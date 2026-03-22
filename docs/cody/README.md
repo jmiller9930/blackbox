@@ -8,9 +8,17 @@ Runnable agent assets live under `agents/cody/` (identity, prompts, skills, runt
 
 **Python (`agents/cody/runtime/`)** is **support only** — types, guardrails, helpers. It does **not** define agent behavior; see [`agents/cody/runtime/README.md`](../../agents/cody/runtime/README.md).
 
-## ClawBot host (Phase 2+)
+## ClawBot host (OpenClaw)
 
-Work on the ClawBot / OpenClaw side targets **`clawbot.a51.corp`**. A typical interactive login is **`jmiller@clawbot.a51.corp`** (for example via **Cursor Remote SSH**). Phase 1 does not require that host; it is the expected environment when wiring Cody more deeply in a later phase.
+Work on the ClawBot / OpenClaw side targets **`clawbot.a51.corp`**. A typical interactive login is **`jmiller@clawbot.a51.corp`** (for example via **Cursor Remote SSH**).
+
+**After each `git pull` on the server**, sync the Cody skill into the OpenClaw workspace (symlinks outside the workspace are rejected):
+
+```bash
+cd ~/blackbox && ./scripts/sync_cody_skill_to_openclaw.sh
+```
+
+**OpenClaw CLI** over SSH often needs: `~/blackbox/scripts/openclaw_on_claw.sh skills list` (wraps `node ~/openclaw/openclaw.mjs`).
 
 ### ClawBot web UI (lab)
 
