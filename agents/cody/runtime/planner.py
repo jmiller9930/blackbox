@@ -9,12 +9,7 @@ from agents.cody.runtime.contracts import TaskItem
 
 
 def get_next_steps(plan_text: str | None = None) -> list[TaskItem]:
-    """
-    Return the next tasks implied by an optional plan body.
-
-    When `plan_text` is set, the workflow assumes a document exists to parse.
-    When omitted, callers get a generic review-oriented sequence.
-    """
+    """Return a fixed sequence of `TaskItem` rows (placeholder until real plan parsing exists)."""
     if plan_text:
         return [
             TaskItem(id="p1", title="Parse plan document", description="Extract milestones and dependencies."),

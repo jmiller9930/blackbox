@@ -1,4 +1,6 @@
-"""Pydantic models for Cody recommendations, patch proposals, tasks, and risk levels.
+"""Structured types for the Cody support layer: RiskLevel, Recommendation, PatchProposal.
+
+Optional: TaskItem — small struct used by `planner.py` for ordered steps.
 
 Support layer only — agent behavior is defined in SKILL.md, agent.md, and prompts.
 """
@@ -7,7 +9,7 @@ from __future__ import annotations
 
 from enum import Enum
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 
 
 class RiskLevel(str, Enum):
@@ -19,17 +21,8 @@ class RiskLevel(str, Enum):
     CRITICAL = "critical"
 
 
-class TaskItem(BaseModel):
-    """One actionable unit in a development plan."""
-
-    id: str
-    title: str
-    description: str = ""
-    done: bool = False
-
-
 class Recommendation(BaseModel):
-    """Engineering recommendation aligned with `recommendation_format.md`."""
+    """Engineering recommendation (align fields with `recommendation_format.md`)."""
 
     title: str
     summary: str
@@ -40,7 +33,7 @@ class Recommendation(BaseModel):
 
 
 class PatchProposal(BaseModel):
-    """Describes an intended patch for review; not auto-applied unless policy allows."""
+    """Patch intent for human review; not auto-applied by default."""
 
     title: str
     summary: str
@@ -48,4 +41,13 @@ class PatchProposal(BaseModel):
     risk_level: RiskLevel = RiskLevel.MEDIUM
     requests_auto_apply: bool = False
     unsafe: bool = False
-    notes: str = Field(default="", description="Optional reviewer notes.")
+    notes: str = ""
+
+
+class TaskItem(BaseModel):
+    """One row in a simple task list (used by `planner.get_next_steps`)."""
+
+    id: str
+    title: str
+    description: str = ""
+    done: bool = False
