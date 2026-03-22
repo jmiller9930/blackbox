@@ -1,0 +1,31 @@
+---
+description: Align BLACK BOX / Cody work with OpenClaw documentation; map plans to docs; ask when unclear
+alwaysApply: true
+---
+
+# OpenClaw documentation alignment
+
+## Rule 1 — Understand OpenClaw before integrating
+
+Work that touches **OpenClaw** (gateway, Control UI, agents, tools, pairing, config, channels, exec, or lab wiring) **must** be grounded in **OpenClaw documentation**, not guesswork.
+
+**Primary sources (use what exists in the environment):**
+
+- **Lab host:** `~/openclaw/docs/` on `clawbot` (or the path where OpenClaw is installed) — read the relevant pages for the feature (gateway, web/Control UI, CLI, devices, security, etc.).
+- **Upstream:** [https://docs.openclaw.ai](https://docs.openclaw.ai) when the repo or CLI points there.
+
+Do **not** invent gateway protocols, auth/token behavior, WebSocket contracts, or UI flows that contradict those docs.
+
+## Plans must map back to OpenClaw
+
+When you receive a **plan** (phase goals, architecture notes, user instructions):
+
+1. **Parse the plan** into concrete integration steps.
+2. **For each step**, tie it to **OpenClaw concepts and documentation** (e.g. gateway RPC, Control UI, `openclaw` CLI, device pairing, `openclaw.json`, tools/skills/agents as documented).
+3. **State the linkage** (which doc area or command applies) when proposing or implementing changes.
+
+If a plan step **does not map** to documented OpenClaw behavior, or the mapping is ambiguous, **do not assume** — see below.
+
+## Clarification required
+
+If **anything** is unclear — user intent, OpenClaw version on the host, deployment layout, security policy, or gaps between the plan and the docs — **ask for clarification before building**. Prefer questions over wrong assumptions. Clarification **will** be provided.
