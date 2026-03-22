@@ -7,7 +7,7 @@ This file is an **audit trail** only: pass/fail, time, and repo reference.
 |--------|--------|
 | **Last verified** | 2026-03-22 |
 | **Repository** | `blackbox` @ `main` |
-| **Git ref (recorded)** | `0a8bdb3` |
+| **Git ref (recorded)** | `534d74b` |
 | **Checklist basis** | Architect Cody + DATA verification checklist (external) |
 
 ---
