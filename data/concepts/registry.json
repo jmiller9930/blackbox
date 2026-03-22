@@ -1,0 +1,29 @@
+{
+  "registry_version": 1,
+  "concepts": [
+    {
+      "concept_id": "example_slippage",
+      "name": "Slippage",
+      "definition": "The difference between expected fill price and actual fill price at execution time.",
+      "trader_meaning": "How much worse (or better) the trade gets filled versus the quote you saw when deciding.",
+      "why_it_matters": "Affects realized PnL, risk, and whether a strategy is viable on a given venue or size.",
+      "data_signals": [
+        "bid_ask_spread",
+        "depth_at_price",
+        "recent_trade_prices",
+        "order_book_imbalance"
+      ],
+      "decision_impact": "Influences sizing, venue choice, and whether to enter a trade at all.",
+      "execution_impact": "May warrant limit orders, TWAP, or smaller clips to control adverse selection.",
+      "failure_modes": [
+        "Ignoring slippage when backtesting on mid prices only",
+        "Assuming static liquidity during volatile periods"
+      ],
+      "examples": [
+        "Quoted 100.00, filled at 100.04 on a market buy — 4 bps slippage."
+      ],
+      "status": "draft",
+      "version": 1
+    }
+  ]
+}

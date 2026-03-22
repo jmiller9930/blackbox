@@ -233,7 +233,7 @@ This section is intentionally high-level; detailed triggers, providers, and Open
 
 > **Planning-only for this document.** Phase 3 is where **intelligence** (interpretation, conversation, validation, and—when built—**read-only** market context) layers on top of the **Phase 2** paper pipeline. **No exchange trading, no wallet keys, and no live execution** are implied by this section until [Phase 4](#phase-4--real-trading-integration-prerequisites) gates are met.
 
-**Keywords for search:** Phase 3, Anna, intelligence layer, Telegram, validation loop, market data ingestion, Solana, read-only.
+**Keywords for search:** Phase 3, Anna, intelligence layer, Telegram, validation loop, market data ingestion, Solana, read-only, trading concept registry, intelligence extensibility.
 
 **Upstream (Phase 2) evidence the intelligence layer must align with:** trade episodes (`trade_episode_aggregator.py`), system insight (`insight_generator.py`), system trend (`insight_trend_tracker.py`), guardrail policy (`guardrail_policy_evaluator.py`), policy-gated action (`policy_gated_action_filter.py`) — all **paper-only** today.
 
@@ -315,6 +315,93 @@ Anna may **acknowledge** concepts such as:
 - Treated as **theoretical or exploratory** input unless promoted through validation.
 
 **Purpose:** Let Anna **understand and reason** about these topics and support **structured discussion** — **not** to implement execution behavior here.
+
+### Phase 3E — Trading Concept Registry & Intelligence Extensibility
+
+> **Planning-only in this document.** The **registry file** in-repo is the **canonical shape** for concepts; **no registry loader** or Anna runtime wiring is implied until implemented in a later phase.
+
+#### 1. Trading Concept Registry (source of truth)
+
+- **Location:** [`data/concepts/registry.json`](../../data/concepts/registry.json) (JSON; version-controlled in **Git**).
+- **Mutation rule:** No **runtime** mutation without **validation** and human/process approval; changes land via **PR / review**, not ad hoc edits in production.
+
+Each concept entry **should** include:
+
+| Field | Purpose |
+|--------|---------|
+| `concept_id` | Stable identifier |
+| `name` | Short title |
+| `definition` | Precise definition |
+| `trader_meaning` | How traders use the term |
+| `why_it_matters` | Relevance to decisions |
+| `data_signals` | What observables relate |
+| `decision_impact` | How it affects recommendations |
+| `execution_impact` | How it would affect execution (when allowed) |
+| `failure_modes` | What goes wrong if misunderstood |
+| `examples` | Concrete examples |
+| `status` | `draft` \| `validated` \| `deprecated` |
+| `version` | Monotonic or semver per concept |
+
+**Explicit rule:** The **registry is canonical memory** — **not** the LLM. Models may assist drafting; **registry + review** is authoritative.
+
+#### 2. Anna extensibility model
+
+Anna is a **modular reasoning system**, not a single growing prompt:
+
+| Component | Role |
+|-----------|------|
+| **Input adapters** | Telegram, system context, market/health data |
+| **Concept interpreter** | Maps natural language → **registry** concepts |
+| **Reasoning modules** | Risk, liquidity, execution *logic* (policy-aligned, paper-first) |
+| **Output adapters** | Human-readable + **structured** system payloads |
+
+**Explicit rule:** Intelligence **grows by adding modules**, **not** by enlarging one monolithic prompt.
+
+#### 3. Runtime concept retrieval (pattern)
+
+When implemented:
+
+1. **Detect** concepts in user/system input (IDs or language matches).  
+2. **Fetch** matching **registry entries** only (partial load).  
+3. **Inject** those entries into Anna context at runtime.  
+4. **Do not** load the entire registry into every turn.
+
+**Explicit rules:**
+
+- Prefer **registry-backed** reasoning over assumed model memory.  
+- **Unknown** term → treat as **draft** / flag for registry update, not silent invention.
+
+#### 4. Structured concept usage
+
+Anna outputs (when persisted) should support:
+
+- `concepts_used`: `[concept_id, …]`  
+- **Reasoning** tied to **registry fields** (which signals, which failure modes considered).  
+- Clear **concept → system impact** mapping (decision vs execution posture).
+
+**Purpose:** **Auditability**, **traceability**, **learning-loop** compatibility (Phase 3C).
+
+#### 5. Validation loop integration
+
+Concept lifecycle:
+
+**proposal → test → outcome → reflection → validation → registry update**
+
+**Explicit rules:**
+
+- Concepts are **not trusted** for production semantics until **`validated`**.  
+- **Sean** may **propose** concepts; **Anna** must **challenge or refine**.  
+- **System** confirms through **outcomes** (paper path first).
+
+#### 6. Hybrid intelligence model
+
+| Layer | Role |
+|--------|------|
+| **Registry** | Stable, reviewed **knowledge** |
+| **Anna** | **Reasoning** over registry + live context |
+| **LLM** | **Assistive** drafting/expansion only |
+
+**Explicit rule:** An LLM may **propose** definitions; the **registry** (after review) is **final authority**.
 
 ---
 
