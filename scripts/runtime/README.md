@@ -91,3 +91,13 @@ python3 scripts/runtime/analyst_decision_engine.py
 python3 scripts/runtime/analyst_decision_engine.py --use-latest-stored-context
 python3 scripts/runtime/analyst_decision_engine.py --store
 ```
+
+## Simulated action router — Phase 2.4
+
+**`simulated_action_router.py`** — Maps latest analyst output to safe **action intent** only: **`HOLD`** (NO_TRADE), **`WATCH`** (REDUCED_RISK), **`PAPER_TRADE_READY`** (ALLOW). No execution, no exchanges. Consumes **live** analyst (same options as Phase 2.3) or **`--use-latest-stored-analyst`**. Optional **`--include-decision-context-ref`**. Output: `kind: simulated_action_v1`, `source_decision`, `action`, `rationale`, `caution_flags`, `execution_notes`, `next_step_recommendation`. **`--store`** → title **`[Simulated Action]`**.
+
+```bash
+python3 scripts/runtime/simulated_action_router.py
+python3 scripts/runtime/simulated_action_router.py --use-latest-stored-analyst --include-decision-context-ref
+python3 scripts/runtime/simulated_action_router.py --store
+```
