@@ -12,3 +12,8 @@ build/
 data/sqlite/*.db
 data/sqlite/*.db-journal
 data/logs/*.log
+
+# Local secrets (never commit)
+.env.local
+.env.*.local
+.secrets/
