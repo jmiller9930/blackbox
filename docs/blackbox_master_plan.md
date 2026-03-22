@@ -73,8 +73,8 @@ OpenClaw loads skills from `<workspace>/skills` (highest precedence), then `~/.o
 
 **Make skills visible to the gateway** by one of:
 
-- Deploying or symlinking into the active agent workspace under `skills/`, or  
-- Setting `skills.load.extraDirs` in `~/.openclaw/openclaw.json` to include the path to `agents/cody/skills` (see OpenClaw docs: *Skills*, *Creating Skills*).
+- Copying `cody-planner` into `<workspace>/skills/` (symlinks that escape the workspace root may be **rejected** by OpenClaw), or  
+- Setting `skills.load.extraDirs` in `~/.openclaw/openclaw.json` to an allowed path (see OpenClaw docs: *Skills*, *Creating Skills*).
 
 **Verify:**
 
