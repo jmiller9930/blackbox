@@ -101,3 +101,12 @@ python3 scripts/runtime/simulated_action_router.py
 python3 scripts/runtime/simulated_action_router.py --use-latest-stored-analyst --include-decision-context-ref
 python3 scripts/runtime/simulated_action_router.py --store
 ```
+
+## Paper trade ticket — Phase 2.5
+
+**`paper_trade_ticket_builder.py`** — Builds **`paper_trade_ticket_v1`** from **live** simulated action (`compute_simulated_action`) or **`--use-latest-stored-simulated-action`**. Statuses: **`NOT_CREATED`** (HOLD), **`WATCH_ONLY`** (WATCH), **`READY`** (PAPER_TRADE_READY with placeholders for market/direction). Optional **`--attach-analyst-ref`** / **`--attach-decision-context-ref`**. **`--store`** → **`[Paper Trade Ticket]`** task.
+
+```bash
+python3 scripts/runtime/paper_trade_ticket_builder.py --use-latest-stored-simulated-action --attach-analyst-ref --attach-decision-context-ref
+python3 scripts/runtime/paper_trade_ticket_builder.py --store
+```

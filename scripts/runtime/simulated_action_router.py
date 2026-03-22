@@ -143,7 +143,24 @@ def build_simulated_payload(
     return out
 
 
-def run(
+def load_latest_stored_simulated_action(conn) -> tuple[str, dict]:
+    row = conn.execute(
+        """
+        SELECT id, description FROM tasks
+        WHERE title LIKE '[Simulated Action]%'
+        ORDER BY datetime(updated_at) DESC
+        LIMIT 1
+        """
+    ).fetchone()
+    if not row or not row[1]:
+        raise LookupError("no stored [Simulated Action] task found")
+    data = json.loads(row[1])
+    if data.get("kind") != "simulated_action_v1":
+        raise ValueError("latest simulated-action task is not simulated_action_v1")
+    return row[0], data
+
+
+def compute_simulated_action(
     db_path: Path,
     *,
     analyst_from_stored: bool,
@@ -152,9 +169,8 @@ def run(
     health_limit: int,
     task_limit: int,
     alert_window: int,
-    store: bool,
-) -> int:
-    root = repo_root()
+) -> tuple[dict, str | None]:
+    """Build simulated_action_v1 JSON without persisting or printing."""
     source_task_id: str | None = None
     decision_context_reference: dict | None = None
 
@@ -196,6 +212,30 @@ def run(
         analyst,
         decision_context_reference=decision_context_reference,
         source_task_id=source_task_id,
+    )
+    return sim, source_task_id
+
+
+def run(
+    db_path: Path,
+    *,
+    analyst_from_stored: bool,
+    use_stored_context_for_live: bool,
+    include_context_ref: bool,
+    health_limit: int,
+    task_limit: int,
+    alert_window: int,
+    store: bool,
+) -> int:
+    root = repo_root()
+    sim, _source_id = compute_simulated_action(
+        db_path,
+        analyst_from_stored=analyst_from_stored,
+        use_stored_context_for_live=use_stored_context_for_live,
+        include_context_ref=include_context_ref,
+        health_limit=health_limit,
+        task_limit=task_limit,
+        alert_window=alert_window,
     )
 
     result: dict = {"simulated_action": sim, "stored_task_id": None}
