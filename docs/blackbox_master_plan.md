@@ -231,7 +231,7 @@ This section is intentionally high-level; detailed triggers, providers, and Open
 
 ## Phase 3 — Intelligence Layer
 
-> **Planning-only for this document.** Phase 3 is where **intelligence** (interpretation, conversation, validation, and—when built—**read-only** market context) layers on top of the **Phase 2** paper pipeline. **No registry loader**, Anna runtime wiring, exchange connectivity, or wallet code is implied until implemented per architect — this section is **plan codification** only.
+> **Mostly planning in this document.** Phase 3 is where **intelligence** (interpretation, conversation, validation, and **read-only** market context) layers on top of the **Phase 2** paper pipeline. **Exception:** [Phase 3.1](#phase-31--market-data-ingestion-read-only) includes an approved **read-only** runtime script (`market_data_ingestor.py`) — **no trading, wallets, or writes to venues**. **No** Anna analyst runtime, **no** registry loader, and **no** Phase 4 execution paths are implied for the rest until implemented per architect.
 
 **What Phase 3 is not:** live trading; wallet integration; exchange execution; unrestricted LLM behavior.
 
@@ -280,6 +280,12 @@ Data should be **normalized** into a **consistent internal structure** for analy
 #### Explicit rule
 
 **Phase 3.1 is visibility only.** It does **not** grant permission to execute.
+
+#### Runtime implementation (started)
+
+- **Script:** `scripts/runtime/market_data_ingestor.py` — emits **`market_snapshot_v1`** JSON (`kind`, `schema_version`, `generated_at`, `source`, `market_symbol`, `asset`, `price`, `bid`, `ask`, `spread`, `volume`, `liquidity_depth_summary`, `volatility_placeholder`, `notes`). Optional **`--store`** writes a completed **`[Market Snapshot]`** row in existing `tasks` (no new tables).
+- **Sources (read-only, no API keys):** try in order **Coinbase Exchange** product ticker (default `SOL-USD`), **Kraken** `SOLUSD`, **Binance** `SOLUSDT` (may be geo-restricted), then **CoinGecko** price-only (bid/ask **null**). Unavailable fields stay **null** with explanation in **`notes`** — **no fabricated values**.
+- **DATA:** failures must be explicit in output; deeper health wiring is **future** (optional `system_health_logs` hook noted in script).
 
 ### Phase 3.2 — Anna: Conversational Analyst Layer
 
