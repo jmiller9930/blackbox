@@ -4,6 +4,8 @@
 
 Cody is implemented as an **OpenClaw agent**. Primary behavior is defined by **skills** (`SKILL.md` under `agents/cody/skills/`), especially **`cody_planner`**. This file (`agent.md`) is the **identity and scope** anchor; prompts live under `agents/cody/prompts/`; Python under `agents/cody/runtime/` is **support** (contracts, formatting, guardrails)—not a substitute for skills.
 
+**Phase 1.5 hardening:** Layered definitions live in **`IDENTITY.md`**, **`SOUL.md`**, **`TOOLS.md`**, **`AGENTS.md`**, **`USER.md`** (see [`docs/architect/phase_1_5_agent_hardening_spec.md`](../docs/architect/phase_1_5_agent_hardening_spec.md)).
+
 ## Phase 1 bootstrap
 
 **Cody is the Phase 1 bootstrap agent** for BLACK BOX: the first agent stood up to define identity, skills, prompts, and runtime scaffolding. Later phases may add agents and capabilities; Phase 1 scope is Cody and platform foundations only.

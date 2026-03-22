@@ -4,6 +4,7 @@
 - **Governance:** [cody_governance.md](cody_governance.md)
 - **Bootstrap (Phase 1):** [cody_bootstrap.md](cody_bootstrap.md)
 - **Tool policy (Phase 1.5):** [cody_tool_policy.md](cody_tool_policy.md)
+- **Agent hardening spec (architect):** [../architect/phase_1_5_agent_hardening_spec.md](../architect/phase_1_5_agent_hardening_spec.md) — Cody `IDENTITY` / `SOUL` / `TOOLS` / `AGENTS` / `USER` under `agents/cody/`
 
 Runnable agent assets live under `agents/cody/` (identity, prompts, skills, runtime).
 

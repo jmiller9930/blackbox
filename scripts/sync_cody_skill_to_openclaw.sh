@@ -2,6 +2,8 @@
 # Sync the in-repo Cody skill into OpenClaw's workspace skills directory.
 # Run on the Claw host after `git pull` (OpenClaw rejects symlinks that escape the workspace root).
 #
+# Phase 1.5+: prefer ./scripts/sync_openclaw_skills.sh (Cody + DATA skills).
+#
 # Usage:
 #   ./scripts/sync_cody_skill_to_openclaw.sh
 #   OPENCLAW_WORKSPACE=/path/to/workspace ./scripts/sync_cody_skill_to_openclaw.sh

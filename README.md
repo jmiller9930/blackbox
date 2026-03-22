@@ -31,6 +31,8 @@ No autonomous rewrites, no trading decisions, no self-modification, no guessing 
 
 **Trading bot (execution path, not Phase 1 Cody work):** See [`docs/trading/REFERENCE_CURRENT_DRIFT_BOT.md`](docs/trading/REFERENCE_CURRENT_DRIFT_BOT.md) for behavior summary; **full rules source:** [`trading_core/drift_trading_bot_source.ts`](trading_core/drift_trading_bot_source.ts). Architect roadmap: [`docs/architect/architect_update_trading_system.md`](docs/architect/architect_update_trading_system.md).
 
+**Phase 1.5 (agent hardening):** [`docs/architect/phase_1_5_agent_hardening_spec.md`](docs/architect/phase_1_5_agent_hardening_spec.md) — Cody + DATA definitions in `agents/`, SQLite in `data/sqlite/`, `./scripts/sync_openclaw_skills.sh`, `./scripts/init_phase1_5_sqlite.sh`.
+
 **Python:** 3.11+
 
 ```bash
