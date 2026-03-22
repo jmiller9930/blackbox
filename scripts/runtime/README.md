@@ -34,10 +34,28 @@ Task `description` is JSON with `schema_version`, normalized fields, `parse_meth
 
 ## Cody — coordination: DATA alert → plan task (Phase 1.9)
 
-Requires at least one **open**, **unacknowledged** alert (e.g. from DATA health workflow). Picks the **oldest** such alert unless `--alert-id` is set. Writes a task whose JSON includes `coordination.responded_to_alert_id` and `alert_snapshot`. Default: sets `acknowledged_at` and `status='acknowledged'` on that alert (`--no-consume-alert` to skip).
+Requires at least one **open**, **unacknowledged** alert (e.g. from DATA health workflow). Picks the **latest** such alert unless `--alert-id` is set. Writes a task whose JSON includes `coordination.responded_to_alert_id` and `alert_snapshot`. Default: sets `acknowledged_at` and `status='acknowledged'` on that alert (`--no-consume-alert` to skip).
 
 ```bash
 export BLACKBOX_SQLITE_PATH="${BLACKBOX_SQLITE_PATH:-data/sqlite/blackbox.db}"
 python3 scripts/runtime/data_health_workflow.py   # ensure a fresh alert if needed
 python3 scripts/runtime/cody_alert_coordination.py
 ```
+
+## Outcome recording — Phase 2.0 (feedback loop)
+
+**`task_outcome_recorder.py`** — merge an `outcome` object into existing `tasks.description` JSON (requires valid JSON already, e.g. from Cody coordination):
+
+```bash
+python3 scripts/runtime/task_outcome_recorder.py --task-id "<uuid>" --status success \
+  --notes "manual sign-off" --validated-by human
+```
+
+**`data_task_outcome_validate.py`** — DATA runs a **minimal** check: if title/description looks **disk-related** (keywords: disk, df, `/var/log`, usage, space), records `outcome` with `validated_by: DATA` after `shutil.disk_usage` on `/var/log` and `/`; otherwise `status: unknown`. Preserves `coordination.responded_to_alert_id`.
+
+```bash
+python3 scripts/runtime/data_task_outcome_validate.py --task-id "<uuid>"
+# optional: --dry-run
+```
+
+Chain: **alert → task (coordination) → outcome** in one JSON document.
