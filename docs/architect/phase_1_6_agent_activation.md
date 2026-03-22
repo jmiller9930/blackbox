@@ -142,6 +142,10 @@ Demonstrate:
 - Introduce Billy (execution layer)
 - Implement vault-based secrets management
 
+### Next phases — Decision Layer (roadmap stub)
+
+**Decision layer / analyst model (Phase 2+)** — structured trade reasoning, confidence, and auditable metadata—plus **trade-team learning** via explicit frameworks (expected utility, Bayesian updates, risk constraints) and outcome reflection. **Not implemented yet**; see **[`docs/blackbox_master_plan.md`](../blackbox_master_plan.md)** → section **Phase 2+ — Decision Layer (Analyst Model) [STUB]** (keywords: decision layer, analyst model, expected utility, bayesian update, learning system).
+
 ### Future: SQLite schema normalization (tracked — not blocking)
 
 Run **after** DATA/Cody behavior is proven on the bridge schema. Per [`architect_sqlite_deviation_response.md`](architect_sqlite_deviation_response.md):

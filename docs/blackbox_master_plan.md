@@ -134,6 +134,64 @@ Use the Cody planner skill to recommend next steps for building BLACK BOX.
 
 ---
 
+## Phase 2+ — Decision Layer (Analyst Model) [STUB]
+
+> **STUB — not implemented.** No Analyst agent code, no runtime wiring, no new tools in this phase. Recorded for roadmap and context rehydration. Keywords for search: **decision layer**, **analyst model**, **expected utility**, **bayesian update**, **learning system**.
+
+### Purpose
+
+Introduce structured, **auditable** reasoning for:
+
+- trade decisions (long / short / none as a **recommendation**, not autonomous execution)
+- risk evaluation (limits, drawdown, exposure)
+- confidence scoring (explicit, not opaque)
+
+**Trade team learning (human-in-the-loop):** the same frameworks should double as **teachable methods**—so operators understand *why* a recommendation carries a given confidence and *how* new evidence updates beliefs—rather than treating the layer as a black box. Teaching uses **explained theory + worked examples + outcome reflection**, not reinforcement-learning training in the initial phase.
+
+### Principle
+
+Combine:
+
+- **Theory** — decision frameworks (see below) stated clearly enough to audit and to teach
+- **Historical data** — outcomes and prior cases stored in SQLite (and related stores)
+- **Real-time data** — market state and **DATA** outputs (health, signals context)
+- **Reflection** — compare predicted vs actual outcomes; update documented rationale (Bayesian belief update as a *process*, not a hidden model)
+
+### Initial frameworks (Phase 2 targets)
+
+- **Decision theory / expected utility** — preferences over outcomes under uncertainty; explicit tradeoffs
+- **Bayesian belief updates** — principled revision of confidence as evidence arrives (explainable steps)
+- **Risk & survival constraints** — drawdown limits, exposure caps, survival-style rules (constraints before optimization)
+
+### Inputs
+
+- signals (from trading logic / existing bots)
+- market state (including **DATA** outputs where relevant)
+- historical outcomes (SQLite and curated history)
+
+### Outputs
+
+- trade recommendation (long / short / none)
+- confidence score (defined scale, documented)
+- reasoning metadata (why the decision was made—**no hidden state**)
+
+### Constraints
+
+- no reinforcement learning in the initial phase
+- must be auditable and explainable end-to-end
+- must be testable against historical and live data (replay / paper scenarios)
+- no hidden state or black-box behavior in the core path
+
+### Non-goals (for this phase of the stub)
+
+- no RL training
+- no autonomous execution (Billy / execution layer remains separate and gated)
+- no complex portfolio optimization as a first deliverable
+
+**Alignment:** Roster “Anna — Analyst” ([`docs/architect/TEAM_ROSTER.md`](architect/TEAM_ROSTER.md)) is the **persona** this layer eventually supports; this stub does **not** implement Anna.
+
+---
+
 ## Meet the Team
 
 Roster — **software agents** vs **human roles** — status as of planning docs (see [`docs/architect/TEAM_ROSTER.md`](architect/TEAM_ROSTER.md) for the canonical table).

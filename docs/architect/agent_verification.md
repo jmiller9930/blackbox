@@ -30,6 +30,10 @@ This file is an **audit trail** only: pass/fail, time, and repo reference.
 - Tool boundaries appropriate and safe  
 - Runtime aligned  
 
+### Future: Analyst / Decision Layer (not in scope yet)
+
+**Anna (Analyst)** and a **Decision Layer (Analyst Model)** are **roadmap** items only—see **[`docs/blackbox_master_plan.md`](../blackbox_master_plan.md)** section **Phase 2+ — Decision Layer (Analyst Model) [STUB]**. No Analyst agent implementation or runtime wiring is claimed in controlled execution; verification of that work will be a **future** audit when the architect promotes it from stub to spec.
+
 ### Critical requirement
 
 **[`workspace_sync.md`](workspace_sync.md)** is **mandatory**: sync after every `git pull`; update **this file** (date, ref, status) when re-verifying. Undefined behavior if sync is skipped.
