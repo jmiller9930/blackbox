@@ -158,3 +158,14 @@ python3 scripts/runtime/insight_trend_tracker.py
 python3 scripts/runtime/insight_trend_tracker.py --recent 10
 python3 scripts/runtime/insight_trend_tracker.py --store
 ```
+
+## Guardrail policy — Phase 2.11
+
+**`guardrail_policy_evaluator.py`** — Rule-based **operating mode**: `FROZEN` | `CAUTION` | `NORMAL` from **decision context** (live `build_payload` or **`--use-latest-stored-decision-context`**) plus **system trend** (live from recent **`[System Insight]`** rows or **`--use-latest-stored-trend`**). Optional **`--include-insight-reference`**. Output: **`guardrail_policy_v1`**. **`--store`** → **`[Guardrail Policy]`** completed task. **`--self-test`** runs local FROZEN/CAUTION/NORMAL checks (no DB).
+
+```bash
+python3 scripts/runtime/guardrail_policy_evaluator.py --use-latest-stored-decision-context --trend-recent 10
+python3 scripts/runtime/guardrail_policy_evaluator.py --use-latest-stored-decision-context --use-latest-stored-trend
+python3 scripts/runtime/guardrail_policy_evaluator.py --self-test
+python3 scripts/runtime/guardrail_policy_evaluator.py --store
+```
