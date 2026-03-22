@@ -150,6 +150,23 @@ Demonstrate:
 | `agent_tasks` | View `agent_tasks` → `tasks` in [`data/sqlite/schema_phase1_6.sql`](../../data/sqlite/schema_phase1_6.sql) |
 | `system_health_logs` | Table in [`data/sqlite/schema_phase1_6.sql`](../../data/sqlite/schema_phase1_6.sql) |
 
+### Architect `sqlite_spec_phase` — match vs deviation
+
+The external **SQLite Specification (Phase 1.6 / 1.7)** is the behavioral target (logging, health, alerts, tasks). The repo schema is **conceptually aligned** but **not byte-for-byte identical**. Summary:
+
+| Area | Spec | In-repo today | Deviation |
+|------|------|----------------|-----------|
+| **DB path** | `data/sqlite/blackbox.db` on clawbot | Same default via `BLACKBOX_SQLITE_PATH` | **Match** |
+| **system_health_logs** | `INTEGER` id AUTOINCREMENT; `timestamp`; `component`; `message`; `latency_ms`; `metadata` JSON | `TEXT` id; `checked_at`; `target`; `check_type`; `status`; optional `severity`; `summary`; `evidence`; `created_at` | **Structural:** SQLite types differ (`TEXT` ids vs integer autoincrement); column names differ (`component`→`target`, `message`→`summary`+`evidence`); **no** `latency_ms` or `metadata` column yet; extra `check_type` / `severity` for classification |
+| **alerts** | `INTEGER` id; `timestamp`; `severity`; `component`; `message`; `resolved` boolean; `resolved_at` | `TEXT` id; `source_agent`; `severity`; `channel`; `message`; `status`; `created_at`; `acknowledged_at` | **Structural:** no autoincrement; `source_agent`+`channel` vs `component`; **no** `resolved` flag (use `status` + `acknowledged_at` partially); no FK from alert → `system_health_logs` (traceability is operational, not enforced in DDL) |
+| **agent_tasks** | Table with `agent_name`, `task_type`, `status` (pending/…), `result_summary` | **View** over `tasks`: `agent_id`, `title`, `description`, `state`, … — no `task_type` or `result_summary` columns | **Logical overlap only:** same intent (track agent work); **different** column set; Cody/DATA should map *task_type* into `title`/`description` and *result_summary* into `description`/`state` until a migration adds columns |
+| **DATA rules** | No modify/delete past logs; alerts on failure | Not enforced in DDL (policy in agent + ops) | **Match by policy**, not triggers |
+| **Cody** | Writes `agent_tasks` only; not health/alerts | `tasks` table is writable if runtime allows | **Behavioral** — spec-compliant usage is on the agents |
+
+**Validation criteria in the spec** (rows for gateway / ollama / sqlite in `system_health_logs`, at least one alert, at least one task) are **outcomes to demonstrate**, not yet guaranteed by DDL alone.
+
+**If architect requires strict column parity:** approve a **schema migration** (new revision) to rename/add columns and optional FKs; until then, treat the repo as an **intentional Phase 1.5/1.6 bridge** with documented mapping above.
+
 **Init script (recommended):** [`scripts/init_phase1_6_sqlite.sh`](../../scripts/init_phase1_6_sqlite.sh) — applies **1.5 + 1.6** to `BLACKBOX_SQLITE_PATH` (default `data/sqlite/blackbox.db`).  
 Legacy: [`scripts/init_phase1_5_sqlite.sh`](../../scripts/init_phase1_5_sqlite.sh) alone does **not** add `system_health_logs` / `agent_tasks` view.
 
