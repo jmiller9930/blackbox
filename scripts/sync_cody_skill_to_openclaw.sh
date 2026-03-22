@@ -17,7 +17,13 @@ if [[ ! -f "${SRC}/SKILL.md" ]]; then
 fi
 
 mkdir -p "$(dirname "${DST_ROOT}")"
-rsync -a --delete "${SRC}/" "${DST_ROOT}/"
+if command -v rsync >/dev/null 2>&1; then
+  rsync -a --delete "${SRC}/" "${DST_ROOT}/"
+else
+  rm -rf "${DST_ROOT}"
+  mkdir -p "${DST_ROOT}"
+  cp -a "${SRC}/." "${DST_ROOT}/"
+fi
 
 echo "Synced Cody skill:"
 echo "  ${SRC}/"
