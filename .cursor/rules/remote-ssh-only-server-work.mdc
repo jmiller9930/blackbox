@@ -1,0 +1,24 @@
+---
+description: Server-side work on clawbot only via Cursor Remote SSH — never via batch SSH from a local workspace
+alwaysApply: true
+---
+
+# Remote SSH only — server work (hard rule)
+
+This applies to **every** chat in this repo.
+
+## Rule
+
+- **No work on the server** (`clawbot`, `jmiller@clawbot`, `~/blackbox`, server SQLite, server-only scripts) **unless** the session is **Cursor Remote SSH** with the project opened **on the server** (e.g. `/home/jmiller/blackbox`).
+- **If there is no Cursor Remote SSH session** to that host/path, **no server-side work** — do not substitute plain SSH, `scp`, or one-off shell hops to “get it done.”
+
+## For the agent
+
+1. **Infer workspace:** If the workspace root looks **local** (e.g. macOS `.../Documents/.../blackbox`, `/Users/...`), treat **server filesystem and server DB** as **out of bounds** for edits, `git`, and running project commands on clawbot.
+2. **Do not** run `ssh jmiller@clawbot.a51.corp '...'` (or similar) to modify code, run project Python against the server DB, or change server `git` state for this project. That is **not** an acceptable stand-in for Remote SSH.
+3. If the user asks for something that **requires** the server, say clearly: open **Cursor → Remote SSH → clawbot → `~/blackbox`**, then continue; optionally work only in the **local clone** here if the task is “prepare commits / sync via Git” per team workflow.
+4. **If** the workspace root is **on the server** (e.g. `/home/jmiller/blackbox`), server-side edits and commands in that tree are allowed — that **is** the Remote SSH workflow.
+
+## Git / Mac clone
+
+- A **local Mac** checkout may exist for **pull-only** parity with `origin`; do not treat ad-hoc SSH from the agent as the way to “sync” server work.

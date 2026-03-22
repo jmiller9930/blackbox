@@ -163,7 +163,24 @@ def build_paper_execution_record(
     }
 
 
-def run(
+def load_latest_stored_paper_execution(conn) -> tuple[str, dict]:
+    row = conn.execute(
+        """
+        SELECT id, description FROM tasks
+        WHERE title LIKE '[Paper Execution]%'
+        ORDER BY datetime(updated_at) DESC
+        LIMIT 1
+        """
+    ).fetchone()
+    if not row or not row[1]:
+        raise LookupError("no stored [Paper Execution] task found")
+    data = json.loads(row[1])
+    if data.get("kind") != "paper_execution_record_v1":
+        raise ValueError("latest paper execution task is not paper_execution_record_v1")
+    return row[0], data
+
+
+def compute_paper_execution_record_document(
     db_path: Path,
     *,
     ticket_from_stored: bool,
@@ -178,8 +195,8 @@ def run(
     task_limit: int,
     alert_window: int,
     analyst_from_stored_for_live: bool,
-    store: bool,
-) -> int:
+) -> dict:
+    """Build paper_execution_record_v1 without printing or persisting."""
     root = repo_root()
     source_tid: str | None = None
 
@@ -220,11 +237,46 @@ def run(
             finally:
                 conn.close()
 
-    ex = build_paper_execution_record(
+    return build_paper_execution_record(
         ticket_doc,
         source_paper_trade_ticket_task_id=source_tid,
         simulated_action_reference=sim_ref,
         analyst_decision_reference=an_ref,
+    )
+
+
+def run(
+    db_path: Path,
+    *,
+    ticket_from_stored: bool,
+    attach_sim_ref: bool,
+    attach_analyst_ref: bool,
+    simulated_from_stored: bool,
+    use_stored_context_for_live: bool,
+    sim_include_context_ref: bool,
+    attach_analyst_for_ticket: bool,
+    attach_decision_context_for_ticket: bool,
+    health_limit: int,
+    task_limit: int,
+    alert_window: int,
+    analyst_from_stored_for_live: bool,
+    store: bool,
+) -> int:
+    root = repo_root()
+    ex = compute_paper_execution_record_document(
+        db_path,
+        ticket_from_stored=ticket_from_stored,
+        attach_sim_ref=attach_sim_ref,
+        attach_analyst_ref=attach_analyst_ref,
+        simulated_from_stored=simulated_from_stored,
+        use_stored_context_for_live=use_stored_context_for_live,
+        sim_include_context_ref=sim_include_context_ref,
+        attach_analyst_for_ticket=attach_analyst_for_ticket,
+        attach_decision_context_for_ticket=attach_decision_context_for_ticket,
+        health_limit=health_limit,
+        task_limit=task_limit,
+        alert_window=alert_window,
+        analyst_from_stored_for_live=analyst_from_stored_for_live,
     )
 
     result: dict = {"paper_execution_record": ex, "stored_task_id": None}

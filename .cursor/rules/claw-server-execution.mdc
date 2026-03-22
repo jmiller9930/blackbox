@@ -1,22 +1,14 @@
 ---
-description: Run work on clawbot via SSH by default; do not only suggest shell commands to the user
+description: Clawbot is the primary runtime; execution must follow Remote SSH-only rule
 alwaysApply: true
 ---
 
 # Claw server execution
 
-When the user asks for something that involves **the lab host** (`clawbot`, `clawbot.a51.corp`, `jmiller@clawbot`, `~/blackbox` on the server, OpenClaw on the server, or services running there):
+**This project’s lab host** is `clawbot` / `~/blackbox`. See **`remote-ssh-only-server-work.mdc`**: server-side work happens **only** in **Cursor Remote SSH** to that repo — **not** via batch `ssh` from a local Cursor workspace.
 
-1. **Execute on the server yourself** using non-interactive SSH from the dev environment, e.g.  
-   `ssh jmiller@clawbot.a51.corp '<command>'`  
-   (batch flags, no prompts where possible).
+When the workspace **is** Remote SSH to `~/blackbox` on clawbot, you may run commands and edit files there as usual.
 
-2. **Do not** default to giving the user a list of commands to copy-paste unless:
-   - the step **requires** their password, browser, or GitHub account (e.g. `sudo`, `gh auth login`, OAuth), or
-   - they explicitly say they want to run it locally.
+When the workspace is **local**, do **not** use SSH to clawbot to perform server work; direct the user to open Remote SSH first, or limit work to the local tree / Git operations appropriate to their workflow.
 
-3. After running, **summarize what you did and the output**, not “run this yourself.”
-
-4. **Repo path on server:** `~/blackbox` unless stated otherwise.
-
-This project treats **Claw as the primary runtime target** for Cody-related work alongside the GitHub repo.
+Repo path on server: **`~/blackbox`** unless stated otherwise.
