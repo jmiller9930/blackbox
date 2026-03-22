@@ -10,7 +10,6 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import argparse
 import json
 import os
-import re
 import uuid
 import urllib.request
 from datetime import datetime, timezone
@@ -18,6 +17,7 @@ from datetime import datetime, timezone
 from _db import connect, ensure_schema, seed_agents
 from _ollama import ollama_base_url
 from _paths import default_sqlite_path, repo_root
+from _plan_parse import normalize_plan
 
 
 def _utc_now() -> str:
@@ -45,69 +45,22 @@ def _generate(base: str, model: str, prompt: str, timeout: float = 120.0) -> str
     return (data.get("response") or "").strip()
 
 
-PLAN_PROMPT = """You are Cody, an engineering planner. The user request is below.
+PLAN_PROMPT = """You are Cody, an engineering planner. The user request is at the end.
 
-Produce a structured plan in this exact format (use the headings literally):
+First write a concise markdown plan using these headings (exact names):
 
 OBJECTIVE:
-<one paragraph>
-
 STEPS:
-1. ...
-2. ...
-
 FILES IMPACTED:
-- path/or/pattern — reason
-- ...
-
 RISKS:
-- ...
-
 VALIDATION:
-- ...
+
+Then output a single JSON object in a fenced code block (```json ... ```) with keys:
+"objective" (string), "steps" (array of strings), "files_impacted" (array),
+"risks" (array), "validation" (array). Strings must be plain text without markdown bold.
 
 USER REQUEST:
 """
-
-
-def _parse_plan(text: str) -> dict:
-    """Best-effort parse of structured sections into JSON fields."""
-    out: dict = {
-        "objective": "",
-        "steps": [],
-        "files_impacted": [],
-        "risks": [],
-        "validation": [],
-        "raw": text,
-    }
-    obj = re.search(r"OBJECTIVE:\s*(.+?)(?=STEPS:|FILES IMPACTED:|$)", text, re.S | re.I)
-    if obj:
-        out["objective"] = obj.group(1).strip()
-    steps = re.search(r"STEPS:\s*(.+?)(?=FILES IMPACTED:|$)", text, re.S | re.I)
-    if steps:
-        for line in steps.group(1).strip().splitlines():
-            line = re.sub(r"^\s*\d+\.\s*", "", line.strip())
-            if line:
-                out["steps"].append(line)
-    files = re.search(r"FILES IMPACTED:\s*(.+?)(?=RISKS:|$)", text, re.S | re.I)
-    if files:
-        for line in files.group(1).strip().splitlines():
-            line = line.strip().lstrip("-").strip()
-            if line:
-                out["files_impacted"].append(line)
-    risks = re.search(r"RISKS:\s*(.+?)(?=VALIDATION:|$)", text, re.S | re.I)
-    if risks:
-        for line in risks.group(1).strip().splitlines():
-            line = line.strip().lstrip("-").strip()
-            if line:
-                out["risks"].append(line)
-    val = re.search(r"VALIDATION:\s*(.+?)$", text, re.S | re.I)
-    if val:
-        for line in val.group(1).strip().splitlines():
-            line = line.strip().lstrip("-").strip()
-            if line:
-                out["validation"].append(line)
-    return out
 
 
 def run(
@@ -129,9 +82,9 @@ def run(
 
     full_prompt = PLAN_PROMPT + user_prompt.strip()
     raw = _generate(ollama_base, model, full_prompt)
-    plan = _parse_plan(raw)
+    plan = normalize_plan(raw)
     plan["model"] = model
-    plan["prompt"] = user_prompt.strip()
+    plan["user_prompt"] = user_prompt.strip()
 
     tid = str(uuid.uuid4())
     ttitle = title or f"Plan: {user_prompt.strip()[:80]}"
