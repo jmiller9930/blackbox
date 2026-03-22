@@ -190,6 +190,8 @@ Combine:
 
 **Alignment:** Roster “Anna — Analyst” ([`docs/architect/TEAM_ROSTER.md`](architect/TEAM_ROSTER.md)) is the **persona** this layer eventually supports; this stub does **not** implement Anna.
 
+**Superseded in roadmap detail by:** [Phase 3 — Intelligence Layer (Codified)](#phase-3--intelligence-layer-codified) below (Anna, ingestion, validation loop, optional strategy awareness).
+
 ---
 
 ## Meet the Team
@@ -224,6 +226,95 @@ Roster — **software agents** vs **human roles** — status as of planning docs
    Escalation should be **explicitly triggered** (rules + signals—not only model self-reported confidence), **metered**, **audited**, and **key-safe** (secrets never in repo or public channels).
 
 This section is intentionally high-level; detailed triggers, providers, and OpenClaw wiring belong in a follow-on spec once Phase 1.5 hardening and product direction are set.
+
+---
+
+## Phase 3 — Intelligence Layer (Codified)
+
+> **Planning-only for this document.** Phase 3 is where **intelligence** (interpretation, conversation, validation, and—when built—**read-only** market context) layers on top of the **Phase 2** paper pipeline. **No exchange trading, no wallet keys, and no live execution** are implied by this section until [Phase 4](#phase-4--real-trading-integration-prerequisites) gates are met.
+
+**Keywords for search:** Phase 3, Anna, intelligence layer, Telegram, validation loop, market data ingestion, Solana, read-only.
+
+**Upstream (Phase 2) evidence the intelligence layer must align with:** trade episodes (`trade_episode_aggregator.py`), system insight (`insight_generator.py`), system trend (`insight_trend_tracker.py`), guardrail policy (`guardrail_policy_evaluator.py`), policy-gated action (`policy_gated_action_filter.py`) — all **paper-only** today.
+
+**Downstream:** [Phase 4 — Real Trading Integration Prerequisites](#phase-4--real-trading-integration-prerequisites) (wallet, custody, signing, governance) applies before any real venue execution.
+
+**Roster alignment:** Anna (analyst), Sean (human expert), DATA/Mia — see [`docs/architect/TEAM_ROSTER.md`](architect/TEAM_ROSTER.md).
+
+### Phase 3A — Market Data Ingestion (READ ONLY)
+
+- The system **ingests live market data** relevant to the **Solana ecosystem** (exact feeds and venues are implementation choices; not locked here).
+- Ingestion includes, as applicable: **price**, **volume**, **spreads**, **liquidity context**, normalized into a **structured internal format** for analysts and downstream logic.
+- **DATA** monitors **feed health** (staleness, gaps, source failures) alongside existing health duties.
+
+**Explicit:**
+
+- **No trading** from ingestion alone.  
+- **Read-only ingestion** — no orders, no signed transactions, no venue keys in application code paths for this phase’s ingestion scope.
+
+### Phase 3B — Conversational Analyst (Anna)
+
+Anna is defined as:
+
+> A **domain-aware analyst** that can communicate with **human traders (Sean)** and **translate trading concepts into system logic** — without becoming an execution path by itself.
+
+**Responsibilities:**
+
+- Understand trader language (**liquidity**, **spreads**, **slippage**, **order flow**, etc.).
+- **Translate** into **structured system signals** compatible with existing pipelines.
+- **Align** with **system state** (e.g. trends, **guardrail policy**, paper outcomes).
+- **Propose** adjustments or strategies as **recommendations**, not autonomous trades.
+- **Push back** when input is weak, ambiguous, or unsupported by evidence.
+
+**Interaction model:**
+
+- **Sean** communicates via **Telegram** (primary human channel for this design).
+- Anna responds in **trader-accessible language**.
+- Anna produces **structured outputs for the system** — **not** direct execution (execution remains gated by policy and Phase 4).
+
+**Required conversational capabilities:**
+
+- Agree / disagree / question  
+- Request evidence  
+- Suggest alternatives  
+- Explain reasoning clearly  
+
+### Phase 3C — Validation & Learning Loop
+
+Codified loop:
+
+**human input → analyst interpretation → system proposal → controlled evaluation (paper system) → outcome → reflection (why) → retain or reject**
+
+**Rules:**
+
+- **No idea becomes system behavior** without **validation** on the paper path (or equivalent controlled evaluation).
+- **Success must be repeatable** under documented conditions.
+- **Failure must be explained** (what broke, what to change).
+- **Reasoning must be stored** alongside outcomes where the architecture persists artifacts (SQLite tasks, episode/insight records).
+
+**Philosophy:** **trust → test → validate → adopt or reject** — not “ship intuition.”
+
+### Phase 3D — Strategy Interaction Layer (Optional / Advanced)
+
+The system may **support discussion** of advanced strategy concepts with expert users **without implementing execution** for those concepts in Phase 3.
+
+#### Market making / maker concepts (awareness only)
+
+Anna may **acknowledge** concepts such as:
+
+- Providing liquidity  
+- Spread capture  
+- Bid/ask positioning  
+- Influencing microstructure **when size permits** (theoretically — not assumed)
+
+**Important constraints:**
+
+- **Not implemented** as trading behavior in Phase 3.  
+- **No manipulation** or artificial market movement as a goal.  
+- **No assumption** of sufficient capital or market dominance.  
+- Treated as **theoretical or exploratory** input unless promoted through validation.
+
+**Purpose:** Let Anna **understand and reason** about these topics and support **structured discussion** — **not** to implement execution behavior here.
 
 ---
 
