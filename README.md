@@ -38,3 +38,19 @@ pip install -r requirements.txt
 python -m agents.cody.runtime.main --version
 pytest
 ```
+
+### Lab server (`clawbot`) without `python3-venv`
+
+If `python -m venv` fails (missing `ensurepip`), ask an admin for `python3.13-venv` (or your distro’s `python3-venv`), **or** install deps into your user site and run tests via the interpreter (PEP 668):
+
+```bash
+cd ~/blackbox
+python3 -m pip install --user --break-system-packages -r requirements.txt
+python3 -m pytest -q
+```
+
+Add `export PATH="$HOME/.local/bin:$PATH"` to `~/.bashrc` if you want the `pytest` script on `PATH` (optional; `python3 -m pytest` always works).
+
+### GitHub push from the lab
+
+HTTPS push needs credentials (`gh auth login` or a PAT). SSH push needs a key in `~/.ssh` on the server and [GitHub SSH keys](https://github.com/settings/keys) for this host. Until then, push from a machine that is already authenticated or create the repo on GitHub and `git pull` on the lab.
