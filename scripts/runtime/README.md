@@ -59,3 +59,14 @@ python3 scripts/runtime/data_task_outcome_validate.py --task-id "<uuid>"
 ```
 
 Chain: **alert → task (coordination) → outcome** in one JSON document.
+
+## Reflection — Phase 2.1 (lightweight)
+
+**`cody_reflection_workflow.py`** — deterministic (no ML) scan of recent **non–reflection** tasks: parses `outcome` and `coordination.responded_to_alert_id`, buckets success / failure / unknown, keyword themes, `recommended_improvements`, `confidence_notes`. Prints JSON.
+
+```bash
+python3 scripts/runtime/cody_reflection_workflow.py --limit 25
+python3 scripts/runtime/cody_reflection_workflow.py --limit 25 --store   # also save as a completed task row
+```
+
+Stored rows use title prefix `[Reflection]` and are excluded from the next scan by default.
