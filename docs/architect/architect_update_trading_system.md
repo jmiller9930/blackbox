@@ -11,6 +11,8 @@ This document formalizes the next phase of the BLACK BOX / Cody system.
 Core objective:
 > Build a system that becomes smarter over time through learning and controlled escalation — not just larger models.
 
+**Real trading / venue integration prerequisites (governance, wallet, signing, gates):** see **Phase 4** in [`docs/blackbox_master_plan.md`](../blackbox_master_plan.md).
+
 ---
 
 ## FINAL ARCHITECTURE (LOCKED)

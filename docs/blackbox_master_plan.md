@@ -227,6 +227,107 @@ This section is intentionally high-level; detailed triggers, providers, and Open
 
 ---
 
+## Phase 4 — Real Trading Integration Prerequisites
+
+> **Planning-only.** Phase 4 is the first phase where the system may be **prepared** to touch a **real trading venue**. This section codifies prerequisites so future context rehydration does not lose governance, custody, or safety boundaries. **Nothing in this section implies live trading is enabled by default.**
+
+**Keywords for search:** Phase 4, real trading, venue, wallet, custody, go-live, governance, signing, policy gate.
+
+**Related:** executor / trading architecture discussion — [`docs/architect/architect_update_trading_system.md`](architect/architect_update_trading_system.md); roster — [`docs/architect/TEAM_ROSTER.md`](architect/TEAM_ROSTER.md); runtime guardrail — `scripts/runtime/guardrail_policy_evaluator.py` (paper-only pipeline today).
+
+### 1. Ownership and Governance
+
+Real trading integration requires **clear human ownership** and **explicit approval** before any live capability is enabled.
+
+| Concern | Expectation |
+|--------|-------------|
+| **Business / risk owner** | **Sean** is the default business and risk owner unless revised in writing. |
+| **Technical authority** | CTO / architecture (e.g. **John**) retains technical direction and security oversight for how integration is built. |
+| **Account ownership** | Venue and funding accounts must be owned by identified humans or legal entities; **no anonymous or shared “system” accounts** without documented owners. |
+| **Who approves access** | Human approvers (risk + technical) must sign off before credentials, API keys, or signing paths are provisioned. |
+| **Who approves go-live** | **Explicit human go-live approval** (not model self-approval) before real execution is allowed. |
+| **Who can revoke** | Same governance chain must define **revocation**: disable keys, freeze integration, or pull execution access without redeploying the whole app. |
+
+**Human approval policy:** No live trading capability is “on” until a documented approval record exists (who, when, scope).
+
+### 2. Wallet / Custody Prerequisites
+
+Real trading requires a **wallet architecture** (chain- and venue-specific details are chosen later).
+
+- **Wallet selection:** Example class — **Phantom** or a comparable **Solana** wallet for human-initiated operations; other chains require an explicit decision.  
+- **Custody model:** Define whether keys are **hot**, **warm**, or **hardware-backed** for production; default assumption is **no hot-wallet free-for-all** for system funds.  
+- **Recovery / secrets:** Rules for **recovery phrase** and **secret material** handling (offline backup, split custody, no single-person copy in chat).  
+- **Hardening path:** **Hardware wallet** or stronger custody is a **future hardening** step, not a shortcut around governance.
+
+**Non-negotiables (secrets):**
+
+- **No private keys or seed phrases in Git.**  
+- **No private keys or seed phrases in chat** (including Cursor, Slack, email).  
+- **No direct unsafe embedding** of raw secrets into runtime scripts or env files committed to the repo.
+
+The system must **never casually “hold” raw secrets**; integration must use **approved secret storage** (see below) when execution is real.
+
+### 3. Platform / Venue Prerequisites
+
+Before real execution:
+
+- **Target platform / venue** must be **selected** explicitly (generic examples: CEX vs DEX, Drift-class venue — **not locked** here unless architect says so).  
+- **Account creation / onboarding** must be completed under the **owner** identity.  
+- **Policy on venue type** must be written (what is allowed vs forbidden).
+
+**Explicit distinction:**
+
+| Mode | Meaning |
+|------|--------|
+| **Read-only market access** | Quotes, charts, public data — **no signing, no orders**. |
+| **Paper / simulated** | Current BLACK BOX paper pipeline — **no venue keys required**. |
+| **Real execution** | Orders, deposits, or signed transactions — **only after Phase 4 gates + approval**. |
+
+### 4. Signing / Execution Control Model
+
+A **controlled execution model** is required:
+
+- **Authorization:** Orders or transactions must be **authorized** by a defined path (human approval first).  
+- **Initial assumption:** **Human approval** before every real execution **until** a stricter automated policy is validated and approved.  
+- **Later:** **Controlled automated approval** only after **validation**, audits, and rollback drills — not a default.  
+- **Auditable path:** Every real execution must be **traceable** (who/what approved, what was signed, when).
+
+**Explicit statements:**
+
+- **No silent execution** — no background signing without policy visibility.  
+- **No uncontrolled signing** — no ad hoc scripts with keys.  
+- **No direct production execution** without passing the **policy gate** (e.g. guardrail / governance layer — see Phase 2.11–2.12 runtime and future enforcement).
+
+### 5. Environment / Secrets / Access Controls
+
+- **Secret storage policy:** Secrets live in **approved vaults** or host-managed secret stores — **not** in the repo.  
+- **Direction:** Integrate with a **vault / secret-manager** pattern approved by technical leadership.  
+- **Access classes by role:** Separate **data** access, **planning** access, and **execution** access; least privilege.  
+- **No secrets in repo**; **no secrets in chat**; **no ad hoc copying** of credentials into scripts.
+
+### 6. Safety Gates Before Live Integration
+
+Phase 4 **must not** begin real execution until **all** of the following are true:
+
+1. **Phase 2** paper-only pipeline is **complete and stable** (lifecycle → insight → trend → guardrail as implemented).  
+2. **Phase 3** intelligence / data phase is **complete enough** per architect (not defined here in detail).  
+3. **Guardrail policy** exists and is **enforceable** in downstream workflows (see `policy_gated_action_filter.py` and policy storage).  
+4. **Wallet / access governance** is **documented** (this section + approvals).  
+5. **Approval model** is **documented** and followed.  
+6. **Test capital policy** is **documented** (how much, which account, kill switch).  
+7. **Rollback / disable path** is **documented** (how to turn off venue access without code panic).
+
+### 7. Explicit Non-Goals
+
+Phase 4 **does not** automatically mean:
+
+- **Immediate autonomous trading**  
+- **Unrestricted exchange access**  
+- **Direct hot-wallet free-for-all**  
+- **Bypassing policy** because the system “looks ready”
+
+---
+
 ## Final Rule
 
 If unclear: **STOP → LOOK UP DOCS → THEN IMPLEMENT**
