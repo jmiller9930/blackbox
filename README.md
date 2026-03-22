@@ -29,7 +29,7 @@ No autonomous rewrites, no trading decisions, no self-modification, no guessing 
 
 **Environment note:** A future target is the ClawBot server (`clawbot.a51.corp`); Phase 1 does not depend on it.
 
-**Trading bot (execution path, not Phase 1 Cody work):** See [`docs/trading/REFERENCE_CURRENT_DRIFT_BOT.md`](docs/trading/REFERENCE_CURRENT_DRIFT_BOT.md) for the current Drift / SOL perp bot behavior, gaps vs the architect trading doc, and security notes. Architect roadmap: [`docs/architect/architect_update_trading_system.md`](docs/architect/architect_update_trading_system.md).
+**Trading bot (execution path, not Phase 1 Cody work):** See [`docs/trading/REFERENCE_CURRENT_DRIFT_BOT.md`](docs/trading/REFERENCE_CURRENT_DRIFT_BOT.md) for behavior summary; **full rules source:** [`trading_core/drift_trading_bot_source.ts`](trading_core/drift_trading_bot_source.ts). Architect roadmap: [`docs/architect/architect_update_trading_system.md`](docs/architect/architect_update_trading_system.md).
 
 **Python:** 3.11+
 

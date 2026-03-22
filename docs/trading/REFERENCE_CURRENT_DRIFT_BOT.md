@@ -4,6 +4,8 @@ This document is the **in-repo handoff** for what the **live-style** trading bot
 
 **Sources:** Architect trading-system update (`docs/architect/architect_update_trading_system.md`), operator context, and a **code snapshot** shared 2026-03-22 (Sean S → John Miller; subject referenced **“trading bot code 60/40”** — meaning of **60/40** should be confirmed with the team, e.g. revenue vs effort split).
 
+**Full source in-repo:** [`../../trading_core/drift_trading_bot_source.ts`](../../trading_core/drift_trading_bot_source.ts) (QuickNode URL redacted → `SOLANA_RPC_URL`).
+
 ---
 
 ## Vision (why this repo exists)
