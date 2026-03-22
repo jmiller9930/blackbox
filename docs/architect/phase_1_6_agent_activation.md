@@ -1,5 +1,15 @@
 # Phase 1.6 — Activate Agents + System Prerequisites
 
+## Controlled execution phase (architect — active)
+
+**Status:** Architect **concurrence** received. Implementation of Cody + DATA definitions is **approved**. The system is in **controlled execution** — **no expansion** (no new agents, no vault integration, no broad tool surface) until validation completes.
+
+**Focus:** stability, validation, controlled execution — not premature scaling.
+
+A separate `phase_1_7.md` is **not required** while this document remains the single execution-scope reference.
+
+---
+
 ## Objective
 
 Move from “agents on paper” to **agents doing controlled, real work**.
@@ -56,7 +66,7 @@ Cody must be able to:
 Cody should:
 
 - not execute uncontrolled system changes
-- operate as planner + builder
+- operate as **engineer + planner + builder**
 
 ### 4. System Prerequisites (Document + Enforce)
 
@@ -73,21 +83,53 @@ Define and document:
 
 ---
 
-## Constraints
+## Constraints (remain enforced)
 
-- No new agents until Cody + DATA are validated
-- No broad autonomy
-- No secrets in repo or chat
+- **No new agents** (Anna, Billy, Mia expansion, etc.) until architect sign-off
+- **No vault / secrets integration** in this phase
+- **No expansion of tool surface** beyond defined scope
+- **No autonomous execution** beyond defined scope (no uncontrolled mutation)
+- No broad autonomy; no secrets in repo or chat
 - All actions must be logged or traceable
+
+---
+
+## Approved next actions (operational)
+
+### 1. SQLite (clawbot)
+
+- Deploy **locally** on clawbot (no separate VM)
+- Apply schema: **`system_health_logs`**, **`alerts`** (Phase 1.5), **`agent_tasks`** (view over `tasks` + use `tasks` for writes)
+- Run [`scripts/init_phase1_6_sqlite.sh`](../../scripts/init_phase1_6_sqlite.sh) (applies 1.5 + 1.6)
+
+### 2. DATA — first workload
+
+- Check **gateway** health, **Ollama** connectivity, **SQLite** availability, **key endpoints**
+- **Log results** to SQLite; **detect and report** at least one failure condition
+- Report **only verified truth**; **classify** failures; **never speculate**
+
+### 3. Cody — first workload
+
+- **Analyze** repository structure; produce **structured patch plan(s)**; **propose** agent config improvements
+- **Do not** execute uncontrolled changes or mutate system state without approval
+
+### 4. Validation gate
+
+Demonstrate:
+
+- DATA produces **reliable health logs** in SQLite
+- DATA **detects** a failure condition
+- Cody produces a **usable patch plan**
+- SQLite **stores** results as expected
 
 ---
 
 ## Success Criteria
 
-- SQLite running and writable
-- DATA successfully logs system health checks
-- Cody produces structured repo analysis or patch plan
-- At least one alert scenario tested and logged
+- SQLite running and writable (`init_phase1_6_sqlite.sh` applied on clawbot)
+- DATA logs system health checks into **`system_health_logs`** / **`alerts`** as designed
+- Cody produces structured repo analysis or patch plan (no blind execution)
+- At least one **failure** scenario detected and logged
 
 ---
 
@@ -102,13 +144,14 @@ Define and document:
 
 ## BLACK BOX repo alignment
 
-| Phase 1.6 intent | In-repo today (Phase 1.5 persistence) |
-|------------------|-----------------------------------|
-| `alerts` | `alerts` table in [`data/sqlite/schema_phase1_5.sql`](../../data/sqlite/schema_phase1_5.sql) |
-| `agent_tasks` | `tasks` table (agent-scoped via `agent_id`) |
-| `system_health_logs` | `system_events` (structured events + payloads); extend or add `system_health_logs` in a follow-up migration if needed |
+| Phase 1.6 intent | In-repo |
+|------------------|--------|
+| `alerts` | [`data/sqlite/schema_phase1_5.sql`](../../data/sqlite/schema_phase1_5.sql) |
+| `agent_tasks` | View `agent_tasks` → `tasks` in [`data/sqlite/schema_phase1_6.sql`](../../data/sqlite/schema_phase1_6.sql) |
+| `system_health_logs` | Table in [`data/sqlite/schema_phase1_6.sql`](../../data/sqlite/schema_phase1_6.sql) |
 
-**Init script:** [`scripts/init_phase1_5_sqlite.sh`](../../scripts/init_phase1_5_sqlite.sh) — run on clawbot after choosing DB path.
+**Init script (recommended):** [`scripts/init_phase1_6_sqlite.sh`](../../scripts/init_phase1_6_sqlite.sh) — applies **1.5 + 1.6** to `BLACKBOX_SQLITE_PATH` (default `data/sqlite/blackbox.db`).  
+Legacy: [`scripts/init_phase1_5_sqlite.sh`](../../scripts/init_phase1_5_sqlite.sh) alone does **not** add `system_health_logs` / `agent_tasks` view.
 
 **Agent definitions:** [`agents/agent_registry.json`](../../agents/agent_registry.json) — Cody + DATA policy, [`DATA_ONLINE_SETUP.md`](DATA_ONLINE_SETUP.md) for OpenClaw wiring.
 
