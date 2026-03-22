@@ -20,6 +20,8 @@ cd ~/blackbox && ./scripts/sync_cody_skill_to_openclaw.sh
 
 **OpenClaw CLI** over SSH often needs: `~/blackbox/scripts/openclaw_on_claw.sh skills list` (wraps `node ~/openclaw/openclaw.mjs`).
 
+**“See Cody” in the web UI:** OpenClaw already runs an **agent** (default id **`main`** — that *is* the agentic agent). The **name/face** come from the **workspace** files OpenClaw injects, especially **`IDENTITY.md`** and **`SOUL.md`** under `~/.openclaw/workspace/`. Set **Name: Cody** there (and optional avatar path). The chat session may still show `main` in the URL; refresh or start a new session after editing identity files.
+
 ### ClawBot web UI (lab)
 
 OpenClaw / agent chat in the browser (verified in lab):
