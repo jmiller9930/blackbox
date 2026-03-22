@@ -120,6 +120,22 @@ Use the Cody planner skill to recommend next steps for building BLACK BOX.
 
 ---
 
+## Meet the Team
+
+Roster — **software agents** vs **human roles** — status as of planning docs (see [`docs/architect/TEAM_ROSTER.md`](architect/TEAM_ROSTER.md) for the canonical table).
+
+| Name | Type | Role | Status |
+|------|------|------|--------|
+| **Cody** | Agent | Software engineer — builds the system and agents | In progress |
+| **DATA** | Agent | System & data guardian — health, integrity, monitoring | In progress |
+| **Mia** | Agent | Market info — real-time market data (**read-only**) | Active |
+| **Anna** | Agent | Analyst — trade signals and confidence | In progress |
+| **Billy** | Agent | TBot executor — executes trades and manages positions | In development |
+| **Sean** | Human | CEO — strategy, goals, risk tolerance | Active |
+| **John** | Human | CTO — architecture, security, technical direction | Active |
+
+---
+
 ## Future phases (stub — architect review)
 
 > **Note:** Not in scope for Phase 1 delivery. Below is a **proposal stub** for roadmap alignment. **Confirm with the architect** before design or implementation.

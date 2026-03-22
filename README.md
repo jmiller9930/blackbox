@@ -33,6 +33,8 @@ No autonomous rewrites, no trading decisions, no self-modification, no guessing 
 
 **Phase 1.5 (agent hardening):** [`docs/architect/phase_1_5_agent_hardening_spec.md`](docs/architect/phase_1_5_agent_hardening_spec.md) — Cody + DATA definitions in `agents/`, SQLite in `data/sqlite/`, `./scripts/sync_openclaw_skills.sh`, `./scripts/init_phase1_5_sqlite.sh`.
 
+**Team roster (agents + humans):** [`docs/architect/TEAM_ROSTER.md`](docs/architect/TEAM_ROSTER.md)
+
 **Python:** 3.11+
 
 ```bash
