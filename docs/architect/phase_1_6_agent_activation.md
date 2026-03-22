@@ -140,6 +140,19 @@ Demonstrate:
 - Introduce Billy (execution layer)
 - Implement vault-based secrets management
 
+### Future: SQLite schema normalization (tracked — not blocking)
+
+Run **after** DATA/Cody behavior is proven on the bridge schema. Per [`architect_sqlite_deviation_response.md`](architect_sqlite_deviation_response.md):
+
+- Column normalization vs architect `sqlite_spec_phase`
+- `id` strategy review
+- `latency_ms`, `metadata` on health logs
+- Alert traceability / optional FKs to health rows
+- `resolved` / `resolved_at` vs current `status` / `acknowledged_at`
+- Whether `agent_tasks` stays a view or becomes a dedicated table (`task_type`, `result_summary`)
+
+Do **not** rebuild DB from scratch or churn schema mid-implementation without architect approval.
+
 ---
 
 ## BLACK BOX repo alignment
@@ -166,6 +179,8 @@ The external **SQLite Specification (Phase 1.6 / 1.7)** is the behavioral target
 **Validation criteria in the spec** (rows for gateway / ollama / sqlite in `system_health_logs`, at least one alert, at least one task) are **outcomes to demonstrate**, not yet guaranteed by DDL alone.
 
 **If architect requires strict column parity:** approve a **schema migration** (new revision) to rename/add columns and optional FKs; until then, treat the repo as an **intentional Phase 1.5/1.6 bridge** with documented mapping above.
+
+**Architect-approved temporary bridge (official):** [`architect_sqlite_deviation_response.md`](architect_sqlite_deviation_response.md) — acceptable to proceed; **not** final schema; behavior rules frozen; do not block activation on perfect DDL.
 
 **Init script (recommended):** [`scripts/init_phase1_6_sqlite.sh`](../../scripts/init_phase1_6_sqlite.sh) — applies **1.5 + 1.6** to `BLACKBOX_SQLITE_PATH` (default `data/sqlite/blackbox.db`).  
 Legacy: [`scripts/init_phase1_5_sqlite.sh`](../../scripts/init_phase1_5_sqlite.sh) alone does **not** add `system_health_logs` / `agent_tasks` view.
