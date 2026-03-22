@@ -13,7 +13,7 @@ This file is an **audit trail** only: pass/fail, time, and repo reference.
 |--------|--------|
 | **Concurrence recorded** | 2026-03-23 |
 | **Repository** | `blackbox` @ `main` |
-| **Git ref (recorded)** | _(update on each audit pass — `git rev-parse HEAD`)_ |
+| **Git ref (recorded)** | `31804aa` |
 | **Phase** | Controlled execution — see [`phase_1_6_agent_activation.md`](phase_1_6_agent_activation.md) |
 
 ### Cody — PASS
