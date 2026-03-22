@@ -11,7 +11,7 @@ This document formalizes the next phase of the BLACK BOX / Cody system.
 Core objective:
 > Build a system that becomes smarter over time through learning and controlled escalation — not just larger models.
 
-**Phase 3 — Intelligence Layer** (Anna, read-only market ingestion, validation loop, optional maker awareness — planning): see [`docs/blackbox_master_plan.md`](../blackbox_master_plan.md) — section *Phase 3 — Intelligence Layer (Codified)*.
+**Phase 3 — Intelligence Layer** (Anna, read-only market ingestion, validation loop, concept registry, optional maker awareness — planning): see [`docs/blackbox_master_plan.md`](../blackbox_master_plan.md) — section *Phase 3 — Intelligence Layer* (Phase 3.1–3.8).
 
 **Real trading / venue integration prerequisites (governance, wallet, signing, gates):** see **Phase 4** in [`docs/blackbox_master_plan.md`](../blackbox_master_plan.md).
 

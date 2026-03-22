@@ -190,7 +190,7 @@ Combine:
 
 **Alignment:** Roster “Anna — Analyst” ([`docs/architect/TEAM_ROSTER.md`](architect/TEAM_ROSTER.md)) is the **persona** this layer eventually supports; this stub does **not** implement Anna.
 
-**Superseded in roadmap detail by:** [Phase 3 — Intelligence Layer (Codified)](#phase-3--intelligence-layer-codified) below (Anna, ingestion, validation loop, optional strategy awareness).
+**Superseded in roadmap detail by:** [Phase 3 — Intelligence Layer](#phase-3--intelligence-layer) below (Anna, ingestion, validation loop, concept registry, optional strategy awareness).
 
 ---
 
@@ -229,103 +229,165 @@ This section is intentionally high-level; detailed triggers, providers, and Open
 
 ---
 
-## Phase 3 — Intelligence Layer (Codified)
+## Phase 3 — Intelligence Layer
 
-> **Planning-only for this document.** Phase 3 is where **intelligence** (interpretation, conversation, validation, and—when built—**read-only** market context) layers on top of the **Phase 2** paper pipeline. **No exchange trading, no wallet keys, and no live execution** are implied by this section until [Phase 4](#phase-4--real-trading-integration-prerequisites) gates are met.
+> **Planning-only for this document.** Phase 3 is where **intelligence** (interpretation, conversation, validation, and—when built—**read-only** market context) layers on top of the **Phase 2** paper pipeline. **No registry loader**, Anna runtime wiring, exchange connectivity, or wallet code is implied until implemented per architect — this section is **plan codification** only.
 
-**Keywords for search:** Phase 3, Anna, intelligence layer, Telegram, validation loop, market data ingestion, Solana, read-only, trading concept registry, intelligence extensibility.
+**What Phase 3 is not:** live trading; wallet integration; exchange execution; unrestricted LLM behavior.
 
-**Upstream (Phase 2) evidence the intelligence layer must align with:** trade episodes (`trade_episode_aggregator.py`), system insight (`insight_generator.py`), system trend (`insight_trend_tracker.py`), guardrail policy (`guardrail_policy_evaluator.py`), policy-gated action (`policy_gated_action_filter.py`) — all **paper-only** today.
+**What Phase 3 is:** market visibility; **Anna** as the analyst intelligence layer; **concept registry** and retrieval; expert interaction with Sean; **validation** and concept promotion; **extensible reasoning modules**.
 
-**Downstream:** [Phase 4 — Real Trading Integration Prerequisites](#phase-4--real-trading-integration-prerequisites) (wallet, custody, signing, governance) applies before any real venue execution.
+**No exchange trading, no wallet keys, and no live execution** are implied by this section until [Phase 4](#phase-4--real-trading-integration-prerequisites) gates are met.
+
+**Keywords for search:** Phase 3, Anna, intelligence layer, Telegram, validation loop, market data ingestion, Solana, read-only, trading concept registry, intelligence extensibility, concept retrieval, modular reasoning, concept formation pipeline.
+
+**Upstream (Phase 2) — safe simulation:** The intelligence layer must align with trade episodes (`trade_episode_aggregator.py`), system insight (`insight_generator.py`), system trend (`insight_trend_tracker.py`), guardrail policy (`guardrail_policy_evaluator.py`), policy-gated action (`policy_gated_action_filter.py`) — all **paper-only** today (episodes, insights, trends, policy / guardrails).
+
+**Downstream (Phase 4) — real trading prerequisites:** [Phase 4 — Real Trading Integration Prerequisites](#phase-4--real-trading-integration-prerequisites) — wallet, custody, access, approval, governance — before any real venue execution.
+
+**Placement:** Phase 3 sits between **safe simulation** (Phase 2) and **real-world trading integration** (Phase 4).
 
 **Roster alignment:** Anna (analyst), Sean (human expert), DATA/Mia — see [`docs/architect/TEAM_ROSTER.md`](architect/TEAM_ROSTER.md).
 
-### Phase 3A — Market Data Ingestion (READ ONLY)
+### Phase 3.1 — Market Data Ingestion (Read-Only)
 
-- The system **ingests live market data** relevant to the **Solana ecosystem** (exact feeds and venues are implementation choices; not locked here).
-- Ingestion includes, as applicable: **price**, **volume**, **spreads**, **liquidity context**, normalized into a **structured internal format** for analysts and downstream logic.
+#### Purpose
+
+Allow the system to **see** the market before it tries to reason about it.
+
+#### Required content
+
+The system must support **read-only** ingestion of market data relevant to the target crypto trading environment (e.g. **Solana** ecosystem; exact feeds and venues are implementation choices).
+
+This must include, as applicable:
+
+- **price**
+- **volume**
+- **spread**
+- **liquidity context**
+- **order book / depth context** where available
+- **volatility context**
+- **timestamped normalized market snapshots**
+
+Data should be **normalized** into a **consistent internal structure** for analysts and downstream logic.
+
+#### Requirements
+
+- **Read-only only** — no orders, no signed transactions, no venue keys in application code paths for this phase’s ingestion scope.
+- **No trading** in this step.
 - **DATA** monitors **feed health** (staleness, gaps, source failures) alongside existing health duties.
 
-**Explicit:**
+#### Explicit rule
 
-- **No trading** from ingestion alone.  
-- **Read-only ingestion** — no orders, no signed transactions, no venue keys in application code paths for this phase’s ingestion scope.
+**Phase 3.1 is visibility only.** It does **not** grant permission to execute.
 
-### Phase 3B — Conversational Analyst (Anna)
+### Phase 3.2 — Anna: Conversational Analyst Layer
 
-Anna is defined as:
+#### Purpose
 
-> A **domain-aware analyst** that can communicate with **human traders (Sean)** and **translate trading concepts into system logic** — without becoming an execution path by itself.
+Define **Anna** as the **primary cognitive intelligence layer** for market reasoning.
 
-**Responsibilities:**
+#### Definition
 
-- Understand trader language (**liquidity**, **spreads**, **slippage**, **order flow**, etc.).
-- **Translate** into **structured system signals** compatible with existing pipelines.
-- **Align** with **system state** (e.g. trends, **guardrail policy**, paper outcomes).
-- **Propose** adjustments or strategies as **recommendations**, not autonomous trades.
-- **Push back** when input is weak, ambiguous, or unsupported by evidence.
+Anna is a **domain-aware analyst** that can communicate with **expert humans (especially Sean)**, understand **trader language**, and translate that language into **structured system reasoning**.
 
-**Interaction model:**
+#### Anna responsibilities
 
-- **Sean** communicates via **Telegram** (primary human channel for this design).
-- Anna responds in **trader-accessible language**.
-- Anna produces **structured outputs for the system** — **not** direct execution (execution remains gated by policy and Phase 4).
+- Understand trader language: **liquidity**, **spreads**, **slippage**, **order flow**, **volatility**, **market depth**, **market-making / maker concepts** (as vocabulary and reasoning inputs — not as autonomous execution in Phase 3).
+- **Translate** trader language into **system-usable concepts** and structured signals compatible with existing pipelines.
+- **Align** reasoning with **current decision context**, **trends**, and **guardrail policy**; align with **paper outcomes** from Phase 2.
+- **Propose** adjustments, critiques, or candidate improvements — as **recommendations**, not autonomous trades.
+- **Push back** when expert input is weak, unsupported, or contradicted by evidence.
+- **Request more evidence** when needed.
+- **Explain reasoning** clearly in both **human** and **system** terms.
 
-**Required conversational capabilities:**
+#### Interaction model
 
-- Agree / disagree / question  
-- Request evidence  
-- Suggest alternatives  
-- Explain reasoning clearly  
+- **Sean** communicates with Anna via **Telegram** (primary human channel for this design).
+- Anna must be able to: **converse** in trader language; **ask clarifying questions**; **agree**; **disagree**; **request evidence**; **suggest alternatives**.
 
-### Phase 3C — Validation & Learning Loop
+#### Explicit rule
 
-Codified loop:
+Anna is **not** a blind translator and **not** a yes-bot. Anna must be able to **challenge weak logic**.
 
-**human input → analyst interpretation → system proposal → controlled evaluation (paper system) → outcome → reflection (why) → retain or reject**
+#### Explicit non-goals (Phase 3.2)
 
-**Rules:**
+Phase 3.2 does **not** mean:
+
+- live execution
+- direct code mutation
+- direct system reconfiguration from chat
+- automatic adoption of expert suggestions
+
+### Phase 3.3 — Validation & Learning Loop
+
+#### Purpose
+
+Codify the core philosophy: **trust → test → validate → adopt or reject**.
+
+#### Required loop
+
+**human input → analyst interpretation → structured proposal → controlled evaluation (paper system) → outcome → reflection → why did it succeed or fail → retain or reject**
+
+(Equivalent shorthand: **human input → analyst interpretation → system proposal → controlled evaluation (paper system) → outcome → reflection (why) → retain or reject**.)
+
+#### Required rules
 
 - **No idea becomes system behavior** without **validation** on the paper path (or equivalent controlled evaluation).
 - **Success must be repeatable** under documented conditions.
 - **Failure must be explained** (what broke, what to change).
-- **Reasoning must be stored** alongside outcomes where the architecture persists artifacts (SQLite tasks, episode/insight records).
+- **Reasoning must be stored** alongside outcomes where the architecture persists artifacts (e.g. SQLite tasks, episode/insight records).
+- **Expert input is valuable** but **not automatically correct**.
+- **System evidence** is the **final arbiter** for what becomes trusted behavior.
+
+#### Explicit rule
+
+The system must always ask: **why did this work?** and **why did this fail?**
 
 **Philosophy:** **trust → test → validate → adopt or reject** — not “ship intuition.”
 
-### Phase 3D — Strategy Interaction Layer (Optional / Advanced)
+### Phase 3.4 — Anna Modular Extensibility Model
 
-The system may **support discussion** of advanced strategy concepts with expert users **without implementing execution** for those concepts in Phase 3.
+#### Purpose
 
-#### Market making / maker concepts (awareness only)
+Ensure Anna becomes smarter by **adding modules**, not by turning into a **single giant prompt blob**.
 
-Anna may **acknowledge** concepts such as:
+#### Required content
 
-- Providing liquidity  
-- Spread capture  
-- Bid/ask positioning  
-- Influencing microstructure **when size permits** (theoretically — not assumed)
+Anna must be built as a **modular reasoning system**. The plan defines the following categories:
 
-**Important constraints:**
+#### Input adapters
 
-- **Not implemented** as trading behavior in Phase 3.  
-- **No manipulation** or artificial market movement as a goal.  
-- **No assumption** of sufficient capital or market dominance.  
-- Treated as **theoretical or exploratory** input unless promoted through validation.
+Examples: **Telegram** expert input; **market data snapshots**; **system state / guardrail state**; **outcomes / insights / trends**.
 
-**Purpose:** Let Anna **understand and reason** about these topics and support **structured discussion** — **not** to implement execution behavior here.
+#### Concept interpreter
 
-### Phase 3E — Trading Concept Registry & Intelligence Extensibility
+Maps **human language** and **system language** into **registry concepts** (Phase 3.5).
 
-> **Planning-only in this document.** The **registry file** in-repo is the **canonical shape** for concepts; **no registry loader** or Anna runtime wiring is implied until implemented in a later phase.
+#### Reasoning modules
 
-#### 1. Trading Concept Registry (source of truth)
+Examples: **liquidity reasoning**; **spread / slippage reasoning**; **execution risk reasoning**; **contradiction / challenge logic**; **confidence / justification logic**.
 
-- **Location:** [`data/concepts/registry.json`](../../data/concepts/registry.json) (JSON; version-controlled in **Git**).
+#### Output adapters
+
+Examples: **human-facing** analyst answer; **structured proposal** for system use; **challenge / pushback** output; **concept-tagged** reasoning output.
+
+#### Explicit rule
+
+Anna intelligence must scale by adding modular “Legos,” **not** by endlessly bloating a single prompt.
+
+### Phase 3.5 — Trading Concept Registry
+
+#### Purpose
+
+Create the **stable knowledge layer** Anna relies on.
+
+#### Canonical location
+
+- JSON-based registry: **[`data/concepts/registry.json`](../../data/concepts/registry.json)** (or equivalent), version-controlled in **Git**.
 - **Mutation rule:** No **runtime** mutation without **validation** and human/process approval; changes land via **PR / review**, not ad hoc edits in production.
 
-Each concept entry **should** include:
+#### Each concept entry
 
 | Field | Purpose |
 |--------|---------|
@@ -339,61 +401,75 @@ Each concept entry **should** include:
 | `execution_impact` | How it would affect execution (when allowed) |
 | `failure_modes` | What goes wrong if misunderstood |
 | `examples` | Concrete examples |
-| `status` | `draft` \| `validated` \| `deprecated` |
+| `status` | `draft` \| `validated` \| `deprecated` (see lifecycle in Phase 3.7) |
 | `version` | Monotonic or semver per concept |
 
-**Explicit rule:** The **registry is canonical memory** — **not** the LLM. Models may assist drafting; **registry + review** is authoritative.
+#### Explicit rule
 
-#### 2. Anna extensibility model
+The **concept registry is canonical memory**. The **LLM is not** canonical memory.
 
-Anna is a **modular reasoning system**, not a single growing prompt:
+#### Concept categories (registry growth)
 
-| Component | Role |
-|-----------|------|
-| **Input adapters** | Telegram, system context, market/health data |
-| **Concept interpreter** | Maps natural language → **registry** concepts |
-| **Reasoning modules** | Risk, liquidity, execution *logic* (policy-aligned, paper-first) |
-| **Output adapters** | Human-readable + **structured** system payloads |
+The registry should grow in **layers**, for example:
 
-**Explicit rule:** Intelligence **grows by adding modules**, **not** by enlarging one monolithic prompt.
+##### Foundation / “for dummies” layer
 
-#### 3. Runtime concept retrieval (pattern)
+price, bid, ask, spread, orders, volume, liquidity, candles, timeframes
+
+##### Mechanical layer
+
+slippage, depth, price impact, volatility, maker / taker
+
+##### Behavioral layer
+
+trend, chop, breakout, fakeout, stop hunt
+
+##### Risk layer
+
+drawdown, position sizing, tail risk, regime shift
+
+##### Strategy layer
+
+market making, mean reversion, momentum, arbitrage, trend following
+
+#### Explicit rule
+
+The registry should **begin with foundational and mechanical** concepts **before** advanced strategy concepts.
+
+### Phase 3.6 — Runtime Concept Retrieval Pattern
+
+#### Purpose
+
+Prevent Anna from “forgetting” concepts and prevent **concept drift**.
+
+#### Required pattern
 
 When implemented:
 
-1. **Detect** concepts in user/system input (IDs or language matches).  
-2. **Fetch** matching **registry entries** only (partial load).  
-3. **Inject** those entries into Anna context at runtime.  
-4. **Do not** load the entire registry into every turn.
+1. **Detect** concepts in user input or task context.
+2. **Fetch** matching **registry entries** only (partial load).
+3. **Inject** those entries into Anna’s reasoning context.
+4. **Do not** load the entire registry every time.
 
-**Explicit rules:**
+#### Required rules
 
-- Prefer **registry-backed** reasoning over assumed model memory.  
-- **Unknown** term → treat as **draft** / flag for registry update, not silent invention.
+- **Registry-backed reasoning** — **no** reliance on assumed LLM memory for canonical definitions.
+- **Unknown** concept → **flagged** as draft / unresolved — **not** silent invention.
+- **Output** should reference **`concepts_used`** where persisted.
 
-#### 4. Structured concept usage
+#### Structured output requirement
 
 Anna outputs (when persisted) should support:
 
-- `concepts_used`: `[concept_id, …]`  
-- **Reasoning** tied to **registry fields** (which signals, which failure modes considered).  
-- Clear **concept → system impact** mapping (decision vs execution posture).
+- **`concepts_used`**
+- **Reasoning tied to concept IDs** (and registry fields where applicable)
+- **Mapping** from concept → **system effect** (decision vs execution posture)
 
-**Purpose:** **Auditability**, **traceability**, **learning-loop** compatibility (Phase 3C).
+#### Explicit rule
 
-#### 5. Validation loop integration
+**Concept memory lives in the system**, not in temporary LLM context.
 
-Concept lifecycle:
-
-**proposal → test → outcome → reflection → validation → registry update**
-
-**Explicit rules:**
-
-- Concepts are **not trusted** for production semantics until **`validated`**.  
-- **Sean** may **propose** concepts; **Anna** must **challenge or refine**.  
-- **System** confirms through **outcomes** (paper path first).
-
-#### 6. Hybrid intelligence model
+#### Hybrid intelligence (reference)
 
 | Layer | Role |
 |--------|------|
@@ -401,7 +477,78 @@ Concept lifecycle:
 | **Anna** | **Reasoning** over registry + live context |
 | **LLM** | **Assistive** drafting/expansion only |
 
-**Explicit rule:** An LLM may **propose** definitions; the **registry** (after review) is **final authority**.
+An LLM may **propose** definitions; the **registry** (after review) is **final authority**.
+
+### Phase 3.7 — Intelligence Ingestion & Concept Formation Pipeline
+
+#### Purpose
+
+Define how the system **gains new concepts** and **improves over time**.
+
+#### Intelligence sources
+
+##### 1. Expert input
+
+- Sean’s guidance
+- Sean’s code / strategy logic
+- Sean’s trader-language observations
+
+##### 2. Public / external knowledge
+
+- definitions, theory, vocabulary, reference knowledge
+
+##### 3. System evidence
+
+- outcomes, insights, trends, policy / guardrail interactions (Phase 2 artifacts)
+
+#### Required pipeline
+
+**source input → concept extraction → external validation / naming → registry encoding as draft → system testing → outcome evaluation → promote to validated or reject**
+
+#### Required rules
+
+- **Sean** input is **high-value**, not automatically correct.
+- **Internet / external** knowledge is **reference**, not final authority.
+- **System evidence** decides whether a concept becomes **trusted**.
+- Concepts must move through lifecycle states: **`draft`** → **`under test`** → **`validated`** → **`deprecated`** (exact encoding is an implementation detail; semantics are fixed here).
+
+#### Explicit rule
+
+**No concept** should become **`validated`** without **system-backed evidence**.
+
+#### Integration with concept lifecycle (Phase 3.3)
+
+**proposal → test → outcome → reflection → validation → registry update** — Sean may propose; Anna challenges or refines; the system confirms through outcomes (paper path first).
+
+### Phase 3.8 — Advanced Strategy Awareness (Constrained)
+
+#### Purpose
+
+Acknowledge **advanced topics** without prematurely implementing them.
+
+#### Required content
+
+Anna may **reason about** advanced concepts discussed by expert users, such as:
+
+- maker / market making
+- spread capture
+- bid/ask positioning
+- liquidity provision
+- microstructure effects
+- inventory risk
+- adverse selection
+
+#### Explicit constraints
+
+- **Awareness** does **not** equal **implementation**.
+- **No** market manipulation behavior.
+- **No** assumption of sufficient capital to influence markets.
+- **No execution behavior** is created in this phase.
+- These concepts are **discussion / reasoning inputs** only.
+
+#### Explicit rule
+
+Advanced concepts may enter the registry as **draft** or **exploratory** concepts, but do **not** imply deployment.
 
 ---
 
