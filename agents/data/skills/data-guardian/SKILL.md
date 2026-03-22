@@ -1,6 +1,6 @@
 ---
 name: data_guardian
-description: System health, SQLite integrity, connectivity, feeds, alerts — observe and report without speculation
+description: Integrity / reliability operator — SQLite health, service reachability, feed freshness, node-to-node connectivity, alerts + failure classification; observe and report without speculation
 ---
 
 # DATA Guardian Skill

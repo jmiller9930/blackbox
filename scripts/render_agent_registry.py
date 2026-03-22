@@ -11,7 +11,7 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parents[1]
 REGISTRY = REPO_ROOT / "agents" / "agent_registry.json"
 AGENTS_DIR = REPO_ROOT / "agents"
-OVERVIEW = REPO_ROOT / "docs" / "architect" / "agent_registry.md"
+OVERVIEW = REPO_ROOT / "docs" / "architect" / "AGENT_REGISTRY.md"
 
 GENERATED = (
     "<!-- Generated from ../../agent_registry.json — edit registry and re-run scripts/render_agent_registry.py -->"
@@ -57,6 +57,11 @@ def render_identity(agent_id: str, block: dict) -> str:
         for item in outs or []:
             lines.append(f"  - {item}")
     lines.append(f"- **Ownership:** {ident.get('ownership', '')}")
+    owns = ident.get("owns")
+    if owns:
+        lines.append("- **Operational ownership:**")
+        for item in owns:
+            lines.append(f"  - {item}")
 
     resp = block.get("responsibilities") or []
     if resp:
@@ -107,6 +112,25 @@ def render_tools(agent_id: str, block: dict) -> str:
         for ref in align:
             out.append(f"- {ref}")
         out.append("")
+
+    policy = block.get("policy") or {}
+    labels = [
+        ("allowedToolClasses", "## Policy — allowed tool classes"),
+        ("deniedActions", "## Policy — denied actions"),
+        ("escalationRules", "## Policy — escalation"),
+        ("secretAccessClasses", "## Policy — secret access classes"),
+    ]
+    any_policy = any(policy.get(k) for k, _ in labels)
+    if any_policy:
+        for key, title in labels:
+            items = policy.get(key) or []
+            if not items:
+                continue
+            out.append(title)
+            out.append("")
+            for line in items:
+                out.append(f"- {line}")
+            out.append("")
     return "\n".join(out).rstrip() + "\n"
 
 
@@ -200,18 +224,46 @@ def render_overview(raw: dict) -> str:
         "",
         "## Purpose",
         "",
-        "Single source of truth for all agents: identity, tools, soul, responsibilities, handoffs.",
+        "Single source of truth for all agents: identity, tools, soul, responsibilities, handoffs, and **policy** (tool classes, denials, escalation, secret access).",
         "Canonical data lives in **`agents/agent_registry.json`**; this file is **generated** for reading — edit the JSON, then run `python3 scripts/render_agent_registry.py`.",
         "",
         "## Architecture (three layers)",
         "",
         "| Layer | Answers | Rendered file |",
         "|--------|---------|----------------|",
-        "| Identity | Who, mission, scope, ownership, responsibilities | `IDENTITY.md` |",
-        "| Tools | Allowed / conditional / denied surfaces | `TOOLS.md` |",
+        "| Identity | Who, mission, scope, ownership, operational ownership | `IDENTITY.md` |",
+        "| Tools | Allowed / conditional / denied + **policy** sections | `TOOLS.md` |",
         "| Soul | Voice, traits, behavior under uncertainty | `SOUL.md` |",
         "",
         "Keep **JSON compact** (lists and short strings). **Prose-heavy** behavior lives in generated per-agent Markdown, not duplicated as long strings in the registry.",
+        "",
+        "## Registry as policy (not descriptive-only)",
+        "",
+    ]
+    rp = raw.get("registryPolicy") or {}
+    if rp.get("statement"):
+        lines.append(rp["statement"])
+        lines.append("")
+    seq = rp.get("sequencing") or []
+    if seq:
+        lines.append("**Sequencing:**")
+        for i, step in enumerate(seq, 1):
+            lines.append(f"{i}. {step}")
+        lines.append("")
+    lines.extend(
+        [
+        "## Secrets (vault-first)",
+        "",
+    ]
+    )
+    sp = raw.get("secretsPolicy") or {}
+    if sp.get("vaultFirst"):
+        lines.append("**Vault-first:** yes — lock these rules before building integrations.")
+        lines.append("")
+    for rule in sp.get("rules") or []:
+        lines.append(f"- {rule}")
+    lines.extend(
+        [
         "",
         "## Performance",
         "",
@@ -222,6 +274,7 @@ def render_overview(raw: dict) -> str:
         "## Governance",
         "",
     ]
+    )
     for g in raw.get("governance") or []:
         lines.append(f"- {g}")
     lines.extend(["", "# Agents", ""])
@@ -267,6 +320,9 @@ def render_overview(raw: dict) -> str:
             lines.append("- **Handoff:**")
             for h in ho:
                 lines.append(f"  - {h}")
+        pol = block.get("policy") or {}
+        if any(pol.get(k) for k in ("allowedToolClasses", "deniedActions", "escalationRules", "secretAccessClasses")):
+            lines.append("- **Policy (summary):** see per-agent `TOOLS.md` — allowed tool classes, denied actions, escalation, secret access classes.")
         lines.append("")
     lines.extend(
         [

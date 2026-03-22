@@ -2,6 +2,8 @@
 
 DATA becomes a **real second agent** when (1) **skills** are synced, (2) a **dedicated workspace** holds DATA’s identity/soul files, and (3) **`agents.list`** registers that agent. **Cody** can stay **`main`** / default; DATA is a separate `id`.
 
+Canonical role framing: **Cody** = engineer + planner + builder; **DATA** = **integrity / reliability operator** (SQLite health, reachability, feeds, node connectivity, alerts — not a general assistant). Source: [`agents/agent_registry.json`](../../agents/agent_registry.json), generated docs in [`AGENT_REGISTRY.md`](AGENT_REGISTRY.md).
+
 ## 1. Pull repo and sync skills
 
 ```bash

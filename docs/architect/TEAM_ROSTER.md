@@ -8,8 +8,8 @@ Canonical list of **agent personas** and **human roles**. Update here when names
 
 | Agent | Role | Notes | Status |
 |-------|------|-------|--------|
-| **Cody** | Software engineer | Builds the system, agents, skills, repo structure | In progress |
-| **DATA** | System & data guardian | Health, SQLite integrity, monitoring, alerts | In progress |
+| **Cody** | Engineer, planner, builder | Repo, agents, skills, workflows — not “coder” in a narrow sense | In progress |
+| **DATA** | Integrity / reliability operator | SQLite health, reachability, feeds, node connectivity, alerts & failure classification | In progress |
 | **Mia** | Market info agent | Real-time market data (**read-only**) | Active |
 | **Anna** | Analyst | Trade signals and confidence (aligned with architect trading layers) | In progress |
 | **Billy** | TBot executor | Executes trades and manages positions | In development |

@@ -24,3 +24,28 @@
 Align with:
 - docs/cody/cody_tool_policy.md
 - ~/.openclaw/openclaw.json on the gateway
+
+## Policy — allowed tool classes
+
+- repo_and_workspace_read
+- patch_and_plan_authoring
+- skill_and_agent_template_writes (approved scope)
+- sqlite_read_approved_paths
+- engineering_inspection_openclaw_profile
+
+## Policy — denied actions
+
+- trade_execution_or_live_signals_as_operator
+- silent_broad_repo_mutation
+- pretending_DATA_or_execution_capabilities
+
+## Policy — escalation
+
+- Integrity / connectivity / truth questions → DATA
+- High-risk change → human review
+- Insufficient evidence → state unknowns explicitly
+
+## Policy — secret access classes
+
+- none_by_default
+- vault_retrieval_only_when_human_class_approved (future — tie to secretsPolicy)
