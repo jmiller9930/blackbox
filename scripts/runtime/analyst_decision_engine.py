@@ -1,7 +1,9 @@
 #!/usr/bin/env python3
 """
-Phase 2.3 — Analyst prototype (decision engine v0): rule-based recommendations from
-Phase 2.2 decision context. No ML, no trades, no registry agent.
+Phase 2.3 — Analyst prototype (decision engine v0).
+
+Consumes Phase 2.2 decision context (fresh build or latest stored [Decision Context] task).
+Rule-based only: NO_TRADE / REDUCED_RISK / ALLOW. No ML, no trades, no API calls.
 """
 from __future__ import annotations
 
@@ -23,195 +25,162 @@ def _utc_now() -> str:
     return datetime.now(timezone.utc).replace(microsecond=0).isoformat()
 
 
-def load_latest_stored_decision_context(conn) -> dict | None:
+def load_latest_stored_decision_context(conn) -> dict:
     row = conn.execute(
         """
-        SELECT description
-        FROM tasks
+        SELECT description FROM tasks
         WHERE title LIKE '[Decision Context]%'
         ORDER BY datetime(updated_at) DESC
         LIMIT 1
         """
     ).fetchone()
     if not row or not row[0]:
-        return None
-    try:
-        d = json.loads(row[0])
-    except json.JSONDecodeError:
-        return None
-    if d.get("kind") != "decision_context_v1":
-        return None
-    return d
+        raise LookupError("no stored [Decision Context] task found")
+    data = json.loads(row[0])
+    if data.get("kind") != "decision_context_v1":
+        raise ValueError("latest context task is not decision_context_v1")
+    return data
 
 
-def _snapshot(ctx: dict) -> dict:
-    h = ctx.get("health_summary") or {}
+def _context_snapshot(ctx: dict) -> dict:
+    hs = ctx.get("health_summary") or {}
     return {
         "system_readiness": ctx.get("system_readiness"),
-        "health_summary": {
-            "latest_by_check_type": h.get("latest_by_check_type"),
-            "sqlite": h.get("sqlite"),
-            "gateway": h.get("gateway"),
-            "ollama": h.get("ollama"),
-            "recent_failure_row_count": h.get("recent_failure_row_count"),
-        },
-        "alert_summary": ctx.get("alert_summary"),
-        "outcome_summary": ctx.get("outcome_summary"),
-        "reflection_summary": {
-            "latest_reflection_task_id": (ctx.get("reflection_summary") or {}).get(
-                "latest_reflection_task_id"
-            ),
-            "latest_title": (ctx.get("reflection_summary") or {}).get("latest_title"),
-        },
+        "health_latest": hs.get("latest_by_check_type"),
+        "recent_health_fail_rows": hs.get("recent_failure_row_count"),
+        "alert_open_unacknowledged": (ctx.get("alert_summary") or {}).get(
+            "open_unacknowledged_count"
+        ),
+        "outcomes_by_status": (ctx.get("outcome_summary") or {}).get("by_status"),
+        "reflection_title": (ctx.get("reflection_summary") or {}).get("latest_title"),
     }
 
 
-def decide(ctx: dict, signal_stub: str | None) -> dict:
-    readiness = ctx.get("system_readiness") or "unknown"
-    flags = list(ctx.get("caution_flags") or [])
-    alerts = ctx.get("alert_summary") or {}
-    outcome = ctx.get("outcome_summary") or {}
-    health = ctx.get("health_summary") or {}
-    bys = outcome.get("by_status") or {}
-    open_a = int(alerts.get("open_unacknowledged_count") or 0)
-    fail_rows = int(health.get("recent_failure_row_count") or 0)
-    succ = int(bys.get("success") or 0)
-    unk = int(bys.get("unknown") or 0)
-    miss = int(bys.get("missing") or 0)
-    skew = (succ > 0 and (unk + miss) > succ) or (succ == 0 and (unk + miss) >= 3)
+def _degraded_confidence(ctx: dict) -> str:
+    al = (ctx.get("alert_summary") or {}).get("open_unacknowledged_count") or 0
+    rf = (ctx.get("health_summary") or {}).get("recent_failure_row_count") or 0
+    if al > 2 or rf > 5:
+        return "low"
+    return "medium"
 
-    notes: list[str] = []
-    if signal_stub:
-        notes.append(f"signal_stub (placeholder): {signal_stub}")
+
+def _degraded_reasoning(ctx: dict) -> str:
+    parts: list[str] = []
+    hs = ctx.get("health_summary") or {}
+    if hs.get("recent_failure_row_count", 0) > 0:
+        parts.append(
+            f"Health logs include {hs['recent_failure_row_count']} recent FAIL row(s)."
+        )
+    al = (ctx.get("alert_summary") or {}).get("open_unacknowledged_count") or 0
+    if al > 0:
+        parts.append(f"{al} open/unacknowledged alert(s).")
+    bys = (ctx.get("outcome_summary") or {}).get("by_status") or {}
+    unk = (bys.get("unknown") or 0) + (bys.get("missing") or 0)
+    succ = bys.get("success") or 0
+    if succ > 0 and unk > succ:
+        parts.append("Outcome records skew toward unknown/missing vs successes.")
+    elif succ == 0 and unk >= 3:
+        parts.append("Few tasks have recorded outcomes (success/failure/unknown).")
+    if not parts:
+        parts.append(
+            "Secondary signals (degraded readiness) without a single dominant trigger; see caution_flags."
+        )
+    return " ".join(parts)
+
+
+def decide(ctx: dict) -> dict:
+    readiness = ctx.get("system_readiness")
+    flags = list(ctx.get("caution_flags") or [])
+    ctx_notes = ctx.get("notes") or []
 
     if readiness == "unstable":
-        latest = health.get("latest_by_check_type") or {}
-        bad = [k for k, v in latest.items() if v == "FAIL"]
-        reasoning = (
-            "system unstable: latest core health snapshot shows FAIL for "
-            + (", ".join(bad) if bad else "one or more components")
-            + ". NO_TRADE until infrastructure is healthy."
-        )
         return {
-            "kind": "analyst_decision_v1",
-            "schema_version": 1,
-            "generated_at": _utc_now(),
             "decision": "NO_TRADE",
             "confidence": "low",
-            "reasoning": reasoning,
-            "context_snapshot": _snapshot(ctx),
-            "caution_flags": flags,
-            "notes": notes,
+            "reasoning": (
+                "system_readiness is unstable: core infrastructure health (sqlite/gateway/ollama) "
+                "shows FAIL in the latest snapshot. Do not trade until checks pass."
+            ),
         }
 
     if readiness == "degraded":
-        parts: list[str] = []
-        if open_a > 0:
-            parts.append(f"open/unacknowledged alerts={open_a}")
-        if fail_rows > 0:
-            parts.append(f"recent health log failures(rows)={fail_rows}")
-        if skew:
-            parts.append(
-                f"outcome skew (success={succ}, unknown={unk}, missing={miss})"
-            )
-        if not parts:
-            parts.append("secondary degraded signals per decision context notes")
-        reasoning = (
-            "REDUCED_RISK: degraded readiness — "
-            + "; ".join(parts)
-            + ". Reduce exposure and verify before acting."
-        )
-        confidence = "low" if (open_a > 2 or skew or fail_rows > 3) else "medium"
+        conf = _degraded_confidence(ctx)
         return {
-            "kind": "analyst_decision_v1",
-            "schema_version": 1,
-            "generated_at": _utc_now(),
             "decision": "REDUCED_RISK",
-            "confidence": confidence,
-            "reasoning": reasoning,
-            "context_snapshot": _snapshot(ctx),
-            "caution_flags": flags,
-            "notes": notes,
+            "confidence": conf,
+            "reasoning": _degraded_reasoning(ctx),
         }
 
     if readiness == "healthy":
-        reasoning = (
-            "ALLOW: system_readiness healthy. Still review caution_flags and "
-            "context_snapshot before any trade; no automatic execution."
-        )
-        notes.append(
-            "Healthy path still carries operational caution_flags if listed above."
-        )
         return {
-            "kind": "analyst_decision_v1",
-            "schema_version": 1,
-            "generated_at": _utc_now(),
             "decision": "ALLOW",
             "confidence": "medium",
-            "reasoning": reasoning,
-            "context_snapshot": _snapshot(ctx),
-            "caution_flags": flags,
-            "notes": notes,
+            "reasoning": (
+                "system_readiness is healthy: core checks PASS, no open-alert pressure under "
+                "current rules. Operational allowance only; still review caution_flags and "
+                "reflection before any real execution."
+            ),
         }
 
-    reasoning = f"Unknown readiness state {readiness!r}; defaulting to NO_TRADE."
+    return {
+        "decision": "NO_TRADE",
+        "confidence": "low",
+        "reasoning": f"Unknown system_readiness value {readiness!r}; defaulting to NO_TRADE.",
+    }
+
+
+def build_analyst_output(ctx: dict, decision_block: dict) -> dict:
     return {
         "kind": "analyst_decision_v1",
         "schema_version": 1,
         "generated_at": _utc_now(),
-        "decision": "NO_TRADE",
-        "confidence": "low",
-        "reasoning": reasoning,
-        "context_snapshot": _snapshot(ctx),
-        "caution_flags": flags,
-        "notes": notes,
+        "decision": decision_block["decision"],
+        "confidence": decision_block["confidence"],
+        "reasoning": decision_block["reasoning"],
+        "context_snapshot": _context_snapshot(ctx),
+        "caution_flags": ctx.get("caution_flags") or [],
+        "notes": list(ctx.get("notes") or []),
+        "signal_input": {
+            "stub": True,
+            "note": "No trading signal wired in Phase 2.3; placeholder for future inputs.",
+        },
     }
 
 
 def run(
     db_path: Path,
     *,
-    from_latest: bool,
+    use_stored_context: bool,
     health_limit: int,
     task_limit: int,
     alert_window: int,
-    signal_stub: str | None,
     store: bool,
 ) -> int:
     root = repo_root()
-    ctx: dict | None = None
-    context_source = "fresh"
-
-    if from_latest:
+    if use_stored_context:
         conn = connect(db_path)
         ensure_schema(conn, root)
         seed_agents(conn)
-        ctx = load_latest_stored_decision_context(conn)
-        conn.close()
-        context_source = "latest_stored_task"
-        if ctx is None:
-            print(
-                "no stored [Decision Context] task found; run decision_context_builder.py --store first",
-                file=sys.stderr,
-            )
-            return 3
+        try:
+            ctx = load_latest_stored_decision_context(conn)
+        finally:
+            conn.close()
     else:
         ctx = build_payload(db_path, health_limit, task_limit, alert_window)
 
-    result = decide(ctx, signal_stub)
-    result["context_source"] = context_source
-    result["decision_context_generated_at"] = ctx.get("generated_at")
+    decision_block = decide(ctx)
+    out_doc = build_analyst_output(ctx, decision_block)
 
-    out: dict = {"analyst_decision": result, "stored_task_id": None}
+    result: dict = {"analyst_decision": out_doc, "stored_task_id": None}
 
     if store:
         conn = connect(db_path)
         ensure_schema(conn, root)
         seed_agents(conn)
         tid = str(uuid.uuid4())
-        now = result["generated_at"]
-        title = f"[Analyst Decision] {result['decision']} @ {now[:19]}Z"
-        desc = json.dumps(result, ensure_ascii=False, indent=2)
+        now = out_doc["generated_at"]
+        title = f"[Analyst Decision] {now[:19]}Z"
+        desc = json.dumps(out_doc, ensure_ascii=False, indent=2)
         conn.execute(
             """
             INSERT INTO tasks (id, agent_id, title, description, state, priority, created_at, updated_at)
@@ -221,9 +190,9 @@ def run(
         )
         conn.commit()
         conn.close()
-        out["stored_task_id"] = tid
+        result["stored_task_id"] = tid
 
-    print(json.dumps(out, indent=2, ensure_ascii=False))
+    print(json.dumps(result, indent=2, ensure_ascii=False))
     return 0
 
 
@@ -233,32 +202,26 @@ def main(argv: list[str] | None = None) -> int:
     )
     p.add_argument("--db", type=Path, default=None)
     p.add_argument(
-        "--from-latest",
+        "--use-latest-stored-context",
         action="store_true",
-        help="Use latest stored [Decision Context] task instead of fresh build",
+        help="Load latest [Decision Context] task JSON instead of rebuilding",
     )
     p.add_argument("--health-limit", type=int, default=120)
     p.add_argument("--task-limit", type=int, default=50)
     p.add_argument("--alert-window-days", type=int, default=7)
     p.add_argument(
-        "--signal",
-        default=None,
-        help="Optional placeholder string (not trading logic)",
-    )
-    p.add_argument(
         "--store",
         action="store_true",
-        help="Persist analyst output as a completed task row",
+        help="Persist analyst JSON as a completed task row",
     )
     args = p.parse_args(argv)
     db = args.db or default_sqlite_path()
     return run(
         db,
-        from_latest=args.from_latest,
+        use_stored_context=args.use_latest_stored_context,
         health_limit=max(10, args.health_limit),
         task_limit=max(5, args.task_limit),
         alert_window=max(1, args.alert_window_days),
-        signal_stub=args.signal,
         store=args.store,
     )
 
