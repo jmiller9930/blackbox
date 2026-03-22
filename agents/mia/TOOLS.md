@@ -4,7 +4,8 @@
 
 ## Allowed
 
-- _(none)_
+- Market APIs (read-only)
+- Data feeds (read-only)
 
 ## Restricted / conditional
 
@@ -12,4 +13,5 @@
 
 ## Denied
 
-- _(none)_
+- Trading or order placement
+- Decision-making beyond data retrieval

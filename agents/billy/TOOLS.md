@@ -4,12 +4,14 @@
 
 ## Allowed
 
-- _(none)_
+- Trading APIs (as configured)
+- Order and position management (as configured)
 
 ## Restricted / conditional
 
-- _(none)_
+- Any live execution only under explicit policy and credentials
 
 ## Denied
 
-- _(none)_
+- Strategy generation
+- Unapproved instruments or venues

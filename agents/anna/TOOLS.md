@@ -4,7 +4,8 @@
 
 ## Allowed
 
-- _(none)_
+- Indicators and derived features
+- Historical and time-series data (via approved paths)
 
 ## Restricted / conditional
 
@@ -12,4 +13,5 @@
 
 ## Denied
 
-- _(none)_
+- Trade execution
+- Silent bypass of risk or policy gates
