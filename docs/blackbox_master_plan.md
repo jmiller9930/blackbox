@@ -120,6 +120,16 @@ Use the Cody planner skill to recommend next steps for building BLACK BOX.
 
 ---
 
+## Phase 1.6 — Agent activation (next)
+
+**Goal:** Move from “agents on paper” to **agents doing controlled, real work** on clawbot: SQLite + DATA health logging + Cody structured plans.
+
+**Canonical spec (architect):** [`docs/architect/phase_1_6_agent_activation.md`](architect/phase_1_6_agent_activation.md)
+
+**Constraints:** No new agents until Cody + DATA are validated; no secrets in repo or chat; traceability — per spec.
+
+---
+
 ## Meet the Team
 
 Roster — **software agents** vs **human roles** — status as of planning docs (see [`docs/architect/TEAM_ROSTER.md`](architect/TEAM_ROSTER.md) for the canonical table).

@@ -711,4 +711,6 @@ Phase 1.5 should end with:
 - drift reduced
 - next phase ready
 
+**Next:** [`phase_1_6_agent_activation.md`](phase_1_6_agent_activation.md) — activate agents + system prerequisites on clawbot.
+
 End of specification.
