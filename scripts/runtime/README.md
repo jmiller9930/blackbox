@@ -148,3 +148,13 @@ python3 scripts/runtime/insight_generator.py
 python3 scripts/runtime/insight_generator.py --recent 5
 python3 scripts/runtime/insight_generator.py --store
 ```
+
+## Insight trends — Phase 2.10
+
+**`insight_trend_tracker.py`** — Aggregates the latest **N** **`[System Insight]`** tasks (`--recent`, default **10**, max **100**) into **`system_trend_v1`**: outcome / alignment / risk / structural / readiness trends, **recent vs prior** half-windows, **`flags`** (e.g. misalignment rising, persistent alerts, structural gaps). Deterministic; no ML. **`--store`** → **`[System Trend]`** completed task.
+
+```bash
+python3 scripts/runtime/insight_trend_tracker.py
+python3 scripts/runtime/insight_trend_tracker.py --recent 10
+python3 scripts/runtime/insight_trend_tracker.py --store
+```
