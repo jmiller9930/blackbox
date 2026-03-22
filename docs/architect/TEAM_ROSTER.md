@@ -2,6 +2,8 @@
 
 Canonical list of **agent personas** and **human roles**. Update here when names, scope, or status change; the master plan links to this file.
 
+**Unique souls (structured):** [`../../agents/souls.json`](../../agents/souls.json) — see [`SOUL_REGISTRY.md`](SOUL_REGISTRY.md).
+
 ## Software agents
 
 | Agent | Role | Notes | Status |
