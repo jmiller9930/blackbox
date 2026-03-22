@@ -11,7 +11,7 @@
 - **Cody** is the **first engineering agent** (software / systems engineer for BLACK BOX).
 - **Later phases** will introduce additional agents, including **Billy**, **Robbie**, and **Bobby** (names and roles will be defined as those phases land).
 
-Details: `AGENTS.md`. Cody-specific files: `docs/cody/` and `agents/cody/`.
+Details: `AGENTS.md`. Cody-specific files: `docs/cody/` and `agents/cody/`. **Full Phase 1 / OpenClaw master plan:** [`docs/blackbox_master_plan.md`](docs/blackbox_master_plan.md).
 
 ## Cody — Phase 1 limits
 
