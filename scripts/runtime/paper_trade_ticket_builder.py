@@ -166,7 +166,24 @@ def build_paper_ticket(
     }
 
 
-def run(
+def load_latest_stored_paper_trade_ticket(conn) -> tuple[str, dict]:
+    row = conn.execute(
+        """
+        SELECT id, description FROM tasks
+        WHERE title LIKE '[Paper Trade Ticket]%'
+        ORDER BY datetime(updated_at) DESC
+        LIMIT 1
+        """
+    ).fetchone()
+    if not row or not row[1]:
+        raise LookupError("no stored [Paper Trade Ticket] task found")
+    data = json.loads(row[1])
+    if data.get("kind") != "paper_trade_ticket_v1":
+        raise ValueError("latest paper trade ticket task is not paper_trade_ticket_v1")
+    return row[0], data
+
+
+def compute_paper_trade_ticket_document(
     db_path: Path,
     *,
     simulated_from_stored: bool,
@@ -178,8 +195,8 @@ def run(
     task_limit: int,
     alert_window: int,
     analyst_from_stored_for_live: bool,
-    store: bool,
-) -> int:
+) -> dict:
+    """Build paper_trade_ticket_v1 JSON without printing or persisting."""
     root = repo_root()
     source_sim_task_id: str | None = None
     analyst_ref: dict | None = None
@@ -219,11 +236,40 @@ def run(
             finally:
                 conn.close()
 
-    doc = build_paper_ticket(
+    return build_paper_ticket(
         sim,
         source_simulated_action_task_id=source_sim_task_id,
         analyst_ref=analyst_ref,
         context_ref=context_ref,
+    )
+
+
+def run(
+    db_path: Path,
+    *,
+    simulated_from_stored: bool,
+    use_stored_context_for_live: bool,
+    sim_include_context_ref: bool,
+    attach_analyst_ref: bool,
+    attach_decision_context_ref: bool,
+    health_limit: int,
+    task_limit: int,
+    alert_window: int,
+    analyst_from_stored_for_live: bool,
+    store: bool,
+) -> int:
+    root = repo_root()
+    doc = compute_paper_trade_ticket_document(
+        db_path,
+        simulated_from_stored=simulated_from_stored,
+        use_stored_context_for_live=use_stored_context_for_live,
+        sim_include_context_ref=sim_include_context_ref,
+        attach_analyst_ref=attach_analyst_ref,
+        attach_decision_context_ref=attach_decision_context_ref,
+        health_limit=health_limit,
+        task_limit=task_limit,
+        alert_window=alert_window,
+        analyst_from_stored_for_live=analyst_from_stored_for_live,
     )
 
     result: dict = {"paper_trade_ticket_document": doc, "stored_task_id": None}
