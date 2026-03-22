@@ -171,6 +171,7 @@ def compute_simulated_action(
     alert_window: int,
 ) -> tuple[dict, str | None]:
     """Build simulated_action_v1 JSON without persisting or printing."""
+    root = repo_root()
     source_task_id: str | None = None
     decision_context_reference: dict | None = None
 

@@ -169,3 +169,13 @@ python3 scripts/runtime/guardrail_policy_evaluator.py --use-latest-stored-decisi
 python3 scripts/runtime/guardrail_policy_evaluator.py --self-test
 python3 scripts/runtime/guardrail_policy_evaluator.py --store
 ```
+
+## Policy-gated action — Phase 2.12
+
+**`policy_gated_action_filter.py`** — Combines **guardrail policy** (live `build_guardrail_document` or **`--use-latest-stored-policy`**) with **simulated action** (live `compute_simulated_action` or **`--use-latest-stored-simulated-action`**). Emits **`policy_gated_action_v1`**: `FROZEN` → **`BLOCKED`** / `FROZEN_BLOCK`; **`CAUTION`** → pass-through for HOLD/WATCH, downgrade **`PAPER_TRADE_READY`** → **`WATCH`** / `CAUTION_DOWNGRADE`; **`NORMAL`** → pass-through / `NORMAL_PASS`. Optional **`--include-optional-refs`**. **`--store`** → **`[Policy Gated Action]`**. **`--self-test`** exercises all three policy results without DB.
+
+```bash
+python3 scripts/runtime/policy_gated_action_filter.py --use-latest-stored-policy --use-latest-stored-simulated-action
+python3 scripts/runtime/policy_gated_action_filter.py --self-test
+python3 scripts/runtime/policy_gated_action_filter.py --store
+```
