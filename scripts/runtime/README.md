@@ -70,3 +70,14 @@ python3 scripts/runtime/cody_reflection_workflow.py --limit 25 --store   # also 
 ```
 
 Stored rows use title prefix `[Reflection]` and are excluded from the next scan by default.
+
+## Decision context — Phase 2.2
+
+**`decision_context_builder.py`** — bundles **health** (`system_health_logs`), **alerts**, **operational tasks/outcomes**, and the **latest `[Reflection]`** summary into one JSON (`kind: decision_context_v1`). Rule-based **`system_readiness`**: `healthy` | `degraded` | `unstable`; **`caution_flags`** are explicit strings. No trades, no ML.
+
+```bash
+python3 scripts/runtime/decision_context_builder.py
+python3 scripts/runtime/decision_context_builder.py --store --health-limit 80 --task-limit 40
+```
+
+Operational tasks exclude `[Reflection]` and `[Decision Context]` rows from counts. Stored decision-context tasks use title prefix **`[Decision Context]`**.
