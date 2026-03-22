@@ -1,7 +1,7 @@
 # DATA agent (Phase 1.5)
 
-**DATA** is the integrity / monitoring / alerting-oriented agent. Definitions: `agent.md`, `IDENTITY.md`, `SOUL.md`, `TOOLS.md`, `AGENTS.md`, `USER.md`, and skill **`data_guardian`** in `skills/data-guardian/`.
+**DATA** is the integrity / monitoring / alerting-oriented agent. Definitions: `agent.md`, `IDENTITY.md`, **`SOUL.md`** (voice + boundaries), `TOOLS.md`, `AGENTS.md`, `USER.md`, and skill **`data_guardian`** in `skills/data-guardian/`.
 
-Sync to OpenClaw workspace: `./scripts/sync_openclaw_skills.sh` (from repo root on the gateway host).
+**Bring DATA online (OpenClaw):** [`docs/architect/DATA_ONLINE_SETUP.md`](../../docs/architect/DATA_ONLINE_SETUP.md) — skill sync + `bootstrap_data_workspace.sh` + `agents.list`.
 
-Register DATA in OpenClaw (`agents.list` or equivalent) when operators enable the second agent.
+Skills (shared gateway): `./scripts/sync_openclaw_skills.sh` on the gateway host after `git pull`.

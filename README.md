@@ -35,6 +35,8 @@ No autonomous rewrites, no trading decisions, no self-modification, no guessing 
 
 **Team roster (agents + humans):** [`docs/architect/TEAM_ROSTER.md`](docs/architect/TEAM_ROSTER.md)
 
+**DATA agent in OpenClaw:** [`docs/architect/DATA_ONLINE_SETUP.md`](docs/architect/DATA_ONLINE_SETUP.md)
+
 **Python:** 3.11+
 
 ```bash
