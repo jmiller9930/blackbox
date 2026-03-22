@@ -96,6 +96,8 @@ Define and document:
 
 ## Approved next actions (operational)
 
+**Detailed workloads + acceptance criteria (architect):** [`phase_1_6_next_steps_spec.md`](phase_1_6_next_steps_spec.md) — DATA health checks (SQLite, gateway, Ollama), Cody patch-plan task, validation gate, hard constraints.
+
 ### 1. SQLite (clawbot)
 
 - Deploy **locally** on clawbot (no separate VM)
