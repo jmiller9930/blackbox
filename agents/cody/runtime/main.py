@@ -1,4 +1,4 @@
-"""Command-line entry for the Cody runtime (version and smoke checks; no agent loop)."""
+"""Support-only CLI entry (version / smoke). Does not implement OpenClaw agent behavior."""
 
 from __future__ import annotations
 

@@ -1,4 +1,7 @@
-"""Pydantic models for Cody recommendations, patch proposals, tasks, and risk levels."""
+"""Pydantic models for Cody recommendations, patch proposals, tasks, and risk levels.
+
+Support layer only — agent behavior is defined in SKILL.md, agent.md, and prompts.
+"""
 
 from __future__ import annotations
 

@@ -4,7 +4,9 @@
 - **Governance:** [cody_governance.md](cody_governance.md)
 - **Bootstrap (Phase 1):** [cody_bootstrap.md](cody_bootstrap.md)
 
-Runnable agent assets live under `agents/cody/` (identity, prompts, runtime).
+Runnable agent assets live under `agents/cody/` (identity, prompts, skills, runtime).
+
+**Python (`agents/cody/runtime/`)** is **support only** — types, guardrails, helpers. It does **not** define agent behavior; see [`agents/cody/runtime/README.md`](../../agents/cody/runtime/README.md).
 
 ## ClawBot host (Phase 2+)
 
