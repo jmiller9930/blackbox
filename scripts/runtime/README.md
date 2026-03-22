@@ -138,3 +138,13 @@ python3 scripts/runtime/paper_execution_outcome_evaluator.py --use-latest-stored
 python3 scripts/runtime/trade_episode_aggregator.py
 python3 scripts/runtime/trade_episode_aggregator.py --store
 ```
+
+## System insight — Phase 2.9
+
+**`insight_generator.py`** — Reads **N** most recent **`[Trade Episode]`** tasks (`--recent`, default **8**, max 50), deterministic **rule-only** interpretation: **`system_insight_v1`** with **`outcome_summary`**, **`decision_alignment`** (readiness × analyst decision table), **`risk_signals`** (caution flag aggregation), **`structural_gaps`** (null links, placeholders). No ML, no trading, no mutation except optional **`--store`** → **`[System Insight]`** completed task.
+
+```bash
+python3 scripts/runtime/insight_generator.py
+python3 scripts/runtime/insight_generator.py --recent 5
+python3 scripts/runtime/insight_generator.py --store
+```
