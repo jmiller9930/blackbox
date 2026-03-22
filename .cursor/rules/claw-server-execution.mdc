@@ -1,0 +1,22 @@
+---
+description: Run work on clawbot via SSH by default; do not only suggest shell commands to the user
+alwaysApply: true
+---
+
+# Claw server execution
+
+When the user asks for something that involves **the lab host** (`clawbot`, `clawbot.a51.corp`, `jmiller@clawbot`, `~/blackbox` on the server, OpenClaw on the server, or services running there):
+
+1. **Execute on the server yourself** using non-interactive SSH from the dev environment, e.g.  
+   `ssh jmiller@clawbot.a51.corp '<command>'`  
+   (batch flags, no prompts where possible).
+
+2. **Do not** default to giving the user a list of commands to copy-paste unless:
+   - the step **requires** their password, browser, or GitHub account (e.g. `sudo`, `gh auth login`, OAuth), or
+   - they explicitly say they want to run it locally.
+
+3. After running, **summarize what you did and the output**, not “run this yourself.”
+
+4. **Repo path on server:** `~/blackbox` unless stated otherwise.
+
+This project treats **Claw as the primary runtime target** for Cody-related work alongside the GitHub repo.
