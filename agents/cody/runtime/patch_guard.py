@@ -1,4 +1,7 @@
-"""Enforces default-deny rules for automatic application of patch proposals."""
+"""Default-deny rules for automatic application of patch proposals (tooling/tests).
+
+Support layer only — governance policy text is in prompts; this enforces a simple gate in code.
+"""
 
 from __future__ import annotations
 

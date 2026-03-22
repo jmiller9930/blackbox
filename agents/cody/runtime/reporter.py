@@ -1,4 +1,7 @@
-"""Serializes `Recommendation` models to Markdown using Jinja2 templates."""
+"""Serializes `Recommendation` models to Markdown using Jinja2 templates.
+
+Support layer only — formatting helper; output shape is governed by prompts / skills.
+"""
 
 from __future__ import annotations
 

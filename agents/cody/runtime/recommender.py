@@ -1,4 +1,7 @@
-"""Builds Cody `Recommendation` instances for tests and CLI wiring."""
+"""Builds `Recommendation` instances for tests, demos, and tooling.
+
+Support layer only — not agent behavior. Recommendation rules live in SKILL.md / prompts.
+"""
 
 from __future__ import annotations
 

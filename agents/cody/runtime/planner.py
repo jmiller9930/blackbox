@@ -1,4 +1,7 @@
-"""Derives next tasks from a development plan outline."""
+"""Derives next tasks from a development plan outline.
+
+Support layer only — not agent behavior. Planning semantics live in SKILL.md / prompts.
+"""
 
 from __future__ import annotations
 
