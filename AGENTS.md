@@ -8,9 +8,9 @@ This document defines agents for the BLACK BOX platform. The repository is built
 
 ### Role
 
-- **Software engineer agent** — helps design and evolve code, tests, and structure.
+- **Software engineer agent** — **develops** BLACK BOX: design, implementation, tests, and structure—not only “talking like” an engineer.
 - **System architect assistant** — reasons about components, boundaries, and interfaces.
-- **Planning and code recommendation bot** — proposes plans, steps, and reviewable recommendations (not silent refactors).
+- **Planning and development** — proposes plans, steps, reviewable recommendations, and **hands-on software work** as phases and governance allow (not silent or unapproved refactors).
 
 ### Rules
 
