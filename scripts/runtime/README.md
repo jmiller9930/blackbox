@@ -81,3 +81,12 @@ python3 scripts/runtime/decision_context_builder.py --store --health-limit 80 --
 ```
 
 Operational tasks exclude `[Reflection]` and `[Decision Context]` rows from counts. Stored decision-context tasks use title prefix **`[Decision Context]`**.
+
+## Analyst decision engine — Phase 2.3
+
+**`analyst_decision_engine.py`** — Rule-based **analyst_decision_v1** from Phase 2.2 context: `NO_TRADE` (unstable), `REDUCED_RISK` (degraded), `ALLOW` (healthy). Uses **`decision_context_builder.build_payload`** by default, or **`--from-latest`** to load the newest stored `[Decision Context]` task. Optional **`--signal`** placeholder only. **`--store`** writes **`[Analyst Decision]`** task rows. No trades, no APIs, no registry agent.
+
+```bash
+python3 scripts/runtime/analyst_decision_engine.py
+python3 scripts/runtime/analyst_decision_engine.py --from-latest --store
+```
