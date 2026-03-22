@@ -4,6 +4,8 @@ Canonical list of **agent personas** and **human roles**. Update here when names
 
 **Agent registry (identity + tools + soul):** [`../../agents/agent_registry.json`](../../agents/agent_registry.json) — see [`AGENT_REGISTRY.md`](AGENT_REGISTRY.md).
 
+**Verification audit:** [`agent_verification.md`](agent_verification.md) · **Workspace sync (drift):** [`workspace_sync.md`](workspace_sync.md).
+
 ## Software agents
 
 | Agent | Role | Notes | Status |

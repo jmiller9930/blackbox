@@ -113,3 +113,7 @@ Define and document:
 **Agent definitions:** [`agents/agent_registry.json`](../../agents/agent_registry.json) — Cody + DATA policy, [`DATA_ONLINE_SETUP.md`](DATA_ONLINE_SETUP.md) for OpenClaw wiring.
 
 **Registry / secrets rules:** [`AGENT_REGISTRY.md`](AGENT_REGISTRY.md) — vault-first policy; no secrets in git or chat.
+
+**Verification audit (pass/fail record):** [`agent_verification.md`](agent_verification.md) — do not duplicate full agent prose there.
+
+**Workspace drift:** [`workspace_sync.md`](workspace_sync.md) — mandatory repo → OpenClaw workspace steps after updates.
