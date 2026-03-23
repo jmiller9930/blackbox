@@ -2,8 +2,9 @@
 """
 Phase 3.3 — Anna proposal builder: anna_analysis_v1 → anna_proposal_v1 (validation-loop bridge).
 
+Core logic: `anna_modules.py` (proposal shaping layer). This file is the CLI entrypoint.
+
 Deterministic; paper-only; no Telegram, no registry load, no schema migration, no trades.
-Proposal shaping lives in `anna_modules/proposal.py` (Phase 3.4 modular split).
 """
 from __future__ import annotations
 
@@ -22,36 +23,11 @@ from anna_modules.analysis import build_analysis
 from anna_modules.input_adapter import (
     load_latest_guardrail_policy,
     load_latest_market_snapshot,
+    load_latest_stored_anna_analysis,
     try_load_decision_context,
     try_load_trend,
 )
-from anna_modules.proposal import build_anna_proposal
-
-
-def load_latest_stored_anna_analysis(conn) -> tuple[str | None, dict[str, Any] | None, str | None]:
-    """Return (task_id, anna_analysis_v1 dict, error_message)."""
-    row = conn.execute(
-        """
-        SELECT id, description FROM tasks
-        WHERE title LIKE '[Anna Analysis]%'
-        ORDER BY datetime(updated_at) DESC
-        LIMIT 1
-        """
-    ).fetchone()
-    if not row or not row[1]:
-        return None, None, "No [Anna Analysis] task found in database."
-    tid, desc = row[0], row[1]
-    try:
-        blob = json.loads(desc)
-    except json.JSONDecodeError:
-        return None, None, "Latest [Anna Analysis] row is not valid JSON."
-    if isinstance(blob, dict) and "anna_analysis" in blob:
-        anna = blob["anna_analysis"]
-    else:
-        anna = blob
-    if not isinstance(anna, dict) or anna.get("kind") != "anna_analysis_v1":
-        return None, None, "Latest Anna task is not anna_analysis_v1."
-    return tid, anna, None
+from anna_modules.proposal import assemble_anna_proposal_v1
 
 
 def run_live_build(
@@ -157,7 +133,7 @@ def run(
         if conn:
             conn.close()
 
-    proposal = build_anna_proposal(analysis, source_task_id=source_task_id, extra_notes=extra_notes)
+    proposal = assemble_anna_proposal_v1(analysis, source_task_id=source_task_id, extra_notes=extra_notes)
     out: dict[str, Any] = {"anna_proposal": proposal, "stored_task_id": None}
 
     if store:

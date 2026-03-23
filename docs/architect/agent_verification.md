@@ -113,19 +113,20 @@ The master plan **Phase 2+ — Decision Layer (Analyst Model)** section remains 
 
 ---
 
-## Phase 3.4 — Anna modular extensibility (skeleton) — **CLOSED**
+## Phase 3.4 — Anna modular extensibility (package skeleton) — **CLOSED**
 
 | Field | Value |
 |--------|--------|
 | **Status** | **PASS** |
 | **Closure recorded** | 2026-03-23 |
 | **Repository** | `blackbox` @ `main` |
-| **Git ref (recorded)** | `ae5138a` |
+| **Git ref (recorded)** | *(set at commit)* |
 | **Canonical spec** | [`docs/blackbox_master_plan.md`](../blackbox_master_plan.md) — Phase 3.4 |
-| **Runtime** | Package `scripts/runtime/anna_modules/`; entrypoints `anna_analyst_v1.py`, `anna_proposal_builder.py` |
-| **Proof summary** | Refactor only: same `anna_analysis_v1` / `anna_proposal_v1` CLI; backward-compat flows re-run on clawbot |
+| **Runtime** | `scripts/runtime/anna_modules/` (`input_adapter`, `interpretation`, `risk`, `policy`, `analysis`, `proposal`, `util`); CLIs unchanged: `anna_analyst_v1.py`, `anna_proposal_builder.py` |
+| **Verification host** | `clawbot.a51.corp` (`~/blackbox`) |
+| **Proof summary** | Backward-compat flows OK after refactor: analyst + proposal commands; `--store` paths for analysis and proposal; outputs `anna_analysis_v1` / `anna_proposal_v1` unchanged in shape |
 
-**Scope:** Structure only — no Telegram, no registry disk load, no new tables, no guardrail logic changes.
+**Scope:** Structural modularization only—no Telegram, no registry load, no guardrail logic change, no new tables.
 
 ---
 

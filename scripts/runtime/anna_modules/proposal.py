@@ -135,3 +135,6 @@ def build_anna_proposal(
         "caution_flags": caution[:16],
         "notes": notes,
     }
+
+
+assemble_anna_proposal_v1 = build_anna_proposal

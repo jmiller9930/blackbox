@@ -398,9 +398,7 @@ Anna intelligence must scale by adding modular “Legos,” **not** by endlessly
 
 #### Runtime implementation (skeleton — started)
 
-- **Package:** `scripts/runtime/anna_modules/` — layered **input_adapter**, **interpretation**, **risk**, **policy**, **analysis** (compose `anna_analysis_v1`), **proposal** (`anna_proposal_v1`). CLI remains **`anna_analyst_v1.py`** / **`anna_proposal_builder.py`**. See [`scripts/runtime/README.md`](../scripts/runtime/README.md) — *Anna modular runtime — Phase 3.4*.
-
-**Closure (verified):** refactor + clawbot compatibility **2026-03-23** — see [`docs/architect/agent_verification.md`](architect/agent_verification.md) → *Phase 3.4 — Anna modular extensibility (skeleton)*.
+- **Package:** `scripts/runtime/anna_modules/` — **`input_adapter`**, **`interpretation`**, **`risk`**, **`policy`**, **`analysis`** (`anna_analysis_v1`), **`proposal`** (`anna_proposal_v1`), **`util`**. CLI entrypoints **`anna_analyst_v1.py`** and **`anna_proposal_builder.py`** compose these layers; see [`scripts/runtime/README.md`](../scripts/runtime/README.md) (Anna modular package — Phase 3.4).
 
 ### Phase 3.5 — Trading Concept Registry
 

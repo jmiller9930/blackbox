@@ -2,11 +2,43 @@
 Input adaptation: optional SQLite-backed artifacts, null-safe packaging.
 
 Loads market snapshot, decision context, system trend, guardrail policy from `tasks`.
+Also: latest stored `[Anna Analysis]` row for proposal builder.
 """
 from __future__ import annotations
 
 import json
 from typing import Any
+
+
+def normalize_trader_text(text: str) -> str:
+    """Strip and normalize free-text trader input."""
+    return (text or "").strip()
+
+
+def load_latest_stored_anna_analysis(conn) -> tuple[str | None, dict[str, Any] | None, str | None]:
+    """Return (task_id, anna_analysis_v1 dict, error_message)."""
+    row = conn.execute(
+        """
+        SELECT id, description FROM tasks
+        WHERE title LIKE '[Anna Analysis]%'
+        ORDER BY datetime(updated_at) DESC
+        LIMIT 1
+        """
+    ).fetchone()
+    if not row or not row[1]:
+        return None, None, "No [Anna Analysis] task found in database."
+    tid, desc = row[0], row[1]
+    try:
+        blob = json.loads(desc)
+    except json.JSONDecodeError:
+        return None, None, "Latest [Anna Analysis] row is not valid JSON."
+    if isinstance(blob, dict) and "anna_analysis" in blob:
+        anna = blob["anna_analysis"]
+    else:
+        anna = blob
+    if not isinstance(anna, dict) or anna.get("kind") != "anna_analysis_v1":
+        return None, None, "Latest Anna task is not anna_analysis_v1."
+    return tid, anna, None
 
 from analyst_decision_engine import load_latest_stored_decision_context
 from guardrail_policy_evaluator import load_latest_stored_system_trend

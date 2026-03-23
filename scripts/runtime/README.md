@@ -200,18 +200,18 @@ python3 scripts/runtime/anna_proposal_builder.py --use-latest-stored-anna-analys
 python3 scripts/runtime/anna_proposal_builder.py "Test proposal" --store
 ```
 
-## Anna modular runtime — Phase 3.4 (skeleton)
+## Anna modular package — Phase 3.4
 
-Anna’s **CLI** logic is split under **`scripts/runtime/anna_modules/`** so new behavior can be added **by module** instead of growing one monolithic script:
+**`scripts/runtime/anna_modules/`** — Internal layers (not standalone user scripts):
 
-| Module | Responsibility |
-|--------|------------------|
-| **`input_adapter.py`** | Optional loads from `tasks`: market snapshot, decision context, system trend, guardrail policy; readiness / guardrail mode helpers; null-safe packaging. |
-| **`interpretation.py`** | Trader text → **`extract_concepts`**, interpretation summary / signals / assumptions. |
-| **`risk.py`** | **`build_market_context`** notes, **`build_risk_factors`**, **`determine_risk_level`**. |
-| **`policy.py`** | **`build_suggested_action`**, **`build_policy_alignment_dict`** (aligned / cautious / misaligned / unknown). |
-| **`analysis.py`** | **`build_analysis`** — composes **`anna_analysis_v1`**. |
-| **`proposal.py`** | **`build_anna_proposal`**, **`classify_proposal_type`** — **`anna_proposal_v1`**. |
-| **`util.py`** | Shared timestamps / schema version / float parsing. |
+| Layer | Module | Role |
+|-------|--------|------|
+| Input adaptation | `input_adapter.py` | `normalize_trader_text`; load `[Market Snapshot]`, `[Decision Context]`, `[System Trend]`, `[Guardrail Policy]`, stored `[Anna Analysis]`. |
+| Interpretation | `interpretation.py` | Keyword → `concepts_used`; summary / signals / assumptions. |
+| Risk reasoning | `risk.py` | Risk level, factors, market_context numeric notes. |
+| Policy alignment | `policy.py` | Guardrail mode, alignment vs intent, paper-only suggested action. |
+| Analysis assembly | `analysis.py` | **`build_analysis`** / **`assemble_anna_analysis_v1`** → `anna_analysis_v1`. |
+| Proposal shaping | `proposal.py` | **`build_anna_proposal`** / **`assemble_anna_proposal_v1`** → `anna_proposal_v1`. |
+| Shared utils | `util.py` | Schema versions, `utc_now`, float helpers. |
 
-**Entrypoints:** **`anna_analyst_v1.py`** and **`anna_proposal_builder.py`** stay thin (CLI + DB store). **Registry** integration, **Telegram**, and richer reasoning remain **future** phases per master plan.
+**Entrypoints:** `anna_analyst_v1.py` and `anna_proposal_builder.py` import these modules; behavior stays compatible with Phase 3.2 / 3.3. **Registry**, **Telegram**, and **advanced reasoning** remain future phases — extend by adding or editing focused modules, not by growing one flat script.

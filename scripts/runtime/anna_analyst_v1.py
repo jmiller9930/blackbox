@@ -2,10 +2,9 @@
 """
 Phase 3.2 — Anna conversational analyst v1: trader text → structured anna_analysis_v1.
 
-Rule-based only; no ML, no Telegram, no registry loader, no execution, no venue calls.
-Implementation is modular under `anna_modules/` (Phase 3.4); this file is the CLI entrypoint.
+Implementation lives in `anna_modules.py` (Phase 3.4 modular layers). This file is the CLI entrypoint.
 
-Re-exports `build_analysis` and loaders for backward compatibility with `anna_proposal_builder.py`.
+Rule-based only; no ML, no Telegram, no registry loader, no execution, no venue calls.
 """
 from __future__ import annotations
 
@@ -27,20 +26,6 @@ from anna_modules.input_adapter import (
     try_load_decision_context,
     try_load_trend,
 )
-from anna_modules.interpretation import CONCEPT_PATTERNS, extract_concepts
-
-__all__ = [
-    "build_analysis",
-    "load_latest_market_snapshot",
-    "load_latest_guardrail_policy",
-    "try_load_decision_context",
-    "try_load_trend",
-    "extract_concepts",
-    "CONCEPT_PATTERNS",
-    "run",
-    "main",
-]
-
 
 def run(
     db_path: Path,

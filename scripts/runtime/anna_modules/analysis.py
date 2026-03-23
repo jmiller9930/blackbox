@@ -5,6 +5,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from anna_modules.input_adapter import normalize_trader_text
 from anna_modules.interpretation import build_interpretation, extract_concepts
 from anna_modules.policy import build_policy_alignment_dict, build_suggested_action
 from anna_modules.risk import (
@@ -32,6 +33,7 @@ def build_analysis(
     use_trend: bool,
     use_policy: bool,
 ) -> dict[str, Any]:
+    input_text = normalize_trader_text(input_text)
     notes: list[str] = []
     if use_snapshot and market_err:
         notes.append(market_err)
@@ -94,3 +96,6 @@ def build_analysis(
         ],
         "notes": notes,
     }
+
+
+assemble_anna_analysis_v1 = build_analysis
