@@ -439,7 +439,7 @@ The **concept registry is canonical memory**. The **LLM is not** canonical memor
 - **File:** [`data/concepts/registry.json`](../../data/concepts/registry.json) — **`kind`: `trading_concept_registry_v1`**, seed **Foundation + Mechanical** concepts (read-only at runtime). **Mutation** only via **PR / review**, not live writes.
 - **Reader:** `scripts/runtime/concept_registry_reader.py` — **`--list`**, **`--concept <id>`**, **`--search <keyword>`**; JSON only; **no** DB, **no** Anna wiring yet. Later phases: retrieval inside Anna, concept promotion (Phase 3.6–3.7).
 
-**Closure:** verify on clawbot + record in [`docs/architect/agent_verification.md`](architect/agent_verification.md) when architect signs off.
+**Closure (verified):** clawbot + audit **2026-03-23** — [`docs/architect/agent_verification.md`](architect/agent_verification.md) → *Phase 3.5 — Trading concept registry*.
 
 #### Concept categories (registry growth)
 
