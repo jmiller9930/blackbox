@@ -1,4 +1,4 @@
-> **Source:** `docs/blackbox_master_plan.md` in repository **blackbox**, branch **`main`** (includes Phase 4.1 readiness).
+> **Source:** `docs/blackbox_master_plan.md` in repository **blackbox**, branch **`main`** (includes Phase 4.2 architecture stub).
 
 > **Purpose:** Verbatim master plan for architect review. Canonical file remains `docs/blackbox_master_plan.md`.
 
@@ -23,6 +23,7 @@ It is the **single source of truth** for project **rehydration** (Architect, Cur
 | **3** | Intelligence layer | **3.1–3.8** closed (clawbot-verified; see [`agent_verification.md`](architect/agent_verification.md)) |
 | **4.0** | Execution context rehydration | **Closed** |
 | **4.1** | Trading readiness map | **Blueprint** — [`phase_4_1_trading_readiness.md`](architect/phase_4_1_trading_readiness.md) (planning only; **not** go-live) |
+| **4.2** | Wallet / account architecture | **Stub** — [`phase_4_2_wallet_account_architecture.md`](architect/phase_4_2_wallet_account_architecture.md) (technical shape; **no** implementation) |
 | **4.1+** | Real trading prerequisites (detail) | Master plan § Phase 4 below; implementation **after** architect alignment |
 | **5** | Trading operations & governance | Planning — see [Phase 5](#phase-5--trading-operations--governance) |
 
@@ -32,9 +33,10 @@ It is the **single source of truth** for project **rehydration** (Architect, Cur
 
 ### Where we are now
 
-- **Completed through:** Phase **4.0** (and all listed Phase **3.x** milestones).
-- **Current planning artifact:** **Phase 4.1** — [`docs/architect/phase_4_1_trading_readiness.md`](architect/phase_4_1_trading_readiness.md) (readiness map; **no** trading enabled).
-- **Next focus:** Align implementation with Phase **4.1+** prerequisites (§ below) and architect approval before any live path.
+- **Completed through:** Phase **4.1** blueprint (and Phase **4.0**, all Phase **3.x**).
+- **Current planning artifact:** **Phase 4.2** — [`docs/architect/phase_4_2_wallet_account_architecture.md`](architect/phase_4_2_wallet_account_architecture.md) (wallet/account **architecture stub**; **no** code).
+- **Prior blueprint:** **Phase 4.1** — [`phase_4_1_trading_readiness.md`](architect/phase_4_1_trading_readiness.md).
+- **Next focus:** Phase **4.1+** prerequisites (§ below) and architect approval before **any** implementation that touches keys or venues.
 - **Safe resume:** Read this plan → [`docs/runtime/execution_context.md`](runtime/execution_context.md) → `python3 scripts/runtime/context_loader.py` → run mandated verification on **clawbot** before claiming closure.
 
 ---
@@ -681,6 +683,10 @@ Phase **4** spans **execution-context rehydration** (4.0, closed) and **readines
 ### Phase 4.1 — Trading readiness map (blueprint)
 
 **Operational map (planning only):** [`docs/architect/phase_4_1_trading_readiness.md`](architect/phase_4_1_trading_readiness.md) — account model, wallet/connection, authority (Anna / human / Billy / revoke), execution modes (read-only / paper / live gated), approval & signing flow, **chat vs secure execution plane** (chat never executes trades), safety/kill switches, audit link to Phase 2/3 learning, **non-goals** (no live trading, no keys in repo). **Does not** implement execution code.
+
+### Phase 4.2 — Wallet / account architecture (stub)
+
+**Technical architecture stub:** [`docs/architect/phase_4_2_wallet_account_architecture.md`](architect/phase_4_2_wallet_account_architecture.md) — entity model (human, trading account, wallet, venue, roles), wallet integration patterns, access modes, identity/authority (Anna recommends, Billy bounded, humans grant/revoke), **signing boundary** (analysis → approval → signing → execution), **chat-to-secure-plane handoff**, vault boundary (no vault product locked), conceptual audit events, failure/safety cases, **non-goals** (no wallet/signing/exchange code, no secrets). **Does not** implement runtime or schema.
 
 ### Phase 4.1+ — Real trading integration readiness (master plan detail)
 

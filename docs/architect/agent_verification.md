@@ -234,6 +234,23 @@ The master plan **Phase 2+ — Decision Layer (Analyst Model)** section remains 
 
 ---
 
+## Phase 4.2 — Wallet / account architecture stub — **CLOSED**
+
+| Field | Value |
+|--------|--------|
+| **Status** | **PASS** |
+| **Closure recorded** | 2026-03-23 |
+| **Repository** | `blackbox` @ `main` |
+| **Git ref (recorded)** | `PHASE42_COMMIT` |
+| **Canonical spec** | [`docs/blackbox_master_plan.md`](../blackbox_master_plan.md) — Phase 4.2; [`phase_4_2_wallet_account_architecture.md`](phase_4_2_wallet_account_architecture.md) |
+| **Runtime** | Documentation only — `phase_4_2_wallet_account_architecture.md`; `execution_context` snapshot (`current_phase` 4.2, `last_completed_phase` 4.1) |
+| **Verification host** | `clawbot.a51.corp` (`~/blackbox`) |
+| **Proof summary** | `git pull`; `test -f docs/architect/phase_4_2_wallet_account_architecture.md`; no runtime/scripts/schema/secrets changes |
+
+**Scope:** Architecture stub only — **no** wallet/signing/exchange implementation.
+
+---
+
 ## Update protocol
 
 1. `git rev-parse HEAD` → set **Git ref (recorded)** in the table at top  
