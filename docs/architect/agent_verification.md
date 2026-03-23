@@ -3,6 +3,8 @@
 This file is an **audit trail** only: pass/fail, time, and repo reference.  
 **Do not** duplicate full identity, soul, or tools prose here — those live in [`../../agents/agent_registry.json`](../../agents/agent_registry.json) and generated files under [`../../agents/`](../../agents/).
 
+**Mandatory proof standard:** Every runtime phase closure must follow [`global_clawbot_proof_standard.md`](global_clawbot_proof_standard.md) — clawbot execution, persisted evidence (DB or file), structured proof package. Local-only runs are not sufficient.
+
 ---
 
 ## Architect concurrence (controlled execution phase)
