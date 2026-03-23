@@ -7,7 +7,7 @@
 - **Sync must run after every `git pull`** that could affect agent definitions, skills, or registry-driven files.
 - **Failure to sync** → **undefined agent behavior** (stale identity, wrong skills, debugging noise).
 
-See audit protocol: [`agent_verification.md`](agent_verification.md).
+See audit protocol: [`agent_verification.md`](agent_verification.md). **Phase / runtime proof:** [`global_clawbot_proof_standard.md`](global_clawbot_proof_standard.md) (mandatory clawbot execution + persistence evidence).
 
 ---
 
