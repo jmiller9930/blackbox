@@ -559,6 +559,15 @@ Define how the system **gains new concepts** and **improves over time**.
 
 **proposal → test → outcome → reflection → validation → registry update** — Sean may propose; Anna challenges or refines; the system confirms through outcomes (paper path first).
 
+#### Runtime implementation (Phase 3.7)
+
+- **Staging file:** [`data/concepts/staging_registry.json`](../../data/concepts/staging_registry.json) — **`kind`: `trading_concept_staging_v1`**. Holds **candidate** concepts only; **not** the canonical registry.
+- **CLI:** [`scripts/runtime/concept_ingestor.py`](../../scripts/runtime/concept_ingestor.py) — `--add` (with `--concept-id`, `--source-type`, `--definition`, `--rationale`, `--signals`, `--impact`), `--update <concept_id> --status` (appends **`status_history`**, bumps **`version`**; preserves prior fields), `--list`, `--concept <id>` — **JSON only** to stdout. **No** writes to **`registry.json`**, **no** automatic promotion, **no** Anna auto-wiring, **no** new DB tables.
+
+**Canonical vs staging:** **`registry.json`** is reviewed canonical memory; **staging** is where new ideas land until evidence and PR merge promote them (or they are **rejected**).
+
+**Closure:** clawbot proof pending — see [`docs/architect/agent_verification.md`](architect/agent_verification.md) when recorded.
+
 ### Phase 3.8 — Advanced Strategy Awareness (Constrained)
 
 #### Purpose

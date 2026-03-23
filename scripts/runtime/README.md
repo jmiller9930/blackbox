@@ -220,6 +220,25 @@ python3 scripts/runtime/anna_proposal_builder.py "Test proposal" --store
 
 **`anna_modules/concept_retrieval.py`** — Read-only link from Anna to **`data/concepts/registry.json`**: regex detection aligned to registry **`concept_id`**s, **`retrieve_concept_support()`** returns **`concepts_used`** IDs plus **`concept_support`** (`concept_ids`, **`concept_summaries`**). Reuses **`concept_registry_reader`**. **No** registry writes, **no** full-registry embed in output.
 
+## Concept staging & ingestion — Phase 3.7
+
+**`data/concepts/staging_registry.json`** — **`kind`: `trading_concept_staging_v1`**. **Candidate** concepts before they are canonical. This is **not** [`registry.json`](../../data/concepts/registry.json); there is **no** automatic promotion—merge to the canonical registry only via **PR/review** after evidence.
+
+**Lifecycle (staging):** `draft` → `under_test` → `validated` \| `rejected`.
+
+**`concept_ingestor.py`** — JSON only on stdout:
+
+```bash
+python3 scripts/runtime/concept_ingestor.py --add --concept-id my_concept --source-type expert \
+  --definition "Proposed definition text." --rationale "Why we are capturing this." \
+  --signals "signal_a,signal_b" --impact "Expected effect if adopted."
+python3 scripts/runtime/concept_ingestor.py --update my_concept --status under_test
+python3 scripts/runtime/concept_ingestor.py --list
+python3 scripts/runtime/concept_ingestor.py --concept my_concept
+```
+
+Optional: `--source-reference`, `--evidence-links` (comma-separated or JSON array). **No** Anna wiring, **no** `registry.json` mutation, **no** new DB tables.
+
 ## Trading concept registry — Phase 3.5 (scaffold)
 
 **Canonical file:** **`data/concepts/registry.json`** — **`kind`: `trading_concept_registry_v1`**, versioned in Git. The registry is **canonical memory** for trading concepts; **not** the LLM. Changes happen through **PR/review**, not runtime mutation.

@@ -1,0 +1,10 @@
+{
+  "kind": "trading_concept_staging_v1",
+  "schema_version": 1,
+  "generated_at": null,
+  "notes": [
+    "Staging is not the canonical registry. Entries are candidates until reviewed and merged into registry.json via PR.",
+    "No automatic promotion; lifecycle: draft → under_test → validated | rejected."
+  ],
+  "staged_concepts": []
+}

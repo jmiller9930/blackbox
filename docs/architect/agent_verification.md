@@ -164,6 +164,19 @@ The master plan **Phase 2+ — Decision Layer (Analyst Model)** section remains 
 
 ---
 
+## Phase 3.7 — Concept staging & ingestion — **OPEN** (proof pending)
+
+| Field | Value |
+|--------|--------|
+| **Status** | **PENDING** — implementation in repo; clawbot verification not yet recorded |
+| **Canonical spec** | [`docs/blackbox_master_plan.md`](../blackbox_master_plan.md) — Phase 3.7 |
+| **Runtime** | `data/concepts/staging_registry.json`; `scripts/runtime/concept_ingestor.py` |
+| **Proof checklist** | On `clawbot`: `--add` (full flags), `--list`, `--update <id> --status under_test`, `--concept <id>`; JSON only; **no** `registry.json` change |
+
+**Scope:** Staging intake only—**no** automatic promotion, **no** Anna wiring, **no** new DB tables.
+
+---
+
 ## Update protocol
 
 1. `git rev-parse HEAD` → set **Git ref (recorded)** in the table at top  
