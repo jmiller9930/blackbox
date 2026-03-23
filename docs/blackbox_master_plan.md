@@ -566,7 +566,7 @@ Define how the system **gains new concepts** and **improves over time**.
 
 **Canonical vs staging:** **`registry.json`** is reviewed canonical memory; **staging** is where new ideas land until evidence and PR merge promote them (or they are **rejected**).
 
-**Closure:** clawbot proof pending — see [`docs/architect/agent_verification.md`](architect/agent_verification.md) when recorded.
+**Closure (verified):** clawbot proof recorded **2026-03-23** — see [`docs/architect/agent_verification.md`](architect/agent_verification.md) → *Phase 3.7 — Concept staging & ingestion*.
 
 ### Phase 3.8 — Advanced Strategy Awareness (Constrained)
 

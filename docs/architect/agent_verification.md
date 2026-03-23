@@ -164,14 +164,18 @@ The master plan **Phase 2+ — Decision Layer (Analyst Model)** section remains 
 
 ---
 
-## Phase 3.7 — Concept staging & ingestion — **OPEN** (proof pending)
+## Phase 3.7 — Concept staging & ingestion — **CLOSED**
 
 | Field | Value |
 |--------|--------|
-| **Status** | **PENDING** — implementation in repo; clawbot verification not yet recorded |
+| **Status** | **PASS** |
+| **Closure recorded** | 2026-03-23 |
+| **Repository** | `blackbox` @ `main` |
+| **Git ref (recorded)** | `e7600e6bd315a509bb369af75be2e4bda23fbe13` |
 | **Canonical spec** | [`docs/blackbox_master_plan.md`](../blackbox_master_plan.md) — Phase 3.7 |
 | **Runtime** | `data/concepts/staging_registry.json`; `scripts/runtime/concept_ingestor.py` |
-| **Proof checklist** | On `clawbot`: `--add` (full flags), `--list`, `--update <id> --status under_test`, `--concept <id>`; JSON only; **no** `registry.json` change |
+| **Verification host** | `clawbot.a51.corp` (`~/blackbox`) |
+| **Proof summary** | `git pull` → `e7600e6…`; `--add` → staged `clawbot_p37_proof` (draft); `--list` → `staged_count` 1; `--update … --status under_test` → `version` 2 + `status_history`; `--concept` → `found` true; `registry.json` untouched; `git checkout -- data/concepts/staging_registry.json` after proof (clean tree) |
 
 **Scope:** Staging intake only—**no** automatic promotion, **no** Anna wiring, **no** new DB tables.
 
