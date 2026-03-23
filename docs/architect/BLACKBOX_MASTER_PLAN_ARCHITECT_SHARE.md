@@ -1,6 +1,6 @@
-> **Source:** `docs/blackbox_master_plan.md` in repository **blackbox**, branch **`main`**, commit **`eb966bb84a564295b7974acdc2bc772d8d98cbe5`** (2026-03-23).
+> **Source:** `docs/blackbox_master_plan.md` in repository **blackbox**, branch **`main`** (regenerated with master plan correction directive).
 
-> **Purpose:** Verbatim master plan for architect review and sharing. The canonical document remains `docs/blackbox_master_plan.md`; regenerate this file if the plan changes.
+> **Purpose:** Verbatim master plan for architect review. Canonical file remains `docs/blackbox_master_plan.md`.
 
 ---
 
@@ -9,6 +9,31 @@
 ## Overview
 
 This document defines the full Phase 1 bootstrap for Cody (Code Bot) using OpenClaw.
+
+It is the **single source of truth** for project **rehydration** (Architect, Cursor, Operator). **Directives** issued as work packages map to sections here and to companion markdown specs; keep this file aligned with **implemented reality**.
+
+### Roadmap at a glance
+
+| Phase | Name | Status (this document) |
+|-------|------|-------------------------|
+| **1** | Foundation | Complete |
+| **1.5** | Agent hardening | Complete |
+| **1.6** | Controlled execution | Complete |
+| **2** | Paper system | Complete — runtime pipeline (see [Phase 2 — Paper System](#phase-2--paper-system)) |
+| **3** | Intelligence layer | **3.1–3.8** closed (clawbot-verified; see [`agent_verification.md`](architect/agent_verification.md)) |
+| **4.0** | Execution context rehydration | **Closed** |
+| **4.1+** | Real trading integration readiness | **Next** — prerequisites and governance; **not** automatic go-live |
+| **5** | Trading operations & governance | Planning — see [Phase 5](#phase-5--trading-operations--governance) |
+
+**Do not confuse:** The **[future decision-science stub](#future-decision-science-stub-not-phase-2-runtime)** (expected utility, Bayesian *teaching* framing) is **not** the same as **Phase 2 — Paper System** (implemented scripts). During rehydration, treat them as distinct.
+
+**Execution / proof:** Primary host **`clawbot.a51.corp`**, repo path **`~/blackbox`**. Phase closures use [`docs/architect/global_clawbot_proof_standard.md`](architect/global_clawbot_proof_standard.md).
+
+### Where we are now
+
+- **Completed through:** Phase **4.0** (and all listed Phase **3.x** milestones).
+- **Current next focus:** **Phase 4.1+** — real trading **readiness** (ownership, custody, venue, gates).
+- **Safe resume:** Read this plan → [`docs/runtime/execution_context.md`](runtime/execution_context.md) → `python3 scripts/runtime/context_loader.py` → run mandated verification on **clawbot** before claiming closure.
 
 ---
 
@@ -21,15 +46,17 @@ This document defines the full Phase 1 bootstrap for Cody (Code Bot) using OpenC
 
 ---
 
-## Phase 1 Goal
+## Phase 1 — Foundation
+
+### Phase 1 Goal
 
 Build Cody as an OpenClaw SKILL-driven engineering agent.
 
 ---
 
-## Key Components
+### Key Components
 
-### Cody — Code Bot
+#### Cody — Code Bot
 
 **Role:**
 
@@ -45,7 +72,7 @@ Build Cody as an OpenClaw SKILL-driven engineering agent.
 
 ---
 
-## Directory Structure
+### Directory Structure
 
 ```text
 blackbox/
@@ -66,14 +93,14 @@ blackbox/
 
 ---
 
-## SKILL.md Core
+### SKILL.md Core
 
 - **name:** `cody_planner`
 - **Purpose:** Plan system architecture, recommend build steps, guide development (see `agents/cody/skills/cody-planner/SKILL.md` in-repo).
 
 ---
 
-## OpenClaw Integration
+### OpenClaw Integration
 
 OpenClaw loads skills from `<workspace>/skills` (highest precedence), then `~/.openclaw/skills`, then bundled skills. The canonical copy in **git** lives at `agents/cody/skills/`.
 
@@ -90,13 +117,13 @@ openclaw skills list
 
 ---
 
-## Test Prompt
+### Test Prompt
 
 Use the Cody planner skill to recommend next steps for building BLACK BOX.
 
 ---
 
-## Success Criteria
+### Success Criteria
 
 - Cody loads in OpenClaw
 - Cody responds as engineering agent
@@ -105,7 +132,7 @@ Use the Cody planner skill to recommend next steps for building BLACK BOX.
 
 ---
 
-## Phase 1.5 — Agent hardening (in progress)
+## Phase 1.5 — Agent hardening (complete)
 
 **Goal:** Move from “working shell” to **disciplined multi-agent foundation**: explicit boundaries, persistence, reduced drift.
 
@@ -126,7 +153,7 @@ Use the Cody planner skill to recommend next steps for building BLACK BOX.
 
 ---
 
-## Phase 1.6 — Controlled execution (active)
+## Phase 1.6 — Controlled execution (complete)
 
 **Goal:** Move from “agents on paper” to **agents doing controlled, real work** on clawbot: SQLite + DATA health logging + Cody structured plans — **no expansion** until validation.
 
@@ -140,9 +167,21 @@ Use the Cody planner skill to recommend next steps for building BLACK BOX.
 
 ---
 
-## Phase 2+ — Decision Layer (Analyst Model) [STUB]
+## Phase 2 — Paper System
 
-> **STUB — not implemented.** No Analyst agent code, no runtime wiring, no new tools in this phase. Recorded for roadmap and context rehydration. Keywords for search: **decision layer**, **analyst model**, **expected utility**, **bayesian update**, **learning system**.
+**Purpose:** The **implemented** safe simulation and paper pipeline that sits **before** real venue integration. This is **Phase 2** in the roadmap — not the “Phase 2+” decision-science stub below.
+
+**Runtime (representative):** trade lifecycle aggregation (`trade_episode_aggregator.py`), system insight (`insight_generator.py`), system trend (`insight_trend_tracker.py`), guardrail evaluation (`guardrail_policy_evaluator.py`), policy-gated action (`policy_gated_action_filter.py`) — **paper-only**; outputs feed Phase 3 intelligence and validation loops.
+
+**Learning doctrine (paper path):** The system is expected to learn from **both wins and losses**. **Wins do not automatically prove good logic; losses do not automatically prove bad logic.** Every material outcome should support **root-cause analysis** before patterns or behaviors are promoted. Promotion requires **evidence** (repeatability, documented conditions), not a single lucky or unlucky draw.
+
+**Status:** **Complete** as an implemented baseline for paper/safe simulation; evolution continues under Phase 3 validation and governance.
+
+---
+
+## Future decision-science stub (not Phase 2 runtime)
+
+> **STUB — not implemented.** This section is a **future** decision-theory / teachable-analytics layer. It is **not** the same as **[Phase 2 — Paper System](#phase-2--paper-system)** above (implemented scripts). No Analyst *decision-science* runtime here; **Anna** in Phase 3 is the **intelligence layer** with its own closures. Keywords for search: **decision layer**, **analyst model**, **expected utility**, **bayesian update**, **learning system**.
 
 ### Purpose
 
@@ -163,7 +202,7 @@ Combine:
 - **Real-time data** — market state and **DATA** outputs (health, signals context)
 - **Reflection** — compare predicted vs actual outcomes; update documented rationale (Bayesian belief update as a *process*, not a hidden model)
 
-### Initial frameworks (Phase 2 targets)
+### Initial frameworks (future stub — not Phase 2 paper runtime)
 
 - **Decision theory / expected utility** — preferences over outcomes under uncertainty; explicit tradeoffs
 - **Bayesian belief updates** — principled revision of confidence as evidence arrives (explainable steps)
@@ -194,23 +233,21 @@ Combine:
 - no autonomous execution (Billy / execution layer remains separate and gated)
 - no complex portfolio optimization as a first deliverable
 
-**Alignment:** Roster “Anna — Analyst” ([`docs/architect/TEAM_ROSTER.md`](architect/TEAM_ROSTER.md)) is the **persona** this layer eventually supports; this stub does **not** implement Anna.
-
-**Superseded in roadmap detail by:** [Phase 3 — Intelligence Layer](#phase-3--intelligence-layer) below (Anna, ingestion, validation loop, concept registry, optional strategy awareness).
+**Alignment:** Roster “Anna — Analyst” ([`docs/architect/TEAM_ROSTER.md`](architect/TEAM_ROSTER.md)) is a **persona** this *future* layer could complement; **implemented Anna** lives under [Phase 3 — Intelligence Layer](#phase-3--intelligence-layer). This stub does **not** implement either by itself.
 
 ---
 
 ## Meet the Team
 
-Roster — **software agents** vs **human roles** — status as of planning docs (see [`docs/architect/TEAM_ROSTER.md`](architect/TEAM_ROSTER.md) for the canonical table).
+Roster — **software agents** vs **human roles** — aligned with runtime architecture (see [`docs/architect/TEAM_ROSTER.md`](architect/TEAM_ROSTER.md) for the canonical table).
 
 | Name | Type | Role | Status |
 |------|------|------|--------|
-| **Cody** | Agent | Software engineer — builds the system and agents | In progress |
-| **DATA** | Agent | System & data guardian — health, integrity, monitoring | In progress |
+| **Cody** | Agent | Software engineer — builds the system and agents | Active (Phase 1–2 runtime) |
+| **DATA** | Agent | Evidence / health / integrity — monitoring, logging, guardian posture | Active |
 | **Mia** | Agent | Market info — real-time market data (**read-only**) | Active |
-| **Anna** | Agent | Analyst — trade signals and confidence | In progress |
-| **Billy** | Agent | TBot executor — executes trades and manages positions | In development |
+| **Anna** | Agent | Analyst intelligence layer — **`anna_analysis_v1`**, proposals, registry-aware reasoning (Phase 3); not live execution | Active (CLI + modular runtime) |
+| **Billy** | Agent | Execution / TBot — **future** venue execution **only** under policy, governance, and Phase 4+ gates (not autonomous in Phase 3) | Planned |
 | **Sean** | Human | CEO — strategy, goals, risk tolerance | Active |
 | **John** | Human | CTO — architecture, security, technical direction | Active |
 
@@ -237,21 +274,27 @@ This section is intentionally high-level; detailed triggers, providers, and Open
 
 ## Phase 3 — Intelligence Layer
 
+### Shared explanation of learning (future requirement)
+
+Any agent that **explains** how learning, validation, outcome reflection, or concept promotion works must eventually use a **single shared explanation source** (canonical documentation or controlled text), so **no agent improvises a contradictory story** about the learning engine. This is an **architectural** rule; implementation may evolve.
+
+---
+
 > **Mostly planning in this document.** Phase 3 is where **intelligence** (interpretation, conversation, validation, and **read-only** market context) layers on top of the **Phase 2** paper pipeline. **Exceptions:** [Phase 3.1](#phase-31--market-data-ingestion-read-only) — **`market_data_ingestor.py`** (read-only snapshots); [Phase 3.2](#phase-32--anna-conversational-analyst-layer) — **`anna_analyst_v1.py`** (CLI rule-based **`anna_analysis_v1`**, no Telegram). **No** registry loader, **no** Phase 4 execution paths, **no** venue writes beyond these scoped scripts until implemented per architect.
 
 **What Phase 3 is not:** live trading; wallet integration; exchange execution; unrestricted LLM behavior.
 
 **What Phase 3 is:** market visibility; **Anna** as the analyst intelligence layer; **concept registry** and retrieval; expert interaction with Sean; **validation** and concept promotion; **extensible reasoning modules**.
 
-**No exchange trading, no wallet keys, and no live execution** are implied by this section until [Phase 4](#phase-4--real-trading-integration-prerequisites) gates are met.
+**No exchange trading, no wallet keys, and no live execution** are implied by this section until [Phase 4](#phase-4--real-trading-integration) gates are met.
 
 **Keywords for search:** Phase 3, Anna, intelligence layer, Telegram, validation loop, market data ingestion, Solana, read-only, trading concept registry, intelligence extensibility, concept retrieval, modular reasoning, concept formation pipeline.
 
 **Upstream (Phase 2) — safe simulation:** The intelligence layer must align with trade episodes (`trade_episode_aggregator.py`), system insight (`insight_generator.py`), system trend (`insight_trend_tracker.py`), guardrail policy (`guardrail_policy_evaluator.py`), policy-gated action (`policy_gated_action_filter.py`) — all **paper-only** today (episodes, insights, trends, policy / guardrails).
 
-**Downstream (Phase 4) — real trading prerequisites:** [Phase 4 — Real Trading Integration Prerequisites](#phase-4--real-trading-integration-prerequisites) — wallet, custody, access, approval, governance — before any real venue execution.
+**Downstream (Phase 4) — real trading prerequisites:** [Phase 4 — Real Trading Integration](#phase-4--real-trading-integration) — wallet, custody, access, approval, governance — before any real venue execution.
 
-**Placement:** Phase 3 sits between **safe simulation** (Phase 2) and **real-world trading integration** (Phase 4).
+**Placement:** Phase 3 sits between **safe simulation** (Phase 2) and **real-world trading integration** ([Phase 4](#phase-4--real-trading-integration)).
 
 **Roster alignment:** Anna (analyst), Sean (human expert), DATA/Mia — see [`docs/architect/TEAM_ROSTER.md`](architect/TEAM_ROSTER.md).
 
@@ -365,6 +408,8 @@ Codify the core philosophy: **trust → test → validate → adopt or reject**.
 The system must always ask: **why did this work?** and **why did this fail?**
 
 **Philosophy:** **trust → test → validate → adopt or reject** — not “ship intuition.”
+
+**Learning doctrine:** Treat **wins and losses** symmetrically for analysis — both require **root-cause** understanding. **Patterns and behaviors are promoted only with evidence**; a win does not prove the logic was sound, and a loss does not by itself prove the logic was wrong.
 
 #### Runtime implementation (v1 — started)
 
@@ -613,9 +658,9 @@ Advanced concepts may enter the registry as **draft** or **exploratory** concept
 
 ---
 
-## Phase 4 — Real Trading Integration Prerequisites
+## Phase 4 — Real Trading Integration
 
-> **Planning-only.** Phase 4 is the first phase where the system may be **prepared** to touch a **real trading venue**. This section codifies prerequisites so future context rehydration does not lose governance, custody, or safety boundaries. **Nothing in this section implies live trading is enabled by default.**
+Phase **4** spans **execution-context rehydration** (4.0, closed) and **readiness for** touching a real venue (**4.1+** — next focus). **Planning-only for 4.1+:** the system may be **prepared** to touch a **real trading venue** only after gates and human approval. **Nothing here implies live trading is enabled by default.**
 
 **Keywords for search:** Phase 4, real trading, venue, wallet, custody, go-live, governance, signing, policy gate.
 
@@ -631,7 +676,11 @@ Advanced concepts may enter the registry as **draft** or **exploratory** concept
 
 **Closure (verified):** clawbot proof recorded **2026-03-23** — see [`docs/architect/agent_verification.md`](architect/agent_verification.md) → *Phase 4.0 — Execution context rehydration*.
 
-### 1. Ownership and Governance
+### Phase 4.1+ — Real trading integration readiness
+
+The following subsections (**1–7**) are **Phase 4.1+** prerequisites: governance, custody, venue, signing, secrets, gates, and non-goals — **not** automatic deployment.
+
+#### 1. Ownership and Governance
 
 Real trading integration requires **clear human ownership** and **explicit approval** before any live capability is enabled.
 
@@ -646,7 +695,7 @@ Real trading integration requires **clear human ownership** and **explicit appro
 
 **Human approval policy:** No live trading capability is “on” until a documented approval record exists (who, when, scope).
 
-### 2. Wallet / Custody Prerequisites
+#### 2. Wallet / Custody Prerequisites
 
 Real trading requires a **wallet architecture** (chain- and venue-specific details are chosen later).
 
@@ -663,7 +712,7 @@ Real trading requires a **wallet architecture** (chain- and venue-specific detai
 
 The system must **never casually “hold” raw secrets**; integration must use **approved secret storage** (see below) when execution is real.
 
-### 3. Platform / Venue Prerequisites
+#### 3. Platform / Venue Prerequisites
 
 Before real execution:
 
@@ -679,7 +728,7 @@ Before real execution:
 | **Paper / simulated** | Current BLACK BOX paper pipeline — **no venue keys required**. |
 | **Real execution** | Orders, deposits, or signed transactions — **only after Phase 4 gates + approval**. |
 
-### 4. Signing / Execution Control Model
+#### 4. Signing / Execution Control Model
 
 A **controlled execution model** is required:
 
@@ -694,14 +743,14 @@ A **controlled execution model** is required:
 - **No uncontrolled signing** — no ad hoc scripts with keys.  
 - **No direct production execution** without passing the **policy gate** (e.g. guardrail / governance layer — see Phase 2.11–2.12 runtime and future enforcement).
 
-### 5. Environment / Secrets / Access Controls
+#### 5. Environment / Secrets / Access Controls
 
 - **Secret storage policy:** Secrets live in **approved vaults** or host-managed secret stores — **not** in the repo.  
 - **Direction:** Integrate with a **vault / secret-manager** pattern approved by technical leadership.  
 - **Access classes by role:** Separate **data** access, **planning** access, and **execution** access; least privilege.  
 - **No secrets in repo**; **no secrets in chat**; **no ad hoc copying** of credentials into scripts.
 
-### 6. Safety Gates Before Live Integration
+#### 6. Safety Gates Before Live Integration
 
 Phase 4 **must not** begin real execution until **all** of the following are true:
 
@@ -713,7 +762,7 @@ Phase 4 **must not** begin real execution until **all** of the following are tru
 6. **Test capital policy** is **documented** (how much, which account, kill switch).  
 7. **Rollback / disable path** is **documented** (how to turn off venue access without code panic).
 
-### 7. Explicit Non-Goals
+#### 7. Explicit Non-Goals
 
 Phase 4 **does not** automatically mean:
 
@@ -721,6 +770,43 @@ Phase 4 **does not** automatically mean:
 - **Unrestricted exchange access**  
 - **Direct hot-wallet free-for-all**  
 - **Bypassing policy** because the system “looks ready”
+
+---
+
+## Phase 5 — Trading Operations & Governance
+
+> **Planning.** Defines how the organization **operates** trading-capable systems after **Phase 4+** integration groundwork is satisfied — not a promise that every item is implemented on day one.
+
+### Purpose
+
+Establish **operations**, **interaction models**, and **governance** so that any execution path remains **human-accountable**, **auditable**, and **consistent** with policy.
+
+### Required themes (architectural)
+
+| Theme | Expectation |
+|--------|----------------|
+| **Individual accounts** | Clear workflows and ownership for single-account operation. |
+| **Shared / pooled / hedge-style** | Explicit rules when exposure is shared across strategies or entities; **no** implicit commingling without documentation and approval. |
+| **Chat-first interaction** | Conversational interfaces may be primary for awareness and routine prompts; **must not** replace required **approval planes** for high-risk actions. |
+| **Secure portal / approval plane** | Sensitive approvals use a **dedicated, reviewable surface** (not only informal chat). |
+| **Mobile-first principle** | Operational and approval flows should assume **mobile** use where the architect requires real-time human decisions. |
+| **Approval / signing model** | Defined roles, limits, separation of duties, revocation. |
+| **Audit & traceability** | Records of who approved what, when, and under which policy revision. |
+| **Safety controls** | Kill switches, limits, and rollback consistent with Phase 4 gates. |
+
+### Explicit non-goals
+
+- **Not** a substitute for **human risk ownership** (Sean / delegated officers).
+- **Not** “autonomous operations” without governance visibility.
+- **Not** mixing **paper** and **live** runbooks without explicit labeling.
+- Detailed UI specs may land in separate architect-approved documents.
+
+### Relationship
+
+- **Phase 4** = **readiness** to integrate (custody, venue, secrets policy, gates).
+- **Phase 5** = **how we run** once readiness exists — day-two operations and governance.
+
+**Status:** Framing for rehydration; elaboration tracks architectural decisions already discussed in chat.
 
 ---
 
