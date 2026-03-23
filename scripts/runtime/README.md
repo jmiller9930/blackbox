@@ -189,3 +189,13 @@ python3 scripts/runtime/anna_analyst_v1.py "Liquidity is thin and spreads are wi
 python3 scripts/runtime/anna_analyst_v1.py "Spreads widening" --use-latest-market-snapshot --use-latest-policy --use-latest-trend
 python3 scripts/runtime/anna_analyst_v1.py "Test input" --store
 ```
+
+## Anna proposal builder — Phase 3.3
+
+**`anna_proposal_builder.py`** — Bridges Anna analysis to **`anna_proposal_v1`**: `NO_CHANGE` \| `RISK_REDUCTION` \| `CONDITION_TIGHTENING` \| `OBSERVATION_ONLY`, **`validation_plan`**, **`proposed_effect`** (paper-only). Consumes **`--use-latest-stored-anna-analysis`** or **live** trader text with optional **`--use-latest-market-snapshot`**, **`--use-latest-decision-context`**, **`--use-latest-trend`**, **`--use-latest-policy`**. **`--store`** → **`[Anna Proposal]`**. Reuses **`anna_analyst_v1.build_analysis`**; no registry, no Telegram.
+
+```bash
+python3 scripts/runtime/anna_proposal_builder.py "Liquidity is thin and spreads are widening" --use-latest-market-snapshot --use-latest-policy
+python3 scripts/runtime/anna_proposal_builder.py --use-latest-stored-anna-analysis
+python3 scripts/runtime/anna_proposal_builder.py "Test proposal" --store
+```
