@@ -217,6 +217,23 @@ The master plan **Phase 2+ — Decision Layer (Analyst Model)** section remains 
 
 ---
 
+## Phase 4.1 — Trading readiness map — **CLOSED**
+
+| Field | Value |
+|--------|--------|
+| **Status** | **PASS** |
+| **Closure recorded** | 2026-03-23 |
+| **Repository** | `blackbox` @ `main` |
+| **Git ref (recorded)** | `PHASE41_COMMIT` |
+| **Canonical spec** | [`docs/blackbox_master_plan.md`](../blackbox_master_plan.md) — Phase 4.1; [`phase_4_1_trading_readiness.md`](phase_4_1_trading_readiness.md) |
+| **Runtime** | Documentation only — `docs/architect/phase_4_1_trading_readiness.md`; `docs/blackbox_master_plan.md` updated; `docs/runtime/execution_context.md` phase snapshot (`current_phase` 4.1, `last_completed_phase` 4.0) |
+| **Verification host** | `clawbot.a51.corp` (`~/blackbox`) |
+| **Proof summary** | `git pull`; `test -f docs/architect/phase_4_1_trading_readiness.md`; no trading code, no API keys, no schema change |
+
+**Scope:** Readiness blueprint only — **no** execution implementation, **no** exchange connection, **no** secrets.
+
+---
+
 ## Update protocol
 
 1. `git rev-parse HEAD` → set **Git ref (recorded)** in the table at top  

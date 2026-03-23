@@ -65,8 +65,8 @@ The JSON block below is parsed by `scripts/runtime/context_loader.py`. Keep it v
 
 ```json
 {
-  "current_phase": "Phase 4.0",
-  "last_completed_phase": "3.8",
+  "current_phase": "Phase 4.1",
+  "last_completed_phase": "4.0",
   "execution_environment": {
     "primary_host": "clawbot.a51.corp",
     "repo_path": "~/blackbox",

@@ -1,4 +1,4 @@
-> **Source:** `docs/blackbox_master_plan.md` in repository **blackbox**, branch **`main`** (regenerated with master plan correction directive).
+> **Source:** `docs/blackbox_master_plan.md` in repository **blackbox**, branch **`main`** (includes Phase 4.1 readiness).
 
 > **Purpose:** Verbatim master plan for architect review. Canonical file remains `docs/blackbox_master_plan.md`.
 
@@ -22,7 +22,8 @@ It is the **single source of truth** for project **rehydration** (Architect, Cur
 | **2** | Paper system | Complete — runtime pipeline (see [Phase 2 — Paper System](#phase-2--paper-system)) |
 | **3** | Intelligence layer | **3.1–3.8** closed (clawbot-verified; see [`agent_verification.md`](architect/agent_verification.md)) |
 | **4.0** | Execution context rehydration | **Closed** |
-| **4.1+** | Real trading integration readiness | **Next** — prerequisites and governance; **not** automatic go-live |
+| **4.1** | Trading readiness map | **Blueprint** — [`phase_4_1_trading_readiness.md`](architect/phase_4_1_trading_readiness.md) (planning only; **not** go-live) |
+| **4.1+** | Real trading prerequisites (detail) | Master plan § Phase 4 below; implementation **after** architect alignment |
 | **5** | Trading operations & governance | Planning — see [Phase 5](#phase-5--trading-operations--governance) |
 
 **Do not confuse:** The **[future decision-science stub](#future-decision-science-stub-not-phase-2-runtime)** (expected utility, Bayesian *teaching* framing) is **not** the same as **Phase 2 — Paper System** (implemented scripts). During rehydration, treat them as distinct.
@@ -32,7 +33,8 @@ It is the **single source of truth** for project **rehydration** (Architect, Cur
 ### Where we are now
 
 - **Completed through:** Phase **4.0** (and all listed Phase **3.x** milestones).
-- **Current next focus:** **Phase 4.1+** — real trading **readiness** (ownership, custody, venue, gates).
+- **Current planning artifact:** **Phase 4.1** — [`docs/architect/phase_4_1_trading_readiness.md`](architect/phase_4_1_trading_readiness.md) (readiness map; **no** trading enabled).
+- **Next focus:** Align implementation with Phase **4.1+** prerequisites (§ below) and architect approval before any live path.
 - **Safe resume:** Read this plan → [`docs/runtime/execution_context.md`](runtime/execution_context.md) → `python3 scripts/runtime/context_loader.py` → run mandated verification on **clawbot** before claiming closure.
 
 ---
@@ -676,9 +678,13 @@ Phase **4** spans **execution-context rehydration** (4.0, closed) and **readines
 
 **Closure (verified):** clawbot proof recorded **2026-03-23** — see [`docs/architect/agent_verification.md`](architect/agent_verification.md) → *Phase 4.0 — Execution context rehydration*.
 
-### Phase 4.1+ — Real trading integration readiness
+### Phase 4.1 — Trading readiness map (blueprint)
 
-The following subsections (**1–7**) are **Phase 4.1+** prerequisites: governance, custody, venue, signing, secrets, gates, and non-goals — **not** automatic deployment.
+**Operational map (planning only):** [`docs/architect/phase_4_1_trading_readiness.md`](architect/phase_4_1_trading_readiness.md) — account model, wallet/connection, authority (Anna / human / Billy / revoke), execution modes (read-only / paper / live gated), approval & signing flow, **chat vs secure execution plane** (chat never executes trades), safety/kill switches, audit link to Phase 2/3 learning, **non-goals** (no live trading, no keys in repo). **Does not** implement execution code.
+
+### Phase 4.1+ — Real trading integration readiness (master plan detail)
+
+The following subsections (**1–7**) are **prerequisites** consistent with the Phase **4.1** blueprint: governance, custody, venue, signing, secrets, gates, and non-goals — **not** automatic deployment.
 
 #### 1. Ownership and Governance
 
