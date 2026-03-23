@@ -59,14 +59,26 @@ Every mandated phase proof **must** include:
 
 ---
 
+## 5. Telegram personas (Phase 4.6.3)
+
+| Persona | Silo | Default when |
+|--------|------|----------------|
+| **Anna** | Trading / market / risk / concepts / analyst | No `@`, or ambiguous question (spokesperson); natural trading questions |
+| **DATA** | SQLite, execution context, reports, insights, status, infra, connectivity | `@data`, or NL cues (status, report, DB, schema, telemetry, …) |
+| **Cody** | Engineering / planning / repo | `@cody`, `cody …` lead, or clear engineering NL |
+
+**Rules:** Every reply is **persona-owned** — first line of message text is **`[Anna]`**, **`[DATA]`**, or **`[Cody]`** (optional **`[Mia]`** for reserved `@mia` only). The **Telegram bot display name** (e.g. BB Trader) is the **bot account**, not the speaker. **No** unlabeled assistant output; **`response_formatter`** enforces tags. Anna on Telegram uses **`telegram_interface`** + **`anna_analyst_v1`** — **no** separate OpenClaw process required for chat. Registry alignment: [`agents/agent_registry.json`](../../agents/agent_registry.json).
+
+---
+
 ## Machine-readable snapshot (for `context_loader.py`)
 
 The JSON block below is parsed by `scripts/runtime/context_loader.py`. Keep it valid JSON.
 
 ```json
 {
-  "current_phase": "Phase 4.2",
-  "last_completed_phase": "4.1",
+  "current_phase": "Phase 4.6.3",
+  "last_completed_phase": "4.6.3",
   "execution_environment": {
     "primary_host": "clawbot.a51.corp",
     "repo_path": "~/blackbox",
@@ -77,7 +89,8 @@ The JSON block below is parsed by `scripts/runtime/context_loader.py`. Keep it v
   "rules": [
     "NEVER stop at local execution for phase closure proof",
     "ALWAYS run mandated verification on clawbot.a51.corp",
-    "ALWAYS return full proof package: git pull, git rev-parse HEAD, runtime outputs, persistence proof"
+    "ALWAYS return full proof package: git pull, git rev-parse HEAD, runtime outputs, persistence proof",
+    "Telegram (Phase 4.6.3): every reply persona-tagged in message body; bot display name is not the speaker"
   ]
 }
 ```

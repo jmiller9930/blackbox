@@ -20,6 +20,7 @@ def ensure_schema(conn: sqlite3.Connection, repo_root: Path) -> None:
 
 
 def seed_agents(conn: sqlite3.Connection) -> None:
+    # id "main" is legacy primary key for Cody (engineer); kept for existing tasks / FKs.
     conn.execute(
         "INSERT OR IGNORE INTO agents (id, name, role, status) VALUES (?, ?, ?, ?)",
         ("main", "Cody", "engineer-planner-builder", "active"),
@@ -27,5 +28,13 @@ def seed_agents(conn: sqlite3.Connection) -> None:
     conn.execute(
         "INSERT OR IGNORE INTO agents (id, name, role, status) VALUES (?, ?, ?, ?)",
         ("data", "DATA", "integrity-operator", "active"),
+    )
+    conn.execute(
+        "INSERT OR IGNORE INTO agents (id, name, role, status) VALUES (?, ?, ?, ?)",
+        ("anna", "Anna", "trading-analyst", "active"),
+    )
+    conn.execute(
+        "INSERT OR IGNORE INTO agents (id, name, role, status) VALUES (?, ?, ?, ?)",
+        ("mia", "Mia", "reserved", "inactive"),
     )
     conn.commit()

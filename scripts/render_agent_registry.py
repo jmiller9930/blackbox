@@ -79,6 +79,13 @@ def render_identity(agent_id: str, block: dict) -> str:
         for h in ho:
             lines.append(f"  - {h}")
 
+    ralign = block.get("runtimeAlignment")
+    if isinstance(ralign, list) and ralign:
+        lines.append("")
+        lines.append("## Runtime alignment (architect)")
+        for item in ralign:
+            lines.append(f"- {item}")
+
     see = ident.get("seeAlso")
     if see:
         ticked = ", ".join(f"`{x}`" for x in see)

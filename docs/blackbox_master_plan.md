@@ -18,6 +18,12 @@ It is the **single source of truth** for project **rehydration** (Architect, Cur
 | **4.0** | Execution context rehydration | **Closed** |
 | **4.1** | Trading readiness map | **Blueprint** — [`phase_4_1_trading_readiness.md`](architect/phase_4_1_trading_readiness.md) (planning only; **not** go-live) |
 | **4.2** | Wallet / account architecture | **Stub** — [`phase_4_2_wallet_account_architecture.md`](architect/phase_4_2_wallet_account_architecture.md) (technical shape; **no** implementation) |
+| **4.3** | Execution plane skeleton (mock) | **Implemented** — [`scripts/runtime/execution_plane/`](../scripts/runtime/execution_plane/) + [`execution_cli.py`](../scripts/runtime/execution_cli.py) (approval gate, kill switch, audit to `system_events`; **no** wallets/venues/secrets) |
+| **4.4** | Execution feedback & learning loop | **Implemented** — [`scripts/runtime/learning_loop/`](../scripts/runtime/learning_loop/) (outcome + `insight_kind` in `system_events` `execution_feedback_v1`; **no** ML, tasks, or schema) |
+| **4.5** | Learning visibility & reporting | **Implemented** — [`scripts/runtime/learning_visibility/`](../scripts/runtime/learning_visibility/) + [`learning_cli.py`](../scripts/runtime/learning_cli.py) (query/summarize/report over `execution_feedback_v1`; **no** ML, registry writes, or schema) |
+| **4.6** | Telegram interaction layer | **Implemented** — [`scripts/runtime/telegram_interface/`](../scripts/runtime/telegram_interface/) (Bot API; Anna + learning visibility; **no** execution from chat; token via env) |
+| **4.6.2** | Multi-agent persona (single bot) | **Implemented** — [`@anna` / `@data` / `@cody`](../scripts/runtime/telegram_interface/) routing + `[Anna]`/`[DATA]`/`[Cody]` labels (no extra bots or processes) |
+| **4.6.3** | Identity, routing, persona enforcement | **Implemented** — mandatory tags, silo defaults, SQLite `agents` + registry alignment (see Phase 4.6.3 below) |
 | **4.1+** | Real trading prerequisites (detail) | Master plan § Phase 4 below; implementation **after** architect alignment |
 | **5** | Trading operations & governance | Planning — see [Phase 5](#phase-5--trading-operations--governance) |
 
@@ -27,9 +33,9 @@ It is the **single source of truth** for project **rehydration** (Architect, Cur
 
 ### Where we are now
 
-- **Completed through:** Phase **4.1** blueprint (and Phase **4.0**, all Phase **3.x**).
-- **Current planning artifact:** **Phase 4.2** — [`docs/architect/phase_4_2_wallet_account_architecture.md`](architect/phase_4_2_wallet_account_architecture.md) (wallet/account **architecture stub**; **no** code).
-- **Prior blueprint:** **Phase 4.1** — [`phase_4_1_trading_readiness.md`](architect/phase_4_1_trading_readiness.md).
+- **Completed through:** Phase **4.6.3** (persona enforcement + DB/registry alignment), **4.6.2** Telegram multi-persona, **4.6** bot layer, **4.5** learning visibility, **4.4** feedback loop, **4.3** execution plane (mock), **4.2** stub, **4.1** blueprint (and **4.0**, all Phase **3.x**).
+- **Current planning artifact:** **Phase 4.6.3** — **Anna** default front door; **DATA** / **Cody** silos; mandatory `[Anna]`/`[DATA]`/`[Cody]` in message text; Telegram bot name ≠ persona — [`telegram_interface/`](../scripts/runtime/telegram_interface/), [`agents/agent_registry.json`](../agents/agent_registry.json).
+- **Prior blueprint:** **Phase 4.1** — [`phase_4_1_trading_readiness.md`](architect/phase_4_1_trading_readiness.md); **4.2** architecture — [`phase_4_2_wallet_account_architecture.md`](architect/phase_4_2_wallet_account_architecture.md).
 - **Next focus:** Phase **4.1+** prerequisites (§ below) and architect approval before **any** implementation that touches keys or venues.
 - **Safe resume:** Read this plan → [`docs/runtime/execution_context.md`](runtime/execution_context.md) → `python3 scripts/runtime/context_loader.py` → run mandated verification on **clawbot** before claiming closure.
 
@@ -681,6 +687,46 @@ Phase **4** spans **execution-context rehydration** (4.0, closed) and **readines
 ### Phase 4.2 — Wallet / account architecture (stub)
 
 **Technical architecture stub:** [`docs/architect/phase_4_2_wallet_account_architecture.md`](architect/phase_4_2_wallet_account_architecture.md) — entity model (human, trading account, wallet, venue, roles), wallet integration patterns, access modes, identity/authority (Anna recommends, Billy bounded, humans grant/revoke), **signing boundary** (analysis → approval → signing → execution), **chat-to-secure-plane handoff**, vault boundary (no vault product locked), conceptual audit events, failure/safety cases, **non-goals** (no wallet/signing/exchange code, no secrets). **Does not** implement runtime or schema.
+
+### Phase 4.3 — Execution plane skeleton (mock)
+
+**Implemented control layer (safe, no real trading):** [`scripts/runtime/execution_plane/`](../scripts/runtime/execution_plane/) + [`scripts/runtime/execution_cli.py`](../scripts/runtime/execution_cli.py) — `anna_proposal_v1` → `execution_request_v1` (file-backed), **human approval** before any mock execution, **kill switch** (`data/runtime/execution_plane/kill_switch.json`) that blocks all runs when active, **audit** to existing SQLite `system_events` (`source='execution_plane'`; no schema change). **Non-goals:** no wallets, exchanges, API keys, or signing.
+
+**Closure (verified):** clawbot proof — see [`docs/architect/agent_verification.md`](architect/agent_verification.md) → *Phase 4.3 — Execution plane skeleton (mock)*.
+
+### Phase 4.4 — Execution feedback & learning loop (mock)
+
+**Problem:** Execution results need **structured, append-only feedback** so downstream learning can consume **deterministic signals** without new ML, task queues, or schema migrations.
+
+**Mitigation:** [`scripts/runtime/learning_loop/`](../scripts/runtime/learning_loop/) — after each `run_execution` attempt, **one** `system_events` row (`event_type`=`execution_feedback_v1`, `source`=`execution_plane`) stores **outcome** (request_id, status, reason, timestamp) and **insight** (`insight_kind`, `type`, `reasoning`, `linked_request_id`). **Amendment 4.4.1:** canonical store only in `system_events`; append-only (repeat runs append rows); failure taxonomy preserved (`blocked_not_approved`, `blocked_kill_switch`, `blocked_unknown_request`, `execution_succeeded`). **No** tasks, **no** Phase 3 triggers from this layer.
+
+**Closure (verified):** clawbot proof — see [`docs/architect/agent_verification.md`](architect/agent_verification.md) → *Phase 4.4 — Execution feedback & learning loop*.
+
+### Phase 4.5 — Learning visibility & reporting
+
+**Problem:** Feedback rows exist in `system_events`, but operators need **queryable lists**, **aggregates**, and **human-readable** summaries without ad-hoc SQL.
+
+**Mitigation:** [`scripts/runtime/learning_visibility/`](../scripts/runtime/learning_visibility/) — read-only **query** (`insight_query.py`), **aggregation** (`insight_summary.py`), and **report text** from summary data only (`report_generator.py`). CLI: [`scripts/runtime/learning_cli.py`](../scripts/runtime/learning_cli.py) — `list_insights`, `summarize_insights`, `generate_report`. Filters: `insight_kind`, success/failure (`insight.type`), `request_id`. **Non-goals:** no ML, no registry mutation, no learning triggers, no schema change.
+
+**Closure (verified):** clawbot proof — see [`docs/architect/agent_verification.md`](architect/agent_verification.md) → *Phase 4.5 — Learning visibility & reporting*.
+
+### Phase 4.6 — Telegram interaction layer (agents interface)
+
+**Problem:** Operators need a **primary human-facing channel** without bypassing governance.
+
+**Mitigation:** [`scripts/runtime/telegram_interface/`](../scripts/runtime/telegram_interface/) — Bot API via **`TELEGRAM_BOT_TOKEN`** (env only). **Message router** → **agent dispatcher** (Anna via `anna_analyst_v1.analyze_to_dict`; `report` / `insights` via read-only `learning_visibility`). **Response formatter** → concise Telegram text. **Non-goals:** no `run_execution`, approval, or kill switch from Telegram; no secrets in repo; no schema change.
+
+**Phase 4.6.1 (UX):** Identity intents (`help`, `who are you`, `what can you do`, `how do I use this`), `agent_identity` copy for Anna, and responses shaped as **Answer → Expand → Guide → Offer** with rotating closing lines — **behavior/UX only** (no backend or DB changes).
+
+**Phase 4.6.2 (multi-persona, single bot):** `@anna` / `@data` / `@cody` explicit routing; default Anna; `report` / `insights` / `status` → DATA; `cody …` or engineering-style openers → Cody stub; all replies prefixed `[Anna]`, `[DATA]`, or `[Cody]` — **no** extra Telegram bots, tokens, or processes.
+
+**Phase 4.6.2a (routing correction):** Removed broad “engineering keyword” routing to Cody so general trading/market text **defaults to Anna**; Cody only via `@cody`, leading `cody …`, or exact `cody`. Identity/help phrases checked first (including `@anna help` → identity).
+
+**Ownership (UX):** Trading / market / risk / concepts / education → **Anna** by default. Reporting / system-state / insights / status → **DATA** (including conservative natural-language cues). Engineering / repo / code / architecture → **Cody**. Replies are `[Anna]` / `[DATA]` / `[Cody]` with content matching role; optional Telegram **first name** in copy.
+
+**Phase 4.6.3 — Agent identity, routing, persona enforcement (system integrity):** **Default:** no `@` → trading/market/risk/concept → **Anna**; DB/system/status/connectivity/report/insights/infra cues → **DATA**; engineering cues → **Cody**; **ambiguous → Anna** (spokesperson). **Telegram:** every user-visible reply passes through **`response_formatter`**; first line **`[Anna]`**, **`[DATA]`**, or **`[Cody]`** (and **`[Mia]`** only for reserved `@mia`); invalid/missing tag → **Anna** fallback (`re-evaluate…`). Telegram **sender name** (BotFather) is **not** the persona — identity is in the message body. **SQLite:** `agents` rows `main`→Cody, `data`→DATA, `anna`→Anna, `mia`→Mia (inactive); new Anna tasks use `agent_id = "anna"`. **Project:** [`agents/agent_registry.json`](../agents/agent_registry.json) `runtimeAlignment` on Anna; **not** a separate OpenClaw runtime for Telegram. **Tone:** Anna conversational analyst; DATA factual/state-based; Cody structured engineering.
+
+**Closure (verified):** clawbot proof — see [`docs/architect/agent_verification.md`](architect/agent_verification.md) → *Phase 4.6 — Telegram interaction layer* / *4.6.2* / *4.6.3*.
 
 ### Phase 4.1+ — Real trading integration readiness (master plan detail)
 

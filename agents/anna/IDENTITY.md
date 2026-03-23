@@ -18,3 +18,9 @@
 - **Handoff:**
   - Sends signals to Billy
   - Consumes market data from Mia
+
+## Runtime alignment (architect)
+- Telegram Anna = runtime analyst persona (`telegram_bot.py` → `anna_analyst_v1` → `response_formatter`). **No separate OpenClaw process** is required for Telegram chat.
+- OpenClaw / `agents/anna/` = identity and tooling alignment; complements but does not replace the Telegram pipeline.
+- Persona tags `[Anna]` / `[DATA]` / `[Cody]` are mandatory in message bodies; Telegram’s sender name is the bot account (BotFather), not the speaker.
+- SQLite `agents.id`: `anna` = Anna, `data` = DATA, `main` = Cody (legacy id), `mia` = Mia (inactive). Anna stored tasks use `agent_id = "anna"`.

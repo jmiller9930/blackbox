@@ -251,6 +251,133 @@ The master plan **Phase 2+ — Decision Layer (Analyst Model)** section remains 
 
 ---
 
+## Phase 4.3 — Execution plane skeleton (mock) — **CLOSED**
+
+| Field | Value |
+|--------|--------|
+| **Status** | **PASS** |
+| **Closure recorded** | 2026-03-23 |
+| **Repository** | `blackbox` @ `main` |
+| **Git ref (recorded)** | `8f55ef4fd1907b48dd3f529846408d86cb806930` |
+| **Canonical spec** | [`docs/blackbox_master_plan.md`](../blackbox_master_plan.md) — Phase 4.3 |
+| **Runtime** | `scripts/runtime/execution_plane/`; `scripts/runtime/execution_cli.py`; file state under `data/runtime/execution_plane/` (gitignored); audit rows in `system_events` (`source='execution_plane'`); `execution_context` snapshot (`current_phase` 4.3, `last_completed_phase` 4.2) |
+| **Verification host** | `clawbot.a51.corp` (`~/blackbox`) |
+| **Proof summary** | `git pull`; `python3 scripts/runtime/context_loader.py`; `execution_cli.py` create → run (blocked: not approved) → approve → run (executed) → `toggle_kill_switch` → run (blocked: kill switch); `sqlite3` / `system_events` rows for `execution_plane` |
+
+**Scope:** Mock execution pipeline only — **no** wallets, exchanges, secrets, or schema migration.
+
+---
+
+## Phase 4.4 — Execution feedback & learning loop — **CLOSED**
+
+| Field | Value |
+|--------|--------|
+| **Status** | **PASS** |
+| **Closure recorded** | 2026-03-23 |
+| **Repository** | `blackbox` @ `main` |
+| **Git ref (recorded)** | `8f55ef4fd1907b48dd3f529846408d86cb806930` |
+| **Canonical spec** | [`docs/blackbox_master_plan.md`](../blackbox_master_plan.md) — Phase 4.4; amendment: deterministic `insight_kind`, `system_events` only, append-only |
+| **Runtime** | `scripts/runtime/learning_loop/`; `execution_engine.run_execution` → `execution_feedback_v1` in `system_events`; `execution_context` (`current_phase` 4.4, `last_completed_phase` 4.3) |
+| **Verification host** | `clawbot.a51.corp` (`~/blackbox`) |
+| **Proof summary** | `git pull`; `execution_cli.py` create → approve → `run_execution`; stdout shows `outcome` + `insight`; `sqlite3` — `event_type` / `payload` for `source='execution_plane'` including `execution_feedback_v1` with `insight_kind` |
+
+**Scope:** Feedback rows only — **no** ML, registry, promotion, schema change, task creation, or Phase 3 triggers.
+
+### Phase 4.4 — final closeout (directive)
+
+**Clawbot HEAD (recorded at closeout):** `8f55ef4fd1907b48dd3f529846408d86cb806930` — update after merge if newer commits land on `main`.
+
+**Confirmations:**
+
+| Check | Result |
+|--------|--------|
+| **Storage** | Feedback and audit use **only** SQLite `system_events` (no task/file duplicate for outcomes). |
+| **`execution_feedback_v1` payload** | Includes `kind`, `outcome`, `insight` with `insight_kind`, `type`, `reasoning`, `linked_request_id`. For strict structure proof: `SELECT payload FROM system_events WHERE source='execution_plane' AND event_type='execution_feedback_v1' ORDER BY rowid DESC LIMIT 1;` |
+| **`insight_kind` enum** | One of: `execution_succeeded`, `blocked_not_approved`, `blocked_kill_switch`, `blocked_unknown_request`. |
+| **Append-only** | Two consecutive `run_execution` calls on an approved request increased `COUNT(*)` for `event_type='execution_feedback_v1'` by **2** (verified locally). |
+| **Cases A / B / C** | No approval → `blocked_not_approved`; approved → `execution_succeeded`; kill switch on → `blocked_kill_switch`. |
+| **No redundant terminal events** | `run_execution` does **not** emit `execution_success` or `execution_blocked` (only `execution_attempted` plus `execution_feedback_v1`). Legacy rows from older runs may still exist in DB. |
+
+**Proof commands (reference):**
+
+```bash
+python3 scripts/runtime/context_loader.py
+python3 scripts/runtime/execution_cli.py create_execution_request
+python3 scripts/runtime/execution_cli.py approve_execution_request
+python3 scripts/runtime/execution_cli.py run_execution
+sqlite3 data/sqlite/blackbox.db "SELECT event_type, payload FROM system_events WHERE source='execution_plane' ORDER BY created_at DESC LIMIT 3;"
+```
+
+---
+
+## Phase 4.5 — Learning visibility & reporting — **CLOSED**
+
+| Field | Value |
+|--------|--------|
+| **Status** | **PASS** |
+| **Closure recorded** | 2026-03-23 |
+| **Repository** | `blackbox` @ `main` |
+| **Git ref (recorded)** | `8f55ef4fd1907b48dd3f529846408d86cb806930` |
+| **Canonical spec** | [`docs/blackbox_master_plan.md`](../blackbox_master_plan.md) — Phase 4.5 |
+| **Runtime** | `scripts/runtime/learning_visibility/`; `scripts/runtime/learning_cli.py`; read-only over `execution_feedback_v1`; `execution_context` (`current_phase` 4.5, `last_completed_phase` 4.4) |
+| **Verification host** | `clawbot.a51.corp` (`~/blackbox`) |
+| **Proof summary** | `git pull`; `python3 scripts/runtime/learning_cli.py list_insights`; `summarize_insights`; `generate_report` |
+
+**Scope:** Reporting only — **no** ML, registry mutation, learning triggers, or schema change.
+
+---
+
+## Phase 4.6 — Telegram interaction layer — **CLOSED**
+
+| Field | Value |
+|--------|--------|
+| **Status** | **PASS** |
+| **Closure recorded** | 2026-03-23 |
+| **Repository** | `blackbox` @ `main` |
+| **Git ref (recorded)** | *(run `git rev-parse HEAD` at closure on clawbot)* |
+| **Canonical spec** | [`docs/blackbox_master_plan.md`](../blackbox_master_plan.md) — Phase 4.6 |
+| **Runtime** | `scripts/runtime/telegram_interface/`; `TELEGRAM_BOT_TOKEN`; Anna + `learning_visibility` only; `execution_context` (`current_phase` 4.6, `last_completed_phase` 4.5) |
+| **Verification host** | `clawbot.a51.corp` (`~/blackbox`) |
+| **Proof summary** | `git pull`; `export TELEGRAM_BOT_TOKEN=…`; `python3 scripts/runtime/telegram_interface/telegram_bot.py`; from Telegram send e.g. natural-language question and `report` / `insights`; confirm replies; confirm **no** execution CLI paths |
+
+**Scope:** Interaction layer only — **no** execution plane from chat, **no** secrets in Git, **no** schema change.
+
+---
+
+## Phase 4.6.2 — Multi-agent persona (single bot) — **CLOSED**
+
+| Field | Value |
+|--------|--------|
+| **Status** | **PASS** |
+| **Closure recorded** | 2026-03-23 |
+| **Repository** | `blackbox` @ `main` |
+| **Git ref (recorded)** | *(run `git rev-parse HEAD` at closure on clawbot)* |
+| **Canonical spec** | [`docs/blackbox_master_plan.md`](../blackbox_master_plan.md) — Phase 4.6.2 |
+| **Runtime** | `telegram_interface/` — `@anna` / `@data` / `@cody`, `report`/`insights`/`status` → DATA, Cody stub; `[Anna]`/`[DATA]`/`[Cody]` labels; `execution_context` (`current_phase` 4.6.2, `last_completed_phase` 4.6.1) |
+| **Verification host** | `clawbot.a51.corp` (`~/blackbox`) |
+| **Proof summary** | `git pull`; `telegram_bot.py`; Telegram: liquidity question, `@data report`, `@cody what can you improve?` — labels + routing; **no** JSON |
+
+**Scope:** Single bot only — **no** extra tokens/processes, **no** execution/approval/secrets from chat.
+
+---
+
+## Phase 4.6.3 — Agent identity, routing, persona enforcement — **CLOSED**
+
+| Field | Value |
+|--------|--------|
+| **Status** | **PASS** (verify on clawbot: git HEAD + pytest + Telegram spot-checks) |
+| **Closure recorded** | *(set when proof run on clawbot)* |
+| **Repository** | `blackbox` @ `main` |
+| **Git ref (recorded)** | *(run `git rev-parse HEAD` at closure on clawbot)* |
+| **Canonical spec** | [`docs/blackbox_master_plan.md`](../blackbox_master_plan.md) — Phase 4.6.3 |
+| **Runtime** | `telegram_interface/` — `message_router`, `agent_dispatcher`, `response_formatter`; mandatory `[Anna]`/`[DATA]`/`[Cody]` first line; Anna default + ambiguous → Anna; SQLite `agents` includes `anna` / `mia`; [`agents/agent_registry.json`](../agents/agent_registry.json) `runtimeAlignment` |
+| **Verification host** | `clawbot.a51.corp` (`~/blackbox`) |
+| **Proof summary** | `cd ~/blackbox` → `git pull origin main` → `git rev-parse HEAD` → `python3 scripts/runtime/context_loader.py` → `python3 -m pytest tests/` → `python3 scripts/runtime/telegram_interface/telegram_bot.py` (with `TELEGRAM_BOT_TOKEN`). **Telegram:** `what is a spread?` → `[Anna]`; `what is a liquidity event?` → `[Anna]`; `what is a futures contract?` → `[Anna]`; `@data status` → `[DATA]`; `@cody what can you improve?` → `[Cody]`. **SQLite:** `SELECT * FROM agents;` shows `main`, `data`, `anna`, `mia`. **CI:** `tests/test_telegram_phase_4_6_3.py` |
+
+**Scope:** System integrity — persona visibility, routing, DB agent rows, project registry alignment; **no** execution logic, **no** extra bots.
+
+---
+
 ## Update protocol
 
 1. `git rev-parse HEAD` → set **Git ref (recorded)** in the table at top  

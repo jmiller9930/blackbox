@@ -149,7 +149,7 @@ def run(
             INSERT INTO tasks (id, agent_id, title, description, state, priority, created_at, updated_at)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?)
             """,
-            (tid, "main", title, desc, "completed", "normal", now, now),
+            (tid, "anna", title, desc, "completed", "normal", now, now),
         )
         conn.commit()
         conn.close()

@@ -27,7 +27,7 @@ from anna_modules.input_adapter import (
     try_load_trend,
 )
 
-def run(
+def analyze_to_dict(
     db_path: Path,
     input_text: str,
     *,
@@ -36,7 +36,8 @@ def run(
     use_trend: bool,
     use_policy: bool,
     store: bool,
-) -> int:
+) -> dict[str, Any]:
+    """Programmatic entry (e.g. Telegram). Returns structured result; does not print."""
     root = repo_root()
     conn = connect(db_path)
     ensure_schema(conn, root)
@@ -95,12 +96,34 @@ def run(
             INSERT INTO tasks (id, agent_id, title, description, state, priority, created_at, updated_at)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?)
             """,
-            (tid, "main", title, desc, "completed", "normal", now, now),
+            (tid, "anna", title, desc, "completed", "normal", now, now),
         )
         conn.commit()
         conn.close()
         out["stored_task_id"] = tid
 
+    return out
+
+
+def run(
+    db_path: Path,
+    input_text: str,
+    *,
+    use_snapshot: bool,
+    use_ctx: bool,
+    use_trend: bool,
+    use_policy: bool,
+    store: bool,
+) -> int:
+    out = analyze_to_dict(
+        db_path,
+        input_text,
+        use_snapshot=use_snapshot,
+        use_ctx=use_ctx,
+        use_trend=use_trend,
+        use_policy=use_policy,
+        store=store,
+    )
     print(json.dumps(out, indent=2, ensure_ascii=False))
     return 0
 

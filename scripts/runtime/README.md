@@ -10,6 +10,52 @@ Run from the **repository root** (`blackbox/`).
 python3 scripts/runtime/context_loader.py
 ```
 
+## Execution plane — Phase 4.3 (mock)
+
+Approval-gated mock execution, kill switch, and audit to `system_events` (no schema change). **No** wallets, exchanges, or secrets.
+
+```bash
+python3 scripts/runtime/execution_cli.py create_execution_request
+python3 scripts/runtime/execution_cli.py run_execution
+python3 scripts/runtime/execution_cli.py approve_execution_request
+python3 scripts/runtime/execution_cli.py toggle_kill_switch --off   # or --on
+```
+
+State: `data/runtime/execution_plane/` (gitignored JSON). With no `--request-id`, approve/run default to the **latest** request.
+
+## Execution feedback — Phase 4.4 (+ 4.4.1 amendment)
+
+Each `run_execution` appends **one** `system_events` row (`event_type`=`execution_feedback_v1`) with structured **outcome** and **insight** (`insight_kind`: `execution_succeeded` | `blocked_*`). Canonical store only — no duplicate task/file storage.
+
+```bash
+python3 scripts/runtime/execution_cli.py create_execution_request
+python3 scripts/runtime/execution_cli.py approve_execution_request
+python3 scripts/runtime/execution_cli.py run_execution
+# persistence proof (example):
+# sqlite3 data/sqlite/blackbox.db "SELECT event_type, payload FROM system_events WHERE source='execution_plane' ORDER BY created_at DESC LIMIT 5;"
+```
+
+## Learning visibility — Phase 4.5
+
+Read-only query, JSON aggregates, and human-readable report over `execution_feedback_v1` rows (filters: `--insight-kind`, `--type success|failure`, `--request-id`).
+
+```bash
+python3 scripts/runtime/learning_cli.py list_insights
+python3 scripts/runtime/learning_cli.py summarize_insights
+python3 scripts/runtime/learning_cli.py generate_report
+```
+
+## Telegram — Phase 4.6 / 4.6.1 / 4.6.2 (interaction layer)
+
+Single bot, **multi-persona** labels: **`@anna`**, **`@data`** (`status` / `report` / `insights` or free text), **`@cody`** (engineering stub). Unprefixed: `report`, `insights`, `status` → DATA; default → Anna. Prefixes: `[Anna]`, `[DATA]`, `[Cody]`. **help** / **who** / **what can you do** / **how** → identity. **No** execution, approval, or kill switch from Telegram.
+
+Requires `TELEGRAM_BOT_TOKEN`. Optional `TELEGRAM_ALLOWED_CHAT_IDS` (comma-separated chat ids).
+
+```bash
+export TELEGRAM_BOT_TOKEN="your-bot-token"
+python3 scripts/runtime/telegram_interface/telegram_bot.py
+```
+
 ## DATA — one-shot health checks
 
 ```bash
