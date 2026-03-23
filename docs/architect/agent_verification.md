@@ -120,7 +120,7 @@ The master plan **Phase 2+ — Decision Layer (Analyst Model)** section remains 
 | **Status** | **PASS** |
 | **Closure recorded** | 2026-03-23 |
 | **Repository** | `blackbox` @ `main` |
-| **Git ref (recorded)** | *(set at commit)* |
+| **Git ref (recorded)** | `7d2ec15c86ac52e58e29e6045ce2aeef0682b08b` |
 | **Canonical spec** | [`docs/blackbox_master_plan.md`](../blackbox_master_plan.md) — Phase 3.4 |
 | **Runtime** | `scripts/runtime/anna_modules/` (`input_adapter`, `interpretation`, `risk`, `policy`, `analysis`, `proposal`, `util`); CLIs unchanged: `anna_analyst_v1.py`, `anna_proposal_builder.py` |
 | **Verification host** | `clawbot.a51.corp` (`~/blackbox`) |
