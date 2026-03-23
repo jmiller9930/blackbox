@@ -1,26 +1,327 @@
 {
-  "registry_version": 1,
+  "kind": "trading_concept_registry_v1",
+  "schema_version": 1,
+  "generated_at": null,
+  "notes": [
+    "Seed pack: foundation + mechanical starter concepts. Status: validated for basic definitions; draft where nuance is venue-specific.",
+    "Canonical memory for the system — not LLM output. Changes via PR/review only."
+  ],
   "concepts": [
     {
-      "concept_id": "example_slippage",
+      "concept_id": "price",
+      "name": "Price",
+      "definition": "Last traded price or mid quote for an instrument at a point in time.",
+      "trader_meaning": "What you think you pay or receive per unit.",
+      "why_it_matters": "Sizing, PnL, and comparisons across venues depend on a clear price reference.",
+      "data_signals": [
+        "last_trade",
+        "mid",
+        "mark"
+      ],
+      "decision_impact": "Anchors entry/exit evaluation.",
+      "execution_impact": "Limit price selection and fill expectations when execution is allowed.",
+      "failure_modes": [
+        "Confusing mark vs last in illiquid books"
+      ],
+      "examples": [
+        "SOL quoted at 86.22 USDC."
+      ],
+      "status": "validated",
+      "version": 1
+    },
+    {
+      "concept_id": "bid",
+      "name": "Bid",
+      "definition": "The highest price a buyer is willing to pay for an asset at a given moment.",
+      "trader_meaning": "Buy-side quote you hit when selling into the book.",
+      "why_it_matters": "Tells you immediate sell-side liquidity quality.",
+      "data_signals": [
+        "order_book_bid",
+        "best_bid"
+      ],
+      "decision_impact": "Influences where you place limits relative to the market.",
+      "execution_impact": "Sell market orders lift bids; limits join bid side.",
+      "failure_modes": [
+        "Treating stale bid as guaranteed size"
+      ],
+      "examples": [
+        "Best bid 86.10 for size 10."
+      ],
+      "status": "validated",
+      "version": 1
+    },
+    {
+      "concept_id": "ask",
+      "name": "Ask (Offer)",
+      "definition": "The lowest price a seller will accept for an asset at a given moment.",
+      "trader_meaning": "Sell-side quote you hit when buying from the book.",
+      "why_it_matters": "Defines the cost to lift liquidity now.",
+      "data_signals": [
+        "order_book_ask",
+        "best_ask"
+      ],
+      "decision_impact": "Buy decisions reference ask for immediate fills.",
+      "execution_impact": "Buy market orders lift asks; limits join ask side.",
+      "failure_modes": [
+        "Ignoring ask size when it is tiny"
+      ],
+      "examples": [
+        "Best ask 86.12."
+      ],
+      "status": "validated",
+      "version": 1
+    },
+    {
+      "concept_id": "spread",
+      "name": "Bid–Ask Spread",
+      "definition": "The difference between best ask and best bid (ask minus bid).",
+      "trader_meaning": "Tight spread usually means cheaper to trade now; wide spread means friction.",
+      "why_it_matters": "Direct read on liquidity and transaction cost before fees.",
+      "data_signals": [
+        "best_bid",
+        "best_ask"
+      ],
+      "decision_impact": "Wider spread often implies smaller size or more caution.",
+      "execution_impact": "May favor limits or smaller clips to reduce crossing cost.",
+      "failure_modes": [
+        "Confusing spread with fee"
+      ],
+      "examples": [
+        "Spread is 2 cents on a 86 dollar name."
+      ],
+      "status": "validated",
+      "version": 1
+    },
+    {
+      "concept_id": "market_order",
+      "name": "Market Order",
+      "definition": "An instruction to buy or sell immediately at the best available prices until filled or capped.",
+      "trader_meaning": "I will pay whatever the book requires right now to get done.",
+      "why_it_matters": "Certainty of execution vs uncertain price.",
+      "data_signals": [
+        "book_depth",
+        "trade_tape"
+      ],
+      "decision_impact": "Use when urgency dominates price precision.",
+      "execution_impact": "Crosses spread; may walk the book on size.",
+      "failure_modes": [
+        "Fat-finger size with no cap"
+      ],
+      "examples": [
+        "Market buy lifts through multiple ask levels."
+      ],
+      "status": "validated",
+      "version": 1
+    },
+    {
+      "concept_id": "limit_order",
+      "name": "Limit Order",
+      "definition": "An instruction to buy only at or below a price, or sell only at or above a price.",
+      "trader_meaning": "I will not pay worse than this (buy) or accept less than this (sell).",
+      "why_it_matters": "Controls worst-case price; may not fill.",
+      "data_signals": [
+        "open_orders",
+        "book"
+      ],
+      "decision_impact": "Defines patience vs immediacy tradeoff.",
+      "execution_impact": "Rests on book as maker liquidity when price allows.",
+      "failure_modes": [
+        "Forgot to cancel stale limits in fast markets"
+      ],
+      "examples": [
+        "Buy limit at 85.50 while best ask is 86."
+      ],
+      "status": "validated",
+      "version": 1
+    },
+    {
+      "concept_id": "volume",
+      "name": "Volume",
+      "definition": "The amount of the asset traded over a time window (often base-asset units or quote notional).",
+      "trader_meaning": "How much traded recently — activity and participation.",
+      "why_it_matters": "Context for whether moves are on thin or thick trade flow.",
+      "data_signals": [
+        "bar_volume",
+        "quote_volume"
+      ],
+      "decision_impact": "High volume can validate moves; low volume warns of noise.",
+      "execution_impact": "Impacts how much size can clear without large impact.",
+      "failure_modes": [
+        "Comparing venues with different volume definitions"
+      ],
+      "examples": [
+        "24h volume 50M USDC."
+      ],
+      "status": "validated",
+      "version": 1
+    },
+    {
+      "concept_id": "liquidity",
+      "name": "Liquidity",
+      "definition": "The ability to trade size near current prices without moving the price excessively.",
+      "trader_meaning": "Can I get in and out without paying the earth?",
+      "why_it_matters": "Core to feasibility of strategy and risk of slippage.",
+      "data_signals": [
+        "depth",
+        "spread",
+        "trade_size"
+      ],
+      "decision_impact": "Influences venue choice and max comfortable size.",
+      "execution_impact": "Drives order type and clip size when executing.",
+      "failure_modes": [
+        "Assuming infinite liquidity at top of book"
+      ],
+      "examples": [
+        "Only 500 units within 10 bps of mid."
+      ],
+      "status": "validated",
+      "version": 1
+    },
+    {
+      "concept_id": "candle",
+      "name": "Candlestick (OHLC Bar)",
+      "definition": "A time-bucket summary: open, high, low, close (and often volume).",
+      "trader_meaning": "How price evolved over a bar on a chart.",
+      "why_it_matters": "Trend and range visualization; timeframe choice matters.",
+      "data_signals": [
+        "ohlc",
+        "interval_volume"
+      ],
+      "decision_impact": "Timeframe selection frames noise vs signal.",
+      "execution_impact": "Not execution directly — context for timing.",
+      "failure_modes": [
+        "Look-ahead bias in backtests using close within bar"
+      ],
+      "examples": [
+        "1h candle: O=85 H=87 L=84.9 C=86.2."
+      ],
+      "status": "validated",
+      "version": 1
+    },
+    {
+      "concept_id": "timeframe",
+      "name": "Timeframe",
+      "definition": "The duration of each candle or aggregation window (e.g. 1m, 15m, 1d).",
+      "trader_meaning": "The zoom level on the chart and signal speed.",
+      "why_it_matters": "Same market can look trending on one timeframe and choppy on another.",
+      "data_signals": [
+        "bar_interval"
+      ],
+      "decision_impact": "Aligns indicators and rules to decision horizon.",
+      "execution_impact": "Usually indirect; affects when signals fire.",
+      "failure_modes": [
+        "Mixing signals from mismatched timeframes without rules"
+      ],
+      "examples": [
+        "Use 4h structure for bias, 15m for entries."
+      ],
+      "status": "validated",
+      "version": 1
+    },
+    {
+      "concept_id": "slippage",
       "name": "Slippage",
-      "definition": "The difference between expected fill price and actual fill price at execution time.",
-      "trader_meaning": "How much worse (or better) the trade gets filled versus the quote you saw when deciding.",
-      "why_it_matters": "Affects realized PnL, risk, and whether a strategy is viable on a given venue or size.",
+      "definition": "Difference between expected fill price and actual average fill price.",
+      "trader_meaning": "How much worse (or better) the fill vs the quote you saw.",
+      "why_it_matters": "Dominates small-edge strategies and realistic backtests.",
       "data_signals": [
         "bid_ask_spread",
         "depth_at_price",
-        "recent_trade_prices",
-        "order_book_imbalance"
+        "recent_trades"
       ],
-      "decision_impact": "Influences sizing, venue choice, and whether to enter a trade at all.",
-      "execution_impact": "May warrant limit orders, TWAP, or smaller clips to control adverse selection.",
+      "decision_impact": "Influences go/no-go and sizing.",
+      "execution_impact": "May require limits, TWAP, or smaller clips.",
       "failure_modes": [
-        "Ignoring slippage when backtesting on mid prices only",
-        "Assuming static liquidity during volatile periods"
+        "Backtesting on mid without spread"
       ],
       "examples": [
-        "Quoted 100.00, filled at 100.04 on a market buy — 4 bps slippage."
+        "Expected 86.00, filled 86.06 on size."
+      ],
+      "status": "draft",
+      "version": 1
+    },
+    {
+      "concept_id": "depth",
+      "name": "Order Book Depth",
+      "definition": "Quantity available to trade at and near current prices across price levels.",
+      "trader_meaning": "How much is actually for sale or bid under the surface.",
+      "why_it_matters": "Thin depth implies large price impact for modest size.",
+      "data_signals": [
+        "L2_levels",
+        "cumulative_depth"
+      ],
+      "decision_impact": "Warns when size is large vs visible liquidity.",
+      "execution_impact": "Informs slicing and venue choice.",
+      "failure_modes": [
+        "Only looking at L1 size"
+      ],
+      "examples": [
+        "10k units within 20 bps of mid."
+      ],
+      "status": "draft",
+      "version": 1
+    },
+    {
+      "concept_id": "price_impact",
+      "name": "Price Impact",
+      "definition": "The adverse price movement caused by your own order relative to pre-trade mid.",
+      "trader_meaning": "How much I move the market against myself when I trade.",
+      "why_it_matters": "Separates trading skill and algo quality from directional alpha.",
+      "data_signals": [
+        "pre_trade_mid",
+        "fill_prices",
+        "depth"
+      ],
+      "decision_impact": "Caps realistic size for a strategy.",
+      "execution_impact": "Drives scheduling and passive vs aggressive routing.",
+      "failure_modes": [
+        "Ignoring impact when scaling"
+      ],
+      "examples": [
+        "Buying 1% of ADV moves price more than 5 bps."
+      ],
+      "status": "draft",
+      "version": 1
+    },
+    {
+      "concept_id": "volatility",
+      "name": "Volatility",
+      "definition": "The magnitude of price fluctuations over time (statistical or heuristic).",
+      "trader_meaning": "How wild the ride is — risk and opportunity scale.",
+      "why_it_matters": "Sizing, stops, and options-like intuition depend on vol regime.",
+      "data_signals": [
+        "realized_vol",
+        "range",
+        "atr"
+      ],
+      "decision_impact": "Higher vol often implies smaller size or wider risk buffers.",
+      "execution_impact": "Wider stops or slower execution may be needed in fast tape.",
+      "failure_modes": [
+        "Confusing historical vol with future"
+      ],
+      "examples": [
+        "Daily range 8% during event week."
+      ],
+      "status": "draft",
+      "version": 1
+    },
+    {
+      "concept_id": "maker_taker",
+      "name": "Maker / Taker",
+      "definition": "Maker orders add liquidity to the book; taker orders remove liquidity by crossing the spread.",
+      "trader_meaning": "Am I getting paid rebate as a maker or paying spread as a taker?",
+      "why_it_matters": "Fee structure and adverse selection differ by role.",
+      "data_signals": [
+        "order_type",
+        "fill_role"
+      ],
+      "decision_impact": "Strategy choice between passive quotes vs aggressive fills.",
+      "execution_impact": "Post-only limits vs market — different fees and risks.",
+      "failure_modes": [
+        "Assuming maker fill when you actually took"
+      ],
+      "examples": [
+        "Post-only buy rests below best ask — maker if filled."
       ],
       "status": "draft",
       "version": 1

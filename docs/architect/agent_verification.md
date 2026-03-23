@@ -130,6 +130,23 @@ The master plan **Phase 2+ — Decision Layer (Analyst Model)** section remains 
 
 ---
 
+## Phase 3.5 — Trading concept registry (scaffold v1) — **CLOSED**
+
+| Field | Value |
+|--------|--------|
+| **Status** | **PASS** |
+| **Closure recorded** | 2026-03-23 |
+| **Repository** | `blackbox` @ `main` |
+| **Git ref (recorded)** | *(set at commit)* |
+| **Canonical spec** | [`docs/blackbox_master_plan.md`](../blackbox_master_plan.md) — Phase 3.5 |
+| **Artifacts** | `data/concepts/registry.json` (`trading_concept_registry_v1`, 15 seed concepts); `scripts/runtime/concept_registry_reader.py` (`--list`, `--concept`, `--search`) |
+| **Verification host** | `clawbot.a51.corp` (`~/blackbox`) |
+| **Proof summary** | Valid JSON; reader `--list` count 15; `--concept slippage` returns full entry; `--search liquidity` returns matches; no runtime mutation |
+
+**Scope:** Read-only scaffold—no Anna wiring, no promotion logic, no schema migration, no Telegram.
+
+---
+
 ## Update protocol
 
 1. `git rev-parse HEAD` → set **Git ref (recorded)** in the table at top  

@@ -215,3 +215,19 @@ python3 scripts/runtime/anna_proposal_builder.py "Test proposal" --store
 | Shared utils | `util.py` | Schema versions, `utc_now`, float helpers. |
 
 **Entrypoints:** `anna_analyst_v1.py` and `anna_proposal_builder.py` import these modules; behavior stays compatible with Phase 3.2 / 3.3. **Registry**, **Telegram**, and **advanced reasoning** remain future phases — extend by adding or editing focused modules, not by growing one flat script.
+
+## Trading concept registry — Phase 3.5 (scaffold)
+
+**Canonical file:** **`data/concepts/registry.json`** — **`kind`: `trading_concept_registry_v1`**, versioned in Git. The registry is **canonical memory** for trading concepts; **not** the LLM. Changes happen through **PR/review**, not runtime mutation.
+
+**Seeded concepts (v1):** Foundation — `price`, `bid`, `ask`, `spread`, `market_order`, `limit_order`, `volume`, `liquidity`, `candle`, `timeframe`. Mechanical — `slippage`, `depth`, `price_impact`, `volatility`, `maker_taker`. Each entry includes `definition`, `trader_meaning`, `why_it_matters`, `data_signals`, impacts, `failure_modes`, `examples`, `status`, `version`.
+
+**`concept_registry_reader.py`** — Read-only JSON queries (no Anna wiring in this phase):
+
+```bash
+python3 scripts/runtime/concept_registry_reader.py --list
+python3 scripts/runtime/concept_registry_reader.py --concept slippage
+python3 scripts/runtime/concept_registry_reader.py --search liquidity
+```
+
+Unknown `--concept` → `found: false` (no fabricated definitions). **No** `tasks` storage by default.
