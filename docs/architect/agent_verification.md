@@ -154,7 +154,7 @@ The master plan **Phase 2+ — Decision Layer (Analyst Model)** section remains 
 | **Status** | **PASS** |
 | **Closure recorded** | 2026-03-23 |
 | **Repository** | `blackbox` @ `main` |
-| **Git ref (recorded)** | `66a769e72a0b46587cb8330b856c829031516039` |
+| **Git ref (recorded)** | `6d62b9e58465339b8aba85c2b002ef54b93a98ca` |
 | **Canonical spec** | [`docs/blackbox_master_plan.md`](../blackbox_master_plan.md) — Phase 3.6 |
 | **Runtime** | `scripts/runtime/anna_modules/concept_retrieval.py`; `anna_modules/analysis.py` → **`concept_support`** + registry-backed **`concepts_used`** on **`anna_analysis_v1`** |
 | **Verification host** | `clawbot.a51.corp` (`~/blackbox`) — align ref on push |
