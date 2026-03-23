@@ -224,7 +224,7 @@ The master plan **Phase 2+ — Decision Layer (Analyst Model)** section remains 
 | **Status** | **PASS** |
 | **Closure recorded** | 2026-03-23 |
 | **Repository** | `blackbox` @ `main` |
-| **Git ref (recorded)** | `PHASE41_COMMIT` |
+| **Git ref (recorded)** | `f79f186082e7e380d7e6008d0919ebab69f2bed2` |
 | **Canonical spec** | [`docs/blackbox_master_plan.md`](../blackbox_master_plan.md) — Phase 4.1; [`phase_4_1_trading_readiness.md`](phase_4_1_trading_readiness.md) |
 | **Runtime** | Documentation only — `docs/architect/phase_4_1_trading_readiness.md`; `docs/blackbox_master_plan.md` updated; `docs/runtime/execution_context.md` phase snapshot (`current_phase` 4.1, `last_completed_phase` 4.0) |
 | **Verification host** | `clawbot.a51.corp` (`~/blackbox`) |
