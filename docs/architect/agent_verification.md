@@ -137,7 +137,7 @@ The master plan **Phase 2+ — Decision Layer (Analyst Model)** section remains 
 | **Status** | **PASS** |
 | **Closure recorded** | 2026-03-23 |
 | **Repository** | `blackbox` @ `main` |
-| **Git ref (recorded)** | *(set at commit)* |
+| **Git ref (recorded)** | `3d55fd2f3f4aa2f28ba97fe010389691949d21bb` |
 | **Canonical spec** | [`docs/blackbox_master_plan.md`](../blackbox_master_plan.md) — Phase 3.5 |
 | **Artifacts** | `data/concepts/registry.json` (`trading_concept_registry_v1`, 15 seed concepts); `scripts/runtime/concept_registry_reader.py` (`--list`, `--concept`, `--search`) |
 | **Verification host** | `clawbot.a51.corp` (`~/blackbox`) |
