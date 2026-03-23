@@ -615,6 +615,16 @@ Advanced concepts may enter the registry as **draft** or **exploratory** concept
 
 **Related:** executor / trading architecture discussion — [`docs/architect/architect_update_trading_system.md`](architect/architect_update_trading_system.md); roster — [`docs/architect/TEAM_ROSTER.md`](architect/TEAM_ROSTER.md); runtime guardrail — `scripts/runtime/guardrail_policy_evaluator.py` (paper-only pipeline today).
 
+### Phase 4.0 — Execution context rehydration
+
+**Problem:** Without a shared, loadable context, verification can drift to local-only runs, informal proof, or missed **clawbot** execution—forcing repeated instructions.
+
+**Mitigation:** Canonical file [`docs/runtime/execution_context.md`](runtime/execution_context.md) records **current phase**, **last completed phase**, **primary host** (`clawbot.a51.corp`), **repo path** (`~/blackbox`), and ties to the [**global clawbot proof standard**](architect/global_clawbot_proof_standard.md). [`scripts/runtime/context_loader.py`](../scripts/runtime/context_loader.py) reads the embedded JSON and prints structured JSON (phase, host, `proof_required`, rules).
+
+**Enforcement:** Runtime work that claims phase closure **must** follow that proof standard; **context_loader** is the lightweight preflight. Other scripts should run it or document that context was loaded.
+
+**Closure:** clawbot proof pending — see [`docs/architect/agent_verification.md`](architect/agent_verification.md) when recorded.
+
 ### 1. Ownership and Governance
 
 Real trading integration requires **clear human ownership** and **explicit approval** before any live capability is enabled.

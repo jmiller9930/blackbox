@@ -2,6 +2,14 @@
 
 Run from the **repository root** (`blackbox/`).
 
+## Execution context — Phase 4.0
+
+**[`docs/runtime/execution_context.md`](../docs/runtime/execution_context.md)** — phase, host, proof rules. **`context_loader.py`** prints JSON (preflight before mandated clawbot verification):
+
+```bash
+python3 scripts/runtime/context_loader.py
+```
+
 ## DATA — one-shot health checks
 
 ```bash
