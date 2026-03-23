@@ -287,6 +287,8 @@ Data should be **normalized** into a **consistent internal structure** for analy
 - **Sources (read-only, no API keys):** try in order **Coinbase Exchange** product ticker (default `SOL-USD`), **Kraken** `SOLUSD`, **Binance** `SOLUSDT` (may be geo-restricted), then **CoinGecko** price-only (bid/ask **null**). Unavailable fields stay **null** with explanation in **`notes`** — **no fabricated values**.
 - **DATA:** failures must be explicit in output; deeper health wiring is **future** (optional `system_health_logs` hook noted in script).
 
+**Closure (verified):** clawbot runtime proof recorded **2026-03-23** — see [`docs/architect/agent_verification.md`](architect/agent_verification.md) → *Phase 3.1 — Market data ingestion*.
+
 ### Phase 3.2 — Anna: Conversational Analyst Layer
 
 #### Purpose
@@ -328,6 +330,8 @@ Phase 3.2 does **not** mean:
 #### Runtime implementation (v1 — started)
 
 - **Script:** `scripts/runtime/anna_analyst_v1.py` — **`anna_analysis_v1`** JSON: interpretation, **`market_context`** (optional latest **`[Market Snapshot]`**), **`risk_assessment`**, **`policy_alignment`** (optional latest **`[Guardrail Policy]`**), paper-only **`suggested_action`**, **`concepts_used`** (keyword tags; not registry-backed yet). Flags: **`--use-latest-market-snapshot`**, **`--use-latest-decision-context`**, **`--use-latest-trend`**, **`--use-latest-policy`**, **`--store`** → **`[Anna Analysis]`**. Rule-based; **no** Telegram, **no** registry loader, **no** execution.
+
+**Closure (verified):** clawbot runtime proof recorded **2026-03-23** — see [`docs/architect/agent_verification.md`](architect/agent_verification.md) → *Phase 3.2 — Anna analyst v1 (CLI)*. Telegram / gateway Anna remains **out of scope** for this closure.
 
 ### Phase 3.3 — Validation & Learning Loop
 

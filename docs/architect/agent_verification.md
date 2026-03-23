@@ -30,9 +30,9 @@ This file is an **audit trail** only: pass/fail, time, and repo reference.
 - Tool boundaries appropriate and safe  
 - Runtime aligned  
 
-### Future: Analyst / Decision Layer (not in scope yet)
+### Phase 2+ Decision Layer (stub) vs Phase 3 runtime
 
-**Anna (Analyst)** and a **Decision Layer (Analyst Model)** are **roadmap** items only—see **[`docs/blackbox_master_plan.md`](../blackbox_master_plan.md)** section **Phase 2+ — Decision Layer (Analyst Model) [STUB]**. No Analyst agent implementation or runtime wiring is claimed in controlled execution; verification of that work will be a **future** audit when the architect promotes it from stub to spec.
+The master plan **Phase 2+ — Decision Layer (Analyst Model)** section remains a **stub** for the full *decision-theory* framing. Separately, **Phase 3** runtime milestones below are **closed** with clawbot proof. **Telegram / gateway wiring for Anna** is **not** claimed here—only the CLI scripts listed.
 
 ### Critical requirement
 
@@ -59,6 +59,40 @@ This file is an **audit trail** only: pass/fail, time, and repo reference.
 | Role: integrity / reliability operator; operational ownership explicit | **PASS** |
 | Skill `data_guardian` present | **PASS** |
 | OpenClaw runtime (lab) | **PASS** (re-verify after host changes) |
+
+---
+
+## Phase 3.1 — Market data ingestion (read-only) — **CLOSED**
+
+| Field | Value |
+|--------|--------|
+| **Status** | **PASS** |
+| **Closure recorded** | 2026-03-23 |
+| **Repository** | `blackbox` @ `main` |
+| **Git ref (recorded)** | `1131c65` (ingestor); verified with repo at `4916312` |
+| **Canonical spec** | [`docs/blackbox_master_plan.md`](../blackbox_master_plan.md) — Phase 3.1 |
+| **Runtime** | `scripts/runtime/market_data_ingestor.py` → `market_snapshot_v1` |
+| **Verification host** | `clawbot.a51.corp` (`~/blackbox`) |
+| **Proof summary** | `python3 scripts/runtime/market_data_ingestor.py` returned `source: coinbase_exchange_public_rest`, real bid/ask/spread/price; `python3 scripts/runtime/market_data_ingestor.py --store` persisted `[Market Snapshot]` completed task; no wallet, no writes to venues, no schema migration |
+
+**Scope:** Read-only public HTTP; optional `tasks` insert only. Does **not** close Phase 3.2+ or Phase 4.
+
+---
+
+## Phase 3.2 — Anna analyst v1 (CLI) — **CLOSED**
+
+| Field | Value |
+|--------|--------|
+| **Status** | **PASS** |
+| **Closure recorded** | 2026-03-23 |
+| **Repository** | `blackbox` @ `main` |
+| **Git ref (recorded)** | `4916312` |
+| **Canonical spec** | [`docs/blackbox_master_plan.md`](../blackbox_master_plan.md) — Phase 3.2 |
+| **Runtime** | `scripts/runtime/anna_analyst_v1.py` → `anna_analysis_v1` |
+| **Verification host** | `clawbot.a51.corp` (`~/blackbox`) |
+| **Proof summary** | Basic trader-text run OK; context-enriched run used stored `[Market Snapshot]` + `[Guardrail Policy]` + `[Decision Context]` (real numeric/policy fields); `--store` → `[Anna Analysis]` completed task `0281543d-2368-4784-91b8-83ef7a9eb205`; missing `[System Trend]` surfaced in `notes` (null-safe). No Telegram, no registry loader, no execution |
+
+**Scope:** Rule-based CLI analyst only. **Not** Anna-on-Telegram or registry-backed concepts—that remains future work per master plan.
 
 ---
 
