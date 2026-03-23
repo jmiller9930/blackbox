@@ -199,3 +199,19 @@ python3 scripts/runtime/anna_proposal_builder.py "Liquidity is thin and spreads 
 python3 scripts/runtime/anna_proposal_builder.py --use-latest-stored-anna-analysis
 python3 scripts/runtime/anna_proposal_builder.py "Test proposal" --store
 ```
+
+## Anna modular runtime — Phase 3.4 (skeleton)
+
+Anna’s **CLI** logic is split under **`scripts/runtime/anna_modules/`** so new behavior can be added **by module** instead of growing one monolithic script:
+
+| Module | Responsibility |
+|--------|------------------|
+| **`input_adapter.py`** | Optional loads from `tasks`: market snapshot, decision context, system trend, guardrail policy; readiness / guardrail mode helpers; null-safe packaging. |
+| **`interpretation.py`** | Trader text → **`extract_concepts`**, interpretation summary / signals / assumptions. |
+| **`risk.py`** | **`build_market_context`** notes, **`build_risk_factors`**, **`determine_risk_level`**. |
+| **`policy.py`** | **`build_suggested_action`**, **`build_policy_alignment_dict`** (aligned / cautious / misaligned / unknown). |
+| **`analysis.py`** | **`build_analysis`** — composes **`anna_analysis_v1`**. |
+| **`proposal.py`** | **`build_anna_proposal`**, **`classify_proposal_type`** — **`anna_proposal_v1`**. |
+| **`util.py`** | Shared timestamps / schema version / float parsing. |
+
+**Entrypoints:** **`anna_analyst_v1.py`** and **`anna_proposal_builder.py`** stay thin (CLI + DB store). **Registry** integration, **Telegram**, and richer reasoning remain **future** phases per master plan.

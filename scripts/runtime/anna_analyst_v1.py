@@ -3,17 +3,16 @@
 Phase 3.2 — Anna conversational analyst v1: trader text → structured anna_analysis_v1.
 
 Rule-based only; no ML, no Telegram, no registry loader, no execution, no venue calls.
-Optional loads from existing tasks: market snapshot, decision context, system trend, guardrail policy.
+Implementation is modular under `anna_modules/` (Phase 3.4); this file is the CLI entrypoint.
+
+Re-exports `build_analysis` and loaders for backward compatibility with `anna_proposal_builder.py`.
 """
 from __future__ import annotations
 
 import argparse
 import json
-import math
-import re
 import sys
 import uuid
-from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -21,295 +20,26 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from _db import connect, ensure_schema, seed_agents
 from _paths import default_sqlite_path, repo_root
-from analyst_decision_engine import load_latest_stored_decision_context
-from guardrail_policy_evaluator import load_latest_stored_system_trend
+from anna_modules.analysis import build_analysis
+from anna_modules.input_adapter import (
+    load_latest_guardrail_policy,
+    load_latest_market_snapshot,
+    try_load_decision_context,
+    try_load_trend,
+)
+from anna_modules.interpretation import CONCEPT_PATTERNS, extract_concepts
 
-SCHEMA_VERSION = 1
-
-# Keyword → concept id (strings for concepts_used; registry wiring later)
-CONCEPT_PATTERNS: list[tuple[str, re.Pattern[str]]] = [
-    ("liquidity", re.compile(r"\b(liquidity|thin\s+liquidity|market\s+depth|depth|order\s+book)\b", re.I)),
-    ("spread", re.compile(r"\b(spread|spreads|bid[- ]ask|widening|wide\s+spread)\b", re.I)),
-    ("slippage", re.compile(r"\b(slippage|slip)\b", re.I)),
-    ("volatility", re.compile(r"\b(volatility|volatile|chop|choppy|swing)\b", re.I)),
-    ("risk", re.compile(r"\b(risk|risky|danger|careful|caution)\b", re.I)),
-    ("trend", re.compile(r"\b(trend|trending|momentum|breakout)\b", re.I)),
-    ("volume", re.compile(r"\b(volume|liquidity\s+crunch)\b", re.I)),
+__all__ = [
+    "build_analysis",
+    "load_latest_market_snapshot",
+    "load_latest_guardrail_policy",
+    "try_load_decision_context",
+    "try_load_trend",
+    "extract_concepts",
+    "CONCEPT_PATTERNS",
+    "run",
+    "main",
 ]
-
-
-def _utc_now() -> str:
-    return datetime.now(timezone.utc).replace(microsecond=0).isoformat()
-
-
-def _try_float(x: Any) -> float | None:
-    if x is None:
-        return None
-    try:
-        v = float(x)
-        if math.isnan(v) or math.isinf(v):
-            return None
-        return v
-    except (TypeError, ValueError):
-        return None
-
-
-def load_latest_market_snapshot(conn) -> tuple[dict[str, Any] | None, str | None]:
-    row = conn.execute(
-        """
-        SELECT id, description FROM tasks
-        WHERE title LIKE '[Market Snapshot]%'
-        ORDER BY datetime(updated_at) DESC
-        LIMIT 1
-        """
-    ).fetchone()
-    if not row or not row[1]:
-        return None, "No [Market Snapshot] task found in database."
-    try:
-        data = json.loads(row[1])
-    except json.JSONDecodeError:
-        return None, "Latest [Market Snapshot] row is not valid JSON."
-    if data.get("kind") != "market_snapshot_v1":
-        return None, "Latest market task is not market_snapshot_v1."
-    return data, None
-
-
-def load_latest_guardrail_policy(conn) -> tuple[dict[str, Any] | None, str | None]:
-    row = conn.execute(
-        """
-        SELECT description FROM tasks
-        WHERE title LIKE '[Guardrail Policy]%'
-        ORDER BY datetime(updated_at) DESC
-        LIMIT 1
-        """
-    ).fetchone()
-    if not row or not row[0]:
-        return None, "No [Guardrail Policy] task found."
-    try:
-        data = json.loads(row[0])
-    except json.JSONDecodeError:
-        return None, "Latest [Guardrail Policy] row is not valid JSON."
-    if data.get("kind") != "guardrail_policy_v1":
-        return None, "Latest policy task is not guardrail_policy_v1."
-    return data, None
-
-
-def try_load_decision_context(conn) -> tuple[dict[str, Any] | None, str | None]:
-    try:
-        return load_latest_stored_decision_context(conn), None
-    except (LookupError, ValueError, json.JSONDecodeError):
-        return None, "No valid [Decision Context] with decision_context_v1."
-
-
-def try_load_trend(conn) -> tuple[dict[str, Any] | None, str | None]:
-    try:
-        return load_latest_stored_system_trend(conn), None
-    except (LookupError, ValueError, json.JSONDecodeError):
-        return None, "No valid [System Trend] with system_trend_v1."
-
-
-def extract_concepts(text: str) -> list[str]:
-    seen: set[str] = set()
-    out: list[str] = []
-    for cid, pat in CONCEPT_PATTERNS:
-        if pat.search(text) and cid not in seen:
-            seen.add(cid)
-            out.append(cid)
-    return out
-
-
-def _readiness_from_context(ctx: dict | None) -> str | None:
-    if not ctx:
-        return None
-    r = ctx.get("system_readiness")
-    if r in ("healthy", "degraded", "unstable"):
-        return r
-    return None
-
-
-def build_analysis(
-    input_text: str,
-    *,
-    market: dict[str, Any] | None,
-    market_err: str | None,
-    ctx: dict[str, Any] | None,
-    ctx_err: str | None,
-    trend: dict[str, Any] | None,
-    trend_err: str | None,
-    policy: dict[str, Any] | None,
-    policy_err: str | None,
-    use_snapshot: bool,
-    use_ctx: bool,
-    use_trend: bool,
-    use_policy: bool,
-) -> dict[str, Any]:
-    notes: list[str] = []
-    if use_snapshot and market_err:
-        notes.append(market_err)
-    if use_ctx and ctx_err:
-        notes.append(ctx_err)
-    if use_trend and trend_err:
-        notes.append(trend_err)
-    if use_policy and policy_err:
-        notes.append(policy_err)
-
-    concepts = extract_concepts(input_text)
-
-    price = _read_float(market, "price") if market else None
-    spread = _read_float(market, "spread") if market else None
-    m_notes: list[str] = []
-    if market and market.get("source") == "unavailable":
-        m_notes.append("Market snapshot source was unavailable when recorded; no fabricated prices.")
-    if not use_snapshot:
-        m_notes.append("Market snapshot not requested; price/spread may be null.")
-    elif market_err or not market:
-        m_notes.append("No market snapshot data applied.")
-    if price is not None and spread is not None and price > 0:
-        bps = (spread / price) * 10000.0
-        m_notes.append(f"Snapshot mid context: spread ≈ {bps:.2f} bps of price (informational).")
-
-    guard_mode_raw = policy.get("mode") if policy else None
-    if guard_mode_raw in ("FROZEN", "CAUTION", "NORMAL"):
-        guardrail_mode = guard_mode_raw
-    else:
-        guardrail_mode = "unknown"
-
-    readiness = _readiness_from_context(ctx)
-
-    # Risk
-    factors: list[str] = []
-    neg = re.search(r"\b(thin|crash|panic|liquidat|unsafe|avoid|stop\s*hunt)\b", input_text, re.I)
-    if neg:
-        factors.append("Language suggests stress or adverse conditions.")
-    if guardrail_mode == "FROZEN":
-        factors.append("Guardrail policy mode is FROZEN.")
-    elif guardrail_mode == "CAUTION":
-        factors.append("Guardrail policy mode is CAUTION.")
-    if readiness == "unstable":
-        factors.append("Decision context reports unstable system readiness.")
-    elif readiness == "degraded":
-        factors.append("Decision context reports degraded readiness.")
-    if trend and isinstance(trend.get("flags"), list) and trend["flags"]:
-        factors.append(f"System trend flags present: {len(trend['flags'])} flag(s).")
-    if price is not None and spread is not None and price > 0 and (spread / price) > 0.005:
-        factors.append("Observed spread is large relative to price (rough check).")
-
-    if not factors:
-        factors.append("No strong risk amplifiers detected from text and available context.")
-
-    risk_level = "low"
-    if guardrail_mode == "FROZEN" or readiness == "unstable":
-        risk_level = "high"
-    elif guardrail_mode == "CAUTION" or readiness == "degraded" or neg or (
-        trend and trend.get("flags")
-    ):
-        risk_level = "medium"
-    if risk_level != "high" and concepts and "risk" in concepts:
-        risk_level = "medium"
-
-    # Suggested action (paper-only intent)
-    intent = "WATCH"
-    conf = "medium"
-    rationale = "Default cautious stance without full policy/market context."
-
-    if guardrail_mode == "FROZEN":
-        intent, conf = "HOLD", "low"
-        rationale = "Policy mode FROZEN: stand down from new risk; paper rehearsal only if explicitly gated elsewhere."
-    elif guardrail_mode == "CAUTION":
-        intent, conf = "WATCH", "medium"
-        rationale = "Policy mode CAUTION: monitor and size conservatively; no execution implied."
-    elif guardrail_mode == "NORMAL":
-        if neg or risk_level == "high":
-            intent, conf = "WATCH", "medium"
-            rationale = "NORMAL policy but language or signals warrant monitoring before any paper rehearsal."
-        else:
-            intent, conf = "PAPER_TRADE_READY", "low"
-            rationale = (
-                "Policy mode NORMAL and no strong caution signals in text/context; "
-                "paper path only — still no live execution."
-            )
-    else:
-        intent, conf = "WATCH", "low"
-        rationale = "Guardrail mode unknown or missing; avoid aggressive posture."
-
-    # Policy alignment vs intent
-    alignment = "unknown"
-    if guardrail_mode == "unknown":
-        alignment = "unknown"
-    elif guardrail_mode == "FROZEN":
-        alignment = "aligned" if intent == "HOLD" else "misaligned"
-    elif guardrail_mode == "CAUTION":
-        alignment = "aligned" if intent in ("HOLD", "WATCH") else "cautious"
-    elif guardrail_mode == "NORMAL":
-        if intent == "PAPER_TRADE_READY" and neg:
-            alignment = "cautious"
-        elif intent == "PAPER_TRADE_READY":
-            alignment = "aligned"
-        else:
-            alignment = "aligned"
-
-    pol_notes: list[str] = []
-    if policy:
-        pol_notes.append(f"Policy reasoning (excerpt): {(policy.get('reasoning') or '')[:280]}")
-    else:
-        pol_notes.append("No guardrail policy document loaded.")
-
-    signals = [f"concept:{c}" for c in concepts]
-    if not signals:
-        signals.append("no strong keyword match; interpret manually")
-
-    assumptions = [
-        "Rule-based v1 analyst — not predictive; does not call markets or execute.",
-        "Concept tags are keyword-derived; not registry-backed in v1.",
-    ]
-    if readiness:
-        assumptions.append(f"Decision context readiness (if loaded): {readiness}.")
-
-    summary = (
-        f"Interpreted trader concern as focusing on: {', '.join(concepts) or 'general market commentary'}. "
-        f"Structured under current guardrail posture ({guardrail_mode})."
-    )
-
-    return {
-        "kind": "anna_analysis_v1",
-        "schema_version": SCHEMA_VERSION,
-        "generated_at": _utc_now(),
-        "input_text": input_text,
-        "interpretation": {
-            "summary": summary,
-            "signals": signals,
-            "assumptions": assumptions,
-        },
-        "market_context": {
-            "price": price,
-            "spread": spread,
-            "notes": m_notes,
-        },
-        "risk_assessment": {
-            "level": risk_level,
-            "factors": factors[:12],
-        },
-        "policy_alignment": {
-            "guardrail_mode": guardrail_mode,
-            "alignment": alignment,
-            "notes": pol_notes,
-        },
-        "suggested_action": {
-            "intent": intent,
-            "confidence": conf,
-            "rationale": rationale,
-        },
-        "concepts_used": concepts,
-        "caution_flags": [
-            "anna_analysis_v1 is advisory only; no execution.",
-            "Do not treat keyword concepts as validated registry entries.",
-        ],
-        "notes": notes,
-    }
-
-
-def _read_float(blob: dict[str, Any], key: str) -> float | None:
-    return _try_float(blob.get(key))
 
 
 def run(
@@ -360,7 +90,6 @@ def run(
         use_policy=use_policy,
     )
 
-    # Trend informs notes only if loaded (risk already uses flags)
     if trend and not trend_err:
         analysis["notes"].append(
             f"System trend window_size={trend.get('window_size')} (loaded)."
