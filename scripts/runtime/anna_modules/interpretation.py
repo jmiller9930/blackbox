@@ -33,6 +33,8 @@ def build_interpretation(
     concepts: list[str],
     guardrail_mode: str,
     readiness: str | None,
+    *,
+    registry_loaded: bool = False,
 ) -> dict[str, Any]:
     signals = [f"concept:{c}" for c in concepts]
     if not signals:
@@ -40,8 +42,13 @@ def build_interpretation(
 
     assumptions = [
         "Rule-based v1 analyst — not predictive; does not call markets or execute.",
-        "Concept tags are keyword-derived; not registry-backed in v1.",
     ]
+    if registry_loaded and concepts:
+        assumptions.append("Concept IDs matched against trading concept registry (read-only).")
+    elif registry_loaded and not concepts:
+        assumptions.append("No registry concept IDs matched this input; see concept_support and notes.")
+    else:
+        assumptions.append("Trading concept registry unavailable or invalid; concept_support empty.")
     if readiness:
         assumptions.append(f"Decision context readiness (if loaded): {readiness}.")
 

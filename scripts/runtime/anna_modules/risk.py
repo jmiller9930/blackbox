@@ -66,7 +66,6 @@ def determine_risk_level(
     *,
     guardrail_mode: str,
     readiness: str | None,
-    concepts: list[str],
     trend: dict[str, Any] | None,
     input_text: str,
 ) -> str:
@@ -78,7 +77,7 @@ def determine_risk_level(
         trend and trend.get("flags")
     ):
         risk_level = "medium"
-    if risk_level != "high" and concepts and "risk" in concepts:
+    if risk_level != "high" and re.search(r"\b(risk|risky)\b", input_text, re.I):
         risk_level = "medium"
     return risk_level
 

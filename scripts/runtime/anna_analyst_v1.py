@@ -4,7 +4,7 @@ Phase 3.2 — Anna conversational analyst v1: trader text → structured anna_an
 
 Implementation lives in `anna_modules.py` (Phase 3.4 modular layers). This file is the CLI entrypoint.
 
-Rule-based only; no ML, no Telegram, no registry loader, no execution, no venue calls.
+Rule-based only; no ML, no Telegram, no registry mutation, no execution, no venue calls. Read-only concept retrieval from `data/concepts/registry.json` (Phase 3.6).
 """
 from __future__ import annotations
 

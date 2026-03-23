@@ -5,8 +5,9 @@ from __future__ import annotations
 
 from typing import Any
 
+from anna_modules.concept_retrieval import retrieve_concept_support
 from anna_modules.input_adapter import normalize_trader_text
-from anna_modules.interpretation import build_interpretation, extract_concepts
+from anna_modules.interpretation import build_interpretation
 from anna_modules.policy import build_policy_alignment_dict, build_suggested_action
 from anna_modules.risk import (
     build_market_context,
@@ -45,7 +46,8 @@ def build_analysis(
         notes.append(policy_err)
 
     gm, readiness = resolve_context_for_risk(policy, ctx)
-    concepts = extract_concepts(input_text)
+    concepts, concept_support, concept_notes, registry_loaded = retrieve_concept_support(input_text)
+    notes.extend(concept_notes)
     price, spread, m_notes = build_market_context(
         market, use_snapshot=use_snapshot, market_err=market_err
     )
@@ -60,7 +62,6 @@ def build_analysis(
     risk_level = determine_risk_level(
         guardrail_mode=gm,
         readiness=readiness,
-        concepts=concepts,
         trend=trend,
         input_text=input_text,
     )
@@ -69,7 +70,9 @@ def build_analysis(
         risk_level=risk_level,
         input_text=input_text,
     )
-    interpretation = build_interpretation(input_text, concepts, gm, readiness)
+    interpretation = build_interpretation(
+        input_text, concepts, gm, readiness, registry_loaded=registry_loaded
+    )
     pol_align = build_policy_alignment_dict(policy, suggested["intent"], input_text)
 
     return {
@@ -90,9 +93,14 @@ def build_analysis(
         "policy_alignment": pol_align,
         "suggested_action": suggested,
         "concepts_used": concepts,
+        "concept_support": concept_support,
         "caution_flags": [
             "anna_analysis_v1 is advisory only; no execution.",
-            "Do not treat keyword concepts as validated registry entries.",
+            (
+                "Registry-backed concept IDs are informational; status does not authorize execution."
+                if registry_loaded and concepts
+                else "Do not infer execution permission from analysis output alone."
+            ),
         ],
         "notes": notes,
     }

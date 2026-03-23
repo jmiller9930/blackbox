@@ -2,7 +2,7 @@
 """
 Phase 3.5 — Read-only trading concept registry utility.
 
-Loads `data/concepts/registry.json` (Git-versioned). No runtime mutation, no DB, no Anna wiring.
+Loads `data/concepts/registry.json` (Git-versioned). No runtime mutation, no DB. Anna read-only retrieval: `anna_modules/concept_retrieval.py` (Phase 3.6).
 """
 from __future__ import annotations
 

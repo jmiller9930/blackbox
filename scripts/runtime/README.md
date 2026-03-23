@@ -180,9 +180,9 @@ python3 scripts/runtime/policy_gated_action_filter.py --self-test
 python3 scripts/runtime/policy_gated_action_filter.py --store
 ```
 
-## Anna analyst — Phase 3.2 (v1)
+## Anna analyst — Phase 3.2 (v1) + Phase 3.6 (concept retrieval)
 
-**`anna_analyst_v1.py`** — Rule-based **conversational analyst**: trader text → **`anna_analysis_v1`** (interpretation, market_context from optional latest **`[Market Snapshot]`**, risk, policy alignment from optional **`[Guardrail Policy]`**, paper-only **`suggested_action`**, **`concepts_used`** keyword tags). Optional **`--use-latest-decision-context`**, **`--use-latest-trend`** (**`[System Trend]`**). Missing artifacts → null-safe + **`notes`**. No Telegram, no registry loader, no execution, no venue calls. **`--store`** → **`[Anna Analysis]`** completed task.
+**`anna_analyst_v1.py`** — Rule-based **conversational analyst**: trader text → **`anna_analysis_v1`** (interpretation, market_context from optional latest **`[Market Snapshot]`**, risk, policy alignment from optional **`[Guardrail Policy]`**, paper-only **`suggested_action`**, **`concepts_used`**, **`concept_support`**). **`concepts_used`** lists registry **`concept_id`**s when language matches seeded concepts; **`concept_support`** includes concise **`concept_summaries`** only for those IDs (read-only; not a full registry load). Optional **`--use-latest-decision-context`**, **`--use-latest-trend`** (**`[System Trend]`**). Missing artifacts → null-safe + **`notes`**. No Telegram, no registry **mutation**, no execution, no venue calls. **`--store`** → **`[Anna Analysis]`** completed task.
 
 ```bash
 python3 scripts/runtime/anna_analyst_v1.py "Liquidity is thin and spreads are widening"
@@ -192,7 +192,7 @@ python3 scripts/runtime/anna_analyst_v1.py "Test input" --store
 
 ## Anna proposal builder — Phase 3.3
 
-**`anna_proposal_builder.py`** — Bridges Anna analysis to **`anna_proposal_v1`**: `NO_CHANGE` \| `RISK_REDUCTION` \| `CONDITION_TIGHTENING` \| `OBSERVATION_ONLY`, **`validation_plan`**, **`proposed_effect`** (paper-only). Consumes **`--use-latest-stored-anna-analysis`** or **live** trader text with optional **`--use-latest-market-snapshot`**, **`--use-latest-decision-context`**, **`--use-latest-trend`**, **`--use-latest-policy`**. **`--store`** → **`[Anna Proposal]`**. Reuses **`anna_analyst_v1.build_analysis`**; no registry, no Telegram.
+**`anna_proposal_builder.py`** — Bridges Anna analysis to **`anna_proposal_v1`**: `NO_CHANGE` \| `RISK_REDUCTION` \| `CONDITION_TIGHTENING` \| `OBSERVATION_ONLY`, **`validation_plan`**, **`proposed_effect`** (paper-only). Consumes **`--use-latest-stored-anna-analysis`** or **live** trader text with optional **`--use-latest-market-snapshot`**, **`--use-latest-decision-context`**, **`--use-latest-trend`**, **`--use-latest-policy`**. **`--store`** → **`[Anna Proposal]`**. Reuses **`anna_analyst_v1.build_analysis`** (includes registry-backed **`concepts_used`** / **`concept_support`** when matched). No Telegram.
 
 ```bash
 python3 scripts/runtime/anna_proposal_builder.py "Liquidity is thin and spreads are widening" --use-latest-market-snapshot --use-latest-policy
@@ -214,7 +214,11 @@ python3 scripts/runtime/anna_proposal_builder.py "Test proposal" --store
 | Proposal shaping | `proposal.py` | **`build_anna_proposal`** / **`assemble_anna_proposal_v1`** → `anna_proposal_v1`. |
 | Shared utils | `util.py` | Schema versions, `utc_now`, float helpers. |
 
-**Entrypoints:** `anna_analyst_v1.py` and `anna_proposal_builder.py` import these modules; behavior stays compatible with Phase 3.2 / 3.3. **Registry**, **Telegram**, and **advanced reasoning** remain future phases — extend by adding or editing focused modules, not by growing one flat script.
+**Entrypoints:** `anna_analyst_v1.py` and `anna_proposal_builder.py` import these modules; behavior stays compatible with Phase 3.2 / 3.3. **Telegram** and **advanced reasoning** remain future phases — extend by adding or editing focused modules, not by growing one flat script.
+
+## Runtime concept retrieval — Phase 3.6
+
+**`anna_modules/concept_retrieval.py`** — Read-only link from Anna to **`data/concepts/registry.json`**: regex detection aligned to registry **`concept_id`**s, **`retrieve_concept_support()`** returns **`concepts_used`** IDs plus **`concept_support`** (`concept_ids`, **`concept_summaries`**). Reuses **`concept_registry_reader`**. **No** registry writes, **no** full-registry embed in output.
 
 ## Trading concept registry — Phase 3.5 (scaffold)
 
@@ -222,7 +226,7 @@ python3 scripts/runtime/anna_proposal_builder.py "Test proposal" --store
 
 **Seeded concepts (v1):** Foundation — `price`, `bid`, `ask`, `spread`, `market_order`, `limit_order`, `volume`, `liquidity`, `candle`, `timeframe`. Mechanical — `slippage`, `depth`, `price_impact`, `volatility`, `maker_taker`. Each entry includes `definition`, `trader_meaning`, `why_it_matters`, `data_signals`, impacts, `failure_modes`, `examples`, `status`, `version`.
 
-**`concept_registry_reader.py`** — Read-only JSON queries (no Anna wiring in this phase):
+**`concept_registry_reader.py`** — Read-only JSON queries (Anna consumes via Phase 3.6 `concept_retrieval`):
 
 ```bash
 python3 scripts/runtime/concept_registry_reader.py --list

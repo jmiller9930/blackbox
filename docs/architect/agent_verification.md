@@ -92,7 +92,7 @@ The master plan **Phase 2+ — Decision Layer (Analyst Model)** section remains 
 | **Verification host** | `clawbot.a51.corp` (`~/blackbox`) |
 | **Proof summary** | Basic trader-text run OK; context-enriched run used stored `[Market Snapshot]` + `[Guardrail Policy]` + `[Decision Context]` (real numeric/policy fields); `--store` → `[Anna Analysis]` completed task `0281543d-2368-4784-91b8-83ef7a9eb205`; missing `[System Trend]` surfaced in `notes` (null-safe). No Telegram, no registry loader, no execution |
 
-**Scope:** Rule-based CLI analyst only. **Not** Anna-on-Telegram or registry-backed concepts—that remains future work per master plan.
+**Scope:** Rule-based CLI analyst only. **Not** Anna-on-Telegram (still future). Registry-backed **`concepts_used`** / **`concept_support`** added in Phase 3.6.
 
 ---
 
@@ -143,7 +143,24 @@ The master plan **Phase 2+ — Decision Layer (Analyst Model)** section remains 
 | **Verification host** | `clawbot.a51.corp` (`~/blackbox`) |
 | **Proof summary** | Valid JSON; reader `--list` count 15; `--concept slippage` returns full entry; `--search liquidity` returns matches; no runtime mutation |
 
-**Scope:** Read-only scaffold—no Anna wiring, no promotion logic, no schema migration, no Telegram.
+**Scope:** Read-only scaffold at closure; Anna selective retrieval added in Phase 3.6. No promotion logic, no schema migration, no Telegram.
+
+---
+
+## Phase 3.6 — Runtime concept retrieval (Anna) — **CLOSED**
+
+| Field | Value |
+|--------|--------|
+| **Status** | **PASS** |
+| **Closure recorded** | 2026-03-23 |
+| **Repository** | `blackbox` @ `main` |
+| **Git ref (recorded)** | `66a769e72a0b46587cb8330b856c829031516039` |
+| **Canonical spec** | [`docs/blackbox_master_plan.md`](../blackbox_master_plan.md) — Phase 3.6 |
+| **Runtime** | `scripts/runtime/anna_modules/concept_retrieval.py`; `anna_modules/analysis.py` → **`concept_support`** + registry-backed **`concepts_used`** on **`anna_analysis_v1`** |
+| **Verification host** | `clawbot.a51.corp` (`~/blackbox`) — align ref on push |
+| **Proof summary** | `anna_analyst_v1.py` with trader text mentioning liquidity/spread → `concepts_used` + `concept_support.concept_summaries`; null-safe path (`Hello world only`) → empty concepts + explanatory `notes`; `anna_proposal_builder.py` still emits `anna_proposal_v1`; no registry mutation, no DB schema change |
+
+**Scope:** Read-only registry load and selective summaries only; concept **promotion** remains Phase 3.7+; **no** Telegram Anna.
 
 ---
 
