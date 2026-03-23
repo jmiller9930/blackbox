@@ -241,7 +241,7 @@ The master plan **Phase 2+ — Decision Layer (Analyst Model)** section remains 
 | **Status** | **PASS** |
 | **Closure recorded** | 2026-03-23 |
 | **Repository** | `blackbox` @ `main` |
-| **Git ref (recorded)** | `PHASE42_COMMIT` |
+| **Git ref (recorded)** | `a757ffb99d8d001056509f3f1049cf55a8c4481c` |
 | **Canonical spec** | [`docs/blackbox_master_plan.md`](../blackbox_master_plan.md) — Phase 4.2; [`phase_4_2_wallet_account_architecture.md`](phase_4_2_wallet_account_architecture.md) |
 | **Runtime** | Documentation only — `phase_4_2_wallet_account_architecture.md`; `execution_context` snapshot (`current_phase` 4.2, `last_completed_phase` 4.1) |
 | **Verification host** | `clawbot.a51.corp` (`~/blackbox`) |
