@@ -7,7 +7,7 @@ from typing import Any
 
 from anna_modules.concept_retrieval import retrieve_concept_support
 from anna_modules.input_adapter import normalize_trader_text
-from anna_modules.interpretation import build_interpretation
+from anna_modules.interpretation import build_interpretation, build_strategy_awareness
 from anna_modules.policy import build_policy_alignment_dict, build_suggested_action
 from anna_modules.risk import (
     build_market_context,
@@ -74,6 +74,9 @@ def build_analysis(
         input_text, concepts, gm, readiness, registry_loaded=registry_loaded
     )
     pol_align = build_policy_alignment_dict(policy, suggested["intent"], input_text)
+    strategy_awareness = build_strategy_awareness(
+        input_text, price=price, spread=spread, market_notes=m_notes
+    )
 
     return {
         "kind": "anna_analysis_v1",
@@ -94,6 +97,7 @@ def build_analysis(
         "suggested_action": suggested,
         "concepts_used": concepts,
         "concept_support": concept_support,
+        "strategy_awareness": strategy_awareness,
         "caution_flags": [
             "anna_analysis_v1 is advisory only; no execution.",
             (

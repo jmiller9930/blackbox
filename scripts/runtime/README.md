@@ -182,7 +182,7 @@ python3 scripts/runtime/policy_gated_action_filter.py --store
 
 ## Anna analyst — Phase 3.2 (v1) + Phase 3.6 (concept retrieval)
 
-**`anna_analyst_v1.py`** — Rule-based **conversational analyst**: trader text → **`anna_analysis_v1`** (interpretation, market_context from optional latest **`[Market Snapshot]`**, risk, policy alignment from optional **`[Guardrail Policy]`**, paper-only **`suggested_action`**, **`concepts_used`**, **`concept_support`**). **`concepts_used`** lists registry **`concept_id`**s when language matches seeded concepts; **`concept_support`** includes concise **`concept_summaries`** only for those IDs (read-only; not a full registry load). Optional **`--use-latest-decision-context`**, **`--use-latest-trend`** (**`[System Trend]`**). Missing artifacts → null-safe + **`notes`**. No Telegram, no registry **mutation**, no execution, no venue calls. **`--store`** → **`[Anna Analysis]`** completed task.
+**`anna_analyst_v1.py`** — Rule-based **conversational analyst**: trader text → **`anna_analysis_v1`** (interpretation, market_context from optional latest **`[Market Snapshot]`**, risk, policy alignment from optional **`[Guardrail Policy]`**, paper-only **`suggested_action`**, **`concepts_used`**, **`concept_support`**, optional **`strategy_awareness`** — Phase 3.8 awareness-only strategy language). **`concepts_used`** lists registry **`concept_id`**s when language matches seeded concepts; **`concept_support`** includes concise **`concept_summaries`** only for those IDs (read-only; not a full registry load). Optional **`--use-latest-decision-context`**, **`--use-latest-trend`** (**`[System Trend]`**). Missing artifacts → null-safe + **`notes`**. No Telegram, no registry **mutation**, no execution, no venue calls. **`--store`** → **`[Anna Analysis]`** completed task.
 
 ```bash
 python3 scripts/runtime/anna_analyst_v1.py "Liquidity is thin and spreads are widening"
@@ -238,6 +238,10 @@ python3 scripts/runtime/concept_ingestor.py --concept my_concept
 ```
 
 Optional: `--source-reference`, `--evidence-links` (comma-separated or JSON array). **No** Anna wiring, **no** `registry.json` mutation, **no** new DB tables.
+
+## Advanced strategy awareness — Phase 3.8
+
+**`interpretation.py` + `analysis.py`** — Detects awareness-only strategy language (e.g. market making, spread capture, adverse selection, thin books). **`anna_analysis_v1`** may include **`strategy_awareness`** (`detected`, `explanation`, `risks`, `applicability`, `note`) or **`null`** when nothing matches. **Awareness ≠ execution:** descriptive and advisory only; **no** trade commands, **no** automation, **no** registry writes, **no** policy bypass.
 
 ## Trading concept registry — Phase 3.5 (scaffold)
 

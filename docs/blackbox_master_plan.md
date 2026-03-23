@@ -598,6 +598,13 @@ Anna may **reason about** advanced concepts discussed by expert users, such as:
 
 Advanced concepts may enter the registry as **draft** or **exploratory** concepts, but do **not** imply deployment.
 
+#### Runtime implementation (Phase 3.8)
+
+- **Modules:** [`scripts/runtime/anna_modules/interpretation.py`](../../scripts/runtime/anna_modules/interpretation.py) — pattern detection for awareness-only strategy ids (`market_making`, `spread_capture`, `inventory_risk`, `adverse_selection`, `liquidity_provision`, `order_book_dynamics`); [`analysis.py`](../../scripts/runtime/anna_modules/analysis.py) adds optional **`strategy_awareness`** on **`anna_analysis_v1`** (`detected`, `explanation`, `risks`, `applicability`, `note`). **No** execution, **no** registry mutation, **no** policy bypass.
+- **Null-safe:** `strategy_awareness` is **`null`** when no strategy language matches.
+
+**Closure:** clawbot proof pending — see [`docs/architect/agent_verification.md`](architect/agent_verification.md) when recorded.
+
 ---
 
 ## Phase 4 — Real Trading Integration Prerequisites
