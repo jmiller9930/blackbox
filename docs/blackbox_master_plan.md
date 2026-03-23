@@ -623,7 +623,7 @@ Advanced concepts may enter the registry as **draft** or **exploratory** concept
 
 **Enforcement:** Runtime work that claims phase closure **must** follow that proof standard; **context_loader** is the lightweight preflight. Other scripts should run it or document that context was loaded.
 
-**Closure:** clawbot proof pending — see [`docs/architect/agent_verification.md`](architect/agent_verification.md) when recorded.
+**Closure (verified):** clawbot proof recorded **2026-03-23** — see [`docs/architect/agent_verification.md`](architect/agent_verification.md) → *Phase 4.0 — Execution context rehydration*.
 
 ### 1. Ownership and Governance
 

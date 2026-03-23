@@ -200,6 +200,23 @@ The master plan **Phase 2+ — Decision Layer (Analyst Model)** section remains 
 
 ---
 
+## Phase 4.0 — Execution context rehydration — **CLOSED**
+
+| Field | Value |
+|--------|--------|
+| **Status** | **PASS** |
+| **Closure recorded** | 2026-03-23 |
+| **Repository** | `blackbox` @ `main` |
+| **Git ref (recorded)** | `572a7b7a5afa5810f97fb9a6f8fe1d3475cb1cdc` |
+| **Canonical spec** | [`docs/blackbox_master_plan.md`](../blackbox_master_plan.md) — Phase 4.0 |
+| **Runtime** | `docs/runtime/execution_context.md`; `scripts/runtime/context_loader.py` |
+| **Verification host** | `clawbot.a51.corp` (`~/blackbox`) |
+| **Proof summary** | `git pull` → `572a7b7…`; `test -f docs/runtime/execution_context.md`; `python3 scripts/runtime/context_loader.py` → JSON with `phase`, `execution_host`, `proof_required`, `rules`; no trading logic change, no DB schema change |
+
+**Scope:** Documentation + loader only; **no** live execution, **no** Telegram, **no** registry mutation.
+
+---
+
 ## Update protocol
 
 1. `git rev-parse HEAD` → set **Git ref (recorded)** in the table at top  
