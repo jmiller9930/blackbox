@@ -183,6 +183,23 @@ The master plan **Phase 2+ — Decision Layer (Analyst Model)** section remains 
 
 ---
 
+## Phase 3.8 — Advanced strategy awareness — **CLOSED**
+
+| Field | Value |
+|--------|--------|
+| **Status** | **PASS** |
+| **Closure recorded** | 2026-03-23 |
+| **Repository** | `blackbox` @ `main` |
+| **Git ref (recorded)** | `480f04fe0e754528d5ebd856ec6292a04cb2b9e9` |
+| **Canonical spec** | [`docs/blackbox_master_plan.md`](../blackbox_master_plan.md) — Phase 3.8 |
+| **Runtime** | `anna_modules/interpretation.py` (detection + copy); `anna_modules/analysis.py` → **`strategy_awareness`** on **`anna_analysis_v1`** |
+| **Verification host** | `clawbot.a51.corp` (`~/blackbox`) |
+| **Proof summary** | Test 1: `market_making` in `strategy_awareness.detected`; Test 2: `adverse_selection`; Test 3: `strategy_awareness` null; `--store` → task `becc5ad7-bf5c-48de-8eb1-3e3ebeda2bc0` **completed** with title `[Anna Analysis]…`; no execution logic, no `registry.json` mutation, no policy bypass |
+
+**Scope:** Awareness-only text; **no** automation, **no** Telegram, **no** registry promotion.
+
+---
+
 ## Update protocol
 
 1. `git rev-parse HEAD` → set **Git ref (recorded)** in the table at top  

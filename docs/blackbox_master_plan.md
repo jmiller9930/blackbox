@@ -603,7 +603,7 @@ Advanced concepts may enter the registry as **draft** or **exploratory** concept
 - **Modules:** [`scripts/runtime/anna_modules/interpretation.py`](../../scripts/runtime/anna_modules/interpretation.py) — pattern detection for awareness-only strategy ids (`market_making`, `spread_capture`, `inventory_risk`, `adverse_selection`, `liquidity_provision`, `order_book_dynamics`); [`analysis.py`](../../scripts/runtime/anna_modules/analysis.py) adds optional **`strategy_awareness`** on **`anna_analysis_v1`** (`detected`, `explanation`, `risks`, `applicability`, `note`). **No** execution, **no** registry mutation, **no** policy bypass.
 - **Null-safe:** `strategy_awareness` is **`null`** when no strategy language matches.
 
-**Closure:** clawbot proof pending — see [`docs/architect/agent_verification.md`](architect/agent_verification.md) when recorded.
+**Closure (verified):** clawbot proof recorded **2026-03-23** — see [`docs/architect/agent_verification.md`](architect/agent_verification.md) → *Phase 3.8 — Advanced strategy awareness*.
 
 ---
 
