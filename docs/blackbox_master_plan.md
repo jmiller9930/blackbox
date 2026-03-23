@@ -364,6 +364,8 @@ The system must always ask: **why did this work?** and **why did this fail?**
 
 - **Script:** `scripts/runtime/anna_proposal_builder.py` — maps **`anna_analysis_v1`** → **`anna_proposal_v1`** (`proposal_type`, `validation_plan`, `supporting_reasoning`, etc.). **`--use-latest-stored-anna-analysis`** or **live** text with the same optional context flags as **`anna_analyst_v1`**. **`--store`** → **`[Anna Proposal]`** completed task. Deterministic; **no** schema migration; prepares records for later comparison to paper outcomes / reflections / insights / trends.
 
+**Closure (verified):** clawbot proof recorded **2026-03-23** — see [`docs/architect/agent_verification.md`](architect/agent_verification.md) → *Phase 3.3 — Anna proposal builder*.
+
 ### Phase 3.4 — Anna Modular Extensibility Model
 
 #### Purpose

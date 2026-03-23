@@ -96,6 +96,23 @@ The master plan **Phase 2+ — Decision Layer (Analyst Model)** section remains 
 
 ---
 
+## Phase 3.3 — Anna proposal builder (validation bridge) — **CLOSED**
+
+| Field | Value |
+|--------|--------|
+| **Status** | **PASS** |
+| **Closure recorded** | 2026-03-23 |
+| **Repository** | `blackbox` @ `main` |
+| **Git ref (recorded)** | `b0db6f0` |
+| **Canonical spec** | [`docs/blackbox_master_plan.md`](../blackbox_master_plan.md) — Phase 3.3 |
+| **Runtime** | `scripts/runtime/anna_proposal_builder.py` → `anna_proposal_v1` |
+| **Verification host** | `clawbot.a51.corp` (`~/blackbox`) |
+| **Proof summary** | Live build with snapshot+policy → `RISK_REDUCTION` / `anna_proposal_v1` with real fields; `--use-latest-stored-anna-analysis` → `source_analysis_reference.task_id` = `0281543d-2368-4784-91b8-83ef7a9eb205`; `--store` → `[Anna Proposal]` task `e07c1e9c-4ab8-4dce-be01-48031eec5386` **completed** |
+
+**Scope:** Deterministic mapping only; no schema migration; no Telegram; no registry load; prepares structure for later outcome/reflection comparison.
+
+---
+
 ## Update protocol
 
 1. `git rev-parse HEAD` → set **Git ref (recorded)** in the table at top  
