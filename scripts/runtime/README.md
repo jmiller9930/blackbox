@@ -179,3 +179,13 @@ python3 scripts/runtime/policy_gated_action_filter.py --use-latest-stored-policy
 python3 scripts/runtime/policy_gated_action_filter.py --self-test
 python3 scripts/runtime/policy_gated_action_filter.py --store
 ```
+
+## Anna analyst — Phase 3.2 (v1)
+
+**`anna_analyst_v1.py`** — Rule-based **conversational analyst**: trader text → **`anna_analysis_v1`** (interpretation, market_context from optional latest **`[Market Snapshot]`**, risk, policy alignment from optional **`[Guardrail Policy]`**, paper-only **`suggested_action`**, **`concepts_used`** keyword tags). Optional **`--use-latest-decision-context`**, **`--use-latest-trend`** (**`[System Trend]`**). Missing artifacts → null-safe + **`notes`**. No Telegram, no registry loader, no execution, no venue calls. **`--store`** → **`[Anna Analysis]`** completed task.
+
+```bash
+python3 scripts/runtime/anna_analyst_v1.py "Liquidity is thin and spreads are widening"
+python3 scripts/runtime/anna_analyst_v1.py "Spreads widening" --use-latest-market-snapshot --use-latest-policy --use-latest-trend
+python3 scripts/runtime/anna_analyst_v1.py "Test input" --store
+```

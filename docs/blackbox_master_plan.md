@@ -231,7 +231,7 @@ This section is intentionally high-level; detailed triggers, providers, and Open
 
 ## Phase 3 — Intelligence Layer
 
-> **Mostly planning in this document.** Phase 3 is where **intelligence** (interpretation, conversation, validation, and **read-only** market context) layers on top of the **Phase 2** paper pipeline. **Exception:** [Phase 3.1](#phase-31--market-data-ingestion-read-only) includes an approved **read-only** runtime script (`market_data_ingestor.py`) — **no trading, wallets, or writes to venues**. **No** Anna analyst runtime, **no** registry loader, and **no** Phase 4 execution paths are implied for the rest until implemented per architect.
+> **Mostly planning in this document.** Phase 3 is where **intelligence** (interpretation, conversation, validation, and **read-only** market context) layers on top of the **Phase 2** paper pipeline. **Exceptions:** [Phase 3.1](#phase-31--market-data-ingestion-read-only) — **`market_data_ingestor.py`** (read-only snapshots); [Phase 3.2](#phase-32--anna-conversational-analyst-layer) — **`anna_analyst_v1.py`** (CLI rule-based **`anna_analysis_v1`**, no Telegram). **No** registry loader, **no** Phase 4 execution paths, **no** venue writes beyond these scoped scripts until implemented per architect.
 
 **What Phase 3 is not:** live trading; wallet integration; exchange execution; unrestricted LLM behavior.
 
@@ -324,6 +324,10 @@ Phase 3.2 does **not** mean:
 - direct code mutation
 - direct system reconfiguration from chat
 - automatic adoption of expert suggestions
+
+#### Runtime implementation (v1 — started)
+
+- **Script:** `scripts/runtime/anna_analyst_v1.py` — **`anna_analysis_v1`** JSON: interpretation, **`market_context`** (optional latest **`[Market Snapshot]`**), **`risk_assessment`**, **`policy_alignment`** (optional latest **`[Guardrail Policy]`**), paper-only **`suggested_action`**, **`concepts_used`** (keyword tags; not registry-backed yet). Flags: **`--use-latest-market-snapshot`**, **`--use-latest-decision-context`**, **`--use-latest-trend`**, **`--use-latest-policy`**, **`--store`** → **`[Anna Analysis]`**. Rule-based; **no** Telegram, **no** registry loader, **no** execution.
 
 ### Phase 3.3 — Validation & Learning Loop
 
