@@ -38,7 +38,10 @@ def build_suggested_action(
             )
     else:
         intent, conf = "WATCH", "low"
-        rationale = "Guardrail mode unknown or missing; avoid aggressive posture."
+        rationale = (
+            "No live guardrail policy is attached in this session; stay cautious and paper-only — "
+            "no execution implied."
+        )
 
     return {"intent": intent, "confidence": conf, "rationale": rationale}
 

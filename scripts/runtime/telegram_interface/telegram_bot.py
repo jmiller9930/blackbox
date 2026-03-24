@@ -156,11 +156,30 @@ async def on_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     await update.message.reply_text(out)
 
 
+def _log_anna_llm_runtime() -> None:
+    """Proof in logs: same OLLAMA_* resolution as Anna (see tools/check_ollama_runtime.py)."""
+    try:
+        from _ollama import ollama_base_url
+
+        resolved = ollama_base_url()
+    except Exception as e:
+        logger.warning("anna_llm_runtime could not resolve Ollama base: %s", e)
+        return
+    logger.info(
+        "anna_llm_runtime ANNA_USE_LLM=%s OLLAMA_BASE_URL=%s resolved_base=%s OLLAMA_MODEL=%s",
+        os.environ.get("ANNA_USE_LLM", "<unset>"),
+        os.environ.get("OLLAMA_BASE_URL", "<unset>"),
+        resolved,
+        os.environ.get("OLLAMA_MODEL", "<unset>"),
+    )
+
+
 def main() -> int:
     token = os.environ.get("TELEGRAM_BOT_TOKEN")
     if not token:
         print("Set environment variable TELEGRAM_BOT_TOKEN", file=sys.stderr)
         return 1
+    _log_anna_llm_runtime()
     app = (
         Application.builder()
         .token(token)

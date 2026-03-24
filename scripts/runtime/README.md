@@ -51,8 +51,16 @@ Single bot, **multi-persona** labels: **`@anna`**, **`@data`** (`status` / `repo
 
 Requires `TELEGRAM_BOT_TOKEN`. Optional `TELEGRAM_ALLOWED_CHAT_IDS` (comma-separated chat ids).
 
+**Anna LLM (Ollama):** set **`OLLAMA_BASE_URL`** to the network LLM host on clawbot (not localhost unless Ollama runs there). Set **`OLLAMA_MODEL`** to a tag present on that host. Optional **`OLLAMA_STRICT=1`** requires `OLLAMA_BASE_URL` to be set. Verify before start:
+
+```bash
+cd scripts/runtime && PYTHONPATH=. python3 tools/check_ollama_runtime.py
+```
+
 ```bash
 export TELEGRAM_BOT_TOKEN="your-bot-token"
+export OLLAMA_BASE_URL="http://YOUR_LLM_HOST:11434"
+export OLLAMA_MODEL="your-installed-model:tag"
 python3 scripts/runtime/telegram_interface/telegram_bot.py
 ```
 

@@ -4,7 +4,7 @@ Phase 3.2 — Anna conversational analyst v1: trader text → structured anna_an
 
 Implementation lives in `anna_modules.py` (Phase 3.4 modular layers). This file is the CLI entrypoint.
 
-Rule-based only; no ML, no Telegram, no registry mutation, no execution, no venue calls. Read-only concept retrieval from `data/concepts/registry.json` (Phase 3.6).
+Pipeline: intent → context check → contextual memory (SQLite) → deterministic playbook → optional local LLM (Ollama/Qwen when `ANNA_USE_LLM=1`). No Telegram in this module; read-only concept retrieval from `data/concepts/registry.json` (Phase 3.6). No execution.
 """
 from __future__ import annotations
 
@@ -57,29 +57,29 @@ def analyze_to_dict(
             trend, trend_err = try_load_trend(conn)
         if use_policy:
             policy, policy_err = load_latest_guardrail_policy(conn)
+
+        analysis = build_analysis(
+            input_text,
+            market=market,
+            market_err=market_err,
+            ctx=ctx,
+            ctx_err=ctx_err,
+            trend=trend,
+            trend_err=trend_err,
+            policy=policy,
+            policy_err=policy_err,
+            use_snapshot=use_snapshot,
+            use_ctx=use_ctx,
+            use_trend=use_trend,
+            use_policy=use_policy,
+            conn=conn,
+        )
+        if trend and not trend_err:
+            analysis["notes"].append(
+                f"System trend window_size={trend.get('window_size')} (loaded)."
+            )
     finally:
         conn.close()
-
-    analysis = build_analysis(
-        input_text,
-        market=market,
-        market_err=market_err,
-        ctx=ctx,
-        ctx_err=ctx_err,
-        trend=trend,
-        trend_err=trend_err,
-        policy=policy,
-        policy_err=policy_err,
-        use_snapshot=use_snapshot,
-        use_ctx=use_ctx,
-        use_trend=use_trend,
-        use_policy=use_policy,
-    )
-
-    if trend and not trend_err:
-        analysis["notes"].append(
-            f"System trend window_size={trend.get('window_size')} (loaded)."
-        )
 
     out: dict[str, Any] = {"anna_analysis": analysis, "stored_task_id": None}
 

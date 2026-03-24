@@ -17,6 +17,7 @@ Registry loading, Telegram, ML, and execution live outside this package until la
 from __future__ import annotations
 
 from anna_modules.analysis import assemble_anna_analysis_v1, build_analysis
+from anna_modules.context_requirements import assess_context_completeness
 from anna_modules.input_adapter import (
     load_latest_guardrail_policy,
     load_latest_market_snapshot,
@@ -38,4 +39,5 @@ __all__ = [
     "try_load_trend",
     "load_latest_stored_anna_analysis",
     "normalize_trader_text",
+    "assess_context_completeness",
 ]

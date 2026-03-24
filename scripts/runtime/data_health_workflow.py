@@ -246,7 +246,7 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument(
         "--ollama-base",
         default=None,
-        help="Ollama base (default from OLLAMA_BASE_URL or ~/.openclaw/openclaw.json)",
+        help="Ollama base (default from OLLAMA_BASE_URL, else http://127.0.0.1:11434)",
     )
     p.add_argument(
         "--force-failure-url",

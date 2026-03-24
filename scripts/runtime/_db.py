@@ -11,7 +11,11 @@ def connect(db_path: Path) -> sqlite3.Connection:
 
 
 def ensure_schema(conn: sqlite3.Connection, repo_root: Path) -> None:
-    for name in ("schema_phase1_5.sql", "schema_phase1_6.sql"):
+    for name in (
+        "schema_phase1_5.sql",
+        "schema_phase1_6.sql",
+        "schema_phase4_anna_context.sql",
+    ):
         p = repo_root / "data" / "sqlite" / name
         if not p.is_file():
             raise FileNotFoundError(p)

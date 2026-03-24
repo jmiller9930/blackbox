@@ -12,7 +12,7 @@ from telegram_interface.message_router import route_message
 
 def _first_tag(text: str) -> str | None:
     line = (text or "").strip().split("\n", 1)[0].strip()
-    m = re.match(r"^\[(Anna|DATA|Cody|Mia)\]", line)
+    m = re.match(r"^\[(Anna|DATA|Cody|Mia)(\s+—[^\]]*)?\]", line)
     return m.group(1) if m else None
 
 

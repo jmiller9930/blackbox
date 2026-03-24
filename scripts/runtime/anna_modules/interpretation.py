@@ -175,7 +175,12 @@ def build_interpretation(
     readiness: str | None,
     *,
     registry_loaded: bool = False,
+    human_intent: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
+    """
+    Human-facing summary must read like an analyst, not an internal template.
+    Guardrail/registry diagnostics go to assumptions (JSON / logs), not the lead sentence.
+    """
     signals = [f"concept:{c}" for c in concepts]
     if not signals:
         signals.append("no strong keyword match; interpret manually")
@@ -191,13 +196,56 @@ def build_interpretation(
         assumptions.append("Trading concept registry unavailable or invalid; concept_support empty.")
     if readiness:
         assumptions.append(f"Decision context readiness (if loaded): {readiness}.")
+    assumptions.append(f"Internal guardrail mode for policy: {guardrail_mode}.")
 
-    summary = (
-        f"Interpreted trader concern as focusing on: {', '.join(concepts) or 'general market commentary'}. "
-        f"Structured under current guardrail posture ({guardrail_mode})."
-    )
+    topic = (human_intent or {}).get("topic")
+    intent = (human_intent or {}).get("intent")
+
+    if topic == "exit_logic":
+        headline = "Exit timing"
+        summary = (
+            "You're asking how to exit when a trade is still working but price looks extended or ready to "
+            "roll over. Below is how I'd think about risk, profit protection, and reversal signals — "
+            "advisory only, not a buy/sell instruction."
+        )
+    elif topic == "trading_general" and concepts:
+        headline = "Your question"
+        summary = (
+            f"I'm reading this around: {', '.join(concepts)}. I'll walk through risk and what I'd watch — "
+            "still advisory, not execution."
+        )
+    elif topic == "feedback" or intent == "CORRECTION":
+        headline = "Feedback"
+        summary = (
+            "Sounds like you're correcting or challenging a prior read — I'll take that seriously and "
+            "focus on what would have changed the view."
+        )
+    elif intent == "INSTRUCTION":
+        headline = "Instruction"
+        summary = (
+            "You're steering toward a rule or habit — I'll respond in terms of risk and process, not "
+            "automated execution."
+        )
+    elif intent == "OBSERVATION":
+        headline = "Observation"
+        summary = (
+            "You're sharing a market read — I'll reflect it back with structure and what I'd validate next."
+        )
+    elif concepts:
+        headline = "Your question"
+        summary = (
+            f"I'm reading this around: {', '.join(concepts)}. I'll keep the answer practical and flag "
+            "what we can't know from text alone."
+        )
+    else:
+        headline = "Your question"
+        summary = (
+            "I'm treating this as a trading conversation without tight keyword tags; I'll keep the answer "
+            "practical and name what we don't know from here."
+        )
 
     return {
+        "headline": headline,
         "summary": summary,
         "signals": signals,
         "assumptions": assumptions,

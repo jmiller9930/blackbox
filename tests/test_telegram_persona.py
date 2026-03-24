@@ -20,7 +20,7 @@ from telegram_interface.response_formatter import (
 
 def _first_line_tag(text: str) -> str | None:
     line = (text or "").strip().split("\n", 1)[0].strip()
-    m = re.match(r"^\[(Anna|DATA|Cody|Mia)\]", line)
+    m = re.match(r"^\[(Anna|DATA|Cody|Mia)(\s+—[^\]]*)?\]", line)
     return m.group(1) if m else None
 
 
@@ -53,8 +53,8 @@ def test_format_response_enforces_tag_when_missing() -> None:
 
 def test_format_anna_system_message_is_tagged() -> None:
     out = format_anna_system_message("Hello from /start.", user_display_name="John")
-    assert out.startswith("[Anna]")
-    assert "Role: Anna" in out
+    assert out.startswith("[Anna — Trading Analyst]")
+    assert "Role: Anna" not in out
     assert "John" in out or "Hello" in out
 
 

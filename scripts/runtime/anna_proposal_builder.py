@@ -57,28 +57,29 @@ def run_live_build(
             trend, trend_err = try_load_trend(conn)
         if use_policy:
             policy, policy_err = load_latest_guardrail_policy(conn)
+
+        analysis = build_analysis(
+            input_text,
+            market=market,
+            market_err=market_err,
+            ctx=ctx,
+            ctx_err=ctx_err,
+            trend=trend,
+            trend_err=trend_err,
+            policy=policy,
+            policy_err=policy_err,
+            use_snapshot=use_snapshot,
+            use_ctx=use_ctx,
+            use_trend=use_trend,
+            use_policy=use_policy,
+            conn=conn,
+        )
+        if trend and not trend_err:
+            analysis["notes"].append(
+                f"System trend window_size={trend.get('window_size')} (loaded)."
+            )
     finally:
         conn.close()
-
-    analysis = build_analysis(
-        input_text,
-        market=market,
-        market_err=market_err,
-        ctx=ctx,
-        ctx_err=ctx_err,
-        trend=trend,
-        trend_err=trend_err,
-        policy=policy,
-        policy_err=policy_err,
-        use_snapshot=use_snapshot,
-        use_ctx=use_ctx,
-        use_trend=use_trend,
-        use_policy=use_policy,
-    )
-    if trend and not trend_err:
-        analysis["notes"].append(
-            f"System trend window_size={trend.get('window_size')} (loaded)."
-        )
     extra_notes.extend(analysis.get("notes") or [])
     return analysis, extra_notes
 

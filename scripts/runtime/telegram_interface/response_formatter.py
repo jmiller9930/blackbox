@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import logging
+import os
 import re
 from typing import Any
 
@@ -16,6 +17,9 @@ _CLOSINGS = (
     "Want me to go deeper on any part?",
     "Do you want me to check current conditions next?",
 )
+
+# Directive 4.6.3.1 — Anna product header (first line must match persona enforcement regex)
+ANNA_TELEGRAM_HEADER = "[Anna — Trading Analyst]"
 
 _ROLE = {
     "Anna": "Role: Anna — trading analyst (markets, risk, concepts; advisory only).",
@@ -35,6 +39,11 @@ def _closing(seed: str) -> str:
     if not seed:
         seed = "default"
     return _CLOSINGS[hash(seed) % len(_CLOSINGS)]
+
+
+def _prefix_anna(body: str) -> str:
+    """Directive 4.6.3.1 — single professional header; no Role:/BotFather essay on Anna path."""
+    return f"{ANNA_TELEGRAM_HEADER}\n\n{_truncate((body or '').strip())}"
 
 
 def _prefix(agent: str, body: str) -> str:
@@ -62,7 +71,8 @@ def _fallback_anna_body(*, user_display_name: str | None) -> str:
     return "I need to re-evaluate that — let me take a closer look."
 
 
-_PERSONA_FIRST_LINE = re.compile(r"^\[(Anna|DATA|Cody|Mia)\]")
+# Anna may use "[Anna — Trading Analyst]"; other personas stay "[DATA]" etc.
+_PERSONA_FIRST_LINE = re.compile(r"^\[(Anna|DATA|Cody|Mia)(\s+—[^\]]*)?\]")
 
 
 def _enforce_persona_tag(text: str | None, *, user_display_name: str | None) -> str:
@@ -73,12 +83,12 @@ def _enforce_persona_tag(text: str | None, *, user_display_name: str | None) -> 
     s = (text or "").strip()
     if not s:
         logger.warning("persona enforcement: empty body; using Anna fallback")
-        return _prefix("Anna", _fallback_anna_body(user_display_name=user_display_name))
+        return _prefix_anna(_fallback_anna_body(user_display_name=user_display_name))
     first = s.split("\n", 1)[0].strip()
     if _PERSONA_FIRST_LINE.match(first):
         return s
     logger.warning("persona enforcement: missing or invalid tag on first line; using Anna fallback")
-    return _prefix("Anna", _fallback_anna_body(user_display_name=user_display_name))
+    return _prefix_anna(_fallback_anna_body(user_display_name=user_display_name))
 
 
 def format_response(
@@ -92,22 +102,16 @@ def format_response(
         body = f"I hit a snag on my side: {msg}"
         if user_display_name:
             body = f"{user_display_name}, {body}"
-        out = _prefix("Anna", body)
+        out = _prefix_anna(body)
         return _enforce_persona_tag(out, user_display_name=user_display_name)
     if kind == "anna":
-        out = _prefix(
-            "Anna",
-            _format_anna_body(payload.get("data") or {}, display_name=user_display_name),
-        )
+        out = _prefix_anna(_format_anna_body(payload.get("data") or {}, display_name=user_display_name))
         return _enforce_persona_tag(out, user_display_name=user_display_name)
     if kind == "cody":
         out = _prefix("Cody", _format_cody_body(payload))
         return _enforce_persona_tag(out, user_display_name=user_display_name)
     if kind == "identity":
-        out = _prefix(
-            "Anna",
-            _format_identity_body(str(payload.get("intent") or "help"), display_name=user_display_name),
-        )
+        out = _prefix_anna(_format_identity_body(str(payload.get("intent") or "help"), display_name=user_display_name))
         return _enforce_persona_tag(out, user_display_name=user_display_name)
     if kind == "data":
         out = _prefix(
@@ -122,7 +126,7 @@ def format_response(
         )
         return _enforce_persona_tag(out, user_display_name=user_display_name)
     logger.warning("persona enforcement: unknown or missing kind %r", kind)
-    out = _prefix("Anna", _fallback_anna_body(user_display_name=user_display_name))
+    out = _prefix_anna(_fallback_anna_body(user_display_name=user_display_name))
     return _enforce_persona_tag(out, user_display_name=user_display_name)
 
 
@@ -131,7 +135,7 @@ def format_anna_system_message(body: str, *, user_display_name: str | None = Non
     Hard path for Telegram copy that does not go through dispatch (e.g. /start, unauthorized).
     Still wrapped as [Anna] + enforcement — never send raw strings to Telegram.
     """
-    out = _prefix("Anna", (body or "").strip() or _fallback_anna_body(user_display_name=user_display_name))
+    out = _prefix_anna((body or "").strip() or _fallback_anna_body(user_display_name=user_display_name))
     return _enforce_persona_tag(out, user_display_name=user_display_name)
 
 
@@ -182,6 +186,73 @@ def _format_identity_body(intent: str, *, display_name: str | None = None) -> st
 
 def _format_cody_body(payload: dict[str, Any]) -> str:
     return _truncate(str(payload.get("reply") or ""))
+
+
+def _anna_telegram_verbose() -> bool:
+    """Set ANNA_TELEGRAM_VERBOSE=1 to include Risk read / How I'd play it blocks (debug-style)."""
+    return os.environ.get("ANNA_TELEGRAM_VERBOSE", "") == "1"
+
+
+def _sanitize_anna_lead(gist: str, headline: str) -> str:
+    """Strip legacy / internal template phrasing; user-facing text is the analyst answer only."""
+    g = (gist or "").strip()
+    low = g.lower()
+    bad = (
+        "interpreted trader concern",
+        "guardrail posture",
+        "structured under",
+        "anna_analysis",
+        "without tight keyword",
+    )
+    if any(b in low for b in bad):
+        return (headline or "").strip()
+    return g
+
+
+def _telegram_safe_suggested_rationale(text: str) -> str:
+    """Do not surface policy/debug lines as the main 'answer' in Telegram."""
+    s = (text or "").strip()
+    if not s:
+        return ""
+    low = s.lower()
+    if any(
+        x in low
+        for x in (
+            "guardrail mode unknown",
+            "guardrail mode",
+            "anna_analysis",
+            "registry snapshot",
+            "paper-only — still no live",
+        )
+    ):
+        return ""
+    return s
+
+
+def _telegram_safe_anna_notes(notes: list[Any]) -> list[str]:
+    """Directive 4.6.3 — do not leak guardrail/registry/debug strings to Telegram."""
+    out: list[str] = []
+    for n in notes:
+        s = str(n).strip()
+        if not s:
+            continue
+        low = s.lower()
+        if any(
+            m in low
+            for m in (
+                "guardrail",
+                "registry",
+                "debug",
+                "anna_analysis",
+                "concept_support",
+                "telemetry",
+                "execution plane",
+                "anna_analysis",
+            )
+        ):
+            continue
+        out.append(s)
+    return out
 
 
 def _format_data_body(payload: dict[str, Any], *, display_name: str | None = None) -> str:
@@ -254,57 +325,105 @@ def _format_data_body(payload: dict[str, Any], *, display_name: str | None = Non
     return _truncate("State\nNo DATA mode specified.")
 
 
+def _anna_model_limitation_note(aa: dict[str, Any]) -> str:
+    """Directive 4.6.3.1 — explicit limitation when model path failed but rules/memory answered."""
+    pipe = aa.get("pipeline") or {}
+    meta = pipe.get("layer_meta") or {}
+    err = meta.get("llm_error")
+    if not err:
+        return ""
+    return (
+        f"\n\n(Note: the analyst model didn’t produce usable output for this turn — {err}. "
+        "What you see above is from rules or prior context.)"
+    )
+
+
 def _format_anna_body(data: dict[str, Any], *, display_name: str | None = None) -> str:
     aa = data.get("anna_analysis") or {}
     interp = aa.get("interpretation") or {}
     headline = str(interp.get("headline") or "Analysis")
-    gist = str(interp.get("summary") or "")
+    gist = _sanitize_anna_lead(str(interp.get("summary") or ""), headline)
+    signals = interp.get("signals") or []
+    hi = aa.get("human_intent") or {}
+    factual_dt = hi.get("bypass") == "datetime" or (
+        isinstance(signals, list) and "intent:factual_datetime" in signals
+    )
+
+    def _lead_line() -> str:
+        lead = gist if gist else headline
+        if display_name:
+            return f"{display_name}, {lead}"
+        return lead
+
+    if factual_dt:
+        return _truncate(_lead_line())
+
+    pipe = aa.get("pipeline") or {}
+    if pipe.get("answer_source") == "clarification_requested" or (
+        isinstance(signals, list) and "pipeline:clarification_required" in signals
+    ):
+        # Context stop — body is the clarifying question only (4.6.3.1)
+        return _truncate(_lead_line())
+
+    # Default 4.6.3.1: interpretation.summary is the product; no generic tails or rotating closings.
+    if not _anna_telegram_verbose():
+        text = _lead_line()
+        if (
+            gist
+            and headline
+            and headline.strip().lower() not in (gist or "").lower()
+            and headline.strip().lower() not in ("analysis", "your question", "need a bit more context")
+        ):
+            hl = headline.strip()
+            text = f"{text}\n\n{hl}"
+        text += _anna_model_limitation_note(aa)
+        return _truncate(text)
+
+    # Debug-style: extra sections only when verbose — still avoid WATCH / "low risk" / empty posture.
     ra = aa.get("risk_assessment") or {}
-    risk = str(ra.get("level") or "?")
+    risk = str(ra.get("level") or "?").strip().lower()
     factors = ra.get("factors") or []
     factor_txt = ""
     if isinstance(factors, list) and factors:
         factor_txt = "; ".join(str(f) for f in factors[:4])
 
     suggested = aa.get("suggested_action") or {}
-    action = str(suggested.get("intent") or "")
-    intent_expl = str(suggested.get("rationale") or "")
+    action = str(suggested.get("intent") or "").strip().upper()
+    intent_expl = _telegram_safe_suggested_rationale(str(suggested.get("rationale") or ""))
 
-    # Conversational analyst voice: address by name, plain language (Phase 4.6.x tone).
-    lead = gist if gist else headline
-    if display_name:
-        lead = f"{display_name}, {lead}"
-    parts: list[str] = ["Quick take", lead]
+    lead = _lead_line()
+    parts: list[str] = [lead]
     if gist and headline and headline.lower() not in lead.lower():
         hl = headline.strip().lower()
-        if hl not in ("analysis", "anna analysis"):
+        if hl not in ("analysis", "anna analysis", "your question"):
+            parts.append("")
             parts.append(headline)
 
-    parts.extend(["", "Risk read", f"I'm seeing risk around {risk} here."])
-    if factor_txt:
-        parts.append(f"What's in the mix: {factor_txt}.")
+    if factor_txt and risk != "low":
+        parts.extend(["", "Risk factors", factor_txt])
+    elif factor_txt and risk == "low":
+        parts.extend(["", "Context", factor_txt])
 
-    notes = aa.get("notes") or []
+    if action and action != "WATCH":
+        parts.append("")
+        parts.append("Posture (advisory)")
+        parts.append(f"{action}.")
+        if intent_expl:
+            parts.append(intent_expl)
+    elif intent_expl:
+        parts.append("")
+        parts.append("Context")
+        parts.append(intent_expl)
+
+    notes = _telegram_safe_anna_notes(list(aa.get("notes") or []))
     if notes:
+        parts.append("")
         parts.append("Worth noting: " + "; ".join(str(n) for n in notes[:2]))
 
-    parts.append("")
-    parts.append("How I'd play it")
-    if action:
-        parts.append(f"{action}.")
-    if intent_expl:
-        parts.append(intent_expl)
-    flags = aa.get("caution_flags") or []
-    if flags:
-        parts.append(str(flags[0]))
-
-    seed = str(aa.get("input_text") or headline)
-    parts.append("")
-    parts.append(
-        f"Want to go deeper? Throw me a scenario, or ping @data for system readouts / @cody for code.\n\n"
-        + _closing(seed)
-    )
-    return _truncate("\n".join(parts))
+    lim = _anna_model_limitation_note(aa).strip()
+    if lim:
+        parts.append(lim)
+    return _truncate("\n".join(p for p in parts if p))
 
 
 def _format_report_body(payload: dict[str, Any], *, display_name: str | None = None) -> str:
