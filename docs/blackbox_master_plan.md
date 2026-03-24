@@ -33,6 +33,8 @@ It is the **single source of truth** for project **rehydration** (Architect, Cur
 
 **Execution / proof:** Primary host **`clawbot.a51.corp`**, repo path **`~/blackbox`**. Phase closures use [`docs/architect/global_clawbot_proof_standard.md`](architect/global_clawbot_proof_standard.md).
 
+**Architect directives (registry):** [`docs/architect/directives/README.md`](architect/directives/README.md) — tracked specs (e.g. messaging abstraction **4.6.3.3**).
+
 ### Where we are now
 
 - **Completed through:** Phase **4.6.3** (persona enforcement + DB/registry alignment), **4.6.2** Telegram multi-persona, **4.6** bot layer, **4.5** learning visibility, **4.4** feedback loop, **4.3** execution plane (mock), **4.2** stub, **4.1** blueprint (and **4.0**, all Phase **3.x**).
