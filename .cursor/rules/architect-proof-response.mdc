@@ -1,0 +1,37 @@
+---
+description: Mandatory format when reporting proof, tests, or “what to tell the architect”
+alwaysApply: true
+---
+
+# Architect proof & status responses (non-negotiable format)
+
+When the user asks for **proof**, **what to tell the architect**, **status for closure**, or **did you test** — do **not** answer with prose-only claims. Follow this structure. Full phase closure details: [`docs/architect/global_clawbot_proof_standard.md`](docs/architect/global_clawbot_proof_standard.md).
+
+## 1. Automated verification table
+
+Include a **markdown table** (at minimum):
+
+| Where | Command | Result |
+
+- **Where:** e.g. local workspace, **`clawbot` `~/blackbox`** (or other mandated host).
+- **Command:** exact command run (e.g. `python3 -m pytest tests/ -q`).
+- **Result:** counts and pass/fail (e.g. **44 passed**). If anything failed, show failure summary.
+
+Run or cite **clawbot** verification when the task is server-side / phase proof — not local-only unless the architect accepts dev-only scope.
+
+## 2. Git commit on primary host
+
+State **`git rev-parse HEAD`** on **clawbot** after `git pull origin main` in `~/blackbox`, when claiming synced server proof. If only local was run, say so explicitly.
+
+## 3. Coverage vs gaps
+
+- **What the proof covers** (which tests, which layer: unit, integration, Telegram formatter path, etc.).
+- **What is explicitly not covered** by that proof (e.g. **live Telegram**, Ollama live calls when `ANNA_USE_LLM=0` in CI, persistence rows) — **never imply** those are done because pytest passed.
+
+## 4. Tie to directives
+
+If the work maps to a **master plan** subsection (e.g. 4.6.3.1), name it and state whether **operational acceptance** (per plan) still requires human/live steps.
+
+## 5. If you did not run tests
+
+Say **no**, list what is missing, and run the relevant commands or ask the user to run on the host you cannot reach — do not fabricate proof.
