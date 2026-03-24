@@ -10,7 +10,7 @@ Add new directives here as **`directive_<id>_<short_title>.md`** and a row in th
 
 | ID | Title | Document | Status |
 |----|--------|----------|--------|
-| **4.6.3.3** | Messaging interface abstraction (Anna decoupled from Telegram) | [`directive_4_6_3_3_messaging_interface.md`](directive_4_6_3_3_messaging_interface.md) | Active — open decisions: [`directive_4_6_3_3_architect_followup.md`](directive_4_6_3_3_architect_followup.md) |
+| **4.6.3.3** | Messaging interface abstraction (Anna decoupled from Telegram) | [`directive_4_6_3_3_messaging_interface.md`](directive_4_6_3_3_messaging_interface.md) | **Architect approved (FINAL)** — Slack/OpenClaw **out of scope**; CLI validation **mandatory** for closure |
 | **—** | Expose master plan via raw Git URL (ChatGPT / tooling) | [`../../cursor_directive_expose_master_plan.md`](../../cursor_directive_expose_master_plan.md) | Active (ops) |
 | **4.6.4** | Anna benchmark / architect submission artifact | [`../../benchmarks/anna_directive_4_6_4_architect_submission.md`](../../benchmarks/anna_directive_4_6_4_architect_submission.md) | Benchmark / evidence |
 | **Global** | Mandatory clawbot proof (all phases) | [`../global_clawbot_proof_standard.md`](../global_clawbot_proof_standard.md) | Non-negotiable |

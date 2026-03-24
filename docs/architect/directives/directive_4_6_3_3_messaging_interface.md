@@ -1,42 +1,53 @@
-# Directive 4.6.3.3 — Messaging Interface Abstraction
+# Directive 4.6.3.3 — Messaging Interface Abstraction (Architect Approved)
 
 ## Objective
 
 Decouple Anna from Telegram and introduce a unified messaging interface layer.
 
-Telegram must become an adapter, not a dependency.
+Telegram becomes an adapter, not a dependency.
 
 ---
 
 ## Core Principle
 
-Anna is the brain. Messaging is a transport layer.
+Anna is the brain.  
+Messaging is the transport.
 
-No reasoning, context handling, or learning logic may live inside any messaging adapter.
+Adapters must not contain:
+
+- reasoning logic
+- context logic
+- memory logic
+- LLM logic
 
 ---
 
-## Scope
+## Normalized Output Standard (NON-NEGOTIABLE)
 
-This directive introduces an infrastructure layer and does NOT modify:
+All interfaces must compare against normalized Anna output.
 
-- Anna reasoning logic
-- context / memory system
-- LLM usage flow
-- learning loop behavior
+### Required Fields
+
+- interpretation.summary
+- answer_source
+- intent
+- topic
+- limitation_flag (if present)
+
+### Rule
+
+Adapters format output only.  
+They do not alter meaning.
 
 ---
 
 ## Required Architecture
 
-Create:
-
-```
 messaging_interface/
+
 - base_interface.py
 - telegram_adapter.py
 - cli_adapter.py
-```
 
 ---
 
@@ -44,55 +55,69 @@ messaging_interface/
 
 Adapter → normalized input → Anna pipeline → normalized output → adapter formatting
 
-Anna must remain unaware of:
+Anna must not be aware of:
 
 - Telegram
 - CLI
-- any transport-specific behavior
+- Slack
+- any transport layer
 
 ---
 
 ## Implementation Steps
 
-1. Identify all Telegram-specific logic in:
+1. Identify Telegram-specific logic:
+
    - response_formatter
    - telegram_interface
-   - dispatch/router entry points
+   - dispatch/router
 
 2. Extract:
+
    - input handling
    - output formatting
    - transport metadata
 
 3. Create base interface:
+
    - send_message()
    - receive_message()
 
-4. Implement CLI adapter:
-   - simple stdin/stdout loop
-   - becomes primary validation surface
+4. Implement CLI adapter (PRIMARY VALIDATION SURFACE)
 
-5. Wrap existing Telegram logic into telegram_adapter
+5. Wrap Telegram into telegram_adapter
 
 ---
 
-## Validation
+## CLI Validation Requirement (MANDATORY)
 
-Pass criteria:
+CLI must support:
 
-- CLI interface runs Anna end-to-end
-- Telegram still functions (if stable)
-- Outputs from CLI and Telegram are identical (logic, not formatting)
-- No duplicated logic across adapters
+```bash
+echo "test question" | python -m messaging_interface.cli_adapter
+```
+
+Phase cannot close without CLI validation.
+
+---
+
+## Validation Criteria
+
+Pass only if:
+
+- CLI produces correct Anna responses
+- Telegram produces equivalent logic (not formatting)
+- normalized fields match across interfaces
+- no duplicated logic in adapters
 
 ---
 
 ## Out of Scope
 
-- No new agent behavior
-- No learning system changes
-- No trading logic
-- No external integrations
+- Slack
+- OpenClaw gateway integration
+- trading logic
+- learning system changes
 
 ---
 
@@ -101,9 +126,17 @@ Pass criteria:
 Directive closes when:
 
 - CLI adapter operational
-- Telegram isolated as adapter
+- Telegram fully isolated as adapter
 - Anna pipeline unchanged
-- identical responses across interfaces
+- normalized outputs match across interfaces
+
+---
+
+## Master Plan Requirement
+
+- Add 4.6.3.3 under 4.6.3.x
+- Mark as infrastructure leaf
+- dependency: after 4.6.3.1 (code closure)
 
 ---
 
