@@ -1,33 +1,36 @@
 ---
-description: Proof = ran architect-required tests; pass/fail; fix or ask on failure
+description: Directive met + proof as benchmark; method of testing is secondary
 alwaysApply: true
 ---
 
 # Architect proof & status responses (non-negotiable format)
 
+## What the architect cares about
+
+- **The directive was met** (behavior and outcomes the directive / master plan specifies).
+- **Proof** is the **benchmark**: verifiable evidence that the directive was met — not a story.
+
+The architect does **not** prescribe *how* you verify (pytest, manual repro, clawbot script, logs, DB rows, live Telegram — whatever the directive and [`global_clawbot_proof_standard.md`](docs/architect/global_clawbot_proof_standard.md) require). The architect cares that you **show proof** aligned to that directive.
+
 ## Meaning of “proof” (operational)
 
-**Proof** means you **actually ran** the **testing required by the architect** (or mandated by the directive / [`global_clawbot_proof_standard.md`](docs/architect/global_clawbot_proof_standard.md) / [`execution_context.md`](docs/runtime/execution_context.md)) for the work — not a narrative that tests “should” pass.
+**Proof** = you obtained **real evidence** the directive is satisfied — commands run, outputs captured, failures shown with detail — not “it should work.”
 
-- **Before** coming back to the human: run that required testing (or the closest equivalent you can execute in this environment).
-- **Report an explicit outcome:** **successful** (all required checks passed) or **not successful** (what failed, with output).
-- **If not successful:** **iterate** — fix the code and re-run until successful **or** **stop and ask for clarification** when blocked (ambiguous spec, missing host access, need a decision). Do not declare done while failing.
+- **Before** coming back: do whatever verification is required for **that** directive (automated, host, persistence, live — as applicable).
+- **Report an explicit outcome:** **met / successful** or **not met / not successful** (with evidence).
+- **If not met:** **iterate** (fix and re-prove) **or** **ask for clarification** when blocked. Do not declare the directive satisfied while proof fails.
 
-When the user asks for **proof**, **what to tell the architect**, **status for closure**, or **did you test** — do **not** answer with prose-only claims. Combine the obligation above with the structure below.
+When the user asks for **proof** or **what to tell the architect** — combine the obligation above with the structure below.
 
-Full phase closure details: [`docs/architect/global_clawbot_proof_standard.md`](docs/architect/global_clawbot_proof_standard.md).
+Full phase closure details: [`docs/architect/global_clawbot_proof_standard.md`](docs/architect/global_clawbot_proof_standard.md). Host/phase context: [`docs/runtime/execution_context.md`](docs/runtime/execution_context.md).
 
-## 1. Automated verification table
+## 1. Evidence table (proof package)
 
-Include a **markdown table** (at minimum):
+Include a **markdown table** so the benchmark is inspectable:
 
-| Where | Command | Result |
+| Where | What you ran / captured | Result |
 
-- **Where:** e.g. local workspace, **`clawbot` `~/blackbox`** (or other mandated host).
-- **Command:** exact command run (e.g. `python3 -m pytest tests/ -q`).
-- **Result:** counts and pass/fail (e.g. **44 passed**). If anything failed, show failure summary.
-
-Run or cite **clawbot** verification when the task is server-side / phase proof — not local-only unless the architect accepts dev-only scope.
+Use **exact** commands, log lines, hashes, or artifacts — whatever constitutes proof for **this** directive. Often that includes automated tests; it may also require clawbot runtime, SQLite rows, or live channel checks per the directive — state **gaps** if something cannot be run here.
 
 ## 2. Git commit on primary host
 
@@ -42,6 +45,6 @@ State **`git rev-parse HEAD`** on **clawbot** after `git pull origin main` in `~
 
 If the work maps to a **master plan** subsection (e.g. 4.6.3.1), name it and state whether **operational acceptance** (per plan) still requires human/live steps.
 
-## 5. If you did not run tests (or they failed)
+## 5. If proof is missing or fails
 
-You do **not** have proof. Say so, run the missing commands if possible, **fix and re-run** on failure, or **ask for clarification** / remote access — do not fabricate proof or claim success.
+You do **not** have a met directive. Say so, obtain the missing evidence if possible, **fix and re-prove**, or **ask for clarification** / access — do not fabricate proof or claim the directive is met.
