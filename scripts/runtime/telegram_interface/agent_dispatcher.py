@@ -1,6 +1,7 @@
 """Dispatch routed messages to Anna, DATA, or Cody (no execution plane)."""
 from __future__ import annotations
 
+import os
 import sys
 from pathlib import Path
 from typing import Any
@@ -16,6 +17,20 @@ from learning_visibility.report_generator import generate_report
 from .cody_stub import cody_reply
 from .data_status import build_infra_snapshot, build_status_text
 from .message_router import RoutedMessage
+
+
+def telegram_anna_use_llm() -> bool:
+    """
+    Telegram → Anna must use the local LLM (Ollama) pipeline when enabled (Directive 4.6.3.x).
+
+    Resolution order: ANNA_TELEGRAM_USE_LLM (Telegram-only override), then ANNA_USE_LLM, then default **on**.
+    Tests set ANNA_USE_LLM=0 in conftest so CI does not call Ollama.
+    """
+    for key in ("ANNA_TELEGRAM_USE_LLM", "ANNA_USE_LLM"):
+        v = os.environ.get(key)
+        if v is not None and str(v).strip() != "":
+            return str(v).strip().lower() not in ("0", "false", "no")
+    return True
 
 
 def dispatch(routed: RoutedMessage, *, display_name: str | None = None) -> dict[str, Any]:
@@ -34,6 +49,7 @@ def dispatch(routed: RoutedMessage, *, display_name: str | None = None) -> dict[
             use_trend=False,
             use_policy=False,
             store=False,
+            use_llm=telegram_anna_use_llm(),
         )
         return {"kind": "anna", "data": out}
 

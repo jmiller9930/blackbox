@@ -51,7 +51,7 @@ Single bot, **multi-persona** labels: **`@anna`**, **`@data`** (`status` / `repo
 
 Requires `TELEGRAM_BOT_TOKEN`. Optional `TELEGRAM_ALLOWED_CHAT_IDS` (comma-separated chat ids).
 
-**Anna LLM (Ollama):** set **`OLLAMA_BASE_URL`** to the network LLM host on clawbot (not localhost unless Ollama runs there). Set **`OLLAMA_MODEL`** to a tag present on that host. Optional **`OLLAMA_STRICT=1`** requires `OLLAMA_BASE_URL` to be set. Verify before start:
+**Anna LLM (Ollama) — wired on the Telegram path:** dispatch calls Anna with **`use_llm=telegram_anna_use_llm()`** (local LLM **on** by default). Override with **`ANNA_TELEGRAM_USE_LLM`** (Telegram-only) or **`ANNA_USE_LLM`** (`0` = rules/playbook only, e.g. CI). Set **`OLLAMA_BASE_URL`** to the network LLM host on clawbot (not localhost unless Ollama runs there). Set **`OLLAMA_MODEL`** to a tag present on that host. Optional **`OLLAMA_STRICT=1`** requires `OLLAMA_BASE_URL` to be set. Verify before start:
 
 ```bash
 cd scripts/runtime && PYTHONPATH=. python3 tools/check_ollama_runtime.py

@@ -11,6 +11,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts" / "runtime"))
 
+from telegram_interface.agent_dispatcher import telegram_anna_use_llm
 from telegram_interface.message_router import route_message
 from telegram_interface.response_formatter import (
     format_anna_system_message,
@@ -56,6 +57,18 @@ def test_format_anna_system_message_is_tagged() -> None:
     assert out.startswith("[Anna — Trading Analyst]")
     assert "Role: Anna" not in out
     assert "John" in out or "Hello" in out
+
+
+def test_telegram_anna_use_llm_env_chain(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Telegram path uses explicit LOM resolution: TELEGRAM override, then ANNA_USE_LLM, default on."""
+    monkeypatch.delenv("ANNA_TELEGRAM_USE_LLM", raising=False)
+    monkeypatch.setenv("ANNA_USE_LLM", "0")
+    assert telegram_anna_use_llm() is False
+    monkeypatch.setenv("ANNA_TELEGRAM_USE_LLM", "1")
+    assert telegram_anna_use_llm() is True
+    monkeypatch.delenv("ANNA_TELEGRAM_USE_LLM", raising=False)
+    monkeypatch.delenv("ANNA_USE_LLM", raising=False)
+    assert telegram_anna_use_llm() is True
 
 
 def test_all_kinds_emit_first_line_persona() -> None:

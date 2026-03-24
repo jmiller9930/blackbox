@@ -21,7 +21,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from telegram import Update
 from telegram.ext import Application, CommandHandler, ContextTypes, MessageHandler, filters
 
-from telegram_interface.agent_dispatcher import dispatch
+from telegram_interface.agent_dispatcher import dispatch, telegram_anna_use_llm
 from telegram_interface.message_router import route_message
 from telegram_interface.response_formatter import format_anna_system_message, format_response
 
@@ -166,12 +166,20 @@ def _log_anna_llm_runtime() -> None:
         logger.warning("anna_llm_runtime could not resolve Ollama base: %s", e)
         return
     logger.info(
-        "anna_llm_runtime ANNA_USE_LLM=%s OLLAMA_BASE_URL=%s resolved_base=%s OLLAMA_MODEL=%s",
+        "anna_llm_runtime telegram_anna_use_llm=%s ANNA_USE_LLM=%s ANNA_TELEGRAM_USE_LLM=%s "
+        "OLLAMA_BASE_URL=%s resolved_base=%s OLLAMA_MODEL=%s",
+        telegram_anna_use_llm(),
         os.environ.get("ANNA_USE_LLM", "<unset>"),
+        os.environ.get("ANNA_TELEGRAM_USE_LLM", "<unset>"),
         os.environ.get("OLLAMA_BASE_URL", "<unset>"),
         resolved,
         os.environ.get("OLLAMA_MODEL", "<unset>"),
     )
+    if not telegram_anna_use_llm():
+        logger.warning(
+            "Telegram Anna: local LLM pipeline is OFF (ANNA_TELEGRAM_USE_LLM / ANNA_USE_LLM). "
+            "Replies use rules/playbook only — set OLLAMA_* and ANNA_USE_LLM=1 for full LOM path."
+        )
 
 
 def main() -> int:

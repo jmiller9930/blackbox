@@ -36,8 +36,13 @@ def analyze_to_dict(
     use_trend: bool,
     use_policy: bool,
     store: bool,
+    use_llm: bool | None = None,
 ) -> dict[str, Any]:
-    """Programmatic entry (e.g. Telegram). Returns structured result; does not print."""
+    """Programmatic entry (e.g. Telegram). Returns structured result; does not print.
+
+    use_llm: pass True/False to force the Ollama path; None uses ANNA_USE_LLM (default on).
+    Telegram dispatcher passes an explicit value — see agent_dispatcher.telegram_anna_use_llm.
+    """
     root = repo_root()
     conn = connect(db_path)
     ensure_schema(conn, root)
@@ -73,6 +78,7 @@ def analyze_to_dict(
             use_trend=use_trend,
             use_policy=use_policy,
             conn=conn,
+            use_llm=use_llm,
         )
         if trend and not trend_err:
             analysis["notes"].append(
@@ -123,6 +129,7 @@ def run(
         use_trend=use_trend,
         use_policy=use_policy,
         store=store,
+        use_llm=None,
     )
     print(json.dumps(out, indent=2, ensure_ascii=False))
     return 0
