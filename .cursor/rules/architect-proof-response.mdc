@@ -1,11 +1,21 @@
 ---
-description: Mandatory format when reporting proof, tests, or “what to tell the architect”
+description: Proof = ran architect-required tests; pass/fail; fix or ask on failure
 alwaysApply: true
 ---
 
 # Architect proof & status responses (non-negotiable format)
 
-When the user asks for **proof**, **what to tell the architect**, **status for closure**, or **did you test** — do **not** answer with prose-only claims. Follow this structure. Full phase closure details: [`docs/architect/global_clawbot_proof_standard.md`](docs/architect/global_clawbot_proof_standard.md).
+## Meaning of “proof” (operational)
+
+**Proof** means you **actually ran** the **testing required by the architect** (or mandated by the directive / [`global_clawbot_proof_standard.md`](docs/architect/global_clawbot_proof_standard.md) / [`execution_context.md`](docs/runtime/execution_context.md)) for the work — not a narrative that tests “should” pass.
+
+- **Before** coming back to the human: run that required testing (or the closest equivalent you can execute in this environment).
+- **Report an explicit outcome:** **successful** (all required checks passed) or **not successful** (what failed, with output).
+- **If not successful:** **iterate** — fix the code and re-run until successful **or** **stop and ask for clarification** when blocked (ambiguous spec, missing host access, need a decision). Do not declare done while failing.
+
+When the user asks for **proof**, **what to tell the architect**, **status for closure**, or **did you test** — do **not** answer with prose-only claims. Combine the obligation above with the structure below.
+
+Full phase closure details: [`docs/architect/global_clawbot_proof_standard.md`](docs/architect/global_clawbot_proof_standard.md).
 
 ## 1. Automated verification table
 
@@ -32,6 +42,6 @@ State **`git rev-parse HEAD`** on **clawbot** after `git pull origin main` in `~
 
 If the work maps to a **master plan** subsection (e.g. 4.6.3.1), name it and state whether **operational acceptance** (per plan) still requires human/live steps.
 
-## 5. If you did not run tests
+## 5. If you did not run tests (or they failed)
 
-Say **no**, list what is missing, and run the relevant commands or ask the user to run on the host you cannot reach — do not fabricate proof.
+You do **not** have proof. Say so, run the missing commands if possible, **fix and re-run** on failure, or **ask for clarification** / remote access — do not fabricate proof or claim success.
