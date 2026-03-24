@@ -378,6 +378,46 @@ sqlite3 data/sqlite/blackbox.db "SELECT event_type, payload FROM system_events W
 
 ---
 
+## Phase 4.6.3.1 — Telegram Anna product surface & validation — **CODE COMPLETE** (operational sign-off per master plan)
+
+**Canonical spec:** [`docs/blackbox_master_plan.md`](../blackbox_master_plan.md) — Phase 4.6.3.1
+
+### Directive → evidence (implementation)
+
+| Directive requirement | Met | Evidence |
+|------------------------|-----|----------|
+| Telegram = **primary Anna interface**; bubble reflects real path, not transport-only | Yes | `agent_dispatcher` → `anna_analyst_v1.analyze_to_dict` → `response_formatter._format_anna_body`; Anna path uses `telegram_anna_use_llm()` for **local LLM (Ollama)** wiring on Telegram (`agent_dispatcher.py`). |
+| Anna text driven by **`interpretation.summary`** | Yes | `_format_anna_body` uses `interpretation.summary` / `_sanitize_anna_lead` (`response_formatter.py`). |
+| No generic tails (WATCH / Risk read / paper boilerplate) unless **`ANNA_TELEGRAM_VERBOSE=1`** | Yes | Non-verbose branch omits rotating closings / default posture blocks; verbose gated (`response_formatter.py`). |
+| First-line Anna tag **`[Anna — Trading Analyst]`** | Yes | `ANNA_TELEGRAM_HEADER`, `_prefix_anna`; CI `tests/test_telegram_persona.py`. |
+| Missing context → **clarification only** | Yes | Pipeline `clarification_requested` / `context_requirements`; `tests/test_context_requirements.py`, `tests/test_anna_pipeline.py`. |
+| Model/rules failure → **explicit limitation**, not silent filler | Yes | `_anna_model_limitation_note`, `pipeline:explicit_limitation` path in `anna_modules/analysis.py`; `tests/test_anna_directive_4_6_3.py`. |
+
+### Proof package (benchmark)
+
+| Where | What ran / captured | Result |
+|--------|----------------------|--------|
+| **clawbot** `~/blackbox` | `git pull origin main` → `git rev-parse HEAD` | `40d2fe4c91b955175e587df519a99b826daba416` |
+| **clawbot** | `python3 -m pytest tests/` | **44 passed** (full suite; prior run) |
+| **Local / CI equivalent** | `pytest` subset for 4.6.3.x surface | **19 passed** — `test_telegram_persona`, `test_telegram_phase_4_6_3`, `test_anna_directive_4_6_3`, `test_context_requirements` |
+
+### Operational acceptance (master plan)
+
+Master plan states **live operator validation on Telegram** (e.g. Sean loop) for **operational** closure. That is **human-recorded** here when the operator confirms:
+
+| Field | Value |
+|--------|--------|
+| **Code + automated directive evidence** | **PASS** (see table above) |
+| **Live Telegram validation** | **Pending operator sign-off** — when complete, add **date**, **validator**, and **spot-check notes** below |
+
+*Operator sign-off (fill when done):*
+
+- **Date:** *(YYYY-MM-DD)*
+- **Validator:** *(name)*
+- **Notes:** *(e.g. non-verbose bubble OK, clarification path OK, limitation text OK)*
+
+---
+
 ## Update protocol
 
 1. `git rev-parse HEAD` → set **Git ref (recorded)** in the table at top  

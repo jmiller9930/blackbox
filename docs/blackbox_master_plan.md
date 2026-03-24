@@ -24,7 +24,7 @@ It is the **single source of truth** for project **rehydration** (Architect, Cur
 | **4.6** | Telegram interaction layer | **Implemented** — [`scripts/runtime/telegram_interface/`](../scripts/runtime/telegram_interface/) (Bot API; Anna + learning visibility; **no** execution from chat; token via env) |
 | **4.6.2** | Multi-agent persona (single bot) | **Implemented** — [`@anna` / `@data` / `@cody`](../scripts/runtime/telegram_interface/) routing + `[Anna]`/`[DATA]`/`[Cody]` labels (no extra bots or processes) |
 | **4.6.3** | Identity, routing, persona enforcement | **Implemented** — mandatory tags, silo defaults, SQLite `agents` + registry alignment (see Phase 4.6.3 below) |
-| **4.6.3.1** | Telegram Anna product surface & validation | **Implemented (code)** — formatter + explicit limits; **operational acceptance** = live Telegram proof (see Phase 4.6.3.1 below) |
+| **4.6.3.1** | Telegram Anna product surface & validation | **Directive (code/CI) met** — proof package [`agent_verification.md`](architect/agent_verification.md) § Phase 4.6.3.1; **operational acceptance** = live Telegram sign-off in that section |
 | **4.6.3.2** | **Learning Core Extraction** (`agent_learning_core`) | **Stub / planning only** — shared context + memory + validation system for **all** agents; **no implementation** yet (see Phase 4.6.3.2 below) |
 | **4.1+** | Real trading prerequisites (detail) | Master plan § Phase 4 below; implementation **after** architect alignment |
 | **5** | Trading operations & governance | Planning — see [Phase 5](#phase-5--trading-operations--governance) |
