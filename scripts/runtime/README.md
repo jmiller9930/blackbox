@@ -64,6 +64,17 @@ export OLLAMA_MODEL="your-installed-model:tag"
 python3 scripts/runtime/telegram_interface/telegram_bot.py
 ```
 
+## Messaging interface — Directive 4.6.3.3 (CLI validation)
+
+Anna dispatch runs through **`messaging_interface`** (`run_dispatch_pipeline` → Telegram adapter formats text). **Primary validation surface:**
+
+```bash
+# from repository root (blackbox/)
+echo "What day is it?" | python3 -m messaging_interface.cli_adapter
+```
+
+Prints **JSON** with normalized fields (`interpretation.summary`, `answer_source`, `intent`, `topic`, `limitation_flag` for Anna). Phase closure requires this path per directive.
+
 ## DATA — one-shot health checks
 
 ```bash

@@ -16,14 +16,18 @@ import sys
 from functools import partial
 from pathlib import Path
 
+_REPO_ROOT = Path(__file__).resolve().parents[3]
+sys.path.insert(0, str(_REPO_ROOT))
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from telegram import Update
 from telegram.ext import Application, CommandHandler, ContextTypes, MessageHandler, filters
 
-from telegram_interface.agent_dispatcher import dispatch, telegram_anna_use_llm
+from messaging_interface.pipeline import run_dispatch_pipeline
+from messaging_interface.telegram_adapter import format_telegram_reply, format_telegram_system_message
+
+from telegram_interface.agent_dispatcher import telegram_anna_use_llm
 from telegram_interface.message_router import route_message
-from telegram_interface.response_formatter import format_anna_system_message, format_response
 
 logging.basicConfig(
     format="%(asctime)s %(levelname)s %(name)s %(message)s",
@@ -53,7 +57,7 @@ async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         if update.effective_user:
             name = (update.effective_user.first_name or "").strip() or None
         await update.message.reply_text(
-            format_anna_system_message(
+            format_telegram_system_message(
                 "I can't open this chat for you — it isn't on the allowed list.\n\n"
                 "If you should have access, ask the operator to add your Telegram chat id to TELEGRAM_ALLOWED_CHAT_IDS.",
                 user_display_name=name,
@@ -76,7 +80,7 @@ async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         "Try: help · report · insights · status · infra\n\n"
         "No trades or execution from Telegram."
     )
-    await update.message.reply_text(format_anna_system_message(welcome, user_display_name=name))
+    await update.message.reply_text(format_telegram_system_message(welcome, user_display_name=name))
 
 
 async def cmd_help(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -87,23 +91,22 @@ async def cmd_help(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         if update.effective_user:
             name = (update.effective_user.first_name or "").strip() or None
         await update.message.reply_text(
-            format_anna_system_message(
+            format_telegram_system_message(
                 "I can't open this chat for you — it isn't on the allowed list.",
                 user_display_name=name,
             )
         )
         return
-    routed = route_message("help")
     name = None
     if update.effective_user:
         name = (update.effective_user.first_name or "").strip() or None
     try:
-        payload = await asyncio.to_thread(partial(dispatch, routed, display_name=name))
-        out = format_response(payload, user_display_name=name)
+        payload = await asyncio.to_thread(partial(run_dispatch_pipeline, "help", display_name=name))
+        out = format_telegram_reply(payload, user_display_name=name)
     except Exception as e:
         logger.exception("help dispatch failed")
         await update.message.reply_text(
-            format_anna_system_message(
+            format_telegram_system_message(
                 f"I couldn't load help just now: {e!s}",
                 user_display_name=name,
             )
@@ -120,7 +123,7 @@ async def on_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         if update.effective_user:
             name = (update.effective_user.first_name or "").strip() or None
         await update.message.reply_text(
-            format_anna_system_message(
+            format_telegram_system_message(
                 "I can't open this chat for you — it isn't on the allowed list.",
                 user_display_name=name,
             )
@@ -135,19 +138,19 @@ async def on_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     routed = route_message(text)
     if routed.agent == "anna" and not routed.text.strip():
         await update.message.reply_text(
-            format_anna_system_message(
+            format_telegram_system_message(
                 "Send me a question (I'm Anna for trading and concepts), or try `report` / `insights` / `status` for DATA.",
                 user_display_name=name,
             )
         )
         return
     try:
-        payload = await asyncio.to_thread(partial(dispatch, routed, display_name=name))
-        out = format_response(payload, user_display_name=name)
+        payload = await asyncio.to_thread(partial(run_dispatch_pipeline, text, display_name=name))
+        out = format_telegram_reply(payload, user_display_name=name)
     except Exception as e:
         logger.exception("dispatch failed")
         await update.message.reply_text(
-            format_anna_system_message(
+            format_telegram_system_message(
                 f"I hit a snag processing that: {e!s}",
                 user_display_name=name,
             )
