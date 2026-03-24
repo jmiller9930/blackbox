@@ -11,6 +11,7 @@ alwaysApply: true
 2. **Local Mac vs Remote SSH vs clawbot verification:** [`docs/architect/local_remote_development_workflow.md`](docs/architect/local_remote_development_workflow.md)
 3. **Phase proof / primary host:** [`docs/runtime/execution_context.md`](docs/runtime/execution_context.md)
 4. **How to answer the architect (proof format):** [`architect-proof-response.mdc`](architect-proof-response.mdc)
+5. **Triad peer — question before acting when wrong/unclear:** [`triad-engagement.mdc`](triad-engagement.mdc)
 
 ## Operating agreement
 
