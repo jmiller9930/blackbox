@@ -1,0 +1,23 @@
+---
+description: Loads every session — workspace vs server, dev/test/sync, where to read full workflow
+alwaysApply: true
+---
+
+# BLACK BOX — every session (read first)
+
+## Authority
+
+1. **Agent roles / phase limits:** [`AGENTS.md`](AGENTS.md)
+2. **Local Mac vs Remote SSH vs clawbot verification:** [`docs/architect/local_remote_development_workflow.md`](docs/architect/local_remote_development_workflow.md)
+3. **Phase proof / primary host:** [`docs/runtime/execution_context.md`](docs/runtime/execution_context.md)
+
+## Operating agreement
+
+- **Infer the workspace root.** Local path (e.g. `/Users/...`) → edits and default `git` are **local**. Path on `clawbot` (e.g. `/home/jmiller/blackbox`) → **server** tree. State which applies in one sentence when it matters.
+- **Implement the architect’s plan** and **test** it; **local-only** is not phase closure when `execution_context` / proof standards require **clawbot**.
+- **Sync:** push from where you commit; **`git pull` in `~/blackbox` on clawbot** before claiming server-side verification. OpenClaw copy steps: [`docs/architect/workspace_sync.md`](docs/architect/workspace_sync.md).
+- **Do not** re-litigate “SSH vs Cursor” at length. If remote commands or Remote SSH are needed, say so briefly and **do** what the user or the docs direct.
+
+## OpenClaw integration
+
+If work touches gateway, Control UI, agents, or tools, ground changes in **OpenClaw docs** per [`openclaw-documentation.mdc`](openclaw-documentation.mdc).

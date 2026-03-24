@@ -2,6 +2,8 @@
 
 **Purpose:** Persistent reminder of **where** runtime verification runs, **what phase** the repo targets, and **what proof** is mandatory—so work does not silently fall back to local-only runs or informal proof.
 
+**Related (local clone vs Remote SSH vs clawbot verification):** [`../architect/local_remote_development_workflow.md`](../architect/local_remote_development_workflow.md)
+
 ---
 
 ## Why context drift happens

@@ -1,24 +1,27 @@
 ---
-description: Server-side work on clawbot only via Cursor Remote SSH — never via batch SSH from a local workspace
+description: Where server work runs; workspace vs SSH; sync with local_remote_development_workflow.md
 alwaysApply: true
 ---
 
-# Remote SSH only — server work (hard rule)
+# Server work, workspace, and SSH (aligned with execution proof)
 
-This applies to **every** chat in this repo.
+**Authoritative workflow:** [`docs/architect/local_remote_development_workflow.md`](docs/architect/local_remote_development_workflow.md) — read it before arguing about “can’t touch clawbot.”
 
-## Rule
+## Concepts
 
-- **No work on the server** (`clawbot`, `jmiller@clawbot`, `~/blackbox`, server SQLite, server-only scripts) **unless** the session is **Cursor Remote SSH** with the project opened **on the server** (e.g. `/home/jmiller/blackbox`).
-- **If there is no Cursor Remote SSH session** to that host/path, **no server-side work** — do not substitute plain SSH, `scp`, or one-off shell hops to “get it done.”
+- **Remote SSH workspace** (`/home/jmiller/blackbox` on clawbot): sustained server editing and git in one place — **preferred** when most work is on the canonical server tree.
+- **Local Mac workspace** (`/Users/.../blackbox`): editor changes apply to the **local clone** only. **Not** the same as “SSH doesn’t work.”
+- **`ssh jmiller@clawbot.a51.corp '...'`** runs commands **on the server**. Use when the **user directs** remote sync/test, or when [`docs/runtime/execution_context.md`](docs/runtime/execution_context.md) / proof standards require **verification on clawbot** and the session is still local.
 
-## For the agent
+## Rules for the agent
 
-1. **Infer workspace:** If the workspace root looks **local** (e.g. macOS `.../Documents/.../blackbox`, `/Users/...`), treat **server filesystem and server DB** as **out of bounds** for edits, `git`, and running project commands on clawbot.
-2. **Do not** run `ssh jmiller@clawbot.a51.corp '...'` (or similar) to modify code, run project Python against the server DB, or change server `git` state for this project. That is **not** an acceptable stand-in for Remote SSH.
-3. If the user asks for something that **requires** the server, say clearly: open **Cursor → Remote SSH → clawbot → `~/blackbox`**, then continue; optionally work only in the **local clone** here if the task is “prepare commits / sync via Git” per team workflow.
-4. **If** the workspace root is **on the server** (e.g. `/home/jmiller/blackbox`), server-side edits and commands in that tree are allowed — that **is** the Remote SSH workflow.
+1. **Infer workspace root.** Local path → file tools edit **local** clone. Server path → edit **server** tree.
+2. **Do not** confuse “I’m in a local workspace” with “the server is unreachable.” For **phase closure** and mandated clawbot proof, **run verification on clawbot** (Remote SSH window **or** explicit `ssh ... cd ~/blackbox && ...` per workflow doc).
+3. **Do not** use casual one-off SSH to **silently** change server `git` or files **without** user/plan intent — state what you’re doing and which host it affects.
+4. If work **requires** interactive server-only context (DB, long sessions) and the window is local, **say once**: open **Cursor → Remote SSH → clawbot → `~/blackbox`**, **or** approve explicit remote commands — then continue per [`local_remote_development_workflow.md`](docs/architect/local_remote_development_workflow.md).
+5. **Git:** Mac clone may track `origin` for development; **server `~/blackbox`** must be **pulled** before claiming server-side verification. See workflow doc §4.
 
-## Git / Mac clone
+## Related
 
-- A **local Mac** checkout may exist for **pull-only** parity with `origin`; do not treat ad-hoc SSH from the agent as the way to “sync” server work.
+- [`docs/runtime/execution_context.md`](docs/runtime/execution_context.md) — `primary_host`, required execution
+- [`docs/architect/global_clawbot_proof_standard.md`](docs/architect/global_clawbot_proof_standard.md)

@@ -58,5 +58,6 @@ After sync on a milestone, update **[`agent_verification.md`](agent_verification
 
 ## See also
 
+- [`local_remote_development_workflow.md`](local_remote_development_workflow.md) — Git local ↔ server, Cursor modes, when to verify on clawbot
 - [`DATA_ONLINE_SETUP.md`](DATA_ONLINE_SETUP.md)
 - [`agent_verification.md`](agent_verification.md)
