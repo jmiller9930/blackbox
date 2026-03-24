@@ -1,0 +1,18 @@
+{
+  "messaging": {
+    "backend": "cli",
+    "telegram": {
+      "token": "",
+      "chat_id": ""
+    },
+    "cli": {
+      "enabled": true
+    },
+    "slack": {
+      "bot_token": "",
+      "app_token": "",
+      "channel": "",
+      "mode": "socket"
+    }
+  }
+}
