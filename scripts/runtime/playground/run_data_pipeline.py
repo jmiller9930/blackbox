@@ -52,25 +52,60 @@ def _print_global_header(*, quiet: bool) -> None:
 def _emit_stage_contract(
     stage_key: str,
     status: str,
-    contract: dict[str, str],
+    contract: dict[str, Any],
     *,
     quiet: bool,
 ) -> None:
+    """Human-readable stage lines; keys align with canonical directive (presentation-only)."""
     if quiet:
         return
     print(f"[STAGE: {stage_key}]")
-    print("")
-    print("Input:")
-    print(contract.get("input", ""))
-    print("")
-    print("Process:")
-    print(contract.get("process", ""))
-    print("")
-    print("Output:")
-    print(contract.get("output", ""))
-    print("")
-    print("Confidence:")
-    print(contract.get("confidence", "N/A"))
+    print(f"status: {status}")
+
+    def _disp(v: Any) -> str:
+        if v is None:
+            return "N/A"
+        if isinstance(v, bool):
+            return "true" if v else "false"
+        s = str(v).strip()
+        return s if s else "N/A"
+
+    sk = stage_key.lower()
+    if sk == "detect":
+        print(f"issue_id={_disp(contract.get('issue_id'))}")
+        print(f"category={_disp(contract.get('category'))}")
+        print(f"severity={_disp(contract.get('severity'))}")
+        print(f"evidence_summary={_disp(contract.get('evidence_summary'))}")
+    elif sk == "suggest":
+        print("Suggestion only")
+        print(f"suggested_fix={_disp(contract.get('suggested_fix'))}")
+        pc = contract.get("possible_causes")
+        if isinstance(pc, (list, tuple)) and len(pc) > 0:
+            print(f"possible_causes={', '.join(_disp(x) for x in pc[:5])}")
+    elif sk == "ingest":
+        print(f"remediation_id={_disp(contract.get('remediation_id'))}")
+        print(f"source_type={_disp(contract.get('source_type'))}")
+    elif sk == "validate":
+        print(f"result={_disp(contract.get('result'))}")
+        res_l = str(contract.get("result") or "").lower()
+        if res_l == "fail":
+            print(f"failure_class={_disp(contract.get('failure_class'))}")
+        else:
+            print("failure_class=N/A")
+    elif sk == "analyze":
+        print(f"outcome_category={_disp(contract.get('outcome_category'))}")
+        print(f"evidence_summary={_disp(contract.get('evidence_summary'))}")
+    elif sk == "pattern":
+        print(f"pattern_id={_disp(contract.get('pattern_id'))}")
+        print(f"pattern_status={_disp(contract.get('pattern_status'))}")
+    elif sk == "simulate":
+        print(
+            f"execution_blocked={_disp(contract.get('execution_blocked'))} | "
+            f"blocked_reason={_disp(contract.get('blocked_reason'))}"
+        )
+        print(f"approval_required={_disp(contract.get('approval_required'))}")
+    else:
+        print("N/A")
     print("")
 
 
@@ -205,7 +240,7 @@ def _stage(
     summary: str,
     *,
     stage_key: str,
-    contract: dict[str, str],
+    contract: dict[str, Any],
 ) -> dict[str, Any]:
     return {
         "name": name,
@@ -239,6 +274,7 @@ def run_data_pipeline(
     issue: dict[str, Any] | None = None
     suggestion: dict[str, Any] | None = None
     remediation_id: str | None = None
+    remediation_source_type: str | None = None
     validation_run_id: str | None = None
     vr: dict[str, Any] | None = None
     analysis_id: str | None = None
@@ -256,10 +292,10 @@ def run_data_pipeline(
         cand = get_candidate(sandbox_conn, replay_remediation_id)
         if cand is None:
             contract = {
-                "input": f"replay remediation_id={replay_remediation_id}",
-                "process": "get_candidate(sandbox_conn, remediation_id)",
-                "output": "candidate not found",
-                "confidence": "N/A",
+                "issue_id": "N/A",
+                "category": "N/A",
+                "severity": "N/A",
+                "evidence_summary": "N/A",
             }
             st = _stage("DETECT", "fail", f"remediation_id not found: {replay_remediation_id}", stage_key="detect", contract=contract)
             stages.append(st)
@@ -268,11 +304,14 @@ def run_data_pipeline(
             return {"stages": stages, "ok": False}
         issue = _issue_dict_from_candidate(cand)
         remediation_id = replay_remediation_id
+        remediation_source_type = getattr(cand, "source_type", None)
+        evidence_list = list(issue.get("supporting_evidence") or [])
+        evidence_summary = evidence_list[0] if evidence_list else "N/A"
         contract = {
-            "input": f"sandbox remediation_id={replay_remediation_id}",
-            "process": "replay — detection skipped; issue reconstructed from candidate",
-            "output": f"issue_id={issue.get('issue_id')} (synthetic)",
-            "confidence": _conf_str(issue.get("confidence")),
+            "issue_id": issue.get("issue_id"),
+            "category": issue.get("category"),
+            "severity": issue.get("severity"),
+            "evidence_summary": evidence_summary,
         }
         st = _stage("DETECT", "blocked", "replay mode — detection skipped", stage_key="detect", contract=contract)
         stages.append(st)
@@ -289,10 +328,10 @@ def run_data_pipeline(
             idesc = f"--issue-db: {issue_db}"
         else:
             contract = {
-                "input": "(none)",
-                "process": "—",
-                "output": "missing --issue-db, --seed-demo, or --replay",
-                "confidence": "N/A",
+                "issue_id": "N/A",
+                "category": "N/A",
+                "severity": "N/A",
+                "evidence_summary": "N/A",
             }
             st = _stage("DETECT", "fail", "provide --issue-db, --seed-demo, or --replay", stage_key="detect", contract=contract)
             stages.append(st)
@@ -304,10 +343,10 @@ def run_data_pipeline(
         issues = detect_infra_issues(issue_db_conn)
         if not issues:
             contract = {
-                "input": idesc,
-                "process": "detect_infra_issues(issue_db_conn)",
-                "output": "no issues returned",
-                "confidence": "N/A",
+                "issue_id": "N/A",
+                "category": "N/A",
+                "severity": "N/A",
+                "evidence_summary": "N/A",
             }
             st = _stage("DETECT", "fail", "no issues detected — use --seed-demo or populate issue DB", stage_key="detect", contract=contract)
             stages.append(st)
@@ -316,11 +355,13 @@ def run_data_pipeline(
             pause()
             return {"stages": stages, "ok": False}
         issue = issues[0]
+        evidence_list = list(issue.get("supporting_evidence") or [])
+        evidence_summary = evidence_list[0] if evidence_list else "N/A"
         contract = {
-            "input": idesc,
-            "process": "detect_infra_issues(issue_db_conn) — deterministic scan of system_events / tasks",
-            "output": f"issue_id={issue.get('issue_id')}, category={issue.get('category')}, message={issue.get('message', '')[:120]}",
-            "confidence": _conf_str(issue.get("confidence")),
+            "issue_id": issue.get("issue_id"),
+            "category": issue.get("category"),
+            "severity": issue.get("severity"),
+            "evidence_summary": evidence_summary,
         }
         st = _stage("DETECT", "pass", f"found issue {issue.get('issue_id')}", stage_key="detect", contract=contract)
         stages.append(st)
@@ -333,10 +374,9 @@ def run_data_pipeline(
     sfix = str(suggestion.get("suggested_fix") or "")
     causes = suggestion.get("possible_causes") or []
     contract = {
-        "input": f"issue_id={issue.get('issue_id')}, category={issue.get('category')}",
-        "process": "build_issue_suggestion(issue, execution_state) — non-executable suggestion artifact",
-        "output": f"suggested_fix={sfix[:160]}; possible_causes={causes}",
-        "confidence": "N/A",
+        "label": "Suggestion only",
+        "suggested_fix": sfix,
+        "possible_causes": causes,
     }
     st = _stage("SUGGEST", "pass", "suggestion artifact built", stage_key="suggest", contract=contract)
     stages.append(st)
@@ -347,10 +387,8 @@ def run_data_pipeline(
     if replay_remediation_id:
         assert remediation_id is not None
         contract = {
-            "input": f"replay remediation_id={remediation_id}",
-            "process": "ingest skipped — using existing sandbox remediation row",
-            "output": f"remediation_id={remediation_id}",
-            "confidence": "N/A",
+            "remediation_id": remediation_id,
+            "source_type": remediation_source_type,
         }
         st = _stage("INGEST", "blocked", f"replay — using existing remediation {remediation_id}", stage_key="ingest", contract=contract)
         stages.append(st)
@@ -367,20 +405,16 @@ def run_data_pipeline(
                 related_issue_id=str(issue.get("issue_id") or "") or None,
             )
             contract = {
-                "input": "issue message + suggested_fix + supporting_evidence",
-                "process": "ingest_remediation_candidate(..., source_type=deterministic)",
-                "output": f"remediation_id={remediation_id}",
-                "confidence": "N/A",
+                "remediation_id": remediation_id,
+                "source_type": "deterministic",
             }
             st = _stage("INGEST", "pass", f"remediation_id={remediation_id}", stage_key="ingest", contract=contract)
             stages.append(st)
             _emit_stage_contract("ingest", st["status"], contract, quiet=quiet)
         except ValueError as exc:
             contract = {
-                "input": "issue + suggestion",
-                "process": "ingest_remediation_candidate",
-                "output": str(exc),
-                "confidence": "N/A",
+                "remediation_id": "N/A",
+                "source_type": "N/A",
             }
             st = _stage("INGEST", "fail", str(exc), stage_key="ingest", contract=contract)
             stages.append(st)
@@ -403,11 +437,10 @@ def run_data_pipeline(
     )
     validation_run_id = str(vr["run_id"])
     vst = "pass" if vr.get("result") == "pass" else "fail"
+    fc_val = str(vr.get("failure_class") or "").strip() or "N/A"
     contract = {
-        "input": f"remediation_id={remediation_id}; before_state={before_state}; after_state={after_state}",
-        "process": "run_validation — deterministic sandbox validation (simulated before/after)",
-        "output": f"run_id={validation_run_id}, result={vr.get('result')}, failure_class={vr.get('failure_class') or '(empty)'}",
-        "confidence": _conf_str(vr.get("confidence")),
+        "result": vst,
+        "failure_class": fc_val if vst == "fail" else "N/A",
     }
     st = _stage("VALIDATE", vst, f"run_id={validation_run_id} result={vr.get('result')}", stage_key="validate", contract=contract)
     stages.append(st)
@@ -418,12 +451,15 @@ def run_data_pipeline(
     an = analyze_and_persist(sandbox_conn, validation_run_id)
     analysis_id = str(an["analysis_id"])
     ev = an.get("evidence_summary") or {}
-    ev_line = str(ev.get("what_changed", ""))[:120]
+    evidence_parts: list[str] = []
+    for k in ("what_changed", "what_improved", "what_failed"):
+        v = ev.get(k)
+        if v:
+            evidence_parts.append(str(v))
+    evidence_summary_short = ("; ".join(evidence_parts[:2]))[:180] if evidence_parts else "N/A"
     contract = {
-        "input": f"validation_run_id={validation_run_id}",
-        "process": "analyze_and_persist — outcome category + evidence summary (sandbox)",
-        "output": f"analysis_id={analysis_id}, outcome_category={an.get('outcome_category')}, evidence={ev_line}",
-        "confidence": "N/A",
+        "outcome_category": an.get("outcome_category"),
+        "evidence_summary": evidence_summary_short,
     }
     st = _stage("ANALYZE", "pass", f"analysis_id={analysis_id}", stage_key="analyze", contract=contract)
     stages.append(st)
@@ -436,10 +472,8 @@ def run_data_pipeline(
         pat = get_pattern(sandbox_conn, pattern_id)
         pattern_status = str(pat.pattern_status) if pat else None
         contract = {
-            "input": f"outcome_analysis_id={analysis_id}",
-            "process": "register_pattern_from_outcome_analysis",
-            "output": f"pattern_id={pattern_id}, pattern_status={pattern_status or 'unknown'}",
-            "confidence": "N/A",
+            "pattern_id": pattern_id,
+            "pattern_status": pattern_status,
         }
         st = _stage("PATTERN", "pass", f"pattern_id={pattern_id}", stage_key="pattern", contract=contract)
         stages.append(st)
@@ -458,20 +492,16 @@ def run_data_pipeline(
             pat = get_pattern(sandbox_conn, pattern_id)
             pattern_status = str(pat.pattern_status) if pat else None
             contract = {
-                "input": f"outcome_analysis_id={analysis_id}",
-                "process": "register_pattern_from_outcome_analysis (duplicate)",
-                "output": f"using existing pattern_id={pattern_id}, pattern_status={pattern_status or 'unknown'}",
-                "confidence": "N/A",
+                "pattern_id": pattern_id,
+                "pattern_status": pattern_status,
             }
             st = _stage("PATTERN", "blocked", f"register skipped (duplicate); using {pattern_id}", stage_key="pattern", contract=contract)
             stages.append(st)
             _emit_stage_contract("pattern", st["status"], contract, quiet=quiet)
         else:
             contract = {
-                "input": f"analysis_id={analysis_id}",
-                "process": "register_pattern_from_outcome_analysis",
-                "output": "integrity error without existing pattern",
-                "confidence": "N/A",
+                "pattern_id": "N/A",
+                "pattern_status": "N/A",
             }
             st = _stage("PATTERN", "fail", "integrity error without existing pattern", stage_key="pattern", contract=contract)
             stages.append(st)
@@ -482,10 +512,8 @@ def run_data_pipeline(
             return {"stages": stages, "ok": False}
     except Exception as exc:
         contract = {
-            "input": f"analysis_id={analysis_id}",
-            "process": "register_pattern_from_outcome_analysis",
-            "output": str(exc),
-            "confidence": "N/A",
+            "pattern_id": "N/A",
+            "pattern_status": "N/A",
         }
         st = _stage("PATTERN", "fail", str(exc), stage_key="pattern", contract=contract)
         stages.append(st)
@@ -506,11 +534,11 @@ def run_data_pipeline(
     )
     sm = "pass" if sim.get("result") == "success" else "fail"
     pol = sim.get("policy") or {}
+    execution_blocked = not bool(pol.get("would_allow_real_execution", False))
     contract = {
-        "input": f"pattern_id={pattern_id}, remediation_id={remediation_id}, validation_context=synthetic",
-        "process": "simulate_and_record_remediation_execution — synthetic apply/rollback only",
-        "output": f"execution_simulation_id={sim.get('execution_simulation_id')}, result={sim.get('result')}, policy.would_allow_real_execution={pol.get('would_allow_real_execution')}",
-        "confidence": "N/A",
+        "execution_blocked": execution_blocked,
+        "blocked_reason": pol.get("execution_blocked_reason"),
+        "approval_required": pol.get("approval_required"),
     }
     st = _stage("SIMULATE", sm, f"execution_simulation_id={sim.get('execution_simulation_id')}", stage_key="simulate", contract=contract)
     stages.append(st)

@@ -715,7 +715,7 @@ Playground is a debug surface only, never an operational interface.
 
 **Operator Playground — Visibility Layer 1 (Complete):** [`scripts/runtime/playground/run_data_pipeline.py`](../scripts/runtime/playground/run_data_pipeline.py) — sandbox-only CLI (`--sandbox-db` required; rejects production runtime SQLite); full staged run (**detect → suggest → ingest → validate → analyze → pattern → simulate**); `--json`, `--step`, `--replay`, `--seed-demo`. Optional TUI wrapper: [`scripts/runtime/playground/playground_ui.py`](../scripts/runtime/playground/playground_ui.py). **Not** a runtime entrypoint; **not** wired into DATA or messaging responses.
 
-**Playground output contract (canonical):** [`directives/directive_4_6_3_3_playground_output_contract.md`](architect/directives/directive_4_6_3_3_playground_output_contract.md) — stage-specific operator fields per stage (DETECT…SIMULATE); JSON envelope stable; inner `contract` keys may migrate from legacy `input`/`process`/`output`/`confidence` to those fields (presentation-only). Implementation may trail the canonical doc until aligned.
+**Playground output contract (canonical):** [`directives/directive_4_6_3_3_playground_output_contract.md`](architect/directives/directive_4_6_3_3_playground_output_contract.md) — stage-specific operator fields per stage (DETECT…SIMULATE); JSON envelope stable; `stages[].contract` aligned to that structure (presentation-only; unavailable fields shown as `N/A`). **Playground Output Contract Alignment — Complete.** **Plan/log status sync: PASS**
 
 ---
 

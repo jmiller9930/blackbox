@@ -6,6 +6,13 @@ Canonical running log for architect-facing directive execution, proof, and closu
 
 **Templates:** [`DIRECTIVE_TEMPLATE.md`](DIRECTIVE_TEMPLATE.md) (full directive scaffold), [`CLOSEOUT_PACKET_TEMPLATE.md`](CLOSEOUT_PACKET_TEMPLATE.md) (closeout / gate / proof summary). Every closeout must include `Plan/log status sync: PASS`.
 
+## 2026-03-25 — Playground Output Contract Alignment — Complete (implementation)
+
+- **Directive:** Align Playground runtime CLI/JSON `stages[].contract` with [`directive_4_6_3_3_playground_output_contract.md`](directive_4_6_3_3_playground_output_contract.md) (DETECT…SIMULATE field sets); presentation-only.
+- **Scope:** [`scripts/runtime/playground/run_data_pipeline.py`](../../../scripts/runtime/playground/run_data_pipeline.py) — human-readable stage lines and JSON inner `contract` keys; no pipeline logic, persistence, schema, execution, or approval semantics.
+- **Verification:** `python3 -m pytest -q` — full suite passed (local workspace).
+- **Plan/log status sync: PASS**
+
 ## 2026-03-26 — Playground Output Contract — Canonical update (docs-only)
 
 - **Directive:** `4.6.3.3-playground-output` — replace legacy per-stage `Input` / `Process` / `Output` / `Confidence` blocks with **stage-specific field contract** (DETECT…SIMULATE) and document JSON envelope + `contract` evolution.
