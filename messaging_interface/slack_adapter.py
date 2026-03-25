@@ -13,6 +13,8 @@ import sys
 from pathlib import Path
 from typing import Any
 
+from messaging_interface.slack_persona_enforcement import enforce_slack_outbound
+
 _REPO_ROOT = Path(__file__).resolve().parent.parent
 _RUNTIME = _REPO_ROOT / "scripts" / "runtime"
 
@@ -79,10 +81,14 @@ def run_slack_from_config(cfg: dict[str, Any]) -> int:
         try:
             payload = run_dispatch_pipeline(text, display_name=display_name)
             out = slack_reply_text(payload, user_display_name=display_name)
+            out, _ = enforce_slack_outbound(out)
             say(out)
         except Exception as e:
             log.exception("slack dispatch failed")
-            say(f"[Anna — Trading Analyst]\n\nI hit a snag processing that: {e!s}")
+            err, _ = enforce_slack_outbound(
+                f"Processing error while handling your message: {e!s}",
+            )
+            say(err)
 
     log.info(
         "Slack Socket Mode starting (backend=slack). "
