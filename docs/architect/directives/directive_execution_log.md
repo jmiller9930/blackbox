@@ -6,6 +6,14 @@ Canonical running log for architect-facing directive execution, proof, and closu
 
 **Templates:** [`DIRECTIVE_TEMPLATE.md`](DIRECTIVE_TEMPLATE.md) (full directive scaffold), [`CLOSEOUT_PACKET_TEMPLATE.md`](CLOSEOUT_PACKET_TEMPLATE.md) (closeout / gate / proof summary). Every closeout must include `Plan/log status sync: PASS`.
 
+## 2026-03-26 — Layer 4 Execution Interface — Design complete (docs-only)
+
+- **Directive:** Author and canonically record Layer 4 execution interface — **design only**; no implementation, no code changes.
+- **Summary:** Controlled **action** layer: requires **approval_id**, validated context, expiration/revocation checks, explicit trigger, idempotency, concurrency rules, failure/rollback model, audit (**approval → execution**), kill switch boundary; forbids bypass of L3, messaging/pattern/simulation triggers, upstream artifact mutation; Layer 2 / 3 / 4 separation explicit.
+- **Artifact location:** [`docs/architect/layer_4_execution_interface_design.md`](../layer_4_execution_interface_design.md)
+- **Master plan:** Layer 4 = **Design Complete** (implementation not claimed).
+- **Plan/log status sync: PASS**
+
 ## 2026-03-26 — Layer 3 Approval Interface — Implemented (decision surface)
 
 - **Directive:** Implement Layer 3 approval interface per [`layer_3_approval_interface_design.md`](../layer_3_approval_interface_design.md) — view artifacts, read-only context, approve/reject/defer; no execution, simulation trigger, pipeline/pattern/policy mutation, messaging, `execution_plane`, or background automation.

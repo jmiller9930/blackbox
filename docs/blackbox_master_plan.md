@@ -767,7 +767,7 @@ Approval is a distinct system boundary, not an extension of analysis.
 
 ---
 
-### Layer 4 — Execution Interface (Future)
+### Layer 4 — Execution Interface (Design Complete)
 
 Type: Restricted system layer  
 
@@ -782,6 +782,8 @@ Constraints:
 
 Rule:
 Execution is never triggered directly from UI.
+
+**Status:** **Design complete** — canonical specification: [`docs/architect/layer_4_execution_interface_design.md`](architect/layer_4_execution_interface_design.md). Layer 4 is **action only**: **explicit** execution requests with **valid** **approval_id**, **re-validation**, **idempotency**, **audit**, **kill/abort** boundaries; **no** bypass of Layer 3; **no** Slack/Telegram/pattern/simulation-triggered execution; **no** upstream artifact mutation as part of core execution; **no** messaging as control plane. **Implementation** of this interface (workers, connectors, production execution store) is **not** claimed here — **live** controlled remediation execution remains **not built** until a future implementation directive. **Plan/log status sync: PASS**
 
 ---
 
