@@ -6,6 +6,19 @@ Canonical running log for architect-facing directive execution, proof, and closu
 
 **Templates:** [`DIRECTIVE_TEMPLATE.md`](DIRECTIVE_TEMPLATE.md) (full directive scaffold), [`CLOSEOUT_PACKET_TEMPLATE.md`](CLOSEOUT_PACKET_TEMPLATE.md) (closeout / gate / proof summary). Every closeout must include `Plan/log status sync: PASS`.
 
+## 2026-03-26 — 4.6.3.2 Part B Twig 4.4 (Validation outcome analysis layer, sandbox-only)
+
+- **Directive:** DATA Twig 4.4 — Validation Outcome Analysis Layer.
+- **Scope:** deterministic analysis of existing sandbox `validation_runs` into structured outcome artifacts; evidence summaries from snapshot JSON only; optional per-remediation trend listing; **no** live execution, **no** production mutation, **no** DATA output integration, **no** Anna/routing/persona changes.
+- **What was implemented:**
+  - `scripts/runtime/learning_core/validation_outcome_analysis.py` — `classify_outcome_category`, `analyze_validation_run`, `analyze_and_persist`, `list_recent_analyses_for_remediation`,
+  - sandbox table `validation_outcome_analyses` (created in `open_validation_sandbox`) storing outcome category, summaries, evidence JSON, `prior_run_count` trend hook,
+  - documented outcome categories: `validated_success`, `rejected_functional`, `rejected_regression`, `rejected_stability`, `insufficient_evidence`,
+  - retention boundary text in evidence summaries (diagnostic only; not approval; does not trigger execution).
+- **Safety boundaries:** analysis does not execute remediation; persisted rows are not live-approved; lifecycle controls unchanged; sandbox DB path only (same isolation as Twig 4.1).
+- **Status:** Complete (implementation); plan and log updated in same change set.
+- **Verification summary:** targeted Twig 4.4 tests passed; full suite passed; no regression in unrelated paths.
+
 ## 2026-03-25 — 4.6.3.2 Part B Twig 3 (DATA structured issue detection + suggestions)
 
 - **Directive:** DATA Twig 3 — Structured Issue Detection + Suggestion Layer.

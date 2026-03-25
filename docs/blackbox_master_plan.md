@@ -758,11 +758,17 @@ Phase **4** spans **execution-context rehydration** (4.0, closed) and **readines
 - **DATA Twig 1 — Visibility (Complete):** DATA has read-only visibility into learning lifecycle state via inspection helpers; helpers are not in output-generation paths.
 - **DATA Twig 2 — Execution-Aware Diagnostics (Complete):** DATA has execution-sensitive state awareness, infrastructure-action risk classification (`safe` / `controlled` / `blocked`), and defer/report decisions; diagnostics-only and non-remediating.
 - **DATA Twig 3 — Structured Issue Detection + Suggestion Layer (Complete):** deterministic issue detection + structured issue objects + non-executable fix suggestions are available for diagnostic contexts only; recent-event window uses **`system_events.created_at`** ordering (not `id`); no remediation, no execution, and no DATA output-generation integration.
-- **DATA Twig 4 — Remediation Validation Pipeline (Stub):** candidate remediations tested in controlled environments; only validated remediations eligible for promotion.
+- **DATA Twig 4 — Remediation Validation Pipeline (Design Complete):** lifecycle and safety design for sandbox remediation validation; see `docs/architect/directives/directive_4_6_3_2_part_b_twig4_design.md`.
+- **DATA Twig 4.1 — Sandbox Validation Engine (Complete):** isolated SQLite sandbox (`remediation_candidates`, `validation_runs`); deterministic `run_validation` with simulated before/after; no production DB path.
+- **DATA Twig 4.2 — Remediation Candidate Ingestion + Registry Boundary (Complete):** controlled `ingest_remediation_candidate(...)`; lifecycle `candidate` only at ingest; duplicate guard; no auto-promotion.
+- **DATA Twig 4.3 — Detection → Ingestion → Validation Integration (Complete):** manual `run_remediation_validation_pipeline` (sandbox only); traceability; stop on ingestion failure; no runtime/DATA wiring.
+- **DATA Twig 4.4 — Validation Outcome Analysis Layer (Complete):** deterministic analysis of sandbox `validation_runs` into structured artifacts (`validation_outcome_analysis.py`); outcome categories (`validated_success`, `rejected_functional`, `rejected_regression`, `rejected_stability`, `insufficient_evidence`); evidence summaries derived from sandbox snapshots only (no LLM); persisted analyses are diagnostic retention only — **not** live approval, **not** execution triggers; optional trend listing per remediation; no DATA output integration; no production mutation.
 - **DATA Twig 5 — Controlled Remediation Execution (Stub):** future remediation execution only under execution-safe + maintenance-window + rollback + audit + policy controls.
 - **DATA Twig 6 — Learning-Backed Ops Optimization (Stub):** future optimization from validated remediation outcomes; must remain infrastructure-scoped (not market strategy reasoning).
 
 **Roadmap safety note:** DATA is an infrastructure intelligence / telemetry / diagnostic agent, not a market analyst or trading decision-maker. DATA is not permitted to perform disruptive infrastructure actions during active execution/trading state unless a future explicitly approved control framework authorizes it.
+
+**Twig 4.x safety boundary:** no live remediation execution; no DATA output-generation integration; no production system mutation; validation, ingestion, pipeline, and outcome analysis are sandbox-only unless explicitly scoped otherwise; analysis artifacts do not bypass lifecycle controls or imply approval.
 
 **Closure (verified):** clawbot proof — see [`docs/architect/agent_verification.md`](architect/agent_verification.md) → *Phase 4.6 — Telegram interaction layer* / *4.6.2* / *4.6.3*. **Note:** **4.6.3.1** is **code-tracked**; **operational closure** is when Telegram validation passes per directive.
 

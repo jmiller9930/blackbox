@@ -121,6 +121,24 @@ def open_validation_sandbox(db_path: Path) -> sqlite3.Connection:
 
         CREATE INDEX IF NOT EXISTS idx_validation_runs_remediation
           ON validation_runs(remediation_id, created_at);
+
+        CREATE TABLE IF NOT EXISTS validation_outcome_analyses (
+          analysis_id TEXT PRIMARY KEY,
+          validation_run_id TEXT NOT NULL UNIQUE,
+          remediation_id TEXT NOT NULL,
+          validation_result TEXT NOT NULL,
+          outcome_category TEXT NOT NULL,
+          failure_class TEXT NOT NULL DEFAULT '',
+          failure_reason TEXT NOT NULL DEFAULT '',
+          before_after_summary_json TEXT NOT NULL,
+          evidence_summary_json TEXT NOT NULL,
+          analysis_timestamp TEXT NOT NULL,
+          prior_run_count INTEGER NOT NULL DEFAULT 0,
+          FOREIGN KEY (validation_run_id) REFERENCES validation_runs(run_id) ON DELETE CASCADE
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_outcome_analyses_remediation
+          ON validation_outcome_analyses(remediation_id, analysis_timestamp);
         """
     )
     conn.commit()
