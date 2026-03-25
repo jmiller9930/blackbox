@@ -6,6 +6,14 @@ Canonical running log for architect-facing directive execution, proof, and closu
 
 **Templates:** [`DIRECTIVE_TEMPLATE.md`](DIRECTIVE_TEMPLATE.md) (full directive scaffold), [`CLOSEOUT_PACKET_TEMPLATE.md`](CLOSEOUT_PACKET_TEMPLATE.md) (closeout / gate / proof summary). Every closeout must include `Plan/log status sync: PASS`.
 
+## 2026-03-26 — Layer 4 Safety Mitigation Addendum — Canonically recorded (docs-only)
+
+- **Directive:** Capture required safety mitigations in canonical Layer 4 design before implementation — **docs only**; no code.
+- **Summary:** **Section 13** added to [`layer_4_execution_interface_design.md`](../layer_4_execution_interface_design.md): (13.1) default **one success per `approval_id`**, opt-in bounded repeat on approval; (13.2) **audit-before-effect** + WORM/reconciliation; (13.3) **single execution entry point**, `execution_plane` not Layer 4 for remediation; (13.4) **context hash**, no drift, invalidation rules, NTP; (13.5) kill / in-flight / abort / timeout / observability contract.
+- **Artifact location:** [`docs/architect/layer_4_execution_interface_design.md`](../layer_4_execution_interface_design.md) (section 13).
+- **Master plan:** Layer 4 subsection updated with mitigation summary + link.
+- **Plan/log status sync: PASS**
+
 ## 2026-03-26 — Layer 4 Execution Interface — Design complete (docs-only)
 
 - **Directive:** Author and canonically record Layer 4 execution interface — **design only**; no implementation, no code changes.
