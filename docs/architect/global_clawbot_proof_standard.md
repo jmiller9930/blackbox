@@ -94,6 +94,10 @@ Explicit list, for example:
 - no registry mutation (if restricted)  
 - no Telegram / execution / ML unless specified  
 
+### 7. Documentation / status synchronization (mandatory)
+
+Clawbot proof does **not** close a phase or directive if roadmap documentation is out of sync. Follow [`docs/architect/directives/DIRECTIVE_TEMPLATE.md`](directives/DIRECTIVE_TEMPLATE.md): `docs/blackbox_master_plan.md` and `docs/architect/directives/directive_execution_log.md` must be updated in the **same change set** with **matching status granularity**. Closeouts and proof summaries must include `Plan/log status sync: PASS`. If mismatch is discovered after return, treat as incomplete and restore sync before advancing (see template **Documentation mismatch failure rule**).
+
 ---
 
 ## Failure conditions
@@ -105,6 +109,7 @@ A phase is **not** complete if **any** of the following are missing:
 - no persistence proof  
 - only local execution  
 - vague summaries instead of real output  
+- master plan / directive execution log out of sync (see § Required proof package → 7)  
 
 ---
 

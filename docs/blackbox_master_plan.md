@@ -38,6 +38,13 @@ It is the **single source of truth** for project **rehydration** (Architect, Cur
 
 **Architect directives (registry):** [`docs/architect/directives/README.md`](architect/directives/README.md) — e.g. **4.6.3.3** (closed), **4.6.3.4** (Slack + config).
 
+**Status Synchronization Rule (mandatory):**
+- The master plan and directive execution log must remain synchronized.
+- If a twig/sub-step is recorded as active, complete, closed, implemented, or corrected in the execution log, the master plan must reflect the same status granularity in the same change set (broader umbrella wording is not sufficient for a more specific log entry).
+- No directive/twig is canonically advanced or closed unless both documents agree.
+- Closeout summaries must include: `Plan/log status sync: PASS`.
+- **Canonical scaffolds:** [`docs/architect/directives/DIRECTIVE_TEMPLATE.md`](architect/directives/DIRECTIVE_TEMPLATE.md), [`docs/architect/directives/CLOSEOUT_PACKET_TEMPLATE.md`](architect/directives/CLOSEOUT_PACKET_TEMPLATE.md).
+
 ### Where we are now
 
 - **Completed through:** Phase **4.6.3** (persona enforcement + DB/registry alignment), **4.6.2** Telegram multi-persona, **4.6** bot layer, **4.5** learning visibility, **4.4** feedback loop, **4.3** execution plane (mock), **4.2** stub, **4.1** blueprint (and **4.0**, all Phase **3.x**).

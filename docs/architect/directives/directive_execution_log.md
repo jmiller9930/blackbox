@@ -4,6 +4,8 @@ Canonical running log for architect-facing directive execution, proof, and closu
 
 **Alignment (mandatory):** A Part B twig or directive must not be treated as **closed** or **advanced** unless **`docs/blackbox_master_plan.md`** and **this file** are updated in the **same change set** with **matching status granularity** (scope, completion level, safety boundaries, verification where applicable).
 
+**Templates:** [`DIRECTIVE_TEMPLATE.md`](DIRECTIVE_TEMPLATE.md) (full directive scaffold), [`CLOSEOUT_PACKET_TEMPLATE.md`](CLOSEOUT_PACKET_TEMPLATE.md) (closeout / gate / proof summary). Every closeout must include `Plan/log status sync: PASS`.
+
 ## 2026-03-25 — 4.6.3.2 Part B Twig 3 (DATA structured issue detection + suggestions)
 
 - **Directive:** DATA Twig 3 — Structured Issue Detection + Suggestion Layer.

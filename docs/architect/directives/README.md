@@ -2,7 +2,13 @@
 
 **Purpose:** Single place to **find and track** architect-issued directives. Implementation and proof still follow [`agent_verification.md`](../agent_verification.md) and [`global_clawbot_proof_standard.md`](../global_clawbot_proof_standard.md).
 
+**Canonical templates (mandatory for new work):**
+- **Full directive:** [`DIRECTIVE_TEMPLATE.md`](DIRECTIVE_TEMPLATE.md) — copy scaffold for every new `directive_<id>_<short_title>.md`.
+- **Closeout / gate / proof summary only:** [`CLOSEOUT_PACKET_TEMPLATE.md`](CLOSEOUT_PACKET_TEMPLATE.md) — mandatory plan/log sync, checklist, `Plan/log status sync: PASS`, and mismatch failure rule.
+
 Add new directives here as **`directive_<id>_<short_title>.md`** and a row in the table below.
+
+**Documentation / status synchronization (mandatory):** A directive, twig, sub-step, or closure is not complete unless `docs/blackbox_master_plan.md` and `directive_execution_log.md` are updated in the **same change set** with **matching granularity** (see **Documentation / Status Synchronization** in [`DIRECTIVE_TEMPLATE.md`](DIRECTIVE_TEMPLATE.md)). Closeouts must include `Plan/log status sync: PASS`. If mismatch is found after return, work is incomplete; fix docs before starting the next directive or phase.
 
 ---
 
@@ -14,6 +20,7 @@ Add new directives here as **`directive_<id>_<short_title>.md`** and a row in th
 | **4.6.3.4** | Messenger config + Slack adapter bring-up | [`directive_4_6_3_4_slack_adapter_and_config.md`](directive_4_6_3_4_slack_adapter_and_config.md) | **Active** — one backend at runtime; **no** OpenClaw gateway in this leaf |
 | **4.6.3.4.C** | Slack Anna activation (routing + ingress + enforcement + Ollama) | [`directive_4_6_3_4_c_slack_anna_closure.md`](directive_4_6_3_4_c_slack_anna_closure.md) | **Closed** — live `#blackbox_lab`; see closure doc |
 | **4.6.3.5.A** | Anna live data grounding v1 + final identity containment | master plan phase entry [`../../blackbox_master_plan.md`](../../blackbox_master_plan.md) | **Closed** — live 4-prompt proof on `#blackbox_lab`: no-data fallback + concept answer + system-consistent `hello` |
+| **4.6.3.2.A** | Learning Core containment slice (lifecycle + validated-only reuse gate) | master plan phase entry [`../../blackbox_master_plan.md`](../../blackbox_master_plan.md) | **Closed (containment scope only)** — committed/accepted (`ea9c215`) |
 | **—** | Expose master plan via raw Git URL (ChatGPT / tooling) | [`../../cursor_directive_expose_master_plan.md`](../../cursor_directive_expose_master_plan.md) | Active (ops) |
 | **4.6.4** | Anna benchmark / architect submission artifact | [`../../benchmarks/anna_directive_4_6_4_architect_submission.md`](../../benchmarks/anna_directive_4_6_4_architect_submission.md) | Benchmark / evidence |
 | **Global** | Mandatory clawbot proof (all phases) | [`../global_clawbot_proof_standard.md`](../global_clawbot_proof_standard.md) | Non-negotiable |
@@ -22,13 +29,14 @@ Add new directives here as **`directive_<id>_<short_title>.md`** and a row in th
 
 ## Related (not standalone directive files)
 
-- **Phase 4.6.3.2** (`agent_learning_core`) — stub on master plan only; see [`../../blackbox_master_plan.md`](../../blackbox_master_plan.md).
+- **Phase 4.6.3.2** (`agent_learning_core`) — Part A accepted (containment only), Part B planning target; see [`../../blackbox_master_plan.md`](../../blackbox_master_plan.md).
 - **Local / remote dev workflow** — [`../local_remote_development_workflow.md`](../local_remote_development_workflow.md).
 
 ---
 
 ## How to add a directive
 
-1. Add `directive_<phase_or_id>_<slug>.md` in this folder.
+1. Copy [`DIRECTIVE_TEMPLATE.md`](DIRECTIVE_TEMPLATE.md) to `directive_<phase_or_id>_<slug>.md` and fill in scope, proof, and evidence; keep all **(Mandatory)** sections.
 2. Add a row to the **Index** table.
-3. Reference it from [`../../blackbox_master_plan.md`](../../blackbox_master_plan.md) when it maps to a roadmap phase.
+3. In the **same change set**, update [`../../blackbox_master_plan.md`](../../blackbox_master_plan.md) and [`directive_execution_log.md`](directive_execution_log.md) to matching status granularity.
+4. Closeout / return must include `Plan/log status sync: PASS`.
