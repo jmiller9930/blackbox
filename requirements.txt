@@ -6,3 +6,4 @@ jinja2>=3.1,<4
 rich>=13.0,<14
 pytest>=8.0,<9
 python-telegram-bot>=21.0,<22
+slack-bolt>=1.18,<2

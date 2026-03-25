@@ -34,7 +34,7 @@ Merge an **`agents.list`** (or extend yours) so it includes **DATA** alongside *
       "default": true,
       "name": "Cody",
       "workspace": "/home/jmiller/.openclaw/workspace",
-      "model": "ollama/qwen2.5-coder:7b",
+      "model": "ollama/qwen2.5:7b",
       "identity": { "name": "Cody", "emoji": "🛠️" }
     },
     {
@@ -42,7 +42,7 @@ Merge an **`agents.list`** (or extend yours) so it includes **DATA** alongside *
       "default": false,
       "name": "DATA",
       "workspace": "/home/jmiller/.openclaw/workspace-data",
-      "model": "ollama/qwen2.5-coder:7b",
+      "model": "ollama/qwen2.5:7b",
       "identity": { "name": "DATA", "emoji": "🔍" }
     }
   ]

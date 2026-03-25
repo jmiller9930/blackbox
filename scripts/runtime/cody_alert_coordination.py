@@ -28,7 +28,7 @@ def _utc_now() -> str:
 
 
 def _ollama_model() -> str:
-    return os.environ.get("OLLAMA_MODEL", "qwen2.5-coder:7b")
+    return os.environ.get("OLLAMA_MODEL", "qwen2.5:7b")
 
 
 def _generate(base: str, model: str, prompt: str, timeout: float = 120.0) -> str:

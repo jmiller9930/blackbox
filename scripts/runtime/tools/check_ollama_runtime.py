@@ -30,7 +30,7 @@ def _anna_llm_enabled() -> bool:
 
 def main() -> int:
     base = ollama_base_url()
-    model = os.environ.get("OLLAMA_MODEL", "qwen2.5-coder:7b")
+    model = os.environ.get("OLLAMA_MODEL", "qwen2.5:7b")
 
     print("--- Ollama runtime (same resolution as Anna pipeline) ---")
     print("ANNA_USE_LLM:", repr(os.environ.get("ANNA_USE_LLM", "<unset>")))

@@ -75,6 +75,19 @@ echo "What day is it?" | python3 -m messaging_interface.cli_adapter
 
 Prints **JSON** with normalized fields (`interpretation.summary`, `answer_source`, `intent`, `topic`, `limitation_flag` for Anna). Phase closure requires this path per directive.
 
+### Messaging interface — Directive 4.6.3.4 (config + single backend)
+
+**Unified entry** (loads `config/messaging_config.json`, or falls back to `config/messaging_config.example.json`):
+
+```bash
+# from repository root — backend is `cli` | `slack` | `telegram` in config
+echo "What day is it?" | python3 -m messaging_interface
+```
+
+Copy `config/messaging_config.example.json` to `config/messaging_config.json` (gitignored) and set **`messaging.backend`**. Optional env overrides (merged after file load): **`TELEGRAM_BOT_TOKEN`**, **`SLACK_BOT_TOKEN`**, **`SLACK_APP_TOKEN`**.
+
+**Slack (Socket Mode):** set `backend` to `slack`, fill `messaging.slack.bot_token` (starts with `xoxb-`) and `app_token` (`xapp-`), enable Socket Mode and subscribe to **`message.channels`** / **`message.im`** (and scopes `chat:write`, `users:read` as needed). Requires **`slack-bolt`** (`requirements.txt`). The adapter calls **`run_dispatch_pipeline`** only — same dispatch as CLI/Telegram, not a separate Anna path.
+
 ## DATA — one-shot health checks
 
 ```bash
@@ -99,7 +112,7 @@ Use `--max-iterations` for bounded tests; omit `--max-iterations` for continuous
 
 ```bash
 export BLACKBOX_SQLITE_PATH="${BLACKBOX_SQLITE_PATH:-data/sqlite/blackbox.db}"
-export OLLAMA_MODEL="${OLLAMA_MODEL:-qwen2.5-coder:7b}"
+export OLLAMA_MODEL="${OLLAMA_MODEL:-qwen2.5:7b}"
 python3 scripts/runtime/cody_plan_workflow.py "Your engineering request here"
 ```
 

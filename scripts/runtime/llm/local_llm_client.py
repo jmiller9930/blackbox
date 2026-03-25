@@ -24,7 +24,7 @@ def ollama_generate(
     model: str | None = None,
     timeout: float = 120.0,
 ) -> LlmResult:
-    m = model or os.environ.get("OLLAMA_MODEL", "qwen2.5-coder:7b")
+    m = model or os.environ.get("OLLAMA_MODEL", "qwen2.5:7b")
     url = f"{base_url.rstrip('/')}/api/generate"
     body = json.dumps(
         {"model": m, "prompt": prompt, "stream": False},
