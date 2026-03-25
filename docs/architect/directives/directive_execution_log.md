@@ -6,6 +6,14 @@ Canonical running log for architect-facing directive execution, proof, and closu
 
 **Templates:** [`DIRECTIVE_TEMPLATE.md`](DIRECTIVE_TEMPLATE.md) (full directive scaffold), [`CLOSEOUT_PACKET_TEMPLATE.md`](CLOSEOUT_PACKET_TEMPLATE.md) (closeout / gate / proof summary). Every closeout must include `Plan/log status sync: PASS`.
 
+## 2026-03-25 — Layer 2 Operator Dashboard — Implemented (read-only)
+
+- **Directive:** Implement read-only Layer 2 operator dashboard — visibility only; no write, approval, execution, messaging, pipeline control, or background mutation.
+- **Scope:** [`scripts/runtime/operator_dashboard/`](../../../scripts/runtime/operator_dashboard/) — WSGI (`app.py`), read-only DB open (`readonly_db.py`), SELECT-only queries (`queries.py`), UI (`static/index.html`), entrypoint [`__main__.py`](../../../scripts/runtime/operator_dashboard/__main__.py); tests [`tests/test_operator_dashboard_readonly.py`](../../../tests/test_operator_dashboard_readonly.py).
+- **Boundaries:** GET-only HTTP; sandbox DB only via `assert_non_production_sqlite_path`; query module contains no `INSERT`/`UPDATE`/`DELETE`; banned-import AST tests mirror Playground/approval CLI; no `telegram_interface` / `messaging_interface` / `execution_plane` / `data_status`.
+- **Verification:** `python3 -m pytest -q` — full suite passed (local workspace).
+- **Plan/log status sync: PASS**
+
 ## 2026-03-25 — Playground Output Contract Alignment — Complete (implementation)
 
 - **Directive:** Align Playground runtime CLI/JSON `stages[].contract` with [`directive_4_6_3_3_playground_output_contract.md`](directive_4_6_3_3_playground_output_contract.md) (DETECT…SIMULATE field sets); presentation-only.

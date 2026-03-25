@@ -740,6 +740,8 @@ Constraints:
 Rule:
 Dashboard is a glass window, not a control surface.
 
+**Layer 2 Dashboard — Implemented (read-only):** [`scripts/runtime/operator_dashboard/`](../scripts/runtime/operator_dashboard/) — WSGI app + `static/index.html`; `GET` only; reads sandbox SQLite with **`file:…?mode=ro`** and **`PRAGMA query_only`** (no writes). Surfaces: pipeline runs (seven stages synthesized per `remediation_id`), validation runs, outcome analyses, patterns, simulations, approvals (**status display only**). Run: `cd scripts/runtime && python3 -m operator_dashboard --sandbox-db /path/to/sandbox.db` (bind defaults `127.0.0.1:8765`). **Not** an approval interface; **not** execution; **not** messaging; **not** pipeline control; **no** background jobs. Tests: [`tests/test_operator_dashboard_readonly.py`](../tests/test_operator_dashboard_readonly.py). **Plan/log status sync: PASS**
+
 ---
 
 ### Layer 3 — Approval Interface (Future)

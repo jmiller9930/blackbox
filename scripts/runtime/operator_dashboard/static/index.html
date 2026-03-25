@@ -1,0 +1,333 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>BLACKBOX — Layer 2 Operator Dashboard (Read-Only)</title>
+  <style>
+    :root {
+      --bg: #0f1419;
+      --panel: #1a2332;
+      --text: #e6edf3;
+      --muted: #8b949e;
+      --accent: #58a6ff;
+      --ok: #3fb950;
+      --warn: #d29922;
+      --bad: #f85149;
+      --border: #30363d;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0; font-family: ui-sans-serif, system-ui, sans-serif;
+      background: var(--bg); color: var(--text); line-height: 1.45;
+    }
+    header {
+      background: var(--panel); border-bottom: 1px solid var(--border);
+      padding: 0.75rem 1.25rem; position: sticky; top: 0; z-index: 10;
+    }
+    header h1 { margin: 0; font-size: 1.1rem; font-weight: 600; }
+    .banner {
+      font-size: 0.75rem; color: var(--warn); margin-top: 0.35rem;
+      letter-spacing: 0.02em;
+    }
+    .toolbar {
+      display: flex; flex-wrap: wrap; gap: 0.5rem 1rem; align-items: center;
+      padding: 0.5rem 1.25rem; background: #151b24; border-bottom: 1px solid var(--border);
+    }
+    .toolbar input[type="search"] {
+      min-width: 14rem; padding: 0.35rem 0.5rem; border-radius: 4px;
+      border: 1px solid var(--border); background: var(--bg); color: var(--text);
+    }
+    nav.tabs { display: flex; flex-wrap: wrap; gap: 0.25rem; }
+    nav.tabs button {
+      background: transparent; border: 1px solid var(--border); color: var(--text);
+      padding: 0.35rem 0.65rem; border-radius: 4px; cursor: pointer; font-size: 0.85rem;
+    }
+    nav.tabs button.active { border-color: var(--accent); color: var(--accent); }
+    main { padding: 1rem 1.25rem 2rem; max-width: 1400px; margin: 0 auto; }
+    .grid { display: grid; gap: 1rem; }
+    @media (min-width: 900px) {
+      .split { display: grid; grid-template-columns: 1fr 360px; gap: 1rem; align-items: start; }
+    }
+    table {
+      width: 100%; border-collapse: collapse; font-size: 0.8rem;
+      background: var(--panel); border: 1px solid var(--border); border-radius: 6px; overflow: hidden;
+    }
+    th, td { text-align: left; padding: 0.45rem 0.55rem; border-bottom: 1px solid var(--border); vertical-align: top; }
+    th { background: #222d3d; color: var(--muted); font-weight: 600; }
+    tr:hover td { background: rgba(88, 166, 255, 0.06); cursor: pointer; }
+    tr.selected td { background: rgba(88, 166, 255, 0.12); }
+    .pill {
+      display: inline-block; padding: 0.1rem 0.4rem; border-radius: 4px; font-size: 0.72rem;
+      background: #21262d; border: 1px solid var(--border);
+    }
+    .pill.complete { color: var(--ok); }
+    .pill.missing { color: var(--muted); }
+    .stage-strip {
+      display: flex; flex-wrap: wrap; gap: 0.35rem; margin-top: 0.35rem;
+    }
+    .stage-chip {
+      font-size: 0.68rem; padding: 0.2rem 0.45rem; border-radius: 4px;
+      border: 1px solid var(--border); background: #0d1117;
+    }
+    .stage-chip.complete { border-color: var(--ok); }
+    .stage-chip.missing { opacity: 0.65; }
+    aside.detail {
+      background: var(--panel); border: 1px solid var(--border); border-radius: 6px;
+      padding: 0.75rem; font-size: 0.78rem; max-height: 70vh; overflow: auto;
+    }
+    aside.detail pre {
+      margin: 0; white-space: pre-wrap; word-break: break-word; color: var(--muted);
+    }
+    .err { color: var(--bad); padding: 1rem; }
+    .muted { color: var(--muted); font-size: 0.8rem; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Layer 2 — Operator Dashboard</h1>
+    <div class="banner">
+      READ ONLY — NO WRITES — NO APPROVAL ACTIONS — NO EXECUTION — NO MESSAGING — SANDBOX DATA ONLY
+    </div>
+  </header>
+  <div class="toolbar">
+    <label>Filter <input type="search" id="q" placeholder="Filter visible rows…" autocomplete="off"/></label>
+    <nav class="tabs" id="tabs"></nav>
+  </div>
+  <main>
+    <p class="muted" id="status">Loading…</p>
+    <div id="root"></div>
+  </main>
+  <script>
+    const TABS = [
+      { id: "pipeline", label: "Pipeline runs" },
+      { id: "validation", label: "Validation runs" },
+      { id: "analyses", label: "Outcome analyses" },
+      { id: "patterns", label: "Patterns" },
+      { id: "simulations", label: "Simulations" },
+      { id: "approvals", label: "Approvals" },
+    ];
+    let data = null;
+    let tab = "pipeline";
+    let selected = null;
+
+    function $(s) { return document.querySelector(s); }
+
+    function matchesFilter(obj, q) {
+      if (!q) return true;
+      return JSON.stringify(obj).toLowerCase().includes(q.toLowerCase());
+    }
+
+    function renderTabs() {
+      const nav = $("#tabs");
+      nav.innerHTML = "";
+      TABS.forEach(t => {
+        const b = document.createElement("button");
+        b.textContent = t.label;
+        b.className = tab === t.id ? "active" : "";
+        b.onclick = () => { tab = t.id; selected = null; render(); };
+        nav.appendChild(b);
+      });
+    }
+
+    function renderStageStrip(stages) {
+      if (!stages || !stages.length) return "";
+      const el = document.createElement("div");
+      el.className = "stage-strip";
+      stages.forEach(s => {
+        const c = document.createElement("span");
+        c.className = "stage-chip " + (s.status === "complete" ? "complete" : "missing");
+        c.title = (s.timestamp && s.timestamp !== "N/A") ? s.timestamp : "";
+        c.textContent = s.name + ": " + s.status;
+        el.appendChild(c);
+      });
+      return el.outerHTML;
+    }
+
+    function renderPipeline() {
+      const q = $("#q").value.trim();
+      const runs = (data.pipeline_runs || []).filter(r => matchesFilter(r, q));
+      const rows = runs.map((r, i) => {
+        const sel = selected && selected.type === "pipeline" && selected.idx === i;
+        return `<tr data-idx="${i}" class="${sel ? "selected" : ""}">
+          <td><code>${escapeHtml(r.remediation_id)}</code></td>
+          <td>${r.stages_complete}/${r.stages_total}</td>
+          <td>${escapeHtml(r.last_activity)}</td>
+          <td>${renderStageStrip(r.stages)}</td>
+        </tr>`;
+      }).join("");
+      return `<div class="split"><div class="grid">
+        <table><thead><tr><th>remediation_id</th><th>stages</th><th>last activity</th><th>7 stages</th></tr></thead>
+        <tbody>${rows || "<tr><td colspan='4'>No rows</td></tr>"}</tbody></table>
+      </div><aside class="detail" id="detail"></aside></div>`;
+    }
+
+    function renderValidation() {
+      const q = $("#q").value.trim();
+      const rows = (data.validation_runs || []).filter(r => matchesFilter(r, q));
+      const body = rows.map((r, i) => {
+        const sel = selected && selected.type === "validation" && selected.idx === i;
+        return `<tr data-idx="${i}" class="${sel ? "selected" : ""}">
+          <td><code>${escapeHtml(r.run_id)}</code></td>
+          <td><code>${escapeHtml(r.remediation_id)}</code></td>
+          <td>${escapeHtml(r.result)}</td>
+          <td>${escapeHtml(r.failure_class)}</td>
+          <td>${escapeHtml(r.created_at)}</td>
+        </tr>`;
+      }).join("");
+      return `<div class="split"><div><table><thead><tr>
+        <th>run_id</th><th>remediation_id</th><th>result</th><th>failure_class</th><th>created</th>
+      </tr></thead><tbody>${body || "<tr><td colspan='5'>No rows</td></tr>"}</tbody></table></div>
+      <aside class="detail" id="detail"></aside></div>`;
+    }
+
+    function renderAnalyses() {
+      const q = $("#q").value.trim();
+      const rows = (data.outcome_analyses || []).filter(r => matchesFilter(r, q));
+      const body = rows.map((r, i) => {
+        const sel = selected && selected.type === "analyses" && selected.idx === i;
+        return `<tr data-idx="${i}" class="${sel ? "selected" : ""}">
+          <td><code>${escapeHtml(r.analysis_id)}</code></td>
+          <td>${escapeHtml(r.outcome_category)}</td>
+          <td><code>${escapeHtml(r.validation_run_id)}</code></td>
+          <td>${escapeHtml(r.analysis_timestamp)}</td>
+        </tr>`;
+      }).join("");
+      return `<div class="split"><div><table><thead><tr>
+        <th>analysis_id</th><th>outcome_category</th><th>validation_run_id</th><th>time</th>
+      </tr></thead><tbody>${body || "<tr><td colspan='4'>No rows</td></tr>"}</tbody></table></div>
+      <aside class="detail" id="detail"></aside></div>`;
+    }
+
+    function renderPatterns() {
+      const q = $("#q").value.trim();
+      const rows = (data.patterns || []).filter(r => matchesFilter(r, q));
+      const body = rows.map((r, i) => {
+        const sel = selected && selected.type === "patterns" && selected.idx === i;
+        return `<tr data-idx="${i}" class="${sel ? "selected" : ""}">
+          <td><code>${escapeHtml(r.pattern_id)}</code></td>
+          <td>${escapeHtml(r.pattern_status)}</td>
+          <td><code>${escapeHtml(r.source_remediation_id)}</code></td>
+          <td><code>${escapeHtml(r.validation_run_id)}</code></td>
+        </tr>`;
+      }).join("");
+      return `<div class="split"><div><table><thead><tr>
+        <th>pattern_id</th><th>status</th><th>source remediation</th><th>validation_run</th>
+      </tr></thead><tbody>${body || "<tr><td colspan='4'>No rows</td></tr>"}</tbody></table></div>
+      <aside class="detail" id="detail"></aside></div>`;
+    }
+
+    function renderSimulations() {
+      const q = $("#q").value.trim();
+      const rows = (data.simulations || []).filter(r => matchesFilter(r, q));
+      const body = rows.map((r, i) => {
+        const sel = selected && selected.type === "simulations" && selected.idx === i;
+        return `<tr data-idx="${i}" class="${sel ? "selected" : ""}">
+          <td><code>${escapeHtml(r.execution_simulation_id)}</code></td>
+          <td>${escapeHtml(r.result)}</td>
+          <td>${escapeHtml(String(r.blocked_reason))}</td>
+          <td>${escapeHtml(String(r.approval_required))}</td>
+          <td>${r.rollback_attempted}/${r.rollback_success}</td>
+        </tr>`;
+      }).join("");
+      return `<div class="split"><div><table><thead><tr>
+        <th>simulation_id</th><th>result</th><th>blocked_reason</th><th>approval_required</th><th>rollback</th>
+      </tr></thead><tbody>${body || "<tr><td colspan='5'>No rows</td></tr>"}</tbody></table></div>
+      <aside class="detail" id="detail"></aside></div>`;
+    }
+
+    function renderApprovals() {
+      const q = $("#q").value.trim();
+      const rows = (data.approvals || []).filter(r => matchesFilter(r, q));
+      const body = rows.map((r, i) => {
+        const sel = selected && selected.type === "approvals" && selected.idx === i;
+        const st = (r.status || "").toLowerCase();
+        return `<tr data-idx="${i}" class="${sel ? "selected" : ""}">
+          <td><code>${escapeHtml(r.approval_id)}</code></td>
+          <td><span class="pill">${escapeHtml(st)}</span></td>
+          <td><code>${escapeHtml(r.source_remediation_id)}</code></td>
+          <td>${escapeHtml(r.created_at)}</td>
+        </tr>`;
+      }).join("");
+      return `<div class="split"><div><table><thead><tr>
+        <th>approval_id</th><th>status</th><th>source_remediation</th><th>created</th>
+      </tr></thead><tbody>${body || "<tr><td colspan='4'>No rows</td></tr>"}</tbody></table></div>
+      <aside class="detail" id="detail"></aside></div>`;
+    }
+
+    function escapeHtml(s) {
+      return String(s).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+    }
+
+    function fillDetail() {
+      const d = $("#detail");
+      if (!d || !selected || !data) return;
+      const q = $("#q").value.trim();
+      let obj = null;
+      if (selected.type === "pipeline") {
+        const list = (data.pipeline_runs || []).filter(r => matchesFilter(r, q));
+        obj = list[selected.idx];
+      } else if (selected.type === "validation") {
+        const list = (data.validation_runs || []).filter(r => matchesFilter(r, q));
+        obj = list[selected.idx];
+      } else if (selected.type === "analyses") {
+        const list = (data.outcome_analyses || []).filter(r => matchesFilter(r, q));
+        obj = list[selected.idx];
+      } else if (selected.type === "patterns") {
+        const list = (data.patterns || []).filter(r => matchesFilter(r, q));
+        obj = list[selected.idx];
+      } else if (selected.type === "simulations") {
+        const list = (data.simulations || []).filter(r => matchesFilter(r, q));
+        obj = list[selected.idx];
+      } else if (selected.type === "approvals") {
+        const list = (data.approvals || []).filter(r => matchesFilter(r, q));
+        obj = list[selected.idx];
+      }
+      if (!obj) { d.innerHTML = "<p class='muted'>No selection</p>"; return; }
+      d.innerHTML = "<pre>" + escapeHtml(JSON.stringify(obj, null, 2)) + "</pre>";
+    }
+
+    function attachRowClicks() {
+      const root = $("#root");
+      root.querySelectorAll("tbody tr[data-idx]").forEach(tr => {
+        tr.onclick = () => {
+          const idx = parseInt(tr.getAttribute("data-idx"), 10);
+          selected = { type: tab, idx };
+          root.querySelectorAll("tbody tr").forEach(r => r.classList.remove("selected"));
+          tr.classList.add("selected");
+          fillDetail();
+        };
+      });
+    }
+
+    function render() {
+      renderTabs();
+      if (!data) return;
+      $("#status").textContent = "Read-only snapshot loaded.";
+      let html = "";
+      if (tab === "pipeline") html = renderPipeline();
+      if (tab === "validation") html = renderValidation();
+      if (tab === "analyses") html = renderAnalyses();
+      if (tab === "patterns") html = renderPatterns();
+      if (tab === "simulations") html = renderSimulations();
+      if (tab === "approvals") html = renderApprovals();
+      $("#root").innerHTML = html;
+      attachRowClicks();
+      fillDetail();
+    }
+
+    $("#q").addEventListener("input", () => { selected = null; render(); });
+
+    fetch("/api/all")
+      .then(r => { if (!r.ok) throw new Error("HTTP " + r.status); return r.json(); })
+      .then(j => {
+        data = j;
+        if (!j.ok) throw new Error("api error");
+        render();
+      })
+      .catch(e => {
+        $("#status").innerHTML = '<span class="err">Failed to load data: ' + escapeHtml(e.message) + "</span>";
+      });
+  </script>
+</body>
+</html>
