@@ -13,6 +13,7 @@ import sys
 from pathlib import Path
 from typing import Any
 
+from messaging_interface.anna_slack_route import explicit_anna_route
 from messaging_interface.slack_persona_enforcement import enforce_slack_outbound
 
 _REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -81,7 +82,8 @@ def run_slack_from_config(cfg: dict[str, Any]) -> int:
         try:
             payload = run_dispatch_pipeline(text, display_name=display_name)
             out = slack_reply_text(payload, user_display_name=display_name)
-            out, _ = enforce_slack_outbound(out)
+            route = "anna" if explicit_anna_route(text) else "system"
+            out, _ = enforce_slack_outbound(out, route=route)
             say(out)
         except Exception as e:
             log.exception("slack dispatch failed")

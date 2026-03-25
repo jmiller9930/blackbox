@@ -1,19 +1,20 @@
 """
-Directive 4.6.3.4.B.2 — deterministic Slack outbound persona enforcement.
+Slack outbound persona enforcement (4.6.3.4.B.2 + 4.6.3.4.C routing-aware).
 
-Runs after model (or formatter) output, before posting to Slack.
-Soft prompts may suggest tone; identity and forbidden phrases are enforced here.
+Runs after model / formatter output, before posting to Slack.
 """
 
 from __future__ import annotations
 
 import re
-from typing import Final
+from typing import Final, Literal
+
+Route = Literal["system", "anna"]
 
 SLACK_AGENT_PREFIX: Final[str] = "[BlackBox — System Agent]"
+ANNA_HEADER: Final[str] = "[Anna — Trading Analyst]"
 ANNA_SLACK_STATUS: Final[str] = "Anna is not connected to Slack in this environment."
 
-# Claims about Anna availability / reachability not backed by a real health integration.
 _ANNA_STATUS_PATTERN = re.compile(
     r"(?is)"
     r"(?:^|\s)"
@@ -32,29 +33,15 @@ _ANNA_IMPERSONATION = re.compile(
 
 _FORBIDDEN_ANNA_TAG = "[Anna — Trading Analyst]"
 
-# Extra literal patterns (regex) for variants the block regex can miss.
 _ANNA_EXTRA = [
     re.compile(r"\bAnna\s+is\s+still\s+offline\b[^.!?\n]*[.!?]?", re.I),
     re.compile(r"\bAnna\s+is\s+still\s+online\b[^.!?\n]*[.!?]?", re.I),
 ]
 
 
-def enforce_slack_outbound(raw: str) -> tuple[str, list[str]]:
-    """
-    Apply mandatory Slack persona rules. Returns (final_text, rules_triggered).
-    """
-    triggered: list[str] = []
-    text = (raw or "").strip()
-    if not text:
-        out = f"{SLACK_AGENT_PREFIX}\n"
-        triggered.append("empty_input_prefixed")
-        return out, triggered
-
-    if _FORBIDDEN_ANNA_TAG in text:
-        text = text.replace(_FORBIDDEN_ANNA_TAG, "").strip()
-        triggered.append("strip_anna_analyst_tag")
-
-    if _ANNA_IMPERSONATION.search(text):
+def _apply_global_truth_and_status(text: str, triggered: list[str], *, strip_impersonation: bool) -> str:
+    """Shared: forbidden availability claims; optional impersonation strip (system route only)."""
+    if strip_impersonation and _ANNA_IMPERSONATION.search(text):
         text = _ANNA_IMPERSONATION.sub(
             "This reply is from the system agent, not Anna.",
             text,
@@ -74,7 +61,47 @@ def enforce_slack_outbound(raw: str) -> tuple[str, list[str]]:
         text = text.replace(ANNA_SLACK_STATUS + " " + ANNA_SLACK_STATUS, ANNA_SLACK_STATUS)
         triggered.append("dedupe_anna_sentence")
 
-    text = re.sub(r"\n{3,}", "\n\n", text).strip()
+    return re.sub(r"\n{3,}", "\n\n", text).strip()
+
+
+def enforce_slack_outbound(raw: str, *, route: Route = "system") -> tuple[str, list[str]]:
+    """
+    Apply Slack persona rules. Returns (final_text, rules_triggered).
+
+    - route=\"system\": require [BlackBox — System Agent]; strip Anna analyst tag from model mistakes.
+    - route=\"anna\": require [Anna — Trading Analyst] (4.6.3.4.C real Anna path); never add BlackBox prefix.
+    """
+    triggered: list[str] = []
+    text = (raw or "").strip()
+
+    if route == "anna":
+        if not text:
+            out = f"{ANNA_HEADER}\n"
+            triggered.append("empty_input_anna_header")
+            return out, triggered
+        # Drop mistaken system prefix
+        if text.startswith(SLACK_AGENT_PREFIX):
+            text = text[len(SLACK_AGENT_PREFIX) :].lstrip()
+            triggered.append("strip_blackbox_prefix_anna_route")
+        text = _apply_global_truth_and_status(text, triggered, strip_impersonation=False)
+        if not text.startswith(ANNA_HEADER):
+            text = f"{ANNA_HEADER}\n\n{text}"
+            triggered.append("prepend_anna_header")
+        else:
+            triggered.append("anna_header_already_present")
+        return text, triggered
+
+    # --- system route (default) ---
+    if not text:
+        out = f"{SLACK_AGENT_PREFIX}\n"
+        triggered.append("empty_input_prefixed")
+        return out, triggered
+
+    if _FORBIDDEN_ANNA_TAG in text:
+        text = text.replace(_FORBIDDEN_ANNA_TAG, "").strip()
+        triggered.append("strip_anna_analyst_tag")
+
+    text = _apply_global_truth_and_status(text, triggered, strip_impersonation=True)
 
     if not text.startswith(SLACK_AGENT_PREFIX):
         text = f"{SLACK_AGENT_PREFIX}\n\n{text}"

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from messaging_interface.slack_persona_enforcement import (
     ANNA_SLACK_STATUS,
+    ANNA_HEADER,
     SLACK_AGENT_PREFIX,
     enforce_slack_outbound,
 )
@@ -73,3 +74,18 @@ def test_anna_still_offline_variant() -> None:
     _assert_starts_with_prefix(out)
     assert "offline" not in out.lower()
     assert ANNA_SLACK_STATUS in out
+
+
+def test_anna_route_keeps_header() -> None:
+    raw = "Anna is offline"  # wrong claim; should be fixed
+    out, _ = enforce_slack_outbound(raw, route="anna")
+    assert out.startswith(ANNA_HEADER)
+    assert ANNA_SLACK_STATUS in out
+    assert "offline" not in out.lower()
+
+
+def test_anna_route_prepends_header() -> None:
+    raw = "A spread is the bid-ask difference."
+    out, _ = enforce_slack_outbound(raw, route="anna")
+    assert out.startswith(ANNA_HEADER)
+    assert "bid-ask" in out.lower()
