@@ -6,6 +6,14 @@ Canonical running log for architect-facing directive execution, proof, and closu
 
 **Templates:** [`DIRECTIVE_TEMPLATE.md`](DIRECTIVE_TEMPLATE.md) (full directive scaffold), [`CLOSEOUT_PACKET_TEMPLATE.md`](CLOSEOUT_PACKET_TEMPLATE.md) (closeout / gate / proof summary). Every closeout must include `Plan/log status sync: PASS`.
 
+## 2026-03-26 — Playground Output Contract — Canonical update (docs-only)
+
+- **Directive:** `4.6.3.3-playground-output` — replace legacy per-stage `Input` / `Process` / `Output` / `Confidence` blocks with **stage-specific field contract** (DETECT…SIMULATE) and document JSON envelope + `contract` evolution.
+- **Canonical file:** [`directive_4_6_3_3_playground_output_contract.md`](directive_4_6_3_3_playground_output_contract.md)
+- **Boundaries:** docs-only; no code / pipeline / persistence changes in this change set; sandbox-only, no approval or execution semantics.
+- **Implementation note:** runtime CLI may still emit legacy blocks until a presentation-only alignment change; canonical spec is source of truth per §7 of the directive.
+- **Plan/log status sync: PASS**
+
 ## 2026-03-25 — 4.6.3.5-CLOSE — DATA Twig 6 Approval Model Implementation (closed)
 
 - **Directive:** Close **4.6.3.5** (implementation) + **4.6.3.5A** (design fidelity: `source_remediation_id` alignment). Sandbox-only **`approvals`** table, [`learning_core/approval_model.py`](../../../scripts/runtime/learning_core/approval_model.py), [`approval_cli.py`](../../../scripts/runtime/approval_cli.py), tests [`tests/test_approval_model.py`](../../../tests/test_approval_model.py); migration for legacy sandbox column rename.
