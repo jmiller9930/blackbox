@@ -23,7 +23,7 @@ DISPATCH = OPENCLAW / "extensions" / "slack" / "src" / "monitor" / "message-hand
 
 IMPORTS = '''import { spawnSync } from "node:child_process";
 import { join } from "node:path";
-import { stripSlackMentionsForCommandDetection } from "../../commands.js";
+import { stripSlackMentionsForCommandDetection } from "../commands.js";
 '''
 
 BLOCK = """
