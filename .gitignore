@@ -23,3 +23,13 @@ config/messaging_config.local.json
 .env.local
 .env.*.local
 .secrets/
+
+# macOS
+.DS_Store
+**/.DS_Store
+
+# Local Codex / agent exports (not canonical repo content)
+.codex/
+
+# Optional local clones of third-party reference repos
+external/

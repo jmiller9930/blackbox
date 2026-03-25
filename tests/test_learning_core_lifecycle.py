@@ -43,6 +43,44 @@ def test_valid_transitions_pass() -> None:
     assert is_reusable(rec2) is True
 
 
+def test_create_allows_candidate_initial_state() -> None:
+    conn = _conn()
+    rid = create_learning_record(
+        conn,
+        source="unit_test",
+        source_record_id="candidate-ok",
+        content="candidate seed",
+        state="candidate",
+    )
+    rec = get_learning_record(conn, rid)
+    assert rec is not None
+    assert rec.state == "candidate"
+
+
+def test_create_direct_validated_is_rejected() -> None:
+    conn = _conn()
+    with pytest.raises(ValueError):
+        create_learning_record(
+            conn,
+            source="unit_test",
+            source_record_id="bad-validated",
+            content="should fail",
+            state="validated",
+        )
+
+
+def test_create_direct_rejected_is_rejected() -> None:
+    conn = _conn()
+    with pytest.raises(ValueError):
+        create_learning_record(
+            conn,
+            source="unit_test",
+            source_record_id="bad-rejected",
+            content="should fail",
+            state="rejected",
+        )
+
+
 def test_invalid_transitions_fail() -> None:
     conn = _conn()
     rid = create_learning_record(

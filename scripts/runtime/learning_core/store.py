@@ -11,7 +11,7 @@ from typing import Any
 from learning_core.lifecycle import assert_valid_transition
 from learning_core.models import LearningRecord
 
-_VALID_STATES = {"candidate", "under_test", "validated", "rejected"}
+_INITIAL_STATE = "candidate"
 
 
 def _utc_now() -> str:
@@ -28,8 +28,8 @@ def create_learning_record(
     validation_notes: str = "",
     state: str = "candidate",
 ) -> str:
-    if state not in _VALID_STATES:
-        raise ValueError(f"invalid learning state: {state}")
+    if state != _INITIAL_STATE:
+        raise ValueError(f"create_learning_record only allows initial state '{_INITIAL_STATE}', got: {state}")
     rid = str(uuid.uuid4())
     now = _utc_now()
     evidence = json.dumps(list(evidence_links or []), ensure_ascii=False)
