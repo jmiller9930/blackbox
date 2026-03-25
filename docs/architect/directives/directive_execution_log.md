@@ -6,6 +6,15 @@ Canonical running log for architect-facing directive execution, proof, and closu
 
 **Templates:** [`DIRECTIVE_TEMPLATE.md`](DIRECTIVE_TEMPLATE.md) (full directive scaffold), [`CLOSEOUT_PACKET_TEMPLATE.md`](CLOSEOUT_PACKET_TEMPLATE.md) (closeout / gate / proof summary). Every closeout must include `Plan/log status sync: PASS`.
 
+## 2026-03-25 — Operator Playground — Visibility Layer 1 (Complete)
+
+- **Directive:** Sandbox-only DATA pipeline playground (CLI + optional TUI); orchestration only; full staged visibility without granting execution or approval.
+- **Scope:** [`scripts/runtime/playground/run_data_pipeline.py`](../../../scripts/runtime/playground/run_data_pipeline.py), optional [`playground_ui.py`](../../../scripts/runtime/playground/playground_ui.py); tests [`tests/test_playground_run_data_pipeline.py`](../../../tests/test_playground_run_data_pipeline.py).
+- **Safety:** `--sandbox-db` required; rejects production runtime SQLite path (`default_sqlite_path()`); imports limited to `learning_core` and sandbox-safe helpers; **no** `telegram_interface`, `messaging_interface`, `execution_plane`, `data_status`, or dispatch/routing.
+- **Pipeline:** seven stages — detect → suggest → ingest → validate → analyze → pattern → simulate (existing modules only).
+- **Verification:** `python3 -m pytest -q` — full suite passed (local workspace).
+- **Plan/log status sync: PASS**
+
 ## 2026-03-26 — Phase 4.x visibility architecture — wording alignment (docs-only)
 
 - **Directive:** Precision pass on Phase 4.x (Chris): full pipeline-stage visibility in Playground; explicit **Playground → Dashboard → Approval → Execution** stack; Slack/Telegram parallel to approval/execution flow; strengthen “not a single UI / layered interaction stack” framing.
