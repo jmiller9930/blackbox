@@ -99,6 +99,71 @@ def _migrate_approvals_source_remediation_id(conn: sqlite3.Connection) -> None:
         conn.commit()
 
 
+def _migrate_eligibility_artifact(conn: sqlite3.Connection) -> None:
+    """
+    Sandbox-only: eligibility artifacts must persist without FK to validation/simulation
+    (linkage may be missing for INELIGIBLE). Add ineligibility_reason; drop legacy FKs.
+    """
+    row = conn.execute(
+        "SELECT 1 FROM sqlite_master WHERE type='table' AND name='eligibility'"
+    ).fetchone()
+    if not row:
+        return
+    sql_row = conn.execute(
+        "SELECT sql FROM sqlite_master WHERE type='table' AND name='eligibility'"
+    ).fetchone()
+    sql = (sql_row[0] or "") if sql_row else ""
+    cols = _table_columns(conn, "eligibility")
+    need_rebuild = "FOREIGN KEY" in sql.upper()
+    if need_rebuild:
+        conn.executescript(
+            """
+            PRAGMA foreign_keys = OFF;
+
+            CREATE TABLE eligibility__m (
+              eligibility_id TEXT PRIMARY KEY,
+              approval_id TEXT NOT NULL,
+              source_remediation_id TEXT NOT NULL,
+              validation_run_id TEXT NOT NULL,
+              simulation_id TEXT NOT NULL,
+              eligibility_status TEXT NOT NULL CHECK (eligibility_status IN ('ELIGIBLE', 'INELIGIBLE', 'EXPIRED')),
+              evaluated_at TEXT NOT NULL,
+              expires_at TEXT,
+              evaluated_by TEXT NOT NULL,
+              confidence_score REAL,
+              risk_level TEXT,
+              ineligibility_reason TEXT
+            );
+
+            INSERT INTO eligibility__m (
+              eligibility_id, approval_id, source_remediation_id, validation_run_id, simulation_id,
+              eligibility_status, evaluated_at, expires_at, evaluated_by, confidence_score, risk_level, ineligibility_reason
+            )
+            SELECT
+              eligibility_id, approval_id, source_remediation_id, validation_run_id, simulation_id,
+              eligibility_status, evaluated_at, expires_at, evaluated_by, confidence_score, risk_level,
+              NULL
+            FROM eligibility;
+
+            DROP TABLE eligibility;
+            ALTER TABLE eligibility__m RENAME TO eligibility;
+
+            CREATE INDEX IF NOT EXISTS idx_eligibility_approval
+              ON eligibility(approval_id, evaluated_at);
+
+            CREATE INDEX IF NOT EXISTS idx_eligibility_status
+              ON eligibility(eligibility_status, expires_at);
+
+            PRAGMA foreign_keys = ON;
+            """
+        )
+        conn.commit()
+        return
+    if "ineligibility_reason" not in cols:
+        conn.execute("ALTER TABLE eligibility ADD COLUMN ineligibility_reason TEXT")
+        conn.commit()
+
+
 def open_validation_sandbox(db_path: Path) -> sqlite3.Connection:
     """
     Open isolated SQLite store for remediation validation.
@@ -237,11 +302,33 @@ def open_validation_sandbox(db_path: Path) -> sqlite3.Connection:
 
         CREATE INDEX IF NOT EXISTS idx_approvals_source_remediation
           ON approvals(source_remediation_id, status, created_at);
+
+        CREATE TABLE IF NOT EXISTS eligibility (
+          eligibility_id TEXT PRIMARY KEY,
+          approval_id TEXT NOT NULL,
+          source_remediation_id TEXT NOT NULL,
+          validation_run_id TEXT NOT NULL,
+          simulation_id TEXT NOT NULL,
+          eligibility_status TEXT NOT NULL CHECK (eligibility_status IN ('ELIGIBLE', 'INELIGIBLE', 'EXPIRED')),
+          evaluated_at TEXT NOT NULL,
+          expires_at TEXT,
+          evaluated_by TEXT NOT NULL,
+          confidence_score REAL,
+          risk_level TEXT,
+          ineligibility_reason TEXT
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_eligibility_approval
+          ON eligibility(approval_id, evaluated_at);
+
+        CREATE INDEX IF NOT EXISTS idx_eligibility_status
+          ON eligibility(eligibility_status, expires_at);
         """
     )
     conn.commit()
     _migrate_remediation_candidates(conn)
     _migrate_approvals_source_remediation_id(conn)
+    _migrate_eligibility_artifact(conn)
     conn.execute(
         """
         CREATE UNIQUE INDEX IF NOT EXISTS idx_remediation_ingestion_key
