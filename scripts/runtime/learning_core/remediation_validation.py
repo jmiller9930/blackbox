@@ -86,6 +86,19 @@ def _migrate_remediation_candidates(conn: sqlite3.Connection) -> None:
     conn.commit()
 
 
+def _migrate_approvals_source_remediation_id(conn: sqlite3.Connection) -> None:
+    """Sandbox-only: align legacy approvals.remediation_id with design field source_remediation_id."""
+    row = conn.execute(
+        "SELECT 1 FROM sqlite_master WHERE type='table' AND name='approvals'"
+    ).fetchone()
+    if not row:
+        return
+    cols = _table_columns(conn, "approvals")
+    if "remediation_id" in cols and "source_remediation_id" not in cols:
+        conn.execute("ALTER TABLE approvals RENAME COLUMN remediation_id TO source_remediation_id")
+        conn.commit()
+
+
 def open_validation_sandbox(db_path: Path) -> sqlite3.Connection:
     """
     Open isolated SQLite store for remediation validation.
@@ -202,10 +215,33 @@ def open_validation_sandbox(db_path: Path) -> sqlite3.Connection:
 
         CREATE INDEX IF NOT EXISTS idx_remediation_exec_sim_pattern
           ON remediation_execution_simulations(pattern_id, simulation_timestamp);
+
+        CREATE TABLE IF NOT EXISTS approvals (
+          approval_id TEXT PRIMARY KEY,
+          source_remediation_id TEXT NOT NULL,
+          pattern_id TEXT,
+          validation_run_id TEXT NOT NULL,
+          simulation_id TEXT NOT NULL,
+          requested_by TEXT NOT NULL,
+          approved_by TEXT,
+          approval_timestamp TEXT,
+          expiration_timestamp TEXT,
+          status TEXT NOT NULL CHECK (status IN ('PENDING', 'APPROVED', 'REJECTED', 'EXPIRED')),
+          confidence_score REAL,
+          risk_level TEXT,
+          created_at TEXT NOT NULL,
+          FOREIGN KEY (source_remediation_id) REFERENCES remediation_candidates(remediation_id) ON DELETE CASCADE,
+          FOREIGN KEY (validation_run_id) REFERENCES validation_runs(run_id) ON DELETE CASCADE,
+          FOREIGN KEY (simulation_id) REFERENCES remediation_execution_simulations(execution_simulation_id) ON DELETE CASCADE
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_approvals_source_remediation
+          ON approvals(source_remediation_id, status, created_at);
         """
     )
     conn.commit()
     _migrate_remediation_candidates(conn)
+    _migrate_approvals_source_remediation_id(conn)
     conn.execute(
         """
         CREATE UNIQUE INDEX IF NOT EXISTS idx_remediation_ingestion_key

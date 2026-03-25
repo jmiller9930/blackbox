@@ -6,6 +6,22 @@ Canonical running log for architect-facing directive execution, proof, and closu
 
 **Templates:** [`DIRECTIVE_TEMPLATE.md`](DIRECTIVE_TEMPLATE.md) (full directive scaffold), [`CLOSEOUT_PACKET_TEMPLATE.md`](CLOSEOUT_PACKET_TEMPLATE.md) (closeout / gate / proof summary). Every closeout must include `Plan/log status sync: PASS`.
 
+## 2026-03-25 — 4.6.3.5-CLOSE — DATA Twig 6 Approval Model Implementation (closed)
+
+- **Directive:** Close **4.6.3.5** (implementation) + **4.6.3.5A** (design fidelity: `source_remediation_id` alignment). Sandbox-only **`approvals`** table, [`learning_core/approval_model.py`](../../../scripts/runtime/learning_core/approval_model.py), [`approval_cli.py`](../../../scripts/runtime/approval_cli.py), tests [`tests/test_approval_model.py`](../../../tests/test_approval_model.py); migration for legacy sandbox column rename.
+- **Boundaries:** no execution hooks; no Telegram/Slack/Anna; Playground unchanged; simulation policy **`would_allow_real_execution: False`** unchanged; approval = eligibility only.
+- **Verification:** `python3 -m pytest -q` — full suite passed (local workspace).
+- **Plan/log status sync: PASS**
+
+## 2026-03-25 — 4.6.3.4-CLOSE — DATA Twig 6 Approval Model Design (closed, design-only)
+
+- **Directive:** Close Twig 6 approval model **design** after architectural validation, boundary validation, and Git proof (`4.6.3.4` + `4.6.3.4-GIT-PROOF-FIX` work packages). **Not** Phase **4.6.3.4** (messaging/Slack) in the roadmap table — this is **Part B DATA / Twig 6** approval-layer design.
+- **Canonical design:** [`docs/architect/design/twig6_approval_model.md`](../design/twig6_approval_model.md) — approval artifact, eligibility, lifecycle, conceptual CLI contract, safety boundaries, future execution handoff; **no** persistence/runtime in this closure.
+- **Git proof:** commit `e91c6be04e65a01b9c20d2faf6533a5859fcba9e` on `main`, pushed to `origin`; that commit contains **only** `docs/architect/design/twig6_approval_model.md`.
+- **Boundary validation:** no execution logic introduced; no runtime hooks; approval ≠ execution; Playground does not originate approvals.
+- **Implementation:** **not started** — next authorized work is a **Twig 6 implementation** directive that **must** follow `twig6_approval_model.md` without deviation.
+- **Plan/log status sync: PASS**
+
 ## 2026-03-25 — Operator Playground — Visibility Layer 1 (Complete)
 
 - **Directive:** Sandbox-only DATA pipeline playground (CLI + optional TUI); orchestration only; full staged visibility without granting execution or approval.
