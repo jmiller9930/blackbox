@@ -6,6 +6,12 @@ Canonical running log for architect-facing directive execution, proof, and closu
 
 **Templates:** [`DIRECTIVE_TEMPLATE.md`](DIRECTIVE_TEMPLATE.md) (full directive scaffold), [`CLOSEOUT_PACKET_TEMPLATE.md`](CLOSEOUT_PACKET_TEMPLATE.md) (closeout / gate / proof summary). Every closeout must include `Plan/log status sync: PASS`.
 
+## 2026-03-26 — Phase 4.x visibility architecture — wording alignment (docs-only)
+
+- **Directive:** Precision pass on Phase 4.x (Chris): full pipeline-stage visibility in Playground; explicit **Playground → Dashboard → Approval → Execution** stack; Slack/Telegram parallel to approval/execution flow; strengthen “not a single UI / layered interaction stack” framing.
+- **Scope:** `docs/blackbox_master_plan.md` only (paired log entry).
+- **Plan/log status sync: PASS**
+
 ## 2026-03-25 — SYSTEM VISIBILITY ARCHITECTURE — CANONICALIZATION (docs-only)
 
 - **Directive:** System visibility & interface architecture — canonical master plan update.

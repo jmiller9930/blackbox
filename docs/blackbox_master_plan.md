@@ -683,9 +683,9 @@ Advanced concepts may enter the registry as **draft** or **exploratory** concept
 
 ### Core Principle
 
-The system is not a single UI.
+**BLACKBOX is not a single interface and not a single UI.** It is a **layered interaction stack**: multiple surfaces, each with a distinct role, composed together without collapsing into one pane or one mental model.
 
-It is a layered interaction model:
+At a high level the stack follows:
 
 observe → validate → simulate → approve → execute
 
@@ -700,7 +700,8 @@ Purpose: Debugging and inspection
 
 Responsibilities:
 - run full DATA pipeline end-to-end  
-- display all stages (detect → simulate)  
+- run and inspect each stage of the pipeline end-to-end (full staged visibility, not only endpoints)  
+- display all stages: **detect → suggest → ingest → validate → analyze → pattern → simulate**  
 - support step, replay, and seed modes  
 
 Constraints:
@@ -795,9 +796,11 @@ They are NOT:
 
 ### System Relationship
 
-Playground → Dashboard → Approval → Execution  
+The primary architectural picture for operator-facing control and decision surfaces is a **linear layer stack**:
 
-Slack operates in parallel as a communication layer, not inline with execution.
+**Playground → Dashboard → Approval → Execution**
+
+Slack and Telegram sit **in parallel** to that stack: they are the primary **communication** surfaces for querying state, receiving summaries, and conversation. They are **not** inline between Dashboard and Approval, or between Approval and Execution—i.e. they do not substitute for the approval or execution layers, and they are not the playground or pipeline runner.
 
 ---
 
