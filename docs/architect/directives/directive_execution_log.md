@@ -6,6 +6,20 @@ Canonical running log for architect-facing directive execution, proof, and closu
 
 **Templates:** [`DIRECTIVE_TEMPLATE.md`](DIRECTIVE_TEMPLATE.md) (full directive scaffold), [`CLOSEOUT_PACKET_TEMPLATE.md`](CLOSEOUT_PACKET_TEMPLATE.md) (closeout / gate / proof summary). Every closeout must include `Plan/log status sync: PASS`.
 
+## 2026-03-26 — 4.6.3.2 Part B Twig 5 (Simulation-first remediation execution layer, sandbox-only)
+
+- **Directive:** DATA Twig 5 — Simulation-First Remediation Execution Layer.
+- **Scope:** deterministic **simulation** of pattern application and rollback on synthetic inputs; policy gate simulation; **no** real execution, **no** production mutation, **no** DATA output integration, **no** runtime execution hooks.
+- **What was implemented:**
+  - `scripts/runtime/learning_core/remediation_execution_simulator.py` — `evaluate_simulation_policy`, `simulate_and_record_remediation_execution`,
+  - sandbox table `remediation_execution_simulations` (created in `open_validation_sandbox`),
+  - execution artifacts: `execution_simulation_id`, `pattern_id`, `remediation_id`, `simulated_action_description`, `result`, `failure_reason`, `failure_class` (`functional` \| `regression` \| `stability`), `rollback_attempted`, `rollback_success`, `simulation_timestamp`, policy JSON,
+  - policy fields: `approval_required` (true), `maintenance_window_required` / `maintenance_window_active`, `execution_blocked_reason`, `would_allow_real_execution` (always false in this phase),
+  - separation: module does not import DATA output or Telegram/runtime execution paths.
+- **Safety boundaries:** simulation results **must never** be interpreted as permission to execute; live controlled execution remains **Twig 6 (Stub)** in master plan.
+- **Status:** Complete (implementation); plan and log updated in same change set.
+- **Verification summary:** targeted Twig 5 tests passed; full suite passed.
+
 ## 2026-03-26 — 4.6.3.2 Part B Twig 4.5 (Validated remediation pattern registry boundary, sandbox-only)
 
 - **Directive:** DATA Twig 4.5 — Validated Remediation Pattern Registry Boundary.

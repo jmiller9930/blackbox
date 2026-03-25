@@ -173,6 +173,25 @@ def open_validation_sandbox(db_path: Path) -> sqlite3.Connection:
           notes TEXT NOT NULL DEFAULT '',
           FOREIGN KEY (pattern_id) REFERENCES remediation_patterns(pattern_id) ON DELETE CASCADE
         );
+
+        CREATE TABLE IF NOT EXISTS remediation_execution_simulations (
+          execution_simulation_id TEXT PRIMARY KEY,
+          pattern_id TEXT NOT NULL,
+          remediation_id TEXT NOT NULL,
+          simulated_action_description TEXT NOT NULL,
+          result TEXT NOT NULL CHECK (result IN ('success', 'fail')),
+          failure_reason TEXT NOT NULL DEFAULT '',
+          failure_class TEXT NOT NULL DEFAULT '',
+          rollback_attempted INTEGER NOT NULL CHECK (rollback_attempted IN (0, 1)),
+          rollback_success INTEGER NOT NULL CHECK (rollback_success IN (0, 1)),
+          simulation_timestamp TEXT NOT NULL,
+          policy_json TEXT NOT NULL DEFAULT '{}',
+          validation_context_json TEXT NOT NULL DEFAULT '{}',
+          FOREIGN KEY (pattern_id) REFERENCES remediation_patterns(pattern_id) ON DELETE CASCADE
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_remediation_exec_sim_pattern
+          ON remediation_execution_simulations(pattern_id, simulation_timestamp);
         """
     )
     conn.commit()
