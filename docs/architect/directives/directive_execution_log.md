@@ -2,6 +2,54 @@
 
 Canonical running log for architect-facing directive execution, proof, and closure status.
 
+## 2026-03-25 — 4.6.3.2 Part B Step 2 (DATA execution-aware diagnostics, minimal)
+
+- **Directive:** DATA Infrastructure Roadmap Stubs + Execution-Aware DATA Layer (Twig 2).
+- **Scope:** implement diagnostics-only execution-aware layer and update plan with DATA twig sequencing.
+- **What was added:**
+  - execution-sensitive state snapshot helper,
+  - infra action classification (`safe` / `controlled` / `blocked`),
+  - defer/report decision artifact (no remediation),
+  - maintenance-window placeholder hook (no-op / planning-safe).
+- **Roadmap update:** DATA Twigs 1..6 stubbed/sequenced in master plan under 4.6.3.2 Part B section.
+- **Safety boundary:** no remediation capability introduced; no disruptive runtime action path added; execution/trading continuity preserved by defer/report-first behavior.
+- **Verification summary:**
+  - targeted + regression suites passed (`45 passed`),
+  - full suite passed (`89 passed`),
+  - no regressions observed in Anna behavior, DATA output behavior, routing/persona behavior, or grounding behavior.
+
+## 2026-03-25 — 4.6.3.2 Part B Step 1 (Complete: DATA visibility only)
+
+- **Scope statement:** DATA learning-core integration in this step is read-only visibility only.
+  Added helpers expose lifecycle inspection (state summary + recent transitions) without changing runtime response behavior.
+
+- **Explicit boundary (required):**
+  - helpers are inspection-only,
+  - helpers are **not** called from DATA output-generation paths,
+  - helpers do **not** influence response content.
+
+- **Verification summary:**
+  - targeted suite: `45 passed`
+  - full suite: `89 passed`
+  - no regression observed in:
+    - Anna surfaces,
+    - DATA output behavior,
+    - routing/persona behavior,
+    - grounding behavior.
+
+- **Status:**
+  - 4.6.3.2 Part B Step 1 = complete (visibility only).
+  - System remains in containment + controlled expansion mode.
+
+## 2026-03-25 — 4.6.3.2 Part A status lock + Part B planning target
+
+- **Directive:** post-commit status lock + next planning target.
+- **Outcome:** applied (docs/planning only; no runtime changes).
+- **Part A status:** committed and accepted (`ea9c215`) as containment-only completion.
+- **Lock semantics:** completion meaning is limited to Part A; no Part B runtime expansion implied.
+- **Sequencing rule retained:** DATA next, Cody after DATA, Mia/Billy remain stubbed unless explicitly authorized.
+- **Planning packet created:** `docs/architect/directives/directive_4_6_3_2_part_b_planning_packet.md`
+
 ## 2026-03-25 — PRE-4.6.3.2 verify-and-plan (Blocking Gate Complete)
 
 - **Directive:** `PRE-4.6.3.2-VERIFY-AND-PLAN`
