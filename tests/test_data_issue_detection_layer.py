@@ -96,3 +96,22 @@ def test_data_responses_unchanged_and_independent_from_detection() -> None:
     assert payload["kind"] == "data"
     assert payload["data_mode"] == "status"
     assert "Current phase:" in str(payload.get("status_text") or "")
+
+
+def test_database_lock_detection_from_seeded_payload_signal() -> None:
+    conn = _conn()
+    conn.execute(
+        "INSERT INTO system_events (id, source, event_type, severity, payload) VALUES (?, ?, ?, ?, ?)",
+        (
+            "lock1",
+            "execution_plane",
+            "execution_attempted",
+            "error",
+            json.dumps({"error": "database is locked"}),
+        ),
+    )
+    conn.commit()
+    issues = detect_infra_issues(conn)
+    db_issues = [i for i in issues if i.get("category") == "database"]
+    assert db_issues, "expected explicit database lock issue"
+    assert any("db_lock_signals=" in " ".join(i.get("supporting_evidence") or []) for i in db_issues)
