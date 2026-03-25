@@ -341,6 +341,12 @@ def _anna_model_limitation_note(aa: dict[str, Any]) -> str:
 def _format_anna_body(data: dict[str, Any], *, display_name: str | None = None) -> str:
     aa = data.get("anna_analysis") or {}
     interp = aa.get("interpretation") or {}
+    pipe = aa.get("pipeline") or {}
+    layer_meta = pipe.get("layer_meta") or {}
+    if bool(layer_meta.get("live_data_fallback_exact")):
+        # Directive 4.6.3.5.A requires this fallback sentence verbatim.
+        return _truncate(str(interp.get("summary") or ""))
+
     headline = str(interp.get("headline") or "Analysis")
     gist = _sanitize_anna_lead(str(interp.get("summary") or ""), headline)
     signals = interp.get("signals") or []
@@ -358,7 +364,6 @@ def _format_anna_body(data: dict[str, Any], *, display_name: str | None = None) 
     if factual_dt:
         return _truncate(_lead_line())
 
-    pipe = aa.get("pipeline") or {}
     if pipe.get("answer_source") == "clarification_requested" or (
         isinstance(signals, list) and "pipeline:clarification_required" in signals
     ):

@@ -98,3 +98,13 @@ def test_slack_connectivity_answer_does_not_inject_anna_status() -> None:
     _assert_starts_with_prefix(out)
     assert ANNA_SLACK_STATUS not in out
     assert "slack" in out.lower()
+
+
+def test_system_route_blocks_ungrounded_market_like_output() -> None:
+    raw = (
+        "Current price of SOL is approximately $35 and the spread ranges from 0.1% to 1%."
+    )
+    out, rules = enforce_slack_outbound(raw, route="system")
+    _assert_starts_with_prefix(out)
+    assert "Hello — how can I help?" in out
+    assert "block_ungrounded_market_like_output" in rules

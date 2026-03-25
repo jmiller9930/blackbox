@@ -38,6 +38,13 @@ _ANNA_EXTRA = [
     re.compile(r"\bAnna\s+is\s+still\s+online\b[^.!?\n]*[.!?]?", re.I),
 ]
 
+_MARKET_LIKE_OUTPUT = re.compile(
+    r"(?is)"
+    r"(?:\$\s?\d[\d,]*(?:\.\d+)?\b|"
+    r"\b(?:price|spread)\b.{0,80}\b(?:approximately|approx|around|about|range)\b|"
+    r"\b(?:current|live)\s+(?:price|spread)\b)"
+)
+
 
 def _apply_global_truth_and_status(text: str, triggered: list[str], *, strip_impersonation: bool) -> str:
     """Shared: forbidden availability claims; optional impersonation strip (system route only)."""
@@ -62,6 +69,10 @@ def _apply_global_truth_and_status(text: str, triggered: list[str], *, strip_imp
         triggered.append("dedupe_anna_sentence")
 
     return re.sub(r"\n{3,}", "\n\n", text).strip()
+
+
+def _contains_market_like_output(text: str) -> bool:
+    return bool(_MARKET_LIKE_OUTPUT.search(text or ""))
 
 
 def enforce_slack_outbound(raw: str, *, route: Route = "system") -> tuple[str, list[str]]:
@@ -102,6 +113,9 @@ def enforce_slack_outbound(raw: str, *, route: Route = "system") -> tuple[str, l
         triggered.append("strip_anna_analyst_tag")
 
     text = _apply_global_truth_and_status(text, triggered, strip_impersonation=True)
+    if _contains_market_like_output(text):
+        text = "Hello — how can I help?"
+        triggered.append("block_ungrounded_market_like_output")
 
     if not text.startswith(SLACK_AGENT_PREFIX):
         text = f"{SLACK_AGENT_PREFIX}\n\n{text}"
