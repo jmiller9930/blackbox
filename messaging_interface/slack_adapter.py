@@ -14,6 +14,7 @@ from pathlib import Path
 from typing import Any
 
 from messaging_interface.anna_slack_route import explicit_anna_route
+from messaging_interface.slack_architect_diagnostics import emit_slack_architect_block
 from messaging_interface.slack_persona_enforcement import enforce_slack_outbound
 
 _REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -81,14 +82,38 @@ def run_slack_from_config(cfg: dict[str, Any]) -> int:
             pass
         try:
             payload = run_dispatch_pipeline(text, display_name=display_name)
-            out = slack_reply_text(payload, user_display_name=display_name)
-            route = "anna" if explicit_anna_route(text) else "system"
-            out, _ = enforce_slack_outbound(out, route=route)
+            raw_before = slack_reply_text(payload, user_display_name=display_name)
+            route: str = "anna" if explicit_anna_route(text) else "system"
+            out, rules = enforce_slack_outbound(raw_before, route=route)
+            emit_slack_architect_block(
+                layer="slack_bolt_socket",
+                user_text=text,
+                routing_decision=route,
+                anna_entry_py_ran=False,
+                anna_entry_note=(
+                    "In-process run_dispatch_pipeline + format_telegram_reply "
+                    "(same pipeline as anna_entry.py; CLI not invoked in Bolt path)."
+                ),
+                raw_before_enforcement=raw_before,
+                enforcement_rules_fired=rules,
+                final_slack_text=out,
+            )
             say(out)
         except Exception as e:
             log.exception("slack dispatch failed")
-            err, _ = enforce_slack_outbound(
+            err, err_rules = enforce_slack_outbound(
                 f"Processing error while handling your message: {e!s}",
+            )
+            emit_slack_architect_block(
+                layer="slack_bolt_socket_error",
+                user_text=text,
+                routing_decision="system",
+                anna_entry_py_ran=False,
+                anna_entry_note="Exception before enforcement; error path uses system route.",
+                raw_before_enforcement=f"Processing error while handling your message: {e!s}",
+                enforcement_rules_fired=err_rules,
+                final_slack_text=err,
+                extra={"exception_type": type(e).__name__},
             )
             say(err)
 
