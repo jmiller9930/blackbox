@@ -11,6 +11,7 @@ Canonical running log for architect-facing directive execution, proof, and closu
 - **Directive:** Precision pass on Phase 4.x (Chris): full pipeline-stage visibility in Playground; explicit **Playground → Dashboard → Approval → Execution** stack; Slack/Telegram parallel to approval/execution flow; strengthen “not a single UI / layered interaction stack” framing.
 - **Scope:** `docs/blackbox_master_plan.md` only (paired log entry).
 - **Plan/log status sync: PASS**
+- **Post-verification:** Master plan Slack/Telegram “NOT” list explicitly excludes **approval interface** and **execution interface** (architecture precision checklist).
 
 ## 2026-03-25 — SYSTEM VISIBILITY ARCHITECTURE — CANONICALIZATION (docs-only)
 

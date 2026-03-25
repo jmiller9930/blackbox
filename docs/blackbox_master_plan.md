@@ -789,8 +789,8 @@ They are responsible for:
 They are NOT:
 - a playground  
 - a pipeline runner  
+- an approval interface  
 - an execution interface  
-- an approval system (in current phases)  
 
 ---
 
