@@ -12,6 +12,7 @@ Add new directives here as **`directive_<id>_<short_title>.md`** and a row in th
 |----|--------|----------|--------|
 | **4.6.3.3** | Messaging interface abstraction (Anna decoupled from Telegram) | [`directive_4_6_3_3_messaging_interface.md`](directive_4_6_3_3_messaging_interface.md) | **Closed** — see [`directive_4_6_3_3_closure_evidence.md`](directive_4_6_3_3_closure_evidence.md) |
 | **4.6.3.4** | Messenger config + Slack adapter bring-up | [`directive_4_6_3_4_slack_adapter_and_config.md`](directive_4_6_3_4_slack_adapter_and_config.md) | **Active** — one backend at runtime; **no** OpenClaw gateway in this leaf |
+| **4.6.3.4.C** | Slack Anna activation (routing + ingress + enforcement + Ollama) | [`directive_4_6_3_4_c_slack_anna_closure.md`](directive_4_6_3_4_c_slack_anna_closure.md) | **Closed** — live `#blackbox_lab`; see closure doc |
 | **—** | Expose master plan via raw Git URL (ChatGPT / tooling) | [`../../cursor_directive_expose_master_plan.md`](../../cursor_directive_expose_master_plan.md) | Active (ops) |
 | **4.6.4** | Anna benchmark / architect submission artifact | [`../../benchmarks/anna_directive_4_6_4_architect_submission.md`](../../benchmarks/anna_directive_4_6_4_architect_submission.md) | Benchmark / evidence |
 | **Global** | Mandatory clawbot proof (all phases) | [`../global_clawbot_proof_standard.md`](../global_clawbot_proof_standard.md) | Non-negotiable |
