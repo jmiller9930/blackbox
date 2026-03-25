@@ -6,6 +6,20 @@ Canonical running log for architect-facing directive execution, proof, and closu
 
 **Templates:** [`DIRECTIVE_TEMPLATE.md`](DIRECTIVE_TEMPLATE.md) (full directive scaffold), [`CLOSEOUT_PACKET_TEMPLATE.md`](CLOSEOUT_PACKET_TEMPLATE.md) (closeout / gate / proof summary). Every closeout must include `Plan/log status sync: PASS`.
 
+## 2026-03-26 — 4.6.3.2 Part B Twig 4.5 (Validated remediation pattern registry boundary, sandbox-only)
+
+- **Directive:** DATA Twig 4.5 — Validated Remediation Pattern Registry Boundary.
+- **Scope:** controlled pattern rows derived from Twig 4.4 outcome analyses; lifecycle + promotion rules only; **no** execution, **no** DATA output, **no** production mutation, **no** autonomous remediation.
+- **What was implemented:**
+  - `scripts/runtime/learning_core/remediation_pattern_registry.py` — `register_pattern_from_outcome_analysis`, `promote_candidate_to_validated_pattern` (explicit only), `reject_candidate_pattern`, `deprecate_validated_pattern`, `list_patterns`, helpers clarifying **validated_pattern = sandbox knowledge artifact, not live approval**,
+  - sandbox tables `remediation_patterns`, `remediation_pattern_history` (created in `open_validation_sandbox`),
+  - `get_persisted_outcome_analysis` on `validation_outcome_analysis.py` for linkage reads,
+  - traceability: `source_remediation_id`, `validation_run_id`, `outcome_analysis_id` (no orphan patterns),
+  - rejected / insufficient-evidence outcomes → `rejected_pattern` (retained, never reusable); optional trend fields (`validation_success_count`, `last_seen_at`, `stability_hint`).
+- **Safety boundaries:** patterns are not executable instructions; registry does not wire to runtime or DATA responses; future execution requires separate directives and policy gates.
+- **Status:** Complete (implementation); plan and log updated in same change set.
+- **Verification summary:** targeted Twig 4.5 tests passed; full suite passed.
+
 ## 2026-03-26 — 4.6.3.2 Part B Twig 4.4 (Validation outcome analysis layer, sandbox-only)
 
 - **Directive:** DATA Twig 4.4 — Validation Outcome Analysis Layer.

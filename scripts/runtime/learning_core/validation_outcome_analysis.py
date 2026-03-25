@@ -301,3 +301,44 @@ def list_recent_analyses_for_remediation(
             }
         )
     return out
+
+
+def get_persisted_outcome_analysis(conn: sqlite3.Connection, analysis_id: str) -> dict[str, Any] | None:
+    """Load a row from `validation_outcome_analyses` (Twig 4.4). Returns None if missing."""
+    row = conn.execute(
+        """
+        SELECT analysis_id, validation_run_id, remediation_id, validation_result,
+               outcome_category, failure_class, failure_reason,
+               before_after_summary_json, evidence_summary_json, analysis_timestamp, prior_run_count
+        FROM validation_outcome_analyses
+        WHERE analysis_id = ?
+        """,
+        (analysis_id,),
+    ).fetchone()
+    if not row:
+        return None
+    try:
+        before_after = json.loads(str(row[7] or "{}"))
+        if not isinstance(before_after, dict):
+            before_after = {}
+    except Exception:
+        before_after = {}
+    try:
+        evidence = json.loads(str(row[8] or "{}"))
+        if not isinstance(evidence, dict):
+            evidence = {}
+    except Exception:
+        evidence = {}
+    return {
+        "analysis_id": str(row[0]),
+        "validation_run_id": str(row[1]),
+        "remediation_id": str(row[2]),
+        "validation_result": str(row[3]),
+        "outcome_category": str(row[4]),
+        "failure_class": str(row[5] or ""),
+        "failure_reason": str(row[6] or ""),
+        "before_after_comparison_summary": before_after,
+        "evidence_summary": evidence,
+        "analysis_timestamp": str(row[9]),
+        "prior_run_count": int(row[10] or 0),
+    }

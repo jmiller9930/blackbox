@@ -139,6 +139,40 @@ def open_validation_sandbox(db_path: Path) -> sqlite3.Connection:
 
         CREATE INDEX IF NOT EXISTS idx_outcome_analyses_remediation
           ON validation_outcome_analyses(remediation_id, analysis_timestamp);
+
+        CREATE TABLE IF NOT EXISTS remediation_patterns (
+          pattern_id TEXT PRIMARY KEY,
+          source_remediation_id TEXT NOT NULL,
+          validation_run_id TEXT NOT NULL,
+          outcome_analysis_id TEXT NOT NULL UNIQUE,
+          outcome_category TEXT NOT NULL,
+          validation_evidence_summary_json TEXT NOT NULL,
+          failure_modes_json TEXT NOT NULL DEFAULT '[]',
+          pattern_status TEXT NOT NULL CHECK (pattern_status IN (
+            'candidate_pattern', 'validated_pattern', 'rejected_pattern', 'deprecated_pattern'
+          )),
+          created_at TEXT NOT NULL,
+          updated_at TEXT NOT NULL,
+          version INTEGER NOT NULL DEFAULT 1,
+          validation_success_count INTEGER NOT NULL DEFAULT 0,
+          last_seen_at TEXT,
+          stability_hint TEXT NOT NULL DEFAULT '',
+          FOREIGN KEY (validation_run_id) REFERENCES validation_runs(run_id) ON DELETE CASCADE,
+          FOREIGN KEY (outcome_analysis_id) REFERENCES validation_outcome_analyses(analysis_id) ON DELETE CASCADE
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_remediation_patterns_status
+          ON remediation_patterns(pattern_status, created_at);
+
+        CREATE TABLE IF NOT EXISTS remediation_pattern_history (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          pattern_id TEXT NOT NULL,
+          from_status TEXT NOT NULL,
+          to_status TEXT NOT NULL,
+          changed_at TEXT NOT NULL,
+          notes TEXT NOT NULL DEFAULT '',
+          FOREIGN KEY (pattern_id) REFERENCES remediation_patterns(pattern_id) ON DELETE CASCADE
+        );
         """
     )
     conn.commit()
