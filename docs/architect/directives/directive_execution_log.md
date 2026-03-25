@@ -34,7 +34,7 @@ Canonical running log for architect-facing directive execution, proof, and closu
 - **Directive:** `4.6.3.3-playground-output` — replace legacy per-stage `Input` / `Process` / `Output` / `Confidence` blocks with **stage-specific field contract** (DETECT…SIMULATE) and document JSON envelope + `contract` evolution.
 - **Canonical file:** [`directive_4_6_3_3_playground_output_contract.md`](directive_4_6_3_3_playground_output_contract.md)
 - **Boundaries:** docs-only; no code / pipeline / persistence changes in this change set; sandbox-only, no approval or execution semantics.
-- **Implementation note:** runtime CLI may still emit legacy blocks until a presentation-only alignment change; canonical spec is source of truth per §7 of the directive.
+- **Note:** This entry records the **canonical** [`directive_4_6_3_3_playground_output_contract.md`](directive_4_6_3_3_playground_output_contract.md) update (docs-only). Runtime alignment of `run_data_pipeline.py` to stage-specific `stages[].contract` fields is **implemented** and logged in **“2026-03-25 — Playground Output Contract Alignment — Complete (implementation)”** below.
 - **Plan/log status sync: PASS**
 
 ## 2026-03-25 — 4.6.3.5-CLOSE — DATA Twig 6 Approval Model Implementation (closed)
