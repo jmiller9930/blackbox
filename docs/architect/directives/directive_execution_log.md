@@ -6,6 +6,13 @@ Canonical running log for architect-facing directive execution, proof, and closu
 
 **Templates:** [`DIRECTIVE_TEMPLATE.md`](DIRECTIVE_TEMPLATE.md) (full directive scaffold), [`CLOSEOUT_PACKET_TEMPLATE.md`](CLOSEOUT_PACKET_TEMPLATE.md) (closeout / gate / proof summary). Every closeout must include `Plan/log status sync: PASS`.
 
+## 2026-03-26 — Layer 3 Approval Interface — Implemented (decision surface)
+
+- **Directive:** Implement Layer 3 approval interface per [`layer_3_approval_interface_design.md`](../layer_3_approval_interface_design.md) — view artifacts, read-only context, approve/reject/defer; no execution, simulation trigger, pipeline/pattern/policy mutation, messaging, `execution_plane`, or background automation.
+- **Scope:** [`scripts/runtime/approval_interface/`](../../../scripts/runtime/approval_interface/) — WSGI `app.py`, `context.py`, `static/index.html`, `__main__.py`; `learning_core/approval_model.py` — `defer_pending`, `list_approvals`, `DEFERRED` + `decision_note`; sandbox migration `_migrate_approvals_deferred_and_note` in [`remediation_validation.py`](../../../scripts/runtime/learning_core/remediation_validation.py); [`approval_cli.py`](../../../scripts/runtime/approval_cli.py) `--defer`; tests [`tests/test_approval_interface.py`](../../../tests/test_approval_interface.py), [`tests/test_approval_model.py`](../../../tests/test_approval_model.py).
+- **Verification:** `python3 -m pytest -q` — full suite passed (local workspace).
+- **Plan/log status sync: PASS**
+
 ## 2026-03-26 — Layer 3 Approval Interface Design
 
 - **Scope:** Design and canonicalization only — **no** Layer 3 UI implementation required for this closeout.

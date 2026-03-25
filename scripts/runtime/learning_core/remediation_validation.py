@@ -99,6 +99,63 @@ def _migrate_approvals_source_remediation_id(conn: sqlite3.Connection) -> None:
         conn.commit()
 
 
+def _migrate_approvals_deferred_and_note(conn: sqlite3.Connection) -> None:
+    """Sandbox-only: add DEFERRED status + optional decision_note to approvals (Layer 3 defer)."""
+    row = conn.execute(
+        "SELECT sql FROM sqlite_master WHERE type='table' AND name='approvals'"
+    ).fetchone()
+    if not row or not row[0]:
+        return
+    sql = row[0]
+    if "DEFERRED" in sql.upper() and "decision_note" in sql.lower():
+        return
+    conn.execute("PRAGMA foreign_keys=OFF")
+    try:
+        conn.executescript(
+            """
+            CREATE TABLE approvals__new (
+              approval_id TEXT PRIMARY KEY,
+              source_remediation_id TEXT NOT NULL,
+              pattern_id TEXT,
+              validation_run_id TEXT NOT NULL,
+              simulation_id TEXT NOT NULL,
+              requested_by TEXT NOT NULL,
+              approved_by TEXT,
+              approval_timestamp TEXT,
+              expiration_timestamp TEXT,
+              status TEXT NOT NULL CHECK (status IN ('PENDING', 'APPROVED', 'REJECTED', 'EXPIRED', 'DEFERRED')),
+              confidence_score REAL,
+              risk_level TEXT,
+              created_at TEXT NOT NULL,
+              decision_note TEXT,
+              FOREIGN KEY (source_remediation_id) REFERENCES remediation_candidates(remediation_id) ON DELETE CASCADE,
+              FOREIGN KEY (validation_run_id) REFERENCES validation_runs(run_id) ON DELETE CASCADE,
+              FOREIGN KEY (simulation_id) REFERENCES remediation_execution_simulations(execution_simulation_id) ON DELETE CASCADE
+            );
+
+            INSERT INTO approvals__new (
+              approval_id, source_remediation_id, pattern_id, validation_run_id, simulation_id,
+              requested_by, approved_by, approval_timestamp, expiration_timestamp,
+              status, confidence_score, risk_level, created_at, decision_note
+            )
+            SELECT
+              approval_id, source_remediation_id, pattern_id, validation_run_id, simulation_id,
+              requested_by, approved_by, approval_timestamp, expiration_timestamp,
+              status, confidence_score, risk_level, created_at, NULL
+            FROM approvals;
+
+            DROP TABLE approvals;
+            ALTER TABLE approvals__new RENAME TO approvals;
+
+            CREATE INDEX IF NOT EXISTS idx_approvals_source_remediation
+              ON approvals(source_remediation_id, status, created_at);
+            """
+        )
+    finally:
+        conn.execute("PRAGMA foreign_keys=ON")
+    conn.commit()
+
+
 def _migrate_eligibility_artifact(conn: sqlite3.Connection) -> None:
     """
     Sandbox-only: eligibility artifacts must persist without FK to validation/simulation
@@ -291,10 +348,11 @@ def open_validation_sandbox(db_path: Path) -> sqlite3.Connection:
           approved_by TEXT,
           approval_timestamp TEXT,
           expiration_timestamp TEXT,
-          status TEXT NOT NULL CHECK (status IN ('PENDING', 'APPROVED', 'REJECTED', 'EXPIRED')),
+          status TEXT NOT NULL CHECK (status IN ('PENDING', 'APPROVED', 'REJECTED', 'EXPIRED', 'DEFERRED')),
           confidence_score REAL,
           risk_level TEXT,
           created_at TEXT NOT NULL,
+          decision_note TEXT,
           FOREIGN KEY (source_remediation_id) REFERENCES remediation_candidates(remediation_id) ON DELETE CASCADE,
           FOREIGN KEY (validation_run_id) REFERENCES validation_runs(run_id) ON DELETE CASCADE,
           FOREIGN KEY (simulation_id) REFERENCES remediation_execution_simulations(execution_simulation_id) ON DELETE CASCADE
@@ -328,6 +386,7 @@ def open_validation_sandbox(db_path: Path) -> sqlite3.Connection:
     conn.commit()
     _migrate_remediation_candidates(conn)
     _migrate_approvals_source_remediation_id(conn)
+    _migrate_approvals_deferred_and_note(conn)
     _migrate_eligibility_artifact(conn)
     conn.execute(
         """

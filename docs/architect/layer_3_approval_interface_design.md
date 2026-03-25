@@ -1,7 +1,7 @@
 # Layer 3 — Approval Interface (Canonical Design)
 
-**Status:** **Design complete** — Layer 3 **UI product** not implemented; this document is the **canonical** design record.  
-**Related:** Approval **artifact** model and sandbox persistence — [`design/twig6_approval_model.md`](design/twig6_approval_model.md); implementation of data/CLI — `learning_core/approval_model.py`, `approval_cli.py`.
+**Status:** **Design complete**; **decision surface implemented** in [`scripts/runtime/approval_interface/`](../scripts/runtime/approval_interface/) (WSGI + token-guarded POST). This document remains the **canonical** design record.  
+**Related:** Approval **artifact** model — [`design/twig6_approval_model.md`](design/twig6_approval_model.md); persistence — `learning_core/approval_model.py`, `approval_cli.py`.
 
 ---
 

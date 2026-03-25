@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <title>Layer 3 — Approval (Decision Only)</title>
+  <style>
+    body { font-family: system-ui, sans-serif; margin: 1rem; max-width: 960px; background: #0d1117; color: #e6edf3; }
+    .warn { color: #d29922; font-size: 0.85rem; margin-bottom: 1rem; }
+    table { border-collapse: collapse; width: 100%; font-size: 0.85rem; }
+    th, td { border: 1px solid #30363d; padding: 0.35rem 0.5rem; text-align: left; }
+    tr:hover { background: #161b22; cursor: pointer; }
+    pre { background: #161b22; padding: 0.75rem; overflow: auto; font-size: 0.75rem; border: 1px solid #30363d; }
+    label { display: block; margin: 0.5rem 0 0.2rem; }
+    input[type="text"], input[type="password"] { width: 100%; max-width: 28rem; padding: 0.35rem; }
+    button { margin-right: 0.35rem; margin-top: 0.35rem; padding: 0.35rem 0.65rem; }
+    .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+    @media (max-width: 800px) { .grid { grid-template-columns: 1fr; } }
+  </style>
+</head>
+<body>
+  <h1>Layer 3 — Approval decisions</h1>
+  <p class="warn">DECISION ONLY — NO EXECUTION — NO PIPELINE RERUN — NO PATTERN MUTATION — NO SLACK/TELEGRAM</p>
+  <label>Decision token (for approve / reject / defer POST only)</label>
+  <input type="password" id="token" placeholder="paste token from server startup" autocomplete="off"/>
+  <label>Optional reason (reject / defer)</label>
+  <input type="text" id="reason" placeholder=""/>
+  <div class="grid">
+    <div>
+      <h2>Approvals</h2>
+      <p id="listStatus">Loading…</p>
+      <table id="tbl"><thead><tr><th>id</th><th>status</th><th>remediation</th></tr></thead><tbody></tbody></table>
+    </div>
+    <div>
+      <h2>Detail + context</h2>
+      <p id="detailStatus">Select a row.</p>
+      <pre id="ctx">{}</pre>
+      <div id="actions" style="display:none;">
+        <label>TTL hours (approve)</label>
+        <input type="number" id="ttl" value="168" min="0"/>
+        <label>Actor id</label>
+        <input type="text" id="actor" placeholder="operator_id"/>
+        <button type="button" id="btnApprove">Approve</button>
+        <button type="button" id="btnReject">Reject</button>
+        <button type="button" id="btnDefer">Defer</button>
+        <p id="postStatus"></p>
+      </div>
+    </div>
+  </div>
+  <script>
+    let selectedId = null;
+    function $(id) { return document.getElementById(id); }
+    function esc(s) {
+      const d = document.createElement("div");
+      d.textContent = s;
+      return d.innerHTML;
+    }
+    async function loadList() {
+      const r = await fetch("/api/approvals");
+      const j = await r.json();
+      $("listStatus").textContent = j.ok ? "Select an approval." : "Error";
+      const tb = $("#tbl").querySelector("tbody");
+      tb.innerHTML = "";
+      (j.approvals || []).forEach(a => {
+        const tr = document.createElement("tr");
+        tr.innerHTML = "<td><code>" + esc(a.approval_id) + "</code></td><td>" + esc(a.status) + "</td><td><code>" + esc(a.source_remediation_id) + "</code></td>";
+        tr.onclick = () => loadDetail(a.approval_id);
+        tb.appendChild(tr);
+      });
+    }
+    async function loadDetail(id) {
+      selectedId = id;
+      $("detailStatus").textContent = "Loading…";
+      const r = await fetch("/api/approvals/" + encodeURIComponent(id));
+      const j = await r.json();
+      $("ctx").textContent = JSON.stringify(j, null, 2);
+      $("detailStatus").textContent = j.ok ? "Context loaded." : "Error";
+      const st = j.approval && j.approval.status;
+      $("actions").style.display = st === "PENDING" ? "block" : "none";
+      $("postStatus").textContent = "";
+    }
+    async function decide(action) {
+      if (!selectedId) return;
+      const tok = $("token").value.trim();
+      if (!tok) { $("postStatus").textContent = "Set decision token first."; return; }
+      const actor = $("actor").value.trim() || "operator";
+      const body = { action, actor, reason: $("reason").value.trim() || null };
+      if (action === "approve") body.ttl_hours = parseInt($("ttl").value, 10) || 168;
+      const r = await fetch("/api/approvals/" + encodeURIComponent(selectedId) + "/decision", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": "Bearer " + tok
+        },
+        body: JSON.stringify(body)
+      });
+      const j = await r.json().catch(() => ({}));
+      $("postStatus").textContent = r.ok ? "OK: " + JSON.stringify(j.approval || j) : "Error " + r.status + " " + (j.error || "");
+      await loadList();
+      await loadDetail(selectedId);
+    }
+    $("btnApprove").onclick = () => decide("approve");
+    $("btnReject").onclick = () => decide("reject");
+    $("btnDefer").onclick = () => decide("defer");
+    loadList();
+  </script>
+</body>
+</html>

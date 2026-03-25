@@ -15,6 +15,7 @@ if str(_RUNTIME) not in sys.path:
 from learning_core.approval_model import (
     approve_pending,
     create_approval_request,
+    defer_pending,
     get_approval,
     reject_pending,
 )
@@ -45,6 +46,12 @@ def main() -> None:
         action="store_true",
         dest="reject_decision",
         help="Transition PENDING → REJECTED",
+    )
+    g.add_argument(
+        "--defer",
+        action="store_true",
+        dest="defer_decision",
+        help="Transition PENDING → DEFERRED",
     )
     g.add_argument("--status", action="store_true", help="Show approval record (applies expiration)")
 
@@ -117,6 +124,15 @@ def main() -> None:
         if args.reject_decision:
             try:
                 out = reject_pending(conn, approval_id=aid, approved_by=approver)
+                print(json.dumps({"ok": True, "approval": out}, sort_keys=True, default=str))
+            except ValueError as e:
+                print(json.dumps({"ok": False, "error": str(e)}, sort_keys=True))
+                raise SystemExit(1) from e
+            raise SystemExit(0)
+
+        if args.defer_decision:
+            try:
+                out = defer_pending(conn, approval_id=aid, approved_by=approver)
                 print(json.dumps({"ok": True, "approval": out}, sort_keys=True, default=str))
             except ValueError as e:
                 print(json.dumps({"ok": False, "error": str(e)}, sort_keys=True))

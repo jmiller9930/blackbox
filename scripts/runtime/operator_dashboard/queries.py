@@ -245,7 +245,7 @@ def fetch_approvals(conn: sqlite3.Connection) -> list[dict[str, Any]]:
         """
         SELECT approval_id, source_remediation_id, pattern_id, status,
                requested_by, approved_by, approval_timestamp, expiration_timestamp,
-               created_at, risk_level, confidence_score
+               created_at, risk_level, confidence_score, decision_note
         FROM approvals
         ORDER BY datetime(created_at) DESC
         """
@@ -263,6 +263,7 @@ def fetch_approvals(conn: sqlite3.Connection) -> list[dict[str, Any]]:
             "created_at": str(r["created_at"]),
             "risk_level": _na(r["risk_level"]),
             "confidence_score": r["confidence_score"],
+            "decision_note": _na(r["decision_note"]),
         }
         for r in cur.fetchall()
     ]

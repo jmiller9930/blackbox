@@ -16,11 +16,13 @@ sys.path.insert(0, str(RUNTIME))
 
 from learning_core.approval_model import (
     STATUS_APPROVED,
+    STATUS_DEFERRED,
     STATUS_EXPIRED,
     STATUS_PENDING,
     STATUS_REJECTED,
     approve_pending,
     create_approval_request,
+    defer_pending,
     get_approval,
     reject_pending,
     resolve_eligibility,
@@ -68,6 +70,19 @@ def test_reject_pending(tmp_path: Path) -> None:
         aid = row["approval_id"]
         rj = reject_pending(conn, approval_id=aid, approved_by="architect")
         assert rj["status"] == STATUS_REJECTED
+    finally:
+        conn.close()
+
+
+def test_defer_pending(tmp_path: Path) -> None:
+    sb, rid = _seed_sandbox_with_pipeline(tmp_path)
+    conn = open_validation_sandbox(sb)
+    try:
+        row = create_approval_request(conn, source_remediation_id=rid, requested_by="t")
+        aid = row["approval_id"]
+        d = defer_pending(conn, approval_id=aid, approved_by="architect", decision_note="later")
+        assert d["status"] == STATUS_DEFERRED
+        assert d.get("decision_note") == "later"
     finally:
         conn.close()
 

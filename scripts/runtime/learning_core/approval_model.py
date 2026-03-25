@@ -19,6 +19,7 @@ STATUS_PENDING = "PENDING"
 STATUS_APPROVED = "APPROVED"
 STATUS_REJECTED = "REJECTED"
 STATUS_EXPIRED = "EXPIRED"
+STATUS_DEFERRED = "DEFERRED"
 
 
 def _utc_now() -> datetime:
@@ -128,8 +129,8 @@ def create_approval_request(
         INSERT INTO approvals (
           approval_id, source_remediation_id, pattern_id, validation_run_id, simulation_id,
           requested_by, approved_by, approval_timestamp, expiration_timestamp,
-          status, confidence_score, risk_level, created_at
-        ) VALUES (?, ?, ?, ?, ?, ?, NULL, NULL, NULL, ?, ?, ?, ?)
+          status, confidence_score, risk_level, created_at, decision_note
+        ) VALUES (?, ?, ?, ?, ?, ?, NULL, NULL, NULL, ?, ?, ?, ?, NULL)
         """,
         (
             aid,
@@ -176,7 +177,7 @@ def get_approval(conn: sqlite3.Connection, approval_id: str) -> dict[str, Any] |
         """
         SELECT approval_id, source_remediation_id, pattern_id, validation_run_id, simulation_id,
                requested_by, approved_by, approval_timestamp, expiration_timestamp,
-               status, confidence_score, risk_level, created_at
+               status, confidence_score, risk_level, created_at, decision_note
         FROM approvals WHERE approval_id = ?
         """,
         (approval_id,),
@@ -197,7 +198,22 @@ def get_approval(conn: sqlite3.Connection, approval_id: str) -> dict[str, Any] |
         "confidence_score": row[10],
         "risk_level": row[11],
         "created_at": str(row[12]),
+        "decision_note": row[13],
     }
+
+
+def list_approvals(conn: sqlite3.Connection) -> list[dict[str, Any]]:
+    """All approval rows (calls get_approval per id for expiry side effect on APPROVED)."""
+    ids = [
+        str(r[0])
+        for r in conn.execute("SELECT approval_id FROM approvals ORDER BY datetime(created_at) DESC").fetchall()
+    ]
+    out: list[dict[str, Any]] = []
+    for aid in ids:
+        row = get_approval(conn, aid)
+        if row:
+            out.append(row)
+    return out
 
 
 def approve_pending(
@@ -206,6 +222,7 @@ def approve_pending(
     approval_id: str,
     approved_by: str,
     ttl_hours: int = 168,
+    decision_note: str | None = None,
 ) -> dict[str, Any]:
     """PENDING → APPROVED. Sets expiration_timestamp. Does not execute anything."""
     row = conn.execute(
@@ -221,16 +238,18 @@ def approve_pending(
     exp = now + timedelta(hours=max(0, int(ttl_hours)))
     ts = _iso(now)
     exp_s = _iso(exp)
+    note = (decision_note or "").strip() or None
     conn.execute(
         """
         UPDATE approvals SET
           status = ?,
           approved_by = ?,
           approval_timestamp = ?,
-          expiration_timestamp = ?
+          expiration_timestamp = ?,
+          decision_note = ?
         WHERE approval_id = ?
         """,
-        (STATUS_APPROVED, approved_by, ts, exp_s, approval_id),
+        (STATUS_APPROVED, approved_by, ts, exp_s, note, approval_id),
     )
     conn.commit()
     out = get_approval(conn, approval_id)
@@ -242,6 +261,7 @@ def reject_pending(
     *,
     approval_id: str,
     approved_by: str,
+    decision_note: str | None = None,
 ) -> dict[str, Any]:
     """PENDING → REJECTED."""
     row = conn.execute(
@@ -254,16 +274,54 @@ def reject_pending(
         raise ValueError(f"invalid transition: status is {row[0]}, expected PENDING")
 
     now = _iso(_utc_now())
+    note = (decision_note or "").strip() or None
     conn.execute(
         """
         UPDATE approvals SET
           status = ?,
           approved_by = ?,
           approval_timestamp = ?,
-          expiration_timestamp = NULL
+          expiration_timestamp = NULL,
+          decision_note = ?
         WHERE approval_id = ?
         """,
-        (STATUS_REJECTED, approved_by, now, approval_id),
+        (STATUS_REJECTED, approved_by, now, note, approval_id),
+    )
+    conn.commit()
+    out = get_approval(conn, approval_id)
+    return out or {}
+
+
+def defer_pending(
+    conn: sqlite3.Connection,
+    *,
+    approval_id: str,
+    approved_by: str,
+    decision_note: str | None = None,
+) -> dict[str, Any]:
+    """PENDING → DEFERRED. Audited hold; does not execute or mutate pipeline artifacts."""
+    row = conn.execute(
+        "SELECT status FROM approvals WHERE approval_id = ?",
+        (approval_id,),
+    ).fetchone()
+    if not row:
+        raise ValueError(f"approval_id not found: {approval_id}")
+    if str(row[0]) != STATUS_PENDING:
+        raise ValueError(f"invalid transition: status is {row[0]}, expected PENDING")
+
+    now = _iso(_utc_now())
+    note = (decision_note or "").strip() or None
+    conn.execute(
+        """
+        UPDATE approvals SET
+          status = ?,
+          approved_by = ?,
+          approval_timestamp = ?,
+          expiration_timestamp = NULL,
+          decision_note = ?
+        WHERE approval_id = ?
+        """,
+        (STATUS_DEFERRED, approved_by, now, note, approval_id),
     )
     conn.commit()
     out = get_approval(conn, approval_id)

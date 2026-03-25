@@ -744,7 +744,7 @@ Dashboard is a glass window, not a control surface.
 
 ---
 
-### Layer 3 — Approval Interface (Design Complete)
+### Layer 3 — Approval Interface (Implemented — decision surface)
 
 Type: Controlled UI  
 
@@ -763,9 +763,7 @@ Constraints:
 Rule:
 Approval is a distinct system boundary, not an extension of analysis.
 
-**Status:** **Design complete** — canonical specification: [`docs/architect/layer_3_approval_interface_design.md`](architect/layer_3_approval_interface_design.md). Layer 3 is the **decision-only** surface between Layer 2 (read-only visibility) and Layer 4 (execution): **approve / reject / defer** on **approval artifacts** with full **audit**; **no** execution, **no** pipeline/rerun, **no** mutation of pipeline or pattern-registry artifacts, **no** policy editing, **no** messaging-triggered approval; **separation** from execution and from **pattern lifecycle** mutation (pattern rows may appear as **read-only evidence** only). **UI implementation** of this interface is **not** claimed here.
-
-**Artifact model + sandbox persistence (Twig 6):** Canonical contract in [`docs/architect/design/twig6_approval_model.md`](architect/design/twig6_approval_model.md). **Implemented:** sandbox `approvals` table, [`learning_core/approval_model.py`](../scripts/runtime/learning_core/approval_model.py), [`approval_cli.py`](../scripts/runtime/approval_cli.py) — **data model / CLI**, eligibility rules; **no** execution layer; **no** runtime dispatch. Field **`source_remediation_id`** matches design. **Live** controlled remediation **execution** remains **not built**. **Plan/log status sync: PASS**
+**Canonical design:** [`docs/architect/layer_3_approval_interface_design.md`](architect/layer_3_approval_interface_design.md). **Implemented UI/API:** [`scripts/runtime/approval_interface/`](../scripts/runtime/approval_interface/) — WSGI + `static/index.html`; `GET` list/detail/context; `POST` `/api/approvals/<id>/decision` with **`--decision-token`** (Bearer / `X-Approval-Token`) for **approve / reject / defer** only; **no** execution_plane, messaging, pipeline rerun, or mutation of non-`approvals` tables. Run: `cd scripts/runtime && python3 -m approval_interface --sandbox-db /path/to/sandbox.db --decision-token <secret>` (default bind `127.0.0.1:8766`). **Twig 6 data model:** `DEFERRED` status + `decision_note` on sandbox `approvals` (migration in `remediation_validation`); [`learning_core/approval_model.py`](../scripts/runtime/learning_core/approval_model.py) (`defer_pending`, `list_approvals`, …); [`approval_cli.py`](../scripts/runtime/approval_cli.py) includes `--defer`. Tests: [`tests/test_approval_interface.py`](../tests/test_approval_interface.py). **Live** controlled remediation **execution** remains **not built**. **Plan/log status sync: PASS**
 
 ---
 
