@@ -10,6 +10,8 @@ import uuid
 from typing import Any
 
 from anna_modules.util import utc_now
+from learning_core.enforcement import is_reusable_by_source
+from learning_core.store import create_learning_record
 
 
 def _norm_q(text: str) -> str:
@@ -50,6 +52,13 @@ def find_reusable_answer(
         (intent, topic, nq),
     ).fetchone()
     if not row:
+        return None
+    # 4.6.3.2 Part A enforcement: only validated learning records may be reused.
+    if not is_reusable_by_source(
+        conn,
+        source="anna_context_memory",
+        source_record_id=str(row[0]),
+    ):
         return None
     return {
         "id": row[0],
@@ -102,4 +111,13 @@ def store_interaction(
         ),
     )
     conn.commit()
+    # Mirror into learning lifecycle as candidate (non-invasive: no decision-path influence yet).
+    create_learning_record(
+        conn,
+        source="anna_context_memory",
+        source_record_id=rid,
+        content=answer_text,
+        validation_notes=f"seeded from answer_source={answer_source}",
+        state="candidate",
+    )
     return rid

@@ -14,6 +14,7 @@ sys.path.insert(0, str(ROOT / "scripts" / "runtime"))
 from _db import ensure_schema, seed_agents
 from _paths import repo_root
 from anna_modules.analysis import build_analysis
+from learning_core.store import get_learning_record_by_source, transition_learning_record
 
 
 def _ctx(conn=None):
@@ -51,11 +52,26 @@ def test_memory_reuse_after_store():
     os.environ["ANNA_USE_LLM"] = "0"
     first = build_analysis(q, **_ctx(conn=conn))
     assert first["pipeline"]["answer_source"] == "rules_only"
-    assert first.get("pipeline", {}).get("stored_memory_id")
+    mem_id = first.get("pipeline", {}).get("stored_memory_id")
+    assert mem_id
 
+    # 4.6.3.2 Part A: candidate memory is not reusable.
     second = build_analysis(q, **_ctx(conn=conn))
-    assert second["pipeline"]["answer_source"] == "memory_only"
-    assert "61" in str(second["interpretation"].get("summary", ""))
+    assert second["pipeline"]["answer_source"] == "rules_only"
+
+    rec = get_learning_record_by_source(
+        conn,
+        source="anna_context_memory",
+        source_record_id=str(mem_id),
+    )
+    assert rec is not None
+    assert rec.state == "candidate"
+    transition_learning_record(conn, record_id=rec.id, to_state="under_test", notes="test promotion")
+    transition_learning_record(conn, record_id=rec.id, to_state="validated", notes="validated for reuse")
+
+    third = build_analysis(q, **_ctx(conn=conn))
+    assert third["pipeline"]["answer_source"] == "memory_only"
+    assert "61" in str(third["interpretation"].get("summary", ""))
 
 
 def test_playbook_rules_without_llm():
