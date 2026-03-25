@@ -6,6 +6,18 @@ Canonical running log for architect-facing directive execution, proof, and closu
 
 **Templates:** [`DIRECTIVE_TEMPLATE.md`](DIRECTIVE_TEMPLATE.md) (full directive scaffold), [`CLOSEOUT_PACKET_TEMPLATE.md`](CLOSEOUT_PACKET_TEMPLATE.md) (closeout / gate / proof summary). Every closeout must include `Plan/log status sync: PASS`.
 
+## 2026-03-25 — SYSTEM VISIBILITY ARCHITECTURE — CANONICALIZATION (docs-only)
+
+- **Directive:** System visibility & interface architecture — canonical master plan update.
+- **Summary:**
+  - Introduced layered operator interface model into [`../../blackbox_master_plan.md`](../../blackbox_master_plan.md) (Phase 4.x).
+  - Defined Playground, Operator Dashboard, Approval, and Execution layers.
+  - Clarified Slack/Telegram as primary **communication** interface (not playground, pipeline runner, execution, or approval system in current phases).
+  - Established separation between visibility, decision, and execution.
+- **Scope:** docs-only update (no runtime or code changes).
+- **Result:** Master plan explicitly reflects UI/interface architecture; future UI work aligns with these layers.
+- **Plan/log status sync: PASS**
+
 ## 2026-03-26 — 4.6.3.2 Part B Twig 5 (Simulation-first remediation execution layer, sandbox-only)
 
 - **Directive:** DATA Twig 5 — Simulation-First Remediation Execution Layer.

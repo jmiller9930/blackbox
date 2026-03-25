@@ -679,6 +679,128 @@ Advanced concepts may enter the registry as **draft** or **exploratory** concept
 
 ## Phase 4 — Real Trading Integration
 
+## Phase 4.x — System Visibility & Interface Architecture
+
+### Core Principle
+
+The system is not a single UI.
+
+It is a layered interaction model:
+
+observe → validate → simulate → approve → execute
+
+Each layer is isolated and must not bypass another.
+
+---
+
+### Layer 1 — Playground (Developer / Architect Surface)
+
+Type: CLI + TUI  
+Purpose: Debugging and inspection  
+
+Responsibilities:
+- run full DATA pipeline end-to-end  
+- display all stages (detect → simulate)  
+- support step, replay, and seed modes  
+
+Constraints:
+- sandbox-only  
+- no production DB access  
+- no execution capability  
+- no integration with DATA runtime or messaging systems  
+
+Rule:
+Playground is a debug surface only, never an operational interface.
+
+---
+
+### Layer 2 — Operator Dashboard (Read-Only)
+
+Type: Web UI  
+Purpose: Visibility and monitoring  
+
+Displays:
+- system health  
+- detected issues  
+- validation results  
+- remediation patterns  
+- simulation outcomes  
+
+Constraints:
+- strictly read-only  
+- no execution  
+- no approval  
+- no system mutation  
+
+Rule:
+Dashboard is a glass window, not a control surface.
+
+---
+
+### Layer 3 — Approval Interface (Future)
+
+Type: Controlled UI  
+
+Purpose:
+Introduce explicit permission to act  
+
+Responsibilities:
+- approve / reject / defer actions  
+- enforce policy constraints  
+
+Constraints:
+- separate from Slack  
+- fully audited  
+- not tied to pattern or simulation output  
+
+Rule:
+Approval is a distinct system boundary, not an extension of analysis.
+
+---
+
+### Layer 4 — Execution Interface (Future)
+
+Type: Restricted system layer  
+
+Purpose:
+Execute approved actions safely  
+
+Constraints:
+- requires approval artifact  
+- policy gated  
+- rollback capable  
+- fully auditable  
+
+Rule:
+Execution is never triggered directly from UI.
+
+---
+
+### Slack / Messenger Role (Clarification)
+
+Slack and Telegram remain the PRIMARY operator interface.
+
+They are responsible for:
+- querying system state  
+- receiving summaries  
+- conversational interaction  
+
+They are NOT:
+- a playground  
+- a pipeline runner  
+- an execution interface  
+- an approval system (in current phases)  
+
+---
+
+### System Relationship
+
+Playground → Dashboard → Approval → Execution  
+
+Slack operates in parallel as a communication layer, not inline with execution.
+
+---
+
 Phase **4** spans **execution-context rehydration** (4.0, closed) and **readiness for** touching a real venue (**4.1+** — next focus). **Planning-only for 4.1+:** the system may be **prepared** to touch a **real trading venue** only after gates and human approval. **Nothing here implies live trading is enabled by default.**
 
 **Keywords for search:** Phase 4, real trading, venue, wallet, custody, go-live, governance, signing, policy gate.
