@@ -6,6 +6,14 @@ Canonical running log for architect-facing directive execution, proof, and closu
 
 **Templates:** [`DIRECTIVE_TEMPLATE.md`](DIRECTIVE_TEMPLATE.md) (full directive scaffold), [`CLOSEOUT_PACKET_TEMPLATE.md`](CLOSEOUT_PACKET_TEMPLATE.md) (closeout / gate / proof summary). Every closeout must include `Plan/log status sync: PASS`.
 
+## 2026-03-26 — Layer 3 Approval Interface — Design complete (docs-only)
+
+- **Directive:** Layer 3 controlled approval interface — **design only**; separate surface between read-only dashboard (Layer 2) and execution (Layer 4); no implementation of Layer 3 UI required for this closeout.
+- **Canonical design:** [`docs/architect/design/layer3_approval_interface.md`](../design/layer3_approval_interface.md) — purpose, inputs, approve/reject/defer, forbidden actions, safety, audit, UI panels, Layer 2/3/4 relationship; aligns with [`twig6_approval_model.md`](../design/twig6_approval_model.md) for artifacts.
+- **Boundaries:** no execution logic, no runtime mutation via this design doc, no Slack/Telegram approval path, no execution coupling, no automatic approval; existing sandbox `approval_model` / CLI remain the persistence/CLI layer until a future **implementation** directive.
+- **Verification:** documentation review; plan + log updated same change set.
+- **Plan/log status sync: PASS**
+
 ## 2026-03-25 — Layer 2 Operator Dashboard — Implemented (read-only)
 
 - **Directive:** Implement read-only Layer 2 operator dashboard — visibility only; no write, approval, execution, messaging, pipeline control, or background mutation.

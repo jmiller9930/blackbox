@@ -744,7 +744,7 @@ Dashboard is a glass window, not a control surface.
 
 ---
 
-### Layer 3 — Approval Interface (Future)
+### Layer 3 — Approval Interface (Designed — UI not implemented)
 
 Type: Controlled UI  
 
@@ -763,7 +763,9 @@ Constraints:
 Rule:
 Approval is a distinct system boundary, not an extension of analysis.
 
-**Design + implementation (DATA Twig 6 — approval model, sandbox):** Canonical contract in [`docs/architect/design/twig6_approval_model.md`](architect/design/twig6_approval_model.md). **Implemented:** sandbox `approvals` table, [`learning_core/approval_model.py`](../scripts/runtime/learning_core/approval_model.py), [`approval_cli.py`](../scripts/runtime/approval_cli.py) — **eligibility only**; **no** execution layer; **no** runtime dispatch. Field **`source_remediation_id`** matches design. **Live** controlled remediation **execution** remains **not built**.
+**Layer 3 approval interface — design complete:** [`docs/architect/design/layer3_approval_interface.md`](architect/design/layer3_approval_interface.md) — controlled surface between Layer 2 (read-only) and Layer 4 (execution); **approve / reject / defer** only; **no** execute, rerun, remediation mutation, policy edit, or messaging-triggered approval; audit requirements and UI panels defined. **Implementation** of that UI is **not** claimed here.
+
+**Artifact model + sandbox persistence (Twig 6):** Canonical contract in [`docs/architect/design/twig6_approval_model.md`](architect/design/twig6_approval_model.md). **Implemented:** sandbox `approvals` table, [`learning_core/approval_model.py`](../scripts/runtime/learning_core/approval_model.py), [`approval_cli.py`](../scripts/runtime/approval_cli.py) — **data model / CLI**, eligibility rules; **no** execution layer; **no** runtime dispatch. Field **`source_remediation_id`** matches design. **Live** controlled remediation **execution** remains **not built**. **Plan/log status sync: PASS** (Layer 3 interface design).
 
 ---
 
