@@ -31,6 +31,14 @@ Canonical running log for architect-facing directive execution, proof, and closu
 - **Verification:** `python3 -m pytest -q` — full suite passed (local workspace).
 - **Plan/log status sync: PASS**
 
+## 2026-03-25 — Playground Output Polish — Complete
+
+- **Directive:** Playground Output Polish (Stage 3) — presentation-only CLI output formatting for the seven stages and required safety disclaimers.
+- **Scope:** `scripts/runtime/playground/run_data_pipeline.py` (human-readable output only; `--json` structure unchanged); docs-only updates in the same change set.
+- **Boundaries:** no new business logic, no persistence changes, no approval/execution semantics, no runtime/DATA/messaging integration.
+- **Verification:** `python3 -m pytest -q` — full suite passed (local workspace).
+- **Plan/log status sync: PASS**
+
 ## 2026-03-26 — Phase 4.x visibility architecture — wording alignment (docs-only)
 
 - **Directive:** Precision pass on Phase 4.x (Chris): full pipeline-stage visibility in Playground; explicit **Playground → Dashboard → Approval → Execution** stack; Slack/Telegram parallel to approval/execution flow; strengthen “not a single UI / layered interaction stack” framing.
