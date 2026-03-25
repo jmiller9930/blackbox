@@ -12,7 +12,9 @@ import pytest
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts" / "runtime"))
 
-from playground.run_data_pipeline import _assert_not_production_sqlite, run_data_pipeline
+from learning_core.remediation_validation import assert_non_production_sqlite_path
+
+from playground.run_data_pipeline import run_data_pipeline
 
 
 def test_full_pipeline_seed_demo(tmp_path: Path) -> None:
@@ -29,6 +31,8 @@ def test_full_pipeline_seed_demo(tmp_path: Path) -> None:
     assert len(r["stages"]) == 7
     names = [s["name"] for s in r["stages"]]
     assert names == ["DETECT", "SUGGEST", "INGEST", "VALIDATE", "ANALYZE", "PATTERN", "SIMULATE"]
+    assert r["simulation_policy"]["would_allow_real_execution"] is False
+    assert all("contract" in s and "stage_key" in s for s in r["stages"])
     conn = sqlite3.connect(sb)
     n = conn.execute("SELECT COUNT(*) FROM remediation_execution_simulations").fetchone()
     assert int(n[0]) >= 1
@@ -38,8 +42,8 @@ def test_full_pipeline_seed_demo(tmp_path: Path) -> None:
 def test_rejects_production_sandbox_path(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     prod = tmp_path / "prod.db"
     monkeypatch.setenv("BLACKBOX_SQLITE_PATH", str(prod))
-    with pytest.raises(SystemExit):
-        _assert_not_production_sqlite(prod)
+    with pytest.raises(ValueError):
+        assert_non_production_sqlite_path(prod)
 
 
 def test_step_mode_pauses(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:

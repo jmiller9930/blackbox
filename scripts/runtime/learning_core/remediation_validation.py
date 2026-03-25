@@ -45,6 +45,16 @@ def _is_production_db(path: Path) -> bool:
         return False
 
 
+def assert_non_production_sqlite_path(path: Path | str) -> None:
+    """
+    Refuse the production runtime SQLite path (same rule as open_validation_sandbox).
+    Exposed for playground callers that must not import _paths directly.
+    """
+    p = Path(path).expanduser()
+    if _is_production_db(p):
+        raise ValueError("path must not be production runtime SQLite (BLACKBOX_SQLITE_PATH)")
+
+
 def _table_columns(conn: sqlite3.Connection, table: str) -> set[str]:
     if not table.replace("_", "").isalnum():
         raise ValueError("invalid table name for introspection")
