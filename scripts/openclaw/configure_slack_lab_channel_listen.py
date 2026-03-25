@@ -23,6 +23,8 @@ import sys
 from pathlib import Path
 
 CONFIG = Path.home() / ".openclaw" / "openclaw.json"
+# Name variants (need dangerouslyAllowNameMatching). ID is authoritative for private channels.
+LAB_CHANNEL_ID = "C0ANSPTH552"
 LAB_KEYS = ("blackbox_lab", "blackbox-lab", "#blackbox_lab", "#blackbox-lab")
 
 
@@ -37,6 +39,7 @@ def main() -> int:
     slack = d.setdefault("channels", {}).setdefault("slack", {})
     slack["dangerouslyAllowNameMatching"] = True
     ch = slack.setdefault("channels", {})
+    ch[LAB_CHANNEL_ID] = {"requireMention": False}
     for key in LAB_KEYS:
         ch[key] = {"requireMention": False}
     CONFIG.write_text(json.dumps(d, indent=2) + "\n", encoding="utf-8")
