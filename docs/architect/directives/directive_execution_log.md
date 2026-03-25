@@ -2,6 +2,22 @@
 
 Canonical running log for architect-facing directive execution, proof, and closure status.
 
+## 2026-03-25 — 4.6.3.2 Part B Twig 3 (DATA structured issue detection + suggestions)
+
+- **Directive:** DATA Twig 3 — Structured Issue Detection + Suggestion Layer.
+- **Scope:** deterministic issue detection + classification + non-executable suggestions with execution-aware defer/report integration.
+- **What was added:**
+  - `scripts/runtime/learning_core/data_issue_detection.py` as a dedicated diagnostics module,
+  - deterministic detectors for repeated error patterns, connectivity failure signals, database lock signals, and stale/missing market snapshots,
+  - structured issue objects (`issue_id`, `category`, `severity`, `confidence`, `timestamp`, `supporting_evidence`),
+  - suggestion artifacts (`suggested_fix`, `possible_causes`, `recommended_next_step`) marked non-executable and suggestion-only,
+  - execution-aware safety integration via existing action classification + defer/report decisions.
+- **Hard boundary retained:** no remediation, no execution, no runtime mutation, and no DATA output-generation path integration (diagnostics layer remains isolated).
+- **Verification summary:**
+  - targeted Twig 3 suite passed,
+  - full suite passed,
+  - regression checks confirm DATA/Anna/routing behavior unchanged.
+
 ## 2026-03-25 — 4.6.3.2 Part B Step 2 (DATA execution-aware diagnostics, minimal)
 
 - **Directive:** DATA Infrastructure Roadmap Stubs + Execution-Aware DATA Layer (Twig 2).
