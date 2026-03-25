@@ -746,9 +746,11 @@ Phase **4** spans **execution-context rehydration** (4.0, closed) and **readines
 
 **4.6.3.2 Part B — DATA infrastructure-intelligence sequencing (twigs):**
 
+**Status alignment (mandatory):** A Part B twig or directive is not treated as closed or advanced unless **`docs/blackbox_master_plan.md`** and **`docs/architect/directives/directive_execution_log.md`** are updated in the **same change set** with **matching status granularity** (scope, completion level, safety boundaries).
+
 - **DATA Twig 1 — Visibility (Complete):** DATA has read-only visibility into learning lifecycle state via inspection helpers; helpers are not in output-generation paths.
 - **DATA Twig 2 — Execution-Aware Diagnostics (Complete):** DATA has execution-sensitive state awareness, infrastructure-action risk classification (`safe` / `controlled` / `blocked`), and defer/report decisions; diagnostics-only and non-remediating.
-- **DATA Twig 3 — Structured Issue Detection + Suggestion Layer (Active):** deterministic issue detection + structured issue objects + non-executable fix suggestions are available for diagnostic contexts only; no remediation, no execution, and no DATA output-generation integration.
+- **DATA Twig 3 — Structured Issue Detection + Suggestion Layer (Complete):** deterministic issue detection + structured issue objects + non-executable fix suggestions are available for diagnostic contexts only; recent-event window uses **`system_events.created_at`** ordering (not `id`); no remediation, no execution, and no DATA output-generation integration.
 - **DATA Twig 4 — Remediation Validation Pipeline (Stub):** candidate remediations tested in controlled environments; only validated remediations eligible for promotion.
 - **DATA Twig 5 — Controlled Remediation Execution (Stub):** future remediation execution only under execution-safe + maintenance-window + rollback + audit + policy controls.
 - **DATA Twig 6 — Learning-Backed Ops Optimization (Stub):** future optimization from validated remediation outcomes; must remain infrastructure-scoped (not market strategy reasoning).

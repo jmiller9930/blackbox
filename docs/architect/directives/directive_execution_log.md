@@ -2,6 +2,8 @@
 
 Canonical running log for architect-facing directive execution, proof, and closure status.
 
+**Alignment (mandatory):** A Part B twig or directive must not be treated as **closed** or **advanced** unless **`docs/blackbox_master_plan.md`** and **this file** are updated in the **same change set** with **matching status granularity** (scope, completion level, safety boundaries, verification where applicable).
+
 ## 2026-03-25 — 4.6.3.2 Part B Twig 3 (DATA structured issue detection + suggestions)
 
 - **Directive:** DATA Twig 3 — Structured Issue Detection + Suggestion Layer.
@@ -17,6 +19,7 @@ Canonical running log for architect-facing directive execution, proof, and closu
   - targeted Twig 3 suite passed,
   - full suite passed,
   - regression checks confirm DATA/Anna/routing behavior unchanged.
+- **Correction (recency, Twig 4.3 closeout):** `detect_infra_issues()` orders recent `system_events` by **`datetime(created_at)`** (not lexicographic `id`); proof tests in `tests/test_data_issue_detection_layer.py`.
 
 ## 2026-03-25 — 4.6.3.2 Part B Step 2 (DATA execution-aware diagnostics, minimal)
 

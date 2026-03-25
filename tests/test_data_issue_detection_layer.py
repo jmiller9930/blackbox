@@ -98,6 +98,96 @@ def test_data_responses_unchanged_and_independent_from_detection() -> None:
     assert "Current phase:" in str(payload.get("status_text") or "")
 
 
+def test_detection_window_orders_by_created_at_newest_first() -> None:
+    """Lexicographic id order must not define recency; created_at does."""
+    conn = _conn()
+    conn.execute(
+        "INSERT INTO system_events (id, source, event_type, severity, payload, created_at) VALUES (?, ?, ?, ?, ?, ?)",
+        (
+            "zzz-oldest-id",
+            "execution_plane",
+            "execution_attempted",
+            "error",
+            json.dumps({"n": 1}),
+            "2019-01-01T00:00:00Z",
+        ),
+    )
+    conn.execute(
+        "INSERT INTO system_events (id, source, event_type, severity, payload, created_at) VALUES (?, ?, ?, ?, ?, ?)",
+        (
+            "mmm-mid-id",
+            "execution_plane",
+            "execution_attempted",
+            "error",
+            json.dumps({"n": 2}),
+            "2020-06-01T00:00:00Z",
+        ),
+    )
+    conn.execute(
+        "INSERT INTO system_events (id, source, event_type, severity, payload, created_at) VALUES (?, ?, ?, ?, ?, ?)",
+        (
+            "aaa-newest-id",
+            "execution_plane",
+            "execution_attempted",
+            "error",
+            json.dumps({"n": 3}),
+            "2030-01-01T00:00:00Z",
+        ),
+    )
+    conn.commit()
+    ordered = conn.execute(
+        """
+        SELECT id FROM system_events
+        ORDER BY datetime(created_at) DESC, id DESC
+        LIMIT 10
+        """
+    ).fetchall()
+    assert [str(r[0]) for r in ordered][0] == "aaa-newest-id"
+
+
+def test_newest_events_win_over_lexicographic_id_order_in_window() -> None:
+    """
+    When id DESC would exclude the newest rows by time, timestamp ordering must still
+    include them in the detection window (connectivity signal only on newest rows).
+    """
+    conn = _conn()
+    for i in range(50):
+        conn.execute(
+            """
+            INSERT INTO system_events (id, source, event_type, severity, payload, created_at)
+            VALUES (?, ?, ?, ?, ?, ?)
+            """,
+            (
+                f"e{i:03d}-old",
+                "execution_plane",
+                "execution_attempted",
+                "info",
+                json.dumps({"n": i}),
+                "2020-01-01T00:00:00Z",
+            ),
+        )
+    for j, eid in enumerate(("aa-newest", "bb-newest")):
+        conn.execute(
+            """
+            INSERT INTO system_events (id, source, event_type, severity, payload, created_at)
+            VALUES (?, ?, ?, ?, ?, ?)
+            """,
+            (
+                eid,
+                "execution_plane",
+                "execution_attempted",
+                "error",
+                json.dumps({"error": "connection refused", "j": j}),
+                "2030-06-01T12:00:00Z",
+            ),
+        )
+    conn.commit()
+    issues = detect_infra_issues(conn, error_window=50)
+    conn_issues = [i for i in issues if i.get("category") == "connectivity"]
+    assert conn_issues, "newest connection-refused rows must be inside the detection window"
+    assert any("connectivity_error_signals=" in " ".join(i.get("supporting_evidence") or []) for i in conn_issues)
+
+
 def test_database_lock_detection_from_seeded_payload_signal() -> None:
     conn = _conn()
     conn.execute(

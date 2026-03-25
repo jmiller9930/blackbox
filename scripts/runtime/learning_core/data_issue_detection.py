@@ -58,11 +58,12 @@ def detect_infra_issues(
     issues: list[dict[str, Any]] = []
 
     # 1) repeated errors in recent events
+    # Recency uses `created_at` (true insert time per schema_phase1_5.sql), not `id` (TEXT UUIDs are not chronological).
     rows = conn.execute(
         """
         SELECT id, event_type, severity, payload
         FROM system_events
-        ORDER BY id DESC
+        ORDER BY datetime(created_at) DESC, id DESC
         LIMIT ?
         """,
         (int(error_window),),
