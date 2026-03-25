@@ -89,3 +89,12 @@ def test_anna_route_prepends_header() -> None:
     out, _ = enforce_slack_outbound(raw, route="anna")
     assert out.startswith(ANNA_HEADER)
     assert "bid-ask" in out.lower()
+
+
+def test_slack_connectivity_answer_does_not_inject_anna_status() -> None:
+    """Bot/Slack uptime answers must not mention Anna unless the model does (then rules apply)."""
+    raw = "Yes — Slack is connected here and the bot can receive DMs in this channel."
+    out, rules = enforce_slack_outbound(raw)
+    _assert_starts_with_prefix(out)
+    assert ANNA_SLACK_STATUS not in out
+    assert "slack" in out.lower()
