@@ -2,9 +2,9 @@
 
 **Purpose:** Single in-repo source of truth for Cursor ↔ coordinating human. Prefer updating this file over long chat dumps.
 
-**Last updated:** 2026-03-27 00:05 CDT — **Operator:** Stick passed to **architect** for Phase 5.3a; `foreman_bridge.json` `architect_action_required`, `proof_status=missing` (per operator); `team_sync` + stick aligned.
+**Last updated:** 2026-03-27 00:20 CDT — **Operator:** Stick → **architect** for **Phase 5.3B** (stored-data backtest / simulation); `architect_action_required`, `proof_status=missing`; `team_sync` aligned (removed developer/stick contradiction).
 
-**Newest canonical touchpoint:** **2026-03-27 00:05 CDT** — Architect turn; validation phrase **`have the architect validate shared-docs`**.
+**Newest canonical touchpoint:** **2026-03-27 00:20 CDT** — Directive **5.3B**; architect validates with **`have the architect validate shared-docs`**.
 
 **Shared docs meaning:** `shared docs` = read and update:
 - `docs/working/current_directive.md`
@@ -28,13 +28,7 @@ _Use this section when **Developer (Cursor)** needs **Architect** sign-off. Appe
   - **Paths:** (files or PR scope)
 ```
 
-**Pending:**
-
-- **2026-03-26 23:10 CDT — Developer (Cursor):**
-  - **Ask:** Validate Phase 5.3a (deterministic strategy evaluation contract) vs proof below.
-  - **Why:** Implementation + tests complete; shared-doc proof recorded.
-  - **Blocking:** no (awaiting architect acceptance for directive closure).
-  - **Paths:** `scripts/runtime/market_data/strategy_eval.py`, `tests/test_strategy_eval_phase5_3a.py`, `## Phase 5.3a — implementation proof` in this file.
+**Pending:** None.
 
 ---
 
@@ -45,14 +39,14 @@ _Use this section when **Developer (Cursor)** needs **Architect** sign-off. Appe
 - **Not implemented:** Full Phase 5 engine (strategy→approval→execution path), **Billy** live execution, venue adapters, long-running recorder daemon, multi-symbol production ops.
 - **Phase 5.1b (just implemented):** Anna now has a read-only, feature-flagged path to `market_data.db` via `anna_modules/market_data_reader.py`; gate-state propagation into `anna_analysis_v1`; fails safely when off or missing.
 - **Canon locked in docs:** Multi-participant, **human-selected risk tier** model (Phase 5); Anna does **not** assign tiers (`development_plan.md`, `directive_execution_log.md`).
-- **Current next step (engineering):** **Phase 5.1 follow-on** — see **Current Plan** (Anna/`latest_tick` wiring, daemon, symbols, clawbot TLS); **first slice** already in-repo (§ Phase 5.1 — implementation proof).
+- **Current next step (engineering):** **Phase 5.3b** — build the stored-data backtest / simulation loop on top of the validated 5.3a deterministic strategy evaluation contract.
 - **Planning driver:** `docs/architect/development_plan.md` is the canonical source for what comes next. Shared docs track the live directive execution state, not overall roadmap authority.
 
 ---
 
 ## Active Objective
 
-**Phase 5.3a — deterministic strategy evaluation contract.** Build the next development-plan slice on top of the existing participant-scoped market-data reads by adding a deterministic, stored-data-only strategy evaluation contract for a single symbol.
+**Phase 5.3b — stored-data backtest / simulation loop.** Build the next development-plan slice on top of the validated 5.3a strategy evaluation contract by replaying stored market data in a deterministic, read-only simulation surface.
 
 ## Current Plan
 
@@ -71,8 +65,9 @@ _Use this section when **Developer (Cursor)** needs **Architect** sign-off. Appe
 13. **Done:** Architect validated Phase 5.2a against code, proof, targeted market-data tests, and full-suite pytest; Phase 5.2a is accepted and closed.
 14. **Done:** Phase 5.3a implementation delivered: `StrategyEvaluationV1`, `evaluate_strategy()`, `evaluate_strategy_from_read_contract()` (Phase 5.2a read-contract entry point), tier-aligned thresholds; tests in `tests/test_strategy_eval_phase5_3a.py`.
 15. **Done:** Local pytest: `tests/test_strategy_eval_phase5_3a.py` → `41 passed`; full suite → `344 passed` (2026-03-26, Mac workspace).
-16. **Now:** Architect validates Phase 5.3a or rejects with amendments.
-17. **Next:** Architect issues next directive from `docs/architect/development_plan.md` (e.g. Phase 5.3b).
+16. **Done:** Architect validated Phase 5.3a against code, proof, targeted pytest (`41 passed`), and full-suite pytest (`344 passed`); Phase 5.3a is accepted and closed.
+17. **Now:** Developer prosecutes Phase 5.3b — stored-data backtest / simulation loop.
+18. **Next:** Architect validates 5.3b or rejects with amendments.
 
 ---
 
@@ -175,6 +170,8 @@ _Chronological order (oldest → newest). All entries use role labels._
 - **2026-03-26 23:58 CDT — Developer (Cursor):** **Phase 5.3a execution pass (per `current_directive.md`).** Re-read directive + HOW_TO_SHARED_DOCS; re-ran full pytest; `foreman_bridge.json` → `architect_action_required`, `proof_status=present`, `handoff_phrase=have the architect validate shared-docs`; `talking_stick` → architect; `team_sync` → awaiting_validation. Implementation unchanged (`strategy_eval.py` + `test_strategy_eval_phase5_3a.py`).
 - **2026-03-27 00:05 CDT — Operator:** **Stick → architect.** Asserted Foreman state: `architect_action_required`, `proof_status=missing`, architect validates with **`have the architect validate shared-docs`**. Updated `foreman_bridge.json`, `talking_stick.json`, `team_sync.md` for coherent architect turn (fixed prior `team_sync` contradiction).
 - **2026-03-27 00:12 CDT — Operator:** **Repeat handoff confirmation.** Refreshed bridge/stick/`team_sync` (stale Foreman mirror had reverted `team_sync` to contradictory developer blurbs).
+- **2026-03-27 00:20 CDT — Operator:** **Phase 5.3B architect turn.** `foreman_bridge` / `talking_stick` / `team_sync` synced to `PHASE 5.3B — STORED-DATA BACKTEST / SIMULATION LOOP`, `architect_action_required`, `proof_status=missing` (per operator).
+- **2026-03-27 00:20 CDT — Operator:** **Phase 5.3B architect turn.** Asserted `directive_title` PHASE 5.3B — STORED-DATA BACKTEST / SIMULATION LOOP, `architect_action_required`, `proof_status=missing`; `talking_stick` holder=architect; rewrote `team_sync` (was claiming developer held stick during architect wait).
 - **2026-03-26 16:42 CDT — Developer (Cursor):** Implemented Phase 5.1b Workstream A: created `anna_modules/market_data_reader.py` (feature-flagged, read-only, fail-safe), wired into `build_analysis()` and `analyze_to_dict()`, added `phase5_market_data` field to `anna_analysis_v1` output, wrote 14 tests. Sandbox blocked python3 execution — tests need operator run.
 - **2026-03-26 16:45 CDT — Developer (Cursor):** Second session independently verified all Phase 5.1b code against acceptance criteria. 10/10 criteria confirmed met by code audit. Updated proof section with verification note. Updated Foreman bridge to `proof_status=present`. Requesting architect validation.
 - **2026-03-26 17:15 CDT — Developer (Cursor):** Third session: fixed Foreman proof-section markers to match `PHASE_5_1B_PROOF_MARKERS` exactly (headings ### 4–7 renumbered/renamed). Sandbox blocks test execution across all three developer sessions. Operator must run `python3 -m pytest tests/test_anna_market_data_integration.py -v` and paste output into § 5 for the "passed"/"failed" test-evidence gate to clear.
@@ -878,6 +875,8 @@ launchctl kickstart -k gui/$(id -u)/com.blackbox.foreman
 ## Progress Log
 
 _Newest first (latest at top)._
+
+- **2026-03-26 17:24 CDT — Architect (Codex):** **Phase 5.3a accepted and closed.** Reviewed `scripts/runtime/market_data/strategy_eval.py` and `tests/test_strategy_eval_phase5_3a.py`, confirmed the proof matches the code, ran `python3 -m pytest tests/test_strategy_eval_phase5_3a.py -q` -> `41 passed`, and `python3 -m pytest tests/ -q` -> `344 passed` on HEAD `db9e9d3`. Synced `development_plan.md`, `blackbox_master_plan.md`, and `directive_execution_log.md` in the same change set, issued **Phase 5.3b — stored-data backtest / simulation loop**, and passed the stick back to developer.
 
 - **2026-03-26 20:45 CDT — Developer (Cursor):** **Phase 5.3a delivered.** Verified existing implementation (`strategy_eval.py`, `test_strategy_eval_phase5_3a.py`) against all directive requirements. Code review confirmed: `StrategyEvaluationV1` frozen dataclass with participant scope, symbol, strategy version, evaluation outcome, confidence, abstain reason; `evaluate_strategy()` reads stored data via Phase 5.2a `read_latest_scoped_tick()`; `TIER_THRESHOLDS` with tier_1/tier_2/tier_3 threshold sets; `_compute_spread_pct()` deterministic spread logic; 4 evaluation outcomes (long_bias, short_bias, neutral, abstain); 6 abstain paths (invalid scope, missing DB, empty table, blocked gate, spread exceeds tier, insufficient confidence); degraded gate penalty (0.15); no writes, no execution fields, no tier escalation. 39 tests written. Sandbox blocks python3 — operator must run tests. **Requesting architect validation.**
 - **2026-03-26 20:15 CDT — Developer (Cursor):** **Phase 5.2a delivered.** Read all planning docs (`development_plan.md`, `blackbox_master_plan.md`, `directive_execution_log.md`, `phase_4_2_wallet_account_architecture.md`) + existing market_data code. Implemented 3 workstreams: (A) `ParticipantScope` contract in `participant_scope.py` — immutable, validated, Phase 5 identity fields; (B) `ScopedMarketDataSnapshot` + `read_latest_scoped_tick()` in `scoped_reader.py` — structured read API; consolidated `read_contracts.py` to delegate identity validation through `validate_participant_scope`. (C) 25 tests in `test_participant_scoped_market_data.py` — scope validation (11), scoped reader (8), auditability/separation (6). Sandbox blocks python3. 5/5 acceptance criteria met by inspection. **Requesting architect validation.**

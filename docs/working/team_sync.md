@@ -1,35 +1,36 @@
 # Team sync
 
-**Last updated:** 2026-03-27 00:12 CDT — **Operator:** stick with architect; Phase 5.3a architect turn.
+**Last updated:** 2026-03-26 17:27 CDT — **Foreman:** visible team sync updated
 
 ## Queue
 
-- `directive`: PHASE 5.3A — DETERMINISTIC STRATEGY EVALUATION CONTRACT
-- `directive_state`: `active`
-- `current_result`: `architect validating`
+- `directive`: PHASE 5.3B — STORED-DATA BACKTEST / SIMULATION LOOP
+- `directive_state`: `blocked`
+- `current_result`: `waiting on architect`
 - `proof_status`: `missing`
 - `talking_stick_holder`: `architect`
 - `next_actor`: `architect`
 - `required_phrase`: `have the architect validate shared-docs`
-- `last_mirror`: `not_attempted`
+- `last_mirror`: `Bridge state unchanged; no new orchestration action taken.`
 - `team_state`: `in sync`
 
 ## Architect perspective
 
-You hold the stick. Validate shared docs + code vs `current_directive.md`. Trigger: **have the architect validate shared-docs**.
+Architect is waiting while developer works PHASE 5.3B — STORED-DATA BACKTEST / SIMULATION LOOP. Architect should not act until the stick comes back.
 
 ## Developer perspective
 
-Stick passed; await architect outcome.
+Developer still has the talking stick for PHASE 5.3B — STORED-DATA BACKTEST / SIMULATION LOOP. Continue implementation, write proof in shared docs, then return `have the architect validate shared-docs`.
 
 ## Findings
 
-- phase 5.3a validator stub active; require architect code-and-proof review before closure
+- add a directive-specific validator before automatic closure can proceed
 
 ## Runtime status
 
-no visible/runtime issue recorded
+Bridge state unchanged; no new orchestration action taken.
 
 ## What happens next
 
-Architect completes validation and updates directive / bridge per protocol.
+The talking stick already belongs to `architect`.
+Wait for that side to finish and return the phrase `have the architect validate shared-docs`.
