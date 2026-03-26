@@ -1,0 +1,17 @@
+{
+  "name": "blackbox-trading-core",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "create-wallet": "tsx create-solana-wallet.ts"
+  },
+  "dependencies": {
+    "@solana/web3.js": "^1.95.4",
+    "bs58": "^6.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2"
+  }
+}
