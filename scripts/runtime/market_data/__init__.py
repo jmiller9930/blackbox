@@ -18,7 +18,19 @@ from market_data.read_contracts import (
 from market_data.recorder import record_market_snapshot, snapshot_json
 from market_data.scoped_reader import ScopedMarketDataSnapshot, read_latest_scoped_tick
 from market_data.signal_contract import SignalContractV1, validate_signal_contract
-from market_data.store import connect_market_db, ensure_market_schema, insert_tick, latest_tick
+from market_data.backtest_simulation import (
+    SIMULATION_VERSION,
+    SimulationRunV1,
+    run_stored_simulation,
+    run_stored_simulation_from_read_contract,
+)
+from market_data.store import (
+    connect_market_db,
+    ensure_market_schema,
+    insert_tick,
+    latest_tick,
+    ticks_chronological,
+)
 from market_data.strategy_eval import (
     EVALUATION_OUTCOMES,
     STRATEGY_VERSION,
@@ -29,6 +41,8 @@ from market_data.strategy_eval import (
 )
 
 __all__ = [
+    "SIMULATION_VERSION",
+    "SimulationRunV1",
     "EVALUATION_OUTCOMES",
     "GateState",
     "MarketDataReadContractV1",
@@ -48,6 +62,9 @@ __all__ = [
     "evaluate_strategy_from_read_contract",
     "insert_tick",
     "latest_tick",
+    "run_stored_simulation",
+    "run_stored_simulation_from_read_contract",
+    "ticks_chronological",
     "load_latest_tick_scoped",
     "read_latest_scoped_tick",
     "record_market_snapshot",

@@ -2,9 +2,9 @@
 
 **Purpose:** Single in-repo source of truth for Cursor ↔ coordinating human. Prefer updating this file over long chat dumps.
 
-**Last updated:** 2026-03-27 00:35 CDT — **Operator:** Stick → **developer** for **Phase 5.3B**; `developer_action_required`, `findings` none, handoff phrase **`have cursor validate shared-docs`**.
+**Last updated:** 2026-03-27 01:00 CDT — **Developer (Cursor):** Phase 5.3b implementation + tests + proof; `pytest` `7` + `353 passed`; handoff for architect.
 
-**Newest canonical touchpoint:** **2026-03-27 00:35 CDT** — Developer executes **5.3B**; then **`have cursor validate shared-docs`** for architect pass.
+**Newest canonical touchpoint:** **2026-03-27 01:00 CDT** — Phase 5.3b proof recorded; **`have the architect validate shared-docs`**.
 
 **Shared docs meaning:** `shared docs` = read and update:
 - `docs/working/current_directive.md`
@@ -28,7 +28,13 @@ _Use this section when **Developer (Cursor)** needs **Architect** sign-off. Appe
   - **Paths:** (files or PR scope)
 ```
 
-**Pending:** None.
+**Pending:**
+
+- **2026-03-27 01:00 CDT — Developer (Cursor):**
+  - **Ask:** Validate Phase 5.3b (stored-data backtest / simulation loop) vs proof below.
+  - **Why:** Implementation + tests complete; read-only simulation reuses 5.3a evaluation per tick.
+  - **Blocking:** no.
+  - **Paths:** `scripts/runtime/market_data/backtest_simulation.py`, `scripts/runtime/market_data/store.py` (`ticks_chronological`), `tests/test_backtest_simulation_phase5_3b.py`, § Phase 5.3b proof.
 
 ---
 
@@ -66,8 +72,53 @@ _Use this section when **Developer (Cursor)** needs **Architect** sign-off. Appe
 14. **Done:** Phase 5.3a implementation delivered: `StrategyEvaluationV1`, `evaluate_strategy()`, `evaluate_strategy_from_read_contract()` (Phase 5.2a read-contract entry point), tier-aligned thresholds; tests in `tests/test_strategy_eval_phase5_3a.py`.
 15. **Done:** Local pytest: `tests/test_strategy_eval_phase5_3a.py` → `41 passed`; full suite → `344 passed` (2026-03-26, Mac workspace).
 16. **Done:** Architect validated Phase 5.3a against code, proof, targeted pytest (`41 passed`), and full-suite pytest (`344 passed`); Phase 5.3a is accepted and closed.
-17. **Now:** Developer prosecutes Phase 5.3b — stored-data backtest / simulation loop.
-18. **Next:** Architect validates 5.3b or rejects with amendments.
+17. **Done:** Phase 5.3b implementation: `ticks_chronological`, `SimulationRunV1`, `run_stored_simulation`, `run_stored_simulation_from_read_contract`; 7 tests in `tests/test_backtest_simulation_phase5_3b.py`; full suite `353 passed`.
+18. **Now:** Architect validates Phase 5.3b or rejects with amendments.
+19. **Next:** Per `development_plan.md` after architect closure.
+
+---
+
+## Phase 5.3b — implementation proof (2026-03-27)
+
+**Role:** Developer (Cursor). **Status:** Implementation complete; tests run locally; handoff for architect validation.
+
+### 1. Summary
+
+- **`ticks_chronological(conn, symbol, limit=None)`** (`store.py`): ordered oldest-first tick rows for deterministic simulation windows (same columns as `latest_tick`).
+- **`SimulationRunV1`** (`backtest_simulation.py`): frozen artifact (`simulation_version` `stored_simulation_v1`) with `participant_scope`, `symbol`, `strategy_version` (reuses 5.3a `deterministic_spread_v1`), `sample_count`, `window_first_inserted_at` / `window_last_inserted_at`, `outcome_counts`, `abstain_count`, `skip_count`, `mean_confidence_non_abstain`, `run_at`. Read-only; no execution.
+- **`run_stored_simulation(scope, symbol, db_path=, max_ticks=500)`**: read-only DB → chronological ticks → each row wrapped in `ScopedMarketDataSnapshot` → **`strategy_eval._evaluate_from_snapshot`** (5.3a reuse) → aggregates.
+- **`run_stored_simulation_from_read_contract(contract, ...)`**: Phase 5.2a `MarketDataReadContractV1` entry point.
+
+### 2. Files
+
+| Path | Role |
+|------|------|
+| `scripts/runtime/market_data/store.py` | `ticks_chronological` |
+| `scripts/runtime/market_data/backtest_simulation.py` | New — simulation runner + artifact |
+| `scripts/runtime/market_data/__init__.py` | Exports |
+| `tests/test_backtest_simulation_phase5_3b.py` | New — 7 tests |
+
+### 3. Commands / evidence (local Mac)
+
+```bash
+cd /Users/bigmac/Documents/code_projects/blackbox
+python3 -m pytest tests/test_backtest_simulation_phase5_3b.py -q
+python3 -m pytest tests/ -q
+```
+
+| Where | What | Result |
+|-------|------|--------|
+| Local Mac | `pytest tests/test_backtest_simulation_phase5_3b.py` | `7 passed` |
+| Local Mac | `pytest tests/` | `353 passed` |
+
+### 4. Remaining gaps
+
+- **Clawbot / primary_host:** Not claimed; run on lab host if proof bar requires it.
+- **Scope:** single-symbol; `max_ticks` cap; no multi-venue backtest.
+
+### 5. Recommended next directive
+
+- Per `development_plan.md` after architect accepts 5.3b — e.g. signal→approval / Phase 5.4 direction.
 
 ---
 
@@ -174,6 +225,7 @@ _Chronological order (oldest → newest). All entries use role labels._
 - **2026-03-27 00:20 CDT — Operator:** **Phase 5.3B architect turn.** Asserted `directive_title` PHASE 5.3B — STORED-DATA BACKTEST / SIMULATION LOOP, `architect_action_required`, `proof_status=missing`; `talking_stick` holder=architect; rewrote `team_sync` (was claiming developer held stick during architect wait).
 - **2026-03-27 00:28 CDT — Operator:** **Phase 5.3B handoff repeat.** Same Foreman state; `team_sync` had drifted again to contradictory developer blurbs — fixed.
 - **2026-03-27 00:35 CDT — Operator:** **Stick → developer (Phase 5.3B).** `foreman_bridge`: `developer_action_required`, `next_actor=developer`, `findings=[]`, `handoff_phrase=have cursor validate shared-docs`; `talking_stick` holder=developer.
+- **2026-03-27 01:00 CDT — Developer (Cursor):** **Phase 5.3b delivered.** `backtest_simulation.py`, `ticks_chronological` in `store.py`, 7 tests, proof § Phase 5.3b; `353 passed` full suite. Requesting architect validation.
 - **2026-03-26 16:42 CDT — Developer (Cursor):** Implemented Phase 5.1b Workstream A: created `anna_modules/market_data_reader.py` (feature-flagged, read-only, fail-safe), wired into `build_analysis()` and `analyze_to_dict()`, added `phase5_market_data` field to `anna_analysis_v1` output, wrote 14 tests. Sandbox blocked python3 execution — tests need operator run.
 - **2026-03-26 16:45 CDT — Developer (Cursor):** Second session independently verified all Phase 5.1b code against acceptance criteria. 10/10 criteria confirmed met by code audit. Updated proof section with verification note. Updated Foreman bridge to `proof_status=present`. Requesting architect validation.
 - **2026-03-26 17:15 CDT — Developer (Cursor):** Third session: fixed Foreman proof-section markers to match `PHASE_5_1B_PROOF_MARKERS` exactly (headings ### 4–7 renumbered/renamed). Sandbox blocks test execution across all three developer sessions. Operator must run `python3 -m pytest tests/test_anna_market_data_integration.py -v` and paste output into § 5 for the "passed"/"failed" test-evidence gate to clear.
