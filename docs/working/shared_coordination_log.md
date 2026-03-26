@@ -2,9 +2,9 @@
 
 **Purpose:** Single in-repo source of truth for Cursor ↔ coordinating human. Prefer updating this file over long chat dumps.
 
-**Last updated:** 2026-03-27 01:40 CDT — **Developer (Cursor):** Phase 5.3b re-verified (`7` + `353 passed`, HEAD `d5976ea`); §5.3b proof in log; `foreman_bridge` → **architect** / **proof present** (was developer/missing).
+**Last updated:** 2026-03-27 01:45 CDT — **Developer (Cursor):** Phase 5.3b re-verified (`7` + `353 passed`); worktree `foreman_*` restored from **HEAD `6f72945`** (had drifted to developer/missing).
 
-**Newest canonical touchpoint:** **2026-03-27 01:40 CDT** — Handoff **`have the architect validate shared-docs`**.
+**Newest canonical touchpoint:** **2026-03-27 01:45 CDT** — §5.3b proof + **`have the architect validate shared-docs`**.
 
 **Shared docs meaning:** `shared docs` = read and update:
 - `docs/working/current_directive.md`
