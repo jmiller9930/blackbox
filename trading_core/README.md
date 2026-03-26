@@ -10,12 +10,21 @@ This folder holds the **canonical TypeScript snapshot** of the live-style **Drif
 
 ### Create a Solana wallet (CLI)
 
-From `trading_core/`:
+From **repo root** (simplest — no `cd` into `trading_core`):
 
 ```bash
+npm run create-wallet
+```
+
+Or from `trading_core/`:
+
+```bash
+cd trading_core
 npm install
 npm run create-wallet
 ```
+
+**Do not use `sudo cd …`** — `cd` in a `sudo` subshell does not change your shell’s directory, so `npm` will run in the wrong folder and look for `package.json` at the repo root. Use plain `cd trading_core` (no sudo).
 
 This writes **`keypair.json`** as a **JSON byte array only** — the format `drift_trading_bot_source.ts` loads (`Keypair.fromSecretKey`). It also writes **`wallet-backup.json`** (public key + base58 + array). **Do not commit** either file. To echo base58 once for a password manager: `SHOW_SECRET=1 npm run create-wallet`.
 

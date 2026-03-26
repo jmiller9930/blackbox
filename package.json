@@ -1,0 +1,8 @@
+{
+  "name": "blackbox",
+  "private": true,
+  "description": "Proxy scripts; Node deps live in subfolders (e.g. trading_core).",
+  "scripts": {
+    "create-wallet": "npm install --prefix trading_core && npm run create-wallet --prefix trading_core"
+  }
+}
