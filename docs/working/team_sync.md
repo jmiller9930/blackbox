@@ -1,26 +1,26 @@
 # Team sync
 
-**Last updated:** 2026-03-26 17:30 CDT — **Foreman:** visible team sync updated
+**Last updated:** 2026-03-27 01:16 CDT — **Developer (Cursor):** Phase 5.3b proof present; architect turn.
 
 ## Queue
 
 - `directive`: PHASE 5.3B — STORED-DATA BACKTEST / SIMULATION LOOP
-- `directive_state`: `active`
-- `current_result`: `developer must continue`
-- `proof_status`: `missing`
+- `directive_state`: `awaiting_validation`
+- `current_result`: `proof submitted — architect to validate`
+- `proof_status`: `present`
 - `talking_stick_holder`: `architect`
-- `next_actor`: `developer`
+- `next_actor`: `architect`
 - `required_phrase`: `have the architect validate shared-docs`
-- `last_mirror`: `Bridge state unchanged; no new orchestration action taken.`
-- `team_state`: `out of sync`
+- `last_mirror`: `not_attempted`
+- `team_state`: `in sync`
 
 ## Architect perspective
 
-Read docs/working/current_directive.md, docs/working/shared_coordination_log.md, docs/working/foreman_bridge.json, and docs/working/HOW_TO_SHARED_DOCS.md. Then validate the active directive against the proof on disk. If requirements are missing, amend immediately. If they are satisfied, close and move on.
+Validate § Phase 5.3b proof in `shared_coordination_log.md`.
 
 ## Developer perspective
 
-Read docs/working/current_directive.md, docs/working/shared_coordination_log.md, docs/working/foreman_bridge.json, and docs/working/HOW_TO_SHARED_DOCS.md. Then execute the active work for PHASE 5.3B — STORED-DATA BACKTEST / SIMULATION LOOP. Update shared docs with timestamped proof as you work. When implementation and proof are ready, reply with: have the architect validate shared-docs.
+Implementation complete; await architect.
 
 ## Findings
 
@@ -28,9 +28,8 @@ Read docs/working/current_directive.md, docs/working/shared_coordination_log.md,
 
 ## Runtime status
 
-Bridge state unchanged; no new orchestration action taken.
+no visible/runtime issue recorded
 
 ## What happens next
 
-Use the phrase `have the architect validate shared-docs`.
-The talking stick currently belongs to `architect`.
+Architect validates with **have the architect validate shared-docs**.
