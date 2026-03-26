@@ -1,6 +1,6 @@
-> **Source:** `docs/blackbox_master_plan.md` in repository **blackbox**, branch **`main`** (includes Phase 4.2 architecture stub).
+> **Source:** `docs/blackbox_master_plan.md` in repository **blackbox**, branch **`main`** (includes Phase **4.x** control stack, Phase **5–8** roadmap, [`development_plan.md`](development_plan.md)).
 
-> **Purpose:** Verbatim master plan for architect review. Canonical file remains `docs/blackbox_master_plan.md`.
+> **Purpose:** Architect-facing copy of the master plan. **Canonical file remains** [`docs/blackbox_master_plan.md`](../blackbox_master_plan.md) — refresh this share file when roadmap phases change.
 
 ---
 
@@ -25,7 +25,10 @@ It is the **single source of truth** for project **rehydration** (Architect, Cur
 | **4.1** | Trading readiness map | **Blueprint** — [`phase_4_1_trading_readiness.md`](architect/phase_4_1_trading_readiness.md) (planning only; **not** go-live) |
 | **4.2** | Wallet / account architecture | **Stub** — [`phase_4_2_wallet_account_architecture.md`](architect/phase_4_2_wallet_account_architecture.md) (technical shape; **no** implementation) |
 | **4.1+** | Real trading prerequisites (detail) | Master plan § Phase 4 below; implementation **after** architect alignment |
-| **5** | Trading operations & governance | Planning — see [Phase 5](#phase-5--trading-operations--governance) |
+| **5** | Core trading engine | **Next active build phase** (planning / not implemented) — [Phase 5](#phase-5--core-trading-engine); tasks [`development_plan.md`](development_plan.md) |
+| **6** | Intelligence & self-improvement | **FUTURE / STUB ONLY** — **not** current sprint — [Phase 6](#phase-6--intelligence--self-improvement-future) |
+| **7** | Bot hub / ecosystem | **FUTURE / STUB ONLY** — **not** current sprint — [Phase 7](#phase-7--bot-hub--ecosystem-future) |
+| **8** | Trading operations & governance | Planning — [Phase 8](#phase-8--trading-operations--governance) |
 
 **Do not confuse:** The **[future decision-science stub](#future-decision-science-stub-not-phase-2-runtime)** (expected utility, Bayesian *teaching* framing) is **not** the same as **Phase 2 — Paper System** (implemented scripts). During rehydration, treat them as distinct.
 
@@ -37,6 +40,7 @@ It is the **single source of truth** for project **rehydration** (Architect, Cur
 - **Current planning artifact:** **Phase 4.2** — [`docs/architect/phase_4_2_wallet_account_architecture.md`](architect/phase_4_2_wallet_account_architecture.md) (wallet/account **architecture stub**; **no** code).
 - **Prior blueprint:** **Phase 4.1** — [`phase_4_1_trading_readiness.md`](architect/phase_4_1_trading_readiness.md).
 - **Next focus:** Phase **4.1+** prerequisites (§ below) and architect approval before **any** implementation that touches keys or venues.
+- **Roadmap beyond Phase 4 control stack:** **Phase 5 — Core trading engine** is the **next** canonical build target. **Phase 6** and **7** are **stub / future only** — **not** in scope for the current sprint. See [Phase 5](#phase-5--core-trading-engine)–[8](#phase-8--trading-operations--governance) and [`development_plan.md`](development_plan.md).
 - **Safe resume:** Read this plan → [`docs/runtime/execution_context.md`](runtime/execution_context.md) → `python3 scripts/runtime/context_loader.py` → run mandated verification on **clawbot** before claiming closure.
 
 ---
@@ -785,9 +789,121 @@ Phase 4 **does not** automatically mean:
 
 ---
 
-## Phase 5 — Trading Operations & Governance
+## Phase 5 — Core Trading Engine
 
-> **Planning.** Defines how the organization **operates** trading-capable systems after **Phase 4+** integration groundwork is satisfied — not a promise that every item is implemented on day one.
+> **Next active build phase (not implemented in tree at roadmap insert).** Enables **one** real agent path (**Anna + Billy**) to execute trades **end-to-end** using **live market data** and **controlled execution** (Layers **1–4** unchanged in canonical master plan). Detailed tasks: [`development_plan.md`](development_plan.md).
+
+### Purpose
+
+Deliver the **data → strategy → approval → execution** spine in production shape: ingest, store, signal, bind to Layer **3** approval, execute via Layer **4** intent and **Billy** (edge execution), with risk controls and observability.
+
+### 5.1 Market data ingestion
+
+- **Primary feed** (e.g. Pyth).
+- **Fallback** (e.g. Coinbase REST).
+- **Normalization** → canonical snapshot schema.
+- **Health checks** + **gap detection**.
+
+### 5.2 Market data store
+
+- **Production database** (non-sandbox).
+- **Queryable** time-series / snapshots.
+
+### 5.3 Strategy engine
+
+- **Initial deterministic strategy** (single symbol / universe).
+- **Signal generation** + **confidence**.
+- **Backtest / simulation loop** using **stored** data.
+
+### 5.4 Signal → approval binding
+
+- **Candidate trade artifact**.
+- **Size / risk / expiry**.
+- **Routed through Layer 3 approval** (no execution without approval).
+
+### 5.5 Execution adapter
+
+- **Single venue** first.
+- **Paper / sandbox mode** → **small-size live**.
+- **Consumes Layer 4 execution intent** (per [`layer_4_execution_interface_design.md`](layer_4_execution_interface_design.md)).
+- **Integrates with Billy** (edge execution).
+
+### 5.6 Risk & controls
+
+- **Per-trade** and **per-account** limits.
+- **Approval expiry** enforcement.
+- **Global kill switch**.
+- **Position / PnL** tracking.
+
+### 5.7 Observability & operations
+
+- **Metrics** (data feed, signals, approvals, executions).
+- **Logs** and **failure** tracking.
+- **Runbooks** (halt / rollback / revoke).
+
+### First approved slice (paper-first, narrow scope)
+
+> **Status:** Build path **approved** for first end-to-end loop (paper-first). **Scope is narrow:** one **SOL** strategy, **Pyth** feed, **Coinbase** adapter, single approved trade loop with stored outcome. No multi-asset, no ML, no scale-out in this slice.
+
+- **Separation:** **Anna = strategy only** (signals; **no** execution). **Billy = execution only** (approved intents; **no** signal invention). **No** fused signal+execution in this path.
+- **Contracts to lock before coding:** strategy (signal) contract for SOL; execution intent (`approval_id`, `intent_id`, `context_hash`, order params, idempotency) **only** after L3; outcome record (`intent_id`, `execution_id`, outcome, fills, fees, timestamps, `failure_class`) **durable**.
+- **Data guards:** Pyth **freshness**; **divergence** vs Coinbase before signal (**fail closed**).
+- **Layer 4:** Section **13** safety (grant, audit-before-effect, entry point, context hash, kill/abort); **hard fail** when guards fail.
+- **Build order:** (1) Pyth ingestion SOL → (2) normalized store → (3) deterministic strategy → signal contract → (4) L3 approval binding → (5) execution intent contract → (6) Billy + Coinbase sandbox → (7) outcome storage. **Goal:** one approved signal → one paper trade → verified outcome → stored.
+
+### Relationship to Phase 4
+
+- Phase **4** = **control framework** (visibility, approval, execution **design** / mock paths). Phase **5** = **first real trading engine** that **uses** that framework for **live** path — **no** bypass of Layers **2–4**.
+
+**Status:** Roadmap structural insert; implementation only per future directives.
+
+---
+
+## Phase 6 — Intelligence & Self-Improvement (Future)
+
+> **NOT IN SCOPE for current sprint. FUTURE / STUB ONLY.** No implementation required at this stage.
+
+### Purpose
+
+Enhance Anna’s **decision quality** using **evidence-based learning** (post–Phase 5 engine).
+
+### Stub sections (not scheduled)
+
+- **Confidence scoring** refinement.
+- **Expected utility** / decision theory.
+- **Bayesian updating**.
+- **Outcome-based** pattern promotion / rejection.
+- **Explainability** (“why this trade”).
+
+**Status:** Placeholder; elaboration when Phase **5** is underway.
+
+---
+
+## Phase 7 — Bot Hub / Ecosystem (Future)
+
+> **NOT IN SCOPE for current sprint. FUTURE / STUB ONLY.** External-facing; **not** part of the **core control stack** (Phase **4** Layers **1–4**).
+
+### Purpose
+
+Expose BLACKBOX as a **platform** for external bots and **distributed** execution.
+
+### Stub sections (not scheduled)
+
+- **Bot onboarding** / portal.
+- **Wallet / token identity** model.
+- **Billy bot distribution**.
+- **Strategy request API**.
+- **Telemetry** + outcome collection.
+- **Network data flywheel**.
+- **Lightweight public metrics**.
+
+**Status:** Placeholder; protocol and security hardening require future directives.
+
+---
+
+## Phase 8 — Trading Operations & Governance
+
+> **Planning.** Defines how the organization **operates** trading-capable systems after **Phase 4+** integration groundwork and the **Phase 5** engine exist — not a promise that every item is implemented on day one.
 
 ### Purpose
 
@@ -815,8 +931,9 @@ Establish **operations**, **interaction models**, and **governance** so that any
 
 ### Relationship
 
-- **Phase 4** = **readiness** to integrate (custody, venue, secrets policy, gates).
-- **Phase 5** = **how we run** once readiness exists — day-two operations and governance.
+- **Phase 4** = **readiness** and **control stack** (custody, venue policy, gates, Layers **1–4**).
+- **Phase 5** = **core trading engine** (data, strategy, execution adapter).
+- **Phase 8** = **how we run** organizationally once the engine exists — day-two **operations** and **governance**.
 
 **Status:** Framing for rehydration; elaboration tracks architectural decisions already discussed in chat.
 

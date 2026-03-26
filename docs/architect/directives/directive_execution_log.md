@@ -6,6 +6,13 @@ Canonical running log for architect-facing directive execution, proof, and closu
 
 **Templates:** [`DIRECTIVE_TEMPLATE.md`](DIRECTIVE_TEMPLATE.md) (full directive scaffold), [`CLOSEOUT_PACKET_TEMPLATE.md`](CLOSEOUT_PACKET_TEMPLATE.md) (closeout / gate / proof summary). Every closeout must include `Plan/log status sync: PASS`.
 
+## 2026-03-27 — Phase 5/6/7 Canonical Plan Update
+
+- **Directive:** Introduce **Phase 5 — Core trading engine**, **Phase 6 — Intelligence (future)**, **Phase 7 — Bot hub (future)** into master plan and development plan; **docs-only** structural update; no implementation.
+- **Summary:** Roadmap table extended: **5** = core engine (next active build), **6/7** = **FUTURE / STUB ONLY** (not current sprint), **8** = trading operations & governance (prior Phase 5 content). **Phase 4.x** (Layers **1–4**) unchanged. **First approved SOL/Pyth paper slice** folded under Phase **5**. New [`development_plan.md`](../development_plan.md) with Phase **5** actionable tasks + checklists; Phase **6/7** explicitly out of scope.
+- **Artifacts:** [`docs/blackbox_master_plan.md`](../../blackbox_master_plan.md), [`docs/architect/development_plan.md`](../development_plan.md), [`docs/architect/BLACKBOX_MASTER_PLAN_ARCHITECT_SHARE.md`](../BLACKBOX_MASTER_PLAN_ARCHITECT_SHARE.md) (synced).
+- **Plan/log status sync: PASS**
+
 ## 2026-03-26 — Layer 4 Safety Mitigation Addendum — Canonically recorded (docs-only)
 
 - **Directive:** Capture required safety mitigations in canonical Layer 4 design before implementation — **docs only**; no code.
