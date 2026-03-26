@@ -1,6 +1,6 @@
 # Team sync
 
-**Last updated:** 2026-03-27 00:05 CDT — **Operator:** stick passed to architect; architect validates Phase 5.3a.
+**Last updated:** 2026-03-27 00:12 CDT — **Operator:** stick with architect; Phase 5.3a architect turn.
 
 ## Queue
 
@@ -16,11 +16,11 @@
 
 ## Architect perspective
 
-You hold the stick. Validate `shared_coordination_log.md` and code vs directive; use **`have the architect validate shared-docs`** as the trigger phrase.
+You hold the stick. Validate shared docs + code vs `current_directive.md`. Trigger: **have the architect validate shared-docs**.
 
 ## Developer perspective
 
-Handoff complete for this turn. Await architect outcome.
+Stick passed; await architect outcome.
 
 ## Findings
 
@@ -32,4 +32,4 @@ no visible/runtime issue recorded
 
 ## What happens next
 
-Architect completes validation, then updates shared docs / directive state per protocol.
+Architect completes validation and updates directive / bridge per protocol.
