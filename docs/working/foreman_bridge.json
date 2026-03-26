@@ -3,16 +3,14 @@
   "updated_at": "2026-03-26 17:28 CDT",
   "directive_title": "PHASE 5.3B — STORED-DATA BACKTEST / SIMULATION LOOP",
   "directive_status": "Active — **Phase 5.3b stored-data backtest / simulation loop**",
-  "bridge_status": "architect_action_required",
-  "next_actor": "architect",
-  "reason": "Architect review is pending in shared docs.",
-  "handoff_phrase": "have the architect validate shared-docs",
+  "bridge_status": "developer_action_required",
+  "next_actor": "developer",
+  "reason": "Phase 5.3b is active; developer should implement the stored-data backtest / simulation loop and return proof.",
+  "handoff_phrase": "have cursor validate shared-docs",
   "proof_status": "missing",
-  "architect_review_pending": true,
+  "architect_review_pending": false,
   "active_proof_section": null,
-  "findings": [
-    "add a directive-specific validator before automatic closure can proceed"
-  ],
+  "findings": [],
   "recommended_next_directive": null,
   "last_foreman_result": "bridge",
   "source_files": [

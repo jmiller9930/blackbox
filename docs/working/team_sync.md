@@ -5,12 +5,12 @@
 ## Queue
 
 - `directive`: PHASE 5.3B — STORED-DATA BACKTEST / SIMULATION LOOP
-- `directive_state`: `blocked`
-- `current_result`: `waiting on architect`
+- `directive_state`: `active`
+- `current_result`: `waiting on developer`
 - `proof_status`: `missing`
-- `talking_stick_holder`: `architect`
-- `next_actor`: `architect`
-- `required_phrase`: `have the architect validate shared-docs`
+- `talking_stick_holder`: `developer`
+- `next_actor`: `developer`
+- `required_phrase`: `have cursor validate shared-docs`
 - `last_mirror`: `Bridge state unchanged; no new orchestration action taken.`
 - `team_state`: `in sync`
 
@@ -20,11 +20,11 @@ Architect is waiting while developer works PHASE 5.3B — STORED-DATA BACKTEST /
 
 ## Developer perspective
 
-Developer still has the talking stick for PHASE 5.3B — STORED-DATA BACKTEST / SIMULATION LOOP. Continue implementation, write proof in shared docs, then return `have the architect validate shared-docs`.
+Developer still has the talking stick for PHASE 5.3B — STORED-DATA BACKTEST / SIMULATION LOOP. Continue implementation, write proof in shared docs, then return `have cursor validate shared-docs`.
 
 ## Findings
 
-- add a directive-specific validator before automatic closure can proceed
+- none
 
 ## Runtime status
 
@@ -32,5 +32,5 @@ Bridge state unchanged; no new orchestration action taken.
 
 ## What happens next
 
-The talking stick already belongs to `architect`.
-Wait for that side to finish and return the phrase `have the architect validate shared-docs`.
+The talking stick already belongs to `developer`.
+Wait for that side to finish and return the phrase `have cursor validate shared-docs`.
