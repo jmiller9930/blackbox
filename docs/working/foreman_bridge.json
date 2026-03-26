@@ -1,8 +1,8 @@
 {
   "schema_version": "foreman_bridge_v1",
-  "updated_at": "2026-03-26 17:32 CDT",
-  "directive_title": "PHASE 5.3B — STORED-DATA BACKTEST / SIMULATION LOOP",
-  "directive_status": "Active — **Phase 5.3b stored-data backtest / simulation loop**",
+  "updated_at": "2026-03-27 01:35 CDT",
+  "directive_title": "PHASE 5.3B \u2014 STORED-DATA BACKTEST / SIMULATION LOOP",
+  "directive_status": "Active \u2014 **Phase 5.3b stored-data backtest / simulation loop**",
   "bridge_status": "developer_action_required",
   "next_actor": "developer",
   "reason": "Phase 5.3b is active; developer should implement the stored-data backtest / simulation loop and return proof.",
