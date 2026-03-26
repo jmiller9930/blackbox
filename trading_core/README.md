@@ -6,7 +6,9 @@ This folder holds the **canonical TypeScript snapshot** of the live-style **Drif
 |------|---------|
 | **`drift_trading_bot_source.ts`** | Full source extracted from the 2026-03-22 operator thread. |
 
-**Secrets:** The original paste included a **tokenized QuickNode URL**. In git it is replaced with **`process.env.SOLANA_RPC_URL`** + public mainnet fallback. Export `SOLANA_RPC_URL` when running locally. **`keypair.json`** stays out of git.
+**Secrets:** The original paste included a **tokenized QuickNode URL**. In git it is replaced with **`process.env.SOLANA_RPC_URL`** + public mainnet fallback. Export `SOLANA_RPC_URL` when running locally.
+
+**Key file:** The bot loads **`KEYPAIR_PATH`** (env) or defaults to **`keypair.json`** in the process working directory — JSON array of 64 bytes only. Put the file **only on your machine**; **never** paste or attach it to chat; **never** commit. You can point elsewhere, e.g. `export KEYPAIR_PATH="$HOME/.secrets/drift-keypair.json"`.
 
 ### Create a Solana wallet (CLI)
 

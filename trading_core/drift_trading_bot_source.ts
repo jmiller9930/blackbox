@@ -65,7 +65,8 @@ const SL_EM_GAP = 0.001;
 const SAFE_PROFIT_THRESHOLD = 0.002;
 const QUICKNODE_RPC = process.env.SOLANA_RPC_URL || 'https://api.mainnet-beta.solana.com'; // set SOLANA_RPC_URL (e.g. QuickNode) — no secrets in git
 const PUBLIC_SOLANA_WS = 'wss://api.mainnet-beta.solana.com';
-const KEYPAIR_PATH = 'keypair.json';
+/** Load from env so the key file can live outside the repo; never commit the file. */
+const KEYPAIR_PATH = process.env.KEYPAIR_PATH || 'keypair.json';
 const DRIFT_WS_URL = 'wss://dlob.drift.trade/ws';
 const PYTH_SSE_URL = 'https://hermes.pyth.network/v2/updates/price/stream?ids[]=ef0d8b6fda2ceba41da15d4095d1da392a0d2f8ed0c6c7bc0f4cfac8c280b56d';
 const COINGECKO_VOLUME_URL = 'https://api.coingecko.com/api/v3/exchanges/drift_protocol/volume_chart?days=1';
