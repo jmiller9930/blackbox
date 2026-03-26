@@ -111,6 +111,8 @@ python3 -m pytest tests/ -q
 | Local Mac | `pytest tests/test_backtest_simulation_phase5_3b.py` | `7 passed` |
 | Local Mac | `pytest tests/` | `353 passed` |
 
+**Git (handoff commit):** `6b31c66` — `phase5.3b: stored-data simulation loop + ticks_chronological + tests + proof`
+
 ### 4. Remaining gaps
 
 - **Clawbot / primary_host:** Not claimed; run on lab host if proof bar requires it.
