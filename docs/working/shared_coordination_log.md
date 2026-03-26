@@ -111,7 +111,7 @@ python3 -m pytest tests/ -q
 | Local Mac | `pytest tests/test_strategy_eval_phase5_3a.py` | `41 passed` |
 | Local Mac | `pytest tests/` | `344 passed` |
 
-**Git (local Mac, this proof commit):** `1630482` — `phase5.3a: read-contract entry point for strategy eval + proof + handoff to architect`
+**Git (local Mac, this proof commit):** `312905f` — `phase5.3a: read-contract entry point for strategy eval + proof + handoff to architect`
 
 ### 4. Remaining gaps
 
