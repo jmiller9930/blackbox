@@ -2,9 +2,9 @@
 
 **Purpose:** Single in-repo source of truth for Cursor ↔ coordinating human. Prefer updating this file over long chat dumps.
 
-**Last updated:** 2026-03-26 16:06 CDT — **Developer (Cursor):** Resynced shared-docs to Phase 5.2a (current_directive + team_sync) per Foreman bridge; ready to proceed.
+**Last updated:** 2026-03-26 23:10 CDT — **Developer (Cursor):** Phase 5.3a proof finalized with local pytest evidence (`41` + `344 passed`), `evaluate_strategy_from_read_contract()` added, bridge/stick/team_sync handed to architect.
 
-**Newest canonical touchpoint:** **2026-03-26 16:06 CDT** — Developer (Cursor): resynced shared-docs to Phase 5.2a and validated mismatch resolution.
+**Newest canonical touchpoint:** **2026-03-26 23:10 CDT** — Developer (Cursor): Phase 5.3a developer work complete; stick with **architect** for validation.
 
 **Shared docs meaning:** `shared docs` = read and update:
 - `docs/working/current_directive.md`
@@ -28,7 +28,13 @@ _Use this section when **Developer (Cursor)** needs **Architect** sign-off. Appe
   - **Paths:** (files or PR scope)
 ```
 
-**Pending:** *(none — add an entry here when review is needed.)*
+**Pending:**
+
+- **2026-03-26 23:10 CDT — Developer (Cursor):**
+  - **Ask:** Validate Phase 5.3a (deterministic strategy evaluation contract) vs proof below.
+  - **Why:** Implementation + tests complete; shared-doc proof recorded.
+  - **Blocking:** no (awaiting architect acceptance for directive closure).
+  - **Paths:** `scripts/runtime/market_data/strategy_eval.py`, `tests/test_strategy_eval_phase5_3a.py`, `## Phase 5.3a — implementation proof` in this file.
 
 ---
 
@@ -46,7 +52,7 @@ _Use this section when **Developer (Cursor)** needs **Architect** sign-off. Appe
 
 ## Active Objective
 
-**Phase 5.2a — participant-scoped market data read contracts.** Build the next development-plan slice on top of the existing market-data store by adding participant/tier-aware consumption contracts and a stable read API for downstream strategy/approval/audit use.
+**Phase 5.3a — deterministic strategy evaluation contract.** Build the next development-plan slice on top of the existing participant-scoped market-data reads by adding a deterministic, stored-data-only strategy evaluation contract for a single symbol.
 
 ## Current Plan
 
@@ -60,8 +66,61 @@ _Use this section when **Developer (Cursor)** needs **Architect** sign-off. Appe
 8. **Done:** Architect ran `python3 -m pytest tests/test_foreman_visible_handoff.py tests/test_shared_docs_foreman.py -v` -> `50 passed`.
 9. **Done:** Architect ran `python3 -m pytest tests/ -q` -> `260 passed`.
 10. **Done:** Architect validation / Foreman closure completed for Phase 5.1c.
-11. **Now:** Execute Phase 5.2a from `development_plan.md` by adding participant-scoped market-data read contracts.
-12. **Next:** Hand the new directive to Cursor through Foreman and begin implementation/proof for the next core-engine slice.
+11. **Done:** Phase 5.2a implementation delivered: `ParticipantScope` contract, `ScopedMarketDataSnapshot` reader, `MarketDataReadContractV1` enhanced with identity delegation, 25 tests covering all three workstreams.
+12. **Done:** Foreman talking-stick enforcement hardened in code and tests: architect-side amend/close writes require `holder=architect`, and duplicate same-side handoffs now resolve to waiting states instead of re-firing work.
+13. **Done:** Architect validated Phase 5.2a against code, proof, targeted market-data tests, and full-suite pytest; Phase 5.2a is accepted and closed.
+14. **Done:** Phase 5.3a implementation delivered: `StrategyEvaluationV1`, `evaluate_strategy()`, `evaluate_strategy_from_read_contract()` (Phase 5.2a read-contract entry point), tier-aligned thresholds; tests in `tests/test_strategy_eval_phase5_3a.py`.
+15. **Done:** Local pytest: `tests/test_strategy_eval_phase5_3a.py` → `41 passed`; full suite → `344 passed` (2026-03-26, Mac workspace).
+16. **Now:** Architect validates Phase 5.3a or rejects with amendments.
+17. **Next:** Architect issues next directive from `docs/architect/development_plan.md` (e.g. Phase 5.3b).
+
+---
+
+## Phase 5.3a — implementation proof (2026-03-26)
+
+**Role:** Developer (Cursor). **Status:** Implementation complete; tests run locally; stick returned to architect.
+
+### 1. Summary
+
+- **`StrategyEvaluationV1`** (`strategy_eval.py`): frozen artifact with `participant_scope`, `symbol`, `strategy_version` (`deterministic_spread_v1`), `evaluation_outcome` (`long_bias` | `short_bias` | `neutral` | `abstain`), `confidence`, `abstain_reason`, prices, `spread_pct`, tier thresholds used, `evaluated_at`. Read-only; no execution.
+- **`evaluate_strategy(scope, symbol, db_path)`**: validates scope → `read_latest_scoped_tick()` (stored data only) → deterministic spread logic with **tier-scoped** thresholds (`TIER_THRESHOLDS`); does not assign or escalate `risk_tier`.
+- **`evaluate_strategy_from_read_contract(contract, db_path)`** *(this session)*: validates `MarketDataReadContractV1` → delegates to `evaluate_strategy`; explicit alignment with Phase 5.2a read contracts.
+
+### 2. Files touched (this handoff)
+
+| Path | Change |
+|------|--------|
+| `scripts/runtime/market_data/strategy_eval.py` | Added `evaluate_strategy_from_read_contract()`; trimmed unused import. |
+| `scripts/runtime/market_data/__init__.py` | Export `evaluate_strategy_from_read_contract`. |
+| `tests/test_strategy_eval_phase5_3a.py` | Added `TestReadContractEntryPoint` (2 tests). |
+| `docs/working/shared_coordination_log.md` | This proof section + header/plan updates. |
+| `docs/working/foreman_bridge.json` | `architect_action_required`, `proof_status=present`. |
+| `docs/working/talking_stick.json` | Holder → architect. |
+| `docs/working/team_sync.md` | Queue state for awaiting validation. |
+
+### 3. Commands / evidence (local Mac)
+
+```bash
+cd /Users/bigmac/Documents/code_projects/blackbox
+python3 -m pytest tests/test_strategy_eval_phase5_3a.py -q
+python3 -m pytest tests/ -q
+```
+
+| Where | What | Result |
+|-------|------|--------|
+| Local Mac | `pytest tests/test_strategy_eval_phase5_3a.py` | `41 passed` |
+| Local Mac | `pytest tests/` | `344 passed` |
+
+**Git (local Mac, this proof commit):** `1630482` — `phase5.3a: read-contract entry point for strategy eval + proof + handoff to architect`
+
+### 4. Remaining gaps
+
+- **Clawbot / primary_host:** Not claimed here; sync and re-run tests on lab host per `docs/architect/local_remote_development_workflow.md` when phase proof requires it.
+- **Scope:** Single-symbol evaluation only; no approval routing or execution (by design).
+
+### 5. Recommended next directive
+
+- **Phase 5.3b** — extend signal contract / confidence fields per `development_plan.md` §5.3 when architect advances roadmap.
 
 ---
 
@@ -100,6 +159,11 @@ _Chronological order (oldest → newest). All entries use role labels._
 - **2026-03-26 15:57 CDT — Architect (Codex):** Canonicalized the workflow distinction: Phase 5.1c is a closed directive slice, not a closed pillar. Architect owns the accept/reject loop: Cursor executes + provides proof; architect checks code vs proof; architect either rejects with corrections or accepts, updates docs, closes the directive, and moves to the next directive.
 - **2026-03-26 15:58 CDT — Architect (Codex):** Canonicalized planning authority: `docs/architect/development_plan.md` drives what directive comes next. Shared docs are the execution surface for the active slice only.
 - **2026-03-26 16:03 CDT — Architect (Codex):** Issued the next directive from `docs/architect/development_plan.md`: **Phase 5.2a — participant-scoped market data read contracts**. This is the next active core-engine slice after Phase 5.1c closure.
+- **2026-03-26 16:17 CDT — Architect (Codex):** Hardened Foreman talking-stick enforcement in code. Architect-side amend/close writes now require `holder=architect`; wrong-side close attempts stay in architect-required waiting state instead of acting. Verified with `23 passed` in `tests/test_shared_docs_foreman.py` and `28 passed` in `tests/test_foreman_visible_handoff.py`.
+- **2026-03-26 16:17 CDT — Architect (Codex):** Added throwaway-repo workflow validation for stick discipline. Verified two fake-data scenarios: duplicate developer handoff resolves to `waiting_on_developer`, and architect closure without the stick resolves to `stick_wait` while leaving the directive active and bridge state on `architect_action_required`.
+- **2026-03-26 16:34 CDT — Architect (Codex):** Validated Phase 5.2a against the development plan and code on disk. Confirmed commit `5b3f257`, reviewed `participant_scope.py`, `scoped_reader.py`, and `read_contracts.py`, ran targeted pytest (`36 passed`) and full suite (`292 passed`). Accepted and closed Phase 5.2a, then issued **Phase 5.3a — deterministic strategy evaluation contract** as the next directive.
+- **2026-03-26 20:45 CDT — Developer (Cursor):** **Phase 5.3a implementation delivered and verified by code review.** Confirmed `strategy_eval.py` + `StrategyEvaluationV1` + `evaluate_strategy()` already implemented by prior session. Verified all 8 directive requirements met by reading every code path. Verified `test_strategy_eval_phase5_3a.py` has 39 tests across 8 classes covering artifact structure (6), spread computation (8), evaluation outcomes (5), abstain paths (7), tier alignment (5), determinism (3), degraded gate (2), separation (3). Sandbox blocks python3 — operator must run tests. Proof section written.
+- **2026-03-26 23:10 CDT — Developer (Cursor):** **Phase 5.3a handoff.** Added `evaluate_strategy_from_read_contract()` + 2 tests; local pytest `41` + `344 passed`; updated `foreman_bridge.json`, `talking_stick.json` (holder=architect), `team_sync.md`, and `## Phase 5.3a — implementation proof` in this log. Stick returned for architect validation.
 - **2026-03-26 16:42 CDT — Developer (Cursor):** Implemented Phase 5.1b Workstream A: created `anna_modules/market_data_reader.py` (feature-flagged, read-only, fail-safe), wired into `build_analysis()` and `analyze_to_dict()`, added `phase5_market_data` field to `anna_analysis_v1` output, wrote 14 tests. Sandbox blocked python3 execution — tests need operator run.
 - **2026-03-26 16:45 CDT — Developer (Cursor):** Second session independently verified all Phase 5.1b code against acceptance criteria. 10/10 criteria confirmed met by code audit. Updated proof section with verification note. Updated Foreman bridge to `proof_status=present`. Requesting architect validation.
 - **2026-03-26 17:15 CDT — Developer (Cursor):** Third session: fixed Foreman proof-section markers to match `PHASE_5_1B_PROOF_MARKERS` exactly (headings ### 4–7 renumbered/renamed). Sandbox blocks test execution across all three developer sessions. Operator must run `python3 -m pytest tests/test_anna_market_data_integration.py -v` and paste output into § 5 for the "passed"/"failed" test-evidence gate to clear.
@@ -108,6 +172,138 @@ _Chronological order (oldest → newest). All entries use role labels._
 - **2026-03-26 19:05 CDT — Developer (Cursor):** **Resync gate + independent code review.** Re-read all 4 planning docs (`CHIEF_ARCHITECT_HANDOVER.md`, `development_plan.md`, `blackbox_master_plan.md`, `directive_execution_log.md`). **Canonical phase:** Phase 5.1c — Foreman Visible Handoff Hardening. **Active directive:** Phase 5.1c (visible team queue correctness + visible handoff proof). **Phase 5 work already done:** Phase 5.1 first slice (market_data.db, recorder, gates, SignalContractV1); Phase 5.1b (Anna read-only market-data integration); Foreman bridge/stick/handoff/LaunchAgent/MCP. **What 5.1c finishes:** hardened team_sync.md rendering for 4 directive states; handoff_proof.json written on every orchestrator transition; Phase 5.1c Foreman validator; 28+ tests. **Code review:** verified `_derive_directive_state`, `_classify_mirror_result`, `_write_team_sync`, `_write_handoff_proof`, `_validate_phase_5_1c`, and all 28 tests in `test_foreman_visible_handoff.py` plus 9 additions in `test_shared_docs_foreman.py` — assertions aligned with code; all 6 acceptance criteria met by inspection. **Blocker:** python3 sandbox restriction persists across 5+ developer sessions; operator must run pytest.
 - **2026-03-26 16:05 CDT — Developer (Cursor):** **Planning-doc resync (requested by Foreman):** re-read `docs/architect/CHIEF_ARCHITECT_HANDOVER.md`, `docs/architect/development_plan.md`, `docs/blackbox_master_plan.md`, and `docs/architect/directives/directive_execution_log.md`. Confirmed Phase 5+ roadmap is canonical (Phase 5 core engine next; Phase 6/7 stubs; Phase 8 ops/governance). Confirmed shared-doc protocol (`current_directive.md` + `shared_coordination_log.md`) remains authoritative for active work. **Found mismatch:** `docs/working/team_sync.md` currently references **PHASE 5.1C — Foreman visible handoff hardening**, while `docs/working/current_directive.md` still shows **PHASE 5.1B** title/status. Next action: **have cursor validate shared-docs** and resolve the directive mismatch (update `current_directive.md` or `team_sync.md` so they point to the same active directive).
 - **2026-03-26 18:30 CDT — Developer (Cursor):** Implemented Phase 5.1c — visible handoff hardening. Hardened team_sync rendering, added handoff_proof.json artifact, restructured orchestrator to capture and propagate mirror results, added Phase 5.1c validator to Foreman core, wrote 28 tests. Sandbox blocks python3 — operator must run tests.
+- **2026-03-26 20:15 CDT — Developer (Cursor):** **Phase 5.2a implementation delivered.** Re-read all 4 planning docs + existing market_data code. Built three workstreams: (A) `ParticipantScope` canonical identity contract with `participant_type` + `risk_tier` validation, (B) `ScopedMarketDataSnapshot` + `read_latest_scoped_tick()` structured reader API, (C) enhanced `MarketDataReadContractV1` to delegate identity validation through `validate_participant_scope`. Consolidated with prior session's `read_contracts.py`. Wrote 25 tests in `test_participant_scoped_market_data.py` covering scope validation (11), scoped reader API (8), and auditability/separation (6). Sandbox blocks python3 — operator must run tests.
+
+---
+
+## Phase 5.2a — implementation proof (2026-03-26)
+
+**Role:** Developer (Cursor). **Status:** Implementation delivered; tests written; awaiting operator test execution and architect validation.
+
+### 1. Implementation summary
+
+- **Workstream A — Participant scope contract (`participant_scope.py`):**
+  - `ParticipantScope` — frozen dataclass with the six Phase 5 identity fields: `participant_id`, `participant_type`, `account_id`, `wallet_context`, `risk_tier`, `interaction_path`.
+  - `validate_participant_scope()` — deterministic validation: checks all required fields non-empty, validates `participant_type` ∈ {human, bot}, validates `risk_tier` ∈ {tier_1, tier_2, tier_3}.
+  - `VALID_RISK_TIERS`, `VALID_PARTICIPANT_TYPES`, `REQUIRED_FIELDS` exported as constants.
+  - risk_tier is validated but never assigned by this layer — operator-owned only.
+  - Immutable (`frozen=True`) — scope cannot be mutated after construction.
+  - Aligned with Phase 4.2 wallet/account architecture and Phase 5.0 identity model.
+
+- **Workstream B — Scoped market-data read API (`scoped_reader.py`):**
+  - `ScopedMarketDataSnapshot` — frozen dataclass combining raw tick data + participant scope + read metadata.
+  - `read_latest_scoped_tick(scope, symbol, db_path)` — validates scope first, opens read-only connection to shared `market_ticks` store, returns structured snapshot.
+  - Never writes. Opens `file:{path}?mode=ro` URI. Uses existing `latest_tick()` from `store.py`.
+  - Error paths: invalid scope → `scope_validation_failed`; missing DB → `market_data_db_missing`; no rows → `market_data_no_rows`; any exception → `market_data_read_error`.
+  - `to_dict()` for serialization to downstream consumers.
+
+- **Workstream B (consolidated) — Enhanced `read_contracts.py`:**
+  - `MarketDataReadContractV1.to_participant_scope()` — converts to canonical `ParticipantScope`.
+  - `validate_market_data_read_contract()` now delegates identity validation to `validate_participant_scope`, adding `participant_type` validation (previously missing).
+  - Error namespace preserved: `participant_scope_*` errors re-raised as `market_data_read_contract_*`.
+  - Existing `load_latest_tick_scoped()` and `connect_market_db_readonly()` unchanged.
+
+- **Workstream C — Auditability and separation:**
+  - 6 tests prove raw `market_ticks` storage is shared while consumption is participant-scoped.
+  - Same tick accessible by different participants (shared data, different scope context).
+  - Reader does not write (row count unchanged after repeated reads).
+  - Human and bot participants read same raw data with different scope identity.
+  - ParticipantScope fields match SignalContractV1 identity fields (cross-contract consistency).
+
+- **Package integration (`__init__.py`):**
+  - Exports all new symbols: `ParticipantScope`, `validate_participant_scope`, `ScopedMarketDataSnapshot`, `read_latest_scoped_tick`, `VALID_RISK_TIERS`, `VALID_PARTICIPANT_TYPES`.
+  - Preserves all existing exports.
+
+### 2. Files added and changed
+
+| Path | Change |
+|------|--------|
+| `scripts/runtime/market_data/participant_scope.py` | **New.** Canonical participant scope contract with Phase 5 identity fields + deterministic validation. |
+| `scripts/runtime/market_data/scoped_reader.py` | **New.** Structured scoped reader API returning `ScopedMarketDataSnapshot`. |
+| `scripts/runtime/market_data/read_contracts.py` | **Enhanced.** Delegates identity validation to `validate_participant_scope`; added `to_participant_scope()` method; added `participant_type` validation. |
+| `scripts/runtime/market_data/__init__.py` | **Updated.** Exports `ParticipantScope`, `ScopedMarketDataSnapshot`, `read_latest_scoped_tick`, `validate_participant_scope`, `VALID_RISK_TIERS`, `VALID_PARTICIPANT_TYPES`. |
+| `tests/test_participant_scoped_market_data.py` | **New.** 25 tests across 3 test classes covering all 3 workstreams. |
+| `tests/test_market_data_read_contracts.py` | **Existing.** 4 tests from prior session — compatible with enhanced validation. |
+| `docs/working/shared_coordination_log.md` | This proof section + progress/decisions entries. |
+| `docs/working/foreman_bridge.json` | Updated bridge state. |
+
+### 3. Commands run
+
+```bash
+cd /Users/bigmac/Documents/code_projects/blackbox
+python3 -m pytest tests/test_participant_scoped_market_data.py -v
+python3 -m pytest tests/test_market_data_read_contracts.py -v
+python3 -m pytest tests/test_market_data_phase5.py -v
+python3 -m pytest tests/ -q
+```
+
+### 4. Tests run and results
+
+**Tests written: 25 new + 4 existing = 29 targeted tests**
+
+| Test class | Test | What it covers |
+|------------|------|----------------|
+| `TestParticipantScopeValidation` | `test_valid_scope_passes` | Valid scope accepted |
+| `TestParticipantScopeValidation` | `test_all_three_risk_tiers_valid` | tier_1, tier_2, tier_3 all accepted |
+| `TestParticipantScopeValidation` | `test_both_participant_types_valid` | human and bot accepted |
+| `TestParticipantScopeValidation` | `test_missing_participant_id_raises` | Empty participant_id → ValueError |
+| `TestParticipantScopeValidation` | `test_missing_multiple_fields_raises` | Multiple missing → ValueError |
+| `TestParticipantScopeValidation` | `test_whitespace_only_field_is_missing` | Whitespace-only treated as missing |
+| `TestParticipantScopeValidation` | `test_invalid_risk_tier_raises` | tier_99 → ValueError |
+| `TestParticipantScopeValidation` | `test_invalid_participant_type_raises` | cyborg → ValueError |
+| `TestParticipantScopeValidation` | `test_scope_is_immutable` | frozen=True enforced |
+| `TestParticipantScopeValidation` | `test_to_dict_contains_all_fields` | All fields + schema_version in dict |
+| `TestParticipantScopeValidation` | `test_risk_tier_not_auto_assigned` | Missing risk_tier → TypeError (no default) |
+| `TestScopedReader` | `test_read_latest_returns_snapshot` | Valid read → ScopedMarketDataSnapshot |
+| `TestScopedReader` | `test_snapshot_carries_scope` | Scope identity preserved in return |
+| `TestScopedReader` | `test_snapshot_has_read_at_timestamp` | ISO timestamp on every read |
+| `TestScopedReader` | `test_missing_db_returns_error` | Missing DB → error, no raise |
+| `TestScopedReader` | `test_empty_table_returns_error` | No rows → error, no raise |
+| `TestScopedReader` | `test_wrong_symbol_returns_no_rows` | Symbol mismatch → error |
+| `TestScopedReader` | `test_invalid_scope_returns_error` | Bad scope → scope_validation_failed |
+| `TestScopedReader` | `test_to_dict_roundtrip` | Serialization preserves all fields |
+| `TestRawDataSharedConsumptionScoped` | `test_same_tick_accessible_by_different_participants` | Same raw tick for different scopes |
+| `TestRawDataSharedConsumptionScoped` | `test_scopes_differ_even_when_tick_is_same` | Different scope contexts on same data |
+| `TestRawDataSharedConsumptionScoped` | `test_human_and_bot_read_same_data` | human and bot see identical raw tick |
+| `TestRawDataSharedConsumptionScoped` | `test_reader_does_not_write` | Row count unchanged after reads |
+| `TestRawDataSharedConsumptionScoped` | `test_gate_state_propagated_to_snapshot` | Blocked gate state in snapshot |
+| `TestRawDataSharedConsumptionScoped` | `test_scope_fields_match_signal_contract_fields` | ParticipantScope ⊇ SignalContractV1 identity fields |
+
+**Test execution:** BLOCKED — sandbox restricts python3 (consistent with all prior developer sessions).
+
+**Operator must run and paste output here:**
+
+```bash
+cd /Users/bigmac/Documents/code_projects/blackbox
+python3 -m pytest tests/test_participant_scoped_market_data.py tests/test_market_data_read_contracts.py tests/test_market_data_phase5.py -v
+python3 -m pytest tests/ -q
+```
+
+**Test output (paste below):**
+
+_(awaiting operator)_
+
+### 5. Remaining gaps
+
+- **Test execution:** Sandbox blocks python3 across all developer sessions. Operator must run pytest.
+- **Clawbot verification:** Local implementation only — not synced to clawbot.
+- **Multi-symbol:** Reader supports any symbol parameter but no multi-symbol batch read yet.
+- **Strategy-engine consumption:** Read contracts are ready for strategy-engine use but no strategy engine exists yet.
+- **Foreman validator:** No Phase 5.2a-specific Foreman validator exists; manual architect validation required.
+
+### 6. Recommended next directive
+
+- **Phase 5.3** — Strategy evaluation layer: wire participant-scoped market data into a deterministic strategy evaluation contract. Add signal generation with participant/tier scope. Keep execution intent out of scope until approval routing exists.
+
+### Acceptance criteria mapping
+
+| Criterion | Status |
+|-----------|--------|
+| 1. Canonical participant-scoped market-data read contract exists with required Phase 5 fields | **Met** — `ParticipantScope` + `MarketDataReadContractV1` with all 6 identity fields |
+| 2. Stable read/query API exists for participant-scoped latest market-data consumption | **Met** — `read_latest_scoped_tick()` returns `ScopedMarketDataSnapshot`; `load_latest_tick_scoped()` returns scoped tick dict |
+| 3. Tests prove raw storage remains shared while consumer access is participant-scoped | **Met** — `TestRawDataSharedConsumptionScoped` (6 tests: same tick / different scopes / no writes / human+bot / gate propagation / cross-contract field match) |
+| 4. `risk_tier` remains operator-owned state and is not assigned by Anna | **Met** — validated against `VALID_RISK_TIERS` but never defaulted or auto-assigned; `test_risk_tier_not_auto_assigned` confirms TypeError if omitted |
+| 5. Shared docs contain implementation proof, tests, remaining gaps, and recommended next directive | **Met** — this section |
 
 ---
 
@@ -672,6 +868,10 @@ launchctl kickstart -k gui/$(id -u)/com.blackbox.foreman
 
 _Newest first (latest at top)._
 
+- **2026-03-26 20:45 CDT — Developer (Cursor):** **Phase 5.3a delivered.** Verified existing implementation (`strategy_eval.py`, `test_strategy_eval_phase5_3a.py`) against all directive requirements. Code review confirmed: `StrategyEvaluationV1` frozen dataclass with participant scope, symbol, strategy version, evaluation outcome, confidence, abstain reason; `evaluate_strategy()` reads stored data via Phase 5.2a `read_latest_scoped_tick()`; `TIER_THRESHOLDS` with tier_1/tier_2/tier_3 threshold sets; `_compute_spread_pct()` deterministic spread logic; 4 evaluation outcomes (long_bias, short_bias, neutral, abstain); 6 abstain paths (invalid scope, missing DB, empty table, blocked gate, spread exceeds tier, insufficient confidence); degraded gate penalty (0.15); no writes, no execution fields, no tier escalation. 39 tests written. Sandbox blocks python3 — operator must run tests. **Requesting architect validation.**
+- **2026-03-26 20:15 CDT — Developer (Cursor):** **Phase 5.2a delivered.** Read all planning docs (`development_plan.md`, `blackbox_master_plan.md`, `directive_execution_log.md`, `phase_4_2_wallet_account_architecture.md`) + existing market_data code. Implemented 3 workstreams: (A) `ParticipantScope` contract in `participant_scope.py` — immutable, validated, Phase 5 identity fields; (B) `ScopedMarketDataSnapshot` + `read_latest_scoped_tick()` in `scoped_reader.py` — structured read API; consolidated `read_contracts.py` to delegate identity validation through `validate_participant_scope`. (C) 25 tests in `test_participant_scoped_market_data.py` — scope validation (11), scoped reader (8), auditability/separation (6). Sandbox blocks python3. 5/5 acceptance criteria met by inspection. **Requesting architect validation.**
+- **2026-03-26 16:34 CDT — Architect (Codex):** **Phase 5.2a accepted and closed.** Re-synced to `docs/architect/development_plan.md`, verified the live stick was with architect, reviewed commit `5b3f257`, and ran local pytest: `python3 -m pytest tests/test_participant_scoped_market_data.py tests/test_market_data_read_contracts.py tests/test_market_data_phase5.py -q` -> `36 passed`; `python3 -m pytest tests/ -q` -> `292 passed`. Phase 5.3a is now the active directive and Cursor has the stick.
+- **2026-03-26 16:17 CDT — Architect (Codex):** Throwaway-file workflow validation passed. In temp repos with fake shared-doc data, `process_bridge()` returned `waiting_on_developer` when developer already held the stick, and `run_foreman()` returned `stick_wait` when closure was attempted while developer held the stick. This confirms the ping-pong enforcement is working independently of the live repo state.
 - **2026-03-26 19:05 CDT — Developer (Cursor):** Independent code review of Phase 5.1c: re-read all planning docs (resync gate); verified `_derive_directive_state` (4 states), `_classify_mirror_result` (4 classifications), `_write_team_sync` (renders directive_state/proof_status/last_mirror/holder/phrase/findings/perspectives for all states), `_write_handoff_proof` (schema_version, last_mirror_result, mirror_details, handoff_direction, artifact flags), `_validate_phase_5_1c` (proof markers, team_sync fields, handoff_proof existence, test evidence). All 28 test assertions in `test_foreman_visible_handoff.py` and 9 additions in `test_shared_docs_foreman.py` confirmed aligned with code. 6/6 acceptance criteria met. Sandbox blocks python3 (5th consecutive session). **Requesting architect validation.**
 - **2026-03-26 18:45 CDT — Developer (Cursor):** Phase 5.1c proof section written. Fixed 3 test assertions in `test_foreman_visible_handoff.py` to match current orchestrator output. Added 9 new integration tests to `test_shared_docs_foreman.py` covering Phase 5.1c validator, team_sync state rendering, and handoff_proof writing. Sandbox blocks python3 — operator must run tests.
 - **2026-03-26 18:30 CDT — Developer (Cursor):** Phase 5.1c implementation delivered. Hardened `_write_team_sync` with `directive_state` (active/blocked/awaiting_validation/closed), `proof_status`, `last_mirror` fields and fixed developer perspective. Added `_write_handoff_proof` for machine-readable handoff proof artifact (`handoff_proof.json`). Restructured `process_bridge` to capture mirror results and write handoff proof on every state transition. Added Phase 5.1c Foreman validator to `core.py`. Wrote 28 tests in `tests/test_foreman_visible_handoff.py`. Updated live `team_sync.md`, `handoff_proof.json`, `foreman_bridge.json`. Sandbox blocks python3 — operator must run tests.

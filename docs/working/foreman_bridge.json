@@ -1,0 +1,22 @@
+{
+  "schema_version": "foreman_bridge_v1",
+  "updated_at": "2026-03-26 17:16 CDT",
+  "directive_title": "PHASE 5.3A — DETERMINISTIC STRATEGY EVALUATION CONTRACT",
+  "directive_status": "Active — **Phase 5.3a deterministic strategy evaluation contract**",
+  "bridge_status": "architect_action_required",
+  "next_actor": "architect",
+  "reason": "Architect review is pending in shared docs.",
+  "handoff_phrase": "have the architect validate shared-docs",
+  "proof_status": "missing",
+  "architect_review_pending": true,
+  "active_proof_section": null,
+  "findings": [
+    "phase 5.3a validator stub active; require architect code-and-proof review before closure"
+  ],
+  "recommended_next_directive": null,
+  "last_foreman_result": "bridge",
+  "source_files": [
+    "docs/working/current_directive.md",
+    "docs/working/shared_coordination_log.md"
+  ]
+}
