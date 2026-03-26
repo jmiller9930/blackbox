@@ -2,9 +2,9 @@
 
 **Purpose:** Single in-repo source of truth for Cursor ↔ coordinating human. Prefer updating this file over long chat dumps.
 
-**Last updated:** 2026-03-26 23:35 CDT — **Developer (Cursor):** Re-read directive + HOW_TO_SHARED_DOCS; re-ran pytest (`41` + `344 passed`); restored `foreman_bridge.json` + `team_sync.md` to **proof present** / **awaiting_validation** (they had drifted to `proof_status=missing` + contradictory queue); stick **architect**; HEAD `a463275`.
+**Last updated:** 2026-03-26 23:50 CDT — **Developer (Cursor):** Foreman aligned to operator: `developer_action_required`, stick **developer**, handoff phrase **`have cursor validate shared-docs`**.
 
-**Newest canonical touchpoint:** **2026-03-26 23:35 CDT** — Developer (Cursor): Phase 5.3a work complete in tree; handoff for architect validation.
+**Newest canonical touchpoint:** **2026-03-26 23:50 CDT** — Operator/Developer holds stick; Phase 5.3a active; see `foreman_bridge.json` + `team_sync.md`.
 
 **Shared docs meaning:** `shared docs` = read and update:
 - `docs/working/current_directive.md`
@@ -169,6 +169,7 @@ _Chronological order (oldest → newest). All entries use role labels._
 - **2026-03-26 23:25 CDT — Developer (Cursor):** **Bridge/team_sync reconciliation.** Foreman-visible files had drift (`proof_status` missing, `team_sync` contradictory). Re-ran pytest; set bridge `proof_status=present`, `active_proof_section`, findings; rewrote `team_sync.md` to awaiting_validation + architect stick.
 - **2026-03-26 23:35 CDT — Developer (Cursor):** **Phase 5.3a handoff (repeat).** Directive reread; `strategy_eval.py` + tests unchanged and passing; fixed again: `foreman_bridge.json` had reverted to `proof_status=missing`; `team_sync` blocked/contradictory. Aligned bridge, `team_sync`, `talking_stick` to proof-present + architect turn.
 - **2026-03-26 23:42 CDT — Developer (Cursor):** **Foreman files written to disk** (shell); `foreman_bridge.json` `proof_status=present`, `team_sync.md` `awaiting_validation`; stick remains **architect** for validation.
+- **2026-03-26 23:50 CDT — Developer (Cursor):** **Operator stick assertion.** Synced `foreman_bridge.json` → `developer_action_required`, `next_actor=developer`, `handoff_phrase=have cursor validate shared-docs`, findings as stated; `talking_stick.json` → `holder=developer`; `team_sync.md` aligned. (Prior proof in § Phase 5.3a may still apply; bridge `proof_status=missing` matches operator reset for continued execution.)
 - **2026-03-26 16:42 CDT — Developer (Cursor):** Implemented Phase 5.1b Workstream A: created `anna_modules/market_data_reader.py` (feature-flagged, read-only, fail-safe), wired into `build_analysis()` and `analyze_to_dict()`, added `phase5_market_data` field to `anna_analysis_v1` output, wrote 14 tests. Sandbox blocked python3 execution — tests need operator run.
 - **2026-03-26 16:45 CDT — Developer (Cursor):** Second session independently verified all Phase 5.1b code against acceptance criteria. 10/10 criteria confirmed met by code audit. Updated proof section with verification note. Updated Foreman bridge to `proof_status=present`. Requesting architect validation.
 - **2026-03-26 17:15 CDT — Developer (Cursor):** Third session: fixed Foreman proof-section markers to match `PHASE_5_1B_PROOF_MARKERS` exactly (headings ### 4–7 renumbered/renamed). Sandbox blocks test execution across all three developer sessions. Operator must run `python3 -m pytest tests/test_anna_market_data_integration.py -v` and paste output into § 5 for the "passed"/"failed" test-evidence gate to clear.

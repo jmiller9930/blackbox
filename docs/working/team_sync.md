@@ -6,21 +6,21 @@
 
 - `directive`: PHASE 5.3A — DETERMINISTIC STRATEGY EVALUATION CONTRACT
 - `directive_state`: `blocked`
-- `current_result`: `waiting on architect`
+- `current_result`: `awaiting architect validation`
 - `proof_status`: `missing`
-- `talking_stick_holder`: `architect`
+- `talking_stick_holder`: `developer`
 - `next_actor`: `architect`
-- `required_phrase`: `have the architect validate shared-docs`
-- `last_mirror`: `Talking stick already held by architect; waiting for that side to act.`
-- `team_state`: `in sync`
+- `required_phrase`: `have cursor validate shared-docs`
+- `last_mirror`: `Bridge state unchanged; no new orchestration action taken.`
+- `team_state`: `out of sync`
 
 ## Architect perspective
 
-Architect is waiting while developer works PHASE 5.3A — DETERMINISTIC STRATEGY EVALUATION CONTRACT. Architect should not act until the stick comes back.
+Read docs/working/current_directive.md, docs/working/shared_coordination_log.md, docs/working/foreman_bridge.json, and docs/working/HOW_TO_SHARED_DOCS.md. Then validate the active directive against the proof on disk. If requirements are missing, amend immediately. If they are satisfied, close and move on.
 
 ## Developer perspective
 
-Developer still has the talking stick for PHASE 5.3A — DETERMINISTIC STRATEGY EVALUATION CONTRACT. Continue implementation, write proof in shared docs, then return `have the architect validate shared-docs`.
+Read docs/working/current_directive.md, docs/working/shared_coordination_log.md, docs/working/foreman_bridge.json, and docs/working/HOW_TO_SHARED_DOCS.md. Then execute the active work for PHASE 5.3A — DETERMINISTIC STRATEGY EVALUATION CONTRACT. Update shared docs with timestamped proof as you work. When implementation and proof are ready, reply with: have the architect validate shared-docs.
 
 ## Findings
 
@@ -28,9 +28,9 @@ Developer still has the talking stick for PHASE 5.3A — DETERMINISTIC STRATEGY 
 
 ## Runtime status
 
-Talking stick already held by architect; waiting for that side to act.
+Bridge state unchanged; no new orchestration action taken.
 
 ## What happens next
 
-The talking stick already belongs to `architect`.
-Wait for that side to finish and return the phrase `have the architect validate shared-docs`.
+Use the phrase `have cursor validate shared-docs`.
+The talking stick currently belongs to `developer`.
