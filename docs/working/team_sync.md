@@ -1,26 +1,26 @@
 # Team sync
 
-**Last updated:** 2026-03-26 17:32 CDT — **Foreman:** visible team sync updated
+**Last updated:** 2026-03-27 01:40 CDT — **Developer (Cursor):** Phase 5.3b proof present; architect turn.
 
 ## Queue
 
 - `directive`: PHASE 5.3B — STORED-DATA BACKTEST / SIMULATION LOOP
-- `directive_state`: `active`
-- `current_result`: `waiting on developer`
-- `proof_status`: `missing`
-- `talking_stick_holder`: `developer`
-- `next_actor`: `developer`
-- `required_phrase`: `have cursor validate shared-docs`
-- `last_mirror`: `Bridge state unchanged; no new orchestration action taken.`
+- `directive_state`: `awaiting_validation`
+- `current_result`: `proof submitted — architect to validate`
+- `proof_status`: `present`
+- `talking_stick_holder`: `architect`
+- `next_actor`: `architect`
+- `required_phrase`: `have the architect validate shared-docs`
+- `last_mirror`: `not_attempted`
 - `team_state`: `in sync`
 
 ## Architect perspective
 
-Architect is waiting while developer works PHASE 5.3B — STORED-DATA BACKTEST / SIMULATION LOOP. Architect should not act until the stick comes back.
+Validate § Phase 5.3b in `shared_coordination_log.md`, `backtest_simulation.py`, tests.
 
 ## Developer perspective
 
-Developer still has the talking stick for PHASE 5.3B — STORED-DATA BACKTEST / SIMULATION LOOP. Continue implementation, write proof in shared docs, then return `have cursor validate shared-docs`.
+Slice complete for this pass; await architect.
 
 ## Findings
 
@@ -28,9 +28,8 @@ Developer still has the talking stick for PHASE 5.3B — STORED-DATA BACKTEST / 
 
 ## Runtime status
 
-Bridge state unchanged; no new orchestration action taken.
+no visible/runtime issue recorded
 
 ## What happens next
 
-The talking stick already belongs to `developer`.
-Wait for that side to finish and return the phrase `have cursor validate shared-docs`.
+Architect validates with **have the architect validate shared-docs**.
