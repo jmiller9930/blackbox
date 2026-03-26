@@ -30,12 +30,20 @@ npm run create-wallet
 
 This writes **`keypair.json`** as a **JSON byte array only** — the format `drift_trading_bot_source.ts` loads (`Keypair.fromSecretKey`). It also writes **`wallet-backup.json`** (public key + base58 + array). **Do not commit** either file. To echo base58 once for a password manager: `SHOW_SECRET=1 npm run create-wallet`.
 
-**Import an existing secret without echo (Python):** from repo root, with venv + `pip install -r requirements.txt` (includes `base58`):
+**Import an existing secret without echo (Python):** install **`base58`** once, then run from **repo root** (not inside `trading_core` — paths are relative to the blackbox folder):
 
 ```bash
+cd ~/Documents/code_projects/blackbox
+python3 -m pip install base58
 python3 scripts/trading/import_solana_keypair.py -o trading_core/keypair.json
 ```
 
-Paste **base58** or a one-line **JSON array** `[...]` when prompted; input is **hidden** (not shown as you type). **Do not** paste secrets into Cursor chat.
+Or use the helper (always uses repo root):
+
+```bash
+bash scripts/trading/run_import_keypair.sh -o trading_core/keypair.json
+```
+
+Paste **base58** or a one-line **JSON array** `[...]` when prompted; input is **hidden**. **Do not** paste secrets into Cursor chat. Replace `~/Documents/code_projects/blackbox` with your real clone path if different.
 
 **Higher-level narrative + gaps vs architect layers:** [`../docs/trading/REFERENCE_CURRENT_DRIFT_BOT.md`](../docs/trading/REFERENCE_CURRENT_DRIFT_BOT.md)
