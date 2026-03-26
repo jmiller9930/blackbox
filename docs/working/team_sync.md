@@ -1,6 +1,6 @@
 # Team sync
 
-**Last updated:** 2026-03-26 17:17 CDT — **Foreman:** visible team sync updated
+**Last updated:** 2026-03-26 17:18 CDT — **Foreman:** visible team sync updated
 
 ## Queue
 
@@ -11,7 +11,7 @@
 - `talking_stick_holder`: `architect`
 - `next_actor`: `architect`
 - `required_phrase`: `have the architect validate shared-docs`
-- `last_mirror`: `Bridge state unchanged; no new orchestration action taken.`
+- `last_mirror`: `Talking stick already held by architect; waiting for that side to act.`
 - `team_state`: `in sync`
 
 ## Architect perspective
@@ -28,7 +28,7 @@ Developer still has the talking stick for PHASE 5.3A — DETERMINISTIC STRATEGY 
 
 ## Runtime status
 
-Bridge state unchanged; no new orchestration action taken.
+Talking stick already held by architect; waiting for that side to act.
 
 ## What happens next
 
