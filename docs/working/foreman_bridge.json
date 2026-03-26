@@ -1,21 +1,18 @@
 {
   "schema_version": "foreman_bridge_v1",
-  "updated_at": "2026-03-27 01:22 CDT",
+  "updated_at": "2026-03-26 17:31 CDT",
   "directive_title": "PHASE 5.3B \u2014 STORED-DATA BACKTEST / SIMULATION LOOP",
-  "directive_status": "Active \u2014 proof recorded; awaiting architect validation",
-  "bridge_status": "architect_action_required",
-  "next_actor": "architect",
-  "reason": "Phase 5.3b implementation + \u00a75.3b proof in shared_coordination_log; pytest 7 + 353 passed.",
-  "handoff_phrase": "have the architect validate shared-docs",
-  "proof_status": "present",
-  "architect_review_pending": true,
-  "active_proof_section": "## Phase 5.3b \u2014 implementation proof (2026-03-27)",
-  "findings": [
-    "backtest_simulation.py + store.ticks_chronological",
-    "tests/test_backtest_simulation_phase5_3b.py 7 passed; full suite 353 passed"
-  ],
-  "recommended_next_directive": "Per development_plan.md after 5.3b closure",
-  "last_foreman_result": "developer_handoff",
+  "directive_status": "Active \u2014 **Phase 5.3b stored-data backtest / simulation loop**",
+  "bridge_status": "developer_action_required",
+  "next_actor": "developer",
+  "reason": "Phase 5.3b implementation + proof in shared_coordination_log; pytest 7 + 353 passed.",
+  "handoff_phrase": "have cursor validate shared-docs",
+  "proof_status": "missing",
+  "architect_review_pending": false,
+  "active_proof_section": null,
+  "findings": [],
+  "recommended_next_directive": null,
+  "last_foreman_result": "bridge",
   "source_files": [
     "docs/working/current_directive.md",
     "docs/working/shared_coordination_log.md"
