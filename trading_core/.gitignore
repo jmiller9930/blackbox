@@ -2,6 +2,7 @@ node_modules/
 
 # Never commit key material
 keypair.json
+keypair.base58
 *-wallet*.json
 wallet-backup.json
 new-solana-wallet.json

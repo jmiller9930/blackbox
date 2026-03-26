@@ -1,11 +1,12 @@
 /**
- * Generate a new Solana keypair and write Drift-bot-compatible keypair.json.
+ * Generate a new Solana keypair — Drift bot format only.
  *
- * drift_trading_bot_source.ts expects KEYPAIR_PATH (default keypair.json) to be
- * ONLY a JSON array of 64 bytes — see fs.readFile + JSON.parse + Keypair.fromSecretKey.
+ * Writes:
+ * - keypair.json — ONE line, compact JSON array [n,n,...] (64 bytes). No spaces.
+ *   drift_trading_bot_source.ts: JSON.parse → Uint8Array.from → Keypair.fromSecretKey
+ * - keypair.base58 — ONE line, base58 only (no brackets) for Phantom/import UIs.
  *
- * Run: cd trading_core && npm install && npm run create-wallet
- * Never commit keypair.json or *-wallet*.json (see trading_core/.gitignore).
+ * Run: npm run create-wallet (from repo root) or npm run create-wallet --prefix trading_core
  */
 
 import { chmodSync, writeFileSync } from "node:fs";
@@ -18,37 +19,27 @@ const publicKey = wallet.publicKey.toBase58();
 const secretBytes = Array.from(wallet.secretKey);
 const secretKeyBase58 = bs58.encode(wallet.secretKey);
 
-// Drift bot load path: JSON.parse -> Uint8Array.from -> Keypair.fromSecretKey
+// Compact JSON: no spaces anywhere (single line).
+const compactArray = JSON.stringify(secretBytes);
 const driftPath = resolve("./keypair.json");
-writeFileSync(driftPath, JSON.stringify(secretBytes), { encoding: "utf8" });
-try {
-  chmodSync(driftPath, 0o600);
-} catch {
-  // Windows may ignore chmod; ignore errors
+writeFileSync(driftPath, compactArray + "\n", { encoding: "utf8" });
+
+const base58Path = resolve("./keypair.base58");
+writeFileSync(base58Path, secretKeyBase58 + "\n", { encoding: "utf8" });
+
+for (const p of [driftPath, base58Path]) {
+  try {
+    chmodSync(p, 0o600);
+  } catch {
+    /* ignore */
+  }
 }
 
-// Optional human-readable backup (still secret — treat like keypair.json)
-const backupPath = resolve("./wallet-backup.json");
-const backup = {
-  publicKey,
-  secretKeyBase58,
-  secretKey: secretBytes,
-  note: "Keep offline. Drift bot uses keypair.json (array only).",
-};
-writeFileSync(backupPath, JSON.stringify(backup, null, 2), { encoding: "utf8" });
-try {
-  chmodSync(backupPath, 0o600);
-} catch {
-  /* ignore */
-}
+console.log("Public key:", publicKey);
+console.log("Drift load (JSON array):", driftPath);
+console.log("Import (base58 one line):", base58Path);
+console.log("Fund this address on-chain. Do not commit these files.");
 
-console.log("Public key (address):", publicKey);
-console.log("");
-console.log("Wrote Drift-compatible:", driftPath);
-console.log("Wrote backup (pub + base58 + array):", backupPath);
-console.log("");
-console.log("Do not commit these files. Fund SOL/USDC on-chain before Drift deposit.");
-console.log("base58 secret is in wallet-backup.json (secretKeyBase58) — never paste into chat.");
 if (process.env.SHOW_SECRET === "1") {
-  console.log("secretKeyBase58:", secretKeyBase58);
+  console.log("base58:", secretKeyBase58);
 }

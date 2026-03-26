@@ -71,8 +71,10 @@ def main() -> int:
 
     os.makedirs(os.path.dirname(out_path) or ".", exist_ok=True)
     arr = list(key_bytes)
+    # Compact: one line, no spaces — same as create-solana-wallet.ts
+    line = json.dumps(arr, separators=(",", ":"))
     with open(out_path, "w", encoding="utf-8") as f:
-        json.dump(arr, f)
+        f.write(line + "\n")
     try:
         os.chmod(out_path, 0o600)
     except OSError:

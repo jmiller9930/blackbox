@@ -28,7 +28,7 @@ npm run create-wallet
 
 **Do not use `sudo cd …`** — `cd` in a `sudo` subshell does not change your shell’s directory, so `npm` will run in the wrong folder and look for `package.json` at the repo root. Use plain `cd trading_core` (no sudo).
 
-This writes **`keypair.json`** as a **JSON byte array only** — the format `drift_trading_bot_source.ts` loads (`Keypair.fromSecretKey`). It also writes **`wallet-backup.json`** (public key + base58 + array). **Do not commit** either file. To echo base58 once for a password manager: `SHOW_SECRET=1 npm run create-wallet`.
+This writes **`keypair.json`** — **one line**, compact `[n,n,...]` (no spaces) for `drift_trading_bot_source.ts`. It also writes **`keypair.base58`** — **one line**, base58 only (no `[]` / `{}`) for wallet import UIs. **Do not commit.** To print base58 once: `SHOW_SECRET=1 npm run create-wallet`.
 
 **Import an existing secret without echo (Python):** install **`base58`** once, then run from **repo root** (not inside `trading_core` — paths are relative to the blackbox folder):
 
