@@ -8,3 +8,4 @@ pytest>=8.0,<9
 prompt_toolkit>=3.0,<4
 python-telegram-bot>=21.0,<22
 slack-bolt>=1.18,<2
+base58>=2.0,<3
