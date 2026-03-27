@@ -1,11 +1,11 @@
 {
   "schema_version": "talking_stick_v1",
-  "updated_at": "2026-03-26 22:35 CDT",
-  "generation": "2026-03-26 22:35 CDT|PHASE 5.3B \u2014 STORED-DATA BACKTEST / SIMULATION LOOP|architect_action_required|architect|have the architect validate shared-docs",
-  "holder": "architect",
+  "updated_at": "2026-03-26 20:30 CDT",
+  "generation": "2026-03-26 20:30 CDT|PHASE 5.3B — STORED-DATA BACKTEST / SIMULATION LOOP|developer_action_required|developer|have cursor validate shared-docs",
+  "holder": "developer",
   "handed_from": "developer",
-  "handed_to": "architect",
-  "reason": "Phase 5.3b proof present; architect validation next.",
-  "required_phrase": "have the architect validate shared-docs",
-  "directive_title": "PHASE 5.3B \u2014 STORED-DATA BACKTEST / SIMULATION LOOP"
+  "handed_to": "developer",
+  "reason": "foreman_bridge.json generation does not match canonical runtime state",
+  "required_phrase": "have cursor validate shared-docs",
+  "directive_title": "PHASE 5.3B — STORED-DATA BACKTEST / SIMULATION LOOP"
 }
