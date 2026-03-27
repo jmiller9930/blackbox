@@ -2,7 +2,23 @@
 
 ## Status
 
-Active planning artifact for the Foreman v2 broker build.
+Active execution artifact for the Foreman v2 broker + backend safety path.
+
+### Execution snapshot (2026-03-27)
+
+- Completed:
+  - Foreman v2 runtime, state machine, proof gate, audit trail
+  - operator command desk (`status`, `route`, `broadcast`, `terminate`)
+  - strict actor-session lock (`foreman_v2_session_lock.json`)
+  - remote terminate/close attempts (`PATCH` + `DELETE` session route)
+  - backend dispatch idempotency contract wiring:
+    - broker sends `X-Foreman-Dispatch-Key`
+    - Mission Control session route dedupes repeated key in TTL window
+  - local/clawbot env bootstrap script (`setup_env.sh`)
+  - live proof harness script (`prove_live_session_safety.sh`)
+- Remaining for closure:
+  - live env values and active session IDs on clawbot
+  - architect proof package from live run evidence table
 
 ## Objective
 
@@ -203,10 +219,12 @@ Exit: directive cannot close without proof markers.
 ## Phase 4 - OpenClaw Adapter
 
 - Implement send prompt to role session/channel
-- Implement inbound message listener/parsing
-- Tie inbound events to transition engine
+- Add backend idempotency contract (`X-Foreman-Dispatch-Key`)
+- Add remote preflight + session existence checks before send
+- Implement inbound message listener/parsing (remaining)
+- Tie inbound events to transition engine (remaining)
 
-Exit: end-to-end brokered handoff between roles via gateway.
+Exit: end-to-end brokered handoff between roles via gateway with duplicate-dispatch suppression.
 
 ## Phase 5 - Audit + Operator Visibility
 
@@ -252,6 +270,35 @@ Exit: production-like operation in lab with rollback path.
 - service restarts recover state safely
 - duplicate inbound messages do not duplicate transitions
 - stale/invalid stick state blocks action
+- repeated dispatch key does not produce duplicate session send at backend route
+- terminate triggers remote close attempts and local PID stop
+
+## End-to-End Backend Inclusion (Required Gate)
+
+### Required runtime topology
+
+1. Foreman v2 process (local or clawbot runtime)
+2. Mission Control API route `/api/openclaw/sessions/[id]`
+3. OpenClaw gateway sessions
+4. Shared docs + audit files in repo
+
+### Backend safety guarantees in scope
+
+- Session preflight verification before send
+- Actor->session lock persistence and conflict block
+- Dispatch-key dedupe at broker + backend route
+- Remote terminate/close attempt path
+
+### Proof package required for architect acceptance
+
+| Where | What you ran / captured | Result |
+|---|---|---|
+| clawbot `~/blackbox` | `source .env.foreman_v2 && ./scripts/runtime/foreman_v2/prove_live_session_safety.sh` | pass/fail with artifacts |
+| docs/working | `foreman_v2_session_lock.json` | stable actor->session mapping |
+| docs/working | `foreman_v2_audit.jsonl` tail | dispatch + dedupe + terminate evidence |
+| clawbot git | `git rev-parse HEAD` | proof commit SHA |
+
+The directive is not considered operationally closed until this proof table is populated from a live (non-dry) run.
 
 ## Risk Register and Mitigations
 
