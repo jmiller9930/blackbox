@@ -1,13 +1,15 @@
 {
   "schema_version": "foreman_bridge_v1",
-  "updated_at": "2026-03-27 01:50 CDT",
-  "directive_title": "PHASE 5.3B \u2014 STORED-DATA BACKTEST / SIMULATION LOOP",
-  "directive_status": "Active \u2014 Phase 5.3b stored-data backtest / simulation loop",
+  "updated_at": "2026-03-26 19:30 CDT",
+  "generation": "2026-03-26 19:30 CDT|PHASE 5.3B — STORED-DATA BACKTEST / SIMULATION LOOP|developer_action_required|developer|have cursor validate shared-docs",
+  "directive_title": "PHASE 5.3B — STORED-DATA BACKTEST / SIMULATION LOOP",
+  "directive_status": "Active — **Phase 5.3b stored-data backtest / simulation loop**",
   "bridge_status": "developer_action_required",
   "next_actor": "developer",
-  "reason": "Operator/Developer holds stick. Complete Phase 5.3b work and proof; hand off with: have cursor validate shared-docs",
+  "reason": "Developer loop retry scheduled for 2026-03-26 19:31 CDT.",
   "handoff_phrase": "have cursor validate shared-docs",
   "proof_status": "missing",
+  "next_retry_at": "2026-03-26 19:31 CDT",
   "architect_review_pending": false,
   "active_proof_section": null,
   "findings": [],
@@ -15,6 +17,7 @@
   "last_foreman_result": "bridge",
   "source_files": [
     "docs/working/current_directive.md",
-    "docs/working/shared_coordination_log.md"
+    "docs/working/shared_coordination_log.md",
+    "docs/working/foreman_runtime_state.json"
   ]
 }

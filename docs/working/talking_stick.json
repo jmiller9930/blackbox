@@ -1,10 +1,11 @@
 {
   "schema_version": "talking_stick_v1",
-  "updated_at": "2026-03-27 01:50 CDT",
+  "updated_at": "2026-03-26 19:30 CDT",
+  "generation": "2026-03-26 19:30 CDT|PHASE 5.3B — STORED-DATA BACKTEST / SIMULATION LOOP|developer_action_required|developer|have cursor validate shared-docs",
   "holder": "developer",
-  "handed_from": "architect",
+  "handed_from": "developer",
   "handed_to": "developer",
-  "reason": "Operator asserted stick for Phase 5.3b.",
+  "reason": "Developer loop retry scheduled for 2026-03-26 19:31 CDT.",
   "required_phrase": "have cursor validate shared-docs",
-  "directive_title": "PHASE 5.3B \u2014 STORED-DATA BACKTEST / SIMULATION LOOP"
+  "directive_title": "PHASE 5.3B — STORED-DATA BACKTEST / SIMULATION LOOP"
 }
