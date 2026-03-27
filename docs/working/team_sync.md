@@ -1,6 +1,6 @@
 # Team sync
 
-**Last updated:** 2026-03-26 19:41 CDT — **Foreman:** visible team sync updated
+**Last updated:** 2026-03-26 19:43 CDT — **Foreman:** visible team sync updated
 
 ## Queue
 
@@ -11,11 +11,11 @@
 - `next_retry_at`: `n/a`
 - `proof_status`: `present`
 - `sync_status`: `conflict`
-- `generation`: `2026-03-26 19:41 CDT|PHASE 5.3B — STORED-DATA BACKTEST / SIMULATION LOOP|developer_action_required|developer|have cursor validate shared-docs`
+- `generation`: `2026-03-26 19:43 CDT|PHASE 5.3B — STORED-DATA BACKTEST / SIMULATION LOOP|developer_action_required|developer|have cursor validate shared-docs`
 - `talking_stick_holder`: `developer`
 - `next_actor`: `architect`
 - `required_phrase`: `have cursor validate shared-docs`
-- `last_mirror`: `foreman_bridge.json generation does not match canonical runtime state`
+- `last_mirror`: `team_sync.md does not match canonical runtime state`
 - `team_state`: `conflict`
 
 ## Architect perspective
@@ -32,7 +32,7 @@ Foreman detected a state conflict. Do not act until the canonical runtime state 
 
 ## Runtime status
 
-foreman_bridge.json generation does not match canonical runtime state
+team_sync.md does not match canonical runtime state
 
 ## What happens next
 
