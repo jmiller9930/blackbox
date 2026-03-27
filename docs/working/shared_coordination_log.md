@@ -2,9 +2,9 @@
 
 **Purpose:** Single in-repo source of truth for Cursor ↔ coordinating human. Prefer updating this file over long chat dumps.
 
-**Last updated:** 2026-03-26 20:50 CDT — **Developer (Cursor):** Phase **5.3b** — read **`current_directive.md`** + **`developer_handoff.md`** only; pytest **`7`** / **`358`** at **`58b1115`** (proof doc commit; code baseline **`d90c77f`**); Foreman watch drift (`updated_at` **20:42**, **`developer_action_required`**, proof **`missing`**) — **re-synced** **`architect_action_required`**, **`proof_status=present`**, stick → **architect**.
+**Last updated:** 2026-03-26 21:10 CDT — **Developer (Cursor):** Phase **5.3b** — read **`current_directive.md`** + **`developer_handoff.md`** only; **`current_directive.md`** — **removed** pasted operator/Cursor block before **`## Title`**; pytest **`7`** / **`358`** on baseline **`2df072d`**; **Foreman** already **`architect_action_required`**, **`proof_status=present`**.
 
-**Newest canonical touchpoint:** **2026-03-26 20:55 CDT** — Proof commit **`58b1115`**; Foreman watch re-clobbered bridge/stick/`team_sync` at **20:43** — **re-synced** architect / proof present; **architect** validation next.
+**Newest canonical touchpoint:** **2026-03-26 21:10 CDT** — Directive cleaned + pytest re-run; **architect** validation next.
 
 **Shared docs meaning:** `shared docs` = read and update:
 - `docs/working/current_directive.md`
@@ -30,7 +30,7 @@ _Use this section when **Developer (Cursor)** needs **Architect** sign-off. Appe
 
 **Pending:**
 
-- (none — **2026-03-26 20:50 CDT** proof present; phrase **`have the architect validate shared-docs`**.)
+- (none — **2026-03-26 21:10 CDT** proof present; phrase **`have the architect validate shared-docs`**.)
 
 ---
 
@@ -173,14 +173,15 @@ _Use this section when **Developer (Cursor)** needs **Architect** sign-off. Appe
 119. **Done:** **2026-03-26 23:40 CDT** — Developer (Cursor): read scope **`current_directive.md`** + **`developer_handoff.md`** only; **`current_directive.md`** **clean**; pytest `7 passed` / `358 passed`; HEAD `1474e4e052d366a92796ddd275e055275497e6a9`; Foreman watch drift (`updated_at` **20:38**) — **re-synced** Foreman bundle → **`architect_action_required`**, **`proof_status=present`**.
 120. **Done:** **2026-03-26 23:45 CDT** — Developer (Cursor): read scope **`current_directive.md`** + **`developer_handoff.md`** only; **`current_directive.md`** — **removed** pasted Cursor stick / operator prompt after **`Directive authority`**; pytest `7 passed` / `358 passed`; HEAD `6cb9968b62fc88a7f39d7562705d0b455b20882a`; Foreman watch drift (`updated_at` **20:41**) — **re-synced** Foreman bundle → **`architect_action_required`**, **`proof_status=present`**.
 121. **Done:** **2026-03-26 20:50 CDT** — Developer (Cursor): read scope **`current_directive.md`** + **`developer_handoff.md`** only; **`current_directive.md`** **clean**; pytest `7 passed` / `358 passed`; proof commit `58b1115e220b8ecb4ce69f8bb3f4a3d416fd7cd2` (parent `d90c77ff181765bfe4a37520feaab8934a6526a1`); Foreman watch drift (`updated_at` **20:42**, **`developer_action_required`**, proof **`missing`**) — **re-synced** Foreman bundle → **`architect_action_required`**, **`proof_status=present`**, **`handoff_phrase`** **`have the architect validate shared-docs`**.
-122. **Now:** Architect validates Phase 5.3b or rejects with amendments.
-123. **Next:** Per `development_plan.md` after architect closure.
+122. **Done:** **2026-03-26 21:10 CDT** — Developer (Cursor): read scope **`current_directive.md`** + **`developer_handoff.md`** only; **`current_directive.md`** — **removed** pasted operator/Cursor prompt before **`## Title`**; pytest `7 passed` / `358 passed` at **`2df072d66185d1ed48aff39acff1f9aecc3be119`**; Foreman unchanged **`architect_action_required`**, **`proof_status=present`**.
+123. **Now:** Architect validates Phase 5.3b or rejects with amendments.
+124. **Next:** Per `development_plan.md` after architect closure.
 
 ---
 
 ## Phase 5.3b — implementation proof (2026-03-27)
 
-**Role:** Developer (Cursor). **Status:** Implementation complete; **2026-03-26 20:50 CDT** re-verification + Foreman re-sync (plan item **121**); read scope **`current_directive.md`** + **`developer_handoff.md`** only; **`current_directive.md`** **clean**; prior: **120** / **109**.
+**Role:** Developer (Cursor). **Status:** Implementation complete; **2026-03-26 21:10 CDT** proof pass (plan item **122**); read scope **`current_directive.md`** + **`developer_handoff.md`** only; **`current_directive.md`** cleaned (pasted block before **`## Title`**); prior: **121** / **109**.
 
 ### 1. Summary
 
@@ -223,6 +224,7 @@ python3 -m pytest tests/ -q
 | Local Mac | `pytest tests/` | `358 passed` (2026-03-26 23:40 CDT; HEAD `1474e4e052d366a92796ddd275e055275497e6a9`) |
 | Local Mac | `pytest tests/` | `358 passed` (2026-03-26 23:45 CDT; HEAD `6cb9968b62fc88a7f39d7562705d0b455b20882a`) |
 | Local Mac | `pytest tests/` | `358 passed` (2026-03-26 20:50 CDT; proof `58b1115e220b8ecb4ce69f8bb3f4a3d416fd7cd2`, parent `d90c77ff181765bfe4a37520feaab8934a6526a1`) |
+| Local Mac | `pytest tests/` | `358 passed` (2026-03-26 21:10 CDT; tests at `2df072d66185d1ed48aff39acff1f9aecc3be119`; `current_directive.md` cleanup in proof commit) |
 | Local Mac | `pytest tests/` | `354 passed` (2026-03-29 05:00 CDT full suite) |
 
 **Git (handoff commit):** `6b31c66` — `phase5.3b: stored-data simulation loop + ticks_chronological + tests + proof`
@@ -254,6 +256,8 @@ python3 -m pytest tests/ -q
 **Re-verification (2026-03-26 20:50 CDT):** Same commands → `7 passed` / `358 passed`. **HEAD:** `58b1115e220b8ecb4ce69f8bb3f4a3d416fd7cd2` (parent `d90c77ff181765bfe4a37520feaab8934a6526a1`). **`current_directive.md`** **clean**. Foreman watch drift **`20:42`** (`developer_action_required`, proof **`missing`**) — re-synced.
 
 **Re-alignment (2026-03-26 20:55 CDT):** Foreman LaunchAgent re-wrote bridge/stick/`team_sync` to **`20:43`** (`developer_action_required`, proof **`missing`**) after proof commit **`58b1115`** — **re-synced** architect handoff + log **`HEAD`** line.
+
+**Re-verification (2026-03-26 21:10 CDT):** Same commands → `7 passed` / `358 passed`. **HEAD (tests):** `2df072d66185d1ed48aff39acff1f9aecc3be119`. **`current_directive.md`** — removed pasted operator/Cursor block before **`## Title`**. Foreman **`architect_action_required`**, proof **`present`** (no drift this pass).
 
 **Re-verification (2026-03-26 19:10 CDT):** `python3 -m pytest tests/test_backtest_simulation_phase5_3b.py -q` → `7 passed`; `python3 -m pytest tests/ -q` → `353 passed`. **HEAD:** `73c203111fd6f13cd9ab28e1495ebd1a1ab3b2aa` (local Mac).
 

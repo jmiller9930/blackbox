@@ -1,6 +1,6 @@
 # Team sync
 
-**Last updated:** 2026-03-26 20:55 CDT — **Foreman:** Phase 5.3b proof present; architect turn (re-sync after watch clobber **20:43**)
+**Last updated:** 2026-03-26 21:10 CDT — **Foreman:** Phase 5.3b proof present; architect turn
 
 ## Queue
 
@@ -14,7 +14,7 @@
 - `next_retry_at`: `n/a`
 - `proof_status`: `present`
 - `sync_status`: `in_sync`
-- `generation`: `2026-03-26 20:55 CDT|PHASE 5.3B — STORED-DATA BACKTEST / SIMULATION LOOP|architect_action_required|architect|have the architect validate shared-docs`
+- `generation`: `2026-03-26 21:10 CDT|PHASE 5.3B — STORED-DATA BACKTEST / SIMULATION LOOP|architect_action_required|architect|have the architect validate shared-docs`
 - `talking_stick_holder`: `architect`
 - `next_actor`: `architect`
 - `required_phrase`: `have the architect validate shared-docs`
@@ -27,7 +27,7 @@ Architect holds the talking stick. Validate Phase 5.3b using `docs/working/share
 
 ## Developer perspective
 
-Developer completed proof pass: `python3 -m pytest tests/test_backtest_simulation_phase5_3b.py` → `7 passed`; `python3 -m pytest tests/` → `358 passed` at HEAD `58b1115e220b8ecb4ce69f8bb3f4a3d416fd7cd2`.
+Developer completed proof pass (2026-03-26 21:10 CDT): `python3 -m pytest tests/test_backtest_simulation_phase5_3b.py` → `7 passed`; `python3 -m pytest tests/` → `358 passed` at HEAD `2df072d66185d1ed48aff39acff1f9aecc3be119`; `current_directive.md` cleaned (pasted block before `## Title`).
 
 ## Findings
 
