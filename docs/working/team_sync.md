@@ -1,6 +1,6 @@
 # Team sync
 
-**Last updated:** 2026-03-26 20:11 CDT — **Foreman:** visible team sync updated
+**Last updated:** 2026-03-26 20:13 CDT — **Foreman:** visible team sync updated
 
 ## Queue
 
@@ -14,7 +14,7 @@
 - `next_retry_at`: `n/a`
 - `proof_status`: `missing`
 - `sync_status`: `in_sync`
-- `generation`: `2026-03-26 20:11 CDT|PHASE 5.3B — STORED-DATA BACKTEST / SIMULATION LOOP|developer_action_required|developer|have cursor validate shared-docs`
+- `generation`: `2026-03-26 20:13 CDT|PHASE 5.3B — STORED-DATA BACKTEST / SIMULATION LOOP|developer_action_required|developer|have cursor validate shared-docs`
 - `talking_stick_holder`: `developer`
 - `next_actor`: `developer`
 - `required_phrase`: `have cursor validate shared-docs`
