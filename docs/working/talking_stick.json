@@ -1,11 +1,11 @@
 {
   "schema_version": "talking_stick_v1",
-  "updated_at": "2026-03-26 20:01 CDT",
-  "generation": "2026-03-26 20:01 CDT|PHASE 5.3B — STORED-DATA BACKTEST / SIMULATION LOOP|developer_action_required|developer|have cursor validate shared-docs",
+  "updated_at": "2026-03-26 20:03 CDT",
+  "generation": "2026-03-26 20:03 CDT|PHASE 5.3B — STORED-DATA BACKTEST / SIMULATION LOOP|developer_action_required|developer|have cursor validate shared-docs",
   "holder": "developer",
   "handed_from": "developer",
   "handed_to": "developer",
-  "reason": "foreman_bridge.json generation does not match canonical runtime state",
+  "reason": "Developer work dispatched through the visible Cursor chat worker.",
   "required_phrase": "have cursor validate shared-docs",
   "directive_title": "PHASE 5.3B — STORED-DATA BACKTEST / SIMULATION LOOP"
 }
