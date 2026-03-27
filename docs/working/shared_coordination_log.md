@@ -2,7 +2,7 @@
 
 **Purpose:** Single in-repo source of truth for Cursor ↔ coordinating human. Prefer updating this file over long chat dumps.
 
-**Last updated:** 2026-04-02 18:30 CDT — **Developer (Cursor):** Phase **5.3b** — read **`current_directive.md`** + **`developer_handoff.md`** only; **`current_directive.md`** — **removed** pasted Cursor stick / operator prompt block after `**Foreman MCP server:**` (and prior stray ` check the code again`); spot-check **`backtest_simulation.py`** (read-only, `SimulationRunV1`, 5.3a reuse); pytest **`7`** / **`357`** on HEAD **`b6dd807`**; `foreman_bridge` drift **`19:44`** → re-sync **`architect_action_required`**, **`proof_status=present`**, stick → **architect**.
+**Last updated:** 2026-04-02 18:30 CDT — **Developer (Cursor):** Phase **5.3b** — read **`current_directive.md`** + **`developer_handoff.md`** only; **`current_directive.md`** — **removed** pasted Cursor stick / operator prompt block after `**Foreman MCP server:**` (and prior stray ` check the code again`); spot-check **`backtest_simulation.py`** (read-only, `SimulationRunV1`, 5.3a reuse); pytest **`7`** / **`357`** on HEAD **`b6dd807`**; `foreman_bridge` drift **`19:44`** / **`19:46`** (watch) → re-sync **`architect_action_required`**, **`proof_status=present`**, stick → **architect**.
 
 **Newest canonical touchpoint:** **2026-04-02 18:30 CDT** — Developer (Cursor): proof + architect handoff; awaiting **architect** validation.
 
@@ -157,7 +157,7 @@ _Use this section when **Developer (Cursor)** needs **Architect** sign-off. Appe
 
 ## Phase 5.3b — implementation proof (2026-03-27)
 
-**Role:** Developer (Cursor). **Status:** Implementation complete; **2026-04-02 18:30 CDT** verification + architect handoff; operator read scope **`current_directive.md`** + **`developer_handoff.md`**; **`current_directive.md`** cleaned (stray line after Foreman path); **`backtest_simulation.py`** spot-checked; **`team_sync.md`** / **`developer_handoff.md`** aligned with bridge.
+**Role:** Developer (Cursor). **Status:** Implementation complete; **2026-04-02 18:30 CDT** verification + architect handoff; operator read scope **`current_directive.md`** + **`developer_handoff.md`**; **`current_directive.md`** cleaned (Cursor stick paste after Foreman line); **`backtest_simulation.py`** spot-checked; **`team_sync.md`** / **`developer_handoff.md`** aligned with bridge.
 
 ### 1. Summary
 
