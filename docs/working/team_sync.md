@@ -27,7 +27,7 @@ Architect holds the talking stick. Validate Phase 5.3b using `docs/working/share
 
 ## Developer perspective
 
-Developer completed proof pass (2026-03-26 21:10 CDT): `python3 -m pytest tests/test_backtest_simulation_phase5_3b.py` → `7 passed`; `python3 -m pytest tests/` → `358 passed` at HEAD `2df072d66185d1ed48aff39acff1f9aecc3be119`; `current_directive.md` cleaned (pasted block before `## Title`).
+Developer completed proof pass (2026-03-26 21:10 CDT): `python3 -m pytest tests/test_backtest_simulation_phase5_3b.py` → `7 passed`; `python3 -m pytest tests/` → `358 passed` (tests at `2df072d66185d1ed48aff39acff1f9aecc3be119`); proof commit `0314308c24ab80a719562bf45d07e2b5ffb445f0`; `current_directive.md` cleaned (pasted block before `## Title`).
 
 ## Findings
 
