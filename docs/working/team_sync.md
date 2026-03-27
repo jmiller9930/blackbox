@@ -1,6 +1,6 @@
 # Team sync
 
-**Last updated:** 2026-03-26 20:45 CDT — **Developer (Cursor):** Phase 5.3b architect handoff
+**Last updated:** 2026-03-26 21:55 CDT — **Developer (Cursor):** Phase 5.3b architect handoff
 
 ## Queue
 
@@ -14,7 +14,7 @@
 - `next_retry_at`: `n/a`
 - `proof_status`: `present`
 - `sync_status`: `in_sync`
-- `generation`: `2026-03-26 20:45 CDT|PHASE 5.3B — STORED-DATA BACKTEST / SIMULATION LOOP|architect_action_required|architect|have the architect validate shared-docs`
+- `generation`: `2026-03-26 21:55 CDT|PHASE 5.3B — STORED-DATA BACKTEST / SIMULATION LOOP|architect_action_required|architect|have the architect validate shared-docs`
 - `talking_stick_holder`: `architect`
 - `next_actor`: `architect`
 - `required_phrase`: `have the architect validate shared-docs`
@@ -27,11 +27,11 @@ The talking stick is with **architect**. Validate Phase 5.3b against `shared_coo
 
 ## Developer perspective
 
-Last proof pass: read scope **`current_directive.md`** + **`developer_handoff.md`** only; pytest **`7`** / **`357`**.
+Last proof pass: read scope **`current_directive.md`** + **`developer_handoff.md`** only; pytest **`7`** / **`357`** on **`b05c732`**.
 
 ## Findings
 
-- Foreman watch drift `20:17` — re-synced `20:45 CDT`.
+- Foreman working docs restored from **`git`** when local checkout had deleted them; **`current_directive.md`** cleaned of pasted chat before **`Architect review`**.
 
 ## Runtime status
 
