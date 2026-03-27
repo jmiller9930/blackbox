@@ -1,33 +1,33 @@
 # Team sync
 
-**Last updated:** 2026-03-26 22:15 CDT — **Operator:** stick → developer (Phase 5.3B)
+**Last updated:** 2026-03-26 22:35 CDT — **Developer (Cursor):** Phase 5.3b proof + architect handoff
 
 ## Queue
 
 - `directive`: PHASE 5.3B — STORED-DATA BACKTEST / SIMULATION LOOP
 - `directive_state`: `active`
-- `current_result`: `developer active`
-- `loop_state`: `developer_active`
-- `loop_count`: `1`
+- `current_result`: `proof recorded — architect validation`
+- `loop_state`: `architect_review`
+- `loop_count`: `0`
 - `loop_type`: `primary`
 - `retry_reason`: `n/a`
 - `next_retry_at`: `n/a`
-- `proof_status`: `missing`
+- `proof_status`: `present`
 - `sync_status`: `in_sync`
-- `generation`: `2026-03-26 22:15 CDT|PHASE 5.3B — STORED-DATA BACKTEST / SIMULATION LOOP|developer_action_required|developer|have cursor validate shared-docs`
-- `talking_stick_holder`: `developer`
-- `next_actor`: `developer`
-- `required_phrase`: `have cursor validate shared-docs`
-- `last_mirror`: `Developer work dispatched through the visible Cursor chat worker.`
+- `generation`: `2026-03-26 22:35 CDT|PHASE 5.3B — STORED-DATA BACKTEST / SIMULATION LOOP|architect_action_required|architect|have the architect validate shared-docs`
+- `talking_stick_holder`: `architect`
+- `next_actor`: `architect`
+- `required_phrase`: `have the architect validate shared-docs`
+- `last_mirror`: `Phase 5.3b proof in shared_coordination_log.md; awaiting architect validation.`
 - `team_state`: `in sync`
 
 ## Architect perspective
 
-Architect is waiting while developer works PHASE 5.3B — STORED-DATA BACKTEST / SIMULATION LOOP. Architect should not act until the stick comes back.
+The talking stick is with **architect**. Validate Phase 5.3b against `shared_coordination_log.md` § Phase 5.3b and pytest evidence.
 
 ## Developer perspective
 
-Developer still has the talking stick for PHASE 5.3B — STORED-DATA BACKTEST / SIMULATION LOOP. Continue implementation, write proof in shared docs, then return `have cursor validate shared-docs`.
+Last proof pass: read scope **`current_directive.md`** + **`developer_handoff.md`** only; pytest **`7`** / **`357`** on **`4767dcd`**; cleaned **`current_directive.md`** (stray **`however`**).
 
 ## Findings
 
@@ -35,9 +35,8 @@ Developer still has the talking stick for PHASE 5.3B — STORED-DATA BACKTEST / 
 
 ## Runtime status
 
-Developer work dispatched through the visible Cursor chat worker.
+Awaiting architect review.
 
 ## What happens next
 
-The talking stick already belongs to `developer`.
-Wait for that side to finish and return the phrase `have cursor validate shared-docs`.
+Operator phrase for architect review: **`have the architect validate shared-docs`**.

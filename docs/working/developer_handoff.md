@@ -1,11 +1,12 @@
 # Developer handoff
 
-**Last updated:** 2026-03-26 22:15 CDT — **Foreman Bridge:** developer action required
+**Last updated:** 2026-03-26 22:35 CDT — **Foreman Bridge:** architect action required (Phase 5.3b proof present)
 
 ## Source
 
+- `docs/working/foreman_bridge.json`
 - `docs/working/current_directive.md`
-- `docs/working/developer_handoff.md`
+- `docs/working/shared_coordination_log.md`
 
 ## Directive
 
@@ -13,14 +14,14 @@ PHASE 5.3B — STORED-DATA BACKTEST / SIMULATION LOOP
 
 ## Bridge status
 
-- `bridge_status`: `developer_action_required`
-- `next_actor`: `developer`
-- `proof_status`: `missing`
-- `handoff_phrase`: `have cursor validate shared-docs`
+- `bridge_status`: `architect_action_required`
+- `next_actor`: `architect`
+- `proof_status`: `present`
+- `handoff_phrase`: `have the architect validate shared-docs`
 
 ## Required action
 
-Read docs/working/current_directive.md and docs/working/developer_handoff.md only. Then execute the active work for PHASE 5.3B — STORED-DATA BACKTEST / SIMULATION LOOP. Implement the code, record proof in shared docs, update git state as required, and stay inside the active directive only. When implementation and proof are ready, reply with: **`have cursor validate shared-docs`** (operator/Foreman phrase). **`current_directive.md`** also names **`have the architect validate shared-docs`** for architect validation — use the phrase that matches your handoff step.
+Architect validates Phase 5.3b using **`docs/working/shared_coordination_log.md`** (§ Phase 5.3b implementation proof) and recorded pytest evidence. Developer read scope for last proof pass: **`current_directive.md`** + **`developer_handoff.md`** only (per operator).
 
 ## Developer boundary
 
