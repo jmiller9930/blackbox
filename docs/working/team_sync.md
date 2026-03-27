@@ -1,6 +1,6 @@
 # Team sync
 
-**Last updated:** 2026-03-26 20:03 CDT — **Foreman:** visible team sync updated
+**Last updated:** 2026-03-26 20:04 CDT — **Foreman:** visible team sync updated
 
 ## Queue
 
@@ -14,11 +14,11 @@
 - `next_retry_at`: `n/a`
 - `proof_status`: `missing`
 - `sync_status`: `in_sync`
-- `generation`: `2026-03-26 20:03 CDT|PHASE 5.3B — STORED-DATA BACKTEST / SIMULATION LOOP|developer_action_required|developer|have cursor validate shared-docs`
+- `generation`: `2026-03-26 20:04 CDT|PHASE 5.3B — STORED-DATA BACKTEST / SIMULATION LOOP|developer_action_required|developer|have cursor validate shared-docs`
 - `talking_stick_holder`: `developer`
 - `next_actor`: `developer`
 - `required_phrase`: `have cursor validate shared-docs`
-- `last_mirror`: `Developer work dispatched through the visible Cursor chat worker.`
+- `last_mirror`: `Developer turn remains active. No second loop is legal until interruption or architect rejection.`
 - `team_state`: `in sync`
 
 ## Architect perspective
@@ -35,7 +35,7 @@ Developer still has the talking stick for PHASE 5.3B — STORED-DATA BACKTEST / 
 
 ## Runtime status
 
-Developer work dispatched through the visible Cursor chat worker.
+Developer turn remains active. No second loop is legal until interruption or architect rejection.
 
 ## What happens next
 
