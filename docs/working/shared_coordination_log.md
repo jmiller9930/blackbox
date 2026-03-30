@@ -2,9 +2,9 @@
 
 **Purpose:** Single in-repo source of truth for shared-doc handoff state.
 
-**Last updated:** 2026-03-30 — **Architect:** Operator-requested bus ceremony — **ACK** Phase C (5.3E met), **COMMIT** Phase D (plan success / SHAs), **DIRECTIVE** Phase A for **5.4** with explicit handoff: *Directive 5.4 is live. Developer, your turn.*
+**Last updated:** 2026-03-30 — **Architect:** Phase **C/D** — **5.4 CandidateTradeV1** **met**; plan §5.4 tasks 1+3 **[x]**; closeout + **DIRECTIVE** Phase A for **5.4 continued — Layer 3 routing**.
 
-**Newest canonical touchpoint:** 2026-03-30 — **5.3E** closed; active slice **5.4** candidate trade artifact v1 per `current_directive.md`.
+**Newest canonical touchpoint:** 2026-03-30 — Active slice **5.4 (continued)** — Layer 3 approval routing per `current_directive.md`.
 
 **Shared docs meaning:** `shared docs` = read and update:
 - `docs/working/current_directive.md`
@@ -21,9 +21,21 @@
 
 ## Active objective
 
-Phase **5.4** — **candidate trade artifact (v1)** per `docs/working/current_directive.md` and `development_plan.md` §5.4 (first task). Layer 3 approval routing is **not** in this slice.
+Phase **5.4 (continued)** — **Layer 3 approval routing** for `CandidateTradeV1` per `docs/working/current_directive.md` and `development_plan.md` §5.4 (remaining open task: route to L3; no execution without APPROVED artifact).
 
 ## Progress log
+
+- 2026-03-30 — **Architect (Codex):** **Phase C** — **5.4 CandidateTradeV1** — **MET**. **STOP** revisiting **5.3E** (closed). **Peek:** `REVIEW_REQ` (Phase 5.4) → `effective_next_actor: architect`. **Validation:** reviewed `candidate_trade.py`, `__init__.py` exports, `tests/test_candidate_trade_phase5_4.py`; reran `python3 -m pytest -q tests/test_candidate_trade_phase5_4.py tests/test_strategy_selection_phase5_3d.py tests/test_pre_trade_fast_gate_phase5_3c.py` — **38 passed**. **Phase D:** `development_plan.md` §5.4 first + third tasks **[x]**; `blackbox_master_plan.md` §5.3 status narrative updated; `directive_execution_log.md` + `directive_5_4_candidate_trade_artifact_v1_closeout.md`; `current_directive.md` → **5.4 continued (L3 routing)**; **Plan/log status sync: PASS**. **Bus:** **ACK** (green) Phase C, **COMMIT** (yellow) Phase D, **DIRECTIVE** (cyan) Phase A — next slice **Layer 3 approval routing**. **Handoff:** *Directive 5.4 (continued) is live. Developer, your turn.*
+- 2026-03-30 — **Developer:** **Phase B** — **PHASE 5.4** candidate trade artifact (v1)
+  - **Peek:** `python3 scripts/runtime/governance_bus.py --peek --developer-phase-b` → **PHASE_B_AUTOSTART: YES** (`effective_next_actor: developer`).
+  - **Files changed:** `scripts/runtime/market_data/candidate_trade.py` (new — `CandidateTradeV1`, `build_candidate_trade_v1`, `validate_candidate_trade_v1`; integrates `StrategyEvaluationV1`, `StrategySelectionV1`, optional `PreTradeGateV1`; size from gate `capped_size_fraction` or explicit `notional_fraction`; tier cap envelope from `TIER_SIZE_CAP`; `expires_at_iso` / `candidate_built_at` caller-supplied; rejects tier/scope/symbol mismatch and non-`selected` selection).
+  - **Files changed:** `scripts/runtime/market_data/__init__.py` (exports `CandidateTradeV1`, builders, `CANDIDATE_TRADE_VERSION`).
+  - **Files changed:** `tests/test_candidate_trade_phase5_4.py` (new — serialization stability, skipped selection, tier mutation guard, notional envelope, gate vs no-gate paths).
+  - **Commands:** `python3 -m pytest tests/test_candidate_trade_phase5_4.py -q` — **6 passed**; `python3 -m pytest tests/test_strategy_selection_phase5_3d.py tests/test_pre_trade_fast_gate_phase5_3c.py tests/test_candidate_trade_phase5_4.py -q` — **38 passed**.
+  - **Git HEAD (local):** `23e37b7a89ce40f9f68a3d55923610a5b3c99559` (pre-commit for new files; amend after commit).
+  - **Out of scope (unchanged):** Layer 3 approval routing, execution, Billy — per `current_directive.md`.
+  - **Bus:** `REVIEW_REQ` Phase B → `next_actor=architect` after this log update (monitor: Magenta).
+  - **have the architect validate shared-docs**
 
 - 2026-03-30 — **Architect:** **Bus ceremony (operator)** — Re-asserted **5.3E** closeout on governance bus: **ACK** (Phase C, green), **COMMIT** (Phase D, yellow), **DIRECTIVE** (Phase A, cyan) for **§5.4 Candidate Trade Artifact (V1)**. **Handoff:** *Directive 5.4 is live. Developer, your turn.* Plan: `development_plan.md` §5.3e remains `[x]`; §5.4 first task open. **Peek:** `governance_bus.py --peek --as Developer` → proceed Phase B autonomously per `development_governance.md` + `governance-signal-bus.mdc`.
 - 2026-03-30 — **Architect:** **Phase C** — **5.3E** validation **met** — `python3 -m pytest -q tests/test_guardrailed_experiment_phase5_3e.py tests/test_strategy_selection_phase5_3d.py tests/test_pre_trade_fast_gate_phase5_3c.py tests/test_backtest_simulation_phase5_3b.py` — **43 passed** (local Mac). Bus: **ACK** Phase C. **Phase D:** `development_plan.md` §5.3e task marked `[x]`; `blackbox_master_plan.md` §5.3 status updated; `directive_execution_log.md` + `directive_5_3_e_guardrailed_experiments_closeout.md`; `current_directive.md` → **5.4**; **Plan/log status sync: PASS**. **Git:** Phase D docs in `24e3864`; **5.3E implementation + market_data chain** in `7934b92` (on top of docs closeout). Operator: `git push` + clawbot `git pull` when syncing. **Protocol:** agents run `python3 scripts/runtime/governance_bus.py --peek` before ending a turn; if **next_actor** matches role, continue without waiting on operator. **Primary-host / push:** operator runs clawbot pull + push per `execution_context.md` when required.

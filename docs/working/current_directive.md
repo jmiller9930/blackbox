@@ -1,10 +1,10 @@
 # Current directive
 
-**Status:** Active — **Phase 5.4 candidate trade artifact (v1)**
+**Status:** Active — **Phase 5.4 (continued) — Layer 3 approval routing for trade candidates**
 
-**Last updated:** 2026-03-30 — **Architect:** Phase D closeout for **5.3E**; next slice **5.4** first task from `development_plan.md` §5.4 (candidate artifact only in this directive; Layer 3 routing is a **later** slice).
+**Last updated:** 2026-03-30 — **Architect:** Phase D closeout for **5.4 CandidateTradeV1**; next open **`development_plan.md` §5.4** task: route through **Layer 3** approval; no execution without **APPROVED** artifact.
 
-**Previous directive closed:** 2026-03-30 — **Architect:** Phase **5.3E** guardrailed self-directed paper/backtest experiments accepted and closed (see `docs/architect/directives/directive_5_3_e_guardrailed_experiments_closeout.md`).
+**Previous directive closed:** 2026-03-30 — **Architect:** **5.4 — Candidate trade artifact (v1)** accepted and closed (see `docs/architect/directives/directive_5_4_candidate_trade_artifact_v1_closeout.md`).
 
 **Shared docs meaning:** When the user says `shared docs`, read and update:
 - `docs/working/current_directive.md`
@@ -18,38 +18,36 @@
 
 **Project-wide rule:** Shared-docs protocol is project-wide for BLACK BOX unless the operator explicitly changes it.
 
-**Architect review:** Pending developer→architect asks live in **`shared_coordination_log.md` → `## Architect review requested`**. Operator shortcut **`architect review`** = read that section first. See `HOW_TO_SHARED_DOCS.md` § Architect review requests.
+**Architect review:** Pending developer→architect asks live in **`shared_coordination_log.md` → `## Architect review requested`**.
 
 **Directive authority:** This file is the live directive source unless replaced by a newer directive written here.
 
-**Canonical slice identity (5.4):** This directive is **Phase 5.4 — signal → approval binding** (`docs/architect/development_plan.md` §5.4). This slice implements only the **first** unchecked task: a **candidate trade artifact** derived from existing strategy/signal surfaces. It does **not** require Layer 3 approval wiring, execution, or Billy in this directive.
+**Canonical slice identity (5.4 continued):** Wire **`CandidateTradeV1`** (or a thin adapter) into the **Layer 3** approval path per **`docs/architect/layer_3_approval_interface_design.md`** and **`docs/architect/development_plan.md` §5.4** (remaining task: approval routing). **No** Layer 4 execution, **no** venue/Billy live actions in this slice unless a future directive explicitly expands scope.
 
-**Talking stick / Foreman:** Unless this directive is amended to scope Foreman/Talking Stick work, stick gating remains **suspended** for core engine slices per operator 2026-03-29 precedent for 5.3E; use **shared docs** for proof. Re-check `talking_stick.json` and `foreman-bridge-enforcement.mdc` if a future directive re-enables stick gating.
+**Talking stick / Foreman:** Use shared docs for proof unless a directive re-enables stick gating.
 
-**Autonomous handoff (operator 2026-03-30):** Before ending a turn, agents holding an architect or developer role should run `python3 scripts/runtime/governance_bus.py --peek` (optionally `--as Architect` / `--as Developer`). If **next_actor** matches the role, continue the chain without waiting on the operator.
+**Autonomous handoff:** `python3 scripts/runtime/governance_bus.py --peek` (`--as Architect` / `--as Developer` / `--developer-phase-b` as appropriate).
 
 ---
 
 ## Title
 
-**PHASE 5.4 — CANDIDATE TRADE ARTIFACT (V1)**
+**PHASE 5.4 (CONTINUED) — LAYER 3 APPROVAL ROUTING FOR CANDIDATE TRADES**
 
 ---
 
 ## Objective
 
-Introduce a **typed, deterministic candidate trade artifact** that can be produced from the existing Phase 5.3 strategy outputs (evaluation, selection, fast-gate context as applicable) and that carries **size**, **risk envelope**, **time validity (expiry)**, and **full participant scope** (participant id/type, account/wallet context, selected risk tier, strategy profile) as required by `docs/blackbox_master_plan.md` §5.4.
-
-This artifact is the **input shape** for future Layer 3 approval. This directive does **not** implement approval routing, execution, or venue interaction.
+Route **`CandidateTradeV1`** trade candidates into the **Layer 3** approval flow so that **no downstream execution** consumes a candidate without a canonical **APPROVED** artifact tied to Layer 3 policy. This slice binds the Phase 5 engine candidate to the existing **decision surface** contract (see `scripts/runtime/approval_interface/` and design docs); it does **not** implement Layer 4 execution.
 
 ---
 
 ## Acceptance criteria (Architect — Phase A)
 
-- **Plan alignment:** Maps to **`docs/architect/development_plan.md` §5.4** first task: create **candidate trade artifact** from signal (size, risk, expiry), including participant scope on the artifact.
-- **Non-execution:** No orders, no live venue calls, no Billy, no Layer 3 **APPROVED** state machine in this slice (artifact + tests + docs proof only).
-- **Determinism:** Same inputs → same artifact fields where the spec defines deterministic behavior; document any intentional nondeterminism (e.g. wall-clock expiry anchor) explicitly.
-- **Proof:** `docs/working/shared_coordination_log.md` lists files, pytest commands/results, and gaps.
+- **Plan alignment:** Maps to **`docs/architect/development_plan.md` §5.4** open line: **Route to Layer 3 approval flow; no execution without APPROVED artifact.**
+- **Design alignment:** Behavior and artifacts remain consistent with **`docs/architect/layer_3_approval_interface_design.md`** (approve / reject / defer; audit; no execution from L3 UI).
+- **Non-execution:** No live venue calls, no Billy execution, no Layer 4 intent emission in this slice unless explicitly scoped later.
+- **Proof:** `docs/working/shared_coordination_log.md` lists files, pytest / harness commands, gaps.
 - **Review:** Developer uses **`have the architect validate shared-docs`** when ready for Phase C.
 
 ---
@@ -58,27 +56,26 @@ This artifact is the **input shape** for future Layer 3 approval. This directive
 
 - Align to:
   - `docs/blackbox_master_plan.md` §5.4
-  - `docs/architect/development_plan.md` §5.4
-  - `scripts/runtime/market_data/signal_contract.py` and existing `StrategyEvaluationV1` / `StrategySelectionV1` / gate artifacts as integration points
-  - `docs/architect/directives/directive_execution_log.md`
-- Out of scope for this directive:
-  - Layer 3 approval flow implementation
-  - Execution adapter or Layer 4 intent
+  - `docs/architect/layer_3_approval_interface_design.md`
+  - `docs/design/twig6_approval_model.md` (artifact shape) where applicable
+  - `scripts/runtime/market_data/candidate_trade.py` (`CandidateTradeV1`)
+  - `scripts/runtime/approval_interface/` (existing L3 surface — extend/wire, do not bypass)
+- Out of scope: Layer 4, venue adapters, autonomous messaging approval.
 
-## Required implementation
+## Required implementation (minimum direction)
 
-- Define a versioned dataclass or Pydantic-style structure (match repo conventions) for **CandidateTradeV1** (or equivalent name) with explicit fields for size, risk limits/caps, expiry, and participant scope mirroring `ParticipantScope` + strategy profile references.
-- Provide a **pure function or small module** that builds the candidate from the validated 5.3 outputs (document which inputs are required vs optional).
-- Unit tests proving serialization stability, required-field enforcement, and guardrails (no tier mutation).
+- Define how a **`CandidateTradeV1`** is submitted or mirrored into the **approval artifact** model expected by Layer 3 (IDs, status, linkage, expiration fields per policy).
+- Enforce **no execution** without **APPROVED** state on the approval record (tests or harness proving reject/defer paths do not emit execution).
+- Tests covering the binding contract you introduce.
 
 ## Notes / constraints
 
-- Prefer extending existing contracts over parallel ad-hoc dicts.
-- If SQLite or store access is needed, keep read-only patterns consistent with Phase 5.2–5.3.
+- Prefer **thin** adapters over duplicating approval business logic.
+- If the repo’s `approval_interface` uses a different legacy artifact shape, document the mapping explicitly in code comments and shared log.
 
 ---
 
 ## Execution / proof protocol (reminder)
 
-- Record implementation proof in `docs/working/shared_coordination_log.md` with timestamps (files changed, commands, tests, remaining gaps).
-- When ready, return the handoff phrase: **`have the architect validate shared-docs`**.
+- Record proof in `docs/working/shared_coordination_log.md` with timestamps.
+- Handoff phrase: **`have the architect validate shared-docs`**.

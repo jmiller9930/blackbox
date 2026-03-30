@@ -6,6 +6,13 @@ Canonical running log for architect-facing directive execution, proof, and closu
 
 **Templates:** [`DIRECTIVE_TEMPLATE.md`](DIRECTIVE_TEMPLATE.md) (full directive scaffold), [`CLOSEOUT_PACKET_TEMPLATE.md`](CLOSEOUT_PACKET_TEMPLATE.md) (closeout / gate / proof summary). Every closeout must include `Plan/log status sync: PASS`. Implementation closes must also record **Git commit and remote sync** (commit SHA, remote push, primary-host proof when required) per the closeout template.
 
+## 2026-03-30 — Phase 5.4 Candidate Trade Artifact (V1) — Implemented / Closed
+
+- **Directive:** **5.4** (first task) — candidate trade artifact from signal/strategy outputs; participant scope; non-executing.
+- **Summary:** `CandidateTradeV1`, `build_candidate_trade_v1`, `validate_candidate_trade_v1` in `scripts/runtime/market_data/candidate_trade.py`; tests `tests/test_candidate_trade_phase5_4.py`. Architect pytest **38 passed** (local). Closeout: [`directive_5_4_candidate_trade_artifact_v1_closeout.md`](directive_5_4_candidate_trade_artifact_v1_closeout.md).
+- **Artifacts:** `scripts/runtime/market_data/candidate_trade.py`, `scripts/runtime/market_data/__init__.py`, `tests/test_candidate_trade_phase5_4.py`, plan + master plan + `current_directive.md` (superseded by next slice), `shared_coordination_log.md`.
+- **Plan/log status sync: PASS**
+
 ## 2026-03-30 — Phase 5.3E Guardrailed Self-Directed Experiments — Implemented / Closed
 
 - **Directive:** **5.3E** — guardrailed self-directed paper/backtest experiments; no self-service risk-tier changes; read-only / non-executing.

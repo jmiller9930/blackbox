@@ -1,27 +1,26 @@
 # Developer handoff
 
-**Last updated:** 2026-03-26 21:10 CDT — **Foreman Bridge:** architect action required (Phase 5.3b proof present)
+**Last updated:** 2026-03-30 — **Architect:** **5.4 CandidateTradeV1** closed; active directive **5.4 (continued) — Layer 3 approval routing** — see **`current_directive.md`**. Talking-stick gating **suspended** for core-engine slice unless directive says otherwise.
 
 ## Source
 
-- `docs/working/foreman_bridge.json`
 - `docs/working/current_directive.md`
+- `docs/working/developer_handoff.md`
 - `docs/working/shared_coordination_log.md`
 
 ## Directive
 
-PHASE 5.3B — STORED-DATA BACKTEST / SIMULATION LOOP
+PHASE 5.4 (CONTINUED) — LAYER 3 APPROVAL ROUTING FOR CANDIDATE TRADES
 
-## Bridge status
+## Coordination status
 
-- `bridge_status`: `architect_action_required`
-- `next_actor`: `architect`
-- `proof_status`: `present`
-- `handoff_phrase`: `have the architect validate shared-docs`
+- **Slice:** Phase **5.4** — route **`CandidateTradeV1`** through **Layer 3** approval flow; **no** execution without **APPROVED** artifact (`development_plan.md` §5.4 next open line).
+- `proof_status`: see **`shared_coordination_log.md`** and **`current_directive.md`**.
+- **Talking stick:** not used as a code-gate for this slice per `current_directive.md` (operator 2026-03-29).
 
 ## Required action
 
-Architect validates Phase 5.3b using **`docs/working/shared_coordination_log.md`** (§ Phase 5.3b implementation proof) and recorded pytest evidence. Developer read scope for last proof pass: **`current_directive.md`** + **`developer_handoff.md`** only (per operator).
+Read `docs/working/current_directive.md`. Follow only the active directive. Record proof in `docs/working/shared_coordination_log.md`. When implementation and proof are ready, use the phrase in `current_directive.md` / `HOW_TO_SHARED_DOCS.md` for architect validation. Do not self-validate closure.
 
 ## Developer boundary
 

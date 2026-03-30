@@ -46,6 +46,12 @@ from market_data.strategy_selection import (
     StrategySelectionV1,
     select_tier_aligned_strategy,
 )
+from market_data.candidate_trade import (
+    CANDIDATE_TRADE_VERSION,
+    CandidateTradeV1,
+    build_candidate_trade_v1,
+    validate_candidate_trade_v1,
+)
 
 __all__ = [
     "SIMULATION_VERSION",
@@ -59,8 +65,11 @@ __all__ = [
     "STRATEGY_VERSION",
     "SELECTION_OUTCOMES",
     "SELECTION_VERSION",
+    "CANDIDATE_TRADE_VERSION",
+    "CandidateTradeV1",
     "StrategyEvaluationV1",
     "StrategySelectionV1",
+    "build_candidate_trade_v1",
     "TIER_THRESHOLDS",
     "TIER_STRATEGY_PROFILES",
     "VALID_PARTICIPANT_TYPES",
@@ -82,6 +91,7 @@ __all__ = [
     "record_market_snapshot",
     "snapshot_json",
     "validate_market_data_read_contract",
+    "validate_candidate_trade_v1",
     "validate_participant_scope",
     "validate_signal_contract",
 ]

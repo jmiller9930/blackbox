@@ -56,9 +56,9 @@
 
 ### 5.4 Signal → approval binding — tasks
 
-- [ ] Create **candidate trade artifact** from signal (size, risk, expiry).
+- [x] Create **candidate trade artifact** from signal (size, risk, expiry).
 - [ ] Route to **Layer 3** approval flow; **no** execution without **APPROVED** artifact.
-- [ ] Include participant scope on the artifact: participant id/type, account/wallet context, selected risk tier, and strategy profile.
+- [x] Include participant scope on the artifact: participant id/type, account/wallet context, selected risk tier, and strategy profile.
 
 ### 5.5 Execution adapter — tasks
 
