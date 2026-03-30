@@ -2,7 +2,7 @@
 
 **Purpose:** Single in-repo source of truth for shared-doc handoff state.
 
-**Last updated:** 2026-03-30 — **Architect:** Phase **C/D** for **5.3E** (ACK on bus, plan + master plan + execution log + closeout; **5.4** `current_directive.md` issued; `governance_bus.py` COMMIT + DIRECTIVE Phase A → **developer**).
+**Last updated:** 2026-03-30 — **Architect:** Operator-requested bus ceremony — **ACK** Phase C (5.3E met), **COMMIT** Phase D (plan success / SHAs), **DIRECTIVE** Phase A for **5.4** with explicit handoff: *Directive 5.4 is live. Developer, your turn.*
 
 **Newest canonical touchpoint:** 2026-03-30 — **5.3E** closed; active slice **5.4** candidate trade artifact v1 per `current_directive.md`.
 
@@ -25,6 +25,7 @@ Phase **5.4** — **candidate trade artifact (v1)** per `docs/working/current_di
 
 ## Progress log
 
+- 2026-03-30 — **Architect:** **Bus ceremony (operator)** — Re-asserted **5.3E** closeout on governance bus: **ACK** (Phase C, green), **COMMIT** (Phase D, yellow), **DIRECTIVE** (Phase A, cyan) for **§5.4 Candidate Trade Artifact (V1)**. **Handoff:** *Directive 5.4 is live. Developer, your turn.* Plan: `development_plan.md` §5.3e remains `[x]`; §5.4 first task open. **Peek:** `governance_bus.py --peek --as Developer` → proceed Phase B autonomously per `development_governance.md` + `governance-signal-bus.mdc`.
 - 2026-03-30 — **Architect:** **Phase C** — **5.3E** validation **met** — `python3 -m pytest -q tests/test_guardrailed_experiment_phase5_3e.py tests/test_strategy_selection_phase5_3d.py tests/test_pre_trade_fast_gate_phase5_3c.py tests/test_backtest_simulation_phase5_3b.py` — **43 passed** (local Mac). Bus: **ACK** Phase C. **Phase D:** `development_plan.md` §5.3e task marked `[x]`; `blackbox_master_plan.md` §5.3 status updated; `directive_execution_log.md` + `directive_5_3_e_guardrailed_experiments_closeout.md`; `current_directive.md` → **5.4**; **Plan/log status sync: PASS**. **Git:** Phase D docs in `24e3864`; **5.3E implementation + market_data chain** in `7934b92` (on top of docs closeout). Operator: `git push` + clawbot `git pull` when syncing. **Protocol:** agents run `python3 scripts/runtime/governance_bus.py --peek` before ending a turn; if **next_actor** matches role, continue without waiting on operator. **Primary-host / push:** operator runs clawbot pull + push per `execution_context.md` when required.
 - 2026-03-30 — **Developer:** **Phase B** — **PHASE 5.3E** guardrailed self-directed paper/backtest experiments — implementation proof
   - **Files changed:** `scripts/runtime/market_data/guardrailed_experiment.py` (new — orchestrates 5.3b simulation → eval on last window tick → 5.3c fast gate → 5.3d tier-aligned selection; immutable `ParticipantScope`, no tier mutation); `tests/test_guardrailed_experiment_phase5_3e.py` (new).
