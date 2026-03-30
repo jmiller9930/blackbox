@@ -24,12 +24,12 @@ Plan/log status sync: PASS
 
 | Field | Value |
 |-------|--------|
-| **Commit (full SHA)** | `PENDING` |
+| **Commit (full SHA)** | `c94aa473d438ed0165e4c15edc5405614d080303` |
 | **Branch** | `main` |
-| **Remote sync** | `PENDING` |
-| **Primary host** | `PENDING` |
+| **Remote sync** | `git push origin main` completed (`4b51219..c94aa47`) |
+| **Primary host** | `ssh jmiller@clawbot.a51.corp "cd ~/blackbox && git pull origin main && git rev-parse HEAD"` blocked: dirty tree/untracked conflicts prevented pull |
 
-**Git proof:** `PENDING` (to be finalized after commit/push and primary-host sync proof)
+**Git proof:** `PASS (local + remote)` / `PRIMARY_HOST_BLOCKED` (clawbot sync requires operator cleanup/stash or dedicated sync procedure)
 
 ## Documentation mismatch failure rule (Mandatory)
 
