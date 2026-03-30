@@ -4,13 +4,83 @@ Canonical running log for architect-facing directive execution, proof, and closu
 
 **Alignment (mandatory):** A Part B twig or directive must not be treated as **closed** or **advanced** unless **`docs/blackbox_master_plan.md`** and **this file** are updated in the **same change set** with **matching status granularity** (scope, completion level, safety boundaries, verification where applicable).
 
-**Templates:** [`DIRECTIVE_TEMPLATE.md`](DIRECTIVE_TEMPLATE.md) (full directive scaffold), [`CLOSEOUT_PACKET_TEMPLATE.md`](CLOSEOUT_PACKET_TEMPLATE.md) (closeout / gate / proof summary). Every closeout must include `Plan/log status sync: PASS`.
+**Templates:** [`DIRECTIVE_TEMPLATE.md`](DIRECTIVE_TEMPLATE.md) (full directive scaffold), [`CLOSEOUT_PACKET_TEMPLATE.md`](CLOSEOUT_PACKET_TEMPLATE.md) (closeout / gate / proof summary). Every closeout must include `Plan/log status sync: PASS`. Implementation closes must also record **Git commit and remote sync** (commit SHA, remote push, primary-host proof when required) per the closeout template.
+
+## 2026-03-30 — Phase 5.3E Guardrailed Self-Directed Experiments — Implemented / Closed
+
+- **Directive:** **5.3E** — guardrailed self-directed paper/backtest experiments; no self-service risk-tier changes; read-only / non-executing.
+- **Summary:** Added `guardrailed_experiment.py` orchestrating 5.3b simulation, aligned evaluation, 5.3c fast gate, and 5.3d tier-aligned selection; tests `test_guardrailed_experiment_phase5_3e.py`. Architect validated with pytest chain (43 passed, local). Closeout: [`directive_5_3_e_guardrailed_experiments_closeout.md`](directive_5_3_e_guardrailed_experiments_closeout.md).
+- **Artifacts:** `scripts/runtime/market_data/guardrailed_experiment.py`, `tests/test_guardrailed_experiment_phase5_3e.py`, `docs/architect/development_plan.md`, `docs/blackbox_master_plan.md`, `docs/working/current_directive.md`, `docs/working/shared_coordination_log.md`, closeout packet above.
+- **Plan/log status sync: PASS**
+
+## 2026-03-28 — Phase 5 canonical plan structure (engine / context / University)
+
+- **Directive:** Record a normative **three-layer** structure for Phase **5** in the development plan and master plan: **engine spine**, **engine-native context**, **University platform** — **docs-only** update; no implementation claimed.
+- **Summary:** Clarifies that **spine and exchange** work is **not** blocked by University process implementation; **5.9** is engine-owned **context**; **5.8** is the **global** University layer (Dean, college as **domain silo**, Professor, Exam board, curriculum, **scored** learning evidence). **Training methods are University-global** across colleges; colleges differ by **domain** and **benchmarks**. **`docs/working/current_directive.md`** remains the active slice authority.
+- **Artifacts:** [`docs/architect/development_plan.md`](../development_plan.md), [`docs/blackbox_master_plan.md`](../../blackbox_master_plan.md).
+- **Plan/log status sync: PASS**
+
+## 2026-03-26 — Phase 5 Multi-Participant + Risk Tier Model Lock
+
+- **Directive:** Canonically expand Phase **5** so Anna is modeled as a **multi-participant, risk-tiered** intelligence surface, not a single-user analyst. Docs-only scope update; no implementation claimed.
+- **Summary:** Phase **5** now explicitly supports multiple human participants plus future constrained bot participants, each with participant identity, account/wallet context, interaction path, and a **human-selected** risk tier. Three canonical tiers are defined (Tier **1** low, Tier **2** medium, Tier **3** high). Anna cannot assign or escalate tiers; Billy enforces approved participant/account/tier scope at execution. Signal, approval, execution-intent, and outcome contracts are required to carry participant/account/tier fields from day one, even if the first paper slice starts with one human operator in practice.
+- **Artifacts:** [`docs/blackbox_master_plan.md`](../../blackbox_master_plan.md), [`docs/architect/development_plan.md`](../development_plan.md), [`docs/architect/BLACKBOX_MASTER_PLAN_ARCHITECT_SHARE.md`](../BLACKBOX_MASTER_PLAN_ARCHITECT_SHARE.md).
+- **Plan/log status sync: PASS**
+
+## 2026-03-28 — Phase 5.8 University Dean + Subtree Draft Update
+
+- **Directive:** Expand the Phase **5.8** University planning surface to include the Dean agent, a strict repeatable human intake template, a university subtree inside BLACK BOX as the staging area for a future standalone repo, and a university-wide context-engineering requirement. Docs-only structural update; no implementation claimed.
+- **Summary:** Added the in-repo University subtree and canonical draft artifacts for system structure and the human-to-Dean intake template. The roadmap now explicitly includes the **Dean** as the university-wide intake/governance agent, the BLACK BOX Slack path as the primary curriculum submission surface, college-specific professor and exam-board structure, and a shared context-engineering layer that combines structured retrieval, metadata filters, memory, and typed context bundles rather than relying on naive chunk-only RAG alone. This is a planning and architecture update only; no runtime behavior is claimed.
+- **Artifacts:** [`docs/blackbox_master_plan.md`](../../blackbox_master_plan.md), [`docs/architect/development_plan.md`](../development_plan.md), [`docs/architect/TEAM_ROSTER.md`](../TEAM_ROSTER.md), [`../../university/README.md`](../../university/README.md), [`../../university/docs/UNIVERSITY_SYSTEM_DRAFT.md`](../../university/docs/UNIVERSITY_SYSTEM_DRAFT.md), [`../../university/templates/dean_curriculum_submission_v1.md`](../../university/templates/dean_curriculum_submission_v1.md), [`../../university/docs/METHODS_NOTES.md`](../../university/docs/METHODS_NOTES.md).
+- **Plan/log status sync: PASS**
+
+## 2026-03-28 — Anna Persona Carry-Forward Rule Update
+
+- **Directive:** Canonically record that Anna’s college progression must preserve core student discipline across all tiers. Docs-only architecture update; no implementation claimed.
+- **Summary:** Updated the BLACK BOX master plan and development plan so Anna’s canonical persona now explicitly carries **capital preservation**, **RCS**, and **RCA** through Bachelor, Master, and PhD. Higher tiers may expand latitude and live authority, but they do not remove preservation or self-correction discipline. Marked for architect review with a 2026-03-28 review flag.
+- **Artifacts:** [`docs/blackbox_master_plan.md`](../../blackbox_master_plan.md), [`docs/architect/development_plan.md`](../development_plan.md).
+- **Plan/log status sync: PASS**
 
 ## 2026-03-27 — Phase 5/6/7 Canonical Plan Update
 
 - **Directive:** Introduce **Phase 5 — Core trading engine**, **Phase 6 — Intelligence (future)**, **Phase 7 — Bot hub (future)** into master plan and development plan; **docs-only** structural update; no implementation.
 - **Summary:** Roadmap table extended: **5** = core engine (next active build), **6/7** = **FUTURE / STUB ONLY** (not current sprint), **8** = trading operations & governance (prior Phase 5 content). **Phase 4.x** (Layers **1–4**) unchanged. **First approved SOL/Pyth paper slice** folded under Phase **5**. New [`development_plan.md`](../development_plan.md) with Phase **5** actionable tasks + checklists; Phase **6/7** explicitly out of scope.
 - **Artifacts:** [`docs/blackbox_master_plan.md`](../../blackbox_master_plan.md), [`docs/architect/development_plan.md`](../development_plan.md), [`docs/architect/BLACKBOX_MASTER_PLAN_ARCHITECT_SHARE.md`](../BLACKBOX_MASTER_PLAN_ARCHITECT_SHARE.md) (synced).
+- **Plan/log status sync: PASS**
+
+## 2026-03-26 — Phase 5.8 University Core-Engine Canonicalization Update
+
+- **Directive:** Refactor the roadmap so University is treated as a **core engine** workstream, not a detached future side project, while preserving the explicit sequencing rule that it must not begin before **Pillars 2 and 3** are complete.
+- **Summary:** The roadmap now places University under **Phase 5.8** of the core engine. [`blackbox_university.md`](../blackbox_university.md) is the canonical bot-agnostic University standard and [`anna_university_methodology.md`](../anna_university_methodology.md) is the Anna-specific supplement. The development plan now lays out numbered core-engine tasks for curriculum schema, enrollment records, context-bundle contracts, evaluation harnesses, promotion/rejection flows, reward system design, and Anna as the first reference student. Phase 6 is reduced back to future expansion work beyond the core-engine University system. This is a roadmap / architecture canonicalization only; no implementation is claimed.
+- **Artifacts:** [`docs/blackbox_master_plan.md`](../../blackbox_master_plan.md), [`docs/architect/development_plan.md`](../development_plan.md), [`docs/architect/blackbox_university.md`](../blackbox_university.md), [`docs/architect/anna_university_methodology.md`](../anna_university_methodology.md).
+- **Plan/log status sync: PASS**
+
+## 2026-03-26 — Phase 5.3a Deterministic Strategy Evaluation Contract — Implemented
+
+- **Directive:** Implement the first Phase **5.3** strategy-engine slice: deterministic, stored-data-only strategy evaluation for a single symbol with structured confidence-bearing output and participant/tier-scoped consumption.
+- **Summary:** Added [`strategy_eval.py`](../../../scripts/runtime/market_data/strategy_eval.py) with immutable **`StrategyEvaluationV1`**, deterministic spread-based evaluation (`evaluate_strategy`), and a Phase **5.2a** read-contract entry point (`evaluate_strategy_from_read_contract`). Evaluation is read-only against stored market data, emits structured fields (`participant_scope`, `symbol`, `strategy_version`, `evaluation_outcome`, `confidence`, abstain/gate metadata), and remains tier-aligned without assigning or escalating risk. Tests in [`tests/test_strategy_eval_phase5_3a.py`](../../../tests/test_strategy_eval_phase5_3a.py) passed locally (`41 passed`), and full suite verification passed locally (`344 passed`).
+- **Artifacts:** [`docs/blackbox_master_plan.md`](../../blackbox_master_plan.md), [`docs/architect/development_plan.md`](../development_plan.md), [`scripts/runtime/market_data/strategy_eval.py`](../../../scripts/runtime/market_data/strategy_eval.py), [`tests/test_strategy_eval_phase5_3a.py`](../../../tests/test_strategy_eval_phase5_3a.py), [`docs/working/shared_coordination_log.md`](../../working/shared_coordination_log.md).
+- **Plan/log status sync: PASS**
+
+## 2026-03-26 — Phase 5.3b Stored-Data Backtest / Simulation Loop — Implemented
+
+- **Directive:** Implement the next Phase **5.3** strategy-engine slice: a deterministic, stored-data-only backtest / simulation loop built on the validated **5.3a** strategy evaluation contract and participant-scoped market-data read contracts from **5.2a**.
+- **Summary:** Added [`backtest_simulation.py`](../../../scripts/runtime/market_data/backtest_simulation.py) with immutable **`SimulationRunV1`**, deterministic stored-data replay helpers (`run_stored_simulation`, `run_stored_simulation_from_read_contract`), and chronological tick support in [`store.py`](../../../scripts/runtime/market_data/store.py) via `ticks_chronological`. The slice remains read-only, non-executing, single-symbol-friendly, participant/tier-scoped, and emits a structured simulation artifact with sample window metadata, abstain / skip counts, and summary outcome fields. Architect validated the implementation against code and proof and reran local verification: `tests/test_backtest_simulation_phase5_3b.py` -> `7 passed`; full suite -> `371 passed`.
+- **Artifacts:** [`docs/blackbox_master_plan.md`](../../blackbox_master_plan.md), [`docs/architect/development_plan.md`](../development_plan.md), [`scripts/runtime/market_data/backtest_simulation.py`](../../../scripts/runtime/market_data/backtest_simulation.py), [`scripts/runtime/market_data/store.py`](../../../scripts/runtime/market_data/store.py), [`tests/test_backtest_simulation_phase5_3b.py`](../../../tests/test_backtest_simulation_phase5_3b.py), [`docs/working/shared_coordination_log.md`](../../working/shared_coordination_log.md).
+- **Plan/log status sync: PASS**
+
+## 2026-03-27 — Phase 5.3c Pre-Trade Fast Gate — Implemented
+
+- **Directive:** Implement the next Phase **5.3** strategy-engine slice: a deterministic, read-only pre-trade fast gate built on validated **5.3a** strategy evaluation and validated **5.3b** stored-data simulation, with EV-after-costs, uncertainty / abstain handling, and capped sizing before any future live candidate could be emitted.
+- **Summary:** Validated [`pre_trade_fast_gate.py`](../../../scripts/runtime/market_data/pre_trade_fast_gate.py) and [`tests/test_pre_trade_fast_gate_phase5_3c.py`](../../../tests/test_pre_trade_fast_gate_phase5_3c.py). The slice emits a structured **`PreTradeGateV1`** artifact, stays inside the selected tier without assigning or escalating risk, and remains strictly read-only: no Billy behavior, no Layer 3/4 approval or intent creation, and no venue or account mutation logic. Architect reran the direct gate suite (`17 passed`) and the dependent `5.3a` + `5.3b` + `5.3c` chain (`65 passed`) before acceptance.
+- **Artifacts:** [`docs/blackbox_master_plan.md`](../../blackbox_master_plan.md), [`docs/architect/development_plan.md`](../development_plan.md), [`scripts/runtime/market_data/pre_trade_fast_gate.py`](../../../scripts/runtime/market_data/pre_trade_fast_gate.py), [`tests/test_pre_trade_fast_gate_phase5_3c.py`](../../../tests/test_pre_trade_fast_gate_phase5_3c.py), [`docs/architect/directives/directive_5_3_c_pre_trade_fast_gate_closeout.md`](directive_5_3_c_pre_trade_fast_gate_closeout.md), [`docs/working/shared_coordination_log.md`](../../working/shared_coordination_log.md).
+- **Plan/log status sync: PASS**
+
+## 2026-03-27 — Phase 5.3D Tier-Aligned Strategy Selection — Implemented
+
+- **Directive:** Ensure strategy selection is tier-aligned so Anna adapts inside the selected tier and never mixes, assigns, or escalates tier behavior.
+- **Summary:** Added [`strategy_selection.py`](../../../scripts/runtime/market_data/strategy_selection.py) with deterministic **`StrategySelectionV1`**, tier-local profile mapping, and explicit no-fallback / no-escalation behavior across evaluation and optional gate inputs. The slice keeps strategy selection read-only and inside the participant-selected tier. Architect reran the focused `5.3d` suite (`13 passed`) and the dependent `5.3a` + `5.3c` + `5.3d` chain (`71 passed`) before acceptance.
+- **Artifacts:** [`docs/blackbox_master_plan.md`](../../blackbox_master_plan.md), [`docs/architect/development_plan.md`](../development_plan.md), [`scripts/runtime/market_data/strategy_eval.py`](../../../scripts/runtime/market_data/strategy_eval.py), [`scripts/runtime/market_data/pre_trade_fast_gate.py`](../../../scripts/runtime/market_data/pre_trade_fast_gate.py), [`scripts/runtime/market_data/strategy_selection.py`](../../../scripts/runtime/market_data/strategy_selection.py), [`tests/test_strategy_eval_phase5_3a.py`](../../../tests/test_strategy_eval_phase5_3a.py), [`tests/test_pre_trade_fast_gate_phase5_3c.py`](../../../tests/test_pre_trade_fast_gate_phase5_3c.py), [`tests/test_strategy_selection_phase5_3d.py`](../../../tests/test_strategy_selection_phase5_3d.py), [`docs/architect/directives/directive_5_3_d_tier_aligned_strategy_selection_closeout.md`](directive_5_3_d_tier_aligned_strategy_selection_closeout.md), [`docs/working/shared_coordination_log.md`](../../working/shared_coordination_log.md).
 - **Plan/log status sync: PASS**
 
 ## 2026-03-26 — Layer 4 Safety Mitigation Addendum — Canonically recorded (docs-only)

@@ -66,6 +66,7 @@ It is the **single source of truth** for project **rehydration** (Architect, Cur
 - Structured learning
 - Risk-controlled decisions
 - No autonomous unsafe behavior
+- **Governed agent development:** The project **explicitly authorizes** training and development of agents—**especially Anna**—as **analyst** and **strategist**, within the same governance and safety boundaries as all other work (directives, proof, human-owned risk tiers, Layer 3/4 gates for execution). Canonical statement: [`docs/architect/development_governance.md`](architect/development_governance.md) — *Project declaration — agent training (analyst and strategist)*.
 
 ---
 
@@ -1013,11 +1014,45 @@ Phase 4 **does not** automatically mean:
 
 ## Phase 5 — Core Trading Engine
 
-> **Next active build phase (not implemented in tree at roadmap insert).** Enables **one** real agent path (**Anna + Billy**) to execute trades **end-to-end** using **live market data** and **controlled execution** (Layers **1–4** unchanged above). Detailed tasks: [`docs/architect/development_plan.md`](architect/development_plan.md).
+> **Next active build phase (not implemented in tree at roadmap insert).** Enables the first real **Anna + Billy** trading path to execute trades **end-to-end** using **live market data** and **controlled execution** (Layers **1–4** unchanged above), while establishing the canonical **multi-participant** architecture that later supports additional humans and constrained bot participants. Detailed tasks: [`docs/architect/development_plan.md`](architect/development_plan.md).
+
+> **Core Principle — Perpetual, Risk-Tiered Winning (Anna):** Anna is a perpetual, self-improving competitor whose “win” is **repeatable, risk-controlled PnL within an authorized risk tier**. Risk tier is set by operators (CEO/human), never by Anna; Anna adapts inside that tier, but cannot bypass hard limits (stale/divergence blocks, size/drawdown caps, approvals, kill switch). Strategies are promoted/demoted by rolling, risk-adjusted performance; execution remains separated (Billy) and policy-gated.
+
+> **Review Flag — 2026-03-28:** Persona carry-forward rule requires explicit architect review. Anna’s core student persona must retain **capital preservation**, **RCS (Reflection Cycle Summary)**, and **RCA (Root Cause Analysis)** discipline across **Bachelor**, **Master**, and **PhD**. These behaviors are not tier-specific add-ons; they persist through the full college ladder and must remain part of her canonical operating psychology.
+> **Self-development & Emergent Behavior:** Anna is expected to self-improve without human prompts: she can schedule backtests, parameter sweeps, and paper drills, and generate/retire strategies autonomously. Exploration is **bounded**: no raising risk limits, no bypassing approvals/guardrails, and no execution without policy gates. Emergent behaviors are acceptable only when they increase safe, repeatable wins.
+> **Advanced methods (bleeding-edge, bounded by guardrails):** Fast EV gate with capped Kelly sizing; conformal prediction for calibrated uncertainty/abstain; distributional RL with CVaR objective (tail-aware); realistic LOB simulator for offline training; adversarial/hostile guard (fail closed on divergence/staleness/hostile book). “Skip” is a rewarded action when uncertainty or EV is poor.
 
 ### Purpose
 
 Deliver the **data → strategy → approval → execution** spine in production shape: ingest, store, signal, bind to Layer **3** approval, execute via Layer **4** intent and **Billy** (edge execution), with risk controls and observability.
+
+### Canonical plan layers (aligned with `development_plan.md`)
+
+Normative three-layer model for Phase **5** (full table: [`docs/architect/development_plan.md`](architect/development_plan.md) — **Phase 5 — Canonical structure**):
+
+- **Layer A — Engine spine (5.0–5.7 + first approved slice):** Data through **venue adapter** and observability; **exchange** connection. Advances on directives **without** requiring full **5.8** University implementation.
+- **Layer B — Engine-native context (5.9):** Ledger, bundles, registry **`contextProfile`**; Anna as first consumer when directed.
+- **Layer C — University platform (5.8):** Global training governance — Dean, **colleges** as domain silos (many colleges; one primary enrollment per student by default), Professor, Exam board, curriculum injection, **binary/scored** evidence of learning. **Same University-wide training methods** across colleges; college varies **domain** and **benchmarks**. Sequenced after **Pillars 2 and 3** per roadmap rule.
+
+### Shared context service (engine-native; interim ledger; Gnosis future)
+
+- **Engine-native:** **Context** is **core platform infrastructure**, not an Anna-only feature or a late add-on. Online agents should receive **agent-scoped views** of **engine-global** context **automatically**, per registry **`contextProfile`**, instead of one-off integrations.
+- **Module home:** [`modules/context_ledger/`](../modules/context_ledger/) — interim append-only ledger and bundle contracts (`ContextRecord`, `ContextBundle`). See [`modules/context_ledger/README.md`](../modules/context_ledger/README.md).
+- **Gnosis (external):** Possible future **context-as-a-service** provider — **not** a dependency for delivery until integrated. Implement **baked, contracted** context in BLACK BOX first; add a **Gnosis adapter** later that maps to the same contracts.
+- **Consumers:** Core infra → **Anna** (first) → future agents → **University** → optional **Gnosis**. Gap analysis and open items: [`docs/architect/hydration_context_governance.md`](architect/hydration_context_governance.md) §10; tasks: [`development_plan.md`](architect/development_plan.md) §5.9.
+
+### 5.0 Multi-participant + risk tier interaction model
+
+- **Participants:** BLACK BOX must support multiple human participants (Sean plus future operators/users) and future bot participants. Anna is **not** a single-user analyst surface.
+- **Identity model:** every interaction and every trade artifact must resolve **participant identity**, **participant type** (human / bot), **account / wallet context**, **selected risk tier**, and **interaction path**.
+- **Wallet / account association:** each participant operates inside their own documented account / wallet context, aligned with the Phase **4.2** entity model. Shared or pooled accounts require explicit human governance and role mapping.
+- **Risk tier ownership:** Anna does **not** assign or escalate risk tiers. A human selects the risk tier, and that choice defines the strategy space, behavioral boundaries, and allowable exposure.
+- **Canonical tiers:** Tier **1** = low risk (conservative exposure, slower cadence, tighter constraints, capital preservation + consistent gain). Tier **2** = medium risk (moderate exposure, balanced cadence, controlled expansion, disciplined growth). Tier **3** = high risk (higher exposure, faster cadence, wider exploration inside bounds, aggressive but controlled edge extraction).
+- **Shared psychology across tiers:** Anna remains relentless, learning, and competitive in every tier; only the amount of room she is allowed to operate in changes.
+- **Shared discipline across tiers:** Anna also retains the same preservation and self-correction backbone in every tier: protect capital, perform lightweight reflection continuously, perform RCA on qualifying failures, and never drop those mechanisms as authority expands.
+- **Interaction scoping:** before Anna responds or emits a signal, the system must identify the participant, wallet/account context, and chosen risk tier. Output is scoped to that participant and logged for audit.
+- **Bot participants:** future bots may request a strategy, signal stream, or tier-scoped output, but they are treated as constrained participants. Bots cannot override tiers, escalate risk, or bypass approvals.
+- **Implementation note:** the first working slice may start with one human participant in practice, but the contracts, storage, and approvals must be multi-participant and tier-aware from day one.
 
 ### 5.1 Market data ingestion
 
@@ -1030,18 +1065,27 @@ Deliver the **data → strategy → approval → execution** spine in production
 
 - **Production database** (non-sandbox).
 - **Queryable** time-series / snapshots.
+- **Participant-aware consumers:** strategy readers and audit views must resolve which participant/account/tier is consuming a signal even if market data itself is shared.
 
 ### 5.3 Strategy engine
 
 - **Initial deterministic strategy** (single symbol / universe).
 - **Signal generation** + **confidence**.
 - **Backtest / simulation loop** using **stored** data.
+- **Current implementation status (2026-03-30):** Phases **5.3a** through **5.3e** are in-repo and architect-closed: deterministic single-symbol strategy evaluation, structured confidence-bearing evaluation artifact, participant/tier-scoped read-contract entry point, a read-only stored-data backtest / simulation loop, a deterministic read-only pre-trade fast gate (EV after costs, uncertainty/abstain, capped sizing), tier-aligned strategy selection inside the selected tier without escalation, and a **guardrailed_experiment** orchestration path that composes those surfaces without tier mutation or execution. The next **5** engine slice is **5.4** signal → approval binding (starting with a **candidate trade artifact**).
+- **Adaptive loop:** maintain a portfolio of strategies; score by risk-adjusted PnL, rule adherence, and consistency; promote/demote based on rolling windows. Exploration allowed within safety constraints; no strategy may bypass guardrails.
+- **Self-directed learning:** allow Anna to launch sanctioned experiments (paper/backtest/parameter sweeps) on her own schedule, auto-retire underperformers, and propose new configs—without raising risk or changing guardrails.
+- **Pre-trade fast gate (live path):** closed-form EV after fees/slippage + risk penalty; conformal interval check; capped Kelly/half-Kelly sizing; “skip” rewarded; hard fail on stale/divergence/guardrails.
+- **Split-second “brain” sim:** before any live intent, run the fast EV/uncertainty/sizing check as a micro pre-trade simulation; reject or downgrade trades whose probable outcome is negative or too uncertain.
+- **Offline training (paper/sim path):** distributional RL with CVaR objective trained against recorded ticks and a realistic LOB simulator; only promoted to paper/live if risk-adjusted performance and guardrail adherence meet thresholds.
+- **Tier alignment:** strategies adapt **within** the selected risk tier; Anna must not mix behaviors across tiers or expand beyond the participant’s authorized envelope.
 
 ### 5.4 Signal → approval binding
 
 - **Candidate trade artifact**.
 - **Size / risk / expiry**.
 - **Routed through Layer 3 approval** (no execution without approval).
+- **Scope fields required:** participant id, participant type, account/wallet context, selected risk tier, and strategy profile must be present on the signal/candidate artifact before approval.
 
 ### 5.5 Execution adapter
 
@@ -1049,10 +1093,12 @@ Deliver the **data → strategy → approval → execution** spine in production
 - **Paper / sandbox mode** → **small-size live**.
 - **Consumes Layer 4 execution intent** (per [`layer_4_execution_interface_design.md`](architect/layer_4_execution_interface_design.md)).
 - **Integrates with Billy** (edge execution).
+- **Context enforcement:** execution resolves the approved participant account/wallet context and risk tier; Billy cannot substitute wallets, merge participant scopes, or expand tier limits.
 
 ### 5.6 Risk & controls
 
 - **Per-trade** and **per-account** limits.
+- **Per-participant** and **per-tier** limits.
 - **Approval expiry** enforcement.
 - **Global kill switch**.
 - **Position / PnL** tracking.
@@ -1062,13 +1108,34 @@ Deliver the **data → strategy → approval → execution** spine in production
 - **Metrics** (data feed, signals, approvals, executions).
 - **Logs** and **failure** tracking.
 - **Runbooks** (halt / rollback / revoke).
+- **Auditability:** all outputs and executions must remain attributable to participant, wallet/account context, and selected risk tier.
+
+### 5.8 University / learning system
+
+- **Core engine rule:** University is part of the core engine, not a detached side project.
+- **Ordering rule:** University work must **not** begin before **Pillars 2 and 3** are complete; it is a later engine workstream that comes after the higher-priority core-engine build steps.
+- **Foundational context rule:** The interim structured memory/context ledger needed by University should be treated as foundational core-engine work for BLACK BOX, because student reasoning, Dean governance, and exam-board supervision all depend on reliable recall before a future external context service exists.
+- **Interim module placement:** The first implementation home for that foundational memory surface should be `modules/context_ledger/` inside BLACK BOX, with a reusable contract that later University services and future external context providers can consume or replace.
+- **Canonical platform standard:** [`docs/architect/blackbox_university.md`](architect/blackbox_university.md) defines the bot-agnostic University model for enrollment, curriculum, scored evaluation, promotion / rejection, and reward governance.
+- **Anna-specific supplement:** [`docs/architect/anna_university_methodology.md`](architect/anna_university_methodology.md) defines Anna’s role as the first reference student, including context-bundle requirements, teacher-student methodology, curriculum discipline, and grounded evaluation design.
+- **Persona carry-forward rule (review required, 2026-03-28):** University tier progression must preserve Anna’s core student discipline rather than replacing it. Capital preservation, RCS, and RCA remain mandatory through Bachelor, Master, and PhD; later tiers add latitude but do not delete those mechanisms.
+- **University subtree:** the in-repo staging area for the future standalone multi-project University project lives under [`university/`](../university/README.md).
+- **Dean model:** the Dean is the university-wide intake and governance agent. Humans submit curriculum to the Dean using a strict repeatable template, primarily via Slack in BLACK BOX. The Dean validates, routes to the correct college, hydrates the professor path, and coordinates sponsor-facing graduation and export decisions.
+- **College model:** colleges are narrow-discipline boundaries. Each college has its own professor and exam board. Single-college enrollment is the default; dual enrollment is an explicit Dean-approved exception, not normal behavior.
+- **Context rule:** University must implement a shared context-engineering layer across colleges. Basic chunk-only RAG is insufficient as the full strategy; University should combine structured retrieval, metadata filters, memory, typed context bundles, and benchmark/policy context.
+- **Measurement rule:** “student got smarter” must remain binary and sponsor-aligned. Curriculum is only retained when exam-board evaluation shows measurable improvement against the college contract.
+- **Core-engine work items:** Dean intake contract, curriculum schema, enrollment records, college/professor/exam-board contracts, context-bundle contracts, evaluation harnesses, binary promotion / rejection state machine, reward and graduation system, and Anna-on-University rollout.
+- **Boundary:** University extends the engine’s intelligence loop, but it must not bypass approvals, execution controls, selected risk tiers, or human governance.
+- **Canonical rule:** conversation and episodic context may inform learning, but structured curriculum / promoted knowledge artifacts remain the canonical semantic layer.
 
 ### First approved slice (paper-first, narrow scope)
 
 > **Status:** Build path **approved** for first end-to-end loop (paper-first). **Scope is narrow:** one **SOL** strategy, **Pyth** feed, **Coinbase** adapter, single approved trade loop with stored outcome. No multi-asset, no ML, no scale-out in this slice.
 
 - **Separation:** **Anna = strategy only** (signals; **no** execution). **Billy = execution only** (approved intents; **no** signal invention). **No** fused signal+execution in this path.
-- **Contracts to lock before coding:** strategy (signal) contract for SOL; execution intent (`approval_id`, `intent_id`, `context_hash`, order params, idempotency) **only** after L3; outcome record (`intent_id`, `execution_id`, outcome, fills, fees, timestamps, `failure_class`) **durable**.
+- **Perpetual winner discipline:** Anna’s objective combines PnL with strict penalties for stale/divergent data, guardrail breaches, hallucination/unsupported claims, and drawdown/size violations. Success is measured over rolling windows; advancement (size/frequency) is conditional on safe, repeatable wins; any breach forces demotion/pause.
+- **Multi-participant contract rule:** the first paper loop may be operated by one human in practice, but signal, approval, execution intent, and outcome contracts must still carry participant/account/tier fields from day one. Human selects the tier; Anna never does.
+- **Contracts to lock before coding:** strategy (signal) contract for SOL; execution intent (`approval_id`, `intent_id`, `context_hash`, order params, idempotency, participant scope, risk tier) **only** after L3; outcome record (`intent_id`, `execution_id`, outcome, fills, fees, timestamps, `failure_class`, participant scope) **durable**.
 - **Data guards:** Pyth **freshness**; **divergence** vs Coinbase before signal (**fail closed**).
 - **Layer 4:** Section **13** safety (grant, audit-before-effect, entry point, context hash, kill/abort); **hard fail** when guards fail.
 - **Build order:** (1) Pyth ingestion SOL → (2) normalized store → (3) deterministic strategy → signal contract → (4) L3 approval binding → (5) execution intent contract → (6) Billy + Coinbase sandbox → (7) outcome storage. **Goal:** one approved signal → one paper trade → verified outcome → stored.
@@ -1083,7 +1150,7 @@ Deliver the **data → strategy → approval → execution** spine in production
 
 ## Phase 6 — Intelligence & Self-Improvement (Future)
 
-> **NOT IN SCOPE for current sprint. FUTURE / STUB ONLY.** No implementation required at this stage.
+> **FUTURE EXPANSION.** No implementation required at this stage. Core University work has been moved into the engine roadmap under **Phase 5.8**.
 
 ### Purpose
 
@@ -1096,6 +1163,7 @@ Enhance Anna’s **decision quality** using **evidence-based learning** (post–
 - **Bayesian updating**.
 - **Outcome-based** pattern promotion / rejection.
 - **Explainability** (“why this trade”).
+- **Long-horizon intelligence extensions** beyond the core University engine work already listed in Phase 5.8.
 
 **Status:** Placeholder; elaboration when Phase **5** is underway.
 
