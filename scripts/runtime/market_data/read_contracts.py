@@ -1,7 +1,8 @@
 """Phase 5.2a — participant-scoped market-data read contracts (read-only).
 
-Goal: Provide a stable, participant/tier-scoped read API for downstream strategy/approval/audit
-without implying execution.
+Provides a stable, participant/tier-scoped read API for downstream strategy,
+approval, and audit consumers.  Raw shared market_ticks storage is the canonical
+source; this module adds participant scope without modifying the store.
 
 This module does NOT write to market_data.db.
 """
@@ -14,13 +15,22 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any
 
-
-_ALLOWED_RISK_TIERS = {"tier_1", "tier_2", "tier_3"}
+from market_data.participant_scope import (
+    VALID_PARTICIPANT_TYPES,
+    VALID_RISK_TIERS,
+    ParticipantScope,
+    validate_participant_scope,
+)
 
 
 @dataclass(frozen=True)
 class MarketDataReadContractV1:
-    """Required participant scope + read request parameters (Phase 5.2a)."""
+    """Required participant scope + read request parameters (Phase 5.2a).
+
+    Combines a full ParticipantScope identity with a market_symbol request field.
+    Validation delegates participant identity checks to validate_participant_scope
+    and additionally requires market_symbol.
+    """
 
     participant_id: str
     participant_type: str
@@ -34,25 +44,34 @@ class MarketDataReadContractV1:
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
 
+    def to_participant_scope(self) -> ParticipantScope:
+        return ParticipantScope(
+            participant_id=self.participant_id,
+            participant_type=self.participant_type,
+            account_id=self.account_id,
+            wallet_context=self.wallet_context,
+            risk_tier=self.risk_tier,
+            interaction_path=self.interaction_path,
+        )
+
 
 def validate_market_data_read_contract(obj: MarketDataReadContractV1) -> None:
-    missing = [
-        name
-        for name in (
-            "participant_id",
-            "participant_type",
-            "account_id",
-            "wallet_context",
-            "risk_tier",
-            "interaction_path",
-            "market_symbol",
-        )
-        if not str(getattr(obj, name, "") or "").strip()
-    ]
-    if missing:
-        raise ValueError(f"market_data_read_contract_missing_fields:{','.join(missing)}")
-    if obj.risk_tier not in _ALLOWED_RISK_TIERS:
-        raise ValueError(f"market_data_read_contract_invalid_risk_tier:{obj.risk_tier}")
+    """Validate participant identity fields and market_symbol.
+
+    Delegates identity validation to validate_participant_scope (which checks
+    participant_type and risk_tier against canonical allowed values).  Errors
+    are re-raised under the ``market_data_read_contract_`` namespace so callers
+    see a consistent prefix.
+    """
+    scope = obj.to_participant_scope()
+    try:
+        validate_participant_scope(scope)
+    except ValueError as exc:
+        msg = str(exc).replace("participant_scope_", "market_data_read_contract_")
+        raise ValueError(msg) from exc
+
+    if not str(getattr(obj, "market_symbol", "") or "").strip():
+        raise ValueError("market_data_read_contract_missing_fields:market_symbol")
 
 
 def _resolve_market_data_path() -> Path:

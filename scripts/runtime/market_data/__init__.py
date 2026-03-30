@@ -39,6 +39,13 @@ from market_data.strategy_eval import (
     evaluate_strategy,
     evaluate_strategy_from_read_contract,
 )
+from market_data.strategy_selection import (
+    SELECTION_OUTCOMES,
+    SELECTION_VERSION,
+    TIER_STRATEGY_PROFILES,
+    StrategySelectionV1,
+    select_tier_aligned_strategy,
+)
 
 __all__ = [
     "SIMULATION_VERSION",
@@ -50,8 +57,12 @@ __all__ = [
     "ScopedMarketDataSnapshot",
     "SignalContractV1",
     "STRATEGY_VERSION",
+    "SELECTION_OUTCOMES",
+    "SELECTION_VERSION",
     "StrategyEvaluationV1",
+    "StrategySelectionV1",
     "TIER_THRESHOLDS",
+    "TIER_STRATEGY_PROFILES",
     "VALID_PARTICIPANT_TYPES",
     "VALID_RISK_TIERS",
     "connect_market_db",
@@ -60,6 +71,7 @@ __all__ = [
     "evaluate_gates",
     "evaluate_strategy",
     "evaluate_strategy_from_read_contract",
+    "select_tier_aligned_strategy",
     "insert_tick",
     "latest_tick",
     "run_stored_simulation",
