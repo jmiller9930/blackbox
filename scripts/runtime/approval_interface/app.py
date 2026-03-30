@@ -17,6 +17,13 @@ from learning_core.approval_model import (
     reject_pending,
 )
 from learning_core.remediation_validation import assert_non_production_sqlite_path, open_validation_sandbox
+from market_data.trade_approval_routing import (
+    approve_trade_pending,
+    defer_trade_pending,
+    get_trade_candidate_approval,
+    list_trade_candidate_approvals,
+    reject_trade_pending,
+)
 
 from .context import fetch_approval_context
 
@@ -139,6 +146,89 @@ def make_app(sandbox_db: Path, *, decision_token: str) -> Callable:
                     start_response(f"{HTTPStatus.BAD_REQUEST.value} Bad Request", [("Content-Type", "application/json")])
                     return [_json({"ok": False, "error": str(e)})]
                 body = _json({"ok": True, "approval": out})
+                start_response(
+                    f"{HTTPStatus.OK.value} OK",
+                    [("Content-Type", "application/json; charset=utf-8"), ("Content-Length", str(len(body)))],
+                )
+                return [body]
+
+            # --- Phase 5.4 — CandidateTradeV1 Layer 3 (trade_candidate_approvals) ---
+            if method == "GET" and path == "/api/trade-approvals":
+                rows = list_trade_candidate_approvals(conn)
+                body = _json({"ok": True, "trade_approvals": rows})
+                start_response(
+                    f"{HTTPStatus.OK.value} OK",
+                    [("Content-Type", "application/json; charset=utf-8"), ("Content-Length", str(len(body)))],
+                )
+                return [body]
+
+            m_trade = re.match(r"^/api/trade-approvals/([^/]+)$", path)
+            if method == "GET" and m_trade:
+                tid = m_trade.group(1)
+                trow = get_trade_candidate_approval(conn, tid)
+                if not trow:
+                    start_response(f"{HTTPStatus.NOT_FOUND.value} Not Found", [("Content-Type", "application/json")])
+                    return [_json({"ok": False, "error": "trade approval not found"})]
+                try:
+                    payload = json.loads(trow["candidate_payload_json"])
+                except Exception:
+                    payload = None
+                body = _json({"ok": True, "trade_approval": trow, "candidate": payload})
+                start_response(
+                    f"{HTTPStatus.OK.value} OK",
+                    [("Content-Type", "application/json; charset=utf-8"), ("Content-Length", str(len(body)))],
+                )
+                return [body]
+
+            m_trade_dec = re.match(r"^/api/trade-approvals/([^/]+)/decision$", path)
+            if method == "POST" and m_trade_dec:
+                if not _token_ok(environ, token):
+                    start_response(
+                        f"{HTTPStatus.UNAUTHORIZED.value} Unauthorized",
+                        [("Content-Type", "application/json; charset=utf-8")],
+                    )
+                    return [_json({"ok": False, "error": "missing or invalid decision token"})]
+                tid = m_trade_dec.group(1)
+                if not get_trade_candidate_approval(conn, tid):
+                    start_response(f"{HTTPStatus.NOT_FOUND.value} Not Found", [("Content-Type", "application/json")])
+                    return [_json({"ok": False, "error": "trade approval not found"})]
+                raw = _read_body(environ)
+                try:
+                    payload = json.loads(raw.decode("utf-8") or "{}")
+                except json.JSONDecodeError:
+                    start_response(f"{HTTPStatus.BAD_REQUEST.value} Bad Request", [("Content-Type", "application/json")])
+                    return [_json({"ok": False, "error": "invalid JSON"})]
+                action = str(payload.get("action") or "").strip().lower()
+                actor = str(payload.get("actor") or payload.get("approved_by") or "").strip()
+                reason = payload.get("reason")
+                reason_s = str(reason).strip() if reason is not None else None
+                if not actor:
+                    start_response(f"{HTTPStatus.BAD_REQUEST.value} Bad Request", [("Content-Type", "application/json")])
+                    return [_json({"ok": False, "error": "actor required"})]
+                try:
+                    if action == "approve":
+                        ttl = int(payload.get("ttl_hours") or 168)
+                        out = approve_trade_pending(
+                            conn,
+                            approval_id=tid,
+                            approved_by=actor,
+                            ttl_hours=ttl,
+                            decision_note=reason_s,
+                        )
+                    elif action == "reject":
+                        out = reject_trade_pending(conn, approval_id=tid, approved_by=actor, decision_note=reason_s)
+                    elif action == "defer":
+                        out = defer_trade_pending(conn, approval_id=tid, approved_by=actor, decision_note=reason_s)
+                    else:
+                        start_response(
+                            f"{HTTPStatus.BAD_REQUEST.value} Bad Request",
+                            [("Content-Type", "application/json; charset=utf-8")],
+                        )
+                        return [_json({"ok": False, "error": "action must be approve, reject, or defer"})]
+                except ValueError as e:
+                    start_response(f"{HTTPStatus.BAD_REQUEST.value} Bad Request", [("Content-Type", "application/json")])
+                    return [_json({"ok": False, "error": str(e)})]
+                body = _json({"ok": True, "trade_approval": out})
                 start_response(
                     f"{HTTPStatus.OK.value} OK",
                     [("Content-Type", "application/json; charset=utf-8"), ("Content-Length", str(len(body)))],

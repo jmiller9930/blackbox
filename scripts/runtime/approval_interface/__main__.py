@@ -34,6 +34,7 @@ def main() -> None:
     print(
         f"Layer 3 approval interface — http://{args.host}:{args.port}/\n"
         f"sandbox-db: {args.sandbox_db.resolve()}\n"
+        "Remediation: GET/POST /api/approvals/… — Trade candidates: GET/POST /api/trade-approvals/…\n"
         "POST decisions require Authorization: Bearer <token> or X-Approval-Token.\n"
         "Does not execute, simulate, or mutate pipeline artifacts.",
         file=sys.stderr,

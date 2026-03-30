@@ -6,6 +6,13 @@ Canonical running log for architect-facing directive execution, proof, and closu
 
 **Templates:** [`DIRECTIVE_TEMPLATE.md`](DIRECTIVE_TEMPLATE.md) (full directive scaffold), [`CLOSEOUT_PACKET_TEMPLATE.md`](CLOSEOUT_PACKET_TEMPLATE.md) (closeout / gate / proof summary). Every closeout must include `Plan/log status sync: PASS`. Implementation closes must also record **Git commit and remote sync** (commit SHA, remote push, primary-host proof when required) per the closeout template.
 
+## 2026-03-30 — Phase 5.4 (continued) Layer 3 Approval Routing — Implemented / Closed
+
+- **Directive:** **5.4 (continued)** — Layer 3 routing for `CandidateTradeV1`; no execution without approved artifact.
+- **Summary:** `trade_approval_routing.py`, approval interface `/api/trade-approvals`, tests `test_trade_approval_routing_phase5_4.py` + `test_approval_interface.py`. Architect pytest **9 + 12** (re-run). Closeout: [`directive_5_4_layer3_routing_closeout.md`](directive_5_4_layer3_routing_closeout.md). **Phase 5.4** marked **COMPLETE** in `development_plan.md`.
+- **Artifacts:** `scripts/runtime/market_data/trade_approval_routing.py`, `scripts/runtime/approval_interface/app.py`, `scripts/runtime/approval_interface/__main__.py`, `tests/test_trade_approval_routing_phase5_4.py`, plan + master plan + `current_directive.md` (standby), `shared_coordination_log.md`.
+- **Plan/log status sync: PASS**
+
 ## 2026-03-30 — Phase 5.4 Candidate Trade Artifact (V1) — Implemented / Closed
 
 - **Directive:** **5.4** (first task) — candidate trade artifact from signal/strategy outputs; participant scope; non-executing.

@@ -1,6 +1,6 @@
 # Developer handoff
 
-**Last updated:** 2026-03-30 — **Architect:** **5.4 CandidateTradeV1** closed; active directive **5.4 (continued) — Layer 3 approval routing** — see **`current_directive.md`**. Talking-stick gating **suspended** for core-engine slice unless directive says otherwise.
+**Last updated:** 2026-03-30 — **Architect:** **Phase 5.4** (artifact + Layer 3 routing) **complete**; **`current_directive.md` = Standby** — next slice **pending operator** conversation. Talking-stick: per prior operator exception unless a new directive re-enables.
 
 ## Source
 
@@ -10,12 +10,12 @@
 
 ## Directive
 
-PHASE 5.4 (CONTINUED) — LAYER 3 APPROVAL ROUTING FOR CANDIDATE TRADES
+**STANDBY** — see **`docs/working/current_directive.md`**. No new implementation until a directive replaces Standby.
 
 ## Coordination status
 
-- **Slice:** Phase **5.4** — route **`CandidateTradeV1`** through **Layer 3** approval flow; **no** execution without **APPROVED** artifact (`development_plan.md` §5.4 next open line).
-- `proof_status`: see **`shared_coordination_log.md`** and **`current_directive.md`**.
+- **Slice:** None active — **5.4 COMPLETE** per **`development_plan.md`**; next work **TBD** with operator/architect.
+- `proof_status`: **`shared_coordination_log.md`**.
 - **Talking stick:** not used as a code-gate for this slice per `current_directive.md` (operator 2026-03-29).
 
 ## Required action

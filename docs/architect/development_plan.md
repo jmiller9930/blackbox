@@ -56,8 +56,10 @@
 
 ### 5.4 Signal → approval binding — tasks
 
+> **Phase 5.4 — COMPLETE** (2026-03-30): Candidate trade artifact (`CandidateTradeV1`), Layer 3 routing (`trade_candidate_approvals` + approval interface `/api/trade-approvals`), and participant scope on the artifact are implemented and architect-closed. Proof: `docs/working/shared_coordination_log.md`.
+
 - [x] Create **candidate trade artifact** from signal (size, risk, expiry).
-- [ ] Route to **Layer 3** approval flow; **no** execution without **APPROVED** artifact.
+- [x] Route to **Layer 3** approval flow; **no** execution without **APPROVED** artifact.
 - [x] Include participant scope on the artifact: participant id/type, account/wallet context, selected risk tier, and strategy profile.
 
 ### 5.5 Execution adapter — tasks

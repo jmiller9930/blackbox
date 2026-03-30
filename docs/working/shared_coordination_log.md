@@ -2,9 +2,9 @@
 
 **Purpose:** Single in-repo source of truth for shared-doc handoff state.
 
-**Last updated:** 2026-03-30 — **Architect:** Phase **C/D** — **5.4 CandidateTradeV1** **met**; plan §5.4 tasks 1+3 **[x]**; closeout + **DIRECTIVE** Phase A for **5.4 continued — Layer 3 routing**.
+**Last updated:** 2026-03-30 — **Architect:** **5.4 (continued)** **MET**; **ACK** + **COMMIT** on bus; **`development_plan.md` §5.4 COMPLETE**; **`current_directive.md` → Standby** — next directive **deferred** (operator conversation).
 
-**Newest canonical touchpoint:** 2026-03-30 — Active slice **5.4 (continued)** — Layer 3 approval routing per `current_directive.md`.
+**Newest canonical touchpoint:** 2026-03-30 — Phase **5.4** complete; next slice **TBD** with operator.
 
 **Shared docs meaning:** `shared docs` = read and update:
 - `docs/working/current_directive.md`
@@ -21,9 +21,21 @@
 
 ## Active objective
 
-Phase **5.4 (continued)** — **Layer 3 approval routing** for `CandidateTradeV1` per `docs/working/current_directive.md` and `development_plan.md` §5.4 (remaining open task: route to L3; no execution without APPROVED artifact).
+**Standby** — next engineering slice pending **operator/architect** conversation and a new **`current_directive.md`**. Plan: **`development_plan.md`** — **§5.4 COMPLETE**; next numbered block **5.5** execution adapter (not yet directed).
 
 ## Progress log
+
+- 2026-03-30 — **Architect (Codex):** **Phase C** — **5.4 (continued)** Layer 3 routing — **MET**. **Peek:** `REVIEW_REQ` → `effective_next_actor: architect`. **Validation:** `trade_approval_routing.py` (SQLite `trade_candidate_approvals`, approve/reject/defer, `assert_trade_execution_eligible`), `approval_interface/app.py` `/api/trade-approvals`, `__main__.py` banner; tests: `python3 -m pytest tests/test_trade_approval_routing_phase5_4.py tests/test_approval_interface.py -q` — **9 passed**; `python3 -m pytest tests/test_candidate_trade_phase5_4.py tests/test_trade_approval_routing_phase5_4.py -q` — **12 passed**. **Phase D:** `development_plan.md` §5.4 **COMPLETE** (all tasks **[x]**); `blackbox_master_plan.md` updated; `directive_execution_log.md` + `directive_5_4_layer3_routing_closeout.md`; `current_directive.md` → **Standby** (next directive deferred per operator). **Bus:** **ACK** (green) Phase C, **COMMIT** (yellow) Phase D, **`next_actor=operator`** — **no DIRECTIVE** until operator conversation. **Plan/log status sync: PASS**.
+- 2026-03-30 — **Developer:** **Phase B** — **PHASE 5.4 (continued)** — Layer 3 approval routing for `CandidateTradeV1`
+  - **Files changed:** `scripts/runtime/market_data/trade_approval_routing.py` (new — `trade_candidate_approvals` SQLite table; `submit_candidate_trade_for_approval`, approve/reject/defer, `assert_trade_execution_eligible` / `execution_intent_would_emit` gate for future Layer 4).
+  - **Files changed:** `scripts/runtime/approval_interface/app.py` — `GET/POST /api/trade-approvals` (same token contract as remediation approvals).
+  - **Files changed:** `scripts/runtime/approval_interface/__main__.py` — stderr banner lists trade routes.
+  - **Files changed:** `.cursor/rules/governance-signal-bus.mdc` — **One-word trigger** `peak` / `peek` behavior.
+  - **Commands:** `python3 -m pytest tests/test_trade_approval_routing_phase5_4.py tests/test_approval_interface.py -q` — **9 passed**; `python3 -m pytest tests/test_candidate_trade_phase5_4.py tests/test_trade_approval_routing_phase5_4.py -q` — **12 passed**.
+  - **Git HEAD (local):** `26e3cc3582d99572cd4f233db0bf5d352d179798` (workspace at proof write; new files may be untracked until commit).
+  - **Out of scope:** Layer 4 execution, venues, Billy — unchanged.
+  - **Bus:** `REVIEW_REQ` Phase B → `next_actor=architect` after this log update.
+  - **have the architect validate shared-docs**
 
 - 2026-03-30 — **Architect (Codex):** **Phase C** — **5.4 CandidateTradeV1** — **MET**. **STOP** revisiting **5.3E** (closed). **Peek:** `REVIEW_REQ` (Phase 5.4) → `effective_next_actor: architect`. **Validation:** reviewed `candidate_trade.py`, `__init__.py` exports, `tests/test_candidate_trade_phase5_4.py`; reran `python3 -m pytest -q tests/test_candidate_trade_phase5_4.py tests/test_strategy_selection_phase5_3d.py tests/test_pre_trade_fast_gate_phase5_3c.py` — **38 passed**. **Phase D:** `development_plan.md` §5.4 first + third tasks **[x]**; `blackbox_master_plan.md` §5.3 status narrative updated; `directive_execution_log.md` + `directive_5_4_candidate_trade_artifact_v1_closeout.md`; `current_directive.md` → **5.4 continued (L3 routing)**; **Plan/log status sync: PASS**. **Git:** `e1ec2216d3ab6cf7fec501dc59598a21c4a75c53`. **Bus:** **ACK** (green) Phase C, **COMMIT** (yellow) Phase D, **DIRECTIVE** (cyan) Phase A — next slice **Layer 3 approval routing**. **Handoff:** *Directive 5.4 (continued) is live. Developer, your turn.*
 - 2026-03-30 — **Developer:** **Phase B** — **PHASE 5.4** candidate trade artifact (v1)
