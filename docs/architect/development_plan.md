@@ -128,6 +128,48 @@
 - [ ] Specify **Foreman / orchestration** use of context packets for multi-agent routing (directive).
 - [ ] Document **Gnosis compatibility boundary** (adapter interface only; no hard dependency in core).
 
+#### 5.9.1 Sentinel bus signal — mandatory JSON fields (`.governance/bus.log`)
+
+**Directive:** **CANONICAL #002 (Corrected)** — formal **validation schema** for append-only governance lines written by **`scripts/runtime/governance_bus.py`** (and compatible tooling). This is **orchestration contract** for the **Black Box / Sentinel** sub-layer; it does **not** describe trading engine or external infrastructure.
+
+Each **canonical** bus line MUST be one JSON object including **all** of:
+
+| Field | Type | Rule |
+|-------|------|------|
+| `ts` | `str` | ISO-8601 timestamp (UTC; `Z` suffix preferred). |
+| `agent` | `str` | Exactly one of: `Architect`, `Developer`, `Operator`. |
+| `type` | `str` | Exactly one of: `DIRECTIVE`, `ACK`, `NACK`, `INFO`. |
+| `next_actor` | `str` | Lowercase role: `architect`, `developer`, or `operator`; use `""` if no handoff. |
+| `content_hash` | `str` | 64-character lowercase hex **SHA-256** of the UTF-8 **message body** (the human-readable `content` string; hash of `""` if `content` is empty). |
+
+**Message body:** The string carried in the `content` field (summary line). Implementations MUST set `content_hash` = `sha256(content.encode("utf-8")).hexdigest()` and reject lines where the hash does not match.
+
+**Optional compatibility:** Additional keys (e.g. `phase` per `development_governance.md`) are allowed **only** together with the mandatory five fields and a valid `content_hash`.
+
+**Implementation / proof:** **`CANONICAL #002`** — validate on append and (optionally) on peek; **SI-4** proof via **`scripts/runtime/utils/logger.py`** — `append_test_execution_telemetry()` with `output_hash` over the agreed proof artifact (tests define which file bytes are hashed).
+
+#### 5.9.2 Directive hash pinning — mandatory DIRECTIVE integrity field
+
+**Directive:** **CANONICAL #003** — ensure directive handoff integrity by pinning every DIRECTIVE signal to the exact contents of `docs/working/current_directive.md`.
+
+For bus lines where `type` is `DIRECTIVE`, implementations MUST include:
+
+| Field | Type | Rule |
+|-------|------|------|
+| `directive_hash` | `str` | 64-character lowercase hex SHA-256 of the UTF-8 bytes of `docs/working/current_directive.md` at signal emission time. |
+
+**Authorization rule:** `--peek` and `--developer-phase-b` MUST refuse exit 0 if the local `current_directive.md` hash does not match the latest applicable DIRECTIVE `directive_hash` (even when `next_actor` matches).
+
+**Compatibility note:** Non-`DIRECTIVE` lines do not require `directive_hash`.
+
+#### 5.9.3 Sentinel relay daemon — governance dispatch automation
+
+**Directive:** **CANONICAL #005** — implement a Sentinel-standalone relay daemon that tails `.governance/bus.log`, enforces pre-dispatch hash gate checks, and dispatches architect/developer turns with one-agent-at-a-time safety, strike escalation, timeout, and crash recovery.
+
+- [x] Implement `scripts/runtime/sentinel_relay.py` with kill switch, PID lock, one-at-a-time dispatch, hash gate pre-check, strike escalation model routing, timeout and crash recovery.
+- [x] Add synthetic test coverage in `tests/test_sentinel_relay.py` (9 scenarios).
+- [x] Align governance and architecture docs for relay-driven Rule 11 escalation semantics.
+
 ### First slice (approved paper loop) — checklist
 
 Aligned with **Phase 5 — First approved slice** in [`blackbox_master_plan.md`](../blackbox_master_plan.md).

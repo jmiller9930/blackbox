@@ -1040,6 +1040,7 @@ Normative three-layer model for Phase **5** (full table: [`docs/architect/develo
 - **Module home:** [`modules/context_ledger/`](../modules/context_ledger/) — interim append-only ledger and bundle contracts (`ContextRecord`, `ContextBundle`). See [`modules/context_ledger/README.md`](../modules/context_ledger/README.md).
 - **Gnosis (external):** Possible future **context-as-a-service** provider — **not** a dependency for delivery until integrated. Implement **baked, contracted** context in BLACK BOX first; add a **Gnosis adapter** later that maps to the same contracts.
 - **Consumers:** Core infra → **Anna** (first) → future agents → **University** → optional **Gnosis**. Gap analysis and open items: [`docs/architect/hydration_context_governance.md`](architect/hydration_context_governance.md) §10; tasks: [`development_plan.md`](architect/development_plan.md) §5.9.
+- **CANONICAL #005 status:** **Closed (2026-03-30)** — Sentinel relay daemon (`scripts/runtime/sentinel_relay.py`) and tests (`tests/test_sentinel_relay.py`) implemented to automate governance bus turn dispatch (hash gate before dispatch, one-at-a-time, strike escalation model routing, timeout/crash recovery).
 
 ### 5.0 Multi-participant + risk tier interaction model
 

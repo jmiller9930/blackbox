@@ -6,6 +6,13 @@ Canonical running log for architect-facing directive execution, proof, and closu
 
 **Templates:** [`DIRECTIVE_TEMPLATE.md`](DIRECTIVE_TEMPLATE.md) (full directive scaffold), [`CLOSEOUT_PACKET_TEMPLATE.md`](CLOSEOUT_PACKET_TEMPLATE.md) (closeout / gate / proof summary). Every closeout must include `Plan/log status sync: PASS`. Implementation closes must also record **Git commit and remote sync** (commit SHA, remote push, primary-host proof when required) per the closeout template.
 
+## 2026-03-30 — CANONICAL #005 Sentinel Bus Relay Daemon — Implemented / Closed
+
+- **Directive:** **CANONICAL #005** — Sentinel Bus Relay daemon for governance bus dispatch automation with hash-gated turn ownership, one-agent-at-a-time dispatch, three-strikes model escalation, timeout and crash recovery.
+- **Summary:** Implemented `scripts/runtime/sentinel_relay.py`; added `tests/test_sentinel_relay.py` with 9 synthetic scenarios; aligned governance and architecture docs for Rule 11 and relay runbook. Architect Phase C validation recorded as MET with `python3 -m pytest tests/test_sentinel_relay.py -q` -> **9 passed**. Closeout packet: [`directive_005_sentinel_relay_closeout.md`](directive_005_sentinel_relay_closeout.md).
+- **Artifacts:** `scripts/runtime/sentinel_relay.py`, `tests/test_sentinel_relay.py`, `docs/architect/development_governance.md`, `.cursor/rules/governance-signal-bus.mdc`, `sentinel/SENTINEL_ARCHITECTURE.md`, `docs/architect/development_plan.md`, `docs/blackbox_master_plan.md`, `docs/working/current_directive.md`, `docs/working/shared_coordination_log.md`, closeout packet above.
+- **Plan/log status sync: PASS**
+
 ## 2026-03-30 — Phase 5.4 (continued) Layer 3 Approval Routing — Implemented / Closed
 
 - **Directive:** **5.4 (continued)** — Layer 3 routing for `CandidateTradeV1`; no execution without approved artifact.
