@@ -91,6 +91,80 @@
     return true;
   }
 
+  /**
+   * Any logged-in user (internal_admin or consumer_user).
+   * @param {{ loginHref?: string }} [opts]
+   */
+  function protectAuthenticated(opts) {
+    var loginHref = (opts && opts.loginHref) || "login.html";
+    var s = getSession();
+    if (!s) {
+      window.location.href = loginHref;
+      return false;
+    }
+    if (s.role !== "internal_admin" && s.role !== "consumer_user") {
+      window.location.href = loginHref;
+      return false;
+    }
+    return true;
+  }
+
+  /**
+   * Engine `/api/v1/` paths for self-service and admin (implement on server).
+   * Client sends JSON; server enforces hashing, tokens, rate limits, audit.
+   */
+  var ACCOUNT_API = {
+    register: "/auth/register",
+    passwordResetRequest: "/auth/password-reset/request",
+    passwordResetComplete: "/auth/password-reset/complete",
+    emailVerify: "/auth/email/verify",
+    emailResend: "/auth/email/resend-verification",
+    accountMe: "/account/me",
+    accountPassword: "/account/password",
+    adminUsers: "/admin/users",
+    adminInvite: "/admin/users/invite",
+  };
+
+  function accountApiClient() {
+    var api = createApiClient();
+    return {
+      paths: ACCOUNT_API,
+      register: function (body) {
+        return api.post(ACCOUNT_API.register, body);
+      },
+      requestPasswordReset: function (email) {
+        return api.post(ACCOUNT_API.passwordResetRequest, { email: email });
+      },
+      completePasswordReset: function (token, newPassword) {
+        return api.post(ACCOUNT_API.passwordResetComplete, {
+          token: token,
+          new_password: newPassword,
+        });
+      },
+      verifyEmail: function (token) {
+        return api.post(ACCOUNT_API.emailVerify, { token: token });
+      },
+      resendVerification: function () {
+        return api.post(ACCOUNT_API.emailResend, {});
+      },
+      getProfile: function () {
+        return api.get(ACCOUNT_API.accountMe);
+      },
+      changePassword: function (currentPassword, newPassword) {
+        return api.post(ACCOUNT_API.accountPassword, {
+          current_password: currentPassword,
+          new_password: newPassword,
+        });
+      },
+      listUsers: function () {
+        return api.get(ACCOUNT_API.adminUsers);
+      },
+      inviteUser: function (body) {
+        return api.post(ACCOUNT_API.adminInvite, body);
+      },
+    };
+  }
+
   function normalizePath(path) {
     var p = path.startsWith("/") ? path : "/" + path;
     return p;
@@ -207,6 +281,9 @@
     login: login,
     portalPathForRole: portalPathForRole,
     protectPage: protectPage,
+    protectAuthenticated: protectAuthenticated,
+    ACCOUNT_API: ACCOUNT_API,
+    account: accountApiClient(),
     api: createApiClient(),
   };
 })();

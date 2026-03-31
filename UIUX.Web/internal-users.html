@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="blackbox-api-base" content="" />
+    <title>BLACK BOX | Users (admin)</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <div class="page page--portal page--account" id="root" hidden>
+      <header class="portal-header portal-header--compact" aria-label="Admin header">
+        <div class="portal-header__row">
+          <a class="brand brand--link" href="./internal.html">
+            <img
+              class="brand__mini"
+              src="./assets/blackbox-boxmark.svg"
+              alt="BLACK BOX mark"
+            />
+            <span>Back to portal</span>
+          </a>
+          <span class="badge badge--internal">Admin</span>
+        </div>
+        <p class="plan-doc__intro">
+          Operator tools: invite users, disable accounts, force password reset.
+          All actions must go through the engine API with audit trails.
+        </p>
+      </header>
+      <main class="account-main">
+        <div class="auth-card card account-card">
+          <h1 class="auth-card__title">User management</h1>
+          <div class="alert alert--info" id="api-info" hidden></div>
+          <div class="alert alert--success" id="ok-msg" role="status" hidden></div>
+          <div class="alert alert--error" id="err-msg" role="alert" hidden></div>
+          <section class="account-section">
+            <h2 class="account-section__title">Directory</h2>
+            <p class="panel__state panel__state--pending" id="list-placeholder">
+              User list loads from GET
+              <code id="path-users"></code>
+              when the API is wired.
+            </p>
+            <pre class="plan-doc__body" id="user-json" hidden></pre>
+          </section>
+          <section class="account-section">
+            <h2 class="account-section__title">Invite user</h2>
+            <form class="form" id="invite-form">
+              <div class="field">
+                <label class="field__label" for="inv-email">Email</label>
+                <input class="input" id="inv-email" type="email" required />
+              </div>
+              <div class="field">
+                <label class="field__label" for="inv-role">Role</label>
+                <select class="input" id="inv-role">
+                  <option value="consumer_user">consumer_user</option>
+                  <option value="internal_admin">internal_admin</option>
+                </select>
+              </div>
+              <button type="submit" class="button button--primary" id="btn-invite">
+                Send invite
+              </button>
+            </form>
+          </section>
+        </div>
+      </main>
+    </div>
+    <script src="./app.js"></script>
+    <script>
+      (function () {
+        document.addEventListener("DOMContentLoaded", function () {
+          if (!window.BlackboxPortal.protectPage({ requiredRole: "internal_admin" }))
+            return;
+          document.getElementById("path-users").textContent =
+            window.BlackboxPortal.ACCOUNT_API.adminUsers;
+          var root = document.getElementById("root");
+          root.hidden = false;
+          var apiInfo = document.getElementById("api-info");
+          if (!window.BlackboxPortal.readApiBase()) {
+            apiInfo.textContent =
+              "API not configured. Implement admin routes under /api/v1 per app.js ACCOUNT_API.";
+            apiInfo.hidden = false;
+            document.getElementById("btn-invite").disabled = true;
+          }
+
+          window.BlackboxPortal.account
+            .listUsers()
+            .then(function (data) {
+              document.getElementById("list-placeholder").hidden = true;
+              var pre = document.getElementById("user-json");
+              pre.hidden = false;
+              pre.textContent = JSON.stringify(data, null, 2);
+            })
+            .catch(function () {});
+
+          document.getElementById("invite-form").addEventListener("submit", function (e) {
+            e.preventDefault();
+            var errEl = document.getElementById("err-msg");
+            var okEl = document.getElementById("ok-msg");
+            errEl.hidden = true;
+            okEl.hidden = true;
+            window.BlackboxPortal.account
+              .inviteUser({
+                email: document.getElementById("inv-email").value.trim(),
+                role: document.getElementById("inv-role").value,
+              })
+              .then(function () {
+                okEl.textContent = "Invite queued (when API is live).";
+                okEl.hidden = false;
+                document.getElementById("invite-form").reset();
+              })
+              .catch(function (x) {
+                errEl.textContent = (x && x.message) || "Invite failed.";
+                errEl.hidden = false;
+              });
+          });
+        });
+      })();
+    </script>
+  </body>
+</html>

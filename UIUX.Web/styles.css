@@ -375,6 +375,23 @@ h1 {
   color: var(--text);
 }
 
+.field--checkbox {
+  flex-direction: row;
+  align-items: flex-start;
+}
+
+.field__label--inline {
+  display: flex;
+  gap: var(--space-2);
+  align-items: flex-start;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.field__label--inline input {
+  margin-top: 0.2rem;
+}
+
 .input {
   width: 100%;
   padding: 0.75rem 0.95rem;
@@ -403,6 +420,38 @@ h1 {
   background: rgba(220, 38, 38, 0.08);
   border: 1px solid rgba(220, 38, 38, 0.25);
   color: #7f1d1d;
+}
+
+.alert--success {
+  background: rgba(22, 163, 74, 0.08);
+  border: 1px solid rgba(22, 163, 74, 0.28);
+  color: #14532d;
+}
+
+.alert--info {
+  background: rgba(37, 99, 235, 0.06);
+  border: 1px solid rgba(37, 99, 235, 0.22);
+  color: #1e3a8a;
+}
+
+.auth-footer-links {
+  margin-top: var(--space-4);
+  font-size: 0.9rem;
+  color: var(--muted);
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2) var(--space-4);
+  justify-content: center;
+}
+
+.auth-footer-links a {
+  color: var(--text);
+  font-weight: 600;
+}
+
+.auth-footer-links a:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
 }
 
 .button--block {
@@ -745,6 +794,66 @@ h1 {
   border: 1px solid rgba(220, 38, 38, 0.25);
   color: #7f1d1d;
   font-size: 0.92rem;
+}
+
+/* —— Account settings / admin users —— */
+.page--account {
+  min-height: 100vh;
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+}
+
+.account-main {
+  flex: 1 1 auto;
+  overflow-y: auto;
+  padding: var(--space-4) var(--space-3) var(--space-6);
+  -webkit-overflow-scrolling: touch;
+}
+
+.account-card {
+  width: min(100%, 520px);
+  margin: 0 auto;
+  text-align: left;
+}
+
+.account-section {
+  margin-top: var(--space-5);
+  padding-top: var(--space-4);
+  border-top: 1px solid var(--panel-border);
+}
+
+.account-section:first-of-type {
+  border-top: 0;
+  padding-top: 0;
+  margin-top: var(--space-3);
+}
+
+.account-section__title {
+  margin: 0 0 var(--space-3);
+  font-size: 1rem;
+}
+
+.account-dl {
+  margin: 0 0 var(--space-3);
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: var(--space-2) var(--space-4);
+  font-size: 0.92rem;
+}
+
+.account-dl dt {
+  color: var(--muted);
+  font-weight: 600;
+}
+
+.account-dl dd {
+  margin: 0;
+}
+
+select.input {
+  appearance: auto;
+  cursor: pointer;
 }
 
 @media (max-width: 820px) {

@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="blackbox-api-base" content="" />
+    <title>BLACK BOX | Verify email</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <div class="page page--auth">
+      <header class="masthead masthead--simple" aria-label="Site header">
+        <a class="brand brand--link" href="./index.html">
+          <img
+            class="brand__mini"
+            src="./assets/blackbox-boxmark.svg"
+            alt="BLACK BOX mark"
+          />
+          <span>BLACK BOX</span>
+        </a>
+      </header>
+      <main class="auth-main">
+        <div class="auth-card card">
+          <h1 class="auth-card__title">Verify email</h1>
+          <p class="auth-card__lede">
+            This page completes verification when you open the link from your
+            email. No extra input is required once the API is live.
+          </p>
+          <div class="alert alert--info" id="api-info" hidden></div>
+          <div class="alert alert--success" id="done-msg" role="status" hidden></div>
+          <div class="alert alert--error" id="err-msg" role="alert" hidden></div>
+          <button type="button" class="button button--primary button--block" id="btn">
+            Confirm verification
+          </button>
+          <p class="auth-footer-links">
+            <a href="./login.html">Sign in</a>
+          </p>
+        </div>
+      </main>
+    </div>
+    <script src="./app.js"></script>
+    <script>
+      (function () {
+        var params = new URLSearchParams(window.location.search);
+        var token = params.get("token") || "";
+        var err = document.getElementById("err-msg");
+        var done = document.getElementById("done-msg");
+        var apiInfo = document.getElementById("api-info");
+        var btn = document.getElementById("btn");
+
+        if (!window.BlackboxPortal.readApiBase()) {
+          apiInfo.textContent =
+            "API not configured. Engine POST " +
+            window.BlackboxPortal.ACCOUNT_API.emailVerify +
+            " with { token }.";
+          apiInfo.hidden = false;
+        }
+        if (!token) {
+          err.textContent = "Missing verification token. Use the link from your email.";
+          err.hidden = false;
+          btn.disabled = true;
+        }
+
+        btn.addEventListener("click", function () {
+          err.hidden = true;
+          done.hidden = true;
+          window.BlackboxPortal.account
+            .verifyEmail(token)
+            .then(function () {
+              done.textContent = "Email verified. You can sign in.";
+              done.hidden = false;
+              btn.hidden = true;
+            })
+            .catch(function (x) {
+              err.textContent =
+                (x && x.message) || "Verification failed. Link may be expired.";
+              err.hidden = false;
+            });
+        });
+      })();
+    </script>
+  </body>
+</html>

@@ -753,6 +753,8 @@ This is **baseline hygiene** for a static portal shell. It is **not** a WAF, bot
 
 **When `/api/v1/` is proxied:** enforce **authentication and TLS** on the engine upstream; nginx must forward **`X-Forwarded-Proto`** (and related headers) so the API can enforce HTTPS-aware policies.
 
+**Self-service account (standard process):** The portal ships **UI shells** (`register.html`, `forgot-password.html`, `reset-password.html?token=`, `verify-email.html?token=`, `account-settings.html`) aligned with common practice: **no email enumeration** on forgot-password messaging, **time-limited single-use tokens** for reset and verify (enforced server-side), **password hashing** and **rate limits** on the engine only. Client paths are declared in `app.js` as `ACCOUNT_API` (`/auth/register`, `/auth/password-reset/request`, `/auth/password-reset/complete`, `/auth/email/verify`, `/auth/email/resend-verification`, `/account/me`, `/account/password`, `/admin/users`, `/admin/users/invite`). **`internal-users.html`** is the operator directory/invite shell. Until the engine implements these routes and outbound email, forms show configuration hints and fail closed.
+
 ## 25. Testing and acceptance contract for web work
 
 Governance applies to web work exactly as it applies to engine work.

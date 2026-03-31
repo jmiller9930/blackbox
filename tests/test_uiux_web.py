@@ -21,7 +21,13 @@ def test_unified_plan_build_script_exists() -> None:
         "login.html",
         "internal.html",
         "internal-plan.html",
+        "internal-users.html",
+        "account-settings.html",
         "consumer.html",
+        "forgot-password.html",
+        "reset-password.html",
+        "verify-email.html",
+        "register.html",
         "404.html",
         "styles.css",
         "app.js",
@@ -51,6 +57,8 @@ def test_login_wires_app_and_form() -> None:
     text = (WEB / "login.html").read_text(encoding="utf-8")
     assert "app.js" in text
     assert 'id="login-form"' in text
+    assert "forgot-password.html" in text
+    assert "register.html" in text
     assert "BlackboxPortal.login" in text or "blackbox_portal_session" in (
         WEB / "app.js"
     ).read_text(encoding="utf-8")
@@ -79,6 +87,8 @@ def test_internal_protects_internal_admin() -> None:
     assert "panel-devplan" in text
     assert "development_plan.md" in text
     assert "current_directive.md" in text
+    assert "internal-users.html" in text
+    assert "account-settings.html" in text
     assert "panel-training" in text
 
 
@@ -92,6 +102,26 @@ def test_app_js_exports_portal_api() -> None:
     assert "BlackboxPortal" in text
     assert "connectEventSource" in text
     assert "/api/v1" in text
+
+
+def test_app_js_account_self_service_api_paths() -> None:
+    text = (WEB / "app.js").read_text(encoding="utf-8")
+    assert "protectAuthenticated" in text
+    assert "/auth/register" in text
+    assert "/auth/password-reset/request" in text
+    assert "/auth/email/verify" in text
+    assert "/account/me" in text
+    assert "/admin/users" in text
+
+
+def test_account_settings_requires_auth() -> None:
+    text = (WEB / "account-settings.html").read_text(encoding="utf-8")
+    assert "protectAuthenticated" in text
+
+
+def test_internal_users_requires_internal_admin() -> None:
+    text = (WEB / "internal-users.html").read_text(encoding="utf-8")
+    assert 'requiredRole: "internal_admin"' in text
 
 
 def test_nginx_baseline_hardening() -> None:

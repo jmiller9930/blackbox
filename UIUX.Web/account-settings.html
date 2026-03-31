@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="blackbox-api-base" content="" />
+    <title>BLACK BOX | My account</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <div class="page page--portal page--account" id="root" hidden>
+      <header class="portal-header portal-header--compact" aria-label="Account header">
+        <div class="portal-header__row">
+          <a class="brand brand--link" id="back-link" href="./internal.html">
+            <img
+              class="brand__mini"
+              src="./assets/blackbox-boxmark.svg"
+              alt="BLACK BOX mark"
+            />
+            <span id="back-label">Back to portal</span>
+          </a>
+          <span class="badge" id="role-badge">Account</span>
+        </div>
+      </header>
+      <main class="account-main">
+        <div class="auth-card card account-card">
+          <h1 class="auth-card__title">My account</h1>
+          <p class="auth-card__lede">
+            Self-service: email verification status, resend verification, change
+            password. Requires a live engine API and session token (not dev
+            bootstrap alone).
+          </p>
+          <div class="alert alert--info" id="api-info" hidden></div>
+          <div class="alert alert--success" id="ok-msg" role="status" hidden></div>
+          <div class="alert alert--error" id="err-msg" role="alert" hidden></div>
+
+          <section class="account-section" aria-labelledby="profile-h">
+            <h2 class="account-section__title" id="profile-h">Profile</h2>
+            <dl class="account-dl" id="profile-dl">
+              <dt>Username</dt>
+              <dd id="pf-user">—</dd>
+              <dt>Email</dt>
+              <dd id="pf-email">—</dd>
+              <dt>Email verified</dt>
+              <dd id="pf-verified">—</dd>
+            </dl>
+            <button type="button" class="button button--secondary" id="btn-resend">
+              Resend verification email
+            </button>
+          </section>
+
+          <section class="account-section" aria-labelledby="pw-h">
+            <h2 class="account-section__title" id="pw-h">Change password</h2>
+            <form class="form" id="pw-form">
+              <div class="field">
+                <label class="field__label" for="cur">Current password</label>
+                <input class="input" id="cur" type="password" autocomplete="current-password" />
+              </div>
+              <div class="field">
+                <label class="field__label" for="nw">New password</label>
+                <input class="input" id="nw" type="password" minlength="10" autocomplete="new-password" />
+              </div>
+              <div class="field">
+                <label class="field__label" for="nw2">Confirm new password</label>
+                <input class="input" id="nw2" type="password" minlength="10" autocomplete="new-password" />
+              </div>
+              <button class="button button--primary" type="submit" id="btn-pw">
+                Update password
+              </button>
+            </form>
+          </section>
+        </div>
+      </main>
+    </div>
+    <script src="./app.js"></script>
+    <script>
+      (function () {
+        document.addEventListener("DOMContentLoaded", function () {
+          if (!window.BlackboxPortal.protectAuthenticated({})) return;
+          var s = window.BlackboxPortal.getSession();
+          var root = document.getElementById("root");
+          root.hidden = false;
+          document.getElementById("pf-user").textContent = s.username || "—";
+          var back = document.getElementById("back-link");
+          var backLabel = document.getElementById("back-label");
+          var badge = document.getElementById("role-badge");
+          if (s.role === "consumer_user") {
+            back.href = "consumer.html";
+            backLabel.textContent = "Back to account home";
+            badge.textContent = "Consumer";
+            badge.classList.add("badge--consumer");
+          } else {
+            badge.textContent = "Internal";
+            badge.classList.add("badge--internal");
+          }
+
+          var apiInfo = document.getElementById("api-info");
+          if (!window.BlackboxPortal.readApiBase()) {
+            apiInfo.textContent =
+              "API not configured. GET " +
+              window.BlackboxPortal.ACCOUNT_API.accountMe +
+              " and related routes must be implemented on the engine.";
+            apiInfo.hidden = false;
+          }
+
+          function showErr(m) {
+            var e = document.getElementById("err-msg");
+            e.textContent = m;
+            e.hidden = false;
+            document.getElementById("ok-msg").hidden = true;
+          }
+          function showOk(m) {
+            var o = document.getElementById("ok-msg");
+            o.textContent = m;
+            o.hidden = false;
+            document.getElementById("err-msg").hidden = true;
+          }
+
+          window.BlackboxPortal.account
+            .getProfile()
+            .then(function (data) {
+              document.getElementById("pf-email").textContent =
+                (data && data.email) || "—";
+              document.getElementById("pf-verified").textContent =
+                data && data.email_verified ? "Yes" : "No";
+            })
+            .catch(function () {
+              document.getElementById("pf-email").textContent =
+                "(load profile when API + token are live)";
+              document.getElementById("pf-verified").textContent = "Unknown";
+            });
+
+          document.getElementById("btn-resend").addEventListener("click", function () {
+            document.getElementById("err-msg").hidden = true;
+            document.getElementById("ok-msg").hidden = true;
+            window.BlackboxPortal.account
+              .resendVerification()
+              .then(function () {
+                showOk("If your account needs verification, an email was sent.");
+              })
+              .catch(function (x) {
+                showErr((x && x.message) || "Could not resend.");
+              });
+          });
+
+          document.getElementById("pw-form").addEventListener("submit", function (e) {
+            e.preventDefault();
+            var a = document.getElementById("cur").value;
+            var b = document.getElementById("nw").value;
+            var c = document.getElementById("nw2").value;
+            if (b !== c) {
+              showErr("New passwords do not match.");
+              return;
+            }
+            window.BlackboxPortal.account
+              .changePassword(a, b)
+              .then(function () {
+                showOk("Password updated.");
+                document.getElementById("pw-form").reset();
+              })
+              .catch(function (x) {
+                showErr((x && x.message) || "Password change failed.");
+              });
+          });
+        });
+      })();
+    </script>
+  </body>
+</html>
