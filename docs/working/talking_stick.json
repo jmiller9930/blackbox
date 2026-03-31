@@ -1,11 +1,11 @@
 {
   "schema_version": "talking_stick_v1",
-  "updated_at": "2026-03-26 21:10 CDT",
-  "generation": "2026-03-26 21:10 CDT|PHASE 5.3B — STORED-DATA BACKTEST / SIMULATION LOOP|architect_action_required|architect|have the architect validate shared-docs",
-  "holder": "architect",
-  "handed_from": "developer",
-  "handed_to": "architect",
-  "reason": "Developer recorded proof; architect validates Phase 5.3b.",
-  "required_phrase": "have the architect validate shared-docs",
-  "directive_title": "PHASE 5.3B — STORED-DATA BACKTEST / SIMULATION LOOP"
+  "updated_at": "2026-03-31 16:36 ",
+  "generation": "CANONICAL #041 - Pillar 1 Intake-Cycle Refresh and Publication-Readiness Gate (Architect)|Active - architect-owned intake-cycle refresh and publication-readiness slice.|developer_action_required|developer|have cursor validate shared-docs|missing|False",
+  "holder": "none",
+  "handed_from": "architect",
+  "handed_to": "none",
+  "reason": "stick transfer rejected: current holder is missing or unknown (found none)",
+  "required_phrase": "have cursor validate shared-docs",
+  "directive_title": "CANONICAL #041 - Pillar 1 Intake-Cycle Refresh and Publication-Readiness Gate (Architect)"
 }

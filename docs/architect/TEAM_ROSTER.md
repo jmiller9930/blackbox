@@ -15,6 +15,7 @@ Canonical list of **agent personas** and **human roles**. Update here when names
 | **Mia** | Market info agent | Real-time market data (**read-only**) | Active |
 | **Anna** | Analyst | Trade signals and confidence (aligned with architect trading layers) | In progress |
 | **Billy** | TBot executor | Executes trades and manages positions | In development |
+| **Dean** | University intake and governance | Receives curriculum from sponsors, validates intake template, routes to colleges, coordinates graduation and exports | Planned |
 
 ## Human roles (not automated agents)
 
@@ -26,6 +27,7 @@ Canonical list of **agent personas** and **human roles**. Update here when names
 ## Alignment notes
 
 - **Anna / Billy** map to the architect **Analyst** / **Executor** split in [`architect_update_trading_system.md`](architect_update_trading_system.md) when implemented.
+- **Dean** is the University-wide learning and governance surface, not a trading or execution agent.
 - **Mia** should remain **read-only** and must not execute trades.
 - **Sean / John** set policy; agents do not replace those accountabilities.
 

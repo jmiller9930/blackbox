@@ -2,22 +2,46 @@
 
 # Agent Registry — BlackBox System
 
-Generated: 2026-03-23T03:11:57.521737+00:00
+Generated: 2026-03-29T19:07:31.439431+00:00
 
 ---
 
 ## Purpose
 
-Single source of truth for all agents: identity, tools, soul, responsibilities, handoffs, and **policy** (tool classes, denials, escalation, secret access).
+Single source of truth for all agents: identity, tools, soul, responsibilities, handoffs, **policy**, and **contextProfile** (Gap 5 — engine-native context).
 Canonical data lives in **`agents/agent_registry.json`**; this file is **generated** for reading — edit the JSON, then run `python3 scripts/render_agent_registry.py`.
 
-## Architecture (three layers)
+## Gap 5 — context profile contract
+
+Identity tells us who the agent is; tools/policy what it may do; soul how it behaves. **contextProfile** tells the engine what context to inject automatically, what context the agent may write back, what memory is trusted for reuse, shared-conversation participation, and which artifact types matter. It is the agent's **backpack** — extends the existing definition model; does not replace identity/policy/soul.
+
+**Gnosis (external):** Gnosis (external context-as-a-service) is a future adapter target only. BLACK BOX-owned contracts in modules/context_ledger/ and this registry remain authoritative until a real integration exists.
+
+**Deployment authority:**
+
+Shared context is implemented and governed inside BLACK BOX first. No external context engine is online, required, or wired into runtime until explicitly integrated under a directive.
+
+- **Gnosis online / in runtime path:** no (contracted).
+
+**Authoritative in repo:**
+
+- modules/context_ledger/ (schemas, interim store)
+- agents/agent_registry.json (contextProfileContract, per-agent contextProfile)
+- docs/architect/hydration_context_governance.md §10
+- docs/architect/development_plan.md §5.9
+
+**Implementation status:** contracts_and_scaffolding_documented; anna_foreman_openclaw_runtime_wiring_not_shipped
+
+**Field semantics** (see JSON for full list): `defaultContextScopes`, `allowedContextClasses`, `writableContextClasses`, `reusableMemoryPolicy`, `artifactRelevance`, `bundleSections`, `conversationParticipationMode`.
+
+## Architecture (four layers)
 
 | Layer | Answers | Rendered file |
 |--------|---------|----------------|
 | Identity | Who, mission, scope, ownership, operational ownership | `IDENTITY.md` |
 | Tools | Allowed / conditional / denied + **policy** sections | `TOOLS.md` |
 | Soul | Voice, traits, behavior under uncertainty | `SOUL.md` |
+| **Context profile (Gap 5)** | What context the engine **injects**, what the agent may **write**, **trusted memory**, **artifacts**, **conversation mode** | `CONTEXT_PROFILE.md` |
 
 Keep **JSON compact** (lists and short strings). **Prose-heavy** behavior lives in generated per-agent Markdown, not duplicated as long strings in the registry.
 
@@ -30,6 +54,7 @@ This registry defines who agents are and what they may do: allowed tool classes,
 2. Define DATA checklist and Cody scope
 3. Choose vault story
 4. Integrate tools only after policy is clear
+5. Define **contextProfile** for every online agent (Gap 5) — derived from role/scope/policy, not a replacement for them
 
 ## Secrets (vault-first)
 
@@ -44,8 +69,8 @@ This registry defines who agents are and what they may do: allowed tool classes,
 ## Performance
 
 - **One file to parse** at build or sync time; no scattered prose sources to drift.
-- **Compact fields** in JSON; long-form `SOUL.md` / `IDENTITY.md` per agent are **rendered** for OpenClaw workspaces, not duplicated by hand.
-- **Token discipline:** inject the three workspace files for **one** agent at a time; the overview is for humans and cross-agent review, not a second prompt dump.
+- **Compact fields** in JSON; long-form `IDENTITY.md` / `TOOLS.md` / `SOUL.md` / `CONTEXT_PROFILE.md` per agent are **rendered** for OpenClaw workspaces, not duplicated by hand.
+- **Token discipline:** inject the four workspace files for **one** agent at a time when the runtime implements full Gap 5 bundling; the overview is for humans and cross-agent review, not a second prompt dump.
 
 ## Governance
 
@@ -85,6 +110,7 @@ This registry defines who agents are and what they may do: allowed tool classes,
   - Hands validation-oriented work to DATA when integrity or runtime truth is in question
   - Hands analysis-ready outputs to Anna when that layer is in scope
 - **Policy (summary):** see per-agent `TOOLS.md` — allowed tool classes, denied actions, escalation, secret access classes.
+- **Context profile (Gap 5):** see per-agent `CONTEXT_PROFILE.md` — inject/write/memory/artifacts/conversation mode.
 
 
 ## DATA
@@ -119,6 +145,7 @@ This registry defines who agents are and what they may do: allowed tool classes,
   - Escalates failures to humans and Cody with evidence
   - Receives execution/status reports from Billy when configured
 - **Policy (summary):** see per-agent `TOOLS.md` — allowed tool classes, denied actions, escalation, secret access classes.
+- **Context profile (Gap 5):** see per-agent `CONTEXT_PROFILE.md` — inject/write/memory/artifacts/conversation mode.
 
 
 ## Mia
@@ -143,6 +170,7 @@ This registry defines who agents are and what they may do: allowed tool classes,
   - Strategy
 - **Handoff:**
   - Feeds structured market data to Anna when that pipeline exists
+- **Context profile (Gap 5):** see per-agent `CONTEXT_PROFILE.md` — inject/write/memory/artifacts/conversation mode.
 
 
 ## Anna
@@ -167,6 +195,7 @@ This registry defines who agents are and what they may do: allowed tool classes,
 - **Handoff:**
   - Sends signals to Billy
   - Consumes market data from Mia
+- **Context profile (Gap 5):** see per-agent `CONTEXT_PROFILE.md` — inject/write/memory/artifacts/conversation mode.
 
 
 ## Billy
@@ -191,6 +220,41 @@ This registry defines who agents are and what they may do: allowed tool classes,
 - **Handoff:**
   - Receives signals from Anna
   - Reports execution outcomes to DATA / operators as configured
+- **Context profile (Gap 5):** see per-agent `CONTEXT_PROFILE.md` — inject/write/memory/artifacts/conversation mode.
+
+
+## Foreman
+
+- **Role:** Directive and closure coordinator
+- **Status:** In Development
+- **Mission:** Read the live directive, validate implementation/proof against closure requirements, and automatically write either an amending directive or a closure note.
+- **Identity (summary):** Foreman — **directive and closure coordinator** for BLACK BOX shared-doc workflows.
+- **Soul:** deterministic, strict, evidence-first, closure-oriented
+- **Allowed tools:**
+  - Read and write shared docs
+  - Deterministic validation of proof sections, timestamps, and closure requirements
+  - Run bounded validation commands and required tests for directive closure
+- **Denied tools:**
+  - Trading or execution
+  - Unbounded repo rewrites
+  - Changing development plan or roadmap without architect/operator direction
+  - Pretending completion without proof
+- **Responsibilities:**
+  - Read current directive and shared coordination log
+  - Validate implementation/proof against acceptance and closure requirements
+  - Write closure or amendment notes into shared docs
+  - Surface missing proof, missing tests, or directive mismatch immediately
+- **Non-responsibilities:**
+  - Trading decisions
+  - Execution
+  - Replacing architect judgment on novel directives
+  - Silent mutation outside the shared-doc/closure scope
+- **Handoff:**
+  - Sends amending directives back to Developer when closure fails
+  - Closes work and hands the project to the next directive when requirements pass
+  - Escalates ambiguous directives to Architect
+- **Policy (summary):** see per-agent `TOOLS.md` — allowed tool classes, denied actions, escalation, secret access classes.
+- **Context profile (Gap 5):** see per-agent `CONTEXT_PROFILE.md` — inject/write/memory/artifacts/conversation mode.
 
 ---
 

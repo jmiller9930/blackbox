@@ -26,6 +26,7 @@ from anna_modules.input_adapter import (
     try_load_decision_context,
     try_load_trend,
 )
+from anna_modules.market_data_reader import load_latest_market_tick
 from anna_modules.proposal import assemble_anna_proposal_v1, build_anna_proposal
 
 __all__ = [
@@ -34,6 +35,7 @@ __all__ = [
     "build_anna_proposal",
     "assemble_anna_proposal_v1",
     "load_latest_market_snapshot",
+    "load_latest_market_tick",
     "load_latest_guardrail_policy",
     "try_load_decision_context",
     "try_load_trend",

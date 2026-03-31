@@ -26,6 +26,7 @@ from anna_modules.input_adapter import (
     try_load_decision_context,
     try_load_trend,
 )
+from anna_modules.market_data_reader import load_latest_market_tick
 
 def analyze_to_dict(
     db_path: Path,
@@ -37,6 +38,8 @@ def analyze_to_dict(
     use_policy: bool,
     store: bool,
     use_llm: bool | None = None,
+    context_bundle_json: str | None = None,
+    context_bundle_path: Path | None = None,
 ) -> dict[str, Any]:
     """Programmatic entry (e.g. Telegram). Returns structured result; does not print.
 
@@ -52,6 +55,7 @@ def analyze_to_dict(
     ctx, ctx_err = (None, None)
     trend, trend_err = (None, None)
     policy, policy_err = (None, None)
+    market_data_tick, market_data_err = load_latest_market_tick()
 
     try:
         if use_snapshot:
@@ -79,6 +83,10 @@ def analyze_to_dict(
             use_policy=use_policy,
             conn=conn,
             use_llm=use_llm,
+            market_data_tick=market_data_tick,
+            market_data_err=market_data_err,
+            context_bundle_json=context_bundle_json,
+            context_bundle_path=context_bundle_path,
         )
         if trend and not trend_err:
             analysis["notes"].append(
@@ -120,6 +128,7 @@ def run(
     use_trend: bool,
     use_policy: bool,
     store: bool,
+    context_bundle_path: Path | None = None,
 ) -> int:
     out = analyze_to_dict(
         db_path,
@@ -130,6 +139,7 @@ def run(
         use_policy=use_policy,
         store=store,
         use_llm=None,
+        context_bundle_path=context_bundle_path,
     )
     print(json.dumps(out, indent=2, ensure_ascii=False))
     return 0
@@ -166,6 +176,12 @@ def main(argv: list[str] | None = None) -> int:
         help="Load latest [Guardrail Policy] task (guardrail_policy_v1)",
     )
     p.add_argument("--store", action="store_true", help="Persist anna_analysis as [Anna Analysis] task")
+    p.add_argument(
+        "--context-bundle-path",
+        type=Path,
+        default=None,
+        help="Optional path to a context bundle JSON file (Phase 5.9); also see ANNA_CONTEXT_BUNDLE_PATH",
+    )
     args = p.parse_args(argv)
     text = " ".join(args.input_text).strip()
     if not text:
@@ -180,6 +196,7 @@ def main(argv: list[str] | None = None) -> int:
         use_trend=args.use_latest_trend,
         use_policy=args.use_latest_policy,
         store=args.store,
+        context_bundle_path=args.context_bundle_path,
     )
 
 

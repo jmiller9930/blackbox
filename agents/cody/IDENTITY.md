@@ -22,3 +22,5 @@
   - Hands analysis-ready outputs to Anna when that layer is in scope
 
 See also: `agent.md`, `SOUL.md`, `TOOLS.md`, `AGENTS.md`, `USER.md`.
+
+**Context profile (Gap 5):** see `CONTEXT_PROFILE.md` — engine-native context contract (inject / write / memory / artifacts / conversation mode).

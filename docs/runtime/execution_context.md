@@ -35,6 +35,7 @@ Update **`last_completed_phase`** when the architect records a phase **CLOSED** 
 | Field | Value |
 |--------|--------|
 | **primary_host** | `clawbot.a51.corp` |
+| **primary_host_internal_ip** | `172.20.2.161` |
 | **repo_path** | `~/blackbox` |
 | **required_execution** | **SSH** to `primary_host` and run verification there. Local execution is **dev fallback only** and is **not** sufficient for phase closure. |
 
@@ -83,6 +84,7 @@ The JSON block below is parsed by `scripts/runtime/context_loader.py`. Keep it v
   "last_completed_phase": "4.6.3",
   "execution_environment": {
     "primary_host": "clawbot.a51.corp",
+    "primary_host_internal_ip": "172.20.2.161",
     "repo_path": "~/blackbox",
     "required_execution": "SSH to clawbot for verification; local run only as dev fallback"
   },

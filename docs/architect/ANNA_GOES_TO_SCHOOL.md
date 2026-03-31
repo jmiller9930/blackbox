@@ -90,6 +90,73 @@ Possible visible reward surfaces may include:
 - streak markers
 - collectible reward markers tied to measured events
 
+Reward signaling rule:
+
+- rewards should be given from measured performance and governed outcomes
+- rewards can be pulled back when performance degrades or review outcomes require it
+- resets affect reward windows/markers, not validated degree state
+- default reward reset window is `7` days unless the operator specifies otherwise
+- operator should be able to set the reward window with a command such as `#Reward(<days>)`
+
+Locked `v1` reward shape:
+
+- use one active Anna reward window at a time, not overlapping per-strategy reward windows
+- keep degree advancement persistent, but make points/streaks/stickers resettable by window
+- reward points come only from measured events, not vibes or chat claims
+
+Recommended `v1` point events:
+
+- `+1` for `disciplined_trade_pass` when lane, guardrail, and `RCS` are all present
+- `+3` for `positive_review_segment`
+- `+4` for `validated_corrective_retest`
+- `+5` for `promotion_milestone`
+- `-2` for `qualifying_failure`
+- `-3` for `lane_or_guardrail_breach`
+- `-4` for `unresolved_multi_rca_red_flag`
+
+Recommended visible stickers:
+
+- `kitty`: earned after three disciplined passes in the current window
+- `unicorn`: earned after one positive review segment in the current window
+- `wizard`: earned after one validated corrective retest in the current window
+
+Design intention:
+
+- Anna should want to win
+- she should visibly feel progress when she is trading well and learning correctly
+- she should visibly lose short-term reward state when she degrades or violates guardrails
+- reward must never overpower truth, evidence, or governance
+
+Important lock:
+
+- stickers and points by themselves do not create real AI motivation
+- if we want reward to matter, the runtime has to use reward state inside the real control loop
+- that means reward should affect retention/drop, review pressure, corrective-action priority, and promotion-readiness
+- it should not be described as "she feels sad and tries harder" unless the system actually wires that to concrete policy behavior
+- single market losses should not be treated as true failure by default
+- cumulative failures are what matter because they suggest she is misreading indicators, missing patterns, or failing to adapt
+- bad reward state should increase review and diagnosis pressure, not automatically clamp down her latitude
+
+Core learning loop lock:
+
+- observe market + retained context
+- form thesis
+- act
+- measure result
+- run lightweight why-analysis
+- decide `keep`, `watch`, or `drop`
+- repeat enough to separate true edge from luck
+- only go deeper into `RCA` when materially related failures repeat or corrective learning does not stick
+- materially related repeated failure in `v1` should mean the same `failure_pattern_key` recurs inside the same active review segment
+- an `RCA` is unresolved until its corrective path is actually validated, not merely proposed
+- multi-`RCA` red flag should trigger when `3` unresolved `RCA` events with the same `failure_pattern_key` occur in one active review segment
+
+Reward-ledger lock:
+
+- reward needs an append-only event artifact, not just a mutable score
+- every reward mutation should emit a `reward_event` with id, event type, point delta, source artifact ref, reward window id, and timestamp
+- operator-visible reward state should at minimum expose points, streak, active stickers, reward-window timing, and latest reward event ref
+
 ## 3.2 Strategic latitude inside hard boundaries
 
 Anna must have room to make strategy decisions.
@@ -115,6 +182,70 @@ Forbidden latitude:
 - mutate risk-tier authority
 - treat unsupported intuition as sufficient authority
 - substitute persuasive wording for measured evidence
+
+## 3.3 Reflection and RCA as Anna DNA
+
+This is not only a training-loop detail. It should be part of Anna's operating DNA.
+
+Blend rule:
+
+- persona / operating behavior
+- training methodology
+- evaluation and artifact contract
+
+Required carry-forward behaviors:
+
+- if Anna wins, she asks why
+- if Anna loses, she asks why
+- every trade gets lightweight reflection
+- qualifying failures get deeper RCA
+- repeated unresolved RCA escalates into explicit review
+- corrective actions return to testing before retention
+
+Required `v1` artifact surfaces:
+
+- `RCS` with:
+  - `outcome`
+  - `key_metrics`
+  - `short_why`
+  - `lane_guardrail_check`
+  - `keep_watch_drop`
+- `keep_watch_drop` bounded to:
+  - `keep`
+  - `watch`
+  - `drop`
+- `lane_guardrail_check` should be a structured object with:
+  - `lane_ok`
+  - `guardrail_ok`
+  - `blocking_reason` when either prior flag is false
+- `RCA` with:
+  - `failure_summary`
+  - `failure_classification`
+  - `measured_metrics`
+  - `market_context_summary`
+  - `strategy_summary`
+  - `five_whys_or_equivalent`
+  - `corrective_action_proposal`
+  - `retest_required`
+  - `retest_next_step`
+- `key_metrics` and `measured_metrics` should be structured metric maps, not prose blobs
+- `market_context_summary` and `strategy_summary` should stay concise structured text in `v1`
+- `corrective_action_proposal` should stay concise structured text in `v1`
+- `five_whys_or_equivalent` should be required only when the failure pattern supports deeper causal decomposition
+- when available, the minimum trading-relevant metric keys are:
+  - `win_rate`
+  - `expected_value`
+  - `average_win`
+  - `average_loss`
+  - `drawdown`
+  - `fee_drag`
+- reflection and RCA should remain lightweight enough that Anna stays agile and can rapidly trade or signal trades without being buried under analysis overhead
+
+This must persist across:
+
+- `Bachelor`
+- `Master`
+- `PhD`
 
 ## 4. Retention model
 
@@ -150,6 +281,24 @@ Context must remain:
 - auditable
 - promotion-based
 - fail-closed when required grounding is missing
+
+## 5.1 Live market stream and retained history
+
+Anna needs both present market state and retained market history.
+
+Working requirement:
+
+- the live trading feed should be treated as a never-ending stream
+- the current baseline points to the Pyth live price stream for this role, specifically Pyth via `SSE`
+- that stream should be normalized and injected into SQLite for durable retention
+- Anna should be able to use both current live context and retained historical context when forming strategy judgments
+- retained history should support baseline trading metrics and later curriculum-driven analysis, not just ad hoc recall
+
+Operational intent:
+
+- present history helps her understand what is happening now
+- retained history helps her compare current conditions to prior conditions
+- both together support better prediction, evaluation, and adaptation under the baseline and approved curriculum
 
 ## 6. Curriculum and conversation are different
 
@@ -208,6 +357,11 @@ Related inspection and conversation surface:
 - `#why`
 - `#status`
 - `#review`
+- `#exchange_status`
+- `Anna #pause`
+- `Anna #stop`
+- `Anna #start`
+- `Anna #restart`
 
 Plain-language intent set to recognize:
 
@@ -279,6 +433,178 @@ Minimum staged-candidate lineage fields should include:
 - staged_at
 - downstream_review_refs
 
+Recommended minimum `training_intake` schema layers:
+
+### Identity layer
+
+- `training_item_id`
+- `student_id`
+- `college_id`
+- `degree_lane`
+- `state_label`
+- `created_at`
+
+`state_label` should stay bounded in `v1`:
+
+- `conversation`
+- `candidate_training`
+- `staged_training`
+- `validated_learning`
+
+### Source layer
+
+- `source_actor_type`
+- `source_actor_id`
+- `source_channel`
+- `source_message_or_artifact_ref`
+- `source_text_snapshot`
+
+`source_actor_type` should stay bounded in `v1`:
+
+- `human`
+- `agent`
+- `system`
+
+`source_channel` should stay bounded in `v1`:
+
+- `slack`
+- `cursor`
+- `api`
+- `system_internal`
+
+`source_message_or_artifact_ref` should be a required stable reference string.
+
+`source_text_snapshot` should be required immutable intake text.
+
+### Anna evaluation layer
+
+- `anna_classification`
+- `anna_rationale`
+- `anna_recommended_next_action`
+- `anna_context_refs`
+- `anna_baseline_refs`
+
+`anna_classification` should stay bounded in `v1`:
+
+- `additive`
+- `subtractive`
+- `uncertain`
+- `counterproductive`
+
+`anna_recommended_next_action` should stay bounded in `v1`:
+
+- `stage`
+- `revise`
+- `reject`
+
+`anna_rationale` should be required, concise, and tied to at least one basis from curriculum, baseline doctrine, active context, retained signal, or prior outcomes.
+
+`anna_context_refs` should be a required non-empty list of stable reference strings.
+
+`anna_baseline_refs` should be a required non-empty list of stable reference strings.
+
+### Human decision layer
+
+- `human_confirmation_action`
+- `human_decision_actor_id`
+- `human_decision_at`
+- `human_revision_text`
+
+`human_confirmation_action` should stay bounded in `v1`:
+
+- `stage_it`
+- `revise_it`
+- `leave_it`
+
+`human_revision_text` should be required only when `human_confirmation_action = revise_it`; otherwise it should be null/empty.
+
+### Forensic review layer
+
+- `artifact_version`
+- `decision_trace_id`
+- `related_training_item_ids`
+- `review_status`
+- `review_notes_ref`
+
+`review_status` should stay bounded in `v1`:
+
+- `not_reviewed`
+- `under_review`
+- `review_complete`
+- `escalated`
+
+`decision_trace_id` should be a stable opaque string generated at intake time and carried unchanged through the lifecycle.
+
+`related_training_item_ids` should be optional and used only for revision, merge, follow-on, or comparison relationships.
+
+`review_notes_ref` should be optional, but when present should point to a stable review artifact reference.
+
+### Training execution layer
+
+- `execution_mode`
+- `execution_status`
+- `simulation_run_refs`
+- `micro_live_run_refs`
+- `promotion_outcome`
+- `promotion_outcome_at`
+
+`execution_mode` should stay bounded in `v1`:
+
+- `review_only`
+- `simulation_only`
+- `simulation_then_micro_live`
+
+`execution_status` should stay bounded in `v1`:
+
+- `not_started`
+- `in_review`
+- `running`
+- `completed`
+- `rejected`
+
+`promotion_outcome` should stay bounded in `v1`:
+
+- `not_promoted`
+- `validated`
+- `rejected`
+- `deferred`
+
+`simulation_run_refs` and `micro_live_run_refs` should be lists of stable run-reference strings rather than embedded payloads.
+
+All timestamp fields should use strict ISO-8601 UTC with required `Z` suffix.
+
+All ids and reference strings should be non-empty ASCII strings, immutable once created, and unique within their artifact class.
+
+## 8.1 Operator-visible trading state
+
+Humans need to be able to ask Anna for current operating state and get a useful answer without digging through raw artifacts.
+
+Minimum visible trading-state surface should include:
+
+- current `winning_or_losing` state
+- current win/loss ratios and related active performance ratios
+- current college fund balance
+- whether the fund is up or down versus the configured comparison point
+- current strategy or strategies in play
+- current edge thesis
+- current confidence/uncertainty status
+- current guardrail status
+- current degree lane
+- current training/execution state
+
+Rule:
+
+- this data should be available over Slack and other approved operator-facing interfaces
+- the answer should come from structured system state, not hand-wavy narrative
+- if the exact metric is unavailable, Anna should say so explicitly rather than improvising
+- canonical up/down comparison should use the current degree-lane fund start as the baseline
+- canonical recent-performance comparison should use the active review segment
+- `winning_or_losing` should be reported as `winning`, `losing`, or `flat`
+- `current_strategy` should support one active strategy id or an ordered list of active strategy ids
+- `edge_thesis` should remain one concise current working thesis in `v1`
+- `confidence_or_uncertainty` should be reported as `confident`, `uncertain`, or `abstaining`
+- `guardrail_status` should be reported as `clear`, `blocked`, or `restricted`
+
 State-language rule for human clarity:
 
 - Anna should explicitly distinguish:
@@ -326,6 +652,27 @@ Rule:
 - neither training fork may skip strategizing and analysis
 - the fork decision comes after the pre-work package is assembled
 - if context, evidence, or guardrails are insufficient, Anna must fail closed or downgrade the request
+
+## 9.1 Smarter-by-doing rule
+
+Anna does not become meaningfully smarter by passive suggestion intake alone.
+
+Primary rule:
+
+- Anna improves through doing and measured feedback
+
+Operational meaning:
+
+- curriculum can guide
+- human suggestions can guide
+- conversation can surface new candidates
+- but improvement only counts when Anna executes the governed loop, measures results, and updates behavior based on evidence
+
+Therefore:
+
+- staged suggestions are not learning by themselves
+- execution and measured evaluation are required
+- retained improvement must be tied to actual tested outcomes
 
 ## 10. Human graduation authority
 
@@ -425,20 +772,72 @@ This section captures the active architected discussion points so the conversati
 35. Anna should explicitly distinguish between `conversation`, `candidate_training`, `staged_training`, and `validated_learning`.
 36. Any training-relevant reply should carry its current state label explicitly.
 37. Training-relevant replies should use one compact visible header line in `v1`.
+38. The next contract-lock target after interaction `v1` is the minimum training-intake artifact schema.
+39. The minimum training-intake schema should include identity, source, Anna evaluation, human decision, forensic review, and training execution layers.
+40. `execution_mode` should stay bounded in `v1` to `review_only`, `simulation_only`, and `simulation_then_micro_live`.
+41. Anna improves primarily through doing and measured feedback, not passive suggestion accumulation alone.
+42. `state_label`, `anna_classification`, `human_confirmation_action`, `anna_recommended_next_action`, `execution_status`, and `promotion_outcome` should all stay bounded to small `v1` enums.
+43. `review_status`, `source_actor_type`, and `source_channel` should also stay bounded to small `v1` enums.
+44. `source_message_or_artifact_ref` should be a stable reference string and `source_text_snapshot` should be immutable intake text.
+45. `anna_rationale` should be concise, and `anna_context_refs` plus `anna_baseline_refs` should be required non-empty reference lists.
+46. `human_revision_text` should be required only for the `revise_it` path.
+47. `decision_trace_id` should be stable across the full artifact lifecycle.
+48. `related_training_item_ids` and `review_notes_ref` should remain optional, purpose-bound linkage fields.
+49. `simulation_run_refs` and `micro_live_run_refs` should be reference lists, not embedded payloads.
+50. All timestamps should be strict ISO-8601 UTC with `Z`, and all ids/reference strings should be immutable non-empty ASCII identifiers unique within their artifact class.
+51. Anna should expose operator-visible trading state including win/loss, ratios, fund status, strategy in play, and current degree/training state through Slack and other approved interfaces.
+52. Canonical up/down fund comparison should use the current degree-lane fund start as the baseline.
+53. Canonical recent-performance comparison should use the active review segment.
+54. Operator-visible confidence/uncertainty should be bounded to `confident`, `uncertain`, or `abstaining`.
+55. Operator-visible guardrail status should be bounded to `clear`, `blocked`, or `restricted`.
+56. Operator-visible `winning_or_losing` should be bounded to `winning`, `losing`, or `flat`.
+57. Operator-visible `current_strategy` should support one active strategy id or an ordered list of active strategy ids.
+58. Operator-visible `edge_thesis` should remain one concise current working thesis in `v1`.
+59. `Anna` is the strategist and `Billy` is the execution bot / market connector; Billy does not invent signals or strategy.
+60. In `v1`, Billy is the Drift-facing execution bot for the first real market path.
+61. Billy's market integration path is both the connection mechanism to that market and the rulebook for how BLACK BOX operates correctly in that market.
+62. The rulebook/adapter contract inside Billy should be machine-readable so Anna can consume it as context and Billy can enforce it deterministically.
+63. Future market families may eventually introduce additional strategist/execution-bot pairings, but `v1` remains `Anna` + `Billy` with Billy's Drift market path.
+64. Billy should accept a small, mandatory execution command packet from Anna and reject malformed or out-of-lane commands before venue mapping.
+65. The minimum `Anna -> Billy` command surface in `v1` should include `market`, `side`, `intent_type`, `size`, `thesis_ref`, `confidence`, `risk_envelope_ref`, `strategy_id`, `trace_id`, and `time_in_force` when required.
+66. Billy should own exchange connectivity truth, and `#exchange_status` should surface Billy's structured status for wallet/exchange readiness.
+67. Humans should be able to ask in Slack whether the wallet/exchange path is connected and receive a structured answer rather than vague prose.
+68. Anna should support runtime-control commands in `v1`: `#pause`, `#stop`, `#start`, and `#restart`.
+69. Runtime-control commands must emit structured control artifacts and fail closed when they cannot be completed.
+70. The first internal BLACK BOX web portal should stay operationally small and include runtime controls, Anna status, Billy/Drift status, winning/losing state, a training window, strategy inventory, training participation, edge-bot status, and a recent event feed.
+71. The training window should remain first-class on the internal portal because training is part of Anna's active operating loop.
+72. BLACK BOX requires a minimal login/account layer for portal access using username, email, password hash, role, account state, consent timestamp, and audit fields.
+73. Portal login is for access, routing, ownership binding, and audit only; it is not a custody or secret-storage account.
+74. Portal accounts must not store wallet secrets, seed phrases, exchange private keys, payment data, or unnecessary PII.
+75. `v1` portal roles are `internal_admin` and `consumer_user`, with role-based routing after login.
+76. The portal must connect to BLACK BOX through an explicit authenticated API boundary rather than direct database/runtime coupling.
+77. `v1` portal wiring should include a JSON query/control API plus an authenticated live status/event stream for real-time updates.
+78. The engine core remains the source of truth; the UI is a client shell over artifact-backed command and status surfaces.
+79. Every portal control action should return a structured acknowledgement with `trace_id`, request timing, resulting state, and a failure reason when applicable.
+80. The default local/dev bootstrap internal portal credential is `admin` / `admin`.
+81. That bootstrap credential is for development bring-up only and does not count as an acceptable published or production credential.
+82. The portal should use a standard CSS-first visual system with Apple-like restraint rather than ad hoc screen-by-screen styling.
+83. The landing page should place an original BLACK BOX geometric box-mark dead center as the hero mark, using a black/dark box treatment and not a copied Cursor logo.
+84. That box-mark should take roughly one quarter of the landing-page visual focus in `v1`.
+85. Buttons and controls should follow one shared Apple-like language: soft radius, clean spacing, subtle depth, and consistent interaction behavior.
+86. The API/UI contract should stay additive and non-brittle so future agents, strategies, statuses, and panels can be added without breaking the portal.
+43. Anna needs a continuous live market-data stream plus durable SQLite retention so she can reason over both present and historical market context.
+44. The current trading-doc baseline identifies Anna's live price-feed transport as Pyth via `SSE`.
 
-### Items still expected to tighten later
+### Final lock note
 
-- exact structured template fields for Bachelor human training directives
-- exact pass/fail packet shape for each training fork
-- exact downgrade/fail-closed behavior when pre-work is incomplete
-- exact relationship between Bachelor micro-live eligibility and `#train #trade`
-- exact reward-marker and reset mechanics
-- exact interaction grammar beyond the initial small command set
-- exact confirmation prompt wording for "stage this as training?"
-- exact output wording when Anna thinks a human training suggestion is counterproductive or incorrect
-- exact approved internal research surfaces for first-pass training judgments
-- exact confirmation prompt wording for the compact `v1` packet
-- exact minimum schema for training-intake and decision artifacts
-- exact downstream review and promotion artifact linkage fields
-- exact human-facing wording for the four state labels in Slack and other interfaces
-- exact compact header wording for Slack and non-Slack surfaces
+This discussion log no longer carries open contract placeholders for the active Anna/trading-college `v1` slice.
+
+Canonical lock points now live in:
+
+- `docs/architect/blackbox_university.md`
+- `docs/architect/development_plan.md`
+- `modules/context_ledger/README.md`
+
+That includes:
+
+- reward-window and reward-event contracts
+- core learning loop and `RCS`/`RCA` escalation thresholds
+- append-only context-engine backend choice
+- explicit context trigger rules
+- explicit approved ingestion sources and `v1` exclusions

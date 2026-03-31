@@ -1,6 +1,8 @@
 # Foreman v2 (Simple Broker)
 
-Foreman v2 is a lean development-process broker. It sits between developer and architect roles and automates protocol routing:
+Foreman v2 is the **development control plane** engine for brokered workflow: it sits between developer and architect roles and **governs** protocol routing, turn ownership sync, and coordination persistence (see [`../talking_stick/talking_stick_architecture.md`](../talking_stick/talking_stick_architecture.md)). It is **not** passive tooling.
+
+Foreman v2 is a lean broker. It automates protocol routing:
 
 - reads directive + shared log state
 - determines next actor with a strict transition rule set
@@ -25,6 +27,10 @@ Foreman v2 writes under `docs/working/`:
 - `foreman_v2_runtime_state.json` (canonical state)
 - `foreman_v2_audit.jsonl` (append-only events)
 
+### Context packet routing gate (CANONICAL #013)
+
+[`context_packet_gate.py`](context_packet_gate.py) provides `gate_foreman_context_packet(...)` — fail-closed validation of Foreman/orchestration **context packets** against `docs/working/current_directive.md`, the governance bus hash gate (`governance_bus.check_directive_hash_gate`), and lane metadata before treating a packet as routing authority. Contract: `docs/architect/development_plan.md` §5.9.10–5.9.11; implementation: [`modules/context_ledger/context_packet_validator.py`](../../../modules/context_ledger/context_packet_validator.py). Proof replay: `python3 -m pytest tests/test_context_packet_validator.py -q` and `python3 scripts/runtime/governance_bus.py --peek`.
+
 ## Dependencies
 
 Python 3.10+ (stdlib only)
@@ -42,6 +48,11 @@ Environment variables:
 - `FOREMAN_V2_POLL_SECONDS` (default: `3`)
 - `FOREMAN_V2_DRY_RUN` (`1/true/yes` to disable outbound dispatch)
 - `FOREMAN_V2_STRICT_SESSION_GUARD` (default `1`; verify/lock actor->session before live dispatch)
+- `FOREMAN_V2_UNIFIED_LOG_PATH` (optional) — override path for **one JSON line per loop cycle** (hostname, PID, cycle, `next_actor`, `bridge_state`, stick holder, dispatch summary). Absolute path or path relative to repo root. If unset, defaults to `docs/working/foreman_v2_cycle_log.jsonl`. See [`../talking_stick/LOGGING_INVENTORY.md`](../talking_stick/LOGGING_INVENTORY.md).
+- `FOREMAN_V2_LOOP_STDOUT` (default `1`) — set `0` to suppress per-cycle JSON lines on stdout (file append unchanged).
+- `FOREMAN_V2_CYCLE_LOG_DISABLE` — set `1` to skip appending the cycle JSONL file (stdout unchanged unless `FOREMAN_V2_LOOP_STDOUT=0`).
+
+Each **`talking_stick loop`** / **`foreman_v2 loop`** cycle prints one JSON line to stdout (**flushed**) so `> /tmp/talking_stick_debug.log` is non-empty without extra flags.
 
 ### Local + clawbot environment bootstrap
 
@@ -136,8 +147,24 @@ cd scripts/runtime
 python3 -m foreman_v2 terminate
 ```
 
+Self-heal orchestration (canonical authority):
+
+```bash
+cd scripts/runtime
+python3 -m foreman_v2 reconcile
+python3 -m foreman_v2 stick-sync
+python3 -m foreman_v2 reset --to-canonical
+```
+
+- `reconcile` recomputes canonical state from directive + shared log proof markers and syncs the stick holder.
+- `stick-sync` force-aligns `talking_stick.json` holder with current runtime state.
+- `reset --to-canonical` clears stale session lock, rebuilds canonical state, and resumes deterministic routing.
+- Architect verdict gate: set `ARCHITECT_CANONICAL_VERDICT: met` or `ARCHITECT_CANONICAL_VERDICT: not_met` in shared coordination log; Foreman blocks canonical closure unless architect verdict is `met`.
+- Three-strikes gate: after three `ARCHITECT_CANONICAL_VERDICT: not_met` entries, Foreman stops developer retries and forces architect closeout. Architect must write `ARCHITECT_DIRECTIVE_OUTCOME: accepted|rejected|blocked|deferred|closed_without_completion` before closure.
+
 When running, the broker writes a PID file at `docs/working/foreman_v2.pid` and appends operator actions to `foreman_v2_audit.jsonl`.
 Session lock safety is persisted in `docs/working/foreman_v2_session_lock.json`.
+Role identity registry is persisted in `docs/working/foreman_v2_role_registry.json`.
 
 ## Session Safety Controls
 
@@ -163,7 +190,7 @@ Foreman v2 dispatches prompts by calling:
 
 for developer and architect target sessions configured via env vars.
 
-If session IDs are missing, Foreman v2 records dispatch failure and moves into `sync_conflict` until fixed.
+If session IDs are missing or `GET /api/openclaw/sessions/{sid}` fails (e.g. stale UUID / 404), Foreman v2 can still **record dispatch as successful** using **`dry_run_fallback:*`** when **`FOREMAN_V2_DISPATCH_FALLBACK_DRY_RUN=1`** (default). That keeps the bridge out of `sync_conflict` while Mission Control sessions are fixed or rebound. Set **`FOREMAN_V2_DISPATCH_FALLBACK_DRY_RUN=0`** to restore strict failure behavior. Lock conflicts (`session_lock_conflict`) never fall back.
 
 ## State Model
 
@@ -204,6 +231,110 @@ This is intentionally strict and explicit for deterministic automation.
 5. Foreman v2 routes architect validation prompt.
 6. Architect validates/updates directive state.
 7. Foreman v2 detects closure and moves state to `closed`.
+
+## Architect Kickoff (Exact Runbook)
+
+Use this sequence when starting a real development cycle.
+
+1) Confirm synced code on clawbot:
+
+```bash
+cd ~/blackbox
+git pull origin main
+git rev-parse HEAD
+```
+
+2) Ensure Mission Control API is up (current lab baseline uses `:4010`):
+
+```bash
+cd ~/mission-control
+PORT=4010 npm run dev
+```
+
+3) Ensure Foreman env is loaded on clawbot:
+
+```bash
+cd ~/blackbox
+./scripts/runtime/foreman_v2/setup_env.sh ~/blackbox/.env.foreman_v2
+set -a
+source ~/blackbox/.env.foreman_v2
+set +a
+```
+
+4) Start the broker loop:
+
+```bash
+cd ~/blackbox/scripts/runtime
+python3 -m foreman_v2 loop
+```
+
+5) Drive the cycle from the operator desk:
+
+```bash
+python3 -m foreman_v2 status
+python3 -m foreman_v2 route --actor developer --message "begin implementation for active directive"
+python3 -m foreman_v2 route --actor architect --message "stand by for validation handoff"
+```
+
+Architect should run preflight first on the execution host:
+
+```bash
+python3 -m foreman_v2 doctor
+python3 -m foreman_v2 bind-sessions
+set -a
+source ~/blackbox/.env.foreman_v2
+set +a
+python3 -m foreman_v2 doctor
+```
+
+If `doctor` shows `ok: true`, kickoff is ready.
+`bind-sessions` writes both `.env.foreman_v2` and `foreman_v2_role_registry.json`, so role identity stays explicit and inspectable.
+
+6) Developer writes proof in shared docs and hands back with:
+- `have the architect validate shared-docs`
+
+7) Architect validates and closes/amends directive in shared docs.
+
+8) Capture proof package:
+
+```bash
+./foreman_v2/prove_live_session_safety.sh
+```
+
+## Live-Ready Checklist
+
+Foreman v2 is live-ready when all are true:
+
+- `python3 -m foreman_v2 status` returns valid state JSON.
+- `route` to developer and architect both return `sent=True`.
+- `docs/working/foreman_v2_session_lock.json` exists with both actor locks.
+- `docs/working/foreman_v2_audit.jsonl` shows operator route and state events.
+- `python3 -m foreman_v2 terminate` returns success detail with remote close status.
+- `python3 -m foreman_v2 doctor` returns `ok: true`.
+- `python3 -m foreman_v2 bind-sessions` can auto-bind non-main sessions when IDs are missing.
+
+## Visual Queue (How You Know It Is In Development)
+
+You can monitor development visually from one terminal/chat surface in Cursor:
+
+- **State line:** `python3 -m foreman_v2 status`
+  - watch `bridge_state`, `next_actor`, `proof_status`, `reason`.
+- **Audit timeline:** tail the audit log
+
+```bash
+tail -f ~/blackbox/docs/working/foreman_v2_audit.jsonl
+```
+
+- **Session lock card:** open `docs/working/foreman_v2_session_lock.json`
+  - confirms active actor→session mapping.
+- **Shared-doc progress:** open
+  - `docs/working/current_directive.md`
+  - `docs/working/shared_coordination_log.md`
+
+Interpretation guide:
+- `next_actor=developer` + `proof_status=missing` => implementation lane active.
+- `next_actor=architect` + `proof_status=present` => validation lane active.
+- `bridge_state=sync_conflict` => session/config/proof mismatch needs operator action.
 
 ## Testing
 

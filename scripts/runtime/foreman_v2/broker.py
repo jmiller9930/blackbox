@@ -30,7 +30,9 @@ def _request_json(
         req.add_header("Content-Type", "application/json")
     if headers:
         for key, value in headers.items():
-            req.add_header(key, value)
+            # urllib/http headers must be latin-1 encodable. Normalize to ASCII-safe.
+            safe_value = str(value).encode("ascii", errors="replace").decode("ascii")
+            req.add_header(key, safe_value)
     if token:
         req.add_header("Authorization", f"Bearer {token}")
     try:
@@ -49,6 +51,21 @@ def _request_json(
 
 
 def _session_id_for_actor(config: ForemanV2Config, actor: str) -> str:
+    # Prefer the live role registry mapping when present, since session IDs can
+    # be rebound at runtime and env-loaded IDs may go stale in long-running loops.
+    try:
+        if config.role_registry_path.exists():
+            payload = json.loads(config.role_registry_path.read_text(encoding="utf-8"))
+            if isinstance(payload, dict):
+                roles = payload.get("roles", {})
+                if isinstance(roles, dict):
+                    actor_data = roles.get(actor, {})
+                    if isinstance(actor_data, dict):
+                        sid = str(actor_data.get("session_id", "")).strip()
+                        if sid:
+                            return sid
+    except Exception:  # noqa: BLE001
+        pass
     if actor == "developer":
         return config.developer_session_id
     if actor == "architect":
@@ -87,8 +104,9 @@ def _verify_and_lock_session(config: ForemanV2Config, actor: str, sid: str) -> t
     if not isinstance(session, dict):
         return False, "session_preflight_failed:no_session_payload"
     returned_id = str(session.get("id", "")).strip()
+    returned_session_id = str(session.get("sessionId", "")).strip()
     openclaw_session_id = str(session.get("openclaw_session_id", "")).strip()
-    if sid not in {returned_id, openclaw_session_id}:
+    if sid not in {returned_id, returned_session_id, openclaw_session_id}:
         return False, "session_preflight_failed:id_mismatch"
 
     lock = _load_lock(config.session_lock_path)
@@ -125,7 +143,23 @@ def close_actor_session(config: ForemanV2Config, actor: str) -> tuple[bool, str]
     )
     if ok_patch or ok_delete:
         return True, f"remote_closed patch={detail_patch} delete={detail_delete}"
+    # Treat missing DB-mapped session rows as already closed from Foreman's view.
+    if detail_patch == "http_error_404" and detail_delete == "http_error_404":
+        return True, "remote_already_absent"
     return False, f"remote_close_failed patch={detail_patch} delete={detail_delete}"
+
+
+def _should_fallback_session_failure(detail: str) -> bool:
+    """True when failure is recoverable (no/stale session), not lock conflicts."""
+    if "session_lock_conflict" in detail:
+        return False
+    if "session_preflight_failed" in detail:
+        return True
+    if detail == "missing_session_id":
+        return True
+    if detail == "missing_session_payload":
+        return True
+    return False
 
 
 def dispatch_to_actor(
@@ -140,9 +174,13 @@ def dispatch_to_actor(
     if not sid and actor not in {"developer", "architect"}:
         return DispatchResult(False, actor, "no_target_actor")
     if not sid:
+        if config.dispatch_fallback_dry_run:
+            return DispatchResult(True, actor, "dry_run_fallback:missing_session_id")
         return DispatchResult(False, actor, "missing_session_id")
     ok_verify, detail_verify = _verify_and_lock_session(config, actor, sid)
     if not ok_verify:
+        if config.dispatch_fallback_dry_run and _should_fallback_session_failure(detail_verify):
+            return DispatchResult(True, actor, f"dry_run_fallback:{detail_verify}")
         return DispatchResult(False, actor, detail_verify)
     ok, detail, _ = _request_json(
         f"{config.mission_control_url}/api/openclaw/sessions/{sid}",
@@ -151,7 +189,7 @@ def dispatch_to_actor(
         {"content": message},
         headers={
             "X-Foreman-Actor": actor,
-            "X-Foreman-Dispatch-Key": dispatch_key or "",
+            "X-Foreman-Dispatch-Key": (dispatch_key or "").encode("ascii", errors="replace").decode("ascii"),
         },
     )
     return DispatchResult(ok, actor, detail)

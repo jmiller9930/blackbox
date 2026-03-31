@@ -18,3 +18,5 @@
   - Strategy
 - **Handoff:**
   - Feeds structured market data to Anna when that pipeline exists
+
+**Context profile (Gap 5):** see `CONTEXT_PROFILE.md` — engine-native context contract (inject / write / memory / artifacts / conversation mode).

@@ -2,6 +2,44 @@
 
 Run from the **repository root** (`blackbox/`).
 
+## Unified app stack (single launch command)
+
+Bring up the full local operations stack (Hermes supervisor + Sentinel relay + Textual TUI) with one command:
+
+```bash
+python3 sentinel.py --start
+```
+
+Additional commands:
+
+```bash
+python3 sentinel.py --status
+python3 sentinel.py --restart
+python3 sentinel.py --stop
+python3 sentinel.py --start --headless
+```
+
+Stack sequencing (enforced by `sentinel.py`):
+
+- **Start order:** `hermes_supervisor.py` -> `sentinel_relay.py` -> `governance_monitor.py`
+- **Stop order:** `governance_monitor.py` -> `sentinel_relay.py` -> `cursor-agent workers` -> `hermes_supervisor.py`
+- **Restart order:** full stop order first, then full start order
+
+Hermes supervisor artifacts (written under `.governance/`):
+
+- `hermes_status.json` — live status, player health, active issues
+- `hermes_skills.jsonl` — successful/failed auto-fix history (skill promotion ledger)
+
+Directive publication safety (single-writer):
+
+```bash
+# Re-pin existing current_directive.md (no body write)
+python3 scripts/runtime/governance_bus.py --agent Architect --type DIRECTIVE --issue-directive-atomic --phase A --content "..." --next-actor developer
+
+# Write new directive body + pin hash in one locked transaction
+python3 scripts/runtime/governance_bus.py --agent Architect --type DIRECTIVE --publish-directive-atomic --directive-input-file "/path/to/new_current_directive.md" --phase A --content "..." --next-actor developer
+```
+
 ## Execution context — Phase 4.0
 
 **[`docs/runtime/execution_context.md`](../docs/runtime/execution_context.md)** — phase, host, proof rules. **`context_loader.py`** prints JSON (preflight before mandated clawbot verification):
@@ -117,6 +155,99 @@ python3 scripts/runtime/cody_plan_workflow.py "Your engineering request here"
 ```
 
 Task `description` is JSON with `schema_version`, normalized fields, `parse_method` (`json` | `headings` | `fallback`), and `raw_model_output`.
+
+## Shared docs foreman
+
+**`shared_docs_foreman`** validates the active shared-doc directive against code/test/proof, then automatically writes either:
+
+- a **closure** note when requirements are satisfied, or
+- an **amending directive** when closure requirements are missing
+
+Run from the repository root:
+
+```bash
+cd scripts/runtime && python3 -m shared_docs_foreman --dry-run
+cd scripts/runtime && python3 -m shared_docs_foreman
+```
+
+The foreman reads:
+
+- `docs/working/current_directive.md`
+- `docs/working/shared_coordination_log.md`
+
+Current specialization: **Phase 5.1 foundation** closure checks.
+
+**Context packet gate (CANONICAL #013):** [`foreman_v2/context_packet_gate.py`](foreman_v2/context_packet_gate.py) — fail-closed validation of Foreman/orchestration context packets (directive hash, bus hash gate, lane epoch, freshness, consumers). See [`modules/context_ledger/README.md`](../../modules/context_ledger/README.md). Replay: `python3 -m pytest tests/test_context_packet_validator.py -q` and `python3 scripts/runtime/governance_bus.py --peek`.
+
+## Foreman app mode
+
+`shared_docs_foreman --app` is the durable app/runtime mode. It combines:
+
+- validation + bridge-state refresh
+- orchestrated handoff processing
+- bounded developer loop around `cursor-agent`
+- stale-turn tracking in app state
+
+Run it from `scripts/runtime`:
+
+```bash
+python3 -m shared_docs_foreman --app
+python3 -m shared_docs_foreman --app --watch --interval 15
+```
+
+**Safety (runaway prevention):**
+
+- **`FOREMAN_ALLOW_GUI_AUTOMATION=1`** is required for Cursor UI automation; default is off unless set.
+- **`FOREMAN_UI_CHAT_AUTOSEND=1`** is required to paste/send into chat; keep off unless you intend it.
+- **`/tmp/blackbox-foreman.kill`** — create this file to block all GUI automation (same as operator UI “Kill GUI Automation”).
+- With **`--app --watch`**, the CLI enforces a **minimum 15s** sleep between cycles so a LaunchAgent cannot hammer the desktop every few seconds.
+- Bridge JSON is written only when **semantic** bridge fields change (not every tick), and the orchestrator **does not** repeat failed stick transfers, handoff history lines, or `mirror_handoff` on every poll while stuck.
+
+Tuning flags:
+
+```bash
+python3 -m shared_docs_foreman --app --retry-after 180 --max-developer-attempts 3 --max-architect-attempts 2
+```
+
+State / logs:
+
+- `docs/working/foreman_app_state.json`
+- `docs/working/foreman_developer_loop_state.json`
+- `~/Library/Logs/blackbox/foreman-developer-loop.log`
+
+LaunchAgent source now targets `--app` so the background Foreman service runs the full app loop instead of only the bridge/orchestrator path.
+
+### Foreman app mode
+
+Foreman now also has an **app loop** that acts as the outer coordinator around the validator/orchestrator:
+
+- validates shared docs
+- updates bridge / talking-stick / queue state
+- detects stale turns
+- re-invokes the developer side when a developer-held turn has stalled
+- sends visible nudges into the Cursor thread when a turn is stale
+
+Run once:
+
+```bash
+cd scripts/runtime && python3 -m shared_docs_foreman --app
+```
+
+Run continuously:
+
+```bash
+cd scripts/runtime && python3 -m shared_docs_foreman --app --watch --interval 3
+```
+
+Useful knobs:
+
+```bash
+cd scripts/runtime && python3 -m shared_docs_foreman --app --watch --interval 3 --retry-after 180 --max-developer-attempts 3 --max-architect-attempts 2
+```
+
+App state is persisted in:
+
+- `docs/working/foreman_app_state.json`
 
 ## Cody — coordination: DATA alert → plan task (Phase 1.9)
 
@@ -297,6 +428,8 @@ python3 scripts/runtime/anna_proposal_builder.py "Test proposal" --store
 | Risk reasoning | `risk.py` | Risk level, factors, market_context numeric notes. |
 | Policy alignment | `policy.py` | Guardrail mode, alignment vs intent, paper-only suggested action. |
 | Analysis assembly | `analysis.py` | **`build_analysis`** / **`assemble_anna_analysis_v1`** → `anna_analysis_v1`. |
+| Context ledger (Phase 5.9) | `context_ledger_consumer.py` | Optional validated **`ContextBundle`** attach to `anna_analysis_v1` (`context_ledger` key when engaged). After validation, **`contextProfile`** from **`agents/agent_registry.json`** is enforced (CANONICAL #009 — `allowedContextClasses` vs record classes; fail closed). Optional **`build_analysis(..., context_profile_registry_path=…)`** for tests or alternate registry. CLI: **`anna_analyst_v1.py --context-bundle-path`** or env **`ANNA_CONTEXT_BUNDLE_PATH`**. Inert when unset. |
+| Online activation gate (Phase 5.9) | *(library)* [`modules/context_ledger/online_activation_evaluator.py`](../../modules/context_ledger/online_activation_evaluator.py) | CANONICAL #011 — read-only **`evaluate_online_activation()`** for §5.9.8 checklist gates; does not alter Anna runtime paths. |
 | Proposal shaping | `proposal.py` | **`build_anna_proposal`** / **`assemble_anna_proposal_v1`** → `anna_proposal_v1`. |
 | Shared utils | `util.py` | Schema versions, `utc_now`, float helpers. |
 
@@ -344,3 +477,45 @@ python3 scripts/runtime/concept_registry_reader.py --search liquidity
 ```
 
 Unknown `--concept` → `found: false` (no fabricated definitions). **No** `tasks` storage by default.
+
+## Hermes PM stack (operator goal — do this in order)
+
+**Goal:** Hermes as **PM voice** in Cursor + **repo** as the bus so **architect/Codex** can run governance.
+
+1. **LLM host (`172.20.2.230` or your host):** Enable API server env vars and run **`hermes gateway`** on port **8642** bound so the host can reach it. See **`scripts/runtime/hermes_gateway_llm_host.example.sh`**. On the host: `curl -sS http://127.0.0.1:8642/health` must return OK.
+2. **Mac:** `cp ops/hermes_pm.env.example ops/hermes_pm.env` — set **`HERMES_API_KEY`** to match **`API_SERVER_KEY`** on the server. Run **`./scripts/runtime/hermes_pm_stack.sh`** (starts SSH tunnel, checks health). Use **`status`** / **`stop`** as needed.
+3. **Cursor → Models:** Custom OpenAI-compatible — **Base URL** `http://127.0.0.1:8642/v1`, **API key** from `ops/hermes_pm.env`, **model** `hermes-agent`. **Select that model** in the chat where you want Hermes.
+4. **Cursor → MCP:** Keep **`hermes`** (tools) and **`pm`** (repo directive + **`pm_request_architect_governance`** ping) **green**.
+5. **Nudge architect/Codex:** Use **`pm_request_architect_governance`** or paste the handoff phrase per **`docs/architect/development_governance.md`**. Nothing auto-invokes Codex; **shared docs** are the contract.
+
+**Plain rule:** MCP **`hermes`** = tools. **Gateway + tunnel + custom model** = Hermes **in chat**. Both can be on at once.
+
+### Hermes agent in Cursor chat (OpenAI-compatible, not MCP)
+
+**MCP (`hermes mcp serve`) adds tools; it does not replace the model in the chat.** To get **Hermes’s personality and full agent** as the model answering in Cursor, use Hermes’s **HTTP API** (`hermes gateway`), which is **OpenAI-compatible**.
+
+Official docs: [Hermes API Server](https://hermes-agent.nousresearch.com/docs/user-guide/features/api-server).
+
+### On the LLM host
+
+1. Set `API_SERVER_ENABLED=true`, `API_SERVER_KEY` (long random secret), `API_SERVER_HOST=0.0.0.0`, `API_SERVER_PORT=8642` in the env Hermes reads (see Hermes docs; often a mounted `.env` under `/opt/data`).
+2. Run **`hermes gateway`** (not only `sleep` in the container). Publish **`127.0.0.1:8642`** to the host. Commented example: **`scripts/runtime/hermes_gateway_llm_host.example.sh`**.
+3. Verify: `curl -sS http://127.0.0.1:8642/health` on the host.
+
+### On your Mac (before using Cursor)
+
+Prefer **`./scripts/runtime/hermes_pm_stack.sh`** (tunnel + health check). Alternatively run **`scripts/runtime/hermes_cursor_tunnel_mac.sh`** and leave the terminal open — it forwards `localhost:8642` on the Mac to the remote gateway.
+
+### In Cursor
+
+**Settings → Models:** add a **custom / OpenAI-compatible** model:
+
+- **Base URL:** `http://127.0.0.1:8642/v1`
+- **API key:** same value as `API_SERVER_KEY`
+- **Model id:** `hermes-agent` (Hermes accepts this field; actual LLM is configured server-side)
+
+Select that model in the chat. **Security:** the tunnel + key mean only your machine with SSH access talks to Hermes; do not expose `0.0.0.0:8642` on the public internet without a VPN or stricter controls.
+
+### Governance ping (Codex / architect)
+
+The **`pm`** MCP server tool **`pm_request_architect_governance`** appends an operator line to **`docs/working/shared_coordination_log.md`** asking the architect to run Phase C validation. It does **not** invoke Codex automatically; it records the ask in shared docs per **`docs/architect/development_governance.md`**.

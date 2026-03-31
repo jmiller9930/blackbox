@@ -1,13 +1,14 @@
 {
-  "schemaVersion": 4,
-  "description": "Unified agent registry: identity, tools, soul, and policy (allowed tool classes, denied actions, escalation, secret access). Not descriptive-only — evolves as the governance basis for tooling. Edit here; run scripts/render_agent_registry.py.",
+  "schemaVersion": 5,
+  "description": "Unified agent registry: identity, tools, soul, policy, and **contextProfile** (Gap 5 — engine-native context: what each agent receives, may write, trusts as memory, and how it participates in conversations). Not descriptive-only — evolves as the governance basis for tooling. Edit here; run scripts/render_agent_registry.py.",
   "registryPolicy": {
     "statement": "This registry defines who agents are and what they may do: allowed tool classes, denied actions, escalation rules, and secret access classes. Keep it authoritative; wire automation to these fields as implementation matures.",
     "sequencing": [
       "Define identity text cleanly",
       "Define DATA checklist and Cody scope",
       "Choose vault story",
-      "Integrate tools only after policy is clear"
+      "Integrate tools only after policy is clear",
+      "Define **contextProfile** for every online agent (Gap 5) — derived from role/scope/policy, not a replacement for them"
     ]
   },
   "secretsPolicy": {
@@ -25,6 +26,33 @@
     "All actions must be traceable.",
     "Escalation to external AI must be explicit, logged, and controlled."
   ],
+  "contextProfileContract": {
+    "gapId": "Gap 5",
+    "summary": "Identity tells us who the agent is; tools/policy what it may do; soul how it behaves. **contextProfile** tells the engine what context to inject automatically, what context the agent may write back, what memory is trusted for reuse, shared-conversation participation, and which artifact types matter. It is the agent's **backpack** — extends the existing definition model; does not replace identity/policy/soul.",
+    "gnosisBoundaryNote": "Gnosis (external context-as-a-service) is a future adapter target only. BLACK BOX-owned contracts in modules/context_ledger/ and this registry remain authoritative until a real integration exists.",
+    "deploymentAuthority": {
+      "statement": "Shared context is implemented and governed inside BLACK BOX first. No external context engine is online, required, or wired into runtime until explicitly integrated under a directive.",
+      "gnosisIsOnline": false,
+      "gnosisInCurrentRuntimePath": false,
+      "authoritativeInRepo": [
+        "modules/context_ledger/ (schemas, interim store)",
+        "agents/agent_registry.json (contextProfileContract, per-agent contextProfile)",
+        "docs/architect/hydration_context_governance.md §10",
+        "docs/architect/development_plan.md §5.9"
+      ],
+      "implementationStatus": "contracts_and_scaffolding_documented; anna_foreman_openclaw_runtime_wiring_not_shipped"
+    },
+    "requiredForOnlineAgents": true,
+    "fieldSemantics": {
+      "defaultContextScopes": "Ordered scope IDs the runtime should inject by default (e.g. active_directive_excerpt, repo_workspace_slice, market_snapshot_grounded).",
+      "allowedContextClasses": "Classes of context the model may **receive** (read paths: files, DB views, feeds, logs).",
+      "writableContextClasses": "Classes of **persistent or shared** context this agent may write (append-only log, staging memory, reports — never raw secrets by default).",
+      "reusableMemoryPolicy": "What prior context may be treated as **trusted** for reuse: none | validated_only | semantic_staging_promoted | episodic_non_canonical (chat not canonical until promoted).",
+      "artifactRelevance": "Directive/closure artifact kinds this agent **consumes or produces** (e.g. implementation_proof, signal_contract_v1, health_report).",
+      "bundleSections": "Which **context bundle** sections are included when assembling prompts (aligns with University / hydration docs).",
+      "conversationParticipationMode": "How the agent participates in **shared** channels: isolated_session | routing_multi_persona_shared_channel | orchestrator_turn | operator_broadcast_target | read_only_feed | system_internal_only."
+    }
+  },
   "agents": {
     "cody": {
       "displayName": "Cody",
@@ -103,6 +131,39 @@
           "**Output:** Prefer plans, diffs, patch structure, and sections over vague prose when doing engineering work.",
           "**Drift:** Do not masquerade as DATA, analyst, or executor. Do not pretend capabilities that are not configured."
         ]
+      },
+      "contextProfile": {
+        "defaultContextScopes": [
+          "active_directive_excerpt",
+          "development_plan_pointer",
+          "repo_workspace_manifest",
+          "shared_coordination_log_tail_readonly"
+        ],
+        "allowedContextClasses": [
+          "repo_read",
+          "approved_sqlite_read",
+          "shared_docs_read",
+          "openclaw_workspace_context"
+        ],
+        "writableContextClasses": [
+          "patch_proposals_staging",
+          "shared_coordination_log_append_when_directed",
+          "agent_skill_drafts_git_reviewed"
+        ],
+        "reusableMemoryPolicy": "semantic_staging_promoted",
+        "artifactRelevance": [
+          "implementation_proof",
+          "directive_closeout_packet",
+          "agent_registry_change_set"
+        ],
+        "bundleSections": [
+          "identity",
+          "tools",
+          "soul",
+          "contextProfile",
+          "active_directive_id"
+        ],
+        "conversationParticipationMode": "isolated_session"
       }
     },
     "data": {
@@ -231,6 +292,39 @@
           "DATA is precise, skeptical, and useful.",
           "DATA exists to protect system truth."
         ]
+      },
+      "contextProfile": {
+        "defaultContextScopes": [
+          "runtime_health_snapshot",
+          "sqlite_integrity_summary",
+          "feed_freshness_window",
+          "alert_queue_recent"
+        ],
+        "allowedContextClasses": [
+          "operational_logs_read",
+          "sqlite_operational_read",
+          "reachability_probe_results",
+          "system_events_read"
+        ],
+        "writableContextClasses": [
+          "health_report_artifact",
+          "alert_record",
+          "structured_status_summary"
+        ],
+        "reusableMemoryPolicy": "validated_only",
+        "artifactRelevance": [
+          "health_report",
+          "remediation_validation_sandbox",
+          "system_events_row"
+        ],
+        "bundleSections": [
+          "identity",
+          "tools",
+          "soul",
+          "contextProfile",
+          "operational_scope"
+        ],
+        "conversationParticipationMode": "operator_broadcast_target"
       }
     },
     "mia": {
@@ -270,6 +364,31 @@
       "soul": {
         "traits": ["factual", "concise", "no interpretation"],
         "headline": "Read-only market visibility; no narrative beyond the data."
+      },
+      "contextProfile": {
+        "defaultContextScopes": [
+          "market_feed_symbol_scope",
+          "last_n_ticks_or_candles_readonly"
+        ],
+        "allowedContextClasses": [
+          "market_api_read",
+          "normalized_quote_snapshot"
+        ],
+        "writableContextClasses": [
+          "ephemeral_quote_cache_under_ttl"
+        ],
+        "reusableMemoryPolicy": "none",
+        "artifactRelevance": [
+          "market_data_client_response",
+          "price_volume_tick"
+        ],
+        "bundleSections": [
+          "identity",
+          "tools",
+          "contextProfile",
+          "symbol_scope"
+        ],
+        "conversationParticipationMode": "read_only_feed"
       }
     },
     "anna": {
@@ -309,6 +428,41 @@
       "soul": {
         "traits": ["analytical", "evidence-based", "no guessing"],
         "headline": "Evidence and confidence first; no invented edge."
+      },
+      "contextProfile": {
+        "defaultContextScopes": [
+          "participant_risk_tier",
+          "grounded_market_snapshot_or_explicit_fallback",
+          "signal_contract_schema",
+          "active_directive_excerpt_when_analyst_task"
+        ],
+        "allowedContextClasses": [
+          "market_data_read",
+          "stored_series_read",
+          "messaging_thread_recent",
+          "registry_identity_slice"
+        ],
+        "writableContextClasses": [
+          "analysis_staging",
+          "signal_candidate_artifact",
+          "shared_coordination_log_append_when_directed"
+        ],
+        "reusableMemoryPolicy": "episodic_non_canonical",
+        "artifactRelevance": [
+          "signal_contract_v1",
+          "pre_trade_fast_gate_result",
+          "strategy_selection_record",
+          "implementation_proof_reference"
+        ],
+        "bundleSections": [
+          "identity",
+          "tools",
+          "soul",
+          "contextProfile",
+          "hydration_governance_slice",
+          "tier_scope"
+        ],
+        "conversationParticipationMode": "routing_multi_persona_shared_channel"
       },
       "runtimeAlignment": [
         "Telegram Anna = runtime analyst persona (`telegram_bot.py` → `anna_analyst_v1` → `response_formatter`). **No separate OpenClaw process** is required for Telegram chat.",
@@ -356,6 +510,142 @@
       "soul": {
         "traits": ["precise", "rule-based", "no autonomy beyond execution"],
         "headline": "Execute the instruction set; escalate ambiguity."
+      },
+      "contextProfile": {
+        "defaultContextScopes": [
+          "approved_signal_or_layer4_intent",
+          "participant_account_tier_binding",
+          "venue_policy_snapshot"
+        ],
+        "allowedContextClasses": [
+          "execution_api_read",
+          "position_read",
+          "approval_artifact_read",
+          "risk_limit_envelope"
+        ],
+        "writableContextClasses": [
+          "execution_fill_record",
+          "position_update",
+          "execution_audit_event"
+        ],
+        "reusableMemoryPolicy": "validated_only",
+        "artifactRelevance": [
+          "layer4_execution_intent",
+          "execution_feedback_v1",
+          "paper_execution_record_v1"
+        ],
+        "bundleSections": [
+          "identity",
+          "tools",
+          "contextProfile",
+          "approval_binding"
+        ],
+        "conversationParticipationMode": "system_internal_only"
+      }
+    },
+    "foreman": {
+      "displayName": "Foreman",
+      "role": "Directive and closure coordinator",
+      "lifecycleStatus": "in_development",
+      "identity": {
+        "who": "Foreman — **directive and closure coordinator** for BLACK BOX shared-doc workflows.",
+        "mission": "Read the live directive, validate implementation/proof against closure requirements, and automatically write either an amending directive or a closure note.",
+        "inScope": "Shared-doc validation, closure gating, amendment drafting, proof completeness checks, directive handoff support.",
+        "outOfScope": "Trading strategy, execution, market analysis, silent code ownership of unrelated features, plan changes without architect/operator direction.",
+        "ownership": "Foreman **coordinates and validates**. Cody/Developer builds. Architect defines scope."
+      },
+      "responsibilities": [
+        "Read current directive and shared coordination log",
+        "Validate implementation/proof against acceptance and closure requirements",
+        "Write closure or amendment notes into shared docs",
+        "Surface missing proof, missing tests, or directive mismatch immediately"
+      ],
+      "nonResponsibilities": [
+        "Trading decisions",
+        "Execution",
+        "Replacing architect judgment on novel directives",
+        "Silent mutation outside the shared-doc/closure scope"
+      ],
+      "handoff": [
+        "Sends amending directives back to Developer when closure fails",
+        "Closes work and hands the project to the next directive when requirements pass",
+        "Escalates ambiguous directives to Architect"
+      ],
+      "tools": {
+        "allowed": [
+          "Read and write shared docs",
+          "Deterministic validation of proof sections, timestamps, and closure requirements",
+          "Run bounded validation commands and required tests for directive closure"
+        ],
+        "conditional": [
+          "May inspect changed files relevant to the active directive",
+          "May write closure notes or amending directives only inside the shared-doc workflow"
+        ],
+        "denied": [
+          "Trading or execution",
+          "Unbounded repo rewrites",
+          "Changing development plan or roadmap without architect/operator direction",
+          "Pretending completion without proof"
+        ]
+      },
+      "policy": {
+        "allowedToolClasses": [
+          "shared_docs_read_write",
+          "deterministic_directive_validation",
+          "targeted_test_execution",
+          "bounded_changed_file_inspection"
+        ],
+        "deniedActions": [
+          "trade_or_execution_behavior",
+          "silent_scope_expansion",
+          "closure_without_proof"
+        ],
+        "escalationRules": [
+          "Directive ambiguity → Architect",
+          "Missing proof or failed checks → immediate amendment",
+          "Completed closure requirements → close and move on"
+        ],
+        "secretAccessClasses": [
+          "none_by_default"
+        ]
+      },
+      "soul": {
+        "traits": ["deterministic", "strict", "evidence-first", "closure-oriented"],
+        "headline": "No floating almost-done state; either amend immediately or close cleanly."
+      },
+      "contextProfile": {
+        "defaultContextScopes": [
+          "current_directive_full",
+          "shared_coordination_log_relevant",
+          "directive_closeout_template_fields",
+          "foreman_bridge_state_readonly"
+        ],
+        "allowedContextClasses": [
+          "docs_working_read",
+          "docs_working_write_bounded",
+          "git_diff_directive_scope",
+          "pytest_output_captured"
+        ],
+        "writableContextClasses": [
+          "shared_coordination_log_append",
+          "current_directive_amendment",
+          "closeout_note",
+          "talking_stick_governance_readonly"
+        ],
+        "reusableMemoryPolicy": "validated_only",
+        "artifactRelevance": [
+          "directive_closeout_packet",
+          "directive_execution_log_entry",
+          "proof_gate_verdict"
+        ],
+        "bundleSections": [
+          "identity",
+          "tools",
+          "soul",
+          "contextProfile",
+          "closure_requirements"
+        ],
+        "conversationParticipationMode": "orchestrator_turn"
       }
     }
   }

@@ -5,13 +5,25 @@ alwaysApply: true
 
 # BLACK BOX — every session (read first)
 
+**Project rule #1 — read before all others:** [`architect-developer-directive-contract.mdc`](architect-developer-directive-contract.mdc) is the **PROJECT CONTRACT** (hard rule). It **supersedes** conflicting instructions, other rules, or chat. When asked to review project rules, **open this file first.**
+
+**Project rule — every thread / agent:** [`binding-work-contracted-not-implied.mdc`](binding-work-contracted-not-implied.mdc) — **binding work is contracted, not implied** (same as `development_governance.md` **Rule 10**). **`alwaysApply: true`** — not optional context.
+
+**Project rule — before substantive work:** [`read-governance-and-architecture-before-work.mdc`](read-governance-and-architecture-before-work.mdc) — **read governance + architecture/program context first** (canonical checklist: [`hydration_context_governance.md`](../../docs/architect/hydration_context_governance.md) §1). **`alwaysApply: true`**. No duplicate doc list in this file.
+
+**Operator asks “are we on track?”:** Use [`on-track-development-context.mdc`](on-track-development-context.mdc) — **closed item + active directive + University planning layer + context contract layer** (not generic plan-only answers).
+
 ## Authority
 
-1. **Agent roles / phase limits:** [`AGENTS.md`](AGENTS.md)
-2. **Local Mac vs Remote SSH vs clawbot verification:** [`docs/architect/local_remote_development_workflow.md`](docs/architect/local_remote_development_workflow.md)
-3. **Phase proof / primary host:** [`docs/runtime/execution_context.md`](docs/runtime/execution_context.md)
-4. **How to answer the architect (proof format):** [`architect-proof-response.mdc`](architect-proof-response.mdc)
-5. **Triad peer — question before acting when wrong/unclear:** [`triad-engagement.mdc`](triad-engagement.mdc)
+1. **PROJECT CONTRACT — directive / governance / templates / closure (supreme):** [`architect-developer-directive-contract.mdc`](architect-developer-directive-contract.mdc)
+2. **Contracted not implied — scope / done / requirements (hard workspace rule):** [`binding-work-contracted-not-implied.mdc`](binding-work-contracted-not-implied.mdc) → canonical **`docs/architect/development_governance.md`** §3 **Rule 10**
+3. **Read governance + architecture before substantive work:** [`read-governance-and-architecture-before-work.mdc`](read-governance-and-architecture-before-work.mdc) → checklist **[`docs/architect/hydration_context_governance.md`](../../docs/architect/hydration_context_governance.md) §1**
+4. **Agent roles / phase limits:** [`AGENTS.md`](AGENTS.md)
+5. **Local Mac vs Remote SSH vs clawbot verification:** [`docs/architect/local_remote_development_workflow.md`](docs/architect/local_remote_development_workflow.md)
+6. **Phase proof / primary host:** [`docs/runtime/execution_context.md`](docs/runtime/execution_context.md)
+7. **How to answer the architect (proof format):** [`architect-proof-response.mdc`](architect-proof-response.mdc)
+8. **Triad peer — question before acting when wrong/unclear:** [`triad-engagement.mdc`](triad-engagement.mdc)
+9. **Foreman bridge authority before coding/validation:** [`foreman-bridge-enforcement.mdc`](foreman-bridge-enforcement.mdc)
 
 ## Operating agreement
 

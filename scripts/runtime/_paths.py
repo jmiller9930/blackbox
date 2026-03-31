@@ -14,3 +14,11 @@ def default_sqlite_path() -> Path:
     if env:
         return Path(env).expanduser()
     return repo_root() / "data" / "sqlite" / "blackbox.db"
+
+
+def default_market_data_path() -> Path:
+    """Canonical Phase 5.1 market-data SQLite (separate from sandbox / blackbox.db)."""
+    env = os.environ.get("BLACKBOX_MARKET_DATA_PATH")
+    if env:
+        return Path(env).expanduser()
+    return repo_root() / "data" / "sqlite" / "market_data.db"

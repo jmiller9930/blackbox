@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Render agents/<id>/IDENTITY.md, TOOLS.md, SOUL.md and docs/architect/agent_registry.md from agents/agent_registry.json."""
+"""Render agents/<id>/IDENTITY.md, TOOLS.md, SOUL.md, CONTEXT_PROFILE.md and docs/architect/AGENT_REGISTRY.md from agents/agent_registry.json."""
 
 from __future__ import annotations
 
@@ -91,7 +91,56 @@ def render_identity(agent_id: str, block: dict) -> str:
         ticked = ", ".join(f"`{x}`" for x in see)
         lines.append("")
         lines.append(f"See also: {ticked}.")
+    if block.get("contextProfile"):
+        lines.append("")
+        lines.append("**Context profile (Gap 5):** see `CONTEXT_PROFILE.md` — engine-native context contract (inject / write / memory / artifacts / conversation mode).")
     return "\n".join(lines) + "\n"
+
+
+def render_context_profile(agent_id: str, block: dict) -> str:
+    """Gap 5 — engine-native context contract (backpack), distinct from identity/policy/soul."""
+    name = block.get("displayName", agent_id)
+    cp = block.get("contextProfile")
+    lines = [
+        f"# CONTEXT_PROFILE — {name}",
+        "",
+        GENERATED,
+        "",
+        "Defines what context the **runtime injects**, what this agent may **write back**, **trusted memory** reuse, **artifact** relevance, and **conversation** participation. See `contextProfileContract` in `agents/agent_registry.json`.",
+        "",
+    ]
+    if not cp:
+        lines.append("_(No `contextProfile` block — required for Gap 5 closure for online agents.)_")
+        lines.append("")
+        return "\n".join(lines)
+
+    def bullets(title: str, key: str) -> None:
+        val = cp.get(key)
+        lines.append(f"## {title}")
+        lines.append("")
+        if isinstance(val, list) and val:
+            for item in val:
+                lines.append(f"- {item}")
+        elif isinstance(val, str) and val:
+            lines.append(f"- {val}")
+        else:
+            lines.append("- _(none)_")
+        lines.append("")
+
+    bullets("defaultContextScopes", "defaultContextScopes")
+    bullets("allowedContextClasses", "allowedContextClasses")
+    bullets("writableContextClasses", "writableContextClasses")
+    lines.append("## reusableMemoryPolicy")
+    lines.append("")
+    lines.append(f"- `{cp.get('reusableMemoryPolicy', '')}`")
+    lines.append("")
+    bullets("artifactRelevance", "artifactRelevance")
+    bullets("bundleSections", "bundleSections")
+    lines.append("## conversationParticipationMode")
+    lines.append("")
+    lines.append(f"- `{cp.get('conversationParticipationMode', '')}`")
+    lines.append("")
+    return "\n".join(lines)
 
 
 def render_tools(agent_id: str, block: dict) -> str:
@@ -231,22 +280,65 @@ def render_overview(raw: dict) -> str:
         "",
         "## Purpose",
         "",
-        "Single source of truth for all agents: identity, tools, soul, responsibilities, handoffs, and **policy** (tool classes, denials, escalation, secret access).",
+        "Single source of truth for all agents: identity, tools, soul, responsibilities, handoffs, **policy**, and **contextProfile** (Gap 5 — engine-native context).",
         "Canonical data lives in **`agents/agent_registry.json`**; this file is **generated** for reading — edit the JSON, then run `python3 scripts/render_agent_registry.py`.",
         "",
-        "## Architecture (three layers)",
+    ]
+    cpc = raw.get("contextProfileContract") or {}
+    if cpc.get("summary"):
+        lines.extend(
+            [
+                "## Gap 5 — context profile contract",
+                "",
+                cpc["summary"],
+                "",
+            ]
+        )
+        gnx = cpc.get("gnosisBoundaryNote")
+        if gnx:
+            lines.append(f"**Gnosis (external):** {gnx}")
+            lines.append("")
+        dep = cpc.get("deploymentAuthority")
+        if isinstance(dep, dict) and dep.get("statement"):
+            lines.append("**Deployment authority:**")
+            lines.append("")
+            lines.append(dep["statement"])
+            lines.append("")
+            if dep.get("gnosisIsOnline") is False:
+                lines.append("- **Gnosis online / in runtime path:** no (contracted).")
+                lines.append("")
+            auth = dep.get("authoritativeInRepo")
+            if isinstance(auth, list) and auth:
+                lines.append("**Authoritative in repo:**")
+                lines.append("")
+                for a in auth:
+                    lines.append(f"- {a}")
+                lines.append("")
+            st = dep.get("implementationStatus")
+            if st:
+                lines.append(f"**Implementation status:** {st}")
+                lines.append("")
+        fs = cpc.get("fieldSemantics") or {}
+        if fs:
+            lines.append("**Field semantics** (see JSON for full list): " + ", ".join(f"`{k}`" for k in fs.keys()) + ".")
+            lines.append("")
+    lines.extend(
+        [
+        "## Architecture (four layers)",
         "",
         "| Layer | Answers | Rendered file |",
         "|--------|---------|----------------|",
         "| Identity | Who, mission, scope, ownership, operational ownership | `IDENTITY.md` |",
         "| Tools | Allowed / conditional / denied + **policy** sections | `TOOLS.md` |",
         "| Soul | Voice, traits, behavior under uncertainty | `SOUL.md` |",
+        "| **Context profile (Gap 5)** | What context the engine **injects**, what the agent may **write**, **trusted memory**, **artifacts**, **conversation mode** | `CONTEXT_PROFILE.md` |",
         "",
         "Keep **JSON compact** (lists and short strings). **Prose-heavy** behavior lives in generated per-agent Markdown, not duplicated as long strings in the registry.",
         "",
         "## Registry as policy (not descriptive-only)",
         "",
-    ]
+        ]
+    )
     rp = raw.get("registryPolicy") or {}
     if rp.get("statement"):
         lines.append(rp["statement"])
@@ -275,8 +367,8 @@ def render_overview(raw: dict) -> str:
         "## Performance",
         "",
         "- **One file to parse** at build or sync time; no scattered prose sources to drift.",
-        "- **Compact fields** in JSON; long-form `SOUL.md` / `IDENTITY.md` per agent are **rendered** for OpenClaw workspaces, not duplicated by hand.",
-        "- **Token discipline:** inject the three workspace files for **one** agent at a time; the overview is for humans and cross-agent review, not a second prompt dump.",
+        "- **Compact fields** in JSON; long-form `IDENTITY.md` / `TOOLS.md` / `SOUL.md` / `CONTEXT_PROFILE.md` per agent are **rendered** for OpenClaw workspaces, not duplicated by hand.",
+        "- **Token discipline:** inject the four workspace files for **one** agent at a time when the runtime implements full Gap 5 bundling; the overview is for humans and cross-agent review, not a second prompt dump.",
         "",
         "## Governance",
         "",
@@ -330,6 +422,8 @@ def render_overview(raw: dict) -> str:
         pol = block.get("policy") or {}
         if any(pol.get(k) for k in ("allowedToolClasses", "deniedActions", "escalationRules", "secretAccessClasses")):
             lines.append("- **Policy (summary):** see per-agent `TOOLS.md` — allowed tool classes, denied actions, escalation, secret access classes.")
+        if block.get("contextProfile"):
+            lines.append("- **Context profile (Gap 5):** see per-agent `CONTEXT_PROFILE.md` — inject/write/memory/artifacts/conversation mode.")
         lines.append("")
     lines.extend(
         [
@@ -353,12 +447,13 @@ def main() -> int:
         (dest / "IDENTITY.md").write_text(render_identity(agent_id, block), encoding="utf-8")
         (dest / "TOOLS.md").write_text(render_tools(agent_id, block), encoding="utf-8")
         (dest / "SOUL.md").write_text(render_soul(agent_id, block), encoding="utf-8")
+        (dest / "CONTEXT_PROFILE.md").write_text(render_context_profile(agent_id, block), encoding="utf-8")
 
     OVERVIEW.parent.mkdir(parents=True, exist_ok=True)
     OVERVIEW.write_text(render_overview(raw), encoding="utf-8")
 
     print(
-        f"Rendered IDENTITY/TOOLS/SOUL for {len(agents)} agent(s); wrote {OVERVIEW}",
+        f"Rendered IDENTITY/TOOLS/SOUL/CONTEXT_PROFILE for {len(agents)} agent(s); wrote {OVERVIEW}",
         file=sys.stderr,
     )
     return 0

@@ -24,3 +24,5 @@
 - OpenClaw / `agents/anna/` = identity and tooling alignment; complements but does not replace the Telegram pipeline.
 - Persona tags `[Anna]` / `[DATA]` / `[Cody]` are mandatory in message bodies; Telegram’s sender name is the bot account (BotFather), not the speaker.
 - SQLite `agents.id`: `anna` = Anna, `data` = DATA, `main` = Cody (legacy id), `mia` = Mia (inactive). Anna stored tasks use `agent_id = "anna"`.
+
+**Context profile (Gap 5):** see `CONTEXT_PROFILE.md` — engine-native context contract (inject / write / memory / artifacts / conversation mode).

@@ -32,6 +32,8 @@ Build an intelligent trading assistant platform that:
 
 Long-term intent includes intelligence that improves through action feedback, but only within controlled, human-governed phase boundaries.
 
+**Project governance declaration:** BLACK BOX treats **agent training**—especially developing **Anna** as a **strategist** and **analyst**—as **core product intent**, not an optional experiment. Execution authority, risk-tier selection, and live venue access remain **human-governed** and **directive-governed**. Canonical wording and boundaries: [`development_governance.md`](development_governance.md) — *Project declaration — agent training (analyst and strategist)*.
+
 ---
 
 ## What The System Is Today (Implemented)
@@ -105,6 +107,8 @@ Trading intent is central, but execution autonomy remains gated by phase governa
 ## Canonical Governance Sources
 
 For authoritative interpretation, use:
+- `docs/architect/development_governance.md` (workflow + **project declaration** on agent training)
+- `docs/architect/blackbox_university.md` (University platform standard; **Karpathy-aligned** autonomous research + curriculum + live data ingestion for **all** enrolled agents)
 - `docs/blackbox_master_plan.md` (canonical roadmap + implemented status)
 - `docs/runtime/execution_context.md` (runtime/proof context)
 - `docs/architect/global_clawbot_proof_standard.md` (closure proof standard)

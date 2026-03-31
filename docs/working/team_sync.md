@@ -1,33 +1,33 @@
 # Team sync
 
-**Last updated:** 2026-03-26 21:10 CDT — **Foreman:** Phase 5.3b proof present; architect turn
+**Last updated:** 2026-03-31 16:36  — **Foreman:** visible team sync updated
 
 ## Queue
 
-- `directive`: PHASE 5.3B — STORED-DATA BACKTEST / SIMULATION LOOP
+- `directive`: CANONICAL #041 - Pillar 1 Intake-Cycle Refresh and Publication-Readiness Gate (Architect)
 - `directive_state`: `active`
-- `current_result`: `awaiting architect validation`
-- `loop_state`: `architect_review`
+- `current_result`: `sync_conflict`
+- `loop_state`: `sync_conflict`
 - `loop_count`: `1`
 - `loop_type`: `primary`
 - `retry_reason`: `n/a`
 - `next_retry_at`: `n/a`
-- `proof_status`: `present`
-- `sync_status`: `in_sync`
-- `generation`: `2026-03-26 21:10 CDT|PHASE 5.3B — STORED-DATA BACKTEST / SIMULATION LOOP|architect_action_required|architect|have the architect validate shared-docs`
-- `talking_stick_holder`: `architect`
-- `next_actor`: `architect`
-- `required_phrase`: `have the architect validate shared-docs`
-- `last_mirror`: `Developer recorded proof; architect validates Phase 5.3b.`
-- `team_state`: `in sync`
+- `proof_status`: `missing`
+- `sync_status`: `conflict`
+- `generation`: `CANONICAL #041 - Pillar 1 Intake-Cycle Refresh and Publication-Readiness Gate (Architect)|Active - architect-owned intake-cycle refresh and publication-readiness slice.|developer_action_required|developer|have cursor validate shared-docs|missing|False`
+- `talking_stick_holder`: `none`
+- `next_actor`: `developer`
+- `required_phrase`: `have cursor validate shared-docs`
+- `last_mirror`: `Stick transfer still blocked; not repeating handoff, history, or UI.`
+- `team_state`: `conflict`
 
 ## Architect perspective
 
-Architect holds the talking stick. Validate Phase 5.3b using `docs/working/shared_coordination_log.md` (§ Phase 5.3b implementation proof) and pytest evidence.
+Foreman detected a state conflict. Do not act until the canonical runtime state is reconciled.
 
 ## Developer perspective
 
-Developer completed proof pass (2026-03-26 21:10 CDT): `python3 -m pytest tests/test_backtest_simulation_phase5_3b.py` → `7 passed`; `python3 -m pytest tests/` → `358 passed` (tests at `2df072d66185d1ed48aff39acff1f9aecc3be119`); proof commit `0314308c24ab80a719562bf45d07e2b5ffb445f0`; `current_directive.md` cleaned (pasted block before `## Title`).
+Foreman detected a state conflict. Do not act until the canonical runtime state is reconciled.
 
 ## Findings
 
@@ -35,8 +35,21 @@ Developer completed proof pass (2026-03-26 21:10 CDT): `python3 -m pytest tests/
 
 ## Runtime status
 
-`bridge_status`: `architect_action_required`; `proof_status`: `present`.
+Stick transfer still blocked; not repeating handoff, history, or UI.
+
+## Operator view
+
+- `visibility_status`: Workflow conflict. Resolve canonical state before trusting visibility.
+- `operator_note`: Use the working docs and runtime state only after the conflict is reconciled.
+- `watch_files`:
+  - `docs/working/current_directive.md`
+  - `docs/working/developer_handoff.md`
+  - `docs/working/talking_stick.json`
+  - `docs/working/shared_coordination_log.md`
+  - `docs/working/foreman_bridge.json`
+  - `docs/working/foreman_runtime_state.json`
 
 ## What happens next
 
-Architect reviews shared docs and either accepts Phase 5.3b or returns amendments.
+Foreman paused orchestration because the derived state files disagreed.
+Resolve the conflict or allow Foreman to rewrite the derived views from canonical runtime state.

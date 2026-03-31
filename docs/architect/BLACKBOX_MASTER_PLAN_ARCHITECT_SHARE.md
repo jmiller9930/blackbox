@@ -791,11 +791,27 @@ Phase 4 **does not** automatically mean:
 
 ## Phase 5 — Core Trading Engine
 
-> **Next active build phase (not implemented in tree at roadmap insert).** Enables **one** real agent path (**Anna + Billy**) to execute trades **end-to-end** using **live market data** and **controlled execution** (Layers **1–4** unchanged in canonical master plan). Detailed tasks: [`development_plan.md`](development_plan.md).
+> **Next active build phase (not implemented in tree at roadmap insert).** Enables the first real **Anna + Billy** trading path to execute trades **end-to-end** using **live market data** and **controlled execution** (Layers **1–4** unchanged in canonical master plan), while establishing the canonical **multi-participant** architecture for additional humans and constrained bot participants. Detailed tasks: [`development_plan.md`](development_plan.md).
+
+> **Core Principle — Perpetual, Risk-Tiered Winning (Anna):** Anna is a perpetual, self-improving competitor whose “win” is **repeatable, risk-controlled PnL within an authorized risk tier**. Risk tier is set by operators (CEO/human), never by Anna; Anna adapts inside that tier, but cannot bypass hard limits (stale/divergence blocks, size/drawdown caps, approvals, kill switch). Strategies are promoted/demoted by rolling, risk-adjusted performance; execution remains separated (Billy) and policy-gated.
+> **Self-development & Emergent Behavior:** Anna is expected to self-improve without human prompts: she can schedule backtests, parameter sweeps, and paper drills, and generate/retire strategies autonomously. Exploration is **bounded**: no raising risk limits, no bypassing approvals/guardrails, and no execution without policy gates. Emergent behaviors are acceptable only when they increase safe, repeatable wins.
+> **Advanced methods (bleeding-edge, bounded by guardrails):** Fast EV gate with capped Kelly sizing; conformal prediction for calibrated uncertainty/abstain; distributional RL with CVaR objective (tail-aware); realistic LOB simulator for offline training; adversarial/hostile guard (fail closed on divergence/staleness/hostile book). “Skip” is a rewarded action when uncertainty or EV is poor.
 
 ### Purpose
 
 Deliver the **data → strategy → approval → execution** spine in production shape: ingest, store, signal, bind to Layer **3** approval, execute via Layer **4** intent and **Billy** (edge execution), with risk controls and observability.
+
+### 5.0 Multi-participant + risk tier interaction model
+
+- **Participants:** BLACK BOX must support multiple human participants (Sean plus future operators/users) and future bot participants. Anna is **not** a single-user analyst surface.
+- **Identity model:** every interaction and every trade artifact must resolve **participant identity**, **participant type** (human / bot), **account / wallet context**, **selected risk tier**, and **interaction path**.
+- **Wallet / account association:** each participant operates inside their own documented account / wallet context, aligned with the Phase **4.2** entity model. Shared or pooled accounts require explicit human governance and role mapping.
+- **Risk tier ownership:** Anna does **not** assign or escalate risk tiers. A human selects the risk tier, and that choice defines the strategy space, behavioral boundaries, and allowable exposure.
+- **Canonical tiers:** Tier **1** = low risk (conservative exposure, slower cadence, tighter constraints, capital preservation + consistent gain). Tier **2** = medium risk (moderate exposure, balanced cadence, controlled expansion, disciplined growth). Tier **3** = high risk (higher exposure, faster cadence, wider exploration inside bounds, aggressive but controlled edge extraction).
+- **Shared psychology across tiers:** Anna remains relentless, learning, and competitive in every tier; only the amount of room she is allowed to operate in changes.
+- **Interaction scoping:** before Anna responds or emits a signal, the system must identify the participant, wallet/account context, and chosen risk tier. Output is scoped to that participant and logged for audit.
+- **Bot participants:** future bots may request a strategy, signal stream, or tier-scoped output, but they are treated as constrained participants. Bots cannot override tiers, escalate risk, or bypass approvals.
+- **Implementation note:** the first working slice may start with one human participant in practice, but the contracts, storage, and approvals must be multi-participant and tier-aware from day one.
 
 ### 5.1 Market data ingestion
 
@@ -808,18 +824,26 @@ Deliver the **data → strategy → approval → execution** spine in production
 
 - **Production database** (non-sandbox).
 - **Queryable** time-series / snapshots.
+- **Participant-aware consumers:** strategy readers and audit views must resolve which participant/account/tier is consuming a signal even if market data itself is shared.
 
 ### 5.3 Strategy engine
 
 - **Initial deterministic strategy** (single symbol / universe).
 - **Signal generation** + **confidence**.
 - **Backtest / simulation loop** using **stored** data.
+- **Adaptive loop:** maintain a portfolio of strategies; score by risk-adjusted PnL, rule adherence, and consistency; promote/demote based on rolling windows.
+- **Self-directed learning:** allow Anna to launch sanctioned experiments (paper/backtest/parameter sweeps) on her own schedule, auto-retire underperformers, and propose new configs—without raising risk or changing guardrails.
+- **Pre-trade fast gate (live path):** closed-form EV after fees/slippage + risk penalty; conformal interval check; capped Kelly/half-Kelly sizing; “skip” rewarded; hard fail on stale/divergence/guardrails.
+- **Split-second “brain” sim:** before any live intent, run the fast EV/uncertainty/sizing check as a micro pre-trade simulation; reject or downgrade trades whose probable outcome is negative or too uncertain.
+- **Offline training (paper/sim path):** distributional RL with CVaR objective trained against recorded ticks and a realistic LOB simulator; only promoted to paper/live if risk-adjusted performance and guardrail adherence meet thresholds.
+- **Tier alignment:** strategies adapt **within** the selected risk tier; Anna must not mix behaviors across tiers or expand beyond the participant’s authorized envelope.
 
 ### 5.4 Signal → approval binding
 
 - **Candidate trade artifact**.
 - **Size / risk / expiry**.
 - **Routed through Layer 3 approval** (no execution without approval).
+- **Scope fields required:** participant id, participant type, account/wallet context, selected risk tier, and strategy profile must be present on the signal/candidate artifact before approval.
 
 ### 5.5 Execution adapter
 
@@ -827,10 +851,12 @@ Deliver the **data → strategy → approval → execution** spine in production
 - **Paper / sandbox mode** → **small-size live**.
 - **Consumes Layer 4 execution intent** (per [`layer_4_execution_interface_design.md`](layer_4_execution_interface_design.md)).
 - **Integrates with Billy** (edge execution).
+- **Context enforcement:** execution resolves the approved participant account/wallet context and risk tier; Billy cannot substitute wallets, merge participant scopes, or expand tier limits.
 
 ### 5.6 Risk & controls
 
 - **Per-trade** and **per-account** limits.
+- **Per-participant** and **per-tier** limits.
 - **Approval expiry** enforcement.
 - **Global kill switch**.
 - **Position / PnL** tracking.
@@ -840,13 +866,16 @@ Deliver the **data → strategy → approval → execution** spine in production
 - **Metrics** (data feed, signals, approvals, executions).
 - **Logs** and **failure** tracking.
 - **Runbooks** (halt / rollback / revoke).
+- **Auditability:** all outputs and executions must remain attributable to participant, wallet/account context, and selected risk tier.
 
 ### First approved slice (paper-first, narrow scope)
 
 > **Status:** Build path **approved** for first end-to-end loop (paper-first). **Scope is narrow:** one **SOL** strategy, **Pyth** feed, **Coinbase** adapter, single approved trade loop with stored outcome. No multi-asset, no ML, no scale-out in this slice.
 
 - **Separation:** **Anna = strategy only** (signals; **no** execution). **Billy = execution only** (approved intents; **no** signal invention). **No** fused signal+execution in this path.
-- **Contracts to lock before coding:** strategy (signal) contract for SOL; execution intent (`approval_id`, `intent_id`, `context_hash`, order params, idempotency) **only** after L3; outcome record (`intent_id`, `execution_id`, outcome, fills, fees, timestamps, `failure_class`) **durable**.
+- **Perpetual winner discipline:** Anna’s objective combines PnL with strict penalties for stale/divergent data, guardrail breaches, hallucination/unsupported claims, and drawdown/size violations. Success is measured over rolling windows; advancement (size/frequency) is conditional on repeatable wins inside the selected tier; any breach forces demotion/pause.
+- **Multi-participant contract rule:** the first paper loop may be operated by one human in practice, but signal, approval, execution intent, and outcome contracts must still carry participant/account/tier fields from day one. Human selects the tier; Anna never does.
+- **Contracts to lock before coding:** strategy (signal) contract for SOL; execution intent (`approval_id`, `intent_id`, `context_hash`, order params, idempotency, participant scope, risk tier) **only** after L3; outcome record (`intent_id`, `execution_id`, outcome, fills, fees, timestamps, `failure_class`, participant scope) **durable**.
 - **Data guards:** Pyth **freshness**; **divergence** vs Coinbase before signal (**fail closed**).
 - **Layer 4:** Section **13** safety (grant, audit-before-effect, entry point, context hash, kill/abort); **hard fail** when guards fail.
 - **Build order:** (1) Pyth ingestion SOL → (2) normalized store → (3) deterministic strategy → signal contract → (4) L3 approval binding → (5) execution intent contract → (6) Billy + Coinbase sandbox → (7) outcome storage. **Goal:** one approved signal → one paper trade → verified outcome → stored.

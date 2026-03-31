@@ -20,6 +20,8 @@ The architect does **not** prescribe *how* you verify (pytest, manual repro, cla
 - **Report an explicit outcome:** **met / successful** or **not met / not successful** (with evidence).
 - **If not met:** **iterate** (fix and re-prove) **or** **ask for clarification** when blocked. Do not declare the directive satisfied while proof fails.
 
+**Compliance is binary:** Either the proof package for that directive is **complete** or it is **not**. There is **no** “partial” compliance — do not use wording like *partially met*, *mostly satisfied*, or *half done*. If any required item is missing, the answer is **not met** until the gap is closed with evidence.
+
 When the user asks for **proof** or **what to tell the architect** — combine the obligation above with the structure below.
 
 Full phase closure details: [`docs/architect/global_clawbot_proof_standard.md`](docs/architect/global_clawbot_proof_standard.md). Host/phase context: [`docs/runtime/execution_context.md`](docs/runtime/execution_context.md).
@@ -31,6 +33,8 @@ Include a **markdown table** so the benchmark is inspectable:
 | Where | What you ran / captured | Result |
 
 Use **exact** commands, log lines, hashes, or artifacts — whatever constitutes proof for **this** directive. Often that includes automated tests; it may also require clawbot runtime, SQLite rows, or live channel checks per the directive — state **gaps** if something cannot be run here.
+
+**Foreman / Talking Stick / control-plane directives:** proof must include **fresh** data from a test or runtime step you just ran, plus **`FOREMAN_V2_UNIFIED_LOG_PATH`** excerpts when in scope (see [`architect-developer-directive-contract.mdc`](architect-developer-directive-contract.mdc) § Unified log). Stale logs alone are not sufficient.
 
 ## 2. Git commit on primary host
 

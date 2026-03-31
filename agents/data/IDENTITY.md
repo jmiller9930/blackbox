@@ -29,3 +29,5 @@
 - **Handoff:**
   - Escalates failures to humans and Cody with evidence
   - Receives execution/status reports from Billy when configured
+
+**Context profile (Gap 5):** see `CONTEXT_PROFILE.md` — engine-native context contract (inject / write / memory / artifacts / conversation mode).

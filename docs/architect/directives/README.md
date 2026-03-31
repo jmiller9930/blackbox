@@ -4,11 +4,11 @@
 
 **Canonical templates (mandatory for new work):**
 - **Full directive:** [`DIRECTIVE_TEMPLATE.md`](DIRECTIVE_TEMPLATE.md) — copy scaffold for every new `directive_<id>_<short_title>.md`.
-- **Closeout / gate / proof summary only:** [`CLOSEOUT_PACKET_TEMPLATE.md`](CLOSEOUT_PACKET_TEMPLATE.md) — mandatory plan/log sync, checklist, `Plan/log status sync: PASS`, and mismatch failure rule.
+- **Closeout / gate / proof summary only:** [`CLOSEOUT_PACKET_TEMPLATE.md`](CLOSEOUT_PACKET_TEMPLATE.md) — mandatory plan/log sync, **Git commit + remote sync** (for implementation closes), checklist, `Plan/log status sync: PASS`, and mismatch failure rule.
 
 Add new directives here as **`directive_<id>_<short_title>.md`** and a row in the table below.
 
-**Documentation / status synchronization (mandatory):** A directive, twig, sub-step, or closure is not complete unless `docs/blackbox_master_plan.md` and `directive_execution_log.md` are updated in the **same change set** with **matching granularity** (see **Documentation / Status Synchronization** in [`DIRECTIVE_TEMPLATE.md`](DIRECTIVE_TEMPLATE.md)). Closeouts must include `Plan/log status sync: PASS`. If mismatch is found after return, work is incomplete; fix docs before starting the next directive or phase.
+**Documentation / status synchronization (mandatory):** A directive, twig, sub-step, or closure is not complete unless `docs/blackbox_master_plan.md` and `directive_execution_log.md` are updated in the **same change set** with **matching granularity** (see **Documentation / Status Synchronization** in [`DIRECTIVE_TEMPLATE.md`](DIRECTIVE_TEMPLATE.md)). Closeouts must include `Plan/log status sync: PASS`. **Implementation** closeouts must also record **Git commit and remote sync** (commit SHA, push to `origin`, primary-host SHA when required) per [`CLOSEOUT_PACKET_TEMPLATE.md`](CLOSEOUT_PACKET_TEMPLATE.md). If mismatch is found after return, work is incomplete; fix docs before starting the next directive or phase.
 
 ---
 
@@ -39,4 +39,4 @@ Add new directives here as **`directive_<id>_<short_title>.md`** and a row in th
 1. Copy [`DIRECTIVE_TEMPLATE.md`](DIRECTIVE_TEMPLATE.md) to `directive_<phase_or_id>_<slug>.md` and fill in scope, proof, and evidence; keep all **(Mandatory)** sections.
 2. Add a row to the **Index** table.
 3. In the **same change set**, update [`../../blackbox_master_plan.md`](../../blackbox_master_plan.md) and [`directive_execution_log.md`](directive_execution_log.md) to matching status granularity.
-4. Closeout / return must include `Plan/log status sync: PASS`.
+4. Closeout / return must include `Plan/log status sync: PASS` and **Git commit and remote sync** when the work changed the canonical repo (see template).

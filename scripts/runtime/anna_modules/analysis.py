@@ -7,9 +7,11 @@ from __future__ import annotations
 
 import os
 import sqlite3
+from pathlib import Path
 from typing import Any
 
 from anna_modules.concept_retrieval import retrieve_concept_support
+from anna_modules.context_ledger_consumer import resolve_context_bundle_attachment
 from anna_modules.context_requirements import assess_context_completeness
 from anna_modules.human_intent import build_factual_reply, classify_human_intent
 from anna_modules.input_adapter import normalize_trader_text
@@ -31,6 +33,23 @@ def _use_llm_default() -> bool:
     return os.environ.get("ANNA_USE_LLM", "1").strip().lower() not in ("0", "false", "no")
 
 
+def _attach_context_ledger(
+    out: dict[str, Any],
+    ledger_attachment: dict[str, Any] | None,
+) -> dict[str, Any]:
+    """Attach Phase 5.9 context-ledger consumption summary; keep legacy output when not engaged."""
+    if ledger_attachment is None:
+        return out
+    merged = dict(out)
+    merged["context_ledger"] = ledger_attachment
+    if ledger_attachment.get("consumption") == "rejected":
+        reason = ledger_attachment.get("reason") or "unknown"
+        notes = list(merged.get("notes") or [])
+        notes.append(f"Context ledger bundle not usable: {reason}")
+        merged["notes"] = notes
+    return merged
+
+
 def build_analysis(
     input_text: str,
     *,
@@ -48,20 +67,39 @@ def build_analysis(
     use_policy: bool,
     conn: sqlite3.Connection | None = None,
     use_llm: bool | None = None,
+    market_data_tick: dict[str, Any] | None = None,
+    market_data_err: str | None = None,
+    context_bundle_json: str | None = None,
+    context_bundle_path: Path | None = None,
+    context_profile_agent_id: str = "anna",
+    context_profile_registry_path: Path | None = None,
 ) -> dict[str, Any]:
+    ledger_attachment = resolve_context_bundle_attachment(
+        bundle_json=context_bundle_json,
+        bundle_path=context_bundle_path,
+        agent_id=context_profile_agent_id,
+        registry_path=context_profile_registry_path,
+    )
+
     input_text = normalize_trader_text(input_text)
     human_intent = classify_human_intent(input_text)
     if human_intent.get("bypass") == "datetime":
         reply = build_factual_reply(input_text)
         if reply:
-            return _build_factual_datetime_analysis(input_text, human_intent, reply)
+            return _attach_context_ledger(
+                _build_factual_datetime_analysis(input_text, human_intent, reply),
+                ledger_attachment,
+            )
 
     if use_llm is None:
         use_llm = _use_llm_default()
 
     ctx_assess = assess_context_completeness(input_text)
     if not ctx_assess.get("is_complete"):
-        return _build_clarification_analysis(input_text, human_intent, ctx_assess)
+        return _attach_context_ledger(
+            _build_clarification_analysis(input_text, human_intent, ctx_assess),
+            ledger_attachment,
+        )
 
     notes: list[str] = []
     if use_snapshot and market_err:
@@ -163,6 +201,26 @@ def build_analysis(
         "rule_facts": rule_facts.get("structured") or {},
     }
 
+    phase5_market: dict[str, Any] | None = None
+    if market_data_tick is not None:
+        phase5_market = {
+            "source": "phase5_market_data_db",
+            "tick": market_data_tick,
+            "gate_state": market_data_tick.get("gate_state"),
+        }
+        gate_st = market_data_tick.get("gate_state", "unknown")
+        if gate_st == "blocked":
+            notes.append(
+                "Phase 5.1 market data tick is present but gate_state=blocked; "
+                "treat price as unverified."
+            )
+        elif gate_st == "degraded":
+            notes.append(
+                "Phase 5.1 market data tick gate_state=degraded; use with caution."
+            )
+    elif market_data_err and market_data_err != "feature_disabled":
+        notes.append(f"Phase 5.1 market data unavailable: {market_data_err}")
+
     out: dict[str, Any] = {
         "kind": "anna_analysis_v1",
         "schema_version": SCHEMA_VERSION,
@@ -174,6 +232,7 @@ def build_analysis(
             "spread": spread,
             "notes": m_notes,
         },
+        "phase5_market_data": phase5_market,
         "risk_assessment": {
             "level": risk_level,
             "factors": factors[:12],
@@ -209,7 +268,7 @@ def build_analysis(
     if memory_id:
         out["pipeline"]["stored_memory_id"] = memory_id
 
-    return out
+    return _attach_context_ledger(out, ledger_attachment)
 
 
 def _build_steps(

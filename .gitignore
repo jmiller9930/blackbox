@@ -19,6 +19,9 @@ data/logs/*.log
 config/messaging_config.json
 config/messaging_config.local.json
 
+# Hermes PM local env (copy from ops/hermes_pm.env.example)
+ops/hermes_pm.env
+
 # Local secrets (never commit)
 .env.local
 .env.*.local
@@ -28,8 +31,14 @@ config/messaging_config.local.json
 .DS_Store
 **/.DS_Store
 
+# Foreman per-cycle JSONL (append-only; can grow large)
+docs/working/foreman_v2_cycle_log.jsonl
+
 # Local Codex / agent exports (not canonical repo content)
 .codex/
 
 # Optional local clones of third-party reference repos
 external/
+
+# Optional governance signal bus (local tail / operator; archive separately if needed)
+.governance/bus.log

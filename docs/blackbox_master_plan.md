@@ -1041,6 +1041,42 @@ Normative three-layer model for Phase **5** (full table: [`docs/architect/develo
 - **Gnosis (external):** Possible future **context-as-a-service** provider — **not** a dependency for delivery until integrated. Implement **baked, contracted** context in BLACK BOX first; add a **Gnosis adapter** later that maps to the same contracts.
 - **Consumers:** Core infra → **Anna** (first) → future agents → **University** → optional **Gnosis**. Gap analysis and open items: [`docs/architect/hydration_context_governance.md`](architect/hydration_context_governance.md) §10; tasks: [`development_plan.md`](architect/development_plan.md) §5.9.
 - **CANONICAL #005 status:** **Closed (2026-03-30)** — Sentinel relay daemon (`scripts/runtime/sentinel_relay.py`) and tests (`tests/test_sentinel_relay.py`) implemented to automate governance bus turn dispatch (hash gate before dispatch, one-at-a-time, strike escalation model routing, timeout/crash recovery).
+- **CANONICAL #006 status:** **Closed (2026-03-30)** — startup reconciliation hardening completed: startup INFO is lane-safe (empty `next_actor`), replay offset preserves unread bus lines across downtime/restart, and synthetic startup/replay coverage is validated in `tests/test_sentinel_relay.py` (architect rerun: `14 passed`).
+- **CANONICAL #007 status:** **Closed (2026-03-30)** — context-bundle contract v1 is now locked in `modules/context_ledger/` (`bundle_contract_version`, `validation_state`, contract validators, reject semantics, and README contract table) with architect rerun `tests/test_context_ledger.py tests/test_ledger_storage.py` (`12 passed`).
+- **CANONICAL #008 status:** **Closed (2026-03-30)** — Anna first-consumer ledger wiring is integrated additively (`context_ledger_consumer.py`, `analysis.py`, `anna_analyst_v1.py`) with architect reruns `13 passed` + `23 passed`; legacy Anna behavior remains unchanged when bundle input is not engaged.
+- **CANONICAL #009 status:** **Closed (2026-03-30)** — runtime `contextProfile` enforcement is integrated for the Anna ledger-consumer path with fail-closed policy handling and architect reruns (`24 passed`, `23 passed`), plus Sentinel architect-suite hygiene rerun (`14 passed`).
+- **CANONICAL #010 status:** **Closed (2026-03-30)** — architect-owned online activation checklist + proof-hook contract lock is now canonical with explicit fail-closed gate semantics (`ACT-REG-001`, `ACT-RT-002`, `ACT-MSG-003`, `ACT-PROOF-004`) and operator-visible reason fields.
+- **CANONICAL #011 status:** **Closed (2026-03-30)** — deterministic online-activation evaluator + proof-hook validator is implemented in `modules/context_ledger/online_activation_evaluator.py` with architect-verified pass/fail coverage (`8 passed`, `17 passed`) and fail-closed gate semantics.
+- **CANONICAL #012 status:** **Closed (2026-03-30)** — architect-owned Foreman/orchestration context-packet contract lock is now canonical: required packet identity/scope/evidence fields, lane-authority + directive-hash freshness rules, and deterministic proof hooks are defined in governed docs with runtime changes deferred.
+- **CANONICAL #013 status:** **Closed (2026-03-30)** — context-packet validator + lane-safe routing gate implementation is delivered in `modules/context_ledger/context_packet_validator.py` and `scripts/runtime/foreman_v2/context_packet_gate.py`, with architect reruns (`10 passed`, `17 passed`, `6 passed`) confirming fail-closed hash/lane/freshness/consumer enforcement.
+- **CANONICAL #014 status:** **Closed (2026-03-31)** — architect-owned Gnosis compatibility boundary contract lock is now canonical: BLACK BOX engine-native context contracts remain source-of-truth, adapter states fail closed (`adapter_unavailable`, `adapter_unhealthy`, `adapter_contract_mismatch`), and future adapter proofs must be deterministic and replayable.
+- **CANONICAL #015 status:** **Closed (2026-03-31)** — architect-owned relay session-rollover policy contract lock is now canonical: new `DIRECTIVE` resets both session IDs, `NACK` retries stay warm inside directive scope, strike-3 escalation clears only developer session context, and startup/tail-only paths do not independently clear session IDs.
+- **CANONICAL #016 status:** **Closed (2026-03-31)** — relay runtime/tests are aligned to #015 session-rollover policy (`DIRECTIVE` resets both chat IDs, `NACK` retries stay warm, strike-3 escalation clears developer chat only, strike-4 stops dispatch to operator lane); architect validation rerun: `python3 -m pytest tests/test_sentinel_relay.py -q` -> `17 passed`.
+- **CANONICAL #017 status:** **Closed (2026-03-31)** — architect-owned Phase 5.0 participant identity + risk-tier contract lock is now canonical across signal/candidate/approval/intent/outcome surfaces with fail-closed and authority-boundary rules.
+- **CANONICAL #018 status:** **Closed (2026-03-31)** — architect-owned Phase 5.0 artifact-contract lock for `SignalArtifactV1`, `ExecutionIntentV1`, and `ExecutionOutcomeV1` is synchronized with deterministic linkage/replay and fail-closed validation rules.
+- **CANONICAL #019 status:** **Closed (2026-03-31)** — runtime artifact models/validators are implemented in `modules/execution_artifacts/` with architect rerun `python3 -m pytest tests/test_execution_artifacts.py -q` -> **13 passed**.
+- **CANONICAL #020 status:** **Closed (2026-03-31)** — architect-owned Phase 5.1 market-data ingestion contract lock is now canonical (`MarketSnapshotV1` required fields, source authority rules, fail-closed reason-code matrix, and implementation proof hooks).
+- **CANONICAL #021 status:** **Closed (2026-03-31)** — runtime market-ingestion validators are implemented in `modules/market_snapshot/` with architect reruns `python3 -m pytest tests/test_market_snapshot_v1.py -q` -> **16 passed** and cross-suite `python3 -m pytest tests/test_execution_artifacts.py tests/test_market_data_phase5.py tests/test_market_snapshot_v1.py -q` -> **36 passed**.
+- **CANONICAL #022 status:** **Closed (2026-03-31)** — architect-owned Phase 5.2 market-data store contract lock is now canonical (durable row schema, idempotent write semantics, deterministic query/read contract, fail-closed reason matrix, and proof hooks).
+- **CANONICAL #023 status:** **Closed (2026-03-31)** — developer-owned Phase 5.2 runtime store implementation is architect-validated (`tests/test_market_snapshot_store_v1.py` **18 passed**; cross-suite **66 passed**) with deterministic write/query fail-closed coverage aligned to #022.
+- **CANONICAL #024 status:** **Closed (2026-03-31)** — architect-owned Phase 5.5 execution-adapter runtime contract lock is synchronized (request/outcome tables, deterministic pre-submit gates, fail-closed reason matrix, and proof hooks).
+- **CANONICAL #025 status:** **Closed (2026-03-31)** — developer-owned Phase 5.5 runtime implementation is architect-validated (`tests/test_execution_adapter.py` **16 passed**; cross-suite `tests/test_execution_artifacts.py tests/test_execution_adapter.py tests/test_sentinel_relay.py` **46 passed**) with deterministic fail-closed request/outcome gating and replay coverage aligned to #024.
+- **CANONICAL #026 status:** **Closed (2026-03-31)** — architect-owned Phase 5.6 risk/controls runtime contract lock is synchronized with deterministic limits, approval-expiry, kill-switch, and position/PnL contract boundaries plus fail-closed reason/proof matrix.
+- **CANONICAL #027 status:** **Closed (2026-03-31)** — developer-owned Phase 5.6 runtime implementation slice is architect-validated (`tests/test_risk_controls_runtime.py` **26 passed**) with deterministic fail-closed enforcement across `RSK-REQ-001` ... `RSK-REPLAY-007`.
+- **CANONICAL #028 status:** **Closed (2026-03-31)** — architect-owned Phase 5.7 observability/operations runtime contract lock is synchronized (deterministic observability contract tables, fail-closed reason matrix, and replay-proof hooks).
+- **CANONICAL #029 status:** **Closed (2026-03-31)** — developer-owned Phase 5.7 runtime implementation slice is architect-validated (`tests/test_observability_runtime.py` **17 passed**) with deterministic fail-closed observability validation and replay coverage aligned to #028.
+- **CANONICAL #030 status:** **Closed (2026-03-31)** — architect-owned Pillar 1 first approved paper-loop integration contract lock is synchronized, including canonical linkage tables, fail-closed reason matrix (`LOOP-LINK-001` ... `LOOP-REPLAY-008`), and implementation proof hooks.
+- **CANONICAL #031 status:** **Closed (2026-03-31)** — developer implementation slice for deterministic first paper-loop runtime integration is architect-validated (`tests/test_paper_loop_integration.py` **10 passed**; cross-suite `tests/test_execution_adapter.py tests/test_paper_loop_integration.py tests/test_sentinel_relay.py` **43 passed**) with replay proof command output `True out-1`.
+- **CANONICAL #032 status:** **Closed (2026-03-31)** — developer durable outcome-store implementation is architect-validated (`tests/test_paper_loop_integration.py tests/test_paper_loop_outcome_store.py` **17 passed**; cross-suite `tests/test_execution_adapter.py tests/test_paper_loop_integration.py tests/test_paper_loop_outcome_store.py tests/test_sentinel_relay.py` **50 passed**) with persisted stop-condition replay output `True 1 True`.
+- **CANONICAL #033 status:** **Closed (2026-03-31)** — developer implementation slice for Billy + Coinbase sandbox adapter integration is architect-validated (`tests/test_billy_coinbase_sandbox.py` + dependent suites, **60 passed**) with deterministic stop-condition replay output `True 1 True`.
+- **CANONICAL #034 status:** **Closed (2026-03-31)** — architect-owned post-first-slice transition gate reconciled the first-slice completion chain and confirmed Pillar 1 lock posture remains active pending explicit lock-removal governance.
+- **CANONICAL #035 status:** **Closed (2026-03-31)** — architect-owned Pillar 1 exit-readiness contract lock is synchronized with explicit pass/fail gate IDs (`P1-EXIT-001` ... `P1-EXIT-004`), lock-lift prerequisites (`LOCK-LIFT-001` ... `LOCK-LIFT-004`), and contracted lane map boundaries.
+- **CANONICAL #036 status:** **Closed (2026-03-31)** — architect-owned lock-lift decision-packet contract is synchronized with deterministic decision-packet schema, publication gates, lane-release rules, and hash-pinned proof hooks.
+- **CANONICAL #037 status:** **Closed (2026-03-31)** — architect-owned lock-state publication slice published a canonical `retain` decision packet with explicit publication-gate verdicts and fail-closed lane outcome.
+- **CANONICAL #038 status:** **Closed (2026-03-31)** — architect-owned lock-retained continuity slice published explicit retained-lock boundaries, lane-hold rules, and lock-lift evidence-package prerequisites under fail-closed governance.
+- **CANONICAL #039 status:** **Closed (2026-03-31)** — architect-owned retained-lock continuity enforcement slice is synchronized with deterministic `INTAKE-*` contract checks and fail-closed intake verdict classes while preserving architect lane ownership.
+- **CANONICAL #040 status:** **Closed (2026-03-31)** — architect-owned operator-authority intake reconciliation completed with deterministic per-check outcomes and canonical intake verdict `closed_without_completion` for replay-unsafe/stale hash evidence.
+- **CANONICAL #041 status:** **Active (2026-03-31)** — architect-owned intake-cycle refresh and publication-readiness gate is active; Pillar 1 lock remains in force and beyond-Pillar publication remains blocked unless fresh, hash-aligned intake evidence is reconciled under governed contracts.
 
 ### 5.0 Multi-participant + risk tier interaction model
 
@@ -1055,18 +1091,107 @@ Normative three-layer model for Phase **5** (full table: [`docs/architect/develo
 - **Bot participants:** future bots may request a strategy, signal stream, or tier-scoped output, but they are treated as constrained participants. Bots cannot override tiers, escalate risk, or bypass approvals.
 - **Implementation note:** the first working slice may start with one human participant in practice, but the contracts, storage, and approvals must be multi-participant and tier-aware from day one.
 
+#### CANONICAL #017 contract lock (closed)
+
+**Required participant scope fields (all in-scope artifacts):** `participant_id`, `participant_type`, `account_id`, `wallet_context`, `risk_tier`, `interaction_path`.
+
+| Artifact surface | Required participant scope handling |
+|------------------|-------------------------------------|
+| Signal output | Must include all six scope fields; missing/ambiguous scope is invalid. |
+| Candidate-trade | Must preserve signal scope exactly; any scope drift is invalid. |
+| Approval artifact | Must bind to one deterministic participant scope; mixed scope is invalid. |
+| Execution intent | Must carry approval-bound scope exactly; missing scope blocks adapter entry. |
+| Outcome/audit artifact | Must retain originating participant scope for replay/audit; missing scope is invalid. |
+
+**Fail-closed rule:** missing, unknown, ambiguous, or mismatched participant/account/tier/interaction scope invalidates the artifact chain and blocks lane progression.
+
+**Authority boundary:** only human/operator paths may assign or change `risk_tier`; Anna, Billy, and future bots may consume scope but may not assign, escalate, substitute, or merge tier/account scope.
+
+#### CANONICAL #018 contract lock (closed)
+
+| Contract | Required references and integrity fields | Canonical rule |
+|----------|------------------------------------------|----------------|
+| `SignalArtifactV1` | `signal_id`, `candidate_id`, participant scope fields from #017, strategy fields, confidence fields, `context_hash`, `trace_id`, `generated_at_utc` | Signal artifact is invalid if required fields are missing, ambiguous, or non-deterministic for replay. |
+| `ExecutionIntentV1` | `intent_id`, `approval_id`, `candidate_id`, `signal_id`, participant scope carry-forward, idempotency key, `context_hash`, order fields, intent timestamps, `trace_id` | Intent artifact must bind to one approved candidate and preserve participant scope exactly. |
+| `ExecutionOutcomeV1` | `outcome_id`, `intent_id`, `execution_id`, upstream references (`approval_id`, `candidate_id`, `signal_id`), participant scope carry-forward, fill/fee/outcome fields, audit timestamps, `trace_id` | Outcome artifact must preserve complete lineage and participant scope for audit/replay. |
+
+**Chain-integrity lock:** progression is valid only for deterministic linkage `signal_id` -> `candidate_id` -> `approval_id` -> `intent_id` -> `execution_id` -> `outcome_id`. Any missing, mismatched, or synthetic link is invalid.
+
+**Fail-closed lock (reason-coded):**
+
+- `ART-REQ-001` missing required fields.
+- `ART-SCOPE-002` ambiguous/missing participant scope.
+- `ART-LINK-003` chain-link mismatch.
+- `ART-HASH-004` `context_hash` mismatch/absence when required.
+- `ART-IDEMP-005` idempotency conflict.
+- `ART-TIME-006` invalid timestamp ordering for deterministic replay.
+
+All failures above block artifact progression; no silent defaults or coercion are authorized.
+
 ### 5.1 Market data ingestion
 
-- **Primary feed** (e.g. Pyth).
-- **Fallback** (e.g. Coinbase REST).
-- **Normalization** → canonical snapshot schema.
-- **Health checks** + **gap detection**.
+- **Primary feed** (e.g. Pyth) with deterministic authority-first policy.
+- **Fallback** (e.g. Coinbase REST) allowed only under explicit failover conditions.
+- **Normalization** locked via canonical `MarketSnapshotV1` contract.
+- **Health checks** + **gap detection** with fail-closed rejection behavior.
+- **CANONICAL #020 (closed):** architect contract lock for deterministic market-ingestion language.
+- **CANONICAL #021 (closed):** runtime implementation of the locked market-ingestion validation contract is complete and architect-validated.
+
+#### CANONICAL #020 contract lock (closed)
+
+**`MarketSnapshotV1` required fields (locked):** `snapshot_id`, `symbol`, `source`, `source_name`, `event_time_utc`, `observed_at_utc`, `bid`, `ask`, `last`, `mid`, `spread_bps`, `freshness_ms`, `sequence_id`, `trace_id`.
+
+**Source-authority rules (locked):**
+
+- `MKT-SRC-001` primary-first authority when healthy/fresh.
+- `MKT-SRC-002` fallback allowed only when primary is unavailable/unhealthy/stale.
+- `MKT-SRC-003` fallback activation must be explicit and reason-coded (no silent swap).
+- `MKT-SRC-004` divergence above threshold fails closed.
+- `MKT-SRC-005` if both paths fail policy, ingestion fails closed.
+
+**Fail-closed reason codes (locked):**
+
+- `MKT-REQ-001` required-field missing.
+- `MKT-NORM-002` normalization/parsing failure.
+- `MKT-FRESH-003` freshness-window violation.
+- `MKT-GAP-004` sequence gap/regression.
+- `MKT-DIV-005` source divergence violation.
+- `MKT-SRC-006` unauthorized source/fallback path.
+- `MKT-TIME-007` invalid timestamp ordering.
+
+**Implementation proof hooks (locked):** `MKT-PROOF-001` (unit coverage for rule IDs), `MKT-PROOF-002` (deterministic replay), `MKT-PROOF-003` (shared-log replay evidence for architect validation).
 
 ### 5.2 Market data store
 
 - **Production database** (non-sandbox).
 - **Queryable** time-series / snapshots.
 - **Participant-aware consumers:** strategy readers and audit views must resolve which participant/account/tier is consuming a signal even if market data itself is shared.
+- **CANONICAL #022 (closed):** architect contract lock for deterministic `MarketSnapshotStoreRowV1` schema/write/query semantics before runtime implementation.
+- **CANONICAL #023 (closed):** developer runtime implementation of #022 store writer/query contract is complete and architect-validated.
+
+#### CANONICAL #022 contract lock (closed)
+
+**`MarketSnapshotStoreRowV1` required fields (locked):** `snapshot_id`, `symbol`, `source`, `source_name`, `event_time_utc`, `observed_at_utc`, `sequence_id`, `bid`, `ask`, `last`, `mid`, `spread_bps`, `freshness_ms`, `trace_id`, `persisted_at_utc`.
+
+**Key/index constraints (locked):**
+
+- Primary key: `snapshot_id`.
+- Unique sequence key: `(symbol, source_name, sequence_id)`.
+- Deterministic read-order index: `(symbol, event_time_utc, sequence_id, snapshot_id)`.
+- Source-filter index: `(symbol, source, event_time_utc)`.
+- Replay lookup index: `trace_id`.
+
+**Write/query fail-closed reason codes (locked):**
+
+- `MKS-REQ-001` missing required store-row fields.
+- `MKS-IDEMP-002` conflicting duplicate write for canonical key.
+- `MKS-ORDER-003` sequence/timestamp ordering regression.
+- `MKS-WRITE-004` persistence constraint/write failure.
+- `MKS-QUERY-005` invalid/ambiguous query filters or window.
+- `MKS-SCOPE-006` missing participant-scoped consumption metadata on consumer read path.
+- `MKS-REPLAY-007` non-deterministic ordering/cursor replay drift.
+
+**Proof hooks (locked):** `MKS-PROOF-001` (write-path unit coverage), `MKS-PROOF-002` (deterministic query replay), `MKS-PROOF-003` (shared-log replay evidence for architect validation).
 
 ### 5.3 Strategy engine
 
@@ -1095,6 +1220,8 @@ Normative three-layer model for Phase **5** (full table: [`docs/architect/develo
 - **Consumes Layer 4 execution intent** (per [`layer_4_execution_interface_design.md`](architect/layer_4_execution_interface_design.md)).
 - **Integrates with Billy** (edge execution).
 - **Context enforcement:** execution resolves the approved participant account/wallet context and risk tier; Billy cannot substitute wallets, merge participant scopes, or expand tier limits.
+- **CANONICAL #024 (closed):** architect contract-lock slice now defines canonical request/outcome tables, deterministic pre-submit gates (`EXA-GATE-001` ... `EXA-GATE-005`), fail-closed reason codes (`EXA-REQ-001` ... `EXA-REPLAY-008`), and proof hooks (`EXA-PROOF-001` ... `EXA-PROOF-004`).
+- **CANONICAL #025 (closed):** developer runtime implementation slice for #024 contract enforcement in paper/sandbox mode is implemented and architect-validated (request/outcome validators, gate enforcement, idempotency/venue-failure handling, replay-stability tests).
 
 ### 5.6 Risk & controls
 
@@ -1103,6 +1230,8 @@ Normative three-layer model for Phase **5** (full table: [`docs/architect/develo
 - **Approval expiry** enforcement.
 - **Global kill switch**.
 - **Position / PnL** tracking.
+- **CANONICAL #026 (closed):** architect contract-lock slice now defines deterministic risk/controls runtime boundaries (limits, approval-expiry, kill-switch, position/PnL contracts), fail-closed reason codes, and proof hooks.
+- **CANONICAL #027 (closed):** developer implementation slice now applies #026 contracts in runtime validators/gates and is architect-validated.
 
 ### 5.7 Observability & operations
 
@@ -1110,6 +1239,20 @@ Normative three-layer model for Phase **5** (full table: [`docs/architect/develo
 - **Logs** and **failure** tracking.
 - **Runbooks** (halt / rollback / revoke).
 - **Auditability:** all outputs and executions must remain attributable to participant, wallet/account context, and selected risk tier.
+- **CANONICAL #028 (closed):** architect contract-lock slice now defines deterministic observability event contracts, failure-taxonomy boundaries, runbook authority records, participant-scoped audit attribution, fail-closed reason codes (`OBS-REQ-001` ... `OBS-REPLAY-007`), and proof hooks (`OBS-PROOF-001` ... `OBS-PROOF-004`).
+- **CANONICAL #029 (closed):** developer implementation slice for runtime observability/operations contract enforcement from #028 is architect-accepted and synchronized.
+- **CANONICAL #030 (closed):** architect contract-lock slice now canonically defines first approved paper-loop integration linkage contracts, fail-closed boundaries, and proof hooks for runtime implementation.
+- **CANONICAL #031 (closed):** developer implementation slice for first approved paper-loop runtime integration is architect-accepted.
+- **CANONICAL #032 (closed):** developer implementation slice for durable first paper-loop outcome-store integration and replay-safe persisted readback is architect-accepted.
+- **CANONICAL #033 (closed):** developer implementation slice for Billy + Coinbase sandbox adapter integration is architect-accepted with deterministic stop-condition replay proof.
+- **CANONICAL #034 (closed):** architect-owned post-first-slice transition gate completed Pillar 1 completion reconciliation and contracted the next governance slice.
+- **CANONICAL #035 (closed):** architect-owned Pillar 1 exit-readiness contract lock formalized pass/fail gate contracts, lock-lift prerequisites, and explicit next-directive lane ownership boundaries.
+- **CANONICAL #036 (closed):** architect-owned lock-lift decision-packet contract now locks deterministic decision-packet schema, publication gates, and lane-release semantics.
+- **CANONICAL #037 (closed):** architect-owned publication slice published canonical lock-state packet `LDP-2026-03-31-RET-001` with `lock_state=retain` and fail-closed publication-gate verdicts.
+- **CANONICAL #038 (closed):** architect-owned continuity slice locked retained-scope boundaries, deterministic lane ownership, and required lock-lift evidence package for future publication attempts.
+- **CANONICAL #039 (closed):** architect-owned continuity enforcement slice finalized deterministic intake contracts (`INTAKE-AUTH-001` ... `INTAKE-FRESH-004`) and fail-closed verdict classes without releasing lane ownership.
+- **CANONICAL #040 (closed):** architect-owned intake reconciliation slice evaluated available intake evidence against `INTAKE-*` checks and closed the cycle with canonical verdict `closed_without_completion` due stale hash/freshness mismatch for a new publication event.
+- **CANONICAL #041 (active):** architect-owned intake-cycle refresh slice requires fresh authority evidence, active-hash alignment, and replay-safe completeness before any future lock-state publication review can proceed.
 
 ### 5.8 University / learning system
 
@@ -1131,7 +1274,7 @@ Normative three-layer model for Phase **5** (full table: [`docs/architect/develo
 
 ### First approved slice (paper-first, narrow scope)
 
-> **Status:** Build path **approved** for first end-to-end loop (paper-first). **Scope is narrow:** one **SOL** strategy, **Pyth** feed, **Coinbase** adapter, single approved trade loop with stored outcome. No multi-asset, no ML, no scale-out in this slice.
+> **Status:** First end-to-end loop stop condition is **met** (paper-first, narrow scope): one **SOL** strategy, **Pyth** feed, **Coinbase** adapter, single approved trade loop with stored outcome. No multi-asset, no ML, no scale-out in this slice. **CANONICAL #030** contract lock is closed, **CANONICAL #031** runtime integration is closed, **CANONICAL #032** durable outcome-store integration is closed, and **CANONICAL #033** Billy + Coinbase sandbox adapter integration is closed. **CANONICAL #034**, **#035**, **#036**, **#037**, **#038**, **#039**, and **#040** are closed; **CANONICAL #041** is active as the architect-owned intake-cycle refresh directive.
 
 - **Separation:** **Anna = strategy only** (signals; **no** execution). **Billy = execution only** (approved intents; **no** signal invention). **No** fused signal+execution in this path.
 - **Perpetual winner discipline:** Anna’s objective combines PnL with strict penalties for stale/divergent data, guardrail breaches, hallucination/unsupported claims, and drawdown/size violations. Success is measured over rolling windows; advancement (size/frequency) is conditional on safe, repeatable wins; any breach forces demotion/pause.
