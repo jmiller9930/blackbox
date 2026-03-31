@@ -110,6 +110,31 @@
   }
 
   /**
+   * Consumer portal: `consumer_user` always; `internal_admin` only with
+   * `?preview=1` so operators can validate external UI without logging out.
+   * @param {{ loginHref?: string }} [opts]
+   */
+  function protectConsumerPortal(opts) {
+    var loginHref = (opts && opts.loginHref) || "login.html";
+    var s = getSession();
+    if (!s) {
+      window.location.href = loginHref;
+      return false;
+    }
+    if (s.role === "consumer_user") return true;
+    if (s.role === "internal_admin") {
+      try {
+        var q = new URLSearchParams(window.location.search);
+        if (q.get("preview") === "1") return true;
+      } catch (e) {}
+      window.location.href = portalPathForRole(s.role);
+      return false;
+    }
+    window.location.href = loginHref;
+    return false;
+  }
+
+  /**
    * Engine `/api/v1/` paths for self-service and admin (implement on server).
    * Client sends JSON; server enforces hashing, tokens, rate limits, audit.
    */
@@ -282,6 +307,7 @@
     portalPathForRole: portalPathForRole,
     protectPage: protectPage,
     protectAuthenticated: protectAuthenticated,
+    protectConsumerPortal: protectConsumerPortal,
     ACCOUNT_API: ACCOUNT_API,
     account: accountApiClient(),
     api: createApiClient(),

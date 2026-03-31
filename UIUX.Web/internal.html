@@ -23,6 +23,18 @@
         </div>
         <nav class="portal-nav" aria-label="Portal navigation">
           <span class="portal-nav__user" id="portal-user" aria-live="polite"></span>
+          <a
+            class="button button--secondary portal-nav__external"
+            href="./consumer.html?preview=1"
+            title="Open the consumer portal layout in preview (same session, internal role)"
+            >External</a
+          >
+          <a
+            class="button button--secondary portal-nav__admin-users"
+            href="./internal-users.html"
+            title="User directory and invites (admin)"
+            >Admin users</a
+          >
           <a class="button button--ghost" href="./account-settings.html">My account</a>
           <button type="button" class="button button--ghost" id="btn-logout">
             Sign out
@@ -48,8 +60,10 @@
               >
             </li>
             <li>
-              <a class="sidebar-list__link" href="./internal-users.html"
-                >Users (admin)</a
+              <a
+                class="sidebar-list__link sidebar-list__link--admin"
+                href="./internal-users.html"
+                >Admin users</a
               >
             </li>
             <li><a class="sidebar-list__link" href="#panel-anna">Anna</a></li>

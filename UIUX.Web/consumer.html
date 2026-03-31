@@ -30,6 +30,16 @@
         </nav>
       </header>
 
+      <div
+        class="portal-preview-banner"
+        id="portal-preview-banner"
+        hidden
+        role="status"
+      >
+        <strong>External UI preview</strong> — signed in as internal operator.
+        <a class="portal-preview-banner__link" href="./internal.html">Back to operator portal</a>
+      </div>
+
       <main class="portal-main portal-main--narrow">
         <h1 class="portal-title">Your account</h1>
         <p class="portal-lede">
@@ -70,14 +80,21 @@
     <script src="./app.js"></script>
     <script>
       document.addEventListener("DOMContentLoaded", function () {
-        if (
-          !window.BlackboxPortal.protectPage({ requiredRole: "consumer_user" })
-        ) {
+        if (!window.BlackboxPortal.protectConsumerPortal()) {
           return;
         }
         var root = document.getElementById("portal-root");
         root.hidden = false;
         var s = window.BlackboxPortal.getSession();
+        var preview = false;
+        try {
+          preview =
+            new URLSearchParams(window.location.search).get("preview") === "1";
+        } catch (e) {}
+        if (s.role === "internal_admin" && preview) {
+          var ban = document.getElementById("portal-preview-banner");
+          if (ban) ban.hidden = false;
+        }
         document.getElementById("portal-user").textContent =
           "Signed in as " + s.username + " (" + s.role + ")";
         document.getElementById("btn-logout").addEventListener("click", function () {

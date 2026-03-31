@@ -92,9 +92,29 @@ def test_internal_protects_internal_admin() -> None:
     assert "panel-training" in text
 
 
+def test_internal_header_links_external_preview_and_admin_users() -> None:
+    """Top nav must expose consumer preview and admin user directory (not only sidebar)."""
+    text = (WEB / "internal.html").read_text(encoding="utf-8")
+    assert 'href="./consumer.html?preview=1"' in text
+    assert "portal-nav__external" in text
+    assert ">External</a" in text or ">External</a>" in text.replace("\n", "")
+    assert 'href="./internal-users.html"' in text
+    assert "portal-nav__admin-users" in text
+    assert "Admin users" in text
+
+
+def test_consumer_allows_internal_preview_gate_in_app_js() -> None:
+    text = (WEB / "app.js").read_text(encoding="utf-8")
+    assert "protectConsumerPortal" in text
+    assert 'q.get("preview") === "1"' in text
+    assert "internal_admin" in text
+
+
 def test_consumer_protects_consumer_user() -> None:
+    """Consumer layout is gated by protectConsumerPortal (consumer_user or internal preview)."""
     text = (WEB / "consumer.html").read_text(encoding="utf-8")
-    assert 'requiredRole: "consumer_user"' in text
+    assert "protectConsumerPortal" in text
+    assert "portal-preview-banner" in text
 
 
 def test_app_js_exports_portal_api() -> None:
@@ -102,6 +122,7 @@ def test_app_js_exports_portal_api() -> None:
     assert "BlackboxPortal" in text
     assert "connectEventSource" in text
     assert "/api/v1" in text
+    assert "protectConsumerPortal: protectConsumerPortal" in text
 
 
 def test_app_js_account_self_service_api_paths() -> None:
