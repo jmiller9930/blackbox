@@ -1,0 +1,22 @@
+---
+description: After UIUX.Web changes, commit/push and rebuild portal on clawbot so the operator can verify live
+globs: UIUX.Web/**,tests/test_uiux_web.py
+alwaysApply: false
+---
+
+# UIUX.Web — sync to clawbot (operator verification)
+
+When you **change** files under **`UIUX.Web/`** (or **`tests/test_uiux_web.py`** for the same slice), treat **local-only** as incomplete for “did it work in the browser” unless the stack on **clawbot** is updated.
+
+**Hard completion bar for this workstream**
+
+1. **Commit** the UI/test files with a clear message (scope to the UI slice; do not sweep unrelated repo edits).
+2. **`git push origin main`** (or the branch the lab tracks).
+3. On **clawbot** (`jmiller@clawbot.a51.corp`, repo **`~/blackbox`**):
+   - `git pull origin main`
+   - `cd UIUX.Web && docker compose up -d --build`
+4. Tell the operator **HTTPS URL** they use (e.g. `https://172.20.2.161/` per `UIUX.Web/docker-compose.yml` comments) and that they may need a hard refresh.
+
+**Do not** claim the UI is “live for review” until **pull + compose** have run successfully on the server (or the operator has explicitly said they only need local `file://` / other host).
+
+Related: [`docs/architect/local_remote_development_workflow.md`](../../docs/architect/local_remote_development_workflow.md), [`claw-server-execution.mdc`](claw-server-execution.mdc).
