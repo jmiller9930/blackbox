@@ -8,6 +8,19 @@
     <link rel="stylesheet" href="./styles.css" />
   </head>
   <body>
+    <div
+      class="portal-wait"
+      id="portal-wait"
+      role="status"
+      aria-live="polite"
+      aria-busy="true"
+    >
+      <div class="portal-wait__inner">
+        <div class="portal-wait__spinner" aria-hidden="true"></div>
+        <p class="portal-wait__text">Loading portal…</p>
+        <p class="portal-wait__elapsed" id="portal-wait-elapsed">0s</p>
+      </div>
+    </div>
     <div class="page page--portal" id="guide-root" hidden>
       <header class="portal-header" aria-label="System guide header">
         <div class="portal-header__row">
@@ -233,9 +246,11 @@
     <script src="./app.js"></script>
     <script>
       document.addEventListener("DOMContentLoaded", function () {
+        window.BlackboxPortal.preparePortalBoot();
         if (!window.BlackboxPortal.protectAuthenticated()) {
           return;
         }
+        window.BlackboxPortal.hidePortalBootOverlay();
         var root = document.getElementById("guide-root");
         root.hidden = false;
         var s = window.BlackboxPortal.getSession();

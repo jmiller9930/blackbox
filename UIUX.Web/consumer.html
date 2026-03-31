@@ -8,6 +8,19 @@
     <link rel="stylesheet" href="./styles.css" />
   </head>
   <body>
+    <div
+      class="portal-wait"
+      id="portal-wait"
+      role="status"
+      aria-live="polite"
+      aria-busy="true"
+    >
+      <div class="portal-wait__inner">
+        <div class="portal-wait__spinner" aria-hidden="true"></div>
+        <p class="portal-wait__text">Loading portal…</p>
+        <p class="portal-wait__elapsed" id="portal-wait-elapsed">0s</p>
+      </div>
+    </div>
     <div class="page page--portal" id="portal-root" hidden>
       <header class="portal-header" aria-label="Consumer portal header">
         <div class="portal-header__row">
@@ -81,6 +94,7 @@
     <script src="./app.js"></script>
     <script>
       document.addEventListener("DOMContentLoaded", function () {
+        window.BlackboxPortal.preparePortalBoot();
         if (!window.BlackboxPortal.protectConsumerPortal()) {
           return;
         }
@@ -99,6 +113,7 @@
         }
         document.getElementById("portal-user").textContent =
           "Signed in as " + s.username + " (" + s.role + ")";
+        window.BlackboxPortal.hidePortalBootOverlay();
         document.getElementById("portal-root").hidden = false;
         document.getElementById("btn-logout").addEventListener("click", function () {
           window.BlackboxPortal.clearSession();

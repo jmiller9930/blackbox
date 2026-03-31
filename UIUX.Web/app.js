@@ -69,6 +69,37 @@
     sessionStorage.removeItem(SESSION_KEY);
   }
 
+  var _portalWaitInterval = null;
+
+  /**
+   * Call at start of DOMContentLoaded on gated portal pages. Shows elapsed time on #portal-wait-elapsed.
+   */
+  function preparePortalBoot() {
+    var elapsed = document.getElementById("portal-wait-elapsed");
+    if (!elapsed || _portalWaitInterval) return;
+    var t0 = Date.now();
+    elapsed.textContent = "0s";
+    _portalWaitInterval = setInterval(function () {
+      elapsed.textContent = Math.floor((Date.now() - t0) / 1000) + "s";
+    }, 250);
+  }
+
+  /**
+   * Call after auth passes and before/while revealing main content. Clears elapsed timer.
+   */
+  function hidePortalBootOverlay() {
+    if (_portalWaitInterval) {
+      clearInterval(_portalWaitInterval);
+      _portalWaitInterval = null;
+    }
+    var w = document.getElementById("portal-wait");
+    if (w) {
+      w.hidden = true;
+      w.setAttribute("aria-hidden", "true");
+      w.setAttribute("aria-busy", "false");
+    }
+  }
+
   /**
    * Dev bootstrap only. Engine must verify credentials and issue session/token later.
    * @returns {{ ok: true, session: object } | { ok: false, error: string }}
@@ -344,6 +375,8 @@
     protectPage: protectPage,
     protectAuthenticated: protectAuthenticated,
     protectConsumerPortal: protectConsumerPortal,
+    preparePortalBoot: preparePortalBoot,
+    hidePortalBootOverlay: hidePortalBootOverlay,
     ACCOUNT_API: ACCOUNT_API,
     account: accountApiClient(),
     api: createApiClient(),

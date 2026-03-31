@@ -549,6 +549,65 @@ h1 {
   outline-offset: 3px;
 }
 
+/* —— Portal boot / wait overlay (auth + first paint) —— */
+.portal-wait {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0;
+  padding: var(--space-4);
+  background: rgba(245, 245, 247, 0.88);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+}
+
+.portal-wait[hidden] {
+  display: none !important;
+}
+
+.portal-wait__inner {
+  text-align: center;
+  padding: var(--space-5);
+  border-radius: var(--radius-xl);
+  border: 1px solid var(--panel-border);
+  background: rgba(255, 255, 255, 0.92);
+  box-shadow: var(--shadow-lg);
+  max-width: 280px;
+}
+
+.portal-wait__spinner {
+  width: 36px;
+  height: 36px;
+  margin: 0 auto var(--space-3);
+  border: 3px solid rgba(15, 23, 42, 0.12);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: portal-wait-spin 0.7s linear infinite;
+}
+
+@keyframes portal-wait-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.portal-wait__text {
+  margin: 0 0 var(--space-2);
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.portal-wait__elapsed {
+  margin: 0;
+  font-size: 0.85rem;
+  font-variant-numeric: tabular-nums;
+  color: var(--muted);
+}
+
 /* —— Portal shell —— */
 .page--portal {
   min-height: 100vh;

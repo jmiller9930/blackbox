@@ -8,6 +8,19 @@
     <link rel="stylesheet" href="./styles.css" />
   </head>
   <body>
+    <div
+      class="portal-wait"
+      id="portal-wait"
+      role="status"
+      aria-live="polite"
+      aria-busy="true"
+    >
+      <div class="portal-wait__inner">
+        <div class="portal-wait__spinner" aria-hidden="true"></div>
+        <p class="portal-wait__text">Loading portal…</p>
+        <p class="portal-wait__elapsed" id="portal-wait-elapsed">0s</p>
+      </div>
+    </div>
     <div class="page page--portal page--plan-doc" id="plan-root" hidden>
       <header class="portal-header portal-header--compact" aria-label="Plan header">
         <div class="portal-header__row">
@@ -45,6 +58,7 @@
     <script>
       (function () {
         document.addEventListener("DOMContentLoaded", function () {
+          window.BlackboxPortal.preparePortalBoot();
           if (
             !window.BlackboxPortal.protectPage({
               allowedRoles: window.BlackboxPortal.INTERNAL_STAFF_ROLES,
@@ -52,6 +66,7 @@
           ) {
             return;
           }
+          window.BlackboxPortal.hidePortalBootOverlay();
           var root = document.getElementById("plan-root");
           root.hidden = false;
           var statusEl = document.getElementById("plan-status");

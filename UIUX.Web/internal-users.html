@@ -8,6 +8,19 @@
     <link rel="stylesheet" href="./styles.css" />
   </head>
   <body>
+    <div
+      class="portal-wait"
+      id="portal-wait"
+      role="status"
+      aria-live="polite"
+      aria-busy="true"
+    >
+      <div class="portal-wait__inner">
+        <div class="portal-wait__spinner" aria-hidden="true"></div>
+        <p class="portal-wait__text">Loading portal…</p>
+        <p class="portal-wait__elapsed" id="portal-wait-elapsed">0s</p>
+      </div>
+    </div>
     <div class="page page--portal page--account" id="root" hidden>
       <header class="portal-header portal-header--compact" aria-label="Admin header">
         <div class="portal-header__row">
@@ -68,10 +81,12 @@
     <script>
       (function () {
         document.addEventListener("DOMContentLoaded", function () {
+          window.BlackboxPortal.preparePortalBoot();
           if (!window.BlackboxPortal.protectPage({ requiredRole: "internal_admin" }))
             return;
           document.getElementById("path-users").textContent =
             window.BlackboxPortal.ACCOUNT_API.adminUsers;
+          window.BlackboxPortal.hidePortalBootOverlay();
           var root = document.getElementById("root");
           root.hidden = false;
           var apiInfo = document.getElementById("api-info");

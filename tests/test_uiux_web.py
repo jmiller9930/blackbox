@@ -104,6 +104,9 @@ def test_internal_portal_allows_staff_roles() -> None:
     text = (WEB / "internal.html").read_text(encoding="utf-8")
     assert "allowedRoles: window.BlackboxPortal.INTERNAL_STAFF_ROLES" in text
     assert "internal-admin-only" in text
+    assert "portal-wait" in text
+    assert "preparePortalBoot" in text
+    assert "hidePortalBootOverlay" in text
     assert "isInternalAdminRole" in text
     assert "panel-runtime" in text
     assert "panel-devplan" in text
@@ -163,6 +166,8 @@ def test_app_js_exports_portal_api() -> None:
     assert "connectEventSource" in text
     assert "/api/v1" in text
     assert "protectConsumerPortal: protectConsumerPortal" in text
+    assert "preparePortalBoot: preparePortalBoot" in text
+    assert "hidePortalBootOverlay: hidePortalBootOverlay" in text
 
 
 def test_app_js_account_self_service_api_paths() -> None:
