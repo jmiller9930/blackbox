@@ -59,9 +59,22 @@ def test_login_wires_app_and_form() -> None:
     assert 'id="login-form"' in text
     assert "forgot-password.html" in text
     assert "register.html" in text
+    assert "login-role-picker" in text
+    assert 'data-user="team"' in text and 'data-pass="team"' in text
+    assert "login-continue-portal" in text
+    assert "internal-users.html" in text
     assert "BlackboxPortal.login" in text or "blackbox_portal_session" in (
         WEB / "app.js"
     ).read_text(encoding="utf-8")
+
+
+def test_app_js_three_dev_roles_and_staff_helpers() -> None:
+    text = (WEB / "app.js").read_text(encoding="utf-8")
+    assert "internal_member" in text
+    assert "INTERNAL_STAFF_ROLES" in text
+    assert "isInternalAdminRole" in text
+    assert "isInternalStaffRole" in text
+    assert "team: {" in text
 
 
 def test_unified_plan_generated_file() -> None:
@@ -77,12 +90,14 @@ def test_internal_plan_page_loads_unified_md() -> None:
     text = (WEB / "internal-plan.html").read_text(encoding="utf-8")
     assert "UNIFIED_PLAN.md" in text
     assert "protectPage" in text
-    assert "internal_admin" in text
+    assert "INTERNAL_STAFF_ROLES" in text
 
 
-def test_internal_protects_internal_admin() -> None:
+def test_internal_portal_allows_staff_roles() -> None:
     text = (WEB / "internal.html").read_text(encoding="utf-8")
-    assert 'requiredRole: "internal_admin"' in text
+    assert "allowedRoles: window.BlackboxPortal.INTERNAL_STAFF_ROLES" in text
+    assert "internal-admin-only" in text
+    assert "isInternalAdminRole" in text
     assert "panel-runtime" in text
     assert "panel-devplan" in text
     assert "development_plan.md" in text
@@ -107,7 +122,7 @@ def test_consumer_allows_internal_preview_gate_in_app_js() -> None:
     text = (WEB / "app.js").read_text(encoding="utf-8")
     assert "protectConsumerPortal" in text
     assert 'q.get("preview") === "1"' in text
-    assert "internal_admin" in text
+    assert "isInternalStaffRole" in text
 
 
 def test_consumer_protects_consumer_user() -> None:
@@ -115,6 +130,7 @@ def test_consumer_protects_consumer_user() -> None:
     text = (WEB / "consumer.html").read_text(encoding="utf-8")
     assert "protectConsumerPortal" in text
     assert "portal-preview-banner" in text
+    assert "internal_member" in text
 
 
 def test_app_js_exports_portal_api() -> None:

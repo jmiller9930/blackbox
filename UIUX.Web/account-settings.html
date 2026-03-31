@@ -89,6 +89,9 @@
             backLabel.textContent = "Back to account home";
             badge.textContent = "Consumer";
             badge.classList.add("badge--consumer");
+          } else if (s.role === "internal_member") {
+            badge.textContent = "Team";
+            badge.classList.add("badge--team");
           } else {
             badge.textContent = "Internal";
             badge.classList.add("badge--internal");

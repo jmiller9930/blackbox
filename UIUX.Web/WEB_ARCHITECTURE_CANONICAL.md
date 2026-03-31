@@ -132,7 +132,7 @@ The required `v1` route set is:
 |-------|---------|--------|
 | `/` | Public landing page / under-construction or product front door | Public |
 | `/login` | Login entry point | Public |
-| `/internal` | Internal operator portal | `internal_admin` only |
+| `/internal` | Internal operator portal | `internal_admin`, `internal_member` (staff); admin-only tools gated in UI and must be enforced server-side |
 | `/consumer` | Consumer portal shell | `consumer_user` only |
 | `/404` | Not-found screen | Public |
 
@@ -272,22 +272,22 @@ Required rules:
 
 The required `v1` web roles are:
 
-- `internal_admin`
-- `consumer_user`
+- `internal_admin` — full operator portal including user directory / admin API surfaces
+- `internal_member` — same internal portal route; **no** user-admin tools (client hides links; engine must deny `/admin/*` without admin role)
+- `consumer_user` — consumer portal only
 
 Required routing behavior:
 
 - unauthenticated users go to `/login` when protected pages are requested
-- authenticated `internal_admin` users route to `/internal`
+- authenticated internal staff (`internal_admin`, `internal_member`) route to `/internal`
 - authenticated `consumer_user` users route to `/consumer`
 - unknown or invalid roles fail closed
 
 Development bootstrap credential rule:
 
-- local/dev bootstrap username: `admin`
-- local/dev bootstrap password: `admin`
-- bootstrap password must still be stored through the normal password-hash path
-- this bootstrap credential is development-only and not a production contract
+- local/dev: `admin`/`admin` (admin), `team`/`team` (member), `consumer`/`consumer` (consumer); login page exposes quick sign-in by level
+- bootstrap passwords must still be stored through the normal password-hash path in production
+- these bootstrap credentials are development-only and not a production contract
 
 ## 14. Internal portal contract
 

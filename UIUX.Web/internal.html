@@ -19,7 +19,7 @@
             />
             <span>BLACK BOX</span>
           </a>
-          <span class="badge badge--internal">Internal</span>
+          <span class="badge badge--internal" id="portal-scope-badge">Internal</span>
         </div>
         <nav class="portal-nav" aria-label="Portal navigation">
           <span class="portal-nav__user" id="portal-user" aria-live="polite"></span>
@@ -30,9 +30,9 @@
             >External</a
           >
           <a
-            class="button button--secondary portal-nav__admin-users"
+            class="button button--secondary portal-nav__admin-users internal-admin-only"
             href="./internal-users.html"
-            title="User directory and invites (admin)"
+            title="User directory and invites (admin only)"
             >Admin users</a
           >
           <a class="button button--ghost" href="./account-settings.html">My account</a>
@@ -59,7 +59,7 @@
                 >My account</a
               >
             </li>
-            <li>
+            <li class="internal-admin-only">
               <a
                 class="sidebar-list__link sidebar-list__link--admin"
                 href="./internal-users.html"
@@ -246,7 +246,9 @@
     <script>
       document.addEventListener("DOMContentLoaded", function () {
         if (
-          !window.BlackboxPortal.protectPage({ requiredRole: "internal_admin" })
+          !window.BlackboxPortal.protectPage({
+            allowedRoles: window.BlackboxPortal.INTERNAL_STAFF_ROLES,
+          })
         ) {
           return;
         }
@@ -255,6 +257,19 @@
         var s = window.BlackboxPortal.getSession();
         document.getElementById("portal-user").textContent =
           "Signed in as " + s.username + " (" + s.role + ")";
+        if (!window.BlackboxPortal.isInternalAdminRole(s.role)) {
+          document.querySelectorAll(".internal-admin-only").forEach(function (el) {
+            el.hidden = true;
+          });
+        }
+        var scopeBadge = document.getElementById("portal-scope-badge");
+        if (scopeBadge) {
+          if (s.role === "internal_member") {
+            scopeBadge.textContent = "Team";
+            scopeBadge.classList.remove("badge--internal");
+            scopeBadge.classList.add("badge--team");
+          }
+        }
         document.getElementById("btn-logout").addEventListener("click", function () {
           window.BlackboxPortal.clearSession();
           window.location.href = "login.html";

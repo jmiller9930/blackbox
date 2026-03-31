@@ -21,7 +21,7 @@
       </header>
 
       <main class="auth-main">
-        <div class="auth-card card">
+        <div class="auth-card card auth-card--wide">
           <h1 class="auth-card__title">Sign in</h1>
           <p class="auth-card__lede">
             Use development credentials only. Production auth will use the engine
@@ -35,6 +35,66 @@
             aria-live="polite"
             hidden
           ></div>
+
+          <div class="login-role-picker" aria-labelledby="login-role-picker-title">
+            <h2 class="login-role-picker__title" id="login-role-picker-title">
+              Sign in by access level (development)
+            </h2>
+            <div class="login-role-picker__grid">
+              <button
+                type="button"
+                class="button button--secondary login-role-picker__btn"
+                data-user="admin"
+                data-pass="admin"
+              >
+                <span class="login-role-picker__label">Operator admin</span>
+                <span class="login-role-picker__hint"
+                  >Internal portal + Admin users + all panels</span
+                >
+              </button>
+              <button
+                type="button"
+                class="button button--secondary login-role-picker__btn"
+                data-user="team"
+                data-pass="team"
+              >
+                <span class="login-role-picker__label">Team member</span>
+                <span class="login-role-picker__hint"
+                  >Internal portal, no user directory</span
+                >
+              </button>
+              <button
+                type="button"
+                class="button button--secondary login-role-picker__btn"
+                data-user="consumer"
+                data-pass="consumer"
+              >
+                <span class="login-role-picker__label">Bot / consumer user</span>
+                <span class="login-role-picker__hint"
+                  >External account view only</span
+                >
+              </button>
+            </div>
+          </div>
+
+          <p class="login-continue card card--inline" id="login-continue" hidden>
+            <span class="login-continue__text">You are already signed in.</span>
+            <a class="login-continue__link" id="login-continue-portal" href="#"
+              >Open your portal</a
+            >
+            <span id="login-continue-admin-wrap" hidden>
+              ·
+              <a class="login-continue__link" href="./internal-users.html"
+                >Admin users</a
+              >
+            </span>
+            <span id="login-continue-ext-wrap" hidden>
+              ·
+              <a class="login-continue__link" href="./consumer.html?preview=1"
+                >External preview</a
+              >
+            </span>
+          </p>
 
           <form class="form" id="login-form" novalidate>
             <div class="field">
@@ -67,8 +127,10 @@
           </form>
 
           <p class="auth-hint">
-            Dev bootstrap: <code>admin</code> / <code>admin</code> (internal). Test
-            consumer routing: <code>consumer</code> / <code>consumer</code>.
+            Or use the form:
+            <code>admin</code>/<code>admin</code>,
+            <code>team</code>/<code>team</code>,
+            <code>consumer</code>/<code>consumer</code>.
           </p>
           <p class="auth-footer-links">
             <a href="./forgot-password.html">Forgot password</a>
@@ -80,6 +142,39 @@
     <script src="./app.js"></script>
     <script>
       (function () {
+        function applyContinueLinks() {
+          var ex = window.BlackboxPortal.getSession();
+          var wrap = document.getElementById("login-continue");
+          if (!ex || !wrap) return;
+          wrap.hidden = false;
+          var portalA = document.getElementById("login-continue-portal");
+          portalA.href = window.BlackboxPortal.portalPathForRole(ex.role);
+          document.getElementById("login-continue-admin-wrap").hidden =
+            !window.BlackboxPortal.isInternalAdminRole(ex.role);
+          document.getElementById("login-continue-ext-wrap").hidden =
+            !window.BlackboxPortal.isInternalStaffRole(ex.role);
+        }
+        applyContinueLinks();
+
+        document.querySelectorAll(".login-role-picker__btn").forEach(function (btn) {
+          btn.addEventListener("click", function () {
+            var errEl = document.getElementById("login-error");
+            errEl.hidden = true;
+            errEl.textContent = "";
+            var u = btn.getAttribute("data-user");
+            var p = btn.getAttribute("data-pass");
+            var r = window.BlackboxPortal.login(u, p);
+            if (!r.ok) {
+              errEl.textContent = r.error;
+              errEl.hidden = false;
+              return;
+            }
+            window.location.href = window.BlackboxPortal.portalPathForRole(
+              r.session.role
+            );
+          });
+        });
+
         var form = document.getElementById("login-form");
         var errEl = document.getElementById("login-error");
         form.addEventListener("submit", function (e) {

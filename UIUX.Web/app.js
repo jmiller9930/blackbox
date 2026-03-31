@@ -7,6 +7,9 @@
 
   var SESSION_KEY = "blackbox_portal_session_v1";
 
+  /** Roles that use the operator portal (internal.html). Admin adds user-directory tools. */
+  var INTERNAL_STAFF_ROLES = ["internal_admin", "internal_member"];
+
   /** @type {Record<string, { password: string, role: string, user_id: string }>} */
   var DEV_ACCOUNTS = {
     admin: {
@@ -14,12 +17,25 @@
       role: "internal_admin",
       user_id: "dev-bootstrap-admin",
     },
+    team: {
+      password: "team",
+      role: "internal_member",
+      user_id: "dev-bootstrap-team",
+    },
     consumer: {
       password: "consumer",
       role: "consumer_user",
       user_id: "dev-bootstrap-consumer",
     },
   };
+
+  function isInternalStaffRole(role) {
+    return INTERNAL_STAFF_ROLES.indexOf(role) !== -1;
+  }
+
+  function isInternalAdminRole(role) {
+    return role === "internal_admin";
+  }
 
   function readApiBase() {
     var el = document.querySelector('meta[name="blackbox-api-base"]');
@@ -69,13 +85,17 @@
   }
 
   function portalPathForRole(role) {
-    if (role === "internal_admin") return "internal.html";
+    if (isInternalStaffRole(role)) return "internal.html";
     if (role === "consumer_user") return "consumer.html";
     return "login.html";
   }
 
   /**
-   * @param {{ requiredRole: string, loginHref?: string }} opts
+   * @param {{
+   *   requiredRole?: string,
+   *   allowedRoles?: string[],
+   *   loginHref?: string
+   * }} opts
    */
   function protectPage(opts) {
     var loginHref = opts.loginHref || "login.html";
@@ -84,7 +104,14 @@
       window.location.href = loginHref;
       return false;
     }
-    if (s.role !== opts.requiredRole) {
+    if (opts.allowedRoles && opts.allowedRoles.length) {
+      if (opts.allowedRoles.indexOf(s.role) === -1) {
+        window.location.href = portalPathForRole(s.role);
+        return false;
+      }
+      return true;
+    }
+    if (opts.requiredRole && s.role !== opts.requiredRole) {
       window.location.href = portalPathForRole(s.role);
       return false;
     }
@@ -92,7 +119,7 @@
   }
 
   /**
-   * Any logged-in user (internal_admin or consumer_user).
+   * Any logged-in user (internal staff or consumer).
    * @param {{ loginHref?: string }} [opts]
    */
   function protectAuthenticated(opts) {
@@ -102,7 +129,7 @@
       window.location.href = loginHref;
       return false;
     }
-    if (s.role !== "internal_admin" && s.role !== "consumer_user") {
+    if (!isInternalStaffRole(s.role) && s.role !== "consumer_user") {
       window.location.href = loginHref;
       return false;
     }
@@ -110,7 +137,7 @@
   }
 
   /**
-   * Consumer portal: `consumer_user` always; `internal_admin` only with
+   * Consumer portal: `consumer_user` always; internal staff only with
    * `?preview=1` so operators can validate external UI without logging out.
    * @param {{ loginHref?: string }} [opts]
    */
@@ -122,7 +149,7 @@
       return false;
     }
     if (s.role === "consumer_user") return true;
-    if (s.role === "internal_admin") {
+    if (isInternalStaffRole(s.role)) {
       try {
         var q = new URLSearchParams(window.location.search);
         if (q.get("preview") === "1") return true;
@@ -299,6 +326,9 @@
 
   window.BlackboxPortal = {
     SESSION_KEY: SESSION_KEY,
+    INTERNAL_STAFF_ROLES: INTERNAL_STAFF_ROLES,
+    isInternalStaffRole: isInternalStaffRole,
+    isInternalAdminRole: isInternalAdminRole,
     readApiBase: readApiBase,
     getSession: getSession,
     setSession: setSession,

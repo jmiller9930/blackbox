@@ -46,7 +46,9 @@
       (function () {
         document.addEventListener("DOMContentLoaded", function () {
           if (
-            !window.BlackboxPortal.protectPage({ requiredRole: "internal_admin" })
+            !window.BlackboxPortal.protectPage({
+              allowedRoles: window.BlackboxPortal.INTERNAL_STAFF_ROLES,
+            })
           ) {
             return;
           }

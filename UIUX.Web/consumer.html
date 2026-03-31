@@ -36,7 +36,7 @@
         hidden
         role="status"
       >
-        <strong>External UI preview</strong> — signed in as internal operator.
+        <strong>External UI preview</strong> — signed in as internal staff (not a consumer session).
         <a class="portal-preview-banner__link" href="./internal.html">Back to operator portal</a>
       </div>
 
@@ -91,7 +91,10 @@
           preview =
             new URLSearchParams(window.location.search).get("preview") === "1";
         } catch (e) {}
-        if (s.role === "internal_admin" && preview) {
+        if (
+          preview &&
+          (s.role === "internal_admin" || s.role === "internal_member")
+        ) {
           var ban = document.getElementById("portal-preview-banner");
           if (ban) ban.hidden = false;
         }
