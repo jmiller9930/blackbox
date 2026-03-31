@@ -515,6 +515,17 @@ h1 {
   outline-offset: 2px;
 }
 
+.auth-footer-links__sep {
+  color: var(--muted);
+  user-select: none;
+}
+
+.auth-hint--inline {
+  display: inline;
+  margin: 0 0 0 0.25rem;
+  font-size: 0.82rem;
+}
+
 .button--block {
   width: 100%;
   justify-content: center;
@@ -987,6 +998,27 @@ h1 {
 .account-section__title {
   margin: 0 0 var(--space-3);
   font-size: 1rem;
+}
+
+.account-section__lede {
+  margin: 0 0 var(--space-3);
+  font-size: 0.92rem;
+  color: var(--muted);
+  line-height: 1.5;
+}
+
+.account-password-alt {
+  margin: 0 0 var(--space-4);
+  padding: var(--space-3);
+  font-size: 0.9rem;
+  line-height: 1.45;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--panel-border);
+  background: rgba(255, 255, 255, 0.5);
+}
+
+.account-password-alt a {
+  font-weight: 600;
 }
 
 .account-dl {

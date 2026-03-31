@@ -61,8 +61,10 @@ def test_login_wires_app_and_form() -> None:
     assert 'id="login-form"' in text
     assert "forgot-password.html" in text
     assert "register.html" in text
+    assert "account-settings.html" in text
     assert "login-role-picker" in text
     assert 'data-user="team"' in text and 'data-pass="team"' in text
+    assert 'data-user="seans"' in text and 'data-pass="tradbuddy"' in text
     assert "login-continue-portal" in text
     assert "internal-users.html" in text
     assert "BlackboxPortal.login" in text or "blackbox_portal_session" in (
@@ -77,6 +79,9 @@ def test_app_js_three_dev_roles_and_staff_helpers() -> None:
     assert "isInternalAdminRole" in text
     assert "isInternalStaffRole" in text
     assert "team: {" in text
+    assert "seans: {" in text
+    assert "tradbuddy" in text
+    assert "dev-tradbuddy-seans" in text
 
 
 def test_unified_plan_generated_file() -> None:
@@ -173,6 +178,8 @@ def test_app_js_account_self_service_api_paths() -> None:
 def test_account_settings_requires_auth() -> None:
     text = (WEB / "account-settings.html").read_text(encoding="utf-8")
     assert "protectAuthenticated" in text
+    assert "account-password-alt" in text
+    assert "forgot-password.html" in text
 
 
 def test_internal_users_requires_internal_admin() -> None:

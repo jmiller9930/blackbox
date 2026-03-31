@@ -27,6 +27,12 @@
       role: "consumer_user",
       user_id: "dev-bootstrap-consumer",
     },
+    /** TradBuddy / Sean — consumer portal (dev bootstrap; replace with engine user). */
+    seans: {
+      password: "tradbuddy",
+      role: "consumer_user",
+      user_id: "dev-tradbuddy-seans",
+    },
   };
 
   function isInternalStaffRole(role) {

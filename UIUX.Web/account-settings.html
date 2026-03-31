@@ -26,9 +26,10 @@
         <div class="auth-card card account-card">
           <h1 class="auth-card__title">My account</h1>
           <p class="auth-card__lede">
-            Self-service: email verification status, resend verification, change
-            password. Requires a live engine API and session token (not dev
-            bootstrap alone).
+            Self-service account: email verification, and <strong>change your own
+            password</strong> while signed in (below). Production requires a live
+            engine API, session token, and password hashing — dev bootstrap alone
+            cannot persist a new password.
           </p>
           <div class="alert alert--info" id="api-info" hidden></div>
           <div class="alert alert--success" id="ok-msg" role="status" hidden></div>
@@ -51,6 +52,16 @@
 
           <section class="account-section" aria-labelledby="pw-h">
             <h2 class="account-section__title" id="pw-h">Change password</h2>
+            <p class="account-section__lede" id="pw-lede">
+              Enter your current password, then choose a new one. This calls the
+              engine when <code>blackbox-api-base</code> is set.
+            </p>
+            <p class="account-password-alt">
+              <strong>Forgot your password?</strong>
+              <a href="./login.html">Sign out</a>, then use
+              <a href="./forgot-password.html">Forgot password</a> on the login page
+              to get a reset link by email (engine must send mail).
+            </p>
             <form class="form" id="pw-form">
               <div class="field">
                 <label class="field__label" for="cur">Current password</label>
