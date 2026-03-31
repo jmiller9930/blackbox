@@ -1,0 +1,81 @@
+<svg width="1600" height="900" viewBox="0 0 1600 900" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="bg" x1="180" y1="120" x2="1340" y2="760" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#04070B"/>
+      <stop offset="0.5" stop-color="#0B1118"/>
+      <stop offset="1" stop-color="#08161D"/>
+    </linearGradient>
+    <linearGradient id="front" x1="585" y1="290" x2="930" y2="690" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#F6FBFF"/>
+      <stop offset="0.5" stop-color="#D8E8F2"/>
+      <stop offset="1" stop-color="#AFC4D3"/>
+    </linearGradient>
+    <linearGradient id="side" x1="930" y1="315" x2="1138" y2="628" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#8AA5B6"/>
+      <stop offset="1" stop-color="#5A7485"/>
+    </linearGradient>
+    <linearGradient id="top" x1="610" y1="212" x2="1000" y2="340" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#FFFFFF"/>
+      <stop offset="1" stop-color="#C7DAE6"/>
+    </linearGradient>
+    <linearGradient id="tickerFill" x1="348" y1="501" x2="1296" y2="438" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#7BFFE8" stop-opacity="0.18"/>
+      <stop offset="0.3" stop-color="#EAFCFF" stop-opacity="0.38"/>
+      <stop offset="0.68" stop-color="#88F1BA" stop-opacity="0.24"/>
+      <stop offset="1" stop-color="#ABFFF0" stop-opacity="0.10"/>
+    </linearGradient>
+    <linearGradient id="tickerStroke" x1="360" y1="476" x2="1286" y2="468" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#D5FFF8" stop-opacity="0.16"/>
+      <stop offset="0.5" stop-color="#FFFFFF" stop-opacity="0.40"/>
+      <stop offset="1" stop-color="#C0FFE9" stop-opacity="0.14"/>
+    </linearGradient>
+    <filter id="glow" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="18" result="blur"/>
+      <feColorMatrix in="blur" type="matrix" values="1 0 0 0 0  0 1 0 0 0.95  0 0 1 0 0.98  0 0 0 0.45 0"/>
+    </filter>
+    <clipPath id="tickerClip">
+      <path d="M398 468C481 411 587 391 701 411C804 430 872 458 972 465C1074 472 1167 449 1248 395L1294 446C1190 516 1078 542 956 535C840 528 763 487 680 473C594 458 518 476 442 534L398 468Z"/>
+    </clipPath>
+  </defs>
+
+  <rect width="1600" height="900" fill="url(#bg)"/>
+
+  <g opacity="0.18">
+    <circle cx="410" cy="252" r="126" fill="#113242"/>
+    <circle cx="1242" cy="690" r="174" fill="#0A2530"/>
+  </g>
+
+  <g filter="url(#glow)" opacity="0.24">
+    <path d="M408 474C496 413 596 395 706 414C809 432 874 458 972 466C1074 474 1168 450 1248 395" stroke="#D5FFF6" stroke-width="14" stroke-linecap="round"/>
+  </g>
+
+  <g>
+    <path d="M608 288L930 288L930 610L608 610Z" fill="url(#front)"/>
+    <path d="M930 288L1096 214L1096 534L930 610Z" fill="url(#side)"/>
+    <path d="M608 288L774 214L1096 214L930 288Z" fill="url(#top)"/>
+    <path d="M652 330L884 330L884 566L652 566Z" fill="#0A131B" fill-opacity="0.88"/>
+    <path d="M608 288L930 288L1096 214M930 288V610M608 288V610L930 610L1096 534V214" stroke="#ECF9FF" stroke-opacity="0.14" stroke-width="2"/>
+    <path d="M706 392L832 392L776 450L832 506L706 506L650 450L706 392Z" fill="#D8EEF9" fill-opacity="0.92"/>
+  </g>
+
+  <g clip-path="url(#tickerClip)">
+    <path d="M390 470C482 407 587 389 699 409C804 429 875 459 974 467C1077 474 1171 450 1253 394L1300 454C1188 525 1075 550 949 543C829 536 752 493 669 479C585 465 508 482 434 540L390 470Z" fill="url(#tickerFill)"/>
+    <path d="M390 470C482 407 587 389 699 409C804 429 875 459 974 467C1077 474 1171 450 1253 394L1300 454C1188 525 1075 550 949 543C829 536 752 493 669 479C585 465 508 482 434 540L390 470Z" stroke="url(#tickerStroke)" stroke-width="1.6"/>
+    <g opacity="0.74" font-family="Menlo, Monaco, Consolas, monospace" font-size="20" fill="#F2FFFF">
+      <text x="462" y="477">ETH ² 3.4%</text>
+      <text x="626" y="455">SOL +6.1%</text>
+      <text x="812" y="488">NQ +1.2%</text>
+      <text x="984" y="465">SPX 5288</text>
+      <text x="1136" y="438">BTC 108.4K</text>
+    </g>
+    <g opacity="0.6" stroke="#E8FFFF" stroke-width="2">
+      <path d="M438 503L462 488L486 494L510 466L536 474"/>
+      <path d="M739 507L762 492L788 500L812 474L838 480"/>
+      <path d="M1074 472L1096 466L1118 444L1142 456L1165 430L1190 438"/>
+    </g>
+  </g>
+
+  <g opacity="0.10">
+    <path d="M405 474C496 413 596 395 706 414C809 432 874 458 972 466C1074 474 1168 450 1248 395" stroke="#FFFFFF" stroke-width="2" stroke-linecap="round" stroke-dasharray="4 10"/>
+  </g>
+</svg>

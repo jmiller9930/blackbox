@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="blackbox-api-base" content="" />
+    <title>BLACK BOX | Internal portal</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <div class="page page--portal" id="portal-root" hidden>
+      <header class="portal-header" aria-label="Internal portal header">
+        <div class="portal-header__row">
+          <a class="brand brand--link" href="./index.html">
+            <img
+              class="brand__mini"
+              src="./assets/blackbox-boxmark.svg"
+              alt="BLACK BOX mark"
+            />
+            <span>BLACK BOX</span>
+          </a>
+          <span class="badge badge--internal">Internal</span>
+        </div>
+        <nav class="portal-nav" aria-label="Portal navigation">
+          <span class="portal-nav__user" id="portal-user" aria-live="polite"></span>
+          <button type="button" class="button button--ghost" id="btn-logout">
+            Sign out
+          </button>
+        </nav>
+      </header>
+
+      <div class="portal-layout">
+        <aside class="portal-sidebar" aria-label="Section navigation">
+          <ul class="sidebar-list">
+            <li><a class="sidebar-list__link" href="#panel-runtime">Runtime</a></li>
+            <li><a class="sidebar-list__link" href="#panel-anna">Anna</a></li>
+            <li><a class="sidebar-list__link" href="#panel-exchange">Exchange</a></li>
+            <li><a class="sidebar-list__link" href="#panel-pnl">P&amp;L</a></li>
+            <li><a class="sidebar-list__link" href="#panel-training">Training</a></li>
+            <li><a class="sidebar-list__link" href="#panel-strategy">Strategies</a></li>
+            <li><a class="sidebar-list__link" href="#panel-training-inbox">Training inbox</a></li>
+            <li><a class="sidebar-list__link" href="#panel-edge">Edge bots</a></li>
+            <li><a class="sidebar-list__link" href="#panel-feed">Event feed</a></li>
+          </ul>
+        </aside>
+
+        <main class="portal-main" id="main">
+          <h1 class="portal-title">Operator portal</h1>
+          <p class="portal-lede">
+            Panel shells per web architecture contract. Controls stay disabled until
+            the engine API is wired (Phase 5+).
+          </p>
+
+          <div class="panel-grid">
+            <section class="panel" id="panel-runtime" aria-labelledby="t-runtime">
+              <h2 class="panel__title" id="t-runtime">Runtime controls</h2>
+              <p class="panel__state panel__state--pending" data-state>
+                Not wired — engine control API required.
+              </p>
+              <div class="panel__actions">
+                <button type="button" class="button button--secondary" disabled title="Awaiting engine wiring">
+                  Start
+                </button>
+                <button type="button" class="button button--secondary" disabled title="Awaiting engine wiring">
+                  Pause
+                </button>
+                <button type="button" class="button button--secondary" disabled title="Awaiting engine wiring">
+                  Stop
+                </button>
+                <button type="button" class="button button--secondary" disabled title="Awaiting engine wiring">
+                  Restart
+                </button>
+              </div>
+            </section>
+
+            <section class="panel" id="panel-anna" aria-labelledby="t-anna">
+              <h2 class="panel__title" id="t-anna">Anna status</h2>
+              <p class="panel__state panel__state--pending" data-state>
+                No data — connect <code>meta blackbox-api-base</code> and query API.
+              </p>
+            </section>
+
+            <section class="panel" id="panel-exchange" aria-labelledby="t-ex">
+              <h2 class="panel__title" id="t-ex">Billy / Drift exchange status</h2>
+              <p class="panel__state panel__state--pending" data-state>
+                No data — engine exchange-status contract pending.
+              </p>
+            </section>
+
+            <section class="panel" id="panel-pnl" aria-labelledby="t-pnl">
+              <h2 class="panel__title" id="t-pnl">Winning / losing state</h2>
+              <p class="panel__state panel__state--pending" data-state>
+                No data — awaiting strategy / P&amp;L read surface.
+              </p>
+            </section>
+
+            <section class="panel panel--training" id="panel-training" aria-labelledby="t-train">
+              <h2 class="panel__title" id="t-train">Anna training / learning</h2>
+              <p class="panel__state panel__state--pending" data-state>
+                Training window placeholder — first-class surface when API exists.
+              </p>
+            </section>
+
+            <section class="panel" id="panel-strategy" aria-labelledby="t-strat">
+              <h2 class="panel__title" id="t-strat">Strategy inventory</h2>
+              <p class="panel__state panel__state--pending" data-state>
+                Drill-down for active / considering / on_deck when inventory API is live.
+              </p>
+            </section>
+
+            <section class="panel" id="panel-training-inbox" aria-labelledby="t-tin">
+              <h2 class="panel__title" id="t-tin">Training participation</h2>
+              <p class="panel__state panel__state--pending" data-state>
+                Input and review actions disabled until training control API is wired.
+              </p>
+              <button type="button" class="button button--secondary" disabled title="Awaiting engine wiring">
+                Submit review
+              </button>
+            </section>
+
+            <section class="panel" id="panel-edge" aria-labelledby="t-edge">
+              <h2 class="panel__title" id="t-edge">Edge-bot status</h2>
+              <p class="panel__state panel__state--pending" data-state>
+                No data — edge status endpoint pending.
+              </p>
+            </section>
+
+            <section class="panel panel--wide" id="panel-feed" aria-labelledby="t-feed">
+              <h2 class="panel__title" id="t-feed">Recent event feed</h2>
+              <p class="panel__state panel__state--pending" data-state>
+                Event stream client is in <code>app.js</code>; no events until API base
+                and stream are configured.
+              </p>
+            </section>
+          </div>
+        </main>
+      </div>
+    </div>
+    <script src="./app.js"></script>
+    <script>
+      document.addEventListener("DOMContentLoaded", function () {
+        if (
+          !window.BlackboxPortal.protectPage({ requiredRole: "internal_admin" })
+        ) {
+          return;
+        }
+        var root = document.getElementById("portal-root");
+        root.hidden = false;
+        var s = window.BlackboxPortal.getSession();
+        document.getElementById("portal-user").textContent =
+          "Signed in as " + s.username + " (" + s.role + ")";
+        document.getElementById("btn-logout").addEventListener("click", function () {
+          window.BlackboxPortal.clearSession();
+          window.location.href = "login.html";
+        });
+      });
+    </script>
+  </body>
+</html>

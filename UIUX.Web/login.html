@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="blackbox-api-base" content="" />
+    <title>BLACK BOX | Sign in</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <div class="page page--auth">
+      <header class="masthead masthead--simple" aria-label="Site header">
+        <a class="brand brand--link" href="./index.html">
+          <img
+            class="brand__mini"
+            src="./assets/blackbox-boxmark.svg"
+            alt="BLACK BOX mark"
+          />
+          <span>BLACK BOX</span>
+        </a>
+      </header>
+
+      <main class="auth-main">
+        <div class="auth-card card">
+          <h1 class="auth-card__title">Sign in</h1>
+          <p class="auth-card__lede">
+            Use development credentials only. Production auth will use the engine
+            API and hashed accounts.
+          </p>
+
+          <div
+            class="alert alert--error"
+            id="login-error"
+            role="alert"
+            aria-live="polite"
+            hidden
+          ></div>
+
+          <form class="form" id="login-form" novalidate>
+            <div class="field">
+              <label class="field__label" for="username">Username</label>
+              <input
+                class="input"
+                id="username"
+                name="username"
+                type="text"
+                autocomplete="username"
+                required
+                aria-required="true"
+              />
+            </div>
+            <div class="field">
+              <label class="field__label" for="password">Password</label>
+              <input
+                class="input"
+                id="password"
+                name="password"
+                type="password"
+                autocomplete="current-password"
+                required
+                aria-required="true"
+              />
+            </div>
+            <button class="button button--primary button--block" type="submit">
+              Sign in
+            </button>
+          </form>
+
+          <p class="auth-hint">
+            Dev bootstrap: <code>admin</code> / <code>admin</code> (internal). Test
+            consumer routing: <code>consumer</code> / <code>consumer</code>.
+          </p>
+        </div>
+      </main>
+    </div>
+    <script src="./app.js"></script>
+    <script>
+      (function () {
+        var form = document.getElementById("login-form");
+        var errEl = document.getElementById("login-error");
+        form.addEventListener("submit", function (e) {
+          e.preventDefault();
+          errEl.hidden = true;
+          errEl.textContent = "";
+          var u = document.getElementById("username").value;
+          var p = document.getElementById("password").value;
+          var r = window.BlackboxPortal.login(u, p);
+          if (!r.ok) {
+            errEl.textContent = r.error;
+            errEl.hidden = false;
+            return;
+          }
+          window.location.href = window.BlackboxPortal.portalPathForRole(
+            r.session.role
+          );
+        });
+      })();
+    </script>
+  </body>
+</html>

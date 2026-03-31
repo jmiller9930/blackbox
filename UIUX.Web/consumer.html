@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="blackbox-api-base" content="" />
+    <title>BLACK BOX | Account</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <div class="page page--portal" id="portal-root" hidden>
+      <header class="portal-header" aria-label="Consumer portal header">
+        <div class="portal-header__row">
+          <a class="brand brand--link" href="./index.html">
+            <img
+              class="brand__mini"
+              src="./assets/blackbox-boxmark.svg"
+              alt="BLACK BOX mark"
+            />
+            <span>BLACK BOX</span>
+          </a>
+          <span class="badge badge--consumer">Consumer</span>
+        </div>
+        <nav class="portal-nav" aria-label="Portal navigation">
+          <span class="portal-nav__user" id="portal-user" aria-live="polite"></span>
+          <button type="button" class="button button--ghost" id="btn-logout">
+            Sign out
+          </button>
+        </nav>
+      </header>
+
+      <main class="portal-main portal-main--narrow">
+        <h1 class="portal-title">Your account</h1>
+        <p class="portal-lede">
+          Consumer-safe status only. Internal controls are not shown here.
+        </p>
+
+        <div class="panel-grid panel-grid--single">
+          <section class="panel" aria-labelledby="t-acct">
+            <h2 class="panel__title" id="t-acct">Account status</h2>
+            <p class="panel__state panel__state--pending" data-state>
+              Placeholder — account query API not configured.
+            </p>
+          </section>
+          <section class="panel" aria-labelledby="t-bot">
+            <h2 class="panel__title" id="t-bot">Bot connection</h2>
+            <p class="panel__state panel__state--pending" data-state>
+              Connection visibility when consumer API is wired.
+            </p>
+          </section>
+          <section class="panel" aria-labelledby="t-strat">
+            <h2 class="panel__title" id="t-strat">Strategy selection</h2>
+            <p class="panel__state panel__state--pending" data-state>
+              Placeholder — no strategy controls until authorized by engine.
+            </p>
+            <button type="button" class="button button--secondary" disabled title="Awaiting engine wiring">
+              View strategy
+            </button>
+          </section>
+          <section class="panel" aria-labelledby="t-sys">
+            <h2 class="panel__title" id="t-sys">System status</h2>
+            <p class="panel__state panel__state--pending" data-state>
+              Scoped consumer status messages will appear here.
+            </p>
+          </section>
+        </div>
+      </main>
+    </div>
+    <script src="./app.js"></script>
+    <script>
+      document.addEventListener("DOMContentLoaded", function () {
+        if (
+          !window.BlackboxPortal.protectPage({ requiredRole: "consumer_user" })
+        ) {
+          return;
+        }
+        var root = document.getElementById("portal-root");
+        root.hidden = false;
+        var s = window.BlackboxPortal.getSession();
+        document.getElementById("portal-user").textContent =
+          "Signed in as " + s.username + " (" + s.role + ")";
+        document.getElementById("btn-logout").addEventListener("click", function () {
+          window.BlackboxPortal.clearSession();
+          window.location.href = "login.html";
+        });
+      });
+    </script>
+  </body>
+</html>

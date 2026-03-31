@@ -1,0 +1,23 @@
+UIUX.Web — proof / test artifact index
+======================================
+
+Regenerate the pytest transcript (from repo root):
+
+  python3 -m pytest tests/test_uiux_web.py -v --tb=short | tee UIUX.Web/artifacts/pytest_uiux_web_latest.txt
+
+Artifact files in this folder:
+  pytest_uiux_web_latest.txt   Captured pytest run (commit with the change set that it validates)
+
+Test ↔ development mapping (each area has at least one test):
+  • File tree + Docker/nginx deliverables     → test_uiux_required_paths_exist (parametrize)
+  • Landing page + marks + sign-in            → test_index_has_sign_in_and_mark
+  • Login form + app wiring                   → test_login_wires_app_and_form
+  • Internal portal + role guard + panels     → test_internal_protects_internal_admin
+  • Consumer portal + role guard              → test_consumer_protects_consumer_user
+  • Shared API/session client (app.js)        → test_app_js_exports_portal_api
+  • nginx TLS + security headers              → test_nginx_baseline_hardening
+  • Docker image does not leak nginx to docroot → test_dockerfile_uses_explicit_copy_not_leaky_nginx_root
+
+Not automated in pytest (operator / host):
+  • Live HTTPS + headers on clawbot: curl -skI https://172.20.2.161/ | grep -i ^[a-z]
+  • docker compose rebuild after pull: cd ~/blackbox/UIUX.Web && sudo docker-compose up --build -d

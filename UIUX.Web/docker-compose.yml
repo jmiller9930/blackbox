@@ -1,0 +1,15 @@
+# BLACK BOX UI — nginx + TLS in Docker.
+#
+# Browser: https://127.0.0.1/  or  https://172.20.2.161/  (port 443 is default for https://)
+# First visit: accept the dev self-signed certificate warning.
+#
+# Docker maps: host port 443 -> container port 443 (TLS). Port 80 redirects to HTTPS.
+#
+# Run:  cd UIUX.Web && docker compose up --build
+services:
+  web:
+    build: .
+    ports:
+      - "443:443"
+      - "80:80"
+    restart: unless-stopped

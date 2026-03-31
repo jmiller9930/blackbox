@@ -1,0 +1,4 @@
+# Keep image lean; do not bake governance doc into the static root.
+WEB_ARCHITECTURE_CANONICAL.md
+.git
+**/.DS_Store
