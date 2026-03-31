@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="blackbox-api-base" content="" />
+    <title>BLACK BOX | Unified development plan</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <div class="page page--portal page--plan-doc" id="plan-root" hidden>
+      <header class="portal-header portal-header--compact" aria-label="Plan header">
+        <div class="portal-header__row">
+          <a class="brand brand--link" href="./internal.html">
+            <img
+              class="brand__mini"
+              src="./assets/blackbox-boxmark.svg"
+              alt="BLACK BOX mark"
+            />
+            <span>Back to portal</span>
+          </a>
+          <span class="badge badge--internal">Internal</span>
+        </div>
+        <p class="plan-doc__intro">
+          Single document: <code>docs/architect/development_plan.md</code> +
+          <code>UIUX.Web/WEB_ARCHITECTURE_CANONICAL.md</code>. Regenerate with
+          <code>python3 scripts/build_unified_portal_plan.py</code>.
+        </p>
+      </header>
+
+      <main class="plan-doc__scroll" aria-label="Unified plan document" tabindex="-1">
+        <div
+          class="plan-doc__status"
+          id="plan-status"
+          role="status"
+          aria-live="polite"
+        >
+          Loading plan…
+        </div>
+        <pre class="plan-doc__body" id="plan-body" hidden></pre>
+        <div class="plan-doc__error" id="plan-error" role="alert" hidden></div>
+      </main>
+    </div>
+    <script src="./app.js"></script>
+    <script>
+      (function () {
+        document.addEventListener("DOMContentLoaded", function () {
+          if (
+            !window.BlackboxPortal.protectPage({ requiredRole: "internal_admin" })
+          ) {
+            return;
+          }
+          var root = document.getElementById("plan-root");
+          root.hidden = false;
+          var statusEl = document.getElementById("plan-status");
+          var bodyEl = document.getElementById("plan-body");
+          var errEl = document.getElementById("plan-error");
+          fetch("./content/UNIFIED_PLAN.md", { credentials: "same-origin" })
+            .then(function (r) {
+              if (!r.ok) throw new Error("HTTP " + r.status);
+              return r.text();
+            })
+            .then(function (text) {
+              statusEl.hidden = true;
+              bodyEl.hidden = false;
+              bodyEl.textContent = text;
+            })
+            .catch(function (e) {
+              statusEl.hidden = true;
+              errEl.hidden = false;
+              errEl.textContent =
+                "Could not load unified plan. Run python3 scripts/build_unified_portal_plan.py and redeploy, or open the repo on GitHub. (" +
+                (e && e.message ? e.message : "error") +
+                ")";
+            });
+        });
+      })();
+    </script>
+  </body>
+</html>

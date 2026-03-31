@@ -466,6 +466,8 @@ UIUX.Web/
 
 **Proof artifacts:** `UIUX.Web/artifacts/PROOF_INDEX.txt` maps automated tests to deliverables; `UIUX.Web/artifacts/pytest_uiux_web_latest.txt` is the checked-in transcript of the latest `pytest tests/test_uiux_web.py` run for that change set. Regenerate both when the web shell changes materially.
 
+**Unified portal document:** `UIUX.Web/content/UNIFIED_PLAN.md` is a **generated** splice of `docs/architect/development_plan.md` and this file (`WEB_ARCHITECTURE_CANONICAL.md`), built by `python3 scripts/build_unified_portal_plan.py`. Run that script after editing either source, then commit the updated `UNIFIED_PLAN.md`. Internal operators open it in-browser via **`internal-plan.html`** (auth-gated).
+
 Rules:
 
 - do not scatter web files across unrelated repo folders

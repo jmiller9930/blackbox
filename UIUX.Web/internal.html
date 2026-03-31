@@ -36,6 +36,11 @@
             <li>
               <a class="sidebar-list__link" href="#panel-devplan">Development plan</a>
             </li>
+            <li>
+              <a class="sidebar-list__link" href="./internal-plan.html"
+                >Unified plan (full)</a
+              >
+            </li>
             <li><a class="sidebar-list__link" href="#panel-anna">Anna</a></li>
             <li><a class="sidebar-list__link" href="#panel-exchange">Exchange</a></li>
             <li><a class="sidebar-list__link" href="#panel-pnl">P&amp;L</a></li>
@@ -83,9 +88,18 @@
             >
               <h2 class="panel__title" id="t-devplan">Development plan</h2>
               <p class="panel__lede">
-                Canonical sources in the BLACK BOX repo (not copies). Snapshot below
-                is static—refresh it when the active directive changes.
+                <strong>Unified document</strong> merges the master
+                <code>development_plan.md</code> and
+                <code>WEB_ARCHITECTURE_CANONICAL.md</code> for reading in the portal
+                (<code>UIUX.Web/content/UNIFIED_PLAN.md</code>). Regenerate after edits:
+                <code>python3 scripts/build_unified_portal_plan.py</code>.
               </p>
+              <a
+                class="button button--primary devplan__cta"
+                href="./internal-plan.html"
+                >Open unified plan</a
+              >
+              <h3 class="devplan__subhead">Source links (GitHub)</h3>
               <ul class="devplan__links">
                 <li>
                   <a

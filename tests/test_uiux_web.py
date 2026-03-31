@@ -10,12 +10,17 @@ REPO = Path(__file__).resolve().parents[1]
 WEB = REPO / "UIUX.Web"
 
 
+def test_unified_plan_build_script_exists() -> None:
+    assert (REPO / "scripts" / "build_unified_portal_plan.py").is_file()
+
+
 @pytest.mark.parametrize(
     "name",
     [
         "index.html",
         "login.html",
         "internal.html",
+        "internal-plan.html",
         "consumer.html",
         "404.html",
         "styles.css",
@@ -23,6 +28,7 @@ WEB = REPO / "UIUX.Web"
         "Dockerfile",
         "docker-compose.yml",
         "nginx/default.conf",
+        "content/UNIFIED_PLAN.md",
         "artifacts/PROOF_INDEX.txt",
         "WEB_ARCHITECTURE_CANONICAL.md",
         "assets/blackbox-boxmark.svg",
@@ -48,6 +54,22 @@ def test_login_wires_app_and_form() -> None:
     assert "BlackboxPortal.login" in text or "blackbox_portal_session" in (
         WEB / "app.js"
     ).read_text(encoding="utf-8")
+
+
+def test_unified_plan_generated_file() -> None:
+    p = WEB / "content" / "UNIFIED_PLAN.md"
+    text = p.read_text(encoding="utf-8")
+    assert "BLACK BOX unified plan" in text
+    assert "Part 1 — Development plan" in text
+    assert "Part 2 — Web UI architecture" in text
+    assert len(text) > 50_000
+
+
+def test_internal_plan_page_loads_unified_md() -> None:
+    text = (WEB / "internal-plan.html").read_text(encoding="utf-8")
+    assert "UNIFIED_PLAN.md" in text
+    assert "protectPage" in text
+    assert "internal_admin" in text
 
 
 def test_internal_protects_internal_admin() -> None:

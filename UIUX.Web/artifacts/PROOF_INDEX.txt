@@ -1,6 +1,10 @@
 UIUX.Web — proof / test artifact index
 ======================================
 
+Regenerate the unified plan (after editing development_plan.md or WEB_ARCHITECTURE_CANONICAL.md):
+
+  python3 scripts/build_unified_portal_plan.py
+
 Regenerate the pytest transcript (from repo root):
 
   python3 -m pytest tests/test_uiux_web.py -v --tb=short | tee UIUX.Web/artifacts/pytest_uiux_web_latest.txt
@@ -17,6 +21,8 @@ Test ↔ development mapping (each area has at least one test):
   • Shared API/session client (app.js)        → test_app_js_exports_portal_api
   • nginx TLS + security headers              → test_nginx_baseline_hardening
   • Docker image does not leak nginx to docroot → test_dockerfile_uses_explicit_copy_not_leaky_nginx_root
+  • Unified plan file + build script          → test_unified_plan_generated_file, test_unified_plan_build_script_exists
+  • internal-plan.html fetches unified MD       → test_internal_plan_page_loads_unified_md
 
 Not automated in pytest (operator / host):
   • Live HTTPS + headers on clawbot: curl -skI https://172.20.2.161/ | grep -i ^[a-z]
