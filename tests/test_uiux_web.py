@@ -61,12 +61,10 @@ def test_login_wires_app_and_form() -> None:
     assert 'id="login-form"' in text
     assert "forgot-password.html" in text
     assert "register.html" in text
-    assert "account-settings.html" in text
-    assert "login-role-picker" in text
-    assert 'data-user="team"' in text and 'data-pass="team"' in text
-    assert 'data-user="seans"' in text and 'data-pass="tradbuddy"' in text
+    assert "portalPathForRole" in text
     assert "login-continue-portal" in text
-    assert "internal-users.html" in text
+    assert "login-role-picker" not in text
+    assert "auth-dev-details" in text
     assert "BlackboxPortal.login" in text or "blackbox_portal_session" in (
         WEB / "app.js"
     ).read_text(encoding="utf-8")

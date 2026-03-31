@@ -327,10 +327,6 @@ h1 {
   padding: var(--space-5);
 }
 
-.auth-card--wide {
-  width: min(100%, 520px);
-}
-
 .auth-card__title {
   margin: 0;
   font-size: 1.65rem;
@@ -344,48 +340,6 @@ h1 {
   line-height: 1.55;
 }
 
-.login-role-picker {
-  margin-top: var(--space-4);
-  padding-top: var(--space-4);
-  border-top: 1px solid var(--panel-border);
-}
-
-.login-role-picker__title {
-  margin: 0 0 var(--space-3);
-  font-size: 0.95rem;
-  font-weight: 700;
-  letter-spacing: 0.02em;
-  text-transform: uppercase;
-  color: var(--muted);
-}
-
-.login-role-picker__grid {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-2);
-}
-
-.login-role-picker__btn {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  text-align: left;
-  gap: 0.25rem;
-  padding: var(--space-3) var(--space-4);
-}
-
-.login-role-picker__label {
-  font-weight: 700;
-  font-size: 0.95rem;
-}
-
-.login-role-picker__hint {
-  font-size: 0.82rem;
-  font-weight: 500;
-  color: var(--muted);
-  line-height: 1.35;
-}
-
 .login-continue {
   margin-top: var(--space-3);
   padding: var(--space-3) var(--space-4);
@@ -396,9 +350,36 @@ h1 {
   background: rgba(255, 255, 255, 0.55);
 }
 
+.login-continue--simple {
+  text-align: center;
+}
+
 .login-continue__link {
   font-weight: 600;
   margin-left: 0.25rem;
+}
+
+.auth-dev-details {
+  margin-top: var(--space-4);
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--panel-border);
+  font-size: 0.82rem;
+  color: var(--muted);
+  line-height: 1.45;
+}
+
+.auth-dev-details__summary {
+  cursor: pointer;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.auth-dev-details__body {
+  margin: var(--space-2) 0 0;
+}
+
+.auth-dev-details__body code {
+  font-size: 0.78rem;
 }
 
 .auth-card__actions {
