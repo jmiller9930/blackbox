@@ -24,6 +24,7 @@ def test_unified_plan_build_script_exists() -> None:
         "internal-users.html",
         "account-settings.html",
         "consumer.html",
+        "guide.html",
         "forgot-password.html",
         "reset-password.html",
         "verify-email.html",
@@ -37,6 +38,7 @@ def test_unified_plan_build_script_exists() -> None:
         "content/UNIFIED_PLAN.md",
         "artifacts/PROOF_INDEX.txt",
         "WEB_ARCHITECTURE_CANONICAL.md",
+        "WEB_UI_REQUIRED_CONTEXT.md",
         "assets/blackbox-boxmark.svg",
         "assets/generated/blackbox-3d-box-ticker-logo.svg",
     ],
@@ -105,6 +107,23 @@ def test_internal_portal_allows_staff_roles() -> None:
     assert "internal-users.html" in text
     assert "account-settings.html" in text
     assert "panel-training" in text
+
+
+def test_system_guide_page_and_portal_nav() -> None:
+    guide = (WEB / "guide.html").read_text(encoding="utf-8")
+    assert "protectAuthenticated" in guide
+    assert "guide-root" in guide
+    internal = (WEB / "internal.html").read_text(encoding="utf-8")
+    consumer = (WEB / "consumer.html").read_text(encoding="utf-8")
+    assert 'href="./guide.html"' in internal
+    assert "System guide" in internal
+    assert 'href="./guide.html"' in consumer
+    assert "System guide" in consumer
+    arch = (WEB / "WEB_ARCHITECTURE_CANONICAL.md").read_text(encoding="utf-8")
+    assert "/guide" in arch or "`/guide`" in arch
+    req = (WEB / "WEB_UI_REQUIRED_CONTEXT.md").read_text(encoding="utf-8")
+    assert "BLACK BOX Web UI" in req
+    assert "system guide" in req.lower() or "guide" in req.lower()
 
 
 def test_internal_header_links_external_preview_and_admin_users() -> None:
@@ -176,4 +195,5 @@ def test_dockerfile_uses_explicit_copy_not_leaky_nginx_root() -> None:
     text = (WEB / "Dockerfile").read_text(encoding="utf-8")
     assert "COPY nginx/default.conf" in text
     assert "COPY index.html" in text
+    assert "guide.html" in text
     assert "COPY . /usr/share/nginx/html" not in text

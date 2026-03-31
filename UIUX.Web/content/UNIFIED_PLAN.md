@@ -2152,6 +2152,7 @@ The required `v1` route set is:
 | `/login` | Login entry point | Public |
 | `/internal` | Internal operator portal | `internal_admin`, `internal_member` (staff); admin-only tools gated in UI and must be enforced server-side |
 | `/consumer` | Consumer portal shell | `consumer_user` only |
+| `/guide` | Structured system guide for how BLACK BOX works and how to work with Anna | Any authenticated user |
 | `/404` | Not-found screen | Public |
 
 Rules:
@@ -2348,7 +2349,29 @@ Rules:
 - the consumer portal must not expose sensitive internal runtime detail unless later authorized
 - the consumer portal must remain understandable to a non-operator
 
-## 16. State handling contract
+## 16. System guide contract
+
+The web layer must include one structured guide page that explains the system in plain language for logged-in users.
+
+Required guide coverage:
+
+- what BLACK BOX is
+- how the portal, engine, Anna, Billy, and PiBot fit together
+- how to talk to Anna
+- how curriculum/training staging works
+- how paper trades differ from real trades
+- how PiBot connection and recovery work
+- what the major portal statuses mean
+- links to deeper governed docs when needed
+
+Rules:
+
+- the guide is not an architecture-spec replacement; it is a human-readable operational/system explanation
+- the guide must be readable by both internal and consumer users
+- the guide must stay consistent with the canonical architecture and behavior contracts
+- the guide should be reachable after login from the portal navigation
+
+## 17. State handling contract
 
 Every page or panel that reads from the engine must support explicit UI states.
 
@@ -2367,7 +2390,7 @@ Rules:
 - failures must be visible and readable
 - degraded engine/API conditions must fail closed and inform the user rather than faking healthy state
 
-## 17. Portal-to-engine integration contract
+## 18. Portal-to-engine integration contract
 
 The web layer must integrate with the BLACK BOX engine through an explicit API boundary.
 
@@ -2391,7 +2414,7 @@ The engine remains:
 - the owner of artifact generation
 - the owner of command acceptance or rejection
 
-## 18. API client contract
+## 19. API client contract
 
 The web client must be built to accommodate engine growth without brittle rewrites.
 
@@ -2414,7 +2437,7 @@ Rules:
 - the client must not break because one new status field or event type appears
 - additive compatibility is the default expectation
 
-## 19. Component contract
+## 20. Component contract
 
 The web layer must be composed from reusable primitives.
 
@@ -2437,7 +2460,7 @@ Rules:
 - new primitives should be added only when the existing set cannot express the need cleanly
 - duplicated near-identical components are a contract violation unless explicitly approved
 
-## 20. Asset contract
+## 21. Asset contract
 
 All web assets must live under `UIUX.Web/`.
 
@@ -2449,7 +2472,7 @@ Required asset rules:
 - logo assets must remain original BLACK BOX assets
 - asset names should be stable and descriptive
 
-## 21. File organization contract
+## 22. File organization contract
 
 The web layer must stay organized and easy to hand off.
 
@@ -2492,7 +2515,7 @@ Rules:
 - do not create throwaway naming schemes that force later cleanup
 - keep route/page names aligned with the information architecture in this document
 
-## 22. Implementation sequence (`v1`)
+## 23. Implementation sequence (`v1`)
 
 This section is the canonical economical build order for the `v1` web UI.
 
@@ -2686,7 +2709,7 @@ Implementation-order rule:
 - the first acceptable engine-integrated web slice is Phase 1 through Phase 6
 - the first acceptable broader `v1` portal slice is Phase 1 through Phase 9
 
-## 23. Web build directive packet (`v1`)
+## 24. Web build directive packet (`v1`)
 
 This section is the canonical directive-style execution packet for building the `v1` web UI.
 
@@ -2727,7 +2750,7 @@ Acceptance rule:
 - it must satisfy the phase exit criteria it claims to complete
 - architect validation is still required under project governance
 
-## 24. Security and data-boundary contract
+## 25. Security and data-boundary contract
 
 The web layer must respect the BLACK BOX data boundary.
 
@@ -2773,7 +2796,7 @@ This is **baseline hygiene** for a static portal shell. It is **not** a WAF, bot
 
 **Self-service account (standard process):** The portal ships **UI shells** (`register.html`, `forgot-password.html`, `reset-password.html?token=`, `verify-email.html?token=`, `account-settings.html`) aligned with common practice: **no email enumeration** on forgot-password messaging, **time-limited single-use tokens** for reset and verify (enforced server-side), **password hashing** and **rate limits** on the engine only. Client paths are declared in `app.js` as `ACCOUNT_API` (`/auth/register`, `/auth/password-reset/request`, `/auth/password-reset/complete`, `/auth/email/verify`, `/auth/email/resend-verification`, `/account/me`, `/account/password`, `/admin/users`, `/admin/users/invite`). **`internal-users.html`** is the operator directory/invite shell. Until the engine implements these routes and outbound email, forms show configuration hints and fail closed.
 
-## 25. Testing and acceptance contract for web work
+## 26. Testing and acceptance contract for web work
 
 Governance applies to web work exactly as it applies to engine work.
 
@@ -2800,7 +2823,7 @@ Acceptance rule:
 - no silent failures on engine interactions
 - no acceptance without proof recorded under governance
 
-## 26. Non-goals for `v1`
+## 27. Non-goals for `v1`
 
 The following are explicitly out of scope unless later directed:
 
@@ -2811,7 +2834,7 @@ The following are explicitly out of scope unless later directed:
 - complex CMS behavior
 - client-side storage of critical secrets
 
-## 27. Developer handoff summary
+## 28. Developer handoff summary
 
 If a developer reads only one web-specific document before building, this should be enough to start.
 
@@ -2821,6 +2844,7 @@ The developer must understand:
 - what routes exist
 - what the landing page must look like
 - what the internal and consumer portals are for
+- what the system guide page must explain
 - what visual system to use
 - how CSS should be organized
 - how the UI must talk to the engine
@@ -2828,7 +2852,7 @@ The developer must understand:
 - what cannot be stored in the web layer
 - how web work will be tested and accepted under governance
 
-## 28. Change rule
+## 29. Change rule
 
 This document is intended to reduce ambiguity during development.
 

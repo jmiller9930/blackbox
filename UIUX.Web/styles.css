@@ -632,6 +632,11 @@ h1 {
   border-color: rgba(37, 99, 235, 0.2);
 }
 
+.badge--guide {
+  background: rgba(5, 5, 5, 0.06);
+  color: var(--text);
+}
+
 .portal-layout {
   flex: 1 1 0;
   min-height: 0;
@@ -749,6 +754,10 @@ h1 {
   border-color: rgba(5, 5, 5, 0.12);
 }
 
+.panel--guide {
+  border-color: rgba(5, 5, 5, 0.08);
+}
+
 .panel__title {
   margin: 0 0 var(--space-2);
   font-size: 1.05rem;
@@ -826,6 +835,63 @@ h1 {
 .devplan__cta {
   margin-top: var(--space-3);
   display: inline-flex;
+}
+
+.guide__body {
+  margin: 0 0 var(--space-3);
+  color: var(--text);
+  line-height: 1.65;
+}
+
+.guide__list {
+  margin: 0 0 var(--space-3);
+  padding-left: 1.25rem;
+  color: var(--text);
+  line-height: 1.6;
+}
+
+.guide__list--tight {
+  margin-bottom: 0;
+}
+
+.guide__list li + li {
+  margin-top: 0.45rem;
+}
+
+.guide__mini-card {
+  margin: 0 0 var(--space-3);
+  padding: var(--space-3);
+  border-radius: var(--radius-lg);
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  background: rgba(255, 255, 255, 0.55);
+}
+
+.guide__mini-label {
+  margin: 0 0 var(--space-2);
+  color: var(--muted);
+  font-size: 0.82rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.guide__mini-copy {
+  margin: 0;
+  line-height: 1.6;
+}
+
+.guide__link {
+  color: var(--text);
+  font-weight: 600;
+}
+
+.guide__link:hover {
+  color: var(--muted);
+}
+
+.guide__link:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
 }
 
 /* —— Unified plan full page (internal-plan.html) —— */

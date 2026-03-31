@@ -1,0 +1,255 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="blackbox-api-base" content="" />
+    <title>BLACK BOX | System guide</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <div class="page page--portal" id="guide-root" hidden>
+      <header class="portal-header" aria-label="System guide header">
+        <div class="portal-header__row">
+          <a class="brand brand--link" href="./index.html">
+            <img
+              class="brand__mini"
+              src="./assets/blackbox-boxmark.svg"
+              alt="BLACK BOX mark"
+            />
+            <span>BLACK BOX</span>
+          </a>
+          <span class="badge badge--guide">System guide</span>
+        </div>
+        <nav class="portal-nav" aria-label="Portal navigation">
+          <span class="portal-nav__user" id="portal-user" aria-live="polite"></span>
+          <a class="button button--secondary" id="btn-return" href="./internal.html"
+            >Return to portal</a
+          >
+          <button type="button" class="button button--ghost" id="btn-logout">
+            Sign out
+          </button>
+        </nav>
+      </header>
+
+      <div class="portal-layout">
+        <aside class="portal-sidebar" aria-label="Guide navigation">
+          <ul class="sidebar-list">
+            <li><a class="sidebar-list__link" href="#guide-overview">Overview</a></li>
+            <li><a class="sidebar-list__link" href="#guide-pieces">Pieces</a></li>
+            <li><a class="sidebar-list__link" href="#guide-anna">Working with Anna</a></li>
+            <li><a class="sidebar-list__link" href="#guide-training">Curriculum and training</a></li>
+            <li><a class="sidebar-list__link" href="#guide-trades">Paper trades and real trades</a></li>
+            <li><a class="sidebar-list__link" href="#guide-pibot">PiBot connection and recovery</a></li>
+            <li><a class="sidebar-list__link" href="#guide-status">Portal statuses</a></li>
+            <li><a class="sidebar-list__link" href="#guide-links">Useful links</a></li>
+          </ul>
+        </aside>
+
+        <main class="portal-main">
+          <h1 class="portal-title">How BLACK BOX works</h1>
+          <p class="portal-lede">
+            This guide explains the system in plain language so an operator,
+            internal teammate, or consumer can understand how the portal, Anna,
+            the engine, Billy, and PiBot fit together.
+          </p>
+
+          <div class="panel-grid panel-grid--single">
+            <section class="panel panel--guide" id="guide-overview" aria-labelledby="t-overview">
+              <h2 class="panel__title" id="t-overview">Overview</h2>
+              <p class="guide__body">
+                BLACK BOX is one system with clearly separated parts. The portal is
+                the front door. The engine core is the source of truth and the place
+                where governed status, decisions, and controls live. Anna is the
+                strategist and analyst. Billy is the execution bot / market
+                connector. PiBot is the edge device that stays under user control
+                and holds local secret information.
+              </p>
+              <p class="guide__body">
+                The portal does not replace the engine. It gives humans a structured
+                way to see what the system is doing, interact with Anna, and manage
+                supported workflows such as account access, status visibility, and
+                eventually PiBot connection and recovery.
+              </p>
+            </section>
+
+            <section class="panel panel--guide" id="guide-pieces" aria-labelledby="t-pieces">
+              <h2 class="panel__title" id="t-pieces">How the pieces fit together</h2>
+              <ul class="guide__list">
+                <li><strong>Portal UI</strong>: the human-facing shell and workflow surface.</li>
+                <li><strong>Engine core</strong>: the source of truth, API, status, controls, and artifacts.</li>
+                <li><strong>Anna</strong>: strategist / analyst intelligence surfaced through the engine.</li>
+                <li><strong>Billy</strong>: execution bot / market connector surfaced through the engine.</li>
+                <li><strong>PiBot</strong>: user-owned edge device that keeps local secrets and executes on the edge.</li>
+                <li><strong>API boundary</strong>: the approved contract between the portal and the engine.</li>
+              </ul>
+              <p class="guide__body">
+                In short: BLACK BOX is the platform, the portal is how people use it,
+                the engine is the operational brain, and PiBot is the edge extension
+                that remains under local user control.
+              </p>
+            </section>
+
+            <section class="panel panel--guide" id="guide-anna" aria-labelledby="t-anna-guide">
+              <h2 class="panel__title" id="t-anna-guide">How to work with Anna</h2>
+              <p class="guide__body">
+                Anna is conversation-first. Humans should talk to Anna in normal
+                language by default. Command tags exist only where deterministic
+                routing, logging, or governed handling is required.
+              </p>
+              <ul class="guide__list">
+                <li>Ask for explanations in plain language.</li>
+                <li>Challenge Anna if the thesis or logic looks weak.</li>
+                <li>Ask for status or review when you want current operating state.</li>
+                <li>Use explicit training staging language when you want something to become training.</li>
+              </ul>
+              <p class="guide__body">
+                Anna should not silently self-update from casual conversation.
+                Training suggestions stay conversational until they are explicitly
+                staged.
+              </p>
+              <div class="guide__mini-card">
+                <p class="guide__mini-label">Plain-language intents Anna should recognize</p>
+                <p class="guide__mini-copy">
+                  explanation request, challenge, counter-argument, training
+                  suggestion, status request, and review request
+                </p>
+              </div>
+            </section>
+
+            <section class="panel panel--guide" id="guide-training" aria-labelledby="t-training-guide">
+              <h2 class="panel__title" id="t-training-guide">Curriculum and training</h2>
+              <p class="guide__body">
+                Conversation and training are not the same thing. If you give Anna a
+                suggestion that looks training-relevant, she should classify it
+                first, explain why, and ask whether you want it staged.
+              </p>
+              <div class="guide__mini-card">
+                <p class="guide__mini-label">Anna's compact training packet</p>
+                <ul class="guide__list guide__list--tight">
+                  <li><code>classification</code></li>
+                  <li><code>why</code></li>
+                  <li><code>recommended_next_action</code></li>
+                  <li><code>confirm?</code></li>
+                </ul>
+              </div>
+              <div class="guide__mini-card">
+                <p class="guide__mini-label">Human confirmation grammar</p>
+                <ul class="guide__list guide__list--tight">
+                  <li><code>stage it</code></li>
+                  <li><code>revise it</code></li>
+                  <li><code>leave it</code></li>
+                </ul>
+              </div>
+              <p class="guide__body">
+                In `v1`, if you say <code>revise it</code>, Anna should return one
+                revised candidate only. Training becomes meaningful when it moves
+                through governed review, simulation, and where allowed later, gated
+                live evidence.
+              </p>
+            </section>
+
+            <section class="panel panel--guide" id="guide-trades" aria-labelledby="t-trades">
+              <h2 class="panel__title" id="t-trades">Paper trades and real trades</h2>
+              <p class="guide__body">
+                A paper trade is treated as a real decision event without real
+                capital movement. This lets Anna test trade logic, collect outcome
+                data, and learn from the result without risking funds.
+              </p>
+              <ul class="guide__list">
+                <li><strong>Simulation / backtest</strong>: replay or stored-data testing.</li>
+                <li><strong>Paper trade</strong>: live-data path, fake/non-custodial execution.</li>
+                <li><strong>Real trade</strong>: gated live execution with stricter approval and control requirements.</li>
+              </ul>
+              <p class="guide__body">
+                The expected direction is that Anna proves herself in the
+                paper-trade lane before any actual-trade authorization is considered.
+                Passing paper performance should be a promotion gate, not an implied
+                right to trade live.
+              </p>
+            </section>
+
+            <section class="panel panel--guide" id="guide-pibot" aria-labelledby="t-pibot">
+              <h2 class="panel__title" id="t-pibot">PiBot connection and recovery</h2>
+              <p class="guide__body">
+                PiBot is the edge device. It keeps the secret information locally.
+                BLACK BOX should not hold exchange secrets, seed phrases, or private
+                keys. The portal should therefore own the user-facing pairing and
+                recovery flow, while PiBot proves its identity from the edge.
+              </p>
+              <ul class="guide__list">
+                <li><strong>Device still intact</strong>: recover / re-pair through the portal with device proof.</li>
+                <li><strong>Device wiped or reimaged</strong>: treat it as a new device and start over.</li>
+                <li><strong>Secret handling</strong>: secret information is re-entered on PiBot, not stored in BLACK BOX.</li>
+              </ul>
+            </section>
+
+            <section class="panel panel--guide" id="guide-status" aria-labelledby="t-status">
+              <h2 class="panel__title" id="t-status">What the main portal statuses mean</h2>
+              <ul class="guide__list">
+                <li><strong>Anna status</strong>: what Anna is doing, thinking about, or waiting on.</li>
+                <li><strong>Billy / exchange status</strong>: whether the execution path appears online and trade-capable.</li>
+                <li><strong>Winning / losing</strong>: current performance state, not a guarantee of future results.</li>
+                <li><strong>Training / learning</strong>: what is under review, staged, or being validated.</li>
+                <li><strong>Edge-bot status</strong>: whether PiBot or other edge devices appear connected.</li>
+              </ul>
+              <p class="guide__body">
+                The portal should show readable summaries backed by structured engine
+                artifacts rather than forcing users to reconstruct system truth from
+                raw logs.
+              </p>
+            </section>
+
+            <section class="panel panel--guide" id="guide-links" aria-labelledby="t-links">
+              <h2 class="panel__title" id="t-links">Useful links</h2>
+              <ul class="guide__list">
+                <li><a class="guide__link" href="./internal.html">Internal portal</a></li>
+                <li><a class="guide__link" href="./consumer.html">Consumer portal</a></li>
+                <li><a class="guide__link" href="./internal-plan.html">Unified plan document</a></li>
+                <li>
+                  <a
+                    class="guide__link"
+                    href="https://github.com/jmiller9930/blackbox/blob/main/UIUX.Web/WEB_UI_REQUIRED_CONTEXT.md"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    >Web UI required context</a
+                  >
+                </li>
+                <li>
+                  <a
+                    class="guide__link"
+                    href="https://github.com/jmiller9930/blackbox/blob/main/UIUX.Web/WEB_ARCHITECTURE_CANONICAL.md"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    >Web architecture canonical</a
+                  >
+                </li>
+              </ul>
+            </section>
+          </div>
+        </main>
+      </div>
+    </div>
+    <script src="./app.js"></script>
+    <script>
+      document.addEventListener("DOMContentLoaded", function () {
+        if (!window.BlackboxPortal.protectAuthenticated()) {
+          return;
+        }
+        var root = document.getElementById("guide-root");
+        root.hidden = false;
+        var s = window.BlackboxPortal.getSession();
+        var returnHref = window.BlackboxPortal.portalPathForRole(s.role);
+        document.getElementById("portal-user").textContent =
+          "Signed in as " + s.username + " (" + s.role + ")";
+        document.getElementById("btn-return").href = returnHref;
+        document.getElementById("btn-return").textContent =
+          s.role === "consumer_user" ? "Return to account" : "Return to portal";
+        document.getElementById("btn-logout").addEventListener("click", function () {
+          window.BlackboxPortal.clearSession();
+          window.location.href = "login.html";
+        });
+      });
+    </script>
+  </body>
+</html>
