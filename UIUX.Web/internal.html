@@ -33,6 +33,9 @@
         <aside class="portal-sidebar" aria-label="Section navigation">
           <ul class="sidebar-list">
             <li><a class="sidebar-list__link" href="#panel-runtime">Runtime</a></li>
+            <li>
+              <a class="sidebar-list__link" href="#panel-devplan">Development plan</a>
+            </li>
             <li><a class="sidebar-list__link" href="#panel-anna">Anna</a></li>
             <li><a class="sidebar-list__link" href="#panel-exchange">Exchange</a></li>
             <li><a class="sidebar-list__link" href="#panel-pnl">P&amp;L</a></li>
@@ -71,6 +74,70 @@
                   Restart
                 </button>
               </div>
+            </section>
+
+            <section
+              class="panel panel--wide panel--devplan"
+              id="panel-devplan"
+              aria-labelledby="t-devplan"
+            >
+              <h2 class="panel__title" id="t-devplan">Development plan</h2>
+              <p class="panel__lede">
+                Canonical sources in the BLACK BOX repo (not copies). Snapshot below
+                is static—refresh it when the active directive changes.
+              </p>
+              <ul class="devplan__links">
+                <li>
+                  <a
+                    class="devplan__a"
+                    href="https://github.com/jmiller9930/blackbox/blob/main/docs/architect/development_plan.md"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    >docs/architect/development_plan.md</a
+                  >
+                  — master plan / phases
+                </li>
+                <li>
+                  <a
+                    class="devplan__a"
+                    href="https://github.com/jmiller9930/blackbox/blob/main/docs/working/current_directive.md"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    >docs/working/current_directive.md</a
+                  >
+                  — active directive (binding slice)
+                </li>
+                <li>
+                  <a
+                    class="devplan__a"
+                    href="https://github.com/jmiller9930/blackbox/blob/main/UIUX.Web/WEB_ARCHITECTURE_CANONICAL.md"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    >UIUX.Web/WEB_ARCHITECTURE_CANONICAL.md</a
+                  >
+                  — web implementation sequence (Phases 1–9)
+                </li>
+              </ul>
+              <h3 class="devplan__subhead">Snapshot</h3>
+              <ul class="devplan__status">
+                <li>
+                  <strong>Developed (web)</strong> — Public landing, login, internal /
+                  consumer shells, shared <code>app.js</code>, Docker/nginx TLS shell;
+                  <code>WEB_ARCHITECTURE_CANONICAL.md</code> Phases 1–4 foundation.
+                </li>
+                <li>
+                  <strong>Active directive</strong> —
+                  <strong>CANONICAL #041</strong> — Pillar 1 intake-cycle refresh and
+                  publication-readiness gate (architect-owned). See
+                  <code>current_directive.md</code>.
+                </li>
+                <li>
+                  <strong>Pending (web)</strong> — Phase 5+ engine-backed panels,
+                  <code>/api/v1/</code> proxy, production certificates; see
+                  <code>development_plan.md</code> and web implementation sequence in
+                  <code>WEB_ARCHITECTURE_CANONICAL.md</code>.
+                </li>
+              </ul>
             </section>
 
             <section class="panel" id="panel-anna" aria-labelledby="t-anna">

@@ -38,6 +38,7 @@ def test_index_has_sign_in_and_ticker_logo() -> None:
     assert "login.html" in text
     assert "assets/generated/blackbox-3d-box-ticker-logo.svg" in text
     assert "landing-minimal" in text
+    assert "not wired" not in text.lower()
 
 
 def test_login_wires_app_and_form() -> None:
@@ -53,6 +54,9 @@ def test_internal_protects_internal_admin() -> None:
     text = (WEB / "internal.html").read_text(encoding="utf-8")
     assert 'requiredRole: "internal_admin"' in text
     assert "panel-runtime" in text
+    assert "panel-devplan" in text
+    assert "development_plan.md" in text
+    assert "current_directive.md" in text
     assert "panel-training" in text
 
 

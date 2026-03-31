@@ -1,4 +1,4 @@
-# Captured: 2026-03-31T19:51Z (UTC) — pytest tests/test_uiux_web.py
+# Captured: 2026-03-31T19:53Z (UTC)
 
 ============================= test session starts ==============================
 platform darwin -- Python 3.11.0, pytest-8.4.2, pluggy-1.6.0 -- /usr/local/bin/python3
@@ -30,4 +30,4 @@ tests/test_uiux_web.py::test_app_js_exports_portal_api PASSED            [ 90%]
 tests/test_uiux_web.py::test_nginx_baseline_hardening PASSED             [ 95%]
 tests/test_uiux_web.py::test_dockerfile_uses_explicit_copy_not_leaky_nginx_root PASSED [100%]
 
-============================== 21 passed in 0.01s ==============================
+============================== 21 passed in 0.02s ==============================

@@ -12,7 +12,7 @@ Test ↔ development mapping (each area has at least one test):
   • File tree + Docker/nginx deliverables     → test_uiux_required_paths_exist (parametrize)
   • Minimal landing + ticker logo + sign-in   → test_index_has_sign_in_and_ticker_logo
   • Login form + app wiring                   → test_login_wires_app_and_form
-  • Internal portal + role guard + panels     → test_internal_protects_internal_admin
+  • Internal portal + dev plan panel + links  → test_internal_protects_internal_admin
   • Consumer portal + role guard              → test_consumer_protects_consumer_user
   • Shared API/session client (app.js)        → test_app_js_exports_portal_api
   • nginx TLS + security headers              → test_nginx_baseline_hardening
