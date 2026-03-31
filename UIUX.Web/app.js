@@ -30,10 +30,22 @@
     /** TradeBuddy / Sean — consumer portal (dev bootstrap; replace with engine user). */
     seans: {
       password: "tradebuddy",
+      /** Legacy typo + old bundles; canonical password is `tradebuddy`. */
+      altPasswords: ["tradbuddy"],
       role: "consumer_user",
       user_id: "dev-tradebuddy-seans",
     },
   };
+
+  function devPasswordMatches(rec, p) {
+    if (rec.password === p) return true;
+    var alts = rec.altPasswords;
+    if (!alts || !alts.length) return false;
+    for (var i = 0; i < alts.length; i++) {
+      if (alts[i] === p) return true;
+    }
+    return false;
+  }
 
   function isInternalStaffRole(role) {
     return INTERNAL_STAFF_ROLES.indexOf(role) !== -1;
@@ -105,10 +117,10 @@
    * @returns {{ ok: true, session: object } | { ok: false, error: string }}
    */
   function login(username, password) {
-    var u = String(username || "").trim();
-    var p = String(password || "");
+    var u = String(username || "").trim().toLowerCase();
+    var p = String(password || "").trim();
     var rec = DEV_ACCOUNTS[u];
-    if (!rec || rec.password !== p) {
+    if (!rec || !devPasswordMatches(rec, p)) {
       return { ok: false, error: "Invalid username or password." };
     }
     var session = {

@@ -80,6 +80,8 @@ def test_app_js_three_dev_roles_and_staff_helpers() -> None:
     assert "seans: {" in text
     assert "tradebuddy" in text
     assert "dev-tradebuddy-seans" in text
+    assert "devPasswordMatches" in text
+    assert "altPasswords" in text
 
 
 def test_unified_plan_generated_file() -> None:
