@@ -140,14 +140,27 @@ def test_system_guide_page_and_portal_nav() -> None:
 
 
 def test_internal_header_links_external_preview_and_admin_users() -> None:
-    """Top nav must expose consumer preview and admin user directory (not only sidebar)."""
+    """Top nav exposes unified plan, consumer preview, and admin user directory (not only sidebar)."""
     text = (WEB / "internal.html").read_text(encoding="utf-8")
+    assert 'href="./internal-plan.html"' in text
+    assert "portal-nav__unified-plan" in text
+    assert "Unified plan" in text
     assert 'href="./consumer.html?preview=1"' in text
     assert "portal-nav__external" in text
     assert ">External</a" in text or ">External</a>" in text.replace("\n", "")
     assert 'href="./internal-users.html"' in text
     assert "portal-nav__admin-users" in text
     assert "Admin users" in text
+
+
+def test_internal_portal_devplan_collapsible_and_sidebar_active_styles() -> None:
+    """Development plan is a closed-by-default details panel; sidebar active pill CSS exists."""
+    internal = (WEB / "internal.html").read_text(encoding="utf-8")
+    assert 'id="devplan-details"' in internal
+    assert "devplan-details" in internal
+    assert "sidebar-list__link--active" in internal
+    css = (WEB / "styles.css").read_text(encoding="utf-8")
+    assert ".sidebar-list__link.sidebar-list__link--active" in css
 
 
 def test_consumer_allows_internal_preview_gate_in_app_js() -> None:

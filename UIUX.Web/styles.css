@@ -634,6 +634,10 @@ h1 {
   color: var(--muted);
 }
 
+.portal-nav__unified-plan {
+  flex-shrink: 0;
+}
+
 .portal-preview-banner {
   width: min(calc(100% - 32px), var(--max-width));
   margin: var(--space-2) auto 0;
@@ -659,6 +663,25 @@ h1 {
 .sidebar-list__link--current {
   font-weight: 700;
   color: var(--text);
+}
+
+/* In-page section nav (operator portal): active = pill */
+.sidebar-list__link.sidebar-list__link--active {
+  background: var(--accent);
+  color: var(--accent-contrast);
+  padding: 0.4rem 0.75rem;
+  border-radius: 999px;
+  font-weight: 600;
+}
+
+.sidebar-list__link.sidebar-list__link--active:hover {
+  color: var(--accent-contrast);
+  opacity: 0.92;
+}
+
+.sidebar-list__link.sidebar-list__link--active:focus-visible {
+  outline: 2px solid var(--accent-contrast);
+  outline-offset: 2px;
 }
 
 .badge {
@@ -851,6 +874,51 @@ h1 {
   border-color: rgba(5, 5, 5, 0.1);
 }
 
+.devplan-details {
+  margin: 0;
+}
+
+.devplan-details__summary {
+  cursor: pointer;
+  list-style: none;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  user-select: none;
+}
+
+.devplan-details__summary::-webkit-details-marker {
+  display: none;
+}
+
+.devplan-details__title {
+  margin: 0;
+  flex: 1;
+}
+
+.devplan-details__chevron {
+  width: 0.55rem;
+  height: 0.55rem;
+  border-right: 2px solid var(--text);
+  border-bottom: 2px solid var(--text);
+  transform: rotate(-45deg);
+  flex-shrink: 0;
+  margin-top: -0.2rem;
+  opacity: 0.55;
+}
+
+.devplan-details[open] .devplan-details__chevron {
+  transform: rotate(45deg);
+  margin-top: 0.15rem;
+}
+
+.devplan-details__body {
+  padding-top: var(--space-3);
+  margin-top: var(--space-2);
+  border-top: 1px solid rgba(15, 23, 42, 0.08);
+}
+
 .devplan__links,
 .devplan__status {
   margin: 0 0 var(--space-3);
@@ -886,11 +954,6 @@ h1 {
   letter-spacing: 0.04em;
   text-transform: uppercase;
   color: var(--muted);
-}
-
-.devplan__cta {
-  margin-top: var(--space-3);
-  display: inline-flex;
 }
 
 .guide__body {
