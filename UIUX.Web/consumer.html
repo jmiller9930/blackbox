@@ -84,8 +84,6 @@
         if (!window.BlackboxPortal.protectConsumerPortal()) {
           return;
         }
-        var root = document.getElementById("portal-root");
-        root.hidden = false;
         var s = window.BlackboxPortal.getSession();
         var preview = false;
         try {
@@ -101,6 +99,7 @@
         }
         document.getElementById("portal-user").textContent =
           "Signed in as " + s.username + " (" + s.role + ")";
+        document.getElementById("portal-root").hidden = false;
         document.getElementById("btn-logout").addEventListener("click", function () {
           window.BlackboxPortal.clearSession();
           window.location.href = "login.html";

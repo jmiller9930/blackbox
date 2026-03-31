@@ -256,24 +256,22 @@
         ) {
           return;
         }
-        var root = document.getElementById("portal-root");
-        root.hidden = false;
         var s = window.BlackboxPortal.getSession();
-        document.getElementById("portal-user").textContent =
-          "Signed in as " + s.username + " (" + s.role + ")";
+        /* Hide admin-only chrome before first paint (avoids flicker for team). */
         if (!window.BlackboxPortal.isInternalAdminRole(s.role)) {
           document.querySelectorAll(".internal-admin-only").forEach(function (el) {
             el.hidden = true;
           });
         }
         var scopeBadge = document.getElementById("portal-scope-badge");
-        if (scopeBadge) {
-          if (s.role === "internal_member") {
-            scopeBadge.textContent = "Team";
-            scopeBadge.classList.remove("badge--internal");
-            scopeBadge.classList.add("badge--team");
-          }
+        if (scopeBadge && s.role === "internal_member") {
+          scopeBadge.textContent = "Team";
+          scopeBadge.classList.remove("badge--internal");
+          scopeBadge.classList.add("badge--team");
         }
+        document.getElementById("portal-user").textContent =
+          "Signed in as " + s.username + " (" + s.role + ")";
+        document.getElementById("portal-root").hidden = false;
         document.getElementById("btn-logout").addEventListener("click", function () {
           window.BlackboxPortal.clearSession();
           window.location.href = "login.html";
