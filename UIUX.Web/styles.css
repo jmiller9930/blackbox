@@ -48,6 +48,45 @@ body {
   flex-direction: column;
 }
 
+/* —— Minimal landing (logo + sign in only) —— */
+.page--landing-minimal {
+  display: grid;
+  place-items: center;
+  padding: var(--space-5) var(--space-3);
+}
+
+.landing-minimal {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-5);
+  text-align: center;
+  max-width: 640px;
+}
+
+.landing-minimal__logo {
+  width: min(72vw, 520px);
+  max-width: 100%;
+  height: auto;
+  display: block;
+  filter: drop-shadow(0 20px 40px rgba(6, 10, 18, 0.18));
+}
+
+.landing-minimal__cta {
+  min-width: 11rem;
+  justify-content: center;
+  display: inline-flex;
+  align-items: center;
+}
+
+.landing-minimal__note {
+  margin: 0;
+  font-size: 0.9rem;
+  color: var(--muted);
+  line-height: 1.5;
+  max-width: 28rem;
+}
+
 .masthead {
   width: min(calc(100% - 32px), var(--max-width));
   margin: 18px auto 0;

@@ -33,11 +33,11 @@ def test_uiux_required_paths_exist(name: str) -> None:
     assert (WEB / name).is_file(), f"missing {WEB / name}"
 
 
-def test_index_has_sign_in_and_mark() -> None:
+def test_index_has_sign_in_and_ticker_logo() -> None:
     text = (WEB / "index.html").read_text(encoding="utf-8")
     assert "login.html" in text
-    assert "assets/blackbox-boxmark.svg" in text
     assert "assets/generated/blackbox-3d-box-ticker-logo.svg" in text
+    assert "landing-minimal" in text
 
 
 def test_login_wires_app_and_form() -> None:

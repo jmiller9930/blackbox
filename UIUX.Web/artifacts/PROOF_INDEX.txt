@@ -10,7 +10,7 @@ Artifact files in this folder:
 
 Test ↔ development mapping (each area has at least one test):
   • File tree + Docker/nginx deliverables     → test_uiux_required_paths_exist (parametrize)
-  • Landing page + marks + sign-in            → test_index_has_sign_in_and_mark
+  • Minimal landing + ticker logo + sign-in   → test_index_has_sign_in_and_ticker_logo
   • Login form + app wiring                   → test_login_wires_app_and_form
   • Internal portal + role guard + panels     → test_internal_protects_internal_admin
   • Consumer portal + role guard              → test_consumer_protects_consumer_user

@@ -1,4 +1,4 @@
-# Captured: 2026-03-31T19:47Z (UTC) — repo root: pytest tests/test_uiux_web.py
+# Captured: 2026-03-31T19:51Z (UTC) — pytest tests/test_uiux_web.py
 
 ============================= test session starts ==============================
 platform darwin -- Python 3.11.0, pytest-8.4.2, pluggy-1.6.0 -- /usr/local/bin/python3
@@ -22,7 +22,7 @@ tests/test_uiux_web.py::test_uiux_required_paths_exist[artifacts/PROOF_INDEX.txt
 tests/test_uiux_web.py::test_uiux_required_paths_exist[WEB_ARCHITECTURE_CANONICAL.md] PASSED [ 57%]
 tests/test_uiux_web.py::test_uiux_required_paths_exist[assets/blackbox-boxmark.svg] PASSED [ 61%]
 tests/test_uiux_web.py::test_uiux_required_paths_exist[assets/generated/blackbox-3d-box-ticker-logo.svg] PASSED [ 66%]
-tests/test_uiux_web.py::test_index_has_sign_in_and_mark PASSED           [ 71%]
+tests/test_uiux_web.py::test_index_has_sign_in_and_ticker_logo PASSED    [ 71%]
 tests/test_uiux_web.py::test_login_wires_app_and_form PASSED             [ 76%]
 tests/test_uiux_web.py::test_internal_protects_internal_admin PASSED     [ 80%]
 tests/test_uiux_web.py::test_consumer_protects_consumer_user PASSED      [ 85%]
@@ -30,4 +30,4 @@ tests/test_uiux_web.py::test_app_js_exports_portal_api PASSED            [ 90%]
 tests/test_uiux_web.py::test_nginx_baseline_hardening PASSED             [ 95%]
 tests/test_uiux_web.py::test_dockerfile_uses_explicit_copy_not_leaky_nginx_root PASSED [100%]
 
-============================== 21 passed in 0.02s ==============================
+============================== 21 passed in 0.01s ==============================
