@@ -656,6 +656,11 @@ h1 {
   font-weight: 600;
 }
 
+.sidebar-list__link--current {
+  font-weight: 700;
+  color: var(--text);
+}
+
 .badge {
   font-size: 0.72rem;
   font-weight: 700;

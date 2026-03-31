@@ -20,6 +20,7 @@ def test_unified_plan_build_script_exists() -> None:
         "index.html",
         "login.html",
         "internal.html",
+        "anna.html",
         "internal-plan.html",
         "internal-users.html",
         "account-settings.html",
@@ -107,13 +108,17 @@ def test_internal_portal_allows_staff_roles() -> None:
     assert "portal-wait" in text
     assert "preparePortalBoot" in text
     assert "hidePortalBootOverlay" in text
-    assert "isInternalAdminRole" in text
-    assert "panel-runtime" in text
-    assert "panel-devplan" in text
-    assert "development_plan.md" in text
-    assert "current_directive.md" in text
-    assert "internal-users.html" in text
-    assert "account-settings.html" in text
+    assert 'href="./anna.html"' in text
+
+
+def test_anna_page_is_dedicated_workspace() -> None:
+    text = (WEB / "anna.html").read_text(encoding="utf-8")
+    assert "INTERNAL_STAFF_ROLES" in text
+    assert '<h1 class="portal-title">Anna</h1>' in text
+    assert "Operator portal" in text
+    assert "sidebar-list__link--current" in text
+    assert "preparePortalBoot" in text
+    assert "panel-anna" in text
     assert "panel-training" in text
 
 
@@ -207,5 +212,5 @@ def test_dockerfile_uses_explicit_copy_not_leaky_nginx_root() -> None:
     text = (WEB / "Dockerfile").read_text(encoding="utf-8")
     assert "COPY nginx/default.conf" in text
     assert "COPY index.html" in text
-    assert "guide.html" in text
+    assert "anna.html" in text
     assert "COPY . /usr/share/nginx/html" not in text

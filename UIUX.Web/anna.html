@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="blackbox-api-base" content="" />
+    <title>BLACK BOX | Anna</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <div
+      class="portal-wait"
+      id="portal-wait"
+      role="status"
+      aria-live="polite"
+      aria-busy="true"
+    >
+      <div class="portal-wait__inner">
+        <div class="portal-wait__spinner" aria-hidden="true"></div>
+        <p class="portal-wait__text">Loading portal…</p>
+        <p class="portal-wait__elapsed" id="portal-wait-elapsed">0s</p>
+      </div>
+    </div>
+    <div class="page page--portal" id="portal-root" hidden>
+      <header class="portal-header" aria-label="Anna workspace header">
+        <div class="portal-header__row">
+          <a class="brand brand--link" href="./index.html">
+            <img
+              class="brand__mini"
+              src="./assets/blackbox-boxmark.svg"
+              alt="BLACK BOX mark"
+            />
+            <span>BLACK BOX</span>
+          </a>
+          <span class="badge badge--internal" id="portal-scope-badge">Internal</span>
+        </div>
+        <nav class="portal-nav" aria-label="Portal navigation">
+          <span class="portal-nav__user" id="portal-user" aria-live="polite"></span>
+          <a class="button button--ghost" href="./guide.html">System guide</a>
+          <a
+            class="button button--secondary portal-nav__external"
+            href="./consumer.html?preview=1"
+            title="Open the consumer portal layout in preview"
+            >External</a
+          >
+          <a
+            class="button button--secondary portal-nav__admin-users internal-admin-only"
+            href="./internal-users.html"
+            title="User directory and invites (admin only)"
+            >Admin users</a
+          >
+          <a class="button button--ghost" href="./account-settings.html">My account</a>
+          <button type="button" class="button button--ghost" id="btn-logout">
+            Sign out
+          </button>
+        </nav>
+      </header>
+
+      <div class="portal-layout">
+        <aside class="portal-sidebar" aria-label="Section navigation">
+          <ul class="sidebar-list">
+            <li>
+              <a class="sidebar-list__link" href="./internal.html">Operator portal</a>
+            </li>
+            <li>
+              <a
+                class="sidebar-list__link sidebar-list__link--current"
+                href="./anna.html"
+                aria-current="page"
+                >Anna</a
+              >
+            </li>
+            <li>
+              <a class="sidebar-list__link" href="./internal.html#panel-runtime"
+                >Runtime</a
+              >
+            </li>
+            <li>
+              <a class="sidebar-list__link" href="./internal-plan.html"
+                >Unified plan (full)</a
+              >
+            </li>
+            <li>
+              <a class="sidebar-list__link" href="./guide.html">System guide</a>
+            </li>
+            <li class="internal-admin-only">
+              <a
+                class="sidebar-list__link sidebar-list__link--admin"
+                href="./internal-users.html"
+                >Admin users</a
+              >
+            </li>
+          </ul>
+        </aside>
+
+        <main class="portal-main" id="main">
+          <h1 class="portal-title">Anna</h1>
+          <p class="portal-lede">
+            Strategist / analyst intelligence surfaces here when the engine exposes
+            status, training, and conversation context via <code>/api/v1/</code>.
+            This page is only Anna — not the full operator dashboard.
+          </p>
+
+          <div class="panel-grid panel-grid--single">
+            <section class="panel" id="panel-anna" aria-labelledby="t-anna">
+              <h2 class="panel__title" id="t-anna">Anna status</h2>
+              <p class="panel__state panel__state--pending" data-state>
+                No data — connect <code>meta blackbox-api-base</code> and query API.
+              </p>
+            </section>
+
+            <section class="panel panel--training" id="panel-training" aria-labelledby="t-train">
+              <h2 class="panel__title" id="t-train">Anna training / learning</h2>
+              <p class="panel__state panel__state--pending" data-state>
+                Training window placeholder — first-class surface when API exists.
+              </p>
+            </section>
+          </div>
+        </main>
+      </div>
+    </div>
+    <script src="./app.js"></script>
+    <script>
+      document.addEventListener("DOMContentLoaded", function () {
+        window.BlackboxPortal.preparePortalBoot();
+        if (
+          !window.BlackboxPortal.protectPage({
+            allowedRoles: window.BlackboxPortal.INTERNAL_STAFF_ROLES,
+          })
+        ) {
+          return;
+        }
+        var s = window.BlackboxPortal.getSession();
+        if (!window.BlackboxPortal.isInternalAdminRole(s.role)) {
+          document.querySelectorAll(".internal-admin-only").forEach(function (el) {
+            el.hidden = true;
+          });
+        }
+        var scopeBadge = document.getElementById("portal-scope-badge");
+        if (scopeBadge && s.role === "internal_member") {
+          scopeBadge.textContent = "Team";
+          scopeBadge.classList.remove("badge--internal");
+          scopeBadge.classList.add("badge--team");
+        }
+        document.getElementById("portal-user").textContent =
+          "Signed in as " + s.username + " (" + s.role + ")";
+        window.BlackboxPortal.hidePortalBootOverlay();
+        document.getElementById("portal-root").hidden = false;
+        document.getElementById("btn-logout").addEventListener("click", function () {
+          window.BlackboxPortal.clearSession();
+          window.location.href = "login.html";
+        });
+      });
+    </script>
+  </body>
+</html>
