@@ -27,11 +27,11 @@
       role: "consumer_user",
       user_id: "dev-bootstrap-consumer",
     },
-    /** TradBuddy / Sean — consumer portal (dev bootstrap; replace with engine user). */
+    /** TradeBuddy / Sean — consumer portal (dev bootstrap; replace with engine user). */
     seans: {
-      password: "tradbuddy",
+      password: "tradebuddy",
       role: "consumer_user",
-      user_id: "dev-tradbuddy-seans",
+      user_id: "dev-tradebuddy-seans",
     },
   };
 

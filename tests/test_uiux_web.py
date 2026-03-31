@@ -78,8 +78,8 @@ def test_app_js_three_dev_roles_and_staff_helpers() -> None:
     assert "isInternalStaffRole" in text
     assert "team: {" in text
     assert "seans: {" in text
-    assert "tradbuddy" in text
-    assert "dev-tradbuddy-seans" in text
+    assert "tradebuddy" in text
+    assert "dev-tradebuddy-seans" in text
 
 
 def test_unified_plan_generated_file() -> None:
