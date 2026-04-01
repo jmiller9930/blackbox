@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="blackbox-api-base" content="" />
+    <title>BLACK BOX | Docs</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <div class="portal-wait" id="portal-wait" role="status" aria-live="polite" aria-busy="true">
+      <div class="portal-wait__inner">
+        <div class="portal-wait__spinner" aria-hidden="true"></div>
+        <p class="portal-wait__text">Loading portal…</p>
+        <p class="portal-wait__elapsed" id="portal-wait-elapsed">0s</p>
+      </div>
+    </div>
+    <div class="page page--portal" id="docs-root" hidden>
+      <header class="portal-header" aria-label="Docs header">
+        <div class="portal-header__row">
+          <a class="brand brand--link" href="./index.html">
+            <img class="brand__logo" src="./assets/blackboxlogo.png" alt="BLACK BOX mark" />
+          </a>
+          <span class="badge badge--docs" id="portal-scope-badge">Docs</span>
+        </div>
+        <nav class="portal-nav" aria-label="Portal navigation">
+          <span class="portal-nav__user" id="portal-user" aria-live="polite"></span>
+          <a class="button button--secondary" href="./internal.html">Operator portal</a>
+          <a class="button button--ghost" href="./guide.html">System guide</a>
+          <button type="button" class="button button--ghost" id="btn-logout">Sign out</button>
+        </nav>
+      </header>
+
+      <div class="portal-layout">
+        <aside class="portal-sidebar" aria-label="Docs navigation">
+          <ul class="sidebar-list">
+            <li>
+              <a class="sidebar-list__link sidebar-list__link--current" href="./docs.html" aria-current="page">Docs</a>
+            </li>
+            <li><a class="sidebar-list__link" href="./internal.html#panel-runtime">Runtime</a></li>
+            <li><a class="sidebar-list__link" href="./internal.html#panel-devplan">Development plan</a></li>
+            <li><a class="sidebar-list__link" href="./internal-plan.html">Unified plan</a></li>
+            <li><a class="sidebar-list__link" href="./anna.html">Anna</a></li>
+            <li><a class="sidebar-list__link" href="./guide.html">System guide</a></li>
+            <li class="internal-admin-only">
+              <a class="sidebar-list__link sidebar-list__link--admin" href="./internal-users.html">Admin users</a>
+            </li>
+          </ul>
+        </aside>
+
+        <main class="portal-main portal-main--docs">
+          <h1 class="portal-title">Docs</h1>
+          <p class="portal-lede">
+            Curated operator reading room for the control surface: how to work with Anna,
+            how to operate BLACK BOX, why the portal exists, and where the web contract lives.
+          </p>
+
+          <div class="docs-grid">
+            <section class="panel docs-card" aria-labelledby="docs-anna-title">
+              <p class="docs-card__eyebrow">Operate</p>
+              <h2 class="docs-card__title" id="docs-anna-title">How to interact with Anna using natural language</h2>
+              <p class="docs-card__body">
+                Plain-language conversation patterns, challenge/review behavior, and the difference
+                between normal dialogue and training-related interaction.
+              </p>
+              <p class="docs-card__path">Topic page</p>
+              <a class="button button--primary docs-card__action" href="./docs-anna-language.html">Open topic</a>
+            </section>
+
+            <section class="panel docs-card" aria-labelledby="docs-operate-title">
+              <p class="docs-card__eyebrow">Operate</p>
+              <h2 class="docs-card__title" id="docs-operate-title">How to operate BLACK BOX today</h2>
+              <p class="docs-card__body">
+                Current operating model: what the system already does, how the portal fits in,
+                and what surfaces are authoritative right now.
+              </p>
+              <p class="docs-card__path">Based on docs/blackbox_system_usage_current.md</p>
+              <a class="button button--secondary docs-card__action" href="./docs-system-usage.html">Open topic</a>
+            </section>
+
+            <section class="panel docs-card" aria-labelledby="docs-guide-title">
+              <p class="docs-card__eyebrow">Operate</p>
+              <h2 class="docs-card__title" id="docs-guide-title">Portal and system guide</h2>
+              <p class="docs-card__body">
+                High-level system guide covering how the portal, engine, Anna, Billy, and PiBot fit together.
+              </p>
+              <p class="docs-card__path">guide.html</p>
+              <a class="button button--secondary docs-card__action" href="./guide.html">Open topic</a>
+            </section>
+
+            <section class="panel docs-card" aria-labelledby="docs-context-title">
+              <p class="docs-card__eyebrow">Context</p>
+              <h2 class="docs-card__title" id="docs-context-title">Why the web UI exists</h2>
+              <p class="docs-card__body">
+                Required context for treating the portal as a real control surface over the system,
+                not optional polish or a convenience dashboard.
+              </p>
+              <p class="docs-card__path">WEB_UI_REQUIRED_CONTEXT.md</p>
+              <a class="button button--secondary docs-card__action" href="./docs-ui-context.html">Open topic</a>
+            </section>
+
+            <section class="panel docs-card" aria-labelledby="docs-arch-title">
+              <p class="docs-card__eyebrow">Architecture</p>
+              <h2 class="docs-card__title" id="docs-arch-title">Web architecture and portal contract</h2>
+              <p class="docs-card__body">
+                Canonical route, role, control-surface, and integration contracts for the BLACK BOX web layer.
+              </p>
+              <p class="docs-card__path">WEB_ARCHITECTURE_CANONICAL.md</p>
+              <a class="button button--secondary docs-card__action" href="./docs-web-architecture.html">Open topic</a>
+            </section>
+
+            <section class="panel docs-card" aria-labelledby="docs-plan-title">
+              <p class="docs-card__eyebrow">Architecture</p>
+              <h2 class="docs-card__title" id="docs-plan-title">Unified plan</h2>
+              <p class="docs-card__body">
+                The big stitched document: master development plan plus the canonical web architecture.
+              </p>
+              <p class="docs-card__path">internal-plan.html</p>
+              <a class="button button--secondary docs-card__action" href="./internal-plan.html">Open topic</a>
+            </section>
+          </div>
+        </main>
+      </div>
+    </div>
+    <script src="./app.js"></script>
+    <script>
+      document.addEventListener("DOMContentLoaded", function () {
+        window.BlackboxPortal.preparePortalBoot();
+        if (
+          !window.BlackboxPortal.protectPage({
+            allowedRoles: window.BlackboxPortal.INTERNAL_STAFF_ROLES,
+          })
+        ) {
+          return;
+        }
+        var s = window.BlackboxPortal.getSession();
+        if (!window.BlackboxPortal.isInternalAdminRole(s.role)) {
+          document.querySelectorAll(".internal-admin-only").forEach(function (el) {
+            el.hidden = true;
+          });
+        }
+        document.getElementById("portal-user").textContent =
+          "Signed in as " + s.username + " (" + s.role + ")";
+        window.BlackboxPortal.hidePortalBootOverlay();
+        document.getElementById("docs-root").hidden = false;
+        document.getElementById("btn-logout").addEventListener("click", function () {
+          window.BlackboxPortal.clearSession();
+          window.location.href = "login.html";
+        });
+      });
+    </script>
+  </body>
+</html>

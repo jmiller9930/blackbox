@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="blackbox-api-base" content="" />
+    <title>BLACK BOX | Docs | Why the web UI exists</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <div class="portal-wait" id="portal-wait" role="status" aria-live="polite" aria-busy="true">
+      <div class="portal-wait__inner">
+        <div class="portal-wait__spinner" aria-hidden="true"></div>
+        <p class="portal-wait__text">Loading portal…</p>
+        <p class="portal-wait__elapsed" id="portal-wait-elapsed">0s</p>
+      </div>
+    </div>
+    <div class="page page--portal" id="portal-root" hidden>
+      <header class="portal-header" aria-label="Web UI context docs header">
+        <div class="portal-header__row">
+          <a class="brand brand--link" href="./index.html">
+            <img class="brand__logo" src="./assets/blackboxlogo.png" alt="BLACK BOX mark" />
+          </a>
+          <span class="badge badge--docs">Docs</span>
+        </div>
+        <nav class="portal-nav" aria-label="Portal navigation">
+          <span class="portal-nav__user" id="portal-user" aria-live="polite"></span>
+          <a class="button button--secondary" href="./docs.html">Back to Docs</a>
+          <button type="button" class="button button--ghost" id="btn-logout">Sign out</button>
+        </nav>
+      </header>
+
+      <div class="portal-layout">
+        <aside class="portal-sidebar" aria-label="Docs topics">
+          <div class="docs-topic-nav">
+            <p class="docs-topic-nav__label">Topics</p>
+            <a class="sidebar-list__link docs-topic-nav__link" href="./docs-anna-language.html">How to interact with Anna</a>
+            <a class="sidebar-list__link docs-topic-nav__link" href="./docs-system-usage.html">How to operate BLACK BOX today</a>
+            <a class="sidebar-list__link sidebar-list__link--current docs-topic-nav__link" href="./docs-ui-context.html" aria-current="page">Why the web UI exists</a>
+            <a class="sidebar-list__link docs-topic-nav__link" href="./docs-web-architecture.html">Web architecture</a>
+            <a class="sidebar-list__link docs-topic-nav__link" href="./guide.html">Portal and system guide</a>
+          </div>
+        </aside>
+
+        <main class="portal-main">
+          <article class="panel docs-reader">
+            <h1 class="portal-title">Why the web UI exists</h1>
+            <p class="docs-reader__source">Source basis: <code>UIUX.Web/WEB_UI_REQUIRED_CONTEXT.md</code></p>
+            <p class="docs-reader__summary">
+              The web UI is not optional polish. It is the required portal layer that makes
+              BLACK BOX usable to operators and users as a governed system.
+            </p>
+
+            <section class="docs-reader__section">
+              <h2 class="docs-reader__section-title">Core statement</h2>
+              <p class="docs-reader__body">
+                BLACK BOX needs a stable human-facing portal for access, routing, visibility, control,
+                onboarding, recovery, and governed interaction with the engine. Without that layer,
+                key workflows become hidden, awkward, or unusable.
+              </p>
+            </section>
+
+            <section class="docs-reader__section">
+              <h2 class="docs-reader__section-title">What the UI solves</h2>
+              <ul class="docs-reader__list">
+                <li>A recognizable front door to the platform.</li>
+                <li>Internal operator visibility and control surfaces outside Slack.</li>
+                <li>Consumer-safe or external-safe portal flows.</li>
+                <li>PiBot pairing, recovery, and edge lifecycle surfaces.</li>
+                <li>Separation between portal, engine, and edge device responsibilities.</li>
+              </ul>
+            </section>
+
+            <section class="docs-reader__section">
+              <h2 class="docs-reader__section-title">Why Slack is not enough</h2>
+              <p class="docs-reader__body">
+                Slack can stay useful for operator interaction, but it is not the branded front door,
+                not the right place for ordinary onboarding, not the right place for stable role-based
+                navigation, and not the right place for long-lived portal identity.
+              </p>
+            </section>
+          </article>
+        </main>
+      </div>
+    </div>
+    <script src="./app.js"></script>
+    <script>
+      document.addEventListener("DOMContentLoaded", function () {
+        window.BlackboxPortal.preparePortalBoot();
+        if (!window.BlackboxPortal.protectPage({ allowedRoles: window.BlackboxPortal.INTERNAL_STAFF_ROLES })) {
+          return;
+        }
+        var s = window.BlackboxPortal.getSession();
+        document.getElementById("portal-user").textContent =
+          "Signed in as " + s.username + " (" + s.role + ")";
+        window.BlackboxPortal.hidePortalBootOverlay();
+        document.getElementById("portal-root").hidden = false;
+        document.getElementById("btn-logout").addEventListener("click", function () {
+          window.BlackboxPortal.clearSession();
+          window.location.href = "login.html";
+        });
+      });
+    </script>
+  </body>
+</html>

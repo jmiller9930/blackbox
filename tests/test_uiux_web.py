@@ -21,6 +21,11 @@ def test_unified_plan_build_script_exists() -> None:
         "login.html",
         "internal.html",
         "anna.html",
+        "docs.html",
+        "docs-anna-language.html",
+        "docs-system-usage.html",
+        "docs-ui-context.html",
+        "docs-web-architecture.html",
         "internal-plan.html",
         "internal-users.html",
         "account-settings.html",
@@ -40,6 +45,7 @@ def test_unified_plan_build_script_exists() -> None:
         "artifacts/PROOF_INDEX.txt",
         "WEB_ARCHITECTURE_CANONICAL.md",
         "WEB_UI_REQUIRED_CONTEXT.md",
+        "assets/blackboxlogo.png",
         "assets/blackbox-boxmark.svg",
         "assets/generated/blackbox-3d-box-ticker-logo.svg",
     ],
@@ -48,10 +54,10 @@ def test_uiux_required_paths_exist(name: str) -> None:
     assert (WEB / name).is_file(), f"missing {WEB / name}"
 
 
-def test_index_has_sign_in_and_ticker_logo() -> None:
+def test_index_has_sign_in_and_logo_asset() -> None:
     text = (WEB / "index.html").read_text(encoding="utf-8")
     assert "login.html" in text
-    assert "assets/generated/blackbox-3d-box-ticker-logo.svg" in text
+    assert "assets/blackboxlogo.png" in text
     assert "landing-minimal" in text
     assert "not wired" not in text.lower()
 
@@ -109,6 +115,7 @@ def test_internal_portal_allows_staff_roles() -> None:
     assert "preparePortalBoot" in text
     assert "hidePortalBootOverlay" in text
     assert 'href="./anna.html"' in text
+    assert 'href="./docs.html"' in text
 
 
 def test_anna_page_is_dedicated_workspace() -> None:
@@ -137,6 +144,24 @@ def test_system_guide_page_and_portal_nav() -> None:
     req = (WEB / "WEB_UI_REQUIRED_CONTEXT.md").read_text(encoding="utf-8")
     assert "BLACK BOX Web UI" in req
     assert "system guide" in req.lower() or "guide" in req.lower()
+
+
+def test_docs_hub_and_reader_pages_exist() -> None:
+    docs = (WEB / "docs.html").read_text(encoding="utf-8")
+    assert '<h1 class="portal-title">Docs</h1>' in docs
+    assert "How to interact with Anna using natural language" in docs
+    assert "How to operate BLACK BOX today" in docs
+    assert "Why the web UI exists" in docs
+    assert "Web architecture and portal contract" in docs
+    anna = (WEB / "docs-anna-language.html").read_text(encoding="utf-8")
+    assert "How to interact with Anna using natural language" in anna
+    assert "Natural-language topics" in anna
+    usage = (WEB / "docs-system-usage.html").read_text(encoding="utf-8")
+    assert "How to operate BLACK BOX today" in usage
+    context = (WEB / "docs-ui-context.html").read_text(encoding="utf-8")
+    assert "Why the web UI exists" in context
+    arch = (WEB / "docs-web-architecture.html").read_text(encoding="utf-8")
+    assert "Web architecture and portal contract" in arch
 
 
 def test_internal_header_links_external_preview_and_admin_users() -> None:
@@ -226,4 +251,5 @@ def test_dockerfile_uses_explicit_copy_not_leaky_nginx_root() -> None:
     assert "COPY nginx/default.conf" in text
     assert "COPY index.html" in text
     assert "anna.html" in text
+    assert "docs.html" in text
     assert "COPY . /usr/share/nginx/html" not in text

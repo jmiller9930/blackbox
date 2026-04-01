@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="blackbox-api-base" content="" />
+    <title>BLACK BOX | Docs | Operate BLACK BOX</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <div class="portal-wait" id="portal-wait" role="status" aria-live="polite" aria-busy="true">
+      <div class="portal-wait__inner">
+        <div class="portal-wait__spinner" aria-hidden="true"></div>
+        <p class="portal-wait__text">Loading portal…</p>
+        <p class="portal-wait__elapsed" id="portal-wait-elapsed">0s</p>
+      </div>
+    </div>
+    <div class="page page--portal" id="portal-root" hidden>
+      <header class="portal-header" aria-label="System usage docs header">
+        <div class="portal-header__row">
+          <a class="brand brand--link" href="./index.html">
+            <img class="brand__logo" src="./assets/blackboxlogo.png" alt="BLACK BOX mark" />
+          </a>
+          <span class="badge badge--docs">Docs</span>
+        </div>
+        <nav class="portal-nav" aria-label="Portal navigation">
+          <span class="portal-nav__user" id="portal-user" aria-live="polite"></span>
+          <a class="button button--secondary" href="./docs.html">Back to Docs</a>
+          <button type="button" class="button button--ghost" id="btn-logout">Sign out</button>
+        </nav>
+      </header>
+
+      <div class="portal-layout">
+        <aside class="portal-sidebar" aria-label="Docs topics">
+          <div class="docs-topic-nav">
+            <p class="docs-topic-nav__label">Topics</p>
+            <a class="sidebar-list__link docs-topic-nav__link" href="./docs-anna-language.html">How to interact with Anna</a>
+            <a class="sidebar-list__link sidebar-list__link--current docs-topic-nav__link" href="./docs-system-usage.html" aria-current="page">How to operate BLACK BOX today</a>
+            <a class="sidebar-list__link docs-topic-nav__link" href="./docs-ui-context.html">Why the web UI exists</a>
+            <a class="sidebar-list__link docs-topic-nav__link" href="./docs-web-architecture.html">Web architecture</a>
+            <a class="sidebar-list__link docs-topic-nav__link" href="./guide.html">Portal and system guide</a>
+          </div>
+        </aside>
+
+        <main class="portal-main">
+          <article class="panel docs-reader">
+            <h1 class="portal-title">How to operate BLACK BOX today</h1>
+            <p class="docs-reader__source">Source basis: <code>docs/blackbox_system_usage_current.md</code></p>
+            <p class="docs-reader__summary">
+              This topic is the short operator read: what exists now, which surfaces are authoritative,
+              and how to think about the current layered interaction model.
+            </p>
+
+            <section class="docs-reader__section">
+              <h2 class="docs-reader__section-title">Current operating shape</h2>
+              <ul class="docs-reader__list">
+                <li><strong>BLACK BOX</strong> is a layered system, not a single UI.</li>
+                <li><strong>Portal/UI</strong> is the human-facing control surface.</li>
+                <li><strong>Engine/runtime</strong> is the source of truth behind it.</li>
+                <li><strong>Anna</strong> is the analyst/strategy surface, not a live executor by herself.</li>
+                <li><strong>Billy / exchange path</strong> is the execution connector when that lane is present.</li>
+              </ul>
+            </section>
+
+            <section class="docs-reader__section">
+              <h2 class="docs-reader__section-title">What operators should use</h2>
+              <p class="docs-reader__body">
+                Use the portal for structured access, navigation, and reading surfaces. Use governed runtime and
+                API-backed controls when they are live. Do not treat scattered chat commands or raw logs as the
+                primary product interface if a clearer portal surface exists.
+              </p>
+            </section>
+
+            <section class="docs-reader__section">
+              <h2 class="docs-reader__section-title">What is authoritative today</h2>
+              <div class="docs-reader__callout">
+                <p class="docs-reader__callout-label">Authoritative surfaces</p>
+                <ul class="docs-reader__list">
+                  <li>The engine/runtime path for truth.</li>
+                  <li>Portal route/role boundaries for user interaction.</li>
+                  <li>Governed docs and plans for declared behavior.</li>
+                </ul>
+              </div>
+              <p class="docs-reader__body">
+                The portal should show honest placeholders until those authoritative engine paths are wired.
+                It should not fake a healthy or complete system state.
+              </p>
+            </section>
+          </article>
+        </main>
+      </div>
+    </div>
+    <script src="./app.js"></script>
+    <script>
+      document.addEventListener("DOMContentLoaded", function () {
+        window.BlackboxPortal.preparePortalBoot();
+        if (!window.BlackboxPortal.protectPage({ allowedRoles: window.BlackboxPortal.INTERNAL_STAFF_ROLES })) {
+          return;
+        }
+        var s = window.BlackboxPortal.getSession();
+        document.getElementById("portal-user").textContent =
+          "Signed in as " + s.username + " (" + s.role + ")";
+        window.BlackboxPortal.hidePortalBootOverlay();
+        document.getElementById("portal-root").hidden = false;
+        document.getElementById("btn-logout").addEventListener("click", function () {
+          window.BlackboxPortal.clearSession();
+          window.location.href = "login.html";
+        });
+      });
+    </script>
+  </body>
+</html>

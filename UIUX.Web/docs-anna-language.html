@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="blackbox-api-base" content="" />
+    <title>BLACK BOX | Docs | Anna natural language</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <div class="portal-wait" id="portal-wait" role="status" aria-live="polite" aria-busy="true">
+      <div class="portal-wait__inner">
+        <div class="portal-wait__spinner" aria-hidden="true"></div>
+        <p class="portal-wait__text">Loading portal…</p>
+        <p class="portal-wait__elapsed" id="portal-wait-elapsed">0s</p>
+      </div>
+    </div>
+    <div class="page page--portal" id="portal-root" hidden>
+      <header class="portal-header" aria-label="Anna docs header">
+        <div class="portal-header__row">
+          <a class="brand brand--link" href="./index.html">
+            <img class="brand__logo" src="./assets/blackboxlogo.png" alt="BLACK BOX mark" />
+          </a>
+          <span class="badge badge--docs">Docs</span>
+        </div>
+        <nav class="portal-nav" aria-label="Portal navigation">
+          <span class="portal-nav__user" id="portal-user" aria-live="polite"></span>
+          <a class="button button--secondary" href="./docs.html">Back to Docs</a>
+          <button type="button" class="button button--ghost" id="btn-logout">Sign out</button>
+        </nav>
+      </header>
+
+      <div class="portal-layout">
+        <aside class="portal-sidebar" aria-label="Docs topics">
+          <div class="docs-topic-nav">
+            <p class="docs-topic-nav__label">Topics</p>
+            <a class="sidebar-list__link sidebar-list__link--current docs-topic-nav__link" href="./docs-anna-language.html" aria-current="page">How to interact with Anna</a>
+            <a class="sidebar-list__link docs-topic-nav__link" href="./docs-system-usage.html">How to operate BLACK BOX today</a>
+            <a class="sidebar-list__link docs-topic-nav__link" href="./docs-ui-context.html">Why the web UI exists</a>
+            <a class="sidebar-list__link docs-topic-nav__link" href="./docs-web-architecture.html">Web architecture</a>
+            <a class="sidebar-list__link docs-topic-nav__link" href="./guide.html">Portal and system guide</a>
+          </div>
+        </aside>
+
+        <main class="portal-main">
+          <article class="panel docs-reader">
+            <h1 class="portal-title">How to interact with Anna using natural language</h1>
+            <p class="docs-reader__source">Source basis: <code>UIUX.Web/guide.html</code>, <code>docs/blackbox_system_usage_current.md</code>, <code>docs/runtime/execution_context.md</code></p>
+            <p class="docs-reader__summary">
+              Anna is conversation-first. People should be able to ask in normal language,
+              challenge a thesis, request clarification, or suggest training without needing command syntax first.
+            </p>
+
+            <section class="docs-reader__section">
+              <h2 class="docs-reader__section-title">Default interaction model</h2>
+              <p class="docs-reader__body">
+                Start with plain language. Ask what you are seeing, what Anna thinks, what risk is implied,
+                or what would invalidate a view. The goal is not to memorize commands. The goal is to keep
+                Anna usable as an analyst surface under normal conversation.
+              </p>
+              <ul class="docs-reader__list">
+                <li>Ask for an explanation in ordinary terms.</li>
+                <li>Ask for the thesis, not just the answer.</li>
+                <li>Challenge weak logic directly if something does not feel supported.</li>
+                <li>Ask for status or review when you want operating-state clarity.</li>
+              </ul>
+            </section>
+
+            <section class="docs-reader__section">
+              <h2 class="docs-reader__section-title">Useful topic patterns</h2>
+              <div class="docs-reader__callout">
+                <p class="docs-reader__callout-label">Natural-language topics</p>
+                <ul class="docs-reader__list">
+                  <li><strong>Explanation request</strong> — “Explain why this setup looks strong.”</li>
+                  <li><strong>Challenge</strong> — “What would make this thesis wrong?”</li>
+                  <li><strong>Counter-argument</strong> — “What is the bearish case here?”</li>
+                  <li><strong>Status request</strong> — “What is your current read?”</li>
+                  <li><strong>Review request</strong> — “Review this setup and tell me the weak points.”</li>
+                  <li><strong>Training suggestion</strong> — “This looks like something Anna should learn.”</li>
+                </ul>
+              </div>
+            </section>
+
+            <section class="docs-reader__section">
+              <h2 class="docs-reader__section-title">Conversation is not the same as training</h2>
+              <p class="docs-reader__body">
+                Casual dialogue should stay conversational until explicitly staged. Anna should not silently mutate
+                behavior from ordinary chat. If something sounds training-relevant, the system should classify it,
+                explain why it matters, and ask whether it should be staged.
+              </p>
+              <div class="docs-reader__callout">
+                <p class="docs-reader__callout-label">Compact training packet</p>
+                <ul class="docs-reader__list">
+                  <li><code>classification</code></li>
+                  <li><code>why</code></li>
+                  <li><code>recommended_next_action</code></li>
+                  <li><code>confirm?</code></li>
+                </ul>
+              </div>
+            </section>
+
+            <section class="docs-reader__section">
+              <h2 class="docs-reader__section-title">What good Anna interaction should feel like</h2>
+              <p class="docs-reader__body">
+                Anna should be responsive, readable, and challengeable. If she is uncertain, that uncertainty should
+                be explicit. If she has a thesis, it should be inspectable. If you disagree, you should be able to
+                push back in natural language without dropping into system-internal syntax.
+              </p>
+            </section>
+          </article>
+        </main>
+      </div>
+    </div>
+    <script src="./app.js"></script>
+    <script>
+      document.addEventListener("DOMContentLoaded", function () {
+        window.BlackboxPortal.preparePortalBoot();
+        if (!window.BlackboxPortal.protectPage({ allowedRoles: window.BlackboxPortal.INTERNAL_STAFF_ROLES })) {
+          return;
+        }
+        var s = window.BlackboxPortal.getSession();
+        document.getElementById("portal-user").textContent =
+          "Signed in as " + s.username + " (" + s.role + ")";
+        window.BlackboxPortal.hidePortalBootOverlay();
+        document.getElementById("portal-root").hidden = false;
+        document.getElementById("btn-logout").addEventListener("click", function () {
+          window.BlackboxPortal.clearSession();
+          window.location.href = "login.html";
+        });
+      });
+    </script>
+  </body>
+</html>

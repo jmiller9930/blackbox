@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="blackbox-api-base" content="" />
+    <title>BLACK BOX | Docs | Web architecture</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <div class="portal-wait" id="portal-wait" role="status" aria-live="polite" aria-busy="true">
+      <div class="portal-wait__inner">
+        <div class="portal-wait__spinner" aria-hidden="true"></div>
+        <p class="portal-wait__text">Loading portal…</p>
+        <p class="portal-wait__elapsed" id="portal-wait-elapsed">0s</p>
+      </div>
+    </div>
+    <div class="page page--portal" id="portal-root" hidden>
+      <header class="portal-header" aria-label="Web architecture docs header">
+        <div class="portal-header__row">
+          <a class="brand brand--link" href="./index.html">
+            <img class="brand__logo" src="./assets/blackboxlogo.png" alt="BLACK BOX mark" />
+          </a>
+          <span class="badge badge--docs">Docs</span>
+        </div>
+        <nav class="portal-nav" aria-label="Portal navigation">
+          <span class="portal-nav__user" id="portal-user" aria-live="polite"></span>
+          <a class="button button--secondary" href="./docs.html">Back to Docs</a>
+          <button type="button" class="button button--ghost" id="btn-logout">Sign out</button>
+        </nav>
+      </header>
+
+      <div class="portal-layout">
+        <aside class="portal-sidebar" aria-label="Docs topics">
+          <div class="docs-topic-nav">
+            <p class="docs-topic-nav__label">Topics</p>
+            <a class="sidebar-list__link docs-topic-nav__link" href="./docs-anna-language.html">How to interact with Anna</a>
+            <a class="sidebar-list__link docs-topic-nav__link" href="./docs-system-usage.html">How to operate BLACK BOX today</a>
+            <a class="sidebar-list__link docs-topic-nav__link" href="./docs-ui-context.html">Why the web UI exists</a>
+            <a class="sidebar-list__link sidebar-list__link--current docs-topic-nav__link" href="./docs-web-architecture.html" aria-current="page">Web architecture</a>
+            <a class="sidebar-list__link docs-topic-nav__link" href="./guide.html">Portal and system guide</a>
+          </div>
+        </aside>
+
+        <main class="portal-main">
+          <article class="panel docs-reader">
+            <h1 class="portal-title">Web architecture and portal contract</h1>
+            <p class="docs-reader__source">Source basis: <code>UIUX.Web/WEB_ARCHITECTURE_CANONICAL.md</code></p>
+            <p class="docs-reader__summary">
+              This topic is the short operator/developer read on what the web layer is supposed to be,
+              how it should be structured, and how it should talk to the engine.
+            </p>
+
+            <section class="docs-reader__section">
+              <h2 class="docs-reader__section-title">What the web layer is</h2>
+              <ul class="docs-reader__list">
+                <li>A stable front door and operational portal over the engine core.</li>
+                <li>Static-first where possible, with minimal JavaScript where interaction requires it.</li>
+                <li>A controlled route structure separating landing, login, internal portal, and external or consumer-safe surfaces.</li>
+              </ul>
+            </section>
+
+            <section class="docs-reader__section">
+              <h2 class="docs-reader__section-title">What the web layer is not</h2>
+              <ul class="docs-reader__list">
+                <li>Not an independent product brain.</li>
+                <li>Not a direct mount into engine internals.</li>
+                <li>Not a place to improvise routes or role semantics ad hoc.</li>
+              </ul>
+            </section>
+
+            <section class="docs-reader__section">
+              <h2 class="docs-reader__section-title">Critical contracts</h2>
+              <div class="docs-reader__callout">
+                <p class="docs-reader__callout-label">Binding contracts</p>
+                <ul class="docs-reader__list">
+                  <li>Simple and stable route structure.</li>
+                  <li>Separated internal and external portal surfaces by role.</li>
+                  <li>Fail-closed behavior for unauthorized or degraded states.</li>
+                  <li>Portal-to-engine integration through the API boundary only.</li>
+                  <li>Reusable styling primitives instead of page-by-page invention.</li>
+                </ul>
+              </div>
+            </section>
+          </article>
+        </main>
+      </div>
+    </div>
+    <script src="./app.js"></script>
+    <script>
+      document.addEventListener("DOMContentLoaded", function () {
+        window.BlackboxPortal.preparePortalBoot();
+        if (!window.BlackboxPortal.protectPage({ allowedRoles: window.BlackboxPortal.INTERNAL_STAFF_ROLES })) {
+          return;
+        }
+        var s = window.BlackboxPortal.getSession();
+        document.getElementById("portal-user").textContent =
+          "Signed in as " + s.username + " (" + s.role + ")";
+        window.BlackboxPortal.hidePortalBootOverlay();
+        document.getElementById("portal-root").hidden = false;
+        document.getElementById("btn-logout").addEventListener("click", function () {
+          window.BlackboxPortal.clearSession();
+          window.location.href = "login.html";
+        });
+      });
+    </script>
+  </body>
+</html>
