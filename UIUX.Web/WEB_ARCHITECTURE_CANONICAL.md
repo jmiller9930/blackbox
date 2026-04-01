@@ -49,7 +49,7 @@ The first useful BLACK BOX web release must provide:
 The first useful BLACK BOX web release does **not** require:
 
 - advanced analytics dashboards
-- chart-heavy interfaces
+- chart-heavy interfaces **except** the **internal default live operations surface** defined in **section 31** (primary SOL market chart as supervision, not decorative analytics)
 - complex animation systems
 - payment flows
 - wallet custody
@@ -74,6 +74,26 @@ Rules:
 - the public domain is the human access point
 - `clawbot.a51.corp` / `172.20.2.161` is the internal server target for web mounting and verification
 - environment-specific values must be configurable rather than hard-coded into page content or scripts
+
+### 4.1 Source-of-truth sync contract
+
+BLACK BOX web development is local-first, git-synced, and clawbot-deployed.
+
+Required workflow:
+
+- author and edit web work in the local clone first
+- commit locally
+- push to the canonical git remote
+- on `clawbot`, pull from git into `~/blackbox`
+- verify and deploy from `~/blackbox`
+
+Rules:
+
+- the local clone is the authoring tree
+- `clawbot` is the pulled execution / verification / deployment tree
+- `clawbot` must not become an undocumented alternate authoring source of truth
+- when local and `clawbot` differ, reconciliation must happen through git rather than through silent manual drift
+- web work is not server-aligned until the relevant commit has been pulled into `~/blackbox`
 
 ## 5. Web server and mount contract
 
@@ -107,6 +127,74 @@ Rules:
 - do not invent an alternate server root without updating this document
 - do not mount the UI directly onto engine internals; use the reverse-proxied API boundary
 - internal verification should use `https://172.20.2.161:443/` unless the operator later standardizes a different internal hostname
+
+### 5.1 Engine upstream contract
+
+The `v1` web tier must front one explicit BLACK BOX engine upstream.
+
+Required `v1` upstream:
+
+- upstream host: `127.0.0.1`
+- upstream port: `8000`
+- upstream base: `http://127.0.0.1:8000`
+- public/proxied API base: `/api/v1/`
+- proxied upstream API base: `http://127.0.0.1:8000/api/v1/`
+- proxied live-update/event stream base: `http://127.0.0.1:8000/api/v1/stream/`
+- engine healthcheck path: `/api/v1/health`
+
+Rules:
+
+- `nginx` on `443` is the approved web-facing entry point for browsers
+- browsers should talk to `/api/v1/` on the same origin rather than directly to `127.0.0.1:8000`
+- the upstream host/port must not be inferred from ad hoc container names or temporary shell commands
+- if the engine service moves off `127.0.0.1:8000`, this document must be updated in the same change set
+
+### 5.2 Auth and session contract
+
+The `v1` portal must evolve from local bootstrap auth to engine-backed authentication through the same `/api/v1/` boundary.
+
+Required `v1` auth endpoints:
+
+- `POST /api/v1/auth/login`
+- `POST /api/v1/auth/logout`
+- `POST /api/v1/auth/password-reset/request`
+- `POST /api/v1/auth/password-reset/complete`
+- `POST /api/v1/auth/email/verify`
+- `POST /api/v1/auth/email/resend-verification`
+- `GET /api/v1/account/me`
+- `POST /api/v1/account/password`
+
+Required `v1` session behavior:
+
+- server-issued session or token becomes the source of truth for authenticated API access
+- role enforcement must be performed server-side as well as in the UI
+- UI bootstrap credentials are development-only and must not be treated as production auth
+- login success must return enough data to determine `user_id`, `username`, `role`, `account_state`, and session validity
+- logout must invalidate the active session on the server side
+- protected pages must fail closed when session validation fails
+
+Required `v1` auth response envelope:
+
+- `trace_id`
+- `requested_at`
+- `result_state`
+- `reason_code` when not successful
+- `session` object when successful
+
+Required `session` object fields:
+
+- `user_id`
+- `username`
+- `role`
+- `account_state`
+- `issued_at`
+- `expires_at`
+
+Rules:
+
+- passwords must be verified by the engine once engine auth is wired
+- the client may cache session metadata for navigation convenience, but server truth controls authorization
+- auth transitions must leave audit records
 
 ## 6. Web architecture shape
 
@@ -294,10 +382,18 @@ Development bootstrap credential rule:
 
 The internal portal is the first priority portal surface.
 
-Required `v1` panels or views:
+### 14.1 Default post-login experience
 
-- runtime controls
-- Anna status
+The **default route** after internal login (`/internal`) must present the **BLACK BOX-owned live operations surface** described in **section 31**, not a Drift wrapper, not a docs-first layout, and not a generic grid of undifferentiated placeholders.
+
+The operator must be able to **immediately** (above the fold, without reading documentation) orient to market motion, data health, Anna activity, and runtime state. Deeper panels (training, strategies, edge bots, full exchange detail, system guide) remain reachable from navigation but are **secondary** to that default supervision composition.
+
+### 14.2 Required `v1` panels or views (full portal)
+
+In addition to the **section 31** default landing composition, the internal portal continues to reserve or expose:
+
+- runtime controls (also summarized on the default landing **control strip** per section 31)
+- Anna status (also summarized on the default **Anna at work** surface per section 31)
 - Billy / Drift exchange status
 - winning / losing state
 - Anna training / learning window
@@ -331,7 +427,24 @@ Rules:
 - the consumer portal must not expose sensitive internal runtime detail unless later authorized
 - the consumer portal must remain understandable to a non-operator
 
-## 16. System guide contract
+## 16. PiBot placeholder contract (`v1`)
+
+PiBot connection, pairing, recovery, and edge enrollment are contracted future surfaces, but they are not required to be implemented in the first web-integrated slice.
+
+Required `v1` interpretation:
+
+- PiBot is part of the product/system model
+- PiBot-related surfaces may appear in the portal as placeholders
+- placeholder PiBot surfaces must be labeled honestly as `not complete`, `not wired`, or equivalent fail-closed language
+- PiBot controls must not appear active until the engine/API path exists
+
+Rules:
+
+- the UI must not imply that PiBot pairing or recovery is live when it is not
+- a placeholder is acceptable; a fake active workflow is not
+- the future implementation must remain easy to add because the route, panel, and API namespace are already reserved by contract
+
+## 17. System guide contract
 
 The web layer must include one structured guide page that explains the system in plain language for logged-in users.
 
@@ -353,7 +466,7 @@ Rules:
 - the guide must stay consistent with the canonical architecture and behavior contracts
 - the guide should be reachable after login from the portal navigation
 
-## 17. State handling contract
+## 18. State handling contract
 
 Every page or panel that reads from the engine must support explicit UI states.
 
@@ -372,7 +485,7 @@ Rules:
 - failures must be visible and readable
 - degraded engine/API conditions must fail closed and inform the user rather than faking healthy state
 
-## 18. Portal-to-engine integration contract
+## 19. Portal-to-engine integration contract
 
 The web layer must integrate with the BLACK BOX engine through an explicit API boundary.
 
@@ -396,7 +509,373 @@ The engine remains:
 - the owner of artifact generation
 - the owner of command acceptance or rejection
 
-## 19. API client contract
+### 19.1 Query endpoint matrix (`v1`)
+
+The UI-to-engine read contract must use these canonical `GET` paths:
+
+| Path | Purpose | Minimum response body |
+|------|---------|-----------------------|
+| `/api/v1/health` | Engine healthcheck | `status`, `requested_at`, `trace_id` |
+| `/api/v1/runtime/status` | Runtime state summary | `runtime_state`, `reason_code` (nullable), `requested_at`, `trace_id` |
+| `/api/v1/anna/status` | Anna state / thesis / confidence summary | `anna_state`, `edge_thesis`, `confidence_or_uncertainty`, `guardrail_status`, `requested_at`, `trace_id` |
+| `/api/v1/anna/training/status` | Training / learning state | `training_state`, `degree_lane`, `review_status`, `requested_at`, `trace_id` |
+| `/api/v1/exchange/status` | Billy-owned exchange connectivity truth | `exchange_name`, `connection_state`, `wallet_state`, `public_key_match`, `drift_user_state`, `rpc_state`, `market_data_state`, `last_checked_at`, `reason_code`, `trace_id` |
+| `/api/v1/pnl/summary` | Winning / losing summary | `winning_or_losing`, `performance_summary`, `requested_at`, `trace_id` |
+| `/api/v1/strategies` | Strategy inventory and counts | `items`, `active_count`, `considering_count`, `on_deck_count`, `requested_at`, `trace_id` |
+| `/api/v1/edge-bots` | Edge / PiBot status list | `items`, `requested_at`, `trace_id` |
+| `/api/v1/events/recent` | Recent event feed | `items`, `requested_at`, `trace_id` |
+| `/api/v1/account/me` | Account profile for current user | `account`, `requested_at`, `trace_id` |
+
+Rules:
+
+- each path must return JSON
+- every response must include `trace_id`
+- every response must include `requested_at`
+- paths may grow additively, but the minimum fields above are required
+
+### 19.2 Control endpoint matrix (`v1`)
+
+The UI-to-engine write contract must use these canonical `POST` paths:
+
+| Path | Purpose | Minimum request body | Minimum response body |
+|------|---------|----------------------|-----------------------|
+| `/api/v1/runtime/start` | Start runtime participation | `actor_id` | `trace_id`, `requested_at`, `result_state`, `reason_code` (nullable) |
+| `/api/v1/runtime/pause` | Pause runtime participation | `actor_id` | `trace_id`, `requested_at`, `result_state`, `reason_code` (nullable) |
+| `/api/v1/runtime/stop` | Stop runtime participation | `actor_id` | `trace_id`, `requested_at`, `result_state`, `reason_code` (nullable) |
+| `/api/v1/runtime/restart` | Restart runtime participation | `actor_id` | `trace_id`, `requested_at`, `result_state`, `reason_code` (nullable) |
+| `/api/v1/training/review/submit` | Submit training participation or review action | `actor_id`, `training_item_id`, `action` | `trace_id`, `requested_at`, `result_state`, `reason_code` (nullable) |
+
+PiBot-reserved future control paths:
+
+- `/api/v1/edge-bots/enroll`
+- `/api/v1/edge-bots/recover`
+- `/api/v1/edge-bots/disconnect`
+
+Rules:
+
+- PiBot-reserved future control paths may exist in docs before they are implemented
+- until implemented, the UI must label them as not wired
+- every control action must fail closed when rejected or unavailable
+
+### 19.3 Common API envelope rule (`v1`)
+
+Successful query/control responses must remain machine-readable and additive.
+
+Minimum common response fields:
+
+- `trace_id`
+- `requested_at`
+- `result_state`
+- `message`
+
+Error/negative responses must also include:
+
+- `reason_code`
+
+Rules:
+
+- `result_state` should be bounded to `success`, `accepted`, `rejected`, or `error`
+- `reason_code` must be stable enough for UI handling and audit
+- UI copy may be human-friendly, but machine-readable fields are required
+
+### 19.4 Event stream contract (`v1`)
+
+The authenticated live-update stream must live under the `/api/v1/stream/` namespace.
+
+Required `v1` stream path:
+
+- `/api/v1/stream/status`
+
+Required event envelope:
+
+- `event_type`
+- `emitted_at`
+- `trace_id`
+- `payload`
+
+Recommended initial `event_type` set:
+
+- `runtime_status_changed`
+- `anna_status_changed`
+- `exchange_status_changed`
+- `training_status_changed`
+- `strategy_inventory_changed`
+- `edge_bot_status_changed`
+- `recent_event_added`
+
+Rules:
+
+- clients must tolerate new event types additively
+- stream disconnects must fail closed in the UI with readable degraded status
+- the stream is not a substitute for the query API; it is a near-real-time update surface layered on top
+
+### 19.5 Detailed payload schema contract (`v1`)
+
+The endpoint list above is not sufficient by itself.
+
+The following field-level schemas are the binding `v1` response contracts for the web UI and engine.
+
+#### 19.5.1 Common field-shape rules
+
+Rules:
+
+- every API response body is JSON object root, never a bare array
+- every response includes `trace_id`, `requested_at`, and `result_state`
+- all timestamps use strict ISO-8601 UTC with required `Z` suffix
+- ids and opaque references are non-empty ASCII strings
+- integer counts are JSON integers
+- decimal/monetary/ratio values may be returned as JSON numbers or decimal strings, but one endpoint must stay internally consistent across all calls
+- fields marked nullable must be present with `null` when no value exists rather than omitted, unless otherwise stated
+- additive fields are allowed, but required fields may not be removed or renamed without governed contract update
+
+#### 19.5.2 Common response envelope
+
+Required on every successful query/control response:
+
+| Field | Type | Required rule |
+|-------|------|---------------|
+| `trace_id` | string | Required stable request correlation id. |
+| `requested_at` | string | Required response generation timestamp. |
+| `result_state` | string | Required bounded value: `success`, `accepted`, `rejected`, `error`. |
+| `message` | string or null | Required nullable human-readable summary. |
+
+Required on every rejected/error response:
+
+| Field | Type | Required rule |
+|-------|------|---------------|
+| `reason_code` | string | Required stable machine-readable reason. |
+| `message` | string | Required human-readable explanation. |
+
+#### 19.5.3 `GET /api/v1/health`
+
+Required response fields:
+
+| Field | Type | Required rule |
+|-------|------|---------------|
+| `status` | string | Required bounded value: `healthy`, `degraded`, `unhealthy`. |
+| `service_name` | string | Required stable engine service identifier. |
+| `version` | string or null | Required nullable deployed version/build identifier. |
+
+#### 19.5.4 `GET /api/v1/runtime/status`
+
+Required response fields:
+
+| Field | Type | Required rule |
+|-------|------|---------------|
+| `runtime_state` | string | Required bounded value: `starting`, `running`, `pausing`, `paused`, `stopping`, `stopped`, `restarting`, `unknown`. |
+| `last_transition_at` | string or null | Required nullable timestamp for last runtime-state transition. |
+| `reason_code` | string or null | Required nullable runtime reason when not cleanly running. |
+| `current_mode` | string or null | Required nullable bounded value: `idle`, `analysis`, `training`, `paper_trade`, `live_trade`, `maintenance`. |
+
+#### 19.5.5 `GET /api/v1/anna/status`
+
+Required response fields:
+
+| Field | Type | Required rule |
+|-------|------|---------------|
+| `anna_state` | string | Required bounded value: `analyzing`, `waiting`, `paused`, `stopped`, `error`, `abstaining`. |
+| `current_strategy` | string, array, or null | Required nullable current strategy id or ordered list of ids. |
+| `edge_thesis` | string or null | Required nullable concise current working thesis. |
+| `confidence_or_uncertainty` | string | Required bounded value: `confident`, `uncertain`, `abstaining`. |
+| `guardrail_status` | string | Required bounded value: `clear`, `blocked`, `restricted`. |
+| `winning_or_losing` | string | Required bounded value: `winning`, `losing`, `flat`. |
+| `degree_lane` | string | Required bounded value: `bachelor`, `master`, `phd`. |
+| `training_execution_state` | string | Required bounded value: `conversation`, `candidate_training`, `staged_training`, `validated_learning`, `review_only`, `simulation_only`, `simulation_then_micro_live`. |
+
+#### 19.5.6 `GET /api/v1/anna/training/status`
+
+Required response fields:
+
+| Field | Type | Required rule |
+|-------|------|---------------|
+| `state_label` | string | Required bounded value: `conversation`, `candidate_training`, `staged_training`, `validated_learning`. |
+| `degree_lane` | string | Required bounded value: `bachelor`, `master`, `phd`. |
+| `review_status` | string | Required bounded value: `not_reviewed`, `under_review`, `review_complete`, `escalated`. |
+| `execution_mode` | string | Required bounded value: `review_only`, `simulation_only`, `simulation_then_micro_live`. |
+| `execution_status` | string | Required bounded value: `not_started`, `in_review`, `running`, `completed`, `rejected`. |
+| `promotion_outcome` | string | Required bounded value: `not_promoted`, `validated`, `rejected`, `deferred`. |
+| `latest_training_item_id` | string or null | Required nullable latest active training item reference. |
+
+#### 19.5.7 `GET /api/v1/exchange/status`
+
+Required response fields:
+
+| Field | Type | Required rule |
+|-------|------|---------------|
+| `exchange_name` | string | Required stable venue identifier. |
+| `connection_state` | string | Required bounded value: `connected`, `degraded`, `disconnected`, `unknown`. |
+| `wallet_state` | string | Required bounded value: `loaded`, `not_loaded`, `mismatch`. |
+| `public_key_match` | boolean | Required boolean. |
+| `drift_user_state` | string | Required bounded value: `ready`, `missing_user_account`, `margin_not_enabled`, `not_checked`. |
+| `rpc_state` | string | Required bounded value: `reachable`, `unreachable`, `degraded`. |
+| `market_data_state` | string | Required bounded value: `healthy`, `stale`, `down`, `unknown`. |
+| `last_checked_at` | string | Required last exchange-health evaluation timestamp. |
+| `reason_code` | string or null | Required nullable stable failure/degraded reason. |
+
+#### 19.5.8 `GET /api/v1/pnl/summary`
+
+Required response fields:
+
+| Field | Type | Required rule |
+|-------|------|---------------|
+| `winning_or_losing` | string | Required bounded value: `winning`, `losing`, `flat`. |
+| `current_balance` | number or string | Required current balance value. |
+| `comparison_balance` | number or string | Required comparison-point balance value. |
+| `performance_summary` | object | Required object. |
+
+Required `performance_summary` fields:
+
+- `win_rate`
+- `expected_value`
+- `average_win`
+- `average_loss`
+- `drawdown`
+- `fee_drag`
+
+#### 19.5.9 `GET /api/v1/strategies`
+
+Required response fields:
+
+| Field | Type | Required rule |
+|-------|------|---------------|
+| `items` | array | Required list of strategy records. |
+| `active_count` | integer | Required count. |
+| `considering_count` | integer | Required count. |
+| `on_deck_count` | integer | Required count. |
+
+Required per-item fields:
+
+- `strategy_id`
+- `title`
+- `status`
+- `summary`
+- `last_updated_at`
+
+Required `status` enum:
+
+- `active`
+- `considering`
+- `on_deck`
+- `inactive`
+- `archived`
+
+#### 19.5.10 `GET /api/v1/edge-bots`
+
+Required response fields:
+
+| Field | Type | Required rule |
+|-------|------|---------------|
+| `feature_state` | string | Required bounded value: `not_complete`, `not_wired`, `live`. |
+| `items` | array | Required list; may be empty. |
+
+Required per-item fields when implemented:
+
+- `bot_id`
+- `bot_label`
+- `device_type`
+- `connection_state`
+- `owner_binding_state`
+- `last_seen_at`
+
+Required `connection_state` enum:
+
+- `connected`
+- `disconnected`
+- `recovering`
+- `unknown`
+
+Required `owner_binding_state` enum:
+
+- `bound`
+- `unbound`
+- `recovery_pending`
+- `unknown`
+
+#### 19.5.11 `GET /api/v1/events/recent`
+
+Required response fields:
+
+| Field | Type | Required rule |
+|-------|------|---------------|
+| `items` | array | Required list; may be empty. |
+
+Required per-item fields:
+
+- `event_id`
+- `event_type`
+- `severity`
+- `occurred_at`
+- `title`
+- `summary`
+- `trace_id`
+- `related_ref` (nullable)
+
+Required `severity` enum:
+
+- `info`
+- `warning`
+- `error`
+
+#### 19.5.12 `GET /api/v1/account/me`
+
+Required response fields:
+
+| Field | Type | Required rule |
+|-------|------|---------------|
+| `account` | object | Required object. |
+
+Required `account` fields:
+
+- `user_id`
+- `username`
+- `email`
+- `role`
+- `account_state`
+- `email_verified`
+- `accepted_risk_terms_at` (nullable)
+- `created_at`
+- `last_login_at` (nullable)
+
+#### 19.5.13 Control request body contract
+
+Required on every control request body:
+
+- `actor_id`
+- `requested_at`
+- `command_source`
+
+Required `command_source` enum:
+
+- `portal_internal`
+- `portal_consumer`
+- `slack`
+- `system_internal`
+
+Additional required fields by endpoint:
+
+- `/api/v1/training/review/submit`: `training_item_id`, `action`
+
+Required `action` enum for `/api/v1/training/review/submit`:
+
+- `stage_it`
+- `revise_it`
+- `leave_it`
+- `review_complete`
+- `escalate`
+
+#### 19.5.14 Event-stream payload mapping
+
+Required `payload` object minimums by `event_type`:
+
+- `runtime_status_changed` -> same field minimums as `GET /api/v1/runtime/status`
+- `anna_status_changed` -> same field minimums as `GET /api/v1/anna/status`
+- `exchange_status_changed` -> same field minimums as `GET /api/v1/exchange/status`
+- `training_status_changed` -> same field minimums as `GET /api/v1/anna/training/status`
+- `strategy_inventory_changed` -> same field minimums as `GET /api/v1/strategies`
+- `edge_bot_status_changed` -> same field minimums as `GET /api/v1/edge-bots`
+- `recent_event_added` -> one event item using the `GET /api/v1/events/recent` item schema
+
+## 20. API client contract
 
 The web client must be built to accommodate engine growth without brittle rewrites.
 
@@ -419,7 +898,7 @@ Rules:
 - the client must not break because one new status field or event type appears
 - additive compatibility is the default expectation
 
-## 20. Component contract
+## 21. Component contract
 
 The web layer must be composed from reusable primitives.
 
@@ -442,7 +921,7 @@ Rules:
 - new primitives should be added only when the existing set cannot express the need cleanly
 - duplicated near-identical components are a contract violation unless explicitly approved
 
-## 21. Asset contract
+## 22. Asset contract
 
 All web assets must live under `UIUX.Web/`.
 
@@ -454,7 +933,7 @@ Required asset rules:
 - logo assets must remain original BLACK BOX assets
 - asset names should be stable and descriptive
 
-## 22. File organization contract
+## 23. File organization contract
 
 The web layer must stay organized and easy to hand off.
 
@@ -497,7 +976,7 @@ Rules:
 - do not create throwaway naming schemes that force later cleanup
 - keep route/page names aligned with the information architecture in this document
 
-## 23. Implementation sequence (`v1`)
+## 24. Implementation sequence (`v1`)
 
 This section is the canonical economical build order for the `v1` web UI.
 
@@ -691,7 +1170,7 @@ Implementation-order rule:
 - the first acceptable engine-integrated web slice is Phase 1 through Phase 6
 - the first acceptable broader `v1` portal slice is Phase 1 through Phase 9
 
-## 24. Web build directive packet (`v1`)
+## 25. Web build directive packet (`v1`)
 
 This section is the canonical directive-style execution packet for building the `v1` web UI.
 
@@ -732,7 +1211,7 @@ Acceptance rule:
 - it must satisfy the phase exit criteria it claims to complete
 - architect validation is still required under project governance
 
-## 25. Security and data-boundary contract
+## 26. Security and data-boundary contract
 
 The web layer must respect the BLACK BOX data boundary.
 
@@ -778,7 +1257,7 @@ This is **baseline hygiene** for a static portal shell. It is **not** a WAF, bot
 
 **Self-service account (standard process):** The portal ships **UI shells** (`register.html`, `forgot-password.html`, `reset-password.html?token=`, `verify-email.html?token=`, `account-settings.html`) aligned with common practice: **no email enumeration** on forgot-password messaging, **time-limited single-use tokens** for reset and verify (enforced server-side), **password hashing** and **rate limits** on the engine only. Client paths are declared in `app.js` as `ACCOUNT_API` (`/auth/register`, `/auth/password-reset/request`, `/auth/password-reset/complete`, `/auth/email/verify`, `/auth/email/resend-verification`, `/account/me`, `/account/password`, `/admin/users`, `/admin/users/invite`). **`internal-users.html`** is the operator directory/invite shell. Until the engine implements these routes and outbound email, forms show configuration hints and fail closed.
 
-## 26. Testing and acceptance contract for web work
+## 27. Testing and acceptance contract for web work
 
 Governance applies to web work exactly as it applies to engine work.
 
@@ -805,18 +1284,18 @@ Acceptance rule:
 - no silent failures on engine interactions
 - no acceptance without proof recorded under governance
 
-## 27. Non-goals for `v1`
+## 28. Non-goals for `v1`
 
 The following are explicitly out of scope unless later directed:
 
 - advanced consumer analytics suites
-- real-time charting as a primary portal focus
+- real-time charting as a **consumer** portal focus or as **exchange-clone** UI; **exception:** the **internal** default **live SOL market surface** (section 31) is **in scope** as a BLACK BOX supervision chart backed by the engine market-data path
 - visual experimentation beyond the locked system language
 - multi-brand theme packs
 - complex CMS behavior
 - client-side storage of critical secrets
 
-## 28. Developer handoff summary
+## 29. Developer handoff summary
 
 If a developer reads only one web-specific document before building, this should be enough to start.
 
@@ -826,15 +1305,17 @@ The developer must understand:
 - what routes exist
 - what the landing page must look like
 - what the internal and consumer portals are for
+- the **internal default landing** is the **live operations surface** (section 31), not a Drift wrapper or docs-first screen
 - what the system guide page must explain
 - what visual system to use
 - how CSS should be organized
 - how the UI must talk to the engine
+- which exact API paths and envelopes the UI should target
 - how to avoid brittle client/API coupling
 - what cannot be stored in the web layer
 - how web work will be tested and accepted under governance
 
-## 29. Change rule
+## 30. Change rule
 
 This document is intended to reduce ambiguity during development.
 
@@ -843,3 +1324,216 @@ Rules for change:
 - update this document when a web-facing contract changes materially
 - do not silently drift from this document during implementation
 - if a future directive changes the web stack, route shape, or design system, update this file in the same change set that establishes the new contract
+
+## 31. Internal post-login live operations surface (architect recommendation)
+
+This section is the **canonical contract** for the **default internal experience** after login. It does **not** replace engine or API ownership; the web layer **displays** engine-backed truth and **fails closed** when unavailable.
+
+### 31.1 Developer recommendation (summary)
+
+Build the default post-login internal experience as a **BLACK BOX-owned live operations surface**, not as a Drift wrapper and not as a docs-first portal.
+
+The goal is that when an internal user logs in, they can **immediately** answer:
+
+- what is the market doing right now
+- is live market data flowing
+- is Anna working
+- what mode is Anna in
+- is the runtime healthy
+- do I need to intervene
+
+Do **not** make the default screen a wrapped external Drift interface. The operator goal is **system visibility and trust in BLACK BOX itself**, not venue immersion.
+
+### 31.2 Default internal landing view — four primary surfaces
+
+The first screen after internal login is a live **operations overview** composed of **four** primary surfaces, in this **visual hierarchy**:
+
+1. Live SOL market surface (dominant, center)
+2. Pyth ingestion and storage surface (near the chart)
+3. Anna at work surface
+4. Runtime control strip  
+   **Secondary:** recent events / supporting state below or beside, without crowding the four primaries.
+
+#### Surface 1 — Live SOL market surface
+
+This is the **dominant** visual in the center of the screen.
+
+**Required behavior**
+
+- Show a live **SOL** candlestick chart.
+- Updates must come from the **same market-data path** BLACK BOX ingests and validates (engine-backed; not a decorative third-party widget).
+- When live and valid, **label the source as Pyth** explicitly.
+- Show **stale / degraded** state honestly when data is old or missing.
+
+**Required data around the chart**
+
+- current SOL price
+- recent percentage move
+- selected timeframe (e.g. `1m`, `5m`, `15m`, `1h`)
+- last update timestamp
+- freshness status
+- volatility state badge (e.g. `calm`, `elevated`, `high`)
+
+**Optional (preferred)**
+
+- spread
+- recent high / low
+- candle count in the current window
+
+**Design rule**
+
+- This is a **BLACK BOX** chart, not a cloned exchange UI.
+- Restrained, premium, readable: **candlesticks first**, controls second.
+
+#### Surface 2 — Pyth ingestion and storage surface
+
+Placed **near** the chart. Purpose: prove the chart is backed by a **living ingestion system**, not a decorative number.
+
+**Required items**
+
+- Pyth ingestion state: `healthy`, `degraded`, `stale`, or `down`
+- processed data count
+- retained / stored data count
+- current storage usage
+- configured retention / limit status
+- trim status if trimming is active
+- alert state if thresholds are crossed
+
+**Required policy behavior (product/engine; UI must reflect it)**
+
+- Staged storage policy: **alert first** at threshold; **trim** old data after configured size limit; reserve **automatic storage expansion** as later optional work, not required in this slice.
+- The UI must show the **configured storage limit** and **current utilization**.
+- The UI must **not** hide storage pressure.
+
+#### Surface 3 — Anna at work surface
+
+The operator must see that Anna is **functioning**, not merely “online.”
+
+**Required items**
+
+- Anna state (examples): `analyzing`, `waiting`, `paused`, `stopped`, `error`, `abstaining` — bounded set as contracted by engine/API
+- current working thesis or decision summary
+- confidence / uncertainty state
+- guardrail state
+- current mode: `analysis`, `training`, `paper_trade`, `maintenance`, or other **bounded** runtime mode already contracted
+- last meaningful action timestamp
+- recent event or recent decision trace summary
+
+**Preferred additions**
+
+- latest candidate or latest reviewed item id
+- latest training / review state
+- visible abstain reason when Anna is not taking action
+
+**Design intent**
+
+- Anna is **visible and inspectable**; show **work and state**, not human-like theatrics.
+- Concise **evidence of operation** matters more than decorative personality.
+
+#### Surface 4 — Runtime control strip
+
+Controls are **visible** but must **not** dominate the page.
+
+**Required controls**
+
+- `Start`, `Pause`, `Stop`, `Restart` (as already contracted for runtime; see section 19 control matrix).
+
+**Required state near controls**
+
+- current runtime state
+- last transition time
+- whether controls are enabled or blocked
+- reason code / message when blocked or unavailable
+
+**Design rule**
+
+- Controls are **clearly separated** from telemetry.
+- Disabled controls must **state why** they are disabled.
+- **Fail closed** when the engine/API does not acknowledge availability.
+
+### 31.3 What the default screen must not be
+
+The default internal landing must **not** be:
+
+- the system guide or a document page
+- a generic list of panels with placeholder text and no supervision story
+- a wrapped full Drift exchange page
+- a consumer-safe simplified shell presented as the internal default
+
+The internal default must be a **live supervision surface**.
+
+### 31.4 Drift (secondary only)
+
+- **Do not** make Drift embedding part of the **required** default implementation for this slice.
+- If desired later: provide a secondary **View on Drift** link or optional Drift panel/tab.
+- Do **not** make the portal depend on external site embedding.
+- Do **not** treat Drift UI as BLACK BOX source of truth.
+
+The **native BLACK BOX candlestick chart** (engine-backed) is the preferred solution for default market visibility.
+
+### 31.5 User experience goal
+
+After login, the internal operator should immediately understand:
+
+| Lens | Question answered |
+|------|-------------------|
+| Market | SOL is moving like this |
+| Data | Pyth is ingesting and storage is healthy |
+| Anna | Anna is doing this right now |
+| System | Runtime is in this state and these controls are available |
+
+### 31.6 Implementation direction
+
+Wire the landing page around **engine-backed** surfaces, not static placeholders.
+
+**Target data paths (conceptual; exact paths remain section 19 and engine contracts)**
+
+- Live chart data from the BLACK BOX **market-data** path (proxied via `/api/v1/` or additive documented read endpoints as approved).
+- Ingestion / storage telemetry from the BLACK BOX engine (counts, limits, utilization, trim/alert — as implemented per slice).
+- Anna state from **`/api/v1/anna/status`** (and related training endpoints where applicable).
+- Runtime from **`/api/v1/runtime/status`** and **control** endpoints in section 19.
+
+**Visual hierarchy (implementation order)**
+
+1. SOL live chart  
+2. Pyth ingestion / storage health  
+3. Anna working state  
+4. Runtime controls  
+5. Recent events as secondary support  
+
+### 31.7 Acceptance standard
+
+This work is **successful** when an internal user can log in and, **without reading documentation**, understand:
+
+- whether live trade / market data is flowing
+- whether Anna is actively working
+- what mode the system is in
+- whether the system is healthy enough to proceed
+
+**Operational proof** (live Pyth, live Drift, live control side effects) is validated in a **separate acceptance pass** per governance; the **layout and honest states** can ship before full operational proof.
+
+### 31.8 Safe to build now vs must be proven later
+
+**Safe to build now (no blocker)**
+
+- Default internal dashboard **composition** and **visual hierarchy**
+- SOL live market **panel shell** (chart area, timeframes, labels, stale/degraded UX)
+- Pyth ingestion / storage **telemetry panel** shell
+- Anna at work **panel** shell
+- Runtime **control strip** with separation from telemetry
+- Recent events / supporting state region
+- Explicit UI states: `loading`, `healthy`, `degraded`, `stale`, `not wired`, `error`
+- **API-bound** component hooks using the **endpoint schema** already defined in **section 19** (and additive market-data read contracts as approved)
+
+**Must not be assumed proven until validation**
+
+- Chart fed by **real** live Pyth through the engine path
+- Processed / stored counts **accurate**
+- Storage trimming / alerts **actually** functioning
+- Anna status reflecting **real** runtime behavior
+- Runtime controls **actually** affecting the engine
+- Exchange (Drift) connectivity **operationally** live
+
+**Instruction to the developer (canonical wording)**
+
+Proceed with the **internal post-login operations dashboard layout** now. Build the BLACK BOX-owned **live operations surface** with panel shells, visual hierarchy, **honest fail-closed** states, and **API-bound** hooks. Do **not** assume live Pyth, live Drift, or live Anna control wiring are already proven; treat those as **runtime-backed** states to be validated in the acceptance pass. **Layout and UI composition** may advance in parallel with **operational truth** validation.

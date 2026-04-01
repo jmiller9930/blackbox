@@ -116,6 +116,9 @@ def test_internal_portal_allows_staff_roles() -> None:
     assert "hidePortalBootOverlay" in text
     assert 'href="./anna.html"' in text
     assert 'href="./docs.html"' in text
+    assert 'id="panel-market"' in text
+    assert 'id="panel-pyth"' in text
+    assert "Runtime control strip" in text
 
 
 def test_anna_page_is_dedicated_workspace() -> None:
@@ -186,6 +189,8 @@ def test_internal_portal_devplan_collapsible_and_sidebar_active_styles() -> None
     assert "sidebar-list__link--active" in internal
     css = (WEB / "styles.css").read_text(encoding="utf-8")
     assert ".sidebar-list__link.sidebar-list__link--active" in css
+    assert ".ops-overview" in css
+    assert ".ops-chart" in css
 
 
 def test_consumer_allows_internal_preview_gate_in_app_js() -> None:

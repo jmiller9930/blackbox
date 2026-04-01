@@ -62,9 +62,12 @@
       </header>
 
       <div class="portal-layout">
-        <aside class="portal-sidebar" aria-label="Section navigation">
+        <aside class="portal-sidebar" id="portal-sidebar-nav" aria-label="Section navigation">
           <ul class="sidebar-list">
             <li><a class="sidebar-list__link" href="./docs.html">Docs</a></li>
+            <li><a class="sidebar-list__link" href="#panel-market">SOL market</a></li>
+            <li><a class="sidebar-list__link" href="#panel-pyth">Pyth data</a></li>
+            <li><a class="sidebar-list__link" href="#panel-anna">Anna</a></li>
             <li><a class="sidebar-list__link" href="#panel-runtime">Runtime</a></li>
             <li>
               <a class="sidebar-list__link" href="#panel-devplan">Development plan</a>
@@ -109,12 +112,72 @@
             the engine API is wired (Phase 5+).
           </p>
 
-          <div class="panel-grid">
-            <section class="panel" id="panel-runtime" aria-labelledby="t-runtime">
-              <h2 class="panel__title" id="t-runtime">Runtime controls</h2>
-              <p class="panel__state panel__state--pending" data-state>
-                Not wired — engine control API required.
-              </p>
+          <section class="ops-overview" aria-label="Live operations overview">
+            <section class="panel panel--wide panel--market" id="panel-market" aria-labelledby="t-market">
+              <div class="ops-market__header">
+                <div>
+                  <h2 class="panel__title" id="t-market">Live SOL market</h2>
+                  <p class="panel__lede">
+                    BLACK BOX-native view from the engine market-data path. Source labels and stale/degraded states fail closed.
+                  </p>
+                </div>
+                <div class="ops-market__chips">
+                  <span class="ops-chip">Source: Pyth (not wired)</span>
+                  <span class="ops-chip">Freshness: Unknown</span>
+                  <span class="ops-chip">Volatility: N/A</span>
+                </div>
+              </div>
+              <div class="ops-chart" role="img" aria-label="SOL candlestick chart placeholder">
+                <div class="ops-chart__empty">
+                  <strong>Chart not wired</strong>
+                  <span>Connect engine market endpoint for SOL candles (`1m`, `5m`, `15m`, `1h`).</span>
+                </div>
+              </div>
+              <dl class="ops-market__stats">
+                <div><dt>Price</dt><dd>--</dd></div>
+                <div><dt>Move</dt><dd>--</dd></div>
+                <div><dt>Timeframe</dt><dd>1m</dd></div>
+                <div><dt>Last update</dt><dd>Not wired</dd></div>
+              </dl>
+            </section>
+
+            <div class="ops-overview__grid">
+              <section class="panel" id="panel-pyth" aria-labelledby="t-pyth">
+                <h2 class="panel__title" id="t-pyth">Pyth ingestion &amp; storage</h2>
+                <p class="panel__state panel__state--pending" data-state>
+                  Not wired — ingestion, retention, trim, and alert telemetry required.
+                </p>
+                <ul class="ops-list">
+                  <li>Pyth state: <strong>not wired</strong></li>
+                  <li>Processed count: <strong>--</strong></li>
+                  <li>Stored count: <strong>--</strong></li>
+                  <li>Storage usage: <strong>-- / --</strong></li>
+                  <li>Trim status: <strong>N/A</strong></li>
+                </ul>
+              </section>
+
+              <section class="panel" id="panel-anna" aria-labelledby="t-anna">
+                <h2 class="panel__title" id="t-anna">Anna at work</h2>
+                <p class="panel__state panel__state--pending" data-state>
+                  Not wired — runtime Anna status contract required.
+                </p>
+                <ul class="ops-list">
+                  <li>State: <strong>unknown</strong></li>
+                  <li>Mode: <strong>unknown</strong></li>
+                  <li>Thesis summary: <strong>not available</strong></li>
+                  <li>Confidence/uncertainty: <strong>not available</strong></li>
+                  <li>Last action: <strong>not available</strong></li>
+                </ul>
+              </section>
+            </div>
+
+            <section class="panel panel--wide panel--runtime-strip" id="panel-runtime" aria-labelledby="t-runtime">
+              <div class="ops-runtime__header">
+                <h2 class="panel__title" id="t-runtime">Runtime control strip</h2>
+                <p class="panel__state panel__state--pending" data-state>
+                  Not wired — engine control API required.
+                </p>
+              </div>
               <div class="panel__actions">
                 <button type="button" class="button button--secondary" disabled title="Awaiting engine wiring">
                   Start
@@ -129,7 +192,15 @@
                   Restart
                 </button>
               </div>
+              <div class="ops-runtime__meta">
+                <span>State: <strong>not wired</strong></span>
+                <span>Last transition: <strong>n/a</strong></span>
+                <span>Controls: <strong>blocked</strong></span>
+              </div>
             </section>
+          </section>
+
+          <div class="panel-grid panel-grid--secondary">
 
             <section
               class="panel panel--wide panel--devplan"
@@ -207,13 +278,6 @@
                   </ul>
                 </div>
               </details>
-            </section>
-
-            <section class="panel" id="panel-anna" aria-labelledby="t-anna">
-              <h2 class="panel__title" id="t-anna">Anna status</h2>
-              <p class="panel__state panel__state--pending" data-state>
-                No data — connect <code>meta blackbox-api-base</code> and query API.
-              </p>
             </section>
 
             <section class="panel" id="panel-exchange" aria-labelledby="t-ex">
