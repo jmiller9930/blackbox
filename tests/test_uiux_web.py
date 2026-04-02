@@ -127,6 +127,11 @@ def test_internal_portal_allows_staff_roles() -> None:
     assert "hidePortalBootOverlay" in text
     assert 'href="./anna.html"' not in text
     assert 'href="#panel-docs-hub"' in text
+    assert 'id="docs-slack-hashtag-pill"' in text
+    assert "slack_hashtag_language.md" in text
+    assert 'id="panel-system-language"' in text
+    assert 'id="system-language-modal"' in text
+    assert "System language workspace" in text
     assert 'id="panel-market"' not in text
     assert 'id="panel-pyth"' in text
     assert 'id="panel-agent-hub"' in text
