@@ -1033,6 +1033,70 @@ h1 {
   box-shadow: 0 0 0 2px rgba(100, 116, 139, 0.2);
 }
 
+
+.panel--runtime .panel__title {
+  margin-bottom: 0.45rem;
+}
+
+.runtime-strip {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  margin: 0 0 0.45rem;
+}
+
+.runtime-strip--core {
+  flex-wrap: nowrap;
+}
+
+.runtime-strip--agents {
+  margin-top: -0.1rem;
+}
+
+.runtime-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.14rem 0.42rem;
+  border-radius: 999px;
+  font-size: 0.68rem;
+  font-weight: 600;
+  color: var(--muted);
+  border: 1px solid rgba(15, 23, 42, 0.12);
+  background: rgba(255, 255, 255, 0.64);
+}
+
+.agent-bubble {
+  width: 0.48rem;
+  height: 0.48rem;
+  border-radius: 999px;
+  background: #94a3b8;
+  box-shadow: 0 0 0 2px rgba(148, 163, 184, 0.18);
+  flex: 0 0 auto;
+}
+
+.agent-bubble--connected {
+  background: #16a34a;
+  box-shadow: 0 0 0 2px rgba(22, 163, 74, 0.2);
+}
+
+.agent-bubble--warning {
+  background: #d97706;
+  box-shadow: 0 0 0 2px rgba(217, 119, 6, 0.2);
+}
+
+.agent-bubble--disconnected {
+  background: #dc2626;
+  box-shadow: 0 0 0 2px rgba(220, 38, 38, 0.2);
+}
+
+.agent-bubble--not_wired,
+.agent-bubble--unknown {
+  background: #64748b;
+  box-shadow: 0 0 0 2px rgba(100, 116, 139, 0.2);
+}
+
 .ops-runtime__meta {
   margin-top: var(--space-2);
   display: flex;

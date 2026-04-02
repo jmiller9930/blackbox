@@ -118,9 +118,9 @@ def test_internal_portal_allows_staff_roles() -> None:
     assert 'href="./docs.html"' in text
     assert 'id="panel-market"' in text
     assert 'id="panel-pyth"' in text
-    assert "Runtime control strip" in text
-    assert "Context engine: Unknown" in text
-    assert "context-engine-status-pill" in text
+    assert "Runtime status" in text
+    assert "Context: unknown" in text
+    assert "context-engine-pill" in text
 
 
 def test_anna_page_is_dedicated_workspace() -> None:

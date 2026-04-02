@@ -171,41 +171,25 @@
               </section>
             </div>
 
-            <section class="panel panel--wide panel--runtime-strip" id="panel-runtime" aria-labelledby="t-runtime">
-              <div class="ops-runtime__header">
-                <h2 class="panel__title" id="t-runtime">Runtime control strip</h2>
-                <p class="panel__state panel__state--pending" data-state>
-                  Not wired — engine control API required.
-                </p>
-              </div>
-              <div class="ops-runtime__status-row" aria-label="Runtime status indicators">
-                <span class="runtime-status-pill runtime-status-pill--unknown" id="context-engine-status-pill">
-                  <span
-                    class="runtime-status-pill__dot runtime-status-pill__dot--unknown"
-                    id="context-engine-status-dot"
-                    aria-hidden="true"
-                  ></span>
-                  <span id="context-engine-status-text">Context engine: Unknown</span>
+            <section class="panel panel--wide panel--runtime" id="panel-runtime" aria-labelledby="t-runtime">
+              <h2 class="panel__title" id="t-runtime">Runtime status</h2>
+              <div class="runtime-strip runtime-strip--core" aria-label="Runtime and system strip">
+                <span class="runtime-pill" id="runtime-status-pill" title="Runtime status">
+                  <span class="agent-bubble agent-bubble--unknown" id="runtime-status-bubble" aria-hidden="true"></span>
+                  <span id="runtime-status-text">Runtime: unknown</span>
+                </span>
+                <span class="runtime-pill" id="agents-overall-pill" title="Overall system status">
+                  <span class="agent-bubble agent-bubble--unknown" id="agents-overall-bubble" aria-hidden="true"></span>
+                  <span id="agents-overall-text">System: unknown</span>
                 </span>
               </div>
-              <div class="panel__actions">
-                <button type="button" class="button button--secondary" disabled title="Awaiting engine wiring">
-                  Start
-                </button>
-                <button type="button" class="button button--secondary" disabled title="Awaiting engine wiring">
-                  Pause
-                </button>
-                <button type="button" class="button button--secondary" disabled title="Awaiting engine wiring">
-                  Stop
-                </button>
-                <button type="button" class="button button--secondary" disabled title="Awaiting engine wiring">
-                  Restart
-                </button>
-              </div>
-              <div class="ops-runtime__meta">
-                <span>State: <strong>not wired</strong></span>
-                <span>Last transition: <strong>n/a</strong></span>
-                <span>Controls: <strong>blocked</strong></span>
+              <div class="runtime-strip runtime-strip--agents" aria-label="Agent and context strip">
+                <span class="runtime-pill" id="anna-main-pill" title="Anna connection"><span class="agent-bubble agent-bubble--unknown" id="anna-main-bubble" aria-hidden="true"></span><span id="anna-main-text">Anna: unknown</span></span>
+                <span class="runtime-pill" id="billy-main-pill" title="Billy connection"><span class="agent-bubble agent-bubble--unknown" id="billy-main-bubble" aria-hidden="true"></span><span id="billy-main-text">Billy: unknown</span></span>
+                <span class="runtime-pill" id="mia-main-pill" title="Mia connection"><span class="agent-bubble agent-bubble--unknown" id="mia-main-bubble" aria-hidden="true"></span><span id="mia-main-text">Mia: unknown</span></span>
+                <span class="runtime-pill" id="chris-main-pill" title="Chris connection"><span class="agent-bubble agent-bubble--unknown" id="chris-main-bubble" aria-hidden="true"></span><span id="chris-main-text">Chris: unknown</span></span>
+                <span class="runtime-pill" id="data-main-pill" title="Data connection"><span class="agent-bubble agent-bubble--unknown" id="data-main-bubble" aria-hidden="true"></span><span id="data-main-text">Data: unknown</span></span>
+                <span class="runtime-pill" id="context-engine-pill" title="Context engine status"><span class="agent-bubble agent-bubble--unknown" id="context-engine-bubble" aria-hidden="true"></span><span id="context-engine-text">Context: unknown</span></span>
               </div>
             </section>
           </section>
@@ -468,55 +452,118 @@
           applyHashToDevplan();
         }
 
-        var contextEnginePill = document.getElementById("context-engine-status-pill");
-        var contextEngineDot = document.getElementById("context-engine-status-dot");
-        var contextEngineText = document.getElementById("context-engine-status-text");
-        var CONTEXT_ENGINE_STATES = {
-          healthy: { text: "Context engine: Healthy", tone: "healthy" },
-          degraded: { text: "Context engine: Degraded", tone: "degraded" },
-          error: { text: "Context engine: Error", tone: "error" },
-          unhealthy: { text: "Context engine: Unhealthy", tone: "error" },
-          unknown: { text: "Context engine: Unknown", tone: "unknown" },
-          not_wired: { text: "Context engine: Not wired", tone: "unknown" },
-        };
+        function coerceState(raw) {
+          var s = String(raw || "unknown").toLowerCase();
+          if (s === "healthy" || s === "connected" || s === "up" || s === "on") return "connected";
+          if (s === "degraded" || s === "warning" || s === "partial") return "warning";
+          if (s === "error" || s === "disconnected" || s === "down" || s === "off") return "disconnected";
+          if (s === "not_wired") return "not_wired";
+          return "unknown";
+        }
 
-        function setContextEngineState(state) {
-          if (!contextEnginePill || !contextEngineDot || !contextEngineText) return;
-          var key = String(state || "unknown").toLowerCase();
-          var mapped = CONTEXT_ENGINE_STATES[key] || CONTEXT_ENGINE_STATES.unknown;
-          contextEngineText.textContent = mapped.text;
-          contextEnginePill.className = "runtime-status-pill runtime-status-pill--" + mapped.tone;
-          contextEngineDot.className =
-            "runtime-status-pill__dot runtime-status-pill__dot--" + mapped.tone;
+        function labelWord(state) {
+          if (state === "connected") return "Connected";
+          if (state === "warning") return "Degraded";
+          if (state === "disconnected") return "Disconnected";
+          if (state === "not_wired") return "Not wired";
+          return "Unknown";
+        }
+
+        function applyPill(pillId, bubbleId, textId, state, label, title) {
+          var pill = document.getElementById(pillId);
+          var bubble = document.getElementById(bubbleId);
+          var text = document.getElementById(textId);
+          if (!pill || !bubble || !text) return;
+          pill.title = title || "";
+          text.textContent = label;
+          bubble.className = "agent-bubble agent-bubble--" + state;
+        }
+
+        async function fetchJsonCandidates(paths) {
+          var apiBase = window.BlackboxPortal.readApiBase();
+          var urls = [];
+          paths.forEach(function (p) {
+            if (apiBase) urls.push(apiBase + p);
+            urls.push(p);
+          });
+          for (var i = 0; i < urls.length; i++) {
+            try {
+              var res = await fetch(urls[i], { method: "GET", headers: { Accept: "application/json" }, credentials: "include" });
+              if (!res.ok) continue;
+              return await res.json();
+            } catch (e) {}
+          }
+          return null;
+        }
+
+        async function refreshRuntimeTruth() {
+          var runtime = await fetchJsonCandidates(["/api/v1/runtime/status"]);
+          var agents = await fetchJsonCandidates(["/api/v1/agents/status"]);
+          var byId = {};
+          ((agents && agents.items) || []).forEach(function (item) {
+            var id = String(item.agent_id || "").toLowerCase();
+            if (id) byId[id] = item;
+          });
+
+          var runtimeState = coerceState(runtime && (runtime.runtime_state || runtime.status));
+          applyPill(
+            "runtime-status-pill",
+            "runtime-status-bubble",
+            "runtime-status-text",
+            runtimeState,
+            "Runtime: " + labelWord(runtimeState),
+            (runtime && runtime.reason_code) || "Runtime status"
+          );
+
+          ["anna", "billy", "mia", "chris", "data"].forEach(function (id) {
+            var it = byId[id] || null;
+            var st = coerceState(it && (it.connectivity_state || it.lifecycle_state || it.status));
+            var name = id.charAt(0).toUpperCase() + id.slice(1);
+            applyPill(
+              id + "-main-pill",
+              id + "-main-bubble",
+              id + "-main-text",
+              st,
+              name + ": " + labelWord(st),
+              (it && it.reason_code) || "Agent status"
+            );
+          });
+
+          var states = ["anna", "billy", "mia", "chris", "data"].map(function (id) {
+            var it = byId[id] || null;
+            return coerceState(it && (it.connectivity_state || it.lifecycle_state || it.status));
+          });
+          var hasDisconnected = states.some(function (s) { return s === "disconnected"; });
+          var hasGap = states.some(function (s) { return s === "unknown" || s === "not_wired" || s === "warning"; });
+          var systemState = hasDisconnected ? "disconnected" : hasGap ? "warning" : "connected";
+          applyPill(
+            "agents-overall-pill",
+            "agents-overall-bubble",
+            "agents-overall-text",
+            systemState,
+            "System: " + labelWord(systemState),
+            "Aggregate from runtime + agent connectivity"
+          );
         }
 
         async function loadContextEngineState() {
-          setContextEngineState("unknown");
-          var candidates = [];
-          var apiBase = window.BlackboxPortal.readApiBase();
-          if (apiBase) {
-            candidates.push(apiBase + "/api/v1/context-engine/status");
-          }
-          candidates.push("/api/v1/context-engine/status");
-
-          for (var i = 0; i < candidates.length; i++) {
-            try {
-              var res = await fetch(candidates[i], {
-                method: "GET",
-                headers: { Accept: "application/json" },
-                credentials: "include",
-              });
-              if (!res.ok) continue;
-              var data = await res.json();
-              if (!data || typeof data !== "object") continue;
-              setContextEngineState(data.status || "unknown");
-              return;
-            } catch (e) {}
-          }
-          setContextEngineState("unknown");
+          var ctx = await fetchJsonCandidates(["/api/v1/context-engine/status"]);
+          var raw = ctx && (ctx.status || ctx.state);
+          var st = coerceState(raw);
+          applyPill(
+            "context-engine-pill",
+            "context-engine-bubble",
+            "context-engine-text",
+            st,
+            "Context: " + labelWord(st),
+            (ctx && ctx.reason_code) || "Context engine status"
+          );
         }
 
+        refreshRuntimeTruth();
         loadContextEngineState();
+        setInterval(refreshRuntimeTruth, 15000);
+        setInterval(loadContextEngineState, 15000);
       });
     </script>
   </body>
