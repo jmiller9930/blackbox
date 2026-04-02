@@ -1692,6 +1692,22 @@ select.input {
   outline-offset: 2px;
 }
 
+.runtime-pill--link {
+  text-decoration: none;
+  color: inherit;
+  cursor: pointer;
+}
+
+.runtime-pill--link:hover {
+  background: rgba(255, 255, 255, 0.92);
+  color: var(--text);
+}
+
+.runtime-pill--link:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
 .anna-modal__body {
   padding: var(--space-3);
   display: grid;

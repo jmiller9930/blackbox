@@ -65,7 +65,8 @@
         <aside class="portal-sidebar" id="portal-sidebar-nav" aria-label="Section navigation">
           <ul class="sidebar-list">
             <li><a class="sidebar-list__link" href="#panel-docs-hub">Documentation workspace</a></li>
-                        <li><a class="sidebar-list__link" href="#panel-pyth">Pyth data</a></li>
+            <li><a class="sidebar-list__link" href="#panel-system-language">System language workspace</a></li>
+            <li><a class="sidebar-list__link" href="#panel-pyth">Pyth data</a></li>
             <li><a class="sidebar-list__link" href="#panel-agent-hub">Agent workspace</a></li>
             <li><a class="sidebar-list__link" href="#panel-runtime">Runtime</a></li>
             <li>
@@ -175,6 +176,27 @@
                 </p>
                 <div class="runtime-strip" aria-label="Documentation workspace strip">
                   <button type="button" class="button button--secondary" id="docs-open-btn">Open documentation workspace</button>
+                  <a
+                    class="runtime-pill runtime-pill--link"
+                    id="docs-slack-hashtag-pill"
+                    href="https://github.com/jmiller9930/blackbox/blob/main/docs/runtime/slack_hashtag_language.md"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    title="Slack hashtag language (docs/runtime)"
+                  >
+                    <span class="agent-bubble agent-bubble--connected" aria-hidden="true"></span>
+                    <span>Slack hashtag language</span>
+                  </a>
+                </div>
+              </section>
+
+              <section class="panel" id="panel-system-language" aria-labelledby="t-system-language">
+                <h2 class="panel__title" id="t-system-language">System language workspace</h2>
+                <p class="panel__state" id="system-language-hub-text">
+                  The language we built for the system to interact with the office — including Slack — operators, agents, and governed phrasing in one place.
+                </p>
+                <div class="runtime-strip" aria-label="System language workspace strip">
+                  <button type="button" class="button button--secondary" id="system-language-open-btn">Open system language workspace</button>
                 </div>
               </section>
             </div>
@@ -203,11 +225,50 @@
                   <section class="anna-modal__section"><h4>Unified Plan</h4><p><a href="./internal-plan.html">Open unified plan</a></p></section>
                   <section class="anna-modal__section"><h4>System Guide</h4><p><a href="./guide.html">Open system guide</a></p></section>
                   <section class="anna-modal__section"><h4>Current Directive</h4><p><a href="https://github.com/jmiller9930/blackbox/blob/main/docs/working/current_directive.md" target="_blank" rel="noopener noreferrer">Open governed directive</a></p></section>
+                  <section class="anna-modal__section">
+                    <h4>Slack hashtag language</h4>
+                    <p>
+                      <a
+                        href="https://github.com/jmiller9930/blackbox/blob/main/docs/runtime/slack_hashtag_language.md"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        >docs/runtime/slack_hashtag_language.md</a
+                      >
+                      — runtime vocabulary for office Slack and system alignment.
+                    </p>
+                  </section>
                 </div>
               </div>
             </div>
 
-
+            <div class="pyth-modal anna-modal" id="system-language-modal" hidden role="dialog" aria-modal="true" aria-labelledby="system-language-modal-title">
+              <div class="pyth-modal__card anna-modal__card">
+                <div class="pyth-modal__head">
+                  <h3 class="pyth-modal__title" id="system-language-modal-title">System language workspace</h3>
+                  <button type="button" class="button button--ghost" id="system-language-close-btn">Close</button>
+                </div>
+                <div class="anna-modal__body">
+                  <section class="anna-modal__section">
+                    <h4>What this is</h4>
+                    <p>
+                      The <strong>system language</strong> is the vocabulary and interaction contract we use so operators, automation, and office channels (including <strong>Slack</strong>) stay aligned with BLACK BOX — not casual chat, but governed phrasing tied to roles, directives, and agent surfaces.
+                    </p>
+                  </section>
+                  <section class="anna-modal__section">
+                    <h4>Anna &amp; natural language</h4>
+                    <p><a href="./docs-anna-language.html">How to interact with Anna using natural language</a> — primary doc for phrasing, topics, and expectations.</p>
+                  </section>
+                  <section class="anna-modal__section">
+                    <h4>Operating the system today</h4>
+                    <p><a href="./docs-system-usage.html">How to operate BLACK BOX today</a> — day-to-day language for the portal and workflows.</p>
+                  </section>
+                  <section class="anna-modal__section">
+                    <h4>All docs</h4>
+                    <p><a href="./docs.html">Docs hub</a> for every topic, including web architecture and UI context.</p>
+                  </section>
+                </div>
+              </div>
+            </div>
 
             <div class="pyth-modal anna-modal" id="status-diagnostics-modal" hidden role="dialog" aria-modal="true" aria-labelledby="status-diagnostics-title">
               <div class="pyth-modal__card anna-modal__card">
@@ -909,6 +970,17 @@
           docsCloseBtn.addEventListener("click", closeDocsModal);
           docsModal.addEventListener("click", function (evt) { if (evt.target === docsModal) closeDocsModal(); });
           document.addEventListener("keydown", function (evt) { if (evt.key === "Escape" && !docsModal.hidden) closeDocsModal(); });
+        }
+
+        var systemLanguageModal = document.getElementById("system-language-modal");
+        var systemLanguageOpenBtn = document.getElementById("system-language-open-btn");
+        var systemLanguageCloseBtn = document.getElementById("system-language-close-btn");
+        if (systemLanguageModal && systemLanguageOpenBtn && systemLanguageCloseBtn) {
+          function closeSystemLanguageModal() { systemLanguageModal.hidden = true; }
+          systemLanguageOpenBtn.addEventListener("click", function () { systemLanguageModal.hidden = false; });
+          systemLanguageCloseBtn.addEventListener("click", closeSystemLanguageModal);
+          systemLanguageModal.addEventListener("click", function (evt) { if (evt.target === systemLanguageModal) closeSystemLanguageModal(); });
+          document.addEventListener("keydown", function (evt) { if (evt.key === "Escape" && !systemLanguageModal.hidden) closeSystemLanguageModal(); });
         }
 
         var diagModal = document.getElementById("status-diagnostics-modal");
