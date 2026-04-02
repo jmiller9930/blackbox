@@ -7,8 +7,29 @@
 #
 # Run:  cd UIUX.Web && docker compose up --build
 services:
+  api:
+    image: python:3.11-alpine
+    working_dir: /repo
+    command: ["python3", "UIUX.Web/api_server.py"]
+    volumes:
+      - ../:/repo
+      - /mnt/SQLlite_dB:/mnt/SQLlite_dB
+    restart: unless-stopped
+
+  pyth-stream:
+    image: python:3.11-alpine
+    working_dir: /repo
+    command: ["python3", "scripts/trading/pyth_stream_probe.py"]
+    volumes:
+      - ../:/repo
+      - /mnt/SQLlite_dB:/mnt/SQLlite_dB
+    restart: unless-stopped
+
   web:
     build: .
+    depends_on:
+      - api
+      - pyth-stream
     ports:
       - "443:443"
       - "80:80"
