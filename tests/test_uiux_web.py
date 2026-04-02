@@ -131,6 +131,7 @@ def test_internal_portal_allows_staff_roles() -> None:
     assert "slack_hashtag_language.md" in text
     assert 'id="panel-system-language"' in text
     assert 'id="system-language-modal"' in text
+    assert "Slack hashtags" in text or "Slack hashtags &amp; commands" in text
     assert "System language workspace" in text
     assert 'id="panel-market"' not in text
     assert 'id="panel-pyth"' in text
@@ -184,6 +185,8 @@ def test_docs_hub_and_reader_pages_exist() -> None:
     assert '<h1 class="portal-title">Docs</h1>' in docs
     assert "How to interact with Anna using natural language" in docs
     assert "How to operate BLACK BOX today" in docs
+    assert "Slack hashtag" in docs
+    assert "slack_hashtag_language.md" in docs
     assert "Why the web UI exists" in docs
     assert "Web architecture and portal contract" in docs
     anna = (WEB / "docs-anna-language.html").read_text(encoding="utf-8")
