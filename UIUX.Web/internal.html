@@ -178,6 +178,16 @@
                   Not wired — engine control API required.
                 </p>
               </div>
+              <div class="ops-runtime__status-row" aria-label="Runtime status indicators">
+                <span class="runtime-status-pill runtime-status-pill--unknown" id="context-engine-status-pill">
+                  <span
+                    class="runtime-status-pill__dot runtime-status-pill__dot--unknown"
+                    id="context-engine-status-dot"
+                    aria-hidden="true"
+                  ></span>
+                  <span id="context-engine-status-text">Context engine: Unknown</span>
+                </span>
+              </div>
               <div class="panel__actions">
                 <button type="button" class="button button--secondary" disabled title="Awaiting engine wiring">
                   Start
@@ -457,6 +467,56 @@
 
           applyHashToDevplan();
         }
+
+        var contextEnginePill = document.getElementById("context-engine-status-pill");
+        var contextEngineDot = document.getElementById("context-engine-status-dot");
+        var contextEngineText = document.getElementById("context-engine-status-text");
+        var CONTEXT_ENGINE_STATES = {
+          healthy: { text: "Context engine: Healthy", tone: "healthy" },
+          degraded: { text: "Context engine: Degraded", tone: "degraded" },
+          error: { text: "Context engine: Error", tone: "error" },
+          unhealthy: { text: "Context engine: Unhealthy", tone: "error" },
+          unknown: { text: "Context engine: Unknown", tone: "unknown" },
+          not_wired: { text: "Context engine: Not wired", tone: "unknown" },
+        };
+
+        function setContextEngineState(state) {
+          if (!contextEnginePill || !contextEngineDot || !contextEngineText) return;
+          var key = String(state || "unknown").toLowerCase();
+          var mapped = CONTEXT_ENGINE_STATES[key] || CONTEXT_ENGINE_STATES.unknown;
+          contextEngineText.textContent = mapped.text;
+          contextEnginePill.className = "runtime-status-pill runtime-status-pill--" + mapped.tone;
+          contextEngineDot.className =
+            "runtime-status-pill__dot runtime-status-pill__dot--" + mapped.tone;
+        }
+
+        async function loadContextEngineState() {
+          setContextEngineState("unknown");
+          var candidates = [];
+          var apiBase = window.BlackboxPortal.readApiBase();
+          if (apiBase) {
+            candidates.push(apiBase + "/api/v1/context-engine/status");
+          }
+          candidates.push("/api/v1/context-engine/status");
+
+          for (var i = 0; i < candidates.length; i++) {
+            try {
+              var res = await fetch(candidates[i], {
+                method: "GET",
+                headers: { Accept: "application/json" },
+                credentials: "include",
+              });
+              if (!res.ok) continue;
+              var data = await res.json();
+              if (!data || typeof data !== "object") continue;
+              setContextEngineState(data.status || "unknown");
+              return;
+            } catch (e) {}
+          }
+          setContextEngineState("unknown");
+        }
+
+        loadContextEngineState();
       });
     </script>
   </body>
