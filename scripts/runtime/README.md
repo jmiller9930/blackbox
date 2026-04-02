@@ -83,28 +83,29 @@ python3 scripts/runtime/learning_cli.py summarize_insights
 python3 scripts/runtime/learning_cli.py generate_report
 ```
 
-## Telegram — Phase 4.6 / 4.6.1 / 4.6.2 (interaction layer)
+## Slack — operator messaging (Phase 4.6 / 4.6.1 / 4.6.2)
 
-Single bot, **multi-persona** labels: **`@anna`**, **`@data`** (`status` / `report` / `insights` or free text), **`@cody`** (engineering stub). Unprefixed: `report`, `insights`, `status` → DATA; default → Anna. Prefixes: `[Anna]`, `[DATA]`, `[Cody]`. **help** / **who** / **what can you do** / **how** → identity. **No** execution, approval, or kill switch from Telegram.
+**Primary human channel:** **Slack** (Socket Mode). Set **`messaging.backend`** to **`slack`** in `config/messaging_config.json` (see **Messaging interface — Directive 4.6.3.4** below). The same **multi-persona** routing applies: **`@anna`**, **`@data`** (`status` / `report` / `insights` or free text), **`@cody`** (engineering stub); unprefixed defaults; `[Anna]` / `[DATA]` / `[Cody]` labels in formatted replies. **No** execution, approval, or kill switch from chat.
 
-Requires `TELEGRAM_BOT_TOKEN`. Optional `TELEGRAM_ALLOWED_CHAT_IDS` (comma-separated chat ids).
+Implementation still uses the shared **`telegram_interface/`** dispatch + **`response_formatter`** path internally (Directive 4.6.3.3); Slack is the transport — not a second Anna brain.
 
-**Anna LLM (Ollama) — wired on the Telegram path:** dispatch calls Anna with **`use_llm=telegram_anna_use_llm()`** (local LLM **on** by default). Override with **`ANNA_TELEGRAM_USE_LLM`** (Telegram-only) or **`ANNA_USE_LLM`** (`0` = rules/playbook only, e.g. CI). Set **`OLLAMA_BASE_URL`** to the network LLM host on clawbot (not localhost unless Ollama runs there). Set **`OLLAMA_MODEL`** to a tag present on that host. Optional **`OLLAMA_STRICT=1`** requires `OLLAMA_BASE_URL` to be set. Verify before start:
+**Context engine (DATA hashtags):** **`#context_engine`** — snapshot from the context-engine status model (🟢 online / 🟡 degraded / 🔴 offline or problem), with restart hints when not healthy. **`#status`** — same context-engine block plus the execution/phase snapshot (`build_status_text`). The UI can mirror this with green/yellow/red indicators against the same status fields.
+
+**Composable hashtags:** message = **only** `#tokens` (e.g. `#status #system` = full stack; `#status #context_engine` = that slice). See [`docs/runtime/slack_hashtag_language.md`](../docs/runtime/slack_hashtag_language.md).
+
+**Anna LLM (Ollama) — messaging path:** use **`ANNA_USE_LLM`** (`0` = rules/playbook only, e.g. CI). For Telegram-only overrides, **`ANNA_TELEGRAM_USE_LLM`** exists in the legacy bot path. Set **`OLLAMA_BASE_URL`** to the network LLM host on clawbot (not localhost unless Ollama runs there). Set **`OLLAMA_MODEL`** to a tag present on that host. Optional **`OLLAMA_STRICT=1`** requires `OLLAMA_BASE_URL` to be set. Verify before start:
 
 ```bash
 cd scripts/runtime && PYTHONPATH=. python3 tools/check_ollama_runtime.py
 ```
 
-```bash
-export TELEGRAM_BOT_TOKEN="your-bot-token"
-export OLLAMA_BASE_URL="http://YOUR_LLM_HOST:11434"
-export OLLAMA_MODEL="your-installed-model:tag"
-python3 scripts/runtime/telegram_interface/telegram_bot.py
-```
+### Telegram (optional / lab only)
+
+**Not** the operator channel in current practice. Optional **`backend: telegram`** in `config/messaging_config.json`, or run **`python3 scripts/runtime/telegram_interface/telegram_bot.py`** with **`TELEGRAM_BOT_TOKEN`**, for legacy tests or isolated lab use.
 
 ## Messaging interface — Directive 4.6.3.3 (CLI validation)
 
-Anna dispatch runs through **`messaging_interface`** (`run_dispatch_pipeline` → Telegram adapter formats text). **Primary validation surface:**
+Anna dispatch runs through **`messaging_interface`** (`run_dispatch_pipeline` → shared formatter; Slack uses the same normalized payload). **Primary validation surface:**
 
 ```bash
 # from repository root (blackbox/)
@@ -124,7 +125,7 @@ echo "What day is it?" | python3 -m messaging_interface
 
 Copy `config/messaging_config.example.json` to `config/messaging_config.json` (gitignored) and set **`messaging.backend`**. Optional env overrides (merged after file load): **`TELEGRAM_BOT_TOKEN`**, **`SLACK_BOT_TOKEN`**, **`SLACK_APP_TOKEN`**.
 
-**Slack (Socket Mode):** set `backend` to `slack`, fill `messaging.slack.bot_token` (starts with `xoxb-`) and `app_token` (`xapp-`), enable Socket Mode and subscribe to **`message.channels`** / **`message.im`** (and scopes `chat:write`, `users:read` as needed). Requires **`slack-bolt`** (`requirements.txt`). The adapter calls **`run_dispatch_pipeline`** only — same dispatch as CLI/Telegram, not a separate Anna path.
+**Slack (Socket Mode):** set `backend` to `slack`, fill `messaging.slack.bot_token` (starts with `xoxb-`) and `app_token` (`xapp-`), enable Socket Mode and subscribe to **`message.channels`** / **`message.im`** (and scopes `chat:write`, `users:read` as needed). Requires **`slack-bolt`** (`requirements.txt`). The adapter calls **`run_dispatch_pipeline`** only — same dispatch as CLI (and optional Telegram backend), not a separate Anna path.
 
 ## DATA — one-shot health checks
 
@@ -145,6 +146,38 @@ python3 scripts/runtime/data_health_workflow.py --watchdog --interval 5 --max-it
 ```
 
 Use `--max-iterations` for bounded tests; omit `--max-iterations` for continuous monitoring.
+
+### Phone / SMS notifications (optional)
+
+**Module:** `modules/notification_gateway/` — short **trade**, **system**, and **Anna training** templates (who/what/when/where), delivery via **Twilio** (`BLACKBOX_NOTIFY_MODE=twilio` + `TWILIO_*`) or **HTTPS webhook** (`BLACKBOX_NOTIFY_MODE=webhook` + `BLACKBOX_NOTIFY_WEBHOOK_URL`).
+
+**Priority tiers (SMS):** bodies are prefixed **`T1` / `T2` / `T3`** — **T1** trading, **T2** system/availability, **T3** agents/training. **`BLACKBOX_NOTIFY_SMS_TIERS`** (default `1,2,3`) lists which tiers may send SMS; e.g. `1,2` silences tier-3 training/agent texts while keeping money and ops alerts.
+
+**Routine trades → T3 (optional):** set **`BLACKBOX_NOTIFY_TRADE_ROUTINE_TIER=yes`** (or `3` / `on`) so benign statuses like “filled” route to tier 3; loss/reject/error patterns stay tier 1.
+
+**Recipients (distro):** in order of precedence — `BLACKBOX_NOTIFY_DISTRO` (comma-separated E.164), `BLACKBOX_NOTIFY_RECIPIENTS_PATH`, `config/notification_recipients.local.json` (gitignored; copy from [`config/notification_recipients.example.json`](../config/notification_recipients.example.json)), then `config/notification_recipients.json`, else legacy **`BLACKBOX_NOTIFY_PHONE_E164`** for a single number.
+
+**DATA health → SMS:** `BLACKBOX_NOTIFY_SYSTEM=1` broadcasts a **tier-2** system alert to the distro when the workflow writes an **`alerts`** row (watchdog transition or forced-failure probe). Optional **`BLACKBOX_HOST_LABEL`** appears as “Where”.
+
+**Anna / training milestones:** call **`notify_training_milestone(event_kind=..., summary=...)`** (tier **3**) from the university or training layer when Anna **graduates**, **completes** a phase, or **improves** on a metric (wire those call sites when that state machine exists).
+
+**Trade path:** call **`notify_trade(...)`** (tier **1** by default, or **3** for routine when env allows) from the execution / approval layer when a ticket is placed or terminal state is known (does not auto-wire from chat).
+
+**Test SMS:** quickest path — `python3 scripts/runtime/tools/send_notification_test.py --ping` (sends the standard one-line system test: *“This is a system test from the BLACK BOX engine.”*; add `--dry-run` to print the SMS body only). With Twilio env set, same flags as above: `--who john` / `sean` / `all`; `--kind system|trade|training`; **`--list-sms-tiers`**; **`--trade-status`** (trade tier inference).
+
+Example Twilio keys: [`config/notification_gateway.example.json`](../config/notification_gateway.example.json).
+
+**Backend / workspace panel (for the UI API developer):** wire **operator-only** controls that delegate to `modules/notification_gateway` (same behavior as `scripts/runtime/tools/send_notification_test.py`). Do **not** duplicate Twilio HTTP; import `notify_system`, `notify_trade`, `notify_training_milestone`, `resolve_recipient_targets`, `parse_sms_allowed_tiers`, and/or call the script.
+
+| Concern | Guidance |
+|--------|----------|
+| **Persistence** | Store distro as JSON array `[{ "name", "phone_e164" }]` in SQLite (preferred) or atomic write to `config/notification_recipients.json` under repo root; avoid committing secrets. Optional: sync to `BLACKBOX_NOTIFY_RECIPIENTS_PATH` or document that the API process sets `os.environ["BLACKBOX_NOTIFY_RECIPIENTS_PATH"]` to a server-only file before each send. |
+| **Read API** | `GET /api/v1/notify/recipients` — list names + masked last-4 only in UI; full E.164 only for authorized edit flows if needed. |
+| **Write API** | `PUT /api/v1/notify/recipients` — replace list (validate E.164 with `normalize_to_e164` from `recipients.py`). |
+| **Env mirror (optional)** | `GET/PUT /api/v1/notify/settings` — expose `BLACKBOX_NOTIFY_SMS_TIERS`, `BLACKBOX_NOTIFY_MODE` (read-only or admin), `BLACKBOX_HOST_LABEL` for display; applying changes may require process env reload or a small sidecar that only the notify worker reads. |
+| **Test send** | `POST /api/v1/notify/test` — body `{ "to": "john" \| "all", "kind": "ping" \| "system" \| "trade" \| "training" }`. Map `ping` → `notify_system(..., component=blackbox_engine, summary=PING_SENTENCE)` as in `send_notification_test.py`. Require **internal staff** auth (same gate as other portal control APIs). Return `{ "ok", "detail" }` from gateway tuple; never log full phone numbers. |
+| **Process** | SMS runs **on the host** that has `TWILIO_*` and outbound HTTPS (e.g. clawbot). If the UI API runs in a container, either mount env/secrets there or invoke an **SSH/exec** helper on the lab host—same pattern as other “truth on primary host” jobs. |
+| **Panel UX** | Workspace strip or **System** area: table of recipients, **Save**, **Send test (ping)** / kind selector, link to `docs/runtime/slack_hashtag_language.md` for Slack; separate from Slack hashtag doc. |
 
 ## Cody — structured plan → task row
 
@@ -399,7 +432,7 @@ python3 scripts/runtime/policy_gated_action_filter.py --store
 
 ## Anna analyst — Phase 3.2 (v1) + Phase 3.6 (concept retrieval)
 
-**`anna_analyst_v1.py`** — Rule-based **conversational analyst**: trader text → **`anna_analysis_v1`** (interpretation, market_context from optional latest **`[Market Snapshot]`**, risk, policy alignment from optional **`[Guardrail Policy]`**, paper-only **`suggested_action`**, **`concepts_used`**, **`concept_support`**, optional **`strategy_awareness`** — Phase 3.8 awareness-only strategy language). **`concepts_used`** lists registry **`concept_id`**s when language matches seeded concepts; **`concept_support`** includes concise **`concept_summaries`** only for those IDs (read-only; not a full registry load). Optional **`--use-latest-decision-context`**, **`--use-latest-trend`** (**`[System Trend]`**). Missing artifacts → null-safe + **`notes`**. No Telegram, no registry **mutation**, no execution, no venue calls. **`--store`** → **`[Anna Analysis]`** completed task.
+**`anna_analyst_v1.py`** — Rule-based **conversational analyst**: trader text → **`anna_analysis_v1`** (interpretation, market_context from optional latest **`[Market Snapshot]`**, risk, policy alignment from optional **`[Guardrail Policy]`**, paper-only **`suggested_action`**, **`concepts_used`**, **`concept_support`**, optional **`strategy_awareness`** — Phase 3.8 awareness-only strategy language). **`concepts_used`** lists registry **`concept_id`**s when language matches seeded concepts; **`concept_support`** includes concise **`concept_summaries`** only for those IDs (read-only; not a full registry load). Optional **`--use-latest-decision-context`**, **`--use-latest-trend`** (**`[System Trend]`**). Missing artifacts → null-safe + **`notes`**. No chat transport, no registry **mutation**, no execution, no venue calls. **`--store`** → **`[Anna Analysis]`** completed task.
 
 ```bash
 python3 scripts/runtime/anna_analyst_v1.py "Liquidity is thin and spreads are widening"
@@ -409,7 +442,7 @@ python3 scripts/runtime/anna_analyst_v1.py "Test input" --store
 
 ## Anna proposal builder — Phase 3.3
 
-**`anna_proposal_builder.py`** — Bridges Anna analysis to **`anna_proposal_v1`**: `NO_CHANGE` \| `RISK_REDUCTION` \| `CONDITION_TIGHTENING` \| `OBSERVATION_ONLY`, **`validation_plan`**, **`proposed_effect`** (paper-only). Consumes **`--use-latest-stored-anna-analysis`** or **live** trader text with optional **`--use-latest-market-snapshot`**, **`--use-latest-decision-context`**, **`--use-latest-trend`**, **`--use-latest-policy`**. **`--store`** → **`[Anna Proposal]`**. Reuses **`anna_analyst_v1.build_analysis`** (includes registry-backed **`concepts_used`** / **`concept_support`** when matched). No Telegram.
+**`anna_proposal_builder.py`** — Bridges Anna analysis to **`anna_proposal_v1`**: `NO_CHANGE` \| `RISK_REDUCTION` \| `CONDITION_TIGHTENING` \| `OBSERVATION_ONLY`, **`validation_plan`**, **`proposed_effect`** (paper-only). Consumes **`--use-latest-stored-anna-analysis`** or **live** trader text with optional **`--use-latest-market-snapshot`**, **`--use-latest-decision-context`**, **`--use-latest-trend`**, **`--use-latest-policy`**. **`--store`** → **`[Anna Proposal]`**. Reuses **`anna_analyst_v1.build_analysis`** (includes registry-backed **`concepts_used`** / **`concept_support`** when matched). No chat transport.
 
 ```bash
 python3 scripts/runtime/anna_proposal_builder.py "Liquidity is thin and spreads are widening" --use-latest-market-snapshot --use-latest-policy
@@ -433,7 +466,7 @@ python3 scripts/runtime/anna_proposal_builder.py "Test proposal" --store
 | Proposal shaping | `proposal.py` | **`build_anna_proposal`** / **`assemble_anna_proposal_v1`** → `anna_proposal_v1`. |
 | Shared utils | `util.py` | Schema versions, `utc_now`, float helpers. |
 
-**Entrypoints:** `anna_analyst_v1.py` and `anna_proposal_builder.py` import these modules; behavior stays compatible with Phase 3.2 / 3.3. **Telegram** and **advanced reasoning** remain future phases — extend by adding or editing focused modules, not by growing one flat script.
+**Entrypoints:** `anna_analyst_v1.py` and `anna_proposal_builder.py` import these modules; behavior stays compatible with Phase 3.2 / 3.3. **Advanced reasoning** remains a future phase — extend by adding or editing focused modules, not by growing one flat script.
 
 ## Runtime concept retrieval — Phase 3.6
 
