@@ -65,7 +65,6 @@
         <aside class="portal-sidebar" id="portal-sidebar-nav" aria-label="Section navigation">
           <ul class="sidebar-list">
             <li><a class="sidebar-list__link" href="./docs.html">Docs</a></li>
-            <li><a class="sidebar-list__link" href="#panel-market">SOL market</a></li>
             <li><a class="sidebar-list__link" href="#panel-pyth">Pyth data</a></li>
             <li><a class="sidebar-list__link" href="#panel-anna">Anna</a></li>
             <li><a class="sidebar-list__link" href="#panel-runtime">Runtime</a></li>
@@ -113,48 +112,40 @@
           </p>
 
           <section class="ops-overview" aria-label="Live operations overview">
-            <section class="panel panel--wide panel--market" id="panel-market" aria-labelledby="t-market">
-              <div class="ops-market__header">
-                <div>
-                  <h2 class="panel__title" id="t-market">Live SOL market</h2>
-                  <p class="panel__lede">
-                    BLACK BOX-native view from the engine market-data path. Source labels and stale/degraded states fail closed.
-                  </p>
-                </div>
-                <div class="ops-market__chips">
-                  <span class="ops-chip">Source: Pyth (not wired)</span>
-                  <span class="ops-chip">Freshness: Unknown</span>
-                  <span class="ops-chip">Volatility: N/A</span>
-                </div>
-              </div>
-              <div class="ops-chart" role="img" aria-label="SOL candlestick chart placeholder">
-                <div class="ops-chart__empty">
-                  <strong>Chart not wired</strong>
-                  <span>Connect engine market endpoint for SOL candles (`1m`, `5m`, `15m`, `1h`).</span>
-                </div>
-              </div>
-              <dl class="ops-market__stats">
-                <div><dt>Price</dt><dd>--</dd></div>
-                <div><dt>Move</dt><dd>--</dd></div>
-                <div><dt>Timeframe</dt><dd>1m</dd></div>
-                <div><dt>Last update</dt><dd>Not wired</dd></div>
-              </dl>
-            </section>
 
             <div class="ops-overview__grid">
               <section class="panel" id="panel-pyth" aria-labelledby="t-pyth">
-                <h2 class="panel__title" id="t-pyth">Pyth ingestion &amp; storage</h2>
-                <p class="panel__state panel__state--pending" data-state>
-                  Not wired — ingestion, retention, trim, and alert telemetry required.
+                <h2 class="panel__title" id="t-pyth">Pyth workspace</h2>
+                <p class="panel__state panel__state--pending" id="pyth-status-text" data-state>
+                  Pyth status unknown — waiting for live probe.
                 </p>
-                <ul class="ops-list">
-                  <li>Pyth state: <strong>not wired</strong></li>
-                  <li>Processed count: <strong>--</strong></li>
-                  <li>Stored count: <strong>--</strong></li>
-                  <li>Storage usage: <strong>-- / --</strong></li>
-                  <li>Trim status: <strong>N/A</strong></li>
-                </ul>
+                <div class="runtime-strip" aria-label="Pyth workspace strip">
+                  <span class="runtime-pill" id="pyth-health-pill" title="Pyth health">
+                    <span class="agent-bubble agent-bubble--unknown" id="pyth-health-bubble" aria-hidden="true"></span>
+                    <span id="pyth-health-text">Health: unknown</span>
+                  </span>
+                  <span class="runtime-pill" id="pyth-db-pill" title="Pyth DB health">
+                    <span class="agent-bubble agent-bubble--unknown" id="pyth-db-bubble" aria-hidden="true"></span>
+                    <span id="pyth-db-text">DB: unknown</span>
+                  </span>
+                  <span class="runtime-pill" id="pyth-last-pill" title="Last update">Last: --</span>
+                  <span class="runtime-pill" id="pyth-age-pill" title="Probe age">Age: --</span>
+                  <button type="button" class="button button--secondary" id="pyth-view-btn">View stream</button>
+                </div>
+                <p class="panel__state" id="pyth-db-storage-text">DB storage: total --, used --, free --.</p>
+                <p class="panel__state" id="pyth-data-path-text">Training path: -- (table/filter pending).</p>
               </section>
+
+              <div class="pyth-modal" id="pyth-modal" hidden role="dialog" aria-modal="true" aria-labelledby="pyth-modal-title">
+                <div class="pyth-modal__card">
+                  <div class="pyth-modal__head">
+                    <h3 class="pyth-modal__title" id="pyth-modal-title">Pyth live stream</h3>
+                    <button type="button" class="button button--ghost" id="pyth-close-btn">Close</button>
+                  </div>
+                  <p class="pyth-modal__ticker" id="pyth-ticker-line">Waiting for stream events…</p>
+                  <div class="pyth-modal__list" id="pyth-events-list" aria-live="polite"></div>
+                </div>
+              </div>
 
               <section class="panel" id="panel-anna" aria-labelledby="t-anna">
                 <h2 class="panel__title" id="t-anna">Anna at work</h2>
@@ -453,11 +444,11 @@
         }
 
         function coerceState(raw) {
-          var s = String(raw || "unknown").toLowerCase();
-          if (s === "healthy" || s === "connected" || s === "up" || s === "on") return "connected";
-          if (s === "degraded" || s === "warning" || s === "partial") return "warning";
-          if (s === "error" || s === "disconnected" || s === "down" || s === "off") return "disconnected";
-          if (s === "not_wired") return "not_wired";
+          var v = String(raw || "unknown").toLowerCase();
+          if (v === "healthy" || v === "connected" || v === "up" || v === "on") return "connected";
+          if (v === "degraded" || v === "warning" || v === "partial" || v === "watch") return "warning";
+          if (v === "error" || v === "disconnected" || v === "down" || v === "off" || v === "capacity_risk") return "disconnected";
+          if (v === "not_wired") return "not_wired";
           return "unknown";
         }
 
@@ -467,6 +458,15 @@
           if (state === "disconnected") return "Disconnected";
           if (state === "not_wired") return "Not wired";
           return "Unknown";
+        }
+
+        function bytesToHuman(n) {
+          var x = Number(n || 0);
+          if (!isFinite(x) || x <= 0) return "0 B";
+          var units = ["B", "KB", "MB", "GB", "TB"];
+          var i = Math.min(units.length - 1, Math.floor(Math.log(x) / Math.log(1024)));
+          var val = x / Math.pow(1024, i);
+          return val.toFixed(i === 0 ? 0 : val >= 100 ? 0 : val >= 10 ? 1 : 2) + " " + units[i];
         }
 
         function applyPill(pillId, bubbleId, textId, state, label, title) {
@@ -546,6 +546,104 @@
           );
         }
 
+        async function refreshPythStatus() {
+          var pyth = await fetchJsonCandidates(["/api/v1/market/pyth/status"]);
+          var pythState = coerceState(pyth && pyth.status);
+
+          var statusText = document.getElementById("pyth-status-text");
+          if (statusText) {
+            statusText.textContent =
+              "Pyth " +
+              String((pyth && pyth.status) || "unknown") +
+              " — " +
+              String((pyth && pyth.reason_code) || "no_reason");
+          }
+
+          applyPill(
+            "pyth-health-pill",
+            "pyth-health-bubble",
+            "pyth-health-text",
+            pythState,
+            "Health: " + String((pyth && pyth.status) || "unknown"),
+            "Pyth status from /api/v1/market/pyth/status"
+          );
+
+          var last = document.getElementById("pyth-last-pill");
+          if (last) last.textContent = "Last: " + String((pyth && pyth.last_update_at) || "--");
+          var age = document.getElementById("pyth-age-pill");
+          if (age) age.textContent = "Age: " + String((pyth && pyth.age_seconds) ?? "--");
+
+          var db = (pyth && pyth.db_storage) || {};
+          var dbColor = String(db.health_color || "unknown").toLowerCase();
+          var dbState = dbColor === "green" ? "connected" : dbColor === "yellow" ? "warning" : dbColor === "red" ? "disconnected" : "unknown";
+          applyPill(
+            "pyth-db-pill",
+            "pyth-db-bubble",
+            "pyth-db-text",
+            dbState,
+            "DB: " + String(db.health_state || "unknown"),
+            "SQLite storage health"
+          );
+
+          var dbStorage = document.getElementById("pyth-db-storage-text");
+          if (dbStorage) {
+            dbStorage.textContent =
+              "DB storage: total " +
+              bytesToHuman(db.fs_total_bytes) +
+              ", used " +
+              bytesToHuman(db.fs_used_bytes) +
+              ", free " +
+              bytesToHuman(db.fs_avail_bytes) +
+              ".";
+          }
+
+          var t = (pyth && pyth.training_source) || {};
+          var dataPath = document.getElementById("pyth-data-path-text");
+          if (dataPath) {
+            dataPath.textContent =
+              "Training path: " +
+              String(t.path || "--") +
+              " | table: " +
+              String(t.table || "--") +
+              " | filters: symbol=" +
+              String(t.symbol_filter || "--") +
+              ", source=" +
+              String(t.source_filter || "--");
+          }
+        }
+
+        async function refreshPythRecent() {
+          var list = document.getElementById("pyth-events-list");
+          var ticker = document.getElementById("pyth-ticker-line");
+          if (!list || !ticker) return;
+          var data = await fetchJsonCandidates(["/api/v1/market/pyth/recent?limit=40"]);
+          var items = (data && data.items) || [];
+          if (!items.length) {
+            ticker.textContent = "No recent Pyth events.";
+            list.innerHTML = '<p class="pyth-modal__empty">No stream rows yet.</p>';
+            return;
+          }
+          var latest = items[items.length - 1] || {};
+          ticker.textContent =
+            "Last seq #" + String(latest.seq || "?") +
+            " at " + String(latest.received_at || "--") +
+            " bytes " + String(latest.payload_size || 0);
+          list.innerHTML = items
+            .slice()
+            .reverse()
+            .slice(0, 24)
+            .map(function (it) {
+              return (
+                '<div class="pyth-modal__row">' +
+                '<span class="pyth-modal__seq">#' + String(it.seq || "?") + '</span>' +
+                '<span>' + String(it.received_at || "--") + '</span>' +
+                '<span class="pyth-modal__bytes">' + String(it.payload_size || 0) + 'b</span>' +
+                '</div>'
+              );
+            })
+            .join("");
+        }
+
         async function loadContextEngineState() {
           var ctx = await fetchJsonCandidates(["/api/v1/context-engine/status"]);
           var raw = ctx && (ctx.status || ctx.state);
@@ -562,8 +660,37 @@
 
         refreshRuntimeTruth();
         loadContextEngineState();
+        refreshPythStatus();
         setInterval(refreshRuntimeTruth, 15000);
         setInterval(loadContextEngineState, 15000);
+        setInterval(refreshPythStatus, 15000);
+
+        var pythModal = document.getElementById("pyth-modal");
+        var pythViewBtn = document.getElementById("pyth-view-btn");
+        var pythCloseBtn = document.getElementById("pyth-close-btn");
+        var pythPoll = null;
+        if (pythModal && pythViewBtn && pythCloseBtn) {
+          function closePythModal() {
+            pythModal.hidden = true;
+            if (pythPoll) {
+              clearInterval(pythPoll);
+              pythPoll = null;
+            }
+          }
+          pythViewBtn.addEventListener("click", function () {
+            pythModal.hidden = false;
+            refreshPythRecent();
+            if (pythPoll) clearInterval(pythPoll);
+            pythPoll = setInterval(refreshPythRecent, 1500);
+          });
+          pythCloseBtn.addEventListener("click", closePythModal);
+          pythModal.addEventListener("click", function (evt) {
+            if (evt.target === pythModal) closePythModal();
+          });
+          document.addEventListener("keydown", function (evt) {
+            if (evt.key === "Escape" && !pythModal.hidden) closePythModal();
+          });
+        }
       });
     </script>
   </body>

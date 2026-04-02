@@ -116,8 +116,11 @@ def test_internal_portal_allows_staff_roles() -> None:
     assert "hidePortalBootOverlay" in text
     assert 'href="./anna.html"' in text
     assert 'href="./docs.html"' in text
-    assert 'id="panel-market"' in text
+    assert 'id="panel-market"' not in text
     assert 'id="panel-pyth"' in text
+    assert 'id="pyth-health-pill"' in text
+    assert 'id="pyth-db-pill"' in text
+    assert 'id="pyth-view-btn"' in text
     assert "Runtime status" in text
     assert "Context: unknown" in text
     assert "context-engine-pill" in text
