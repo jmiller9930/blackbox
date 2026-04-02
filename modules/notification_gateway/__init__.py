@@ -1,5 +1,5 @@
 """
-BLACK BOX → phone notification gateway (SMS via Twilio or HTTPS webhook).
+BLACK BOX → phone notification gateway (SMS via Twilio, Textbelt, or HTTPS webhook).
 
 Priority tiers (SMS gating via BLACKBOX_NOTIFY_SMS_TIERS):
   1 — Trading / execution (notify_trade; optional routine → T3 if env allows)
@@ -7,7 +7,7 @@ Priority tiers (SMS gating via BLACKBOX_NOTIFY_SMS_TIERS):
   3 — General / agents (notify_training_milestone)
 
 Env:
-  BLACKBOX_NOTIFY_MODE=off|twilio|webhook
+  BLACKBOX_NOTIFY_MODE=off|twilio|webhook|textbelt
   BLACKBOX_NOTIFY_SMS_TIERS=1,2,3  — subset allowed to send SMS (default all)
   BLACKBOX_NOTIFY_TRADE_ROUTINE_TIER=3  — downgrade benign trade statuses to tier 3
   BLACKBOX_NOTIFY_PHONE_E164=+15551234567  — legacy single recipient
@@ -20,6 +20,9 @@ Twilio: TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, TWILIO_FROM_NUMBER
 
 Webhook: BLACKBOX_NOTIFY_WEBHOOK_URL, optional BLACKBOX_NOTIFY_WEBHOOK_SECRET
 Webhook JSON includes optional \"tier\" (integer) for routing.
+
+Textbelt: BLACKBOX_NOTIFY_TEXTBELT_KEY (default textbelt = 1 free/day on hosted API),
+  BLACKBOX_NOTIFY_TEXTBELT_URL (default https://textbelt.com/text). US +1 E.164 only.
 """
 
 from __future__ import annotations

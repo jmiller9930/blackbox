@@ -149,7 +149,7 @@ Use `--max-iterations` for bounded tests; omit `--max-iterations` for continuous
 
 ### Phone / SMS notifications (optional)
 
-**Module:** `modules/notification_gateway/` — short **trade**, **system**, and **Anna training** templates (who/what/when/where), delivery via **Twilio** (`BLACKBOX_NOTIFY_MODE=twilio` + `TWILIO_*`) or **HTTPS webhook** (`BLACKBOX_NOTIFY_MODE=webhook` + `BLACKBOX_NOTIFY_WEBHOOK_URL`).
+**Module:** `modules/notification_gateway/` — short **trade**, **system**, and **Anna training** templates (who/what/when/where), delivery via **Twilio** (`BLACKBOX_NOTIFY_MODE=twilio` + `TWILIO_*`), **Textbelt** (`BLACKBOX_NOTIFY_MODE=textbelt`; optional `BLACKBOX_NOTIFY_TEXTBELT_KEY`, default `textbelt` for one free SMS/day on the hosted API — US `+1` numbers only), or **HTTPS webhook** (`BLACKBOX_NOTIFY_MODE=webhook` + `BLACKBOX_NOTIFY_WEBHOOK_URL`).
 
 **Priority tiers (SMS):** bodies are prefixed **`T1` / `T2` / `T3`** — **T1** trading, **T2** system/availability, **T3** agents/training. **`BLACKBOX_NOTIFY_SMS_TIERS`** (default `1,2,3`) lists which tiers may send SMS; e.g. `1,2` silences tier-3 training/agent texts while keeping money and ops alerts.
 

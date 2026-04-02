@@ -2,16 +2,19 @@
 """
 Send one test SMS via the notification gateway (Twilio or webhook).
 
-Requires BLACKBOX_NOTIFY_MODE=twilio (or webhook) and credentials. Recipients come
+Requires BLACKBOX_NOTIFY_MODE=twilio, textbelt, or webhook (and matching credentials). Recipients come
 from config/notification_recipients.local.json, BLACKBOX_NOTIFY_DISTRO, or
 BLACKBOX_NOTIFY_PHONE_E164 — see modules/notification_gateway/__init__.py.
 
 Easiest (one system SMS with the standard test sentence):
   python3 scripts/runtime/tools/send_notification_test.py --ping
 
-With Twilio env set (same as above, actually sends):
+With Twilio env set (actually sends):
   BLACKBOX_NOTIFY_MODE=twilio TWILIO_ACCOUNT_SID=... TWILIO_AUTH_TOKEN=... TWILIO_FROM_NUMBER=... \\
     python3 scripts/runtime/tools/send_notification_test.py --ping
+
+With Textbelt (hosted; key ``textbelt`` = ~1 free SMS/day; US +1 numbers only):
+  BLACKBOX_NOTIFY_MODE=textbelt python3 scripts/runtime/tools/send_notification_test.py --who all --ping
 
 Other examples:
   python3 scripts/runtime/tools/send_notification_test.py --who john --dry-run
@@ -147,8 +150,8 @@ def main() -> int:
 
     if mode in ("0", "off", "false", "no"):
         print(
-            "BLACKBOX_NOTIFY_MODE is off. Set BLACKBOX_NOTIFY_MODE=twilio and TWILIO_* "
-            "to send, or use --dry-run.",
+            "BLACKBOX_NOTIFY_MODE is off. Set BLACKBOX_NOTIFY_MODE=twilio|textbelt|webhook "
+            "with matching env, or use --dry-run.",
             file=sys.stderr,
         )
         return 3

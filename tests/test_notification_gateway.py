@@ -107,3 +107,36 @@ def test_parse_sms_tiers_default(monkeypatch) -> None:
     from modules.notification_gateway.tiers import parse_sms_allowed_tiers
 
     assert parse_sms_allowed_tiers() == {1, 2, 3}
+
+
+def test_textbelt_success(monkeypatch) -> None:
+    monkeypatch.setenv("BLACKBOX_NOTIFY_MODE", "textbelt")
+    monkeypatch.setenv("BLACKBOX_NOTIFY_TEXTBELT_KEY", "textbelt")
+    import modules.notification_gateway.deliver as deliver
+
+    class _Resp:
+        def read(self) -> bytes:
+            return b'{"success": true, "quotaRemaining": 99}'
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return None
+
+    def _fake_urlopen(req, timeout=None):
+        return _Resp()
+
+    monkeypatch.setattr(deliver.urllib.request, "urlopen", _fake_urlopen)
+    ok, reason = deliver.send_sms("+15551112222", "hello")
+    assert ok
+    assert "textbelt_ok" in reason
+
+
+def test_textbelt_rejects_non_us_e164(monkeypatch) -> None:
+    monkeypatch.setenv("BLACKBOX_NOTIFY_MODE", "textbelt")
+    import modules.notification_gateway.deliver as deliver
+
+    ok, reason = deliver.send_sms("+447911123456", "hello")
+    assert not ok
+    assert "textbelt_phone" in reason

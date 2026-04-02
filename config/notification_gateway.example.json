@@ -13,6 +13,11 @@
     "url": "",
     "secret": ""
   },
+  "textbelt": {
+    "key": "textbelt",
+    "url": "https://textbelt.com/text",
+    "comment": "Env: BLACKBOX_NOTIFY_TEXTBELT_KEY, BLACKBOX_NOTIFY_TEXTBELT_URL. US 10-digit via +1 E.164 only."
+  },
   "notify_on_data_health_alert": false,
   "host_label": "clawbot"
 }

@@ -45,7 +45,7 @@ Implement under **`/api/v1/notify/`** (or equivalent namespaced path consistent 
 | `GET` | `/api/v1/notify/settings` (optional) | Read-only or admin: `BLACKBOX_NOTIFY_SMS_TIERS`, mode hints. |
 | `POST` | `/api/v1/notify/test` | Body: `{ "to": "john" \| "all" \| "recipient1", "kind": "ping" \| "system" \| "trade" \| "training" }`; returns `{ "ok": bool, "detail": str }` from gateway. |
 
-**Process:** SMS delivery must run where **`BLACKBOX_NOTIFY_MODE=twilio`** (or webhook) and **`TWILIO_*`** are available — typically **clawbot** / primary host per [`docs/runtime/execution_context.md`](../../runtime/execution_context.md). If the UI API container lacks secrets, use a **documented** pattern: subprocess on host, SSH one-shot, or shared env on the same machine as today’s CLI proof.
+**Process:** SMS delivery must run where **`BLACKBOX_NOTIFY_MODE`** is **`twilio`** (with **`TWILIO_*`**), **`textbelt`** (hosted free tier: `key=textbelt`, US +1 only), or **`webhook`** — typically **clawbot** / primary host per [`docs/runtime/execution_context.md`](../../runtime/execution_context.md). If the UI API container lacks secrets, use a **documented** pattern: subprocess on host, SSH one-shot, or shared env on the same machine as today’s CLI proof.
 
 ### UI shape (contractual minimum)
 

@@ -1,10 +1,11 @@
-"""Deliver SMS via Twilio REST (stdlib) or generic webhook — no extra pip deps."""
+"""Deliver SMS via Twilio REST, Textbelt REST, or generic webhook — no extra pip deps."""
 
 from __future__ import annotations
 
 import base64
 import json
 import os
+import re
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -16,7 +17,7 @@ def _env(name: str, default: str = "") -> str:
 
 
 def delivery_mode() -> str:
-    """off | twilio | webhook"""
+    """off | twilio | webhook | textbelt"""
     return _env("BLACKBOX_NOTIFY_MODE", "off").lower()
 
 
@@ -37,6 +38,9 @@ def send_sms(
 
     Webhook env: BLACKBOX_NOTIFY_WEBHOOK_URL (POST JSON {to, body, kind, tier}).
     Optional: BLACKBOX_NOTIFY_WEBHOOK_SECRET (sent as X-Notify-Secret).
+
+    Textbelt env: BLACKBOX_NOTIFY_TEXTBELT_KEY (default ``textbelt`` = one free SMS/day on hosted API),
+    BLACKBOX_NOTIFY_TEXTBELT_URL (default https://textbelt.com/text). US 10-digit from E.164 +1… only.
     """
     to_e164 = (to_e164 or "").strip()
     body = (body or "").strip()
@@ -52,6 +56,9 @@ def send_sms(
 
     if mode == "webhook":
         return _send_webhook(to_e164, body, tier=tier)
+
+    if mode == "textbelt":
+        return _send_textbelt(to_e164, body)
 
     return False, f"unknown_notify_mode:{mode}"
 
@@ -114,3 +121,54 @@ def _send_webhook(to_e164: str, body: str, *, tier: int | None = None) -> tuple[
         return False, f"webhook_http_{e.code}"
     except Exception as e:
         return False, f"webhook_err:{e!s}"
+
+
+def _e164_to_textbelt_us_phone(e164: str) -> str | None:
+    """Hosted Textbelt examples use 10-digit US numbers (no +1)."""
+    d = re.sub(r"\D", "", e164 or "")
+    if len(d) == 11 and d.startswith("1"):
+        return d[1:]
+    if len(d) == 10:
+        return d
+    return None
+
+
+def _send_textbelt(to_e164: str, body: str) -> tuple[bool, str]:
+    """
+    POST application/x-www-form-urlencoded to Textbelt.
+
+    Free tier: key ``textbelt`` — typically one outbound text per day (see textbelt.com).
+    Paid: purchase key; same API.
+    """
+    phone = _e164_to_textbelt_us_phone(to_e164)
+    if not phone:
+        return False, "textbelt_phone_requires_us_10digit"
+
+    key = _env("BLACKBOX_NOTIFY_TEXTBELT_KEY", "textbelt")
+    url = _env("BLACKBOX_NOTIFY_TEXTBELT_URL", "https://textbelt.com/text")
+    if not url:
+        return False, "textbelt_url_missing"
+
+    msg = (body or "")[:1600]
+    data = urllib.parse.urlencode({"phone": phone, "message": msg, "key": key}).encode("utf-8")
+    req = urllib.request.Request(url, data=data, method="POST")
+    req.add_header("Content-Type", "application/x-www-form-urlencoded")
+    try:
+        with urllib.request.urlopen(req, timeout=20) as resp:
+            raw = resp.read().decode("utf-8", errors="replace")
+    except urllib.error.HTTPError as e:
+        return False, f"textbelt_http_{e.code}"
+    except Exception as e:
+        return False, f"textbelt_err:{e!s}"
+
+    try:
+        obj = json.loads(raw)
+    except json.JSONDecodeError:
+        return False, "textbelt_bad_json"
+
+    if obj.get("success") is True:
+        q = obj.get("quotaRemaining")
+        return True, f"textbelt_ok:{q}" if q is not None else "textbelt_ok"
+
+    err = obj.get("error") or obj.get("message") or "unknown"
+    return False, f"textbelt_api:{err}"
