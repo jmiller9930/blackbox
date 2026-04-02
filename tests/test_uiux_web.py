@@ -14,6 +14,17 @@ def test_unified_plan_build_script_exists() -> None:
     assert (REPO / "scripts" / "build_unified_portal_plan.py").is_file()
 
 
+def test_docker_compose_sets_context_engine_env() -> None:
+    text = (WEB / "docker-compose.yml").read_text(encoding="utf-8")
+    assert "BLACKBOX_CONTEXT_ROOT" in text
+    assert "BLACKBOX_REPO_ROOT" in text
+
+
+def test_api_server_exposes_context_engine_route() -> None:
+    text = (WEB / "api_server.py").read_text(encoding="utf-8")
+    assert "/api/v1/context-engine/status" in text
+
+
 @pytest.mark.parametrize(
     "name",
     [
@@ -130,6 +141,8 @@ def test_internal_portal_allows_staff_roles() -> None:
     assert "id=\"data-plane-pill\"" in text
     assert "id=\"ui-api-pill\"" in text
     assert "id=\"agent-workers-pill\"" in text
+    assert 'id="context-engine-pill"' in text
+    assert "/api/v1/context-engine/status" in text
     assert "id=\"status-diagnostics-modal\"" in text
 
 

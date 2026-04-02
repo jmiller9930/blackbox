@@ -11,6 +11,9 @@ services:
     image: python:3.11-alpine
     working_dir: /repo
     command: ["python3", "UIUX.Web/api_server.py"]
+    environment:
+      BLACKBOX_REPO_ROOT: /repo
+      BLACKBOX_CONTEXT_ROOT: /repo/data/context_engine
     volumes:
       - ../:/repo
       - /mnt/SQLlite_dB:/mnt/SQLlite_dB

@@ -15,6 +15,13 @@ HOST = "0.0.0.0"
 PORT = 8080
 ROOT = Path("/repo")
 ARTIFACTS = ROOT / "docs" / "working" / "artifacts"
+
+# Context engine (Pillar 1) — operational store under BLACKBOX_CONTEXT_ROOT or data/context_engine
+try:
+    from modules.context_engine.status import build_context_engine_status, record_api_probe
+except ImportError:
+    build_context_engine_status = None  # type: ignore[assignment]
+    record_api_probe = None  # type: ignore[assignment]
 STATE_FILE = ARTIFACTS / "ui_runtime_state.json"
 PYTH_STREAM_FILE = ARTIFACTS / "pyth_stream_status.json"
 PYTH_RECENT_FILE = ARTIFACTS / "pyth_stream_recent.json"
@@ -477,6 +484,43 @@ class Handler(BaseHTTPRequestHandler):
             return
         if path == "/api/v1/system/status":
             self._json(200, build_system_status())
+            return
+        if path == "/api/v1/context-engine/status":
+            if build_context_engine_status is None or record_api_probe is None:
+                self._json(
+                    200,
+                    {
+                        "status": "error",
+                        "reason_code": "CTX-ENGINE-IMPORT-FAIL",
+                        "last_heartbeat_at": None,
+                        "freshness_seconds": None,
+                        "last_event_kind": None,
+                        "record_count_hint": None,
+                        "storage_path": None,
+                        "trace_id": str(uuid.uuid4()),
+                    },
+                )
+                return
+            try:
+                record_api_probe(ROOT)
+                body = dict(build_context_engine_status(ROOT))
+                body["trace_id"] = str(uuid.uuid4())
+                self._json(200, body)
+            except Exception as e:  # noqa: BLE001 — fail-closed surface for API
+                self._json(
+                    200,
+                    {
+                        "status": "error",
+                        "reason_code": "CTX-STATUS-EXCEPTION",
+                        "last_heartbeat_at": None,
+                        "freshness_seconds": None,
+                        "last_event_kind": None,
+                        "record_count_hint": None,
+                        "storage_path": None,
+                        "detail": str(e),
+                        "trace_id": str(uuid.uuid4()),
+                    },
+                )
             return
         self._json(404, {"error": "not_found", "path": path})
 

@@ -121,6 +121,10 @@
                   <span class="agent-bubble agent-bubble--unknown" id="agent-workers-bubble" aria-hidden="true"></span>
                   <span id="agent-workers-text">Agent Workers: unknown</span>
                 </button>
+                <button type="button" class="runtime-pill runtime-pill--action" id="context-engine-pill" title="Context engine status from /api/v1/context-engine/status">
+                  <span class="agent-bubble agent-bubble--unknown" id="context-engine-bubble" aria-hidden="true"></span>
+                  <span id="context-engine-text">Context engine: unknown</span>
+                </button>
               </div>
               <div class="runtime-strip runtime-strip--agents" aria-label="Agent strip">
                 <button type="button" class="runtime-pill runtime-pill--action" id="anna-main-pill" title="Anna status"><span class="agent-bubble agent-bubble--unknown" id="anna-main-bubble" aria-hidden="true"></span><span id="anna-main-text">Anna: unknown</span></button>
@@ -808,6 +812,37 @@
           }).join("");
         }
 
+        async function refreshContextEngineStatus() {
+          var ce = await fetchJsonCandidates(["/api/v1/context-engine/status"]);
+          var st = normalizeStatus(ce && ce.status);
+          var reason = String((ce && ce.reason_code) || "api_unavailable");
+          applyPill(
+            "context-engine-pill",
+            "context-engine-bubble",
+            "context-engine-text",
+            st,
+            "Context engine: " + statusLabelWord(st),
+            reason
+          );
+          var pill = document.getElementById("context-engine-pill");
+          if (pill) {
+            pill.onclick = function () {
+              openDiagnostics("Context engine", {
+                status: st,
+                reason_code: reason,
+                summary: "GET /api/v1/context-engine/status — " + String((ce && ce.storage_path) || "--"),
+                last_heartbeat_at: (ce && ce.last_heartbeat_at) || null,
+                fix: {
+                  headline: "Restore context engine store or policy",
+                  steps: ["Verify BLACKBOX_CONTEXT_ROOT", "Check api container can write data/context_engine", "Review reason_code"],
+                  commands: ["curl -sS https://localhost/api/v1/context-engine/status"],
+                  docs: ["modules/context_engine/", "UIUX.Web/api_server.py"],
+                },
+              });
+            };
+          }
+        }
+
         async function refreshAnnaSummaryDetails() {
           var anna = await fetchJsonCandidates(["/api/v1/anna/summary"]);
           var s = document.getElementById("anna-modal-status-text");
@@ -823,9 +858,11 @@
         }
 
         refreshSystemStatus();
+        refreshContextEngineStatus();
         refreshPythStatus();
         refreshAnnaSummaryDetails();
         setInterval(refreshSystemStatus, 15000);
+        setInterval(refreshContextEngineStatus, 15000);
         setInterval(refreshPythStatus, 15000);
         setInterval(refreshAnnaSummaryDetails, 15000);
 
