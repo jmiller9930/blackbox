@@ -66,7 +66,7 @@
           <ul class="sidebar-list">
             <li><a class="sidebar-list__link" href="./docs.html">Docs</a></li>
             <li><a class="sidebar-list__link" href="#panel-pyth">Pyth data</a></li>
-            <li><a class="sidebar-list__link" href="#panel-anna">Anna</a></li>
+            <li><a class="sidebar-list__link" href="#panel-agent-hub">Agent workspace</a></li>
             <li><a class="sidebar-list__link" href="#panel-runtime">Runtime</a></li>
             <li>
               <a class="sidebar-list__link" href="#panel-devplan">Development plan</a>
@@ -91,9 +91,6 @@
                 >Admin users</a
               >
             </li>
-            <li>
-              <a class="sidebar-list__link" href="./anna.html">Anna</a>
-            </li>
             <li><a class="sidebar-list__link" href="#panel-exchange">Exchange</a></li>
             <li><a class="sidebar-list__link" href="#panel-pnl">P&amp;L</a></li>
             <li><a class="sidebar-list__link" href="#panel-training">Training</a></li>
@@ -110,9 +107,7 @@
             Panel shells per web architecture contract. Controls stay disabled until
             the engine API is wired (Phase 5+).
           </p>
-
           <section class="ops-overview" aria-label="Live operations overview">
-
             <div class="ops-overview__grid">
               <section class="panel" id="panel-pyth" aria-labelledby="t-pyth">
                 <h2 class="panel__title" id="t-pyth">Pyth workspace</h2>
@@ -136,50 +131,86 @@
                 <p class="panel__state" id="pyth-data-path-text">Training path: -- (table/filter pending).</p>
               </section>
 
-              <div class="pyth-modal" id="pyth-modal" hidden role="dialog" aria-modal="true" aria-labelledby="pyth-modal-title">
-                <div class="pyth-modal__card">
-                  <div class="pyth-modal__head">
-                    <h3 class="pyth-modal__title" id="pyth-modal-title">Pyth live stream</h3>
-                    <button type="button" class="button button--ghost" id="pyth-close-btn">Close</button>
-                  </div>
-                  <p class="pyth-modal__ticker" id="pyth-ticker-line">Waiting for stream events…</p>
-                  <div class="pyth-modal__list" id="pyth-events-list" aria-live="polite"></div>
+              <section class="panel" id="panel-agent-hub" aria-labelledby="t-agent-hub">
+                <h2 class="panel__title" id="t-agent-hub">Agent workspace</h2>
+                <p class="panel__state" id="agent-hub-status-text">
+                  Anna, Billy, Mia, Chris, and Data are grouped here for focused work.
+                </p>
+                <div class="runtime-strip" aria-label="Agent workspace strip">
+                  <button type="button" class="button button--secondary" id="agent-workspace-open-btn">Open agent workspace</button>
+                </div>
+              </section>
+            </div>
+
+            <div class="pyth-modal" id="pyth-modal" hidden role="dialog" aria-modal="true" aria-labelledby="pyth-modal-title">
+              <div class="pyth-modal__card">
+                <div class="pyth-modal__head">
+                  <h3 class="pyth-modal__title" id="pyth-modal-title">Pyth live stream</h3>
+                  <button type="button" class="button button--ghost" id="pyth-close-btn">Close</button>
+                </div>
+                <p class="pyth-modal__ticker" id="pyth-ticker-line">Waiting for stream events…</p>
+                <div class="pyth-modal__list" id="pyth-events-list" aria-live="polite"></div>
+              </div>
+            </div>
+
+            <div class="pyth-modal anna-modal" id="agent-modal" hidden role="dialog" aria-modal="true" aria-labelledby="agent-modal-title">
+              <div class="pyth-modal__card anna-modal__card">
+                <div class="pyth-modal__head">
+                  <h3 class="pyth-modal__title" id="agent-modal-title">Runtime agent workspace</h3>
+                  <button type="button" class="button button--ghost" id="agent-close-btn">Close</button>
+                </div>
+                <div class="anna-modal__body">
+                  <section class="anna-modal__section" id="agent-section-anna">
+                    <h4>Anna</h4>
+                    <span class="agent-status-pill" id="anna-conn-pill"><span class="agent-bubble agent-bubble--unknown" id="anna-conn-bubble" aria-hidden="true"></span><span id="anna-conn-text">Anna: Unknown</span></span>
+                    <p id="anna-modal-status-text">Status unknown.</p>
+                    <p id="anna-modal-training-text">Training status unknown.</p>
+                    <p id="anna-modal-path-text">Training source path: --</p>
+                    <p id="anna-modal-participation-text">Participation not wired.</p>
+                    <p id="anna-modal-strategy-text">Strategy inventory not wired.</p>
+                  </section>
+                  <section class="anna-modal__section" id="agent-section-billy">
+                    <h4>Billy</h4>
+                    <span class="agent-status-pill" id="billy-conn-pill"><span class="agent-bubble agent-bubble--unknown" id="billy-conn-bubble" aria-hidden="true"></span><span id="billy-conn-text">Billy: Unknown</span></span>
+                    <p id="billy-modal-status-text">Status unknown.</p>
+                  </section>
+                  <section class="anna-modal__section" id="agent-section-mia">
+                    <h4>Mia</h4>
+                    <span class="agent-status-pill" id="mia-conn-pill"><span class="agent-bubble agent-bubble--unknown" id="mia-conn-bubble" aria-hidden="true"></span><span id="mia-conn-text">Mia: Unknown</span></span>
+                    <p id="mia-modal-status-text">Status unknown.</p>
+                  </section>
+                  <section class="anna-modal__section" id="agent-section-chris">
+                    <h4>Chris</h4>
+                    <span class="agent-status-pill" id="chris-conn-pill"><span class="agent-bubble agent-bubble--unknown" id="chris-conn-bubble" aria-hidden="true"></span><span id="chris-conn-text">Chris: Unknown</span></span>
+                    <p id="chris-modal-status-text">Status unknown.</p>
+                  </section>
+                  <section class="anna-modal__section" id="agent-section-data">
+                    <h4>Data</h4>
+                    <span class="agent-status-pill" id="data-conn-pill"><span class="agent-bubble agent-bubble--unknown" id="data-conn-bubble" aria-hidden="true"></span><span id="data-conn-text">Data: Unknown</span></span>
+                    <p id="data-modal-status-text">Status unknown.</p>
+                  </section>
                 </div>
               </div>
-
-              <section class="panel" id="panel-anna" aria-labelledby="t-anna">
-                <h2 class="panel__title" id="t-anna">Anna at work</h2>
-                <p class="panel__state panel__state--pending" data-state>
-                  Not wired — runtime Anna status contract required.
-                </p>
-                <ul class="ops-list">
-                  <li>State: <strong>unknown</strong></li>
-                  <li>Mode: <strong>unknown</strong></li>
-                  <li>Thesis summary: <strong>not available</strong></li>
-                  <li>Confidence/uncertainty: <strong>not available</strong></li>
-                  <li>Last action: <strong>not available</strong></li>
-                </ul>
-              </section>
             </div>
 
             <section class="panel panel--wide panel--runtime" id="panel-runtime" aria-labelledby="t-runtime">
               <h2 class="panel__title" id="t-runtime">Runtime status</h2>
               <div class="runtime-strip runtime-strip--core" aria-label="Runtime and system strip">
-                <span class="runtime-pill" id="runtime-status-pill" title="Runtime status">
+                <button type="button" class="runtime-pill runtime-pill--action" id="runtime-status-pill" title="Runtime status">
                   <span class="agent-bubble agent-bubble--unknown" id="runtime-status-bubble" aria-hidden="true"></span>
                   <span id="runtime-status-text">Runtime: unknown</span>
-                </span>
-                <span class="runtime-pill" id="agents-overall-pill" title="Overall system status">
+                </button>
+                <button type="button" class="runtime-pill runtime-pill--action" id="agents-overall-pill" title="Overall system status">
                   <span class="agent-bubble agent-bubble--unknown" id="agents-overall-bubble" aria-hidden="true"></span>
                   <span id="agents-overall-text">System: unknown</span>
-                </span>
+                </button>
               </div>
               <div class="runtime-strip runtime-strip--agents" aria-label="Agent and context strip">
-                <span class="runtime-pill" id="anna-main-pill" title="Anna connection"><span class="agent-bubble agent-bubble--unknown" id="anna-main-bubble" aria-hidden="true"></span><span id="anna-main-text">Anna: unknown</span></span>
-                <span class="runtime-pill" id="billy-main-pill" title="Billy connection"><span class="agent-bubble agent-bubble--unknown" id="billy-main-bubble" aria-hidden="true"></span><span id="billy-main-text">Billy: unknown</span></span>
-                <span class="runtime-pill" id="mia-main-pill" title="Mia connection"><span class="agent-bubble agent-bubble--unknown" id="mia-main-bubble" aria-hidden="true"></span><span id="mia-main-text">Mia: unknown</span></span>
-                <span class="runtime-pill" id="chris-main-pill" title="Chris connection"><span class="agent-bubble agent-bubble--unknown" id="chris-main-bubble" aria-hidden="true"></span><span id="chris-main-text">Chris: unknown</span></span>
-                <span class="runtime-pill" id="data-main-pill" title="Data connection"><span class="agent-bubble agent-bubble--unknown" id="data-main-bubble" aria-hidden="true"></span><span id="data-main-text">Data: unknown</span></span>
+                <button type="button" class="runtime-pill runtime-pill--action" id="anna-main-pill" title="Anna connection"><span class="agent-bubble agent-bubble--unknown" id="anna-main-bubble" aria-hidden="true"></span><span id="anna-main-text">Anna: unknown</span></button>
+                <button type="button" class="runtime-pill runtime-pill--action" id="billy-main-pill" title="Billy connection"><span class="agent-bubble agent-bubble--unknown" id="billy-main-bubble" aria-hidden="true"></span><span id="billy-main-text">Billy: unknown</span></button>
+                <button type="button" class="runtime-pill runtime-pill--action" id="mia-main-pill" title="Mia connection"><span class="agent-bubble agent-bubble--unknown" id="mia-main-bubble" aria-hidden="true"></span><span id="mia-main-text">Mia: unknown</span></button>
+                <button type="button" class="runtime-pill runtime-pill--action" id="chris-main-pill" title="Chris connection"><span class="agent-bubble agent-bubble--unknown" id="chris-main-bubble" aria-hidden="true"></span><span id="chris-main-text">Chris: unknown</span></button>
+                <button type="button" class="runtime-pill runtime-pill--action" id="data-main-pill" title="Data connection"><span class="agent-bubble agent-bubble--unknown" id="data-main-bubble" aria-hidden="true"></span><span id="data-main-text">Data: unknown</span></button>
                 <span class="runtime-pill" id="context-engine-pill" title="Context engine status"><span class="agent-bubble agent-bubble--unknown" id="context-engine-bubble" aria-hidden="true"></span><span id="context-engine-text">Context: unknown</span></span>
               </div>
             </section>
@@ -499,6 +530,8 @@
         async function refreshRuntimeTruth() {
           var runtime = await fetchJsonCandidates(["/api/v1/runtime/status"]);
           var agents = await fetchJsonCandidates(["/api/v1/agents/status"]);
+          var annaSummary = await fetchJsonCandidates(["/api/v1/anna/summary"]);
+
           var byId = {};
           ((agents && agents.items) || []).forEach(function (item) {
             var id = String(item.agent_id || "").toLowerCase();
@@ -515,26 +548,28 @@
             (runtime && runtime.reason_code) || "Runtime status"
           );
 
-          ["anna", "billy", "mia", "chris", "data"].forEach(function (id) {
-            var it = byId[id] || null;
+          function applyAgentConn(agentId, mainPillId, mainBubbleId, mainTextId, modalPillId, modalBubbleId, modalTextId, detailId) {
+            var it = byId[agentId] || null;
             var st = coerceState(it && (it.connectivity_state || it.lifecycle_state || it.status));
-            var name = id.charAt(0).toUpperCase() + id.slice(1);
-            applyPill(
-              id + "-main-pill",
-              id + "-main-bubble",
-              id + "-main-text",
-              st,
-              name + ": " + labelWord(st),
-              (it && it.reason_code) || "Agent status"
-            );
-          });
+            var name = agentId.charAt(0).toUpperCase() + agentId.slice(1);
+            var reason = (it && it.reason_code) || "Agent status unavailable";
+            var label = name + ": " + labelWord(st);
+            applyPill(mainPillId, mainBubbleId, mainTextId, st, label, reason);
+            applyPill(modalPillId, modalBubbleId, modalTextId, st, label, reason);
+            var detail = document.getElementById(detailId);
+            if (detail) detail.textContent = "State: " + String((it && (it.connectivity_state || it.lifecycle_state || it.status)) || "unknown") + " | Reason: " + reason;
+            return st;
+          }
 
-          var states = ["anna", "billy", "mia", "chris", "data"].map(function (id) {
-            var it = byId[id] || null;
-            return coerceState(it && (it.connectivity_state || it.lifecycle_state || it.status));
-          });
-          var hasDisconnected = states.some(function (s) { return s === "disconnected"; });
-          var hasGap = states.some(function (s) { return s === "unknown" || s === "not_wired" || s === "warning"; });
+          var stAnna = applyAgentConn("anna", "anna-main-pill", "anna-main-bubble", "anna-main-text", "anna-conn-pill", "anna-conn-bubble", "anna-conn-text", "anna-modal-status-text");
+          var stBilly = applyAgentConn("billy", "billy-main-pill", "billy-main-bubble", "billy-main-text", "billy-conn-pill", "billy-conn-bubble", "billy-conn-text", "billy-modal-status-text");
+          var stMia = applyAgentConn("mia", "mia-main-pill", "mia-main-bubble", "mia-main-text", "mia-conn-pill", "mia-conn-bubble", "mia-conn-text", "mia-modal-status-text");
+          var stChris = applyAgentConn("chris", "chris-main-pill", "chris-main-bubble", "chris-main-text", "chris-conn-pill", "chris-conn-bubble", "chris-conn-text", "chris-modal-status-text");
+          var stData = applyAgentConn("data", "data-main-pill", "data-main-bubble", "data-main-text", "data-conn-pill", "data-conn-bubble", "data-conn-text", "data-modal-status-text");
+
+          var states = [stAnna, stBilly, stMia, stChris, stData];
+          var hasDisconnected = states.some(function (x) { return x === "disconnected"; });
+          var hasGap = states.some(function (x) { return x === "unknown" || x === "not_wired" || x === "warning"; });
           var systemState = hasDisconnected ? "disconnected" : hasGap ? "warning" : "connected";
           applyPill(
             "agents-overall-pill",
@@ -544,6 +579,39 @@
             "System: " + labelWord(systemState),
             "Aggregate from runtime + agent connectivity"
           );
+
+          var annaTraining = document.getElementById("anna-modal-training-text");
+          var annaPath = document.getElementById("anna-modal-path-text");
+          var annaParticipation = document.getElementById("anna-modal-participation-text");
+          var annaStrategy = document.getElementById("anna-modal-strategy-text");
+          if (annaTraining) {
+            annaTraining.textContent =
+              "Training: " +
+              String((annaSummary && annaSummary.training && annaSummary.training.state) || "unknown") +
+              " | Reason: " +
+              String((annaSummary && annaSummary.training && annaSummary.training.reason_code) || "no_reason");
+          }
+          if (annaPath) {
+            annaPath.textContent =
+              "Training source path: " +
+              String((annaSummary && annaSummary.training && annaSummary.training.source_path) || "--") +
+              " | table: " +
+              String((annaSummary && annaSummary.training && annaSummary.training.table) || "--");
+          }
+          if (annaParticipation) {
+            annaParticipation.textContent =
+              "Participation: " +
+              String((annaSummary && annaSummary.participation && annaSummary.participation.state) || "unknown") +
+              " | Reason: " +
+              String((annaSummary && annaSummary.participation && annaSummary.participation.reason_code) || "no_reason");
+          }
+          if (annaStrategy) {
+            annaStrategy.textContent =
+              "Strategy: " +
+              String((annaSummary && annaSummary.strategy && annaSummary.strategy.state) || "unknown") +
+              " | Reason: " +
+              String((annaSummary && annaSummary.strategy && annaSummary.strategy.reason_code) || "no_reason");
+          }
         }
 
         async function refreshPythStatus() {
@@ -553,10 +621,8 @@
           var statusText = document.getElementById("pyth-status-text");
           if (statusText) {
             statusText.textContent =
-              "Pyth " +
-              String((pyth && pyth.status) || "unknown") +
-              " — " +
-              String((pyth && pyth.reason_code) || "no_reason");
+              "Pyth " + String((pyth && pyth.status) || "unknown") +
+              " — " + String((pyth && pyth.reason_code) || "api_unavailable");
           }
 
           applyPill(
@@ -588,27 +654,19 @@
           var dbStorage = document.getElementById("pyth-db-storage-text");
           if (dbStorage) {
             dbStorage.textContent =
-              "DB storage: total " +
-              bytesToHuman(db.fs_total_bytes) +
-              ", used " +
-              bytesToHuman(db.fs_used_bytes) +
-              ", free " +
-              bytesToHuman(db.fs_avail_bytes) +
-              ".";
+              "DB storage: total " + bytesToHuman(db.fs_total_bytes) +
+              ", used " + bytesToHuman(db.fs_used_bytes) +
+              ", free " + bytesToHuman(db.fs_avail_bytes) + ".";
           }
 
           var t = (pyth && pyth.training_source) || {};
           var dataPath = document.getElementById("pyth-data-path-text");
           if (dataPath) {
             dataPath.textContent =
-              "Training path: " +
-              String(t.path || "--") +
-              " | table: " +
-              String(t.table || "--") +
-              " | filters: symbol=" +
-              String(t.symbol_filter || "--") +
-              ", source=" +
-              String(t.source_filter || "--");
+              "Training path: " + String(t.path || "--") +
+              " | table: " + String(t.table || "--") +
+              " | filters: symbol=" + String(t.symbol_filter || "--") +
+              ", source=" + String(t.source_filter || "--");
           }
         }
 
@@ -624,24 +682,10 @@
             return;
           }
           var latest = items[items.length - 1] || {};
-          ticker.textContent =
-            "Last seq #" + String(latest.seq || "?") +
-            " at " + String(latest.received_at || "--") +
-            " bytes " + String(latest.payload_size || 0);
-          list.innerHTML = items
-            .slice()
-            .reverse()
-            .slice(0, 24)
-            .map(function (it) {
-              return (
-                '<div class="pyth-modal__row">' +
-                '<span class="pyth-modal__seq">#' + String(it.seq || "?") + '</span>' +
-                '<span>' + String(it.received_at || "--") + '</span>' +
-                '<span class="pyth-modal__bytes">' + String(it.payload_size || 0) + 'b</span>' +
-                '</div>'
-              );
-            })
-            .join("");
+          ticker.textContent = "Last seq #" + String(latest.seq || "?") + " at " + String(latest.received_at || "--") + " bytes " + String(latest.payload_size || 0);
+          list.innerHTML = items.slice().reverse().slice(0, 24).map(function (it) {
+            return '<div class="pyth-modal__row"><span class="pyth-modal__seq">#' + String(it.seq || "?") + '</span><span>' + String(it.received_at || "--") + '</span><span class="pyth-modal__bytes">' + String(it.payload_size || 0) + 'b</span></div>';
+          }).join("");
         }
 
         async function loadContextEngineState() {
@@ -656,6 +700,14 @@
             "Context: " + labelWord(st),
             (ctx && ctx.reason_code) || "Context engine status"
           );
+        }
+
+        function openAgentSection(agentId) {
+          var agentModal = document.getElementById("agent-modal");
+          if (!agentModal) return;
+          agentModal.hidden = false;
+          var section = document.getElementById("agent-section-" + agentId);
+          if (section) section.scrollIntoView({ block: "start", behavior: "smooth" });
         }
 
         refreshRuntimeTruth();
@@ -691,6 +743,31 @@
             if (evt.key === "Escape" && !pythModal.hidden) closePythModal();
           });
         }
+
+        var agentModal = document.getElementById("agent-modal");
+        var agentOpenBtn = document.getElementById("agent-workspace-open-btn");
+        var agentCloseBtn = document.getElementById("agent-close-btn");
+        if (agentModal && agentOpenBtn && agentCloseBtn) {
+          function closeAgentModal() {
+            agentModal.hidden = true;
+          }
+          agentOpenBtn.addEventListener("click", function () {
+            agentModal.hidden = false;
+          });
+          agentCloseBtn.addEventListener("click", closeAgentModal);
+          agentModal.addEventListener("click", function (evt) {
+            if (evt.target === agentModal) closeAgentModal();
+          });
+          document.addEventListener("keydown", function (evt) {
+            if (evt.key === "Escape" && !agentModal.hidden) closeAgentModal();
+          });
+        }
+
+        [["anna-main-pill", "anna"], ["billy-main-pill", "billy"], ["mia-main-pill", "mia"], ["chris-main-pill", "chris"], ["data-main-pill", "data"]]
+          .forEach(function (row) {
+            var el = document.getElementById(row[0]);
+            if (el) el.addEventListener("click", function () { openAgentSection(row[1]); });
+          });
       });
     </script>
   </body>
