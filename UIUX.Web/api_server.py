@@ -64,15 +64,13 @@ def ensure_state() -> dict[str, Any]:
         "ledger_lag_seconds": None,
         "last_error_code": "ledger_not_wired",
     }
-    STATE_FILE.write_text(json.dumps(state, indent=2) + "
-", encoding="utf-8")
+    STATE_FILE.write_text(json.dumps(state, indent=2) + "\n", encoding="utf-8")
     return state
 
 
 def save_state(state: dict[str, Any]) -> None:
     ARTIFACTS.mkdir(parents=True, exist_ok=True)
-    STATE_FILE.write_text(json.dumps(state, indent=2) + "
-", encoding="utf-8")
+    STATE_FILE.write_text(json.dumps(state, indent=2) + "\n", encoding="utf-8")
 
 
 def latest_drift_doctor_report() -> tuple[dict[str, Any] | None, Path | None]:
@@ -271,6 +269,163 @@ def build_anna_summary() -> dict[str, Any]:
     }
 
 
+def normalize_status(raw: Any) -> str:
+    v = str(raw or "unknown").strip().lower()
+    if v in {"healthy", "degraded", "error", "unknown"}:
+        return v
+    if v in {"connected", "up", "on", "ready", "ok"}:
+        return "healthy"
+    if v in {"warning", "watch", "not_connected", "partial", "stale"}:
+        return "degraded"
+    if v in {"disconnected", "down", "off", "capacity_risk", "failed", "failure"}:
+        return "error"
+    return "unknown"
+
+
+def _fix(headline: str, steps: list[str], commands: list[str] | None = None, docs: list[str] | None = None) -> dict[str, Any]:
+    return {
+        "headline": headline,
+        "steps": steps,
+        "commands": commands or [],
+        "docs": docs or [],
+    }
+
+
+def build_system_status() -> dict[str, Any]:
+    runtime, agents = build_status()
+    pyth = build_pyth_status()
+
+    runtime_raw = runtime.get("runtime_state")
+    control_status = normalize_status(runtime_raw)
+    control_reason = str(runtime.get("reason_code") or "CONTROL_PLANE_STATUS_UNAVAILABLE")
+
+    pyth_raw = pyth.get("status")
+    data_status = normalize_status(pyth_raw)
+    data_reason = str(pyth.get("reason_code") or "DATA_PLANE_STATUS_UNAVAILABLE")
+
+    ui_api_status = "healthy"
+    ui_api_reason = "STATUS_ENDPOINT_RESPONDING"
+
+    agent_items = (agents.get("items") if isinstance(agents, dict) else None) or []
+    agent_statuses: list[str] = []
+    agents_node: dict[str, Any] = {}
+
+    for item in agent_items:
+        agent_id = str(item.get("agent_id") or "").lower()
+        if agent_id not in ALLOWED_AGENTS:
+            continue
+        conn = item.get("connectivity_state") or item.get("lifecycle_state") or item.get("status")
+        st = normalize_status(conn)
+        reason = str(item.get("reason_code") or "AGENT_STATUS_UNAVAILABLE")
+        summary = str(conn or "unknown")
+        route = f"#agent-section-{agent_id}"
+        label = f"{agent_id.capitalize()} workspace"
+        agent_statuses.append(st)
+        agents_node[agent_id] = {
+            "status": st,
+            "reason_code": reason,
+            "summary": summary,
+            "last_heartbeat_at": item.get("last_check_in_at"),
+            "workspace_route": route,
+            "workspace_label": label,
+        }
+
+    for required_id in sorted(ALLOWED_AGENTS):
+        if required_id not in agents_node:
+            agents_node[required_id] = {
+                "status": "unknown",
+                "reason_code": "AGENT_NODE_MISSING",
+                "summary": "agent node missing from source",
+                "last_heartbeat_at": None,
+                "workspace_route": "",
+                "workspace_label": f"{required_id.capitalize()} workspace",
+            }
+            agent_statuses.append("unknown")
+
+    if any(st == "error" for st in agent_statuses):
+        workers_status = "error"
+    elif any(st == "degraded" for st in agent_statuses):
+        workers_status = "degraded"
+    elif all(st == "unknown" for st in agent_statuses):
+        workers_status = "unknown"
+    elif all(st == "healthy" for st in agent_statuses):
+        workers_status = "healthy"
+    else:
+        workers_status = "degraded"
+
+    plane_statuses = [control_status, data_status, ui_api_status, workers_status]
+    if any(st == "error" for st in plane_statuses):
+        top_status = "error"
+    elif any(st == "degraded" for st in plane_statuses):
+        top_status = "degraded"
+    elif all(st == "unknown" for st in plane_statuses):
+        top_status = "unknown"
+    elif all(st == "healthy" for st in plane_statuses):
+        top_status = "healthy"
+    else:
+        top_status = "unknown"
+
+    now = now_iso()
+    nodes = {
+        "control_plane": {
+            "status": control_status,
+            "reason_code": control_reason,
+            "summary": f"Runtime state {runtime_raw or 'unknown'}",
+            "last_heartbeat_at": runtime.get("last_transition_at"),
+            "fix": _fix(
+                "Restore control-plane connectivity",
+                ["Check runtime source artifact", "Reconcile drift/engine prerequisites", "Retry runtime probe"],
+                ["python3 scripts/trading/drift_doctor.ts"],
+                ["docs/working/current_directive.md"],
+            ),
+        },
+        "data_plane": {
+            "status": data_status,
+            "reason_code": data_reason,
+            "summary": f"Pyth status {pyth_raw or 'unknown'}",
+            "last_heartbeat_at": pyth.get("last_update_at"),
+            "fix": _fix(
+                "Restore data-plane ingestion",
+                ["Check pyth-stream container", "Verify stream status artifacts", "Confirm sqlite storage path and rails"],
+                ["cd UIUX.Web && docker compose ps", "cd UIUX.Web && docker compose logs pyth-stream --tail 120"],
+                ["scripts/trading/pyth_stream_probe.py"],
+            ),
+        },
+        "ui_api": {
+            "status": ui_api_status,
+            "reason_code": ui_api_reason,
+            "summary": "System status endpoint responding",
+            "last_heartbeat_at": now,
+            "fix": _fix(
+                "Restore UI/API bridge",
+                ["Verify nginx /api/v1 proxy", "Verify api container health", "Rebuild web stack"],
+                ["cd UIUX.Web && docker compose up -d --build"],
+                ["UIUX.Web/nginx/default.conf", "UIUX.Web/docker-compose.yml"],
+            ),
+        },
+        "agent_workers": {
+            "status": workers_status,
+            "reason_code": "AGENT_WORKER_ROLLUP",
+            "summary": "Aggregate from all required agent nodes",
+            "last_heartbeat_at": now,
+            "fix": _fix(
+                "Bring missing or degraded agents to expected state",
+                ["Open each agent workspace", "Review reason codes", "Wire missing routes/probes"],
+                [],
+                ["UIUX.Web/internal.html"],
+            ),
+        },
+        "agents": agents_node,
+    }
+
+    return {
+        "status": top_status,
+        "reason_code": "SYSTEM_ROLLUP_FROM_PLANES",
+        "last_updated_at": now,
+        "nodes": nodes,
+    }
+
+
 def run_control(agent_id: str, action: str) -> tuple[str, str]:
     if agent_id in {"mia", "chris", "data"}:
         return "rejected", "not_wired"
@@ -319,6 +474,9 @@ class Handler(BaseHTTPRequestHandler):
             return
         if path == "/api/v1/anna/summary":
             self._json(200, build_anna_summary())
+            return
+        if path == "/api/v1/system/status":
+            self._json(200, build_system_status())
             return
         self._json(404, {"error": "not_found", "path": path})
 

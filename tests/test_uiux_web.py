@@ -115,7 +115,7 @@ def test_internal_portal_allows_staff_roles() -> None:
     assert "preparePortalBoot" in text
     assert "hidePortalBootOverlay" in text
     assert 'href="./anna.html"' not in text
-    assert 'href="./docs.html"' in text
+    assert 'href="#panel-docs-hub"' in text
     assert 'id="panel-market"' not in text
     assert 'id="panel-pyth"' in text
     assert 'id="panel-agent-hub"' in text
@@ -124,8 +124,13 @@ def test_internal_portal_allows_staff_roles() -> None:
     assert 'id="pyth-db-pill"' in text
     assert 'id="pyth-view-btn"' in text
     assert "Runtime status" in text
-    assert "Context: unknown" in text
-    assert "context-engine-pill" in text
+    assert "/api/v1/system/status" in text
+    assert "id=\"system-status-pill\"" in text
+    assert "id=\"control-plane-pill\"" in text
+    assert "id=\"data-plane-pill\"" in text
+    assert "id=\"ui-api-pill\"" in text
+    assert "id=\"agent-workers-pill\"" in text
+    assert "id=\"status-diagnostics-modal\"" in text
 
 
 def test_anna_page_is_dedicated_workspace() -> None:

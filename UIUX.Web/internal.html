@@ -64,21 +64,10 @@
       <div class="portal-layout">
         <aside class="portal-sidebar" id="portal-sidebar-nav" aria-label="Section navigation">
           <ul class="sidebar-list">
-            <li><a class="sidebar-list__link" href="./docs.html">Docs</a></li>
-            <li><a class="sidebar-list__link" href="#panel-pyth">Pyth data</a></li>
+            <li><a class="sidebar-list__link" href="#panel-docs-hub">Documentation workspace</a></li>
+                        <li><a class="sidebar-list__link" href="#panel-pyth">Pyth data</a></li>
             <li><a class="sidebar-list__link" href="#panel-agent-hub">Agent workspace</a></li>
             <li><a class="sidebar-list__link" href="#panel-runtime">Runtime</a></li>
-            <li>
-              <a class="sidebar-list__link" href="#panel-devplan">Development plan</a>
-            </li>
-            <li>
-              <a class="sidebar-list__link" href="./internal-plan.html"
-                >Unified plan (full)</a
-              >
-            </li>
-            <li>
-              <a class="sidebar-list__link" href="./guide.html">System guide</a>
-            </li>
             <li>
               <a class="sidebar-list__link" href="./account-settings.html"
                 >My account</a
@@ -109,28 +98,39 @@
           </p>
           <section class="ops-overview" aria-label="Live operations overview">
 
-
             <section class="panel panel--wide panel--runtime" id="panel-runtime" aria-labelledby="t-runtime">
               <h2 class="panel__title" id="t-runtime">Runtime status</h2>
-              <div class="runtime-strip runtime-strip--core" aria-label="Runtime and system strip">
-                <button type="button" class="runtime-pill runtime-pill--action" id="runtime-status-pill" title="Runtime status">
-                  <span class="agent-bubble agent-bubble--unknown" id="runtime-status-bubble" aria-hidden="true"></span>
-                  <span id="runtime-status-text">Runtime: unknown</span>
+              <div class="runtime-strip runtime-strip--core" aria-label="System and plane strip">
+                <button type="button" class="runtime-pill runtime-pill--action" id="system-status-pill" title="System roll-up status">
+                  <span class="agent-bubble agent-bubble--unknown" id="system-status-bubble" aria-hidden="true"></span>
+                  <span id="system-status-text">System: unknown</span>
                 </button>
-                <button type="button" class="runtime-pill runtime-pill--action" id="agents-overall-pill" title="Overall system status">
-                  <span class="agent-bubble agent-bubble--unknown" id="agents-overall-bubble" aria-hidden="true"></span>
-                  <span id="agents-overall-text">System: unknown</span>
+                <button type="button" class="runtime-pill runtime-pill--action" id="control-plane-pill" title="Control Plane status">
+                  <span class="agent-bubble agent-bubble--unknown" id="control-plane-bubble" aria-hidden="true"></span>
+                  <span id="control-plane-text">Control Plane: unknown</span>
+                </button>
+                <button type="button" class="runtime-pill runtime-pill--action" id="data-plane-pill" title="Data Plane status">
+                  <span class="agent-bubble agent-bubble--unknown" id="data-plane-bubble" aria-hidden="true"></span>
+                  <span id="data-plane-text">Data Plane: unknown</span>
+                </button>
+                <button type="button" class="runtime-pill runtime-pill--action" id="ui-api-pill" title="UI/API status">
+                  <span class="agent-bubble agent-bubble--unknown" id="ui-api-bubble" aria-hidden="true"></span>
+                  <span id="ui-api-text">UI/API: unknown</span>
+                </button>
+                <button type="button" class="runtime-pill runtime-pill--action" id="agent-workers-pill" title="Agent Workers aggregate status">
+                  <span class="agent-bubble agent-bubble--unknown" id="agent-workers-bubble" aria-hidden="true"></span>
+                  <span id="agent-workers-text">Agent Workers: unknown</span>
                 </button>
               </div>
-              <div class="runtime-strip runtime-strip--agents" aria-label="Agent and context strip">
-                <button type="button" class="runtime-pill runtime-pill--action" id="anna-main-pill" title="Anna connection"><span class="agent-bubble agent-bubble--unknown" id="anna-main-bubble" aria-hidden="true"></span><span id="anna-main-text">Anna: unknown</span></button>
-                <button type="button" class="runtime-pill runtime-pill--action" id="billy-main-pill" title="Billy connection"><span class="agent-bubble agent-bubble--unknown" id="billy-main-bubble" aria-hidden="true"></span><span id="billy-main-text">Billy: unknown</span></button>
-                <button type="button" class="runtime-pill runtime-pill--action" id="mia-main-pill" title="Mia connection"><span class="agent-bubble agent-bubble--unknown" id="mia-main-bubble" aria-hidden="true"></span><span id="mia-main-text">Mia: unknown</span></button>
-                <button type="button" class="runtime-pill runtime-pill--action" id="chris-main-pill" title="Chris connection"><span class="agent-bubble agent-bubble--unknown" id="chris-main-bubble" aria-hidden="true"></span><span id="chris-main-text">Chris: unknown</span></button>
-                <button type="button" class="runtime-pill runtime-pill--action" id="data-main-pill" title="Data connection"><span class="agent-bubble agent-bubble--unknown" id="data-main-bubble" aria-hidden="true"></span><span id="data-main-text">Data: unknown</span></button>
-                <span class="runtime-pill" id="context-engine-pill" title="Context engine status"><span class="agent-bubble agent-bubble--unknown" id="context-engine-bubble" aria-hidden="true"></span><span id="context-engine-text">Context: unknown</span></span>
+              <div class="runtime-strip runtime-strip--agents" aria-label="Agent strip">
+                <button type="button" class="runtime-pill runtime-pill--action" id="anna-main-pill" title="Anna status"><span class="agent-bubble agent-bubble--unknown" id="anna-main-bubble" aria-hidden="true"></span><span id="anna-main-text">Anna: unknown</span></button>
+                <button type="button" class="runtime-pill runtime-pill--action" id="billy-main-pill" title="Billy status"><span class="agent-bubble agent-bubble--unknown" id="billy-main-bubble" aria-hidden="true"></span><span id="billy-main-text">Billy: unknown</span></button>
+                <button type="button" class="runtime-pill runtime-pill--action" id="mia-main-pill" title="Mia status"><span class="agent-bubble agent-bubble--unknown" id="mia-main-bubble" aria-hidden="true"></span><span id="mia-main-text">Mia: unknown</span></button>
+                <button type="button" class="runtime-pill runtime-pill--action" id="chris-main-pill" title="Chris status"><span class="agent-bubble agent-bubble--unknown" id="chris-main-bubble" aria-hidden="true"></span><span id="chris-main-text">Chris: unknown</span></button>
+                <button type="button" class="runtime-pill runtime-pill--action" id="data-main-pill" title="Data status"><span class="agent-bubble agent-bubble--unknown" id="data-main-bubble" aria-hidden="true"></span><span id="data-main-text">Data: unknown</span></button>
               </div>
             </section>
+
             <div class="ops-overview__grid">
               <section class="panel" id="panel-pyth" aria-labelledby="t-pyth">
                 <h2 class="panel__title" id="t-pyth">Pyth workspace</h2>
@@ -163,6 +163,16 @@
                   <button type="button" class="button button--secondary" id="agent-workspace-open-btn">Open agent workspace</button>
                 </div>
               </section>
+
+              <section class="panel" id="panel-docs-hub" aria-labelledby="t-docs-hub">
+                <h2 class="panel__title" id="t-docs-hub">Documentation workspace</h2>
+                <p class="panel__state" id="docs-hub-status-text">
+                  Unified place for docs, development plan, and system guide.
+                </p>
+                <div class="runtime-strip" aria-label="Documentation workspace strip">
+                  <button type="button" class="button button--secondary" id="docs-open-btn">Open documentation workspace</button>
+                </div>
+              </section>
             </div>
 
             <div class="pyth-modal" id="pyth-modal" hidden role="dialog" aria-modal="true" aria-labelledby="pyth-modal-title">
@@ -173,6 +183,50 @@
                 </div>
                 <p class="pyth-modal__ticker" id="pyth-ticker-line">Waiting for stream events…</p>
                 <div class="pyth-modal__list" id="pyth-events-list" aria-live="polite"></div>
+              </div>
+            </div>
+
+
+
+            <div class="pyth-modal anna-modal" id="docs-modal" hidden role="dialog" aria-modal="true" aria-labelledby="docs-modal-title">
+              <div class="pyth-modal__card anna-modal__card">
+                <div class="pyth-modal__head">
+                  <h3 class="pyth-modal__title" id="docs-modal-title">Documentation workspace</h3>
+                  <button type="button" class="button button--ghost" id="docs-close-btn">Close</button>
+                </div>
+                <div class="anna-modal__body">
+                  <section class="anna-modal__section"><h4>Docs Hub</h4><p><a href="./docs.html">Open docs hub</a></p></section>
+                  <section class="anna-modal__section"><h4>Unified Plan</h4><p><a href="./internal-plan.html">Open unified plan</a></p></section>
+                  <section class="anna-modal__section"><h4>System Guide</h4><p><a href="./guide.html">Open system guide</a></p></section>
+                  <section class="anna-modal__section"><h4>Current Directive</h4><p><a href="https://github.com/jmiller9930/blackbox/blob/main/docs/working/current_directive.md" target="_blank" rel="noopener noreferrer">Open governed directive</a></p></section>
+                </div>
+              </div>
+            </div>
+
+
+
+            <div class="pyth-modal anna-modal" id="status-diagnostics-modal" hidden role="dialog" aria-modal="true" aria-labelledby="status-diagnostics-title">
+              <div class="pyth-modal__card anna-modal__card">
+                <div class="pyth-modal__head">
+                  <h3 class="pyth-modal__title" id="status-diagnostics-title">Status diagnostics</h3>
+                  <button type="button" class="button button--ghost" id="status-diagnostics-close-btn">Close</button>
+                </div>
+                <div class="anna-modal__body">
+                  <section class="anna-modal__section">
+                    <h4 id="diag-node-name">Node</h4>
+                    <p id="diag-node-status">Status: --</p>
+                    <p id="diag-node-reason">Reason: --</p>
+                    <p id="diag-node-summary">Summary: --</p>
+                    <p id="diag-node-heartbeat">Last heartbeat: --</p>
+                  </section>
+                  <section class="anna-modal__section">
+                    <h4>Remediation</h4>
+                    <p id="diag-fix-headline">--</p>
+                    <p id="diag-fix-steps">Steps: --</p>
+                    <p id="diag-fix-commands">Commands: --</p>
+                    <p id="diag-fix-docs">Docs: --</p>
+                  </section>
+                </div>
               </div>
             </div>
 
@@ -474,21 +528,27 @@
           applyHashToDevplan();
         }
 
-        function coerceState(raw) {
-          var v = String(raw || "unknown").toLowerCase();
-          if (v === "healthy" || v === "connected" || v === "up" || v === "on") return "connected";
-          if (v === "degraded" || v === "warning" || v === "partial" || v === "watch") return "warning";
-          if (v === "error" || v === "disconnected" || v === "down" || v === "off" || v === "capacity_risk") return "disconnected";
-          if (v === "not_connected") return "warning";
-          if (v === "not_wired") return "not_wired";
+        var STATUS_VALUES = { healthy: true, degraded: true, error: true, unknown: true };
+
+        function normalizeStatus(v) {
+          var raw = String(v || "unknown").toLowerCase();
+          if (raw === "connected" || raw === "up" || raw === "on") return "healthy";
+          if (raw === "warning" || raw === "watch" || raw === "not_connected" || raw === "partial") return "degraded";
+          if (raw === "disconnected" || raw === "down" || raw === "off" || raw === "capacity_risk") return "error";
+          return STATUS_VALUES[raw] ? raw : "unknown";
+        }
+
+        function statusToBubbleState(status) {
+          if (status === "healthy") return "connected";
+          if (status === "degraded") return "warning";
+          if (status === "error") return "disconnected";
           return "unknown";
         }
 
-        function labelWord(state) {
-          if (state === "connected") return "Connected";
-          if (state === "warning") return "Degraded";
-          if (state === "disconnected") return "Disconnected";
-          if (state === "not_wired") return "Not wired";
+        function statusLabelWord(status) {
+          if (status === "healthy") return "Healthy";
+          if (status === "degraded") return "Degraded";
+          if (status === "error") return "Error";
           return "Unknown";
         }
 
@@ -501,14 +561,15 @@
           return val.toFixed(i === 0 ? 0 : val >= 100 ? 0 : val >= 10 ? 1 : 2) + " " + units[i];
         }
 
-        function applyPill(pillId, bubbleId, textId, state, label, title) {
+        function applyPill(pillId, bubbleId, textId, status, label, title) {
           var pill = document.getElementById(pillId);
           var bubble = document.getElementById(bubbleId);
           var text = document.getElementById(textId);
           if (!pill || !bubble || !text) return;
+          var norm = normalizeStatus(status);
           pill.title = title || "";
           text.textContent = label;
-          bubble.className = "agent-bubble agent-bubble--" + state;
+          bubble.className = "agent-bubble agent-bubble--" + statusToBubbleState(norm);
         }
 
         async function fetchJsonCandidates(paths) {
@@ -528,98 +589,154 @@
           return null;
         }
 
-        async function refreshRuntimeTruth() {
-          var runtime = await fetchJsonCandidates(["/api/v1/runtime/status"]);
-          var agents = await fetchJsonCandidates(["/api/v1/agents/status"]);
-          var annaSummary = await fetchJsonCandidates(["/api/v1/anna/summary"]);
+        function fallbackSystemUnavailable() {
+          var unknownNode = {
+            status: "unknown",
+            reason_code: "STATUS_API_UNAVAILABLE",
+            summary: "Status API unavailable",
+            last_heartbeat_at: null,
+            fix: {
+              headline: "Restore system status API wiring",
+              steps: ["Verify api container is running", "Verify nginx /api/v1 proxy", "Rebuild stack"],
+              commands: ["cd UIUX.Web && docker compose up -d --build"],
+              docs: ["UIUX.Web/nginx/default.conf", "UIUX.Web/docker-compose.yml"],
+            },
+          };
+          return {
+            status: "unknown",
+            reason_code: "STATUS_API_UNAVAILABLE",
+            last_updated_at: new Date().toISOString(),
+            nodes: {
+              control_plane: unknownNode,
+              data_plane: unknownNode,
+              ui_api: unknownNode,
+              agent_workers: unknownNode,
+              agents: {
+                anna: { status: "unknown", reason_code: "STATUS_API_UNAVAILABLE", summary: "Unavailable", last_heartbeat_at: null, workspace_route: "", workspace_label: "Anna workspace" },
+                billy: { status: "unknown", reason_code: "STATUS_API_UNAVAILABLE", summary: "Unavailable", last_heartbeat_at: null, workspace_route: "", workspace_label: "Billy workspace" },
+                mia: { status: "unknown", reason_code: "STATUS_API_UNAVAILABLE", summary: "Unavailable", last_heartbeat_at: null, workspace_route: "", workspace_label: "Mia workspace" },
+                chris: { status: "unknown", reason_code: "STATUS_API_UNAVAILABLE", summary: "Unavailable", last_heartbeat_at: null, workspace_route: "", workspace_label: "Chris workspace" },
+                data: { status: "unknown", reason_code: "STATUS_API_UNAVAILABLE", summary: "Unavailable", last_heartbeat_at: null, workspace_route: "", workspace_label: "Data workspace" },
+              },
+            },
+          };
+        }
 
-          var byId = {};
-          ((agents && agents.items) || []).forEach(function (item) {
-            var id = String(item.agent_id || "").toLowerCase();
-            if (id) byId[id] = item;
+        var lastGoodSystemPayload = null;
+        var lastGoodSystemAtMs = 0;
+
+        function openDiagnostics(name, node) {
+          var modal = document.getElementById("status-diagnostics-modal");
+          if (!modal) return;
+          var fix = (node && node.fix) || {};
+          document.getElementById("diag-node-name").textContent = name;
+          document.getElementById("diag-node-status").textContent = "Status: " + statusLabelWord(normalizeStatus(node && node.status));
+          document.getElementById("diag-node-reason").textContent = "Reason: " + String((node && node.reason_code) || "--");
+          document.getElementById("diag-node-summary").textContent = "Summary: " + String((node && node.summary) || "--");
+          document.getElementById("diag-node-heartbeat").textContent = "Last heartbeat: " + String((node && node.last_heartbeat_at) || "--");
+          document.getElementById("diag-fix-headline").textContent = String(fix.headline || "--");
+          document.getElementById("diag-fix-steps").textContent = "Steps: " + String((fix.steps || []).join(" | ") || "--");
+          document.getElementById("diag-fix-commands").textContent = "Commands: " + String((fix.commands || []).join(" | ") || "--");
+          document.getElementById("diag-fix-docs").textContent = "Docs: " + String((fix.docs || []).join(" | ") || "--");
+          modal.hidden = false;
+        }
+
+        function routeToAgentWorkspace(agentId, route) {
+          if (!route) {
+            openDiagnostics("Agent route", {
+              status: "unknown",
+              reason_code: "AGENT_WORKSPACE_ROUTE_NOT_WIRED",
+              summary: "Agent workspace route missing",
+              last_heartbeat_at: null,
+              fix: {
+                headline: "Wire workspace_route in /api/v1/system/status",
+                steps: ["Set workspace_route for " + agentId, "Redeploy api", "Retry click"],
+                commands: [],
+                docs: ["UIUX.Web/api_server.py"],
+              },
+            });
+            return;
+          }
+          if (route.indexOf("#agent-section-") === 0) {
+            var modal = document.getElementById("agent-modal");
+            var section = document.querySelector(route);
+            if (!modal || !section) {
+              openDiagnostics("Agent route", {
+                status: "unknown",
+                reason_code: "AGENT_WORKSPACE_ROUTE_NOT_WIRED",
+                summary: "Agent route target missing in UI",
+                last_heartbeat_at: null,
+                fix: { headline: "Restore modal section ids", steps: ["Check internal.html section ids"], commands: [], docs: ["UIUX.Web/internal.html"] },
+              });
+              return;
+            }
+            modal.hidden = false;
+            section.scrollIntoView({ block: "start", behavior: "smooth" });
+            return;
+          }
+          window.location.href = route;
+        }
+
+        function renderSystemPayload(payload, stale) {
+          var nodes = (payload && payload.nodes) || {};
+          var nonAgent = {
+            system: { status: normalizeStatus(payload && payload.status), reason_code: payload && payload.reason_code, summary: "System roll-up from required planes", last_heartbeat_at: payload && payload.last_updated_at, fix: { headline: "Review degraded/error plane and apply remediation", steps: ["Click failing plane", "Follow fix steps"], commands: [], docs: [] } },
+            control_plane: nodes.control_plane || { status: "unknown" },
+            data_plane: nodes.data_plane || { status: "unknown" },
+            ui_api: nodes.ui_api || { status: "unknown" },
+            agent_workers: nodes.agent_workers || { status: "unknown" },
+          };
+          var staleSuffix = stale ? " (stale)" : "";
+
+          function setNonAgent(pillId, bubbleId, textId, label, nodeKey) {
+            var node = nonAgent[nodeKey] || { status: "unknown" };
+            var st = normalizeStatus(node.status);
+            applyPill(pillId, bubbleId, textId, st, label + ": " + statusLabelWord(st) + staleSuffix, String(node.reason_code || "--"));
+            var pill = document.getElementById(pillId);
+            if (pill) pill.onclick = function () { openDiagnostics(label, node); };
+          }
+
+          setNonAgent("system-status-pill", "system-status-bubble", "system-status-text", "System", "system");
+          setNonAgent("control-plane-pill", "control-plane-bubble", "control-plane-text", "Control Plane", "control_plane");
+          setNonAgent("data-plane-pill", "data-plane-bubble", "data-plane-text", "Data Plane", "data_plane");
+          setNonAgent("ui-api-pill", "ui-api-bubble", "ui-api-text", "UI/API", "ui_api");
+          setNonAgent("agent-workers-pill", "agent-workers-bubble", "agent-workers-text", "Agent Workers", "agent_workers");
+
+          var agents = (nodes && nodes.agents) || {};
+          [["anna", "Anna"], ["billy", "Billy"], ["mia", "Mia"], ["chris", "Chris"], ["data", "Data"]].forEach(function (row) {
+            var id = row[0], name = row[1];
+            var node = agents[id] || { status: "unknown", reason_code: "AGENT_NODE_MISSING" };
+            var st = normalizeStatus(node.status);
+            applyPill(id + "-main-pill", id + "-main-bubble", id + "-main-text", st, name + ": " + statusLabelWord(st) + staleSuffix, String(node.reason_code || "--"));
+            applyPill(id + "-conn-pill", id + "-conn-bubble", id + "-conn-text", st, name + ": " + statusLabelWord(st), String(node.reason_code || "--"));
+            var pill = document.getElementById(id + "-main-pill");
+            if (pill) {
+              pill.onclick = function () {
+                routeToAgentWorkspace(id, String(node.workspace_route || ""));
+              };
+            }
           });
+        }
 
-          var runtimeRaw = String((runtime && (runtime.runtime_state || runtime.status)) || "unknown").toLowerCase();
-          var runtimeState = coerceState(runtimeRaw);
-          var runtimeLabel = runtimeRaw === "not_connected" ? "Runtime: Not connected" : ("Runtime: " + labelWord(runtimeState));
-          applyPill(
-            "runtime-status-pill",
-            "runtime-status-bubble",
-            "runtime-status-text",
-            runtimeState,
-            runtimeLabel,
-            (runtime && runtime.reason_code) || "Runtime status"
-          );
-
-          function applyAgentConn(agentId, mainPillId, mainBubbleId, mainTextId, modalPillId, modalBubbleId, modalTextId, detailId) {
-            var it = byId[agentId] || null;
-            var st = coerceState(it && (it.connectivity_state || it.lifecycle_state || it.status));
-            var name = agentId.charAt(0).toUpperCase() + agentId.slice(1);
-            var reason = (it && it.reason_code) || "Agent status unavailable";
-            var label = name + ": " + labelWord(st);
-            applyPill(mainPillId, mainBubbleId, mainTextId, st, label, reason);
-            applyPill(modalPillId, modalBubbleId, modalTextId, st, label, reason);
-            var detail = document.getElementById(detailId);
-            if (detail) detail.textContent = "State: " + String((it && (it.connectivity_state || it.lifecycle_state || it.status)) || "unknown") + " | Reason: " + reason;
-            return st;
+        async function refreshSystemStatus() {
+          var payload = await fetchJsonCandidates(["/api/v1/system/status"]);
+          var now = Date.now();
+          var stale = false;
+          if (payload && typeof payload === "object" && payload.nodes && payload.nodes.agents) {
+            lastGoodSystemPayload = payload;
+            lastGoodSystemAtMs = now;
+          } else if (lastGoodSystemPayload && (now - lastGoodSystemAtMs) <= 60000) {
+            payload = lastGoodSystemPayload;
+            stale = true;
+          } else {
+            payload = fallbackSystemUnavailable();
           }
-
-          var stAnna = applyAgentConn("anna", "anna-main-pill", "anna-main-bubble", "anna-main-text", "anna-conn-pill", "anna-conn-bubble", "anna-conn-text", "anna-modal-status-text");
-          var stBilly = applyAgentConn("billy", "billy-main-pill", "billy-main-bubble", "billy-main-text", "billy-conn-pill", "billy-conn-bubble", "billy-conn-text", "billy-modal-status-text");
-          var stMia = applyAgentConn("mia", "mia-main-pill", "mia-main-bubble", "mia-main-text", "mia-conn-pill", "mia-conn-bubble", "mia-conn-text", "mia-modal-status-text");
-          var stChris = applyAgentConn("chris", "chris-main-pill", "chris-main-bubble", "chris-main-text", "chris-conn-pill", "chris-conn-bubble", "chris-conn-text", "chris-modal-status-text");
-          var stData = applyAgentConn("data", "data-main-pill", "data-main-bubble", "data-main-text", "data-conn-pill", "data-conn-bubble", "data-conn-text", "data-modal-status-text");
-
-          var states = [stAnna, stBilly, stMia, stChris, stData];
-          var hasDisconnected = states.some(function (x) { return x === "disconnected"; });
-          var hasGap = states.some(function (x) { return x === "unknown" || x === "not_wired" || x === "warning"; });
-          var systemState = hasDisconnected ? "disconnected" : hasGap ? "warning" : "connected";
-          applyPill(
-            "agents-overall-pill",
-            "agents-overall-bubble",
-            "agents-overall-text",
-            systemState,
-            "System: " + labelWord(systemState),
-            "Aggregate from runtime + agent connectivity"
-          );
-
-          var annaTraining = document.getElementById("anna-modal-training-text");
-          var annaPath = document.getElementById("anna-modal-path-text");
-          var annaParticipation = document.getElementById("anna-modal-participation-text");
-          var annaStrategy = document.getElementById("anna-modal-strategy-text");
-          if (annaTraining) {
-            annaTraining.textContent =
-              "Training: " +
-              String((annaSummary && annaSummary.training && annaSummary.training.state) || "unknown") +
-              " | Reason: " +
-              String((annaSummary && annaSummary.training && annaSummary.training.reason_code) || "no_reason");
-          }
-          if (annaPath) {
-            annaPath.textContent =
-              "Training source path: " +
-              String((annaSummary && annaSummary.training && annaSummary.training.source_path) || "--") +
-              " | table: " +
-              String((annaSummary && annaSummary.training && annaSummary.training.table) || "--");
-          }
-          if (annaParticipation) {
-            annaParticipation.textContent =
-              "Participation: " +
-              String((annaSummary && annaSummary.participation && annaSummary.participation.state) || "unknown") +
-              " | Reason: " +
-              String((annaSummary && annaSummary.participation && annaSummary.participation.reason_code) || "no_reason");
-          }
-          if (annaStrategy) {
-            annaStrategy.textContent =
-              "Strategy: " +
-              String((annaSummary && annaSummary.strategy && annaSummary.strategy.state) || "unknown") +
-              " | Reason: " +
-              String((annaSummary && annaSummary.strategy && annaSummary.strategy.reason_code) || "no_reason");
-          }
+          renderSystemPayload(payload, stale);
         }
 
         async function refreshPythStatus() {
           var pyth = await fetchJsonCandidates(["/api/v1/market/pyth/status"]);
-          var pythState = coerceState(pyth && pyth.status);
+          var status = normalizeStatus(pyth && pyth.status);
 
           var statusText = document.getElementById("pyth-status-text");
           if (statusText) {
@@ -632,8 +749,8 @@
             "pyth-health-pill",
             "pyth-health-bubble",
             "pyth-health-text",
-            pythState,
-            "Health: " + String((pyth && pyth.status) || "unknown"),
+            status,
+            "Health: " + statusLabelWord(status),
             "Pyth status from /api/v1/market/pyth/status"
           );
 
@@ -643,14 +760,13 @@
           if (age) age.textContent = "Age: " + String((pyth && pyth.age_seconds) ?? "--");
 
           var db = (pyth && pyth.db_storage) || {};
-          var dbColor = String(db.health_color || "unknown").toLowerCase();
-          var dbState = dbColor === "green" ? "connected" : dbColor === "yellow" ? "warning" : dbColor === "red" ? "disconnected" : "unknown";
+          var dbStatus = normalizeStatus(db.health_state || db.health_color || "unknown");
           applyPill(
             "pyth-db-pill",
             "pyth-db-bubble",
             "pyth-db-text",
-            dbState,
-            "DB: " + String(db.health_state || "unknown"),
+            dbStatus,
+            "DB: " + statusLabelWord(dbStatus),
             "SQLite storage health"
           );
 
@@ -691,34 +807,26 @@
           }).join("");
         }
 
-        async function loadContextEngineState() {
-          var ctx = await fetchJsonCandidates(["/api/v1/context-engine/status"]);
-          var raw = ctx && (ctx.status || ctx.state);
-          var st = coerceState(raw);
-          applyPill(
-            "context-engine-pill",
-            "context-engine-bubble",
-            "context-engine-text",
-            st,
-            "Context: " + labelWord(st),
-            (ctx && ctx.reason_code) || "Context engine status"
-          );
+        async function refreshAnnaSummaryDetails() {
+          var anna = await fetchJsonCandidates(["/api/v1/anna/summary"]);
+          var s = document.getElementById("anna-modal-status-text");
+          var t = document.getElementById("anna-modal-training-text");
+          var p = document.getElementById("anna-modal-path-text");
+          var pa = document.getElementById("anna-modal-participation-text");
+          var st = document.getElementById("anna-modal-strategy-text");
+          if (s) s.textContent = "State: " + String((anna && anna.connectivity_state) || "unknown") + " | Reason: " + String((anna && anna.reason_code) || "no_reason");
+          if (t) t.textContent = "Training: " + String((anna && anna.training && anna.training.state) || "unknown") + " | Reason: " + String((anna && anna.training && anna.training.reason_code) || "no_reason");
+          if (p) p.textContent = "Training source path: " + String((anna && anna.training && anna.training.source_path) || "--") + " | table: " + String((anna && anna.training && anna.training.table) || "--");
+          if (pa) pa.textContent = "Participation: " + String((anna && anna.participation && anna.participation.state) || "unknown") + " | Reason: " + String((anna && anna.participation && anna.participation.reason_code) || "no_reason");
+          if (st) st.textContent = "Strategy: " + String((anna && anna.strategy && anna.strategy.state) || "unknown") + " | Reason: " + String((anna && anna.strategy && anna.strategy.reason_code) || "no_reason");
         }
 
-        function openAgentSection(agentId) {
-          var agentModal = document.getElementById("agent-modal");
-          if (!agentModal) return;
-          agentModal.hidden = false;
-          var section = document.getElementById("agent-section-" + agentId);
-          if (section) section.scrollIntoView({ block: "start", behavior: "smooth" });
-        }
-
-        refreshRuntimeTruth();
-        loadContextEngineState();
+        refreshSystemStatus();
         refreshPythStatus();
-        setInterval(refreshRuntimeTruth, 15000);
-        setInterval(loadContextEngineState, 15000);
+        refreshAnnaSummaryDetails();
+        setInterval(refreshSystemStatus, 15000);
         setInterval(refreshPythStatus, 15000);
+        setInterval(refreshAnnaSummaryDetails, 15000);
 
         var pythModal = document.getElementById("pyth-modal");
         var pythViewBtn = document.getElementById("pyth-view-btn");
@@ -739,38 +847,40 @@
             pythPoll = setInterval(refreshPythRecent, 1500);
           });
           pythCloseBtn.addEventListener("click", closePythModal);
-          pythModal.addEventListener("click", function (evt) {
-            if (evt.target === pythModal) closePythModal();
-          });
-          document.addEventListener("keydown", function (evt) {
-            if (evt.key === "Escape" && !pythModal.hidden) closePythModal();
-          });
+          pythModal.addEventListener("click", function (evt) { if (evt.target === pythModal) closePythModal(); });
+          document.addEventListener("keydown", function (evt) { if (evt.key === "Escape" && !pythModal.hidden) closePythModal(); });
         }
 
         var agentModal = document.getElementById("agent-modal");
         var agentOpenBtn = document.getElementById("agent-workspace-open-btn");
         var agentCloseBtn = document.getElementById("agent-close-btn");
         if (agentModal && agentOpenBtn && agentCloseBtn) {
-          function closeAgentModal() {
-            agentModal.hidden = true;
-          }
-          agentOpenBtn.addEventListener("click", function () {
-            agentModal.hidden = false;
-          });
+          function closeAgentModal() { agentModal.hidden = true; }
+          agentOpenBtn.addEventListener("click", function () { agentModal.hidden = false; });
           agentCloseBtn.addEventListener("click", closeAgentModal);
-          agentModal.addEventListener("click", function (evt) {
-            if (evt.target === agentModal) closeAgentModal();
-          });
-          document.addEventListener("keydown", function (evt) {
-            if (evt.key === "Escape" && !agentModal.hidden) closeAgentModal();
-          });
+          agentModal.addEventListener("click", function (evt) { if (evt.target === agentModal) closeAgentModal(); });
+          document.addEventListener("keydown", function (evt) { if (evt.key === "Escape" && !agentModal.hidden) closeAgentModal(); });
         }
 
-        [["anna-main-pill", "anna"], ["billy-main-pill", "billy"], ["mia-main-pill", "mia"], ["chris-main-pill", "chris"], ["data-main-pill", "data"]]
-          .forEach(function (row) {
-            var el = document.getElementById(row[0]);
-            if (el) el.addEventListener("click", function () { openAgentSection(row[1]); });
-          });
+        var docsModal = document.getElementById("docs-modal");
+        var docsOpenBtn = document.getElementById("docs-open-btn");
+        var docsCloseBtn = document.getElementById("docs-close-btn");
+        if (docsModal && docsOpenBtn && docsCloseBtn) {
+          function closeDocsModal() { docsModal.hidden = true; }
+          docsOpenBtn.addEventListener("click", function () { docsModal.hidden = false; });
+          docsCloseBtn.addEventListener("click", closeDocsModal);
+          docsModal.addEventListener("click", function (evt) { if (evt.target === docsModal) closeDocsModal(); });
+          document.addEventListener("keydown", function (evt) { if (evt.key === "Escape" && !docsModal.hidden) closeDocsModal(); });
+        }
+
+        var diagModal = document.getElementById("status-diagnostics-modal");
+        var diagCloseBtn = document.getElementById("status-diagnostics-close-btn");
+        if (diagModal && diagCloseBtn) {
+          function closeDiagModal() { diagModal.hidden = true; }
+          diagCloseBtn.addEventListener("click", closeDiagModal);
+          diagModal.addEventListener("click", function (evt) { if (evt.target === diagModal) closeDiagModal(); });
+          document.addEventListener("keydown", function (evt) { if (evt.key === "Escape" && !diagModal.hidden) closeDiagModal(); });
+        }
       });
     </script>
   </body>
