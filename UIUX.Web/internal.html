@@ -479,6 +479,7 @@
           if (v === "healthy" || v === "connected" || v === "up" || v === "on") return "connected";
           if (v === "degraded" || v === "warning" || v === "partial" || v === "watch") return "warning";
           if (v === "error" || v === "disconnected" || v === "down" || v === "off" || v === "capacity_risk") return "disconnected";
+          if (v === "not_connected") return "warning";
           if (v === "not_wired") return "not_wired";
           return "unknown";
         }
@@ -538,13 +539,15 @@
             if (id) byId[id] = item;
           });
 
-          var runtimeState = coerceState(runtime && (runtime.runtime_state || runtime.status));
+          var runtimeRaw = String((runtime && (runtime.runtime_state || runtime.status)) || "unknown").toLowerCase();
+          var runtimeState = coerceState(runtimeRaw);
+          var runtimeLabel = runtimeRaw === "not_connected" ? "Runtime: Not connected" : ("Runtime: " + labelWord(runtimeState));
           applyPill(
             "runtime-status-pill",
             "runtime-status-bubble",
             "runtime-status-text",
             runtimeState,
-            "Runtime: " + labelWord(runtimeState),
+            runtimeLabel,
             (runtime && runtime.reason_code) || "Runtime status"
           );
 
