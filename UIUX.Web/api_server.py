@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import sys
 import uuid
 from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -14,6 +15,9 @@ from urllib.parse import parse_qs, urlparse
 HOST = "0.0.0.0"
 PORT = 8080
 ROOT = Path("/repo")
+_REPO_ROOT = Path(__file__).resolve().parents[1]
+if str(_REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(_REPO_ROOT))
 ARTIFACTS = ROOT / "docs" / "working" / "artifacts"
 
 # Context engine (Pillar 1) — operational store under BLACKBOX_CONTEXT_ROOT or data/context_engine
