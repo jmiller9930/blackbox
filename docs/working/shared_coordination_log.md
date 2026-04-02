@@ -3566,4 +3566,5 @@
   - **Tests:** `python3 -m pytest tests/test_context_engine.py tests/test_uiux_web.py -q` — **63 passed** (local).
   - **Non-goals respected:** no trading logic changes; no lock-lift; scope limited to context-engine + UI/API wiring.
   - **Git proof (local at append):** run `git rev-parse HEAD` after commit; **clawbot sync:** operator `git pull` + `docker compose` per `UIUX.Web` workflow — required for live endpoint/UI proof on primary host.
+  - **Live endpoint (clawbot, post-pull + compose + `docker compose restart api`):** `curl -sk https://127.0.0.1/api/v1/context-engine/status` → `status: healthy`, `reason_code: CTX-ENGINE-OK`, `storage_path: /repo/data/context_engine`.
   - **Bus:** `REVIEW_REQ` → `next_actor=architect` for Phase C validation (binary acceptance per directive).
