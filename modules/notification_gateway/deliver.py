@@ -1,0 +1,116 @@
+"""Deliver SMS via Twilio REST (stdlib) or generic webhook — no extra pip deps."""
+
+from __future__ import annotations
+
+import base64
+import json
+import os
+import urllib.error
+import urllib.parse
+import urllib.request
+from typing import Any
+
+
+def _env(name: str, default: str = "") -> str:
+    return (os.environ.get(name) or default).strip()
+
+
+def delivery_mode() -> str:
+    """off | twilio | webhook"""
+    return _env("BLACKBOX_NOTIFY_MODE", "off").lower()
+
+
+def default_to_e164() -> str:
+    return _env("BLACKBOX_NOTIFY_PHONE_E164", "")
+
+
+def send_sms(
+    to_e164: str,
+    body: str,
+    *,
+    tier: int | None = None,
+) -> tuple[bool, str]:
+    """
+    Send one SMS-sized message. Respects BLACKBOX_NOTIFY_MODE.
+
+    Twilio env: TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, TWILIO_FROM_NUMBER (E.164).
+
+    Webhook env: BLACKBOX_NOTIFY_WEBHOOK_URL (POST JSON {to, body, kind, tier}).
+    Optional: BLACKBOX_NOTIFY_WEBHOOK_SECRET (sent as X-Notify-Secret).
+    """
+    to_e164 = (to_e164 or "").strip()
+    body = (body or "").strip()
+    if not to_e164 or not body:
+        return False, "missing_to_or_body"
+
+    mode = delivery_mode()
+    if mode in ("0", "off", "false", "no"):
+        return False, "notify_mode_off"
+
+    if mode == "twilio":
+        return _send_twilio(to_e164, body)
+
+    if mode == "webhook":
+        return _send_webhook(to_e164, body, tier=tier)
+
+    return False, f"unknown_notify_mode:{mode}"
+
+
+def send_sms_to_targets(
+    targets: list[tuple[str, str]],
+    body: str,
+    *,
+    tier: int | None = None,
+) -> list[tuple[bool, str, str]]:
+    """Send the same body to each (name, e164). Returns list of (ok, reason, name)."""
+    out: list[tuple[bool, str, str]] = []
+    for name, e164 in targets:
+        ok, reason = send_sms(e164, body, tier=tier)
+        out.append((ok, reason, name))
+    return out
+
+
+def _send_twilio(to_e164: str, body: str) -> tuple[bool, str]:
+    sid = _env("TWILIO_ACCOUNT_SID")
+    token = _env("TWILIO_AUTH_TOKEN")
+    from_num = _env("TWILIO_FROM_NUMBER")
+    if not sid or not token or not from_num:
+        return False, "twilio_env_incomplete"
+
+    url = f"https://api.twilio.com/2010-04-01/Accounts/{sid}/Messages.json"
+    data = urllib.parse.urlencode({"To": to_e164, "From": from_num, "Body": body}).encode("utf-8")
+    req = urllib.request.Request(url, data=data, method="POST")
+    auth = base64.b64encode(f"{sid}:{token}".encode("utf-8")).decode("ascii")
+    req.add_header("Authorization", f"Basic {auth}")
+    req.add_header("Content-Type", "application/x-www-form-urlencoded")
+    try:
+        with urllib.request.urlopen(req, timeout=15) as resp:
+            code = getattr(resp, "status", 200)
+            return (200 <= code < 300), f"twilio_http_{code}"
+    except urllib.error.HTTPError as e:
+        return False, f"twilio_http_{e.code}"
+    except Exception as e:
+        return False, f"twilio_err:{e!s}"
+
+
+def _send_webhook(to_e164: str, body: str, *, tier: int | None = None) -> tuple[bool, str]:
+    wh = _env("BLACKBOX_NOTIFY_WEBHOOK_URL")
+    if not wh:
+        return False, "webhook_url_missing"
+    secret = _env("BLACKBOX_NOTIFY_WEBHOOK_SECRET")
+    payload_obj: dict[str, Any] = {"to": to_e164, "body": body, "kind": "notify"}
+    if tier is not None:
+        payload_obj["tier"] = int(tier)
+    payload = json.dumps(payload_obj, ensure_ascii=False).encode("utf-8")
+    req = urllib.request.Request(wh, data=payload, method="POST")
+    req.add_header("Content-Type", "application/json; charset=utf-8")
+    if secret:
+        req.add_header("X-Notify-Secret", secret)
+    try:
+        with urllib.request.urlopen(req, timeout=15) as resp:
+            code = getattr(resp, "status", 200)
+            return (200 <= code < 300), f"webhook_http_{code}"
+    except urllib.error.HTTPError as e:
+        return False, f"webhook_http_{e.code}"
+    except Exception as e:
+        return False, f"webhook_err:{e!s}"

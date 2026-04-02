@@ -1,0 +1,18 @@
+{
+  "comment": "Copy to notification_gateway.json (gitignored) or use environment variables only.",
+  "mode": "off",
+  "sms_tiers": "1,2,3",
+  "trade_routine_tier": "off",
+  "phone_e164": "+15551234567",
+  "twilio": {
+    "account_sid": "",
+    "auth_token": "",
+    "from_number": ""
+  },
+  "webhook": {
+    "url": "",
+    "secret": ""
+  },
+  "notify_on_data_health_alert": false,
+  "host_label": "clawbot"
+}

@@ -19,6 +19,9 @@ data/logs/*.log
 config/messaging_config.json
 config/messaging_config.local.json
 
+# SMS distro with real numbers (use notification_recipients.example.json)
+config/notification_recipients.local.json
+
 # Hermes PM local env (copy from ops/hermes_pm.env.example)
 ops/hermes_pm.env
 

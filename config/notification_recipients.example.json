@@ -1,0 +1,13 @@
+{
+  "recipients": [
+    {
+      "name": "John",
+      "phone_e164": "+15550000001"
+    },
+    {
+      "name": "Sean",
+      "phone_e164": "+15550000002"
+    }
+  ],
+  "_comment": "Copy to notification_recipients.local.json (gitignored) or set BLACKBOX_NOTIFY_DISTRO=+1...,+1... See scripts/runtime/README.md."
+}
