@@ -18,8 +18,9 @@ Env:
 
 Twilio: TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, TWILIO_FROM_NUMBER
 
-Webhook: BLACKBOX_NOTIFY_WEBHOOK_URL, optional BLACKBOX_NOTIFY_WEBHOOK_SECRET
-Webhook JSON includes optional \"tier\" (integer) for routing.
+Webhook: BLACKBOX_NOTIFY_WEBHOOK_URL, optional BLACKBOX_NOTIFY_WEBHOOK_SECRET,
+  optional BLACKBOX_NOTIFY_WEBHOOK_FORMAT=slack — Slack Incoming Webhook body ``{"text": "..."}``; multicast sends one post for the whole distro.
+  Default format: JSON to, body, kind, tier.
 
 Textbelt: BLACKBOX_NOTIFY_TEXTBELT_KEY (default textbelt = 1 free/day on hosted API),
   BLACKBOX_NOTIFY_TEXTBELT_URL (default https://textbelt.com/text). US +1 E.164 only.

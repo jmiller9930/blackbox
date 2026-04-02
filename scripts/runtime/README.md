@@ -147,9 +147,9 @@ python3 scripts/runtime/data_health_workflow.py --watchdog --interval 5 --max-it
 
 Use `--max-iterations` for bounded tests; omit `--max-iterations` for continuous monitoring.
 
-### Phone / SMS notifications (optional)
+### Operator notifications — Slack (primary) / SMS (optional)
 
-**Module:** `modules/notification_gateway/` — short **trade**, **system**, and **Anna training** templates (who/what/when/where), delivery via **Twilio** (`BLACKBOX_NOTIFY_MODE=twilio` + `TWILIO_*`), **Textbelt** (`BLACKBOX_NOTIFY_MODE=textbelt`; optional `BLACKBOX_NOTIFY_TEXTBELT_KEY`, default `textbelt` for one free SMS/day on the hosted API — US `+1` numbers only), or **HTTPS webhook** (`BLACKBOX_NOTIFY_MODE=webhook` + `BLACKBOX_NOTIFY_WEBHOOK_URL`).
+**Module:** `modules/notification_gateway/` — short **trade**, **system**, and **Anna training** templates (who/what/when/where). **Recommended default in lab:** **Slack Incoming Webhook** — set `BLACKBOX_NOTIFY_MODE=webhook`, `BLACKBOX_NOTIFY_WEBHOOK_URL` to your Slack app’s Incoming Webhook URL, and **`BLACKBOX_NOTIFY_WEBHOOK_FORMAT=slack`** so each notify posts **`{"text": "..."}`** with tier line + body + recipient names (one HTTP POST per event for the whole distro). SMS remains available via **Twilio** (`BLACKBOX_NOTIFY_MODE=twilio` + `TWILIO_*`) or **Textbelt** (`BLACKBOX_NOTIFY_MODE=textbelt`; optional `BLACKBOX_NOTIFY_TEXTBELT_KEY`; US `+1` only on hosted API — use when you return to SMS).
 
 **Priority tiers (SMS):** bodies are prefixed **`T1` / `T2` / `T3`** — **T1** trading, **T2** system/availability, **T3** agents/training. **`BLACKBOX_NOTIFY_SMS_TIERS`** (default `1,2,3`) lists which tiers may send SMS; e.g. `1,2` silences tier-3 training/agent texts while keeping money and ops alerts.
 
@@ -163,9 +163,9 @@ Use `--max-iterations` for bounded tests; omit `--max-iterations` for continuous
 
 **Trade path:** call **`notify_trade(...)`** (tier **1** by default, or **3** for routine when env allows) from the execution / approval layer when a ticket is placed or terminal state is known (does not auto-wire from chat).
 
-**Test SMS:** quickest path — `python3 scripts/runtime/tools/send_notification_test.py --ping` (sends the standard one-line system test: *“This is a system test from the BLACK BOX engine.”*; add `--dry-run` to print the SMS body only). With Twilio env set, same flags as above: `--who john` / `sean` / `all`; `--kind system|trade|training`; **`--list-sms-tiers`**; **`--trade-status`** (trade tier inference).
+**Test notify:** `python3 scripts/runtime/tools/send_notification_test.py --ping` (standard one-line: *“This is a system test from the BLACK BOX engine.”*; `--dry-run` prints body only). Same flags with Twilio or webhook: `--who john` / `sean` / `all`; `--kind system|trade|training`; **`--list-sms-tiers`**; **`--trade-status`**.
 
-Example Twilio keys: [`config/notification_gateway.example.json`](../config/notification_gateway.example.json).
+Example keys / webhook fields: [`config/notification_gateway.example.json`](../config/notification_gateway.example.json).
 
 **Backend / workspace panel (for the UI API developer):** wire **operator-only** controls that delegate to `modules/notification_gateway` (same behavior as `scripts/runtime/tools/send_notification_test.py`). Do **not** duplicate Twilio HTTP; import `notify_system`, `notify_trade`, `notify_training_milestone`, `resolve_recipient_targets`, `parse_sms_allowed_tiers`, and/or call the script.
 

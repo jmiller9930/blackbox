@@ -11,7 +11,9 @@
   },
   "webhook": {
     "url": "",
-    "secret": ""
+    "secret": "",
+    "format": "slack",
+    "comment": "Env: BLACKBOX_NOTIFY_WEBHOOK_URL, BLACKBOX_NOTIFY_WEBHOOK_SECRET, BLACKBOX_NOTIFY_WEBHOOK_FORMAT=slack for Slack Incoming Webhooks"
   },
   "textbelt": {
     "key": "textbelt",

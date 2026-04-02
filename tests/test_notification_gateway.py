@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import sys
 from pathlib import Path
 
@@ -131,6 +132,71 @@ def test_textbelt_success(monkeypatch) -> None:
     ok, reason = deliver.send_sms("+15551112222", "hello")
     assert ok
     assert "textbelt_ok" in reason
+
+
+def test_webhook_slack_format_posts_text_json(monkeypatch) -> None:
+    monkeypatch.setenv("BLACKBOX_NOTIFY_MODE", "webhook")
+    monkeypatch.setenv("BLACKBOX_NOTIFY_WEBHOOK_URL", "https://hooks.slack.com/services/FAKE/FAKE/FAKE")
+    monkeypatch.setenv("BLACKBOX_NOTIFY_WEBHOOK_FORMAT", "slack")
+    import modules.notification_gateway.deliver as deliver
+
+    captured: dict = {}
+
+    class _Resp:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return None
+
+        def read(self) -> bytes:
+            return b"ok"
+
+    def _fake_open(req, timeout=None):
+        captured["data"] = json.loads(req.data.decode("utf-8"))
+        return _Resp()
+
+    monkeypatch.setattr(deliver.urllib.request, "urlopen", _fake_open)
+    ok, reason = deliver._send_webhook_single("+15550001", "hello", tier=2)
+    assert ok
+    assert captured["data"].get("text")
+    assert "*BLACKBOX · T2*" in captured["data"]["text"]
+    assert "hello" in captured["data"]["text"]
+
+
+def test_webhook_slack_multicast_single_post(monkeypatch) -> None:
+    monkeypatch.setenv("BLACKBOX_NOTIFY_MODE", "webhook")
+    monkeypatch.setenv("BLACKBOX_NOTIFY_WEBHOOK_URL", "https://hooks.slack.com/services/FAKE/FAKE/FAKE")
+    monkeypatch.setenv("BLACKBOX_NOTIFY_WEBHOOK_FORMAT", "slack")
+    import modules.notification_gateway.deliver as deliver
+
+    posts: list[dict] = []
+
+    class _Resp:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return None
+
+        def read(self) -> bytes:
+            return b"ok"
+
+    def _fake_open(req, timeout=None):
+        posts.append(json.loads(req.data.decode("utf-8")))
+        return _Resp()
+
+    monkeypatch.setattr(deliver.urllib.request, "urlopen", _fake_open)
+    out = deliver.send_sms_to_targets(
+        [("Alice", "+15551111"), ("Bob", "+15552222")],
+        "ping body",
+        tier=2,
+    )
+    assert len(posts) == 1
+    assert "Alice" in posts[0]["text"] and "Bob" in posts[0]["text"]
+    assert "ping body" in posts[0]["text"]
+    assert len(out) == 1
+    assert out[0][0] is True
 
 
 def test_textbelt_rejects_non_us_e164(monkeypatch) -> None:

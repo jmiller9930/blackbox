@@ -36,8 +36,11 @@ def send_sms(
 
     Twilio env: TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, TWILIO_FROM_NUMBER (E.164).
 
-    Webhook env: BLACKBOX_NOTIFY_WEBHOOK_URL (POST JSON {to, body, kind, tier}).
+    Webhook env: BLACKBOX_NOTIFY_WEBHOOK_URL.
     Optional: BLACKBOX_NOTIFY_WEBHOOK_SECRET (sent as X-Notify-Secret).
+    Optional: BLACKBOX_NOTIFY_WEBHOOK_FORMAT=slack — POST ``{\"text\": \"...\"}`` for Slack Incoming Webhooks
+    (recommended primary channel when SMS is off). Multicast sends **one** Slack message listing recipient names.
+    Default format: JSON ``{to, body, kind, tier}``.
 
     Textbelt env: BLACKBOX_NOTIFY_TEXTBELT_KEY (default ``textbelt`` = one free SMS/day on hosted API),
     BLACKBOX_NOTIFY_TEXTBELT_URL (default https://textbelt.com/text). US 10-digit from E.164 +1… only.
@@ -55,7 +58,7 @@ def send_sms(
         return _send_twilio(to_e164, body)
 
     if mode == "webhook":
-        return _send_webhook(to_e164, body, tier=tier)
+        return _send_webhook_single(to_e164, body, tier=tier)
 
     if mode == "textbelt":
         return _send_textbelt(to_e164, body)
@@ -70,6 +73,15 @@ def send_sms_to_targets(
     tier: int | None = None,
 ) -> list[tuple[bool, str, str]]:
     """Send the same body to each (name, e164). Returns list of (ok, reason, name)."""
+    if (
+        delivery_mode() == "webhook"
+        and _env("BLACKBOX_NOTIFY_WEBHOOK_FORMAT").lower() == "slack"
+        and targets
+    ):
+        ok, reason = _send_webhook_slack_multicast(body, tier=tier, targets=targets)
+        label = ",".join(n for n, _ in targets)
+        return [(ok, reason, label)]
+
     out: list[tuple[bool, str, str]] = []
     for name, e164 in targets:
         ok, reason = send_sms(e164, body, tier=tier)
@@ -100,14 +112,11 @@ def _send_twilio(to_e164: str, body: str) -> tuple[bool, str]:
         return False, f"twilio_err:{e!s}"
 
 
-def _send_webhook(to_e164: str, body: str, *, tier: int | None = None) -> tuple[bool, str]:
+def _post_webhook_payload(payload_obj: dict[str, Any]) -> tuple[bool, str]:
     wh = _env("BLACKBOX_NOTIFY_WEBHOOK_URL")
     if not wh:
         return False, "webhook_url_missing"
     secret = _env("BLACKBOX_NOTIFY_WEBHOOK_SECRET")
-    payload_obj: dict[str, Any] = {"to": to_e164, "body": body, "kind": "notify"}
-    if tier is not None:
-        payload_obj["tier"] = int(tier)
     payload = json.dumps(payload_obj, ensure_ascii=False).encode("utf-8")
     req = urllib.request.Request(wh, data=payload, method="POST")
     req.add_header("Content-Type", "application/json; charset=utf-8")
@@ -121,6 +130,38 @@ def _send_webhook(to_e164: str, body: str, *, tier: int | None = None) -> tuple[
         return False, f"webhook_http_{e.code}"
     except Exception as e:
         return False, f"webhook_err:{e!s}"
+
+
+def _send_webhook_single(to_e164: str, body: str, *, tier: int | None = None) -> tuple[bool, str]:
+    if _env("BLACKBOX_NOTIFY_WEBHOOK_FORMAT").lower() == "slack":
+        parts: list[str] = []
+        if tier is not None:
+            parts.append(f"*BLACKBOX · T{tier}*")
+        parts.append(body)
+        if to_e164:
+            parts.append(f"_to {to_e164}_")
+        return _post_webhook_payload({"text": "\n".join(parts)})
+
+    payload_obj: dict[str, Any] = {"to": to_e164, "body": body, "kind": "notify"}
+    if tier is not None:
+        payload_obj["tier"] = int(tier)
+    return _post_webhook_payload(payload_obj)
+
+
+def _send_webhook_slack_multicast(
+    body: str,
+    *,
+    tier: int | None,
+    targets: list[tuple[str, str]],
+) -> tuple[bool, str]:
+    parts: list[str] = []
+    if tier is not None:
+        parts.append(f"*BLACKBOX · T{tier}*")
+    parts.append(body)
+    if targets:
+        who = ", ".join(f"{n}" for n, _ in targets)
+        parts.append(f"_Recipients: {who}_")
+    return _post_webhook_payload({"text": "\n".join(parts)})
 
 
 def _e164_to_textbelt_us_phone(e164: str) -> str | None:
