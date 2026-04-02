@@ -6,6 +6,12 @@ Canonical running log for architect-facing directive execution, proof, and closu
 
 **Templates:** [`DIRECTIVE_TEMPLATE.md`](DIRECTIVE_TEMPLATE.md) (full directive scaffold), [`CLOSEOUT_PACKET_TEMPLATE.md`](CLOSEOUT_PACKET_TEMPLATE.md) (closeout / gate / proof summary). Every closeout must include `Plan/log status sync: PASS`. Implementation closes must also record **Git commit and remote sync** (commit SHA, remote push, primary-host proof when required) per the closeout template.
 
+## 2026-04-02 — DEV-BBX-SMS-001 Operator SMS workspace panel (UI + API) (Developer) — Issued / Active
+
+- **Directive:** [`directive_dev_bbx_sms_workspace_panel.md`](directive_dev_bbx_sms_workspace_panel.md) — internal portal panel + `/api/v1/notify/*` (or equivalent) for recipient CRUD and test sends; delegates to `modules/notification_gateway`; internal-staff auth only; does not alter trading or CANONICAL #041 intake scope.
+- **Summary:** Issued for backend developer implementation; closeout pending panel + API + proof per directive file.
+- **Plan/log status sync:** Pending closure (issuance-only entry).
+
 ## 2026-03-31 — CANONICAL #040 Pillar 1 Operator-Authority Intake Reconciliation Gate (Architect) — Implemented / Closed
 
 - **Directive:** **CANONICAL #040** — operationalize #039 intake contracts by reconciling intake evidence against deterministic `INTAKE-*` checks and recording fail-closed verdict evidence before any lock-lift publication gate can be considered.

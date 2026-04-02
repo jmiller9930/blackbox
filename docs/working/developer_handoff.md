@@ -28,3 +28,7 @@ No developer implementation is authorized for this architect-owned intake-refres
 - Follow the active directive only.
 - Do not use architect troubleshooting or Foreman debugging as implementation context.
 - Do not work from broader workflow conversation unless the directive explicitly says the task is Foreman itself.
+
+## Additional authorized work (does not replace CANONICAL #041)
+
+- **DEV-BBX-SMS-001** — [`docs/architect/directives/directive_dev_bbx_sms_workspace_panel.md`](../architect/directives/directive_dev_bbx_sms_workspace_panel.md) — **Operator SMS workspace panel** (UI + JSON API): distro CRUD + test send (`ping` / system / trade / training) delegating to `modules/notification_gateway`. Control-surface only; **no** trading, execution, or intake-gate changes. Closeout requires proof per directive file.
