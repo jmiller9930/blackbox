@@ -10,5 +10,8 @@
 set -euo pipefail
 REPO="${BLACKBOX_REPO:-${HOME}/blackbox}"
 cd "${REPO}"
+# shellcheck disable=SC1091
+source "${REPO}/scripts/anna_karpathy_loop_env.inc.sh"
+_load_karpathy_loop_env "$REPO"
 export PYTHONPATH="${REPO}/scripts/runtime:${REPO}${PYTHONPATH:+:${PYTHONPATH}}"
 exec python3 scripts/runtime/anna_karpathy_loop_daemon.py "$@"

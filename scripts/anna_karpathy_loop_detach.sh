@@ -12,15 +12,18 @@
 #   ANNA_TMUX_SESSION — tmux name (default anna-karpathy-loop)
 #   ANNA_LOOP_INTERVAL_SEC — passed through (daemon default 5)
 #
+# Loads repo .env / .env.local via scripts/anna_karpathy_loop_run.sh so OLLAMA_BASE_URL
+# and BLACKBOX_JACK_EXECUTOR_CMD match the rest of Anna (see scripts/runtime/_ollama.py).
+#
 set -euo pipefail
 
 REPO="${BLACKBOX_REPO:-${HOME}/blackbox}"
 SESSION="${ANNA_TMUX_SESSION:-anna-karpathy-loop}"
 cd "${REPO}"
 
-PY="${REPO}/.venv/bin/python3"
-if [[ ! -x "$PY" ]]; then
-  PY="$(command -v python3)"
+RUNNER="${REPO}/scripts/anna_karpathy_loop_run.sh"
+if [[ ! -x "$RUNNER" ]]; then
+  chmod +x "$RUNNER" 2>/dev/null || true
 fi
 
 if ! command -v tmux >/dev/null 2>&1; then
@@ -33,11 +36,8 @@ if tmux has-session -t "$SESSION" 2>/dev/null; then
   exit 1
 fi
 
-export PYTHONPATH="${REPO}/scripts/runtime:${REPO}${PYTHONPATH:+:${PYTHONPATH}}"
-
 # Detached session: loop runs until SIGTERM; survives SSH logout.
-tmux new-session -d -s "$SESSION" \
-  "cd $(printf '%q' "$REPO") && export PYTHONPATH=$(printf '%q' "$PYTHONPATH") && exec $(printf '%q' "$PY") $(printf '%q' "$REPO/scripts/runtime/anna_training_cli.py") loop-daemon"
+tmux new-session -d -s "$SESSION" "$(printf '%q' "$RUNNER")"
 
 echo "Started Karpathy loop-daemon in tmux session: $SESSION"
 echo "  Attach: tmux attach -t $SESSION"
