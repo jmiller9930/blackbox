@@ -276,9 +276,63 @@ def _cmd_dashboard() -> int:
         )
         return 0
 
+    st = load_state()
+    cid = (st.get("curriculum_id") or "") or ""
+    cur = CURRICULA.get(cid) if cid else None
+    g12 = evaluate_grade12_gates()
+    sf = suggest_next_focus(
+        curriculum_id=st.get("curriculum_id"),
+        training_method_id=st.get("training_method_id"),
+    )
+    be = bachelor_eligibility_report(
+        curriculum_id=st.get("curriculum_id"),
+        completed_milestones=st.get("completed_curriculum_milestones") or [],
+    )
+    gate_pass = bool(g12.get("pass"))
+    gate_style = "[bold green]PASS[/bold green]" if gate_pass else "[bold red]NOT PASS[/bold red]"
+    min_dt = g12.get("min_decisive_trades")
+    dec_raw = g12.get("decisive_trades")
+    wr = g12.get("win_rate")
+    wr_s = f"{wr:.0%}" if wr is not None else "—"
+    elig = "[bold green]yes[/bold green]" if be.get("eligible_for_bachelor_paper_track_v1") else "[dim]no[/dim]"
+    cur_title = (cur or {}).get("title", cid or "(not assigned)")
+    stage = (cur or {}).get("stage", "—")
+    hints_lines = (sf.get("hints") or [])[:4]
+    hints_txt = "\n".join(f"  • {h}" for h in hints_lines) if hints_lines else "  —"
+    bullets = list(st.get("carryforward_bullets") or [])[:6]
+    carry_txt = "\n".join(f"  • {b}" for b in bullets) if bullets else "  — (none yet; promotes with bachelor track)"
+
+    learning_body = (
+        f"[bold]Curriculum[/bold]: {cid or '—'} — {cur_title}\n"
+        f"[dim]Stage[/dim]: {stage}\n\n"
+        f"[bold]Grade 12 numeric gate[/bold]: {gate_style}  "
+        f"(decisive trades {dec_raw}/{min_dt}, win rate {wr_s})\n"
+        f"[bold]Bachelor paper track eligible[/bold]: {elig}\n\n"
+        f"[bold]Next focus[/bold]: {sf.get('focus', '—')}\n"
+        f"{hints_txt}\n\n"
+        f"[bold]Cumulative carry-forward[/bold] (Grade 12 → later stages):\n{carry_txt}"
+    )
+
     trades = load_paper_trades()
     s = summarize_trades(trades)
     console = Console()
+    console.print(
+        Panel.fit(
+            learning_body,
+            title="Learning, goals & eligibility",
+            border_style="magenta",
+        )
+    )
+
+    meth_id = st.get("training_method_id") or "karpathy_loop_v1"
+    meth = TRAINING_METHODS.get(meth_id) or {}
+    steps_tbl = Table(title=f"Karpathy method — {meth_id} (canonical steps)")
+    steps_tbl.add_column("#", justify="right", width=3)
+    steps_tbl.add_column("Step")
+    for i, step in enumerate(meth.get("steps") or [], start=1):
+        steps_tbl.add_row(str(i), step)
+    console.print(steps_tbl)
+
     console.print(
         Panel.fit(
             "[bold cyan]Anna[/bold cyan] (analyst)  [dim]── handoff ──▶[/dim]  "
@@ -286,7 +340,7 @@ def _cmd_dashboard() -> int:
             "[yellow]Jupiter Perps[/yellow] = exchange / venue\n"
             "[dim]Default live path when venue is Jupiter: Anna’s packets go to Jack; "
             "Drift would be Billy (not shown here). Rows below are paper harness outcomes, not live fills.[/dim]\n\n"
-            "[bold]Grade 12 — paper training[/bold]\n"
+            "[bold]Paper harness — summary[/bold]\n"
             f"Trades: {s.trade_count} | W {s.wins} / L {s.losses} | "
             f"P&L USD [bold]{s.total_pnl_usd:.2f}[/bold]"
             + (f" | Win rate {s.win_rate:.0%}" if s.win_rate is not None else ""),
