@@ -7,7 +7,8 @@ from __future__ import annotations
 
 from typing import Any, Mapping
 
-# Ordered checklist: learn each tool, then use them together; then 60% / fund objectives apply.
+# Strict sequence: each skill builds on the last; complete in order before the paper cohort gate.
+# Order: numeracy → analysis → RCS/RCA → harness loop → then numeric paper trading bar applies.
 GRADE_12_TOOLS: tuple[dict[str, str], ...] = (
     {
         "id": "math_engine_literacy",

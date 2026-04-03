@@ -80,6 +80,8 @@ Human / exam-board judgment above the software minimum remains as in §1.3; this
 
 ### 1.3 12th grade graduation — sequencing, numeric gate, and human authority
 
+**Sequencing (binding, read with §1.2.1):** Every skill defined for Grade 12 in **`curriculum_tools.py`** is **sequential** — **fixed order**, **one active focus at a time**, **each stage builds on the last** (later skills assume the earlier ones are in play: honest numeracy → disciplined analysis → reflection / thesis↔outcome → sustained harness loop). **Paper trading** in the sense of the **numeric cohort gate** (logged paper outcomes scored for min-N and win rate) is **not** where the curriculum starts; it is the **capstone** after those four learning outcomes are attested. Until then, paper rows may exist for harness work, but the **headline “paper trade” graduation metric** is **deferred** in product and gates until the sequential skills are complete.
+
 **She cannot graduate 12th grade until all of the following are satisfied:**
 
 1. **Curriculum tool checklist (cohesive set, code-enforced, sequential focus)** — Here a **“tool”** is **not** a random feature toggle: each id is a **named learning outcome or process** Anna must **learn and apply** (math literacy, analysis discipline, RCS/RCA, Karpathy harness practice). The **deck and gates surface one current focus at a time** in canonical **`curriculum_tools.py` order** — complete the first missing skill before treating the next as the active requirement; **do not skip ahead**. Before the **numeric** slice is admissible for overall **PASS**, all **four** must be marked **passed** via operator attestation (`anna tool-pass <id>`) **after evidence** that those capabilities/processes are in use. They map to the contract as follows:
