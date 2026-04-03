@@ -13,9 +13,9 @@ Env:
   RECORD_MARKET_SNAPSHOT_EACH_TICK — 1 to record one market row per successful tick
   MARKET_DATA_SKIP_JUPITER — 1 to skip Jupiter quote when snapshotting
   ANNA_SKIP_PREFLIGHT — 1 bypasses data preflight (tests/dev only)
-  ANNA_KARPATHY_AUTO_ATTEST_TOOLS — 1 to set ``grade_12_tool_mastery`` for a tool when
-    binary skill practice passes for the deck’s current focus (default: off; operator
-    attestation remains the primary path)
+  ANNA_KARPATHY_AUTO_ATTEST_TOOLS — default **on** (set 0/false to disable): set
+    ``grade_12_tool_mastery`` when the skill’s **education_benchmark** passes (see
+    ``curriculum_tools.GRADE_12_TOOLS``). Manual ``anna tool-pass`` remains available.
   ANNA_KARPATHY_HARNESS_MIN_ITERATIONS — min ``karpathy_loop_iteration`` count for the
     harness-loop tool practice predicate (default 10)
 

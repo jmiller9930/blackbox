@@ -3,8 +3,9 @@ Karpathy-aligned skill practice: each cycle can *attempt* the current curriculum
 
 Contract alignment: every objective here is a **boolean predicate** only. Each
 ``attempt_curriculum_skill`` / practice hook returns ``passed: True|False`` — no partial
-credit. Optional ``ANNA_KARPATHY_AUTO_ATTEST_TOOLS=1`` sets checklist mastery only when
-the corresponding predicate is true.
+credit. ``ANNA_KARPATHY_AUTO_ATTEST_TOOLS`` defaults **on** for Grade-12 education: checklist
+mastery flips when the skill’s **automated benchmark** passes (see ``curriculum_tools``
+``education_benchmark``). Set to ``0`` to require manual ``anna tool-pass`` only.
 """
 
 from __future__ import annotations
@@ -141,7 +142,7 @@ def run_skill_practice_cycle(
         return None
 
     attempt = attempt_curriculum_skill(focus, state=state, g12=g12)
-    if _env_bool("ANNA_KARPATHY_AUTO_ATTEST_TOOLS", False) and attempt.get("passed"):
+    if _env_bool("ANNA_KARPATHY_AUTO_ATTEST_TOOLS", True) and attempt.get("passed"):
         mp = normalize_tool_mastery(state.get("grade_12_tool_mastery"))
         mp[focus] = True
         state["grade_12_tool_mastery"] = mp

@@ -232,6 +232,14 @@ def test_assign_and_invoke(tmp_path: Path, monkeypatch) -> None:
     assert raw["training_method_id"] == "karpathy_loop_v1"
 
 
+def test_grade12_tool_list_includes_education_benchmark(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setenv("BLACKBOX_ANNA_TRAINING_DIR", str(tmp_path))
+    from modules.anna_training.curriculum_tools import GRADE_12_TOOLS
+
+    assert all("education_benchmark" in t for t in GRADE_12_TOOLS)
+    assert GRADE_12_TOOLS[0]["education_benchmark"]["id"] == "wilson_nist_reference_v1"
+
+
 def test_describe_catalog_includes_complementary() -> None:
     from modules.anna_training.catalog import describe_catalog
 

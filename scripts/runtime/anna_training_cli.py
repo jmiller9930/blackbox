@@ -300,7 +300,12 @@ def _cmd_tool_list() -> int:
         "schema": "anna_grade_12_tool_list_v1",
         "tools": [{**t, "passed": bool(m.get(t["id"]))} for t in GRADE_12_TOOLS],
         "all_passed": all(m.get(tid) for tid in TOOL_IDS),
-        "hint": "Mark pass after evidence: anna tool-pass <tool_id>",
+        "hint": (
+            "Default: Karpathy loop auto-attests when education_benchmark passes (ANNA_KARPATHY_AUTO_ATTEST_TOOLS, default on). "
+            "Manual override: anna tool-pass <tool_id>. Each tool includes education_benchmark in this JSON."
+        ),
+        "auto_attest_default": True,
+        "auto_attest_env": "ANNA_KARPATHY_AUTO_ATTEST_TOOLS (set 0/false to disable)",
     }
     print(json.dumps(out, indent=2))
     return 0
@@ -480,7 +485,7 @@ def _cmd_dashboard(args: argparse.Namespace | None = None) -> int:
         cur_focus = g12.get("grade_12_current_focus")
         tools_tbl = Table(
             title="Tool checklist — sequential (finish current focus before the next; then numeric gate)",
-            caption="Checklist % = operator attestation after evidence — not an auto score from idle loop ticks.",
+            caption="Checklist % = passed when education_benchmark succeeds (auto, default) or anna tool-pass — not idle-loop vibes.",
         )
         tools_tbl.add_column("Tool", no_wrap=True)
         tools_tbl.add_column("ID", style="dim")
