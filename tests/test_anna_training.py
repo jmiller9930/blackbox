@@ -9,6 +9,40 @@ import sys
 from pathlib import Path
 from unittest.mock import patch
 
+def test_apply_repo_dotenv_sets_ollama_from_file(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.delenv("OLLAMA_BASE_URL", raising=False)
+    (tmp_path / ".env").write_text("OLLAMA_BASE_URL=http://from-dotenv.example:11434\n", encoding="utf-8")
+    from modules.anna_training.repo_env import apply_repo_dotenv
+
+    try:
+        apply_repo_dotenv(repo_root=tmp_path)
+        assert os.environ.get("OLLAMA_BASE_URL") == "http://from-dotenv.example:11434"
+    finally:
+        os.environ.pop("OLLAMA_BASE_URL", None)
+
+
+def test_apply_repo_dotenv_does_not_override_existing(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setenv("OLLAMA_BASE_URL", "http://already-set:11434")
+    (tmp_path / ".env").write_text("OLLAMA_BASE_URL=http://from-dotenv.example:11434\n", encoding="utf-8")
+    from modules.anna_training.repo_env import apply_repo_dotenv
+
+    apply_repo_dotenv(repo_root=tmp_path)
+    assert os.environ.get("OLLAMA_BASE_URL") == "http://already-set:11434"
+
+
+def test_apply_repo_dotenv_local_overrides_env_file(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.delenv("OLLAMA_BASE_URL", raising=False)
+    (tmp_path / ".env").write_text("OLLAMA_BASE_URL=http://a:11434\n", encoding="utf-8")
+    (tmp_path / ".env.local").write_text("OLLAMA_BASE_URL=http://b:11434\n", encoding="utf-8")
+    from modules.anna_training.repo_env import apply_repo_dotenv
+
+    try:
+        apply_repo_dotenv(repo_root=tmp_path)
+        assert os.environ.get("OLLAMA_BASE_URL") == "http://b:11434"
+    finally:
+        os.environ.pop("OLLAMA_BASE_URL", None)
+
+
 def test_ensure_preflight_respects_skip(monkeypatch) -> None:
     monkeypatch.delenv("ANNA_SKIP_PREFLIGHT", raising=False)
     monkeypatch.setenv("ANNA_SKIP_PREFLIGHT", "1")

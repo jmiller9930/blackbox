@@ -29,6 +29,9 @@ Env:
 Repo root:
   PYTHONPATH=scripts/runtime:. python3 scripts/runtime/anna_karpathy_loop_daemon.py
   PYTHONPATH=scripts/runtime:. python3 scripts/runtime/anna_karpathy_loop_daemon.py --once
+
+Loads ``.env`` / ``.env.local`` from repo root into the process (same keys as ``anna_karpathy_loop_run.sh``)
+so ``OLLAMA_BASE_URL`` applies even when not started via the shell wrapper.
 """
 from __future__ import annotations
 
@@ -48,6 +51,10 @@ if str(ROOT) not in sys.path:
 _RT = ROOT / "scripts" / "runtime"
 if str(_RT) not in sys.path:
     sys.path.insert(0, str(_RT))
+
+from modules.anna_training.repo_env import apply_repo_dotenv  # noqa: E402
+
+apply_repo_dotenv(ROOT)
 
 from modules.anna_training.catalog import CURRICULA, TRAINING_METHODS  # noqa: E402
 from modules.anna_training.cumulative import append_cumulative_log  # noqa: E402

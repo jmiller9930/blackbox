@@ -693,12 +693,14 @@ TRAINING_DASHBOARD_HTML = """<!DOCTYPE html>
     .llm-bad { border-color: var(--bad) !important; background: #22191c; }
     .llm-warn { border-color: #9e6a03 !important; background: #1c1a12; }
     .llm-good { border-color: var(--ok) !important; background: #0d1f14; }
+    #v_preflight_banner .sub { white-space: normal; word-break: break-word; }
   </style>
 </head>
 <body>
   <h1>Anna training — live</h1>
   <div id="v_preflight_banner" class="card llm-good" style="margin-bottom:0.75rem;display:none">
     <h2>Preflight (data + LLM — same order as the daemon)</h2>
+    <p class="sub" style="font-size:0.72rem;color:var(--muted);margin:0 0 0.5rem">Red/warn here means a <strong>probe</strong> failed (feeds or Ollama), not a corrupt <code>state.json</code> file.</p>
     <p class="sub" id="v_data_pf">—</p>
     <p class="sub" id="v_llm_pf" style="margin-top:0.45rem">—</p>
     <p class="sub" id="v_pf_policy" style="margin-top:0.45rem;font-size:0.72rem;color:var(--muted)"></p>
@@ -781,32 +783,32 @@ TRAINING_DASHBOARD_HTML = """<!DOCTYPE html>
         var pol = j.preflight_policy || {};
         function dataLine() {
           if (!d || typeof d !== 'object' || Object.keys(d).length === 0) {
-            return { tier: 1, text: 'No data-preflight snapshot in state yet — run the Karpathy daemon at least once after deploy.' };
+            return { tier: 1, text: 'No saved data-preflight row yet — run the Karpathy daemon once so training state is updated.' };
           }
           if (d.skipped) return { tier: 1, text: 'Skipped (ANNA_SKIP_PREFLIGHT) — enforcement bypassed.' };
           if (d.ok) return { tier: 0, text: 'OK — Pyth stream + market_data.db (and optional Solana) passed this tick.' };
-          var b = (d.blockers || []).join(', ');
-          return { tier: 2, text: 'Blocked — ' + (b || 'unknown') + '. Fix sources; see readiness in state / heartbeat JSONL.' };
+          var blockers = (d.blockers || []).join(', ');
+          return { tier: 2, text: 'Blocked — ' + (blockers || 'unknown') + '. Fix feeds; see readiness in heartbeat JSONL or anna_training_dir.' };
         }
         function llmLine() {
           if (!l || typeof l !== 'object' || Object.keys(l).length === 0) {
-            return { tier: 1, text: 'No LLM snapshot in state yet — daemon has not completed a tick with LLM probe.' };
+            return { tier: 1, text: 'No LLM probe row yet — daemon has not finished a tick that saved llm_preflight.' };
           }
           if (l.skipped) return { tier: 0, text: 'Skipped (' + (l.reason || 'ANNA_USE_LLM off') + ').' };
           if (l.ok === false) {
-            return { tier: 2, text: 'Not reachable — ' + (l.error || 'error') + (l.base_url ? ' · base ' + l.base_url : '') };
+            return { tier: 2, text: 'Ollama probe failed — ' + (l.error || 'error') + (l.base_url ? ' · base ' + l.base_url : '') };
           }
           if (l.model_present_in_tags === false) {
             return { tier: 1, text: 'Ollama up but model ' + (l.ollama_model_configured || '') + ' not listed in /api/tags (ollama pull).' };
           }
           return { tier: 0, text: 'OK — ' + (l.ollama_model_configured || '') + ' present · ' + (l.base_url || '') };
         }
-        var a = dataLine();
-        var b = llmLine();
-        document.getElementById('v_data_pf').textContent = 'Data: ' + a.text;
-        document.getElementById('v_llm_pf').textContent = 'LLM: ' + b.text;
+        var dataPf = dataLine();
+        var llmPf = llmLine();
+        document.getElementById('v_data_pf').textContent = 'Data: ' + dataPf.text;
+        document.getElementById('v_llm_pf').textContent = 'LLM: ' + llmPf.text;
         var worst = 0;
-        if (a.tier >= b.tier) worst = a.tier; else worst = b.tier;
+        if (dataPf.tier >= llmPf.tier) worst = dataPf.tier; else worst = llmPf.tier;
         var ban = document.getElementById('v_preflight_banner');
         ban.className = 'card ' + (worst >= 2 ? 'llm-bad' : (worst >= 1 ? 'llm-warn' : 'llm-good'));
         ban.style.display = 'block';

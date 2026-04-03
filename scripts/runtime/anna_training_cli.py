@@ -1134,6 +1134,10 @@ def _interactive_training_menu() -> int:
 
 
 def main(argv: list[str] | None = None) -> int:
+    from modules.anna_training.repo_env import apply_repo_dotenv
+
+    apply_repo_dotenv(ROOT)
+
     p = argparse.ArgumentParser(description="Anna training control (curriculum + method + notes).")
     sub = p.add_subparsers(dest="cmd", required=True)
 
