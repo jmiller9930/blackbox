@@ -20,7 +20,7 @@
 #   MARKET_DATA_SKIP_JUPITER — if 1, snapshot uses --no-jupiter
 #   ANNA_TRAINING_LAUNCH_DAEMON — if 0/false, run school only (no long-running loop after)
 #   ANNA_TRAINING_ALWAYS_DAEMON — if 1, start daemon even after interactive school (no --once)
-#   ANNA_LOOP_INTERVAL_SEC — daemon tick interval (default 300)
+#   ANNA_LOOP_INTERVAL_SEC — daemon tick interval (default 60)
 #
 set -euo pipefail
 

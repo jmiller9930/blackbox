@@ -7,7 +7,7 @@ optionally records ``market_data``. Does not place live trades — harness / pap
 remain operator-driven.
 
 Env:
-  ANNA_LOOP_INTERVAL_SEC — seconds between ticks (default 300)
+  ANNA_LOOP_INTERVAL_SEC — seconds between ticks (default 60)
   RECORD_MARKET_SNAPSHOT_EACH_TICK — 1 to record one market row per successful tick
   MARKET_DATA_SKIP_JUPITER — 1 to skip Jupiter quote when snapshotting
   ANNA_SKIP_PREFLIGHT — 1 bypasses data preflight (tests/dev only)
@@ -68,11 +68,11 @@ def _interval_sec(cli: float | None) -> float:
         return max(5.0, float(cli))
     raw = (os.environ.get("ANNA_LOOP_INTERVAL_SEC") or "").strip()
     if not raw:
-        return 300.0
+        return 60.0
     try:
         return max(5.0, float(raw))
     except ValueError:
-        return 300.0
+        return 60.0
 
 
 def _snapshot_market_if_requested() -> dict | None:
@@ -153,7 +153,7 @@ def main(argv: list[str] | None = None) -> int:
         "--interval-sec",
         type=float,
         default=None,
-        help="Seconds between ticks (default ANNA_LOOP_INTERVAL_SEC or 300)",
+        help="Seconds between ticks (default ANNA_LOOP_INTERVAL_SEC or 60)",
     )
     ap.add_argument(
         "--once",
