@@ -73,6 +73,10 @@ def test_harness_full_jack_paper(tmp_path, monkeypatch: pytest.MonkeyPatch) -> N
     assert out.get("enabled") is True
     assert out.get("paper_logged") is True
     assert out.get("execution_status") == "executed"
+    snap = out.get("analysis_snapshot")
+    assert isinstance(snap, dict)
+    assert snap.get("interpretation_headline") == "Risk"
+    assert snap.get("answer_source") == "test"
 
     from modules.anna_training.paper_trades import load_paper_trades
 

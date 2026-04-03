@@ -39,6 +39,68 @@ def _ensure_runtime_path() -> None:
         sys.path.insert(0, str(rt))
 
 
+def analysis_snapshot_for_dashboard(analysis: dict[str, Any]) -> dict[str, Any]:
+    """Compact, JSON-safe slice of ``anna_analysis_v1`` for operator dashboards (data, not prose)."""
+    interp = analysis.get("interpretation") if isinstance(analysis.get("interpretation"), dict) else {}
+    pipe = analysis.get("pipeline") if isinstance(analysis.get("pipeline"), dict) else {}
+    mc = analysis.get("market_context") if isinstance(analysis.get("market_context"), dict) else {}
+    risk = analysis.get("risk_assessment") if isinstance(analysis.get("risk_assessment"), dict) else {}
+    sug = analysis.get("suggested_action") if isinstance(analysis.get("suggested_action"), dict) else {}
+    hi = analysis.get("human_intent") if isinstance(analysis.get("human_intent"), dict) else {}
+    cum = analysis.get("cumulative_learning") if isinstance(analysis.get("cumulative_learning"), dict) else {}
+
+    summary = str(interp.get("summary") or "")
+    if len(summary) > 800:
+        summary = summary[:797] + "..."
+
+    factors = risk.get("factors") or []
+    if isinstance(factors, list):
+        factors_out = [str(x)[:160] for x in factors[:10]]
+    else:
+        factors_out = []
+
+    notes = analysis.get("notes")
+    if isinstance(notes, list):
+        note_lines = [str(x)[:240] for x in notes[:6]]
+    else:
+        note_lines = []
+
+    sig = interp.get("signals") if isinstance(interp.get("signals"), list) else []
+    sig_out = [str(x) for x in sig[:12]]
+
+    steps = pipe.get("steps")
+    if not isinstance(steps, list):
+        steps = []
+
+    return {
+        "generated_at": analysis.get("generated_at"),
+        "answer_source": pipe.get("answer_source"),
+        "pipeline_steps": [str(s) for s in steps],
+        "interpretation_headline": interp.get("headline"),
+        "interpretation_summary": summary,
+        "risk_level": risk.get("level"),
+        "risk_factors": factors_out,
+        "suggested_intent": sug.get("intent"),
+        "suggested_rationale": (str(sug.get("rationale") or ""))[:500],
+        "market_price": mc.get("price"),
+        "market_spread": mc.get("spread"),
+        "market_notes_count": len(mc.get("notes") or []) if isinstance(mc.get("notes"), list) else 0,
+        "regime": analysis.get("regime"),
+        "human_intent": {k: hi.get(k) for k in ("kind", "label", "confidence") if hi.get(k) is not None},
+        "curriculum_stage": cum.get("stage"),
+        "cumulative_log_entries": cum.get("cumulative_log_entries"),
+        "interpretation_signals": sig_out,
+        "analysis_notes_tail": note_lines,
+    }
+
+
+def _with_analysis_snapshot(analysis: dict[str, Any], out: dict[str, Any]) -> dict[str, Any]:
+    snap = analysis_snapshot_for_dashboard(analysis)
+    if snap:
+        out["analysis_snapshot"] = snap
+    return out
+
+
 def run_karpathy_paper_harness_tick(*, iteration: int) -> dict[str, Any]:
     """
     One full paper harness attempt. Safe to call when preflight already passed for the daemon tick.
@@ -94,11 +156,14 @@ def run_karpathy_paper_harness_tick(*, iteration: int) -> dict[str, Any]:
     analysis = out.get("anna_analysis") or {}
     pipe = analysis.get("pipeline") or {}
     if pipe.get("answer_source") == "preflight_blocked":
-        return {
-            "enabled": True,
-            "iteration": iteration,
-            "skipped": "analysis_preflight_blocked_body",
-        }
+        return _with_analysis_snapshot(
+            analysis,
+            {
+                "enabled": True,
+                "iteration": iteration,
+                "skipped": "analysis_preflight_blocked_body",
+            },
+        )
 
     handoff = try_create_execution_request_from_anna_analysis(
         analysis,
@@ -114,58 +179,82 @@ def run_karpathy_paper_harness_tick(*, iteration: int) -> dict[str, Any]:
             ptype = prop.get("proposal_type")
         except Exception:
             ptype = None
-        return {
-            "enabled": True,
-            "iteration": iteration,
-            "skipped": "no_execution_request",
-            "detail": "OBSERVATION_ONLY or signal policy blocked or auto-request off",
-            "proposal_type": ptype,
-        }
+        return _with_analysis_snapshot(
+            analysis,
+            {
+                "enabled": True,
+                "iteration": iteration,
+                "skipped": "no_execution_request",
+                "detail": "OBSERVATION_ONLY or signal policy blocked or auto-request off",
+                "proposal_type": ptype,
+            },
+        )
 
     rid = handoff.get("request_id")
     if not rid:
-        return {"enabled": True, "iteration": iteration, "handoff": handoff, "skipped": "no_request_id"}
+        return _with_analysis_snapshot(
+            analysis,
+            {"enabled": True, "iteration": iteration, "handoff": handoff, "skipped": "no_request_id"},
+        )
 
     if not _env_bool("ANNA_KARPATHY_AUTO_RUN_PAPER", True):
-        return {
-            "enabled": True,
-            "iteration": iteration,
-            "request_id": rid,
-            "pending": True,
-            "note": "ANNA_KARPATHY_AUTO_RUN_PAPER=0 — approve + run_execution manually",
-        }
+        return _with_analysis_snapshot(
+            analysis,
+            {
+                "enabled": True,
+                "iteration": iteration,
+                "request_id": rid,
+                "pending": True,
+                "note": "ANNA_KARPATHY_AUTO_RUN_PAPER=0 — approve + run_execution manually",
+            },
+        )
 
     jack = (os.environ.get("BLACKBOX_JACK_EXECUTOR_CMD") or "").strip()
     if not jack:
-        return {
-            "enabled": True,
-            "iteration": iteration,
-            "request_id": rid,
-            "skipped": "BLACKBOX_JACK_EXECUTOR_CMD unset — cannot run Jack paper",
-        }
+        return _with_analysis_snapshot(
+            analysis,
+            {
+                "enabled": True,
+                "iteration": iteration,
+                "request_id": rid,
+                "skipped": "BLACKBOX_JACK_EXECUTOR_CMD unset — cannot run Jack paper",
+            },
+        )
 
     try:
         from execution_plane.approval_manager import approve_request
         from execution_plane.execution_engine import run_execution
     except Exception as e:  # noqa: BLE001
-        return {"enabled": True, "request_id": rid, "error": f"import execution:{e}"}
+        return _with_analysis_snapshot(
+            analysis,
+            {"enabled": True, "request_id": rid, "error": f"import execution:{e}"},
+        )
 
     approver = (os.environ.get("ANNA_KARPATHY_PAPER_APPROVER_ID") or "karpathy-paper-harness").strip()
     approved = approve_request(str(rid), approver)
     if not approved:
-        return {"enabled": True, "request_id": rid, "error": "approve_request returned None"}
+        return _with_analysis_snapshot(
+            analysis,
+            {"enabled": True, "request_id": rid, "error": "approve_request returned None"},
+        )
 
     try:
         result = run_execution(str(rid))
     except Exception as e:  # noqa: BLE001
-        return {"enabled": True, "request_id": rid, "error": f"run_execution:{e}"}
+        return _with_analysis_snapshot(
+            analysis,
+            {"enabled": True, "request_id": rid, "error": f"run_execution:{e}"},
+        )
 
     jd = (result or {}).get("jack_delegate") or {}
-    return {
-        "enabled": True,
-        "iteration": iteration,
-        "request_id": rid,
-        "execution_status": (result or {}).get("status"),
-        "paper_logged": jd.get("paper_logged"),
-        "jack_delegate": {"ok": jd.get("ok"), "error": jd.get("error")},
-    }
+    return _with_analysis_snapshot(
+        analysis,
+        {
+            "enabled": True,
+            "iteration": iteration,
+            "request_id": rid,
+            "execution_status": (result or {}).get("status"),
+            "paper_logged": jd.get("paper_logged"),
+            "jack_delegate": {"ok": jd.get("ok"), "error": jd.get("error")},
+        },
+    )

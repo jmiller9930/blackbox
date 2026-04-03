@@ -348,7 +348,12 @@ def build_anna_training_dashboard() -> dict[str, Any]:
         from modules.anna_training.gates import evaluate_grade12_gates
         from modules.anna_training.paper_trades import load_paper_trades_for_gates, summarize_trades, trades_path
         from modules.anna_training.store import anna_training_dir, load_state, state_path
-        from modules.anna_training.trade_attempts import attempts_path, summarize_trade_activity
+        from modules.anna_training.trade_attempts import (
+            attempts_path,
+            load_trade_attempts,
+            summarize_trade_activity,
+        )
+        from modules.anna_training.report_card_text import learning_signal_verdict
     except ImportError as e:
         return {
             "schema": "anna_training_dashboard_v1",
@@ -370,12 +375,42 @@ def build_anna_training_dashboard() -> dict[str, Any]:
         else:
             harness = {}
         engagement = _training_engagement_payload(st, harness)
+        snap = harness.get("analysis_snapshot")
+        analysis_snapshot = snap if isinstance(snap, dict) else {}
+        sp_last = st.get("karpathy_last_skill_practice")
+        skill_practice_last = sp_last if isinstance(sp_last, dict) else {}
+        deck = st.get("grade_12_skills_deck")
+        deck = deck if isinstance(deck, dict) else {}
+        ls = learning_signal_verdict(g12, st)
+        att_rows = load_trade_attempts()
+        recent_attempts = []
+        for e in att_rows[-18:]:
+            if not isinstance(e, dict):
+                continue
+            rid = e.get("request_id")
+            recent_attempts.append(
+                {
+                    "ts_utc": str(e.get("ts_utc") or "")[:22],
+                    "phase": e.get("phase"),
+                    "status": e.get("status"),
+                    "request_id": (str(rid)[:14] + "…") if rid and len(str(rid)) > 14 else rid,
+                }
+            )
         return {
             "schema": "anna_training_dashboard_v1",
             "ok": True,
             "trace_id": tid,
             "at_utc": now_iso(),
             "training_engagement": engagement,
+            "analysis_snapshot": analysis_snapshot,
+            "skill_practice_last": skill_practice_last,
+            "skills_deck_focus": deck.get("current_focus_requirement") or deck.get("current_focus"),
+            "learning_signal": {
+                "verdict": ls.get("verdict"),
+                "headline": ls.get("headline"),
+                "detail": (ls.get("detail") or "")[:900],
+            },
+            "attempt_events_recent": recent_attempts,
             "enrollment": {
                 "curriculum_id": st.get("curriculum_id"),
                 "training_method_id": st.get("training_method_id"),
@@ -412,6 +447,8 @@ def build_anna_training_dashboard() -> dict[str, Any]:
                 "jack_delegate_started": act.jack_delegate_started,
                 "jack_delegate_failed": act.jack_delegate_failed,
                 "jack_ok_with_paper": act.jack_delegate_ok_with_paper,
+                "jack_ok_no_paper": act.jack_delegate_ok_no_paper,
+                "paper_manual_recorded": act.paper_manual_recorded,
                 "failed_or_blocked": act.failed_or_blocked,
             },
             "paper_harness_last": harness,
@@ -605,44 +642,88 @@ TRAINING_DASHBOARD_HTML = """<!DOCTYPE html>
     :root { --bg:#0d1117; --card:#161b22; --text:#e6edf3; --muted:#8b949e; --ok:#3fb950; --bad:#f85149; --accent:#58a6ff; }
     * { box-sizing: border-box; }
     body { font-family: ui-sans-serif, system-ui, sans-serif; background: var(--bg); color: var(--text); margin: 0; padding: 1rem; }
-    h1 { font-size: 1.1rem; font-weight: 600; margin: 0 0 0.75rem; }
-    .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 0.75rem; }
+    h1 { font-size: 1.15rem; font-weight: 600; margin: 0 0 0.35rem; }
+    .lead { font-size: 0.8rem; color: var(--muted); margin: 0 0 1rem; max-width: 52rem; line-height: 1.45; }
+    .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 0.75rem; }
     .card { background: var(--card); border: 1px solid #30363d; border-radius: 8px; padding: 0.75rem 1rem; }
-    .card h2 { font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted); margin: 0 0 0.5rem; }
-    .val { font-size: 1.35rem; font-weight: 600; font-variant-numeric: tabular-nums; }
-    .sub { font-size: 0.8rem; color: var(--muted); margin-top: 0.35rem; word-break: break-word; }
+    .card h2 { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted); margin: 0 0 0.5rem; }
+    .val { font-size: 1.25rem; font-weight: 600; font-variant-numeric: tabular-nums; }
+    .sub { font-size: 0.75rem; color: var(--muted); margin-top: 0.35rem; word-break: break-word; line-height: 1.35; }
     .ok { color: var(--ok); } .bad { color: var(--bad); }
-    table { width: 100%; border-collapse: collapse; font-size: 0.8rem; }
-    th, td { text-align: left; padding: 0.35rem 0.5rem; border-bottom: 1px solid #30363d; }
-    th { color: var(--muted); font-weight: 500; }
+    table.data { width: 100%; border-collapse: collapse; font-size: 0.8rem; }
+    table.data th, table.data td { text-align: left; padding: 0.35rem 0.45rem; border-bottom: 1px solid #30363d; vertical-align: top; }
+    table.data th { color: var(--muted); font-weight: 500; width: 38%; }
     #err { color: var(--bad); font-size: 0.85rem; margin-bottom: 1rem; display: none; }
-    #meta { font-size: 0.75rem; color: var(--muted); margin-top: 1rem; }
-    .card--sean { border-color: var(--accent); background: linear-gradient(165deg, #1c2128 0%, #161b22 100%); }
-    .card--sean h2 { color: var(--accent); }
-    .engagement-list { font-size: 0.88rem; line-height: 1.55; color: var(--text); margin: 0; padding-left: 1.15rem; }
-    .engagement-list li { margin-bottom: 0.45rem; }
-    .enroll { font-size: 0.8rem; color: var(--muted); margin-top: 0.5rem; }
+    #meta { font-size: 0.72rem; color: var(--muted); margin-top: 1rem; }
+    .ls { font-size: 0.85rem; line-height: 1.45; margin: 0 0 0.5rem; }
+    .ls-detail { font-size: 0.78rem; color: var(--muted); margin: 0 0 0.75rem; }
+    .chips { display: flex; flex-wrap: wrap; gap: 0.35rem; margin-top: 0.35rem; }
+    .chip { font-size: 0.72rem; padding: 0.15rem 0.45rem; background: #21262d; border-radius: 4px; border: 1px solid #30363d; }
+    details.raw { margin-top: 0.5rem; font-size: 0.75rem; color: var(--muted); }
+    details.raw pre { white-space: pre-wrap; word-break: break-word; margin: 0.35rem 0 0; }
   </style>
 </head>
 <body>
-  <h1>Anna training — hard-coded layout (values refresh)</h1>
+  <h1>Anna training — live</h1>
+  <p class="lead">
+    <strong>How to read this page:</strong> <em>Supervisor ticks</em> = training clock (school loop).
+    <em>Paper ledger rows</em> = trades actually logged for scoring (not the same as ticks).
+    <em>Attempt log lines</em> = delegate/manual events in a separate file — flat is normal if Jack paper is not wiring new events.
+  </p>
   <div id="err"></div>
-  <div class="card card--sean" style="margin-bottom:0.75rem">
-    <h2>What Anna is doing (training)</h2>
-    <ul class="engagement-list" id="v_bullets" aria-label="Training activity"></ul>
-    <p class="enroll" id="v_enroll"></p>
+  <div class="card" style="margin-bottom:0.75rem;border-color:#30363d">
+    <h2>Grade-12 learning signal (gates)</h2>
+    <p class="ls" id="v_ls_head">—</p>
+    <p class="ls-detail" id="v_ls_detail">—</p>
+    <p class="sub" id="v_enroll"></p>
+  </div>
+  <div class="card" style="margin-bottom:0.75rem;border-color:var(--accent)">
+    <h2>Last tick — analysis inputs &amp; outputs (from harness)</h2>
+    <p class="sub" id="v_snap_hint">Structured fields produced each time the harness runs <code>analyze_to_dict</code> (same path as live Anna analysis).</p>
+    <div class="chips" id="v_steps"></div>
+    <table class="data" id="v_analysis_tbl"><tbody id="v_analysis_body"></tbody></table>
+  </div>
+  <div class="card" style="margin-bottom:0.75rem">
+    <h2>Last tick — curriculum skill practice</h2>
+    <table class="data" id="v_sp_tbl"><tbody id="v_sp_body"></tbody></table>
   </div>
   <div class="grid">
-    <div class="card"><h2>Loop iteration</h2><div class="val" id="v_iter">—</div><div class="sub" id="v_tick"></div></div>
-    <div class="card"><h2>Gates</h2><div class="val" id="v_gate">—</div><div class="sub" id="v_gdetail"></div></div>
-    <div class="card"><h2>Paper rows</h2><div class="val" id="v_rows">—</div><div class="sub">W/L / P&amp;L</div><div class="val" id="v_pnl" style="font-size:1rem;margin-top:0.25rem">—</div></div>
-    <div class="card"><h2>Attempt events</h2><div class="val" id="v_attempts">—</div><div class="sub" id="v_jack"></div></div>
+    <div class="card"><h2>Supervisor ticks</h2><div class="val" id="v_iter">—</div><div class="sub" id="v_tick"></div></div>
+    <div class="card"><h2>Grade-12 gates (numeric)</h2><div class="val" id="v_gate">—</div><div class="sub" id="v_gdetail"></div></div>
+    <div class="card"><h2>Paper ledger (scored rows)</h2><div class="val" id="v_rows">—</div><div class="sub">Rows in <code>paper_trades.jsonl</code> — appended only when a paper trade is logged.</div><div class="val" id="v_pnl" style="font-size:1rem;margin-top:0.35rem">—</div></div>
+    <div class="card"><h2>Attempt log (event lines)</h2><div class="val" id="v_attempts">—</div><div class="sub" id="v_jack"></div></div>
   </div>
-  <div class="card" style="margin-top:0.75rem"><h2>Last paper harness (daemon)</h2><pre id="v_harness" style="margin:0;white-space:pre-wrap;font-size:0.8rem;color:var(--muted)">—</pre></div>
-  <div class="card" style="margin-top:0.75rem"><h2>Recent paper trades</h2><table><thead><tr><th>UTC</th><th>Sym</th><th>Side</th><th>Res</th><th>P&amp;L</th><th>Src</th></tr></thead><tbody id="tb"></tbody></table></div>
+  <div class="card" style="margin-top:0.75rem">
+    <h2>Paper ledger — recent rows (same strip as TUI)</h2>
+    <table class="data"><thead><tr><th>UTC</th><th>Sym</th><th>Side</th><th>Res</th><th>P&amp;L</th><th>Src</th></tr></thead><tbody id="tb"></tbody></table>
+  </div>
+  <div class="card" style="margin-top:0.75rem">
+    <h2>Attempt log — recent lines</h2>
+    <table class="data"><thead><tr><th>UTC</th><th>Phase</th><th>Status</th><th>Request</th></tr></thead><tbody id="tb_att"></tbody></table>
+  </div>
+  <div class="card" style="margin-top:0.75rem">
+    <h2>Harness state (execution bridge)</h2>
+    <p class="sub" id="v_harness_line">—</p>
+    <details class="raw"><summary>Raw JSON (debug)</summary><pre id="v_harness">—</pre></details>
+  </div>
   <p id="meta"></p>
   <script>
   const pollMs = 4000;
+  function harnessLine(h) {
+    if (!h || typeof h !== 'object') return '—';
+    if (h.enabled === false) return String(h.reason || 'harness off');
+    if (h.error) return 'error: ' + h.error;
+    if (h.skipped) return 'stopped: ' + h.skipped + (h.request_id ? ' · request_id=' + String(h.request_id).slice(0,12) : '');
+    if (h.paper_logged === true) return 'paper_logged · execution=' + String(h.execution_status||'') + ' · req=' + String(h.request_id||'').slice(0,12);
+    if (h.request_id) return 'request_id=' + String(h.request_id).slice(0,12) + '… (see skipped/stopped above if no fill)';
+    return '—';
+  }
+  function row(tbl, k, v) {
+    var tr = document.createElement('tr');
+    var th = document.createElement('th'); th.textContent = k;
+    var td = document.createElement('td'); td.textContent = v == null || v === '' ? '—' : String(v);
+    tr.appendChild(th); tr.appendChild(td); tbl.appendChild(tr);
+  }
   async function tick() {
     const err = document.getElementById('err');
     try {
@@ -650,23 +731,61 @@ TRAINING_DASHBOARD_HTML = """<!DOCTYPE html>
       const j = await r.json();
       err.style.display = 'none';
       if (!j.ok) { err.textContent = (j.error || 'error') + ': ' + (j.detail || ''); err.style.display = 'block'; return; }
-      var eng = j.training_engagement || {};
-      var ul = document.getElementById('v_bullets');
-      ul.innerHTML = '';
-      var lines = eng.bullets && eng.bullets.length ? eng.bullets : (eng.plain_english ? [eng.plain_english] : []);
-      if (!lines.length) {
-        var li0 = document.createElement('li');
-        li0.textContent = 'No training engagement summary yet.';
-        ul.appendChild(li0);
-      } else lines.forEach(function(line) {
-        var li = document.createElement('li');
-        li.textContent = line;
-        ul.appendChild(li);
-      });
+      var ls = j.learning_signal || {};
+      document.getElementById('v_ls_head').textContent = ls.headline || '—';
+      document.getElementById('v_ls_detail').textContent = ls.detail || '';
       var enr = j.enrollment || {};
       document.getElementById('v_enroll').textContent =
         'Curriculum: ' + (enr.curriculum_id || '—') + ' · Method: ' + (enr.training_method_id || '—') +
-        (eng.skills_deck_focus ? ' · Deck focus: ' + eng.skills_deck_focus : '');
+        (j.skills_deck_focus ? ' · Deck focus: ' + j.skills_deck_focus : '');
+      var as = j.analysis_snapshot || {};
+      var ab = document.getElementById('v_analysis_body');
+      ab.innerHTML = '';
+      document.getElementById('v_snap_hint').style.display = Object.keys(as).length ? 'block' : 'none';
+      var stel = document.getElementById('v_steps');
+      stel.innerHTML = '';
+      if (as.answer_source) {
+        var c0 = document.createElement('span');
+        c0.className = 'chip';
+        c0.textContent = 'answer_source: ' + as.answer_source;
+        stel.appendChild(c0);
+      }
+      (as.pipeline_steps || []).forEach(function(s) {
+        var c = document.createElement('span');
+        c.className = 'chip';
+        c.textContent = s;
+        stel.appendChild(c);
+      });
+      if (Object.keys(as).length) {
+        row(ab, 'Generated (UTC)', as.generated_at || '—');
+        row(ab, 'Headline', as.interpretation_headline);
+        row(ab, 'Summary', as.interpretation_summary);
+        row(ab, 'Risk level', as.risk_level);
+        row(ab, 'Risk factors', (as.risk_factors || []).join(' · ') || '—');
+        row(ab, 'Suggested intent', as.suggested_intent);
+        row(ab, 'Suggested rationale', as.suggested_rationale || '—');
+        row(ab, 'Market price / spread', (as.market_price != null ? as.market_price : '—') + ' / ' + (as.market_spread != null ? as.market_spread : '—'));
+        row(ab, 'Regime', as.regime || '—');
+        row(ab, 'Signals', (as.interpretation_signals || []).join(', ') || '—');
+        row(ab, 'Cumulative log entries (school)', as.cumulative_log_entries != null ? String(as.cumulative_log_entries) : '—');
+        row(ab, 'Notes (tail)', (as.analysis_notes_tail || []).join(' | ') || '—');
+      } else {
+        var tr = document.createElement('tr');
+        var td = document.createElement('td');
+        td.colSpan = 2;
+        td.textContent = 'No analysis snapshot yet — upgrade Karpathy daemon after deploy (harness must persist analysis_snapshot).';
+        tr.appendChild(td);
+        ab.appendChild(tr);
+      }
+      var sp = j.skill_practice_last || {};
+      var sb = document.getElementById('v_sp_body');
+      sb.innerHTML = '';
+      row(sb, 'Drill ran this tick', sp.ran ? 'yes' : 'no');
+      row(sb, 'Skill id', sp.skill_id || '—');
+      row(sb, 'Passed', sp.passed != null ? (sp.passed ? 'yes' : 'no') : '—');
+      row(sb, 'Summary', sp.summary || '—');
+      row(sb, 'Practice kind', sp.practice_kind || '—');
+      row(sb, 'Detail', sp.detail || '—');
       document.getElementById('v_iter').textContent = j.loop.karpathy_loop_iteration ?? '—';
       document.getElementById('v_tick').textContent = j.loop.karpathy_loop_last_tick_utc ? 'last tick ' + j.loop.karpathy_loop_last_tick_utc : '';
       const gp = j.gates.pass;
@@ -678,7 +797,14 @@ TRAINING_DASHBOARD_HTML = """<!DOCTYPE html>
       document.getElementById('v_rows').textContent = j.paper_cohort.row_count;
       document.getElementById('v_pnl').textContent = 'W'+j.paper_cohort.wins+' L'+j.paper_cohort.losses+' · $'+Number(j.paper_cohort.total_pnl_usd||0).toFixed(2);
       document.getElementById('v_attempts').textContent = j.attempts.total_events;
-      document.getElementById('v_jack').textContent = 'Jack ok+w/paper '+j.attempts.jack_ok_with_paper+' · failed '+j.attempts.jack_delegate_failed;
+      var aj = j.attempts || {};
+      document.getElementById('v_jack').textContent =
+        'Jack delegate started ' + (aj.jack_delegate_started||0) +
+        ' · ok+paper ' + (aj.jack_ok_with_paper||0) +
+        ' · ok no paper ' + (aj.jack_ok_no_paper||0) +
+        ' · manual log ' + (aj.paper_manual_recorded||0) +
+        ' · failed ' + (aj.jack_delegate_failed||0);
+      document.getElementById('v_harness_line').textContent = harnessLine(j.paper_harness_last);
       document.getElementById('v_harness').textContent = JSON.stringify(j.paper_harness_last || {}, null, 2);
       const tb = document.getElementById('tb');
       tb.innerHTML = '';
@@ -694,7 +820,18 @@ TRAINING_DASHBOARD_HTML = """<!DOCTYPE html>
         });
         tb.appendChild(tr);
       });
-      document.getElementById('meta').textContent = 'Updated ' + (j.at_utc || '') + ' · ' + JSON.stringify(j.paths || {});
+      var tba = document.getElementById('tb_att');
+      tba.innerHTML = '';
+      (j.attempt_events_recent || []).forEach(function(ev) {
+        var tr = document.createElement('tr');
+        ['ts_utc','phase','status','request_id'].forEach(function(k) {
+          var td = document.createElement('td');
+          td.textContent = ev[k] != null && ev[k] !== '' ? String(ev[k]) : '—';
+          tr.appendChild(td);
+        });
+        tba.appendChild(tr);
+      });
+      document.getElementById('meta').textContent = 'Updated ' + (j.at_utc || '') + ' · trace ' + (j.trace_id||'').slice(0,8);
     } catch (e) {
       err.textContent = String(e);
       err.style.display = 'block';
