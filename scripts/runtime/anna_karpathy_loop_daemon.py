@@ -209,6 +209,13 @@ def main(argv: list[str] | None = None) -> int:
         else:
             target = interval
 
+        print(
+            f"[karpathy_loop] Sleeping {target:.0f}s until next tick (not hung — interval). "
+            "Ctrl+C or SIGTERM to stop.",
+            file=sys.stderr,
+            flush=True,
+        )
+
         slept = 0.0
         while slept < target and not stop["flag"]:
             step = min(1.0, target - slept)

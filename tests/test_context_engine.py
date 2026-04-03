@@ -151,3 +151,69 @@ def test_status_disabled_unknown(monkeypatch: pytest.MonkeyPatch, tmp_path: Path
     st = build_context_engine_status(tmp_path)
     assert st["status"] == "unknown"
     assert st["reason_code"] == "CTX-ENGINE-DISABLED"
+
+
+def _load_message_router_standalone():
+    """Avoid `telegram_interface` package __init__ (eager `agent_dispatcher` → anna chain)."""
+    import importlib.util
+
+    name = "tests._message_router_for_hashtag_tests"
+    path = REPO / "scripts" / "runtime" / "telegram_interface" / "message_router.py"
+    spec = importlib.util.spec_from_file_location(name, path)
+    assert spec and spec.loader
+    mod = importlib.util.module_from_spec(spec)
+    sys.modules[name] = mod
+    spec.loader.exec_module(mod)
+    return mod
+
+
+def test_hashtag_commands_route_to_data() -> None:
+    """Pure-hashtag lines → composable operator mode (see compose_operator_hashtag_message)."""
+    mod = _load_message_router_standalone()
+    route_message = mod.route_message
+
+    r = route_message("#status")
+    assert r.agent == "data"
+    assert r.data_mode == "hashtag_composed"
+    assert r.hashtag_tokens == ("status",)
+
+    r2 = route_message("#context_engine")
+    assert r2.data_mode == "hashtag_composed"
+    assert r2.hashtag_tokens == ("context_engine",)
+
+    r3 = route_message("#status #system")
+    assert r3.hashtag_tokens == ("status", "system")
+
+    r4 = route_message("#status  #context-engine")
+    assert r4.hashtag_tokens == ("status", "context-engine")
+
+    assert route_message("hello").agent == "anna"
+    assert route_message("hello #status").agent == "anna"
+
+    r_anna = route_message("#anna #report_card")
+    assert r_anna.agent == "data"
+    assert r_anna.data_mode == "hashtag_composed"
+    assert "report_card" in r_anna.hashtag_tokens or "anna" in r_anna.hashtag_tokens
+
+
+def test_compose_operator_mega_and_slice() -> None:
+    import importlib.util
+
+    sys.path.insert(0, str(REPO / "scripts" / "runtime"))
+    path = REPO / "scripts" / "runtime" / "telegram_interface" / "data_status.py"
+    name = "tests._data_status_compose"
+    spec = importlib.util.spec_from_file_location(name, path)
+    assert spec and spec.loader
+    mod = importlib.util.module_from_spec(spec)
+    sys.modules[name] = mod
+    spec.loader.exec_module(mod)
+    compose = mod.compose_operator_hashtag_message
+
+    mega = compose(("status", "system"))
+    assert "Full operator status" in mega or "Runtime" in mega
+
+    ce_only = compose(("status", "context_engine"))
+    assert "context" in ce_only.lower() or "Reason:" in ce_only or "Offline" in ce_only or "Online" in ce_only
+
+    anna_rep = compose(("anna", "report_card"))
+    assert "Anna" in anna_rep or "training" in anna_rep.lower()
