@@ -31,6 +31,7 @@ def append_paper_trade(
     notes: str = "",
     trade_id: str | None = None,
     ts_utc: str | None = None,
+    log_manual_activity: bool = True,
 ) -> dict[str, Any]:
     r = (result or "").strip().lower()
     if r not in VALID_RESULTS:
@@ -51,6 +52,24 @@ def append_paper_trade(
     p.parent.mkdir(parents=True, exist_ok=True)
     with p.open("a", encoding="utf-8") as f:
         f.write(json.dumps(row, ensure_ascii=False) + "\n")
+    if log_manual_activity:
+        try:
+            from modules.anna_training.trade_attempts import append_trade_attempt
+
+            append_trade_attempt(
+                phase="paper_manual",
+                status="recorded",
+                trade_id=str(row.get("trade_id")),
+                detail={
+                    "symbol": row.get("symbol"),
+                    "side": row.get("side"),
+                    "result": row.get("result"),
+                    "pnl_usd": row.get("pnl_usd"),
+                    "venue": row.get("venue"),
+                },
+            )
+        except Exception:
+            pass
     return row
 
 

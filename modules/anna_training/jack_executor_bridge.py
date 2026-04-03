@@ -26,6 +26,7 @@ import subprocess
 from typing import Any
 
 from modules.anna_training.paper_trades import append_paper_trade
+from modules.anna_training.trade_attempts import append_trade_attempt
 
 
 def _env_bool(name: str, default: bool) -> bool:
@@ -47,6 +48,20 @@ def maybe_delegate_to_jack(
     Returns a JSON-serializable status dict.
     """
     cmd = (os.environ.get("BLACKBOX_JACK_EXECUTOR_CMD") or "").strip()
+    rid = str((execution_request or {}).get("request_id") or "")
+
+    def _jack_fail(err: str, **extra: Any) -> dict[str, Any]:
+        try:
+            append_trade_attempt(
+                phase="jack_handoff",
+                status="fail",
+                request_id=rid or None,
+                detail={"error": err, **extra},
+            )
+        except Exception:
+            pass
+        return {"delegated": True, "ok": False, "error": err, **{k: v for k, v in extra.items() if k in ("returncode", "stderr", "stdout", "stdout_preview")}}
+
     if not cmd:
         return {"delegated": False, "reason": "BLACKBOX_JACK_EXECUTOR_CMD unset"}
 
@@ -68,6 +83,7 @@ def maybe_delegate_to_jack(
         "mock_execution_result": mock_execution_result,
     }
     try:
+        append_trade_attempt(phase="jack_handoff", status="started", request_id=rid or None, detail={})
         proc = subprocess.run(
             argv,
             input=json.dumps(payload, ensure_ascii=False),
@@ -77,33 +93,40 @@ def maybe_delegate_to_jack(
             check=False,
         )
     except subprocess.TimeoutExpired:
-        return {"delegated": True, "ok": False, "error": "jack_executor_timeout"}
+        return _jack_fail("jack_executor_timeout")
     except OSError as e:
-        return {"delegated": True, "ok": False, "error": f"jack_spawn_failed:{e!s}"}
+        return _jack_fail(f"jack_spawn_failed:{e!s}")
 
     raw_out = (proc.stdout or "").strip()
     if proc.returncode != 0:
-        return {
-            "delegated": True,
-            "ok": False,
-            "error": "jack_nonzero_exit",
-            "returncode": proc.returncode,
-            "stderr": (proc.stderr or "")[-2000:],
-            "stdout": raw_out[-2000:],
-        }
+        return _jack_fail(
+            "jack_nonzero_exit",
+            returncode=proc.returncode,
+            stderr=(proc.stderr or "")[-2000:],
+            stdout=raw_out[-2000:],
+        )
     if not raw_out:
-        return {"delegated": True, "ok": False, "error": "jack_empty_stdout"}
+        return _jack_fail("jack_empty_stdout")
 
     try:
         out = json.loads(raw_out)
     except json.JSONDecodeError:
-        return {"delegated": True, "ok": False, "error": "jack_stdout_not_json", "stdout_preview": raw_out[:500]}
+        return _jack_fail("jack_stdout_not_json", stdout_preview=raw_out[:500])
 
     if not out.get("ok"):
-        return {"delegated": True, "ok": False, "error": out.get("error") or "jack_rejected"}
+        return _jack_fail(str(out.get("error") or "jack_rejected"))
 
     pt = out.get("paper_trade")
     if not isinstance(pt, dict):
+        try:
+            append_trade_attempt(
+                phase="jack_handoff",
+                status="ok",
+                request_id=rid or None,
+                detail={"paper_logged": False, "note": "no paper_trade in response"},
+            )
+        except Exception:
+            pass
         return {"delegated": True, "ok": True, "paper_logged": False, "note": "no paper_trade in response"}
 
     try:
@@ -115,8 +138,19 @@ def maybe_delegate_to_jack(
             timeframe=str(pt.get("timeframe") or ""),
             venue=str(pt.get("venue") or "jupiter_perp"),
             notes=str(pt.get("notes") or ""),
+            log_manual_activity=False,
         )
     except (TypeError, ValueError) as e:
-        return {"delegated": True, "ok": False, "error": f"paper_trade_invalid:{e!s}"}
+        return _jack_fail(f"paper_trade_invalid:{e!s}")
 
+    try:
+        append_trade_attempt(
+            phase="jack_handoff",
+            status="ok",
+            request_id=rid or None,
+            trade_id=str(row.get("trade_id")),
+            detail={"paper_logged": True},
+        )
+    except Exception:
+        pass
     return {"delegated": True, "ok": True, "paper_logged": True, "trade": row}

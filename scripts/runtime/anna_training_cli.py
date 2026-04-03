@@ -71,6 +71,10 @@ from modules.anna_training.paper_trades import (  # noqa: E402
     load_paper_trades,
     summarize_trades,
 )
+from modules.anna_training.trade_attempts import (  # noqa: E402
+    ATTEMPTS_FILE,
+    summarize_trade_activity,
+)
 from modules.anna_training.llm_cross_check import (  # noqa: E402
     append_cross_check_log,
     run_llm_cross_check,
@@ -569,6 +573,24 @@ def _cmd_dashboard(args: argparse.Namespace | None = None) -> int:
         for i, step in enumerate(meth.get("steps") or [], start=1):
             steps_tbl.add_row(str(i), step)
         console.print(steps_tbl)
+
+        act = summarize_trade_activity()
+        trade_vis = (
+            "[bold]Paper ledger[/bold] (what gates score): "
+            f"wins [green]{s.wins}[/green]  |  losses [yellow]{s.losses}[/yellow]  |  "
+            f"rows [cyan]{s.trade_count}[/cyan]  |  breakeven {s.breakeven}  |  abstain {s.abstain}\n"
+            "[bold]Attempt log[/bold] (Jack / execution path — not silent misses): "
+            f"Jack delegate started {act.jack_delegate_started}  |  "
+            f"Jack failed {act.jack_delegate_failed}  |  "
+            f"Jack OK + paper row {act.jack_delegate_ok_with_paper}  |  "
+            f"Jack OK no paper {act.jack_delegate_ok_no_paper}  |  "
+            f"execution blocked {act.execution_blocked}  |  "
+            f"manual CLI logged {act.paper_manual_recorded}\n"
+            f"[dim]Failed + blocked = {act.failed_or_blocked}. "
+            f"Attempts file: {anna_training_dir() / ATTEMPTS_FILE} "
+            f"(manual/Jack counts are new events only; ledger table still shows all historical rows.)[/dim]"
+        )
+        console.print(Panel.fit(trade_vis, title="Trades — ledger vs attempts", border_style="yellow"))
 
         console.print(
             Panel.fit(

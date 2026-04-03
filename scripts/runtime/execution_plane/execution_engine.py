@@ -19,10 +19,25 @@ from .audit_logger import log_audit
 from .kill_switch import is_active
 
 
+def _log_execution_blocked(*, request_id: str, reason: str) -> None:
+    try:
+        from modules.anna_training.trade_attempts import append_trade_attempt
+
+        append_trade_attempt(
+            phase="execution",
+            status="blocked",
+            request_id=request_id,
+            detail={"reason": reason},
+        )
+    except Exception:
+        pass
+
+
 def run_execution(request_id: str) -> dict[str, Any]:
     log_audit("execution_attempted", {"request_id": request_id})
 
     if is_active():
+        _log_execution_blocked(request_id=request_id, reason="kill_switch_active")
         result: dict[str, Any] = {
             "status": "blocked",
             "reason": "kill switch active",
@@ -33,11 +48,13 @@ def run_execution(request_id: str) -> dict[str, Any]:
 
     req = get_request(request_id)
     if not req:
+        _log_execution_blocked(request_id=request_id, reason="unknown_request")
         result = {"status": "blocked", "reason": "unknown request", "request_id": request_id}
         outcome, insight = record_execution_feedback(result)
         return {**result, "outcome": outcome, "insight": insight}
 
     if req.get("approval_status") != "approved":
+        _log_execution_blocked(request_id=request_id, reason="not_approved")
         result = {"status": "blocked", "reason": "not approved", "request_id": request_id}
         outcome, insight = record_execution_feedback(result)
         return {**result, "outcome": outcome, "insight": insight}
