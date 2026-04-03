@@ -70,6 +70,14 @@ This keeps the important University mechanics without forcing the entire standal
 
 **Graduation act:** Formal **12th grade** completion is **not** automatic. It runs under **manual review** — **exam board recommends**, **humans graduate** — however your governance packet is written. The CLI can print **PASS/FAIL** for `gates`; it does not issue a diploma.
 
+### 1.4 Fund assignment, growth objectives, math bar, algorithms (binding spec)
+
+**Assigned notional fund, explicit growth goals, statistical competence expectation, and the meaning of “algorithm”** (trading vs governance) are **contract-locked** in:
+
+- [`anna_fund_objectives_and_algorithms_contract.md`](anna_fund_objectives_and_algorithms_contract.md)
+
+That document **supersedes unstated assumptions** (e.g. “she’s a math expert,” “there’s a $1k→$10k goal,” “winning psychology”) unless those are recorded there or in a higher directive. Implementation of a **ledger** and automated fund enforcement may be phased; the **definitions and obligations** apply as soon as a “funded” track is claimed.
+
 ## 2. Anna is an agent, not the LLM
 
 Anna must be treated as an agentic system.
