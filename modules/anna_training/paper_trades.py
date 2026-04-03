@@ -1,7 +1,9 @@
 """Append-only paper trade log for grade-12 report card (JSONL under anna_training dir).
 
-Rows may be market-grounded paper, operator ``log-trade``, or lab synthetic — see
-``docs/architect/ANNA_GOES_TO_SCHOOL.md`` §1.1.1.
+Contract intent: **paper and live use the same pipeline** (analysis → request → adapter); the **only**
+deliberate difference is **settlement** — no real money / no live venue submit; paper uses sim or
+notional outcomes. Rows may still be market-grounded paper, operator ``log-trade``, or lab synthetic;
+see ``docs/architect/ANNA_GOES_TO_SCHOOL.md`` §1.1.1.
 """
 
 from __future__ import annotations

@@ -1,5 +1,9 @@
 """Optional handoff: after an approved execution request completes, invoke Jack (executor).
 
+**Paper vs live (intent):** same **execution_request** shape and handoff; **settlement** differs —
+paper/sim mapping or no real capital vs live venue submit. Anna and the control plane stay on the
+same path until the adapter.
+
 **Separation of roles:** Anna analyzes and emits strategy (``anna_proposal_v1`` / go–no-go posture).
 She does **not** implement venue submit mechanics. **Jack** is the Jupiter executor: how the trade is
 placed, filled, or paper-mapped is **Jack’s** concern; this bridge only passes the approved

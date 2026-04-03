@@ -61,7 +61,7 @@ This keeps the important University mechanics without forcing the entire standal
 
 ### 1.1.1 Paper trading — definition (binding) vs rows in `paper_trades.jsonl`
 
-**Paper trading** (the thing we mean when we say Anna is “trading paper”) is **the same operational chain as live trading** — signal / risk / intent → **execution request** → **venue or paper adapter** → **fill and P&amp;L model** → durable log — **except** no real capital is at risk (simulation, sandbox, or notional accounting). It must be **grounded in market context the strategy is supposed to use** (quotes, snapshots, fees, slippage model as applicable) and **traceable** (e.g. request id, snapshot id), or it is not a defensible claim about skill.
+**Paper trading** (the thing we mean when we say Anna is “trading paper”) is **the same code path as live trading** through analysis, gating, and **execution request** — the **only** deliberate difference is **settlement**: real capital movement and live venue submit are **not** performed; a **paper / sim adapter** (or governed notional accounting) produces fills and P&amp;L instead. Everything upstream (market context, request shape, audit) should match live **except** that money step. It must still be **grounded** and **traceable** (e.g. request id, snapshot id), or it is not a defensible claim about skill.
 
 The file **`paper_trades.jsonl`** is an **append-only ledger**. Rows may come from:
 
