@@ -11,6 +11,7 @@ Examples (repo root):
   python3 scripts/runtime/anna_training_cli.py start --once   # assign + single dashboard, then exit (scripting)
   python3 scripts/runtime/anna_training_cli.py gates   # PASS/FAIL vs 60% + min decisive trades (see env vars)
   python3 scripts/runtime/anna_training_cli.py check-readiness   # Solana RPC + Pyth artifact + DB — run first
+  python3 scripts/runtime/anna_training_cli.py loop-daemon       # Karpathy loop until SIGTERM (heartbeat JSONL)
   python3 scripts/runtime/anna_training_cli.py status
   python3 scripts/runtime/anna_training_cli.py log-trade --symbol SOL-PERP --side long --result won --pnl-usd 10.5 --timeframe 5m
   python3 scripts/runtime/anna_training_cli.py dashboard
@@ -22,6 +23,7 @@ Examples (repo root):
 from __future__ import annotations
 
 import argparse
+import importlib.util
 import json
 import sys
 from pathlib import Path
@@ -425,8 +427,24 @@ def main(argv: list[str] | None = None) -> int:
     ap_z.add_argument("--method-id", default="karpathy_loop_v1")
     ap_z.add_argument("--once", action="store_true")
 
+    ap_loop = sub.add_parser(
+        "loop-daemon",
+        help="Karpathy learning loop until SIGTERM: heartbeat JSONL + state iteration (no preflight gate on entry).",
+    )
+    ap_loop.add_argument(
+        "--interval-sec",
+        type=float,
+        default=None,
+        help="Seconds between ticks (default ANNA_LOOP_INTERVAL_SEC or 300).",
+    )
+    ap_loop.add_argument(
+        "--once",
+        action="store_true",
+        help="Single tick then exit.",
+    )
+
     args = p.parse_args(argv)
-    if args.cmd not in ("check-readiness", "gates"):
+    if args.cmd not in ("check-readiness", "gates", "loop-daemon"):
         rc = _require_preflight_or_exit()
         if rc is not None:
             return rc
@@ -454,6 +472,20 @@ def main(argv: list[str] | None = None) -> int:
         return _cmd_start(args)
     if args.cmd == "school":
         return _cmd_school(args)
+    if args.cmd == "loop-daemon":
+        lp = ROOT / "scripts" / "runtime" / "anna_karpathy_loop_daemon.py"
+        spec = importlib.util.spec_from_file_location("anna_karpathy_loop_daemon", lp)
+        if spec is None or spec.loader is None:
+            print(json.dumps({"error": "cannot_load_loop_daemon", "path": str(lp)}), file=sys.stderr)
+            return 2
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        argv_ld: list[str] = []
+        if getattr(args, "interval_sec", None) is not None:
+            argv_ld.extend(["--interval-sec", str(args.interval_sec)])
+        if args.once:
+            argv_ld.append("--once")
+        return int(mod.main(argv_ld))
     return 1
 
 
