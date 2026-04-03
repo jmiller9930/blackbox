@@ -10,6 +10,7 @@
 
 ```bash
 # repo root — single entry (readiness JSON + gates JSON + start); optional: --once
+# Lab host: scripts/anna_training_launch_server.sh --once runs school then starts the long-running Karpathy loop daemon (same method; ANNA_TRAINING_LAUNCH_DAEMON=0 for school-only).
 python3 scripts/runtime/anna_go_to_school.py
 # equivalent: python3 scripts/runtime/anna_training_cli.py school
 # preflight + Grade 12 + Karpathy only (no readiness/gates print first):
