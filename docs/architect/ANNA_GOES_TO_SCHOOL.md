@@ -59,6 +59,18 @@ This keeps the important University mechanics without forcing the entire standal
 
 **12th grade** (trading college) means **paper / simulation harness only** — **no live venue** (no Jack/Billy production submits) until humans and policy move Anna past that gate. In code this is curriculum id **`grade_12_paper_only`**. The **first** invoked training method is **`karpathy_loop_v1`** (the loop in §3 below), assigned via `anna_training_cli.py`.
 
+### 1.1.1 Paper trading — definition (binding) vs rows in `paper_trades.jsonl`
+
+**Paper trading** (the thing we mean when we say Anna is “trading paper”) is **the same operational chain as live trading** — signal / risk / intent → **execution request** → **venue or paper adapter** → **fill and P&amp;L model** → durable log — **except** no real capital is at risk (simulation, sandbox, or notional accounting). It must be **grounded in market context the strategy is supposed to use** (quotes, snapshots, fees, slippage model as applicable) and **traceable** (e.g. request id, snapshot id), or it is not a defensible claim about skill.
+
+The file **`paper_trades.jsonl`** is an **append-only ledger**. Rows may come from:
+
+- **Market-grounded paper** — Jack / paper loop / adapter output tied to real context (the normal meaning of “paper trading”).
+- **Operator `log-trade`** — human-attested outcomes; governance decides whether that counts toward skill claims.
+- **Lab synthetic cohort ticks** — optional `ANNA_KARPATHY_AUTO_PAPER_HARNESS` in `modules/anna_training/harness_auto_tick.py`; rows are tagged **`synthetic: true`**, **`source=karpathy_harness_sim`**. These are **volume / gate mechanics**, **not** a substitute for market-grounded paper when judging edge. Policy and exam-board judgment may exclude them from “real” paper metrics.
+
+If a row is not market-grounded, **do not** treat it as proof that Anna “beat the market” — only that the harness produced a scored line.
+
 ### 1.2 Contract lock (12th grade + Karpathy loop — binding)
 
 - **Curriculum id (canonical):** `grade_12_paper_only` — defined in `modules/anna_training/catalog.py` (`CURRICULA`).

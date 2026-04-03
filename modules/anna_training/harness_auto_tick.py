@@ -1,8 +1,11 @@
-"""Optional automated paper rows on Karpathy ticks — lab cohort fuel (opt-in, synthetic).
+"""Optional automated rows on Karpathy ticks — **lab cohort fuel only** (opt-in, synthetic).
 
-Real venue fills still come from Jack / operator ``log-trade``. This module exists so the
-**numeric gate** can accumulate decisive outcomes when no human is clicking, without pretending
-rows are live execution.
+This is **not** “paper trading” in the sense of ANNA_GOES_TO_SCHOOL.md §1.1.1 (same chain as live,
+market-grounded, sim settlement). These lines exist so the numeric gate can accumulate **decisive
+counts** when enabled; they are tagged ``synthetic: true`` and must not be confused with edge.
+
+Real paper-trading outcomes still come from the **execution / paper adapter path** (e.g. Jack) or
+operator ``log-trade`` with governance.
 
 Env (all optional except the master switch):
   ANNA_KARPATHY_AUTO_PAPER_HARNESS — default off; set 1/true/on to enable.
