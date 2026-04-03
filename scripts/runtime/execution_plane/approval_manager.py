@@ -9,7 +9,7 @@ from typing import Any
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from anna_modules.util import utc_now
+from anna_modules.util import PROPOSAL_SCHEMA_VERSION, utc_now
 from _paths import repo_root
 
 from .audit_logger import log_audit
@@ -29,11 +29,29 @@ def _save_requests(data: dict[str, Any]) -> None:
 
 
 def _minimal_proposal() -> dict[str, Any]:
+    """Valid ``anna_proposal_v1`` for tests/CLI when no file is passed (OBSERVATION_ONLY — Jack path idle)."""
+    now = utc_now()
     return {
         "kind": "anna_proposal_v1",
-        "schema_version": 1,
+        "schema_version": PROPOSAL_SCHEMA_VERSION,
+        "generated_at": now,
+        "source_analysis_reference": {"task_id": None, "kind": "anna_analysis_v1"},
         "proposal_type": "OBSERVATION_ONLY",
-        "proposal_summary": "Synthetic proposal for execution plane (mock).",
+        "proposal_summary": "Synthetic Anna-sourced placeholder for execution plane (tests/CLI default).",
+        "proposed_effect": {
+            "paper_mode_intent": "unknown",
+            "guardrail_interaction": "Synthetic; not from live analysis.",
+            "reasoning_scope": [],
+        },
+        "validation_plan": {"what_to_watch": [], "success_signals": [], "failure_signals": []},
+        "supporting_reasoning": {
+            "interpretation_summary": "",
+            "risk_level": "low",
+            "policy_alignment": "synthetic",
+            "concepts_used": [],
+        },
+        "caution_flags": [],
+        "notes": ["synthetic_minimal_proposal_v1"],
     }
 
 
@@ -42,8 +60,14 @@ def create_request(
     *,
     proposal_id: str | None = None,
 ) -> dict[str, Any]:
+    from .anna_signal_execution import require_anna_proposal_for_execution_request, validate_anna_proposal_v1
+
     rid = str(uuid.uuid4())
     prop = proposal or _minimal_proposal()
+    if require_anna_proposal_for_execution_request():
+        ok, err = validate_anna_proposal_v1(prop)
+        if not ok:
+            raise ValueError(f"BLACKBOX_REQUIRE_ANNA_PROPOSAL_FOR_EXECUTION: {err}")
     prop_id = proposal_id
     if prop_id is None:
         ref = prop.get("source_analysis_reference") or {}

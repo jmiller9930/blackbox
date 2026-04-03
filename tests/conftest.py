@@ -6,3 +6,5 @@ os.environ.setdefault("ANNA_USE_LLM", "0")
 os.environ.setdefault("ANNA_SKIP_PREFLIGHT", "1")
 # Heavy math stack (statsmodels/arch/sklearn) off unless a test enables it.
 os.environ.setdefault("ANNA_MATH_ENGINE_FULL", "0")
+# Avoid writing execution_request_v1 rows during unrelated tests (enable per test if needed).
+os.environ.setdefault("ANNA_AUTO_EXECUTION_REQUEST", "0")

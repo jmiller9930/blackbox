@@ -279,6 +279,27 @@ def _format_data_body(payload: dict[str, Any], *, display_name: str | None = Non
             _closing("status"),
         ]
         return _truncate("\n".join(parts))
+    if mode == "hashtag_composed":
+        st = str(payload.get("status_text") or "")
+        lead = (
+            "Composable operator hashtags (pure #tokens only). "
+            "Example: #status #system = full stack; #status #context_engine = slice only."
+        )
+        if display_name:
+            lead = f"{display_name}, {lead}"
+        parts = [
+            "State",
+            lead,
+            "",
+            "Facts",
+            st,
+            "",
+            "Next check",
+            "Say #ops_help for the tag index. Chat output is read-only unless a future gated op is enabled.",
+            "",
+            _closing("hashtag-composed"),
+        ]
+        return _truncate("\n".join(parts))
     if mode == "infra":
         infra = str(payload.get("infra_text") or "")
         st = str(payload.get("status_text") or "")
@@ -338,6 +359,17 @@ def _anna_model_limitation_note(aa: dict[str, Any]) -> str:
     )
 
 
+def _execution_handoff_footer(data: dict[str, Any]) -> str:
+    eh = data.get("execution_handoff") or {}
+    rid = eh.get("request_id")
+    if not rid:
+        return ""
+    return (
+        "\n\n— Execution handoff: request "
+        f"{rid} pending approval → Jack (Jupiter) after approve + run_execution."
+    )
+
+
 def _format_anna_body(data: dict[str, Any], *, display_name: str | None = None) -> str:
     aa = data.get("anna_analysis") or {}
     interp = aa.get("interpretation") or {}
@@ -382,6 +414,7 @@ def _format_anna_body(data: dict[str, Any], *, display_name: str | None = None) 
             hl = headline.strip()
             text = f"{text}\n\n{hl}"
         text += _anna_model_limitation_note(aa)
+        text += _execution_handoff_footer(data)
         return _truncate(text)
 
     # Debug-style: extra sections only when verbose — still avoid WATCH / "low risk" / empty posture.
@@ -428,7 +461,9 @@ def _format_anna_body(data: dict[str, Any], *, display_name: str | None = None) 
     lim = _anna_model_limitation_note(aa).strip()
     if lim:
         parts.append(lim)
-    return _truncate("\n".join(p for p in parts if p))
+    body = "\n".join(p for p in parts if p)
+    body += _execution_handoff_footer(data)
+    return _truncate(body)
 
 
 def _format_report_body(payload: dict[str, Any], *, display_name: str | None = None) -> str:

@@ -2,7 +2,7 @@
 
 # Agent Registry — BlackBox System
 
-Generated: 2026-04-03T18:20:05.162092+00:00
+Generated: 2026-04-03T18:28:06.212818+00:00
 
 ---
 

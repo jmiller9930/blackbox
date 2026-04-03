@@ -1,4 +1,8 @@
-"""Dispatch routed messages to Anna, DATA, or Cody (no execution plane)."""
+"""Dispatch routed messages to Anna, DATA, or Cody.
+
+Anna: full analysis may create a **pending** ``execution_request_v1`` (Anna-sourced ``anna_proposal_v1``)
+for strategy signals so the Jack path is wired; does not approve, run execution, or call Jack.
+"""
 from __future__ import annotations
 
 import os
@@ -49,7 +53,7 @@ def telegram_anna_use_llm() -> bool:
 def dispatch(routed: RoutedMessage, *, display_name: str | None = None) -> dict[str, Any]:
     """
     Returns a dict with \"kind\" and payload for response_formatter.
-    Does not call run_execution, approval, or kill switch.
+    Does not call run_execution or Jack; may create a pending execution request (see execution_plane).
     """
     db = default_sqlite_path()
 
@@ -156,6 +160,16 @@ def dispatch(routed: RoutedMessage, *, display_name: str | None = None) -> dict[
             use_llm=telegram_anna_use_llm(),
             skip_preflight=True,
         )
+        if not out.get("preflight"):
+            from execution_plane.anna_signal_execution import try_create_execution_request_from_anna_analysis
+
+            analysis = out.get("anna_analysis") or {}
+            handoff = try_create_execution_request_from_anna_analysis(
+                analysis,
+                source_task_id=out.get("stored_task_id"),
+            )
+            if handoff:
+                out = {**out, "execution_handoff": handoff}
         return {"kind": "anna", "data": out}
 
     if routed.agent == "cody":
