@@ -139,6 +139,11 @@ def maybe_delegate_to_jack(
             venue=str(pt.get("venue") or "jupiter_perp"),
             notes=str(pt.get("notes") or ""),
             log_manual_activity=False,
+            source="jack_bridge",
+            proposal_ref=rid or None,
+            strategy_label=(
+                xs if (xs := str(pt.get("strategy_label") or "").strip()) else None
+            ),
         )
     except (TypeError, ValueError) as e:
         return _jack_fail(f"paper_trade_invalid:{e!s}")

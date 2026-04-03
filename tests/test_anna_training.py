@@ -544,3 +544,74 @@ def test_grade12_bankroll_return_gate(tmp_path: Path, monkeypatch) -> None:
     g12b = evaluate_grade12_gates()
     assert g12b["numeric_gate_pass"]
     assert float(g12b["paper_equity_usd"] or 0) >= 1050.0
+
+
+def test_harness_auto_tick_appends_synthetic_paper_row(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setenv("BLACKBOX_ANNA_TRAINING_DIR", str(tmp_path))
+    monkeypatch.setenv("ANNA_GRADE12_MIN_DECISIVE_TRADES", "99")
+    from modules.anna_training.curriculum_tools import TOOL_IDS
+    from modules.anna_training.gates import evaluate_grade12_gates
+    from modules.anna_training.harness_auto_tick import run_automated_paper_harness_tick
+    from modules.anna_training.paper_trades import load_paper_trades
+    from modules.anna_training.store import load_state, save_state
+    from modules.anna_training.trade_attempts import summarize_trade_activity
+
+    st = load_state()
+    st["grade_12_tool_mastery"] = {tid: True for tid in TOOL_IDS}
+    save_state(st)
+    g12 = evaluate_grade12_gates()
+    r = run_automated_paper_harness_tick(karpathy_iteration=3, g12=g12, force=True)
+    assert r and r.get("ok")
+    rows = load_paper_trades()
+    assert rows[-1].get("synthetic") is True
+    assert rows[-1].get("source") == "karpathy_harness_sim"
+    act = summarize_trade_activity()
+    assert act.harness_auto_recorded >= 1
+
+
+def test_school_mandate_facts_repeat_harness_until_numeric_gate(tmp_path: Path, monkeypatch) -> None:
+    """Analyst FACT layer must say 'keep doing' when tools pass but cohort gate does not."""
+    monkeypatch.setenv("BLACKBOX_ANNA_TRAINING_DIR", str(tmp_path))
+    monkeypatch.setenv("ANNA_GRADE12_MIN_DECISIVE_TRADES", "50")
+    monkeypatch.setenv("ANNA_GRADE12_MIN_WIN_RATE", "0.6")
+    from modules.anna_training.cumulative import carryforward_fact_lines
+    from modules.anna_training.curriculum_tools import TOOL_IDS
+    from modules.anna_training.paper_trades import append_paper_trade
+    from modules.anna_training.store import load_state, save_state
+
+    append_paper_trade(symbol="S", side="long", result="won", pnl_usd=5.0, timeframe="5m")
+    st = load_state()
+    st["grade_12_tool_mastery"] = {tid: True for tid in TOOL_IDS}
+    save_state(st)
+    st2 = load_state()
+    lines = carryforward_fact_lines(st2)
+    blob = " ".join(lines).lower()
+    assert "school mandate" in blob
+    assert "one winning trade" in blob
+    assert "numeric paper cohort gate not satisfied" in blob or "not satisfied" in blob
+
+
+def test_paper_manual_row_links_attempt_and_activity_total(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setenv("BLACKBOX_ANNA_TRAINING_DIR", str(tmp_path))
+    from modules.anna_training.paper_trades import append_paper_trade, trades_path
+    from modules.anna_training.trade_attempts import summarize_trade_activity
+
+    append_paper_trade(
+        symbol="X",
+        side="long",
+        result="won",
+        pnl_usd=2.0,
+        timeframe="1h",
+        source="manual_cli",
+        strategy_label="smoke-strat",
+        proposal_ref="req-smoke-1",
+    )
+    act = summarize_trade_activity()
+    assert act.total_events >= 1
+    assert act.paper_manual_recorded == 1
+    line = trades_path().read_text(encoding="utf-8").strip().splitlines()[-1]
+    row = json.loads(line)
+    assert row.get("source") == "manual_cli"
+    assert row.get("strategy_label") == "smoke-strat"
+    assert row.get("proposal_ref") == "req-smoke-1"
+    assert row.get("linked_attempt_event_id")

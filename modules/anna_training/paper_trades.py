@@ -32,6 +32,12 @@ def append_paper_trade(
     trade_id: str | None = None,
     ts_utc: str | None = None,
     log_manual_activity: bool = True,
+    source: str | None = None,
+    proposal_ref: str | None = None,
+    strategy_label: str | None = None,
+    linked_attempt_event_id: str | None = None,
+    synthetic: bool = False,
+    activity_phase: str = "paper_manual",
 ) -> dict[str, Any]:
     r = (result or "").strip().lower()
     if r not in VALID_RESULTS:
@@ -48,16 +54,23 @@ def append_paper_trade(
         "timeframe": (timeframe or "").strip(),
         "notes": (notes or "").strip(),
     }
-    p = trades_path()
-    p.parent.mkdir(parents=True, exist_ok=True)
-    with p.open("a", encoding="utf-8") as f:
-        f.write(json.dumps(row, ensure_ascii=False) + "\n")
+    if source:
+        row["source"] = str(source).strip()
+    if proposal_ref:
+        row["proposal_ref"] = str(proposal_ref).strip()
+    if strategy_label:
+        row["strategy_label"] = str(strategy_label).strip()
+    if linked_attempt_event_id:
+        row["linked_attempt_event_id"] = str(linked_attempt_event_id).strip()
+    if synthetic:
+        row["synthetic"] = True
+
     if log_manual_activity:
         try:
             from modules.anna_training.trade_attempts import append_trade_attempt
 
-            append_trade_attempt(
-                phase="paper_manual",
+            ev = append_trade_attempt(
+                phase=(activity_phase or "paper_manual").strip(),
                 status="recorded",
                 trade_id=str(row.get("trade_id")),
                 detail={
@@ -66,10 +79,21 @@ def append_paper_trade(
                     "result": row.get("result"),
                     "pnl_usd": row.get("pnl_usd"),
                     "venue": row.get("venue"),
+                    "strategy_label": row.get("strategy_label"),
+                    "proposal_ref": row.get("proposal_ref"),
+                    "synthetic": bool(row.get("synthetic")),
                 },
             )
+            eid = str(ev.get("event_id") or "").strip()
+            if eid:
+                row["linked_attempt_event_id"] = eid
         except Exception:
             pass
+
+    p = trades_path()
+    p.parent.mkdir(parents=True, exist_ok=True)
+    with p.open("a", encoding="utf-8") as f:
+        f.write(json.dumps(row, ensure_ascii=False) + "\n")
     return row
 
 

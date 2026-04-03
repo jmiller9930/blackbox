@@ -159,6 +159,7 @@ def format_slack_report_card_text(
     Safe for Slack / Telegram DATA replies (no Rich markup).
     """
     from modules.anna_training.curriculum_tools import GRADE_12_TOOLS, normalize_tool_mastery
+    from modules.anna_training.school_mandate import build_school_mandate_fact_lines
 
     cid = (st.get("curriculum_id") or "") or "—"
     gate_pass = bool(g12.get("pass"))
@@ -189,6 +190,11 @@ def format_slack_report_card_text(
         lv["detail"],
     ]
     lines.extend(deck_lines)
+    sm = build_school_mandate_fact_lines(g12=g12, st=st)
+    lines.extend(
+        ["", "SCHOOL MANDATE (injected as FACT on every analyst run — repeat harness work until gates pass):"]
+        + [f"  • {x}" for x in sm]
+    )
     lines.extend(
         [
             "",
@@ -268,6 +274,27 @@ def format_slack_report_card_text(
     last = st.get("karpathy_loop_last_tick_utc")
     if it is not None or last:
         lines.append(f"Loop supervisor: iteration={it if it is not None else '—'}  |  last_tick={last or '—'}")
+
+    from modules.anna_training.paper_trades import trades_path
+    from modules.anna_training.trade_attempts import (
+        attempts_path,
+        format_trade_activity_evidence_lines,
+        summarize_trade_activity,
+    )
+
+    _act = summarize_trade_activity()
+    lines.append("")
+    lines.extend(
+        format_trade_activity_evidence_lines(
+            _act,
+            ledger_trade_count=summ.trade_count,
+            ledger_decisive=summ.wins + summ.losses,
+            ledger_wins=summ.wins,
+            ledger_losses=summ.losses,
+            attempts_path=str(attempts_path()),
+            ledger_path=str(trades_path()),
+        )
+    )
 
     lines.extend(
         [

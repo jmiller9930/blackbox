@@ -31,7 +31,7 @@ def append_trade_attempt(
     trade_id: str | None = None,
 ) -> dict[str, Any]:
     """
-    phase: jack_handoff | execution | paper_manual
+    phase: jack_handoff | execution | paper_manual | harness_auto
     status: started | ok | fail | blocked | recorded
     """
     row = {
@@ -71,12 +71,16 @@ def load_trade_attempts() -> list[dict[str, Any]]:
 
 @dataclass
 class TradeActivitySummary:
+    """Roll-up of ``paper_trade_attempts.jsonl`` — not the same as ``paper_trades.jsonl`` row count."""
+
+    total_events: int
     jack_delegate_started: int
     jack_delegate_failed: int
     jack_delegate_ok_with_paper: int
     jack_delegate_ok_no_paper: int
     execution_blocked: int
     paper_manual_recorded: int
+    harness_auto_recorded: int
 
     @property
     def failed_or_blocked(self) -> int:
@@ -85,7 +89,7 @@ class TradeActivitySummary:
 
 def summarize_trade_activity(rows: list[dict[str, Any]] | None = None) -> TradeActivitySummary:
     r = rows if rows is not None else load_trade_attempts()
-    js = jf = jokp = jokn = eb = pm = 0
+    js = jf = jokp = jokn = eb = pm = ha = 0
     for e in r:
         phase = str(e.get("phase") or "")
         status = str(e.get("status") or "")
@@ -104,11 +108,49 @@ def summarize_trade_activity(rows: list[dict[str, Any]] | None = None) -> TradeA
             eb += 1
         elif phase == "paper_manual" and status == "recorded":
             pm += 1
+        elif phase == "harness_auto" and status == "recorded":
+            ha += 1
     return TradeActivitySummary(
+        total_events=len(r),
         jack_delegate_started=js,
         jack_delegate_failed=jf,
         jack_delegate_ok_with_paper=jokp,
         jack_delegate_ok_no_paper=jokn,
         execution_blocked=eb,
         paper_manual_recorded=pm,
+        harness_auto_recorded=ha,
     )
+
+
+def format_trade_activity_evidence_lines(
+    act: TradeActivitySummary,
+    *,
+    ledger_trade_count: int,
+    ledger_decisive: int,
+    ledger_wins: int,
+    ledger_losses: int,
+    attempts_path: str,
+    ledger_path: str,
+) -> list[str]:
+    """
+    Plain lines for TUI / Slack / report card: reconciles cohort ledger vs attempt JSONL.
+    """
+    lines = [
+        "EVIDENCE — ledger (gates) vs attempt log (visibility):",
+        f"  • Paper ledger rows: {ledger_trade_count} total; decisive {ledger_decisive} "
+        f"(W {ledger_wins} / L {ledger_losses}) — file: {ledger_path}",
+        f"  • Attempt log events: {act.total_events} lines — file: {attempts_path}",
+        "  • Attempt breakdown: "
+        f"Jack started {act.jack_delegate_started} | Jack failed {act.jack_delegate_failed} | "
+        f"Jack OK + paper row {act.jack_delegate_ok_with_paper} | Jack OK no paper {act.jack_delegate_ok_no_paper} | "
+        f"execution blocked {act.execution_blocked} | manual CLI `log-trade` recorded {act.paper_manual_recorded} | "
+        f"Karpathy auto sim {act.harness_auto_recorded}",
+        "  • If ledger >> manual-recorded: older rows predate attempt logging, imports, or rows from Jack "
+        "(Jack OK logs trade_id on success; not every historical row has a backfilled attempt).",
+    ]
+    if act.paper_manual_recorded <= 1 and ledger_trade_count > act.paper_manual_recorded:
+        lines.append(
+            "  • Operator CLI attempts since wiring: "
+            f"{act.paper_manual_recorded} — that is not the same as {ledger_trade_count} ledger rows."
+        )
+    return lines

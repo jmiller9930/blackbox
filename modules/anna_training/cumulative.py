@@ -70,13 +70,23 @@ def carryforward_fact_lines(state: dict[str, Any] | None) -> list[str]:
 
     Injected on every analyst path (see ``analysis.build_analysis``) — Anna does not need to ask
     for these; they are always part of ``facts_for_prompt`` when state is loadable.
+
+    School mandate lines are always merged when state exists so the analyst sees current gate
+    obligations even if carryforward_bullets is still empty.
     """
     if not state:
         return []
-    bullets = list(state.get("carryforward_bullets") or [])
-    if not bullets:
-        return []
     lines: list[str] = []
+    bullets = list(state.get("carryforward_bullets") or [])
     for b in bullets[:12]:
         lines.append(f"FACT (cumulative learning): {b}")
+    try:
+        from modules.anna_training.gates import evaluate_grade12_gates
+        from modules.anna_training.school_mandate import build_school_mandate_fact_lines
+
+        g12 = evaluate_grade12_gates(training_state=state)
+        for line in build_school_mandate_fact_lines(g12=g12, st=state):
+            lines.append(f"FACT (school mandate): {line}")
+    except Exception:
+        pass
     return lines
