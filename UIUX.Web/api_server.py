@@ -280,13 +280,74 @@ def build_anna_summary() -> dict[str, Any]:
     }
 
 
+def _training_engagement_payload(st: dict[str, Any], harness: dict[str, Any]) -> dict[str, Any]:
+    """Human-readable training story for operators (skill practice + harness path per tick)."""
+    sp = st.get("karpathy_last_skill_practice")
+    sp = sp if isinstance(sp, dict) else {}
+    deck = st.get("grade_12_skills_deck")
+    deck = deck if isinstance(deck, dict) else {}
+    focus = deck.get("current_focus_requirement") or deck.get("current_focus")
+
+    bullets: list[str] = []
+    bullets.append(
+        "Each loop tick Anna refreshes Grade-12 gates and the skills deck, runs scheduled tool/skill "
+        "practice, logs the learning cycle, and runs the Karpathy paper harness (analysis → execution request → Jack paper when configured)."
+    )
+    if sp.get("ran"):
+        outcome = "passed" if sp.get("passed") else "did not pass"
+        sid = sp.get("skill_id") or "skill"
+        summ = (sp.get("summary") or "").strip()
+        bullets.append(
+            f"Last skill practice: {sid} — {outcome}"
+            + (f" — {summ}" if summ else "")
+            + "."
+        )
+    else:
+        note = (sp.get("note") or "").strip()
+        cf = sp.get("current_focus")
+        tail = note or (f"Current deck focus: {cf!r}." if cf else "No drill this tick (often numeric cohort or deck complete).")
+        bullets.append(f"Last tick — tool practice: none. {tail}")
+
+    h_skipped = harness.get("skipped")
+    h_err = harness.get("error")
+    if h_skipped:
+        bullets.append(f"Paper harness: stopped — {h_skipped}.")
+    elif h_err:
+        bullets.append(f"Paper harness: error — {h_err}.")
+    elif harness.get("enabled") is False:
+        bullets.append("Paper harness: off (ANNA_KARPATHY_PAPER_HARNESS_EACH_TICK=0 or disabled).")
+    elif harness.get("paper_logged") is True or (harness.get("jack_delegate") or {}).get("ok"):
+        rid = harness.get("request_id") or "—"
+        bullets.append(
+            f"Paper harness: Anna produced a request and execution delegated (request {rid}). "
+            "Check paper rows / attempts for fills."
+        )
+    elif harness.get("request_id"):
+        bullets.append(
+            f"Paper harness: Anna produced execution request {harness.get('request_id')} "
+            "(analysis + handoff succeeded; see skipped/error above if Jack did not run)."
+        )
+    else:
+        bullets.append(
+            "Paper harness: no execution request this tick (observation-only or policy blocked — normal some ticks)."
+        )
+
+    plain = " ".join(bullets)
+    return {
+        "plain_english": plain,
+        "bullets": bullets,
+        "skills_deck_focus": focus,
+        "skill_practice_last": sp,
+    }
+
+
 def build_anna_training_dashboard() -> dict[str, Any]:
     """Fixed-layout JSON for web UI: same facts as `anna status` / compact dashboard (read-only)."""
     tid = str(uuid.uuid4())
     try:
         from modules.anna_training.gates import evaluate_grade12_gates
         from modules.anna_training.paper_trades import load_paper_trades_for_gates, summarize_trades, trades_path
-        from modules.anna_training.store import load_state, state_path
+        from modules.anna_training.store import anna_training_dir, load_state, state_path
         from modules.anna_training.trade_attempts import attempts_path, summarize_trade_activity
     except ImportError as e:
         return {
@@ -308,15 +369,22 @@ def build_anna_training_dashboard() -> dict[str, Any]:
             harness = ph
         else:
             harness = {}
+        engagement = _training_engagement_payload(st, harness)
         return {
             "schema": "anna_training_dashboard_v1",
             "ok": True,
             "trace_id": tid,
             "at_utc": now_iso(),
+            "training_engagement": engagement,
+            "enrollment": {
+                "curriculum_id": st.get("curriculum_id"),
+                "training_method_id": st.get("training_method_id"),
+            },
             "paths": {
                 "state_json": str(state_path()),
                 "paper_trades_jsonl": str(trades_path()),
                 "attempts_jsonl": str(attempts_path()),
+                "heartbeat_jsonl": str(anna_training_dir() / "karpathy_loop_heartbeat.jsonl"),
             },
             "loop": {
                 "karpathy_loop_iteration": st.get("karpathy_loop_iteration"),
@@ -549,11 +617,21 @@ TRAINING_DASHBOARD_HTML = """<!DOCTYPE html>
     th { color: var(--muted); font-weight: 500; }
     #err { color: var(--bad); font-size: 0.85rem; margin-bottom: 1rem; display: none; }
     #meta { font-size: 0.75rem; color: var(--muted); margin-top: 1rem; }
+    .card--sean { border-color: var(--accent); background: linear-gradient(165deg, #1c2128 0%, #161b22 100%); }
+    .card--sean h2 { color: var(--accent); }
+    .engagement-list { font-size: 0.88rem; line-height: 1.55; color: var(--text); margin: 0; padding-left: 1.15rem; }
+    .engagement-list li { margin-bottom: 0.45rem; }
+    .enroll { font-size: 0.8rem; color: var(--muted); margin-top: 0.5rem; }
   </style>
 </head>
 <body>
   <h1>Anna training — hard-coded layout (values refresh)</h1>
   <div id="err"></div>
+  <div class="card card--sean" style="margin-bottom:0.75rem">
+    <h2>What Anna is doing (training)</h2>
+    <ul class="engagement-list" id="v_bullets" aria-label="Training activity"></ul>
+    <p class="enroll" id="v_enroll"></p>
+  </div>
   <div class="grid">
     <div class="card"><h2>Loop iteration</h2><div class="val" id="v_iter">—</div><div class="sub" id="v_tick"></div></div>
     <div class="card"><h2>Gates</h2><div class="val" id="v_gate">—</div><div class="sub" id="v_gdetail"></div></div>
@@ -572,6 +650,23 @@ TRAINING_DASHBOARD_HTML = """<!DOCTYPE html>
       const j = await r.json();
       err.style.display = 'none';
       if (!j.ok) { err.textContent = (j.error || 'error') + ': ' + (j.detail || ''); err.style.display = 'block'; return; }
+      var eng = j.training_engagement || {};
+      var ul = document.getElementById('v_bullets');
+      ul.innerHTML = '';
+      var lines = eng.bullets && eng.bullets.length ? eng.bullets : (eng.plain_english ? [eng.plain_english] : []);
+      if (!lines.length) {
+        var li0 = document.createElement('li');
+        li0.textContent = 'No training engagement summary yet.';
+        ul.appendChild(li0);
+      } else lines.forEach(function(line) {
+        var li = document.createElement('li');
+        li.textContent = line;
+        ul.appendChild(li);
+      });
+      var enr = j.enrollment || {};
+      document.getElementById('v_enroll').textContent =
+        'Curriculum: ' + (enr.curriculum_id || '—') + ' · Method: ' + (enr.training_method_id || '—') +
+        (eng.skills_deck_focus ? ' · Deck focus: ' + eng.skills_deck_focus : '');
       document.getElementById('v_iter').textContent = j.loop.karpathy_loop_iteration ?? '—';
       document.getElementById('v_tick').textContent = j.loop.karpathy_loop_last_tick_utc ? 'last tick ' + j.loop.karpathy_loop_last_tick_utc : '';
       const gp = j.gates.pass;
