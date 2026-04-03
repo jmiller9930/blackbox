@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Mapping
 
 # Ordered checklist: learn each tool, then use them together; then 60% / fund objectives apply.
 GRADE_12_TOOLS: tuple[dict[str, str], ...] = (
@@ -60,3 +60,30 @@ def tool_meta(tool_id: str) -> dict[str, str] | None:
         if t["id"] == tool_id:
             return dict(t)
     return None
+
+
+def build_grade12_skills_deck(state: Mapping[str, Any], g12: Mapping[str, Any]) -> dict[str, Any]:
+    """Snapshot for state + logs: ordered requirements, current focus, completion flags."""
+    mastery = normalize_tool_mastery(state.get("grade_12_tool_mastery"))
+    missing = missing_grade_12_tools(mastery)
+    if missing:
+        current_focus = missing[0]
+    elif not g12.get("numeric_gate_pass"):
+        current_focus = "numeric_paper_cohort"
+    elif g12.get("pass"):
+        current_focus = "grade_12_gate_complete"
+    else:
+        current_focus = "numeric_paper_cohort"
+    tools = [{"id": t["id"], "title": t["title"], "passed": bool(mastery.get(t["id"]))} for t in GRADE_12_TOOLS]
+    tools_complete = curriculum_tools_complete(mastery)
+    deck_complete = bool(g12.get("pass"))
+    return {
+        "version": 1,
+        "karpathy_loop_iteration": state.get("karpathy_loop_iteration"),
+        "current_focus_requirement": current_focus,
+        "tools": tools,
+        "tools_complete": tools_complete,
+        "numeric_gate_pass": bool(g12.get("numeric_gate_pass")),
+        "overall_gate_pass": bool(g12.get("pass")),
+        "deck_complete": deck_complete,
+    }

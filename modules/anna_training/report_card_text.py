@@ -165,26 +165,40 @@ def format_slack_report_card_text(
     wr_s = f"{wr:.0%}" if wr is not None else "n/a"
 
     meth = (training_method_id or "").strip() or "—"
+    deck = st.get("grade_12_skills_deck") or {}
+    deck_lines: list[str] = []
+    if isinstance(deck, dict) and deck.get("version"):
+        deck_lines = [
+            "",
+            "SKILLS DECK (Karpathy loop updates each cycle until requirements satisfied):",
+            f"  • Current focus: {deck.get('current_focus_requirement') or '—'}",
+            f"  • Deck complete (full gate PASS): {'yes' if deck.get('deck_complete') else 'no'}",
+        ]
     lines: list[str] = [
         "Anna — report card (same signal as `anna watch` / dashboard TUI)",
         "",
         lv["headline"],
         lv["detail"],
-        "",
-        "MEASURABLE PROGRESS (evidence on the scored path — `anna tool-pass`, `log-trade`, learning log):",
-        f"  • Tool checklist: {prog['tool_checklist_pct']}% ({prog['tools_passed_count']}/{prog['tools_total']} attested)",
-        f"  • Paper numeric track: {prog['numeric_track_pct']}% (decisive count + win-rate vs gate)",
-        f"  • Combined average: {prog['combined_avg_pct']}%  |  Bottleneck: {prog['bottleneck_pct']}%",
-        "",
-        f"Curriculum: {cid} — {curriculum_title}",
-        f"Stage: {stage}",
-        f"Training method: {meth}",
-        "",
-        f"OVERALL GATE: {'PASS' if gate_pass else 'NOT PASS'}  (cohesive tools, then numeric min-N @ 60%)",
-        f"  • Curriculum tools (cohesive): {'PASS' if ct_ok else 'NOT PASS'}",
-        f"  • Numeric paper slice: {'PASS' if ng_ok else 'NOT PASS'}",
-        f"  • Cohort: decisive {dec_raw}/{min_dt}  |  win rate {wr_s}",
     ]
+    lines.extend(deck_lines)
+    lines.extend(
+        [
+            "",
+            "MEASURABLE PROGRESS (evidence on the scored path — `anna tool-pass`, `log-trade`, learning log):",
+            f"  • Tool checklist: {prog['tool_checklist_pct']}% ({prog['tools_passed_count']}/{prog['tools_total']} attested)",
+            f"  • Paper numeric track: {prog['numeric_track_pct']}% (decisive count + win-rate vs gate)",
+            f"  • Combined average: {prog['combined_avg_pct']}%  |  Bottleneck: {prog['bottleneck_pct']}%",
+            "",
+            f"Curriculum: {cid} — {curriculum_title}",
+            f"Stage: {stage}",
+            f"Training method: {meth}",
+            "",
+            f"OVERALL GATE: {'PASS' if gate_pass else 'NOT PASS'}  (cohesive tools, then numeric min-N @ 60%)",
+            f"  • Curriculum tools (cohesive): {'PASS' if ct_ok else 'NOT PASS'}",
+            f"  • Numeric paper slice: {'PASS' if ng_ok else 'NOT PASS'}",
+            f"  • Cohort: decisive {dec_raw}/{min_dt}  |  win rate {wr_s}",
+        ]
+    )
 
     blockers = list(g12.get("blockers") or [])
     if blockers:

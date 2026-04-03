@@ -2,9 +2,11 @@
 """Karpathy learning loop supervisor — runs until SIGTERM/INT (repeat continuously).
 
 Assigns Grade 12 + Karpathy if missing; each tick advances ``karpathy_loop_iteration`` in
-``state.json``, appends ``karpathy_loop_heartbeat.jsonl``, snapshots grade-12 gates, and
-optionally records ``market_data``. Does not place live trades — harness / paper logging
-remain operator-driven.
+``state.json``, updates ``grade_12_skills_deck`` (ordered requirements + current focus),
+appends ``karpathy_learning_cycle_v1`` to ``cumulative_learning_log`` (disable with
+``ANNA_KARPATHY_LOG_EACH_CYCLE=0``), appends ``karpathy_loop_heartbeat.jsonl``, snapshots
+grade-12 gates, and optionally records ``market_data``. Does not place live trades —
+harness / paper logging remain operator-driven; tool-pass / log-trade still advance attestation.
 
 Env:
   ANNA_LOOP_INTERVAL_SEC — seconds between ticks (default 5; floor is 5; supervisor cadence)
@@ -35,6 +37,8 @@ if str(_RT) not in sys.path:
     sys.path.insert(0, str(_RT))
 
 from modules.anna_training.catalog import CURRICULA, TRAINING_METHODS  # noqa: E402
+from modules.anna_training.cumulative import append_cumulative_log  # noqa: E402
+from modules.anna_training.curriculum_tools import build_grade12_skills_deck  # noqa: E402
 from modules.anna_training.gates import evaluate_grade12_gates  # noqa: E402
 from modules.anna_training.readiness import ensure_anna_data_preflight, preflight_skipped  # noqa: E402
 from modules.anna_training.store import anna_training_dir, load_state, save_state, utc_now_iso  # noqa: E402
@@ -90,6 +94,15 @@ def _snapshot_market_if_requested() -> dict | None:
     return record_market_snapshot(include_jupiter=None)
 
 
+def _karpathy_log_each_cycle() -> bool:
+    """Append skills-deck + cumulative log each successful tick (set ANNA_KARPATHY_LOG_EACH_CYCLE=0 to disable)."""
+    return (os.environ.get("ANNA_KARPATHY_LOG_EACH_CYCLE") or "1").strip().lower() not in (
+        "0",
+        "false",
+        "no",
+    )
+
+
 def _append_heartbeat(obj: dict) -> None:
     hb = anna_training_dir() / _HEARTBEAT_REL
     hb.parent.mkdir(parents=True, exist_ok=True)
@@ -121,9 +134,32 @@ def run_one_tick(*, tick_index: int) -> tuple[dict, bool]:
     n = int(st.get("karpathy_loop_iteration") or 0) + 1
     st["karpathy_loop_iteration"] = n
     st["karpathy_loop_last_tick_utc"] = utc_now_iso()
-    save_state(st)
 
     g12 = evaluate_grade12_gates()
+    deck = build_grade12_skills_deck(st, g12)
+    st["grade_12_skills_deck"] = deck
+    if _karpathy_log_each_cycle():
+        passed_tools = sum(1 for t in deck["tools"] if t.get("passed"))
+        summary = (
+            f"Karpathy cycle {n}: focus={deck['current_focus_requirement']} | "
+            f"tools {passed_tools}/4 | numeric {'PASS' if g12.get('numeric_gate_pass') else 'NOT PASS'} | "
+            f"overall {'PASS' if g12.get('pass') else 'NOT PASS'}"
+        )
+        append_cumulative_log(
+            st,
+            kind="karpathy_learning_cycle_v1",
+            summary=summary,
+            curriculum_id=st.get("curriculum_id"),
+            meta={
+                "karpathy_loop_iteration": n,
+                "tick_index": tick_index,
+                "current_focus_requirement": deck["current_focus_requirement"],
+                "deck_complete": deck["deck_complete"],
+                "skills_deck_version": deck.get("version"),
+            },
+        )
+    save_state(st)
+
     snap = _snapshot_market_if_requested()
 
     row = {

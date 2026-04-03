@@ -129,6 +129,7 @@ def default_state() -> dict[str, Any]:
         "carryforward_bullets": [],
         "bachelor_track_started_at_utc": None,
         "grade_12_tool_mastery": default_grade_12_tool_mastery(),
+        "grade_12_skills_deck": {},
     }
 
 

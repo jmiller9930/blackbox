@@ -21,16 +21,18 @@ def append_cumulative_log(
     kind: str,
     summary: str,
     curriculum_id: str | None = None,
+    meta: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     log = list(state.get("cumulative_learning_log") or [])
-    log.append(
-        {
-            "ts_utc": utc_now_iso(),
-            "kind": kind,
-            "curriculum_id": curriculum_id,
-            "summary": (summary or "")[:2000],
-        }
-    )
+    row: dict[str, Any] = {
+        "ts_utc": utc_now_iso(),
+        "kind": kind,
+        "curriculum_id": curriculum_id,
+        "summary": (summary or "")[:2000],
+    }
+    if meta:
+        row["meta"] = meta
+    log.append(row)
     state["cumulative_learning_log"] = log[-500:]
     return state
 

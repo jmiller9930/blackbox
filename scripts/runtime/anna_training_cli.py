@@ -107,6 +107,7 @@ def _cmd_status() -> int:
         "bachelor_track_started_at_utc": st.get("bachelor_track_started_at_utc"),
         "grade_12_tool_mastery": normalize_tool_mastery(st.get("grade_12_tool_mastery")),
         "grade_12_tools_all_passed": all(normalize_tool_mastery(st.get("grade_12_tool_mastery")).get(tid) for tid in TOOL_IDS),
+        "grade_12_skills_deck": st.get("grade_12_skills_deck") or {},
     }
     g12 = evaluate_grade12_gates()
     out["grade_12_progress"] = grade12_progress_percentages(g12, st.get("grade_12_tool_mastery"))
@@ -408,9 +409,18 @@ def _cmd_dashboard(args: argparse.Namespace | None = None) -> int:
             imp_txt = "\n[bold]Where to improve her code / stack[/bold]\n" + "\n".join(f"  • {x}" for x in imp)
 
         border_learning = lv.get("border") or "red"
+        deck = st.get("grade_12_skills_deck") or {}
+        deck_line = ""
+        if isinstance(deck, dict) and deck.get("version"):
+            cf = deck.get("current_focus_requirement") or "—"
+            dc = "yes" if deck.get("deck_complete") else "no"
+            deck_line = (
+                f"\n[bold]Skills deck[/bold] (loop advances focus through requirements until gate PASS): "
+                f"current focus [yellow]{cf}[/yellow]  |  deck complete [cyan]{dc}[/cyan]\n"
+            )
         report_body = (
             f"[dim]Report card — answers: is learning shown on the scored path (tools, paper, logs)?[/dim]\n\n"
-            f"{learn_block}\n\n"
+            f"{learn_block}{deck_line}\n"
             f"[bold]Measurable progress[/bold]: tool checklist [cyan]{prog['tool_checklist_pct']}%[/cyan] "
             f"([cyan]{prog['tools_passed_count']}/{prog['tools_total']}[/cyan] attested)  |  "
             f"paper numeric track [cyan]{prog['numeric_track_pct']}%[/cyan]  |  "

@@ -19,6 +19,26 @@ def test_ensure_preflight_respects_skip(monkeypatch) -> None:
     assert r.get("skipped") is True
 
 
+def test_karpathy_once_writes_skills_deck_and_cycle_log(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setenv("BLACKBOX_ANNA_TRAINING_DIR", str(tmp_path))
+    monkeypatch.setenv("ANNA_SKIP_PREFLIGHT", "1")
+    repo = Path(__file__).resolve().parents[1]
+    r = subprocess.run(
+        [sys.executable, str(repo / "scripts/runtime/anna_karpathy_loop_daemon.py"), "--once"],
+        cwd=str(repo),
+        capture_output=True,
+        text=True,
+        env={**os.environ, "BLACKBOX_ANNA_TRAINING_DIR": str(tmp_path), "ANNA_SKIP_PREFLIGHT": "1"},
+    )
+    assert r.returncode == 0, r.stderr + r.stdout
+    raw = json.loads((tmp_path / "state.json").read_text(encoding="utf-8"))
+    assert raw.get("grade_12_skills_deck", {}).get("version") == 1
+    assert raw.get("cumulative_learning_log")
+    assert any(
+        e.get("kind") == "karpathy_learning_cycle_v1" for e in (raw.get("cumulative_learning_log") or [])
+    )
+
+
 def test_learning_signal_verdict_not_yet_vs_emerging(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.setenv("BLACKBOX_ANNA_TRAINING_DIR", str(tmp_path))
     from modules.anna_training.gates import evaluate_grade12_gates
@@ -92,6 +112,7 @@ def test_default_state_roundtrip(tmp_path: Path, monkeypatch) -> None:
     assert s2["schema_version"] == "anna_training_state_v3"
     assert "carryforward_bullets" in s2
     assert "grade_12_tool_mastery" in s2
+    assert "grade_12_skills_deck" in s2
     assert set((s2.get("grade_12_tool_mastery") or {}).keys()) >= {
         "math_engine_literacy",
         "analysis_algorithms",
