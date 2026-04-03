@@ -10,3 +10,5 @@ os.environ.setdefault("ANNA_MATH_ENGINE_FULL", "0")
 os.environ.setdefault("ANNA_AUTO_EXECUTION_REQUEST", "0")
 # Never auto-approve / auto-run execution in the suite unless a test sets it.
 os.environ.setdefault("ANNA_TRADER_MODE_AUTO_EXECUTE", "0")
+# Karpathy daemon `--once` tests should not run full analysis→Jack unless a test enables it.
+os.environ.setdefault("ANNA_KARPATHY_PAPER_HARNESS_EACH_TICK", "0")

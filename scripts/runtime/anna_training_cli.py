@@ -127,6 +127,7 @@ def _cmd_status() -> int:
         "grade_12_tools_all_passed": all(normalize_tool_mastery(st.get("grade_12_tool_mastery")).get(tid) for tid in TOOL_IDS),
         "grade_12_skills_deck": st.get("grade_12_skills_deck") or {},
         "karpathy_last_skill_practice": st.get("karpathy_last_skill_practice"),
+        "karpathy_last_paper_harness": st.get("karpathy_last_paper_harness"),
         "grade_12_knowledge_internalized": internalized_grade12_snapshot(st),
         "grade_12_trading_knowledge_internalized": internalized_trading_snapshot(st),
         "school_mandate_v1": compute_school_mandate_payload(st),

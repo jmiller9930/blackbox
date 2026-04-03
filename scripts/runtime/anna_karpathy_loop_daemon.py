@@ -6,7 +6,10 @@ Assigns Grade 12 + Karpathy if missing; each tick advances ``karpathy_loop_itera
 appends ``karpathy_learning_cycle_v1`` to ``cumulative_learning_log`` (disable with
 ``ANNA_KARPATHY_LOG_EACH_CYCLE=0``), appends ``karpathy_loop_heartbeat.jsonl`` (includes ``skill_practice`` pass/fail or why none), snapshots
 grade-12 gates, and optionally records ``market_data``. Does not place live venue orders.
-Paper trade rows are appended only via operator ``log-trade``, Jack paper bridge, or other explicit paths — not by this daemon.
+When ``ANNA_KARPATHY_PAPER_HARNESS_EACH_TICK=1`` (default), each tick also runs the **paper harness**
+(``anna_modules`` analysis → execution_request → auto-approve → Jack paper). That is how the loop
+**repeats trade attempts** while the market feeds data. Disable with ``ANNA_KARPATHY_PAPER_HARNESS_EACH_TICK=0``
+(iterations-only mode). Operator ``log-trade`` remains available.
 
 Env:
   ANNA_LOOP_INTERVAL_SEC — seconds between ticks (default 5; floor is 5; supervisor cadence)
@@ -207,6 +210,12 @@ def run_one_tick(*, tick_index: int) -> tuple[dict, bool]:
             },
         )
     st["school_mandate_v1"] = compute_school_mandate_payload(st)
+    try:
+        from modules.anna_training.karpathy_paper_harness import run_karpathy_paper_harness_tick
+
+        st["karpathy_last_paper_harness"] = run_karpathy_paper_harness_tick(iteration=n)
+    except Exception as e:  # noqa: BLE001
+        st["karpathy_last_paper_harness"] = {"enabled": True, "error": repr(e)}
     save_state(st)
 
     snap = _snapshot_market_if_requested()
@@ -229,6 +238,7 @@ def run_one_tick(*, tick_index: int) -> tuple[dict, bool]:
             "losses": g12.get("losses"),
             "win_rate": g12.get("win_rate"),
         },
+        "paper_harness": st.get("karpathy_last_paper_harness"),
         "market_snapshot_row_id": (snap or {}).get("row_id") if isinstance(snap, dict) else None,
     }
     _append_heartbeat(row)
