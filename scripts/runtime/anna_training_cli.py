@@ -56,6 +56,7 @@ from modules.anna_training.progression import bachelor_eligibility_report, sugge
 from modules.anna_training.report_card_text import (  # noqa: E402
     grade12_progress_percentages,
     improvement_lines_from_gate_result,
+    learning_signal_verdict,
 )
 from modules.anna_training.gates import evaluate_grade12_gates  # noqa: E402
 from modules.anna_training.readiness import ensure_anna_data_preflight, full_readiness  # noqa: E402
@@ -109,6 +110,7 @@ def _cmd_status() -> int:
     }
     g12 = evaluate_grade12_gates()
     out["grade_12_progress"] = grade12_progress_percentages(g12, st.get("grade_12_tool_mastery"))
+    out["learning_signal"] = learning_signal_verdict(g12, st)
     out["grade_12_gate_snapshot"] = {
         "pass": g12.get("pass"),
         "curriculum_tools_pass": g12.get("curriculum_tools_pass"),
@@ -335,11 +337,13 @@ def _cmd_dashboard(args: argparse.Namespace | None = None) -> int:
         g12 = evaluate_grade12_gates()
         st0 = load_state()
         prog = grade12_progress_percentages(g12, st0.get("grade_12_tool_mastery"))
+        lv0 = learning_signal_verdict(g12, st0)
         print(
             json.dumps(
                 {
                     "report_card": {
                         "learning_slice_pass": bool(g12.get("pass")),
+                        "learning_signal": lv0,
                         "blockers": g12.get("blockers"),
                         "improvement_hints": improvement_lines_from_gate_result(g12),
                         "grade_12_progress": prog,
@@ -366,13 +370,16 @@ def _cmd_dashboard(args: argparse.Namespace | None = None) -> int:
             completed_milestones=st.get("completed_curriculum_milestones") or [],
         )
         prog = grade12_progress_percentages(g12, st.get("grade_12_tool_mastery"))
+        lv = learning_signal_verdict(g12, st)
         gate_pass = bool(g12.get("pass"))
         gate_style = "[bold green]PASS[/bold green]" if gate_pass else "[bold red]NOT PASS[/bold red]"
-        learn_line = (
-            "[bold green]Learning on track[/bold green] for this paper slice (tools + numeric gate)."
-            if gate_pass
-            else "[bold red]Not yet learning to spec[/bold red] — see why below; use it to fix prompts, harness, or logging."
-        )
+        v = lv.get("verdict") or "not_yet"
+        if v == "on_track":
+            learn_block = f"[bold green]{lv['headline']}[/bold green]\n[dim]{lv['detail']}[/dim]"
+        elif v == "emerging":
+            learn_block = f"[bold yellow]{lv['headline']}[/bold yellow]\n[dim]{lv['detail']}[/dim]"
+        else:
+            learn_block = f"[bold red]{lv['headline']}[/bold red]\n[dim]{lv['detail']}[/dim]"
         ct_ok = bool(g12.get("curriculum_tools_pass"))
         ng_ok = bool(g12.get("numeric_gate_pass"))
         ct_s = "[bold green]PASS[/bold green]" if ct_ok else "[bold yellow]NOT PASS[/bold yellow]"
@@ -400,23 +407,15 @@ def _cmd_dashboard(args: argparse.Namespace | None = None) -> int:
         if imp and not gate_pass:
             imp_txt = "\n[bold]Where to improve her code / stack[/bold]\n" + "\n".join(f"  • {x}" for x in imp)
 
-        sup_it = st.get("karpathy_loop_iteration")
-        sup_last = st.get("karpathy_loop_last_tick_utc")
-        sup_line = (
-            f"[bold cyan]Loop supervisor[/bold cyan] (should increase while `loop-daemon` runs): "
-            f"iteration [bold]{sup_it if sup_it is not None else '—'}[/bold] · last_tick [dim]{sup_last or '—'}[/dim]\n"
-            f"[dim]This is real activity — not a bug. Gate % below stays 0 until you `anna tool-pass` and/or `log-trade`; "
-            f"two different dials.[/dim]\n\n"
-        )
+        border_learning = lv.get("border") or "red"
         report_body = (
-            f"[dim]Updating report card — same signal as gates + tool checklist; refresh shows progress.[/dim]\n\n"
-            f"{sup_line}"
-            f"{learn_line}\n\n"
+            f"[dim]Report card — answers: is learning shown on the scored path (tools, paper, logs)?[/dim]\n\n"
+            f"{learn_block}\n\n"
             f"[bold]Measurable progress[/bold]: tool checklist [cyan]{prog['tool_checklist_pct']}%[/cyan] "
             f"([cyan]{prog['tools_passed_count']}/{prog['tools_total']}[/cyan] attested)  |  "
             f"paper numeric track [cyan]{prog['numeric_track_pct']}%[/cyan]  |  "
             f"combined avg [cyan]{prog['combined_avg_pct']}%[/cyan]  |  bottleneck [yellow]{prog['bottleneck_pct']}%[/yellow]\n"
-            f"[dim]Loop heartbeats alone do not raise these. Per-row % below = attestation only (0% until `anna tool-pass`).[/dim]\n\n"
+            f"[dim]Per-row % below = attestation after evidence.[/dim]\n\n"
             f"[bold]Curriculum[/bold]: {cid or '—'} — {cur_title}\n"
             f"[dim]Stage[/dim]: {stage}\n\n"
             f"[bold]Overall[/bold]: {gate_style}  [dim](cohesive tools, then numeric 60% / min-N)[/dim]\n"
@@ -433,11 +432,12 @@ def _cmd_dashboard(args: argparse.Namespace | None = None) -> int:
         trades = load_paper_trades()
         s = summarize_trades(trades)
         console = Console()
+        _bs = border_learning if border_learning in ("green", "yellow", "red") else ("green" if gate_pass else "red")
         console.print(
             Panel.fit(
                 report_body,
                 title="Anna — report card (live)",
-                border_style="green" if gate_pass else "red",
+                border_style=_bs,
             )
         )
 

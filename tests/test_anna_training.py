@@ -19,6 +19,23 @@ def test_ensure_preflight_respects_skip(monkeypatch) -> None:
     assert r.get("skipped") is True
 
 
+def test_learning_signal_verdict_not_yet_vs_emerging(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setenv("BLACKBOX_ANNA_TRAINING_DIR", str(tmp_path))
+    from modules.anna_training.gates import evaluate_grade12_gates
+    from modules.anna_training.report_card_text import learning_signal_verdict
+    from modules.anna_training.store import load_state, save_state
+
+    g12 = evaluate_grade12_gates()
+    st = load_state()
+    lv0 = learning_signal_verdict(g12, st)
+    assert lv0["verdict"] == "not_yet"
+
+    st["cumulative_learning_log"] = [{"kind": "test", "summary": "x"}]
+    save_state(st)
+    lv1 = learning_signal_verdict(evaluate_grade12_gates(), load_state())
+    assert lv1["verdict"] == "emerging"
+
+
 def test_grade12_progress_percentages_shape(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.setenv("BLACKBOX_ANNA_TRAINING_DIR", str(tmp_path))
     from modules.anna_training.curriculum_tools import TOOL_IDS

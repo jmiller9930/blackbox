@@ -61,6 +61,57 @@ def grade12_progress_percentages(
     }
 
 
+def learning_signal_verdict(g12: Mapping[str, Any], st: Mapping[str, Any]) -> dict[str, str]:
+    """
+    Human-facing answer: is there evidence of learning on the *scored* path?
+
+    - on_track: full Grade-12 gate PASS.
+    - emerging: not full PASS, but some attested tools, paper trades, or learning/carry-forward history.
+    - not_yet: no evidence yet on the scored path (what operators feel as 'blank').
+    """
+    prog = grade12_progress_percentages(g12, st.get("grade_12_tool_mastery"))
+    if bool(g12.get("pass")):
+        return {
+            "verdict": "on_track",
+            "headline": "LEARNING: On track — Grade-12 gate satisfied for this slice.",
+            "detail": "Tools (cohesive) and numeric paper cohort meet the bar.",
+            "border": "green",
+        }
+
+    tp = int(prog.get("tools_passed_count") or 0)
+    dec = int(g12.get("decisive_trades") or 0)
+    n_log = len(st.get("cumulative_learning_log") or [])
+    n_cf = len(st.get("carryforward_bullets") or [])
+
+    parts: list[str] = []
+    if tp > 0:
+        parts.append(f"{tp} curriculum tool(s) attested")
+    if dec > 0:
+        parts.append(f"{dec} decisive paper trade(s)")
+    if n_log > 0:
+        parts.append(f"{n_log} cumulative learning log entr{'ies' if n_log != 1 else 'y'}")
+    if n_cf > 0:
+        parts.append(f"{n_cf} carry-forward bullet(s)")
+
+    if parts:
+        return {
+            "verdict": "emerging",
+            "headline": "LEARNING: In progress — evidence exists on the scored path.",
+            "detail": "; ".join(parts) + ". Full gate not passed yet — see blockers below.",
+            "border": "yellow",
+        }
+
+    return {
+        "verdict": "not_yet",
+        "headline": "LEARNING: Not yet shown on the scored path.",
+        "detail": (
+            "No attested tools, no decisive paper trades, no learning-log or carry-forward entries yet. "
+            "To record work: `anna tool-pass <id>` after evidence, and `anna log-trade` for paper outcomes."
+        ),
+        "border": "red",
+    }
+
+
 def improvement_lines_from_gate_result(g12: Mapping[str, Any]) -> list[str]:
     """Actionable hooks when the report card is NOT PASS — where to change Anna’s stack."""
     out: list[str] = []
@@ -104,11 +155,7 @@ def format_slack_report_card_text(
     cid = (st.get("curriculum_id") or "") or "—"
     gate_pass = bool(g12.get("pass"))
     prog = grade12_progress_percentages(g12, st.get("grade_12_tool_mastery"))
-    learn = (
-        "Learning on track for this paper slice (tools + numeric gate)."
-        if gate_pass
-        else "Not yet learning to spec — use WHY NOT / IMPROVE STACK below to fix prompts, harness, or logging."
-    )
+    lv = learning_signal_verdict(g12, st)
 
     ct_ok = bool(g12.get("curriculum_tools_pass"))
     ng_ok = bool(g12.get("numeric_gate_pass"))
@@ -118,17 +165,13 @@ def format_slack_report_card_text(
     wr_s = f"{wr:.0%}" if wr is not None else "n/a"
 
     meth = (training_method_id or "").strip() or "—"
-    sup_it = st.get("karpathy_loop_iteration")
-    sup_last = st.get("karpathy_loop_last_tick_utc")
     lines: list[str] = [
         "Anna — report card (same signal as `anna watch` / dashboard TUI)",
         "",
-        f"LOOP SUPERVISOR (not the same as gate % — should change while loop-daemon runs): "
-        f"iteration={sup_it if sup_it is not None else '—'} | last_tick={sup_last or '—'}",
+        lv["headline"],
+        lv["detail"],
         "",
-        f"LEARNING: {learn}",
-        "",
-        "MEASURABLE PROGRESS (loop ticks alone do not increase these — paper trades + `anna tool-pass` do):",
+        "MEASURABLE PROGRESS (evidence on the scored path — `anna tool-pass`, `log-trade`, learning log):",
         f"  • Tool checklist: {prog['tool_checklist_pct']}% ({prog['tools_passed_count']}/{prog['tools_total']} attested)",
         f"  • Paper numeric track: {prog['numeric_track_pct']}% (decisive count + win-rate vs gate)",
         f"  • Combined average: {prog['combined_avg_pct']}%  |  Bottleneck: {prog['bottleneck_pct']}%",
