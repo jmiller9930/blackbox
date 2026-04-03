@@ -1,4 +1,7 @@
-"""Grade 12 required tools — each id is a binary pass/fail; all four true before numeric gate counts."""
+"""Grade 12 curriculum — four named learning outcomes / processes (not arbitrary flags).
+
+Each id is something Anna must learn and apply; software stores binary attestation after evidence.
+All four true before the numeric paper gate counts. See ANNA_GOES_TO_SCHOOL.md §1.3."""
 
 from __future__ import annotations
 

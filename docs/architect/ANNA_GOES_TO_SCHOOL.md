@@ -82,7 +82,7 @@ Human / exam-board judgment above the software minimum remains as in §1.3; this
 
 **She cannot graduate 12th grade until all of the following are satisfied:**
 
-1. **Curriculum tool checklist (cohesive set, code-enforced)** — Before the **numeric** slice is admissible for overall **PASS**, all **four** tools in `modules/anna_training/curriculum_tools.py` must be marked **passed** via operator attestation (`anna tool-pass <id>`) after evidence. They map to the contract as follows:
+1. **Curriculum tool checklist (cohesive set, code-enforced)** — Here a **“tool”** is **not** a random feature toggle: each id is a **named learning outcome or process** Anna must **learn and apply** (math literacy, analysis discipline, RCS/RCA, Karpathy harness practice). Before the **numeric** slice is admissible for overall **PASS**, all **four** must be marked **passed** via operator attestation (`anna tool-pass <id>`) **after evidence** that those capabilities/processes are in use. They map to the contract as follows:
    - **`math_engine_literacy`** — FACT-grounded numeracy; epistemic honesty; Wilson/NIST-style checks when claiming numbers (ties to math engine + analyst pipeline).
    - **`analysis_algorithms`** — quant stack and analysis path: separate noise from signal in the harness (metrics, pedagogy, procedures in code).
    - **`rcs_rca_discipline`** — **RCS** on outcomes; **RCA** when policy/gates say so (see §3.3 — same DNA, checklist makes it visible before headline metrics).
