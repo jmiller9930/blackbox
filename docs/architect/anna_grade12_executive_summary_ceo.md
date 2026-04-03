@@ -2,7 +2,7 @@
 
 **Audience:** CEO / leadership  
 **Date:** aligned with repo `main` (training operator surface + gates v3)  
-**Companion detail:** [`ANNA_GOES_TO_SCHOOL.md`](ANNA_GOES_TO_SCHOOL.md) (full contract), [`anna_fund_objectives_and_algorithms_contract.md`](anna_fund_objectives_and_algorithms_contract.md) (fund / growth / algorithm definitions)
+**Companion detail:** [`ANNA_GOES_TO_SCHOOL.md`](ANNA_GOES_TO_SCHOOL.md) (full contract; **§1.6** = Karpathy skill engine / loop daemon prerequisites: Python deps, env, lazy `math-engine-full` import, verification), [`anna_fund_objectives_and_algorithms_contract.md`](anna_fund_objectives_and_algorithms_contract.md) (fund / growth / algorithm definitions)
 
 ---
 

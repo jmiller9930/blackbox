@@ -29,7 +29,7 @@ No autonomous rewrites, no trading decisions, no self-modification, no guessing 
 
 **Environment note:** A future target is the ClawBot server (`clawbot.a51.corp`); Phase 1 does not depend on it.
 
-**Trading bot (execution path, not Phase 1 Cody work):** See [`docs/trading/REFERENCE_CURRENT_DRIFT_BOT.md`](docs/trading/REFERENCE_CURRENT_DRIFT_BOT.md) for behavior summary; **full rules source:** [`trading_core/drift_trading_bot_source.ts`](trading_core/drift_trading_bot_source.ts). Architect roadmap: [`docs/architect/architect_update_trading_system.md`](docs/architect/architect_update_trading_system.md).
+**Trading bot (execution path, not Phase 1 Cody work):** See [`docs/trading/REFERENCE_CURRENT_DRIFT_BOT.md`](docs/trading/REFERENCE_CURRENT_DRIFT_BOT.md) for behavior summary; **full rules source:** [`trading_core/src/bot/drift_trading_bot_source.ts`](trading_core/src/bot/drift_trading_bot_source.ts). Architect roadmap: [`docs/architect/architect_update_trading_system.md`](docs/architect/architect_update_trading_system.md).
 
 **Phase 1.5 (agent hardening):** [`docs/architect/phase_1_5_agent_hardening_spec.md`](docs/architect/phase_1_5_agent_hardening_spec.md) — Cody + DATA definitions in `agents/`, SQLite in `data/sqlite/`, `./scripts/sync_openclaw_skills.sh`, `./scripts/init_phase1_5_sqlite.sh`.
 
@@ -46,6 +46,10 @@ pip install -r requirements.txt
 python -m agents.cody.runtime.main --version
 pytest
 ```
+
+**Anna training / Karpathy loop / math engine (optional):** Canonical contract and operator commands: [`docs/architect/ANNA_GOES_TO_SCHOOL.md`](docs/architect/ANNA_GOES_TO_SCHOOL.md). **§1.6** lists **prerequisites** for the Karpathy skill engine and long-running loop daemon: `requirements.txt` (scientific stack + runtime deps), lab-host `pip` when `venv` is unavailable, **lazy import** of `math-engine-full` in `anna_training_cli.py` (so `school` / `gates` / etc. start without numpy), data **preflight**, daemon **env vars** (`ANNA_KARPATHY_AUTO_ATTEST_TOOLS`, `ANNA_KARPATHY_HARNESS_MIN_ITERATIONS`, `ANNA_LOOP_INTERVAL_SEC`, …), and suggested **pytest** commands.
+
+From the repo root, `python3 scripts/runtime/anna_training_cli.py math-check` runs Wilson reference cases; `quant-metrics` prints paper-trade risk proxies (Sharpe/Sortino-style, drawdown, VaR/CVaR). **`math-engine-full`** lazy-imports and runs the extended stack (ARIMA, GARCH, annualized Sharpe with `ANNA_RISK_FREE_ANNUAL`, walk-forward windows, Monte Carlo bootstrap on trades, sklearn direction baseline, Kalman on daily P&L; cointegration when two series are supplied in code); without deps it exits **2** with JSON `hint`. Set **`ANNA_MATH_ENGINE_FULL=1`** to merge that stack into Anna analysis facts. Heavy deps: `numpy`, `pandas`, `scipy`, `statsmodels`, `arch`, `scikit-learn` (see `requirements.txt`). `anna_go_to_school.py` runs `math-check` before readiness when you use the `school` subcommand.
 
 ### Lab server (`clawbot`) without `python3-venv`
 

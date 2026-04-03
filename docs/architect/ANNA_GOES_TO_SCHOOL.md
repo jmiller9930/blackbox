@@ -1,6 +1,6 @@
 # Anna Goes to School
 
-**Status:** Canonical training + University-lite contract for Anna (trading college). **12th grade** and **Karpathy loop v1** are **locked** to code in `modules/anna_training/catalog.py` — see §1.2. **State schema** `anna_training_state_v3` adds **`grade_12_tool_mastery`** (four curriculum tools — see §1.5).
+**Status:** Canonical training + University-lite contract for Anna (trading college). **12th grade** and **Karpathy loop v1** are **locked** to code in `modules/anna_training/catalog.py` — see §1.2. **State schema** `anna_training_state_v3` adds **`grade_12_tool_mastery`** (four curriculum tools — see §1.5). **Karpathy skill engine + loop daemon — Python deps, env, and operator prerequisites:** §1.6.
 
 **Purpose:** Capture the practical BLACK BOX training model for Anna as a single-college student agent inside the core engine, with the minimum structure needed to preserve curriculum quality, context quality, exam-board governance, and human graduation authority.
 
@@ -108,6 +108,8 @@ Human / exam-board judgment above the software minimum remains as in §1.3; this
 | Next focus, bachelor eligibility | `modules/anna_training/progression.py` |
 | Operator CLI | `scripts/runtime/anna_training_cli.py`, `bin/anna` |
 | Slack `#report_card` | `scripts/runtime/telegram_interface/data_status.py` → `format_anna_training_report_hashtag_text` |
+| Karpathy skill practice (binary predicates per tool) | `modules/anna_training/karpathy_skill_engine.py` |
+| Long-running Karpathy loop (ticks, deck, practice, logs) | `scripts/runtime/anna_karpathy_loop_daemon.py`; launcher: `scripts/anna_training_launch_server.sh` |
 
 ### 1.5 Fund assignment, growth objectives, math bar, algorithms (binding spec)
 
@@ -116,6 +118,50 @@ Human / exam-board judgment above the software minimum remains as in §1.3; this
 - [`anna_fund_objectives_and_algorithms_contract.md`](anna_fund_objectives_and_algorithms_contract.md)
 
 That document **supersedes unstated assumptions** (e.g. “she’s a math expert,” “there’s a $1k→$10k goal,” “winning psychology”) unless those are recorded there or in a higher directive. Implementation of a **ledger** and automated fund enforcement may be phased; the **definitions and obligations** apply as soon as a “funded” track is claimed.
+
+### 1.6 Karpathy skill engine and loop daemon — prerequisites
+
+This subsection records what must be true on disk, in Python, and in the environment so the **Karpathy learning loop** and **skill practice** path behave as designed (including what we fixed when the lab host lacked scientific-Python wheels).
+
+#### Python and `requirements.txt`
+
+- **Interpreter:** Python **3.11+** (repo standard; some lab hosts run 3.13 — keep `requirements.txt` pins compatible).
+- **Install:** From the repo root, `pip install -r requirements.txt` (venv recommended on dev machines). The file includes **Anna math / analysis stack** used by tests and by the `math-engine-full` CLI: `numpy`, `pandas`, `scipy`, `statsmodels`, `arch`, `scikit-learn`, plus shared runtime deps (`pydantic`, `rich`, `pytest`, …).
+- **Lab host without `venv`:** If PEP 668 blocks system-wide install, use the same pattern as the root **README** — e.g. `python3 -m pip install --user --break-system-packages -r requirements.txt` under `~/blackbox`. Without these packages, **`tests/test_math_engine_full.py`** is skipped at collection (`importorskip(statsmodels)`), and **`anna_training_cli.py math-engine-full`** fails at runtime with a JSON error unless the stack is installed.
+
+#### CLI import behavior (`math-engine-full` vs everything else)
+
+- **`anna_training_cli.py` does not** import `modules/anna_training/math_engine_full` at startup. The **`math-engine-full`** subcommand **lazy-imports** that stack; if `ImportError` (missing numpy, etc.), the CLI prints a JSON object with `error`, `detail`, and a **`hint`** to install from `requirements.txt`, and exits **2**.
+- Subcommands such as **`school`**, **`start`**, **`gates`**, **`assign-curriculum`**, **`tool-pass`**, **`watch`** therefore start **without** requiring numpy — sufficient for smoke tests and minimal lab images.
+- The **`karpathy_skill_engine`** module uses **Wilson checks**, **paper trades**, and **pure-Python** `quant_metrics` — it does **not** depend on `math_engine_full`; the **loop daemon** imports `karpathy_skill_engine` at load time.
+
+#### Data preflight (daemon and most CLI commands)
+
+- **Preflight is mandatory** for normal operation: healthy Pyth stream artifact and non-empty `data/sqlite/market_data.db` (see document header and `ensure_anna_data_preflight`). **`ANNA_SKIP_PREFLIGHT=1`** bypasses this for **tests/dev only** — not for production claims.
+- Optional: **`ANNA_PREFLIGHT_REQUIRE_SOLANA=1`** also requires Solana RPC (same as elsewhere in this doc).
+
+#### Long-running daemon — entrypoint and logs
+
+- **Script:** `scripts/runtime/anna_karpathy_loop_daemon.py` (repo root: `PYTHONPATH=scripts/runtime:. python3 scripts/runtime/anna_karpathy_loop_daemon.py`, or `--once` for a single tick).
+- **State:** Updates `state.json` (under `BLACKBOX_ANNA_TRAINING_DIR` or default `data/runtime/anna_training/`): `karpathy_loop_iteration`, `grade_12_skills_deck`, etc.
+- **Cumulative learning log** kinds include at least: **`karpathy_learning_cycle_v1`**, **`karpathy_skill_practice_v1`** (when skill practice runs and is logged).
+- **Heartbeat:** `karpathy_loop_heartbeat.jsonl` under the Anna training dir.
+
+#### Environment variables (daemon and skill practice)
+
+| Variable | Role |
+|----------|------|
+| `ANNA_LOOP_INTERVAL_SEC` | Seconds between ticks (default 5; floor 5). |
+| `ANNA_KARPATHY_LOG_EACH_CYCLE` | Set `0` to disable appending `karpathy_learning_cycle_v1` each successful tick. |
+| `ANNA_KARPATHY_AUTO_ATTEST_TOOLS` | `1` = may set `grade_12_tool_mastery` for the deck’s current focus when **binary** skill practice **passes**; default off (operator `anna tool-pass` remains primary). |
+| `ANNA_KARPATHY_HARNESS_MIN_ITERATIONS` | Minimum `karpathy_loop_iteration` count for the **`karpathy_harness_loop`** tool practice predicate (default **10**). |
+| `ANNA_SKIP_PREFLIGHT` | `1` = skip data preflight (tests/dev only). |
+| `RECORD_MARKET_SNAPSHOT_EACH_TICK` | `1` = record one `market_data` row per successful tick when snapshot succeeds. |
+| `MARKET_DATA_SKIP_JUPITER` | `1` = skip Jupiter quote when snapshotting. |
+
+#### Verification
+
+- **Suggested tests:** `python3 -m pytest tests/test_anna_training.py tests/test_math_engine_full.py -q` after `pip install -r requirements.txt` (full stack); `test_anna_training` alone is the minimum CI slice if the math stack is omitted (math-engine-full tests skip).
 
 ## 2. Anna is an agent, not the LLM
 
