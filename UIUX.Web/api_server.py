@@ -280,6 +280,85 @@ def build_anna_summary() -> dict[str, Any]:
     }
 
 
+def build_anna_training_dashboard() -> dict[str, Any]:
+    """Fixed-layout JSON for web UI: same facts as `anna status` / compact dashboard (read-only)."""
+    tid = str(uuid.uuid4())
+    try:
+        from modules.anna_training.gates import evaluate_grade12_gates
+        from modules.anna_training.paper_trades import load_paper_trades_for_gates, summarize_trades, trades_path
+        from modules.anna_training.store import load_state, state_path
+        from modules.anna_training.trade_attempts import attempts_path, summarize_trade_activity
+    except ImportError as e:
+        return {
+            "schema": "anna_training_dashboard_v1",
+            "ok": False,
+            "error": "import_failed",
+            "detail": str(e),
+            "trace_id": tid,
+        }
+    try:
+        st = load_state()
+        g12 = evaluate_grade12_gates()
+        trades = load_paper_trades_for_gates()
+        s = summarize_trades(trades)
+        act = summarize_trade_activity()
+        recent = sorted(trades, key=lambda x: x.get("ts_utc") or "")[-20:]
+        ph = st.get("karpathy_last_paper_harness")
+        if isinstance(ph, dict):
+            harness = ph
+        else:
+            harness = {}
+        return {
+            "schema": "anna_training_dashboard_v1",
+            "ok": True,
+            "trace_id": tid,
+            "at_utc": now_iso(),
+            "paths": {
+                "state_json": str(state_path()),
+                "paper_trades_jsonl": str(trades_path()),
+                "attempts_jsonl": str(attempts_path()),
+            },
+            "loop": {
+                "karpathy_loop_iteration": st.get("karpathy_loop_iteration"),
+                "karpathy_loop_last_tick_utc": st.get("karpathy_loop_last_tick_utc"),
+            },
+            "gates": {
+                "pass": bool(g12.get("pass")),
+                "curriculum_tools_pass": bool(g12.get("curriculum_tools_pass")),
+                "numeric_gate_pass": bool(g12.get("numeric_gate_pass")),
+                "decisive_trades": g12.get("decisive_trades"),
+                "min_decisive_trades": g12.get("min_decisive_trades"),
+                "win_rate": g12.get("win_rate"),
+                "total_pnl_usd": g12.get("total_pnl_usd"),
+                "paper_goal_met": g12.get("paper_goal_met"),
+                "paper_goal_rationale": g12.get("paper_goal_rationale"),
+            },
+            "paper_cohort": {
+                "row_count": s.trade_count,
+                "wins": s.wins,
+                "losses": s.losses,
+                "total_pnl_usd": s.total_pnl_usd,
+            },
+            "attempts": {
+                "total_events": act.total_events,
+                "jack_delegate_started": act.jack_delegate_started,
+                "jack_delegate_failed": act.jack_delegate_failed,
+                "jack_ok_with_paper": act.jack_delegate_ok_with_paper,
+                "failed_or_blocked": act.failed_or_blocked,
+            },
+            "paper_harness_last": harness,
+            "recent_trades": recent,
+        }
+    except Exception as e:  # noqa: BLE001
+        return {
+            "schema": "anna_training_dashboard_v1",
+            "ok": False,
+            "error": "build_failed",
+            "detail": str(e),
+            "trace_id": tid,
+        }
+
+
 def normalize_status(raw: Any) -> str:
     v = str(raw or "unknown").strip().lower()
     if v in {"healthy", "degraded", "error", "unknown"}:
@@ -448,6 +527,92 @@ def run_control(agent_id: str, action: str) -> tuple[str, str]:
     return "rejected", "billy_control_not_wired"
 
 
+TRAINING_DASHBOARD_HTML = """<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Anna training — live</title>
+  <style>
+    :root { --bg:#0d1117; --card:#161b22; --text:#e6edf3; --muted:#8b949e; --ok:#3fb950; --bad:#f85149; --accent:#58a6ff; }
+    * { box-sizing: border-box; }
+    body { font-family: ui-sans-serif, system-ui, sans-serif; background: var(--bg); color: var(--text); margin: 0; padding: 1rem; }
+    h1 { font-size: 1.1rem; font-weight: 600; margin: 0 0 0.75rem; }
+    .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 0.75rem; }
+    .card { background: var(--card); border: 1px solid #30363d; border-radius: 8px; padding: 0.75rem 1rem; }
+    .card h2 { font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted); margin: 0 0 0.5rem; }
+    .val { font-size: 1.35rem; font-weight: 600; font-variant-numeric: tabular-nums; }
+    .sub { font-size: 0.8rem; color: var(--muted); margin-top: 0.35rem; word-break: break-word; }
+    .ok { color: var(--ok); } .bad { color: var(--bad); }
+    table { width: 100%; border-collapse: collapse; font-size: 0.8rem; }
+    th, td { text-align: left; padding: 0.35rem 0.5rem; border-bottom: 1px solid #30363d; }
+    th { color: var(--muted); font-weight: 500; }
+    #err { color: var(--bad); font-size: 0.85rem; margin-bottom: 1rem; display: none; }
+    #meta { font-size: 0.75rem; color: var(--muted); margin-top: 1rem; }
+  </style>
+</head>
+<body>
+  <h1>Anna training — hard-coded layout (values refresh)</h1>
+  <div id="err"></div>
+  <div class="grid">
+    <div class="card"><h2>Loop iteration</h2><div class="val" id="v_iter">—</div><div class="sub" id="v_tick"></div></div>
+    <div class="card"><h2>Gates</h2><div class="val" id="v_gate">—</div><div class="sub" id="v_gdetail"></div></div>
+    <div class="card"><h2>Paper rows</h2><div class="val" id="v_rows">—</div><div class="sub">W/L / P&amp;L</div><div class="val" id="v_pnl" style="font-size:1rem;margin-top:0.25rem">—</div></div>
+    <div class="card"><h2>Attempt events</h2><div class="val" id="v_attempts">—</div><div class="sub" id="v_jack"></div></div>
+  </div>
+  <div class="card" style="margin-top:0.75rem"><h2>Last paper harness (daemon)</h2><pre id="v_harness" style="margin:0;white-space:pre-wrap;font-size:0.8rem;color:var(--muted)">—</pre></div>
+  <div class="card" style="margin-top:0.75rem"><h2>Recent paper trades</h2><table><thead><tr><th>UTC</th><th>Sym</th><th>Side</th><th>Res</th><th>P&amp;L</th><th>Src</th></tr></thead><tbody id="tb"></tbody></table></div>
+  <p id="meta"></p>
+  <script>
+  const pollMs = 4000;
+  async function tick() {
+    const err = document.getElementById('err');
+    try {
+      const r = await fetch('/api/v1/anna/training-dashboard', { cache: 'no-store' });
+      const j = await r.json();
+      err.style.display = 'none';
+      if (!j.ok) { err.textContent = (j.error || 'error') + ': ' + (j.detail || ''); err.style.display = 'block'; return; }
+      document.getElementById('v_iter').textContent = j.loop.karpathy_loop_iteration ?? '—';
+      document.getElementById('v_tick').textContent = j.loop.karpathy_loop_last_tick_utc ? 'last tick ' + j.loop.karpathy_loop_last_tick_utc : '';
+      const gp = j.gates.pass;
+      const ge = document.getElementById('v_gate');
+      ge.textContent = gp ? 'PASS' : 'NOT PASS';
+      ge.className = 'val ' + (gp ? 'ok' : 'bad');
+      document.getElementById('v_gdetail').textContent = 'decisive ' + (j.gates.decisive_trades||0) + '/' + (j.gates.min_decisive_trades||'—') +
+        (j.gates.win_rate != null ? ' · WR ' + (100*j.gates.win_rate).toFixed(0) + '%' : '');
+      document.getElementById('v_rows').textContent = j.paper_cohort.row_count;
+      document.getElementById('v_pnl').textContent = 'W'+j.paper_cohort.wins+' L'+j.paper_cohort.losses+' · $'+Number(j.paper_cohort.total_pnl_usd||0).toFixed(2);
+      document.getElementById('v_attempts').textContent = j.attempts.total_events;
+      document.getElementById('v_jack').textContent = 'Jack ok+w/paper '+j.attempts.jack_ok_with_paper+' · failed '+j.attempts.jack_delegate_failed;
+      document.getElementById('v_harness').textContent = JSON.stringify(j.paper_harness_last || {}, null, 2);
+      const tb = document.getElementById('tb');
+      tb.innerHTML = '';
+      (j.recent_trades || []).forEach(function(row) {
+        const tr = document.createElement('tr');
+        [ 'ts_utc','symbol','side','result','pnl_usd','source' ].forEach(function(k) {
+          const td = document.createElement('td');
+          let v = row[k];
+          if (k === 'ts_utc' && v) v = String(v).slice(0,19);
+          if (k === 'pnl_usd') v = v != null ? Number(v).toFixed(2) : '—';
+          td.textContent = v != null && v !== '' ? v : '—';
+          tr.appendChild(td);
+        });
+        tb.appendChild(tr);
+      });
+      document.getElementById('meta').textContent = 'Updated ' + (j.at_utc || '') + ' · ' + JSON.stringify(j.paths || {});
+    } catch (e) {
+      err.textContent = String(e);
+      err.style.display = 'block';
+    }
+  }
+  tick();
+  setInterval(tick, pollMs);
+  </script>
+</body>
+</html>
+"""
+
+
 class Handler(BaseHTTPRequestHandler):
     def _json(self, code: int, body: dict[str, Any] | list[Any]) -> None:
         payload = json.dumps(body).encode("utf-8")
@@ -456,6 +621,14 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header("Content-Length", str(len(payload)))
         self.end_headers()
         self.wfile.write(payload)
+
+    def _html(self, code: int, body: str) -> None:
+        data = body.encode("utf-8")
+        self.send_response(code)
+        self.send_header("Content-Type", "text/html; charset=utf-8")
+        self.send_header("Content-Length", str(len(data)))
+        self.end_headers()
+        self.wfile.write(data)
 
     def do_GET(self) -> None:  # noqa: N802
         parsed = urlparse(self.path)
@@ -485,6 +658,12 @@ class Handler(BaseHTTPRequestHandler):
             return
         if path == "/api/v1/anna/summary":
             self._json(200, build_anna_summary())
+            return
+        if path == "/api/v1/anna/training-dashboard":
+            self._json(200, build_anna_training_dashboard())
+            return
+        if path in ("/anna/training", "/anna/training/"):
+            self._html(200, TRAINING_DASHBOARD_HTML)
             return
         if path == "/api/v1/system/status":
             self._json(200, build_system_status())
