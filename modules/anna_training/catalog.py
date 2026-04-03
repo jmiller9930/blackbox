@@ -132,6 +132,7 @@ def default_state() -> dict[str, Any]:
         "grade_12_skills_deck": {},
         "grade_12_knowledge_internalized": None,
         "grade_12_trading_knowledge_internalized": None,
+        "karpathy_last_skill_practice": None,
     }
 
 

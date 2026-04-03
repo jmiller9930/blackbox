@@ -4,7 +4,7 @@
 Assigns Grade 12 + Karpathy if missing; each tick advances ``karpathy_loop_iteration`` in
 ``state.json``, updates ``grade_12_skills_deck`` (ordered requirements + current focus),
 appends ``karpathy_learning_cycle_v1`` to ``cumulative_learning_log`` (disable with
-``ANNA_KARPATHY_LOG_EACH_CYCLE=0``), appends ``karpathy_loop_heartbeat.jsonl``, snapshots
+``ANNA_KARPATHY_LOG_EACH_CYCLE=0``), appends ``karpathy_loop_heartbeat.jsonl`` (includes ``skill_practice`` pass/fail or why none), snapshots
 grade-12 gates, and optionally records ``market_data``. Does not place live trades —
 harness / paper logging remain operator-driven; tool-pass / log-trade still advance attestation.
 
@@ -146,6 +146,29 @@ def run_one_tick(*, tick_index: int) -> tuple[dict, bool]:
     st["grade_12_skills_deck"] = deck
 
     pr = run_skill_practice_cycle(st, g12)
+
+    def _skill_practice_snapshot() -> dict:
+        if pr:
+            return {
+                "ran": True,
+                "passed": bool(pr.get("passed")),
+                "skill_id": pr.get("skill_id"),
+                "summary": pr.get("summary"),
+                "practice_kind": pr.get("practice_kind"),
+                "detail": pr.get("detail"),
+                "karpathy_loop_iteration": n,
+                "tick_index": tick_index,
+            }
+        return {
+            "ran": False,
+            "current_focus": deck.get("current_focus_requirement"),
+            "note": "No tool-skill practice this tick (focus may be numeric cohort or gate complete).",
+            "karpathy_loop_iteration": n,
+            "tick_index": tick_index,
+        }
+
+    st["karpathy_last_skill_practice"] = _skill_practice_snapshot()
+
     if pr:
         append_cumulative_log(
             st,
@@ -194,6 +217,7 @@ def run_one_tick(*, tick_index: int) -> tuple[dict, bool]:
         "karpathy_loop_iteration": n,
         "curriculum_id": st.get("curriculum_id"),
         "training_method_id": st.get("training_method_id"),
+        "skill_practice": st.get("karpathy_last_skill_practice"),
         "grade12_gate": {
             "pass": g12.get("pass"),
             "curriculum_tools_pass": g12.get("curriculum_tools_pass"),
@@ -206,6 +230,20 @@ def run_one_tick(*, tick_index: int) -> tuple[dict, bool]:
         "market_snapshot_row_id": (snap or {}).get("row_id") if isinstance(snap, dict) else None,
     }
     _append_heartbeat(row)
+    sp = st.get("karpathy_last_skill_practice") or {}
+    if sp.get("ran"):
+        print(
+            f"[karpathy_loop] Skill practice: {sp.get('skill_id')} "
+            f"{'PASS' if sp.get('passed') else 'NOT PASS'} — {sp.get('summary', '')}",
+            file=sys.stderr,
+            flush=True,
+        )
+    else:
+        print(
+            f"[karpathy_loop] Skill practice: (none) focus={sp.get('current_focus')!r}",
+            file=sys.stderr,
+            flush=True,
+        )
     return row, True
 
 

@@ -111,6 +111,7 @@ def _cmd_status() -> int:
         "grade_12_tool_mastery": normalize_tool_mastery(st.get("grade_12_tool_mastery")),
         "grade_12_tools_all_passed": all(normalize_tool_mastery(st.get("grade_12_tool_mastery")).get(tid) for tid in TOOL_IDS),
         "grade_12_skills_deck": st.get("grade_12_skills_deck") or {},
+        "karpathy_last_skill_practice": st.get("karpathy_last_skill_practice"),
         "grade_12_knowledge_internalized": internalized_grade12_snapshot(st),
         "grade_12_trading_knowledge_internalized": internalized_trading_snapshot(st),
     }
@@ -442,9 +443,24 @@ def _cmd_dashboard(args: argparse.Namespace | None = None) -> int:
                 f"\n[bold]Skills deck[/bold] — [yellow]ONE skill at a time[/yellow] in fixed order "
                 f"(do not skip ahead). Current focus [yellow]{cf}[/yellow]  |  deck complete [cyan]{dc}[/cyan]\n"
             )
+        sp_line = ""
+        sp = st.get("karpathy_last_skill_practice")
+        if isinstance(sp, dict) and sp.get("tick_index") is not None:
+            if sp.get("ran"):
+                p_ok = bool(sp.get("passed"))
+                sp_style = "[bold green]PASS[/bold green]" if p_ok else "[bold yellow]NOT PASS[/bold yellow]"
+                sp_line = (
+                    f"\n[bold]Last Karpathy skill check (daemon)[/bold] — {sp_style}  |  "
+                    f"[cyan]{sp.get('skill_id', '—')}[/cyan]  |  [dim]{sp.get('summary', '')}[/dim]\n"
+                )
+            else:
+                sp_line = (
+                    f"\n[bold]Last Karpathy skill check (daemon)[/bold] — [dim]no tool practice this tick[/dim]  "
+                    f"(focus [yellow]{sp.get('current_focus', '—')}[/yellow])\n"
+                )
         report_body = (
             f"[dim]Report card — answers: is learning shown on the scored path (tools, paper, logs)?[/dim]\n\n"
-            f"{learn_block}{deck_line}\n"
+            f"{learn_block}{deck_line}{sp_line}\n"
             f"[bold]Measurable progress[/bold]: tool checklist [cyan]{prog['tool_checklist_pct']}%[/cyan] "
             f"([cyan]{prog['tools_passed_count']}/{prog['tools_total']}[/cyan] attested)  |  "
             f"paper numeric track [cyan]{prog['numeric_track_pct']}%[/cyan]"

@@ -50,6 +50,16 @@ def test_karpathy_once_writes_skills_deck_and_cycle_log(tmp_path: Path, monkeypa
     assert any(
         e.get("kind") == "karpathy_learning_cycle_v1" for e in (raw.get("cumulative_learning_log") or [])
     )
+    ksp = raw.get("karpathy_last_skill_practice")
+    assert isinstance(ksp, dict)
+    assert ksp.get("ran") is True
+    assert ksp.get("skill_id")
+    assert "passed" in ksp
+    hb_lines = (tmp_path / "karpathy_loop_heartbeat.jsonl").read_text(encoding="utf-8").strip().splitlines()
+    assert hb_lines
+    last_hb = json.loads(hb_lines[-1])
+    assert last_hb.get("kind") == "karpathy_loop_heartbeat_v1"
+    assert last_hb.get("skill_practice") == ksp
 
 
 def test_grade12_internalizes_when_all_tools_pass(tmp_path: Path, monkeypatch) -> None:
