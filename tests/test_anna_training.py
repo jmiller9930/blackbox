@@ -63,6 +63,8 @@ def test_learning_signal_verdict_binary_pass_not_pass(tmp_path: Path, monkeypatc
     lv_fail = learning_signal_verdict(g12_fail, st)
     assert lv_fail["verdict"] == "not_pass"
     assert lv_fail["border"] == "red"
+    assert "deferred" in lv_fail["detail"].lower()
+    assert "math_engine_literacy" in lv_fail["detail"]
 
     g12_ok = {**g12_fail, "pass": True, "curriculum_tools_pass": True, "numeric_gate_pass": True}
     lv_ok = learning_signal_verdict(g12_ok, st)
@@ -81,6 +83,8 @@ def test_grade12_progress_percentages_shape(tmp_path: Path, monkeypatch) -> None
     st = load_state()
     p0 = grade12_progress_percentages(g12, st.get("grade_12_tool_mastery"))
     assert p0["tool_checklist_pct"] == 0.0
+    assert p0["numeric_track_pct"] == 0.0
+    assert p0["combined_avg_pct"] == 0.0
     assert p0["tools_passed_count"] == 0
     assert p0["tools_total"] == len(TOOL_IDS)
 
@@ -239,7 +243,11 @@ def test_gates_fail_when_tools_incomplete_even_if_numeric_ok(tmp_path: Path, mon
     assert r["numeric_gate_pass"] is True
     assert r["curriculum_tools_pass"] is False
     assert r["pass"] is False
+    assert r["grade_12_current_focus"] == "math_engine_literacy"
     assert r["blockers"]
+    joined = " ".join(r["blockers"])
+    assert "deferred" in joined.lower()
+    assert not any("decisive_trades_below" in b or "win_rate_below" in b for b in r["blockers"])
 
 
 def test_gates_pass_when_all_tools_marked_and_numeric_ok(tmp_path: Path, monkeypatch) -> None:

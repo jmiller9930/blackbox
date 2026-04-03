@@ -6,6 +6,7 @@ import os
 from typing import Any
 
 from modules.anna_training.curriculum_tools import (
+    TOOL_IDS,
     curriculum_tools_complete,
     missing_grade_12_tools,
     normalize_tool_mastery,
@@ -80,13 +81,27 @@ def evaluate_grade12_gates() -> dict[str, Any]:
     numeric_ok = len(numeric_blockers) == 0
 
     tool_blockers: list[str] = []
+    current_focus: str | None = None
     if not tools_ok and missing_tools:
+        current_focus = missing_tools[0]
+        chain = " → ".join(missing_tools)
         tool_blockers.append(
-            "curriculum_tools_incomplete: " + ", ".join(missing_tools) + " — use `anna tool-list` / `anna tool-pass <id>`"
+            f"grade_12_current_focus: {current_focus} — complete ONLY this skill next (sequential 1/{len(TOOL_IDS)}). "
+            f"Order for remaining work: {chain}. After evidence: `anna tool-pass {current_focus}`. "
+            f"`anna tool-list` for titles."
         )
 
-    blockers = tool_blockers + numeric_blockers
-    overall_ok = len(blockers) == 0
+    # One-at-a-time UX: do not flood NOT PASS with numeric failures while tools are incomplete.
+    if tools_ok:
+        blockers = tool_blockers + numeric_blockers
+    else:
+        defer = (
+            "Paper numeric cohort gate is deferred until all four curriculum tools are passed "
+            "(no trade-count / win-rate headline until then)."
+        )
+        blockers = tool_blockers + ([defer] if tool_blockers else [])
+
+    overall_ok = bool(tools_ok and numeric_ok)
 
     return {
         "gate_id": "grade12_paper_win_rate_v1",
@@ -95,6 +110,8 @@ def evaluate_grade12_gates() -> dict[str, Any]:
         "numeric_gate_pass": numeric_ok,
         "tool_blockers": tool_blockers,
         "numeric_blockers": numeric_blockers,
+        "grade_12_current_focus": current_focus,
+        "numeric_gate_deferred_until_tools": not tools_ok,
         "grade_12_tool_mastery": mastery,
         "missing_curriculum_tools": missing_tools,
         "min_win_rate": min_wr,
@@ -105,5 +122,5 @@ def evaluate_grade12_gates() -> dict[str, Any]:
         "win_rate": wr,
         "total_trades_logged": s.trade_count,
         "blockers": blockers,
-        "note": "Pass requires curriculum tools (cohesive set) then numeric paper cohort. RCS/RCA human sign-off may still apply per ANNA_GOES_TO_SCHOOL.md.",
+        "note": "Pass requires curriculum tools in sequence (one focus at a time in the deck), then numeric paper cohort. RCS/RCA human sign-off may still apply per ANNA_GOES_TO_SCHOOL.md.",
     }

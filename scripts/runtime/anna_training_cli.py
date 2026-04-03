@@ -428,17 +428,23 @@ def _cmd_dashboard(args: argparse.Namespace | None = None) -> int:
             cf = deck.get("current_focus_requirement") or "—"
             dc = "yes" if deck.get("deck_complete") else "no"
             deck_line = (
-                f"\n[bold]Skills deck[/bold] (loop advances focus through requirements until gate PASS): "
-                f"current focus [yellow]{cf}[/yellow]  |  deck complete [cyan]{dc}[/cyan]\n"
+                f"\n[bold]Skills deck[/bold] — [yellow]ONE skill at a time[/yellow] in fixed order "
+                f"(do not skip ahead). Current focus [yellow]{cf}[/yellow]  |  deck complete [cyan]{dc}[/cyan]\n"
             )
         report_body = (
             f"[dim]Report card — answers: is learning shown on the scored path (tools, paper, logs)?[/dim]\n\n"
             f"{learn_block}{deck_line}\n"
             f"[bold]Measurable progress[/bold]: tool checklist [cyan]{prog['tool_checklist_pct']}%[/cyan] "
             f"([cyan]{prog['tools_passed_count']}/{prog['tools_total']}[/cyan] attested)  |  "
-            f"paper numeric track [cyan]{prog['numeric_track_pct']}%[/cyan]  |  "
+            f"paper numeric track [cyan]{prog['numeric_track_pct']}%[/cyan]"
+            + (
+                " [dim](locked until all four tools passed)[/dim]"
+                if not g12.get("curriculum_tools_pass")
+                else ""
+            )
+            + "  |  "
             f"combined avg [cyan]{prog['combined_avg_pct']}%[/cyan]  |  bottleneck [yellow]{prog['bottleneck_pct']}%[/yellow]\n"
-            f"[dim]Per-row % below = attestation after evidence.[/dim]\n\n"
+            f"[dim]Per-row % below = attestation after evidence. Sequential skills first; then paper cohort.[/dim]\n\n"
             f"[bold]Curriculum[/bold]: {cid or '—'} — {cur_title}\n"
             f"[dim]Stage[/dim]: {stage}\n\n"
             f"[bold]Overall[/bold]: {gate_style}  [dim](cohesive tools, then numeric 60% / min-N)[/dim]\n"
@@ -465,21 +471,29 @@ def _cmd_dashboard(args: argparse.Namespace | None = None) -> int:
         )
 
         tm = normalize_tool_mastery(st.get("grade_12_tool_mastery"))
+        cur_focus = g12.get("grade_12_current_focus")
         tools_tbl = Table(
-            title="Tool checklist (pass all as a set; then numeric / fund bar applies)",
+            title="Tool checklist — sequential (finish current focus before the next; then numeric gate)",
             caption="Checklist % = operator attestation after evidence — not an auto score from idle loop ticks.",
         )
         tools_tbl.add_column("Tool", no_wrap=True)
         tools_tbl.add_column("ID", style="dim")
+        tools_tbl.add_column("Now?", justify="center")
         tools_tbl.add_column("Status")
         tools_tbl.add_column("Checklist %", justify="right")
         for t in GRADE_12_TOOLS:
             tid = t["id"]
             ok = bool(tm.get(tid))
             pct = "100%" if ok else "0%"
+            now_cell = (
+                "[bold yellow]YES[/bold yellow]"
+                if (cur_focus and tid == cur_focus and not ok)
+                else ("—" if ok else "[dim]later[/dim]")
+            )
             tools_tbl.add_row(
                 t["title"][:48] + ("…" if len(t["title"]) > 48 else ""),
                 tid,
+                now_cell,
                 "[green]PASS[/green]" if ok else "[yellow]not yet[/yellow]",
                 f"[green]{pct}[/green]" if ok else f"[dim]{pct}[/dim]",
             )

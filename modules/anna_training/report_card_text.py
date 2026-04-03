@@ -13,9 +13,10 @@ def grade12_progress_percentages(
     Honest progress numbers for the report card (not the same as gate PASS).
 
     - tool_checklist_pct: 0–100 from how many of four tools are attested (`anna tool-pass`).
-    - numeric_track_pct: blend of decisive-count vs min-N and win rate vs floor (0 if no decisive trades).
-    - combined_avg_pct: average of tool + numeric (single “how far along” number).
-    - bottleneck_pct: min(tool, numeric) — what’s holding the gate back most.
+    - numeric_track_pct: blend of decisive-count vs min-N and win rate vs floor — **0 while any tool
+      is incomplete** (numeric phase is sequential after the four skills).
+    - combined_avg_pct: while tools incomplete, equals tool_checklist_pct only (no dilution with locked numeric).
+    - bottleneck_pct: while tools incomplete, follows tool checklist; after all tools, min(tool, numeric).
 
     The Karpathy loop does not increment these; trades + attestation do.
     """
@@ -42,9 +43,17 @@ def grade12_progress_percentages(
     else:
         win_pct = min(100.0, 100.0 * float(wr) / min_wr)
 
-    numeric_pct = (trade_pct + win_pct) / 2.0
-    combined = (tool_pct + numeric_pct) / 2.0
-    bottleneck = min(tool_pct, numeric_pct)
+    tools_all = all(m.get(tid) for tid in TOOL_IDS)
+    if not tools_all:
+        numeric_pct = 0.0
+        trade_pct = 0.0
+        win_pct = 0.0
+        combined = tool_pct
+        bottleneck = tool_pct
+    else:
+        numeric_pct = (trade_pct + win_pct) / 2.0
+        combined = (tool_pct + numeric_pct) / 2.0
+        bottleneck = min(tool_pct, numeric_pct)
 
     def _r(x: float) -> float:
         return round(x, 1)
@@ -78,12 +87,24 @@ def learning_signal_verdict(g12: Mapping[str, Any], _st: Mapping[str, Any]) -> d
 
     ct = bool(g12.get("curriculum_tools_pass"))
     ng = bool(g12.get("numeric_gate_pass"))
-    parts = [
-        f"Curriculum tools (binary): {'PASS' if ct else 'NOT PASS'}",
-        f"Numeric paper slice (binary): {'PASS' if ng else 'NOT PASS'}",
-    ]
+    if not ct:
+        parts = [
+            "Curriculum tools (binary): NOT PASS",
+            "Numeric paper slice: deferred until all four tools are passed (sequential curriculum).",
+        ]
+    else:
+        parts = [
+            "Curriculum tools (binary): PASS",
+            f"Numeric paper slice (binary): {'PASS' if ng else 'NOT PASS'}",
+        ]
     miss = g12.get("missing_curriculum_tools") or []
-    if miss:
+    cf = g12.get("grade_12_current_focus")
+    if not ct and cf:
+        parts.append(f"Sequential focus — work ONLY `{cf}` next (do not skip ahead).")
+        rest = [x for x in miss if x != cf]
+        if rest:
+            parts.append("Then in order: " + " → ".join(str(x) for x in rest))
+    elif miss:
         parts.append("Missing tool ids: " + ", ".join(str(x) for x in miss))
     return {
         "verdict": "not_pass",
@@ -99,10 +120,16 @@ def improvement_lines_from_gate_result(g12: Mapping[str, Any]) -> list[str]:
     tb = g12.get("tool_blockers") or []
     nb = g12.get("numeric_blockers") or []
     if tb:
+        focus = g12.get("grade_12_current_focus")
+        seq = (
+            f" Work only `{focus}` next (sequential); do not skip ahead. "
+            if focus
+            else " Work one skill at a time in deck order; do not skip ahead. "
+        )
         out.append(
             "Tools gap: tighten LLM/pipeline use of math engine + FACT discipline, RCS/RCA, harness loop "
             "(see `modules/anna_training/`, `scripts/runtime/anna_modules/`, `llm/prompt_builder.py`); "
-            "after evidence, `anna tool-pass <id>`."
+            f"after evidence, `anna tool-pass <id>`.{seq}"
         )
     if nb:
         out.append(
@@ -151,7 +178,7 @@ def format_slack_report_card_text(
     if isinstance(deck, dict) and deck.get("version"):
         deck_lines = [
             "",
-            "SKILLS DECK (Karpathy loop updates each cycle until requirements satisfied):",
+            "SKILLS DECK — one skill at a time in fixed order (Karpathy loop updates deck):",
             f"  • Current focus: {deck.get('current_focus_requirement') or '—'}",
             f"  • Deck complete (full gate PASS): {'yes' if deck.get('deck_complete') else 'no'}",
         ]
@@ -167,7 +194,12 @@ def format_slack_report_card_text(
             "",
             "MEASURABLE PROGRESS (evidence on the scored path — `anna tool-pass`, `log-trade`, learning log):",
             f"  • Tool checklist: {prog['tool_checklist_pct']}% ({prog['tools_passed_count']}/{prog['tools_total']} attested)",
-            f"  • Paper numeric track: {prog['numeric_track_pct']}% (decisive count + win-rate vs gate)",
+            f"  • Paper numeric track: {prog['numeric_track_pct']}%"
+            + (
+                " (locked at 0% until all four tools passed — sequential curriculum)"
+                if not ct_ok
+                else " (decisive count + win-rate vs gate)"
+            ),
             f"  • Combined average: {prog['combined_avg_pct']}%  |  Bottleneck: {prog['bottleneck_pct']}%",
             "",
             f"Curriculum: {cid} — {curriculum_title}",
