@@ -19,6 +19,28 @@ def test_ensure_preflight_respects_skip(monkeypatch) -> None:
     assert r.get("skipped") is True
 
 
+def test_grade12_progress_percentages_shape(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setenv("BLACKBOX_ANNA_TRAINING_DIR", str(tmp_path))
+    from modules.anna_training.curriculum_tools import TOOL_IDS
+    from modules.anna_training.gates import evaluate_grade12_gates
+    from modules.anna_training.report_card_text import grade12_progress_percentages
+    from modules.anna_training.store import load_state, save_state
+
+    g12 = evaluate_grade12_gates()
+    st = load_state()
+    p0 = grade12_progress_percentages(g12, st.get("grade_12_tool_mastery"))
+    assert p0["tool_checklist_pct"] == 0.0
+    assert p0["tools_passed_count"] == 0
+    assert p0["tools_total"] == len(TOOL_IDS)
+
+    st["grade_12_tool_mastery"] = {tid: True for tid in TOOL_IDS}
+    save_state(st)
+    g12b = evaluate_grade12_gates()
+    p1 = grade12_progress_percentages(g12b, load_state().get("grade_12_tool_mastery"))
+    assert p1["tool_checklist_pct"] == 100.0
+    assert p1["tools_passed_count"] == len(TOOL_IDS)
+
+
 def test_readiness_shape(tmp_path: Path) -> None:
     class _Resp:
         def read(self) -> bytes:

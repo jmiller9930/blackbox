@@ -53,7 +53,10 @@ from modules.anna_training.curriculum_tools import (  # noqa: E402
     normalize_tool_mastery,
 )
 from modules.anna_training.progression import bachelor_eligibility_report, suggest_next_focus  # noqa: E402
-from modules.anna_training.report_card_text import improvement_lines_from_gate_result  # noqa: E402
+from modules.anna_training.report_card_text import (  # noqa: E402
+    grade12_progress_percentages,
+    improvement_lines_from_gate_result,
+)
 from modules.anna_training.gates import evaluate_grade12_gates  # noqa: E402
 from modules.anna_training.readiness import ensure_anna_data_preflight, full_readiness  # noqa: E402
 from modules.anna_training.paper_trades import (  # noqa: E402
@@ -103,6 +106,15 @@ def _cmd_status() -> int:
         "bachelor_track_started_at_utc": st.get("bachelor_track_started_at_utc"),
         "grade_12_tool_mastery": normalize_tool_mastery(st.get("grade_12_tool_mastery")),
         "grade_12_tools_all_passed": all(normalize_tool_mastery(st.get("grade_12_tool_mastery")).get(tid) for tid in TOOL_IDS),
+    }
+    g12 = evaluate_grade12_gates()
+    out["grade_12_progress"] = grade12_progress_percentages(g12, st.get("grade_12_tool_mastery"))
+    out["grade_12_gate_snapshot"] = {
+        "pass": g12.get("pass"),
+        "curriculum_tools_pass": g12.get("curriculum_tools_pass"),
+        "numeric_gate_pass": g12.get("numeric_gate_pass"),
+        "decisive_trades": g12.get("decisive_trades"),
+        "min_decisive_trades": g12.get("min_decisive_trades"),
     }
     print(json.dumps(out, indent=2))
     return 0
@@ -321,6 +333,8 @@ def _cmd_dashboard(args: argparse.Namespace | None = None) -> int:
         trades = load_paper_trades()
         s = summarize_trades(trades)
         g12 = evaluate_grade12_gates()
+        st0 = load_state()
+        prog = grade12_progress_percentages(g12, st0.get("grade_12_tool_mastery"))
         print(
             json.dumps(
                 {
@@ -328,6 +342,7 @@ def _cmd_dashboard(args: argparse.Namespace | None = None) -> int:
                         "learning_slice_pass": bool(g12.get("pass")),
                         "blockers": g12.get("blockers"),
                         "improvement_hints": improvement_lines_from_gate_result(g12),
+                        "grade_12_progress": prog,
                     },
                     "summary": s.__dict__,
                     "trades": len(trades),
@@ -350,6 +365,7 @@ def _cmd_dashboard(args: argparse.Namespace | None = None) -> int:
             curriculum_id=st.get("curriculum_id"),
             completed_milestones=st.get("completed_curriculum_milestones") or [],
         )
+        prog = grade12_progress_percentages(g12, st.get("grade_12_tool_mastery"))
         gate_pass = bool(g12.get("pass"))
         gate_style = "[bold green]PASS[/bold green]" if gate_pass else "[bold red]NOT PASS[/bold red]"
         learn_line = (
@@ -387,6 +403,11 @@ def _cmd_dashboard(args: argparse.Namespace | None = None) -> int:
         report_body = (
             f"[dim]Updating report card — same signal as gates + tool checklist; refresh shows progress.[/dim]\n\n"
             f"{learn_line}\n\n"
+            f"[bold]Measurable progress[/bold]: tool checklist [cyan]{prog['tool_checklist_pct']}%[/cyan] "
+            f"([cyan]{prog['tools_passed_count']}/{prog['tools_total']}[/cyan] attested)  |  "
+            f"paper numeric track [cyan]{prog['numeric_track_pct']}%[/cyan]  |  "
+            f"combined avg [cyan]{prog['combined_avg_pct']}%[/cyan]  |  bottleneck [yellow]{prog['bottleneck_pct']}%[/yellow]\n"
+            f"[dim]Loop heartbeats alone do not raise these. Per-row % below = attestation only (0% until `anna tool-pass`).[/dim]\n\n"
             f"[bold]Curriculum[/bold]: {cid or '—'} — {cur_title}\n"
             f"[dim]Stage[/dim]: {stage}\n\n"
             f"[bold]Overall[/bold]: {gate_style}  [dim](cohesive tools, then numeric 60% / min-N)[/dim]\n"
@@ -412,17 +433,23 @@ def _cmd_dashboard(args: argparse.Namespace | None = None) -> int:
         )
 
         tm = normalize_tool_mastery(st.get("grade_12_tool_mastery"))
-        tools_tbl = Table(title="Tool checklist (pass all as a set; then numeric / fund bar applies)")
+        tools_tbl = Table(
+            title="Tool checklist (pass all as a set; then numeric / fund bar applies)",
+            caption="Checklist % = operator attestation after evidence — not an auto score from idle loop ticks.",
+        )
         tools_tbl.add_column("Tool", no_wrap=True)
         tools_tbl.add_column("ID", style="dim")
         tools_tbl.add_column("Status")
+        tools_tbl.add_column("Checklist %", justify="right")
         for t in GRADE_12_TOOLS:
             tid = t["id"]
             ok = bool(tm.get(tid))
+            pct = "100%" if ok else "0%"
             tools_tbl.add_row(
-                t["title"][:52] + ("…" if len(t["title"]) > 52 else ""),
+                t["title"][:48] + ("…" if len(t["title"]) > 48 else ""),
                 tid,
                 "[green]PASS[/green]" if ok else "[yellow]not yet[/yellow]",
+                f"[green]{pct}[/green]" if ok else f"[dim]{pct}[/dim]",
             )
         console.print(tools_tbl)
 
