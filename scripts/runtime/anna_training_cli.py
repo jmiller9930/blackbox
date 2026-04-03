@@ -763,6 +763,9 @@ def main(argv: list[str] | None = None) -> int:
         "math-engine-full",
         "training-progress",
         "advance-curriculum",
+        "dashboard",
+        "status",
+        "curricula",
     ):
         rc = _require_preflight_or_exit()
         if rc is not None:
