@@ -667,8 +667,10 @@ def _cmd_dashboard(args: argparse.Namespace | None = None) -> int:
                 border_style="cyan",
             )
         )
-        table = Table(title="Paper trades (most recent last) — raw rows behind the numeric gate")
-        for col in ("UTC", "Symbol", "Venue", "Side", "TF", "Result", "P&L $", "Src", "Strategy", "Ref"):
+        table = Table(
+            title="Paper trades (most recent last) — Synth=yes is lab-only (not market-grounded paper)"
+        )
+        for col in ("UTC", "Symbol", "Venue", "Side", "TF", "Result", "P&L $", "Synth", "Src", "Strategy", "Ref"):
             table.add_column(col)
         for row in sorted(trades, key=lambda x: x.get("ts_utc") or "")[-40:]:
             src = str(row.get("source") or "—")
@@ -676,6 +678,8 @@ def _cmd_dashboard(args: argparse.Namespace | None = None) -> int:
                 src = "—"
             strat = (str(row.get("strategy_label") or "") or "—")[:20]
             pref = (str(row.get("proposal_ref") or "") or "—")[:16]
+            is_syn = bool(row.get("synthetic"))
+            syn_cell = "[yellow]yes[/yellow]" if is_syn else "no"
             table.add_row(
                 str(row.get("ts_utc", ""))[:19],
                 str(row.get("symbol", "")),
@@ -684,6 +688,7 @@ def _cmd_dashboard(args: argparse.Namespace | None = None) -> int:
                 str(row.get("timeframe", "")),
                 str(row.get("result", "")),
                 f"{float(row.get('pnl_usd') or 0):.2f}",
+                syn_cell,
                 src[:12],
                 strat,
                 pref,
