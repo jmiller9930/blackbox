@@ -21,6 +21,10 @@ Env:
     ``curriculum_tools.GRADE_12_TOOLS``). Manual ``anna tool-pass`` remains available.
   ANNA_KARPATHY_HARNESS_MIN_ITERATIONS — min ``karpathy_loop_iteration`` count for the
     harness-loop tool practice predicate (default 10)
+  ANNA_KARPATHY_REQUIRE_LLM_REACHABLE — if ``1``/true: after data preflight, probe Ollama
+    (``GET …/api/tags``) **before** incrementing the loop or running school/harness; when ``ANNA_USE_LLM``
+    is on, skip the rest of the tick if Ollama is unreachable, **or** if ``OLLAMA_MODEL`` is not listed
+    in tags (iteration unchanged; heartbeat includes ``school_skip_reason``).
 
 Repo root:
   PYTHONPATH=scripts/runtime:. python3 scripts/runtime/anna_karpathy_loop_daemon.py
@@ -36,6 +40,7 @@ import sys
 import time
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import Any
 
 ROOT = Path(__file__).resolve().parents[2]
 if str(ROOT) not in sys.path:
@@ -136,11 +141,96 @@ def run_one_tick(*, tick_index: int) -> tuple[dict, bool]:
                 "pyth_stream": (pf.get("readiness") or {}).get("pyth_stream"),
                 "market_data_db": (pf.get("readiness") or {}).get("market_data_db"),
             },
+            "data_preflight": {
+                "schema": "anna_data_preflight_v1",
+                "ok": bool(pf.get("ok")),
+                "skipped": bool(pf.get("skipped")),
+                "blockers": list(pf.get("blockers") or []),
+                "readiness": {
+                    "pyth_stream": (pf.get("readiness") or {}).get("pyth_stream"),
+                    "market_data_db": (pf.get("readiness") or {}).get("market_data_db"),
+                    "solana_rpc": (pf.get("readiness") or {}).get("solana_rpc"),
+                },
+                "at_utc": _utc_iso(),
+            },
         }
         _append_heartbeat(row)
         return row, False
 
     st = _ensure_enrolled(load_state())
+
+    st["karpathy_last_data_preflight"] = {
+        "schema": "anna_data_preflight_v1",
+        "ok": bool(pf.get("ok")),
+        "skipped": bool(pf.get("skipped")),
+        "blockers": list(pf.get("blockers") or []),
+        "readiness": {
+            "pyth_stream": (pf.get("readiness") or {}).get("pyth_stream"),
+            "market_data_db": (pf.get("readiness") or {}).get("market_data_db"),
+            "solana_rpc": (pf.get("readiness") or {}).get("solana_rpc"),
+        },
+        "at_utc": _utc_iso(),
+    }
+
+    try:
+        from ollama_preflight import ollama_llm_preflight
+
+        lp = ollama_llm_preflight()
+    except Exception as e:  # noqa: BLE001
+        lp = {
+            "schema": "ollama_llm_preflight_v1",
+            "ok": False,
+            "error": f"preflight_import_or_run:{e}",
+        }
+    st["karpathy_last_llm_preflight"] = lp
+
+    require_llm = (os.environ.get("ANNA_KARPATHY_REQUIRE_LLM_REACHABLE") or "").strip().lower() in (
+        "1",
+        "true",
+        "yes",
+    )
+    st["karpathy_last_preflight_policy"] = {"require_llm_reachable": require_llm}
+
+    def _llm_blocks_school_when_required(p: dict[str, Any]) -> bool:
+        if p.get("skipped"):
+            return False
+        if p.get("ok") is not True:
+            return True
+        if p.get("model_present_in_tags") is False:
+            return True
+        return False
+
+    if require_llm and _llm_blocks_school_when_required(lp):
+        save_state(st)
+        row = {
+            "kind": "karpathy_loop_heartbeat_v1",
+            "tick_index": tick_index,
+            "at_utc": _utc_iso(),
+            "preflight_ok": True,
+            "school_skipped_llm_unreachable": True,
+            "school_skip_reason": (
+                "ollama_model_not_installed"
+                if lp.get("ok") and lp.get("model_present_in_tags") is False
+                else "ollama_unreachable_or_error"
+            ),
+            "data_preflight": st.get("karpathy_last_data_preflight"),
+            "preflight_policy": st.get("karpathy_last_preflight_policy"),
+            "llm_preflight": lp,
+        }
+        _append_heartbeat(row)
+        print(
+            json.dumps(
+                {
+                    "kind": "karpathy_loop_llm_blocked",
+                    "tick_index": tick_index,
+                    "llm_preflight": lp,
+                },
+                ensure_ascii=False,
+            ),
+            flush=True,
+        )
+        return row, False
+
     n = int(st.get("karpathy_loop_iteration") or 0) + 1
     st["karpathy_loop_iteration"] = n
     st["karpathy_loop_last_tick_utc"] = utc_now_iso()
@@ -239,6 +329,9 @@ def run_one_tick(*, tick_index: int) -> tuple[dict, bool]:
             "win_rate": g12.get("win_rate"),
         },
         "paper_harness": st.get("karpathy_last_paper_harness"),
+        "data_preflight": st.get("karpathy_last_data_preflight"),
+        "preflight_policy": st.get("karpathy_last_preflight_policy"),
+        "llm_preflight": st.get("karpathy_last_llm_preflight"),
         "market_snapshot_row_id": (snap or {}).get("row_id") if isinstance(snap, dict) else None,
     }
     _append_heartbeat(row)

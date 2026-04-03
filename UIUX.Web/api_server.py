@@ -396,12 +396,21 @@ def build_anna_training_dashboard() -> dict[str, Any]:
                     "request_id": (str(rid)[:14] + "…") if rid and len(str(rid)) > 14 else rid,
                 }
             )
+        lp = st.get("karpathy_last_llm_preflight")
+        llm_preflight = lp if isinstance(lp, dict) else {}
+        dp = st.get("karpathy_last_data_preflight")
+        data_preflight = dp if isinstance(dp, dict) else {}
+        pol = st.get("karpathy_last_preflight_policy")
+        preflight_policy = pol if isinstance(pol, dict) else {}
+
         semantics = {
             "loop_tick_means": (
-                "Each supervisor tick: preflight → iteration++ → skills deck → tool drill only when "
-                "deck focus is one of the four Grade-12 tool IDs (when focus is numeric_paper_cohort, "
-                "no tool drill runs that tick) → paper harness: full analyze_to_dict → execution request "
-                "→ Jack paper only if BLACKBOX_JACK_EXECUTOR_CMD is set."
+                "Each supervisor tick: **data preflight** (Pyth stream + market_data.db; optional Solana) → "
+                "**LLM preflight** (GET Ollama /api/tags when ANNA_USE_LLM is on; same OLLAMA_BASE_URL as Anna) → "
+                "then iteration++ → skills deck → tool drill when deck focus is a Grade-12 tool ID → paper harness "
+                "(analyze_to_dict → execution request → Jack paper if BLACKBOX_JACK_EXECUTOR_CMD is set). "
+                "With ANNA_KARPATHY_REQUIRE_LLM_REACHABLE=1, a failed LLM check or missing OLLAMA_MODEL in tags skips "
+                "school/harness for that tick (iteration unchanged)."
             ),
             "attempt_log_vs_tick": (
                 "The attempt log file counts delegate/manual events (jack_handoff, paper_manual, etc.) — "
@@ -418,6 +427,9 @@ def build_anna_training_dashboard() -> dict[str, Any]:
             "trace_id": tid,
             "at_utc": now_iso(),
             "semantics": semantics,
+            "data_preflight": data_preflight,
+            "preflight_policy": preflight_policy,
+            "llm_preflight": llm_preflight,
             "training_engagement": engagement,
             "analysis_snapshot": analysis_snapshot,
             "skill_practice_last": skill_practice_last,
@@ -678,10 +690,19 @@ TRAINING_DASHBOARD_HTML = """<!DOCTYPE html>
     .chip { font-size: 0.72rem; padding: 0.15rem 0.45rem; background: #21262d; border-radius: 4px; border: 1px solid #30363d; }
     details.raw { margin-top: 0.5rem; font-size: 0.75rem; color: var(--muted); }
     details.raw pre { white-space: pre-wrap; word-break: break-word; margin: 0.35rem 0 0; }
+    .llm-bad { border-color: var(--bad) !important; background: #22191c; }
+    .llm-warn { border-color: #9e6a03 !important; background: #1c1a12; }
+    .llm-good { border-color: var(--ok) !important; background: #0d1f14; }
   </style>
 </head>
 <body>
   <h1>Anna training — live</h1>
+  <div id="v_preflight_banner" class="card llm-good" style="margin-bottom:0.75rem;display:none">
+    <h2>Preflight (data + LLM — same order as the daemon)</h2>
+    <p class="sub" id="v_data_pf">—</p>
+    <p class="sub" id="v_llm_pf" style="margin-top:0.45rem">—</p>
+    <p class="sub" id="v_pf_policy" style="margin-top:0.45rem;font-size:0.72rem;color:var(--muted)"></p>
+  </div>
   <div class="card" style="margin-bottom:0.75rem;border-color:#484f58">
     <h2>One loop tick vs paper rows vs attempt-file lines</h2>
     <p class="sub" id="v_sem1"></p>
@@ -754,6 +775,45 @@ TRAINING_DASHBOARD_HTML = """<!DOCTYPE html>
       document.getElementById('v_sem1').textContent = sem.loop_tick_means || '—';
       document.getElementById('v_sem2').textContent = sem.attempt_log_vs_tick || '—';
       document.getElementById('v_sem3').textContent = sem.paper_ledger_vs_tick || '—';
+      (function preflightBanner() {
+        var d = j.data_preflight || {};
+        var l = j.llm_preflight || {};
+        var pol = j.preflight_policy || {};
+        function dataLine() {
+          if (!d || typeof d !== 'object' || Object.keys(d).length === 0) {
+            return { tier: 1, text: 'No data-preflight snapshot in state yet — run the Karpathy daemon at least once after deploy.' };
+          }
+          if (d.skipped) return { tier: 1, text: 'Skipped (ANNA_SKIP_PREFLIGHT) — enforcement bypassed.' };
+          if (d.ok) return { tier: 0, text: 'OK — Pyth stream + market_data.db (and optional Solana) passed this tick.' };
+          var b = (d.blockers || []).join(', ');
+          return { tier: 2, text: 'Blocked — ' + (b || 'unknown') + '. Fix sources; see readiness in state / heartbeat JSONL.' };
+        }
+        function llmLine() {
+          if (!l || typeof l !== 'object' || Object.keys(l).length === 0) {
+            return { tier: 1, text: 'No LLM snapshot in state yet — daemon has not completed a tick with LLM probe.' };
+          }
+          if (l.skipped) return { tier: 0, text: 'Skipped (' + (l.reason || 'ANNA_USE_LLM off') + ').' };
+          if (l.ok === false) {
+            return { tier: 2, text: 'Not reachable — ' + (l.error || 'error') + (l.base_url ? ' · base ' + l.base_url : '') };
+          }
+          if (l.model_present_in_tags === false) {
+            return { tier: 1, text: 'Ollama up but model ' + (l.ollama_model_configured || '') + ' not listed in /api/tags (ollama pull).' };
+          }
+          return { tier: 0, text: 'OK — ' + (l.ollama_model_configured || '') + ' present · ' + (l.base_url || '') };
+        }
+        var a = dataLine();
+        var b = llmLine();
+        document.getElementById('v_data_pf').textContent = 'Data: ' + a.text;
+        document.getElementById('v_llm_pf').textContent = 'LLM: ' + b.text;
+        var worst = 0;
+        if (a.tier >= b.tier) worst = a.tier; else worst = b.tier;
+        var ban = document.getElementById('v_preflight_banner');
+        ban.className = 'card ' + (worst >= 2 ? 'llm-bad' : (worst >= 1 ? 'llm-warn' : 'llm-good'));
+        ban.style.display = 'block';
+        document.getElementById('v_pf_policy').textContent = pol.require_llm_reachable
+          ? 'Strict: ANNA_KARPATHY_REQUIRE_LLM_REACHABLE — iteration/school/harness do not advance when the LLM line is not OK (includes missing model in tags).'
+          : 'Lenient: LLM status is informational unless you set ANNA_KARPATHY_REQUIRE_LLM_REACHABLE=1 on the daemon host.';
+      })();
       var ls = j.learning_signal || {};
       document.getElementById('v_ls_head').textContent = ls.headline || '—';
       document.getElementById('v_ls_detail').textContent = ls.detail || '';

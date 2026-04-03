@@ -60,6 +60,10 @@ def test_karpathy_once_writes_skills_deck_and_cycle_log(tmp_path: Path, monkeypa
     last_hb = json.loads(hb_lines[-1])
     assert last_hb.get("kind") == "karpathy_loop_heartbeat_v1"
     assert last_hb.get("skill_practice") == ksp
+    assert (last_hb.get("data_preflight") or {}).get("schema") == "anna_data_preflight_v1"
+    assert isinstance(last_hb.get("llm_preflight"), dict)
+    assert last_hb.get("preflight_policy") == {"require_llm_reachable": False}
+    assert (raw.get("karpathy_last_data_preflight") or {}).get("schema") == "anna_data_preflight_v1"
 
 
 def test_grade12_internalizes_when_all_tools_pass(tmp_path: Path, monkeypatch) -> None:
