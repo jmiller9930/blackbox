@@ -13,8 +13,8 @@ Contract (operator-supplied executable via ``BLACKBOX_JACK_EXECUTOR_CMD``):
   - **stdin:** one JSON object:
     ``{"kind":"blackbox_jack_handoff_v1","execution_request":{...},"mock_execution_result":{...}}``
   - **stdout:** one JSON object, either:
-    - ``{"ok": true, "paper_trade": {"symbol", "side", "result", "pnl_usd", "timeframe", optional "notes", "venue"}}``
-      → appended to ``paper_trades.jsonl`` via :func:`append_paper_trade`
+    - ``{"ok": true, "paper_trade": {"symbol", "side", "result", "pnl_usd", "timeframe", optional "notes", "venue", optional "bid", "ask", "spread", optional "regime", "signal_snapshot", "strategy_label"}}``
+      → appended to ``paper_trades.jsonl`` via :func:`append_paper_trade` (placement-time quote, venue-specific units)
     - ``{"ok": false, "error": "..."}`` → no append
 
 Default: no command set → no-op (bridge not active). Does not place orders from Slack chat; use
@@ -29,7 +29,11 @@ import shlex
 import subprocess
 from typing import Any
 
-from modules.anna_training.paper_trades import append_paper_trade
+from modules.anna_training.paper_trades import (
+    append_paper_trade,
+    placement_quote_kwargs_from_mapping,
+    regime_signal_kwargs_from_mapping,
+)
 from modules.anna_training.trade_attempts import append_trade_attempt
 
 
@@ -134,6 +138,8 @@ def maybe_delegate_to_jack(
         return {"delegated": True, "ok": True, "paper_logged": False, "note": "no paper_trade in response"}
 
     try:
+        qk = placement_quote_kwargs_from_mapping(pt)
+        rk = regime_signal_kwargs_from_mapping(pt)
         row = append_paper_trade(
             symbol=str(pt.get("symbol") or ""),
             side=str(pt.get("side") or ""),
@@ -148,6 +154,8 @@ def maybe_delegate_to_jack(
             strategy_label=(
                 xs if (xs := str(pt.get("strategy_label") or "").strip()) else None
             ),
+            **qk,
+            **rk,
         )
     except (TypeError, ValueError) as e:
         return _jack_fail(f"paper_trade_invalid:{e!s}")

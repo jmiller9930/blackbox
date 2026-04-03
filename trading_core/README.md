@@ -1,10 +1,35 @@
-# `trading_core` — rules source (Drift bot)
+# `trading_core` — rules source (SOL perp bot)
 
-This folder holds the **canonical TypeScript snapshot** of the live-style **Drift SOL-PERP** bot — the **operational rules** (signals, sizing, orders, trailing, gates) you asked to preserve for building a smarter/dynamic system around.
+This folder holds the **canonical TypeScript snapshot** of the live-style **SOL-PERP** bot — the **operational rules** (signals, sizing, orders, trailing, gates) to preserve for a smarter/dynamic system around it.
 
-| File | Purpose |
+**Default venue (policy):** **Jupiter Perps** → executor **Jack**. Use **Billy** only when the routed venue is explicitly **Drift** (see `src/venue/adapter_model.ts` — `DEFAULT_VENUE_ID`).
+
+## Anna, Billy, Jack, and venues (clear as day)
+
+| Agent | Venue | Role |
+|--------|--------|------|
+| **Anna** | (analyst) | Signals and confidence; **routes** approved execution packets by **venue** — **not** free-text “use Jupiter.” |
+| **Billy** | **Drift** only | Execution-only: Drift orders and positions. |
+| **Jack** | **Jupiter Perps** only | Execution-only: Jupiter Perps orders and positions. |
+
+**Rule:** One **executor** per intent — Anna sends Drift work to **Billy**, Jupiter Perps work to **Jack**. That keeps venues and humans aligned (`agents/agent_registry.json`).
+
+**Adapter rule:** Drift and Jupiter code stay **separate** under `src/venue/` — no mixed SDK imports.
+
+**Jupiter vs Drift — different path, not a skin:** Same L1 doesn’t mean the same integration. **Program**, **accounts**, **instructions**, **SDK**, and **subscriptions** differ; the monolith in `src/bot/` is **Drift-shaped** today. **Jack** needs a **Jupiter-native** client path (see `jupiter_perp.ts` anchors), not Drift calls with different constants.
+
+**Where this is spelled in code:** [`src/venue/adapter_model.ts`](src/venue/adapter_model.ts) (`VenueId`, `executorForVenue`).
+
+**Parity with Python:** `modules/execution_adapter/` — same handoff shape; wire `executor_agent_id` / lane to Billy vs Jack adapters as implementation lands.
+
+**Today’s snapshot:** `src/bot/drift_trading_bot_source.ts` is still a **monolith** (strategy + **Drift** SDK). Jupiter is **IDs only** in `jupiter_perp.ts` until **Jack’s** adapter is implemented. Splitting **strategy** vs **venue** is the target shape.
+
+| Path | Purpose |
 |------|---------|
-| **`drift_trading_bot_source.ts`** | Full source extracted from the 2026-03-22 operator thread. |
+| **`src/bot/drift_trading_bot_source.ts`** | Full bot — extracted from the 2026-03-22 operator thread. |
+| **`src/venue/adapter_model.ts`** | `VenueId`, `executorForVenue` (Billy↔Drift, Jack↔Jupiter). |
+| **`src/venue/jupiter_perp.ts`** | Jupiter Perps program / pool / custody `PublicKey`s (Sean). |
+| **`scripts/create-solana-wallet.ts`** | CLI: write `keypair.json` + `keypair.base58` (`npm run create-wallet`). |
 
 **Secrets:** The original paste included a **tokenized QuickNode URL**. In git it is replaced with **`process.env.SOLANA_RPC_URL`** + public mainnet fallback. Export `SOLANA_RPC_URL` when running locally.
 
@@ -28,7 +53,9 @@ npm run create-wallet
 
 **Do not use `sudo cd …`** — `cd` in a `sudo` subshell does not change your shell’s directory, so `npm` will run in the wrong folder and look for `package.json` at the repo root. Use plain `cd trading_core` (no sudo).
 
-This writes **`keypair.json`** — **one line**, compact `[n,n,...]` (no spaces) for `drift_trading_bot_source.ts`. It also writes **`keypair.base58`** — **one line**, base58 only (no `[]` / `{}`) for wallet import UIs. **Do not commit.** To print base58 once: `SHOW_SECRET=1 npm run create-wallet`.
+This writes **`keypair.json`** — **one line**, compact `[n,n,...]` (no spaces) for `src/bot/drift_trading_bot_source.ts`. It also writes **`keypair.base58`** — **one line**, base58 only (no `[]` / `{}`) for wallet import UIs. **Do not commit.** To print base58 once: `SHOW_SECRET=1 npm run create-wallet`.
+
+Run the bot (after `npm install` in `trading_core/` and Drift SDK deps resolved): `npm run bot` from `trading_core/` (same cwd as `keypair.json` unless `KEYPAIR_PATH` is set).
 
 **Import an existing secret without echo (Python):** install **`base58`** once, then run from **repo root** (not inside `trading_core` — paths are relative to the blackbox folder):
 

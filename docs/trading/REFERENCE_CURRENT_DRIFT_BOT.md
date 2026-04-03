@@ -6,7 +6,7 @@ This document is the **in-repo handoff** for what the **live-style** trading bot
 
 **Sources:** Architect trading-system update (`docs/architect/architect_update_trading_system.md`), operator context, and a **code snapshot** shared 2026-03-22 (Sean S → John Miller; subject referenced **“trading bot code 60/40”** — meaning of **60/40** should be confirmed with the team, e.g. revenue vs effort split).
 
-**Full source in-repo:** [`../../trading_core/drift_trading_bot_source.ts`](../../trading_core/drift_trading_bot_source.ts) (QuickNode URL redacted → `SOLANA_RPC_URL`).
+**Full source in-repo:** [`../../trading_core/src/bot/drift_trading_bot_source.ts`](../../trading_core/src/bot/drift_trading_bot_source.ts) (QuickNode URL redacted → `SOLANA_RPC_URL`). Jupiter Perp addresses: [`../../trading_core/src/venue/jupiter_perp.ts`](../../trading_core/src/venue/jupiter_perp.ts).
 
 ---
 
@@ -101,9 +101,13 @@ Next evolution steps align with **`docs/architect/architect_update_trading_syste
 - Treat **mainnet** keys as **production secrets**; use **env vars** or a **secrets manager** for RPC and third-party URLs if they contain auth.  
 - This reference **intentionally omits** full source listing; keep **canonical code** in a **private** repo or path agreed by the team, with **.gitignore** for keys.
 
+## Execution agents vs venues (Billy / Jack)
+
+**Jack** = executor for **Jupiter Perps** — **default** venue when unspecified. **Billy** = executor for **Drift** only (explicit venue). **Anna** routes approved intents by **venue** (structured packet), not chat tone. Registry: [`agents/agent_registry.json`](../../agents/agent_registry.json). Types: [`trading_core/src/venue/adapter_model.ts`](../../trading_core/src/venue/adapter_model.ts) (`DEFAULT_VENUE_ID`).
+
 ## Billy -> Drift connection contract (`v1`)
 
-For BLACK BOX `v1`, Billy is the Drift-facing execution bot. The connection path must be explicit, replayable, and secret-safe.
+When the routed venue is **Drift**, **Billy** uses the Drift adapter. The in-repo **TypeScript** snapshot was built around Drift first; **policy default** for new work is **Jupiter Perps / Jack** unless the packet pins Drift. The Drift connection path must be explicit, replayable, and secret-safe.
 
 Required connection sequence:
 
@@ -121,7 +125,7 @@ Required connection sequence:
 
 The in-repo snapshot already demonstrates the core SDK sequence:
 
-```144:179:trading_core/drift_trading_bot_source.ts
+```149:184:trading_core/src/bot/drift_trading_bot_source.ts
 public async initDrift() {
   ...
   const keypairJson = await fs.readFile(KEYPAIR_PATH, 'utf-8');

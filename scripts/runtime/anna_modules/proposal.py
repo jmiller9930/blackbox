@@ -110,6 +110,11 @@ def build_anna_proposal(
         "Prepared for later comparison to paper outcomes, reflections, insights, and trends — automated diff not implemented in this phase."
     )
 
+    execution_context = {
+        "regime": anna.get("regime"),
+        "signal_snapshot": anna.get("signal_snapshot"),
+    }
+
     return {
         "kind": "anna_proposal_v1",
         "schema_version": PROPOSAL_SCHEMA_VERSION,
@@ -118,6 +123,7 @@ def build_anna_proposal(
             "task_id": source_task_id,
             "kind": "anna_analysis_v1",
         },
+        "execution_context": execution_context,
         "proposal_type": ptype,
         "proposal_summary": summary,
         "proposed_effect": {

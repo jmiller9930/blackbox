@@ -31,7 +31,7 @@ def append_trade_attempt(
     trade_id: str | None = None,
 ) -> dict[str, Any]:
     """
-    phase: jack_handoff | execution | paper_manual | harness_auto
+    phase: jack_handoff | execution | paper_manual
     status: started | ok | fail | blocked | recorded
     """
     row = {
@@ -80,7 +80,6 @@ class TradeActivitySummary:
     jack_delegate_ok_no_paper: int
     execution_blocked: int
     paper_manual_recorded: int
-    harness_auto_recorded: int
 
     @property
     def failed_or_blocked(self) -> int:
@@ -89,7 +88,7 @@ class TradeActivitySummary:
 
 def summarize_trade_activity(rows: list[dict[str, Any]] | None = None) -> TradeActivitySummary:
     r = rows if rows is not None else load_trade_attempts()
-    js = jf = jokp = jokn = eb = pm = ha = 0
+    js = jf = jokp = jokn = eb = pm = 0
     for e in r:
         phase = str(e.get("phase") or "")
         status = str(e.get("status") or "")
@@ -108,8 +107,6 @@ def summarize_trade_activity(rows: list[dict[str, Any]] | None = None) -> TradeA
             eb += 1
         elif phase == "paper_manual" and status == "recorded":
             pm += 1
-        elif phase == "harness_auto" and status == "recorded":
-            ha += 1
     return TradeActivitySummary(
         total_events=len(r),
         jack_delegate_started=js,
@@ -118,7 +115,6 @@ def summarize_trade_activity(rows: list[dict[str, Any]] | None = None) -> TradeA
         jack_delegate_ok_no_paper=jokn,
         execution_blocked=eb,
         paper_manual_recorded=pm,
-        harness_auto_recorded=ha,
     )
 
 
@@ -143,8 +139,7 @@ def format_trade_activity_evidence_lines(
         "  • Attempt breakdown: "
         f"Jack started {act.jack_delegate_started} | Jack failed {act.jack_delegate_failed} | "
         f"Jack OK + paper row {act.jack_delegate_ok_with_paper} | Jack OK no paper {act.jack_delegate_ok_no_paper} | "
-        f"execution blocked {act.execution_blocked} | manual CLI `log-trade` recorded {act.paper_manual_recorded} | "
-        f"Karpathy auto sim {act.harness_auto_recorded}",
+        f"execution blocked {act.execution_blocked} | manual CLI `log-trade` recorded {act.paper_manual_recorded}",
         "  • If ledger >> manual-recorded: older rows predate attempt logging, imports, or rows from Jack "
         "(Jack OK logs trade_id on success; not every historical row has a backfilled attempt).",
     ]

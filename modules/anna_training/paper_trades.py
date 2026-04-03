@@ -1,21 +1,23 @@
 """Append-only paper trade log for grade-12 report card (JSONL under anna_training dir).
 
 Contract intent: **paper and live use the same pipeline** (analysis → request → adapter); the **only**
-deliberate difference is **settlement** — no real money / no live venue submit; paper uses sim or
-notional outcomes. Rows may still be market-grounded paper, operator ``log-trade``, or lab synthetic;
-see ``docs/architect/ANNA_GOES_TO_SCHOOL.md`` §1.1.1.
+deliberate difference is **settlement** — no real money / no live venue submit. Post-trade, the
+exchange may return less detail than a live fill; **at placement time** we can still record **bid,
+ask, and spread** (or a market snapshot id) when the adapter provides them. Rows are market-grounded
+paper or operator ``log-trade``; see ``docs/architect/ANNA_GOES_TO_SCHOOL.md`` §1.1.1.
 """
 
 from __future__ import annotations
 
 import json
 import uuid
-from collections.abc import Iterable
+from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
 from modules.anna_training.store import anna_training_dir, utc_now_iso
+from modules.anna_training.strategy_catalog import validate_strategy_label
 
 TRADES_FILE = "paper_trades.jsonl"
 
@@ -24,6 +26,55 @@ VALID_RESULTS = frozenset({"won", "lost", "breakeven", "abstain"})
 
 def trades_path() -> Path:
     return anna_training_dir() / TRADES_FILE
+
+
+def placement_quote_kwargs_from_mapping(m: Mapping[str, Any]) -> dict[str, float | None]:
+    """Parse optional ``bid``, ``ask``, ``spread`` from Jack ``paper_trade`` or similar JSON."""
+
+    def _f(key: str) -> float | None:
+        v = m.get(key)
+        if v is None or v == "":
+            return None
+        try:
+            return float(v)
+        except (TypeError, ValueError):
+            return None
+
+    return {"bid": _f("bid"), "ask": _f("ask"), "spread": _f("spread")}
+
+
+def regime_signal_kwargs_from_mapping(m: Mapping[str, Any]) -> dict[str, Any]:
+    """Optional ``regime`` and ``signal_snapshot`` from Jack ``paper_trade`` JSON."""
+    out: dict[str, Any] = {}
+    r = m.get("regime")
+    if r is not None and str(r).strip():
+        out["regime"] = str(r).strip()
+    ss = m.get("signal_snapshot")
+    if isinstance(ss, dict):
+        out["signal_snapshot"] = ss
+    return out
+
+
+def _optional_placement_quote(
+    row: dict[str, Any],
+    *,
+    bid: float | None = None,
+    ask: float | None = None,
+    spread: float | None = None,
+) -> None:
+    """Attach optional top-of-book (or equivalent) quote at decision/placement time.
+
+    Units are venue-specific (often USD per base or index price). If ``spread`` is omitted but both
+    ``bid`` and ``ask`` are set, ``spread`` defaults to ``ask - bid``.
+    """
+    if bid is not None:
+        row["bid"] = float(bid)
+    if ask is not None:
+        row["ask"] = float(ask)
+    if spread is not None:
+        row["spread"] = float(spread)
+    elif bid is not None and ask is not None:
+        row["spread"] = float(ask) - float(bid)
 
 
 def append_paper_trade(
@@ -42,9 +93,17 @@ def append_paper_trade(
     proposal_ref: str | None = None,
     strategy_label: str | None = None,
     linked_attempt_event_id: str | None = None,
-    synthetic: bool = False,
     activity_phase: str = "paper_manual",
+    bid: float | None = None,
+    ask: float | None = None,
+    spread: float | None = None,
+    regime: str | None = None,
+    signal_snapshot: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
+    if strategy_label is not None and str(strategy_label).strip():
+        ok, err = validate_strategy_label(str(strategy_label).strip())
+        if not ok:
+            raise ValueError(err)
     r = (result or "").strip().lower()
     if r not in VALID_RESULTS:
         raise ValueError(f"result must be one of {sorted(VALID_RESULTS)}")
@@ -68,8 +127,11 @@ def append_paper_trade(
         row["strategy_label"] = str(strategy_label).strip()
     if linked_attempt_event_id:
         row["linked_attempt_event_id"] = str(linked_attempt_event_id).strip()
-    if synthetic:
-        row["synthetic"] = True
+    _optional_placement_quote(row, bid=bid, ask=ask, spread=spread)
+    if regime is not None and str(regime).strip():
+        row["regime"] = str(regime).strip()
+    if signal_snapshot is not None and isinstance(signal_snapshot, dict):
+        row["signal_snapshot"] = signal_snapshot
 
     if log_manual_activity:
         try:
@@ -87,7 +149,10 @@ def append_paper_trade(
                     "venue": row.get("venue"),
                     "strategy_label": row.get("strategy_label"),
                     "proposal_ref": row.get("proposal_ref"),
-                    "synthetic": bool(row.get("synthetic")),
+                    "bid": row.get("bid"),
+                    "ask": row.get("ask"),
+                    "spread": row.get("spread"),
+                    "regime": row.get("regime"),
                 },
             )
             eid = str(ev.get("event_id") or "").strip()
@@ -119,6 +184,15 @@ def load_paper_trades() -> list[dict[str, Any]]:
         except json.JSONDecodeError:
             continue
     return out
+
+
+def load_paper_trades_for_gates() -> list[dict[str, Any]]:
+    """Rows used for Grade-12 numeric gate and operator-facing summaries.
+
+    Omits legacy JSONL lines that still carry a truthy ``synthetic`` field (the lab auto-append
+    path was removed; the field is no longer written).
+    """
+    return [t for t in load_paper_trades() if not t.get("synthetic")]
 
 
 @dataclass
@@ -176,7 +250,7 @@ def build_report_card_markdown(
     operator_name: str = "",
 ) -> str:
     """Grade 12 paper-trading report card (markdown) for external share."""
-    t = trades if trades is not None else load_paper_trades()
+    t = trades if trades is not None else load_paper_trades_for_gates()
     s = summarize_trades(t)
     st_path = anna_training_dir() / "state.json"
     curriculum_title = "—"

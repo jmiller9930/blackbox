@@ -3,7 +3,8 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "create-wallet": "tsx create-solana-wallet.ts"
+    "create-wallet": "tsx scripts/create-solana-wallet.ts",
+    "bot": "tsx src/bot/drift_trading_bot_source.ts"
   },
   "dependencies": {
     "@solana/web3.js": "^1.95.4",

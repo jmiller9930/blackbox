@@ -3,7 +3,7 @@
  *
  * Writes:
  * - keypair.json — ONE line, compact JSON array [n,n,...] (64 bytes). No spaces.
- *   drift_trading_bot_source.ts: JSON.parse → Uint8Array.from → Keypair.fromSecretKey
+ *   src/bot/drift_trading_bot_source.ts: JSON.parse → Uint8Array.from → Keypair.fromSecretKey
  * - keypair.base58 — ONE line, base58 only (no brackets) for Phantom/import UIs.
  *
  * Run: npm run create-wallet (from repo root) or npm run create-wallet --prefix trading_core

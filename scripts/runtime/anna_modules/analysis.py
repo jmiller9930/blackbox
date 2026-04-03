@@ -163,6 +163,34 @@ def build_analysis(
     except Exception:
         training_state_snapshot = None
 
+    phase5_market: dict[str, Any] | None = None
+    if market_data_tick is not None:
+        phase5_market = {
+            "source": "phase5_market_data_db",
+            "tick": market_data_tick,
+            "gate_state": market_data_tick.get("gate_state"),
+        }
+    try:
+        from modules.anna_training.regime_signal import (
+            infer_regime_from_phase5_market,
+            load_trading_core_signal,
+            signal_fact_lines,
+        )
+        from modules.anna_training.strategy_catalog import strategy_catalog_fact_lines
+        from modules.anna_training.strategy_stats import strategy_stats_fact_lines
+
+        _regime = infer_regime_from_phase5_market(phase5_market)
+        _tc = load_trading_core_signal()
+        sr_layer = {
+            "facts_for_prompt": signal_fact_lines(_tc, _regime)
+            + strategy_catalog_fact_lines()
+            + strategy_stats_fact_lines(),
+            "structured": {"strategy_regime_catalog_facts": True},
+        }
+        merged_rule_facts = merge_authoritative_fact_layers(merged_rule_facts, sr_layer)
+    except Exception:
+        pass
+
     resolved_summary, resolved_headline, extra_sig, answer_source, layer_meta = resolve_answer_layers(
         conn,
         input_text,
@@ -227,13 +255,7 @@ def build_analysis(
         "rule_facts": merged_rule_facts.get("structured") or {},
     }
 
-    phase5_market: dict[str, Any] | None = None
     if market_data_tick is not None:
-        phase5_market = {
-            "source": "phase5_market_data_db",
-            "tick": market_data_tick,
-            "gate_state": market_data_tick.get("gate_state"),
-        }
         gate_st = market_data_tick.get("gate_state", "unknown")
         if gate_st == "blocked":
             notes.append(
@@ -247,6 +269,16 @@ def build_analysis(
     elif market_data_err and market_data_err != "feature_disabled":
         notes.append(f"Phase 5.1 market data unavailable: {market_data_err}")
 
+    _regime_out = "unknown"
+    _tc_out: dict[str, Any] | None = None
+    try:
+        from modules.anna_training.regime_signal import infer_regime_from_phase5_market, load_trading_core_signal
+
+        _regime_out = infer_regime_from_phase5_market(phase5_market)
+        _tc_out = load_trading_core_signal()
+    except Exception:
+        pass
+
     out: dict[str, Any] = {
         "kind": "anna_analysis_v1",
         "schema_version": SCHEMA_VERSION,
@@ -259,6 +291,8 @@ def build_analysis(
             "notes": m_notes,
         },
         "phase5_market_data": phase5_market,
+        "regime": _regime_out,
+        "signal_snapshot": _tc_out,
         "risk_assessment": {
             "level": risk_level,
             "factors": factors[:12],

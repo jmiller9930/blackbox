@@ -15,6 +15,7 @@ class RoutedMessage:
     agent: AgentId
     text: str
     data_mode: str | None = None  # report | insights | status | infra | None (general @data text)
+    hashtag_tokens: tuple[str, ...] | None = None  # pure-hashtag operator lines (#status #system)
 
 
 def _norm_phrase(s: str) -> str:
@@ -127,6 +128,26 @@ def _nl_looks_like_cody(text: str) -> bool:
     return bool(_RE_NL_CODY.search(text))
 
 
+# Composable operator hashtags — message is *only* #tokens (whitespace between).
+# See docs/runtime/slack_hashtag_language.md (grammar: #status #system = full stack).
+_PURE_HASHTAG_LINE = re.compile(r"^(\s*#[\w-]+\s*)+$", re.IGNORECASE)
+
+
+def _extract_hashtag_tokens(text: str) -> list[str] | None:
+    raw = (text or "").strip()
+    if not raw or not _PURE_HASHTAG_LINE.match(raw):
+        return None
+    return re.findall(r"#([\w-]+)", raw, flags=re.IGNORECASE)
+
+
+def _hashtag_command(text: str) -> RoutedMessage | None:
+    """Composable operator hashtags → single DATA mode with token tuple."""
+    tokens = _extract_hashtag_tokens(text)
+    if not tokens:
+        return None
+    return RoutedMessage("data", "", data_mode="hashtag_composed", hashtag_tokens=tuple(tokens))
+
+
 def route_message(text: str) -> RoutedMessage:
     """
     Phase 4.6.3 — silo ownership (no @ prefix):
@@ -137,6 +158,10 @@ def route_message(text: str) -> RoutedMessage:
     Explicit: @anna @data @cody @mia (Mia reserved).
     """
     raw = (text or "").strip()
+    tagged = _hashtag_command(raw)
+    if tagged is not None:
+        return tagged
+
     low = _norm_phrase(raw)
 
     intent = _identity_intent_from_text(raw)

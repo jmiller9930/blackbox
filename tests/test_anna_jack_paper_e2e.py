@@ -33,7 +33,8 @@ def _fake_jack_script(path: Path) -> None:
         "json.load(sys.stdin)\n"
         'print(json.dumps({"ok": True, "paper_trade": {'
         '"symbol": "SOL-PERP", "side": "long", "result": "won", "pnl_usd": 3.25, '
-        '"timeframe": "5m", "notes": "mock Jack Jupiter paper", "venue": "jupiter_perp"}}))\n',
+        '"timeframe": "5m", "notes": "mock Jack Jupiter paper", "venue": "jupiter_perp", '
+        '"bid": 100.0, "ask": 100.05}}))\n',
         encoding="utf-8",
     )
 
@@ -74,6 +75,9 @@ def test_anna_signal_approve_run_jack_logs_paper_trade(tmp_path, monkeypatch) ->
     assert len(trades) == 1
     assert trades[0].get("symbol") == "SOL-PERP"
     assert "mock jack" in (trades[0].get("notes") or "").lower()
+    assert trades[0].get("bid") == 100.0
+    assert trades[0].get("ask") == 100.05
+    assert abs(float(trades[0].get("spread") or 0) - 0.05) < 1e-9
 
 
 def test_trader_mode_auto_execute_runs_jack_without_separate_approve(tmp_path, monkeypatch) -> None:

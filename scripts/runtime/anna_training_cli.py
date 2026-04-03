@@ -14,8 +14,6 @@ Examples (repo root):
   python3 scripts/runtime/anna_training_cli.py loop-daemon       # Karpathy loop until SIGTERM (heartbeat JSONL)
   python3 scripts/runtime/anna_training_cli.py status
   python3 scripts/runtime/anna_training_cli.py log-trade --symbol SOL-PERP --side long --result won --pnl-usd 10.5 --timeframe 5m
-  ANNA_KARPATHY_AUTO_PAPER_HARNESS=1 python3 scripts/runtime/anna_karpathy_loop_daemon.py --once   # optional synthetic cohort rows when gate open
-  python3 scripts/runtime/anna_training_cli.py harness-tick --force   # one synthetic row if tools PASS & gate not (lab)
   python3 scripts/runtime/anna_training_cli.py dashboard
   python3 scripts/runtime/anna_training_cli.py report-card --out docs/working/anna_grade12_report_card.md --recipient Sean
   python3 scripts/runtime/anna_training_cli.py assign-curriculum grade_12_paper_only
@@ -74,6 +72,7 @@ from modules.anna_training.paper_trades import (  # noqa: E402
     append_paper_trade,
     build_report_card_markdown,
     load_paper_trades,
+    load_paper_trades_for_gates,
     summarize_trades,
     trades_path,
 )
@@ -87,6 +86,11 @@ from modules.anna_training.llm_cross_check import (  # noqa: E402
     run_llm_cross_check,
 )
 from modules.anna_training.quant_metrics import compute_paper_quant_metrics  # noqa: E402
+from modules.anna_training.strategy_stats import (  # noqa: E402
+    compute_strategy_regime_stats,
+    min_n_for_strategy_stats,
+)
+from modules.anna_training.strategy_catalog import load_strategy_catalog  # noqa: E402
 from modules.anna_training.wilson_nist_reference import run_wilson_reference_check  # noqa: E402
 from modules.anna_training.store import (  # noqa: E402
     anna_training_dir,
@@ -130,7 +134,7 @@ def _cmd_status() -> int:
     g12 = evaluate_grade12_gates()
     out["grade_12_progress"] = grade12_progress_percentages(g12, st.get("grade_12_tool_mastery"))
     out["learning_signal"] = learning_signal_verdict(g12, st)
-    _tr = load_paper_trades()
+    _tr = load_paper_trades_for_gates()
     _sm = summarize_trades(_tr)
     _act = summarize_trade_activity()
     out["paper_ledger"] = {
@@ -149,8 +153,16 @@ def _cmd_status() -> int:
         "jack_ok_no_paper": _act.jack_delegate_ok_no_paper,
         "execution_blocked": _act.execution_blocked,
         "manual_cli_log_trade_recorded": _act.paper_manual_recorded,
-        "karpathy_harness_auto_recorded": _act.harness_auto_recorded,
     }
+    out["strategy_catalog"] = {
+        "path": str(anna_training_dir() / "strategy_catalog.json"),
+        "entries": load_strategy_catalog(),
+    }
+    out["strategy_regime_cohort"] = {
+        "min_n": min_n_for_strategy_stats(),
+        "buckets": compute_strategy_regime_stats(_tr),
+    }
+    out["trading_core_signal_path"] = str(anna_training_dir() / "trading_core_signal.json")
     out["grade_12_gate_snapshot"] = {
         "pass": g12.get("pass"),
         "curriculum_tools_pass": g12.get("curriculum_tools_pass"),
@@ -222,29 +234,16 @@ def _cmd_log_trade(args: argparse.Namespace) -> int:
             source="manual_cli",
             proposal_ref=((getattr(args, "proposal_ref", None) or "").strip() or None),
             strategy_label=((getattr(args, "strategy_label", None) or "").strip() or None),
+            bid=getattr(args, "bid", None),
+            ask=getattr(args, "ask", None),
+            spread=getattr(args, "spread", None),
+            regime=((getattr(args, "regime", None) or "").strip() or None),
         )
     except ValueError as e:
         print(json.dumps({"error": str(e)}), file=sys.stderr)
         return 1
     print(json.dumps({"ok": True, "trade": row}, indent=2))
     return 0
-
-
-def _cmd_harness_tick(args: argparse.Namespace) -> int:
-    """Opt-in synthetic cohort row — same logic as Karpathy daemon auto harness."""
-    from modules.anna_training.gates import evaluate_grade12_gates
-    from modules.anna_training.harness_auto_tick import run_automated_paper_harness_tick
-
-    st = load_state()
-    n = int(st.get("karpathy_loop_iteration") or 0)
-    g12 = evaluate_grade12_gates(training_state=st)
-    r = run_automated_paper_harness_tick(
-        karpathy_iteration=n + 1,
-        g12=g12,
-        force=bool(getattr(args, "force", False)),
-    )
-    print(json.dumps({"ok": r is not None, "result": r}, indent=2))
-    return 0 if r else 2
 
 
 def _cmd_math_check() -> int:
@@ -256,8 +255,26 @@ def _cmd_math_check() -> int:
 
 def _cmd_quant_metrics() -> int:
     """Paper-trade quant metrics (same module as Anna math_engine paper_quant)."""
-    out = compute_paper_quant_metrics(load_paper_trades())
+    out = compute_paper_quant_metrics(load_paper_trades_for_gates())
     print(json.dumps({"ok": True, "metrics": out}, indent=2))
+    return 0
+
+
+def _cmd_strategy_stats() -> int:
+    """Per (strategy_label, regime) cohort stats from paper_trades.jsonl."""
+    from modules.anna_training.strategy_stats import min_n_for_strategy_stats
+
+    rows = compute_strategy_regime_stats()
+    print(
+        json.dumps(
+            {
+                "ok": True,
+                "min_n": min_n_for_strategy_stats(),
+                "buckets": rows,
+            },
+            indent=2,
+        )
+    )
     return 0
 
 
@@ -279,7 +296,7 @@ def _cmd_math_engine_full() -> int:
             file=sys.stderr,
         )
         return 2
-    result = run_full_math_stack(load_paper_trades(), aux=None)
+    result = run_full_math_stack(load_paper_trades_for_gates(), aux=None)
     print(json.dumps({"ok": True, "result": result}, indent=2))
     return 0
 
@@ -419,7 +436,7 @@ def _cmd_dashboard(args: argparse.Namespace | None = None) -> int:
         from rich.panel import Panel
         from rich.table import Table
     except ImportError:
-        trades = load_paper_trades()
+        trades = load_paper_trades_for_gates()
         s = summarize_trades(trades)
         g12 = evaluate_grade12_gates()
         st0 = load_state()
@@ -442,7 +459,6 @@ def _cmd_dashboard(args: argparse.Namespace | None = None) -> int:
                         "path": str(attempts_path()),
                         "total_events": tact.total_events,
                         "manual_cli_log_trade_recorded": tact.paper_manual_recorded,
-                        "karpathy_harness_auto_recorded": tact.harness_auto_recorded,
                     },
                 },
                 indent=2,
@@ -551,7 +567,7 @@ def _cmd_dashboard(args: argparse.Namespace | None = None) -> int:
             f"[bold]Carry-forward[/bold]:\n{carry_txt}"
         )
 
-        trades = load_paper_trades()
+        trades = load_paper_trades_for_gates()
         s = summarize_trades(trades)
         bs = g12.get("paper_bankroll_start_usd")
         eq = g12.get("paper_equity_usd")
@@ -667,10 +683,23 @@ def _cmd_dashboard(args: argparse.Namespace | None = None) -> int:
                 border_style="cyan",
             )
         )
-        table = Table(
-            title="Paper trades (most recent last) — Synth=yes is lab-only (not market-grounded paper)"
-        )
-        for col in ("UTC", "Symbol", "Venue", "Side", "TF", "Result", "P&L $", "Synth", "Src", "Strategy", "Ref"):
+        table = Table(title="Paper trades (most recent last)")
+        for col in (
+            "UTC",
+            "Symbol",
+            "Venue",
+            "Side",
+            "TF",
+            "Result",
+            "P&L $",
+            "Bid",
+            "Ask",
+            "Spr",
+            "Reg",
+            "Src",
+            "Strategy",
+            "Ref",
+        ):
             table.add_column(col)
         for row in sorted(trades, key=lambda x: x.get("ts_utc") or "")[-40:]:
             src = str(row.get("source") or "—")
@@ -678,8 +707,17 @@ def _cmd_dashboard(args: argparse.Namespace | None = None) -> int:
                 src = "—"
             strat = (str(row.get("strategy_label") or "") or "—")[:20]
             pref = (str(row.get("proposal_ref") or "") or "—")[:16]
-            is_syn = bool(row.get("synthetic"))
-            syn_cell = "[yellow]yes[/yellow]" if is_syn else "no"
+            reg_cell = (str(row.get("regime") or "") or "—")[:10]
+
+            def _qcell(k: str) -> str:
+                v = row.get(k)
+                if v is None:
+                    return "—"
+                try:
+                    return f"{float(v):.6g}"
+                except (TypeError, ValueError):
+                    return "—"
+
             table.add_row(
                 str(row.get("ts_utc", ""))[:19],
                 str(row.get("symbol", "")),
@@ -688,7 +726,10 @@ def _cmd_dashboard(args: argparse.Namespace | None = None) -> int:
                 str(row.get("timeframe", "")),
                 str(row.get("result", "")),
                 f"{float(row.get('pnl_usd') or 0):.2f}",
-                syn_cell,
+                _qcell("bid"),
+                _qcell("ask"),
+                _qcell("spread"),
+                reg_cell,
                 src[:12],
                 strat,
                 pref,
@@ -985,16 +1026,28 @@ def main(argv: list[str] | None = None) -> int:
         default="",
         help="Optional human-readable strategy / thesis name for this paper row (stored on row + attempt detail).",
     )
-
-    ap_ht = sub.add_parser(
-        "harness-tick",
-        help="Append one synthetic lab paper row when curriculum tools PASS and overall gate not PASS "
-        "(ANNA_KARPATHY_AUTO_PAPER_HARNESS=1 or --force).",
+    ap_l.add_argument(
+        "--bid",
+        type=float,
+        default=None,
+        help="Optional bid (or best bid) at placement time — venue-specific units.",
     )
-    ap_ht.add_argument(
-        "--force",
-        action="store_true",
-        help="Bypass env off switch; still requires eligible gates.",
+    ap_l.add_argument(
+        "--ask",
+        type=float,
+        default=None,
+        help="Optional ask (or best ask) at placement time — venue-specific units.",
+    )
+    ap_l.add_argument(
+        "--spread",
+        type=float,
+        default=None,
+        help="Optional spread at placement; if omitted and both --bid and --ask are set, spread = ask - bid.",
+    )
+    ap_l.add_argument(
+        "--regime",
+        default="",
+        help="Optional atmosphere tag (e.g. nominal, degraded, data_blocked) for cohort stats.",
     )
 
     sub.add_parser(
@@ -1080,6 +1133,11 @@ def main(argv: list[str] | None = None) -> int:
     )
 
     sub.add_parser(
+        "strategy-stats",
+        help="Per (strategy_label, regime) cohort stats from paper_trades.jsonl (decisive trades only).",
+    )
+
+    sub.add_parser(
         "math-engine-full",
         help="Full math stack on paper trades (ARIMA/GARCH, annualized Sharpe, WFO, bootstrap, ML, Kalman). Needs pip -r requirements.txt.",
     )
@@ -1157,6 +1215,7 @@ def main(argv: list[str] | None = None) -> int:
         "llm-cross-check",
         "math-check",
         "quant-metrics",
+        "strategy-stats",
         "math-engine-full",
         "training-progress",
         "advance-curriculum",
@@ -1181,12 +1240,12 @@ def main(argv: list[str] | None = None) -> int:
         return _cmd_note(args)
     if args.cmd == "log-trade":
         return _cmd_log_trade(args)
-    if args.cmd == "harness-tick":
-        return _cmd_harness_tick(args)
     if args.cmd == "math-check":
         return _cmd_math_check()
     if args.cmd == "quant-metrics":
         return _cmd_quant_metrics()
+    if args.cmd == "strategy-stats":
+        return _cmd_strategy_stats()
     if args.cmd == "math-engine-full":
         return _cmd_math_engine_full()
     if args.cmd == "training-progress":

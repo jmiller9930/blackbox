@@ -10,7 +10,7 @@ alwaysApply: true
 - **The directive was met** (behavior and outcomes the directive / master plan specifies).
 - **Proof** is the **benchmark**: verifiable evidence that the directive was met — not a story.
 
-The architect does **not** prescribe *how* you verify (pytest, manual repro, clawbot script, logs, DB rows, live Telegram — whatever the directive and [`global_clawbot_proof_standard.md`](docs/architect/global_clawbot_proof_standard.md) require). The architect cares that you **show proof** aligned to that directive.
+The architect does **not** prescribe *how* you verify (pytest, manual repro, clawbot script, logs, DB rows, live Slack — whatever the directive and [`global_clawbot_proof_standard.md`](docs/architect/global_clawbot_proof_standard.md) require). The architect cares that you **show proof** aligned to that directive.
 
 ## Meaning of “proof” (operational)
 
@@ -42,8 +42,8 @@ State **`git rev-parse HEAD`** on **clawbot** after `git pull origin main` in `~
 
 ## 3. Coverage vs gaps
 
-- **What the proof covers** (which tests, which layer: unit, integration, Telegram formatter path, etc.).
-- **What is explicitly not covered** by that proof (e.g. **live Telegram**, Ollama live calls when `ANNA_USE_LLM=0` in CI, persistence rows) — **never imply** those are done because pytest passed.
+- **What the proof covers** (which tests, which layer: unit, integration, Slack/messaging formatter path, etc.).
+- **What is explicitly not covered** by that proof (e.g. **live Slack**, Ollama live calls when `ANNA_USE_LLM=0` in CI, persistence rows) — **never imply** those are done because pytest passed.
 
 ## 4. Tie to directives
 

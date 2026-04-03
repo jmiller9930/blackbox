@@ -68,6 +68,29 @@ def test_try_create_execution_request_for_risk_signal(tmp_path, monkeypatch) -> 
     assert (tmp_path / "req.json").is_file()
 
 
+def test_try_create_blocked_when_strict_signal_missing(tmp_path, monkeypatch) -> None:
+    import execution_plane.approval_manager as am
+
+    monkeypatch.setattr(am, "REQUESTS_PATH", tmp_path / "req.json")
+    monkeypatch.setenv("BLACKBOX_REQUIRE_ANNA_PROPOSAL_FOR_EXECUTION", "1")
+    monkeypatch.setenv("ANNA_AUTO_EXECUTION_REQUEST", "1")
+    monkeypatch.setenv("ANNA_REQUIRE_SIGNAL_SNAPSHOT_FOR_EXECUTION", "1")
+
+    from execution_plane.anna_signal_execution import try_create_execution_request_from_anna_analysis
+
+    analysis = {
+        "input_text": "reduce exposure now",
+        "policy_alignment": {"guardrail_mode": "FROZEN", "alignment": "caution"},
+        "risk_assessment": {"level": "high", "factors": []},
+        "suggested_action": {"intent": "HOLD", "rationale": ""},
+        "concepts_used": ["risk"],
+        "interpretation": {"summary": "elevated risk", "headline": "Risk", "signals": []},
+        "caution_flags": [],
+        "notes": [],
+    }
+    assert try_create_execution_request_from_anna_analysis(analysis, source_task_id=None) is None
+
+
 def test_try_create_skips_preflight_blocked(monkeypatch) -> None:
     monkeypatch.setenv("ANNA_AUTO_EXECUTION_REQUEST", "1")
     from execution_plane.anna_signal_execution import try_create_execution_request_from_anna_analysis

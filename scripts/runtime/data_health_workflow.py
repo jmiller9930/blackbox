@@ -95,6 +95,35 @@ def insert_health_logs(
         )
 
 
+def _maybe_phone_notify_alert(
+    source_agent: str,
+    check_name: str,
+    target: str,
+    detail: str,
+    now: str,
+) -> None:
+    """Optional SMS via `modules/notification_gateway` (BLACKBOX_NOTIFY_SYSTEM=1)."""
+    try:
+        root = repo_root()
+        r = str(root)
+        if r not in sys.path:
+            sys.path.insert(0, r)
+        from modules.notification_gateway import notify_system_from_health
+
+        ok, reason = notify_system_from_health(
+            check_name=check_name,
+            target=target,
+            detail=detail,
+            source_agent=source_agent,
+            ts_utc=now,
+            host_hint=os.environ.get("BLACKBOX_HOST_LABEL", "").strip() or None,
+        )
+        if not ok and reason not in ("notify_system_disabled", "notify_mode_off"):
+            print(f"phone notify: {reason}", file=sys.stderr)
+    except Exception as ex:
+        print(f"phone notify error: {ex!s}", file=sys.stderr)
+
+
 def _insert_alert(
     conn,
     source_agent: str,
@@ -141,6 +170,7 @@ def apply_alerts_one_shot(
         if ok:
             return
         _insert_alert(conn, source_agent, name, target, detail, now)
+        _maybe_phone_notify_alert(source_agent, name, target, detail, now)
         return
 
 
@@ -165,6 +195,7 @@ def apply_alerts_watchdog(
         if prev is False:
             continue
         _insert_alert(conn, source_agent, name, target, detail, now)
+        _maybe_phone_notify_alert(source_agent, name, target, detail, now)
         alerted.append(name)
     return alerted
 

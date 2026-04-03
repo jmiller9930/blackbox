@@ -261,6 +261,25 @@ def test_paper_trades_and_report(tmp_path: Path, monkeypatch) -> None:
     assert "Grade 12" in md and "Sean" in md and "SOL-PERP" in md
 
 
+def test_paper_trade_stores_placement_bid_ask_spread(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setenv("BLACKBOX_ANNA_TRAINING_DIR", str(tmp_path))
+    from modules.anna_training.paper_trades import append_paper_trade, load_paper_trades
+
+    append_paper_trade(
+        symbol="SOL-PERP",
+        side="long",
+        result="won",
+        pnl_usd=1.0,
+        timeframe="5m",
+        bid=100.0,
+        ask=100.04,
+    )
+    r = load_paper_trades()[0]
+    assert r.get("bid") == 100.0
+    assert r.get("ask") == 100.04
+    assert abs(float(r.get("spread") or 0) - 0.04) < 1e-9
+
+
 def test_assign_and_invoke(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.setenv("BLACKBOX_ANNA_TRAINING_DIR", str(tmp_path))
     from modules.anna_training.store import load_state, save_state, utc_now_iso
@@ -544,29 +563,6 @@ def test_grade12_bankroll_return_gate(tmp_path: Path, monkeypatch) -> None:
     g12b = evaluate_grade12_gates()
     assert g12b["numeric_gate_pass"]
     assert float(g12b["paper_equity_usd"] or 0) >= 1050.0
-
-
-def test_harness_auto_tick_appends_synthetic_paper_row(tmp_path: Path, monkeypatch) -> None:
-    monkeypatch.setenv("BLACKBOX_ANNA_TRAINING_DIR", str(tmp_path))
-    monkeypatch.setenv("ANNA_GRADE12_MIN_DECISIVE_TRADES", "99")
-    from modules.anna_training.curriculum_tools import TOOL_IDS
-    from modules.anna_training.gates import evaluate_grade12_gates
-    from modules.anna_training.harness_auto_tick import run_automated_paper_harness_tick
-    from modules.anna_training.paper_trades import load_paper_trades
-    from modules.anna_training.store import load_state, save_state
-    from modules.anna_training.trade_attempts import summarize_trade_activity
-
-    st = load_state()
-    st["grade_12_tool_mastery"] = {tid: True for tid in TOOL_IDS}
-    save_state(st)
-    g12 = evaluate_grade12_gates()
-    r = run_automated_paper_harness_tick(karpathy_iteration=3, g12=g12, force=True)
-    assert r and r.get("ok")
-    rows = load_paper_trades()
-    assert rows[-1].get("synthetic") is True
-    assert rows[-1].get("source") == "karpathy_harness_sim"
-    act = summarize_trade_activity()
-    assert act.harness_auto_recorded >= 1
 
 
 def test_school_mandate_facts_repeat_harness_until_numeric_gate(tmp_path: Path, monkeypatch) -> None:

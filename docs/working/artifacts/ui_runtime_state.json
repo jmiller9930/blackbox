@@ -1,0 +1,10 @@
+{
+  "paper_enabled": true,
+  "live_enabled": false,
+  "runtime_state": "not_connected",
+  "last_transition_at": null,
+  "last_event_at": null,
+  "write_success_rate_5m": null,
+  "ledger_lag_seconds": null,
+  "last_error_code": "ledger_not_wired"
+}

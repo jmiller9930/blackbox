@@ -11,7 +11,7 @@ from modules.anna_training.curriculum_tools import (
     missing_grade_12_tools,
     normalize_tool_mastery,
 )
-from modules.anna_training.paper_trades import load_paper_trades, summarize_trades
+from modules.anna_training.paper_trades import load_paper_trades_for_gates, summarize_trades
 from modules.anna_training.store import load_state
 
 
@@ -83,7 +83,7 @@ def evaluate_grade12_gates(training_state: dict[str, Any] | None = None) -> dict
         tools_ok = True
         missing_tools = []
 
-    trades = load_paper_trades()
+    trades = load_paper_trades_for_gates()
     s = summarize_trades(trades)
     decisive = s.wins + s.losses
     wr = s.win_rate

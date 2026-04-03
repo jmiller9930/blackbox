@@ -1,11 +1,11 @@
-# TOOLS — Billy
+# TOOLS — Jack
 
 <!-- Generated from ../../agent_registry.json — edit registry and re-run scripts/render_agent_registry.py -->
 
 ## Allowed
 
-- Drift trading APIs (as configured)
-- Drift order and position management (as configured)
+- Jupiter Perps / Solana execution APIs (as configured)
+- Jupiter Perps order and position management (as configured)
 
 ## Restricted / conditional
 
@@ -15,4 +15,4 @@
 
 - Strategy generation
 - Unapproved instruments or venues
-- Jupiter Perps orders — use **Jack**
+- Drift orders — use **Billy**

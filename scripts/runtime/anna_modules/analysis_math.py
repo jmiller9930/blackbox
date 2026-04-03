@@ -65,9 +65,9 @@ def merge_authoritative_fact_layers(
 
 def _load_paper_trades_safe() -> list[dict[str, Any]]:
     try:
-        from modules.anna_training.paper_trades import load_paper_trades
+        from modules.anna_training.paper_trades import load_paper_trades_for_gates
 
-        return load_paper_trades()
+        return load_paper_trades_for_gates()
     except Exception:
         return []
 

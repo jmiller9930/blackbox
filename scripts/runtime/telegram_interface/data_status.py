@@ -200,7 +200,7 @@ def format_anna_training_report_hashtag_text() -> str:
     try:
         from modules.anna_training.catalog import CURRICULA
         from modules.anna_training.gates import evaluate_grade12_gates
-        from modules.anna_training.paper_trades import load_paper_trades, summarize_trades
+        from modules.anna_training.paper_trades import load_paper_trades_for_gates, summarize_trades
         from modules.anna_training.progression import bachelor_eligibility_report, suggest_next_focus
         from modules.anna_training.readiness import ensure_anna_data_preflight
         from modules.anna_training.report_card_text import format_slack_report_card_text
@@ -211,7 +211,7 @@ def format_anna_training_report_hashtag_text() -> str:
     try:
         pf = ensure_anna_data_preflight()
         st = load_state()
-        trades = load_paper_trades()
+        trades = load_paper_trades_for_gates()
         summ = summarize_trades(trades)
         g12 = evaluate_grade12_gates()
         sf = suggest_next_focus(

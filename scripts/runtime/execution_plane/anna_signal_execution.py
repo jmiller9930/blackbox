@@ -102,6 +102,16 @@ def try_create_execution_request_from_anna_analysis(
         return None
 
     try:
+        from modules.anna_training.regime_signal import execution_blocked_by_signal_policy
+
+        blocked, br = execution_blocked_by_signal_policy(analysis)
+        if blocked:
+            logger.warning("execution_request blocked by signal policy: %s", br)
+            return None
+    except Exception:
+        pass
+
+    try:
         req = create_request(proposal)
     except ValueError as e:
         logger.warning("create_request rejected: %s", e)

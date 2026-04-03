@@ -61,15 +61,14 @@ This keeps the important University mechanics without forcing the entire standal
 
 ### 1.1.1 Paper trading — definition (binding) vs rows in `paper_trades.jsonl`
 
-**Paper trading** (the thing we mean when we say Anna is “trading paper”) is **the same code path as live trading** through analysis, gating, and **execution request** — the **only** deliberate difference is **settlement**: real capital movement and live venue submit are **not** performed; a **paper / sim adapter** (or governed notional accounting) produces fills and P&amp;L instead. Everything upstream (market context, request shape, audit) should match live **except** that money step. It must still be **grounded** and **traceable** (e.g. request id, snapshot id), or it is not a defensible claim about skill.
+**Paper trading** (the thing we mean when we say Anna is “trading paper”) is **the same code path as live trading** through analysis, gating, and **execution request** — the **only** deliberate difference is **settlement**: real capital movement and live venue submit are **not** performed; a **paper / sim adapter** (or governed notional accounting) produces fills and P&amp;L instead. Everything upstream (market context, request shape, audit) should match live **except** that money step. After the fact, a venue may return **less** fill and microstructure detail for paper/sim than for a live fill; that does not change the “same path until settlement” rule. **At placement time**, the stack **should** capture what the adapter can see — at minimum optional **bid**, **ask**, and **spread** (or a linked **market snapshot** id) on the paper row when available (`anna log-trade --bid … --ask …` or Jack `paper_trade` JSON). It must still be **grounded** and **traceable** (e.g. request id, snapshot id), or it is not a defensible claim about skill.
 
 The file **`paper_trades.jsonl`** is an **append-only ledger**. Rows may come from:
 
 - **Market-grounded paper** — Jack / paper loop / adapter output tied to real context (the normal meaning of “paper trading”).
 - **Operator `log-trade`** — human-attested outcomes; governance decides whether that counts toward skill claims.
-- **Lab synthetic cohort ticks** — optional `ANNA_KARPATHY_AUTO_PAPER_HARNESS` in `modules/anna_training/harness_auto_tick.py`; rows are tagged **`synthetic: true`**, **`source=karpathy_harness_sim`**. These are **volume / gate mechanics**, **not** a substitute for market-grounded paper when judging edge. Policy and exam-board judgment may exclude them from “real” paper metrics.
 
-If a row is not market-grounded, **do not** treat it as proof that Anna “beat the market” — only that the harness produced a scored line.
+If a row is not market-grounded, **do not** treat it as proof that Anna “beat the market.”
 
 ### 1.2 Contract lock (12th grade + Karpathy loop — binding)
 

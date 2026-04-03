@@ -18,7 +18,7 @@ from modules.anna_training.curriculum_tools import (
     build_grade12_skills_deck,
     normalize_tool_mastery,
 )
-from modules.anna_training.paper_trades import load_paper_trades
+from modules.anna_training.paper_trades import load_paper_trades_for_gates
 from modules.anna_training.quant_metrics import compute_paper_quant_metrics
 from modules.anna_training.wilson_nist_reference import run_wilson_reference_check
 
@@ -72,7 +72,7 @@ def attempt_curriculum_skill(
         }
 
     if skill_id == "analysis_algorithms":
-        trades = load_paper_trades()
+        trades = load_paper_trades_for_gates()
         if not trades:
             return {
                 "passed": False,
@@ -93,7 +93,7 @@ def attempt_curriculum_skill(
         }
 
     if skill_id == "rcs_rca_discipline":
-        trades = load_paper_trades()
+        trades = load_paper_trades_for_gates()
         with_notes = sum(1 for t in trades if (str(t.get("notes") or "").strip()))
         # Minimal bar: at least one paper outcome includes a non-empty reflection note (RCS habit).
         ok = with_notes >= 1

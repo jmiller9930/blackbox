@@ -23,11 +23,12 @@ This document defines agents for the BLACK BOX platform. The repository is built
 
 Later phases are expected to add additional agents, including:
 
-- **Billy**
+- **Billy** — trade executor for the **Drift** venue (registry: `agents/billy/`)
+- **Jack** — trade executor for **Jupiter Perps** (registry: `agents/jack/`); **default** venue when unspecified; **Billy** only when the packet pins **Drift**
 - **Robbie**
 - **Bobby**
 
-Their roles, prompts, and runtimes will be defined when those phases begin. **Do not implement them in Phase 1.**
+Their runtimes will be wired when those phases begin. **Do not implement execution or trading logic in Phase 1** except as governance allows.
 
 ## Phase 1 — Hard exclusions
 
@@ -35,7 +36,7 @@ Aligned with the project README:
 
 | Excluded in Phase 1 | Notes |
 |---------------------|--------|
-| Billy | Do not add agent code, prompts, or runtime. |
+| Billy / Jack | Do not add **execution** or trading runtime in Phase 1; **registry + docs** for Billy (Drift) and Jack (Jupiter) are allowed for clarity. |
 | Robbie | Same. |
 | Bobby | Same; no integration layer for Bobby. |
 | Trading logic | No production or “real” trading behavior. |

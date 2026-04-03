@@ -1,6 +1,7 @@
 /**
- * Trading core rules — source snapshot (Drift SOL-PERP bot).
+ * Trading core rules — source snapshot (SOL-PERP bot; Drift SDK for orders/subscriptions).
  * Extracted from operator email / thread 2026-03-22.
+ * Drift DLOB WebSocket removed (migrating to Jupiter Perps); bid/ask come from Pyth oracle until native Jupiter book is wired.
  * QUICKNODE_RPC redacted: use env SOLANA_RPC_URL for authenticated RPC.
  * keypair.json must never be committed.
  */
@@ -35,8 +36,13 @@ import {
  UserAccount,
  ModifyOrderParams,
 } from '@drift-labs/sdk';
-import WebSocket from 'ws';
 import { EventSource } from 'eventsource';
+import {
+ JUPITER_PERP_PROGRAM_ID,
+ JUPITER_PERP_POOL,
+ JUPITER_SOL_CUSTODY,
+ JUPITER_USDC_CUSTODY,
+} from '../venue/jupiter_perp.js';
 
 const SOL_PERP_INDEX = 0;
 const USDC_SPOT_INDEX = 0;
@@ -67,7 +73,7 @@ const QUICKNODE_RPC = process.env.SOLANA_RPC_URL || 'https://api.mainnet-beta.so
 const PUBLIC_SOLANA_WS = 'wss://api.mainnet-beta.solana.com';
 /** Load from env so the key file can live outside the repo; never commit the file. */
 const KEYPAIR_PATH = process.env.KEYPAIR_PATH || 'keypair.json';
-const DRIFT_WS_URL = 'wss://dlob.drift.trade/ws';
+
 const PYTH_SSE_URL = 'https://hermes.pyth.network/v2/updates/price/stream?ids[]=ef0d8b6fda2ceba41da15d4095d1da392a0d2f8ed0c6c7bc0f4cfac8c280b56d';
 const COINGECKO_VOLUME_URL = 'https://api.coingecko.com/api/v3/exchanges/drift_protocol/volume_chart?days=1';
 const COINGECKO_BTC_PRICE_URL = 'https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd';
@@ -118,7 +124,6 @@ class TradingBot {
  private asks: { price: number; size: number }[] = [];
  private cachedPosition: any | undefined = undefined;
  private previousBaseAmount: BN = new BN(0);
- private driftWs: WebSocket | null = null;
  private pythSse: EventSource | null = null;
  private pythReconnectAttempts: number = 0;
  private slOrderId: number | undefined = undefined;
@@ -210,7 +215,10 @@ class TradingBot {
  }
  });
  console.info('Event subscriber ready');
- this.setupDriftWs();
+ console.info(
+ `Jupiter Perp reference: program=${JUPITER_PERP_PROGRAM_ID.toBase58()} pool=${JUPITER_PERP_POOL.toBase58()} ` +
+ `solCustody=${JUPITER_SOL_CUSTODY.toBase58()} usdcCustody=${JUPITER_USDC_CUSTODY.toBase58()}`
+ );
  await this.fetchHistoricalCandles(); // New: Fetch real historical candles before Pyth
  this.setupPythSse();
  const perpPosition = this.driftClient.getUser().getPerpPosition(SOL_PERP_INDEX);
@@ -291,6 +299,7 @@ class TradingBot {
  if (rawPrice === this.lastPrice) return;
 
  this.lastPrice = rawPrice;
+ this.syncSyntheticBookFromOracle();
  console.info(`Pyth price: ${rawPrice} (±${confidence})`);
 
  const now = new Date();
@@ -673,58 +682,25 @@ class TradingBot {
  }
  }
 
- private setupDriftWs() {
- this.driftWs = new WebSocket(DRIFT_WS_URL);
- this.driftWs.on('open', () => {
- console.info('Drift WS connected');
- this.toggleDriftSubscription(true);
- });
- this.driftWs.on('message', (data: string) => {
- try {
- const message = JSON.parse(data);
- if (message.channel === 'heartbeat') return;
- if (message.channel && message.channel.startsWith('orderbook_perp')) {
- const bookData = message.data;
- if (bookData.bids && bookData.bids.length > 0) {
- this.bids = bookData.bids.map((b: any) => ({ price: b.price / PRICE_PRECISION.toNumber(), size: b.size / BASE_PRECISION.toNumber() }));
- this.bestBid = this.bids[0].price;
- }
- if (bookData.asks && bookData.asks.length > 0) {
- this.asks = bookData.asks.map((a: any) => ({ price: a.price / PRICE_PRECISION.toNumber(), size: a.size / BASE_PRECISION.toNumber() }));
- this.bestAsk = this.asks[0].price;
- }
- if (this.bookUpdateResolve && this.bestBid > 0 && this.bestAsk > 0) {
+ /**
+  * Bid/ask around Pyth mid (replaces Drift `dlob.drift.trade` WebSocket). Wire `JUPITER_PERP_*` for native Jupiter book when ready.
+  */
+ private syncSyntheticBookFromOracle(): void {
+ if (this.lastPrice === null || this.lastPrice <= 0) return;
+ const half = SLIPPAGE_PCT;
+ this.bestBid = this.lastPrice * (1 - half);
+ this.bestAsk = this.lastPrice * (1 + half);
+ const sz = Math.max(MIN_NOTIONAL_DEPTH_USD / this.lastPrice, 1);
+ this.bids = [{ price: this.bestBid, size: sz }];
+ this.asks = [{ price: this.bestAsk, size: sz }];
+ if (this.bookUpdateResolve) {
  this.bookUpdateResolve();
  this.bookUpdateResolve = null;
  }
  }
- } catch (e) {
- console.error('Drift WS msg error:', e);
- }
- });
- this.driftWs.on('close', (code) => {
- console.info(`Drift WS disconnected with code: ${code}. Reconnecting...`);
- setTimeout(() => this.setupDriftWs(), 5000);
- });
- this.driftWs.on('error', (e) => {
- console.error('Drift WS error:', e);
- });
- }
-
- private toggleDriftSubscription(subscribe: boolean = true) {
- if (this.driftWs && this.driftWs.readyState === WebSocket.OPEN) {
- const type = subscribe ? 'subscribe' : 'unsubscribe';
- this.driftWs.send(JSON.stringify({
- type,
- marketType: 'perp',
- channel: 'orderbook',
- market: 'SOL-PERP'
- }));
- console.info(`Drift WS ${type}d`);
- }
- }
 
  private async waitForBookUpdate(): Promise<void> {
+ this.syncSyntheticBookFromOracle();
  if (this.bestBid > 0 && this.bestAsk > 0) return;
 
  let retries = 0;
@@ -735,7 +711,7 @@ class TradingBot {
  });
  const timeout = setTimeout(() => {
  if (this.bookUpdateResolve) {
- console.warn(`Book timeout on attempt ${retries + 1}`);
+ console.warn(`Book timeout on attempt ${retries + 1} (waiting for Pyth)`);
  this.bookUpdateResolve();
  this.bookUpdateResolve = null;
  }
@@ -744,13 +720,14 @@ class TradingBot {
  clearTimeout(timeout);
  this.bookUpdatePromise = null;
 
+ this.syncSyntheticBookFromOracle();
  if (this.bestBid > 0 && this.bestAsk > 0) {
  return;
  }
  retries++;
  if (retries <= maxRetries) {
  console.info(`Retrying book update (attempt ${retries})`);
- await new Promise(resolve => setTimeout(resolve, 1000)); // Short delay before retry
+ await new Promise(resolve => setTimeout(resolve, 1000));
  }
  }
  console.warn('Book update failed after retries; using fallback');
@@ -1450,7 +1427,6 @@ class TradingBot {
  if (this.orderSubscriber) await this.orderSubscriber.unsubscribe();
  if (this.eventSubscriber) await this.eventSubscriber.unsubscribe();
  await this.driftClient!.unsubscribe();
- if (this.driftWs) this.driftWs.close();
  console.info('Done');
  process.exit(0);
  });

@@ -6,9 +6,7 @@ Assigns Grade 12 + Karpathy if missing; each tick advances ``karpathy_loop_itera
 appends ``karpathy_learning_cycle_v1`` to ``cumulative_learning_log`` (disable with
 ``ANNA_KARPATHY_LOG_EACH_CYCLE=0``), appends ``karpathy_loop_heartbeat.jsonl`` (includes ``skill_practice`` pass/fail or why none), snapshots
 grade-12 gates, and optionally records ``market_data``. Does not place live venue orders.
-Optional **synthetic** paper rows (lab cohort fuel): ``ANNA_KARPATHY_AUTO_PAPER_HARNESS=1`` appends
-deterministic sim outcomes when tools pass and the gate is not yet satisfied (see
-``modules/anna_training/harness_auto_tick.py``). Otherwise harness / paper logging remain operator-driven.
+Paper trade rows are appended only via operator ``log-trade``, Jack paper bridge, or other explicit paths — not by this daemon.
 
 Env:
   ANNA_LOOP_INTERVAL_SEC — seconds between ticks (default 5; floor is 5; supervisor cadence)
@@ -20,9 +18,6 @@ Env:
     ``curriculum_tools.GRADE_12_TOOLS``). Manual ``anna tool-pass`` remains available.
   ANNA_KARPATHY_HARNESS_MIN_ITERATIONS — min ``karpathy_loop_iteration`` count for the
     harness-loop tool practice predicate (default 10)
-  ANNA_KARPATHY_AUTO_PAPER_HARNESS — default **off**; set 1 for synthetic paper rows per tick (when eligible)
-  ANNA_KARPATHY_AUTO_PAPER_EVERY_N — only every N iterations (default 1)
-  ANNA_HARNESS_SYMBOL / ANNA_HARNESS_TIMEFRAME — sim labels (defaults SOL-PERP / 5m)
 
 Repo root:
   PYTHONPATH=scripts/runtime:. python3 scripts/runtime/anna_karpathy_loop_daemon.py
@@ -52,7 +47,6 @@ from modules.anna_training.curriculum_tools import build_grade12_skills_deck  # 
 from modules.anna_training.karpathy_skill_engine import run_skill_practice_cycle  # noqa: E402
 from modules.anna_training.gates import evaluate_grade12_gates  # noqa: E402
 from modules.anna_training.readiness import ensure_anna_data_preflight, preflight_skipped  # noqa: E402
-from modules.anna_training.harness_auto_tick import run_automated_paper_harness_tick  # noqa: E402
 from modules.anna_training.school_mandate import compute_school_mandate_payload  # noqa: E402
 from modules.anna_training.store import anna_training_dir, load_state, save_state, utc_now_iso  # noqa: E402
 
@@ -189,12 +183,6 @@ def run_one_tick(*, tick_index: int) -> tuple[dict, bool]:
             },
         )
         g12 = evaluate_grade12_gates()
-        deck = build_grade12_skills_deck(st, g12)
-        st["grade_12_skills_deck"] = deck
-
-    har = run_automated_paper_harness_tick(karpathy_iteration=n, g12=g12)
-    if har and har.get("ok"):
-        g12 = evaluate_grade12_gates(training_state=st)
         deck = build_grade12_skills_deck(st, g12)
         st["grade_12_skills_deck"] = deck
 

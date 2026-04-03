@@ -7,7 +7,7 @@ from typing import Any
 
 from modules.anna_training.curriculum_tools import curriculum_tools_complete, missing_grade_12_tools
 from modules.anna_training.gates import evaluate_grade12_gates
-from modules.anna_training.paper_trades import load_paper_trades, summarize_trades
+from modules.anna_training.paper_trades import load_paper_trades_for_gates, summarize_trades
 from modules.anna_training.store import load_state
 
 
@@ -25,7 +25,7 @@ def suggest_next_focus(
     cid = (curriculum_id or "").strip() or (st.get("curriculum_id") or "").strip()
 
     g12 = evaluate_grade12_gates()
-    trades = load_paper_trades()
+    trades = load_paper_trades_for_gates()
     s = summarize_trades(trades)
     focus = "maintain_measurement"
     hints: list[str] = []
