@@ -206,12 +206,16 @@ def format_slack_report_card_text(
             f"Stage: {stage}",
             f"Training method: {meth}",
             "",
-            f"OVERALL GATE: {'PASS' if gate_pass else 'NOT PASS'}  (cohesive tools, then numeric min-N @ 60%)",
+            f"OVERALL GATE: {'PASS' if gate_pass else 'NOT PASS'}  (tools, then numeric min-N + win rate; optional P&L/bankroll env)",
             f"  • Curriculum tools (cohesive): {'PASS' if ct_ok else 'NOT PASS'}",
             f"  • Numeric paper slice: {'PASS' if ng_ok else 'NOT PASS'}",
-            f"  • Cohort: decisive {dec_raw}/{min_dt}  |  win rate {wr_s}",
+            f"  • Cohort: decisive {dec_raw}/{min_dt}  |  win rate {wr_s}  |  net P&L USD {float(g12.get('total_pnl_usd') or 0):.2f}",
         ]
     )
+    bs = g12.get("paper_bankroll_start_usd")
+    eq = g12.get("paper_equity_usd")
+    if bs is not None and eq is not None:
+        lines.append(f"  • Paper bankroll: start ${float(bs):,.2f} → equity ${float(eq):,.2f}")
 
     blockers = list(g12.get("blockers") or [])
     if blockers:

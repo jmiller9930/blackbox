@@ -124,6 +124,12 @@ def _cmd_status() -> int:
         "numeric_gate_pass": g12.get("numeric_gate_pass"),
         "decisive_trades": g12.get("decisive_trades"),
         "min_decisive_trades": g12.get("min_decisive_trades"),
+        "total_pnl_usd": g12.get("total_pnl_usd"),
+        "paper_bankroll_start_usd": g12.get("paper_bankroll_start_usd"),
+        "paper_equity_usd": g12.get("paper_equity_usd"),
+        "min_net_pnl_usd": g12.get("min_net_pnl_usd"),
+        "min_equity_usd": g12.get("min_equity_usd"),
+        "min_bankroll_return_frac": g12.get("min_bankroll_return_frac"),
     }
     print(json.dumps(out, indent=2))
     return 0
@@ -474,9 +480,9 @@ def _cmd_dashboard(args: argparse.Namespace | None = None) -> int:
             f"[dim]Per-row % below = attestation after evidence. Sequential skills first; then paper cohort.[/dim]\n\n"
             f"[bold]Curriculum[/bold]: {cid or '—'} — {cur_title}\n"
             f"[dim]Stage[/dim]: {stage}\n\n"
-            f"[bold]Overall[/bold]: {gate_style}  [dim](cohesive tools, then numeric 60% / min-N)[/dim]\n"
+            f"[bold]Overall[/bold]: {gate_style}  [dim](tools, then numeric min-N + win rate; optional P&L/bankroll env)[/dim]\n"
             f"[bold]Curriculum tools[/bold]: {ct_s}  |  [bold]Numeric paper[/bold]: {ng_s}\n"
-            f"[dim]Cohort: decisive {dec_raw}/{min_dt}, win rate {wr_s}[/dim]"
+            f"[dim]Cohort: decisive {dec_raw}/{min_dt}, win rate {wr_s}  |  net P&L USD [cyan]{float(g12.get('total_pnl_usd') or 0):.2f}[/cyan][/dim]"
             f"{why_txt}"
             f"{imp_txt}\n\n"
             f"[bold]Bachelor paper track eligible[/bold]: {elig}\n\n"
@@ -487,6 +493,33 @@ def _cmd_dashboard(args: argparse.Namespace | None = None) -> int:
 
         trades = load_paper_trades()
         s = summarize_trades(trades)
+        bs = g12.get("paper_bankroll_start_usd")
+        eq = g12.get("paper_equity_usd")
+        bankroll_line = ""
+        if bs is not None and eq is not None:
+            bankroll_line = (
+                f"\nNotional bankroll: start [bold]${float(bs):,.2f}[/bold] → "
+                f"equity [bold]${float(eq):,.2f}[/bold] (start + sum of pnl_usd in log)"
+            )
+        elif bs is None and ct_ok and s.trade_count > 0:
+            bankroll_line = (
+                "\n[dim]Set ANNA_GRADE12_PAPER_BANKROLL_START_USD to show start → equity (growth vs notional).[/dim]"
+            )
+        req_bits: list[str] = []
+        if g12.get("min_net_pnl_usd") is not None:
+            req_bits.append(f"net P&L ≥ ${float(g12['min_net_pnl_usd']):,.2f}")
+        if g12.get("min_equity_usd") is not None:
+            req_bits.append(f"equity ≥ ${float(g12['min_equity_usd']):,.2f}")
+        if g12.get("min_bankroll_return_frac") is not None:
+            req_bits.append(f"return ≥ {float(g12['min_bankroll_return_frac']):.2%} on start")
+        req_line = ""
+        if req_bits:
+            req_line = "\n[dim]Optional numeric gates also require:[/dim] " + " | ".join(req_bits)
+        pnl_note = (
+            "\n[dim]Outcome (won/lost) is separate from P&L $: each row’s pnl_usd is what you logged "
+            "(e.g. anna log-trade). Won + $0 means pnl_usd was 0 — use modeled $ when logging.[/dim]"
+            "\n[dim]School / Karpathy does not auto-append trades from Jupiter; add rows via log-trade or Jack bridge.[/dim]"
+        )
         console = Console()
         _bs = border_learning if border_learning in ("green", "yellow", "red") else ("green" if gate_pass else "red")
         console.print(
@@ -542,7 +575,10 @@ def _cmd_dashboard(args: argparse.Namespace | None = None) -> int:
                 "[dim]Paper harness evidence for this report card (not live fills).[/dim]\n"
                 f"Trades: {s.trade_count} | W {s.wins} / L {s.losses} | "
                 f"P&L USD [bold]{s.total_pnl_usd:.2f}[/bold]"
-                + (f" | Win rate {s.win_rate:.0%}" if s.win_rate is not None else ""),
+                + (f" | Win rate {s.win_rate:.0%}" if s.win_rate is not None else "")
+                + bankroll_line
+                + req_line
+                + pnl_note,
                 title="Paper cohort — summary",
                 border_style="cyan",
             )

@@ -35,6 +35,16 @@ def _env_int(name: str, default: int) -> int:
         return default
 
 
+def _env_optional_float(name: str) -> float | None:
+    raw = (os.environ.get(name) or "").strip()
+    if not raw:
+        return None
+    try:
+        return float(raw)
+    except ValueError:
+        return None
+
+
 def _skip_curriculum_tools_gate() -> bool:
     return (os.environ.get("ANNA_SKIP_CURRICULUM_TOOLS_GATE") or "").strip().lower() in (
         "1",
@@ -52,6 +62,11 @@ def evaluate_grade12_gates(training_state: dict[str, Any] | None = None) -> dict
     Env (numeric):
       ANNA_GRADE12_MIN_WIN_RATE — default 0.6
       ANNA_GRADE12_MIN_DECISIVE_TRADES — default 30
+    Env (numeric, optional capital — evaluated only after curriculum tools PASS):
+      ANNA_GRADE12_PAPER_BANKROLL_START_USD — notional starting equity for display / return gate
+      ANNA_GRADE12_MIN_NET_PNL_USD — require sum(pnl_usd) on cohort >= this
+      ANNA_GRADE12_MIN_EQUITY_USD — require (start + net P&L) >= this (start env required)
+      ANNA_GRADE12_MIN_BANKROLL_RETURN_FRAC — e.g. 0.05 requires 5% gain on start (start env required, >0)
     Env (tools bypass, tests/dev only):
       ANNA_SKIP_CURRICULUM_TOOLS_GATE=1 — ignore tool checklist (numeric only)
 
@@ -80,6 +95,37 @@ def evaluate_grade12_gates(training_state: dict[str, Any] | None = None) -> dict
         numeric_blockers.append("no_decisive_trades")
     elif wr < min_wr:
         numeric_blockers.append(f"win_rate_below_minimum ({wr:.4f} < {min_wr})")
+
+    total_pnl = float(s.total_pnl_usd)
+    bankroll_start = _env_optional_float("ANNA_GRADE12_PAPER_BANKROLL_START_USD")
+    min_net_pnl = _env_optional_float("ANNA_GRADE12_MIN_NET_PNL_USD")
+    min_equity = _env_optional_float("ANNA_GRADE12_MIN_EQUITY_USD")
+    min_return_frac = _env_optional_float("ANNA_GRADE12_MIN_BANKROLL_RETURN_FRAC")
+    equity_usd = (bankroll_start + total_pnl) if bankroll_start is not None else None
+
+    if tools_ok:
+        if min_net_pnl is not None and total_pnl < min_net_pnl:
+            numeric_blockers.append(f"net_pnl_below_minimum ({total_pnl:.2f} < {min_net_pnl:.2f})")
+        if min_equity is not None:
+            if equity_usd is None:
+                numeric_blockers.append(
+                    "equity_gate_requires_ANNA_GRADE12_PAPER_BANKROLL_START_USD (set notional start)"
+                )
+            elif equity_usd < min_equity:
+                numeric_blockers.append(f"equity_below_minimum ({equity_usd:.2f} < {min_equity:.2f})")
+        if min_return_frac is not None:
+            if bankroll_start is None or bankroll_start <= 0:
+                numeric_blockers.append(
+                    "return_gate_requires_positive_ANNA_GRADE12_PAPER_BANKROLL_START_USD"
+                )
+            elif equity_usd is not None:
+                target_equity = bankroll_start * (1.0 + min_return_frac)
+                if equity_usd < target_equity - 1e-9:
+                    numeric_blockers.append(
+                        "return_on_bankroll_below_minimum "
+                        f"(equity {equity_usd:.2f} < target {target_equity:.2f} "
+                        f"for {min_return_frac:.4f} frac on start {bankroll_start:.2f})"
+                    )
 
     numeric_ok = len(numeric_blockers) == 0
 
@@ -124,6 +170,12 @@ def evaluate_grade12_gates(training_state: dict[str, Any] | None = None) -> dict
         "losses": s.losses,
         "win_rate": wr,
         "total_trades_logged": s.trade_count,
+        "total_pnl_usd": total_pnl,
+        "paper_bankroll_start_usd": bankroll_start,
+        "paper_equity_usd": equity_usd,
+        "min_net_pnl_usd": min_net_pnl,
+        "min_equity_usd": min_equity,
+        "min_bankroll_return_frac": min_return_frac,
         "blockers": blockers,
         "note": "Pass requires curriculum tools in sequence (one focus at a time in the deck), then numeric paper cohort. RCS/RCA human sign-off may still apply per ANNA_GOES_TO_SCHOOL.md.",
     }

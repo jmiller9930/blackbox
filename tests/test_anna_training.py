@@ -481,3 +481,66 @@ def test_cli_training_progress_and_advance_curriculum(tmp_path: Path, monkeypatc
     assert r2.returncode == 0, r2.stderr
     raw = json.loads((tmp_path / "state.json").read_text(encoding="utf-8"))
     assert raw["curriculum_id"] == "bachelor_paper_track_v1"
+
+
+def test_grade12_numeric_gate_min_net_pnl_blocks(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setenv("BLACKBOX_ANNA_TRAINING_DIR", str(tmp_path))
+    monkeypatch.setenv("ANNA_GRADE12_MIN_DECISIVE_TRADES", "1")
+    monkeypatch.setenv("ANNA_GRADE12_MIN_WIN_RATE", "0.5")
+    monkeypatch.setenv("ANNA_GRADE12_MIN_NET_PNL_USD", "50")
+    from modules.anna_training.curriculum_tools import TOOL_IDS
+    from modules.anna_training.gates import evaluate_grade12_gates
+    from modules.anna_training.paper_trades import append_paper_trade
+    from modules.anna_training.store import load_state, save_state
+
+    append_paper_trade(symbol="S", side="long", result="won", pnl_usd=10.0, timeframe="5m")
+    st = load_state()
+    st["grade_12_tool_mastery"] = {tid: True for tid in TOOL_IDS}
+    save_state(st)
+    g12 = evaluate_grade12_gates()
+    assert not g12["numeric_gate_pass"]
+    assert any("net_pnl" in x for x in g12["numeric_blockers"])
+
+
+def test_grade12_numeric_gate_min_net_pnl_passes(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setenv("BLACKBOX_ANNA_TRAINING_DIR", str(tmp_path))
+    monkeypatch.setenv("ANNA_GRADE12_MIN_DECISIVE_TRADES", "1")
+    monkeypatch.setenv("ANNA_GRADE12_MIN_WIN_RATE", "0.5")
+    monkeypatch.setenv("ANNA_GRADE12_MIN_NET_PNL_USD", "50")
+    from modules.anna_training.curriculum_tools import TOOL_IDS
+    from modules.anna_training.gates import evaluate_grade12_gates
+    from modules.anna_training.paper_trades import append_paper_trade
+    from modules.anna_training.store import load_state, save_state
+
+    append_paper_trade(symbol="S", side="long", result="won", pnl_usd=60.0, timeframe="5m")
+    st = load_state()
+    st["grade_12_tool_mastery"] = {tid: True for tid in TOOL_IDS}
+    save_state(st)
+    g12 = evaluate_grade12_gates()
+    assert g12["numeric_gate_pass"]
+    assert g12["pass"]
+
+
+def test_grade12_bankroll_return_gate(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setenv("BLACKBOX_ANNA_TRAINING_DIR", str(tmp_path))
+    monkeypatch.setenv("ANNA_GRADE12_MIN_DECISIVE_TRADES", "1")
+    monkeypatch.setenv("ANNA_GRADE12_MIN_WIN_RATE", "0.5")
+    monkeypatch.setenv("ANNA_GRADE12_PAPER_BANKROLL_START_USD", "1000")
+    monkeypatch.setenv("ANNA_GRADE12_MIN_BANKROLL_RETURN_FRAC", "0.05")
+    from modules.anna_training.curriculum_tools import TOOL_IDS
+    from modules.anna_training.gates import evaluate_grade12_gates
+    from modules.anna_training.paper_trades import append_paper_trade
+    from modules.anna_training.store import load_state, save_state
+
+    append_paper_trade(symbol="S", side="long", result="won", pnl_usd=40.0, timeframe="5m")
+    st = load_state()
+    st["grade_12_tool_mastery"] = {tid: True for tid in TOOL_IDS}
+    save_state(st)
+    g12 = evaluate_grade12_gates()
+    assert not g12["numeric_gate_pass"]
+    assert any("return_on_bankroll" in x for x in g12["numeric_blockers"])
+
+    append_paper_trade(symbol="S", side="long", result="won", pnl_usd=10.0, timeframe="5m")
+    g12b = evaluate_grade12_gates()
+    assert g12b["numeric_gate_pass"]
+    assert float(g12b["paper_equity_usd"] or 0) >= 1050.0
