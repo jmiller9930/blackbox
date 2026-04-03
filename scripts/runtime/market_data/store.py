@@ -14,12 +14,33 @@ def connect_market_db(db_path: Path) -> sqlite3.Connection:
     return sqlite3.connect(db_path)
 
 
+def _migrate_market_ticks_tertiary(conn: sqlite3.Connection) -> None:
+    """Add Jupiter/tertiary columns to older DBs created before optional tertiary leg."""
+    cur = conn.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='market_ticks'")
+    if cur.fetchone() is None:
+        return
+    info = conn.execute("PRAGMA table_info(market_ticks)").fetchall()
+    cols = {row[1] for row in info}
+    alters: list[str] = []
+    if "tertiary_source" not in cols:
+        alters.append("ALTER TABLE market_ticks ADD COLUMN tertiary_source TEXT")
+    if "tertiary_price" not in cols:
+        alters.append("ALTER TABLE market_ticks ADD COLUMN tertiary_price REAL")
+    if "tertiary_observed_at" not in cols:
+        alters.append("ALTER TABLE market_ticks ADD COLUMN tertiary_observed_at TEXT")
+    if "tertiary_raw_json" not in cols:
+        alters.append("ALTER TABLE market_ticks ADD COLUMN tertiary_raw_json TEXT")
+    for sql in alters:
+        conn.execute(sql)
+
+
 def ensure_market_schema(conn: sqlite3.Connection, root: Path | None = None) -> None:
     root = root or repo_root()
     p = root / "data" / "sqlite" / "schema_phase5_market_data.sql"
     if not p.is_file():
         raise FileNotFoundError(p)
     conn.executescript(p.read_text(encoding="utf-8"))
+    _migrate_market_ticks_tertiary(conn)
     conn.commit()
 
 
@@ -39,6 +60,10 @@ def insert_tick(
     comparator_raw: dict[str, Any] | None,
     gate_state: str,
     gate_reason: str,
+    tertiary_source: str | None = None,
+    tertiary_price: float | None = None,
+    tertiary_observed_at: str | None = None,
+    tertiary_raw: dict[str, Any] | None = None,
 ) -> int:
     cur = conn.execute(
         """
@@ -46,8 +71,9 @@ def insert_tick(
           symbol, inserted_at,
           primary_source, primary_price, primary_observed_at, primary_publish_time, primary_raw_json,
           comparator_source, comparator_price, comparator_observed_at, comparator_raw_json,
+          tertiary_source, tertiary_price, tertiary_observed_at, tertiary_raw_json,
           gate_state, gate_reason
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
         (
             symbol,
@@ -61,6 +87,10 @@ def insert_tick(
             comparator_price,
             comparator_observed_at,
             json.dumps(comparator_raw, ensure_ascii=False) if comparator_raw is not None else None,
+            tertiary_source,
+            tertiary_price,
+            tertiary_observed_at,
+            json.dumps(tertiary_raw, ensure_ascii=False) if tertiary_raw is not None else None,
             gate_state,
             gate_reason,
         ),
@@ -73,7 +103,9 @@ def latest_tick(conn: sqlite3.Connection, symbol: str) -> dict[str, Any] | None:
     row = conn.execute(
         """
         SELECT id, symbol, inserted_at, primary_source, primary_price, primary_observed_at,
-               comparator_source, comparator_price, comparator_observed_at, gate_state, gate_reason
+               comparator_source, comparator_price, comparator_observed_at,
+               tertiary_source, tertiary_price, tertiary_observed_at,
+               gate_state, gate_reason
         FROM market_ticks
         WHERE symbol = ?
         ORDER BY inserted_at DESC, id DESC
@@ -93,6 +125,9 @@ def latest_tick(conn: sqlite3.Connection, symbol: str) -> dict[str, Any] | None:
         "comparator_source",
         "comparator_price",
         "comparator_observed_at",
+        "tertiary_source",
+        "tertiary_price",
+        "tertiary_observed_at",
         "gate_state",
         "gate_reason",
     ]
@@ -121,6 +156,9 @@ def ticks_chronological(
         "comparator_source",
         "comparator_price",
         "comparator_observed_at",
+        "tertiary_source",
+        "tertiary_price",
+        "tertiary_observed_at",
         "gate_state",
         "gate_reason",
     ]

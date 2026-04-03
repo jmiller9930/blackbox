@@ -120,6 +120,7 @@ def load_latest_tick_scoped(
                 SELECT id, symbol, inserted_at,
                        primary_source, primary_price, primary_observed_at,
                        comparator_source, comparator_price, comparator_observed_at,
+                       tertiary_source, tertiary_price, tertiary_observed_at,
                        gate_state, gate_reason
                 FROM market_ticks
                 WHERE symbol = ?
@@ -146,6 +147,9 @@ def load_latest_tick_scoped(
             "comparator_source",
             "comparator_price",
             "comparator_observed_at",
+            "tertiary_source",
+            "tertiary_price",
+            "tertiary_observed_at",
             "gate_state",
             "gate_reason",
         ]

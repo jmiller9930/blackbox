@@ -140,21 +140,69 @@ def evaluate_gates(
     max_age_sec: float = 120.0,
     max_rel_diff: float = 0.005,
     degraded_rel_diff: float = 0.002,
+    tertiary_observed_at: str | None = None,
+    tertiary_price: float | None = None,
+    king_pyth_max_rel_diff: float = 0.007,
+    king_pyth_degraded_rel_diff: float = 0.004,
+    king_coinbase_max_rel_diff: float = 0.025,
+    king_coinbase_degraded_rel_diff: float = 0.012,
 ) -> GateResult:
-    """Combine primary/comparator freshness and divergence. No silent OK when inputs missing."""
+    """Combine freshness + divergence.
+
+    **Jupiter-as-king** (when ``tertiary_price`` is set — Jupiter implied SOL/USD):
+
+    - **Pyth** is checked **against Jupiter** (oracle should track the on-chain anchor).
+    - **Coinbase** **supports** Jupiter: checked **against Jupiter** with a **wider** band
+      (CEX vs routed DEX basis).
+    - Direct Pyth↔Coinbase divergence is **not** used in this mode — Coinbase’s job is to
+      align with the king, not to substitute for it.
+
+    **Fallback** (no Jupiter price): classic **Pyth ↔ Coinbase** pair only (``max_rel_diff``).
+    """
     f1 = evaluate_freshness(observed_at=primary_observed_at, wall_now=wall_now, max_age_sec=max_age_sec)
     f2 = evaluate_freshness(observed_at=comparator_observed_at, wall_now=wall_now, max_age_sec=max_age_sec)
-    div = evaluate_divergence(
-        primary=primary_price,
+    details: dict[str, Any] = {
+        "freshness_primary": f1.details,
+        "freshness_comparator": f2.details,
+    }
+
+    if tertiary_price is None:
+        div = evaluate_divergence(
+            primary=primary_price,
+            comparator=comparator_price,
+            max_rel_diff=max_rel_diff,
+            degraded_rel_diff=degraded_rel_diff,
+        )
+        state = _worst(_worst(f1.state, f2.state), div.state)
+        parts = [f1.reason, f2.reason, div.reason]
+        details["divergence"] = div.details
+        details["gate_mode"] = "pyth_vs_coinbase"
+        details["tertiary"] = {"skipped": True}
+        return GateResult(state=state, reason=";".join(parts), details=details)
+
+    f3 = evaluate_freshness(observed_at=tertiary_observed_at, wall_now=wall_now, max_age_sec=max_age_sec)
+    # King = Jupiter (first operand) for both divergences — symmetric math, explicit role in details.
+    div_pj = evaluate_divergence(
+        primary=tertiary_price,
+        comparator=primary_price,
+        max_rel_diff=king_pyth_max_rel_diff,
+        degraded_rel_diff=king_pyth_degraded_rel_diff,
+    )
+    div_cj = evaluate_divergence(
+        primary=tertiary_price,
         comparator=comparator_price,
-        max_rel_diff=max_rel_diff,
-        degraded_rel_diff=degraded_rel_diff,
+        max_rel_diff=king_coinbase_max_rel_diff,
+        degraded_rel_diff=king_coinbase_degraded_rel_diff,
     )
-    state = _worst(_worst(f1.state, f2.state), div.state)
-    parts = [f1.reason, f2.reason, div.reason]
-    reason = ";".join(parts)
-    return GateResult(
-        state=state,
-        reason=reason,
-        details={"freshness_primary": f1.details, "freshness_comparator": f2.details, "divergence": div.details},
-    )
+    state = f1.state
+    state = _worst(state, f2.state)
+    state = _worst(state, f3.state)
+    state = _worst(state, div_pj.state)
+    state = _worst(state, div_cj.state)
+    parts = [f1.reason, f2.reason, f3.reason, div_pj.reason, div_cj.reason]
+    details["freshness_tertiary"] = f3.details
+    details["gate_mode"] = "jupiter_king"
+    details["divergence_pyth_vs_jupiter_king"] = div_pj.details
+    details["divergence_coinbase_supports_jupiter_king"] = div_cj.details
+
+    return GateResult(state=state, reason=";".join(parts), details=details)
