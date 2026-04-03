@@ -66,7 +66,11 @@ def promote_to_bachelor_track(state: dict[str, Any]) -> dict[str, Any]:
 
 
 def carryforward_fact_lines(state: dict[str, Any] | None) -> list[str]:
-    """Authoritative FACT lines for LLM merge (short)."""
+    """Authoritative FACT lines for LLM merge (short).
+
+    Injected on every analyst path (see ``analysis.build_analysis``) — Anna does not need to ask
+    for these; they are always part of ``facts_for_prompt`` when state is loadable.
+    """
     if not state:
         return []
     bullets = list(state.get("carryforward_bullets") or [])

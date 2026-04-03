@@ -75,6 +75,30 @@ def test_grade12_internalizes_when_all_tools_pass(tmp_path: Path, monkeypatch) -
     assert len([e for e in (st3.get("cumulative_learning_log") or []) if e.get("kind") == "grade_12_knowledge_internalized_v1"]) == 1
 
 
+def test_grade12_trading_internalizes_when_overall_gate_passes(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setenv("BLACKBOX_ANNA_TRAINING_DIR", str(tmp_path))
+    monkeypatch.setenv("ANNA_GRADE12_MIN_DECISIVE_TRADES", "1")
+    monkeypatch.setenv("ANNA_GRADE12_MIN_WIN_RATE", "0.5")
+    from modules.anna_training.curriculum_tools import TOOL_IDS
+    from modules.anna_training.paper_trades import append_paper_trade
+    from modules.anna_training.store import load_state, save_state
+
+    append_paper_trade(symbol="S", side="long", result="won", pnl_usd=1.0, timeframe="5m")
+    st = load_state()
+    st["grade_12_tool_mastery"] = {tid: True for tid in TOOL_IDS}
+    save_state(st)
+    st2 = load_state()
+    assert st2.get("grade_12_knowledge_internalized")
+    snap = st2.get("grade_12_trading_knowledge_internalized")
+    assert isinstance(snap, dict)
+    assert snap.get("version") == 1
+    assert any("INTERNALIZED G12 TRADING" in str(b) for b in (st2.get("carryforward_bullets") or []))
+    assert any(
+        e.get("kind") == "grade_12_trading_knowledge_internalized_v1"
+        for e in (st2.get("cumulative_learning_log") or [])
+    )
+
+
 def test_learning_signal_verdict_binary_pass_not_pass(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.setenv("BLACKBOX_ANNA_TRAINING_DIR", str(tmp_path))
     from modules.anna_training.gates import evaluate_grade12_gates

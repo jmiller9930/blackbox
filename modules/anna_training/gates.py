@@ -43,8 +43,11 @@ def _skip_curriculum_tools_gate() -> bool:
     )
 
 
-def evaluate_grade12_gates() -> dict[str, Any]:
+def evaluate_grade12_gates(training_state: dict[str, Any] | None = None) -> dict[str, Any]:
     """Return PASS/FAIL: (1) all Grade 12 curriculum tools passed, (2) numeric paper cohort.
+
+    ``training_state``: optional in-memory state (e.g. during ``save_state`` before disk write).
+    When provided, ``grade_12_tool_mastery`` is taken from it; paper trades still come from disk.
 
     Env (numeric):
       ANNA_GRADE12_MIN_WIN_RATE — default 0.6
@@ -57,7 +60,7 @@ def evaluate_grade12_gates() -> dict[str, Any]:
     min_wr = _env_float("ANNA_GRADE12_MIN_WIN_RATE", 0.6)
     min_decisive = _env_int("ANNA_GRADE12_MIN_DECISIVE_TRADES", 30)
 
-    st = load_state()
+    st = training_state if training_state is not None else load_state()
     mastery = normalize_tool_mastery(st.get("grade_12_tool_mastery"))
     tools_ok = curriculum_tools_complete(mastery)
     missing_tools = missing_grade_12_tools(mastery)

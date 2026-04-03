@@ -58,7 +58,10 @@ from modules.anna_training.report_card_text import (  # noqa: E402
     improvement_lines_from_gate_result,
     learning_signal_verdict,
 )
-from modules.anna_training.internalized_knowledge import internalized_grade12_snapshot  # noqa: E402
+from modules.anna_training.internalized_knowledge import (  # noqa: E402
+    internalized_grade12_snapshot,
+    internalized_trading_snapshot,
+)
 from modules.anna_training.gates import evaluate_grade12_gates  # noqa: E402
 from modules.anna_training.readiness import ensure_anna_data_preflight, full_readiness  # noqa: E402
 from modules.anna_training.paper_trades import (  # noqa: E402
@@ -109,6 +112,7 @@ def _cmd_status() -> int:
         "grade_12_tools_all_passed": all(normalize_tool_mastery(st.get("grade_12_tool_mastery")).get(tid) for tid in TOOL_IDS),
         "grade_12_skills_deck": st.get("grade_12_skills_deck") or {},
         "grade_12_knowledge_internalized": internalized_grade12_snapshot(st),
+        "grade_12_trading_knowledge_internalized": internalized_trading_snapshot(st),
     }
     g12 = evaluate_grade12_gates()
     out["grade_12_progress"] = grade12_progress_percentages(g12, st.get("grade_12_tool_mastery"))

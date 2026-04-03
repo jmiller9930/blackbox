@@ -131,6 +131,7 @@ def default_state() -> dict[str, Any]:
         "grade_12_tool_mastery": default_grade_12_tool_mastery(),
         "grade_12_skills_deck": {},
         "grade_12_knowledge_internalized": None,
+        "grade_12_trading_knowledge_internalized": None,
     }
 
 
