@@ -1,4 +1,4 @@
-"""Grade 12 required tools — must be passed (cohesive set) before numeric gate / revenue bar counts."""
+"""Grade 12 required tools — each id is a binary pass/fail; all four true before numeric gate counts."""
 
 from __future__ import annotations
 

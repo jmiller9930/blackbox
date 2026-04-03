@@ -67,6 +67,17 @@ This keeps the important University mechanics without forcing the entire standal
 - **Reflection / RCA / strategy latitude:** §3.2–3.3 (and RCS shape in §3.3) are **part of Anna’s operating contract** for this track; automation may be phased, but semantics are not optional for “what Anna is supposed to do.”
 - **Operator surface:** `scripts/runtime/anna_training_cli.py` (assign curriculum, invoke method, notes, paper trade log, dashboard, report-card, `check-readiness`, `gates`).
 
+### 1.2.1 Binary curriculum predicates (Grade-12 bar — binding)
+
+At this level, **every** Grade-12 curriculum requirement that the software enforces **must** be expressible as a **boolean predicate** (true/false only). There is **no** “partial mastery” state that counts as overall **PASS**: the **headline gate** is **PASS** iff **all** required predicates are true, else **NOT PASS**.
+
+- **Gates** (`evaluate_grade12_gates`): **curriculum_tools_pass**, **numeric_gate_pass**, and overall **pass** are booleans; blockers explain which predicate failed.
+- **Tool checklist** (`grade_12_tool_mastery`): each tool id is **True** or **False** — not a scalar grade.
+- **Skill practice** (`karpathy_skill_engine`): each practice attempt returns **passed** true/false only; optional **`ANNA_KARPATHY_AUTO_ATTEST_TOOLS=1`** may set a tool to **True** only when its practice predicate passes — it does not introduce a third state.
+- **Learning headline** (report card / Slack): **PASS** vs **NOT PASS** aligned to the gate; diagnostics may list which binary legs are false — they are **not** a separate “in progress” grade.
+
+Human / exam-board judgment above the software minimum remains as in §1.3; this subsection binds **what the code may claim** as satisfied.
+
 ### 1.3 12th grade graduation — sequencing, numeric gate, and human authority
 
 **She cannot graduate 12th grade until all of the following are satisfied:**
@@ -76,7 +87,7 @@ This keeps the important University mechanics without forcing the entire standal
    - **`analysis_algorithms`** — quant stack and analysis path: separate noise from signal in the harness (metrics, pedagogy, procedures in code).
    - **`rcs_rca_discipline`** — **RCS** on outcomes; **RCA** when policy/gates say so (see §3.3 — same DNA, checklist makes it visible before headline metrics).
    - **`karpathy_harness_loop`** — paper harness: propose → test → measure → keep/drop → repeat (canonical **Karpathy** steps in `catalog.py`).
-   The long-running **loop daemon** (tmux / `loop-daemon`) **does not** auto-flip these flags; **heartbeats ≠ checklist progress** until trades are logged and tools are attested.
+   By default the long-running **loop daemon** does **not** auto-flip checklist flags (**heartbeats ≠ mastery**). With **`ANNA_KARPATHY_AUTO_ATTEST_TOOLS=1`**, it may set a tool to **passed** only when **binary** skill practice for that tool’s predicate succeeds; otherwise **operator** attestation after evidence (`anna tool-pass <id>`) remains required.
 2. **Prior learning requirements (human judgment)** — **Demonstrated competent competency** in the skills the contract requires: **§3.3** **`RCS`/`RCA`**, **Karpathy** practice in paper, **traceable** thesis ↔ outcome, and carry-forward behaviors in §3.3–3.4 (operator / exam board judge “competent,” not only logs). The **tool checklist** is the **minimum bar encoded in software**; exam-board judgment can still apply above that.
 3. **Numeric cohort gate** — After (1) is satisfied, the program’s **60%** standard (configurable) on **decisive** paper trades (won+lost), with a **minimum decisive trade count**, as implemented by **`python3 scripts/runtime/anna_training_cli.py gates`** (`ANNA_GRADE12_MIN_WIN_RATE`, `ANNA_GRADE12_MIN_DECISIVE_TRADES`). **Win rate alone** does not substitute for the tool checklist; **tools without numeric** does not satisfy overall **PASS**.
 

@@ -14,7 +14,7 @@ Anna’s **Grade 12** path is **paper and simulation only** — **no live tradin
 
 ## 2. The four pillars (what we measure before headline numbers)
 
-We encoded a **cohesive checklist** of four skills. **Overall Grade-12 gate PASS** requires **all four** to be operator-attested **and** a **numeric paper cohort** (minimum decisive trades + win-rate floor — default **60%** on decisive outcomes). **Order matters:** tools first, then the numeric bar — so we do not optimize a vanity percentage while skipping fundamentals.
+We encoded a **cohesive checklist** of four skills. **Overall Grade-12 gate PASS** requires **all four** to be operator-attested **and** a **numeric paper cohort** (minimum decisive trades + win-rate floor — default **60%** on decisive outcomes). At this level the bar is **binary** only (each requirement is pass/fail; no partial credit for overall PASS). **Order matters:** tools first, then the numeric bar — so we do not optimize a vanity percentage while skipping fundamentals.
 
 | Pillar | Plain English | Contract tie-in |
 |--------|----------------|------------------|
@@ -23,7 +23,7 @@ We encoded a **cohesive checklist** of four skills. **Overall Grade-12 gate PASS
 | **RCS / RCA discipline** | **RCS** (light reflection) on every outcome; **RCA** (deep dive) only when the gate/policy says so — traceable **why** on wins and losses. | Same DNA as §3.3 in `ANNA_GOES_TO_SCHOOL.md` — this checklist makes that discipline **visible** before revenue-style headlines. |
 | **Karpathy harness loop** | **Propose → test in harness → measure → keep/drop → repeat** until gates are met. | Canonical seven-step loop in `karpathy_loop_v1`; continuous improvement, not one-off chat. |
 
-**Important:** The **long-running training loop** (daemon) keeps the **process** alive; it does **not** automatically mark these skills “mastered.” **Progress on the checklist** is **operator attestation** after evidence (`anna tool-pass`), plus **logged paper trades** for the numeric slice.
+**Important:** The **long-running training loop** (daemon) keeps the **process** alive; by default it does **not** mark skills “mastered.” **Progress on the checklist** is **operator attestation** after evidence (`anna tool-pass`), plus **logged paper trades** for the numeric slice. Optional env **`ANNA_KARPATHY_AUTO_ATTEST_TOOLS=1`** can flip a tool to passed only when **binary** automated practice for that tool succeeds — still a true/false outcome, not a partial grade.
 
 ---
 

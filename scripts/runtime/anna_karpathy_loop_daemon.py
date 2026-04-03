@@ -13,6 +13,11 @@ Env:
   RECORD_MARKET_SNAPSHOT_EACH_TICK — 1 to record one market row per successful tick
   MARKET_DATA_SKIP_JUPITER — 1 to skip Jupiter quote when snapshotting
   ANNA_SKIP_PREFLIGHT — 1 bypasses data preflight (tests/dev only)
+  ANNA_KARPATHY_AUTO_ATTEST_TOOLS — 1 to set ``grade_12_tool_mastery`` for a tool when
+    binary skill practice passes for the deck’s current focus (default: off; operator
+    attestation remains the primary path)
+  ANNA_KARPATHY_HARNESS_MIN_ITERATIONS — min ``karpathy_loop_iteration`` count for the
+    harness-loop tool practice predicate (default 10)
 
 Repo root:
   PYTHONPATH=scripts/runtime:. python3 scripts/runtime/anna_karpathy_loop_daemon.py
@@ -39,6 +44,7 @@ if str(_RT) not in sys.path:
 from modules.anna_training.catalog import CURRICULA, TRAINING_METHODS  # noqa: E402
 from modules.anna_training.cumulative import append_cumulative_log  # noqa: E402
 from modules.anna_training.curriculum_tools import build_grade12_skills_deck  # noqa: E402
+from modules.anna_training.karpathy_skill_engine import run_skill_practice_cycle  # noqa: E402
 from modules.anna_training.gates import evaluate_grade12_gates  # noqa: E402
 from modules.anna_training.readiness import ensure_anna_data_preflight, preflight_skipped  # noqa: E402
 from modules.anna_training.store import anna_training_dir, load_state, save_state, utc_now_iso  # noqa: E402
@@ -138,6 +144,24 @@ def run_one_tick(*, tick_index: int) -> tuple[dict, bool]:
     g12 = evaluate_grade12_gates()
     deck = build_grade12_skills_deck(st, g12)
     st["grade_12_skills_deck"] = deck
+
+    pr = run_skill_practice_cycle(st, g12)
+    if pr:
+        append_cumulative_log(
+            st,
+            kind="karpathy_skill_practice_v1",
+            summary=f"{pr.get('skill_id')}: {'PASS' if pr.get('passed') else 'NOT PASS'} — {pr.get('summary', '')}",
+            curriculum_id=st.get("curriculum_id"),
+            meta={
+                "attempt": pr,
+                "karpathy_loop_iteration": n,
+                "tick_index": tick_index,
+            },
+        )
+        g12 = evaluate_grade12_gates()
+        deck = build_grade12_skills_deck(st, g12)
+        st["grade_12_skills_deck"] = deck
+
     if _karpathy_log_each_cycle():
         passed_tools = sum(1 for t in deck["tools"] if t.get("passed"))
         summary = (
@@ -172,6 +196,8 @@ def run_one_tick(*, tick_index: int) -> tuple[dict, bool]:
         "training_method_id": st.get("training_method_id"),
         "grade12_gate": {
             "pass": g12.get("pass"),
+            "curriculum_tools_pass": g12.get("curriculum_tools_pass"),
+            "numeric_gate_pass": g12.get("numeric_gate_pass"),
             "decisive_trades": g12.get("decisive_trades"),
             "wins": g12.get("wins"),
             "losses": g12.get("losses"),

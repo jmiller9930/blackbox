@@ -374,11 +374,9 @@ def _cmd_dashboard(args: argparse.Namespace | None = None) -> int:
         lv = learning_signal_verdict(g12, st)
         gate_pass = bool(g12.get("pass"))
         gate_style = "[bold green]PASS[/bold green]" if gate_pass else "[bold red]NOT PASS[/bold red]"
-        v = lv.get("verdict") or "not_yet"
-        if v == "on_track":
+        v = lv.get("verdict") or "not_pass"
+        if v == "pass":
             learn_block = f"[bold green]{lv['headline']}[/bold green]\n[dim]{lv['detail']}[/dim]"
-        elif v == "emerging":
-            learn_block = f"[bold yellow]{lv['headline']}[/bold yellow]\n[dim]{lv['detail']}[/dim]"
         else:
             learn_block = f"[bold red]{lv['headline']}[/bold red]\n[dim]{lv['detail']}[/dim]"
         ct_ok = bool(g12.get("curriculum_tools_pass"))
@@ -408,7 +406,7 @@ def _cmd_dashboard(args: argparse.Namespace | None = None) -> int:
         if imp and not gate_pass:
             imp_txt = "\n[bold]Where to improve her code / stack[/bold]\n" + "\n".join(f"  • {x}" for x in imp)
 
-        border_learning = lv.get("border") or "red"
+        border_learning = "green" if lv.get("verdict") == "pass" else "red"
         deck = st.get("grade_12_skills_deck") or {}
         deck_line = ""
         if isinstance(deck, dict) and deck.get("version"):

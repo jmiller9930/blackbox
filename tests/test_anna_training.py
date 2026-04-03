@@ -19,6 +19,19 @@ def test_ensure_preflight_respects_skip(monkeypatch) -> None:
     assert r.get("skipped") is True
 
 
+def test_attempt_math_engine_wilson_passes(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setenv("BLACKBOX_ANNA_TRAINING_DIR", str(tmp_path))
+    from modules.anna_training.gates import evaluate_grade12_gates
+    from modules.anna_training.karpathy_skill_engine import attempt_curriculum_skill
+    from modules.anna_training.store import load_state
+
+    st = load_state()
+    g12 = evaluate_grade12_gates()
+    r = attempt_curriculum_skill("math_engine_literacy", state=st, g12=g12)
+    assert r.get("practice_kind") == "wilson_nist_reference"
+    assert r.get("passed") is True
+
+
 def test_karpathy_once_writes_skills_deck_and_cycle_log(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.setenv("BLACKBOX_ANNA_TRAINING_DIR", str(tmp_path))
     monkeypatch.setenv("ANNA_SKIP_PREFLIGHT", "1")
@@ -39,21 +52,22 @@ def test_karpathy_once_writes_skills_deck_and_cycle_log(tmp_path: Path, monkeypa
     )
 
 
-def test_learning_signal_verdict_not_yet_vs_emerging(tmp_path: Path, monkeypatch) -> None:
+def test_learning_signal_verdict_binary_pass_not_pass(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.setenv("BLACKBOX_ANNA_TRAINING_DIR", str(tmp_path))
     from modules.anna_training.gates import evaluate_grade12_gates
     from modules.anna_training.report_card_text import learning_signal_verdict
-    from modules.anna_training.store import load_state, save_state
+    from modules.anna_training.store import load_state
 
-    g12 = evaluate_grade12_gates()
+    g12_fail = evaluate_grade12_gates()
     st = load_state()
-    lv0 = learning_signal_verdict(g12, st)
-    assert lv0["verdict"] == "not_yet"
+    lv_fail = learning_signal_verdict(g12_fail, st)
+    assert lv_fail["verdict"] == "not_pass"
+    assert lv_fail["border"] == "red"
 
-    st["cumulative_learning_log"] = [{"kind": "test", "summary": "x"}]
-    save_state(st)
-    lv1 = learning_signal_verdict(evaluate_grade12_gates(), load_state())
-    assert lv1["verdict"] == "emerging"
+    g12_ok = {**g12_fail, "pass": True, "curriculum_tools_pass": True, "numeric_gate_pass": True}
+    lv_ok = learning_signal_verdict(g12_ok, st)
+    assert lv_ok["verdict"] == "pass"
+    assert lv_ok["border"] == "green"
 
 
 def test_grade12_progress_percentages_shape(tmp_path: Path, monkeypatch) -> None:
