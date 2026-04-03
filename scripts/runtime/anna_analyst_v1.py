@@ -15,7 +15,10 @@ import uuid
 from pathlib import Path
 from typing import Any
 
+_REPO = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+if str(_REPO) not in sys.path:
+    sys.path.insert(0, str(_REPO))
 
 from _db import connect, ensure_schema, seed_agents
 from _paths import default_sqlite_path, repo_root
@@ -27,6 +30,10 @@ from anna_modules.input_adapter import (
     try_load_trend,
 )
 from anna_modules.market_data_reader import load_latest_market_tick
+from modules.anna_training.readiness import (
+    build_anna_analysis_preflight_blocked,
+    ensure_anna_data_preflight,
+)
 
 def analyze_to_dict(
     db_path: Path,
@@ -40,13 +47,24 @@ def analyze_to_dict(
     use_llm: bool | None = None,
     context_bundle_json: str | None = None,
     context_bundle_path: Path | None = None,
+    skip_preflight: bool = False,
 ) -> dict[str, Any]:
     """Programmatic entry (e.g. Telegram). Returns structured result; does not print.
 
     use_llm: pass True/False to force the Ollama path; None uses ANNA_USE_LLM (default on).
     Telegram dispatcher passes an explicit value — see agent_dispatcher.telegram_anna_use_llm.
+    When the caller already ran `ensure_anna_data_preflight` (e.g. Telegram), pass skip_preflight=True.
     """
     root = repo_root()
+    if not skip_preflight:
+        pf = ensure_anna_data_preflight(root)
+        if not pf["ok"]:
+            return {
+                "anna_analysis": build_anna_analysis_preflight_blocked(input_text, pf),
+                "stored_task_id": None,
+                "preflight": pf,
+            }
+
     conn = connect(db_path)
     ensure_schema(conn, root)
     seed_agents(conn)
@@ -140,7 +158,11 @@ def run(
         store=store,
         use_llm=None,
         context_bundle_path=context_bundle_path,
+        skip_preflight=False,
     )
+    if out.get("preflight"):
+        print(json.dumps(out, indent=2, ensure_ascii=False), file=sys.stderr)
+        return 5
     print(json.dumps(out, indent=2, ensure_ascii=False))
     return 0
 

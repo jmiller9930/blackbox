@@ -48,6 +48,29 @@ python3 scripts/runtime/governance_bus.py --agent Architect --type DIRECTIVE --p
 python3 scripts/runtime/context_loader.py
 ```
 
+## Anna training — curriculum + method (operator CLI)
+
+**Preflight:** `check-readiness` — Solana **RPC** (`SOLANA_RPC_URL` or public fallback), **Pyth** stream status file under `docs/working/artifacts/`, **`data/sqlite/market_data.db`** presence (ticks/snapshots for Anna when pipeline loads them). **Enforced:** all other `anna_training_cli` subcommands run this gate first (exit 5 on failure). Anna analyst (`anna_analyst_v1.py`), proposal builder, and Telegram `@anna` dispatch run the same **data-source** checks before producing output. Optional **`ANNA_PREFLIGHT_REQUIRE_SOLANA=1`** adds RPC to the gate. **`ANNA_SKIP_PREFLIGHT=1`** — tests/dev only.
+
+Assign **grade 12 equivalent (paper only)**, invoke the **Karpathy-aligned loop** method, append **notes**. State: `data/runtime/anna_training/state.json` (gitignored; `BLACKBOX_ANNA_TRAINING_DIR` overrides). See **`docs/architect/ANNA_GOES_TO_SCHOOL.md`** §1.1.
+
+```bash
+python3 scripts/runtime/anna_training_cli.py check-readiness
+python3 scripts/runtime/anna_training_cli.py status
+python3 scripts/runtime/anna_training_cli.py curricula
+python3 scripts/runtime/anna_training_cli.py assign-curriculum grade_12_paper_only
+python3 scripts/runtime/anna_training_cli.py invoke-method karpathy_loop_v1
+python3 scripts/runtime/anna_training_cli.py note "Operator check-in text"
+```
+
+**Paper trades + report card (Sean):** log each paper outcome (`won` / `lost` / `breakeven` / `abstain`) with P&L and timeframe; **`dashboard`** prints a Rich summary + table; **`report-card --out path.md --recipient Sean`** writes a markdown “grade 12” summary you can email or paste. Data: `data/runtime/anna_training/paper_trades.jsonl` (gitignored).
+
+```bash
+python3 scripts/runtime/anna_training_cli.py log-trade --symbol SOL-PERP --side long --result won --pnl-usd 12.5 --timeframe 5m --notes "optional"
+python3 scripts/runtime/anna_training_cli.py dashboard
+python3 scripts/runtime/anna_training_cli.py report-card --out docs/working/anna_grade12_report_card.md --recipient Sean --operator "Your name"
+```
+
 ## Execution plane — Phase 4.3 (mock)
 
 Approval-gated mock execution, kill switch, and audit to `system_events` (no schema change). **No** wallets, exchanges, or secrets.
@@ -432,7 +455,7 @@ python3 scripts/runtime/policy_gated_action_filter.py --store
 
 ## Anna analyst — Phase 3.2 (v1) + Phase 3.6 (concept retrieval)
 
-**`anna_analyst_v1.py`** — Rule-based **conversational analyst**: trader text → **`anna_analysis_v1`** (interpretation, market_context from optional latest **`[Market Snapshot]`**, risk, policy alignment from optional **`[Guardrail Policy]`**, paper-only **`suggested_action`**, **`concepts_used`**, **`concept_support`**, optional **`strategy_awareness`** — Phase 3.8 awareness-only strategy language). **`concepts_used`** lists registry **`concept_id`**s when language matches seeded concepts; **`concept_support`** includes concise **`concept_summaries`** only for those IDs (read-only; not a full registry load). Optional **`--use-latest-decision-context`**, **`--use-latest-trend`** (**`[System Trend]`**). Missing artifacts → null-safe + **`notes`**. No chat transport, no registry **mutation**, no execution, no venue calls. **`--store`** → **`[Anna Analysis]`** completed task.
+**`anna_analyst_v1.py`** — Rule-based **conversational analyst**: trader text → **`anna_analysis_v1`** (runs **data-source preflight** first; stderr JSON + exit **5** on failure). (interpretation, market_context from optional latest **`[Market Snapshot]`**, risk, policy alignment from optional **`[Guardrail Policy]`**, paper-only **`suggested_action`**, **`concepts_used`**, **`concept_support`**, optional **`strategy_awareness`** — Phase 3.8 awareness-only strategy language). **`concepts_used`** lists registry **`concept_id`**s when language matches seeded concepts; **`concept_support`** includes concise **`concept_summaries`** only for those IDs (read-only; not a full registry load). Optional **`--use-latest-decision-context`**, **`--use-latest-trend`** (**`[System Trend]`**). Missing artifacts → null-safe + **`notes`**. No chat transport, no registry **mutation**, no execution, no venue calls. **`--store`** → **`[Anna Analysis]`** completed task.
 
 ```bash
 python3 scripts/runtime/anna_analyst_v1.py "Liquidity is thin and spreads are widening"

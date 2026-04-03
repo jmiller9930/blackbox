@@ -15,7 +15,10 @@ import uuid
 from pathlib import Path
 from typing import Any
 
+_REPO = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+if str(_REPO) not in sys.path:
+    sys.path.insert(0, str(_REPO))
 
 from _db import connect, ensure_schema, seed_agents
 from _paths import default_sqlite_path, repo_root
@@ -28,6 +31,7 @@ from anna_modules.input_adapter import (
     try_load_trend,
 )
 from anna_modules.proposal import assemble_anna_proposal_v1
+from modules.anna_training.readiness import ensure_anna_data_preflight
 
 
 def run_live_build(
@@ -96,6 +100,11 @@ def run(
     store: bool,
 ) -> int:
     root = repo_root()
+    pf = ensure_anna_data_preflight(root)
+    if not pf["ok"]:
+        print(json.dumps({"error": "preflight_failed", "preflight": pf}, indent=2), file=sys.stderr)
+        return 5
+
     conn = connect(db_path)
     ensure_schema(conn, root)
     seed_agents(conn)

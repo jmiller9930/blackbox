@@ -1,14 +1,36 @@
 # Anna Goes to School
 
-**Status:** Architect discussion capture and methodology draft
+**Status:** Canonical training + University-lite contract for Anna (trading college). **12th grade** and **Karpathy loop v1** are **locked** to code in `modules/anna_training/catalog.py` — see §1.2.
 
 **Purpose:** Capture the practical BLACK BOX training model for Anna as a single-college student agent inside the core engine, with the minimum structure needed to preserve curriculum quality, context quality, exam-board governance, and human graduation authority.
 
-**Related docs:**
-- `docs/architect/blackbox_university.md`
-- `docs/architect/anna_university_methodology.md`
-- `university/docs/TRADING_COLLEGE_CONTRACT_V1.md`
-- `university/docs/TRADING_COLLEGE_MASTER_CURRICULUM_V1.md`
+**Operator controls (implemented):** assign curriculum, invoke the first training method, append notes — all **CLI**; state on disk (gitignored).
+
+**Preflight is mandatory:** every training CLI command (except `check-readiness`) runs the same data-source gate as Anna’s analyst path — healthy Pyth stream artifact + non-empty `data/sqlite/market_data.db`. Optional: `ANNA_PREFLIGHT_REQUIRE_SOLANA=1` to also require Solana RPC. Tests/dev only: `ANNA_SKIP_PREFLIGHT=1`.
+
+```bash
+# repo root — one command: preflight + Grade 12 + Karpathy + interactive TUI (or add --once for one dashboard)
+python3 scripts/runtime/anna_training_cli.py start
+# repo root — preflight only (JSON)
+python3 scripts/runtime/anna_training_cli.py check-readiness
+python3 scripts/runtime/anna_training_cli.py gates   # numeric PASS/FAIL: default ≥60% win rate on decisive trades + min N (env)
+python3 scripts/runtime/anna_training_cli.py status
+python3 scripts/runtime/anna_training_cli.py curricula
+python3 scripts/runtime/anna_training_cli.py assign-curriculum grade_12_paper_only
+python3 scripts/runtime/anna_training_cli.py invoke-method karpathy_loop_v1
+python3 scripts/runtime/anna_training_cli.py note "Your note — visible in status tail"
+# Paper outcomes → grade-12 report card (markdown for Sean)
+python3 scripts/runtime/anna_training_cli.py log-trade --symbol SOL-PERP --side long --result won --pnl-usd 10 --timeframe 5m
+python3 scripts/runtime/anna_training_cli.py dashboard
+python3 scripts/runtime/anna_training_cli.py report-card --out docs/working/anna_grade12_report_card.md --recipient Sean
+```
+
+- State file: `data/runtime/anna_training/state.json` (override with `BLACKBOX_ANNA_TRAINING_DIR` — point this at another filesystem if you want report card + JSONL off the OS volume; artifacts are small unless you log at extreme volume).
+- Code: `modules/anna_training/`, `scripts/runtime/anna_training_cli.py`.
+
+**Full University methodology matrix (RAG, bandits, CMDP, Bayesian optimization, walk-forward, etc.):** [`anna_university_methodology.md`](anna_university_methodology.md) — primary training **method id** in code remains `karpathy_loop_v1`; the matrix is **design canon**, phased per roadmap. Staging subtree (when present): `university/README.md`, `university/docs/METHODS_NOTES.md`.
+
+**Related roadmap:** `docs/architect/development_plan.md` §5.8 (University / learning system). This file + CLI are the live operator surface for the first slice; University docs above are authoritative for the broader method stack.
 
 ## 1. Working reduction for BLACK BOX
 
@@ -23,6 +45,27 @@ The near-term build is a focused University-lite path inside BLACK BOX with:
 - one retained graduation authority model: exam board recommends, humans graduate
 
 This keeps the important University mechanics without forcing the entire standalone University platform to ship first.
+
+### 1.1 “12th grade” = paper trading only (operator mapping)
+
+**12th grade** (trading college) means **paper / simulation harness only** — **no live venue** (no Jack/Billy production submits) until humans and policy move Anna past that gate. In code this is curriculum id **`grade_12_paper_only`**. The **first** invoked training method is **`karpathy_loop_v1`** (the loop in §3 below), assigned via `anna_training_cli.py`.
+
+### 1.2 Contract lock (12th grade + Karpathy loop — binding)
+
+- **Curriculum id (canonical):** `grade_12_paper_only` — defined in `modules/anna_training/catalog.py` (`CURRICULA`).
+- **Training method id (canonical):** `karpathy_loop_v1` — defined in `modules/anna_training/catalog.py` (`TRAINING_METHODS`).
+- **Loop steps (canonical):** §3 below — **seven** numbered steps. The same seven strings appear in code in `karpathy_loop_v1["steps"]`. Any change to wording or order **must** update **both** this document and `catalog.py` in one change.
+- **Reflection / RCA / strategy latitude:** §3.2–3.3 (and RCS shape in §3.3) are **part of Anna’s operating contract** for this track; automation may be phased, but semantics are not optional for “what Anna is supposed to do.”
+- **Operator surface:** `scripts/runtime/anna_training_cli.py` (assign curriculum, invoke method, notes, paper trade log, dashboard, report-card, `check-readiness`, `gates`).
+
+### 1.3 12th grade graduation — sequencing, numeric gate, and human authority
+
+**She cannot graduate 12th grade until all of the following are satisfied:**
+
+1. **Prior learning requirements** — **demonstrated competent competency** in the skills the contract requires before a headline number matters: **§3.3** rank-1 **`RCS`/`RCA`** discipline, **Karpathy loop** practice in paper, **traceable** thesis ↔ outcome, and the other carry-forward behaviors in §3.3–3.4 (operator / exam board judge “competent,” not only logs).
+2. **Numeric cohort gate** — the program’s **60%** standard on **decisive** paper trades (won+lost), with a **minimum decisive trade count**, as implemented by **`python3 scripts/runtime/anna_training_cli.py gates`** (defaults and env: `ANNA_GRADE12_MIN_WIN_RATE`, `ANNA_GRADE12_MIN_DECISIVE_TRADES`). **Win rate alone** does not substitute for (1); **(1) without (2)** does not satisfy this program’s agreed bar for the **numeric** slice.
+
+**Graduation act:** Formal **12th grade** completion is **not** automatic. It runs under **manual review** — **exam board recommends**, **humans graduate** — however your governance packet is written. The CLI can print **PASS/FAIL** for `gates`; it does not issue a diploma.
 
 ## 2. Anna is an agent, not the LLM
 
@@ -185,6 +228,8 @@ Forbidden latitude:
 
 ## 3.3 Reflection and RCA as Anna DNA
 
+**Rank-1 skill (non-negotiable):** The capability Anna must master first is **truthful learning from outcomes**—**`RCS` on every paper result**, and **formal `RCA` only when the gate says so** (for 12th grade / paper: **five** repeats of the **same** classified issue; **or** sooner when a single outcome is already **qualifying** under policy, e.g. guardrail breach). Strategy mix, win rate, and venue context **depend on** that foundation; without it, other metrics are not admissible as proof of competence.
+
 This is not only a training-loop detail. It should be part of Anna's operating DNA.
 
 Blend rule:
@@ -197,8 +242,8 @@ Required carry-forward behaviors:
 
 - if Anna wins, she asks why
 - if Anna loses, she asks why
-- every trade gets lightweight reflection
-- qualifying failures get deeper RCA
+- every trade gets lightweight reflection (**`RCS`** — not “RS”; that abbreviation is not used in this contract)
+- **`RCS` on every outcome; full `RCA` only after repeated same-issue failure** — for **12th grade / paper** this program locks: **five (5)** occurrences of the **same** classified issue (same `failure_pattern_key` or equivalent operator classification) before opening a formal **`RCA`** packet. Single losses use **`RCS` only** unless the failure is already “qualifying” by policy (e.g. guardrail breach). *(Separate from the reward-ledger “multi-RCA red flag” count elsewhere in this doc — align numbers in one governance pass if both apply.)*
 - repeated unresolved RCA escalates into explicit review
 - corrective actions return to testing before retention
 
@@ -246,6 +291,32 @@ This must persist across:
 - `Bachelor`
 - `Master`
 - `PhD`
+
+## 3.4 Paper / Jupiter — operator goals (what “training” is for)
+
+This section states **intent** for the trading track. Implementation is phased; the developer directive [`directive_dev_anna_paper_jupiter_learning_loop.md`](directives/directive_dev_anna_paper_jupiter_learning_loop.md) scopes build work.
+
+**Designer stance:** The operator defines **outcomes**, not mechanics — *how* to store skills, archives, and differential queries is **developer-owned** (see directive). The point of training is: **paper** as the school; **learn what is required to trade**; **observe Jupiter** (context / timing) so paper decisions are informed by the venue you will use later; **record** success or failure; **analyze** and **try another method** when the hypothesis fails; **always ask why** on wins **and** losses (§3.3); **promote reusable skills** from validated wins; **keep a failure archive** and use **differential / repetition** checks so “have I failed this way before?” is **data-backed**, not vibes.
+
+**Multiple metrics at once (starting posture — not one vanity KPI):** harness **pass/fail** and gate codes; **RCS/RCA** discipline; **Jupiter-alignment** of the decision (did context support the timing?); **iteration** (new hypothesis vs repeating the same mistake); **promoted skill** count; **repeat-failure** rate vs **`failure_pattern_key`**. Headline scores matter less than **traceable** win/loss → why → next candidate.
+
+**Harness:** Paper / simulation only for the **grade 12 equivalent** path — Anna learns **how to trade** under guardrails **before** live Jack/Billy execution is in play.
+
+**Roadmap vs destination:** **Jupiter / Jack / Perps** integration is **roadmap** — the venue and plumbing she may use when policy allows. It is **not** her **destination**. The destination is **demonstrated learning** — **`RCS`/`RCA` discipline**, **traceable** paper outcomes, **numeric/contract gates**, and **human graduation** — not “the Jupiter code exists.”
+
+**Observation surface (Jupiter):** Training assumes Anna can **watch the Jupiter Perps context** (feeds, program/market metadata, timing cues you define in harness) and form **when to act** judgments. Success or failure is **measured in the paper harness**, not by vibes.
+
+**The loop the operator cares about:**
+
+1. **Learn** — meet harness requirements (gates, discipline, thesis ↔ outcome trace).
+2. **Act in paper** — timed / sized per policy; record **outcome** (win/loss/abstain/fail-closed reason).
+3. **Interrogate** — **win → why**; **loss → why** (already DNA in §3.3 via `RCS`; **RCA** when failure is qualifying or repeated).
+4. **Iterate** — failed hypotheses lead to **revised method** (new candidate), tested again; not chat-only story changes.
+5. **Retain winners** — when a win is **validated**, emit a **reusable skill artifact** (concise, retrievable, linkable to evidence) she can **re-open** later — not raw log spam.
+6. **Archive losers** — failures stay queryable with a stable **`failure_pattern_key`** (taxonomy TBD in implementation) so she can see **whether she is repeating** the same mistake under new paint.
+7. **Differential** — **compare** a new outcome or failure to **prior** archive entries (same/different pattern, same/different market regime) so “have I been here before?” is **answerable from data**, not memory.
+
+**Metrics starting out** (conceptual; wire in directive): pass/fail on paper + gate reason codes; then **`RCS` completeness**; then **repeat-failure rate** vs **failure_pattern_key**; promotion of **validated_skill** count. Single headline number is less important than **traceable** win/loss → why → next candidate.
 
 ## 4. Retention model
 

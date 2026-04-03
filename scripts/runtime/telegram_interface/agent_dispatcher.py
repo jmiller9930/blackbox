@@ -12,12 +12,20 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
 
 from _paths import default_sqlite_path
 from anna_analyst_v1 import analyze_to_dict
+from modules.anna_training.readiness import (
+    build_anna_analysis_preflight_blocked,
+    ensure_anna_data_preflight,
+)
 from learning_visibility.insight_query import fetch_insights
 from learning_visibility.insight_summary import summarize_insights
 from learning_visibility.report_generator import generate_report
 
 from .cody_stub import cody_reply
-from .data_status import build_infra_snapshot, build_status_text
+from .data_status import (
+    build_infra_snapshot,
+    build_status_text,
+    compose_operator_hashtag_message,
+)
 from .message_router import RoutedMessage
 
 logger = logging.getLogger(__name__)
@@ -46,6 +54,17 @@ def dispatch(routed: RoutedMessage, *, display_name: str | None = None) -> dict[
     db = default_sqlite_path()
 
     if routed.agent == "anna":
+        pf0 = ensure_anna_data_preflight()
+        if not pf0["ok"]:
+            return {
+                "kind": "anna",
+                "data": {
+                    "anna_analysis": build_anna_analysis_preflight_blocked(routed.text or "", pf0),
+                    "stored_task_id": None,
+                    "preflight": pf0,
+                },
+            }
+
         from data_clients.market_data import get_price, get_spread
         from messaging_interface.live_data import extract_symbol, requires_live_data, wants_spread
 
@@ -135,6 +154,7 @@ def dispatch(routed: RoutedMessage, *, display_name: str | None = None) -> dict[
             use_policy=False,
             store=False,
             use_llm=telegram_anna_use_llm(),
+            skip_preflight=True,
         )
         return {"kind": "anna", "data": out}
 
@@ -177,6 +197,13 @@ def dispatch(routed: RoutedMessage, *, display_name: str | None = None) -> dict[
                 "kind": "data",
                 "data_mode": "status",
                 "status_text": build_status_text(),
+            }
+        if mode == "hashtag_composed":
+            tok = routed.hashtag_tokens or ()
+            return {
+                "kind": "data",
+                "data_mode": "hashtag_composed",
+                "status_text": compose_operator_hashtag_message(tok),
             }
         if mode == "infra":
             return {
