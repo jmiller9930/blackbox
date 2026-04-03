@@ -48,6 +48,8 @@ Every funded training track **must** state (in writing, in the ledger or linked 
 
 Anna’s analyst role requires **statistical literacy** sufficient for **honest** analysis: distributions, variance, sample size, overfitting risk, multiple-comparison caution, calibration — not slogan-level “AI confidence.”
 
+**Operator intent (plain language):** a **heavy math / stats background** so she can **separate noise from truth** — i.e. distinguish **signal** from **luck**, **small samples**, and **overfitting**, and state **uncertainty** honestly. That is **not** optional flavor; it is **how** numeric claims earn trust next to a **fund objective**.
+
 ### 3.2 Contract bar
 
 - **“Advanced math inside and out”** is **not** a vague title. It means: **demonstrated** ability to apply the relevant **statistical / quantitative** methods the exam board and harness require for the current degree stage — evidenced by **structured outputs, tests, or human review**, not by model fluency alone.
