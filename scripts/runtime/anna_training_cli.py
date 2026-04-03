@@ -71,7 +71,6 @@ from modules.anna_training.llm_cross_check import (  # noqa: E402
     append_cross_check_log,
     run_llm_cross_check,
 )
-from modules.anna_training.math_engine_full.stack import run_full_math_stack  # noqa: E402
 from modules.anna_training.quant_metrics import compute_paper_quant_metrics  # noqa: E402
 from modules.anna_training.wilson_nist_reference import run_wilson_reference_check  # noqa: E402
 from modules.anna_training.store import (  # noqa: E402
@@ -198,6 +197,22 @@ def _cmd_quant_metrics() -> int:
 
 def _cmd_math_engine_full() -> int:
     """Full stack: ARIMA, GARCH, annualized Sharpe, walk-forward, Monte Carlo, ML baseline, Kalman; coint if aux added later."""
+    try:
+        from modules.anna_training.math_engine_full.stack import run_full_math_stack
+    except ImportError as e:
+        print(
+            json.dumps(
+                {
+                    "ok": False,
+                    "error": "math_engine_full_import_failed",
+                    "detail": str(e),
+                    "hint": "Install deps: python3 -m pip install -r requirements.txt (see README, lab host without venv)",
+                },
+                indent=2,
+            ),
+            file=sys.stderr,
+        )
+        return 2
     result = run_full_math_stack(load_paper_trades(), aux=None)
     print(json.dumps({"ok": True, "result": result}, indent=2))
     return 0
