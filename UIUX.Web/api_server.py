@@ -693,10 +693,13 @@ TRAINING_DASHBOARD_HTML = """<!DOCTYPE html>
     .llm-warn { border-color: #9e6a03 !important; background: #1c1a12; }
     .llm-good { border-color: var(--ok) !important; background: #0d1f14; }
     #v_preflight_banner .sub { white-space: normal; word-break: break-word; }
+    #v_llm_fail_alert { display:none; margin-bottom:0.75rem; padding:0.65rem 0.85rem; border-radius:8px; border:1px solid var(--bad); background:#2a1518; color:#f0d0d2; font-size:0.88rem; line-height:1.4; }
+    #v_llm_fail_alert strong { color: #f85149; }
   </style>
 </head>
 <body>
   <h1>Anna training — live</h1>
+  <div id="v_llm_fail_alert" role="alert"></div>
   <div id="v_preflight_banner" class="card llm-good" style="margin-bottom:0.75rem;display:none">
     <h2>Preflight (data + LLM — same order as the daemon)</h2>
     <p class="sub" style="font-size:0.72rem;color:var(--muted);margin:0 0 0.5rem">Red/warn here means a <strong>probe</strong> failed (feeds or Ollama), not a corrupt <code>state.json</code> file.</p>
@@ -794,23 +797,41 @@ TRAINING_DASHBOARD_HTML = """<!DOCTYPE html>
             return { tier: 1, text: 'No LLM probe row yet — daemon has not finished a tick that saved llm_preflight.' };
           }
           if (l.skipped) return { tier: 0, text: 'Skipped (' + (l.reason || 'ANNA_USE_LLM off') + ').' };
-          if (l.ok === false) {
-            return { tier: 2, text: 'Ollama probe failed — ' + (l.error || 'error') + (l.base_url ? ' · base ' + l.base_url : '') };
+          if (l.ok === true && l.model_present_in_tags !== false) {
+            return { tier: 0, text: 'OK — ' + (l.ollama_model_configured || '') + ' present · ' + (l.base_url || '') };
           }
-          if (l.model_present_in_tags === false) {
+          if (l.ok === true && l.model_present_in_tags === false) {
             return { tier: 1, text: 'Ollama up but model ' + (l.ollama_model_configured || '') + ' not listed in /api/tags (ollama pull).' };
           }
-          return { tier: 0, text: 'OK — ' + (l.ollama_model_configured || '') + ' present · ' + (l.base_url || '') };
+          var err = (l.error != null && String(l.error) !== '') ? String(l.error) : 'probe not OK (check OLLAMA_BASE_URL / ollama serve)';
+          return { tier: 2, text: 'Ollama probe failed — ' + err + (l.base_url ? ' · base ' + l.base_url : '') };
         }
         var dataPf = dataLine();
         var llmPf = llmLine();
         document.getElementById('v_data_pf').textContent = 'Data: ' + dataPf.text;
         document.getElementById('v_llm_pf').textContent = 'LLM: ' + llmPf.text;
-        var worst = 0;
-        if (dataPf.tier >= llmPf.tier) worst = dataPf.tier; else worst = llmPf.tier;
+        var worst = Math.max(dataPf.tier, llmPf.tier);
         var ban = document.getElementById('v_preflight_banner');
         ban.className = 'card ' + (worst >= 2 ? 'llm-bad' : (worst >= 1 ? 'llm-warn' : 'llm-good'));
         ban.style.display = 'block';
+        var alertEl = document.getElementById('v_llm_fail_alert');
+        alertEl.style.borderColor = '';
+        alertEl.style.background = '';
+        alertEl.style.color = '';
+        if (llmPf.tier >= 2) {
+          alertEl.style.display = 'block';
+          alertEl.innerHTML = '<strong>LLM probe failed</strong> — school still runs; fix Ollama or <code>OLLAMA_BASE_URL</code>. ' +
+            llmPf.text.replace(/^Ollama probe failed — /, '');
+        } else if (llmPf.tier >= 1 && l && !l.skipped) {
+          alertEl.style.display = 'block';
+          alertEl.style.borderColor = '#9e6a03';
+          alertEl.style.background = '#1c1a12';
+          alertEl.style.color = '#e3b341';
+          alertEl.innerHTML = '<strong>LLM warning</strong> — ' + llmPf.text;
+        } else {
+          alertEl.style.display = 'none';
+          alertEl.innerHTML = '';
+        }
         document.getElementById('v_pf_policy').textContent = (pol.llm_probe_never_blocks_school !== false)
           ? 'Policy: the LLM line is informational — the loop does not skip school on Ollama errors. Fix OLLAMA_BASE_URL and model for real generations.'
           : 'Policy: see preflight_policy in JSON.';
@@ -952,18 +973,30 @@ TRAINING_DASHBOARD_HTML = """<!DOCTYPE html>
 
 
 class Handler(BaseHTTPRequestHandler):
-    def _json(self, code: int, body: dict[str, Any] | list[Any]) -> None:
+    def _json(
+        self,
+        code: int,
+        body: dict[str, Any] | list[Any],
+        *,
+        no_cache: bool = False,
+    ) -> None:
         payload = json.dumps(body).encode("utf-8")
         self.send_response(code)
         self.send_header("Content-Type", "application/json; charset=utf-8")
+        if no_cache:
+            self.send_header("Cache-Control", "no-store, no-cache, must-revalidate, max-age=0")
+            self.send_header("Pragma", "no-cache")
         self.send_header("Content-Length", str(len(payload)))
         self.end_headers()
         self.wfile.write(payload)
 
-    def _html(self, code: int, body: str) -> None:
+    def _html(self, code: int, body: str, *, no_cache: bool = False) -> None:
         data = body.encode("utf-8")
         self.send_response(code)
         self.send_header("Content-Type", "text/html; charset=utf-8")
+        if no_cache:
+            self.send_header("Cache-Control", "no-store, no-cache, must-revalidate, max-age=0")
+            self.send_header("Pragma", "no-cache")
         self.send_header("Content-Length", str(len(data)))
         self.end_headers()
         self.wfile.write(data)
@@ -998,10 +1031,10 @@ class Handler(BaseHTTPRequestHandler):
             self._json(200, build_anna_summary())
             return
         if path == "/api/v1/anna/training-dashboard":
-            self._json(200, build_anna_training_dashboard())
+            self._json(200, build_anna_training_dashboard(), no_cache=True)
             return
         if path in ("/anna/training", "/anna/training/"):
-            self._html(200, TRAINING_DASHBOARD_HTML)
+            self._html(200, TRAINING_DASHBOARD_HTML, no_cache=True)
             return
         if path == "/api/v1/system/status":
             self._json(200, build_system_status())
