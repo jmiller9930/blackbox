@@ -222,6 +222,13 @@ def format_slack_report_card_text(
     eq = g12.get("paper_equity_usd")
     if bs is not None and eq is not None:
         lines.append(f"  • Paper bankroll: start ${float(bs):,.2f} → equity ${float(eq):,.2f}")
+    tgt = g12.get("paper_goal_target_equity_usd")
+    gf = g12.get("paper_goal_return_frac")
+    if tgt is not None and gf is not None:
+        lines.append(
+            f"  • Weekly fictitious target (sliding 5–15% vs market when adaptive): "
+            f"{float(gf):.1%} → ${float(tgt):,.2f} — {g12.get('paper_goal_rationale') or 'see gates'}"
+        )
 
     blockers = list(g12.get("blockers") or [])
     if blockers:

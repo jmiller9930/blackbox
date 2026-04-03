@@ -11,8 +11,16 @@ from modules.anna_training.curriculum_tools import (
     missing_grade_12_tools,
     normalize_tool_mastery,
 )
+from modules.anna_training.adaptive_paper_goal import compute_adaptive_paper_goal
 from modules.anna_training.paper_trades import load_paper_trades_for_gates, summarize_trades
-from modules.anna_training.store import load_state
+from modules.anna_training.paper_wallet import (
+    DEFAULT_PAPER_WALLET,
+    days_since_clock,
+    ensure_paper_wallet_clock,
+    merge_paper_wallet_into_state,
+    resolve_paper_bankroll_start_usd,
+)
+from modules.anna_training.store import load_state, save_state
 
 
 def _env_float(name: str, default: float) -> float:
@@ -62,8 +70,11 @@ def evaluate_grade12_gates(training_state: dict[str, Any] | None = None) -> dict
     Env (numeric):
       ANNA_GRADE12_MIN_WIN_RATE — default 0.6
       ANNA_GRADE12_MIN_DECISIVE_TRADES — default 30
-    Env (numeric, optional capital — evaluated only after curriculum tools PASS):
-      ANNA_GRADE12_PAPER_BANKROLL_START_USD — notional starting equity for display / return gate
+    Env (numeric, optional capital — overrides state wallet start — evaluated only after curriculum tools PASS):
+      ANNA_GRADE12_PAPER_BANKROLL_START_USD — notional starting equity (default from state paper_wallet: $100)
+    Weekly fictitious goal (informational paper_goal_met):
+      ANNA_PAPER_GOAL_ADAPTIVE — default 1: slide goal return 5%–15% from recent market_ticks (+ gate/signal); 0: use state paper_wallet.goal_return_frac
+      ANNA_PAPER_GOAL_FIXED_FRAC — optional clamp to one fraction in [0.05, 0.15] (disables adaptive stress)
       ANNA_GRADE12_MIN_NET_PNL_USD — require sum(pnl_usd) on cohort >= this
       ANNA_GRADE12_MIN_EQUITY_USD — require (start + net P&L) >= this (start env required)
       ANNA_GRADE12_MIN_BANKROLL_RETURN_FRAC — e.g. 0.05 requires 5% gain on start (start env required, >0)
@@ -76,6 +87,9 @@ def evaluate_grade12_gates(training_state: dict[str, Any] | None = None) -> dict
     min_decisive = _env_int("ANNA_GRADE12_MIN_DECISIVE_TRADES", 30)
 
     st = training_state if training_state is not None else load_state()
+    merge_paper_wallet_into_state(st)
+    if ensure_paper_wallet_clock(st):
+        save_state(st)
     mastery = normalize_tool_mastery(st.get("grade_12_tool_mastery"))
     tools_ok = curriculum_tools_complete(mastery)
     missing_tools = missing_grade_12_tools(mastery)
@@ -97,28 +111,31 @@ def evaluate_grade12_gates(training_state: dict[str, Any] | None = None) -> dict
         numeric_blockers.append(f"win_rate_below_minimum ({wr:.4f} < {min_wr})")
 
     total_pnl = float(s.total_pnl_usd)
-    bankroll_start = _env_optional_float("ANNA_GRADE12_PAPER_BANKROLL_START_USD")
+    bankroll_start = resolve_paper_bankroll_start_usd(st)
     min_net_pnl = _env_optional_float("ANNA_GRADE12_MIN_NET_PNL_USD")
     min_equity = _env_optional_float("ANNA_GRADE12_MIN_EQUITY_USD")
     min_return_frac = _env_optional_float("ANNA_GRADE12_MIN_BANKROLL_RETURN_FRAC")
-    equity_usd = (bankroll_start + total_pnl) if bankroll_start is not None else None
+    equity_usd = bankroll_start + total_pnl
+    pw = st.get("paper_wallet") or {}
+    ag = compute_adaptive_paper_goal(bankroll_start=bankroll_start, paper_wallet=pw)
+    goal_target_equity = float(ag["goal_target_equity_usd"])
+    computed_goal_frac = float(ag["goal_return_frac"])
+    goal_horizon_days = int(pw.get("goal_horizon_days") or DEFAULT_PAPER_WALLET["goal_horizon_days"])
+    goal_days_elapsed = days_since_clock(pw.get("clock_start_utc"))
+    paper_goal_met = bool(equity_usd >= goal_target_equity - 1e-9)
 
     if tools_ok:
         if min_net_pnl is not None and total_pnl < min_net_pnl:
             numeric_blockers.append(f"net_pnl_below_minimum ({total_pnl:.2f} < {min_net_pnl:.2f})")
         if min_equity is not None:
-            if equity_usd is None:
-                numeric_blockers.append(
-                    "equity_gate_requires_ANNA_GRADE12_PAPER_BANKROLL_START_USD (set notional start)"
-                )
-            elif equity_usd < min_equity:
+            if equity_usd < min_equity:
                 numeric_blockers.append(f"equity_below_minimum ({equity_usd:.2f} < {min_equity:.2f})")
         if min_return_frac is not None:
-            if bankroll_start is None or bankroll_start <= 0:
+            if bankroll_start <= 0:
                 numeric_blockers.append(
-                    "return_gate_requires_positive_ANNA_GRADE12_PAPER_BANKROLL_START_USD"
+                    "return_gate_requires_positive_bankroll (set ANNA_GRADE12_PAPER_BANKROLL_START_USD or paper_wallet.starting_usd)"
                 )
-            elif equity_usd is not None:
+            else:
                 target_equity = bankroll_start * (1.0 + min_return_frac)
                 if equity_usd < target_equity - 1e-9:
                     numeric_blockers.append(
@@ -173,6 +190,15 @@ def evaluate_grade12_gates(training_state: dict[str, Any] | None = None) -> dict
         "total_pnl_usd": total_pnl,
         "paper_bankroll_start_usd": bankroll_start,
         "paper_equity_usd": equity_usd,
+        "paper_goal_target_equity_usd": goal_target_equity,
+        "paper_goal_return_frac": computed_goal_frac,
+        "paper_goal_adaptive": bool(ag.get("adaptive")),
+        "paper_goal_rationale": ag.get("rationale"),
+        "paper_goal_stress_norm": ag.get("stress_norm"),
+        "paper_goal_detail": ag.get("detail"),
+        "paper_goal_horizon_days": goal_horizon_days,
+        "paper_goal_days_elapsed": goal_days_elapsed,
+        "paper_goal_met": paper_goal_met,
         "min_net_pnl_usd": min_net_pnl,
         "min_equity_usd": min_equity,
         "min_bankroll_return_frac": min_return_frac,

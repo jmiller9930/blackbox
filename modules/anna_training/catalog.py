@@ -116,6 +116,7 @@ COMPLEMENTARY_PEDAGOGY: list[dict[str, str]] = [
 
 def default_state() -> dict[str, Any]:
     from modules.anna_training.curriculum_tools import default_grade_12_tool_mastery
+    from modules.anna_training.paper_wallet import DEFAULT_PAPER_WALLET
 
     return {
         "schema_version": "anna_training_state_v3",
@@ -133,6 +134,7 @@ def default_state() -> dict[str, Any]:
         "grade_12_knowledge_internalized": None,
         "grade_12_trading_knowledge_internalized": None,
         "karpathy_last_skill_practice": None,
+        "paper_wallet": {**DEFAULT_PAPER_WALLET},
     }
 
 
