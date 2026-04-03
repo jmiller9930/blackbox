@@ -53,6 +53,7 @@ from modules.anna_training.curriculum_tools import (  # noqa: E402
     normalize_tool_mastery,
 )
 from modules.anna_training.progression import bachelor_eligibility_report, suggest_next_focus  # noqa: E402
+from modules.anna_training.report_card_text import improvement_lines_from_gate_result  # noqa: E402
 from modules.anna_training.gates import evaluate_grade12_gates  # noqa: E402
 from modules.anna_training.readiness import ensure_anna_data_preflight, full_readiness  # noqa: E402
 from modules.anna_training.paper_trades import (  # noqa: E402
@@ -299,27 +300,6 @@ def _cmd_tool_pass(args: argparse.Namespace) -> int:
     return 0
 
 
-def _report_card_improvement_lines(g12: dict) -> list[str]:
-    """Actionable hooks when the report card is NOT PASS — where to change Anna’s stack."""
-    out: list[str] = []
-    tb = g12.get("tool_blockers") or []
-    nb = g12.get("numeric_blockers") or []
-    if tb:
-        out.append(
-            "Tools gap: tighten LLM/pipeline use of math engine + FACT discipline, RCS/RCA, harness loop "
-            "(see `modules/anna_training/`, `scripts/runtime/anna_modules/`, `llm/prompt_builder.py`); "
-            "after evidence, `anna tool-pass <id>`."
-        )
-    if nb:
-        out.append(
-            "Numeric gap: paper cohort under gate — review harness outcomes, trade logging, and strategy "
-            "logic on the paper path (`paper_trades.jsonl`, analysis/execution modules feeding the harness)."
-        )
-    if not out and not g12.get("pass"):
-        out.append("See blockers above; split between tool checklist vs paper metrics.")
-    return out[:4]
-
-
 def _require_preflight_or_exit() -> int | None:
     """Run before every subcommand except `check-readiness`. Fail closed with JSON on stderr."""
     pf = ensure_anna_data_preflight()
@@ -347,7 +327,7 @@ def _cmd_dashboard(args: argparse.Namespace | None = None) -> int:
                     "report_card": {
                         "learning_slice_pass": bool(g12.get("pass")),
                         "blockers": g12.get("blockers"),
-                        "improvement_hints": _report_card_improvement_lines(g12),
+                        "improvement_hints": improvement_lines_from_gate_result(g12),
                     },
                     "summary": s.__dict__,
                     "trades": len(trades),
@@ -399,7 +379,7 @@ def _cmd_dashboard(args: argparse.Namespace | None = None) -> int:
             why_txt = "\n[bold]Why not (from gates)[/bold]\n" + "\n".join(
                 f"  [red]•[/red] {b}" for b in blockers
             )
-        imp = _report_card_improvement_lines(g12)
+        imp = improvement_lines_from_gate_result(g12)
         imp_txt = ""
         if imp and not gate_pass:
             imp_txt = "\n[bold]Where to improve her code / stack[/bold]\n" + "\n".join(f"  • {x}" for x in imp)

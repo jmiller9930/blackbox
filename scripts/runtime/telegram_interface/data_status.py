@@ -198,10 +198,12 @@ def format_anna_training_report_hashtag_text() -> str:
     """Slack/DATA reply for #anna #report_card / #report_card — training snapshot (read-only)."""
     _ensure_repo_root_imports()
     try:
+        from modules.anna_training.catalog import CURRICULA
         from modules.anna_training.gates import evaluate_grade12_gates
         from modules.anna_training.paper_trades import load_paper_trades, summarize_trades
         from modules.anna_training.progression import bachelor_eligibility_report, suggest_next_focus
         from modules.anna_training.readiness import ensure_anna_data_preflight
+        from modules.anna_training.report_card_text import format_slack_report_card_text
         from modules.anna_training.store import load_state
     except Exception as e:  # noqa: BLE001
         return f"Anna training snapshot unavailable (import): {e}"
@@ -224,62 +226,24 @@ def format_anna_training_report_hashtag_text() -> str:
         return f"Anna training snapshot unavailable (read): {e}"
 
     ok = bool(pf.get("ok")) or bool(pf.get("skipped"))
-    blockers = pf.get("blockers") or []
-    lines = [
-        "📚 Anna — training update (Grade 12 paper / Karpathy loop)",
-        "",
-        f"Data preflight: {'OK' if ok else 'NOT OK'}",
-    ]
-    if blockers:
-        lines.append(f"Blockers: {', '.join(blockers)}")
-    lines.append("")
-    lines.append(
-        f"Curriculum: {st.get('curriculum_id') or '—'} | Method: {st.get('training_method_id') or '—'}"
+    blockers_pf = [str(x) for x in (pf.get("blockers") or [])]
+    cid = (st.get("curriculum_id") or "") or ""
+    cur = CURRICULA.get(cid) if cid else None
+    cur_title = (cur or {}).get("title", cid or "(not assigned)")
+    stage = str((cur or {}).get("stage", "—"))
+
+    return format_slack_report_card_text(
+        st=st,
+        g12=g12,
+        sf=sf,
+        be=be,
+        summ=summ,
+        preflight_ok=ok,
+        preflight_blockers=blockers_pf,
+        curriculum_title=str(cur_title),
+        stage=stage,
+        training_method_id=st.get("training_method_id"),
     )
-    it = st.get("karpathy_loop_iteration")
-    last = st.get("karpathy_loop_last_tick_utc")
-    if it is not None or last:
-        lines.append(
-            f"Loop supervisor: iteration={it if it is not None else '—'} | last_tick={last or '—'}"
-        )
-    lines.extend(
-        [
-            "",
-            f"Curriculum tools (cohesive): {'PASS' if g12.get('curriculum_tools_pass') else 'NOT PASS'}",
-            f"Numeric paper slice (60% / min N): {'PASS' if g12.get('numeric_gate_pass') else 'NOT PASS'}",
-            "",
-            f"Paper trades: {summ.trade_count} total | decisive (W+L): {summ.wins + summ.losses}",
-            f"W {summ.wins} / L {summ.losses} | P&L sum ${summ.total_pnl_usd:.2f}",
-            f"Win rate (decisive): {summ.win_rate if summ.win_rate is not None else 'n/a'}",
-            "",
-            f"Grade-12 gate (overall): {'PASS' if g12.get('pass') else 'FAIL'} "
-            f"(tools + numeric; min {g12.get('min_decisive_trades')} decisive @ {float(g12.get('min_win_rate') or 0):.0%})",
-        ]
-    )
-    if g12.get("blockers"):
-        lines.append("Gate blockers: " + "; ".join(str(x) for x in (g12.get("blockers") or [])))
-    elig = "yes" if be.get("eligible_for_bachelor_paper_track_v1") else "no"
-    lines.extend(
-        [
-            "",
-            f"Bachelor paper track eligible: {elig}",
-            f"Next focus: {sf.get('focus', '—')}",
-        ]
-    )
-    for h in (sf.get("hints") or [])[:3]:
-        lines.append(f"  • {h}")
-    cf = list(st.get("carryforward_bullets") or [])[:4]
-    if cf:
-        lines.append("Carry-forward:")
-        for b in cf:
-            lines.append(f"  • {b}")
-    lines.extend(
-        [
-            "",
-            "Full markdown: `python3 scripts/runtime/anna_training_cli.py report-card --recipient Sean`",
-        ]
-    )
-    return "\n".join(lines)
 
 
 def normalize_operator_tag(raw: str) -> str:
