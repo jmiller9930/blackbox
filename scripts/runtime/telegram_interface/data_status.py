@@ -200,6 +200,7 @@ def format_anna_training_report_hashtag_text() -> str:
     try:
         from modules.anna_training.gates import evaluate_grade12_gates
         from modules.anna_training.paper_trades import load_paper_trades, summarize_trades
+        from modules.anna_training.progression import bachelor_eligibility_report, suggest_next_focus
         from modules.anna_training.readiness import ensure_anna_data_preflight
         from modules.anna_training.store import load_state
     except Exception as e:  # noqa: BLE001
@@ -211,6 +212,14 @@ def format_anna_training_report_hashtag_text() -> str:
         trades = load_paper_trades()
         summ = summarize_trades(trades)
         g12 = evaluate_grade12_gates()
+        sf = suggest_next_focus(
+            curriculum_id=st.get("curriculum_id"),
+            training_method_id=st.get("training_method_id"),
+        )
+        be = bachelor_eligibility_report(
+            curriculum_id=st.get("curriculum_id"),
+            completed_milestones=st.get("completed_curriculum_milestones") or [],
+        )
     except Exception as e:  # noqa: BLE001
         return f"Anna training snapshot unavailable (read): {e}"
 
@@ -246,6 +255,21 @@ def format_anna_training_report_hashtag_text() -> str:
     )
     if g12.get("blockers"):
         lines.append("Gate blockers: " + "; ".join(str(x) for x in (g12.get("blockers") or [])))
+    elig = "yes" if be.get("eligible_for_bachelor_paper_track_v1") else "no"
+    lines.extend(
+        [
+            "",
+            f"Bachelor paper track eligible: {elig}",
+            f"Next focus: {sf.get('focus', '—')}",
+        ]
+    )
+    for h in (sf.get("hints") or [])[:3]:
+        lines.append(f"  • {h}")
+    cf = list(st.get("carryforward_bullets") or [])[:4]
+    if cf:
+        lines.append("Carry-forward:")
+        for b in cf:
+            lines.append(f"  • {b}")
     lines.extend(
         [
             "",
