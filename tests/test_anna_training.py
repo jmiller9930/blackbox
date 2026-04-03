@@ -129,6 +129,40 @@ def test_learning_signal_verdict_binary_pass_not_pass(tmp_path: Path, monkeypatc
     assert lv_ok["border"] == "green"
 
 
+def test_jack_executor_bridge_skips_without_cmd(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setenv("BLACKBOX_ANNA_TRAINING_DIR", str(tmp_path))
+    monkeypatch.delenv("BLACKBOX_JACK_EXECUTOR_CMD", raising=False)
+    from modules.anna_training.jack_executor_bridge import maybe_delegate_to_jack
+
+    r = maybe_delegate_to_jack(execution_request={"x": 1}, mock_execution_result={"status": "executed"})
+    assert r["delegated"] is False
+
+
+def test_jack_executor_bridge_appends_paper_trade(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setenv("BLACKBOX_ANNA_TRAINING_DIR", str(tmp_path))
+    helper = tmp_path / "fake_jack.py"
+    helper.write_text(
+        "import json, sys\n"
+        "json.load(sys.stdin)\n"
+        'print(json.dumps({"ok": True, "paper_trade": {'
+        '"symbol": "SOL", "side": "long", "result": "won", "pnl_usd": 2.5, '
+        '"timeframe": "5m", "notes": "jack stub"}}))\n',
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("BLACKBOX_JACK_EXECUTOR_CMD", f"{sys.executable} {helper}")
+    from modules.anna_training.jack_executor_bridge import maybe_delegate_to_jack
+    from modules.anna_training.paper_trades import load_paper_trades
+
+    r = maybe_delegate_to_jack(execution_request={"kind": "execution_request_v1"}, mock_execution_result={})
+    assert r.get("delegated") is True
+    assert r.get("ok") is True
+    assert r.get("paper_logged") is True
+    trades = load_paper_trades()
+    assert len(trades) == 1
+    assert trades[0].get("symbol") == "SOL"
+    assert "jack" in (trades[0].get("notes") or "").lower()
+
+
 def test_grade12_progress_percentages_shape(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.setenv("BLACKBOX_ANNA_TRAINING_DIR", str(tmp_path))
     from modules.anna_training.curriculum_tools import TOOL_IDS

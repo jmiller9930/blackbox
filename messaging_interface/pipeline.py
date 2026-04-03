@@ -23,7 +23,7 @@ def run_dispatch_pipeline(user_text: str, *, display_name: str | None = None) ->
     """
     Run message_router.route_message → agent_dispatcher.dispatch.
 
-    Transport-agnostic entry used by CLI and Telegram adapter.
+    Transport-agnostic entry used by CLI, `anna_entry` (Slack/OpenClaw), and the Telegram bot.
     """
     _ensure_runtime_path()
     from telegram_interface.agent_dispatcher import dispatch

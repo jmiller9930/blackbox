@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """
-Directive 4.6.3.4.C — CLI bridge: OpenClaw calls `python3 anna_entry.py "<user message>"`.
+Directive 4.6.3.4.C — CLI bridge: OpenClaw **Slack** calls `python3 anna_entry.py "<user message>"`.
 
-Reuses existing Anna dispatch + Telegram formatter output (same as messaging Slack adapter).
+Reuses shared dispatch + `format_telegram_reply` (Slack outbound shaping; Telegram bot is a separate transport).
 """
 
 from __future__ import annotations

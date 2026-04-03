@@ -5,7 +5,12 @@ import sys
 from pathlib import Path
 from typing import Any
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+_ROOT = Path(__file__).resolve().parents[2]
+_RUNTIME = Path(__file__).resolve().parent.parent
+for _p in (_RUNTIME, _ROOT):
+    s = str(_p)
+    if s not in sys.path:
+        sys.path.insert(0, s)
 
 from learning_loop.outcome_tracker import record_execution_feedback
 
@@ -43,4 +48,17 @@ def run_execution(request_id: str) -> dict[str, Any]:
         "request_id": request_id,
     }
     outcome, insight = record_execution_feedback(result)
-    return {**result, "outcome": outcome, "insight": insight}
+    jack_meta: dict = {}
+    try:
+        from modules.anna_training.jack_executor_bridge import maybe_delegate_to_jack
+
+        jack_meta = maybe_delegate_to_jack(
+            execution_request=req,
+            mock_execution_result=result,
+        )
+    except Exception as e:  # noqa: BLE001 — never fail execution plane on delegate
+        jack_meta = {"delegated": False, "reason": f"jack_bridge_import_or_run:{e!s}"}
+    out = {**result, "outcome": outcome, "insight": insight}
+    if jack_meta:
+        out["jack_delegate"] = jack_meta
+    return out
