@@ -19,6 +19,13 @@ Examples (repo root):
   python3 scripts/runtime/anna_training_cli.py assign-curriculum grade_12_paper_only
   python3 scripts/runtime/anna_training_cli.py invoke-method karpathy_loop_v1
   python3 scripts/runtime/anna_training_cli.py note "Reviewed simulation run — ok"
+  python3 scripts/runtime/anna_training_cli.py llm-cross-check --file draft.txt   # internal Ollama cross-check (no external chat)
+  echo "My draft thesis..." | python3 scripts/runtime/anna_training_cli.py llm-cross-check
+  python3 scripts/runtime/anna_training_cli.py math-check   # Wilson NIST-style cases (float vs Decimal); run before school
+  python3 scripts/runtime/anna_training_cli.py quant-metrics  # paper P&L: Sharpe/Sortino proxies, DD, VaR/CVaR (math engine)
+  python3 scripts/runtime/anna_training_cli.py math-engine-full  # ARIMA/GARCH, annualized Sharpe, WFO, MC, ML, Kalman
+  python3 scripts/runtime/anna_training_cli.py training-progress  # ACL-lite: next focus + bachelor eligibility + cumulative tail
+  python3 scripts/runtime/anna_training_cli.py advance-curriculum bachelor_paper_track_v1  # Grade 12 → bachelor (gates + prereq)
 """
 from __future__ import annotations
 
@@ -38,6 +45,8 @@ from modules.anna_training.catalog import (  # noqa: E402
     TRAINING_METHODS,
     describe_catalog,
 )
+from modules.anna_training.cumulative import promote_to_bachelor_track  # noqa: E402
+from modules.anna_training.progression import bachelor_eligibility_report, suggest_next_focus  # noqa: E402
 from modules.anna_training.gates import evaluate_grade12_gates  # noqa: E402
 from modules.anna_training.readiness import ensure_anna_data_preflight, full_readiness  # noqa: E402
 from modules.anna_training.paper_trades import (  # noqa: E402
@@ -47,6 +56,13 @@ from modules.anna_training.paper_trades import (  # noqa: E402
     load_paper_trades,
     summarize_trades,
 )
+from modules.anna_training.llm_cross_check import (  # noqa: E402
+    append_cross_check_log,
+    run_llm_cross_check,
+)
+from modules.anna_training.math_engine_full.stack import run_full_math_stack  # noqa: E402
+from modules.anna_training.quant_metrics import compute_paper_quant_metrics  # noqa: E402
+from modules.anna_training.wilson_nist_reference import run_wilson_reference_check  # noqa: E402
 from modules.anna_training.store import (  # noqa: E402
     anna_training_dir,
     load_state,
@@ -74,6 +90,10 @@ def _cmd_status() -> int:
         "method_invoked_at_utc": st.get("method_invoked_at_utc"),
         "operator_notes_count": len(st.get("operator_notes") or []),
         "last_notes": (st.get("operator_notes") or [])[-5:],
+        "completed_curriculum_milestones": st.get("completed_curriculum_milestones") or [],
+        "carryforward_bullet_count": len(st.get("carryforward_bullets") or []),
+        "cumulative_learning_log_entries": len(st.get("cumulative_learning_log") or []),
+        "bachelor_track_started_at_utc": st.get("bachelor_track_started_at_utc"),
     }
     print(json.dumps(out, indent=2))
     return 0
@@ -135,6 +155,83 @@ def _cmd_log_trade(args: argparse.Namespace) -> int:
         print(json.dumps({"error": str(e)}), file=sys.stderr)
         return 1
     print(json.dumps({"ok": True, "trade": row}, indent=2))
+    return 0
+
+
+def _cmd_math_check() -> int:
+    """Wilson 95% intervals: float engine vs Decimal oracle (NIST-style regression cases)."""
+    out = run_wilson_reference_check()
+    print(json.dumps(out, indent=2))
+    return 0 if out.get("ok") else 3
+
+
+def _cmd_quant_metrics() -> int:
+    """Paper-trade quant metrics (same module as Anna math_engine paper_quant)."""
+    out = compute_paper_quant_metrics(load_paper_trades())
+    print(json.dumps({"ok": True, "metrics": out}, indent=2))
+    return 0
+
+
+def _cmd_math_engine_full() -> int:
+    """Full stack: ARIMA, GARCH, annualized Sharpe, walk-forward, Monte Carlo, ML baseline, Kalman; coint if aux added later."""
+    result = run_full_math_stack(load_paper_trades(), aux=None)
+    print(json.dumps({"ok": True, "result": result}, indent=2))
+    return 0
+
+
+def _cmd_training_progress() -> int:
+    """ACL-lite: next focus + bachelor eligibility + cumulative log tail."""
+    st = load_state()
+    out = {
+        "suggest_next_focus": suggest_next_focus(
+            curriculum_id=st.get("curriculum_id"),
+            training_method_id=st.get("training_method_id"),
+        ),
+        "bachelor_eligibility": bachelor_eligibility_report(
+            curriculum_id=st.get("curriculum_id"),
+            completed_milestones=st.get("completed_curriculum_milestones") or [],
+        ),
+        "cumulative_learning_log_last_8": (st.get("cumulative_learning_log") or [])[-8:],
+        "carryforward_bullets": (st.get("carryforward_bullets") or [])[:12],
+    }
+    print(json.dumps(out, indent=2))
+    return 0
+
+
+def _cmd_advance_curriculum(args: argparse.Namespace) -> int:
+    """Promote to bachelor_paper_track_v1 when gates + prereq satisfied (or ANNA_ALLOW_BACHELOR_WITHOUT_GATE)."""
+    cid = (args.curriculum_id or "").strip()
+    if cid not in CURRICULA:
+        print(
+            json.dumps({"error": "unknown_curriculum", "id": cid, "valid": list(CURRICULA.keys())}),
+            file=sys.stderr,
+        )
+        return 1
+    if cid != "bachelor_paper_track_v1":
+        print(
+            json.dumps(
+                {
+                    "error": "advance_only_bachelor_implemented",
+                    "hint": "Use assign-curriculum for other ids; advance-curriculum promotes Grade 12 → bachelor track.",
+                }
+            ),
+            file=sys.stderr,
+        )
+        return 1
+    st = load_state()
+    if st.get("curriculum_id") == "bachelor_paper_track_v1":
+        print(json.dumps({"ok": True, "already": "bachelor_paper_track_v1"}, indent=2))
+        return 0
+    rep = bachelor_eligibility_report(
+        curriculum_id=st.get("curriculum_id"),
+        completed_milestones=st.get("completed_curriculum_milestones") or [],
+    )
+    if not rep.get("eligible_for_bachelor_paper_track_v1"):
+        print(json.dumps({"ok": False, "bachelor_eligibility": rep}, indent=2), file=sys.stderr)
+        return 1
+    promote_to_bachelor_track(st)
+    save_state(st)
+    print(json.dumps({"ok": True, "curriculum_id": "bachelor_paper_track_v1", "state_file": str(state_path())}, indent=2))
     return 0
 
 
@@ -230,6 +327,71 @@ def _cmd_report_card(args: argparse.Namespace) -> int:
     return 0
 
 
+def _read_utf8_file(path: str) -> str:
+    return Path(path).expanduser().read_text(encoding="utf-8")
+
+
+def _cmd_llm_cross_check(args: argparse.Namespace) -> int:
+    """In-process LLM reviewer pass (Ollama); does not use Telegram/Slack."""
+    draft_parts: list[str] = []
+    if getattr(args, "text", None):
+        draft_parts.append(args.text)
+    if getattr(args, "file", None):
+        draft_parts.append(_read_utf8_file(args.file))
+    if not draft_parts and not sys.stdin.isatty():
+        draft_parts.append(sys.stdin.read())
+    draft = "\n\n".join(draft_parts).strip()
+    if not draft:
+        print(
+            json.dumps(
+                {
+                    "error": "empty_draft",
+                    "hint": "Use --text, --file, or pipe stdin. Example: llm-cross-check --file notes.txt",
+                },
+                indent=2,
+            ),
+            file=sys.stderr,
+        )
+        return 1
+
+    ctx: str | None = None
+    if getattr(args, "context_text", None):
+        ctx = args.context_text
+    if getattr(args, "context_file", None):
+        block = _read_utf8_file(args.context_file)
+        ctx = f"{ctx}\n\n{block}".strip() if ctx else block
+
+    out = run_llm_cross_check(draft, supporting_context=ctx)
+    if not getattr(args, "no_log", False) and (out.get("ok") or out.get("skipped")):
+        log_row = {
+            "verdict": out.get("verdict"),
+            "ok": out.get("ok"),
+            "skipped": out.get("skipped"),
+            "model": out.get("model"),
+            "error": out.get("error"),
+            "raw_text": (out.get("raw_text") or "")[:8000],
+        }
+        p = append_cross_check_log(log_row)
+        if p:
+            out["log_path"] = str(p)
+
+    if getattr(args, "append_note", False) and out.get("ok"):
+        summary = out.get("verdict") or "?"
+        snippet = (out.get("raw_text") or "")[:400].replace("\n", " ")
+        note_txt = f"[llm-cross-check] verdict={summary} — {snippet}"
+        st = load_state()
+        notes = list(st.get("operator_notes") or [])
+        notes.append({"ts_utc": utc_now_iso(), "text": note_txt})
+        st["operator_notes"] = notes[-200:]
+        save_state(st)
+        out["note_appended"] = True
+
+    print(json.dumps(out, indent=2))
+    if out.get("error") and not out.get("skipped"):
+        return 1
+    return 0
+
+
 def _cmd_note(args: argparse.Namespace) -> int:
     text = (args.text or "").strip()
     if not text:
@@ -302,7 +464,7 @@ def _cmd_start(args: argparse.Namespace) -> int:
 
 
 def _cmd_school(args: argparse.Namespace) -> int:
-    """Single operator flow: print readiness, print gates, then start (curriculum + TUI)."""
+    """Single operator flow: readiness, gates, then start (curriculum + TUI). Step (0) math runs in main() before preflight."""
     print("=== (1) Data readiness ===", flush=True)
     _cmd_check_readiness()
     print("\n=== (2) Grade-12 numeric gates ===", flush=True)
@@ -317,7 +479,8 @@ def _cmd_school(args: argparse.Namespace) -> int:
 def _interactive_training_menu() -> int:
     """Simple REPL: dashboard, status, note, readiness snapshot, quit."""
     help_lines = (
-        "Commands: [d] dashboard  [s] status  [n] note  [p] readiness  [g] gates (60% check)  [q] quit"
+        "Commands: [d] dashboard  [s] status  [n] note  [x] llm cross-check (file)  "
+        "[p] readiness  [g] gates (60% check)  [q] quit"
     )
     print(help_lines)
     while True:
@@ -349,6 +512,29 @@ def _interactive_training_menu() -> int:
             if line:
                 ns = argparse.Namespace(text=line)
                 _cmd_note(ns)
+            continue
+        if raw == "x" or raw == "cross-check":
+            try:
+                p = input("Draft file path (UTF-8 text, ANNA_USE_LLM=1 for Ollama): ").strip()
+            except EOFError:
+                print()
+                return 0
+            if not p:
+                print("Cancelled.")
+                continue
+            fp = Path(p).expanduser()
+            if not fp.is_file():
+                print(json.dumps({"error": "not_a_file", "path": str(fp)}))
+                continue
+            ns = argparse.Namespace(
+                text=None,
+                file=str(fp),
+                context_text=None,
+                context_file=None,
+                no_log=False,
+                append_note=False,
+            )
+            _cmd_llm_cross_check(ns)
             continue
         if raw in ("h", "help", "?"):
             print(help_lines)
@@ -426,6 +612,40 @@ def main(argv: list[str] | None = None) -> int:
     ap_z.add_argument("--curriculum-id", default="grade_12_paper_only")
     ap_z.add_argument("--method-id", default="karpathy_loop_v1")
     ap_z.add_argument("--once", action="store_true")
+    ap_z.add_argument(
+        "--skip-math-check",
+        action="store_true",
+        help="Skip step (0) Wilson float-vs-Decimal regression (not recommended).",
+    )
+
+    sub.add_parser(
+        "math-check",
+        help="NIST-style Wilson 95%% interval cases: float implementation vs Decimal oracle. Exit 3 if any fail.",
+    )
+
+    sub.add_parser(
+        "quant-metrics",
+        help="Paper P&L quant metrics (Sharpe/Sortino proxies, max DD, Calmar, VaR/CVaR) — math engine training layer.",
+    )
+
+    sub.add_parser(
+        "math-engine-full",
+        help="Full math stack on paper trades (ARIMA/GARCH, annualized Sharpe, WFO, bootstrap, ML, Kalman). Needs pip -r requirements.txt.",
+    )
+
+    sub.add_parser(
+        "training-progress",
+        help="ACL-lite JSON: suggest_next_focus, bachelor_eligibility, cumulative log tail, carryforward bullets.",
+    )
+
+    ap_adv = sub.add_parser(
+        "advance-curriculum",
+        help="Promote to bachelor_paper_track_v1 when grade-12 gate + prerequisite satisfied (or ANNA_ALLOW_BACHELOR_WITHOUT_GATE).",
+    )
+    ap_adv.add_argument(
+        "curriculum_id",
+        help="Target curriculum id (only bachelor_paper_track_v1 implemented for promotion).",
+    )
 
     ap_loop = sub.add_parser(
         "loop-daemon",
@@ -443,8 +663,53 @@ def main(argv: list[str] | None = None) -> int:
         help="Single tick then exit.",
     )
 
+    ap_xc = sub.add_parser(
+        "llm-cross-check",
+        help="Internal Ollama cross-check of draft text (no Telegram/Slack); respects ANNA_USE_LLM.",
+    )
+    ap_xc.add_argument("--text", help="Draft text (optional if --file or stdin).")
+    ap_xc.add_argument("--file", help="Path to UTF-8 file with draft text.")
+    ap_xc.add_argument("--context-text", dest="context_text", default=None, help="Optional supporting context string.")
+    ap_xc.add_argument(
+        "--context-file",
+        dest="context_file",
+        default=None,
+        help="Optional path to extra context (e.g. numbers to verify against).",
+    )
+    ap_xc.add_argument(
+        "--no-log",
+        action="store_true",
+        help="Do not append llm_cross_checks.jsonl under the training dir.",
+    )
+    ap_xc.add_argument(
+        "--append-note",
+        action="store_true",
+        help="If cross-check runs successfully, append a short line to operator_notes in state.json.",
+    )
+
     args = p.parse_args(argv)
-    if args.cmd not in ("check-readiness", "gates", "loop-daemon"):
+
+    # Wilson NIST cases before data preflight so math regressions surface even without DB/Solana.
+    if args.cmd == "school" and not getattr(args, "skip_math_check", False):
+        print("=== (0) Math engine — Wilson NIST reference cases ===", flush=True)
+        mc = run_wilson_reference_check()
+        print(json.dumps(mc, indent=2), flush=True)
+        if not mc.get("ok"):
+            print("math-check FAILED — fix analysis_math / wilson before training.", file=sys.stderr)
+            return 3
+        print(flush=True)
+
+    if args.cmd not in (
+        "check-readiness",
+        "gates",
+        "loop-daemon",
+        "llm-cross-check",
+        "math-check",
+        "quant-metrics",
+        "math-engine-full",
+        "training-progress",
+        "advance-curriculum",
+    ):
         rc = _require_preflight_or_exit()
         if rc is not None:
             return rc
@@ -460,6 +725,16 @@ def main(argv: list[str] | None = None) -> int:
         return _cmd_note(args)
     if args.cmd == "log-trade":
         return _cmd_log_trade(args)
+    if args.cmd == "math-check":
+        return _cmd_math_check()
+    if args.cmd == "quant-metrics":
+        return _cmd_quant_metrics()
+    if args.cmd == "math-engine-full":
+        return _cmd_math_engine_full()
+    if args.cmd == "training-progress":
+        return _cmd_training_progress()
+    if args.cmd == "advance-curriculum":
+        return _cmd_advance_curriculum(args)
     if args.cmd == "check-readiness":
         return _cmd_check_readiness()
     if args.cmd == "gates":
@@ -472,6 +747,8 @@ def main(argv: list[str] | None = None) -> int:
         return _cmd_start(args)
     if args.cmd == "school":
         return _cmd_school(args)
+    if args.cmd == "llm-cross-check":
+        return _cmd_llm_cross_check(args)
     if args.cmd == "loop-daemon":
         lp = ROOT / "scripts" / "runtime" / "anna_karpathy_loop_daemon.py"
         spec = importlib.util.spec_from_file_location("anna_karpathy_loop_daemon", lp)

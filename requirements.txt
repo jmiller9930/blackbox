@@ -9,3 +9,11 @@ prompt_toolkit>=3.0,<4
 python-telegram-bot>=21.0,<22
 slack-bolt>=1.18,<2
 base58>=2.0,<3
+
+# Anna math engine — full stack (time series, GARCH, ML baselines; optional heavy path)
+numpy>=1.24,<3
+pandas>=2.0,<3
+scipy>=1.10,<2
+statsmodels>=0.14,<1
+arch>=6.2,<8
+scikit-learn>=1.3,<2

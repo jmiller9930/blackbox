@@ -50,7 +50,8 @@ def test_default_state_roundtrip(tmp_path: Path, monkeypatch) -> None:
     s = default_state()
     save_state(s)
     s2 = load_state()
-    assert s2["schema_version"] == "anna_training_state_v1"
+    assert s2["schema_version"] == "anna_training_state_v2"
+    assert "carryforward_bullets" in s2
 
 
 def test_paper_trades_and_report(tmp_path: Path, monkeypatch) -> None:
@@ -172,3 +173,76 @@ def test_start_once_sets_state(tmp_path: Path, monkeypatch) -> None:
     raw = json.loads((tmp_path / "state.json").read_text(encoding="utf-8"))
     assert raw["curriculum_id"] == "grade_12_paper_only"
     assert raw["training_method_id"] == "karpathy_loop_v1"
+
+
+def test_bachelor_eligibility_requires_grade12_engagement(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setenv("BLACKBOX_ANNA_TRAINING_DIR", str(tmp_path))
+    monkeypatch.setenv("ANNA_ALLOW_BACHELOR_WITHOUT_GATE", "1")
+    from modules.anna_training.progression import bachelor_eligibility_report
+
+    r = bachelor_eligibility_report(curriculum_id=None, completed_milestones=[])
+    assert r["eligible_for_bachelor_paper_track_v1"] is False
+    r2 = bachelor_eligibility_report(curriculum_id="grade_12_paper_only", completed_milestones=[])
+    assert r2["eligible_for_bachelor_paper_track_v1"] is True
+
+
+def test_promote_to_bachelor_track_sets_carryforward(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setenv("BLACKBOX_ANNA_TRAINING_DIR", str(tmp_path))
+    from modules.anna_training.cumulative import promote_to_bachelor_track
+    from modules.anna_training.store import load_state, save_state
+
+    st = load_state()
+    st["curriculum_id"] = "grade_12_paper_only"
+    save_state(st)
+    st2 = load_state()
+    promote_to_bachelor_track(st2)
+    save_state(st2)
+    st3 = load_state()
+    assert st3["curriculum_id"] == "bachelor_paper_track_v1"
+    assert "grade_12_paper_only" in (st3.get("completed_curriculum_milestones") or [])
+    assert len(st3.get("carryforward_bullets") or []) >= 1
+    assert st3.get("bachelor_track_started_at_utc")
+
+
+def test_cli_training_progress_and_advance_curriculum(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setenv("BLACKBOX_ANNA_TRAINING_DIR", str(tmp_path))
+    monkeypatch.setenv("ANNA_SKIP_PREFLIGHT", "1")
+    monkeypatch.setenv("ANNA_ALLOW_BACHELOR_WITHOUT_GATE", "1")
+    repo = Path(__file__).resolve().parents[1]
+    cli = repo / "scripts/runtime/anna_training_cli.py"
+    env = {
+        **os.environ,
+        "BLACKBOX_ANNA_TRAINING_DIR": str(tmp_path),
+        "ANNA_SKIP_PREFLIGHT": "1",
+        "ANNA_ALLOW_BACHELOR_WITHOUT_GATE": "1",
+    }
+
+    r0 = subprocess.run(
+        [sys.executable, str(cli), "assign-curriculum", "grade_12_paper_only"],
+        cwd=str(repo),
+        capture_output=True,
+        text=True,
+        env=env,
+    )
+    assert r0.returncode == 0, r0.stderr
+    r1 = subprocess.run(
+        [sys.executable, str(cli), "training-progress"],
+        cwd=str(repo),
+        capture_output=True,
+        text=True,
+        env=env,
+    )
+    assert r1.returncode == 0, r1.stderr
+    j1 = json.loads(r1.stdout)
+    assert "suggest_next_focus" in j1 and "bachelor_eligibility" in j1
+
+    r2 = subprocess.run(
+        [sys.executable, str(cli), "advance-curriculum", "bachelor_paper_track_v1"],
+        cwd=str(repo),
+        capture_output=True,
+        text=True,
+        env=env,
+    )
+    assert r2.returncode == 0, r2.stderr
+    raw = json.loads((tmp_path / "state.json").read_text(encoding="utf-8"))
+    assert raw["curriculum_id"] == "bachelor_paper_track_v1"

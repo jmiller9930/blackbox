@@ -19,7 +19,14 @@ from anna_modules.interpretation import build_interpretation, build_strategy_awa
 from anna_modules.pipeline import maybe_store_interaction, resolve_answer_layers
 from anna_modules.policy import build_policy_alignment_dict, build_suggested_action
 from anna_modules.education_definitions import build_registry_definition_summary
+from anna_modules.analysis_math import (
+    compute_math_engine_facts,
+    merge_authoritative_fact_layers,
+)
 from anna_modules.rule_facts import compute_rule_facts
+from modules.anna_training.catalog import CURRICULA
+from modules.anna_training.cumulative import carryforward_fact_lines
+from modules.anna_training.store import load_state
 from anna_modules.risk import (
     build_market_context,
     build_risk_factors,
@@ -138,13 +145,30 @@ def build_analysis(
     )
 
     rule_facts = compute_rule_facts(input_text, human_intent, concepts)
+    math_facts = compute_math_engine_facts(
+        input_text,
+        human_intent,
+        market=market,
+        market_data_tick=market_data_tick,
+    )
+    merged_rule_facts = merge_authoritative_fact_layers(rule_facts, math_facts)
+    training_state_snapshot: dict[str, Any] | None = None
+    try:
+        training_state_snapshot = load_state()
+        cf_layer = {
+            "facts_for_prompt": carryforward_fact_lines(training_state_snapshot),
+            "structured": {"cumulative_carryforward": True},
+        }
+        merged_rule_facts = merge_authoritative_fact_layers(merged_rule_facts, cf_layer)
+    except Exception:
+        training_state_snapshot = None
 
     resolved_summary, resolved_headline, extra_sig, answer_source, layer_meta = resolve_answer_layers(
         conn,
         input_text,
         human_intent,
         use_llm=use_llm,
-        rule_facts=rule_facts,
+        rule_facts=merged_rule_facts,
     )
 
     # "What is X?" — canonical definitions from the concept registry when no LLM/playbook layer produced text.
@@ -172,6 +196,8 @@ def build_analysis(
             interpretation["headline"] = resolved_headline
         sig = list(interpretation.get("signals") or [])
         sig.extend(extra_sig or [])
+        if merged_rule_facts.get("structured", {}).get("math_engine"):
+            sig.append("math_engine:v1")
         interpretation["signals"] = sig
     else:
         answer_source = "template_fallback"
@@ -198,7 +224,7 @@ def build_analysis(
             layer_meta=layer_meta,
         ),
         "layer_meta": layer_meta,
-        "rule_facts": rule_facts.get("structured") or {},
+        "rule_facts": merged_rule_facts.get("structured") or {},
     }
 
     phase5_market: dict[str, Any] | None = None
@@ -254,6 +280,28 @@ def build_analysis(
         "human_intent": human_intent,
         "strategy_playbook_applied": playbook_applied,
         "pipeline": pipeline_trace,
+        "math_engine": merged_rule_facts.get("structured", {}).get("math_engine"),
+        "cumulative_learning": (
+            {
+                "curriculum_id": training_state_snapshot.get("curriculum_id"),
+                "stage": (CURRICULA.get(training_state_snapshot.get("curriculum_id") or "") or {}).get(
+                    "stage"
+                ),
+                "carryforward_bullet_count": len(
+                    (training_state_snapshot or {}).get("carryforward_bullets") or []
+                ),
+                "cumulative_log_entries": len(
+                    (training_state_snapshot or {}).get("cumulative_learning_log") or []
+                ),
+            }
+            if training_state_snapshot
+            else {
+                "curriculum_id": None,
+                "stage": None,
+                "carryforward_bullet_count": 0,
+                "cumulative_log_entries": 0,
+            }
+        ),
         "context_assessment": {"is_complete": True, "missing_fields": []},
     }
 

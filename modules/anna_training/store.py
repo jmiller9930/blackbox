@@ -37,6 +37,10 @@ def load_state() -> dict[str, Any]:
         return default_state()
     base = default_state()
     base.update(raw)
+    # Forward-compat: fill new keys from default without clobbering migrated data.
+    for k, v in default_state().items():
+        if k not in base:
+            base[k] = v
     return base
 
 

@@ -9,6 +9,8 @@ Anna modular runtime (Phase 3.4): input → interpretation → risk → policy �
 | `policy` | Guardrail mode, alignment vs intent, paper-only `suggested_action`. |
 | `analysis` | Assemble full `anna_analysis_v1`. |
 | `proposal` | Map analysis → `anna_proposal_v1` (types, validation_plan). |
+| `analysis_math` | Math engine v3: cohort/tick/snapshot + quant_metrics + optional full stack (``ANNA_MATH_ENGINE_FULL``). |
+| `analysis_math_pedagogy` | Procedure for using engine facts in the LLM (prompt + pipeline snippets). |
 | `util` | Schema versions, time, float helpers. |
 
 Registry loading, Telegram, ML, and execution live outside this package until later phases.

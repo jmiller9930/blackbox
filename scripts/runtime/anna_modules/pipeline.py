@@ -12,6 +12,7 @@ from __future__ import annotations
 import sqlite3
 from typing import Any
 
+from anna_modules.analysis_math_pedagogy import pedagogy_snippets_for_pipeline
 from anna_modules.context_memory import find_reusable_answer, store_interaction
 from anna_modules.llm_output_validation import validate_llm_output
 from anna_modules.strategy_playbook import apply_strategy_playbook
@@ -70,6 +71,7 @@ def resolve_answer_layers(
             "Paper-only / advisory; no live execution from Anna.",
             "Prefer concrete risk framing over generic filler.",
         ]
+        snippets.extend(pedagogy_snippets_for_pipeline())
         if memory_row:
             snippets.append(
                 "Prior stored answer (context only; re-explain for this turn if needed): "
@@ -100,7 +102,7 @@ def resolve_answer_layers(
             return (
                 res.text,
                 pb.get("headline") if pb else None,
-                extra_signals + ["llm:qwen"],
+                extra_signals + ["llm:qwen", "pedagogy:math_engine_analysis"],
                 src,
                 meta,
             )

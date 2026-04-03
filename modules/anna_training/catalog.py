@@ -9,12 +9,27 @@ from typing import Any
 CURRICULA: dict[str, dict[str, Any]] = {
     "grade_12_paper_only": {
         "title": "Grade 12 equivalent — paper trading only",
+        "stage": "secondary",
         "harness": "paper_loop_and_simulation",
         "live_venue_execution": False,
         "contract_doc": "docs/architect/ANNA_GOES_TO_SCHOOL.md §1.1 §1.2",
+        "next_curriculum_id": "bachelor_paper_track_v1",
         "summary": (
             "Anna trains against approved paper/simulation paths only; "
             "no Billy/Jack live submits until human graduation policy says otherwise."
+        ),
+    },
+    "bachelor_paper_track_v1": {
+        "title": "Bachelor track — paper trading (cumulative with Grade 12)",
+        "stage": "bachelor",
+        "harness": "paper_loop_and_simulation",
+        "live_venue_execution": False,
+        "prerequisite_curriculum_id": "grade_12_paper_only",
+        "requires_grade12_numeric_gate": True,
+        "contract_doc": "docs/architect/ANNA_GOES_TO_SCHOOL.md + modules/anna_training/cumulative.py",
+        "summary": (
+            "Continues Karpathy measurement on paper; all validated Grade 12 habits, math-engine literacy, "
+            "and cohort history are cumulative — deeper analysis, same harness constraints until policy changes."
         ),
     },
 }
@@ -49,6 +64,30 @@ UNIVERSITY_METHODOLOGY_CANON: dict[str, str] = {
 # Not separate invoke IDs — nested inside Karpathy steps 4–7 / paper harness. Exposed for operator JSON.
 COMPLEMENTARY_PEDAGOGY: list[dict[str, str]] = [
     {
+        "id": "cumulative_learning_carryforward",
+        "title": "Cumulative learning — Grade 12 → bachelor; carryforward_bullets + cumulative_learning_log in state.json",
+        "reference": "modules/anna_training/cumulative.py + progression.py",
+        "note": "Merged as FACT (cumulative learning) in analyst path when carryforward_bullets present",
+    },
+    {
+        "id": "anna_math_analysis_pedagogy",
+        "title": "How Anna uses the math engine — LLM procedure (cite FACT lines, no invented stats, uncertainty when n small)",
+        "reference": "scripts/runtime/anna_modules/analysis_math_pedagogy.py + llm/prompt_builder.py + anna_modules/pipeline.py",
+        "note": "Merged into every Anna LLM call as snippets + MATH ANALYSIS PROCEDURE block",
+    },
+    {
+        "id": "training_quant_metrics_engine",
+        "title": "Math engine quant layer — per-trade Sharpe/Sortino proxies, drawdown, Calmar, historical VaR/CVaR on paper P&L",
+        "reference": "modules/anna_training/quant_metrics.py + scripts/runtime/anna_modules/analysis_math.py",
+        "note": "Deterministic Python; `anna_training_cli.py quant-metrics`; merged into Anna AUTHORITATIVE FACTS when paper trades exist",
+    },
+    {
+        "id": "math_engine_full_stack",
+        "title": "Full quant stack — ARIMA/GARCH, annualized Sharpe+rf, walk-forward, Monte Carlo bootstrap, sklearn baseline, Kalman; Engle-Granger when aux series provided",
+        "reference": "modules/anna_training/math_engine_full/ + requirements.txt (numpy, pandas, statsmodels, arch, scikit-learn)",
+        "note": "Analyst merge gated by ANNA_MATH_ENGINE_FULL=1; run `anna_training_cli.py math-engine-full` anytime",
+    },
+    {
         "id": "core_learning_loop_lock",
         "title": "Observe → thesis → act → measure → lightweight why → keep / watch / drop",
         "reference": "docs/architect/ANNA_GOES_TO_SCHOOL.md §3.1 (core learning loop lock)",
@@ -77,12 +116,16 @@ COMPLEMENTARY_PEDAGOGY: list[dict[str, str]] = [
 
 def default_state() -> dict[str, Any]:
     return {
-        "schema_version": "anna_training_state_v1",
+        "schema_version": "anna_training_state_v2",
         "curriculum_id": None,
         "training_method_id": None,
         "method_invoked_at_utc": None,
         "curriculum_assigned_at_utc": None,
         "operator_notes": [],
+        "completed_curriculum_milestones": [],
+        "cumulative_learning_log": [],
+        "carryforward_bullets": [],
+        "bachelor_track_started_at_utc": None,
     }
 
 
