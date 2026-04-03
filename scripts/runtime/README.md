@@ -52,22 +52,27 @@ python3 scripts/runtime/context_loader.py
 
 **Preflight:** `check-readiness` — Solana **RPC** (`SOLANA_RPC_URL` or public fallback), **Pyth** stream status file under `docs/working/artifacts/`, **`data/sqlite/market_data.db`** presence (ticks/snapshots for Anna when pipeline loads them). **Enforced:** all other `anna_training_cli` subcommands run this gate first (exit 5 on failure). Anna analyst (`anna_analyst_v1.py`), proposal builder, and Telegram `@anna` dispatch run the same **data-source** checks before producing output. Optional **`ANNA_PREFLIGHT_REQUIRE_SOLANA=1`** adds RPC to the gate. **`ANNA_SKIP_PREFLIGHT=1`** — tests/dev only.
 
-Assign **grade 12 equivalent (paper only)**, invoke the **Karpathy-aligned loop** method, append **notes**. State: `data/runtime/anna_training/state.json` (gitignored; `BLACKBOX_ANNA_TRAINING_DIR` overrides). See **`docs/architect/ANNA_GOES_TO_SCHOOL.md`** §1.1.
+Assign **grade 12 equivalent (paper only)**, invoke the **Karpathy-aligned loop** method, append **notes**. State: `data/runtime/anna_training/state.json` (schema **`anna_training_state_v3`** includes **`grade_12_tool_mastery`**). See **`docs/architect/ANNA_GOES_TO_SCHOOL.md`** (§1.3–1.5) and **`docs/architect/anna_grade12_executive_summary_ceo.md`** (executive summary).
+
+**Grade-12 gate (implemented):** **(1)** four curriculum tools attested as a set (`anna tool-list` / `anna tool-pass <id>`) **and** **(2)** numeric paper cohort (min decisive trades + win-rate floor — default 60%). **`gates`** returns PASS only when both are satisfied.
 
 ```bash
 python3 scripts/runtime/anna_training_cli.py check-readiness
-python3 scripts/runtime/anna_training_cli.py status
+python3 scripts/runtime/anna_training_cli.py status          # JSON includes grade_12_progress %
 python3 scripts/runtime/anna_training_cli.py curricula
 python3 scripts/runtime/anna_training_cli.py assign-curriculum grade_12_paper_only
 python3 scripts/runtime/anna_training_cli.py invoke-method karpathy_loop_v1
 python3 scripts/runtime/anna_training_cli.py note "Operator check-in text"
+python3 scripts/runtime/anna_training_cli.py tool-list
+python3 scripts/runtime/anna_training_cli.py tool-pass math_engine_literacy   # after evidence
+python3 scripts/runtime/anna_training_cli.py gates
 ```
 
-**Paper trades + report card (Sean):** log each paper outcome (`won` / `lost` / `breakeven` / `abstain`) with P&L and timeframe; **`dashboard`** prints a Rich summary + table; **`report-card --out path.md --recipient Sean`** writes a markdown “grade 12” summary you can email or paste. Data: `data/runtime/anna_training/paper_trades.jsonl` (gitignored).
+**Paper trades + report card:** log each paper outcome (`won` / `lost` / `breakeven` / `abstain`) with P&L and timeframe; **`dashboard`** / **`watch`** = Rich **report card** (progress %, tool table); **`watch --live`** refreshes until Ctrl+C; **`report-card --out path.md --recipient Sean`** writes markdown. Data: `data/runtime/anna_training/paper_trades.jsonl` (gitignored). Slack: **`#report_card`** (same text as report card).
 
 ```bash
 python3 scripts/runtime/anna_training_cli.py log-trade --symbol SOL-PERP --side long --result won --pnl-usd 12.5 --timeframe 5m --notes "optional"
-python3 scripts/runtime/anna_training_cli.py dashboard
+python3 scripts/runtime/anna_training_cli.py watch
 python3 scripts/runtime/anna_training_cli.py report-card --out docs/working/anna_grade12_report_card.md --recipient Sean --operator "Your name"
 ```
 

@@ -29,7 +29,7 @@ This document lists **hashtag-style commands**, **@-mentions**, **bare keywords*
 | `#billy_checkin` | Drift-doctor check-in probe (same gate as API). |
 | `#ops_help` \| `#help_ops` \| `#operations` | Index + restart **instructions** (no auto-exec). |
 | `#op_restart` | Restart runbook text only. |
-| `#anna` `#report_card` \| `#report_card` | Anna **training snapshot**: preflight, curriculum/method, loop iteration (if daemon ran), paper-trade counts, grade-12 gate. `#anna` alone hints to add `#report_card`. |
+| `#anna` `#report_card` \| `#report_card` | Anna **training report card** (same signal as `anna watch` TUI): preflight; curriculum/method; **four curriculum tools** + checklist %; **measurable progress** (tool %, paper numeric %, combined, bottleneck); paper cohort; Grade-12 **gate** (tools + numeric); next focus; carry-forward. `#anna` alone hints to add `#report_card`. |
 
 **Unknown tokens** are listed as ignored; **unrecognized-only** messages return a short error line.
 

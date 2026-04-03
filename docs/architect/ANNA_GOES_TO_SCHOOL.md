@@ -1,10 +1,10 @@
 # Anna Goes to School
 
-**Status:** Canonical training + University-lite contract for Anna (trading college). **12th grade** and **Karpathy loop v1** are **locked** to code in `modules/anna_training/catalog.py` — see §1.2.
+**Status:** Canonical training + University-lite contract for Anna (trading college). **12th grade** and **Karpathy loop v1** are **locked** to code in `modules/anna_training/catalog.py` — see §1.2. **State schema** `anna_training_state_v3` adds **`grade_12_tool_mastery`** (four curriculum tools — see §1.5).
 
 **Purpose:** Capture the practical BLACK BOX training model for Anna as a single-college student agent inside the core engine, with the minimum structure needed to preserve curriculum quality, context quality, exam-board governance, and human graduation authority.
 
-**Operator controls (implemented):** assign curriculum, invoke the first training method, append notes — all **CLI**; state on disk (gitignored).
+**Operator controls (implemented):** assign curriculum, invoke the first training method, append notes — all **CLI**; state on disk (gitignored). **Grade-12 gate** = **(A) four curriculum tools attested as a cohesive set** + **(B) numeric paper cohort** (min decisive trades + win-rate floor — default 60%). See §1.3–1.5.
 
 **Preflight is mandatory:** every training CLI command (except `check-readiness`) runs the same data-source gate as Anna’s analyst path — healthy Pyth stream artifact + non-empty `data/sqlite/market_data.db`. Optional: `ANNA_PREFLIGHT_REQUIRE_SOLANA=1` to also require Solana RPC. Tests/dev only: `ANNA_SKIP_PREFLIGHT=1`.
 
@@ -17,8 +17,11 @@ python3 scripts/runtime/anna_go_to_school.py
 python3 scripts/runtime/anna_training_cli.py start
 # repo root — preflight only (JSON)
 python3 scripts/runtime/anna_training_cli.py check-readiness
-python3 scripts/runtime/anna_training_cli.py gates   # numeric PASS/FAIL: default ≥60% win rate on decisive trades + min N (env)
-python3 scripts/runtime/anna_training_cli.py status
+python3 scripts/runtime/anna_training_cli.py gates   # PASS/FAIL: curriculum tools + numeric cohort (see §1.5)
+python3 scripts/runtime/anna_training_cli.py tool-list    # JSON: four Grade-12 tools + passed flags
+python3 scripts/runtime/anna_training_cli.py tool-pass math_engine_literacy   # operator attestation after evidence
+python3 scripts/runtime/anna_training_cli.py status   # JSON includes grade_12_progress percentages
+python3 scripts/runtime/anna_training_cli.py watch       # report card once; add --live for refresh until Ctrl+C
 python3 scripts/runtime/anna_training_cli.py curricula
 python3 scripts/runtime/anna_training_cli.py assign-curriculum grade_12_paper_only
 python3 scripts/runtime/anna_training_cli.py invoke-method karpathy_loop_v1
@@ -30,7 +33,9 @@ python3 scripts/runtime/anna_training_cli.py report-card --out docs/working/anna
 ```
 
 - State file: `data/runtime/anna_training/state.json` (override with `BLACKBOX_ANNA_TRAINING_DIR` — point this at another filesystem if you want report card + JSONL off the OS volume; artifacts are small unless you log at extreme volume).
-- Code: `modules/anna_training/`, `scripts/runtime/anna_training_cli.py`.
+- Code: `modules/anna_training/` (including `curriculum_tools.py`, `gates.py`, `report_card_text.py`), `scripts/runtime/anna_training_cli.py`.
+
+**CEO / stakeholder one-pager:** [`anna_grade12_executive_summary_ceo.md`](anna_grade12_executive_summary_ceo.md) — math engine, analysis stack, RCS/RCA, harness loop, rework summary, current posture.
 
 **Full University methodology matrix (RAG, bandits, CMDP, Bayesian optimization, walk-forward, etc.):** [`anna_university_methodology.md`](anna_university_methodology.md) — primary training **method id** in code remains `karpathy_loop_v1`; the matrix is **design canon**, phased per roadmap. Staging subtree (when present): `university/README.md`, `university/docs/METHODS_NOTES.md`.
 
@@ -66,12 +71,34 @@ This keeps the important University mechanics without forcing the entire standal
 
 **She cannot graduate 12th grade until all of the following are satisfied:**
 
-1. **Prior learning requirements** — **demonstrated competent competency** in the skills the contract requires before a headline number matters: **§3.3** rank-1 **`RCS`/`RCA`** discipline, **Karpathy loop** practice in paper, **traceable** thesis ↔ outcome, and the other carry-forward behaviors in §3.3–3.4 (operator / exam board judge “competent,” not only logs).
-2. **Numeric cohort gate** — the program’s **60%** standard on **decisive** paper trades (won+lost), with a **minimum decisive trade count**, as implemented by **`python3 scripts/runtime/anna_training_cli.py gates`** (defaults and env: `ANNA_GRADE12_MIN_WIN_RATE`, `ANNA_GRADE12_MIN_DECISIVE_TRADES`). **Win rate alone** does not substitute for (1); **(1) without (2)** does not satisfy this program’s agreed bar for the **numeric** slice.
+1. **Curriculum tool checklist (cohesive set, code-enforced)** — Before the **numeric** slice is admissible for overall **PASS**, all **four** tools in `modules/anna_training/curriculum_tools.py` must be marked **passed** via operator attestation (`anna tool-pass <id>`) after evidence. They map to the contract as follows:
+   - **`math_engine_literacy`** — FACT-grounded numeracy; epistemic honesty; Wilson/NIST-style checks when claiming numbers (ties to math engine + analyst pipeline).
+   - **`analysis_algorithms`** — quant stack and analysis path: separate noise from signal in the harness (metrics, pedagogy, procedures in code).
+   - **`rcs_rca_discipline`** — **RCS** on outcomes; **RCA** when policy/gates say so (see §3.3 — same DNA, checklist makes it visible before headline metrics).
+   - **`karpathy_harness_loop`** — paper harness: propose → test → measure → keep/drop → repeat (canonical **Karpathy** steps in `catalog.py`).
+   The long-running **loop daemon** (tmux / `loop-daemon`) **does not** auto-flip these flags; **heartbeats ≠ checklist progress** until trades are logged and tools are attested.
+2. **Prior learning requirements (human judgment)** — **Demonstrated competent competency** in the skills the contract requires: **§3.3** **`RCS`/`RCA`**, **Karpathy** practice in paper, **traceable** thesis ↔ outcome, and carry-forward behaviors in §3.3–3.4 (operator / exam board judge “competent,” not only logs). The **tool checklist** is the **minimum bar encoded in software**; exam-board judgment can still apply above that.
+3. **Numeric cohort gate** — After (1) is satisfied, the program’s **60%** standard (configurable) on **decisive** paper trades (won+lost), with a **minimum decisive trade count**, as implemented by **`python3 scripts/runtime/anna_training_cli.py gates`** (`ANNA_GRADE12_MIN_WIN_RATE`, `ANNA_GRADE12_MIN_DECISIVE_TRADES`). **Win rate alone** does not substitute for the tool checklist; **tools without numeric** does not satisfy overall **PASS**.
+
+**Report card (TUI):** `anna watch` / `anna watch --live` shows the same signal as **`gates`** plus tool table, **measurable progress** (tool checklist %, paper numeric track %, combined average, bottleneck), and **Slack** `#report_card` uses the same plaintext formatter (`modules/anna_training/report_card_text.py`). Per-tool **Checklist %** is **0%** until attested, **100%** after — not an autonomous “learning %” from idle ticks.
 
 **Graduation act:** Formal **12th grade** completion is **not** automatic. It runs under **manual review** — **exam board recommends**, **humans graduate** — however your governance packet is written. The CLI can print **PASS/FAIL** for `gates`; it does not issue a diploma.
 
-### 1.4 Fund assignment, growth objectives, math bar, algorithms (binding spec)
+**Tests/dev only:** `ANNA_SKIP_CURRICULUM_TOOLS_GATE=1` bypasses the tool checklist (numeric gate only) — **not** for production claims.
+
+### 1.4 Implementation reference (code ↔ contract)
+
+| Concern | Module / entry |
+|--------|----------------|
+| Four tool ids, titles, summaries | `modules/anna_training/curriculum_tools.py` |
+| Gate evaluation (tools + numeric, blockers) | `modules/anna_training/gates.py` |
+| Slack + TUI shared progress text | `modules/anna_training/report_card_text.py` |
+| State defaults + schema v3 | `modules/anna_training/catalog.py` |
+| Next focus, bachelor eligibility | `modules/anna_training/progression.py` |
+| Operator CLI | `scripts/runtime/anna_training_cli.py`, `bin/anna` |
+| Slack `#report_card` | `scripts/runtime/telegram_interface/data_status.py` → `format_anna_training_report_hashtag_text` |
+
+### 1.5 Fund assignment, growth objectives, math bar, algorithms (binding spec)
 
 **Assigned notional fund, explicit growth goals, statistical competence expectation, and the meaning of “algorithm”** (trading vs governance) are **contract-locked** in:
 
