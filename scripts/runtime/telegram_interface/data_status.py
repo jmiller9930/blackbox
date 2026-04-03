@@ -245,12 +245,15 @@ def format_anna_training_report_hashtag_text() -> str:
     lines.extend(
         [
             "",
+            f"Curriculum tools (cohesive): {'PASS' if g12.get('curriculum_tools_pass') else 'NOT PASS'}",
+            f"Numeric paper slice (60% / min N): {'PASS' if g12.get('numeric_gate_pass') else 'NOT PASS'}",
+            "",
             f"Paper trades: {summ.trade_count} total | decisive (W+L): {summ.wins + summ.losses}",
             f"W {summ.wins} / L {summ.losses} | P&L sum ${summ.total_pnl_usd:.2f}",
             f"Win rate (decisive): {summ.win_rate if summ.win_rate is not None else 'n/a'}",
             "",
-            f"Grade-12 gate: {'PASS' if g12.get('pass') else 'FAIL'} "
-            f"(min {g12.get('min_decisive_trades')} decisive @ {float(g12.get('min_win_rate') or 0):.0%} win rate)",
+            f"Grade-12 gate (overall): {'PASS' if g12.get('pass') else 'FAIL'} "
+            f"(tools + numeric; min {g12.get('min_decisive_trades')} decisive @ {float(g12.get('min_win_rate') or 0):.0%})",
         ]
     )
     if g12.get("blockers"):

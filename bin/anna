@@ -34,6 +34,8 @@ Anna training (repo: ${_REPO})
 
   anna watch             Dashboard once (snapshot)
   anna watch --live      Same dashboard, refreshes until Ctrl+C (default 10s)
+  anna tool-list         Grade 12 tool checklist (JSON)
+  anna tool-pass <id>    Mark a curriculum tool passed (after evidence)
   anna progress          Next focus + bachelor eligibility + cumulative log tail
   anna status            JSON snapshot (curriculum, method, notes)
 
@@ -63,6 +65,12 @@ EOF
     ;;
   progress|training-progress)
     exec "$_PY" "$_CLI" training-progress "$@"
+    ;;
+  tool-list)
+    exec "$_PY" "$_CLI" tool-list "$@"
+    ;;
+  tool-pass)
+    exec "$_PY" "$_CLI" tool-pass "$@"
     ;;
   school)
     exec "$_PY" "$_CLI" school "$@"

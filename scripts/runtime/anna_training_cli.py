@@ -46,7 +46,12 @@ from modules.anna_training.catalog import (  # noqa: E402
     TRAINING_METHODS,
     describe_catalog,
 )
-from modules.anna_training.cumulative import promote_to_bachelor_track  # noqa: E402
+from modules.anna_training.cumulative import append_cumulative_log, promote_to_bachelor_track  # noqa: E402
+from modules.anna_training.curriculum_tools import (  # noqa: E402
+    GRADE_12_TOOLS,
+    TOOL_IDS,
+    normalize_tool_mastery,
+)
 from modules.anna_training.progression import bachelor_eligibility_report, suggest_next_focus  # noqa: E402
 from modules.anna_training.gates import evaluate_grade12_gates  # noqa: E402
 from modules.anna_training.readiness import ensure_anna_data_preflight, full_readiness  # noqa: E402
@@ -95,6 +100,8 @@ def _cmd_status() -> int:
         "carryforward_bullet_count": len(st.get("carryforward_bullets") or []),
         "cumulative_learning_log_entries": len(st.get("cumulative_learning_log") or []),
         "bachelor_track_started_at_utc": st.get("bachelor_track_started_at_utc"),
+        "grade_12_tool_mastery": normalize_tool_mastery(st.get("grade_12_tool_mastery")),
+        "grade_12_tools_all_passed": all(normalize_tool_mastery(st.get("grade_12_tool_mastery")).get(tid) for tid in TOOL_IDS),
     }
     print(json.dumps(out, indent=2))
     return 0
@@ -242,10 +249,75 @@ def _cmd_check_readiness() -> int:
 
 
 def _cmd_gates() -> int:
-    """Numeric grade-12 exit gate (paper trades); exit 0 when pass, 1 when fail."""
+    """Grade-12 gate: curriculum tools (cohesive) then numeric paper cohort; exit 0 when pass."""
     out = evaluate_grade12_gates()
     print(json.dumps(out, indent=2))
     return 0 if out.get("pass") else 1
+
+
+def _cmd_tool_list() -> int:
+    """JSON checklist of Grade 12 tools (must pass before 60% / min-N counts for overall PASS)."""
+    st = load_state()
+    m = normalize_tool_mastery(st.get("grade_12_tool_mastery"))
+    out = {
+        "schema": "anna_grade_12_tool_list_v1",
+        "tools": [{**t, "passed": bool(m.get(t["id"]))} for t in GRADE_12_TOOLS],
+        "all_passed": all(m.get(tid) for tid in TOOL_IDS),
+        "hint": "Mark pass after evidence: anna tool-pass <tool_id>",
+    }
+    print(json.dumps(out, indent=2))
+    return 0
+
+
+def _cmd_tool_pass(args: argparse.Namespace) -> int:
+    """Operator attestation: tool mastered (see anna tool-list for ids)."""
+    tid = (args.tool_id or "").strip()
+    if tid not in TOOL_IDS:
+        print(json.dumps({"error": "unknown_tool_id", "id": tid, "valid": list(TOOL_IDS)}), file=sys.stderr)
+        return 1
+    st = load_state()
+    mp = normalize_tool_mastery(st.get("grade_12_tool_mastery"))
+    mp[tid] = True
+    st["grade_12_tool_mastery"] = mp
+    append_cumulative_log(
+        st,
+        kind="grade_12_tool_passed",
+        summary=f"Operator passed curriculum tool {tid}",
+        curriculum_id=st.get("curriculum_id"),
+    )
+    save_state(st)
+    print(
+        json.dumps(
+            {
+                "ok": True,
+                "tool_id": tid,
+                "all_tools_passed": all(mp.get(x) for x in TOOL_IDS),
+            },
+            indent=2,
+        )
+    )
+    return 0
+
+
+def _report_card_improvement_lines(g12: dict) -> list[str]:
+    """Actionable hooks when the report card is NOT PASS — where to change Anna’s stack."""
+    out: list[str] = []
+    tb = g12.get("tool_blockers") or []
+    nb = g12.get("numeric_blockers") or []
+    if tb:
+        out.append(
+            "Tools gap: tighten LLM/pipeline use of math engine + FACT discipline, RCS/RCA, harness loop "
+            "(see `modules/anna_training/`, `scripts/runtime/anna_modules/`, `llm/prompt_builder.py`); "
+            "after evidence, `anna tool-pass <id>`."
+        )
+    if nb:
+        out.append(
+            "Numeric gap: paper cohort under gate — review harness outcomes, trade logging, and strategy "
+            "logic on the paper path (`paper_trades.jsonl`, analysis/execution modules feeding the harness)."
+        )
+    if not out and not g12.get("pass"):
+        out.append("See blockers above; split between tool checklist vs paper metrics.")
+    return out[:4]
 
 
 def _require_preflight_or_exit() -> int | None:
@@ -268,10 +340,15 @@ def _cmd_dashboard(args: argparse.Namespace | None = None) -> int:
     except ImportError:
         trades = load_paper_trades()
         s = summarize_trades(trades)
+        g12 = evaluate_grade12_gates()
         print(
             json.dumps(
                 {
-                    "execution_path": "Anna (analyst) → Jack (executor) → Jupiter Perps (exchange on Solana)",
+                    "report_card": {
+                        "learning_slice_pass": bool(g12.get("pass")),
+                        "blockers": g12.get("blockers"),
+                        "improvement_hints": _report_card_improvement_lines(g12),
+                    },
                     "summary": s.__dict__,
                     "trades": len(trades),
                 },
@@ -295,6 +372,15 @@ def _cmd_dashboard(args: argparse.Namespace | None = None) -> int:
         )
         gate_pass = bool(g12.get("pass"))
         gate_style = "[bold green]PASS[/bold green]" if gate_pass else "[bold red]NOT PASS[/bold red]"
+        learn_line = (
+            "[bold green]Learning on track[/bold green] for this paper slice (tools + numeric gate)."
+            if gate_pass
+            else "[bold red]Not yet learning to spec[/bold red] — see why below; use it to fix prompts, harness, or logging."
+        )
+        ct_ok = bool(g12.get("curriculum_tools_pass"))
+        ng_ok = bool(g12.get("numeric_gate_pass"))
+        ct_s = "[bold green]PASS[/bold green]" if ct_ok else "[bold yellow]NOT PASS[/bold yellow]"
+        ng_s = "[bold green]PASS[/bold green]" if ng_ok else "[bold yellow]NOT PASS[/bold yellow]"
         min_dt = g12.get("min_decisive_trades")
         dec_raw = g12.get("decisive_trades")
         wr = g12.get("win_rate")
@@ -302,20 +388,36 @@ def _cmd_dashboard(args: argparse.Namespace | None = None) -> int:
         elig = "[bold green]yes[/bold green]" if be.get("eligible_for_bachelor_paper_track_v1") else "[dim]no[/dim]"
         cur_title = (cur or {}).get("title", cid or "(not assigned)")
         stage = (cur or {}).get("stage", "—")
-        hints_lines = (sf.get("hints") or [])[:4]
+        hints_lines = (sf.get("hints") or [])[:5]
         hints_txt = "\n".join(f"  • {h}" for h in hints_lines) if hints_lines else "  —"
         bullets = list(st.get("carryforward_bullets") or [])[:6]
         carry_txt = "\n".join(f"  • {b}" for b in bullets) if bullets else "  — (none yet; promotes with bachelor track)"
 
-        learning_body = (
+        blockers = list(g12.get("blockers") or [])
+        why_txt = ""
+        if blockers:
+            why_txt = "\n[bold]Why not (from gates)[/bold]\n" + "\n".join(
+                f"  [red]•[/red] {b}" for b in blockers
+            )
+        imp = _report_card_improvement_lines(g12)
+        imp_txt = ""
+        if imp and not gate_pass:
+            imp_txt = "\n[bold]Where to improve her code / stack[/bold]\n" + "\n".join(f"  • {x}" for x in imp)
+
+        report_body = (
+            f"[dim]Updating report card — same signal as gates + tool checklist; refresh shows progress.[/dim]\n\n"
+            f"{learn_line}\n\n"
             f"[bold]Curriculum[/bold]: {cid or '—'} — {cur_title}\n"
             f"[dim]Stage[/dim]: {stage}\n\n"
-            f"[bold]Grade 12 numeric gate[/bold]: {gate_style}  "
-            f"(decisive trades {dec_raw}/{min_dt}, win rate {wr_s})\n"
+            f"[bold]Overall[/bold]: {gate_style}  [dim](cohesive tools, then numeric 60% / min-N)[/dim]\n"
+            f"[bold]Curriculum tools[/bold]: {ct_s}  |  [bold]Numeric paper[/bold]: {ng_s}\n"
+            f"[dim]Cohort: decisive {dec_raw}/{min_dt}, win rate {wr_s}[/dim]"
+            f"{why_txt}"
+            f"{imp_txt}\n\n"
             f"[bold]Bachelor paper track eligible[/bold]: {elig}\n\n"
             f"[bold]Next focus[/bold]: {sf.get('focus', '—')}\n"
             f"{hints_txt}\n\n"
-            f"[bold]Cumulative carry-forward[/bold] (Grade 12 → later stages):\n{carry_txt}"
+            f"[bold]Carry-forward[/bold]:\n{carry_txt}"
         )
 
         trades = load_paper_trades()
@@ -323,15 +425,32 @@ def _cmd_dashboard(args: argparse.Namespace | None = None) -> int:
         console = Console()
         console.print(
             Panel.fit(
-                learning_body,
-                title="Learning, goals & eligibility",
-                border_style="magenta",
+                report_body,
+                title="Anna — report card (live)",
+                border_style="green" if gate_pass else "red",
             )
         )
 
+        tm = normalize_tool_mastery(st.get("grade_12_tool_mastery"))
+        tools_tbl = Table(title="Tool checklist (pass all as a set; then numeric / fund bar applies)")
+        tools_tbl.add_column("Tool", no_wrap=True)
+        tools_tbl.add_column("ID", style="dim")
+        tools_tbl.add_column("Status")
+        for t in GRADE_12_TOOLS:
+            tid = t["id"]
+            ok = bool(tm.get(tid))
+            tools_tbl.add_row(
+                t["title"][:52] + ("…" if len(t["title"]) > 52 else ""),
+                tid,
+                "[green]PASS[/green]" if ok else "[yellow]not yet[/yellow]",
+            )
+        console.print(tools_tbl)
+
         meth_id = st.get("training_method_id") or "karpathy_loop_v1"
         meth = TRAINING_METHODS.get(meth_id) or {}
-        steps_tbl = Table(title=f"Karpathy method — {meth_id} (canonical steps)")
+        steps_tbl = Table(
+            title=f"[dim]Reference — Karpathy steps ({meth_id})[/dim]",
+        )
         steps_tbl.add_column("#", justify="right", width=3)
         steps_tbl.add_column("Step")
         for i, step in enumerate(meth.get("steps") or [], start=1):
@@ -340,20 +459,15 @@ def _cmd_dashboard(args: argparse.Namespace | None = None) -> int:
 
         console.print(
             Panel.fit(
-                "[bold cyan]Anna[/bold cyan] (analyst)  [dim]── handoff ──▶[/dim]  "
-                "[bold green]Jack[/bold green] (executor)  [dim]│[/dim]  "
-                "[yellow]Jupiter Perps[/yellow] = exchange / venue\n"
-                "[dim]Default live path when venue is Jupiter: Anna’s packets go to Jack; "
-                "Drift would be Billy (not shown here). Rows below are paper harness outcomes, not live fills.[/dim]\n\n"
-                "[bold]Paper harness — summary[/bold]\n"
+                "[dim]Paper harness evidence for this report card (not live fills).[/dim]\n"
                 f"Trades: {s.trade_count} | W {s.wins} / L {s.losses} | "
                 f"P&L USD [bold]{s.total_pnl_usd:.2f}[/bold]"
                 + (f" | Win rate {s.win_rate:.0%}" if s.win_rate is not None else ""),
-                title="BLACK BOX · Anna training (TUI)",
+                title="Paper cohort — summary",
                 border_style="cyan",
             )
         )
-        table = Table(title="Paper trades — Jupiter Perps venue (most recent last)")
+        table = Table(title="Paper trades (most recent last) — raw rows behind the numeric gate")
         for col in ("UTC", "Symbol", "Venue", "Side", "TF", "Result", "P&L $"):
             table.add_column(col)
         for row in sorted(trades, key=lambda x: x.get("ts_utc") or "")[-40:]:
@@ -367,16 +481,16 @@ def _cmd_dashboard(args: argparse.Namespace | None = None) -> int:
                 f"{float(row.get('pnl_usd') or 0):.2f}",
             )
         console.print(table)
-        console.print(f"[dim]Log: {anna_training_dir() / TRADES_FILE}[/dim]")
+        console.print(f"[dim]Trade log: {anna_training_dir() / TRADES_FILE}[/dim]")
         if live:
             console.print(
-                f"[dim]Refresh every {refresh_sec:.0f}s — Ctrl+C to quit. "
-                f"(Training loop is separate: anna loop in tmux.)[/dim]"
+                f"[dim]Report card refresh every {refresh_sec:.0f}s — Ctrl+C to quit. "
+                f"(Karpathy training loop is separate, e.g. anna loop in tmux.)[/dim]"
             )
 
     if live:
         print(
-            f"Anna dashboard — live refresh every {refresh_sec:.0f}s (Ctrl+C to quit).",
+            f"Anna report card — live refresh every {refresh_sec:.0f}s (Ctrl+C to quit).",
             file=sys.stderr,
         )
         try:
@@ -656,9 +770,18 @@ def main(argv: list[str] | None = None) -> int:
 
     sub.add_parser(
         "gates",
-        help="Grade-12 numeric gate: win rate vs ANNA_GRADE12_MIN_WIN_RATE (default 0.6) and "
-        "min decisive trades ANNA_GRADE12_MIN_DECISIVE_TRADES (default 30). Exit 0 if pass.",
+        help="Grade-12 gate: curriculum tools (cohesive) then win rate vs ANNA_GRADE12_MIN_WIN_RATE (0.6) "
+        "and min decisive trades (30). Exit 0 if pass. Dev: ANNA_SKIP_CURRICULUM_TOOLS_GATE=1.",
     )
+    sub.add_parser(
+        "tool-list",
+        help="Grade 12 curriculum tools checklist (JSON). Pass tools before 60%% / revenue headline.",
+    )
+    ap_tp = sub.add_parser(
+        "tool-pass",
+        help="Mark a Grade 12 tool passed (operator attestation). IDs: see tool-list.",
+    )
+    ap_tp.add_argument("tool_id", help="e.g. math_engine_literacy, analysis_algorithms, rcs_rca_discipline, karpathy_harness_loop")
 
     ap_dash = sub.add_parser("dashboard", help="Terminal view: summary + trade table (requires rich).")
     ap_dash.add_argument(
@@ -806,6 +929,8 @@ def main(argv: list[str] | None = None) -> int:
         "dashboard",
         "status",
         "curricula",
+        "tool-list",
+        "tool-pass",
     ):
         rc = _require_preflight_or_exit()
         if rc is not None:
@@ -836,6 +961,10 @@ def main(argv: list[str] | None = None) -> int:
         return _cmd_check_readiness()
     if args.cmd == "gates":
         return _cmd_gates()
+    if args.cmd == "tool-list":
+        return _cmd_tool_list()
+    if args.cmd == "tool-pass":
+        return _cmd_tool_pass(args)
     if args.cmd == "dashboard":
         return _cmd_dashboard(args)
     if args.cmd == "report-card":

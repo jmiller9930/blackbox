@@ -115,8 +115,10 @@ COMPLEMENTARY_PEDAGOGY: list[dict[str, str]] = [
 
 
 def default_state() -> dict[str, Any]:
+    from modules.anna_training.curriculum_tools import default_grade_12_tool_mastery
+
     return {
-        "schema_version": "anna_training_state_v2",
+        "schema_version": "anna_training_state_v3",
         "curriculum_id": None,
         "training_method_id": None,
         "method_invoked_at_utc": None,
@@ -126,6 +128,7 @@ def default_state() -> dict[str, Any]:
         "cumulative_learning_log": [],
         "carryforward_bullets": [],
         "bachelor_track_started_at_utc": None,
+        "grade_12_tool_mastery": default_grade_12_tool_mastery(),
     }
 
 

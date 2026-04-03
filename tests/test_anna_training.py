@@ -50,8 +50,15 @@ def test_default_state_roundtrip(tmp_path: Path, monkeypatch) -> None:
     s = default_state()
     save_state(s)
     s2 = load_state()
-    assert s2["schema_version"] == "anna_training_state_v2"
+    assert s2["schema_version"] == "anna_training_state_v3"
     assert "carryforward_bullets" in s2
+    assert "grade_12_tool_mastery" in s2
+    assert set((s2.get("grade_12_tool_mastery") or {}).keys()) >= {
+        "math_engine_literacy",
+        "analysis_algorithms",
+        "rcs_rca_discipline",
+        "karpathy_harness_loop",
+    }
 
 
 def test_paper_trades_and_report(tmp_path: Path, monkeypatch) -> None:
@@ -125,6 +132,7 @@ def test_gates_passes_when_threshold_met(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.setenv("BLACKBOX_ANNA_TRAINING_DIR", str(tmp_path))
     monkeypatch.setenv("ANNA_GRADE12_MIN_WIN_RATE", "0.6")
     monkeypatch.setenv("ANNA_GRADE12_MIN_DECISIVE_TRADES", "5")
+    monkeypatch.setenv("ANNA_SKIP_CURRICULUM_TOOLS_GATE", "1")
     from modules.anna_training.paper_trades import append_paper_trade
     from modules.anna_training.gates import evaluate_grade12_gates
 
@@ -136,6 +144,52 @@ def test_gates_passes_when_threshold_met(tmp_path: Path, monkeypatch) -> None:
     r = evaluate_grade12_gates()
     assert r["decisive_trades"] == 5
     assert r["win_rate"] == 0.8
+    assert r["pass"] is True
+
+
+def test_gates_fail_when_tools_incomplete_even_if_numeric_ok(tmp_path: Path, monkeypatch) -> None:
+    """Cohesive tool set must pass before overall PASS; numeric cohort alone is not enough."""
+    monkeypatch.setenv("BLACKBOX_ANNA_TRAINING_DIR", str(tmp_path))
+    monkeypatch.delenv("ANNA_SKIP_CURRICULUM_TOOLS_GATE", raising=False)
+    monkeypatch.setenv("ANNA_GRADE12_MIN_WIN_RATE", "0.6")
+    monkeypatch.setenv("ANNA_GRADE12_MIN_DECISIVE_TRADES", "5")
+    from modules.anna_training.paper_trades import append_paper_trade
+    from modules.anna_training.gates import evaluate_grade12_gates
+
+    for _ in range(4):
+        append_paper_trade(
+            symbol="S", side="long", result="won", pnl_usd=1.0, timeframe="5m"
+        )
+    append_paper_trade(symbol="S", side="long", result="lost", pnl_usd=-1.0, timeframe="5m")
+    r = evaluate_grade12_gates()
+    assert r["numeric_gate_pass"] is True
+    assert r["curriculum_tools_pass"] is False
+    assert r["pass"] is False
+    assert r["blockers"]
+
+
+def test_gates_pass_when_all_tools_marked_and_numeric_ok(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setenv("BLACKBOX_ANNA_TRAINING_DIR", str(tmp_path))
+    monkeypatch.delenv("ANNA_SKIP_CURRICULUM_TOOLS_GATE", raising=False)
+    monkeypatch.setenv("ANNA_GRADE12_MIN_WIN_RATE", "0.6")
+    monkeypatch.setenv("ANNA_GRADE12_MIN_DECISIVE_TRADES", "5")
+    from modules.anna_training.paper_trades import append_paper_trade
+    from modules.anna_training.gates import evaluate_grade12_gates
+    from modules.anna_training.curriculum_tools import TOOL_IDS
+    from modules.anna_training.store import load_state, save_state
+
+    st = load_state()
+    st["grade_12_tool_mastery"] = {tid: True for tid in TOOL_IDS}
+    save_state(st)
+
+    for _ in range(4):
+        append_paper_trade(
+            symbol="S", side="long", result="won", pnl_usd=1.0, timeframe="5m"
+        )
+    append_paper_trade(symbol="S", side="long", result="lost", pnl_usd=-1.0, timeframe="5m")
+    r = evaluate_grade12_gates()
+    assert r["curriculum_tools_pass"] is True
+    assert r["numeric_gate_pass"] is True
     assert r["pass"] is True
 
 
