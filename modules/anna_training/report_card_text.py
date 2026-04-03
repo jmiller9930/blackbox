@@ -118,8 +118,13 @@ def format_slack_report_card_text(
     wr_s = f"{wr:.0%}" if wr is not None else "n/a"
 
     meth = (training_method_id or "").strip() or "—"
+    sup_it = st.get("karpathy_loop_iteration")
+    sup_last = st.get("karpathy_loop_last_tick_utc")
     lines: list[str] = [
         "Anna — report card (same signal as `anna watch` / dashboard TUI)",
+        "",
+        f"LOOP SUPERVISOR (not the same as gate % — should change while loop-daemon runs): "
+        f"iteration={sup_it if sup_it is not None else '—'} | last_tick={sup_last or '—'}",
         "",
         f"LEARNING: {learn}",
         "",

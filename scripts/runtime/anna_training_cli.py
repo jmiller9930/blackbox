@@ -400,8 +400,17 @@ def _cmd_dashboard(args: argparse.Namespace | None = None) -> int:
         if imp and not gate_pass:
             imp_txt = "\n[bold]Where to improve her code / stack[/bold]\n" + "\n".join(f"  • {x}" for x in imp)
 
+        sup_it = st.get("karpathy_loop_iteration")
+        sup_last = st.get("karpathy_loop_last_tick_utc")
+        sup_line = (
+            f"[bold cyan]Loop supervisor[/bold cyan] (should increase while `loop-daemon` runs): "
+            f"iteration [bold]{sup_it if sup_it is not None else '—'}[/bold] · last_tick [dim]{sup_last or '—'}[/dim]\n"
+            f"[dim]This is real activity — not a bug. Gate % below stays 0 until you `anna tool-pass` and/or `log-trade`; "
+            f"two different dials.[/dim]\n\n"
+        )
         report_body = (
             f"[dim]Updating report card — same signal as gates + tool checklist; refresh shows progress.[/dim]\n\n"
+            f"{sup_line}"
             f"{learn_line}\n\n"
             f"[bold]Measurable progress[/bold]: tool checklist [cyan]{prog['tool_checklist_pct']}%[/cyan] "
             f"([cyan]{prog['tools_passed_count']}/{prog['tools_total']}[/cyan] attested)  |  "
