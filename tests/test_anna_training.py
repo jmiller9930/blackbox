@@ -138,6 +138,24 @@ def test_gates_passes_when_threshold_met(tmp_path: Path, monkeypatch) -> None:
     assert r["pass"] is True
 
 
+def test_school_once_runs(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setenv("BLACKBOX_ANNA_TRAINING_DIR", str(tmp_path))
+    monkeypatch.setenv("ANNA_SKIP_PREFLIGHT", "1")
+    repo = Path(__file__).resolve().parents[1]
+    cli = repo / "scripts/runtime/anna_go_to_school.py"
+    r = subprocess.run(
+        [sys.executable, str(cli), "--once"],
+        cwd=str(repo),
+        capture_output=True,
+        text=True,
+        env={**os.environ, "BLACKBOX_ANNA_TRAINING_DIR": str(tmp_path), "ANNA_SKIP_PREFLIGHT": "1"},
+    )
+    assert r.returncode == 0, r.stdout + r.stderr
+    assert "(1) Data readiness" in r.stdout or "solana_rpc" in r.stdout
+    raw = json.loads((tmp_path / "state.json").read_text(encoding="utf-8"))
+    assert raw.get("curriculum_id") == "grade_12_paper_only"
+
+
 def test_start_once_sets_state(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.setenv("BLACKBOX_ANNA_TRAINING_DIR", str(tmp_path))
     monkeypatch.setenv("ANNA_SKIP_PREFLIGHT", "1")

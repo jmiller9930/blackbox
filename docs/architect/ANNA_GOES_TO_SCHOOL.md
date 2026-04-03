@@ -9,7 +9,10 @@
 **Preflight is mandatory:** every training CLI command (except `check-readiness`) runs the same data-source gate as Anna’s analyst path — healthy Pyth stream artifact + non-empty `data/sqlite/market_data.db`. Optional: `ANNA_PREFLIGHT_REQUIRE_SOLANA=1` to also require Solana RPC. Tests/dev only: `ANNA_SKIP_PREFLIGHT=1`.
 
 ```bash
-# repo root — one command: preflight + Grade 12 + Karpathy + interactive TUI (or add --once for one dashboard)
+# repo root — single entry (readiness JSON + gates JSON + start); optional: --once
+python3 scripts/runtime/anna_go_to_school.py
+# equivalent: python3 scripts/runtime/anna_training_cli.py school
+# preflight + Grade 12 + Karpathy only (no readiness/gates print first):
 python3 scripts/runtime/anna_training_cli.py start
 # repo root — preflight only (JSON)
 python3 scripts/runtime/anna_training_cli.py check-readiness

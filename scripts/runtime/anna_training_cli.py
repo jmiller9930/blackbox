@@ -5,7 +5,9 @@ Anna training — curriculum, method, paper trade log, dashboard, grade-12 repor
 State: data/runtime/anna_training/state.json; trades: paper_trades.jsonl (override dir with BLACKBOX_ANNA_TRAINING_DIR).
 
 Examples (repo root):
-  python3 scripts/runtime/anna_training_cli.py start   # one-shot: preflight + Grade 12 + Karpathy + interactive TUI menu
+  python3 scripts/runtime/anna_go_to_school.py   # ONE entry: readiness + gates + start (same as `school` subcommand)
+  python3 scripts/runtime/anna_training_cli.py school   # same (check-readiness, gates, then start)
+  python3 scripts/runtime/anna_training_cli.py start   # preflight + Grade 12 + Karpathy + interactive TUI only
   python3 scripts/runtime/anna_training_cli.py start --once   # assign + single dashboard, then exit (scripting)
   python3 scripts/runtime/anna_training_cli.py gates   # PASS/FAIL vs 60% + min decisive trades (see env vars)
   python3 scripts/runtime/anna_training_cli.py check-readiness   # Solana RPC + Pyth artifact + DB — run first
@@ -297,6 +299,19 @@ def _cmd_start(args: argparse.Namespace) -> int:
     return _interactive_training_menu()
 
 
+def _cmd_school(args: argparse.Namespace) -> int:
+    """Single operator flow: print readiness, print gates, then start (curriculum + TUI)."""
+    print("=== (1) Data readiness ===", flush=True)
+    _cmd_check_readiness()
+    print("\n=== (2) Grade-12 numeric gates ===", flush=True)
+    gates_rc = _cmd_gates()
+    if gates_rc != 0:
+        print("\n[Note] Numeric gates did not PASS yet — expected until cohort is large enough.", file=sys.stderr)
+    print("\n=== (3) Training session ===", flush=True)
+    start_rc = _cmd_start(args)
+    return start_rc
+
+
 def _interactive_training_menu() -> int:
     """Simple REPL: dashboard, status, note, readiness snapshot, quit."""
     help_lines = (
@@ -402,6 +417,14 @@ def main(argv: list[str] | None = None) -> int:
         help="After assign, print dashboard once and exit (no interactive menu).",
     )
 
+    ap_z = sub.add_parser(
+        "school",
+        help="One command: check-readiness JSON + gates JSON + start (preflight runs first). Same flags as start.",
+    )
+    ap_z.add_argument("--curriculum-id", default="grade_12_paper_only")
+    ap_z.add_argument("--method-id", default="karpathy_loop_v1")
+    ap_z.add_argument("--once", action="store_true")
+
     args = p.parse_args(argv)
     if args.cmd not in ("check-readiness", "gates"):
         rc = _require_preflight_or_exit()
@@ -429,6 +452,8 @@ def main(argv: list[str] | None = None) -> int:
         return _cmd_report_card(args)
     if args.cmd == "start":
         return _cmd_start(args)
+    if args.cmd == "school":
+        return _cmd_school(args)
     return 1
 
 
