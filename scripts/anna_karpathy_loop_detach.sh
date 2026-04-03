@@ -10,7 +10,7 @@
 # Env:
 #   BLACKBOX_REPO — default ~/blackbox
 #   ANNA_TMUX_SESSION — tmux name (default anna-karpathy-loop)
-#   ANNA_LOOP_INTERVAL_SEC — passed through (daemon default 10)
+#   ANNA_LOOP_INTERVAL_SEC — passed through (daemon default 5)
 #
 set -euo pipefail
 
