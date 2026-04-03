@@ -655,7 +655,7 @@ def main(argv: list[str] | None = None) -> int:
         "--interval-sec",
         type=float,
         default=None,
-        help="Seconds between ticks (default ANNA_LOOP_INTERVAL_SEC or 60).",
+        help="Seconds between ticks (default ANNA_LOOP_INTERVAL_SEC or 10).",
     )
     ap_loop.add_argument(
         "--once",
