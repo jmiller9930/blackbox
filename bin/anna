@@ -32,7 +32,8 @@ Anna training (repo: ${_REPO})
   anna loop-attach       Attach to tmux session (see live output)
   anna loop-stop         Stop tmux session (kills loop)
 
-  anna watch             Dashboard — paper trades + summary (your "TV" for now)
+  anna watch             Dashboard once (snapshot)
+  anna watch --live      Same dashboard, refreshes until Ctrl+C (default 10s)
   anna progress          Next focus + bachelor eligibility + cumulative log tail
   anna status            JSON snapshot (curriculum, method, notes)
 

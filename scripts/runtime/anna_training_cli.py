@@ -33,6 +33,7 @@ import argparse
 import importlib.util
 import json
 import sys
+import time
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -256,7 +257,10 @@ def _require_preflight_or_exit() -> int | None:
     return 5
 
 
-def _cmd_dashboard() -> int:
+def _cmd_dashboard(args: argparse.Namespace | None = None) -> int:
+    live = bool(getattr(args, "live", False) if args is not None else False)
+    refresh_sec = max(3.0, float(getattr(args, "interval", 10.0) if args is not None else 10.0))
+
     try:
         from rich.console import Console
         from rich.panel import Panel
@@ -276,93 +280,117 @@ def _cmd_dashboard() -> int:
         )
         return 0
 
-    st = load_state()
-    cid = (st.get("curriculum_id") or "") or ""
-    cur = CURRICULA.get(cid) if cid else None
-    g12 = evaluate_grade12_gates()
-    sf = suggest_next_focus(
-        curriculum_id=st.get("curriculum_id"),
-        training_method_id=st.get("training_method_id"),
-    )
-    be = bachelor_eligibility_report(
-        curriculum_id=st.get("curriculum_id"),
-        completed_milestones=st.get("completed_curriculum_milestones") or [],
-    )
-    gate_pass = bool(g12.get("pass"))
-    gate_style = "[bold green]PASS[/bold green]" if gate_pass else "[bold red]NOT PASS[/bold red]"
-    min_dt = g12.get("min_decisive_trades")
-    dec_raw = g12.get("decisive_trades")
-    wr = g12.get("win_rate")
-    wr_s = f"{wr:.0%}" if wr is not None else "—"
-    elig = "[bold green]yes[/bold green]" if be.get("eligible_for_bachelor_paper_track_v1") else "[dim]no[/dim]"
-    cur_title = (cur or {}).get("title", cid or "(not assigned)")
-    stage = (cur or {}).get("stage", "—")
-    hints_lines = (sf.get("hints") or [])[:4]
-    hints_txt = "\n".join(f"  • {h}" for h in hints_lines) if hints_lines else "  —"
-    bullets = list(st.get("carryforward_bullets") or [])[:6]
-    carry_txt = "\n".join(f"  • {b}" for b in bullets) if bullets else "  — (none yet; promotes with bachelor track)"
-
-    learning_body = (
-        f"[bold]Curriculum[/bold]: {cid or '—'} — {cur_title}\n"
-        f"[dim]Stage[/dim]: {stage}\n\n"
-        f"[bold]Grade 12 numeric gate[/bold]: {gate_style}  "
-        f"(decisive trades {dec_raw}/{min_dt}, win rate {wr_s})\n"
-        f"[bold]Bachelor paper track eligible[/bold]: {elig}\n\n"
-        f"[bold]Next focus[/bold]: {sf.get('focus', '—')}\n"
-        f"{hints_txt}\n\n"
-        f"[bold]Cumulative carry-forward[/bold] (Grade 12 → later stages):\n{carry_txt}"
-    )
-
-    trades = load_paper_trades()
-    s = summarize_trades(trades)
-    console = Console()
-    console.print(
-        Panel.fit(
-            learning_body,
-            title="Learning, goals & eligibility",
-            border_style="magenta",
+    def _print_once() -> None:
+        st = load_state()
+        cid = (st.get("curriculum_id") or "") or ""
+        cur = CURRICULA.get(cid) if cid else None
+        g12 = evaluate_grade12_gates()
+        sf = suggest_next_focus(
+            curriculum_id=st.get("curriculum_id"),
+            training_method_id=st.get("training_method_id"),
         )
-    )
-
-    meth_id = st.get("training_method_id") or "karpathy_loop_v1"
-    meth = TRAINING_METHODS.get(meth_id) or {}
-    steps_tbl = Table(title=f"Karpathy method — {meth_id} (canonical steps)")
-    steps_tbl.add_column("#", justify="right", width=3)
-    steps_tbl.add_column("Step")
-    for i, step in enumerate(meth.get("steps") or [], start=1):
-        steps_tbl.add_row(str(i), step)
-    console.print(steps_tbl)
-
-    console.print(
-        Panel.fit(
-            "[bold cyan]Anna[/bold cyan] (analyst)  [dim]── handoff ──▶[/dim]  "
-            "[bold green]Jack[/bold green] (executor)  [dim]│[/dim]  "
-            "[yellow]Jupiter Perps[/yellow] = exchange / venue\n"
-            "[dim]Default live path when venue is Jupiter: Anna’s packets go to Jack; "
-            "Drift would be Billy (not shown here). Rows below are paper harness outcomes, not live fills.[/dim]\n\n"
-            "[bold]Paper harness — summary[/bold]\n"
-            f"Trades: {s.trade_count} | W {s.wins} / L {s.losses} | "
-            f"P&L USD [bold]{s.total_pnl_usd:.2f}[/bold]"
-            + (f" | Win rate {s.win_rate:.0%}" if s.win_rate is not None else ""),
-            title="BLACK BOX · Anna training (TUI)",
-            border_style="cyan",
+        be = bachelor_eligibility_report(
+            curriculum_id=st.get("curriculum_id"),
+            completed_milestones=st.get("completed_curriculum_milestones") or [],
         )
-    )
-    table = Table(title="Paper trades — Jupiter Perps venue (most recent last)")
-    for col in ("UTC", "Symbol", "Venue", "Side", "TF", "Result", "P&L $"):
-        table.add_column(col)
-    for row in sorted(trades, key=lambda x: x.get("ts_utc") or "")[-40:]:
-        table.add_row(
-            str(row.get("ts_utc", ""))[:19],
-            str(row.get("symbol", "")),
-            str(row.get("venue", "")),
-            str(row.get("side", "")),
-            str(row.get("timeframe", "")),
-            str(row.get("result", "")),
-            f"{float(row.get('pnl_usd') or 0):.2f}",
+        gate_pass = bool(g12.get("pass"))
+        gate_style = "[bold green]PASS[/bold green]" if gate_pass else "[bold red]NOT PASS[/bold red]"
+        min_dt = g12.get("min_decisive_trades")
+        dec_raw = g12.get("decisive_trades")
+        wr = g12.get("win_rate")
+        wr_s = f"{wr:.0%}" if wr is not None else "—"
+        elig = "[bold green]yes[/bold green]" if be.get("eligible_for_bachelor_paper_track_v1") else "[dim]no[/dim]"
+        cur_title = (cur or {}).get("title", cid or "(not assigned)")
+        stage = (cur or {}).get("stage", "—")
+        hints_lines = (sf.get("hints") or [])[:4]
+        hints_txt = "\n".join(f"  • {h}" for h in hints_lines) if hints_lines else "  —"
+        bullets = list(st.get("carryforward_bullets") or [])[:6]
+        carry_txt = "\n".join(f"  • {b}" for b in bullets) if bullets else "  — (none yet; promotes with bachelor track)"
+
+        learning_body = (
+            f"[bold]Curriculum[/bold]: {cid or '—'} — {cur_title}\n"
+            f"[dim]Stage[/dim]: {stage}\n\n"
+            f"[bold]Grade 12 numeric gate[/bold]: {gate_style}  "
+            f"(decisive trades {dec_raw}/{min_dt}, win rate {wr_s})\n"
+            f"[bold]Bachelor paper track eligible[/bold]: {elig}\n\n"
+            f"[bold]Next focus[/bold]: {sf.get('focus', '—')}\n"
+            f"{hints_txt}\n\n"
+            f"[bold]Cumulative carry-forward[/bold] (Grade 12 → later stages):\n{carry_txt}"
         )
-    console.print(table)
-    console.print(f"[dim]Log: {anna_training_dir() / TRADES_FILE}[/dim]")
+
+        trades = load_paper_trades()
+        s = summarize_trades(trades)
+        console = Console()
+        console.print(
+            Panel.fit(
+                learning_body,
+                title="Learning, goals & eligibility",
+                border_style="magenta",
+            )
+        )
+
+        meth_id = st.get("training_method_id") or "karpathy_loop_v1"
+        meth = TRAINING_METHODS.get(meth_id) or {}
+        steps_tbl = Table(title=f"Karpathy method — {meth_id} (canonical steps)")
+        steps_tbl.add_column("#", justify="right", width=3)
+        steps_tbl.add_column("Step")
+        for i, step in enumerate(meth.get("steps") or [], start=1):
+            steps_tbl.add_row(str(i), step)
+        console.print(steps_tbl)
+
+        console.print(
+            Panel.fit(
+                "[bold cyan]Anna[/bold cyan] (analyst)  [dim]── handoff ──▶[/dim]  "
+                "[bold green]Jack[/bold green] (executor)  [dim]│[/dim]  "
+                "[yellow]Jupiter Perps[/yellow] = exchange / venue\n"
+                "[dim]Default live path when venue is Jupiter: Anna’s packets go to Jack; "
+                "Drift would be Billy (not shown here). Rows below are paper harness outcomes, not live fills.[/dim]\n\n"
+                "[bold]Paper harness — summary[/bold]\n"
+                f"Trades: {s.trade_count} | W {s.wins} / L {s.losses} | "
+                f"P&L USD [bold]{s.total_pnl_usd:.2f}[/bold]"
+                + (f" | Win rate {s.win_rate:.0%}" if s.win_rate is not None else ""),
+                title="BLACK BOX · Anna training (TUI)",
+                border_style="cyan",
+            )
+        )
+        table = Table(title="Paper trades — Jupiter Perps venue (most recent last)")
+        for col in ("UTC", "Symbol", "Venue", "Side", "TF", "Result", "P&L $"):
+            table.add_column(col)
+        for row in sorted(trades, key=lambda x: x.get("ts_utc") or "")[-40:]:
+            table.add_row(
+                str(row.get("ts_utc", ""))[:19],
+                str(row.get("symbol", "")),
+                str(row.get("venue", "")),
+                str(row.get("side", "")),
+                str(row.get("timeframe", "")),
+                str(row.get("result", "")),
+                f"{float(row.get('pnl_usd') or 0):.2f}",
+            )
+        console.print(table)
+        console.print(f"[dim]Log: {anna_training_dir() / TRADES_FILE}[/dim]")
+        if live:
+            console.print(
+                f"[dim]Refresh every {refresh_sec:.0f}s — Ctrl+C to quit. "
+                f"(Training loop is separate: anna loop in tmux.)[/dim]"
+            )
+
+    if live:
+        print(
+            f"Anna dashboard — live refresh every {refresh_sec:.0f}s (Ctrl+C to quit).",
+            file=sys.stderr,
+        )
+        try:
+            while True:
+                if sys.stdout.isatty():
+                    sys.stdout.write("\033[2J\033[H")
+                    sys.stdout.flush()
+                _print_once()
+                time.sleep(refresh_sec)
+        except KeyboardInterrupt:
+            print(file=sys.stderr)
+            return 0
+
+    _print_once()
     return 0
 
 
@@ -632,7 +660,19 @@ def main(argv: list[str] | None = None) -> int:
         "min decisive trades ANNA_GRADE12_MIN_DECISIVE_TRADES (default 30). Exit 0 if pass.",
     )
 
-    sub.add_parser("dashboard", help="Terminal view: summary + trade table (requires rich).")
+    ap_dash = sub.add_parser("dashboard", help="Terminal view: summary + trade table (requires rich).")
+    ap_dash.add_argument(
+        "--live",
+        action="store_true",
+        help="Keep refreshing until Ctrl+C (TTY recommended). Default interval 10s.",
+    )
+    ap_dash.add_argument(
+        "--interval",
+        type=float,
+        default=10.0,
+        metavar="SEC",
+        help="Seconds between refreshes when --live (minimum 3).",
+    )
 
     ap_r = sub.add_parser("report-card", help="Markdown grade-12 report for Sean (or stdout).")
     ap_r.add_argument("--out", help="Write markdown file path")
@@ -797,7 +837,7 @@ def main(argv: list[str] | None = None) -> int:
     if args.cmd == "gates":
         return _cmd_gates()
     if args.cmd == "dashboard":
-        return _cmd_dashboard()
+        return _cmd_dashboard(args)
     if args.cmd == "report-card":
         return _cmd_report_card(args)
     if args.cmd == "start":
