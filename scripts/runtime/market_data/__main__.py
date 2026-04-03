@@ -39,12 +39,19 @@ def main(argv: list[str] | None = None) -> int:
         help="Jupiter king mode: max rel diff Coinbase vs Jupiter — wider support band (default 0.025)",
     )
     args = p.parse_args(argv)
+    # Let recorder honor MARKET_DATA_SKIP_JUPITER unless CLI forces (--no-jupiter | default fetch).
+    include_jupiter: bool | None
+    if args.no_jupiter:
+        include_jupiter = False
+    else:
+        include_jupiter = None  # recorder resolves env + default True when unset
+
     out = record_market_snapshot(
         symbol=args.symbol,
         coinbase_product=args.coinbase_product,
         max_age_sec=args.max_age_sec,
         max_rel_diff=args.max_rel_diff,
-        include_jupiter=not args.no_jupiter,
+        include_jupiter=include_jupiter,
         king_pyth_max_rel_diff=args.king_pyth_max_rel_diff,
         king_coinbase_max_rel_diff=args.king_coinbase_max_rel_diff,
     )
