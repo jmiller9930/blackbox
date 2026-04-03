@@ -1,0 +1,78 @@
+#!/usr/bin/env bash
+# Anna training — one entry point. No venv paths to memorize.
+# Usage: add to PATH once:  export PATH="$HOME/blackbox/bin:$PATH"
+#   anna help
+#   anna loop          # Karpathy loop in detached tmux (survives SSH)
+#   anna watch         # dashboard (paper trades + Rich panel)
+#   anna school        # readiness + gates + TUI
+#   anna progress      # ACL-lite JSON: next focus, eligibility, cumulative tail
+# Anything else is passed through to anna_training_cli.py (e.g. anna gates).
+set -euo pipefail
+
+_REPO="$(cd "$(dirname "$0")/.." && pwd)"
+export BLACKBOX_REPO="${BLACKBOX_REPO:-$_REPO}"
+
+_PY="${_REPO}/.venv/bin/python3"
+if [[ ! -x "$_PY" ]]; then
+  _PY="$(command -v python3)"
+fi
+export PYTHONPATH="${_REPO}/scripts/runtime:${_REPO}${PYTHONPATH:+:${PYTHONPATH}}"
+_CLI="${_REPO}/scripts/runtime/anna_training_cli.py"
+_DETACH="${_REPO}/scripts/anna_karpathy_loop_detach.sh"
+
+_cmd="${1:-help}"
+shift || true
+
+case "$_cmd" in
+  help|-h|--help)
+    cat <<EOF
+Anna training (repo: ${_REPO})
+
+  anna loop              Start Karpathy loop in detached tmux (training runs; survives SSH logout)
+  anna loop-attach       Attach to tmux session (see live output)
+  anna loop-stop         Stop tmux session (kills loop)
+
+  anna watch             Dashboard — paper trades + summary (your "TV" for now)
+  anna progress          Next focus + bachelor eligibility + cumulative log tail
+  anna status            JSON snapshot (curriculum, method, notes)
+
+  anna school            Readiness + gates + enroll + interactive TUI (first-time / full check)
+  anna start             Enroll + TUI (uses preflight unless ANNA_SKIP_PREFLIGHT=1)
+
+  anna <anything else>   Pass-through to anna_training_cli.py
+                         Examples: anna gates | anna quant-metrics | anna report-card --help
+
+Tip: put this on your PATH:
+  export PATH="${_REPO}/bin:\$PATH"
+
+Web UI with push updates can wrap these later; this stays the stable operator surface.
+EOF
+    ;;
+  loop)
+    exec "$_DETACH" "$@"
+    ;;
+  loop-attach)
+    exec tmux attach -t "${ANNA_TMUX_SESSION:-anna-karpathy-loop}"
+    ;;
+  loop-stop)
+    exec tmux kill-session -t "${ANNA_TMUX_SESSION:-anna-karpathy-loop}"
+    ;;
+  watch|tv|monitor|dashboard)
+    exec "$_PY" "$_CLI" dashboard "$@"
+    ;;
+  progress|training-progress)
+    exec "$_PY" "$_CLI" training-progress "$@"
+    ;;
+  school)
+    exec "$_PY" "$_CLI" school "$@"
+    ;;
+  start)
+    exec "$_PY" "$_CLI" start "$@"
+    ;;
+  status)
+    exec "$_PY" "$_CLI" status "$@"
+    ;;
+  *)
+    exec "$_PY" "$_CLI" "$_cmd" "$@"
+    ;;
+esac
