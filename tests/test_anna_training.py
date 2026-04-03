@@ -96,7 +96,8 @@ def test_karpathy_once_writes_skills_deck_and_cycle_log(tmp_path: Path, monkeypa
     assert last_hb.get("skill_practice") == ksp
     assert (last_hb.get("data_preflight") or {}).get("schema") == "anna_data_preflight_v1"
     assert isinstance(last_hb.get("llm_preflight"), dict)
-    assert last_hb.get("preflight_policy") == {"require_llm_reachable": False}
+    pol = last_hb.get("preflight_policy") or {}
+    assert pol.get("llm_probe_never_blocks_school") is True
     assert (raw.get("karpathy_last_data_preflight") or {}).get("schema") == "anna_data_preflight_v1"
 
 

@@ -406,11 +406,10 @@ def build_anna_training_dashboard() -> dict[str, Any]:
         semantics = {
             "loop_tick_means": (
                 "Each supervisor tick: **data preflight** (Pyth stream + market_data.db; optional Solana) → "
-                "**LLM preflight** (GET Ollama /api/tags when ANNA_USE_LLM is on; same OLLAMA_BASE_URL as Anna) → "
+                "**LLM probe** (GET Ollama /api/tags when ANNA_USE_LLM is on — informational in state/heartbeat) → "
                 "then iteration++ → skills deck → tool drill when deck focus is a Grade-12 tool ID → paper harness "
                 "(analyze_to_dict → execution request → Jack paper if BLACKBOX_JACK_EXECUTOR_CMD is set). "
-                "With ANNA_KARPATHY_REQUIRE_LLM_REACHABLE=1, a failed LLM check or missing OLLAMA_MODEL in tags skips "
-                "school/harness for that tick (iteration unchanged)."
+                "A bad Ollama probe does not skip school; fix OLLAMA_BASE_URL / model for real LLM analysis."
             ),
             "attempt_log_vs_tick": (
                 "The attempt log file counts delegate/manual events (jack_handoff, paper_manual, etc.) — "
@@ -812,9 +811,9 @@ TRAINING_DASHBOARD_HTML = """<!DOCTYPE html>
         var ban = document.getElementById('v_preflight_banner');
         ban.className = 'card ' + (worst >= 2 ? 'llm-bad' : (worst >= 1 ? 'llm-warn' : 'llm-good'));
         ban.style.display = 'block';
-        document.getElementById('v_pf_policy').textContent = pol.require_llm_reachable
-          ? 'Strict: ANNA_KARPATHY_REQUIRE_LLM_REACHABLE — iteration/school/harness do not advance when the LLM line is not OK (includes missing model in tags).'
-          : 'Lenient: LLM status is informational unless you set ANNA_KARPATHY_REQUIRE_LLM_REACHABLE=1 on the daemon host.';
+        document.getElementById('v_pf_policy').textContent = (pol.llm_probe_never_blocks_school !== false)
+          ? 'Policy: the LLM line is informational — the loop does not skip school on Ollama errors. Fix OLLAMA_BASE_URL and model for real generations.'
+          : 'Policy: see preflight_policy in JSON.';
       })();
       var ls = j.learning_signal || {};
       document.getElementById('v_ls_head').textContent = ls.headline || '—';
