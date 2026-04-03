@@ -396,11 +396,28 @@ def build_anna_training_dashboard() -> dict[str, Any]:
                     "request_id": (str(rid)[:14] + "…") if rid and len(str(rid)) > 14 else rid,
                 }
             )
+        semantics = {
+            "loop_tick_means": (
+                "Each supervisor tick: preflight → iteration++ → skills deck → tool drill only when "
+                "deck focus is one of the four Grade-12 tool IDs (when focus is numeric_paper_cohort, "
+                "no tool drill runs that tick) → paper harness: full analyze_to_dict → execution request "
+                "→ Jack paper only if BLACKBOX_JACK_EXECUTOR_CMD is set."
+            ),
+            "attempt_log_vs_tick": (
+                "The attempt log file counts delegate/manual events (jack_handoff, paper_manual, etc.) — "
+                "not one line per tick. The harness still runs every tick; that is the repeated analysis "
+                "and handoff attempt."
+            ),
+            "paper_ledger_vs_tick": (
+                "Paper ledger rows append when a paper trade is logged to paper_trades.jsonl — not every tick."
+            ),
+        }
         return {
             "schema": "anna_training_dashboard_v1",
             "ok": True,
             "trace_id": tid,
             "at_utc": now_iso(),
+            "semantics": semantics,
             "training_engagement": engagement,
             "analysis_snapshot": analysis_snapshot,
             "skill_practice_last": skill_practice_last,
@@ -665,11 +682,12 @@ TRAINING_DASHBOARD_HTML = """<!DOCTYPE html>
 </head>
 <body>
   <h1>Anna training — live</h1>
-  <p class="lead">
-    <strong>How to read this page:</strong> <em>Supervisor ticks</em> = training clock (school loop).
-    <em>Paper ledger rows</em> = trades actually logged for scoring (not the same as ticks).
-    <em>Attempt log lines</em> = delegate/manual events in a separate file — flat is normal if Jack paper is not wiring new events.
-  </p>
+  <div class="card" style="margin-bottom:0.75rem;border-color:#484f58">
+    <h2>One loop tick vs paper rows vs attempt-file lines</h2>
+    <p class="sub" id="v_sem1"></p>
+    <p class="sub" id="v_sem2"></p>
+    <p class="sub" id="v_sem3"></p>
+  </div>
   <div id="err"></div>
   <div class="card" style="margin-bottom:0.75rem;border-color:#30363d">
     <h2>Grade-12 learning signal (gates)</h2>
@@ -678,13 +696,14 @@ TRAINING_DASHBOARD_HTML = """<!DOCTYPE html>
     <p class="sub" id="v_enroll"></p>
   </div>
   <div class="card" style="margin-bottom:0.75rem;border-color:var(--accent)">
-    <h2>Last tick — analysis inputs &amp; outputs (from harness)</h2>
-    <p class="sub" id="v_snap_hint">Structured fields produced each time the harness runs <code>analyze_to_dict</code> (same path as live Anna analysis).</p>
+    <h2>Last tick — Anna analysis (same stack as messaging Anna)</h2>
+    <p class="sub" id="v_snap_hint">Persisted from the Karpathy harness: strategy, concepts, policy, risk, suggested action — refreshed every tick the daemon runs.</p>
     <div class="chips" id="v_steps"></div>
     <table class="data" id="v_analysis_tbl"><tbody id="v_analysis_body"></tbody></table>
   </div>
   <div class="card" style="margin-bottom:0.75rem">
-    <h2>Last tick — curriculum skill practice</h2>
+    <h2>Last tick — Grade-12 tool drill (classroom)</h2>
+    <p class="sub">When deck focus is <code>numeric_paper_cohort</code>, there is no four-tool drill that tick — focus is the paper cohort gate, not a tool ID.</p>
     <table class="data" id="v_sp_tbl"><tbody id="v_sp_body"></tbody></table>
   </div>
   <div class="grid">
@@ -731,6 +750,10 @@ TRAINING_DASHBOARD_HTML = """<!DOCTYPE html>
       const j = await r.json();
       err.style.display = 'none';
       if (!j.ok) { err.textContent = (j.error || 'error') + ': ' + (j.detail || ''); err.style.display = 'block'; return; }
+      var sem = j.semantics || {};
+      document.getElementById('v_sem1').textContent = sem.loop_tick_means || '—';
+      document.getElementById('v_sem2').textContent = sem.attempt_log_vs_tick || '—';
+      document.getElementById('v_sem3').textContent = sem.paper_ledger_vs_tick || '—';
       var ls = j.learning_signal || {};
       document.getElementById('v_ls_head').textContent = ls.headline || '—';
       document.getElementById('v_ls_detail').textContent = ls.detail || '';
@@ -760,11 +783,24 @@ TRAINING_DASHBOARD_HTML = """<!DOCTYPE html>
         row(ab, 'Generated (UTC)', as.generated_at || '—');
         row(ab, 'Headline', as.interpretation_headline);
         row(ab, 'Summary', as.interpretation_summary);
+        row(ab, 'Concepts used', (as.concepts_used || []).join(', ') || '—');
+        row(ab, 'Policy guardrail mode', as.policy_guardrail_mode || '—');
+        row(ab, 'Policy alignment', as.policy_alignment || '—');
+        row(ab, 'Strategy playbook applied', as.strategy_playbook_applied != null ? String(as.strategy_playbook_applied) : '—');
+        row(ab, 'Strategy concepts (detected)', (as.strategy_concepts_detected || []).join(', ') || '—');
+        row(ab, 'Strategy explanation', as.strategy_explanation || '—');
+        row(ab, 'Strategy risks', (as.strategy_risks || []).join(' · ') || '—');
+        row(ab, 'Trading-core signal snapshot', as.trading_core_signal_snapshot || '—');
+        row(ab, 'Math engine (snapshot)', as.math_engine_snapshot || '—');
         row(ab, 'Risk level', as.risk_level);
         row(ab, 'Risk factors', (as.risk_factors || []).join(' · ') || '—');
         row(ab, 'Suggested intent', as.suggested_intent);
         row(ab, 'Suggested rationale', as.suggested_rationale || '—');
-        row(ab, 'Market price / spread', (as.market_price != null ? as.market_price : '—') + ' / ' + (as.market_spread != null ? as.market_spread : '—'));
+        var mps = (as.market_price != null ? as.market_price : '—') + ' / ' + (as.market_spread != null ? as.market_spread : '—');
+        if (as.market_price == null && as.market_spread == null) {
+          mps += ' — (no price in snapshot: market snapshot / DB tasks may be empty; see Notes)';
+        }
+        row(ab, 'Market price / spread', mps);
         row(ab, 'Regime', as.regime || '—');
         row(ab, 'Signals', (as.interpretation_signals || []).join(', ') || '—');
         row(ab, 'Cumulative log entries (school)', as.cumulative_log_entries != null ? String(as.cumulative_log_entries) : '—');
@@ -781,11 +817,20 @@ TRAINING_DASHBOARD_HTML = """<!DOCTYPE html>
       var sb = document.getElementById('v_sp_body');
       sb.innerHTML = '';
       row(sb, 'Drill ran this tick', sp.ran ? 'yes' : 'no');
+      row(sb, 'Deck focus (snapshot)', sp.current_focus || j.skills_deck_focus || '—');
+      var noteText = sp.note || '—';
+      if (sp.ran) noteText = '(n/a — tool drill ran this tick)';
+      row(sb, 'Why no tool drill / note', noteText);
       row(sb, 'Skill id', sp.skill_id || '—');
       row(sb, 'Passed', sp.passed != null ? (sp.passed ? 'yes' : 'no') : '—');
       row(sb, 'Summary', sp.summary || '—');
       row(sb, 'Practice kind', sp.practice_kind || '—');
-      row(sb, 'Detail', sp.detail || '—');
+      var det = sp.detail;
+      if (det != null && typeof det === 'object') {
+        row(sb, 'Detail', JSON.stringify(det));
+      } else {
+        row(sb, 'Detail', det != null && det !== '' ? String(det) : '—');
+      }
       document.getElementById('v_iter').textContent = j.loop.karpathy_loop_iteration ?? '—';
       document.getElementById('v_tick').textContent = j.loop.karpathy_loop_last_tick_utc ? 'last tick ' + j.loop.karpathy_loop_last_tick_utc : '';
       const gp = j.gates.pass;

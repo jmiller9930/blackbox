@@ -16,6 +16,7 @@ Requires for paper rows: ``BLACKBOX_JACK_EXECUTOR_CMD`` (and delegate enabled) l
 
 from __future__ import annotations
 
+import json
 import os
 import sys
 from pathlib import Path
@@ -72,6 +73,40 @@ def analysis_snapshot_for_dashboard(analysis: dict[str, Any]) -> dict[str, Any]:
     if not isinstance(steps, list):
         steps = []
 
+    pol = analysis.get("policy_alignment") if isinstance(analysis.get("policy_alignment"), dict) else {}
+    concepts = analysis.get("concepts_used")
+    if isinstance(concepts, list):
+        concepts_out = [str(c) for c in concepts[:16]]
+    else:
+        concepts_out = []
+
+    sa = analysis.get("strategy_awareness")
+    sa_detected: list[str] = []
+    sa_expl = ""
+    sa_risks: list[str] = []
+    if isinstance(sa, dict):
+        det = sa.get("detected")
+        if isinstance(det, list):
+            sa_detected = [str(x) for x in det[:12]]
+        sa_expl = str(sa.get("explanation") or "")[:700]
+        rs = sa.get("risks")
+        if isinstance(rs, list):
+            sa_risks = [str(x) for x in rs[:8]]
+
+    sig_snap = analysis.get("signal_snapshot")
+    sig_line = ""
+    if isinstance(sig_snap, dict):
+        sig_line = json.dumps(sig_snap, ensure_ascii=False)[:900]
+    elif sig_snap is not None:
+        sig_line = str(sig_snap)[:500]
+
+    me = analysis.get("math_engine")
+    me_line = ""
+    if isinstance(me, dict):
+        me_line = json.dumps(me, ensure_ascii=False)[:600]
+    elif me is not None:
+        me_line = str(me)[:400]
+
     return {
         "generated_at": analysis.get("generated_at"),
         "answer_source": pipe.get("answer_source"),
@@ -91,6 +126,15 @@ def analysis_snapshot_for_dashboard(analysis: dict[str, Any]) -> dict[str, Any]:
         "cumulative_log_entries": cum.get("cumulative_log_entries"),
         "interpretation_signals": sig_out,
         "analysis_notes_tail": note_lines,
+        "concepts_used": concepts_out,
+        "policy_guardrail_mode": pol.get("guardrail_mode") or pol.get("mode"),
+        "policy_alignment": pol.get("alignment"),
+        "strategy_playbook_applied": bool(analysis.get("strategy_playbook_applied")),
+        "strategy_concepts_detected": sa_detected,
+        "strategy_explanation": sa_expl,
+        "strategy_risks": sa_risks,
+        "trading_core_signal_snapshot": sig_line,
+        "math_engine_snapshot": me_line,
     }
 
 
