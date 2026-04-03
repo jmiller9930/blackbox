@@ -1,10 +1,14 @@
 """
 Anna strategy signal → execution_request_v1 (Jack downstream after approve + run_execution).
 
+**Trader mode (optional, off by default):** ``ANNA_TRADER_MODE_AUTO_EXECUTE=1`` auto-approves the
+pending request and runs ``run_execution`` so Jack can fire immediately after a strategy signal.
+Use only in controlled environments; default is human approve.
+
 Contract:
   - ``create_request`` may require a valid ``anna_proposal_v1`` (see ``BLACKBOX_REQUIRE_ANNA_PROPOSAL_FOR_EXECUTION``).
   - After Anna analysis, non-``OBSERVATION_ONLY`` proposals auto-create a **pending** request so every
-    strategy signal is wired to the same Jack path (approval still required).
+    strategy signal is wired to the same Jack path (unless trader mode auto-runs).
 """
 from __future__ import annotations
 
@@ -112,5 +116,28 @@ def try_create_execution_request_from_anna_analysis(
         "request_id": rid,
         "proposal_type": proposal.get("proposal_type"),
         "venue_executor": "jack",
-        "note": "Anna-sourced strategy signal → execution_request_v1; approve then run_execution to invoke Jack (when configured).",
+        "note": "Anna-sourced strategy signal → execution_request_v1; approve then run_execution to invoke Jack (when configured), or enable ANNA_TRADER_MODE_AUTO_EXECUTE for immediate Jack (lab).",
     }
+
+
+def maybe_trader_mode_auto_execute(request_id: str) -> dict[str, Any] | None:
+    """
+    If ``ANNA_TRADER_MODE_AUTO_EXECUTE`` is set, approve the request and ``run_execution`` (→ Jack delegate).
+
+    Anna still only supplied the signal; approval identity is ``ANNA_TRADER_MODE_APPROVER_ID`` or
+    ``trader-mode-auto``. Returns execution result dict, or None if disabled.
+    """
+    if not _env_bool("ANNA_TRADER_MODE_AUTO_EXECUTE", False):
+        return None
+    try:
+        from execution_plane.approval_manager import approve_request
+        from execution_plane.execution_engine import run_execution
+    except Exception as e:  # noqa: BLE001
+        logger.warning("trader_mode_auto_execute import failed: %s", e)
+        return None
+
+    approver = (os.environ.get("ANNA_TRADER_MODE_APPROVER_ID") or "trader-mode-auto").strip() or "trader-mode-auto"
+    approved = approve_request(request_id, approver)
+    if not approved:
+        return {"status": "blocked", "reason": "approve_failed", "request_id": request_id}
+    return run_execution(request_id)

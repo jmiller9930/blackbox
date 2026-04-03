@@ -364,6 +364,12 @@ def _execution_handoff_footer(data: dict[str, Any]) -> str:
     rid = eh.get("request_id")
     if not rid:
         return ""
+    tm = data.get("trader_mode_execution") or {}
+    jd = tm.get("jack_delegate") if isinstance(tm, dict) else None
+    if isinstance(jd, dict) and jd.get("paper_logged"):
+        return (
+            f"\n\n— Trader mode: Jack executed for request {rid}; paper row recorded (venue side)."
+        )
     return (
         "\n\n— Execution handoff: request "
         f"{rid} pending approval → Jack (Jupiter) after approve + run_execution."

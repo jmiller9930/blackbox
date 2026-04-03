@@ -1,5 +1,10 @@
 """Optional handoff: after an approved execution request completes, invoke Jack (executor).
 
+**Separation of roles:** Anna analyzes and emits strategy (``anna_proposal_v1`` / go–no-go posture).
+She does **not** implement venue submit mechanics. **Jack** is the Jupiter executor: how the trade is
+placed, filled, or paper-mapped is **Jack’s** concern; this bridge only passes the approved
+``execution_request_v1`` snapshot on stdin and may append a **paper** row from Jack’s stdout.
+
 Contract (operator-supplied executable via ``BLACKBOX_JACK_EXECUTOR_CMD``):
   - **stdin:** one JSON object:
     ``{"kind":"blackbox_jack_handoff_v1","execution_request":{...},"mock_execution_result":{...}}``

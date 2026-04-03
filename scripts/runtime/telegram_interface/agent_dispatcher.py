@@ -161,7 +161,10 @@ def dispatch(routed: RoutedMessage, *, display_name: str | None = None) -> dict[
             skip_preflight=True,
         )
         if not out.get("preflight"):
-            from execution_plane.anna_signal_execution import try_create_execution_request_from_anna_analysis
+            from execution_plane.anna_signal_execution import (
+                maybe_trader_mode_auto_execute,
+                try_create_execution_request_from_anna_analysis,
+            )
 
             analysis = out.get("anna_analysis") or {}
             handoff = try_create_execution_request_from_anna_analysis(
@@ -170,6 +173,9 @@ def dispatch(routed: RoutedMessage, *, display_name: str | None = None) -> dict[
             )
             if handoff:
                 out = {**out, "execution_handoff": handoff}
+                tm = maybe_trader_mode_auto_execute(str(handoff["request_id"]))
+                if tm:
+                    out = {**out, "trader_mode_execution": tm}
         return {"kind": "anna", "data": out}
 
     if routed.agent == "cody":

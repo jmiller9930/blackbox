@@ -2,7 +2,7 @@
 
 # Agent Registry — BlackBox System
 
-Generated: 2026-04-03T18:28:06.212818+00:00
+Generated: 2026-04-03T18:30:29.683452+00:00
 
 ---
 
@@ -197,6 +197,8 @@ This registry defines who agents are and what they may do: allowed tool classes,
   - Consumes market data from Mia
   - Production analyst ingress is **Slack** (OpenClaw → `slack_anna_ingress.py` → `anna_entry.py` → shared dispatch). Shared routing lives under `telegram_interface/` (transport-agnostic); Telegram bot is an alternate deployment.
   - **Jack line (contract):** Slack/OpenClaw does not submit orders. After **human-approved** `execution_request_v1`, `run_execution` may delegate to **Jack** via `BLACKBOX_JACK_EXECUTOR_CMD` — stdin/stdout JSON per `modules/anna_training/jack_executor_bridge.py`; optional `paper_trade` append for the Grade-12 log.
+  - **Strategy signal wire:** Anna analysis dispatch builds `anna_proposal_v1`; non-`OBSERVATION_ONLY` signals create a **pending** `execution_request_v1` (same Jack pipeline). Tests default `ANNA_AUTO_EXECUTION_REQUEST=0`. `create_request` requires valid Anna proposals when `BLACKBOX_REQUIRE_ANNA_PROPOSAL_FOR_EXECUTION=1` (default).
+  - **Trader mode (lab):** `ANNA_TRADER_MODE_AUTO_EXECUTE=1` auto-approves that request and runs `run_execution` so **Jack** can run immediately; Anna still only analyzes — placement is Jack. Default off; tests force off.
 - **Context profile (Gap 5):** see per-agent `CONTEXT_PROFILE.md` — inject/write/memory/artifacts/conversation mode.
 
 

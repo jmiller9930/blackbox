@@ -8,3 +8,5 @@ os.environ.setdefault("ANNA_SKIP_PREFLIGHT", "1")
 os.environ.setdefault("ANNA_MATH_ENGINE_FULL", "0")
 # Avoid writing execution_request_v1 rows during unrelated tests (enable per test if needed).
 os.environ.setdefault("ANNA_AUTO_EXECUTION_REQUEST", "0")
+# Never auto-approve / auto-run execution in the suite unless a test sets it.
+os.environ.setdefault("ANNA_TRADER_MODE_AUTO_EXECUTE", "0")
