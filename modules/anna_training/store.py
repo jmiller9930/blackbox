@@ -45,6 +45,9 @@ def load_state() -> dict[str, Any]:
 
 
 def save_state(state: dict[str, Any]) -> None:
+    from modules.anna_training.internalized_knowledge import maybe_grade12_internalize
+
+    maybe_grade12_internalize(state)
     d = anna_training_dir()
     d.mkdir(parents=True, exist_ok=True)
     tmp = d / (STATE_FILE_NAME + ".tmp")

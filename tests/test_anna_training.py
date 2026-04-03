@@ -52,6 +52,29 @@ def test_karpathy_once_writes_skills_deck_and_cycle_log(tmp_path: Path, monkeypa
     )
 
 
+def test_grade12_internalizes_when_all_tools_pass(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setenv("BLACKBOX_ANNA_TRAINING_DIR", str(tmp_path))
+    from modules.anna_training.curriculum_tools import TOOL_IDS
+    from modules.anna_training.store import load_state, save_state
+
+    st = load_state()
+    st["grade_12_tool_mastery"] = {tid: True for tid in TOOL_IDS}
+    save_state(st)
+    st2 = load_state()
+    snap = st2.get("grade_12_knowledge_internalized")
+    assert isinstance(snap, dict)
+    assert snap.get("version") == 1
+    assert len(snap.get("skills") or []) == len(TOOL_IDS)
+    assert any("INTERNALIZED G12" in str(b) for b in (st2.get("carryforward_bullets") or []))
+    assert any(
+        e.get("kind") == "grade_12_knowledge_internalized_v1"
+        for e in (st2.get("cumulative_learning_log") or [])
+    )
+    save_state(st2)
+    st3 = load_state()
+    assert len([e for e in (st3.get("cumulative_learning_log") or []) if e.get("kind") == "grade_12_knowledge_internalized_v1"]) == 1
+
+
 def test_learning_signal_verdict_binary_pass_not_pass(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.setenv("BLACKBOX_ANNA_TRAINING_DIR", str(tmp_path))
     from modules.anna_training.gates import evaluate_grade12_gates

@@ -90,6 +90,7 @@ Human / exam-board judgment above the software minimum remains as in §1.3; this
    - **`rcs_rca_discipline`** — **RCS** on outcomes; **RCA** when policy/gates say so (see §3.3 — same DNA, checklist makes it visible before headline metrics).
    - **`karpathy_harness_loop`** — paper harness: propose → test → measure → keep/drop → repeat (canonical **Karpathy** steps in `catalog.py`).
    By default the long-running **loop daemon** does **not** auto-flip checklist flags (**heartbeats ≠ mastery**). With **`ANNA_KARPATHY_AUTO_ATTEST_TOOLS=1`**, it may set a tool to **passed** only when **binary** skill practice for that tool’s predicate succeeds; otherwise **operator** attestation after evidence (`anna tool-pass <id>`) remains required.
+   **Internalized knowledge (software):** When all **four** tools are **passed**, `save_state` (any path) runs **`maybe_grade12_internalize`** once: it stamps **`grade_12_knowledge_internalized`** in `state.json`, appends **carryforward** FACT lines so Anna’s analyst merge treats the full Grade-12 set as **durable operating knowledge**, and logs **`grade_12_knowledge_internalized_v1`** to the cumulative learning log. This is the mechanism that moves checklist completion into **internalized** form for downstream prompts — not a separate “mystery” memory.
 2. **Prior learning requirements (human judgment)** — **Demonstrated competent competency** in the skills the contract requires: **§3.3** **`RCS`/`RCA`**, **Karpathy** practice in paper, **traceable** thesis ↔ outcome, and carry-forward behaviors in §3.3–3.4 (operator / exam board judge “competent,” not only logs). The **tool checklist** is the **minimum bar encoded in software**; exam-board judgment can still apply above that.
 3. **Numeric cohort gate** — After (1) is satisfied, the program’s **60%** standard (configurable) on **decisive** paper trades (won+lost), with a **minimum decisive trade count**, as implemented by **`python3 scripts/runtime/anna_training_cli.py gates`** (`ANNA_GRADE12_MIN_WIN_RATE`, `ANNA_GRADE12_MIN_DECISIVE_TRADES`). **Win rate alone** does not substitute for the tool checklist; **tools without numeric** does not satisfy overall **PASS**.
 
@@ -112,6 +113,7 @@ Human / exam-board judgment above the software minimum remains as in §1.3; this
 | Slack `#report_card` | `scripts/runtime/telegram_interface/data_status.py` → `format_anna_training_report_hashtag_text` |
 | Karpathy skill practice (binary predicates per tool) | `modules/anna_training/karpathy_skill_engine.py` |
 | Long-running Karpathy loop (ticks, deck, practice, logs) | `scripts/runtime/anna_karpathy_loop_daemon.py`; launcher: `scripts/anna_training_launch_server.sh` |
+| Grade-12 skills → internalized knowledge (one-time snapshot + carryforward FACT) | `modules/anna_training/internalized_knowledge.py` (invoked from `save_state`) |
 
 ### 1.5 Fund assignment, growth objectives, math bar, algorithms (binding spec)
 
