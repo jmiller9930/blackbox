@@ -15,6 +15,7 @@ Examples (repo root):
   python3 scripts/runtime/anna_training_cli.py status
   python3 scripts/runtime/anna_training_cli.py log-trade --symbol SOL-PERP --side long --result won --pnl-usd 10.5 --timeframe 5m
   python3 scripts/runtime/anna_training_cli.py dashboard
+  python3 scripts/runtime/anna_training_cli.py dashboard --live --interval 5   # compact live (default); add --full for report-card wall
   python3 scripts/runtime/anna_training_cli.py report-card --out docs/working/anna_grade12_report_card.md --recipient Sean
   python3 scripts/runtime/anna_training_cli.py assign-curriculum grade_12_paper_only
   python3 scripts/runtime/anna_training_cli.py invoke-method karpathy_loop_v1
@@ -435,12 +436,14 @@ def _require_preflight_or_exit() -> int | None:
 
 def _cmd_dashboard(args: argparse.Namespace | None = None) -> int:
     live = bool(getattr(args, "live", False) if args is not None else False)
+    live_full = bool(getattr(args, "full", False) if args is not None else False)
     refresh_sec = max(3.0, float(getattr(args, "interval", 10.0) if args is not None else 10.0))
 
     try:
-        from rich.console import Console
+        from rich.console import Console, Group
         from rich.panel import Panel
         from rich.table import Table
+        from rich.text import Text
     except ImportError:
         trades = load_paper_trades_for_gates()
         s = summarize_trades(trades)
@@ -472,7 +475,87 @@ def _cmd_dashboard(args: argparse.Namespace | None = None) -> int:
         )
         return 0
 
-    def _print_once() -> None:
+    def _harness_one_liner(ph: object) -> str:
+        if not isinstance(ph, dict) or not ph:
+            return "no harness snapshot yet (daemon just started?)"
+        if ph.get("enabled") is False:
+            return str(ph.get("reason") or "harness off")
+        if ph.get("error"):
+            return f"error: {ph.get('error')}"
+        if ph.get("skipped"):
+            return str(ph.get("skipped"))
+        if ph.get("paper_logged") is True:
+            return (
+                f"PAPER ROW LOGGED  execution={ph.get('execution_status')}  "
+                f"req={str(ph.get('request_id', ''))[:12]}"
+            )
+        if ph.get("request_id"):
+            return f"pending request {str(ph.get('request_id'))[:12]}…"
+        return str(ph.get("detail") or ph)[:200]
+
+    def _build_dashboard_compact_group(*, show_live_footer: bool = False) -> Group:
+        """Minimal live view: counts + last harness line + short trade strip (no report-card wall)."""
+        st = load_state()
+        g12 = evaluate_grade12_gates()
+        trades = load_paper_trades_for_gates()
+        s = summarize_trades(trades)
+        act = summarize_trade_activity()
+        n = st.get("karpathy_loop_iteration")
+        last_tick = st.get("karpathy_loop_last_tick_utc") or "—"
+        ph = st.get("karpathy_last_paper_harness")
+        top = (
+            f"[bold]Loop[/bold] iter [cyan]{n}[/cyan]   [dim]last_tick[/dim] {last_tick}\n"
+            f"[bold]Gates[/bold] {'[green]PASS[/green]' if g12.get('pass') else '[red]NOT PASS[/red]'}   "
+            f"decisive [yellow]{g12.get('decisive_trades')}/{g12.get('min_decisive_trades')}[/yellow]   "
+            f"paper_rows [green]{s.trade_count}[/green]   "
+            f"attempt_log_events [magenta]{act.total_events}[/magenta]\n"
+            f"[dim]Rows in this table = appended paper trades only. Harness runs each tick; "
+            f"a new row needs Jack (BLACKBOX_JACK_EXECUTOR_CMD) + a strategy execution path. "
+            f"Files: {trades_path()} | {attempts_path()}[/dim]"
+        )
+        parts: list = [
+            Panel.fit(
+                top,
+                title="Anna — live monitor (compact)",
+                border_style="cyan",
+            ),
+            Panel.fit(
+                _harness_one_liner(ph),
+                title="Last paper harness (daemon tick)",
+                border_style="blue",
+            ),
+        ]
+        ct = Table(
+            title="Paper trades (newest at bottom; max 12)",
+            show_header=True,
+            header_style="bold",
+        )
+        for c in ("UTC", "Sym", "Side", "Result", "P&L", "Src"):
+            ct.add_column(c, overflow="ellipsis")
+        for row in sorted(trades, key=lambda x: x.get("ts_utc") or "")[-12:]:
+            ct.add_row(
+                str(row.get("ts_utc", ""))[:19],
+                str(row.get("symbol", ""))[:12],
+                str(row.get("side", ""))[:6],
+                str(row.get("result", ""))[:10],
+                f"{float(row.get('pnl_usd') or 0):.2f}",
+                str(row.get("source") or "")[:10] or "—",
+            )
+        parts.append(ct)
+        parts.append(
+            Text.from_markup(
+                "[dim]Tip: full report card wall →  dashboard --live --full  |  JSON status →  anna status[/dim]"
+            )
+        )
+        if show_live_footer:
+            parts.append(
+                Text.from_markup(
+                    f"[dim]Refreshing every {refresh_sec:.0f}s — Ctrl+C. Compact mode (default with --live).[/dim]"
+                )
+            )
+        return Group(*parts)
+
+    def _build_dashboard_group(*, show_live_footer: bool = False) -> Group:
         st = load_state()
         cid = (st.get("curriculum_id") or "") or ""
         cur = CURRICULA.get(cid) if cid else None
@@ -598,27 +681,50 @@ def _cmd_dashboard(args: argparse.Namespace | None = None) -> int:
         if req_bits:
             req_line = "\n[dim]Optional numeric gates also require:[/dim] " + " | ".join(req_bits)
         pnl_note = (
-            "\n[dim]Outcome (won/lost) is separate from P&L $: each row’s pnl_usd is what you logged "
-            "(e.g. anna log-trade). Won + $0 means pnl_usd was 0 — use modeled $ when logging.[/dim]"
-            "\n[dim]School / Karpathy does not auto-append trades from Jupiter; add rows via log-trade or Jack bridge.[/dim]"
+            "\n[dim]Outcome (won/lost) vs P&L $: each row’s pnl_usd from log-trade or Jack paper.[/dim]"
+            "\n[dim]Daemon: paper harness runs each tick when enabled; set BLACKBOX_JACK_EXECUTOR_CMD for fills.[/dim]"
         )
-        console = Console()
         mandate_lines = build_school_mandate_fact_lines(g12=g12, st=st)
-        console.print(
+        parts: list = [
             Panel.fit(
                 "\n".join(f"  • {ln}" for ln in mandate_lines),
                 title="School mandate (analyst FACTs — repeat work until gates pass)",
                 border_style="magenta",
             )
-        )
+        ]
         _bs = border_learning if border_learning in ("green", "yellow", "red") else ("green" if gate_pass else "red")
-        console.print(
+        parts.append(
             Panel.fit(
                 report_body,
                 title="Anna — report card (live)",
                 border_style=_bs,
             )
         )
+        ph = st.get("karpathy_last_paper_harness")
+        if isinstance(ph, dict) and ph:
+            ph_lines = []
+            if ph.get("enabled") is False:
+                ph_lines.append(f"[dim]{ph.get('reason', 'off')}[/dim]")
+            elif ph.get("error"):
+                ph_lines.append(f"[red]{ph.get('error')}[/red]")
+            elif ph.get("skipped"):
+                ph_lines.append(f"[yellow]{ph.get('skipped')}[/yellow]")
+            elif ph.get("paper_logged") is True:
+                ph_lines.append(
+                    f"[green]paper_logged[/green]  request={str(ph.get('request_id', ''))[:12]}… "
+                    f"status={ph.get('execution_status')}"
+                )
+            elif ph.get("request_id"):
+                ph_lines.append(f"[cyan]request[/cyan] {ph.get('request_id')}  pending={ph.get('pending', False)}")
+            else:
+                ph_lines.append(json.dumps(ph, default=str)[:1200])
+            parts.append(
+                Panel.fit(
+                    "\n".join(str(x) for x in ph_lines),
+                    title="Paper harness (last daemon tick)",
+                    border_style="blue",
+                )
+            )
 
         tm = normalize_tool_mastery(st.get("grade_12_tool_mastery"))
         cur_focus = g12.get("grade_12_current_focus")
@@ -647,7 +753,7 @@ def _cmd_dashboard(args: argparse.Namespace | None = None) -> int:
                 "[green]PASS[/green]" if ok else "[yellow]not yet[/yellow]",
                 f"[green]{pct}[/green]" if ok else f"[dim]{pct}[/dim]",
             )
-        console.print(tools_tbl)
+        parts.append(tools_tbl)
 
         meth_id = st.get("training_method_id") or "karpathy_loop_v1"
         meth = TRAINING_METHODS.get(meth_id) or {}
@@ -658,7 +764,7 @@ def _cmd_dashboard(args: argparse.Namespace | None = None) -> int:
         steps_tbl.add_column("Step")
         for i, step in enumerate(meth.get("steps") or [], start=1):
             steps_tbl.add_row(str(i), step)
-        console.print(steps_tbl)
+        parts.append(steps_tbl)
 
         act = summarize_trade_activity()
         ev_plain = format_trade_activity_evidence_lines(
@@ -674,11 +780,11 @@ def _cmd_dashboard(args: argparse.Namespace | None = None) -> int:
             s=s,
             fb=act.failed_or_blocked,
         )
-        console.print(Panel.fit(trade_vis, title="Trades — ledger vs attempts", border_style="yellow"))
+        parts.append(Panel.fit(trade_vis, title="Trades — ledger vs attempts", border_style="yellow"))
 
-        console.print(
+        parts.append(
             Panel.fit(
-                "[dim]Paper harness evidence for this report card (not live fills).[/dim]\n"
+                "[dim]Paper cohort summary (ledger + optional gates).[/dim]\n"
                 f"Trades: {s.trade_count} | W {s.wins} / L {s.losses} | "
                 f"P&L USD [bold]{s.total_pnl_usd:.2f}[/bold]"
                 + (f" | Win rate {s.win_rate:.0%}" if s.win_rate is not None else "")
@@ -740,31 +846,60 @@ def _cmd_dashboard(args: argparse.Namespace | None = None) -> int:
                 strat,
                 pref,
             )
-        console.print(table)
-        console.print(f"[dim]Ledger: {trades_path()} | Attempts: {attempts_path()}[/dim]")
-        if live:
-            console.print(
-                f"[dim]Report card refresh every {refresh_sec:.0f}s — Ctrl+C to quit. "
-                f"(Karpathy training loop is separate, e.g. anna loop in tmux.)[/dim]"
+        parts.append(table)
+        parts.append(Text.from_markup(f"[dim]Ledger: {trades_path()} | Attempts: {attempts_path()}[/dim]"))
+        if show_live_footer:
+            parts.append(
+                Text.from_markup(
+                    f"[dim]Refreshing every {refresh_sec:.0f}s — Ctrl+C to quit. "
+                    f"Alternate screen (no scrollback) when your terminal supports it.[/dim]"
+                )
             )
+        return Group(*parts)
 
     if live:
+        mode = "FULL report card" if live_full else "COMPACT (default)"
         print(
-            f"Anna report card — live refresh every {refresh_sec:.0f}s (Ctrl+C to quit).",
+            f"Anna dashboard — {mode} — every {refresh_sec:.0f}s (Ctrl+C). "
+            f"Alternate screen when supported. Use --full for the full wall of panels.",
             file=sys.stderr,
         )
+        from rich.live import Live
+
+        console = Console()
+
+        def _group() -> Group:
+            if live_full:
+                return _build_dashboard_group(show_live_footer=True)
+            return _build_dashboard_compact_group(show_live_footer=True)
+
         try:
-            while True:
-                if sys.stdout.isatty():
-                    sys.stdout.write("\033[2J\033[H")
-                    sys.stdout.flush()
-                _print_once()
-                time.sleep(refresh_sec)
+            if sys.stdout.isatty():
+                try:
+                    live_cm = Live(
+                        _group(),
+                        console=console,
+                        screen=True,
+                        transient=True,
+                        auto_refresh=False,
+                    )
+                except TypeError:
+                    live_cm = Live(_group(), console=console, screen=True, transient=True)
+                with live_cm as live:
+                    while True:
+                        time.sleep(refresh_sec)
+                        live.update(_group())
+            else:
+                while True:
+                    console.clear()
+                    console.print(_group())
+                    time.sleep(refresh_sec)
         except KeyboardInterrupt:
             print(file=sys.stderr)
             return 0
 
-    _print_once()
+    console = Console()
+    console.print(_build_dashboard_group(show_live_footer=False))
     return 0
 
 
@@ -1080,7 +1215,7 @@ def main(argv: list[str] | None = None) -> int:
     ap_dash.add_argument(
         "--live",
         action="store_true",
-        help="Keep refreshing until Ctrl+C (TTY recommended). Default interval 10s.",
+        help="Full-screen live refresh until Ctrl+C (Rich alternate screen — minimal scrollback). Default interval 10s.",
     )
     ap_dash.add_argument(
         "--interval",
@@ -1088,6 +1223,11 @@ def main(argv: list[str] | None = None) -> int:
         default=10.0,
         metavar="SEC",
         help="Seconds between refreshes when --live (minimum 3).",
+    )
+    ap_dash.add_argument(
+        "--full",
+        action="store_true",
+        help="With --live: full report card (verbose). Default --live is compact (counts + harness + short trade table).",
     )
 
     ap_r = sub.add_parser("report-card", help="Markdown grade-12 report for Sean (or stdout).")
