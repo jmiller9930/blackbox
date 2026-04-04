@@ -8,16 +8,18 @@ Env:
   ANNA_KARPATHY_DISABLE_LAB_WIRE_JACK — if ``1``/true: keep ``OBSERVATION_ONLY`` (no execution_request from
     observational classification). **Default is off** — thin analyses map to ``CONDITION_TIGHTENING`` so the
     base harness can create a pending request. ``ANNA_KARPATHY_LAB_WIRE_JACK=0`` is an alias for the same opt-out.
-    Still need ``BLACKBOX_JACK_EXECUTOR_CMD`` **or** ``ANNA_KARPATHY_JACK_STUB=1`` for ``run_execution`` → Jack paper.
-  ANNA_KARPATHY_JACK_STUB — if ``1``/true and ``BLACKBOX_JACK_EXECUTOR_CMD`` is unset, use
-    ``scripts/runtime/jack_paper_bump_stub.py`` (deterministic paper row; lab / agents without a real Jupiter Jack).
+    For ``run_execution`` → Jack paper: set ``BLACKBOX_JACK_EXECUTOR_CMD``, **or** rely on the **default**
+    bundled stub when the command is unset (tier-1 school). Set ``ANNA_KARPATHY_JACK_STUB=0`` to disable the stub
+    and require an explicit executor command.
+  ANNA_KARPATHY_JACK_STUB — default **on** when ``BLACKBOX_JACK_EXECUTOR_CMD`` is unset: use
+    ``scripts/runtime/jack_paper_bump_stub.py`` (deterministic paper row). Set ``0``/false to opt out.
   ANNA_KARPATHY_PAPER_HARNESS_EACH_TICK — default **1** (true): run harness each successful tick.
   ANNA_KARPATHY_AUTO_RUN_PAPER — default **1**: auto-approve + run_execution after a strategy signal.
   ANNA_KARPATHY_PAPER_APPROVER_ID — default ``karpathy-paper-harness``.
   ANNA_KARPATHY_HARNESS_PROMPT — override harness user text (iteration substituted if contains ``{iteration}``).
   ANNA_KARPATHY_HARNESS_USE_LLM — unset follows ANNA_USE_LLM; ``0``/``1`` forces off/on for harness only.
 
-Requires for paper rows: ``BLACKBOX_JACK_EXECUTOR_CMD`` **or** ``ANNA_KARPATHY_JACK_STUB=1`` (and delegate enabled).
+Requires for paper rows: real Jack command **or** default stub (unless ``ANNA_KARPATHY_JACK_STUB=0``); ``BLACKBOX_JACK_DELEGATE_ENABLED`` on.
 """
 
 from __future__ import annotations
@@ -260,10 +262,12 @@ def run_karpathy_paper_harness_tick(*, iteration: int) -> dict[str, Any]:
         )
 
     jack = (os.environ.get("BLACKBOX_JACK_EXECUTOR_CMD") or "").strip()
-    if not jack and _env_bool("ANNA_KARPATHY_JACK_STUB", False):
-        stub = _runtime_scripts() / "jack_paper_bump_stub.py"
-        if stub.is_file():
-            jack = f"{sys.executable} {stub}"
+    if not jack:
+        # Tier-1 school: complete the paper path without a real Jupiter Jack unless explicitly disabled.
+        if _env_bool("ANNA_KARPATHY_JACK_STUB", True):
+            stub = _runtime_scripts() / "jack_paper_bump_stub.py"
+            if stub.is_file():
+                jack = f"{sys.executable} {stub}"
     if not jack:
         return _with_analysis_snapshot(
             analysis,
@@ -271,7 +275,10 @@ def run_karpathy_paper_harness_tick(*, iteration: int) -> dict[str, Any]:
                 "enabled": True,
                 "iteration": iteration,
                 "request_id": rid,
-                "skipped": "BLACKBOX_JACK_EXECUTOR_CMD unset — set it or ANNA_KARPATHY_JACK_STUB=1 (lab bump stub)",
+                "skipped": (
+                    "No Jack executor: set BLACKBOX_JACK_EXECUTOR_CMD or enable bundled stub "
+                    "(default on when cmd unset; ANNA_KARPATHY_JACK_STUB=0 opts out)"
+                ),
             },
         )
 

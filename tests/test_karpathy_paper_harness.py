@@ -132,6 +132,52 @@ def test_harness_uses_builtin_jack_stub_when_env(tmp_path, monkeypatch: pytest.M
     assert out.get("skipped") is None
 
 
+def test_harness_default_stub_when_no_jack_cmd_no_stub_env(tmp_path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Bundled stub is default when JACK cmd unset (tier-1); no ANNA_KARPATHY_JACK_STUB needed."""
+    anna_dir = tmp_path / "anna_training"
+    anna_dir.mkdir()
+    monkeypatch.setenv("BLACKBOX_ANNA_TRAINING_DIR", str(anna_dir))
+    monkeypatch.setenv("ANNA_KARPATHY_PAPER_HARNESS_EACH_TICK", "1")
+    monkeypatch.setenv("ANNA_KARPATHY_AUTO_RUN_PAPER", "1")
+    monkeypatch.setenv("BLACKBOX_REQUIRE_ANNA_PROPOSAL_FOR_EXECUTION", "1")
+    monkeypatch.setenv("BLACKBOX_JACK_DELEGATE_ENABLED", "1")
+    monkeypatch.setenv("ANNA_AUTO_EXECUTION_REQUEST", "1")
+    monkeypatch.delenv("BLACKBOX_JACK_EXECUTOR_CMD", raising=False)
+    monkeypatch.delenv("ANNA_KARPATHY_JACK_STUB", raising=False)
+
+    import execution_plane.approval_manager as am
+    import execution_plane.execution_engine as ee
+
+    monkeypatch.setattr(am, "REQUESTS_PATH", tmp_path / "execution_requests.json")
+    monkeypatch.setattr(ee, "is_active", lambda: False)
+
+    def _fake_analyze(*_a, **_k):
+        return {
+            "anna_analysis": {
+                "input_text": "harness",
+                "policy_alignment": {"guardrail_mode": "FROZEN", "alignment": "caution"},
+                "risk_assessment": {"level": "high", "factors": []},
+                "suggested_action": {"intent": "HOLD", "rationale": ""},
+                "concepts_used": ["risk"],
+                "interpretation": {"summary": "elevated risk", "headline": "Risk", "signals": []},
+                "caution_flags": [],
+                "notes": [],
+                "pipeline": {"answer_source": "test"},
+            }
+        }
+
+    monkeypatch.setenv("ANNA_KARPATHY_HARNESS_USE_LLM", "0")
+    import anna_analyst_v1 as anna_analyst_v1_mod
+
+    monkeypatch.setattr(anna_analyst_v1_mod, "analyze_to_dict", _fake_analyze)
+
+    from modules.anna_training.karpathy_paper_harness import run_karpathy_paper_harness_tick
+
+    out = run_karpathy_paper_harness_tick(iteration=9)
+    assert out.get("paper_logged") is True
+    assert out.get("skipped") is None
+
+
 def test_jack_paper_bump_stub_stdout_contract() -> None:
     import subprocess
 
