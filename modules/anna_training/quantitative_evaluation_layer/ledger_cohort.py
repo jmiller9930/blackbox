@@ -20,7 +20,8 @@ def _default_market_db_path() -> Path:
     raw = (os.environ.get("BLACKBOX_MARKET_DATA_DB") or "").strip()
     if raw:
         return Path(raw).expanduser()
-    return Path(__file__).resolve().parents[2] / "data" / "sqlite" / "market_data.db"
+    # Repo root is parents[3]: …/quantitative_evaluation_layer/ledger_cohort.py → anna_training → modules → blackbox
+    return Path(__file__).resolve().parents[3] / "data" / "sqlite" / "market_data.db"
 
 
 def fetch_bar_by_market_event_id(
