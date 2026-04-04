@@ -31,9 +31,14 @@ config/notification_recipients.local.json
 ops/hermes_pm.env
 
 # Local secrets (never commit)
+.env
+.env.bak
 .env.local
 .env.*.local
 .secrets/
+
+# Context engine local store (host-local; BLACKBOX_CONTEXT_ROOT or default data/context_engine)
+data/context_engine/
 
 # macOS
 .DS_Store
