@@ -8,19 +8,22 @@ from typing import Any
 # docs/architect/ANNA_GOES_TO_SCHOOL.md §1.1, §1.2, and §3. Loop steps below MUST match §3 numbering (7 steps).
 CURRICULA: dict[str, dict[str, Any]] = {
     "grade_12_paper_only": {
-        "title": "Grade 12 equivalent — paper trading only",
+        "title": "Grade 12 equivalent — basic trade training (paper only)",
+        "training_track": "basic_trade_paper",
         "stage": "secondary",
         "harness": "paper_loop_and_simulation",
         "live_venue_execution": False,
         "contract_doc": "docs/architect/ANNA_GOES_TO_SCHOOL.md §1.1 §1.2",
         "next_curriculum_id": "bachelor_paper_track_v1",
         "summary": (
-            "Anna trains against approved paper/simulation paths only; "
-            "no Billy/Jack live submits until human graduation policy says otherwise."
+            "Standalone basic trade training: paper harness, proposals, gates, RCS/RCA — "
+            "not the statistical-methods track. Policy: paper/simulation only; no live Jack/Billy until graduated. "
+            "Completing this tier (milestones + gate) is prerequisite for statistical trade training."
         ),
     },
     "bachelor_paper_track_v1": {
-        "title": "Bachelor track — paper trading (cumulative with Grade 12)",
+        "title": "Bachelor track — statistical trade training (paper; builds on basic)",
+        "training_track": "statistical_trade_paper",
         "stage": "bachelor",
         "harness": "paper_loop_and_simulation",
         "live_venue_execution": False,
@@ -28,8 +31,10 @@ CURRICULA: dict[str, dict[str, Any]] = {
         "requires_grade12_numeric_gate": True,
         "contract_doc": "docs/architect/ANNA_GOES_TO_SCHOOL.md + modules/anna_training/cumulative.py",
         "summary": (
-            "Continues Karpathy measurement on paper; all validated Grade 12 habits, math-engine literacy, "
-            "and cohort history are cumulative — deeper analysis, same harness constraints until policy changes."
+            "Separate program from basic trade training: rigorous statistical/quant work on paper "
+            "(math engine, cohort metrics, deeper measurement). Still paper-only until policy changes. "
+            "Does not replace basic training — requires it; state carries carryforward_bullets, milestones, "
+            "and tool mastery forward so prior basic-trade knowledge stays in force."
         ),
     },
 }
@@ -65,9 +70,12 @@ UNIVERSITY_METHODOLOGY_CANON: dict[str, str] = {
 COMPLEMENTARY_PEDAGOGY: list[dict[str, str]] = [
     {
         "id": "cumulative_learning_carryforward",
-        "title": "Cumulative learning — Grade 12 → bachelor; carryforward_bullets + cumulative_learning_log in state.json",
+        "title": "Retention across tracks — basic trade training → statistical trade training; state.json carryforward",
         "reference": "modules/anna_training/cumulative.py + progression.py",
-        "note": "Merged as FACT (cumulative learning) in analyst path when carryforward_bullets present",
+        "note": (
+            "Programs are separate (catalog training_track); promotion merges bullets/milestones so basic-trade "
+            "knowledge is not discarded — merged as FACT when carryforward_bullets present"
+        ),
     },
     {
         "id": "anna_math_analysis_pedagogy",

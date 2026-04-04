@@ -9,9 +9,9 @@ from modules.anna_training.store import utc_now_iso
 
 def default_carryforward_bullets() -> list[str]:
     return [
-        "Grade 12 paper harness: RCS/RCA discipline, Wilson-backed cohort stats, and explicit gates carry forward.",
+        "Basic trade training (Grade 12 tier): paper-harness discipline, RCS/RCA, gates, cohort evidence — retained when leveling to statistical trade training.",
         "Math engine literacy: cite FACT lines only; epistemic honesty when evidence is thin carries forward.",
-        "Karpathy loop habit — measure, keep/drop, repeat — is cumulative across curriculum stages.",
+        "Karpathy loop habit — measure, keep/drop, repeat — applies across both tracks; statistical track adds measurement depth, not a reset.",
     ]
 
 
@@ -59,7 +59,7 @@ def promote_to_bachelor_track(state: dict[str, Any]) -> dict[str, Any]:
     append_cumulative_log(
         state,
         kind="promoted_to_bachelor_paper_track_v1",
-        summary="Cumulative learning from Grade 12 retained; bachelor paper track active.",
+        summary="Basic trade training knowledge retained; statistical trade training (bachelor paper track) active.",
         curriculum_id="bachelor_paper_track_v1",
     )
     return state

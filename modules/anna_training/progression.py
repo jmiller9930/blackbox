@@ -66,7 +66,10 @@ def suggest_next_focus(
 
     if cid == "bachelor_paper_track_v1":
         focus = "bachelor_track_active"
-        hints.append("Cumulative learning from Grade 12 applies; continue Karpathy loop with deeper paper metrics.")
+        hints.append(
+            "Statistical trade training is separate from basic trade training; prior basic-tier knowledge stays "
+            "in state (carryforward). Continue Karpathy loop with deeper quant/statistical paper metrics."
+        )
 
     return {
         "focus": focus,

@@ -8,14 +8,16 @@ Env:
   ANNA_KARPATHY_DISABLE_LAB_WIRE_JACK — if ``1``/true: keep ``OBSERVATION_ONLY`` (no execution_request from
     observational classification). **Default is off** — thin analyses map to ``CONDITION_TIGHTENING`` so the
     base harness can create a pending request. ``ANNA_KARPATHY_LAB_WIRE_JACK=0`` is an alias for the same opt-out.
-    Still need ``BLACKBOX_JACK_EXECUTOR_CMD`` for ``run_execution`` → Jack paper.
+    Still need ``BLACKBOX_JACK_EXECUTOR_CMD`` **or** ``ANNA_KARPATHY_JACK_STUB=1`` for ``run_execution`` → Jack paper.
+  ANNA_KARPATHY_JACK_STUB — if ``1``/true and ``BLACKBOX_JACK_EXECUTOR_CMD`` is unset, use
+    ``scripts/runtime/jack_paper_bump_stub.py`` (deterministic paper row; lab / agents without a real Jupiter Jack).
   ANNA_KARPATHY_PAPER_HARNESS_EACH_TICK — default **1** (true): run harness each successful tick.
   ANNA_KARPATHY_AUTO_RUN_PAPER — default **1**: auto-approve + run_execution after a strategy signal.
   ANNA_KARPATHY_PAPER_APPROVER_ID — default ``karpathy-paper-harness``.
   ANNA_KARPATHY_HARNESS_PROMPT — override harness user text (iteration substituted if contains ``{iteration}``).
   ANNA_KARPATHY_HARNESS_USE_LLM — unset follows ANNA_USE_LLM; ``0``/``1`` forces off/on for harness only.
 
-Requires for paper rows: ``BLACKBOX_JACK_EXECUTOR_CMD`` (and delegate enabled) like the E2E test.
+Requires for paper rows: ``BLACKBOX_JACK_EXECUTOR_CMD`` **or** ``ANNA_KARPATHY_JACK_STUB=1`` (and delegate enabled).
 """
 
 from __future__ import annotations
@@ -258,6 +260,10 @@ def run_karpathy_paper_harness_tick(*, iteration: int) -> dict[str, Any]:
         )
 
     jack = (os.environ.get("BLACKBOX_JACK_EXECUTOR_CMD") or "").strip()
+    if not jack and _env_bool("ANNA_KARPATHY_JACK_STUB", False):
+        stub = _runtime_scripts() / "jack_paper_bump_stub.py"
+        if stub.is_file():
+            jack = f"{sys.executable} {stub}"
     if not jack:
         return _with_analysis_snapshot(
             analysis,
@@ -265,7 +271,7 @@ def run_karpathy_paper_harness_tick(*, iteration: int) -> dict[str, Any]:
                 "enabled": True,
                 "iteration": iteration,
                 "request_id": rid,
-                "skipped": "BLACKBOX_JACK_EXECUTOR_CMD unset — cannot run Jack paper",
+                "skipped": "BLACKBOX_JACK_EXECUTOR_CMD unset — set it or ANNA_KARPATHY_JACK_STUB=1 (lab bump stub)",
             },
         )
 
@@ -286,13 +292,23 @@ def run_karpathy_paper_harness_tick(*, iteration: int) -> dict[str, Any]:
             {"enabled": True, "request_id": rid, "error": "approve_request returned None"},
         )
 
+    prev_jack = os.environ.get("BLACKBOX_JACK_EXECUTOR_CMD")
     try:
-        result = run_execution(str(rid))
-    except Exception as e:  # noqa: BLE001
-        return _with_analysis_snapshot(
-            analysis,
-            {"enabled": True, "request_id": rid, "error": f"run_execution:{e}"},
-        )
+        # ``maybe_delegate_to_jack`` reads ``BLACKBOX_JACK_EXECUTOR_CMD`` from the environment.
+        if jack:
+            os.environ["BLACKBOX_JACK_EXECUTOR_CMD"] = jack
+        try:
+            result = run_execution(str(rid))
+        except Exception as e:  # noqa: BLE001
+            return _with_analysis_snapshot(
+                analysis,
+                {"enabled": True, "request_id": rid, "error": f"run_execution:{e}"},
+            )
+    finally:
+        if prev_jack is None:
+            os.environ.pop("BLACKBOX_JACK_EXECUTOR_CMD", None)
+        else:
+            os.environ["BLACKBOX_JACK_EXECUTOR_CMD"] = prev_jack
 
     jd = (result or {}).get("jack_delegate") or {}
     return _with_analysis_snapshot(
