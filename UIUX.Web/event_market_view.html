@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
-  <title>Event view — market_event_id</title>
+  <title>Event dashboard — market_event_id</title>
   <link rel="preconnect" href="https://fonts.googleapis.com"/>
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,600;0,9..40,700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet"/>
@@ -75,15 +75,47 @@
       line-height: 1.4;
     }
     .training-banner strong { color: #fcd34d; }
+    .layout { display: flex; align-items: flex-start; gap: 0; min-height: 100vh; }
+    .nav {
+      width: 220px; flex-shrink: 0; position: sticky; top: 0; align-self: flex-start;
+      padding: 1rem 0.75rem; border-right: 1px solid var(--border); background: var(--surface);
+      min-height: 100vh; max-height: 100vh; overflow-y: auto;
+    }
+    .nav h2 { font-size: 0.65rem; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); margin: 0 0 0.75rem; }
+    .nav a {
+      display: block; padding: 0.45rem 0.5rem; border-radius: 6px; color: var(--text); text-decoration: none;
+      font-size: 0.85rem; margin-bottom: 0.2rem; line-height: 1.3;
+    }
+    .nav a:hover { background: var(--surface2); }
+    .nav .nav-note { font-size: 0.72rem; color: var(--muted); margin-top: 1rem; padding-top: 1rem; border-top: 1px solid var(--border); }
+    .main { flex: 1; min-width: 0; padding: 1rem 1.25rem 2.5rem; }
+    section[id^="sec-"] { scroll-margin-top: 0.75rem; }
   </style>
 </head>
 <body>
-  <div class="wrap">
-    <h1>Event view</h1>
-    <p class="sub">Operator surface — baseline vs Anna, decision traces, API-driven (no client-side economics).</p>
-    <p class="sub" style="margin-bottom:0.75rem"><a href="/anna/event-dashboard" style="color:var(--accent)">Primary operator dashboard</a> (market + top-five + QEL) — this page is the <strong>legacy</strong> single-event tool.</p>
+  <div class="layout">
+    <nav class="nav" aria-label="Dashboard sections (same page)">
+      <h2>Sections</h2>
+      <a href="#sec-header">Title &amp; training notice</a>
+      <a href="#sec-toolbar">Query &amp; filters</a>
+      <a href="#sec-identity">Event identity</a>
+      <a href="#sec-chart">Market chart</a>
+      <a href="#sec-strategy-actions">Strategy actions (baseline + table)</a>
+      <a href="#sec-qel">Evaluation (QEL judgment)</a>
+      <a href="#sec-context">Context snapshot</a>
+      <a href="#sec-traces">Decision traces</a>
+      <a href="#sec-meta">Load metadata</a>
+      <p class="nav-note">Extended surface (top-five selection, survival dots): <a href="/anna/event-view-extended" style="color:var(--accent)">/anna/event-view-extended</a></p>
+    </nav>
+    <div class="main">
+  <div class="wrap" style="max-width:none;margin:0;padding:0">
+    <section id="sec-header">
+    <h1>Event dashboard</h1>
+    <p class="sub">Operator surface — baseline vs Anna, decision traces, API-driven (no client-side economics). Left navigation jumps to each existing panel (decomposition only; no panels removed).</p>
     <p class="training-banner" role="status"><strong>Training / paper economics.</strong> Anna lane here is paper-grade (not live-authorized). Baseline rows may be paper for harness comparison. Do not treat as production trading authorization.</p>
+    </section>
 
+    <section id="sec-toolbar">
     <div class="toolbar">
       <label>market_event_id
         <input type="text" id="mid" placeholder="SOL-PERP_5m_2026-04-04T21:45:00Z"/>
@@ -104,10 +136,14 @@
       <button type="button" class="primary" id="loadBtn">Load</button>
     </div>
     <div id="error" class="err" style="display:none"></div>
+    </section>
 
     <div id="content" style="display:none">
+      <section id="sec-identity">
       <div class="identity" id="identity"></div>
+      </section>
 
+      <section id="sec-chart">
       <div class="panel">
         <div class="panel-h">Market chart (history + event + markers)</div>
         <div class="panel-b">
@@ -115,7 +151,9 @@
           <p class="meta" id="chartNote"></p>
         </div>
       </div>
+      </section>
 
+      <section id="sec-strategy-actions">
       <div class="panel">
         <div class="panel-h">Strategy actions (this event)</div>
         <div class="panel-b">
@@ -128,7 +166,9 @@
           </table>
         </div>
       </div>
+      </section>
 
+      <section id="sec-qel">
       <div class="panel">
         <div class="panel-h">Evaluation (QEL judgment)</div>
         <div class="panel-b">
@@ -142,19 +182,28 @@
           <div id="evalBody" style="margin-top:1rem;display:none"></div>
         </div>
       </div>
+      </section>
 
+      <section id="sec-context">
       <div class="panel">
         <div class="panel-h">Context snapshot (at decision time)</div>
         <div class="panel-b"><div class="kv" id="ctx"></div></div>
       </div>
+      </section>
 
+      <section id="sec-traces">
       <div class="panel">
         <div class="panel-h">Decision traces</div>
         <div class="panel-b" id="traces"></div>
       </div>
+      </section>
 
+      <section id="sec-meta">
       <p class="meta" id="rawMeta"></p>
+      </section>
     </div>
+    </div>
+  </div>
   </div>
 
   <script>

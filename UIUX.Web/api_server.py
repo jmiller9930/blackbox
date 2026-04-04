@@ -1793,6 +1793,11 @@ class Handler(BaseHTTPRequestHandler):
             self._json(200, build_anna_operator_dashboard(q), no_cache=True)
             return
         if path in ("/anna/event-dashboard", "/anna/event-dashboard/"):
+            ev = _REPO_ROOT / "UIUX.Web" / "event_market_view.html"
+            if ev.is_file():
+                self._html(200, ev.read_text(encoding="utf-8"), no_cache=True)
+                return
+        if path in ("/anna/event-view-extended", "/anna/event-view-extended/"):
             ev = _REPO_ROOT / "UIUX.Web" / "operator_event_dashboard.html"
             if ev.is_file():
                 self._html(200, ev.read_text(encoding="utf-8"), no_cache=True)
