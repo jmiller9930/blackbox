@@ -256,6 +256,14 @@ def build_market_event_view(qs: dict[str, list[str]]) -> dict[str, Any]:
         window_days = 30.0
     hist_limit = _history_bar_limit_5m(window_days)
 
+    view_mode = (_one("view_mode") or "operator").strip().lower()
+    if view_mode not in ("operator", "expanded", "full"):
+        view_mode = "operator"
+    if view_mode == "full":
+        include_modes = None
+        exclude_modes = set()
+        lane_filter = None
+
     # Bar + history
     event_block: dict[str, Any] = {"symbol": None, "timeframe": None, "bar": None}
     history_bars: list[dict[str, Any]] = []
@@ -524,11 +532,13 @@ def build_market_event_view(qs: dict[str, list[str]]) -> dict[str, Any]:
         "ok": True,
         "market_event_id": mid,
         "defaults_used": defaults_used,
+        "view_mode": view_mode,
         "chart_window": {"window_days": window_days, "history_bar_limit_5m": hist_limit},
         "filters_applied": {
             "modes": sorted(include_modes) if include_modes else None,
             "exclude_modes": sorted(exclude_modes),
             "lane": lane_filter,
+            "view_mode": view_mode,
         },
         "ledger_path": str(ledger_path),
         "market_data_path": str(market_path),

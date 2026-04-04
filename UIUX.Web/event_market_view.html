@@ -115,9 +115,14 @@
     .sw-baseline { background: var(--baseline); }
     .sw-market { background: #94a3b8; }
     .sw-test { background: repeating-linear-gradient(90deg, #f472b6, #f472b6 4px, transparent 4px, transparent 7px); height: 0.5rem; width: 1.4rem; border-radius: 2px; }
+    body.view-operator #sec-qel { display: none !important; }
+    body.view-operator #sec-context { display: none !important; }
+    body.view-operator #sec-meta { display: none !important; }
+    body.view-expanded #sec-context .kv { font-size: 0.78rem; }
+    .trace--summary { font-family: var(--mono); font-size: 0.78rem; }
   </style>
 </head>
-<body>
+<body class="view-operator">
   <header class="app-topbar">
     <nav class="app-topbar__nav" aria-label="Anna applications">
       <a href="/anna.html">Anna hub</a>
@@ -187,6 +192,13 @@
           <option value="90">90 days</option>
         </select>
       </label>
+      <label>View mode
+        <select id="viewMode" title="Changes what data is shown (refetches)">
+          <option value="operator" selected>Operator</option>
+          <option value="expanded">Expanded</option>
+          <option value="full">Full / Debug</option>
+        </select>
+      </label>
       <button type="button" class="primary" id="loadBtn">Load</button>
     </div>
     <div id="error" class="err" style="display:none"></div>
@@ -220,7 +232,7 @@
 
       <section id="sec-strategy-toggles">
       <div class="panel">
-        <div class="panel-h">Top-five Anna strategies (chart visibility)</div>
+        <div class="panel-h" id="strategyPanelTitle">Anna strategies (chart visibility)</div>
         <div class="panel-b" id="strategyPanel"></div>
       </div>
       </section>
@@ -299,6 +311,16 @@
     return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
   }
 
+  function getViewMode() {
+    return (qs('#viewMode') && qs('#viewMode').value) ? qs('#viewMode').value : 'operator';
+  }
+
+  function applyViewModeClass() {
+    var vm = getViewMode();
+    document.body.classList.remove('view-operator', 'view-expanded', 'view-full');
+    document.body.classList.add('view-' + vm);
+  }
+
   function apiParams() {
     var parts = [];
     var mid = qs('#mid').value.trim();
@@ -308,6 +330,7 @@
     if (lane) parts.push('lane=' + encodeURIComponent(lane));
     var wd = qs('#windowDays') && qs('#windowDays').value;
     if (wd) parts.push('window_days=' + encodeURIComponent(wd));
+    parts.push('view_mode=' + encodeURIComponent(getViewMode()));
     return parts.join('&');
   }
 
@@ -338,7 +361,7 @@
     var mid = p.market_event_id;
     var overlay = p.chart_overlay || {};
     var od = p.operator_dashboard || {};
-    var topFive = od.top_five_strategy_ids || [];
+    var topFive = od.ranked_strategy_ids || od.top_five_strategy_ids || [];
     if (ruleBox) ruleBox.textContent = od.top_five_selection_rule || '';
     if (!hist.length) {
       svg.innerHTML = '';
@@ -428,14 +451,22 @@
     parts.push('<text x="' + L + '" y="' + (H - 8) + '" fill="#8b9aad" font-size="10">Older ← → Recent</text>');
     svg.innerHTML = parts.join('');
     var dg = (overlay.data_gaps || []).join(', ');
-    note.textContent = 'Bars: ' + n + '. Baseline = blue segments (ledger time span). Anna = top-five, toggleable. Tests = pink band strip. ' + (dg ? 'Gaps: ' + dg + '.' : '');
+    var vm = getViewMode();
+    note.textContent = 'Bars: ' + n + '. Mode: ' + vm + '. Baseline = blue. Anna overlays = ranked set for this mode. Tests = pink strip. ' + (dg ? 'Gaps: ' + dg + '.' : '');
   }
 
   function renderStrategyPanel(p) {
     var od = p.operator_dashboard || {};
-    var top = od.top_five_strategy_ids || [];
+    var top = od.ranked_strategy_ids || od.top_five_strategy_ids || [];
     var lc = od.lifecycle_by_strategy_id || {};
-    var html = '<p style="margin:0 0 0.75rem;font-size:0.85rem;color:var(--muted)">Server-selected top five. Baseline is always drawn on the chart (blue). Uncheck to hide an Anna overlay.</p>';
+    var vm = getViewMode();
+    var ptitle = qs('#strategyPanelTitle');
+    if (ptitle) {
+      if (vm === 'operator') ptitle.textContent = 'Anna strategies (top five — visibility)';
+      else if (vm === 'expanded') ptitle.textContent = 'Anna strategies (expanded set — visibility)';
+      else ptitle.textContent = 'Anna strategies (full registry — visibility)';
+    }
+    var html = '<p style="margin:0 0 0.75rem;font-size:0.85rem;color:var(--muted)">Server-ranked list for this view mode. Baseline is always drawn (blue). Uncheck to hide an Anna overlay.</p>';
     top.forEach(function (sid, i) {
       if (toggles[sid] === undefined) toggles[sid] = true;
       var st = lc[sid] || '—';
@@ -490,6 +521,17 @@
 
   function renderTable(p) {
     var rows = p.strategy_rows || [];
+    var vm = getViewMode();
+    var od = p.operator_dashboard || {};
+    var ranked = od.ranked_strategy_ids || od.top_five_strategy_ids || [];
+    var allow = {};
+    ranked.forEach(function (id) { allow[id] = true; });
+    if (vm === 'operator' || vm === 'expanded') {
+      rows = rows.filter(function (r) {
+        if (r.lane === 'baseline') return true;
+        return allow[r.strategy_id] === true;
+      });
+    }
     var tb = qs('#tbody');
     tb.innerHTML = rows.map(function (row) {
       var laneClass = row.lane === 'baseline' ? 'lane-baseline' : 'lane-anna';
@@ -506,15 +548,23 @@
   }
 
   function renderContext(p) {
-    var blocks = p.context_by_trade || [];
+    var vm = getViewMode();
     var el = qs('#ctx');
+    if (vm === 'operator') {
+      el.innerHTML = '<span style="color:var(--muted)">Context hidden in Operator mode — switch to Expanded or Full.</span>';
+      return;
+    }
+    var blocks = p.context_by_trade || [];
     if (!blocks.length) { el.innerHTML = '<span style="color:var(--muted)">No context_snapshot on trades.</span>'; return; }
+    var keyLimit = vm === 'expanded' ? 8 : 9999;
     el.innerHTML = blocks.map(function (b) {
       var snap = b.snapshot || {};
       var keys = Object.keys(snap);
       if (!keys.length) return '';
-      return '<div style="grid-column:1/-1;margin-bottom:0.75rem"><strong style="font-size:0.75rem;color:var(--accent)">' + esc(b.strategy_id) + '</strong> · ' + esc(b.trade_id) + '</div>' +
-        keys.map(function (k) {
+      var useKeys = vm === 'full' ? keys : keys.slice(0, keyLimit);
+      return '<div style="grid-column:1/-1;margin-bottom:0.75rem"><strong style="font-size:0.75rem;color:var(--accent)">' + esc(b.strategy_id) + '</strong> · ' + esc(b.trade_id) +
+        (vm === 'expanded' && keys.length > keyLimit ? ' · <span style="color:var(--muted)">(first ' + keyLimit + ' keys)</span>' : '') + '</div>' +
+        useKeys.map(function (k) {
           var v = snap[k];
           var disp = typeof v === 'object' ? JSON.stringify(v) : String(v);
           return '<div><kbd>' + esc(k) + '</kbd><br/>' + esc(disp) + '</div>';
@@ -531,7 +581,7 @@
     sel.innerHTML = '<option value="">— select Anna strategy —</option>' +
       ids.map(function (id) { return '<option value="' + esc(id) + '">' + esc(id) + '</option>'; }).join('');
     var od = p.operator_dashboard || {};
-    var tf = od.top_five_strategy_ids || [];
+    var tf = od.ranked_strategy_ids || od.top_five_strategy_ids || [];
     if (tf.length) sel.value = tf[0];
     else if (ids.length === 1) sel.value = ids[0];
   }
@@ -615,11 +665,19 @@
   }
 
   function renderTraces(p) {
+    var vm = getViewMode();
     var tr = p.decision_traces || [];
     var el = qs('#traces');
     if (!tr.length) { el.innerHTML = '<span style="color:var(--muted)">No decision_traces for this filter.</span>'; return; }
+    if (vm === 'operator') tr = tr.slice(0, 3);
     el.innerHTML = tr.map(function (t) {
       var steps = t.steps || [];
+      if (vm === 'operator') {
+        var summary = steps.map(function (s) { return esc(s.step_name || '?'); }).join(' → ');
+        return '<div class="trace trace--summary" style="padding:0.55rem 0.85rem;border:1px solid var(--border);border-radius:8px;margin-bottom:0.45rem;background:var(--surface2)">' +
+          '<strong>' + esc(t.strategy_id) + '</strong> · ' + esc(t.trace_id) + ' · trade ' + esc(t.trade_id) +
+          '<div style="color:var(--muted);font-size:0.72rem;margin-top:0.35rem">' + summary + '</div></div>';
+      }
       var body = steps.map(function (s, idx) {
         return '<div class="step"><h4>Step ' + (idx+1) + ' · ' + esc(s.step_name) + '</h4>' +
           '<div style="color:var(--muted);font-size:0.72rem;margin-bottom:0.35rem">' + esc(s.timestamp) + '</div>' +
@@ -628,7 +686,8 @@
           (s.rationale ? '<div><strong>rationale</strong><pre class="json">' + esc(s.rationale) + '</pre></div>' : '') +
           '</div>';
       }).join('');
-      return '<details class="trace" open="false"><summary>' + esc(t.strategy_id) + ' · ' + esc(t.trace_id) + ' · trade ' + esc(t.trade_id) + '</summary>' + body + '</details>';
+      var openAttr = vm === 'full' ? ' open' : '';
+      return '<details class="trace"' + openAttr + '><summary>' + esc(t.strategy_id) + ' · ' + esc(t.trace_id) + ' · trade ' + esc(t.trade_id) + '</summary>' + body + '</details>';
     }).join('');
   }
 
@@ -652,6 +711,7 @@
       window.__lastPayload = p;
       qs('#content').style.display = 'block';
       if (p.market_event_id) qs('#mid').value = p.market_event_id;
+      applyViewModeClass();
       var hint = qs('#loadHint');
       if (hint) hint.style.display = 'none';
       renderIdentity(p);
@@ -683,6 +743,8 @@
     if (ln) qs('#lane').value = ln;
     var wd = u.searchParams.get('window_days');
     if (wd && qs('#windowDays')) qs('#windowDays').value = wd;
+    var vm = u.searchParams.get('view_mode');
+    if (vm && qs('#viewMode') && (vm === 'operator' || vm === 'expanded' || vm === 'full')) qs('#viewMode').value = vm;
   }
 
   function applyUiScale() {
@@ -709,8 +771,15 @@
     localStorage.setItem('eventDashUiScale', this.value);
     applyUiScale();
   });
+  qs('#viewMode').addEventListener('change', function () {
+    localStorage.setItem('eventDashViewMode', this.value);
+    load();
+  });
   initFromQuery();
+  var savedVm = localStorage.getItem('eventDashViewMode');
+  if (savedVm && qs('#viewMode') && (savedVm === 'operator' || savedVm === 'expanded' || savedVm === 'full')) qs('#viewMode').value = savedVm;
   applyUiScale();
+  applyViewModeClass();
   load();
 })();
   </script>

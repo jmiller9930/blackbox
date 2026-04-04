@@ -129,15 +129,15 @@ def build_chart_overlay(
     history_bars: list[dict[str, Any]],
     symbol: str | None,
     timeframe: str | None,
-    top_five_strategy_ids: list[str],
+    allowed_anna_strategy_ids: list[str] | None,
     survival_tests_active: list[dict[str, Any]],
     db_path: Path,
 ) -> dict[str, Any]:
     """
     Build overlay metadata for the market chart + test strip.
 
-    ``strategy_position_segments`` only include Anna lane rows whose ``strategy_id`` is in
-    ``top_five_strategy_ids``. Baseline segments always include lane=baseline.
+    If ``allowed_anna_strategy_ids`` is None, every Anna lane segment in the window is included
+    (full/debug). Otherwise segments are restricted to that id set. Baseline is always included.
     """
     bars = _bars_chronological(history_bars)
     n = len(bars)
@@ -174,7 +174,9 @@ def build_chart_overlay(
     )
     merged = _dedupe_trades(in_events + spanning)
 
-    top_set = {str(s).strip() for s in top_five_strategy_ids if str(s).strip()}
+    allowed_set: set[str] | None = None
+    if allowed_anna_strategy_ids is not None:
+        allowed_set = {str(s).strip() for s in allowed_anna_strategy_ids if str(s).strip()}
 
     baseline_segments: list[dict[str, Any]] = []
     strategy_segments: list[dict[str, Any]] = []
@@ -196,8 +198,9 @@ def build_chart_overlay(
         }
         if lane == "baseline" or sid == RESERVED_STRATEGY_BASELINE:
             baseline_segments.append(seg)
-        elif lane == "anna" and sid in top_set:
-            strategy_segments.append(seg)
+        elif lane == "anna":
+            if allowed_set is None or sid in allowed_set:
+                strategy_segments.append(seg)
 
     bands: list[dict[str, Any]] = []
     for i, t in enumerate(survival_tests_active or []):

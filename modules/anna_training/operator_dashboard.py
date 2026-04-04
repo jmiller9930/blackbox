@@ -60,9 +60,9 @@ def _economic_pnl_sum_by_strategy(conn: sqlite3.Connection) -> dict[str, float]:
     return {str(r[0]): float(r[1]) for r in cur.fetchall()}
 
 
-def select_top_five_anna_strategy_ids(*, db_path: Path | None = None) -> tuple[list[str], str]:
+def select_ranked_anna_strategy_ids(*, db_path: Path | None = None, limit: int = 5) -> tuple[list[str], str]:
     """
-    Returns up to five Anna strategy_ids for chart surfacing (baseline handled separately).
+    Anna strategy_ids sorted by lifecycle maturity and economic P&L (server-side rule).
     """
     conn = connect_ledger(db_path)
     try:
@@ -88,8 +88,23 @@ def select_top_five_anna_strategy_ids(*, db_path: Path | None = None) -> tuple[l
         return (-rank, -pnl, sid)
 
     rows.sort(key=sort_key)
-    top = [sid for sid, _ in rows[:5]]
+    lim = max(1, int(limit))
+    top = [sid for sid, _ in rows[:lim]]
     return top, TOP_FIVE_RULE_DESCRIPTION
+
+
+def select_top_five_anna_strategy_ids(*, db_path: Path | None = None) -> tuple[list[str], str]:
+    """Returns up to five Anna strategy_ids (baseline handled separately)."""
+    return select_ranked_anna_strategy_ids(db_path=db_path, limit=5)
+
+
+def _overlay_limit_for_view_mode(view_mode: str) -> int:
+    vm = (view_mode or "operator").strip().lower()
+    if vm == "expanded":
+        return 12
+    if vm == "full":
+        return 10_000
+    return 5
 
 
 def query_active_survival_tests(*, db_path: Path | None = None) -> list[dict[str, Any]]:
@@ -122,21 +137,32 @@ def query_lifecycle_by_strategy(*, db_path: Path | None = None) -> dict[str, str
 
 def build_operator_dashboard(qs: dict[str, list[str]]) -> dict[str, Any]:
     """
-    Full market-event-view payload plus operator_dashboard block (top-five, survival tests, lifecycle map).
+    Full market-event-view payload plus operator_dashboard block (ranked strategies, survival tests).
     """
     base = build_market_event_view(qs)
     if not base.get("ok"):
         return base
 
+    def _one(name: str) -> str | None:
+        v = (qs.get(name) or [None])[0]
+        return (str(v) if v is not None else "").strip() or None
+
+    vm = (_one("view_mode") or "operator").strip().lower()
+    if vm not in ("operator", "expanded", "full"):
+        vm = "operator"
+
     db_path = default_execution_ledger_path()
-    top_five, rule = select_top_five_anna_strategy_ids(db_path=db_path)
+    lim = _overlay_limit_for_view_mode(vm)
+    ranked, rule = select_ranked_anna_strategy_ids(db_path=db_path, limit=lim)
     survival = query_active_survival_tests(db_path=db_path)
     lifecycle_map = query_lifecycle_by_strategy(db_path=db_path)
 
     od = {
         "schema": "anna_operator_dashboard_v1",
+        "view_mode": vm,
         "top_five_selection_rule": rule,
-        "top_five_strategy_ids": top_five,
+        "ranked_strategy_ids": ranked,
+        "top_five_strategy_ids": ranked[:5] if len(ranked) >= 5 else ranked,
         "lifecycle_by_strategy_id": lifecycle_map,
         "survival_tests_active": survival,
     }
@@ -147,11 +173,12 @@ def build_operator_dashboard(qs: dict[str, list[str]]) -> dict[str, Any]:
     sym = bar.get("canonical_symbol")
     tf = bar.get("timeframe")
     hist = (base.get("chart") or {}).get("history_bars") or []
+    allowed_overlay = None if vm == "full" else ranked
     base["chart_overlay"] = build_chart_overlay(
         history_bars=list(hist) if isinstance(hist, list) else [],
         symbol=str(sym) if sym else None,
         timeframe=str(tf) if tf else None,
-        top_five_strategy_ids=top_five,
+        allowed_anna_strategy_ids=allowed_overlay,
         survival_tests_active=survival,
         db_path=db_path,
     )
