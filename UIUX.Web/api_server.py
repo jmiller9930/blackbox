@@ -474,6 +474,21 @@ def build_anna_market_event_view(qs: dict[str, list[str]]) -> dict[str, Any]:
         }
 
 
+def build_anna_operator_dashboard(qs: dict[str, list[str]]) -> dict[str, Any]:
+    """Market-event view plus top-five selection, survival tests, lifecycle map (operator control surface)."""
+    try:
+        from modules.anna_training.operator_dashboard import build_operator_dashboard
+
+        return build_operator_dashboard(qs)
+    except ImportError as e:
+        return {
+            "schema": "anna_operator_dashboard_v1",
+            "ok": False,
+            "error": "import_failed",
+            "detail": str(e),
+        }
+
+
 def build_anna_strategy_catalog() -> dict[str, Any]:
     try:
         from modules.anna_training.market_event_view import build_strategy_catalog_response
@@ -1773,6 +1788,15 @@ class Handler(BaseHTTPRequestHandler):
             q = parse_qs(parsed.query or "")
             self._json(200, build_anna_evaluation_summary(q), no_cache=True)
             return
+        if path == "/api/v1/anna/operator-dashboard":
+            q = parse_qs(parsed.query or "")
+            self._json(200, build_anna_operator_dashboard(q), no_cache=True)
+            return
+        if path in ("/anna/event-dashboard", "/anna/event-dashboard/"):
+            ev = _REPO_ROOT / "UIUX.Web" / "operator_event_dashboard.html"
+            if ev.is_file():
+                self._html(200, ev.read_text(encoding="utf-8"), no_cache=True)
+                return
         if path in ("/anna/event-view", "/anna/event-view/"):
             ev = _REPO_ROOT / "UIUX.Web" / "event_market_view.html"
             if ev.is_file():

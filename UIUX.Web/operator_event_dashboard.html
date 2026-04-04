@@ -1,0 +1,478 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Operator event dashboard — market, strategies, QEL</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,600;0,9..40,700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet"/>
+  <style>
+    :root {
+      --bg: #0c0f14; --surface: #141a22; --surface2: #1a222d; --border: #2d3847;
+      --text: #e8edf4; --muted: #8b9aad; --accent: #f0b429; --baseline: #4a9eff;
+      --font: "DM Sans", system-ui, sans-serif; --mono: "IBM Plex Mono", ui-monospace, monospace;
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; min-height: 100vh; background: var(--bg); color: var(--text); font-family: var(--font); font-size: 15px; }
+    .layout { display: flex; min-height: 100vh; align-items: flex-start; }
+    .nav {
+      width: 220px; flex-shrink: 0; position: sticky; top: 0; align-self: flex-start;
+      padding: 1rem 0.75rem; border-right: 1px solid var(--border); background: var(--surface);
+      min-height: 100vh;
+    }
+    .nav h2 { font-size: 0.65rem; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); margin: 0 0 0.75rem; }
+    .nav a {
+      display: block; padding: 0.45rem 0.5rem; border-radius: 6px; color: var(--text); text-decoration: none;
+      font-size: 0.88rem; margin-bottom: 0.25rem;
+    }
+    .nav a:hover { background: var(--surface2); }
+    .nav .legacy { margin-top: 1.25rem; padding-top: 1rem; border-top: 1px solid var(--border); font-size: 0.78rem; color: var(--muted); }
+    .nav .legacy a { color: var(--accent); }
+    main { flex: 1; padding: 1rem 1.25rem 3rem; max-width: calc(100vw - 220px); }
+    h1 { font-size: 1.35rem; margin: 0 0 0.35rem; }
+    .sub { color: var(--muted); font-size: 0.88rem; margin-bottom: 0.75rem; }
+    .banner {
+      font-size: 0.78rem; color: #fde68a; background: rgba(245, 158, 11, 0.12);
+      border: 1px solid rgba(245, 158, 11, 0.35); border-radius: 8px; padding: 0.55rem 0.85rem; margin-bottom: 1rem;
+    }
+    section { margin-top: 2rem; scroll-margin-top: 1rem; }
+    section > h2 {
+      font-size: 0.72rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.07em; color: var(--muted);
+      margin: 0 0 0.75rem;
+    }
+    .toolbar { display: flex; flex-wrap: wrap; gap: 0.75rem; align-items: flex-end; margin-bottom: 1rem; padding: 0.75rem 1rem; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; }
+    .toolbar label { display: flex; flex-direction: column; gap: 0.25rem; font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); }
+    .toolbar input { min-width: 280px; padding: 0.45rem 0.6rem; border-radius: 6px; border: 1px solid var(--border); background: var(--surface2); color: var(--text); font-family: var(--mono); font-size: 0.85rem; }
+    button.primary { padding: 0.5rem 1rem; border-radius: 8px; border: none; background: var(--accent); color: #0c0f14; font-weight: 600; cursor: pointer; }
+    .err { background: rgba(248,113,113,0.12); border: 1px solid rgba(248,113,113,0.4); color: #fecaca; padding: 0.75rem 1rem; border-radius: 8px; margin-bottom: 1rem; font-family: var(--mono); font-size: 0.82rem; display: none; }
+    .panel { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; overflow: hidden; margin-bottom: 1rem; }
+    .panel-h { padding: 0.65rem 1rem; border-bottom: 1px solid var(--border); font-size: 0.72rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.07em; color: var(--muted); }
+    .panel-b { padding: 1rem; }
+    .chart-svg { width: 100%; height: auto; display: block; background: var(--surface2); border-radius: 8px; }
+    .rule-box { font-size: 0.72rem; color: var(--muted); font-family: var(--mono); line-height: 1.45; margin-top: 0.75rem; }
+    table.data { width: 100%; border-collapse: collapse; font-size: 0.82rem; }
+    table.data th, table.data td { padding: 0.5rem 0.65rem; text-align: left; border-bottom: 1px solid var(--border); }
+    table.data th { color: var(--muted); font-size: 0.72rem; text-transform: uppercase; }
+    .badge { display: inline-block; padding: 0.15rem 0.45rem; border-radius: 4px; font-size: 0.72rem; font-weight: 600; }
+    .eval-pass { background: rgba(52,211,153,0.15); color: #34d399; border: 1px solid rgba(52,211,153,0.35); }
+    .eval-fail { background: rgba(248,113,113,0.12); color: #fecaca; }
+    .eval-pend { background: rgba(139,154,173,0.12); color: var(--muted); border: 1px solid var(--border); }
+    .lane-baseline { color: var(--baseline); font-weight: 600; }
+    .lane-anna { color: #a855f7; font-weight: 600; }
+    .kv { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 0.5rem; font-family: var(--mono); font-size: 0.78rem; }
+    .kv kbd { color: var(--muted); font-size: 0.7rem; }
+    .toggle-row { display: flex; align-items: center; gap: 0.5rem; margin: 0.35rem 0; font-size: 0.85rem; }
+    .toggle-row input { width: 1rem; height: 1rem; }
+    .test-dot-legend { font-size: 0.78rem; color: var(--muted); margin-top: 0.5rem; }
+    details.trace { margin-bottom: 0.5rem; border: 1px solid var(--border); border-radius: 8px; background: var(--surface2); }
+    details.trace > summary { padding: 0.6rem 0.85rem; cursor: pointer; font-family: var(--mono); font-size: 0.8rem; color: var(--accent); }
+    .meta { font-size: 0.72rem; color: var(--muted); margin-top: 0.75rem; }
+  </style>
+</head>
+<body>
+  <div class="layout">
+    <nav class="nav" aria-label="Section navigation">
+      <h2>Dashboard</h2>
+      <a href="#sec-market">Market + chart</a>
+      <a href="#sec-strategies">Strategies (top five)</a>
+      <a href="#sec-event">Event / trades</a>
+      <a href="#sec-qel">Evaluation (QEL)</a>
+      <a href="#sec-tests">Survival tests</a>
+      <a href="#sec-traces">Decision traces</a>
+      <div class="legacy">
+        <a href="/anna/event-view">Legacy event view</a> — prior single-page tool
+      </div>
+    </nav>
+    <main>
+      <h1>Operator event dashboard</h1>
+      <p class="sub">Authoritative ledger + QEL. Baseline is always drawn in blue; up to five Anna strategies (server-selected); active survival tests as patterned overlays (not strategy lines).</p>
+      <p class="banner" role="status"><strong>Training / paper economics.</strong> Anna lane is paper-grade unless policy changes. This is not live-authorized trading.</p>
+
+      <div class="toolbar">
+        <label>market_event_id
+          <input type="text" id="mid" placeholder="SOL-PERP_5m_…"/>
+        </label>
+        <button type="button" class="primary" id="loadBtn">Load dashboard</button>
+      </div>
+      <div id="error" class="err"></div>
+
+      <div id="content" style="display:none">
+        <section id="sec-market">
+          <h2>Market + overlays</h2>
+          <div class="panel">
+            <div class="panel-h">Price window + mechanics</div>
+            <div class="panel-b">
+              <div id="identity" class="kv" style="margin-bottom:1rem"></div>
+              <svg class="chart-svg" id="chart" viewBox="0 0 900 280" preserveAspectRatio="xMidYMid meet"></svg>
+              <p class="meta" id="chartNote"></p>
+              <p class="test-dot-legend">Gold vertical = selected event bar. <strong>Patterned circles</strong> = active survival tests (evaluation in progress, not a strategy line).</p>
+              <div class="rule-box" id="ruleBox"></div>
+            </div>
+          </div>
+        </section>
+
+        <section id="sec-strategies">
+          <h2>Strategy selection (top five Anna)</h2>
+          <div class="panel">
+            <div class="panel-h">Visibility + lifecycle</div>
+            <div class="panel-b" id="strategyPanel"></div>
+          </div>
+        </section>
+
+        <section id="sec-event">
+          <h2>Event / trade detail</h2>
+          <div class="panel">
+            <div class="panel-h">Strategy actions (this event)</div>
+            <div class="panel-b">
+              <div id="baselineSlot"></div>
+              <table class="data" id="tbl">
+                <thead><tr><th>Lane</th><th>Strategy</th><th>Mode</th><th>Side</th><th>Entry</th><th>Exit</th><th>Result</th></tr></thead>
+                <tbody id="tbody"></tbody>
+              </table>
+            </div>
+          </div>
+          <div class="panel">
+            <div class="panel-h">Context snapshot (condensed)</div>
+            <div class="panel-b" id="ctx"></div>
+          </div>
+        </section>
+
+        <section id="sec-qel">
+          <h2>Evaluation / judgment (QEL)</h2>
+          <div class="panel">
+            <div class="panel-b">
+              <label style="display:flex;flex-direction:column;gap:0.35rem;font-size:0.72rem;text-transform:uppercase;color:var(--muted);max-width:420px">
+                Anna strategy
+                <select id="evalStrategy" style="padding:0.45rem;border-radius:6px;border:1px solid var(--border);background:var(--surface2);color:var(--text);font-family:var(--mono)"></select>
+              </label>
+              <button type="button" class="primary" id="evalBtn" style="margin-top:0.75rem">Load judgment</button>
+              <div id="evalErr" class="err" style="margin-top:0.75rem"></div>
+              <div id="evalBody" style="margin-top:1rem;display:none"></div>
+            </div>
+          </div>
+        </section>
+
+        <section id="sec-tests">
+          <h2>Active survival tests</h2>
+          <div class="panel">
+            <div class="panel-b" id="testsBody"></div>
+          </div>
+        </section>
+
+        <section id="sec-traces">
+          <h2>Decision traces</h2>
+          <div class="panel">
+            <div class="panel-b" id="traces"></div>
+          </div>
+        </section>
+
+        <p class="meta" id="rawMeta"></p>
+      </div>
+    </main>
+  </div>
+  <script>
+(function () {
+  'use strict';
+  var BASELINE_COLOR = '#4a9eff';
+  var ANNA_LINE_COLORS = ['#a855f7', '#eab308', '#22c55e', '#f97316', '#ec4899'];
+  var qs = function (s) { return document.querySelector(s); };
+  function esc(s) {
+    if (s === null || s === undefined) return '';
+    return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  }
+  var toggles = {};
+
+  function badgeMode(mode) {
+    var m = (mode || '').toLowerCase();
+    if (m === 'live' || m === 'paper') return '<span class="badge" style="background:rgba(52,211,153,0.15);color:#34d399">economic</span>';
+    if (m === 'paper_stub') return '<span class="badge" style="background:rgba(167,139,250,0.15);color:#c4b5fd">paper_stub</span>';
+    return esc(mode || '—');
+  }
+
+  function resultCell(row) {
+    if (row.row_state === 'no_trade') return '<strong>NO TRADE</strong>';
+    var r = row.result || {};
+    if (r.pnl_asserted && r.economic_pnl_usd != null) {
+      return esc(r.classification || '') + ' <span class="badge eval-pass">$' + esc(String(r.economic_pnl_usd.toFixed ? r.economic_pnl_usd.toFixed(4) : r.economic_pnl_usd)) + '</span>';
+    }
+    if (!r.pnl_asserted) {
+      return esc(r.stub_classification || r.classification || 'stub') + ' <span class="badge" style="opacity:0.9">(not $ in ledger)</span>';
+    }
+    return '—';
+  }
+
+  function renderIdentity(p) {
+    var ev = p.event || {};
+    var b = ev.bar || {};
+    qs('#identity').innerHTML =
+      '<div><kbd>Symbol</kbd><br/><strong>' + esc(ev.symbol || '—') + '</strong></div>' +
+      '<div><kbd>Timeframe</kbd><br/><strong>' + esc(ev.timeframe || '—') + '</strong></div>' +
+      '<div style="grid-column:1/-1"><kbd>market_event_id</kbd><br/><strong>' + esc(p.market_event_id) + '</strong></div>' +
+      (b.close != null ? '<div style="grid-column:1/-1"><kbd>OHLC</kbd><br/>O ' + esc(b.open) + ' · H ' + esc(b.high) + ' · L ' + esc(b.low) + ' · C ' + esc(b.close) + '</div>' : '');
+  }
+
+  function renderChart(p) {
+    var svg = qs('#chart');
+    var note = qs('#chartNote');
+    var hist = (p.chart && p.chart.history_bars) ? p.chart.history_bars : [];
+    var mid = p.market_event_id;
+    var od = p.operator_dashboard || {};
+    var topFive = od.top_five_strategy_ids || [];
+    if (!hist.length) {
+      svg.innerHTML = '';
+      note.textContent = 'No history_bars — chart empty.';
+      return;
+    }
+    var series = hist.slice().reverse();
+    var closes = series.map(function (b) { return Number(b.close); });
+    var lo = Math.min.apply(null, closes.concat([Infinity]));
+    var hi = Math.max.apply(null, closes.concat([-Infinity]));
+    var rows = p.strategy_rows || [];
+    var br = rows.filter(function (r) { return r.lane === 'baseline'; })[0];
+    var bp = br && br.entry_price != null ? Number(br.entry_price) : null;
+    if (bp != null && isFinite(bp)) { lo = Math.min(lo, bp); hi = Math.max(hi, bp); }
+    topFive.forEach(function (sid, i) {
+      var m = rows.filter(function (r) { return r.lane === 'anna' && r.strategy_id === sid; })[0];
+      var ep = m && m.entry_price != null ? Number(m.entry_price) : null;
+      if (ep != null && isFinite(ep)) { lo = Math.min(lo, ep); hi = Math.max(hi, ep); }
+    });
+    var pad = (hi - lo) * 0.08 || 0.01;
+    lo -= pad; hi += pad;
+    var W = 900, H = 280, L = 50, R = 20, T = 20, B = 40;
+    var iw = W - L - R, ih = H - T - B;
+    var n = series.length;
+    function xAt(i) { return L + (i / Math.max(1, n - 1)) * iw; }
+    function yAt(price) { return T + (1 - (price - lo) / (hi - lo)) * ih; }
+    var evIdx = -1;
+    for (var j = 0; j < series.length; j++) {
+      if (series[j].market_event_id === mid) { evIdx = j; break; }
+    }
+    var path = [];
+    for (var i = 0; i < n; i++) path.push((i ? 'L' : 'M') + xAt(i).toFixed(1) + ',' + yAt(closes[i]).toFixed(1));
+    var parts = [];
+    parts.push('<rect x="0" y="0" width="' + W + '" height="' + H + '" fill="#1a222d"/>');
+    parts.push('<path d="' + path.join(' ') + '" fill="none" stroke="#94a3b8" stroke-width="1.2" opacity="0.9"/>');
+    if (evIdx >= 0) {
+      var vx = xAt(evIdx);
+      parts.push('<line x1="' + vx + '" y1="' + T + '" x2="' + vx + '" y2="' + (T + ih) + '" stroke="#f0b429" stroke-width="1.5" opacity="0.9"/>');
+    }
+    if (bp != null && isFinite(bp) && evIdx >= 0) {
+      parts.push('<line x1="' + L + '" y1="' + yAt(bp) + '" x2="' + (L + iw) + '" y2="' + yAt(bp) + '" stroke="' + BASELINE_COLOR + '" stroke-width="2.2" opacity="0.95"/>');
+      parts.push('<text x="' + (L + iw - 8) + '" y="' + (yAt(bp) - 4) + '" fill="' + BASELINE_COLOR + '" font-size="10" text-anchor="end" font-family="IBM Plex Mono, monospace">baseline</text>');
+    }
+    topFive.forEach(function (sid, idx) {
+      if (toggles[sid] === false) return;
+      var m = rows.filter(function (r) { return r.lane === 'anna' && r.strategy_id === sid; })[0];
+      var ep = m && m.entry_price != null ? Number(m.entry_price) : null;
+      if (ep == null || !isFinite(ep)) return;
+      var col = ANNA_LINE_COLORS[idx % ANNA_LINE_COLORS.length];
+      parts.push('<line x1="' + L + '" y1="' + yAt(ep) + '" x2="' + (L + iw) + '" y2="' + yAt(ep) + '" stroke="' + col + '" stroke-width="1.8" opacity="0.9"/>');
+    });
+    var tests = od.survival_tests_active || [];
+    if (evIdx >= 0 && tests.length) {
+      var vx = xAt(evIdx);
+      tests.forEach(function (t, ti) {
+        var ty = T + ih - 10 - (ti % 3) * 8;
+        parts.push('<circle cx="' + vx + '" cy="' + ty + '" r="6" fill="none" stroke="#f472b6" stroke-width="2" stroke-dasharray="3,3"/>');
+      });
+    }
+    parts.push('<text x="' + L + '" y="' + (H - 6) + '" fill="#8b9aad" font-size="10">Older ← → Recent · gray = market close path</text>');
+    svg.innerHTML = parts.join('');
+    note.textContent = 'Bars: ' + n + '. Baseline (blue) always on. Anna lines: up to five, toggle in panel. Pink dashed circles at event = active survival tests.';
+  }
+
+  function renderStrategyPanel(p) {
+    var od = p.operator_dashboard || {};
+    var top = od.top_five_strategy_ids || [];
+    var lc = od.lifecycle_by_strategy_id || {};
+    qs('#ruleBox').textContent = od.top_five_selection_rule || '';
+    var html = '<p style="margin:0 0 0.75rem;font-size:0.85rem;color:var(--muted)">Server-selected top five (see rule below). Baseline is not listed — it is always drawn in blue on the chart.</p>';
+    top.forEach(function (sid, i) {
+      if (toggles[sid] === undefined) toggles[sid] = true;
+      var st = lc[sid] || '—';
+      html += '<div class="toggle-row"><label><input type="checkbox" data-sid="' + esc(sid) + '" ' + (toggles[sid] ? 'checked' : '') + '/> ' +
+        '<span class="lane-anna">' + esc(sid) + '</span> · <span style="color:var(--muted)">' + esc(st) + '</span> · line color ' + ANNA_LINE_COLORS[i % ANNA_LINE_COLORS.length] + '</label></div>';
+    });
+    qs('#strategyPanel').innerHTML = html;
+    qs('#strategyPanel').querySelectorAll('input[type=checkbox]').forEach(function (cb) {
+      cb.addEventListener('change', function () {
+        toggles[cb.getAttribute('data-sid')] = cb.checked;
+        renderChart(window.__lastPayload);
+      });
+    });
+  }
+
+  function renderBaselineSlot(p) {
+    var bs = p.baseline_slot || {};
+    var el = qs('#baselineSlot');
+    if (bs.state === 'no_trade') {
+      el.innerHTML = '<p style="margin:0 0 1rem"><strong class="lane-baseline">baseline</strong> — no trade <span style="color:var(--muted)">' + esc(bs.reason_code || '') + '</span></p>';
+    } else {
+      el.innerHTML = '<p style="margin:0 0 1rem"><strong class="lane-baseline">baseline</strong> — trade recorded</p>';
+    }
+  }
+
+  function renderTable(p) {
+    var rows = p.strategy_rows || [];
+    qs('#tbody').innerHTML = rows.map(function (row) {
+      var laneClass = row.lane === 'baseline' ? 'lane-baseline' : 'lane-anna';
+      return '<tr><td class="' + laneClass + '">' + esc(row.lane) + '</td><td style="font-family:var(--mono);font-size:0.78rem">' + esc(row.strategy_id) + '</td><td>' + badgeMode(row.mode) + '</td><td>' + esc(row.side || '—') + '</td><td>' + esc(row.entry_time || '—') + '</td><td>' + esc(row.exit_time || '—') + '</td><td>' + resultCell(row) + '</td></tr>';
+    }).join('');
+  }
+
+  function condensedContext(blocks) {
+    if (!blocks || !blocks.length) return '<span style="color:var(--muted)">No context snapshots.</span>';
+    return blocks.map(function (b) {
+      var snap = b.snapshot || {};
+      var bits = [];
+      ['rsi', 'supertrend', 'atr', 'gate_state', 'vs_ema200'].forEach(function (k) {
+        if (snap[k] !== undefined && snap[k] !== null) bits.push('<strong>' + esc(k) + '</strong>: ' + esc(typeof snap[k] === 'object' ? JSON.stringify(snap[k]) : snap[k]));
+      });
+      if (!bits.length) bits.push('<span style="color:var(--muted)">' + esc(Object.keys(snap).length ? Object.keys(snap).slice(0, 6).join(', ') : 'empty') + '</span>');
+      return '<div style="margin-bottom:0.75rem"><strong style="color:var(--accent)">' + esc(b.strategy_id) + '</strong><div class="kv" style="margin-top:0.35rem">' + bits.map(function (x) { return '<div>' + x + '</div>'; }).join('') + '</div></div>';
+    }).join('');
+  }
+
+  function renderContext(p) {
+    qs('#ctx').innerHTML = condensedContext(p.context_by_trade || []);
+  }
+
+  function populateEvalSelect(p) {
+    var rows = p.strategy_rows || [];
+    var seen = {};
+    rows.filter(function (r) { return r.lane === 'anna'; }).forEach(function (r) { seen[r.strategy_id] = true; });
+    var ids = Object.keys(seen);
+    qs('#evalStrategy').innerHTML = '<option value="">— select —</option>' + ids.map(function (id) { return '<option value="' + esc(id) + '">' + esc(id) + '</option>'; }).join('');
+    var od = p.operator_dashboard || {};
+    var tf = od.top_five_strategy_ids || [];
+    if (tf.length) qs('#evalStrategy').value = tf[0];
+    else if (ids.length === 1) qs('#evalStrategy').value = ids[0];
+  }
+
+  function renderEval(d) {
+    var lc = d.lifecycle || {};
+    var parts = [];
+    parts.push('<div class="kv" style="margin-bottom:1rem">');
+    parts.push('<div><kbd>Phase</kbd><br/><strong>' + esc(lc.current_phase || '') + '</strong> <span style="color:var(--muted);font-size:0.75rem">(' + esc(lc.lifecycle_state || '') + ')</span></div>');
+    parts.push('<div><kbd>Last checkpoint</kbd><br/>' + esc(lc.last_checkpoint_decision || '—') + '</div>');
+    parts.push('<div><kbd>Active test</kbd><br/><span style="font-size:0.78rem">' + esc(lc.active_test_id || '—') + '</span></div>');
+    parts.push('</div>');
+    var cps = d.checkpoints || [];
+    parts.push('<table class="data"><thead><tr><th>Checkpoint</th><th>Result</th><th>UTC</th></tr></thead><tbody>');
+    cps.forEach(function (c) {
+      var badge = c.result === 'PASS' ? 'eval-pass' : (c.result === 'FAIL' ? 'eval-fail' : 'eval-pend');
+      parts.push('<tr><td>' + esc(c.checkpoint_label) + '</td><td><span class="badge ' + badge + '">' + esc(c.result) + '</span></td><td style="font-size:0.78rem">' + esc(c.evaluated_at_utc || '—') + '</td></tr>');
+    });
+    parts.push('</tbody></table>');
+    var m = d.metrics || {};
+    var sc = m.strategy_cohort || {};
+    parts.push('<h4 style="margin:1rem 0 0.5rem;font-size:0.8rem;color:var(--muted)">Cohort metrics</h4><div class="kv">');
+    parts.push('<div><kbd>Trades</kbd><br/>' + esc(sc.trade_count) + '</div>');
+    parts.push('<div><kbd>Win rate</kbd><br/>' + (sc.win_rate != null ? esc((100 * sc.win_rate).toFixed(1) + '%') : '—') + '</div>');
+    parts.push('<div><kbd>P&amp;L USD</kbd><br/>' + esc(sc.pnl_usd) + '</div>');
+    parts.push('</div>');
+    var rs = d.regime_summary || {};
+    parts.push('<h4 style="margin:1rem 0 0.5rem;font-size:0.8rem;color:var(--muted)">Regimes</h4><p style="font-size:0.8rem;color:var(--muted)">' + esc(rs.performance_note || '') + '</p>');
+    var bc = d.baseline_comparison || {};
+    if (bc.available) {
+      parts.push('<h4 style="margin:1rem 0 0.5rem;font-size:0.8rem;color:var(--muted)">vs baseline</h4><p style="font-size:0.85rem">' + esc(bc.direction) + ' · Δ ' + esc(bc.delta_pnl_usd) + '</p>');
+    }
+    qs('#evalBody').innerHTML = parts.join('');
+  }
+
+  function loadEvaluation() {
+    var sid = qs('#evalStrategy').value.trim();
+    var mid = qs('#mid').value.trim();
+    qs('#evalErr').style.display = 'none';
+    qs('#evalBody').style.display = 'none';
+    if (!sid) {
+      qs('#evalErr').style.display = 'block';
+      qs('#evalErr').textContent = 'Select a strategy.';
+      return;
+    }
+    var url = '/api/v1/anna/evaluation-summary?strategy_id=' + encodeURIComponent(sid);
+    if (mid) url += '&market_event_id=' + encodeURIComponent(mid);
+    fetch(url, { cache: 'no-store' }).then(function (r) { return r.json(); }).then(function (d) {
+      if (!d.ok) {
+        qs('#evalErr').style.display = 'block';
+        qs('#evalErr').textContent = d.error || d.detail || 'error';
+        return;
+      }
+      qs('#evalBody').style.display = 'block';
+      renderEval(d);
+    }).catch(function (e) {
+      qs('#evalErr').style.display = 'block';
+      qs('#evalErr').textContent = String(e);
+    });
+  }
+
+  function renderTests(p) {
+    var od = p.operator_dashboard || {};
+    var tests = od.survival_tests_active || [];
+    if (!tests.length) {
+      qs('#testsBody').innerHTML = '<span style="color:var(--muted)">No active survival tests in ledger.</span>';
+      return;
+    }
+    qs('#testsBody').innerHTML = '<table class="data"><thead><tr><th>test_id</th><th>strategy_id</th><th>status</th><th>created</th></tr></thead><tbody>' +
+      tests.map(function (t) {
+        return '<tr><td style="font-size:0.75rem">' + esc(t.test_id) + '</td><td style="font-family:var(--mono);font-size:0.78rem">' + esc(t.strategy_id) + '</td><td>' + esc(t.status) + '</td><td>' + esc(t.created_at_utc || '') + '</td></tr>';
+      }).join('') + '</tbody></table>';
+  }
+
+  function renderTraces(p) {
+    var tr = p.decision_traces || [];
+    var el = qs('#traces');
+    if (!tr.length) { el.innerHTML = '<span style="color:var(--muted)">No traces for filters.</span>'; return; }
+    el.innerHTML = tr.map(function (t) {
+      var steps = t.steps || [];
+      var summary = steps.map(function (s) { return esc(s.step_name || '?'); }).join(' → ');
+      return '<details class="trace"><summary>' + esc(t.strategy_id) + ' · ' + esc(t.trace_id) + '</summary><p style="padding:0.5rem 0.85rem;font-size:0.8rem;color:var(--muted)">' + summary + '</p></details>';
+    }).join('');
+  }
+
+  function load() {
+    qs('#error').style.display = 'none';
+    var mid = qs('#mid').value.trim();
+    if (!mid) {
+      qs('#error').style.display = 'block';
+      qs('#error').textContent = 'Enter market_event_id.';
+      return;
+    }
+    var url = '/api/v1/anna/operator-dashboard?market_event_id=' + encodeURIComponent(mid);
+    fetch(url, { cache: 'no-store' }).then(function (r) { return r.json(); }).then(function (p) {
+      if (!p.ok) {
+        qs('#error').style.display = 'block';
+        qs('#error').textContent = (p.error || 'error') + (p.detail ? ': ' + p.detail : '');
+        qs('#content').style.display = 'none';
+        return;
+      }
+      window.__lastPayload = p;
+      qs('#content').style.display = 'block';
+      renderIdentity(p);
+      renderStrategyPanel(p);
+      renderChart(p);
+      renderBaselineSlot(p);
+      renderTable(p);
+      populateEvalSelect(p);
+      qs('#evalBody').style.display = 'none';
+      renderContext(p);
+      renderTests(p);
+      renderTraces(p);
+      qs('#rawMeta').textContent = 'GET ' + url + ' · ' + (p.schema || '') + ' · operator_dashboard schema ' + ((p.operator_dashboard || {}).schema || '');
+    }).catch(function (e) {
+      qs('#error').style.display = 'block';
+      qs('#error').textContent = String(e);
+      qs('#content').style.display = 'none';
+    });
+  }
+
+  qs('#loadBtn').addEventListener('click', load);
+  qs('#evalBtn').addEventListener('click', loadEvaluation);
+  var u = new URL(window.location.href);
+  var mq = u.searchParams.get('market_event_id');
+  if (mq) qs('#mid').value = mq;
+})();
+  </script>
+</body>
+</html>
