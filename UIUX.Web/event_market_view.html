@@ -69,12 +69,19 @@
     .step h4 { margin: 0 0 0.35rem; font-size: 0.75rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em; }
     pre.json { margin: 0; white-space: pre-wrap; word-break: break-word; font-family: var(--mono); font-size: 0.72rem; color: #c9d1d9; }
     .meta { font-size: 0.72rem; color: var(--muted); margin-top: 0.75rem; }
+    .training-banner {
+      font-size: 0.78rem; color: #fde68a; background: rgba(245, 158, 11, 0.12);
+      border: 1px solid rgba(245, 158, 11, 0.35); border-radius: 8px; padding: 0.55rem 0.85rem; margin-bottom: 1rem;
+      line-height: 1.4;
+    }
+    .training-banner strong { color: #fcd34d; }
   </style>
 </head>
 <body>
   <div class="wrap">
     <h1>Event view</h1>
     <p class="sub">Operator surface — baseline vs Anna, decision traces, API-driven (no client-side economics).</p>
+    <p class="training-banner" role="status"><strong>Training / paper economics.</strong> Anna lane here is paper-grade (not live-authorized). Baseline rows may be paper for harness comparison. Do not treat as production trading authorization.</p>
 
     <div class="toolbar">
       <label>market_event_id
