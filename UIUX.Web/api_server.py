@@ -291,7 +291,7 @@ def _training_engagement_payload(st: dict[str, Any], harness: dict[str, Any]) ->
     bullets: list[str] = []
     bullets.append(
         "Each loop tick Anna refreshes Grade-12 gates and the skills deck, runs scheduled tool/skill "
-        "practice, logs the learning cycle, and runs the Karpathy paper harness (analysis → execution request → Jack paper when configured)."
+        "practice, logs the learning cycle, and runs the school paper harness (analysis → execution request → Jack paper when configured)."
     )
     if sp.get("ran"):
         outcome = "passed" if sp.get("passed") else "did not pass"
@@ -422,7 +422,7 @@ def build_anna_training_dashboard() -> dict[str, Any]:
         }
 
         def _activity_feed() -> list[dict[str, Any]]:
-            """Short lines for the dashboard — what the loop actually did (no essay)."""
+            """Optional tail — excludes repetitive supervisor cycle lines; use digest for the real story."""
             out: list[dict[str, Any]] = []
             tick_ts = st.get("karpathy_loop_last_tick_utc")
             n = st.get("karpathy_loop_iteration")
@@ -430,8 +430,8 @@ def build_anna_training_dashboard() -> dict[str, Any]:
                 out.append(
                     {
                         "ts_utc": str(tick_ts)[:24],
-                        "tag": "loop",
-                        "line": f"Tick #{n} — analysis + harness cycle (state updated)",
+                        "tag": "tick",
+                        "line": f"Supervisor tick #{n} (state updated)",
                     }
                 )
             h = harness or {}
@@ -472,19 +472,190 @@ def build_anna_training_dashboard() -> dict[str, Any]:
                         "line": f"Tool drill · {sk} · {pf}",
                     }
                 )
+            skip_kinds = frozenset({"karpathy_learning_cycle_v1", "karpathy_skill_practice_v1"})
             log = list(st.get("cumulative_learning_log") or [])
-            for e in reversed(log[-14:]):
+            for e in reversed(log[-24:]):
                 if not isinstance(e, dict):
                     continue
+                kind = str(e.get("kind") or "")
+                if kind in skip_kinds:
+                    continue
                 ts = str(e.get("ts_utc") or "")[:24]
-                kind = str(e.get("kind") or "log")
                 sumy = str(e.get("summary") or "").replace("\n", " ")[:110]
                 if sumy:
-                    out.append({"ts_utc": ts, "tag": kind[:24], "line": f"{kind}: {sumy}"})
+                    out.append({"ts_utc": ts, "tag": kind[:24] or "log", "line": sumy})
             out.sort(key=lambda x: str(x.get("ts_utc") or ""), reverse=True)
-            return out[:20]
+            return out[:16]
+
+        def _training_run_digest() -> dict[str, Any]:
+            """Single stitched view: Grade-12 bar + ordered steps for the last harness save."""
+            h = harness or {}
+            snap = analysis_snapshot if isinstance(analysis_snapshot, dict) else {}
+            tick_ts = st.get("karpathy_loop_last_tick_utc")
+            n = st.get("karpathy_loop_iteration")
+            why: list[str] = []
+            if not g12.get("pass"):
+                for b in (g12.get("blockers") or [])[:6]:
+                    why.append(str(b)[:280])
+
+            steps: list[dict[str, str]] = []
+            err = str(h.get("error") or "")
+
+            if "analyze_to_dict" in err:
+                steps.append(
+                    {
+                        "step": "1 · Anna analysis",
+                        "result": "FAIL",
+                        "detail": err[:260],
+                    }
+                )
+            elif snap:
+                hl = (snap.get("interpretation_headline") or "").strip() or "(no headline)"
+                src = snap.get("answer_source") or "—"
+                intent = snap.get("suggested_intent") or "—"
+                steps.append(
+                    {
+                        "step": "1 · Anna analysis",
+                        "result": "OK",
+                        "detail": f"{hl[:130]} · answer_source={src} · suggested_intent={str(intent)[:72]}",
+                    }
+                )
+            else:
+                steps.append(
+                    {
+                        "step": "1 · Anna analysis",
+                        "result": "—",
+                        "detail": "No analysis snapshot on last harness save (harness may not have completed analysis).",
+                    }
+                )
+
+            sk = h.get("skipped")
+            if sk == "analysis_preflight_blocked_body":
+                steps.append(
+                    {
+                        "step": "2 · Execution request",
+                        "result": "BLOCKED",
+                        "detail": "Analysis blocked by preflight policy on body.",
+                    }
+                )
+            elif sk == "no_execution_request":
+                steps.append(
+                    {
+                        "step": "2 · Execution request",
+                        "result": "NO",
+                        "detail": str(h.get("detail") or "Observation-only or policy — no handoff to trade path.")[:220],
+                    }
+                )
+            elif h.get("pending"):
+                steps.append(
+                    {
+                        "step": "2 · Execution request",
+                        "result": "PENDING",
+                        "detail": "Auto paper off — approve + run_execution manually.",
+                    }
+                )
+            elif h.get("request_id"):
+                steps.append(
+                    {
+                        "step": "2 · Execution request",
+                        "result": "YES",
+                        "detail": f"request_id={str(h.get('request_id'))[:20]}…",
+                    }
+                )
+            else:
+                steps.append(
+                    {
+                        "step": "2 · Execution request",
+                        "result": "—",
+                        "detail": "No request_id in last harness state.",
+                    }
+                )
+
+            jack_sk = sk and ("JACK" in str(sk).upper() or "jack" in str(sk).lower())
+            if jack_sk:
+                steps.append(
+                    {
+                        "step": "3 · Run execution → delegate",
+                        "result": "BLOCKED",
+                        "detail": str(sk)[:240],
+                    }
+                )
+            elif "approve_request" in err or "approve" in err.lower():
+                steps.append(
+                    {
+                        "step": "3 · Approve + run_execution",
+                        "result": "FAIL",
+                        "detail": err[:240],
+                    }
+                )
+            elif "run_execution" in err:
+                steps.append(
+                    {
+                        "step": "3 · run_execution",
+                        "result": "FAIL",
+                        "detail": err[:240],
+                    }
+                )
+            elif h.get("execution_status"):
+                jd = h.get("jack_delegate") if isinstance(h.get("jack_delegate"), dict) else {}
+                pl = h.get("paper_logged")
+                ex = h.get("execution_status")
+                jerr = jd.get("error") if jd else None
+                tail = f"execution_status={ex} · paper_logged={pl}"
+                if jerr:
+                    tail += f" · delegate: {str(jerr)[:100]}"
+                ok = ex == "executed" and pl is True
+                steps.append(
+                    {
+                        "step": "3 · run_execution → delegate",
+                        "result": "OK" if ok else ("PARTIAL" if ex == "executed" else str(ex).upper()[:12]),
+                        "detail": tail[:260],
+                    }
+                )
+            elif h.get("request_id") and not jack_sk:
+                steps.append(
+                    {
+                        "step": "3 · run_execution → delegate",
+                        "result": "—",
+                        "detail": "Request existed but no execution_status on last save (check daemon).",
+                    }
+                )
+            else:
+                steps.append(
+                    {
+                        "step": "3 · run_execution → delegate",
+                        "result": "SKIPPED",
+                        "detail": "Stopped before mock execution (no path or earlier skip).",
+                    }
+                )
+
+            if h.get("paper_logged") is True:
+                steps.append(
+                    {
+                        "step": "4 · Paper ledger",
+                        "result": "YES",
+                        "detail": "Row appended to paper_trades.jsonl this tick.",
+                    }
+                )
+            else:
+                steps.append(
+                    {
+                        "step": "4 · Paper ledger",
+                        "result": "NO",
+                        "detail": "No new paper row this tick (blocked earlier or delegate did not log).",
+                    }
+                )
+
+            return {
+                "grade12_pass": bool(g12.get("pass")),
+                "why_grade12_not_pass": why,
+                "last_tick_at": str(tick_ts) if tick_ts else None,
+                "last_iteration": n,
+                "steps": steps,
+            }
 
         activity_feed = _activity_feed()
+        training_run_digest = _training_run_digest()
 
         return {
             "schema": "anna_training_dashboard_v1",
@@ -505,6 +676,7 @@ def build_anna_training_dashboard() -> dict[str, Any]:
                 "detail": (ls.get("detail") or "")[:280],
             },
             "activity_feed": activity_feed,
+            "training_run_digest": training_run_digest,
             "attempt_events_recent": recent_attempts,
             "enrollment": {
                 "curriculum_id": st.get("curriculum_id"),
@@ -530,6 +702,7 @@ def build_anna_training_dashboard() -> dict[str, Any]:
                 "total_pnl_usd": g12.get("total_pnl_usd"),
                 "paper_goal_met": g12.get("paper_goal_met"),
                 "paper_goal_rationale": g12.get("paper_goal_rationale"),
+                "blockers": [str(b)[:300] for b in (g12.get("blockers") or [])[:8]],
             },
             "paper_cohort": {
                 "row_count": s.trade_count,
@@ -790,19 +963,37 @@ TRAINING_DASHBOARD_HTML = """<!DOCTYPE html>
     .metric-flash { animation: metricFlash 0.75s ease-out; }
     @keyframes metricFlash { 0% { background: rgba(88,166,255,0.28); box-shadow: 0 0 0 1px rgba(88,166,255,0.4); } 100% { background: transparent; box-shadow: none; } }
     #v_iter.metric-flash, #v_rows.metric-flash { border-radius: 6px; padding: 0.15rem 0.35rem; margin: -0.15rem -0.35rem; }
+    .digest-bar { font-size: 0.85rem; margin: 0 0 0.65rem; line-height: 1.45; }
+    .digest-bar.pass { color: var(--ok); font-weight: 600; }
+    .digest-bar.fail { color: var(--bad); font-weight: 600; }
+    ul.digest-steps { list-style: none; margin: 0; padding: 0; font-size: 0.8rem; line-height: 1.4; }
+    ul.digest-steps li { margin: 0 0 0.55rem; padding: 0.45rem 0.55rem; background: #0d1117; border-left: 3px solid #30363d; border-radius: 4px; }
+    ul.digest-steps li .r { font-weight: 700; font-variant-numeric: tabular-nums; margin-right: 0.45rem; }
+    ul.digest-steps li .r.ok { color: var(--ok); }
+    ul.digest-steps li .r.bad { color: var(--bad); }
+    ul.digest-steps li .r.neu { color: var(--muted); }
+    .digest-why { font-size: 0.72rem; color: var(--muted); margin: 0.35rem 0 0; padding-left: 0.85rem; border-left: 2px solid #30363d; }
   </style>
 </head>
 <body>
   <h1>Anna training — live</h1>
-  <p class="lead">Refreshes every 4s. Live lines = what the school loop did last; scorecard + ledger = numbers moving.</p>
+  <p class="lead">Refreshes every 4s. Top block = Grade-12 training bar + last-tick steps (where she passed or stopped). Scorecard + ledger = rolling numbers.</p>
   <p class="dash-tools"><button type="button" id="btn_expand_all" title="Open all sections">Expand all</button><button type="button" id="btn_collapse_all" title="Close all collapsible sections">Collapse all</button></p>
   <div id="v_llm_fail_alert" role="alert"></div>
   <div id="err"></div>
-  <section class="scorecard-block" style="border:1px solid #1f6feb44" aria-labelledby="live-h">
-    <h2 id="live-h" style="font-size:0.78rem;text-transform:uppercase;letter-spacing:0.06em;color:var(--accent);margin:0 0 0.45rem">Live activity</h2>
-    <p class="sub" style="margin:0 0 0.5rem;font-size:0.72rem">Ticks, harness, tool drills, log lines — not prose.</p>
-    <div style="overflow-x:auto"><table class="activity-feed" aria-label="School loop activity"><tbody id="v_activity_body"></tbody></table></div>
+  <section class="scorecard-block" style="border:1px solid #3fb95044" aria-labelledby="digest-h">
+    <h2 id="digest-h" style="font-size:0.78rem;text-transform:uppercase;letter-spacing:0.06em;color:var(--ok);margin:0 0 0.45rem">Training run — where she is (last tick + Grade-12 bar)</h2>
+    <p class="sub" id="v_digest_meta" style="margin:0 0 0.5rem;font-size:0.72rem">—</p>
+    <p class="digest-bar" id="v_digest_grade12">—</p>
+    <div id="v_digest_why_wrap" style="display:none"></div>
+    <ul class="digest-steps" id="v_digest_steps" aria-label="Last tick steps"></ul>
   </section>
+  <details class="dash-section">
+    <summary><span class="dash-chev" aria-hidden="true"></span><h2>Optional — short log lines (no cycle spam)</h2></summary>
+    <div class="dash-inner">
+    <div style="overflow-x:auto"><table class="activity-feed" aria-label="Optional log tail"><tbody id="v_activity_body"></tbody></table></div>
+    </div>
+  </details>
   <section class="scorecard-block" aria-labelledby="scorecard-h">
     <h2 id="scorecard-h" style="font-size:0.78rem;text-transform:uppercase;letter-spacing:0.06em;color:var(--muted);margin:0 0 0.65rem">Scorecard</h2>
     <p class="ls" id="v_ls_head" style="margin-top:0">—</p>
@@ -849,7 +1040,7 @@ TRAINING_DASHBOARD_HTML = """<!DOCTYPE html>
   <details class="dash-section" style="border-color:var(--accent)">
     <summary><span class="dash-chev" aria-hidden="true"></span><h2>Last tick — Anna analysis (same stack as messaging Anna)</h2></summary>
     <div class="dash-inner">
-    <p class="sub" id="v_snap_hint">Persisted from the Karpathy harness: strategy, concepts, policy, risk, suggested action — refreshed every tick the daemon runs.</p>
+    <p class="sub" id="v_snap_hint">From the last school harness save: full analyst fields — refreshed each daemon tick.</p>
     <div class="chips" id="v_steps"></div>
     <table class="data" id="v_analysis_tbl"><tbody id="v_analysis_body"></tbody></table>
     </div>
@@ -909,7 +1100,7 @@ TRAINING_DASHBOARD_HTML = """<!DOCTYPE html>
         var pol = j.preflight_policy || {};
         function dataLine() {
           if (!d || typeof d !== 'object' || Object.keys(d).length === 0) {
-            return { tier: 1, text: 'No saved data-preflight row yet — run the Karpathy daemon once so training state is updated.' };
+            return { tier: 1, text: 'No saved data-preflight row yet — run the school daemon once so training state is updated.' };
           }
           if (d.skipped) return { tier: 1, text: 'Skipped (ANNA_SKIP_PREFLIGHT) — enforcement bypassed.' };
           if (d.ok) return { tier: 0, text: 'OK — Pyth stream + market_data.db (and optional Solana) passed this tick.' };
@@ -960,6 +1151,58 @@ TRAINING_DASHBOARD_HTML = """<!DOCTYPE html>
           ? 'Policy: the LLM line is informational — the loop does not skip school on Ollama errors. Fix OLLAMA_BASE_URL and model for real generations.'
           : 'Policy: see preflight_policy in JSON.';
       })();
+      (function fillDigest() {
+        var d = j.training_run_digest || {};
+        var meta = document.getElementById('v_digest_meta');
+        var g = document.getElementById('v_digest_grade12');
+        var whyWrap = document.getElementById('v_digest_why_wrap');
+        var ul = document.getElementById('v_digest_steps');
+        if (!meta || !g || !ul || !whyWrap) return;
+        meta.textContent =
+          (d.last_iteration != null ? 'Last harness save · iteration ' + d.last_iteration : '—') +
+          (d.last_tick_at ? ' · ' + d.last_tick_at : '');
+        var pass = d.grade12_pass === true;
+        g.className = 'digest-bar ' + (pass ? 'pass' : 'fail');
+        g.textContent = pass ? 'Grade-12 training bar: PASS' : 'Grade-12 training bar: NOT PASS';
+        while (whyWrap.firstChild) whyWrap.removeChild(whyWrap.firstChild);
+        whyWrap.style.display = 'none';
+        var whys = d.why_grade12_not_pass || [];
+        if (!pass && whys.length) {
+          whyWrap.style.display = 'block';
+          var hw = document.createElement('p');
+          hw.style.fontSize = '0.72rem';
+          hw.style.color = 'var(--muted)';
+          hw.style.margin = '0 0 0.35rem';
+          var st = document.createElement('strong');
+          st.textContent = 'Why NOT PASS';
+          hw.appendChild(st);
+          hw.appendChild(document.createTextNode(' (aggregate — tools + paper cohort, not one tick):'));
+          whyWrap.appendChild(hw);
+          whys.forEach(function(line) {
+            var p = document.createElement('p');
+            p.className = 'digest-why';
+            p.textContent = line;
+            whyWrap.appendChild(p);
+          });
+        }
+        ul.innerHTML = '';
+        (d.steps || []).forEach(function(s) {
+          var li = document.createElement('li');
+          var res = String(s.result || '—').toUpperCase();
+          var rspan = document.createElement('span');
+          var rc = 'neu';
+          if (res === 'OK' || res === 'YES') rc = 'ok';
+          else if (res === 'FAIL' || res === 'NO' || res === 'BLOCKED') rc = 'bad';
+          rspan.className = 'r ' + rc;
+          rspan.textContent = res + ' ';
+          li.appendChild(rspan);
+          var strong = document.createElement('strong');
+          strong.textContent = (s.step || '') + ' — ';
+          li.appendChild(strong);
+          li.appendChild(document.createTextNode(s.detail || ''));
+          ul.appendChild(li);
+        });
+      })();
       (function fillActivity() {
         var body = document.getElementById('v_activity_body');
         if (!body) return;
@@ -971,7 +1214,7 @@ TRAINING_DASHBOARD_HTML = """<!DOCTYPE html>
           td0.colSpan = 3;
           td0.className = 'sub';
           td0.style.fontFamily = 'inherit';
-          td0.textContent = 'No activity yet — start the Karpathy loop; this table fills from ticks + school log.';
+          td0.textContent = 'No optional log lines — school daemon will add tail events here (cycle lines are hidden).';
           tr0.appendChild(td0);
           body.appendChild(tr0);
           return;
@@ -1042,7 +1285,7 @@ TRAINING_DASHBOARD_HTML = """<!DOCTYPE html>
         var tr = document.createElement('tr');
         var td = document.createElement('td');
         td.colSpan = 2;
-        td.textContent = 'No analysis snapshot yet — upgrade Karpathy daemon after deploy (harness must persist analysis_snapshot).';
+        td.textContent = 'No analysis snapshot yet — school harness must persist analysis_snapshot on each tick.';
         tr.appendChild(td);
         ab.appendChild(tr);
       }
