@@ -420,6 +420,72 @@ def build_anna_training_dashboard() -> dict[str, Any]:
                 "Paper ledger rows append when a paper trade is logged to paper_trades.jsonl — not every tick."
             ),
         }
+
+        def _activity_feed() -> list[dict[str, Any]]:
+            """Short lines for the dashboard — what the loop actually did (no essay)."""
+            out: list[dict[str, Any]] = []
+            tick_ts = st.get("karpathy_loop_last_tick_utc")
+            n = st.get("karpathy_loop_iteration")
+            if tick_ts:
+                out.append(
+                    {
+                        "ts_utc": str(tick_ts)[:24],
+                        "tag": "loop",
+                        "line": f"Tick #{n} — analysis + harness cycle (state updated)",
+                    }
+                )
+            h = harness or {}
+            if h.get("paper_logged") is True:
+                rid = h.get("request_id")
+                rid_s = (str(rid)[:12] + "…") if rid else "—"
+                out.append(
+                    {
+                        "ts_utc": str(tick_ts or "")[:24],
+                        "tag": "paper",
+                        "line": f"Paper row written · req {rid_s}",
+                    }
+                )
+            elif h.get("skipped"):
+                out.append(
+                    {
+                        "ts_utc": str(tick_ts or "")[:24],
+                        "tag": "skip",
+                        "line": "Harness: " + str(h.get("skipped"))[:100],
+                    }
+                )
+            elif h.get("error"):
+                out.append(
+                    {
+                        "ts_utc": str(tick_ts or "")[:24],
+                        "tag": "err",
+                        "line": "Harness: " + str(h.get("error"))[:100],
+                    }
+                )
+            sp = skill_practice_last
+            if isinstance(sp, dict) and sp.get("ran"):
+                sk = sp.get("skill_id") or "tool"
+                pf = "PASS" if sp.get("passed") else "no"
+                out.append(
+                    {
+                        "ts_utc": str(tick_ts or "")[:24],
+                        "tag": "drill",
+                        "line": f"Tool drill · {sk} · {pf}",
+                    }
+                )
+            log = list(st.get("cumulative_learning_log") or [])
+            for e in reversed(log[-14:]):
+                if not isinstance(e, dict):
+                    continue
+                ts = str(e.get("ts_utc") or "")[:24]
+                kind = str(e.get("kind") or "log")
+                sumy = str(e.get("summary") or "").replace("\n", " ")[:110]
+                if sumy:
+                    out.append({"ts_utc": ts, "tag": kind[:24], "line": f"{kind}: {sumy}"})
+            out.sort(key=lambda x: str(x.get("ts_utc") or ""), reverse=True)
+            return out[:20]
+
+        activity_feed = _activity_feed()
+
         return {
             "schema": "anna_training_dashboard_v1",
             "ok": True,
@@ -436,8 +502,9 @@ def build_anna_training_dashboard() -> dict[str, Any]:
             "learning_signal": {
                 "verdict": ls.get("verdict"),
                 "headline": ls.get("headline"),
-                "detail": (ls.get("detail") or "")[:900],
+                "detail": (ls.get("detail") or "")[:280],
             },
+            "activity_feed": activity_feed,
             "attempt_events_recent": recent_attempts,
             "enrollment": {
                 "curriculum_id": st.get("curriculum_id"),
@@ -715,14 +782,27 @@ TRAINING_DASHBOARD_HTML = """<!DOCTYPE html>
     .res-won { color: var(--ok); font-weight: 600; text-transform: uppercase; }
     .res-lost { color: var(--bad); font-weight: 600; text-transform: uppercase; }
     .res-other { color: var(--muted); font-weight: 500; }
+    table.activity-feed { font-size: 0.76rem; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; width: 100%; border-collapse: collapse; }
+    table.activity-feed td { padding: 0.3rem 0.45rem; border-bottom: 1px solid #21262d; vertical-align: top; }
+    table.activity-feed td.time { color: var(--muted); white-space: nowrap; width: 11.5rem; }
+    table.activity-feed td.tag { color: var(--accent); width: 8rem; }
+    table.activity-feed td.line { color: #c9d1d9; word-break: break-word; }
+    .metric-flash { animation: metricFlash 0.75s ease-out; }
+    @keyframes metricFlash { 0% { background: rgba(88,166,255,0.28); box-shadow: 0 0 0 1px rgba(88,166,255,0.4); } 100% { background: transparent; box-shadow: none; } }
+    #v_iter.metric-flash, #v_rows.metric-flash { border-radius: 6px; padding: 0.15rem 0.35rem; margin: -0.15rem -0.35rem; }
   </style>
 </head>
 <body>
   <h1>Anna training — live</h1>
-  <p class="lead">Scorecard and paper ledger are always visible. Open sections below for preflight, last-tick analysis, drills, and harness.</p>
+  <p class="lead">Refreshes every 4s. Live lines = what the school loop did last; scorecard + ledger = numbers moving.</p>
   <p class="dash-tools"><button type="button" id="btn_expand_all" title="Open all sections">Expand all</button><button type="button" id="btn_collapse_all" title="Close all collapsible sections">Collapse all</button></p>
   <div id="v_llm_fail_alert" role="alert"></div>
   <div id="err"></div>
+  <section class="scorecard-block" style="border:1px solid #1f6feb44" aria-labelledby="live-h">
+    <h2 id="live-h" style="font-size:0.78rem;text-transform:uppercase;letter-spacing:0.06em;color:var(--accent);margin:0 0 0.45rem">Live activity</h2>
+    <p class="sub" style="margin:0 0 0.5rem;font-size:0.72rem">Ticks, harness, tool drills, log lines — not prose.</p>
+    <div style="overflow-x:auto"><table class="activity-feed" aria-label="School loop activity"><tbody id="v_activity_body"></tbody></table></div>
+  </section>
   <section class="scorecard-block" aria-labelledby="scorecard-h">
     <h2 id="scorecard-h" style="font-size:0.78rem;text-transform:uppercase;letter-spacing:0.06em;color:var(--muted);margin:0 0 0.65rem">Scorecard</h2>
     <p class="ls" id="v_ls_head" style="margin-top:0">—</p>
@@ -880,8 +960,35 @@ TRAINING_DASHBOARD_HTML = """<!DOCTYPE html>
           ? 'Policy: the LLM line is informational — the loop does not skip school on Ollama errors. Fix OLLAMA_BASE_URL and model for real generations.'
           : 'Policy: see preflight_policy in JSON.';
       })();
+      (function fillActivity() {
+        var body = document.getElementById('v_activity_body');
+        if (!body) return;
+        body.innerHTML = '';
+        var feed = j.activity_feed || [];
+        if (!feed.length) {
+          var tr0 = document.createElement('tr');
+          var td0 = document.createElement('td');
+          td0.colSpan = 3;
+          td0.className = 'sub';
+          td0.style.fontFamily = 'inherit';
+          td0.textContent = 'No activity yet — start the Karpathy loop; this table fills from ticks + school log.';
+          tr0.appendChild(td0);
+          body.appendChild(tr0);
+          return;
+        }
+        feed.forEach(function(row) {
+          var tr = document.createElement('tr');
+          var t0 = document.createElement('td'); t0.className = 'time'; t0.textContent = row.ts_utc || '—';
+          var t1 = document.createElement('td'); t1.className = 'tag'; t1.textContent = row.tag || '—';
+          var t2 = document.createElement('td'); t2.className = 'line'; t2.textContent = row.line || '—';
+          tr.appendChild(t0); tr.appendChild(t1); tr.appendChild(t2);
+          body.appendChild(tr);
+        });
+      })();
       var ls = j.learning_signal || {};
-      document.getElementById('v_ls_head').textContent = ls.headline || '—';
+      var hl = ls.headline || '—';
+      if (hl.length > 200) hl = hl.slice(0, 197) + '…';
+      document.getElementById('v_ls_head').textContent = hl;
       document.getElementById('v_ls_detail').textContent = ls.detail || '';
       var enr = j.enrollment || {};
       document.getElementById('v_enroll').textContent =
@@ -957,7 +1064,14 @@ TRAINING_DASHBOARD_HTML = """<!DOCTYPE html>
       } else {
         row(sb, 'Detail', det != null && det !== '' ? String(det) : '—');
       }
-      document.getElementById('v_iter').textContent = j.loop.karpathy_loop_iteration ?? '—';
+      var iterEl = document.getElementById('v_iter');
+      var newIter = j.loop.karpathy_loop_iteration;
+      iterEl.textContent = newIter ?? '—';
+      if (window._dashPrevIter != null && newIter != null && Number(newIter) !== Number(window._dashPrevIter)) {
+        iterEl.classList.add('metric-flash');
+        setTimeout(function() { iterEl.classList.remove('metric-flash'); }, 850);
+      }
+      window._dashPrevIter = newIter;
       document.getElementById('v_tick').textContent = j.loop.karpathy_loop_last_tick_utc ? 'last tick ' + j.loop.karpathy_loop_last_tick_utc : '';
       const gp = j.gates.pass;
       const ge = document.getElementById('v_gate');
@@ -965,7 +1079,14 @@ TRAINING_DASHBOARD_HTML = """<!DOCTYPE html>
       ge.className = 'val ' + (gp ? 'ok' : 'bad');
       document.getElementById('v_gdetail').textContent = 'decisive ' + (j.gates.decisive_trades||0) + '/' + (j.gates.min_decisive_trades||'—') +
         (j.gates.win_rate != null ? ' · WR ' + (100*j.gates.win_rate).toFixed(0) + '%' : '');
-      document.getElementById('v_rows').textContent = j.paper_cohort.row_count;
+      var rowEl = document.getElementById('v_rows');
+      var newRows = j.paper_cohort.row_count;
+      rowEl.textContent = newRows;
+      if (window._dashPrevRows != null && newRows != null && Number(newRows) !== Number(window._dashPrevRows)) {
+        rowEl.classList.add('metric-flash');
+        setTimeout(function() { rowEl.classList.remove('metric-flash'); }, 850);
+      }
+      window._dashPrevRows = newRows;
       document.getElementById('v_pnl').textContent = 'W'+j.paper_cohort.wins+' L'+j.paper_cohort.losses+' · $'+Number(j.paper_cohort.total_pnl_usd||0).toFixed(2);
       document.getElementById('v_attempts').textContent = j.attempts.total_events;
       var aj = j.attempts || {};
