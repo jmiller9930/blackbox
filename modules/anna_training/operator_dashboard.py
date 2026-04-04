@@ -16,6 +16,7 @@ from modules.anna_training.execution_ledger import (
     default_execution_ledger_path,
     ensure_execution_ledger_schema,
 )
+from modules.anna_training.chart_overlay import build_chart_overlay
 from modules.anna_training.market_event_view import build_market_event_view
 from modules.anna_training.quantitative_evaluation_layer.constants import (
     LIFECYCLE_ARCHIVED,
@@ -132,11 +133,26 @@ def build_operator_dashboard(qs: dict[str, list[str]]) -> dict[str, Any]:
     survival = query_active_survival_tests(db_path=db_path)
     lifecycle_map = query_lifecycle_by_strategy(db_path=db_path)
 
-    base["operator_dashboard"] = {
+    od = {
         "schema": "anna_operator_dashboard_v1",
         "top_five_selection_rule": rule,
         "top_five_strategy_ids": top_five,
         "lifecycle_by_strategy_id": lifecycle_map,
         "survival_tests_active": survival,
     }
+    base["operator_dashboard"] = od
+
+    ev = base.get("event") or {}
+    bar = ev.get("bar") or {}
+    sym = bar.get("canonical_symbol")
+    tf = bar.get("timeframe")
+    hist = (base.get("chart") or {}).get("history_bars") or []
+    base["chart_overlay"] = build_chart_overlay(
+        history_bars=list(hist) if isinstance(hist, list) else [],
+        symbol=str(sym) if sym else None,
+        timeframe=str(tf) if tf else None,
+        top_five_strategy_ids=top_five,
+        survival_tests_active=survival,
+        db_path=db_path,
+    )
     return base

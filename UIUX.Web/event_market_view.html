@@ -90,6 +90,15 @@
     .nav .nav-note { font-size: 0.72rem; color: var(--muted); margin-top: 1rem; padding-top: 1rem; border-top: 1px solid var(--border); }
     .main { flex: 1; min-width: 0; padding: 1rem 1.25rem 2.5rem; }
     section[id^="sec-"] { scroll-margin-top: 0.75rem; }
+    .chart-legend {
+      display: flex; flex-wrap: wrap; gap: 0.75rem 1.25rem; align-items: center;
+      font-size: 0.72rem; color: var(--muted); margin-bottom: 0.75rem;
+    }
+    .chart-legend span { display: inline-flex; align-items: center; gap: 0.35rem; }
+    .sw { width: 1.1rem; height: 0.35rem; border-radius: 2px; display: inline-block; }
+    .sw-baseline { background: var(--baseline); }
+    .sw-market { background: #94a3b8; }
+    .sw-test { background: repeating-linear-gradient(90deg, #f472b6, #f472b6 4px, transparent 4px, transparent 7px); height: 0.5rem; width: 1.4rem; border-radius: 2px; }
   </style>
 </head>
 <body>
@@ -99,19 +108,21 @@
       <a href="#sec-header">Title &amp; training notice</a>
       <a href="#sec-toolbar">Query &amp; filters</a>
       <a href="#sec-identity">Event identity</a>
-      <a href="#sec-chart">Market chart</a>
+      <a href="#sec-chart">Market chart (primary)</a>
+      <a href="#sec-strategy-toggles">Top-five Anna (visibility)</a>
       <a href="#sec-strategy-actions">Strategy actions (baseline + table)</a>
+      <a href="#sec-tests">Survival tests</a>
       <a href="#sec-qel">Evaluation (QEL judgment)</a>
       <a href="#sec-context">Context snapshot</a>
       <a href="#sec-traces">Decision traces</a>
       <a href="#sec-meta">Load metadata</a>
-      <p class="nav-note">Extended surface (top-five selection, survival dots): <a href="/anna/event-view-extended" style="color:var(--accent)">/anna/event-view-extended</a></p>
+      <p class="nav-note">Unified operator surface: same page at <code style="font-size:0.68rem">/anna/event-dashboard</code>, <code style="font-size:0.68rem">/anna/event-view</code>, and <code style="font-size:0.68rem">/anna/event-view-extended</code>.</p>
     </nav>
     <div class="main">
   <div class="wrap" style="max-width:none;margin:0;padding:0">
     <section id="sec-header">
     <h1>Event dashboard</h1>
-    <p class="sub">Operator surface — baseline vs Anna, decision traces, API-driven (no client-side economics). Left navigation jumps to each existing panel (decomposition only; no panels removed).</p>
+    <p class="sub">Unified operator surface: market chart is primary (baseline blue, top-five Anna overlays, survival tests in time strip). Data from <code style="font-family:var(--mono);font-size:0.82rem">/api/v1/anna/operator-dashboard</code> plus chart overlay series from the ledger.</p>
     <p class="training-banner" role="status"><strong>Training / paper economics.</strong> Anna lane here is paper-grade (not live-authorized). Baseline rows may be paper for harness comparison. Do not treat as production trading authorization.</p>
     </section>
 
@@ -145,11 +156,32 @@
 
       <section id="sec-chart">
       <div class="panel">
-        <div class="panel-h">Market chart (history + event + markers)</div>
+        <div class="panel-h">Market chart — primary surface</div>
         <div class="panel-b">
-          <svg class="chart-svg" id="chart" viewBox="0 0 900 260" preserveAspectRatio="xMidYMid meet"></svg>
+          <div class="chart-legend" aria-hidden="true">
+            <span><i class="sw sw-market"></i> Market close path</span>
+            <span><i class="sw sw-baseline"></i> Baseline position (blue, always on)</span>
+            <span>Anna strategies (non-blue, toggle below)</span>
+            <span><i class="sw sw-test"></i> Survival tests (strip = presence over time)</span>
+          </div>
+          <svg class="chart-svg" id="chart" viewBox="0 0 900 400" preserveAspectRatio="xMidYMid meet"></svg>
           <p class="meta" id="chartNote"></p>
+          <p class="meta" id="ruleBox" style="margin-top:0.5rem"></p>
         </div>
+      </div>
+      </section>
+
+      <section id="sec-strategy-toggles">
+      <div class="panel">
+        <div class="panel-h">Top-five Anna strategies (chart visibility)</div>
+        <div class="panel-b" id="strategyPanel"></div>
+      </div>
+      </section>
+
+      <section id="sec-tests">
+      <div class="panel">
+        <div class="panel-h">Active survival tests (ledger)</div>
+        <div class="panel-b" id="testsBody"></div>
       </div>
       </section>
 
@@ -210,6 +242,10 @@
 (function () {
   'use strict';
 
+  var BASELINE_COLOR = '#4a9eff';
+  var ANNA_LINE_COLORS = ['#a855f7', '#eab308', '#22c55e', '#f97316', '#ec4899'];
+  var toggles = {};
+
   function qs(sel) { return document.querySelector(sel); }
   function esc(s) {
     if (s === null || s === undefined) return '';
@@ -244,54 +280,138 @@
     return '—';
   }
 
-  function renderChart(payload) {
+  function renderChart(p) {
     var svg = qs('#chart');
     var note = qs('#chartNote');
-    var hist = (payload.chart && payload.chart.history_bars) ? payload.chart.history_bars : [];
-    var markers = (payload.chart && payload.chart.markers) ? payload.chart.markers : [];
-    var mid = payload.market_event_id;
+    var ruleBox = qs('#ruleBox');
+    var hist = (p.chart && p.chart.history_bars) ? p.chart.history_bars : [];
+    var mid = p.market_event_id;
+    var overlay = p.chart_overlay || {};
+    var od = p.operator_dashboard || {};
+    var topFive = od.top_five_strategy_ids || [];
+    if (ruleBox) ruleBox.textContent = od.top_five_selection_rule || '';
     if (!hist.length) {
       svg.innerHTML = '';
-      note.textContent = 'No history_bars in API — chart empty.';
+      note.textContent = 'No history_bars — chart empty.';
       return;
     }
     var series = hist.slice().reverse();
     var closes = series.map(function (b) { return Number(b.close); });
     var lo = Math.min.apply(null, closes.concat([Infinity]));
     var hi = Math.max.apply(null, closes.concat([-Infinity]));
+    function bumpRange(segs) {
+      (segs || []).forEach(function (s) {
+        var pr = s.entry_price;
+        if (pr != null && isFinite(Number(pr))) {
+          var v = Number(pr);
+          lo = Math.min(lo, v);
+          hi = Math.max(hi, v);
+        }
+      });
+    }
+    var segBL = (overlay.baseline_position_segments || []).slice();
+    var segSA = (overlay.strategy_position_segments || []).slice();
+    bumpRange(segBL);
+    bumpRange(segSA);
     var pad = (hi - lo) * 0.08 || 0.01;
     lo -= pad; hi += pad;
-    var W = 900, H = 260, L = 50, R = 20, T = 20, B = 35;
-    var iw = W - L - R, ih = H - T - B;
+    var W = 900, H = 400, L = 50, R = 20, T = 22;
+    var PRICE_H = 280;
+    var ih = PRICE_H;
+    var iw = W - L - R;
     var n = series.length;
     function xAt(i) { return L + (i / Math.max(1, n - 1)) * iw; }
     function yAt(price) { return T + (1 - (price - lo) / (hi - lo)) * ih; }
-    var path = [];
-    for (var i = 0; i < n; i++) path.push((i ? 'L' : 'M') + xAt(i).toFixed(1) + ',' + yAt(closes[i]).toFixed(1));
     var evIdx = -1;
     for (var j = 0; j < series.length; j++) {
       if (series[j].market_event_id === mid) { evIdx = j; break; }
     }
+    if (!segBL.length && evIdx >= 0) {
+      var br = (p.strategy_rows || []).filter(function (r) { return r.lane === 'baseline' && r.row_state === 'trade_recorded'; })[0];
+      if (br && br.entry_price != null && isFinite(Number(br.entry_price))) {
+        segBL.push({ from_bar: evIdx, to_bar: evIdx, entry_price: Number(br.entry_price) });
+      }
+    }
+    var path = [];
+    for (var i = 0; i < n; i++) path.push((i ? 'L' : 'M') + xAt(i).toFixed(1) + ',' + yAt(closes[i]).toFixed(1));
     var parts = [];
     parts.push('<rect x="0" y="0" width="' + W + '" height="' + H + '" fill="#1a222d"/>');
-    parts.push('<path d="' + path.join(' ') + '" fill="none" stroke="#60a5fa" stroke-width="1.5"/>');
+    parts.push('<path d="' + path.join(' ') + '" fill="none" stroke="#94a3b8" stroke-width="1.2" opacity="0.95"/>');
     if (evIdx >= 0) {
       var vx = xAt(evIdx);
-      parts.push('<line x1="' + vx + '" y1="' + T + '" x2="' + vx + '" y2="' + (T+ih) + '" stroke="#f0b429" stroke-width="1.2" opacity="0.85"/>');
+      parts.push('<line x1="' + vx + '" y1="' + T + '" x2="' + vx + '" y2="' + (T + ih) + '" stroke="#f0b429" stroke-width="1.5" opacity="0.9"/>');
     }
-    markers.forEach(function (m) {
-      var price = m.price != null ? Number(m.price) : null;
-      if (price == null || isNaN(price)) return;
-      var mx = evIdx >= 0 ? xAt(evIdx) : L + iw * 0.5;
-      var my = yAt(price);
-      var fill = (m.lane === 'baseline') ? '#4a9eff' : '#a855f7';
-      var sym = m.kind === 'entry' ? '▲' : '●';
-      parts.push('<circle cx="' + mx + '" cy="' + my + '" r="5" fill="' + fill + '" stroke="#fff" stroke-width="0.5"/>');
-      parts.push('<text x="' + (mx+8) + '" y="' + (my+4) + '" fill="#c9d1d9" font-size="9" font-family="IBM Plex Mono, monospace">' + esc(sym + ' ' + (m.strategy_id||'')) + '</text>');
+    function drawSegLine(seg, stroke, sw) {
+      var pr = Number(seg.entry_price);
+      if (!isFinite(pr)) return;
+      var a = Math.max(0, Math.min(n - 1, seg.from_bar));
+      var b = Math.max(0, Math.min(n - 1, seg.to_bar));
+      var y = yAt(pr);
+      if (a === b) {
+        parts.push('<circle cx="' + xAt(a) + '" cy="' + y + '" r="5" fill="none" stroke="' + stroke + '" stroke-width="' + sw + '"/>');
+      } else {
+        var x1 = xAt(Math.min(a, b)), x2 = xAt(Math.max(a, b));
+        parts.push('<line x1="' + x1 + '" y1="' + y + '" x2="' + x2 + '" y2="' + y + '" stroke="' + stroke + '" stroke-width="' + sw + '" opacity="0.95"/>');
+      }
+    }
+    segBL.forEach(function (seg) { drawSegLine(seg, BASELINE_COLOR, '2.4'); });
+    topFive.forEach(function (sid, idx) {
+      if (toggles[sid] === false) return;
+      var col = ANNA_LINE_COLORS[idx % ANNA_LINE_COLORS.length];
+      segSA.filter(function (s) { return s.strategy_id === sid; }).forEach(function (seg) { drawSegLine(seg, col, '2'); });
     });
-    parts.push('<text x="' + L + '" y="' + (H-8) + '" fill="#8b9aad" font-size="10">Older ← → Recent</text>');
+    var TEST_TOP = 318;
+    var TEST_H = 64;
+    parts.push('<line x1="' + L + '" y1="' + (T + ih + 6) + '" x2="' + (L + iw) + '" y2="' + (T + ih + 6) + '" stroke="#2d3847" stroke-width="1"/>');
+    parts.push('<text x="' + L + '" y="' + (T + ih + 20) + '" fill="#8b9aad" font-size="10" font-family="IBM Plex Mono, monospace">Survival tests — presence over time (strip below; not strategy price lines)</text>');
+    parts.push('<rect x="' + L + '" y="' + TEST_TOP + '" width="' + iw + '" height="' + TEST_H + '" fill="rgba(15,20,28,0.9)" stroke="#2d3847" stroke-width="0.5"/>');
+    (overlay.survival_test_bands || []).forEach(function (band, bi) {
+      var fb = Math.max(0, Math.min(n - 1, band.from_bar));
+      var tb = Math.max(0, Math.min(n - 1, band.to_bar));
+      var row = (band.strip_row != null ? band.strip_row : bi) % 4;
+      var yb = TEST_TOP + 6 + row * 14;
+      var x1 = xAt(Math.min(fb, tb));
+      var x2 = xAt(Math.max(fb, tb));
+      var w = Math.max(3, x2 - x1);
+      parts.push('<rect x="' + x1 + '" y="' + yb + '" width="' + w + '" height="10" fill="rgba(244,114,182,0.35)" stroke="#f472b6" stroke-width="1" stroke-dasharray="4,3"/>');
+    });
+    parts.push('<text x="' + L + '" y="' + (H - 8) + '" fill="#8b9aad" font-size="10">Older ← → Recent</text>');
     svg.innerHTML = parts.join('');
-    note.textContent = 'Close path + event bar highlight (gold) + markers (lane-colored). history_bars count: ' + series.length + '.';
+    var dg = (overlay.data_gaps || []).join(', ');
+    note.textContent = 'Bars: ' + n + '. Baseline = blue segments (ledger time span). Anna = top-five, toggleable. Tests = pink band strip. ' + (dg ? 'Gaps: ' + dg + '.' : '');
+  }
+
+  function renderStrategyPanel(p) {
+    var od = p.operator_dashboard || {};
+    var top = od.top_five_strategy_ids || [];
+    var lc = od.lifecycle_by_strategy_id || {};
+    var html = '<p style="margin:0 0 0.75rem;font-size:0.85rem;color:var(--muted)">Server-selected top five. Baseline is always drawn on the chart (blue). Uncheck to hide an Anna overlay.</p>';
+    top.forEach(function (sid, i) {
+      if (toggles[sid] === undefined) toggles[sid] = true;
+      var st = lc[sid] || '—';
+      html += '<div class="toggle-row" style="display:flex;align-items:center;gap:0.5rem;margin:0.35rem 0;font-size:0.85rem"><label><input type="checkbox" data-sid="' + esc(sid) + '" ' + (toggles[sid] ? 'checked' : '') + '/> ' +
+        '<span class="lane-anna">' + esc(sid) + '</span> · <span style="color:var(--muted)">' + esc(st) + '</span> · <span style="font-family:var(--mono);font-size:0.75rem">' + ANNA_LINE_COLORS[i % ANNA_LINE_COLORS.length] + '</span></label></div>';
+    });
+    qs('#strategyPanel').innerHTML = html;
+    qs('#strategyPanel').querySelectorAll('input[type=checkbox]').forEach(function (cb) {
+      cb.addEventListener('change', function () {
+        toggles[cb.getAttribute('data-sid')] = cb.checked;
+        renderChart(window.__lastPayload);
+      });
+    });
+  }
+
+  function renderTests(p) {
+    var od = p.operator_dashboard || {};
+    var tests = od.survival_tests_active || [];
+    if (!tests.length) {
+      qs('#testsBody').innerHTML = '<span style="color:var(--muted)">No active survival tests in ledger.</span>';
+      return;
+    }
+    qs('#testsBody').innerHTML = '<table class="data"><thead><tr><th>test_id</th><th>strategy_id</th><th>status</th><th>created</th></tr></thead><tbody>' +
+      tests.map(function (t) {
+        return '<tr><td style="font-size:0.75rem">' + esc(t.test_id) + '</td><td style="font-family:var(--mono);font-size:0.78rem">' + esc(t.strategy_id) + '</td><td>' + esc(t.status) + '</td><td>' + esc(t.created_at_utc || '') + '</td></tr>';
+      }).join('') + '</tbody></table>';
   }
 
   function renderIdentity(p) {
@@ -355,13 +475,15 @@
   function populateEvalSelect(p) {
     var rows = p.strategy_rows || [];
     var sel = qs('#evalStrategy');
-    var anna = rows.filter(function (r) { return r.lane === 'anna' && r.strategy_id; });
     var seen = {};
-    anna.forEach(function (r) { seen[r.strategy_id] = true; });
+    rows.filter(function (r) { return r.lane === 'anna' && r.strategy_id; }).forEach(function (r) { seen[r.strategy_id] = true; });
     var ids = Object.keys(seen);
     sel.innerHTML = '<option value="">— select Anna strategy —</option>' +
       ids.map(function (id) { return '<option value="' + esc(id) + '">' + esc(id) + '</option>'; }).join('');
-    if (ids.length === 1) sel.value = ids[0];
+    var od = p.operator_dashboard || {};
+    var tf = od.top_five_strategy_ids || [];
+    if (tf.length) sel.value = tf[0];
+    else if (ids.length === 1) sel.value = ids[0];
   }
 
   function renderEval(d) {
@@ -462,7 +584,7 @@
 
   function load() {
     qs('#error').style.display = 'none';
-    var url = '/api/v1/anna/market-event-view?' + apiParams();
+    var url = '/api/v1/anna/operator-dashboard?' + apiParams();
     fetch(url, { cache: 'no-store' }).then(function (r) { return r.json(); }).then(function (p) {
       if (!p.ok) {
         qs('#error').style.display = 'block';
@@ -470,16 +592,19 @@
         qs('#content').style.display = 'none';
         return;
       }
+      window.__lastPayload = p;
       qs('#content').style.display = 'block';
       renderIdentity(p);
       renderBaselineSlot(p);
+      renderStrategyPanel(p);
       renderChart(p);
       renderTable(p);
       populateEvalSelect(p);
       qs('#evalBody').style.display = 'none';
       renderContext(p);
+      renderTests(p);
       renderTraces(p);
-      qs('#rawMeta').textContent = 'GET ' + url + ' · schema ' + (p.schema || '') + ' · ledger ' + (p.ledger_path || '') + ' · judgment: /api/v1/anna/evaluation-summary';
+      qs('#rawMeta').textContent = 'GET ' + url + ' · ' + (p.schema || '') + ' · chart_overlay ' + ((p.chart_overlay || {}).schema || '') + ' · ledger ' + (p.ledger_path || '');
     }).catch(function (e) {
       qs('#error').style.display = 'block';
       qs('#error').textContent = String(e);

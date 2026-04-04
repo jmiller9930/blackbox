@@ -561,6 +561,87 @@ def query_trades_by_market_event_id(
         conn.close()
 
 
+def query_trades_for_symbol_timeframe_in_events(
+    symbol: str,
+    timeframe: str,
+    market_event_ids: list[str],
+    *,
+    db_path: Path | None = None,
+) -> list[dict[str, Any]]:
+    """
+    Trades whose ``market_event_id`` is in the given set (e.g. chart window bars).
+    Used to align ledger rows with OHLC history for time-based overlays.
+    """
+    mids = [str(x).strip() for x in market_event_ids if str(x).strip()]
+    if not mids:
+        return []
+    sym = (symbol or "").strip()
+    tf = (timeframe or "").strip()
+    if not sym or not tf:
+        return []
+    conn = connect_ledger(db_path)
+    try:
+        ensure_execution_ledger_schema(conn)
+        placeholders = ",".join("?" * len(mids))
+        cur = conn.execute(
+            f"""
+            SELECT trade_id, strategy_id, lane, mode, market_event_id, symbol, timeframe,
+                   side, entry_time, entry_price, size, exit_time, exit_price, exit_reason,
+                   pnl_usd, context_snapshot_json, notes, trace_id, schema_version, created_at_utc
+            FROM execution_trades
+            WHERE symbol = ? AND timeframe = ? AND market_event_id IN ({placeholders})
+            ORDER BY entry_time ASC, trade_id ASC
+            """,
+            (sym, tf, *mids),
+        )
+        cols = [d[0] for d in cur.description]
+        return [dict(zip(cols, r)) for r in cur.fetchall()]
+    finally:
+        conn.close()
+
+
+def query_trades_for_symbol_timeframe_overlapping_window(
+    symbol: str,
+    timeframe: str,
+    window_start_utc: str,
+    window_end_utc: str,
+    *,
+    limit: int = 800,
+    db_path: Path | None = None,
+) -> list[dict[str, Any]]:
+    """
+    Trades that may span multiple bars: overlap [window_start_utc, window_end_utc] lexicographically
+    (ISO-8601 strings) using entry/exit times.
+    """
+    sym = (symbol or "").strip()
+    tf = (timeframe or "").strip()
+    ws = (window_start_utc or "").strip()
+    we = (window_end_utc or "").strip()
+    if not sym or not tf or not ws or not we:
+        return []
+    conn = connect_ledger(db_path)
+    try:
+        ensure_execution_ledger_schema(conn)
+        cur = conn.execute(
+            """
+            SELECT trade_id, strategy_id, lane, mode, market_event_id, symbol, timeframe,
+                   side, entry_time, entry_price, size, exit_time, exit_price, exit_reason,
+                   pnl_usd, context_snapshot_json, notes, trace_id, schema_version, created_at_utc
+            FROM execution_trades
+            WHERE symbol = ? AND timeframe = ?
+              AND entry_time IS NOT NULL AND entry_time <= ?
+              AND (exit_time IS NULL OR exit_time >= ?)
+            ORDER BY entry_time ASC, trade_id ASC
+            LIMIT ?
+            """,
+            (sym, tf, we, ws, int(limit)),
+        )
+        cols = [d[0] for d in cur.description]
+        return [dict(zip(cols, r)) for r in cur.fetchall()]
+    finally:
+        conn.close()
+
+
 def query_trades_by_strategy(
     strategy_id: str,
     *,

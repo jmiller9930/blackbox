@@ -237,6 +237,7 @@ def build_market_event_view(qs: dict[str, list[str]]) -> dict[str, Any]:
                         history_bars.append(
                             {
                                 "candle_open_utc": h.get("candle_open_utc"),
+                                "candle_close_utc": h.get("candle_close_utc"),
                                 "open": h.get("open"),
                                 "high": h.get("high"),
                                 "low": h.get("low"),
