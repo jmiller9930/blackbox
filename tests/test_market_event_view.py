@@ -11,8 +11,8 @@ from modules.anna_training.execution_ledger import RESERVED_STRATEGY_BASELINE, a
 from modules.anna_training.market_event_view import build_market_event_view
 
 
-def test_market_event_view_requires_id() -> None:
-    r = build_market_event_view({})
+def test_market_event_view_requires_id_when_auto_disabled() -> None:
+    r = build_market_event_view({"no_auto_default": ["1"]})
     assert r.get("ok") is False
     assert r.get("error") == "missing_market_event_id"
 

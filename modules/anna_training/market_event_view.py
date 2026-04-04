@@ -24,6 +24,32 @@ from _paths import default_market_data_path  # noqa: E402
 from market_data.store import connect_market_db, ensure_market_schema, fetch_bar_by_market_event_id, latest_stored_bars  # noqa: E402
 
 
+def _history_bar_limit_5m(window_days: float) -> int:
+    """Cap five-minute bars for chart window (12 bars/hour)."""
+    n = int(max(0.25, window_days) * 24 * 12)
+    return min(9000, max(32, n))
+
+
+def _resolve_latest_market_event_id(market_path: Path) -> str | None:
+    """Most recent bar in market_bars_5m — used when UI omits market_event_id."""
+    try:
+        conn_m = connect_market_db(market_path)
+        try:
+            ensure_market_schema(conn_m, _REPO)
+            row = conn_m.execute(
+                """
+                SELECT market_event_id FROM market_bars_5m
+                ORDER BY candle_open_utc DESC, id DESC
+                LIMIT 1
+                """
+            ).fetchone()
+            return str(row[0]).strip() if row and row[0] else None
+        finally:
+            conn_m.close()
+    except Exception:  # noqa: BLE001
+        return None
+
+
 def _ledger_path() -> Path:
     raw = os.environ.get("BLACKBOX_EXECUTION_LEDGER_PATH") or ""
     return Path(raw).expanduser() if raw.strip() else default_execution_ledger_path()
@@ -197,18 +223,10 @@ def build_market_event_view(qs: dict[str, list[str]]) -> dict[str, Any]:
         v = (qs.get(name) or [None])[0]
         return (str(v) if v is not None else "").strip() or None
 
-    mid = _one("market_event_id")
-    if not mid:
-        return {
-            "schema": "anna_market_event_view_v1",
-            "ok": False,
-            "error": "missing_market_event_id",
-            "detail": "Query parameter market_event_id is required.",
-        }
-
     modes_raw = _one("modes")
     exclude_raw = _one("exclude_modes")
     lane_filter = _one("lane")
+    no_auto = (_one("no_auto_default") or "").lower() in ("1", "true", "yes")
 
     include_modes: set[str] | None = None
     if modes_raw:
@@ -217,6 +235,26 @@ def build_market_event_view(qs: dict[str, list[str]]) -> dict[str, Any]:
 
     ledger_path = _ledger_path()
     market_path = _market_db_path()
+
+    mid = _one("market_event_id")
+    defaults_used: dict[str, Any] = {}
+    if not mid and not no_auto:
+        mid = _resolve_latest_market_event_id(market_path)
+        if mid:
+            defaults_used["market_event_id"] = "resolved_latest_bar"
+    if not mid:
+        return {
+            "schema": "anna_market_event_view_v1",
+            "ok": False,
+            "error": "missing_market_event_id",
+            "detail": "No market_event_id and no bars in market DB to default to — pass market_event_id=… or ingest bars.",
+        }
+
+    try:
+        window_days = float((_one("window_days") or "30").strip() or "30")
+    except ValueError:
+        window_days = 30.0
+    hist_limit = _history_bar_limit_5m(window_days)
 
     # Bar + history
     event_block: dict[str, Any] = {"symbol": None, "timeframe": None, "bar": None}
@@ -232,7 +270,7 @@ def build_market_event_view(qs: dict[str, list[str]]) -> dict[str, Any]:
                 event_block["bar"] = bar
                 sym = str(bar.get("canonical_symbol") or "")
                 if sym:
-                    hist = latest_stored_bars(conn_m, sym, limit=48)
+                    hist = latest_stored_bars(conn_m, sym, limit=hist_limit)
                     for h in hist:
                         history_bars.append(
                             {
@@ -481,10 +519,12 @@ def build_market_event_view(qs: dict[str, list[str]]) -> dict[str, Any]:
                 }
             )
 
-    return {
+    out: dict[str, Any] = {
         "schema": "anna_market_event_view_v1",
         "ok": True,
         "market_event_id": mid,
+        "defaults_used": defaults_used,
+        "chart_window": {"window_days": window_days, "history_bar_limit_5m": hist_limit},
         "filters_applied": {
             "modes": sorted(include_modes) if include_modes else None,
             "exclude_modes": sorted(exclude_modes),
@@ -505,3 +545,4 @@ def build_market_event_view(qs: dict[str, list[str]]) -> dict[str, Any]:
         "decision_traces": traces_f,
         "context_by_trade": context_by_trade,
     }
+    return out

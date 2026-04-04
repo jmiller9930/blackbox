@@ -24,7 +24,19 @@
       --mono: "IBM Plex Mono", ui-monospace, monospace;
     }
     * { box-sizing: border-box; }
-    body { margin: 0; min-height: 100vh; background: var(--bg); color: var(--text); font-family: var(--font); font-size: 15px; line-height: 1.45; }
+    html { font-size: clamp(13px, 0.75vw + 12px, 17px); }
+    body { margin: 0; min-height: 100vh; background: var(--bg); color: var(--text); font-family: var(--font); font-size: 1rem; line-height: 1.45; }
+    .app-topbar {
+      display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between;
+      gap: 0.75rem; padding: 0.5rem 1rem; background: var(--surface2); border-bottom: 1px solid var(--border);
+      position: sticky; top: 0; z-index: 100;
+    }
+    .app-topbar__nav { display: flex; flex-wrap: wrap; gap: 0.5rem 1.25rem; align-items: center; }
+    .app-topbar__nav a { color: var(--accent); text-decoration: none; font-size: 0.88rem; }
+    .app-topbar__nav a:hover { text-decoration: underline; }
+    .app-topbar__nav a[aria-current="page"] { color: var(--text); font-weight: 600; pointer-events: none; }
+    .app-topbar__scale { font-size: 0.72rem; color: var(--muted); display: flex; align-items: center; gap: 0.4rem; }
+    .app-topbar__scale select { padding: 0.3rem 0.45rem; border-radius: 6px; border: 1px solid var(--border); background: var(--surface); color: var(--text); font-size: 0.85rem; }
     .wrap { max-width: min(1680px, 100vw); margin: 0 auto; padding: 1rem 1.25rem 2.5rem; }
     h1 { font-size: 1.35rem; margin: 0 0 0.35rem; }
     .sub { color: var(--muted); font-size: 0.88rem; margin-bottom: 1rem; }
@@ -75,9 +87,13 @@
       line-height: 1.4;
     }
     .training-banner strong { color: #fcd34d; }
-    .layout { display: flex; align-items: flex-start; gap: 0; min-height: 100vh; }
+    .layout { display: flex; align-items: flex-start; gap: 0; min-height: calc(100vh - 48px); }
+    @media (max-width: 960px) {
+      .layout { flex-direction: column; }
+      .nav { width: 100%; min-height: 0; max-height: none; position: relative; border-right: none; border-bottom: 1px solid var(--border); }
+    }
     .nav {
-      width: 220px; flex-shrink: 0; position: sticky; top: 0; align-self: flex-start;
+      width: min(220px, 100%); flex-shrink: 0; position: sticky; top: 0; align-self: flex-start;
       padding: 1rem 0.75rem; border-right: 1px solid var(--border); background: var(--surface);
       min-height: 100vh; max-height: 100vh; overflow-y: auto;
     }
@@ -102,6 +118,22 @@
   </style>
 </head>
 <body>
+  <header class="app-topbar">
+    <nav class="app-topbar__nav" aria-label="Anna applications">
+      <a href="/anna.html">Anna hub</a>
+      <a href="/anna/training">Training — live</a>
+      <a href="/anna/event-dashboard" aria-current="page">Event dashboard</a>
+      <a href="/anna/evaluation">QEL evaluation</a>
+    </nav>
+    <label class="app-topbar__scale">UI scale
+      <select id="uiScale" title="Saved in this browser">
+        <option value="85">85%</option>
+        <option value="100" selected>100%</option>
+        <option value="115">115%</option>
+        <option value="130">130%</option>
+      </select>
+    </label>
+  </header>
   <div class="layout">
     <nav class="nav" aria-label="Dashboard sections (same page)">
       <h2>Sections</h2>
@@ -116,7 +148,11 @@
       <a href="#sec-context">Context snapshot</a>
       <a href="#sec-traces">Decision traces</a>
       <a href="#sec-meta">Load metadata</a>
-      <p class="nav-note">Unified operator surface: same page at <code style="font-size:0.68rem">/anna/event-dashboard</code>, <code style="font-size:0.68rem">/anna/event-view</code>, and <code style="font-size:0.68rem">/anna/event-view-extended</code>.</p>
+      <h2 style="margin-top:1rem">Other pages</h2>
+      <a href="/anna.html">Anna hub</a>
+      <a href="/anna/training">Training — live (paper ledger)</a>
+      <a href="/anna/evaluation">QEL evaluation</a>
+      <p class="nav-note">Aliases: <code style="font-size:0.68rem">/anna/event-view</code>, <code style="font-size:0.68rem">/anna/event-view-extended</code></p>
     </nav>
     <div class="main">
   <div class="wrap" style="max-width:none;margin:0;padding:0">
@@ -144,13 +180,19 @@
           <option value="anna">anna</option>
         </select>
       </label>
+      <label>Chart window (5m bars)
+        <select id="windowDays" title="Approximate calendar days of history">
+          <option value="7">7 days</option>
+          <option value="30" selected>30 days</option>
+          <option value="90">90 days</option>
+        </select>
+      </label>
       <button type="button" class="primary" id="loadBtn">Load</button>
     </div>
     <div id="error" class="err" style="display:none"></div>
     <p id="loadHint" class="sub" style="margin:0.75rem 0 0;line-height:1.5">
-      <strong>How to load data:</strong> Enter <code style="font-family:var(--mono);font-size:0.85rem">market_event_id</code> and click <strong>Load</strong>, or open this page with
-      <code style="font-family:var(--mono);font-size:0.82rem">?market_event_id=…</code> in the URL. Typing alone does not fetch — the panels below stay hidden until a successful load.
-      <br/><span style="color:var(--muted)">This view is <strong>one event</strong> (execution ledger + market bars for that id). The rolling paper harness / full trade list is <a href="/anna/training" style="color:var(--accent)">Anna training — live</a>, not this page.</span>
+      <strong>Loads automatically</strong> on open: if the field is empty, the server picks the <strong>latest bar</strong> in market data (current “as of” event). Override by typing an id and clicking <strong>Load</strong> or pressing <strong>Enter</strong>.
+      <br/><span style="color:var(--muted)">This page is <strong>one event</strong> plus chart window — not the full rolling paper table. For that use <a href="/anna/training" style="color:var(--accent)">Training — live</a> (also in the top bar).</span>
     </p>
     </section>
 
@@ -258,12 +300,15 @@
   }
 
   function apiParams() {
+    var parts = [];
     var mid = qs('#mid').value.trim();
-    var p = 'market_event_id=' + encodeURIComponent(mid);
-    if (qs('#filterMode').value === 'economic') p += '&exclude_modes=paper_stub';
+    if (mid) parts.push('market_event_id=' + encodeURIComponent(mid));
+    if (qs('#filterMode').value === 'economic') parts.push('exclude_modes=paper_stub');
     var lane = qs('#lane').value.trim();
-    if (lane) p += '&lane=' + encodeURIComponent(lane);
-    return p;
+    if (lane) parts.push('lane=' + encodeURIComponent(lane));
+    var wd = qs('#windowDays') && qs('#windowDays').value;
+    if (wd) parts.push('window_days=' + encodeURIComponent(wd));
+    return parts.join('&');
   }
 
   function badgeMode(mode) {
@@ -606,6 +651,7 @@
       }
       window.__lastPayload = p;
       qs('#content').style.display = 'block';
+      if (p.market_event_id) qs('#mid').value = p.market_event_id;
       var hint = qs('#loadHint');
       if (hint) hint.style.display = 'none';
       renderIdentity(p);
@@ -618,7 +664,9 @@
       renderContext(p);
       renderTests(p);
       renderTraces(p);
-      qs('#rawMeta').textContent = 'GET ' + url + ' · ' + (p.schema || '') + ' · chart_overlay ' + ((p.chart_overlay || {}).schema || '') + ' · ledger ' + (p.ledger_path || '');
+      var defu = p.defaults_used || {};
+      var cw = p.chart_window || {};
+      qs('#rawMeta').textContent = 'GET ' + url + ' · ' + (p.schema || '') + ' · defaults_used ' + JSON.stringify(defu) + ' · window ' + JSON.stringify(cw) + ' · chart_overlay ' + ((p.chart_overlay || {}).schema || '') + ' · ledger ' + (p.ledger_path || '');
     }).catch(function (e) {
       qs('#error').style.display = 'block';
       qs('#error').textContent = String(e);
@@ -633,6 +681,23 @@
     if (u.searchParams.get('exclude_modes') === 'paper_stub') qs('#filterMode').value = 'economic';
     var ln = u.searchParams.get('lane');
     if (ln) qs('#lane').value = ln;
+    var wd = u.searchParams.get('window_days');
+    if (wd && qs('#windowDays')) qs('#windowDays').value = wd;
+  }
+
+  function applyUiScale() {
+    var v = localStorage.getItem('eventDashUiScale') || '100';
+    var sel = qs('#uiScale');
+    if (sel) {
+      var ok = false;
+      for (var i = 0; i < sel.options.length; i++) {
+        if (sel.options[i].value === v) { ok = true; break; }
+      }
+      sel.value = ok ? v : '100';
+    }
+    var pct = parseInt(sel && sel.value ? sel.value : v, 10);
+    if (!isFinite(pct) || pct < 50) pct = 100;
+    document.documentElement.style.fontSize = (pct / 100 * 16) + 'px';
   }
 
   qs('#loadBtn').addEventListener('click', load);
@@ -640,8 +705,13 @@
   qs('#mid').addEventListener('keydown', function (ev) {
     if (ev.key === 'Enter') { ev.preventDefault(); load(); }
   });
+  qs('#uiScale').addEventListener('change', function () {
+    localStorage.setItem('eventDashUiScale', this.value);
+    applyUiScale();
+  });
   initFromQuery();
-  if (qs('#mid').value.trim()) load();
+  applyUiScale();
+  load();
 })();
   </script>
 </body>
