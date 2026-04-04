@@ -5,6 +5,10 @@ path as Telegram: ``analyze_to_dict`` → ``try_create_execution_request_from_an
 approve + ``run_execution`` so paper rows can append every tick when configured.
 
 Env:
+  ANNA_KARPATHY_LAB_WIRE_JACK — if ``1``/true: map ``OBSERVATION_ONLY`` proposals to ``CONDITION_TIGHTENING``
+    so ``try_create_execution_request_from_anna_analysis`` can create a pending request (otherwise most ticks
+    never wire to Jack because classification stays observational). Still need ``BLACKBOX_JACK_EXECUTOR_CMD``
+    for ``run_execution`` to log paper.
   ANNA_KARPATHY_PAPER_HARNESS_EACH_TICK — default **1** (true): run harness each successful tick.
   ANNA_KARPATHY_AUTO_RUN_PAPER — default **1**: auto-approve + run_execution after a strategy signal.
   ANNA_KARPATHY_PAPER_APPROVER_ID — default ``karpathy-paper-harness``.

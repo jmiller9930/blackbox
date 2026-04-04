@@ -97,3 +97,30 @@ def test_try_create_skips_preflight_blocked(monkeypatch) -> None:
 
     analysis = {"pipeline": {"answer_source": "preflight_blocked"}}
     assert try_create_execution_request_from_anna_analysis(analysis, source_task_id=None) is None
+
+
+def test_try_create_wires_observation_when_lab_jack_override(tmp_path, monkeypatch) -> None:
+    """OBSERVATION_ONLY normally skips execution_request; ANNA_KARPATHY_LAB_WIRE_JACK maps to CONDITION_TIGHTENING."""
+    import execution_plane.approval_manager as am
+
+    monkeypatch.setattr(am, "REQUESTS_PATH", tmp_path / "req.json")
+    monkeypatch.setenv("BLACKBOX_REQUIRE_ANNA_PROPOSAL_FOR_EXECUTION", "1")
+    monkeypatch.setenv("ANNA_AUTO_EXECUTION_REQUEST", "1")
+    monkeypatch.setenv("ANNA_KARPATHY_LAB_WIRE_JACK", "1")
+
+    from execution_plane.anna_signal_execution import try_create_execution_request_from_anna_analysis
+
+    analysis = {
+        "input_text": "market notes",
+        "policy_alignment": {"guardrail_mode": "unknown", "alignment": "unknown"},
+        "risk_assessment": {"level": "low", "factors": []},
+        "suggested_action": {"intent": "WATCH", "rationale": ""},
+        "concepts_used": [],
+        "interpretation": {"summary": "thin", "headline": "H", "signals": []},
+        "caution_flags": [],
+        "notes": [],
+    }
+    handoff = try_create_execution_request_from_anna_analysis(analysis, source_task_id=None)
+    assert handoff is not None
+    assert handoff.get("request_id")
+    assert (tmp_path / "req.json").is_file()

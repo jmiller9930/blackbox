@@ -3,6 +3,7 @@ Proposal shaping: anna_analysis_v1 → anna_proposal_v1 (validation-loop bridge)
 """
 from __future__ import annotations
 
+import os
 import re
 from typing import Any
 
@@ -40,6 +41,23 @@ def classify_proposal_type(anna: dict[str, Any]) -> str:
     return "CONDITION_TIGHTENING"
 
 
+def _lab_wire_jack_override(ptype: str) -> str:
+    """Karpathy lab: OBSERVATION_ONLY never creates execution_request → Jack never runs.
+
+    Set ``ANNA_KARPATHY_LAB_WIRE_JACK=1`` to map OBSERVATION_ONLY → CONDITION_TIGHTENING so the
+    harness can still build a pending request (subject to ``BLACKBOX_JACK_EXECUTOR_CMD``, etc.).
+    """
+    if ptype != "OBSERVATION_ONLY":
+        return ptype
+    if (os.environ.get("ANNA_KARPATHY_LAB_WIRE_JACK") or "").strip().lower() not in (
+        "1",
+        "true",
+        "yes",
+    ):
+        return ptype
+    return "CONDITION_TIGHTENING"
+
+
 def paper_intent_for_proposal(proposal_type: str, anna_intent: str) -> str:
     if proposal_type == "NO_CHANGE":
         return "unchanged"
@@ -54,7 +72,7 @@ def build_anna_proposal(
     source_task_id: str | None,
     extra_notes: list[str],
 ) -> dict[str, Any]:
-    ptype = classify_proposal_type(anna)
+    ptype = _lab_wire_jack_override(classify_proposal_type(anna))
     pol = anna.get("policy_alignment") or {}
     mode = pol.get("guardrail_mode") or "unknown"
     risk = (anna.get("risk_assessment") or {}).get("level") or "unknown"
