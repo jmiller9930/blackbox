@@ -147,6 +147,11 @@
       <button type="button" class="primary" id="loadBtn">Load</button>
     </div>
     <div id="error" class="err" style="display:none"></div>
+    <p id="loadHint" class="sub" style="margin:0.75rem 0 0;line-height:1.5">
+      <strong>How to load data:</strong> Enter <code style="font-family:var(--mono);font-size:0.85rem">market_event_id</code> and click <strong>Load</strong>, or open this page with
+      <code style="font-family:var(--mono);font-size:0.82rem">?market_event_id=…</code> in the URL. Typing alone does not fetch — the panels below stay hidden until a successful load.
+      <br/><span style="color:var(--muted)">This view is <strong>one event</strong> (execution ledger + market bars for that id). The rolling paper harness / full trade list is <a href="/anna/training" style="color:var(--accent)">Anna training — live</a>, not this page.</span>
+    </p>
     </section>
 
     <div id="content" style="display:none">
@@ -585,7 +590,14 @@
   function load() {
     qs('#error').style.display = 'none';
     var url = '/api/v1/anna/operator-dashboard?' + apiParams();
-    fetch(url, { cache: 'no-store' }).then(function (r) { return r.json(); }).then(function (p) {
+    fetch(url, { cache: 'no-store' }).then(function (r) {
+      if (!r.ok) {
+        return r.text().then(function (t) {
+          throw new Error('HTTP ' + r.status + ' ' + (t ? t.slice(0, 200) : ''));
+        });
+      }
+      return r.json();
+    }).then(function (p) {
       if (!p.ok) {
         qs('#error').style.display = 'block';
         qs('#error').textContent = (p.error || 'error') + (p.detail ? ': ' + p.detail : '');
@@ -594,6 +606,8 @@
       }
       window.__lastPayload = p;
       qs('#content').style.display = 'block';
+      var hint = qs('#loadHint');
+      if (hint) hint.style.display = 'none';
       renderIdentity(p);
       renderBaselineSlot(p);
       renderStrategyPanel(p);
@@ -623,6 +637,9 @@
 
   qs('#loadBtn').addEventListener('click', load);
   qs('#evalBtn').addEventListener('click', loadEvaluation);
+  qs('#mid').addEventListener('keydown', function (ev) {
+    if (ev.key === 'Enter') { ev.preventDefault(); load(); }
+  });
   initFromQuery();
   if (qs('#mid').value.trim()) load();
 })();
