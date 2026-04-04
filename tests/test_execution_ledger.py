@@ -48,12 +48,13 @@ def test_multiple_trades_same_market_event_id(tmp_path: Path, monkeypatch: pytes
         market_event_id=mid,
         symbol="SOL-PERP",
         timeframe="5m",
+        side="long",
+        size=1.0,
         entry_time="2026-04-01T19:55:00Z",
         entry_price=100.0,
         exit_time="2026-04-01T20:00:00Z",
         exit_price=101.0,
         exit_reason="CLOSE",
-        pnl_usd=1.0,
         trade_id="t-anna-1",
     )
     append_execution_trade(
@@ -63,12 +64,13 @@ def test_multiple_trades_same_market_event_id(tmp_path: Path, monkeypatch: pytes
         market_event_id=mid,
         symbol="SOL-PERP",
         timeframe="5m",
+        side="long",
+        size=1.0,
         entry_time="2026-04-01T19:55:00Z",
         entry_price=100.0,
         exit_time="2026-04-01T20:00:00Z",
         exit_price=99.0,
         exit_reason="CLOSE",
-        pnl_usd=-1.0,
         trade_id="t-anna-2",
     )
     append_execution_trade(
@@ -78,12 +80,13 @@ def test_multiple_trades_same_market_event_id(tmp_path: Path, monkeypatch: pytes
         market_event_id=mid,
         symbol="SOL-PERP",
         timeframe="5m",
+        side="long",
+        size=1.0,
         entry_time="2026-04-01T19:55:00Z",
         entry_price=100.0,
         exit_time="2026-04-01T20:00:00Z",
         exit_price=100.5,
         exit_reason="TP",
-        pnl_usd=0.5,
         trade_id="t-base-1",
     )
     rows = query_trades_by_market_event_id(mid)

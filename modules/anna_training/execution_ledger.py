@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import math
 import os
 import sqlite3
 import uuid
@@ -13,8 +14,10 @@ from modules.anna_training.store import utc_now_iso
 
 RESERVED_STRATEGY_BASELINE = "baseline"
 VALID_LANES = frozenset({"baseline", "anna"})
-VALID_MODES = frozenset({"live", "paper"})
+VALID_MODES = frozenset({"live", "paper", "paper_stub"})
 SCHEMA_VERSION = "execution_trade_v1"
+# Float tolerance when comparing caller-supplied pnl_usd to derived (economic modes only).
+PNL_EPSILON = 1e-6
 
 
 def _repo_root() -> Path:
@@ -26,6 +29,84 @@ def default_execution_ledger_path() -> Path:
     if env:
         return Path(env).expanduser()
     return _repo_root() / "data" / "sqlite" / "execution_ledger.db"
+
+
+def is_economic_mode(mode: str | None) -> bool:
+    """``live`` / ``paper`` rows carry verifiable P&amp;L; ``paper_stub`` does not (synthetic / excluded)."""
+    return (mode or "").strip().lower() in ("live", "paper")
+
+
+def compute_pnl_usd(*, entry_price: float, exit_price: float, size: float, side: str) -> float:
+    """
+    Index-style P&amp;L in USD: long ``(exit-entry)*size``, short ``(entry-exit)*size``.
+    """
+    sd = (side or "").strip().lower()
+    if sd not in ("long", "short"):
+        raise ValueError("side must be 'long' or 'short'")
+    ep = float(entry_price)
+    xp = float(exit_price)
+    sz = float(size)
+    if sz <= 0:
+        raise ValueError("size must be positive")
+    if sd == "long":
+        return (xp - ep) * sz
+    return (ep - xp) * sz
+
+
+def _pnl_close(a: float | None, b: float | None) -> bool:
+    if a is None or b is None:
+        return False
+    return math.isfinite(a) and math.isfinite(b) and abs(float(a) - float(b)) <= PNL_EPSILON
+
+
+def _migrate_execution_trades_paper_stub_mode(conn: sqlite3.Connection) -> None:
+    """Allow ``paper_stub`` in ``mode`` CHECK (existing DBs created before that value)."""
+    cur = conn.execute(
+        "SELECT sql FROM sqlite_master WHERE type='table' AND name='execution_trades'"
+    )
+    row = cur.fetchone()
+    sql = (row[0] or "") if row else ""
+    if "paper_stub" in sql:
+        return
+    conn.executescript(
+        """
+        BEGIN;
+        DROP INDEX IF EXISTS idx_execution_trades_market_event;
+        DROP INDEX IF EXISTS idx_execution_trades_strategy;
+        DROP INDEX IF EXISTS idx_execution_trades_lane_mode;
+        CREATE TABLE execution_trades__new (
+          trade_id TEXT PRIMARY KEY,
+          strategy_id TEXT NOT NULL,
+          lane TEXT NOT NULL CHECK (lane IN ('baseline', 'anna')),
+          mode TEXT NOT NULL CHECK (mode IN ('live', 'paper', 'paper_stub')),
+          market_event_id TEXT NOT NULL,
+          symbol TEXT NOT NULL,
+          timeframe TEXT NOT NULL,
+          side TEXT,
+          entry_time TEXT,
+          entry_price REAL,
+          size REAL,
+          exit_time TEXT,
+          exit_price REAL,
+          exit_reason TEXT,
+          pnl_usd REAL,
+          context_snapshot_json TEXT,
+          notes TEXT,
+          schema_version TEXT NOT NULL DEFAULT 'execution_trade_v1',
+          created_at_utc TEXT NOT NULL
+        );
+        INSERT INTO execution_trades__new SELECT * FROM execution_trades;
+        DROP TABLE execution_trades;
+        ALTER TABLE execution_trades__new RENAME TO execution_trades;
+        CREATE INDEX IF NOT EXISTS idx_execution_trades_market_event
+          ON execution_trades (market_event_id);
+        CREATE INDEX IF NOT EXISTS idx_execution_trades_strategy
+          ON execution_trades (strategy_id, created_at_utc DESC);
+        CREATE INDEX IF NOT EXISTS idx_execution_trades_lane_mode
+          ON execution_trades (lane, mode, created_at_utc DESC);
+        COMMIT;
+        """
+    )
 
 
 def _strict_trade_identity() -> bool:
@@ -50,6 +131,8 @@ def ensure_execution_ledger_schema(conn: sqlite3.Connection, root: Path | None =
         raise FileNotFoundError(sql)
     conn.executescript(sql.read_text(encoding="utf-8"))
     conn.commit()
+    _migrate_execution_trades_paper_stub_mode(conn)
+    conn.commit()
 
 
 def _validate_lane_strategy(lane: str, strategy_id: str) -> None:
@@ -61,6 +144,51 @@ def _validate_lane_strategy(lane: str, strategy_id: str) -> None:
         raise ValueError("lane=baseline requires strategy_id=baseline")
     if lane == "anna" and sid == RESERVED_STRATEGY_BASELINE:
         raise ValueError("strategy_id baseline is reserved for lane=baseline only")
+
+
+def _resolve_pnl_and_validate(
+    *,
+    mode: str,
+    lane: str,
+    side: str | None,
+    entry_price: float | None,
+    exit_price: float | None,
+    size: float | None,
+    pnl_usd: float | None,
+    context_snapshot: dict[str, Any] | None,
+) -> float | None:
+    """Returns ``pnl_usd`` to persist (never authoritative from a mismatched caller hint)."""
+    if mode == "paper_stub":
+        if lane != "anna":
+            raise ValueError("paper_stub is only valid for lane=anna")
+        if pnl_usd is not None:
+            raise ValueError(
+                "paper_stub must not set pnl_usd — store synthetic outcome in context_snapshot only"
+            )
+        ctx = dict(context_snapshot or {})
+        if not (ctx.get("synthetic") is True or ctx.get("paper_stub") is True):
+            raise ValueError(
+                "paper_stub requires context_snapshot with synthetic=True or paper_stub=True"
+            )
+        return None
+
+    # Economic modes: derive from trade facts; optional caller pnl_usd must match or raise.
+    side_n = (side or "").strip().lower()
+    if side_n not in ("long", "short"):
+        raise ValueError("side must be 'long' or 'short' for live/paper trades")
+    if entry_price is None or exit_price is None or size is None:
+        raise ValueError("entry_price, exit_price, and size are required for live/paper trades")
+    computed = compute_pnl_usd(
+        entry_price=float(entry_price),
+        exit_price=float(exit_price),
+        size=float(size),
+        side=side_n,
+    )
+    if pnl_usd is not None and not _pnl_close(float(pnl_usd), computed):
+        raise ValueError(
+            f"pnl_usd mismatch: given {pnl_usd!r} but derived from trade facts is {computed!r}"
+        )
+    return computed
 
 
 def append_execution_trade(
@@ -85,17 +213,26 @@ def append_execution_trade(
     db_path: Path | None = None,
 ) -> dict[str, Any]:
     """
-    Persist one trade row. ``trade_id`` defaults to UUID.
+    Persist one trade row. **PnL is never taken as authoritative** for ``live``/``paper``:
+    it is recomputed from ``entry_price``, ``exit_price``, ``size``, and ``side``.
+    If a ``pnl_usd`` hint is provided and does not match the derivation, raises ``ValueError``.
 
-    When ``ANNA_STRICT_TRADE_IDENTITY=1``, requires non-empty market_event_id, symbol, timeframe,
-    and entry/exit fields (minimal paper stubs must still supply placeholders).
+    ``paper_stub`` (``lane=anna`` only): ``pnl_usd`` is stored as **NULL**; synthetic economics
+    live only in ``context_snapshot`` (must include ``synthetic`` or ``paper_stub`` flag).
     """
     _validate_lane_strategy(lane, strategy_id)
     mode = (mode or "").strip().lower()
     if mode not in VALID_MODES:
         raise ValueError(f"mode must be one of {sorted(VALID_MODES)}")
+    if lane == "baseline" and mode not in ("live", "paper"):
+        raise ValueError("baseline lane requires mode live or paper")
     if lane == "anna" and mode == "live":
         raise ValueError("Anna lane is paper-only until policy changes")
+    if lane == "anna" and mode not in ("paper", "paper_stub"):
+        raise ValueError("Anna lane requires mode paper or paper_stub")
+    if mode == "paper_stub" and lane != "anna":
+        raise ValueError("paper_stub is only valid for lane=anna")
+
     mid = (market_event_id or "").strip()
     if not mid:
         raise ValueError("market_event_id is required")
@@ -111,8 +248,22 @@ def append_execution_trade(
         ):
             if not val:
                 raise ValueError(f"ANNA_STRICT_TRADE_IDENTITY: {name} required")
-        if entry_price is None or exit_price is None or pnl_usd is None:
-            raise ValueError("ANNA_STRICT_TRADE_IDENTITY: entry_price, exit_price, pnl_usd required")
+        if mode != "paper_stub":
+            if entry_price is None or exit_price is None or size is None or not (side or "").strip():
+                raise ValueError(
+                    "ANNA_STRICT_TRADE_IDENTITY: entry_price, exit_price, size, side required for live/paper"
+                )
+
+    final_pnl = _resolve_pnl_and_validate(
+        mode=mode,
+        lane=lane,
+        side=side,
+        entry_price=entry_price,
+        exit_price=exit_price,
+        size=size,
+        pnl_usd=pnl_usd,
+        context_snapshot=context_snapshot,
+    )
 
     tid = (trade_id or "").strip() or str(uuid.uuid4())
     ctx_json = json.dumps(context_snapshot, ensure_ascii=False) if context_snapshot else None
@@ -133,7 +284,7 @@ def append_execution_trade(
         "exit_time": exit_time,
         "exit_price": exit_price,
         "exit_reason": (exit_reason or "").strip() or None,
-        "pnl_usd": pnl_usd,
+        "pnl_usd": final_pnl,
         "context_snapshot_json": ctx_json,
         "notes": (notes or "").strip() or None,
         "schema_version": SCHEMA_VERSION,
@@ -177,6 +328,147 @@ def append_execution_trade(
     finally:
         conn.close()
     return row
+
+
+def scan_execution_ledger_pnl_integrity(
+    *,
+    db_path: Path | None = None,
+    limit_examples: int = 20,
+) -> dict[str, Any]:
+    """
+    Scan ``execution_trades`` for rows where ``pnl_usd`` is not consistent with stored trade facts.
+
+    - ``live`` / ``paper``: must have ``entry_price``, ``exit_price``, ``size``, ``side`` and
+      ``pnl_usd`` equal to :func:`compute_pnl_usd`.
+    - ``paper_stub``: ``pnl_usd`` must be **NULL** (synthetic economics only in JSON); non-null
+      must match derivation if facts are complete.
+
+    Returns counts plus example violation dicts.
+    """
+    conn = connect_ledger(db_path)
+    violations: list[dict[str, Any]] = []
+    economic_ok = 0
+    stub_ok = 0
+    total_rows = 0
+    try:
+        ensure_execution_ledger_schema(conn)
+        cur = conn.execute(
+            """
+            SELECT trade_id, strategy_id, lane, mode, market_event_id, symbol, timeframe,
+                   side, entry_time, entry_price, size, exit_time, exit_price, exit_reason,
+                   pnl_usd, context_snapshot_json, notes, schema_version, created_at_utc
+            FROM execution_trades
+            ORDER BY created_at_utc ASC, trade_id ASC
+            """
+        )
+        cols = [d[0] for d in cur.description]
+        rows = cur.fetchall()
+        total_rows = len(rows)
+        for r in rows:
+            row = dict(zip(cols, r))
+            mode = (row.get("mode") or "").strip().lower()
+            if mode == "paper_stub":
+                stored = row.get("pnl_usd")
+                if stored is None:
+                    stub_ok += 1
+                    continue
+                ep, xp, sz, sd = row.get("entry_price"), row.get("exit_price"), row.get("size"), row.get("side")
+                if ep is None or xp is None or sz is None or not (sd or "").strip():
+                    violations.append(
+                        {
+                            "trade_id": row.get("trade_id"),
+                            "reason": "paper_stub_non_null_pnl_incomplete_facts",
+                            "stored_pnl_usd": stored,
+                        }
+                    )
+                    continue
+                try:
+                    exp = compute_pnl_usd(
+                        entry_price=float(ep),
+                        exit_price=float(xp),
+                        size=float(sz),
+                        side=str(sd),
+                    )
+                except ValueError as e:
+                    violations.append(
+                        {
+                            "trade_id": row.get("trade_id"),
+                            "reason": f"paper_stub_derivation_error:{e}",
+                            "stored_pnl_usd": stored,
+                        }
+                    )
+                    continue
+                if not _pnl_close(float(stored), exp):
+                    violations.append(
+                        {
+                            "trade_id": row.get("trade_id"),
+                            "reason": "paper_stub_pnl_mismatch",
+                            "stored_pnl_usd": stored,
+                            "expected_pnl_usd": exp,
+                        }
+                    )
+                else:
+                    stub_ok += 1
+                continue
+
+            if mode not in ("live", "paper"):
+                continue
+            ep, xp, sz, sd = row.get("entry_price"), row.get("exit_price"), row.get("size"), row.get("side")
+            stored = row.get("pnl_usd")
+            if ep is None or xp is None or sz is None or not (sd or "").strip():
+                violations.append(
+                    {
+                        "trade_id": row.get("trade_id"),
+                        "reason": "economic_trade_missing_facts",
+                        "mode": mode,
+                        "entry_price": ep,
+                        "exit_price": xp,
+                        "size": sz,
+                        "side": sd,
+                        "stored_pnl_usd": stored,
+                    }
+                )
+                continue
+            try:
+                exp = compute_pnl_usd(
+                    entry_price=float(ep),
+                    exit_price=float(xp),
+                    size=float(sz),
+                    side=str(sd),
+                )
+            except ValueError as e:
+                violations.append(
+                    {
+                        "trade_id": row.get("trade_id"),
+                        "reason": f"derivation_error:{e}",
+                        "mode": mode,
+                        "stored_pnl_usd": stored,
+                    }
+                )
+                continue
+            if stored is None or not _pnl_close(float(stored), exp):
+                violations.append(
+                    {
+                        "trade_id": row.get("trade_id"),
+                        "reason": "economic_pnl_mismatch_or_null",
+                        "mode": mode,
+                        "stored_pnl_usd": stored,
+                        "expected_pnl_usd": exp,
+                    }
+                )
+                continue
+            economic_ok += 1
+    finally:
+        conn.close()
+
+    return {
+        "ledger_path": str(db_path or default_execution_ledger_path()),
+        "total_rows": total_rows,
+        "violation_count": len(violations),
+        "economic_ok_count": economic_ok,
+        "paper_stub_ok_count": stub_ok,
+        "examples": violations[: max(0, int(limit_examples))],
+    }
 
 
 def query_trades_by_market_event_id(

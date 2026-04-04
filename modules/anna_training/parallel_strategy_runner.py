@@ -60,8 +60,9 @@ def run_parallel_anna_strategies_tick(
     execution_ledger_db_path: Path | None = None,
 ) -> dict[str, Any]:
     """
-    For each configured Anna strategy, append one **paper** execution row for the **latest**
-    ``market_event_id`` (from ``market_bars_5m``). Independent of Jack / single harness.
+    For each configured Anna strategy, append one **paper_stub** execution row for the **latest**
+    ``market_event_id`` (from ``market_bars_5m``). ``pnl_usd`` is **not** stored (synthetic classification
+    only in ``context_snapshot``). Independent of Jack / single harness.
 
     ``market_event_id`` is recomputed from the same canonical bar row via
     :func:`verify_market_event_id_matches_canonical_bar` (no divergence from the single constructor).
@@ -133,14 +134,14 @@ def run_parallel_anna_strategies_tick(
     for sid in strategies:
         if sid == RESERVED_STRATEGY_BASELINE:
             continue
-        result, pnl = _stub_pnl_for_strategy(sid, mid)
+        result, stub_pnl = _stub_pnl_for_strategy(sid, mid)
         tid = _trade_id_for(sid, mid)
         try:
             append_execution_trade(
                 trade_id=tid,
                 strategy_id=sid,
                 lane="anna",
-                mode="paper",
+                mode="paper_stub",
                 market_event_id=mid,
                 symbol="SOL-PERP",
                 timeframe="5m",
@@ -151,9 +152,13 @@ def run_parallel_anna_strategies_tick(
                 exit_time=bar.get("candle_close_utc"),
                 exit_price=float(close_px) if close_px is not None else None,
                 exit_reason="CLOSE",
-                pnl_usd=float(pnl),
-                context_snapshot={"stub": True, "result": result, **ctx},
-                notes=f"parallel_stub result={result}",
+                context_snapshot={
+                    "synthetic": True,
+                    "stub_result": result,
+                    "stub_pnl_usd": stub_pnl,
+                    **ctx,
+                },
+                notes=f"parallel_stub synthetic classification={result} (pnl_usd not asserted)",
                 db_path=execution_ledger_db_path,
             )
             written.append(tid)

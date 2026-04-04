@@ -13,7 +13,7 @@ CREATE TABLE IF NOT EXISTS execution_trades (
   trade_id TEXT PRIMARY KEY,
   strategy_id TEXT NOT NULL,
   lane TEXT NOT NULL CHECK (lane IN ('baseline', 'anna')),
-  mode TEXT NOT NULL CHECK (mode IN ('live', 'paper')),
+  mode TEXT NOT NULL CHECK (mode IN ('live', 'paper', 'paper_stub')),
   market_event_id TEXT NOT NULL,
   symbol TEXT NOT NULL,
   timeframe TEXT NOT NULL,

@@ -92,7 +92,6 @@ def run_baseline_ledger_bridge_tick(
         return {"ok": False, "reason": "bar_missing_ohlc", "market_event_id": mid}
 
     size = 1.0
-    pnl = (float(c) - float(o)) * size
     tid = _baseline_trade_id(mid, m)
 
     from .execution_ledger import RESERVED_STRATEGY_BASELINE, append_execution_trade
@@ -113,7 +112,6 @@ def run_baseline_ledger_bridge_tick(
             exit_time=str(bar.get("candle_close_utc") or ""),
             exit_price=float(c),
             exit_reason="CLOSE",
-            pnl_usd=round(pnl, 8),
             context_snapshot={
                 "source": "baseline_ledger_bridge_v1",
                 "price_source": bar.get("price_source"),

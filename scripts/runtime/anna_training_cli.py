@@ -258,6 +258,19 @@ def _cmd_log_execution_trade(args: argparse.Namespace) -> int:
     """Append one row to execution_ledger (full identity for baseline vs Anna comparison)."""
     from modules.anna_training.execution_ledger import append_execution_trade
 
+    ctx = None
+    raw = (getattr(args, "context_json", None) or "").strip()
+    if raw:
+        try:
+            ctx = json.loads(raw)
+        except json.JSONDecodeError as e:
+            print(json.dumps({"error": f"invalid context_json: {e}"}), file=sys.stderr)
+            return 1
+    mode = (args.mode or "").strip().lower()
+    if mode == "paper_stub":
+        ctx = dict(ctx or {})
+        ctx.setdefault("synthetic", True)
+
     try:
         row = append_execution_trade(
             strategy_id=args.strategy_id,
@@ -275,6 +288,7 @@ def _cmd_log_execution_trade(args: argparse.Namespace) -> int:
             exit_price=getattr(args, "exit_price", None),
             exit_reason=getattr(args, "exit_reason", None),
             pnl_usd=getattr(args, "pnl_usd", None),
+            context_snapshot=ctx,
             notes=getattr(args, "notes", None),
         )
     except ValueError as e:
@@ -282,6 +296,20 @@ def _cmd_log_execution_trade(args: argparse.Namespace) -> int:
         return 1
     print(json.dumps({"ok": True, "execution_trade": row}, indent=2))
     return 0
+
+
+def _cmd_scan_execution_ledger_pnl(args: argparse.Namespace) -> int:
+    """PnL integrity scan: economic rows must match derived PnL from trade facts."""
+    from modules.anna_training.execution_ledger import scan_execution_ledger_pnl_integrity
+
+    ledger = (getattr(args, "ledger", None) or "").strip()
+    db_path = Path(ledger).expanduser() if ledger else None
+    out = scan_execution_ledger_pnl_integrity(
+        db_path=db_path,
+        limit_examples=int(getattr(args, "limit_examples", 20) or 20),
+    )
+    print(json.dumps(out, indent=2))
+    return 0 if out.get("violation_count", 0) == 0 else 2
 
 
 def _cmd_math_check() -> int:
@@ -1231,7 +1259,12 @@ def main(argv: list[str] | None = None) -> int:
         help="Append execution_ledger row: strategy_id, lane, mode, market_event_id (baseline or Anna).",
     )
     ap_xe.add_argument("--lane", required=True, choices=["baseline", "anna"])
-    ap_xe.add_argument("--mode", required=True, choices=["live", "paper"])
+    ap_xe.add_argument(
+        "--mode",
+        required=True,
+        choices=["live", "paper", "paper_stub"],
+        help="live/paper: PnL derived from entry/exit/size/side. paper_stub: synthetic (Anna only); pnl_usd not stored.",
+    )
     ap_xe.add_argument("--market-event-id", required=True, dest="market_event_id")
     ap_xe.add_argument(
         "--strategy-id",
@@ -1248,8 +1281,38 @@ def main(argv: list[str] | None = None) -> int:
     ap_xe.add_argument("--exit-time", default=None, dest="exit_time")
     ap_xe.add_argument("--exit-price", type=float, default=None, dest="exit_price")
     ap_xe.add_argument("--exit-reason", default=None, dest="exit_reason")
-    ap_xe.add_argument("--pnl-usd", type=float, default=None, dest="pnl_usd")
+    ap_xe.add_argument(
+        "--pnl-usd",
+        type=float,
+        default=None,
+        dest="pnl_usd",
+        help="Optional check only for live/paper: must match derived PnL from prices × size × side.",
+    )
+    ap_xe.add_argument(
+        "--context-json",
+        default="",
+        dest="context_json",
+        help="JSON object merged into context_snapshot (required semantics for paper_stub: use synthetic flags).",
+    )
     ap_xe.add_argument("--notes", default="")
+
+    ap_scan_el = sub.add_parser(
+        "scan-execution-ledger-pnl",
+        help="Scan execution_trades: flag rows where pnl_usd is not derivable from stored facts (economic modes).",
+    )
+    ap_scan_el.add_argument(
+        "--ledger",
+        default="",
+        help="Path to execution_ledger.db (default: BLACKBOX_EXECUTION_LEDGER_PATH or data/sqlite/execution_ledger.db).",
+    )
+    ap_scan_el.add_argument(
+        "--limit-examples",
+        type=int,
+        default=20,
+        metavar="N",
+        dest="limit_examples",
+        help="Max violation examples in JSON output (default 20).",
+    )
 
     sub.add_parser(
         "check-readiness",
@@ -1448,6 +1511,8 @@ def main(argv: list[str] | None = None) -> int:
         "curricula",
         "tool-list",
         "tool-pass",
+        "log-execution-trade",
+        "scan-execution-ledger-pnl",
     ):
         rc = _require_preflight_or_exit()
         if rc is not None:
@@ -1466,6 +1531,8 @@ def main(argv: list[str] | None = None) -> int:
         return _cmd_log_trade(args)
     if args.cmd == "log-execution-trade":
         return _cmd_log_execution_trade(args)
+    if args.cmd == "scan-execution-ledger-pnl":
+        return _cmd_scan_execution_ledger_pnl(args)
     if args.cmd == "math-check":
         return _cmd_math_check()
     if args.cmd == "quant-metrics":

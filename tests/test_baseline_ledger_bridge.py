@@ -93,6 +93,10 @@ def test_baseline_and_anna_share_market_event_id(tmp_path: Path, monkeypatch: py
     for r in rows:
         if r["lane"] == "baseline":
             assert r["mode"] == "paper"
+            assert r["pnl_usd"] is not None
+        if r["lane"] == "anna":
+            assert r["mode"] == "paper_stub"
+            assert r["pnl_usd"] is None
 
     bar = fetch_latest_bar_row(db_path=market_db)
     assert bar is not None
