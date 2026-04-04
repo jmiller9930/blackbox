@@ -98,6 +98,7 @@
       min-height: 100vh; max-height: 100vh; overflow-y: auto;
     }
     .nav h2 { font-size: 0.65rem; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); margin: 0 0 0.75rem; }
+    .nav h3 { font-size: 0.62rem; text-transform: uppercase; letter-spacing: 0.07em; color: var(--muted); margin: 0.85rem 0 0.45rem; }
     .nav a {
       display: block; padding: 0.45rem 0.5rem; border-radius: 6px; color: var(--text); text-decoration: none;
       font-size: 0.85rem; margin-bottom: 0.2rem; line-height: 1.3;
@@ -139,8 +140,11 @@
   <div class="layout">
     <nav class="nav" aria-label="Dashboard sections (same page)">
       <h2>Sections</h2>
+      <p class="nav-note" style="margin:0 0 0.6rem;line-height:1.35">Panels below <strong>After data loads</strong> sit inside the loaded block — use those links only after the dashboard has loaded (auto or <strong>Load</strong>), or the jump target is not visible yet.</p>
+      <h3>Always</h3>
       <a href="#sec-header">Title &amp; training notice</a>
       <a href="#sec-toolbar">Query &amp; filters</a>
+      <h3>After data loads</h3>
       <a href="#sec-identity">Event identity</a>
       <a href="#sec-chart">Market chart (primary)</a>
       <a href="#sec-strategy-toggles">Top-five Anna (visibility)</a>
