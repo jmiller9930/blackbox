@@ -12,6 +12,8 @@ When ``ANNA_KARPATHY_PAPER_HARNESS_EACH_TICK=1`` (default), each tick also runs 
 (iterations-only mode). Operator ``log-trade`` remains available.
 
 Env:
+  ANNA_QEL_SURVIVAL_EACH_TICK — default **1**: after parallel Anna strategies + baseline ledger bridge,
+    run Quantitative Evaluation Layer survival checkpoints for every active survival test (set 0 to disable).
   ANNA_LOOP_INTERVAL_SEC — seconds between ticks (default 5; floor is 5; supervisor cadence)
   RECORD_MARKET_SNAPSHOT_EACH_TICK — 1 to record one market row per successful tick
   MARKET_DATA_SKIP_JUPITER — 1 to skip Jupiter quote when snapshotting
@@ -299,6 +301,12 @@ def run_one_tick(*, tick_index: int) -> tuple[dict, bool]:
         st["baseline_ledger_last"] = run_baseline_ledger_bridge_tick()
     except Exception as e:  # noqa: BLE001
         st["baseline_ledger_last"] = {"ok": False, "error": repr(e)}
+    try:
+        from modules.anna_training.quantitative_evaluation_layer.runtime import run_qel_survival_tick
+
+        st["qel_survival_last"] = run_qel_survival_tick()
+    except Exception as e:  # noqa: BLE001
+        st["qel_survival_last"] = {"ok": False, "error": repr(e)}
     save_state(st)
 
     row = {
@@ -322,6 +330,7 @@ def run_one_tick(*, tick_index: int) -> tuple[dict, bool]:
         "paper_harness": st.get("karpathy_last_paper_harness"),
         "parallel_strategies": st.get("parallel_strategies_last"),
         "baseline_ledger": st.get("baseline_ledger_last"),
+        "qel_survival": st.get("qel_survival_last"),
         "data_preflight": st.get("karpathy_last_data_preflight"),
         "preflight_policy": st.get("karpathy_last_preflight_policy"),
         "llm_preflight": st.get("karpathy_last_llm_preflight"),

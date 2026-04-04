@@ -55,6 +55,9 @@
     .badge { display: inline-block; padding: 0.15rem 0.45rem; border-radius: 4px; font-size: 0.72rem; font-weight: 600; }
     .badge-econ { background: rgba(52,211,153,0.15); color: var(--economic); border: 1px solid rgba(52,211,153,0.35); }
     .badge-stub { background: rgba(167,139,250,0.15); color: var(--stub); border: 1px solid rgba(167,139,250,0.35); }
+    .eval-pass { background: rgba(52,211,153,0.15); color: var(--economic); border: 1px solid rgba(52,211,153,0.35); }
+    .eval-fail { background: rgba(248,113,113,0.12); color: #fecaca; border: 1px solid rgba(248,113,113,0.4); }
+    .eval-pend { background: rgba(139,154,173,0.12); color: var(--muted); border: 1px solid var(--border); }
     .lane-baseline { color: var(--baseline); font-weight: 600; }
     .lane-anna { color: var(--anna); font-weight: 600; }
     .kv { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 0.5rem 1rem; font-family: var(--mono); font-size: 0.8rem; }
@@ -115,6 +118,20 @@
             </tr></thead>
             <tbody id="tbody"></tbody>
           </table>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-h">Evaluation (QEL judgment)</div>
+        <div class="panel-b">
+          <p class="sub" style="margin-top:0">Why this strategy is alive, dead, or advancing — from the Quantitative Evaluation Layer (ledger + survival checkpoints), not inferred from raw trades.</p>
+          <label style="display:flex;flex-direction:column;gap:0.35rem;font-size:0.72rem;text-transform:uppercase;letter-spacing:0.05em;color:var(--muted);max-width:420px;margin-bottom:0.75rem">
+            Anna strategy
+            <select id="evalStrategy" style="padding:0.45rem 0.6rem;border-radius:6px;border:1px solid var(--border);background:var(--surface2);color:var(--text);font-family:var(--mono);font-size:0.85rem"></select>
+          </label>
+          <button type="button" class="primary" id="evalBtn">Load judgment</button>
+          <div id="evalErr" class="err" style="display:none;margin-top:0.75rem"></div>
+          <div id="evalBody" style="margin-top:1rem;display:none"></div>
         </div>
       </div>
 
@@ -278,6 +295,96 @@
     }).join('');
   }
 
+  function populateEvalSelect(p) {
+    var rows = p.strategy_rows || [];
+    var sel = qs('#evalStrategy');
+    var anna = rows.filter(function (r) { return r.lane === 'anna' && r.strategy_id; });
+    var seen = {};
+    anna.forEach(function (r) { seen[r.strategy_id] = true; });
+    var ids = Object.keys(seen);
+    sel.innerHTML = '<option value="">— select Anna strategy —</option>' +
+      ids.map(function (id) { return '<option value="' + esc(id) + '">' + esc(id) + '</option>'; }).join('');
+    if (ids.length === 1) sel.value = ids[0];
+  }
+
+  function renderEval(d) {
+    var lc = d.lifecycle || {};
+    var parts = [];
+    parts.push('<div class="kv" style="margin-bottom:1rem">');
+    parts.push('<div><kbd>Phase</kbd><br/><strong>' + esc(lc.current_phase || '') + '</strong> <span style="color:var(--muted);font-size:0.75rem">(' + esc(lc.lifecycle_state || '') + ')</span></div>');
+    parts.push('<div><kbd>Last checkpoint decision</kbd><br/>' + esc(lc.last_checkpoint_decision || '—') + '</div>');
+    parts.push('<div><kbd>Last evaluated</kbd><br/>' + esc(lc.last_evaluated_at_utc || '—') + '</div>');
+    parts.push('<div><kbd>Survival test</kbd><br/><span style="font-size:0.78rem">' + esc(lc.active_test_id || '—') + '</span> · ' + esc(lc.test_status || '—') + '</div>');
+    parts.push('</div>');
+    var cps = d.checkpoints || [];
+    parts.push('<table class="data"><thead><tr><th>Checkpoint</th><th>Result</th><th>Evaluated at (UTC)</th></tr></thead><tbody>');
+    cps.forEach(function (c) {
+      var badge = c.result === 'PASS' ? 'eval-pass' : (c.result === 'FAIL' ? 'eval-fail' : 'eval-pend');
+      parts.push('<tr><td>' + esc(c.checkpoint_label) + '</td><td><span class="badge ' + badge + '">' + esc(c.result) + '</span></td><td style="font-size:0.78rem">' + esc(c.evaluated_at_utc || '—') + '</td></tr>');
+    });
+    parts.push('</tbody></table>');
+    var m = d.metrics || {};
+    var sc = m.strategy_cohort || {};
+    parts.push('<h4 style="margin:1rem 0 0.5rem;font-size:0.8rem;color:var(--muted)">Cohort metrics (economic)</h4>');
+    parts.push('<div class="kv">');
+    parts.push('<div><kbd>Trades</kbd><br/>' + esc(sc.trade_count) + '</div>');
+    parts.push('<div><kbd>Win rate</kbd><br/>' + (sc.win_rate != null ? esc((100 * sc.win_rate).toFixed(1) + '%') : '—') + '</div>');
+    parts.push('<div><kbd>P&amp;L USD</kbd><br/>' + esc(sc.pnl_usd) + '</div>');
+    parts.push('<div><kbd>Max drawdown</kbd><br/>' + esc(sc.max_drawdown_usd) + '</div>');
+    if (m.stability_hint) parts.push('<div><kbd>Stability hint</kbd><br/>' + esc(m.stability_hint) + '</div>');
+    parts.push('</div>');
+    if (m.at_market_event) {
+      var ae = m.at_market_event;
+      parts.push('<h4 style="margin:1rem 0 0.5rem;font-size:0.8rem;color:var(--muted)">At this market_event_id</h4><div class="kv">');
+      parts.push('<div><kbd>Trades</kbd><br/>' + esc(ae.trade_count) + '</div>');
+      parts.push('<div><kbd>P&amp;L USD</kbd><br/>' + esc(ae.pnl_usd) + '</div>');
+      parts.push('</div>');
+    }
+    var rs = d.regime_summary || {};
+    parts.push('<h4 style="margin:1rem 0 0.5rem;font-size:0.8rem;color:var(--muted)">Regimes (volatility buckets)</h4>');
+    parts.push('<p style="font-size:0.8rem;color:var(--muted)">' + esc(rs.performance_note || '') + '</p>');
+    var rb = rs.by_vol_bucket || [];
+    if (rb.length) {
+      parts.push('<table class="data"><thead><tr><th>Bucket</th><th>Trades</th><th>W / L</th><th>Net P&amp;L USD</th></tr></thead><tbody>');
+      rb.forEach(function (x) {
+        parts.push('<tr><td>' + esc(x.bucket) + '</td><td>' + esc(x.trades) + '</td><td>' + esc(x.wins) + ' / ' + esc(x.losses) + '</td><td>' + esc(x.net_pnl_usd) + '</td></tr>');
+      });
+      parts.push('</tbody></table>');
+    }
+    var bc = d.baseline_comparison || {};
+    if (bc.available) {
+      parts.push('<h4 style="margin:1rem 0 0.5rem;font-size:0.8rem;color:var(--muted)">vs baseline (this event)</h4>');
+      parts.push('<p style="font-size:0.85rem"><strong>' + esc(bc.direction) + '</strong> · Δ P&amp;L USD ' + esc(bc.delta_pnl_usd) + ' (strategy ' + esc(bc.strategy_pnl_usd) + ' vs baseline ' + esc(bc.baseline_pnl_usd) + ')</p>');
+    }
+    qs('#evalBody').innerHTML = parts.join('');
+  }
+
+  function loadEvaluation() {
+    var sid = qs('#evalStrategy').value.trim();
+    var mid = qs('#mid').value.trim();
+    qs('#evalErr').style.display = 'none';
+    qs('#evalBody').style.display = 'none';
+    if (!sid) {
+      qs('#evalErr').style.display = 'block';
+      qs('#evalErr').textContent = 'Select an Anna strategy.';
+      return;
+    }
+    var url = '/api/v1/anna/evaluation-summary?strategy_id=' + encodeURIComponent(sid);
+    if (mid) url += '&market_event_id=' + encodeURIComponent(mid);
+    fetch(url, { cache: 'no-store' }).then(function (r) { return r.json(); }).then(function (d) {
+      if (!d.ok) {
+        qs('#evalErr').style.display = 'block';
+        qs('#evalErr').textContent = d.error || d.detail || 'error';
+        return;
+      }
+      qs('#evalBody').style.display = 'block';
+      renderEval(d);
+    }).catch(function (e) {
+      qs('#evalErr').style.display = 'block';
+      qs('#evalErr').textContent = String(e);
+    });
+  }
+
   function renderTraces(p) {
     var tr = p.decision_traces || [];
     var el = qs('#traces');
@@ -311,9 +418,11 @@
       renderBaselineSlot(p);
       renderChart(p);
       renderTable(p);
+      populateEvalSelect(p);
+      qs('#evalBody').style.display = 'none';
       renderContext(p);
       renderTraces(p);
-      qs('#rawMeta').textContent = 'GET ' + url + ' · schema ' + (p.schema || '') + ' · ledger ' + (p.ledger_path || '');
+      qs('#rawMeta').textContent = 'GET ' + url + ' · schema ' + (p.schema || '') + ' · ledger ' + (p.ledger_path || '') + ' · judgment: /api/v1/anna/evaluation-summary';
     }).catch(function (e) {
       qs('#error').style.display = 'block';
       qs('#error').textContent = String(e);
@@ -331,6 +440,7 @@
   }
 
   qs('#loadBtn').addEventListener('click', load);
+  qs('#evalBtn').addEventListener('click', loadEvaluation);
   initFromQuery();
   if (qs('#mid').value.trim()) load();
 })();

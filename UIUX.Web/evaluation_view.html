@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Evaluation — QEL judgment</title>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,600;0,9..40,700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet"/>
+  <style>
+    :root {
+      --bg: #0c0f14; --surface: #141a22; --surface2: #1a222d; --border: #2d3847;
+      --text: #e8edf4; --muted: #8b9aad; --accent: #f0b429; --economic: #34d399;
+      --font: "DM Sans", system-ui, sans-serif; --mono: "IBM Plex Mono", ui-monospace, monospace;
+    }
+    body { margin: 0; min-height: 100vh; background: var(--bg); color: var(--text); font-family: var(--font); font-size: 15px; }
+    .wrap { max-width: 960px; margin: 0 auto; padding: 1.25rem; }
+    h1 { font-size: 1.35rem; margin: 0 0 0.35rem; }
+    .sub { color: var(--muted); font-size: 0.88rem; margin-bottom: 1rem; }
+    .toolbar { display: flex; flex-wrap: wrap; gap: 0.75rem; align-items: flex-end; margin-bottom: 1rem; padding: 0.75rem 1rem; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; }
+    .toolbar label { display: flex; flex-direction: column; gap: 0.25rem; font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); }
+    .toolbar input { min-width: 260px; padding: 0.45rem 0.6rem; border-radius: 6px; border: 1px solid var(--border); background: var(--surface2); color: var(--text); font-family: var(--mono); font-size: 0.85rem; }
+    button.primary { padding: 0.5rem 1rem; border-radius: 8px; border: none; background: var(--accent); color: #0c0f14; font-weight: 600; cursor: pointer; }
+    .err { background: rgba(248,113,113,0.12); border: 1px solid rgba(248,113,113,0.4); color: #fecaca; padding: 0.75rem 1rem; border-radius: 8px; margin-bottom: 1rem; font-family: var(--mono); font-size: 0.82rem; display: none; }
+    .panel { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; overflow: hidden; }
+    .panel-h { padding: 0.65rem 1rem; border-bottom: 1px solid var(--border); font-size: 0.72rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.07em; color: var(--muted); }
+    .panel-b { padding: 1rem; }
+    .kv { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 0.5rem 1rem; font-family: var(--mono); font-size: 0.8rem; }
+    .kv kbd { color: var(--muted); font-size: 0.7rem; }
+    table.data { width: 100%; border-collapse: collapse; font-size: 0.82rem; }
+    table.data th, table.data td { padding: 0.5rem 0.65rem; text-align: left; border-bottom: 1px solid var(--border); }
+    table.data th { color: var(--muted); font-weight: 600; font-size: 0.72rem; text-transform: uppercase; }
+    .badge { display: inline-block; padding: 0.15rem 0.45rem; border-radius: 4px; font-size: 0.72rem; font-weight: 600; }
+    .eval-pass { background: rgba(52,211,153,0.15); color: var(--economic); border: 1px solid rgba(52,211,153,0.35); }
+    .eval-fail { background: rgba(248,113,113,0.12); color: #fecaca; border: 1px solid rgba(248,113,113,0.4); }
+    .eval-pend { background: rgba(139,154,173,0.12); color: var(--muted); border: 1px solid var(--border); }
+    .meta { font-size: 0.72rem; color: var(--muted); margin-top: 1rem; }
+    a { color: var(--accent); }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <h1>Evaluation (QEL)</h1>
+    <p class="sub">Judgment view — same API as <a href="/anna/event-view">event view</a>. Uses <code>/api/v1/anna/evaluation-summary</code>.</p>
+    <div class="toolbar">
+      <label>strategy_id
+        <input type="text" id="sid" placeholder="jupiter_supertrend_ema_rsi_atr_v1"/>
+      </label>
+      <label>market_event_id (optional)
+        <input type="text" id="mid" placeholder="SOL-PERP_5m_…"/>
+      </label>
+      <button type="button" class="primary" id="go">Load judgment</button>
+    </div>
+    <div id="err" class="err"></div>
+    <div class="panel" id="panel" style="display:none">
+      <div class="panel-h">Summary</div>
+      <div class="panel-b" id="body"></div>
+    </div>
+    <p class="meta" id="meta"></p>
+  </div>
+  <script>
+(function () {
+  function qs(s) { return document.querySelector(s); }
+  function esc(s) {
+    if (s === null || s === undefined) return '';
+    return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  }
+  function render(d) {
+    var lc = d.lifecycle || {};
+    var parts = [];
+    parts.push('<div class="kv" style="margin-bottom:1rem">');
+    parts.push('<div><kbd>Phase</kbd><br/><strong>' + esc(lc.current_phase || '') + '</strong> <span style="color:var(--muted);font-size:0.75rem">(' + esc(lc.lifecycle_state || '') + ')</span></div>');
+    parts.push('<div><kbd>Last checkpoint decision</kbd><br/>' + esc(lc.last_checkpoint_decision || '—') + '</div>');
+    parts.push('<div><kbd>Last evaluated</kbd><br/>' + esc(lc.last_evaluated_at_utc || '—') + '</div>');
+    parts.push('<div><kbd>Survival test</kbd><br/><span style="font-size:0.78rem">' + esc(lc.active_test_id || '—') + '</span> · ' + esc(lc.test_status || '—') + '</div>');
+    parts.push('</div>');
+    var cps = d.checkpoints || [];
+    parts.push('<table class="data"><thead><tr><th>Checkpoint</th><th>Result</th><th>Evaluated at (UTC)</th></tr></thead><tbody>');
+    cps.forEach(function (c) {
+      var badge = c.result === 'PASS' ? 'eval-pass' : (c.result === 'FAIL' ? 'eval-fail' : 'eval-pend');
+      parts.push('<tr><td>' + esc(c.checkpoint_label) + '</td><td><span class="badge ' + badge + '">' + esc(c.result) + '</span></td><td style="font-size:0.78rem">' + esc(c.evaluated_at_utc || '—') + '</td></tr>');
+    });
+    parts.push('</tbody></table>');
+    var m = d.metrics || {};
+    var sc = m.strategy_cohort || {};
+    parts.push('<h4 style="margin:1rem 0 0.5rem;font-size:0.8rem;color:var(--muted)">Cohort metrics (economic)</h4><div class="kv">');
+    parts.push('<div><kbd>Trades</kbd><br/>' + esc(sc.trade_count) + '</div>');
+    parts.push('<div><kbd>Win rate</kbd><br/>' + (sc.win_rate != null ? esc((100 * sc.win_rate).toFixed(1) + '%') : '—') + '</div>');
+    parts.push('<div><kbd>P&amp;L USD</kbd><br/>' + esc(sc.pnl_usd) + '</div>');
+    parts.push('<div><kbd>Max drawdown</kbd><br/>' + esc(sc.max_drawdown_usd) + '</div>');
+    if (m.stability_hint) parts.push('<div><kbd>Stability hint</kbd><br/>' + esc(m.stability_hint) + '</div>');
+    parts.push('</div>');
+    if (m.at_market_event) {
+      var ae = m.at_market_event;
+      parts.push('<h4 style="margin:1rem 0 0.5rem;font-size:0.8rem;color:var(--muted)">At this market_event_id</h4><div class="kv">');
+      parts.push('<div><kbd>Trades</kbd><br/>' + esc(ae.trade_count) + '</div>');
+      parts.push('<div><kbd>P&amp;L USD</kbd><br/>' + esc(ae.pnl_usd) + '</div></div>');
+    }
+    var rs = d.regime_summary || {};
+    parts.push('<h4 style="margin:1rem 0 0.5rem;font-size:0.8rem;color:var(--muted)">Regimes</h4>');
+    parts.push('<p style="font-size:0.8rem;color:var(--muted)">' + esc(rs.performance_note || '') + '</p>');
+    var rb = rs.by_vol_bucket || [];
+    if (rb.length) {
+      parts.push('<table class="data"><thead><tr><th>Bucket</th><th>Trades</th><th>W / L</th><th>Net P&amp;L</th></tr></thead><tbody>');
+      rb.forEach(function (x) {
+        parts.push('<tr><td>' + esc(x.bucket) + '</td><td>' + esc(x.trades) + '</td><td>' + esc(x.wins) + ' / ' + esc(x.losses) + '</td><td>' + esc(x.net_pnl_usd) + '</td></tr>');
+      });
+      parts.push('</tbody></table>');
+    }
+    var bc = d.baseline_comparison || {};
+    if (bc.available) {
+      parts.push('<h4 style="margin:1rem 0 0.5rem;font-size:0.8rem;color:var(--muted)">vs baseline (this event)</h4>');
+      parts.push('<p style="font-size:0.85rem"><strong>' + esc(bc.direction) + '</strong> · Δ P&amp;L ' + esc(bc.delta_pnl_usd) + '</p>');
+    }
+    qs('#body').innerHTML = parts.join('');
+  }
+  function load() {
+    var sid = qs('#sid').value.trim();
+    var mid = qs('#mid').value.trim();
+    qs('#err').style.display = 'none';
+    qs('#panel').style.display = 'none';
+    if (!sid) {
+      qs('#err').style.display = 'block';
+      qs('#err').textContent = 'Enter strategy_id.';
+      return;
+    }
+    var url = '/api/v1/anna/evaluation-summary?strategy_id=' + encodeURIComponent(sid);
+    if (mid) url += '&market_event_id=' + encodeURIComponent(mid);
+    fetch(url, { cache: 'no-store' }).then(function (r) { return r.json(); }).then(function (d) {
+      if (!d.ok) {
+        qs('#err').style.display = 'block';
+        qs('#err').textContent = d.error || d.detail || 'error';
+        return;
+      }
+      qs('#panel').style.display = 'block';
+      render(d);
+      qs('#meta').textContent = 'GET ' + url + ' · ' + (d.schema || '');
+    }).catch(function (e) {
+      qs('#err').style.display = 'block';
+      qs('#err').textContent = String(e);
+    });
+  }
+  qs('#go').addEventListener('click', load);
+  var u = new URL(window.location.href);
+  if (u.searchParams.get('strategy_id')) qs('#sid').value = u.searchParams.get('strategy_id');
+  if (u.searchParams.get('market_event_id')) qs('#mid').value = u.searchParams.get('market_event_id');
+  if (qs('#sid').value.trim()) load();
+})();
+  </script>
+</body>
+</html>

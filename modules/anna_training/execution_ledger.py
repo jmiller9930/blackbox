@@ -140,6 +140,28 @@ def _migrate_decision_traces_table(conn: sqlite3.Connection, root: Path) -> None
     conn.executescript(sql.read_text(encoding="utf-8"))
 
 
+def _migrate_strategy_registry_qel_columns(conn: sqlite3.Connection) -> None:
+    """Quantitative Evaluation Layer — lifecycle columns on strategy_registry."""
+    cur = conn.execute("PRAGMA table_info(strategy_registry)")
+    cols = {str(r[1]) for r in cur.fetchall()}
+    if "lifecycle_state" not in cols:
+        conn.execute(
+            "ALTER TABLE strategy_registry ADD COLUMN lifecycle_state TEXT NOT NULL DEFAULT 'experiment'"
+        )
+    if "parent_strategy_id" not in cols:
+        conn.execute("ALTER TABLE strategy_registry ADD COLUMN parent_strategy_id TEXT")
+    if "qel_updated_at_utc" not in cols:
+        conn.execute("ALTER TABLE strategy_registry ADD COLUMN qel_updated_at_utc TEXT")
+
+
+def _migrate_qel_schema(conn: sqlite3.Connection, root: Path) -> None:
+    """QEL tables (survival tests, evaluation runs, lifecycle audit)."""
+    qel = root / "data" / "sqlite" / "schema_qel.sql"
+    if qel.is_file():
+        conn.executescript(qel.read_text(encoding="utf-8"))
+    _migrate_strategy_registry_qel_columns(conn)
+
+
 def _strict_trade_identity() -> bool:
     return (os.environ.get("ANNA_STRICT_TRADE_IDENTITY") or "").strip().lower() in (
         "1",
@@ -165,6 +187,7 @@ def ensure_execution_ledger_schema(conn: sqlite3.Connection, root: Path | None =
     _migrate_add_trace_id_column(conn)
     _migrate_execution_trades_paper_stub_mode(conn)
     _migrate_decision_traces_table(conn, root)
+    _migrate_qel_schema(conn, root)
     conn.commit()
 
 
@@ -569,6 +592,8 @@ def sync_strategy_registry_from_catalog(conn: sqlite3.Connection) -> int:
     """Upsert rows from ``strategy_catalog`` + reserved baseline. Returns count written."""
     from modules.anna_training.strategy_catalog import load_strategy_catalog
 
+    cur = conn.execute("PRAGMA table_info(strategy_registry)")
+    has_lifecycle = any(str(r[1]) == "lifecycle_state" for r in cur.fetchall())
     now = utc_now_iso()
     n = 0
     rows = list(load_strategy_catalog())
@@ -583,22 +608,33 @@ def sync_strategy_registry_from_catalog(conn: sqlite3.Connection) -> int:
         sid = str(s.get("id") or "").strip()
         if not sid:
             continue
-        conn.execute(
-            """
-            INSERT INTO strategy_registry (strategy_id, title, description, registered_at_utc, source)
-            VALUES (?, ?, ?, ?, ?)
-            ON CONFLICT(strategy_id) DO UPDATE SET
-              title = excluded.title,
-              description = excluded.description
-            """,
-            (
-                sid,
-                str(s.get("title") or "")[:500],
-                str(s.get("description") or "")[:2000],
-                now,
-                "catalog" if sid != RESERVED_STRATEGY_BASELINE else "reserved",
-            ),
-        )
+        src = "catalog" if sid != RESERVED_STRATEGY_BASELINE else "reserved"
+        title = str(s.get("title") or "")[:500]
+        desc = str(s.get("description") or "")[:2000]
+        if has_lifecycle:
+            conn.execute(
+                """
+                INSERT INTO strategy_registry (
+                  strategy_id, title, description, registered_at_utc, source,
+                  lifecycle_state, parent_strategy_id, qel_updated_at_utc
+                ) VALUES (?, ?, ?, ?, ?, 'experiment', NULL, ?)
+                ON CONFLICT(strategy_id) DO UPDATE SET
+                  title = excluded.title,
+                  description = excluded.description
+                """,
+                (sid, title, desc, now, src, now),
+            )
+        else:
+            conn.execute(
+                """
+                INSERT INTO strategy_registry (strategy_id, title, description, registered_at_utc, source)
+                VALUES (?, ?, ?, ?, ?)
+                ON CONFLICT(strategy_id) DO UPDATE SET
+                  title = excluded.title,
+                  description = excluded.description
+                """,
+                (sid, title, desc, now, src),
+            )
         n += 1
     conn.commit()
     return n

@@ -483,6 +483,21 @@ def build_anna_strategy_catalog() -> dict[str, Any]:
         return {"schema": "anna_strategy_catalog_v1", "ok": False, "error": "import_failed", "detail": str(e)}
 
 
+def build_anna_evaluation_summary(qs: dict[str, list[str]]) -> dict[str, Any]:
+    """QEL judgment view — lifecycle, checkpoints (PASS/FAIL), condensed metrics (read-only)."""
+    try:
+        from modules.anna_training.evaluation_summary import build_evaluation_summary
+
+        return build_evaluation_summary(qs)
+    except ImportError as e:
+        return {
+            "schema": "anna_evaluation_summary_v1",
+            "ok": False,
+            "error": "import_failed",
+            "detail": str(e),
+        }
+
+
 def build_anna_training_dashboard() -> dict[str, Any]:
     """Fixed-layout JSON for web UI: same facts as `anna status` / compact dashboard (read-only)."""
     tid = str(uuid.uuid4())
@@ -1754,8 +1769,17 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/api/v1/anna/strategies/catalog":
             self._json(200, build_anna_strategy_catalog(), no_cache=True)
             return
+        if path == "/api/v1/anna/evaluation-summary":
+            q = parse_qs(parsed.query or "")
+            self._json(200, build_anna_evaluation_summary(q), no_cache=True)
+            return
         if path in ("/anna/event-view", "/anna/event-view/"):
             ev = _REPO_ROOT / "UIUX.Web" / "event_market_view.html"
+            if ev.is_file():
+                self._html(200, ev.read_text(encoding="utf-8"), no_cache=True)
+                return
+        if path in ("/anna/evaluation", "/anna/evaluation/"):
+            ev = _REPO_ROOT / "UIUX.Web" / "evaluation_view.html"
             if ev.is_file():
                 self._html(200, ev.read_text(encoding="utf-8"), no_cache=True)
                 return

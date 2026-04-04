@@ -1,0 +1,28 @@
+{
+  "qel_version": "1",
+  "lifecycle_auto": {
+    "enabled": true,
+    "min_completed_survived_for_promotion_ready": 3
+  },
+  "regime_v1": {
+    "vol_low_below": 0.003,
+    "vol_mid_below": 0.012,
+    "flat_abs_pct": 0.0005
+  },
+  "checkpoints": {
+    "min_economic_trades": { "enabled": true, "min_count": 5 },
+    "min_distinct_market_events": { "enabled": true, "min_count": 5 },
+    "min_calendar_span_days": { "enabled": true, "min_days": 1 },
+    "distinctiveness_hash": { "enabled": true },
+    "min_regime_vol_buckets": {
+      "enabled": true,
+      "min_distinct_vol_buckets": 2,
+      "min_trades_per_bucket": 1
+    },
+    "min_performance": {
+      "enabled": true,
+      "min_total_pnl_usd": -1000000000.0,
+      "min_win_rate_decisive": 0.0
+    }
+  }
+}
