@@ -54,10 +54,17 @@ def _stub_pnl_for_strategy(strategy_id: str, market_event_id: str) -> tuple[str,
     return "won", round((v % 500) / 100.0 + 0.01, 2)
 
 
-def run_parallel_anna_strategies_tick() -> dict[str, Any]:
+def run_parallel_anna_strategies_tick(
+    *,
+    market_data_db_path: Path | None = None,
+    execution_ledger_db_path: Path | None = None,
+) -> dict[str, Any]:
     """
     For each configured Anna strategy, append one **paper** execution row for the **latest**
     ``market_event_id`` (from ``market_bars_5m``). Independent of Jack / single harness.
+
+    ``market_event_id`` is recomputed from the same canonical bar row via
+    :func:`verify_market_event_id_matches_canonical_bar` (no divergence from the single constructor).
 
     Env:
       ANNA_PARALLEL_STRATEGY_RUNNER — default **on**; set ``0`` to disable.
@@ -69,6 +76,7 @@ def run_parallel_anna_strategies_tick() -> dict[str, Any]:
     _ensure_runtime_path()
     from market_data.bar_lookup import fetch_latest_bar_row, fetch_latest_market_event_id
 
+    from modules.anna_training.baseline_ledger_bridge import verify_market_event_id_matches_canonical_bar
     from modules.anna_training.execution_ledger import (
         RESERVED_STRATEGY_BASELINE,
         append_execution_trade,
@@ -77,11 +85,26 @@ def run_parallel_anna_strategies_tick() -> dict[str, Any]:
         sync_strategy_registry_from_catalog,
     )
 
-    mid = fetch_latest_market_event_id()
+    mid = fetch_latest_market_event_id(db_path=market_data_db_path)
     if not mid:
         return {"ok": False, "reason": "no_market_event_id", "trades_written": 0}
 
-    bar = fetch_latest_bar_row() or {}
+    bar = fetch_latest_bar_row(db_path=market_data_db_path) or {}
+    if not bar:
+        return {"ok": False, "reason": "no_canonical_bar"}
+
+    try:
+        verified_mid = verify_market_event_id_matches_canonical_bar(bar)
+    except ValueError as e:
+        return {"ok": False, "reason": "market_event_id_divergence", "detail": str(e)}
+
+    if verified_mid != mid:
+        return {
+            "ok": False,
+            "reason": "mid_fetch_vs_bar_mismatch",
+            "mid_fetch": mid,
+            "mid_bar": verified_mid,
+        }
     close_px = bar.get("close")
     o_px = bar.get("open")
     hi = bar.get("high")
@@ -100,7 +123,7 @@ def run_parallel_anna_strategies_tick() -> dict[str, Any]:
     strategies = _parallel_strategy_ids()
     written: list[str] = []
 
-    conn = connect_ledger()
+    conn = connect_ledger(execution_ledger_db_path)
     try:
         ensure_execution_ledger_schema(conn)
         sync_strategy_registry_from_catalog(conn)
@@ -131,6 +154,7 @@ def run_parallel_anna_strategies_tick() -> dict[str, Any]:
                 pnl_usd=float(pnl),
                 context_snapshot={"stub": True, "result": result, **ctx},
                 notes=f"parallel_stub result={result}",
+                db_path=execution_ledger_db_path,
             )
             written.append(tid)
         except sqlite3.IntegrityError:

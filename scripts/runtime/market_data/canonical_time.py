@@ -38,3 +38,13 @@ def format_candle_open_iso_z(candle_open_utc: datetime) -> str:
     """ISO 8601 Zulu with second precision (used inside market_event_id)."""
     dt = candle_open_utc.astimezone(timezone.utc).replace(microsecond=0)
     return dt.strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+def parse_iso_zulu_to_utc(s: str) -> datetime:
+    """Parse ``YYYY-MM-DDTHH:MM:SSZ`` (or ``...+00:00``) to timezone-aware UTC."""
+    raw = (s or "").strip()
+    if not raw:
+        raise ValueError("empty ISO timestamp")
+    if raw.endswith("Z"):
+        raw = raw[:-1] + "+00:00"
+    return datetime.fromisoformat(raw).astimezone(timezone.utc).replace(microsecond=0)

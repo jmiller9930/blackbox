@@ -293,6 +293,12 @@ def run_one_tick(*, tick_index: int) -> tuple[dict, bool]:
         st["parallel_strategies_last"] = run_parallel_anna_strategies_tick()
     except Exception as e:  # noqa: BLE001
         st["parallel_strategies_last"] = {"ok": False, "error": repr(e)}
+    try:
+        from modules.anna_training.baseline_ledger_bridge import run_baseline_ledger_bridge_tick
+
+        st["baseline_ledger_last"] = run_baseline_ledger_bridge_tick()
+    except Exception as e:  # noqa: BLE001
+        st["baseline_ledger_last"] = {"ok": False, "error": repr(e)}
     save_state(st)
 
     row = {
@@ -315,6 +321,7 @@ def run_one_tick(*, tick_index: int) -> tuple[dict, bool]:
         },
         "paper_harness": st.get("karpathy_last_paper_harness"),
         "parallel_strategies": st.get("parallel_strategies_last"),
+        "baseline_ledger": st.get("baseline_ledger_last"),
         "data_preflight": st.get("karpathy_last_data_preflight"),
         "preflight_policy": st.get("karpathy_last_preflight_policy"),
         "llm_preflight": st.get("karpathy_last_llm_preflight"),
