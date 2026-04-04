@@ -368,7 +368,7 @@ def build_anna_training_dashboard() -> dict[str, Any]:
         trades = load_paper_trades_for_gates()
         s = summarize_trades(trades)
         act = summarize_trade_activity()
-        recent = sorted(trades, key=lambda x: x.get("ts_utc") or "")[-20:]
+        recent = sorted(trades, key=lambda x: x.get("ts_utc") or "", reverse=True)[:100]
         ph = st.get("karpathy_last_paper_harness")
         if isinstance(ph, dict):
             harness = ph
@@ -708,13 +708,42 @@ TRAINING_DASHBOARD_HTML = """<!DOCTYPE html>
     .dash-tools { margin: 0 0 0.65rem; font-size: 0.75rem; color: var(--muted); }
     .dash-tools button { font: inherit; font-size: 0.72rem; padding: 0.2rem 0.55rem; margin-right: 0.35rem; border-radius: 4px; border: 1px solid #30363d; background: #21262d; color: var(--text); cursor: pointer; }
     .dash-tools button:hover { border-color: var(--accent); color: var(--accent); }
+    .scorecard-block { background: var(--card); border: 1px solid #30363d; border-radius: 8px; padding: 0.85rem 1rem; margin-bottom: 1rem; }
+    table.trades-ledger { font-size: 0.78rem; }
+    table.trades-ledger th { width: auto !important; white-space: nowrap; }
+    table.trades-ledger .details-cell { max-width: 26rem; word-break: break-word; font-size: 0.76rem; color: #c9d1d9; }
+    .res-won { color: var(--ok); font-weight: 600; text-transform: uppercase; }
+    .res-lost { color: var(--bad); font-weight: 600; text-transform: uppercase; }
+    .res-other { color: var(--muted); font-weight: 500; }
   </style>
 </head>
 <body>
   <h1>Anna training — live</h1>
-  <p class="dash-tools"><button type="button" id="btn_expand_all" title="Open all sections">Expand all</button><button type="button" id="btn_collapse_all" title="Close all collapsible sections">Collapse all</button><span style="margin-left:0.5rem">Housekeeping sections start collapsed.</span></p>
+  <p class="lead">Scorecard and paper ledger are always visible. Open sections below for preflight, last-tick analysis, drills, and harness.</p>
+  <p class="dash-tools"><button type="button" id="btn_expand_all" title="Open all sections">Expand all</button><button type="button" id="btn_collapse_all" title="Close all collapsible sections">Collapse all</button></p>
   <div id="v_llm_fail_alert" role="alert"></div>
-  <details class="dash-section llm-good" id="v_preflight_banner" style="display:none" open>
+  <div id="err"></div>
+  <section class="scorecard-block" aria-labelledby="scorecard-h">
+    <h2 id="scorecard-h" style="font-size:0.78rem;text-transform:uppercase;letter-spacing:0.06em;color:var(--muted);margin:0 0 0.65rem">Scorecard</h2>
+    <p class="ls" id="v_ls_head" style="margin-top:0">—</p>
+    <p class="sub" id="v_enroll" style="margin:0.35rem 0 0.75rem">—</p>
+    <div class="grid">
+      <div class="card" style="border:1px solid #30363d;margin:0"><h2>Supervisor ticks</h2><div class="val" id="v_iter">—</div><div class="sub" id="v_tick"></div></div>
+      <div class="card" style="border:1px solid #30363d;margin:0"><h2>Grade-12 gates</h2><div class="val" id="v_gate">—</div><div class="sub" id="v_gdetail"></div></div>
+      <div class="card" style="border:1px solid #30363d;margin:0"><h2>Paper trades (rows)</h2><div class="val" id="v_rows">—</div><div class="sub">Scored rows in <code>paper_trades.jsonl</code></div><div class="val" id="v_pnl" style="font-size:1rem;margin-top:0.35rem">—</div></div>
+      <div class="card" style="border:1px solid #30363d;margin:0"><h2>Attempt log (events)</h2><div class="val" id="v_attempts">—</div><div class="sub" id="v_jack"></div></div>
+    </div>
+  </section>
+  <section class="scorecard-block" aria-labelledby="trades-h" style="margin-top:0">
+    <h2 id="trades-h" style="font-size:0.95rem;font-weight:600;margin:0 0 0.35rem;color:var(--text)">Paper trades — every row</h2>
+    <p class="sub" style="margin:0 0 0.5rem">Newest first. Full UTC time, outcome, P&amp;L, symbol, side, timeframe, notes, source.</p>
+    <div style="overflow-x:auto">
+    <table class="data trades-ledger"><thead><tr>
+      <th>Time (UTC)</th><th>Result</th><th>P&amp;L $</th><th>Symbol</th><th>Side</th><th>TF</th><th>Details</th><th>Src</th>
+    </tr></thead><tbody id="tb"></tbody></table>
+    </div>
+  </section>
+  <details class="dash-section llm-good" id="v_preflight_banner" style="display:none">
     <summary><span class="dash-chev" aria-hidden="true"></span><h2>Preflight (data + LLM — same order as the daemon)</h2></summary>
     <div class="dash-inner">
     <p class="sub" style="font-size:0.72rem;color:var(--muted);margin:0 0 0.5rem">Red/warn here means a <strong>probe</strong> failed (feeds or Ollama), not a corrupt <code>state.json</code> file.</p>
@@ -731,16 +760,13 @@ TRAINING_DASHBOARD_HTML = """<!DOCTYPE html>
     <p class="sub" id="v_sem3"></p>
     </div>
   </details>
-  <div id="err"></div>
-  <details class="dash-section" open>
-    <summary><span class="dash-chev" aria-hidden="true"></span><h2>Grade-12 learning signal (gates)</h2></summary>
+  <details class="dash-section">
+    <summary><span class="dash-chev" aria-hidden="true"></span><h2>Grade-12 learning signal (detail)</h2></summary>
     <div class="dash-inner">
-    <p class="ls" id="v_ls_head">—</p>
     <p class="ls-detail" id="v_ls_detail">—</p>
-    <p class="sub" id="v_enroll"></p>
     </div>
   </details>
-  <details class="dash-section" style="border-color:var(--accent)" open>
+  <details class="dash-section" style="border-color:var(--accent)">
     <summary><span class="dash-chev" aria-hidden="true"></span><h2>Last tick — Anna analysis (same stack as messaging Anna)</h2></summary>
     <div class="dash-inner">
     <p class="sub" id="v_snap_hint">Persisted from the Karpathy harness: strategy, concepts, policy, risk, suggested action — refreshed every tick the daemon runs.</p>
@@ -748,28 +774,11 @@ TRAINING_DASHBOARD_HTML = """<!DOCTYPE html>
     <table class="data" id="v_analysis_tbl"><tbody id="v_analysis_body"></tbody></table>
     </div>
   </details>
-  <details class="dash-section" open>
+  <details class="dash-section">
     <summary><span class="dash-chev" aria-hidden="true"></span><h2>Last tick — Grade-12 tool drill (classroom)</h2></summary>
     <div class="dash-inner">
     <p class="sub">When deck focus is <code>numeric_paper_cohort</code>, there is no four-tool drill that tick — focus is the paper cohort gate, not a tool ID.</p>
     <table class="data" id="v_sp_tbl"><tbody id="v_sp_body"></tbody></table>
-    </div>
-  </details>
-  <details class="dash-section" open>
-    <summary><span class="dash-chev" aria-hidden="true"></span><h2>Snapshot metrics — ticks, gates, ledger, attempts</h2></summary>
-    <div class="dash-inner">
-  <div class="grid">
-    <div class="card" style="border:1px solid #30363d;margin:0"><h2>Supervisor ticks</h2><div class="val" id="v_iter">—</div><div class="sub" id="v_tick"></div></div>
-    <div class="card" style="border:1px solid #30363d;margin:0"><h2>Grade-12 gates (numeric)</h2><div class="val" id="v_gate">—</div><div class="sub" id="v_gdetail"></div></div>
-    <div class="card" style="border:1px solid #30363d;margin:0"><h2>Paper ledger (scored rows)</h2><div class="val" id="v_rows">—</div><div class="sub">Rows in <code>paper_trades.jsonl</code> — appended only when a paper trade is logged.</div><div class="val" id="v_pnl" style="font-size:1rem;margin-top:0.35rem">—</div></div>
-    <div class="card" style="border:1px solid #30363d;margin:0"><h2>Attempt log (event lines)</h2><div class="val" id="v_attempts">—</div><div class="sub" id="v_jack"></div></div>
-  </div>
-    </div>
-  </details>
-  <details class="dash-section" open>
-    <summary><span class="dash-chev" aria-hidden="true"></span><h2>Paper ledger — recent rows (same strip as TUI)</h2></summary>
-    <div class="dash-inner">
-    <table class="data"><thead><tr><th>UTC</th><th>Sym</th><th>Side</th><th>Res</th><th>P&amp;L</th><th>Src</th></tr></thead><tbody id="tb"></tbody></table>
     </div>
   </details>
   <details class="dash-section">
@@ -778,7 +787,7 @@ TRAINING_DASHBOARD_HTML = """<!DOCTYPE html>
     <table class="data"><thead><tr><th>UTC</th><th>Phase</th><th>Status</th><th>Request</th></tr></thead><tbody id="tb_att"></tbody></table>
     </div>
   </details>
-  <details class="dash-section" open>
+  <details class="dash-section">
     <summary><span class="dash-chev" aria-hidden="true"></span><h2>Harness state (execution bridge)</h2></summary>
     <div class="dash-inner">
     <p class="sub" id="v_harness_line">—</p>
@@ -970,16 +979,51 @@ TRAINING_DASHBOARD_HTML = """<!DOCTYPE html>
       document.getElementById('v_harness').textContent = JSON.stringify(j.paper_harness_last || {}, null, 2);
       const tb = document.getElementById('tb');
       tb.innerHTML = '';
-      (j.recent_trades || []).forEach(function(row) {
+      var tradesList = j.recent_trades || [];
+      if (!tradesList.length) {
+        var trEmpty = document.createElement('tr');
+        var tdEmpty = document.createElement('td');
+        tdEmpty.colSpan = 8;
+        tdEmpty.className = 'sub';
+        tdEmpty.textContent = 'No paper trades yet — rows appear when a paper trade is logged to paper_trades.jsonl.';
+        trEmpty.appendChild(tdEmpty);
+        tb.appendChild(trEmpty);
+      } else tradesList.forEach(function(row) {
         const tr = document.createElement('tr');
-        [ 'ts_utc','symbol','side','result','pnl_usd','source' ].forEach(function(k) {
-          const td = document.createElement('td');
-          let v = row[k];
-          if (k === 'ts_utc' && v) v = String(v).slice(0,19);
-          if (k === 'pnl_usd') v = v != null ? Number(v).toFixed(2) : '—';
-          td.textContent = v != null && v !== '' ? v : '—';
+        var res = String(row.result || '').toLowerCase();
+        var ts = row.ts_utc != null ? String(row.ts_utc) : '—';
+        var pnlStr = row.pnl_usd != null ? Number(row.pnl_usd).toFixed(2) : '—';
+        var sym = row.symbol != null && row.symbol !== '' ? String(row.symbol) : '—';
+        var side = row.side != null && row.side !== '' ? String(row.side) : '—';
+        var tf = row.timeframe != null && row.timeframe !== '' ? String(row.timeframe) : '—';
+        var notes = row.notes != null ? String(row.notes) : '—';
+        if (notes.length > 500) notes = notes.slice(0, 500) + '…';
+        var src = row.source != null && row.source !== '' ? String(row.source) : '—';
+        function addTd(text, opts) {
+          var td = document.createElement('td');
+          td.textContent = text;
+          if (opts && opts.className) td.className = opts.className;
+          if (opts && opts.title) td.title = opts.title;
           tr.appendChild(td);
-        });
+        }
+        addTd(ts);
+        var tdRes = document.createElement('td');
+        tdRes.textContent = row.result != null && row.result !== '' ? String(row.result) : '—';
+        tdRes.className = res === 'won' ? 'res-won' : (res === 'lost' ? 'res-lost' : 'res-other');
+        tr.appendChild(tdRes);
+        var tdPnl = document.createElement('td');
+        tdPnl.textContent = pnlStr;
+        tdPnl.style.fontVariantNumeric = 'tabular-nums';
+        if (pnlStr !== '—' && !isNaN(Number(pnlStr))) tdPnl.className = Number(pnlStr) >= 0 ? 'ok' : 'bad';
+        tr.appendChild(tdPnl);
+        addTd(sym);
+        addTd(side);
+        addTd(tf);
+        var tdDet = document.createElement('td');
+        tdDet.className = 'details-cell';
+        tdDet.textContent = notes;
+        tr.appendChild(tdDet);
+        addTd(src);
         tb.appendChild(tr);
       });
       var tba = document.getElementById('tb_att');
