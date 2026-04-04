@@ -79,18 +79,21 @@
             </li>
             <li>
               <a class="sidebar-list__link" href="/anna/event-dashboard"
-                >Event dashboard (operator — QEL)</a
+                >Event dashboard (operator — chart + QEL)</a
               >
-            </li>
-            <li>
-              <a class="sidebar-list__link" href="/anna/event-view"
-                >Event view (alias URL — same unified dashboard)</a
+              <p
+                style="
+                  font-size: 0.78rem;
+                  color: #8b949e;
+                  margin: 0.25rem 0 0.5rem 0.15rem;
+                  max-width: 18rem;
+                  line-height: 1.35;
+                "
               >
-            </li>
-            <li>
-              <a class="sidebar-list__link" href="/anna/event-view-extended"
-                >Event view extended (alias URL — same unified dashboard)</a
-              >
+                Canonical URL <code>/anna/event-dashboard</code>. Same page:
+                <code>/anna/event-view</code>,
+                <code>/anna/event-view-extended</code>.
+              </p>
             </li>
             <li>
               <a class="sidebar-list__link" href="/anna/evaluation"
@@ -141,8 +144,9 @@
               <p>
                 <a class="button button--primary" href="/anna/training">Open live training dashboard</a>
               </p>
-              <p class="panel__state panel__state--pending" data-state>
-                Training window placeholder — first-class surface when API exists.
+              <p class="panel__state" data-state style="color: #8b949e; font-size: 0.95rem; line-height: 1.45">
+                Rolling paper ledger, Grade-12 scorecard, digest, and harness status — refreshed from
+                <code>/api/v1/anna/training-dashboard</code> (same origin as this portal).
               </p>
             </section>
           </div>

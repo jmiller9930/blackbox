@@ -115,9 +115,6 @@
     .sw-baseline { background: var(--baseline); }
     .sw-market { background: #94a3b8; }
     .sw-test { background: repeating-linear-gradient(90deg, #f472b6, #f472b6 4px, transparent 4px, transparent 7px); height: 0.5rem; width: 1.4rem; border-radius: 2px; }
-    body.view-operator #sec-qel { display: none !important; }
-    body.view-operator #sec-context { display: none !important; }
-    body.view-operator #sec-meta { display: none !important; }
     body.view-expanded #sec-context .kv { font-size: 0.78rem; }
     .trace--summary { font-family: var(--mono); font-size: 0.78rem; }
   </style>
@@ -156,14 +153,14 @@
       <h2 style="margin-top:1rem">Other pages</h2>
       <a href="/anna.html">Anna hub</a>
       <a href="/anna/training">Training — live (paper ledger)</a>
-      <a href="/anna/evaluation">QEL evaluation</a>
-      <p class="nav-note">Aliases: <code style="font-size:0.68rem">/anna/event-view</code>, <code style="font-size:0.68rem">/anna/event-view-extended</code></p>
+      <a href="/anna/evaluation">QEL evaluation (standalone page)</a>
+      <p class="nav-note">Canonical event URL: <code style="font-size:0.68rem">/anna/event-dashboard</code>. Same page (legacy aliases): <code style="font-size:0.68rem">/anna/event-view</code>, <code style="font-size:0.68rem">/anna/event-view-extended</code>.</p>
     </nav>
     <div class="main">
   <div class="wrap" style="max-width:none;margin:0;padding:0">
     <section id="sec-header">
     <h1>Event dashboard</h1>
-    <p class="sub">Unified operator surface: market chart is primary (baseline blue, top-five Anna overlays, survival tests in time strip). Data from <code style="font-family:var(--mono);font-size:0.82rem">/api/v1/anna/operator-dashboard</code> plus chart overlay series from the ledger.</p>
+    <p class="sub">Unified operator surface: market chart is primary (baseline blue, top-five Anna overlays, survival tests in time strip). Data from <code style="font-family:var(--mono);font-size:0.82rem">/api/v1/anna/operator-dashboard</code> plus chart overlay series from the ledger. <strong>QEL judgment</strong> is on this page in every view mode (below). <strong>Expanded</strong> and <strong>Full</strong> add more strategy rows, full context keys, and richer decision traces.</p>
     <p class="training-banner" role="status"><strong>Training / paper economics.</strong> Anna lane here is paper-grade (not live-authorized). Baseline rows may be paper for harness comparison. Do not treat as production trading authorization.</p>
     </section>
 
@@ -263,7 +260,8 @@
       <div class="panel">
         <div class="panel-h">Evaluation (QEL judgment)</div>
         <div class="panel-b">
-          <p class="sub" style="margin-top:0">Why this strategy is alive, dead, or advancing — from the Quantitative Evaluation Layer (ledger + survival checkpoints), not inferred from raw trades.</p>
+          <p class="sub" style="margin-top:0">Shown in <strong>all view modes</strong> (Operator is default). Load judgment uses <code style="font-family:var(--mono);font-size:0.82rem">/api/v1/anna/evaluation-summary</code>. For strategy-only QEL without the event chart, use <a href="/anna/evaluation" style="color:var(--accent)">QEL evaluation</a> in the top bar.</p>
+          <p class="sub" style="margin-top:0.5rem">Why this strategy is alive, dead, or advancing — from the Quantitative Evaluation Layer (ledger + survival checkpoints), not inferred from raw trades.</p>
           <label style="display:flex;flex-direction:column;gap:0.35rem;font-size:0.72rem;text-transform:uppercase;letter-spacing:0.05em;color:var(--muted);max-width:420px;margin-bottom:0.75rem">
             Anna strategy
             <select id="evalStrategy" style="padding:0.45rem 0.6rem;border-radius:6px;border:1px solid var(--border);background:var(--surface2);color:var(--text);font-family:var(--mono);font-size:0.85rem"></select>
@@ -290,7 +288,10 @@
       </section>
 
       <section id="sec-meta">
-      <p class="meta" id="rawMeta"></p>
+      <div class="panel">
+        <div class="panel-h">Load metadata (debug)</div>
+        <div class="panel-b"><p class="meta" id="rawMeta" style="margin:0"></p></div>
+      </div>
       </section>
     </div>
     </div>
@@ -551,7 +552,7 @@
     var vm = getViewMode();
     var el = qs('#ctx');
     if (vm === 'operator') {
-      el.innerHTML = '<span style="color:var(--muted)">Context hidden in Operator mode — switch to Expanded or Full.</span>';
+      el.innerHTML = '<span style="color:var(--muted)">In <strong>Operator</strong> mode, context snapshot keys are not expanded here — switch to <strong>Expanded</strong> or <strong>Full</strong> to see the full key set per trade.</span>';
       return;
     }
     var blocks = p.context_by_trade || [];
