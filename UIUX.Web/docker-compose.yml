@@ -36,4 +36,7 @@ services:
     ports:
       - "443:443"
       - "80:80"
+    # Host repo config — avoids 404 on /anna/* after git pull without rebuilding the image.
+    volumes:
+      - ./nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
     restart: unless-stopped
