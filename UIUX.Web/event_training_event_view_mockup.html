@@ -1,0 +1,701 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Event view — mockup (discussion)</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,600;0,9..40,700;1,9..40,400&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet"/>
+  <style>
+    :root {
+      --bg: #0c0f14;
+      --surface: #141a22;
+      --surface2: #1a222d;
+      --border: #2d3847;
+      --text: #e8edf4;
+      --muted: #8b9aad;
+      --accent: #f0b429;
+      --ok: #34d399;
+      --bad: #f87171;
+      --info: #60a5fa;
+      --stub: #a78bfa;
+      --font: "DM Sans", system-ui, sans-serif;
+      --mono: "IBM Plex Mono", ui-monospace, monospace;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      background: var(--bg);
+      color: var(--text);
+      font-family: var(--font);
+      font-size: 15px;
+      line-height: 1.45;
+    }
+    .wrap {
+      max-width: min(1680px, 100vw);
+      margin: 0 auto;
+      padding: 1rem 1.25rem 2.5rem;
+    }
+    .banner {
+      font-size: 0.75rem;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      color: var(--accent);
+      border: 1px solid rgba(240, 180, 41, 0.35);
+      background: rgba(240, 180, 41, 0.06);
+      padding: 0.5rem 0.75rem;
+      border-radius: 6px;
+      margin-bottom: 1.25rem;
+    }
+    h1 {
+      font-size: 1.35rem;
+      font-weight: 700;
+      margin: 0 0 0.35rem;
+      letter-spacing: -0.02em;
+    }
+    .subhead {
+      color: var(--muted);
+      font-size: 0.9rem;
+      margin: 0 0 1.5rem;
+    }
+    .identity {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.75rem 1.5rem;
+      padding: 1rem 1.1rem;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      margin-bottom: 1.25rem;
+    }
+    .identity span { color: var(--muted); font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.05em; display: block; margin-bottom: 0.2rem; }
+    .identity strong { font-family: var(--mono); font-weight: 500; font-size: 0.95rem; }
+    .identity .ohlc-compact {
+      flex: 1 1 100%;
+      margin-top: 0.5rem;
+      padding-top: 0.75rem;
+      border-top: 1px solid var(--border);
+      font-family: var(--mono);
+      font-size: 0.8rem;
+      color: #c9d1d9;
+      line-height: 1.5;
+    }
+    .identity .ohlc-compact kbd {
+      color: var(--muted);
+      font-size: 0.72rem;
+      font-weight: 600;
+      letter-spacing: 0.04em;
+      margin-right: 0.35rem;
+    }
+    .chart-main { margin-bottom: 1.25rem; }
+    .panel {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      overflow: hidden;
+    }
+    .panel-h {
+      padding: 0.65rem 1rem;
+      border-bottom: 1px solid var(--border);
+      font-size: 0.72rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.07em;
+      color: var(--muted);
+    }
+    .axis-note {
+      font-size: 0.72rem;
+      color: var(--muted);
+      margin: 0 0 0.5rem;
+      line-height: 1.35;
+    }
+    .panel-b { padding: 1rem; }
+    .chart-svg { width: 100%; height: auto; display: block; }
+    .legend-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 1rem;
+      margin-top: 0.75rem;
+      font-size: 0.78rem;
+      color: var(--muted);
+    }
+    .legend-row i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 0.35rem; vertical-align: middle; }
+    .facts dl {
+      margin: 0;
+      display: grid;
+      grid-template-columns: auto 1fr;
+      gap: 0.35rem 1rem;
+      font-size: 0.88rem;
+    }
+    .facts dt { color: var(--muted); }
+    .facts dd { margin: 0; font-family: var(--mono); }
+    section { margin-top: 1.5rem; }
+    section > h2 {
+      font-size: 0.78rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.07em;
+      color: var(--muted);
+      margin: 0 0 0.65rem;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.86rem;
+    }
+    th, td {
+      text-align: left;
+      padding: 0.55rem 0.65rem;
+      border-bottom: 1px solid var(--border);
+    }
+    th { color: var(--muted); font-weight: 600; font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.04em; }
+    tr:last-child td { border-bottom: none; }
+    .lane-baseline { color: var(--info); }
+    .lane-anna { color: var(--stub); }
+    .pnl-pos { color: var(--ok); font-family: var(--mono); }
+    .pnl-neg { color: var(--bad); font-family: var(--mono); }
+    .badge {
+      display: inline-block;
+      font-size: 0.65rem;
+      padding: 0.12rem 0.4rem;
+      border-radius: 4px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+    .badge-eco { background: rgba(52, 211, 153, 0.15); color: var(--ok); border: 1px solid rgba(52, 211, 153, 0.35); }
+    .badge-stub { background: rgba(167, 139, 250, 0.12); color: #c4b5fd; border: 1px solid rgba(167, 139, 250, 0.35); }
+    .term-note {
+      font-size: 0.78rem;
+      color: var(--muted);
+      margin: 0 0 1rem;
+      line-height: 1.45;
+      max-width: 56rem;
+    }
+    .chips { display: flex; flex-wrap: wrap; gap: 0.5rem; }
+    .chip {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      padding: 0.45rem 0.65rem;
+      border-radius: 8px;
+      font-size: 0.82rem;
+    }
+    .chip kbd { color: var(--muted); font-size: 0.72rem; margin-right: 0.35rem; }
+    .narrative {
+      background: var(--surface2);
+      border-left: 3px solid var(--accent);
+      padding: 0.75rem 1rem;
+      font-size: 0.88rem;
+      color: #cbd5e1;
+      border-radius: 0 8px 8px 0;
+    }
+    .narrative.unwired { border-left-color: var(--muted); color: var(--muted); font-style: italic; }
+    .chart-toolbar {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 0.75rem 1.25rem;
+      margin-bottom: 0.65rem;
+    }
+    .chart-toolbar label { font-size: 0.78rem; color: var(--muted); }
+    .chart-toolbar select {
+      font: inherit;
+      font-size: 0.85rem;
+      padding: 0.35rem 0.65rem;
+      border-radius: 6px;
+      border: 1px solid var(--border);
+      background: var(--surface2);
+      color: var(--text);
+      min-width: 16rem;
+    }
+    .chart-scroll {
+      overflow-x: auto;
+      overflow-y: hidden;
+      border-radius: 8px;
+      border: 1px solid var(--border);
+      background: linear-gradient(180deg, #0a0d12 0%, #0c0f14 100%);
+      -webkit-overflow-scrolling: touch;
+      min-height: min(42vh, 420px);
+    }
+    .chart-scroll svg { display: block; min-height: min(38vh, 380px); width: 100%; }
+    .chart-meta {
+      font-size: 0.72rem;
+      color: var(--muted);
+      margin-top: 0.5rem;
+      line-height: 1.45;
+      max-width: 52rem;
+    }
+    .brush-strip {
+      position: relative;
+      height: 8px;
+      border-radius: 4px;
+      background: #1a222d;
+      margin-top: 0.5rem;
+      border: 1px solid var(--border);
+    }
+    .brush-strip i {
+      position: absolute;
+      top: 0;
+      width: 3px;
+      height: 100%;
+      background: var(--accent);
+      border-radius: 1px;
+      transform: translateX(-50%);
+      box-shadow: 0 0 10px rgba(240, 180, 41, 0.45);
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="banner">Mockup only — static sample data for layout discussion. Open this file in a browser.</div>
+
+    <h1>Market event</h1>
+    <p class="subhead">Detail panel is for <strong>one</strong> <code>market_event_id</code>. The chart below is a <strong>design simulation</strong> of “how much history could feel like” — range + bar size are user controls in production.</p>
+    <p class="term-note">
+      <strong>Ledger wording:</strong> Anna’s strategies are not “fake.” Rows in <strong>paper_stub</strong> mode mean we <strong>do not assert dollar P&amp;L</strong> in <code>execution_trades</code> (classification / experiment lives in JSON). Economic <strong>paper</strong> / <strong>live</strong> rows still get derived $ P&amp;L from prices × size × side. The table below uses <em>stub</em> for that contract, not “synthetic strategy.”
+    </p>
+
+    <div class="identity">
+      <div><span>Symbol</span><strong id="v-symbol">—</strong></div>
+      <div><span>Timeframe</span><strong id="v-tf">—</strong></div>
+      <div><span>Event (candle open)</span><strong id="v-event">—</strong></div>
+      <div><span>market_event_id</span><strong id="v-mid" style="font-size:0.82rem;word-break:break-all;">—</strong></div>
+      <div class="ohlc-compact" id="ohlc-compact" aria-label="OHLC for this event bar"></div>
+    </div>
+
+    <div class="chart-main">
+      <div class="panel">
+        <div class="panel-h">Price vs market time — scroll when zoomed in</div>
+        <div class="panel-b">
+          <div class="chart-toolbar">
+            <label for="chartRange">Chart window (simulated)</label>
+            <select id="chartRange" aria-label="Chart time range and bar size">
+              <option value="24h_5m">24h · 5m bars (~288) — dense, scroll</option>
+              <option value="7d_1h">7d · 1h bars (~168)</option>
+              <option value="30d_4h">30d · 4h bars (~180)</option>
+              <option value="90d_1d" selected>~3 months · 1d bars (~90) — full context</option>
+            </select>
+          </div>
+          <p class="axis-note">
+            <strong>Y</strong> = price. <strong>X</strong> = market time (bar index). Gold highlight = <strong>this event</strong> in the window.
+            Blue = <em>simulated</em> baseline mechanic track; violet = <em>simulated</em> Anna overlay (same axis; ledger uses <code>paper_stub</code> when $ P&amp;L is not asserted).
+          </p>
+          <div class="chart-scroll">
+            <svg class="chart-svg" id="chart" xmlns="http://www.w3.org/2000/svg" aria-label="Simulated OHLC with overlay lines"></svg>
+          </div>
+          <div class="brush-strip" id="brushStrip" title="Event position in window (mockup)"><i id="brushTick"></i></div>
+          <p class="chart-meta" id="chartMeta"></p>
+          <div class="legend-row">
+            <span><i style="background:#60a5fa;height:3px;width:18px;border-radius:0"></i>Baseline (sim overlay)</span>
+            <span><i style="background:#c4b5fd;height:3px;width:18px;border-radius:0"></i>Anna path (sim overlay)</span>
+            <span><i style="background:#f0b429"></i>Event bar</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <section>
+      <h2>Strategy actions (this event)</h2>
+      <div class="panel">
+        <div class="panel-b" style="padding:0">
+          <table>
+            <thead>
+              <tr>
+                <th>Lane</th>
+                <th>Strategy</th>
+                <th>Mode</th>
+                <th>Side</th>
+                <th>Entry</th>
+                <th>Exit</th>
+                <th>Result</th>
+              </tr>
+            </thead>
+            <tbody id="tbody-trades"></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <section>
+      <h2>Context snapshot (at decision time)</h2>
+      <div class="chips" id="chips-indicators"></div>
+      <p class="narrative unwired" id="narrative" style="margin-top:1rem">—</p>
+    </section>
+  </div>
+
+  <script>
+    /** Same shape as docs/architect/event_market_training_view_framework.md §1 */
+    const MOCK = {
+      ok: true,
+      market_event_id: "SOL-PERP_5m_2026-04-01T19:55:00Z",
+      symbol: "SOL-PERP",
+      timeframe: "5m",
+      candle: {
+        open_utc: "2026-04-01T19:55:00Z",
+        close_utc: "2026-04-01T20:00:00Z",
+        open: 83.97,
+        high: 84.50,
+        low: 83.80,
+        close: 84.20,
+        price_source: "pyth+rollup",
+        tick_count: 42
+      },
+      trades: [
+        {
+          trade_id: "bl_demo",
+          lane: "baseline",
+          strategy_id: "baseline",
+          mode: "paper",
+          side: "long",
+          entry_price: 83.97,
+          exit_price: 84.20,
+          size: 1.0,
+          exit_reason: "CLOSE",
+          pnl_usd: 0.23,
+          economic: true
+        },
+        {
+          lane: "anna",
+          strategy_id: "monopoly",
+          mode: "paper_stub",
+          side: "long",
+          entry_price: 84.0,
+          exit_price: 84.0,
+          pnl_usd: null,
+          economic: false,
+          synthetic: { stub_result: "lost", stub_pnl_usd: -0.12 }
+        },
+        {
+          lane: "anna",
+          strategy_id: "no_ema_filter",
+          mode: "paper_stub",
+          side: null,
+          entry_price: null,
+          exit_price: null,
+          pnl_usd: null,
+          economic: false,
+          synthetic: { outcome: "no_trade" }
+        },
+        {
+          lane: "anna",
+          strategy_id: "aggressive_rsi",
+          mode: "paper_stub",
+          side: "short",
+          entry_price: 84.35,
+          exit_price: 84.14,
+          pnl_usd: null,
+          economic: false,
+          synthetic: { stub_result: "won", stub_pnl_usd: 0.19 }
+        }
+      ],
+      indicators: {
+        rsi: 41.74,
+        supertrend: "BEARISH",
+        atr_ratio: 0.69,
+        atr_label: "LOW VOL",
+        price_vs_ema200: "ABOVE",
+        source: "illustrative"
+      },
+      narrative: {
+        signal_breakdown: "Baseline: hold-to-close long. Anna(monopoly): synthetic classification only. aggressive_rsi: synthetic short demo.",
+        source: "mockup"
+      }
+    };
+
+    function fmt(n) {
+      if (n == null || n === "") return "—";
+      if (typeof n === "number") return n.toFixed(2);
+      return String(n);
+    }
+
+    document.getElementById("v-symbol").textContent = MOCK.symbol;
+    document.getElementById("v-tf").textContent = MOCK.timeframe;
+    document.getElementById("v-event").textContent = MOCK.candle.open_utc;
+    document.getElementById("v-mid").textContent = MOCK.market_event_id;
+
+    var ohlc = MOCK.candle;
+    document.getElementById("ohlc-compact").innerHTML =
+      "<kbd>THIS BAR</kbd> O " +
+      fmt(ohlc.open) +
+      " · H " +
+      fmt(ohlc.high) +
+      " · L " +
+      fmt(ohlc.low) +
+      " · C " +
+      fmt(ohlc.close) +
+      " · ticks " +
+      String(ohlc.tick_count);
+
+    const tbody = document.getElementById("tbody-trades");
+    MOCK.trades.forEach(function (t) {
+      const tr = document.createElement("tr");
+      const laneClass = t.lane === "baseline" ? "lane-baseline" : "lane-anna";
+      let resultCell = "";
+      if (t.economic && t.pnl_usd != null) {
+        const cls = t.pnl_usd >= 0 ? "pnl-pos" : "pnl-neg";
+        resultCell = '<span class="badge badge-eco">Economic</span> <span class="' + cls + '">$' + t.pnl_usd.toFixed(2) + "</span>";
+      } else if (t.synthetic && t.synthetic.outcome === "no_trade") {
+        resultCell =
+          '<span class="badge badge-stub">paper_stub</span> <span style="color:var(--muted)">NO TRADE</span>';
+      } else {
+        var syn = t.synthetic || {};
+        var stub =
+          syn.stub_pnl_usd != null
+            ? "classification " + syn.stub_result + " (" + syn.stub_pnl_usd + " — not $ in ledger)"
+            : "classification only";
+        resultCell =
+          '<span class="badge badge-stub">paper_stub</span> <span style="color:var(--muted)">' + stub + "</span>";
+      }
+      tr.innerHTML =
+        '<td class="' + laneClass + '">' + t.lane + "</td>" +
+        "<td>" + t.strategy_id + "</td>" +
+        "<td>" + t.mode + "</td>" +
+        "<td>" + (t.side || "—") + "</td>" +
+        "<td style='font-family:var(--mono)'>" + fmt(t.entry_price) + "</td>" +
+        "<td style='font-family:var(--mono)'>" + fmt(t.exit_price) + "</td>" +
+        "<td>" + resultCell + "</td>";
+      tbody.appendChild(tr);
+    });
+
+    const ind = MOCK.indicators;
+    const chipHtml = [
+      ["RSI", ind.rsi != null ? ind.rsi : "—"],
+      ["Supertrend", ind.supertrend || "—"],
+      ["ATR ratio", ind.atr_ratio != null ? ind.atr_ratio + " (" + (ind.atr_label || "") + ")" : "—"],
+      ["vs EMA200", ind.price_vs_ema200 || "—"]
+    ]
+      .map(function (x) {
+        return '<div class="chip"><kbd>' + x[0] + "</kbd>" + x[1] + "</div>";
+      })
+      .join("");
+    document.getElementById("chips-indicators").innerHTML = chipHtml;
+
+    const nar = document.getElementById("narrative");
+    if (MOCK.narrative && MOCK.narrative.signal_breakdown) {
+      nar.className = "narrative";
+      nar.textContent = MOCK.narrative.signal_breakdown;
+    }
+
+    /** Seeded RNG so each preset looks stable between reloads */
+    function mulberry32(seed) {
+      return function () {
+        let t = (seed += 0x6d2b79f5);
+        t = Math.imul(t ^ (t >>> 15), t | 1);
+        t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+        return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+      };
+    }
+
+    var PRESETS = {
+      "24h_5m": { n: 288, gw: 2.15, desc: "24h · 5m (~288 bars)" },
+      "7d_1h": { n: 168, gw: 3.4, desc: "7d · 1h (~168 bars)" },
+      "30d_4h": { n: 180, gw: 3.0, desc: "30d · 4h (~180 bars)" },
+      "90d_1d": { n: 90, gw: 5.2, desc: "~3 months · 1d (~90 bars)" }
+    };
+
+    function generateBars(n, rng) {
+      var p = 80 + rng() * 10;
+      var bars = [];
+      var i;
+      for (i = 0; i < n; i++) {
+        var drift = Math.sin(i * 0.055) * 0.045;
+        var j = rng() - 0.5;
+        p = Math.max(72, Math.min(98, p + drift + j * 0.38));
+        var o = p + (rng() - 0.5) * 0.48;
+        var c = p + (rng() - 0.5) * 0.42;
+        var h = Math.max(o, c) + rng() * 0.52;
+        var l = Math.min(o, c) - rng() * 0.52;
+        bars.push({ o: o, h: h, l: l, c: c, focus: false });
+      }
+      var eventIdx = Math.floor(n * 0.62);
+      bars[eventIdx].focus = true;
+      if (typeof MOCK !== "undefined" && MOCK.candle) {
+        var k = MOCK.candle;
+        bars[eventIdx].o = k.open;
+        bars[eventIdx].h = k.high;
+        bars[eventIdx].l = k.low;
+        bars[eventIdx].c = k.close;
+      }
+      return { bars: bars, eventIdx: eventIdx };
+    }
+
+    function drawSyntheticChart() {
+      var key = document.getElementById("chartRange").value;
+      var P = PRESETS[key] || PRESETS["90d_1d"];
+      var rng = mulberry32(key.split("").reduce(function (a, c) { return a + c.charCodeAt(0); }, 42));
+      var gen = generateBars(P.n, rng);
+      var bars = gen.bars;
+      var eventIdx = gen.eventIdx;
+      var n = bars.length;
+      var gw = P.gw;
+      var padL = 50;
+      var padR = 18;
+      var padT = 18;
+      var padB = 44;
+      var W = padL + n * gw + padR;
+      var H = 340;
+      var plotH = H - padT - padB;
+      var i;
+
+      var baseLine = [];
+      var annaLine = [];
+      for (i = 0; i < n; i++) {
+        baseLine.push(bars[i].c + 0.28 * Math.sin(i * 0.11) + 0.06 * Math.sin(i * 0.03));
+        annaLine.push(bars[i].c - 0.38 * Math.sin(i * 0.095 + 1.15) - 0.05 * Math.cos(i * 0.04));
+      }
+
+      var all = bars.flatMap(function (b) { return [b.h, b.l]; });
+      for (i = 0; i < n; i++) {
+        all.push(baseLine[i], annaLine[i]);
+      }
+      var pMin = Math.min.apply(null, all) - 0.25;
+      var pMax = Math.max.apply(null, all) + 0.25;
+      function yp(price) {
+        return padT + (1 - (price - pMin) / (pMax - pMin)) * plotH;
+      }
+      function xCenter(idx) {
+        return padL + idx * gw + gw / 2;
+      }
+
+      var svg = "";
+      var g;
+      for (g = 0; g <= 4; g++) {
+        var pr = pMin + (g / 4) * (pMax - pMin);
+        var gy = yp(pr);
+        svg +=
+          '<line x1="' + padL + '" y1="' + gy + '" x2="' + (W - padR) + '" y2="' + gy + '" stroke="#2d3847" stroke-width="1" opacity="0.55"/>';
+        svg +=
+          '<text x="' + (padL - 6) + '" y="' + (gy + 4) + '" fill="#8b9aad" font-size="9" text-anchor="end" font-family="IBM Plex Mono, monospace">' +
+          pr.toFixed(2) +
+          "</text>";
+      }
+
+      var bandX = padL + eventIdx * gw;
+      svg +=
+        '<rect x="' + bandX + '" y="' + padT + '" width="' + gw + '" height="' + plotH + '" fill="#f0b429" opacity="0.09"/>';
+
+      var bodyW = Math.min(gw * 0.72, 8);
+      for (i = 0; i < n; i++) {
+        var b = bars[i];
+        var cx = xCenter(i);
+        var stroke = b.focus ? "#f0b429" : "#2d3847";
+        var sw = b.focus ? 2.2 : 0.9;
+        var yH = yp(b.h);
+        var yL = yp(b.l);
+        var top = Math.min(yp(b.o), yp(b.c));
+        var bot = Math.max(yp(b.o), yp(b.c));
+        var fill = b.c >= b.o ? "#34d399" : "#f87171";
+        var op = b.focus ? 0.92 : n > 120 ? 0.35 : 0.5;
+        svg +=
+          '<line x1="' + cx + '" y1="' + yH + '" x2="' + cx + '" y2="' + yL + '" stroke="' + stroke + '" stroke-width="' + sw + '"/>';
+        svg +=
+          '<rect x="' +
+          (cx - bodyW / 2) +
+          '" y="' +
+          top +
+          '" width="' +
+          bodyW +
+          '" height="' +
+          Math.max(1.5, bot - top) +
+          '" fill="' +
+          fill +
+          '" opacity="' +
+          op +
+          '" rx="0.5"/>';
+      }
+
+      var basePts = [];
+      var annaPts = [];
+      for (i = 0; i < n; i++) {
+        basePts.push(xCenter(i) + "," + yp(baseLine[i]));
+        annaPts.push(xCenter(i) + "," + yp(annaLine[i]));
+      }
+      svg +=
+        '<polyline fill="none" stroke="#60a5fa" stroke-width="2.4" stroke-linejoin="round" stroke-linecap="round" opacity="0.95" points="' +
+        basePts.join(" ") +
+        '"/>';
+      svg +=
+        '<polyline fill="none" stroke="#c4b5fd" stroke-width="2" stroke-dasharray="5 4" stroke-linejoin="round" stroke-linecap="round" opacity="0.92" points="' +
+        annaPts.join(" ") +
+        '"/>';
+
+      var xe = xCenter(eventIdx);
+      var x0 = xe - gw * 0.42;
+      var x1 = xe + gw * 0.42;
+      var bEntry = MOCK.candle.open;
+      var bExit = MOCK.candle.close;
+      var aEntry = 84.35;
+      var aExit = 84.14;
+      svg +=
+        '<polyline fill="none" stroke="#60a5fa" stroke-width="3.2" stroke-linecap="round" points="' +
+        x0 +
+        "," +
+        yp(bEntry) +
+        " " +
+        x1 +
+        "," +
+        yp(bExit) +
+        '"/>';
+      svg +=
+        '<polyline fill="none" stroke="#c4b5fd" stroke-width="2.8" stroke-dasharray="4 3" stroke-linecap="round" points="' +
+        x0 +
+        "," +
+        yp(aEntry) +
+        " " +
+        x1 +
+        "," +
+        yp(aExit) +
+        '"/>';
+      svg +=
+        '<circle cx="' + x0 + '" cy="' + yp(bEntry) + '" r="4" fill="#0c0f14" stroke="#93c5fd" stroke-width="2"/>';
+      svg +=
+        '<circle cx="' + x1 + '" cy="' + yp(bExit) + '" r="4" fill="#0c0f14" stroke="#93c5fd" stroke-width="2"/>';
+      svg +=
+        '<circle cx="' + x0 + '" cy="' + yp(aEntry) + '" r="3.5" fill="#0c0f14" stroke="#c4b5fd" stroke-width="2"/>';
+      svg +=
+        '<circle cx="' + x1 + '" cy="' + yp(aExit) + '" r="3.5" fill="#0c0f14" stroke="#c4b5fd" stroke-width="2"/>';
+
+      svg += '<line x1="' + padL + '" y1="' + (H - padB) + '" x2="' + (W - padR) + '" y2="' + (H - padB) + '" stroke="#5c6b7f" stroke-width="1"/>';
+      var xTick = [0, Math.floor(n / 2), n - 1];
+      var lbl = ["Older", "Mid window", "Recent"];
+      for (i = 0; i < xTick.length; i++) {
+        var xi = xTick[i];
+        var xc = xCenter(xi);
+        svg +=
+          '<text x="' + xc + '" y="' + (H - padB + 18) + '" fill="#8b9aad" font-size="8.5" text-anchor="middle">' + lbl[i] + "</text>";
+      }
+      svg +=
+        '<text x="' + (padL + (W - padL - padR) / 2) + '" y="' + (H - 8) + '" fill="#8b9aad" font-size="9" text-anchor="middle">Market time →</text>';
+      var pyMid = padT + plotH / 2;
+      svg +=
+        '<text x="16" y="' + pyMid + '" fill="#8b9aad" font-size="9" text-anchor="middle" transform="rotate(-90 16 ' + pyMid + ')">Price</text>';
+
+      var chartEl = document.getElementById("chart");
+      chartEl.setAttribute("viewBox", "0 0 " + W + " " + H);
+      chartEl.setAttribute("preserveAspectRatio", "xMinYMin meet");
+      chartEl.innerHTML = svg;
+
+      var tick = document.getElementById("brushTick");
+      if (tick) {
+        tick.style.left = 100 * (eventIdx / Math.max(1, n - 1)) + "%";
+      }
+
+      document.getElementById("chartMeta").textContent =
+        "Simulated " +
+        n +
+        " bars (" +
+        P.desc +
+        "). Event pinned at bar #" +
+        (eventIdx + 1) +
+        " (gold). Wide overlays = fake “regime” tracks; thick segment on event = entry→exit demo. " +
+        "Production: user sets visible range + bar size (e.g. 3 months of 1d, or 24h of 5m); " +
+        "3 months of 5m raw = ~26k bars — expect zoom/pan, downsampling, or higher TF roll-ups; API caps by retention.";
+    }
+
+    document.getElementById("chartRange").addEventListener("change", drawSyntheticChart);
+    drawSyntheticChart();
+  </script>
+</body>
+</html>

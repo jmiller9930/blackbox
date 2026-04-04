@@ -84,7 +84,7 @@ If a row is not market-grounded, **do not** treat it as proof that Anna “beat 
 
 **Data flow (high level):** Market data → analysis / harness → **paper** outcome rows in `paper_trades.jsonl` (training judgment). **Live** baseline bot logging is **not** the same artifact — see Engineering memo on trade visibility.
 
-**Parallel execution ledger (identity):** `data/sqlite/execution_ledger.db` (gitignored) stores **`execution_trades`** with full identity: `strategy_id`, `lane` (`baseline`|`anna`), `mode` (`live`|`paper`), `market_event_id`, entry/exit, P&amp;L. Multiple rows per `market_event_id` are **required** (baseline vs many Anna strategies). CLI: `anna_training_cli.py log-execution-trade`. Karpathy loop appends Anna parallel stub rows when canonical bars exist (`parallel_strategies_last` in state/heartbeat).
+**Parallel execution ledger (identity):** `data/sqlite/execution_ledger.db` (gitignored) stores **`execution_trades`** with full identity: `strategy_id`, `lane` (`baseline`|`anna`), `mode` (`live`|`paper`|`paper_stub`), `market_event_id`, entry/exit; **PnL** for `live`/`paper` is **derived** from price × size × side (not free-form). **`paper_stub`** = synthetic Anna rows (no asserted dollar P&amp;L in column). Multiple rows per `market_event_id` are **required** (baseline vs many Anna strategies). CLI: `anna_training_cli.py log-execution-trade`. Karpathy loop appends Anna parallel stub rows when canonical bars exist (`parallel_strategies_last` in state/heartbeat). **Event-centric UI/API framework (chart + strategies + context, wiring checklist):** [`event_market_training_view_framework.md`](event_market_training_view_framework.md).
 
 ### 1.2 Contract lock (12th grade + Karpathy loop — binding)
 
