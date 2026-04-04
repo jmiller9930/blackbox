@@ -25,9 +25,9 @@ Env:
   Ollama is probed each tick and stored as ``karpathy_last_llm_preflight`` (dashboard + heartbeat).
   A failed probe **does not** skip school/harness — the loop only gates on **data** preflight.
 
-  Paper harness → Jack: most analyses classify as ``OBSERVATION_ONLY``, which **does not** create an
-  ``execution_request``. For lab wiring to Jack paper, set ``ANNA_KARPATHY_LAB_WIRE_JACK=1`` and
-  ``BLACKBOX_JACK_EXECUTOR_CMD`` (see ``karpathy_paper_harness`` module docstring).
+  Paper harness → Jack: by default, observational classification is mapped so an ``execution_request`` can be
+  created (see ``anna_modules.proposal._lab_wire_jack_override``). Set ``ANNA_KARPATHY_DISABLE_LAB_WIRE_JACK=1``
+  to keep pure ``OBSERVATION_ONLY`` (no request). Still need ``BLACKBOX_JACK_EXECUTOR_CMD`` for Jack.
 
 Repo root:
   PYTHONPATH=scripts/runtime:. python3 scripts/runtime/anna_karpathy_loop_daemon.py
