@@ -14,10 +14,18 @@ from urllib.parse import parse_qs, urlparse
 
 HOST = "0.0.0.0"
 PORT = 8080
-ROOT = Path("/repo")
+ROOT = Path(os.environ.get("BLACKBOX_REPO_ROOT", "/repo"))
 _REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
+# Match Karpathy / CLI: load repo .env so BLACKBOX_ANNA_TRAINING_DIR (and Jack/Ollama) align — otherwise the
+# dashboard reads default data/runtime/anna_training while the school loop writes a path from .env.
+try:
+    from modules.anna_training.repo_env import apply_repo_dotenv
+
+    apply_repo_dotenv(_REPO_ROOT)
+except Exception:
+    pass
 ARTIFACTS = ROOT / "docs" / "working" / "artifacts"
 
 # Context engine (Pillar 1) — operational store under BLACKBOX_CONTEXT_ROOT or data/context_engine
@@ -428,6 +436,11 @@ def build_anna_training_dashboard() -> dict[str, Any]:
             "paper_ledger_vs_tick": (
                 "Paper ledger rows append when a paper trade is logged to paper_trades.jsonl — not every tick."
             ),
+            "scorecard_where_data_lives": (
+                "W/L and P&L totals are every line in paper_trades.jsonl under paths.anna_training_dir "
+                "(append-only). New trades add rows; old rows stay until flush-runtime --yes or you delete the file. "
+                "The API loads repo .env so BLACKBOX_ANNA_TRAINING_DIR matches the Karpathy loop."
+            ),
             "paper_judgment": PAPER_JUDGMENT_BLURB,
             "digest_ok_vs_trade_win": (
                 "Training digest steps 1–4 use OK/YES for **pipeline** completion (analysis, request, delegate, row). "
@@ -726,6 +739,7 @@ def build_anna_training_dashboard() -> dict[str, Any]:
                 "training_method_id": st.get("training_method_id"),
             },
             "paths": {
+                "anna_training_dir": str(anna_training_dir()),
                 "state_json": str(state_path()),
                 "paper_trades_jsonl": str(trades_path()),
                 "attempts_jsonl": str(attempts_path()),
