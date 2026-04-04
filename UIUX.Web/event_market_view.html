@@ -1,0 +1,339 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Event view — market_event_id</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,600;0,9..40,700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet"/>
+  <style>
+    :root {
+      --bg: #0c0f14;
+      --surface: #141a22;
+      --surface2: #1a222d;
+      --border: #2d3847;
+      --text: #e8edf4;
+      --muted: #8b9aad;
+      --accent: #f0b429;
+      --economic: #34d399;
+      --stub: #a78bfa;
+      --baseline: #4a9eff;
+      --anna: #a855f7;
+      --font: "DM Sans", system-ui, sans-serif;
+      --mono: "IBM Plex Mono", ui-monospace, monospace;
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; min-height: 100vh; background: var(--bg); color: var(--text); font-family: var(--font); font-size: 15px; line-height: 1.45; }
+    .wrap { max-width: min(1680px, 100vw); margin: 0 auto; padding: 1rem 1.25rem 2.5rem; }
+    h1 { font-size: 1.35rem; margin: 0 0 0.35rem; }
+    .sub { color: var(--muted); font-size: 0.88rem; margin-bottom: 1rem; }
+    .toolbar {
+      display: flex; flex-wrap: wrap; gap: 0.75rem; align-items: flex-end;
+      margin-bottom: 1rem; padding: 0.75rem 1rem; background: var(--surface); border: 1px solid var(--border); border-radius: 10px;
+    }
+    .toolbar label { display: flex; flex-direction: column; gap: 0.25rem; font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); }
+    .toolbar input[type="text"] { min-width: 280px; padding: 0.45rem 0.6rem; border-radius: 6px; border: 1px solid var(--border); background: var(--surface2); color: var(--text); font-family: var(--mono); font-size: 0.85rem; }
+    .toolbar select { padding: 0.45rem 0.6rem; border-radius: 6px; border: 1px solid var(--border); background: var(--surface2); color: var(--text); }
+    button.primary {
+      padding: 0.5rem 1rem; border-radius: 8px; border: none; background: var(--accent); color: #0c0f14; font-weight: 600; cursor: pointer;
+    }
+    button.primary:hover { filter: brightness(1.08); }
+    .err { background: rgba(248,113,113,0.12); border: 1px solid rgba(248,113,113,0.4); color: #fecaca; padding: 0.75rem 1rem; border-radius: 8px; margin-bottom: 1rem; font-family: var(--mono); font-size: 0.82rem; }
+    .identity {
+      display: flex; flex-wrap: wrap; gap: 0.75rem 1.5rem; padding: 1rem 1.1rem; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; margin-bottom: 1rem;
+    }
+    .identity span { color: var(--muted); font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.05em; display: block; margin-bottom: 0.2rem; }
+    .identity strong { font-family: var(--mono); font-weight: 500; font-size: 0.9rem; word-break: break-all; }
+    .panel { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; margin-bottom: 1rem; overflow: hidden; }
+    .panel-h { padding: 0.65rem 1rem; border-bottom: 1px solid var(--border); font-size: 0.72rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.07em; color: var(--muted); }
+    .panel-b { padding: 1rem; overflow-x: auto; }
+    .chart-svg { width: 100%; height: auto; display: block; background: var(--surface2); border-radius: 8px; }
+    table.data { width: 100%; border-collapse: collapse; font-size: 0.82rem; }
+    table.data th, table.data td { padding: 0.5rem 0.65rem; text-align: left; border-bottom: 1px solid var(--border); vertical-align: top; }
+    table.data th { color: var(--muted); font-weight: 600; font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.04em; }
+    .badge { display: inline-block; padding: 0.15rem 0.45rem; border-radius: 4px; font-size: 0.72rem; font-weight: 600; }
+    .badge-econ { background: rgba(52,211,153,0.15); color: var(--economic); border: 1px solid rgba(52,211,153,0.35); }
+    .badge-stub { background: rgba(167,139,250,0.15); color: var(--stub); border: 1px solid rgba(167,139,250,0.35); }
+    .lane-baseline { color: var(--baseline); font-weight: 600; }
+    .lane-anna { color: var(--anna); font-weight: 600; }
+    .kv { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 0.5rem 1rem; font-family: var(--mono); font-size: 0.8rem; }
+    .kv div { padding: 0.35rem 0; border-bottom: 1px dashed var(--border); }
+    .kv kbd { color: var(--muted); font-size: 0.7rem; }
+    details.trace { margin-bottom: 0.5rem; border: 1px solid var(--border); border-radius: 8px; background: var(--surface2); }
+    details.trace > summary { padding: 0.6rem 0.85rem; cursor: pointer; font-family: var(--mono); font-size: 0.8rem; color: var(--accent); }
+    .step { padding: 0.5rem 0.85rem 0.85rem; border-top: 1px solid var(--border); font-size: 0.78rem; }
+    .step h4 { margin: 0 0 0.35rem; font-size: 0.75rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em; }
+    pre.json { margin: 0; white-space: pre-wrap; word-break: break-word; font-family: var(--mono); font-size: 0.72rem; color: #c9d1d9; }
+    .meta { font-size: 0.72rem; color: var(--muted); margin-top: 0.75rem; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <h1>Event view</h1>
+    <p class="sub">Operator surface — baseline vs Anna, decision traces, API-driven (no client-side economics).</p>
+
+    <div class="toolbar">
+      <label>market_event_id
+        <input type="text" id="mid" placeholder="SOL-PERP_5m_2026-04-04T21:45:00Z"/>
+      </label>
+      <label>Filter
+        <select id="filterMode">
+          <option value="all">All modes</option>
+          <option value="economic">Economic only (exclude paper_stub)</option>
+        </select>
+      </label>
+      <label>Lane
+        <select id="lane">
+          <option value="">All</option>
+          <option value="baseline">baseline</option>
+          <option value="anna">anna</option>
+        </select>
+      </label>
+      <button type="button" class="primary" id="loadBtn">Load</button>
+    </div>
+    <div id="error" class="err" style="display:none"></div>
+
+    <div id="content" style="display:none">
+      <div class="identity" id="identity"></div>
+
+      <div class="panel">
+        <div class="panel-h">Market chart (history + event + markers)</div>
+        <div class="panel-b">
+          <svg class="chart-svg" id="chart" viewBox="0 0 900 260" preserveAspectRatio="xMidYMid meet"></svg>
+          <p class="meta" id="chartNote"></p>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-h">Strategy actions (this event)</div>
+        <div class="panel-b">
+          <div id="baselineSlot"></div>
+          <table class="data" id="tbl">
+            <thead><tr>
+              <th>Lane</th><th>Strategy</th><th>Mode</th><th>Side</th><th>Entry</th><th>Exit</th><th>Result</th>
+            </tr></thead>
+            <tbody id="tbody"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-h">Context snapshot (at decision time)</div>
+        <div class="panel-b"><div class="kv" id="ctx"></div></div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-h">Decision traces</div>
+        <div class="panel-b" id="traces"></div>
+      </div>
+
+      <p class="meta" id="rawMeta"></p>
+    </div>
+  </div>
+
+  <script>
+(function () {
+  'use strict';
+
+  function qs(sel) { return document.querySelector(sel); }
+  function esc(s) {
+    if (s === null || s === undefined) return '';
+    return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  }
+
+  function apiParams() {
+    var mid = qs('#mid').value.trim();
+    var p = 'market_event_id=' + encodeURIComponent(mid);
+    if (qs('#filterMode').value === 'economic') p += '&exclude_modes=paper_stub';
+    var lane = qs('#lane').value.trim();
+    if (lane) p += '&lane=' + encodeURIComponent(lane);
+    return p;
+  }
+
+  function badgeMode(mode) {
+    var m = (mode || '').toLowerCase();
+    if (m === 'live' || m === 'paper') return '<span class="badge badge-econ">economic</span>';
+    if (m === 'paper_stub') return '<span class="badge badge-stub">paper_stub</span>';
+    return esc(mode || '—');
+  }
+
+  function resultCell(row) {
+    if (row.row_state === 'no_trade') return '<strong>NO TRADE</strong>';
+    var r = row.result || {};
+    if (r.pnl_asserted && r.economic_pnl_usd != null) {
+      return esc(r.classification || '') + ' <span class="badge badge-econ">$' + esc(String(r.economic_pnl_usd.toFixed ? r.economic_pnl_usd.toFixed(4) : r.economic_pnl_usd)) + '</span>';
+    }
+    if (!r.pnl_asserted) {
+      return esc(r.stub_classification || r.classification || 'stub') + ' <span class="badge badge-stub">(not $ in ledger)</span> stub_pnl=' + esc(String(r.stub_pnl_usd != null ? r.stub_pnl_usd : '—'));
+    }
+    return '—';
+  }
+
+  function renderChart(payload) {
+    var svg = qs('#chart');
+    var note = qs('#chartNote');
+    var hist = (payload.chart && payload.chart.history_bars) ? payload.chart.history_bars : [];
+    var markers = (payload.chart && payload.chart.markers) ? payload.chart.markers : [];
+    var mid = payload.market_event_id;
+    if (!hist.length) {
+      svg.innerHTML = '';
+      note.textContent = 'No history_bars in API — chart empty.';
+      return;
+    }
+    var series = hist.slice().reverse();
+    var closes = series.map(function (b) { return Number(b.close); });
+    var lo = Math.min.apply(null, closes.concat([Infinity]));
+    var hi = Math.max.apply(null, closes.concat([-Infinity]));
+    var pad = (hi - lo) * 0.08 || 0.01;
+    lo -= pad; hi += pad;
+    var W = 900, H = 260, L = 50, R = 20, T = 20, B = 35;
+    var iw = W - L - R, ih = H - T - B;
+    var n = series.length;
+    function xAt(i) { return L + (i / Math.max(1, n - 1)) * iw; }
+    function yAt(price) { return T + (1 - (price - lo) / (hi - lo)) * ih; }
+    var path = [];
+    for (var i = 0; i < n; i++) path.push((i ? 'L' : 'M') + xAt(i).toFixed(1) + ',' + yAt(closes[i]).toFixed(1));
+    var evIdx = -1;
+    for (var j = 0; j < series.length; j++) {
+      if (series[j].market_event_id === mid) { evIdx = j; break; }
+    }
+    var parts = [];
+    parts.push('<rect x="0" y="0" width="' + W + '" height="' + H + '" fill="#1a222d"/>');
+    parts.push('<path d="' + path.join(' ') + '" fill="none" stroke="#60a5fa" stroke-width="1.5"/>');
+    if (evIdx >= 0) {
+      var vx = xAt(evIdx);
+      parts.push('<line x1="' + vx + '" y1="' + T + '" x2="' + vx + '" y2="' + (T+ih) + '" stroke="#f0b429" stroke-width="1.2" opacity="0.85"/>');
+    }
+    markers.forEach(function (m) {
+      var price = m.price != null ? Number(m.price) : null;
+      if (price == null || isNaN(price)) return;
+      var mx = evIdx >= 0 ? xAt(evIdx) : L + iw * 0.5;
+      var my = yAt(price);
+      var fill = (m.lane === 'baseline') ? '#4a9eff' : '#a855f7';
+      var sym = m.kind === 'entry' ? '▲' : '●';
+      parts.push('<circle cx="' + mx + '" cy="' + my + '" r="5" fill="' + fill + '" stroke="#fff" stroke-width="0.5"/>');
+      parts.push('<text x="' + (mx+8) + '" y="' + (my+4) + '" fill="#c9d1d9" font-size="9" font-family="IBM Plex Mono, monospace">' + esc(sym + ' ' + (m.strategy_id||'')) + '</text>');
+    });
+    parts.push('<text x="' + L + '" y="' + (H-8) + '" fill="#8b9aad" font-size="10">Older ← → Recent</text>');
+    svg.innerHTML = parts.join('');
+    note.textContent = 'Close path + event bar highlight (gold) + markers (lane-colored). history_bars count: ' + series.length + '.';
+  }
+
+  function renderIdentity(p) {
+    var ev = p.event || {};
+    var b = ev.bar || {};
+    qs('#identity').innerHTML =
+      '<div><span>Symbol</span><strong>' + esc(ev.symbol || '—') + '</strong></div>' +
+      '<div><span>Timeframe</span><strong>' + esc(ev.timeframe || '—') + '</strong></div>' +
+      '<div style="flex:1 1 100%"><span>market_event_id</span><strong>' + esc(p.market_event_id) + '</strong></div>' +
+      (b.close != null ? '<div class="ohlc" style="flex:1 1 100%;margin-top:0.5rem;padding-top:0.75rem;border-top:1px solid var(--border);font-family:var(--mono);font-size:0.8rem">' +
+        '<kbd>O</kbd>' + esc(b.open) + ' <kbd>H</kbd>' + esc(b.high) + ' <kbd>L</kbd>' + esc(b.low) + ' <kbd>C</kbd>' + esc(b.close) +
+        (b.tick_count != null ? ' · ticks ' + esc(b.tick_count) : '') + '</div>' : '');
+  }
+
+  function renderBaselineSlot(p) {
+    var bs = p.baseline_slot || {};
+    var el = qs('#baselineSlot');
+    if (bs.state === 'no_trade') {
+      el.innerHTML = '<p style="margin:0 0 1rem;font-family:var(--mono);font-size:0.85rem"><strong class="lane-baseline">baseline</strong> → <strong>NO TRADE</strong>' +
+        (bs.reason_code ? ' <span style="color:var(--muted)">(' + esc(bs.reason_code) + ')</span>' : '') +
+        (bs.detail ? '<br/><span style="color:var(--muted);font-size:0.78rem">' + esc(bs.detail) + '</span>' : '') + '</p>';
+    } else {
+      el.innerHTML = '<p style="margin:0 0 1rem;font-size:0.85rem"><strong class="lane-baseline">baseline</strong> — trade recorded · trace ' + esc((bs.trace && bs.trace.trace_id) || '—') + '</p>';
+    }
+  }
+
+  function renderTable(p) {
+    var rows = p.strategy_rows || [];
+    var tb = qs('#tbody');
+    tb.innerHTML = rows.map(function (row) {
+      var laneClass = row.lane === 'baseline' ? 'lane-baseline' : 'lane-anna';
+      return '<tr>' +
+        '<td class="' + laneClass + '">' + esc(row.lane) + '</td>' +
+        '<td style="font-family:var(--mono);font-size:0.78rem">' + esc(row.strategy_id) + '</td>' +
+        '<td>' + badgeMode(row.mode) + '</td>' +
+        '<td>' + esc(row.side || '—') + '</td>' +
+        '<td>' + esc(row.entry_time || '—') + (row.entry_price != null ? '<br/><span style="color:var(--muted)">@' + esc(row.entry_price) + '</span>' : '') + '</td>' +
+        '<td>' + esc(row.exit_time || '—') + (row.exit_price != null ? '<br/><span style="color:var(--muted)">@' + esc(row.exit_price) + '</span>' : '') + '</td>' +
+        '<td>' + resultCell(row) + '</td>' +
+        '</tr>';
+    }).join('');
+  }
+
+  function renderContext(p) {
+    var blocks = p.context_by_trade || [];
+    var el = qs('#ctx');
+    if (!blocks.length) { el.innerHTML = '<span style="color:var(--muted)">No context_snapshot on trades.</span>'; return; }
+    el.innerHTML = blocks.map(function (b) {
+      var snap = b.snapshot || {};
+      var keys = Object.keys(snap);
+      if (!keys.length) return '';
+      return '<div style="grid-column:1/-1;margin-bottom:0.75rem"><strong style="font-size:0.75rem;color:var(--accent)">' + esc(b.strategy_id) + '</strong> · ' + esc(b.trade_id) + '</div>' +
+        keys.map(function (k) {
+          var v = snap[k];
+          var disp = typeof v === 'object' ? JSON.stringify(v) : String(v);
+          return '<div><kbd>' + esc(k) + '</kbd><br/>' + esc(disp) + '</div>';
+        }).join('');
+    }).join('');
+  }
+
+  function renderTraces(p) {
+    var tr = p.decision_traces || [];
+    var el = qs('#traces');
+    if (!tr.length) { el.innerHTML = '<span style="color:var(--muted)">No decision_traces for this filter.</span>'; return; }
+    el.innerHTML = tr.map(function (t) {
+      var steps = t.steps || [];
+      var body = steps.map(function (s, idx) {
+        return '<div class="step"><h4>Step ' + (idx+1) + ' · ' + esc(s.step_name) + '</h4>' +
+          '<div style="color:var(--muted);font-size:0.72rem;margin-bottom:0.35rem">' + esc(s.timestamp) + '</div>' +
+          '<div><strong>input_refs</strong><pre class="json">' + esc(JSON.stringify(s.input_refs || {}, null, 2)) + '</pre></div>' +
+          '<div><strong>output</strong><pre class="json">' + esc(JSON.stringify(s.output || {}, null, 2)) + '</pre></div>' +
+          (s.rationale ? '<div><strong>rationale</strong><pre class="json">' + esc(s.rationale) + '</pre></div>' : '') +
+          '</div>';
+      }).join('');
+      return '<details class="trace" open="false"><summary>' + esc(t.strategy_id) + ' · ' + esc(t.trace_id) + ' · trade ' + esc(t.trade_id) + '</summary>' + body + '</details>';
+    }).join('');
+  }
+
+  function load() {
+    qs('#error').style.display = 'none';
+    var url = '/api/v1/anna/market-event-view?' + apiParams();
+    fetch(url, { cache: 'no-store' }).then(function (r) { return r.json(); }).then(function (p) {
+      if (!p.ok) {
+        qs('#error').style.display = 'block';
+        qs('#error').textContent = (p.error || 'error') + (p.detail ? ': ' + p.detail : '');
+        qs('#content').style.display = 'none';
+        return;
+      }
+      qs('#content').style.display = 'block';
+      renderIdentity(p);
+      renderBaselineSlot(p);
+      renderChart(p);
+      renderTable(p);
+      renderContext(p);
+      renderTraces(p);
+      qs('#rawMeta').textContent = 'GET ' + url + ' · schema ' + (p.schema || '') + ' · ledger ' + (p.ledger_path || '');
+    }).catch(function (e) {
+      qs('#error').style.display = 'block';
+      qs('#error').textContent = String(e);
+      qs('#content').style.display = 'none';
+    });
+  }
+
+  function initFromQuery() {
+    var u = new URL(window.location.href);
+    var m = u.searchParams.get('market_event_id');
+    if (m) qs('#mid').value = m;
+    if (u.searchParams.get('exclude_modes') === 'paper_stub') qs('#filterMode').value = 'economic';
+    var ln = u.searchParams.get('lane');
+    if (ln) qs('#lane').value = ln;
+  }
+
+  qs('#loadBtn').addEventListener('click', load);
+  initFromQuery();
+  if (qs('#mid').value.trim()) load();
+})();
+  </script>
+</body>
+</html>

@@ -459,6 +459,30 @@ def build_anna_decision_trace_read(qs: dict[str, list[str]]) -> dict[str, Any]:
         }
 
 
+def build_anna_market_event_view(qs: dict[str, list[str]]) -> dict[str, Any]:
+    """Aggregate event-centric JSON for operator UI (baseline vs Anna, traces, markers)."""
+    try:
+        from modules.anna_training.market_event_view import build_market_event_view
+
+        return build_market_event_view(qs)
+    except ImportError as e:
+        return {
+            "schema": "anna_market_event_view_v1",
+            "ok": False,
+            "error": "import_failed",
+            "detail": str(e),
+        }
+
+
+def build_anna_strategy_catalog() -> dict[str, Any]:
+    try:
+        from modules.anna_training.market_event_view import build_strategy_catalog_response
+
+        return build_strategy_catalog_response()
+    except ImportError as e:
+        return {"schema": "anna_strategy_catalog_v1", "ok": False, "error": "import_failed", "detail": str(e)}
+
+
 def build_anna_training_dashboard() -> dict[str, Any]:
     """Fixed-layout JSON for web UI: same facts as `anna status` / compact dashboard (read-only)."""
     tid = str(uuid.uuid4())
@@ -1723,6 +1747,18 @@ class Handler(BaseHTTPRequestHandler):
             q = parse_qs(parsed.query or "")
             self._json(200, build_anna_decision_trace_read(q), no_cache=True)
             return
+        if path == "/api/v1/anna/market-event-view":
+            q = parse_qs(parsed.query or "")
+            self._json(200, build_anna_market_event_view(q), no_cache=True)
+            return
+        if path == "/api/v1/anna/strategies/catalog":
+            self._json(200, build_anna_strategy_catalog(), no_cache=True)
+            return
+        if path in ("/anna/event-view", "/anna/event-view/"):
+            ev = _REPO_ROOT / "UIUX.Web" / "event_market_view.html"
+            if ev.is_file():
+                self._html(200, ev.read_text(encoding="utf-8"), no_cache=True)
+                return
         if path in ("/anna/training", "/anna/training/"):
             self._html(200, TRAINING_DASHBOARD_HTML, no_cache=True)
             return
