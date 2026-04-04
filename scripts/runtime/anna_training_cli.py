@@ -254,6 +254,36 @@ def _cmd_log_trade(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_log_execution_trade(args: argparse.Namespace) -> int:
+    """Append one row to execution_ledger (full identity for baseline vs Anna comparison)."""
+    from modules.anna_training.execution_ledger import append_execution_trade
+
+    try:
+        row = append_execution_trade(
+            strategy_id=args.strategy_id,
+            lane=args.lane,
+            mode=args.mode,
+            market_event_id=args.market_event_id,
+            symbol=args.symbol,
+            timeframe=args.timeframe,
+            trade_id=(getattr(args, "trade_id", None) or "").strip() or None,
+            side=getattr(args, "side", None),
+            entry_time=getattr(args, "entry_time", None),
+            entry_price=getattr(args, "entry_price", None),
+            size=getattr(args, "size", None),
+            exit_time=getattr(args, "exit_time", None),
+            exit_price=getattr(args, "exit_price", None),
+            exit_reason=getattr(args, "exit_reason", None),
+            pnl_usd=getattr(args, "pnl_usd", None),
+            notes=getattr(args, "notes", None),
+        )
+    except ValueError as e:
+        print(json.dumps({"error": str(e)}), file=sys.stderr)
+        return 1
+    print(json.dumps({"ok": True, "execution_trade": row}, indent=2))
+    return 0
+
+
 def _cmd_math_check() -> int:
     """Wilson 95% intervals: float engine vs Decimal oracle (NIST-style regression cases)."""
     out = run_wilson_reference_check()
@@ -1196,6 +1226,31 @@ def main(argv: list[str] | None = None) -> int:
         help="Optional atmosphere tag (e.g. nominal, degraded, data_blocked) for cohort stats.",
     )
 
+    ap_xe = sub.add_parser(
+        "log-execution-trade",
+        help="Append execution_ledger row: strategy_id, lane, mode, market_event_id (baseline or Anna).",
+    )
+    ap_xe.add_argument("--lane", required=True, choices=["baseline", "anna"])
+    ap_xe.add_argument("--mode", required=True, choices=["live", "paper"])
+    ap_xe.add_argument("--market-event-id", required=True, dest="market_event_id")
+    ap_xe.add_argument(
+        "--strategy-id",
+        required=True,
+        help="Use 'baseline' for Sean baseline; Anna strategies use their catalog id.",
+    )
+    ap_xe.add_argument("--symbol", default="SOL-PERP")
+    ap_xe.add_argument("--timeframe", default="5m")
+    ap_xe.add_argument("--trade-id", default="", dest="trade_id")
+    ap_xe.add_argument("--side", default="")
+    ap_xe.add_argument("--entry-time", default=None, dest="entry_time")
+    ap_xe.add_argument("--entry-price", type=float, default=None, dest="entry_price")
+    ap_xe.add_argument("--size", type=float, default=None)
+    ap_xe.add_argument("--exit-time", default=None, dest="exit_time")
+    ap_xe.add_argument("--exit-price", type=float, default=None, dest="exit_price")
+    ap_xe.add_argument("--exit-reason", default=None, dest="exit_reason")
+    ap_xe.add_argument("--pnl-usd", type=float, default=None, dest="pnl_usd")
+    ap_xe.add_argument("--notes", default="")
+
     sub.add_parser(
         "check-readiness",
         help="First: Solana RPC (Jupiter prerequisite), Pyth stream artifact, market_data.db; see JSON.",
@@ -1409,6 +1464,8 @@ def main(argv: list[str] | None = None) -> int:
         return _cmd_note(args)
     if args.cmd == "log-trade":
         return _cmd_log_trade(args)
+    if args.cmd == "log-execution-trade":
+        return _cmd_log_execution_trade(args)
     if args.cmd == "math-check":
         return _cmd_math_check()
     if args.cmd == "quant-metrics":

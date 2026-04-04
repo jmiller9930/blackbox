@@ -42,6 +42,11 @@ def flush_anna_training_runtime(*, include_execution_requests: bool = True) -> d
     ad = anna_training_dir()
     removed.extend(_wipe_anna_training_dir_files(ad))
 
+    elp = _repo_root() / "data" / "sqlite" / "execution_ledger.db"
+    if elp.is_file():
+        elp.unlink()
+        removed.append(str(elp))
+
     exec_cleared = False
     if include_execution_requests:
         ep = _repo_root() / "data" / "runtime" / "execution_plane" / "requests.json"

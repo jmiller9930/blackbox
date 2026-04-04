@@ -272,9 +272,28 @@ def run_one_tick(*, tick_index: int) -> tuple[dict, bool]:
         st["karpathy_last_paper_harness"] = run_karpathy_paper_harness_tick(iteration=n)
     except Exception as e:  # noqa: BLE001
         st["karpathy_last_paper_harness"] = {"enabled": True, "error": repr(e)}
-    save_state(st)
 
+    # Market tick + canonical bar refresh must run before parallel Anna strategies (same market_event_id).
     snap = _snapshot_market_if_requested()
+    if snap is None and (os.environ.get("ANNA_PARALLEL_STRATEGY_RUNNER", "1").strip().lower() not in (
+        "0",
+        "false",
+        "no",
+        "off",
+    )):
+        from market_data.recorder import record_market_snapshot
+
+        if (os.environ.get("MARKET_DATA_SKIP_JUPITER") or "").strip().lower() in ("1", "true", "yes"):
+            snap = record_market_snapshot(include_jupiter=False)
+        else:
+            snap = record_market_snapshot(include_jupiter=None)
+    try:
+        from modules.anna_training.parallel_strategy_runner import run_parallel_anna_strategies_tick
+
+        st["parallel_strategies_last"] = run_parallel_anna_strategies_tick()
+    except Exception as e:  # noqa: BLE001
+        st["parallel_strategies_last"] = {"ok": False, "error": repr(e)}
+    save_state(st)
 
     row = {
         "kind": "karpathy_loop_heartbeat_v1",
@@ -295,6 +314,7 @@ def run_one_tick(*, tick_index: int) -> tuple[dict, bool]:
             "win_rate": g12.get("win_rate"),
         },
         "paper_harness": st.get("karpathy_last_paper_harness"),
+        "parallel_strategies": st.get("parallel_strategies_last"),
         "data_preflight": st.get("karpathy_last_data_preflight"),
         "preflight_policy": st.get("karpathy_last_preflight_policy"),
         "llm_preflight": st.get("karpathy_last_llm_preflight"),
