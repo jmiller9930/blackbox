@@ -61,7 +61,7 @@ def fetch_latest_bar_row(
             return None
         row = conn.execute(
             """
-            SELECT canonical_symbol, timeframe, candle_open_utc, candle_close_utc,
+            SELECT id, canonical_symbol, timeframe, candle_open_utc, candle_close_utc,
                    market_event_id, open, high, low, close, tick_count, price_source, computed_at
             FROM market_bars_5m
             WHERE canonical_symbol = ?
@@ -73,6 +73,7 @@ def fetch_latest_bar_row(
         if not row:
             return None
         keys = [
+            "id",
             "canonical_symbol",
             "timeframe",
             "candle_open_utc",

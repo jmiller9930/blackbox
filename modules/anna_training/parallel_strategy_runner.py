@@ -78,9 +78,9 @@ def run_parallel_anna_strategies_tick(
     from market_data.bar_lookup import fetch_latest_bar_row, fetch_latest_market_event_id
 
     from modules.anna_training.baseline_ledger_bridge import verify_market_event_id_matches_canonical_bar
+    from modules.anna_training.decision_trace import persist_parallel_anna_stub_trade_with_trace
     from modules.anna_training.execution_ledger import (
         RESERVED_STRATEGY_BASELINE,
-        append_execution_trade,
         connect_ledger,
         ensure_execution_ledger_schema,
         sync_strategy_registry_from_catalog,
@@ -123,6 +123,7 @@ def run_parallel_anna_strategies_tick(
 
     strategies = _parallel_strategy_ids()
     written: list[str] = []
+    trace_ids: list[str] = []
 
     conn = connect_ledger(execution_ledger_db_path)
     try:
@@ -137,21 +138,13 @@ def run_parallel_anna_strategies_tick(
         result, stub_pnl = _stub_pnl_for_strategy(sid, mid)
         tid = _trade_id_for(sid, mid)
         try:
-            append_execution_trade(
-                trade_id=tid,
-                strategy_id=sid,
-                lane="anna",
-                mode="paper_stub",
+            out = persist_parallel_anna_stub_trade_with_trace(
                 market_event_id=mid,
-                symbol="SOL-PERP",
-                timeframe="5m",
-                side="long",
-                entry_time=bar.get("candle_open_utc"),
-                entry_price=float(close_px) if close_px is not None else None,
-                size=1.0,
-                exit_time=bar.get("candle_close_utc"),
-                exit_price=float(close_px) if close_px is not None else None,
-                exit_reason="CLOSE",
+                strategy_id=sid,
+                bar=bar,
+                stub_result=result,
+                stub_pnl_usd=stub_pnl,
+                trade_id=tid,
                 context_snapshot={
                     "synthetic": True,
                     "stub_result": result,
@@ -162,6 +155,7 @@ def run_parallel_anna_strategies_tick(
                 db_path=execution_ledger_db_path,
             )
             written.append(tid)
+            trace_ids.append(str(out.get("trace_id") or ""))
         except sqlite3.IntegrityError:
             # Idempotent re-run for same strategy+market_event_id (fixed trade_id).
             pass
@@ -172,6 +166,7 @@ def run_parallel_anna_strategies_tick(
         "strategies": strategies,
         "trades_written": len(written),
         "trade_ids": written,
+        "trace_ids": trace_ids,
     }
 
 

@@ -59,6 +59,15 @@ def _pnl_close(a: float | None, b: float | None) -> bool:
     return math.isfinite(a) and math.isfinite(b) and abs(float(a) - float(b)) <= PNL_EPSILON
 
 
+def _migrate_add_trace_id_column(conn: sqlite3.Connection) -> None:
+    """Add ``trace_id`` to ``execution_trades`` (links to ``decision_traces``)."""
+    cur = conn.execute("PRAGMA table_info(execution_trades)")
+    cols = {str(r[1]) for r in cur.fetchall()}
+    if "trace_id" in cols:
+        return
+    conn.execute("ALTER TABLE execution_trades ADD COLUMN trace_id TEXT")
+
+
 def _migrate_execution_trades_paper_stub_mode(conn: sqlite3.Connection) -> None:
     """Allow ``paper_stub`` in ``mode`` CHECK (existing DBs created before that value)."""
     cur = conn.execute(
@@ -74,6 +83,7 @@ def _migrate_execution_trades_paper_stub_mode(conn: sqlite3.Connection) -> None:
         DROP INDEX IF EXISTS idx_execution_trades_market_event;
         DROP INDEX IF EXISTS idx_execution_trades_strategy;
         DROP INDEX IF EXISTS idx_execution_trades_lane_mode;
+        DROP INDEX IF EXISTS idx_execution_trades_trace_id;
         CREATE TABLE execution_trades__new (
           trade_id TEXT PRIMARY KEY,
           strategy_id TEXT NOT NULL,
@@ -92,10 +102,22 @@ def _migrate_execution_trades_paper_stub_mode(conn: sqlite3.Connection) -> None:
           pnl_usd REAL,
           context_snapshot_json TEXT,
           notes TEXT,
+          trace_id TEXT,
           schema_version TEXT NOT NULL DEFAULT 'execution_trade_v1',
           created_at_utc TEXT NOT NULL
         );
-        INSERT INTO execution_trades__new SELECT * FROM execution_trades;
+        INSERT INTO execution_trades__new (
+          trade_id, strategy_id, lane, mode, market_event_id, symbol, timeframe,
+          side, entry_time, entry_price, size, exit_time, exit_price, exit_reason,
+          pnl_usd, context_snapshot_json, notes, trace_id, schema_version, created_at_utc
+        )
+        SELECT
+          trade_id, strategy_id, lane, mode, market_event_id, symbol, timeframe,
+          side, entry_time, entry_price, size, exit_time, exit_price, exit_reason,
+          pnl_usd, context_snapshot_json, notes,
+          trace_id,
+          schema_version, created_at_utc
+        FROM execution_trades;
         DROP TABLE execution_trades;
         ALTER TABLE execution_trades__new RENAME TO execution_trades;
         CREATE INDEX IF NOT EXISTS idx_execution_trades_market_event
@@ -104,9 +126,18 @@ def _migrate_execution_trades_paper_stub_mode(conn: sqlite3.Connection) -> None:
           ON execution_trades (strategy_id, created_at_utc DESC);
         CREATE INDEX IF NOT EXISTS idx_execution_trades_lane_mode
           ON execution_trades (lane, mode, created_at_utc DESC);
+        CREATE INDEX IF NOT EXISTS idx_execution_trades_trace_id
+          ON execution_trades (trace_id);
         COMMIT;
         """
     )
+
+
+def _migrate_decision_traces_table(conn: sqlite3.Connection, root: Path) -> None:
+    sql = root / "data" / "sqlite" / "schema_decision_trace.sql"
+    if not sql.is_file():
+        raise FileNotFoundError(sql)
+    conn.executescript(sql.read_text(encoding="utf-8"))
 
 
 def _strict_trade_identity() -> bool:
@@ -131,7 +162,9 @@ def ensure_execution_ledger_schema(conn: sqlite3.Connection, root: Path | None =
         raise FileNotFoundError(sql)
     conn.executescript(sql.read_text(encoding="utf-8"))
     conn.commit()
+    _migrate_add_trace_id_column(conn)
     _migrate_execution_trades_paper_stub_mode(conn)
+    _migrate_decision_traces_table(conn, root)
     conn.commit()
 
 
@@ -200,6 +233,7 @@ def append_execution_trade(
     symbol: str,
     timeframe: str,
     trade_id: str | None = None,
+    trace_id: str | None = None,
     side: str | None = None,
     entry_time: str | None = None,
     entry_price: float | None = None,
@@ -211,6 +245,7 @@ def append_execution_trade(
     context_snapshot: dict[str, Any] | None = None,
     notes: str | None = None,
     db_path: Path | None = None,
+    conn: sqlite3.Connection | None = None,
 ) -> dict[str, Any]:
     """
     Persist one trade row. **PnL is never taken as authoritative** for ``live``/``paper``:
@@ -269,6 +304,8 @@ def append_execution_trade(
     ctx_json = json.dumps(context_snapshot, ensure_ascii=False) if context_snapshot else None
 
     created = utc_now_iso()
+    trid = (trace_id or "").strip() or None
+
     row = {
         "trade_id": tid,
         "strategy_id": strategy_id.strip(),
@@ -287,11 +324,13 @@ def append_execution_trade(
         "pnl_usd": final_pnl,
         "context_snapshot_json": ctx_json,
         "notes": (notes or "").strip() or None,
+        "trace_id": trid,
         "schema_version": SCHEMA_VERSION,
         "created_at_utc": created,
     }
 
-    conn = connect_ledger(db_path)
+    own_conn = conn is None
+    conn = conn or connect_ledger(db_path)
     try:
         ensure_execution_ledger_schema(conn)
         conn.execute(
@@ -299,8 +338,8 @@ def append_execution_trade(
             INSERT INTO execution_trades (
               trade_id, strategy_id, lane, mode, market_event_id, symbol, timeframe,
               side, entry_time, entry_price, size, exit_time, exit_price, exit_reason,
-              pnl_usd, context_snapshot_json, notes, schema_version, created_at_utc
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+              pnl_usd, context_snapshot_json, notes, trace_id, schema_version, created_at_utc
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 row["trade_id"],
@@ -320,13 +359,16 @@ def append_execution_trade(
                 row["pnl_usd"],
                 row["context_snapshot_json"],
                 row["notes"],
+                row["trace_id"],
                 row["schema_version"],
                 row["created_at_utc"],
             ),
         )
-        conn.commit()
+        if own_conn:
+            conn.commit()
     finally:
-        conn.close()
+        if own_conn:
+            conn.close()
     return row
 
 
@@ -356,7 +398,7 @@ def scan_execution_ledger_pnl_integrity(
             """
             SELECT trade_id, strategy_id, lane, mode, market_event_id, symbol, timeframe,
                    side, entry_time, entry_price, size, exit_time, exit_price, exit_reason,
-                   pnl_usd, context_snapshot_json, notes, schema_version, created_at_utc
+                   pnl_usd, context_snapshot_json, notes, trace_id, schema_version, created_at_utc
             FROM execution_trades
             ORDER BY created_at_utc ASC, trade_id ASC
             """
@@ -483,7 +525,7 @@ def query_trades_by_market_event_id(
             """
             SELECT trade_id, strategy_id, lane, mode, market_event_id, symbol, timeframe,
                    side, entry_time, entry_price, size, exit_time, exit_price, exit_reason,
-                   pnl_usd, context_snapshot_json, notes, schema_version, created_at_utc
+                   pnl_usd, context_snapshot_json, notes, trace_id, schema_version, created_at_utc
             FROM execution_trades
             WHERE market_event_id = ?
             ORDER BY created_at_utc ASC, trade_id ASC
@@ -509,7 +551,7 @@ def query_trades_by_strategy(
             """
             SELECT trade_id, strategy_id, lane, mode, market_event_id, symbol, timeframe,
                    side, entry_time, entry_price, size, exit_time, exit_price, exit_reason,
-                   pnl_usd, context_snapshot_json, notes, schema_version, created_at_utc
+                   pnl_usd, context_snapshot_json, notes, trace_id, schema_version, created_at_utc
             FROM execution_trades
             WHERE strategy_id = ?
             ORDER BY created_at_utc DESC, trade_id DESC

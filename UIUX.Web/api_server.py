@@ -374,6 +374,91 @@ def _training_engagement_payload(st: dict[str, Any], harness: dict[str, Any]) ->
     }
 
 
+def build_anna_decision_trace_read(qs: dict[str, list[str]]) -> dict[str, Any]:
+    """Read persisted decision_trace rows (exactly one filter: trade_id, trace_id, market_event_id, strategy_id)."""
+    try:
+        from modules.anna_training.decision_trace import (
+            query_trace_by_trace_id,
+            query_trace_by_trade_id,
+            query_traces_by_market_event_id,
+            query_traces_by_strategy_id,
+        )
+        from modules.anna_training.execution_ledger import default_execution_ledger_path
+    except ImportError as e:
+        return {
+            "schema": "decision_trace_read_v1",
+            "ok": False,
+            "error": "import_failed",
+            "detail": str(e),
+        }
+
+    def _one(name: str) -> str | None:
+        v = (qs.get(name) or [None])[0]
+        return (str(v) if v is not None else "").strip() or None
+
+    trade_id = _one("trade_id")
+    market_event_id = _one("market_event_id")
+    strategy_id = _one("strategy_id")
+    trace_id = _one("trace_id")
+
+    n = sum(x is not None for x in (trade_id, market_event_id, strategy_id, trace_id))
+    if n != 1:
+        return {
+            "schema": "decision_trace_read_v1",
+            "ok": False,
+            "error": "query_param",
+            "detail": "Provide exactly one of: trade_id, market_event_id, strategy_id, trace_id",
+        }
+
+    raw = (os.environ.get("BLACKBOX_EXECUTION_LEDGER_PATH") or "").strip()
+    db_path = Path(raw).expanduser() if raw else default_execution_ledger_path()
+
+    try:
+        if trade_id:
+            tr = query_trace_by_trade_id(trade_id, db_path=db_path)
+            return {
+                "schema": "decision_trace_read_v1",
+                "ok": True,
+                "kind": "single",
+                "trace": tr,
+                "ledger_path": str(db_path),
+            }
+        if trace_id:
+            tr = query_trace_by_trace_id(trace_id, db_path=db_path)
+            return {
+                "schema": "decision_trace_read_v1",
+                "ok": True,
+                "kind": "single",
+                "trace": tr,
+                "ledger_path": str(db_path),
+            }
+        if market_event_id:
+            traces = query_traces_by_market_event_id(market_event_id, db_path=db_path)
+            return {
+                "schema": "decision_trace_read_v1",
+                "ok": True,
+                "kind": "list",
+                "traces": traces,
+                "ledger_path": str(db_path),
+            }
+        traces = query_traces_by_strategy_id(strategy_id or "", db_path=db_path)
+        return {
+            "schema": "decision_trace_read_v1",
+            "ok": True,
+            "kind": "list",
+            "traces": traces,
+            "ledger_path": str(db_path),
+        }
+    except Exception as e:  # noqa: BLE001
+        return {
+            "schema": "decision_trace_read_v1",
+            "ok": False,
+            "error": "exception",
+            "detail": str(e),
+            "ledger_path": str(db_path),
+        }
+
+
 def build_anna_training_dashboard() -> dict[str, Any]:
     """Fixed-layout JSON for web UI: same facts as `anna status` / compact dashboard (read-only)."""
     tid = str(uuid.uuid4())
@@ -1633,6 +1718,10 @@ class Handler(BaseHTTPRequestHandler):
             return
         if path == "/api/v1/anna/training-dashboard":
             self._json(200, build_anna_training_dashboard(), no_cache=True)
+            return
+        if path == "/api/v1/anna/decision-trace":
+            q = parse_qs(parsed.query or "")
+            self._json(200, build_anna_decision_trace_read(q), no_cache=True)
             return
         if path in ("/anna/training", "/anna/training/"):
             self._html(200, TRAINING_DASHBOARD_HTML, no_cache=True)

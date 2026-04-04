@@ -27,6 +27,7 @@ CREATE TABLE IF NOT EXISTS execution_trades (
   pnl_usd REAL,
   context_snapshot_json TEXT,
   notes TEXT,
+  trace_id TEXT,
   schema_version TEXT NOT NULL DEFAULT 'execution_trade_v1',
   created_at_utc TEXT NOT NULL
 );
@@ -39,3 +40,6 @@ CREATE INDEX IF NOT EXISTS idx_execution_trades_strategy
 
 CREATE INDEX IF NOT EXISTS idx_execution_trades_lane_mode
   ON execution_trades (lane, mode, created_at_utc DESC);
+
+CREATE INDEX IF NOT EXISTS idx_execution_trades_trace_id
+  ON execution_trades (trace_id);

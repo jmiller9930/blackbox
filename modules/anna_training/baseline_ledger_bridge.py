@@ -94,24 +94,18 @@ def run_baseline_ledger_bridge_tick(
     size = 1.0
     tid = _baseline_trade_id(mid, m)
 
-    from .execution_ledger import RESERVED_STRATEGY_BASELINE, append_execution_trade
+    from .decision_trace import persist_baseline_trade_with_trace
+    from .execution_ledger import compute_pnl_usd
+
+    pnl = compute_pnl_usd(entry_price=float(o), exit_price=float(c), size=size, side="long")
 
     try:
-        row = append_execution_trade(
-            trade_id=tid,
-            strategy_id=RESERVED_STRATEGY_BASELINE,
-            lane="baseline",
-            mode=m,
+        out = persist_baseline_trade_with_trace(
             market_event_id=mid,
-            symbol=str(bar.get("canonical_symbol") or "SOL-PERP"),
-            timeframe=str(bar.get("timeframe") or "5m"),
-            side="long",
-            entry_time=str(bar.get("candle_open_utc") or ""),
-            entry_price=float(o),
-            size=size,
-            exit_time=str(bar.get("candle_close_utc") or ""),
-            exit_price=float(c),
-            exit_reason="CLOSE",
+            bar=bar,
+            mode=m,
+            trade_id=tid,
+            pnl_usd=pnl,
             context_snapshot={
                 "source": "baseline_ledger_bridge_v1",
                 "price_source": bar.get("price_source"),
@@ -129,10 +123,14 @@ def run_baseline_ledger_bridge_tick(
             "trade_id": tid,
         }
 
+    row = out.get("execution_trade")
+    trace_meta = {k: v for k, v in out.items() if k != "execution_trade"}
+
     return {
         "ok": True,
         "market_event_id": mid,
         "trade_id": tid,
         "mode": m,
         "execution_trade": row,
+        "decision_trace": trace_meta,
     }
