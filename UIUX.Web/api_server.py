@@ -1154,7 +1154,7 @@ TRAINING_DASHBOARD_HTML = """<!DOCTYPE html>
             (w.fix ? ' — <span style="opacity:0.95">' + String(w.fix) + '</span>' : ''));
         });
         if (vac && !ws.length) {
-          parts.push('<strong>vacuous_cohort</strong>: Every decisive row is won with $0 P&amp;L — check executor env (JACK_STUB_ALWAYS_WIN / JACK_STUB_SIMULATE).');
+          parts.push('<strong>vacuous_cohort</strong>: Every decisive row is won with $0 P&amp;L — remove JACK_STUB_ALWAYS_WIN; drop legacy JACK_STUB_SIMULATE from .env; consider flush-runtime + Karpathy restart.');
         }
         el.innerHTML = parts.join('<br/>');
       })();

@@ -92,6 +92,9 @@ def maybe_delegate_to_jack(
     }
     try:
         append_trade_attempt(phase="jack_handoff", status="started", request_id=rid or None, detail={})
+        # Legacy: JACK_STUB_SIMULATE=0 in operator .env used to force always-won stub rows; do not pass through.
+        child_env = os.environ.copy()
+        child_env.pop("JACK_STUB_SIMULATE", None)
         proc = subprocess.run(
             argv,
             input=json.dumps(payload, ensure_ascii=False),
@@ -99,6 +102,7 @@ def maybe_delegate_to_jack(
             capture_output=True,
             timeout=max(1, timeout_sec),
             check=False,
+            env=child_env,
         )
     except subprocess.TimeoutExpired:
         return _jack_fail("jack_executor_timeout")

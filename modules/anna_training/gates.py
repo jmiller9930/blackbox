@@ -135,8 +135,9 @@ def evaluate_grade12_gates(training_state: dict[str, Any] | None = None) -> dict
     if tools_ok and not _ignore_vacuous_win_streak_gate():
         if cohort_is_vacuous_all_wins_zero_pnl(trades, min_decisive=min_decisive):
             numeric_blockers.append(
-                "vacuous_win_streak_all_won_zero_pnl — ledger matches JACK_STUB_ALWAYS_WIN / "
-                "JACK_STUB_SIMULATE=0 (smoke mode), not a scored cohort. Unset those vars and restart Karpathy."
+                "vacuous_win_streak_all_won_zero_pnl — historical rows look like stub smoke mode (won+$0). "
+                "Unset JACK_STUB_ALWAYS_WIN if set; remove legacy JACK_STUB_SIMULATE from .env; "
+                "flush-runtime or accumulate new mixed outcomes; restart Karpathy."
             )
 
     total_pnl = float(s.total_pnl_usd)

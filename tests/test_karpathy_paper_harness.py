@@ -232,9 +232,10 @@ def test_jack_stub_paper_outcomes_deterministic() -> None:
     assert always_won["paper_trade"]["result"] == "won"
     assert always_won["paper_trade"]["pnl_usd"] == 0.0
 
-    legacy_sim_off = run_stub({"JACK_STUB_SIMULATE": "0"})
-    assert legacy_sim_off["paper_trade"]["result"] == "won"
-    assert legacy_sim_off["paper_trade"]["pnl_usd"] == 0.0
+    # JACK_STUB_SIMULATE is ignored — same mixed outcome as unset (legacy SIMULATE=0 no longer forces always-won).
+    sim_legacy = run_stub({"JACK_STUB_SIMULATE": "0"})
+    assert sim_legacy["paper_trade"]["result"] == a["paper_trade"]["result"]
+    assert sim_legacy["paper_trade"]["pnl_usd"] == a["paper_trade"]["pnl_usd"]
 
 
 def test_jack_stub_mix_key_includes_created_at() -> None:

@@ -215,7 +215,8 @@ def cohort_is_vacuous_all_wins_zero_pnl(
 ) -> bool:
     """True when the cohort clears ``min_decisive`` but every decisive row is ``won`` with ``pnl_usd`` = 0.
 
-    That pattern matches the lab stub's smoke mode (``JACK_STUB_ALWAYS_WIN`` / ``JACK_STUB_SIMULATE=0``), not a
+    That pattern matches the lab stub's historical smoke mode (``JACK_STUB_ALWAYS_WIN`` or legacy always-win env),
+    not a
     real win distribution — **100% win rate is meaningless** here.
     """
     decisive = [t for t in trades if str(t.get("result") or "").lower() in ("won", "lost")]
@@ -247,8 +248,8 @@ def cohort_ledger_warnings(s: TradeSummary, trades: list[dict[str, Any]]) -> lis
                     "(won + $0 each), not mixed outcomes."
                 ),
                 "fix": (
-                    "Unset JACK_STUB_ALWAYS_WIN and JACK_STUB_SIMULATE (or set SIMULATE=1). "
-                    "Restart the Karpathy process so the executor env is picked up."
+                    "Remove JACK_STUB_SIMULATE from .env (ignored by stub now). Unset JACK_STUB_ALWAYS_WIN. "
+                    "Run flush-runtime --yes for a clean ledger, then restart Karpathy."
                 ),
             }
         )

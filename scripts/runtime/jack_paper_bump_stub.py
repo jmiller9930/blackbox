@@ -20,7 +20,8 @@ Override fields via env (all optional):
 - ``JACK_STUB_PNL_USD`` — if set: fixed P&L (otherwise derived from the deterministic mix above)
 - ``JACK_STUB_TIMEFRAME`` (default ``5m``)
 - ``JACK_STUB_ALWAYS_WIN`` — ``1``/true: always ``won`` + 0 P&amp;L when result not set (smoke tests only)
-- ``JACK_STUB_SIMULATE`` — **deprecated**; ``0``/false is treated like ``JACK_STUB_ALWAYS_WIN=1``
+- ``JACK_STUB_SIMULATE`` — **ignored** (legacy). Older setups used ``=0`` for always-win and broke cohort stats.
+  Remove it from ``.env``; only ``JACK_STUB_ALWAYS_WIN=1`` enables smoke mode.
 """
 
 from __future__ import annotations
@@ -40,13 +41,8 @@ def _env_bool(name: str, default: bool) -> bool:
 
 
 def _legacy_always_won_mode() -> bool:
-    """Always ``won`` + 0 P&L when no explicit result (smoke test). ``JACK_STUB_SIMULATE=0`` kept as alias."""
-    if _env_bool("JACK_STUB_ALWAYS_WIN", False):
-        return True
-    raw = (os.environ.get("JACK_STUB_SIMULATE") or "").strip()
-    if raw:
-        return not _env_bool("JACK_STUB_SIMULATE", True)
-    return False
+    """Only ``JACK_STUB_ALWAYS_WIN=1`` forces won+$0. Do not use ``JACK_STUB_SIMULATE`` for that (it is ignored)."""
+    return _env_bool("JACK_STUB_ALWAYS_WIN", False)
 
 
 def _handoff_mix_key(payload: dict[str, Any]) -> str:
@@ -112,8 +108,7 @@ def main() -> None:
         result = "won" if pnl > 0 else ("lost" if pnl < 0 else "breakeven")
     elif _legacy_always_won_mode():
         print(
-            "jack_paper_bump_stub: WARNING — JACK_STUB_ALWAYS_WIN or JACK_STUB_SIMULATE=0: "
-            "every row is won + $0 (smoke mode); unset for cohort mix.",
+            "jack_paper_bump_stub: WARNING — JACK_STUB_ALWAYS_WIN=1: every row is won + $0 (smoke mode).",
             file=sys.stderr,
         )
         result = "won"
