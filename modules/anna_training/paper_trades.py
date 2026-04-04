@@ -208,6 +208,53 @@ class TradeSummary:
     period_end_utc: str | None
 
 
+def cohort_is_vacuous_all_wins_zero_pnl(
+    trades: Iterable[dict[str, Any]],
+    *,
+    min_decisive: int,
+) -> bool:
+    """True when the cohort clears ``min_decisive`` but every decisive row is ``won`` with ``pnl_usd`` = 0.
+
+    That pattern matches the lab stub's smoke mode (``JACK_STUB_ALWAYS_WIN`` / ``JACK_STUB_SIMULATE=0``), not a
+    real win distribution — **100% win rate is meaningless** here.
+    """
+    decisive = [t for t in trades if str(t.get("result") or "").lower() in ("won", "lost")]
+    if len(decisive) < max(1, int(min_decisive)):
+        return False
+    if any(str(t.get("result") or "").lower() == "lost" for t in decisive):
+        return False
+    if not all(str(t.get("result") or "").lower() == "won" for t in decisive):
+        return False
+    return all(abs(float(t.get("pnl_usd") or 0.0)) < 1e-12 for t in decisive)
+
+
+def cohort_ledger_warnings(s: TradeSummary, trades: list[dict[str, Any]]) -> list[dict[str, str]]:
+    """Human-facing flags for dashboard/API when the ledger looks misconfigured or vacuous."""
+    out: list[dict[str, str]] = []
+    decisive = s.wins + s.losses
+    if (
+        decisive >= 5
+        and s.losses == 0
+        and s.wins == decisive
+        and abs(float(s.total_pnl_usd or 0.0)) < 1e-9
+    ):
+        out.append(
+            {
+                "code": "all_wins_zero_pnl",
+                "severity": "error",
+                "message": (
+                    f"{s.wins} decisive wins, $0.00 total P&L — rows look like stub smoke mode "
+                    "(won + $0 each), not mixed outcomes."
+                ),
+                "fix": (
+                    "Unset JACK_STUB_ALWAYS_WIN and JACK_STUB_SIMULATE (or set SIMULATE=1). "
+                    "Restart the Karpathy process so the executor env is picked up."
+                ),
+            }
+        )
+    return out
+
+
 def summarize_trades(trades: Iterable[dict[str, Any]]) -> TradeSummary:
     tlist = list(trades)
     if not tlist:
@@ -328,7 +375,7 @@ def build_report_card_markdown(
             "",
             "## How we measure (paper)",
             "",
-            "Each row is a **paper / simulation** outcome (not live Jack/Billy). P&L is in **USD** as recorded by the operator or harness. ",
+            "Each row is a **paper** outcome — **no live settlement**; P&L is **monopoly money** in the bank sense but **real for judgment** (gates, cohort, report card). P&L is in **USD** as recorded by the operator or harness. ",
             "`won` / `lost` / `breakeven` / `abstain` are explicit outcomes; interrogation (why) lives in RCS/RCA when wired per directive.",
             "",
             "**Useful report-card inputs (for humans and later automation):** symbol, timeframe, side, explicit result, P&L, optional notes (thesis / mistake / Jupiter context). ",

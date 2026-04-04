@@ -17,7 +17,7 @@ CURRICULA: dict[str, dict[str, Any]] = {
         "next_curriculum_id": "bachelor_paper_track_v1",
         "summary": (
             "Standalone basic trade training: paper harness, proposals, gates, RCS/RCA — "
-            "not the statistical-methods track. Policy: paper/simulation only; no live Jack/Billy until graduated. "
+            "not the statistical-methods track. Policy: paper only — she is **judged on the paper ledger** (no live venue); no live Jack/Billy until graduated. "
             "Completing this tier (milestones + gate) is prerequisite for statistical trade training."
         ),
     },

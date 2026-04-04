@@ -9,6 +9,8 @@ import sys
 from pathlib import Path
 from unittest.mock import patch
 
+import pytest
+
 def test_apply_repo_dotenv_sets_ollama_from_file(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.delenv("OLLAMA_BASE_URL", raising=False)
     (tmp_path / ".env").write_text("OLLAMA_BASE_URL=http://from-dotenv.example:11434\n", encoding="utf-8")
@@ -650,3 +652,68 @@ def test_paper_manual_row_links_attempt_and_activity_total(tmp_path: Path, monke
     assert row.get("strategy_label") == "smoke-strat"
     assert row.get("proposal_ref") == "req-smoke-1"
     assert row.get("linked_attempt_event_id")
+
+
+def test_vacuous_all_wins_zero_pnl_fails_numeric_gate(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Smoke-mode ledger (won + $0 each) must not count as a real cohort for Grade-12 numeric PASS."""
+    monkeypatch.setenv("BLACKBOX_ANNA_TRAINING_DIR", str(tmp_path))
+    monkeypatch.setenv("ANNA_GRADE12_MIN_DECISIVE_TRADES", "5")
+    monkeypatch.setenv("ANNA_GRADE12_MIN_WIN_RATE", "0.6")
+    from modules.anna_training.curriculum_tools import TOOL_IDS
+    from modules.anna_training.gates import evaluate_grade12_gates
+    from modules.anna_training.paper_trades import append_paper_trade
+    from modules.anna_training.store import load_state, save_state
+
+    for _ in range(5):
+        append_paper_trade(symbol="S", side="long", result="won", pnl_usd=0.0, timeframe="5m")
+    st = load_state()
+    st["grade_12_tool_mastery"] = {tid: True for tid in TOOL_IDS}
+    save_state(st)
+    g12 = evaluate_grade12_gates()
+    assert g12.get("curriculum_tools_pass") is True
+    assert g12.get("cohort_vacuous_all_wins_zero_pnl") is True
+    assert g12.get("numeric_gate_pass") is False
+    assert any("vacuous" in str(b).lower() for b in (g12.get("numeric_blockers") or []))
+
+
+def test_flush_runtime_clears_files_and_writes_default_state(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("BLACKBOX_ANNA_TRAINING_DIR", str(tmp_path))
+    (tmp_path / "paper_trades.jsonl").write_text('{"schema":"anna_paper_trade_v1"}\n', encoding="utf-8")
+    (tmp_path / "state.json").write_text('{"schema_version":"anna_training_state_v3","karpathy_loop_iteration":999}\n', encoding="utf-8")
+    nested = tmp_path / "nested"
+    nested.mkdir()
+    (nested / "school_extra.json").write_text("{}", encoding="utf-8")
+
+    from modules.anna_training.catalog import default_state
+    from modules.anna_training.runtime_reset import flush_anna_training_runtime
+    from modules.anna_training.store import load_state
+
+    # Do not clear repo execution_plane/requests.json from unit tests; CLI default does clear it on host.
+    r = flush_anna_training_runtime(include_execution_requests=False)
+    assert r.get("ok") is True
+    assert not (tmp_path / "paper_trades.jsonl").is_file()
+    assert not (nested / "school_extra.json").is_file()
+    assert (tmp_path / "state.json").is_file()
+    st = load_state()
+    assert st.get("karpathy_loop_iteration") is None
+    assert st.get("schema_version") == default_state().get("schema_version")
+
+
+def test_vacuous_win_streak_can_be_ignored_for_dev(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("BLACKBOX_ANNA_TRAINING_DIR", str(tmp_path))
+    monkeypatch.setenv("ANNA_GRADE12_MIN_DECISIVE_TRADES", "5")
+    monkeypatch.setenv("ANNA_GRADE12_MIN_WIN_RATE", "0.6")
+    monkeypatch.setenv("ANNA_GRADE12_IGNORE_VACUOUS_WIN_STREAK", "1")
+    from modules.anna_training.curriculum_tools import TOOL_IDS
+    from modules.anna_training.gates import evaluate_grade12_gates
+    from modules.anna_training.paper_trades import append_paper_trade
+    from modules.anna_training.store import load_state, save_state
+
+    for _ in range(5):
+        append_paper_trade(symbol="S", side="long", result="won", pnl_usd=0.0, timeframe="5m")
+    st = load_state()
+    st["grade_12_tool_mastery"] = {tid: True for tid in TOOL_IDS}
+    save_state(st)
+    g12 = evaluate_grade12_gates()
+    assert g12.get("numeric_gate_pass") is True
+    assert g12.get("cohort_vacuous_all_wins_zero_pnl") is True

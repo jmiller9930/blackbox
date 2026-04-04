@@ -1,4 +1,8 @@
-"""Fictitious paper wallet — notional start, goal, and horizon (not live capital)."""
+"""Paper wallet — start, goal, and horizon for **judgment** (no live settlement).
+
+Dollars here are not withdrawable venue balance, but **gates and goals treat equity as real** for training:
+start + sum(logged ``pnl_usd`` is what the scorecard and optional numeric gates use.
+"""
 
 from __future__ import annotations
 
@@ -6,7 +10,7 @@ import os
 from datetime import datetime, timezone
 from typing import Any
 
-# Contract: training narrative only; gates use starting_usd for equity = start + sum(pnl).
+# Contract: gates use starting_usd for equity = start + sum(pnl) from the paper ledger.
 DEFAULT_PAPER_WALLET: dict[str, Any] = {
     "schema": "paper_wallet_v1",
     "starting_usd": 100.0,
@@ -17,7 +21,7 @@ DEFAULT_PAPER_WALLET: dict[str, Any] = {
     "currency": "USD",
     "clock_start_utc": None,
     "note": (
-        "Fictitious paper only — not live capital. Default ANNA_PAPER_GOAL_ADAPTIVE=1 slides weekly "
+        "Paper bankroll for judgment (no live settlement). Default ANNA_PAPER_GOAL_ADAPTIVE=1 slides weekly "
         "goal between 5% and 15% from recent SOL-USD ticks (range/vol + gate health); set ANNA_PAPER_GOAL_ADAPTIVE=0 "
         "to use goal_return_frac from this object only."
     ),
@@ -36,7 +40,7 @@ def merge_paper_wallet_into_state(st: dict[str, Any]) -> None:
 
 
 def resolve_paper_bankroll_start_usd(training_state: dict[str, Any]) -> float:
-    """Starting notional for P&L + equity. Env overrides state; default $100 from wallet."""
+    """Starting paper equity for gate math (start + cohort P&L). Env overrides state; default $100 from wallet."""
     raw = (os.environ.get("ANNA_GRADE12_PAPER_BANKROLL_START_USD") or "").strip()
     if raw:
         try:
@@ -101,8 +105,8 @@ def goal_progress_lines(
     day_part = f"day {days + 1} of {horizon}" if days is not None else "clock starts at first `anna status` / `anna gates` after upgrade"
     eq = equity_usd if equity_usd is not None else (bankroll_start + total_pnl_usd)
     met = eq >= target - 1e-9
-    status = "goal equity reached (fictitious)" if met else "working toward goal"
+    status = "goal equity reached (judgment track)" if met else "working toward goal"
     return [
-        f"Paper wallet (fictitious): start ${bankroll_start:,.2f} → current equity ${eq:,.2f} "
+        f"Paper bankroll (judgment-grade; no live settlement): start ${bankroll_start:,.2f} → current equity ${eq:,.2f} "
         f"→ target ${target:,.2f} (+{ret:.0%} on start) within {horizon} days ({day_part}) — {status}.",
     ]

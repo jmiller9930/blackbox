@@ -27,6 +27,7 @@ Examples (repo root):
   python3 scripts/runtime/anna_training_cli.py math-engine-full  # ARIMA/GARCH, annualized Sharpe, WFO, MC, ML, Kalman
   python3 scripts/runtime/anna_training_cli.py training-progress  # ACL-lite: next focus + bachelor eligibility + cumulative tail
   python3 scripts/runtime/anna_training_cli.py advance-curriculum bachelor_paper_track_v1  # Grade 12 → bachelor (gates + prereq)
+  python3 scripts/runtime/anna_training_cli.py flush-runtime --yes   # stop Karpathy first: wipe entire anna_training dir (school + dashboard inputs) + execution requests + fresh state
 """
 from __future__ import annotations
 
@@ -663,12 +664,12 @@ def _cmd_dashboard(args: argparse.Namespace | None = None) -> int:
         bankroll_line = ""
         if bs is not None and eq is not None:
             bankroll_line = (
-                f"\nNotional bankroll: start [bold]${float(bs):,.2f}[/bold] → "
+                f"\nPaper bankroll (judgment track): start [bold]${float(bs):,.2f}[/bold] → "
                 f"equity [bold]${float(eq):,.2f}[/bold] (start + sum of pnl_usd in log)"
             )
         elif bs is None and ct_ok and s.trade_count > 0:
             bankroll_line = (
-                "\n[dim]Set ANNA_GRADE12_PAPER_BANKROLL_START_USD to show start → equity (growth vs notional).[/dim]"
+                "\n[dim]Set ANNA_GRADE12_PAPER_BANKROLL_START_USD to show start → equity on the judgment ledger.[/dim]"
             )
         req_bits: list[str] = []
         if g12.get("min_net_pnl_usd") is not None:
@@ -681,8 +682,8 @@ def _cmd_dashboard(args: argparse.Namespace | None = None) -> int:
         if req_bits:
             req_line = "\n[dim]Optional numeric gates also require:[/dim] " + " | ".join(req_bits)
         pnl_note = (
-            "\n[dim]Outcome (won/lost) vs P&L $: each row’s pnl_usd from log-trade or Jack paper.[/dim]"
-            "\n[dim]Daemon: paper harness runs each tick when enabled; set BLACKBOX_JACK_EXECUTOR_CMD for fills.[/dim]"
+            "\n[dim]Gates and scorecard judge logged won/lost and pnl_usd — paper is the performance surface (no venue settlement in G12).[/dim]"
+            "\n[dim]Daemon: paper harness runs each tick when enabled; set BLACKBOX_JACK_EXECUTOR_CMD for live-adapter fills or use the default lab executor.[/dim]"
         )
         mandate_lines = build_school_mandate_fact_lines(g12=g12, st=st)
         parts: list = [
@@ -1322,6 +1323,23 @@ def main(argv: list[str] | None = None) -> int:
         help="Single tick then exit.",
     )
 
+    ap_flush = sub.add_parser(
+        "flush-runtime",
+        help="Destructive: delete ALL files under the Anna training dir (school state, ledger, heartbeat, attempts, "
+        "any strays — dashboard reads this tree), clear execution_plane requests.json unless --keep-execution-plane, "
+        "then write fresh state.json. Stop Karpathy first.",
+    )
+    ap_flush.add_argument(
+        "--yes",
+        action="store_true",
+        help="Required. Confirms delete + reset.",
+    )
+    ap_flush.add_argument(
+        "--keep-execution-plane",
+        action="store_true",
+        help="Do not delete data/runtime/execution_plane/requests.json (default: clear pending requests).",
+    )
+
     ap_xc = sub.add_parser(
         "llm-cross-check",
         help="Internal Ollama cross-check of draft text (no Telegram/Slack); respects ANNA_USE_LLM.",
@@ -1362,6 +1380,7 @@ def main(argv: list[str] | None = None) -> int:
         "check-readiness",
         "gates",
         "loop-daemon",
+        "flush-runtime",
         "llm-cross-check",
         "math-check",
         "quant-metrics",
@@ -1420,6 +1439,26 @@ def main(argv: list[str] | None = None) -> int:
         return _cmd_school(args)
     if args.cmd == "llm-cross-check":
         return _cmd_llm_cross_check(args)
+    if args.cmd == "flush-runtime":
+        if not getattr(args, "yes", False):
+            print(
+                json.dumps(
+                    {
+                        "ok": False,
+                        "error": "refused",
+                        "detail": "Destructive reset — re-run with --yes after stopping the Karpathy loop (tmux/supervisor).",
+                    },
+                    indent=2,
+                )
+            )
+            return 2
+        from modules.anna_training.runtime_reset import flush_anna_training_runtime
+
+        r = flush_anna_training_runtime(
+            include_execution_requests=not getattr(args, "keep_execution_plane", False),
+        )
+        print(json.dumps(r, indent=2))
+        return 0 if r.get("ok") else 1
     if args.cmd == "loop-daemon":
         lp = ROOT / "scripts" / "runtime" / "anna_karpathy_loop_daemon.py"
         spec = importlib.util.spec_from_file_location("anna_karpathy_loop_daemon", lp)

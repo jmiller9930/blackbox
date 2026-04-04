@@ -194,3 +194,76 @@ def test_jack_paper_bump_stub_stdout_contract() -> None:
     out = json.loads(proc.stdout.strip())
     assert out["ok"] is True
     assert out["paper_trade"]["symbol"] == "SOL-PERP"
+    assert out["paper_trade"]["result"] in ("won", "lost", "breakeven", "abstain")
+
+
+def test_jack_stub_paper_outcomes_deterministic() -> None:
+    """Same request_id → same ledger result; overrides still work."""
+    import os
+    import subprocess
+
+    stub = ROOT / "scripts" / "runtime" / "jack_paper_bump_stub.py"
+    payload = json.dumps({"execution_request": {"request_id": "deterministic-test-rid-001"}})
+
+    def run_stub(extra: dict | None = None) -> dict:
+        env = {**os.environ, **(extra or {})}
+        proc = subprocess.run(
+            [sys.executable, str(stub)],
+            input=payload,
+            text=True,
+            capture_output=True,
+            check=False,
+            timeout=10,
+            env=env,
+        )
+        assert proc.returncode == 0
+        return json.loads(proc.stdout.strip())
+
+    a = run_stub()
+    b = run_stub()
+    assert a["paper_trade"]["result"] == b["paper_trade"]["result"]
+    assert a["paper_trade"]["pnl_usd"] == b["paper_trade"]["pnl_usd"]
+
+    forced = run_stub({"JACK_STUB_RESULT": "lost", "JACK_STUB_PNL_USD": "-2.5"})
+    assert forced["paper_trade"]["result"] == "lost"
+    assert forced["paper_trade"]["pnl_usd"] == -2.5
+
+    always_won = run_stub({"JACK_STUB_ALWAYS_WIN": "1"})
+    assert always_won["paper_trade"]["result"] == "won"
+    assert always_won["paper_trade"]["pnl_usd"] == 0.0
+
+    legacy_sim_off = run_stub({"JACK_STUB_SIMULATE": "0"})
+    assert legacy_sim_off["paper_trade"]["result"] == "won"
+    assert legacy_sim_off["paper_trade"]["pnl_usd"] == 0.0
+
+
+def test_jack_stub_mix_key_includes_created_at() -> None:
+    """Same request_id but different created_at → different mix key (distinct outcomes per new request)."""
+    import importlib.util
+
+    spec = importlib.util.spec_from_file_location(
+        "jack_paper_bump_stub",
+        ROOT / "scripts" / "runtime" / "jack_paper_bump_stub.py",
+    )
+    assert spec and spec.loader
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    a = mod._handoff_mix_key(
+        {
+            "execution_request": {
+                "request_id": "same",
+                "created_at": "2026-01-01T00:00:00Z",
+                "proposal_id": "p1",
+            }
+        }
+    )
+    b = mod._handoff_mix_key(
+        {
+            "execution_request": {
+                "request_id": "same",
+                "created_at": "2026-01-02T00:00:00Z",
+                "proposal_id": "p1",
+            }
+        }
+    )
+    assert a != b

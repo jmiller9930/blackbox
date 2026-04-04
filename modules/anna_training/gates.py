@@ -1,10 +1,14 @@
-"""Grade 12 paper exit gates — curriculum tools first, then numeric cohort (paper_trades.jsonl)."""
+"""Grade 12 paper exit gates — curriculum tools first, then numeric cohort (paper_trades.jsonl).
+
+Paper trades are the **judgment ledger** for training: see :mod:`modules.anna_training.paper_judgment`.
+"""
 
 from __future__ import annotations
 
 import os
 from typing import Any
 
+from modules.anna_training.paper_judgment import PAPER_LEDGER_AUTHORITATIVE_FOR_TRAINING
 from modules.anna_training.curriculum_tools import (
     TOOL_IDS,
     curriculum_tools_complete,
@@ -12,7 +16,11 @@ from modules.anna_training.curriculum_tools import (
     normalize_tool_mastery,
 )
 from modules.anna_training.adaptive_paper_goal import compute_adaptive_paper_goal
-from modules.anna_training.paper_trades import load_paper_trades_for_gates, summarize_trades
+from modules.anna_training.paper_trades import (
+    cohort_is_vacuous_all_wins_zero_pnl,
+    load_paper_trades_for_gates,
+    summarize_trades,
+)
 from modules.anna_training.paper_wallet import (
     DEFAULT_PAPER_WALLET,
     days_since_clock,
@@ -61,8 +69,20 @@ def _skip_curriculum_tools_gate() -> bool:
     )
 
 
+def _ignore_vacuous_win_streak_gate() -> bool:
+    """Allow numeric PASS when every row is won+$0 (dev/tests only — not honest for production)."""
+    return (os.environ.get("ANNA_GRADE12_IGNORE_VACUOUS_WIN_STREAK") or "").strip().lower() in (
+        "1",
+        "true",
+        "yes",
+    )
+
+
 def evaluate_grade12_gates(training_state: dict[str, Any] | None = None) -> dict[str, Any]:
     """Return PASS/FAIL: (1) all Grade 12 curriculum tools passed, (2) numeric paper cohort.
+
+    Cohort metrics read **paper_trades.jsonl** — that log is **authoritative for training judgment**
+    (no live settlement; still what Anna is graded on). See ``paper_judgment`` in the return dict.
 
     ``training_state``: optional in-memory state (e.g. during ``save_state`` before disk write).
     When provided, ``grade_12_tool_mastery`` is taken from it; paper trades still come from disk.
@@ -71,8 +91,8 @@ def evaluate_grade12_gates(training_state: dict[str, Any] | None = None) -> dict
       ANNA_GRADE12_MIN_WIN_RATE — default 0.6
       ANNA_GRADE12_MIN_DECISIVE_TRADES — default 30
     Env (numeric, optional capital — overrides state wallet start — evaluated only after curriculum tools PASS):
-      ANNA_GRADE12_PAPER_BANKROLL_START_USD — notional starting equity (default from state paper_wallet: $100)
-    Weekly fictitious goal (informational paper_goal_met):
+      ANNA_GRADE12_PAPER_BANKROLL_START_USD — paper starting equity for gate math (default from state paper_wallet: $100)
+    Weekly paper goal (informational paper_goal_met; still counts for “did she hit the bar” reporting):
       ANNA_PAPER_GOAL_ADAPTIVE — default 1: slide goal return 5%–15% from recent market_ticks (+ gate/signal); 0: use state paper_wallet.goal_return_frac
       ANNA_PAPER_GOAL_FIXED_FRAC — optional clamp to one fraction in [0.05, 0.15] (disables adaptive stress)
       ANNA_GRADE12_MIN_NET_PNL_USD — require sum(pnl_usd) on cohort >= this
@@ -80,6 +100,8 @@ def evaluate_grade12_gates(training_state: dict[str, Any] | None = None) -> dict
       ANNA_GRADE12_MIN_BANKROLL_RETURN_FRAC — e.g. 0.05 requires 5% gain on start (start env required, >0)
     Env (tools bypass, tests/dev only):
       ANNA_SKIP_CURRICULUM_TOOLS_GATE=1 — ignore tool checklist (numeric only)
+      ANNA_GRADE12_IGNORE_VACUOUS_WIN_STREAK=1 — do **not** fail numeric gate when every decisive row is won+0 P&L
+        (dev only; production should leave unset so smoke-mode ledgers cannot pass as real performance)
 
     Order: tools must be complete before the 60% / min-N slice is considered for overall PASS.
     """
@@ -109,6 +131,13 @@ def evaluate_grade12_gates(training_state: dict[str, Any] | None = None) -> dict
         numeric_blockers.append("no_decisive_trades")
     elif wr < min_wr:
         numeric_blockers.append(f"win_rate_below_minimum ({wr:.4f} < {min_wr})")
+
+    if tools_ok and not _ignore_vacuous_win_streak_gate():
+        if cohort_is_vacuous_all_wins_zero_pnl(trades, min_decisive=min_decisive):
+            numeric_blockers.append(
+                "vacuous_win_streak_all_won_zero_pnl — ledger matches JACK_STUB_ALWAYS_WIN / "
+                "JACK_STUB_SIMULATE=0 (smoke mode), not a scored cohort. Unset those vars and restart Karpathy."
+            )
 
     total_pnl = float(s.total_pnl_usd)
     bankroll_start = resolve_paper_bankroll_start_usd(st)
@@ -171,6 +200,7 @@ def evaluate_grade12_gates(training_state: dict[str, Any] | None = None) -> dict
 
     return {
         "gate_id": "grade12_paper_win_rate_v1",
+        "paper_ledger_authoritative_for_training": PAPER_LEDGER_AUTHORITATIVE_FOR_TRAINING,
         "pass": overall_ok,
         "curriculum_tools_pass": tools_ok,
         "numeric_gate_pass": numeric_ok,
@@ -202,6 +232,14 @@ def evaluate_grade12_gates(training_state: dict[str, Any] | None = None) -> dict
         "min_net_pnl_usd": min_net_pnl,
         "min_equity_usd": min_equity,
         "min_bankroll_return_frac": min_return_frac,
+        "cohort_vacuous_all_wins_zero_pnl": bool(
+            tools_ok
+            and cohort_is_vacuous_all_wins_zero_pnl(trades, min_decisive=min_decisive)
+        ),
         "blockers": blockers,
-        "note": "Pass requires curriculum tools in sequence (one focus at a time in the deck), then numeric paper cohort. RCS/RCA human sign-off may still apply per ANNA_GOES_TO_SCHOOL.md.",
+        "note": (
+            "Pass requires curriculum tools in sequence (one focus at a time in the deck), then numeric paper cohort "
+            "on the paper ledger (judgment-grade outcomes; no live venue settlement in this phase). "
+            "RCS/RCA human sign-off may still apply per ANNA_GOES_TO_SCHOOL.md."
+        ),
     }

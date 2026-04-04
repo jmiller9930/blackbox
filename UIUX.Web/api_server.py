@@ -346,12 +346,21 @@ def build_anna_training_dashboard() -> dict[str, Any]:
     tid = str(uuid.uuid4())
     try:
         from modules.anna_training.gates import evaluate_grade12_gates
-        from modules.anna_training.paper_trades import load_paper_trades_for_gates, summarize_trades, trades_path
+        from modules.anna_training.paper_trades import (
+            cohort_ledger_warnings,
+            load_paper_trades_for_gates,
+            summarize_trades,
+            trades_path,
+        )
         from modules.anna_training.store import anna_training_dir, load_state, state_path
         from modules.anna_training.trade_attempts import (
             attempts_path,
             load_trade_attempts,
             summarize_trade_activity,
+        )
+        from modules.anna_training.paper_judgment import (
+            PAPER_JUDGMENT_BLURB,
+            PAPER_LEDGER_AUTHORITATIVE_FOR_TRAINING,
         )
         from modules.anna_training.report_card_text import learning_signal_verdict
     except ImportError as e:
@@ -418,6 +427,11 @@ def build_anna_training_dashboard() -> dict[str, Any]:
             ),
             "paper_ledger_vs_tick": (
                 "Paper ledger rows append when a paper trade is logged to paper_trades.jsonl — not every tick."
+            ),
+            "paper_judgment": PAPER_JUDGMENT_BLURB,
+            "digest_ok_vs_trade_win": (
+                "Training digest steps 1–4 use OK/YES for **pipeline** completion (analysis, request, delegate, row). "
+                "That is different from **won** on a trade — use digest step 5 and the paper trades table for outcomes."
             ),
         }
 
@@ -634,7 +648,7 @@ def build_anna_training_dashboard() -> dict[str, Any]:
                     {
                         "step": "4 · Paper ledger",
                         "result": "YES",
-                        "detail": "Row appended to paper_trades.jsonl this tick.",
+                        "detail": "Row appended to paper_trades.jsonl (pipeline). This is not a ‘win’ — see step 5 / table for won|lost.",
                     }
                 )
             else:
@@ -646,11 +660,36 @@ def build_anna_training_dashboard() -> dict[str, Any]:
                     }
                 )
 
+            if recent:
+                lt = recent[0]
+                r0 = str(lt.get("result") or "").strip().upper() or "—"
+                pnl_v = lt.get("pnl_usd")
+                pnl_s = f"{float(pnl_v):.2f}" if pnl_v is not None else "—"
+                steps.append(
+                    {
+                        "step": "5 · Trade outcome (ledger)",
+                        "result": r0,
+                        "detail": f"Most recent row: result={r0.lower() if r0 != '—' else '—'} · pnl_usd={pnl_s} — this is the scored outcome, not pipeline OK/YES above.",
+                    }
+                )
+            else:
+                steps.append(
+                    {
+                        "step": "5 · Trade outcome (ledger)",
+                        "result": "—",
+                        "detail": "No paper rows yet — W/L below will populate when trades log.",
+                    }
+                )
+
             return {
                 "grade12_pass": bool(g12.get("pass")),
                 "why_grade12_not_pass": why,
                 "last_tick_at": str(tick_ts) if tick_ts else None,
                 "last_iteration": n,
+                "digest_note": (
+                    "Steps 1–4 are **pipeline health** (did school wiring run). **OK / YES** means that stage completed — "
+                    "not that the market trade was profitable. **Step 5** and the paper table show won / lost / breakeven."
+                ),
                 "steps": steps,
             }
 
@@ -662,6 +701,10 @@ def build_anna_training_dashboard() -> dict[str, Any]:
             "ok": True,
             "trace_id": tid,
             "at_utc": now_iso(),
+            "paper_judgment": {
+                "ledger_authoritative_for_training": PAPER_LEDGER_AUTHORITATIVE_FOR_TRAINING,
+                "plain_english": PAPER_JUDGMENT_BLURB,
+            },
             "semantics": semantics,
             "data_preflight": data_preflight,
             "preflight_policy": preflight_policy,
@@ -696,6 +739,7 @@ def build_anna_training_dashboard() -> dict[str, Any]:
                 "pass": bool(g12.get("pass")),
                 "curriculum_tools_pass": bool(g12.get("curriculum_tools_pass")),
                 "numeric_gate_pass": bool(g12.get("numeric_gate_pass")),
+                "cohort_vacuous_all_wins_zero_pnl": bool(g12.get("cohort_vacuous_all_wins_zero_pnl")),
                 "decisive_trades": g12.get("decisive_trades"),
                 "min_decisive_trades": g12.get("min_decisive_trades"),
                 "win_rate": g12.get("win_rate"),
@@ -709,6 +753,7 @@ def build_anna_training_dashboard() -> dict[str, Any]:
                 "wins": s.wins,
                 "losses": s.losses,
                 "total_pnl_usd": s.total_pnl_usd,
+                "warnings": cohort_ledger_warnings(s, trades),
             },
             "attempts": {
                 "total_events": act.total_events,
@@ -983,10 +1028,12 @@ TRAINING_DASHBOARD_HTML = """<!DOCTYPE html>
   <p class="lead">Refreshes every 4s. Top block = Grade-12 training bar + last-tick steps (where she passed or stopped). Scorecard + ledger = rolling numbers.</p>
   <p class="dash-tools"><button type="button" id="btn_expand_all" title="Open all sections">Expand all</button><button type="button" id="btn_collapse_all" title="Close all collapsible sections">Collapse all</button></p>
   <div id="v_llm_fail_alert" role="alert"></div>
+  <div id="v_ledger_alert" role="alert" style="display:none;margin:0 0 0.85rem;padding:0.65rem 0.85rem;border-radius:8px;border:1px solid #f85149;background:#3d1114;color:#f0f3f6;font-size:0.78rem;line-height:1.4"></div>
   <div id="err"></div>
   <section class="scorecard-block" style="border:1px solid #3fb95044" aria-labelledby="digest-h">
     <h2 id="digest-h" style="font-size:0.78rem;text-transform:uppercase;letter-spacing:0.06em;color:var(--ok);margin:0 0 0.45rem">Training run — where she is (last tick + Grade-12 bar)</h2>
     <p class="sub" id="v_digest_meta" style="margin:0 0 0.5rem;font-size:0.72rem">—</p>
+    <p class="sub" id="v_digest_note" style="margin:0 0 0.45rem;font-size:0.7rem;color:var(--muted);line-height:1.35">—</p>
     <p class="digest-bar" id="v_digest_grade12">—</p>
     <div id="v_digest_why_wrap" style="display:none"></div>
     <ul class="digest-steps" id="v_digest_steps" aria-label="Last tick steps"></ul>
@@ -1093,6 +1140,24 @@ TRAINING_DASHBOARD_HTML = """<!DOCTYPE html>
       const j = await r.json();
       err.style.display = 'none';
       if (!j.ok) { err.textContent = (j.error || 'error') + ': ' + (j.detail || ''); err.style.display = 'block'; return; }
+      (function ledgerAlert() {
+        var el = document.getElementById('v_ledger_alert');
+        if (!el) return;
+        var ws = (j.paper_cohort && j.paper_cohort.warnings) || [];
+        var vac = j.gates && j.gates.cohort_vacuous_all_wins_zero_pnl;
+        if (!ws.length && !vac) { el.style.display = 'none'; el.innerHTML = ''; return; }
+        el.style.display = 'block';
+        var parts = [];
+        ws.forEach(function(w) {
+          if (!w || !w.message) return;
+          parts.push('<strong>' + String(w.code || 'ledger') + '</strong>: ' + String(w.message) +
+            (w.fix ? ' — <span style="opacity:0.95">' + String(w.fix) + '</span>' : ''));
+        });
+        if (vac && !ws.length) {
+          parts.push('<strong>vacuous_cohort</strong>: Every decisive row is won with $0 P&amp;L — check executor env (JACK_STUB_ALWAYS_WIN / JACK_STUB_SIMULATE).');
+        }
+        el.innerHTML = parts.join('<br/>');
+      })();
       var sem = j.semantics || {};
       document.getElementById('v_sem1').textContent = sem.loop_tick_means || '—';
       document.getElementById('v_sem2').textContent = sem.attempt_log_vs_tick || '—';
@@ -1164,6 +1229,8 @@ TRAINING_DASHBOARD_HTML = """<!DOCTYPE html>
         meta.textContent =
           (d.last_iteration != null ? 'Last harness save · iteration ' + d.last_iteration : '—') +
           (d.last_tick_at ? ' · ' + d.last_tick_at : '');
+        var noteEl = document.getElementById('v_digest_note');
+        if (noteEl) noteEl.textContent = d.digest_note || '';
         var pass = d.grade12_pass === true;
         g.className = 'digest-bar ' + (pass ? 'pass' : 'fail');
         g.textContent = pass ? 'Grade-12 training bar: PASS' : 'Grade-12 training bar: NOT PASS';
@@ -1195,6 +1262,8 @@ TRAINING_DASHBOARD_HTML = """<!DOCTYPE html>
           var rspan = document.createElement('span');
           var rc = 'neu';
           if (res === 'OK' || res === 'YES') rc = 'ok';
+          else if (res === 'WON') rc = 'ok';
+          else if (res === 'LOST') rc = 'bad';
           else if (res === 'FAIL' || res === 'NO' || res === 'BLOCKED') rc = 'bad';
           rspan.className = 'r ' + rc;
           rspan.textContent = res + ' ';

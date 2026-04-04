@@ -12,7 +12,8 @@ Env:
     bundled stub when the command is unset (tier-1 school). Set ``ANNA_KARPATHY_JACK_STUB=0`` to disable the stub
     and require an explicit executor command.
   ANNA_KARPATHY_JACK_STUB — default **on** when ``BLACKBOX_JACK_EXECUTOR_CMD`` is unset: use
-    ``scripts/runtime/jack_paper_bump_stub.py`` (deterministic paper row). Set ``0``/false to opt out.
+    ``scripts/runtime/jack_paper_bump_stub.py`` (paper ledger rows — no venue settlement; still **judgment-grade**
+    for gates when that is the configured path). Set ``0``/false to opt out.
   ANNA_KARPATHY_PAPER_HARNESS_EACH_TICK — default **1** (true): run harness each successful tick.
   ANNA_KARPATHY_AUTO_RUN_PAPER — default **1**: auto-approve + run_execution after a strategy signal.
   ANNA_KARPATHY_PAPER_APPROVER_ID — default ``karpathy-paper-harness``.
