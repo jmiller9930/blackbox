@@ -695,61 +695,96 @@ TRAINING_DASHBOARD_HTML = """<!DOCTYPE html>
     #v_preflight_banner .sub { white-space: normal; word-break: break-word; }
     #v_llm_fail_alert { display:none; margin-bottom:0.75rem; padding:0.65rem 0.85rem; border-radius:8px; border:1px solid var(--bad); background:#2a1518; color:#f0d0d2; font-size:0.88rem; line-height:1.4; }
     #v_llm_fail_alert strong { color: #f85149; }
+    details.dash-section { background: var(--card); border: 1px solid #30363d; border-radius: 8px; margin-bottom: 0.75rem; }
+    details.dash-section > summary { list-style: none; cursor: pointer; padding: 0.65rem 0.85rem; user-select: none; display: flex; align-items: center; gap: 0.5rem; }
+    details.dash-section > summary::-webkit-details-marker { display: none; }
+    details.dash-section > summary::marker { content: ''; }
+    details.dash-section > summary .dash-chev { color: var(--muted); font-size: 0.65rem; width: 1rem; flex-shrink: 0; }
+    details.dash-section[open] > summary .dash-chev::before { content: '▼'; }
+    details.dash-section:not([open]) > summary .dash-chev::before { content: '▶'; }
+    details.dash-section > summary h2 { margin: 0; flex: 1; }
+    details.dash-section .dash-inner { padding: 0 1rem 0.85rem; }
+    details.dash-section#v_preflight_banner { border-width: 1px; }
+    .dash-tools { margin: 0 0 0.65rem; font-size: 0.75rem; color: var(--muted); }
+    .dash-tools button { font: inherit; font-size: 0.72rem; padding: 0.2rem 0.55rem; margin-right: 0.35rem; border-radius: 4px; border: 1px solid #30363d; background: #21262d; color: var(--text); cursor: pointer; }
+    .dash-tools button:hover { border-color: var(--accent); color: var(--accent); }
   </style>
 </head>
 <body>
   <h1>Anna training — live</h1>
+  <p class="dash-tools"><button type="button" id="btn_expand_all" title="Open all sections">Expand all</button><button type="button" id="btn_collapse_all" title="Close all collapsible sections">Collapse all</button><span style="margin-left:0.5rem">Housekeeping sections start collapsed.</span></p>
   <div id="v_llm_fail_alert" role="alert"></div>
-  <div id="v_preflight_banner" class="card llm-good" style="margin-bottom:0.75rem;display:none">
-    <h2>Preflight (data + LLM — same order as the daemon)</h2>
+  <details class="dash-section llm-good" id="v_preflight_banner" style="display:none" open>
+    <summary><span class="dash-chev" aria-hidden="true"></span><h2>Preflight (data + LLM — same order as the daemon)</h2></summary>
+    <div class="dash-inner">
     <p class="sub" style="font-size:0.72rem;color:var(--muted);margin:0 0 0.5rem">Red/warn here means a <strong>probe</strong> failed (feeds or Ollama), not a corrupt <code>state.json</code> file.</p>
     <p class="sub" id="v_data_pf">—</p>
     <p class="sub" id="v_llm_pf" style="margin-top:0.45rem">—</p>
     <p class="sub" id="v_pf_policy" style="margin-top:0.45rem;font-size:0.72rem;color:var(--muted)"></p>
-  </div>
-  <div class="card" style="margin-bottom:0.75rem;border-color:#484f58">
-    <h2>One loop tick vs paper rows vs attempt-file lines</h2>
+    </div>
+  </details>
+  <details class="dash-section" style="border-color:#484f58">
+    <summary><span class="dash-chev" aria-hidden="true"></span><h2>Housekeeping — tick vs paper vs attempts (semantics)</h2></summary>
+    <div class="dash-inner">
     <p class="sub" id="v_sem1"></p>
     <p class="sub" id="v_sem2"></p>
     <p class="sub" id="v_sem3"></p>
-  </div>
+    </div>
+  </details>
   <div id="err"></div>
-  <div class="card" style="margin-bottom:0.75rem;border-color:#30363d">
-    <h2>Grade-12 learning signal (gates)</h2>
+  <details class="dash-section" open>
+    <summary><span class="dash-chev" aria-hidden="true"></span><h2>Grade-12 learning signal (gates)</h2></summary>
+    <div class="dash-inner">
     <p class="ls" id="v_ls_head">—</p>
     <p class="ls-detail" id="v_ls_detail">—</p>
     <p class="sub" id="v_enroll"></p>
-  </div>
-  <div class="card" style="margin-bottom:0.75rem;border-color:var(--accent)">
-    <h2>Last tick — Anna analysis (same stack as messaging Anna)</h2>
+    </div>
+  </details>
+  <details class="dash-section" style="border-color:var(--accent)" open>
+    <summary><span class="dash-chev" aria-hidden="true"></span><h2>Last tick — Anna analysis (same stack as messaging Anna)</h2></summary>
+    <div class="dash-inner">
     <p class="sub" id="v_snap_hint">Persisted from the Karpathy harness: strategy, concepts, policy, risk, suggested action — refreshed every tick the daemon runs.</p>
     <div class="chips" id="v_steps"></div>
     <table class="data" id="v_analysis_tbl"><tbody id="v_analysis_body"></tbody></table>
-  </div>
-  <div class="card" style="margin-bottom:0.75rem">
-    <h2>Last tick — Grade-12 tool drill (classroom)</h2>
+    </div>
+  </details>
+  <details class="dash-section" open>
+    <summary><span class="dash-chev" aria-hidden="true"></span><h2>Last tick — Grade-12 tool drill (classroom)</h2></summary>
+    <div class="dash-inner">
     <p class="sub">When deck focus is <code>numeric_paper_cohort</code>, there is no four-tool drill that tick — focus is the paper cohort gate, not a tool ID.</p>
     <table class="data" id="v_sp_tbl"><tbody id="v_sp_body"></tbody></table>
-  </div>
+    </div>
+  </details>
+  <details class="dash-section" open>
+    <summary><span class="dash-chev" aria-hidden="true"></span><h2>Snapshot metrics — ticks, gates, ledger, attempts</h2></summary>
+    <div class="dash-inner">
   <div class="grid">
-    <div class="card"><h2>Supervisor ticks</h2><div class="val" id="v_iter">—</div><div class="sub" id="v_tick"></div></div>
-    <div class="card"><h2>Grade-12 gates (numeric)</h2><div class="val" id="v_gate">—</div><div class="sub" id="v_gdetail"></div></div>
-    <div class="card"><h2>Paper ledger (scored rows)</h2><div class="val" id="v_rows">—</div><div class="sub">Rows in <code>paper_trades.jsonl</code> — appended only when a paper trade is logged.</div><div class="val" id="v_pnl" style="font-size:1rem;margin-top:0.35rem">—</div></div>
-    <div class="card"><h2>Attempt log (event lines)</h2><div class="val" id="v_attempts">—</div><div class="sub" id="v_jack"></div></div>
+    <div class="card" style="border:1px solid #30363d;margin:0"><h2>Supervisor ticks</h2><div class="val" id="v_iter">—</div><div class="sub" id="v_tick"></div></div>
+    <div class="card" style="border:1px solid #30363d;margin:0"><h2>Grade-12 gates (numeric)</h2><div class="val" id="v_gate">—</div><div class="sub" id="v_gdetail"></div></div>
+    <div class="card" style="border:1px solid #30363d;margin:0"><h2>Paper ledger (scored rows)</h2><div class="val" id="v_rows">—</div><div class="sub">Rows in <code>paper_trades.jsonl</code> — appended only when a paper trade is logged.</div><div class="val" id="v_pnl" style="font-size:1rem;margin-top:0.35rem">—</div></div>
+    <div class="card" style="border:1px solid #30363d;margin:0"><h2>Attempt log (event lines)</h2><div class="val" id="v_attempts">—</div><div class="sub" id="v_jack"></div></div>
   </div>
-  <div class="card" style="margin-top:0.75rem">
-    <h2>Paper ledger — recent rows (same strip as TUI)</h2>
+    </div>
+  </details>
+  <details class="dash-section" open>
+    <summary><span class="dash-chev" aria-hidden="true"></span><h2>Paper ledger — recent rows (same strip as TUI)</h2></summary>
+    <div class="dash-inner">
     <table class="data"><thead><tr><th>UTC</th><th>Sym</th><th>Side</th><th>Res</th><th>P&amp;L</th><th>Src</th></tr></thead><tbody id="tb"></tbody></table>
-  </div>
-  <div class="card" style="margin-top:0.75rem">
-    <h2>Attempt log — recent lines</h2>
+    </div>
+  </details>
+  <details class="dash-section">
+    <summary><span class="dash-chev" aria-hidden="true"></span><h2>Attempt log — recent lines</h2></summary>
+    <div class="dash-inner">
     <table class="data"><thead><tr><th>UTC</th><th>Phase</th><th>Status</th><th>Request</th></tr></thead><tbody id="tb_att"></tbody></table>
-  </div>
-  <div class="card" style="margin-top:0.75rem">
-    <h2>Harness state (execution bridge)</h2>
+    </div>
+  </details>
+  <details class="dash-section" open>
+    <summary><span class="dash-chev" aria-hidden="true"></span><h2>Harness state (execution bridge)</h2></summary>
+    <div class="dash-inner">
     <p class="sub" id="v_harness_line">—</p>
     <details class="raw"><summary>Raw JSON (debug)</summary><pre id="v_harness">—</pre></details>
-  </div>
+    </div>
+  </details>
   <p id="meta"></p>
   <script>
   const pollMs = 4000;
@@ -812,8 +847,8 @@ TRAINING_DASHBOARD_HTML = """<!DOCTYPE html>
         document.getElementById('v_llm_pf').textContent = 'LLM: ' + llmPf.text;
         var worst = Math.max(dataPf.tier, llmPf.tier);
         var ban = document.getElementById('v_preflight_banner');
-        ban.className = 'card ' + (worst >= 2 ? 'llm-bad' : (worst >= 1 ? 'llm-warn' : 'llm-good'));
-        ban.style.display = 'block';
+        ban.className = 'dash-section ' + (worst >= 2 ? 'llm-bad' : (worst >= 1 ? 'llm-warn' : 'llm-good'));
+        ban.style.display = '';
         var alertEl = document.getElementById('v_llm_fail_alert');
         alertEl.style.borderColor = '';
         alertEl.style.background = '';
@@ -966,6 +1001,12 @@ TRAINING_DASHBOARD_HTML = """<!DOCTYPE html>
   }
   tick();
   setInterval(tick, pollMs);
+  document.getElementById('btn_expand_all').addEventListener('click', function() {
+    document.querySelectorAll('details.dash-section').forEach(function(el) { el.open = true; });
+  });
+  document.getElementById('btn_collapse_all').addEventListener('click', function() {
+    document.querySelectorAll('details.dash-section').forEach(function(el) { el.open = false; });
+  });
   </script>
 </body>
 </html>
