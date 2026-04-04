@@ -80,6 +80,8 @@ class TradeActivitySummary:
     jack_delegate_ok_no_paper: int
     execution_blocked: int
     paper_manual_recorded: int
+    uncategorized: int
+    phase_status_counts: dict[str, int]
 
     @property
     def failed_or_blocked(self) -> int:
@@ -89,24 +91,36 @@ class TradeActivitySummary:
 def summarize_trade_activity(rows: list[dict[str, Any]] | None = None) -> TradeActivitySummary:
     r = rows if rows is not None else load_trade_attempts()
     js = jf = jokp = jokn = eb = pm = 0
+    phase_status_counts: dict[str, int] = {}
+    uncat = 0
     for e in r:
         phase = str(e.get("phase") or "")
         status = str(e.get("status") or "")
+        key = f"{phase}:{status}" if phase or status else "(empty)"
+        phase_status_counts[key] = phase_status_counts.get(key, 0) + 1
         det = e.get("detail") if isinstance(e.get("detail"), dict) else {}
+        matched = False
         if phase == "jack_handoff":
             if status == "started":
                 js += 1
+                matched = True
             elif status == "fail":
                 jf += 1
+                matched = True
             elif status == "ok":
                 if det.get("paper_logged"):
                     jokp += 1
                 else:
                     jokn += 1
+                matched = True
         elif phase == "execution" and status == "blocked":
             eb += 1
+            matched = True
         elif phase == "paper_manual" and status == "recorded":
             pm += 1
+            matched = True
+        if not matched:
+            uncat += 1
     return TradeActivitySummary(
         total_events=len(r),
         jack_delegate_started=js,
@@ -115,6 +129,8 @@ def summarize_trade_activity(rows: list[dict[str, Any]] | None = None) -> TradeA
         jack_delegate_ok_no_paper=jokn,
         execution_blocked=eb,
         paper_manual_recorded=pm,
+        uncategorized=uncat,
+        phase_status_counts=phase_status_counts,
     )
 
 
@@ -139,7 +155,8 @@ def format_trade_activity_evidence_lines(
         "  • Attempt breakdown: "
         f"Jack started {act.jack_delegate_started} | Jack failed {act.jack_delegate_failed} | "
         f"Jack OK + paper row {act.jack_delegate_ok_with_paper} | Jack OK no paper {act.jack_delegate_ok_no_paper} | "
-        f"execution blocked {act.execution_blocked} | manual CLI `log-trade` recorded {act.paper_manual_recorded}",
+        f"execution blocked {act.execution_blocked} | manual CLI `log-trade` recorded {act.paper_manual_recorded} | "
+        f"uncategorized {act.uncategorized} (phase/status not in roll-up)",
         "  • If ledger >> manual-recorded: older rows predate attempt logging, imports, or rows from Jack "
         "(Jack OK logs trade_id on success; not every historical row has a backfilled attempt).",
     ]

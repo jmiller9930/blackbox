@@ -712,11 +712,14 @@ def build_anna_training_dashboard() -> dict[str, Any]:
             },
             "attempts": {
                 "total_events": act.total_events,
+                "uncategorized": act.uncategorized,
+                "phase_status_counts": act.phase_status_counts,
                 "jack_delegate_started": act.jack_delegate_started,
                 "jack_delegate_failed": act.jack_delegate_failed,
                 "jack_ok_with_paper": act.jack_delegate_ok_with_paper,
                 "jack_ok_no_paper": act.jack_delegate_ok_no_paper,
                 "paper_manual_recorded": act.paper_manual_recorded,
+                "execution_blocked": act.execution_blocked,
                 "failed_or_blocked": act.failed_or_blocked,
             },
             "paper_harness_last": harness,
@@ -1002,7 +1005,7 @@ TRAINING_DASHBOARD_HTML = """<!DOCTYPE html>
       <div class="card" style="border:1px solid #30363d;margin:0"><h2>Supervisor ticks</h2><div class="val" id="v_iter">—</div><div class="sub" id="v_tick"></div></div>
       <div class="card" style="border:1px solid #30363d;margin:0"><h2>Grade-12 gates</h2><div class="val" id="v_gate">—</div><div class="sub" id="v_gdetail"></div></div>
       <div class="card" style="border:1px solid #30363d;margin:0"><h2>Paper trades (rows)</h2><div class="val" id="v_rows">—</div><div class="sub">Scored rows in <code>paper_trades.jsonl</code></div><div class="val" id="v_pnl" style="font-size:1rem;margin-top:0.35rem">—</div></div>
-      <div class="card" style="border:1px solid #30363d;margin:0"><h2>Attempt log (events)</h2><div class="val" id="v_attempts">—</div><div class="sub" id="v_jack"></div></div>
+      <div class="card" style="border:1px solid #30363d;margin:0"><h2>Attempt log (JSONL lines)</h2><div class="val" id="v_attempts">—</div><div class="sub" id="v_attempts_hint" style="font-size:0.7rem">Total = lines in <code>paper_trade_attempts.jsonl</code>. Breakdown only counts known phase/status; rest shows as uncategorized or by_phase.</div><div class="sub" id="v_jack"></div></div>
     </div>
   </section>
   <section class="scorecard-block" aria-labelledby="trades-h" style="margin-top:0">
@@ -1333,12 +1336,18 @@ TRAINING_DASHBOARD_HTML = """<!DOCTYPE html>
       document.getElementById('v_pnl').textContent = 'W'+j.paper_cohort.wins+' L'+j.paper_cohort.losses+' · $'+Number(j.paper_cohort.total_pnl_usd||0).toFixed(2);
       document.getElementById('v_attempts').textContent = j.attempts.total_events;
       var aj = j.attempts || {};
+      var pct = aj.phase_status_counts || {};
+      var phaseKeys = Object.keys(pct).sort();
+      var phaseStr = phaseKeys.length ? phaseKeys.map(function(k) { return k + '=' + pct[k]; }).join(' · ') : '';
       document.getElementById('v_jack').textContent =
-        'Jack delegate started ' + (aj.jack_delegate_started||0) +
+        'uncategorized ' + (aj.uncategorized != null ? aj.uncategorized : '—') +
+        ' · Jack started ' + (aj.jack_delegate_started||0) +
         ' · ok+paper ' + (aj.jack_ok_with_paper||0) +
         ' · ok no paper ' + (aj.jack_ok_no_paper||0) +
         ' · manual log ' + (aj.paper_manual_recorded||0) +
-        ' · failed ' + (aj.jack_delegate_failed||0);
+        ' · exec blocked ' + (aj.execution_blocked != null ? aj.execution_blocked : 0) +
+        ' · Jack failed ' + (aj.jack_delegate_failed||0) +
+        (phaseStr ? ' · by_phase: ' + phaseStr : '');
       document.getElementById('v_harness_line').textContent = harnessLine(j.paper_harness_last);
       document.getElementById('v_harness').textContent = JSON.stringify(j.paper_harness_last || {}, null, 2);
       const tb = document.getElementById('tb');
