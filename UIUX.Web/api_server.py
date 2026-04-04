@@ -42,6 +42,31 @@ PYTH_SAFETY_FILE = ARTIFACTS / "pyth_storage_safety.json"
 ALLOWED_AGENTS = {"anna", "billy", "mia", "chris", "data"}
 ALLOWED_ACTIONS = {"start", "pause", "stop", "restart", "reset", "check-in"}
 
+# v1 training governance — product copy + API truth (Option A: provisional qualification, not durable trust).
+V1_GOVERNANCE_CONTRACT: dict[str, Any] = {
+    "contract_id": "blackbox_v1_training_semantics_2026",
+    "advisor_artifact": "docs/working/v1_governance_contract_advisor.md",
+    "pass_means": "qualified_provisional",
+    "pass_operator_line": (
+        "Gate PASS means thresholds met on the current paper ledger at evaluation time — "
+        "usable with caution; not trusted across all conditions or future time."
+    ),
+    "promotion_means": "qualified_method_not_universal_approval",
+    "post_pass_behavior": "no_automatic_execution_or_method_preference_change",
+    "degradation": "manual_operator_review_no_auto_demotion_v1",
+    "improvement_mechanism": "operator_directive_config_code",
+    "naming": (
+        "Avoid calling gate PASS a durable skill; reserve skill/capability language for a future lifecycle contract."
+    ),
+    "soft_reset_boundary": (
+        "No hard reset required to adopt semantics. Optional soft reset: pick a reporting baseline (date or iteration) "
+        "to separate pre- vs post-contract narratives, or evaluate new windows without wiping the ledger."
+    ),
+    "hard_reset_note": (
+        "flush-runtime / wipe ledger only if you intentionally want a clean evidence file — not required for wording."
+    ),
+}
+
 
 def now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
@@ -694,8 +719,23 @@ def build_anna_training_dashboard() -> dict[str, Any]:
                     }
                 )
 
+            gp_digest = bool(g12.get("pass"))
+            bar_title = (
+                "Grade-12 gate: QUALIFIED (provisional)"
+                if gp_digest
+                else "Grade-12 gate: NOT QUALIFIED"
+            )
+            bar_sub = (
+                "v1 governance: thresholds met on current cohort snapshot — not durable trust across environments "
+                "or regimes; drift is possible without auto-demotion."
+                if gp_digest
+                else "v1 governance: gate not satisfied; improvement is operator/config-driven. "
+                "No hard reset required to adopt contract semantics — see Governance panel."
+            )
             return {
-                "grade12_pass": bool(g12.get("pass")),
+                "grade12_pass": gp_digest,
+                "grade12_bar_title": bar_title,
+                "grade12_bar_subtitle": bar_sub,
                 "why_grade12_not_pass": why,
                 "last_tick_at": str(tick_ts) if tick_ts else None,
                 "last_iteration": n,
@@ -719,6 +759,7 @@ def build_anna_training_dashboard() -> dict[str, Any]:
                 "plain_english": PAPER_JUDGMENT_BLURB,
             },
             "semantics": semantics,
+            "v1_governance_contract": dict(V1_GOVERNANCE_CONTRACT),
             "data_preflight": data_preflight,
             "preflight_policy": preflight_policy,
             "llm_preflight": llm_preflight,
@@ -751,6 +792,9 @@ def build_anna_training_dashboard() -> dict[str, Any]:
             },
             "gates": {
                 "pass": bool(g12.get("pass")),
+                "pass_label_v1": (
+                    "QUALIFIED (provisional)" if g12.get("pass") else "NOT QUALIFIED"
+                ),
                 "curriculum_tools_pass": bool(g12.get("curriculum_tools_pass")),
                 "numeric_gate_pass": bool(g12.get("numeric_gate_pass")),
                 "cohort_vacuous_all_wins_zero_pnl": bool(g12.get("cohort_vacuous_all_wins_zero_pnl")),
@@ -1039,7 +1083,7 @@ TRAINING_DASHBOARD_HTML = """<!DOCTYPE html>
 </head>
 <body>
   <h1>Anna training — live</h1>
-  <p class="lead">Refreshes every 4s. Top block = Grade-12 training bar + last-tick steps (where she passed or stopped). Scorecard + ledger = rolling numbers.</p>
+  <p class="lead">Refreshes every 4s. Grade-12 gate labels follow <strong>v1 governance</strong>: PASS = <em>qualified (provisional)</em> on the current ledger — not universal trust. Scorecard + ledger = rolling numbers.</p>
   <p class="dash-tools"><button type="button" id="btn_expand_all" title="Open all sections">Expand all</button><button type="button" id="btn_collapse_all" title="Close all collapsible sections">Collapse all</button></p>
   <div id="v_llm_fail_alert" role="alert"></div>
   <div id="v_ledger_alert" role="alert" style="display:none;margin:0 0 0.85rem;padding:0.65rem 0.85rem;border-radius:8px;border:1px solid #f85149;background:#3d1114;color:#f0f3f6;font-size:0.78rem;line-height:1.4"></div>
@@ -1049,6 +1093,7 @@ TRAINING_DASHBOARD_HTML = """<!DOCTYPE html>
     <p class="sub" id="v_digest_meta" style="margin:0 0 0.5rem;font-size:0.72rem">—</p>
     <p class="sub" id="v_digest_note" style="margin:0 0 0.45rem;font-size:0.7rem;color:var(--muted);line-height:1.35">—</p>
     <p class="digest-bar" id="v_digest_grade12">—</p>
+    <p class="sub" id="v_digest_grade12_sub" style="margin:0 0 0.5rem;font-size:0.7rem;color:var(--muted);line-height:1.35">—</p>
     <div id="v_digest_why_wrap" style="display:none"></div>
     <ul class="digest-steps" id="v_digest_steps" aria-label="Last tick steps"></ul>
   </section>
@@ -1085,6 +1130,13 @@ TRAINING_DASHBOARD_HTML = """<!DOCTYPE html>
     <p class="sub" id="v_data_pf">—</p>
     <p class="sub" id="v_llm_pf" style="margin-top:0.45rem">—</p>
     <p class="sub" id="v_pf_policy" style="margin-top:0.45rem;font-size:0.72rem;color:var(--muted)"></p>
+    </div>
+  </details>
+  <details class="dash-section" style="border-color:#238636">
+    <summary><span class="dash-chev" aria-hidden="true"></span><h2>Governance — v1 PASS semantics (contract)</h2></summary>
+    <div class="dash-inner">
+    <p class="sub" style="font-size:0.72rem;color:var(--muted);margin:0 0 0.5rem">Machine-readable copy: <code>/api/v1/anna/training-dashboard</code> → <code>v1_governance_contract</code>.</p>
+    <pre id="v_v1_gov" style="font-size:0.7rem;white-space:pre-wrap;word-break:break-word;margin:0;padding:0.65rem;background:#0d1117;border-radius:6px;border:1px solid #30363d;color:#c9d1d9">—</pre>
     </div>
   </details>
   <details class="dash-section" style="border-color:#484f58">
@@ -1176,6 +1228,12 @@ TRAINING_DASHBOARD_HTML = """<!DOCTYPE html>
       document.getElementById('v_sem1').textContent = sem.loop_tick_means || '—';
       document.getElementById('v_sem2').textContent = sem.attempt_log_vs_tick || '—';
       document.getElementById('v_sem3').textContent = sem.paper_ledger_vs_tick || '—';
+      (function fillV1Governance() {
+        var pre = document.getElementById('v_v1_gov');
+        if (!pre) return;
+        var c = j.v1_governance_contract;
+        pre.textContent = (c && typeof c === 'object') ? JSON.stringify(c, null, 2) : '—';
+      })();
       (function preflightBanner() {
         var d = j.data_preflight || {};
         var l = j.llm_preflight || {};
@@ -1247,7 +1305,9 @@ TRAINING_DASHBOARD_HTML = """<!DOCTYPE html>
         if (noteEl) noteEl.textContent = d.digest_note || '';
         var pass = d.grade12_pass === true;
         g.className = 'digest-bar ' + (pass ? 'pass' : 'fail');
-        g.textContent = pass ? 'Grade-12 training bar: PASS' : 'Grade-12 training bar: NOT PASS';
+        g.textContent = d.grade12_bar_title || (pass ? 'Grade-12 gate: QUALIFIED (provisional)' : 'Grade-12 gate: NOT QUALIFIED');
+        var gsub = document.getElementById('v_digest_grade12_sub');
+        if (gsub) gsub.textContent = d.grade12_bar_subtitle || '';
         while (whyWrap.firstChild) whyWrap.removeChild(whyWrap.firstChild);
         whyWrap.style.display = 'none';
         var whys = d.why_grade12_not_pass || [];
@@ -1258,7 +1318,7 @@ TRAINING_DASHBOARD_HTML = """<!DOCTYPE html>
           hw.style.color = 'var(--muted)';
           hw.style.margin = '0 0 0.35rem';
           var st = document.createElement('strong');
-          st.textContent = 'Why NOT PASS';
+          st.textContent = 'Why NOT QUALIFIED';
           hw.appendChild(st);
           hw.appendChild(document.createTextNode(' (aggregate — tools + paper cohort, not one tick):'));
           whyWrap.appendChild(hw);
@@ -1404,7 +1464,7 @@ TRAINING_DASHBOARD_HTML = """<!DOCTYPE html>
       document.getElementById('v_tick').textContent = j.loop.karpathy_loop_last_tick_utc ? 'last tick ' + j.loop.karpathy_loop_last_tick_utc : '';
       const gp = j.gates.pass;
       const ge = document.getElementById('v_gate');
-      ge.textContent = gp ? 'PASS' : 'NOT PASS';
+      ge.textContent = (j.gates.pass_label_v1 != null && j.gates.pass_label_v1 !== '') ? j.gates.pass_label_v1 : (gp ? 'PASS' : 'NOT PASS');
       ge.className = 'val ' + (gp ? 'ok' : 'bad');
       document.getElementById('v_gdetail').textContent = 'decisive ' + (j.gates.decisive_trades||0) + '/' + (j.gates.min_decisive_trades||'—') +
         (j.gates.win_rate != null ? ' · WR ' + (100*j.gates.win_rate).toFixed(0) + '%' : '');

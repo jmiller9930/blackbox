@@ -24,12 +24,17 @@ from market_data.backtest_simulation import (
     run_stored_simulation,
     run_stored_simulation_from_read_contract,
 )
+from market_data.canonical_time import floor_utc_to_5m_open, last_closed_candle_open_utc
+from market_data.market_event_id import make_market_event_id, parse_market_event_id
 from market_data.store import (
     connect_market_db,
     ensure_market_schema,
+    fetch_bar_by_market_event_id,
     insert_tick,
+    latest_stored_bars,
     latest_tick,
     ticks_chronological,
+    upsert_market_bar_5m,
 )
 from market_data.strategy_eval import (
     EVALUATION_OUTCOMES,
@@ -77,6 +82,13 @@ __all__ = [
     "connect_market_db",
     "connect_market_db_readonly",
     "ensure_market_schema",
+    "fetch_bar_by_market_event_id",
+    "floor_utc_to_5m_open",
+    "last_closed_candle_open_utc",
+    "latest_stored_bars",
+    "make_market_event_id",
+    "parse_market_event_id",
+    "upsert_market_bar_5m",
     "evaluate_gates",
     "evaluate_strategy",
     "evaluate_strategy_from_read_contract",

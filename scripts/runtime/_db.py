@@ -15,6 +15,7 @@ def ensure_schema(conn: sqlite3.Connection, repo_root: Path) -> None:
         "schema_phase1_5.sql",
         "schema_phase1_6.sql",
         "schema_phase4_anna_context.sql",
+        "schema_phase4_anna_lessons.sql",
         "schema_phase4_learning_core.sql",
     ):
         p = repo_root / "data" / "sqlite" / name

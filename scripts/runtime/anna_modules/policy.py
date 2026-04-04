@@ -8,6 +8,9 @@ from typing import Any
 
 from anna_modules.input_adapter import guardrail_mode_from_policy
 
+# Reserved values for lesson `context_tags` JSON object key `behavior_effect` (validated/promoted only).
+LESSON_BEHAVIOR_TIGHTEN_SUGGESTED = "tighten_suggested_action"
+
 
 def build_suggested_action(
     *,
@@ -44,6 +47,37 @@ def build_suggested_action(
         )
 
     return {"intent": intent, "confidence": conf, "rationale": rationale}
+
+
+def apply_lesson_memory_to_suggested_action(
+    suggested: dict[str, Any],
+    lesson_injected: list[dict[str, Any]] | None,
+    *,
+    allow_behavior_effect: bool = True,
+) -> tuple[dict[str, Any], list[str]]:
+    """
+    Deterministic merge: validated lesson memory can change paper-vs-watch stance (not LLM wording).
+
+    When an injected lesson declares ``behavior_effect=tighten_suggested_action`` and baseline intent is
+    ``PAPER_TRADE_READY``, intent becomes ``WATCH`` so downstream policy/proposal see a different outcome.
+    """
+    if not allow_behavior_effect or not lesson_injected:
+        return suggested, []
+    out = dict(suggested)
+    applied: list[str] = []
+    for inj in lesson_injected:
+        eff = str(inj.get("behavior_effect") or "").strip()
+        if eff == LESSON_BEHAVIOR_TIGHTEN_SUGGESTED and out.get("intent") == "PAPER_TRADE_READY":
+            out["intent"] = "WATCH"
+            out["confidence"] = "medium"
+            base = (out.get("rationale") or "").strip()
+            suffix = (
+                "Validated lesson memory: prefer observation over paper rehearsal for this setup."
+            )
+            out["rationale"] = f"{base} {suffix}".strip() if base else suffix
+            applied.append(eff)
+            break
+    return out, applied
 
 
 def compute_alignment(guardrail_mode: str, intent: str, input_text: str) -> str:

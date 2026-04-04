@@ -1,0 +1,1027 @@
+{
+  "meta": {
+    "env": {
+      "ANNA_USE_LLM": "0",
+      "ANNA_LESSON_MEMORY_ENABLED": "0",
+      "ANNA_LESSON_MEMORY_CONTROL_PLANE": "0"
+    },
+    "purpose": "Tier 1 behavioral validation \u2014 script adherence (Training Architect directive)",
+    "host": "local workspace pytest-capable host"
+  },
+  "S1_correct_setup": {
+    "kind": "anna_analysis_v1",
+    "schema_version": 1,
+    "generated_at": "<deterministic_placeholder>",
+    "input_text": "SOL 5m \u2014 structure check for behavioral proof",
+    "interpretation": {
+      "headline": "Need more to go on",
+      "summary": "I can\u2019t ground a reliable answer from rules or model output for that yet \u2014 I\u2019m not going to fill in with generic trading filler. What symbol, timeframe, and setup are we discussing? Or narrow the question (e.g. concept vs a specific live trade).",
+      "signals": [
+        "concept:timeframe",
+        "pipeline:explicit_limitation"
+      ],
+      "assumptions": [
+        "Rule-based v1 analyst \u2014 not predictive; does not call markets or execute.",
+        "Concept IDs matched against trading concept registry (read-only).",
+        "Internal guardrail mode for policy: NORMAL."
+      ]
+    },
+    "market_context": {
+      "price": null,
+      "spread": null,
+      "notes": [
+        "Market snapshot not requested; price/spread may be null."
+      ]
+    },
+    "phase5_market_data": {
+      "source": "phase5_market_data_db",
+      "tick": {
+        "symbol": "SOL-PERP",
+        "gate_state": "ok",
+        "price": 100.0
+      },
+      "gate_state": "ok"
+    },
+    "regime": "nominal",
+    "signal_snapshot": null,
+    "risk_assessment": {
+      "level": "low",
+      "factors": [
+        "No strong risk amplifiers detected from text and available context."
+      ]
+    },
+    "policy_alignment": {
+      "guardrail_mode": "NORMAL",
+      "alignment": "aligned",
+      "notes": [
+        "Policy reasoning (excerpt): behavioral_proof"
+      ]
+    },
+    "suggested_action": {
+      "intent": "PAPER_TRADE_READY",
+      "confidence": "low",
+      "rationale": "Policy mode NORMAL and no strong caution signals in text/context; paper path only \u2014 still no live execution."
+    },
+    "concepts_used": [
+      "timeframe"
+    ],
+    "concept_support": {
+      "concept_ids": [
+        "timeframe"
+      ],
+      "concept_summaries": [
+        {
+          "concept_id": "timeframe",
+          "name": "Timeframe",
+          "status": "validated",
+          "why_it_matters": [
+            "Same market can look trending on one timeframe and choppy on another."
+          ]
+        }
+      ]
+    },
+    "strategy_awareness": null,
+    "caution_flags": [
+      "anna_analysis_v1 is advisory only; no execution.",
+      "Registry-backed concept IDs are informational; status does not authorize execution."
+    ],
+    "notes": [],
+    "human_intent": {
+      "intent": "OBSERVATION",
+      "topic": "general",
+      "requires_reasoning": true,
+      "bypass": null
+    },
+    "strategy_playbook_applied": false,
+    "pipeline": {
+      "answer_source": "template_fallback",
+      "steps": [
+        "receive",
+        "classify_intent",
+        "context_ok",
+        "template_fallback"
+      ],
+      "layer_meta": {
+        "memory_hit": false,
+        "llm_called": false,
+        "llm_error": null,
+        "playbook_hit": false,
+        "rule_facts_structured": {
+          "math_engine": {
+            "version": "3",
+            "numeric_question_likely": false,
+            "paper_cohort": {
+              "paper_trade_count": 1,
+              "decisive_trades": 1,
+              "wins": 1,
+              "losses": 0,
+              "breakeven": 0,
+              "abstain": 0,
+              "total_pnl_usd": 5.0,
+              "win_rate": 1.0,
+              "wilson_95": {
+                "low": 0.206543,
+                "high": 1.0
+              },
+              "sample_adequacy": "small"
+            },
+            "paper_quant": {
+              "version": "1",
+              "trade_count": 1,
+              "mean_pnl_usd": 5.0,
+              "std_pnl_usd": null,
+              "total_pnl_usd": 5.0,
+              "final_equity_usd": 5.0,
+              "max_drawdown_usd": 0.0,
+              "sharpe_proxy_per_trade": null,
+              "sortino_proxy_per_trade": null,
+              "calmar_proxy": null,
+              "historical_var_95_usd": 0.0,
+              "historical_cvar_95_usd": 0.0,
+              "disclaimer": "Per-trade Sharpe/Sortino/VaR proxies on paper USD; not annualized portfolio Sharpe or regulatory VaR."
+            }
+          },
+          "cumulative_carryforward": true,
+          "strategy_regime_catalog_facts": true
+        }
+      },
+      "rule_facts": {
+        "math_engine": {
+          "version": "3",
+          "numeric_question_likely": false,
+          "paper_cohort": {
+            "paper_trade_count": 1,
+            "decisive_trades": 1,
+            "wins": 1,
+            "losses": 0,
+            "breakeven": 0,
+            "abstain": 0,
+            "total_pnl_usd": 5.0,
+            "win_rate": 1.0,
+            "wilson_95": {
+              "low": 0.206543,
+              "high": 1.0
+            },
+            "sample_adequacy": "small"
+          },
+          "paper_quant": {
+            "version": "1",
+            "trade_count": 1,
+            "mean_pnl_usd": 5.0,
+            "std_pnl_usd": null,
+            "total_pnl_usd": 5.0,
+            "final_equity_usd": 5.0,
+            "max_drawdown_usd": 0.0,
+            "sharpe_proxy_per_trade": null,
+            "sortino_proxy_per_trade": null,
+            "calmar_proxy": null,
+            "historical_var_95_usd": 0.0,
+            "historical_cvar_95_usd": 0.0,
+            "disclaimer": "Per-trade Sharpe/Sortino/VaR proxies on paper USD; not annualized portfolio Sharpe or regulatory VaR."
+          }
+        },
+        "cumulative_carryforward": true,
+        "strategy_regime_catalog_facts": true
+      },
+      "lesson_memory": {
+        "enabled": false,
+        "injected": [],
+        "facts": [],
+        "situation": null
+      },
+      "memory_control_plane": {
+        "signals": {
+          "semantic_ambiguity": false,
+          "low_confidence_derived": false,
+          "conflicting_signals": false,
+          "elevated_risk": false,
+          "bypass_lesson_memory": false,
+          "clear_routine": true,
+          "playbook_hit": false
+        },
+        "engagement_mode": "off",
+        "retrieval": {
+          "top_k": 3,
+          "min_score": 3,
+          "bypass": true,
+          "apply_behavior_effect": false,
+          "scope": "validated_promoted_similarity"
+        },
+        "lesson_memory_env_on": false,
+        "control_plane_enabled": false
+      }
+    },
+    "memory_control_plane": {
+      "signals": {
+        "semantic_ambiguity": false,
+        "low_confidence_derived": false,
+        "conflicting_signals": false,
+        "elevated_risk": false,
+        "bypass_lesson_memory": false,
+        "clear_routine": true,
+        "playbook_hit": false
+      },
+      "engagement_mode": "off",
+      "retrieval": {
+        "top_k": 3,
+        "min_score": 3,
+        "bypass": true,
+        "apply_behavior_effect": false,
+        "scope": "validated_promoted_similarity"
+      },
+      "lesson_memory_env_on": false,
+      "control_plane_enabled": false
+    },
+    "lesson_memory": {
+      "enabled": false,
+      "injected": [],
+      "facts": [],
+      "situation": null
+    },
+    "math_engine": {
+      "version": "3",
+      "numeric_question_likely": false,
+      "paper_cohort": {
+        "paper_trade_count": 1,
+        "decisive_trades": 1,
+        "wins": 1,
+        "losses": 0,
+        "breakeven": 0,
+        "abstain": 0,
+        "total_pnl_usd": 5.0,
+        "win_rate": 1.0,
+        "wilson_95": {
+          "low": 0.206543,
+          "high": 1.0
+        },
+        "sample_adequacy": "small"
+      },
+      "paper_quant": {
+        "version": "1",
+        "trade_count": 1,
+        "mean_pnl_usd": 5.0,
+        "std_pnl_usd": null,
+        "total_pnl_usd": 5.0,
+        "final_equity_usd": 5.0,
+        "max_drawdown_usd": 0.0,
+        "sharpe_proxy_per_trade": null,
+        "sortino_proxy_per_trade": null,
+        "calmar_proxy": null,
+        "historical_var_95_usd": 0.0,
+        "historical_cvar_95_usd": 0.0,
+        "disclaimer": "Per-trade Sharpe/Sortino/VaR proxies on paper USD; not annualized portfolio Sharpe or regulatory VaR."
+      }
+    },
+    "cumulative_learning": {
+      "curriculum_id": "grade_12_paper_only",
+      "stage": "secondary",
+      "carryforward_bullet_count": 0,
+      "cumulative_log_entries": 0
+    },
+    "context_assessment": {
+      "is_complete": true,
+      "missing_fields": []
+    }
+  },
+  "S2_invalid_incomplete": {
+    "kind": "anna_analysis_v1",
+    "schema_version": 1,
+    "generated_at": "<deterministic_placeholder>",
+    "input_text": "should we take it",
+    "interpretation": {
+      "headline": "Need a bit more context",
+      "summary": "Are you asking generally, or about a live trade right now? If live, what symbol and timeframe are we talking about?",
+      "signals": [
+        "pipeline:clarification_required"
+      ],
+      "assumptions": []
+    },
+    "market_context": {
+      "price": null,
+      "spread": null,
+      "notes": []
+    },
+    "risk_assessment": {
+      "level": "low",
+      "factors": []
+    },
+    "policy_alignment": {},
+    "suggested_action": {
+      "intent": "",
+      "rationale": ""
+    },
+    "concepts_used": [],
+    "concept_support": {},
+    "strategy_awareness": null,
+    "caution_flags": [],
+    "notes": [],
+    "human_intent": {
+      "intent": "QUESTION",
+      "topic": "trading_general",
+      "requires_reasoning": true,
+      "bypass": null
+    },
+    "strategy_playbook_applied": false,
+    "pipeline": {
+      "answer_source": "clarification_requested",
+      "steps": [
+        "receive",
+        "classify_intent",
+        "context_incomplete_stop"
+      ],
+      "layer_meta": {
+        "missing_fields": [
+          "question_mode",
+          "symbol",
+          "timeframe"
+        ]
+      }
+    },
+    "context_assessment": {
+      "is_complete": false,
+      "missing_fields": [
+        "question_mode",
+        "symbol",
+        "timeframe"
+      ],
+      "clarifying_question": "Are you asking generally, or about a live trade right now? If live, what symbol and timeframe are we talking about?",
+      "requires_clarification": true
+    }
+  },
+  "S3_ambiguous_live": {
+    "kind": "anna_analysis_v1",
+    "schema_version": 1,
+    "generated_at": "<deterministic_placeholder>",
+    "input_text": "should we take it live right now on this trade",
+    "interpretation": {
+      "headline": "Need a bit more context",
+      "summary": "Are you asking generally, or about a live trade right now? If live, what symbol and timeframe are we talking about?",
+      "signals": [
+        "pipeline:clarification_required"
+      ],
+      "assumptions": []
+    },
+    "market_context": {
+      "price": null,
+      "spread": null,
+      "notes": []
+    },
+    "risk_assessment": {
+      "level": "low",
+      "factors": []
+    },
+    "policy_alignment": {},
+    "suggested_action": {
+      "intent": "",
+      "rationale": ""
+    },
+    "concepts_used": [],
+    "concept_support": {},
+    "strategy_awareness": null,
+    "caution_flags": [],
+    "notes": [],
+    "human_intent": {
+      "intent": "QUESTION",
+      "topic": "trading_general",
+      "requires_reasoning": true,
+      "bypass": null
+    },
+    "strategy_playbook_applied": false,
+    "pipeline": {
+      "answer_source": "clarification_requested",
+      "steps": [
+        "receive",
+        "classify_intent",
+        "context_incomplete_stop"
+      ],
+      "layer_meta": {
+        "missing_fields": [
+          "question_mode",
+          "symbol",
+          "timeframe"
+        ]
+      }
+    },
+    "context_assessment": {
+      "is_complete": false,
+      "missing_fields": [
+        "question_mode",
+        "symbol",
+        "timeframe"
+      ],
+      "clarifying_question": "Are you asking generally, or about a live trade right now? If live, what symbol and timeframe are we talking about?",
+      "requires_clarification": true
+    }
+  },
+  "S4_frozen_conservative": {
+    "kind": "anna_analysis_v1",
+    "schema_version": 1,
+    "generated_at": "<deterministic_placeholder>",
+    "input_text": "SOL 5m analysis",
+    "interpretation": {
+      "headline": "Need more to go on",
+      "summary": "I can\u2019t ground a reliable answer from rules or model output for that yet \u2014 I\u2019m not going to fill in with generic trading filler. What symbol, timeframe, and setup are we discussing? Or narrow the question (e.g. concept vs a specific live trade).",
+      "signals": [
+        "concept:timeframe",
+        "pipeline:explicit_limitation"
+      ],
+      "assumptions": [
+        "Rule-based v1 analyst \u2014 not predictive; does not call markets or execute.",
+        "Concept IDs matched against trading concept registry (read-only).",
+        "Internal guardrail mode for policy: FROZEN."
+      ]
+    },
+    "market_context": {
+      "price": null,
+      "spread": null,
+      "notes": [
+        "Market snapshot not requested; price/spread may be null."
+      ]
+    },
+    "phase5_market_data": {
+      "source": "phase5_market_data_db",
+      "tick": {
+        "symbol": "SOL-PERP",
+        "gate_state": "ok",
+        "price": 100.0
+      },
+      "gate_state": "ok"
+    },
+    "regime": "nominal",
+    "signal_snapshot": null,
+    "risk_assessment": {
+      "level": "high",
+      "factors": [
+        "Guardrail policy mode is FROZEN."
+      ]
+    },
+    "policy_alignment": {
+      "guardrail_mode": "FROZEN",
+      "alignment": "aligned",
+      "notes": [
+        "Policy reasoning (excerpt): behavioral_proof"
+      ]
+    },
+    "suggested_action": {
+      "intent": "HOLD",
+      "confidence": "low",
+      "rationale": "Policy mode FROZEN: stand down from new risk; paper rehearsal only if explicitly gated elsewhere."
+    },
+    "concepts_used": [
+      "timeframe"
+    ],
+    "concept_support": {
+      "concept_ids": [
+        "timeframe"
+      ],
+      "concept_summaries": [
+        {
+          "concept_id": "timeframe",
+          "name": "Timeframe",
+          "status": "validated",
+          "why_it_matters": [
+            "Same market can look trending on one timeframe and choppy on another."
+          ]
+        }
+      ]
+    },
+    "strategy_awareness": null,
+    "caution_flags": [
+      "anna_analysis_v1 is advisory only; no execution.",
+      "Registry-backed concept IDs are informational; status does not authorize execution."
+    ],
+    "notes": [],
+    "human_intent": {
+      "intent": "OBSERVATION",
+      "topic": "general",
+      "requires_reasoning": true,
+      "bypass": null
+    },
+    "strategy_playbook_applied": false,
+    "pipeline": {
+      "answer_source": "template_fallback",
+      "steps": [
+        "receive",
+        "classify_intent",
+        "context_ok",
+        "template_fallback"
+      ],
+      "layer_meta": {
+        "memory_hit": false,
+        "llm_called": false,
+        "llm_error": null,
+        "playbook_hit": false,
+        "rule_facts_structured": {
+          "math_engine": {
+            "version": "3",
+            "numeric_question_likely": false,
+            "paper_cohort": {
+              "paper_trade_count": 1,
+              "decisive_trades": 1,
+              "wins": 1,
+              "losses": 0,
+              "breakeven": 0,
+              "abstain": 0,
+              "total_pnl_usd": 5.0,
+              "win_rate": 1.0,
+              "wilson_95": {
+                "low": 0.206543,
+                "high": 1.0
+              },
+              "sample_adequacy": "small"
+            },
+            "paper_quant": {
+              "version": "1",
+              "trade_count": 1,
+              "mean_pnl_usd": 5.0,
+              "std_pnl_usd": null,
+              "total_pnl_usd": 5.0,
+              "final_equity_usd": 5.0,
+              "max_drawdown_usd": 0.0,
+              "sharpe_proxy_per_trade": null,
+              "sortino_proxy_per_trade": null,
+              "calmar_proxy": null,
+              "historical_var_95_usd": 0.0,
+              "historical_cvar_95_usd": 0.0,
+              "disclaimer": "Per-trade Sharpe/Sortino/VaR proxies on paper USD; not annualized portfolio Sharpe or regulatory VaR."
+            }
+          },
+          "cumulative_carryforward": true,
+          "strategy_regime_catalog_facts": true
+        }
+      },
+      "rule_facts": {
+        "math_engine": {
+          "version": "3",
+          "numeric_question_likely": false,
+          "paper_cohort": {
+            "paper_trade_count": 1,
+            "decisive_trades": 1,
+            "wins": 1,
+            "losses": 0,
+            "breakeven": 0,
+            "abstain": 0,
+            "total_pnl_usd": 5.0,
+            "win_rate": 1.0,
+            "wilson_95": {
+              "low": 0.206543,
+              "high": 1.0
+            },
+            "sample_adequacy": "small"
+          },
+          "paper_quant": {
+            "version": "1",
+            "trade_count": 1,
+            "mean_pnl_usd": 5.0,
+            "std_pnl_usd": null,
+            "total_pnl_usd": 5.0,
+            "final_equity_usd": 5.0,
+            "max_drawdown_usd": 0.0,
+            "sharpe_proxy_per_trade": null,
+            "sortino_proxy_per_trade": null,
+            "calmar_proxy": null,
+            "historical_var_95_usd": 0.0,
+            "historical_cvar_95_usd": 0.0,
+            "disclaimer": "Per-trade Sharpe/Sortino/VaR proxies on paper USD; not annualized portfolio Sharpe or regulatory VaR."
+          }
+        },
+        "cumulative_carryforward": true,
+        "strategy_regime_catalog_facts": true
+      },
+      "lesson_memory": {
+        "enabled": false,
+        "injected": [],
+        "facts": [],
+        "situation": null
+      },
+      "memory_control_plane": {
+        "signals": {
+          "semantic_ambiguity": false,
+          "low_confidence_derived": false,
+          "conflicting_signals": true,
+          "elevated_risk": true,
+          "bypass_lesson_memory": true,
+          "clear_routine": false,
+          "playbook_hit": false
+        },
+        "engagement_mode": "off",
+        "retrieval": {
+          "top_k": 3,
+          "min_score": 3,
+          "bypass": true,
+          "apply_behavior_effect": false,
+          "scope": "validated_promoted_similarity"
+        },
+        "lesson_memory_env_on": false,
+        "control_plane_enabled": false
+      }
+    },
+    "memory_control_plane": {
+      "signals": {
+        "semantic_ambiguity": false,
+        "low_confidence_derived": false,
+        "conflicting_signals": true,
+        "elevated_risk": true,
+        "bypass_lesson_memory": true,
+        "clear_routine": false,
+        "playbook_hit": false
+      },
+      "engagement_mode": "off",
+      "retrieval": {
+        "top_k": 3,
+        "min_score": 3,
+        "bypass": true,
+        "apply_behavior_effect": false,
+        "scope": "validated_promoted_similarity"
+      },
+      "lesson_memory_env_on": false,
+      "control_plane_enabled": false
+    },
+    "lesson_memory": {
+      "enabled": false,
+      "injected": [],
+      "facts": [],
+      "situation": null
+    },
+    "math_engine": {
+      "version": "3",
+      "numeric_question_likely": false,
+      "paper_cohort": {
+        "paper_trade_count": 1,
+        "decisive_trades": 1,
+        "wins": 1,
+        "losses": 0,
+        "breakeven": 0,
+        "abstain": 0,
+        "total_pnl_usd": 5.0,
+        "win_rate": 1.0,
+        "wilson_95": {
+          "low": 0.206543,
+          "high": 1.0
+        },
+        "sample_adequacy": "small"
+      },
+      "paper_quant": {
+        "version": "1",
+        "trade_count": 1,
+        "mean_pnl_usd": 5.0,
+        "std_pnl_usd": null,
+        "total_pnl_usd": 5.0,
+        "final_equity_usd": 5.0,
+        "max_drawdown_usd": 0.0,
+        "sharpe_proxy_per_trade": null,
+        "sortino_proxy_per_trade": null,
+        "calmar_proxy": null,
+        "historical_var_95_usd": 0.0,
+        "historical_cvar_95_usd": 0.0,
+        "disclaimer": "Per-trade Sharpe/Sortino/VaR proxies on paper USD; not annualized portfolio Sharpe or regulatory VaR."
+      }
+    },
+    "cumulative_learning": {
+      "curriculum_id": "grade_12_paper_only",
+      "stage": "secondary",
+      "carryforward_bullet_count": 0,
+      "cumulative_log_entries": 0
+    },
+    "context_assessment": {
+      "is_complete": true,
+      "missing_fields": []
+    }
+  },
+  "S5_neg_language_conservative": {
+    "kind": "anna_analysis_v1",
+    "schema_version": 1,
+    "generated_at": "<deterministic_placeholder>",
+    "input_text": "SOL 5m thin liquidity panic unsafe",
+    "interpretation": {
+      "headline": "Need more to go on",
+      "summary": "I can\u2019t ground a reliable answer from rules or model output for that yet \u2014 I\u2019m not going to fill in with generic trading filler. What symbol, timeframe, and setup are we discussing? Or narrow the question (e.g. concept vs a specific live trade).",
+      "signals": [
+        "concept:liquidity",
+        "concept:timeframe",
+        "pipeline:explicit_limitation"
+      ],
+      "assumptions": [
+        "Rule-based v1 analyst \u2014 not predictive; does not call markets or execute.",
+        "Concept IDs matched against trading concept registry (read-only).",
+        "Internal guardrail mode for policy: NORMAL."
+      ]
+    },
+    "market_context": {
+      "price": null,
+      "spread": null,
+      "notes": [
+        "Market snapshot not requested; price/spread may be null."
+      ]
+    },
+    "phase5_market_data": {
+      "source": "phase5_market_data_db",
+      "tick": {
+        "symbol": "SOL-PERP",
+        "gate_state": "ok",
+        "price": 100.0
+      },
+      "gate_state": "ok"
+    },
+    "regime": "nominal",
+    "signal_snapshot": null,
+    "risk_assessment": {
+      "level": "medium",
+      "factors": [
+        "Language suggests stress or adverse conditions."
+      ]
+    },
+    "policy_alignment": {
+      "guardrail_mode": "NORMAL",
+      "alignment": "aligned",
+      "notes": [
+        "Policy reasoning (excerpt): behavioral_proof"
+      ]
+    },
+    "suggested_action": {
+      "intent": "WATCH",
+      "confidence": "medium",
+      "rationale": "NORMAL policy but language or signals warrant monitoring before any paper rehearsal."
+    },
+    "concepts_used": [
+      "liquidity",
+      "timeframe"
+    ],
+    "concept_support": {
+      "concept_ids": [
+        "liquidity",
+        "timeframe"
+      ],
+      "concept_summaries": [
+        {
+          "concept_id": "liquidity",
+          "name": "Liquidity",
+          "status": "validated",
+          "why_it_matters": [
+            "Core to feasibility of strategy and risk of slippage."
+          ]
+        },
+        {
+          "concept_id": "timeframe",
+          "name": "Timeframe",
+          "status": "validated",
+          "why_it_matters": [
+            "Same market can look trending on one timeframe and choppy on another."
+          ]
+        }
+      ]
+    },
+    "strategy_awareness": null,
+    "caution_flags": [
+      "anna_analysis_v1 is advisory only; no execution.",
+      "Registry-backed concept IDs are informational; status does not authorize execution."
+    ],
+    "notes": [],
+    "human_intent": {
+      "intent": "OBSERVATION",
+      "topic": "market_observation",
+      "requires_reasoning": true,
+      "bypass": null
+    },
+    "strategy_playbook_applied": false,
+    "pipeline": {
+      "answer_source": "template_fallback",
+      "steps": [
+        "receive",
+        "classify_intent",
+        "context_ok",
+        "template_fallback"
+      ],
+      "layer_meta": {
+        "memory_hit": false,
+        "llm_called": false,
+        "llm_error": null,
+        "playbook_hit": false,
+        "rule_facts_structured": {
+          "math_engine": {
+            "version": "3",
+            "numeric_question_likely": false,
+            "paper_cohort": {
+              "paper_trade_count": 1,
+              "decisive_trades": 1,
+              "wins": 1,
+              "losses": 0,
+              "breakeven": 0,
+              "abstain": 0,
+              "total_pnl_usd": 5.0,
+              "win_rate": 1.0,
+              "wilson_95": {
+                "low": 0.206543,
+                "high": 1.0
+              },
+              "sample_adequacy": "small"
+            },
+            "paper_quant": {
+              "version": "1",
+              "trade_count": 1,
+              "mean_pnl_usd": 5.0,
+              "std_pnl_usd": null,
+              "total_pnl_usd": 5.0,
+              "final_equity_usd": 5.0,
+              "max_drawdown_usd": 0.0,
+              "sharpe_proxy_per_trade": null,
+              "sortino_proxy_per_trade": null,
+              "calmar_proxy": null,
+              "historical_var_95_usd": 0.0,
+              "historical_cvar_95_usd": 0.0,
+              "disclaimer": "Per-trade Sharpe/Sortino/VaR proxies on paper USD; not annualized portfolio Sharpe or regulatory VaR."
+            }
+          },
+          "cumulative_carryforward": true,
+          "strategy_regime_catalog_facts": true
+        }
+      },
+      "rule_facts": {
+        "math_engine": {
+          "version": "3",
+          "numeric_question_likely": false,
+          "paper_cohort": {
+            "paper_trade_count": 1,
+            "decisive_trades": 1,
+            "wins": 1,
+            "losses": 0,
+            "breakeven": 0,
+            "abstain": 0,
+            "total_pnl_usd": 5.0,
+            "win_rate": 1.0,
+            "wilson_95": {
+              "low": 0.206543,
+              "high": 1.0
+            },
+            "sample_adequacy": "small"
+          },
+          "paper_quant": {
+            "version": "1",
+            "trade_count": 1,
+            "mean_pnl_usd": 5.0,
+            "std_pnl_usd": null,
+            "total_pnl_usd": 5.0,
+            "final_equity_usd": 5.0,
+            "max_drawdown_usd": 0.0,
+            "sharpe_proxy_per_trade": null,
+            "sortino_proxy_per_trade": null,
+            "calmar_proxy": null,
+            "historical_var_95_usd": 0.0,
+            "historical_cvar_95_usd": 0.0,
+            "disclaimer": "Per-trade Sharpe/Sortino/VaR proxies on paper USD; not annualized portfolio Sharpe or regulatory VaR."
+          }
+        },
+        "cumulative_carryforward": true,
+        "strategy_regime_catalog_facts": true
+      },
+      "lesson_memory": {
+        "enabled": false,
+        "injected": [],
+        "facts": [],
+        "situation": null
+      },
+      "memory_control_plane": {
+        "signals": {
+          "semantic_ambiguity": false,
+          "low_confidence_derived": true,
+          "conflicting_signals": true,
+          "elevated_risk": true,
+          "bypass_lesson_memory": false,
+          "clear_routine": false,
+          "playbook_hit": false
+        },
+        "engagement_mode": "off",
+        "retrieval": {
+          "top_k": 3,
+          "min_score": 3,
+          "bypass": true,
+          "apply_behavior_effect": false,
+          "scope": "validated_promoted_similarity"
+        },
+        "lesson_memory_env_on": false,
+        "control_plane_enabled": false
+      }
+    },
+    "memory_control_plane": {
+      "signals": {
+        "semantic_ambiguity": false,
+        "low_confidence_derived": true,
+        "conflicting_signals": true,
+        "elevated_risk": true,
+        "bypass_lesson_memory": false,
+        "clear_routine": false,
+        "playbook_hit": false
+      },
+      "engagement_mode": "off",
+      "retrieval": {
+        "top_k": 3,
+        "min_score": 3,
+        "bypass": true,
+        "apply_behavior_effect": false,
+        "scope": "validated_promoted_similarity"
+      },
+      "lesson_memory_env_on": false,
+      "control_plane_enabled": false
+    },
+    "lesson_memory": {
+      "enabled": false,
+      "injected": [],
+      "facts": [],
+      "situation": null
+    },
+    "math_engine": {
+      "version": "3",
+      "numeric_question_likely": false,
+      "paper_cohort": {
+        "paper_trade_count": 1,
+        "decisive_trades": 1,
+        "wins": 1,
+        "losses": 0,
+        "breakeven": 0,
+        "abstain": 0,
+        "total_pnl_usd": 5.0,
+        "win_rate": 1.0,
+        "wilson_95": {
+          "low": 0.206543,
+          "high": 1.0
+        },
+        "sample_adequacy": "small"
+      },
+      "paper_quant": {
+        "version": "1",
+        "trade_count": 1,
+        "mean_pnl_usd": 5.0,
+        "std_pnl_usd": null,
+        "total_pnl_usd": 5.0,
+        "final_equity_usd": 5.0,
+        "max_drawdown_usd": 0.0,
+        "sharpe_proxy_per_trade": null,
+        "sortino_proxy_per_trade": null,
+        "calmar_proxy": null,
+        "historical_var_95_usd": 0.0,
+        "historical_cvar_95_usd": 0.0,
+        "disclaimer": "Per-trade Sharpe/Sortino/VaR proxies on paper USD; not annualized portfolio Sharpe or regulatory VaR."
+      }
+    },
+    "cumulative_learning": {
+      "curriculum_id": "grade_12_paper_only",
+      "stage": "secondary",
+      "carryforward_bullet_count": 0,
+      "cumulative_log_entries": 0
+    },
+    "context_assessment": {
+      "is_complete": true,
+      "missing_fields": []
+    }
+  },
+  "S6_datetime_edge": {
+    "kind": "anna_analysis_v1",
+    "schema_version": 1,
+    "generated_at": "<deterministic_placeholder>",
+    "input_text": "What day is it?",
+    "interpretation": {
+      "headline": "Quick answer",
+      "summary": "Today is Saturday, 2026-04-04 (UTC) (server UTC \u2014 check your device for local date if you're near midnight).",
+      "signals": [
+        "intent:factual_datetime"
+      ],
+      "assumptions": []
+    },
+    "market_context": {
+      "price": null,
+      "spread": null,
+      "notes": []
+    },
+    "risk_assessment": {
+      "level": "low",
+      "factors": []
+    },
+    "policy_alignment": {},
+    "suggested_action": {
+      "intent": "",
+      "rationale": ""
+    },
+    "concepts_used": [],
+    "concept_support": {},
+    "strategy_awareness": null,
+    "caution_flags": [],
+    "notes": [],
+    "human_intent": {
+      "intent": "QUESTION",
+      "topic": "factual_datetime",
+      "requires_reasoning": false,
+      "bypass": "datetime"
+    },
+    "pipeline": {
+      "answer_source": "rules_only",
+      "steps": [
+        "receive",
+        "factual_datetime"
+      ]
+    },
+    "context_assessment": {
+      "is_complete": true,
+      "missing_fields": []
+    }
+  }
+}

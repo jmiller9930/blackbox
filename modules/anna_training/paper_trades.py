@@ -10,6 +10,7 @@ paper or operator ``log-trade``; see ``docs/architect/ANNA_GOES_TO_SCHOOL.md`` Â
 from __future__ import annotations
 
 import json
+import os
 import uuid
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
@@ -99,7 +100,16 @@ def append_paper_trade(
     spread: float | None = None,
     regime: str | None = None,
     signal_snapshot: dict[str, Any] | None = None,
+    market_event_id: str | None = None,
 ) -> dict[str, Any]:
+    strict_mid = (os.environ.get("ANNA_STRICT_MARKET_EVENT_ID") or "").strip().lower() in (
+        "1",
+        "true",
+        "yes",
+        "on",
+    )
+    if strict_mid and not (market_event_id and str(market_event_id).strip()):
+        raise ValueError("market_event_id required when ANNA_STRICT_MARKET_EVENT_ID=1")
     if strategy_label is not None and str(strategy_label).strip():
         ok, err = validate_strategy_label(str(strategy_label).strip())
         if not ok:
@@ -132,6 +142,16 @@ def append_paper_trade(
         row["regime"] = str(regime).strip()
     if signal_snapshot is not None and isinstance(signal_snapshot, dict):
         row["signal_snapshot"] = signal_snapshot
+    if market_event_id is not None and str(market_event_id).strip():
+        mid = str(market_event_id).strip()
+        try:
+            from market_data.market_event_id import is_valid_market_event_id_format
+
+            if not is_valid_market_event_id_format(mid):
+                raise ValueError("invalid_market_event_id_format")
+        except ImportError:
+            pass
+        row["market_event_id"] = mid
 
     if log_manual_activity:
         try:
@@ -153,6 +173,7 @@ def append_paper_trade(
                     "ask": row.get("ask"),
                     "spread": row.get("spread"),
                     "regime": row.get("regime"),
+                    "market_event_id": row.get("market_event_id"),
                 },
             )
             eid = str(ev.get("event_id") or "").strip()

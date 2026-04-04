@@ -1,0 +1,18 @@
+---
+description: When the Agentic Training Advisor (or training governance) thread gets a new query/response, update the roundtable doc.
+alwaysApply: false
+---
+
+# Training conference roundtable — maintenance
+
+When the user or **Agentic Training Advisor** material includes a **new governance/training contract question** and you produce an **Engineering response** (memo, implementation note, or policy mapping):
+
+1. **Update** [`docs/architect/training_conference_roundtable.md`](docs/architect/training_conference_roundtable.md):
+   - **Append one row** to **§6 — Exchange log (table)** using the **same columns**: Round (next integer), Date, From, Topic, Summary, Outcome / artifacts, Status.
+   - If agreement or scope changed, revise **§3 Agreed positions** or **§4 Work tracker** accordingly.
+   - If something **shipped**, add or update **§5 Accomplishments**.
+   - For **lesson memory / control-plane** milestones, **rewrite §4.1 Rolling summary** (update in place — the living status table).
+
+2. **Do not** create duplicate standalone memos unless the user asks; prefer **one** roundtable update per exchange batch.
+
+3. If the user says “training advisor” / “roundtable” / “training conference,” **open the roundtable file** and align the reply with **§6**.

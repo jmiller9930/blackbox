@@ -70,6 +70,20 @@ The file **`paper_trades.jsonl`** is an **append-only ledger**. Rows may come fr
 
 If a row is not market-grounded, **do not** treat it as proof that Anna “beat the market.”
 
+### 1.1.2 Execution layers — baseline (Sean) vs strategy layer (Anna / Tier 2) vs governance
+
+**Directive model (2026-04):** The platform is described in three layers; **code may not yet implement all of them end-to-end** — see Engineering responses to the Training Architect for gaps.
+
+| Layer | Role | Live trades? | Notes |
+|--------|------|--------------|--------|
+| **Baseline engine (Sean)** | Primary **live** execution logic in the **TypeScript** snapshot (`trading_core/src/bot/drift_trading_bot_source.ts`) — **only** path intended for real venue submits when that process is run by an operator. | **Yes** (when operated) | **Immutable** as a reference snapshot unless governance approves a controlled update. |
+| **Strategy layer (Anna / Tier 2)** | Multiple **paper/sim** strategies (variants, experiments) **may** run against the same market data **without** live settlement. | **No** | Tagging, parallel cohorts, and dashboard filtering are **partially** implemented — see `strategy_label`, `strategy_catalog.json`, `paper_trades.jsonl`. |
+| **Governance** | No autonomous promotion of experimental strategies to live. | — | Human approval + evidence; **not** auto-promote in code. |
+
+**Tier 1 vs Tier 2 (terminology):** **Tier 1** = baseline execution + **script adherence** / analyst contract (Anna’s rule-following layer). **Tier 2** = **strategy experimentation** (conjunctive / multi-strategy learning) **on paper** until policy promotes — distinct from Tier 1 closure.
+
+**Data flow (high level):** Market data → analysis / harness → **paper** outcome rows in `paper_trades.jsonl` (training judgment). **Live** baseline bot logging is **not** the same artifact — see Engineering memo on trade visibility.
+
 ### 1.2 Contract lock (12th grade + Karpathy loop — binding)
 
 - **Curriculum id (canonical):** `grade_12_paper_only` — defined in `modules/anna_training/catalog.py` (`CURRICULA`).

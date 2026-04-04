@@ -17,13 +17,28 @@ from anna_modules.human_intent import build_factual_reply, classify_human_intent
 from anna_modules.input_adapter import normalize_trader_text
 from anna_modules.interpretation import build_interpretation, build_strategy_awareness
 from anna_modules.pipeline import maybe_store_interaction, resolve_answer_layers
-from anna_modules.policy import build_policy_alignment_dict, build_suggested_action
+from anna_modules.policy import (
+    apply_lesson_memory_to_suggested_action,
+    build_policy_alignment_dict,
+    build_suggested_action,
+)
 from anna_modules.education_definitions import build_registry_definition_summary
 from anna_modules.analysis_math import (
     compute_math_engine_facts,
     merge_authoritative_fact_layers,
 )
 from anna_modules.rule_facts import compute_rule_facts
+from anna_modules.lesson_memory import max_inject, min_score_threshold
+from anna_modules.memory_control_plane import (
+    MODE_BASELINE,
+    MODE_OFF,
+    build_memory_control_plane_payload,
+    control_plane_enabled,
+    detect_problem_signals,
+    effective_retrieval_params,
+    select_engagement_mode,
+)
+from anna_modules.strategy_playbook import apply_strategy_playbook
 from modules.anna_training.catalog import CURRICULA
 from modules.anna_training.cumulative import carryforward_fact_lines
 from modules.anna_training.store import load_state
@@ -38,6 +53,15 @@ from anna_modules.util import SCHEMA_VERSION, utc_now
 
 def _use_llm_default() -> bool:
     return os.environ.get("ANNA_USE_LLM", "1").strip().lower() not in ("0", "false", "no")
+
+
+def _lesson_memory_enabled() -> bool:
+    return (os.environ.get("ANNA_LESSON_MEMORY_ENABLED") or "").strip().lower() in (
+        "1",
+        "true",
+        "yes",
+        "on",
+    )
 
 
 def _attach_context_ledger(
@@ -191,6 +215,116 @@ def build_analysis(
     except Exception:
         pass
 
+    lesson_memory_payload: dict[str, Any] = {
+        "enabled": False,
+        "injected": [],
+        "facts": [],
+        "situation": None,
+    }
+    _regime_for_lesson: str | None = None
+    try:
+        from modules.anna_training.regime_signal import infer_regime_from_phase5_market
+
+        _regime_for_lesson = infer_regime_from_phase5_market(phase5_market)
+    except Exception:
+        _regime_for_lesson = None
+
+    pb_probe = apply_strategy_playbook(input_text, human_intent)
+    playbook_hit = pb_probe is not None
+    problem_signals = detect_problem_signals(
+        input_text=input_text,
+        guardrail_mode=gm,
+        risk_level=risk_level,
+        readiness=readiness,
+        playbook_hit=playbook_hit,
+        merged_rule_facts=merged_rule_facts,
+    )
+    lesson_memory_env_on = _lesson_memory_enabled()
+    cp_active = control_plane_enabled()
+    base_k = max_inject()
+    base_ms = min_score_threshold()
+
+    if not lesson_memory_env_on:
+        engagement_mode = MODE_OFF
+        retrieval = effective_retrieval_params(MODE_OFF, base_top_k=base_k, base_min_score=base_ms)
+    elif not cp_active:
+        engagement_mode = MODE_BASELINE
+        retrieval = effective_retrieval_params(MODE_BASELINE, base_top_k=base_k, base_min_score=base_ms)
+    else:
+        engagement_mode = select_engagement_mode(
+            problem_signals,
+            guardrail_mode=gm,
+            risk_level=risk_level,
+        )
+        retrieval = effective_retrieval_params(
+            engagement_mode,
+            base_top_k=base_k,
+            base_min_score=base_ms,
+        )
+
+    memory_control_plane_payload = build_memory_control_plane_payload(
+        lesson_memory_env_on=lesson_memory_env_on,
+        signals=problem_signals,
+        engagement_mode=engagement_mode,
+        retrieval=retrieval,
+        control_plane_active=cp_active,
+    )
+
+    if conn is not None and lesson_memory_env_on and not retrieval["bypass"]:
+        try:
+            from anna_modules.lesson_memory import build_lesson_memory_fact_lines, build_situation
+
+            situation = build_situation(
+                input_text=input_text,
+                regime_tag=_regime_for_lesson,
+            )
+            lesson_lines, lesson_injected = build_lesson_memory_fact_lines(
+                conn,
+                situation,
+                top_k=retrieval["top_k"],
+                min_score=retrieval["min_score"],
+            )
+            lesson_memory_payload = {
+                "enabled": True,
+                "injected": lesson_injected,
+                "facts": lesson_lines,
+                "situation": situation,
+                "bypass_reason": None,
+            }
+            if lesson_lines:
+                lm_layer = {
+                    "facts_for_prompt": lesson_lines,
+                    "structured": {"lesson_memory": True, "injected": lesson_injected},
+                }
+                merged_rule_facts = merge_authoritative_fact_layers(merged_rule_facts, lm_layer)
+        except Exception as exc:
+            notes.append(f"lesson_memory: skipped ({exc})")
+    elif lesson_memory_env_on and retrieval["bypass"]:
+        lesson_memory_payload = {
+            "enabled": False,
+            "injected": [],
+            "facts": [],
+            "situation": None,
+            "bypass_reason": engagement_mode,
+        }
+    if (os.environ.get("ANNA_LESSON_MEMORY_DEBUG") or "").strip().lower() in ("1", "true", "yes", "on"):
+        lesson_memory_payload["authoritative_facts_all"] = list(
+            merged_rule_facts.get("facts_for_prompt") or []
+        )
+
+    if (
+        lesson_memory_env_on
+        and lesson_memory_payload.get("enabled")
+        and not retrieval["bypass"]
+    ):
+        suggested, behavior_applied = apply_lesson_memory_to_suggested_action(
+            suggested,
+            lesson_memory_payload.get("injected"),
+            allow_behavior_effect=bool(retrieval.get("apply_behavior_effect")),
+        )
+        if behavior_applied:
+            lesson_memory_payload["behavior_applied"] = behavior_applied
+
     resolved_summary, resolved_headline, extra_sig, answer_source, layer_meta = resolve_answer_layers(
         conn,
         input_text,
@@ -253,6 +387,8 @@ def build_analysis(
         ),
         "layer_meta": layer_meta,
         "rule_facts": merged_rule_facts.get("structured") or {},
+        "lesson_memory": lesson_memory_payload,
+        "memory_control_plane": memory_control_plane_payload,
     }
 
     if market_data_tick is not None:
@@ -314,6 +450,8 @@ def build_analysis(
         "human_intent": human_intent,
         "strategy_playbook_applied": playbook_applied,
         "pipeline": pipeline_trace,
+        "memory_control_plane": memory_control_plane_payload,
+        "lesson_memory": lesson_memory_payload,
         "math_engine": merged_rule_facts.get("structured", {}).get("math_engine"),
         "cumulative_learning": (
             {

@@ -101,6 +101,13 @@ def record_market_snapshot(
         gate_state=gr.state.value,
         gate_reason=gr.reason,
     )
+    bar_refresh: dict[str, Any] | None = None
+    try:
+        from market_data.canonical_bar_refresh import refresh_last_closed_bar_from_ticks
+
+        bar_refresh = refresh_last_closed_bar_from_ticks(conn, symbol)
+    except Exception as exc:
+        bar_refresh = {"ok": False, "reason": f"canonical_bar_refresh:{exc}"}
     conn.close()
 
     out: dict[str, Any] = {
@@ -134,6 +141,8 @@ def record_market_snapshot(
         }
     else:
         out["tertiary"] = {"included": bool(include_jupiter), "price": None, "notes": []}
+    if bar_refresh is not None:
+        out["canonical_bar_refresh"] = bar_refresh
     return out
 
 
