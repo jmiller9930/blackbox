@@ -40,19 +40,24 @@ def merge_paper_wallet_into_state(st: dict[str, Any]) -> None:
 
 
 def resolve_paper_bankroll_start_usd(training_state: dict[str, Any]) -> float:
-    """Starting paper equity for gate math (start + cohort P&L). Env overrides state; default $100 from wallet."""
-    raw = (os.environ.get("ANNA_GRADE12_PAPER_BANKROLL_START_USD") or "").strip()
-    if raw:
-        try:
-            return float(raw)
-        except ValueError:
-            pass
-    merge_paper_wallet_into_state(training_state)
-    pw = training_state.get("paper_wallet") or {}
+    """Net **contributed** capital for gate math: journal initial + deposits − withdrawals (not raw starting_usd edits)."""
     try:
-        return float(pw.get("starting_usd", DEFAULT_PAPER_WALLET["starting_usd"]))
-    except (TypeError, ValueError):
-        return float(DEFAULT_PAPER_WALLET["starting_usd"])
+        from modules.anna_training.paper_capital import net_contributed_capital_usd
+
+        return net_contributed_capital_usd(training_state)
+    except Exception:
+        raw = (os.environ.get("ANNA_GRADE12_PAPER_BANKROLL_START_USD") or "").strip()
+        if raw:
+            try:
+                return float(raw)
+            except ValueError:
+                pass
+        merge_paper_wallet_into_state(training_state)
+        pw = training_state.get("paper_wallet") or {}
+        try:
+            return float(pw.get("starting_usd", DEFAULT_PAPER_WALLET["starting_usd"]))
+        except (TypeError, ValueError):
+            return float(DEFAULT_PAPER_WALLET["starting_usd"])
 
 
 def _parse_utc(ts: str | None) -> datetime | None:

@@ -14,6 +14,7 @@ data/runtime/execution_plane/kill_switch.json
 data/runtime/anna_training/state.json
 data/runtime/anna_training/state.json.tmp
 data/runtime/anna_training/paper_trades.jsonl
+data/runtime/anna_training/paper_capital_journal.jsonl
 data/runtime/anna_training/karpathy_loop_heartbeat.jsonl
 data/runtime/anna_training/llm_cross_checks.jsonl
 data/sqlite/*.db

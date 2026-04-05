@@ -656,43 +656,6 @@ def build_trade_chain_payload(
     }
 
 
-def _paper_bankroll_snapshot() -> dict[str, Any] | None:
-    """
-    Read-only: training state paper_wallet for operator context.
-    Not the Solana wallet — gates equity model is starting_usd + sum(pnl) on paper paths.
-    """
-    p = _REPO_ROOT / "data" / "runtime" / "anna_training" / "state.json"
-    if not p.is_file():
-        return None
-    try:
-        raw = json.loads(p.read_text(encoding="utf-8"))
-    except json.JSONDecodeError:
-        return None
-    if not isinstance(raw, dict):
-        return None
-    pw = raw.get("paper_wallet")
-    if not isinstance(pw, dict):
-        return None
-    try:
-        start = float(pw.get("starting_usd", 0.0))
-    except (TypeError, ValueError):
-        start = 0.0
-    return {
-        "schema": "dashboard_paper_bankroll_v1",
-        "starting_usd": start,
-        "goal_horizon_days": pw.get("goal_horizon_days"),
-        "state_path": str(p),
-        "equity_model": (
-            "Judgment/gates use paper_wallet.starting_usd plus sum of pnl_usd from paper-mode ledger paths "
-            "(see modules/anna_training/paper_wallet.py). Not the same as the connected Solana balance."
-        ),
-        "deposit_tracking": (
-            "There is no separate in-tree deposit journal. Change starting_usd in state (or "
-            "ANNA_GRADE12_PAPER_BANKROLL_START_USD) when you intentionally reset bankroll; PnL remains trade-derived."
-        ),
-    }
-
-
 def _wallet_subset(full: dict[str, Any] | None) -> dict[str, Any]:
     if not full:
         return {"ok": False, "detail": "wallet_unavailable"}
@@ -861,13 +824,20 @@ def build_dashboard_bundle(
     live_policy_blocked = bool(wallet.get("live_trading_blocked"))
 
     mc = tc.get("market_clock") if isinstance(tc, dict) else None
-    paper_br = _paper_bankroll_snapshot()
+    paper_cap: dict[str, Any] | None = None
+    try:
+        from modules.anna_training.paper_capital import build_paper_capital_summary
+        from modules.anna_training.store import load_state
+
+        paper_cap = build_paper_capital_summary(training_state=load_state(), ledger_db_path=db_path)
+    except Exception:
+        paper_cap = None
 
     return {
         "schema": "blackbox_dashboard_bundle_v1",
         "trace_id": tid,
         "market_clock": mc,
-        "paper_bankroll": paper_br,
+        "paper_capital": paper_cap,
         "banner": {
             "ui_state": ui_state.upper(),
             "mode_label": str((mode or {}).get("label") or "PAPER"),

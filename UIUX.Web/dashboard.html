@@ -214,7 +214,29 @@
         <div class="kv"><span class="k">LIVE policy</span><span class="v" id="c-livepol">—</span></div>
         <div class="kv"><span class="k">Baseline mode</span><span class="v" id="c-base">—</span></div>
         <div class="kv"><span class="k">Anna mode</span><span class="v" id="c-anna">—</span></div>
-        <div class="kv"><span class="k">Paper bankroll (gates)</span><span class="v" id="c-paper-bank" title="Not on-chain balance — training judgment equity model">—</span></div>
+      </div>
+      <div class="dash-r3" id="dash-paper-capital" style="grid-column: 1 / -1; border-top: 1px solid var(--panel-border); padding-top: 0.4rem; margin-top: 0.2rem;">
+        <div class="kv"><span class="k">Start capital</span><span class="v" id="pc-start">—</span></div>
+        <div class="kv"><span class="k">Capital added</span><span class="v" id="pc-added">—</span></div>
+        <div class="kv"><span class="k">Capital withdrawn</span><span class="v" id="pc-withdrawn">—</span></div>
+        <div class="kv"><span class="k">Net contributed</span><span class="v" id="pc-net">—</span></div>
+        <div class="kv"><span class="k">Trading PnL (cohort)</span><span class="v" id="pc-pnl-cohort">—</span></div>
+        <div class="kv"><span class="k">Trading PnL (ledger)</span><span class="v" id="pc-pnl-ledger">—</span></div>
+        <div class="kv"><span class="k">Equity (cohort)</span><span class="v" id="pc-eq-cohort">—</span></div>
+        <div class="kv"><span class="k">Equity (ledger)</span><span class="v" id="pc-eq-ledger">—</span></div>
+        <div class="kv"><span class="k">Journal file</span><span class="v" id="pc-journal" style="font-size:0.62rem">—</span></div>
+      </div>
+      <div class="dash-r2" style="border-top: 1px solid var(--panel-border); margin: 0 0.75rem 0.5rem; padding-top: 0.45rem;">
+        <p style="margin:0 0 0.35rem;font-size:0.72rem;color:var(--muted)">Paper capital flows (append-only journal — do not edit starting_usd to fake deposits)</p>
+        <div class="dash-form-grid" style="max-width: 100%; align-items: flex-end;">
+          <label>Deposit USD <input type="number" id="pc-deposit" step="0.01" min="0.01"/></label>
+          <label>Note <input type="text" id="pc-note-dep" placeholder="optional"/></label>
+          <button type="button" class="tick" id="btnPcDeposit">Record deposit</button>
+          <label>Withdrawal USD <input type="number" id="pc-withdraw" step="0.01" min="0.01"/></label>
+          <label>Note <input type="text" id="pc-note-wd" placeholder="optional"/></label>
+          <button type="button" class="sec" id="btnPcWithdraw">Record withdrawal</button>
+        </div>
+        <p id="pc-msg" style="font-size:0.7rem;color:var(--muted);margin:0.35rem 0 0"></p>
       </div>
 
       <!-- Row 4: trade chain (primary) -->
@@ -526,21 +548,20 @@
     var annaHint = le.anna_lane_hint || cm.anna_display || '';
     $('c-anna').textContent = w.live_trading_blocked ? 'paper only (policy lock)' : esc(String(annaHint));
 
-    var pb = bundle.paper_bankroll;
-    var pbEl = $('c-paper-bank');
-    if (pbEl) {
-      if (pb && pb.starting_usd != null && isFinite(Number(pb.starting_usd))) {
-        var base = String(pb.state_path || '').split('/').pop() || 'state.json';
-        pbEl.textContent =
-          '$' +
-          Number(pb.starting_usd).toFixed(2) +
-          ' starting · no amount field on dashboard — edit data/runtime/anna_training/state.json or ANNA_GRADE12_PAPER_BANKROLL_START_USD';
-        pbEl.title = esc((pb.equity_model || '') + ' ' + (pb.deposit_tracking || ''));
-      } else {
-        pbEl.textContent = '— (paper state not found)';
-        pbEl.title = '';
-      }
+    function fmtPc(n) {
+      if (n == null || n === '' || !isFinite(Number(n))) return '—';
+      return '$' + Number(n).toFixed(2);
     }
+    var pc = bundle.paper_capital;
+    if ($('pc-start')) $('pc-start').textContent = pc ? fmtPc(pc.starting_capital) : '—';
+    if ($('pc-added')) $('pc-added').textContent = pc ? fmtPc(pc.capital_added) : '—';
+    if ($('pc-withdrawn')) $('pc-withdrawn').textContent = pc ? fmtPc(pc.capital_withdrawn) : '—';
+    if ($('pc-net')) $('pc-net').textContent = pc ? fmtPc(pc.net_contributed_capital) : '—';
+    if ($('pc-pnl-cohort')) $('pc-pnl-cohort').textContent = pc ? fmtPc(pc.trading_pnl_cohort) : '—';
+    if ($('pc-pnl-ledger')) $('pc-pnl-ledger').textContent = pc ? fmtPc(pc.trading_pnl_execution_ledger) : '—';
+    if ($('pc-eq-cohort')) $('pc-eq-cohort').textContent = pc ? fmtPc(pc.current_equity_cohort) : '—';
+    if ($('pc-eq-ledger')) $('pc-eq-ledger').textContent = pc ? fmtPc(pc.current_equity_ledger) : '—';
+    if ($('pc-journal')) $('pc-journal').textContent = pc && pc.journal_path ? String(pc.journal_path).split('/').pop() : '—';
 
     var tickReq = !!ls.tick_required;
     $('btnTick').disabled = !tickReq;
@@ -629,6 +650,38 @@
   $('btnStop').addEventListener('click', function () { postCtl('stop', {}).then(function (x) { $('dash-ctl-msg').textContent = fmtCtl(x.j); refresh(); }); });
   $('btnReset').addEventListener('click', function () { if (!confirm('Reset?')) return; postCtl('reset', { archive: true }).then(function (x) { $('dash-ctl-msg').textContent = fmtCtl(x.j); refresh(); }); });
   $('btnTick').addEventListener('click', function () { postCtl('tick', { max_events: 5 }).then(function (x) { $('dash-ctl-msg').textContent = fmtCtl(x.j); refresh(); }); });
+
+  function postPaperFlow(kind) {
+    var amt = kind === 'deposit' ? parseFloat(($('pc-deposit') || {}).value) : parseFloat(($('pc-withdraw') || {}).value);
+    var note = kind === 'deposit' ? (($('pc-note-dep') || {}).value || '').trim() : (($('pc-note-wd') || {}).value || '').trim();
+    var msg = $('pc-msg');
+    if (!isFinite(amt) || amt <= 0) {
+      if (msg) msg.textContent = 'Enter a positive USD amount.';
+      return;
+    }
+    if (msg) msg.textContent = '…';
+    fetch('/api/v1/paper-capital/flow', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ event_type: kind, amount_usd: amt, note: note })
+    })
+      .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, j: j }; }); })
+      .then(function (x) {
+        if (msg) {
+          if (x.j && x.j.ok) msg.textContent = kind === 'deposit' ? 'Deposit recorded.' : 'Withdrawal recorded.';
+          else msg.textContent = String((x.j && (x.j.detail || x.j.reason_code)) || 'failed');
+        }
+        if (x.j && x.j.ok) {
+          if ($('pc-deposit')) $('pc-deposit').value = '';
+          if ($('pc-withdraw')) $('pc-withdraw').value = '';
+        }
+        refresh();
+      });
+  }
+  var bpd = $('btnPcDeposit');
+  var bpw = $('btnPcWithdraw');
+  if (bpd) bpd.addEventListener('click', function () { postPaperFlow('deposit'); });
+  if (bpw) bpw.addEventListener('click', function () { postPaperFlow('withdrawal'); });
 
   refresh();
   setInterval(refresh, POLL_MS);

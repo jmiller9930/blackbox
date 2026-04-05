@@ -1948,6 +1948,21 @@ class Handler(BaseHTTPRequestHandler):
             payload["trace_id"] = str(uuid.uuid4())
             self._json(200, payload, no_cache=True)
             return
+        if path == "/api/v1/paper-capital/summary":
+            try:
+                from modules.anna_training.paper_capital import build_paper_capital_summary
+                from modules.anna_training.store import load_state
+
+                body = build_paper_capital_summary(training_state=load_state())
+            except Exception as e:  # noqa: BLE001
+                self._json(
+                    500,
+                    {"ok": False, "schema": "paper_capital_summary_v1", "error": str(e)[:500]},
+                    no_cache=True,
+                )
+                return
+            self._json(200, body, no_cache=True)
+            return
         if path == "/api/v1/dashboard/bundle":
             try:
                 from modules.anna_training.dashboard_bundle import build_dashboard_bundle
@@ -2122,6 +2137,22 @@ class Handler(BaseHTTPRequestHandler):
                 self._json(code, r)
                 return
             self._json(400, {"ok": False, "error": "unknown_action", "action": action, "trace_id": trace_id})
+            return
+        if len(parts) == 4 and parts[:2] == ["api", "v1"] and parts[2] == "paper-capital" and parts[3] == "flow":
+            body = self._read_json_body()
+            try:
+                from modules.anna_training.paper_capital import append_flow
+
+                r = append_flow(
+                    event_type=str(body.get("event_type") or ""),
+                    amount_usd=body.get("amount_usd"),
+                    note=str(body.get("note") or ""),
+                )
+            except Exception as e:  # noqa: BLE001
+                self._json(500, {"ok": False, "error": str(e)[:500]}, no_cache=True)
+                return
+            code = 200 if r.get("ok") else 400
+            self._json(code, r, no_cache=True)
             return
         self._json(404, {"error": "not_found", "path": parsed.path})
 

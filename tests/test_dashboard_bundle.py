@@ -30,5 +30,5 @@ def test_build_dashboard_bundle_schema() -> None:
     assert "next_tick" in b["liveness"]
     assert "bundle_snapshot_at" in b["liveness"]
     assert "eta_at" in b["liveness"]["next_tick"]
-    assert "paper_bankroll" in b
+    assert "paper_capital" in b
     assert "recency" in b["trade_chain"]
