@@ -168,13 +168,20 @@ def test_commit_outcome_advances_sprt(tmp_path: Path) -> None:
             assert adv["wilson"] is not None
 
 
-def test_patterns_pelt_cusum() -> None:
+def test_patterns_cusum_monitor() -> None:
+    rng = np.random.default_rng(0)
+    x = np.concatenate([rng.normal(0, 1, 40), rng.normal(2, 1, 40)])
+    cus = run_cusum_monitor(x, reference_mean=0.0, sigma=1.0, k=0.5, h=5.0)
+    assert "cusum_pos_max" in cus
+
+
+def test_patterns_pelt_requires_ruptures() -> None:
+    """PELT needs optional ``ruptures`` (see requirements.txt); skipped if not installed."""
+    pytest.importorskip("ruptures")
     rng = np.random.default_rng(0)
     x = np.concatenate([rng.normal(0, 1, 40), rng.normal(2, 1, 40)])
     pelt = run_pelt_changepoints(x, penalty=3.0)
     assert pelt["method"] == "PELT"
-    cus = run_cusum_monitor(x, reference_mean=0.0, sigma=1.0, k=0.5, h=5.0)
-    assert "cusum_pos_max" in cus
 
 
 def test_build_outcome_pair(tmp_path: Path) -> None:
