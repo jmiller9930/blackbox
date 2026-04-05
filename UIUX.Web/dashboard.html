@@ -1,0 +1,469 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>BLACK BOX — System dashboard</title>
+  <link rel="stylesheet" href="/styles.css"/>
+  <style>
+    .sysdash { max-width: 1400px; margin: 0 auto; padding: var(--space-3) var(--space-4) var(--space-6); }
+    .sysdash-top {
+      display: grid;
+      grid-template-columns: minmax(200px, 1fr) minmax(200px, 1fr) minmax(220px, 1.2fr);
+      gap: var(--space-3);
+      align-items: start;
+      margin-bottom: var(--space-4);
+    }
+    @media (max-width: 960px) {
+      .sysdash-top { grid-template-columns: 1fr; }
+    }
+    .sysdash-wallet {
+      display: flex; align-items: center; gap: var(--space-3);
+      padding: var(--space-3); border-radius: var(--radius-lg);
+      border: 1px solid var(--panel-border); background: var(--panel); box-shadow: var(--shadow-sm);
+    }
+    .sysdash-wallet--ok { border-color: rgba(22, 163, 74, 0.45); background: rgba(22, 163, 74, 0.08); }
+    .sysdash-wallet--bad { border-color: rgba(220, 38, 38, 0.45); background: rgba(220, 38, 38, 0.06); }
+    .sysdash-orb {
+      width: 3rem; height: 3rem; border-radius: 50%; flex-shrink: 0;
+      box-shadow: inset 0 0 0 2px rgba(255,255,255,0.45);
+    }
+    .sysdash-orb--ok {
+      background: radial-gradient(circle at 30% 30%, #4ade80, #16a34a);
+      box-shadow: 0 6px 18px rgba(22, 163, 74, 0.35), inset 0 0 0 2px rgba(255,255,255,0.45);
+    }
+    .sysdash-orb--bad {
+      background: radial-gradient(circle at 30% 30%, #f87171, #dc2626);
+      box-shadow: 0 6px 18px rgba(220, 38, 38, 0.28), inset 0 0 0 2px rgba(255,255,255,0.4);
+    }
+    .sysdash-wallet-usd { font-size: 1.35rem; font-weight: 700; font-variant-numeric: tabular-nums; }
+    .sysdash-wallet-sub { font-size: 0.82rem; color: var(--muted); }
+    .sysdash-mode {
+      padding: var(--space-3); border-radius: var(--radius-lg); border: 1px solid var(--panel-border);
+      background: var(--panel); box-shadow: var(--shadow-sm);
+    }
+    .sysdash-mode-tag {
+      display: inline-block; font-weight: 800; letter-spacing: 0.06em; font-size: 0.75rem;
+      padding: 0.25rem 0.5rem; border-radius: 6px;
+    }
+    .sysdash-mode-tag--paper { background: rgba(59, 130, 246, 0.15); color: #1d4ed8; }
+    .sysdash-mode-tag--live { background: rgba(220, 38, 38, 0.12); color: #b91c1c; }
+    .sysdash-health {
+      padding: var(--space-3); border-radius: var(--radius-lg); border: 1px solid var(--panel-border);
+      background: var(--panel); box-shadow: var(--shadow-sm); font-size: 0.88rem; line-height: 1.5;
+    }
+    .sysdash-health h2 { margin: 0 0 0.35rem; font-size: 0.95rem; }
+    .sysdash-tick-banner {
+      padding: var(--space-3); margin-bottom: var(--space-3); border-radius: var(--radius-md);
+      border: 1px dashed rgba(59, 130, 246, 0.45); background: rgba(59, 130, 246, 0.06);
+      font-size: 0.88rem; line-height: 1.45;
+    }
+    .sysdash-boundary {
+      margin-bottom: var(--space-4); padding: var(--space-3); border-radius: var(--radius-lg);
+      border: 1px solid var(--panel-border); background: rgba(255,255,255,0.5);
+      font-size: 0.82rem; color: var(--muted);
+    }
+    .sysdash-boundary h3 { margin: 0 0 0.5rem; font-size: 0.85rem; color: var(--text); }
+    .sysdash-boundary ul { margin: 0; padding-left: 1.1rem; }
+    .sysdash-boundary-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: var(--space-3); }
+    .sysdash-controls {
+      display: flex; flex-wrap: wrap; gap: var(--space-2); align-items: center;
+      margin-bottom: var(--space-4); padding: var(--space-3);
+      border-radius: var(--radius-lg); border: 1px solid var(--panel-border); background: var(--panel);
+    }
+    .sysdash-controls button {
+      padding: 0.45rem 0.85rem; border-radius: var(--radius-md); border: 1px solid var(--panel-border);
+      background: var(--accent); color: var(--accent-contrast); font-weight: 600; font-size: 0.82rem; cursor: pointer;
+    }
+    .sysdash-controls button.secondary { background: var(--panel); color: var(--text); }
+    .sysdash-controls button:disabled { opacity: 0.45; cursor: not-allowed; }
+    .sysdash-msg { font-size: 0.78rem; color: var(--muted); flex: 1 1 100%; }
+    .sysdash-trade-wrap {
+      overflow-x: auto; margin-bottom: var(--space-5);
+      border-radius: var(--radius-lg); border: 1px solid var(--panel-border);
+      background: var(--panel); box-shadow: var(--shadow-sm);
+    }
+    .sysdash-trade-wrap h2 { margin: 0; padding: var(--space-3); font-size: 1rem; border-bottom: 1px solid var(--panel-border); }
+    .sysdash-table { border-collapse: separate; border-spacing: 0; font-size: 0.72rem; min-width: max-content; }
+    .sysdash-table th, .sysdash-table td {
+      border-bottom: 1px solid var(--panel-border); border-right: 1px solid var(--panel-border);
+      padding: 0.35rem 0.45rem; vertical-align: top;
+    }
+    .sysdash-table th:first-child, .sysdash-table td:first-child {
+      position: sticky; left: 0; background: var(--panel); z-index: 2; font-weight: 600;
+      max-width: 11rem;
+    }
+    .sysdash-table thead th { background: rgba(15, 23, 42, 0.04); font-weight: 600; }
+    .tc-cell { min-width: 7.5rem; max-width: 10rem; }
+    .tc-mode { font-size: 0.65rem; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted); }
+    .tc-out { font-weight: 700; font-size: 0.7rem; }
+    .tc-out--WIN { color: #15803d; }
+    .tc-out--LOSS { color: #b91c1c; }
+    .tc-out--FLAT { color: #64748b; }
+    .tc-line { color: var(--muted); line-height: 1.35; }
+    details.sysdash-drill { margin-bottom: var(--space-2); border-radius: var(--radius-md); border: 1px solid var(--panel-border); background: rgba(255,255,255,0.55); }
+    details.sysdash-drill > summary {
+      padding: 0.6rem 0.85rem; cursor: pointer; font-weight: 600; font-size: 0.85rem;
+    }
+    details.sysdash-drill .drill-body { padding: 0 0.85rem 0.85rem; font-size: 0.82rem; }
+    details.sysdash-drill pre { font-size: 0.68rem; overflow: auto; max-height: 240px; background: rgba(15,23,42,0.04); padding: 0.5rem; border-radius: 6px; }
+    .dash-form-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 0.5rem; margin-top: 0.5rem; }
+    .dash-form-grid label { display: flex; flex-direction: column; gap: 0.2rem; font-size: 0.68rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; }
+    .dash-form-grid input { padding: 0.35rem 0.45rem; border-radius: 6px; border: 1px solid var(--panel-border); font-size: 0.78rem; }
+  </style>
+</head>
+<body>
+  <div class="page">
+    <header class="portal-header" style="padding: var(--space-3) var(--space-4); border-bottom: 1px solid var(--panel-border); background: var(--panel);">
+      <div style="display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:var(--space-3); max-width:1400px; margin:0 auto;">
+        <div style="display:flex; align-items:center; gap:var(--space-3);">
+          <a class="brand brand--link" href="/internal.html"><img class="brand__logo" src="/assets/blackboxlogo.png" alt="BLACK BOX" style="height:36px;width:auto"/></a>
+          <span class="badge badge--internal">Operator</span>
+        </div>
+        <nav class="portal-nav" aria-label="Dashboard navigation">
+          <a class="button button--ghost" href="/internal.html">Portal</a>
+          <a class="button button--secondary" href="/login.html">Sign in</a>
+        </nav>
+      </div>
+    </header>
+
+    <main class="sysdash" id="sysdash-root">
+      <h1 class="portal-title" style="margin-bottom:0.25rem">System dashboard</h1>
+      <p class="portal-lede" style="margin-top:0">Primary operator surface — trade chain first, global controls, wallet and mode visible. Specialist consoles are drill-down only.</p>
+
+      <div class="sysdash-top">
+        <div class="sysdash-wallet sysdash-wallet--bad" id="dash-wallet-box" role="status">
+          <div class="sysdash-orb sysdash-orb--bad" aria-hidden="true"></div>
+          <div>
+            <div class="sysdash-wallet-usd" id="dash-wallet-usd">—</div>
+            <div class="sysdash-wallet-sub" id="dash-wallet-sub">Wallet offline</div>
+            <div class="sysdash-wallet-sub" id="dash-wallet-addr" style="font-family:ui-monospace,monospace;font-size:0.7rem"></div>
+          </div>
+        </div>
+        <div class="sysdash-mode">
+          <div><span class="sysdash-mode-tag sysdash-mode-tag--paper" id="dash-mode-tag">PAPER</span></div>
+          <p style="margin:0.5rem 0 0; font-size:0.82rem; color:var(--muted)" id="dash-mode-reason">—</p>
+        </div>
+        <div class="sysdash-health">
+          <h2>Is the system working right now?</h2>
+          <div id="dash-health-body">Loading…</div>
+        </div>
+      </div>
+
+      <div class="sysdash-tick-banner" id="dash-tick-banner" hidden></div>
+
+      <section class="sysdash-boundary" aria-labelledby="boundary-h">
+        <h3 id="boundary-h">Operational boundary</h3>
+        <div class="sysdash-boundary-grid" id="dash-boundary-grid"></div>
+      </section>
+
+      <section class="sysdash-controls" aria-label="Global sequential learning controls">
+        <button type="button" id="btnPause">Pause</button>
+        <button type="button" id="btnStop">Stop</button>
+        <button type="button" id="btnReset">Reset</button>
+        <button type="button" class="secondary" id="btnTick">Tick</button>
+        <span class="sysdash-msg" id="dash-control-msg">Start requires run configuration (expand below). Pause / Stop / Reset / Tick call the same API as the specialist console.</span>
+      </section>
+
+      <details class="sysdash-drill" id="dash-start-details">
+        <summary>Run configuration + Start (New run / Resume)</summary>
+        <div class="drill-body">
+          <p style="margin:0 0 0.5rem; font-size:0.82rem; color:var(--muted)">Same fields as <a href="/anna/sequential-learning">sequential learning control</a>. Values are saved in this browser (localStorage).</p>
+          <div class="dash-form-grid">
+            <label>test_id <input type="text" id="dash_test_id" placeholder="seq_run_001"/></label>
+            <label>strategy_id <input type="text" id="dash_strategy_id" placeholder="anna_strategy_v1"/></label>
+            <label>calibration_path <input type="text" id="dash_calibration_path" placeholder="/repo/.../calibration_report.json"/></label>
+            <label>events_file_path <input type="text" id="dash_events_file_path" placeholder="/repo/.../event_ids.txt"/></label>
+            <label>ledger_db_path <input type="text" id="dash_ledger_db_path" placeholder=""/></label>
+            <label>market_db_path <input type="text" id="dash_market_db_path" placeholder=""/></label>
+            <label>artifacts_dir <input type="text" id="dash_artifacts_dir" placeholder=""/></label>
+          </div>
+          <p style="margin:0.75rem 0 0.35rem">
+            <button type="button" id="btnStartNew">Start New Run</button>
+            <button type="button" class="secondary" id="btnResume" style="margin-left:0.5rem">Resume</button>
+          </p>
+        </div>
+      </details>
+
+      <section class="sysdash-trade-wrap" aria-labelledby="trade-h">
+        <h2 id="trade-h">Trade chain (main)</h2>
+        <div style="overflow-x:auto">
+          <table class="sysdash-table" id="dash-trade-table">
+            <thead><tr><th scope="col">Chain</th></tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+        <p style="margin:0; padding:0.5rem 0.85rem; font-size:0.72rem; color:var(--muted)" id="dash-trade-note"></p>
+      </section>
+
+      <details class="sysdash-drill">
+        <summary>Specialist: Sequential learning engine (full console)</summary>
+        <div class="drill-body">
+          <p><a href="/anna/sequential-learning">Open /anna/sequential-learning</a> — validation checklist, processing evidence, full operator copy.</p>
+        </div>
+      </details>
+      <details class="sysdash-drill">
+        <summary>Specialist: Anna training dashboard (legacy JSON / governance)</summary>
+        <div class="drill-body">
+          <p><a href="/anna/training">Open /anna/training</a> — training governance contract and machine-readable dashboard JSON.</p>
+        </div>
+      </details>
+      <details class="sysdash-drill">
+        <summary>Technical: raw dashboard bundle (debug)</summary>
+        <div class="drill-body"><pre id="dash-raw-pre">—</pre></div>
+      </details>
+    </main>
+  </div>
+  <script>
+(function () {
+  var LS_KEY = 'blackbox_dashboard_seq_form_v1';
+
+  function $(id) { return document.getElementById(id); }
+
+  function loadForm() {
+    try {
+      var j = JSON.parse(localStorage.getItem(LS_KEY) || '{}');
+      ['test_id','strategy_id','calibration_path','events_file_path','ledger_db_path','market_db_path','artifacts_dir'].forEach(function (k) {
+        var el = $('dash_' + k);
+        if (el && j[k]) el.value = j[k];
+      });
+    } catch (e) {}
+  }
+  function saveForm() {
+    var o = {};
+    ['test_id','strategy_id','calibration_path','events_file_path','ledger_db_path','market_db_path','artifacts_dir'].forEach(function (k) {
+      var el = $('dash_' + k);
+      if (el) o[k] = el.value.trim();
+    });
+    try { localStorage.setItem(LS_KEY, JSON.stringify(o)); } catch (e) {}
+  }
+  ['dash_test_id','dash_strategy_id','dash_calibration_path','dash_events_file_path','dash_ledger_db_path','dash_market_db_path','dash_artifacts_dir'].forEach(function (id) {
+    var n = $(id);
+    if (n) n.addEventListener('change', saveForm);
+  });
+  loadForm();
+
+  function fmtUsd(w) {
+    if (!w) return '—';
+    var u = w.balance_usd_approx;
+    if (u != null && u !== '') {
+      var n = Number(u);
+      if (isFinite(n)) return '$' + n.toFixed(2);
+    }
+    if (w.wallet_connected && w.solana_rpc_ok && w.balance_sol === 0) return '$0.00';
+    return '—';
+  }
+
+  function setWallet(w) {
+    var box = $('dash-wallet-box');
+    var orb = box.querySelector('.sysdash-orb');
+    var ok = !!(w && w.wallet_connected && w.solana_rpc_ok);
+    $('dash-wallet-usd').textContent = fmtUsd(w);
+    $('dash-wallet-sub').textContent = ok ? 'Wallet connected' : 'Wallet offline or misconfigured';
+    $('dash-wallet-addr').textContent = (w && w.public_address) ? w.public_address : '';
+    box.className = 'sysdash-wallet ' + (ok ? 'sysdash-wallet--ok' : 'sysdash-wallet--bad');
+    orb.className = 'sysdash-orb ' + (ok ? 'sysdash-orb--ok' : 'sysdash-orb--bad');
+  }
+
+  function setMode(sm) {
+    var tag = $('dash-mode-tag');
+    var lab = (sm && sm.label) === 'LIVE' ? 'LIVE' : 'PAPER';
+    tag.textContent = lab;
+    tag.className = 'sysdash-mode-tag ' + (lab === 'LIVE' ? 'sysdash-mode-tag--live' : 'sysdash-mode-tag--paper');
+    $('dash-mode-reason').textContent = (sm && sm.reason) ? sm.reason : '—';
+  }
+
+  function renderBoundary(b) {
+    var host = $('dash-boundary-grid');
+    host.innerHTML = '';
+    if (!b) return;
+    function col(title, items) {
+      var d = document.createElement('div');
+      d.innerHTML = '<strong style="display:block;margin-bottom:0.25rem;font-size:0.78rem">' + title + '</strong><ul style="margin:0">' +
+        (items || []).map(function (x) { return '<li>' + esc(x) + '</li>'; }).join('') + '</ul>';
+      host.appendChild(d);
+    }
+    col('What runs now', b.what_runs_now);
+    col('Shadow only', b.shadow_only);
+    col('Paper-only defaults', b.paper_only);
+    col('Not yet automated', b.not_yet_automated);
+  }
+
+  function esc(s) {
+    var t = document.createElement('textarea');
+    t.textContent = s;
+    return t.innerHTML;
+  }
+
+  function renderHealth(bundle) {
+    var ls = bundle.learning_summary || {};
+    var seq = bundle.sequential || {};
+    var st = String(ls.ui_state || seq.ui_state || 'unknown');
+    var lines = [];
+    lines.push('<strong>Sequential UI state:</strong> ' + esc(st));
+    lines.push('<strong>Learning active:</strong> ' + (ls.learning_active ? 'yes' : 'no'));
+    lines.push('<strong>Events remaining in queue:</strong> ' + String(ls.events_remaining_in_queue != null ? ls.events_remaining_in_queue : '—'));
+    lines.push('<strong>Last processed market_event_id:</strong> ' + esc(String(ls.last_processed_market_event_id || '—')));
+    lines.push('<strong>Last tick:</strong> ' + esc(String(seq.last_tick_at || '—')));
+    lines.push('<strong>Last error:</strong> ' + esc(String(seq.last_error || '—')));
+    var sprt = ls.sprt_or_compact;
+    lines.push('<strong>SPRT / learning signal:</strong> ' + esc(sprt != null ? JSON.stringify(sprt) : '—'));
+    lines.push('<strong>Last decision (compact):</strong> ' + esc(String(ls.last_decision_compact || '—')));
+    var proc = (seq.processing_signal || {});
+    lines.push('<strong>Processing evidence:</strong> ' + (proc.has_processing_evidence ? 'yes' : 'no'));
+    $('dash-health-body').innerHTML = lines.map(function (x) { return '<div style="margin-bottom:0.35rem">' + x + '</div>'; }).join('');
+
+    var tb = $('dash-tick-banner');
+    if (ls.tick_ux_banner) {
+      tb.hidden = false;
+      tb.textContent = ls.tick_ux_banner;
+    } else {
+      tb.hidden = true;
+      tb.textContent = '';
+    }
+  }
+
+  function cellHtml(c) {
+    if (!c || c.empty) return '<span class="tc-line">—</span>';
+    var mode = esc(String(c.mode || '—'));
+    var oc = String(c.outcome || '—');
+    var ocls = 'tc-out';
+    if (oc === 'WIN') ocls += ' tc-out--WIN';
+    else if (oc === 'LOSS') ocls += ' tc-out--LOSS';
+    else if (oc === 'FLAT') ocls += ' tc-out--FLAT';
+    var pnl = c.pnl_usd != null ? Number(c.pnl_usd).toFixed(4) : '—';
+    var mae = c.mae_usd != null ? Number(c.mae_usd).toFixed(4) : '—';
+    var ent = c.entry != null ? c.entry : '—';
+    var ex = c.exit != null ? c.exit : '—';
+    var sz = c.size != null ? c.size : '—';
+    var nom = c.notional_usd_approx != null ? Number(c.notional_usd_approx).toFixed(2) : '—';
+    return (
+      '<div class="tc-cell">' +
+      '<span class="tc-mode">' + mode + '</span> · <span class="' + ocls + '">' + esc(oc) + '</span>' +
+      '<div class="tc-line">entry ' + esc(String(ent)) + ' → exit ' + esc(String(ex)) + '</div>' +
+      '<div class="tc-line">size ' + esc(String(sz)) + ' · notional ~$' + esc(String(nom)) + '</div>' +
+      '<div class="tc-line">pnl $' + esc(pnl) + ' · MAE $' + esc(mae) + '</div>' +
+      '</div>'
+    );
+  }
+
+  function renderTradeChain(tc) {
+    var table = $('dash-trade-table');
+    var thead = table.querySelector('thead tr');
+    var tbody = table.querySelector('tbody');
+    $('dash-trade-note').textContent = (tc && tc.event_axis_note) ? tc.event_axis_note : '';
+    if (!tc || !tc.rows || !tc.rows.length) {
+      thead.innerHTML = '<th scope="col">Chain</th>';
+      tbody.innerHTML = '<tr><td>No ledger rows yet — trade chain fills as execution_trades ingests events.</td></tr>';
+      if (tc && tc.strategy_selection_note) {
+        $('dash-trade-note').textContent += ' ' + tc.strategy_selection_note;
+      }
+      return;
+    }
+    var axis = tc.event_axis || [];
+    var th = '<th scope="col">Chain</th>';
+    axis.forEach(function (mid) {
+      th += '<th scope="col" title="' + esc(mid) + '"><div style="max-width:6rem;overflow:hidden;text-overflow:ellipsis">' + esc(mid) + '</div></th>';
+    });
+    thead.innerHTML = th;
+    tbody.innerHTML = '';
+    tc.rows.forEach(function (row) {
+      var tr = document.createElement('tr');
+      var h = '<th scope="row">' + esc(row.label || row.strategy_id) + '<div class="tc-line">' + esc(String(row.chain_kind || '')) + '</div></th>';
+      var cells = '';
+      axis.forEach(function (mid) {
+        var cell = (row.cells && row.cells[mid]) ? row.cells[mid] : null;
+        cells += '<td>' + cellHtml(cell) + '</td>';
+      });
+      tr.innerHTML = h + cells;
+      tbody.appendChild(tr);
+    });
+  }
+
+  function render(bundle) {
+    setWallet(bundle.wallet);
+    setMode(bundle.system_mode);
+    renderBoundary(bundle.operational_boundary);
+    renderHealth(bundle);
+    renderTradeChain(bundle.trade_chain || {});
+    $('dash-raw-pre').textContent = JSON.stringify(bundle, null, 2);
+  }
+
+  function fetchBundle() {
+    return fetch('/api/v1/dashboard/bundle?max_events=28', { cache: 'no-store' }).then(function (r) { return r.json(); });
+  }
+
+  function tick() {
+    fetchBundle().then(render).catch(function (e) {
+      $('dash-health-body').textContent = 'Bundle load failed: ' + e;
+    });
+  }
+
+  function postCtl(action, body) {
+    $('dash-control-msg').textContent = '…';
+    return fetch('/api/v1/sequential-learning/control/' + action, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body || {})
+    }).then(function (r) { return r.json().then(function (j) { return { ok: r.ok, j: j }; }); });
+  }
+
+  function startBody(mode) {
+    return {
+      start_mode: mode,
+      test_id: $('dash_test_id').value.trim(),
+      strategy_id: $('dash_strategy_id').value.trim(),
+      calibration_path: $('dash_calibration_path').value.trim(),
+      events_file_path: $('dash_events_file_path').value.trim(),
+      ledger_db_path: $('dash_ledger_db_path').value.trim(),
+      market_db_path: $('dash_market_db_path').value.trim(),
+      artifacts_dir: $('dash_artifacts_dir').value.trim()
+    };
+  }
+
+  $('btnStartNew').addEventListener('click', function () {
+    saveForm();
+    postCtl('start', startBody('new_run')).then(function (x) {
+      $('dash-control-msg').textContent = x.ok ? ('start: ' + (x.j.reason_code || 'ok')) : ('start failed: ' + JSON.stringify(x.j));
+      tick();
+    });
+  });
+  $('btnResume').addEventListener('click', function () {
+    saveForm();
+    postCtl('start', startBody('resume')).then(function (x) {
+      $('dash-control-msg').textContent = x.ok ? ('start: ' + (x.j.reason_code || 'ok')) : ('start failed: ' + JSON.stringify(x.j));
+      tick();
+    });
+  });
+  $('btnPause').addEventListener('click', function () {
+    postCtl('pause', {}).then(function (x) {
+      $('dash-control-msg').textContent = JSON.stringify(x.j);
+      tick();
+    });
+  });
+  $('btnStop').addEventListener('click', function () {
+    postCtl('stop', {}).then(function (x) {
+      $('dash-control-msg').textContent = JSON.stringify(x.j);
+      tick();
+    });
+  });
+  $('btnReset').addEventListener('click', function () {
+    if (!confirm('Reset control state?')) return;
+    postCtl('reset', { archive: true }).then(function (x) {
+      $('dash-control-msg').textContent = JSON.stringify(x.j);
+      tick();
+    });
+  });
+  $('btnTick').addEventListener('click', function () {
+    postCtl('tick', { max_events: 5 }).then(function (x) {
+      $('dash-control-msg').textContent = JSON.stringify(x.j);
+      tick();
+    });
+  });
+
+  tick();
+  setInterval(tick, 15000);
+})();
+  </script>
+</body>
+</html>

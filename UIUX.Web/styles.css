@@ -1183,6 +1183,82 @@ h1 {
   box-shadow: 0 0 0 2px rgba(100, 116, 139, 0.2);
 }
 
+/* Solana wallet strip (internal portal + dashboard) */
+.wallet-pill-usd {
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+  color: var(--text);
+  letter-spacing: -0.02em;
+}
+
+a.runtime-pill.wallet-pill--ok {
+  border-color: rgba(22, 163, 74, 0.4);
+  background: rgba(22, 163, 74, 0.09);
+  color: var(--text);
+}
+
+a.runtime-pill.wallet-pill--bad {
+  border-color: rgba(220, 38, 38, 0.4);
+  background: rgba(220, 38, 38, 0.07);
+  color: var(--text);
+}
+
+.wallet-bubble-card {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--radius-xl);
+  border: 1px solid var(--panel-border);
+  background: var(--panel);
+  box-shadow: var(--shadow-sm);
+  max-width: min(100%, 28rem);
+}
+
+.wallet-bubble-card__orb {
+  width: 3.25rem;
+  height: 3.25rem;
+  border-radius: 50%;
+  flex-shrink: 0;
+  box-shadow: inset 0 0 0 3px rgba(255, 255, 255, 0.5);
+}
+
+.wallet-bubble-card--ok .wallet-bubble-card__orb {
+  background: radial-gradient(circle at 30% 30%, #4ade80, #16a34a);
+  box-shadow:
+    inset 0 0 0 3px rgba(255, 255, 255, 0.45),
+    0 8px 24px rgba(22, 163, 74, 0.35);
+}
+
+.wallet-bubble-card--bad .wallet-bubble-card__orb {
+  background: radial-gradient(circle at 30% 30%, #f87171, #dc2626);
+  box-shadow:
+    inset 0 0 0 3px rgba(255, 255, 255, 0.4),
+    0 8px 24px rgba(220, 38, 38, 0.3);
+}
+
+.wallet-bubble-card__usd {
+  font-size: clamp(1.35rem, 2.5vw, 1.75rem);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.03em;
+  line-height: 1.15;
+}
+
+.wallet-bubble-card__sub {
+  font-size: 0.88rem;
+  color: var(--muted);
+  margin-top: 0.2rem;
+}
+
+.wallet-bubble-card__addr {
+  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  font-size: 0.72rem;
+  color: var(--muted);
+  margin-top: 0.35rem;
+  word-break: break-all;
+}
+
 .ops-runtime__meta {
   margin-top: var(--space-2);
   display: flex;

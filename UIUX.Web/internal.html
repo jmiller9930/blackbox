@@ -35,6 +35,7 @@
         </div>
         <nav class="portal-nav" aria-label="Portal navigation">
           <span class="portal-nav__user" id="portal-user" aria-live="polite"></span>
+          <a class="button button--primary" href="/dashboard.html" title="Primary operator surface — trade chain, controls, wallet">System dashboard</a>
           <a class="button button--ghost" href="./guide.html">System guide</a>
           <a
             class="button button--primary portal-nav__unified-plan"
@@ -102,6 +103,16 @@
             <section class="panel panel--wide panel--runtime" id="panel-runtime" aria-labelledby="t-runtime">
               <h2 class="panel__title" id="t-runtime">Runtime status</h2>
               <div class="runtime-strip runtime-strip--core" aria-label="System and plane strip">
+                <a
+                  class="runtime-pill runtime-pill--link wallet-pill--bad"
+                  href="/dashboard.html"
+                  id="wallet-pill"
+                  title="Solana wallet — open dashboard"
+                >
+                  <span class="agent-bubble agent-bubble--disconnected" id="wallet-bubble" aria-hidden="true"></span>
+                  <span id="wallet-pill-label">Wallet</span>
+                  <span class="wallet-pill-usd" id="wallet-pill-usd">—</span>
+                </a>
                 <button type="button" class="runtime-pill runtime-pill--action" id="system-status-pill" title="System roll-up status">
                   <span class="agent-bubble agent-bubble--unknown" id="system-status-bubble" aria-hidden="true"></span>
                   <span id="system-status-text">System: unknown</span>
@@ -899,6 +910,55 @@
           }).join("");
         }
 
+        function formatWalletUsd(p) {
+          if (!p) return "—";
+          var u = p.balance_usd_approx;
+          if (u != null && u !== "") {
+            var n = Number(u);
+            if (isFinite(n)) return "$" + n.toFixed(2);
+          }
+          var rpcOk = p.solana_rpc && p.solana_rpc.ok;
+          var connected = !!p.wallet_connected && !!rpcOk;
+          var lamports = p.balance_lamports;
+          if (connected && lamports === 0) return "$0.00";
+          return "—";
+        }
+
+        function applyWalletPill(p) {
+          var pill = document.getElementById("wallet-pill");
+          var bubble = document.getElementById("wallet-bubble");
+          var label = document.getElementById("wallet-pill-label");
+          var usdEl = document.getElementById("wallet-pill-usd");
+          if (!pill || !bubble || !label || !usdEl) return;
+          var rpcOk = p && p.solana_rpc && p.solana_rpc.ok;
+          var connected = !!(p && p.wallet_connected && rpcOk);
+          usdEl.textContent = formatWalletUsd(p);
+          if (connected) {
+            bubble.className = "agent-bubble agent-bubble--connected";
+            label.textContent = "Wallet · ready";
+            pill.classList.remove("wallet-pill--bad");
+            pill.classList.add("wallet-pill--ok");
+            pill.title =
+              "Solana wallet connected — " +
+              String((p && p.public_address) || "") +
+              " — open dashboard.";
+          } else {
+            bubble.className = "agent-bubble agent-bubble--disconnected";
+            label.textContent = "Wallet · offline";
+            pill.classList.remove("wallet-pill--ok");
+            pill.classList.add("wallet-pill--bad");
+            pill.title =
+              "Wallet not connected — " +
+              String((p && p.disconnect_reason) || (p && p.solana_rpc && JSON.stringify(p.solana_rpc.detail)) || "check KEYPAIR_PATH / RPC") +
+              " — open dashboard.";
+          }
+        }
+
+        async function refreshWalletStatus() {
+          var p = await fetchJsonCandidates(["/api/v1/wallet/status"]);
+          applyWalletPill(p);
+        }
+
         async function refreshContextEngineStatus() {
           var ce = await fetchJsonCandidates(["/api/v1/context-engine/status"]);
           var st = normalizeStatus(ce && ce.status);
@@ -945,10 +1005,12 @@
         }
 
         refreshSystemStatus();
+        refreshWalletStatus();
         refreshContextEngineStatus();
         refreshPythStatus();
         refreshAnnaSummaryDetails();
         setInterval(refreshSystemStatus, 15000);
+        setInterval(refreshWalletStatus, 15000);
         setInterval(refreshContextEngineStatus, 15000);
         setInterval(refreshPythStatus, 15000);
         setInterval(refreshAnnaSummaryDetails, 15000);

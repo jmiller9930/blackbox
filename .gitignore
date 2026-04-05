@@ -30,6 +30,10 @@ config/notification_recipients.local.json
 # Hermes PM local env (copy from ops/hermes_pm.env.example)
 ops/hermes_pm.env
 
+# Solana keypairs (trading_core / operator)
+trading_core/keypair.json
+trading_core/keypair.base58
+
 # Local secrets (never commit)
 .env
 .env.bak

@@ -34,6 +34,10 @@ try:
 except ImportError:
     build_context_engine_status = None  # type: ignore[assignment]
     record_api_probe = None  # type: ignore[assignment]
+try:
+    from modules.wallet import build_wallet_status_payload
+except ImportError:
+    build_wallet_status_payload = None  # type: ignore[assignment]
 STATE_FILE = ARTIFACTS / "ui_runtime_state.json"
 PYTH_STREAM_FILE = ARTIFACTS / "pyth_stream_status.json"
 PYTH_RECENT_FILE = ARTIFACTS / "pyth_stream_recent.json"
@@ -1831,8 +1835,42 @@ class Handler(BaseHTTPRequestHandler):
             if sl.is_file():
                 self._html(200, sl.read_text(encoding="utf-8"), no_cache=True)
                 return
+        if path in ("/dashboard", "/dashboard/", "/dashboard.html"):
+            dash = _REPO_ROOT / "UIUX.Web" / "dashboard.html"
+            if dash.is_file():
+                self._html(200, dash.read_text(encoding="utf-8"), no_cache=True)
+                return
         if path == "/api/v1/system/status":
             self._json(200, build_system_status())
+            return
+        if path == "/api/v1/wallet/status":
+            if build_wallet_status_payload is None:
+                self._json(
+                    500,
+                    {
+                        "schema": "blackbox_wallet_status_v1",
+                        "wallet_connected": False,
+                        "error": "wallet_module_import_failed",
+                        "trace_id": str(uuid.uuid4()),
+                    },
+                    no_cache=True,
+                )
+                return
+            try:
+                payload = build_wallet_status_payload()
+            except Exception as e:  # noqa: BLE001
+                self._json(
+                    500,
+                    {
+                        "schema": "blackbox_wallet_status_v1",
+                        "wallet_connected": False,
+                        "error": str(e)[:500],
+                        "trace_id": str(uuid.uuid4()),
+                    },
+                    no_cache=True,
+                )
+                return
+            self._json(200, payload, no_cache=True)
             return
         if path == "/api/v1/sequential-learning/control/status":
             try:
@@ -1855,6 +1893,31 @@ class Handler(BaseHTTPRequestHandler):
             payload["ok"] = True
             payload["trace_id"] = str(uuid.uuid4())
             self._json(200, payload, no_cache=True)
+            return
+        if path == "/api/v1/dashboard/bundle":
+            try:
+                from modules.anna_training.dashboard_bundle import build_dashboard_bundle
+
+                q = parse_qs(parsed.query or "")
+                raw = (q.get("max_events") or ["24"])[0]
+                try:
+                    max_ev = max(4, min(48, int(raw)))
+                except ValueError:
+                    max_ev = 24
+                body = build_dashboard_bundle(max_events=max_ev)
+            except Exception as e:  # noqa: BLE001
+                self._json(
+                    500,
+                    {
+                        "schema": "blackbox_dashboard_bundle_v1",
+                        "ok": False,
+                        "error": str(e)[:500],
+                        "trace_id": str(uuid.uuid4()),
+                    },
+                    no_cache=True,
+                )
+                return
+            self._json(200, body, no_cache=True)
             return
         if path == "/api/v1/context-engine/status":
             if build_context_engine_status is None or record_api_probe is None:
