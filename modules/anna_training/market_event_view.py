@@ -14,6 +14,7 @@ from modules.anna_training.execution_ledger import (
     default_execution_ledger_path,
     query_trades_by_market_event_id,
 )
+from modules.anna_training.trend_context import build_trend_context
 
 _REPO = Path(__file__).resolve().parents[2]
 _RT = _REPO / "scripts" / "runtime"
@@ -527,6 +528,25 @@ def build_market_event_view(qs: dict[str, list[str]]) -> dict[str, Any]:
                 }
             )
 
+    trend_ctx = build_trend_context(
+        history_bars=history_bars,
+        market_event_id=str(mid),
+        trades_enriched=trades_enriched,
+    )
+    align_by_tid = {
+        str(t["trade_id"]): t
+        for t in (trend_ctx.get("trade_trend_alignments") or [])
+        if t.get("trade_id")
+    }
+    for row in strategy_rows:
+        tid = row.get("trade_id")
+        if tid and str(tid) in align_by_tid:
+            row["trend_alignment"] = align_by_tid[str(tid)]
+    for t in trades_enriched:
+        tid = t.get("trade_id")
+        if tid and str(tid) in align_by_tid:
+            t["trend_alignment"] = align_by_tid[str(tid)]
+
     out: dict[str, Any] = {
         "schema": "anna_market_event_view_v1",
         "ok": True,
@@ -554,5 +574,6 @@ def build_market_event_view(qs: dict[str, list[str]]) -> dict[str, Any]:
         "trades": trades_enriched,
         "decision_traces": traces_f,
         "context_by_trade": context_by_trade,
+        "trend_context": trend_ctx,
     }
     return out

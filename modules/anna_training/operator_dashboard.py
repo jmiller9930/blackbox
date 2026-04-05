@@ -10,6 +10,7 @@ import sqlite3
 from pathlib import Path
 from typing import Any
 
+from modules.anna_training.evaluation_summary import build_evaluation_summary
 from modules.anna_training.execution_ledger import (
     RESERVED_STRATEGY_BASELINE,
     connect_ledger,
@@ -38,6 +39,26 @@ _LIFECYCLE_MATURITY_RANK: dict[str, int] = {
     LIFECYCLE_EXPERIMENT: 100,
     LIFECYCLE_ARCHIVED: 0,
 }
+
+def _compact_qel_for_dashboard(body: dict[str, Any]) -> dict[str, Any]:
+    """Small QEL slice for operator bundle — same fields as /evaluation-summary, no raw engine blobs."""
+    if not body.get("ok"):
+        return {
+            "ok": False,
+            "error": body.get("error"),
+            "detail": body.get("detail"),
+        }
+    return {
+        "ok": True,
+        "strategy_id": body.get("strategy_id"),
+        "canonical_evaluation": body.get("canonical_evaluation"),
+        "lifecycle": body.get("lifecycle"),
+        "checkpoints": body.get("checkpoints"),
+        "metrics": body.get("metrics"),
+        "baseline_comparison": body.get("baseline_comparison"),
+        "regime_summary": body.get("regime_summary"),
+    }
+
 
 TOP_FIVE_RULE_DESCRIPTION = (
     "Default top-five Anna strategies (max 5 lines, excluding baseline): "
@@ -157,6 +178,23 @@ def build_operator_dashboard(qs: dict[str, list[str]]) -> dict[str, Any]:
     survival = query_active_survival_tests(db_path=db_path)
     lifecycle_map = query_lifecycle_by_strategy(db_path=db_path)
 
+    mid_ev = base.get("market_event_id")
+    mpath_arg: Path | None = None
+    if base.get("market_data_path"):
+        try:
+            mp = Path(str(base["market_data_path"]))
+            if mp.exists():
+                mpath_arg = mp
+        except Exception:
+            mpath_arg = None
+
+    qel_summaries: dict[str, Any] = {}
+    if mid_ev:
+        for sid in ranked[:5]:
+            qs = {"strategy_id": [sid], "market_event_id": [str(mid_ev)]}
+            summ = build_evaluation_summary(qs, db_path=db_path, market_db_path=mpath_arg)
+            qel_summaries[sid] = _compact_qel_for_dashboard(summ)
+
     od = {
         "schema": "anna_operator_dashboard_v1",
         "view_mode": vm,
@@ -165,6 +203,7 @@ def build_operator_dashboard(qs: dict[str, list[str]]) -> dict[str, Any]:
         "top_five_strategy_ids": ranked[:5] if len(ranked) >= 5 else ranked,
         "lifecycle_by_strategy_id": lifecycle_map,
         "survival_tests_active": survival,
+        "qel_summaries": qel_summaries,
     }
     base["operator_dashboard"] = od
 

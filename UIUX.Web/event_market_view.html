@@ -117,6 +117,7 @@
     .sw { width: 1.1rem; height: 0.35rem; border-radius: 2px; display: inline-block; }
     .sw-baseline { background: var(--baseline); }
     .sw-market { background: #94a3b8; }
+    .sw-ema { background: linear-gradient(90deg, #fbbf24, #f59e0b); }
     .sw-test { background: repeating-linear-gradient(90deg, #f472b6, #f472b6 4px, transparent 4px, transparent 7px); height: 0.5rem; width: 1.4rem; border-radius: 2px; }
     body.view-expanded #sec-context .kv { font-size: 0.78rem; }
     .trace--summary { font-family: var(--mono); font-size: 0.78rem; }
@@ -149,6 +150,7 @@
       <h3>After data loads</h3>
       <a href="#sec-identity">Event identity</a>
       <a href="#sec-chart">Market chart (primary)</a>
+      <a href="#sec-trend-context">Trend context</a>
       <a href="#sec-strategy-toggles">Top-five Anna (visibility)</a>
       <a href="#sec-strategy-actions">Strategy actions (baseline + table)</a>
       <a href="#sec-tests">Survival tests</a>
@@ -229,6 +231,7 @@
         <div class="panel-b">
           <div class="chart-legend" aria-hidden="true">
             <span><i class="sw sw-market"></i> OHLC candles (TradingView Lightweight Charts)</span>
+            <span><i class="sw sw-ema"></i> EMA trend reference (server)</span>
             <span><i class="sw sw-baseline"></i> Baseline (blue line)</span>
             <span>Anna strategies (colored lines, toggle below)</span>
             <span><i class="sw sw-test"></i> Survival tests (strip below chart)</span>
@@ -238,6 +241,13 @@
           <p class="meta" id="chartNote"></p>
           <p class="meta" id="ruleBox" style="margin-top:0.5rem"></p>
         </div>
+      </div>
+      </section>
+
+      <section id="sec-trend-context">
+      <div class="panel">
+        <div class="panel-h">Trend context (authoritative — API)</div>
+        <div class="panel-b" id="trendContextBody"></div>
       </div>
       </section>
 
@@ -262,7 +272,7 @@
           <div id="baselineSlot"></div>
           <table class="data" id="tbl">
             <thead><tr>
-              <th>Lane</th><th>Strategy</th><th>Mode</th><th>Side</th><th>Entry</th><th>Exit</th><th>Result</th>
+              <th>Lane</th><th>Strategy</th><th>Mode</th><th>Side</th><th>vs trend</th><th>Entry</th><th>Exit</th><th>Result</th>
             </tr></thead>
             <tbody id="tbody"></tbody>
           </table>
@@ -276,6 +286,7 @@
         <div class="panel-b">
           <p class="sub" style="margin-top:0">Shown in <strong>all view modes</strong> (Operator is default). Load judgment uses <code style="font-family:var(--mono);font-size:0.82rem">/api/v1/anna/evaluation-summary</code>. For strategy-only QEL without the event chart, use <a href="/anna/evaluation" style="color:var(--accent)">QEL evaluation</a> in the top bar.</p>
           <p class="sub" style="margin-top:0.5rem">Why this strategy is alive, dead, or advancing — from the Quantitative Evaluation Layer (ledger + survival checkpoints), not inferred from raw trades.</p>
+          <div id="qelEmbedded" class="meta" style="margin:0.75rem 0 1rem;padding:0.75rem;border:1px solid var(--border);border-radius:8px;background:var(--surface2)"></div>
           <label style="display:flex;flex-direction:column;gap:0.35rem;font-size:0.72rem;text-transform:uppercase;letter-spacing:0.05em;color:var(--muted);max-width:420px;margin-bottom:0.75rem">
             Anna strategy
             <select id="evalStrategy" style="padding:0.45rem 0.6rem;border-radius:6px;border:1px solid var(--border);background:var(--surface2);color:var(--text);font-family:var(--mono);font-size:0.85rem"></select>
@@ -546,6 +557,20 @@
     });
     candleSeries.setData(candleData);
 
+    var tx = p.trend_context || {};
+    var emaPts = tx.trend_reference_series || [];
+    if (emaPts.length) {
+      var emaSeries = chart.addLineSeries({
+        color: '#fbbf24',
+        lineWidth: 2,
+        priceLineVisible: false,
+        lastValueVisible: true,
+      });
+      emaSeries.setData(emaPts.map(function (pt) {
+        return { time: pt.time, value: Number(pt.value) };
+      }));
+    }
+
     function addSegmentLines(segs, color, lineWidth, visible) {
       (segs || []).forEach(function (seg) {
         var pr = Number(seg.entry_price);
@@ -692,7 +717,7 @@
     var cs = (qs('#chartSize') && qs('#chartSize').value) ? qs('#chartSize').value : 'standard';
     if (note) {
       note.textContent =
-        'Candles: ' + candleData.length + ' (TradingView Lightweight Charts). Mode: ' + vm + '. Chart height: ' + cs + '. Baseline = blue lines. Anna = ranked (toggle). Entry/exit = E/X markers; event bar = ▲. Survival = strip below. ' +
+        'Candles: ' + candleData.length + ' (TradingView Lightweight Charts). Gold line = EMA(' + (tx.ema_period || 20) + ') from API. Mode: ' + vm + '. Chart height: ' + cs + '. Baseline = blue lines. Anna = ranked (toggle). Entry/exit = E/X markers; event bar = ▲. Survival = strip below. ' +
         (dg ? 'Gaps: ' + dg + '.' : '');
     }
   }
@@ -761,6 +786,18 @@
     }
   }
 
+  function trendAlignmentCell(row) {
+    var ta = row.trend_alignment;
+    if (!ta || !ta.alignment) return '<span style="color:var(--muted)">—</span>';
+    var al = ta.alignment;
+    var cls = 'eval-pend';
+    if (al === 'with_trend') cls = 'eval-pass';
+    else if (al === 'against_trend') cls = 'eval-fail';
+    else if (al === 'neutral_trend') cls = 'eval-pend';
+    return '<span class="badge ' + cls + '" title="' + esc(ta.interpretation || '') + '">' + esc(al) + '</span>' +
+      '<div style="font-size:0.72rem;color:var(--muted);margin-top:0.2rem">' + esc(ta.trend_at_entry || '—') + '</div>';
+  }
+
   function renderTable(p) {
     var rows = p.strategy_rows || [];
     var vm = getViewMode();
@@ -782,11 +819,64 @@
         '<td style="font-family:var(--mono);font-size:0.78rem">' + esc(row.strategy_id) + '</td>' +
         '<td>' + badgeMode(row.mode) + '</td>' +
         '<td>' + esc(row.side || '—') + '</td>' +
+        '<td style="max-width:140px">' + trendAlignmentCell(row) + '</td>' +
         '<td>' + esc(row.entry_time || '—') + (row.entry_price != null ? '<br/><span style="color:var(--muted)">@' + esc(row.entry_price) + '</span>' : '') + '</td>' +
         '<td>' + esc(row.exit_time || '—') + (row.exit_price != null ? '<br/><span style="color:var(--muted)">@' + esc(row.exit_price) + '</span>' : '') + '</td>' +
         '<td>' + resultCell(row) + '</td>' +
         '</tr>';
     }).join('');
+  }
+
+  function renderTrendContextPanel(p) {
+    var el = qs('#trendContextBody');
+    if (!el) return;
+    var tc = p.trend_context || {};
+    var ev = tc.event_bar_regime_tags || {};
+    var rt = ev.trend_bucket != null ? String(ev.trend_bucket) : '—';
+    var vb = ev.vol_bucket != null ? String(ev.vol_bucket) : '—';
+    var st = ev.stress ? 'yes' : 'no';
+    var parts = [];
+    parts.push('<p class="meta" style="margin:0;line-height:1.45">' + esc(tc.alignment_rule || '') + '</p>');
+    parts.push('<div class="kv" style="margin-top:0.85rem">');
+    parts.push('<div><kbd>EMA period</kbd><br/><strong>' + esc(String(tc.ema_period != null ? tc.ema_period : '—')) + '</strong> · gold line on chart</div>');
+    parts.push('<div><kbd>Event bar — trend</kbd><br/><strong>' + esc(rt) + '</strong> (single-bar regime_tags_v1)</div>');
+    parts.push('<div><kbd>Event bar — volatility</kbd><br/><strong>' + esc(vb) + '</strong></div>');
+    parts.push('<div><kbd>Event bar — stress</kbd><br/><strong>' + esc(st) + '</strong> (high vol and/or gate from trade context)</div>');
+    parts.push('</div>');
+    el.innerHTML = parts.join('');
+  }
+
+  function renderQelEmbedded(p) {
+    var host = qs('#qelEmbedded');
+    if (!host) return;
+    var od = p.operator_dashboard || {};
+    var qel = od.qel_summaries || {};
+    var ids = Object.keys(qel);
+    if (!ids.length) {
+      host.innerHTML = '<p style="margin:0;color:var(--muted)">No bundled QEL summaries (no ranked Anna strategies or ledger unavailable).</p>';
+      return;
+    }
+    var html = '<p style="margin:0 0 0.65rem;font-size:0.85rem;color:var(--muted)">Bundled <strong>QEL</strong> for ranked Anna strategies at this <code style="font-family:var(--mono);font-size:0.78rem">market_event_id</code> — same source as <code style="font-family:var(--mono);font-size:0.78rem">/api/v1/anna/evaluation-summary</code>.</p>';
+    ids.forEach(function (sid) {
+      var block = qel[sid];
+      if (!block || !block.ok) {
+        html += '<div style="margin-bottom:0.5rem;padding:0.5rem;border:1px solid var(--border);border-radius:6px;background:var(--surface)"><strong style="font-family:var(--mono);font-size:0.8rem">' + esc(sid) + '</strong> · <span style="color:#fecaca">' + esc((block && block.error) || 'error') + '</span></div>';
+        return;
+      }
+      var ce = block.canonical_evaluation || {};
+      var bc = block.baseline_comparison || {};
+      html += '<div style="margin-bottom:0.65rem;padding:0.65rem;border:1px solid var(--border);border-radius:8px;background:var(--surface)">';
+      html += '<div style="font-family:var(--mono);font-size:0.82rem;font-weight:600;margin-bottom:0.35rem">' + esc(sid) + '</div>';
+      html += '<div class="kv" style="font-size:0.78rem">';
+      html += '<div><kbd>Readiness</kbd><br/><strong>' + esc(ce.readiness_state || '—') + '</strong></div>';
+      html += '<div><kbd>Phase</kbd><br/>' + esc(ce.current_phase || '—') + '</div>';
+      html += '<div><kbd>Last checkpoint</kbd><br/>' + esc(ce.last_checkpoint_decision || '—') + '</div>';
+      if (bc && bc.available) {
+        html += '<div><kbd>vs baseline @ event</kbd><br/>' + esc(bc.direction || '') + ' · Δ $' + esc(String(bc.delta_pnl_usd)) + '</div>';
+      }
+      html += '</div></div>';
+    });
+    host.innerHTML = html;
   }
 
   function renderContext(p) {
@@ -960,7 +1050,9 @@
       renderBaselineSlot(p);
       renderStrategyPanel(p);
       renderChart(p);
+      renderTrendContextPanel(p);
       renderTable(p);
+      renderQelEmbedded(p);
       populateEvalSelect(p);
       qs('#evalBody').style.display = 'none';
       renderContext(p);
@@ -968,7 +1060,7 @@
       renderTraces(p);
       var defu = p.defaults_used || {};
       var cw = p.chart_window || {};
-      qs('#rawMeta').textContent = 'GET ' + url + ' · ' + (p.schema || '') + ' · defaults_used ' + JSON.stringify(defu) + ' · window ' + JSON.stringify(cw) + ' · chart_overlay ' + ((p.chart_overlay || {}).schema || '') + ' · ledger ' + (p.ledger_path || '');
+      qs('#rawMeta').textContent = 'GET ' + url + ' · ' + (p.schema || '') + ' · defaults_used ' + JSON.stringify(defu) + ' · window ' + JSON.stringify(cw) + ' · chart_overlay ' + ((p.chart_overlay || {}).schema || '') + ' · trend_context ' + ((p.trend_context || {}).schema || '') + ' · qel_summaries ' + (Object.keys((p.operator_dashboard || {}).qel_summaries || {}).length) + ' · ledger ' + (p.ledger_path || '');
     }).catch(function (e) {
       qs('#error').style.display = 'block';
       qs('#error').textContent = String(e);
