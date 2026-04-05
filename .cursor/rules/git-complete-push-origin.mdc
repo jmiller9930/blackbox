@@ -1,0 +1,31 @@
+---
+description: Commit and push substantive work to origin — remote is not updated until push succeeds
+alwaysApply: true
+---
+
+# Git: complete work on the remote
+
+**Problem:** Uncommitted or unpushed work is invisible on other machines, forces rework, and risks divergent copies.
+
+## Default (substantive work)
+
+When you **implement or fix** something that changes tracked project files (code, tests, operator-facing config the repo expects):
+
+1. **`git status`** — confirm what changed; stage **only** files that belong to this task (exclude unrelated artifacts, accidental `docs/working/` dumps, local DBs, unless the user asked to commit them).
+2. **`git commit`** — clear message describing what and why.
+3. **`git push origin`** to the **current branch** (usually `main`).
+
+Do this **before** you end the turn, say “done,” or tell the operator to pull on clawbot.
+
+## If push cannot run
+
+- Report **commit hash** (local) and the **failure** (auth, network). Do **not** imply the remote has the work.
+
+## When to skip push
+
+- The user **explicitly** asked not to commit or push, or
+- The work is **explicitly** exploratory/scratch only (still say “not committed”).
+
+## Proof
+
+“Synced” means **`git push` succeeded** for that commit. Staging-only or local-only is **not** synced.
