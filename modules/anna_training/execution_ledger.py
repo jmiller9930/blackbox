@@ -162,6 +162,24 @@ def _migrate_qel_schema(conn: sqlite3.Connection, root: Path) -> None:
     _migrate_strategy_registry_qel_columns(conn)
 
 
+def _migrate_strategy_registry_sequential_columns(conn: sqlite3.Connection) -> None:
+    """Sequential learning driver — snapshot JSON on strategy_registry."""
+    cur = conn.execute("PRAGMA table_info(strategy_registry)")
+    cols = {str(r[1]) for r in cur.fetchall()}
+    if "sequential_learning_snapshot_json" not in cols:
+        conn.execute(
+            "ALTER TABLE strategy_registry ADD COLUMN sequential_learning_snapshot_json TEXT"
+        )
+
+
+def _migrate_sequential_learning_schema(conn: sqlite3.Connection, root: Path) -> None:
+    """Sequential learning SPRT audit table + strategy_registry columns."""
+    sl = root / "data" / "sqlite" / "schema_sequential_learning.sql"
+    if sl.is_file():
+        conn.executescript(sl.read_text(encoding="utf-8"))
+    _migrate_strategy_registry_sequential_columns(conn)
+
+
 def _strict_trade_identity() -> bool:
     return (os.environ.get("ANNA_STRICT_TRADE_IDENTITY") or "").strip().lower() in (
         "1",
@@ -188,6 +206,7 @@ def ensure_execution_ledger_schema(conn: sqlite3.Connection, root: Path | None =
     _migrate_execution_trades_paper_stub_mode(conn)
     _migrate_decision_traces_table(conn, root)
     _migrate_qel_schema(conn, root)
+    _migrate_sequential_learning_schema(conn, root)
     conn.commit()
 
 

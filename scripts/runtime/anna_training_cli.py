@@ -1042,6 +1042,108 @@ def _cmd_llm_cross_check(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_sequential_learning_run(args: argparse.Namespace) -> int:
+    """Sequential learning driver: ledger pairs → manifest → SPRT → DB audit + shadow tier."""
+    from modules.anna_training.sequential_engine.calibration_factory import load_and_validate_calibration
+    from modules.anna_training.sequential_engine.io_paths import calibration_report_path
+    from modules.anna_training.sequential_engine.runtime_driver import run_sequential_learning_driver
+
+    cal_path = (getattr(args, "calibration", "") or "").strip()
+    p = Path(cal_path) if cal_path else calibration_report_path()
+    if getattr(args, "calibration_check_only", False):
+        report = load_and_validate_calibration(p)
+        print(json.dumps({"ok": True, "calibration": report.model_dump(), "path": str(p)}, indent=2))
+        return 0
+    ev_raw = (getattr(args, "events", "") or "").strip()
+    if not ev_raw:
+        print(json.dumps({"ok": False, "error": "events_required", "hint": "Pass --events <file>"}), file=sys.stderr)
+        return 2
+    if not p.is_file():
+        print(
+            json.dumps(
+                {
+                    "ok": False,
+                    "error": "calibration_missing",
+                    "path": str(p),
+                    "hint": "Run: sequential-init-calibration --out <path> --protocol-id <id>",
+                },
+                indent=2,
+            ),
+            file=sys.stderr,
+        )
+        return 2
+    report = load_and_validate_calibration(p)
+
+    ev_path = Path(ev_raw)
+    if not ev_path.is_file():
+        print(json.dumps({"ok": False, "error": "events_file_not_found", "path": str(ev_path)}), file=sys.stderr)
+        return 2
+    lines = [ln.strip() for ln in ev_path.read_text(encoding="utf-8").splitlines() if ln.strip() and not ln.strip().startswith("#")]
+
+    art = (getattr(args, "artifacts_dir", "") or "").strip()
+    ldb = (getattr(args, "ledger_db", "") or "").strip()
+    mdb = (getattr(args, "market_db", "") or "").strip()
+    hyp = (getattr(args, "hypothesis_json", "") or "").strip()
+    pat = (getattr(args, "pattern_spec_json", "") or "").strip()
+    sp = (getattr(args, "scaling_protocol_json", "") or "").strip()
+
+    hypothesis = json.loads(Path(hyp).read_text(encoding="utf-8")) if hyp else None
+    pattern_spec = json.loads(Path(pat).read_text(encoding="utf-8")) if pat else None
+    scaling_protocol = json.loads(Path(sp).read_text(encoding="utf-8")) if sp else {}
+
+    out = run_sequential_learning_driver(
+        test_id=(args.test_id or "").strip(),
+        strategy_id=(args.strategy_id or "").strip(),
+        calibration=report,
+        market_event_ids=lines,
+        ledger_db_path=Path(ldb) if ldb else None,
+        market_db_path=Path(mdb) if mdb else None,
+        artifacts_dir=Path(art) if art else None,
+        hypothesis=hypothesis,
+        pattern_spec=pattern_spec,
+        scaling_protocol=scaling_protocol,
+    )
+    print(json.dumps(out, indent=2))
+    return 0 if out.get("ok") else 1
+
+
+def _cmd_sequential_init_calibration(args: argparse.Namespace) -> int:
+    from modules.anna_training.sequential_engine.calibration_factory import write_calibration_from_template
+
+    dest = Path((args.out or "").strip())
+    write_calibration_from_template(dest, protocol_id=(args.protocol_id or "").strip())
+    print(json.dumps({"ok": True, "path": str(dest)}, indent=2))
+    return 0
+
+
+def _cmd_sequential_learning_status(args: argparse.Namespace) -> int:
+    from modules.anna_training.sequential_engine.decision_state import export_decision_snapshot
+    from modules.anna_training.sequential_engine.sequential_persistence import (
+        list_sequential_runs_for_test,
+        load_last_sequential_decision,
+    )
+
+    test_id = (args.test_id or "").strip()
+    sid = (args.strategy_id or "").strip()
+    art = (getattr(args, "artifacts_dir", "") or "").strip()
+    ldb = (getattr(args, "ledger_db", "") or "").strip()
+    snap = export_decision_snapshot(test_id, artifacts_dir=Path(art) if art else None)
+    runs = list_sequential_runs_for_test(test_id, db_path=Path(ldb) if ldb else None, limit=20)
+    last = load_last_sequential_decision(sid, db_path=Path(ldb) if ldb else None)
+    print(
+        json.dumps(
+            {
+                "ok": True,
+                "sequential_state_snapshot": snap,
+                "runs_for_test": runs,
+                "last_decision_for_strategy": last,
+            },
+            indent=2,
+        )
+    )
+    return 0
+
+
 def _cmd_note(args: argparse.Namespace) -> int:
     text = (args.text or "").strip()
     if not text:
@@ -1482,6 +1584,54 @@ def main(argv: list[str] | None = None) -> int:
         help="If cross-check runs successfully, append a short line to operator_notes in state.json.",
     )
 
+    ap_seq = sub.add_parser(
+        "sequential-learning-run",
+        help="Sequential engine driver: paired ledger rows → outcome_manifest → SPRT → DB audit (shadow tier JSON).",
+    )
+    ap_seq.add_argument("--test-id", required=True, help="Test / cohort id (artifact subdirectory).")
+    ap_seq.add_argument("--strategy-id", required=True, help="Anna candidate strategy_id (ledger lane=anna).")
+    ap_seq.add_argument(
+        "--calibration",
+        default="",
+        help="Path to calibration_report.json (default: BLACKBOX_CALIBRATION_REPORT_PATH or data/sequential_engine/calibration_report.json).",
+    )
+    ap_seq.add_argument(
+        "--events",
+        default="",
+        help="UTF-8 file: one market_event_id per line (# comments). Not required with --calibration-check-only.",
+    )
+    ap_seq.add_argument("--artifacts-dir", default="", help="Override BLACKBOX_SEQUENTIAL_ARTIFACTS_DIR.")
+    ap_seq.add_argument("--ledger-db", default="", help="Override BLACKBOX_EXECUTION_LEDGER_PATH (SQLite file).")
+    ap_seq.add_argument("--market-db", default="", help="Override BLACKBOX_MARKET_DATA_DB.")
+    ap_seq.add_argument("--hypothesis-json", default="", help="Optional JSON file for hypothesis dict (hashed + written to hypothesis_bundle.json).")
+    ap_seq.add_argument("--pattern-spec-json", default="", help="Optional JSON file for pattern_spec (detector params).")
+    ap_seq.add_argument(
+        "--scaling-protocol-json",
+        default="",
+        help="Optional JSON for scaling_policy (shadow tier only; max_scale, require_promote_for_scale).",
+    )
+    ap_seq.add_argument(
+        "--calibration-check-only",
+        action="store_true",
+        help="Validate calibration file and exit (no ledger access).",
+    )
+
+    ap_seq_st = sub.add_parser(
+        "sequential-learning-status",
+        help="JSON: sequential_state snapshot, SPRT audit rows for test, last decision for strategy.",
+    )
+    ap_seq_st.add_argument("--test-id", required=True)
+    ap_seq_st.add_argument("--strategy-id", required=True)
+    ap_seq_st.add_argument("--artifacts-dir", default="")
+    ap_seq_st.add_argument("--ledger-db", default="")
+
+    ap_seq_init = sub.add_parser(
+        "sequential-init-calibration",
+        help="Write calibration_report.json from bundled template (protocol_id + locked MAE id).",
+    )
+    ap_seq_init.add_argument("--out", required=True, help="Destination path for calibration_report.json.")
+    ap_seq_init.add_argument("--protocol-id", required=True, help="Frozen protocol id string for this calibration.")
+
     args = p.parse_args(argv)
 
     # Wilson NIST cases before data preflight so math regressions surface even without DB/Solana.
@@ -1513,6 +1663,9 @@ def main(argv: list[str] | None = None) -> int:
         "tool-pass",
         "log-execution-trade",
         "scan-execution-ledger-pnl",
+        "sequential-learning-run",
+        "sequential-learning-status",
+        "sequential-init-calibration",
     ):
         rc = _require_preflight_or_exit()
         if rc is not None:
@@ -1563,6 +1716,12 @@ def main(argv: list[str] | None = None) -> int:
         return _cmd_school(args)
     if args.cmd == "llm-cross-check":
         return _cmd_llm_cross_check(args)
+    if args.cmd == "sequential-learning-run":
+        return _cmd_sequential_learning_run(args)
+    if args.cmd == "sequential-learning-status":
+        return _cmd_sequential_learning_status(args)
+    if args.cmd == "sequential-init-calibration":
+        return _cmd_sequential_init_calibration(args)
     if args.cmd == "flush-runtime":
         if not getattr(args, "yes", False):
             print(
