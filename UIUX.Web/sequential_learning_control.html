@@ -1,0 +1,235 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Sequential learning — operator control</title>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,600;0,9..40,700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet"/>
+  <style>
+    :root {
+      --bg: #0c0f14; --surface: #141a22; --surface2: #1a222d; --border: #2d3847;
+      --text: #e8edf4; --muted: #8b9aad; --accent: #38bdf8; --warn: #fbbf24; --stop: #f87171;
+      --go: #34d399; --font: "DM Sans", system-ui, sans-serif; --mono: "IBM Plex Mono", ui-monospace, monospace;
+    }
+    body { margin: 0; min-height: 100vh; background: var(--bg); color: var(--text); font-family: var(--font); font-size: 15px; }
+    .wrap { max-width: 1100px; margin: 0 auto; padding: 1.25rem; }
+    h1 { font-size: 1.35rem; margin: 0 0 0.35rem; }
+    .sub { color: var(--muted); font-size: 0.88rem; margin-bottom: 1rem; }
+    .banner {
+      font-size: 0.78rem; color: #bae6fd; background: rgba(56, 189, 248, 0.08);
+      border: 1px solid rgba(56, 189, 248, 0.35); border-radius: 8px; padding: 0.55rem 0.85rem; margin-bottom: 1rem; line-height: 1.45;
+    }
+    .controls { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 0.6rem; margin-bottom: 1rem; }
+    .controls button {
+      padding: 0.55rem 0.75rem; border-radius: 8px; border: 1px solid var(--border); cursor: pointer;
+      font-weight: 600; font-size: 0.88rem; font-family: var(--font);
+    }
+    button.start { background: rgba(52, 211, 153, 0.2); color: #6ee7b7; border-color: rgba(52, 211, 153, 0.45); }
+    button.pause { background: rgba(251, 191, 36, 0.15); color: #fcd34d; border-color: rgba(251, 191, 36, 0.4); }
+    button.stop { background: rgba(248, 113, 113, 0.12); color: #fecaca; border-color: rgba(248, 113, 113, 0.4); }
+    button.reset { background: var(--surface2); color: var(--muted); }
+    button.tick { background: rgba(56, 189, 248, 0.15); color: #7dd3fc; border-color: rgba(56, 189, 248, 0.35); }
+    button:disabled { opacity: 0.45; cursor: not-allowed; }
+    .form { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 1rem; margin-bottom: 1rem; }
+    .form-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 0.75rem; }
+    label { display: flex; flex-direction: column; gap: 0.25rem; font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); }
+    input, select { padding: 0.45rem 0.55rem; border-radius: 6px; border: 1px solid var(--border); background: var(--surface2); color: var(--text); font-family: var(--mono); font-size: 0.82rem; }
+    .status-bar {
+      display: flex; flex-wrap: wrap; gap: 0.75rem 1.25rem; align-items: center;
+      padding: 0.75rem 1rem; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; margin-bottom: 1rem; font-family: var(--mono); font-size: 0.82rem;
+    }
+    .pill { padding: 0.2rem 0.55rem; border-radius: 999px; font-weight: 600; font-size: 0.78rem; }
+    .idle { background: rgba(139, 154, 173, 0.2); color: var(--muted); }
+    .running { background: rgba(52, 211, 153, 0.2); color: #6ee7b7; }
+    .paused { background: rgba(251, 191, 36, 0.2); color: #fcd34d; }
+    .stopped { background: rgba(248, 113, 113, 0.15); color: #fecaca; }
+    .panel { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; overflow: hidden; margin-bottom: 1rem; }
+    .panel-h { padding: 0.65rem 1rem; border-bottom: 1px solid var(--border); font-size: 0.72rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.07em; color: var(--muted); }
+    .panel-b { padding: 1rem; }
+    pre { margin: 0; font-family: var(--mono); font-size: 0.75rem; line-height: 1.45; white-space: pre-wrap; word-break: break-word; color: #cbd5e1; max-height: 320px; overflow: auto; }
+    .err { background: rgba(248,113,113,0.12); border: 1px solid rgba(248,113,113,0.4); color: #fecaca; padding: 0.75rem 1rem; border-radius: 8px; margin-bottom: 1rem; font-family: var(--mono); font-size: 0.82rem; display: none; }
+    .ok { background: rgba(52,211,153,0.1); border: 1px solid rgba(52,211,153,0.35); color: #a7f3d0; padding: 0.5rem 0.85rem; border-radius: 8px; margin-bottom: 0.75rem; font-size: 0.8rem; display: none; font-family: var(--mono); }
+    a { color: var(--accent); }
+    .meta { font-size: 0.72rem; color: var(--muted); }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <h1>Sequential learning — operator control</h1>
+    <p class="sub">Start / Pause / Stop / Reset map to strict backend semantics. API: <code>/api/v1/sequential-learning/control/*</code>. Same-origin as other Anna surfaces.</p>
+    <p class="banner" role="status">
+      <strong>Start</strong> requires explicit <code>start_mode</code>: <code>resume</code> (continue cursor + same test/calibration) or <code>new_run</code> (fresh cursor; fails if artifact dir for <code>test_id</code> already has files — use Reset or a new <code>test_id</code>).
+      <strong>Pause</strong> halts tick consumption; <strong>Stop</strong> ends the run without clearing artifacts; <strong>Reset</strong> creates a clean control boundary and optionally archives file artifacts under <code>_archive/</code> (SQLite decision history is retained).
+    </p>
+
+    <div class="form">
+      <div class="form-grid">
+        <label>start_mode
+          <select id="start_mode">
+            <option value="resume">resume</option>
+            <option value="new_run">new_run</option>
+          </select>
+        </label>
+        <label>test_id
+          <input type="text" id="test_id" placeholder="seq_run_001"/>
+        </label>
+        <label>strategy_id
+          <input type="text" id="strategy_id" placeholder="anna_strategy_v1"/>
+        </label>
+        <label>calibration_path
+          <input type="text" id="calibration_path" placeholder="/path/to/calibration_report.json"/>
+        </label>
+        <label>events_file_path
+          <input type="text" id="events_file_path" placeholder="/path/to/event_ids.txt"/>
+        </label>
+        <label>ledger_db_path (optional)
+          <input type="text" id="ledger_db_path" placeholder=""/>
+        </label>
+        <label>market_db_path (optional)
+          <input type="text" id="market_db_path" placeholder=""/>
+        </label>
+        <label>artifacts_dir (optional)
+          <input type="text" id="artifacts_dir" placeholder=""/>
+        </label>
+      </div>
+    </div>
+
+    <div class="controls">
+      <button type="button" class="start" id="btnStart">Start</button>
+      <button type="button" class="pause" id="btnPause">Pause</button>
+      <button type="button" class="stop" id="btnStop">Stop</button>
+      <button type="button" class="reset" id="btnReset">Reset</button>
+      <button type="button" class="tick" id="btnTick">Tick</button>
+    </div>
+
+    <div id="msgOk" class="ok"></div>
+    <div id="msgErr" class="err"></div>
+
+    <div class="status-bar" id="statusBar">
+      <span>ui_state: <span class="pill idle" id="pillState">—</span></span>
+      <span>test_id: <strong id="v_test">—</strong></span>
+      <span>strategy: <strong id="v_strat">—</strong></span>
+      <span>calibration fp: <strong id="v_cal">—</strong></span>
+      <span>last event: <strong id="v_ev">—</strong></span>
+      <span>cursor: <strong id="v_cur">—</strong></span>
+      <span>last SPRT: <strong id="v_sprt">—</strong></span>
+      <span>last decision (DB): <strong id="v_dec">—</strong></span>
+    </div>
+
+    <div class="panel">
+      <div class="panel-h">Sequential state snapshot</div>
+      <div class="panel-b"><pre id="snapPre">{}</pre></div>
+    </div>
+    <div class="panel">
+      <div class="panel-h">Last decision row (ledger)</div>
+      <div class="panel-b"><pre id="decPre">{}</pre></div>
+    </div>
+    <div class="panel">
+      <div class="panel-h">Transition log (tail)</div>
+      <div class="panel-b"><pre id="logPre">[]</pre></div>
+    </div>
+    <p class="meta" id="meta"></p>
+  </div>
+  <script>
+(function () {
+  var pollTimer = null;
+  function qs(s) { return document.querySelector(s); }
+  function showErr(t) {
+    var e = qs('#msgErr'); e.style.display = t ? 'block' : 'none'; e.textContent = t || '';
+  }
+  function showOk(t) {
+    var o = qs('#msgOk'); o.style.display = t ? 'block' : 'none'; o.textContent = t || '';
+  }
+  function esc(s) {
+    if (s === null || s === undefined) return '';
+    return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  }
+  function pillClass(st) {
+    var m = { idle: 'idle', running: 'running', paused: 'paused', stopped: 'stopped' };
+    return m[st] || 'idle';
+  }
+  function jstr(x) {
+    try { return JSON.stringify(x, null, 2); } catch (e) { return String(x); }
+  }
+  function renderStatus(d) {
+    var st = d.ui_state || 'idle';
+    var pill = qs('#pillState');
+    pill.textContent = st;
+    pill.className = 'pill ' + pillClass(st);
+    qs('#v_test').textContent = d.test_id != null ? d.test_id : '—';
+    qs('#v_strat').textContent = d.strategy_id != null ? d.strategy_id : '—';
+    qs('#v_cal').textContent = d.calibration_fingerprint != null ? String(d.calibration_fingerprint).slice(0, 16) + '…' : '—';
+    qs('#v_ev').textContent = d.last_processed_market_event_id != null ? d.last_processed_market_event_id : '—';
+    qs('#v_cur').textContent = (d.events_cursor_line != null ? d.events_cursor_line : '0') + ' / ' + (d.events_total_lines != null ? d.events_total_lines : '?');
+    var sprt = d.last_sprt_decision;
+    if (sprt == null && d.sequential_state_snapshot && d.sequential_state_snapshot.sprt) {
+      var sp = d.sequential_state_snapshot.sprt;
+      sprt = (sp.decision != null) ? sp.decision : jstr(sp).slice(0, 120);
+    }
+    qs('#v_sprt').textContent = sprt != null ? String(sprt) : '—';
+    var dr = d.last_decision_row;
+    qs('#v_dec').textContent = dr && dr.sprt_decision != null ? dr.sprt_decision : '—';
+    qs('#snapPre').textContent = jstr(d.sequential_state_snapshot || {});
+    qs('#decPre').textContent = jstr(d.last_decision_row || {});
+    qs('#logPre').textContent = jstr(d.transition_log_tail || []);
+    qs('#meta').textContent = 'Last refresh: ' + new Date().toISOString() + (d.trace_id ? ' · trace ' + d.trace_id : '');
+  }
+  function getStatus() {
+    fetch('/api/v1/sequential-learning/control/status', { cache: 'no-store' })
+      .then(function (r) { return r.json(); })
+      .then(function (d) {
+        showErr('');
+        renderStatus(d);
+      })
+      .catch(function (e) {
+        showErr('status fetch failed: ' + e);
+      });
+  }
+  function post(action, body) {
+    showOk('');
+    fetch('/api/v1/sequential-learning/control/' + action, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body || {})
+    })
+      .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, j: j }; }); })
+      .then(function (x) {
+        if (!x.ok) {
+          showErr((x.j && (x.j.detail || x.j.reason_code)) ? (x.j.reason_code + ': ' + (x.j.detail || '')) : jstr(x.j));
+        } else {
+          showOk((x.j && x.j.reason_code) ? x.j.reason_code : 'ok');
+          showErr('');
+        }
+        getStatus();
+      })
+      .catch(function (e) {
+        showErr('request failed: ' + e);
+      });
+  }
+  function startBody() {
+    return {
+      start_mode: qs('#start_mode').value,
+      test_id: qs('#test_id').value.trim(),
+      strategy_id: qs('#strategy_id').value.trim(),
+      calibration_path: qs('#calibration_path').value.trim(),
+      events_file_path: qs('#events_file_path').value.trim(),
+      ledger_db_path: qs('#ledger_db_path').value.trim(),
+      market_db_path: qs('#market_db_path').value.trim(),
+      artifacts_dir: qs('#artifacts_dir').value.trim()
+    };
+  }
+  qs('#btnStart').onclick = function () { post('start', startBody()); };
+  qs('#btnPause').onclick = function () { post('pause', {}); };
+  qs('#btnStop').onclick = function () { post('stop', {}); };
+  qs('#btnReset').onclick = function () {
+    if (!window.confirm('Reset control state? Optional: archive file artifacts to _archive/. SQLite history is not deleted.')) return;
+    post('reset', { archive: true, new_test_id: '' });
+  };
+  qs('#btnTick').onclick = function () { post('tick', { max_events: 5 }); };
+
+  getStatus();
+  pollTimer = setInterval(getStatus, 3000);
+})();
+  </script>
+</body>
+</html>

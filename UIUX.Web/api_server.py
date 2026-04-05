@@ -1713,6 +1713,17 @@ TRAINING_DASHBOARD_HTML = """<!DOCTYPE html>
 
 
 class Handler(BaseHTTPRequestHandler):
+    def _read_json_body(self) -> dict[str, Any]:
+        ln = int(self.headers.get("Content-Length") or 0)
+        if ln <= 0:
+            return {}
+        raw = self.rfile.read(ln)
+        try:
+            out = json.loads(raw.decode("utf-8"))
+            return out if isinstance(out, dict) else {}
+        except json.JSONDecodeError:
+            return {}
+
     def _json(
         self,
         code: int,
@@ -1815,8 +1826,35 @@ class Handler(BaseHTTPRequestHandler):
         if path in ("/anna/training", "/anna/training/"):
             self._html(200, TRAINING_DASHBOARD_HTML, no_cache=True)
             return
+        if path in ("/anna/sequential-learning", "/anna/sequential-learning/"):
+            sl = _REPO_ROOT / "UIUX.Web" / "sequential_learning_control.html"
+            if sl.is_file():
+                self._html(200, sl.read_text(encoding="utf-8"), no_cache=True)
+                return
         if path == "/api/v1/system/status":
             self._json(200, build_system_status())
+            return
+        if path == "/api/v1/sequential-learning/control/status":
+            try:
+                from modules.anna_training.sequential_engine.ui_control import build_operator_status
+
+                payload = build_operator_status()
+            except Exception as e:  # noqa: BLE001
+                self._json(
+                    500,
+                    {
+                        "ok": False,
+                        "reason_code": "SEQUENTIAL_STATUS_EXCEPTION",
+                        "detail": str(e),
+                        "trace_id": str(uuid.uuid4()),
+                    },
+                    no_cache=True,
+                )
+                return
+            payload = dict(payload)
+            payload["ok"] = True
+            payload["trace_id"] = str(uuid.uuid4())
+            self._json(200, payload, no_cache=True)
             return
         if path == "/api/v1/context-engine/status":
             if build_context_engine_status is None or record_api_probe is None:
@@ -1881,6 +1919,66 @@ class Handler(BaseHTTPRequestHandler):
                     "emitted_at": now_iso(),
                 },
             )
+            return
+        if len(parts) == 5 and parts[:2] == ["api", "v1"] and parts[2] == "sequential-learning" and parts[3] == "control":
+            action = parts[4].lower()
+            body = self._read_json_body()
+            try:
+                from modules.anna_training.sequential_engine import ui_control as seq_uc
+            except Exception as e:  # noqa: BLE001
+                self._json(500, {"ok": False, "reason_code": "SEQUENTIAL_IMPORT_FAIL", "detail": str(e)})
+                return
+            trace_id = str(uuid.uuid4())
+            if action == "start":
+                sm_raw = str(body.get("start_mode") or "resume").lower()
+                sm: Any = "new_run" if sm_raw == "new_run" else "resume"
+                r = seq_uc.control_start(
+                    start_mode=sm,
+                    test_id=str(body.get("test_id") or ""),
+                    strategy_id=str(body.get("strategy_id") or ""),
+                    calibration_path=str(body.get("calibration_path") or ""),
+                    events_file_path=str(body.get("events_file_path") or ""),
+                    ledger_db_path=str(body.get("ledger_db_path") or ""),
+                    market_db_path=str(body.get("market_db_path") or ""),
+                    artifacts_dir=str(body.get("artifacts_dir") or ""),
+                )
+                code = 200 if r.get("ok") else 400
+                r["trace_id"] = trace_id
+                self._json(code, r)
+                return
+            if action == "pause":
+                r = seq_uc.control_pause()
+                code = 200 if r.get("ok") else 409
+                r["trace_id"] = trace_id
+                self._json(code, r)
+                return
+            if action == "stop":
+                r = seq_uc.control_stop()
+                code = 200 if r.get("ok") else 409
+                r["trace_id"] = trace_id
+                self._json(code, r)
+                return
+            if action == "reset":
+                r = seq_uc.control_reset(
+                    archive=bool(body.get("archive", True)),
+                    new_test_id=str(body.get("new_test_id") or "").strip() or None,
+                )
+                code = 200 if r.get("ok") else 409
+                r["trace_id"] = trace_id
+                self._json(code, r)
+                return
+            if action == "tick":
+                r = seq_uc.control_tick(max_events=int(body.get("max_events") or 5))
+                if r.get("reason_code") == "driver_exception":
+                    code = 500
+                elif r.get("ok") or r.get("reason_code") in ("end_of_events", "not_running_tick_skipped"):
+                    code = 200
+                else:
+                    code = 400
+                r["trace_id"] = trace_id
+                self._json(code, r)
+                return
+            self._json(400, {"ok": False, "error": "unknown_action", "action": action, "trace_id": trace_id})
             return
         self._json(404, {"error": "not_found", "path": parsed.path})
 
