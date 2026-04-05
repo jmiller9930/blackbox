@@ -20,3 +20,5 @@ def test_build_dashboard_bundle_schema() -> None:
     assert "sequential" in b
     assert "operational_boundary" in b
     assert "learning_summary" in b
+    assert "liveness" in b
+    assert b["liveness"].get("update_model", {}).get("dashboard_poll_interval_ms") == 1500

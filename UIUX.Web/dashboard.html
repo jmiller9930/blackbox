@@ -81,6 +81,29 @@
     .dash-form-grid label { display: flex; flex-direction: column; gap: 0.15rem; font-size: 0.62rem; color: var(--muted); text-transform: uppercase; }
     .dash-form-grid input { padding: 0.3rem 0.4rem; font-size: 0.75rem; border: 1px solid var(--panel-border); border-radius: 4px; }
     #dash-ctl-msg { font-size: 0.7rem; color: var(--muted); width: 100%; margin-top: 0.25rem; }
+    /* Liveness strip — operator-visible cadence + heartbeat */
+    .dash-live {
+      flex-shrink: 0; padding: 0.4rem 0.75rem; border-bottom: 1px solid var(--panel-border);
+      background: linear-gradient(90deg, rgba(34,197,94,0.08) 0%, rgba(248,250,252,1) 40%);
+      font-size: 0.74rem; font-weight: 600;
+    }
+    .dash-live.is-stalled { background: linear-gradient(90deg, rgba(239,68,68,0.12) 0%, rgba(254,242,242,1) 45%); }
+    .dash-live.is-degraded { background: linear-gradient(90deg, rgba(234,179,8,0.1) 0%, rgba(254,252,232,1) 45%); }
+    .dash-live.is-not_running { background: var(--panel); }
+    .dash-live-main { display: flex; flex-wrap: wrap; align-items: center; gap: 0.35rem 0.65rem; }
+    .dash-live-sub { margin-top: 0.25rem; font-size: 0.65rem; font-weight: 500; color: var(--muted); max-width: 100%; }
+    .pulse-wrap { display: inline-flex; align-items: center; margin-right: 0.15rem; }
+    .pulse-dot {
+      width: 10px; height: 10px; border-radius: 50%;
+      background: #22c55e; box-shadow: 0 0 0 2px rgba(34,197,94,0.35);
+    }
+    .dash-live.is-stalled .pulse-dot { background: #ef4444; box-shadow: 0 0 0 2px rgba(239,68,68,0.35); }
+    .dash-live.is-degraded .pulse-dot { background: #ca8a04; box-shadow: 0 0 0 2px rgba(234,179,8,0.4); }
+    .pulse-dot.pulse-flash { animation: livePulse 0.55s ease-out; }
+    @keyframes livePulse {
+      0% { transform: scale(1.35); opacity: 1; }
+      100% { transform: scale(1); opacity: 1; }
+    }
   </style>
 </head>
 <body>
@@ -92,6 +115,30 @@
       <a href="/anna/training">Training Dashboard</a>
     </nav>
     <div class="dash-main">
+      <!-- Row 0: liveness / cadence (heartbeat on each poll) -->
+      <div class="dash-live is-not_running" id="dash-live" role="status" aria-live="polite">
+        <div class="dash-live-main">
+          <span class="pulse-wrap" title="Flashes green on each successful bundle fetch"><span class="pulse-dot" id="live-pulse"></span></span>
+          <span><span class="lbl">Liveness</span> <span class="val" id="live-tier">—</span></span>
+          <span class="sep">|</span>
+          <span><span class="lbl">Bundle as-of (server)</span> <span class="val" id="live-bundle-at">—</span></span>
+          <span class="sep">|</span>
+          <span><span class="lbl">Last UI refresh</span> <span class="val" id="live-client-refresh">—</span></span>
+          <span class="sep">|</span>
+          <span><span class="lbl">Poll</span> <span class="val" id="live-poll-ms">—</span></span>
+          <span class="sep">|</span>
+          <span><span class="lbl">Seq. tick ~</span> <span class="val" id="live-tick-sec">—</span></span>
+          <span class="sep">|</span>
+          <span><span class="lbl">Events done</span> <span class="val" id="live-ev-proc">—</span></span>
+          <span class="sep">|</span>
+          <span><span class="lbl">Queue</span> <span class="val" id="live-ev-queue">—</span></span>
+          <span class="sep">|</span>
+          <span><span class="lbl">Last seq. tick</span> <span class="val" id="live-last-tick">—</span></span>
+          <span class="sep">|</span>
+          <span><span class="lbl">Pyth age</span> <span class="val" id="live-pyth-age">—</span></span>
+        </div>
+        <div class="dash-live-sub" id="live-detail"></div>
+      </div>
       <!-- Row 1: system banner (one strip) -->
       <div class="dash-r1" id="dash-r1" role="status" aria-live="polite">
         <span><span class="lbl">State</span> <span class="val" id="b-state">—</span></span>
@@ -188,6 +235,7 @@
   <script>
 (function () {
   var LS_KEY = 'blackbox_dashboard_seq_form_v1';
+  var POLL_MS = 1500;
   function $(id) { return document.getElementById(id); }
 
   function loadForm() {
@@ -292,6 +340,39 @@
     }).join('');
   }
 
+  function renderLive(bundle) {
+    var lv = bundle.liveness || {};
+    var sig = lv.operator_signals || {};
+    var ts = sig.tick_staleness || {};
+    var um = lv.update_model || {};
+    var lev = ts.level || 'not_running';
+    $('live-tier').textContent = esc(ts.label || '—');
+    $('live-bundle-at').textContent = esc(lv.bundle_generated_at_utc || '—');
+    $('live-poll-ms').textContent = (um.dashboard_poll_interval_ms != null ? String(um.dashboard_poll_interval_ms) + 'ms' : POLL_MS + 'ms');
+    $('live-tick-sec').textContent = um.sequential_tick_interval_sec_expected != null ? ('~' + um.sequential_tick_interval_sec_expected + 's') : '—';
+    $('live-ev-proc').textContent = sig.sequential_events_processed_total != null ? String(sig.sequential_events_processed_total) : '—';
+    $('live-ev-queue').textContent = sig.sequential_events_remaining_in_queue != null ? String(sig.sequential_events_remaining_in_queue) : '—';
+    $('live-last-tick').textContent = esc(sig.sequential_last_tick_at || '—');
+    $('live-pyth-age').textContent = sig.pyth_age_seconds != null ? (String(sig.pyth_age_seconds) + 's') : '—';
+    var d1 = esc(ts.detail || '');
+    var d2 = esc(lv.methodology_one_liner || '');
+    $('live-detail').textContent = d1 + (d2 && d1 ? ' — ' : '') + d2;
+    var row = $('dash-live');
+    if (!row) return;
+    row.className = 'dash-live';
+    if (lev === 'stalled') row.classList.add('is-stalled');
+    else if (lev === 'degraded') row.classList.add('is-degraded');
+    else if (lev === 'live') row.classList.add('is-live');
+    else if (lev === 'queue_empty') row.classList.add('is-live');
+    else row.classList.add('is-not_running');
+    var pd = $('live-pulse');
+    if (pd) {
+      pd.classList.remove('pulse-flash');
+      void pd.offsetWidth;
+      pd.classList.add('pulse-flash');
+    }
+  }
+
   function render(bundle) {
     var w = bundle.wallet || {};
     var seq = bundle.sequential || {};
@@ -327,6 +408,7 @@
 
     renderTC(bundle.trade_chain || {});
     renderOB(bundle.operational_boundary);
+    renderLive(bundle);
   }
 
   function fetchBundle() {
@@ -344,9 +426,13 @@
   }
 
   function refresh() {
+    var t0 = new Date();
+    var cr = $('live-client-refresh');
+    if (cr) cr.textContent = t0.toISOString().replace('T', ' ').slice(0, 19) + 'Z';
     fetchBundle().then(render).catch(function (e) {
       $('b-state').textContent = 'ERR';
       $('dash-ctl-msg').textContent = String(e);
+      if ($('live-tier')) $('live-tier').textContent = 'FETCH ERR';
     });
   }
 
@@ -380,7 +466,7 @@
   $('btnTick').addEventListener('click', function () { postCtl('tick', { max_events: 5 }).then(function (x) { $('dash-ctl-msg').textContent = fmtCtl(x.j); refresh(); }); });
 
   refresh();
-  setInterval(refresh, 1500);
+  setInterval(refresh, POLL_MS);
 })();
   </script>
 </body>

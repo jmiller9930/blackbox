@@ -9,8 +9,105 @@ from __future__ import annotations
 import json
 import os
 import uuid
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
+
+_REPO_ROOT = Path(__file__).resolve().parents[2]
+
+# Operator-visible cadence (must match dashboard.html poll interval and docker-compose defaults).
+DASHBOARD_CLIENT_POLL_INTERVAL_MS = 1500
+SEQUENTIAL_TICK_SIDECAR_INTERVAL_SEC_DEFAULT = 5
+PYTH_STREAM_PROBE_INTERVAL_SEC_DEFAULT = 15
+
+
+def _parse_iso_ts(ts: str | None) -> datetime | None:
+    if not ts or not str(ts).strip():
+        return None
+    raw = str(ts).strip()
+    if raw.endswith("Z"):
+        raw = raw[:-1] + "+00:00"
+    try:
+        return datetime.fromisoformat(raw)
+    except ValueError:
+        return None
+
+
+def _pyth_probe_snapshot(repo: Path) -> dict[str, Any]:
+    p = repo / "docs" / "working" / "artifacts" / "pyth_stream_status.json"
+    out: dict[str, Any] = {"status": None, "last_event_at": None, "age_seconds": None, "reason_code": None}
+    if not p.is_file():
+        out["reason_code"] = "pyth_artifact_missing"
+        return out
+    try:
+        raw = json.loads(p.read_text(encoding="utf-8"))
+    except json.JSONDecodeError:
+        out["reason_code"] = "pyth_artifact_bad_json"
+        return out
+    if not isinstance(raw, dict):
+        return out
+    out["status"] = raw.get("status") or raw.get("stream_state")
+    out["reason_code"] = raw.get("reason_code")
+    lu = raw.get("last_event_at") or raw.get("updated_at")
+    out["last_event_at"] = lu
+    dt = _parse_iso_ts(str(lu) if lu else None)
+    if dt is not None:
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        out["age_seconds"] = max(0, int((datetime.now(timezone.utc) - dt).total_seconds()))
+    return out
+
+
+def _sequential_tick_staleness(
+    *,
+    ui_state: str,
+    events_remaining: int,
+    last_tick_at: str | None,
+    now: datetime,
+) -> dict[str, Any]:
+    """
+    Operator-facing: distinguish live advancing vs running-but-stalled.
+    Thresholds: degraded >45s, stalled >90s with queue > 0.
+    """
+    if ui_state != "running":
+        return {
+            "level": "not_running",
+            "label": "IDLE",
+            "detail": "Sequential learning is not in running state.",
+        }
+    if events_remaining <= 0:
+        return {
+            "level": "queue_empty",
+            "label": "RUNNING · IDLE QUEUE",
+            "detail": "No events left in file — last tick may not advance until new events.",
+        }
+    dt = _parse_iso_ts(last_tick_at)
+    if dt is None:
+        return {
+            "level": "unknown",
+            "label": "RUNNING · NO TICK YET",
+            "detail": "Queue has events but no last_tick_at — wait for first tick.",
+        }
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    age = max(0, int((now - dt).total_seconds()))
+    if age > 90:
+        return {
+            "level": "stalled",
+            "label": "STALLED",
+            "detail": f"Last sequential tick was {age}s ago with {events_remaining} events still queued — check tick sidecar or API.",
+        }
+    if age > 45:
+        return {
+            "level": "degraded",
+            "label": "LIVE (SLOW)",
+            "detail": f"Last tick {age}s ago — expect ~{SEQUENTIAL_TICK_SIDECAR_INTERVAL_SEC_DEFAULT}s when sidecar is up.",
+        }
+    return {
+        "level": "live",
+        "label": "LIVE",
+        "detail": f"Last tick {age}s ago · {events_remaining} events remaining in queue.",
+    }
 
 from modules.anna_training.execution_ledger import (
     RESERVED_STRATEGY_BASELINE,
@@ -467,11 +564,51 @@ def build_dashboard_bundle(
     tick_banner = None
     if ui_state == "running" and ev_rem > 0:
         tick_banner = (
-            "Sequential learning is running but does not auto-advance events. "
-            "Press Tick (or POST tick) to process the next batch from the events file."
+            f"Sequential learning advances via batch ticks (~every {SEQUENTIAL_TICK_SIDECAR_INTERVAL_SEC_DEFAULT}s "
+            "when the `sequential-tick` sidecar is running) or manual Tick / POST tick."
         )
     elif ui_state == "running" and ev_rem == 0:
         tick_banner = "Running — event queue empty (end of file or cursor at end)."
+
+    now_utc = datetime.now(timezone.utc)
+    pyth_snap = _pyth_probe_snapshot(_REPO_ROOT)
+    tick_stale = _sequential_tick_staleness(
+        ui_state=ui_state,
+        events_remaining=ev_rem,
+        last_tick_at=str((seq or {}).get("last_tick_at") or "") or None,
+        now=now_utc,
+    )
+    liveness: dict[str, Any] = {
+        "bundle_generated_at_utc": now_utc.replace(microsecond=0).isoformat().replace("+00:00", "Z"),
+        "methodology_one_liner": (
+            "Dashboard: REST poll of aggregated bundle; sequential: discrete batch ticks over a cursor; "
+            "market: Hermes price probe JSON artifacts — not a sub-second order-book stream."
+        ),
+        "update_model": {
+            "dashboard_ui": "poll_driven",
+            "dashboard_poll_interval_ms": DASHBOARD_CLIENT_POLL_INTERVAL_MS,
+            "bundle_source": "GET /api/v1/dashboard/bundle (server builds snapshot each request)",
+            "sequential_engine": "tick_driven_batch",
+            "sequential_tick_interval_sec_expected": SEQUENTIAL_TICK_SIDECAR_INTERVAL_SEC_DEFAULT,
+            "market_price_probe": "pyth_stream_probe Hermes HTTP",
+            "pyth_probe_interval_sec_default": PYTH_STREAM_PROBE_INTERVAL_SEC_DEFAULT,
+        },
+        "operator_signals": {
+            "sequential_events_processed_total": (seq or {}).get("events_processed_total"),
+            "sequential_events_remaining_in_queue": ev_rem,
+            "sequential_last_tick_at": (seq or {}).get("last_tick_at"),
+            "last_processed_market_event_id": (seq or {}).get("last_processed_market_event_id"),
+            "pyth_status": pyth_snap.get("status"),
+            "pyth_last_event_at": pyth_snap.get("last_event_at"),
+            "pyth_age_seconds": pyth_snap.get("age_seconds"),
+            "tick_staleness": tick_stale,
+        },
+        "not_exchange_tick_stream": (
+            "This dashboard is not a live order-book or millisecond tape. "
+            "Liveness is: (1) bundle timestamp advancing every poll, (2) sequential last_tick_at advancing while queue>0, "
+            "(3) Pyth probe age staying bounded, (4) STALLED label if ticks stop while queue remains."
+        ),
+    }
 
     last_dec = (seq or {}).get("last_decision_row")
     last_dec_s = None
@@ -538,4 +675,5 @@ def build_dashboard_bundle(
             "events_processed_total": (seq or {}).get("events_processed_total"),
         },
         "trade_chain": tc,
+        "liveness": liveness,
     }
