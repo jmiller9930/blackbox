@@ -71,10 +71,13 @@
       background: var(--panel); overflow: hidden;
     }
     .dash-r4 h2 { margin: 0; padding: 0.35rem 0.5rem; font-size: 0.82rem; border-bottom: 1px solid var(--panel-border); background: rgba(15,23,42,0.03); }
-    .dash-r4 .scroll { flex: 1; overflow: auto; min-height: 12rem; }
+    .dash-r4 .scroll {
+      flex: 1; overflow: auto; min-height: 12rem;
+      scroll-padding-inline: 0.5rem;
+    }
     .tc-table { border-collapse: separate; border-spacing: 0; font-size: 0.65rem; min-width: max-content; }
     .tc-table th, .tc-table td { border-right: 1px solid var(--panel-border); border-bottom: 1px solid var(--panel-border); padding: 0.25rem 0.3rem; vertical-align: top; }
-    /* Recency + Anna tints applied inline on event columns; sticky label column stays neutral. */
+    /* Recency: same background for every cell in an event column; sticky label column stays neutral. */
     .tc-table tbody tr th:first-child {
       position: sticky; left: 0; z-index: 2; max-width: 10rem;
       background: #f8fafc !important;
@@ -82,23 +85,37 @@
     }
     .tc-table thead th.tc-sticky-chain { background: #f8fafc !important; }
     .tc-tr-baseline th:first-child { border-left: 3px solid #0f172a; }
-    .tc-tr-anna th:first-child { border-left: 2px solid #94a3b8; font-weight: 600; }
-    .tc-tr-anna-test th:first-child { border-left-color: #64748b; }
-    .tc-tr-anna-strategy th:first-child { border-left-color: #7c8aa0; }
-    .tc-tr-anna.tc-acc-0 th:first-child { background: linear-gradient(90deg, rgba(100,116,139,0.08) 0%, #f8fafc 0.5rem); }
-    .tc-tr-anna.tc-acc-1 th:first-child { background: linear-gradient(90deg, rgba(71,85,105,0.07) 0%, #f8fafc 0.5rem); }
-    .tc-tr-anna.tc-acc-2 th:first-child { background: linear-gradient(90deg, rgba(51,65,85,0.06) 0%, #f8fafc 0.5rem); }
-    .tc-tr-anna.tc-acc-3 th:first-child { background: linear-gradient(90deg, rgba(30,41,59,0.05) 0%, #f8fafc 0.5rem); }
-    /* Newest column: ring only (gradient underneath stays visible) */
+    /* Anna: label column only — subtle border hue per chain slot (no row/cell fill). */
+    .tc-tr-anna th:first-child { border-left: 3px solid #94a3b8; font-weight: 600; }
+    .tc-tr-anna.tc-acc-0 th:first-child { border-left-color: #64748b; }
+    .tc-tr-anna.tc-acc-1 th:first-child { border-left-color: #5a6f82; }
+    .tc-tr-anna.tc-acc-2 th:first-child { border-left-color: #52687a; }
+    .tc-tr-anna.tc-acc-3 th:first-child { border-left-color: #4a6072; }
+    /* Newest column: ring + “now” in header — column recency is separate */
     .tc-table thead th.tc-now,
-    .tc-table tbody td.tc-now { box-shadow: inset 0 0 0 2px rgba(15, 23, 42, 0.3); }
+    .tc-table tbody td.tc-now { box-shadow: inset 0 0 0 2px rgba(15, 23, 42, 0.42); }
     .tc-table thead th.tc-now { font-weight: 800; }
-    .tc-table thead th.tc-head-ev { min-width: 4.75rem; max-width: 8.5rem; }
+    .tc-table thead th.tc-head-ev { min-width: 5.25rem; max-width: 9rem; }
     .tc-hdr-stack { display: flex; flex-direction: column; gap: 0.1rem; align-items: flex-start; line-height: 1.2; }
     .tc-hdr-now { font-size: 0.55rem; font-weight: 800; color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em; }
+    .tc-hdr-lab { font-size: 0.52rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); }
     .tc-hdr-primary { font-weight: 700; font-size: 0.62rem; color: var(--text); }
     .tc-hdr-utc { font-size: 0.58rem; color: var(--muted); font-weight: 600; }
     .tc-hdr-fallback { font-size: 0.6rem; word-break: break-all; font-weight: 600; color: var(--text); }
+    .tc-flow {
+      display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap;
+      gap: 0.35rem 0.75rem;
+      padding: 0.35rem 0.5rem 0.45rem;
+      font-size: 0.68rem; font-weight: 800;
+      color: var(--text);
+      border-bottom: 1px solid var(--panel-border);
+      background: linear-gradient(90deg, rgba(248,250,252,1) 0%, rgba(226,232,240,0.85) 100%);
+    }
+    .tc-flow-seq { white-space: nowrap; }
+    .tc-flow-old { color: var(--muted); }
+    .tc-flow-arrow { color: #64748b; letter-spacing: 0.12em; font-weight: 700; }
+    .tc-flow-new { color: var(--muted); }
+    .tc-flow-now { font-size: 0.58rem; font-weight: 800; color: #0f172a; text-transform: uppercase; letter-spacing: 0.05em; }
     .tc-row-head { display: flex; flex-direction: column; gap: 0.2rem; align-items: flex-start; }
     .tc-sid { font-size: 0.58rem; font-weight: 600; color: var(--muted); word-break: break-all; max-width: 9rem; }
     .tc-chip { display: inline-block; padding: 0.08rem 0.28rem; border-radius: 3px; font-size: 0.58rem; font-weight: 700; letter-spacing: 0.02em; }
@@ -246,8 +263,12 @@
       <!-- Row 4: trade chain (primary) -->
       <section class="dash-r4" aria-labelledby="tc-h">
         <h2 id="tc-h">Trade chain</h2>
-        <p style="margin:0;font-size:0.65rem;color:var(--muted);padding:0 0.5rem 0.3rem">Older → newer · right = latest (now). <strong>Local</strong> time uses your browser zone; <strong>UTC</strong> is the ledger canonical instant for each column.</p>
-        <div class="scroll">
+        <div class="tc-flow" aria-hidden="true">
+          <span class="tc-flow-seq"><span class="tc-flow-old">older</span> <span class="tc-flow-arrow">→</span> <span class="tc-flow-new">newer</span></span>
+          <span class="tc-flow-now">now = right column</span>
+        </div>
+        <p style="margin:0;font-size:0.62rem;color:var(--muted);padding:0.25rem 0.5rem 0.35rem">Headers: <strong>Local</strong> = your browser clock &amp; zone · <strong>UTC</strong> = canonical ledger time. Recency shade is per column (same for all rows).</p>
+        <div class="scroll" id="tc-scroll">
           <table class="tc-table" id="tc-table">
             <thead><tr><th scope="col">Chain</th></tr></thead>
             <tbody></tbody>
@@ -422,44 +443,20 @@
     );
   }
 
-  /** Older columns lighter → right (newest) slightly darker; scales with column count. */
+  /** Column-only recency: left = lighter, right = darker (all rows in column share this). */
   function tcRecencyBg(idx, n) {
     if (n <= 0) return '#f8fafc';
     var t = n === 1 ? 1 : idx / (n - 1);
-    var r0 = 250, g0 = 251, b0 = 252;
-    var r1 = 230, g1 = 234, b1 = 240;
+    var r0 = 252, g0 = 253, b0 = 254;
+    var r1 = 214, g1 = 220, b1 = 228;
     var r = Math.round(r0 + (r1 - r0) * t);
     var g = Math.round(g0 + (g1 - g0) * t);
     var b = Math.round(b0 + (b1 - b0) * t);
     return 'rgb(' + r + ',' + g + ',' + b + ')';
   }
 
-  /** Subtle per-chain tint (Anna rows only); baseline unchanged. */
-  function tcAnnaTint(row) {
-    var ck = row.chain_kind || '';
-    if (ck === 'baseline') return '';
-    if (ck === 'anna_test' || ck === 'anna_strategy') {
-      var slot = row.accent_slot != null ? Number(row.accent_slot) : 0;
-      var tints = [
-        'rgba(100,116,139,0.09)',
-        'rgba(71,85,105,0.08)',
-        'rgba(51,65,85,0.07)',
-        'rgba(30,41,59,0.065)'
-      ];
-      return tints[((slot % 4) + 4) % 4];
-    }
-    return '';
-  }
-
-  function tcCellBackground(row, idx, n) {
-    var base = tcRecencyBg(idx, n);
-    var tint = tcAnnaTint(row);
-    if (!tint) return 'background-color:' + base;
-    return (
-      'background:' +
-      'linear-gradient(0deg,' + tint + ',' + tint + '),' +
-      'linear-gradient(0deg,' + base + ',' + base + ')'
-    );
+  function tcColumnBgOnly(idx, n) {
+    return 'background-color:' + tcRecencyBg(idx, n);
   }
 
   /** Resolve column instant: prefer ledger UTC ISO from bundle; else ISO-shaped market_event_id. */
@@ -505,7 +502,9 @@
     return (
       '<div class="tc-hdr-stack">' +
       nowRow +
+      '<span class="tc-hdr-lab">Local</span>' +
       '<span class="tc-hdr-primary">' + esc(localFmt.format(d)) + '</span>' +
+      '<span class="tc-hdr-lab">UTC</span>' +
       '<span class="tc-hdr-utc">' + esc(utcStr) + '</span>' +
       '</div>'
     );
@@ -539,7 +538,7 @@
           ? String(mid) + ' — canonical UTC: ' + d.toISOString()
           : String(mid)
       );
-      var bgStyle = 'background-color:' + tcRecencyBg(idx, nEv);
+      var bgStyle = tcColumnBgOnly(idx, nEv);
       th +=
         '<th scope="col" class="tc-head-ev' + nowCls + '"' +
         ' title="' + thTitle + '"' +
@@ -567,12 +566,20 @@
         var cell = (row.cells && row.cells[mid]) ? row.cells[mid] : null;
         var isNow = axis.length > 0 && idx === axis.length - 1;
         var cls = isNow ? ' class="tc-now"' : '';
-        var cellBg = tcCellBackground(row, idx, nEv);
+        var cellBg = tcColumnBgOnly(idx, nEv);
         cells += '<td' + cls + ' style="' + cellBg + '">' + cellMini(cell, row) + '</td>';
       });
       tr.innerHTML = h + cells;
       tbody.appendChild(tr);
     });
+    var sc = $('tc-scroll');
+    if (sc) {
+      requestAnimationFrame(function () {
+        requestAnimationFrame(function () {
+          sc.scrollLeft = Math.max(0, sc.scrollWidth - sc.clientWidth);
+        });
+      });
+    }
   }
 
   function renderOB(b) {
@@ -697,7 +704,7 @@
   }
 
   function fetchBundle() {
-    return fetch('/api/v1/dashboard/bundle?max_events=28', { cache: 'no-store' }).then(function (r) { return r.json(); });
+    return fetch('/api/v1/dashboard/bundle?max_events=10', { cache: 'no-store' }).then(function (r) { return r.json(); });
   }
 
   function fmtCtl(j) {
