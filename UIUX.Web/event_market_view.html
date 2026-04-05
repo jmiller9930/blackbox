@@ -380,10 +380,11 @@
   }
 
   /**
-   * Y-axis: 5th–95th percentile of bar closes (not raw min/max) so wicks/spikes do not
-   * flatten the path. Vertical padding 12%. Then nudge range toward overlay entry prices
-   * by at most one span (pre-nudge) so baseline/Anna lines stay visible without re-introducing
-   * extreme outliers that dominate the scale.
+   * Y-axis for readability: trim heavy tails (12th–88th percentile of closes), not 5–95,
+   * so a small fraction of outlier bars does not reserve huge empty vertical space while the
+   * bulk of the path sits in a tight band. Padding 6%. Overlay entry prices may widen the
+   * band by at most 35% of the pre-overlay span (not a full duplicate span) so one far
+   * overlay cannot dominate like raw min/max.
    */
   function computePriceRange(closes, overlayPrices) {
     var sortedC = sortedFinite(closes);
@@ -395,8 +396,8 @@
       var hi1 = u + eps;
       return expandRangeForOverlays(lo1, hi1, overlayPrices);
     }
-    var lo = percentileSorted(sortedC, 0.05);
-    var hi = percentileSorted(sortedC, 0.95);
+    var lo = percentileSorted(sortedC, 0.12);
+    var hi = percentileSorted(sortedC, 0.88);
     if (!isFinite(lo) || !isFinite(hi)) {
       lo = sortedC[0];
       hi = sortedC[sortedC.length - 1];
@@ -408,7 +409,7 @@
       hi = mid + eps2;
     }
     var span = hi - lo;
-    var pad = Math.max(span * 0.12, Math.abs(hi + lo) * 2.5e-5);
+    var pad = Math.max(span * 0.06, Math.abs(hi + lo) * 2.5e-5);
     lo -= pad;
     hi += pad;
     return expandRangeForOverlays(lo, hi, overlayPrices);
@@ -421,9 +422,18 @@
     var maxO = ovs[ovs.length - 1];
     var span = hi - lo;
     if (span <= 0) span = Math.max(Math.abs(hi) * 1e-6, 1e-9);
-    if (minO < lo) lo = Math.max(minO, lo - span);
-    if (maxO > hi) hi = Math.min(maxO, hi + span);
+    var cap = span * 0.35;
+    if (minO < lo) lo = Math.max(minO, lo - cap);
+    if (maxO > hi) hi = Math.min(maxO, hi + cap);
     return { lo: lo, hi: hi };
+  }
+
+  function fmtAxisPrice(x) {
+    if (!isFinite(x)) return '—';
+    var ax = Math.abs(x);
+    if (ax >= 1000) return x.toFixed(2);
+    if (ax >= 1) return x.toFixed(4);
+    return x.toFixed(6);
   }
 
   function renderChart(p) {
@@ -478,6 +488,8 @@
     for (var i = 0; i < n; i++) path.push((i ? 'L' : 'M') + xAt(i).toFixed(1) + ',' + yAt(closes[i]).toFixed(1));
     var parts = [];
     parts.push('<rect x="0" y="0" width="' + W + '" height="' + H + '" fill="#1a222d"/>');
+    parts.push('<text x="4" y="' + (T + 14) + '" fill="#8b9aad" font-size="10" font-family="IBM Plex Mono, monospace">' + esc(fmtAxisPrice(hi)) + '</text>');
+    parts.push('<text x="4" y="' + (T + ih - 2) + '" fill="#8b9aad" font-size="10" font-family="IBM Plex Mono, monospace">' + esc(fmtAxisPrice(lo)) + '</text>');
     parts.push('<path d="' + path.join(' ') + '" fill="none" stroke="#94a3b8" stroke-width="1.2" opacity="0.95"/>');
     if (evIdx >= 0) {
       var vx = xAt(evIdx);
@@ -522,7 +534,7 @@
     var dg = (overlay.data_gaps || []).join(', ');
     var vm = getViewMode();
     note.textContent =
-      'Bars: ' + n + '. Mode: ' + vm + '. Y-axis: 5th–95th percentile of bar closes + 12% padding; overlay prices pull the range by at most one span (not raw min/max on closes). Baseline = blue. Anna overlays = ranked set for this mode. Tests = pink strip. ' +
+      'Bars: ' + n + '. Mode: ' + vm + '. Y-axis: p12–p88 of closes + 6% pad; overlay nudge ≤35% of span (see left labels). Baseline = blue. Anna = ranked. Tests = pink strip. Hard refresh (Ctrl+Shift+R) if an old bundle was cached. ' +
       (dg ? 'Gaps: ' + dg + '.' : '');
   }
 
