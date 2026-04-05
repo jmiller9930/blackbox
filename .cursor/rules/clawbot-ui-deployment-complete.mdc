@@ -15,7 +15,7 @@ Do **not** skip any step. Do **not** say “done” or “implemented for the op
 
 1. **Pull on clawbot** — Do **not** assume `~/blackbox` is current. Run `git fetch` + `git pull origin main` (or tracked branch) and record **`git rev-parse HEAD`**. Must match the commit that contains the change (or newer).
 2. **Rebuild the `web` container** — `cd ~/blackbox/UIUX.Web && docker compose build web` (HTML/CSS in image).
-3. **Restart the stack** — `docker compose up -d web api` (or full stack). Do **not** assume old containers picked up changes.
+3. **Restart the stack** — `docker compose up -d web api` (or full stack). **`api` must be restarted after `git pull`** — the Python process caches imported modules; **pull + rebuild `web` alone does not reload `modules/anna_training/*.py`**. If the API is not restarted, the bundle can omit newer keys (e.g. `trade_chain.scorecard`) while `rows` updates from the same repo mount. Use `docker compose restart api` or `up -d api` after pull.
 4. **Verify inside the running container** — e.g. `docker compose exec web grep -q '<expected fragment>' /usr/share/nginx/html/dashboard.html` (or the file you changed). **Not** your laptop copy; **the container filesystem**.
 5. **Verify in the browser** — Hard refresh; operator (or you via documented URL) confirms the visible change.
 

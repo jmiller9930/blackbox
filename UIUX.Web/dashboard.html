@@ -342,6 +342,7 @@
         <div class="tc-scorecard-block" id="tc-scorecard-block">
           <p class="tc-sc-title">Scorecard (this window vs baseline)</p>
           <div id="tc-scorecard" role="group" aria-label="Strategy scorecard"></div>
+          <p class="tc-sc-explain" id="tc-sc-explain" style="font-size:0.6rem;color:var(--muted);margin:0.35rem 0 0;line-height:1.4"></p>
           <div class="tc-strategy-ops" id="tc-strategy-ops">
             <p class="tc-op-note" id="tc-op-note"></p>
             <div class="tc-op-line">
@@ -828,10 +829,76 @@
     renderLive(bundle);
   }
 
+  /**
+   * Stale API processes can serve trade_chain.rows without scorecard / aggregate (Python import cache).
+   * Derive the same counts client-side so the operator never sees a blank scorecard when rows exist.
+   */
+  function deriveScorecardFromRows(tc) {
+    var rows = tc.rows || [];
+    if (!rows.length) return [];
+    var out = [];
+    rows.forEach(function (sr) {
+      var ck = sr.chain_kind || '';
+      var sid = sr.strategy_id || '';
+      if (ck === 'baseline') {
+        out.push({
+          chain_kind: 'baseline',
+          strategy_id: sid,
+          row_label: sr.label || '',
+          vs_baseline_wins: null,
+          vs_baseline_not_wins: null,
+          vs_baseline_excluded: null,
+          events_with_comparison: null
+        });
+        return;
+      }
+      var cells = sr.cells || {};
+      var wins = 0;
+      var notW = 0;
+      var exc = 0;
+      Object.keys(cells).forEach(function (mid) {
+        var c = cells[mid];
+        if (!c || typeof c !== 'object') return;
+        var vs = c.vs_baseline;
+        if (vs === 'WIN') wins++;
+        else if (vs === 'NOT_WIN') notW++;
+        else if (vs === 'EXCLUDED') exc++;
+      });
+      var n = wins + notW + exc;
+      out.push({
+        chain_kind: ck,
+        strategy_id: sid,
+        row_label: sr.label || '',
+        lifecycle_label: sr.lifecycle_label || '',
+        vs_baseline_wins: wins,
+        vs_baseline_not_wins: notW,
+        vs_baseline_excluded: exc,
+        events_with_comparison: n
+      });
+    });
+    return out;
+  }
+
+  function deriveAnnaAggregateFromScorecard(scRows) {
+    var w = 0;
+    var nw = 0;
+    var exc = 0;
+    scRows.forEach(function (sr) {
+      if ((sr.chain_kind || '') === 'baseline') return;
+      w += Number(sr.vs_baseline_wins) || 0;
+      nw += Number(sr.vs_baseline_not_wins) || 0;
+      exc += Number(sr.vs_baseline_excluded) || 0;
+    });
+    return { wins: w, not_wins: nw, excluded: exc };
+  }
+
   function renderScorecardAndOps(bundle) {
     var tc = bundle.trade_chain || {};
     var ot = bundle.operator_trading || {};
     var scRows = tc.scorecard || [];
+    if (!scRows.length && tc.rows && tc.rows.length) {
+      scRows = deriveScorecardFromRows(tc);
+    }
     var scEl = $('tc-scorecard');
     var compEl = $('tc-comparative');
     var noteEl = $('tc-op-note');
@@ -853,30 +920,42 @@
         : baselineId + ' (default system strategy — baseline chain)';
     }
     var eligible = (ot && Array.isArray(ot.eligible_strategy_ids)) ? ot.eligible_strategy_ids : [];
+    var explainEl = $('tc-sc-explain');
     if (compEl) {
       var agg = tc.anna_vs_baseline_aggregate || {};
       var wAgg = agg.wins;
       var nwAgg = agg.not_wins;
       var xAgg = agg.excluded;
       if (wAgg == null && nwAgg == null && xAgg == null && scRows.length) {
-        wAgg = 0;
-        nwAgg = 0;
-        xAgg = 0;
-        scRows.forEach(function (sr) {
-          if ((sr.chain_kind || '') === 'baseline') return;
-          wAgg += Number(sr.vs_baseline_wins) || 0;
-          nwAgg += Number(sr.vs_baseline_not_wins) || 0;
-          xAgg += Number(sr.vs_baseline_excluded) || 0;
-        });
+        agg = deriveAnnaAggregateFromScorecard(scRows);
+        wAgg = agg.wins;
+        nwAgg = agg.not_wins;
+        xAgg = agg.excluded;
       }
       if (wAgg != null && nwAgg != null && xAgg != null) {
         compEl.innerHTML =
           'Anna vs baseline (this window): ' +
           '<span class="tc-sum-win">WIN ' + wAgg + '</span> · ' +
           '<span class="tc-sum-loss">NOT ' + nwAgg + '</span> · n/a ' + xAgg;
+        if (explainEl) {
+          if (wAgg === 0 && nwAgg === 0 && xAgg > 0) {
+            explainEl.textContent =
+              'Comparison layer: every event in this window is n/a for Anna vs baseline (e.g. eval/paper_stub rows have no economic PnL in the ledger, or MAE/PnL missing for pairing). ' +
+              'Baseline still shows economic WIN/LOSS; Anna lane is non-economic until mode=paper with full trade economics.';
+          } else if (wAgg === 0 && nwAgg === 0 && xAgg === 0) {
+            explainEl.textContent =
+              'No paired events in this window yet (empty cells or no overlap with baseline).';
+          } else {
+            explainEl.textContent =
+              'WIN / NOT = Anna PnL vs baseline on the same market_event_id after the MAE gate; n/a = excluded from that paired comparison.';
+          }
+        }
       } else {
         compEl.innerHTML = '';
+        if (explainEl) explainEl.textContent = '';
       }
+    } else if (explainEl) {
+      explainEl.textContent = '';
     }
     function fillPromoteSelect(sel, ids) {
       if (!sel) return;
