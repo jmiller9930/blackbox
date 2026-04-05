@@ -326,8 +326,8 @@
 
     var tickReq = !!ls.tick_required;
     $('btnTick').disabled = !tickReq;
-    $('btnTick').style.display = tickReq ? 'inline-block' : 'inline-block';
-    $('btnTick').title = tickReq ? 'Process next event batch' : 'Tick only when running with events in queue';
+    $('btnTick').style.display = tickReq ? 'inline-block' : 'none';
+    $('btnTick').title = 'Process next event batch (running + queue)';
 
     renderTC(bundle.trade_chain || {});
     renderOB(bundle.operational_boundary);
