@@ -521,7 +521,21 @@
       } else if (vs === 'NOT_WIN') {
         vsLine = '<div class="tc-vs tc-vs-notwin">vs baseline: NOT WIN</div>';
       } else if (vs === 'EXCLUDED') {
-        vsLine = '<div class="tc-vs tc-vs-exc">vs baseline: n/a</div>';
+        var excl = c.vs_baseline_excl != null ? String(c.vs_baseline_excl) : '';
+        var exHint =
+          excl === 'missing_mae'
+            ? ' (MAE missing on one leg — check market DB path / symbol)'
+            : excl === 'missing_pnl'
+              ? ' (PnL missing on one leg)'
+              : excl
+                ? ' (' + esc(excl) + ')'
+                : '';
+        vsLine =
+          '<div class="tc-vs tc-vs-exc" title="' +
+          esc(excl || 'excluded') +
+          '">vs baseline: n/a' +
+          exHint +
+          '</div>';
       }
     }
     var modeRaw = String(c.mode || '—');
