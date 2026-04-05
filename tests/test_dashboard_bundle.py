@@ -2,7 +2,11 @@
 
 from __future__ import annotations
 
-from modules.anna_training.dashboard_bundle import build_dashboard_bundle, build_trade_chain_payload
+from modules.anna_training.dashboard_bundle import (
+    _pair_vs_baseline_for_cells,
+    build_dashboard_bundle,
+    build_trade_chain_payload,
+)
 
 
 def test_build_trade_chain_payload_schema() -> None:
@@ -38,3 +42,19 @@ def test_build_dashboard_bundle_schema() -> None:
     assert "eta_at" in b["liveness"]["next_tick"]
     assert "paper_capital" in b
     assert "recency" in b["trade_chain"]
+
+
+def test_pair_vs_baseline_for_cells() -> None:
+    base = {"empty": False, "mode": "paper", "pnl_usd": 1.0, "mae_usd": 0.5}
+    win = {"empty": False, "mode": "paper", "pnl_usd": 2.0, "mae_usd": 0.45}
+    lose = {"empty": False, "mode": "paper", "pnl_usd": 0.5, "mae_usd": 0.4}
+    stub = {"empty": False, "mode": "paper_stub", "pnl_usd": None, "mae_usd": 0.1}
+    assert _pair_vs_baseline_for_cells(base, win, epsilon=0.05)["vs_baseline"] == "WIN"
+    assert _pair_vs_baseline_for_cells(base, lose, epsilon=0.05)["vs_baseline"] == "NOT_WIN"
+    assert _pair_vs_baseline_for_cells(base, stub, epsilon=0.05)["vs_baseline"] == "EXCLUDED"
+
+
+def test_trade_chain_includes_pair_epsilon() -> None:
+    tc = build_trade_chain_payload(max_events=4)
+    assert "paired_comparison_epsilon" in tc
+    assert isinstance(tc["paired_comparison_epsilon"], float)

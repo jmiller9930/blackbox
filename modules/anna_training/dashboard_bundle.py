@@ -313,6 +313,50 @@ def _notional_usd(entry_price: float | None, size: float | None) -> float | None
     return round(ep * sz, 4)
 
 
+def _pair_vs_baseline_for_cells(
+    baseline_cell: dict[str, Any],
+    anna_cell: dict[str, Any],
+    *,
+    epsilon: float,
+) -> dict[str, Any]:
+    """
+    Same rule as sequential paired_outcomes + MAE gate (display / operator clarity).
+    Only when both legs are live/paper with PnL + MAE.
+    """
+    if baseline_cell.get("empty") or anna_cell.get("empty"):
+        return {"vs_baseline": None, "vs_baseline_excl": "empty_cell"}
+    bm = str(baseline_cell.get("mode") or "").strip().lower()
+    am = str(anna_cell.get("mode") or "").strip().lower()
+    if bm not in ("live", "paper"):
+        return {"vs_baseline": "EXCLUDED", "vs_baseline_excl": "baseline_not_economic"}
+    if am not in ("live", "paper"):
+        return {"vs_baseline": "EXCLUDED", "vs_baseline_excl": "anna_not_economic"}
+    pb = baseline_cell.get("pnl_usd")
+    pa = anna_cell.get("pnl_usd")
+    if pb is None or pa is None:
+        return {"vs_baseline": "EXCLUDED", "vs_baseline_excl": "missing_pnl"}
+    mae_b = baseline_cell.get("mae_usd")
+    mae_a = anna_cell.get("mae_usd")
+    if mae_b is None or mae_a is None:
+        return {"vs_baseline": "EXCLUDED", "vs_baseline_excl": "missing_mae"}
+    try:
+        mb = float(mae_b)
+        ma = float(mae_a)
+        fpb = float(pb)
+        fpa = float(pa)
+    except (TypeError, ValueError):
+        return {"vs_baseline": "EXCLUDED", "vs_baseline_excl": "invalid_numbers"}
+    if mb < 0:
+        return {"vs_baseline": "EXCLUDED", "vs_baseline_excl": "invalid_mae_baseline"}
+    cap = (1.0 + float(epsilon)) * mb
+    passes_risk = ma <= cap + 1e-12
+    if not passes_risk:
+        return {"vs_baseline": "NOT_WIN", "vs_baseline_excl": "risk_gate"}
+    if fpa > fpb:
+        return {"vs_baseline": "WIN", "vs_baseline_excl": None}
+    return {"vs_baseline": "NOT_WIN", "vs_baseline_excl": "pnl_not_above"}
+
+
 def _compact_cell(
     row: dict[str, Any] | None,
     *,
@@ -587,6 +631,7 @@ def build_trade_chain_payload(
     db_path = db_path or default_execution_ledger_path()
     mpath = market_db_path if market_db_path is not None else _market_db_path()
 
+    pair_eps = 0.05
     conn = connect_ledger(db_path)
     try:
         ensure_execution_ledger_schema(conn)
@@ -653,6 +698,27 @@ def build_trade_chain_payload(
                     "cells": cells,
                 }
             )
+
+        pair_eps = 0.05
+        try:
+            pair_eps = float(str(os.environ.get("BLACKBOX_PAIR_DISPLAY_EPSILON", "0.05")).strip() or "0.05")
+        except (TypeError, ValueError):
+            pair_eps = 0.05
+        bi = next((i for i, r in enumerate(rows_out) if r.get("chain_kind") == "baseline"), None)
+        if bi is not None and event_axis:
+            bcells = rows_out[bi]["cells"]
+            for r in rows_out:
+                ck = str(r.get("chain_kind") or "")
+                if ck not in ("anna_test", "anna_strategy"):
+                    continue
+                for mid in event_axis:
+                    ac = dict(r["cells"].get(mid) or {})
+                    pair = _pair_vs_baseline_for_cells(
+                        bcells.get(mid) or {},
+                        ac,
+                        epsilon=pair_eps,
+                    )
+                    r["cells"][mid] = {**ac, **pair}
     finally:
         conn.close()
 
@@ -676,9 +742,13 @@ def build_trade_chain_payload(
         "strategy_selection_note": note,
         "visual_hierarchy_note": (
             "Chain identity is lane + strategy_id (chips on the left). "
-            "Economic cells (paper or live) use the same outcome emphasis as baseline; "
-            "non-economic (eval/training) cells are visually subdued. Row labels show test vs strategy lifecycle."
+            "Anna cells show vs baseline WIN / NOT WIN / n/a when both legs are economic (paper or live) "
+            "with PnL and MAE; MAE gate uses epsilon="
+            + str(round(pair_eps, 6))
+            + " (env BLACKBOX_PAIR_DISPLAY_EPSILON). "
+            "Eval/stub rows cannot pair until logged as economic paper/live."
         ),
+        "paired_comparison_epsilon": round(pair_eps, 6),
         "rows": rows_out,
     }
 

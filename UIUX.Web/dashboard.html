@@ -85,12 +85,17 @@
     }
     .tc-table thead th.tc-sticky-chain { background: #f8fafc !important; }
     .tc-tr-baseline th:first-child { border-left: 3px solid #0f172a; }
-    /* Anna: label column only — subtle border hue per chain slot (no row/cell fill). */
-    .tc-tr-anna th:first-child { border-left: 3px solid #94a3b8; font-weight: 600; }
-    .tc-tr-anna.tc-acc-0 th:first-child { border-left-color: #64748b; }
-    .tc-tr-anna.tc-acc-1 th:first-child { border-left-color: #5a6f82; }
-    .tc-tr-anna.tc-acc-2 th:first-child { border-left-color: #52687a; }
-    .tc-tr-anna.tc-acc-3 th:first-child { border-left-color: #4a6072; }
+    /* Anna rows: soft blue band + sky accent (separate from baseline). */
+    .tc-tr-anna th:first-child {
+      background: #e8f4fc !important;
+      border-left: 3px solid #38bdf8;
+      font-weight: 600;
+      box-shadow: 2px 0 6px rgba(14, 165, 233, 0.12);
+    }
+    .tc-tr-anna.tc-acc-0 th:first-child { border-left-color: #0ea5e9; }
+    .tc-tr-anna.tc-acc-1 th:first-child { border-left-color: #38bdf8; }
+    .tc-tr-anna.tc-acc-2 th:first-child { border-left-color: #7dd3fc; }
+    .tc-tr-anna.tc-acc-3 th:first-child { border-left-color: #bae6fd; }
     /* Newest column: ring + “now” in header — column recency is separate */
     .tc-table thead th.tc-now,
     .tc-table tbody td.tc-now { box-shadow: inset 0 0 0 2px rgba(15, 23, 42, 0.42); }
@@ -132,6 +137,10 @@
     .wl-FLAT { color: #64748b; font-weight: 700; }
     .tc-mini-muted .wl-WIN, .tc-mini-muted .wl-LOSS, .tc-mini-muted .wl-FLAT { font-weight: 600; color: #64748b; }
     .wl-EVAL { color: #64748b; font-weight: 600; font-style: italic; }
+    .tc-vs { font-size: 0.58rem; font-weight: 800; letter-spacing: 0.02em; margin-bottom: 0.2rem; padding: 0.12rem 0.2rem; border-radius: 3px; }
+    .tc-vs-win { background: rgba(21, 128, 61, 0.14); color: #14532d; }
+    .tc-vs-notwin { background: rgba(185, 28, 28, 0.1); color: #991b1b; }
+    .tc-vs-exc { background: rgba(100, 116, 139, 0.12); color: #475569; font-weight: 700; }
     details.dash-below { margin: 0.25rem 0.5rem; border: 1px solid var(--panel-border); border-radius: var(--radius-md); background: #fff; }
     details.dash-below > summary { padding: 0.4rem 0.6rem; cursor: pointer; font-weight: 600; font-size: 0.78rem; }
     details.dash-below .body { padding: 0 0.6rem 0.6rem; font-size: 0.78rem; }
@@ -413,6 +422,18 @@
 
   function cellMini(c, row) {
     if (!c || c.empty) return '<span class="tc-empty">—</span>';
+    var ck = row.chain_kind || '';
+    var vsLine = '';
+    if (ck === 'anna_test' || ck === 'anna_strategy') {
+      var vs = c.vs_baseline;
+      if (vs === 'WIN') {
+        vsLine = '<div class="tc-vs tc-vs-win">vs baseline: WIN</div>';
+      } else if (vs === 'NOT_WIN') {
+        vsLine = '<div class="tc-vs tc-vs-notwin">vs baseline: NOT WIN</div>';
+      } else if (vs === 'EXCLUDED') {
+        vsLine = '<div class="tc-vs tc-vs-exc">vs baseline: n/a</div>';
+      }
+    }
     var modeRaw = String(c.mode || '—');
     var modeDisp = modeRaw === 'paper_stub' ? 'eval / non-economic' : modeRaw;
     var ocDisp = String(c.outcome_display != null ? c.outcome_display : c.outcome || '—');
@@ -432,6 +453,7 @@
     var ent = c.entry != null ? esc(String(c.entry)) : '—';
     var ex = c.exit != null ? esc(String(c.exit)) : '—';
     return (
+      vsLine +
       '<div class="' + wrapCls + '">' +
       '<span class="lab">entry</span><span>' + ent + '</span>' +
       '<span class="lab">exit</span><span>' + ex + '</span>' +
@@ -455,8 +477,17 @@
     return 'rgb(' + r + ',' + g + ',' + b + ')';
   }
 
-  function tcColumnBgOnly(idx, n) {
-    return 'background-color:' + tcRecencyBg(idx, n);
+  function tcColumnBgOnly(idx, n, row) {
+    var base = tcRecencyBg(idx, n);
+    var ck = row.chain_kind || '';
+    if (ck === 'anna_test' || ck === 'anna_strategy') {
+      return (
+        'background:' +
+        'linear-gradient(0deg, rgba(219,234,254,0.78), rgba(219,234,254,0.78)),' +
+        'linear-gradient(0deg,' + base + ',' + base + ')'
+      );
+    }
+    return 'background-color:' + base;
   }
 
   /** Resolve column instant: prefer ledger UTC ISO from bundle; else ISO-shaped market_event_id. */
@@ -538,7 +569,7 @@
           ? String(mid) + ' — canonical UTC: ' + d.toISOString()
           : String(mid)
       );
-      var bgStyle = tcColumnBgOnly(idx, nEv);
+      var bgStyle = tcColumnBgOnly(idx, nEv, { chain_kind: 'baseline' });
       th +=
         '<th scope="col" class="tc-head-ev' + nowCls + '"' +
         ' title="' + thTitle + '"' +
@@ -566,7 +597,7 @@
         var cell = (row.cells && row.cells[mid]) ? row.cells[mid] : null;
         var isNow = axis.length > 0 && idx === axis.length - 1;
         var cls = isNow ? ' class="tc-now"' : '';
-        var cellBg = tcColumnBgOnly(idx, nEv);
+        var cellBg = tcColumnBgOnly(idx, nEv, row);
         cells += '<td' + cls + ' style="' + cellBg + '">' + cellMini(cell, row) + '</td>';
       });
       tr.innerHTML = h + cells;
