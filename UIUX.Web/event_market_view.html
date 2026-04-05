@@ -60,7 +60,9 @@
     .panel { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; margin-bottom: 1rem; overflow: hidden; }
     .panel-h { padding: 0.65rem 1rem; border-bottom: 1px solid var(--border); font-size: 0.72rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.07em; color: var(--muted); }
     .panel-b { padding: 1rem; overflow-x: auto; }
-    .chart-svg { width: 100%; height: auto; display: block; background: var(--surface2); border-radius: 8px; }
+    .lw-chart-host { width: 100%; border-radius: 8px; overflow: hidden; background: var(--surface2); border: 1px solid var(--border); min-height: 200px; }
+    .survival-strip-host { width: 100%; margin-top: 0.5rem; border-radius: 8px; background: rgba(15,20,28,0.95); border: 1px solid var(--border); overflow: hidden; }
+    .survival-strip-svg { width: 100%; display: block; height: auto; }
     table.data { width: 100%; border-collapse: collapse; font-size: 0.82rem; }
     table.data th, table.data td { padding: 0.5rem 0.65rem; text-align: left; border-bottom: 1px solid var(--border); vertical-align: top; }
     table.data th { color: var(--muted); font-weight: 600; font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.04em; }
@@ -226,12 +228,13 @@
         <div class="panel-h">Market chart — primary surface</div>
         <div class="panel-b">
           <div class="chart-legend" aria-hidden="true">
-            <span><i class="sw sw-market"></i> Market close path</span>
-            <span><i class="sw sw-baseline"></i> Baseline position (blue, always on)</span>
-            <span>Anna strategies (non-blue, toggle below)</span>
-            <span><i class="sw sw-test"></i> Survival tests (strip = presence over time)</span>
+            <span><i class="sw sw-market"></i> OHLC candles (TradingView Lightweight Charts)</span>
+            <span><i class="sw sw-baseline"></i> Baseline (blue line)</span>
+            <span>Anna strategies (colored lines, toggle below)</span>
+            <span><i class="sw sw-test"></i> Survival tests (strip below chart)</span>
           </div>
-          <svg class="chart-svg" id="chart" viewBox="0 0 900 400" preserveAspectRatio="xMidYMid meet"></svg>
+          <div id="lwChartHost" class="lw-chart-host"></div>
+          <div id="survivalStripHost" class="survival-strip-host" aria-hidden="true"></div>
           <p class="meta" id="chartNote"></p>
           <p class="meta" id="ruleBox" style="margin-top:0.5rem"></p>
         </div>
@@ -309,6 +312,7 @@
   </div>
   </div>
 
+  <script src="https://unpkg.com/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js" crossorigin="anonymous"></script>
   <script>
 (function () {
   'use strict';
@@ -327,16 +331,43 @@
     return (qs('#viewMode') && qs('#viewMode').value) ? qs('#viewMode').value : 'operator';
   }
 
-  /** Layout for #chart SVG only — does not affect other panels. */
-  function getChartLayout() {
+  /** Price pane + survival strip heights (toolbar chart size). */
+  function getChartHeights() {
     var m = (qs('#chartSize') && qs('#chartSize').value) ? qs('#chartSize').value : 'standard';
-    if (m === 'compact') {
-      return { W: 900, H: 280, T: 16, L: 48, R: 18, PRICE_H: 168, TEST_TOP: 196, TEST_H: 48 };
+    if (m === 'compact') return { priceH: 280, stripH: 48 };
+    if (m === 'tall') return { priceH: 520, stripH: 88 };
+    return { priceH: 400, stripH: 64 };
+  }
+
+  function barTimeUtc(b) {
+    var t = (b && b.candle_open_utc) ? String(b.candle_open_utc).trim() : '';
+    if (!t) return null;
+    var ms = Date.parse(t.indexOf('Z') !== -1 ? t : t + 'Z');
+    return isFinite(ms) ? Math.floor(ms / 1000) : null;
+  }
+
+  function nearestBarTime(ts, candleTimes) {
+    var best = null;
+    var bestD = Infinity;
+    for (var i = 0; i < candleTimes.length; i++) {
+      var bt = candleTimes[i];
+      if (bt == null) continue;
+      var d = Math.abs(bt - ts);
+      if (d < bestD) { bestD = d; best = bt; }
     }
-    if (m === 'tall') {
-      return { W: 900, H: 520, T: 24, L: 52, R: 22, PRICE_H: 360, TEST_TOP: 410, TEST_H: 88 };
+    return best;
+  }
+
+  function destroyLwChart() {
+    if (window.__lwResizeHandler) {
+      window.removeEventListener('resize', window.__lwResizeHandler);
+      window.__lwResizeHandler = null;
     }
-    return { W: 900, H: 400, T: 22, L: 50, R: 20, PRICE_H: 280, TEST_TOP: 318, TEST_H: 64 };
+    if (window.__lwChart) {
+      try { window.__lwChart.remove(); } catch (e) {}
+      window.__lwChart = null;
+    }
+    window.__lwTradeLineSeries = [];
   }
 
   function applyViewModeClass() {
@@ -377,126 +408,68 @@
     return '—';
   }
 
-  function sortedFinite(nums) {
-    var v = [];
-    for (var i = 0; i < nums.length; i++) {
-      var x = Number(nums[i]);
-      if (isFinite(x)) v.push(x);
+  function renderSurvivalStrip(overlay, barsChrono, stripH) {
+    var host = qs('#survivalStripHost');
+    if (!host) return;
+    var n = barsChrono.length;
+    if (!n || !(overlay.survival_test_bands || []).length) {
+      host.innerHTML = '';
+      host.style.display = 'none';
+      host.setAttribute('aria-hidden', 'true');
+      return;
     }
-    v.sort(function (a, b) { return a - b; });
-    return v;
-  }
-
-  /** Linear percentile on sorted array, p in [0,1]. */
-  function percentileSorted(sorted, p) {
-    if (!sorted.length) return NaN;
-    if (sorted.length === 1) return sorted[0];
-    var idx = (sorted.length - 1) * p;
-    var a = Math.floor(idx);
-    var b = Math.ceil(idx);
-    if (a === b) return sorted[a];
-    return sorted[a] + (sorted[b] - sorted[a]) * (idx - a);
-  }
-
-  /**
-   * Y-axis for readability: trim heavy tails (12th–88th percentile of closes), not 5–95,
-   * so a small fraction of outlier bars does not reserve huge empty vertical space while the
-   * bulk of the path sits in a tight band. Padding 6%. Overlay entry prices may widen the
-   * band by at most 35% of the pre-overlay span (not a full duplicate span) so one far
-   * overlay cannot dominate like raw min/max.
-   */
-  function computePriceRange(closes, overlayPrices) {
-    var sortedC = sortedFinite(closes);
-    if (!sortedC.length) return { lo: 0, hi: 1 };
-    if (sortedC.length === 1) {
-      var u = sortedC[0];
-      var eps = Math.max(Math.abs(u) * 1e-4, 1e-6);
-      var lo1 = u - eps;
-      var hi1 = u + eps;
-      return expandRangeForOverlays(lo1, hi1, overlayPrices);
-    }
-    var lo = percentileSorted(sortedC, 0.12);
-    var hi = percentileSorted(sortedC, 0.88);
-    if (!isFinite(lo) || !isFinite(hi)) {
-      lo = sortedC[0];
-      hi = sortedC[sortedC.length - 1];
-    }
-    if (hi <= lo) {
-      var mid = (hi + lo) / 2;
-      var eps2 = Math.max(Math.abs(mid) * 1e-4, 1e-6);
-      lo = mid - eps2;
-      hi = mid + eps2;
-    }
-    var span = hi - lo;
-    var pad = Math.max(span * 0.06, Math.abs(hi + lo) * 2.5e-5);
-    lo -= pad;
-    hi += pad;
-    return expandRangeForOverlays(lo, hi, overlayPrices);
-  }
-
-  function expandRangeForOverlays(lo, hi, overlayPrices) {
-    var ovs = sortedFinite(overlayPrices || []);
-    if (!ovs.length) return { lo: lo, hi: hi };
-    var minO = ovs[0];
-    var maxO = ovs[ovs.length - 1];
-    var span = hi - lo;
-    if (span <= 0) span = Math.max(Math.abs(hi) * 1e-6, 1e-9);
-    var cap = span * 0.35;
-    if (minO < lo) lo = Math.max(minO, lo - cap);
-    if (maxO > hi) hi = Math.min(maxO, hi + cap);
-    return { lo: lo, hi: hi };
-  }
-
-  function fmtAxisPrice(x) {
-    if (!isFinite(x)) return '—';
-    var ax = Math.abs(x);
-    if (ax >= 1000) return x.toFixed(2);
-    if (ax >= 1) return x.toFixed(4);
-    return x.toFixed(6);
+    host.style.display = 'block';
+    host.setAttribute('aria-hidden', 'false');
+    var W = 900;
+    function xAt(i) { return (i / Math.max(1, n - 1)) * W; }
+    var parts = [];
+    parts.push('<svg class="survival-strip-svg" viewBox="0 0 ' + W + ' ' + stripH + '" preserveAspectRatio="none" role="img" aria-label="Survival test presence over time">');
+    parts.push('<rect x="0" y="0" width="' + W + '" height="' + stripH + '" fill="rgba(15,20,28,0.95)" stroke="#2d3847" stroke-width="0.5"/>');
+    parts.push('<text x="6" y="14" fill="#8b9aad" font-size="10" font-family="IBM Plex Mono, monospace">Survival tests (time strip — not price)</text>');
+    (overlay.survival_test_bands || []).forEach(function (band, bi) {
+      var fb = Math.max(0, Math.min(n - 1, band.from_bar));
+      var tb = Math.max(0, Math.min(n - 1, band.to_bar));
+      var row = (band.strip_row != null ? band.strip_row : bi) % 4;
+      var yb = 22 + row * Math.max(10, (stripH - 28) / 4);
+      var x1 = xAt(Math.min(fb, tb));
+      var x2 = xAt(Math.max(fb, tb));
+      var rw = Math.max(4, x2 - x1);
+      parts.push('<rect x="' + x1 + '" y="' + yb + '" width="' + rw + '" height="10" fill="rgba(244,114,182,0.35)" stroke="#f472b6" stroke-width="1" stroke-dasharray="4,3"/>');
+    });
+    parts.push('</svg>');
+    host.innerHTML = parts.join('');
   }
 
   function renderChart(p) {
-    var svg = qs('#chart');
     var note = qs('#chartNote');
     var ruleBox = qs('#ruleBox');
+    var host = qs('#lwChartHost');
     var hist = (p.chart && p.chart.history_bars) ? p.chart.history_bars : [];
     var mid = p.market_event_id;
     var overlay = p.chart_overlay || {};
     var od = p.operator_dashboard || {};
     var topFive = od.ranked_strategy_ids || od.top_five_strategy_ids || [];
     if (ruleBox) ruleBox.textContent = od.top_five_selection_rule || '';
+    destroyLwChart();
+    if (!host) return;
     if (!hist.length) {
-      svg.innerHTML = '';
-      note.textContent = 'No history_bars — chart empty.';
+      host.innerHTML = '';
+      var stripEl = qs('#survivalStripHost');
+      if (stripEl) { stripEl.innerHTML = ''; stripEl.style.display = 'none'; }
+      if (note) note.textContent = 'No history_bars — chart empty.';
       return;
     }
+    var LC = window.LightweightCharts;
+    if (!LC || typeof LC.createChart !== 'function') {
+      host.innerHTML = '<p style="padding:1rem;color:#fecaca">TradingView Lightweight Charts failed to load. Check network / CDN.</p>';
+      if (note) note.textContent = 'Chart library unavailable.';
+      return;
+    }
+
     var series = hist.slice().reverse();
-    var closes = series.map(function (b) { return Number(b.close); });
+    var n = series.length;
     var segBL = (overlay.baseline_position_segments || []).slice();
     var segSA = (overlay.strategy_position_segments || []).slice();
-    var overlayPrices = [];
-    function collectSegPrices(segs) {
-      (segs || []).forEach(function (s) {
-        var pr = s.entry_price;
-        if (pr != null && isFinite(Number(pr))) overlayPrices.push(Number(pr));
-      });
-    }
-    collectSegPrices(segBL);
-    collectSegPrices(segSA);
-    var rng = computePriceRange(closes, overlayPrices);
-    var lo = rng.lo;
-    var hi = rng.hi;
-    var lay = getChartLayout();
-    var W = lay.W;
-    var H = lay.H;
-    var L = lay.L;
-    var R = lay.R;
-    var T = lay.T;
-    var ih = lay.PRICE_H;
-    var iw = W - L - R;
-    var n = series.length;
-    function xAt(i) { return L + (i / Math.max(1, n - 1)) * iw; }
-    function yAt(price) { return T + (1 - (price - lo) / (hi - lo)) * ih; }
     var evIdx = -1;
     for (var j = 0; j < series.length; j++) {
       if (series[j].market_event_id === mid) { evIdx = j; break; }
@@ -507,61 +480,221 @@
         segBL.push({ from_bar: evIdx, to_bar: evIdx, entry_price: Number(br.entry_price) });
       }
     }
-    var path = [];
-    for (var i = 0; i < n; i++) path.push((i ? 'L' : 'M') + xAt(i).toFixed(1) + ',' + yAt(closes[i]).toFixed(1));
-    var parts = [];
-    parts.push('<rect x="0" y="0" width="' + W + '" height="' + H + '" fill="#1a222d"/>');
-    parts.push('<text x="4" y="' + (T + 14) + '" fill="#8b9aad" font-size="10" font-family="IBM Plex Mono, monospace">' + esc(fmtAxisPrice(hi)) + '</text>');
-    parts.push('<text x="4" y="' + (T + ih - 2) + '" fill="#8b9aad" font-size="10" font-family="IBM Plex Mono, monospace">' + esc(fmtAxisPrice(lo)) + '</text>');
-    parts.push('<path d="' + path.join(' ') + '" fill="none" stroke="#94a3b8" stroke-width="1.2" opacity="0.95"/>');
-    if (evIdx >= 0) {
-      var vx = xAt(evIdx);
-      parts.push('<line x1="' + vx + '" y1="' + T + '" x2="' + vx + '" y2="' + (T + ih) + '" stroke="#f0b429" stroke-width="1.5" opacity="0.9"/>');
+
+    var candleData = [];
+    var candleTimes = [];
+    var seenT = {};
+    for (var i = 0; i < n; i++) {
+      var b = series[i];
+      var t = barTimeUtc(b);
+      if (t == null || seenT[t]) continue;
+      seenT[t] = true;
+      var o = Number(b.open), h = Number(b.high), lo = Number(b.low), c = Number(b.close);
+      if (![o, h, lo, c].every(function (x) { return isFinite(x); })) continue;
+      candleData.push({ time: t, open: o, high: h, low: lo, close: c });
+      candleTimes.push(t);
     }
-    function drawSegLine(seg, stroke, sw) {
-      var pr = Number(seg.entry_price);
-      if (!isFinite(pr)) return;
-      var a = Math.max(0, Math.min(n - 1, seg.from_bar));
-      var b = Math.max(0, Math.min(n - 1, seg.to_bar));
-      var y = yAt(pr);
-      if (a === b) {
-        parts.push('<circle cx="' + xAt(a) + '" cy="' + y + '" r="5" fill="none" stroke="' + stroke + '" stroke-width="' + sw + '"/>');
-      } else {
-        var x1 = xAt(Math.min(a, b)), x2 = xAt(Math.max(a, b));
-        parts.push('<line x1="' + x1 + '" y1="' + y + '" x2="' + x2 + '" y2="' + y + '" stroke="' + stroke + '" stroke-width="' + sw + '" opacity="0.95"/>');
+    candleData.sort(function (a, b) { return a.time - b.time; });
+    if (!candleData.length) {
+      host.innerHTML = '';
+      if (note) note.textContent = 'history_bars present but no valid OHLC times — chart empty.';
+      return;
+    }
+
+    var heights = getChartHeights();
+    var priceH = heights.priceH;
+    var stripH = heights.stripH;
+    var w = host.clientWidth || host.parentElement.clientWidth || 800;
+    host.innerHTML = '';
+    var chart = LC.createChart(host, {
+      width: w,
+      height: priceH,
+      layout: {
+        background: { type: 'solid', color: '#1a222d' },
+        textColor: '#8b9aad',
+        fontFamily: "'IBM Plex Mono', ui-monospace, monospace",
+        fontSize: 11,
+      },
+      grid: {
+        vertLines: { color: '#2d3847' },
+        horzLines: { color: '#2d3847' },
+      },
+      crosshair: { mode: LC.CrosshairMode ? LC.CrosshairMode.Normal : 1 },
+      rightPriceScale: { borderColor: '#2d3847', scaleMargins: { top: 0.08, bottom: 0.12 } },
+      timeScale: {
+        borderColor: '#2d3847',
+        timeVisible: true,
+        secondsVisible: false,
+        rightOffset: 8,
+        barSpacing: 6,
+        fixLeftEdge: false,
+        fixRightEdge: false,
+      },
+      localization: {
+        locale: 'en-US',
+        dateFormat: 'yyyy-MM-dd',
+      },
+    });
+    window.__lwChart = chart;
+
+    var candleSeries = chart.addCandlestickSeries({
+      upColor: '#26a69a',
+      downColor: '#ef5350',
+      borderVisible: true,
+      wickUpColor: '#26a69a',
+      wickDownColor: '#ef5350',
+    });
+    candleSeries.setData(candleData);
+
+    function addSegmentLines(segs, color, lineWidth, visible) {
+      (segs || []).forEach(function (seg) {
+        var pr = Number(seg.entry_price);
+        if (!isFinite(pr)) return;
+        var a = Math.max(0, Math.min(n - 1, seg.from_bar));
+        var b = Math.max(0, Math.min(n - 1, seg.to_bar));
+        var lo = Math.min(a, b);
+        var hi = Math.max(a, b);
+        var t0 = barTimeUtc(series[lo]);
+        var t1 = barTimeUtc(series[hi]);
+        if (t0 == null || t1 == null) return;
+        var line = chart.addLineSeries({
+          color: color,
+          lineWidth: lineWidth,
+          priceLineVisible: false,
+          lastValueVisible: false,
+          visible: visible !== false,
+        });
+        line.setData([{ time: t0, value: pr }, { time: t1, value: pr }]);
+      });
+    }
+
+    addSegmentLines(segBL, BASELINE_COLOR, 3, true);
+
+    window.__lwAnnaSeries = {};
+    topFive.forEach(function (sid, idx) {
+      var col = ANNA_LINE_COLORS[idx % ANNA_LINE_COLORS.length];
+      var segs = segSA.filter(function (s) { return s.strategy_id === sid; });
+      var vis = toggles[sid] !== false;
+      window.__lwAnnaSeries[sid] = [];
+      (segs || []).forEach(function (seg) {
+        var pr = Number(seg.entry_price);
+        if (!isFinite(pr)) return;
+        var a = Math.max(0, Math.min(n - 1, seg.from_bar));
+        var b = Math.max(0, Math.min(n - 1, seg.to_bar));
+        var lo = Math.min(a, b);
+        var hi = Math.max(a, b);
+        var t0 = barTimeUtc(series[lo]);
+        var t1 = barTimeUtc(series[hi]);
+        if (t0 == null || t1 == null) return;
+        var line = chart.addLineSeries({
+          color: col,
+          lineWidth: 2,
+          priceLineVisible: false,
+          lastValueVisible: false,
+          visible: vis,
+        });
+        line.setData([{ time: t0, value: pr }, { time: t1, value: pr }]);
+        window.__lwAnnaSeries[sid].push(line);
+      });
+    });
+
+    var markers = [];
+    var rawMarkers = (p.chart && p.chart.markers) ? p.chart.markers : [];
+    rawMarkers.forEach(function (m) {
+      var ts = m.timestamp_utc;
+      if (!ts) return;
+      var ms = Date.parse(String(ts).indexOf('Z') !== -1 ? String(ts) : String(ts) + 'Z');
+      if (!isFinite(ms)) return;
+      var ut = Math.floor(ms / 1000);
+      var bt = nearestBarTime(ut, candleTimes);
+      if (bt == null) return;
+      var isEntry = m.kind === 'entry';
+      var lane = (m.lane || '').toLowerCase();
+      var col = lane === 'baseline' ? BASELINE_COLOR : '#c084fc';
+      markers.push({
+        time: bt,
+        position: isEntry ? 'belowBar' : 'aboveBar',
+        color: col,
+        shape: 'circle',
+        size: 1,
+        text: isEntry ? 'E' : 'X',
+      });
+    });
+    if (evIdx >= 0) {
+      var et = barTimeUtc(series[evIdx]);
+      if (et != null) {
+        markers.push({
+          time: et,
+          position: 'inBar',
+          color: '#f0b429',
+          shape: 'square',
+          size: 1,
+          text: '▲',
+        });
       }
     }
-    segBL.forEach(function (seg) { drawSegLine(seg, BASELINE_COLOR, '2.4'); });
-    topFive.forEach(function (sid, idx) {
-      if (toggles[sid] === false) return;
-      var col = ANNA_LINE_COLORS[idx % ANNA_LINE_COLORS.length];
-      segSA.filter(function (s) { return s.strategy_id === sid; }).forEach(function (seg) { drawSegLine(seg, col, '2'); });
+    markers.sort(function (a, b) { return a.time - b.time; });
+    candleSeries.setMarkers(markers);
+
+    var tradePairs = {};
+    rawMarkers.forEach(function (m) {
+      var tid = m.trade_id || '';
+      if (!tid) return;
+      if (!tradePairs[tid]) tradePairs[tid] = {};
+      if (m.kind === 'entry') tradePairs[tid].entry = m;
+      if (m.kind === 'exit') tradePairs[tid].exit = m;
     });
-    var TEST_TOP = lay.TEST_TOP;
-    var TEST_H = lay.TEST_H;
-    parts.push('<line x1="' + L + '" y1="' + (T + ih + 6) + '" x2="' + (L + iw) + '" y2="' + (T + ih + 6) + '" stroke="#2d3847" stroke-width="1"/>');
-    parts.push('<text x="' + L + '" y="' + (T + ih + 20) + '" fill="#8b9aad" font-size="10" font-family="IBM Plex Mono, monospace">Survival tests — presence over time (strip below; not strategy price lines)</text>');
-    parts.push('<rect x="' + L + '" y="' + TEST_TOP + '" width="' + iw + '" height="' + TEST_H + '" fill="rgba(15,20,28,0.9)" stroke="#2d3847" stroke-width="0.5"/>');
-    (overlay.survival_test_bands || []).forEach(function (band, bi) {
-      var fb = Math.max(0, Math.min(n - 1, band.from_bar));
-      var tb = Math.max(0, Math.min(n - 1, band.to_bar));
-      var row = (band.strip_row != null ? band.strip_row : bi) % 4;
-      var yb = TEST_TOP + 6 + row * 14;
-      var x1 = xAt(Math.min(fb, tb));
-      var x2 = xAt(Math.max(fb, tb));
-      var w = Math.max(3, x2 - x1);
-      parts.push('<rect x="' + x1 + '" y="' + yb + '" width="' + w + '" height="10" fill="rgba(244,114,182,0.35)" stroke="#f472b6" stroke-width="1" stroke-dasharray="4,3"/>');
+    window.__lwTradeLineSeries = [];
+    Object.keys(tradePairs).forEach(function (tid) {
+      var pair = tradePairs[tid];
+      if (!pair.entry || !pair.exit) return;
+      var msE = Date.parse(String(pair.entry.timestamp_utc).indexOf('Z') !== -1 ? String(pair.entry.timestamp_utc) : String(pair.entry.timestamp_utc) + 'Z');
+      var msX = Date.parse(String(pair.exit.timestamp_utc).indexOf('Z') !== -1 ? String(pair.exit.timestamp_utc) : String(pair.exit.timestamp_utc) + 'Z');
+      if (!isFinite(msE) || !isFinite(msX)) return;
+      var tE = nearestBarTime(Math.floor(msE / 1000), candleTimes);
+      var tX = nearestBarTime(Math.floor(msX / 1000), candleTimes);
+      var pE = pair.entry.price;
+      var pX = pair.exit.price;
+      if (tE == null || tX == null || !isFinite(Number(pE)) || !isFinite(Number(pX))) return;
+      var lane = (pair.entry.lane || '').toLowerCase();
+      var col = lane === 'baseline' ? 'rgba(74,158,255,0.45)' : 'rgba(168,85,247,0.45)';
+      var tl = chart.addLineSeries({
+        color: col,
+        lineWidth: 1,
+        lineStyle: 2,
+        priceLineVisible: false,
+        lastValueVisible: false,
+      });
+      tl.setData([{ time: tE, value: Number(pE) }, { time: tX, value: Number(pX) }]);
+      window.__lwTradeLineSeries.push(tl);
     });
-    parts.push('<text x="' + L + '" y="' + (H - 8) + '" fill="#8b9aad" font-size="10">Older ← → Recent</text>');
-    svg.innerHTML = parts.join('');
-    svg.setAttribute('viewBox', '0 0 ' + W + ' ' + H);
-    svg.setAttribute('preserveAspectRatio', 'xMidYMid meet');
+
+    chart.timeScale().fitContent();
+
+    window.__lwResizeHandler = function () {
+      if (!window.__lwChart || !host) return;
+      var nw = host.clientWidth;
+      var nh = getChartHeights().priceH;
+      if (nw <= 0) return;
+      if (typeof window.__lwChart.resize === 'function') {
+        window.__lwChart.resize(nw, nh);
+      } else {
+        window.__lwChart.applyOptions({ width: nw, height: nh });
+      }
+    };
+    window.addEventListener('resize', window.__lwResizeHandler);
+    setTimeout(window.__lwResizeHandler, 0);
+
+    renderSurvivalStrip(overlay, series, stripH);
+
     var dg = (overlay.data_gaps || []).join(', ');
     var vm = getViewMode();
     var cs = (qs('#chartSize') && qs('#chartSize').value) ? qs('#chartSize').value : 'standard';
-    note.textContent =
-      'Bars: ' + n + '. Mode: ' + vm + '. Chart height: ' + cs + ' (toolbar). Y-axis: p12–p88 of closes + 6% pad; overlay nudge ≤35% of span (see left labels). Baseline = blue. Anna = ranked. Tests = pink strip. ' +
-      (dg ? 'Gaps: ' + dg + '.' : '');
+    if (note) {
+      note.textContent =
+        'Candles: ' + candleData.length + ' (TradingView Lightweight Charts). Mode: ' + vm + '. Chart height: ' + cs + '. Baseline = blue lines. Anna = ranked (toggle). Entry/exit = E/X markers; event bar = ▲. Survival = strip below. ' +
+        (dg ? 'Gaps: ' + dg + '.' : '');
+    }
   }
 
   function renderStrategyPanel(p) {
@@ -879,6 +1012,7 @@
   qs('#uiScale').addEventListener('change', function () {
     localStorage.setItem('eventDashUiScale', this.value);
     applyUiScale();
+    if (typeof window.__lwResizeHandler === 'function') window.__lwResizeHandler();
   });
   qs('#viewMode').addEventListener('change', function () {
     localStorage.setItem('eventDashViewMode', this.value);
