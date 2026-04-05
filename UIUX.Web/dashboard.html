@@ -183,10 +183,6 @@
         <summary>Operational boundary</summary>
         <div class="body" id="ob-body"></div>
       </details>
-      <details class="dash-below">
-        <summary>Raw JSON (bundle)</summary>
-        <div class="body"><pre id="raw-pre">—</pre></div>
-      </details>
     </div>
   </div>
   <script>
@@ -331,11 +327,20 @@
 
     renderTC(bundle.trade_chain || {});
     renderOB(bundle.operational_boundary);
-    $('raw-pre').textContent = JSON.stringify(bundle, null, 2);
   }
 
   function fetchBundle() {
     return fetch('/api/v1/dashboard/bundle?max_events=28', { cache: 'no-store' }).then(function (r) { return r.json(); });
+  }
+
+  function fmtCtl(j) {
+    if (!j || typeof j !== 'object') return String(j);
+    var ok = j.ok;
+    var r = j.reason_code || j.result_state || '';
+    var extra = j.processed != null ? ' processed=' + j.processed : '';
+    if (ok === false) return '✗ ' + (r || 'failed') + extra;
+    if (ok === true || r) return '✓ ' + (r || 'ok') + extra;
+    return JSON.stringify(j).slice(0, 200);
   }
 
   function refresh() {
@@ -367,15 +372,15 @@
     };
   }
 
-  $('btnStartNew').addEventListener('click', function () { saveForm(); postCtl('start', startBody('new_run')).then(function (x) { $('dash-ctl-msg').textContent = x.ok ? JSON.stringify(x.j) : JSON.stringify(x.j); refresh(); }); });
-  $('btnResume').addEventListener('click', function () { saveForm(); postCtl('start', startBody('resume')).then(function (x) { $('dash-ctl-msg').textContent = JSON.stringify(x.j); refresh(); }); });
-  $('btnPause').addEventListener('click', function () { postCtl('pause', {}).then(function (x) { $('dash-ctl-msg').textContent = JSON.stringify(x.j); refresh(); }); });
-  $('btnStop').addEventListener('click', function () { postCtl('stop', {}).then(function (x) { $('dash-ctl-msg').textContent = JSON.stringify(x.j); refresh(); }); });
-  $('btnReset').addEventListener('click', function () { if (!confirm('Reset?')) return; postCtl('reset', { archive: true }).then(function (x) { $('dash-ctl-msg').textContent = JSON.stringify(x.j); refresh(); }); });
-  $('btnTick').addEventListener('click', function () { postCtl('tick', { max_events: 5 }).then(function (x) { $('dash-ctl-msg').textContent = JSON.stringify(x.j); refresh(); }); });
+  $('btnStartNew').addEventListener('click', function () { saveForm(); postCtl('start', startBody('new_run')).then(function (x) { $('dash-ctl-msg').textContent = fmtCtl(x.j); refresh(); }); });
+  $('btnResume').addEventListener('click', function () { saveForm(); postCtl('start', startBody('resume')).then(function (x) { $('dash-ctl-msg').textContent = fmtCtl(x.j); refresh(); }); });
+  $('btnPause').addEventListener('click', function () { postCtl('pause', {}).then(function (x) { $('dash-ctl-msg').textContent = fmtCtl(x.j); refresh(); }); });
+  $('btnStop').addEventListener('click', function () { postCtl('stop', {}).then(function (x) { $('dash-ctl-msg').textContent = fmtCtl(x.j); refresh(); }); });
+  $('btnReset').addEventListener('click', function () { if (!confirm('Reset?')) return; postCtl('reset', { archive: true }).then(function (x) { $('dash-ctl-msg').textContent = fmtCtl(x.j); refresh(); }); });
+  $('btnTick').addEventListener('click', function () { postCtl('tick', { max_events: 5 }).then(function (x) { $('dash-ctl-msg').textContent = fmtCtl(x.j); refresh(); }); });
 
   refresh();
-  setInterval(refresh, 15000);
+  setInterval(refresh, 1500);
 })();
   </script>
 </body>

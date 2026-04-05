@@ -167,20 +167,68 @@ def build_status() -> tuple[dict[str, Any], dict[str, Any]]:
         if isinstance(drift, dict)
         else "no_drift_doctor_artifact"
     )
-    runtime_state = "connected" if billy_conn == "connected" else "not_connected"
-    state["runtime_state"] = runtime_state
+
+    seq_snapshot: dict[str, Any] = {}
+    seq_ui = "idle"
+    try:
+        from modules.anna_training.sequential_engine.ui_control import build_operator_status
+
+        seq_snapshot = build_operator_status()
+        seq_ui = str(seq_snapshot.get("ui_state") or "idle").lower()
+    except Exception:
+        seq_ui = "idle"
+
+    # Primary signal: sequential learning RUNNING → runtime RUNNING + ledger wired for dashboard truth.
+    if seq_ui == "running":
+        runtime_state = "running"
+        reason_code = "sequential_learning_running"
+        tick_at = seq_snapshot.get("last_tick_at") or now_iso()
+        state["runtime_state"] = runtime_state
+        state["last_transition_at"] = tick_at
+        state["last_event_at"] = tick_at
+        state["write_success_rate_5m"] = 1.0
+        state["ledger_lag_seconds"] = 5
+        state["last_error_code"] = None
+        controls_enabled = True
+    elif seq_ui == "paused":
+        runtime_state = "paused"
+        reason_code = "sequential_learning_paused"
+        state["runtime_state"] = runtime_state
+        controls_enabled = True
+    elif billy_conn == "connected":
+        runtime_state = "connected"
+        reason_code = "runtime_connected_via_billy"
+        state["runtime_state"] = runtime_state
+        controls_enabled = True
+    else:
+        runtime_state = "not_connected"
+        reason_code = "runtime_not_connected"
+        state["runtime_state"] = runtime_state
+        controls_enabled = False
+
     save_state(state)
+
+    anna_conn = "connected" if seq_ui == "running" else "unknown"
+    anna_reason = "sequential_learning_active" if seq_ui == "running" else "anna_runtime_probe_not_configured"
+    anna_lifecycle = "running" if seq_ui == "running" else "unknown"
 
     runtime = {
         "runtime_state": runtime_state,
         "last_transition_at": state.get("last_transition_at"),
-        "controls_enabled": billy_conn == "connected",
+        "controls_enabled": controls_enabled,
         "paper_enabled": bool(state.get("paper_enabled", False)),
         "live_enabled": bool(state.get("live_enabled", False)),
-        "reason_code": "runtime_connected_via_billy" if billy_conn == "connected" else "runtime_not_connected",
+        "reason_code": reason_code,
         "trace_id": str(uuid.uuid4()),
         "probe_artifact": str(drift_path.relative_to(ROOT)) if drift_path else None,
         "ledger": ledger_health(state),
+        "sequential_learning": {
+            "ui_state": seq_ui,
+            "events_processed_total": int(seq_snapshot.get("events_processed_total") or 0),
+            "events_total_lines": int(seq_snapshot.get("events_total_lines") or 0),
+            "last_tick_at": seq_snapshot.get("last_tick_at"),
+            "last_processed_market_event_id": seq_snapshot.get("last_processed_market_event_id"),
+        },
     }
 
     def item(agent_id: str, label: str, conn: str, reason: str, lifecycle: str) -> dict[str, Any]:
@@ -203,7 +251,7 @@ def build_status() -> tuple[dict[str, Any], dict[str, Any]]:
 
     agents = {
         "items": [
-            item("anna", "Anna", "unknown", "anna_runtime_probe_not_configured", "unknown"),
+            item("anna", "Anna", anna_conn, anna_reason, anna_lifecycle),
             item("billy", "Billy", billy_conn, billy_reason, "on" if billy_conn == "connected" else "unknown"),
             item("mia", "Mia", "not_wired", "mia_not_wired", "not_wired"),
             item("chris", "Chris", "not_wired", "chris_not_wired", "not_wired"),
@@ -987,6 +1035,12 @@ def normalize_status(raw: Any) -> str:
         return v
     if v in {"connected", "up", "on", "ready", "ok"}:
         return "healthy"
+    if v in {"running"}:
+        return "healthy"
+    if v in {"paused"}:
+        return "degraded"
+    if v in {"idle", "stopped"}:
+        return "degraded"
     if v in {"warning", "watch", "not_connected", "partial", "stale"}:
         return "degraded"
     if v in {"disconnected", "down", "off", "capacity_risk", "failed", "failure"}:

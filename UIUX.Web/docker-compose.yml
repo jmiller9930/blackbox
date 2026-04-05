@@ -29,6 +29,25 @@ services:
     volumes:
       - ../:/repo
       - /mnt/SQLlite_dB:/mnt/SQLlite_dB
+    # Helps Jupiter quote DNS in some lab networks (optional).
+    dns:
+      - 8.8.8.8
+      - 8.8.4.4
+    restart: unless-stopped
+
+  sequential-tick:
+    image: python:3.11-alpine
+    working_dir: /repo
+    environment:
+      BLACKBOX_REPO_ROOT: /repo
+      BLACKBOX_API_TICK_URL: http://api:8080/api/v1/sequential-learning/control/tick
+      SEQUENTIAL_TICK_INTERVAL_SEC: "5"
+      SEQUENTIAL_TICK_MAX_EVENTS: "5"
+    command: ["python3", "scripts/runtime/sequential_http_tick_loop.py"]
+    volumes:
+      - ../:/repo
+    depends_on:
+      - api
     restart: unless-stopped
 
   pyth-stream:
@@ -52,6 +71,7 @@ services:
     depends_on:
       - api
       - pyth-stream
+      - sequential-tick
     ports:
       - "443:443"
       - "80:80"
