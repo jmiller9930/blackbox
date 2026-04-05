@@ -63,6 +63,7 @@
 | W7 | **This roundtable** maintained per §6 | Engineering | Ongoing | — |
 | W8 | **Context & Memory Contract** (memory-driven; doc + compliance) | Architect + Eng | **Draft published** — [`context_memory_contract_w8.md`](context_memory_contract_w8.md); §8 = gap | 2026-04 |
 | W9 | **Implement** W8 (lesson memory, similarity, injection, tests) | Engineering | **Shipped** — W9a–c + behavioral proof + **runtime control plane** (see §4.1, §5) | 2026-04 |
+| W10 | **Clawbot remote operational proof** (runtime UI/API, pyth-stream, wallet truth, sequential learning RUNNING, Anna/ledger evidence) | Engineering + Operator | **Open** — partial proof on clawbot; acceptance bar not fully met (see Round 024) | 2026-04 |
 
 ---
 
@@ -82,6 +83,7 @@
 | **Tier 1 lesson lifecycle** | **Accepted & track closed (R021).** Definition unchanged from R020: operator `candidate` → human `validated` → optional `promoted`; injection **validated/promoted only**; assistive memory; no autonomous learning. **Clarifications:** `promoted` vs `validated` = **governance only** in Tier 1 (same code path); minimum bar = **training plan**, not code enforcement; lesson quality = **training/process** ownership. **Next:** Tier 1 completion validation → Tier 2 transition planning (separate). |
 | **Tier 1 final validation (R022)** | **Behavior-focused closure memo** — Engineering: deterministic + gate + ledger paths **test-backed**; LLM path **not** strictly deterministic; live production proof = **operator / primary host** per project standards. |
 | **Tier 1 script adherence (R023)** | **Controlled `anna_analysis_v1` proof** — [`docs/working/tier1_behavioral_validation_proof.json`](../working/tier1_behavioral_validation_proof.json) (`ANNA_USE_LLM=0`, memory off). |
+| **Clawbot remote runtime (W10)** | **Partially met** — `main` synced on clawbot; `pyth-stream` stable (Hermes probe); Pyth API `healthy`; context engine `healthy`; `market_ticks` advancing; host `anna_training_cli.py loop-daemon` running; execution DB has historical `paper` / `paper_stub` trades and `decision_traces`. **Gaps:** API wallet disconnected (no keypair path in container env); sequential learning API **`idle`** (not started with calibration/events); UI control-plane artifact `runtime_state` **not_connected** / ledger **not_wired** vs live processes; Jupiter quote from API container fails (DNS); dashboard bundle `trade_chain` empty in sampled response. Operator: `.secrets` keypair + `UIUX.Web/.env`, recreate `api`; optional network/DNS for Jupiter; POST sequential **start** + **tick** with valid paths. |
 
 ---
 
@@ -153,10 +155,11 @@
 | 021 | 2026-04 | Architect | **Acceptance — Tier 1 lesson lifecycle** | Lock and close track; clarifications on promoted vs validated (governance only), minimum bar in training plan, ownership = training/process. | **Accepted as written.** No additional code for Tier 1 lifecycle; no automation of validation/promotion; no Tier 2 expansion from this track. **Next:** Tier 1 completion validation → Tier 2 transition planning. **Track closed.** | closed |
 | 022 | 2026-04 | Architect | **Tier 1 closure — final validation** (behavior) | Script, signals, `anna_analysis_v1`, ledger, gates, determinism; proof where applicable. | Engineering response: deterministic paths + gates + ledger logic **substantiated** by automated tests; LLM-on path **not** strictly deterministic; production primary-host proof **out of scope** for this memo. See Round 022 Engineering reply. | closed |
 | 023 | 2026-04 | Architect | **Tier 1 — behavioral validation (script adherence)** | Controlled scenarios: input, expected, full `anna_analysis_v1`, pass/fail; no metrics-only closure. | **`docs/working/tier1_behavioral_validation_proof.json`** — `build_analysis`, `ANNA_USE_LLM=0`, lesson memory off; scenarios S1–S6; duplicate-input determinism verified separately. | closed |
+| 024 | 2026-04-05 | Engineering | **W10 — Clawbot-only operationalization** (Git sync, pyth-stream, wallet, sequential, Anna/learning proof) | Architect directive: prove system on **clawbot** only; no local-only proof; fix unhealthy services; truthful wallet; RUNNING sequential + trade-and-train evidence. | **Shipped:** `scripts/trading/pyth_stream_probe.py` (fixes `pyth-stream` crash — missing script); `UIUX.Web/docker-compose.yml` env passthrough (`KEYPAIR_PATH`, `BLACKBOX_SOLANA_KEYPAIR_PATH`, `SOLANA_RPC_URL`, `BLACKBOX_LIVE_TRADING_BLOCKED`, `BLACKBOX_EXECUTION_LEDGER_PATH`); `modules/wallet/solana_wallet.py` governance flag; `scripts/runtime/operational_readiness_clawbot.sh`. **Clawbot verified (SSH):** `main` @ `7fd7cd90bd9dda4062589617317fb8b9a705c796`; containers Up; Pyth `healthy`; sequential API **`idle`**; wallet **`wallet_connected: false`** (no keypair in container); `runtime/status` **not_connected**; Anna host process running; DB counts non-zero historically. **Not accepted** vs full directive until wallet wired, sequential **running**, unified dashboard proof. **W10** open. | open |
 
 ---
 
-*Last updated: 2026-04-02 — Round 023; Tier 1 **script adherence** proof artifact.*
+*Last updated: 2026-04-05 — Round 024; W10 clawbot operational proof (partial).*
 
 ---
 
@@ -171,6 +174,9 @@
 | `docs/working/w9bc_checkpoint_proof.md` | W9b/c + behavioral checkpoint proof |
 | `docs/architect/problem_aware_lesson_memory_control_plane.md` | Control-plane directive + implementation pointers |
 | **This file — §4.1 + §6 R020–021** | **Tier 1 lesson lifecycle** (definition R020; **acceptance / track closure** R021) |
+| **This file — §6 R024, W10** | **Clawbot operational proof** — partial status, gaps, commit pointers |
+| `scripts/trading/pyth_stream_probe.py` | Hermes Pyth poller for `docs/working/artifacts/pyth_stream_*.json` (docker `pyth-stream`) |
+| `scripts/runtime/operational_readiness_clawbot.sh` | Remote curl + compose checks (run on clawbot after pull) |
 | `scripts/runtime/anna_modules/memory_control_plane.py` | Problem signals → mode → retrieval (runtime) |
 | `modules/anna_training/gates.py` | Grade-12 gate evaluation |
 | `.cursor/rules/training-conference-roundtable.mdc` | Reminder to append §6 |
