@@ -124,6 +124,45 @@ def append_flow(
     return {"ok": True, "flow": flow}
 
 
+def replace_initial_capital(*, amount_usd: float) -> dict[str, Any]:
+    """
+    Replace the single ``initial`` journal line (operator sets starting bankroll).
+    Allowed only when there are no deposit/withdrawal events yet — otherwise use flows API.
+    """
+    try:
+        amt = float(amount_usd)
+    except (TypeError, ValueError):
+        return {"ok": False, "reason_code": "invalid_amount", "detail": "starting_usd must be a number."}
+    if amt <= 0:
+        return {"ok": False, "reason_code": "amount_must_be_positive", "detail": "Starting capital must be positive."}
+
+    from modules.anna_training.store import load_state
+
+    st = load_state()
+    ensure_journal_seeded(st)
+    flows = _read_all_flows()
+    rollup = _rollup_from_flows(flows)
+    if rollup.capital_added > 1e-12 or rollup.capital_withdrawn > 1e-12:
+        return {
+            "ok": False,
+            "reason_code": "flows_after_initial",
+            "detail": "Cannot change starting capital after deposits or withdrawals — use Add capital instead.",
+        }
+
+    flow = {
+        "schema": FLOW_SCHEMA,
+        "flow_id": uuid.uuid4().hex,
+        "ts_utc": utc_now_iso(),
+        "event_type": "initial",
+        "amount_usd": amt,
+        "note": "Operator set starting capital (replaces prior initial while no flows exist).",
+    }
+    p = journal_path()
+    p.parent.mkdir(parents=True, exist_ok=True)
+    p.write_text(json.dumps(flow, ensure_ascii=False) + "\n", encoding="utf-8")
+    return {"ok": True, "flow": flow}
+
+
 @dataclass(frozen=True)
 class CapitalRollup:
     starting_capital: float
@@ -219,6 +258,8 @@ def build_paper_capital_summary(
     equity_cohort = rollup.net_contributed_capital + trading_pnl_cohort
     equity_ledger = rollup.net_contributed_capital + trading_pnl_ledger
 
+    can_edit = rollup.capital_added <= 1e-12 and rollup.capital_withdrawn <= 1e-12
+
     return {
         "schema": "paper_capital_summary_v1",
         "journal_path": str(journal_path()),
@@ -231,6 +272,7 @@ def build_paper_capital_summary(
         "trading_pnl_execution_ledger": round(trading_pnl_ledger, 8),
         "current_equity_cohort": round(equity_cohort, 8),
         "current_equity_ledger": round(equity_ledger, 8),
+        "can_edit_starting": can_edit,
         "note": (
             "Equity = net_contributed_capital + trading_pnl. "
             "Cohort uses paper_trades.jsonl (grade-12 gates). "

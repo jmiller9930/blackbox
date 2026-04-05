@@ -57,6 +57,13 @@
     .dash-r3 .kv { display: flex; flex-direction: column; gap: 0.1rem; }
     .dash-r3 .k { font-size: 0.62rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); font-weight: 700; }
     .dash-r3 .v { font-family: ui-monospace, monospace; word-break: break-all; }
+    .dash-r3 button {
+      padding: 0.28rem 0.55rem; border-radius: var(--radius-md); border: 1px solid var(--panel-border);
+      font-size: 0.72rem; font-weight: 700; cursor: pointer;
+    }
+    .dash-r3 button.sec { background: var(--panel); color: var(--text); }
+    .dash-r3 button.tick { background: #0f766e; color: #fff; border-color: #0d9488; }
+    .dash-r3 button:disabled { opacity: 0.45; cursor: not-allowed; }
     /* Row 4 — trade chain dominates */
     .dash-r4 {
       flex: 1; min-height: 0; display: flex; flex-direction: column;
@@ -67,13 +74,13 @@
     .dash-r4 .scroll { flex: 1; overflow: auto; min-height: 12rem; }
     .tc-table { border-collapse: separate; border-spacing: 0; font-size: 0.65rem; min-width: max-content; }
     .tc-table th, .tc-table td { border-right: 1px solid var(--panel-border); border-bottom: 1px solid var(--panel-border); padding: 0.25rem 0.3rem; vertical-align: top; }
-    /* Economic equivalence: data cells share one neutral ground; chain identity stays in the label column. */
-    .tc-table tbody tr td { background: #f8fafc; }
+    /* Recency + Anna tints applied inline on event columns; sticky label column stays neutral. */
     .tc-table tbody tr th:first-child {
       position: sticky; left: 0; z-index: 2; max-width: 10rem;
-      background: #f8fafc;
+      background: #f8fafc !important;
       box-shadow: 2px 0 6px rgba(15,23,42,0.06);
     }
+    .tc-table thead th.tc-sticky-chain { background: #f8fafc !important; }
     .tc-tr-baseline th:first-child { border-left: 3px solid #0f172a; }
     .tc-tr-anna th:first-child { border-left: 2px solid #94a3b8; font-weight: 600; }
     .tc-tr-anna-test th:first-child { border-left-color: #64748b; }
@@ -82,9 +89,9 @@
     .tc-tr-anna.tc-acc-1 th:first-child { background: linear-gradient(90deg, rgba(71,85,105,0.07) 0%, #f8fafc 0.5rem); }
     .tc-tr-anna.tc-acc-2 th:first-child { background: linear-gradient(90deg, rgba(51,65,85,0.06) 0%, #f8fafc 0.5rem); }
     .tc-tr-anna.tc-acc-3 th:first-child { background: linear-gradient(90deg, rgba(30,41,59,0.05) 0%, #f8fafc 0.5rem); }
-    /* Newest event column (recency anchor) */
+    /* Newest column: ring only (gradient underneath stays visible) */
     .tc-table thead th.tc-now,
-    .tc-table tbody td.tc-now { box-shadow: inset 0 0 0 2px rgba(15, 23, 42, 0.22); background: #fff !important; }
+    .tc-table tbody td.tc-now { box-shadow: inset 0 0 0 2px rgba(15, 23, 42, 0.3); }
     .tc-table thead th.tc-now { font-weight: 800; }
     .tc-row-head { display: flex; flex-direction: column; gap: 0.2rem; align-items: flex-start; }
     .tc-sid { font-size: 0.58rem; font-weight: 600; color: var(--muted); word-break: break-all; max-width: 9rem; }
@@ -216,32 +223,24 @@
         <div class="kv"><span class="k">Anna mode</span><span class="v" id="c-anna">—</span></div>
       </div>
       <div class="dash-r3" id="dash-paper-capital" style="grid-column: 1 / -1; border-top: 1px solid var(--panel-border); padding-top: 0.4rem; margin-top: 0.2rem;">
-        <div class="kv"><span class="k">Start capital</span><span class="v" id="pc-start">—</span></div>
-        <div class="kv"><span class="k">Capital added</span><span class="v" id="pc-added">—</span></div>
-        <div class="kv"><span class="k">Capital withdrawn</span><span class="v" id="pc-withdrawn">—</span></div>
-        <div class="kv"><span class="k">Net contributed</span><span class="v" id="pc-net">—</span></div>
-        <div class="kv"><span class="k">Trading PnL (cohort)</span><span class="v" id="pc-pnl-cohort">—</span></div>
-        <div class="kv"><span class="k">Trading PnL (ledger)</span><span class="v" id="pc-pnl-ledger">—</span></div>
-        <div class="kv"><span class="k">Equity (cohort)</span><span class="v" id="pc-eq-cohort">—</span></div>
-        <div class="kv"><span class="k">Equity (ledger)</span><span class="v" id="pc-eq-ledger">—</span></div>
-        <div class="kv"><span class="k">Journal file</span><span class="v" id="pc-journal" style="font-size:0.62rem">—</span></div>
+        <div class="kv"><span class="k">Starting capital</span><span class="v" style="display:flex;gap:0.35rem;align-items:center;flex-wrap:wrap">
+          <input type="number" id="pc-start-input" step="0.01" min="0.01" style="width:5.5rem;padding:0.25rem 0.4rem;font-size:0.75rem;border:1px solid var(--panel-border);border-radius:4px"/>
+          <button type="button" class="sec" id="btnPcSaveStart" title="Only before any deposits or withdrawals">Save</button>
+        </span></div>
+        <div class="kv"><span class="k">Add capital</span><span class="v" style="display:flex;gap:0.35rem;align-items:center;flex-wrap:wrap">
+          <input type="number" id="pc-deposit" step="0.01" min="0.01" placeholder="USD" style="width:5rem;padding:0.25rem 0.4rem;font-size:0.75rem;border:1px solid var(--panel-border);border-radius:4px"/>
+          <button type="button" class="tick" id="btnPcDeposit">Add</button>
+        </span></div>
+        <div class="kv"><span class="k">Net invested</span><span class="v" id="pc-net">—</span></div>
+        <div class="kv"><span class="k">Trading PnL</span><span class="v" id="pc-pnl">—</span></div>
+        <div class="kv"><span class="k">Current paper balance</span><span class="v" id="pc-balance">—</span></div>
       </div>
-      <div class="dash-r2" style="border-top: 1px solid var(--panel-border); margin: 0 0.75rem 0.5rem; padding-top: 0.45rem;">
-        <p style="margin:0 0 0.35rem;font-size:0.72rem;color:var(--muted)">Paper capital flows (append-only journal — do not edit starting_usd to fake deposits)</p>
-        <div class="dash-form-grid" style="max-width: 100%; align-items: flex-end;">
-          <label>Deposit USD <input type="number" id="pc-deposit" step="0.01" min="0.01"/></label>
-          <label>Note <input type="text" id="pc-note-dep" placeholder="optional"/></label>
-          <button type="button" class="tick" id="btnPcDeposit">Record deposit</button>
-          <label>Withdrawal USD <input type="number" id="pc-withdraw" step="0.01" min="0.01"/></label>
-          <label>Note <input type="text" id="pc-note-wd" placeholder="optional"/></label>
-          <button type="button" class="sec" id="btnPcWithdraw">Record withdrawal</button>
-        </div>
-        <p id="pc-msg" style="font-size:0.7rem;color:var(--muted);margin:0.35rem 0 0"></p>
-      </div>
+      <p id="pc-msg" style="font-size:0.7rem;color:var(--muted);margin:0.2rem 0.75rem 0.45rem"></p>
 
       <!-- Row 4: trade chain (primary) -->
       <section class="dash-r4" aria-labelledby="tc-h">
         <h2 id="tc-h">Trade chain</h2>
+        <p style="margin:0;font-size:0.65rem;color:var(--muted);padding:0 0.5rem 0.3rem">Older → newer · right = latest event (now)</p>
         <div class="scroll">
           <table class="tc-table" id="tc-table">
             <thead><tr><th scope="col">Chain</th></tr></thead>
@@ -410,6 +409,46 @@
     );
   }
 
+  /** Older columns lighter → right (newest) slightly darker; scales with column count. */
+  function tcRecencyBg(idx, n) {
+    if (n <= 0) return '#f8fafc';
+    var t = n === 1 ? 1 : idx / (n - 1);
+    var r0 = 250, g0 = 251, b0 = 252;
+    var r1 = 230, g1 = 234, b1 = 240;
+    var r = Math.round(r0 + (r1 - r0) * t);
+    var g = Math.round(g0 + (g1 - g0) * t);
+    var b = Math.round(b0 + (b1 - b0) * t);
+    return 'rgb(' + r + ',' + g + ',' + b + ')';
+  }
+
+  /** Subtle per-chain tint (Anna rows only); baseline unchanged. */
+  function tcAnnaTint(row) {
+    var ck = row.chain_kind || '';
+    if (ck === 'baseline') return '';
+    if (ck === 'anna_test' || ck === 'anna_strategy') {
+      var slot = row.accent_slot != null ? Number(row.accent_slot) : 0;
+      var tints = [
+        'rgba(100,116,139,0.09)',
+        'rgba(71,85,105,0.08)',
+        'rgba(51,65,85,0.07)',
+        'rgba(30,41,59,0.065)'
+      ];
+      return tints[((slot % 4) + 4) % 4];
+    }
+    return '';
+  }
+
+  function tcCellBackground(row, idx, n) {
+    var base = tcRecencyBg(idx, n);
+    var tint = tcAnnaTint(row);
+    if (!tint) return 'background-color:' + base;
+    return (
+      'background:' +
+      'linear-gradient(0deg,' + tint + ',' + tint + '),' +
+      'linear-gradient(0deg,' + base + ',' + base + ')'
+    );
+  }
+
   function renderTC(tc) {
     var table = $('tc-table');
     var thead = table.querySelector('thead tr');
@@ -419,22 +458,25 @@
     if (noteEl) noteEl.textContent = (tc && tc.event_axis_note) ? tc.event_axis_note : '';
     if (hierEl) hierEl.textContent = (tc && tc.visual_hierarchy_note) ? tc.visual_hierarchy_note : '';
     if (!tc || !tc.rows || !tc.rows.length) {
-      thead.innerHTML = '<th scope="col">Chain</th>';
+      thead.innerHTML = '<th scope="col" class="tc-sticky-chain">Chain</th>';
       tbody.innerHTML = '<tr><td colspan="99">No ledger rows yet.</td></tr>';
       if (tc && tc.strategy_selection_note && noteEl) noteEl.textContent += ' ' + tc.strategy_selection_note;
       return;
     }
     var axis = tc.event_axis || [];
-    var th = '<th scope="col">Chain</th>';
+    var nEv = axis.length;
+    var th = '<th scope="col" class="tc-sticky-chain">Chain</th>';
     axis.forEach(function (mid, idx) {
       var isNow = axis.length > 0 && idx === axis.length - 1;
-      var nowCls = isNow ? 'tc-now' : '';
-      var nowLab = isNow ? ' title="' + esc(mid) + ' — newest in this window (→ now)"' : ' title="' + esc(mid) + '"';
+      var nowCls = isNow ? ' tc-now' : '';
+      var nowLab = isNow ? ' title="' + esc(mid) + ' — newest (now)"' : ' title="' + esc(mid) + '"';
+      var bgStyle = 'background-color:' + tcRecencyBg(idx, nEv);
       th +=
-        '<th scope="col"' + (nowCls ? ' class="' + nowCls + '"' : '') +
+        '<th scope="col" class="tc-head-ev' + nowCls + '"' +
         nowLab +
+        ' style="' + bgStyle + '"' +
         '><div style="max-width:5rem;overflow:hidden;text-overflow:ellipsis">' +
-        (isNow ? '<span style="font-size:0.58rem;color:var(--muted);display:block">now →</span>' : '') +
+        (isNow ? '<span style="font-size:0.58rem;color:var(--muted);display:block">now</span>' : '') +
         esc(mid) +
         '</div></th>';
     });
@@ -456,7 +498,9 @@
       axis.forEach(function (mid, idx) {
         var cell = (row.cells && row.cells[mid]) ? row.cells[mid] : null;
         var isNow = axis.length > 0 && idx === axis.length - 1;
-        cells += '<td' + (isNow ? ' class="tc-now"' : '') + '>' + cellMini(cell, row) + '</td>';
+        var cls = isNow ? ' class="tc-now"' : '';
+        var cellBg = tcCellBackground(row, idx, nEv);
+        cells += '<td' + cls + ' style="' + cellBg + '">' + cellMini(cell, row) + '</td>';
       });
       tr.innerHTML = h + cells;
       tbody.appendChild(tr);
@@ -553,15 +597,20 @@
       return '$' + Number(n).toFixed(2);
     }
     var pc = bundle.paper_capital;
-    if ($('pc-start')) $('pc-start').textContent = pc ? fmtPc(pc.starting_capital) : '—';
-    if ($('pc-added')) $('pc-added').textContent = pc ? fmtPc(pc.capital_added) : '—';
-    if ($('pc-withdrawn')) $('pc-withdrawn').textContent = pc ? fmtPc(pc.capital_withdrawn) : '—';
+    var psi = $('pc-start-input');
+    var bSave = $('btnPcSaveStart');
+    if (pc && psi) {
+      psi.value = pc.starting_capital != null ? String(pc.starting_capital) : '';
+    }
+    if (bSave && pc) {
+      bSave.disabled = !pc.can_edit_starting;
+      bSave.title = pc.can_edit_starting
+        ? 'Save starting capital (only before any deposits or withdrawals)'
+        : 'Locked after deposits/withdrawals — use Add capital';
+    }
     if ($('pc-net')) $('pc-net').textContent = pc ? fmtPc(pc.net_contributed_capital) : '—';
-    if ($('pc-pnl-cohort')) $('pc-pnl-cohort').textContent = pc ? fmtPc(pc.trading_pnl_cohort) : '—';
-    if ($('pc-pnl-ledger')) $('pc-pnl-ledger').textContent = pc ? fmtPc(pc.trading_pnl_execution_ledger) : '—';
-    if ($('pc-eq-cohort')) $('pc-eq-cohort').textContent = pc ? fmtPc(pc.current_equity_cohort) : '—';
-    if ($('pc-eq-ledger')) $('pc-eq-ledger').textContent = pc ? fmtPc(pc.current_equity_ledger) : '—';
-    if ($('pc-journal')) $('pc-journal').textContent = pc && pc.journal_path ? String(pc.journal_path).split('/').pop() : '—';
+    if ($('pc-pnl')) $('pc-pnl').textContent = pc ? fmtPc(pc.trading_pnl_execution_ledger) : '—';
+    if ($('pc-balance')) $('pc-balance').textContent = pc ? fmtPc(pc.current_equity_ledger) : '—';
 
     var tickReq = !!ls.tick_required;
     $('btnTick').disabled = !tickReq;
@@ -652,8 +701,8 @@
   $('btnTick').addEventListener('click', function () { postCtl('tick', { max_events: 5 }).then(function (x) { $('dash-ctl-msg').textContent = fmtCtl(x.j); refresh(); }); });
 
   function postPaperFlow(kind) {
-    var amt = kind === 'deposit' ? parseFloat(($('pc-deposit') || {}).value) : parseFloat(($('pc-withdraw') || {}).value);
-    var note = kind === 'deposit' ? (($('pc-note-dep') || {}).value || '').trim() : (($('pc-note-wd') || {}).value || '').trim();
+    var amt = parseFloat(($('pc-deposit') || {}).value);
+    var note = '';
     var msg = $('pc-msg');
     if (!isFinite(amt) || amt <= 0) {
       if (msg) msg.textContent = 'Enter a positive USD amount.';
@@ -668,20 +717,41 @@
       .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, j: j }; }); })
       .then(function (x) {
         if (msg) {
-          if (x.j && x.j.ok) msg.textContent = kind === 'deposit' ? 'Deposit recorded.' : 'Withdrawal recorded.';
+          if (x.j && x.j.ok) msg.textContent = 'Capital added.';
           else msg.textContent = String((x.j && (x.j.detail || x.j.reason_code)) || 'failed');
         }
-        if (x.j && x.j.ok) {
-          if ($('pc-deposit')) $('pc-deposit').value = '';
-          if ($('pc-withdraw')) $('pc-withdraw').value = '';
+        if (x.j && x.j.ok && $('pc-deposit')) $('pc-deposit').value = '';
+        refresh();
+      });
+  }
+
+  function postSetStarting() {
+    var msg = $('pc-msg');
+    var amt = parseFloat(($('pc-start-input') || {}).value);
+    if (!isFinite(amt) || amt <= 0) {
+      if (msg) msg.textContent = 'Enter a positive starting capital.';
+      return;
+    }
+    if (msg) msg.textContent = '…';
+    fetch('/api/v1/paper-capital/set-starting', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ starting_usd: amt })
+    })
+      .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, j: j }; }); })
+      .then(function (x) {
+        if (msg) {
+          if (x.j && x.j.ok) msg.textContent = 'Starting capital saved.';
+          else msg.textContent = String((x.j && (x.j.detail || x.j.reason_code)) || 'failed');
         }
         refresh();
       });
   }
+
   var bpd = $('btnPcDeposit');
-  var bpw = $('btnPcWithdraw');
   if (bpd) bpd.addEventListener('click', function () { postPaperFlow('deposit'); });
-  if (bpw) bpw.addEventListener('click', function () { postPaperFlow('withdrawal'); });
+  var bps = $('btnPcSaveStart');
+  if (bps) bps.addEventListener('click', postSetStarting);
 
   refresh();
   setInterval(refresh, POLL_MS);

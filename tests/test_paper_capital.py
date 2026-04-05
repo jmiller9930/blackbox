@@ -45,6 +45,37 @@ def test_withdrawal_reduces_net(isolated_anna_dir: Path) -> None:
     assert s["net_contributed_capital"] == 90.0
 
 
+def test_replace_initial_capital_before_flows(isolated_anna_dir: Path) -> None:
+    from modules.anna_training.paper_capital import build_paper_capital_summary, replace_initial_capital
+    from modules.anna_training.store import load_state
+
+    s0 = build_paper_capital_summary(training_state=load_state())
+    assert s0["starting_capital"] == 100.0
+    assert s0["can_edit_starting"] is True
+
+    r = replace_initial_capital(amount_usd=250.0)
+    assert r.get("ok") is True
+    s1 = build_paper_capital_summary(training_state=load_state())
+    assert s1["starting_capital"] == 250.0
+    assert s1["can_edit_starting"] is True
+
+
+def test_replace_initial_capital_rejected_after_deposit(isolated_anna_dir: Path) -> None:
+    from modules.anna_training.paper_capital import append_flow, build_paper_capital_summary, replace_initial_capital
+    from modules.anna_training.store import load_state
+
+    build_paper_capital_summary(training_state=load_state())
+    assert append_flow(event_type="deposit", amount_usd=10.0, note="").get("ok") is True
+    s = build_paper_capital_summary(training_state=load_state())
+    assert s["can_edit_starting"] is False
+
+    r = replace_initial_capital(amount_usd=999.0)
+    assert r.get("ok") is False
+    assert (r.get("reason_code") or "") == "flows_after_initial"
+    s2 = build_paper_capital_summary(training_state=load_state())
+    assert s2["starting_capital"] == 100.0
+
+
 def test_net_contributed_used_by_resolve_bankroll(isolated_anna_dir: Path) -> None:
     from modules.anna_training.paper_wallet import resolve_paper_bankroll_start_usd
     from modules.anna_training.store import load_state

@@ -2154,6 +2154,21 @@ class Handler(BaseHTTPRequestHandler):
             code = 200 if r.get("ok") else 400
             self._json(code, r, no_cache=True)
             return
+        if len(parts) == 4 and parts[:2] == ["api", "v1"] and parts[2] == "paper-capital" and parts[3] == "set-starting":
+            body = self._read_json_body()
+            try:
+                from modules.anna_training.paper_capital import replace_initial_capital
+
+                raw_amt = body.get("starting_usd")
+                if raw_amt is None:
+                    raw_amt = body.get("amount_usd")
+                r = replace_initial_capital(amount_usd=float(raw_amt or 0))
+            except Exception as e:  # noqa: BLE001
+                self._json(500, {"ok": False, "error": str(e)[:500]}, no_cache=True)
+                return
+            code = 200 if r.get("ok") else 400
+            self._json(code, r, no_cache=True)
+            return
         self._json(404, {"error": "not_found", "path": parsed.path})
 
     def log_message(self, _format: str, *_args: Any) -> None:
