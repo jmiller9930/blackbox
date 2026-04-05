@@ -1,0 +1,40 @@
+---
+description: HARD RULE — UI work is not complete until verified on clawbot (sync, rebuild, proof)
+alwaysApply: true
+---
+
+# Clawbot UI / deployment — completion is non-negotiable
+
+**Failure mode (unacceptable):** Code is pushed; engineering says done; **operator screen does not match**. That is **not** a nuance — it is **failed delivery**.
+
+**Scope:** Any change under **`UIUX.Web/`** that affects what the operator sees (HTML, CSS, JS, or **`api_server.py`** behavior for the dashboard/API). **`dashboard.html` is baked into the `web` Docker image** (`UIUX.Web/Dockerfile` `COPY`); bind-mounting the repo does **not** update nginx HTML unless you **rebuild `web`**.
+
+## Work is INCOMPLETE until all five steps are done
+
+Do **not** skip any step. Do **not** say “done” or “implemented for the operator” until the proof block below is satisfied.
+
+1. **Pull on clawbot** — Do **not** assume `~/blackbox` is current. Run `git fetch` + `git pull origin main` (or tracked branch) and record **`git rev-parse HEAD`**. Must match the commit that contains the change (or newer).
+2. **Rebuild the `web` container** — `cd ~/blackbox/UIUX.Web && docker compose build web` (HTML/CSS in image).
+3. **Restart the stack** — `docker compose up -d web api` (or full stack). Do **not** assume old containers picked up changes.
+4. **Verify inside the running container** — e.g. `docker compose exec web grep -q '<expected fragment>' /usr/share/nginx/html/dashboard.html` (or the file you changed). **Not** your laptop copy; **the container filesystem**.
+5. **Verify in the browser** — Hard refresh; operator (or you via documented URL) confirms the visible change.
+
+## “Implemented” proof (all three required)
+
+Before claiming operator-visible UI work is complete, capture evidence for:
+
+| # | Proof | Required |
+|---|--------|----------|
+| 1 | **Running commit** | `git rev-parse HEAD` on **clawbot** after pull — state the hash |
+| 2 | **Container has the updated file** | Command output showing expected content **inside** `web` (or `api`) container |
+| 3 | **UI visibly reflects the change** | Browser confirmation (operator hard refresh) or equivalent **targeted** check |
+
+If **any** of the three is missing, say **not complete** — not “should be there.”
+
+## Related
+
+- Push to origin is **necessary** but **not sufficient**: [`git-complete-push-origin.mdc`](git-complete-push-origin.mdc)
+- Detail + compose paths: [`uiux-web-clawbot-deploy.mdc`](uiux-web-clawbot-deploy.mdc)
+- Lab host: [`claw-server-execution.mdc`](claw-server-execution.mdc)
+
+**Operator must not** have to guess whether code is deployed, UI is current, or the system is lying — **verification is engineering’s responsibility.**

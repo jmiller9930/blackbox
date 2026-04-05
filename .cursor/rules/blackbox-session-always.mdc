@@ -31,6 +31,7 @@ alwaysApply: true
 - **Implement the architect’s plan** and **test** it; **local-only** is not phase closure when `execution_context` / proof standards require **clawbot**.
 - **Sync:** push from where you commit; **`git pull` in `~/blackbox` on clawbot** before claiming server-side verification. OpenClaw copy steps: [`docs/architect/workspace_sync.md`](docs/architect/workspace_sync.md).
 - **Commit + push (binding for agents):** Substantive code/fix work → **commit + successful `git push`** before calling a task done — see [`git-complete-push-origin.mdc`](git-complete-push-origin.mdc). Unpushed work is not “delivered.”
+- **Clawbot UI completion (HARD):** Changes under **`UIUX.Web/`** (operator-visible) are **not** complete until **pull + rebuild `web` + restart + in-container proof + browser** — see [`clawbot-ui-deployment-complete.mdc`](clawbot-ui-deployment-complete.mdc). Pushed code without deployed verification is **failed delivery**.
 - **Do not** re-litigate “SSH vs Cursor” at length. If remote commands or Remote SSH are needed, say so briefly and **do** what the user or the docs direct.
 
 ## OpenClaw integration

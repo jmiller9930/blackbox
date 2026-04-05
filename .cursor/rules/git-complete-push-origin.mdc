@@ -29,3 +29,7 @@ Do this **before** you end the turn, say “done,” or tell the operator to pul
 ## Proof
 
 “Synced” means **`git push` succeeded** for that commit. Staging-only or local-only is **not** synced.
+
+## UI / operator surface (additional bar)
+
+**Push alone is not operator-visible completion** for **`UIUX.Web/`** changes. After push, **clawbot** must be **pulled**, **`web` image rebuilt**, stack **restarted**, and **verified** per [`clawbot-ui-deployment-complete.mdc`](clawbot-ui-deployment-complete.mdc). Do **not** call UI work “done” without that proof package.
