@@ -1932,16 +1932,42 @@ class Handler(BaseHTTPRequestHandler):
             if action == "start":
                 sm_raw = str(body.get("start_mode") or "resume").lower()
                 sm: Any = "new_run" if sm_raw == "new_run" else "resume"
-                r = seq_uc.control_start(
-                    start_mode=sm,
-                    test_id=str(body.get("test_id") or ""),
-                    strategy_id=str(body.get("strategy_id") or ""),
-                    calibration_path=str(body.get("calibration_path") or ""),
-                    events_file_path=str(body.get("events_file_path") or ""),
-                    ledger_db_path=str(body.get("ledger_db_path") or ""),
-                    market_db_path=str(body.get("market_db_path") or ""),
-                    artifacts_dir=str(body.get("artifacts_dir") or ""),
-                )
+                try:
+                    r = seq_uc.control_start(
+                        start_mode=sm,
+                        test_id=str(body.get("test_id") or ""),
+                        strategy_id=str(body.get("strategy_id") or ""),
+                        calibration_path=str(body.get("calibration_path") or ""),
+                        events_file_path=str(body.get("events_file_path") or ""),
+                        ledger_db_path=str(body.get("ledger_db_path") or ""),
+                        market_db_path=str(body.get("market_db_path") or ""),
+                        artifacts_dir=str(body.get("artifacts_dir") or ""),
+                    )
+                except ValueError as e:
+                    self._json(
+                        400,
+                        {
+                            "ok": False,
+                            "reason_code": "calibration_validation_failed",
+                            "detail": str(e),
+                            "trace_id": trace_id,
+                        },
+                    )
+                    return
+                except Exception as e:  # noqa: BLE001 — calibration JSON / schema errors
+                    en = type(e).__name__
+                    if en in ("ValidationError", "JSONDecodeError") or "validation" in en.lower():
+                        self._json(
+                            400,
+                            {
+                                "ok": False,
+                                "reason_code": "calibration_validation_failed",
+                                "detail": str(e),
+                                "trace_id": trace_id,
+                            },
+                        )
+                        return
+                    raise
                 code = 200 if r.get("ok") else 400
                 r["trace_id"] = trace_id
                 self._json(code, r)
