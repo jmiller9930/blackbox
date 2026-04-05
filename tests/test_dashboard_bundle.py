@@ -24,6 +24,8 @@ def test_build_trade_chain_payload_schema() -> None:
     assert "scorecard" in tc
     assert isinstance(tc["scorecard"], list)
     assert len(tc["scorecard"]) == len(tc["rows"])
+    assert "anna_vs_baseline_aggregate" in tc
+    assert isinstance(tc["anna_vs_baseline_aggregate"], dict)
     assert "market_clock" in tc
     assert tc["rows"][0].get("chain_kind") == "baseline"
     assert tc["rows"][0].get("row_tier") == "primary"
@@ -55,10 +57,12 @@ def test_pair_vs_baseline_for_cells() -> None:
     base = {"empty": False, "mode": "paper", "pnl_usd": 1.0, "mae_usd": 0.5}
     win = {"empty": False, "mode": "paper", "pnl_usd": 2.0, "mae_usd": 0.45}
     lose = {"empty": False, "mode": "paper", "pnl_usd": 0.5, "mae_usd": 0.4}
-    stub = {"empty": False, "mode": "paper_stub", "pnl_usd": None, "mae_usd": 0.1}
+    stub_no_pnl = {"empty": False, "mode": "paper_stub", "pnl_usd": None, "mae_usd": 0.1}
+    stub_win = {"empty": False, "mode": "paper_stub", "pnl_usd": 2.0, "mae_usd": 0.45}
     assert _pair_vs_baseline_for_cells(base, win, epsilon=0.05)["vs_baseline"] == "WIN"
     assert _pair_vs_baseline_for_cells(base, lose, epsilon=0.05)["vs_baseline"] == "NOT_WIN"
-    assert _pair_vs_baseline_for_cells(base, stub, epsilon=0.05)["vs_baseline"] == "EXCLUDED"
+    assert _pair_vs_baseline_for_cells(base, stub_no_pnl, epsilon=0.05)["vs_baseline"] == "EXCLUDED"
+    assert _pair_vs_baseline_for_cells(base, stub_win, epsilon=0.05)["vs_baseline"] == "WIN"
 
 
 def test_trade_chain_includes_pair_epsilon() -> None:

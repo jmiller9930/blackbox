@@ -321,7 +321,8 @@ def _pair_vs_baseline_for_cells(
 ) -> dict[str, Any]:
     """
     Same rule as sequential paired_outcomes + MAE gate (display / operator clarity).
-    Only when both legs are live/paper with PnL + MAE.
+    Baseline leg must be live/paper. Anna leg may be paper_stub when PnL + MAE are present
+    so operator sees WIN/NOT vs baseline alongside eval/stub mode labeling.
     """
     if baseline_cell.get("empty") or anna_cell.get("empty"):
         return {"vs_baseline": None, "vs_baseline_excl": "empty_cell"}
@@ -329,7 +330,9 @@ def _pair_vs_baseline_for_cells(
     am = str(anna_cell.get("mode") or "").strip().lower()
     if bm not in ("live", "paper"):
         return {"vs_baseline": "EXCLUDED", "vs_baseline_excl": "baseline_not_economic"}
-    if am not in ("live", "paper"):
+    # Anna: include paper_stub when PnL+MAE exist so trial/candidate rows can show WIN/NOT vs baseline
+    # (mode line may still read eval/stub; pairing uses the same MAE gate as paper.)
+    if am not in ("live", "paper", "paper_stub"):
         return {"vs_baseline": "EXCLUDED", "vs_baseline_excl": "anna_not_economic"}
     pb = baseline_cell.get("pnl_usd")
     pa = anna_cell.get("pnl_usd")
@@ -669,6 +672,26 @@ def _build_trade_chain_scorecard(rows: list[dict[str, Any]]) -> list[dict[str, A
     return out
 
 
+def _anna_vs_baseline_aggregate(scorecard: list[dict[str, Any]]) -> dict[str, int]:
+    w = nw = exc = 0
+    for r in scorecard:
+        if str(r.get("chain_kind") or "") == "baseline":
+            continue
+        try:
+            w += int(r.get("vs_baseline_wins") or 0)
+        except (TypeError, ValueError):
+            pass
+        try:
+            nw += int(r.get("vs_baseline_not_wins") or 0)
+        except (TypeError, ValueError):
+            pass
+        try:
+            exc += int(r.get("vs_baseline_excluded") or 0)
+        except (TypeError, ValueError):
+            pass
+    return {"wins": w, "not_wins": nw, "excluded": exc}
+
+
 def build_trade_chain_payload(
     *,
     db_path: Path | None = None,
@@ -771,6 +794,7 @@ def build_trade_chain_payload(
         conn.close()
 
     scorecard = _build_trade_chain_scorecard(rows_out)
+    anna_agg = _anna_vs_baseline_aggregate(scorecard)
 
     return {
         "schema": "blackbox_trade_chain_v1",
@@ -792,14 +816,15 @@ def build_trade_chain_payload(
         "strategy_selection_note": note,
         "visual_hierarchy_note": (
             "Chain identity is lane + strategy_id (chips on the left). "
-            "Anna cells show vs baseline WIN / NOT WIN / n/a when both legs are economic (paper or live) "
-            "with PnL and MAE; MAE gate uses epsilon="
+            "Anna cells show vs baseline WIN / NOT WIN / n/a when baseline is paper/live and Anna has PnL+MAE; "
+            "Anna may be paper_stub and still pair for display when those numbers exist. "
+            "MAE gate uses epsilon="
             + str(round(pair_eps, 6))
-            + " (env BLACKBOX_PAIR_DISPLAY_EPSILON). "
-            "Eval/stub rows cannot pair until logged as economic paper/live."
+            + " (env BLACKBOX_PAIR_DISPLAY_EPSILON)."
         ),
         "paired_comparison_epsilon": round(pair_eps, 6),
         "scorecard": scorecard,
+        "anna_vs_baseline_aggregate": anna_agg,
         "rows": rows_out,
     }
 

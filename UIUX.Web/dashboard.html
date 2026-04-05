@@ -70,7 +70,34 @@
       margin: 0.35rem 0.5rem 0.5rem; border: 1px solid var(--panel-border); border-radius: var(--radius-md);
       background: var(--panel); overflow: hidden;
     }
-    .dash-r4 h2 { margin: 0; padding: 0.35rem 0.5rem; font-size: 0.82rem; border-bottom: 1px solid var(--panel-border); background: rgba(15,23,42,0.03); }
+    .tc-section-head {
+      flex-shrink: 0;
+      display: flex;
+      flex-wrap: wrap;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 0.5rem 1rem;
+      padding: 0.4rem 0.5rem;
+      border-bottom: 1px solid var(--panel-border);
+      background: rgba(15, 23, 42, 0.05);
+    }
+    .dash-r4 h2 {
+      margin: 0;
+      padding: 0;
+      font-size: 0.85rem;
+      border: 0;
+      background: transparent;
+    }
+    .tc-comparative {
+      font-size: 0.62rem;
+      font-weight: 700;
+      color: #0f172a;
+      max-width: min(100%, 32rem);
+      text-align: right;
+      line-height: 1.4;
+    }
+    .tc-comparative .tc-sum-win { color: #15803d; }
+    .tc-comparative .tc-sum-loss { color: #b91c1c; }
     .dash-r4 .scroll {
       flex: 1; overflow: auto; min-height: 12rem;
       scroll-padding-inline: 0.5rem;
@@ -108,6 +135,7 @@
     .tc-hdr-utc { font-size: 0.58rem; color: var(--muted); font-weight: 600; }
     .tc-hdr-fallback { font-size: 0.6rem; word-break: break-all; font-weight: 600; color: var(--text); }
     .tc-flow {
+      flex-shrink: 0;
       display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap;
       gap: 0.35rem 0.75rem;
       padding: 0.35rem 0.5rem 0.45rem;
@@ -173,10 +201,12 @@
       100% { transform: scale(1); opacity: 1; }
     }
     .tc-scorecard-block {
-      padding: 0.35rem 0.5rem 0.45rem;
+      flex-shrink: 0;
+      padding: 0.4rem 0.5rem 0.5rem;
       border-bottom: 1px solid var(--panel-border);
-      background: #fdfefe;
+      background: #f0f9ff;
       font-size: 0.68rem;
+      box-shadow: inset 0 1px 0 rgba(14, 165, 233, 0.15);
     }
     .tc-sc-title { font-weight: 800; font-size: 0.68rem; margin: 0 0 0.35rem; color: #0f172a; }
     .tc-sc-grid { display: grid; grid-template-columns: 7.5rem minmax(6rem, 1fr) 2.5rem 2.5rem 2.5rem; gap: 0.25rem 0.5rem; align-items: center; }
@@ -195,6 +225,13 @@
     .tc-op-line { display: flex; flex-wrap: wrap; align-items: center; gap: 0.35rem 0.65rem; }
     .tc-op-jar { font-size: 0.58rem; color: var(--muted); margin: 0; line-height: 1.35; }
     .tc-op-note { font-size: 0.58rem; color: var(--muted); margin: 0 0 0.25rem; line-height: 1.35; }
+    .tc-ledger-note {
+      flex-shrink: 0;
+      margin: 0;
+      font-size: 0.62rem;
+      color: var(--muted);
+      padding: 0.25rem 0.5rem 0.35rem;
+    }
   </style>
 </head>
 <body>
@@ -294,7 +331,10 @@
 
       <!-- Row 4: trade chain (primary) -->
       <section class="dash-r4" aria-labelledby="tc-h">
-        <h2 id="tc-h">Trade chain</h2>
+        <div class="tc-section-head">
+          <h2 id="tc-h">Trade chain</h2>
+          <div id="tc-comparative" class="tc-comparative" aria-live="polite"></div>
+        </div>
         <div class="tc-flow" aria-hidden="true">
           <span class="tc-flow-seq"><span class="tc-flow-old">older</span> <span class="tc-flow-arrow">→</span> <span class="tc-flow-new">newer</span></span>
           <span class="tc-flow-now">now = right column</span>
@@ -324,7 +364,7 @@
             <p class="tc-op-jar" id="tc-cookie-jar"></p>
           </div>
         </div>
-        <p style="margin:0;font-size:0.62rem;color:var(--muted);padding:0.25rem 0.5rem 0.35rem">Headers: <strong>Local</strong> = your browser clock &amp; zone · <strong>UTC</strong> = canonical ledger time. Recency shade is per column (same for all rows).</p>
+        <p class="tc-ledger-note">Headers: <strong>Local</strong> = your browser clock &amp; zone · <strong>UTC</strong> = canonical ledger time. Recency shade is per column (same for all rows).</p>
         <div class="scroll" id="tc-scroll">
           <table class="tc-table" id="tc-table">
             <thead><tr><th scope="col">Chain</th></tr></thead>
@@ -471,9 +511,9 @@
   function cellMini(c, row) {
     if (!c || c.empty) return '<span class="tc-empty">—</span>';
     var ck = row.chain_kind || '';
+    var vs = (ck === 'anna_test' || ck === 'anna_strategy') ? c.vs_baseline : null;
     var vsLine = '';
     if (ck === 'anna_test' || ck === 'anna_strategy') {
-      var vs = c.vs_baseline;
       if (vs === 'WIN') {
         vsLine = '<div class="tc-vs tc-vs-win">vs baseline: WIN</div>';
       } else if (vs === 'NOT_WIN') {
@@ -485,13 +525,18 @@
     var modeRaw = String(c.mode || '—');
     var modeDisp = modeRaw === 'paper_stub' ? 'eval / non-economic' : modeRaw;
     var ocDisp = String(c.outcome_display != null ? c.outcome_display : c.outcome || '—');
-    var muted = (c.economic_authority === 'muted');
+    var paired = (vs === 'WIN' || vs === 'NOT_WIN');
+    if (paired) {
+      ocDisp = vs === 'WIN' ? 'WIN' : 'NOT';
+    }
+    var muted = !paired && (c.economic_authority === 'muted');
     var wl = 'wl-FLAT';
     if (ocDisp === 'WIN') wl = 'wl-WIN';
+    else if (ocDisp === 'NOT') wl = 'wl-LOSS';
     else if (ocDisp === 'LOSS') wl = 'wl-LOSS';
     else if (ocDisp === 'FLAT') wl = 'wl-FLAT';
     else if (ocDisp === 'Eval') wl = 'wl-EVAL';
-    var econCell = (c.economic_authority === 'full');
+    var econCell = paired || (c.economic_authority === 'full');
     var wrapCls =
       'tc-mini' +
       (muted ? ' tc-mini-muted' : '') +
@@ -786,7 +831,9 @@
   function renderScorecardAndOps(bundle) {
     var tc = bundle.trade_chain || {};
     var ot = bundle.operator_trading || {};
+    var scRows = tc.scorecard || [];
     var scEl = $('tc-scorecard');
+    var compEl = $('tc-comparative');
     var noteEl = $('tc-op-note');
     var desEl = $('tc-designated');
     var jarEl = $('tc-cookie-jar');
@@ -806,7 +853,31 @@
         : baselineId + ' (default system strategy — baseline chain)';
     }
     var eligible = (ot && Array.isArray(ot.eligible_strategy_ids)) ? ot.eligible_strategy_ids : [];
-    var scRows = tc.scorecard || [];
+    if (compEl) {
+      var agg = tc.anna_vs_baseline_aggregate || {};
+      var wAgg = agg.wins;
+      var nwAgg = agg.not_wins;
+      var xAgg = agg.excluded;
+      if (wAgg == null && nwAgg == null && xAgg == null && scRows.length) {
+        wAgg = 0;
+        nwAgg = 0;
+        xAgg = 0;
+        scRows.forEach(function (sr) {
+          if ((sr.chain_kind || '') === 'baseline') return;
+          wAgg += Number(sr.vs_baseline_wins) || 0;
+          nwAgg += Number(sr.vs_baseline_not_wins) || 0;
+          xAgg += Number(sr.vs_baseline_excluded) || 0;
+        });
+      }
+      if (wAgg != null && nwAgg != null && xAgg != null) {
+        compEl.innerHTML =
+          'Anna vs baseline (this window): ' +
+          '<span class="tc-sum-win">WIN ' + wAgg + '</span> · ' +
+          '<span class="tc-sum-loss">NOT ' + nwAgg + '</span> · n/a ' + xAgg;
+      } else {
+        compEl.innerHTML = '';
+      }
+    }
     function fillPromoteSelect(sel, ids) {
       if (!sel) return;
       var prev = sel.value;
