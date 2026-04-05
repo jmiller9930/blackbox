@@ -200,6 +200,13 @@
           <option value="full">Full / Debug</option>
         </select>
       </label>
+      <label>Chart height
+        <select id="chartSize" title="Resize only the market chart panel (saved in this browser)">
+          <option value="compact">Compact</option>
+          <option value="standard" selected>Standard</option>
+          <option value="tall">Tall</option>
+        </select>
+      </label>
       <button type="button" class="primary" id="loadBtn">Load</button>
     </div>
     <div id="error" class="err" style="display:none"></div>
@@ -318,6 +325,18 @@
 
   function getViewMode() {
     return (qs('#viewMode') && qs('#viewMode').value) ? qs('#viewMode').value : 'operator';
+  }
+
+  /** Layout for #chart SVG only — does not affect other panels. */
+  function getChartLayout() {
+    var m = (qs('#chartSize') && qs('#chartSize').value) ? qs('#chartSize').value : 'standard';
+    if (m === 'compact') {
+      return { W: 900, H: 280, T: 16, L: 48, R: 18, PRICE_H: 168, TEST_TOP: 196, TEST_H: 48 };
+    }
+    if (m === 'tall') {
+      return { W: 900, H: 520, T: 24, L: 52, R: 22, PRICE_H: 360, TEST_TOP: 410, TEST_H: 88 };
+    }
+    return { W: 900, H: 400, T: 22, L: 50, R: 20, PRICE_H: 280, TEST_TOP: 318, TEST_H: 64 };
   }
 
   function applyViewModeClass() {
@@ -467,9 +486,13 @@
     var rng = computePriceRange(closes, overlayPrices);
     var lo = rng.lo;
     var hi = rng.hi;
-    var W = 900, H = 400, L = 50, R = 20, T = 22;
-    var PRICE_H = 280;
-    var ih = PRICE_H;
+    var lay = getChartLayout();
+    var W = lay.W;
+    var H = lay.H;
+    var L = lay.L;
+    var R = lay.R;
+    var T = lay.T;
+    var ih = lay.PRICE_H;
     var iw = W - L - R;
     var n = series.length;
     function xAt(i) { return L + (i / Math.max(1, n - 1)) * iw; }
@@ -514,8 +537,8 @@
       var col = ANNA_LINE_COLORS[idx % ANNA_LINE_COLORS.length];
       segSA.filter(function (s) { return s.strategy_id === sid; }).forEach(function (seg) { drawSegLine(seg, col, '2'); });
     });
-    var TEST_TOP = 318;
-    var TEST_H = 64;
+    var TEST_TOP = lay.TEST_TOP;
+    var TEST_H = lay.TEST_H;
     parts.push('<line x1="' + L + '" y1="' + (T + ih + 6) + '" x2="' + (L + iw) + '" y2="' + (T + ih + 6) + '" stroke="#2d3847" stroke-width="1"/>');
     parts.push('<text x="' + L + '" y="' + (T + ih + 20) + '" fill="#8b9aad" font-size="10" font-family="IBM Plex Mono, monospace">Survival tests — presence over time (strip below; not strategy price lines)</text>');
     parts.push('<rect x="' + L + '" y="' + TEST_TOP + '" width="' + iw + '" height="' + TEST_H + '" fill="rgba(15,20,28,0.9)" stroke="#2d3847" stroke-width="0.5"/>');
@@ -531,10 +554,13 @@
     });
     parts.push('<text x="' + L + '" y="' + (H - 8) + '" fill="#8b9aad" font-size="10">Older ← → Recent</text>');
     svg.innerHTML = parts.join('');
+    svg.setAttribute('viewBox', '0 0 ' + W + ' ' + H);
+    svg.setAttribute('preserveAspectRatio', 'xMidYMid meet');
     var dg = (overlay.data_gaps || []).join(', ');
     var vm = getViewMode();
+    var cs = (qs('#chartSize') && qs('#chartSize').value) ? qs('#chartSize').value : 'standard';
     note.textContent =
-      'Bars: ' + n + '. Mode: ' + vm + '. Y-axis: p12–p88 of closes + 6% pad; overlay nudge ≤35% of span (see left labels). Baseline = blue. Anna = ranked. Tests = pink strip. Hard refresh (Ctrl+Shift+R) if an old bundle was cached. ' +
+      'Bars: ' + n + '. Mode: ' + vm + '. Chart height: ' + cs + ' (toolbar). Y-axis: p12–p88 of closes + 6% pad; overlay nudge ≤35% of span (see left labels). Baseline = blue. Anna = ranked. Tests = pink strip. ' +
       (dg ? 'Gaps: ' + dg + '.' : '');
   }
 
@@ -857,6 +883,14 @@
   qs('#viewMode').addEventListener('change', function () {
     localStorage.setItem('eventDashViewMode', this.value);
     load();
+  });
+  var savedCs = localStorage.getItem('eventDashChartSize');
+  if (savedCs && qs('#chartSize') && (savedCs === 'compact' || savedCs === 'standard' || savedCs === 'tall')) {
+    qs('#chartSize').value = savedCs;
+  }
+  qs('#chartSize').addEventListener('change', function () {
+    localStorage.setItem('eventDashChartSize', this.value);
+    if (window.__lastPayload) renderChart(window.__lastPayload);
   });
   initFromQuery();
   var savedVm = localStorage.getItem('eventDashViewMode');
