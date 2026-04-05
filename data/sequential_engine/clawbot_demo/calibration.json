@@ -1,0 +1,14 @@
+{
+  "schema_version": "calibration_report_v1",
+  "protocol_id": "clawbot_demo_v1",
+  "p0": 0.4,
+  "p1": 0.55,
+  "alpha": 0.05,
+  "beta": 0.1,
+  "n_min": 1,
+  "batch_size": 1,
+  "epsilon": 0.25,
+  "mae_protocol_id": "mae_usd_v1_ledger_bars_5m",
+  "autocorrelation_rho": null,
+  "calibration_inputs_hash": ""
+}
