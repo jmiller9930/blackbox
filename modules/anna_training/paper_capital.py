@@ -201,19 +201,42 @@ def _rollup_from_flows(flows: list[dict[str, Any]]) -> CapitalRollup:
     )
 
 
-def sum_trading_pnl_execution_ledger(*, db_path: Path | None = None) -> float:
-    """Sum realized pnl_usd on economic modes (paper + live) in execution ledger."""
+def sum_trading_pnl_execution_ledger(
+    *,
+    db_path: Path | None = None,
+    lane: str | None = None,
+) -> float:
+    """
+    Sum realized pnl_usd on economic modes (paper + live) in execution ledger.
+
+    ``lane``:
+    - ``None``: all lanes (baseline + anna) — legacy combined total.
+    - ``\"baseline\"``: official book only (headline PnL for promoted/baseline chain).
+    - ``\"anna\"``: Anna lane what-if / measurement (does not define official book).
+    """
     db = db_path or default_execution_ledger_path()
     conn = connect_ledger(db)
     try:
         ensure_execution_ledger_schema(conn)
-        cur = conn.execute(
-            """
-            SELECT COALESCE(SUM(pnl_usd), 0)
-            FROM execution_trades
-            WHERE pnl_usd IS NOT NULL AND mode IN ('paper', 'live')
-            """
-        )
+        lane_n = (lane or "").strip().lower()
+        if lane_n in ("baseline", "anna"):
+            cur = conn.execute(
+                """
+                SELECT COALESCE(SUM(pnl_usd), 0)
+                FROM execution_trades
+                WHERE pnl_usd IS NOT NULL AND mode IN ('paper', 'live')
+                  AND lane = ?
+                """,
+                (lane_n,),
+            )
+        else:
+            cur = conn.execute(
+                """
+                SELECT COALESCE(SUM(pnl_usd), 0)
+                FROM execution_trades
+                WHERE pnl_usd IS NOT NULL AND mode IN ('paper', 'live')
+                """
+            )
         row = cur.fetchone()
         if not row or row[0] is None:
             return 0.0
@@ -252,11 +275,18 @@ def build_paper_capital_summary(
     trades = load_paper_trades_for_gates()
     cohort = summarize_trades(trades)
     trading_pnl_cohort = float(cohort.total_pnl_usd)
-    trading_pnl_ledger = sum_trading_pnl_execution_ledger(db_path=ledger_db_path)
+    trading_pnl_baseline_ledger = sum_trading_pnl_execution_ledger(
+        db_path=ledger_db_path, lane="baseline"
+    )
+    trading_pnl_anna_ledger = sum_trading_pnl_execution_ledger(db_path=ledger_db_path, lane="anna")
+    # Combined economic PnL (audit / optional); official headline book uses baseline only.
+    trading_pnl_ledger = sum_trading_pnl_execution_ledger(db_path=ledger_db_path, lane=None)
 
     # Grade-12 gates use cohort log; execution ledger is parallel truth for operator.
     equity_cohort = rollup.net_contributed_capital + trading_pnl_cohort
-    equity_ledger = rollup.net_contributed_capital + trading_pnl_ledger
+    # Official paper book: contributed capital + baseline lane PnL only (Anna does not dilute headline).
+    equity_ledger = rollup.net_contributed_capital + trading_pnl_baseline_ledger
+    equity_ledger_including_anna = rollup.net_contributed_capital + trading_pnl_ledger
 
     can_edit = rollup.capital_added <= 1e-12 and rollup.capital_withdrawn <= 1e-12
 
@@ -269,13 +299,17 @@ def build_paper_capital_summary(
         "capital_withdrawn": round(rollup.capital_withdrawn, 8),
         "net_contributed_capital": round(rollup.net_contributed_capital, 8),
         "trading_pnl_cohort": round(trading_pnl_cohort, 8),
+        "trading_pnl_baseline_ledger": round(trading_pnl_baseline_ledger, 8),
+        "trading_pnl_anna_ledger": round(trading_pnl_anna_ledger, 8),
         "trading_pnl_execution_ledger": round(trading_pnl_ledger, 8),
         "current_equity_cohort": round(equity_cohort, 8),
         "current_equity_ledger": round(equity_ledger, 8),
+        "current_equity_ledger_including_anna": round(equity_ledger_including_anna, 8),
         "can_edit_starting": can_edit,
         "note": (
-            "Equity = net_contributed_capital + trading_pnl. "
-            "Cohort uses paper_trades.jsonl (grade-12 gates). "
-            "Ledger uses execution_trades sum(pnl) for paper+live economic rows."
+            "Official book: net_contributed_capital + trading_pnl_baseline_ledger (lane=baseline only). "
+            "Anna economic paper PnL is trading_pnl_anna_ledger (measurement vs baseline; not headline book). "
+            "trading_pnl_execution_ledger is baseline+anna combined. "
+            "Cohort uses paper_trades.jsonl (grade-12 gates)."
         ),
     }
