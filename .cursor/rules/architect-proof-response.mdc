@@ -40,6 +40,15 @@ Use **exact** commands, log lines, hashes, or artifacts — whatever constitutes
 
 State **`git rev-parse HEAD`** on **clawbot** after `git pull origin main` in `~/blackbox`, when claiming synced server proof. If only local was run, say so explicitly.
 
+### 2b. Implementation status must not be reported as complete unless git matches remote (hard rule)
+
+Before claiming work is **done**, **ready for remote testing**, **on `main`**, or **available for the operator to pull**, you **must** have:
+
+- **Committed** all relevant changes (no material omissions left unstaged).
+- **Pushed** to **`origin`** so **`HEAD` == `origin/main`** (or the named integration branch) — verify with `git status` and `git rev-parse HEAD` / `git rev-parse origin/main`.
+
+If you have **not** pushed (or cannot), the report **must** say so explicitly (e.g. “local only; not on origin”). **Do not** imply remote parity or give architect/advisor proof that sounds complete when the code is only local — that is **partially false**.
+
 ## 3. Coverage vs gaps
 
 - **What the proof covers** (which tests, which layer: unit, integration, Slack/messaging formatter path, etc.).
