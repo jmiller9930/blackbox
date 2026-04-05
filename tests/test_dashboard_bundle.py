@@ -11,6 +11,9 @@ def test_build_trade_chain_payload_schema() -> None:
     assert "event_axis" in tc
     assert "rows" in tc
     assert isinstance(tc["rows"], list)
+    assert "market_clock" in tc
+    assert tc["rows"][0].get("chain_kind") == "baseline"
+    assert tc["rows"][0].get("row_tier") == "primary"
 
 
 def test_build_dashboard_bundle_schema() -> None:
@@ -22,3 +25,5 @@ def test_build_dashboard_bundle_schema() -> None:
     assert "learning_summary" in b
     assert "liveness" in b
     assert b["liveness"].get("update_model", {}).get("dashboard_poll_interval_ms") == 1500
+    assert "market_clock" in b
+    assert "next_tick" in b["liveness"]

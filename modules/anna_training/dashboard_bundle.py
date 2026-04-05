@@ -6,10 +6,11 @@ Trade chain: horizontal event axis (columns) × vertical chains (baseline, Anna 
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
@@ -109,6 +110,47 @@ def _sequential_tick_staleness(
         "detail": f"Last tick {age}s ago · {events_remaining} events remaining in queue.",
     }
 
+
+def compute_next_tick_eta(
+    *,
+    ui_state: str,
+    events_remaining: int,
+    last_tick_at: str | None,
+    interval_sec: float | None = None,
+) -> dict[str, Any]:
+    """
+    Estimated time of next sequential batch tick (sidecar cadence), for operator countdown.
+    When stalled, ETA rolls forward from now so the countdown stays meaningful.
+    """
+    sec = float(interval_sec or SEQUENTIAL_TICK_SIDECAR_INTERVAL_SEC_DEFAULT)
+    if ui_state != "running" or events_remaining <= 0:
+        return {
+            "available": False,
+            "reason": "idle_or_queue_empty",
+            "interval_sec": sec,
+            "eta_utc_iso": None,
+            "seconds_until_eta": None,
+        }
+    now = datetime.now(timezone.utc)
+    base = _parse_iso_ts(last_tick_at) if last_tick_at else None
+    if base is None:
+        eta = now + timedelta(seconds=sec)
+    else:
+        if base.tzinfo is None:
+            base = base.replace(tzinfo=timezone.utc)
+        eta = base + timedelta(seconds=sec)
+        if eta < now:
+            eta = now + timedelta(seconds=sec)
+    delta = max(0.0, (eta - now).total_seconds())
+    return {
+        "available": True,
+        "reason": None,
+        "interval_sec": sec,
+        "eta_utc_iso": eta.replace(microsecond=0).isoformat().replace("+00:00", "Z"),
+        "seconds_until_eta": round(delta, 1),
+    }
+
+
 from modules.anna_training.execution_ledger import (
     RESERVED_STRATEGY_BASELINE,
     connect_ledger,
@@ -116,6 +158,7 @@ from modules.anna_training.execution_ledger import (
     ensure_execution_ledger_schema,
 )
 from modules.anna_training.quantitative_evaluation_layer.constants import (
+    LIFECYCLE_ARCHIVED,
     LIFECYCLE_CANDIDATE,
     LIFECYCLE_EXPERIMENT,
     LIFECYCLE_PROMOTED,
@@ -151,7 +194,7 @@ def _market_db_path() -> Path | None:
 def _outcome_from_pnl(pnl: float | None, *, mode: str) -> str:
     m = (mode or "").strip().lower()
     if m == "paper_stub":
-        return "STUB"
+        return "STUB"  # internal code; UI uses outcome_display (operator-friendly)
     if pnl is None:
         return "—"
     try:
@@ -163,6 +206,97 @@ def _outcome_from_pnl(pnl: float | None, *, mode: str) -> str:
     if p < -1e-9:
         return "LOSS"
     return "FLAT"
+
+
+def _economic_authority(*, chain_kind: str, mode: str | None) -> str:
+    """Baseline = full. Anna live/paper = full economic W/L. Other modes = muted."""
+    if chain_kind == "baseline":
+        return "full"
+    m = (mode or "").strip().lower()
+    if m in ("live", "paper"):
+        return "full"
+    return "muted"
+
+
+def _outcome_display(outcome: str) -> str:
+    if outcome == "STUB":
+        return "Eval"
+    return outcome
+
+
+def _lifecycle_short_label(lifecycle_state: str | None) -> str:
+    s = (lifecycle_state or "").strip().lower()
+    return {
+        LIFECYCLE_EXPERIMENT: "Experiment",
+        LIFECYCLE_TEST: "Test",
+        LIFECYCLE_CANDIDATE: "Candidate",
+        LIFECYCLE_VALIDATED_STRATEGY: "Validated",
+        LIFECYCLE_PROMOTION_READY: "Promo-ready",
+        LIFECYCLE_PROMOTED: "Promoted",
+        LIFECYCLE_ARCHIVED: "Archived",
+    }.get(s, s.replace("_", " ").title() if s else "—")
+
+
+def _anna_row_accent_slot(strategy_id: str) -> int:
+    h = hashlib.md5(strategy_id.encode("utf-8"), usedforsecurity=False).hexdigest()
+    return int(h[:2], 16) % 4
+
+
+def _latest_symbol_from_ledger(conn: Any) -> str | None:
+    try:
+        cur = conn.execute(
+            "SELECT symbol FROM execution_trades ORDER BY created_at_utc DESC LIMIT 1"
+        )
+        row = cur.fetchone()
+        if row and row[0]:
+            return str(row[0]).strip() or None
+    except Exception:
+        pass
+    return None
+
+
+def _market_clock_for_symbol(symbol: str | None) -> dict[str, Any]:
+    """
+    Display timezone for operator-facing clocks (market-context, not browser local).
+    Heuristic: US-listed symbols → America/New_York; crypto/24h → UTC with explicit label.
+    """
+    s = (symbol or "").strip().upper()
+    if not s:
+        return {
+            "iana_timezone": "UTC",
+            "label": "UTC (no symbol in ledger yet)",
+            "primary_symbol": None,
+        }
+    if s in ("SPY", "QQQ", "IWM", "DIA") or "-US" in s or s.endswith(".US"):
+        return {
+            "iana_timezone": "America/New_York",
+            "label": "US cash session (Eastern)",
+            "primary_symbol": symbol,
+        }
+    if any(
+        x in s
+        for x in (
+            "BTC",
+            "ETH",
+            "SOL",
+            "PERP",
+            "USDC",
+            "USDT",
+            "-USD",
+            "USD-",
+            "/USD",
+        )
+    ):
+        return {
+            "iana_timezone": "UTC",
+            "label": "24h market (UTC)",
+            "primary_symbol": symbol,
+        }
+    return {
+        "iana_timezone": "UTC",
+        "label": "Market (UTC)",
+        "primary_symbol": symbol,
+    }
 
 
 def _notional_usd(entry_price: float | None, size: float | None) -> float | None:
@@ -182,6 +316,7 @@ def _compact_cell(
     row: dict[str, Any] | None,
     *,
     market_db_path: Path | None,
+    chain_kind: str = "baseline",
 ) -> dict[str, Any]:
     if not row:
         return {
@@ -195,6 +330,8 @@ def _compact_cell(
             "pnl_usd": None,
             "mae_usd": None,
             "outcome": "—",
+            "outcome_display": "—",
+            "economic_authority": "full" if chain_kind == "baseline" else "muted",
             "mode": None,
         }
     mode = str(row.get("mode") or "")
@@ -212,6 +349,8 @@ def _compact_cell(
             exit_time=row.get("exit_time"),
             market_db_path=market_db_path,
         )
+    raw_out = _outcome_from_pnl(pnl_f, mode=mode)
+    econ = _economic_authority(chain_kind=chain_kind, mode=mode)
     return {
         "empty": False,
         "market_event_id": row.get("market_event_id"),
@@ -224,7 +363,9 @@ def _compact_cell(
         "notional_usd_approx": _notional_usd(row.get("entry_price"), row.get("size")),
         "pnl_usd": pnl_f,
         "mae_usd": round(mae_val, 6) if mae_val is not None else None,
-        "outcome": _outcome_from_pnl(pnl_f, mode=mode),
+        "outcome": raw_out,
+        "outcome_display": _outcome_display(raw_out),
+        "economic_authority": econ,
         "mode": mode,
     }
 
@@ -393,6 +534,24 @@ def _strategy_buckets(conn: Any) -> tuple[list[str], list[str], str | None]:
     return tests, strats, note
 
 
+def _lifecycle_by_strategy(conn: Any) -> dict[str, str]:
+    out: dict[str, str] = {}
+    try:
+        cur = conn.execute(
+            """
+            SELECT strategy_id, COALESCE(lifecycle_state, '') FROM strategy_registry
+            WHERE strategy_id != ?
+            """,
+            (RESERVED_STRATEGY_BASELINE,),
+        )
+        for sid, lc in cur.fetchall():
+            if sid:
+                out[str(sid).strip()] = str(lc or "").strip()
+    except Exception:
+        pass
+    return out
+
+
 def build_trade_chain_payload(
     *,
     db_path: Path | None = None,
@@ -408,43 +567,61 @@ def build_trade_chain_payload(
         ensure_execution_ledger_schema(conn)
         event_axis = _distinct_event_axis(conn, limit=max_events)
         tests, strats, note = _strategy_buckets(conn)
+        lc_map = _lifecycle_by_strategy(conn)
+        primary_sym = _latest_symbol_from_ledger(conn)
+        market_clock = _market_clock_for_symbol(primary_sym)
 
         row_defs: list[dict[str, Any]] = [
             {
                 "chain_kind": "baseline",
-                "label": "Baseline chain",
+                "label": "Baseline",
                 "lane": "baseline",
                 "strategy_id": RESERVED_STRATEGY_BASELINE,
-                "account_note": "One account model per row; mode shown per cell.",
+                "lifecycle_state": None,
+                "lifecycle_label": "Economic anchor",
+                "row_tier": "primary",
+                "accent_slot": None,
+                "account_note": "Primary economic truth (paper/live); W/L and PnL are authoritative here.",
             }
         ]
         for sid in tests:
+            lc = lc_map.get(sid, "")
             row_defs.append(
                 {
                     "chain_kind": "anna_test",
-                    "label": f"Anna test · {sid}",
+                    "label": f"Anna · {sid}",
                     "lane": "anna",
                     "strategy_id": sid,
-                    "account_note": "Anna test / experiment / survival-active lane",
+                    "lifecycle_state": lc or None,
+                    "lifecycle_label": _lifecycle_short_label(lc),
+                    "row_tier": "secondary_test",
+                    "accent_slot": _anna_row_accent_slot(sid),
+                    "account_note": "Test / experiment / survival — secondary to baseline.",
                 }
             )
         for sid in strats:
+            lc = lc_map.get(sid, "")
             row_defs.append(
                 {
                     "chain_kind": "anna_strategy",
-                    "label": f"Anna strategy · {sid}",
+                    "label": f"Anna · {sid}",
                     "lane": "anna",
                     "strategy_id": sid,
-                    "account_note": "Candidate / validated / promotion lane",
+                    "lifecycle_state": lc or None,
+                    "lifecycle_label": _lifecycle_short_label(lc),
+                    "row_tier": "secondary_strategy",
+                    "accent_slot": _anna_row_accent_slot(sid),
+                    "account_note": "Strategy maturity lane — secondary to baseline.",
                 }
             )
 
         rows_out: list[dict[str, Any]] = []
         for rd in row_defs:
             cells: dict[str, Any] = {}
+            ck = str(rd.get("chain_kind") or "baseline")
             for mid in event_axis:
                 tr = _fetch_trade(conn, mid, lane=rd["lane"], strategy_id=rd["strategy_id"])
-                cells[mid] = _compact_cell(tr, market_db_path=mpath)
+                cells[mid] = _compact_cell(tr, market_db_path=mpath, chain_kind=ck)
             rows_out.append(
                 {
                     **rd,
@@ -459,8 +636,13 @@ def build_trade_chain_payload(
         "ledger_path": str(db_path),
         "market_db_path": str(mpath) if mpath else None,
         "event_axis": event_axis,
-        "event_axis_note": "Columns are distinct market_event_id values (recent window, oldest left → newest right).",
+        "event_axis_note": "Columns are distinct market_event_id values (recent window, oldest left → newest right). Same column = same market_event_id across rows.",
+        "market_clock": market_clock,
         "strategy_selection_note": note,
+        "visual_hierarchy_note": (
+            "Baseline row is the primary scan target (economic truth). Anna rows are de-emphasized; "
+            "lifecycle chips distinguish test vs strategy maturity without competing with baseline."
+        ),
         "rows": rows_out,
     }
 
@@ -578,6 +760,11 @@ def build_dashboard_bundle(
         last_tick_at=str((seq or {}).get("last_tick_at") or "") or None,
         now=now_utc,
     )
+    next_tick = compute_next_tick_eta(
+        ui_state=ui_state,
+        events_remaining=ev_rem,
+        last_tick_at=str((seq or {}).get("last_tick_at") or "") or None,
+    )
     liveness: dict[str, Any] = {
         "bundle_generated_at_utc": now_utc.replace(microsecond=0).isoformat().replace("+00:00", "Z"),
         "methodology_one_liner": (
@@ -603,6 +790,7 @@ def build_dashboard_bundle(
             "pyth_age_seconds": pyth_snap.get("age_seconds"),
             "tick_staleness": tick_stale,
         },
+        "next_tick": next_tick,
         "not_exchange_tick_stream": (
             "This dashboard is not a live order-book or millisecond tape. "
             "Liveness is: (1) bundle timestamp advancing every poll, (2) sequential last_tick_at advancing while queue>0, "
@@ -624,9 +812,12 @@ def build_dashboard_bundle(
 
     live_policy_blocked = bool(wallet.get("live_trading_blocked"))
 
+    mc = tc.get("market_clock") if isinstance(tc, dict) else None
+
     return {
         "schema": "blackbox_dashboard_bundle_v1",
         "trace_id": tid,
+        "market_clock": mc,
         "banner": {
             "ui_state": ui_state.upper(),
             "mode_label": str((mode or {}).get("label") or "PAPER"),

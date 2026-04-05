@@ -67,12 +67,46 @@
     .dash-r4 .scroll { flex: 1; overflow: auto; min-height: 12rem; }
     .tc-table { border-collapse: separate; border-spacing: 0; font-size: 0.65rem; min-width: max-content; }
     .tc-table th, .tc-table td { border-right: 1px solid var(--panel-border); border-bottom: 1px solid var(--panel-border); padding: 0.25rem 0.3rem; vertical-align: top; }
-    .tc-table th:first-child, .tc-table td:first-child { position: sticky; left: 0; background: #fafafa; z-index: 2; font-weight: 700; max-width: 8rem; }
+    /* Baseline row: primary truth — full contrast sticky column */
+    .tc-table tbody tr.tc-tr-baseline th:first-child,
+    .tc-table tbody tr.tc-tr-baseline td { background: #f8fafc; }
+    .tc-table tbody tr.tc-tr-baseline th:first-child {
+      position: sticky; left: 0; z-index: 2; max-width: 10rem;
+      border-left: 3px solid #0f172a;
+      box-shadow: 2px 0 6px rgba(15,23,42,0.06);
+    }
+    /* Anna rows: secondary, muted band */
+    .tc-table tbody tr.tc-tr-anna th:first-child,
+    .tc-table tbody tr.tc-tr-anna td { background: #f1f5f9; }
+    .tc-table tbody tr.tc-tr-anna th:first-child {
+      position: sticky; left: 0; z-index: 2; max-width: 10rem;
+      border-left: 2px solid #94a3b8;
+      font-weight: 600;
+      opacity: 0.96;
+    }
+    .tc-tr-anna-test th:first-child { border-left-color: #64748b; }
+    .tc-tr-anna-strategy th:first-child { border-left-color: #7c8aa0; }
+    /* Subtle per-strategy accent (same cool family) */
+    .tc-tr-anna.tc-acc-0 th:first-child { background: linear-gradient(90deg, rgba(100,116,139,0.12) 0%, #f1f5f9 0.5rem); }
+    .tc-tr-anna.tc-acc-1 th:first-child { background: linear-gradient(90deg, rgba(71,85,105,0.1) 0%, #f1f5f9 0.5rem); }
+    .tc-tr-anna.tc-acc-2 th:first-child { background: linear-gradient(90deg, rgba(51,65,85,0.09) 0%, #f1f5f9 0.5rem); }
+    .tc-tr-anna.tc-acc-3 th:first-child { background: linear-gradient(90deg, rgba(30,41,59,0.08) 0%, #f1f5f9 0.5rem); }
+    .tc-row-head { display: flex; flex-direction: column; gap: 0.2rem; align-items: flex-start; }
+    .tc-sid { font-size: 0.58rem; font-weight: 600; color: var(--muted); word-break: break-all; max-width: 9rem; }
+    .tc-chip { display: inline-block; padding: 0.08rem 0.28rem; border-radius: 3px; font-size: 0.58rem; font-weight: 700; letter-spacing: 0.02em; }
+    .tc-chip-baseline { background: #0f172a; color: #f8fafc; }
+    .tc-chip-anna-kind { background: #e2e8f0; color: #334155; margin-right: 0.2rem; }
+    .tc-chip-life { background: #cbd5e1; color: #1e293b; }
     .tc-mini { display: grid; grid-template-columns: auto 1fr; gap: 0.1rem 0.35rem; align-items: baseline; }
     .tc-mini .lab { color: var(--muted); font-size: 0.58rem; text-transform: uppercase; }
+    .tc-mini-muted .lab { opacity: 0.85; }
+    .tc-mini-muted { opacity: 0.88; }
+    .tc-empty { color: var(--muted); }
     .wl-WIN { color: #15803d; font-weight: 800; }
     .wl-LOSS { color: #b91c1c; font-weight: 800; }
     .wl-FLAT { color: #64748b; font-weight: 700; }
+    .tc-mini-muted .wl-WIN, .tc-mini-muted .wl-LOSS, .tc-mini-muted .wl-FLAT { font-weight: 600; color: #64748b; }
+    .wl-EVAL { color: #64748b; font-weight: 600; font-style: italic; }
     details.dash-below { margin: 0.25rem 0.5rem; border: 1px solid var(--panel-border); border-radius: var(--radius-md); background: #fff; }
     details.dash-below > summary { padding: 0.4rem 0.6rem; cursor: pointer; font-weight: 600; font-size: 0.78rem; }
     details.dash-below .body { padding: 0 0.6rem 0.6rem; font-size: 0.78rem; }
@@ -135,7 +169,13 @@
           <span class="sep">|</span>
           <span><span class="lbl">Last seq. tick</span> <span class="val" id="live-last-tick">—</span></span>
           <span class="sep">|</span>
+          <span><span class="lbl">Next tick ~</span> <span class="val" id="live-next-tick">—</span></span>
+          <span class="sep">|</span>
+          <span><span class="lbl">Next UI poll ~</span> <span class="val" id="live-next-poll">—</span></span>
+          <span class="sep">|</span>
           <span><span class="lbl">Pyth age</span> <span class="val" id="live-pyth-age">—</span></span>
+          <span class="sep">|</span>
+          <span><span class="lbl">Clock</span> <span class="val" id="live-market-tz">—</span></span>
         </div>
         <div class="dash-live-sub" id="live-detail"></div>
       </div>
@@ -191,6 +231,7 @@
           </table>
         </div>
         <p style="margin:0;padding:0.25rem 0.5rem;font-size:0.62rem;color:var(--muted)" id="tc-note"></p>
+        <p style="margin:0;padding:0 0.5rem 0.35rem;font-size:0.6rem;color:var(--muted);line-height:1.35" id="tc-hierarchy"></p>
       </section>
 
       <!-- Below: collapsible, default closed -->
@@ -278,24 +319,65 @@
     return '—';
   }
 
-  function cellMini(c) {
-    if (!c || c.empty) return '<span style="color:var(--muted)">—</span>';
-    var mode = esc(String(c.mode || '—'));
-    var oc = String(c.outcome || '—');
-    var wl = 'wl-' + (oc === 'WIN' || oc === 'LOSS' || oc === 'FLAT' ? oc : 'FLAT');
-    if (oc === 'STUB') wl = 'wl-FLAT';
+  /** Display timestamps in market-context IANA zone (from bundle.market_clock). */
+  function fmtMarketTime(iso, tz) {
+    if (!iso) return '—';
+    try {
+      var d = new Date(iso);
+      if (isNaN(d.getTime())) return esc(String(iso));
+      return new Intl.DateTimeFormat(undefined, {
+        timeZone: tz || 'UTC',
+        dateStyle: 'short',
+        timeStyle: 'medium',
+      }).format(d);
+    } catch (e) {
+      return esc(String(iso));
+    }
+  }
+
+  function rowHead(row) {
+    var ck = row.chain_kind || '';
+    var chips = '';
+    if (ck === 'baseline') {
+      chips = '<span class="tc-chip tc-chip-baseline">Baseline</span>';
+    } else {
+      var kind = ck === 'anna_test' ? 'Test' : 'Strategy';
+      chips =
+        '<span class="tc-chip tc-chip-anna-kind">' + esc(kind) + '</span>' +
+        '<span class="tc-chip tc-chip-life">' + esc(row.lifecycle_label || '—') + '</span>';
+    }
+    return (
+      '<div class="tc-row-head">' +
+      '<div>' + chips + '</div>' +
+      '<div class="tc-sid">' + esc(row.strategy_id || '') + '</div>' +
+      '</div>'
+    );
+  }
+
+  function cellMini(c, row) {
+    if (!c || c.empty) return '<span class="tc-empty">—</span>';
+    var modeRaw = String(c.mode || '—');
+    var modeDisp = modeRaw === 'paper_stub' ? 'eval / non-economic' : modeRaw;
+    var ocDisp = String(c.outcome_display != null ? c.outcome_display : c.outcome || '—');
+    var muted = (c.economic_authority === 'muted');
+    var wl = 'wl-FLAT';
+    if (ocDisp === 'WIN') wl = 'wl-WIN';
+    else if (ocDisp === 'LOSS') wl = 'wl-LOSS';
+    else if (ocDisp === 'FLAT') wl = 'wl-FLAT';
+    else if (ocDisp === 'Eval') wl = 'wl-EVAL';
+    var wrapCls = 'tc-mini' + (muted ? ' tc-mini-muted' : '');
     var pnl = c.pnl_usd != null ? Number(c.pnl_usd).toFixed(2) : '—';
     var mae = c.mae_usd != null ? Number(c.mae_usd).toFixed(2) : '—';
     var ent = c.entry != null ? esc(String(c.entry)) : '—';
     var ex = c.exit != null ? esc(String(c.exit)) : '—';
     return (
-      '<div class="tc-mini">' +
+      '<div class="' + wrapCls + '">' +
       '<span class="lab">entry</span><span>' + ent + '</span>' +
       '<span class="lab">exit</span><span>' + ex + '</span>' +
       '<span class="lab">pnl</span><span>' + esc(pnl) + '</span>' +
       '<span class="lab">MAE</span><span>' + esc(mae) + '</span>' +
-      '<span class="lab">W/L</span><span class="' + esc(wl) + '">' + esc(oc) + '</span>' +
-      '<span class="lab">mode</span><span>' + mode + '</span>' +
+      '<span class="lab">outcome</span><span class="' + wl + '">' + esc(ocDisp) + '</span>' +
+      '<span class="lab">mode</span><span>' + esc(modeDisp) + '</span>' +
       '</div>'
     );
   }
@@ -304,11 +386,14 @@
     var table = $('tc-table');
     var thead = table.querySelector('thead tr');
     var tbody = table.querySelector('tbody');
-    $('tc-note').textContent = (tc && tc.event_axis_note) ? tc.event_axis_note : '';
+    var noteEl = $('tc-note');
+    var hierEl = $('tc-hierarchy');
+    if (noteEl) noteEl.textContent = (tc && tc.event_axis_note) ? tc.event_axis_note : '';
+    if (hierEl) hierEl.textContent = (tc && tc.visual_hierarchy_note) ? tc.visual_hierarchy_note : '';
     if (!tc || !tc.rows || !tc.rows.length) {
       thead.innerHTML = '<th scope="col">Chain</th>';
       tbody.innerHTML = '<tr><td colspan="99">No ledger rows yet.</td></tr>';
-      if (tc && tc.strategy_selection_note) $('tc-note').textContent += ' ' + tc.strategy_selection_note;
+      if (tc && tc.strategy_selection_note && noteEl) noteEl.textContent += ' ' + tc.strategy_selection_note;
       return;
     }
     var axis = tc.event_axis || [];
@@ -320,11 +405,20 @@
     tbody.innerHTML = '';
     tc.rows.forEach(function (row) {
       var tr = document.createElement('tr');
-      var h = '<th scope="row">' + esc(row.label || row.strategy_id) + '</th>';
+      var ck = row.chain_kind || '';
+      var trCls = '';
+      if (ck === 'baseline') trCls = 'tc-tr-baseline';
+      else if (ck === 'anna_test') {
+        trCls = 'tc-tr-anna tc-tr-anna-test tc-acc-' + (row.accent_slot != null ? row.accent_slot : 0);
+      } else if (ck === 'anna_strategy') {
+        trCls = 'tc-tr-anna tc-tr-anna-strategy tc-acc-' + (row.accent_slot != null ? row.accent_slot : 0);
+      }
+      if (trCls) tr.className = trCls;
+      var h = '<th scope="row">' + rowHead(row) + '</th>';
       var cells = '';
       axis.forEach(function (mid) {
         var cell = (row.cells && row.cells[mid]) ? row.cells[mid] : null;
-        cells += '<td>' + cellMini(cell) + '</td>';
+        cells += '<td>' + cellMini(cell, row) + '</td>';
       });
       tr.innerHTML = h + cells;
       tbody.appendChild(tr);
@@ -345,14 +439,25 @@
     var sig = lv.operator_signals || {};
     var ts = sig.tick_staleness || {};
     var um = lv.update_model || {};
+    var mc = bundle.market_clock || (bundle.trade_chain || {}).market_clock || {};
+    var tz = mc.iana_timezone || 'UTC';
+    window.__bbMarketTz = tz;
+    var mtz = $('live-market-tz');
+    if (mtz) mtz.textContent = esc((mc.label || tz) + ' · ' + tz);
+    var nxt = lv.next_tick || {};
+    if (nxt.available && nxt.eta_utc_iso) {
+      window.__bbNextTickEta = new Date(nxt.eta_utc_iso);
+    } else {
+      window.__bbNextTickEta = null;
+    }
     var lev = ts.level || 'not_running';
     $('live-tier').textContent = esc(ts.label || '—');
-    $('live-bundle-at').textContent = esc(lv.bundle_generated_at_utc || '—');
+    $('live-bundle-at').textContent = fmtMarketTime(lv.bundle_generated_at_utc, tz);
     $('live-poll-ms').textContent = (um.dashboard_poll_interval_ms != null ? String(um.dashboard_poll_interval_ms) + 'ms' : POLL_MS + 'ms');
     $('live-tick-sec').textContent = um.sequential_tick_interval_sec_expected != null ? ('~' + um.sequential_tick_interval_sec_expected + 's') : '—';
     $('live-ev-proc').textContent = sig.sequential_events_processed_total != null ? String(sig.sequential_events_processed_total) : '—';
     $('live-ev-queue').textContent = sig.sequential_events_remaining_in_queue != null ? String(sig.sequential_events_remaining_in_queue) : '—';
-    $('live-last-tick').textContent = esc(sig.sequential_last_tick_at || '—');
+    $('live-last-tick').textContent = fmtMarketTime(sig.sequential_last_tick_at, tz);
     $('live-pyth-age').textContent = sig.pyth_age_seconds != null ? (String(sig.pyth_age_seconds) + 's') : '—';
     var d1 = esc(ts.detail || '');
     var d2 = esc(lv.methodology_one_liner || '');
@@ -404,7 +509,13 @@
     var tickReq = !!ls.tick_required;
     $('btnTick').disabled = !tickReq;
     $('btnTick').style.display = tickReq ? 'inline-block' : 'none';
-    $('btnTick').title = 'Process next event batch (running + queue)';
+    $('btnTick').title = 'Process next event batch (running + queue) — new trades appear as events are processed.';
+
+    var mc2 = bundle.market_clock || (bundle.trade_chain || {}).market_clock || {};
+    var tz2 = mc2.iana_timezone || 'UTC';
+    var cr = $('live-client-refresh');
+    if (cr) cr.textContent = fmtMarketTime(new Date().toISOString(), tz2);
+    window.__bbNextPollEta = new Date(Date.now() + POLL_MS);
 
     renderTC(bundle.trade_chain || {});
     renderOB(bundle.operational_boundary);
@@ -425,10 +536,28 @@
     return JSON.stringify(j).slice(0, 200);
   }
 
+  function tickClocks() {
+    var nt = window.__bbNextTickEta;
+    var el = $('live-next-tick');
+    if (el) {
+      if (!nt || isNaN(nt.getTime())) el.textContent = '—';
+      else {
+        var s = Math.max(0, Math.floor((nt.getTime() - Date.now()) / 1000));
+        el.textContent = s + 's';
+      }
+    }
+    var np = window.__bbNextPollEta;
+    var elp = $('live-next-poll');
+    if (elp) {
+      if (!np || isNaN(np.getTime())) elp.textContent = '—';
+      else {
+        var sp = Math.max(0, Math.floor((np.getTime() - Date.now()) / 1000));
+        elp.textContent = sp + 's';
+      }
+    }
+  }
+
   function refresh() {
-    var t0 = new Date();
-    var cr = $('live-client-refresh');
-    if (cr) cr.textContent = t0.toISOString().replace('T', ' ').slice(0, 19) + 'Z';
     fetchBundle().then(render).catch(function (e) {
       $('b-state').textContent = 'ERR';
       $('dash-ctl-msg').textContent = String(e);
@@ -467,6 +596,7 @@
 
   refresh();
   setInterval(refresh, POLL_MS);
+  setInterval(tickClocks, 250);
 })();
   </script>
 </body>
