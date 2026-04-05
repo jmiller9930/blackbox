@@ -10,7 +10,13 @@ services:
   api:
     image: python:3.11-alpine
     working_dir: /repo
-    command: ["python3", "UIUX.Web/api_server.py"]
+    # Install minimal deps not present in the bare image (sequential learning imports pydantic).
+    command:
+      [
+        "sh",
+        "-c",
+        "pip install -q --no-cache-dir 'pydantic>=2,<3' certifi base58 && exec python3 UIUX.Web/api_server.py",
+      ]
     environment:
       BLACKBOX_REPO_ROOT: /repo
       BLACKBOX_CONTEXT_ROOT: /repo/data/context_engine
