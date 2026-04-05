@@ -155,7 +155,7 @@
           <span class="pulse-wrap" title="Flashes green on each successful bundle fetch"><span class="pulse-dot" id="live-pulse"></span></span>
           <span><span class="lbl">Liveness</span> <span class="val" id="live-tier">—</span></span>
           <span class="sep">|</span>
-          <span><span class="lbl">Bundle as-of (server)</span> <span class="val" id="live-bundle-at">—</span></span>
+          <span><span class="lbl">Bundle as-of (market)</span> <span class="val" id="live-bundle-at">—</span></span>
           <span class="sep">|</span>
           <span><span class="lbl">Last UI refresh</span> <span class="val" id="live-client-refresh">—</span></span>
           <span class="sep">|</span>
@@ -175,7 +175,7 @@
           <span class="sep">|</span>
           <span><span class="lbl">Pyth age</span> <span class="val" id="live-pyth-age">—</span></span>
           <span class="sep">|</span>
-          <span><span class="lbl">Clock</span> <span class="val" id="live-market-tz">—</span></span>
+          <span><span class="lbl">Market clock</span> <span class="val" id="live-market-tz">—</span></span>
         </div>
         <div class="dash-live-sub" id="live-detail"></div>
       </div>
@@ -319,16 +319,22 @@
     return '—';
   }
 
-  /** Display timestamps in market-context IANA zone (from bundle.market_clock). */
+  /** Wall-clock times in the market’s IANA zone — no Zulu suffix / no raw ISO in the UI. */
   function fmtMarketTime(iso, tz) {
     if (!iso) return '—';
     try {
       var d = new Date(iso);
       if (isNaN(d.getTime())) return esc(String(iso));
+      var zone = tz || 'UTC';
       return new Intl.DateTimeFormat(undefined, {
-        timeZone: tz || 'UTC',
-        dateStyle: 'short',
-        timeStyle: 'medium',
+        timeZone: zone,
+        year: 'numeric',
+        month: 'numeric',
+        day: 'numeric',
+        hour: 'numeric',
+        minute: 'numeric',
+        second: 'numeric',
+        hour12: true,
       }).format(d);
     } catch (e) {
       return esc(String(iso));
@@ -443,16 +449,20 @@
     var tz = mc.iana_timezone || 'UTC';
     window.__bbMarketTz = tz;
     var mtz = $('live-market-tz');
-    if (mtz) mtz.textContent = esc((mc.label || tz) + ' · ' + tz);
+    if (mtz) mtz.textContent = esc(mc.label || '—');
     var nxt = lv.next_tick || {};
-    if (nxt.available && nxt.eta_utc_iso) {
-      window.__bbNextTickEta = new Date(nxt.eta_utc_iso);
+    var etaRaw = nxt.eta_at || nxt.eta_utc_iso;
+    if (nxt.available && etaRaw) {
+      window.__bbNextTickEta = new Date(etaRaw);
     } else {
       window.__bbNextTickEta = null;
     }
     var lev = ts.level || 'not_running';
     $('live-tier').textContent = esc(ts.label || '—');
-    $('live-bundle-at').textContent = fmtMarketTime(lv.bundle_generated_at_utc, tz);
+    $('live-bundle-at').textContent = fmtMarketTime(
+      lv.bundle_snapshot_at || lv.bundle_generated_at_utc,
+      tz
+    );
     $('live-poll-ms').textContent = (um.dashboard_poll_interval_ms != null ? String(um.dashboard_poll_interval_ms) + 'ms' : POLL_MS + 'ms');
     $('live-tick-sec').textContent = um.sequential_tick_interval_sec_expected != null ? ('~' + um.sequential_tick_interval_sec_expected + 's') : '—';
     $('live-ev-proc').textContent = sig.sequential_events_processed_total != null ? String(sig.sequential_events_processed_total) : '—';

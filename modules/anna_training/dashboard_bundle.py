@@ -128,7 +128,7 @@ def compute_next_tick_eta(
             "available": False,
             "reason": "idle_or_queue_empty",
             "interval_sec": sec,
-            "eta_utc_iso": None,
+            "eta_at": None,
             "seconds_until_eta": None,
         }
     now = datetime.now(timezone.utc)
@@ -142,11 +142,12 @@ def compute_next_tick_eta(
         if eta < now:
             eta = now + timedelta(seconds=sec)
     delta = max(0.0, (eta - now).total_seconds())
+    eta_iso = eta.replace(microsecond=0).isoformat().replace("+00:00", "Z")
     return {
         "available": True,
         "reason": None,
         "interval_sec": sec,
-        "eta_utc_iso": eta.replace(microsecond=0).isoformat().replace("+00:00", "Z"),
+        "eta_at": eta_iso,
         "seconds_until_eta": round(delta, 1),
     }
 
@@ -258,13 +259,13 @@ def _latest_symbol_from_ledger(conn: Any) -> str | None:
 def _market_clock_for_symbol(symbol: str | None) -> dict[str, Any]:
     """
     Display timezone for operator-facing clocks (market-context, not browser local).
-    Heuristic: US-listed symbols → America/New_York; crypto/24h → UTC with explicit label.
+    Heuristic: US-listed symbols → America/New_York; crypto/24h → IANA UTC (labels avoid spelling Zulu/UTC).
     """
     s = (symbol or "").strip().upper()
     if not s:
         return {
             "iana_timezone": "UTC",
-            "label": "UTC (no symbol in ledger yet)",
+            "label": "Market time (settle when ledger has a symbol)",
             "primary_symbol": None,
         }
     if s in ("SPY", "QQQ", "IWM", "DIA") or "-US" in s or s.endswith(".US"):
@@ -289,12 +290,12 @@ def _market_clock_for_symbol(symbol: str | None) -> dict[str, Any]:
     ):
         return {
             "iana_timezone": "UTC",
-            "label": "24h market (UTC)",
+            "label": "24h perpetual / crypto (market clock)",
             "primary_symbol": symbol,
         }
     return {
         "iana_timezone": "UTC",
-        "label": "Market (UTC)",
+        "label": "Global market (clock)",
         "primary_symbol": symbol,
     }
 
@@ -765,8 +766,10 @@ def build_dashboard_bundle(
         events_remaining=ev_rem,
         last_tick_at=str((seq or {}).get("last_tick_at") or "") or None,
     )
+    snap_iso = now_utc.replace(microsecond=0).isoformat().replace("+00:00", "Z")
     liveness: dict[str, Any] = {
-        "bundle_generated_at_utc": now_utc.replace(microsecond=0).isoformat().replace("+00:00", "Z"),
+        "bundle_snapshot_at": snap_iso,
+        "bundle_generated_at_utc": snap_iso,
         "methodology_one_liner": (
             "Dashboard: REST poll of aggregated bundle; sequential: discrete batch ticks over a cursor; "
             "market: Hermes price probe JSON artifacts — not a sub-second order-book stream."

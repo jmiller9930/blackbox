@@ -27,3 +27,5 @@ def test_build_dashboard_bundle_schema() -> None:
     assert b["liveness"].get("update_model", {}).get("dashboard_poll_interval_ms") == 1500
     assert "market_clock" in b
     assert "next_tick" in b["liveness"]
+    assert "bundle_snapshot_at" in b["liveness"]
+    assert "eta_at" in b["liveness"]["next_tick"]
