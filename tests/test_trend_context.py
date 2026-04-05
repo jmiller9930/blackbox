@@ -84,7 +84,8 @@ def test_build_trend_context_minimal() -> None:
         market_event_id=mid,
         trades_enriched=trades,
     )
-    assert out["schema"] == "trend_context_v1"
+    assert out["schema"] == "trend_context_v2"
+    assert len(out["trend_reference_layers"]) == 3
     assert len(out["trend_reference_series"]) >= 1
     assert out["event_bar_regime_tags"] is not None
     assert len(out["trade_trend_alignments"]) == 1

@@ -103,5 +103,5 @@ def test_market_event_view_baseline_and_stub(tmp_path: Path, monkeypatch: pytest
     assert len(r["trades"]) == 2
     assert len(r["decision_traces"]) >= 1
     assert any(m.get("kind") == "entry" for m in r["chart"]["markers"])
-    assert r.get("trend_context", {}).get("schema") == "trend_context_v1"
+    assert r.get("trend_context", {}).get("schema") == "trend_context_v2"
     assert isinstance(r["trend_context"].get("trade_trend_alignments"), list)

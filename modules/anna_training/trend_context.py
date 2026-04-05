@@ -17,7 +17,9 @@ from modules.anna_training.quantitative_evaluation_layer.regime_tags_v1 import (
     regime_tags_v1_from_bar,
 )
 
-SCHEMA = "trend_context_v1"
+SCHEMA = "trend_context_v2"
+EMA_PERIODS_DEFAULT = (20, 50, 200)
+PRIMARY_TREND_PERIOD = 50
 
 ALIGNMENT_RULE = (
     "Bar-level trend_bucket from regime_tags_v1 (single-bar open→close direction). "
@@ -108,12 +110,14 @@ def build_trend_context(
     history_bars: list[dict[str, Any]],
     market_event_id: str,
     trades_enriched: list[dict[str, Any]],
-    ema_period: int = 20,
+    ema_period: int = 50,
+    ema_periods: tuple[int, ...] = EMA_PERIODS_DEFAULT,
 ) -> dict[str, Any]:
     """
-    EMA reference line (closes), regime_tags_v1 per bar, trade alignment at entry bar.
+    EMA reference layers (20/50/200 on closes), regime_tags_v1 per bar, trade alignment at entry bar.
 
     ``history_bars`` is newest-first (API order); internally reversed to chronological.
+    ``trend_reference_series`` duplicates EMA50 points for backward compatibility.
     """
     rp = _regime_params()
     bars = _bars_chronological(history_bars)
@@ -122,7 +126,10 @@ def build_trend_context(
         return {
             "schema": SCHEMA,
             "ema_period": ema_period,
+            "ema_periods": list(ema_periods),
+            "ema_primary_period": PRIMARY_TREND_PERIOD,
             "alignment_rule": ALIGNMENT_RULE,
+            "trend_reference_layers": [],
             "trend_reference_series": [],
             "regime_tags_by_bar": [],
             "event_bar_index": None,
@@ -142,14 +149,32 @@ def build_trend_context(
             last = c
         closes.append(c)
 
-    ema_vals = ema_from_closes(closes, ema_period)
-    trend_reference_series: list[dict[str, Any]] = []
+    trend_reference_layers: list[dict[str, Any]] = []
+    for period in ema_periods:
+        ema_vals = ema_from_closes(closes, period)
+        pts: list[dict[str, Any]] = []
+        for i, b in enumerate(bars):
+            tu = _bar_unix_open(b)
+            ev = ema_vals[i]
+            if tu is not None and ev is not None:
+                pts.append({"time": tu, "value": float(ev)})
+        role = "fast_trend"
+        if period == PRIMARY_TREND_PERIOD:
+            role = "primary_trend"
+        elif period == 200:
+            role = "slow_trend"
+        trend_reference_layers.append(
+            {
+                "period": period,
+                "label": f"EMA{period}",
+                "role": role,
+                "points": pts,
+            }
+        )
+    primary_layer = next((x for x in trend_reference_layers if x["period"] == PRIMARY_TREND_PERIOD), None)
+    trend_reference_series: list[dict[str, Any]] = list(primary_layer["points"]) if primary_layer else []
     regime_tags_by_bar: list[dict[str, Any]] = []
     for i, b in enumerate(bars):
-        tu = _bar_unix_open(b)
-        ev = ema_vals[i]
-        if tu is not None and ev is not None:
-            trend_reference_series.append({"time": tu, "value": float(ev)})
         tags = regime_tags_v1_from_bar(
             b,
             vol_low_below=rp["vol_low_below"],
@@ -205,7 +230,10 @@ def build_trend_context(
     return {
         "schema": SCHEMA,
         "ema_period": ema_period,
+        "ema_periods": list(ema_periods),
+        "ema_primary_period": PRIMARY_TREND_PERIOD,
         "alignment_rule": ALIGNMENT_RULE,
+        "trend_reference_layers": trend_reference_layers,
         "trend_reference_series": trend_reference_series,
         "regime_tags_by_bar": regime_tags_by_bar,
         "event_bar_index": ev_idx,

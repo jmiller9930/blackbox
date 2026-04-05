@@ -207,8 +207,8 @@
       <label>Chart height
         <select id="chartSize" title="Resize only the market chart panel (saved in this browser)">
           <option value="compact">Compact</option>
-          <option value="standard" selected>Standard</option>
-          <option value="tall">Tall</option>
+          <option value="standard">Standard</option>
+          <option value="tall" selected>Tall (default — readability)</option>
         </select>
       </label>
       <button type="button" class="primary" id="loadBtn">Load</button>
@@ -344,10 +344,10 @@
 
   /** Price pane + survival strip heights (toolbar chart size). */
   function getChartHeights() {
-    var m = (qs('#chartSize') && qs('#chartSize').value) ? qs('#chartSize').value : 'standard';
-    if (m === 'compact') return { priceH: 280, stripH: 48 };
-    if (m === 'tall') return { priceH: 520, stripH: 88 };
-    return { priceH: 400, stripH: 64 };
+    var m = (qs('#chartSize') && qs('#chartSize').value) ? qs('#chartSize').value : 'tall';
+    if (m === 'compact') return { priceH: 360, stripH: 52 };
+    if (m === 'tall') return { priceH: 620, stripH: 96 };
+    return { priceH: 480, stripH: 72 };
   }
 
   function barTimeUtc(b) {
@@ -369,6 +369,83 @@
     return best;
   }
 
+  /** Merge ledger segments into one stepped polyline per overlay (no barcode fragments). */
+  function buildSteppedOverlayPoints(segs, series, n) {
+    var intervals = [];
+    for (var i = 0; i < (segs || []).length; i++) {
+      var seg = segs[i];
+      var pr = Number(seg.entry_price);
+      if (!isFinite(pr)) continue;
+      var a = Math.max(0, Math.min(n - 1, seg.from_bar));
+      var b = Math.max(0, Math.min(n - 1, seg.to_bar));
+      var lo = Math.min(a, b);
+      var hi = Math.max(a, b);
+      var t0 = barTimeUtc(series[lo]);
+      var t1 = barTimeUtc(series[hi]);
+      if (t0 == null || t1 == null) continue;
+      if (t1 < t0) { var tmp = t0; t0 = t1; t1 = tmp; }
+      intervals.push({ t0: t0, t1: t1, p: pr });
+    }
+    intervals.sort(function (a, b) {
+      if (a.t0 !== b.t0) return a.t0 - b.t0;
+      return a.t1 - b.t1;
+    });
+    if (!intervals.length) return [];
+    var pts = [];
+    var lastEnd = -1;
+    var lastPx = null;
+    for (var j = 0; j < intervals.length; j++) {
+      var it = intervals[j];
+      if (!pts.length) {
+        pts.push({ time: it.t0, value: it.p });
+        pts.push({ time: it.t1, value: it.p });
+        lastEnd = it.t1;
+        lastPx = it.p;
+        continue;
+      }
+      if (it.t0 > lastEnd) {
+        if (it.p !== lastPx) {
+          pts.push({ time: it.t0, value: lastPx });
+          pts.push({ time: it.t0, value: it.p });
+        } else {
+          pts.push({ time: it.t0, value: it.p });
+        }
+        pts.push({ time: it.t1, value: it.p });
+        lastEnd = it.t1;
+        lastPx = it.p;
+      } else if (it.t1 > lastEnd) {
+        pts.push({ time: it.t1, value: it.p });
+        lastEnd = it.t1;
+        lastPx = it.p;
+      }
+    }
+    return pts;
+  }
+
+  function lineStepType(LC) {
+    return (LC.LineType && LC.LineType.WithSteps !== undefined) ? LC.LineType.WithSteps : 1;
+  }
+
+  /** Same bar time: cycle positions so markers do not stack. */
+  function staggerMarkersByTime(markers) {
+    var copy = markers.slice().sort(function (a, b) {
+      if (a.time !== b.time) return a.time - b.time;
+      return (a.sortOrder || 0) - (b.sortOrder || 0);
+    });
+    var posCycle = ['belowBar', 'aboveBar', 'inBar'];
+    var i = 0;
+    while (i < copy.length) {
+      var t = copy[i].time;
+      var k = 0;
+      while (i + k < copy.length && copy[i + k].time === t) k++;
+      for (var j = 0; j < k; j++) {
+        copy[i + j].position = posCycle[j % posCycle.length];
+      }
+      i += k;
+    }
+    return copy;
+  }
+
   function destroyLwChart() {
     if (window.__lwResizeHandler) {
       window.removeEventListener('resize', window.__lwResizeHandler);
@@ -379,6 +456,7 @@
       window.__lwChart = null;
     }
     window.__lwTradeLineSeries = [];
+    window.__lwAnnaSeries = {};
   }
 
   function applyViewModeClass() {
@@ -521,23 +599,24 @@
       width: w,
       height: priceH,
       layout: {
-        background: { type: 'solid', color: '#1a222d' },
-        textColor: '#8b9aad',
+        background: { type: 'solid', color: '#12161c' },
+        textColor: '#94a3b8',
         fontFamily: "'IBM Plex Mono', ui-monospace, monospace",
         fontSize: 11,
       },
       grid: {
-        vertLines: { color: '#2d3847' },
-        horzLines: { color: '#2d3847' },
+        vertLines: { color: 'rgba(45,56,71,0.35)' },
+        horzLines: { color: 'rgba(45,56,71,0.35)' },
       },
       crosshair: { mode: LC.CrosshairMode ? LC.CrosshairMode.Normal : 1 },
-      rightPriceScale: { borderColor: '#2d3847', scaleMargins: { top: 0.08, bottom: 0.12 } },
+      rightPriceScale: { borderColor: '#2d3847', scaleMargins: { top: 0.06, bottom: 0.1 } },
       timeScale: {
         borderColor: '#2d3847',
         timeVisible: true,
         secondsVisible: false,
-        rightOffset: 8,
-        barSpacing: 6,
+        rightOffset: 10,
+        barSpacing: 12,
+        minBarSpacing: 4,
         fixLeftEdge: false,
         fixRightEdge: false,
       },
@@ -548,83 +627,69 @@
     });
     window.__lwChart = chart;
 
-    var candleSeries = chart.addCandlestickSeries({
-      upColor: '#26a69a',
-      downColor: '#ef5350',
-      borderVisible: true,
-      wickUpColor: '#26a69a',
-      wickDownColor: '#ef5350',
-    });
-    candleSeries.setData(candleData);
-
     var tx = p.trend_context || {};
-    var emaPts = tx.trend_reference_series || [];
-    if (emaPts.length) {
-      var emaSeries = chart.addLineSeries({
-        color: '#fbbf24',
-        lineWidth: 2,
+    var layers = tx.trend_reference_layers || [];
+    var stepT = lineStepType(LC);
+    function addEmaLayer(period, lineWidth, color, lastVis) {
+      var L = layers.filter(function (Lx) { return Lx.period === period; })[0];
+      if (!L || !(L.points || []).length) return;
+      chart.addLineSeries({
+        color: color,
+        lineWidth: lineWidth,
         priceLineVisible: false,
-        lastValueVisible: true,
-      });
-      emaSeries.setData(emaPts.map(function (pt) {
+        lastValueVisible: !!lastVis,
+      }).setData(L.points.map(function (pt) {
         return { time: pt.time, value: Number(pt.value) };
       }));
     }
+    addEmaLayer(200, 1, 'rgba(251,191,36,0.45)', false);
+    addEmaLayer(50, 2, '#fbbf24', true);
+    addEmaLayer(20, 1, 'rgba(148,163,184,0.55)', false);
 
-    function addSegmentLines(segs, color, lineWidth, visible) {
-      (segs || []).forEach(function (seg) {
-        var pr = Number(seg.entry_price);
-        if (!isFinite(pr)) return;
-        var a = Math.max(0, Math.min(n - 1, seg.from_bar));
-        var b = Math.max(0, Math.min(n - 1, seg.to_bar));
-        var lo = Math.min(a, b);
-        var hi = Math.max(a, b);
-        var t0 = barTimeUtc(series[lo]);
-        var t1 = barTimeUtc(series[hi]);
-        if (t0 == null || t1 == null) return;
-        var line = chart.addLineSeries({
-          color: color,
-          lineWidth: lineWidth,
-          priceLineVisible: false,
-          lastValueVisible: false,
-          visible: visible !== false,
-        });
-        line.setData([{ time: t0, value: pr }, { time: t1, value: pr }]);
-      });
+    var blPts = buildSteppedOverlayPoints(segBL, series, n);
+    if (blPts.length) {
+      chart.addLineSeries({
+        color: BASELINE_COLOR,
+        lineWidth: 4,
+        lineType: stepT,
+        priceLineVisible: false,
+        lastValueVisible: false,
+      }).setData(blPts);
     }
-
-    addSegmentLines(segBL, BASELINE_COLOR, 3, true);
 
     window.__lwAnnaSeries = {};
     topFive.forEach(function (sid, idx) {
       var col = ANNA_LINE_COLORS[idx % ANNA_LINE_COLORS.length];
       var segs = segSA.filter(function (s) { return s.strategy_id === sid; });
       var vis = toggles[sid] !== false;
-      window.__lwAnnaSeries[sid] = [];
-      (segs || []).forEach(function (seg) {
-        var pr = Number(seg.entry_price);
-        if (!isFinite(pr)) return;
-        var a = Math.max(0, Math.min(n - 1, seg.from_bar));
-        var b = Math.max(0, Math.min(n - 1, seg.to_bar));
-        var lo = Math.min(a, b);
-        var hi = Math.max(a, b);
-        var t0 = barTimeUtc(series[lo]);
-        var t1 = barTimeUtc(series[hi]);
-        if (t0 == null || t1 == null) return;
-        var line = chart.addLineSeries({
-          color: col,
-          lineWidth: 2,
-          priceLineVisible: false,
-          lastValueVisible: false,
-          visible: vis,
-        });
-        line.setData([{ time: t0, value: pr }, { time: t1, value: pr }]);
-        window.__lwAnnaSeries[sid].push(line);
+      var pts = buildSteppedOverlayPoints(segs, series, n);
+      if (!pts.length) return;
+      var line = chart.addLineSeries({
+        color: col,
+        lineWidth: 2,
+        lineType: stepT,
+        priceLineVisible: false,
+        lastValueVisible: false,
+        visible: vis,
       });
+      line.setData(pts);
+      window.__lwAnnaSeries[sid] = line;
     });
+
+    var candleSeries = chart.addCandlestickSeries({
+      upColor: '#2dd4bf',
+      downColor: '#fb7185',
+      borderVisible: true,
+      borderUpColor: '#5eead4',
+      borderDownColor: '#fda4af',
+      wickUpColor: '#99f6e4',
+      wickDownColor: '#fecdd3',
+    });
+    candleSeries.setData(candleData);
 
     var markers = [];
     var rawMarkers = (p.chart && p.chart.markers) ? p.chart.markers : [];
+    var mkOrder = 0;
     rawMarkers.forEach(function (m) {
       var ts = m.timestamp_utc;
       if (!ts) return;
@@ -635,14 +700,16 @@
       if (bt == null) return;
       var isEntry = m.kind === 'entry';
       var lane = (m.lane || '').toLowerCase();
-      var col = lane === 'baseline' ? BASELINE_COLOR : '#c084fc';
+      var col = lane === 'baseline' ? BASELINE_COLOR : '#e879f9';
+      var lbl = isEntry ? (m.marker_short_label || 'E') : (m.outcome_label || 'X');
       markers.push({
         time: bt,
         position: isEntry ? 'belowBar' : 'aboveBar',
         color: col,
-        shape: 'circle',
-        size: 1,
-        text: isEntry ? 'E' : 'X',
+        shape: isEntry ? 'arrowUp' : 'arrowDown',
+        size: 2,
+        text: String(lbl).slice(0, 18),
+        sortOrder: mkOrder++,
       });
     });
     if (evIdx >= 0) {
@@ -653,46 +720,16 @@
           position: 'inBar',
           color: '#f0b429',
           shape: 'square',
-          size: 1,
-          text: '▲',
+          size: 2,
+          text: 'EVT',
+          sortOrder: mkOrder++,
         });
       }
     }
-    markers.sort(function (a, b) { return a.time - b.time; });
-    candleSeries.setMarkers(markers);
-
-    var tradePairs = {};
-    rawMarkers.forEach(function (m) {
-      var tid = m.trade_id || '';
-      if (!tid) return;
-      if (!tradePairs[tid]) tradePairs[tid] = {};
-      if (m.kind === 'entry') tradePairs[tid].entry = m;
-      if (m.kind === 'exit') tradePairs[tid].exit = m;
+    var mkFin = staggerMarkersByTime(markers).map(function (m) {
+      return { time: m.time, position: m.position, color: m.color, shape: m.shape, size: m.size, text: m.text || '' };
     });
-    window.__lwTradeLineSeries = [];
-    Object.keys(tradePairs).forEach(function (tid) {
-      var pair = tradePairs[tid];
-      if (!pair.entry || !pair.exit) return;
-      var msE = Date.parse(String(pair.entry.timestamp_utc).indexOf('Z') !== -1 ? String(pair.entry.timestamp_utc) : String(pair.entry.timestamp_utc) + 'Z');
-      var msX = Date.parse(String(pair.exit.timestamp_utc).indexOf('Z') !== -1 ? String(pair.exit.timestamp_utc) : String(pair.exit.timestamp_utc) + 'Z');
-      if (!isFinite(msE) || !isFinite(msX)) return;
-      var tE = nearestBarTime(Math.floor(msE / 1000), candleTimes);
-      var tX = nearestBarTime(Math.floor(msX / 1000), candleTimes);
-      var pE = pair.entry.price;
-      var pX = pair.exit.price;
-      if (tE == null || tX == null || !isFinite(Number(pE)) || !isFinite(Number(pX))) return;
-      var lane = (pair.entry.lane || '').toLowerCase();
-      var col = lane === 'baseline' ? 'rgba(74,158,255,0.45)' : 'rgba(168,85,247,0.45)';
-      var tl = chart.addLineSeries({
-        color: col,
-        lineWidth: 1,
-        lineStyle: 2,
-        priceLineVisible: false,
-        lastValueVisible: false,
-      });
-      tl.setData([{ time: tE, value: Number(pE) }, { time: tX, value: Number(pX) }]);
-      window.__lwTradeLineSeries.push(tl);
-    });
+    candleSeries.setMarkers(mkFin);
 
     chart.timeScale().fitContent();
 
@@ -714,10 +751,10 @@
 
     var dg = (overlay.data_gaps || []).join(', ');
     var vm = getViewMode();
-    var cs = (qs('#chartSize') && qs('#chartSize').value) ? qs('#chartSize').value : 'standard';
+    var cs = (qs('#chartSize') && qs('#chartSize').value) ? qs('#chartSize').value : 'tall';
     if (note) {
       note.textContent =
-        'Candles: ' + candleData.length + ' (TradingView Lightweight Charts). Gold line = EMA(' + (tx.ema_period || 20) + ') from API. Mode: ' + vm + '. Chart height: ' + cs + '. Baseline = blue lines. Anna = ranked (toggle). Entry/exit = E/X markers; event bar = ▲. Survival = strip below. ' +
+        'OHLC (dominant) · EMA20/50/200 from API · baseline & Anna = stepped position lines (one per series) · exit markers show WIN/LOSS when PnL is in ledger. Mode: ' + vm + '. Height: ' + cs + '. ' +
         (dg ? 'Gaps: ' + dg + '.' : '');
     }
   }
@@ -733,7 +770,7 @@
       else if (vm === 'expanded') ptitle.textContent = 'Anna strategies (expanded set — visibility)';
       else ptitle.textContent = 'Anna strategies (full registry — visibility)';
     }
-    var html = '<p style="margin:0 0 0.75rem;font-size:0.85rem;color:var(--muted)">Server-ranked list for this view mode. Baseline is always drawn (blue). Uncheck to hide an Anna overlay.</p>';
+    var html = '<p style="margin:0 0 0.75rem;font-size:0.85rem;color:var(--muted)">Server-ranked list for this view mode. Baseline is one stepped blue line; each Anna strategy is one stepped line (merged segments). Uncheck to hide an Anna line.</p>';
     top.forEach(function (sid, i) {
       if (toggles[sid] === undefined) toggles[sid] = true;
       var st = lc[sid] || '—';
@@ -838,7 +875,7 @@
     var parts = [];
     parts.push('<p class="meta" style="margin:0;line-height:1.45">' + esc(tc.alignment_rule || '') + '</p>');
     parts.push('<div class="kv" style="margin-top:0.85rem">');
-    parts.push('<div><kbd>EMA period</kbd><br/><strong>' + esc(String(tc.ema_period != null ? tc.ema_period : '—')) + '</strong> · gold line on chart</div>');
+    parts.push('<div><kbd>Trend EMAs (API)</kbd><br/><strong>' + esc((tc.ema_periods || []).join(', ') || '—') + '</strong> · primary <strong>EMA' + esc(String(tc.ema_primary_period || 50)) + '</strong></div>');
     parts.push('<div><kbd>Event bar — trend</kbd><br/><strong>' + esc(rt) + '</strong> (single-bar regime_tags_v1)</div>');
     parts.push('<div><kbd>Event bar — volatility</kbd><br/><strong>' + esc(vb) + '</strong></div>');
     parts.push('<div><kbd>Event bar — stress</kbd><br/><strong>' + esc(st) + '</strong> (high vol and/or gate from trade context)</div>');

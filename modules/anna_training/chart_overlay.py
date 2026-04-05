@@ -247,8 +247,8 @@ def build_chart_overlay(
 
 def _semantics() -> dict[str, str]:
     return {
-        "price_path": "Gray path = market close through visible bars (primary surface).",
-        "baseline": "Blue horizontal segments at entry_price from entry bar through exit bar (or window end).",
-        "strategies": "Non-blue segments for top-five Anna strategies (toggleable); same time-span semantics.",
+        "price_path": "Primary OHLC is candlesticks (UI); overlay segments merge to stepped lines per lane/strategy.",
+        "baseline": "Ledger baseline_position_segments: entry_price held from entry bar through exit (or window end).",
+        "strategies": "strategy_position_segments per strategy_id; UI draws one stepped line per strategy (max five).",
         "tests": "Separate strip below price: each band spans bars (ongoing evaluation), not a price line.",
     }

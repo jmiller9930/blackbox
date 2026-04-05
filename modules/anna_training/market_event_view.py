@@ -158,6 +158,52 @@ def _markers_from_trades(trades: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return markers
 
 
+def _exit_marker_outcome(row: dict[str, Any]) -> str | None:
+    """Authoritative win/loss label for chart exit markers — from ledger + result rules."""
+    r = _result_for_trade(row)
+    if not r.get("pnl_asserted"):
+        stub = r.get("stub_classification") or r.get("classification")
+        return str(stub) if stub is not None else "stub"
+    pnl = row.get("pnl_usd")
+    if pnl is None:
+        return None
+    try:
+        p = float(pnl)
+    except (TypeError, ValueError):
+        return None
+    cls = str(r.get("classification") or "")
+    if cls == "won":
+        return f"WIN ${p:.4f}"
+    if cls == "lost":
+        return f"LOSS ${abs(p):.4f}"
+    if cls == "breakeven":
+        return "FLAT $0"
+    return f"${p:.4f}"
+
+
+def _enrich_chart_markers_with_outcomes(markers: list[dict[str, Any]], trades_enriched: list[dict[str, Any]]) -> None:
+    by_id = {str(t.get("trade_id")): t for t in trades_enriched if t.get("trade_id")}
+    for m in markers:
+        tid = str(m.get("trade_id") or "")
+        row = by_id.get(tid)
+        if not row:
+            continue
+        kind = str(m.get("kind") or "")
+        if kind == "exit":
+            lab = _exit_marker_outcome(row)
+            if lab:
+                m["outcome_label"] = lab
+            ep = row.get("pnl_usd")
+            if ep is not None:
+                try:
+                    m["economic_pnl_usd"] = float(ep)
+                except (TypeError, ValueError):
+                    pass
+        if kind == "entry":
+            lane = str(m.get("lane") or "").lower()
+            m["marker_short_label"] = "B·E" if lane == "baseline" else "A·E"
+
+
 def _display_palette() -> tuple[list[str], list[str]]:
     """Stable colors: baseline blue, Anna purple family."""
     base = "#4a9eff"
@@ -365,6 +411,7 @@ def build_market_event_view(qs: dict[str, list[str]]) -> dict[str, Any]:
         traces_f.append(tr)
 
     markers = _markers_from_trades(trades_enriched)
+    _enrich_chart_markers_with_outcomes(markers, trades_enriched)
 
     if baseline_row_unfiltered:
         br0 = baseline_row_unfiltered
@@ -567,6 +614,15 @@ def build_market_event_view(qs: dict[str, list[str]]) -> dict[str, Any]:
             "markers": markers,
             "history_bars": history_bars,
             "event_market_event_id": mid,
+            "data_contract": {
+                "schema": "anna_chart_data_contract_v1",
+                "ohlc": "history_bars: open, high, low, close, candle_open_utc, market_event_id per bar",
+                "trend": "trend_context.trend_reference_layers: EMA series (periods 20,50,200); primary trend = EMA50",
+                "baseline_path": "chart_overlay.baseline_position_segments → UI stepped line",
+                "anna_paths": "chart_overlay.strategy_position_segments (per strategy_id) → UI stepped lines (max 5)",
+                "markers": "markers[] entry|exit; exit includes outcome_label when economic PnL known",
+                "performance": "strategy_rows[].result and trades[].result — not inferred in UI",
+            },
         },
         "baseline_slot": baseline_slot,
         "strategy_slots": strategy_slots,
