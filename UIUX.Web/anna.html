@@ -134,9 +134,9 @@
           <div class="panel-grid panel-grid--single">
             <section class="panel" id="panel-anna" aria-labelledby="t-anna">
               <h2 class="panel__title" id="t-anna">Anna status</h2>
-              <p class="panel__state panel__state--pending" data-state>
-                No data — connect <code>meta blackbox-api-base</code> and query API.
-              </p>
+              <div id="panel-anna-body" class="panel__state panel__state--pending" data-state>
+                Loading status from <code>/api/v1/anna/summary</code>…
+              </div>
             </section>
 
             <section class="panel panel--training" id="panel-training" aria-labelledby="t-train">
@@ -184,6 +184,69 @@
           window.BlackboxPortal.clearSession();
           window.location.href = "login.html";
         });
+        (function loadAnnaSummary() {
+          function esc(x) {
+            if (x === null || x === undefined) return "—";
+            return String(x)
+              .replace(/&/g, "&amp;")
+              .replace(/</g, "&lt;")
+              .replace(/>/g, "&gt;");
+          }
+          var base = window.BlackboxPortal.readApiBase();
+          var url = (base ? String(base).replace(/\/+$/, "") : "") + "/api/v1/anna/summary";
+          var bodyEl = document.getElementById("panel-anna-body");
+          if (!bodyEl) return;
+          fetch(url, { credentials: "include", headers: { Accept: "application/json" } })
+            .then(function (r) {
+              return r.json().then(function (j) {
+                return { ok: r.ok, status: r.status, json: j };
+              });
+            })
+            .then(function (res) {
+              if (!res.ok || !res.json) {
+                bodyEl.className = "panel__state panel__state--pending";
+                bodyEl.innerHTML =
+                  "Could not load Anna summary (" +
+                  (res.status || "?") +
+                  "). Ensure this portal is opened on the same origin as <code>/api/v1/</code> (HTTPS front door), or set <code>meta blackbox-api-base</code>.";
+                return;
+              }
+              var d = res.json;
+              bodyEl.className = "panel__state";
+              bodyEl.removeAttribute("data-state");
+              var tr = d.training || {};
+              var filt = tr.filters || {};
+              bodyEl.innerHTML =
+                "<p style=\"margin:0 0 0.75rem;line-height:1.45\">Live snapshot from the engine (agents + Pyth training feed).</p>" +
+                "<dl style=\"margin:0;font-size:0.92rem;line-height:1.5\">" +
+                "<dt style=\"color:#8b949e;font-size:0.78rem;margin-top:0.35rem\">Connectivity</dt><dd>" +
+                esc(d.connectivity_state) +
+                "</dd>" +
+                "<dt style=\"color:#8b949e;font-size:0.78rem;margin-top:0.35rem\">Runtime</dt><dd>" +
+                esc(d.runtime_state) +
+                " <span style=\"color:#8b949e\">(" +
+                esc(d.reason_code) +
+                ")</span></dd>" +
+                "<dt style=\"color:#8b949e;font-size:0.78rem;margin-top:0.35rem\">Training feed</dt><dd>" +
+                esc(tr.state) +
+                " · " +
+                esc(tr.source_path || "—") +
+                " · " +
+                esc(filt.symbol || "—") +
+                " / " +
+                esc(filt.source || "—") +
+                "</dd></dl>" +
+                "<p style=\"margin:0.85rem 0 0;display:flex;flex-wrap:wrap;gap:0.5rem\">" +
+                "<a class=\"button button--secondary\" href=\"/anna/training\">Training dashboard</a> " +
+                "<a class=\"button button--secondary\" href=\"/anna/event-dashboard\">Event dashboard</a> " +
+                "<a class=\"button button--secondary\" href=\"/anna/evaluation\">QEL evaluation</a>" +
+                "</p>";
+            })
+            .catch(function (e) {
+              bodyEl.className = "panel__state panel__state--pending";
+              bodyEl.textContent = "Network error loading Anna summary: " + String(e && e.message ? e.message : e);
+            });
+        })();
       });
     </script>
   </body>
