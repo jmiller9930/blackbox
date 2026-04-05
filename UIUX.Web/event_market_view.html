@@ -358,6 +358,74 @@
     return '—';
   }
 
+  function sortedFinite(nums) {
+    var v = [];
+    for (var i = 0; i < nums.length; i++) {
+      var x = Number(nums[i]);
+      if (isFinite(x)) v.push(x);
+    }
+    v.sort(function (a, b) { return a - b; });
+    return v;
+  }
+
+  /** Linear percentile on sorted array, p in [0,1]. */
+  function percentileSorted(sorted, p) {
+    if (!sorted.length) return NaN;
+    if (sorted.length === 1) return sorted[0];
+    var idx = (sorted.length - 1) * p;
+    var a = Math.floor(idx);
+    var b = Math.ceil(idx);
+    if (a === b) return sorted[a];
+    return sorted[a] + (sorted[b] - sorted[a]) * (idx - a);
+  }
+
+  /**
+   * Y-axis: 5th–95th percentile of bar closes (not raw min/max) so wicks/spikes do not
+   * flatten the path. Vertical padding 12%. Then nudge range toward overlay entry prices
+   * by at most one span (pre-nudge) so baseline/Anna lines stay visible without re-introducing
+   * extreme outliers that dominate the scale.
+   */
+  function computePriceRange(closes, overlayPrices) {
+    var sortedC = sortedFinite(closes);
+    if (!sortedC.length) return { lo: 0, hi: 1 };
+    if (sortedC.length === 1) {
+      var u = sortedC[0];
+      var eps = Math.max(Math.abs(u) * 1e-4, 1e-6);
+      var lo1 = u - eps;
+      var hi1 = u + eps;
+      return expandRangeForOverlays(lo1, hi1, overlayPrices);
+    }
+    var lo = percentileSorted(sortedC, 0.05);
+    var hi = percentileSorted(sortedC, 0.95);
+    if (!isFinite(lo) || !isFinite(hi)) {
+      lo = sortedC[0];
+      hi = sortedC[sortedC.length - 1];
+    }
+    if (hi <= lo) {
+      var mid = (hi + lo) / 2;
+      var eps2 = Math.max(Math.abs(mid) * 1e-4, 1e-6);
+      lo = mid - eps2;
+      hi = mid + eps2;
+    }
+    var span = hi - lo;
+    var pad = Math.max(span * 0.12, Math.abs(hi + lo) * 2.5e-5);
+    lo -= pad;
+    hi += pad;
+    return expandRangeForOverlays(lo, hi, overlayPrices);
+  }
+
+  function expandRangeForOverlays(lo, hi, overlayPrices) {
+    var ovs = sortedFinite(overlayPrices || []);
+    if (!ovs.length) return { lo: lo, hi: hi };
+    var minO = ovs[0];
+    var maxO = ovs[ovs.length - 1];
+    var span = hi - lo;
+    if (span <= 0) span = Math.max(Math.abs(hi) * 1e-6, 1e-9);
+    if (minO < lo) lo = Math.max(minO, lo - span);
+    if (maxO > hi) hi = Math.min(maxO, hi + span);
+    return { lo: lo, hi: hi };
+  }
+
   function renderChart(p) {
     var svg = qs('#chart');
     var note = qs('#chartNote');
@@ -375,24 +443,20 @@
     }
     var series = hist.slice().reverse();
     var closes = series.map(function (b) { return Number(b.close); });
-    var lo = Math.min.apply(null, closes.concat([Infinity]));
-    var hi = Math.max.apply(null, closes.concat([-Infinity]));
-    function bumpRange(segs) {
-      (segs || []).forEach(function (s) {
-        var pr = s.entry_price;
-        if (pr != null && isFinite(Number(pr))) {
-          var v = Number(pr);
-          lo = Math.min(lo, v);
-          hi = Math.max(hi, v);
-        }
-      });
-    }
     var segBL = (overlay.baseline_position_segments || []).slice();
     var segSA = (overlay.strategy_position_segments || []).slice();
-    bumpRange(segBL);
-    bumpRange(segSA);
-    var pad = (hi - lo) * 0.08 || 0.01;
-    lo -= pad; hi += pad;
+    var overlayPrices = [];
+    function collectSegPrices(segs) {
+      (segs || []).forEach(function (s) {
+        var pr = s.entry_price;
+        if (pr != null && isFinite(Number(pr))) overlayPrices.push(Number(pr));
+      });
+    }
+    collectSegPrices(segBL);
+    collectSegPrices(segSA);
+    var rng = computePriceRange(closes, overlayPrices);
+    var lo = rng.lo;
+    var hi = rng.hi;
     var W = 900, H = 400, L = 50, R = 20, T = 22;
     var PRICE_H = 280;
     var ih = PRICE_H;
@@ -457,7 +521,9 @@
     svg.innerHTML = parts.join('');
     var dg = (overlay.data_gaps || []).join(', ');
     var vm = getViewMode();
-    note.textContent = 'Bars: ' + n + '. Mode: ' + vm + '. Baseline = blue. Anna overlays = ranked set for this mode. Tests = pink strip. ' + (dg ? 'Gaps: ' + dg + '.' : '');
+    note.textContent =
+      'Bars: ' + n + '. Mode: ' + vm + '. Y-axis: 5th–95th percentile of bar closes + 12% padding; overlay prices pull the range by at most one span (not raw min/max on closes). Baseline = blue. Anna overlays = ranked set for this mode. Tests = pink strip. ' +
+      (dg ? 'Gaps: ' + dg + '.' : '');
   }
 
   function renderStrategyPanel(p) {
