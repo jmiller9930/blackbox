@@ -173,6 +173,24 @@ Target: resume full-stack University and optional external context-provider expa
 
 ---
 
+### Operator web dashboard — trade chain & strategy designation (as-built, 2026-04)
+
+**Pillar 1 operator surface (lab):** `UIUX.Web/dashboard.html`, `UIUX.Web/api_server.py`, `modules/anna_training/dashboard_bundle.py`, `modules/anna_training/operator_trading_strategy.py`. Poll **`GET /api/v1/dashboard/bundle`** (aggregate: sequential status, wallet subset, **trade_chain**, **operator_trading**, liveness).
+
+| Capability | Location / notes |
+|------------|-------------------|
+| Trade chain table | Baseline row + Anna rows from `strategy_registry` lifecycles (`anna_test` vs `anna_strategy` buckets); event columns = recent `market_event_id` window |
+| vs baseline | **`_pair_vs_baseline_for_cells`**: WIN / NOT WIN / EXCLUDED; baseline leg paper/live; Anna leg includes **`paper_stub`** when PnL + MAE present |
+| Comparative headline | **`trade_chain.anna_vs_baseline_aggregate`** + UI title line; **`trade_chain.scorecard`** per-row counts |
+| Operator trading strategy | **`operator_trading`** in `state.json`: `designated_strategy_id`, `cookie_jar`; **not** a rewrite of ledger **`lane=baseline`** |
+| Registry-backed controls | **`operator_trading.eligible_strategy_ids`** = sustained QEL lifecycles (candidate → promoted); test/experiment excluded |
+| API | **`POST /api/v1/operator/trading-strategy`** — `action` promote / demote; demote may replace with **`baseline`** (default system strategy) |
+| Cursor rule | **Commit + push** after substantive work: [`git-complete-push-origin.mdc`](../../.cursor/rules/git-complete-push-origin.mdc) |
+
+**Deploy:** `git pull` + restart API; hard-refresh browser — stale static files explain “no UI change” on clawbot.
+
+---
+
 ## Phase 5 — Core trading engine (next active build)
 
 **Goal:** First working **Anna + Billy** path from **live data** → **signal** → **Layer 3 approval** → **Layer 4 intent** → **venue execution** (paper/sandbox first), while locking in the canonical **multi-participant, human-selected risk tier** model from day one.

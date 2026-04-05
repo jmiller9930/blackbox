@@ -1026,6 +1026,20 @@ Phase 4 **does not** automatically mean:
 
 Deliver the **data → strategy → approval → execution** spine in production shape: ingest, store, signal, bind to Layer **3** approval, execute via Layer **4** intent and **Billy** (edge execution), with risk controls and observability.
 
+### Operator web dashboard (Anna training / execution ledger) — partial as-built (2026-04)
+
+**Distinct from** Layer 2 read-only sandbox dashboard (`scripts/runtime/operator_dashboard/`). This surface is **`UIUX.Web/dashboard.html`** + **`UIUX.Web/api_server.py`**, with bundle logic in **`modules/anna_training/dashboard_bundle.py`** and polling **`GET /api/v1/dashboard/bundle`**.
+
+| Area | As-built |
+|------|----------|
+| Trade chain grid | Ledger `execution_trades` × recent event axis; baseline + Anna test/strategy rows; liveness strip on bundle |
+| vs baseline | Cell pairing WIN / NOT WIN / n/a (MAE gate vs `BLACKBOX_PAIR_DISPLAY_EPSILON`); **`paper_stub`** pairs when PnL + MAE exist |
+| Comparative summary | `trade_chain.anna_vs_baseline_aggregate` + title-line on dashboard; per-row **`scorecard`** |
+| Designated strategy | `data/runtime/anna_training/state.json` **`operator_trading`**; promote/demote **`POST /api/v1/operator/trading-strategy`**; eligible ids = sustained QEL registry lifecycles; **does not** replace ledger baseline lane |
+| Proof / tests | `tests/test_dashboard_bundle.py`, `tests/test_operator_trading_strategy.py` |
+
+**Deploy note:** After **`git pull`**, restart the API process/container and hard-refresh the browser — a running host still serving an older **`dashboard.html`** will show the prior UI (no scorecard / no dropdowns / old Eval behavior).
+
 ### Canonical plan layers (aligned with `development_plan.md`)
 
 Normative three-layer model for Phase **5** (full table: [`docs/architect/development_plan.md`](architect/development_plan.md) — **Phase 5 — Canonical structure**):

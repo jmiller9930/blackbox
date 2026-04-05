@@ -36,6 +36,7 @@ It is the **single source of truth** for project **rehydration** (Architect, Cur
 
 ### Where we are now
 
+- **Operator web (Anna / execution ledger):** partial as-built dashboard — trade chain, vs-baseline pairing, scorecard, designated-strategy controls — see canonical **Phase 5** subsection *Operator web dashboard (Anna training / execution ledger)* in [`blackbox_master_plan.md`](../blackbox_master_plan.md). Requires **`git pull`** + API restart + browser refresh on the host that serves `UIUX.Web/`.
 - **Completed through:** Phase **4.1** blueprint (and Phase **4.0**, all Phase **3.x**).
 - **Current planning artifact:** **Phase 4.2** — [`docs/architect/phase_4_2_wallet_account_architecture.md`](architect/phase_4_2_wallet_account_architecture.md) (wallet/account **architecture stub**; **no** code).
 - **Prior blueprint:** **Phase 4.1** — [`phase_4_1_trading_readiness.md`](architect/phase_4_1_trading_readiness.md).
