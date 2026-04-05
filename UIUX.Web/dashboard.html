@@ -110,6 +110,23 @@
     .dash-form-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 0.5rem; margin-top: 0.5rem; }
     .dash-form-grid label { display: flex; flex-direction: column; gap: 0.2rem; font-size: 0.68rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; }
     .dash-form-grid input { padding: 0.35rem 0.45rem; border-radius: 6px; border: 1px solid var(--panel-border); font-size: 0.78rem; }
+    .sysdash-hub {
+      display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem 0.65rem;
+      margin-bottom: var(--space-4); padding: var(--space-3);
+      border-radius: var(--radius-lg); border: 1px solid var(--panel-border);
+      background: rgba(255, 255, 255, 0.72); box-shadow: var(--shadow-sm);
+    }
+    .sysdash-hub__title {
+      width: 100%; margin: 0 0 0.25rem; font-size: 0.72rem; font-weight: 700;
+      text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted);
+    }
+    .sysdash-hub a {
+      display: inline-flex; align-items: center; padding: 0.4rem 0.75rem;
+      border-radius: 999px; font-size: 0.82rem; font-weight: 600; text-decoration: none;
+      border: 1px solid var(--panel-border); background: var(--panel); color: var(--text);
+    }
+    .sysdash-hub a:hover { border-color: var(--text); }
+    .sysdash-hub a[href="/anna/sequential-learning"] { border-color: rgba(22, 163, 74, 0.45); background: rgba(22, 163, 74, 0.08); }
   </style>
 </head>
 <body>
@@ -129,7 +146,18 @@
 
     <main class="sysdash" id="sysdash-root">
       <h1 class="portal-title" style="margin-bottom:0.25rem">System dashboard</h1>
-      <p class="portal-lede" style="margin-top:0">Primary operator surface — trade chain first, global controls, wallet and mode visible. Specialist consoles are drill-down only.</p>
+      <p class="portal-lede" style="margin-top:0">Primary operator entry — trade chain, controls, and wallet below. Use the hub links to open validation, QEL, training, and other surfaces without hunting in menus.</p>
+
+      <nav class="sysdash-hub" aria-label="Operator hub — all surfaces from the dashboard">
+        <p class="sysdash-hub__title">Open from here</p>
+        <a href="/anna/sequential-learning">Validate (sequential learning + checklist)</a>
+        <a href="/anna/evaluation">QEL evaluation</a>
+        <a href="/anna/event-view">Event view (chart + QEL)</a>
+        <a href="/anna/training">Anna training dashboard</a>
+        <a href="/anna.html">Anna hub</a>
+        <a href="/internal.html">Internal portal</a>
+        <a href="/guide.html">System guide</a>
+      </nav>
 
       <div class="sysdash-top">
         <div class="sysdash-wallet sysdash-wallet--bad" id="dash-wallet-box" role="status">
@@ -197,15 +225,15 @@
       </section>
 
       <details class="sysdash-drill">
-        <summary>Specialist: Sequential learning engine (full console)</summary>
+        <summary>Sequential learning — full console (same as hub link)</summary>
         <div class="drill-body">
-          <p><a href="/anna/sequential-learning">Open /anna/sequential-learning</a> — validation checklist, processing evidence, full operator copy.</p>
+          <p><a href="/anna/sequential-learning">/anna/sequential-learning</a> — run validation checklist, processing evidence, extended copy.</p>
         </div>
       </details>
       <details class="sysdash-drill">
-        <summary>Specialist: Anna training dashboard (legacy JSON / governance)</summary>
+        <summary>Anna training dashboard (same as hub link)</summary>
         <div class="drill-body">
-          <p><a href="/anna/training">Open /anna/training</a> — training governance contract and machine-readable dashboard JSON.</p>
+          <p><a href="/anna/training">/anna/training</a> — governance contract and machine-readable training JSON.</p>
         </div>
       </details>
       <details class="sysdash-drill">
