@@ -20,6 +20,12 @@ services:
     environment:
       BLACKBOX_REPO_ROOT: /repo
       BLACKBOX_CONTEXT_ROOT: /repo/data/context_engine
+      # Host .env (same directory as compose) supplies these; enables true wallet_connected on clawbot.
+      KEYPAIR_PATH: ${KEYPAIR_PATH:-}
+      BLACKBOX_SOLANA_KEYPAIR_PATH: ${BLACKBOX_SOLANA_KEYPAIR_PATH:-}
+      SOLANA_RPC_URL: ${SOLANA_RPC_URL:-}
+      BLACKBOX_LIVE_TRADING_BLOCKED: ${BLACKBOX_LIVE_TRADING_BLOCKED:-1}
+      BLACKBOX_EXECUTION_LEDGER_PATH: ${BLACKBOX_EXECUTION_LEDGER_PATH:-}
     volumes:
       - ../:/repo
       - /mnt/SQLlite_dB:/mnt/SQLlite_dB
@@ -28,7 +34,14 @@ services:
   pyth-stream:
     image: python:3.11-alpine
     working_dir: /repo
-    command: ["python3", "scripts/trading/pyth_stream_probe.py"]
+    environment:
+      BLACKBOX_REPO_ROOT: /repo
+    command:
+      [
+        "sh",
+        "-c",
+        "pip install -q --no-cache-dir certifi && exec python3 scripts/trading/pyth_stream_probe.py",
+      ]
     volumes:
       - ../:/repo
       - /mnt/SQLlite_dB:/mnt/SQLlite_dB

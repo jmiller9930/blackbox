@@ -45,6 +45,14 @@ def _rpc_url() -> str:
     return (os.environ.get("SOLANA_RPC_URL") or "").strip() or "https://api.mainnet-beta.solana.com"
 
 
+def _live_trading_blocked() -> bool:
+    """
+    Governance: default blocked. Set BLACKBOX_LIVE_TRADING_BLOCKED=0 when policy allows LIVE labeling.
+    """
+    raw = (os.environ.get("BLACKBOX_LIVE_TRADING_BLOCKED") or "1").strip().lower()
+    return raw not in ("0", "false", "no", "off")
+
+
 def _rpc_post(body: dict[str, Any]) -> dict[str, Any]:
     url = _rpc_url()
     data = json.dumps(body).encode("utf-8")
@@ -189,8 +197,11 @@ def build_wallet_status_payload() -> dict[str, Any]:
         "balance_sol": None,
         "balance_usd_approx": None,
         "signing_proof": None,
-        "live_trading_blocked": True,
-        "note": "LIVE remains disabled until governance enables it; wallet proves connectivity only.",
+        "live_trading_blocked": _live_trading_blocked(),
+        "note": (
+            "LIVE policy: set BLACKBOX_LIVE_TRADING_BLOCKED=0 when governance clears LIVE labeling; "
+            "wallet proves RPC/signing only."
+        ),
     }
 
     if kp is None:
