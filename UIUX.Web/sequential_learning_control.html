@@ -8,8 +8,8 @@
   <style>
     :root {
       --bg: #0c0f14; --surface: #141a22; --surface2: #1a222d; --border: #2d3847;
-      --text: #e8edf4; --muted: #8b9aad; --accent: #38bdf8; --warn: #fbbf24; --stop: #f87171;
-      --go: #34d399; --font: "DM Sans", system-ui, sans-serif; --mono: "IBM Plex Mono", ui-monospace, monospace;
+      --text: #e8edf4; --muted: #8b9aad; --accent: #38bdf8;
+      --go: #34d399; --bad: #f87171; --font: "DM Sans", system-ui, sans-serif; --mono: "IBM Plex Mono", ui-monospace, monospace;
     }
     body { margin: 0; min-height: 100vh; background: var(--bg); color: var(--text); font-family: var(--font); font-size: 15px; }
     .wrap { max-width: 1100px; margin: 0 auto; padding: 1.25rem; }
@@ -19,12 +19,13 @@
       font-size: 0.78rem; color: #bae6fd; background: rgba(56, 189, 248, 0.08);
       border: 1px solid rgba(56, 189, 248, 0.35); border-radius: 8px; padding: 0.55rem 0.85rem; margin-bottom: 1rem; line-height: 1.45;
     }
-    .controls { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 0.6rem; margin-bottom: 1rem; }
+    .controls { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 0.6rem; margin-bottom: 1rem; }
     .controls button {
       padding: 0.55rem 0.75rem; border-radius: 8px; border: 1px solid var(--border); cursor: pointer;
-      font-weight: 600; font-size: 0.88rem; font-family: var(--font);
+      font-weight: 600; font-size: 0.85rem; font-family: var(--font);
     }
-    button.start { background: rgba(52, 211, 153, 0.2); color: #6ee7b7; border-color: rgba(52, 211, 153, 0.45); }
+    button.start-new { background: rgba(52, 211, 153, 0.22); color: #6ee7b7; border-color: rgba(52, 211, 153, 0.45); }
+    button.start-resume { background: rgba(45, 212, 191, 0.12); color: #5eead4; border-color: rgba(45, 212, 191, 0.4); }
     button.pause { background: rgba(251, 191, 36, 0.15); color: #fcd34d; border-color: rgba(251, 191, 36, 0.4); }
     button.stop { background: rgba(248, 113, 113, 0.12); color: #fecaca; border-color: rgba(248, 113, 113, 0.4); }
     button.reset { background: var(--surface2); color: var(--muted); }
@@ -33,22 +34,31 @@
     .form { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 1rem; margin-bottom: 1rem; }
     .form-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 0.75rem; }
     label { display: flex; flex-direction: column; gap: 0.25rem; font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); }
-    input, select { padding: 0.45rem 0.55rem; border-radius: 6px; border: 1px solid var(--border); background: var(--surface2); color: var(--text); font-family: var(--mono); font-size: 0.82rem; }
+    input { padding: 0.45rem 0.55rem; border-radius: 6px; border: 1px solid var(--border); background: var(--surface2); color: var(--text); font-family: var(--mono); font-size: 0.82rem; }
     .status-bar {
-      display: flex; flex-wrap: wrap; gap: 0.75rem 1.25rem; align-items: center;
-      padding: 0.75rem 1rem; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; margin-bottom: 1rem; font-family: var(--mono); font-size: 0.82rem;
+      display: flex; flex-wrap: wrap; gap: 0.65rem 1rem; align-items: flex-start;
+      padding: 0.85rem 1rem; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; margin-bottom: 1rem; font-family: var(--mono); font-size: 0.78rem;
     }
     .pill { padding: 0.2rem 0.55rem; border-radius: 999px; font-weight: 600; font-size: 0.78rem; }
     .idle { background: rgba(139, 154, 173, 0.2); color: var(--muted); }
     .running { background: rgba(52, 211, 153, 0.2); color: #6ee7b7; }
     .paused { background: rgba(251, 191, 36, 0.2); color: #fcd34d; }
     .stopped { background: rgba(248, 113, 113, 0.15); color: #fecaca; }
+    .cal-block { width: 100%; margin-top: 0.35rem; }
+    .cal-block kbd { color: var(--muted); font-size: 0.68rem; display: block; margin-bottom: 0.2rem; }
+    .cal-path { word-break: break-all; color: #e2e8f0; }
     .panel { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; overflow: hidden; margin-bottom: 1rem; }
     .panel-h { padding: 0.65rem 1rem; border-bottom: 1px solid var(--border); font-size: 0.72rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.07em; color: var(--muted); }
     .panel-b { padding: 1rem; }
-    pre { margin: 0; font-family: var(--mono); font-size: 0.75rem; line-height: 1.45; white-space: pre-wrap; word-break: break-word; color: #cbd5e1; max-height: 320px; overflow: auto; }
+    pre { margin: 0; font-family: var(--mono); font-size: 0.75rem; line-height: 1.45; white-space: pre-wrap; word-break: break-word; color: #cbd5e1; max-height: 280px; overflow: auto; }
     .err { background: rgba(248,113,113,0.12); border: 1px solid rgba(248,113,113,0.4); color: #fecaca; padding: 0.75rem 1rem; border-radius: 8px; margin-bottom: 1rem; font-family: var(--mono); font-size: 0.82rem; display: none; }
-    .ok { background: rgba(52,211,153,0.1); border: 1px solid rgba(52,211,153,0.35); color: #a7f3d0; padding: 0.5rem 0.85rem; border-radius: 8px; margin-bottom: 0.75rem; font-size: 0.8rem; display: none; font-family: var(--mono); }
+    .ok { background: rgba(52,211,153,0.1); border: 1px solid rgba(52,211,153,0.35); color: #a7f3d0; padding: 0.5rem 0.85rem; border-radius: 8px; margin-bottom: 0.75rem; font-size: 0.8rem; display: none; font-family: var(--mono); white-space: pre-wrap; }
+    .checklist { display: grid; gap: 0.45rem; font-size: 0.8rem; }
+    .check { display: flex; align-items: flex-start; gap: 0.5rem; }
+    .check .mark { flex-shrink: 0; width: 1.1rem; text-align: center; font-weight: 700; }
+    .check.oky .mark { color: var(--go); }
+    .check.bad .mark { color: var(--bad); }
+    .proc-strong { color: #a5f3fc; font-weight: 600; }
     a { color: var(--accent); }
     .meta { font-size: 0.72rem; color: var(--muted); }
   </style>
@@ -56,20 +66,13 @@
 <body>
   <div class="wrap">
     <h1>Sequential learning — operator control</h1>
-    <p class="sub">Start / Pause / Stop / Reset map to strict backend semantics. API: <code>/api/v1/sequential-learning/control/*</code>. Same-origin as other Anna surfaces.</p>
+    <p class="sub">Lifecycle controls map to <code>/api/v1/sequential-learning/control/*</code>. Use explicit <strong>Start New Run</strong> or <strong>Resume Existing Run</strong> — there is no implicit start mode.</p>
     <p class="banner" role="status">
-      <strong>Start</strong> requires explicit <code>start_mode</code>: <code>resume</code> (continue cursor + same test/calibration) or <code>new_run</code> (fresh cursor; fails if artifact dir for <code>test_id</code> already has files — use Reset or a new <code>test_id</code>).
-      <strong>Pause</strong> halts tick consumption; <strong>Stop</strong> ends the run without clearing artifacts; <strong>Reset</strong> creates a clean control boundary and optionally archives file artifacts under <code>_archive/</code> (SQLite decision history is retained).
+      Operator checklist after start is computed server-side (calibration + MAE, ledger pairs, event queue). Active processing is shown via last event id, tick timestamp, and cumulative <code>events_processed_total</code> — not <code>ui_state</code> alone.
     </p>
 
     <div class="form">
       <div class="form-grid">
-        <label>start_mode
-          <select id="start_mode">
-            <option value="resume">resume</option>
-            <option value="new_run">new_run</option>
-          </select>
-        </label>
         <label>test_id
           <input type="text" id="test_id" placeholder="seq_run_001"/>
         </label>
@@ -82,7 +85,7 @@
         <label>events_file_path
           <input type="text" id="events_file_path" placeholder="/path/to/event_ids.txt"/>
         </label>
-        <label>ledger_db_path (optional)
+        <label>ledger_db_path (required for pair validation)
           <input type="text" id="ledger_db_path" placeholder=""/>
         </label>
         <label>market_db_path (optional)
@@ -95,7 +98,8 @@
     </div>
 
     <div class="controls">
-      <button type="button" class="start" id="btnStart">Start</button>
+      <button type="button" class="start-new" id="btnStartNew" title="Explicit new_run — fails if artifact dir for test_id already has files">Start New Run</button>
+      <button type="button" class="start-resume" id="btnResume" title="Explicit resume — same test_id and calibration as stored">Resume Existing Run</button>
       <button type="button" class="pause" id="btnPause">Pause</button>
       <button type="button" class="stop" id="btnStop">Stop</button>
       <button type="button" class="reset" id="btnReset">Reset</button>
@@ -106,14 +110,36 @@
     <div id="msgErr" class="err"></div>
 
     <div class="status-bar" id="statusBar">
-      <span>ui_state: <span class="pill idle" id="pillState">—</span></span>
-      <span>test_id: <strong id="v_test">—</strong></span>
-      <span>strategy: <strong id="v_strat">—</strong></span>
-      <span>calibration fp: <strong id="v_cal">—</strong></span>
-      <span>last event: <strong id="v_ev">—</strong></span>
-      <span>cursor: <strong id="v_cur">—</strong></span>
-      <span>last SPRT: <strong id="v_sprt">—</strong></span>
-      <span>last decision (DB): <strong id="v_dec">—</strong></span>
+      <div>
+        <span>ui_state: <span class="pill idle" id="pillState">—</span></span>
+        <span style="margin-left:0.75rem">test_id: <strong id="v_test">—</strong></span>
+        <span style="margin-left:0.75rem">strategy: <strong id="v_strat">—</strong></span>
+      </div>
+      <div class="cal-block">
+        <kbd>calibration_path</kbd>
+        <div class="cal-path" id="v_cal_path">—</div>
+      </div>
+      <div class="cal-block">
+        <kbd>calibration_fingerprint</kbd>
+        <div class="cal-path" id="v_cal_fp">—</div>
+      </div>
+      <div style="width:100%; margin-top:0.35rem">
+        <span class="proc-strong">Processing evidence</span>
+        <div id="v_proc" style="margin-top:0.35rem; line-height:1.5">—</div>
+      </div>
+      <div style="width:100%">
+        <span>cursor / queue: <strong id="v_cur">—</strong></span>
+        <span style="margin-left:1rem">last SPRT: <strong id="v_sprt">—</strong></span>
+        <span style="margin-left:1rem">last decision (DB): <strong id="v_dec">—</strong></span>
+      </div>
+    </div>
+
+    <div class="panel" id="panelRunVal">
+      <div class="panel-h">Run validation (operator checklist)</div>
+      <div class="panel-b">
+        <div class="checklist" id="runChecklist"></div>
+        <p class="meta" style="margin-top:0.75rem">Refreshed from API on each status poll. Same object is returned on successful Start.</p>
+      </div>
     </div>
 
     <div class="panel">
@@ -132,7 +158,6 @@
   </div>
   <script>
 (function () {
-  var pollTimer = null;
   function qs(s) { return document.querySelector(s); }
   function showErr(t) {
     var e = qs('#msgErr'); e.style.display = t ? 'block' : 'none'; e.textContent = t || '';
@@ -151,6 +176,25 @@
   function jstr(x) {
     try { return JSON.stringify(x, null, 2); } catch (e) { return String(x); }
   }
+  function renderRunValidation(rv, ps) {
+    ps = ps || {};
+    var el = qs('#runChecklist');
+    if (!rv || typeof rv !== 'object') {
+      el.innerHTML = '<div class="meta">No run_validation in response.</div>';
+      return;
+    }
+    function row(ok, label, detail) {
+      var d = (detail && String(detail)) ? '<div style="color:var(--muted);font-size:0.75rem;margin-left:1.6rem">' + esc(detail) + '</div>' : '';
+      return '<div class="check ' + (ok ? 'oky' : 'bad') + '"><span class="mark">' + (ok ? '✓' : '✗') + '</span><div><strong>' + esc(label) + '</strong>' + d + '</div></div>';
+    }
+    var parts = [];
+    parts.push(row(!!rv.calibration_loaded, 'Calibration loaded', rv.calibration_detail));
+    parts.push(row(!!rv.mae_path_valid, 'MAE protocol path valid (locked MAE v1)', rv.mae_protocol_id ? ('mae_protocol_id=' + esc(rv.mae_protocol_id)) : null));
+    parts.push(row(!!rv.paired_trades_available, 'Paired trades available in ledger', rv.paired_trades_detail || (rv.paired_trades_count != null ? ('count=' + rv.paired_trades_count) : null)));
+    parts.push(row(!!rv.event_processing_ready, 'Event queue ready for ticks (running + events remaining)', rv.events_file_detail || (rv.events_remaining != null ? ('events_remaining=' + rv.events_remaining) : null)));
+    parts.push(row(!!ps.has_processing_evidence, 'Processing evidence (last tick time or events_processed_total > 0)', null));
+    el.innerHTML = parts.join('');
+  }
   function renderStatus(d) {
     var st = d.ui_state || 'idle';
     var pill = qs('#pillState');
@@ -158,9 +202,22 @@
     pill.className = 'pill ' + pillClass(st);
     qs('#v_test').textContent = d.test_id != null ? d.test_id : '—';
     qs('#v_strat').textContent = d.strategy_id != null ? d.strategy_id : '—';
-    qs('#v_cal').textContent = d.calibration_fingerprint != null ? String(d.calibration_fingerprint).slice(0, 16) + '…' : '—';
-    qs('#v_ev').textContent = d.last_processed_market_event_id != null ? d.last_processed_market_event_id : '—';
+    qs('#v_cal_path').textContent = d.calibration_path != null ? d.calibration_path : '—';
+    qs('#v_cal_fp').textContent = d.calibration_fingerprint != null ? d.calibration_fingerprint : '—';
+
+    var ps = d.processing_signal || {};
+    var lines = [];
+    lines.push('last_processed_market_event_id: ' + (ps.last_processed_market_event_id != null ? esc(ps.last_processed_market_event_id) : '—'));
+    lines.push('last_processed_at_utc: ' + (ps.last_processed_at_utc != null ? esc(ps.last_processed_at_utc) : '—'));
+    lines.push('events_processed_total: ' + (ps.events_processed_total != null ? esc(ps.events_processed_total) : '0'));
+    if (ps.last_batch_events_processed != null) {
+      lines.push('last_batch_events_processed: ' + esc(ps.last_batch_events_processed));
+    }
+    lines.push('has_processing_evidence: ' + (ps.has_processing_evidence ? 'true' : 'false'));
+    qs('#v_proc').innerHTML = lines.map(function (L) { return '<div>' + L + '</div>'; }).join('');
+
     qs('#v_cur').textContent = (d.events_cursor_line != null ? d.events_cursor_line : '0') + ' / ' + (d.events_total_lines != null ? d.events_total_lines : '?');
+
     var sprt = d.last_sprt_decision;
     if (sprt == null && d.sequential_state_snapshot && d.sequential_state_snapshot.sprt) {
       var sp = d.sequential_state_snapshot.sprt;
@@ -172,6 +229,7 @@
     qs('#snapPre').textContent = jstr(d.sequential_state_snapshot || {});
     qs('#decPre').textContent = jstr(d.last_decision_row || {});
     qs('#logPre').textContent = jstr(d.transition_log_tail || []);
+    renderRunValidation(d.run_validation, d.processing_signal);
     qs('#meta').textContent = 'Last refresh: ' + new Date().toISOString() + (d.trace_id ? ' · trace ' + d.trace_id : '');
   }
   function getStatus() {
@@ -197,7 +255,14 @@
         if (!x.ok) {
           showErr((x.j && (x.j.detail || x.j.reason_code)) ? (x.j.reason_code + ': ' + (x.j.detail || '')) : jstr(x.j));
         } else {
-          showOk((x.j && x.j.reason_code) ? x.j.reason_code : 'ok');
+          var lines = [];
+          if (x.j.reason_code) lines.push(x.j.reason_code);
+          if (x.j.run_validation) {
+            lines.push('');
+            lines.push('Run validation (server):');
+            lines.push(jstr(x.j.run_validation));
+          }
+          showOk(lines.join('\n'));
           showErr('');
         }
         getStatus();
@@ -206,9 +271,9 @@
         showErr('request failed: ' + e);
       });
   }
-  function startBody() {
+  function startBody(mode) {
     return {
-      start_mode: qs('#start_mode').value,
+      start_mode: mode,
       test_id: qs('#test_id').value.trim(),
       strategy_id: qs('#strategy_id').value.trim(),
       calibration_path: qs('#calibration_path').value.trim(),
@@ -218,17 +283,29 @@
       artifacts_dir: qs('#artifacts_dir').value.trim()
     };
   }
-  qs('#btnStart').onclick = function () { post('start', startBody()); };
+  qs('#btnStartNew').onclick = function () { post('start', startBody('new_run')); };
+  qs('#btnResume').onclick = function () { post('start', startBody('resume')); };
   qs('#btnPause').onclick = function () { post('pause', {}); };
   qs('#btnStop').onclick = function () { post('stop', {}); };
   qs('#btnReset').onclick = function () {
-    if (!window.confirm('Reset control state? Optional: archive file artifacts to _archive/. SQLite history is not deleted.')) return;
-    post('reset', { archive: true, new_test_id: '' });
+    var resetMsg = [
+      'Confirm Reset — operator checkpoint',
+      '',
+      'You are about to reset the sequential learning control plane.',
+      '',
+      '• File artifacts: if archive is enabled, the current test_id directory is COPIED under artifacts/_archive/ (timestamped). Nothing is silently deleted without this copy when the directory had content.',
+      '• Control state: cursor, paths, and UI state are cleared to idle (optionally preset new test_id in API — this UI sends archive only).',
+      '• SQLite decision history (anna_sequential_decision_runs and related rows): NOT deleted — preserved for audit.',
+      '',
+      'Proceed with reset?'
+    ].join('\n');
+    if (!window.confirm(resetMsg)) return;
+    post('reset', { archive: true });
   };
   qs('#btnTick').onclick = function () { post('tick', { max_events: 5 }); };
 
   getStatus();
-  pollTimer = setInterval(getStatus, 3000);
+  setInterval(getStatus, 3000);
 })();
   </script>
 </body>

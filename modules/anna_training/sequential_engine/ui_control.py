@@ -34,6 +34,7 @@ from .calibration_report import calibration_report_fingerprint
 from .canonical_json import sha256_hex
 from .decision_state import export_decision_snapshot
 from .io_paths import default_artifacts_dir
+from .ledger_pairs import count_paired_market_events
 from .runtime_driver import run_sequential_learning_driver
 from .sequential_persistence import load_last_sequential_decision
 
@@ -68,6 +69,7 @@ def load_control_state(path: Path | None = None) -> dict[str, Any]:
         return _default_control_state()
     raw.setdefault("transition_log", [])
     raw.setdefault("events_cursor_line", 0)
+    raw.setdefault("events_processed_total", 0)
     return raw
 
 
@@ -89,6 +91,7 @@ def _default_control_state() -> dict[str, Any]:
         "last_tick_summary": None,
         "last_error": None,
         "last_sprt_decision": None,
+        "events_processed_total": 0,
         "transition_log": [],
     }
 
@@ -125,6 +128,100 @@ def _read_event_lines(events_path: Path) -> list[str]:
             continue
         out.append(s)
     return out
+
+
+def compute_run_validation(st: dict[str, Any]) -> dict[str, Any]:
+    """
+    Post-start / status checklist: calibration + MAE, ledger pairs, event queue.
+
+    Does not mutate state.
+    """
+    out: dict[str, Any] = {
+        "calibration_loaded": False,
+        "calibration_detail": None,
+        "mae_path_valid": False,
+        "mae_protocol_id": None,
+        "paired_trades_available": False,
+        "paired_trades_count": 0,
+        "paired_trades_detail": None,
+        "events_file_detail": None,
+        "event_queue_ready": False,
+        "events_remaining": 0,
+        "event_processing_ready": False,
+    }
+    cp = (st.get("calibration_path") or "").strip()
+    if not cp:
+        out["calibration_detail"] = "calibration_path not set in control state"
+        return out
+    cal_path = Path(cp)
+    if not cal_path.is_file():
+        out["calibration_detail"] = f"calibration file not found: {cal_path}"
+        return out
+    try:
+        report = load_and_validate_calibration(cal_path)
+        out["calibration_loaded"] = True
+        out["mae_path_valid"] = True
+        out["mae_protocol_id"] = report.mae_protocol_id
+    except Exception as e:
+        out["calibration_detail"] = str(e)
+        out["mae_path_valid"] = False
+        return out
+
+    sid = (st.get("strategy_id") or "").strip()
+    ldb_s = (st.get("ledger_db_path") or "").strip()
+    if not ldb_s:
+        out["paired_trades_detail"] = "ledger_db_path not set — cannot verify paired trades in ledger"
+    elif not sid:
+        out["paired_trades_detail"] = "strategy_id not set"
+    else:
+        ldb = Path(ldb_s)
+        if not ldb.is_file():
+            out["paired_trades_detail"] = f"ledger database not found: {ldb}"
+        else:
+            n = count_paired_market_events(candidate_strategy_id=sid, db_path=ldb)
+            out["paired_trades_count"] = n
+            out["paired_trades_available"] = n > 0
+            if n == 0:
+                out["paired_trades_detail"] = (
+                    "no market_event_id with both baseline and anna rows for this strategy_id"
+                )
+
+    ef = (st.get("events_file_path") or "").strip()
+    if not ef:
+        out["events_file_detail"] = "events_file_path not set"
+    else:
+        evp = Path(ef)
+        if not evp.is_file():
+            out["events_file_detail"] = f"events file not found: {evp}"
+        else:
+            lines = _read_event_lines(evp)
+            cur = int(st.get("events_cursor_line") or 0)
+            rem = max(0, len(lines) - cur)
+            out["events_remaining"] = rem
+            out["event_queue_ready"] = rem > 0
+
+    ui = st.get("ui_state") or "idle"
+    out["event_processing_ready"] = ui == "running" and out.get("event_queue_ready", False)
+
+    return out
+
+
+def _processing_signal_dict(st: dict[str, Any]) -> dict[str, Any]:
+    ts = st.get("last_tick_summary")
+    last_batch: int | None = None
+    if isinstance(ts, dict):
+        v = ts.get("events_processed")
+        if v is not None:
+            last_batch = int(v)
+    total = int(st.get("events_processed_total") or 0)
+    tick_at = st.get("last_tick_at")
+    return {
+        "last_processed_market_event_id": st.get("last_processed_market_event_id"),
+        "last_processed_at_utc": tick_at,
+        "events_processed_total": total,
+        "last_batch_events_processed": last_batch,
+        "has_processing_evidence": bool(total > 0 or tick_at),
+    }
 
 
 def control_start(
@@ -185,6 +282,7 @@ def control_start(
                 }
             st["events_cursor_line"] = 0
             st["last_processed_market_event_id"] = None
+            st["events_processed_total"] = 0
         else:
             # resume
             if (st.get("test_id") or "") and st.get("test_id") != tid:
@@ -214,7 +312,8 @@ def control_start(
         st["last_error"] = None
         _log_transition(st, from_s=prev, to_s="running", action=f"start:{sm}")
         save_control_state(st, state_path)
-        return {"ok": True, "ui_state": "running", "reason_code": "start_ok", "start_mode": sm}
+        rv = compute_run_validation(st)
+        return {"ok": True, "ui_state": "running", "reason_code": "start_ok", "start_mode": sm, "run_validation": rv}
 
 
 def control_pause(state_path: Path | None = None) -> dict[str, Any]:
@@ -320,11 +419,14 @@ def build_operator_status(
         "events_file_path": st.get("events_file_path") or None,
         "events_cursor_line": int(st.get("events_cursor_line") or 0),
         "events_total_lines": total_events,
+        "events_processed_total": int(st.get("events_processed_total") or 0),
         "last_processed_market_event_id": st.get("last_processed_market_event_id"),
         "last_tick_at": st.get("last_tick_at"),
         "last_tick_summary": st.get("last_tick_summary"),
         "last_error": st.get("last_error"),
         "last_sprt_decision": st.get("last_sprt_decision"),
+        "processing_signal": _processing_signal_dict(st),
+        "run_validation": compute_run_validation(st),
         "sequential_state_snapshot": snap,
         "last_decision_row": last_db,
         "transition_log_tail": (st.get("transition_log") or [])[-12:],
@@ -398,5 +500,6 @@ def control_tick(
         ls = result.get("last_sprt")
         if isinstance(ls, dict):
             st["last_sprt_decision"] = ls.get("decision")
+        st["events_processed_total"] = int(st.get("events_processed_total") or 0) + len(batch)
         save_control_state(st, state_path)
         return {"ok": True, "reason_code": "tick_ok", "driver_result": result}

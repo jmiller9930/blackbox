@@ -15,6 +15,33 @@ from modules.anna_training.execution_ledger import (
 )
 
 
+def count_paired_market_events(
+    *,
+    candidate_strategy_id: str,
+    db_path: Path | None = None,
+) -> int:
+    """Count distinct ``market_event_id`` with both baseline and anna rows for ``candidate_strategy_id``."""
+    sid = (candidate_strategy_id or "").strip()
+    if not sid:
+        return 0
+    conn = connect_ledger(db_path or default_execution_ledger_path())
+    try:
+        ensure_execution_ledger_schema(conn)
+        row = conn.execute(
+            """
+            SELECT COUNT(DISTINCT a.market_event_id)
+            FROM execution_trades a
+            INNER JOIN execution_trades b ON a.market_event_id = b.market_event_id
+            WHERE a.lane = 'anna' AND a.strategy_id = ?
+              AND b.lane = 'baseline' AND b.strategy_id = ?
+            """,
+            (sid, RESERVED_STRATEGY_BASELINE),
+        ).fetchone()
+        return int(row[0]) if row and row[0] is not None else 0
+    finally:
+        conn.close()
+
+
 def _row_to_dict(cur: sqlite3.Cursor, row: tuple[Any, ...]) -> dict[str, Any]:
     cols = [d[0] for d in cur.description]
     d = dict(zip(cols, row))

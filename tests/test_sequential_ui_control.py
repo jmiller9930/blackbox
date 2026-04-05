@@ -11,6 +11,7 @@ import pytest
 from modules.anna_training.execution_ledger import append_execution_trade
 from modules.anna_training.sequential_engine.calibration_factory import load_and_validate_calibration, write_calibration_from_template
 from modules.anna_training.sequential_engine import ui_control as uc
+from modules.anna_training.sequential_engine.ledger_pairs import count_paired_market_events
 from tests.test_sequential_engine import _mk_market_db
 
 
@@ -81,6 +82,11 @@ def test_state_machine_transitions_and_audit_log(tmp_path: Path) -> None:
         state_path=state_path,
     )
     assert r["ok"] is True
+    assert "run_validation" in r
+    assert r["run_validation"]["calibration_loaded"] is True
+    assert r["run_validation"]["mae_path_valid"] is True
+    assert r["run_validation"]["paired_trades_available"] is True
+    assert count_paired_market_events(candidate_strategy_id=strat, db_path=db) >= 1
     st = uc.load_control_state(state_path)
     assert st["ui_state"] == "running"
     log_len_1 = len(st["transition_log"])
@@ -206,3 +212,6 @@ def test_operator_status_includes_sprt_decision_key(tmp_path: Path) -> None:
     assert out["schema"] == "sequential_operator_status_v1"
     assert "last_sprt_decision" in out
     assert "sequential_state_snapshot" in out
+    assert "run_validation" in out
+    assert "processing_signal" in out
+    assert "has_processing_evidence" in out["processing_signal"]
