@@ -397,8 +397,25 @@ def _fetch_trade(
     return dict(zip(cols, r))
 
 
-def _distinct_event_axis(conn: Any, *, limit: int) -> list[str]:
-    """Most recent ``limit`` distinct market_event_ids; returned oldest→newest (left→right)."""
+def _normalize_utc_iso_for_axis(ts: Any) -> str | None:
+    """Normalize ledger timestamp to UTC ISO for browser (canonical column instant)."""
+    if ts is None:
+        return None
+    s = str(ts).strip()
+    if not s:
+        return None
+    dt = _parse_iso_ts(s)
+    if dt is None:
+        return None
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    else:
+        dt = dt.astimezone(timezone.utc)
+    return dt.isoformat().replace("+00:00", "Z")
+
+
+def _distinct_event_axis_with_times(conn: Any, *, limit: int) -> tuple[list[str], list[str | None]]:
+    """Distinct market_event_ids (oldest→newest) with parallel UTC instants from MAX(created_at_utc)."""
     lim = max(4, min(48, int(limit)))
     cur = conn.execute(
         """
@@ -410,8 +427,15 @@ def _distinct_event_axis(conn: Any, *, limit: int) -> list[str]:
         """,
         (lim,),
     )
-    mids = [str(r[0]) for r in cur.fetchall() if r and r[0]]
-    return list(reversed(mids))
+    rows = list(reversed(cur.fetchall()))
+    mids: list[str] = []
+    times: list[str | None] = []
+    for r in rows:
+        if not r or not r[0]:
+            continue
+        mids.append(str(r[0]))
+        times.append(_normalize_utc_iso_for_axis(r[1]))
+    return mids, times
 
 
 def _ledger_has_live_anna(conn: Any) -> bool:
@@ -566,7 +590,7 @@ def build_trade_chain_payload(
     conn = connect_ledger(db_path)
     try:
         ensure_execution_ledger_schema(conn)
-        event_axis = _distinct_event_axis(conn, limit=max_events)
+        event_axis, event_axis_time_utc_iso = _distinct_event_axis_with_times(conn, limit=max_events)
         tests, strats, note = _strategy_buckets(conn)
         lc_map = _lifecycle_by_strategy(conn)
         primary_sym = _latest_symbol_from_ledger(conn)
@@ -637,9 +661,12 @@ def build_trade_chain_payload(
         "ledger_path": str(db_path),
         "market_db_path": str(mpath) if mpath else None,
         "event_axis": event_axis,
+        "event_axis_time_utc_iso": event_axis_time_utc_iso,
         "event_axis_note": (
             "Columns are distinct market_event_id values (recent window, oldest left → newest right). "
-            "Same column = same market_event_id across rows. The rightmost column is the newest event in this window."
+            "Canonical time per column is UTC from the execution ledger (MAX(created_at_utc) for that id). "
+            "The UI also shows your browser’s local time for the same instant. "
+            "The rightmost column is the newest event in this window."
         ),
         "recency": {
             "axis_order": "oldest_left_newest_right",

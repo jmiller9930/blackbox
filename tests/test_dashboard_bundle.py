@@ -9,6 +9,12 @@ def test_build_trade_chain_payload_schema() -> None:
     tc = build_trade_chain_payload(max_events=8)
     assert tc.get("schema") == "blackbox_trade_chain_v1"
     assert "event_axis" in tc
+    assert "event_axis_time_utc_iso" in tc
+    axis = tc["event_axis"]
+    times = tc["event_axis_time_utc_iso"]
+    assert isinstance(axis, list)
+    assert isinstance(times, list)
+    assert len(times) == len(axis)
     assert "rows" in tc
     assert isinstance(tc["rows"], list)
     assert "market_clock" in tc

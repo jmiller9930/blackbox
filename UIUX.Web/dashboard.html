@@ -93,6 +93,12 @@
     .tc-table thead th.tc-now,
     .tc-table tbody td.tc-now { box-shadow: inset 0 0 0 2px rgba(15, 23, 42, 0.3); }
     .tc-table thead th.tc-now { font-weight: 800; }
+    .tc-table thead th.tc-head-ev { min-width: 4.75rem; max-width: 8.5rem; }
+    .tc-hdr-stack { display: flex; flex-direction: column; gap: 0.1rem; align-items: flex-start; line-height: 1.2; }
+    .tc-hdr-now { font-size: 0.55rem; font-weight: 800; color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em; }
+    .tc-hdr-primary { font-weight: 700; font-size: 0.62rem; color: var(--text); }
+    .tc-hdr-utc { font-size: 0.58rem; color: var(--muted); font-weight: 600; }
+    .tc-hdr-fallback { font-size: 0.6rem; word-break: break-all; font-weight: 600; color: var(--text); }
     .tc-row-head { display: flex; flex-direction: column; gap: 0.2rem; align-items: flex-start; }
     .tc-sid { font-size: 0.58rem; font-weight: 600; color: var(--muted); word-break: break-all; max-width: 9rem; }
     .tc-chip { display: inline-block; padding: 0.08rem 0.28rem; border-radius: 3px; font-size: 0.58rem; font-weight: 700; letter-spacing: 0.02em; }
@@ -240,7 +246,7 @@
       <!-- Row 4: trade chain (primary) -->
       <section class="dash-r4" aria-labelledby="tc-h">
         <h2 id="tc-h">Trade chain</h2>
-        <p style="margin:0;font-size:0.65rem;color:var(--muted);padding:0 0.5rem 0.3rem">Older → newer · right = latest event (now)</p>
+        <p style="margin:0;font-size:0.65rem;color:var(--muted);padding:0 0.5rem 0.3rem">Older → newer · right = latest (now). <strong>Local</strong> time uses your browser zone; <strong>UTC</strong> is the ledger canonical instant for each column.</p>
         <div class="scroll">
           <table class="tc-table" id="tc-table">
             <thead><tr><th scope="col">Chain</th></tr></thead>
@@ -323,6 +329,13 @@
     var t = document.createElement('textarea');
     t.textContent = s == null ? '' : String(s);
     return t.innerHTML;
+  }
+
+  function escAttr(s) {
+    return String(s == null ? '' : s)
+      .replace(/&/g, '&amp;')
+      .replace(/"/g, '&quot;')
+      .replace(/</g, '&lt;');
   }
 
   function fmtUsd(w) {
@@ -449,6 +462,55 @@
     );
   }
 
+  /** Resolve column instant: prefer ledger UTC ISO from bundle; else ISO-shaped market_event_id. */
+  function tcParseAxisInstant(isoUtc, mid) {
+    var s = isoUtc != null && String(isoUtc).trim();
+    if (s) {
+      var d = new Date(s);
+      if (!isNaN(d.getTime())) return d;
+    }
+    var m = mid != null ? String(mid) : '';
+    if (/^\d{4}-\d{2}-\d{2}T/.test(m)) {
+      var d2 = new Date(m);
+      if (!isNaN(d2.getTime())) return d2;
+    }
+    return null;
+  }
+
+  /** Primary: browser local + zone label; secondary: HH:MM UTC (canonical). */
+  function tcAxisHeaderHtml(mid, isoUtc, isNow) {
+    var d = tcParseAxisInstant(isoUtc, mid);
+    var nowRow = isNow ? '<span class="tc-hdr-now">now</span>' : '';
+    if (!d) {
+      return (
+        '<div class="tc-hdr-stack">' +
+        nowRow +
+        '<span class="tc-hdr-fallback">' + esc(mid) + '</span>' +
+        '</div>'
+      );
+    }
+    var localFmt = new Intl.DateTimeFormat(undefined, {
+      hour: 'numeric',
+      minute: '2-digit',
+      hour12: true,
+      timeZoneName: 'short',
+    });
+    var utcFmt = new Intl.DateTimeFormat('en-GB', {
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: false,
+      timeZone: 'UTC',
+    });
+    var utcStr = utcFmt.format(d).replace(/\s/g, '') + ' UTC';
+    return (
+      '<div class="tc-hdr-stack">' +
+      nowRow +
+      '<span class="tc-hdr-primary">' + esc(localFmt.format(d)) + '</span>' +
+      '<span class="tc-hdr-utc">' + esc(utcStr) + '</span>' +
+      '</div>'
+    );
+  }
+
   function renderTC(tc) {
     var table = $('tc-table');
     var thead = table.querySelector('thead tr');
@@ -464,21 +526,27 @@
       return;
     }
     var axis = tc.event_axis || [];
+    var axisTimes = tc.event_axis_time_utc_iso || [];
     var nEv = axis.length;
     var th = '<th scope="col" class="tc-sticky-chain">Chain</th>';
     axis.forEach(function (mid, idx) {
       var isNow = axis.length > 0 && idx === axis.length - 1;
       var nowCls = isNow ? ' tc-now' : '';
-      var nowLab = isNow ? ' title="' + esc(mid) + ' — newest (now)"' : ' title="' + esc(mid) + '"';
+      var isoUtc = axisTimes.length > idx ? axisTimes[idx] : null;
+      var d = tcParseAxisInstant(isoUtc, mid);
+      var thTitle = escAttr(
+        d
+          ? String(mid) + ' — canonical UTC: ' + d.toISOString()
+          : String(mid)
+      );
       var bgStyle = 'background-color:' + tcRecencyBg(idx, nEv);
       th +=
         '<th scope="col" class="tc-head-ev' + nowCls + '"' +
-        nowLab +
+        ' title="' + thTitle + '"' +
         ' style="' + bgStyle + '"' +
-        '><div style="max-width:5rem;overflow:hidden;text-overflow:ellipsis">' +
-        (isNow ? '<span style="font-size:0.58rem;color:var(--muted);display:block">now</span>' : '') +
-        esc(mid) +
-        '</div></th>';
+        '>' +
+        tcAxisHeaderHtml(mid, isoUtc, isNow) +
+        '</th>';
     });
     thead.innerHTML = th;
     tbody.innerHTML = '';
