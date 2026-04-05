@@ -63,11 +63,33 @@ def _rpc_post(body: dict[str, Any]) -> dict[str, Any]:
         return json.loads(resp.read().decode("utf-8", errors="replace"))
 
 
+def _pubkey_from_keypair_python(keypair_path: Path) -> tuple[str | None, str | None]:
+    """Derive Solana base58 pubkey from keypair JSON (64 ints) — no Node (Alpine API container)."""
+    try:
+        import base58
+        from nacl.signing import SigningKey
+    except ImportError:
+        return None, "pynacl_or_base58_missing"
+    try:
+        raw = json.loads(keypair_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as e:
+        return None, str(e)[:120]
+    if not isinstance(raw, list) or len(raw) < 32:
+        return None, "keypair_json_invalid"
+    seed = bytes(int(x) & 0xFF for x in raw[:32])
+    sk = SigningKey(seed)
+    vk = sk.verify_key.encode()
+    return base58.b58encode(vk).decode("ascii"), None
+
+
 def _pubkey_via_node(keypair_path: Path) -> tuple[str | None, str | None]:
-    """Return (base58_pubkey, error)."""
+    """Return (base58_pubkey, error). Prefer Python (PyNaCl) when Node is absent."""
+    pk, err = _pubkey_from_keypair_python(keypair_path)
+    if pk:
+        return pk, None
     script = _TRADING_CORE / "scripts" / "wallet_pubkey.ts"
     if not script.is_file():
-        return None, "wallet_pubkey.ts missing"
+        return None, err or "wallet_pubkey.ts missing"
     try:
         proc = subprocess.run(
             ["npx", "--yes", "tsx", str(script), str(keypair_path)],
@@ -82,8 +104,8 @@ def _pubkey_via_node(keypair_path: Path) -> tuple[str | None, str | None]:
     if proc.returncode != 0:
         return None, (proc.stderr or proc.stdout or "tsx_failed")[:300]
     line = (proc.stdout or "").strip().splitlines()
-    pk = line[-1].strip() if line else ""
-    return (pk if pk else None), None
+    pk2 = line[-1].strip() if line else ""
+    return (pk2 if pk2 else None), None
 
 
 def _sign_proof_via_node(keypair_path: Path) -> tuple[dict[str, Any] | None, str | None]:

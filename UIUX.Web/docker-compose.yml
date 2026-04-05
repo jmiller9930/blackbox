@@ -15,7 +15,7 @@ services:
       [
         "sh",
         "-c",
-        "pip install -q --no-cache-dir 'pydantic>=2,<3' certifi base58 && exec python3 UIUX.Web/api_server.py",
+        "pip install -q --no-cache-dir 'pydantic>=2,<3' certifi base58 PyNaCl && exec python3 UIUX.Web/api_server.py",
       ]
     environment:
       BLACKBOX_REPO_ROOT: /repo
