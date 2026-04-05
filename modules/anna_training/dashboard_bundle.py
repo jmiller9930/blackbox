@@ -637,14 +637,59 @@ def build_trade_chain_payload(
         "ledger_path": str(db_path),
         "market_db_path": str(mpath) if mpath else None,
         "event_axis": event_axis,
-        "event_axis_note": "Columns are distinct market_event_id values (recent window, oldest left → newest right). Same column = same market_event_id across rows.",
+        "event_axis_note": (
+            "Columns are distinct market_event_id values (recent window, oldest left → newest right). "
+            "Same column = same market_event_id across rows. The rightmost column is the newest event in this window."
+        ),
+        "recency": {
+            "axis_order": "oldest_left_newest_right",
+            "newest_market_event_id": event_axis[-1] if event_axis else None,
+        },
         "market_clock": market_clock,
         "strategy_selection_note": note,
         "visual_hierarchy_note": (
-            "Baseline row is the primary scan target (economic truth). Anna rows are de-emphasized; "
-            "lifecycle chips distinguish test vs strategy maturity without competing with baseline."
+            "Chain identity is lane + strategy_id (chips on the left). "
+            "Economic cells (paper or live) use the same outcome emphasis as baseline; "
+            "non-economic (eval/training) cells are visually subdued. Row labels show test vs strategy lifecycle."
         ),
         "rows": rows_out,
+    }
+
+
+def _paper_bankroll_snapshot() -> dict[str, Any] | None:
+    """
+    Read-only: training state paper_wallet for operator context.
+    Not the Solana wallet — gates equity model is starting_usd + sum(pnl) on paper paths.
+    """
+    p = _REPO_ROOT / "data" / "runtime" / "anna_training" / "state.json"
+    if not p.is_file():
+        return None
+    try:
+        raw = json.loads(p.read_text(encoding="utf-8"))
+    except json.JSONDecodeError:
+        return None
+    if not isinstance(raw, dict):
+        return None
+    pw = raw.get("paper_wallet")
+    if not isinstance(pw, dict):
+        return None
+    try:
+        start = float(pw.get("starting_usd", 0.0))
+    except (TypeError, ValueError):
+        start = 0.0
+    return {
+        "schema": "dashboard_paper_bankroll_v1",
+        "starting_usd": start,
+        "goal_horizon_days": pw.get("goal_horizon_days"),
+        "state_path": str(p),
+        "equity_model": (
+            "Judgment/gates use paper_wallet.starting_usd plus sum of pnl_usd from paper-mode ledger paths "
+            "(see modules/anna_training/paper_wallet.py). Not the same as the connected Solana balance."
+        ),
+        "deposit_tracking": (
+            "There is no separate in-tree deposit journal. Change starting_usd in state (or "
+            "ANNA_GRADE12_PAPER_BANKROLL_START_USD) when you intentionally reset bankroll; PnL remains trade-derived."
+        ),
     }
 
 
@@ -816,11 +861,13 @@ def build_dashboard_bundle(
     live_policy_blocked = bool(wallet.get("live_trading_blocked"))
 
     mc = tc.get("market_clock") if isinstance(tc, dict) else None
+    paper_br = _paper_bankroll_snapshot()
 
     return {
         "schema": "blackbox_dashboard_bundle_v1",
         "trace_id": tid,
         "market_clock": mc,
+        "paper_bankroll": paper_br,
         "banner": {
             "ui_state": ui_state.upper(),
             "mode_label": str((mode or {}).get("label") or "PAPER"),

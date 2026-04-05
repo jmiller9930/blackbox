@@ -14,6 +14,7 @@ def test_build_trade_chain_payload_schema() -> None:
     assert "market_clock" in tc
     assert tc["rows"][0].get("chain_kind") == "baseline"
     assert tc["rows"][0].get("row_tier") == "primary"
+    assert (tc.get("recency") or {}).get("axis_order") == "oldest_left_newest_right"
 
 
 def test_build_dashboard_bundle_schema() -> None:
@@ -29,3 +30,5 @@ def test_build_dashboard_bundle_schema() -> None:
     assert "next_tick" in b["liveness"]
     assert "bundle_snapshot_at" in b["liveness"]
     assert "eta_at" in b["liveness"]["next_tick"]
+    assert "paper_bankroll" in b
+    assert "recency" in b["trade_chain"]

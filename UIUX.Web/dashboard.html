@@ -67,30 +67,25 @@
     .dash-r4 .scroll { flex: 1; overflow: auto; min-height: 12rem; }
     .tc-table { border-collapse: separate; border-spacing: 0; font-size: 0.65rem; min-width: max-content; }
     .tc-table th, .tc-table td { border-right: 1px solid var(--panel-border); border-bottom: 1px solid var(--panel-border); padding: 0.25rem 0.3rem; vertical-align: top; }
-    /* Baseline row: primary truth — full contrast sticky column */
-    .tc-table tbody tr.tc-tr-baseline th:first-child,
-    .tc-table tbody tr.tc-tr-baseline td { background: #f8fafc; }
-    .tc-table tbody tr.tc-tr-baseline th:first-child {
+    /* Economic equivalence: data cells share one neutral ground; chain identity stays in the label column. */
+    .tc-table tbody tr td { background: #f8fafc; }
+    .tc-table tbody tr th:first-child {
       position: sticky; left: 0; z-index: 2; max-width: 10rem;
-      border-left: 3px solid #0f172a;
+      background: #f8fafc;
       box-shadow: 2px 0 6px rgba(15,23,42,0.06);
     }
-    /* Anna rows: secondary, muted band */
-    .tc-table tbody tr.tc-tr-anna th:first-child,
-    .tc-table tbody tr.tc-tr-anna td { background: #f1f5f9; }
-    .tc-table tbody tr.tc-tr-anna th:first-child {
-      position: sticky; left: 0; z-index: 2; max-width: 10rem;
-      border-left: 2px solid #94a3b8;
-      font-weight: 600;
-      opacity: 0.96;
-    }
+    .tc-tr-baseline th:first-child { border-left: 3px solid #0f172a; }
+    .tc-tr-anna th:first-child { border-left: 2px solid #94a3b8; font-weight: 600; }
     .tc-tr-anna-test th:first-child { border-left-color: #64748b; }
     .tc-tr-anna-strategy th:first-child { border-left-color: #7c8aa0; }
-    /* Subtle per-strategy accent (same cool family) */
-    .tc-tr-anna.tc-acc-0 th:first-child { background: linear-gradient(90deg, rgba(100,116,139,0.12) 0%, #f1f5f9 0.5rem); }
-    .tc-tr-anna.tc-acc-1 th:first-child { background: linear-gradient(90deg, rgba(71,85,105,0.1) 0%, #f1f5f9 0.5rem); }
-    .tc-tr-anna.tc-acc-2 th:first-child { background: linear-gradient(90deg, rgba(51,65,85,0.09) 0%, #f1f5f9 0.5rem); }
-    .tc-tr-anna.tc-acc-3 th:first-child { background: linear-gradient(90deg, rgba(30,41,59,0.08) 0%, #f1f5f9 0.5rem); }
+    .tc-tr-anna.tc-acc-0 th:first-child { background: linear-gradient(90deg, rgba(100,116,139,0.08) 0%, #f8fafc 0.5rem); }
+    .tc-tr-anna.tc-acc-1 th:first-child { background: linear-gradient(90deg, rgba(71,85,105,0.07) 0%, #f8fafc 0.5rem); }
+    .tc-tr-anna.tc-acc-2 th:first-child { background: linear-gradient(90deg, rgba(51,65,85,0.06) 0%, #f8fafc 0.5rem); }
+    .tc-tr-anna.tc-acc-3 th:first-child { background: linear-gradient(90deg, rgba(30,41,59,0.05) 0%, #f8fafc 0.5rem); }
+    /* Newest event column (recency anchor) */
+    .tc-table thead th.tc-now,
+    .tc-table tbody td.tc-now { box-shadow: inset 0 0 0 2px rgba(15, 23, 42, 0.22); background: #fff !important; }
+    .tc-table thead th.tc-now { font-weight: 800; }
     .tc-row-head { display: flex; flex-direction: column; gap: 0.2rem; align-items: flex-start; }
     .tc-sid { font-size: 0.58rem; font-weight: 600; color: var(--muted); word-break: break-all; max-width: 9rem; }
     .tc-chip { display: inline-block; padding: 0.08rem 0.28rem; border-radius: 3px; font-size: 0.58rem; font-weight: 700; letter-spacing: 0.02em; }
@@ -219,6 +214,7 @@
         <div class="kv"><span class="k">LIVE policy</span><span class="v" id="c-livepol">—</span></div>
         <div class="kv"><span class="k">Baseline mode</span><span class="v" id="c-base">—</span></div>
         <div class="kv"><span class="k">Anna mode</span><span class="v" id="c-anna">—</span></div>
+        <div class="kv"><span class="k">Paper bankroll (gates)</span><span class="v" id="c-paper-bank" title="Not on-chain balance — training judgment equity model">—</span></div>
       </div>
 
       <!-- Row 4: trade chain (primary) -->
@@ -371,7 +367,11 @@
     else if (ocDisp === 'LOSS') wl = 'wl-LOSS';
     else if (ocDisp === 'FLAT') wl = 'wl-FLAT';
     else if (ocDisp === 'Eval') wl = 'wl-EVAL';
-    var wrapCls = 'tc-mini' + (muted ? ' tc-mini-muted' : '');
+    var econCell = (c.economic_authority === 'full');
+    var wrapCls =
+      'tc-mini' +
+      (muted ? ' tc-mini-muted' : '') +
+      (econCell ? ' tc-cell-econ' : ' tc-cell-nonecon');
     var pnl = c.pnl_usd != null ? Number(c.pnl_usd).toFixed(2) : '—';
     var mae = c.mae_usd != null ? Number(c.mae_usd).toFixed(2) : '—';
     var ent = c.entry != null ? esc(String(c.entry)) : '—';
@@ -404,8 +404,17 @@
     }
     var axis = tc.event_axis || [];
     var th = '<th scope="col">Chain</th>';
-    axis.forEach(function (mid) {
-      th += '<th scope="col" title="' + esc(mid) + '"><div style="max-width:5rem;overflow:hidden;text-overflow:ellipsis">' + esc(mid) + '</div></th>';
+    axis.forEach(function (mid, idx) {
+      var isNow = axis.length > 0 && idx === axis.length - 1;
+      var nowCls = isNow ? 'tc-now' : '';
+      var nowLab = isNow ? ' title="' + esc(mid) + ' — newest in this window (→ now)"' : ' title="' + esc(mid) + '"';
+      th +=
+        '<th scope="col"' + (nowCls ? ' class="' + nowCls + '"' : '') +
+        nowLab +
+        '><div style="max-width:5rem;overflow:hidden;text-overflow:ellipsis">' +
+        (isNow ? '<span style="font-size:0.58rem;color:var(--muted);display:block">now →</span>' : '') +
+        esc(mid) +
+        '</div></th>';
     });
     thead.innerHTML = th;
     tbody.innerHTML = '';
@@ -422,9 +431,10 @@
       if (trCls) tr.className = trCls;
       var h = '<th scope="row">' + rowHead(row) + '</th>';
       var cells = '';
-      axis.forEach(function (mid) {
+      axis.forEach(function (mid, idx) {
         var cell = (row.cells && row.cells[mid]) ? row.cells[mid] : null;
-        cells += '<td>' + cellMini(cell, row) + '</td>';
+        var isNow = axis.length > 0 && idx === axis.length - 1;
+        cells += '<td' + (isNow ? ' class="tc-now"' : '') + '>' + cellMini(cell, row) + '</td>';
       });
       tr.innerHTML = h + cells;
       tbody.appendChild(tr);
@@ -515,6 +525,22 @@
     $('c-base').textContent = esc(String(cm.baseline_display || 'none'));
     var annaHint = le.anna_lane_hint || cm.anna_display || '';
     $('c-anna').textContent = w.live_trading_blocked ? 'paper only (policy lock)' : esc(String(annaHint));
+
+    var pb = bundle.paper_bankroll;
+    var pbEl = $('c-paper-bank');
+    if (pbEl) {
+      if (pb && pb.starting_usd != null && isFinite(Number(pb.starting_usd))) {
+        var base = String(pb.state_path || '').split('/').pop() || 'state.json';
+        pbEl.textContent =
+          '$' +
+          Number(pb.starting_usd).toFixed(2) +
+          ' starting · no amount field on dashboard — edit data/runtime/anna_training/state.json or ANNA_GRADE12_PAPER_BANKROLL_START_USD';
+        pbEl.title = esc((pb.equity_model || '') + ' ' + (pb.deposit_tracking || ''));
+      } else {
+        pbEl.textContent = '— (paper state not found)';
+        pbEl.title = '';
+      }
+    }
 
     var tickReq = !!ls.tick_required;
     $('btnTick').disabled = !tickReq;
