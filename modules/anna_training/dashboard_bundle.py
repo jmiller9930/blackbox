@@ -185,6 +185,63 @@ def _ledger_has_live_anna(conn: Any) -> bool:
     return bool(row)
 
 
+def _ledger_lane_mode_summary(conn: Any) -> dict[str, Any]:
+    """Baseline / Anna execution modes observed in ledger (capital-risk display)."""
+    baseline_modes: list[str] = []
+    anna_modes: list[str] = []
+    try:
+        cur = conn.execute(
+            "SELECT DISTINCT mode FROM execution_trades WHERE lane = 'baseline' ORDER BY mode"
+        )
+        baseline_modes = [str(r[0]) for r in cur.fetchall() if r and r[0]]
+    except Exception:
+        pass
+    try:
+        cur = conn.execute(
+            "SELECT DISTINCT mode FROM execution_trades WHERE lane = 'anna' ORDER BY mode"
+        )
+        anna_modes = [str(r[0]) for r in cur.fetchall() if r and r[0]]
+    except Exception:
+        pass
+
+    def _disp(modes: list[str], lane: str) -> str:
+        if not modes:
+            return "paper_only" if lane == "anna" else "none"
+        economic = [m for m in modes if m in ("live", "paper")]
+        if lane == "baseline":
+            if "live" in economic and "paper" in economic:
+                return "mixed"
+            if "live" in economic:
+                return "live"
+            if "paper" in economic:
+                return "paper"
+            return "stub" if "paper_stub" in modes else "mixed"
+        # anna
+        if "live" in economic:
+            return "live_present"
+        return "paper_only"
+
+    return {
+        "baseline_modes_observed": baseline_modes,
+        "anna_modes_observed": anna_modes,
+        "baseline_display": _disp(baseline_modes, "baseline"),
+        "anna_display": _disp(anna_modes, "anna"),
+    }
+
+
+def _compact_last_decision(row: dict[str, Any] | None) -> str:
+    if not row:
+        return "—"
+    for k in ("decision", "sprt_decision", "outcome", "status", "reason_code"):
+        v = row.get(k)
+        if v is not None and str(v).strip():
+            return str(v).strip()[:100]
+    tid = row.get("test_id") or row.get("strategy_id")
+    if tid:
+        return str(tid)[:80]
+    return str(row)[:100]
+
+
 def _strategy_buckets(conn: Any) -> tuple[list[str], list[str], str | None]:
     """
     Returns (test_strategy_ids, strategy_row_ids, note).
@@ -376,11 +433,18 @@ def build_dashboard_bundle(
         seq = {"schema": "sequential_operator_status_v1", "ui_state": "unknown", "detail": str(e)[:200]}
 
     ledger_live = False
+    capital_modes: dict[str, Any] = {
+        "baseline_modes_observed": [],
+        "anna_modes_observed": [],
+        "baseline_display": "none",
+        "anna_display": "paper_only",
+    }
     try:
         conn = connect_ledger(db_path)
         try:
             ensure_execution_ledger_schema(conn)
             ledger_live = _ledger_has_live_anna(conn)
+            capital_modes = _ledger_lane_mode_summary(conn)
         finally:
             conn.close()
     except Exception:
@@ -415,14 +479,29 @@ def build_dashboard_bundle(
         last_dec_s = json.dumps(last_dec, default=str)[:800]
     elif last_dec is not None:
         last_dec_s = str(last_dec)[:800]
+    last_dec_banner = _compact_last_decision(last_dec if isinstance(last_dec, dict) else None)
 
     sprt = (seq or {}).get("last_sprt_decision")
     if sprt is None and isinstance((seq or {}).get("last_tick_summary"), dict):
         sprt = ((seq or {}).get("last_tick_summary") or {}).get("last_sprt")
 
+    live_policy_blocked = bool(wallet.get("live_trading_blocked"))
+
     return {
         "schema": "blackbox_dashboard_bundle_v1",
         "trace_id": tid,
+        "banner": {
+            "ui_state": ui_state.upper(),
+            "mode_label": str((mode or {}).get("label") or "PAPER"),
+            "last_decision_compact": last_dec_banner,
+            "last_processed_market_event_id": (seq or {}).get("last_processed_market_event_id"),
+        },
+        "capital_modes": capital_modes,
+        "live_execution": {
+            "live_trading_blocked_by_policy": live_policy_blocked,
+            "ledger_anna_has_live_rows": ledger_live,
+            "anna_lane_hint": "paper_only_until_unlocked" if live_policy_blocked else str(capital_modes.get("anna_display") or ""),
+        },
         "operational_boundary": {
             "what_runs_now": [
                 "UI/API (this dashboard, /api/v1/*)",
@@ -455,6 +534,7 @@ def build_dashboard_bundle(
             "sprt_or_compact": sprt,
             "last_decision_compact": last_dec_s,
             "tick_ux_banner": tick_banner,
+            "tick_required": ui_state == "running" and ev_rem > 0,
             "events_processed_total": (seq or {}).get("events_processed_total"),
         },
         "trade_chain": tc,
