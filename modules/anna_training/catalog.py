@@ -143,6 +143,10 @@ def default_state() -> dict[str, Any]:
         "grade_12_trading_knowledge_internalized": None,
         "karpathy_last_skill_practice": None,
         "paper_wallet": {**DEFAULT_PAPER_WALLET},
+        "operator_trading": {
+            "designated_strategy_id": None,
+            "cookie_jar": [],
+        },
     }
 
 

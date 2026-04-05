@@ -621,6 +621,54 @@ def _lifecycle_by_strategy(conn: Any) -> dict[str, str]:
     return out
 
 
+def _build_trade_chain_scorecard(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Per-row WIN / NOT_WIN / EXCLUDED counts for the current event window (from cell vs_baseline)."""
+    out: list[dict[str, Any]] = []
+    for r in rows:
+        ck = str(r.get("chain_kind") or "")
+        sid = str(r.get("strategy_id") or "")
+        if ck == "baseline":
+            out.append(
+                {
+                    "chain_kind": "baseline",
+                    "strategy_id": sid,
+                    "row_label": str(r.get("label") or ""),
+                    "vs_baseline_wins": None,
+                    "vs_baseline_not_wins": None,
+                    "vs_baseline_excluded": None,
+                    "events_with_comparison": None,
+                }
+            )
+            continue
+        cells = r.get("cells") or {}
+        wins = not_wins = exc = 0
+        if isinstance(cells, dict):
+            for _mid, c in cells.items():
+                if not isinstance(c, dict):
+                    continue
+                vs = c.get("vs_baseline")
+                if vs == "WIN":
+                    wins += 1
+                elif vs == "NOT_WIN":
+                    not_wins += 1
+                elif vs == "EXCLUDED":
+                    exc += 1
+        n = wins + not_wins + exc
+        out.append(
+            {
+                "chain_kind": ck,
+                "strategy_id": sid,
+                "row_label": str(r.get("label") or ""),
+                "lifecycle_label": str(r.get("lifecycle_label") or ""),
+                "vs_baseline_wins": wins,
+                "vs_baseline_not_wins": not_wins,
+                "vs_baseline_excluded": exc,
+                "events_with_comparison": n,
+            }
+        )
+    return out
+
+
 def build_trade_chain_payload(
     *,
     db_path: Path | None = None,
@@ -722,6 +770,8 @@ def build_trade_chain_payload(
     finally:
         conn.close()
 
+    scorecard = _build_trade_chain_scorecard(rows_out)
+
     return {
         "schema": "blackbox_trade_chain_v1",
         "ledger_path": str(db_path),
@@ -749,6 +799,7 @@ def build_trade_chain_payload(
             "Eval/stub rows cannot pair until logged as economic paper/live."
         ),
         "paired_comparison_epsilon": round(pair_eps, 6),
+        "scorecard": scorecard,
         "rows": rows_out,
     }
 
@@ -838,6 +889,20 @@ def build_dashboard_bundle(
     mode = _system_mode_label(wallet=wallet_full, ledger_has_live_anna=ledger_live)
 
     tc = build_trade_chain_payload(db_path=db_path, max_events=max_events)
+
+    operator_trading: dict[str, Any] = {}
+    try:
+        from modules.anna_training.operator_trading_strategy import build_operator_trading_bundle_part
+
+        operator_trading = build_operator_trading_bundle_part(db_path)
+    except Exception:
+        operator_trading = {
+            "schema": "operator_trading_strategy_v1",
+            "designated_strategy_id": None,
+            "cookie_jar": [],
+            "eligible_strategy_ids": [],
+            "default_system_strategy_id": RESERVED_STRATEGY_BASELINE,
+        }
 
     ui_state = str((seq or {}).get("ui_state") or "idle")
     ev_rem = 0
@@ -983,5 +1048,6 @@ def build_dashboard_bundle(
             "events_processed_total": (seq or {}).get("events_processed_total"),
         },
         "trade_chain": tc,
+        "operator_trading": operator_trading,
         "liveness": liveness,
     }

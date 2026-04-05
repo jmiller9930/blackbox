@@ -2169,6 +2169,55 @@ class Handler(BaseHTTPRequestHandler):
             code = 200 if r.get("ok") else 400
             self._json(code, r, no_cache=True)
             return
+        if len(parts) == 4 and parts[:2] == ["api", "v1"] and parts[2] == "operator" and parts[3] == "trading-strategy":
+            body = self._read_json_body()
+            trace_id = str(uuid.uuid4())
+            try:
+                from modules.anna_training.operator_trading_strategy import (
+                    demote_designated_strategy,
+                    promote_designated_strategy,
+                )
+            except Exception as e:  # noqa: BLE001
+                self._json(
+                    500,
+                    {"ok": False, "reason_code": "import_fail", "detail": str(e)[:400], "trace_id": trace_id},
+                    no_cache=True,
+                )
+                return
+            action = str(body.get("action") or "").strip().lower()
+            try:
+                from modules.anna_training.execution_ledger import default_execution_ledger_path
+
+                _ldb = default_execution_ledger_path()
+            except Exception:
+                _ldb = None
+            if action == "promote":
+                r = promote_designated_strategy(
+                    strategy_id=str(body.get("strategy_id") or ""),
+                    ledger_db_path=_ldb,
+                )
+            elif action == "demote":
+                r = demote_designated_strategy(
+                    strategy_id=str(body.get("strategy_id") or ""),
+                    replacement_strategy_id=str(body.get("replacement_strategy_id") or ""),
+                    ledger_db_path=_ldb,
+                )
+            else:
+                self._json(
+                    400,
+                    {
+                        "ok": False,
+                        "reason_code": "unknown_action",
+                        "detail": "action must be promote or demote",
+                        "trace_id": trace_id,
+                    },
+                    no_cache=True,
+                )
+                return
+            code = 200 if r.get("ok") else 400
+            r["trace_id"] = trace_id
+            self._json(code, r, no_cache=True)
+            return
         self._json(404, {"error": "not_found", "path": parsed.path})
 
     def log_message(self, _format: str, *_args: Any) -> None:

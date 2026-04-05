@@ -172,6 +172,29 @@
       0% { transform: scale(1.35); opacity: 1; }
       100% { transform: scale(1); opacity: 1; }
     }
+    .tc-scorecard-block {
+      padding: 0.35rem 0.5rem 0.45rem;
+      border-bottom: 1px solid var(--panel-border);
+      background: #fdfefe;
+      font-size: 0.68rem;
+    }
+    .tc-sc-title { font-weight: 800; font-size: 0.68rem; margin: 0 0 0.35rem; color: #0f172a; }
+    .tc-sc-grid { display: grid; grid-template-columns: 7.5rem minmax(6rem, 1fr) 2.5rem 2.5rem 2.5rem; gap: 0.25rem 0.5rem; align-items: center; }
+    .tc-sc-head { font-weight: 800; color: var(--muted); text-transform: uppercase; font-size: 0.58rem; letter-spacing: 0.04em; }
+    .tc-sc-row { font-size: 0.62rem; }
+    .tc-sc-row.tc-sc-designated { background: rgba(14, 165, 233, 0.12); border-radius: 4px; padding: 0.2rem 0.15rem; margin: 0 -0.15rem; }
+    .tc-sc-kind { font-weight: 700; color: #334155; }
+    .tc-sc-sid { font-family: ui-monospace, monospace; font-size: 0.58rem; word-break: break-all; }
+    .tc-sc-num { font-weight: 700; text-align: right; }
+    .tc-sc-badge { display: inline-block; margin-left: 0.25rem; padding: 0.05rem 0.25rem; border-radius: 3px; background: #0ea5e9; color: #fff; font-size: 0.52rem; font-weight: 800; text-transform: uppercase; }
+    .tc-strategy-ops { margin-top: 0.4rem; padding-top: 0.35rem; border-top: 1px dashed var(--panel-border); display: grid; gap: 0.35rem; }
+    .tc-strategy-ops label { font-size: 0.58rem; color: var(--muted); font-weight: 700; display: block; margin-bottom: 0.15rem; }
+    .tc-strategy-ops select { font-size: 0.72rem; padding: 0.25rem 0.35rem; max-width: 18rem; }
+    .tc-strategy-ops button { padding: 0.3rem 0.55rem; border-radius: var(--radius-md); border: 1px solid var(--panel-border); background: var(--accent); color: var(--accent-contrast); font-weight: 700; font-size: 0.72rem; cursor: pointer; }
+    .tc-strategy-ops button.sec { background: var(--panel); color: var(--text); }
+    .tc-op-line { display: flex; flex-wrap: wrap; align-items: center; gap: 0.35rem 0.65rem; }
+    .tc-op-jar { font-size: 0.58rem; color: var(--muted); margin: 0; line-height: 1.35; }
+    .tc-op-note { font-size: 0.58rem; color: var(--muted); margin: 0 0 0.25rem; line-height: 1.35; }
   </style>
 </head>
 <body>
@@ -275,6 +298,31 @@
         <div class="tc-flow" aria-hidden="true">
           <span class="tc-flow-seq"><span class="tc-flow-old">older</span> <span class="tc-flow-arrow">→</span> <span class="tc-flow-new">newer</span></span>
           <span class="tc-flow-now">now = right column</span>
+        </div>
+        <div class="tc-scorecard-block" id="tc-scorecard-block">
+          <p class="tc-sc-title">Scorecard (this window vs baseline)</p>
+          <div id="tc-scorecard" role="group" aria-label="Strategy scorecard"></div>
+          <div class="tc-strategy-ops" id="tc-strategy-ops">
+            <p class="tc-op-note" id="tc-op-note"></p>
+            <div class="tc-op-line">
+              <span><strong>Designated trading strategy</strong> <span id="tc-designated" style="font-family:ui-monospace,monospace">—</span></span>
+            </div>
+            <div>
+              <label for="tc-promote-sel">Promote a sustained registry strategy (candidate → promoted lifecycle; tests excluded)</label>
+              <div class="tc-op-line">
+                <select id="tc-promote-sel" aria-label="Sustained registry strategy to promote"></select>
+                <button type="button" class="sec" id="btn-tc-promote">Promote</button>
+              </div>
+            </div>
+            <div>
+              <label for="tc-demote-rep">Demote current Anna designation — replacement (baseline or another sustained id)</label>
+              <div class="tc-op-line">
+                <select id="tc-demote-rep" aria-label="Replacement when demoting"></select>
+                <button type="button" class="sec" id="btn-tc-demote">Demote &amp; switch</button>
+              </div>
+            </div>
+            <p class="tc-op-jar" id="tc-cookie-jar"></p>
+          </div>
         </div>
         <p style="margin:0;font-size:0.62rem;color:var(--muted);padding:0.25rem 0.5rem 0.35rem">Headers: <strong>Local</strong> = your browser clock &amp; zone · <strong>UTC</strong> = canonical ledger time. Recency shade is per column (same for all rows).</p>
         <div class="scroll" id="tc-scroll">
@@ -407,7 +455,7 @@
     if (ck === 'baseline') {
       chips = '<span class="tc-chip tc-chip-baseline">Baseline</span>';
     } else {
-      var kind = ck === 'anna_test' ? 'Test' : 'Strategy';
+      var kind = ck === 'anna_test' ? 'Trial strategy' : 'Strategy';
       chips =
         '<span class="tc-chip tc-chip-anna-kind">' + esc(kind) + '</span>' +
         '<span class="tc-chip tc-chip-life">' + esc(row.lifecycle_label || '—') + '</span>';
@@ -730,8 +778,117 @@
     window.__bbNextPollEta = new Date(Date.now() + POLL_MS);
 
     renderTC(bundle.trade_chain || {});
+    renderScorecardAndOps(bundle);
     renderOB(bundle.operational_boundary);
     renderLive(bundle);
+  }
+
+  function renderScorecardAndOps(bundle) {
+    var tc = bundle.trade_chain || {};
+    var ot = bundle.operator_trading || {};
+    var scEl = $('tc-scorecard');
+    var noteEl = $('tc-op-note');
+    var desEl = $('tc-designated');
+    var jarEl = $('tc-cookie-jar');
+    var promoteSel = $('tc-promote-sel');
+    var demoteRep = $('tc-demote-rep');
+    var btnDem = $('btn-tc-demote');
+    var baselineId = (ot && ot.default_system_strategy_id) ? String(ot.default_system_strategy_id) : 'baseline';
+    var pol = (ot && ot.sustained_policy_note) ? String(ot.sustained_policy_note) : '';
+    var leg = (ot && ot.ledger_baseline_note) ? String(ot.ledger_baseline_note) : '';
+    if (noteEl) noteEl.textContent = [pol, leg].filter(Boolean).join(' ');
+    var designated = (ot && ot.designated_strategy_id) ? String(ot.designated_strategy_id) : '';
+    window.__bbDesignated = designated || '';
+    window.__bbBaselineId = baselineId;
+    if (desEl) {
+      desEl.textContent = designated
+        ? designated
+        : baselineId + ' (default system strategy — baseline chain)';
+    }
+    var eligible = (ot && Array.isArray(ot.eligible_strategy_ids)) ? ot.eligible_strategy_ids : [];
+    var scRows = tc.scorecard || [];
+    function fillPromoteSelect(sel, ids) {
+      if (!sel) return;
+      var prev = sel.value;
+      sel.innerHTML = '';
+      var opt0 = document.createElement('option');
+      opt0.value = '';
+      opt0.textContent = ids.length ? '— choose sustained strategy —' : '— no sustained strategies in registry —';
+      sel.appendChild(opt0);
+      ids.forEach(function (id) {
+        var o = document.createElement('option');
+        o.value = id;
+        o.textContent = id;
+        sel.appendChild(o);
+      });
+      if (prev && ids.indexOf(prev) >= 0) sel.value = prev;
+    }
+    function fillDemoteSelect(sel, ids, baseline, currentAnna) {
+      if (!sel) return;
+      var prev = sel.value;
+      sel.innerHTML = '';
+      var opt0 = document.createElement('option');
+      opt0.value = '';
+      opt0.textContent = '—';
+      sel.appendChild(opt0);
+      var ob = document.createElement('option');
+      ob.value = baseline;
+      ob.textContent = 'Baseline (default system strategy)';
+      sel.appendChild(ob);
+      ids.forEach(function (id) {
+        if (currentAnna && id === currentAnna) return;
+        var o = document.createElement('option');
+        o.value = id;
+        o.textContent = id;
+        sel.appendChild(o);
+      });
+      if (prev) sel.value = prev;
+    }
+    if (promoteSel) fillPromoteSelect(promoteSel, eligible);
+    if (demoteRep) fillDemoteSelect(demoteRep, eligible, baselineId, designated || null);
+    if (btnDem) btnDem.disabled = !designated;
+    if (promoteSel) promoteSel.title = 'Only strategy_registry rows with sustained lifecycle (not test/experiment).';
+    if (!scEl) return;
+    if (!scRows.length) {
+      scEl.innerHTML = '<span style="color:var(--muted)">No scorecard rows.</span>';
+      return;
+    }
+    var h = '<div class="tc-sc-head"><span>Lane</span><span>Strategy</span><span>WIN</span><span>NOT</span><span>n/a</span></div>';
+    scRows.forEach(function (sr) {
+      var ck = sr.chain_kind || '';
+      var sid = sr.strategy_id || '';
+      var isDes = !!(designated && sid === designated && ck !== 'baseline');
+      var rowCls = 'tc-sc-row' + (isDes ? ' tc-sc-designated' : '');
+      if (ck === 'baseline') {
+        h += '<div class="' + rowCls + '"><span class="tc-sc-kind">Baseline</span><span class="tc-sc-sid">' + esc(sid) + '</span><span class="tc-sc-num">—</span><span class="tc-sc-num">—</span><span class="tc-sc-num">—</span></div>';
+      } else {
+        var w = sr.vs_baseline_wins != null ? String(sr.vs_baseline_wins) : '—';
+        var nw = sr.vs_baseline_not_wins != null ? String(sr.vs_baseline_not_wins) : '—';
+        var ex = sr.vs_baseline_excluded != null ? String(sr.vs_baseline_excluded) : '—';
+        var kindLab = ck === 'anna_test' ? 'Trial strategy' : 'Strategy';
+        h += '<div class="' + rowCls + '"><span class="tc-sc-kind">' + esc(kindLab) + '</span><span class="tc-sc-sid">' + esc(sid) + (isDes ? ' <span class="tc-sc-badge">trading</span>' : '') + '</span><span class="tc-sc-num">' + esc(w) + '</span><span class="tc-sc-num">' + esc(nw) + '</span><span class="tc-sc-num">' + esc(ex) + '</span></div>';
+      }
+    });
+    scEl.innerHTML = '<div class="tc-sc-grid">' + h + '</div>';
+    if (jarEl) {
+      var jar = (ot && ot.cookie_jar) ? ot.cookie_jar : [];
+      if (!jar.length) jarEl.textContent = 'Cookie jar: empty (no demotions or promotions yet).';
+      else {
+        var parts = jar.slice(-6).map(function (e) {
+          return (e.strategy_id || '?') + ' → ' + (e.action || '') + ' @ ' + (e.at_utc || '');
+        });
+        jarEl.textContent = 'Cookie jar (recent): ' + parts.join(' · ');
+      }
+    }
+  }
+
+  function postTradingStrategy(body) {
+    $('dash-ctl-msg').textContent = '…';
+    return fetch('/api/v1/operator/trading-strategy', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body || {})
+    }).then(function (r) { return r.json().then(function (j) { return { ok: r.ok, j: j }; }); });
   }
 
   function fetchBundle() {
@@ -858,6 +1015,42 @@
   if (bpd) bpd.addEventListener('click', function () { postPaperFlow('deposit'); });
   var bps = $('btnPcSaveStart');
   if (bps) bps.addEventListener('click', postSetStarting);
+
+  var btnTcp = $('btn-tc-promote');
+  if (btnTcp) {
+    btnTcp.addEventListener('click', function () {
+      var sel = $('tc-promote-sel');
+      var sid = sel && sel.value ? String(sel.value).trim() : '';
+      if (!sid) {
+        $('dash-ctl-msg').textContent = 'Pick a strategy id to promote.';
+        return;
+      }
+      postTradingStrategy({ action: 'promote', strategy_id: sid }).then(function (x) {
+        $('dash-ctl-msg').textContent = fmtCtl(x.j);
+        refresh();
+      });
+    });
+  }
+  var btnTcd = $('btn-tc-demote');
+  if (btnTcd) {
+    btnTcd.addEventListener('click', function () {
+      var cur = window.__bbDesignated || '';
+      var repSel = $('tc-demote-rep');
+      var rep = repSel && repSel.value ? String(repSel.value).trim() : '';
+      if (!cur) {
+        $('dash-ctl-msg').textContent = 'No designated strategy — promote one first.';
+        return;
+      }
+      if (!rep) {
+        $('dash-ctl-msg').textContent = 'Choose a replacement strategy (required).';
+        return;
+      }
+      postTradingStrategy({ action: 'demote', strategy_id: cur, replacement_strategy_id: rep }).then(function (x) {
+        $('dash-ctl-msg').textContent = fmtCtl(x.j);
+        refresh();
+      });
+    });
+  }
 
   refresh();
   setInterval(refresh, POLL_MS);

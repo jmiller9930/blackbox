@@ -21,6 +21,9 @@ def test_build_trade_chain_payload_schema() -> None:
     assert len(times) == len(axis)
     assert "rows" in tc
     assert isinstance(tc["rows"], list)
+    assert "scorecard" in tc
+    assert isinstance(tc["scorecard"], list)
+    assert len(tc["scorecard"]) == len(tc["rows"])
     assert "market_clock" in tc
     assert tc["rows"][0].get("chain_kind") == "baseline"
     assert tc["rows"][0].get("row_tier") == "primary"
@@ -42,6 +45,10 @@ def test_build_dashboard_bundle_schema() -> None:
     assert "eta_at" in b["liveness"]["next_tick"]
     assert "paper_capital" in b
     assert "recency" in b["trade_chain"]
+    assert "operator_trading" in b
+    assert (b["operator_trading"] or {}).get("schema") == "operator_trading_strategy_v1"
+    assert "eligible_strategy_ids" in b["operator_trading"]
+    assert isinstance(b["operator_trading"]["eligible_strategy_ids"], list)
 
 
 def test_pair_vs_baseline_for_cells() -> None:
