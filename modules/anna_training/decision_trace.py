@@ -177,6 +177,114 @@ def build_parallel_anna_paper_stub_steps(
     return steps
 
 
+def build_parallel_anna_paper_steps(
+    *,
+    market_event_id: str,
+    strategy_id: str,
+    bar: dict[str, Any],
+    trade_id: str,
+    trace_id: str,
+    entry_price: float,
+    exit_price: float,
+    size: float,
+    side: str,
+    runner: str = "parallel_strategy_runner_v1",
+) -> list[dict[str, Any]]:
+    """Ordered steps for Anna lane **economic paper** parallel harness (PnL derived in ledger)."""
+    from modules.anna_training.execution_ledger import compute_pnl_usd
+
+    mid = (market_event_id or "").strip()
+    bar_id = bar.get("id")
+    if bar_id is None:
+        bar_id = mid
+    sym = str(bar.get("canonical_symbol") or "")
+    tf = str(bar.get("timeframe") or "")
+    base_refs = build_input_refs(market_event_id=mid, bar_id=bar_id)
+    pnl_preview = compute_pnl_usd(
+        entry_price=float(entry_price),
+        exit_price=float(exit_price),
+        size=float(size),
+        side=str(side).strip().lower(),
+    )
+
+    def _ts() -> str:
+        return utc_now_iso()
+
+    steps: list[dict[str, Any]] = [
+        {
+            "step_name": "ingest",
+            "timestamp": _ts(),
+            "input_refs": dict(base_refs),
+            "output": {
+                "source": "market_bars_5m",
+                "canonical_symbol": sym,
+                "timeframe": tf,
+                "candle_open_utc": bar.get("candle_open_utc"),
+                "candle_close_utc": bar.get("candle_close_utc"),
+            },
+            "rationale": _clamp_rationale("Canonical bar row for parallel economic paper harness."),
+        },
+        {
+            "step_name": "feature_calc",
+            "timestamp": _ts(),
+            "input_refs": dict(base_refs),
+            "output": {
+                "ohlc": {
+                    "open": bar.get("open"),
+                    "high": bar.get("high"),
+                    "low": bar.get("low"),
+                    "close": bar.get("close"),
+                },
+                "entry_price": entry_price,
+                "exit_price": exit_price,
+                "size": size,
+                "side": side,
+            },
+        },
+        {
+            "step_name": "policy_check",
+            "timestamp": _ts(),
+            "input_refs": dict(base_refs),
+            "output": {
+                "anna_lane_allowed": True,
+                "parallel_runner": runner,
+                "economic_paper": True,
+            },
+        },
+        {
+            "step_name": "decision",
+            "timestamp": _ts(),
+            "input_refs": dict(base_refs),
+            "output": {
+                "mode": "paper",
+                "trade_id_planned": trade_id,
+                "derived_pnl_usd_preview": round(pnl_preview, 8),
+            },
+            "rationale": _clamp_rationale(
+                "Synthetic open→close long on canonical bar for parallel measurement (same instrument as baseline pairing)."
+            ),
+        },
+        {
+            "step_name": "execution",
+            "timestamp": _ts(),
+            "input_refs": build_input_refs(
+                market_event_id=mid,
+                bar_id=bar_id,
+                ledger_ref="execution_trades",
+            ),
+            "output": {
+                "status": "written",
+                "trade_id": trade_id,
+                "trace_id": trace_id,
+                "lane": "anna",
+                "mode": "paper",
+            },
+        },
+    ]
+    _validate_steps(steps, market_event_id=mid)
+    return steps
+
+
 def build_baseline_bridge_steps(
     *,
     market_event_id: str,
@@ -387,6 +495,111 @@ def persist_parallel_anna_stub_trade_with_trace(
         "lane": "anna",
         "mode": "paper_stub",
         "paper_stub": True,
+        "timestamp_start_utc": ts_start,
+        "timestamp_end_utc": ts_end,
+        "steps": steps,
+        "execution_trade": row,
+    }
+
+
+def persist_parallel_anna_paper_trade_with_trace(
+    *,
+    market_event_id: str,
+    strategy_id: str,
+    bar: dict[str, Any],
+    trade_id: str,
+    context_snapshot: dict[str, Any],
+    notes: str | None,
+    db_path: Path | None = None,
+) -> dict[str, Any]:
+    """
+    Parallel harness: **economic** Anna lane ``paper`` row (PnL derived from OHLC).
+
+    Uses open→close, long, size 1.0 so ``pnl_usd`` is stored and baseline pairing works.
+    Does not affect baseline headline book (lane=anna).
+    """
+    from modules.anna_training.execution_ledger import append_execution_trade
+
+    trace_id = str(uuid.uuid4())
+    ts_start = utc_now_iso()
+    close_px = bar.get("close")
+    open_px = bar.get("open")
+    try:
+        ep = float(open_px) if open_px is not None else float(close_px) if close_px is not None else None
+        xp = float(close_px) if close_px is not None else None
+    except (TypeError, ValueError):
+        ep = xp = None
+    if ep is None or xp is None:
+        raise ValueError("parallel Anna paper requires bar open and close for entry/exit prices")
+    size = 1.0
+    side = "long"
+    steps = build_parallel_anna_paper_steps(
+        market_event_id=market_event_id,
+        strategy_id=strategy_id,
+        bar=bar,
+        trade_id=trade_id,
+        trace_id=trace_id,
+        entry_price=ep,
+        exit_price=xp,
+        size=size,
+        side=side,
+    )
+    ts_end = utc_now_iso()
+    ctx = dict(context_snapshot or {})
+    ctx.setdefault("economic_parallel_paper", True)
+
+    conn = connect_ledger(db_path)
+    try:
+        ensure_execution_ledger_schema(conn)
+        insert_decision_trace(
+            conn,
+            trace_id=trace_id,
+            market_event_id=market_event_id,
+            strategy_id=strategy_id,
+            lane="anna",
+            mode="paper",
+            paper_stub=False,
+            timestamp_start_utc=ts_start,
+            timestamp_end_utc=ts_end,
+            steps=steps,
+            trade_id=trade_id,
+        )
+        row = append_execution_trade(
+            trade_id=trade_id,
+            strategy_id=strategy_id,
+            lane="anna",
+            mode="paper",
+            market_event_id=market_event_id,
+            symbol="SOL-PERP",
+            timeframe="5m",
+            trace_id=trace_id,
+            side=side,
+            entry_time=bar.get("candle_open_utc"),
+            entry_price=ep,
+            size=size,
+            exit_time=bar.get("candle_close_utc"),
+            exit_price=xp,
+            exit_reason="CLOSE",
+            context_snapshot=ctx,
+            notes=notes,
+            db_path=db_path,
+            conn=conn,
+        )
+        conn.commit()
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        conn.close()
+
+    return {
+        "trace_id": trace_id,
+        "trade_id": trade_id,
+        "market_event_id": market_event_id,
+        "strategy_id": strategy_id,
+        "lane": "anna",
+        "mode": "paper",
+        "paper_stub": False,
         "timestamp_start_utc": ts_start,
         "timestamp_end_utc": ts_end,
         "steps": steps,

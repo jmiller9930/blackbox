@@ -17,6 +17,21 @@ def _env_bool(name: str, default: bool) -> bool:
     return raw not in ("0", "false", "no", "off")
 
 
+def _parallel_strategy_mode() -> str:
+    """
+    ``paper`` — economic Anna lane rows (PnL in ledger; comparable vs baseline).
+    ``paper_stub`` — legacy eval-only rows (no asserted PnL).
+
+    Env: ``ANNA_PARALLEL_STRATEGY_MODE`` — default ``paper``.
+    """
+    raw = (os.environ.get("ANNA_PARALLEL_STRATEGY_MODE") or "paper").strip().lower()
+    if raw in ("paper", "economic", "economic_paper"):
+        return "paper"
+    if raw in ("stub", "paper_stub", "eval"):
+        return "paper_stub"
+    return "paper"
+
+
 def _runtime_scripts() -> Path:
     return Path(__file__).resolve().parents[2] / "scripts" / "runtime"
 
@@ -60,9 +75,13 @@ def run_parallel_anna_strategies_tick(
     execution_ledger_db_path: Path | None = None,
 ) -> dict[str, Any]:
     """
-    For each configured Anna strategy, append one **paper_stub** execution row for the **latest**
-    ``market_event_id`` (from ``market_bars_5m``). ``pnl_usd`` is **not** stored (synthetic classification
-    only in ``context_snapshot``). Independent of Jack / single harness.
+    For **each** configured Anna strategy id, append **one** execution row for the **latest**
+    ``market_event_id`` (from ``market_bars_5m``). **Multiple strategies = multiple chains at once**
+    (one row per strategy per event).
+
+    Mode (``ANNA_PARALLEL_STRATEGY_MODE``, default ``paper``):
+      - **paper** — economic Anna lane; ``pnl_usd`` derived (open→close long, size 1); baseline pairing works.
+      - **paper_stub** — legacy eval; no asserted PnL (synthetic classification in context only).
 
     ``market_event_id`` is recomputed from the same canonical bar row via
     :func:`verify_market_event_id_matches_canonical_bar` (no divergence from the single constructor).
@@ -70,6 +89,7 @@ def run_parallel_anna_strategies_tick(
     Env:
       ANNA_PARALLEL_STRATEGY_RUNNER — default **on**; set ``0`` to disable.
       ANNA_PARALLEL_STRATEGY_IDS — optional comma list; else catalog-derived (excludes manual-only).
+      ANNA_PARALLEL_STRATEGY_MODE — ``paper`` (default) or ``paper_stub``.
     """
     if not _env_bool("ANNA_PARALLEL_STRATEGY_RUNNER", True):
         return {"enabled": False, "reason": "ANNA_PARALLEL_STRATEGY_RUNNER off"}
@@ -78,7 +98,10 @@ def run_parallel_anna_strategies_tick(
     from market_data.bar_lookup import fetch_latest_bar_row, fetch_latest_market_event_id
 
     from modules.anna_training.baseline_ledger_bridge import verify_market_event_id_matches_canonical_bar
-    from modules.anna_training.decision_trace import persist_parallel_anna_stub_trade_with_trace
+    from modules.anna_training.decision_trace import (
+        persist_parallel_anna_paper_trade_with_trace,
+        persist_parallel_anna_stub_trade_with_trace,
+    )
     from modules.anna_training.execution_ledger import (
         RESERVED_STRATEGY_BASELINE,
         connect_ledger,
@@ -122,6 +145,7 @@ def run_parallel_anna_strategies_tick(
     }
 
     strategies = _parallel_strategy_ids()
+    mode = _parallel_strategy_mode()
     written: list[str] = []
     trace_ids: list[str] = []
 
@@ -135,25 +159,36 @@ def run_parallel_anna_strategies_tick(
     for sid in strategies:
         if sid == RESERVED_STRATEGY_BASELINE:
             continue
-        result, stub_pnl = _stub_pnl_for_strategy(sid, mid)
         tid = _trade_id_for(sid, mid)
         try:
-            out = persist_parallel_anna_stub_trade_with_trace(
-                market_event_id=mid,
-                strategy_id=sid,
-                bar=bar,
-                stub_result=result,
-                stub_pnl_usd=stub_pnl,
-                trade_id=tid,
-                context_snapshot={
-                    "synthetic": True,
-                    "stub_result": result,
-                    "stub_pnl_usd": stub_pnl,
-                    **ctx,
-                },
-                notes=f"parallel_stub synthetic classification={result} (pnl_usd not asserted)",
-                db_path=execution_ledger_db_path,
-            )
+            if mode == "paper":
+                out = persist_parallel_anna_paper_trade_with_trace(
+                    market_event_id=mid,
+                    strategy_id=sid,
+                    bar=bar,
+                    trade_id=tid,
+                    context_snapshot={**ctx, "parallel_mode": "paper"},
+                    notes="parallel_runner economic paper (open→close long, size 1)",
+                    db_path=execution_ledger_db_path,
+                )
+            else:
+                result, stub_pnl = _stub_pnl_for_strategy(sid, mid)
+                out = persist_parallel_anna_stub_trade_with_trace(
+                    market_event_id=mid,
+                    strategy_id=sid,
+                    bar=bar,
+                    stub_result=result,
+                    stub_pnl_usd=stub_pnl,
+                    trade_id=tid,
+                    context_snapshot={
+                        "synthetic": True,
+                        "stub_result": result,
+                        "stub_pnl_usd": stub_pnl,
+                        **ctx,
+                    },
+                    notes=f"parallel_stub synthetic classification={result} (pnl_usd not asserted)",
+                    db_path=execution_ledger_db_path,
+                )
             written.append(tid)
             trace_ids.append(str(out.get("trace_id") or ""))
         except sqlite3.IntegrityError:
@@ -164,6 +199,7 @@ def run_parallel_anna_strategies_tick(
         "ok": True,
         "market_event_id": mid,
         "strategies": strategies,
+        "parallel_mode": mode,
         "trades_written": len(written),
         "trade_ids": written,
         "trace_ids": trace_ids,
