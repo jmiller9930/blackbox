@@ -18,8 +18,8 @@ else
 fi
 echo
 
-echo "--- API health ---"
-curl -skS "$BASE/api/health" || echo "FAIL"
+echo "--- API runtime status ---"
+curl -skS "$BASE/api/v1/runtime/status" | head -c 1200 || echo "FAIL"
 echo
 echo
 
