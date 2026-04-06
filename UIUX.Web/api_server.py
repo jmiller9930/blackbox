@@ -1277,6 +1277,7 @@ TRAINING_DASHBOARD_HTML = """<!DOCTYPE html>
     ul.digest-steps li .r.neu { color: var(--muted); }
     .digest-why { font-size: 0.72rem; color: var(--muted); margin: 0.35rem 0 0; padding-left: 0.85rem; border-left: 2px solid #30363d; }
   </style>
+  <script src="/text-scale.js"></script>
 </head>
 <body>
   <h1>Anna training — live</h1>
