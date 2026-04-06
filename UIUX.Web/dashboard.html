@@ -240,7 +240,15 @@
       box-shadow: inset 0 1px 0 rgba(14, 165, 233, 0.15);
     }
     .tc-sc-title { font-weight: 800; font-size: 0.68rem; margin: 0 0 0.35rem; color: #0f172a; }
-    .tc-sc-grid { display: grid; grid-template-columns: 7.5rem minmax(6rem, 1fr) 2.5rem 2.5rem 2.5rem; gap: 0.25rem 0.5rem; align-items: center; }
+    /* Stack header + rows; each row is its own 5-col grid (parent grid on .tc-sc-grid was wrong — one div = one cell, spans overlapped). */
+    .tc-sc-grid { display: flex; flex-direction: column; gap: 0.25rem; }
+    .tc-sc-head,
+    .tc-sc-row {
+      display: grid;
+      grid-template-columns: 7.5rem minmax(6rem, 1fr) 2.5rem 2.5rem 2.5rem;
+      gap: 0.25rem 0.5rem;
+      align-items: center;
+    }
     .tc-sc-head { font-weight: 800; color: var(--muted); text-transform: uppercase; font-size: 0.58rem; letter-spacing: 0.04em; }
     .tc-sc-row { font-size: 0.62rem; }
     .tc-sc-row.tc-sc-designated { background: rgba(14, 165, 233, 0.12); border-radius: 4px; padding: 0.2rem 0.15rem; margin: 0 -0.15rem; }
