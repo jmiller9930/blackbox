@@ -1012,13 +1012,54 @@ def build_dashboard_bundle(
 
     mc = tc.get("market_clock") if isinstance(tc, dict) else None
     paper_cap: dict[str, Any] | None = None
+    training_st: dict[str, Any] | None = None
     try:
         from modules.anna_training.paper_capital import build_paper_capital_summary
         from modules.anna_training.store import load_state
 
-        paper_cap = build_paper_capital_summary(training_state=load_state(), ledger_db_path=db_path)
+        training_st = load_state()
+        paper_cap = build_paper_capital_summary(training_state=training_st, ledger_db_path=db_path)
     except Exception:
         paper_cap = None
+
+    learning_summary_for_vis: dict[str, Any] = {
+        "ui_state": ui_state,
+        "learning_active": learning_active,
+        "events_remaining_in_queue": ev_rem,
+        "last_processed_market_event_id": (seq or {}).get("last_processed_market_event_id"),
+        "last_tick_at": (seq or {}).get("last_tick_at"),
+        "last_error": (seq or {}).get("last_error"),
+        "sprt_or_compact": sprt,
+        "last_decision_compact": last_dec_s,
+        "tick_ux_banner": tick_banner,
+        "tick_required": ui_state == "running" and ev_rem > 0,
+        "events_processed_total": (seq or {}).get("events_processed_total"),
+    }
+
+    intelligence_visibility: dict[str, Any] | None = None
+    try:
+        from modules.anna_training.intelligence_visibility import build_intelligence_visibility
+
+        llm_pf = (training_st or {}).get("karpathy_last_llm_preflight")
+        if not isinstance(llm_pf, dict):
+            llm_pf = {}
+        mdb_s = str((tc.get("market_db_path") or "") or "").strip() or None
+        intelligence_visibility = build_intelligence_visibility(
+            repo_root=_REPO_ROOT,
+            seq=seq if isinstance(seq, dict) else {},
+            trade_chain=tc if isinstance(tc, dict) else {},
+            operator_trading=operator_trading if isinstance(operator_trading, dict) else {},
+            learning_summary=learning_summary_for_vis,
+            pyth_snapshot=pyth_snap if isinstance(pyth_snap, dict) else {},
+            market_db_path=mdb_s,
+            training_state=training_st if isinstance(training_st, dict) else {},
+            llm_preflight_from_state=llm_pf,
+        )
+    except Exception as e:
+        intelligence_visibility = {
+            "schema": "anna_intelligence_visibility_v1",
+            "error": str(e)[:400],
+        }
 
     return {
         "schema": "blackbox_dashboard_bundle_v1",
@@ -1075,4 +1116,5 @@ def build_dashboard_bundle(
         "trade_chain": tc,
         "operator_trading": operator_trading,
         "liveness": liveness,
+        "intelligence_visibility": intelligence_visibility,
     }

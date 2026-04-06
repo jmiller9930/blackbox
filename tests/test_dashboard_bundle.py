@@ -51,6 +51,14 @@ def test_build_dashboard_bundle_schema() -> None:
     assert (b["operator_trading"] or {}).get("schema") == "operator_trading_strategy_v1"
     assert "eligible_strategy_ids" in b["operator_trading"]
     assert isinstance(b["operator_trading"]["eligible_strategy_ids"], list)
+    iv = b.get("intelligence_visibility")
+    assert isinstance(iv, dict)
+    assert iv.get("schema") == "anna_intelligence_visibility_v1"
+    assert "status_strip" in iv
+    for k in ("context", "learning", "llm_analysis", "decisioning", "baseline_comparison"):
+        assert k in (iv.get("status_strip") or {})
+    assert "effectiveness_summary" in iv
+    assert "subsystem_gaps" in iv
 
 
 def test_pair_vs_baseline_for_cells() -> None:

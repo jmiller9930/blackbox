@@ -32,6 +32,51 @@
     .dash-r1 .sep { color: var(--muted); font-weight: 400; }
     .dash-r1 .lbl { color: var(--muted); font-weight: 600; font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.04em; }
     .dash-r1 .val { font-family: ui-monospace, monospace; font-weight: 700; }
+    /* Anna intelligence strip */
+    .dash-intel {
+      flex-shrink: 0;
+      padding: 0.5rem 0.75rem 0.55rem;
+      border-bottom: 1px solid var(--panel-border);
+      background: linear-gradient(180deg, #f8fafc 0%, #eef2f7 100%);
+    }
+    .dash-intel-title { margin: 0 0 0.25rem; font-size: 0.82rem; font-weight: 800; color: #0f172a; }
+    .dash-intel-sub { margin: 0 0 0.45rem; font-size: 0.65rem; color: var(--muted); line-height: 1.4; max-width: 52rem; }
+    .dash-intel-strip {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(11.5rem, 1fr));
+      gap: 0.35rem;
+      margin-bottom: 0.45rem;
+    }
+    .dash-intel-card {
+      border: 1px solid var(--panel-border);
+      border-radius: 6px;
+      padding: 0.35rem 0.45rem;
+      background: #fff;
+      font-size: 0.68rem;
+    }
+    .dash-intel-card .lbl { font-size: 0.58rem; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted); font-weight: 800; }
+    .dash-intel-card .st { font-weight: 800; font-size: 0.78rem; margin: 0.15rem 0; }
+    .dash-intel-card.st-online .st { color: #15803d; }
+    .dash-intel-card.st-partial .st { color: #a16207; }
+    .dash-intel-card.st-offline .st { color: #b91c1c; }
+    .dash-intel-card.st-valid .st { color: #15803d; }
+    .dash-intel-card.st-limited .st { color: #a16207; }
+    .dash-intel-card.st-invalid .st { color: #b91c1c; }
+    .dash-intel-card .det { font-size: 0.6rem; color: #475569; line-height: 1.35; }
+    .dash-intel-eff, .dash-intel-phase {
+      font-size: 0.68rem;
+      line-height: 1.45;
+      margin: 0.35rem 0 0;
+      padding: 0.4rem 0.5rem;
+      border-radius: 6px;
+      background: #fff;
+      border: 1px solid var(--panel-border);
+    }
+    .dash-intel-eff strong, .dash-intel-phase strong { color: #0f172a; }
+    .dash-intel-gaps { margin-top: 0.4rem; font-size: 0.72rem; }
+    .dash-intel-gaps summary { cursor: pointer; font-weight: 700; }
+    .dash-intel-gaps-body { margin-top: 0.35rem; font-size: 0.65rem; line-height: 1.45; color: #334155; }
+    .dash-intel-gaps-body ul { margin: 0.2rem 0 0.35rem 1rem; padding: 0; }
     /* Row 2 — command center */
     .dash-r2 {
       flex-shrink: 0; padding: 0.5rem 0.75rem; border-bottom: 1px solid var(--panel-border);
@@ -286,6 +331,19 @@
         <span><span class="lbl">Last decision</span> <span class="val" id="b-dec">—</span></span>
         <span class="sep">|</span>
         <span><span class="lbl">Last event</span> <span class="val" id="b-ev">—</span></span>
+      </div>
+
+      <!-- Anna intelligence visibility (advisor directive — real signals, no fake Online) -->
+      <div class="dash-intel" id="dash-intel-wrap" role="region" aria-labelledby="dash-intel-h">
+        <h2 id="dash-intel-h" class="dash-intel-title">Anna intelligence — is the stack operating?</h2>
+        <p class="dash-intel-sub">Each status uses backend signals from this bundle (not docs). <strong>Partial</strong> means degraded; <strong>Offline</strong> means not meeting minimum conditions.</p>
+        <div class="dash-intel-strip" id="dash-intel-strip" aria-live="polite"></div>
+        <div class="dash-intel-eff" id="dash-intel-eff"></div>
+        <div class="dash-intel-phase" id="dash-intel-phase"></div>
+        <details class="dash-intel-gaps">
+          <summary>Wired vs partial vs missing (honest)</summary>
+          <div class="dash-intel-gaps-body" id="dash-intel-gaps-body"></div>
+        </details>
       </div>
 
       <!-- Row 2: control plane -->
@@ -852,6 +910,110 @@
     renderScorecardAndOps(bundle);
     renderOB(bundle.operational_boundary);
     renderLive(bundle);
+    renderIntel(bundle);
+  }
+
+  function renderIntel(bundle) {
+    var iv = bundle.intelligence_visibility;
+    var strip = $('dash-intel-strip');
+    var eff = $('dash-intel-eff');
+    var ph = $('dash-intel-phase');
+    var gb = $('dash-intel-gaps-body');
+    if (!strip) return;
+    if (!iv || iv.error) {
+      strip.innerHTML =
+        '<div class="dash-intel-card st-offline"><div class="lbl">intelligence_visibility</div><div class="st">Unavailable</div><div class="det">' +
+        esc(iv && iv.error ? iv.error : 'bundle missing intelligence_visibility — restart api after deploy') +
+        '</div></div>';
+      if (eff) eff.innerHTML = '';
+      if (ph) ph.innerHTML = '';
+      if (gb) gb.innerHTML = '';
+      return;
+    }
+    var ss = iv.status_strip || {};
+    var order = ['context', 'learning', 'llm_analysis', 'decisioning', 'baseline_comparison'];
+    var titles = {
+      context: 'Context',
+      learning: 'Learning',
+      llm_analysis: 'LLM analysis',
+      decisioning: 'Decisioning',
+      baseline_comparison: 'Baseline comparison'
+    };
+    var h = '';
+    order.forEach(function (k) {
+      var x = ss[k] || {};
+      var lab = x.label || '—';
+      var cls = 'st-offline';
+      var L = String(lab).toLowerCase();
+      if (k === 'baseline_comparison') {
+        if (L === 'valid') cls = 'st-valid';
+        else if (L === 'limited') cls = 'st-limited';
+        else cls = 'st-invalid';
+      } else {
+        if (L === 'online') cls = 'st-online';
+        else if (L === 'partial') cls = 'st-partial';
+        else cls = 'st-offline';
+      }
+      h +=
+        '<div class="dash-intel-card ' +
+        cls +
+        '"><div class="lbl">' +
+        esc(titles[k] || k) +
+        '</div><div class="st">' +
+        esc(lab) +
+        '</div><div class="det">' +
+        esc(x.plain || '') +
+        '</div><div class="det">' +
+        esc(x.detail || '') +
+        '</div></div>';
+    });
+    strip.innerHTML = h;
+    var es = iv.effectiveness_summary || {};
+    if (eff) {
+      eff.innerHTML =
+        '<strong>Effectiveness</strong> — ' +
+        esc(es.vs_baseline_plain || '—') +
+        '<br/>Trustworthy comparison: <strong>' +
+        (es.comparison_trustworthy ? 'yes' : 'no') +
+        '</strong> — ' +
+        esc(es.why_trust || '') +
+        '<br/>Evidence strength: <strong>' +
+        esc(es.evidence_strength || '—') +
+        '</strong> · Promotion readiness: <strong>' +
+        esc(es.promotion_readiness || '—') +
+        '</strong>';
+    }
+    var ps = iv.phase_story || {};
+    if (ph) {
+      ph.innerHTML =
+        '<strong>Phase</strong> — Designated strategy: <strong>' +
+        esc(ps.designated_strategy_id || 'none') +
+        '</strong><br/>' +
+        esc(ps.sandbox_eval || '') +
+        '<br/>' +
+        esc(ps.economic_proof || '') +
+        '<br/>' +
+        esc(ps.active_strategy || '') +
+        '<br/>' +
+        esc(ps.promotion_readiness || '');
+    }
+    var g = iv.subsystem_gaps || {};
+    if (gb) {
+      function ul(arr) {
+        if (!arr || !arr.length) return '<li>—</li>';
+        return arr.map(function (s) {
+          return '<li>' + esc(s) + '</li>';
+        }).join('');
+      }
+      gb.innerHTML =
+        '<p><strong>Implemented</strong></p><ul>' +
+        ul(g.implemented) +
+        '</ul><p><strong>Partial</strong></p><ul>' +
+        ul(g.partial) +
+        '</ul><p><strong>Missing</strong></p><ul>' +
+        ul(g.missing) +
+        '</ul>';
+    }
   }
 
   /**
