@@ -305,6 +305,22 @@
         </div>
         <div class="dash-live-sub" id="live-detail"></div>
       </div>
+      <!-- Runtime control — directly under liveness -->
+      <div class="dash-r2" id="dash-runtime-ctl" role="region" aria-label="Sequential learning runtime control">
+        <div class="dash-r2-row1">
+          <button type="button" id="btnStartNew">Start</button>
+          <button type="button" class="sec" id="btnResume">Resume</button>
+          <button type="button" class="sec" id="btnPause">Pause</button>
+          <button type="button" class="sec" id="btnStop">Stop</button>
+          <button type="button" class="sec" id="btnReset">Reset</button>
+          <button type="button" class="tick" id="btnTick" title="Advance events when running">Tick</button>
+        </div>
+        <div class="dash-r2-row2">
+          <span class="act">active <strong>test_id</strong>: <span id="act-tid">—</span></span>
+          <span class="act">active <strong>strategy_id</strong>: <span id="act-sid">—</span></span>
+        </div>
+        <div id="dash-ctl-msg"></div>
+      </div>
       <!-- Row 1: system banner (one strip) -->
       <div class="dash-r1" id="dash-r1" role="status" aria-live="polite">
         <span><span class="lbl">State</span> <span class="val" id="b-state">—</span></span>
@@ -328,23 +344,6 @@
         <p class="dash-intel-sub" style="margin-top:0.35rem;margin-bottom:0">
           <a href="/intelligence-method.html">Intelligence METHOD</a> — effectiveness, phase, subsystem gaps, learning storage, and learning proof.
         </p>
-      </div>
-
-      <!-- Row 2: control plane -->
-      <div class="dash-r2">
-        <div class="dash-r2-row1">
-          <button type="button" id="btnStartNew">Start</button>
-          <button type="button" class="sec" id="btnResume">Resume</button>
-          <button type="button" class="sec" id="btnPause">Pause</button>
-          <button type="button" class="sec" id="btnStop">Stop</button>
-          <button type="button" class="sec" id="btnReset">Reset</button>
-          <button type="button" class="tick" id="btnTick" title="Advance events when running">Tick</button>
-        </div>
-        <div class="dash-r2-row2">
-          <span class="act">active <strong>test_id</strong>: <span id="act-tid">—</span></span>
-          <span class="act">active <strong>strategy_id</strong>: <span id="act-sid">—</span></span>
-        </div>
-        <div id="dash-ctl-msg"></div>
       </div>
 
       <!-- Row 3: wallet + trade mode (capital) -->
