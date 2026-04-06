@@ -290,4 +290,18 @@ def test_dockerfile_uses_explicit_copy_not_leaky_nginx_root() -> None:
     assert "COPY index.html" in text
     assert "anna.html" in text
     assert "docs.html" in text
+    assert "intelligence-method.html" in text
     assert "COPY . /usr/share/nginx/html" not in text
+
+
+def test_intelligence_method_page_and_api_route() -> None:
+    """Operator surface: method page + dev-server fallback route (nginx serves static copy)."""
+    p = WEB / "intelligence-method.html"
+    assert p.is_file()
+    t = p.read_text(encoding="utf-8")
+    assert "Learning storage" in t
+    assert "dash-intel-eff" in t
+    assert "Learning proof" in t
+    assert "intelligence-method.html" in t
+    api = (WEB / "api_server.py").read_text(encoding="utf-8")
+    assert "/intelligence-method.html" in api

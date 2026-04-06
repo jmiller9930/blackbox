@@ -63,20 +63,6 @@
     .dash-intel-card.st-limited .st { color: #a16207; }
     .dash-intel-card.st-invalid .st { color: #b91c1c; }
     .dash-intel-card .det { font-size: 0.6rem; color: #475569; line-height: 1.35; }
-    .dash-intel-eff, .dash-intel-phase {
-      font-size: 0.68rem;
-      line-height: 1.45;
-      margin: 0.35rem 0 0;
-      padding: 0.4rem 0.5rem;
-      border-radius: 6px;
-      background: #fff;
-      border: 1px solid var(--panel-border);
-    }
-    .dash-intel-eff strong, .dash-intel-phase strong { color: #0f172a; }
-    .dash-intel-gaps { margin-top: 0.4rem; font-size: 0.72rem; }
-    .dash-intel-gaps summary { cursor: pointer; font-weight: 700; }
-    .dash-intel-gaps-body { margin-top: 0.35rem; font-size: 0.65rem; line-height: 1.45; color: #334155; }
-    .dash-intel-gaps-body ul { margin: 0.2rem 0 0.35rem 1rem; padding: 0; }
     /* Row 2 — command center */
     .dash-r2 {
       flex-shrink: 0; padding: 0.5rem 0.75rem; border-bottom: 1px solid var(--panel-border);
@@ -286,6 +272,7 @@
       <a href="/internal.html">Operator Panel</a>
       <a href="/anna/sequential-learning">Learning Engine</a>
       <a href="/anna/training">Training Dashboard</a>
+      <a href="/intelligence-method.html">Intelligence METHOD</a>
     </nav>
     <div class="dash-main">
       <!-- Row 0: liveness / cadence (heartbeat on each poll) -->
@@ -338,19 +325,9 @@
         <h2 id="dash-intel-h" class="dash-intel-title">Anna intelligence — is the stack operating?</h2>
         <p class="dash-intel-sub">Each status uses backend signals from this bundle (not docs). <strong>Partial</strong> means degraded; <strong>Offline</strong> means not meeting minimum conditions.</p>
         <div class="dash-intel-strip" id="dash-intel-strip" aria-live="polite"></div>
-        <div class="dash-intel-eff" id="dash-intel-eff"></div>
-        <div class="dash-intel-phase" id="dash-intel-phase"></div>
-        <details class="dash-intel-gaps">
-          <summary>Wired vs partial vs missing (honest)</summary>
-          <div class="dash-intel-gaps-body" id="dash-intel-gaps-body"></div>
-        </details>
-      </div>
-
-      <!-- Learning proof loop (MIT directive): memory attribution + vs-baseline join -->
-      <div class="dash-lp" id="dash-lp-wrap" role="region" aria-labelledby="dash-lp-h">
-        <h2 id="dash-lp-h" class="dash-intel-title">Learning proof — memory → decision → outcome</h2>
-        <p class="dash-intel-sub">Claim: retrieved lessons must be explicit on the trace; compare vs baseline per event. Ablation: set <code>ANNA_LEARNING_PROOF_MEMORY_OFF=1</code> on the API host.</p>
-        <div id="dash-lp-body" class="dash-lp-body" aria-live="polite"></div>
+        <p class="dash-intel-sub" style="margin-top:0.35rem;margin-bottom:0">
+          <a href="/intelligence-method.html">Intelligence METHOD</a> — effectiveness, phase, subsystem gaps, learning storage, and learning proof.
+        </p>
       </div>
 
       <!-- Row 2: control plane -->
@@ -918,75 +895,17 @@
     renderOB(bundle.operational_boundary);
     renderLive(bundle);
     renderIntel(bundle);
-    renderLearningProof(bundle);
-  }
-
-  function renderLearningProof(bundle) {
-    var el = $('dash-lp-body');
-    if (!el) return;
-    var lp = bundle.learning_proof;
-    if (!lp || lp.error) {
-      el.innerHTML =
-        '<div class="dash-intel-card st-offline"><div class="lbl">learning_proof</div><div class="st">Unavailable</div><div class="det">' +
-        esc(lp && lp.error ? lp.error : 'bundle missing learning_proof') +
-        '</div></div>';
-      return;
-    }
-    var agg = lp.aggregate || {};
-    var st = agg.learning_proof_status || 'insufficient_data';
-    var cls =
-      st === 'improving' ? 'st-valid' : st === 'degrading' ? 'st-invalid' : st === 'neutral' ? 'st-limited' : 'st-partial';
-    var rows = lp.per_event || [];
-    var tail = rows.slice(-16);
-    var h =
-      '<div class="dash-intel-card ' +
-      cls +
-      '"><div class="lbl">Proof status</div><div class="st">' +
-      esc(st) +
-      '</div><div class="det">Memory-used events: ' +
-      (agg.memory_used_events || 0) +
-      ' · no-memory: ' +
-      (agg.memory_unused_events || 0) +
-      '</div><div class="det">WIN rate (memory): ' +
-      (agg.win_rate_memory_used != null ? (agg.win_rate_memory_used * 100).toFixed(1) + '%' : '—') +
-      ' · (no memory): ' +
-      (agg.win_rate_memory_unused != null ? (agg.win_rate_memory_unused * 100).toFixed(1) + '%' : '—') +
-      '</div><div class="det">Δ WIN rate (memory − no): ' +
-      (agg.win_rate_delta_memory_minus_nomemory != null ? agg.win_rate_delta_memory_minus_nomemory.toFixed(4) : '—') +
-      '</div></div>';
-    h +=
-      '<table style="font-size:0.68rem;width:100%;margin-top:0.45rem;border-collapse:collapse"><thead><tr><th align="left">Event (tail)</th><th>Memory</th><th>vs baseline</th><th>PnL</th></tr></thead><tbody>';
-    tail.forEach(function (r) {
-      h +=
-        '<tr><td style="font-family:ui-monospace,monospace;font-size:0.58rem">' +
-        esc(String(r.market_event_id || '').slice(-28)) +
-        '</td><td>' +
-        (r.memory_used ? 'yes' : 'no') +
-        '</td><td>' +
-        esc(r.vs_baseline || '—') +
-        '</td><td>' +
-        esc(r.pnl_usd != null && r.pnl_usd !== '' ? String(r.pnl_usd) : '—') +
-        '</td></tr>';
-    });
-    h += '</tbody></table>';
-    el.innerHTML = h;
   }
 
   function renderIntel(bundle) {
     var iv = bundle.intelligence_visibility;
     var strip = $('dash-intel-strip');
-    var eff = $('dash-intel-eff');
-    var ph = $('dash-intel-phase');
-    var gb = $('dash-intel-gaps-body');
     if (!strip) return;
     if (!iv || iv.error) {
       strip.innerHTML =
         '<div class="dash-intel-card st-offline"><div class="lbl">intelligence_visibility</div><div class="st">Unavailable</div><div class="det">' +
         esc(iv && iv.error ? iv.error : 'bundle missing intelligence_visibility — restart api after deploy') +
         '</div></div>';
-      if (eff) eff.innerHTML = '';
-      if (ph) ph.innerHTML = '';
-      if (gb) gb.innerHTML = '';
       return;
     }
     var ss = iv.status_strip || {};
@@ -1027,52 +946,6 @@
         '</div></div>';
     });
     strip.innerHTML = h;
-    var es = iv.effectiveness_summary || {};
-    if (eff) {
-      eff.innerHTML =
-        '<strong>Effectiveness</strong> — ' +
-        esc(es.vs_baseline_plain || '—') +
-        '<br/>Trustworthy comparison: <strong>' +
-        (es.comparison_trustworthy ? 'yes' : 'no') +
-        '</strong> — ' +
-        esc(es.why_trust || '') +
-        '<br/>Evidence strength: <strong>' +
-        esc(es.evidence_strength || '—') +
-        '</strong> · Promotion readiness: <strong>' +
-        esc(es.promotion_readiness || '—') +
-        '</strong>';
-    }
-    var ps = iv.phase_story || {};
-    if (ph) {
-      ph.innerHTML =
-        '<strong>Phase</strong> — Designated strategy: <strong>' +
-        esc(ps.designated_strategy_id || 'none') +
-        '</strong><br/>' +
-        esc(ps.sandbox_eval || '') +
-        '<br/>' +
-        esc(ps.economic_proof || '') +
-        '<br/>' +
-        esc(ps.active_strategy || '') +
-        '<br/>' +
-        esc(ps.promotion_readiness || '');
-    }
-    var g = iv.subsystem_gaps || {};
-    if (gb) {
-      function ul(arr) {
-        if (!arr || !arr.length) return '<li>—</li>';
-        return arr.map(function (s) {
-          return '<li>' + esc(s) + '</li>';
-        }).join('');
-      }
-      gb.innerHTML =
-        '<p><strong>Implemented</strong></p><ul>' +
-        ul(g.implemented) +
-        '</ul><p><strong>Partial</strong></p><ul>' +
-        ul(g.partial) +
-        '</ul><p><strong>Missing</strong></p><ul>' +
-        ul(g.missing) +
-        '</ul>';
-    }
   }
 
   /**

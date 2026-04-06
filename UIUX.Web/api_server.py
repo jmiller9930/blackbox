@@ -1894,6 +1894,11 @@ class Handler(BaseHTTPRequestHandler):
             if dash.is_file():
                 self._html(200, dash.read_text(encoding="utf-8"), no_cache=True)
                 return
+        if path in ("/intelligence-method", "/intelligence-method/", "/intelligence-method.html"):
+            im = _REPO_ROOT / "UIUX.Web" / "intelligence-method.html"
+            if im.is_file():
+                self._html(200, im.read_text(encoding="utf-8"), no_cache=True)
+                return
         if path == "/api/v1/system/status":
             self._json(200, build_system_status())
             return

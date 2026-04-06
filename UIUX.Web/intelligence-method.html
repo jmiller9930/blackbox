@@ -1,0 +1,257 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>BLACK BOX — Intelligence METHOD</title>
+  <link rel="stylesheet" href="/styles.css"/>
+  <style>
+    html, body { height: 100%; margin: 0; }
+    .dash-app { display: flex; min-height: 100vh; align-items: stretch; }
+    .dash-nav {
+      width: 12.5rem; flex-shrink: 0; border-right: 1px solid var(--panel-border);
+      background: var(--panel); padding: var(--space-3) var(--space-2);
+      display: flex; flex-direction: column; gap: 0.25rem;
+    }
+    .dash-nav a {
+      display: block; padding: 0.45rem 0.65rem; border-radius: var(--radius-md);
+      font-size: 0.85rem; font-weight: 600; color: var(--text); text-decoration: none;
+    }
+    .dash-nav a:hover { background: rgba(15, 23, 42, 0.06); }
+    .dash-nav a.is-active { background: var(--accent); color: var(--accent-contrast); }
+    .dash-main {
+      flex: 1; display: flex; flex-direction: column; min-width: 0; min-height: 0;
+      background: linear-gradient(180deg, #f8f8fa 0%, #eef1f5 100%);
+    }
+    .dash-intel {
+      flex-shrink: 0;
+      padding: 0.5rem 0.75rem 0.55rem;
+      border-bottom: 1px solid var(--panel-border);
+      background: linear-gradient(180deg, #f8fafc 0%, #eef2f7 100%);
+    }
+    .dash-intel-title { margin: 0 0 0.25rem; font-size: 0.82rem; font-weight: 800; color: #0f172a; }
+    .dash-intel-sub { margin: 0 0 0.45rem; font-size: 0.65rem; color: var(--muted); line-height: 1.4; max-width: 52rem; }
+    .dash-intel-card {
+      border: 1px solid var(--panel-border);
+      border-radius: 6px;
+      padding: 0.35rem 0.45rem;
+      background: #fff;
+      font-size: 0.68rem;
+    }
+    .dash-intel-card .lbl { font-size: 0.58rem; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted); font-weight: 800; }
+    .dash-intel-card .st { font-weight: 800; font-size: 0.78rem; margin: 0.15rem 0; }
+    .dash-intel-card.st-online .st { color: #15803d; }
+    .dash-intel-card.st-partial .st { color: #a16207; }
+    .dash-intel-card.st-offline .st { color: #b91c1c; }
+    .dash-intel-card.st-valid .st { color: #15803d; }
+    .dash-intel-card.st-limited .st { color: #a16207; }
+    .dash-intel-card.st-invalid .st { color: #b91c1c; }
+    .dash-intel-card .det { font-size: 0.6rem; color: #475569; line-height: 1.35; }
+    .im-section {
+      padding: 0.65rem 0.75rem 0.55rem;
+      border-bottom: 1px solid var(--panel-border);
+      background: #fff;
+      font-size: 0.72rem;
+      line-height: 1.5;
+      color: #334155;
+    }
+    .im-section h2 { margin: 0 0 0.35rem; font-size: 0.85rem; font-weight: 800; color: #0f172a; }
+    .im-section ul { margin: 0.2rem 0 0.35rem 1rem; padding: 0; }
+    .im-section code { font-size: 0.65rem; }
+    .im-foot { padding: 0.5rem 0.75rem; font-size: 0.65rem; color: var(--muted); }
+    .im-foot a { color: var(--accent); font-weight: 600; }
+  </style>
+</head>
+<body>
+  <div class="dash-app">
+    <nav class="dash-nav" aria-label="Primary">
+      <a href="/dashboard.html">Dashboard</a>
+      <a href="/internal.html">Operator Panel</a>
+      <a href="/anna/sequential-learning">Learning Engine</a>
+      <a href="/anna/training">Training Dashboard</a>
+      <a class="is-active" href="/intelligence-method.html">Intelligence METHOD</a>
+    </nav>
+    <div class="dash-main">
+      <div class="im-section">
+        <h2>Intelligence METHOD</h2>
+        <p style="margin:0 0 0.5rem 0;max-width:44rem">
+          Effectiveness, phase, subsystem gaps, and learning proof (below). The five stack indicators (Context, Learning, LLM, Decisioning, Baseline)
+          stay on the <a href="/dashboard.html">Dashboard</a>.
+        </p>
+      </div>
+
+      <div class="im-section">
+        <h2>Learning storage</h2>
+        <ul>
+          <li><strong>Where:</strong> SQLite table <code>anna_lesson_memory</code> in the execution / training ledger database (same host as sequential learning and paper trades).</li>
+          <li><strong>What:</strong> Validated or promoted lessons (not raw chat); retrieval is gated by the runtime (scores, flags, env).</li>
+          <li><strong>Reasoning path:</strong> When enabled, the analyst pipeline merges eligible lessons into FACT lines via <code>build_analysis</code> — that is “memory in reasoning” for operator review (inspect <code>lesson_memory</code> on the analysis payload).</li>
+          <li><strong>Not the same:</strong> The learning proof table below uses <strong>parallel trace</strong> attribution (memory on trace vs baseline). That is a measurement harness; it does not by itself prove the LLM saw the same rows in the analyst merge.</li>
+        </ul>
+      </div>
+
+      <div class="dash-intel" id="dash-im-detail" role="region" aria-labelledby="dash-im-detail-h">
+        <h2 id="dash-im-detail-h" class="dash-intel-title">Effectiveness, phase, and wiring gaps</h2>
+        <p class="dash-intel-sub">Same fields as previously on the main dashboard; driven by <code>intelligence_visibility</code> in the dashboard bundle.</p>
+        <div class="dash-intel-eff" id="dash-intel-eff"></div>
+        <div class="dash-intel-phase" id="dash-intel-phase"></div>
+        <details class="dash-intel-gaps">
+          <summary>Wired vs partial vs missing (honest)</summary>
+          <div class="dash-intel-gaps-body" id="dash-intel-gaps-body"></div>
+        </details>
+      </div>
+
+      <div class="dash-intel" id="dash-lp-wrap" role="region" aria-labelledby="dash-lp-h" style="border-bottom:none">
+        <h2 id="dash-lp-h" class="dash-intel-title">Learning proof — memory → decision → outcome</h2>
+        <p class="dash-intel-sub">Claim: retrieved lessons must be explicit on the trace; compare vs baseline per event. Ablation: set <code>ANNA_LEARNING_PROOF_MEMORY_OFF=1</code> on the API host.</p>
+        <div id="dash-lp-body" class="dash-lp-body" aria-live="polite"></div>
+      </div>
+
+      <div class="im-foot">
+        <a href="/dashboard.html">← Dashboard</a>
+        ·
+        <a href="/anna/training">Training Dashboard</a>
+      </div>
+    </div>
+  </div>
+  <script>
+(function () {
+  var POLL_MS = 1500;
+  function $(id) { return document.getElementById(id); }
+  function esc(s) {
+    var t = document.createElement('textarea');
+    t.textContent = s == null ? '' : String(s);
+    return t.innerHTML;
+  }
+  function fetchBundle() {
+    return fetch('/api/v1/dashboard/bundle?max_events=10', { cache: 'no-store' }).then(function (r) { return r.json(); });
+  }
+  function renderIntelDetail(bundle) {
+    var iv = bundle.intelligence_visibility;
+    var eff = $('dash-intel-eff');
+    var ph = $('dash-intel-phase');
+    var gb = $('dash-intel-gaps-body');
+    if (!eff && !ph && !gb) return;
+    if (!iv || iv.error) {
+      var msg = esc(iv && iv.error ? iv.error : 'bundle missing intelligence_visibility — restart api after deploy');
+      if (eff) eff.innerHTML = '<strong>Effectiveness</strong> — Unavailable: ' + msg;
+      if (ph) ph.innerHTML = '';
+      if (gb) gb.innerHTML = '';
+      return;
+    }
+    var es = iv.effectiveness_summary || {};
+    if (eff) {
+      eff.innerHTML =
+        '<strong>Effectiveness</strong> — ' +
+        esc(es.vs_baseline_plain || '—') +
+        '<br/>Trustworthy comparison: <strong>' +
+        (es.comparison_trustworthy ? 'yes' : 'no') +
+        '</strong> — ' +
+        esc(es.why_trust || '') +
+        '<br/>Evidence strength: <strong>' +
+        esc(es.evidence_strength || '—') +
+        '</strong> · Promotion readiness: <strong>' +
+        esc(es.promotion_readiness || '—') +
+        '</strong>';
+    }
+    var ps = iv.phase_story || {};
+    if (ph) {
+      ph.innerHTML =
+        '<strong>Phase</strong> — Designated strategy: <strong>' +
+        esc(ps.designated_strategy_id || 'none') +
+        '</strong><br/>' +
+        esc(ps.sandbox_eval || '') +
+        '<br/>' +
+        esc(ps.economic_proof || '') +
+        '<br/>' +
+        esc(ps.active_strategy || '') +
+        '<br/>' +
+        esc(ps.promotion_readiness || '');
+    }
+    var g = iv.subsystem_gaps || {};
+    if (gb) {
+      function ul(arr) {
+        if (!arr || !arr.length) return '<li>—</li>';
+        return arr.map(function (s) {
+          return '<li>' + esc(s) + '</li>';
+        }).join('');
+      }
+      gb.innerHTML =
+        '<p><strong>Implemented</strong></p><ul>' +
+        ul(g.implemented) +
+        '</ul><p><strong>Partial</strong></p><ul>' +
+        ul(g.partial) +
+        '</ul><p><strong>Missing</strong></p><ul>' +
+        ul(g.missing) +
+        '</ul>';
+    }
+  }
+  function renderLearningProof(bundle) {
+    var el = $('dash-lp-body');
+    if (!el) return;
+    var lp = bundle.learning_proof;
+    if (!lp || lp.error) {
+      el.innerHTML =
+        '<div class="dash-intel-card st-offline"><div class="lbl">learning_proof</div><div class="st">Unavailable</div><div class="det">' +
+        esc(lp && lp.error ? lp.error : 'bundle missing learning_proof') +
+        '</div></div>';
+      return;
+    }
+    var agg = lp.aggregate || {};
+    var st = agg.learning_proof_status || 'insufficient_data';
+    var cls =
+      st === 'improving' ? 'st-valid' : st === 'degrading' ? 'st-invalid' : st === 'neutral' ? 'st-limited' : 'st-partial';
+    var rows = lp.per_event || [];
+    var tail = rows.slice(-16);
+    var h =
+      '<div class="dash-intel-card ' +
+      cls +
+      '"><div class="lbl">Proof status</div><div class="st">' +
+      esc(st) +
+      '</div><div class="det">Memory-used events: ' +
+      (agg.memory_used_events || 0) +
+      ' · no-memory: ' +
+      (agg.memory_unused_events || 0) +
+      '</div><div class="det">WIN rate (memory): ' +
+      (agg.win_rate_memory_used != null ? (agg.win_rate_memory_used * 100).toFixed(1) + '%' : '—') +
+      ' · (no memory): ' +
+      (agg.win_rate_memory_unused != null ? (agg.win_rate_memory_unused * 100).toFixed(1) + '%' : '—') +
+      '</div><div class="det">Δ WIN rate (memory − no): ' +
+      (agg.win_rate_delta_memory_minus_nomemory != null ? agg.win_rate_delta_memory_minus_nomemory.toFixed(4) : '—') +
+      '</div></div>';
+    h +=
+      '<table style="font-size:0.68rem;width:100%;margin-top:0.45rem;border-collapse:collapse"><thead><tr><th align="left">Event (tail)</th><th>Memory</th><th>vs baseline</th><th>PnL</th></tr></thead><tbody>';
+    tail.forEach(function (r) {
+      h +=
+        '<tr><td style="font-family:ui-monospace,monospace;font-size:0.58rem">' +
+        esc(String(r.market_event_id || '').slice(-28)) +
+        '</td><td>' +
+        (r.memory_used ? 'yes' : 'no') +
+        '</td><td>' +
+        esc(r.vs_baseline || '—') +
+        '</td><td>' +
+        esc(r.pnl_usd != null && r.pnl_usd !== '' ? String(r.pnl_usd) : '—') +
+        '</td></tr>';
+    });
+    h += '</tbody></table>';
+    el.innerHTML = h;
+  }
+  function render(bundle) {
+    renderIntelDetail(bundle);
+    renderLearningProof(bundle);
+  }
+  function refresh() {
+    fetchBundle().then(render).catch(function (e) {
+      var msg = esc(String(e));
+      var eff = $('dash-intel-eff');
+      if (eff) eff.innerHTML = '<strong>Effectiveness</strong> — Fetch error: ' + msg;
+      var el = $('dash-lp-body');
+      if (el) el.innerHTML = '<div class="dash-intel-card st-offline"><div class="lbl">bundle</div><div class="st">Fetch error</div><div class="det">' + msg + '</div></div>';
+    });
+  }
+  refresh();
+  setInterval(refresh, POLL_MS);
+})();
+  </script>
+</body>
+</html>
