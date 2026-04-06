@@ -33,13 +33,37 @@
     .dash-r1 .sep { color: var(--muted); font-weight: 400; }
     .dash-r1 .lbl { color: var(--muted); font-weight: 600; font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.04em; }
     .dash-r1 .val { font-family: ui-monospace, monospace; font-weight: 700; }
-    /* Anna intelligence strip */
-    .dash-intel {
+    /* Anna intelligence — collapsible (default closed) */
+    .dash-intel-details {
       flex-shrink: 0;
-      padding: 0.5rem 0.75rem 0.55rem;
       border-bottom: 1px solid var(--panel-border);
       background: linear-gradient(180deg, #f8fafc 0%, #eef2f7 100%);
     }
+    .dash-intel-summary {
+      list-style: none;
+      padding: 0.45rem 0.75rem;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 0.35rem 0.5rem;
+    }
+    .dash-intel-summary::-webkit-details-marker { display: none; }
+    .dash-intel-chevron {
+      display: inline-block;
+      font-size: 0.65rem;
+      color: #64748b;
+      transition: transform 0.15s ease;
+      line-height: 1;
+    }
+    .dash-intel-details[open] .dash-intel-chevron { transform: rotate(90deg); }
+    .dash-intel-summary-title { font-size: 0.82rem; font-weight: 800; color: #0f172a; margin: 0; }
+    .dash-intel-summary-hint {
+      font-size: 0.6rem;
+      color: var(--muted);
+      font-weight: 600;
+    }
+    .dash-intel-inner { padding: 0 0.75rem 0.55rem; }
     .dash-intel-title { margin: 0 0 0.25rem; font-size: 0.82rem; font-weight: 800; color: #0f172a; }
     .dash-intel-sub { margin: 0 0 0.45rem; font-size: 0.65rem; color: var(--muted); line-height: 1.4; max-width: 52rem; }
     .dash-intel-strip {
@@ -103,6 +127,64 @@
       100% { box-shadow: none; }
     }
     .dash-jp.panel-polled { animation: dashPanelPollFlash 0.5s ease-out; }
+    /* Signal readiness heat (operator: how close to a paper baseline trade on this bar) */
+    .dash-jp.jp-heat-fire { box-shadow: inset 4px 0 0 0 #ea580c; }
+    .dash-jp.jp-heat-warm { box-shadow: inset 4px 0 0 0 #f59e0b; }
+    .dash-jp.jp-heat-cool { box-shadow: inset 4px 0 0 0 #38bdf8; }
+    .dash-jp.jp-heat-cold { box-shadow: inset 4px 0 0 0 #94a3b8; }
+    .dash-jp.jp-heat-error { box-shadow: inset 4px 0 0 0 #dc2626; }
+    .dash-jp.jp-heat-idle { box-shadow: inset 4px 0 0 0 #cbd5e1; }
+    .dash-jp-heat-row {
+      margin: 0 0 0.45rem;
+      display: flex;
+      flex-wrap: wrap;
+      align-items: flex-start;
+      gap: 0.5rem 0.75rem;
+    }
+    .dash-jp-heat-strip {
+      display: flex;
+      gap: 4px;
+      flex: 0 0 auto;
+    }
+    .dash-jp-heat-seg {
+      width: 1.65rem;
+      height: 0.42rem;
+      border-radius: 3px;
+      background: #e2e8f0;
+      transition: background 0.2s ease, box-shadow 0.2s ease;
+    }
+    .dash-jp-heat-seg.on {
+      background: linear-gradient(90deg, #f59e0b, #ea580c);
+      box-shadow: 0 0 0 1px rgba(234, 88, 12, 0.35);
+    }
+    .dash-jp.jp-heat-cool .dash-jp-heat-seg.on {
+      background: linear-gradient(90deg, #38bdf8, #0ea5e9);
+      box-shadow: 0 0 0 1px rgba(14, 165, 233, 0.35);
+    }
+    .dash-jp.jp-heat-cold .dash-jp-heat-seg.on,
+    .dash-jp.jp-heat-error .dash-jp-heat-seg.on,
+    .dash-jp.jp-heat-idle .dash-jp-heat-seg.on {
+      background: #cbd5e1;
+      box-shadow: none;
+    }
+    .dash-jp.jp-heat-fire .dash-jp-heat-seg.on {
+      background: linear-gradient(90deg, #fb923c, #ea580c);
+    }
+    .dash-jp-heat-copy { flex: 1 1 12rem; min-width: 0; }
+    .dash-jp-heat-label {
+      display: block;
+      font-size: 0.72rem;
+      font-weight: 800;
+      color: #0f172a;
+      line-height: 1.3;
+    }
+    .dash-jp-heat-detail {
+      display: block;
+      margin-top: 0.12rem;
+      font-size: 0.6rem;
+      color: #475569;
+      line-height: 1.35;
+    }
     .dash-dc.panel-polled { animation: dashPanelPollFlash 0.5s ease-out; }
     .dash-dc {
       margin: 0.5rem 0.75rem 0.65rem;
@@ -440,6 +522,24 @@
           <code>reason_code</code>. Not venue execution. Refreshes each poll (~<span id="dash-jp-poll-ms-label">1500</span>ms).
         </p>
         <p class="dash-jp-tick" id="dash-jp-tick" aria-live="polite">—</p>
+        <div class="dash-jp-heat-row" id="dash-jp-heat-row">
+          <div
+            class="dash-jp-heat-strip"
+            id="dash-jp-heat"
+            role="img"
+            aria-label="Policy signal readiness heat"
+          >
+            <span class="dash-jp-heat-seg" aria-hidden="true"></span>
+            <span class="dash-jp-heat-seg" aria-hidden="true"></span>
+            <span class="dash-jp-heat-seg" aria-hidden="true"></span>
+            <span class="dash-jp-heat-seg" aria-hidden="true"></span>
+            <span class="dash-jp-heat-seg" aria-hidden="true"></span>
+          </div>
+          <div class="dash-jp-heat-copy">
+            <strong class="dash-jp-heat-label" id="dash-jp-heat-label" title="">Signal readiness —</strong>
+            <span class="dash-jp-heat-detail" id="dash-jp-heat-detail"></span>
+          </div>
+        </div>
         <div class="dash-jp-grid" id="dash-jp-grid" aria-live="polite"></div>
         <p class="dash-jp-daemon" id="dash-jp-daemon"></p>
       </div>
@@ -466,15 +566,21 @@
         <p class="dash-jp-daemon" id="dash-dc-foot" style="margin-top:0.35rem"></p>
       </div>
 
-      <!-- Anna intelligence visibility (advisor directive — real signals, no fake Online) -->
-      <div class="dash-intel" id="dash-intel-wrap" role="region" aria-labelledby="dash-intel-h">
-        <h2 id="dash-intel-h" class="dash-intel-title">Anna intelligence — is the stack operating?</h2>
-        <p class="dash-intel-sub">Each status uses backend signals from this bundle (not docs). <strong>Partial</strong> means degraded; <strong>Offline</strong> means not meeting minimum conditions.</p>
-        <div class="dash-intel-strip" id="dash-intel-strip" aria-live="polite"></div>
-        <p class="dash-intel-sub" style="margin-top:0.35rem;margin-bottom:0">
-          <a href="/intelligence-method.html">Intelligence METHOD</a> — effectiveness, phase, subsystem gaps, learning storage, and learning proof.
-        </p>
-      </div>
+      <!-- Anna intelligence visibility (advisor directive — real signals, no fake Online); collapsed by default -->
+      <details class="dash-intel-details" id="dash-intel-wrap" aria-labelledby="dash-intel-h">
+        <summary class="dash-intel-summary">
+          <span class="dash-intel-chevron" aria-hidden="true">▸</span>
+          <h2 id="dash-intel-h" class="dash-intel-summary-title">Anna intelligence</h2>
+          <span class="dash-intel-summary-hint">Stack status — expand to view</span>
+        </summary>
+        <div class="dash-intel-inner">
+          <p class="dash-intel-sub">Each status uses backend signals from this bundle (not docs). <strong>Partial</strong> means degraded; <strong>Offline</strong> means not meeting minimum conditions.</p>
+          <div class="dash-intel-strip" id="dash-intel-strip" aria-live="polite"></div>
+          <p class="dash-intel-sub" style="margin-top:0.35rem;margin-bottom:0">
+            <a href="/intelligence-method.html">Intelligence METHOD</a> — effectiveness, phase, subsystem gaps, learning storage, and learning proof.
+          </p>
+        </div>
+      </details>
 
       <!-- Row 3: wallet + trade mode (capital) -->
       <div class="dash-r3" id="dash-r3">
@@ -1050,6 +1156,37 @@
     }
   }
 
+  function applyJupiterHeat(bundle) {
+    var wrap = $('dash-jp-wrap');
+    var strip = $('dash-jp-heat');
+    var lab = $('dash-jp-heat-label');
+    var det = $('dash-jp-heat-detail');
+    var jp = bundle && bundle.jupiter_policy_snapshot;
+    var sr = jp && jp.signal_readiness;
+    var levels = ['fire', 'warm', 'cool', 'cold', 'error', 'idle'];
+    if (wrap) {
+      levels.forEach(function (k) {
+        wrap.classList.remove('jp-heat-' + k);
+      });
+      if (sr && sr.level) wrap.classList.add('jp-heat-' + String(sr.level).toLowerCase());
+    }
+    var heat = sr && sr.heat != null ? parseInt(sr.heat, 10) : 0;
+    if (isNaN(heat)) heat = 0;
+    if (strip) {
+      var segs = strip.querySelectorAll('.dash-jp-heat-seg');
+      for (var i = 0; i < segs.length; i++) {
+        segs[i].classList.toggle('on', i < heat);
+      }
+    }
+    if (lab) {
+      lab.textContent = sr && sr.label ? String(sr.label) : '—';
+      lab.title = sr && sr.detail ? String(sr.detail) : '';
+    }
+    if (det) {
+      det.textContent = sr && sr.detail ? String(sr.detail) : '';
+    }
+  }
+
   function renderJupiterPolicy(bundle) {
     var grid = $('dash-jp-grid');
     var daemonEl = $('dash-jp-daemon');
@@ -1061,6 +1198,7 @@
         'missing jupiter_policy_snapshot — restart API after deploy' +
         '</span></div>';
       if (daemonEl) daemonEl.textContent = '';
+      applyJupiterHeat({});
       applyPollTickerAndFlash(bundle, 'dash-jp-tick', 'dash-jp-wrap');
       return;
     }
@@ -1134,6 +1272,7 @@
         '<em>No <code>baseline_ledger_last</code> in training state yet</em> — bridge runs when the Karpathy loop daemon ticks.';
     }
     if (daemonEl) daemonEl.innerHTML = dtxt;
+    applyJupiterHeat(bundle);
     applyPollTickerAndFlash(bundle, 'dash-jp-tick', 'dash-jp-wrap');
   }
 
