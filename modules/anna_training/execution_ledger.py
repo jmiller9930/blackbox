@@ -229,6 +229,18 @@ def connect_ledger(db_path: Path | None = None) -> sqlite3.Connection:
     return sqlite3.connect(p)
 
 
+def _migrate_policy_evaluation_schema(conn: sqlite3.Connection, root: Path) -> None:
+    pe = root / "data" / "sqlite" / "schema_policy_evaluation.sql"
+    if pe.is_file():
+        conn.executescript(pe.read_text(encoding="utf-8"))
+
+
+def _migrate_position_events_schema(conn: sqlite3.Connection, root: Path) -> None:
+    pe = root / "data" / "sqlite" / "schema_position_events.sql"
+    if pe.is_file():
+        conn.executescript(pe.read_text(encoding="utf-8"))
+
+
 def ensure_execution_ledger_schema(conn: sqlite3.Connection, root: Path | None = None) -> None:
     root = root or _repo_root()
     sql = root / "data" / "sqlite" / "schema_execution_ledger.sql"
@@ -241,7 +253,243 @@ def ensure_execution_ledger_schema(conn: sqlite3.Connection, root: Path | None =
     _migrate_decision_traces_table(conn, root)
     _migrate_qel_schema(conn, root)
     _migrate_sequential_learning_schema(conn, root)
+    _migrate_policy_evaluation_schema(conn, root)
+    _migrate_position_events_schema(conn, root)
     conn.commit()
+
+
+POLICY_EVALUATION_SCHEMA_VERSION = "policy_evaluation_v1"
+POSITION_EVENT_SCHEMA_VERSION = "position_event_v1"
+
+
+def insert_baseline_paper_lifecycle_events(
+    conn: sqlite3.Connection,
+    *,
+    trade_id: str,
+    market_event_id: str,
+    bar: dict[str, Any],
+    side: str,
+    pnl_usd: float,
+    mode: str,
+) -> None:
+    """
+    Record open + close for baseline **paper** same-bar trades (bucket 2).
+
+    Virtual TP/SL/trailing are ``null`` here until an execution engine appends
+    ``trail_update`` / ``tp_hit`` / ``sl_hit`` rows.
+    """
+    o = bar.get("open")
+    c = bar.get("close")
+    if o is None or c is None:
+        raise ValueError("bar_missing_ohlc")
+    sd = (side or "long").strip().lower()
+    if sd not in ("long", "short"):
+        sd = "long"
+    sym = str(bar.get("canonical_symbol") or "SOL-PERP")
+    ts = utc_now_iso()
+    open_payload: dict[str, Any] = {
+        "phase": "position_open",
+        "entry_price": float(o),
+        "same_bar_close_preview": float(c),
+        "side": sd,
+        "symbol": sym,
+        "mode": str(mode or "paper"),
+        "virtual_tp": None,
+        "virtual_sl": None,
+        "note": (
+            "Paper baseline: 1-unit open→close on this bar. "
+            "TP/SL/trail rows appear when the execution layer records them."
+        ),
+    }
+    close_payload: dict[str, Any] = {
+        "phase": "position_close",
+        "exit_price": float(c),
+        "pnl_usd_1unit": float(pnl_usd),
+        "exit_reason": "BAR_CLOSE",
+        "note": "Same-candle exit as baseline ledger (economic_basis=jupiter_policy or mechanical long).",
+    }
+    rows_spec = (
+        (0, "position_open", open_payload),
+        (1, "position_close", close_payload),
+    )
+    for seq, etype, payload in rows_spec:
+        eid = str(uuid.uuid4())
+        conn.execute(
+            """
+            INSERT OR IGNORE INTO position_events (
+              event_id, trade_id, market_event_id, lane, sequence_num, event_type, payload_json, created_at_utc, schema_version
+            ) VALUES (?, ?, ?, 'baseline', ?, ?, ?, ?, ?)
+            """,
+            (
+                eid,
+                str(trade_id).strip(),
+                str(market_event_id).strip(),
+                int(seq),
+                str(etype),
+                json.dumps(payload, default=str, sort_keys=True),
+                ts,
+                POSITION_EVENT_SCHEMA_VERSION,
+            ),
+        )
+
+
+def fetch_recent_policy_evaluations(
+    conn: sqlite3.Connection,
+    *,
+    limit: int = 24,
+) -> list[dict[str, Any]]:
+    cur = conn.execute(
+        """
+        SELECT market_event_id, lane, strategy_id, signal_mode, tick_mode, trade, side, reason_code,
+               features_json, pnl_usd, evaluated_at_utc
+        FROM policy_evaluations
+        ORDER BY evaluated_at_utc DESC
+        LIMIT ?
+        """,
+        (max(1, int(limit)),),
+    )
+    out: list[dict[str, Any]] = []
+    for r in cur.fetchall():
+        feat: Any = {}
+        try:
+            feat = json.loads(r[8]) if r[8] else {}
+        except json.JSONDecodeError:
+            feat = {"raw": r[8]}
+        out.append(
+            {
+                "market_event_id": r[0],
+                "lane": r[1],
+                "strategy_id": r[2],
+                "signal_mode": r[3],
+                "tick_mode": r[4],
+                "trade": bool(r[5]),
+                "side": r[6],
+                "reason_code": r[7],
+                "features": feat,
+                "pnl_usd": r[9],
+                "evaluated_at_utc": r[10],
+            }
+        )
+    return out
+
+
+def fetch_recent_position_events(
+    conn: sqlite3.Connection,
+    *,
+    limit: int = 48,
+) -> list[dict[str, Any]]:
+    cur = conn.execute(
+        """
+        SELECT event_id, trade_id, market_event_id, lane, sequence_num, event_type, payload_json, created_at_utc
+        FROM position_events
+        ORDER BY created_at_utc DESC, trade_id, sequence_num DESC
+        LIMIT ?
+        """,
+        (max(1, int(limit)),),
+    )
+    out: list[dict[str, Any]] = []
+    for r in cur.fetchall():
+        try:
+            pl = json.loads(r[6]) if r[6] else {}
+        except json.JSONDecodeError:
+            pl = {"raw": r[6]}
+        out.append(
+            {
+                "event_id": r[0],
+                "trade_id": r[1],
+                "market_event_id": r[2],
+                "lane": r[3],
+                "sequence_num": r[4],
+                "event_type": r[5],
+                "payload": pl,
+                "created_at_utc": r[7],
+            }
+        )
+    return out
+
+
+def upsert_policy_evaluation(
+    *,
+    market_event_id: str,
+    signal_mode: str,
+    tick_mode: str,
+    trade: bool,
+    reason_code: str,
+    features: dict[str, Any],
+    lane: str = RESERVED_STRATEGY_BASELINE,
+    strategy_id: str = RESERVED_STRATEGY_BASELINE,
+    side: str | None = None,
+    pnl_usd: float | None = None,
+    evaluated_at_utc: str | None = None,
+    db_path: Path | None = None,
+    conn: sqlite3.Connection | None = None,
+) -> None:
+    """
+    One row per (market_event_id, lane, strategy_id, signal_mode): policy outcome for backtest joins.
+
+    Call after ``evaluate_sean_jupiter_baseline_v1`` (or equivalent) on every baseline tick,
+    including ``trade=false`` outcomes.
+    """
+    mid = (market_event_id or "").strip()
+    if not mid:
+        raise ValueError("market_event_id required")
+    _validate_lane_strategy(lane, strategy_id)
+    tm = (tick_mode or "paper").strip().lower()
+    if tm not in ("live", "paper"):
+        raise ValueError("tick_mode must be live or paper")
+    sm = (signal_mode or "").strip()
+    if not sm:
+        raise ValueError("signal_mode required")
+    ts = evaluated_at_utc or utc_now_iso()
+    sd = None
+    if side is not None and str(side).strip():
+        sd = str(side).strip().lower()
+        if sd not in ("long", "short", "flat"):
+            raise ValueError("side must be long, short, flat, or empty")
+
+    payload = json.dumps(features, default=str, sort_keys=True)
+    close_conn = False
+    if conn is None:
+        conn = connect_ledger(db_path)
+        close_conn = True
+    try:
+        ensure_execution_ledger_schema(conn)
+        conn.execute(
+            """
+            INSERT INTO policy_evaluations (
+              market_event_id, lane, strategy_id, signal_mode, tick_mode,
+              trade, side, reason_code, features_json, pnl_usd,
+              evaluated_at_utc, schema_version
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(market_event_id, lane, strategy_id, signal_mode) DO UPDATE SET
+              tick_mode = excluded.tick_mode,
+              trade = excluded.trade,
+              side = excluded.side,
+              reason_code = excluded.reason_code,
+              features_json = excluded.features_json,
+              pnl_usd = excluded.pnl_usd,
+              evaluated_at_utc = excluded.evaluated_at_utc,
+              schema_version = excluded.schema_version
+            """,
+            (
+                mid,
+                lane,
+                strategy_id,
+                sm,
+                tm,
+                1 if trade else 0,
+                sd,
+                str(reason_code or ""),
+                payload,
+                (float(pnl_usd) if pnl_usd is not None else 0.0) if trade else None,
+                ts,
+                POLICY_EVALUATION_SCHEMA_VERSION,
+            ),
+        )
+        conn.commit()
+    finally:
+        if close_conn:
+            conn.close()
 
 
 def _validate_lane_strategy(lane: str, strategy_id: str) -> None:

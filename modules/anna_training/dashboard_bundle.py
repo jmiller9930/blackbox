@@ -161,6 +161,8 @@ from modules.anna_training.execution_ledger import (
     connect_ledger,
     default_execution_ledger_path,
     ensure_execution_ledger_schema,
+    fetch_recent_policy_evaluations,
+    fetch_recent_position_events,
 )
 from modules.anna_training.quantitative_evaluation_layer.constants import (
     LIFECYCLE_ARCHIVED,
@@ -979,6 +981,41 @@ def _system_mode_label(
     }
 
 
+def build_data_collection_payload(
+    *,
+    db_path: Path | None = None,
+    limit_policy: int = 24,
+    limit_events: int = 48,
+) -> dict[str, Any]:
+    """
+    Bucket 1: ``policy_evaluations`` (per-bar policy outcome).
+    Bucket 2: ``position_events`` (trade lifecycle; baseline paper = open + close on same bar).
+    """
+    p = db_path or default_execution_ledger_path()
+    out: dict[str, Any] = {
+        "schema": "blackbox_data_collection_v1",
+        "what_this_is": (
+            "policy_evaluations = every baseline tick signal snapshot; "
+            "position_events = open/close/trail/tp/sl (baseline paper records open+close; "
+            "execution layer can append trail_update later)."
+        ),
+        "ledger_db_path": str(p),
+        "policy_evaluations": [],
+        "position_events": [],
+    }
+    try:
+        conn = connect_ledger(p)
+        try:
+            ensure_execution_ledger_schema(conn)
+            out["policy_evaluations"] = fetch_recent_policy_evaluations(conn, limit=limit_policy)
+            out["position_events"] = fetch_recent_position_events(conn, limit=limit_events)
+        finally:
+            conn.close()
+    except Exception as e:
+        out["error"] = str(e)[:400]
+    return out
+
+
 def build_dashboard_bundle(
     *,
     db_path: Path | None = None,
@@ -1196,6 +1233,12 @@ def build_dashboard_bundle(
             "error": str(e)[:400],
         }
 
+    data_collection: dict[str, Any] = {}
+    try:
+        data_collection = build_data_collection_payload(db_path=db_path)
+    except Exception as e:
+        data_collection = {"schema": "blackbox_data_collection_v1", "error": str(e)[:400]}
+
     return {
         "schema": "blackbox_dashboard_bundle_v1",
         "trace_id": tid,
@@ -1255,4 +1298,5 @@ def build_dashboard_bundle(
         "intelligence_visibility": intelligence_visibility,
         "learning_proof": learning_proof,
         "jupiter_policy_snapshot": jupiter_policy_snapshot,
+        "data_collection": data_collection,
     }

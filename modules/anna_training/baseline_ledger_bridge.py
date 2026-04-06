@@ -1,7 +1,12 @@
 """Baseline → execution_ledger: **Sean’s Jupiter policy** (signal-gated) or legacy mechanical row.
 
 Default **signal mode** = ``sean_jupiter_v1`` — **parity** with ``trading_core`` ``aggregateCandles`` + ``rsi``
-(see ``sean_jupiter_baseline_signal.py``). **No row** if no signal.
+(see ``sean_jupiter_baseline_signal.py``).
+
+**Execution trades:** still **at most one** baseline ``execution_trades`` row per ``market_event_id`` when the policy fires.
+
+**Policy evaluations:** every evaluated tick writes/upserts ``policy_evaluations`` (including ``trade=false``),
+for backtest joins to ``market_bars_5m``. Disable with ``BASELINE_POLICY_EVALUATION_LOG=0``.
 
 Legacy: ``BASELINE_LEDGER_SIGNAL_MODE=legacy_mechanical_long`` — old open→close long every bar (lab only).
 """
@@ -21,6 +26,10 @@ def _env_bool(name: str, default: bool) -> bool:
     if not raw:
         return default
     return raw not in ("0", "false", "no", "off")
+
+
+def _policy_evaluation_log_enabled() -> bool:
+    return _env_bool("BASELINE_POLICY_EVALUATION_LOG", True)
 
 
 def _runtime_scripts() -> Path:
@@ -80,6 +89,7 @@ def run_baseline_ledger_bridge_tick(
       BASELINE_LEDGER_BRIDGE — default **on**; ``0`` disables all baseline writes.
       BASELINE_LEDGER_SIGNAL_MODE — ``sean_jupiter_v1`` (default) | ``legacy_mechanical_long``.
       BASELINE_LEDGER_MODE — ``paper`` (default) or ``live``.
+      BASELINE_POLICY_EVALUATION_LOG — default **on**; ``0`` skips ``policy_evaluations`` upserts only.
     """
     if not _env_bool("BASELINE_LEDGER_BRIDGE", True):
         return {"enabled": False, "reason": "BASELINE_LEDGER_BRIDGE off"}
@@ -117,6 +127,21 @@ def run_baseline_ledger_bridge_tick(
     from modules.anna_training.sean_jupiter_baseline_signal import evaluate_sean_jupiter_baseline_v1
 
     sig = evaluate_sean_jupiter_baseline_v1(bars_asc=bars_asc)
+    if _policy_evaluation_log_enabled():
+        from modules.anna_training.execution_ledger import upsert_policy_evaluation
+
+        feat = dict(sig.features) if sig.features else {}
+        upsert_policy_evaluation(
+            market_event_id=mid,
+            signal_mode=sm,
+            tick_mode=m,
+            trade=bool(sig.trade),
+            reason_code=str(sig.reason_code or ""),
+            features=feat,
+            side=str(sig.side) if sig.trade else "flat",
+            pnl_usd=(float(sig.pnl_usd) if sig.pnl_usd is not None else 0.0) if sig.trade else None,
+            db_path=execution_ledger_db_path,
+        )
     if not sig.trade:
         return {
             "ok": True,
@@ -193,13 +218,32 @@ def _run_legacy_mechanical_long(
     execution_ledger_db_path: Path | None,
 ) -> dict[str, Any]:
     from .decision_trace import persist_baseline_trade_with_trace
-    from .execution_ledger import compute_pnl_usd
+    from .execution_ledger import compute_pnl_usd, upsert_policy_evaluation
 
     o = bar.get("open")
     c = bar.get("close")
     size = 1.0
     tid = _baseline_trade_id(mid, mode)
     pnl = compute_pnl_usd(entry_price=float(o), exit_price=float(c), size=size, side="long")
+
+    tm = mode if mode in ("live", "paper") else "paper"
+    if _policy_evaluation_log_enabled():
+        upsert_policy_evaluation(
+            market_event_id=mid,
+            signal_mode="legacy_mechanical_long",
+            tick_mode=tm,
+            trade=True,
+            reason_code="legacy_mechanical_long",
+            features={
+                "source": "baseline_ledger_bridge_v1",
+                "economic_basis": "canonical_bar_open_to_close_long_1unit",
+                "price_source": bar.get("price_source"),
+                "tick_count": bar.get("tick_count"),
+            },
+            side="long",
+            pnl_usd=pnl,
+            db_path=execution_ledger_db_path,
+        )
 
     try:
         out = persist_baseline_trade_with_trace(

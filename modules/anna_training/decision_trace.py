@@ -759,6 +759,17 @@ def persist_baseline_trade_with_trace(
             db_path=db_path,
             conn=conn,
         )
+        from modules.anna_training.execution_ledger import insert_baseline_paper_lifecycle_events
+
+        insert_baseline_paper_lifecycle_events(
+            conn,
+            trade_id=trade_id,
+            market_event_id=market_event_id,
+            bar=bar,
+            side=sd,
+            pnl_usd=float(pnl),
+            mode=mode,
+        )
         conn.commit()
     except Exception:
         conn.rollback()
