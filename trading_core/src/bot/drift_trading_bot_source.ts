@@ -55,8 +55,9 @@ const EMERGENCY_SL_PCT = 0.006;
 const INITIAL_COLLATERAL = 20;
 const LOOKBACK = 10;
 const RSI_PERIOD = 14;
-const RSI_SHORT_THRESHOLD = 60;
-const RSI_LONG_THRESHOLD = 40;
+/** Sean Jupiter policy v2 (Apr 2026) — align Python baseline ``sean_jupiter_baseline_signal``; deprecated Drift snapshot used 60/40. */
+const RSI_SHORT_THRESHOLD = 48;
+const RSI_LONG_THRESHOLD = 52;
 const CONFIDENCE_THRESHOLD = 0.001;
 const SLIPPAGE_PCT = 0.001;
 const ENTRY_TIMEOUT_MS = 15000;

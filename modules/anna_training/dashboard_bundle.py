@@ -275,7 +275,7 @@ def build_jupiter_policy_snapshot(
     out["min_bars_required"] = MIN_BARS
     if len(bars) < MIN_BARS:
         out["error"] = "insufficient_history"
-        out["hint"] = f"Need at least {MIN_BARS} closed bars for RSI policy."
+        out["hint"] = f"Need at least {MIN_BARS} closed bars (Sean v2: EMA200 + Supertrend + RSI)."
         return out
 
     last = bars[-1]

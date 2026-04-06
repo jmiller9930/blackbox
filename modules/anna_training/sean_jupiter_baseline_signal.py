@@ -1,9 +1,16 @@
-"""Baseline signal — **Jupiter trade policy** (Sean’s rules): parity with ``trading_core`` signal math.
+"""Baseline signal — **Jupiter trade policy** (Sean’s rules, v2).
 
-Entry rules mirror the SOL bot’s ``aggregateCandles`` + ``rsi`` logic (RSI swing + structure, same
-constants). This module is **Jupiter trade policy** measurement only.
+Combines:
 
-Catalog id ``jupiter_supertrend_ema_rsi_atr_v1``. Short precedence when both flags would fire.
+- **aggregateCandles-style** structure + RSI swing (same boolean shape as the live bot’s
+  ``aggregateCandles`` block: high/low deltas + RSI delta vs ``RSI_EPSILON``).
+- **Sean Jupiter constants** (RSI 52/48, ATR 14, Supertrend ×3, EMA 200, min-notional hint).
+- **Supertrend** (Wilder ATR, final upper/lower bands — TradingView-style step).
+- **EMA200** filter: long only if ``close > EMA200``; short only if ``close < EMA200``.
+
+Short precedence when both raw arms would fire. Catalog id ``jupiter_supertrend_ema_rsi_atr_v1``.
+
+This is **paper measurement** only (no venue submit).
 """
 
 from __future__ import annotations
@@ -12,16 +19,24 @@ import math
 from dataclasses import dataclass
 from typing import Any
 
-# --- Parity: trading_core SOL bot constants (aggregateCandles / rsi) ---
+import pandas as pd
+
+# --- Sean Jupiter Perps policy (v2) — align with operator Jupiter bot constants ---
 RSI_PERIOD = 14
-RSI_SHORT_THRESHOLD = 60
-RSI_LONG_THRESHOLD = 40
+RSI_SHORT_THRESHOLD = 48
+RSI_LONG_THRESHOLD = 52
 PRICE_EPSILON = 0.001
 RSI_EPSILON = 0.05
-# Minimum candles: ``aggregateCandles`` requires ``df5min.length >= RSI_PERIOD + 2``
-MIN_BARS = RSI_PERIOD + 2
 
-REFERENCE_SOURCE = "trading_core:jupiter_policy:aggregateCandles+rsi"
+ATR_PERIOD = 14
+SUPERTREND_MULTIPLIER = 3.0
+EMA_PERIOD = 200
+MIN_NOTIONAL_USD = 10
+
+# Need full EMA200 + RSI at last index; 200 bars covers EMA200 at the last close.
+MIN_BARS = EMA_PERIOD
+
+REFERENCE_SOURCE = "jupiter_sean_policy:v2:aggregateCandles+rsi+supertrend+ema200"
 
 
 @dataclass(frozen=True)
@@ -80,6 +95,82 @@ def rsi_trading_core(series: list[float], period: int = RSI_PERIOD) -> list[floa
     return rsi_values
 
 
+def wilder_atr(
+    highs: list[float],
+    lows: list[float],
+    closes: list[float],
+    period: int = ATR_PERIOD,
+) -> list[float]:
+    """Wilder ATR; value at index ``period`` is first defined (NaN before)."""
+    n = len(closes)
+    atr = [float("nan")] * n
+    if n < period + 1:
+        return atr
+    tr = [0.0] * n
+    tr[0] = highs[0] - lows[0]
+    for i in range(1, n):
+        tr[i] = max(
+            highs[i] - lows[i],
+            abs(highs[i] - closes[i - 1]),
+            abs(lows[i] - closes[i - 1]),
+        )
+    atr[period] = sum(tr[1 : period + 1]) / period
+    for i in range(period + 1, n):
+        atr[i] = (atr[i - 1] * (period - 1) + tr[i]) / period
+    return atr
+
+
+def supertrend_direction_series(
+    highs: list[float],
+    lows: list[float],
+    closes: list[float],
+    *,
+    atr_period: int = ATR_PERIOD,
+    multiplier: float = SUPERTREND_MULTIPLIER,
+) -> list[int]:
+    """
+    TradingView-style Supertrend **direction**: ``1`` bullish, ``-1`` bearish, ``0`` unknown.
+
+    Uses hl2 ± multiplier * ATR for basic bands; final bands follow Pine-style hold rules.
+    """
+    n = len(closes)
+    out = [0] * n
+    if n < atr_period + 2:
+        return out
+    atr = wilder_atr(highs, lows, closes, atr_period)
+    src = [(highs[i] + lows[i]) / 2 for i in range(n)]
+    upper: list[float | None] = [None] * n
+    lower: list[float | None] = [None] * n
+    for i in range(n):
+        if math.isnan(atr[i]):
+            continue
+        ub = src[i] + multiplier * atr[i]
+        lb = src[i] - multiplier * atr[i]
+        if i == 0 or upper[i - 1] is None:
+            upper[i] = ub
+            lower[i] = lb
+            continue
+        pu = float(upper[i - 1])
+        pl = float(lower[i - 1])
+        pc = closes[i - 1]
+        lower[i] = lb if (lb > pl or pc < pl) else pl
+        upper[i] = ub if (ub < pu or pc > pu) else pu
+
+    for i in range(1, n):
+        if upper[i - 1] is None or lower[i - 1] is None or upper[i] is None or lower[i] is None:
+            continue
+        pu = float(upper[i - 1])
+        pl = float(lower[i - 1])
+        c = closes[i]
+        if c > pu:
+            out[i] = 1
+        elif c < pl:
+            out[i] = -1
+        else:
+            out[i] = out[i - 1]
+    return out
+
+
 def aggregate_candles_signal_flags(
     *,
     prev_candle: dict[str, float],
@@ -88,9 +179,9 @@ def aggregate_candles_signal_flags(
     current_rsi_raw: float,
 ) -> tuple[bool, bool]:
     """
-    Exact boolean logic from ``aggregateCandles`` (lines 797–798).
+    Same boolean **shape** as ``aggregateCandles`` (high/low structure + RSI swing + thresholds).
 
-    ``prev_candle`` / ``curr_candle`` use keys: high, low (floats).
+    Thresholds are **Sean's Jupiter v2** (52 / 48), not the deprecated Drift snapshot (40 / 60).
     """
     ph = prev_candle["high"]
     pl = prev_candle["low"]
@@ -117,8 +208,7 @@ def evaluate_sean_jupiter_baseline_v1(
     """
     Evaluate **latest** bar (``bars_asc[-1]``) as ``currCandle`` and ``bars_asc[-2]`` as ``prevCandle``.
 
-    Same indexing as ``trading_core``: ``i = len - 1``, RSI at ``i`` and ``i-1`` over **all** closes in
-    ``bars_asc``.
+    RSI indexing matches ``trading_core``: ``i = len - 1``, RSI at ``i`` and ``i-1`` over **all** closes.
     """
     if len(bars_asc) < MIN_BARS:
         return SeanJupiterBaselineSignalV1(
@@ -146,6 +236,8 @@ def evaluate_sean_jupiter_baseline_v1(
         }
         o = float(cur["open"])
         c = float(cur["close"])
+        highs = [float(b["high"]) for b in bars_asc]
+        lows = [float(b["low"]) for b in bars_asc]
         closes = [float(b["close"]) for b in bars_asc]
     except (TypeError, ValueError, KeyError):
         return SeanJupiterBaselineSignalV1(
@@ -177,17 +269,33 @@ def evaluate_sean_jupiter_baseline_v1(
         current_rsi_raw=current_rsi_raw,
     )
 
-    feat = {
+    st_dir = supertrend_direction_series(highs, lows, closes)[i]
+    ema200_s = pd.Series(closes, dtype=float).ewm(span=EMA_PERIOD, adjust=False).mean()
+    ema200_last = float(ema200_s.iloc[-1])
+
+    raw_short = short_signal
+    raw_long = long_signal
+    short_ok = raw_short and st_dir == -1 and c < ema200_last
+    long_ok = raw_long and st_dir == 1 and c > ema200_last
+
+    feat: dict[str, Any] = {
         "reference": REFERENCE_SOURCE,
         "catalog_id": "jupiter_supertrend_ema_rsi_atr_v1",
-        "parity": "jupiter_policy_aggregateCandles_rsi",
+        "parity": "jupiter_policy_v2:aggregateCandles_rsi+supertrend+ema200",
+        "policy_version": "sean_jupiter_v2",
         "prev_rsi": round(prev_rsi_raw, 8),
         "current_rsi": round(current_rsi_raw, 8),
-        "short_signal": short_signal,
-        "long_signal": long_signal,
+        "short_signal_raw": raw_short,
+        "long_signal_raw": raw_long,
+        "short_signal": short_ok,
+        "long_signal": long_ok,
+        "supertrend_direction": st_dir,
+        "ema200": round(ema200_last, 8),
+        "close": round(c, 8),
+        "min_notional_hint_usd": MIN_NOTIONAL_USD,
     }
 
-    if not short_signal and not long_signal:
+    if not raw_short and not raw_long:
         return SeanJupiterBaselineSignalV1(
             trade=False,
             side="flat",
@@ -196,8 +304,28 @@ def evaluate_sean_jupiter_baseline_v1(
             features=feat,
         )
 
-    # ``processSignals(shortSignal, longSignal)`` uses short first (line 1016).
-    if short_signal:
+    blockers: list[str] = []
+    if raw_short and not short_ok:
+        if st_dir != -1:
+            blockers.append("supertrend_not_bearish")
+        elif c >= ema200_last:
+            blockers.append("ema200_blocks_short")
+    if raw_long and not long_ok:
+        if st_dir != 1:
+            blockers.append("supertrend_not_bullish")
+        elif c <= ema200_last:
+            blockers.append("ema200_blocks_long")
+
+    if not short_ok and not long_ok:
+        return SeanJupiterBaselineSignalV1(
+            trade=False,
+            side="flat",
+            reason_code="policy_filter_block",
+            pnl_usd=None,
+            features={**feat, "policy_blockers": blockers},
+        )
+
+    if short_ok:
         side = "short"
         pnl = (o - c) * 1.0
         reason = "jupiter_policy_short_signal"
