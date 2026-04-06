@@ -64,6 +64,32 @@
     .dash-intel-card.st-limited .st { color: #a16207; }
     .dash-intel-card.st-invalid .st { color: #b91c1c; }
     .dash-intel-card .det { font-size: 0.6rem; color: #475569; line-height: 1.35; }
+    /* Jupiter policy snapshot — authoritative bar-derived policy (paper baseline) */
+    .dash-jp {
+      flex-shrink: 0;
+      padding: 0.45rem 0.75rem 0.5rem;
+      border-bottom: 1px solid #0d9488;
+      background: linear-gradient(180deg, #ecfdf5 0%, #f0fdfa 100%);
+    }
+    .dash-jp-title { margin: 0 0 0.2rem; font-size: 0.82rem; font-weight: 800; color: #0f172a; }
+    .dash-jp-sub { margin: 0 0 0.4rem; font-size: 0.62rem; color: #0f766e; line-height: 1.35; max-width: 56rem; }
+    .dash-jp-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(9.5rem, 1fr));
+      gap: 0.35rem;
+      font-size: 0.68rem;
+    }
+    .dash-jp-kv {
+      border: 1px solid rgba(13, 148, 136, 0.35);
+      border-radius: 6px;
+      padding: 0.3rem 0.4rem;
+      background: #fff;
+    }
+    .dash-jp-kv .jk { font-size: 0.55rem; text-transform: uppercase; letter-spacing: 0.04em; color: #0f766e; font-weight: 800; }
+    .dash-jp-kv .jv { font-family: ui-monospace, monospace; font-weight: 700; margin-top: 0.12rem; word-break: break-word; }
+    .dash-jp-kv.jp-fire .jv { color: #b45309; }
+    .dash-jp-kv.jp-flat .jv { color: #475569; }
+    .dash-jp-daemon { margin-top: 0.35rem; font-size: 0.62rem; color: #334155; line-height: 1.4; }
     /* Row 2 — command center */
     .dash-r2 {
       flex-shrink: 0; padding: 0.5rem 0.75rem; border-bottom: 1px solid var(--panel-border);
@@ -372,9 +398,20 @@
         <span class="sep">|</span>
         <span><span class="lbl">Balance</span> <span class="val" id="b-bal">—</span></span>
         <span class="sep">|</span>
-        <span><span class="lbl">Last decision</span> <span class="val" id="b-dec">—</span></span>
+        <span title="Sequential learning engine — not Jupiter policy"><span class="lbl">Seq. learning</span> <span class="val" id="b-dec">—</span></span>
         <span class="sep">|</span>
         <span><span class="lbl">Last event</span> <span class="val" id="b-ev">—</span></span>
+      </div>
+
+      <!-- Jupiter policy — bar-derived paper baseline (same evaluator as ledger bridge) -->
+      <div class="dash-jp" id="dash-jp-wrap" role="region" aria-labelledby="dash-jp-h">
+        <h2 id="dash-jp-h" class="dash-jp-title">Jupiter policy (paper baseline)</h2>
+        <p class="dash-jp-sub" id="dash-jp-lead">
+          Latest closed bar: whether a <strong>paper</strong> baseline trade would fire, feature alignment (RSI / flags), and
+          <code>reason_code</code>. Not venue execution. Refreshes each poll.
+        </p>
+        <div class="dash-jp-grid" id="dash-jp-grid" aria-live="polite"></div>
+        <p class="dash-jp-daemon" id="dash-jp-daemon"></p>
       </div>
 
       <!-- Anna intelligence visibility (advisor directive — real signals, no fake Online) -->
@@ -934,7 +971,93 @@
     renderScorecardAndOps(bundle);
     renderOB(bundle.operational_boundary);
     renderLive(bundle);
+    renderJupiterPolicy(bundle);
     renderIntel(bundle);
+  }
+
+  function renderJupiterPolicy(bundle) {
+    var grid = $('dash-jp-grid');
+    var daemonEl = $('dash-jp-daemon');
+    if (!grid) return;
+    var jp = bundle.jupiter_policy_snapshot;
+    if (!jp) {
+      grid.innerHTML =
+        '<div class="dash-jp-kv" style="grid-column:1/-1"><span class="jk">snapshot</span><span class="jv">' +
+        'missing jupiter_policy_snapshot — restart API after deploy' +
+        '</span></div>';
+      if (daemonEl) daemonEl.textContent = '';
+      return;
+    }
+    var rows = [];
+    if (jp.market_db_ok === false) {
+      rows.push({ k: 'market DB', v: 'missing or path wrong', cls: 'jp-flat' });
+    }
+    if (jp.error) {
+      rows.push({ k: 'error', v: String(jp.error), cls: 'jp-flat' });
+      if (jp.hint) rows.push({ k: 'hint', v: String(jp.hint), cls: 'jp-flat' });
+    } else {
+      rows.push({
+        k: 'would trade (paper)',
+        v: jp.would_trade ? 'YES — ' + String(jp.side || '') : 'no',
+        cls: jp.would_trade ? 'jp-fire' : 'jp-flat',
+      });
+      if (jp.reason_code != null) rows.push({ k: 'reason_code', v: String(jp.reason_code), cls: 'jp-flat' });
+      var al = jp.alignment || {};
+      rows.push({ k: 'short_signal', v: String(!!al.short_signal), cls: al.short_signal ? 'jp-fire' : 'jp-flat' });
+      rows.push({ k: 'long_signal', v: String(!!al.long_signal), cls: al.long_signal ? 'jp-fire' : 'jp-flat' });
+      if (al.prev_rsi != null) rows.push({ k: 'prev_rsi', v: String(al.prev_rsi), cls: 'jp-flat' });
+      if (al.current_rsi != null) rows.push({ k: 'current_rsi', v: String(al.current_rsi), cls: 'jp-flat' });
+      var eb = jp.evaluated_bar || {};
+      if (eb.market_event_id) rows.push({ k: 'market_event_id', v: String(eb.market_event_id), cls: 'jp-flat' });
+      if (eb.candle_open_utc) rows.push({ k: 'bar open (UTC)', v: String(eb.candle_open_utc), cls: 'jp-flat' });
+      rows.push({ k: 'bars in window', v: String(jp.bars_fetched != null ? jp.bars_fetched : '—'), cls: 'jp-flat' });
+    }
+    var h = rows
+      .map(function (r) {
+        return (
+          '<div class="dash-jp-kv ' +
+          (r.cls || '') +
+          '"><div class="jk">' +
+          esc(r.k) +
+          '</div><div class="jv">' +
+          esc(r.v) +
+          '</div></div>'
+        );
+      })
+      .join('');
+    grid.innerHTML = h || '<div class="dash-jp-kv"><span class="jk">—</span><span class="jv">no data</span></div>';
+
+    var dtxt = '';
+    var ldb = jp.last_daemon_bridge_tick;
+    if (ldb && typeof ldb === 'object') {
+      dtxt =
+        '<strong>Last Karpathy tick — baseline bridge:</strong> ';
+      if (ldb.enabled === false) {
+        dtxt += 'BASELINE_LEDGER_BRIDGE off.';
+      } else if (ldb.no_trade) {
+        dtxt +=
+          'no trade · reason_code=' +
+          esc(String(ldb.reason_code || '—')) +
+          ' · event ' +
+          esc(String(ldb.market_event_id || '—'));
+      } else if (ldb.idempotent_skip) {
+        dtxt += 'idempotent skip (already recorded) · ' + esc(String(ldb.market_event_id || '—'));
+      } else if (ldb.ok && ldb.trade_id) {
+        dtxt +=
+          'recorded trade · side=' +
+          esc(String(ldb.side || '—')) +
+          ' · ' +
+          esc(String(ldb.market_event_id || '—'));
+      } else if (ldb.error) {
+        dtxt += esc(String(ldb.error));
+      } else {
+        dtxt += esc(JSON.stringify(ldb).slice(0, 220));
+      }
+    } else {
+      dtxt =
+        '<em>No <code>baseline_ledger_last</code> in training state yet</em> — bridge runs when the Karpathy loop daemon ticks.';
+    }
+    if (daemonEl) daemonEl.innerHTML = dtxt;
   }
 
   function renderIntel(bundle) {

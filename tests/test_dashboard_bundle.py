@@ -64,6 +64,9 @@ def test_build_dashboard_bundle_schema() -> None:
     assert lp.get("schema") == "learning_proof_bundle_v1"
     assert "aggregate" in lp
     assert "per_event" in lp
+    jp = b.get("jupiter_policy_snapshot")
+    assert isinstance(jp, dict)
+    assert jp.get("schema") == "jupiter_policy_snapshot_v1"
 
 
 def test_pair_vs_baseline_for_cells() -> None:

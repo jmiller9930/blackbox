@@ -2,6 +2,9 @@
 Aggregated operator dashboard payload: trade chain, sequential status, wallet subset, system mode.
 
 Trade chain: horizontal event axis (columns) × vertical chains (baseline, Anna test, Anna strategy rows).
+
+**Jupiter policy snapshot:** same ``evaluate_sean_jupiter_baseline_v1`` inputs as the baseline ledger bridge
+(bar-derived; paper measurement). Surfaces *why* trade / no-trade before inferring from ledger cells.
 """
 
 from __future__ import annotations
@@ -9,6 +12,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import sys
 import uuid
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -190,6 +194,114 @@ def _market_db_path() -> Path | None:
             _MARKET_DB = candidate
             return candidate
     return None
+
+
+def _ensure_runtime_for_market_imports() -> None:
+    rt = _REPO_ROOT / "scripts" / "runtime"
+    s = str(rt)
+    if s not in sys.path:
+        sys.path.insert(0, s)
+
+
+def _compact_baseline_ledger_last(raw: Any) -> dict[str, Any] | None:
+    """Last Karpathy tick bridge result — small keys only (state.json may hold full dict)."""
+    if not isinstance(raw, dict):
+        return None
+    out: dict[str, Any] = {"schema": "baseline_ledger_tick_compact_v1"}
+    for k in (
+        "ok",
+        "enabled",
+        "no_trade",
+        "reason_code",
+        "market_event_id",
+        "trade_id",
+        "side",
+        "signal_mode",
+        "error",
+        "idempotent_skip",
+        "reason",
+    ):
+        if k in raw:
+            out[k] = raw[k]
+    feat = raw.get("features")
+    if isinstance(feat, dict):
+        out["features"] = feat
+    return out if len(out) > 1 else None
+
+
+def build_jupiter_policy_snapshot(
+    *,
+    market_db_path: Path | None = None,
+    training_state: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """
+    Live **paper** Jupiter baseline policy view: same evaluator as ``baseline_ledger_bridge`` (sean_jupiter_v1).
+
+    Not a price tape; not venue execution. Refreshes every dashboard bundle request.
+    """
+    from modules.anna_training.sean_jupiter_baseline_signal import MIN_BARS, evaluate_sean_jupiter_baseline_v1
+
+    mpath = market_db_path if market_db_path is not None else _market_db_path()
+    out: dict[str, Any] = {
+        "schema": "jupiter_policy_snapshot_v1",
+        "what_this_is": (
+            "Bar-derived Jupiter policy (aggregateCandles+rsi parity). "
+            "Shows whether the latest closed bar would fire a paper baseline trade and which features aligned."
+        ),
+        "market_db_path": str(mpath) if mpath else None,
+        "market_db_ok": bool(mpath and mpath.is_file()),
+    }
+    st = training_state if isinstance(training_state, dict) else {}
+    bl = st.get("baseline_ledger_last")
+    cbl = _compact_baseline_ledger_last(bl)
+    if cbl:
+        out["last_daemon_bridge_tick"] = cbl
+
+    if not mpath or not mpath.is_file():
+        out["error"] = "market_db_missing"
+        out["hint"] = "Set BLACKBOX_MARKET_DATA_PATH or ingest market_bars_5m."
+        return out
+
+    try:
+        _ensure_runtime_for_market_imports()
+        from market_data.bar_lookup import fetch_recent_bars_asc
+
+        bars = fetch_recent_bars_asc(limit=280, db_path=mpath)
+    except Exception as e:
+        out["error"] = f"fetch_bars_failed:{e!s}"[:240]
+        return out
+
+    out["bars_fetched"] = len(bars)
+    out["min_bars_required"] = MIN_BARS
+    if len(bars) < MIN_BARS:
+        out["error"] = "insufficient_history"
+        out["hint"] = f"Need at least {MIN_BARS} closed bars for RSI policy."
+        return out
+
+    last = bars[-1]
+    out["evaluated_bar"] = {
+        "market_event_id": str(last.get("market_event_id") or ""),
+        "candle_open_utc": str(last.get("candle_open_utc") or ""),
+        "candle_close_utc": str(last.get("candle_close_utc") or ""),
+        "close": last.get("close"),
+    }
+
+    sig = evaluate_sean_jupiter_baseline_v1(bars_asc=bars)
+    out["would_trade"] = bool(sig.trade)
+    out["side"] = sig.side
+    out["reason_code"] = sig.reason_code
+    out["pnl_usd_open_to_close_hint"] = sig.pnl_usd
+    out["features"] = dict(sig.features) if isinstance(sig.features, dict) else sig.features
+
+    # Explicit alignment chips for UI (same booleans as in features)
+    feat = out["features"] if isinstance(out["features"], dict) else {}
+    out["alignment"] = {
+        "short_signal": bool(feat.get("short_signal")),
+        "long_signal": bool(feat.get("long_signal")),
+        "prev_rsi": feat.get("prev_rsi"),
+        "current_rsi": feat.get("current_rsi"),
+    }
+    return out
 
 
 def _outcome_from_pnl(pnl: float | None, *, mode: str) -> str:
@@ -1022,6 +1134,18 @@ def build_dashboard_bundle(
     except Exception:
         paper_cap = None
 
+    jupiter_policy_snapshot: dict[str, Any] = {}
+    try:
+        jupiter_policy_snapshot = build_jupiter_policy_snapshot(
+            market_db_path=None,
+            training_state=training_st,
+        )
+    except Exception as e:
+        jupiter_policy_snapshot = {
+            "schema": "jupiter_policy_snapshot_v1",
+            "error": str(e)[:400],
+        }
+
     learning_summary_for_vis: dict[str, Any] = {
         "ui_state": ui_state,
         "learning_active": learning_active,
@@ -1099,6 +1223,7 @@ def build_dashboard_bundle(
                 "Strategy evaluation overlays vs baseline (QEL) when ledger rows exist — not separate execution",
             ],
             "paper_only": [
+                "Jupiter policy truth: `jupiter_policy_snapshot` — same evaluator as baseline ledger (bar-derived; not live venue)",
                 "Anna training execution ledger defaults to paper unless rows are explicitly mode=live",
                 "Live trading remains blocked until governance clears wallet + Jupiter path",
             ],
@@ -1129,4 +1254,5 @@ def build_dashboard_bundle(
         "liveness": liveness,
         "intelligence_visibility": intelligence_visibility,
         "learning_proof": learning_proof,
+        "jupiter_policy_snapshot": jupiter_policy_snapshot,
     }
