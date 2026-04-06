@@ -299,6 +299,7 @@ def test_intelligence_method_page_and_api_route() -> None:
     p = WEB / "intelligence-method.html"
     assert p.is_file()
     t = p.read_text(encoding="utf-8")
+    assert "Learning stack" in t
     assert "Learning storage" in t
     assert "dash-intel-eff" in t
     assert "Learning proof" in t
