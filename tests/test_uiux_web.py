@@ -291,6 +291,7 @@ def test_dockerfile_uses_explicit_copy_not_leaky_nginx_root() -> None:
     assert "anna.html" in text
     assert "docs.html" in text
     assert "intelligence-method.html" in text
+    assert "text-scale.js" in text
     assert "COPY . /usr/share/nginx/html" not in text
 
 
