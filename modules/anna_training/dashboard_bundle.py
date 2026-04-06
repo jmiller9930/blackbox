@@ -230,8 +230,8 @@ def _compact_baseline_ledger_last(raw: Any) -> dict[str, Any] | None:
 
 
 _JUPITER_READINESS_FOR_OPERATOR = (
-    "Plain read: more lit segments means closer to a baseline paper trade on this candle. "
-    "It only looks at the latest closed bar in the database, not the next one."
+    "Summary line for this closed bar (same evaluator as the gate pills). "
+    "Not a live tick stream — only the latest closed candle in the database."
 )
 
 
@@ -327,6 +327,55 @@ def _jupiter_signal_readiness_v1(
         label="No trade",
         detail=f"Reason: {rc}" if rc else "—",
     )
+
+
+def _jupiter_alignment_pills_v1(feat: dict[str, Any]) -> dict[str, Any]:
+    """
+    Three-step ladder matching the baseline evaluator (same booleans as ``features``):
+    1) Raw long/short arm (aggregate + RSI swing),
+    2) Supertrend direction matches the armed side,
+    3) EMA200 vs close — equivalent to ``short_signal`` / ``long_signal`` (all gates).
+    """
+    raw_l = bool(feat.get("long_signal_raw"))
+    raw_s = bool(feat.get("short_signal_raw"))
+    st_raw = feat.get("supertrend_direction")
+    try:
+        st_dir = int(st_raw) if st_raw is not None else 0
+    except (TypeError, ValueError):
+        st_dir = 0
+
+    st_ok = (raw_s and st_dir == -1) or (raw_l and st_dir == 1)
+    sg_short = bool(feat.get("short_signal"))
+    sg_long = bool(feat.get("long_signal"))
+    all_gates = sg_short or sg_long
+
+    return {
+        "schema": "jupiter_alignment_pills_v1",
+        "what_this_is": (
+            "Lights left-to-right as each policy gate passes on this bar. "
+            "Does not replace reason_code or the heat strip."
+        ),
+        "pills": [
+            {
+                "id": "arm",
+                "label": "1 · Structure + RSI arm",
+                "active": raw_s or raw_l,
+                "hint": "First check: a long or short arm from structure + RSI on this candle.",
+            },
+            {
+                "id": "supertrend",
+                "label": "2 · Supertrend",
+                "active": st_ok,
+                "hint": "Trend band must be bearish (−1) for a short arm or bullish (+1) for a long arm.",
+            },
+            {
+                "id": "ema_price",
+                "label": "3 · EMA200 vs price",
+                "active": all_gates,
+                "hint": "Close on the correct side of EMA200 for that direction — same as a green long/short flag below.",
+            },
+        ],
+    }
 
 
 def build_jupiter_policy_snapshot(
@@ -425,6 +474,7 @@ def build_jupiter_policy_snapshot(
         side=str(sig.side or ""),
         features=feat,
     )
+    out["alignment_pills"] = _jupiter_alignment_pills_v1(feat)
     return out
 
 

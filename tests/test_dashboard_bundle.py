@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from modules.anna_training.dashboard_bundle import (
+    _jupiter_alignment_pills_v1,
     _jupiter_signal_readiness_v1,
     _pair_vs_baseline_for_cells,
     build_dashboard_bundle,
@@ -115,3 +116,23 @@ def test_jupiter_signal_readiness_levels() -> None:
         features={},
     )
     assert cool["level"] == "cool" and cool["heat"] == 1
+
+
+def test_jupiter_alignment_pills_v1_ladder() -> None:
+    p = _jupiter_alignment_pills_v1(
+        {
+            "long_signal_raw": True,
+            "short_signal_raw": False,
+            "supertrend_direction": 1,
+            "short_signal": False,
+            "long_signal": True,
+        }
+    )
+    assert p.get("schema") == "jupiter_alignment_pills_v1"
+    assert len(p["pills"]) == 3
+    assert p["pills"][0]["active"] is True
+    assert p["pills"][1]["active"] is True
+    assert p["pills"][2]["active"] is True
+    p2 = _jupiter_alignment_pills_v1({})
+    assert p2["pills"][0]["active"] is False
+    assert p2["pills"][2]["active"] is False
