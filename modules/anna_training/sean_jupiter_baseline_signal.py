@@ -19,8 +19,6 @@ import math
 from dataclasses import dataclass
 from typing import Any
 
-import pandas as pd
-
 # --- Sean Jupiter Perps policy (v2) — align with operator Jupiter bot constants ---
 RSI_PERIOD = 14
 RSI_SHORT_THRESHOLD = 48
@@ -37,6 +35,20 @@ MIN_NOTIONAL_USD = 10
 MIN_BARS = EMA_PERIOD
 
 REFERENCE_SOURCE = "jupiter_sean_policy:v2:aggregateCandles+rsi+supertrend+ema200"
+
+
+def _ewm_mean_last(closes: list[float], span: int) -> float:
+    """
+    Last value of EWMA with ``span`` — matches ``pandas.Series.ewm(span=span, adjust=False).mean().iloc[-1]``
+    (no pandas; safe in minimal API containers).
+    """
+    if len(closes) < 1:
+        raise ValueError("closes empty")
+    alpha = 2.0 / (float(span) + 1.0)
+    ema = float(closes[0])
+    for x in closes[1:]:
+        ema = ema * (1.0 - alpha) + alpha * float(x)
+    return ema
 
 
 @dataclass(frozen=True)
@@ -270,8 +282,7 @@ def evaluate_sean_jupiter_baseline_v1(
     )
 
     st_dir = supertrend_direction_series(highs, lows, closes)[i]
-    ema200_s = pd.Series(closes, dtype=float).ewm(span=EMA_PERIOD, adjust=False).mean()
-    ema200_last = float(ema200_s.iloc[-1])
+    ema200_last = _ewm_mean_last(closes, EMA_PERIOD)
 
     raw_short = short_signal
     raw_long = long_signal

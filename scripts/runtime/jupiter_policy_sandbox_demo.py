@@ -59,10 +59,8 @@ def _fmt_candle(b: dict, rsi: float | None) -> None:
     )
 
 
-def pd_ema200_last(closes: list[float]) -> float:
-    import pandas as pd
-
-    return float(pd.Series(closes, dtype=float).ewm(span=sj.EMA_PERIOD, adjust=False).mean().iloc[-1])
+def ema200_last(closes: list[float]) -> float:
+    return sj._ewm_mean_last(closes, sj.EMA_PERIOD)
 
 
 def print_scenario(title: str, bars: list[dict], sig: sj.SeanJupiterBaselineSignalV1) -> None:
@@ -76,7 +74,7 @@ def print_scenario(title: str, bars: list[dict], sig: sj.SeanJupiterBaselineSign
         [float(b["low"]) for b in bars],
         closes,
     )[i]
-    ema200 = pd_ema200_last(closes)
+    ema200 = ema200_last(closes)
     st_label = {1: "BULLISH (green)", -1: "BEARISH (red)", 0: "UNKNOWN"}[st]
 
     print()

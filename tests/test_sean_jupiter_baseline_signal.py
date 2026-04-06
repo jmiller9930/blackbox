@@ -6,6 +6,8 @@ import math
 import sys
 from pathlib import Path
 
+import pytest
+
 ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
@@ -85,3 +87,19 @@ def test_rsi_trading_core_length_matches_ts() -> None:
     assert len(r) == len(closes)
     assert math.isnan(r[RSI_PERIOD - 1])
     assert not math.isnan(r[RSI_PERIOD])
+
+
+def test_ewm_mean_last_matches_pandas_when_available() -> None:
+    """EMA200 path must match prior pandas.Series.ewm(adjust=False) (dev env has pandas)."""
+    pd = pytest.importorskip("pandas")
+    from modules.anna_training.sean_jupiter_baseline_signal import EMA_PERIOD, _ewm_mean_last
+
+    import random
+
+    random.seed(42)
+    closes = [100.0 + random.random() for _ in range(200)]
+    want = float(
+        pd.Series(closes, dtype=float).ewm(span=EMA_PERIOD, adjust=False).mean().iloc[-1]
+    )
+    got = _ewm_mean_last(closes, EMA_PERIOD)
+    assert abs(got - want) < 1e-9
