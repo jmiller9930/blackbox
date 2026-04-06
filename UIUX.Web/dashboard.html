@@ -185,22 +185,6 @@
       color: #475569;
       line-height: 1.35;
     }
-    .dash-dc.panel-polled { animation: dashPanelPollFlash 0.5s ease-out; }
-    .dash-dc {
-      margin: 0.5rem 0.75rem 0.65rem;
-      padding: 0.55rem 0.65rem;
-      border-radius: 8px;
-      border: 1px solid #cbd5e1;
-      background: linear-gradient(165deg, #f8fafc 0%, #f1f5f9 100%);
-    }
-    .dash-dc-title { margin: 0 0 0.25rem; font-size: 0.78rem; font-weight: 800; color: #0f172a; }
-    .dash-dc-sub { margin: 0 0 0.4rem; font-size: 0.6rem; color: #475569; line-height: 1.35; max-width: 56rem; }
-    .dash-dc-tables { display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem; }
-    @media (max-width: 900px) { .dash-dc-tables { grid-template-columns: 1fr; } }
-    .dash-dc-tbl { font-size: 0.58rem; width: 100%; border-collapse: collapse; }
-    .dash-dc-tbl th, .dash-dc-tbl td { text-align: left; padding: 0.2rem 0.25rem; border-bottom: 1px solid #e2e8f0; vertical-align: top; word-break: break-word; }
-    .dash-dc-tbl th { color: #64748b; font-weight: 700; }
-    .dash-dc-h { font-size: 0.62rem; font-weight: 800; color: #0f766e; margin: 0 0 0.2rem; }
     /* Row 2 — command center */
     .dash-r2 {
       flex-shrink: 0; padding: 0.5rem 0.75rem; border-bottom: 1px solid var(--panel-border);
@@ -542,28 +526,6 @@
         </div>
         <div class="dash-jp-grid" id="dash-jp-grid" aria-live="polite"></div>
         <p class="dash-jp-daemon" id="dash-jp-daemon"></p>
-      </div>
-
-      <!-- Data collection: policy_evaluations (all bars) + position_events (trade lifecycle) -->
-      <div class="dash-dc" id="dash-dc-wrap" role="region" aria-labelledby="dash-dc-h">
-        <h2 id="dash-dc-h" class="dash-dc-title">Data collection — policy log &amp; trade lifecycle</h2>
-        <p class="dash-dc-sub">
-          <strong>Bucket 1</strong>: per-bar <code>policy_evaluations</code> (signal / no-trade / reason).
-          <strong>Bucket 2</strong>: <code>position_events</code> (open → close; TP/SL/trail when execution appends them).
-          Refreshes each poll with the bundle.
-        </p>
-        <p class="dash-jp-tick" id="dash-dc-tick" aria-live="polite">—</p>
-        <div class="dash-dc-tables">
-          <div>
-            <p class="dash-dc-h">Recent policy rows</p>
-            <div style="overflow-x:auto"><table class="dash-dc-tbl" id="dash-dc-policy" aria-label="Policy evaluations"></table></div>
-          </div>
-          <div>
-            <p class="dash-dc-h">Recent position events</p>
-            <div style="overflow-x:auto"><table class="dash-dc-tbl" id="dash-dc-pos" aria-label="Position events"></table></div>
-          </div>
-        </div>
-        <p class="dash-jp-daemon" id="dash-dc-foot" style="margin-top:0.35rem"></p>
       </div>
 
       <!-- Anna intelligence visibility (advisor directive — real signals, no fake Online); collapsed by default -->
@@ -1135,7 +1097,6 @@
     renderOB(bundle.operational_boundary);
     renderLive(bundle);
     renderJupiterPolicy(bundle);
-    renderDataCollection(bundle);
     renderIntel(bundle);
   }
 
@@ -1274,77 +1235,6 @@
     if (daemonEl) daemonEl.innerHTML = dtxt;
     applyJupiterHeat(bundle);
     applyPollTickerAndFlash(bundle, 'dash-jp-tick', 'dash-jp-wrap');
-  }
-
-  function renderDataCollection(bundle) {
-    var dc = bundle.data_collection || {};
-    var pol = $('dash-dc-policy');
-    var pos = $('dash-dc-pos');
-    var foot = $('dash-dc-foot');
-    if (!pol || !pos) return;
-    if (dc.error) {
-      pol.innerHTML = '<tbody><tr><td colspan="4">' + esc(dc.error) + '</td></tr></tbody>';
-      pos.innerHTML = '';
-      if (foot) foot.textContent = 'data_collection error — check API / ledger schema.';
-      applyPollTickerAndFlash(bundle, 'dash-dc-tick', 'dash-dc-wrap');
-      return;
-    }
-    var pr = dc.policy_evaluations || [];
-    var ph =
-      '<thead><tr><th>evaluated (UTC)</th><th>trade</th><th>reason</th><th>market_event_id</th></tr></thead><tbody>';
-    pr.forEach(function (row) {
-      ph +=
-        '<tr><td>' +
-        esc(String(row.evaluated_at_utc || '—')) +
-        '</td><td>' +
-        esc(row.trade ? 'yes' : 'no') +
-        '</td><td>' +
-        esc(String(row.reason_code || '—')) +
-        '</td><td>' +
-        esc(String(row.market_event_id || '—')) +
-        '</td></tr>';
-    });
-    ph += '</tbody>';
-    pol.innerHTML = pr.length ? ph : '<tbody><tr><td colspan="4">No policy_evaluations rows yet.</td></tr></tbody>';
-
-    var ev = dc.position_events || [];
-    var eh =
-      '<thead><tr><th>created (UTC)</th><th>type</th><th>trade_id</th><th>payload (summary)</th></tr></thead><tbody>';
-    ev.forEach(function (row) {
-      var pl = row.payload || {};
-      var sm =
-        pl.phase === 'position_open'
-          ? 'open @ ' + String(pl.entry_price != null ? pl.entry_price : '—')
-          : pl.phase === 'position_close'
-            ? 'close pnl ' + String(pl.pnl_usd_1unit != null ? pl.pnl_usd_1unit : '—')
-            : JSON.stringify(pl).slice(0, 120);
-      eh +=
-        '<tr><td>' +
-        esc(String(row.created_at_utc || '—')) +
-        '</td><td>' +
-        esc(String(row.event_type || '—')) +
-        '</td><td>' +
-        esc(String(row.trade_id || '—').slice(0, 18)) +
-        '…</td><td>' +
-        esc(sm) +
-        '</td></tr>';
-    });
-    eh += '</tbody>';
-    pos.innerHTML = ev.length ? eh : '<tbody><tr><td colspan="4">No position_events yet (after a baseline paper trade, open+close appear).</td></tr></tbody>';
-
-    if (foot) {
-      var nP = pr.length;
-      var nE = ev.length;
-      foot.innerHTML =
-        '<strong>data_collection</strong> · ' +
-        nP +
-        ' policy row(s) · ' +
-        nE +
-        ' event(s) · schema <code>' +
-        esc(String(dc.schema || '—')) +
-        '</code>';
-    }
-    applyPollTickerAndFlash(bundle, 'dash-dc-tick', 'dash-dc-wrap');
   }
 
   function renderIntel(bundle) {
