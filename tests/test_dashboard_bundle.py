@@ -107,11 +107,11 @@ def test_jupiter_signal_readiness_levels() -> None:
         side="",
         features={"long_signal_raw": True, "policy_blockers": ["ema200"]},
     )
-    assert warm["level"] == "warm" and warm["heat"] == 3
+    assert warm["level"] == "warm" and warm["heat"] == 2
     cool = _jupiter_signal_readiness_v1(
         would_trade=False,
         reason_code="no_signal",
         side="flat",
         features={},
     )
-    assert cool["level"] == "cool" and cool["heat"] == 2
+    assert cool["level"] == "cool" and cool["heat"] == 1

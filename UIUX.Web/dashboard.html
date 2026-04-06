@@ -97,9 +97,10 @@
     }
     .dash-jp-title { margin: 0 0 0.2rem; font-size: 0.82rem; font-weight: 800; color: #0f172a; }
     .dash-jp-sub { margin: 0 0 0.4rem; font-size: 0.62rem; color: #0f766e; line-height: 1.35; max-width: 56rem; }
+    /* 9 tiles in normal state — heat band aligns to cols 4–6 (long / prev RSI / current RSI) */
     .dash-jp-grid {
       display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(9.5rem, 1fr));
+      grid-template-columns: repeat(9, minmax(0, 1fr));
       gap: 0.35rem;
       font-size: 0.68rem;
     }
@@ -129,22 +130,48 @@
     .dash-jp.panel-polled { animation: dashPanelPollFlash 0.5s ease-out; }
     /* Signal readiness heat (operator: how close to a paper baseline trade on this bar) */
     .dash-jp.jp-heat-fire { box-shadow: inset 4px 0 0 0 #ea580c; }
-    .dash-jp.jp-heat-warm { box-shadow: inset 4px 0 0 0 #f59e0b; }
+    /* Warm = blocked after an early step — softer than fire (avoid “3 candy orange” jump from cool) */
+    .dash-jp.jp-heat-warm { box-shadow: inset 4px 0 0 0 #b45309; }
     .dash-jp.jp-heat-cool { box-shadow: inset 4px 0 0 0 #38bdf8; }
     .dash-jp.jp-heat-cold { box-shadow: inset 4px 0 0 0 #94a3b8; }
     .dash-jp.jp-heat-error { box-shadow: inset 4px 0 0 0 #dc2626; }
     .dash-jp.jp-heat-idle { box-shadow: inset 4px 0 0 0 #cbd5e1; }
-    .dash-jp-heat-row {
-      margin: 0 0 0.45rem;
+    .dash-jp-layout {
+      display: grid;
+      grid-template-columns: repeat(9, minmax(0, 1fr));
+      gap: 0.35rem;
+      align-items: start;
+      margin: 0 0 0.35rem;
+    }
+    /* Heat + copy sit above tiles 4–6 (centered on the “long / RSI” band) */
+    .dash-jp-heat-band {
+      grid-column: 4 / span 3;
+      grid-row: 1;
       display: flex;
-      flex-wrap: wrap;
-      align-items: flex-start;
-      gap: 0.5rem 0.75rem;
+      flex-direction: column;
+      align-items: center;
+      text-align: center;
+      gap: 0.3rem;
+      min-width: 0;
+    }
+    .dash-jp-grid-wrap {
+      grid-column: 1 / -1;
+      grid-row: 2;
+      min-width: 0;
     }
     .dash-jp-heat-strip {
       display: flex;
-      gap: 4px;
-      flex: 0 0 auto;
+      gap: 5px;
+      width: 100%;
+      max-width: 100%;
+      justify-content: center;
+      align-items: center;
+    }
+    .dash-jp-heat-strip .dash-jp-heat-seg {
+      flex: 1 1 0;
+      min-width: 0.55rem;
+      max-width: 2.25rem;
+      width: auto;
     }
     .dash-jp-heat-seg {
       width: 1.65rem;
@@ -153,9 +180,14 @@
       background: #e2e8f0;
       transition: background 0.2s ease, box-shadow 0.2s ease;
     }
+    /* Default “on” for fire path only when no level class overrides */
     .dash-jp-heat-seg.on {
       background: linear-gradient(90deg, #f59e0b, #ea580c);
       box-shadow: 0 0 0 1px rgba(234, 88, 12, 0.35);
+    }
+    .dash-jp.jp-heat-warm .dash-jp-heat-seg.on {
+      background: linear-gradient(90deg, #ca8a04, #b45309);
+      box-shadow: 0 0 0 1px rgba(180, 83, 9, 0.28);
     }
     .dash-jp.jp-heat-cool .dash-jp-heat-seg.on {
       background: linear-gradient(90deg, #38bdf8, #0ea5e9);
@@ -170,7 +202,10 @@
     .dash-jp.jp-heat-fire .dash-jp-heat-seg.on {
       background: linear-gradient(90deg, #fb923c, #ea580c);
     }
-    .dash-jp-heat-copy { flex: 1 1 12rem; min-width: 0; }
+    .dash-jp-heat-copy {
+      width: 100%;
+      min-width: 0;
+    }
     .dash-jp-heat-label {
       display: block;
       font-size: 0.72rem;
@@ -184,6 +219,22 @@
       font-size: 0.6rem;
       color: #475569;
       line-height: 1.35;
+    }
+    @media (max-width: 72rem) {
+      .dash-jp-layout {
+        grid-template-columns: 1fr;
+      }
+      .dash-jp-heat-band {
+        grid-column: 1 / -1;
+        grid-row: auto;
+      }
+      .dash-jp-grid-wrap {
+        grid-column: 1 / -1;
+        grid-row: auto;
+      }
+      .dash-jp-grid {
+        grid-template-columns: repeat(auto-fill, minmax(9.5rem, 1fr));
+      }
     }
     /* Row 2 — command center */
     .dash-r2 {
@@ -506,25 +557,29 @@
           <code>reason_code</code>. Not venue execution. Refreshes each poll (~<span id="dash-jp-poll-ms-label">1500</span>ms).
         </p>
         <p class="dash-jp-tick" id="dash-jp-tick" aria-live="polite">—</p>
-        <div class="dash-jp-heat-row" id="dash-jp-heat-row">
-          <div
-            class="dash-jp-heat-strip"
-            id="dash-jp-heat"
-            role="img"
-            aria-label="Policy signal readiness heat"
-          >
-            <span class="dash-jp-heat-seg" aria-hidden="true"></span>
-            <span class="dash-jp-heat-seg" aria-hidden="true"></span>
-            <span class="dash-jp-heat-seg" aria-hidden="true"></span>
-            <span class="dash-jp-heat-seg" aria-hidden="true"></span>
-            <span class="dash-jp-heat-seg" aria-hidden="true"></span>
+        <div class="dash-jp-layout">
+          <div class="dash-jp-heat-band">
+            <div
+              class="dash-jp-heat-strip"
+              id="dash-jp-heat"
+              role="img"
+              aria-label="Policy signal readiness heat"
+            >
+              <span class="dash-jp-heat-seg" aria-hidden="true"></span>
+              <span class="dash-jp-heat-seg" aria-hidden="true"></span>
+              <span class="dash-jp-heat-seg" aria-hidden="true"></span>
+              <span class="dash-jp-heat-seg" aria-hidden="true"></span>
+              <span class="dash-jp-heat-seg" aria-hidden="true"></span>
+            </div>
+            <div class="dash-jp-heat-copy">
+              <strong class="dash-jp-heat-label" id="dash-jp-heat-label" title="">Signal readiness —</strong>
+              <span class="dash-jp-heat-detail" id="dash-jp-heat-detail"></span>
+            </div>
           </div>
-          <div class="dash-jp-heat-copy">
-            <strong class="dash-jp-heat-label" id="dash-jp-heat-label" title="">Signal readiness —</strong>
-            <span class="dash-jp-heat-detail" id="dash-jp-heat-detail"></span>
+          <div class="dash-jp-grid-wrap">
+            <div class="dash-jp-grid" id="dash-jp-grid" aria-live="polite"></div>
           </div>
         </div>
-        <div class="dash-jp-grid" id="dash-jp-grid" aria-live="polite"></div>
         <p class="dash-jp-daemon" id="dash-jp-daemon"></p>
       </div>
 

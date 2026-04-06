@@ -230,8 +230,8 @@ def _compact_baseline_ledger_last(raw: Any) -> dict[str, Any] | None:
 
 
 _JUPITER_READINESS_FOR_OPERATOR = (
-    "John-facing summary: heat rises when policy parts align; **fire** = trade would fire on this bar (paper). "
-    "Not a prediction of the next bar — only the latest closed candle in the DB."
+    "Plain read: more lit segments means closer to a baseline paper trade on this candle. "
+    "It only looks at the latest closed bar in the database, not the next one."
 )
 
 
@@ -266,12 +266,10 @@ def _jupiter_signal_readiness_v1(
     features: dict[str, Any],
 ) -> dict[str, Any]:
     """
-    Operator **heat map** (discrete): how close Sean v2 is to a paper baseline trade on **this** bar.
+    Operator heat strip (discrete): how close the baseline policy is to a paper trade on this bar.
 
-    - **fire** — all gates pass (would_trade).
-    - **warm** — raw aggregate+RSI arm fired; Supertrend or EMA200 blocked.
-    - **cool** — no raw long/short arm (no_signal).
-    - **cold** — insufficient history or data problems.
+    Levels: fire = would trade; warm = blocked after an early step; cool = no_signal;
+    cold = insufficient history; error = bad data. Technical reason_code stays in the grid below.
     """
     rc = (reason_code or "").strip()
     feat = features or {}
@@ -285,48 +283,49 @@ def _jupiter_signal_readiness_v1(
         return _jupiter_signal_readiness_fixed(
             level="fire",
             heat=5,
-            label="Trade would fire (paper baseline)",
-            detail=f"All Sean v2 checks passed — side={side} ({rc}).",
+            label="Would take the trade (paper)",
+            detail=f"Baseline rules allow a paper trade on this bar — side {side}. Code: {rc}.",
         )
 
     if rc == "policy_filter_block" and (raw_long or raw_short):
-        blk = ", ".join(str(x) for x in blockers) if blockers else "Supertrend or EMA200 gate"
+        blk = ", ".join(str(x) for x in blockers) if blockers else "another rule"
         return _jupiter_signal_readiness_fixed(
             level="warm",
-            heat=3,
-            label="Signal lining up — filter blocked",
-            detail=f"Raw structure + RSI matched a long/short arm; {blk}.",
+            heat=2,
+            label="Almost — something blocked it",
+            detail=f"A direction was in play, but {blk} stopped a trade on this bar.",
         )
 
     if rc == "no_signal":
         return _jupiter_signal_readiness_fixed(
             level="cool",
-            heat=2,
-            label="Not aligned yet (this bar)",
-            detail="Aggregate + RSI swing did not match a long or short arm on this bar.",
+            heat=1,
+            label="No baseline trade on this bar",
+            detail="The latest closed candle did not pass the first baseline checks for a long or short. "
+            "That is only about this one bar; the next bar is checked when it closes.",
         )
 
     if rc in ("insufficient_history",):
         return _jupiter_signal_readiness_fixed(
             level="cold",
             heat=0,
-            label="Need more history",
-            detail="Not enough closed bars in the DB for EMA200 / Supertrend / RSI.",
+            label="Need more price history",
+            detail="Not enough closed bars loaded yet for the baseline to run its full checks.",
         )
 
     if rc in ("rsi_nan", "ohlc_parse_error"):
         return _jupiter_signal_readiness_fixed(
             level="error",
             heat=0,
-            label="Data / RSI error",
-            detail=rc,
+            label="Data problem",
+            detail=f"Could not read price or RSI cleanly ({rc}).",
         )
 
     return _jupiter_signal_readiness_fixed(
         level="idle",
         heat=1,
         label="No trade",
-        detail=rc or "—",
+        detail=f"Reason: {rc}" if rc else "—",
     )
 
 
