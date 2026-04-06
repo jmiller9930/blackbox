@@ -68,7 +68,22 @@ def test_baseline_and_anna_share_market_event_id(tmp_path: Path, monkeypatch: py
     )
     from modules.anna_training.execution_ledger import query_trades_by_market_event_id
     from modules.anna_training.parallel_strategy_runner import run_parallel_anna_strategies_tick
+    from modules.anna_training.sean_jupiter_baseline_signal import SeanJupiterBaselineSignalV1
     from market_data.bar_lookup import fetch_latest_bar_row
+
+    def _fake_sean_jupiter(bars_asc: list) -> SeanJupiterBaselineSignalV1:
+        return SeanJupiterBaselineSignalV1(
+            trade=True,
+            side="long",
+            reason_code="test_fixture_signal",
+            pnl_usd=0.5,
+            features={"reference": "test"},
+        )
+
+    monkeypatch.setattr(
+        "modules.anna_training.parallel_strategy_runner.evaluate_sean_jupiter_baseline_v1",
+        _fake_sean_jupiter,
+    )
 
     anna = run_parallel_anna_strategies_tick(
         market_data_db_path=market_db,

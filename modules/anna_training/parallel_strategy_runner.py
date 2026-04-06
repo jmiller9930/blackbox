@@ -1,4 +1,4 @@
-"""Parallel Anna paper strategies per market_event_id — no gating; ledger writes."""
+"""Parallel Anna paper strategies per market_event_id — **Sean Jupiter v1 signal-gated** ledger writes."""
 
 from __future__ import annotations
 
@@ -8,6 +8,8 @@ import sqlite3
 import sys
 from pathlib import Path
 from typing import Any
+
+from modules.anna_training.sean_jupiter_baseline_signal import evaluate_sean_jupiter_baseline_v1
 
 
 def _env_bool(name: str, default: bool) -> bool:
@@ -159,12 +161,13 @@ def run_parallel_anna_strategies_tick(
 ) -> dict[str, Any]:
     """
     For **each** configured Anna strategy id, append **one** execution row for the **latest**
-    ``market_event_id`` (from ``market_bars_5m``). **Multiple strategies = multiple chains at once**
-    (one row per strategy per event).
+    ``market_event_id`` **only when** :func:`evaluate_sean_jupiter_baseline_v1` returns ``trade=True``
+    (same Jupiter policy as :func:`run_baseline_ledger_bridge_tick` in ``sean_jupiter_v1`` mode).
+    **Multiple strategies** ⇒ multiple Anna rows on the **same** signal event (one per strategy id).
 
     Mode (``ANNA_PARALLEL_STRATEGY_MODE``, default ``paper``):
-      - **paper** — economic Anna lane; ``pnl_usd`` derived (open→close long, size 1); baseline pairing works.
-      - **paper_stub** — legacy eval; no asserted PnL (synthetic classification in context only).
+      - **paper** — economic Anna lane; ``pnl_usd`` from open→close in the **signal** direction (long or short), size 1.
+      - **paper_stub** — legacy eval; no asserted PnL (synthetic classification in context only); still signal-gated.
 
     ``market_event_id`` is recomputed from the same canonical bar row via
     :func:`verify_market_event_id_matches_canonical_bar` (no divergence from the single constructor).
@@ -178,7 +181,11 @@ def run_parallel_anna_strategies_tick(
         return {"enabled": False, "reason": "ANNA_PARALLEL_STRATEGY_RUNNER off"}
 
     _ensure_runtime_path()
-    from market_data.bar_lookup import fetch_latest_bar_row, fetch_latest_market_event_id
+    from market_data.bar_lookup import (
+        fetch_latest_bar_row,
+        fetch_latest_market_event_id,
+        fetch_recent_bars_asc,
+    )
 
     from modules.anna_training.baseline_ledger_bridge import verify_market_event_id_matches_canonical_bar
     from modules.anna_training.decision_trace import (
@@ -212,11 +219,21 @@ def run_parallel_anna_strategies_tick(
             "mid_fetch": mid,
             "mid_bar": verified_mid,
         }
+
+    bars_asc = fetch_recent_bars_asc(limit=280, db_path=market_data_db_path)
+    if not bars_asc or str(bars_asc[-1].get("market_event_id") or "") != mid:
+        return {
+            "ok": False,
+            "reason": "bar_history_mismatch",
+            "market_event_id": mid,
+            "trades_written": 0,
+        }
+
     close_px = bar.get("close")
     o_px = bar.get("open")
     hi = bar.get("high")
     lo = bar.get("low")
-    ctx = {
+    base_ctx = {
         "bar": {
             "open": o_px,
             "high": hi,
@@ -243,6 +260,33 @@ def run_parallel_anna_strategies_tick(
     finally:
         conn.close()
 
+    sig = evaluate_sean_jupiter_baseline_v1(bars_asc=bars_asc)
+    if not sig.trade:
+        return {
+            "ok": True,
+            "no_trade": True,
+            "market_event_id": mid,
+            "reason_code": sig.reason_code,
+            "signal_mode": "sean_jupiter_v1",
+            "features": sig.features,
+            "strategies": strategies,
+            "parallel_mode": mode,
+            "trades_written": 0,
+            "trade_ids": [],
+            "trace_ids": [],
+            "stub_migration": stub_migration,
+        }
+
+    ctx = {
+        **base_ctx,
+        "parallel_signal": {
+            "signal_mode": "sean_jupiter_v1",
+            "reason_code": sig.reason_code,
+            "side": sig.side,
+            "features": sig.features,
+        },
+    }
+
     for sid in strategies:
         if sid == RESERVED_STRATEGY_BASELINE:
             continue
@@ -254,8 +298,13 @@ def run_parallel_anna_strategies_tick(
                     strategy_id=sid,
                     bar=bar,
                     trade_id=tid,
+                    side=str(sig.side),
+                    signal_reason_code=str(sig.reason_code or ""),
                     context_snapshot={**ctx, "parallel_mode": "paper"},
-                    notes="parallel_runner economic paper (open→close long, size 1)",
+                    notes=(
+                        "parallel_runner economic paper — Sean Jupiter v1 signal; "
+                        f"open→close {sig.side}, size 1"
+                    ),
                     db_path=execution_ledger_db_path,
                 )
             else:

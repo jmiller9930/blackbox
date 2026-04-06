@@ -251,6 +251,7 @@
     .tc-chip-anna-kind { background: #e2e8f0; color: #334155; margin-right: 0.2rem; }
     .tc-chip-life { background: #cbd5e1; color: #1e293b; }
     .tc-mini { display: grid; grid-template-columns: auto 1fr; gap: 0.1rem 0.35rem; align-items: baseline; }
+    .tc-mini .tc-id { font-family: ui-monospace, monospace; font-size: 0.62rem; word-break: break-all; }
     .tc-mini .lab { color: var(--muted); font-size: 0.58rem; text-transform: uppercase; }
     .tc-mini-muted .lab { opacity: 0.85; }
     .tc-mini-muted { opacity: 0.88; }
@@ -673,6 +674,34 @@
     );
   }
 
+  /** Compact UTC slice for tile (ISO-ish strings from API). */
+  function tcShortTime(iso) {
+    if (iso == null || iso === '') return '—';
+    var t = String(iso).trim();
+    if (!t) return '—';
+    if (t.length >= 16) return esc(t.slice(0, 16).replace('T', ' ')) + '…';
+    return esc(t);
+  }
+
+  /** Monospace-friendly id: show full if short, else head…tail for hover title. */
+  function tcShortId(id, maxLen) {
+    maxLen = maxLen || 14;
+    if (id == null || id === '') return '—';
+    var s = String(id);
+    if (s.length <= maxLen) return '<span class="tc-id">' + esc(s) + '</span>';
+    var head = Math.floor((maxLen - 1) / 2);
+    var tail = maxLen - 1 - head;
+    return (
+      '<span class="tc-id" title="' +
+      esc(s) +
+      '">' +
+      esc(s.slice(0, head)) +
+      '…' +
+      esc(s.slice(-tail)) +
+      '</span>'
+    );
+  }
+
   function cellMini(c, row) {
     if (!c || c.empty) return '<span class="tc-empty">—</span>';
     var ck = row.chain_kind || '';
@@ -724,15 +753,38 @@
     var mae = c.mae_usd != null ? Number(c.mae_usd).toFixed(2) : '—';
     var ent = c.entry != null ? esc(String(c.entry)) : '—';
     var ex = c.exit != null ? esc(String(c.exit)) : '—';
+    var sym = c.symbol != null && String(c.symbol).trim() !== '' ? esc(String(c.symbol)) : '';
+    var tf = c.timeframe != null && String(c.timeframe).trim() !== '' ? esc(String(c.timeframe)) : '';
+    var symTf =
+      sym && tf ? sym + ' · ' + tf : sym || tf || '—';
+    var side =
+      c.side != null && String(c.side).trim() !== ''
+        ? esc(String(c.side).toUpperCase())
+        : '—';
+    var exRsn =
+      c.exit_reason != null && String(c.exit_reason).trim() !== ''
+        ? esc(String(c.exit_reason))
+        : '—';
+    var entT = tcShortTime(c.entry_time);
+    var exT = tcShortTime(c.exit_time);
+    var tradeCell = tcShortId(c.trade_id, 16);
+    var traceCell = tcShortId(c.trace_id, 12);
     return (
       vsLine +
       '<div class="' + wrapCls + '">' +
+      '<span class="lab">sym</span><span>' + symTf + '</span>' +
+      '<span class="lab">side</span><span>' + side + '</span>' +
       '<span class="lab">entry</span><span>' + ent + '</span>' +
       '<span class="lab">exit</span><span>' + ex + '</span>' +
+      '<span class="lab">in t</span><span>' + entT + '</span>' +
+      '<span class="lab">out t</span><span>' + exT + '</span>' +
       '<span class="lab">pnl</span><span>' + esc(pnl) + '</span>' +
       '<span class="lab">MAE</span><span>' + esc(mae) + '</span>' +
       '<span class="lab">outcome</span><span class="' + wl + '">' + esc(ocDisp) + '</span>' +
       '<span class="lab">mode</span><span>' + esc(modeDisp) + '</span>' +
+      '<span class="lab">reason</span><span>' + exRsn + '</span>' +
+      '<span class="lab">trade</span><span>' + tradeCell + '</span>' +
+      '<span class="lab">trace</span><span>' + traceCell + '</span>' +
       '</div>'
     );
   }

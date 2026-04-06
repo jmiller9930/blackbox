@@ -190,6 +190,7 @@ def build_parallel_anna_paper_steps(
     size: float,
     side: str,
     runner: str = "parallel_strategy_runner_v1",
+    signal_reason_code: str | None = None,
 ) -> list[dict[str, Any]]:
     """Ordered steps for Anna lane **economic paper** parallel harness (PnL derived in ledger)."""
     from modules.anna_training.execution_ledger import compute_pnl_usd
@@ -250,6 +251,8 @@ def build_parallel_anna_paper_steps(
                 "anna_lane_allowed": True,
                 "parallel_runner": runner,
                 "economic_paper": True,
+                "sean_jupiter_v1": True,
+                "signal_reason_code": signal_reason_code,
             },
         },
         {
@@ -262,7 +265,9 @@ def build_parallel_anna_paper_steps(
                 "derived_pnl_usd_preview": round(pnl_preview, 8),
             },
             "rationale": _clamp_rationale(
-                "Synthetic open→close long on canonical bar for parallel measurement (same instrument as baseline pairing)."
+                f"Open→close {side} on canonical bar (Sean Jupiter v1 fired"
+                + (f", {signal_reason_code}" if signal_reason_code else "")
+                + "); parallel Anna measurement vs baseline on same market_event_id."
             ),
         },
         {
@@ -561,11 +566,14 @@ def persist_parallel_anna_paper_trade_with_trace(
     context_snapshot: dict[str, Any],
     notes: str | None,
     db_path: Path | None = None,
+    side: str = "long",
+    signal_reason_code: str | None = None,
 ) -> dict[str, Any]:
     """
     Parallel harness: **economic** Anna lane ``paper`` row (PnL derived from OHLC).
 
-    Uses open→close, long, size 1.0 so ``pnl_usd`` is stored and baseline pairing works.
+    Uses open→close in ``side`` (``long`` or ``short``), size **1.0**, matching Sean Jupiter v1
+    when the parallel runner only calls this after ``evaluate_sean_jupiter_baseline_v1().trade``.
     Does not affect baseline headline book (lane=anna).
     """
     from modules.anna_training.execution_ledger import append_execution_trade
@@ -583,7 +591,11 @@ def persist_parallel_anna_paper_trade_with_trace(
     if ep is None or xp is None:
         raise ValueError("parallel Anna paper requires bar open and close for entry/exit prices")
     size = 1.0
-    side = "long"
+    sd = (side or "long").strip().lower()
+    if sd not in ("long", "short"):
+        sd = "long"
+    sym = str(bar.get("canonical_symbol") or "SOL-PERP").strip() or "SOL-PERP"
+    tf = str(bar.get("timeframe") or "5m").strip() or "5m"
     steps = build_parallel_anna_paper_steps(
         market_event_id=market_event_id,
         strategy_id=strategy_id,
@@ -593,7 +605,8 @@ def persist_parallel_anna_paper_trade_with_trace(
         entry_price=ep,
         exit_price=xp,
         size=size,
-        side=side,
+        side=sd,
+        signal_reason_code=signal_reason_code,
     )
     ts_end = utc_now_iso()
     lp = compute_learning_proof_attachment(
@@ -634,10 +647,10 @@ def persist_parallel_anna_paper_trade_with_trace(
             lane="anna",
             mode="paper",
             market_event_id=market_event_id,
-            symbol="SOL-PERP",
-            timeframe="5m",
+            symbol=sym,
+            timeframe=tf,
             trace_id=trace_id,
-            side=side,
+            side=sd,
             entry_time=bar.get("candle_open_utc"),
             entry_price=ep,
             size=size,
