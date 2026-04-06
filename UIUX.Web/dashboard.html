@@ -90,6 +90,20 @@
     .dash-jp-kv.jp-fire .jv { color: #b45309; }
     .dash-jp-kv.jp-flat .jv { color: #475569; }
     .dash-jp-daemon { margin-top: 0.35rem; font-size: 0.62rem; color: #334155; line-height: 1.4; }
+    .dash-jp-tick {
+      margin: 0 0 0.35rem;
+      font-size: 0.58rem;
+      font-family: ui-monospace, monospace;
+      color: #0f766e;
+      font-weight: 700;
+      letter-spacing: 0.02em;
+    }
+    @keyframes dashPanelPollFlash {
+      0% { box-shadow: inset 0 0 0 2px rgba(13, 148, 136, 0.55); }
+      100% { box-shadow: none; }
+    }
+    .dash-jp.panel-polled { animation: dashPanelPollFlash 0.5s ease-out; }
+    .dash-dc.panel-polled { animation: dashPanelPollFlash 0.5s ease-out; }
     .dash-dc {
       margin: 0.5rem 0.75rem 0.65rem;
       padding: 0.55rem 0.65rem;
@@ -423,8 +437,9 @@
         <h2 id="dash-jp-h" class="dash-jp-title">Jupiter policy (paper baseline)</h2>
         <p class="dash-jp-sub" id="dash-jp-lead">
           Latest closed bar: whether a <strong>paper</strong> baseline trade would fire, feature alignment (RSI / flags), and
-          <code>reason_code</code>. Not venue execution. Refreshes each poll.
+          <code>reason_code</code>. Not venue execution. Refreshes each poll (~<span id="dash-jp-poll-ms-label">1500</span>ms).
         </p>
+        <p class="dash-jp-tick" id="dash-jp-tick" aria-live="polite">—</p>
         <div class="dash-jp-grid" id="dash-jp-grid" aria-live="polite"></div>
         <p class="dash-jp-daemon" id="dash-jp-daemon"></p>
       </div>
@@ -437,6 +452,7 @@
           <strong>Bucket 2</strong>: <code>position_events</code> (open → close; TP/SL/trail when execution appends them).
           Refreshes each poll with the bundle.
         </p>
+        <p class="dash-jp-tick" id="dash-dc-tick" aria-live="polite">—</p>
         <div class="dash-dc-tables">
           <div>
             <p class="dash-dc-h">Recent policy rows</p>
@@ -1002,6 +1018,11 @@
     var cr = $('live-client-refresh');
     if (cr) cr.textContent = fmtMarketTime(new Date().toISOString(), tz2);
     window.__bbNextPollEta = new Date(Date.now() + POLL_MS);
+    var umPoll = (bundle.liveness || {}).update_model || {};
+    var plabMs = $('dash-jp-poll-ms-label');
+    if (plabMs && umPoll.dashboard_poll_interval_ms != null) {
+      plabMs.textContent = String(umPoll.dashboard_poll_interval_ms);
+    }
 
     renderTC(bundle.trade_chain || {});
     renderScorecardAndOps(bundle);
@@ -1010,6 +1031,23 @@
     renderJupiterPolicy(bundle);
     renderDataCollection(bundle);
     renderIntel(bundle);
+  }
+
+  function applyPollTickerAndFlash(bundle, tickId, wrapId) {
+    var tick = $(tickId);
+    var wrap = $(wrapId);
+    var lv = (bundle && bundle.liveness) || {};
+    var srv = lv.bundle_snapshot_at || lv.bundle_generated_at_utc || '—';
+    var local = new Date().toISOString();
+    if (tick) {
+      tick.textContent =
+        'Poll ticker · server bundle: ' + srv + ' · UI render: ' + local.slice(11, 23) + 'Z';
+    }
+    if (wrap) {
+      wrap.classList.remove('panel-polled');
+      void wrap.offsetWidth;
+      wrap.classList.add('panel-polled');
+    }
   }
 
   function renderJupiterPolicy(bundle) {
@@ -1023,6 +1061,7 @@
         'missing jupiter_policy_snapshot — restart API after deploy' +
         '</span></div>';
       if (daemonEl) daemonEl.textContent = '';
+      applyPollTickerAndFlash(bundle, 'dash-jp-tick', 'dash-jp-wrap');
       return;
     }
     var rows = [];
@@ -1095,6 +1134,7 @@
         '<em>No <code>baseline_ledger_last</code> in training state yet</em> — bridge runs when the Karpathy loop daemon ticks.';
     }
     if (daemonEl) daemonEl.innerHTML = dtxt;
+    applyPollTickerAndFlash(bundle, 'dash-jp-tick', 'dash-jp-wrap');
   }
 
   function renderDataCollection(bundle) {
@@ -1107,6 +1147,7 @@
       pol.innerHTML = '<tbody><tr><td colspan="4">' + esc(dc.error) + '</td></tr></tbody>';
       pos.innerHTML = '';
       if (foot) foot.textContent = 'data_collection error — check API / ledger schema.';
+      applyPollTickerAndFlash(bundle, 'dash-dc-tick', 'dash-dc-wrap');
       return;
     }
     var pr = dc.policy_evaluations || [];
@@ -1164,6 +1205,7 @@
         esc(String(dc.schema || '—')) +
         '</code>';
     }
+    applyPollTickerAndFlash(bundle, 'dash-dc-tick', 'dash-dc-wrap');
   }
 
   function renderIntel(bundle) {
