@@ -1061,6 +1061,17 @@ def build_dashboard_bundle(
             "error": str(e)[:400],
         }
 
+    learning_proof: dict[str, Any] | None = None
+    try:
+        from modules.anna_training.learning_proof import build_learning_proof_bundle
+
+        learning_proof = build_learning_proof_bundle(trade_chain=tc, db_path=db_path)
+    except Exception as e:
+        learning_proof = {
+            "schema": "learning_proof_bundle_v1",
+            "error": str(e)[:400],
+        }
+
     return {
         "schema": "blackbox_dashboard_bundle_v1",
         "trace_id": tid,
@@ -1117,4 +1128,5 @@ def build_dashboard_bundle(
         "operator_trading": operator_trading,
         "liveness": liveness,
         "intelligence_visibility": intelligence_visibility,
+        "learning_proof": learning_proof,
     }

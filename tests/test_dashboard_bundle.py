@@ -59,6 +59,11 @@ def test_build_dashboard_bundle_schema() -> None:
         assert k in (iv.get("status_strip") or {})
     assert "effectiveness_summary" in iv
     assert "subsystem_gaps" in iv
+    lp = b.get("learning_proof")
+    assert isinstance(lp, dict)
+    assert lp.get("schema") == "learning_proof_bundle_v1"
+    assert "aggregate" in lp
+    assert "per_event" in lp
 
 
 def test_pair_vs_baseline_for_cells() -> None:

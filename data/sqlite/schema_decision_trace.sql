@@ -13,7 +13,14 @@ CREATE TABLE IF NOT EXISTS decision_traces (
   steps_json TEXT NOT NULL,
   trade_id TEXT,
   schema_version TEXT NOT NULL DEFAULT 'decision_trace_v1',
-  created_at_utc TEXT NOT NULL
+  created_at_utc TEXT NOT NULL,
+  retrieved_memory_ids_json TEXT NOT NULL DEFAULT '[]',
+  memory_used INTEGER NOT NULL DEFAULT 0,
+  decision_summary TEXT,
+  baseline_action_json TEXT,
+  anna_action_json TEXT,
+  memory_ablation_off INTEGER NOT NULL DEFAULT 0,
+  learning_proof_schema TEXT DEFAULT 'learning_proof_v1'
 );
 
 CREATE INDEX IF NOT EXISTS idx_decision_traces_market_event

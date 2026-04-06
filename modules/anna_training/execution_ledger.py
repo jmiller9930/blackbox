@@ -138,6 +138,40 @@ def _migrate_decision_traces_table(conn: sqlite3.Connection, root: Path) -> None
     if not sql.is_file():
         raise FileNotFoundError(sql)
     conn.executescript(sql.read_text(encoding="utf-8"))
+    _migrate_decision_traces_learning_proof_columns(conn)
+
+
+def _migrate_decision_traces_learning_proof_columns(conn: sqlite3.Connection) -> None:
+    """MIT learning-proof directive: memory attribution + join keys on decision_traces."""
+    cur = conn.execute("PRAGMA table_info(decision_traces)")
+    cols = {str(r[1]) for r in cur.fetchall()}
+    stmts: list[str] = []
+    if "retrieved_memory_ids_json" not in cols:
+        stmts.append(
+            "ALTER TABLE decision_traces ADD COLUMN retrieved_memory_ids_json "
+            "TEXT NOT NULL DEFAULT '[]'"
+        )
+    if "memory_used" not in cols:
+        stmts.append(
+            "ALTER TABLE decision_traces ADD COLUMN memory_used INTEGER NOT NULL DEFAULT 0"
+        )
+    if "decision_summary" not in cols:
+        stmts.append("ALTER TABLE decision_traces ADD COLUMN decision_summary TEXT")
+    if "baseline_action_json" not in cols:
+        stmts.append("ALTER TABLE decision_traces ADD COLUMN baseline_action_json TEXT")
+    if "anna_action_json" not in cols:
+        stmts.append("ALTER TABLE decision_traces ADD COLUMN anna_action_json TEXT")
+    if "memory_ablation_off" not in cols:
+        stmts.append(
+            "ALTER TABLE decision_traces ADD COLUMN memory_ablation_off INTEGER NOT NULL DEFAULT 0"
+        )
+    if "learning_proof_schema" not in cols:
+        stmts.append(
+            "ALTER TABLE decision_traces ADD COLUMN learning_proof_schema TEXT "
+            "DEFAULT 'learning_proof_v1'"
+        )
+    for s in stmts:
+        conn.execute(s)
 
 
 def _migrate_strategy_registry_qel_columns(conn: sqlite3.Connection) -> None:

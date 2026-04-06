@@ -13,6 +13,7 @@ from modules.anna_training.execution_ledger import connect_ledger, ensure_execut
 from modules.anna_training.store import utc_now_iso
 
 TRACE_SCHEMA_VERSION = "decision_trace_v1"
+LEARNING_PROOF_SCHEMA = "learning_proof_v1"
 RATIONALE_MAX_LEN = 512
 
 STEP_NAMES = frozenset({"ingest", "feature_calc", "policy_check", "decision", "execution"})
@@ -369,6 +370,14 @@ def build_baseline_bridge_steps(
     return steps
 
 
+def _json_obj_or_none(v: Any) -> str | None:
+    if v is None:
+        return None
+    if isinstance(v, str):
+        return v
+    return json.dumps(v, ensure_ascii=False)
+
+
 def insert_decision_trace(
     conn: sqlite3.Connection,
     *,
@@ -382,18 +391,27 @@ def insert_decision_trace(
     timestamp_end_utc: str,
     steps: list[dict[str, Any]],
     trade_id: str | None,
+    retrieved_memory_ids: list[str] | None = None,
+    memory_used: bool = False,
+    decision_summary: str | None = None,
+    baseline_action_json: dict[str, Any] | None = None,
+    anna_action_json: dict[str, Any] | None = None,
+    memory_ablation_off: bool = False,
 ) -> None:
     _validate_steps(steps, market_event_id=market_event_id)
     lane_n = (lane or "").strip().lower()
     if lane_n not in ("baseline", "anna"):
         raise ValueError("lane must be baseline or anna")
     mode_n = (mode or "").strip().lower()
+    rids = list(retrieved_memory_ids or [])
     conn.execute(
         """
         INSERT INTO decision_traces (
           trace_id, market_event_id, strategy_id, lane, mode, paper_stub,
-          timestamp_start_utc, timestamp_end_utc, steps_json, trade_id, schema_version, created_at_utc
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          timestamp_start_utc, timestamp_end_utc, steps_json, trade_id, schema_version, created_at_utc,
+          retrieved_memory_ids_json, memory_used, decision_summary, baseline_action_json, anna_action_json,
+          memory_ablation_off, learning_proof_schema
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
         (
             trace_id.strip(),
@@ -408,6 +426,13 @@ def insert_decision_trace(
             (trade_id or "").strip() or None,
             TRACE_SCHEMA_VERSION,
             utc_now_iso(),
+            json.dumps(rids, ensure_ascii=False),
+            1 if memory_used else 0,
+            _clamp_rationale(decision_summary),
+            _json_obj_or_none(baseline_action_json),
+            _json_obj_or_none(anna_action_json),
+            1 if memory_ablation_off else 0,
+            LEARNING_PROOF_SCHEMA,
         ),
     )
 
@@ -428,6 +453,7 @@ def persist_parallel_anna_stub_trade_with_trace(
     Single transaction: ``decision_traces`` row then ``execution_trades`` with matching ``trace_id``.
     """
     from modules.anna_training.execution_ledger import append_execution_trade
+    from modules.anna_training.learning_proof import compute_learning_proof_attachment
 
     trace_id = str(uuid.uuid4())
     ts_start = utc_now_iso()
@@ -441,6 +467,14 @@ def persist_parallel_anna_stub_trade_with_trace(
         trace_id=trace_id,
     )
     ts_end = utc_now_iso()
+    lp = compute_learning_proof_attachment(
+        strategy_id=strategy_id,
+        market_event_id=market_event_id,
+        bar=bar,
+        mode="paper_stub",
+    )
+    ctx = dict(context_snapshot or {})
+    ctx["learning_proof"] = lp
 
     close_px = bar.get("close")
     conn = connect_ledger(db_path)
@@ -458,6 +492,12 @@ def persist_parallel_anna_stub_trade_with_trace(
             timestamp_end_utc=ts_end,
             steps=steps,
             trade_id=trade_id,
+            retrieved_memory_ids=lp["retrieved_memory_ids"],
+            memory_used=bool(lp["memory_used"]),
+            decision_summary=str(lp.get("decision_summary") or ""),
+            baseline_action_json=lp.get("baseline_action_json"),
+            anna_action_json=lp.get("anna_action_json"),
+            memory_ablation_off=bool(lp.get("memory_ablation_off")),
         )
         row = append_execution_trade(
             trade_id=trade_id,
@@ -475,7 +515,7 @@ def persist_parallel_anna_stub_trade_with_trace(
             exit_time=bar.get("candle_close_utc"),
             exit_price=float(close_px) if close_px is not None else None,
             exit_reason="CLOSE",
-            context_snapshot=context_snapshot,
+            context_snapshot=ctx,
             notes=notes,
             db_path=db_path,
             conn=conn,
@@ -499,6 +539,7 @@ def persist_parallel_anna_stub_trade_with_trace(
         "timestamp_end_utc": ts_end,
         "steps": steps,
         "execution_trade": row,
+        "learning_proof": lp,
     }
 
 
@@ -519,6 +560,7 @@ def persist_parallel_anna_paper_trade_with_trace(
     Does not affect baseline headline book (lane=anna).
     """
     from modules.anna_training.execution_ledger import append_execution_trade
+    from modules.anna_training.learning_proof import compute_learning_proof_attachment
 
     trace_id = str(uuid.uuid4())
     ts_start = utc_now_iso()
@@ -545,8 +587,15 @@ def persist_parallel_anna_paper_trade_with_trace(
         side=side,
     )
     ts_end = utc_now_iso()
+    lp = compute_learning_proof_attachment(
+        strategy_id=strategy_id,
+        market_event_id=market_event_id,
+        bar=bar,
+        mode="paper",
+    )
     ctx = dict(context_snapshot or {})
     ctx.setdefault("economic_parallel_paper", True)
+    ctx["learning_proof"] = lp
 
     conn = connect_ledger(db_path)
     try:
@@ -563,6 +612,12 @@ def persist_parallel_anna_paper_trade_with_trace(
             timestamp_end_utc=ts_end,
             steps=steps,
             trade_id=trade_id,
+            retrieved_memory_ids=lp["retrieved_memory_ids"],
+            memory_used=bool(lp["memory_used"]),
+            decision_summary=str(lp.get("decision_summary") or ""),
+            baseline_action_json=lp.get("baseline_action_json"),
+            anna_action_json=lp.get("anna_action_json"),
+            memory_ablation_off=bool(lp.get("memory_ablation_off")),
         )
         row = append_execution_trade(
             trade_id=trade_id,
@@ -604,6 +659,7 @@ def persist_parallel_anna_paper_trade_with_trace(
         "timestamp_end_utc": ts_end,
         "steps": steps,
         "execution_trade": row,
+        "learning_proof": lp,
     }
 
 
@@ -657,6 +713,12 @@ def persist_baseline_trade_with_trace(
             timestamp_end_utc=ts_end,
             steps=steps,
             trade_id=trade_id,
+            retrieved_memory_ids=[],
+            memory_used=False,
+            decision_summary="Baseline lane — no Anna memory attribution.",
+            baseline_action_json=None,
+            anna_action_json=None,
+            memory_ablation_off=False,
         )
         trade_row = append_execution_trade(
             trade_id=trade_id,
@@ -701,8 +763,39 @@ def persist_baseline_trade_with_trace(
     }
 
 
+def _parse_json_list(raw: Any) -> list[str]:
+    if raw is None:
+        return []
+    if isinstance(raw, list):
+        return [str(x) for x in raw if str(x).strip()]
+    if isinstance(raw, str):
+        try:
+            data = json.loads(raw)
+            if isinstance(data, list):
+                return [str(x) for x in data if str(x).strip()]
+        except json.JSONDecodeError:
+            return []
+    return []
+
+
+def _parse_json_obj(raw: Any) -> dict[str, Any] | None:
+    if raw is None:
+        return None
+    if isinstance(raw, dict):
+        return raw
+    if isinstance(raw, str) and raw.strip():
+        try:
+            data = json.loads(raw)
+            return data if isinstance(data, dict) else None
+        except json.JSONDecodeError:
+            return None
+    return None
+
+
 def row_to_api_dict(row: dict[str, Any]) -> dict[str, Any]:
     steps = json.loads(row["steps_json"]) if row.get("steps_json") else []
+    rj = row.get("retrieved_memory_ids_json")
+    mem_ids = _parse_json_list(rj)
     return {
         "trace_id": row.get("trace_id"),
         "market_event_id": row.get("market_event_id"),
@@ -716,6 +809,13 @@ def row_to_api_dict(row: dict[str, Any]) -> dict[str, Any]:
         "trade_id": row.get("trade_id"),
         "schema_version": row.get("schema_version"),
         "created_at_utc": row.get("created_at_utc"),
+        "retrieved_memory_ids": mem_ids,
+        "memory_used": bool(row.get("memory_used")),
+        "decision_summary": row.get("decision_summary"),
+        "baseline_action_json": _parse_json_obj(row.get("baseline_action_json")),
+        "anna_action_json": _parse_json_obj(row.get("anna_action_json")),
+        "memory_ablation_off": bool(row.get("memory_ablation_off")),
+        "learning_proof_schema": row.get("learning_proof_schema") or LEARNING_PROOF_SCHEMA,
     }
 
 
