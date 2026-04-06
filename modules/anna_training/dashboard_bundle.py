@@ -230,8 +230,7 @@ def _compact_baseline_ledger_last(raw: Any) -> dict[str, Any] | None:
 
 
 _JUPITER_READINESS_FOR_OPERATOR = (
-    "Summary line for this closed bar (same evaluator as the gate pills). "
-    "Not a live tick stream — only the latest closed candle in the database."
+    "Same evaluator as the gate pills below; latest closed bar in the database only."
 )
 
 
