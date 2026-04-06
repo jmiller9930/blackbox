@@ -92,6 +92,58 @@ def fetch_latest_bar_row(
         conn.close()
 
 
+def fetch_bar_by_market_event_id(
+    market_event_id: str,
+    *,
+    db_path: Path | None = None,
+    canonical_symbol: str = CANONICAL_INSTRUMENT_SOL_PERP,
+) -> dict[str, Any] | None:
+    """Return one canonical bar row for ``market_event_id``, or None."""
+    mid = (market_event_id or "").strip()
+    if not mid:
+        return None
+    p = db_path or default_market_data_path()
+    if not p.is_file():
+        return None
+    conn = sqlite3.connect(f"file:{p}?mode=ro", uri=True)
+    try:
+        cur = conn.execute(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name='market_bars_5m'"
+        )
+        if cur.fetchone() is None:
+            return None
+        row = conn.execute(
+            """
+            SELECT id, canonical_symbol, timeframe, candle_open_utc, candle_close_utc,
+                   market_event_id, open, high, low, close, tick_count, price_source, computed_at
+            FROM market_bars_5m
+            WHERE market_event_id = ? AND canonical_symbol = ?
+            LIMIT 1
+            """,
+            (mid, canonical_symbol),
+        ).fetchone()
+        if not row:
+            return None
+        keys = [
+            "id",
+            "canonical_symbol",
+            "timeframe",
+            "candle_open_utc",
+            "candle_close_utc",
+            "market_event_id",
+            "open",
+            "high",
+            "low",
+            "close",
+            "tick_count",
+            "price_source",
+            "computed_at",
+        ]
+        return dict(zip(keys, row))
+    finally:
+        conn.close()
+
+
 def ensure_market_db_has_bar_table(db_path: Path | None = None) -> bool:
     """True if ``market_bars_5m`` exists (schema applied)."""
     p = db_path or default_market_data_path()

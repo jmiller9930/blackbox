@@ -20,15 +20,27 @@ def _env_bool(name: str, default: bool) -> bool:
 def _parallel_strategy_mode() -> str:
     """
     ``paper`` — economic Anna lane rows (PnL in ledger; comparable vs baseline).
-    ``paper_stub`` — legacy eval-only rows (no asserted PnL).
+    ``paper_stub`` — legacy eval-only rows (**pnl_usd NULL**); breaks dashboard pairing.
 
-    Env: ``ANNA_PARALLEL_STRATEGY_MODE`` — default ``paper``.
+    Default: **paper** (measurement instrument). Stub is allowed only when both:
+    - ``ANNA_PARALLEL_STRATEGY_MODE`` is stub-like (``stub`` / ``paper_stub`` / ``eval``), and
+    - ``ANNA_PARALLEL_STUB_LAB=1`` (explicit lab opt-in).
+
+    This prevents a stray ``paper_stub`` host env from excluding every Anna cell (``missing_pnl``).
     """
     raw = (os.environ.get("ANNA_PARALLEL_STRATEGY_MODE") or "paper").strip().lower()
     if raw in ("paper", "economic", "economic_paper"):
         return "paper"
     if raw in ("stub", "paper_stub", "eval"):
-        return "paper_stub"
+        lab = (os.environ.get("ANNA_PARALLEL_STUB_LAB") or "").strip().lower() in (
+            "1",
+            "true",
+            "yes",
+            "on",
+        )
+        if lab:
+            return "paper_stub"
+        return "paper"
     return "paper"
 
 
@@ -40,6 +52,77 @@ def _ensure_runtime_path() -> None:
     rt = _runtime_scripts()
     if str(rt) not in sys.path:
         sys.path.insert(0, str(rt))
+
+
+def _default_market_db_path() -> Path:
+    env = (os.environ.get("BLACKBOX_MARKET_DATA_PATH") or "").strip()
+    if env:
+        return Path(env).expanduser()
+    return Path(__file__).resolve().parents[2] / "data" / "sqlite" / "market_data.db"
+
+
+def _migrate_anna_parallel_stub_rows_to_paper(
+    conn: sqlite3.Connection,
+    *,
+    market_db_path: Path | None,
+) -> dict[str, Any]:
+    """
+    One-time-per-row upgrade: legacy ``paper_stub`` parallel Anna rows stored ``pnl_usd`` NULL.
+    Recompute economic long open→close PnL from ``market_bars_5m`` and set ``mode=paper``.
+    """
+    _ensure_runtime_path()
+    from market_data.bar_lookup import fetch_bar_by_market_event_id
+
+    from modules.anna_training.execution_ledger import compute_pnl_usd
+
+    mpath = market_db_path or _default_market_db_path()
+    if not mpath.is_file():
+        return {"ok": False, "reason": "market_db_missing", "updated": 0}
+
+    cur = conn.execute(
+        """
+        SELECT trade_id, market_event_id
+        FROM execution_trades
+        WHERE lane = 'anna' AND mode = 'paper_stub' AND pnl_usd IS NULL
+          AND (notes IS NOT NULL AND notes NOT LIKE '%migrated_stub_to_paper%')
+          AND (
+            notes LIKE '%parallel_stub%' OR notes LIKE '%parallel_runner%'
+          )
+        """
+    )
+    rows = cur.fetchall()
+    updated = 0
+    for trade_id, mid in rows:
+        tid = str(trade_id or "").strip()
+        mid_s = str(mid or "").strip()
+        if not tid or not mid_s:
+            continue
+        bar = fetch_bar_by_market_event_id(mid_s, db_path=mpath)
+        if not bar:
+            continue
+        o = bar.get("open")
+        c = bar.get("close")
+        if o is None or c is None:
+            continue
+        try:
+            ep = float(o)
+            xp = float(c)
+        except (TypeError, ValueError):
+            continue
+        pnl = compute_pnl_usd(entry_price=ep, exit_price=xp, size=1.0, side="long")
+        cu = conn.execute(
+            """
+            UPDATE execution_trades
+            SET mode = 'paper', pnl_usd = ?,
+                notes = COALESCE(notes, '') || ' [migrated_stub_to_paper_v1]'
+            WHERE trade_id = ? AND lane = 'anna' AND mode = 'paper_stub' AND pnl_usd IS NULL
+            """,
+            (pnl, tid),
+        )
+        if cu.rowcount and cu.rowcount > 0:
+            updated += int(cu.rowcount)
+    conn.commit()
+    return {"ok": True, "updated": updated, "market_db_path": str(mpath)}
 
 
 def _parallel_strategy_ids() -> list[str]:
@@ -150,8 +233,12 @@ def run_parallel_anna_strategies_tick(
     trace_ids: list[str] = []
 
     conn = connect_ledger(execution_ledger_db_path)
+    stub_migration: dict[str, Any] = {"ok": True, "updated": 0}
     try:
         ensure_execution_ledger_schema(conn)
+        stub_migration = _migrate_anna_parallel_stub_rows_to_paper(
+            conn, market_db_path=market_data_db_path
+        )
         sync_strategy_registry_from_catalog(conn)
     finally:
         conn.close()
@@ -200,6 +287,7 @@ def run_parallel_anna_strategies_tick(
         "market_event_id": mid,
         "strategies": strategies,
         "parallel_mode": mode,
+        "stub_migration": stub_migration,
         "trades_written": len(written),
         "trade_ids": written,
         "trace_ids": trace_ids,

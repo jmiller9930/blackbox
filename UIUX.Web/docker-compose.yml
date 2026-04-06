@@ -26,6 +26,8 @@ services:
       SOLANA_RPC_URL: ${SOLANA_RPC_URL:-}
       BLACKBOX_LIVE_TRADING_BLOCKED: ${BLACKBOX_LIVE_TRADING_BLOCKED:-1}
       BLACKBOX_EXECUTION_LEDGER_PATH: ${BLACKBOX_EXECUTION_LEDGER_PATH:-}
+      # Measurement: economic paper (ledger pnl_usd) for baseline pairing. Stub requires ANNA_PARALLEL_STUB_LAB=1 on host running Karpathy.
+      ANNA_PARALLEL_STRATEGY_MODE: ${ANNA_PARALLEL_STRATEGY_MODE:-paper}
     volumes:
       - ../:/repo
       - /mnt/SQLlite_dB:/mnt/SQLlite_dB
