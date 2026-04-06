@@ -148,6 +148,51 @@ def _build_tile_payload(
     }
 
 
+def _tile_ts_iso_z(ts: str) -> str:
+    """Normalize to ``...T..:..:..(.fff)?Z`` (add ``.000`` before Z when seconds have no fraction)."""
+    s = (ts or "").strip()
+    if not s:
+        return s
+    if s.endswith("Z") and "." not in s[10:]:
+        # e.g. 2026-04-06T18:30:00Z → 2026-04-06T18:30:00.000Z
+        if len(s) >= 20 and s[-1] == "Z":
+            return s[:-1] + ".000Z"
+    return s
+
+
+def _tile_fmt_price(v: Any) -> str:
+    """Stable decimal text for OHLC/ATR/EMA (avoid float print artifacts)."""
+    if v is None:
+        return ""
+    try:
+        f = float(v)
+        r = round(f, 12)
+        t = f"{r:.12f}".rstrip("0").rstrip(".")
+        return t if t else "0"
+    except (TypeError, ValueError):
+        return str(v)
+
+
+def _tile_fmt_rsi(v: Any) -> str:
+    if v is None:
+        return ""
+    try:
+        f = float(v)
+        r = round(f, 12)
+        t = f"{r:.15f}".rstrip("0").rstrip(".")
+        return t if t else "0"
+    except (TypeError, ValueError):
+        return str(v)
+
+
+def _tile_lower_bool(x: Any) -> str:
+    if x is True:
+        return "true"
+    if x is False:
+        return "false"
+    return str(x).lower()
+
+
 def format_jupiter_tile_narrative_v1(
     *,
     features: dict[str, Any],
@@ -157,7 +202,7 @@ def format_jupiter_tile_narrative_v1(
     policy_blockers: list[str] | None = None,
 ) -> str:
     """
-    Human-readable multi-line tile matching operator Jupiter / Sean policy context.
+    Human-readable multi-line tile — **operator contract** (fixed line shapes, labels, order).
 
     Uses ``features["tile"]`` when present (populated by :func:`evaluate_sean_jupiter_baseline_v1`).
     """
@@ -171,7 +216,7 @@ def format_jupiter_tile_narrative_v1(
             "(Insufficient bar context for full OHLC/ATR tile — need closed bar history.)"
         )
 
-    ts = str(tile.get("candle_open_utc") or "")
+    ts = _tile_ts_iso_z(str(tile.get("candle_open_utc") or ""))
     nv = tile.get("new_ohlcv") or {}
     vo, vh, vl, vc = nv.get("o"), nv.get("h"), nv.get("l"), nv.get("c")
     vv = nv.get("v")
@@ -179,83 +224,146 @@ def format_jupiter_tile_narrative_v1(
     if vv is not None:
         try:
             fv = float(vv)
-            vol_s = str(int(fv)) if fv.is_integer() else str(fv)
+            vol_s = str(int(fv)) if fv.is_integer() else _tile_fmt_price(fv)
         except (TypeError, ValueError):
             vol_s = str(vv)
 
     lines.append(
-        f"New 5-min candle formed: Timestamp={ts}, O={vo}, H={vh}, L={vl}, C={vc}, V={vol_s}"
+        "New 5-min candle formed: Timestamp="
+        + ts
+        + ", O="
+        + _tile_fmt_price(vo)
+        + ", H="
+        + _tile_fmt_price(vh)
+        + ", L="
+        + _tile_fmt_price(vl)
+        + ", C="
+        + _tile_fmt_price(vc)
+        + ", V="
+        + vol_s
     )
 
     pv = tile.get("prev_ohlc") or {}
     lines.append(
-        f"Previous candle: O={pv.get('o')}, H={pv.get('h')}, L={pv.get('l')}, C={pv.get('c')}, "
-        f"RSI={tile.get('prev_rsi')}"
+        "Previous candle: O="
+        + _tile_fmt_price(pv.get("o"))
+        + ", H="
+        + _tile_fmt_price(pv.get("h"))
+        + ", L="
+        + _tile_fmt_price(pv.get("l"))
+        + ", C="
+        + _tile_fmt_price(pv.get("c"))
+        + ", RSI="
+        + _tile_fmt_rsi(tile.get("prev_rsi"))
     )
     lines.append(
-        f"Current candle: O={vo}, H={vh}, L={vl}, C={vc}, RSI={tile.get('current_rsi')}"
+        "Current candle: O="
+        + _tile_fmt_price(vo)
+        + ", H="
+        + _tile_fmt_price(vh)
+        + ", L="
+        + _tile_fmt_price(vl)
+        + ", C="
+        + _tile_fmt_price(vc)
+        + ", RSI="
+        + _tile_fmt_rsi(tile.get("current_rsi"))
     )
     lines.append(f"Supertrend: {tile.get('supertrend_label')}")
 
     atr_c = tile.get("atr_current")
     atr_a = tile.get("atr_avg200")
     atr_r = tile.get("atr_ratio")
+    ratio_s = "n/a"
+    if atr_r is not None:
+        try:
+            ratio_s = _tile_fmt_price(round(float(atr_r), 6))
+        except (TypeError, ValueError):
+            ratio_s = str(atr_r)
     lines.append(
-        f"ATR Analysis: Current={atr_c} | Avg200={atr_a} | Ratio={round(atr_r, 4) if atr_r is not None else 'n/a'}"
+        "ATR Analysis: Current="
+        + _tile_fmt_price(atr_c)
+        + " | Avg200="
+        + _tile_fmt_price(atr_a)
+        + " | Ratio="
+        + ratio_s
     )
 
     ema = tile.get("ema200")
-    lines.append(f"Price vs EMA200: {tile.get('price_vs_ema200')} (EMA={ema})")
+    lines.append(
+        "Price vs EMA200: "
+        + str(tile.get("price_vs_ema200") or "")
+        + " (EMA="
+        + _tile_fmt_price(ema)
+        + ")"
+    )
 
     bl = tile.get("breakdown_long") or {}
     bs = tile.get("breakdown_short") or {}
+    # Operator spec: Long=(Supertrend, AboveEMA, RSI>52, HigherClose) — Short=(Supertrend, BelowEMA, RSI<48, LowerClose)
     lines.append(
         "Signal Breakdown → Long="
-        + str(bl.get("long_ok"))
+        + _tile_lower_bool(bl.get("long_ok"))
         + " (Supertrend="
-        + str(bl.get("supertrend_bullish"))
+        + _tile_lower_bool(bl.get("supertrend_bullish"))
         + ", AboveEMA="
-        + str(bl.get("above_ema"))
-        + ", RSI_long_arm_raw="
-        + str(bl.get("rsi_long_arm_raw"))
+        + _tile_lower_bool(bl.get("above_ema"))
         + ", RSI>52="
-        + str(bl.get("rsi_gt_52"))
+        + _tile_lower_bool(bl.get("rsi_gt_52"))
         + ", HigherClose="
-        + str(bl.get("higher_close"))
+        + _tile_lower_bool(bl.get("higher_close"))
         + ")"
     )
     lines.append(
         "Signal Breakdown → Short="
-        + str(bs.get("short_ok"))
+        + _tile_lower_bool(bs.get("short_ok"))
         + " (Supertrend="
-        + str(bs.get("supertrend_bearish"))
+        + _tile_lower_bool(bs.get("supertrend_bearish"))
         + ", BelowEMA="
-        + str(bs.get("below_ema"))
-        + ", RSI_short_arm_raw="
-        + str(bs.get("rsi_short_arm_raw"))
+        + _tile_lower_bool(bs.get("below_ema"))
         + ", RSI<48="
-        + str(bs.get("rsi_lt_48"))
+        + _tile_lower_bool(bs.get("rsi_lt_48"))
         + ", LowerClose="
-        + str(bs.get("lower_close"))
+        + _tile_lower_bool(bs.get("lower_close"))
         + ")"
     )
 
     crsi = tile.get("current_rsi")
     rs_raw = features.get("short_signal_raw")
     rl_raw = features.get("long_signal_raw")
-    lines.append(f"Signals: short={rs_raw} (RSI={crsi}), long={rl_raw}")
+    lines.append(
+        "Signals: short="
+        + _tile_lower_bool(rs_raw)
+        + " (RSI="
+        + _tile_fmt_rsi(crsi)
+        + "), long="
+        + _tile_lower_bool(rl_raw)
+    )
+
+    vc_num = nv.get("c")
+    atr_c_fmt = _tile_fmt_price(atr_c)
 
     if trade and side in ("long", "short"):
-        lines.append(f"ATR-Supertrend SIGNAL → {side.upper()} at {vc} | ATR={atr_c}")
-        lines.append(f"Processing {side.upper()} signal at {vc}")
+        lines.append(
+            "ATR-Supertrend SIGNAL → "
+            + side.upper()
+            + " at "
+            + _tile_fmt_price(vc_num)
+            + " | ATR="
+            + atr_c_fmt
+        )
+        lines.append("Processing " + side.upper() + " signal at " + _tile_fmt_price(vc_num))
     elif rl_raw and not rs_raw:
-        lines.append(f"ATR-Supertrend SIGNAL → LONG at {vc} | ATR={atr_c}")
-        lines.append(f"Processing LONG signal at {vc}")
+        lines.append(
+            "ATR-Supertrend SIGNAL → LONG at " + _tile_fmt_price(vc_num) + " | ATR=" + atr_c_fmt
+        )
+        lines.append("Processing LONG signal at " + _tile_fmt_price(vc_num))
     elif rs_raw and not rl_raw:
-        lines.append(f"ATR-Supertrend SIGNAL → SHORT at {vc} | ATR={atr_c}")
-        lines.append(f"Processing SHORT signal at {vc}")
+        lines.append(
+            "ATR-Supertrend SIGNAL → SHORT at " + _tile_fmt_price(vc_num) + " | ATR=" + atr_c_fmt
+        )
+        lines.append("Processing SHORT signal at " + _tile_fmt_price(vc_num))
 
-    # Filter / skip line
+    # Filter / skip line (use en dash per operator example)
     pb = policy_blockers or []
     if isinstance(features.get("policy_blockers"), list):
         pb = [str(x) for x in features["policy_blockers"]]
@@ -264,8 +372,9 @@ def format_jupiter_tile_narrative_v1(
         pass
     elif reason_code == "no_signal":
         lines.append("Filter: no aggregateCandles long/short arm – skipping entry")
-    elif reason_code == "policy_filter_block" and pb:
-        lines.append("Filter: " + ", ".join(pb) + " – skipping entry")
+    elif reason_code == "policy_filter_block":
+        # Operator contract (fixed copy when Supertrend/EMA/RSI regime blocks a raw arm).
+        lines.append("Filter: weak Supertrend / extreme RSI – skipping entry")
     elif reason_code == "insufficient_history":
         lines.append("Filter: insufficient bar history for EMA200/ATR – skipping entry")
     elif atr_r is not None and float(atr_r) < 0.45:
