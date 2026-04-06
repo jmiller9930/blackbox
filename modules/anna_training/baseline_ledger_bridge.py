@@ -1,4 +1,10 @@
-"""Baseline → execution_ledger: same market_event_id as Anna (canonical bar row, single constructor)."""
+"""Baseline → execution_ledger: **Sean’s Jupiter policy** (signal-gated) or legacy mechanical row.
+
+Default **signal mode** = ``sean_jupiter_v1`` — **parity** with ``trading_core`` ``aggregateCandles`` + ``rsi``
+(see ``sean_jupiter_baseline_signal.py``). **No row** if no signal.
+
+Legacy: ``BASELINE_LEDGER_SIGNAL_MODE=legacy_mechanical_long`` — old open→close long every bar (lab only).
+"""
 
 from __future__ import annotations
 
@@ -54,6 +60,13 @@ def _baseline_trade_id(market_event_id: str, mode: str) -> str:
     return f"bl_{h}"
 
 
+def _signal_mode() -> str:
+    raw = (os.environ.get("BASELINE_LEDGER_SIGNAL_MODE") or "sean_jupiter_v1").strip().lower()
+    if raw in ("legacy", "legacy_mechanical", "legacy_mechanical_long", "mechanical"):
+        return "legacy_mechanical_long"
+    return "sean_jupiter_v1"
+
+
 def run_baseline_ledger_bridge_tick(
     *,
     market_data_db_path: Path | None = None,
@@ -61,21 +74,18 @@ def run_baseline_ledger_bridge_tick(
     mode: str | None = None,
 ) -> dict[str, Any]:
     """
-    Append one **baseline** row to ``execution_trades`` for the latest canonical 5m bar.
-
-    Uses **only** ``market_event_id`` and OHLC from ``market_bars_5m`` (same source as Anna).
-    Economic fields: long 1 unit notional, entry at bar **open**, exit at bar **close**,
-    P&amp;L = (close - open) * size (index-style USD move on SOL-PERP).
+    Append **at most one** baseline row per ``market_event_id`` when Sean Jupiter signal (or legacy) fires.
 
     Env:
-      BASELINE_LEDGER_BRIDGE — default **on**; ``0`` disables.
+      BASELINE_LEDGER_BRIDGE — default **on**; ``0`` disables all baseline writes.
+      BASELINE_LEDGER_SIGNAL_MODE — ``sean_jupiter_v1`` (default) | ``legacy_mechanical_long``.
       BASELINE_LEDGER_MODE — ``paper`` (default) or ``live``.
     """
     if not _env_bool("BASELINE_LEDGER_BRIDGE", True):
         return {"enabled": False, "reason": "BASELINE_LEDGER_BRIDGE off"}
 
     _ensure_runtime_path()
-    from market_data.bar_lookup import fetch_latest_bar_row
+    from market_data.bar_lookup import fetch_latest_bar_row, fetch_recent_bars_asc
 
     m = (mode or os.environ.get("BASELINE_LEDGER_MODE") or "paper").strip().lower()
     if m not in ("live", "paper"):
@@ -91,13 +101,52 @@ def run_baseline_ledger_bridge_tick(
     if o is None or c is None:
         return {"ok": False, "reason": "bar_missing_ohlc", "market_event_id": mid}
 
+    sm = _signal_mode()
+    if sm == "legacy_mechanical_long":
+        return _run_legacy_mechanical_long(
+            bar=bar,
+            mid=mid,
+            mode=m,
+            execution_ledger_db_path=execution_ledger_db_path,
+        )
+
+    bars_asc = fetch_recent_bars_asc(limit=280, db_path=market_data_db_path)
+    if not bars_asc or str(bars_asc[-1].get("market_event_id") or "") != mid:
+        return {"ok": False, "reason": "bar_history_mismatch", "market_event_id": mid}
+
+    from modules.anna_training.sean_jupiter_baseline_signal import evaluate_sean_jupiter_baseline_v1
+
+    sig = evaluate_sean_jupiter_baseline_v1(bars_asc=bars_asc)
+    if not sig.trade:
+        return {
+            "ok": True,
+            "no_trade": True,
+            "market_event_id": mid,
+            "reason_code": sig.reason_code,
+            "features": sig.features,
+            "signal_mode": sm,
+        }
+
     size = 1.0
     tid = _baseline_trade_id(mid, m)
+    pnl = float(sig.pnl_usd) if sig.pnl_usd is not None else 0.0
 
     from .decision_trace import persist_baseline_trade_with_trace
-    from .execution_ledger import compute_pnl_usd
 
-    pnl = compute_pnl_usd(entry_price=float(o), exit_price=float(c), size=size, side="long")
+    catalog_id = "jupiter_supertrend_ema_rsi_atr_v1"
+    ctx = {
+        "source": "baseline_ledger_bridge_sean_jupiter_v1",
+        "trade_policy": "jupiter_perps",
+        "catalog_strategy_id": catalog_id,
+        "signal_mode": sm,
+        "reason_code": sig.reason_code,
+        "features": sig.features,
+        "side": sig.side,
+    }
+    notes = (
+        f"baseline — Sean Jupiter policy ({catalog_id}) signal; "
+        f"{sig.reason_code} side={sig.side}"
+    )
 
     try:
         out = persist_baseline_trade_with_trace(
@@ -106,14 +155,12 @@ def run_baseline_ledger_bridge_tick(
             mode=m,
             trade_id=tid,
             pnl_usd=pnl,
-            context_snapshot={
-                "source": "baseline_ledger_bridge_v1",
-                "price_source": bar.get("price_source"),
-                "tick_count": bar.get("tick_count"),
-                "economic_basis": "canonical_bar_open_to_close_long_1unit",
-            },
-            notes="baseline bridge — OHLC from same market_bars_5m row as Anna market_event_id",
+            context_snapshot=ctx,
+            notes=notes,
             db_path=execution_ledger_db_path,
+            side=sig.side,
+            economic_basis="jupiter_policy_aggregateCandles_rsi_open_to_close",
+            signal_snapshot=dict(sig.features),
         )
     except sqlite3.IntegrityError:
         return {
@@ -133,4 +180,63 @@ def run_baseline_ledger_bridge_tick(
         "mode": m,
         "execution_trade": row,
         "decision_trace": trace_meta,
+        "signal_mode": sm,
+        "side": sig.side,
+    }
+
+
+def _run_legacy_mechanical_long(
+    *,
+    bar: dict[str, Any],
+    mid: str,
+    mode: str,
+    execution_ledger_db_path: Path | None,
+) -> dict[str, Any]:
+    from .decision_trace import persist_baseline_trade_with_trace
+    from .execution_ledger import compute_pnl_usd
+
+    o = bar.get("open")
+    c = bar.get("close")
+    size = 1.0
+    tid = _baseline_trade_id(mid, mode)
+    pnl = compute_pnl_usd(entry_price=float(o), exit_price=float(c), size=size, side="long")
+
+    try:
+        out = persist_baseline_trade_with_trace(
+            market_event_id=mid,
+            bar=bar,
+            mode=mode,
+            trade_id=tid,
+            pnl_usd=pnl,
+            context_snapshot={
+                "source": "baseline_ledger_bridge_v1",
+                "price_source": bar.get("price_source"),
+                "tick_count": bar.get("tick_count"),
+                "economic_basis": "canonical_bar_open_to_close_long_1unit",
+            },
+            notes="legacy mechanical baseline — OHLC long 1 unit (not Sean signal)",
+            db_path=execution_ledger_db_path,
+            side="long",
+            economic_basis="canonical_bar_open_to_close_long_1unit",
+            signal_snapshot=None,
+        )
+    except sqlite3.IntegrityError:
+        return {
+            "ok": True,
+            "idempotent_skip": True,
+            "market_event_id": mid,
+            "trade_id": tid,
+        }
+
+    row = out.get("execution_trade")
+    trace_meta = {k: v for k, v in out.items() if k != "execution_trade"}
+
+    return {
+        "ok": True,
+        "market_event_id": mid,
+        "trade_id": tid,
+        "mode": mode,
+        "execution_trade": row,
+        "decision_trace": trace_meta,
+        "signal_mode": "legacy_mechanical_long",
     }

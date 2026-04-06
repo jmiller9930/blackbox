@@ -1,0 +1,8 @@
+{
+  "name": "blackbox-basetrade",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "eventsource": "^2.0.2"
+  }
+}

@@ -92,6 +92,62 @@ def fetch_latest_bar_row(
         conn.close()
 
 
+def fetch_recent_bars_asc(
+    *,
+    limit: int,
+    db_path: Path | None = None,
+    canonical_symbol: str = CANONICAL_INSTRUMENT_SOL_PERP,
+) -> list[dict[str, Any]]:
+    """
+    Last ``limit`` closed bars, **oldest first** (for indicators / Sean baseline signal).
+
+    Uses ``candle_open_utc DESC`` then reverses.
+    """
+    lim = max(1, int(limit))
+    p = db_path or default_market_data_path()
+    if not p.is_file():
+        return []
+    conn = sqlite3.connect(f"file:{p}?mode=ro", uri=True)
+    try:
+        cur = conn.execute(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name='market_bars_5m'"
+        )
+        if cur.fetchone() is None:
+            return []
+        rows = conn.execute(
+            """
+            SELECT id, canonical_symbol, timeframe, candle_open_utc, candle_close_utc,
+                   market_event_id, open, high, low, close, tick_count, price_source, computed_at
+            FROM market_bars_5m
+            WHERE canonical_symbol = ?
+            ORDER BY candle_open_utc DESC, id DESC
+            LIMIT ?
+            """,
+            (canonical_symbol, lim),
+        ).fetchall()
+        if not rows:
+            return []
+        keys = [
+            "id",
+            "canonical_symbol",
+            "timeframe",
+            "candle_open_utc",
+            "candle_close_utc",
+            "market_event_id",
+            "open",
+            "high",
+            "low",
+            "close",
+            "tick_count",
+            "price_source",
+            "computed_at",
+        ]
+        out = [dict(zip(keys, row)) for row in reversed(rows)]
+        return out
+    finally:
+        conn.close()
+
+
 def fetch_bar_by_market_event_id(
     market_event_id: str,
     *,

@@ -74,11 +74,25 @@ If a row is not market-grounded, **do not** treat it as proof that Anna “beat 
 
 ### 1.1.2 Execution layers — baseline (Sean) vs strategy layer (Anna / Tier 2) vs governance
 
+**Verbiage — trade policy vs hooks (aligned):**
+
+- **Trade policy** means **which venue’s rules and integration** apply for settlement (where money and orders actually bind). That is a **policy / routing** choice (`VenueId`), not an informal label.
+- **Billy** is the **hook** (executor agent) into the **Drift** trade policy (historical — **not** active).
+- **Jack** is the **hook** (executor agent) into the **Jupiter Perps** trade policy.
+
+**trading_core** and **Sean’s trading logic** (the TypeScript snapshot: signals, sizing, trails, gates, order shapes) are **rules / strategy mechanics** preserved as a **reference implementation**. They are **not** themselves “the trade policy”; they are written to run **under** whatever venue policy is selected. In operator posture today there is **only one active trade policy: Jupiter Perps** (Jack). **Drift** is **not** a live second policy — deprecated, not in service (see below). Legacy code may still mention two `VenueId` values; **planning and proof** should assume **Jupiter-only** unless governance re-opens another venue.
+
+Same pattern: **policy names the venue economics**; **the named executor is the only supported hook** for that policy in the registry model.
+
+#### 1.1.2.1 Drift (venue) — deprecated; not in service
+
+**Operator posture (2026):** **Drift is deprecated** for BLACK BOX. The historical TypeScript snapshot (`trading_core/src/bot/drift_trading_bot_source.ts`) and older “Billy → Drift” bring-up notes are **not** an active live venue path — **Drift is not in service**. Do not plan work, proof, or operations around submitting orders through Drift. Training and measurement use **canonical market data** (e.g. `market_bars_5m`, Pyth-backed ingest) and **Python/paper** execution and ledger paths; any replacement venue or executor is chosen **outside** this deprecated snapshot. **Legacy numbered bullets** elsewhere in this file that name **Billy + Drift** as the v1 market path describe **historical intent**, not the current venue.
+
 **Directive model (2026-04):** The platform is described in three layers; **code may not yet implement all of them end-to-end** — see Engineering responses to the Training Architect for gaps.
 
 | Layer | Role | Live trades? | Notes |
 |--------|------|--------------|--------|
-| **Baseline engine (Sean)** | Primary **live** execution logic in the **TypeScript** snapshot (`trading_core/src/bot/drift_trading_bot_source.ts`) — **only** path intended for real venue submits when that process is run by an operator. | **Yes** (when operated) | **Immutable** as a reference snapshot unless governance approves a controlled update. |
+| **Baseline (Sean’s Jupiter policy)** | **Sean’s rules = Jupiter trade policy.** Python **baseline ledger bridge** (default ``BASELINE_LEDGER_SIGNAL_MODE=sean_jupiter_v1``) matches **``trading_core``** signal math (``aggregateCandles`` + ``rsi``, same constants); **no row** without a signal. Catalog id ``jupiter_supertrend_ema_rsi_atr_v1``; legacy mechanical long: ``BASELINE_LEDGER_SIGNAL_MODE=legacy_mechanical_long``. **Jupiter only** — do not conflate with deprecated venue paths (see §1.1.2.1). | **No** live venue (paper measurement) | Separate from Anna **sideline** strategies. |
 | **Strategy layer (Anna / Tier 2)** | Multiple **paper/sim** strategies (variants, experiments) **may** run against the same market data **without** live settlement. | **No** | Tagging, parallel cohorts, and dashboard filtering are **partially** implemented — see `strategy_label`, `strategy_catalog.json`, `paper_trades.jsonl`. |
 | **Governance** | No autonomous promotion of experimental strategies to live. | — | Human approval + evidence; **not** auto-promote in code. |
 
