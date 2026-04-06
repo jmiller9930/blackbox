@@ -1,0 +1,17 @@
+{
+  "event_content_hashes": {
+    "proof_mid1": "360e4d5faa411d8776ee5d817c0435c6fe57b57207cd58791bec804b20709ea0",
+    "proof_mid2": "a7ac99111d7719e6a5f65b170c6f851977875e39f10eda2809cbd662e5a35e8e"
+  },
+  "schema_version": "sequential_state_v1",
+  "sprt": {
+    "calibration_fingerprint": "fa92cfa1682820073ad3ca5f66b918e1cb675918f59027742e62aa7ae306d536",
+    "eligible_n": 2,
+    "last_decision": "CONTINUE",
+    "last_evaluated_at_eligible_n": 2,
+    "last_evaluated_at_utc": "2026-04-05T17:02:58Z",
+    "log_likelihood_ratio": -0.575364144903562,
+    "win_n": 0
+  },
+  "test_id": "proof_verify_run"
+}

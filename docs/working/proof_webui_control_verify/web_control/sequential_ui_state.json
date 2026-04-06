@@ -1,0 +1,28 @@
+{
+  "artifacts_dir": "/Users/bigmac/Documents/code_projects/blackbox/docs/working/proof_webui_control_verify",
+  "calibration_fingerprint": "fa92cfa1682820073ad3ca5f66b918e1cb675918f59027742e62aa7ae306d536",
+  "calibration_path": "/Users/bigmac/Documents/code_projects/blackbox/docs/working/proof_webui_control_verify/calibration_valid.json",
+  "events_cursor_line": 0,
+  "events_file_path": "/Users/bigmac/Documents/code_projects/blackbox/docs/working/proof_webui_control_verify/events.txt",
+  "events_processed_total": 0,
+  "last_error": null,
+  "last_processed_market_event_id": null,
+  "last_sprt_decision": null,
+  "last_tick_at": null,
+  "last_tick_summary": null,
+  "ledger_db_path": "/Users/bigmac/Documents/code_projects/blackbox/docs/working/proof_webui_control_verify/ledger.db",
+  "market_db_path": "/Users/bigmac/Documents/code_projects/blackbox/docs/working/proof_webui_control_verify/market.db",
+  "schema_version": "sequential_ui_control_v1",
+  "strategy_id": "proof_verify_strat",
+  "test_id": "webui_verify_run",
+  "transition_log": [
+    {
+      "action": "start:new_run",
+      "at_utc": "2026-04-05T17:07:42Z",
+      "from": "idle",
+      "to": "running",
+      "trace_id": "8df8e064-2f3e-4b3a-8b72-e6fafae56a83"
+    }
+  ],
+  "ui_state": "running"
+}
