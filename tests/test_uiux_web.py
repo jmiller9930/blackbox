@@ -300,6 +300,8 @@ def test_intelligence_method_page_and_api_route() -> None:
     assert p.is_file()
     t = p.read_text(encoding="utf-8")
     assert "Learning stack" in t
+    assert "MIT training flow" in t
+    assert "decision_traces" in t
     assert "Learning storage" in t
     assert "dash-intel-eff" in t
     assert "Learning proof" in t

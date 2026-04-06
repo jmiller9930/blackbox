@@ -95,6 +95,32 @@
       </div>
 
       <div class="im-section">
+        <h2>MIT training flow (learning proof)</h2>
+        <p style="margin:0 0 0.45rem 0;max-width:46rem">
+          The <strong>MIT directive</strong> in code is the <strong>learning proof</strong> loop: attribute <strong>lesson memory</strong> on parallel Anna traces, keep <strong>join keys</strong> to baseline and outcomes, and make retrieval <strong>auditable</strong> (including ablation). Canonical claim encoded in the trainer:
+          Anna shows learning when <strong>retrieved knowledge</strong> is tied to the decision and outcomes are compared <strong>vs baseline</strong> on the same events — not when memory is invisible on the trace.
+        </p>
+        <p style="margin:0 0 0.35rem 0;font-weight:700;font-size:0.74rem;color:#0f172a">Flow (how it runs)</p>
+        <ol style="margin:0.2rem 0 0.45rem 1.1rem;padding:0;line-height:1.45">
+          <li><strong>Parallel harness:</strong> For a given <code>market_event_id</code> and Anna strategy, build a paired trace (baseline reference action vs Anna lane action) before persistence.</li>
+          <li><strong>Memory step:</strong> Unless ablated, retrieve validated/promoted lessons from <code>anna_lesson_memory</code> for the situation; record whether memory was used and which lesson ids were retrieved.</li>
+          <li><strong>Persist on <code>decision_traces</code>:</strong> columns such as <code>memory_used</code>, <code>retrieved_memory_ids_json</code>, <code>baseline_action_json</code>, <code>anna_action_json</code>, <code>memory_ablation_off</code>, <code>learning_proof_schema</code> — so every row is joinable and reviewable.</li>
+          <li><strong>Vs-baseline join:</strong> Ledger and trace data feed per-event comparison (memory yes/no, vs baseline, PnL where applicable) for aggregates.</li>
+          <li><strong>Operator surface:</strong> The API <code>dashboard</code> bundle builds <code>learning_proof</code>; this page renders the <strong>Learning proof</strong> table below from that bundle.</li>
+        </ol>
+        <p style="margin:0 0 0.35rem 0;font-weight:700;font-size:0.74rem;color:#0f172a">Where it is applied (repo)</p>
+        <ul style="margin:0.2rem 0 0.35rem 1rem;padding:0;line-height:1.45">
+          <li><code>modules/anna_training/learning_proof.py</code> — attachments for traces, <code>build_learning_proof_bundle</code> for the dashboard.</li>
+          <li><code>modules/anna_training/decision_trace.py</code> — insert/update traces with learning-proof fields.</li>
+          <li><code>modules/anna_training/execution_ledger.py</code> — schema migration for MIT learning-proof columns on <code>decision_traces</code>.</li>
+          <li><code>modules/anna_training/dashboard_bundle.py</code> — includes <code>learning_proof</code> in the operator JSON this page polls.</li>
+        </ul>
+        <p style="margin:0;max-width:46rem;font-size:0.68rem;color:var(--muted)">
+          <strong>Ablation:</strong> set <code>ANNA_LEARNING_PROOF_MEMORY_OFF=1</code> on the API host to prove claims without lesson retrieval. Analyst-path <code>lesson_memory</code> in <code>build_analysis</code> is a separate surface from this parallel-trace proof.
+        </p>
+      </div>
+
+      <div class="im-section">
         <h2>Learning storage</h2>
         <ul>
           <li><strong>Where:</strong> SQLite table <code>anna_lesson_memory</code> in the execution / training ledger database (same host as sequential learning and paper trades).</li>
