@@ -333,6 +333,51 @@ def insert_baseline_paper_lifecycle_events(
         )
 
 
+def fetch_policy_evaluation_for_market_event(
+    conn: sqlite3.Connection,
+    market_event_id: str,
+    *,
+    lane: str = RESERVED_STRATEGY_BASELINE,
+    strategy_id: str = RESERVED_STRATEGY_BASELINE,
+    signal_mode: str = "sean_jupiter_v1",
+) -> dict[str, Any] | None:
+    """Latest policy_evaluations row for baseline Sean Jupiter policy at ``market_event_id``."""
+    mid = (market_event_id or "").strip()
+    if not mid:
+        return None
+    cur = conn.execute(
+        """
+        SELECT market_event_id, lane, strategy_id, signal_mode, tick_mode, trade, side, reason_code,
+               features_json, pnl_usd, evaluated_at_utc
+        FROM policy_evaluations
+        WHERE market_event_id = ? AND lane = ? AND strategy_id = ? AND signal_mode = ?
+        LIMIT 1
+        """,
+        (mid, lane.strip().lower(), strategy_id.strip(), signal_mode.strip()),
+    )
+    r = cur.fetchone()
+    if not r:
+        return None
+    feat: Any = {}
+    try:
+        feat = json.loads(r[8]) if r[8] else {}
+    except json.JSONDecodeError:
+        feat = {"raw": r[8]}
+    return {
+        "market_event_id": r[0],
+        "lane": r[1],
+        "strategy_id": r[2],
+        "signal_mode": r[3],
+        "tick_mode": r[4],
+        "trade": bool(r[5]),
+        "side": r[6],
+        "reason_code": r[7],
+        "features": feat if isinstance(feat, dict) else {},
+        "pnl_usd": r[9],
+        "evaluated_at_utc": r[10],
+    }
+
+
 def fetch_recent_policy_evaluations(
     conn: sqlite3.Connection,
     *,

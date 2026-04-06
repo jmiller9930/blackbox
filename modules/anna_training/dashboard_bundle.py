@@ -472,6 +472,102 @@ def _pair_vs_baseline_for_cells(
     return {"vs_baseline": "NOT_WIN", "vs_baseline_excl": "pnl_not_above"}
 
 
+def _event_axis_jupiter_tile_narratives(
+    conn: Any,
+    event_axis: list[str],
+    market_db_path: Path | None,
+) -> dict[str, str]:
+    """
+    Per-``market_event_id`` multi-line Jupiter / Sean policy tile (operator requirement).
+
+    Prefer ``policy_evaluations`` features (persisted on baseline tick); else recompute from
+    ``market_bars_5m`` when the event appears in the recent bar window.
+    """
+    from modules.anna_training.execution_ledger import (
+        RESERVED_STRATEGY_BASELINE,
+        fetch_policy_evaluation_for_market_event,
+    )
+    from modules.anna_training.sean_jupiter_baseline_signal import (
+        MIN_BARS,
+        evaluate_sean_jupiter_baseline_v1,
+        format_jupiter_tile_narrative_v1,
+    )
+
+    out: dict[str, str] = {}
+    if not event_axis:
+        return out
+
+    mpath = market_db_path
+    _ensure_runtime_for_market_imports()
+    from market_data.bar_lookup import fetch_recent_bars_asc
+
+    for mid in event_axis:
+        mid_s = str(mid or "").strip()
+        if not mid_s:
+            continue
+        row = fetch_policy_evaluation_for_market_event(
+            conn,
+            mid_s,
+            lane=RESERVED_STRATEGY_BASELINE,
+            strategy_id=RESERVED_STRATEGY_BASELINE,
+            signal_mode="sean_jupiter_v1",
+        )
+        if row and isinstance(row.get("features"), dict):
+            f = dict(row["features"])
+            if isinstance(f.get("tile"), dict):
+                pb = f.get("policy_blockers")
+                pbl = [str(x) for x in pb] if isinstance(pb, list) else None
+                out[mid_s] = format_jupiter_tile_narrative_v1(
+                    features=f,
+                    reason_code=str(row.get("reason_code") or ""),
+                    trade=bool(row.get("trade")),
+                    side=str(row.get("side") or "flat"),
+                    policy_blockers=pbl,
+                )
+                continue
+        if not mpath or not mpath.is_file():
+            out[mid_s] = format_jupiter_tile_narrative_v1(
+                features={},
+                reason_code="market_db_unavailable",
+                trade=False,
+                side="flat",
+            )
+            continue
+        try:
+            bars = fetch_recent_bars_asc(limit=280, db_path=mpath)
+            idx = next(
+                (
+                    j
+                    for j, b in enumerate(bars)
+                    if str(b.get("market_event_id") or "").strip() == mid_s
+                ),
+                None,
+            )
+            if idx is None or len(bars[: idx + 1]) < MIN_BARS:
+                out[mid_s] = format_jupiter_tile_narrative_v1(
+                    features={},
+                    reason_code="bar_not_in_window_or_short_history",
+                    trade=False,
+                    side="flat",
+                )
+                continue
+            sub = bars[: idx + 1]
+            sig = evaluate_sean_jupiter_baseline_v1(bars_asc=sub)
+            sf = dict(sig.features) if isinstance(sig.features, dict) else {}
+            pb = sf.get("policy_blockers")
+            pbl = [str(x) for x in pb] if isinstance(pb, list) else None
+            out[mid_s] = format_jupiter_tile_narrative_v1(
+                features=sf,
+                reason_code=sig.reason_code,
+                trade=sig.trade,
+                side=sig.side,
+                policy_blockers=pbl,
+            )
+        except Exception:
+            out[mid_s] = ""
+    return out
+
+
 def _compact_cell(
     row: dict[str, Any] | None,
     *,
@@ -496,8 +592,8 @@ def _compact_cell(
             "notional_usd_approx": None,
             "pnl_usd": None,
             "mae_usd": None,
-            "outcome": "—",
-            "outcome_display": "—",
+            "outcome": "NO_TRADE",
+            "outcome_display": "no trade",
             "economic_authority": "full" if chain_kind == "baseline" else "muted",
             "mode": None,
         }
@@ -831,6 +927,7 @@ def build_trade_chain_payload(
     try:
         ensure_execution_ledger_schema(conn)
         event_axis, event_axis_time_utc_iso = _distinct_event_axis_with_times(conn, limit=max_events)
+        tile_narr = _event_axis_jupiter_tile_narratives(conn, event_axis, mpath)
         tests, strats, note = _strategy_buckets(conn)
         lc_map = _lifecycle_by_strategy(conn)
         primary_sym = _latest_symbol_from_ledger(conn)
@@ -914,6 +1011,11 @@ def build_trade_chain_payload(
                         epsilon=pair_eps,
                     )
                     r["cells"][mid] = {**ac, **pair}
+        for r in rows_out:
+            for mid in event_axis:
+                d = dict(r["cells"].get(mid) or {})
+                d["jupiter_tile_narrative"] = tile_narr.get(str(mid).strip(), "")
+                r["cells"][mid] = d
     finally:
         conn.close()
 
@@ -932,6 +1034,7 @@ def build_trade_chain_payload(
             "The UI also shows your browser’s local time for the same instant. "
             "The rightmost column is the newest event in this window."
         ),
+        "jupiter_tile_narrative_schema": "jupiter_tile_narrative_v1",
         "recency": {
             "axis_order": "oldest_left_newest_right",
             "newest_market_event_id": event_axis[-1] if event_axis else None,

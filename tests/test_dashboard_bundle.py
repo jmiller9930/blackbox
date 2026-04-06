@@ -30,6 +30,7 @@ def test_build_trade_chain_payload_schema() -> None:
     assert tc["rows"][0].get("chain_kind") == "baseline"
     assert tc["rows"][0].get("row_tier") == "primary"
     assert (tc.get("recency") or {}).get("axis_order") == "oldest_left_newest_right"
+    assert tc.get("jupiter_tile_narrative_schema") == "jupiter_tile_narrative_v1"
 
 
 def test_build_dashboard_bundle_schema() -> None:

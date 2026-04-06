@@ -256,6 +256,37 @@
     .tc-mini-muted .lab { opacity: 0.85; }
     .tc-mini-muted { opacity: 0.88; }
     .tc-empty { color: var(--muted); }
+    .tc-no-trade {
+      display: inline-block;
+      font-size: 0.72rem;
+      font-weight: 700;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      color: #64748b;
+    }
+    .tc-tile-verdict {
+      grid-column: 1 / -1;
+      font-size: 0.78rem;
+      font-weight: 800;
+      letter-spacing: 0.06em;
+      margin-bottom: 0.15rem;
+      line-height: 1.2;
+    }
+    pre.tc-tile-narr {
+      grid-column: 1 / -1;
+      margin: 0 0 0.35rem 0;
+      padding: 0.3rem 0.35rem;
+      max-height: 14rem;
+      overflow: auto;
+      white-space: pre-wrap;
+      word-break: break-word;
+      font-size: 0.58rem;
+      line-height: 1.35;
+      color: #1e293b;
+      background: #f1f5f9;
+      border: 1px solid #e2e8f0;
+      border-radius: 4px;
+    }
     .wl-WIN { color: #15803d; font-weight: 800; }
     .wl-LOSS { color: #b91c1c; font-weight: 800; }
     .wl-FLAT { color: #64748b; font-weight: 700; }
@@ -703,7 +734,16 @@
   }
 
   function cellMini(c, row) {
-    if (!c || c.empty) return '<span class="tc-empty">—</span>';
+    var narr = c && c.jupiter_tile_narrative ? String(c.jupiter_tile_narrative) : '';
+    var narrEl = narr
+      ? '<pre class="tc-tile-narr" title="Jupiter / Sean policy (5m bar)">' + esc(narr) + '</pre>'
+      : '';
+    if (!c || c.empty) {
+      return (
+        narrEl +
+        '<span class="tc-empty tc-no-trade" title="No execution trade for this 5m bar">no trade</span>'
+      );
+    }
     var ck = row.chain_kind || '';
     var vs = (ck === 'anna_test' || ck === 'anna_strategy') ? c.vs_baseline : null;
     var vsLine = '';
@@ -769,9 +809,17 @@
     var exT = tcShortTime(c.exit_time);
     var tradeCell = tcShortId(c.trade_id, 16);
     var traceCell = tcShortId(c.trace_id, 12);
+    var verdictLine =
+      '<div class="tc-tile-verdict ' +
+      wl +
+      '" title="Closed trade outcome for this 5m bar">' +
+      esc(ocDisp) +
+      '</div>';
     return (
+      narrEl +
       vsLine +
       '<div class="' + wrapCls + '">' +
+      verdictLine +
       '<span class="lab">sym</span><span>' + symTf + '</span>' +
       '<span class="lab">side</span><span>' + side + '</span>' +
       '<span class="lab">entry</span><span>' + ent + '</span>' +

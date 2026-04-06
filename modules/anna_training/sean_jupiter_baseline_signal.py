@@ -37,6 +37,249 @@ MIN_BARS = EMA_PERIOD
 REFERENCE_SOURCE = "jupiter_sean_policy:v2:aggregateCandles+rsi+supertrend+ema200"
 
 
+def _volume_from_bar(bar: dict[str, Any]) -> float | int | None:
+    v = bar.get("volume_base")
+    if v is not None:
+        try:
+            return float(v)
+        except (TypeError, ValueError):
+            pass
+    t = bar.get("tick_count")
+    if t is not None:
+        try:
+            return int(t)
+        except (TypeError, ValueError):
+            pass
+    return None
+
+
+def _build_tile_payload(
+    *,
+    bars_asc: list[dict[str, Any]],
+    prev_bar: dict[str, Any],
+    cur: dict[str, Any],
+    i: int,
+    prev_rsi_raw: float,
+    current_rsi_raw: float,
+    highs: list[float],
+    lows: list[float],
+    closes: list[float],
+    st_dir: int,
+    ema200_last: float,
+    raw_short: bool,
+    raw_long: bool,
+    short_ok: bool,
+    long_ok: bool,
+) -> dict[str, Any]:
+    """Rich context for operator tiles (same bar math as policy)."""
+    atr_series = wilder_atr(highs, lows, closes, ATR_PERIOD)
+    ari = atr_series[i]
+    valid_atr = [
+        atr_series[j] for j in range(max(0, i - 199), i + 1) if not math.isnan(atr_series[j])
+    ]
+    atr_avg = sum(valid_atr) / len(valid_atr) if valid_atr else None
+    ratio = (float(ari) / atr_avg) if atr_avg and atr_avg > 0 and not math.isnan(ari) else None
+
+    po = float(prev_bar["open"])
+    ph = float(prev_bar["high"])
+    pl = float(prev_bar["low"])
+    pc = float(prev_bar["close"])
+    co = float(cur["open"])
+    ch = float(cur["high"])
+    cl = float(cur["low"])
+    cc = float(cur["close"])
+    higher_close = cc > pc
+    lower_close = cc < pc
+
+    vol = _volume_from_bar(cur)
+    ts = str(cur.get("candle_open_utc") or cur.get("candle_close_utc") or "").strip()
+
+    if st_dir == 1:
+        st_label = "BULLISH (green)"
+    elif st_dir == -1:
+        st_label = "BEARISH (red)"
+    else:
+        st_label = "NEUTRAL"
+
+    if cc > ema200_last:
+        pvsem = "ABOVE"
+    elif cc < ema200_last:
+        pvsem = "BELOW"
+    else:
+        pvsem = "AT"
+
+    rsi_above_52 = current_rsi_raw > float(RSI_LONG_THRESHOLD)
+    rsi_below_48 = current_rsi_raw < float(RSI_SHORT_THRESHOLD)
+
+    return {
+        "tile": {
+            "candle_open_utc": ts,
+            "new_ohlcv": {"o": co, "h": ch, "l": cl, "c": cc, "v": vol},
+            "prev_ohlc": {"o": po, "h": ph, "l": pl, "c": pc},
+            "prev_rsi": prev_rsi_raw,
+            "current_rsi": current_rsi_raw,
+            "supertrend_label": st_label,
+            "supertrend_direction": st_dir,
+            "atr_current": None if math.isnan(ari) else float(ari),
+            "atr_avg200": atr_avg,
+            "atr_ratio": ratio,
+            "price_vs_ema200": pvsem,
+            "ema200": float(ema200_last),
+            "higher_close": higher_close,
+            "lower_close": lower_close,
+            "breakdown_long": {
+                "supertrend_bullish": st_dir == 1,
+                "above_ema": cc > ema200_last,
+                "rsi_long_arm_raw": raw_long,
+                "rsi_gt_52": rsi_above_52,
+                "higher_close": higher_close,
+                "long_ok": long_ok,
+            },
+            "breakdown_short": {
+                "supertrend_bearish": st_dir == -1,
+                "below_ema": cc < ema200_last,
+                "rsi_short_arm_raw": raw_short,
+                "rsi_lt_48": rsi_below_48,
+                "lower_close": lower_close,
+                "short_ok": short_ok,
+            },
+            "bars_asc_len": len(bars_asc),
+        }
+    }
+
+
+def format_jupiter_tile_narrative_v1(
+    *,
+    features: dict[str, Any],
+    reason_code: str,
+    trade: bool,
+    side: str,
+    policy_blockers: list[str] | None = None,
+) -> str:
+    """
+    Human-readable multi-line tile matching operator Jupiter / Sean policy context.
+
+    Uses ``features["tile"]`` when present (populated by :func:`evaluate_sean_jupiter_baseline_v1`).
+    """
+    lines: list[str] = []
+    tile = features.get("tile") if isinstance(features.get("tile"), dict) else {}
+    if not tile:
+        return (
+            f"Policy: {REFERENCE_SOURCE}\n"
+            f"reason_code={reason_code}\n"
+            f"trade={trade} side={side}\n"
+            "(Insufficient bar context for full OHLC/ATR tile — need closed bar history.)"
+        )
+
+    ts = str(tile.get("candle_open_utc") or "")
+    nv = tile.get("new_ohlcv") or {}
+    vo, vh, vl, vc = nv.get("o"), nv.get("h"), nv.get("l"), nv.get("c")
+    vv = nv.get("v")
+    vol_s = ""
+    if vv is not None:
+        try:
+            fv = float(vv)
+            vol_s = str(int(fv)) if fv.is_integer() else str(fv)
+        except (TypeError, ValueError):
+            vol_s = str(vv)
+
+    lines.append(
+        f"New 5-min candle formed: Timestamp={ts}, O={vo}, H={vh}, L={vl}, C={vc}, V={vol_s}"
+    )
+
+    pv = tile.get("prev_ohlc") or {}
+    lines.append(
+        f"Previous candle: O={pv.get('o')}, H={pv.get('h')}, L={pv.get('l')}, C={pv.get('c')}, "
+        f"RSI={tile.get('prev_rsi')}"
+    )
+    lines.append(
+        f"Current candle: O={vo}, H={vh}, L={vl}, C={vc}, RSI={tile.get('current_rsi')}"
+    )
+    lines.append(f"Supertrend: {tile.get('supertrend_label')}")
+
+    atr_c = tile.get("atr_current")
+    atr_a = tile.get("atr_avg200")
+    atr_r = tile.get("atr_ratio")
+    lines.append(
+        f"ATR Analysis: Current={atr_c} | Avg200={atr_a} | Ratio={round(atr_r, 4) if atr_r is not None else 'n/a'}"
+    )
+
+    ema = tile.get("ema200")
+    lines.append(f"Price vs EMA200: {tile.get('price_vs_ema200')} (EMA={ema})")
+
+    bl = tile.get("breakdown_long") or {}
+    bs = tile.get("breakdown_short") or {}
+    lines.append(
+        "Signal Breakdown → Long="
+        + str(bl.get("long_ok"))
+        + " (Supertrend="
+        + str(bl.get("supertrend_bullish"))
+        + ", AboveEMA="
+        + str(bl.get("above_ema"))
+        + ", RSI_long_arm_raw="
+        + str(bl.get("rsi_long_arm_raw"))
+        + ", RSI>52="
+        + str(bl.get("rsi_gt_52"))
+        + ", HigherClose="
+        + str(bl.get("higher_close"))
+        + ")"
+    )
+    lines.append(
+        "Signal Breakdown → Short="
+        + str(bs.get("short_ok"))
+        + " (Supertrend="
+        + str(bs.get("supertrend_bearish"))
+        + ", BelowEMA="
+        + str(bs.get("below_ema"))
+        + ", RSI_short_arm_raw="
+        + str(bs.get("rsi_short_arm_raw"))
+        + ", RSI<48="
+        + str(bs.get("rsi_lt_48"))
+        + ", LowerClose="
+        + str(bs.get("lower_close"))
+        + ")"
+    )
+
+    crsi = tile.get("current_rsi")
+    rs_raw = features.get("short_signal_raw")
+    rl_raw = features.get("long_signal_raw")
+    lines.append(f"Signals: short={rs_raw} (RSI={crsi}), long={rl_raw}")
+
+    if trade and side in ("long", "short"):
+        lines.append(f"ATR-Supertrend SIGNAL → {side.upper()} at {vc} | ATR={atr_c}")
+        lines.append(f"Processing {side.upper()} signal at {vc}")
+    elif rl_raw and not rs_raw:
+        lines.append(f"ATR-Supertrend SIGNAL → LONG at {vc} | ATR={atr_c}")
+        lines.append(f"Processing LONG signal at {vc}")
+    elif rs_raw and not rl_raw:
+        lines.append(f"ATR-Supertrend SIGNAL → SHORT at {vc} | ATR={atr_c}")
+        lines.append(f"Processing SHORT signal at {vc}")
+
+    # Filter / skip line
+    pb = policy_blockers or []
+    if isinstance(features.get("policy_blockers"), list):
+        pb = [str(x) for x in features["policy_blockers"]]
+
+    if trade:
+        pass
+    elif reason_code == "no_signal":
+        lines.append("Filter: no aggregateCandles long/short arm – skipping entry")
+    elif reason_code == "policy_filter_block" and pb:
+        lines.append("Filter: " + ", ".join(pb) + " – skipping entry")
+    elif reason_code == "insufficient_history":
+        lines.append("Filter: insufficient bar history for EMA200/ATR – skipping entry")
+    elif atr_r is not None and float(atr_r) < 0.45:
+        lines.append(
+            "Filter: weak ATR vs 200-bar average (ratio "
+            + str(round(float(atr_r), 4))
+            + ") / check RSI regime – skipping entry"
+        )
+    else:
+        lines.append(f"Filter: {reason_code} – skipping entry")
+
+    return "\n".join(lines)
+
+
 def _ewm_mean_last(closes: list[float], span: int) -> float:
     """
     Last value of EWMA with ``span`` — matches ``pandas.Series.ewm(span=span, adjust=False).mean().iloc[-1]``
@@ -305,6 +548,25 @@ def evaluate_sean_jupiter_baseline_v1(
         "close": round(c, 8),
         "min_notional_hint_usd": MIN_NOTIONAL_USD,
     }
+    feat.update(
+        _build_tile_payload(
+            bars_asc=bars_asc,
+            prev_bar=prev_bar,
+            cur=cur,
+            i=i,
+            prev_rsi_raw=prev_rsi_raw,
+            current_rsi_raw=current_rsi_raw,
+            highs=highs,
+            lows=lows,
+            closes=closes,
+            st_dir=st_dir,
+            ema200_last=ema200_last,
+            raw_short=raw_short,
+            raw_long=raw_long,
+            short_ok=short_ok,
+            long_ok=long_ok,
+        )
+    )
 
     if not raw_short and not raw_long:
         return SeanJupiterBaselineSignalV1(
