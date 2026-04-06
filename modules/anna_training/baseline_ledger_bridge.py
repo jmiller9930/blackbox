@@ -208,17 +208,27 @@ def run_baseline_ledger_bridge_tick(
         from modules.anna_training.execution_ledger import upsert_policy_evaluation
 
         feat = dict(sig.features) if sig.features else {}
-        upsert_policy_evaluation(
-            market_event_id=mid,
-            signal_mode=sm,
-            tick_mode=m,
-            trade=bool(sig.trade),
-            reason_code=str(sig.reason_code or ""),
-            features=feat,
-            side=str(sig.side) if sig.trade else "flat",
-            pnl_usd=(float(sig.pnl_usd) if sig.pnl_usd is not None else 0.0) if sig.trade else None,
-            db_path=execution_ledger_db_path,
-        )
+        try:
+            upsert_policy_evaluation(
+                market_event_id=mid,
+                signal_mode=sm,
+                tick_mode=m,
+                trade=bool(sig.trade),
+                reason_code=str(sig.reason_code or ""),
+                features=feat,
+                side=str(sig.side) if sig.trade else "flat",
+                pnl_usd=(float(sig.pnl_usd) if sig.pnl_usd is not None else 0.0) if sig.trade else None,
+                db_path=execution_ledger_db_path,
+            )
+        except sqlite3.OperationalError as e:
+            # region agent log
+            _agent_debug_log(
+                hypothesis_id="H10",
+                message="policy_evaluation_upsert_failed_continuing_tick",
+                data={"error": repr(e), "market_event_id": mid},
+            )
+            # endregion
+            pass
     if not sig.trade:
         # region agent log
         global _AGENT_LOG_NO_TRADE_LAST_TS
