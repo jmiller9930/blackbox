@@ -301,18 +301,6 @@ def run_one_tick(*, tick_index: int) -> tuple[dict, bool]:
 
         st["baseline_ledger_last"] = run_baseline_ledger_bridge_tick()
     except Exception as e:  # noqa: BLE001
-        # region agent log
-        try:
-            from modules.anna_training.baseline_ledger_bridge import _agent_debug_log
-
-            _agent_debug_log(
-                hypothesis_id="H7",
-                message="baseline_bridge_exception_in_daemon",
-                data={"error": repr(e)},
-            )
-        except Exception:
-            pass
-        # endregion
         st["baseline_ledger_last"] = {"ok": False, "error": repr(e)}
     try:
         from modules.anna_training.quantitative_evaluation_layer.runtime import run_qel_survival_tick
