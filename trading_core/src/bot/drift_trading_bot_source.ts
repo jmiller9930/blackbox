@@ -1,5 +1,7 @@
 /**
  * Trading core rules — source snapshot (SOL-PERP bot; Drift SDK for orders/subscriptions).
+ * DEPRECATED: Drift is not in service for BLACK BOX — do not treat this file as an active live venue path.
+ * See docs/architect/ANNA_GOES_TO_SCHOOL.md §1.1.2.1.
  * Extracted from operator email / thread 2026-03-22.
  * Drift DLOB WebSocket removed (migrating to Jupiter Perps); bid/ask come from Pyth oracle until native Jupiter book is wired.
  * QUICKNODE_RPC redacted: use env SOLANA_RPC_URL for authenticated RPC.
@@ -36,7 +38,7 @@ import {
  UserAccount,
  ModifyOrderParams,
 } from '@drift-labs/sdk';
-import { EventSource } from 'eventsource';
+import EventSource from 'eventsource';
 import {
  JUPITER_PERP_PROGRAM_ID,
  JUPITER_PERP_POOL,

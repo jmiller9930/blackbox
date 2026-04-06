@@ -1,11 +1,13 @@
 /**
  * Venue adapter model — BLACK BOX trading_core (TypeScript)
  *
- * **Executors (registry):**
- * - **Billy** → **Drift** venue only.
- * - **Jack** → **Jupiter Perps** venue only.
+ * **Verbiage:** A **trade policy** is which venue’s rules apply for settlement. **Sean’s trading logic** (`trading_core` rules snapshot) is **mechanics / strategy**, not the policy itself — it runs **under** a policy. **Operator posture:** **only one active trade policy — Jupiter Perps** (Jack). **Drift** is deprecated; **Billy** remains in types/registry for the deprecated policy only.
  *
- * Anna routes approved work to **one** executor per intent by **venue** (`VenueId`), not by informal chat.
+ * **Executors (registry):**
+ * - **Billy** → **Drift** trade policy only.
+ * - **Jack** → **Jupiter Perps** trade policy only.
+ *
+ * Anna routes approved work to **one** hook per intent by **venue** (`VenueId`), not by informal chat.
  *
  * **Jupiter Perps ≠ Drift (integration path):** Same chain (Solana) does **not** mean the same stack. They differ by **program id**, **SDK / client**, **account graph** (PDAs, custodies, pool), **instruction** shapes, and usually **feeds / subscriptions**. Jack’s adapter is a **separate codebase path** from Billy’s — not a flag on one Drift client.
  *

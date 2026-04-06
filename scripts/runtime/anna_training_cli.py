@@ -312,6 +312,31 @@ def _cmd_scan_execution_ledger_pnl(args: argparse.Namespace) -> int:
     return 0 if out.get("violation_count", 0) == 0 else 2
 
 
+def _cmd_export_trades_csv(args: argparse.Namespace) -> int:
+    """Write execution_trades (+ trace join) to CSV — entry/exit detail columns."""
+    from modules.anna_training.trade_export_csv import default_export_csv_path, export_execution_trades_to_csv
+
+    ledger = (getattr(args, "ledger", None) or "").strip()
+    db_path = Path(ledger).expanduser() if ledger else None
+    out = (getattr(args, "out", None) or "").strip()
+    outp = Path(out).expanduser() if out else default_export_csv_path()
+    lane = (getattr(args, "lane", None) or "").strip() or None
+    strategy = (getattr(args, "strategy_id", None) or "").strip() or None
+    limit = getattr(args, "limit", None)
+    lim = int(limit) if limit is not None else None
+    with_mae = bool(getattr(args, "with_mae", False))
+    result = export_execution_trades_to_csv(
+        out_path=outp,
+        db_path=db_path,
+        lane=lane,
+        strategy_id=strategy,
+        limit=lim,
+        with_mae=with_mae,
+    )
+    print(json.dumps(result, indent=2))
+    return 0 if result.get("ok") else 1
+
+
 def _cmd_math_check() -> int:
     """Wilson 95% intervals: float engine vs Decimal oracle (NIST-style regression cases)."""
     out = run_wilson_reference_check()
@@ -552,6 +577,129 @@ def _cmd_dashboard(args: argparse.Namespace | None = None) -> int:
             return f"pending request {str(ph.get('request_id'))[:12]}…"
         return str(ph.get("detail") or ph)[:200]
 
+    def _paper_bank_tui_panel() -> Panel:
+        """Paper capital: bank starts at $100 (paper_wallet) unless journal/env overrides."""
+        try:
+            from modules.anna_training.paper_capital import build_paper_capital_summary
+
+            pc = build_paper_capital_summary()
+        except Exception as e:
+            return Panel.fit(str(e)[:400], title="Paper bank", border_style="red")
+        start = float(pc["starting_capital"])
+        hint = ""
+        if abs(start - 100.0) < 1e-6:
+            hint = "  [dim](default $100 from paper_wallet / journal seed)[/dim]"
+        body = (
+            f"Starting bank [bold]${start:,.2f}[/bold]{hint}\n"
+            f"net contributed [bold]${float(pc['net_contributed_capital']):,.2f}[/bold]  →  "
+            f"equity (execution ledger, all lanes) [bold]${float(pc['current_equity_ledger_including_anna']):,.2f}[/bold]\n"
+            f"[dim]baseline lane P&L ${float(pc['trading_pnl_baseline_ledger']):,.2f}  |  "
+            f"anna lane ${float(pc['trading_pnl_anna_ledger']):,.2f}  |  "
+            f"cohort jsonl equity ${float(pc['current_equity_cohort']):,.2f}[/dim]"
+        )
+        return Panel.fit(
+            body,
+            title="Paper bank",
+            border_style="yellow",
+        )
+
+    def _execution_ledger_csv_tui_table(*, rows_limit: int, title: str) -> Panel:
+        """CSV column order in the TUI: time → W/L → full detail (same fields as export-trades-csv)."""
+        from rich.table import Table
+
+        try:
+            from modules.anna_training.trade_export_csv import (
+                TUI_WIN_LOSS_FIELD,
+                fetch_trade_export_rows,
+                format_wl_from_pnl,
+                tui_ledger_column_order,
+            )
+
+            rows = fetch_trade_export_rows(limit=rows_limit, with_mae=False)
+        except Exception as e:
+            return Panel.fit(
+                f"[dim]Execution ledger: {e}[/dim]",
+                title=title,
+                border_style="red",
+            )
+        if not rows:
+            return Panel.fit(
+                "[dim]No execution_trades rows — parallel runner / log-execution-trade fills this.[/dim]",
+                title=title,
+                border_style="dim",
+            )
+
+        def _trunc(val: object, n: int) -> str:
+            s = str(val or "")
+            return s if len(s) <= n else s[: n - 1] + "…"
+
+        def _tui_col_width(name: str) -> int:
+            w = {
+                "datetime_utc": 22,
+                TUI_WIN_LOSS_FIELD: 4,
+                "trade_id": 20,
+                "entry": 36,
+                "exit": 36,
+                "market_event_id": 18,
+                "strategy_id": 18,
+                "lane": 8,
+                "mode": 8,
+                "symbol": 12,
+                "timeframe": 8,
+                "side": 6,
+                "entry_time": 22,
+                "entry_price": 10,
+                "size": 8,
+                "exit_time": 22,
+                "exit_price": 10,
+                "exit_reason": 12,
+                "pnl_usd": 11,
+                "mae_usd": 9,
+                "mae_exclusion_reason": 14,
+                "trace_id": 18,
+                "trace_timestamp_start_utc": 22,
+                "trace_timestamp_end_utc": 22,
+                "trace_decision_summary": 32,
+                "trace_memory_used": 8,
+                "trace_retrieved_memory_ids_json": 28,
+                "trace_steps_json": 28,
+                "context_snapshot_json": 32,
+                "notes": 20,
+                "schema_version": 8,
+                "created_at_utc": 22,
+            }
+            return w.get(name, 16)
+
+        def _cell(col: str, r: dict) -> str:
+            if col == TUI_WIN_LOSS_FIELD:
+                return format_wl_from_pnl(r.get("pnl_usd"))
+            if col == "pnl_usd":
+                p = r.get("pnl_usd")
+                try:
+                    return f"{float(p):.4f}" if p is not None else "—"
+                except (TypeError, ValueError):
+                    return "—"
+            return _trunc(r.get(col), _tui_col_width(col))
+
+        cols = tui_ledger_column_order()
+        t = Table(
+            title=title,
+            show_header=True,
+            header_style="bold",
+            expand=False,
+            title_justify="left",
+        )
+        for c in cols:
+            t.add_column(c, overflow="ellipsis", max_width=_tui_col_width(c))
+        for r in rows:
+            t.add_row(*(_cell(c, r) for c in cols))
+        return Panel(
+            t,
+            border_style="green",
+            title_align="left",
+            subtitle="[dim]columns = datetime → W/L → same order as export-trades-csv[/dim]",
+        )
+
     def _build_dashboard_compact_group(*, show_live_footer: bool = False) -> Group:
         """Minimal live view: counts + last harness line + short trade strip (no report-card wall)."""
         st = load_state()
@@ -577,6 +725,11 @@ def _cmd_dashboard(args: argparse.Namespace | None = None) -> int:
                 top,
                 title="Anna — live monitor (compact)",
                 border_style="cyan",
+            ),
+            _paper_bank_tui_panel(),
+            _execution_ledger_csv_tui_table(
+                rows_limit=16,
+                title="Execution ledger (same columns as export-trades-csv)",
             ),
             Panel.fit(
                 _harness_one_liner(ph),
@@ -852,6 +1005,13 @@ def _cmd_dashboard(args: argparse.Namespace | None = None) -> int:
                 + pnl_note,
                 title="Paper cohort — summary",
                 border_style="cyan",
+            )
+        )
+        parts.append(_paper_bank_tui_panel())
+        parts.append(
+            _execution_ledger_csv_tui_table(
+                rows_limit=32,
+                title="Execution ledger (export-trades-csv — same columns)",
             )
         )
         table = Table(title="Paper trades (most recent last)")
@@ -1416,6 +1576,36 @@ def main(argv: list[str] | None = None) -> int:
         help="Max violation examples in JSON output (default 20).",
     )
 
+    ap_csv = sub.add_parser(
+        "export-trades-csv",
+        help="Export execution_trades to CSV: cols 1–4 = datetime_utc, trade_id, entry, exit; then detail + trace + JSON.",
+    )
+    ap_csv.add_argument(
+        "--out",
+        default="",
+        help="Output CSV path (default: data/runtime/trade_exports/trades_export_<utc>.csv).",
+    )
+    ap_csv.add_argument(
+        "--ledger",
+        default="",
+        help="Path to execution_ledger.db (default: BLACKBOX_EXECUTION_LEDGER_PATH or data/sqlite/execution_ledger.db).",
+    )
+    ap_csv.add_argument("--lane", default="", help="Optional filter: baseline | anna")
+    ap_csv.add_argument("--strategy-id", default="", dest="strategy_id", help="Optional filter by strategy_id")
+    ap_csv.add_argument(
+        "--limit",
+        type=int,
+        default=None,
+        metavar="N",
+        help="Max rows (most recent first). Default: all.",
+    )
+    ap_csv.add_argument(
+        "--with-mae",
+        action="store_true",
+        dest="with_mae",
+        help="Compute MAE v1 per row (slower; needs market_data.db).",
+    )
+
     sub.add_parser(
         "check-readiness",
         help="First: Solana RPC (Jupiter prerequisite), Pyth stream artifact, market_data.db; see JSON.",
@@ -1663,6 +1853,7 @@ def main(argv: list[str] | None = None) -> int:
         "tool-pass",
         "log-execution-trade",
         "scan-execution-ledger-pnl",
+        "export-trades-csv",
         "sequential-learning-run",
         "sequential-learning-status",
         "sequential-init-calibration",
@@ -1686,6 +1877,8 @@ def main(argv: list[str] | None = None) -> int:
         return _cmd_log_execution_trade(args)
     if args.cmd == "scan-execution-ledger-pnl":
         return _cmd_scan_execution_ledger_pnl(args)
+    if args.cmd == "export-trades-csv":
+        return _cmd_export_trades_csv(args)
     if args.cmd == "math-check":
         return _cmd_math_check()
     if args.cmd == "quant-metrics":

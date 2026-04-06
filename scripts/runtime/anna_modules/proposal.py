@@ -42,14 +42,15 @@ def classify_proposal_type(anna: dict[str, Any]) -> str:
 
 
 def _lab_wire_jack_override(ptype: str) -> str:
-    """``OBSERVATION_ONLY`` does not create an ``execution_request`` by type alone.
+    """``OBSERVATION_ONLY`` does not create an ``execution_request`` unless explicitly overridden.
 
-    **Default (base Karpathy path):** map ``OBSERVATION_ONLY`` → ``CONDITION_TIGHTENING`` so
-    ``try_create_execution_request_from_anna_analysis`` can run when ``ANNA_AUTO_EXECUTION_REQUEST``
-    is on. Still requires ``BLACKBOX_JACK_EXECUTOR_CMD`` for ``run_execution`` → Jack.
+    **Default (signal-faithful):** do **not** remap — thin analyses stay ``OBSERVATION_ONLY`` so
+    ``try_create_execution_request_from_anna_analysis`` does not fire Jack/paper from cadence alone.
 
-    **Opt out** (strict observational, no request from thin analysis): ``ANNA_KARPATHY_DISABLE_LAB_WIRE_JACK=1``,
-    or ``ANNA_KARPATHY_LAB_WIRE_JACK=0``.
+    **Opt-in (lab/school only):** ``ANNA_KARPATHY_LAB_WIRE_JACK=1`` maps ``OBSERVATION_ONLY`` →
+    ``CONDITION_TIGHTENING`` so the Jack wiring path can run without a strong strategy signal.
+
+    Legacy: ``ANNA_KARPATHY_DISABLE_LAB_WIRE_JACK=1`` is equivalent to default (no remap).
     """
     if ptype != "OBSERVATION_ONLY":
         return ptype
@@ -60,13 +61,13 @@ def _lab_wire_jack_override(ptype: str) -> str:
     ):
         return ptype
     if (os.environ.get("ANNA_KARPATHY_LAB_WIRE_JACK") or "").strip().lower() in (
-        "0",
-        "false",
-        "no",
-        "off",
+        "1",
+        "true",
+        "yes",
+        "on",
     ):
-        return ptype
-    return "CONDITION_TIGHTENING"
+        return "CONDITION_TIGHTENING"
+    return ptype
 
 
 def paper_intent_for_proposal(proposal_type: str, anna_intent: str) -> str:

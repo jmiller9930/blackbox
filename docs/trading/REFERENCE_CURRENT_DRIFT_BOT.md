@@ -1,6 +1,8 @@
-# Reference — Current Drift / SOL perp trading bot (as of 2026-03)
+# Reference — Historical Drift / SOL perp trading bot snapshot (as of 2026-03)
 
-This document is the **in-repo handoff** for what the **live-style** trading bot does today, how it fits the **broader BLACK BOX vision** (multi-agent, learning, reflection, improving outcomes), and what **must never** be committed (keys, RPC auth URLs).
+> **Deprecation:** **Drift is deprecated and not in service** for BLACK BOX. This file is an **historical** description of an in-repo TypeScript snapshot and related wiring — **not** the active execution or venue contract. Canonical posture: [`../architect/ANNA_GOES_TO_SCHOOL.md`](../architect/ANNA_GOES_TO_SCHOOL.md) §1.1.2.1.
+
+This document is the **in-repo handoff** for what the **live-style** trading bot did **when that snapshot was current**, how it fits the **broader BLACK BOX vision** (multi-agent, learning, reflection, improving outcomes), and what **must never** be committed (keys, RPC auth URLs).
 
 **Updated strategy spec (ATR + Supertrend + EMA200 + RSI + ATR ratio filter):** [`SOL_PERP_TREND_STRATEGY_SPEC_v2.md`](SOL_PERP_TREND_STRATEGY_SPEC_v2.md). **Python mirror (signals only, no execution):** [`../../strategy/sol_perp_signal.py`](../../strategy/sol_perp_signal.py).
 
@@ -101,13 +103,15 @@ Next evolution steps align with **`docs/architect/architect_update_trading_syste
 - Treat **mainnet** keys as **production secrets**; use **env vars** or a **secrets manager** for RPC and third-party URLs if they contain auth.  
 - This reference **intentionally omits** full source listing; keep **canonical code** in a **private** repo or path agreed by the team, with **.gitignore** for keys.
 
-## Execution agents vs venues (Billy / Jack)
+## Execution agents vs trade policy (Billy / Jack)
 
-**Jack** = executor for **Jupiter Perps** — **default** venue when unspecified. **Billy** = executor for **Drift** only (explicit venue). **Anna** routes approved intents by **venue** (structured packet), not chat tone. Registry: [`agents/agent_registry.json`](../../agents/agent_registry.json). Types: [`trading_core/src/venue/adapter_model.ts`](../../trading_core/src/venue/adapter_model.ts) (`DEFAULT_VENUE_ID`).
+**Verbiage:** **Trade policy** = which venue applies (**Drift** vs **Jupiter Perps**). **Billy** = **hook** into the **Drift** trade policy; **Jack** = **hook** into the **Jupiter Perps** trade policy.
 
-## Billy -> Drift connection contract (`v1`)
+**Jack** = hook for **Jupiter Perps** — **default** policy when unspecified. **Billy** = hook for **Drift** only (explicit routing). **Anna** routes approved intents by **venue / policy** (structured packet), not chat tone. Registry: [`agents/agent_registry.json`](../../agents/agent_registry.json). Types: [`trading_core/src/venue/adapter_model.ts`](../../trading_core/src/venue/adapter_model.ts) (`DEFAULT_VENUE_ID`). **Drift is deprecated / not in service** — see [`../architect/ANNA_GOES_TO_SCHOOL.md`](../architect/ANNA_GOES_TO_SCHOOL.md) §1.1.2.1.
 
-When the routed venue is **Drift**, **Billy** uses the Drift adapter. The in-repo **TypeScript** snapshot was built around Drift first; **policy default** for new work is **Jupiter Perps / Jack** unless the packet pins Drift. The Drift connection path must be explicit, replayable, and secret-safe.
+## Billy -> Drift connection contract (`v1`) — historical
+
+When the routed policy is **Drift**, **Billy** uses the Drift adapter. The in-repo **TypeScript** snapshot was built around Drift first; **policy default** for new work is **Jupiter Perps / Jack** unless the packet pins Drift. **Drift is not in service** — treat this section as historical. Where a Drift path were ever revisited, it would remain explicit, replayable, and secret-safe.
 
 Required connection sequence:
 

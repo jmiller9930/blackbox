@@ -295,8 +295,11 @@ def build_baseline_bridge_steps(
     trade_id: str,
     trace_id: str,
     pnl_usd: float,
+    side: str = "long",
+    economic_basis: str = "canonical_bar_open_to_close_long_1unit",
+    signal_snapshot: dict[str, Any] | None = None,
 ) -> list[dict[str, Any]]:
-    """Baseline lane: same bar grounding; economic PnL from open→close long 1 unit."""
+    """Baseline lane: same bar grounding; economic PnL from open→close 1 unit (long or short)."""
     mid = (market_event_id or "").strip()
     bar_id = bar.get("id")
     if bar_id is None:
@@ -308,6 +311,10 @@ def build_baseline_bridge_steps(
     base_refs = build_input_refs(market_event_id=mid, bar_id=bar_id)
     o = bar.get("open")
     c = bar.get("close")
+    sd = (side or "long").strip().lower()
+    if sd not in ("long", "short"):
+        sd = "long"
+    sig = signal_snapshot if isinstance(signal_snapshot, dict) else {}
     steps: list[dict[str, Any]] = [
         {
             "step_name": "ingest",
@@ -329,20 +336,22 @@ def build_baseline_bridge_steps(
                     "low": bar.get("low"),
                     "close": c,
                 },
+                "economic_basis": economic_basis,
+                "jupiter_policy_signal": sig,
             },
         },
         {
             "step_name": "policy_check",
             "timestamp": _ts(),
             "input_refs": dict(base_refs),
-            "output": {"baseline_lane": True, "mode": mode},
+            "output": {"baseline_lane": True, "mode": mode, "trade_policy": "jupiter_perps_sean_rules_v1"},
         },
         {
             "step_name": "decision",
             "timestamp": _ts(),
             "input_refs": dict(base_refs),
             "output": {
-                "side": "long",
+                "side": sd,
                 "size": 1.0,
                 "entry_price": float(o) if o is not None else None,
                 "exit_price": float(c) if c is not None else None,
@@ -673,6 +682,9 @@ def persist_baseline_trade_with_trace(
     context_snapshot: dict[str, Any],
     notes: str | None,
     db_path: Path | None = None,
+    side: str = "long",
+    economic_basis: str = "canonical_bar_open_to_close_long_1unit",
+    signal_snapshot: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     from modules.anna_training.execution_ledger import RESERVED_STRATEGY_BASELINE, append_execution_trade
 
@@ -684,7 +696,10 @@ def persist_baseline_trade_with_trace(
     c = bar.get("close")
     if o is None or c is None:
         raise ValueError("bar_missing_ohlc")
-    pnl = compute_pnl_usd(entry_price=float(o), exit_price=float(c), size=1.0, side="long")
+    sd = (side or "long").strip().lower()
+    if sd not in ("long", "short"):
+        sd = "long"
+    pnl = compute_pnl_usd(entry_price=float(o), exit_price=float(c), size=1.0, side=sd)
     if not _pnl_close(pnl, float(pnl_usd)):
         raise ValueError("pnl_usd mismatch for baseline trace")
     steps = build_baseline_bridge_steps(
@@ -695,6 +710,9 @@ def persist_baseline_trade_with_trace(
         trade_id=trade_id,
         trace_id=trace_id,
         pnl_usd=pnl,
+        side=sd,
+        economic_basis=economic_basis,
+        signal_snapshot=signal_snapshot,
     )
     ts_end = utc_now_iso()
 
@@ -729,7 +747,7 @@ def persist_baseline_trade_with_trace(
             symbol=str(bar.get("canonical_symbol") or "SOL-PERP"),
             timeframe=str(bar.get("timeframe") or "5m"),
             trace_id=trace_id,
-            side="long",
+            side=sd,
             entry_time=str(bar.get("candle_open_utc") or ""),
             entry_price=float(o),
             size=1.0,

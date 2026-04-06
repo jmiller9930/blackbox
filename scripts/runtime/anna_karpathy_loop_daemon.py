@@ -6,10 +6,11 @@ Assigns Grade 12 + Karpathy if missing; each tick advances ``karpathy_loop_itera
 appends ``karpathy_learning_cycle_v1`` to ``cumulative_learning_log`` (disable with
 ``ANNA_KARPATHY_LOG_EACH_CYCLE=0``), appends ``karpathy_loop_heartbeat.jsonl`` (includes ``skill_practice`` pass/fail or why none), snapshots
 grade-12 gates, and optionally records ``market_data``. Does not place live venue orders.
-When ``ANNA_KARPATHY_PAPER_HARNESS_EACH_TICK=1`` (default), each tick also runs the **paper harness**
-(``anna_modules`` analysis → execution_request → auto-approve → Jack paper). That is how the loop
-**repeats trade attempts** while the market feeds data. Disable with ``ANNA_KARPATHY_PAPER_HARNESS_EACH_TICK=0``
-(iterations-only mode). Operator ``log-trade`` remains available.
+When ``ANNA_KARPATHY_PAPER_HARNESS_EACH_TICK=1`` (opt-in), each tick also runs the **paper harness**
+(``anna_modules`` analysis → execution_request → auto-approve → Jack paper). **Default is off** so the loop
+does not generate cadence-driven trade attempts; enable only for explicit school/lab runs.
+``ANNA_KARPATHY_LAB_WIRE_JACK=1`` opt-in maps thin observation analyses to wireable proposals (lab only).
+Operator ``log-trade`` remains available.
 
 Env:
   ANNA_QEL_SURVIVAL_EACH_TICK — default **1**: after parallel Anna strategies + baseline ledger bridge,
@@ -27,9 +28,9 @@ Env:
   Ollama is probed each tick and stored as ``karpathy_last_llm_preflight`` (dashboard + heartbeat).
   A failed probe **does not** skip school/harness — the loop only gates on **data** preflight.
 
-  Paper harness → Jack: by default, observational classification is mapped so an ``execution_request`` can be
-  created (see ``anna_modules.proposal._lab_wire_jack_override``). Set ``ANNA_KARPATHY_DISABLE_LAB_WIRE_JACK=1``
-  to keep pure ``OBSERVATION_ONLY`` (no request). Still need ``BLACKBOX_JACK_EXECUTOR_CMD`` for Jack.
+  Paper harness → Jack: default **signal-faithful** — ``OBSERVATION_ONLY`` does not create requests unless
+  ``ANNA_KARPATHY_LAB_WIRE_JACK=1`` (lab/school). Jack command or stub still required for paper rows when a
+  real strategy signal wires through.
 
 Repo root:
   PYTHONPATH=scripts/runtime:. python3 scripts/runtime/anna_karpathy_loop_daemon.py

@@ -23,8 +23,8 @@ This document defines agents for the BLACK BOX platform. The repository is built
 
 Later phases are expected to add additional agents, including:
 
-- **Billy** — trade executor for the **Drift** venue (registry: `agents/billy/`)
-- **Jack** — trade executor for **Jupiter Perps** (registry: `agents/jack/`); **default** venue when unspecified; **Billy** only when the packet pins **Drift**
+- **Billy** — **hook** (executor) for the **Drift** trade policy (registry: `agents/billy/`). Drift is deprecated / not in service — see `docs/architect/ANNA_GOES_TO_SCHOOL.md` §1.1.2.1.
+- **Jack** — **hook** (executor) for the **Jupiter Perps** trade policy (registry: `agents/jack/`); **default** policy when unspecified; use **Billy** only when routing explicitly pins **Drift**
 - **Robbie**
 - **Bobby**
 
@@ -36,7 +36,7 @@ Aligned with the project README:
 
 | Excluded in Phase 1 | Notes |
 |---------------------|--------|
-| Billy / Jack | Do not add **execution** or trading runtime in Phase 1; **registry + docs** for Billy (Drift) and Jack (Jupiter) are allowed for clarity. |
+| Billy / Jack | Do not add **execution** or trading runtime in Phase 1; **registry + docs** for the hooks (**Billy** → Drift policy, **Jack** → Jupiter policy) are allowed for clarity. |
 | Robbie | Same. |
 | Bobby | Same; no integration layer for Bobby. |
 | Trading logic | No production or “real” trading behavior. |

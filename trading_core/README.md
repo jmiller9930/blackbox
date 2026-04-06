@@ -1,18 +1,22 @@
 # `trading_core` — rules source (SOL perp bot)
 
-This folder holds the **canonical TypeScript snapshot** of the live-style **SOL-PERP** bot — the **operational rules** (signals, sizing, orders, trailing, gates) to preserve for a smarter/dynamic system around it.
+This folder holds the **canonical TypeScript snapshot** of the live-style **SOL-PERP** bot — **Sean’s trading logic** in the sense of **operational rules** (signals, sizing, orders, trailing, gates) to preserve for a smarter/dynamic system around it.
 
-**Default venue (policy):** **Jupiter Perps** → executor **Jack**. Use **Billy** only when the routed venue is explicitly **Drift** (see `src/venue/adapter_model.ts` — `DEFAULT_VENUE_ID`).
+**How to read it:** that logic is **strategy / mechanics**, not “the” trade policy. **Trade policy** = which venue binds settlement (**Jupiter Perps** vs historical **Drift**). **Operator posture:** there is **only one active trade policy — Jupiter Perps** (hook **Jack**). **Drift** is deprecated and not in service; the **Drift-shaped** monolith file is a **historical** snapshot, not a parallel live policy.
+
+**Default routing in code:** `DEFAULT_VENUE_ID` → **Jupiter Perps** → **Jack** (`src/venue/adapter_model.ts`). **Billy** exists only for the **deprecated** Drift policy type in the type system and legacy prose.
+
+**Terminology:** **Billy** / **Jack** are **hooks** (executors) into **Drift** vs **Jupiter** policy types — not interchangeable names for “the bot.” For **active** work, **Jack / Jupiter** only.
 
 ## Anna, Billy, Jack, and venues (clear as day)
 
-| Agent | Venue | Role |
-|--------|--------|------|
-| **Anna** | (analyst) | Signals and confidence; **routes** approved execution packets by **venue** — **not** free-text “use Jupiter.” |
-| **Billy** | **Drift** only | Execution-only: Drift orders and positions. |
-| **Jack** | **Jupiter Perps** only | Execution-only: Jupiter Perps orders and positions. |
+| Agent | Trade policy (venue) | Role |
+|--------|------------------------|------|
+| **Anna** | (analyst) | Signals and confidence; **routes** approved execution packets by **venue / policy** — **not** free-text “use Jupiter.” |
+| **Billy** | **Drift** only | **Hook:** Drift orders and positions (deprecated path). |
+| **Jack** | **Jupiter Perps** only | **Hook:** Jupiter Perps orders and positions. |
 
-**Rule:** One **executor** per intent — Anna sends Drift work to **Billy**, Jupiter Perps work to **Jack**. That keeps venues and humans aligned (`agents/agent_registry.json`).
+**Rule:** One **hook** per intent — Anna sends **Drift**-policy work to **Billy**, **Jupiter Perps**-policy work to **Jack**. That keeps policy, venues, and humans aligned (`agents/agent_registry.json`).
 
 **Adapter rule:** Drift and Jupiter code stay **separate** under `src/venue/` — no mixed SDK imports.
 

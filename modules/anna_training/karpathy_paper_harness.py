@@ -5,16 +5,17 @@ path as Telegram: ``analyze_to_dict`` → ``try_create_execution_request_from_an
 approve + ``run_execution`` so paper rows can append every tick when configured.
 
 Env:
-  ANNA_KARPATHY_DISABLE_LAB_WIRE_JACK — if ``1``/true: keep ``OBSERVATION_ONLY`` (no execution_request from
-    observational classification). **Default is off** — thin analyses map to ``CONDITION_TIGHTENING`` so the
-    base harness can create a pending request. ``ANNA_KARPATHY_LAB_WIRE_JACK=0`` is an alias for the same opt-out.
-    For ``run_execution`` → Jack paper: set ``BLACKBOX_JACK_EXECUTOR_CMD``, **or** rely on the **default**
-    bundled stub when the command is unset (tier-1 school). Set ``ANNA_KARPATHY_JACK_STUB=0`` to disable the stub
-    and require an explicit executor command.
+  ANNA_KARPATHY_LAB_WIRE_JACK — set ``1``/true **only** for lab/school: map ``OBSERVATION_ONLY`` →
+    ``CONDITION_TIGHTENING`` so Jack paper can run without a strong signal. **Default: off** (signal-faithful).
+  ANNA_KARPATHY_DISABLE_LAB_WIRE_JACK — legacy alias for strict mode (same as default).
+  For ``run_execution`` → Jack paper: set ``BLACKBOX_JACK_EXECUTOR_CMD``, **or** rely on the **default**
+  bundled stub when the command is unset (tier-1 school). Set ``ANNA_KARPATHY_JACK_STUB=0`` to disable the stub
+  and require an explicit executor command.
   ANNA_KARPATHY_JACK_STUB — default **on** when ``BLACKBOX_JACK_EXECUTOR_CMD`` is unset: use
     ``scripts/runtime/jack_paper_bump_stub.py`` (paper ledger rows — no venue settlement; still **judgment-grade**
     for gates when that is the configured path). Set ``0``/false to opt out.
-  ANNA_KARPATHY_PAPER_HARNESS_EACH_TICK — default **1** (true): run harness each successful tick.
+  ANNA_KARPATHY_PAPER_HARNESS_EACH_TICK — default **0** (false): do not run paper harness every loop tick
+    (avoids cadence-driven trade attempts). Set ``1`` for explicit school/lab runs.
   ANNA_KARPATHY_AUTO_RUN_PAPER — default **1**: auto-approve + run_execution after a strategy signal.
   ANNA_KARPATHY_PAPER_APPROVER_ID — default ``karpathy-paper-harness``.
   ANNA_KARPATHY_HARNESS_PROMPT — override harness user text (iteration substituted if contains ``{iteration}``).
@@ -160,7 +161,7 @@ def run_karpathy_paper_harness_tick(*, iteration: int) -> dict[str, Any]:
 
     Returns a JSON-serializable dict stored on state as ``karpathy_last_paper_harness``.
     """
-    if not _env_bool("ANNA_KARPATHY_PAPER_HARNESS_EACH_TICK", True):
+    if not _env_bool("ANNA_KARPATHY_PAPER_HARNESS_EACH_TICK", False):
         return {"enabled": False, "reason": "ANNA_KARPATHY_PAPER_HARNESS_EACH_TICK=0"}
 
     _ensure_runtime_path()

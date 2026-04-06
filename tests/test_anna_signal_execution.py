@@ -99,15 +99,15 @@ def test_try_create_skips_preflight_blocked(monkeypatch) -> None:
     assert try_create_execution_request_from_anna_analysis(analysis, source_task_id=None) is None
 
 
-def test_try_create_wires_observation_by_default_lab_override(tmp_path, monkeypatch) -> None:
-    """Thin analysis classifies OBSERVATION_ONLY; default override maps to CONDITION_TIGHTENING → request."""
+def test_try_create_wires_observation_when_lab_wire_enabled(tmp_path, monkeypatch) -> None:
+    """Thin analysis classifies OBSERVATION_ONLY; lab opt-in maps to CONDITION_TIGHTENING → request."""
     import execution_plane.approval_manager as am
 
     monkeypatch.setattr(am, "REQUESTS_PATH", tmp_path / "req.json")
     monkeypatch.setenv("BLACKBOX_REQUIRE_ANNA_PROPOSAL_FOR_EXECUTION", "1")
     monkeypatch.setenv("ANNA_AUTO_EXECUTION_REQUEST", "1")
+    monkeypatch.setenv("ANNA_KARPATHY_LAB_WIRE_JACK", "1")
     monkeypatch.delenv("ANNA_KARPATHY_DISABLE_LAB_WIRE_JACK", raising=False)
-    monkeypatch.delenv("ANNA_KARPATHY_LAB_WIRE_JACK", raising=False)
 
     from execution_plane.anna_signal_execution import try_create_execution_request_from_anna_analysis
 
@@ -128,12 +128,38 @@ def test_try_create_wires_observation_by_default_lab_override(tmp_path, monkeypa
 
 
 def test_try_create_skips_observation_when_disable_lab_wire(tmp_path, monkeypatch) -> None:
+    """Thin analysis stays OBSERVATION_ONLY — no execution_request (strict)."""
     import execution_plane.approval_manager as am
 
     monkeypatch.setattr(am, "REQUESTS_PATH", tmp_path / "req.json")
     monkeypatch.setenv("BLACKBOX_REQUIRE_ANNA_PROPOSAL_FOR_EXECUTION", "1")
     monkeypatch.setenv("ANNA_AUTO_EXECUTION_REQUEST", "1")
     monkeypatch.setenv("ANNA_KARPATHY_DISABLE_LAB_WIRE_JACK", "1")
+
+    from execution_plane.anna_signal_execution import try_create_execution_request_from_anna_analysis
+
+    analysis = {
+        "input_text": "market notes",
+        "policy_alignment": {"guardrail_mode": "unknown", "alignment": "unknown"},
+        "risk_assessment": {"level": "low", "factors": []},
+        "suggested_action": {"intent": "WATCH", "rationale": ""},
+        "concepts_used": [],
+        "interpretation": {"summary": "thin", "headline": "H", "signals": []},
+        "caution_flags": [],
+        "notes": [],
+    }
+    assert try_create_execution_request_from_anna_analysis(analysis, source_task_id=None) is None
+
+
+def test_try_create_skips_thin_observation_by_default_without_lab_wire(tmp_path, monkeypatch) -> None:
+    """Default: OBSERVATION_ONLY does not wire (no ANNA_KARPATHY_LAB_WIRE_JACK)."""
+    import execution_plane.approval_manager as am
+
+    monkeypatch.setattr(am, "REQUESTS_PATH", tmp_path / "req.json")
+    monkeypatch.setenv("BLACKBOX_REQUIRE_ANNA_PROPOSAL_FOR_EXECUTION", "1")
+    monkeypatch.setenv("ANNA_AUTO_EXECUTION_REQUEST", "1")
+    monkeypatch.delenv("ANNA_KARPATHY_DISABLE_LAB_WIRE_JACK", raising=False)
+    monkeypatch.delenv("ANNA_KARPATHY_LAB_WIRE_JACK", raising=False)
 
     from execution_plane.anna_signal_execution import try_create_execution_request_from_anna_analysis
 
