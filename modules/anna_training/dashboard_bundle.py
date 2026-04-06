@@ -229,154 +229,6 @@ def _compact_baseline_ledger_last(raw: Any) -> dict[str, Any] | None:
     return out if len(out) > 1 else None
 
 
-_JUPITER_READINESS_FOR_OPERATOR = (
-    "Same evaluator as the gate pills below; latest closed bar in the database only."
-)
-
-
-def _jupiter_signal_readiness_fixed(
-    *,
-    level: str,
-    heat: int,
-    label: str,
-    detail: str,
-) -> dict[str, Any]:
-    """Fixed readiness row (no evaluator features), e.g. missing DB or fetch failure."""
-    try:
-        h = max(0, min(5, int(heat)))
-    except (TypeError, ValueError):
-        h = 0
-    return {
-        "schema": "jupiter_signal_readiness_v1",
-        "heat_max": 5,
-        "level": level,
-        "heat": h,
-        "label": label,
-        "detail": detail,
-        "for_operator": _JUPITER_READINESS_FOR_OPERATOR,
-    }
-
-
-def _jupiter_signal_readiness_v1(
-    *,
-    would_trade: bool,
-    reason_code: str,
-    side: str,
-    features: dict[str, Any],
-) -> dict[str, Any]:
-    """
-    Operator heat strip (discrete): how close the baseline policy is to a paper trade on this bar.
-
-    Levels: fire = would trade; warm = blocked after an early step; cool = no_signal;
-    cold = insufficient history; error = bad data. Technical reason_code stays in the grid below.
-    """
-    rc = (reason_code or "").strip()
-    feat = features or {}
-    raw_long = bool(feat.get("long_signal_raw"))
-    raw_short = bool(feat.get("short_signal_raw"))
-    blockers = feat.get("policy_blockers")
-    if not isinstance(blockers, list):
-        blockers = []
-
-    if would_trade:
-        return _jupiter_signal_readiness_fixed(
-            level="fire",
-            heat=5,
-            label="Would take the trade (paper)",
-            detail=f"Baseline rules allow a paper trade on this bar — side {side}. Code: {rc}.",
-        )
-
-    if rc == "policy_filter_block" and (raw_long or raw_short):
-        blk = ", ".join(str(x) for x in blockers) if blockers else "another rule"
-        return _jupiter_signal_readiness_fixed(
-            level="warm",
-            heat=2,
-            label="Almost — something blocked it",
-            detail=f"A direction was in play, but {blk} stopped a trade on this bar.",
-        )
-
-    if rc == "no_signal":
-        return _jupiter_signal_readiness_fixed(
-            level="cool",
-            heat=1,
-            label="No baseline trade on this bar",
-            detail="The latest closed candle did not pass the first baseline checks for a long or short. "
-            "That is only about this one bar; the next bar is checked when it closes.",
-        )
-
-    if rc in ("insufficient_history",):
-        return _jupiter_signal_readiness_fixed(
-            level="cold",
-            heat=0,
-            label="Need more price history",
-            detail="Not enough closed bars loaded yet for the baseline to run its full checks.",
-        )
-
-    if rc in ("rsi_nan", "ohlc_parse_error"):
-        return _jupiter_signal_readiness_fixed(
-            level="error",
-            heat=0,
-            label="Data problem",
-            detail=f"Could not read price or RSI cleanly ({rc}).",
-        )
-
-    return _jupiter_signal_readiness_fixed(
-        level="idle",
-        heat=1,
-        label="No trade",
-        detail=f"Reason: {rc}" if rc else "—",
-    )
-
-
-def _jupiter_alignment_pills_v1(feat: dict[str, Any]) -> dict[str, Any]:
-    """
-    Three-step ladder matching the baseline evaluator (same booleans as ``features``):
-    1) Raw long/short arm (aggregate + RSI swing),
-    2) Supertrend direction matches the armed side,
-    3) EMA200 vs close — equivalent to ``short_signal`` / ``long_signal`` (all gates).
-    """
-    raw_l = bool(feat.get("long_signal_raw"))
-    raw_s = bool(feat.get("short_signal_raw"))
-    st_raw = feat.get("supertrend_direction")
-    try:
-        st_dir = int(st_raw) if st_raw is not None else 0
-    except (TypeError, ValueError):
-        st_dir = 0
-
-    st_ok = (raw_s and st_dir == -1) or (raw_l and st_dir == 1)
-    sg_short = bool(feat.get("short_signal"))
-    sg_long = bool(feat.get("long_signal"))
-    all_gates = sg_short or sg_long
-
-    return {
-        "schema": "jupiter_alignment_pills_v1",
-        "what_this_is": (
-            "Lights left-to-right as each policy gate passes on this bar. "
-            "Does not replace reason_code or the heat strip."
-        ),
-        "pills": [
-            {
-                "id": "arm",
-                "label": "1 · Structure + RSI arm",
-                "active": raw_s or raw_l,
-                "hint": "First check: a long or short arm from structure + RSI on this candle.",
-            },
-            {
-                "id": "supertrend",
-                "label": "2 · Supertrend",
-                "active": st_ok,
-                "hint": "Trend band must be bearish (−1) for a short arm or bullish (+1) for a long arm.",
-            },
-            {
-                "id": "ema_price",
-                "label": "3 · EMA200 vs price",
-                "active": all_gates,
-                "hint": "Close on the correct side of EMA200 for that direction — same as a green long/short flag below.",
-            },
-        ],
-    }
-
-
 def build_jupiter_policy_snapshot(
     *,
     market_db_path: Path | None = None,
@@ -408,12 +260,6 @@ def build_jupiter_policy_snapshot(
     if not mpath or not mpath.is_file():
         out["error"] = "market_db_missing"
         out["hint"] = "Set BLACKBOX_MARKET_DATA_PATH or ingest market_bars_5m."
-        out["signal_readiness"] = _jupiter_signal_readiness_fixed(
-            level="cold",
-            heat=0,
-            label="No market database",
-            detail="Set BLACKBOX_MARKET_DATA_PATH or ingest market_bars_5m so the policy can read bars.",
-        )
         return out
 
     try:
@@ -423,12 +269,6 @@ def build_jupiter_policy_snapshot(
         bars = fetch_recent_bars_asc(limit=280, db_path=mpath)
     except Exception as e:
         out["error"] = f"fetch_bars_failed:{e!s}"[:240]
-        out["signal_readiness"] = _jupiter_signal_readiness_fixed(
-            level="error",
-            heat=0,
-            label="Could not load bars",
-            detail=str(e)[:220],
-        )
         return out
 
     out["bars_fetched"] = len(bars)
@@ -436,12 +276,6 @@ def build_jupiter_policy_snapshot(
     if len(bars) < MIN_BARS:
         out["error"] = "insufficient_history"
         out["hint"] = f"Need at least {MIN_BARS} closed bars (Sean v2: EMA200 + Supertrend + RSI)."
-        out["signal_readiness"] = _jupiter_signal_readiness_v1(
-            would_trade=False,
-            reason_code="insufficient_history",
-            side="",
-            features={},
-        )
         return out
 
     last = bars[-1]
@@ -467,13 +301,6 @@ def build_jupiter_policy_snapshot(
         "prev_rsi": feat.get("prev_rsi"),
         "current_rsi": feat.get("current_rsi"),
     }
-    out["signal_readiness"] = _jupiter_signal_readiness_v1(
-        would_trade=bool(sig.trade),
-        reason_code=str(sig.reason_code or ""),
-        side=str(sig.side or ""),
-        features=feat,
-    )
-    out["alignment_pills"] = _jupiter_alignment_pills_v1(feat)
     return out
 
 

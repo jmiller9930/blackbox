@@ -3,8 +3,6 @@
 from __future__ import annotations
 
 from modules.anna_training.dashboard_bundle import (
-    _jupiter_alignment_pills_v1,
-    _jupiter_signal_readiness_v1,
     _pair_vs_baseline_for_cells,
     build_dashboard_bundle,
     build_trade_chain_payload,
@@ -69,11 +67,8 @@ def test_build_dashboard_bundle_schema() -> None:
     jp = b.get("jupiter_policy_snapshot")
     assert isinstance(jp, dict)
     assert jp.get("schema") == "jupiter_policy_snapshot_v1"
-    sr = jp.get("signal_readiness")
-    assert isinstance(sr, dict)
-    assert sr.get("schema") == "jupiter_signal_readiness_v1"
-    assert sr.get("heat_max") == 5
-    assert "level" in sr and "heat" in sr and "label" in sr and "detail" in sr
+    assert "signal_readiness" not in jp
+    assert "alignment_pills" not in jp
 
 
 def test_pair_vs_baseline_for_cells() -> None:
@@ -94,45 +89,3 @@ def test_trade_chain_includes_pair_epsilon() -> None:
     assert isinstance(tc["paired_comparison_epsilon"], float)
 
 
-def test_jupiter_signal_readiness_levels() -> None:
-    fire = _jupiter_signal_readiness_v1(
-        would_trade=True,
-        reason_code="jupiter_policy_long_signal",
-        side="long",
-        features={},
-    )
-    assert fire["level"] == "fire" and fire["heat"] == 5
-    warm = _jupiter_signal_readiness_v1(
-        would_trade=False,
-        reason_code="policy_filter_block",
-        side="",
-        features={"long_signal_raw": True, "policy_blockers": ["ema200"]},
-    )
-    assert warm["level"] == "warm" and warm["heat"] == 2
-    cool = _jupiter_signal_readiness_v1(
-        would_trade=False,
-        reason_code="no_signal",
-        side="flat",
-        features={},
-    )
-    assert cool["level"] == "cool" and cool["heat"] == 1
-
-
-def test_jupiter_alignment_pills_v1_ladder() -> None:
-    p = _jupiter_alignment_pills_v1(
-        {
-            "long_signal_raw": True,
-            "short_signal_raw": False,
-            "supertrend_direction": 1,
-            "short_signal": False,
-            "long_signal": True,
-        }
-    )
-    assert p.get("schema") == "jupiter_alignment_pills_v1"
-    assert len(p["pills"]) == 3
-    assert p["pills"][0]["active"] is True
-    assert p["pills"][1]["active"] is True
-    assert p["pills"][2]["active"] is True
-    p2 = _jupiter_alignment_pills_v1({})
-    assert p2["pills"][0]["active"] is False
-    assert p2["pills"][2]["active"] is False
