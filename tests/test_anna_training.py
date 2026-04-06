@@ -689,8 +689,17 @@ def test_flush_runtime_clears_files_and_writes_default_state(tmp_path: Path, mon
     from modules.anna_training.store import load_state
 
     # Do not clear repo execution_plane/requests.json from unit tests; CLI default does clear it on host.
+    ledger = tmp_path / "ledger_test.db"
+    ledger.write_bytes(b"fake")
+    (tmp_path / "ledger_test.db-wal").write_bytes(b"wal")
+
+    monkeypatch.setenv("BLACKBOX_EXECUTION_LEDGER_PATH", str(ledger))
+
     r = flush_anna_training_runtime(include_execution_requests=False)
     assert r.get("ok") is True
+    assert r.get("execution_ledger_path") == str(ledger)
+    assert not ledger.is_file()
+    assert not (tmp_path / "ledger_test.db-wal").is_file()
     assert not (tmp_path / "paper_trades.jsonl").is_file()
     assert not (nested / "school_extra.json").is_file()
     assert (tmp_path / "state.json").is_file()
