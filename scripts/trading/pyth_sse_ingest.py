@@ -5,13 +5,14 @@ Hermes Pyth **SSE** → ``market_ticks`` (oracle tape for 5m OHLC / ``tick_count
 Subscribes to ``/v2/updates/price/stream`` (not ``latest_price_feeds`` polling).
 Inserts into ``BLACKBOX_MARKET_DATA_PATH`` / default ``data/sqlite/market_data.db``.
 
-**Tick rule (product default):** one row **per Pyth price change** — Hermes integer ``(price, expo)``
-differs from the last stored tick (no float rounding / no epsilon; identity is exact).
+**Tick rule (product default):** **Sean rule** — one SQLite row **per accepted SSE message** after conf
+(``every_message``). Optional ``price_change`` = one row only when Hermes integer ``(price, expo)``
+differs from the last stored tick (exact identity; no float epsilon).
 
 Environment:
   PYTH_SOL_USD_FEED_ID — 64-hex feed id (default: SOL/USD)
   MARKET_TICK_SYMBOL — logical symbol (default SOL-USD)
-  PYTH_SSE_TICK_POLICY — ``price_change`` (default) | ``every_message`` | ``dedupe_publish``
+  PYTH_SSE_TICK_POLICY — ``every_message`` (default, Sean tape / V) | ``price_change`` | ``dedupe_publish``
   PYTH_SSE_DEDUPE_PUBLISH_TIME — only for ``dedupe_publish``: skip duplicate ``publish_time`` (default 1)
   PYTH_SSE_CONF_RATIO_MAX — max conf/price to accept (default 0.001, match Drift bot)
   PYTH_SSE_BAR_REFRESH_SEC — throttle for ``refresh_last_closed_bar_from_ticks`` (default 15)
@@ -91,8 +92,8 @@ def _dedupe_publish() -> bool:
 
 
 def _tick_policy() -> str:
-    """Default ``price_change`` = one DB row each time oracle price moves."""
-    v = (os.environ.get("PYTH_SSE_TICK_POLICY") or "price_change").strip().lower()
+    """Default ``every_message`` = one DB row per SSE parse (Sean-aligned tape density / V)."""
+    v = (os.environ.get("PYTH_SSE_TICK_POLICY") or "every_message").strip().lower()
     if v in ("price_change", "every_message", "dedupe_publish"):
         return v
     return "price_change"

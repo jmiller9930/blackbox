@@ -84,7 +84,7 @@ services:
     environment:
       BLACKBOX_REPO_ROOT: /repo
       # One market_ticks row per Pyth **price change** (fills 5m buckets for OHLC / V).
-      PYTH_SSE_TICK_POLICY: price_change
+      PYTH_SSE_TICK_POLICY: every_message
     command:
       [
         "sh",
