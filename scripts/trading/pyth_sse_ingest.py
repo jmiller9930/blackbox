@@ -1,15 +1,19 @@
 #!/usr/bin/env python3
 """
-Hermes Pyth **SSE** → ``market_ticks`` (full stream, one row per update).
+Hermes Pyth **SSE** → ``market_ticks`` (oracle tape for 5m OHLC / ``tick_count``).
 
 Subscribes to ``/v2/updates/price/stream`` (not ``latest_price_feeds`` polling).
-Each SSE ``data:`` JSON with a ``parsed`` price update is inserted into
-``BLACKBOX_MARKET_DATA_PATH`` / default ``data/sqlite/market_data.db``.
+Inserts into ``BLACKBOX_MARKET_DATA_PATH`` / default ``data/sqlite/market_data.db``.
+
+**Tick rule (product default):** one row **per Pyth price change** — any time the resolved USD
+price differs from the last **stored** tick (``PYTH_SSE_TICK_POLICY=price_change``). That fills
+each 5m bucket with one tick per distinct price move Hermes delivers (subject to confidence filter).
 
 Environment:
   PYTH_SOL_USD_FEED_ID — 64-hex feed id (default: SOL/USD)
   MARKET_TICK_SYMBOL — logical symbol (default SOL-USD)
-  PYTH_SSE_DEDUPE_PUBLISH_TIME — if 1 (default), skip duplicate ``publish_time``
+  PYTH_SSE_TICK_POLICY — ``price_change`` (default) | ``every_message`` | ``dedupe_publish``
+  PYTH_SSE_DEDUPE_PUBLISH_TIME — only for ``dedupe_publish``: skip duplicate ``publish_time`` (default 1)
   PYTH_SSE_CONF_RATIO_MAX — max conf/price to accept (default 0.001, match Drift bot)
   PYTH_SSE_BAR_REFRESH_SEC — throttle for ``refresh_last_closed_bar_from_ticks`` (default 15)
 """
@@ -83,6 +87,22 @@ def _dedupe_publish() -> bool:
     ))
 
 
+def _tick_policy() -> str:
+    """Default ``price_change`` = one DB row each time oracle price moves."""
+    v = (os.environ.get("PYTH_SSE_TICK_POLICY") or "price_change").strip().lower()
+    if v in ("price_change", "every_message", "dedupe_publish"):
+        return v
+    return "price_change"
+
+
+def _same_price_for_policy(prev: float | None, px: float) -> bool:
+    """True if we should skip insert (price unchanged within tolerance)."""
+    if prev is None:
+        return False
+    tol = max(1e-10, 1e-12 * max(1.0, abs(px)))
+    return abs(prev - px) <= tol
+
+
 def _sse_url() -> str:
     fid = _feed_id()
     return f"https://hermes.pyth.network/v2/updates/price/stream?ids[]={fid}"
@@ -117,6 +137,7 @@ def _handle_data_line(
     conn: Any,
     symbol: str,
     last_pub: list[int | None],
+    last_stored_price: list[float | None],
 ) -> bool:
     """Parse one SSE data payload; insert tick. Returns True if inserted."""
     try:
@@ -132,10 +153,24 @@ def _handle_data_line(
     px, pub_i = price_from_hermes_parsed_entry(entry, conf_ratio_max=_conf_ratio_max())
     if px is None:
         return False
-    if _dedupe_publish() and pub_i is not None and last_pub[0] == pub_i:
-        return False
-    if pub_i is not None:
-        last_pub[0] = pub_i
+
+    policy = _tick_policy()
+    if policy == "dedupe_publish":
+        if _dedupe_publish() and pub_i is not None and last_pub[0] == pub_i:
+            return False
+        if pub_i is not None:
+            last_pub[0] = pub_i
+    elif policy == "price_change":
+        if _same_price_for_policy(last_stored_price[0], px):
+            return False
+        last_stored_price[0] = px
+        if pub_i is not None:
+            last_pub[0] = pub_i
+    else:
+        # every_message: one row per successful SSE parse (max density)
+        last_stored_price[0] = px
+        if pub_i is not None:
+            last_pub[0] = pub_i
 
     inserted_at = datetime.now(timezone.utc).replace(microsecond=0).isoformat()
     obs = _observed_iso_from_publish(pub_i)
@@ -153,7 +188,7 @@ def _handle_data_line(
         comparator_observed_at=None,
         comparator_raw=None,
         gate_state="ok",
-        gate_reason="pyth_sse_stream_ingest",
+        gate_reason=f"pyth_sse_{policy}",
     )
     _maybe_refresh_canonical_bar(conn, symbol)
     return True
@@ -167,9 +202,25 @@ def _run_sse_loop() -> None:
     symbol = _symbol()
     url = _sse_url()
     last_pub: list[int | None] = [None]
+    last_stored_price: list[float | None] = [None]
+    if _tick_policy() == "price_change":
+        try:
+            row = conn.execute(
+                """
+                SELECT primary_price FROM market_ticks
+                WHERE symbol = ? AND primary_source = ?
+                ORDER BY inserted_at DESC, id DESC LIMIT 1
+                """,
+                (symbol, "pyth_hermes_sse"),
+            ).fetchone()
+            if row and row[0] is not None:
+                last_stored_price[0] = float(row[0])
+        except Exception as e:  # noqa: BLE001
+            print(f"pyth_sse_ingest: warm_start_price_warn {e!r}", flush=True)
+    pol = _tick_policy()
     print(
-        f"pyth_sse_ingest: db={db_path} symbol={symbol!r} url={url[:64]}… "
-        f"dedupe_publish={_dedupe_publish()}",
+        f"pyth_sse_ingest: db={db_path} symbol={symbol!r} tick_policy={pol!r} url={url[:64]}… "
+        f"dedupe_publish_legacy={_dedupe_publish()}",
         flush=True,
     )
     ctx = _ssl_context()
@@ -212,7 +263,11 @@ def _run_sse_loop() -> None:
                                 if data and data != "[DONE]":
                                     try:
                                         _handle_data_line(
-                                            data, conn=conn, symbol=symbol, last_pub=last_pub
+                                            data,
+                                            conn=conn,
+                                            symbol=symbol,
+                                            last_pub=last_pub,
+                                            last_stored_price=last_stored_price,
                                         )
                                     except Exception as e:  # noqa: BLE001
                                         print(f"pyth_sse_ingest: row_error {e!r}", flush=True)
