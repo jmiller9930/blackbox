@@ -239,7 +239,11 @@ def build_jupiter_policy_snapshot(
 
     Not a price tape; not venue execution. Refreshes every dashboard bundle request.
     """
-    from modules.anna_training.sean_jupiter_baseline_signal import MIN_BARS, evaluate_sean_jupiter_baseline_v1
+    from modules.anna_training.sean_jupiter_baseline_signal import (
+        MIN_BARS,
+        evaluate_sean_jupiter_baseline_v1,
+        format_jupiter_tile_narrative_v1,
+    )
 
     mpath = market_db_path if market_db_path is not None else _market_db_path()
     out: dict[str, Any] = {
@@ -292,6 +296,16 @@ def build_jupiter_policy_snapshot(
     out["reason_code"] = sig.reason_code
     out["pnl_usd_open_to_close_hint"] = sig.pnl_usd
     out["features"] = dict(sig.features) if isinstance(sig.features, dict) else sig.features
+    sf = out["features"] if isinstance(out["features"], dict) else {}
+    pb_list = sf.get("policy_blockers")
+    pbl = [str(x) for x in pb_list] if isinstance(pb_list, list) else None
+    out["operator_tile_narrative"] = format_jupiter_tile_narrative_v1(
+        features=sf,
+        reason_code=str(sig.reason_code or ""),
+        trade=bool(sig.trade),
+        side=str(sig.side or "flat"),
+        policy_blockers=pbl,
+    )
 
     # Explicit alignment chips for UI (same booleans as in features)
     feat = out["features"] if isinstance(out["features"], dict) else {}
@@ -563,8 +577,12 @@ def _event_axis_jupiter_tile_narratives(
                 side=sig.side,
                 policy_blockers=pbl,
             )
-        except Exception:
-            out[mid_s] = ""
+        except Exception as e:
+            out[mid_s] = (
+                "Jupiter tile (event column): build failed — "
+                + str(e)[:400]
+                + "\n(Check BLACKBOX_MARKET_DATA_PATH, execution_ledger policy_evaluations, API restart after deploy.)"
+            )
     return out
 
 
