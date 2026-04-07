@@ -203,6 +203,32 @@ def _ensure_runtime_for_market_imports() -> None:
         sys.path.insert(0, s)
 
 
+def _count_pyth_sse_ticks_since_minutes(minutes: float) -> int | None:
+    """Count ``pyth_hermes_sse`` rows with ``inserted_at`` in the last ``minutes`` (UTC)."""
+    import sqlite3
+
+    mpath = _market_db_path()
+    if not mpath or not mpath.is_file():
+        return None
+    cutoff = datetime.now(timezone.utc) - timedelta(minutes=minutes)
+    cutoff = cutoff.replace(microsecond=0)
+    cs = cutoff.isoformat()
+    conn = sqlite3.connect(str(mpath))
+    try:
+        row = conn.execute(
+            """
+            SELECT COUNT(*) FROM market_ticks
+            WHERE primary_source = ? AND inserted_at >= ?
+            """,
+            ("pyth_hermes_sse", cs),
+        ).fetchone()
+        return int(row[0] or 0) if row else 0
+    except (OSError, sqlite3.Error):
+        return None
+    finally:
+        conn.close()
+
+
 def _compact_baseline_ledger_last(raw: Any) -> dict[str, Any] | None:
     """Last Karpathy tick bridge result — small keys only (state.json may hold full dict)."""
     if not isinstance(raw, dict):
@@ -287,7 +313,12 @@ def build_jupiter_policy_snapshot(
         "market_event_id": str(last.get("market_event_id") or ""),
         "candle_open_utc": str(last.get("candle_open_utc") or ""),
         "candle_close_utc": str(last.get("candle_close_utc") or ""),
+        "open": last.get("open"),
+        "high": last.get("high"),
+        "low": last.get("low"),
         "close": last.get("close"),
+        "tick_count": last.get("tick_count"),
+        "price_source": str(last.get("price_source") or "") or None,
     }
 
     sig = evaluate_sean_jupiter_baseline_v1(bars_asc=bars)
@@ -1196,6 +1227,13 @@ def build_dashboard_bundle(
 
     now_utc = datetime.now(timezone.utc)
     pyth_snap = _pyth_probe_snapshot(_REPO_ROOT)
+    try:
+        from modules.anna_training.readiness import check_pyth_sse_tape
+
+        pyth_sse_tape = check_pyth_sse_tape(_REPO_ROOT)
+    except Exception:
+        pyth_sse_tape = {"ok": False, "reason": "check_failed"}
+    sse_ticks_5m = _count_pyth_sse_ticks_since_minutes(5.0)
     tick_stale = _sequential_tick_staleness(
         ui_state=ui_state,
         events_remaining=ev_rem,
@@ -1232,6 +1270,11 @@ def build_dashboard_bundle(
             "pyth_status": pyth_snap.get("status"),
             "pyth_last_event_at": pyth_snap.get("last_event_at"),
             "pyth_age_seconds": pyth_snap.get("age_seconds"),
+            "pyth_sse_tape_ok": bool((pyth_sse_tape or {}).get("ok")),
+            "pyth_sse_age_seconds": (pyth_sse_tape or {}).get("age_seconds"),
+            "pyth_sse_total_ticks": (pyth_sse_tape or {}).get("sse_tick_count"),
+            "pyth_sse_ticks_5m": sse_ticks_5m,
+            "pyth_sse_last_inserted_at": (pyth_sse_tape or {}).get("last_sse_inserted_at"),
             "tick_staleness": tick_stale,
         },
         "next_tick": next_tick,

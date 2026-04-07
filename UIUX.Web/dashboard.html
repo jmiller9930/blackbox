@@ -473,6 +473,10 @@
           <span class="sep">|</span>
           <span><span class="lbl">Pyth age</span> <span class="val" id="live-pyth-age">—</span></span>
           <span class="sep">|</span>
+          <span title="Hermes SSE rows ingested in the last 5 minutes (dense tape → OHLC)"><span class="lbl">SSE ticks/5m</span> <span class="val" id="live-sse-5m">—</span></span>
+          <span class="sep">|</span>
+          <span title="pyth_hermes_sse tape freshness vs ANNA_PYTH_SSE_MAX_AGE_SEC"><span class="lbl">SSE tape</span> <span class="val" id="live-sse-tape">—</span></span>
+          <span class="sep">|</span>
           <span><span class="lbl">Market clock</span> <span class="val" id="live-market-tz">—</span></span>
         </div>
         <div class="dash-live-sub" id="live-detail"></div>
@@ -512,8 +516,9 @@
       <div class="dash-jp" id="dash-jp-wrap" role="region" aria-labelledby="dash-jp-h">
         <h2 id="dash-jp-h" class="dash-jp-title">Jupiter policy (paper baseline)</h2>
         <p class="dash-jp-sub" id="dash-jp-lead">
-          Latest closed bar: whether a <strong>paper</strong> baseline trade would fire, feature alignment (RSI / flags), and
-          <code>reason_code</code>. Not venue execution. Refreshes each poll (~<span id="dash-jp-poll-ms-label">1500</span>ms).
+          Latest closed bar (OHLC + <strong>V</strong> = tick_count from oracle tape): whether a <strong>paper</strong> baseline trade would fire,
+          feature alignment (RSI / flags), and <code>reason_code</code>. Dense Hermes SSE → SQLite feeds correct high/low for the bar.
+          Not venue execution. Refreshes each poll (~<span id="dash-jp-poll-ms-label">1500</span>ms).
         </p>
         <p class="dash-jp-tick" id="dash-jp-tick" aria-live="polite">—</p>
         <div class="dash-jp-grid" id="dash-jp-grid" aria-live="polite"></div>
@@ -1121,6 +1126,14 @@
     $('live-ev-queue').textContent = sig.sequential_events_remaining_in_queue != null ? String(sig.sequential_events_remaining_in_queue) : '—';
     $('live-last-tick').textContent = fmtMarketTime(sig.sequential_last_tick_at, tz);
     $('live-pyth-age').textContent = sig.pyth_age_seconds != null ? (String(sig.pyth_age_seconds) + 's') : '—';
+    var sse5 = $('live-sse-5m');
+    if (sse5) sse5.textContent = sig.pyth_sse_ticks_5m != null ? String(sig.pyth_sse_ticks_5m) : '—';
+    var sset = $('live-sse-tape');
+    if (sset) {
+      if (sig.pyth_sse_tape_ok === true) sset.textContent = 'OK';
+      else if (sig.pyth_sse_tape_ok === false) sset.textContent = 'STALE';
+      else sset.textContent = '—';
+    }
     var d1 = esc(ts.detail || '');
     var d2 = esc(lv.methodology_one_liner || '');
     $('live-detail').textContent = d1 + (d2 && d1 ? ' — ' : '') + d2;
@@ -1277,6 +1290,20 @@
       var eb = jp.evaluated_bar || {};
       if (eb.market_event_id) rows.push({ k: 'market_event_id', v: String(eb.market_event_id), cls: 'jp-flat' });
       if (eb.candle_open_utc) rows.push({ k: 'bar open (UTC)', v: String(eb.candle_open_utc), cls: 'jp-flat' });
+      if (eb.open != null && eb.high != null && eb.low != null && eb.close != null) {
+        rows.push({
+          k: 'OHLC (closed bar)',
+          v: 'O ' + Number(eb.open).toFixed(4) + ' · H ' + Number(eb.high).toFixed(4) + ' · L ' + Number(eb.low).toFixed(4) + ' · C ' + Number(eb.close).toFixed(4),
+          cls: 'jp-flat',
+        });
+      }
+      if (eb.tick_count != null) {
+        rows.push({
+          k: 'tick_count (V)',
+          v: String(eb.tick_count) + ' — oracle samples in bucket (SSE tape drives high/low)',
+          cls: 'jp-flat',
+        });
+      }
       rows.push({ k: 'bars in window', v: String(jp.bars_fetched != null ? jp.bars_fetched : '—'), cls: 'jp-flat' });
     }
     var h = rows
