@@ -74,12 +74,31 @@ services:
       - /mnt/SQLlite_dB:/mnt/SQLlite_dB
     restart: unless-stopped
 
+  # Hermes SSE → market_ticks (full Pyth update stream into SQLite; not REST polling).
+  pyth-sse-ingest:
+    image: python:3.11-alpine
+    working_dir: /repo
+    environment:
+      BLACKBOX_REPO_ROOT: /repo
+    command:
+      [
+        "sh",
+        "-c",
+        "pip install -q --no-cache-dir certifi && exec python3 scripts/trading/pyth_sse_ingest.py",
+      ]
+    volumes:
+      - ../:/repo
+      - /mnt/SQLlite_dB:/mnt/SQLlite_dB
+    restart: unless-stopped
+
   web:
     build: .
     depends_on:
       api:
         condition: service_healthy
       pyth-stream:
+        condition: service_started
+      pyth-sse-ingest:
         condition: service_started
       sequential-tick:
         condition: service_started

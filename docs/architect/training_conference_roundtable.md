@@ -183,6 +183,7 @@
 | **`docs/architect/development_plan.md`** — Operator web dashboard subsection | Trade chain + `operator_trading` + API pointers (Pillar 1 lab surface) |
 | **`docs/blackbox_master_plan.md`** — Phase 5 § Operator web dashboard | Canonical table + deploy note (refresh `dashboard.html`) |
 | `scripts/trading/pyth_stream_probe.py` | SQLite `market_ticks` probe for `docs/working/artifacts/pyth_stream_*.json` (docker `pyth-stream`; no Hermes HTTP) |
+| `scripts/trading/pyth_sse_ingest.py` | Hermes **SSE** → `market_ticks` full stream (docker `pyth-sse-ingest`; `hermes_sse_price` parser tests) |
 | `scripts/runtime/operational_readiness_clawbot.sh` | Remote curl + compose checks (run on clawbot after pull) |
 | `scripts/runtime/sequential_http_tick_loop.py` | Docker `sequential-tick` — periodic POST `/sequential-learning/control/tick` |
 | `scripts/runtime/anna_modules/memory_control_plane.py` | Problem signals → mode → retrieval (runtime) |

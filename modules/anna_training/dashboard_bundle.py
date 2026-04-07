@@ -1213,7 +1213,7 @@ def build_dashboard_bundle(
         "bundle_generated_at_utc": snap_iso,
         "methodology_one_liner": (
             "Dashboard: REST poll of aggregated bundle; sequential: discrete batch ticks over a cursor; "
-            "market: SQLite tape + pyth_stream JSON artifacts — not a sub-second order-book stream."
+            "market: Hermes SSE → SQLite tape (pyth-sse-ingest) + probe JSON — not an exchange order-book stream."
         ),
         "update_model": {
             "dashboard_ui": "poll_driven",
