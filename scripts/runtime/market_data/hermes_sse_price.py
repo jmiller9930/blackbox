@@ -1,8 +1,36 @@
-"""Parse Hermes SSE ``parsed[]`` price objects (SOL/USD and same-shaped feeds)."""
+"""Parse Hermes SSE ``parsed[]`` price objects — integer ``price`` + ``expo`` only (no rounding policy)."""
 from __future__ import annotations
 
 import math
+from decimal import Decimal
 from typing import Any
+
+
+def hermes_price_identity_from_entry(entry: dict[str, Any]) -> tuple[int, int] | None:
+    """
+    Exact oracle identity: ``(price_raw_int, expo)`` as Hermes sends them.
+    Two ticks differ iff this tuple differs — no float tolerance.
+    """
+    price_obj = entry.get("price")
+    if not isinstance(price_obj, dict):
+        return None
+    raw = price_obj.get("price")
+    expo = price_obj.get("expo")
+    try:
+        expo_i = int(expo) if expo is not None else 0
+    except (TypeError, ValueError):
+        expo_i = 0
+    try:
+        raw_i = int(str(raw))
+    except (TypeError, ValueError):
+        return None
+    return (raw_i, expo_i)
+
+
+def human_price_float_from_identity(raw_i: int, expo_i: int) -> float:
+    """Human USD/SOL price for SQLite / OHLC — ``Decimal`` scale, ``float`` only for storage math."""
+    d = Decimal(raw_i) * (Decimal(10) ** expo_i)
+    return float(d)
 
 
 def price_from_hermes_parsed_entry(
@@ -14,30 +42,24 @@ def price_from_hermes_parsed_entry(
     Return (usd_float, publish_time_unix) from one ``parsed`` array element.
     Skips low-confidence updates when conf/price > ``conf_ratio_max`` (same idea as Drift bot).
     """
+    ident = hermes_price_identity_from_entry(entry)
+    if ident is None:
+        return None, None
+    raw_i, expo_i = ident
     price_obj = entry.get("price")
     if not isinstance(price_obj, dict):
         return None, None
-    raw = price_obj.get("price")
     conf = price_obj.get("conf")
-    expo = price_obj.get("expo")
     pub = price_obj.get("publish_time")
+    val = human_price_float_from_identity(raw_i, expo_i)
     try:
-        expo_i = int(expo) if expo is not None else 0
+        conf_raw = int(str(conf)) if conf is not None else 0
     except (TypeError, ValueError):
-        expo_i = 0
-    try:
-        raw_i = int(str(raw))
-    except (TypeError, ValueError):
-        return None, int(pub) if pub is not None else None
-    val = raw_i * (10**expo_i)
-    try:
-        conf_f = float(str(conf)) * (10**expo_i)
-    except (TypeError, ValueError):
-        conf_f = 0.0
+        conf_raw = 0
+    conf_f = float(Decimal(conf_raw) * (Decimal(10) ** expo_i))
     if val > 0 and conf_f / val > conf_ratio_max:
         return None, int(pub) if pub is not None else None
     pub_i = int(pub) if pub is not None else None
-    out = float(val)
-    if math.isnan(out) or math.isinf(out):
+    if math.isnan(val) or math.isinf(val):
         return None, pub_i
-    return out, pub_i
+    return val, pub_i

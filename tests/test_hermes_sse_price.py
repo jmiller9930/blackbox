@@ -8,7 +8,11 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts" / "runtime"))
 
-from market_data.hermes_sse_price import price_from_hermes_parsed_entry  # noqa: E402
+from market_data.hermes_sse_price import (  # noqa: E402
+    hermes_price_identity_from_entry,
+    human_price_float_from_identity,
+    price_from_hermes_parsed_entry,
+)
 
 
 def test_sol_like_entry_matches_latest_feeds_shape():
@@ -25,6 +29,16 @@ def test_sol_like_entry_matches_latest_feeds_shape():
     assert pub == 1775594410
     assert px is not None
     assert 80 < px < 200
+
+
+def test_hermes_identity_exact_no_rounding_merge():
+    a = {"price": {"price": "8192304846", "conf": "1", "expo": -8, "publish_time": 1}}
+    b = {"price": {"price": "8192200001", "conf": "1", "expo": -8, "publish_time": 2}}
+    ia = hermes_price_identity_from_entry(a)
+    ib = hermes_price_identity_from_entry(b)
+    assert ia is not None and ib is not None
+    assert ia != ib
+    assert human_price_float_from_identity(ia[0], ia[1]) != human_price_float_from_identity(ib[0], ib[1])
 
 
 def test_low_confidence_skipped():
