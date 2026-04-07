@@ -13,6 +13,7 @@ echo
 echo "--- docker compose (UIUX.Web) ---"
 if [[ -d "$REPO/UIUX.Web" ]]; then
   (cd "$REPO/UIUX.Web" && docker compose ps 2>/dev/null || true)
+  echo "(expect **pyth-sse-ingest** Up — Hermes SSE → market_ticks; **pyth-stream** reads DB for probe JSON)"
 else
   echo "skip: $REPO/UIUX.Web not found"
 fi

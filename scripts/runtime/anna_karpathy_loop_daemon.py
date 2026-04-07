@@ -19,6 +19,9 @@ Env:
   RECORD_MARKET_SNAPSHOT_EACH_TICK — 1 to record one market row per successful tick
   MARKET_DATA_SKIP_JUPITER — 1 to skip Jupiter quote when snapshotting
   ANNA_SKIP_PREFLIGHT — 1 bypasses data preflight (tests/dev only)
+  ANNA_PREFLIGHT_REQUIRE_PYTH_SSE — default **1** in lab API: require Hermes SSE tape rows
+    (``primary_source=pyth_hermes_sse`` in ``market_ticks``). Ingest: ``pyth_sse_ingest.py`` / docker ``pyth-sse-ingest``.
+    ``record_market_snapshot`` does not call Hermes REST; it merges Coinbase/Jupiter with Pyth read from this DB.
   ANNA_KARPATHY_AUTO_ATTEST_TOOLS — default **on** (set 0/false to disable): set
     ``grade_12_tool_mastery`` when the skill’s **education_benchmark** passes (see
     ``curriculum_tools.GRADE_12_TOOLS``). Manual ``anna tool-pass`` remains available.

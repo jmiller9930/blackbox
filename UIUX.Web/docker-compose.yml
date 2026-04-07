@@ -28,6 +28,9 @@ services:
       BLACKBOX_EXECUTION_LEDGER_PATH: ${BLACKBOX_EXECUTION_LEDGER_PATH:-}
       # Measurement: economic paper (ledger pnl_usd) for baseline pairing. Stub requires ANNA_PARALLEL_STUB_LAB=1 on host running Karpathy.
       ANNA_PARALLEL_STRATEGY_MODE: ${ANNA_PARALLEL_STRATEGY_MODE:-paper}
+      # Require Hermes SSE → market_ticks tape for Anna preflight (matches pyth-sse-ingest service).
+      ANNA_PREFLIGHT_REQUIRE_PYTH_SSE: "1"
+      ANNA_PYTH_SSE_MAX_AGE_SEC: "180"
     volumes:
       - ../:/repo
       - /mnt/SQLlite_dB:/mnt/SQLlite_dB

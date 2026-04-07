@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import sqlite3
 import urllib.error
 from datetime import datetime, timezone
 import urllib.parse
@@ -16,6 +17,24 @@ from modules.operator_snapshot import artifacts_dir
 
 def _repo_root() -> Path:
     return Path(__file__).resolve().parents[2]
+
+
+def _market_data_db_path(repo_root: Path) -> Path:
+    raw = (os.environ.get("BLACKBOX_MARKET_DATA_PATH") or "").strip()
+    if raw:
+        return Path(raw).expanduser().resolve()
+    return (repo_root / "data" / "sqlite" / "market_data.db").resolve()
+
+
+def _iso_age_seconds_utc(ts: str) -> float | None:
+    s = str(ts).strip().replace("Z", "+00:00")
+    try:
+        dt = datetime.fromisoformat(s)
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        return (datetime.now(timezone.utc) - dt.astimezone(timezone.utc)).total_seconds()
+    except ValueError:
+        return None
 
 
 def _load_json(p: Path) -> dict[str, Any] | None:
@@ -74,14 +93,73 @@ def check_pyth_artifacts(repo_root: Path | None = None) -> dict[str, Any]:
 def check_market_db(repo_root: Path | None = None) -> dict[str, Any]:
     """Where Anna's analyst path reads ticks/snapshots when wired (`market_data.db`)."""
     root = repo_root or _repo_root()
-    p = root / "data" / "sqlite" / "market_data.db"
+    p = _market_data_db_path(root)
     exists = p.is_file()
     size = p.stat().st_size if exists else 0
     return {
         "ok": exists and size > 0,
-        "path": str(p.resolve()),
+        "path": str(p),
         "db_bytes": size,
         "note": "Anna uses snapshots/ticks from here when analysis flags enable market data.",
+    }
+
+
+def check_pyth_sse_tape(repo_root: Path | None = None) -> dict[str, Any]:
+    """``pyth_hermes_sse`` rows in ``market_ticks`` (Hermes SSE ingest) — required for full oracle tape."""
+    root = repo_root or _repo_root()
+    p = _market_data_db_path(root)
+    max_age = float((os.environ.get("ANNA_PYTH_SSE_MAX_AGE_SEC") or "180").strip() or "180")
+    if not p.is_file():
+        return {
+            "ok": False,
+            "reason": "db_missing",
+            "path": str(p),
+            "age_seconds": None,
+            "max_age_sec": max_age,
+            "sse_tick_count": 0,
+        }
+    conn = sqlite3.connect(str(p))
+    try:
+        row = conn.execute(
+            """
+            SELECT COUNT(*), MAX(inserted_at)
+            FROM market_ticks
+            WHERE primary_source = ?
+            """,
+            ("pyth_hermes_sse",),
+        ).fetchone()
+    finally:
+        conn.close()
+    n = int(row[0] or 0) if row else 0
+    max_ins = row[1] if row else None
+    if n == 0 or not max_ins:
+        return {
+            "ok": False,
+            "reason": "no_sse_ticks",
+            "path": str(p),
+            "age_seconds": None,
+            "max_age_sec": max_age,
+            "sse_tick_count": 0,
+        }
+    age = _iso_age_seconds_utc(str(max_ins))
+    if age is None:
+        return {
+            "ok": False,
+            "reason": "bad_inserted_at",
+            "path": str(p),
+            "age_seconds": None,
+            "max_age_sec": max_age,
+            "sse_tick_count": n,
+        }
+    ok = age <= max_age
+    return {
+        "ok": ok,
+        "reason": "sse_tape_stale" if not ok else "ok",
+        "path": str(p),
+        "age_seconds": int(max(0.0, age)),
+        "max_age_sec": max_age,
+        "sse_tick_count": n,
+        "last_sse_inserted_at": str(max_ins),
     }
 
 
@@ -96,13 +174,14 @@ def check_jupiter_program_note() -> dict[str, Any]:
 def full_readiness(repo_root: Path | None = None) -> dict[str, Any]:
     root = repo_root or _repo_root()
     return {
-        "order": ["solana_rpc", "pyth_stream", "market_data_db", "jupiter_note"],
+        "order": ["solana_rpc", "pyth_stream", "market_data_db", "pyth_sse_tape", "jupiter_note"],
         "solana_rpc": check_solana_rpc(),
         "pyth_stream": check_pyth_artifacts(root),
         "market_data_db": check_market_db(root),
+        "pyth_sse_tape": check_pyth_sse_tape(root),
         "jupiter_program": check_jupiter_program_note(),
         "anna_pyth_visibility": {
-            "summary": "Anna sees Pyth-derived data when the analyst/market pipeline loads `market_ticks` / snapshots from `market_data.db` (e.g. anna_analyst_v1 --use-latest-*). Training readiness ties to Pyth stream health + DB ingestion.",
+            "summary": "Oracle tape: `pyth_sse_ingest` (Hermes SSE) → `market_ticks` (`pyth_hermes_sse`); bars refreshed in-ingest; strategies read `market_bars_5m` / ticks from `market_data.db`. Probe JSON reflects SQLite age.",
         },
     }
 
@@ -110,6 +189,12 @@ def full_readiness(repo_root: Path | None = None) -> dict[str, Any]:
 def _env_truthy(name: str) -> bool:
     v = (os.environ.get(name) or "").strip().lower()
     return v in ("1", "true", "yes", "on")
+
+
+def _preflight_require_pyth_sse_tape() -> bool:
+    """Default on: block Anna preflight if SSE tape is missing/stale (set ANNA_PREFLIGHT_REQUIRE_PYTH_SSE=0 to disable)."""
+    v = (os.environ.get("ANNA_PREFLIGHT_REQUIRE_PYTH_SSE") or "1").strip().lower()
+    return v not in ("0", "false", "no", "off")
 
 
 def preflight_skipped() -> bool:
@@ -135,6 +220,8 @@ def ensure_anna_data_preflight(repo_root: Path | None = None) -> dict[str, Any]:
         blockers.append("pyth_stream")
     if not (r.get("market_data_db") or {}).get("ok"):
         blockers.append("market_data_db")
+    if _preflight_require_pyth_sse_tape() and not (r.get("pyth_sse_tape") or {}).get("ok"):
+        blockers.append("pyth_sse_tape")
     if _env_truthy("ANNA_PREFLIGHT_REQUIRE_SOLANA") and not (r.get("solana_rpc") or {}).get("ok"):
         blockers.append("solana_rpc")
 
@@ -156,7 +243,7 @@ def build_anna_analysis_preflight_blocked(input_text: str, pf: dict[str, Any]) -
     rd = pf.get("readiness") or {}
     summary = (
         "Anna’s data-source preflight did not pass. "
-        "Fix Pyth stream status and `market_data.db` ingestion, then retry. "
+        "Fix Pyth stream status, `market_data.db`, and Hermes SSE tape (`pyth_hermes_sse` ticks + `pyth-sse-ingest`), then retry. "
         f"Blocked: {', '.join(blockers) if blockers else 'unknown'}. "
         "Operator: `python3 scripts/runtime/anna_training_cli.py check-readiness`."
     )
@@ -164,6 +251,7 @@ def build_anna_analysis_preflight_blocked(input_text: str, pf: dict[str, Any]) -
         "solana_rpc": rd.get("solana_rpc"),
         "pyth_stream": rd.get("pyth_stream"),
         "market_data_db": rd.get("market_data_db"),
+        "pyth_sse_tape": rd.get("pyth_sse_tape"),
     }
     return {
         "kind": "anna_analysis_v1",

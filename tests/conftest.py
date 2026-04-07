@@ -4,6 +4,8 @@ import os
 os.environ.setdefault("ANNA_USE_LLM", "0")
 # Anna preflight (Pyth + market_data.db) is enforced in runtime; tests use fixtures without live pipeline.
 os.environ.setdefault("ANNA_SKIP_PREFLIGHT", "1")
+# SSE tape check is enforced in production (docker); suite has no live Hermes ingest unless a test opts in.
+os.environ.setdefault("ANNA_PREFLIGHT_REQUIRE_PYTH_SSE", "0")
 # Heavy math stack (statsmodels/arch/sklearn) off unless a test enables it.
 os.environ.setdefault("ANNA_MATH_ENGINE_FULL", "0")
 # Avoid writing execution_request_v1 rows during unrelated tests (enable per test if needed).

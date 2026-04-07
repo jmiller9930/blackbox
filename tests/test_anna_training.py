@@ -243,7 +243,7 @@ def test_readiness_shape(tmp_path: Path) -> None:
         from modules.anna_training.readiness import full_readiness
 
         r = full_readiness(repo_root=tmp_path)
-    assert "solana_rpc" in r and "pyth_stream" in r
+    assert "solana_rpc" in r and "pyth_stream" in r and "pyth_sse_tape" in r
     assert r["solana_rpc"].get("ok") is True
 
 

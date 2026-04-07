@@ -11,6 +11,7 @@ Environment:
   MARKET_TICK_SYMBOL — logical symbol (default SOL-USD)
   PYTH_SSE_DEDUPE_PUBLISH_TIME — if 1 (default), skip duplicate ``publish_time``
   PYTH_SSE_CONF_RATIO_MAX — max conf/price to accept (default 0.001, match Drift bot)
+  PYTH_SSE_BAR_REFRESH_SEC — throttle for ``refresh_last_closed_bar_from_ticks`` (default 15)
 """
 from __future__ import annotations
 
@@ -35,6 +36,8 @@ from market_data.store import connect_market_db, ensure_market_schema, insert_ti
 
 USER_AGENT = "blackbox-pyth-sse-ingest/1 (+stream)"
 _DEFAULT_FEED = "ef0d8b6fda2ceba41da15d4095d1da392a0d2f8ed0c6c7bc0f4cfac8c280b56d"
+
+_last_bar_refresh_monotonic: float = 0.0
 
 
 def _ssl_context() -> ssl.SSLContext:
@@ -64,6 +67,14 @@ def _conf_ratio_max() -> float:
         return 0.001
 
 
+def _bar_refresh_sec() -> float:
+    raw = (os.environ.get("PYTH_SSE_BAR_REFRESH_SEC") or "15").strip()
+    try:
+        return max(5.0, float(raw))
+    except ValueError:
+        return 15.0
+
+
 def _dedupe_publish() -> bool:
     return (os.environ.get("PYTH_SSE_DEDUPE_PUBLISH_TIME", "1").strip().lower() not in (
         "0",
@@ -75,6 +86,21 @@ def _dedupe_publish() -> bool:
 def _sse_url() -> str:
     fid = _feed_id()
     return f"https://hermes.pyth.network/v2/updates/price/stream?ids[]={fid}"
+
+
+def _maybe_refresh_canonical_bar(conn: Any, symbol: str) -> None:
+    """Keep ``market_bars_5m`` aligned with the SSE tape (throttled)."""
+    global _last_bar_refresh_monotonic  # noqa: PLW0603
+    now = time.monotonic()
+    if now - _last_bar_refresh_monotonic < _bar_refresh_sec():
+        return
+    _last_bar_refresh_monotonic = now
+    try:
+        from market_data.canonical_bar_refresh import refresh_last_closed_bar_from_ticks
+
+        refresh_last_closed_bar_from_ticks(conn, symbol)
+    except Exception as e:  # noqa: BLE001
+        print(f"pyth_sse_ingest: bar_refresh {e!r}", flush=True)
 
 
 def _observed_iso_from_publish(pub_i: int | None) -> str:
@@ -129,6 +155,7 @@ def _handle_data_line(
         gate_state="ok",
         gate_reason="pyth_sse_stream_ingest",
     )
+    _maybe_refresh_canonical_bar(conn, symbol)
     return True
 
 
