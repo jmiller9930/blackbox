@@ -102,7 +102,8 @@ def test_build_ohlc_from_ticks():
     assert bar.tick_count == 3
 
 
-def test_rollup_refresh_integration(tmp_path):
+def test_rollup_refresh_integration(tmp_path, monkeypatch):
+    monkeypatch.setenv("MARKET_BAR_MEMBERSHIP", "inserted_at")
     db = tmp_path / "market_data.db"
     conn = connect_market_db(db)
     ensure_market_schema(conn, repo_root())
@@ -143,6 +144,53 @@ def test_rollup_refresh_integration(tmp_path):
     assert row["open"] == 100.0
     assert row["close"] == 99.5
     assert row["canonical_symbol"] == CANONICAL_INSTRUMENT_SOL_PERP
+    conn.close()
+
+
+def test_rollup_refresh_oracle_publish_sean_clock(tmp_path, monkeypatch):
+    """5m bar uses Hermes publish_time window + SSE tape only (Sean-aligned)."""
+    monkeypatch.setenv("MARKET_BAR_MEMBERSHIP", "oracle_publish")
+    db = tmp_path / "market_data.db"
+    conn = connect_market_db(db)
+    ensure_market_schema(conn, repo_root())
+
+    now = datetime.now(timezone.utc)
+    last_open = last_closed_candle_open_utc(now)
+    close_ex = candle_close_utc_exclusive(last_open)
+    open_sec = int(last_open.timestamp())
+    close_sec = int(close_ex.timestamp())
+
+    for i, p in enumerate([100.0, 101.0, 99.5]):
+        pub = open_sec + 40 + i * 15
+        assert open_sec <= pub < close_sec
+        ins = datetime.fromtimestamp(pub, tz=timezone.utc).replace(microsecond=0).strftime(
+            "%Y-%m-%dT%H:%M:%SZ"
+        )
+        insert_tick(
+            conn,
+            symbol="SOL-USD",
+            inserted_at=ins,
+            primary_source="pyth_hermes_sse",
+            primary_price=p,
+            primary_observed_at=ins,
+            primary_publish_time=pub,
+            primary_raw=None,
+            comparator_source="none",
+            comparator_price=None,
+            comparator_observed_at=None,
+            comparator_raw=None,
+            gate_state="ok",
+            gate_reason="ok",
+        )
+
+    out = refresh_last_closed_bar_from_ticks(conn, "SOL-USD")
+    assert out["ok"] is True
+    assert out["tick_count"] == 3
+    mid = out["market_event_id"]
+    row = fetch_bar_by_market_event_id(conn, mid)
+    assert row is not None
+    assert row["open"] == 100.0
+    assert row["close"] == 99.5
     conn.close()
 
 

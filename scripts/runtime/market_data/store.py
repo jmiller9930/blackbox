@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import os
 import sqlite3
 from datetime import datetime, timezone
 from pathlib import Path
@@ -14,6 +15,20 @@ from market_data.canonical_time import (
     candle_close_utc_exclusive,
     format_candle_open_iso_z,
 )
+
+
+def bar_membership_mode() -> str:
+    """
+    How 5m bar rollup selects ticks (``MARKET_BAR_MEMBERSHIP``).
+
+    - ``oracle_publish`` (default, Sean): Hermes ``primary_publish_time`` (unix s) in
+      ``[open, close)``, **only** ``primary_source=pyth_hermes_sse`` — matches oracle-clock candles.
+    - ``inserted_at``: legacy — rows whose **ingest** time falls in the window (recorder + SSE).
+    """
+    v = (os.environ.get("MARKET_BAR_MEMBERSHIP") or "oracle_publish").strip().lower()
+    if v in ("inserted_at", "oracle_publish"):
+        return v
+    return "oracle_publish"
 
 
 def connect_market_db(db_path: Path) -> sqlite3.Connection:
@@ -215,6 +230,17 @@ def ticks_in_bucket_5m(
     tick_symbol: str,
     candle_open_utc: datetime,
 ) -> list[dict[str, Any]]:
+    """Ticks for one 5m bar — see :func:`bar_membership_mode`."""
+    if bar_membership_mode() == "oracle_publish":
+        return _ticks_in_bucket_5m_oracle_publish(conn, tick_symbol, candle_open_utc)
+    return _ticks_in_bucket_5m_inserted_at(conn, tick_symbol, candle_open_utc)
+
+
+def _ticks_in_bucket_5m_inserted_at(
+    conn: sqlite3.Connection,
+    tick_symbol: str,
+    candle_open_utc: datetime,
+) -> list[dict[str, Any]]:
     """Ticks with ``inserted_at`` in ``[candle_open, candle_close)`` (exclusive end)."""
     o = format_candle_open_iso_z(candle_open_utc)
     c = format_candle_open_iso_z(candle_close_utc_exclusive(candle_open_utc))
@@ -241,6 +267,48 @@ def ticks_in_bucket_5m(
         ORDER BY inserted_at ASC, id ASC
     """
     rows = conn.execute(sql, (tick_symbol, o, c)).fetchall()
+    return [dict(zip(cols, row)) for row in rows]
+
+
+def _ticks_in_bucket_5m_oracle_publish(
+    conn: sqlite3.Connection,
+    tick_symbol: str,
+    candle_open_utc: datetime,
+) -> list[dict[str, Any]]:
+    """
+    Sean-aligned: Hermes oracle clock — ``primary_publish_time`` unix seconds in
+    ``[open, close)``, SSE tape rows only.
+    """
+    close_dt = candle_close_utc_exclusive(candle_open_utc)
+    open_sec = int(candle_open_utc.timestamp())
+    close_sec = int(close_dt.timestamp())
+    cols = [
+        "id",
+        "symbol",
+        "inserted_at",
+        "primary_source",
+        "primary_price",
+        "primary_observed_at",
+        "primary_publish_time",
+        "comparator_source",
+        "comparator_price",
+        "comparator_observed_at",
+        "tertiary_source",
+        "tertiary_price",
+        "tertiary_observed_at",
+        "gate_state",
+        "gate_reason",
+    ]
+    sql = f"""
+        SELECT {", ".join(cols)}
+        FROM market_ticks
+        WHERE symbol = ?
+          AND primary_source = 'pyth_hermes_sse'
+          AND primary_publish_time IS NOT NULL
+          AND primary_publish_time >= ? AND primary_publish_time < ?
+        ORDER BY primary_publish_time ASC, id ASC
+    """
+    rows = conn.execute(sql, (tick_symbol, open_sec, close_sec)).fetchall()
     return [dict(zip(cols, row)) for row in rows]
 
 

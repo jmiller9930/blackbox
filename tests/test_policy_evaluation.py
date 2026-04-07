@@ -62,6 +62,7 @@ def test_upsert_policy_evaluation_idempotent(tmp_path: Path) -> None:
 
 
 def test_baseline_bridge_writes_policy_eval_legacy(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("MARKET_BAR_MEMBERSHIP", "inserted_at")
     market_db = tmp_path / "market_data.db"
     ledger_db = tmp_path / "execution_ledger.db"
     monkeypatch.setenv("BLACKBOX_EXECUTION_LEDGER_PATH", str(ledger_db))

@@ -20,7 +20,8 @@ from market_data.store import connect_market_db, ensure_market_schema, insert_ti
 from _paths import repo_root  # noqa: E402
 
 
-def _seed_closed_sol_bar(market_db: Path) -> str:
+def _seed_closed_sol_bar(market_db: Path, monkeypatch: pytest.MonkeyPatch) -> str:
+    monkeypatch.setenv("MARKET_BAR_MEMBERSHIP", "inserted_at")
     conn = connect_market_db(market_db)
     ensure_market_schema(conn, repo_root())
     now = datetime.now(timezone.utc)
@@ -60,7 +61,7 @@ def test_baseline_and_anna_share_market_event_id(tmp_path: Path, monkeypatch: py
     monkeypatch.setenv("BASELINE_LEDGER_BRIDGE", "1")
     monkeypatch.setenv("BASELINE_LEDGER_SIGNAL_MODE", "legacy_mechanical_long")
 
-    mid = _seed_closed_sol_bar(market_db)
+    mid = _seed_closed_sol_bar(market_db, monkeypatch)
 
     from modules.anna_training.baseline_ledger_bridge import (
         run_baseline_ledger_bridge_tick,
@@ -133,7 +134,7 @@ def test_corrupt_stored_market_event_id_rejected(tmp_path: Path, monkeypatch: py
     monkeypatch.setenv("BLACKBOX_EXECUTION_LEDGER_PATH", str(ledger_db))
     monkeypatch.setenv("ANNA_PARALLEL_STRATEGY_IDS", "jupiter_supertrend_ema_rsi_atr_v1")
 
-    _seed_closed_sol_bar(market_db)
+    _seed_closed_sol_bar(market_db, monkeypatch)
 
     conn = sqlite3.connect(market_db)
     conn.execute(

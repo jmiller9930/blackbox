@@ -1,4 +1,10 @@
-"""Recompute and persist the last closed 5m bar from ticks (call after each tick ingest)."""
+"""
+Recompute and persist the last closed 5m bar from ticks (call after each tick ingest).
+
+Tick selection for the bucket follows ``MARKET_BAR_MEMBERSHIP`` (see
+:func:`market_data.store.bar_membership_mode`): default **oracle publish time**
+(Sean-aligned Hermes clock on ``pyth_hermes_sse`` rows).
+"""
 
 from __future__ import annotations
 

@@ -16,6 +16,7 @@ Environment:
   PYTH_SSE_DEDUPE_PUBLISH_TIME — only for ``dedupe_publish``: skip duplicate ``publish_time`` (default 1)
   PYTH_SSE_CONF_RATIO_MAX — max conf/price to accept (default 0.001, match Drift bot)
   PYTH_SSE_BAR_REFRESH_SEC — throttle for ``refresh_last_closed_bar_from_ticks`` (default 15)
+  MARKET_BAR_MEMBERSHIP — ``oracle_publish`` (default, Sean) | ``inserted_at`` — see ``store.bar_membership_mode``
 """
 from __future__ import annotations
 

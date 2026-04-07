@@ -31,6 +31,8 @@ services:
       # Require Hermes SSE → market_ticks tape for Anna preflight (matches pyth-sse-ingest service).
       ANNA_PREFLIGHT_REQUIRE_PYTH_SSE: "1"
       ANNA_PYTH_SSE_MAX_AGE_SEC: "180"
+      # Same 5m bar semantics as pyth-sse-ingest when recorder refreshes canonical bars.
+      MARKET_BAR_MEMBERSHIP: oracle_publish
     volumes:
       - ../:/repo
       - /mnt/SQLlite_dB:/mnt/SQLlite_dB
@@ -83,8 +85,9 @@ services:
     working_dir: /repo
     environment:
       BLACKBOX_REPO_ROOT: /repo
-      # One market_ticks row per Pyth **price change** (fills 5m buckets for OHLC / V).
+      # Sean: every Hermes message → tape row; 5m OHLC/V bucketed by oracle publish_time (not ingest time).
       PYTH_SSE_TICK_POLICY: every_message
+      MARKET_BAR_MEMBERSHIP: oracle_publish
     command:
       [
         "sh",
