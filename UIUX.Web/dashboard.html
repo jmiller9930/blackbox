@@ -118,7 +118,6 @@
       font-size: 0.62rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.04em;
       color: #0f766e; margin: 0 0 0.25rem;
     }
-    .dash-jp-operator-tile .tc-tile-narr-wrap { max-height: 22rem; }
     .dash-jp-daemon { margin-top: 0.35rem; font-size: 0.62rem; color: #334155; line-height: 1.4; }
     .dash-jp-tick {
       margin: 0 0 0.35rem;
@@ -230,7 +229,7 @@
     .tc-table thead th.tc-now { font-weight: 800; }
     .tc-table thead th.tc-head-ev { min-width: 5.25rem; max-width: 9rem; }
     /* Event columns: wide enough for operator tile <pre> + trade grid */
-    .tc-table tbody td:not(:first-child) { min-width: 14rem; max-width: 28rem; }
+    .tc-table tbody td:not(:first-child) { min-width: 20rem; max-width: 42rem; }
     .tc-hdr-stack { display: flex; flex-direction: column; gap: 0.1rem; align-items: flex-start; line-height: 1.2; }
     .tc-hdr-now { font-size: 0.55rem; font-weight: 800; color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em; }
     .tc-hdr-lab { font-size: 0.52rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); }
@@ -286,12 +285,12 @@
       display: grid;
       grid-template-columns: 0.55rem auto 1fr;
       column-gap: 0.3rem;
-      row-gap: 0.2rem;
-      align-items: baseline;
+      row-gap: 0.28rem;
+      /* start (not baseline): wrapped value lines must not pull bullet/label out of line */
+      align-items: start;
       margin: 0 0 0.35rem 0;
       padding: 0.32rem 0.4rem;
-      max-height: 14rem;
-      overflow-y: auto;
+      overflow: visible;
       font-size: 0.62rem;
       line-height: 1.45;
       color: #0f172a;
@@ -303,8 +302,9 @@
       color: #94a3b8;
       font-weight: 700;
       font-size: 0.65rem;
-      line-height: 1.35;
+      line-height: 1.45;
       user-select: none;
+      padding-top: 0.06rem;
     }
     .tc-tile-narr-wrap .lab {
       color: var(--muted);
@@ -312,6 +312,7 @@
       text-transform: uppercase;
       letter-spacing: 0.02em;
       font-weight: 600;
+      line-height: 1.45;
     }
     .tc-tile-narr-wrap .tc-tile-val {
       font-family: inherit;
@@ -320,6 +321,7 @@
       word-break: break-word;
       min-width: 0;
       color: #1e293b;
+      line-height: 1.45;
     }
     .wl-WIN { color: #15803d; font-weight: 800; }
     .wl-LOSS { color: #b91c1c; font-weight: 800; }
