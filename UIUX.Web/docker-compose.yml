@@ -35,6 +35,17 @@ services:
     dns:
       - 8.8.8.8
       - 8.8.4.4
+    # Avoid nginx 502 while pip runs before api_server.py binds :8080 (Connection refused to upstream).
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          'python3 -c "import socket; s=socket.socket(); s.settimeout(2); s.connect((\"127.0.0.1\", 8080)); s.close()"',
+        ]
+      interval: 5s
+      timeout: 4s
+      retries: 18
+      start_period: 120s
     restart: unless-stopped
 
   sequential-tick:
@@ -71,9 +82,12 @@ services:
   web:
     build: .
     depends_on:
-      - api
-      - pyth-stream
-      - sequential-tick
+      api:
+        condition: service_healthy
+      pyth-stream:
+        condition: service_started
+      sequential-tick:
+        condition: service_started
     ports:
       - "443:443"
       - "80:80"
