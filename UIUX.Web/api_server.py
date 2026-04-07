@@ -326,7 +326,7 @@ def build_pyth_status() -> dict[str, Any]:
             "resolved_path": str(resolved_path),
             "table": "market_ticks",
             "symbol_filter": "SOL-PERP",
-            "source_filter": "pyth_hermes_sse",
+            "source_filter": "pyth_market_ticks_sqlite",
         },
         "recent_count": len((recent.get("items") or [])) if isinstance(recent, dict) else 0,
     }

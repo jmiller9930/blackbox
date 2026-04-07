@@ -109,6 +109,30 @@ def insert_tick(
     return int(cur.lastrowid)
 
 
+def latest_row_primary_leg(conn: sqlite3.Connection, symbol: str) -> dict[str, Any] | None:
+    """Latest stored primary (oracle) leg for ``symbol`` — replay Pyth from SQLite without network I/O."""
+    row = conn.execute(
+        """
+        SELECT primary_source, primary_price, primary_observed_at, primary_publish_time, primary_raw_json
+        FROM market_ticks
+        WHERE symbol = ?
+        ORDER BY inserted_at DESC, id DESC
+        LIMIT 1
+        """,
+        (symbol,),
+    ).fetchone()
+    if row is None:
+        return None
+    keys = (
+        "primary_source",
+        "primary_price",
+        "primary_observed_at",
+        "primary_publish_time",
+        "primary_raw_json",
+    )
+    return dict(zip(keys, row))
+
+
 def latest_tick(conn: sqlite3.Connection, symbol: str) -> dict[str, Any] | None:
     row = conn.execute(
         """

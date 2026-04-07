@@ -1,20 +1,16 @@
-"""Pyth Hermes HTTP — primary-oriented feed (Phase 5.1)."""
+"""Pyth primary leg from ``market_ticks`` (SQLite) — no Hermes HTTP."""
+
 from __future__ import annotations
 
 import json
 import math
-import os
+import sqlite3
 from dataclasses import dataclass
-from datetime import datetime, timezone
 from typing import Any
-from urllib.error import HTTPError, URLError
-from urllib.parse import urlencode
-from urllib.request import Request, urlopen
 
-USER_AGENT = "blackbox-market-data/5.1 (+read-only)"
 SOURCE = "pyth_hermes"
 
-# Crypto.SOL/USD — Pyth Hermes feed id (64 hex chars; override via PYTH_SOL_USD_FEED_ID).
+# Crypto.SOL/USD — Pyth feed id (metadata; rows may store in raw JSON).
 _DEFAULT_SOL_FEED = "ef0d8b6fda2ceba41da15d4095d1da392a0d2f8ed0c6c7bc0f4cfac8c280b56d"
 
 
@@ -23,7 +19,7 @@ class NormalizedQuote:
     source: str
     symbol: str
     price: float | None
-    observed_at: str
+    observed_at: str | None
     publish_time: int | None
     notes: list[str]
     raw: dict[str, Any]
@@ -41,102 +37,50 @@ def _f(x: Any) -> float | None:
         return None
 
 
-def _price_from_pyth_payload(entry: dict[str, Any]) -> tuple[float | None, int | None]:
-    price_obj = entry.get("price")
-    if not isinstance(price_obj, dict):
-        return None, None
-    raw = price_obj.get("price")
-    expo = price_obj.get("expo")
-    pub = price_obj.get("publish_time")
-    try:
-        expo_i = int(expo) if expo is not None else 0
-    except (TypeError, ValueError):
-        expo_i = 0
-    try:
-        raw_i = int(str(raw))
-    except (TypeError, ValueError):
-        return None, int(pub) if pub is not None else None
-    val = raw_i * (10**expo_i)
-    pub_i = int(pub) if pub is not None else None
-    return val, pub_i
-
-
-def fetch_pyth_latest(
+def load_pyth_quote_from_db(
+    conn: sqlite3.Connection,
     *,
-    feed_id: str | None = None,
     logical_symbol: str = "SOL-USD",
-    timeout: float = 20.0,
 ) -> NormalizedQuote:
-    """GET Hermes latest_price_feeds for one feed id."""
-    fid = (feed_id or os.environ.get("PYTH_SOL_USD_FEED_ID") or _DEFAULT_SOL_FEED).strip()
-    qs = urlencode([("ids[]", fid)])
-    url = f"https://hermes.pyth.network/api/latest_price_feeds?{qs}"
-    notes: list[str] = []
-    observed_at = datetime.now(timezone.utc).replace(microsecond=0).isoformat()
+    """Primary oracle quote from the latest ``market_ticks`` row — no network I/O."""
+    from market_data.store import latest_row_primary_leg
+
+    r = latest_row_primary_leg(conn, logical_symbol)
+    if r is None:
+        return NormalizedQuote(
+            source=SOURCE,
+            symbol=logical_symbol,
+            price=None,
+            observed_at=None,
+            publish_time=None,
+            notes=["pyth_db_empty_no_prior_tick"],
+            raw={},
+        )
+    raw: dict[str, Any] = {}
+    raw_txt = r.get("primary_raw_json")
+    if raw_txt:
+        try:
+            if isinstance(raw_txt, str):
+                parsed = json.loads(raw_txt)
+                raw = parsed if isinstance(parsed, dict) else {"value": parsed}
+            elif isinstance(raw_txt, dict):
+                raw = raw_txt
+        except json.JSONDecodeError:
+            raw = {"primary_raw_json_parse_error": True}
+    notes = ["pyth_from_market_data_db"]
+    pub = r.get("primary_publish_time")
     try:
-        req = Request(url, headers={"User-Agent": USER_AGENT, "Accept": "application/json"})
-        with urlopen(req, timeout=timeout) as resp:
-            body = json.loads(resp.read().decode("utf-8"))
-    except (HTTPError, URLError, TimeoutError, json.JSONDecodeError, OSError) as e:
-        notes.append(f"pyth_hermes_failed:{type(e).__name__}:{e}")
-        return NormalizedQuote(
-            source=SOURCE,
-            symbol=logical_symbol,
-            price=None,
-            observed_at=None,
-            publish_time=None,
-            notes=notes,
-            raw={},
-        )
-
-    if not isinstance(body, list) or not body:
-        notes.append("pyth_hermes_empty_response")
-        return NormalizedQuote(
-            source=SOURCE,
-            symbol=logical_symbol,
-            price=None,
-            observed_at=None,
-            publish_time=None,
-            notes=notes,
-            raw={"response": body},
-        )
-
-    entry = body[0]
-    if not isinstance(entry, dict):
-        notes.append("pyth_hermes_bad_entry_shape")
-        return NormalizedQuote(
-            source=SOURCE,
-            symbol=logical_symbol,
-            price=None,
-            observed_at=None,
-            publish_time=None,
-            notes=notes,
-            raw={},
-        )
-
-    px, pub_i = _price_from_pyth_payload(entry)
-    if px is None:
-        notes.append("pyth_hermes_unparseable_price")
-        return NormalizedQuote(
-            source=SOURCE,
-            symbol=logical_symbol,
-            price=None,
-            observed_at=None,
-            publish_time=pub_i,
-            notes=notes,
-            raw=entry,
-        )
-    if pub_i is not None:
-        observed_at = datetime.fromtimestamp(pub_i, tz=timezone.utc).replace(microsecond=0).isoformat()
-    else:
-        observed_at = datetime.now(timezone.utc).replace(microsecond=0).isoformat()
-    notes.append("Hermes GET /api/latest_price_feeds (read-only).")
+        pub_i = int(pub) if pub is not None else None
+    except (TypeError, ValueError):
+        pub_i = None
+    obs = r.get("primary_observed_at")
+    obs_s = str(obs).strip() if obs is not None else None
     return NormalizedQuote(
-        source=SOURCE,
+        source=str(r.get("primary_source") or SOURCE),
         symbol=logical_symbol,
-        price=px,
-        observed_at=observed_at,
+        price=_f(r.get("primary_price")),
+        observed_at=obs_s if obs_s else None,
         publish_time=pub_i,
         notes=notes,
-        raw=entry,
+        raw=raw,
     )

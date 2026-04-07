@@ -68,12 +68,7 @@ services:
     working_dir: /repo
     environment:
       BLACKBOX_REPO_ROOT: /repo
-    command:
-      [
-        "sh",
-        "-c",
-        "pip install -q --no-cache-dir certifi && exec python3 scripts/trading/pyth_stream_probe.py",
-      ]
+    command: ["python3", "scripts/trading/pyth_stream_probe.py"]
     volumes:
       - ../:/repo
       - /mnt/SQLlite_dB:/mnt/SQLlite_dB

@@ -1213,7 +1213,7 @@ def build_dashboard_bundle(
         "bundle_generated_at_utc": snap_iso,
         "methodology_one_liner": (
             "Dashboard: REST poll of aggregated bundle; sequential: discrete batch ticks over a cursor; "
-            "market: Hermes price probe JSON artifacts — not a sub-second order-book stream."
+            "market: SQLite tape + pyth_stream JSON artifacts — not a sub-second order-book stream."
         ),
         "update_model": {
             "dashboard_ui": "poll_driven",
@@ -1221,7 +1221,7 @@ def build_dashboard_bundle(
             "bundle_source": "GET /api/v1/dashboard/bundle (server builds snapshot each request)",
             "sequential_engine": "tick_driven_batch",
             "sequential_tick_interval_sec_expected": SEQUENTIAL_TICK_SIDECAR_INTERVAL_SEC_DEFAULT,
-            "market_price_probe": "pyth_stream_probe Hermes HTTP",
+            "market_price_probe": "pyth_stream_probe SQLite market_ticks (no Hermes HTTP)",
             "pyth_probe_interval_sec_default": PYTH_STREAM_PROBE_INTERVAL_SEC_DEFAULT,
         },
         "operator_signals": {

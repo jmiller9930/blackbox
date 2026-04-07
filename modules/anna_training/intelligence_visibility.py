@@ -105,7 +105,7 @@ def build_intelligence_visibility(
         ctx_label = "Partial"
         ctx_detail = (
             f"{'OK: ' + md_detail if md_ok else 'Bars: ' + md_detail}. "
-            f"{'Pyth OK' if pyth_ok else 'Pyth stale or missing — check Hermes artifact'}."
+            f"{'Pyth OK' if pyth_ok else 'Pyth stale or missing — check market_ticks + pyth_stream artifact'}."
         )
     else:
         ctx_label = "Offline"

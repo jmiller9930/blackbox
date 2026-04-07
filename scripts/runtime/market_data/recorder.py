@@ -1,4 +1,4 @@
-"""One-shot recorder: Pyth + Coinbase + optional Jupiter; when Jupiter is present it is the gate anchor (king)."""
+"""One-shot recorder: Pyth (from SQLite tape) + Coinbase + optional Jupiter; Jupiter-as-king when present."""
 from __future__ import annotations
 
 import json
@@ -11,7 +11,7 @@ from _paths import default_market_data_path, repo_root
 
 from market_data.feeds_coinbase import fetch_coinbase_ticker
 from market_data.feeds_jupiter import fetch_jupiter_implied_sol_usd
-from market_data.feeds_pyth import fetch_pyth_latest
+from market_data.feeds_pyth import load_pyth_quote_from_db
 from market_data.gates import evaluate_gates
 from market_data.store import connect_market_db, ensure_market_schema, insert_tick
 
@@ -35,7 +35,8 @@ def record_market_snapshot(
     king_coinbase_degraded_rel_diff: float = 0.012,
 ) -> dict[str, Any]:
     """
-    Fetch Pyth + Coinbase + optional Jupiter (SOL→USDC implied USD/SOL), evaluate gates, persist one row.
+    Load **Pyth primary from ``market_ticks``** (latest row for ``symbol``) + Coinbase + optional
+    Jupiter, evaluate gates, persist one row. Hermes HTTP is not used — ingest must populate the tape.
 
     When **Jupiter returns a price**, gates use **Jupiter-as-king**: Pyth and Coinbase are each
     checked against Jupiter (Coinbase uses a wider “support” band). When Jupiter is skipped or
@@ -58,7 +59,7 @@ def record_market_snapshot(
     conn = connect_market_db(path)
     ensure_market_schema(conn, root)
 
-    pyth = fetch_pyth_latest(logical_symbol=symbol)
+    pyth = load_pyth_quote_from_db(conn, logical_symbol=symbol)
     cb = fetch_coinbase_ticker(coinbase_product)
     jup = fetch_jupiter_implied_sol_usd() if include_jupiter else None
 
@@ -116,6 +117,7 @@ def record_market_snapshot(
         "db_path": str(path),
         "symbol": symbol,
         "inserted_at": inserted_at,
+        "pyth_route": "sqlite_market_ticks",
         "primary": {
             "source": pyth.source,
             "price": pyth.price,
