@@ -528,7 +528,9 @@ def _event_axis_jupiter_tile_narratives(
         )
         if row and isinstance(row.get("features"), dict):
             f = dict(row["features"])
-            if isinstance(f.get("tile"), dict):
+            # Empty {} tile must not win over recomputing from market bars — we still want OHLC/RSI truth per 5m bar.
+            tile_stored = f.get("tile")
+            if isinstance(tile_stored, dict) and tile_stored:
                 pb = f.get("policy_blockers")
                 pbl = [str(x) for x in pb] if isinstance(pb, list) else None
                 out[mid_s] = format_jupiter_tile_narrative_v1(
