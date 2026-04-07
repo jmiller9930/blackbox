@@ -118,7 +118,7 @@
       font-size: 0.62rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.04em;
       color: #0f766e; margin: 0 0 0.25rem;
     }
-    .dash-jp-operator-tile pre.tc-tile-narr { max-height: 22rem; }
+    .dash-jp-operator-tile .tc-tile-narr-wrap { max-height: 22rem; }
     .dash-jp-daemon { margin-top: 0.35rem; font-size: 0.62rem; color: #334155; line-height: 1.4; }
     .dash-jp-tick {
       margin: 0 0 0.35rem;
@@ -280,20 +280,46 @@
       margin-bottom: 0.15rem;
       line-height: 1.2;
     }
-    pre.tc-tile-narr {
+    /* Jupiter 5m narrative — same rhythm as tc-mini trade grid: bullet + lab + value (readable body font on values). */
+    .tc-tile-narr-wrap {
       grid-column: 1 / -1;
+      display: grid;
+      grid-template-columns: 0.55rem auto 1fr;
+      column-gap: 0.3rem;
+      row-gap: 0.2rem;
+      align-items: baseline;
       margin: 0 0 0.35rem 0;
-      padding: 0.3rem 0.35rem;
+      padding: 0.32rem 0.4rem;
       max-height: 14rem;
-      overflow: auto;
-      white-space: pre-wrap;
-      word-break: break-word;
-      font-size: 0.58rem;
-      line-height: 1.35;
-      color: #1e293b;
-      background: #f1f5f9;
+      overflow-y: auto;
+      font-size: 0.62rem;
+      line-height: 1.45;
+      color: #0f172a;
+      background: #f8fafc;
       border: 1px solid #e2e8f0;
       border-radius: 4px;
+    }
+    .tc-tile-narr-wrap .tc-tile-bullet {
+      color: #94a3b8;
+      font-weight: 700;
+      font-size: 0.65rem;
+      line-height: 1.35;
+      user-select: none;
+    }
+    .tc-tile-narr-wrap .lab {
+      color: var(--muted);
+      font-size: 0.58rem;
+      text-transform: uppercase;
+      letter-spacing: 0.02em;
+      font-weight: 600;
+    }
+    .tc-tile-narr-wrap .tc-tile-val {
+      font-family: inherit;
+      font-size: 0.62rem;
+      font-weight: 500;
+      word-break: break-word;
+      min-width: 0;
+      color: #1e293b;
     }
     .wl-WIN { color: #15803d; font-weight: 800; }
     .wl-LOSS { color: #b91c1c; font-weight: 800; }
@@ -742,10 +768,71 @@
     );
   }
 
+  /** Parse Jupiter narrative lines into label/value (matches format_jupiter_tile_narrative_v1). */
+  function jupiterLineToLabVal(line) {
+    var s = String(line).trim();
+    if (!s) return { lab: '', val: '' };
+    var arrow = '\u2192';
+    var pats = [
+      [/^New 5-min candle formed:\s*(.*)$/i, 'new 5m'],
+      [/^Previous candle:\s*(.*)$/, 'prev OHLC'],
+      [/^Current candle:\s*(.*)$/, 'current'],
+      [/^Supertrend:\s*(.*)$/, 'supertrend'],
+      [/^ATR Analysis:\s*(.*)$/, 'ATR'],
+      [/^Price vs EMA200:\s*(.*)$/, 'vs EMA200'],
+      [new RegExp('^Signal Breakdown\\s*' + arrow + '\\s*Long=(.*)$'), 'sig long'],
+      [new RegExp('^Signal Breakdown\\s*' + arrow + '\\s*Short=(.*)$'), 'sig short'],
+      [/^Signal Breakdown\s*->\s*Long=(.*)$/, 'sig long'],
+      [/^Signal Breakdown\s*->\s*Short=(.*)$/, 'sig short'],
+      [/^Signals:\s*(.*)$/, 'signals'],
+      [new RegExp('^ATR-Supertrend SIGNAL\\s*' + arrow + '\\s*(.*)$'), 'ATR-ST'],
+      [/^ATR-Supertrend SIGNAL\s*->\s*(.*)$/, 'ATR-ST'],
+      [/^Processing\s+(.*)$/, 'processing'],
+      [/^Filter:\s*(.*)$/, 'filter'],
+      [/^Policy:\s*(.*)$/, 'policy'],
+      [/^reason_code=(.*)$/, 'reason'],
+      [/^trade=\s*(.*)$/, 'trade'],
+    ];
+    var i;
+    var m;
+    for (i = 0; i < pats.length; i++) {
+      m = s.match(pats[i][0]);
+      if (m) return { lab: pats[i][1], val: m[1] != null ? m[1] : '' };
+    }
+    var ci = s.indexOf(': ');
+    if (ci >= 2 && ci <= 72 && !/^Signal Breakdown/i.test(s)) {
+      return { lab: s.slice(0, ci).trim(), val: s.slice(ci + 2) };
+    }
+    return { lab: 'note', val: s };
+  }
+
+  function jupiterNarrativeLinesHtml(raw, titleAttr) {
+    if (raw == null || String(raw).trim() === '') return '';
+    var text = String(raw).replace(/\r\n/g, '\n');
+    var lines = text.split('\n');
+    var rows = [];
+    var j;
+    for (j = 0; j < lines.length; j++) {
+      var row = jupiterLineToLabVal(lines[j]);
+      if (!row.lab && !row.val) continue;
+      rows.push(
+        '<span class="tc-tile-bullet" aria-hidden="true">•</span>' +
+        '<span class="lab">' +
+        esc(row.lab) +
+        '</span><span class="tc-tile-val">' +
+        esc(row.val) +
+        '</span>'
+      );
+    }
+    if (!rows.length) return '';
+    var ta = titleAttr ? ' title="' + esc(titleAttr) + '"' : '';
+    return '<div class="tc-tile-narr-wrap"' + ta + '>' + rows.join('') + '</div>';
+  }
+
   function cellMini(c, row) {
     var narr = c && c.jupiter_tile_narrative ? String(c.jupiter_tile_narrative) : '';
     var narrEl = narr
-      ? '<pre class="tc-tile-narr" title="Jupiter / Sean policy (5m bar)">' + esc(narr) + '</pre>'
+      ? jupiterNarrativeLinesHtml(narr, 'Jupiter / Sean policy (5m bar)')
       : '';
     if (!c || c.empty) {
       return (
@@ -1210,9 +1297,10 @@
       if (jp.operator_tile_narrative) {
         opTile.innerHTML =
           '<p class="dash-jp-tile-h">Operator tile — latest closed bar (OHLC · RSI · Supertrend · ATR · EMA · signals)</p>' +
-          '<pre class="tc-tile-narr">' +
-          esc(String(jp.operator_tile_narrative)) +
-          '</pre>';
+          jupiterNarrativeLinesHtml(
+            String(jp.operator_tile_narrative),
+            'Operator tile — latest closed bar'
+          );
       } else {
         opTile.innerHTML =
           '<p class="dash-jp-tile-h" style="color:#64748b">Operator tile</p>' +
