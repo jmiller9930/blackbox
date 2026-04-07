@@ -118,7 +118,7 @@
       font-size: 0.62rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.04em;
       color: #0f766e; margin: 0 0 0.25rem;
     }
-    .dash-jp-operator-tile .tc-tile-narr-wrap { max-height: 22rem; }
+    .dash-jp-operator-tile pre.tc-tile-narr { max-height: 22rem; }
     .dash-jp-daemon { margin-top: 0.35rem; font-size: 0.62rem; color: #334155; line-height: 1.4; }
     .dash-jp-tick {
       margin: 0 0 0.35rem;
@@ -280,76 +280,21 @@
       margin-bottom: 0.15rem;
       line-height: 1.2;
     }
-    /* Jupiter 5m block — same WIN-box idea: bullet + muted lab + readable value (no monospace wall). */
-    .tc-tile-narr-wrap {
+    pre.tc-tile-narr {
       grid-column: 1 / -1;
-      display: grid;
-      grid-template-columns: 0.55rem auto 1fr;
-      column-gap: 0.3rem;
-      row-gap: 0.2rem;
-      align-items: baseline;
       margin: 0 0 0.35rem 0;
-      padding: 0.32rem 0.4rem;
+      padding: 0.3rem 0.35rem;
       max-height: 14rem;
-      overflow-y: auto;
-      font-size: 0.62rem;
-      line-height: 1.45;
-      color: #0f172a;
-      background: #f8fafc;
+      overflow: auto;
+      white-space: pre-wrap;
+      word-break: break-word;
+      font-size: 0.58rem;
+      line-height: 1.35;
+      color: #1e293b;
+      background: #f1f5f9;
       border: 1px solid #e2e8f0;
       border-radius: 4px;
     }
-    .tc-tile-narr-wrap .tc-tile-bullet {
-      color: #94a3b8;
-      font-weight: 700;
-      font-size: 0.68rem;
-      line-height: 1.35;
-      user-select: none;
-    }
-    .tc-tile-narr-wrap .lab {
-      color: var(--muted);
-      font-size: 0.58rem;
-      text-transform: uppercase;
-      letter-spacing: 0.02em;
-      font-weight: 600;
-    }
-    .tc-tile-narr-wrap .tc-tile-val {
-      font-family: inherit;
-      font-size: 0.62rem;
-      font-weight: 500;
-      word-break: break-word;
-      min-width: 0;
-      color: #1e293b;
-    }
-    .tc-tile-narr-placeholder .tc-tile-val {
-      color: #64748b;
-      font-style: italic;
-      font-weight: 400;
-    }
-    /* No-trade columns: 5m market block first, then execution verdict (same rhythm as WIN/LOSS tiles). */
-    .tc-no-trade-block {
-      grid-column: 1 / -1;
-      display: grid;
-      grid-template-columns: auto 1fr;
-      gap: 0.1rem 0.35rem;
-      align-items: baseline;
-      margin-top: 0.15rem;
-      padding: 0.28rem 0.32rem;
-      border: 1px solid #cbd5e1;
-      border-radius: 4px;
-      background: #f1f5f9;
-    }
-    .tc-no-trade-block .tc-nt-v {
-      grid-column: 1 / -1;
-      margin-bottom: 0.08rem;
-      font-size: 0.72rem;
-      font-weight: 800;
-      letter-spacing: 0.05em;
-      text-transform: uppercase;
-      color: #64748b;
-      line-height: 1.2;
-    }
-    .tc-no-trade-block .tc-tile-val { font-family: inherit; font-size: 0.58rem; color: #334155; }
     .wl-WIN { color: #15803d; font-weight: 800; }
     .wl-LOSS { color: #b91c1c; font-weight: 800; }
     .wl-FLAT { color: #64748b; font-weight: 700; }
@@ -797,105 +742,16 @@
     );
   }
 
-  /**
-   * Jupiter tile narrative text → same two-column .tc-mini layout as trade rows (labels + values).
-   * Matches server-side format_jupiter_tile_narrative_v1 line prefixes.
-   */
-  function jupiterLineToLabVal(line) {
-    var s = String(line).trim();
-    if (!s) return { lab: '', val: '' };
-    var arrow = '\u2192';
-    var pats = [
-      [/^New 5-min candle formed:\s*(.*)$/i, 'new 5m'],
-      [/^Previous candle:\s*(.*)$/, 'prev OHLC'],
-      [/^Current candle:\s*(.*)$/, 'current'],
-      [/^Supertrend:\s*(.*)$/, 'supertrend'],
-      [/^ATR Analysis:\s*(.*)$/, 'ATR'],
-      [/^Price vs EMA200:\s*(.*)$/, 'vs EMA200'],
-      [new RegExp('^Signal Breakdown\\s*' + arrow + '\\s*Long=(.*)$'), 'sig long'],
-      [new RegExp('^Signal Breakdown\\s*' + arrow + '\\s*Short=(.*)$'), 'sig short'],
-      [/^Signal Breakdown\s*->\s*Long=(.*)$/, 'sig long'],
-      [/^Signal Breakdown\s*->\s*Short=(.*)$/, 'sig short'],
-      [/^Signals:\s*(.*)$/, 'signals'],
-      [new RegExp('^ATR-Supertrend SIGNAL\\s*' + arrow + '\\s*(.*)$'), 'ATR-ST'],
-      [/^ATR-Supertrend SIGNAL\s*->\s*(.*)$/, 'ATR-ST'],
-      [/^Processing\s+(.*)$/, 'processing'],
-      [/^Filter:\s*(.*)$/, 'filter'],
-      [/^Policy:\s*(.*)$/, 'policy'],
-      [/^reason_code=(.*)$/, 'reason'],
-      [/^trade=\s*(.*)$/, 'trade'],
-    ];
-    var i;
-    var m;
-    for (i = 0; i < pats.length; i++) {
-      m = s.match(pats[i][0]);
-      if (m) return { lab: pats[i][1], val: m[1] != null ? m[1] : '' };
-    }
-    var ci = s.indexOf(': ');
-    if (ci >= 2 && ci <= 72 && !/^Signal Breakdown/i.test(s)) {
-      return { lab: s.slice(0, ci).trim(), val: s.slice(ci + 2) };
-    }
-    return { lab: 'note', val: s };
-  }
-
-  /** When the API has no narrative string, still reserve the 5m snapshot block (honest gap vs silent empty cell). */
-  function jupiterSnapshotPlaceholderHtml() {
-    return (
-      '<div class="tc-tile-narr-wrap tc-tile-narr-placeholder" title="5m bar snapshot unavailable">' +
-      '<span class="tc-tile-bullet" aria-hidden="true">•</span>' +
-      '<span class="lab">5m snapshot</span>' +
-      '<span class="tc-tile-val">Market/policy snapshot not available for this event — check market DB path, bar window, or policy evaluation.</span>' +
-      '</div>'
-    );
-  }
-
-  /** Execution layer: no ledger trade for this lane/bar; sits below Jupiter 5m market block. */
-  function noTradeExecutionBlockHtml() {
-    return (
-      '<div class="tc-no-trade-block" title="No execution trade for this 5m bar on this strategy lane">' +
-      '<div class="tc-nt-v">no trade</div>' +
-      '<span class="lab">execution</span>' +
-      '<span class="tc-tile-val">No position opened or closed here — bar still logged for the 5m cycle.</span>' +
-      '</div>'
-    );
-  }
-
-  function jupiterNarrativeLinesHtml(raw, titleAttr) {
-    if (raw == null || String(raw).trim() === '') return '';
-    var text = String(raw).replace(/\r\n/g, '\n');
-    var lines = text.split('\n');
-    var rows = [];
-    var j;
-    for (j = 0; j < lines.length; j++) {
-      var row = jupiterLineToLabVal(lines[j]);
-      if (!row.lab && !row.val) continue;
-      rows.push(
-        '<span class="tc-tile-bullet" aria-hidden="true">•</span>' +
-        '<span class="lab">' +
-        esc(row.lab) +
-        '</span><span class="tc-tile-val">' +
-        esc(row.val) +
-        '</span>'
-      );
-    }
-    if (!rows.length) return '';
-    var ta = titleAttr ? ' title="' + esc(titleAttr) + '"' : '';
-    return (
-      '<div class="tc-tile-narr-wrap"' +
-      ta +
-      '>' +
-      rows.join('') +
-      '</div>'
-    );
-  }
-
   function cellMini(c, row) {
-    var narr = c && c.jupiter_tile_narrative ? String(c.jupiter_tile_narrative).trim() : '';
-    var marketBlock = narr
-      ? jupiterNarrativeLinesHtml(narr, 'Jupiter / Sean policy (5m bar)')
-      : jupiterSnapshotPlaceholderHtml();
+    var narr = c && c.jupiter_tile_narrative ? String(c.jupiter_tile_narrative) : '';
+    var narrEl = narr
+      ? '<pre class="tc-tile-narr" title="Jupiter / Sean policy (5m bar)">' + esc(narr) + '</pre>'
+      : '';
     if (!c || c.empty) {
-      return marketBlock + noTradeExecutionBlockHtml();
+      return (
+        narrEl +
+        '<span class="tc-empty tc-no-trade" title="No execution trade for this 5m bar">no trade</span>'
+      );
     }
     var ck = row.chain_kind || '';
     var vs = (ck === 'anna_test' || ck === 'anna_strategy') ? c.vs_baseline : null;
@@ -1354,10 +1210,9 @@
       if (jp.operator_tile_narrative) {
         opTile.innerHTML =
           '<p class="dash-jp-tile-h">Operator tile — latest closed bar (OHLC · RSI · Supertrend · ATR · EMA · signals)</p>' +
-          jupiterNarrativeLinesHtml(
-            String(jp.operator_tile_narrative),
-            'Operator tile — latest closed bar'
-          );
+          '<pre class="tc-tile-narr">' +
+          esc(String(jp.operator_tile_narrative)) +
+          '</pre>';
       } else {
         opTile.innerHTML =
           '<p class="dash-jp-tile-h" style="color:#64748b">Operator tile</p>' +
