@@ -1278,7 +1278,7 @@
     } else {
       rows.push({
         k: 'would trade (paper)',
-        v: jp.would_trade ? 'YES — ' + String(jp.side || '') : 'no',
+        v: jp.would_trade ? 'YES — ' + String(jp.side || '') : 'NO TRADE (paper)',
         cls: jp.would_trade ? 'jp-fire' : 'jp-flat',
       });
       if (jp.reason_code != null) rows.push({ k: 'reason_code', v: String(jp.reason_code), cls: 'jp-flat' });
