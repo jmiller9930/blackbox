@@ -516,8 +516,8 @@
       <div class="dash-jp" id="dash-jp-wrap" role="region" aria-labelledby="dash-jp-h">
         <h2 id="dash-jp-h" class="dash-jp-title">Jupiter policy (paper baseline)</h2>
         <p class="dash-jp-sub" id="dash-jp-lead">
-          Latest closed bar (OHLC + <strong>V</strong> = tick_count, Hermes <strong>publish_time</strong> in the 5m window, SSE tape only): whether a <strong>paper</strong> baseline trade would fire,
-          feature alignment (RSI / flags), and <code>reason_code</code>. Dense Hermes SSE → SQLite feeds correct high/low for the bar.
+          Latest closed bar (OHLC + <strong>V</strong> = tick_count = Hermes SSE rows in that 5m window by <strong>publish_time</strong>; requires <code>pyth-sse-ingest</code> with <code>every_message</code> for full stream parity): whether a <strong>paper</strong> baseline trade would fire,
+          feature alignment (RSI / flags), and <code>reason_code</code>. SSE tape → SQLite feeds OHLC/V for the bar.
           Not venue execution. Refreshes each poll (~<span id="dash-jp-poll-ms-label">1500</span>ms).
         </p>
         <p class="dash-jp-tick" id="dash-jp-tick" aria-live="polite">—</p>
@@ -1300,7 +1300,7 @@
       if (eb.tick_count != null) {
         rows.push({
           k: 'tick_count (V)',
-          v: String(eb.tick_count) + ' — oracle publish_time window, SSE rows (matches Sean clock)',
+          v: String(eb.tick_count) + ' — oracle publish_time window, one row per Hermes parse (every_message)',
           cls: 'jp-flat',
         });
       }

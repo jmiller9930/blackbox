@@ -19,6 +19,8 @@ services:
       ]
     environment:
       BLACKBOX_REPO_ROOT: /repo
+      # Same DB file as pyth-sse-ingest (default: /repo/data/sqlite/market_data.db if unset).
+      BLACKBOX_MARKET_DATA_PATH: ${BLACKBOX_MARKET_DATA_PATH:-}
       BLACKBOX_CONTEXT_ROOT: /repo/data/context_engine
       # Host .env (same directory as compose) supplies these; enables true wallet_connected on clawbot.
       KEYPAIR_PATH: ${KEYPAIR_PATH:-}
@@ -85,7 +87,9 @@ services:
     working_dir: /repo
     environment:
       BLACKBOX_REPO_ROOT: /repo
-      # Sean: every Hermes message → tape row; 5m OHLC/V bucketed by oracle publish_time (not ingest time).
+      BLACKBOX_MARKET_DATA_PATH: ${BLACKBOX_MARKET_DATA_PATH:-}
+      # Sean / full tape: one SQLite row per Hermes SSE parse (PYTH_SSE_TICK_POLICY=every_message).
+      # Ingest code defaults unknown typos to every_message (never silently to price_change).
       PYTH_SSE_TICK_POLICY: every_message
       # Do not drop parses on conf/price (full broadcast accountability). Set to 1 for legacy conf gate.
       PYTH_SSE_APPLY_CONF_GATE: "0"
