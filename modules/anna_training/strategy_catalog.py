@@ -19,6 +19,11 @@ DEFAULT_STRATEGIES: list[dict[str, Any]] = [
         "description": "Trend-following momentum; see trading_core README / operator strategy doc.",
     },
     {
+        "id": "jupiter_2_sean_perps_v1",
+        "title": "Jupiter_2 — Sean policy v1.0 (SOL perp, 5m, ST10×3 + EMA200 + RSI + ATR ratio)",
+        "description": "TypeScript-bot parity: modules/anna_training/jupiter_2_sean_policy.py; paper evaluation only.",
+    },
+    {
         "id": "manual_operator_v1",
         "title": "Operator-attested manual paper",
         "description": "Rows from anna log-trade without bot signal file.",
