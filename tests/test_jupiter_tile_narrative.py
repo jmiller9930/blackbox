@@ -62,7 +62,7 @@ def test_format_with_tile_includes_ohlc_and_signals() -> None:
     assert "ATR Analysis:" in t
     assert "Signal Breakdown" in t
     assert "Signal Breakdown → Long=true" in t
-    assert "RSI>52=true" in t
+    assert "aggregateCandles long=true" in t
     assert "Signal Breakdown → Short=false" in t
     assert "Signals: short=false (RSI=60.75), long=true" in t
     assert "ATR-Supertrend SIGNAL → LONG at 82.1 | ATR=0.133" in t
@@ -88,10 +88,9 @@ def test_policy_filter_block_uses_operator_filter_copy() -> None:
             "ema200": 81.8602,
             "supertrend_direction": 1,
             "breakdown_long": {
-                "supertrend_bullish": True,
+                "supertrend_bullish": False,
                 "above_ema": True,
-                "rsi_gt_52": True,
-                "higher_close": True,
+                "rsi_long_arm_raw": True,
                 "long_ok": False,
             },
             "breakdown_short": {

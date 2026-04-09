@@ -351,31 +351,27 @@ def format_jupiter_tile_narrative_v1(
 
     bl = tile.get("breakdown_long") or {}
     bs = tile.get("breakdown_short") or {}
-    # Operator spec: Long=(Supertrend, AboveEMA, RSI>52, HigherClose) — Short=(Supertrend, BelowEMA, RSI<48, LowerClose)
+    # Must match evaluate_sean_jupiter_baseline_v1: long_ok = raw_long ∧ ST ∧ EMA (aggregateCandles long ≠ “RSI>52”).
     lines.append(
         "Signal Breakdown → Long="
         + _tile_lower_bool(bl.get("long_ok"))
-        + " (Supertrend="
+        + " (aggregateCandles long="
+        + _tile_lower_bool(bl.get("rsi_long_arm_raw"))
+        + ", Supertrend="
         + _tile_lower_bool(bl.get("supertrend_bullish"))
         + ", AboveEMA="
         + _tile_lower_bool(bl.get("above_ema"))
-        + ", RSI>52="
-        + _tile_lower_bool(bl.get("rsi_gt_52"))
-        + ", HigherClose="
-        + _tile_lower_bool(bl.get("higher_close"))
         + ")"
     )
     lines.append(
         "Signal Breakdown → Short="
         + _tile_lower_bool(bs.get("short_ok"))
-        + " (Supertrend="
+        + " (aggregateCandles short="
+        + _tile_lower_bool(bs.get("rsi_short_arm_raw"))
+        + ", Supertrend="
         + _tile_lower_bool(bs.get("supertrend_bearish"))
         + ", BelowEMA="
         + _tile_lower_bool(bs.get("below_ema"))
-        + ", RSI<48="
-        + _tile_lower_bool(bs.get("rsi_lt_48"))
-        + ", LowerClose="
-        + _tile_lower_bool(bs.get("lower_close"))
         + ")"
     )
 
