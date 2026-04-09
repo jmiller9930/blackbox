@@ -6,6 +6,8 @@ Combines:
   ``aggregateCandles`` block: high/low deltas + RSI delta vs ``RSI_EPSILON``).
 - **Sean Jupiter constants** (RSI 52/48, ATR 14, Supertrend ×3, EMA 200, min-notional hint).
 - **Supertrend** (Wilder ATR, final upper/lower bands — TradingView-style step).
+- **ATR ratio (tile + final veto)** — same as ``jupiter_2_sean_policy``: simple mean TR over 14 bars vs
+  reference window (``calculate_atr`` / ``closes[-214:-14]``); not the Wilder-smoothed series.
 - **EMA200** filter: long only if ``close > EMA200``; short only if ``close < EMA200``.
 
 Short precedence when both raw arms would fire. Catalog id ``jupiter_supertrend_ema_rsi_atr_v1``.
@@ -18,6 +20,8 @@ from __future__ import annotations
 import math
 from dataclasses import dataclass
 from typing import Any
+
+from modules.anna_training.jupiter_2_sean_policy import calculate_atr
 
 # --- Sean Jupiter Perps policy (v2) — align with operator Jupiter bot constants ---
 RSI_PERIOD = 14
@@ -43,6 +47,9 @@ REFERENCE_SOURCE = "jupiter_sean_policy:v2:aggregateCandles+rsi+supertrend+ema20
 def _resolve_atr_ratio_from_features(feat: dict[str, Any]) -> float | None:
     """
     ``tile`` from :func:`_build_tile_payload` carries ``atr_ratio`` and/or ``atr_current`` / ``atr_avg200``.
+
+    Ratio matches :func:`modules.anna_training.jupiter_2_sean_policy.generate_signal_from_ohlc`
+    (simple mean TR / reference window — not Wilder-smoothed ATR series).
     Used only as the final trade veto (not for raw/ST/EMA gates).
     """
     tile = feat.get("tile")
@@ -105,13 +112,25 @@ def _build_tile_payload(
     long_ok: bool,
 ) -> dict[str, Any]:
     """Rich context for operator tiles (same bar math as policy)."""
-    atr_series = wilder_atr(highs, lows, closes, ATR_PERIOD)
-    ari = atr_series[i]
-    valid_atr = [
-        atr_series[j] for j in range(max(0, i - 199), i + 1) if not math.isnan(atr_series[j])
-    ]
-    atr_avg = sum(valid_atr) / len(valid_atr) if valid_atr else None
-    ratio = (float(ari) / atr_avg) if atr_avg and atr_avg > 0 and not math.isnan(ari) else None
+    # ATR ratio — align with jupiter_2_sean_policy / TypeScript: simple mean TR (not Wilder).
+    # Wilder ATR remains used for Supertrend bands (above) only.
+    atr_simple = calculate_atr(closes, highs, lows)
+    if len(closes) >= 214:
+        avg_atr = calculate_atr(
+            closes[-214:-14],
+            highs[-214:-14],
+            lows[-214:-14],
+        )
+    elif len(closes) >= 200:
+        # Jupiter uses len>=200 with a 200-bar slice; that slice is empty until len>=214.
+        avg_atr = atr_simple
+    else:
+        avg_atr = atr_simple
+    ratio = (
+        (float(atr_simple) / float(avg_atr))
+        if avg_atr and avg_atr > 0
+        else 1.0
+    )
 
     po = float(prev_bar["open"])
     ph = float(prev_bar["high"])
@@ -153,9 +172,9 @@ def _build_tile_payload(
             "current_rsi": current_rsi_raw,
             "supertrend_label": st_label,
             "supertrend_direction": st_dir,
-            "atr_current": None if math.isnan(ari) else float(ari),
-            "atr_avg200": atr_avg,
-            "atr_ratio": ratio,
+            "atr_current": float(atr_simple),
+            "atr_avg200": float(avg_atr) if avg_atr and avg_atr > 0 else None,
+            "atr_ratio": float(ratio),
             "price_vs_ema200": pvsem,
             "ema200": float(ema200_last),
             "higher_close": higher_close,

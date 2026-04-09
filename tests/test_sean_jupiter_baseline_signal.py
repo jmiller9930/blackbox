@@ -102,6 +102,40 @@ def test_resolve_atr_ratio_from_features() -> None:
     ) is None
 
 
+def test_tile_atr_ratio_matches_jupiter_2_generate_signal() -> None:
+    """Baseline tile uses same simple-TR ratio as jupiter_2_sean_policy.generate_signal_from_ohlc."""
+    import random
+
+    from modules.anna_training.jupiter_2_sean_policy import generate_signal_from_ohlc
+    from modules.anna_training.sean_jupiter_baseline_signal import MIN_BARS, evaluate_sean_jupiter_baseline_v1
+
+    random.seed(7)
+    p = 100.0
+    bars = []
+    for i in range(MIN_BARS + 20):
+        p = p + random.uniform(-0.4, 0.4)
+        o = p
+        c = p + random.uniform(-0.2, 0.2)
+        h = max(o, c) + random.uniform(0, 0.15)
+        l = min(o, c) - random.uniform(0, 0.15)
+        bars.append(
+            _bar(
+                i,
+                o=o,
+                h=h,
+                l=l,
+                c=c,
+            )
+        )
+    out = evaluate_sean_jupiter_baseline_v1(bars_asc=bars)
+    closes = [float(b["close"]) for b in bars]
+    highs = [float(b["high"]) for b in bars]
+    lows = [float(b["low"]) for b in bars]
+    _, _, _, diag = generate_signal_from_ohlc(closes, highs, lows)
+    tr = out.features.get("tile") or {}
+    assert tr.get("atr_ratio") == pytest.approx(float(diag["atr_ratio"]), rel=1e-9, abs=1e-12)
+
+
 def test_atr_ratio_below_min_final_veto(monkeypatch: pytest.MonkeyPatch) -> None:
     """After raw/ST/EMA pass, ATR ratio < 1.35 must return NO TRADE."""
     import modules.anna_training.sean_jupiter_baseline_signal as m
