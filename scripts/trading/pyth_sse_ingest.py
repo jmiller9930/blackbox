@@ -106,11 +106,16 @@ def _dedupe_publish() -> bool:
 
 
 def _tick_policy() -> str:
-    """Default ``every_message`` = one DB row per SSE parse (Sean-aligned tape density / V)."""
-    v = (os.environ.get("PYTH_SSE_TICK_POLICY") or "every_message").strip().lower()
+    """Resolve tick policy. Default **every_message** = one DB row per SSE parse (full tape / V).
+
+    Unknown ``PYTH_SSE_TICK_POLICY`` values **must not** fall back to ``price_change`` (that would
+    silently drop most messages). Invalid / empty typos → ``every_message``.
+    """
+    raw = (os.environ.get("PYTH_SSE_TICK_POLICY") or "").strip()
+    v = raw.lower() if raw else "every_message"
     if v in ("price_change", "every_message", "dedupe_publish"):
         return v
-    return "price_change"
+    return "every_message"
 
 
 def _sse_url() -> str:
@@ -240,12 +245,26 @@ def _run_sse_loop() -> None:
                         last_price_identity[0] = wi
         except Exception as e:  # noqa: BLE001
             print(f"pyth_sse_ingest: warm_start_identity_warn {e!r}", flush=True)
+    raw_policy = (os.environ.get("PYTH_SSE_TICK_POLICY") or "").strip()
     pol = _tick_policy()
+    if raw_policy and raw_policy.lower() not in ("price_change", "every_message", "dedupe_publish"):
+        print(
+            f"pyth_sse_ingest: WARNING invalid PYTH_SSE_TICK_POLICY={raw_policy!r} — "
+            f"using every_message (full tape)",
+            flush=True,
+        )
     print(
-        f"pyth_sse_ingest: db={db_path} symbol={symbol!r} tick_policy={pol!r} url={url[:64]}… "
-        f"dedupe_publish_legacy={_dedupe_publish()}",
+        f"pyth_sse_ingest: db={db_path} symbol={symbol!r} tick_policy={pol!r} "
+        f"conf_gate={_apply_conf_gate()} url={url[:64]}… "
+        f"dedupe_publish_env={_dedupe_publish()}",
         flush=True,
     )
+    if pol != "every_message":
+        print(
+            f"pyth_sse_ingest: NOTICE tick_policy={pol!r} is not every_message — "
+            f"SQLite row count will be lower than raw Hermes SSE line count",
+            flush=True,
+        )
     ctx = _ssl_context()
     backoff = 2.0
     parsed_url = urlparse(url)
