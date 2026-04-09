@@ -33,6 +33,36 @@ def human_price_float_from_identity(raw_i: int, expo_i: int) -> float:
     return float(d)
 
 
+def publish_time_unix_from_entry(entry: dict[str, Any]) -> int | None:
+    """Oracle ``publish_time`` seconds from one ``parsed`` element, if present."""
+    price_obj = entry.get("price")
+    if not isinstance(price_obj, dict):
+        return None
+    pub = price_obj.get("publish_time")
+    try:
+        return int(pub) if pub is not None else None
+    except (TypeError, ValueError):
+        return None
+
+
+def tape_price_and_publish_from_entry(entry: dict[str, Any]) -> tuple[float | None, int | None]:
+    """
+    Hermes ``parsed[]`` element → ``(primary_price, publish_time_unix)`` for tape insert.
+
+    **No** confidence filter — if Hermes sent a valid ``(price, expo) identity``, it counts.
+    Use when the product requires every broadcast update to be represented in the tape.
+    """
+    ident = hermes_price_identity_from_entry(entry)
+    if ident is None:
+        return None, None
+    raw_i, expo_i = ident
+    val = human_price_float_from_identity(raw_i, expo_i)
+    pub_i = publish_time_unix_from_entry(entry)
+    if math.isnan(val) or math.isinf(val):
+        return None, pub_i
+    return val, pub_i
+
+
 def price_from_hermes_parsed_entry(
     entry: dict[str, Any],
     *,

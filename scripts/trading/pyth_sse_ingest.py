@@ -5,16 +5,19 @@ Hermes Pyth **SSE** → ``market_ticks`` (oracle tape for 5m OHLC / ``tick_count
 Subscribes to ``/v2/updates/price/stream`` (not ``latest_price_feeds`` polling).
 Inserts into ``BLACKBOX_MARKET_DATA_PATH`` / default ``data/sqlite/market_data.db``.
 
-**Tick rule (product default):** **Sean rule** — one SQLite row **per accepted SSE message** after conf
-(``every_message``). Optional ``price_change`` = one row only when Hermes integer ``(price, expo)``
-differs from the last stored tick (exact identity; no float epsilon).
+**Tick rule (product default):** **Sean rule** — one SQLite row **per SSE message** with valid price
+identity (``every_message``). **No conf drop** by default: every Hermes parse that reaches the client
+is written (``tape_price_and_publish_from_entry``). Set ``PYTH_SSE_APPLY_CONF_GATE=1`` to restore
+optional conf/price filtering (legacy Drift-style). Optional ``price_change`` = one row only when
+Hermes integer ``(price, expo)`` differs from the last stored tick (exact identity; no float epsilon).
 
 Environment:
   PYTH_SOL_USD_FEED_ID — 64-hex feed id (default: SOL/USD)
   MARKET_TICK_SYMBOL — logical symbol (default SOL-USD)
   PYTH_SSE_TICK_POLICY — ``every_message`` (default, Sean tape / V) | ``price_change`` | ``dedupe_publish``
   PYTH_SSE_DEDUPE_PUBLISH_TIME — only for ``dedupe_publish``: skip duplicate ``publish_time`` (default 1)
-  PYTH_SSE_CONF_RATIO_MAX — max conf/price to accept (default 0.001, match Drift bot)
+  PYTH_SSE_APPLY_CONF_GATE — ``0`` (default) = insert every valid parse; ``1`` = use ``PYTH_SSE_CONF_RATIO_MAX``
+  PYTH_SSE_CONF_RATIO_MAX — only when ``PYTH_SSE_APPLY_CONF_GATE=1`` (default 0.001)
   PYTH_SSE_BAR_REFRESH_SEC — throttle for ``refresh_last_closed_bar_from_ticks`` (default 15)
   MARKET_BAR_MEMBERSHIP — ``oracle_publish`` (default, Sean) | ``inserted_at`` — see ``store.bar_membership_mode``
 """
@@ -40,6 +43,7 @@ from market_data.hermes_sse_price import (  # noqa: E402
     hermes_price_identity_from_entry,
     human_price_float_from_identity,
     price_from_hermes_parsed_entry,
+    tape_price_and_publish_from_entry,
 )
 from market_data.store import connect_market_db, ensure_market_schema, insert_tick  # noqa: E402
 
@@ -74,6 +78,15 @@ def _conf_ratio_max() -> float:
         return float(raw)
     except ValueError:
         return 0.001
+
+
+def _apply_conf_gate() -> bool:
+    """When true, drop low-confidence parses (legacy). Default false = full tape parity."""
+    return (os.environ.get("PYTH_SSE_APPLY_CONF_GATE") or "").strip().lower() in (
+        "1",
+        "true",
+        "yes",
+    )
 
 
 def _bar_refresh_sec() -> float:
@@ -150,10 +163,15 @@ def _handle_data_line(
     ident = hermes_price_identity_from_entry(entry)
     if ident is None:
         return False
-    px, pub_i = price_from_hermes_parsed_entry(entry, conf_ratio_max=_conf_ratio_max())
-    if px is None:
-        return False
-    px_store = human_price_float_from_identity(ident[0], ident[1])
+    if _apply_conf_gate():
+        px, pub_i = price_from_hermes_parsed_entry(entry, conf_ratio_max=_conf_ratio_max())
+        if px is None:
+            return False
+        px_store = human_price_float_from_identity(ident[0], ident[1])
+    else:
+        px_store, pub_i = tape_price_and_publish_from_entry(entry)
+        if px_store is None:
+            return False
 
     policy = _tick_policy()
     if policy == "dedupe_publish":
@@ -189,7 +207,7 @@ def _handle_data_line(
         comparator_observed_at=None,
         comparator_raw=None,
         gate_state="ok",
-        gate_reason=f"pyth_sse_{policy}",
+        gate_reason=f"pyth_sse_{policy}{'_conf' if _apply_conf_gate() else '_full_tape'}",
     )
     _maybe_refresh_canonical_bar(conn, symbol)
     return True

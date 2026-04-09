@@ -12,6 +12,7 @@ from market_data.hermes_sse_price import (  # noqa: E402
     hermes_price_identity_from_entry,
     human_price_float_from_identity,
     price_from_hermes_parsed_entry,
+    tape_price_and_publish_from_entry,
 )
 
 
@@ -52,3 +53,18 @@ def test_low_confidence_skipped():
     }
     px, _ = price_from_hermes_parsed_entry(entry, conf_ratio_max=0.001)
     assert px is None
+
+
+def test_tape_path_includes_low_confidence_parse():
+    """Full tape: same entry still yields price + publish when conf gate is not applied."""
+    entry = {
+        "price": {
+            "price": "1000000000",
+            "conf": "500000000",
+            "expo": -8,
+            "publish_time": 1,
+        },
+    }
+    px, pub = tape_price_and_publish_from_entry(entry)
+    assert px is not None
+    assert pub == 1

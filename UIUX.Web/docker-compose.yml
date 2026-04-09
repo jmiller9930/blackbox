@@ -87,6 +87,8 @@ services:
       BLACKBOX_REPO_ROOT: /repo
       # Sean: every Hermes message → tape row; 5m OHLC/V bucketed by oracle publish_time (not ingest time).
       PYTH_SSE_TICK_POLICY: every_message
+      # Do not drop parses on conf/price (full broadcast accountability). Set to 1 for legacy conf gate.
+      PYTH_SSE_APPLY_CONF_GATE: "0"
       MARKET_BAR_MEMBERSHIP: oracle_publish
     command:
       [
