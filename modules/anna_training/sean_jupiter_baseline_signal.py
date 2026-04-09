@@ -31,10 +31,43 @@ SUPERTREND_MULTIPLIER = 3.0
 EMA_PERIOD = 200
 MIN_NOTIONAL_USD = 10
 
+# Final veto on trade=True: current ATR vs trailing average of ATR (same series as tile).
+ATR_RATIO_MIN = 1.35
+
 # Need full EMA200 + RSI at last index; 200 bars covers EMA200 at the last close.
 MIN_BARS = EMA_PERIOD
 
 REFERENCE_SOURCE = "jupiter_sean_policy:v2:aggregateCandles+rsi+supertrend+ema200"
+
+
+def _resolve_atr_ratio_from_features(feat: dict[str, Any]) -> float | None:
+    """
+    ``tile`` from :func:`_build_tile_payload` carries ``atr_ratio`` and/or ``atr_current`` / ``atr_avg200``.
+    Used only as the final trade veto (not for raw/ST/EMA gates).
+    """
+    tile = feat.get("tile")
+    if not isinstance(tile, dict):
+        return None
+    r = tile.get("atr_ratio")
+    if r is not None:
+        try:
+            rf = float(r)
+            if not math.isnan(rf):
+                return rf
+        except (TypeError, ValueError):
+            pass
+    ac = tile.get("atr_current")
+    aa = tile.get("atr_avg200")
+    if ac is None or aa is None:
+        return None
+    try:
+        a = float(ac)
+        b = float(aa)
+    except (TypeError, ValueError):
+        return None
+    if math.isnan(a) or math.isnan(b) or b <= 0:
+        return None
+    return a / b
 
 
 def _volume_from_bar(bar: dict[str, Any]) -> float | int | None:
@@ -707,6 +740,19 @@ def evaluate_sean_jupiter_baseline_v1(
         side = "long"
         pnl = (c - o) * 1.0
         reason = "jupiter_policy_long_signal"
+
+    atr_ratio = _resolve_atr_ratio_from_features(feat)
+    if atr_ratio is not None and atr_ratio < ATR_RATIO_MIN:
+        return SeanJupiterBaselineSignalV1(
+            trade=False,
+            side="flat",
+            reason_code="atr_ratio_below_min",
+            pnl_usd=None,
+            features={
+                **feat,
+                "policy_blockers": ["atr_ratio_below_1.35"],
+            },
+        )
 
     return SeanJupiterBaselineSignalV1(
         trade=True,

@@ -89,6 +89,83 @@ def test_rsi_trading_core_length_matches_ts() -> None:
     assert not math.isnan(r[RSI_PERIOD])
 
 
+def test_resolve_atr_ratio_from_features() -> None:
+    from modules.anna_training.sean_jupiter_baseline_signal import _resolve_atr_ratio_from_features
+
+    assert _resolve_atr_ratio_from_features({}) is None
+    assert _resolve_atr_ratio_from_features({"tile": {"atr_ratio": 1.5}}) == 1.5
+    assert _resolve_atr_ratio_from_features(
+        {"tile": {"atr_current": 2.7, "atr_avg200": 2.0}}
+    ) == pytest.approx(1.35)
+    assert _resolve_atr_ratio_from_features(
+        {"tile": {"atr_current": 1.0, "atr_avg200": 0.0}}
+    ) is None
+
+
+def test_atr_ratio_below_min_final_veto(monkeypatch: pytest.MonkeyPatch) -> None:
+    """After raw/ST/EMA pass, ATR ratio < 1.35 must return NO TRADE."""
+    import modules.anna_training.sean_jupiter_baseline_signal as m
+    from modules.anna_training.sean_jupiter_baseline_signal import MIN_BARS, evaluate_sean_jupiter_baseline_v1
+
+    monkeypatch.setattr(m, "aggregate_candles_signal_flags", lambda **kw: (True, False))
+    monkeypatch.setattr(
+        m,
+        "supertrend_direction_series",
+        lambda highs, lows, closes: [-1] * len(closes),
+    )
+    monkeypatch.setattr(m, "_ewm_mean_last", lambda closes, period: 300.0)
+
+    orig_tile = m._build_tile_payload
+
+    def fake_tile(**kwargs):
+        out = orig_tile(**kwargs)
+        tile = out.get("tile")
+        if isinstance(tile, dict):
+            tile["atr_ratio"] = 1.0
+            tile["atr_current"] = 1.0
+            tile["atr_avg200"] = 1.0
+        return out
+
+    monkeypatch.setattr(m, "_build_tile_payload", fake_tile)
+
+    bars = [_bar(i, o=100.0, h=101.0, l=99.0, c=100.0) for i in range(MIN_BARS)]
+    out = evaluate_sean_jupiter_baseline_v1(bars_asc=bars)
+    assert out.trade is False
+    assert out.reason_code == "atr_ratio_below_min"
+    assert out.features.get("policy_blockers") == ["atr_ratio_below_1.35"]
+
+
+def test_atr_ratio_at_min_allows_trade(monkeypatch: pytest.MonkeyPatch) -> None:
+    import modules.anna_training.sean_jupiter_baseline_signal as m
+    from modules.anna_training.sean_jupiter_baseline_signal import ATR_RATIO_MIN, MIN_BARS, evaluate_sean_jupiter_baseline_v1
+
+    monkeypatch.setattr(m, "aggregate_candles_signal_flags", lambda **kw: (True, False))
+    monkeypatch.setattr(
+        m,
+        "supertrend_direction_series",
+        lambda highs, lows, closes: [-1] * len(closes),
+    )
+    monkeypatch.setattr(m, "_ewm_mean_last", lambda closes, period: 300.0)
+
+    orig_tile = m._build_tile_payload
+
+    def fake_tile(**kwargs):
+        out = orig_tile(**kwargs)
+        tile = out.get("tile")
+        if isinstance(tile, dict):
+            tile["atr_ratio"] = ATR_RATIO_MIN
+            tile["atr_current"] = 1.35
+            tile["atr_avg200"] = 1.0
+        return out
+
+    monkeypatch.setattr(m, "_build_tile_payload", fake_tile)
+
+    bars = [_bar(i, o=100.0, h=101.0, l=99.0, c=100.0) for i in range(MIN_BARS)]
+    out = evaluate_sean_jupiter_baseline_v1(bars_asc=bars)
+    assert out.trade is True
+    assert out.reason_code == "jupiter_policy_short_signal"
+
+
 def test_ewm_mean_last_matches_pandas_when_available() -> None:
     """EMA200 path must match prior pandas.Series.ewm(adjust=False) (dev env has pandas)."""
     pd = pytest.importorskip("pandas")
