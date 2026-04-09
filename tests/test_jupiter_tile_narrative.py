@@ -110,5 +110,7 @@ def test_policy_filter_block_uses_operator_filter_copy() -> None:
         side="flat",
         policy_blockers=["supertrend_not_bullish"],
     )
-    assert "Processing LONG signal at 82.11571928" in t
+    assert "Processing LONG signal" not in t
+    assert "ATR-Supertrend SIGNAL → LONG" not in t
+    assert "Signals: short=false" in t
     assert "Filter: weak Supertrend / extreme RSI – skipping entry" in t

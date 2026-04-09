@@ -342,6 +342,8 @@ def format_jupiter_tile_narrative_v1(
     vc_num = nv.get("c")
     atr_c_fmt = _tile_fmt_price(atr_c)
 
+    # Only when policy returns trade=True — do not print "Processing …" for raw arms alone
+    # (aggregateCandles short/long) or the UI reads like every bar executes (filters ignored).
     if trade and side in ("long", "short"):
         lines.append(
             "ATR-Supertrend SIGNAL → "
@@ -352,16 +354,6 @@ def format_jupiter_tile_narrative_v1(
             + atr_c_fmt
         )
         lines.append("Processing " + side.upper() + " signal at " + _tile_fmt_price(vc_num))
-    elif rl_raw and not rs_raw:
-        lines.append(
-            "ATR-Supertrend SIGNAL → LONG at " + _tile_fmt_price(vc_num) + " | ATR=" + atr_c_fmt
-        )
-        lines.append("Processing LONG signal at " + _tile_fmt_price(vc_num))
-    elif rs_raw and not rl_raw:
-        lines.append(
-            "ATR-Supertrend SIGNAL → SHORT at " + _tile_fmt_price(vc_num) + " | ATR=" + atr_c_fmt
-        )
-        lines.append("Processing SHORT signal at " + _tile_fmt_price(vc_num))
 
     # Filter / skip line (use en dash per operator example)
     pb = policy_blockers or []
