@@ -32,6 +32,11 @@ def _policy_evaluation_log_enabled() -> bool:
     return _env_bool("BASELINE_POLICY_EVALUATION_LOG", True)
 
 
+def _legacy_mechanical_allowed() -> bool:
+    """Lab-only OHLC-long-every-bar path. Off by default (integrity: Sean policy is authoritative)."""
+    return _env_bool("BASELINE_LEGACY_MECHANICAL_ALLOWED", False)
+
+
 def _runtime_scripts() -> Path:
     return Path(__file__).resolve().parents[2] / "scripts" / "runtime"
 
@@ -88,6 +93,7 @@ def run_baseline_ledger_bridge_tick(
     Env:
       BASELINE_LEDGER_BRIDGE — default **on**; ``0`` disables all baseline writes.
       BASELINE_LEDGER_SIGNAL_MODE — ``sean_jupiter_v1`` (default) | ``legacy_mechanical_long``.
+      BASELINE_LEGACY_MECHANICAL_ALLOWED — default **off**; ``1`` required for ``legacy_mechanical_long`` (lab only).
       BASELINE_LEDGER_MODE — ``paper`` (default) or ``live``.
       BASELINE_POLICY_EVALUATION_LOG — default **on**; ``0`` skips ``policy_evaluations`` upserts only.
     """
@@ -102,6 +108,13 @@ def run_baseline_ledger_bridge_tick(
         m = "paper"
 
     sm = _signal_mode()
+    if sm == "legacy_mechanical_long" and not _legacy_mechanical_allowed():
+        return {
+            "ok": False,
+            "reason": "legacy_mechanical_long_disabled",
+            "detail": "Mechanical OHLC baseline is quarantined. Set BASELINE_LEGACY_MECHANICAL_ALLOWED=1 for lab-only use.",
+            "signal_mode": sm,
+        }
 
     bar = fetch_latest_bar_row(db_path=market_data_db_path)
     if not bar:

@@ -373,6 +373,25 @@ def main(argv: list[str] | None = None) -> int:
     )
     args = ap.parse_args(argv)
 
+    # Long-running loop is opt-in until Karpathy is re-engineered under the policy contract.
+    # Single-tick (--once) remains available for CI and local diagnostics without this flag.
+    if not args.once:
+        _en = (os.environ.get("BLACKBOX_KARPATHY_LOOP_ENABLED") or "").strip().lower()
+        if _en not in ("1", "true", "yes", "on"):
+            print(
+                json.dumps(
+                    {
+                        "kind": "karpathy_loop_daemon_refused_v1",
+                        "reason": "long_running_loop_disabled",
+                        "detail": "Set BLACKBOX_KARPATHY_LOOP_ENABLED=1 to run the continuous Karpathy loop (lab/rebuild only).",
+                    },
+                    indent=2,
+                ),
+                file=sys.stderr,
+                flush=True,
+            )
+            return 0
+
     interval = _interval_sec(args.interval_sec)
     stop = {"flag": False}
 

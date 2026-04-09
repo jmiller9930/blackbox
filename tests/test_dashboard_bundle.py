@@ -2,6 +2,11 @@
 
 from __future__ import annotations
 
+import sqlite3
+
+import pytest
+
+from modules.anna_training.execution_ledger import connect_ledger, ensure_execution_ledger_schema
 from modules.anna_training.dashboard_bundle import (
     _pair_vs_baseline_for_cells,
     build_dashboard_bundle,
@@ -88,5 +93,96 @@ def test_trade_chain_includes_pair_epsilon() -> None:
     tc = build_trade_chain_payload(max_events=4)
     assert "paired_comparison_epsilon" in tc
     assert isinstance(tc["paired_comparison_epsilon"], float)
+
+
+def test_trade_chain_baseline_requires_policy_eval_not_execution_only(tmp_path: Path) -> None:
+    """Baseline WIN/LOSS must not follow execution_trades when policy_evaluations is absent."""
+    import modules.anna_training.dashboard_bundle as dbmod
+
+    dbmod._MARKET_DB = None
+    ledger = tmp_path / "el.db"
+    market = tmp_path / "m.db"
+    mid = "SOL-PERP_5m_2026-04-01T12:00:00Z"
+
+    conn_m = sqlite3.connect(market)
+    conn_m.execute(
+        """CREATE TABLE market_bars_5m (
+            id INTEGER PRIMARY KEY,
+            canonical_symbol TEXT NOT NULL,
+            tick_symbol TEXT NOT NULL,
+            timeframe TEXT NOT NULL,
+            candle_open_utc TEXT NOT NULL,
+            candle_close_utc TEXT NOT NULL,
+            market_event_id TEXT NOT NULL UNIQUE,
+            open REAL, high REAL, low REAL, close REAL,
+            tick_count INTEGER NOT NULL DEFAULT 0,
+            volume_base REAL,
+            price_source TEXT NOT NULL DEFAULT 'pyth_primary',
+            bar_schema_version TEXT NOT NULL DEFAULT 'canonical_bar_v1',
+            computed_at TEXT NOT NULL
+        )"""
+    )
+    conn_m.execute(
+        """INSERT INTO market_bars_5m (
+            canonical_symbol, tick_symbol, timeframe, candle_open_utc, candle_close_utc,
+            market_event_id, open, high, low, close, tick_count, computed_at
+        ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)""",
+        (
+            "SOL-PERP",
+            "SOL-PERP",
+            "5m",
+            "2026-04-01T12:00:00Z",
+            "2026-04-01T12:05:00Z",
+            mid,
+            100.0,
+            101.0,
+            99.0,
+            100.5,
+            10,
+            "2026-04-01T12:05:01Z",
+        ),
+    )
+    conn_m.commit()
+    conn_m.close()
+
+    conn_l = connect_ledger(ledger)
+    ensure_execution_ledger_schema(conn_l)
+    conn_l.execute(
+        """INSERT INTO execution_trades (
+            trade_id, strategy_id, lane, mode, market_event_id, symbol, timeframe,
+            side, entry_time, entry_price, size, exit_time, exit_price, exit_reason,
+            pnl_usd, context_snapshot_json, notes, trace_id, schema_version, created_at_utc
+        ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+        (
+            "bl_test1",
+            "baseline",
+            "baseline",
+            "paper",
+            mid,
+            "SOL-PERP",
+            "5m",
+            "long",
+            "2026-04-01T12:00:00Z",
+            100.0,
+            1.0,
+            "2026-04-01T12:05:00Z",
+            100.5,
+            "CLOSE",
+            0.5,
+            "{}",
+            "non-authoritative fixture",
+            None,
+            "execution_trade_v1",
+            "2026-04-01T12:05:02Z",
+        ),
+    )
+    conn_l.commit()
+    conn_l.close()
+
+    tc = build_trade_chain_payload(db_path=ledger, market_db_path=market, max_events=8)
+    assert tc.get("event_axis_source") == "market_bars_5m"
+    baseline = next(r for r in tc["rows"] if r["chain_kind"] == "baseline")
+    assert baseline["cells"][mid]["outcome"] == "NO_TRADE"
+    assert baseline["cells"][mid].get("ledger_row_ignored") is True
 
 

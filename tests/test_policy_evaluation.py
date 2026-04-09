@@ -17,6 +17,19 @@ if str(RUNTIME) not in sys.path:
     sys.path.insert(0, str(RUNTIME))
 
 
+def test_legacy_mechanical_blocked_without_lab_flag(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("BASELINE_LEDGER_BRIDGE", "1")
+    monkeypatch.setenv("BASELINE_LEDGER_SIGNAL_MODE", "legacy_mechanical_long")
+    monkeypatch.delenv("BASELINE_LEGACY_MECHANICAL_ALLOWED", raising=False)
+    from modules.anna_training.baseline_ledger_bridge import run_baseline_ledger_bridge_tick
+
+    r = run_baseline_ledger_bridge_tick(
+        market_data_db_path=Path("/nonexistent/market_data.db"),
+        execution_ledger_db_path=Path("/nonexistent/execution_ledger.db"),
+    )
+    assert r.get("reason") == "legacy_mechanical_long_disabled"
+
+
 def test_upsert_policy_evaluation_idempotent(tmp_path: Path) -> None:
     db = tmp_path / "execution_ledger.db"
     from modules.anna_training.execution_ledger import (
@@ -69,6 +82,7 @@ def test_baseline_bridge_writes_policy_eval_legacy(tmp_path: Path, monkeypatch: 
     monkeypatch.setenv("BLACKBOX_MARKET_DATA_PATH", str(market_db))
     monkeypatch.setenv("BASELINE_LEDGER_BRIDGE", "1")
     monkeypatch.setenv("BASELINE_LEDGER_SIGNAL_MODE", "legacy_mechanical_long")
+    monkeypatch.setenv("BASELINE_LEGACY_MECHANICAL_ALLOWED", "1")
 
     sys.path.insert(0, str(ROOT / "scripts" / "runtime"))
     from market_data.canonical_time import candle_close_utc_exclusive, last_closed_candle_open_utc  # noqa: E402

@@ -60,6 +60,7 @@ def test_baseline_and_anna_share_market_event_id(tmp_path: Path, monkeypatch: py
     monkeypatch.setenv("ANNA_PARALLEL_STRATEGY_IDS", "jupiter_supertrend_ema_rsi_atr_v1")
     monkeypatch.setenv("BASELINE_LEDGER_BRIDGE", "1")
     monkeypatch.setenv("BASELINE_LEDGER_SIGNAL_MODE", "legacy_mechanical_long")
+    monkeypatch.setenv("BASELINE_LEGACY_MECHANICAL_ALLOWED", "1")
 
     mid = _seed_closed_sol_bar(market_db, monkeypatch)
 

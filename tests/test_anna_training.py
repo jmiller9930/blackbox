@@ -103,6 +103,22 @@ def test_karpathy_once_writes_skills_deck_and_cycle_log(tmp_path: Path, monkeypa
     assert (raw.get("karpathy_last_data_preflight") or {}).get("schema") == "anna_data_preflight_v1"
 
 
+def test_karpathy_daemon_long_run_refused_without_enabled(tmp_path: Path, monkeypatch) -> None:
+    """Continuous loop requires BLACKBOX_KARPATHY_LOOP_ENABLED=1; --once is unchanged."""
+    monkeypatch.setenv("BLACKBOX_ANNA_TRAINING_DIR", str(tmp_path))
+    repo = Path(__file__).resolve().parents[1]
+    r = subprocess.run(
+        [sys.executable, str(repo / "scripts/runtime/anna_karpathy_loop_daemon.py")],
+        cwd=str(repo),
+        capture_output=True,
+        text=True,
+        env={**os.environ, "BLACKBOX_ANNA_TRAINING_DIR": str(tmp_path)},
+        timeout=15,
+    )
+    assert r.returncode == 0
+    assert "karpathy_loop_daemon_refused_v1" in r.stderr
+
+
 def test_grade12_internalizes_when_all_tools_pass(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.setenv("BLACKBOX_ANNA_TRAINING_DIR", str(tmp_path))
     from modules.anna_training.curriculum_tools import TOOL_IDS

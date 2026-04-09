@@ -3,8 +3,12 @@ Aggregated operator dashboard payload: trade chain, sequential status, wallet su
 
 Trade chain: horizontal event axis (columns) × vertical chains (baseline, Anna test, Anna strategy rows).
 
-**Jupiter policy snapshot:** same ``evaluate_sean_jupiter_baseline_v1`` inputs as the baseline ledger bridge
-(bar-derived; paper measurement). Surfaces *why* trade / no-trade before inferring from ledger cells.
+**Baseline row:** WIN/LOSS is bound to ``policy_evaluations`` (Sean Jupiter, ``signal_mode=sean_jupiter_v1``) plus
+a matching execution row when ``trade=1``. Missing policy or ``trade=0`` renders NO TRADE even if
+``execution_trades`` contains a baseline row (non-authoritative artifacts are not displayed as outcomes).
+
+**Jupiter policy snapshot:** same ``evaluate_sean_jupiter_baseline_v1`` inputs when stored policy is absent
+(bar-derived; paper measurement).
 """
 
 from __future__ import annotations
@@ -12,6 +16,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import sqlite3
 import sys
 import uuid
 from datetime import datetime, timedelta, timezone
@@ -161,6 +166,7 @@ from modules.anna_training.execution_ledger import (
     connect_ledger,
     default_execution_ledger_path,
     ensure_execution_ledger_schema,
+    fetch_policy_evaluation_for_market_event,
 )
 from modules.anna_training.quantitative_evaluation_layer.constants import (
     LIFECYCLE_ARCHIVED,
@@ -755,6 +761,127 @@ def _distinct_event_axis_with_times(conn: Any, *, limit: int) -> tuple[list[str]
     return mids, times
 
 
+def _event_axis_from_market_bars(mpath: Path | None, *, limit: int) -> tuple[list[str], list[str | None]]:
+    """Recent closed 5m bars (oldest→newest) — preferred column axis for policy-aligned dashboard."""
+    if not mpath or not mpath.is_file():
+        return [], []
+    lim = max(4, min(48, int(limit)))
+    conn = sqlite3.connect(str(mpath))
+    try:
+        cur = conn.execute(
+            """
+            SELECT market_event_id, candle_open_utc
+            FROM market_bars_5m
+            WHERE timeframe = '5m'
+            ORDER BY candle_open_utc DESC
+            LIMIT ?
+            """,
+            (lim,),
+        )
+        rows = list(reversed(cur.fetchall()))
+    except Exception:
+        return [], []
+    finally:
+        conn.close()
+    mids: list[str] = []
+    times: list[str | None] = []
+    for r in rows:
+        if not r or not r[0]:
+            continue
+        mids.append(str(r[0]))
+        times.append(_normalize_utc_iso_for_axis(r[1]))
+    return mids, times
+
+
+def _baseline_policy_no_trade_cell(
+    *,
+    market_event_id: str,
+    policy_row: dict[str, Any] | None,
+    ledger_row: dict[str, Any] | None,
+    reason: str,
+) -> dict[str, Any]:
+    """Baseline display when policy forbids or omits a trade — execution_trades must not imply WIN/LOSS."""
+    return {
+        "empty": True,
+        "market_event_id": market_event_id,
+        "trade_id": None,
+        "trace_id": None,
+        "symbol": None,
+        "timeframe": None,
+        "side": None,
+        "exit_reason": None,
+        "entry": None,
+        "exit": None,
+        "entry_time": None,
+        "exit_time": None,
+        "size": None,
+        "notional_usd_approx": None,
+        "pnl_usd": None,
+        "mae_usd": None,
+        "outcome": "NO_TRADE",
+        "outcome_display": "no trade",
+        "economic_authority": "policy_gated",
+        "mode": None,
+        "policy_authoritative": True,
+        "policy_trade": (bool(policy_row.get("trade")) if policy_row is not None else None),
+        "policy_reason_code": (str(policy_row.get("reason_code") or "") if policy_row else None),
+        "policy_missing": policy_row is None,
+        "ledger_row_ignored": ledger_row is not None,
+        "baseline_display_reason": reason,
+    }
+
+
+def _compact_baseline_cell_policy_bound(
+    conn: Any,
+    market_event_id: str,
+    ledger_row: dict[str, Any] | None,
+    *,
+    market_db_path: Path | None,
+) -> dict[str, Any]:
+    """
+    Baseline WIN/LOSS only when ``policy_evaluations`` (Sean Jupiter) has ``trade=1`` and a matching ledger row.
+    Missing policy, ``trade=0``, or missing execution all render NO_TRADE (ledger artifacts are non-authoritative).
+    """
+    pol = fetch_policy_evaluation_for_market_event(
+        conn,
+        market_event_id,
+        lane=RESERVED_STRATEGY_BASELINE,
+        strategy_id=RESERVED_STRATEGY_BASELINE,
+        signal_mode="sean_jupiter_v1",
+    )
+    mid = str(market_event_id).strip()
+    if pol is None:
+        return _baseline_policy_no_trade_cell(
+            market_event_id=mid,
+            policy_row=None,
+            ledger_row=ledger_row,
+            reason="policy_missing",
+        )
+    if not pol.get("trade"):
+        return _baseline_policy_no_trade_cell(
+            market_event_id=mid,
+            policy_row=pol,
+            ledger_row=ledger_row,
+            reason="policy_trade_false",
+        )
+    if not ledger_row:
+        return _baseline_policy_no_trade_cell(
+            market_event_id=mid,
+            policy_row=pol,
+            ledger_row=None,
+            reason="execution_missing",
+        )
+    cell = _compact_cell(ledger_row, market_db_path=market_db_path, chain_kind="baseline")
+    cell["policy_authoritative"] = True
+    cell["policy_trade"] = True
+    cell["policy_reason_code"] = pol.get("reason_code")
+    cell["policy_missing"] = False
+    cell["ledger_row_ignored"] = False
+    cell["baseline_display_reason"] = "policy_approved_execution"
+    cell["economic_authority"] = "full"
+    return cell
+
+
 def _ledger_has_live_anna(conn: Any) -> bool:
     row = conn.execute(
         """
@@ -968,7 +1095,7 @@ def build_trade_chain_payload(
     max_events: int = 24,
     market_db_path: Path | None = None,
 ) -> dict[str, Any]:
-    """Horizontal chains × vertical event axis from execution ledger."""
+    """Horizontal chains × vertical event axis; baseline column is policy-authoritative (policy_evaluations)."""
     db_path = db_path or default_execution_ledger_path()
     mpath = market_db_path if market_db_path is not None else _market_db_path()
 
@@ -976,7 +1103,11 @@ def build_trade_chain_payload(
     conn = connect_ledger(db_path)
     try:
         ensure_execution_ledger_schema(conn)
-        event_axis, event_axis_time_utc_iso = _distinct_event_axis_with_times(conn, limit=max_events)
+        event_axis, event_axis_time_utc_iso = _event_axis_from_market_bars(mpath, limit=max_events)
+        event_axis_source = "market_bars_5m"
+        if not event_axis:
+            event_axis, event_axis_time_utc_iso = _distinct_event_axis_with_times(conn, limit=max_events)
+            event_axis_source = "execution_trades_fallback"
         tile_narr = _event_axis_jupiter_tile_narratives(conn, event_axis, mpath)
         tests, strats, note = _strategy_buckets(conn)
         lc_map = _lifecycle_by_strategy(conn)
@@ -993,7 +1124,10 @@ def build_trade_chain_payload(
                 "lifecycle_label": "Economic anchor",
                 "row_tier": "primary",
                 "accent_slot": None,
-                "account_note": "Primary economic truth (paper/live); W/L and PnL are authoritative here.",
+                "account_note": (
+                    "Baseline display is policy-authoritative: WIN/LOSS only when policy_evaluations "
+                    "(Sean Jupiter) approves a trade and a matching execution row exists; otherwise NO TRADE."
+                ),
             }
         ]
         for sid in tests:
@@ -1033,7 +1167,12 @@ def build_trade_chain_payload(
             ck = str(rd.get("chain_kind") or "baseline")
             for mid in event_axis:
                 tr = _fetch_trade(conn, mid, lane=rd["lane"], strategy_id=rd["strategy_id"])
-                cells[mid] = _compact_cell(tr, market_db_path=mpath, chain_kind=ck)
+                if ck == "baseline":
+                    cells[mid] = _compact_baseline_cell_policy_bound(
+                        conn, mid, tr, market_db_path=mpath
+                    )
+                else:
+                    cells[mid] = _compact_cell(tr, market_db_path=mpath, chain_kind=ck)
             rows_out.append(
                 {
                     **rd,
@@ -1078,11 +1217,11 @@ def build_trade_chain_payload(
         "market_db_path": str(mpath) if mpath else None,
         "event_axis": event_axis,
         "event_axis_time_utc_iso": event_axis_time_utc_iso,
+        "event_axis_source": event_axis_source,
         "event_axis_note": (
-            "Columns are distinct market_event_id values (recent window, oldest left → newest right). "
-            "Canonical time per column is UTC from the execution ledger (MAX(created_at_utc) for that id). "
-            "The UI also shows your browser’s local time for the same instant. "
-            "The rightmost column is the newest event in this window."
+            "Columns are distinct market_event_id values (oldest left → newest right). "
+            "Axis prefers recent rows from market_bars_5m when available; else execution_trades. "
+            "Baseline WIN/LOSS is bound to policy_evaluations (Sean Jupiter), not ledger row presence alone."
         ),
         "jupiter_tile_narrative_schema": "jupiter_tile_narrative_v1",
         "recency": {

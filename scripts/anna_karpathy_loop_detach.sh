@@ -11,6 +11,7 @@
 #   BLACKBOX_REPO — default ~/blackbox
 #   ANNA_TMUX_SESSION — tmux name (default anna-karpathy-loop)
 #   ANNA_LOOP_INTERVAL_SEC — passed through (daemon default 5)
+#   BLACKBOX_KARPATHY_LOOP_ENABLED=1 — required for long-running loop (opt-in; see anna_karpathy_loop_daemon.py)
 #
 # Loads repo .env / .env.local via scripts/anna_karpathy_loop_run.sh so OLLAMA_BASE_URL
 # and BLACKBOX_JACK_EXECUTOR_CMD match the rest of Anna (see scripts/runtime/_ollama.py).
