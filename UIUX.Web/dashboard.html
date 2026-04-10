@@ -134,6 +134,9 @@
       flex: 1; min-height: 0; display: flex; flex-direction: column;
       margin: 0.35rem 0.5rem 0.5rem; border: 1px solid var(--panel-border); border-radius: var(--radius-md);
       background: var(--panel); overflow: hidden;
+      /* Narrower chain rail + slightly smaller event floor so ~5 columns fit at 100% page zoom on typical widths */
+      --tc-chain-width: 6.25rem;
+      --tc-event-col-min: 13rem;
     }
     .tc-section-head {
       flex-shrink: 0;
@@ -179,9 +182,9 @@
       position: sticky;
       left: 0;
       z-index: 6;
-      min-width: 10rem;
-      max-width: 10rem;
-      width: 10rem;
+      min-width: var(--tc-chain-width);
+      max-width: var(--tc-chain-width);
+      width: var(--tc-chain-width);
       box-sizing: border-box;
       background: #f8fafc !important;
       /* Second shadow: solid extension still helps where ::after does not paint (older engines). */
@@ -194,9 +197,9 @@
       position: sticky;
       left: 0;
       z-index: 5;
-      min-width: 10rem;
-      max-width: 10rem;
-      width: 10rem;
+      min-width: var(--tc-chain-width);
+      max-width: var(--tc-chain-width);
+      width: var(--tc-chain-width);
       box-sizing: border-box;
       background: #f8fafc !important;
       box-shadow: 2px 0 6px rgba(15, 23, 42, 0.08), 4px 0 0 0 #f8fafc;
@@ -210,9 +213,9 @@
       background: #e8edf4 !important;
       font-weight: 700;
       box-shadow: 2px 0 6px rgba(15, 23, 42, 0.08), 4px 0 0 0 #e8edf4;
-      min-width: 10rem;
-      max-width: 10rem;
-      width: 10rem;
+      min-width: var(--tc-chain-width);
+      max-width: var(--tc-chain-width);
+      width: var(--tc-chain-width);
       box-sizing: border-box;
       z-index: 5;
     }
@@ -225,13 +228,13 @@
     .tc-table thead th.tc-now { font-weight: 800; }
     .tc-table thead th.tc-head-ev {
       min-width: 5.25rem;
-      max-width: 9rem;
+      max-width: 8rem;
       overflow: hidden;
     }
     /* Event columns: td clips; inner surface scrolls so full tiles stay inside the cell (no sliver left of chain). */
     .tc-table tbody tr:not(.tc-empty-chain) td {
-      min-width: 20rem;
-      max-width: 42rem;
+      min-width: var(--tc-event-col-min);
+      max-width: 36rem;
       padding: 0;
       overflow: hidden;
       vertical-align: top;
@@ -266,7 +269,14 @@
     .tc-flow-new { color: var(--muted); }
     .tc-flow-now { font-size: 0.58rem; font-weight: 800; color: #0f172a; text-transform: uppercase; letter-spacing: 0.05em; }
     .tc-row-head { display: flex; flex-direction: column; gap: 0.2rem; align-items: flex-start; }
-    .tc-sid { font-size: 0.58rem; font-weight: 600; color: var(--muted); word-break: break-all; max-width: 9rem; }
+    .tc-sid {
+      font-size: 0.56rem;
+      font-weight: 600;
+      color: var(--muted);
+      word-break: break-word;
+      overflow-wrap: anywhere;
+      max-width: 100%;
+    }
     .tc-chip { display: inline-block; padding: 0.08rem 0.28rem; border-radius: 3px; font-size: 0.58rem; font-weight: 700; letter-spacing: 0.02em; }
     .tc-chip-baseline {
       background: #1e293b;
