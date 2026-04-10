@@ -88,46 +88,6 @@
     .dash-intel-card.st-limited .st { color: #a16207; }
     .dash-intel-card.st-invalid .st { color: #b91c1c; }
     .dash-intel-card .det { font-size: 0.6rem; color: #475569; line-height: 1.35; }
-    /* Jupiter policy snapshot — paper baseline: teal chrome + fire/flat value colors (operator narrative panel removed). */
-    .dash-jp {
-      flex-shrink: 0;
-      padding: 0.45rem 0.75rem 0.5rem;
-      border-bottom: 1px solid #0d9488;
-      background: linear-gradient(180deg, #ecfdf5 0%, #f0fdfa 100%);
-    }
-    .dash-jp-title { margin: 0 0 0.2rem; font-size: 0.82rem; font-weight: 800; color: #0f172a; }
-    .dash-jp-grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(9.5rem, 1fr));
-      gap: 0.35rem;
-      font-size: 0.68rem;
-    }
-    .dash-jp-kv {
-      border: 1px solid rgba(13, 148, 136, 0.35);
-      border-radius: 6px;
-      padding: 0.3rem 0.4rem;
-      background: #fff;
-    }
-    .dash-jp-kv .jk { font-size: 0.55rem; text-transform: uppercase; letter-spacing: 0.04em; color: #0f766e; font-weight: 800; }
-    .dash-jp-kv .jv { font-family: ui-monospace, monospace; font-weight: 700; margin-top: 0.12rem; word-break: break-word; }
-    .dash-jp-kv.jp-fire .jv { color: #b45309; }
-    .dash-jp-kv.jp-flat .jv { color: #475569; }
-    /* Catalog identity keys (e.g. stream_name) — distinct accent; overrides jp-flat when both set */
-    .dash-jp-kv.jp-kv-accent .jv { color: #c2410c; }
-    .dash-jp-daemon { margin-top: 0.35rem; font-size: 0.62rem; color: #334155; line-height: 1.4; }
-    .dash-jp-tick {
-      margin: 0 0 0.35rem;
-      font-size: 0.58rem;
-      font-family: ui-monospace, monospace;
-      color: #0f766e;
-      font-weight: 700;
-      letter-spacing: 0.02em;
-    }
-    @keyframes dashPanelPollFlash {
-      0% { box-shadow: inset 0 0 0 2px rgba(13, 148, 136, 0.55); }
-      100% { box-shadow: none; }
-    }
-    .dash-jp.panel-polled { animation: dashPanelPollFlash 0.5s ease-out; }
     /* Row 2 — command center */
     .dash-r2 {
       flex-shrink: 0; padding: 0.5rem 0.75rem; border-bottom: 1px solid var(--panel-border);
@@ -526,15 +486,6 @@
         <span title="Sequential learning engine — not Jupiter policy"><span class="lbl">Seq. learning</span> <span class="val" id="b-dec">—</span></span>
         <span class="sep">|</span>
         <span><span class="lbl">Last event</span> <span class="val" id="b-ev">—</span></span>
-      </div>
-
-      <!-- Jupiter policy — bar-derived paper baseline (same evaluator as ledger bridge) -->
-      <div class="dash-jp" id="dash-jp-wrap" role="region" aria-labelledby="dash-jp-h">
-        <h2 id="dash-jp-h" class="dash-jp-title">Jupiter policy (paper baseline)</h2>
-        <span id="dash-jp-poll-ms-label" hidden>1500</span>
-        <p class="dash-jp-tick" id="dash-jp-tick" aria-live="polite">—</p>
-        <div class="dash-jp-grid" id="dash-jp-grid" aria-live="polite"></div>
-        <p class="dash-jp-daemon" id="dash-jp-daemon"></p>
       </div>
 
       <!-- Anna intelligence visibility (advisor directive — real signals, no fake Online); collapsed by default -->
@@ -1238,173 +1189,12 @@
     var cr = $('live-client-refresh');
     if (cr) cr.textContent = fmtMarketTime(new Date().toISOString(), tz2);
     window.__bbNextPollEta = new Date(Date.now() + POLL_MS);
-    var umPoll = (bundle.liveness || {}).update_model || {};
-    var plabMs = $('dash-jp-poll-ms-label');
-    if (plabMs && umPoll.dashboard_poll_interval_ms != null) {
-      plabMs.textContent = String(umPoll.dashboard_poll_interval_ms);
-    }
 
     renderTC(bundle.trade_chain || {});
     renderScorecardAndOps(bundle);
     renderOB(bundle.operational_boundary);
     renderLive(bundle);
-    renderJupiterPolicy(bundle);
     renderIntel(bundle);
-  }
-
-  function applyPollTickerAndFlash(bundle, tickId, wrapId) {
-    var tick = $(tickId);
-    var wrap = $(wrapId);
-    var lv = (bundle && bundle.liveness) || {};
-    var srv = lv.bundle_snapshot_at || lv.bundle_generated_at_utc || '—';
-    var local = new Date().toISOString();
-    if (tick) {
-      tick.textContent =
-        'Poll ticker · server bundle: ' + srv + ' · UI render: ' + local.slice(11, 23) + 'Z';
-    }
-    if (wrap) {
-      wrap.classList.remove('panel-polled');
-      void wrap.offsetWidth;
-      wrap.classList.add('panel-polled');
-    }
-  }
-
-  function renderJupiterPolicy(bundle) {
-    var grid = $('dash-jp-grid');
-    var daemonEl = $('dash-jp-daemon');
-    if (!grid) return;
-    var jp = bundle.jupiter_policy_snapshot;
-    if (!jp) {
-      grid.innerHTML =
-        '<div class="dash-jp-kv" style="grid-column:1/-1"><span class="jk">snapshot</span><span class="jv">' +
-        'missing jupiter_policy_snapshot — restart API after deploy' +
-        '</span></div>';
-      if (daemonEl) daemonEl.textContent = '';
-      applyPollTickerAndFlash(bundle, 'dash-jp-tick', 'dash-jp-wrap');
-      return;
-    }
-    var rows = [];
-    if (jp.market_db_ok === false) {
-      rows.push({ k: 'market DB', v: 'missing or path wrong', cls: 'jp-flat' });
-    }
-    if (jp.error) {
-      rows.push({ k: 'error', v: String(jp.error), cls: 'jp-flat' });
-      if (jp.hint) rows.push({ k: 'hint', v: String(jp.hint), cls: 'jp-flat' });
-    } else {
-      if (jp.policy_engine != null && String(jp.policy_engine).trim() !== '') {
-        rows.push({
-          k: 'policy engine',
-          v: String(jp.policy_engine),
-          cls: 'jp-fire',
-          title:
-            'Canonical evaluator: jupiter_2_sean_policy. Env BASELINE_LEDGER_SIGNAL_MODE=sean_jupiter_v1 is a legacy mode name only.',
-        });
-      }
-      if (jp.policy_catalog_id != null && String(jp.policy_catalog_id).trim() !== '') {
-        rows.push({ k: 'catalog id', v: String(jp.policy_catalog_id), cls: 'jp-flat' });
-      }
-      if (jp.policy_spec_version != null && String(jp.policy_spec_version).trim() !== '') {
-        rows.push({
-          k: 'policy spec version',
-          v: String(jp.policy_spec_version),
-          cls: 'jp-flat',
-          title: "Sean's written spec / catalog revision — not 'Jupiter policy v1' vs v2.",
-        });
-      }
-      if (jp.baseline_signal_mode_env != null && String(jp.baseline_signal_mode_env).trim() !== '') {
-        rows.push({
-          k: 'BASELINE_LEDGER_SIGNAL_MODE',
-          v: String(jp.baseline_signal_mode_env),
-          cls: 'jp-flat',
-          title: jp.baseline_signal_mode_note ? String(jp.baseline_signal_mode_note) : '',
-        });
-      }
-      rows.push({
-        k: 'would trade (paper)',
-        v: jp.would_trade ? 'YES — ' + String(jp.side || '') : 'NO TRADE (paper)',
-        cls: jp.would_trade ? 'jp-fire' : 'jp-flat',
-      });
-      if (jp.reason_code != null) rows.push({ k: 'reason_code', v: String(jp.reason_code), cls: 'jp-flat' });
-      var al = jp.alignment || {};
-      rows.push({ k: 'short_signal', v: String(!!al.short_signal), cls: al.short_signal ? 'jp-fire' : 'jp-flat' });
-      rows.push({ k: 'long_signal', v: String(!!al.long_signal), cls: al.long_signal ? 'jp-fire' : 'jp-flat' });
-      if (al.prev_rsi != null) rows.push({ k: 'prev_rsi', v: String(al.prev_rsi), cls: 'jp-flat' });
-      if (al.current_rsi != null) rows.push({ k: 'current_rsi', v: String(al.current_rsi), cls: 'jp-flat' });
-      var eb = jp.evaluated_bar || {};
-      if (eb.market_event_id) rows.push({ k: 'market_event_id', v: String(eb.market_event_id), cls: 'jp-flat' });
-      if (eb.candle_open_utc) rows.push({ k: 'bar open (UTC)', v: String(eb.candle_open_utc), cls: 'jp-flat' });
-      if (eb.open != null && eb.high != null && eb.low != null && eb.close != null) {
-        rows.push({
-          k: 'OHLC (closed bar)',
-          v: 'O ' + Number(eb.open).toFixed(4) + ' · H ' + Number(eb.high).toFixed(4) + ' · L ' + Number(eb.low).toFixed(4) + ' · C ' + Number(eb.close).toFixed(4),
-          cls: 'jp-flat',
-        });
-      }
-      if (eb.tick_count != null) {
-        rows.push({
-          k: 'tick_count (V)',
-          v: String(eb.tick_count) + ' — oracle publish_time window, one row per Hermes parse (every_message)',
-          cls: 'jp-flat',
-        });
-      }
-      rows.push({ k: 'bars in window', v: String(jp.bars_fetched != null ? jp.bars_fetched : '—'), cls: 'jp-flat' });
-    }
-    var h = rows
-      .map(function (r) {
-        var ta = r.title ? ' title="' + esc(r.title) + '"' : '';
-        var kn = String(r.k || '')
-          .toLowerCase()
-          .replace(/\s+/g, '_');
-        var accent =
-          kn === 'stream_name' || kn === 'jupiter_id' ? ' jp-kv-accent' : '';
-        return (
-          '<div class="dash-jp-kv ' +
-          (r.cls || '') +
-          accent +
-          '"' +
-          ta +
-          '><div class="jk">' +
-          esc(r.k) +
-          '</div><div class="jv">' +
-          esc(r.v) +
-          '</div></div>'
-        );
-      })
-      .join('');
-    grid.innerHTML = h || '<div class="dash-jp-kv"><span class="jk">—</span><span class="jv">no data</span></div>';
-
-    var dtxt = '';
-    var ldb = jp.last_daemon_bridge_tick;
-    if (ldb && typeof ldb === 'object') {
-      dtxt =
-        '<strong>Last Karpathy tick — baseline bridge:</strong> ';
-      if (ldb.enabled === false) {
-        dtxt += 'BASELINE_LEDGER_BRIDGE off.';
-      } else if (ldb.no_trade) {
-        dtxt +=
-          'no trade · reason_code=' +
-          esc(String(ldb.reason_code || '—')) +
-          ' · event ' +
-          esc(String(ldb.market_event_id || '—'));
-      } else if (ldb.idempotent_skip) {
-        dtxt += 'idempotent skip (already recorded) · ' + esc(String(ldb.market_event_id || '—'));
-      } else if (ldb.ok && ldb.trade_id) {
-        dtxt +=
-          'recorded trade · side=' +
-          esc(String(ldb.side || '—')) +
-          ' · ' +
-          esc(String(ldb.market_event_id || '—'));
-      } else if (ldb.error) {
-        dtxt += esc(String(ldb.error));
-      } else {
-        dtxt += esc(JSON.stringify(ldb).slice(0, 220));
-      }
-    } else {
-      dtxt =
-        '<em>No <code>baseline_ledger_last</code> in training state yet</em> — bridge runs when the Karpathy loop daemon ticks.';
-    }
-    if (daemonEl) daemonEl.innerHTML = dtxt;
-    applyPollTickerAndFlash(bundle, 'dash-jp-tick', 'dash-jp-wrap');
   }
 
   function renderIntel(bundle) {
