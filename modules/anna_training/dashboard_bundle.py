@@ -1262,7 +1262,11 @@ def build_trade_chain_payload(
 
 def _wallet_subset(full: dict[str, Any] | None) -> dict[str, Any]:
     if not full:
-        return {"ok": False, "detail": "wallet_unavailable"}
+        return {
+            "wallet_connected": False,
+            "solana_rpc_ok": False,
+            "detail": "wallet_unavailable",
+        }
     sig = full.get("signing_proof")
     return {
         "wallet_connected": bool(full.get("wallet_connected")),

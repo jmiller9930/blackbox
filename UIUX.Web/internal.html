@@ -930,35 +930,24 @@
           var usdEl = document.getElementById("wallet-pill-usd");
           if (!pill || !bubble || !label || !usdEl) return;
           var walOk = !!(p && p.wallet_connected);
-          var rpcOk = !!(p && p.solana_rpc && p.solana_rpc.ok);
-          var fullOk = walOk && rpcOk;
           usdEl.textContent = formatWalletUsd(p);
-          if (fullOk) {
+          if (walOk) {
             bubble.className = "agent-bubble agent-bubble--connected";
-            label.textContent = "Wallet · ready";
+            label.textContent = "Wallet · connected";
             pill.classList.remove("wallet-pill--bad");
             pill.classList.add("wallet-pill--ok");
             pill.title =
-              "Solana wallet + RPC OK — " +
+              "Wallet connected (keypair) — " +
               String((p && p.public_address) || "") +
               " — open dashboard.";
-          } else if (walOk && !rpcOk) {
-            bubble.className = "agent-bubble agent-bubble--unknown";
-            label.textContent = "Wallet · RPC degraded";
-            pill.classList.remove("wallet-pill--ok");
-            pill.classList.add("wallet-pill--bad");
-            pill.title =
-              "Keypair loaded but Solana RPC probe failed — " +
-              String((p && p.solana_rpc && JSON.stringify(p.solana_rpc.detail)) || "") +
-              " — check SOLANA_RPC_URL or retry.";
           } else {
             bubble.className = "agent-bubble agent-bubble--disconnected";
-            label.textContent = "Wallet · offline";
+            label.textContent = "Wallet · disconnected";
             pill.classList.remove("wallet-pill--ok");
             pill.classList.add("wallet-pill--bad");
             pill.title =
               "Wallet not connected — " +
-              String((p && p.disconnect_reason) || (p && p.solana_rpc && JSON.stringify(p.solana_rpc.detail)) || "check KEYPAIR_PATH / RPC") +
+              String((p && p.disconnect_reason) || "set KEYPAIR_PATH") +
               " — open dashboard.";
           }
         }

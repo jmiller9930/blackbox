@@ -24,7 +24,7 @@ from typing import Any
 _REPO = Path(__file__).resolve().parents[2]
 _TRADING_CORE = _REPO / "trading_core"
 
-# Last successful payload — used when a rebuild throws (transient RPC/IO) so the UI does not flash red.
+# Last **connected** payload only — never overwrite with a disconnected response (fixes pubkey/RPC flicker).
 _WALLET_LAST_GOOD: dict[str, Any] | None = None
 _WALLET_LAST_GOOD_MONO: float = 0.0
 
@@ -301,11 +301,36 @@ def _build_wallet_status_payload_impl() -> dict[str, Any]:
     return out
 
 
+def _wallet_status_error_payload(exc: Exception) -> dict[str, Any]:
+    return {
+        "schema": "blackbox_wallet_status_v1",
+        "trace_id": uuid.uuid4().hex,
+        "wallet_connected": False,
+        "public_address": None,
+        "keypair_path_configured": bool(
+            (os.environ.get("BLACKBOX_SOLANA_KEYPAIR_PATH") or os.environ.get("KEYPAIR_PATH") or "").strip()
+        ),
+        "keypair_file_present": False,
+        "rpc_url_host": urllib.parse.urlparse(_rpc_url()).netloc or "default",
+        "solana_rpc": {"ok": False, "detail": str(exc)[:200]},
+        "jupiter_quote_sample": {"ok": False},
+        "balance_lamports": None,
+        "balance_sol": None,
+        "balance_usd_approx": None,
+        "signing_proof": None,
+        "live_trading_blocked": _live_trading_blocked(),
+        "error": "wallet_status_build_failed",
+        "note": str(exc)[:500],
+    }
+
+
 def build_wallet_status_payload() -> dict[str, Any]:
     """
-    Operator-facing API: **never raises**. Caches the last successful payload and returns it
-    for ``BLACKBOX_WALLET_STATUS_CACHE_SEC`` (default 120s) after a build failure so the dashboard
-    does not flip red on transient RPC or filesystem blips.
+    Operator-facing API: **never raises**.
+
+    Only **connected** snapshots update the latch cache. A flaky ``pubkey_derivation_failed`` or
+    exception does not replace that cache — we keep showing connected until TTL or a real
+    keypair-missing disconnect.
     """
     global _WALLET_LAST_GOOD, _WALLET_LAST_GOOD_MONO
     try:
@@ -315,9 +340,6 @@ def build_wallet_status_payload() -> dict[str, Any]:
     ttl = max(15.0, min(600.0, ttl))
     try:
         out = _build_wallet_status_payload_impl()
-        _WALLET_LAST_GOOD = copy.deepcopy(out)
-        _WALLET_LAST_GOOD_MONO = time.monotonic()
-        return out
     except Exception as e:
         if _WALLET_LAST_GOOD is not None and (time.monotonic() - _WALLET_LAST_GOOD_MONO) <= ttl:
             stale = copy.deepcopy(_WALLET_LAST_GOOD)
@@ -325,23 +347,26 @@ def build_wallet_status_payload() -> dict[str, Any]:
             stale["served_from_cache_after_error"] = True
             stale["cache_serve_error"] = str(e)[:400]
             return stale
-        return {
-            "schema": "blackbox_wallet_status_v1",
-            "trace_id": uuid.uuid4().hex,
-            "wallet_connected": False,
-            "public_address": None,
-            "keypair_path_configured": bool(
-                (os.environ.get("BLACKBOX_SOLANA_KEYPAIR_PATH") or os.environ.get("KEYPAIR_PATH") or "").strip()
-            ),
-            "keypair_file_present": False,
-            "rpc_url_host": urllib.parse.urlparse(_rpc_url()).netloc or "default",
-            "solana_rpc": {"ok": False, "detail": str(e)[:200]},
-            "jupiter_quote_sample": {"ok": False},
-            "balance_lamports": None,
-            "balance_sol": None,
-            "balance_usd_approx": None,
-            "signing_proof": None,
-            "live_trading_blocked": _live_trading_blocked(),
-            "error": "wallet_status_build_failed",
-            "note": str(e)[:500],
-        }
+        return _wallet_status_error_payload(e)
+
+    if out.get("wallet_connected"):
+        _WALLET_LAST_GOOD = copy.deepcopy(out)
+        _WALLET_LAST_GOOD_MONO = time.monotonic()
+        return out
+
+    dr = str(out.get("disconnect_reason") or "")
+    # Real disconnect: no keypair configured — clear latch and show red.
+    if "not set or file missing" in dr or ("KEYPAIR" in dr and "missing" in dr.lower()):
+        _WALLET_LAST_GOOD = None
+        return out
+
+    # Flaky pubkey / IO: keep last connected view for TTL so the UI stays stable.
+    if _WALLET_LAST_GOOD is not None and (time.monotonic() - _WALLET_LAST_GOOD_MONO) <= ttl:
+        if "pubkey" in dr.lower():
+            stale = copy.deepcopy(_WALLET_LAST_GOOD)
+            stale["trace_id"] = uuid.uuid4().hex
+            stale["latched_wallet_connected"] = True
+            stale["latched_disconnect_reason"] = dr[:300]
+            return stale
+
+    return out
