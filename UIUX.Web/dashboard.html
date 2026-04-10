@@ -302,26 +302,30 @@
       text-transform: uppercase;
       color: #64748b;
     }
-    /* Baseline chain only: “no trade” footer — bold amber outline (not Anna lanes). */
+    /* Baseline chain only: “NO TRADE” as amber-filled text + black stroke (not a filled cell box). */
     .tc-tr-baseline .tc-no-trade.tc-no-trade-amber {
-      display: block;
+      display: inline-block;
       margin-top: 0.35rem;
-      padding: 0.4rem 0.55rem;
+      padding: 0;
       font-weight: 800;
-      color: #92400e;
-      background: #fffbeb;
-      border: 3px solid #f59e0b;
-      border-radius: 4px;
-      box-sizing: border-box;
+      font-size: 0.72rem;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      background: transparent;
+      border: none;
+      color: #f59e0b;
+      -webkit-text-stroke: 1.5px #0f172a;
+      paint-order: stroke fill;
     }
     .tc-tr-baseline .tc-tile-verdict.tc-verdict-no-trade-amber {
-      color: #92400e;
-      padding: 0.4rem 0.55rem;
-      margin-bottom: 0.35rem;
-      background: #fffbeb;
-      border: 3px solid #f59e0b;
-      border-radius: 4px;
-      border-bottom: 3px solid #f59e0b;
+      padding: 0;
+      margin-bottom: 0.25rem;
+      background: transparent;
+      border: none;
+      border-bottom: none !important;
+      color: #f59e0b;
+      -webkit-text-stroke: 1.5px #0f172a;
+      paint-order: stroke fill;
     }
     .tc-tile-verdict {
       grid-column: 1 / -1;
