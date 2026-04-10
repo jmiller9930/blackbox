@@ -88,15 +88,15 @@
     .dash-intel-card.st-limited .st { color: #a16207; }
     .dash-intel-card.st-invalid .st { color: #b91c1c; }
     .dash-intel-card .det { font-size: 0.6rem; color: #475569; line-height: 1.35; }
-    /* Jupiter policy snapshot — neutral chrome; baseline accent is reserved for the trade-chain baseline row. */
+    /* Jupiter policy snapshot — paper baseline: teal chrome + fire/flat value colors (operator narrative panel removed). */
     .dash-jp {
       flex-shrink: 0;
       padding: 0.45rem 0.75rem 0.5rem;
-      border-bottom: 1px solid var(--panel-border);
-      background: var(--panel);
+      border-bottom: 1px solid #0d9488;
+      background: linear-gradient(180deg, #ecfdf5 0%, #f0fdfa 100%);
     }
     .dash-jp-title { margin: 0 0 0.2rem; font-size: 0.82rem; font-weight: 800; color: #0f172a; }
-    .dash-jp-sub { margin: 0 0 0.4rem; font-size: 0.62rem; color: #475569; line-height: 1.35; max-width: 56rem; }
+    .dash-jp-sub { margin: 0 0 0.4rem; font-size: 0.62rem; color: #0f766e; line-height: 1.35; max-width: 56rem; }
     .dash-jp-grid {
       display: grid;
       grid-template-columns: repeat(auto-fill, minmax(9.5rem, 1fr));
@@ -104,31 +104,28 @@
       font-size: 0.68rem;
     }
     .dash-jp-kv {
-      border: 1px solid var(--panel-border);
+      border: 1px solid rgba(13, 148, 136, 0.35);
       border-radius: 6px;
       padding: 0.3rem 0.4rem;
       background: #fff;
     }
-    .dash-jp-kv .jk { font-size: 0.55rem; text-transform: uppercase; letter-spacing: 0.04em; color: #64748b; font-weight: 800; }
-    .dash-jp-kv .jv { font-family: ui-monospace, monospace; font-weight: 700; margin-top: 0.12rem; word-break: break-word; color: #334155; }
-    .dash-jp-kv.jp-fire .jv,
-    .dash-jp-kv.jp-flat .jv { color: #334155; }
-    .dash-jp-operator-tile { margin-top: 0.45rem; max-width: 56rem; }
-    .dash-jp-operator-tile .dash-jp-tile-h {
-      font-size: 0.62rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.04em;
-      color: #64748b; margin: 0 0 0.25rem;
-    }
+    .dash-jp-kv .jk { font-size: 0.55rem; text-transform: uppercase; letter-spacing: 0.04em; color: #0f766e; font-weight: 800; }
+    .dash-jp-kv .jv { font-family: ui-monospace, monospace; font-weight: 700; margin-top: 0.12rem; word-break: break-word; }
+    .dash-jp-kv.jp-fire .jv { color: #b45309; }
+    .dash-jp-kv.jp-flat .jv { color: #475569; }
+    /* Catalog identity keys (e.g. stream_name) — distinct accent; overrides jp-flat when both set */
+    .dash-jp-kv.jp-kv-accent .jv { color: #c2410c; }
     .dash-jp-daemon { margin-top: 0.35rem; font-size: 0.62rem; color: #334155; line-height: 1.4; }
     .dash-jp-tick {
       margin: 0 0 0.35rem;
       font-size: 0.58rem;
       font-family: ui-monospace, monospace;
-      color: #475569;
+      color: #0f766e;
       font-weight: 700;
       letter-spacing: 0.02em;
     }
     @keyframes dashPanelPollFlash {
-      0% { box-shadow: inset 0 0 0 2px rgba(100, 116, 139, 0.45); }
+      0% { box-shadow: inset 0 0 0 2px rgba(13, 148, 136, 0.55); }
       100% { box-shadow: none; }
     }
     .dash-jp.panel-polled { animation: dashPanelPollFlash 0.5s ease-out; }
@@ -535,7 +532,6 @@
         </p>
         <p class="dash-jp-tick" id="dash-jp-tick" aria-live="polite">—</p>
         <div class="dash-jp-grid" id="dash-jp-grid" aria-live="polite"></div>
-        <div id="dash-jp-operator-tile" class="dash-jp-operator-tile" aria-live="polite"></div>
         <p class="dash-jp-daemon" id="dash-jp-daemon"></p>
       </div>
 
@@ -1268,8 +1264,6 @@
         '<div class="dash-jp-kv" style="grid-column:1/-1"><span class="jk">snapshot</span><span class="jv">' +
         'missing jupiter_policy_snapshot — restart API after deploy' +
         '</span></div>';
-      var opTileMissing = $('dash-jp-operator-tile');
-      if (opTileMissing) opTileMissing.innerHTML = '';
       if (daemonEl) daemonEl.textContent = '';
       applyPollTickerAndFlash(bundle, 'dash-jp-tick', 'dash-jp-wrap');
       return;
@@ -1343,9 +1337,15 @@
     var h = rows
       .map(function (r) {
         var ta = r.title ? ' title="' + esc(r.title) + '"' : '';
+        var kn = String(r.k || '')
+          .toLowerCase()
+          .replace(/\s+/g, '_');
+        var accent =
+          kn === 'stream_name' || kn === 'jupiter_id' ? ' jp-kv-accent' : '';
         return (
           '<div class="dash-jp-kv ' +
           (r.cls || '') +
+          accent +
           '"' +
           ta +
           '><div class="jk">' +
@@ -1357,22 +1357,6 @@
       })
       .join('');
     grid.innerHTML = h || '<div class="dash-jp-kv"><span class="jk">—</span><span class="jv">no data</span></div>';
-
-    var opTile = $('dash-jp-operator-tile');
-    if (opTile) {
-      if (jp.operator_tile_narrative) {
-        opTile.innerHTML =
-          '<p class="dash-jp-tile-h">Operator tile — Jupiter_2 policy · latest closed bar (OHLC · RSI · Supertrend · ATR · EMA · signals)</p>' +
-          jupiterNarrativeLinesHtml(
-            String(jp.operator_tile_narrative),
-            'Operator tile — latest closed bar'
-          );
-      } else {
-        opTile.innerHTML =
-          '<p class="dash-jp-tile-h" style="color:#64748b">Operator tile</p>' +
-          '<p style="margin:0;font-size:0.62rem;color:#64748b">No narrative text (policy snapshot missing tile — check market DB and API version).</p>';
-      }
-    }
 
     var dtxt = '';
     var ldb = jp.last_daemon_bridge_tick;
