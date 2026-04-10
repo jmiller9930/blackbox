@@ -364,6 +364,52 @@
     .tc-tile-narr-wrap.tc-tile-narr-baseline {
       border-left: 3px solid #475569;
       background: #f1f5f9;
+      display: flex;
+      flex-direction: column;
+      gap: 0.28rem;
+    }
+    /* Baseline only: per-line rule state (mockup — green / rose / deep red; context = slate). */
+    .tc-tile-narr-baseline .tc-narr-row {
+      display: grid;
+      grid-template-columns: 0.55rem auto 1fr;
+      column-gap: 0.3rem;
+      align-items: start;
+      padding: 0.35rem 0.45rem;
+      margin: 0;
+      border-radius: 6px;
+      border-left: 4px solid #94a3b8;
+      background: #f1f5f9;
+    }
+    .tc-tile-narr-baseline .tc-narr-row .tc-tile-bullet {
+      padding-top: 0.06rem;
+    }
+    .tc-tile-narr-baseline .tc-narr-neutral {
+      border-left-color: #94a3b8;
+      background: #f1f5f9;
+    }
+    .tc-tile-narr-baseline .tc-narr-ok {
+      border-left-color: #059669;
+      background: #d1fae5;
+    }
+    .tc-tile-narr-baseline .tc-narr-stop {
+      border-left-color: #e11d48;
+      background: #ffe4e6;
+      font-weight: 500;
+    }
+    .tc-tile-narr-baseline .tc-narr-gate {
+      border-left-color: #b91c1c;
+      background: #fecaca;
+      font-weight: 600;
+    }
+    .tc-tile-narr-baseline .tc-narr-ok .lab,
+    .tc-tile-narr-baseline .tc-narr-stop .lab,
+    .tc-tile-narr-baseline .tc-narr-gate .lab {
+      color: #334155;
+    }
+    .tc-tile-narr-baseline .tc-narr-ok .tc-tile-val,
+    .tc-tile-narr-baseline .tc-narr-stop .tc-tile-val,
+    .tc-tile-narr-baseline .tc-narr-gate .tc-tile-val {
+      color: #0f172a;
     }
     /* Trade mini cell: outcome text — no green/red for WIN / LOSS / NOT */
     .wl-WIN,
@@ -854,6 +900,32 @@
     return { lab: 'note', val: s };
   }
 
+  /**
+   * Baseline lane only: classify a full narrative line for rule-row background (mockup palette).
+   * Heuristic — same numbers stay on the line so experts can verify math vs label.
+   */
+  function classifyBaselineJupiterNarrRow(fullLine) {
+    var s = String(fullLine).trim();
+    if (!s) return 'neutral';
+    if (/^New 5-min candle formed:/i.test(s) || /^Previous candle:/i.test(s) || /^Current candle:/i.test(s)) return 'neutral';
+    if (/^Supertrend:/i.test(s)) return 'neutral';
+    if (/^ATR Analysis:/i.test(s)) {
+      if (/Volatility gate:\s*blocked/i.test(s)) return 'gate';
+      if (/Volatility gate:\s*passes/i.test(s)) return 'ok';
+      return 'neutral';
+    }
+    if (/^Price vs EMA200:/i.test(s)) return 'neutral';
+    if (/^Signal Breakdown\s*(\u2192|->)\s*Long=/i.test(s)) return /\bLong=true\b/.test(s) ? 'ok' : 'stop';
+    if (/^Signal Breakdown\s*(\u2192|->)\s*Short=/i.test(s)) return /\bShort=true\b/.test(s) ? 'ok' : 'stop';
+    if (/^Signals:/i.test(s)) return 'neutral';
+    if (/^Filter:/i.test(s)) {
+      if (/ATR ratio below|extreme RSI/i.test(s)) return 'gate';
+      return 'stop';
+    }
+    if (/^ATR-Supertrend SIGNAL/i.test(s) || /^Processing\s+/i.test(s)) return 'ok';
+    return 'neutral';
+  }
+
   function jupiterNarrativeLinesHtml(raw, titleAttr, baselineLane) {
     if (raw == null || String(raw).trim() === '') return '';
     var text = String(raw).replace(/\r\n/g, '\n');
@@ -861,16 +933,22 @@
     var rows = [];
     var j;
     for (j = 0; j < lines.length; j++) {
-      var row = jupiterLineToLabVal(lines[j]);
+      var fullLine = lines[j];
+      var row = jupiterLineToLabVal(fullLine);
       if (!row.lab && !row.val) continue;
-      rows.push(
+      var inner =
         '<span class="tc-tile-bullet" aria-hidden="true">•</span>' +
         '<span class="lab">' +
         esc(row.lab) +
         '</span><span class="tc-tile-val">' +
         esc(row.val) +
-        '</span>'
-      );
+        '</span>';
+      if (baselineLane) {
+        var rc = classifyBaselineJupiterNarrRow(fullLine);
+        rows.push('<div class="tc-narr-row tc-narr-' + rc + '">' + inner + '</div>');
+      } else {
+        rows.push(inner);
+      }
     }
     if (!rows.length) return '';
     var ta = titleAttr ? ' title="' + esc(titleAttr) + '"' : '';

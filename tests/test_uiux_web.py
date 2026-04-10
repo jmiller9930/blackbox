@@ -88,6 +88,14 @@ def test_login_wires_app_and_form() -> None:
     ).read_text(encoding="utf-8")
 
 
+def test_dashboard_baseline_jupiter_rule_row_colors() -> None:
+    text = (WEB / "dashboard.html").read_text(encoding="utf-8")
+    assert "classifyBaselineJupiterNarrRow" in text
+    assert "tc-narr-gate" in text
+    assert "tc-narr-ok" in text
+    assert "tc-narr-stop" in text
+
+
 def test_app_js_three_dev_roles_and_staff_helpers() -> None:
     text = (WEB / "app.js").read_text(encoding="utf-8")
     assert "internal_member" in text
