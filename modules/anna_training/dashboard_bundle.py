@@ -547,26 +547,21 @@ def _event_axis_jupiter_tile_narratives(
     """
     Per-``market_event_id`` multi-line Jupiter / Sean policy tile (operator requirement).
 
-    Prefer ``policy_evaluations`` features (persisted on baseline tick); else recompute from
-    ``market_bars_5m`` when the event appears in the recent bar window.
+    **Ledger-only:** narrative is formatted from ``policy_evaluations`` rows persisted on baseline tick.
+    There is **no** bar recompute fallback — operator UI must not show a second "truth" from
+    ``evaluate_sean_jupiter_baseline_v1`` when the posted row is missing or incomplete.
+    (Full OHLC lines require ``features["tile"]``; otherwise ``format_jupiter_tile_narrative_v1``
+    emits a short ledger-sourced stub.)
     """
     from modules.anna_training.execution_ledger import (
         RESERVED_STRATEGY_BASELINE,
         fetch_policy_evaluation_for_market_event,
     )
-    from modules.anna_training.sean_jupiter_baseline_signal import (
-        MIN_BARS,
-        evaluate_sean_jupiter_baseline_v1,
-        format_jupiter_tile_narrative_v1,
-    )
+    from modules.anna_training.sean_jupiter_baseline_signal import format_jupiter_tile_narrative_v1
 
     out: dict[str, str] = {}
     if not event_axis:
         return out
-
-    mpath = market_db_path
-    _ensure_runtime_for_market_imports()
-    from market_data.bar_lookup import fetch_recent_bars_asc
 
     for mid in event_axis:
         mid_s = str(mid or "").strip()
@@ -579,64 +574,22 @@ def _event_axis_jupiter_tile_narratives(
             strategy_id=RESERVED_STRATEGY_BASELINE,
             signal_mode="sean_jupiter_v1",
         )
-        if row and isinstance(row.get("features"), dict):
-            f = dict(row["features"])
-            tile_stored = f.get("tile")
-            if isinstance(tile_stored, dict) and tile_stored:
-                pb = f.get("policy_blockers")
-                pbl = [str(x) for x in pb] if isinstance(pb, list) else None
-                out[mid_s] = format_jupiter_tile_narrative_v1(
-                    features=f,
-                    reason_code=str(row.get("reason_code") or ""),
-                    trade=bool(row.get("trade")),
-                    side=str(row.get("side") or "flat"),
-                    policy_blockers=pbl,
-                )
-                continue
-        if not mpath or not mpath.is_file():
-            out[mid_s] = format_jupiter_tile_narrative_v1(
-                features={},
-                reason_code="market_db_unavailable",
-                trade=False,
-                side="flat",
-            )
-            continue
-        try:
-            bars = fetch_recent_bars_asc(limit=280, db_path=mpath)
-            idx = next(
-                (
-                    j
-                    for j, b in enumerate(bars)
-                    if str(b.get("market_event_id") or "").strip() == mid_s
-                ),
-                None,
-            )
-            if idx is None or len(bars[: idx + 1]) < MIN_BARS:
-                out[mid_s] = format_jupiter_tile_narrative_v1(
-                    features={},
-                    reason_code="bar_not_in_window_or_short_history",
-                    trade=False,
-                    side="flat",
-                )
-                continue
-            sub = bars[: idx + 1]
-            sig = evaluate_sean_jupiter_baseline_v1(bars_asc=sub)
-            sf = dict(sig.features) if isinstance(sig.features, dict) else {}
-            pb = sf.get("policy_blockers")
+        if row:
+            f = dict(row["features"]) if isinstance(row.get("features"), dict) else {}
+            pb = f.get("policy_blockers")
             pbl = [str(x) for x in pb] if isinstance(pb, list) else None
             out[mid_s] = format_jupiter_tile_narrative_v1(
-                features=sf,
-                reason_code=sig.reason_code,
-                trade=sig.trade,
-                side=sig.side,
+                features=f,
+                reason_code=str(row.get("reason_code") or ""),
+                trade=bool(row.get("trade")),
+                side=str(row.get("side") or "flat"),
                 policy_blockers=pbl,
             )
-        except Exception as e:
-            out[mid_s] = (
-                "Jupiter tile (event column): build failed — "
-                + str(e)[:400]
-                + "\n(Check BLACKBOX_MARKET_DATA_PATH, execution_ledger policy_evaluations, API restart after deploy.)"
-            )
+            continue
+        out[mid_s] = (
+            "No baseline policy_evaluations row for this market_event_id.\n"
+            "Operator tile is ledger-only — persist policy on baseline tick before a full narrative appears here."
+        )
     return out
 
 
