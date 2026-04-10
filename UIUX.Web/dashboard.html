@@ -21,6 +21,14 @@
     }
     .dash-nav a:hover { background: rgba(15, 23, 42, 0.06); }
     .dash-nav a.is-active { background: var(--accent); color: var(--accent-contrast); }
+    .dash-nav button.dash-nav-linklike {
+      display: block; width: 100%; text-align: left;
+      padding: 0.45rem 0.65rem; border-radius: var(--radius-md);
+      font-size: 0.85rem; font-weight: 600; color: var(--text);
+      border: none; background: transparent; cursor: pointer;
+      font-family: inherit;
+    }
+    .dash-nav button.dash-nav-linklike:hover { background: rgba(15, 23, 42, 0.06); }
     .dash-main {
       flex: 1; display: flex; flex-direction: column; min-width: 0; min-height: 0;
       background: linear-gradient(180deg, #f8f8fa 0%, #eef1f5 100%);
@@ -388,6 +396,8 @@
       <a href="/anna/sequential-learning">Learning Engine</a>
       <a href="/anna/training">Training Dashboard</a>
       <a href="/intelligence-method.html">Intelligence METHOD</a>
+      <button type="button" class="dash-nav-linklike" id="navDashPaths" title="Open run paths (same as Start dialog)">Run configuration</button>
+      <button type="button" class="dash-nav-linklike" id="navDashOb" title="What runs vs shadow vs paper (from bundle)">Operational boundary</button>
     </nav>
     <div class="dash-main">
       <!-- Row 0: liveness / cadence (heartbeat on each poll) -->
@@ -578,23 +588,25 @@
     var dob = $('dash-ob-dialog');
     var bp = $('btnDashPaths');
     var bo = $('btnDashOb');
+    var np = $('navDashPaths');
+    var no = $('navDashOb');
     var cr = $('dash-run-dialog-close');
     var co = $('dash-ob-dialog-close');
-    if (bp && dr && typeof dr.showModal === 'function') {
-      bp.addEventListener('click', function () {
-        dr.showModal();
-      });
+    function openRun() {
+      if (dr && typeof dr.showModal === 'function') dr.showModal();
     }
+    function openOb() {
+      if (dob && typeof dob.showModal === 'function') dob.showModal();
+    }
+    if (bp && dr) bp.addEventListener('click', openRun);
+    if (np && dr) np.addEventListener('click', openRun);
     if (cr && dr) {
       cr.addEventListener('click', function () {
         dr.close();
       });
     }
-    if (bo && dob && typeof dob.showModal === 'function') {
-      bo.addEventListener('click', function () {
-        dob.showModal();
-      });
-    }
+    if (bo && dob) bo.addEventListener('click', openOb);
+    if (no && dob) no.addEventListener('click', openOb);
     if (co && dob) {
       co.addEventListener('click', function () {
         dob.close();
