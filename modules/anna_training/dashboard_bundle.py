@@ -547,8 +547,9 @@ def _event_axis_jupiter_tile_narratives(
     """
     Per-``market_event_id`` multi-line Jupiter / Sean policy tile (operator requirement).
 
-    Prefer ``policy_evaluations`` features (persisted on baseline tick); else recompute from
-    ``market_bars_5m`` when the event appears in the recent bar window.
+    When a ``policy_evaluations`` row exists for the event, the narrative is **always** derived
+    from persisted ``features_json`` (and row trade/side/reason_code) — never recomputed from
+    bars. Recompute from ``market_bars_5m`` only when **no** policy row is present.
     """
     from modules.anna_training.execution_ledger import (
         RESERVED_STRATEGY_BASELINE,
@@ -579,20 +580,18 @@ def _event_axis_jupiter_tile_narratives(
             strategy_id=RESERVED_STRATEGY_BASELINE,
             signal_mode="sean_jupiter_v1",
         )
-        if row and isinstance(row.get("features"), dict):
-            f = dict(row["features"])
-            tile_stored = f.get("tile")
-            if isinstance(tile_stored, dict) and tile_stored:
-                pb = f.get("policy_blockers")
-                pbl = [str(x) for x in pb] if isinstance(pb, list) else None
-                out[mid_s] = format_jupiter_tile_narrative_v1(
-                    features=f,
-                    reason_code=str(row.get("reason_code") or ""),
-                    trade=bool(row.get("trade")),
-                    side=str(row.get("side") or "flat"),
-                    policy_blockers=pbl,
-                )
-                continue
+        if row:
+            f = dict(row["features"]) if isinstance(row.get("features"), dict) else {}
+            pb = f.get("policy_blockers")
+            pbl = [str(x) for x in pb] if isinstance(pb, list) else None
+            out[mid_s] = format_jupiter_tile_narrative_v1(
+                features=f,
+                reason_code=str(row.get("reason_code") or ""),
+                trade=bool(row.get("trade")),
+                side=str(row.get("side") or "flat"),
+                policy_blockers=pbl,
+            )
+            continue
         if not mpath or not mpath.is_file():
             out[mid_s] = format_jupiter_tile_narrative_v1(
                 features={},
