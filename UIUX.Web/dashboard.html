@@ -196,8 +196,8 @@
       text-align: right;
       line-height: 1.4;
     }
-    .tc-comparative .tc-sum-win { color: #15803d; }
-    .tc-comparative .tc-sum-loss { color: #b91c1c; }
+    /* Anna vs baseline aggregate: no green/red — neutral text only */
+    .tc-comparative .tc-sum-stat { color: #0f172a; font-weight: 700; }
     .dash-r4 .scroll {
       flex: 1; overflow: auto; min-height: 12rem;
       scroll-padding-inline: 0.5rem;
@@ -212,17 +212,13 @@
     }
     .tc-table thead th.tc-sticky-chain { background: #f8fafc !important; }
     .tc-tr-baseline th:first-child { border-left: 3px solid #0f172a; }
-    /* Anna rows: soft blue band + sky accent (separate from baseline). */
+    /* Anna rows: same neutral band as baseline chain column (no blue / no win-loss tint). */
     .tc-tr-anna th:first-child {
-      background: #e8f4fc !important;
-      border-left: 3px solid #38bdf8;
+      background: #f8fafc !important;
+      border-left: 3px solid #94a3b8;
       font-weight: 600;
-      box-shadow: 2px 0 6px rgba(14, 165, 233, 0.12);
+      box-shadow: 2px 0 6px rgba(15, 23, 42, 0.06);
     }
-    .tc-tr-anna.tc-acc-0 th:first-child { border-left-color: #0ea5e9; }
-    .tc-tr-anna.tc-acc-1 th:first-child { border-left-color: #38bdf8; }
-    .tc-tr-anna.tc-acc-2 th:first-child { border-left-color: #7dd3fc; }
-    .tc-tr-anna.tc-acc-3 th:first-child { border-left-color: #bae6fd; }
     /* Newest column: ring + “now” in header — column recency is separate */
     .tc-table thead th.tc-now,
     .tc-table tbody td.tc-now { box-shadow: inset 0 0 0 2px rgba(15, 23, 42, 0.42); }
@@ -278,6 +274,7 @@
       letter-spacing: 0.06em;
       margin-bottom: 0.15rem;
       line-height: 1.2;
+      color: #334155;
     }
     /* Jupiter 5m narrative — same rhythm as tc-mini trade grid: bullet + lab + value (no row-level policy coloring). */
     .tc-tile-narr-wrap {
@@ -322,15 +319,33 @@
       color: #1e293b;
       line-height: 1.45;
     }
-    .wl-WIN { color: #15803d; font-weight: 800; }
-    .wl-LOSS { color: #b91c1c; font-weight: 800; }
-    .wl-FLAT { color: #64748b; font-weight: 700; }
-    .tc-mini-muted .wl-WIN, .tc-mini-muted .wl-LOSS, .tc-mini-muted .wl-FLAT { font-weight: 600; color: #64748b; }
-    .wl-EVAL { color: #64748b; font-weight: 600; font-style: italic; }
-    .tc-vs { font-size: 0.58rem; font-weight: 800; letter-spacing: 0.02em; margin-bottom: 0.2rem; padding: 0.12rem 0.2rem; border-radius: 3px; }
-    .tc-vs-win { background: rgba(21, 128, 61, 0.14); color: #14532d; }
-    .tc-vs-notwin { background: rgba(185, 28, 28, 0.1); color: #991b1b; }
-    .tc-vs-exc { background: rgba(100, 116, 139, 0.12); color: #475569; font-weight: 700; }
+    /* Trade mini cell: outcome text — no green/red for WIN / LOSS / NOT */
+    .wl-WIN,
+    .wl-LOSS,
+    .wl-FLAT,
+    .wl-EVAL {
+      color: #334155;
+      font-weight: 700;
+      font-style: normal;
+    }
+    .tc-mini-muted .wl-WIN,
+    .tc-mini-muted .wl-LOSS,
+    .tc-mini-muted .wl-FLAT,
+    .tc-mini-muted .wl-EVAL {
+      font-weight: 600;
+      color: #64748b;
+    }
+    .tc-vs {
+      font-size: 0.58rem;
+      font-weight: 700;
+      letter-spacing: 0.02em;
+      margin-bottom: 0.2rem;
+      padding: 0.12rem 0.2rem;
+      border-radius: 3px;
+      background: #f1f5f9;
+      color: #334155;
+      border: 1px solid #e2e8f0;
+    }
     details.dash-below { margin: 0.25rem 0.5rem; border: 1px solid var(--panel-border); border-radius: var(--radius-md); background: #fff; }
     details.dash-below > summary { padding: 0.4rem 0.6rem; cursor: pointer; font-weight: 600; font-size: 0.78rem; }
     details.dash-below .body { padding: 0 0.6rem 0.6rem; font-size: 0.78rem; }
@@ -851,9 +866,9 @@
     var vsLine = '';
     if (ck === 'anna_test' || ck === 'anna_strategy') {
       if (vs === 'WIN') {
-        vsLine = '<div class="tc-vs tc-vs-win">vs baseline: WIN</div>';
+        vsLine = '<div class="tc-vs">vs baseline: WIN</div>';
       } else if (vs === 'NOT_WIN') {
-        vsLine = '<div class="tc-vs tc-vs-notwin">vs baseline: NOT WIN</div>';
+        vsLine = '<div class="tc-vs">vs baseline: NOT WIN</div>';
       } else if (vs === 'EXCLUDED') {
         var excl = c.vs_baseline_excl != null ? String(c.vs_baseline_excl) : '';
         var exHint =
@@ -865,7 +880,7 @@
                 ? ' (' + esc(excl) + ')'
                 : '';
         vsLine =
-          '<div class="tc-vs tc-vs-exc" title="' +
+          '<div class="tc-vs" title="' +
           esc(excl || 'excluded') +
           '">vs baseline: n/a' +
           exHint +
@@ -952,15 +967,8 @@
   }
 
   function tcColumnBgOnly(idx, n, row) {
+    void row;
     var base = tcRecencyBg(idx, n);
-    var ck = row.chain_kind || '';
-    if (ck === 'anna_test' || ck === 'anna_strategy') {
-      return (
-        'background:' +
-        'linear-gradient(0deg, rgba(219,234,254,0.78), rgba(219,234,254,0.78)),' +
-        'linear-gradient(0deg,' + base + ',' + base + ')'
-      );
-    }
     return 'background-color:' + base;
   }
 
@@ -1558,8 +1566,13 @@
       if (wAgg != null && nwAgg != null && xAgg != null) {
         compEl.innerHTML =
           'Anna vs baseline (this window): ' +
-          '<span class="tc-sum-win">WIN ' + wAgg + '</span> · ' +
-          '<span class="tc-sum-loss">NOT ' + nwAgg + '</span> · n/a ' + xAgg;
+          '<span class="tc-sum-stat">WIN ' +
+          wAgg +
+          '</span> · ' +
+          '<span class="tc-sum-stat">NOT ' +
+          nwAgg +
+          '</span> · n/a ' +
+          xAgg;
         if (explainEl) {
           if (wAgg === 0 && nwAgg === 0 && xAgg > 0) {
             explainEl.textContent =
