@@ -134,8 +134,8 @@
       flex: 1; min-height: 0; display: flex; flex-direction: column;
       margin: 0.35rem 0.5rem 0.5rem; border: 1px solid var(--panel-border); border-radius: var(--radius-md);
       background: var(--panel); overflow: hidden;
-      /* Narrower chain rail + slightly smaller event floor so ~5 columns fit at 100% page zoom on typical widths */
-      --tc-chain-width: 6.25rem;
+      /* Chain rail: wide enough for row labels to wrap fully; event columns pan via slider when needed */
+      --tc-chain-width: 9.5rem;
       --tc-event-col-min: 13rem;
     }
     .tc-section-head {
@@ -201,6 +201,7 @@
       max-width: var(--tc-chain-width);
       width: var(--tc-chain-width);
       box-sizing: border-box;
+      overflow: visible;
       background: #f8fafc !important;
       box-shadow: 2px 0 6px rgba(15, 23, 42, 0.08), 4px 0 0 0 #f8fafc;
       border-right: 2px solid #cbd5e1;
@@ -217,6 +218,7 @@
       max-width: var(--tc-chain-width);
       width: var(--tc-chain-width);
       box-sizing: border-box;
+      overflow: visible;
       z-index: 5;
     }
     .tc-table tbody tr.tc-tr-baseline th:first-child::after {
@@ -1221,21 +1223,13 @@
     sc.scrollLeft = Math.round(best);
   }
 
-  /** Scroll trade chain horizontally to the rightmost position where scrollLeft aligns with a column edge (no mid-column fragment at the sticky seam). */
+  /** Scroll flush to the right edge so the newest column(s) are fully visible. (Using only column snap points undershoots max and clips the far right.) */
   function tcScrollTradeChainToEnd() {
     var sc = $('tc-scroll');
     if (!sc) return;
     function apply() {
       var max = Math.max(0, sc.scrollWidth - sc.clientWidth);
-      var snaps = tcTradeChainColumnSnapScrollLefts();
-      var best = 0;
-      var j;
-      for (j = 0; j < snaps.length; j++) {
-        if (snaps[j] <= max + 0.5) {
-          best = snaps[j];
-        }
-      }
-      sc.scrollLeft = Math.round(best);
+      sc.scrollLeft = Math.round(max);
     }
     requestAnimationFrame(function () {
       requestAnimationFrame(function () {
