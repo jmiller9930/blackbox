@@ -2,6 +2,12 @@
 
 **Venue:** **Jupiter trade policy** only for current operator work. Deprecated venue paths are not used for proof — see [`docs/architect/ANNA_GOES_TO_SCHOOL.md`](../docs/architect/ANNA_GOES_TO_SCHOOL.md).
 
+### Single story of truth (operator)
+
+For **baseline**, the **binary** question — *for this `market_event_id`, did we post “trade permitted” vs “no trade”?* — is answered in **one place**: the **execution ledger** (`policy_evaluations` + baseline `execution_trades` when a trade exists). **Canonical market bars** live in **market SQLite** (`market_bars_5m`); the **bridge/tick** runs policy on new closed bars and **writes** that decision (including structured **`features` / `tile`** for the operator tile) into the ledger. The dashboard should reflect **that posted row**, not a second parallel “truth” from ad-hoc recompute.
+
+The **§3 harness** below runs **`evaluate_sean_jupiter_baseline_v1`** on bars for **parity / testing**; **operator truth** is still **whatever the bridge persisted** to the ledger for each bar.
+
 ## 1) Pyth-only signal
 
 Proves **Hermes SSE** for the **SOL/USD** feed used with canonical market ingest.
@@ -55,7 +61,7 @@ Env:
 
 ### Baseline ledger vs ingest (operator)
 
-Hermes/Pyth ingest closes a 5m bucket and upserts `market_bars_5m` via `refresh_last_closed_bar_from_ticks`. **After each successful upsert**, the same path calls `run_baseline_ledger_bridge_tick` so `policy_evaluations` and baseline `execution_trades` stay aligned with the tape — **not only** when the Karpathy loop daemon runs.
+Hermes/Pyth ingest closes a 5m bucket and upserts `market_bars_5m` via `refresh_last_closed_bar_from_ticks`. **After each successful upsert**, the same path calls `run_baseline_ledger_bridge_tick` so **`policy_evaluations`** (full policy/tile payload for the operator surface) and baseline **`execution_trades`** stay aligned with the tape — **not only** when the Karpathy loop daemon runs. If those writes are missing or incomplete, the UI cannot claim a single posted story for that bar until persistence is fixed.
 
 - **`BASELINE_LEDGER_AFTER_CANONICAL_BAR`** — default **on** (`1`). Set to `0` to skip the hook (unit tests do this; rare prod use).
 - **`BLACKBOX_EXECUTION_LEDGER_PATH`** — should point at the same `execution_ledger.db` the dashboard and audits use (default `data/sqlite/execution_ledger.db` under repo root).
