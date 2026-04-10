@@ -229,7 +229,7 @@
       padding-bottom: 0.2rem;
       border-bottom: 1px solid rgba(13, 148, 136, 0.35);
     }
-    /* Jupiter 5m narrative in Anna lanes — bullet + lab + value (baseline row omits narrative; see cellMini). */
+    /* Jupiter 5m narrative — bullet + lab + value (baseline + Anna lanes; policy KV strip was removed from page header). */
     .tc-tile-narr-wrap {
       grid-column: 1 / -1;
       display: grid;
@@ -698,13 +698,10 @@
   }
 
   function cellMini(c, row) {
-    var ckRow = (row && row.chain_kind) || '';
     var narr = c && c.jupiter_tile_narrative ? String(c.jupiter_tile_narrative) : '';
-    /* Baseline row: policy detail lives in the Jupiter KV strip above — do not repeat the narrative tile here. */
-    var narrEl =
-      narr && ckRow !== 'baseline'
-        ? jupiterNarrativeLinesHtml(narr, 'Jupiter / Sean policy (5m bar)')
-        : '';
+    var narrEl = narr
+      ? jupiterNarrativeLinesHtml(narr, 'Jupiter / Sean policy (5m bar)')
+      : '';
     if (!c || c.empty) {
       return (
         narrEl +
