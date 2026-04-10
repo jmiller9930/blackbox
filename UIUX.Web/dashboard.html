@@ -1528,11 +1528,11 @@
     var st = String(ban.ui_state || ls.ui_state || seq.ui_state || 'unknown').toUpperCase();
     $('b-state').textContent = st;
     $('b-mode').textContent = String(ban.mode_label || (bundle.system_mode && bundle.system_mode.label) || '—');
-    // Single operator signal: keypair + pubkey (bundle.wallet_connected). RPC is not "connection."
-    var walOk = !!w.wallet_connected;
+    // Connected = backend says so OR we have a pubkey to show (same meaning for the operator).
+    var walOk = !!(w.wallet_connected || (w.public_address && String(w.public_address).trim()));
     $('b-wal').textContent = walOk ? '🟢' : '🔴';
     $('b-wal').title = walOk
-      ? 'Wallet connected (keypair loaded)'
+      ? 'Wallet connected (keypair / address on file)'
       : 'Wallet not connected — no keypair or pubkey';
     $('b-bal').textContent = fmtUsd(w);
     $('b-dec').textContent = esc(ban.last_decision_compact || '—');
