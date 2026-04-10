@@ -14,8 +14,10 @@ from modules.anna_training.execution_ledger import (
     upsert_policy_evaluation,
 )
 from modules.anna_training.dashboard_bundle import (
+    BASELINE_TRADES_REPORT_SCHEMA,
     _event_axis_jupiter_tile_narratives,
     _pair_vs_baseline_for_cells,
+    build_baseline_trades_report,
     build_dashboard_bundle,
     build_trade_chain_payload,
 )
@@ -282,5 +284,17 @@ def test_jupiter_tile_narrative_authoritative_from_ledger_without_tile(
     text = narr.get(mid, "")
     assert "ledger_authoritative_fixture" in text
     assert "New 5-min candle formed" not in text
+
+
+def test_build_baseline_trades_report_schema() -> None:
+    rep = build_baseline_trades_report(limit=10, scope="all")
+    assert rep.get("schema") == BASELINE_TRADES_REPORT_SCHEMA
+    assert "rows" in rep and isinstance(rep["rows"], list)
+    assert "meta" in rep and isinstance(rep["meta"], dict)
+    assert rep["meta"].get("scope") == "all"
+    for row in rep["rows"]:
+        assert "baseline_authority" in row
+        assert row["baseline_authority"] in ("TRADE", "NO_TRADE")
+        assert "baseline_authority_reason" in row
 
 

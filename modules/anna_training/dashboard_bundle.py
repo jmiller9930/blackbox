@@ -817,6 +817,170 @@ def _recent_baseline_trades_for_dashboard_strip(
     return out
 
 
+BASELINE_TRADES_REPORT_SCHEMA = "blackbox_baseline_trades_report_v1"
+
+
+def build_baseline_trades_report(
+    *,
+    db_path: Path | None = None,
+    market_db_path: Path | None = None,
+    from_utc_iso: str | None = None,
+    to_utc_iso: str | None = None,
+    limit: int = 50,
+    scope: str = "all",
+    max_scan: int = 20000,
+) -> dict[str, Any]:
+    """
+    Filtered baseline ledger report with policy-authoritative **TRADE** vs **NO_TRADE** per row.
+
+    ``scope``: ``all`` | ``trade`` | ``no_trade`` — filters rows after policy classification.
+
+    Time window uses ``COALESCE(entry_time, created_at_utc)`` compared in UTC. Rows without a
+    parseable timestamp are excluded when any bound is set.
+    """
+    db_path = db_path or default_execution_ledger_path()
+    mpath = market_db_path if market_db_path is not None else _market_db_path()
+    lim = max(1, min(500, int(limit)))
+    scan_cap = max(100, min(100000, int(max_scan)))
+    sc = str(scope or "all").strip().lower()
+    if sc not in ("all", "trade", "no_trade"):
+        sc = "all"
+
+    from_dt = _parse_iso_ts(from_utc_iso) if (from_utc_iso and str(from_utc_iso).strip()) else None
+    to_dt = _parse_iso_ts(to_utc_iso) if (to_utc_iso and str(to_utc_iso).strip()) else None
+    if from_dt and to_dt and from_dt > to_dt:
+        from_dt, to_dt = to_dt, from_dt
+
+    def _utc(dt: datetime) -> datetime:
+        if dt.tzinfo is None:
+            return dt.replace(tzinfo=timezone.utc)
+        return dt.astimezone(timezone.utc)
+
+    conn = connect_ledger(db_path)
+    rows_out: list[dict[str, Any]] = []
+    scanned = 0
+    try:
+        ensure_execution_ledger_schema(conn)
+        # When a time window is set, scan enough history that older days are not cut off by
+        # "newest first" limits; cap total fetch for safety.
+        wide_history = bool(from_dt or to_dt)
+        fetch_limit = 500000 if wide_history else scan_cap
+        cur = conn.execute(
+            """
+            SELECT market_event_id, side, symbol, timeframe, entry_time, entry_price, exit_price,
+                   exit_reason, exit_time, size, pnl_usd, created_at_utc, trade_id, mode
+            FROM execution_trades
+            WHERE lane = 'baseline' AND strategy_id = ?
+            ORDER BY COALESCE(created_at_utc, entry_time, '') DESC
+            LIMIT ?
+            """,
+            (RESERVED_STRATEGY_BASELINE, fetch_limit),
+        )
+        cols = [d[0] for d in cur.description]
+        candidates: list[tuple[datetime, dict[str, Any]]] = []
+        for r in cur.fetchall():
+            scanned += 1
+            row = dict(zip(cols, r))
+            raw_t = row.get("entry_time") or row.get("created_at_utc")
+            ts = _parse_iso_ts(str(raw_t) if raw_t is not None else None)
+            if ts is not None:
+                ts = ts.astimezone(timezone.utc) if ts.tzinfo else ts.replace(tzinfo=timezone.utc)
+            if from_dt or to_dt:
+                if ts is None:
+                    continue
+                tsu = _utc(ts)
+                if from_dt and tsu < _utc(from_dt):
+                    continue
+                if to_dt and tsu > _utc(to_dt):
+                    continue
+            candidates.append((ts or datetime(1970, 1, 1, tzinfo=timezone.utc), row))
+
+        candidates.sort(key=lambda x: x[0], reverse=True)
+
+        mids_for_tiles: list[str] = []
+        for _ts, ledger_row in candidates:
+            mid = str(ledger_row.get("market_event_id") or "").strip()
+            cell = _compact_baseline_cell_policy_bound(
+                conn, mid, ledger_row, market_db_path=mpath
+            )
+            reason = str(cell.get("baseline_display_reason") or "")
+            is_trade = reason == "policy_approved_execution"
+            authority = "TRADE" if is_trade else "NO_TRADE"
+            if sc == "trade" and authority != "TRADE":
+                continue
+            if sc == "no_trade" and authority != "NO_TRADE":
+                continue
+
+            sym = str(ledger_row.get("symbol") or "").strip()
+            tf = str(ledger_row.get("timeframe") or "").strip()
+            t_iso = _normalize_utc_iso_for_axis(
+                ledger_row.get("entry_time") or ledger_row.get("created_at_utc")
+            )
+            pnl = ledger_row.get("pnl_usd")
+            ep = ledger_row.get("entry_price")
+            xp = ledger_row.get("exit_price")
+            mae_val: float | None = None
+            if sym and mpath and mpath.is_file():
+                mae_val, _ = compute_mae_usd_v1(
+                    canonical_symbol=sym,
+                    side=ledger_row.get("side"),
+                    entry_price=ledger_row.get("entry_price"),
+                    size=ledger_row.get("size"),
+                    entry_time=ledger_row.get("entry_time"),
+                    exit_time=ledger_row.get("exit_time"),
+                    market_db_path=mpath,
+                )
+
+            rows_out.append(
+                {
+                    "market_event_id": mid,
+                    "side": str(ledger_row.get("side") or "").strip().lower(),
+                    "symbol": sym or None,
+                    "timeframe": tf or None,
+                    "mode": str(ledger_row.get("mode") or "").strip() or None,
+                    "time_utc_iso": t_iso or "",
+                    "outcome": _strip_outcome_from_pnl(pnl),
+                    "pnl_usd": float(pnl) if pnl is not None else None,
+                    "entry": float(ep) if ep is not None else None,
+                    "exit": float(xp) if xp is not None else None,
+                    "size": float(ledger_row["size"]) if ledger_row.get("size") is not None else None,
+                    "exit_reason": str(ledger_row.get("exit_reason") or "").strip() or None,
+                    "trade_id": str(ledger_row.get("trade_id") or "").strip() or None,
+                    "mae_usd": round(mae_val, 6) if mae_val is not None else None,
+                    "baseline_authority": authority,
+                    "baseline_authority_reason": reason,
+                    "policy_outcome_display": str(cell.get("outcome_display") or ""),
+                    "policy_outcome": str(cell.get("outcome") or ""),
+                }
+            )
+            mids_for_tiles.append(mid)
+            if len(rows_out) >= lim:
+                break
+
+        tile_narr: dict[str, str] = {}
+        if mids_for_tiles:
+            tile_narr = _event_axis_jupiter_tile_narratives(conn, mids_for_tiles, mpath)
+        for r in rows_out:
+            mk = str(r.get("market_event_id") or "").strip()
+            r["jupiter_tile_narrative"] = tile_narr.get(mk, "") if mk else ""
+    finally:
+        conn.close()
+
+    return {
+        "schema": BASELINE_TRADES_REPORT_SCHEMA,
+        "rows": rows_out,
+        "meta": {
+            "from_utc_iso": from_utc_iso,
+            "to_utc_iso": to_utc_iso,
+            "limit": lim,
+            "scope": sc,
+            "scanned_execution_rows": scanned,
+            "max_scan_cap": scan_cap,
+            "ledger_path": str(db_path),
+        },
+    }
+
+
 def _normalize_utc_iso_for_axis(ts: Any) -> str | None:
     """Normalize ledger timestamp to UTC ISO for browser (canonical column instant)."""
     if ts is None:

@@ -1999,6 +1999,41 @@ class Handler(BaseHTTPRequestHandler):
                 return
             self._json(200, body, no_cache=True)
             return
+        if path == "/api/v1/dashboard/baseline-trades-report":
+            try:
+                from modules.anna_training.dashboard_bundle import build_baseline_trades_report
+
+                q = parse_qs(parsed.query or "")
+                from_u = (q.get("from_utc") or [""])[0].strip() or None
+                to_u = (q.get("to_utc") or [""])[0].strip() or None
+                raw_lim = (q.get("limit") or ["50"])[0]
+                try:
+                    lim = max(1, min(500, int(raw_lim)))
+                except ValueError:
+                    lim = 50
+                scope = (q.get("scope") or ["all"])[0].strip().lower()
+                if scope not in ("all", "trade", "no_trade"):
+                    scope = "all"
+                body = build_baseline_trades_report(
+                    from_utc_iso=from_u,
+                    to_utc_iso=to_u,
+                    limit=lim,
+                    scope=scope,
+                )
+            except Exception as e:  # noqa: BLE001
+                self._json(
+                    500,
+                    {
+                        "ok": False,
+                        "schema": "blackbox_baseline_trades_report_v1",
+                        "error": str(e)[:500],
+                        "trace_id": str(uuid.uuid4()),
+                    },
+                    no_cache=True,
+                )
+                return
+            self._json(200, body, no_cache=True)
+            return
         if path == "/api/v1/context-engine/status":
             if build_context_engine_status is None or record_api_probe is None:
                 self._json(

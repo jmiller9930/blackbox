@@ -87,13 +87,14 @@
       letter-spacing: 0.05em;
       color: var(--muted);
     }
-    .bt-field input {
+    .bt-field input, .bt-field select {
       font: inherit;
       font-size: 0.78rem;
       padding: 0.4rem 0.55rem;
       border-radius: var(--radius-md);
       border: 1px solid var(--panel-border);
       min-width: 10rem;
+      background: #fff;
     }
     .bt-btn {
       font: inherit;
@@ -160,6 +161,8 @@
     .bt-short { background: rgba(234, 88, 12, 0.06); }
     .bt-pnl-pos { color: #047857; font-weight: 800; }
     .bt-pnl-neg { color: #b91c1c; font-weight: 800; }
+    .bt-auth-trade { font-weight: 800; color: #0f766e; }
+    .bt-auth-notrade { font-weight: 700; color: #64748b; }
     .bt-rpt a { color: var(--accent); font-weight: 700; }
     .bt-td-tip { cursor: help; }
     button.bt-view-btn {
@@ -268,12 +271,12 @@
     <div class="dash-main">
       <div class="bt-back">
         <a class="dash-return" href="/dashboard.html">← Back to Dashboard</a>
-        <span class="bt-muted">Loads from <code>/api/v1/dashboard/bundle</code>. Hover column headers for definitions. <strong>View</strong> opens the Jupiter tile in a popup. CSV matches the table.</span>
+        <span class="bt-muted">Report API: <code>/api/v1/dashboard/baseline-trades-report</code> (UTC window, max rows, policy filter). <strong>View</strong> opens the Jupiter tile. CSV matches the table.</span>
       </div>
       <div class="bt-section">
         <h1>Baseline trades report</h1>
         <p class="bt-desc">
-          Baseline lane: <code>execution_trades</code> with <code>policy_evaluations</code>. MAE is computed from 5m bars (same rule as the trade chain). QEL is the Quantitative Evaluation Layer for Anna strategy survival—see the QEL page; this table does not attach a per-row QEL score to baseline executions.
+          Each row is a baseline ledger execution. <strong>Policy</strong> uses the same rule as the trade chain: <strong>TRADE</strong> only when Sean Jupiter policy approves and a matching execution exists; otherwise <strong>NO TRADE</strong> (see reason in hover). MAE uses 5m bars. QEL is cohort evaluation—see the QEL page.
         </p>
 
         <div class="bt-filters">
@@ -287,7 +290,15 @@
           </div>
           <div class="bt-field">
             <label for="bt-max">Max rows</label>
-            <input id="bt-max" type="number" value="100" min="1" max="5000" style="width:5.5rem" />
+            <input id="bt-max" type="number" value="50" min="1" max="500" style="width:5.5rem" />
+          </div>
+          <div class="bt-field">
+            <label for="bt-scope">Show</label>
+            <select id="bt-scope" style="font-weight:700;min-width:11rem">
+              <option value="all">All (ledger rows)</option>
+              <option value="trade">TRADE only</option>
+              <option value="no_trade">NO TRADE only</option>
+            </select>
           </div>
           <div class="bt-field">
             <label>&nbsp;</label>
@@ -297,7 +308,7 @@
             <button type="button" class="bt-btn" id="bt-csv">Download CSV</button>
             <button type="button" class="bt-btn" id="bt-xlsx">Download XLSX</button>
           </div>
-          <p class="bt-note"><strong>Apply</strong> reloads data from the server (UTC range filters are not applied until a dedicated report endpoint exists).</p>
+          <p class="bt-note">Dates are interpreted as <strong>UTC</strong> (labels above). <strong>Apply</strong> runs the report query with your window, max rows, and policy filter.</p>
         </div>
 
         <div class="bt-table-wrap">
@@ -308,7 +319,9 @@
                 <th title="Instrument symbol from the ledger; used with size and prices for MAE bar lookup.">Sym</th>
                 <th title="Timeframe stored on the execution (for example 5m).">TF</th>
                 <th title="Correlates this fill with the dashboard event axis and the Jupiter tile narrative.">market_event_id</th>
+                <th title="Ledger mode: live, paper, or paper_stub.">Mode</th>
                 <th title="Position direction from the ledger: long or short.">Side</th>
+                <th title="TRADE = policy-approved baseline execution (same as trade chain WIN/LOSS path). NO TRADE = policy did not authorize this row as an economic baseline trade (see reason on hover).">Policy</th>
                 <th title="Position size (units or contracts) used with entry price for notional and MAE.">Size</th>
                 <th title="Why the position closed: stop, target, signal, manual, etc.">Exit reason</th>
                 <th title="Recorded entry price for the baseline leg.">Entry</th>
@@ -320,7 +333,7 @@
               </tr>
             </thead>
             <tbody id="bt-tbody">
-              <tr><td colspan="13">Loading…</td></tr>
+              <tr><td colspan="15">Loading…</td></tr>
             </tbody>
           </table>
         </div>
@@ -343,8 +356,8 @@
 
   <script>
     (function () {
-      var state = { rows: [] };
-      var COLS = 13;
+      var state = { rows: [], meta: {} };
+      var COLS = 15;
       var TIP_QEL_ROW =
         "QEL scores and survival decisions apply to Anna strategy cohorts, not to each baseline ledger row. Open QEL evaluation in the nav for details.";
 
@@ -401,6 +414,46 @@
         }
       });
 
+      function utcInputToParam(id) {
+        var el = document.getElementById(id);
+        var v = el && el.value;
+        if (!v) return "";
+        if (v.length === 16) return v + ":00Z";
+        if (v.length === 19) return v + "Z";
+        return v.indexOf("Z") >= 0 ? v : v + "Z";
+      }
+
+      function defaultUtcRangeHours(hours) {
+        var h = hours || 48;
+        var now = new Date();
+        var to = new Date(now.getTime());
+        var from = new Date(now.getTime() - h * 3600 * 1000);
+        function fmt(d) {
+          var y = d.getUTCFullYear();
+          var mo = String(d.getUTCMonth() + 1).padStart(2, "0");
+          var day = String(d.getUTCDate()).padStart(2, "0");
+          var hh = String(d.getUTCHours()).padStart(2, "0");
+          var mm = String(d.getUTCMinutes()).padStart(2, "0");
+          return y + "-" + mo + "-" + day + "T" + hh + ":" + mm;
+        }
+        document.getElementById("bt-from").value = fmt(from);
+        document.getElementById("bt-to").value = fmt(to);
+      }
+
+      function buildReportUrl() {
+        var qs = [];
+        var from = utcInputToParam("bt-from");
+        var to = utcInputToParam("bt-to");
+        if (from) qs.push("from_utc=" + encodeURIComponent(from));
+        if (to) qs.push("to_utc=" + encodeURIComponent(to));
+        var mx = parseInt(document.getElementById("bt-max").value, 10);
+        if (isNaN(mx) || mx < 1) mx = 50;
+        qs.push("limit=" + encodeURIComponent(String(Math.min(500, mx))));
+        var scope = (document.getElementById("bt-scope") || {}).value || "all";
+        qs.push("scope=" + encodeURIComponent(scope));
+        return "/api/v1/dashboard/baseline-trades-report?" + qs.join("&");
+      }
+
       function renderTable(rows) {
         var tb = document.getElementById("bt-tbody");
         if (!rows || !rows.length) {
@@ -425,6 +478,10 @@
           var sym = r.symbol != null ? String(r.symbol) : "—";
           var tf = r.timeframe != null ? String(r.timeframe) : "—";
           var sz = fmtNum(r.size);
+          var auth = r.baseline_authority || "—";
+          var authCls = auth === "TRADE" ? "bt-auth-trade" : "bt-auth-notrade";
+          var reason = r.baseline_authority_reason || "";
+          var mode = r.mode != null ? String(r.mode) : "—";
           h +=
             '<tr><td class="bt-mono" title="' +
             escAttr("UTC time for this row (same as Entry time column).") +
@@ -442,12 +499,26 @@
             escAttr("Event id: ties to tile and trade chain columns.") +
             '">' +
             esc(mid) +
+            '</td><td title="' +
+            escAttr("Ledger mode (live / paper / paper_stub).") +
+            '">' +
+            esc(mode) +
             '</td><td class="' +
             cls +
             '" title="' +
             escAttr("Side from ledger.") +
             '">' +
             esc(side || "—") +
+            '</td><td class="' +
+            authCls +
+            '" title="' +
+            escAttr(
+              reason
+                ? "baseline_display_reason=" + reason
+                : "Policy: TRADE only when policy_approved_execution."
+            ) +
+            '">' +
+            esc(auth) +
             '</td><td title="' +
             escAttr("Size from ledger.") +
             '">' +
@@ -519,7 +590,10 @@
           "symbol",
           "timeframe",
           "market_event_id",
+          "mode",
           "side",
+          "baseline_authority",
+          "baseline_authority_reason",
           "size",
           "exit_reason",
           "entry",
@@ -555,26 +629,33 @@
       function load() {
         var foot = document.getElementById("bt-foot");
         foot.textContent = "Loading…";
-        return fetch("/api/v1/dashboard/bundle?max_events=48", { cache: "no-store" })
+        return fetch(buildReportUrl(), { cache: "no-store" })
           .then(function (r) {
-            if (!r.ok) throw new Error("bundle " + r.status);
+            if (!r.ok) throw new Error("report " + r.status);
             return r.json();
           })
           .then(function (bundle) {
-            var tc = bundle.trade_chain || {};
-            state.rows = tc.baseline_trades_report_rows || [];
+            state.rows = bundle.rows || [];
+            state.meta = bundle.meta || {};
             renderTable(state.rows);
+            var m = state.meta;
             foot.textContent =
               "Showing " +
               state.rows.length +
-              " baseline execution row(s) from the ledger (newest first, cap 50). Hover headers for column help. UTC date filters require a future report API.";
+              " row(s) (limit " +
+              (m.limit || "?") +
+              ", scope " +
+              (m.scope || "?") +
+              "). Scanned up to " +
+              (m.scanned_execution_rows || "?") +
+              " baseline ledger rows in range. Policy column matches trade chain rule.";
           })
           .catch(function (e) {
             foot.textContent = "Failed to load: " + String(e);
             document.getElementById("bt-tbody").innerHTML =
               '<tr><td colspan="' +
               COLS +
-              '">Could not load bundle. Check API and console.</td></tr>';
+              '">Could not load report. Check API and console.</td></tr>';
           });
       }
 
@@ -597,6 +678,7 @@
         alert("Downloaded CSV (same data as future XLSX until a spreadsheet export is implemented).");
       };
 
+      defaultUtcRangeHours(48);
       load().then(function () {
         var q = new URLSearchParams(location.search);
         var mid = q.get("mid");
