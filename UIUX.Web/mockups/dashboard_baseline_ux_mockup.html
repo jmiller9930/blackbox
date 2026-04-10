@@ -1,0 +1,800 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Dashboard baseline UX — single mockup (all views)</title>
+  <style>
+    :root {
+      --text: #0f172a;
+      --muted: #64748b;
+      --border: #cbd5e1;
+      --panel: #ffffff;
+      --accent: #0f766e;
+      --ok: #047857;
+      --chain-placeholder: #e2e8f0;
+    }
+    * { box-sizing: border-box; }
+    body {
+      font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+      font-size: 14px;
+      color: var(--text);
+      margin: 0;
+      padding: 1.25rem;
+      padding-top: 0;
+      background: #eef1f5;
+      line-height: 1.45;
+    }
+    .banner {
+      background: #1e293b;
+      color: #f8fafc;
+      padding: 0.75rem 1rem;
+      border-radius: 8px;
+      margin: 1.25rem 1.25rem 0;
+      font-size: 0.85rem;
+    }
+    .banner strong { color: #86efac; }
+    .mock-nav {
+      position: sticky;
+      top: 0;
+      z-index: 40;
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 0.35rem 0.75rem;
+      padding: 0.65rem 1.25rem;
+      background: rgba(238, 241, 245, 0.92);
+      backdrop-filter: blur(8px);
+      border-bottom: 1px solid #cbd5e1;
+      margin: 0 -1.25rem 1rem;
+    }
+    .mock-nav span {
+      font-size: 0.65rem;
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--muted);
+      margin-right: 0.25rem;
+    }
+    .mock-nav a {
+      font-size: 0.78rem;
+      font-weight: 800;
+      color: var(--accent);
+      text-decoration: none;
+      padding: 0.25rem 0.5rem;
+      border-radius: 6px;
+      border: 1px solid transparent;
+    }
+    .mock-nav a:hover { background: #e2e8f0; border-color: var(--border); }
+    .mock-section {
+      scroll-margin-top: 3.5rem;
+      margin-bottom: 2rem;
+    }
+    .mock-section h2.section-title {
+      margin: 0 0 0.75rem;
+      font-size: 0.8rem;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--muted);
+      font-weight: 800;
+    }
+    .dash-sim {
+      max-width: 56rem;
+      border: 1px dashed #94a3b8;
+      border-radius: 10px;
+      padding: 0.75rem;
+      background: #f8fafc;
+      margin-bottom: 1rem;
+      font-size: 0.72rem;
+      color: var(--muted);
+      font-weight: 600;
+    }
+    /* —— Main strip —— */
+    .bts {
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      background: var(--panel);
+      box-shadow: 0 1px 2px rgba(15, 23, 42, 0.06);
+      margin-bottom: 0.75rem;
+    }
+    .bts-head {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 0.5rem 1rem;
+      padding: 0.55rem 0.85rem;
+      border-bottom: 1px solid #f1f5f9;
+    }
+    .bts-title { font-weight: 800; font-size: 0.85rem; margin: 0; }
+    .bts-meta { font-size: 0.68rem; color: var(--muted); font-weight: 700; }
+    .bts-meta .n { color: var(--ok); font-weight: 800; }
+    .bts-window {
+      display: flex; align-items: center; gap: 0.35rem;
+      font-size: 0.72rem; font-weight: 700; color: var(--muted);
+    }
+    .bts-window select {
+      font: inherit; font-size: 0.72rem; padding: 0.2rem 0.45rem;
+      border-radius: 6px; border: 1px solid var(--border);
+    }
+    .bts-body { padding: 0.65rem 0.85rem 0.75rem; }
+    .bts-copy {
+      margin: 0 0 0.6rem;
+      font-size: 0.72rem;
+      color: #334155;
+      font-weight: 600;
+      line-height: 1.45;
+    }
+    .bts-copy strong { color: var(--text); }
+    table.bts-t {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.72rem;
+    }
+    .bts-t th, .bts-t td {
+      text-align: left;
+      padding: 0.4rem 0.5rem;
+      border-bottom: 1px solid #f1f5f9;
+    }
+    .bts-t th {
+      color: var(--muted);
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      font-size: 0.58rem;
+    }
+    .mono { font-family: ui-monospace, monospace; font-size: 0.68rem; word-break: break-all; }
+    .pill-long { display: inline-block; padding: 0.1rem 0.4rem; border-radius: 999px; font-weight: 800; font-size: 0.65rem; background: #eff6ff; color: #1d4ed8; }
+    .pill-short { display: inline-block; padding: 0.1rem 0.4rem; border-radius: 999px; font-weight: 800; font-size: 0.65rem; background: #fff7ed; color: #c2410c; }
+    .pill-trade { font-weight: 800; font-size: 0.65rem; color: #047857; }
+    .bts-foot {
+      margin-top: 0.65rem;
+      padding-top: 0.65rem;
+      border-top: 1px solid #f1f5f9;
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: space-between;
+      gap: 0.5rem;
+    }
+    .bts-foot p {
+      margin: 0;
+      font-size: 0.68rem;
+      color: var(--muted);
+      font-weight: 600;
+      max-width: 28rem;
+    }
+    .bts-foot a {
+      font-size: 0.75rem;
+      font-weight: 800;
+      color: var(--accent);
+      text-decoration: none;
+      white-space: nowrap;
+    }
+    .bts-foot a:hover { text-decoration: underline; }
+    .tc-placeholder {
+      border: 2px dashed #94a3b8;
+      border-radius: 10px;
+      min-height: 8rem;
+      background: #e2e8f0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #475569;
+      font-weight: 700;
+      font-size: 0.8rem;
+      text-align: center;
+      padding: 1rem;
+    }
+    .tc-placeholder-lg {
+      min-height: 12rem;
+      background: var(--chain-placeholder);
+    }
+    .tc-placeholder small { display: block; margin-top: 0.35rem; font-weight: 600; font-size: 0.72rem; color: var(--muted); }
+    /* —— Collapsible panel —— */
+    .stack { display: flex; flex-direction: column; gap: 0.75rem; max-width: 56rem; }
+    .ftp-details {
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      background: var(--panel);
+      box-shadow: 0 1px 2px rgba(15, 23, 42, 0.06);
+    }
+    .ftp-details > summary {
+      list-style: none;
+      cursor: pointer;
+      padding: 0.55rem 0.85rem;
+      display: flex;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 0.35rem 0.75rem;
+      font-weight: 800;
+      font-size: 0.82rem;
+    }
+    .ftp-details > summary::-webkit-details-marker { display: none; }
+    .ftp-chevron { font-size: 0.65rem; color: var(--muted); transition: transform 0.15s; display: inline-block; }
+    .ftp-details[open] .ftp-chevron { transform: rotate(90deg); }
+    .ftp-hint { font-size: 0.65rem; font-weight: 600; color: var(--muted); }
+    .ftp-toolbar {
+      display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem;
+      padding: 0 0.85rem 0.65rem;
+      font-size: 0.72rem;
+    }
+    .ftp-toolbar label { color: var(--muted); font-weight: 700; }
+    .ftp-toolbar select, .ftp-toolbar input {
+      font: inherit; font-size: 0.72rem; padding: 0.2rem 0.4rem; border-radius: 6px; border: 1px solid var(--border);
+    }
+    .ftp-inner { padding: 0 0.85rem 0.75rem; }
+    .ftp-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.72rem;
+    }
+    .ftp-table th, .ftp-table td {
+      text-align: left;
+      padding: 0.35rem 0.5rem;
+      border-bottom: 1px solid #f1f5f9;
+      vertical-align: top;
+    }
+    .ftp-table th { color: var(--muted); font-weight: 800; text-transform: uppercase; letter-spacing: 0.04em; font-size: 0.58rem; }
+    .pill {
+      display: inline-block;
+      padding: 0.12rem 0.45rem;
+      border-radius: 999px;
+      font-weight: 800;
+      font-size: 0.65rem;
+    }
+    .ftp-table .pill-trade {
+      cursor: pointer;
+      border: 1px solid #6ee7b7;
+      font: inherit;
+      background: #ecfdf5;
+      color: #047857;
+    }
+    .ftp-table .pill-trade:hover { filter: brightness(0.97); }
+    .ftp-table .pill-trade:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+    .ftp-row-details { margin: 0.35rem 0 0; padding: 0.45rem 0.55rem; background: #f8fafc; border-radius: 6px; border: 1px solid #e2e8f0; font-size: 0.68rem; }
+    .ftp-row-details summary { cursor: pointer; font-weight: 700; color: var(--accent); list-style: none; }
+    .ftp-row-details summary::-webkit-details-marker { display: none; }
+    .ftp-kv { margin: 0.4rem 0 0; display: grid; gap: 0.2rem; }
+    .ftp-kv div { display: flex; gap: 0.35rem; flex-wrap: wrap; }
+    .ftp-kv .k { color: var(--muted); min-width: 7rem; font-weight: 700; }
+    .ftp-export {
+      margin-left: auto;
+      display: flex; flex-wrap: wrap; gap: 0.35rem; align-items: center;
+    }
+    .ftp-export button {
+      font: inherit; font-size: 0.68rem; font-weight: 700;
+      padding: 0.25rem 0.5rem; border-radius: 6px; border: 1px solid var(--border);
+      background: #f8fafc; cursor: pointer;
+    }
+    .ftp-export button:hover { background: #e2e8f0; }
+    .ftp-modal-overlay {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(15, 23, 42, 0.45);
+      z-index: 50;
+      align-items: center;
+      justify-content: center;
+      padding: 1rem;
+    }
+    .ftp-modal-overlay.is-open { display: flex; }
+    .ftp-modal {
+      background: var(--panel);
+      border-radius: 12px;
+      border: 1px solid var(--border);
+      max-width: 36rem;
+      width: 100%;
+      max-height: 85vh;
+      overflow: auto;
+      box-shadow: 0 20px 40px rgba(15, 23, 42, 0.2);
+    }
+    .ftp-modal-h {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 0.5rem;
+      padding: 0.65rem 0.85rem;
+      border-bottom: 1px solid #f1f5f9;
+      font-weight: 800;
+      font-size: 0.82rem;
+    }
+    .ftp-modal-h button {
+      border: none; background: transparent; font-size: 1.1rem; line-height: 1;
+      cursor: pointer; color: var(--muted); padding: 0.15rem;
+    }
+    .ftp-modal-body { padding: 0.85rem; font-size: 0.72rem; }
+    .ftp-modal-body pre {
+      margin: 0;
+      font-family: ui-monospace, monospace;
+      white-space: pre-wrap;
+      background: #f8fafc;
+      border: 1px solid #e2e8f0;
+      border-radius: 8px;
+      padding: 0.65rem;
+    }
+    .ftp-modal-foot {
+      padding: 0.65rem 0.85rem;
+      border-top: 1px solid #f1f5f9;
+      display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: center;
+      font-size: 0.72rem;
+    }
+    .ftp-modal-foot a {
+      font-weight: 700;
+      color: var(--accent);
+    }
+    /* —— Report —— */
+    .report-wrap { max-width: 64rem; margin: 0 auto; }
+    .report-nav {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 0.5rem 1rem;
+      margin-bottom: 1rem;
+    }
+    .report-nav a {
+      font-size: 0.8rem;
+      font-weight: 800;
+      color: var(--accent);
+      text-decoration: none;
+    }
+    .report-nav a:hover { text-decoration: underline; }
+    .report-h1 { margin: 0 0 0.25rem; font-size: 1.15rem; }
+    .report-sub { margin: 0 0 1rem; font-size: 0.75rem; color: var(--muted); font-weight: 600; }
+    .controls {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: flex-end;
+      gap: 0.75rem 1rem;
+      padding: 0.85rem 1rem;
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      margin-bottom: 1rem;
+      box-shadow: 0 1px 2px rgba(15, 23, 42, 0.06);
+    }
+    .ctrl { display: flex; flex-direction: column; gap: 0.25rem; }
+    .ctrl label { font-size: 0.62rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); }
+    .ctrl input, .ctrl select {
+      font: inherit;
+      font-size: 0.78rem;
+      padding: 0.35rem 0.5rem;
+      border-radius: 6px;
+      border: 1px solid var(--border);
+      min-width: 8rem;
+    }
+    .btn {
+      font: inherit;
+      font-size: 0.78rem;
+      font-weight: 800;
+      padding: 0.4rem 0.75rem;
+      border-radius: 6px;
+      border: 1px solid var(--border);
+      background: #f8fafc;
+      cursor: pointer;
+    }
+    .btn:hover { background: #e2e8f0; }
+    .btn-primary { background: var(--accent); color: #fff; border-color: #0d5c56; }
+    .btn-primary:hover { filter: brightness(1.05); }
+    .export { margin-left: auto; display: flex; gap: 0.35rem; flex-wrap: wrap; }
+    .table-wrap {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      overflow: auto;
+      box-shadow: 0 1px 2px rgba(15, 23, 42, 0.06);
+    }
+    table.rpt {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.72rem;
+    }
+    .rpt th, .rpt td {
+      text-align: left;
+      padding: 0.45rem 0.6rem;
+      border-bottom: 1px solid #f1f5f9;
+      vertical-align: top;
+    }
+    .rpt th {
+      position: sticky;
+      top: 0;
+      background: #f8fafc;
+      border-bottom: 1px solid var(--border);
+      color: var(--muted);
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      font-size: 0.58rem;
+      z-index: 1;
+    }
+    .rpt tbody tr:hover { background: #fafbfc; }
+    .cell-long { background: rgba(59, 130, 246, 0.06); }
+    .cell-short { background: rgba(234, 88, 12, 0.06); }
+    .pnl-pos { color: #047857; font-weight: 800; }
+    .pnl-neg { color: #b91c1c; font-weight: 800; }
+    .foot {
+      margin-top: 0.75rem;
+      font-size: 0.68rem;
+      color: var(--muted);
+      font-weight: 600;
+    }
+    /* —— Tile detail —— */
+    .detail-panel {
+      max-width: 42rem;
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 1rem;
+    }
+    .detail-panel h1 { margin: 0 0 0.5rem; font-size: 1rem; }
+    .detail-sub { font-size: 0.75rem; color: var(--muted); margin: 0 0 1rem; word-break: break-all; }
+    .tile-pre {
+      font-family: ui-monospace, monospace;
+      font-size: 0.72rem;
+      white-space: pre-wrap;
+      background: #f8fafc;
+      border: 1px solid #e2e8f0;
+      border-radius: 8px;
+      padding: 0.75rem;
+      margin: 0;
+    }
+    .detail-actions { margin-top: 1rem; display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: center; }
+    .detail-actions a, .detail-actions button {
+      font: inherit; font-size: 0.75rem; font-weight: 700;
+      padding: 0.35rem 0.65rem; border-radius: 6px; border: 1px solid var(--border);
+      background: #fff; cursor: pointer; text-decoration: none; color: var(--text);
+    }
+    .detail-actions button:hover, .detail-actions a:hover { background: #f1f5f9; }
+  </style>
+</head>
+<body>
+  <nav class="mock-nav" aria-label="Mockup sections">
+    <span>Jump</span>
+    <a href="#strip">Main strip</a>
+    <a href="#panel">Collapsible panel</a>
+    <a href="#report">Report</a>
+    <a href="#detail">Tile detail</a>
+  </nav>
+
+  <div class="banner">
+    <strong>MOCKUP — single file.</strong> Edit only <code>UIUX.Web/mockups/dashboard_baseline_ux_mockup.html</code>.
+    Sections: main dashboard strip (2 rows), optional collapsible ledger panel, full report + export, bookmarkable tile page.
+  </div>
+
+  <!-- —— Strip —— -->
+  <section id="strip" class="mock-section">
+    <h2 class="section-title">Main dashboard strip</h2>
+    <p class="dash-sim">Simulated: rows above “Trade chain” on <code>dashboard.html</code></p>
+
+    <div class="bts">
+      <div class="bts-head">
+        <h2 class="bts-title">Recent baseline trades</h2>
+        <span class="bts-meta">Window: <span class="n">3</span> trade(s) in last <span id="win-label">24h</span> — showing <strong>2</strong> most recent</span>
+        <div class="bts-window">
+          <label for="win">Window</label>
+          <select id="win" title="Mock only">
+            <option value="24h" selected>Last 24h</option>
+            <option value="7d">Last 7d</option>
+            <option value="48h">Last 48h</option>
+          </select>
+        </div>
+      </div>
+      <div class="bts-body">
+        <p class="bts-copy">
+          <strong>Trades exist</strong> in this window when the policy recorded a baseline <code>execution_trades</code> row.
+          The main dashboard only shows the <strong>last two</strong> so the board stays clean — use the report for the full list, filters, and export.
+        </p>
+        <table class="bts-t">
+          <thead>
+            <tr>
+              <th>Time (UTC)</th>
+              <th>market_event_id</th>
+              <th>Side</th>
+              <th>Verdict</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td class="mono">2026-04-10T14:50:00Z</td>
+              <td class="mono">SOL-PERP_5m_2026-04-10T14:50:00Z</td>
+              <td><span class="pill-long">long</span></td>
+              <td><span class="pill-trade">TRADE</span></td>
+            </tr>
+            <tr>
+              <td class="mono">2026-04-10T09:15:00Z</td>
+              <td class="mono">SOL-PERP_5m_2026-04-10T09:15:00Z</td>
+              <td><span class="pill-long">long</span></td>
+              <td><span class="pill-trade">TRADE</span></td>
+            </tr>
+          </tbody>
+        </table>
+        <div class="bts-foot">
+          <p>
+            1 older trade in this window is not shown here — open the report to see all rows, tile text, and downloads.
+          </p>
+          <a href="#report">Baseline trades report →</a>
+        </div>
+      </div>
+    </div>
+
+    <h3 style="margin:0 0 0.5rem;font-size:0.75rem;text-transform:uppercase;letter-spacing:0.06em;color:var(--muted);">Trade chain (unchanged)</h3>
+    <div class="tc-placeholder">Existing trade chain grid below this strip</div>
+  </section>
+
+  <!-- —— Panel —— -->
+  <section id="panel" class="mock-section">
+    <h2 class="section-title">Collapsible “Baseline trades (ledger)” panel</h2>
+    <p class="dash-sim">Layout idea above the trade chain — not wired to <code>api_server</code>.</p>
+
+    <div class="stack">
+      <details class="ftp-details" open>
+        <summary>
+          <span class="ftp-chevron">▸</span>
+          Baseline trades (ledger)
+          <span class="ftp-hint">Rows from <code>execution_trades</code> + <code>policy_evaluations</code> — recall without scrolling the chain</span>
+        </summary>
+        <div class="ftp-toolbar">
+          <label for="ftp-window">Window</label>
+          <select id="ftp-window" title="Filter mock">
+            <option>Last 24h</option>
+            <option>Last 7d</option>
+            <option>Last 50 events</option>
+          </select>
+          <label for="ftp-max">Max rows</label>
+          <input id="ftp-max" type="number" value="20" min="1" max="200" style="width:4rem" title="Mock only" />
+          <span style="color:var(--muted);font-weight:700;">3 trades in window (sample)</span>
+          <div class="ftp-export">
+            <button type="button" id="ftp-export-csv" title="Mock">Export CSV</button>
+            <button type="button" id="ftp-export-xlsx" title="Mock">Export XLSX</button>
+          </div>
+        </div>
+        <div class="ftp-inner">
+          <table class="ftp-table">
+            <thead>
+              <tr>
+                <th>Time (UTC)</th>
+                <th>Event</th>
+                <th>Side</th>
+                <th>Verdict</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td class="mono">2026-04-10T14:50:00Z</td>
+                <td class="mono">SOL-PERP_5m_2026-04-10T14:50:00Z</td>
+                <td><span class="pill pill-long">long</span></td>
+                <td>
+                  <button type="button" class="pill pill-trade js-open-tile" data-mid="SOL-PERP_5m_2026-04-10T14:50:00Z">
+                    TRADE
+                  </button>
+                </td>
+              </tr>
+              <tr>
+                <td colspan="4">
+                  <details class="ftp-row-details">
+                    <summary>Details — entry / policy snapshot</summary>
+                    <div class="ftp-kv">
+                      <div><span class="k">trade_id</span><span class="mono">bl_…</span></div>
+                      <div><span class="k">reason_code</span><span class="mono">jupiter_policy_long_signal</span></div>
+                      <div><span class="k">entry / exit</span><span>from execution_trades + bar</span></div>
+                      <div><span class="k">Jump</span><span><em>“Focus this column in Trade chain”</em> (future)</span></div>
+                    </div>
+                  </details>
+                </td>
+              </tr>
+              <tr>
+                <td class="mono">2026-04-10T09:15:00Z</td>
+                <td class="mono">SOL-PERP_5m_2026-04-10T09:15:00Z</td>
+                <td><span class="pill pill-long">long</span></td>
+                <td>
+                  <button type="button" class="pill pill-trade js-open-tile" data-mid="SOL-PERP_5m_2026-04-10T09:15:00Z">TRADE</button>
+                </td>
+              </tr>
+              <tr>
+                <td class="mono">2026-04-10T08:45:00Z</td>
+                <td class="mono">SOL-PERP_5m_2026-04-10T08:45:00Z</td>
+                <td><span class="pill pill-short">short</span></td>
+                <td>
+                  <button type="button" class="pill pill-trade js-open-tile" data-mid="SOL-PERP_5m_2026-04-10T08:45:00Z">TRADE</button>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+          <p style="margin:0.6rem 0 0;font-size:0.68rem;color:var(--muted);font-weight:600;">
+            Click <strong>TRADE</strong> → subpanel = same ledger-sourced narrative as the trade-chain tile. <strong>NO TRADE</strong> rows could open a slimmer panel or stay in-table only.
+          </p>
+          <p style="margin:0.45rem 0 0;font-size:0.68rem;color:var(--muted);font-weight:600;">
+            Default could be <strong>collapsed</strong> with summary text like: “Baseline trades · 3 in last 24h” so the chain stays primary.
+          </p>
+        </div>
+      </details>
+
+      <div class="ftp-modal-overlay" id="ftp-tile-modal" role="dialog" aria-modal="true" aria-labelledby="ftp-tile-title" hidden>
+        <div class="ftp-modal">
+          <div class="ftp-modal-h">
+            <span id="ftp-tile-title">Tile (ledger narrative)</span>
+            <button type="button" id="ftp-tile-close" aria-label="Close">×</button>
+          </div>
+          <div class="ftp-modal-body">
+            <p style="margin:0 0 0.5rem;font-size:0.68rem;color:var(--muted);font-weight:600;" id="ftp-tile-mid"></p>
+            <pre id="ftp-tile-pre">(sample — production loads formatted text from policy_evaluations.features via bundle)</pre>
+          </div>
+          <div class="ftp-modal-foot">
+            <a id="ftp-tile-open-page" href="#detail">Open full section →</a>
+            <span style="color:var(--muted);">Same content; bookmarkable / shareable</span>
+          </div>
+        </div>
+      </div>
+
+      <section aria-label="Trade chain placeholder">
+        <h2 style="margin:0 0 0.5rem;font-size:0.85rem;text-transform:uppercase;letter-spacing:0.06em;color:var(--muted);">Trade chain (existing)</h2>
+        <div class="tc-placeholder tc-placeholder-lg">
+          Current <code>dashboard.html</code> trade chain grid
+          <small>Panning columns · sticky chain rail · per-event tiles</small>
+        </div>
+      </section>
+    </div>
+  </section>
+
+  <!-- —— Report —— -->
+  <section id="report" class="mock-section">
+    <h2 class="section-title">Baseline trades report (sub-page)</h2>
+    <div class="report-wrap">
+      <div class="report-nav">
+        <a href="#strip">← Back to main strip</a>
+      </div>
+
+      <h1 class="report-h1">Baseline trades report</h1>
+      <p class="report-sub">Full list from <code>execution_trades</code> + <code>policy_evaluations</code> (baseline lane). Color = side (mock).</p>
+
+      <div class="controls">
+        <div class="ctrl">
+          <label>From (UTC)</label>
+          <input type="datetime-local" value="2026-04-09T00:00" />
+        </div>
+        <div class="ctrl">
+          <label>To (UTC)</label>
+          <input type="datetime-local" value="2026-04-10T23:59" />
+        </div>
+        <div class="ctrl">
+          <label>Max rows</label>
+          <input type="number" value="100" min="1" max="5000" style="width:5rem" />
+        </div>
+        <div class="ctrl">
+          <label>&nbsp;</label>
+          <button type="button" class="btn btn-primary">Apply</button>
+        </div>
+        <div class="export">
+          <button type="button" class="btn" id="rpt-csv">Download CSV</button>
+          <button type="button" class="btn" id="rpt-xlsx">Download XLSX</button>
+        </div>
+      </div>
+
+      <div class="table-wrap">
+        <table class="rpt">
+          <thead>
+            <tr>
+              <th>Entry time</th>
+              <th>market_event_id</th>
+              <th>Side</th>
+              <th>Reason</th>
+              <th>Entry</th>
+              <th>Exit</th>
+              <th>PnL (USD)</th>
+              <th>Tile</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td class="mono">2026-04-10T14:50:00Z</td>
+              <td class="mono">SOL-PERP_5m_2026-04-10T14:50:00Z</td>
+              <td class="cell-long">long</td>
+              <td class="mono">jupiter_policy_long_signal</td>
+              <td>85.41</td>
+              <td>85.52</td>
+              <td class="pnl-pos">+0.12</td>
+              <td><a href="?mid=SOL-PERP_5m_2026-04-10T14:50:00Z#detail">View</a></td>
+            </tr>
+            <tr>
+              <td class="mono">2026-04-10T09:15:00Z</td>
+              <td class="mono">SOL-PERP_5m_2026-04-10T09:15:00Z</td>
+              <td class="cell-long">long</td>
+              <td class="mono">jupiter_policy_long_signal</td>
+              <td>85.10</td>
+              <td>85.08</td>
+              <td class="pnl-neg">−0.02</td>
+              <td><a href="?mid=SOL-PERP_5m_2026-04-10T09:15:00Z#detail">View</a></td>
+            </tr>
+            <tr>
+              <td class="mono">2026-04-10T08:45:00Z</td>
+              <td class="mono">SOL-PERP_5m_2026-04-10T08:45:00Z</td>
+              <td class="cell-short">short</td>
+              <td class="mono">jupiter_policy_short_signal</td>
+              <td>85.20</td>
+              <td>85.35</td>
+              <td class="pnl-neg">−0.18</td>
+              <td><a href="?mid=SOL-PERP_5m_2026-04-10T08:45:00Z#detail">View</a></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <p class="foot">Showing 3 rows (mock). Main dashboard strip only shows the last <strong>2</strong> in the same window.</p>
+    </div>
+  </section>
+
+  <!-- —— Tile detail —— -->
+  <section id="detail" class="mock-section">
+    <h2 class="section-title">Tile detail (sub-page / deep link)</h2>
+    <div class="detail-panel">
+      <h1>Ledger-sourced tile (read-only)</h1>
+      <p class="detail-sub" id="mid-line">market_event_id: (from URL query <code>?mid=</code>)</p>
+      <pre class="tile-pre" id="tile-body">NEW 5M …
+ATR … Volatility gate …
+SIG LONG …
+NO TRADE / TRADE …
+…formatted from policy_evaluations.features (same as chain column narrative)</pre>
+      <div class="detail-actions">
+        <button type="button" id="btn-csv">Download CSV (mock)</button>
+        <button type="button" id="btn-xlsx">Download XLSX (mock)</button>
+        <a href="#panel">← Back to panel</a>
+      </div>
+    </div>
+  </section>
+
+  <script>
+    (function () {
+      var labels = { "24h": "24h", "7d": "7d", "48h": "48h" };
+      var win = document.getElementById("win");
+      if (win) {
+        win.addEventListener("change", function () {
+          document.getElementById("win-label").textContent = labels[this.value] || this.value;
+        });
+      }
+    })();
+
+    (function () {
+      var SAMPLE = "NEW 5M (5-minute candle data):\n  …\nATR … Volatility gate: …\nSIG LONG: …\n→ TRADE (ledger-backed narrative)\n";
+      var overlay = document.getElementById("ftp-tile-modal");
+      var pre = document.getElementById("ftp-tile-pre");
+      var midEl = document.getElementById("ftp-tile-mid");
+      var link = document.getElementById("ftp-tile-open-page");
+      function openTile(mid) {
+        midEl.textContent = "market_event_id: " + mid;
+        pre.textContent = SAMPLE;
+        link.href = "?mid=" + encodeURIComponent(mid) + "#detail";
+        overlay.hidden = false;
+        overlay.classList.add("is-open");
+      }
+      function closeTile() {
+        overlay.classList.remove("is-open");
+        overlay.hidden = true;
+      }
+      document.querySelectorAll(".js-open-tile").forEach(function (btn) {
+        btn.addEventListener("click", function () {
+          openTile(btn.getAttribute("data-mid") || "");
+        });
+      });
+      document.getElementById("ftp-tile-close").addEventListener("click", closeTile);
+      overlay.addEventListener("click", function (e) {
+        if (e.target === overlay) closeTile();
+      });
+      document.getElementById("ftp-export-csv").addEventListener("click", function () {
+        alert("Prod: GET /api/v1/…/baseline-trades/export?format=csv&window=24h — stream ledger rows.");
+      });
+      document.getElementById("ftp-export-xlsx").addEventListener("click", function () {
+        alert("Prod: format=xlsx or generate .xlsx in api (openpyxl) / client-side SheetJS.");
+      });
+    })();
+
+    document.getElementById("rpt-csv").onclick = function () { alert("Prod: GET …/baseline-trades/export?format=csv&from=&to="); };
+    document.getElementById("rpt-xlsx").onclick = function () { alert("Prod: format=xlsx"); };
+
+    (function () {
+      var q = new URLSearchParams(location.search);
+      var mid = q.get("mid") || "SOL-PERP_5m_2026-04-10T14:50:00Z";
+      document.getElementById("mid-line").textContent = "market_event_id: " + mid;
+      document.getElementById("btn-csv").onclick = function () { alert("Prod: GET /api/v1/…/baseline-trades.csv?window=24h"); };
+      document.getElementById("btn-xlsx").onclick = function () { alert("Prod: same + openpyxl or client-side sheet"); };
+    })();
+  </script>
+</body>
+</html>
