@@ -279,48 +279,23 @@
       margin-bottom: 0.15rem;
       line-height: 1.2;
     }
-    /* Jupiter 5m narrative — one colored row per rule line (green = pass, red = blocks trade, deeper red = policy gate). */
+    /* Jupiter 5m narrative — same rhythm as tc-mini trade grid: bullet + lab + value (no row-level policy coloring). */
     .tc-tile-narr-wrap {
       grid-column: 1 / -1;
-      display: flex;
-      flex-direction: column;
-      gap: 0.22rem;
+      display: grid;
+      grid-template-columns: 0.55rem auto 1fr;
+      column-gap: 0.3rem;
+      row-gap: 0.28rem;
+      align-items: start;
       margin: 0 0 0.35rem 0;
       padding: 0.32rem 0.4rem;
       overflow: visible;
       font-size: 0.62rem;
       line-height: 1.45;
       color: #0f172a;
-      background: #f1f5f9;
+      background: #f8fafc;
       border: 1px solid #e2e8f0;
       border-radius: 4px;
-    }
-    .tc-tile-row {
-      display: grid;
-      grid-template-columns: 0.55rem auto 1fr;
-      column-gap: 0.3rem;
-      align-items: start;
-      padding: 0.14rem 0.35rem 0.14rem 0.25rem;
-      border-radius: 4px;
-      border-left: 3px solid #94a3b8;
-      background: #f8fafc;
-    }
-    .tc-tile-row.tc-tile-neutral {
-      border-left-color: #94a3b8;
-      background: #f8fafc;
-    }
-    .tc-tile-row.tc-tile-ok {
-      border-left-color: #059669;
-      background: #d1fae5;
-    }
-    .tc-tile-row.tc-tile-stop {
-      border-left-color: #e11d48;
-      background: #ffe4e6;
-    }
-    .tc-tile-row.tc-tile-gate {
-      border-left-color: #b91c1c;
-      background: #fecaca;
-      font-weight: 500;
     }
     .tc-tile-narr-wrap .tc-tile-bullet {
       color: #94a3b8;
@@ -837,116 +812,22 @@
     return { lab: 'note', val: s };
   }
 
-  /** Context from full narrative for two-pass coloring (matches format_jupiter_tile_narrative_v1). */
-  function jupiterExtractTileContext(lines) {
-    var i;
-    var longLine = '';
-    var shortLine = '';
-    var stLine = '';
-    for (i = 0; i < lines.length; i++) {
-      var L = String(lines[i] || '');
-      if (/^Signal Breakdown\s*(→|->)\s*Long=/i.test(L)) longLine = L;
-      if (/^Signal Breakdown\s*(→|->)\s*Short=/i.test(L)) shortLine = L;
-      if (/^Supertrend:/i.test(L)) stLine = L;
-    }
-    var longST = longLine && /Supertrend=true/i.test(longLine);
-    var shortST = shortLine && /Supertrend=true/i.test(shortLine);
-    var atrLine = '';
-    for (i = 0; i < lines.length; i++) {
-      if (/^ATR Analysis:/i.test(lines[i] || '')) atrLine = lines[i];
-    }
-    var ratio = null;
-    if (atrLine) {
-      var rm = atrLine.match(/Ratio=([0-9.n/a]+)/i);
-      if (rm && rm[1] && rm[1] !== 'n/a') {
-        var p = parseFloat(rm[1]);
-        if (!isNaN(p)) ratio = p;
-      }
-    }
-    return {
-      longLine: longLine,
-      shortLine: shortLine,
-      stLine: stLine,
-      longST: longST,
-      shortST: shortST,
-      ratio: ratio,
-    };
-  }
-
-  function jupiterLineRowClass(line, ctx) {
-    var s = String(line || '').trim();
-    if (!s) return 'tc-tile-neutral';
-    if (/^New 5-min candle formed:/i.test(s)) return 'tc-tile-neutral';
-    if (/^Previous candle:/i.test(s)) return 'tc-tile-neutral';
-    if (/^Current candle:/i.test(s)) return 'tc-tile-neutral';
-    if (/^Policy:/i.test(s)) return 'tc-tile-neutral';
-    if (/^reason_code=/i.test(s)) return 'tc-tile-neutral';
-    if (/^trade=/i.test(s)) return 'tc-tile-neutral';
-    if (/Insufficient bar context/i.test(s)) return 'tc-tile-neutral';
-    if (/^Signals:/i.test(s)) return 'tc-tile-neutral';
-
-    if (/^ATR Analysis:/i.test(s)) {
-      if (ctx.ratio != null && !isNaN(ctx.ratio)) {
-        return ctx.ratio < 1.35 ? 'tc-tile-gate' : 'tc-tile-ok';
-      }
-      return 'tc-tile-neutral';
-    }
-
-    if (/^Supertrend:/i.test(s)) {
-      var bull = /BULLISH/i.test(s);
-      var bear = /BEARISH/i.test(s);
-      if (bull && ctx.longST) return 'tc-tile-ok';
-      if (bear && ctx.shortST) return 'tc-tile-ok';
-      if (bull || bear) return 'tc-tile-stop';
-      return 'tc-tile-neutral';
-    }
-
-    if (/^Price vs EMA200:/i.test(s)) {
-      if (/ABOVE/i.test(s) && ctx.shortLine && /BelowEMA=false/i.test(ctx.shortLine)) return 'tc-tile-stop';
-      if (/BELOW/i.test(s) && ctx.longLine && /AboveEMA=false/i.test(ctx.longLine)) return 'tc-tile-stop';
-      if (/ABOVE/i.test(s) && ctx.longLine && /AboveEMA=true/i.test(ctx.longLine)) return 'tc-tile-ok';
-      if (/BELOW/i.test(s) && ctx.shortLine && /BelowEMA=true/i.test(ctx.shortLine)) return 'tc-tile-ok';
-      return 'tc-tile-neutral';
-    }
-
-    if (/^Signal Breakdown\s*(→|->)\s*Long=/i.test(s)) {
-      return /Long=\s*true\b/i.test(s) ? 'tc-tile-ok' : 'tc-tile-stop';
-    }
-    if (/^Signal Breakdown\s*(→|->)\s*Short=/i.test(s)) {
-      return /Short=\s*true\b/i.test(s) ? 'tc-tile-ok' : 'tc-tile-stop';
-    }
-
-    if (/^Filter:/i.test(s)) {
-      if (/ATR ratio below|extreme RSI|insufficient bar history/i.test(s)) return 'tc-tile-gate';
-      return 'tc-tile-stop';
-    }
-
-    if (/^ATR-Supertrend SIGNAL/i.test(s) || /^Processing /i.test(s)) return 'tc-tile-ok';
-
-    return 'tc-tile-neutral';
-  }
-
   function jupiterNarrativeLinesHtml(raw, titleAttr) {
     if (raw == null || String(raw).trim() === '') return '';
     var text = String(raw).replace(/\r\n/g, '\n');
     var lines = text.split('\n');
-    var ctx = jupiterExtractTileContext(lines);
     var rows = [];
     var j;
     for (j = 0; j < lines.length; j++) {
       var row = jupiterLineToLabVal(lines[j]);
       if (!row.lab && !row.val) continue;
-      var rowCls = jupiterLineRowClass(lines[j], ctx);
       rows.push(
-        '<div class="tc-tile-row ' +
-        rowCls +
-        '">' +
         '<span class="tc-tile-bullet" aria-hidden="true">•</span>' +
         '<span class="lab">' +
         esc(row.lab) +
         '</span><span class="tc-tile-val">' +
         esc(row.val) +
-        '</span></div>'
+        '</span>'
       );
     }
     if (!rows.length) return '';
@@ -1474,7 +1355,7 @@
     if (opTile) {
       if (jp.operator_tile_narrative) {
         opTile.innerHTML =
-          '<p class="dash-jp-tile-h">Operator tile — Jupiter_2 · green = pass, red = blocks trade, darker red = policy gate (ATR/extremes/history)</p>' +
+          '<p class="dash-jp-tile-h">Operator tile — Jupiter_2 policy · latest closed bar (OHLC · RSI · Supertrend · ATR · EMA · signals)</p>' +
           jupiterNarrativeLinesHtml(
             String(jp.operator_tile_narrative),
             'Operator tile — latest closed bar'
