@@ -736,16 +736,20 @@ def _fetch_trade(
 
 
 def _strip_outcome_from_pnl(pnl: Any) -> str:
-    """Compact label for main-dashboard baseline strip (PnL sign)."""
+    """Compact label for main-dashboard baseline strip (PnL sign).
+
+    WIN/LOSS require PnL strictly outside a tiny band around zero (same epsilon as
+    ``_outcome_from_pnl``) — zero or dust PnL is **FLAT**, never WIN.
+    """
     if pnl is None:
         return "—"
     try:
         v = float(pnl)
     except (TypeError, ValueError):
         return "—"
-    if v > 0:
+    if v > 1e-9:
         return "WIN"
-    if v < 0:
+    if v < -1e-9:
         return "LOSS"
     return "FLAT"
 

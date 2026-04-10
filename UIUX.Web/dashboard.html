@@ -1133,6 +1133,15 @@
     if (paired) {
       ocDisp = vs === 'WIN' ? 'WIN' : 'NOT';
     }
+    if (
+      baselineLane &&
+      c.pnl_usd != null &&
+      !isNaN(Number(c.pnl_usd)) &&
+      Math.abs(Number(c.pnl_usd)) <= 1e-9 &&
+      (ocDisp === 'WIN' || ocDisp === 'LOSS')
+    ) {
+      ocDisp = 'FLAT';
+    }
     var muted = !paired && (c.economic_authority === 'muted');
     var wl = 'wl-FLAT';
     if (ocDisp === 'WIN') wl = 'wl-WIN';
@@ -1369,6 +1378,9 @@
         var oc = r.outcome != null ? String(r.outcome) : '—';
         if (r.pnl_usd != null && !isNaN(Number(r.pnl_usd))) {
           var pv = Number(r.pnl_usd);
+          if (Math.abs(pv) <= 1e-9 && (oc === 'WIN' || oc === 'LOSS')) {
+            oc = 'FLAT';
+          }
           oc += ' (' + (pv >= 0 ? '+' : '') + pv.toFixed(2) + ' USD)';
         }
         var pill;

@@ -17,6 +17,7 @@ from modules.anna_training.dashboard_bundle import (
     BASELINE_TRADES_REPORT_SCHEMA,
     _event_axis_jupiter_tile_narratives,
     _pair_vs_baseline_for_cells,
+    _strip_outcome_from_pnl,
     build_baseline_trades_report,
     build_dashboard_bundle,
     build_trade_chain_payload,
@@ -284,6 +285,15 @@ def test_jupiter_tile_narrative_authoritative_from_ledger_without_tile(
     text = narr.get(mid, "")
     assert "ledger_authoritative_fixture" in text
     assert "New 5-min candle formed" not in text
+
+
+def test_strip_outcome_zero_is_flat_not_win() -> None:
+    assert _strip_outcome_from_pnl(0) == "FLAT"
+    assert _strip_outcome_from_pnl(0.0) == "FLAT"
+    assert _strip_outcome_from_pnl(1e-10) == "FLAT"
+    assert _strip_outcome_from_pnl(-1e-10) == "FLAT"
+    assert _strip_outcome_from_pnl(1e-8) == "WIN"
+    assert _strip_outcome_from_pnl(-1e-8) == "LOSS"
 
 
 def test_build_baseline_trades_report_schema() -> None:
