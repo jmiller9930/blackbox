@@ -20,6 +20,8 @@ Environment:
   PYTH_SSE_CONF_RATIO_MAX — only when ``PYTH_SSE_APPLY_CONF_GATE=1`` (default 0.001)
   PYTH_SSE_BAR_REFRESH_SEC — throttle for ``refresh_last_closed_bar_from_ticks`` (default 15)
   MARKET_BAR_MEMBERSHIP — ``oracle_publish`` (default, Sean) | ``inserted_at`` — see ``store.bar_membership_mode``
+  BASELINE_LEDGER_AFTER_CANONICAL_BAR — ``1`` (default): after each ``market_bars_5m`` upsert, run baseline
+  policy → ``execution_ledger.db`` (see ``basetrade/README.md``); ``0`` to disable
 """
 from __future__ import annotations
 

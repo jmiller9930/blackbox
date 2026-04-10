@@ -9,6 +9,11 @@ The evaluator is **only** ``modules/anna_training/jupiter_2_sean_policy.evaluate
 **Policy evaluations:** every evaluated tick writes/upserts ``policy_evaluations`` (including ``trade=false``),
 for backtest joins to ``market_bars_5m``. Disable with ``BASELINE_POLICY_EVALUATION_LOG=0``.
 
+**Ingest alignment:** :func:`market_data.canonical_bar_refresh.refresh_last_closed_bar_from_ticks` calls this after
+each successful ``market_bars_5m`` upsert when ``BASELINE_LEDGER_AFTER_CANONICAL_BAR`` is on (default), so the
+ledger stays aligned with Hermes/Pyth ingest without relying only on the Karpathy loop. Disable with
+``BASELINE_LEDGER_AFTER_CANONICAL_BAR=0`` (e.g. unit tests).
+
 Legacy: ``BASELINE_LEDGER_SIGNAL_MODE=legacy_mechanical_long`` — old open→close long every bar (lab only).
 """
 
@@ -97,6 +102,9 @@ def run_baseline_ledger_bridge_tick(
       BASELINE_LEGACY_MECHANICAL_ALLOWED — default **off**; ``1`` required for ``legacy_mechanical_long`` (lab only).
       BASELINE_LEDGER_MODE — ``paper`` (default) or ``live``.
       BASELINE_POLICY_EVALUATION_LOG — default **on**; ``0`` skips ``policy_evaluations`` upserts only.
+
+      Ingest invokes this after each canonical 5m upsert when ``BASELINE_LEDGER_AFTER_CANONICAL_BAR`` is on
+      (see :func:`market_data.canonical_bar_refresh.refresh_last_closed_bar_from_ticks`).
     """
     if not _env_bool("BASELINE_LEDGER_BRIDGE", True):
         return {"enabled": False, "reason": "BASELINE_LEDGER_BRIDGE off"}
@@ -141,6 +149,7 @@ def run_baseline_ledger_bridge_tick(
     from modules.anna_training.sean_jupiter_baseline_signal import evaluate_sean_jupiter_baseline_v1
 
     sig = evaluate_sean_jupiter_baseline_v1(bars_asc=bars_asc)
+    policy_eval_write_error: str | None = None
     if _policy_evaluation_log_enabled():
         from modules.anna_training.execution_ledger import upsert_policy_evaluation
 
@@ -157,11 +166,16 @@ def run_baseline_ledger_bridge_tick(
                 pnl_usd=(float(sig.pnl_usd) if sig.pnl_usd is not None else 0.0) if sig.trade else None,
                 db_path=execution_ledger_db_path,
             )
-        except sqlite3.OperationalError:
+        except sqlite3.OperationalError as exc:
             # Readonly/locked ledger: still return policy outcome (do not abort tick).
-            pass
+            policy_eval_write_error = str(exc)
+            print(
+                f"baseline_ledger_bridge: policy_evaluations write failed: {exc!r} market_event_id={mid}",
+                file=sys.stderr,
+                flush=True,
+            )
     if not sig.trade:
-        return {
+        out: dict[str, Any] = {
             "ok": True,
             "no_trade": True,
             "market_event_id": mid,
@@ -169,6 +183,9 @@ def run_baseline_ledger_bridge_tick(
             "features": sig.features,
             "signal_mode": sm,
         }
+        if policy_eval_write_error:
+            out["policy_evaluation_write_error"] = policy_eval_write_error
+        return out
 
     size = 1.0
     tid = _baseline_trade_id(mid, m)
@@ -217,11 +234,26 @@ def run_baseline_ledger_bridge_tick(
             "market_event_id": mid,
             "trade_id": tid,
         }
+    except sqlite3.OperationalError as exc:
+        print(
+            f"baseline_ledger_bridge: execution_trades write failed: {exc!r} market_event_id={mid}",
+            file=sys.stderr,
+            flush=True,
+        )
+        return {
+            "ok": False,
+            "reason": "execution_ledger_write_failed",
+            "error": str(exc),
+            "market_event_id": mid,
+            "trade_id": tid,
+            "signal_mode": sm,
+            "side": sig.side,
+        }
 
     row = out.get("execution_trade")
     trace_meta = {k: v for k, v in out.items() if k != "execution_trade"}
 
-    return {
+    ret: dict[str, Any] = {
         "ok": True,
         "market_event_id": mid,
         "trade_id": tid,
@@ -231,6 +263,9 @@ def run_baseline_ledger_bridge_tick(
         "signal_mode": sm,
         "side": sig.side,
     }
+    if policy_eval_write_error:
+        ret["policy_evaluation_write_error"] = policy_eval_write_error
+    return ret
 
 
 def _run_legacy_mechanical_long(
@@ -268,8 +303,13 @@ def _run_legacy_mechanical_long(
                 pnl_usd=pnl,
                 db_path=execution_ledger_db_path,
             )
-        except sqlite3.OperationalError:
-            pass
+        except sqlite3.OperationalError as exc:
+            print(
+                f"baseline_ledger_bridge: policy_evaluations write failed (legacy): {exc!r} "
+                f"market_event_id={mid}",
+                file=sys.stderr,
+                flush=True,
+            )
 
     try:
         out = persist_baseline_trade_with_trace(

@@ -103,6 +103,7 @@ def test_build_ohlc_from_ticks():
 
 
 def test_rollup_refresh_integration(tmp_path, monkeypatch):
+    monkeypatch.setenv("BASELINE_LEDGER_AFTER_CANONICAL_BAR", "0")
     monkeypatch.setenv("MARKET_BAR_MEMBERSHIP", "inserted_at")
     db = tmp_path / "market_data.db"
     conn = connect_market_db(db)
@@ -149,6 +150,7 @@ def test_rollup_refresh_integration(tmp_path, monkeypatch):
 
 def test_rollup_refresh_oracle_publish_sean_clock(tmp_path, monkeypatch):
     """5m bar uses Hermes publish_time window + SSE tape only (Sean-aligned)."""
+    monkeypatch.setenv("BASELINE_LEDGER_AFTER_CANONICAL_BAR", "0")
     monkeypatch.setenv("MARKET_BAR_MEMBERSHIP", "oracle_publish")
     db = tmp_path / "market_data.db"
     conn = connect_market_db(db)

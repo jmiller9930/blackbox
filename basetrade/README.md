@@ -53,6 +53,16 @@ Env:
 - `BLACKBOX_MARKET_DATA_PATH` — override SQLite path (default `data/sqlite/market_data.db`).
 - `BASELINE_LEDGER_SIGNAL_MODE` — default `sean_jupiter_v1`; `legacy_mechanical_long` for old bar-long only.
 
+### Baseline ledger vs ingest (operator)
+
+Hermes/Pyth ingest closes a 5m bucket and upserts `market_bars_5m` via `refresh_last_closed_bar_from_ticks`. **After each successful upsert**, the same path calls `run_baseline_ledger_bridge_tick` so `policy_evaluations` and baseline `execution_trades` stay aligned with the tape — **not only** when the Karpathy loop daemon runs.
+
+- **`BASELINE_LEDGER_AFTER_CANONICAL_BAR`** — default **on** (`1`). Set to `0` to skip the hook (unit tests do this; rare prod use).
+- **`BLACKBOX_EXECUTION_LEDGER_PATH`** — should point at the same `execution_ledger.db` the dashboard and audits use (default `data/sqlite/execution_ledger.db` under repo root).
+- **`BASELINE_LEDGER_BRIDGE`** — must stay **on** (`1`) for writes; same as above.
+
+If `policy_evaluations` upserts hit a locked ledger, the bridge logs to stderr and may include `policy_evaluation_write_error` on the returned dict; fix SQLite contention or paths rather than ignoring silent gaps.
+
 ## 4) Sync on **clawbot** (`~/blackbox`)
 
 Local edits do not update the server until Git is synced.
