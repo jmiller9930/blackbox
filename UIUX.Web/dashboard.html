@@ -162,6 +162,19 @@
     .tc-table { border-collapse: separate; border-spacing: 0; font-size: 0.65rem; min-width: max-content; }
     .tc-table th, .tc-table td { border-right: 1px solid var(--panel-border); border-bottom: 1px solid var(--panel-border); padding: 0.25rem 0.3rem; vertical-align: top; }
     /* Sticky chain column: fixed width + opaque seam; high z-index + layer so event tiles never paint left of this rail. */
+    /* Opaque “overhang” past the chain rail: covers subpixel bleed from scrolling td columns (the persistent sliver). */
+    .tc-table thead tr th:first-child.tc-sticky-chain::after,
+    .tc-table tbody tr th:first-child::after {
+      content: "";
+      position: absolute;
+      top: 0;
+      bottom: 0;
+      right: -12px;
+      width: 12px;
+      pointer-events: none;
+      z-index: 8;
+      background: #f8fafc;
+    }
     .tc-table thead tr th:first-child.tc-sticky-chain {
       position: sticky;
       left: 0;
@@ -171,8 +184,8 @@
       width: 10rem;
       box-sizing: border-box;
       background: #f8fafc !important;
-      /* Second shadow: solid 3px extension masks subpixel td bleed left of first event column */
-      box-shadow: 2px 0 6px rgba(15, 23, 42, 0.08), 3px 0 0 0 #f8fafc;
+      /* Second shadow: solid extension still helps where ::after does not paint (older engines). */
+      box-shadow: 2px 0 6px rgba(15, 23, 42, 0.08), 4px 0 0 0 #f8fafc;
       border-right: 2px solid #cbd5e1;
       transform: translateZ(0);
       backface-visibility: hidden;
@@ -186,7 +199,7 @@
       width: 10rem;
       box-sizing: border-box;
       background: #f8fafc !important;
-      box-shadow: 2px 0 6px rgba(15, 23, 42, 0.08), 3px 0 0 0 #f8fafc;
+      box-shadow: 2px 0 6px rgba(15, 23, 42, 0.08), 4px 0 0 0 #f8fafc;
       border-right: 2px solid #cbd5e1;
       transform: translateZ(0);
       backface-visibility: hidden;
@@ -196,12 +209,15 @@
       border-left: 3px solid #0f172a;
       background: #e8edf4 !important;
       font-weight: 700;
-      box-shadow: 2px 0 6px rgba(15, 23, 42, 0.08), 3px 0 0 0 #e8edf4;
+      box-shadow: 2px 0 6px rgba(15, 23, 42, 0.08), 4px 0 0 0 #e8edf4;
       min-width: 10rem;
       max-width: 10rem;
       width: 10rem;
       box-sizing: border-box;
       z-index: 5;
+    }
+    .tc-table tbody tr.tc-tr-baseline th:first-child::after {
+      background: #e8edf4;
     }
     /* Newest column: ring + “now” in header — column recency is separate */
     .tc-table thead th.tc-now,
