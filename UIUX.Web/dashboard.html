@@ -524,8 +524,6 @@
             <tbody></tbody>
           </table>
         </div>
-        <p style="margin:0;padding:0.25rem 0.5rem;font-size:0.62rem;color:var(--muted)" id="tc-note"></p>
-        <p style="margin:0;padding:0 0.5rem 0.35rem;font-size:0.6rem;color:var(--muted);line-height:1.35" id="tc-hierarchy"></p>
       </section>
     </div>
   </div>
@@ -958,14 +956,9 @@
     var table = $('tc-table');
     var thead = table.querySelector('thead tr');
     var tbody = table.querySelector('tbody');
-    var noteEl = $('tc-note');
-    var hierEl = $('tc-hierarchy');
-    if (noteEl) noteEl.textContent = (tc && tc.event_axis_note) ? tc.event_axis_note : '';
-    if (hierEl) hierEl.textContent = (tc && tc.visual_hierarchy_note) ? tc.visual_hierarchy_note : '';
     if (!tc || !tc.rows || !tc.rows.length) {
       thead.innerHTML = '<th scope="col" class="tc-sticky-chain">Chain</th>';
       tbody.innerHTML = '<tr><td colspan="99">No ledger rows yet.</td></tr>';
-      if (tc && tc.strategy_selection_note && noteEl) noteEl.textContent += ' ' + tc.strategy_selection_note;
       return;
     }
     var axis = tc.event_axis || [];
