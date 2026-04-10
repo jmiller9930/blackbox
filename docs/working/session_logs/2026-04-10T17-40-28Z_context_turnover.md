@@ -3,7 +3,7 @@
 | Field | Value |
 |--------|--------|
 | **UTC timestamp (filename)** | `2026-04-10T17-40-28Z` |
-| **Latest amendment stamp** | **`2026-04-10T17-57-05Z`** — **§18** added: direct answers to architect / agent questions **1–6** (tile colors, live copy, scope, clawbot proof, ops map, trade chain vs narrative). New architects: read **§18** after the table. |
+| **Latest amendment stamp** | **`2026-04-10T19-18-58Z`** — **§19** added: when to escalate vs assume Jupiter_2 baseline expertise. Prior: **`2026-04-10T17-57-05Z`** — **§18** (questions 1–6). |
 | **Amended (detail pass)** | Same calendar day — added **§12–17** (Jupiter policy semantics, data path, open questions). **Code-checked** against `modules/anna_training/dashboard_bundle.py` and related modules; **not** a substitute for live ops verification on `clawbot`. |
 | **Repository** | `blackbox` (local path: workspace root) |
 | **Git `HEAD` at original author time** | `3280424d1e5cdc747ca5a1a9a364b2d02de36550` (see `git log` for later commits) |
@@ -332,4 +332,22 @@ If the triad fixes **(2)** and **(3)**, web work can align **without** guessing 
 
 ---
 
-*End of turnover log. Filename timestamp remains first creation; **§18** stamped `2026-04-10T17-57-05Z`. Adjust if re-exporting from another timezone.*
+## 19. Escalate vs expert default (agent / architect alignment)
+
+**Amended:** `2026-04-10T19-18-58Z`
+
+This is a **runtime / product boundary**, not a math guess: the triad still asks for confirmation in specific cases. **Otherwise** engineers may treat Jupiter_2 baseline behavior as **known from code** until evidence contradicts it.
+
+### Always escalate (stop and ask or file proof — do not improvise)
+
+1. **New behavior** that is **not** in written policy, or that **contradicts** the engine — e.g. different thresholds, extra gates, or **UI that implies a fill** when **`would_trade` is false** / policy says no trade.
+2. **Execution / Jack / venue paths** — baseline evaluation is **not** live venue submit. If wiring **looks like orders** or submission, **confirm intent** with the triad before shipping.
+3. **Observed mismatch** between **narrative numbers** and **ledger / outcome** — treat as **bug hunt / proof issue**, not something to **paper over** in UI or copy.
+
+### Default when none of the above applies
+
+- Operate as an **expert** on how the system behaves under **Jupiter_2 baseline rules** (evaluator, bundle semantics, trade-chain authority) **until** something in **code** or a **directive** contradicts that understanding — then **surface it explicitly** (don’t silently “fix” or reinterpret).
+
+---
+
+*End of turnover log. Filename timestamp remains first creation; **§19** stamped `2026-04-10T19-18-58Z`. Adjust if re-exporting from another timezone.*
