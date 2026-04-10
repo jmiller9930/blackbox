@@ -282,21 +282,21 @@
         <div class="bt-filters">
           <div class="bt-field">
             <label for="bt-from">From (UTC)</label>
-            <input id="bt-from" type="datetime-local" value="2026-04-09T00:00" />
+            <input id="bt-from" type="datetime-local" />
           </div>
           <div class="bt-field">
             <label for="bt-to">To (UTC)</label>
-            <input id="bt-to" type="datetime-local" value="2026-04-10T23:59" />
+            <input id="bt-to" type="datetime-local" />
           </div>
           <div class="bt-field">
             <label for="bt-max">Max rows</label>
-            <input id="bt-max" type="number" value="50" min="1" max="500" style="width:5.5rem" />
+            <input id="bt-max" type="number" value="10" min="1" max="500" style="width:5.5rem" />
           </div>
           <div class="bt-field">
             <label for="bt-scope">Show</label>
             <select id="bt-scope" style="font-weight:700;min-width:11rem">
               <option value="all">All (ledger rows)</option>
-              <option value="trade">TRADE only</option>
+              <option value="trade" selected>TRADE only</option>
               <option value="no_trade">NO TRADE only</option>
             </select>
           </div>
@@ -423,21 +423,14 @@
         return v.indexOf("Z") >= 0 ? v : v + "Z";
       }
 
-      function defaultUtcRangeHours(hours) {
-        var h = hours || 48;
+      /** Default window: current UTC calendar day (00:00–23:59 UTC). */
+      function defaultTodayUtcRange() {
         var now = new Date();
-        var to = new Date(now.getTime());
-        var from = new Date(now.getTime() - h * 3600 * 1000);
-        function fmt(d) {
-          var y = d.getUTCFullYear();
-          var mo = String(d.getUTCMonth() + 1).padStart(2, "0");
-          var day = String(d.getUTCDate()).padStart(2, "0");
-          var hh = String(d.getUTCHours()).padStart(2, "0");
-          var mm = String(d.getUTCMinutes()).padStart(2, "0");
-          return y + "-" + mo + "-" + day + "T" + hh + ":" + mm;
-        }
-        document.getElementById("bt-from").value = fmt(from);
-        document.getElementById("bt-to").value = fmt(to);
+        var y = now.getUTCFullYear();
+        var mo = String(now.getUTCMonth() + 1).padStart(2, "0");
+        var day = String(now.getUTCDate()).padStart(2, "0");
+        document.getElementById("bt-from").value = y + "-" + mo + "-" + day + "T00:00";
+        document.getElementById("bt-to").value = y + "-" + mo + "-" + day + "T23:59";
       }
 
       function buildReportUrl() {
@@ -447,9 +440,9 @@
         if (from) qs.push("from_utc=" + encodeURIComponent(from));
         if (to) qs.push("to_utc=" + encodeURIComponent(to));
         var mx = parseInt(document.getElementById("bt-max").value, 10);
-        if (isNaN(mx) || mx < 1) mx = 50;
+        if (isNaN(mx) || mx < 1) mx = 10;
         qs.push("limit=" + encodeURIComponent(String(Math.min(500, mx))));
-        var scope = (document.getElementById("bt-scope") || {}).value || "all";
+        var scope = (document.getElementById("bt-scope") || {}).value || "trade";
         qs.push("scope=" + encodeURIComponent(scope));
         return "/api/v1/dashboard/baseline-trades-report?" + qs.join("&");
       }
@@ -678,7 +671,7 @@
         alert("Downloaded CSV (same data as future XLSX until a spreadsheet export is implemented).");
       };
 
-      defaultUtcRangeHours(48);
+      defaultTodayUtcRange();
       load().then(function () {
         var q = new URLSearchParams(location.search);
         var mid = q.get("mid");
