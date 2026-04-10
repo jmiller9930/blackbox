@@ -96,7 +96,6 @@
       background: linear-gradient(180deg, #ecfdf5 0%, #f0fdfa 100%);
     }
     .dash-jp-title { margin: 0 0 0.2rem; font-size: 0.82rem; font-weight: 800; color: #0f172a; }
-    .dash-jp-sub { margin: 0 0 0.4rem; font-size: 0.62rem; color: #0f766e; line-height: 1.35; max-width: 56rem; }
     .dash-jp-grid {
       display: grid;
       grid-template-columns: repeat(auto-fill, minmax(9.5rem, 1fr));
@@ -264,6 +263,7 @@
       text-transform: uppercase;
       color: #64748b;
     }
+    .tc-tr-baseline .tc-no-trade { color: #0f766e; }
     .tc-tile-verdict {
       grid-column: 1 / -1;
       font-size: 0.78rem;
@@ -273,7 +273,13 @@
       line-height: 1.2;
       color: #334155;
     }
-    /* Jupiter 5m narrative — same rhythm as tc-mini trade grid: bullet + lab + value (no row-level policy coloring). */
+    /* Baseline chain cells: teal accent on verdict strip (policy narrative not duplicated here). */
+    .tc-tr-baseline .tc-tile-verdict {
+      color: #0f766e;
+      padding-bottom: 0.2rem;
+      border-bottom: 1px solid rgba(13, 148, 136, 0.35);
+    }
+    /* Jupiter 5m narrative in Anna lanes — bullet + lab + value (baseline row omits narrative; see cellMini). */
     .tc-tile-narr-wrap {
       grid-column: 1 / -1;
       display: grid;
@@ -525,11 +531,7 @@
       <!-- Jupiter policy — bar-derived paper baseline (same evaluator as ledger bridge) -->
       <div class="dash-jp" id="dash-jp-wrap" role="region" aria-labelledby="dash-jp-h">
         <h2 id="dash-jp-h" class="dash-jp-title">Jupiter policy (paper baseline)</h2>
-        <p class="dash-jp-sub" id="dash-jp-lead">
-          Latest closed bar (OHLC + <strong>V</strong> = tick_count = Hermes SSE rows in that 5m window by <strong>publish_time</strong>; requires <code>pyth-sse-ingest</code> with <code>every_message</code> for full stream parity): whether a <strong>paper</strong> baseline trade would fire,
-          feature alignment (RSI / flags), and <code>reason_code</code>. SSE tape → SQLite feeds OHLC/V for the bar.
-          Not venue execution. Refreshes each poll (~<span id="dash-jp-poll-ms-label">1500</span>ms).
-        </p>
+        <span id="dash-jp-poll-ms-label" hidden>1500</span>
         <p class="dash-jp-tick" id="dash-jp-tick" aria-live="polite">—</p>
         <div class="dash-jp-grid" id="dash-jp-grid" aria-live="polite"></div>
         <p class="dash-jp-daemon" id="dash-jp-daemon"></p>
@@ -846,10 +848,13 @@
   }
 
   function cellMini(c, row) {
+    var ckRow = (row && row.chain_kind) || '';
     var narr = c && c.jupiter_tile_narrative ? String(c.jupiter_tile_narrative) : '';
-    var narrEl = narr
-      ? jupiterNarrativeLinesHtml(narr, 'Jupiter / Sean policy (5m bar)')
-      : '';
+    /* Baseline row: policy detail lives in the Jupiter KV strip above — do not repeat the narrative tile here. */
+    var narrEl =
+      narr && ckRow !== 'baseline'
+        ? jupiterNarrativeLinesHtml(narr, 'Jupiter / Sean policy (5m bar)')
+        : '';
     if (!c || c.empty) {
       return (
         narrEl +
@@ -962,8 +967,18 @@
   }
 
   function tcColumnBgOnly(idx, n, row) {
-    void row;
     var base = tcRecencyBg(idx, n);
+    var ck = row && (row.chain_kind || '');
+    if (ck === 'baseline') {
+      return (
+        'background-image:linear-gradient(90deg,rgba(236,253,245,0.78),rgba(236,253,245,0.15)),' +
+        'linear-gradient(180deg,' +
+        base +
+        ',' +
+        base +
+        ')'
+      );
+    }
     return 'background-color:' + base;
   }
 
@@ -1046,7 +1061,7 @@
           ? String(mid) + ' — canonical UTC: ' + d.toISOString()
           : String(mid)
       );
-      var bgStyle = tcColumnBgOnly(idx, nEv, { chain_kind: 'baseline' });
+      var bgStyle = tcColumnBgOnly(idx, nEv, null);
       th +=
         '<th scope="col" class="tc-head-ev' + nowCls + '"' +
         ' title="' + thTitle + '"' +
