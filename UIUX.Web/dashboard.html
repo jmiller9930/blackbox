@@ -1111,13 +1111,82 @@
     tcScrollTradeChainToEnd();
   }
 
-  /** Snap horizontal scroll to integer px so subpixel scrollLeft does not show a column fragment at the seam. */
+  /** Left edge of each thead th relative to the table (for column-aligned scroll). */
+  function tcThOffsetFromTable(th, table) {
+    var x = 0;
+    var n = th;
+    while (n && n !== table) {
+      x += n.offsetLeft;
+      n = n.offsetParent;
+    }
+    return x;
+  }
+
+  /** Scroll positions where the viewport left edge aligns with an event column start (fixes partial column “sliver” beside sticky Chain). */
+  function tcTradeChainColumnSnapScrollLefts() {
+    var table = $('tc-table');
+    if (!table) return [0];
+    var headRow = table.querySelector('thead tr');
+    if (!headRow) return [0];
+    var ths = headRow.querySelectorAll('th');
+    if (ths.length < 2) return [0];
+    var snaps = [0];
+    var i;
+    for (i = 1; i < ths.length; i++) {
+      snaps.push(tcThOffsetFromTable(ths[i], table));
+    }
+    snaps.sort(function (a, b) {
+      return a - b;
+    });
+    var out = [];
+    var prev = -1;
+    for (i = 0; i < snaps.length; i++) {
+      if (snaps[i] !== prev) {
+        out.push(snaps[i]);
+        prev = snaps[i];
+      }
+    }
+    return out;
+  }
+
+  /** Snap current scroll to nearest column edge (for manual horizontal scroll). */
+  function tcSnapTradeChainScrollNearest() {
+    var sc = $('tc-scroll');
+    if (!sc) return;
+    var max = Math.max(0, sc.scrollWidth - sc.clientWidth);
+    var snaps = tcTradeChainColumnSnapScrollLefts();
+    var cur = sc.scrollLeft;
+    var best = snaps[0];
+    var bestDist = Math.abs(cur - best);
+    var j;
+    for (j = 1; j < snaps.length; j++) {
+      if (snaps[j] > max + 0.5) {
+        continue;
+      }
+      var d = Math.abs(cur - snaps[j]);
+      if (d < bestDist) {
+        bestDist = d;
+        best = snaps[j];
+      }
+    }
+    sc.scrollLeft = Math.round(best);
+  }
+
+  /** Scroll trade chain horizontally to the rightmost position where scrollLeft aligns with a column edge (no mid-column fragment at the sticky seam). */
   function tcScrollTradeChainToEnd() {
     var sc = $('tc-scroll');
     if (!sc) return;
     function apply() {
       var max = Math.max(0, sc.scrollWidth - sc.clientWidth);
-      sc.scrollLeft = Math.floor(max);
+      var snaps = tcTradeChainColumnSnapScrollLefts();
+      var best = 0;
+      var j;
+      for (j = 0; j < snaps.length; j++) {
+        if (snaps[j] <= max + 0.5) {
+          best = snaps[j];
+        }
+      }
+      sc.scrollLeft = Math.round(best);
     }
     requestAnimationFrame(function () {
       requestAnimationFrame(function () {
@@ -1125,6 +1194,17 @@
         requestAnimationFrame(apply);
       });
     });
+  }
+
+  var tcUserScrollSnapTimer = null;
+  function onTcUserScroll() {
+    if (tcUserScrollSnapTimer) {
+      clearTimeout(tcUserScrollSnapTimer);
+    }
+    tcUserScrollSnapTimer = setTimeout(function () {
+      tcUserScrollSnapTimer = null;
+      tcSnapTradeChainScrollNearest();
+    }, 120);
   }
 
   function renderOB(b) {
@@ -1454,6 +1534,18 @@
   }
   window.addEventListener('resize', onTcLayoutResize);
   window.addEventListener('bb:text-scale', onTcLayoutResize);
+
+  var tcScrollHost = $('tc-scroll');
+  if (tcScrollHost) {
+    tcScrollHost.addEventListener('scroll', onTcUserScroll, { passive: true });
+    tcScrollHost.addEventListener('scrollend', function () {
+      if (tcUserScrollSnapTimer) {
+        clearTimeout(tcUserScrollSnapTimer);
+        tcUserScrollSnapTimer = null;
+      }
+      tcSnapTradeChainScrollNearest();
+    });
+  }
 
   refresh();
   setInterval(refresh, POLL_MS);
