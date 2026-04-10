@@ -1345,83 +1345,63 @@
     var tbody = document.getElementById('bts-tbody');
     var meta = document.getElementById('bts-meta');
     if (!tbody) return;
-    if (!meta) meta = null;
-    if (!tc || !tc.rows || !tc.rows.length) {
+    if (!tc) {
       if (meta) meta.textContent = '';
       tbody.innerHTML = '<tr><td colspan="4">No trade chain data.</td></tr>';
       return;
     }
-    var base = null;
-    var ri;
-    for (ri = 0; ri < tc.rows.length; ri++) {
-      if ((tc.rows[ri].chain_kind || '') === 'baseline') {
-        base = tc.rows[ri];
-        break;
-      }
-    }
-    if (!base) {
-      if (meta) meta.textContent = '';
-      tbody.innerHTML = '<tr><td colspan="4">No baseline row in bundle.</td></tr>';
-      return;
-    }
-    var axis = tc.event_axis || [];
-    var times = tc.event_axis_time_utc_iso || [];
-    var picked = [];
-    for (var i = axis.length - 1; i >= 0 && picked.length < 2; i--) {
-      var mid = axis[i];
-      var cell = base.cells && base.cells[mid] != null ? base.cells[mid] : null;
-      if (cell && !cell.empty) {
-        picked.push({ mid: mid, cell: cell, t: times.length > i ? times[i] : null });
-      }
-    }
-    if (!picked.length) {
+    var recent = tc.recent_baseline_trades;
+    if (recent && recent.length) {
       if (meta) {
         meta.textContent =
-          'No baseline executions in the visible chain columns — scroll the chain or open the report for the full ledger.';
+          'Latest baseline fills from the execution ledger (newest first). Open the report for range filters and CSV.';
       }
-      tbody.innerHTML =
-        '<tr><td colspan="4">No baseline executions in this chain window.</td></tr>';
+      var html = '';
+      var ri;
+      for (ri = 0; ri < recent.length; ri++) {
+        var r = recent[ri];
+        var tim =
+          r.time_utc_iso != null && String(r.time_utc_iso).trim() !== ''
+            ? String(r.time_utc_iso)
+            : '—';
+        var mid = r.market_event_id != null ? String(r.market_event_id) : '—';
+        var sideRaw = r.side != null ? String(r.side).trim().toLowerCase() : '';
+        var oc = r.outcome != null ? String(r.outcome) : '—';
+        if (r.pnl_usd != null && !isNaN(Number(r.pnl_usd))) {
+          var pv = Number(r.pnl_usd);
+          oc += ' (' + (pv >= 0 ? '+' : '') + pv.toFixed(2) + ' USD)';
+        }
+        var pill;
+        if (sideRaw === 'long' || sideRaw === 'short') {
+          pill =
+            '<span class="bts-pill bts-' +
+            (sideRaw === 'long' ? 'long' : 'short') +
+            '">' +
+            esc(sideRaw) +
+            '</span>';
+        } else {
+          pill = esc(sideRaw ? sideRaw : '—');
+        }
+        html +=
+          '<tr><td class="bts-mono">' +
+          esc(tim) +
+          '</td><td class="bts-mono">' +
+          esc(mid) +
+          '</td><td>' +
+          pill +
+          '</td><td>' +
+          esc(oc) +
+          '</td></tr>';
+      }
+      tbody.innerHTML = html;
       return;
     }
     if (meta) {
       meta.textContent =
-        'Up to 2 most recent baseline executions in this window (same cells as the Baseline row below). Older events are to the left in the chain.';
+        'No baseline rows in the execution ledger yet — the chain below may still show policy evaluation.';
     }
-    var html = '';
-    for (ri = 0; ri < picked.length; ri++) {
-      var p = picked[ri];
-      var c = p.cell;
-      var tim = p.t != null && String(p.t).trim() !== '' ? String(p.t) : '—';
-      var sideRaw = c.side != null ? String(c.side).trim().toLowerCase() : '';
-      var oc =
-        c.outcome_display != null
-          ? String(c.outcome_display)
-          : c.outcome != null
-            ? String(c.outcome)
-            : '—';
-      var pill;
-      if (sideRaw === 'long' || sideRaw === 'short') {
-        pill =
-          '<span class="bts-pill bts-' +
-          (sideRaw === 'long' ? 'long' : 'short') +
-          '">' +
-          esc(sideRaw) +
-          '</span>';
-      } else {
-        pill = esc(sideRaw ? sideRaw : '—');
-      }
-      html +=
-        '<tr><td class="bts-mono">' +
-        esc(tim) +
-        '</td><td class="bts-mono">' +
-        esc(String(p.mid)) +
-        '</td><td>' +
-        pill +
-        '</td><td>' +
-        esc(oc) +
-        '</td></tr>';
-    }
-    tbody.innerHTML = html;
+    tbody.innerHTML =
+      '<tr><td colspan="4">No baseline executions recorded in the ledger.</td></tr>';
   }
 
   function renderTC(tc) {

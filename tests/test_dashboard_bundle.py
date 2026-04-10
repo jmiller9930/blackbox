@@ -43,6 +43,16 @@ def test_build_trade_chain_payload_schema() -> None:
     assert tc["rows"][0].get("row_tier") == "primary"
     assert (tc.get("recency") or {}).get("axis_order") == "oldest_left_newest_right"
     assert tc.get("jupiter_tile_narrative_schema") == "jupiter_tile_narrative_v1"
+    assert "recent_baseline_trades" in tc
+    assert isinstance(tc["recent_baseline_trades"], list)
+    for row in tc["recent_baseline_trades"]:
+        assert set(row.keys()) >= {
+            "market_event_id",
+            "side",
+            "time_utc_iso",
+            "outcome",
+            "pnl_usd",
+        }
 
 
 def test_build_dashboard_bundle_schema() -> None:
@@ -60,6 +70,8 @@ def test_build_dashboard_bundle_schema() -> None:
     assert "eta_at" in b["liveness"]["next_tick"]
     assert "paper_capital" in b
     assert "recency" in b["trade_chain"]
+    assert "recent_baseline_trades" in b["trade_chain"]
+    assert isinstance(b["trade_chain"]["recent_baseline_trades"], list)
     assert "operator_trading" in b
     assert (b["operator_trading"] or {}).get("schema") == "operator_trading_strategy_v1"
     assert "eligible_strategy_ids" in b["operator_trading"]

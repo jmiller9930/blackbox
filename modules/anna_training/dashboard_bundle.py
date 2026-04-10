@@ -735,6 +735,62 @@ def _fetch_trade(
     return dict(zip(cols, r))
 
 
+def _strip_outcome_from_pnl(pnl: Any) -> str:
+    """Compact label for main-dashboard baseline strip (PnL sign)."""
+    if pnl is None:
+        return "—"
+    try:
+        v = float(pnl)
+    except (TypeError, ValueError):
+        return "—"
+    if v > 0:
+        return "WIN"
+    if v < 0:
+        return "LOSS"
+    return "FLAT"
+
+
+def _recent_baseline_trades_for_dashboard_strip(
+    conn: sqlite3.Connection,
+    *,
+    limit: int = 3,
+) -> list[dict[str, Any]]:
+    """
+    Newest-first baseline lane rows from ``execution_trades`` (not limited to visible chain columns).
+
+    Used for the “Recent baseline trades” block on ``dashboard.html`` so operators always see
+    ledger-backed activity when rows exist.
+    """
+    lim = max(1, min(12, int(limit)))
+    cur = conn.execute(
+        """
+        SELECT market_event_id, side, entry_time, pnl_usd, created_at_utc, trade_id
+        FROM execution_trades
+        WHERE lane = 'baseline' AND strategy_id = ?
+        ORDER BY COALESCE(created_at_utc, entry_time, '') DESC, trade_id DESC
+        LIMIT ?
+        """,
+        (RESERVED_STRATEGY_BASELINE, lim),
+    )
+    cols = [d[0] for d in cur.description]
+    out: list[dict[str, Any]] = []
+    for r in cur.fetchall():
+        row = dict(zip(cols, r))
+        t = row.get("entry_time") or row.get("created_at_utc")
+        t_iso = _normalize_utc_iso_for_axis(t) if t else None
+        pnl = row.get("pnl_usd")
+        out.append(
+            {
+                "market_event_id": str(row.get("market_event_id") or ""),
+                "side": str(row.get("side") or "").strip().lower(),
+                "time_utc_iso": t_iso or "",
+                "outcome": _strip_outcome_from_pnl(pnl),
+                "pnl_usd": float(pnl) if pnl is not None else None,
+            }
+        )
+    return out
+
+
 def _normalize_utc_iso_for_axis(ts: Any) -> str | None:
     """Normalize ledger timestamp to UTC ISO for browser (canonical column instant)."""
     if ts is None:
@@ -1115,9 +1171,11 @@ def build_trade_chain_payload(
     mpath = market_db_path if market_db_path is not None else _market_db_path()
 
     pair_eps = 0.05
+    recent_strip: list[dict[str, Any]] = []
     conn = connect_ledger(db_path)
     try:
         ensure_execution_ledger_schema(conn)
+        recent_strip = _recent_baseline_trades_for_dashboard_strip(conn, limit=3)
         event_axis, event_axis_time_utc_iso = _event_axis_from_market_bars(mpath, limit=max_events)
         event_axis_source = "market_bars_5m"
         if not event_axis:
@@ -1257,6 +1315,7 @@ def build_trade_chain_payload(
         "scorecard": scorecard,
         "anna_vs_baseline_aggregate": anna_agg,
         "rows": rows_out,
+        "recent_baseline_trades": recent_strip,
     }
 
 
