@@ -30,7 +30,7 @@ python3 basetrade/summarize_log.py basetrade/logs/shadow_bot_*.log
 
 ## 3) **Jupiter policy — baseline signal test** (Python parity harness)
 
-Tests **`evaluate_sean_jupiter_baseline_v1`** (Sean **Jupiter policy v2**: RSI 52/48 + Supertrend + EMA200, on top of aggregateCandles-style structure) against **`data/sqlite/market_data.db`** (`market_bars_5m`). Needs **≥200** closed bars. Use on **clawbot** after `git pull` so code matches `main`.
+Tests **`evaluate_sean_jupiter_baseline_v1`** (thin adapter over **Jupiter_2**: ``jupiter_2_sean_policy`` — RSI 52/48, Supertrend 10/3, EMA200, ATR ratio) against **`data/sqlite/market_data.db`** (`market_bars_5m`). Needs **≥216** closed bars (`MIN_BARS`). Use on **clawbot** after `git pull` so code matches `main`.
 
 ```bash
 # From repo root (e.g. ~/blackbox on clawbot)

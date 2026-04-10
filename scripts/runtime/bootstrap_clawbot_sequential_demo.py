@@ -16,7 +16,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-DEFAULT_STRATEGY = "jupiter_supertrend_ema_rsi_atr_v1"
+DEFAULT_STRATEGY = "jupiter_2_sean_perps_v1"
 DEFAULT_TEST_ID = "clawbot_demo_w10"
 EVENT_LIMIT = 24
 

@@ -1,7 +1,8 @@
-"""Baseline → execution_ledger: **Sean’s Jupiter policy** (signal-gated) or legacy mechanical row.
+"""Baseline → execution_ledger: **Jupiter_2 Sean policy** (signal-gated) or legacy mechanical row.
 
-Default **signal mode** = ``sean_jupiter_v1`` — **parity** with ``trading_core`` ``aggregateCandles`` + ``rsi``
-(see ``sean_jupiter_baseline_signal.py``).
+Default **signal mode** env value is still ``sean_jupiter_v1`` (historic name; do not read as “old Jupiter policy”).
+The evaluator is **only** ``modules/anna_training/jupiter_2_sean_policy.evaluate_jupiter_2_sean`` via
+``sean_jupiter_baseline_signal.evaluate_sean_jupiter_baseline_v1`` (adapter over Jupiter_2).
 
 **Execution trades:** still **at most one** baseline ``execution_trades`` row per ``market_event_id`` when the policy fires.
 
@@ -174,11 +175,15 @@ def run_baseline_ledger_bridge_tick(
     pnl = float(sig.pnl_usd) if sig.pnl_usd is not None else 0.0
 
     from .decision_trace import persist_baseline_trade_with_trace
-    from modules.anna_training.jupiter_2_sean_policy import CATALOG_ID as baseline_catalog_id
+    from modules.anna_training.jupiter_2_sean_policy import (
+        CATALOG_ID as baseline_catalog_id,
+        POLICY_ENGINE_ID,
+    )
 
     catalog_id = baseline_catalog_id
     ctx = {
         "source": "baseline_ledger_bridge_sean_jupiter_v1",
+        "policy_engine": POLICY_ENGINE_ID,
         "trade_policy": "jupiter_perps",
         "catalog_strategy_id": catalog_id,
         "signal_mode": sm,

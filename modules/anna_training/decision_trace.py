@@ -252,6 +252,7 @@ def build_parallel_anna_paper_steps(
                 "parallel_runner": runner,
                 "economic_paper": True,
                 "sean_jupiter_v1": True,
+                "policy_engine": "jupiter_2",
                 "signal_reason_code": signal_reason_code,
             },
         },
@@ -265,7 +266,7 @@ def build_parallel_anna_paper_steps(
                 "derived_pnl_usd_preview": round(pnl_preview, 8),
             },
             "rationale": _clamp_rationale(
-                f"Open→close {side} on canonical bar (Sean Jupiter v1 fired"
+                f"Open→close {side} on canonical bar (Jupiter_2 policy fired"
                 + (f", {signal_reason_code}" if signal_reason_code else "")
                 + "); parallel Anna measurement vs baseline on same market_event_id."
             ),

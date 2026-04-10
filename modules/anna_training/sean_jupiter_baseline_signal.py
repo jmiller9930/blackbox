@@ -498,7 +498,7 @@ def aggregate_candles_signal_flags(
     """
     Same boolean **shape** as ``aggregateCandles`` (high/low structure + RSI swing + thresholds).
 
-    Thresholds are **Sean's Jupiter v2** (52 / 48), not the deprecated Drift snapshot (40 / 60).
+    Thresholds match **Jupiter_2** RSI bands (52 / 48), not the deprecated Drift snapshot (40 / 60).
     """
     ph = prev_candle["high"]
     pl = prev_candle["low"]

@@ -1,4 +1,4 @@
-"""Parallel Anna paper strategies per market_event_id — **Sean Jupiter v1 signal-gated** ledger writes."""
+"""Parallel Anna paper strategies per market_event_id — **Jupiter_2** (same baseline policy) signal-gated ledger writes."""
 
 from __future__ import annotations
 
@@ -139,7 +139,7 @@ def _parallel_strategy_ids() -> list[str]:
         if not sid or sid == "manual_operator_v1":
             continue
         out.append(sid)
-    return out if out else ["jupiter_supertrend_ema_rsi_atr_v1"]
+    return out if out else ["jupiter_2_sean_perps_v1"]
 
 
 def _stub_pnl_for_strategy(strategy_id: str, market_event_id: str) -> tuple[str, float]:
@@ -162,7 +162,7 @@ def run_parallel_anna_strategies_tick(
     """
     For **each** configured Anna strategy id, append **one** execution row for the **latest**
     ``market_event_id`` **only when** :func:`evaluate_sean_jupiter_baseline_v1` returns ``trade=True``
-    (same Jupiter policy as :func:`run_baseline_ledger_bridge_tick` in ``sean_jupiter_v1`` mode).
+    (same Jupiter_2 policy as :func:`run_baseline_ledger_bridge_tick`; env ``BASELINE_LEDGER_SIGNAL_MODE`` default is still named ``sean_jupiter_v1`` for compatibility).
     **Multiple strategies** ⇒ multiple Anna rows on the **same** signal event (one per strategy id).
 
     Mode (``ANNA_PARALLEL_STRATEGY_MODE``, default ``paper``):

@@ -12,16 +12,18 @@ from modules.anna_training.store import anna_training_dir
 CATALOG_FILE = "strategy_catalog.json"
 
 # Minimal built-in ids so tests and fresh installs have stable references.
+# **Baseline / Karpathy policy engine** = Jupiter_2 (`jupiter_2_sean_perps_v1`). The older id remains for
+# legacy ledger rows and tests that pin a stable label.
 DEFAULT_STRATEGIES: list[dict[str, Any]] = [
     {
-        "id": "jupiter_supertrend_ema_rsi_atr_v1",
-        "title": "Jupiter Perps — Supertrend + EMA200 + RSI + ATR (trading_core)",
-        "description": "Trend-following momentum; see trading_core README / operator strategy doc.",
+        "id": "jupiter_2_sean_perps_v1",
+        "title": "Jupiter_2 — Sean policy spec v1.0 (SOL perp, 5m, ST10×3 + EMA200 + RSI + ATR ratio)",
+        "description": "Canonical engine: modules/anna_training/jupiter_2_sean_policy.py; TypeScript-bot parity; paper only.",
     },
     {
-        "id": "jupiter_2_sean_perps_v1",
-        "title": "Jupiter_2 — Sean policy v1.0 (SOL perp, 5m, ST10×3 + EMA200 + RSI + ATR ratio)",
-        "description": "TypeScript-bot parity: modules/anna_training/jupiter_2_sean_policy.py; paper evaluation only.",
+        "id": "jupiter_supertrend_ema_rsi_atr_v1",
+        "title": "Legacy strategy label (pre–Jupiter_2 catalog id)",
+        "description": "Historical id; baseline lane uses jupiter_2_sean_perps_v1. Kept for old execution_trades rows.",
     },
     {
         "id": "manual_operator_v1",

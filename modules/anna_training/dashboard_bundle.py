@@ -3,12 +3,12 @@ Aggregated operator dashboard payload: trade chain, sequential status, wallet su
 
 Trade chain: horizontal event axis (columns) × vertical chains (baseline, Anna test, Anna strategy rows).
 
-**Baseline row:** WIN/LOSS is bound to ``policy_evaluations`` (Sean Jupiter, ``signal_mode=sean_jupiter_v1``) plus
+**Baseline row:** WIN/LOSS is bound to ``policy_evaluations`` (``signal_mode=sean_jupiter_v1`` is the **historic env
+label** for “Sean baseline path”; the **engine** is always **Jupiter_2**, see ``jupiter_2_sean_policy``) plus
 a matching execution row when ``trade=1``. Missing policy or ``trade=0`` renders NO TRADE even if
 ``execution_trades`` contains a baseline row (non-authoritative artifacts are not displayed as outcomes).
 
-**Jupiter policy snapshot:** same ``evaluate_sean_jupiter_baseline_v1`` inputs when stored policy is absent
-(bar-derived; paper measurement).
+**Jupiter policy snapshot:** ``evaluate_sean_jupiter_baseline_v1`` → ``evaluate_jupiter_2_sean`` (bar-derived; paper).
 """
 
 from __future__ import annotations
@@ -267,10 +267,15 @@ def build_jupiter_policy_snapshot(
     training_state: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """
-    Live **paper** Jupiter_2 baseline policy view: same evaluator as ``baseline_ledger_bridge`` (sean_jupiter_v1).
+    Live **paper** Jupiter_2 baseline policy view: same evaluator as ``baseline_ledger_bridge``.
 
     Not a price tape; not venue execution. Refreshes every dashboard bundle request.
     """
+    from modules.anna_training.jupiter_2_sean_policy import (
+        CATALOG_ID as JUPITER_2_CATALOG_ID,
+        POLICY_ENGINE_ID,
+        POLICY_SPEC_VERSION,
+    )
     from modules.anna_training.sean_jupiter_baseline_signal import (
         MIN_BARS,
         evaluate_sean_jupiter_baseline_v1,
@@ -280,6 +285,15 @@ def build_jupiter_policy_snapshot(
     mpath = market_db_path if market_db_path is not None else _market_db_path()
     out: dict[str, Any] = {
         "schema": "jupiter_policy_snapshot_v1",
+        # Explicit engine identity — always Jupiter_2 for this snapshot (not legacy Wilder/ST paths).
+        "policy_engine": POLICY_ENGINE_ID,
+        "policy_catalog_id": JUPITER_2_CATALOG_ID,
+        "policy_spec_version": POLICY_SPEC_VERSION,
+        "baseline_signal_mode_env": "sean_jupiter_v1",
+        "baseline_signal_mode_note": (
+            "Env BASELINE_LEDGER_SIGNAL_MODE default is still named sean_jupiter_v1 for compatibility; "
+            "evaluator is jupiter_2_sean_policy.evaluate_jupiter_2_sean."
+        ),
         "what_this_is": (
             "Bar-derived Jupiter_2 Sean policy (Supertrend 10/3, EMA200, RSI 14, simple TR ATR ratio). "
             "Shows whether the latest closed bar would fire a paper baseline trade and which features aligned."

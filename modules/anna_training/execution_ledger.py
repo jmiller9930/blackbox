@@ -341,7 +341,11 @@ def fetch_policy_evaluation_for_market_event(
     strategy_id: str = RESERVED_STRATEGY_BASELINE,
     signal_mode: str = "sean_jupiter_v1",
 ) -> dict[str, Any] | None:
-    """Latest policy_evaluations row for baseline Sean Jupiter policy at ``market_event_id``."""
+    """Latest policy_evaluations row for baseline policy at ``market_event_id``.
+
+    ``signal_mode`` defaults to ``sean_jupiter_v1`` (historic env name); evaluator is **Jupiter_2**
+    (``jupiter_2_sean_policy``).
+    """
     mid = (market_event_id or "").strip()
     if not mid:
         return None

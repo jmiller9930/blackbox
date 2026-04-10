@@ -126,7 +126,7 @@ def test_migrate_stub_row_gets_pnl(tmp_path: Path, monkeypatch: pytest.MonkeyPat
           side, entry_time, entry_price, size, exit_time, exit_price, exit_reason,
           pnl_usd, context_snapshot_json, notes, trace_id, schema_version, created_at_utc
         ) VALUES (
-          'pt_test1', 'jupiter_supertrend_ema_rsi_atr_v1', 'anna', 'paper_stub', 'e_test_1',
+          'pt_test1', 'jupiter_2_sean_perps_v1', 'anna', 'paper_stub', 'e_test_1',
           'SOL-PERP', '5m', 'long', '2026-04-01T00:00:00Z', 100.0, 1.0,
           '2026-04-01T00:05:00Z', 100.0, 'CLOSE',
           NULL, '{}', 'parallel_stub synthetic (pnl_usd not asserted)', NULL,

@@ -40,6 +40,13 @@ MIN_BARS = EMA_PERIOD + ATR_PERIOD + 2  # 216 — matches generate_signal guard
 REFERENCE_SOURCE = "jupiter_sean_policy:v1.0:SOL_perp_Jupiter_2+TypeScript_ports"
 CATALOG_ID = "jupiter_2_sean_perps_v1"
 
+# --- Application-wide identity (baseline, ledger, dashboard) ---
+# Use this string anywhere you need to answer “which Jupiter policy engine?”
+# (Contrast: env ``BASELINE_LEDGER_SIGNAL_MODE=sean_jupiter_v1`` is a legacy *mode name*, not “policy v1”.)
+POLICY_ENGINE_ID = "jupiter_2"
+# Sean’s written spec / catalog revision (1.0) — not the same thing as “Jupiter_1 vs Jupiter_2”.
+POLICY_SPEC_VERSION = "1.0"
+
 POLICY_NOTES = (
     "Virtual SL/TP: initial ±1.6×ATR / ±4.0×ATR, breakeven after +0.2%, trailing; "
     "market orders only; one position; 5m debounce on trailing — see bot runtime, not this evaluator."

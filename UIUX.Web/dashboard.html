@@ -1276,6 +1276,34 @@
       rows.push({ k: 'error', v: String(jp.error), cls: 'jp-flat' });
       if (jp.hint) rows.push({ k: 'hint', v: String(jp.hint), cls: 'jp-flat' });
     } else {
+      if (jp.policy_engine != null && String(jp.policy_engine).trim() !== '') {
+        rows.push({
+          k: 'policy engine',
+          v: String(jp.policy_engine),
+          cls: 'jp-fire',
+          title:
+            'Canonical evaluator: jupiter_2_sean_policy. Env BASELINE_LEDGER_SIGNAL_MODE=sean_jupiter_v1 is a legacy mode name only.',
+        });
+      }
+      if (jp.policy_catalog_id != null && String(jp.policy_catalog_id).trim() !== '') {
+        rows.push({ k: 'catalog id', v: String(jp.policy_catalog_id), cls: 'jp-flat' });
+      }
+      if (jp.policy_spec_version != null && String(jp.policy_spec_version).trim() !== '') {
+        rows.push({
+          k: 'policy spec version',
+          v: String(jp.policy_spec_version),
+          cls: 'jp-flat',
+          title: "Sean's written spec / catalog revision — not 'Jupiter policy v1' vs v2.",
+        });
+      }
+      if (jp.baseline_signal_mode_env != null && String(jp.baseline_signal_mode_env).trim() !== '') {
+        rows.push({
+          k: 'BASELINE_LEDGER_SIGNAL_MODE',
+          v: String(jp.baseline_signal_mode_env),
+          cls: 'jp-flat',
+          title: jp.baseline_signal_mode_note ? String(jp.baseline_signal_mode_note) : '',
+        });
+      }
       rows.push({
         k: 'would trade (paper)',
         v: jp.would_trade ? 'YES — ' + String(jp.side || '') : 'NO TRADE (paper)',
@@ -1308,10 +1336,13 @@
     }
     var h = rows
       .map(function (r) {
+        var ta = r.title ? ' title="' + esc(r.title) + '"' : '';
         return (
           '<div class="dash-jp-kv ' +
           (r.cls || '') +
-          '"><div class="jk">' +
+          '"' +
+          ta +
+          '><div class="jk">' +
           esc(r.k) +
           '</div><div class="jv">' +
           esc(r.v) +
@@ -1325,7 +1356,7 @@
     if (opTile) {
       if (jp.operator_tile_narrative) {
         opTile.innerHTML =
-          '<p class="dash-jp-tile-h">Operator tile — latest closed bar (OHLC · RSI · Supertrend · ATR · EMA · signals)</p>' +
+          '<p class="dash-jp-tile-h">Operator tile — Jupiter_2 policy · latest closed bar (OHLC · RSI · Supertrend · ATR · EMA · signals)</p>' +
           jupiterNarrativeLinesHtml(
             String(jp.operator_tile_narrative),
             'Operator tile — latest closed bar'
