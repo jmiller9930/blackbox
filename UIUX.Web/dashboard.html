@@ -144,16 +144,6 @@
       border: 0;
       background: transparent;
     }
-    .tc-comparative {
-      font-size: 0.62rem;
-      font-weight: 700;
-      color: #0f172a;
-      max-width: min(100%, 32rem);
-      text-align: right;
-      line-height: 1.4;
-    }
-    /* Anna vs baseline aggregate: no green/red — neutral text only */
-    .tc-comparative .tc-sum-stat { color: #0f172a; font-weight: 700; }
     .dash-r4 .scroll {
       flex: 1; overflow: auto; min-height: 12rem;
       scroll-padding-inline: 0.5rem;
@@ -340,70 +330,6 @@
       0% { transform: scale(1.35); opacity: 1; }
       100% { transform: scale(1); opacity: 1; }
     }
-    .tc-scorecard-block {
-      flex-shrink: 0;
-      padding: 0.4rem 0.5rem 0.5rem;
-      border-bottom: 1px solid var(--panel-border);
-      background: #f8fafc;
-      font-size: 0.68rem;
-    }
-    .tc-sc-title { font-weight: 800; font-size: 0.68rem; margin: 0 0 0.35rem; color: #0f172a; }
-    /* Scorecard: real table — reliable columns; strategy id wraps in its cell. */
-    .tc-sc-table-wrap {
-      overflow-x: auto;
-      width: 100%;
-      margin: 0;
-      border-radius: 6px;
-      border: 1px solid var(--panel-border);
-      background: #fff;
-    }
-    .tc-sc-table {
-      width: 100%;
-      border-collapse: collapse;
-      font-size: 0.62rem;
-      table-layout: fixed;
-    }
-    .tc-sc-table caption {
-      caption-side: top;
-      text-align: left;
-      padding: 0.35rem 0.45rem 0.25rem;
-      font-size: 0.58rem;
-      font-weight: 700;
-      color: var(--muted);
-    }
-    .tc-sc-table th,
-    .tc-sc-table td {
-      border-bottom: 1px solid var(--panel-border);
-      padding: 0.4rem 0.45rem;
-      vertical-align: top;
-      line-height: 1.35;
-    }
-    .tc-sc-table thead th {
-      background: rgba(15, 23, 42, 0.07);
-      font-weight: 800;
-      text-transform: uppercase;
-      font-size: 0.56rem;
-      letter-spacing: 0.04em;
-      color: #475569;
-    }
-    .tc-sc-table tbody tr:last-child td { border-bottom: none; }
-    .tc-sc-table tbody tr.tc-sc-designated { background: #f1f5f9; }
-    .tc-sc-table tbody tr.tc-sc-designated td:first-child { box-shadow: inset 3px 0 0 #94a3b8; }
-    .tc-sc-col-lane { width: 22%; }
-    .tc-sc-col-strat { width: 38%; word-break: break-word; }
-    .tc-sc-col-num { width: 13.33%; text-align: right; font-variant-numeric: tabular-nums; font-weight: 700; }
-    .tc-sc-kind { font-weight: 700; color: #334155; }
-    .tc-sc-sid { font-family: ui-monospace, monospace; font-size: 0.58rem; }
-    .tc-sc-empty { margin: 0; padding: 0.35rem; color: var(--muted); font-size: 0.65rem; }
-    .tc-sc-badge { display: inline-block; margin-left: 0.25rem; padding: 0.05rem 0.25rem; border-radius: 3px; background: #e2e8f0; color: #334155; border: 1px solid #cbd5e1; font-size: 0.52rem; font-weight: 800; text-transform: uppercase; vertical-align: middle; }
-    .tc-strategy-ops { margin-top: 0.4rem; padding-top: 0.35rem; border-top: 1px dashed var(--panel-border); display: grid; gap: 0.35rem; }
-    .tc-strategy-ops label { font-size: 0.58rem; color: var(--muted); font-weight: 700; display: block; margin-bottom: 0.15rem; }
-    .tc-strategy-ops select { font-size: 0.72rem; padding: 0.25rem 0.35rem; max-width: 18rem; }
-    .tc-strategy-ops button { padding: 0.3rem 0.55rem; border-radius: var(--radius-md); border: 1px solid var(--panel-border); background: var(--accent); color: var(--accent-contrast); font-weight: 700; font-size: 0.72rem; cursor: pointer; }
-    .tc-strategy-ops button.sec { background: var(--panel); color: var(--text); }
-    .tc-op-line { display: flex; flex-wrap: wrap; align-items: center; gap: 0.35rem 0.65rem; }
-    .tc-op-jar { font-size: 0.58rem; color: var(--muted); margin: 0; line-height: 1.35; }
-    .tc-op-note { font-size: 0.58rem; color: var(--muted); margin: 0 0 0.25rem; line-height: 1.35; }
     .tc-ledger-note {
       flex-shrink: 0;
       margin: 0;
@@ -533,37 +459,10 @@
       <section class="dash-r4" aria-labelledby="tc-h">
         <div class="tc-section-head">
           <h2 id="tc-h">Trade chain</h2>
-          <div id="tc-comparative" class="tc-comparative" aria-live="polite"></div>
         </div>
         <div class="tc-flow" aria-hidden="true">
           <span class="tc-flow-seq"><span class="tc-flow-old">older</span> <span class="tc-flow-arrow">→</span> <span class="tc-flow-new">newer</span></span>
           <span class="tc-flow-now">now = right column</span>
-        </div>
-        <div class="tc-scorecard-block" id="tc-scorecard-block">
-          <p class="tc-sc-title">Scorecard (this window vs baseline)</p>
-          <div id="tc-scorecard" role="group" aria-label="Strategy scorecard"></div>
-          <p class="tc-sc-explain" id="tc-sc-explain" style="font-size:0.6rem;color:var(--muted);margin:0.35rem 0 0;line-height:1.4"></p>
-          <div class="tc-strategy-ops" id="tc-strategy-ops">
-            <p class="tc-op-note" id="tc-op-note"></p>
-            <div class="tc-op-line">
-              <span><strong>Designated trading strategy</strong> <span id="tc-designated" style="font-family:ui-monospace,monospace">—</span></span>
-            </div>
-            <div>
-              <label for="tc-promote-sel">Promote a sustained registry strategy (candidate → promoted lifecycle; tests excluded)</label>
-              <div class="tc-op-line">
-                <select id="tc-promote-sel" aria-label="Sustained registry strategy to promote"></select>
-                <button type="button" class="sec" id="btn-tc-promote">Promote</button>
-              </div>
-            </div>
-            <div>
-              <label for="tc-demote-rep">Demote current Anna designation — replacement (baseline or another sustained id)</label>
-              <div class="tc-op-line">
-                <select id="tc-demote-rep" aria-label="Replacement when demoting"></select>
-                <button type="button" class="sec" id="btn-tc-demote">Demote &amp; switch</button>
-              </div>
-            </div>
-            <p class="tc-op-jar" id="tc-cookie-jar"></p>
-          </div>
         </div>
         <p class="tc-ledger-note">Headers: <strong>Local</strong> = your browser clock &amp; zone · <strong>UTC</strong> = canonical ledger time. Recency shade is per column (same for all rows).</p>
         <div class="scroll" id="tc-scroll">
@@ -1191,7 +1090,6 @@
     window.__bbNextPollEta = new Date(Date.now() + POLL_MS);
 
     renderTC(bundle.trade_chain || {});
-    renderScorecardAndOps(bundle);
     renderOB(bundle.operational_boundary);
     renderLive(bundle);
     renderIntel(bundle);
@@ -1246,264 +1144,6 @@
         '</div></div>';
     });
     strip.innerHTML = h;
-  }
-
-  /**
-   * Stale API processes can serve trade_chain.rows without scorecard / aggregate (Python import cache).
-   * Derive the same counts client-side so the operator never sees a blank scorecard when rows exist.
-   */
-  function deriveScorecardFromRows(tc) {
-    var rows = tc.rows || [];
-    if (!rows.length) return [];
-    var out = [];
-    rows.forEach(function (sr) {
-      var ck = sr.chain_kind || '';
-      var sid = sr.strategy_id || '';
-      if (ck === 'baseline') {
-        out.push({
-          chain_kind: 'baseline',
-          strategy_id: sid,
-          row_label: sr.label || '',
-          vs_baseline_wins: null,
-          vs_baseline_not_wins: null,
-          vs_baseline_excluded: null,
-          events_with_comparison: null
-        });
-        return;
-      }
-      var cells = sr.cells || {};
-      var wins = 0;
-      var notW = 0;
-      var exc = 0;
-      Object.keys(cells).forEach(function (mid) {
-        var c = cells[mid];
-        if (!c || typeof c !== 'object') return;
-        var vs = c.vs_baseline;
-        if (vs === 'WIN') wins++;
-        else if (vs === 'NOT_WIN') notW++;
-        else if (vs === 'EXCLUDED') exc++;
-      });
-      var n = wins + notW + exc;
-      out.push({
-        chain_kind: ck,
-        strategy_id: sid,
-        row_label: sr.label || '',
-        lifecycle_label: sr.lifecycle_label || '',
-        vs_baseline_wins: wins,
-        vs_baseline_not_wins: notW,
-        vs_baseline_excluded: exc,
-        events_with_comparison: n
-      });
-    });
-    return out;
-  }
-
-  function deriveAnnaAggregateFromScorecard(scRows) {
-    var w = 0;
-    var nw = 0;
-    var exc = 0;
-    scRows.forEach(function (sr) {
-      if ((sr.chain_kind || '') === 'baseline') return;
-      w += Number(sr.vs_baseline_wins) || 0;
-      nw += Number(sr.vs_baseline_not_wins) || 0;
-      exc += Number(sr.vs_baseline_excluded) || 0;
-    });
-    return { wins: w, not_wins: nw, excluded: exc };
-  }
-
-  function renderScorecardAndOps(bundle) {
-    var tc = bundle.trade_chain || {};
-    var ot = bundle.operator_trading || {};
-    var scRows = tc.scorecard || [];
-    if (!scRows.length && tc.rows && tc.rows.length) {
-      scRows = deriveScorecardFromRows(tc);
-    }
-    var scEl = $('tc-scorecard');
-    var compEl = $('tc-comparative');
-    var noteEl = $('tc-op-note');
-    var desEl = $('tc-designated');
-    var jarEl = $('tc-cookie-jar');
-    var promoteSel = $('tc-promote-sel');
-    var demoteRep = $('tc-demote-rep');
-    var btnDem = $('btn-tc-demote');
-    var baselineId = (ot && ot.default_system_strategy_id) ? String(ot.default_system_strategy_id) : 'baseline';
-    var pol = (ot && ot.sustained_policy_note) ? String(ot.sustained_policy_note) : '';
-    var leg = (ot && ot.ledger_baseline_note) ? String(ot.ledger_baseline_note) : '';
-    if (noteEl) noteEl.textContent = [pol, leg].filter(Boolean).join(' ');
-    var designated = (ot && ot.designated_strategy_id) ? String(ot.designated_strategy_id) : '';
-    window.__bbDesignated = designated || '';
-    window.__bbBaselineId = baselineId;
-    if (desEl) {
-      desEl.textContent = designated
-        ? designated
-        : baselineId + ' (default system strategy — baseline chain)';
-    }
-    var eligible = (ot && Array.isArray(ot.eligible_strategy_ids)) ? ot.eligible_strategy_ids : [];
-    var explainEl = $('tc-sc-explain');
-    if (compEl) {
-      var agg = tc.anna_vs_baseline_aggregate || {};
-      var wAgg = agg.wins;
-      var nwAgg = agg.not_wins;
-      var xAgg = agg.excluded;
-      if (wAgg == null && nwAgg == null && xAgg == null && scRows.length) {
-        agg = deriveAnnaAggregateFromScorecard(scRows);
-        wAgg = agg.wins;
-        nwAgg = agg.not_wins;
-        xAgg = agg.excluded;
-      }
-      if (wAgg != null && nwAgg != null && xAgg != null) {
-        compEl.innerHTML =
-          'Anna vs baseline (this window): ' +
-          '<span class="tc-sum-stat">WIN ' +
-          wAgg +
-          '</span> · ' +
-          '<span class="tc-sum-stat">NOT ' +
-          nwAgg +
-          '</span> · n/a ' +
-          xAgg;
-        if (explainEl) {
-          if (wAgg === 0 && nwAgg === 0 && xAgg > 0) {
-            explainEl.textContent =
-              'Comparison layer: every event in this window is n/a for Anna vs baseline (e.g. eval/paper_stub rows have no economic PnL in the ledger, or MAE/PnL missing for pairing). ' +
-              'Baseline still shows economic WIN/LOSS; Anna lane is non-economic until mode=paper with full trade economics.';
-          } else if (wAgg === 0 && nwAgg === 0 && xAgg === 0) {
-            explainEl.textContent =
-              'No paired events in this window yet (empty cells or no overlap with baseline).';
-          } else {
-            explainEl.textContent =
-              'WIN / NOT = Anna PnL vs baseline on the same market_event_id after the MAE gate; n/a = excluded from that paired comparison.';
-          }
-        }
-      } else {
-        compEl.innerHTML = '';
-        if (explainEl) explainEl.textContent = '';
-      }
-    } else if (explainEl) {
-      explainEl.textContent = '';
-    }
-    function fillPromoteSelect(sel, ids) {
-      if (!sel) return;
-      var prev = sel.value;
-      sel.innerHTML = '';
-      var opt0 = document.createElement('option');
-      opt0.value = '';
-      opt0.textContent = ids.length ? '— choose sustained strategy —' : '— no sustained strategies in registry —';
-      sel.appendChild(opt0);
-      ids.forEach(function (id) {
-        var o = document.createElement('option');
-        o.value = id;
-        o.textContent = id;
-        sel.appendChild(o);
-      });
-      if (prev && ids.indexOf(prev) >= 0) sel.value = prev;
-    }
-    function fillDemoteSelect(sel, ids, baseline, currentAnna) {
-      if (!sel) return;
-      var prev = sel.value;
-      sel.innerHTML = '';
-      var opt0 = document.createElement('option');
-      opt0.value = '';
-      opt0.textContent = '—';
-      sel.appendChild(opt0);
-      var ob = document.createElement('option');
-      ob.value = baseline;
-      ob.textContent = 'Baseline (default system strategy)';
-      sel.appendChild(ob);
-      ids.forEach(function (id) {
-        if (currentAnna && id === currentAnna) return;
-        var o = document.createElement('option');
-        o.value = id;
-        o.textContent = id;
-        sel.appendChild(o);
-      });
-      if (prev) sel.value = prev;
-    }
-    if (promoteSel) fillPromoteSelect(promoteSel, eligible);
-    if (demoteRep) fillDemoteSelect(demoteRep, eligible, baselineId, designated || null);
-    if (btnDem) btnDem.disabled = !designated;
-    if (promoteSel) promoteSel.title = 'Only strategy_registry rows with sustained lifecycle (not test/experiment).';
-    if (!scEl) return;
-    if (!scRows.length) {
-      scEl.innerHTML = '<p class="tc-sc-empty">No scorecard rows for this window.</p>';
-      return;
-    }
-    var h =
-      '<div class="tc-sc-table-wrap"><table class="tc-sc-table">' +
-      '<caption>WIN / NOT / n/a — paired Anna vs baseline in this window (MAE gate).</caption>' +
-      '<thead><tr>' +
-      '<th scope="col" class="tc-sc-col-lane">Lane</th>' +
-      '<th scope="col" class="tc-sc-col-strat">Strategy</th>' +
-      '<th scope="col" class="tc-sc-col-num">WIN</th>' +
-      '<th scope="col" class="tc-sc-col-num">NOT</th>' +
-      '<th scope="col" class="tc-sc-col-num">n/a</th>' +
-      '</tr></thead><tbody>';
-    scRows.forEach(function (sr) {
-      var ck = sr.chain_kind || '';
-      var sid = sr.strategy_id || '';
-      var isDes = !!(designated && sid === designated && ck !== 'baseline');
-      var trCls = isDes ? 'tc-sc-designated' : '';
-      if (ck === 'baseline') {
-        h +=
-          '<tr class="' +
-          trCls +
-          '">' +
-          '<td class="tc-sc-kind">Baseline</td>' +
-          '<td class="tc-sc-sid">' +
-          esc(sid) +
-          '</td>' +
-          '<td class="tc-sc-col-num">—</td>' +
-          '<td class="tc-sc-col-num">—</td>' +
-          '<td class="tc-sc-col-num">—</td>' +
-          '</tr>';
-      } else {
-        var w = sr.vs_baseline_wins != null ? String(sr.vs_baseline_wins) : '—';
-        var nw = sr.vs_baseline_not_wins != null ? String(sr.vs_baseline_not_wins) : '—';
-        var ex = sr.vs_baseline_excluded != null ? String(sr.vs_baseline_excluded) : '—';
-        var kindLab = ck === 'anna_test' ? 'Trial strategy' : 'Strategy';
-        h +=
-          '<tr class="' +
-          trCls +
-          '">' +
-          '<td class="tc-sc-kind">' +
-          esc(kindLab) +
-          '</td>' +
-          '<td class="tc-sc-sid">' +
-          esc(sid) +
-          (isDes ? ' <span class="tc-sc-badge">trading</span>' : '') +
-          '</td>' +
-          '<td class="tc-sc-col-num">' +
-          esc(w) +
-          '</td>' +
-          '<td class="tc-sc-col-num">' +
-          esc(nw) +
-          '</td>' +
-          '<td class="tc-sc-col-num">' +
-          esc(ex) +
-          '</td>' +
-          '</tr>';
-      }
-    });
-    h += '</tbody></table></div>';
-    scEl.innerHTML = h;
-    if (jarEl) {
-      var jar = (ot && ot.cookie_jar) ? ot.cookie_jar : [];
-      if (!jar.length) jarEl.textContent = 'Cookie jar: empty (no demotions or promotions yet).';
-      else {
-        var parts = jar.slice(-6).map(function (e) {
-          return (e.strategy_id || '?') + ' → ' + (e.action || '') + ' @ ' + (e.at_utc || '');
-        });
-        jarEl.textContent = 'Cookie jar (recent): ' + parts.join(' · ');
-      }
-    }
-  }
-
-  function postTradingStrategy(body) {
-    $('dash-ctl-msg').textContent = '…';
-    return fetch('/api/v1/operator/trading-strategy', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body || {})
-    }).then(function (r) { return r.json().then(function (j) { return { ok: r.ok, j: j }; }); });
   }
 
   function fetchBundle() {
@@ -1630,42 +1270,6 @@
   if (bpd) bpd.addEventListener('click', function () { postPaperFlow('deposit'); });
   var bps = $('btnPcSaveStart');
   if (bps) bps.addEventListener('click', postSetStarting);
-
-  var btnTcp = $('btn-tc-promote');
-  if (btnTcp) {
-    btnTcp.addEventListener('click', function () {
-      var sel = $('tc-promote-sel');
-      var sid = sel && sel.value ? String(sel.value).trim() : '';
-      if (!sid) {
-        $('dash-ctl-msg').textContent = 'Pick a strategy id to promote.';
-        return;
-      }
-      postTradingStrategy({ action: 'promote', strategy_id: sid }).then(function (x) {
-        $('dash-ctl-msg').textContent = fmtCtl(x.j);
-        refresh();
-      });
-    });
-  }
-  var btnTcd = $('btn-tc-demote');
-  if (btnTcd) {
-    btnTcd.addEventListener('click', function () {
-      var cur = window.__bbDesignated || '';
-      var repSel = $('tc-demote-rep');
-      var rep = repSel && repSel.value ? String(repSel.value).trim() : '';
-      if (!cur) {
-        $('dash-ctl-msg').textContent = 'No designated strategy — promote one first.';
-        return;
-      }
-      if (!rep) {
-        $('dash-ctl-msg').textContent = 'Choose a replacement strategy (required).';
-        return;
-      }
-      postTradingStrategy({ action: 'demote', strategy_id: cur, replacement_strategy_id: rep }).then(function (x) {
-        $('dash-ctl-msg').textContent = fmtCtl(x.j);
-        refresh();
-      });
-    });
-  }
 
   refresh();
   setInterval(refresh, POLL_MS);
