@@ -78,4 +78,4 @@ Tile filter strings (examples): `Filter: ATR ratio below 1.35 – skipping entry
 
 - [`docs/architect/ANNA_GOES_TO_SCHOOL.md`](../architect/ANNA_GOES_TO_SCHOOL.md) — baseline vs Anna context  
 - [`basetrade/README.md`](../../basetrade/README.md) — parity harness for `evaluate_sean_jupiter_baseline_v1`  
-- [`UIUX.Web/jupiter_tile_rule_colors_mockup.html`](../../UIUX.Web/jupiter_tile_rule_colors_mockup.html) — **UI intent only** (colors / readability); does not change policy math
+- [`UIUX.Web/mockups/jupiter_tile_rule_colors_mockup.html`](../../UIUX.Web/mockups/jupiter_tile_rule_colors_mockup.html) — **UI intent only** (colors / readability); does not change policy math
