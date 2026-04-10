@@ -13,6 +13,7 @@
       width: 12.5rem; flex-shrink: 0; border-right: 1px solid var(--panel-border);
       background: var(--panel); padding: var(--space-3) var(--space-2);
       display: flex; flex-direction: column; gap: 0.25rem;
+      min-height: 0; overflow-y: auto;
     }
     .dash-nav a {
       display: block; padding: 0.45rem 0.65rem; border-radius: var(--radius-md);
@@ -343,6 +344,10 @@
     <nav class="dash-nav" aria-label="Primary">
       <a class="is-active" href="/dashboard.html">Dashboard</a>
       <a href="/internal.html">Operator Panel</a>
+      <a href="/anna/evaluation">QEL evaluation</a>
+      <a href="/anna/event-view">Event view</a>
+      <a href="/anna.html">Anna hub</a>
+      <a href="/guide.html">System guide</a>
       <a href="/anna/sequential-learning">Learning Engine</a>
       <a href="/anna/training">Training Dashboard</a>
       <a href="/intelligence-method.html">Intelligence METHOD</a>
@@ -398,6 +403,20 @@
         </div>
         <div id="dash-ctl-msg"></div>
       </div>
+      <details class="dash-below">
+        <summary>Run configuration (paths for Start)</summary>
+        <div class="body">
+          <div class="dash-form-grid">
+            <label>test_id <input type="text" id="dash_test_id"/></label>
+            <label>strategy_id <input type="text" id="dash_strategy_id"/></label>
+            <label>calibration_path <input type="text" id="dash_calibration_path"/></label>
+            <label>events_file_path <input type="text" id="dash_events_file_path"/></label>
+            <label>ledger_db_path <input type="text" id="dash_ledger_db_path"/></label>
+            <label>market_db_path <input type="text" id="dash_market_db_path"/></label>
+            <label>artifacts_dir <input type="text" id="dash_artifacts_dir"/></label>
+          </div>
+        </div>
+      </details>
       <!-- Row 1: system banner (one strip) -->
       <div class="dash-r1" id="dash-r1" role="status" aria-live="polite">
         <span><span class="lbl">State</span> <span class="val" id="b-state">—</span></span>
@@ -454,6 +473,11 @@
       </div>
       <p id="pc-msg" style="font-size:0.7rem;color:var(--muted);margin:0.2rem 0.75rem 0.45rem"></p>
 
+      <details class="dash-below">
+        <summary>Operational boundary</summary>
+        <div class="body" id="ob-body"></div>
+      </details>
+
       <!-- Row 4: trade chain (primary) -->
       <section class="dash-r4" aria-labelledby="tc-h">
         <div class="tc-section-head">
@@ -473,46 +497,6 @@
         <p style="margin:0;padding:0.25rem 0.5rem;font-size:0.62rem;color:var(--muted)" id="tc-note"></p>
         <p style="margin:0;padding:0 0.5rem 0.35rem;font-size:0.6rem;color:var(--muted);line-height:1.35" id="tc-hierarchy"></p>
       </section>
-
-      <!-- Below: collapsible, default closed -->
-      <details class="dash-below">
-        <summary>Run configuration (paths for Start)</summary>
-        <div class="body">
-          <div class="dash-form-grid">
-            <label>test_id <input type="text" id="dash_test_id"/></label>
-            <label>strategy_id <input type="text" id="dash_strategy_id"/></label>
-            <label>calibration_path <input type="text" id="dash_calibration_path"/></label>
-            <label>events_file_path <input type="text" id="dash_events_file_path"/></label>
-            <label>ledger_db_path <input type="text" id="dash_ledger_db_path"/></label>
-            <label>market_db_path <input type="text" id="dash_market_db_path"/></label>
-            <label>artifacts_dir <input type="text" id="dash_artifacts_dir"/></label>
-          </div>
-        </div>
-      </details>
-      <details class="dash-below">
-        <summary>Operator panel (links)</summary>
-        <div class="body">
-          <p style="margin:0 0 0.35rem;line-height:1.45">
-            <a href="/internal.html">Internal portal</a> ·
-            <a href="/anna/evaluation">QEL evaluation</a> ·
-            <a href="/anna/event-view">Event view</a> ·
-            <a href="/anna.html">Anna hub</a> ·
-            <a href="/guide.html">System guide</a>
-          </p>
-          <div style="margin-top:0.75rem;padding-top:0.6rem;border-top:1px solid var(--panel-border)">
-            <p style="margin:0 0 0.35rem;font-size:0.68rem;text-transform:uppercase;letter-spacing:0.04em;color:var(--muted);font-weight:700">Operational boundary</p>
-            <div id="ob-body"></div>
-          </div>
-        </div>
-      </details>
-      <details class="dash-below">
-        <summary>Learning engine</summary>
-        <div class="body"><a href="/anna/sequential-learning">/anna/sequential-learning</a> — full console, validation checklist.</div>
-      </details>
-      <details class="dash-below">
-        <summary>Training dashboard</summary>
-        <div class="body"><a href="/anna/training">/anna/training</a></div>
-      </details>
     </div>
   </div>
   <script>
