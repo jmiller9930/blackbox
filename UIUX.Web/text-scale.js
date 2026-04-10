@@ -94,7 +94,14 @@
     wrap.id = "bb-text-scale-widget";
     wrap.className = "bb-text-scale-widget";
     wrap.setAttribute("role", "group");
-    wrap.setAttribute("aria-label", "Page size");
+    wrap.setAttribute(
+      "aria-label",
+      "Page size — whole-page zoom; use 100 percent for best alignment on dense grids"
+    );
+    wrap.setAttribute(
+      "title",
+      "Whole-page zoom (layout and text). Dense tables and sticky columns align most cleanly at 100%. If edges look off, choose Reset, then hard refresh."
+    );
 
     var lab = document.createElement("span");
     lab.className = "bb-ts-label";
