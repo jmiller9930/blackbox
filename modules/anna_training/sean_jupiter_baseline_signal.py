@@ -260,6 +260,9 @@ def format_jupiter_tile_narrative_v1(
     Human-readable multi-line tile — **operator contract** (fixed line shapes, labels, order).
 
     Uses ``features["tile"]`` when present (populated by :func:`evaluate_sean_jupiter_baseline_v1`).
+
+    Policy math and filter order (Signal Breakdown, ATR 1.35, extreme RSI): see
+    ``docs/trading/jupiter_2_baseline_operator_rules.md``.
     """
     lines: list[str] = []
     tile = features.get("tile") if isinstance(features.get("tile"), dict) else {}

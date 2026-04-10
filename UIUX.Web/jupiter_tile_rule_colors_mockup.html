@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Jupiter tile — rule colors (MOCKUP ONLY)</title>
+  <style>
+    :root {
+      --ok: #d1fae5;
+      --ok-border: #059669;
+      /* Anything that prevents a trade = red (not yellow). Two weights: */
+      --stop: #ffe4e6;
+      --stop-border: #e11d48;
+      --gate: #fecaca;
+      --gate-border: #b91c1c;
+      --muted: #f1f5f9;
+      --text: #0f172a;
+      --sub: #64748b;
+    }
+    * { box-sizing: border-box; }
+    body {
+      font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+      font-size: 14px;
+      color: var(--text);
+      margin: 0;
+      padding: 1.25rem;
+      background: #e2e8f0;
+      line-height: 1.45;
+    }
+    .banner {
+      background: #1e293b;
+      color: #f8fafc;
+      padding: 0.75rem 1rem;
+      border-radius: 8px;
+      margin-bottom: 1rem;
+      font-size: 0.85rem;
+    }
+    .banner strong { color: #86efac; }
+    .purpose {
+      background: #fff;
+      border-left: 4px solid #059669;
+      padding: 0.65rem 0.85rem;
+      margin-bottom: 1rem;
+      border-radius: 0 8px 8px 0;
+      font-size: 0.88rem;
+      color: #334155;
+      max-width: 52rem;
+    }
+    .purpose strong { color: #0f172a; }
+    .key {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.65rem 1.25rem;
+      margin-bottom: 1rem;
+      font-size: 0.78rem;
+      color: var(--sub);
+      max-width: 52rem;
+    }
+    .key span { display: inline-flex; align-items: center; gap: 0.35rem; }
+    .sw { width: 14px; height: 14px; border-radius: 3px; border: 1px solid #94a3b8; flex-shrink: 0; }
+    .sw.ok { background: var(--ok); border-color: var(--ok-border); }
+    .sw.stop { background: var(--stop); border-color: var(--stop-border); }
+    .sw.gate { background: var(--gate); border-color: var(--gate-border); }
+    .sw.neutral { background: var(--muted); border-color: #94a3b8; }
+
+    .panel {
+      max-width: 52rem;
+      background: #fff;
+      border-radius: 10px;
+      padding: 1rem 1.1rem;
+      box-shadow: 0 1px 3px rgba(0,0,0,.08);
+    }
+    .panel h1 {
+      font-size: 1rem;
+      font-weight: 600;
+      margin: 0 0 0.5rem 0;
+      color: #334155;
+    }
+    .note {
+      font-size: 0.75rem;
+      color: var(--sub);
+      margin-bottom: 0.75rem;
+    }
+    .line {
+      padding: 0.4rem 0.55rem;
+      margin: 0.2rem 0;
+      border-radius: 6px;
+      border-left: 4px solid transparent;
+      font-size: 0.85rem;
+    }
+    .line.neutral {
+      background: var(--muted);
+      border-left-color: #94a3b8;
+    }
+    .line.ok {
+      background: var(--ok);
+      border-left-color: var(--ok-border);
+    }
+    /* Core logic not met → still “stopped” → red (rose), not yellow */
+    .line.stop {
+      background: var(--stop);
+      border-left-color: var(--stop-border);
+      font-weight: 500;
+    }
+    /* Policy gate (ATR, extremes) → deeper red */
+    .line.gate {
+      background: var(--gate);
+      border-left-color: var(--gate-border);
+      font-weight: 600;
+    }
+    .lbl { color: var(--sub); font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.04em; margin-top: 0.75rem; margin-bottom: 0.25rem; }
+    .lbl:first-child { margin-top: 0; }
+  </style>
+</head>
+<body>
+  <div class="banner">
+    <strong>MOCKUP ONLY</strong> — not linked to the live API or dashboard. For reading the tile at a glance: <strong style="color:#86efac">green = pass</strong>, <strong style="color:#fca5a5">red = blocks execution</strong>.
+  </div>
+
+  <p class="purpose">
+    <strong>Why color?</strong> So you can look at the tile and immediately see what is <em>OK</em> (green) versus what is <em>stopping the trade</em> (red). No amber/yellow for “blockers” — if it prevents a fill, it’s red.
+  </p>
+
+  <div class="key" aria-label="Legend">
+    <span><i class="sw ok"></i> Passes — this part of the rule is satisfied</span>
+    <span><i class="sw stop"></i> Blocks — core condition not met (no entry for that side)</span>
+    <span><i class="sw gate"></i> Blocks — policy gate (e.g. ATR ratio, extreme RSI)</span>
+    <span><i class="sw neutral"></i> Context only (OHLC / labels — not a pass/fail line)</span>
+  </div>
+
+  <div class="panel">
+    <h1>Sample readout (same shape as operator tile)</h1>
+    <p class="note">
+      Same scenario as before: bearish ST, price <strong>above</strong> EMA, RSI 39.25, ATR ratio 0.95. Every red row is a reason you’re not executing; green rows are checks that did pass.
+    </p>
+
+    <div class="lbl">Context</div>
+    <div class="line neutral">New 5-min candle formed: Timestamp=2026-04-10T15:55:00.000Z, O=84.4299, H=84.4722, L=84.1199, C=84.2487, V=684</div>
+    <div class="line neutral">Previous candle: O=84.4540, H=84.5733, L=84.4235, C=84.4284, RSI=42.937</div>
+    <div class="line neutral">Current candle: O=84.4299, H=84.4722, L=84.1199, C=84.2487, RSI=39.2507</div>
+
+    <div class="lbl">Indicators</div>
+    <div class="line ok">Supertrend: BEARISH — <em>for a short, bearish ST is what you need → passes</em></div>
+    <div class="line gate">ATR Analysis: Ratio=0.954 (&lt; 1.35) — <em>policy gate: volatility filter blocks any entry until ratio clears</em></div>
+    <div class="line stop">Price vs EMA200: ABOVE (EMA=83.8044) — <em>short needs close <strong>below</strong> EMA → this blocks the short setup</em></div>
+
+    <div class="lbl">Signal breakdown</div>
+    <div class="line stop">Long — not firing (Supertrend not bullish, RSI not &gt; 52, etc.)</div>
+    <div class="line stop">Short — not firing: need below EMA; price is still <strong>above</strong> EMA → main blocker for short core</div>
+
+    <div class="lbl">Summary</div>
+    <div class="line neutral">Signals line: short=false, long=false (aggregate flags)</div>
+    <div class="line stop">Filter: no primary long or short — <em>nothing to execute</em></div>
+    <div class="line neutral" style="margin-top:0.5rem;font-weight:700;color:#b91c1c;">NO TRADE</div>
+  </div>
+
+  <p style="margin-top:1rem;font-size:0.75rem;color:#64748b;max-width:52rem;">
+    Production tile is still plain text; wiring these colors needs structured fields from the API (or a parser). This page is the <strong>intent</strong>: green/red readability first.
+  </p>
+</body>
+</html>
