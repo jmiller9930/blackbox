@@ -8,7 +8,6 @@
     :root {
       --ok: #d1fae5;
       --ok-border: #059669;
-      /* Anything that prevents a trade = red (not yellow). Two weights: */
       --stop: #ffe4e6;
       --stop-border: #e11d48;
       --gate: #fecaca;
@@ -36,17 +35,6 @@
       font-size: 0.85rem;
     }
     .banner strong { color: #86efac; }
-    .purpose {
-      background: #fff;
-      border-left: 4px solid #059669;
-      padding: 0.65rem 0.85rem;
-      margin-bottom: 1rem;
-      border-radius: 0 8px 8px 0;
-      font-size: 0.88rem;
-      color: #334155;
-      max-width: 52rem;
-    }
-    .purpose strong { color: #0f172a; }
     .key {
       display: flex;
       flex-wrap: wrap;
@@ -96,66 +84,81 @@
       background: var(--ok);
       border-left-color: var(--ok-border);
     }
-    /* Core logic not met → still “stopped” → red (rose), not yellow */
     .line.stop {
       background: var(--stop);
       border-left-color: var(--stop-border);
       font-weight: 500;
     }
-    /* Policy gate (ATR, extremes) → deeper red */
     .line.gate {
       background: var(--gate);
       border-left-color: var(--gate-border);
       font-weight: 600;
     }
-    .lbl { color: var(--sub); font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.04em; margin-top: 0.75rem; margin-bottom: 0.25rem; }
+    .line.entry {
+      background: #ecfdf5;
+      border-left: 4px solid #047857;
+      font-weight: 700;
+      margin-top: 0.5rem;
+      color: #065f46;
+    }
+    .lbl {
+      color: var(--sub);
+      font-size: 0.72rem;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      margin-top: 0.75rem;
+      margin-bottom: 0.25rem;
+    }
     .lbl:first-child { margin-top: 0; }
   </style>
 </head>
 <body>
   <div class="banner">
-    <strong>MOCKUP ONLY</strong> — not linked to the live API or dashboard. For reading the tile at a glance: <strong style="color:#86efac">green = pass</strong>, <strong style="color:#fca5a5">red = blocks execution</strong>.
+    <strong>MOCKUP ONLY</strong> — not linked to the live API. <strong style="color:#86efac">Green</strong> = pass, <strong style="color:#fca5a5">red</strong> = core not met or policy block. Fictitious numbers; follows Jupiter_2 baseline rules in <code>docs/trading/jupiter_2_baseline_operator_rules.md</code>.
   </div>
 
-  <p class="purpose">
-    <strong>Why color?</strong> So you can look at the tile and immediately see what is <em>OK</em> (green) versus what is <em>stopping the trade</em> (red). No amber/yellow for “blockers” — if it prevents a fill, it’s red.
-  </p>
-
   <div class="key" aria-label="Legend">
-    <span><i class="sw ok"></i> Passes — this part of the rule is satisfied</span>
-    <span><i class="sw stop"></i> Blocks — core condition not met (no entry for that side)</span>
-    <span><i class="sw gate"></i> Blocks — policy gate (e.g. ATR ratio, extreme RSI)</span>
-    <span><i class="sw neutral"></i> Context only (OHLC / labels — not a pass/fail line)</span>
+    <span><i class="sw ok"></i> Pass</span>
+    <span><i class="sw stop"></i> Core side not firing</span>
+    <span><i class="sw gate"></i> Policy gate (ATR / extreme RSI)</span>
+    <span><i class="sw neutral"></i> Context (OHLC)</span>
   </div>
 
   <div class="panel">
-    <h1>Sample readout (same shape as operator tile)</h1>
+    <h1>Example — successful SHORT (made-up bar)</h1>
     <p class="note">
-      Same scenario as before: bearish ST, price <strong>above</strong> EMA, RSI 39.25, ATR ratio 0.95. Every red row is a reason you’re not executing; green rows are checks that did pass.
+      Short core: bearish Supertrend, close <strong>below</strong> EMA200, RSI <strong>&lt; 48</strong>, lower close vs previous.
+      Then: ATR ratio <strong>≥ 1.35</strong>, and RSI <strong>not</strong> in extreme band for short (block if RSI &lt; 25). Long row shows why long did not fire.
     </p>
 
     <div class="lbl">Context</div>
-    <div class="line neutral">New 5-min candle formed: Timestamp=2026-04-10T15:55:00.000Z, O=84.4299, H=84.4722, L=84.1199, C=84.2487, V=684</div>
-    <div class="line neutral">Previous candle: O=84.4540, H=84.5733, L=84.4235, C=84.4284, RSI=42.937</div>
-    <div class="line neutral">Current candle: O=84.4299, H=84.4722, L=84.1199, C=84.2487, RSI=39.2507</div>
+    <div class="line neutral">New 5-min candle: Timestamp=2026-04-10T19:00:00.000Z, O=83.95, H=84.02, L=83.40, C=83.55, V=812</div>
+    <div class="line neutral">Previous candle: O=84.10, H=84.22, L=83.90, C=83.98, RSI=46.2</div>
+    <div class="line neutral">Current candle: … C=83.55, RSI=44.0</div>
 
     <div class="lbl">Indicators</div>
-    <div class="line ok">Supertrend: BEARISH — <em>for a short, bearish ST is what you need → passes</em></div>
-    <div class="line gate">ATR Analysis: Ratio=0.954 (&lt; 1.35) — <em>policy gate: volatility filter blocks any entry until ratio clears</em></div>
-    <div class="line stop">Price vs EMA200: ABOVE (EMA=83.8044) — <em>short needs close <strong>below</strong> EMA → this blocks the short setup</em></div>
+    <div class="line ok">Supertrend: BEARISH — <em>short regime OK</em></div>
+    <div class="line ok">ATR Analysis: Current=0.42 | Avg200=0.30 | Ratio=<strong>1.40</strong> (≥ 1.35) — <em>volatility gate passes</em></div>
+    <div class="line ok">Price vs EMA200: BELOW (EMA=84.08) — <em>short needs below EMA → satisfied</em></div>
+    <div class="line ok">Extreme RSI check: RSI=44.0 — <em>short blocked only if RSI &lt; 25 → not blocked</em></div>
 
     <div class="lbl">Signal breakdown</div>
-    <div class="line stop">Long — not firing (Supertrend not bullish, RSI not &gt; 52, etc.)</div>
-    <div class="line stop">Short — not firing: need below EMA; price is still <strong>above</strong> EMA → main blocker for short core</div>
+    <div class="line stop">
+      Signal Breakdown → Long=<strong>false</strong>
+      (Supertrend=<strong>false</strong>, AboveEMA=<strong>false</strong>, RSI&gt;52=<strong>false</strong>, HigherClose=<strong>false</strong>)
+      — <em>long setup not aligned this bar</em>
+    </div>
+    <div class="line ok">
+      Signal Breakdown → Short=<strong>true</strong>
+      (Supertrend=<strong>true</strong>, BelowEMA=<strong>true</strong>, RSI&lt;48=<strong>true</strong>, LowerClose=<strong>true</strong>)
+      — <em>primary short conditions all satisfied</em>
+    </div>
 
-    <div class="lbl">Summary</div>
-    <div class="line neutral">Signals line: short=false, long=false (aggregate flags)</div>
-    <div class="line stop">Filter: no primary long or short — <em>nothing to execute</em></div>
-    <div class="line neutral" style="margin-top:0.5rem;font-weight:700;color:#b91c1c;">NO TRADE</div>
+    <div class="line entry">TRADE → SHORT @ 83.55 (mock — entry allowed after filters)</div>
   </div>
 
   <p style="margin-top:1rem;font-size:0.75rem;color:#64748b;max-width:52rem;">
-    Production tile is still plain text; wiring these colors needs structured fields from the API (or a parser). This page is the <strong>intent</strong>: green/red readability first.
+    Production dashboard still emits plain narrative lines; this page shows <strong>color + breakdown shape</strong> only. No separate “summary” section — filters are visible in indicators + breakdown rows.
   </p>
 </body>
 </html>
