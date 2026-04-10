@@ -53,6 +53,9 @@ def test_build_trade_chain_payload_schema() -> None:
             "outcome",
             "pnl_usd",
         }
+    assert "baseline_trades_report_rows" in tc
+    assert isinstance(tc["baseline_trades_report_rows"], list)
+    assert len(tc["baseline_trades_report_rows"]) >= len(tc["recent_baseline_trades"])
 
 
 def test_build_dashboard_bundle_schema() -> None:

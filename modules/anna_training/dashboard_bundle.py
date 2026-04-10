@@ -761,10 +761,11 @@ def _recent_baseline_trades_for_dashboard_strip(
     Used for the “Recent baseline trades” block on ``dashboard.html`` so operators always see
     ledger-backed activity when rows exist.
     """
-    lim = max(1, min(12, int(limit)))
+    lim = max(1, min(200, int(limit)))
     cur = conn.execute(
         """
-        SELECT market_event_id, side, entry_time, pnl_usd, created_at_utc, trade_id
+        SELECT market_event_id, side, entry_time, entry_price, exit_price, exit_reason,
+               pnl_usd, created_at_utc, trade_id
         FROM execution_trades
         WHERE lane = 'baseline' AND strategy_id = ?
         ORDER BY COALESCE(created_at_utc, entry_time, '') DESC, trade_id DESC
@@ -779,6 +780,8 @@ def _recent_baseline_trades_for_dashboard_strip(
         t = row.get("entry_time") or row.get("created_at_utc")
         t_iso = _normalize_utc_iso_for_axis(t) if t else None
         pnl = row.get("pnl_usd")
+        ep = row.get("entry_price")
+        xp = row.get("exit_price")
         out.append(
             {
                 "market_event_id": str(row.get("market_event_id") or ""),
@@ -786,6 +789,10 @@ def _recent_baseline_trades_for_dashboard_strip(
                 "time_utc_iso": t_iso or "",
                 "outcome": _strip_outcome_from_pnl(pnl),
                 "pnl_usd": float(pnl) if pnl is not None else None,
+                "entry": float(ep) if ep is not None else None,
+                "exit": float(xp) if xp is not None else None,
+                "exit_reason": str(row.get("exit_reason") or "").strip() or None,
+                "trade_id": str(row.get("trade_id") or "").strip() or None,
             }
         )
     return out
@@ -1172,16 +1179,22 @@ def build_trade_chain_payload(
 
     pair_eps = 0.05
     recent_strip: list[dict[str, Any]] = []
+    baseline_trades_report_rows: list[dict[str, Any]] = []
     conn = connect_ledger(db_path)
     try:
         ensure_execution_ledger_schema(conn)
-        recent_strip = _recent_baseline_trades_for_dashboard_strip(conn, limit=3)
         event_axis, event_axis_time_utc_iso = _event_axis_from_market_bars(mpath, limit=max_events)
         event_axis_source = "market_bars_5m"
         if not event_axis:
             event_axis, event_axis_time_utc_iso = _distinct_event_axis_with_times(conn, limit=max_events)
             event_axis_source = "execution_trades_fallback"
         tile_narr = _event_axis_jupiter_tile_narratives(conn, event_axis, mpath)
+        baseline_ledger = _recent_baseline_trades_for_dashboard_strip(conn, limit=50)
+        recent_strip = baseline_ledger[:3]
+        for br in baseline_ledger:
+            mid_k = str(br.get("market_event_id") or "").strip()
+            br["jupiter_tile_narrative"] = tile_narr.get(mid_k, "") if mid_k else ""
+        baseline_trades_report_rows = baseline_ledger
         tests, strats, note = _strategy_buckets(conn)
         lc_map = _lifecycle_by_strategy(conn)
         primary_sym = _latest_symbol_from_ledger(conn)
@@ -1316,6 +1329,7 @@ def build_trade_chain_payload(
         "anna_vs_baseline_aggregate": anna_agg,
         "rows": rows_out,
         "recent_baseline_trades": recent_strip,
+        "baseline_trades_report_rows": baseline_trades_report_rows,
     }
 
 
