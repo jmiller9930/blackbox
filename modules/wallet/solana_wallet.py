@@ -8,8 +8,11 @@ Env:
 
 from __future__ import annotations
 
+import copy
 import json
 import os
+import time
+import uuid
 import ssl
 import subprocess
 import urllib.error
@@ -20,6 +23,10 @@ from typing import Any
 
 _REPO = Path(__file__).resolve().parents[2]
 _TRADING_CORE = _REPO / "trading_core"
+
+# Last successful payload — used when a rebuild throws (transient RPC/IO) so the UI does not flash red.
+_WALLET_LAST_GOOD: dict[str, Any] | None = None
+_WALLET_LAST_GOOD_MONO: float = 0.0
 
 
 def _ssl_context() -> ssl.SSLContext:
@@ -216,12 +223,10 @@ def _rpc_status_after_balance_probe(
     return health
 
 
-def build_wallet_status_payload() -> dict[str, Any]:
+def _build_wallet_status_payload_impl() -> dict[str, Any]:
     """
-    Full status for dashboard + architect proof package.
+    Full status for dashboard + architect proof package (may raise on unexpected errors).
     """
-    import uuid
-
     tid = uuid.uuid4().hex
     kp = _keypair_path()
     health = _rpc_health()
@@ -294,3 +299,49 @@ def build_wallet_status_payload() -> dict[str, Any]:
         out["signing_proof"] = {"ok": True, **(sig or {})}
 
     return out
+
+
+def build_wallet_status_payload() -> dict[str, Any]:
+    """
+    Operator-facing API: **never raises**. Caches the last successful payload and returns it
+    for ``BLACKBOX_WALLET_STATUS_CACHE_SEC`` (default 120s) after a build failure so the dashboard
+    does not flip red on transient RPC or filesystem blips.
+    """
+    global _WALLET_LAST_GOOD, _WALLET_LAST_GOOD_MONO
+    try:
+        ttl = float((os.environ.get("BLACKBOX_WALLET_STATUS_CACHE_SEC") or "120").strip() or "120")
+    except ValueError:
+        ttl = 120.0
+    ttl = max(15.0, min(600.0, ttl))
+    try:
+        out = _build_wallet_status_payload_impl()
+        _WALLET_LAST_GOOD = copy.deepcopy(out)
+        _WALLET_LAST_GOOD_MONO = time.monotonic()
+        return out
+    except Exception as e:
+        if _WALLET_LAST_GOOD is not None and (time.monotonic() - _WALLET_LAST_GOOD_MONO) <= ttl:
+            stale = copy.deepcopy(_WALLET_LAST_GOOD)
+            stale["trace_id"] = uuid.uuid4().hex
+            stale["served_from_cache_after_error"] = True
+            stale["cache_serve_error"] = str(e)[:400]
+            return stale
+        return {
+            "schema": "blackbox_wallet_status_v1",
+            "trace_id": uuid.uuid4().hex,
+            "wallet_connected": False,
+            "public_address": None,
+            "keypair_path_configured": bool(
+                (os.environ.get("BLACKBOX_SOLANA_KEYPAIR_PATH") or os.environ.get("KEYPAIR_PATH") or "").strip()
+            ),
+            "keypair_file_present": False,
+            "rpc_url_host": urllib.parse.urlparse(_rpc_url()).netloc or "default",
+            "solana_rpc": {"ok": False, "detail": str(e)[:200]},
+            "jupiter_quote_sample": {"ok": False},
+            "balance_lamports": None,
+            "balance_sol": None,
+            "balance_usd_approx": None,
+            "signing_proof": None,
+            "live_trading_blocked": _live_trading_blocked(),
+            "error": "wallet_status_build_failed",
+            "note": str(e)[:500],
+        }

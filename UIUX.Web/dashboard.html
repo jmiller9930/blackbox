@@ -1528,15 +1528,28 @@
     var st = String(ban.ui_state || ls.ui_state || seq.ui_state || 'unknown').toUpperCase();
     $('b-state').textContent = st;
     $('b-mode').textContent = String(ban.mode_label || (bundle.system_mode && bundle.system_mode.label) || '—');
-    var walOk = !!w.wallet_connected;
-    var rpcOk = !!w.solana_rpc_ok;
-    var wok = walOk && rpcOk;
-    $('b-wal').textContent = !walOk ? '🔴' : !rpcOk ? '🟡' : '🟢';
-    $('b-wal').title = !walOk
-      ? 'Wallet not connected (keypair / pubkey)'
-      : !rpcOk
-        ? 'Wallet loaded; Solana RPC probe failed (see bundle.wallet)'
-        : 'Wallet + RPC OK';
+    var rawW = !!w.wallet_connected;
+    var rawRpc = !!w.solana_rpc_ok;
+    var rawFull = rawW && rawRpc;
+    if (typeof window.__bbWalFullGreenFails !== 'number') window.__bbWalFullGreenFails = 0;
+    if (rawFull) {
+      window.__bbWalFullGreenFails = 0;
+      window.__bbWalSawFullGreen = true;
+    } else if (window.__bbWalSawFullGreen) {
+      window.__bbWalFullGreenFails = Math.min(99, window.__bbWalFullGreenFails + 1);
+    }
+    var stickyFullGreenPolls = 4;
+    var fullGreen =
+      rawFull ||
+      (window.__bbWalSawFullGreen === true && window.__bbWalFullGreenFails < stickyFullGreenPolls);
+    var walOk = rawW;
+    var rpcOk = rawRpc;
+    $('b-wal').textContent = fullGreen ? '🟢' : !walOk ? '🔴' : '🟡';
+    $('b-wal').title = fullGreen
+      ? (rawFull ? 'Wallet + RPC OK' : 'Wallet + RPC OK (holding green briefly after a blip)')
+      : !walOk
+        ? 'Wallet not connected (keypair / pubkey)'
+        : 'Wallet loaded; Solana RPC probe failed (see bundle.wallet)';
     $('b-bal').textContent = fmtUsd(w);
     $('b-dec').textContent = esc(ban.last_decision_compact || '—');
     $('b-ev').textContent = esc(String(ban.last_processed_market_event_id != null ? ban.last_processed_market_event_id : '—'));
@@ -1544,7 +1557,11 @@
     $('act-tid').textContent = esc(String(seq.test_id || '—'));
     $('act-sid').textContent = esc(String(seq.strategy_id || '—'));
 
-    $('c-wal').textContent = !walOk ? 'disconnected' : !rpcOk ? 'connected (RPC degraded)' : 'connected';
+    $('c-wal').textContent = fullGreen
+      ? 'connected'
+      : !walOk
+        ? 'disconnected'
+        : 'connected (RPC degraded)';
     $('c-addr').textContent = esc(w.public_address || '—');
     $('c-bal').textContent = fmtUsd(w) + (w.balance_sol != null ? ' · ' + Number(w.balance_sol).toFixed(4) + ' SOL' : '');
     $('c-livepol').textContent = w.live_trading_blocked ? 'LIVE blocked (policy)' : 'LIVE not blocked (policy)';
