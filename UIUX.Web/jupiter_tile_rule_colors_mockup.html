@@ -138,7 +138,7 @@
 
     <div class="lbl">Indicators</div>
     <div class="line ok">Supertrend: BEARISH — <em>short regime OK</em></div>
-    <div class="line ok">ATR Analysis: Current=0.42 | Avg200=0.30 | Ratio=<strong>1.40</strong> (≥ 1.35) — <em>volatility gate passes</em></div>
+    <div class="line ok">ATR Analysis: Current=0.42 | Avg200=0.30 | Ratio=1.4 — Volatility gate: passes</div>
     <div class="line ok">Price vs EMA200: BELOW (EMA=84.08) — <em>short needs below EMA → satisfied</em></div>
     <div class="line ok">Extreme RSI check: RSI=44.0 — <em>short blocked only if RSI &lt; 25 → not blocked</em></div>
 
@@ -157,8 +157,18 @@
     <div class="line entry">TRADE → SHORT @ 83.55 (mock — entry allowed after filters)</div>
   </div>
 
+  <div class="panel" style="margin-top:1rem;">
+    <h1>Example — ATR blocks entry (same copy as live tile)</h1>
+    <p class="note">
+      Fictitious bar similar to a real screen: ratio &lt; 1.35 → <strong>Volatility gate: blocked</strong> on the ATR line; Filter line unchanged in production.
+    </p>
+    <div class="lbl">Indicators (excerpt)</div>
+    <div class="line gate">ATR Analysis: Current=0.149051675 | Avg200=0.147483003571 | Ratio=1.010636 — Volatility gate: blocked</div>
+    <div class="line neutral" style="margin-top:0.35rem;font-size:0.82rem;">Filter: ATR ratio below 1.35 – skipping entry</div>
+  </div>
+
   <p style="margin-top:1rem;font-size:0.75rem;color:#64748b;max-width:52rem;">
-    Production dashboard still emits plain narrative lines; this page shows <strong>color + breakdown shape</strong> only. No separate “summary” section — filters are visible in indicators + breakdown rows.
+    Live tile: the same <code>— Volatility gate: passes</code> / <code>— Volatility gate: blocked</code> suffix is appended in code (<code>format_jupiter_tile_narrative_v1</code>) on the <strong>ATR Analysis</strong> line only. This page mirrors that text for preview offline.
   </p>
 </body>
 </html>
