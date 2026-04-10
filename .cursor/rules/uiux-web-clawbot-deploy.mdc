@@ -6,13 +6,16 @@ alwaysApply: false
 
 # UIUX.Web — clawbot deploy (detail)
 
-**Hard rule (summary):** [`clawbot-ui-deployment-complete.mdc`](clawbot-ui-deployment-complete.mdc) — **alwaysApply.** UI changes are **not** complete without pull + **rebuild `web`** + restart + **in-container** proof + browser.
+**Hard rule (summary):** [`clawbot-ui-deployment-complete.mdc`](clawbot-ui-deployment-complete.mdc) — **alwaysApply.** UI changes are **not** complete without pull, correct verification path, restart when needed, and browser proof.
 
-## Why `web` must be rebuilt
+## `web` rebuild vs `dashboard.html`
 
-`UIUX.Web/Dockerfile` **COPY**s `dashboard.html`, `styles.css`, etc. into `/usr/share/nginx/html/`. `docker-compose.yml` mounts **only** `nginx/default.conf` into `web`; **HTML is not live-mounted from the repo.** After `git pull`, you **must** `docker compose build web`.
+`UIUX.Web/Dockerfile` **COPY**s `dashboard.html`, `styles.css`, etc. into **`web`’s** `/usr/share/nginx/html/`. **`nginx/default.conf`** proxies **`/dashboard.html`** (and `/dashboard`) to **`api`**, which reads **`/repo/UIUX.Web/dashboard.html`** from the **`api`** mount. So:
 
-The **`api`** service mounts **`../:/repo`** — Python changes under `modules/` apply after pull + **restart `api`** without rebuilding the image (same bare image + pip).
+- **Operator dashboard at `/dashboard.html`:** after **`git pull`**, the live document is the file on the **`api`** repo mount — **do not** use **`web`’s** baked copy as proof.
+- **Rebuild `web`** when you change assets nginx serves **without** proxying (e.g. `index.html`, `styles.css`, `app.js` by direct path).
+
+The **`api`** service mounts **`../:/repo`** — Python changes under `modules/` need **restart `api`** (cached imports). **`dashboard.html`** content is read from disk per request in **`api_server`**; no restart needed for HTML-only edits to that file.
 
 ## Commands (clawbot)
 
@@ -22,11 +25,14 @@ cd ~/blackbox && git fetch origin main && git pull origin main && git rev-parse 
 cd ~/blackbox/UIUX.Web && docker compose build web && docker compose up -d web api
 ```
 
-Then verify inside container (example):
+Verify **`dashboard.html`** (what the browser gets at `/dashboard.html`):
 
 ```bash
-cd ~/blackbox/UIUX.Web && docker compose exec web grep -q 'tc-scorecard-block' /usr/share/nginx/html/dashboard.html && echo OK
+cd ~/blackbox/UIUX.Web && docker compose exec api grep -q 'tc-scorecard-block' /repo/UIUX.Web/dashboard.html && echo OK
+# or: curl -sk https://127.0.0.1/dashboard.html | head -30
 ```
+
+(Using **`web`’s** `/usr/share/nginx/html/dashboard.html` is **not** valid proof for that URL — nginx proxies to **api**.)
 
 Operator URL (see `docker-compose.yml` / site): typically HTTPS on host; **hard refresh** after deploy.
 

@@ -7,16 +7,20 @@ alwaysApply: true
 
 **Failure mode (unacceptable):** Code is pushed; engineering says done; **operator screen does not match**. That is **not** a nuance — it is **failed delivery**.
 
-**Scope:** Any change under **`UIUX.Web/`** that affects what the operator sees (HTML, CSS, JS, or **`api_server.py`** behavior for the dashboard/API). **`dashboard.html` is baked into the `web` Docker image** (`UIUX.Web/Dockerfile` `COPY`); bind-mounting the repo does **not** update nginx HTML unless you **rebuild `web`**.
+**Scope:** Any change under **`UIUX.Web/`** that affects what the operator sees (HTML, CSS, JS, or **`api_server.py`** behavior for the dashboard/API).
+
+**Critical — `dashboard.html` vs nginx image:** `UIUX.Web/nginx/default.conf` proxies **`/dashboard`**, **`/dashboard/`**, and **`/dashboard.html`** to **`api:8080`**. The browser does **not** receive the `COPY` in the `web` image for those URLs. **`api_server.py`** reads **`/repo/UIUX.Web/dashboard.html`** from the **`api`** container’s repo mount (`../:/repo` in compose). After **`git pull`** on the host, that file is what the operator gets at **`/dashboard.html`** — verifying **`web`’s** `/usr/share/nginx/html/dashboard.html` is **wrong** for proof of the live dashboard (it can be stale or unused for that route).
+
+**Other** static assets (`index.html`, `styles.css`, etc.) are still served by nginx from the image unless proxied — those need **`docker compose build web`** when changed.
 
 ## Work is INCOMPLETE until all five steps are done
 
 Do **not** skip any step. Do **not** say “done” or “implemented for the operator” until the proof block below is satisfied.
 
 1. **Pull on clawbot** — Do **not** assume `~/blackbox` is current. Run `git fetch` + `git pull origin main` (or tracked branch) and record **`git rev-parse HEAD`**. Must match the commit that contains the change (or newer).
-2. **Rebuild the `web` container** — `cd ~/blackbox/UIUX.Web && docker compose build web` (HTML/CSS in image).
-3. **Restart the stack** — `docker compose up -d web api` (or full stack). **`api` must be restarted after `git pull`** — the Python process caches imported modules; **pull + rebuild `web` alone does not reload `modules/anna_training/*.py`**. If the API is not restarted, the bundle can omit newer keys (e.g. `trade_chain.scorecard`) while `rows` updates from the same repo mount. Use `docker compose restart api` or `up -d api` after pull.
-4. **Verify inside the running container** — e.g. `docker compose exec web grep -q '<expected fragment>' /usr/share/nginx/html/dashboard.html` (or the file you changed). **Not** your laptop copy; **the container filesystem**.
+2. **Rebuild `web` when static-in-image files changed** — `cd ~/blackbox/UIUX.Web && docker compose build web` for HTML/CSS that nginx serves from the image (not for **`dashboard.html`** via `/dashboard.html`; that comes from the repo through **api**).
+3. **Restart the stack** — `docker compose up -d web api` (or full stack). **`api` must be restarted after `git pull`** when Python modules or **`api_server.py`** change — imported code is cached. Dashboard **HTML** edits are read per request from disk; bundle/schema changes still need **`restart api`**. Use `docker compose restart api` or `up -d api` after pull when the API layer changed.
+4. **Verify what the browser actually loads** — For **`dashboard.html`**: e.g. `docker compose exec api grep -q '<expected fragment>' /repo/UIUX.Web/dashboard.html` **or** `curl -sk https://127.0.0.1/dashboard.html | head -40`. **Not** `web`’s `/usr/share/nginx/html/dashboard.html` for this route. For other baked static files, grep inside **`web`** as before.
 5. **Verify in the browser** — Hard refresh; operator (or you via documented URL) confirms the visible change.
 
 ## “Implemented” proof (all three required)
@@ -26,7 +30,7 @@ Before claiming operator-visible UI work is complete, capture evidence for:
 | # | Proof | Required |
 |---|--------|----------|
 | 1 | **Running commit** | `git rev-parse HEAD` on **clawbot** after pull — state the hash |
-| 2 | **Container has the updated file** | Command output showing expected content **inside** `web` (or `api`) container |
+| 2 | **Runtime matches the commit** | For **`/dashboard.html`**: proof from **`api`** mount (`/repo/UIUX.Web/dashboard.html`) or **`curl`** to **`/dashboard.html`** — not stale **`web`** image COPY unless you are proving a non-proxied static file |
 | 3 | **UI visibly reflects the change** | Browser confirmation (operator hard refresh) or equivalent **targeted** check |
 
 If **any** of the three is missing, say **not complete** — not “should be there.”
