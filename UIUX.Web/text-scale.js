@@ -51,10 +51,20 @@
     if (typeof html.style.zoom !== "undefined" && html.style.zoom !== null) {
       try {
         html.style.zoom = z;
+        notifyScaleChange(pct);
         return;
       } catch (e) {}
     }
     html.style.fontSize = pct + "%";
+    notifyScaleChange(pct);
+  }
+
+  /** Let layouts with sticky/scroll regions re-measure (zoom may not always fire resize). */
+  function notifyScaleChange(pct) {
+    try {
+      window.dispatchEvent(new Event("resize"));
+      window.dispatchEvent(new CustomEvent("bb:text-scale", { detail: { pct: pct } }));
+    } catch (e) {}
   }
 
   function injectBaseStyles() {

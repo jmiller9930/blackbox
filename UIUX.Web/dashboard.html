@@ -1427,6 +1427,18 @@
   var bps = $('btnPcSaveStart');
   if (bps) bps.addEventListener('click', postSetStarting);
 
+  /* PAGE SIZE uses root zoom; re-snap horizontal scroll so sticky chain seam does not show a subpixel sliver. */
+  var tcScrollResizeRaf = null;
+  function onTcLayoutResize() {
+    if (tcScrollResizeRaf) return;
+    tcScrollResizeRaf = requestAnimationFrame(function () {
+      tcScrollResizeRaf = null;
+      tcScrollTradeChainToEnd();
+    });
+  }
+  window.addEventListener('resize', onTcLayoutResize);
+  window.addEventListener('bb:text-scale', onTcLayoutResize);
+
   refresh();
   setInterval(refresh, POLL_MS);
   setInterval(tickClocks, 250);
