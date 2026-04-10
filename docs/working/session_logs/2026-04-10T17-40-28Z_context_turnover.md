@@ -3,8 +3,9 @@
 | Field | Value |
 |--------|--------|
 | **UTC timestamp (filename)** | `2026-04-10T17-40-28Z` |
+| **Amended (detail pass)** | Same calendar day — added **§12–17** (Jupiter policy semantics, data path, open questions). **Code-checked** against `modules/anna_training/dashboard_bundle.py` and related modules; **not** a substitute for live ops verification on `clawbot`. |
 | **Repository** | `blackbox` (local path: workspace root) |
-| **Git `HEAD` at author time** | `3280424d1e5cdc747ca5a1a9a364b2d02de36550` |
+| **Git `HEAD` at original author time** | `3280424d1e5cdc747ca5a1a9a364b2d02de36550` (see `git log` for later commits) |
 | **Document type** | Session / turnover — **not** a governance directive; **not** a substitute for `docs/working/current_directive.md` |
 
 ---
@@ -139,6 +140,7 @@ Use `git log -- UIUX.Web/dashboard.html` for the authoritative line-by-line hist
 - **Anna intelligence `<details>`:** Product decision whether to flatten or move to dialog like paths/OB.
 - **Liveness strip** showing green pulse under FETCH ERR on static preview — separate UX question (error vs live styling).
 - **Page size widget** (`text-scale.js`) — third-party control chrome; not removed in dashboard thread.
+- **Runtime / product gaps** — see **§16** (ops topology, “live” semantics, tile schema).
 
 ---
 
@@ -152,4 +154,111 @@ Use `git log -- UIUX.Web/dashboard.html` for the authoritative line-by-line hist
 
 ---
 
-*End of turnover log. Filename timestamp is UTC at document creation; adjust if re-exporting from another timezone.*
+## 12. Jupiter “policy” vs Sean’s rules vs venue execution (terminology)
+
+This section answers: *what does “Jupiter policy” mean in the UI bundle, and how is it different from “trading policy” and Jack?*
+
+### 12.1 Trade policy (venue / registry posture)
+
+- In repo language, **where settlement would bind** for the active posture is **Jupiter Perps** → executor hook **Jack** (see `AGENTS.md`, `docs/architect/ANNA_GOES_TO_SCHOOL.md`, `trading_core/README.md` and adapter/registry text).
+- **Drift / Billy** is **deprecated**, not a live second path — do not treat it as parallel venue policy without an explicit, current directive.
+
+### 12.2 Sean’s rules (mechanics — bar-derived evaluator)
+
+- The **Jupiter_2** engine lives in **`modules/anna_training/jupiter_2_sean_policy.py`**: **SOL perp, 5m** bars, Supertrend (10, 3), EMA200, RSI 14, simple TR ATR, **ATR ratio vs a long lookback with a minimum (e.g. 1.35) to allow entries**, etc.
+- Purpose: **paper / monitoring parity** with the TypeScript policy snapshot semantics — **no venue execution inside that Python module**.
+
+### 12.3 What “Jupiter policy” means in the **dashboard bundle**
+
+- **`jupiter_policy_snapshot`** (built by `build_jupiter_policy_snapshot()` in `modules/anna_training/dashboard_bundle.py`) is **this bar-derived evaluator**, wired through **`evaluate_sean_jupiter_baseline_v1`** → **`evaluate_jupiter_2_sean`** — **not** a separate mysterious layer and **not** Jack placing orders.
+- The module docstring states explicitly: *“Jupiter policy snapshot: `evaluate_sean_jupiter_baseline_v1` → `evaluate_jupiter_2_sean` (bar-derived; paper).”*
+- **Venue execution (Jack)** is a **different concern** and is **out of scope** for that evaluator; Phase 1 / registry text keeps execution **separate and gated**.
+
+---
+
+## 13. How we know “trade” vs “no trade” (backend computation)
+
+Two different surfaces must not be conflated:
+
+### 13.1 Jupiter policy snapshot (latest closed bars → `would_trade`)
+
+`build_jupiter_policy_snapshot()` (same file) does roughly:
+
+1. Resolve **market SQLite** path (`BLACKBOX_MARKET_DATA_PATH` / default via `_market_db_path()`).
+2. If DB missing → **`error: market_db_missing`** (no fake signal).
+3. Import **`fetch_recent_bars_asc`** (from `market_data.bar_lookup` after `_ensure_runtime_for_market_imports()`), read recent **closed** rows into **`market_bars_5m`**-backed structures.
+4. If fewer than **`MIN_BARS`** → **`error: insufficient_history`** with hint text (no fake signal).
+5. Run **`evaluate_sean_jupiter_baseline_v1(bars_asc=bars)`**, which uses **`jupiter_2_sean_policy`** internally.
+6. Expose **`would_trade`**, **`side`**, **`reason_code`**, **`features`**, **`operator_tile_narrative`** (via **`format_jupiter_tile_narrative_v1`**, same family as tile formatting elsewhere).
+
+So **“can we trade in the paper baseline sense on the latest bar history?”** = that evaluator on **canonical 5m bars**. If the DB or history is inadequate, you get **structured errors**, not invented trades.
+
+### 13.2 Trade chain baseline row (ledger / display authority)
+
+The **`dashboard_bundle.py` module docstring** (top of file) defines **baseline WIN/LOSS** binding:
+
+- Tied to **`policy_evaluations`** (historic env label **`signal_mode=sean_jupiter_v1`** — compatibility name; **engine** is **Jupiter_2**) **plus** a matching execution row when **`trade=1`**.
+- **`trade=0`** still means **NO TRADE** for **display authority** even if other artifacts exist — **non-authoritative** rows are not shown as outcomes.
+
+So **ledger/trade-chain semantics** are **separate** from **Jupiter tile narrative alone**; the UI must not treat **`operator_tile_narrative`** as the sole authority for the chain row outcome.
+
+---
+
+## 14. “Live” data — how information reaches the backend and the browser
+
+### 14.1 Canonical inputs for the policy view (not a raw tick tape in the bundle)
+
+- **Canonical state** for the policy snapshot is **closed bars in SQLite** (`market_bars_5m`), not a browser WebSocket of every tick.
+- Population path includes runtime upsert logic (e.g. `scripts/runtime/market_data/store.py` **`upsert_market_bar_5m`**), schema in **`data/sqlite/schema_phase5_canonical_bars.sql`**; bars carry **`price_source`** (e.g. Pyth-related naming where applicable).
+
+### 14.2 Pyth “liveness” as probe artifact
+
+- **`dashboard_bundle.py`** defines **`_pyth_probe_snapshot(repo)`**, reading **`docs/working/artifacts/pyth_stream_status.json`** under the repo root — a **filesystem artifact** produced by whatever stream/probe process operators run.
+- **Code paths exist** in repo; **exact production wiring** (systemd units, compose service names, cron) is **not** proven by reading Python alone — needs **ops map** or live host inspection.
+
+### 14.3 Sequential learning staleness
+
+- The bundle includes **backend-computed** sequential / queue / tick signals (e.g. **`_sequential_tick_staleness`**, surfaced under **`liveness` / `operator_signals`** in the payload). These are **server-derived**, not inferred in static HTML.
+
+### 14.4 UI transport
+
+- **`dashboard.html`** uses **`fetch('/api/v1/dashboard/bundle?...')`** on a **poll interval** — **REST JSON snapshots**, not a WebSocket firehose for the full bundle.
+- **“Live” in the UI** means **fresh polls + backend freshness fields** (and whatever the operator defines as acceptable staleness), **not** necessarily a literal browser SSE for every underlying tick.
+
+---
+
+## 15. Web UI scope — disciplined boundaries
+
+- Treat **`jupiter_policy_snapshot`** and **`trade_chain`** as **whatever `build_dashboard_bundle` returns** — do not invent fields in the HTML layer.
+- **`UIUX.Web/jupiter_tile_rule_colors_mockup.html`** states the **intent** (green/red per rule line); **production** still uses largely **one formatted narrative blob** plus **`features`** — **per-line classification** (`ok` / `stop` / `gate` / `neutral`) would require **structured fields** or an **agreed parser** on `operator_tile_narrative` (mockup file acknowledges this).
+- **Do not** conflate **paper `would_trade`** on **DB bars** with **Jack placing live orders**; registry and governance text keep execution **separate, gated**.
+
+---
+
+## 16. Not runtime-certain without ops / product decisions (explicit gaps)
+
+| # | Topic | Repo has | Still need for **runtime certainty** |
+|---|--------|-----------|--------------------------------------|
+| 1 | **Pyth + bar writers on clawbot** | Writers/upsert paths, `_pyth_probe_snapshot` reader | Which **processes/services** keep **`pyth_stream_status.json`** and **bar closure** current (daemon names, systemd, compose) — **ops map** or live inspection. |
+| 2 | **“Live” UI semantics** | Age fields, poll-based UI | Product choice: show **“live”** only when Pyth age &lt; *N* s, vs always surfacing **last closed bar** time regardless — **not** fully specified in code alone. |
+| 3 | **Per-line tile coloring API** | `features`, `operator_tile_narrative` | Optional **schema extension** to emit **`ok` / `stop` / `gate` / `neutral`** per narrative line — today coloring in UI beyond basic styling may need **bundle contract** change. |
+
+If the triad fixes **(2)** and **(3)**, web work can align **without** guessing execution or trading policy beyond the bundle.
+
+---
+
+## 17. Alignment summary (reader checklist)
+
+**Yes — after reading the repo, these statements are aligned:**
+
+- **Jupiter Perps** is the **active trade policy (venue posture)** → executor hook **Jack** in registry language; **Drift/Billy** deprecated as a live path.
+- **Sean / Jupiter_2** rules are the **bar-derived paper evaluator** in Python — **not** venue execution in that module.
+- **Trade vs no trade** in the **policy snapshot** flows from **`would_trade` / `reason_code` / `features`** via **`evaluate_sean_jupiter_baseline_v1`** on **`market_bars_5m`** history; missing DB/history → **errors**, not fake signals.
+- **Trade chain** baseline display authority follows **ledger + policy_evaluations + `trade` flag** semantics documented in **`dashboard_bundle.py`** — **`trade=0`** → **NO TRADE** for display even if other rows exist.
+- **Data** = **ingested/stored closed bars + status artifacts + bundle-computed liveness**; **dashboard** = **polling `/api/v1/dashboard/bundle`**.
+
+**Intentionally light until ops confirms:** exact **live topology** for Pyth stream and bar writers on the lab host.
+
+---
+
+*End of turnover log. Original filename timestamp is UTC at first document creation; §12–17 amended same calendar day. Adjust if re-exporting from another timezone.*
