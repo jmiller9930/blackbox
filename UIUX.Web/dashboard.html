@@ -171,7 +171,8 @@
       width: 10rem;
       box-sizing: border-box;
       background: #f8fafc !important;
-      box-shadow: 2px 0 6px rgba(15, 23, 42, 0.08);
+      /* Second shadow: solid 3px extension masks subpixel td bleed left of first event column */
+      box-shadow: 2px 0 6px rgba(15, 23, 42, 0.08), 3px 0 0 0 #f8fafc;
       border-right: 2px solid #cbd5e1;
       transform: translateZ(0);
       backface-visibility: hidden;
@@ -185,7 +186,7 @@
       width: 10rem;
       box-sizing: border-box;
       background: #f8fafc !important;
-      box-shadow: 2px 0 6px rgba(15, 23, 42, 0.08);
+      box-shadow: 2px 0 6px rgba(15, 23, 42, 0.08), 3px 0 0 0 #f8fafc;
       border-right: 2px solid #cbd5e1;
       transform: translateZ(0);
       backface-visibility: hidden;
@@ -195,7 +196,7 @@
       border-left: 3px solid #0f172a;
       background: #e8edf4 !important;
       font-weight: 700;
-      box-shadow: 2px 0 6px rgba(15, 23, 42, 0.08);
+      box-shadow: 2px 0 6px rgba(15, 23, 42, 0.08), 3px 0 0 0 #e8edf4;
       min-width: 10rem;
       max-width: 10rem;
       width: 10rem;
@@ -206,7 +207,11 @@
     .tc-table thead th.tc-now,
     .tc-table tbody td.tc-now { box-shadow: inset 0 0 0 2px rgba(15, 23, 42, 0.42); }
     .tc-table thead th.tc-now { font-weight: 800; }
-    .tc-table thead th.tc-head-ev { min-width: 5.25rem; max-width: 9rem; }
+    .tc-table thead th.tc-head-ev {
+      min-width: 5.25rem;
+      max-width: 9rem;
+      overflow: hidden;
+    }
     /* Event columns: td clips; inner surface scrolls so full tiles stay inside the cell (no sliver left of chain). */
     .tc-table tbody tr:not(.tc-empty-chain) td {
       min-width: 20rem;
@@ -1087,14 +1092,23 @@
       tr.innerHTML = h + cells;
       tbody.appendChild(tr);
     });
+    tcScrollTradeChainToEnd();
+  }
+
+  /** Snap horizontal scroll to integer px so subpixel scrollLeft does not show a column fragment at the seam. */
+  function tcScrollTradeChainToEnd() {
     var sc = $('tc-scroll');
-    if (sc) {
-      requestAnimationFrame(function () {
-        requestAnimationFrame(function () {
-          sc.scrollLeft = Math.max(0, sc.scrollWidth - sc.clientWidth);
-        });
-      });
+    if (!sc) return;
+    function apply() {
+      var max = Math.max(0, sc.scrollWidth - sc.clientWidth);
+      sc.scrollLeft = Math.floor(max);
     }
+    requestAnimationFrame(function () {
+      requestAnimationFrame(function () {
+        apply();
+        requestAnimationFrame(apply);
+      });
+    });
   }
 
   function renderOB(b) {
