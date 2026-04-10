@@ -46,7 +46,7 @@
       font-size: 0.68rem;
       color: var(--muted);
       font-weight: 600;
-      max-width: 36rem;
+      max-width: 42rem;
     }
     .bt-section {
       flex: 1;
@@ -64,7 +64,7 @@
       font-size: 0.74rem;
       color: var(--muted);
       font-weight: 600;
-      max-width: 48rem;
+      max-width: 52rem;
       line-height: 1.45;
     }
     .bt-filters {
@@ -128,13 +128,13 @@
       box-shadow: 0 1px 2px rgba(15, 23, 42, 0.06);
     }
     table.bt-rpt {
-      width: 100%;
+      width: max(100%, 72rem);
       border-collapse: collapse;
-      font-size: 0.72rem;
+      font-size: 0.7rem;
     }
     .bt-rpt th, .bt-rpt td {
       text-align: left;
-      padding: 0.5rem 0.6rem;
+      padding: 0.45rem 0.5rem;
       border-bottom: 1px solid #f1f5f9;
       vertical-align: top;
     }
@@ -143,23 +143,28 @@
       top: 0;
       background: #f8fafc;
       border-bottom: 1px solid var(--panel-border);
-      font-size: 0.58rem;
+      font-size: 0.56rem;
       font-weight: 800;
       text-transform: uppercase;
-      letter-spacing: 0.04em;
+      letter-spacing: 0.03em;
       color: var(--muted);
       z-index: 1;
+      cursor: help;
+      max-width: 11rem;
     }
+    .bt-rpt th[title]:hover { color: #0f172a; }
     .bt-rpt tbody tr:hover { background: #fafbfc; }
-    .bt-mono { font-family: ui-monospace, monospace; font-size: 0.68rem; word-break: break-all; }
+    .bt-mono { font-family: ui-monospace, monospace; font-size: 0.66rem; word-break: break-all; }
+    .bt-mono--mid { max-width: 9rem; }
     .bt-long { background: rgba(59, 130, 246, 0.06); }
     .bt-short { background: rgba(234, 88, 12, 0.06); }
     .bt-pnl-pos { color: #047857; font-weight: 800; }
     .bt-pnl-neg { color: #b91c1c; font-weight: 800; }
     .bt-rpt a { color: var(--accent); font-weight: 700; }
+    .bt-td-tip { cursor: help; }
     button.bt-view-btn {
       font: inherit;
-      font-size: 0.72rem;
+      font-size: 0.7rem;
       font-weight: 700;
       color: var(--accent);
       background: transparent;
@@ -176,21 +181,65 @@
       color: var(--muted);
       font-weight: 600;
     }
-    .bt-tile {
-      margin-top: 1.5rem;
+    /* Modal */
+    .bt-modal[hidden] { display: none !important; }
+    .bt-modal {
+      position: fixed;
+      inset: 0;
+      z-index: 100;
+      display: flex;
+      align-items: center;
+      justify-content: center;
       padding: 1rem;
+      box-sizing: border-box;
+    }
+    .bt-modal__backdrop {
+      position: absolute;
+      inset: 0;
+      background: rgba(15, 23, 42, 0.45);
+      cursor: pointer;
+    }
+    .bt-modal__panel {
+      position: relative;
+      width: 100%;
+      max-width: 44rem;
+      max-height: min(85vh, 40rem);
+      overflow: auto;
       background: #fff;
       border: 1px solid var(--panel-border);
       border-radius: var(--radius-md);
-      max-width: 42rem;
+      box-shadow: 0 16px 48px rgba(15, 23, 42, 0.18);
+      padding: 1rem 1.1rem;
     }
-    .bt-tile h2 {
-      margin: 0 0 0.5rem;
-      font-size: 0.88rem;
+    .bt-modal__head {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 0.75rem;
+      margin-bottom: 0.5rem;
+    }
+    .bt-modal__head h2 {
+      margin: 0;
+      font-size: 0.95rem;
       font-weight: 800;
     }
-    .bt-tile .bt-sub { margin: 0 0 0.75rem; font-size: 0.75rem; color: var(--muted); word-break: break-all; }
-    .bt-tile pre {
+    .bt-modal__close {
+      flex-shrink: 0;
+      font: inherit;
+      font-size: 1.35rem;
+      line-height: 1;
+      font-weight: 700;
+      border: none;
+      background: #f1f5f9;
+      width: 2rem;
+      height: 2rem;
+      border-radius: var(--radius-md);
+      cursor: pointer;
+      color: #475569;
+    }
+    .bt-modal__close:hover { background: #e2e8f0; }
+    .bt-modal .bt-sub { margin: 0 0 0.65rem; font-size: 0.75rem; color: var(--muted); word-break: break-all; }
+    .bt-modal pre {
       margin: 0;
       font-family: ui-monospace, monospace;
       font-size: 0.72rem;
@@ -219,12 +268,12 @@
     <div class="dash-main">
       <div class="bt-back">
         <a class="dash-return" href="/dashboard.html">← Back to Dashboard</a>
-        <span class="bt-muted">Table loads from the execution ledger via <code>/api/v1/dashboard/bundle</code>. Use <strong>View</strong> for tile text; CSV exports the rows on screen.</span>
+        <span class="bt-muted">Loads from <code>/api/v1/dashboard/bundle</code>. Hover column headers for definitions. <strong>View</strong> opens the Jupiter tile in a popup. CSV matches the table.</span>
       </div>
       <div class="bt-section">
         <h1>Baseline trades report</h1>
         <p class="bt-desc">
-          Baseline lane: <code>execution_trades</code> with <code>policy_evaluations</code>. Use <strong>From / To</strong> (UTC) to search when trades occurred; exports should apply the same filters.
+          Baseline lane: <code>execution_trades</code> with <code>policy_evaluations</code>. MAE is computed from 5m bars (same rule as the trade chain). QEL is the Quantitative Evaluation Layer for Anna strategy survival—see the QEL page; this table does not attach a per-row QEL score to baseline executions.
         </p>
 
         <div class="bt-filters">
@@ -255,38 +304,49 @@
           <table class="bt-rpt">
             <thead>
               <tr>
-                <th>Entry time</th>
-                <th>market_event_id</th>
-                <th>Side</th>
-                <th>Exit reason</th>
-                <th>Entry</th>
-                <th>Exit</th>
-                <th>PnL (USD)</th>
-                <th>Tile</th>
+                <th title="UTC instant used for this row (entry time, or created time if entry is missing).">Entry time</th>
+                <th title="Instrument symbol from the ledger; used with size and prices for MAE bar lookup.">Sym</th>
+                <th title="Timeframe stored on the execution (for example 5m).">TF</th>
+                <th title="Correlates this fill with the dashboard event axis and the Jupiter tile narrative.">market_event_id</th>
+                <th title="Position direction from the ledger: long or short.">Side</th>
+                <th title="Position size (units or contracts) used with entry price for notional and MAE.">Size</th>
+                <th title="Why the position closed: stop, target, signal, manual, etc.">Exit reason</th>
+                <th title="Recorded entry price for the baseline leg.">Entry</th>
+                <th title="Recorded exit price for the baseline leg.">Exit</th>
+                <th title="Realized profit or loss in USD for this baseline execution.">PnL USD</th>
+                <th title="MAE (maximum adverse excursion) in USD: worst mark-to-market against you over 5m bars between entry and exit. Used with PnL for Anna vs baseline WIN / NOT WIN pairing when both legs qualify.">MAE USD</th>
+                <th title="QEL (Quantitative Evaluation Layer): survival checkpoints and strategy lifecycle for Anna candidates—not a single scalar per baseline row here. Use QEL evaluation in the nav for cohort results.">QEL</th>
+                <th title="Opens the formatted Jupiter policy tile text for this market_event_id.">Tile</th>
               </tr>
             </thead>
             <tbody id="bt-tbody">
-              <tr><td colspan="8">Loading…</td></tr>
+              <tr><td colspan="13">Loading…</td></tr>
             </tbody>
           </table>
         </div>
         <p class="bt-foot" id="bt-foot">Loading…</p>
-
-        <div class="bt-tile" id="bt-tile">
-          <h2>Tile narrative</h2>
-          <p class="bt-sub" id="bt-mid-line">market_event_id: (pass <code>?mid=…</code> in the URL)</p>
-          <pre id="bt-tile-pre">NEW 5M …
-ATR … Volatility gate …
-SIG LONG …
-NO TRADE / TRADE …
-…from policy_evaluations.features (same as trade chain column)</pre>
-        </div>
       </div>
     </div>
   </div>
+
+  <div id="bt-modal" class="bt-modal" hidden aria-hidden="true">
+    <div class="bt-modal__backdrop" id="bt-modal-backdrop" aria-label="Close dialog"></div>
+    <div class="bt-modal__panel" role="dialog" aria-modal="true" aria-labelledby="bt-modal-title">
+      <div class="bt-modal__head">
+        <h2 id="bt-modal-title">Tile narrative</h2>
+        <button type="button" class="bt-modal__close" id="bt-modal-close" aria-label="Close">×</button>
+      </div>
+      <p class="bt-sub" id="bt-modal-mid"></p>
+      <pre id="bt-modal-pre"></pre>
+    </div>
+  </div>
+
   <script>
     (function () {
       var state = { rows: [] };
+      var COLS = 13;
+      var TIP_QEL_ROW =
+        "QEL scores and survival decisions apply to Anna strategy cohorts, not to each baseline ledger row. Open QEL evaluation in the nav for details.";
 
       function esc(s) {
         return String(s == null ? "" : s)
@@ -296,9 +356,20 @@ NO TRADE / TRADE …
           .replace(/"/g, "&quot;");
       }
 
+      function escAttr(s) {
+        return String(s == null ? "" : s)
+          .replace(/&/g, "&amp;")
+          .replace(/"/g, "&quot;");
+      }
+
       function fmtNum(n) {
         if (n == null || n === "" || (typeof n === "number" && isNaN(n))) return "—";
         return Number(n).toFixed(2);
+      }
+
+      function fmtMae(m) {
+        if (m == null || (typeof m === "number" && isNaN(m))) return "—";
+        return Number(m).toFixed(4);
       }
 
       function fmtPnl(pnl) {
@@ -307,15 +378,42 @@ NO TRADE / TRADE …
         return (v >= 0 ? "+" : "") + v.toFixed(2);
       }
 
+      function closeModal() {
+        var m = document.getElementById("bt-modal");
+        m.hidden = true;
+        m.setAttribute("aria-hidden", "true");
+        document.body.style.overflow = "";
+      }
+
+      function openModal() {
+        var m = document.getElementById("bt-modal");
+        m.hidden = false;
+        m.setAttribute("aria-hidden", "false");
+        document.body.style.overflow = "hidden";
+        document.getElementById("bt-modal-close").focus();
+      }
+
+      document.getElementById("bt-modal-backdrop").onclick = closeModal;
+      document.getElementById("bt-modal-close").onclick = closeModal;
+      document.addEventListener("keydown", function (e) {
+        if (e.key === "Escape" && !document.getElementById("bt-modal").hidden) {
+          closeModal();
+        }
+      });
+
       function renderTable(rows) {
         var tb = document.getElementById("bt-tbody");
         if (!rows || !rows.length) {
           tb.innerHTML =
-            '<tr><td colspan="8">No baseline executions in the ledger.</td></tr>';
+            '<tr><td colspan="' +
+            COLS +
+            '">No baseline executions in the ledger.</td></tr>';
           return;
         }
         var h = "";
         var i;
+        var tipMae =
+          "MAE (USD): max adverse excursion on 5m bars in the trade window. Empty when bars or inputs are missing.";
         for (i = 0; i < rows.length; i++) {
           var r = rows[i];
           var mid = r.market_event_id || "";
@@ -324,26 +422,63 @@ NO TRADE / TRADE …
           var pnl = r.pnl_usd;
           var pnlCls =
             pnl == null ? "" : Number(pnl) >= 0 ? "bt-pnl-pos" : "bt-pnl-neg";
+          var sym = r.symbol != null ? String(r.symbol) : "—";
+          var tf = r.timeframe != null ? String(r.timeframe) : "—";
+          var sz = fmtNum(r.size);
           h +=
-            '<tr><td class="bt-mono">' +
+            '<tr><td class="bt-mono" title="' +
+            escAttr("UTC time for this row (same as Entry time column).") +
+            '">' +
             esc(r.time_utc_iso) +
-            '</td><td class="bt-mono">' +
+            '</td><td class="bt-mono" title="' +
+            escAttr("Symbol from ledger.") +
+            '">' +
+            esc(sym) +
+            '</td><td title="' +
+            escAttr("Timeframe from ledger.") +
+            '">' +
+            esc(tf) +
+            '</td><td class="bt-mono bt-mono--mid" title="' +
+            escAttr("Event id: ties to tile and trade chain columns.") +
+            '">' +
             esc(mid) +
             '</td><td class="' +
             cls +
+            '" title="' +
+            escAttr("Side from ledger.") +
             '">' +
             esc(side || "—") +
-            '</td><td class="bt-mono">' +
+            '</td><td title="' +
+            escAttr("Size from ledger.") +
+            '">' +
+            esc(sz) +
+            '</td><td class="bt-mono" title="' +
+            escAttr("Exit reason from ledger.") +
+            '">' +
             esc(r.exit_reason || "—") +
-            "</td><td>" +
+            "</td><td title=\"" +
+            escAttr("Entry price.") +
+            '">' +
             fmtNum(r.entry) +
-            "</td><td>" +
+            "</td><td title=\"" +
+            escAttr("Exit price.") +
+            '">' +
             fmtNum(r.exit) +
             '</td><td class="' +
             pnlCls +
+            '" title="' +
+            escAttr("Realized PnL USD.") +
             '">' +
             esc(fmtPnl(pnl)) +
-            '</td><td><button type="button" class="bt-view-btn">View</button></td></tr>';
+            '</td><td class="bt-td-tip" title="' +
+            escAttr(tipMae) +
+            '">' +
+            esc(fmtMae(r.mae_usd)) +
+            '</td><td class="bt-td-tip" title="' +
+            escAttr(TIP_QEL_ROW) +
+            '">—</td><td><button type="button" class="bt-view-btn" title="' +
+            escAttr("Open Jupiter tile narrative in a popup.") +
+            '">View</button></td></tr>';
         }
         tb.innerHTML = h;
         var btns = tb.querySelectorAll(".bt-view-btn");
@@ -358,8 +493,8 @@ NO TRADE / TRADE …
 
       function openTile(mid) {
         if (!mid) return;
-        var line = document.getElementById("bt-mid-line");
-        var pre = document.getElementById("bt-tile-pre");
+        var line = document.getElementById("bt-modal-mid");
+        var pre = document.getElementById("bt-modal-pre");
         line.textContent = "market_event_id: " + mid;
         var row = null;
         var j;
@@ -374,20 +509,23 @@ NO TRADE / TRADE …
             ? String(row.jupiter_tile_narrative)
             : "(No tile narrative in this bundle for this id. It may be outside the current dashboard event window.)";
         pre.textContent = text;
-        history.replaceState(null, "", "?mid=" + encodeURIComponent(mid) + "#bt-tile");
-        document.getElementById("bt-tile").scrollIntoView({ behavior: "smooth", block: "start" });
+        history.replaceState(null, "", "?mid=" + encodeURIComponent(mid));
+        openModal();
       }
 
       function rowsToCsv(rows) {
         var cols = [
           "time_utc_iso",
+          "symbol",
+          "timeframe",
           "market_event_id",
           "side",
+          "size",
           "exit_reason",
           "entry",
           "exit",
           "pnl_usd",
-          "outcome",
+          "mae_usd",
         ];
         var lines = [cols.join(",")];
         var r, k, val, line;
@@ -429,12 +567,14 @@ NO TRADE / TRADE …
             foot.textContent =
               "Showing " +
               state.rows.length +
-              " baseline execution row(s) from the ledger (newest first, cap 50). UTC date filters require a future report API.";
+              " baseline execution row(s) from the ledger (newest first, cap 50). Hover headers for column help. UTC date filters require a future report API.";
           })
           .catch(function (e) {
             foot.textContent = "Failed to load: " + String(e);
             document.getElementById("bt-tbody").innerHTML =
-              '<tr><td colspan="8">Could not load bundle. Check API and console.</td></tr>';
+              '<tr><td colspan="' +
+              COLS +
+              '">Could not load bundle. Check API and console.</td></tr>';
           });
       }
 

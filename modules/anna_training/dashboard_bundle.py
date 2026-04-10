@@ -754,18 +754,20 @@ def _recent_baseline_trades_for_dashboard_strip(
     conn: sqlite3.Connection,
     *,
     limit: int = 3,
+    market_db_path: Path | None = None,
 ) -> list[dict[str, Any]]:
     """
     Newest-first baseline lane rows from ``execution_trades`` (not limited to visible chain columns).
 
     Used for the “Recent baseline trades” block on ``dashboard.html`` so operators always see
-    ledger-backed activity when rows exist.
+    ledger-backed activity when rows exist. Includes ``mae_usd`` (v1) when market bars and inputs allow.
     """
     lim = max(1, min(200, int(limit)))
+    mpath = market_db_path
     cur = conn.execute(
         """
-        SELECT market_event_id, side, entry_time, entry_price, exit_price, exit_reason,
-               pnl_usd, created_at_utc, trade_id
+        SELECT market_event_id, side, symbol, timeframe, entry_time, entry_price, exit_price,
+               exit_reason, exit_time, size, pnl_usd, created_at_utc, trade_id
         FROM execution_trades
         WHERE lane = 'baseline' AND strategy_id = ?
         ORDER BY COALESCE(created_at_utc, entry_time, '') DESC, trade_id DESC
@@ -782,17 +784,34 @@ def _recent_baseline_trades_for_dashboard_strip(
         pnl = row.get("pnl_usd")
         ep = row.get("entry_price")
         xp = row.get("exit_price")
+        sym = str(row.get("symbol") or "").strip()
+        tf = str(row.get("timeframe") or "").strip()
+        mae_val: float | None = None
+        if sym and mpath and mpath.is_file():
+            mae_val, _ = compute_mae_usd_v1(
+                canonical_symbol=sym,
+                side=row.get("side"),
+                entry_price=row.get("entry_price"),
+                size=row.get("size"),
+                entry_time=row.get("entry_time"),
+                exit_time=row.get("exit_time"),
+                market_db_path=mpath,
+            )
         out.append(
             {
                 "market_event_id": str(row.get("market_event_id") or ""),
                 "side": str(row.get("side") or "").strip().lower(),
+                "symbol": sym or None,
+                "timeframe": tf or None,
                 "time_utc_iso": t_iso or "",
                 "outcome": _strip_outcome_from_pnl(pnl),
                 "pnl_usd": float(pnl) if pnl is not None else None,
                 "entry": float(ep) if ep is not None else None,
                 "exit": float(xp) if xp is not None else None,
+                "size": float(row["size"]) if row.get("size") is not None else None,
                 "exit_reason": str(row.get("exit_reason") or "").strip() or None,
                 "trade_id": str(row.get("trade_id") or "").strip() or None,
+                "mae_usd": round(mae_val, 6) if mae_val is not None else None,
             }
         )
     return out
@@ -1189,7 +1208,9 @@ def build_trade_chain_payload(
             event_axis, event_axis_time_utc_iso = _distinct_event_axis_with_times(conn, limit=max_events)
             event_axis_source = "execution_trades_fallback"
         tile_narr = _event_axis_jupiter_tile_narratives(conn, event_axis, mpath)
-        baseline_ledger = _recent_baseline_trades_for_dashboard_strip(conn, limit=50)
+        baseline_ledger = _recent_baseline_trades_for_dashboard_strip(
+            conn, limit=50, market_db_path=mpath
+        )
         recent_strip = baseline_ledger[:3]
         for br in baseline_ledger:
             mid_k = str(br.get("market_event_id") or "").strip()
