@@ -1895,6 +1895,11 @@ class Handler(BaseHTTPRequestHandler):
             if dash.is_file():
                 self._html(200, dash.read_text(encoding="utf-8"), no_cache=True)
                 return
+        if path in ("/baseline-trades", "/baseline-trades/", "/baseline-trades.html"):
+            bt = _REPO_ROOT / "UIUX.Web" / "baseline_trades.html"
+            if bt.is_file():
+                self._html(200, bt.read_text(encoding="utf-8"), no_cache=True)
+                return
         if path in ("/intelligence-method", "/intelligence-method/", "/intelligence-method.html"):
             im = _REPO_ROOT / "UIUX.Web" / "intelligence-method.html"
             if im.is_file():

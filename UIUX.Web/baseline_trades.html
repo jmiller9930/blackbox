@@ -1,0 +1,329 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>BLACK BOX — Baseline trades report</title>
+  <link rel="stylesheet" href="/styles.css" />
+  <script src="/text-scale.js"></script>
+  <style>
+    html, body { height: 100%; margin: 0; }
+    .dash-app { display: flex; min-height: 100vh; align-items: stretch; }
+    .dash-nav {
+      width: 12.5rem; flex-shrink: 0; border-right: 1px solid var(--panel-border);
+      background: var(--panel); padding: var(--space-3) var(--space-2);
+      display: flex; flex-direction: column; gap: 0.25rem;
+      min-height: 0; overflow-y: auto;
+    }
+    .dash-nav a {
+      display: block; padding: 0.45rem 0.65rem; border-radius: var(--radius-md);
+      font-size: 0.85rem; font-weight: 600; color: var(--text); text-decoration: none;
+    }
+    .dash-nav a:hover { background: rgba(15, 23, 42, 0.06); }
+    .dash-nav a.is-active { background: var(--accent); color: var(--accent-contrast); }
+    .dash-main {
+      flex: 1; display: flex; flex-direction: column; min-width: 0; min-height: 0;
+      background: linear-gradient(180deg, #f8f8fa 0%, #eef1f5 100%);
+    }
+    .bt-back {
+      flex-shrink: 0;
+      padding: 0.5rem 0.75rem;
+      border-bottom: 1px solid var(--panel-border);
+      background: var(--panel);
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 0.5rem 1rem;
+    }
+    .bt-back a.dash-return {
+      font-size: 0.82rem;
+      font-weight: 800;
+      color: var(--accent);
+      text-decoration: none;
+    }
+    .bt-back a.dash-return:hover { text-decoration: underline; }
+    .bt-back .bt-muted {
+      font-size: 0.68rem;
+      color: var(--muted);
+      font-weight: 600;
+      max-width: 36rem;
+    }
+    .bt-section {
+      flex: 1;
+      overflow: auto;
+      padding: 0.65rem 0.75rem 1rem;
+    }
+    .bt-section h1 {
+      margin: 0 0 0.35rem;
+      font-size: 1.05rem;
+      font-weight: 800;
+      color: #0f172a;
+    }
+    .bt-desc {
+      margin: 0 0 1rem;
+      font-size: 0.74rem;
+      color: var(--muted);
+      font-weight: 600;
+      max-width: 48rem;
+      line-height: 1.45;
+    }
+    .bt-filters {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: flex-end;
+      gap: 0.75rem 1rem;
+      padding: 0.85rem 1rem;
+      background: #fff;
+      border: 1px solid var(--panel-border);
+      border-radius: var(--radius-md);
+      margin-bottom: 1rem;
+      box-shadow: 0 1px 2px rgba(15, 23, 42, 0.06);
+    }
+    .bt-field { display: flex; flex-direction: column; gap: 0.25rem; }
+    .bt-field label {
+      font-size: 0.6rem;
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--muted);
+    }
+    .bt-field input {
+      font: inherit;
+      font-size: 0.78rem;
+      padding: 0.4rem 0.55rem;
+      border-radius: var(--radius-md);
+      border: 1px solid var(--panel-border);
+      min-width: 10rem;
+    }
+    .bt-btn {
+      font: inherit;
+      font-size: 0.78rem;
+      font-weight: 800;
+      padding: 0.45rem 0.85rem;
+      border-radius: var(--radius-md);
+      border: 1px solid var(--panel-border);
+      background: #f8fafc;
+      cursor: pointer;
+    }
+    .bt-btn:hover { background: #e2e8f0; }
+    .bt-btn--primary {
+      background: var(--accent);
+      color: var(--accent-contrast);
+      border-color: transparent;
+    }
+    .bt-btn--primary:hover { filter: brightness(1.05); }
+    .bt-export { margin-left: auto; display: flex; gap: 0.4rem; flex-wrap: wrap; }
+    .bt-note {
+      width: 100%;
+      margin: 0;
+      font-size: 0.65rem;
+      color: var(--muted);
+      font-weight: 600;
+    }
+    .bt-table-wrap {
+      background: #fff;
+      border: 1px solid var(--panel-border);
+      border-radius: var(--radius-md);
+      overflow: auto;
+      box-shadow: 0 1px 2px rgba(15, 23, 42, 0.06);
+    }
+    table.bt-rpt {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.72rem;
+    }
+    .bt-rpt th, .bt-rpt td {
+      text-align: left;
+      padding: 0.5rem 0.6rem;
+      border-bottom: 1px solid #f1f5f9;
+      vertical-align: top;
+    }
+    .bt-rpt th {
+      position: sticky;
+      top: 0;
+      background: #f8fafc;
+      border-bottom: 1px solid var(--panel-border);
+      font-size: 0.58rem;
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      color: var(--muted);
+      z-index: 1;
+    }
+    .bt-rpt tbody tr:hover { background: #fafbfc; }
+    .bt-mono { font-family: ui-monospace, monospace; font-size: 0.68rem; word-break: break-all; }
+    .bt-long { background: rgba(59, 130, 246, 0.06); }
+    .bt-short { background: rgba(234, 88, 12, 0.06); }
+    .bt-pnl-pos { color: #047857; font-weight: 800; }
+    .bt-pnl-neg { color: #b91c1c; font-weight: 800; }
+    .bt-rpt a { color: var(--accent); font-weight: 700; }
+    .bt-foot {
+      margin-top: 0.65rem;
+      font-size: 0.68rem;
+      color: var(--muted);
+      font-weight: 600;
+    }
+    .bt-tile {
+      margin-top: 1.5rem;
+      padding: 1rem;
+      background: #fff;
+      border: 1px solid var(--panel-border);
+      border-radius: var(--radius-md);
+      max-width: 42rem;
+    }
+    .bt-tile h2 {
+      margin: 0 0 0.5rem;
+      font-size: 0.88rem;
+      font-weight: 800;
+    }
+    .bt-tile .bt-sub { margin: 0 0 0.75rem; font-size: 0.75rem; color: var(--muted); word-break: break-all; }
+    .bt-tile pre {
+      margin: 0;
+      font-family: ui-monospace, monospace;
+      font-size: 0.72rem;
+      white-space: pre-wrap;
+      background: #f8fafc;
+      border: 1px solid #e2e8f0;
+      border-radius: 8px;
+      padding: 0.75rem;
+    }
+  </style>
+</head>
+<body>
+  <div class="dash-app">
+    <nav class="dash-nav" aria-label="Primary">
+      <a href="/dashboard.html">Dashboard</a>
+      <a class="is-active" href="/baseline-trades.html">Baseline trades</a>
+      <a href="/internal.html">Operator Panel</a>
+      <a href="/anna/evaluation">QEL evaluation</a>
+      <a href="/anna/event-view">Event view</a>
+      <a href="/anna.html">Anna hub</a>
+      <a href="/guide.html">System guide</a>
+      <a href="/anna/sequential-learning">Learning Engine</a>
+      <a href="/anna/training">Training Dashboard</a>
+      <a href="/intelligence-method.html">Intelligence METHOD</a>
+    </nav>
+    <div class="dash-main">
+      <div class="bt-back">
+        <a class="dash-return" href="/dashboard.html">← Back to Dashboard</a>
+        <span class="bt-muted">Full baseline trade list, UTC range, and exports (API wiring pending).</span>
+      </div>
+      <div class="bt-section">
+        <h1>Baseline trades report</h1>
+        <p class="bt-desc">
+          Baseline lane: <code>execution_trades</code> with <code>policy_evaluations</code>. Use <strong>From / To</strong> (UTC) to search when trades occurred; exports should apply the same filters.
+        </p>
+
+        <div class="bt-filters">
+          <div class="bt-field">
+            <label for="bt-from">From (UTC)</label>
+            <input id="bt-from" type="datetime-local" value="2026-04-09T00:00" />
+          </div>
+          <div class="bt-field">
+            <label for="bt-to">To (UTC)</label>
+            <input id="bt-to" type="datetime-local" value="2026-04-10T23:59" />
+          </div>
+          <div class="bt-field">
+            <label for="bt-max">Max rows</label>
+            <input id="bt-max" type="number" value="100" min="1" max="5000" style="width:5.5rem" />
+          </div>
+          <div class="bt-field">
+            <label>&nbsp;</label>
+            <button type="button" class="bt-btn bt-btn--primary" id="bt-apply">Apply</button>
+          </div>
+          <div class="bt-export">
+            <button type="button" class="bt-btn" id="bt-csv">Download CSV</button>
+            <button type="button" class="bt-btn" id="bt-xlsx">Download XLSX</button>
+          </div>
+          <p class="bt-note">Placeholder UI — connect to <code>/api/v1/…/baseline-trades</code> (or agreed export path) with <code>from</code>, <code>to</code>, <code>limit</code>.</p>
+        </div>
+
+        <div class="bt-table-wrap">
+          <table class="bt-rpt">
+            <thead>
+              <tr>
+                <th>Entry time</th>
+                <th>market_event_id</th>
+                <th>Side</th>
+                <th>Reason</th>
+                <th>Entry</th>
+                <th>Exit</th>
+                <th>PnL (USD)</th>
+                <th>Tile</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td class="bt-mono">2026-04-10T14:50:00Z</td>
+                <td class="bt-mono">SOL-PERP_5m_2026-04-10T14:50:00Z</td>
+                <td class="bt-long">long</td>
+                <td class="bt-mono">jupiter_policy_long_signal</td>
+                <td>85.41</td>
+                <td>85.52</td>
+                <td class="bt-pnl-pos">+0.12</td>
+                <td><a href="?mid=SOL-PERP_5m_2026-04-10T14:50:00Z#bt-tile">View</a></td>
+              </tr>
+              <tr>
+                <td class="bt-mono">2026-04-10T09:15:00Z</td>
+                <td class="bt-mono">SOL-PERP_5m_2026-04-10T09:15:00Z</td>
+                <td class="bt-long">long</td>
+                <td class="bt-mono">jupiter_policy_long_signal</td>
+                <td>85.10</td>
+                <td>85.08</td>
+                <td class="bt-pnl-neg">−0.02</td>
+                <td><a href="?mid=SOL-PERP_5m_2026-04-10T09:15:00Z#bt-tile">View</a></td>
+              </tr>
+              <tr>
+                <td class="bt-mono">2026-04-10T08:45:00Z</td>
+                <td class="bt-mono">SOL-PERP_5m_2026-04-10T08:45:00Z</td>
+                <td class="bt-short">short</td>
+                <td class="bt-mono">jupiter_policy_short_signal</td>
+                <td>85.20</td>
+                <td>85.35</td>
+                <td class="bt-pnl-neg">−0.18</td>
+                <td><a href="?mid=SOL-PERP_5m_2026-04-10T08:45:00Z#bt-tile">View</a></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <p class="bt-foot">Sample rows only until the API is connected.</p>
+
+        <div class="bt-tile" id="bt-tile">
+          <h2>Tile narrative</h2>
+          <p class="bt-sub" id="bt-mid-line">market_event_id: (pass <code>?mid=…</code> in the URL)</p>
+          <pre id="bt-tile-pre">NEW 5M …
+ATR … Volatility gate …
+SIG LONG …
+NO TRADE / TRADE …
+…from policy_evaluations.features (same as trade chain column)</pre>
+        </div>
+      </div>
+    </div>
+  </div>
+  <script>
+    (function () {
+      document.getElementById("bt-apply").onclick = function () {
+        alert("Apply: refetch rows for selected UTC range and max rows (API TBD).");
+      };
+      document.getElementById("bt-csv").onclick = function () {
+        alert("Export CSV: GET …/baseline-trades/export?format=csv&from=&to=&limit=");
+      };
+      document.getElementById("bt-xlsx").onclick = function () {
+        alert("Export XLSX: same endpoint, format=xlsx");
+      };
+      var q = new URLSearchParams(location.search);
+      var mid = q.get("mid") || "";
+      var line = document.getElementById("bt-mid-line");
+      var pre = document.getElementById("bt-tile-pre");
+      if (mid) {
+        line.textContent = "market_event_id: " + mid;
+      } else {
+        line.textContent = "market_event_id: (open a row link or add ?mid=… to the URL)";
+      }
+      if (location.hash === "#bt-tile" && mid) {
+        document.getElementById("bt-tile").scrollIntoView({ behavior: "smooth", block: "start" });
+      }
+    })();
+  </script>
+</body>
+</html>
