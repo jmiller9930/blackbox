@@ -665,6 +665,8 @@
 (function () {
   var LS_KEY = 'blackbox_dashboard_seq_form_v1';
   var POLL_MS = 1500;
+  /** Skip full trade-chain DOM rebuild when display payload unchanged (avoids tile flicker every poll). */
+  var __bbLastTradeChainRenderSig = null;
   function $(id) { return document.getElementById(id); }
 
   function loadForm() {
@@ -1095,7 +1097,50 @@
     );
   }
 
+  /** Stable JSON of axis + row heads + cells only (excludes market_clock, scorecard, etc.). */
+  function tradeChainRenderSig(tc) {
+    if (!tc || !tc.rows || !tc.rows.length) {
+      return JSON.stringify({
+        v: 1,
+        empty: true,
+        axis: (tc && tc.event_axis) || [],
+        times: (tc && tc.event_axis_time_utc_iso) || []
+      });
+    }
+    var axis = tc.event_axis || [];
+    var rows = tc.rows.map(function (row) {
+      var cells = {};
+      var i;
+      for (i = 0; i < axis.length; i++) {
+        var mid = axis[i];
+        cells[String(mid)] = row.cells && row.cells[mid] != null ? row.cells[mid] : null;
+      }
+      return {
+        chain_kind: row.chain_kind,
+        strategy_id: row.strategy_id,
+        lifecycle_label: row.lifecycle_label,
+        cells: cells
+      };
+    });
+    return JSON.stringify({
+      v: 1,
+      empty: false,
+      axis: axis,
+      times: tc.event_axis_time_utc_iso || [],
+      rows: rows
+    });
+  }
+
   function renderTC(tc) {
+    var sig = tradeChainRenderSig(tc);
+    if (__bbLastTradeChainRenderSig !== null && sig === __bbLastTradeChainRenderSig) {
+      requestAnimationFrame(function () {
+        tcPanSliderRefresh();
+      });
+      return;
+    }
+    __bbLastTradeChainRenderSig = sig;
+
     var table = $('tc-table');
     var thead = table.querySelector('thead tr');
     var tbody = table.querySelector('tbody');
