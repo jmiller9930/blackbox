@@ -267,7 +267,7 @@ def build_jupiter_policy_snapshot(
     training_state: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """
-    Live **paper** Jupiter baseline policy view: same evaluator as ``baseline_ledger_bridge`` (sean_jupiter_v1).
+    Live **paper** Jupiter_2 baseline policy view: same evaluator as ``baseline_ledger_bridge`` (sean_jupiter_v1).
 
     Not a price tape; not venue execution. Refreshes every dashboard bundle request.
     """
@@ -281,7 +281,7 @@ def build_jupiter_policy_snapshot(
     out: dict[str, Any] = {
         "schema": "jupiter_policy_snapshot_v1",
         "what_this_is": (
-            "Bar-derived Jupiter policy (aggregateCandles+rsi parity). "
+            "Bar-derived Jupiter_2 Sean policy (Supertrend 10/3, EMA200, RSI 14, simple TR ATR ratio). "
             "Shows whether the latest closed bar would fire a paper baseline trade and which features aligned."
         ),
         "market_db_path": str(mpath) if mpath else None,
@@ -311,7 +311,9 @@ def build_jupiter_policy_snapshot(
     out["min_bars_required"] = MIN_BARS
     if len(bars) < MIN_BARS:
         out["error"] = "insufficient_history"
-        out["hint"] = f"Need at least {MIN_BARS} closed bars (Sean v2: EMA200 + Supertrend + RSI)."
+        out["hint"] = (
+            f"Need at least {MIN_BARS} closed bars (Jupiter_2: EMA200 + Supertrend(10,3) + RSI, ATR ratio)."
+        )
         return out
 
     last = bars[-1]

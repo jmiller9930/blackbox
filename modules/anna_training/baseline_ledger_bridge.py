@@ -174,8 +174,9 @@ def run_baseline_ledger_bridge_tick(
     pnl = float(sig.pnl_usd) if sig.pnl_usd is not None else 0.0
 
     from .decision_trace import persist_baseline_trade_with_trace
+    from modules.anna_training.jupiter_2_sean_policy import CATALOG_ID as baseline_catalog_id
 
-    catalog_id = "jupiter_supertrend_ema_rsi_atr_v1"
+    catalog_id = baseline_catalog_id
     ctx = {
         "source": "baseline_ledger_bridge_sean_jupiter_v1",
         "trade_policy": "jupiter_perps",
@@ -186,7 +187,7 @@ def run_baseline_ledger_bridge_tick(
         "side": sig.side,
     }
     notes = (
-        f"baseline — Sean Jupiter policy ({catalog_id}) signal; "
+        f"baseline — Jupiter_2 Sean policy ({catalog_id}) signal; "
         f"{sig.reason_code} side={sig.side}"
     )
 
@@ -201,7 +202,7 @@ def run_baseline_ledger_bridge_tick(
             notes=notes,
             db_path=execution_ledger_db_path,
             side=sig.side,
-            economic_basis="jupiter_policy_aggregateCandles_rsi_open_to_close",
+            economic_basis="jupiter_2_sean_entry_open_to_close",
             signal_snapshot=dict(sig.features),
         )
     except sqlite3.IntegrityError:

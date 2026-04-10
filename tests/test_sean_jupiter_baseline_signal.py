@@ -1,4 +1,4 @@
-"""Sean baseline signal — regime primary + aggregateCandles reference + ATR/RSI extremes."""
+"""Sean baseline signal — thin adapter over Jupiter_2 Sean policy (``evaluate_jupiter_2_sean``)."""
 
 from __future__ import annotations
 
@@ -40,35 +40,6 @@ def test_insufficient_history() -> None:
     assert out.reason_code == "insufficient_history"
 
 
-def test_regime_signal_flags_contract() -> None:
-    from modules.anna_training.sean_jupiter_baseline_signal import regime_signal_flags
-
-    lg, sh = regime_signal_flags(
-        st_dir=1,
-        close=105.0,
-        ema200_last=100.0,
-        current_rsi_raw=55.0,
-        prev_close=100.0,
-    )
-    assert lg is True and sh is False
-    lg2, _ = regime_signal_flags(
-        st_dir=1,
-        close=105.0,
-        ema200_last=100.0,
-        current_rsi_raw=51.0,
-        prev_close=100.0,
-    )
-    assert lg2 is False
-    _, sh2 = regime_signal_flags(
-        st_dir=-1,
-        close=95.0,
-        ema200_last=100.0,
-        current_rsi_raw=45.0,
-        prev_close=100.0,
-    )
-    assert sh2 is True
-
-
 def test_aggregate_candles_flags_short_parity() -> None:
     from modules.anna_training.sean_jupiter_baseline_signal import aggregate_candles_signal_flags
 
@@ -105,7 +76,8 @@ def test_flat_closes_often_no_signal() -> None:
     bars = [_bar(i, o=100.0, h=100.0, l=100.0, c=100.0) for i in range(MIN_BARS + 5)]
     out = evaluate_sean_jupiter_baseline_v1(bars_asc=bars)
     assert out.trade is False
-    assert out.reason_code == "no_signal"
+    # Flat series: Jupiter_2 may block on ATR ratio before ``jupiter_2_no_signal``.
+    assert out.reason_code in ("no_signal", "atr_ratio_below_min")
 
 
 def test_rsi_trading_core_length_matches_ts() -> None:
@@ -166,24 +138,32 @@ def test_tile_atr_ratio_matches_jupiter_2_generate_signal() -> None:
 
 
 def test_atr_ratio_below_min_final_veto(monkeypatch: pytest.MonkeyPatch) -> None:
-    """After primary regime + RSI extreme pass, ATR ratio < 1.35 must return NO TRADE."""
+    """Jupiter_2 ATR ratio block maps to baseline ``atr_ratio_below_min`` + policy_blockers."""
     import modules.anna_training.sean_jupiter_baseline_signal as m
+    from modules.anna_training.jupiter_2_sean_policy import Jupiter2SeanPolicyResult, REFERENCE_SOURCE
     from modules.anna_training.sean_jupiter_baseline_signal import MIN_BARS, evaluate_sean_jupiter_baseline_v1
 
-    monkeypatch.setattr(m, "regime_signal_flags", lambda **kw: (False, True))
-
-    orig_tile = m._build_tile_payload
-
-    def fake_tile(**kwargs):
-        out = orig_tile(**kwargs)
-        tile = out.get("tile")
-        if isinstance(tile, dict):
-            tile["atr_ratio"] = 1.0
-            tile["atr_current"] = 1.0
-            tile["atr_avg200"] = 1.0
-        return out
-
-    monkeypatch.setattr(m, "_build_tile_payload", fake_tile)
+    fake_feat = {
+        "reference": REFERENCE_SOURCE,
+        "catalog_id": "jupiter_2_sean_perps_v1",
+        "supertrend_bullish": False,
+        "ema200": 100.0,
+        "current_rsi": 50.0,
+        "atr": 1.0,
+        "avg_atr_window": 1.0,
+        "atr_ratio": 1.0,
+        "long_signal_core": False,
+        "short_signal_core": True,
+        "reason_detail": "atr_ratio_below_1_35",
+    }
+    fake_res = Jupiter2SeanPolicyResult(
+        trade=False,
+        side="flat",
+        reason_code="jupiter_2_atr_ratio_block",
+        pnl_usd=None,
+        features=fake_feat,
+    )
+    monkeypatch.setattr(m, "evaluate_jupiter_2_sean", lambda **kw: fake_res)
 
     bars = [_bar(i, o=100.0, h=101.0, l=99.0, c=100.0) for i in range(MIN_BARS)]
     out = evaluate_sean_jupiter_baseline_v1(bars_asc=bars)
@@ -194,22 +174,33 @@ def test_atr_ratio_below_min_final_veto(monkeypatch: pytest.MonkeyPatch) -> None
 
 def test_atr_ratio_at_min_allows_trade(monkeypatch: pytest.MonkeyPatch) -> None:
     import modules.anna_training.sean_jupiter_baseline_signal as m
-    from modules.anna_training.sean_jupiter_baseline_signal import ATR_RATIO_MIN, MIN_BARS, evaluate_sean_jupiter_baseline_v1
+    from modules.anna_training.jupiter_2_sean_policy import (
+        ATR_RATIO_MIN,
+        Jupiter2SeanPolicyResult,
+        REFERENCE_SOURCE,
+    )
+    from modules.anna_training.sean_jupiter_baseline_signal import MIN_BARS, evaluate_sean_jupiter_baseline_v1
 
-    monkeypatch.setattr(m, "regime_signal_flags", lambda **kw: (False, True))
-
-    orig_tile = m._build_tile_payload
-
-    def fake_tile(**kwargs):
-        out = orig_tile(**kwargs)
-        tile = out.get("tile")
-        if isinstance(tile, dict):
-            tile["atr_ratio"] = ATR_RATIO_MIN
-            tile["atr_current"] = 1.35
-            tile["atr_avg200"] = 1.0
-        return out
-
-    monkeypatch.setattr(m, "_build_tile_payload", fake_tile)
+    fake_feat = {
+        "reference": REFERENCE_SOURCE,
+        "catalog_id": "jupiter_2_sean_perps_v1",
+        "supertrend_bullish": False,
+        "ema200": 100.0,
+        "current_rsi": 45.0,
+        "atr": ATR_RATIO_MIN,
+        "avg_atr_window": 1.0,
+        "atr_ratio": ATR_RATIO_MIN,
+        "long_signal_core": False,
+        "short_signal_core": True,
+    }
+    fake_res = Jupiter2SeanPolicyResult(
+        trade=True,
+        side="short",
+        reason_code="jupiter_2_short_signal",
+        pnl_usd=0.0,
+        features=fake_feat,
+    )
+    monkeypatch.setattr(m, "evaluate_jupiter_2_sean", lambda **kw: fake_res)
 
     bars = [_bar(i, o=100.0, h=101.0, l=99.0, c=100.0) for i in range(MIN_BARS)]
     out = evaluate_sean_jupiter_baseline_v1(bars_asc=bars)
@@ -217,17 +208,14 @@ def test_atr_ratio_at_min_allows_trade(monkeypatch: pytest.MonkeyPatch) -> None:
     assert out.reason_code == "jupiter_policy_short_signal"
 
 
-def test_ewm_mean_last_matches_pandas_when_available() -> None:
-    """EMA200 path must match prior pandas.Series.ewm(adjust=False) (dev env has pandas)."""
-    pd = pytest.importorskip("pandas")
-    from modules.anna_training.sean_jupiter_baseline_signal import EMA_PERIOD, _ewm_mean_last
-
+def test_jupiter_ema200_last_defined_for_long_series() -> None:
+    """Jupiter_2 ``ema()`` uses SMA seed + recursive alpha (policy port — not pandas ewm)."""
     import random
 
+    from modules.anna_training.jupiter_2_sean_policy import EMA_PERIOD, ema
+
     random.seed(42)
-    closes = [100.0 + random.random() for _ in range(200)]
-    want = float(
-        pd.Series(closes, dtype=float).ewm(span=EMA_PERIOD, adjust=False).mean().iloc[-1]
-    )
-    got = _ewm_mean_last(closes, EMA_PERIOD)
-    assert abs(got - want) < 1e-9
+    closes = [100.0 + random.random() for _ in range(220)]
+    ema_s = ema(closes)
+    assert len(ema_s) == len(closes)
+    assert not math.isnan(float(ema_s[-1]))

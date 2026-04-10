@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Jupiter policy v2 — **sandbox** demo: synthetic 5m OHLC, printed like operator logs.
+Jupiter_2 Sean policy — **sandbox** demo: synthetic 5m OHLC, printed like operator logs.
 
 No DB, no daemon, no venue. Comprehension check: same evaluator as production.
 
@@ -59,22 +59,18 @@ def _fmt_candle(b: dict, rsi: float | None) -> None:
     )
 
 
-def ema200_last(closes: list[float]) -> float:
-    return sj._ewm_mean_last(closes, sj.EMA_PERIOD)
-
-
 def print_scenario(title: str, bars: list[dict], sig: sj.SeanJupiterBaselineSignalV1) -> None:
+    from modules.anna_training.jupiter_2_sean_policy import rsi as j2_rsi
+
     prev, cur = bars[-2], bars[-1]
     closes = [float(b["close"]) for b in bars]
-    rsi_all = sj.rsi_trading_core(closes, sj.RSI_PERIOD)
+    rsi_all = j2_rsi(closes)
     i = len(bars) - 1
     pr, cr = rsi_all[i - 1], rsi_all[i]
-    st = sj.supertrend_direction_series(
-        [float(b["high"]) for b in bars],
-        [float(b["low"]) for b in bars],
-        closes,
-    )[i]
-    ema200 = ema200_last(closes)
+    feat = sig.features or {}
+    st_bull = bool(feat.get("supertrend_bullish"))
+    st = 1 if st_bull else -1
+    ema200 = float(feat.get("ema200") or 0.0)
     st_label = {1: "BULLISH (green)", -1: "BEARISH (red)", 0: "UNKNOWN"}[st]
 
     print()
@@ -136,7 +132,7 @@ def _search(want_side: str, max_seeds: int = 12000) -> tuple[list[dict], sj.Sean
 
 def main() -> int:
     print(
-        "Jupiter policy v2 SANDBOX — synthetic bars only.\n"
+        "Jupiter_2 SANDBOX — synthetic bars only.\n"
         f"Constants: RSI period {sj.RSI_PERIOD}, long<than {sj.RSI_LONG_THRESHOLD}, "
         f"short>than {sj.RSI_SHORT_THRESHOLD}, MIN_BARS={sj.MIN_BARS}.\n"
     )

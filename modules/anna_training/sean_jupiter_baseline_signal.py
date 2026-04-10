@@ -1,19 +1,11 @@
-"""Baseline signal — **Jupiter trade policy** (Sean’s rules, operator contract).
+"""Baseline signal — **Jupiter_2 Sean policy only** (``jupiter_2_sean_policy.py``).
 
-**Primary (Signal Breakdown)** — all must hold per side:
+:func:`evaluate_sean_jupiter_baseline_v1` is a **thin adapter** over
+:func:`modules.anna_training.jupiter_2_sean_policy.evaluate_jupiter_2_sean`. No separate Wilder
+Supertrend, no duplicate regime math — tile and ledger see the same outputs as Jupiter_2.
 
-- **Long:** Supertrend bullish, close ``>`` EMA200, RSI ``>`` 52, higher close vs prior bar.
-- **Short:** Supertrend bearish, close ``<`` EMA200, RSI ``<`` 48, lower close vs prior bar.
-
-**Secondary** (only if primary long or primary short is true; short wins if both):
-
-- Skip long if RSI ``>`` 75; skip short if RSI ``<`` 25.
-- Skip if ATR ratio ``<`` 1.35 (same simple-TR ratio as ``jupiter_2_sean_policy``).
-
-**Supertrend:** Wilder ATR, TradingView-style bands. **aggregateCandles** flags are computed only as
-optional reference fields (not primary gates). Short precedence when both primaries are true.
-
-Catalog id ``jupiter_supertrend_ema_rsi_atr_v1``. **Paper measurement** only (no venue submit).
+Helpers ``aggregate_candles_signal_flags`` and ``rsi_trading_core`` remain for tests and demos only.
+**Paper measurement** only (no venue submit).
 """
 
 from __future__ import annotations
@@ -22,36 +14,38 @@ import math
 from dataclasses import dataclass
 from typing import Any
 
-from modules.anna_training.jupiter_2_sean_policy import calculate_atr
+from modules.anna_training.jupiter_2_sean_policy import (
+    ATR_RATIO_MIN,
+    CATALOG_ID,
+    EMA_PERIOD,
+    MIN_COLLATERAL_USD,
+    MIN_BARS,
+    REFERENCE_SOURCE,
+    evaluate_jupiter_2_sean,
+    rsi as jupiter_2_rsi,
+)
 
-# --- Sean Jupiter Perps policy (v2) — align with operator Jupiter bot constants ---
+# --- Shared constants (aggregateCandles / trading_core RSI tests) ---
 RSI_PERIOD = 14
 RSI_SHORT_THRESHOLD = 48
 RSI_LONG_THRESHOLD = 52
 PRICE_EPSILON = 0.001
 RSI_EPSILON = 0.05
 
-ATR_PERIOD = 14
-SUPERTREND_MULTIPLIER = 3.0
-EMA_PERIOD = 200
-MIN_NOTIONAL_USD = 10
-
-# Final veto on trade=True: current ATR vs trailing average of ATR (same series as tile).
-ATR_RATIO_MIN = 1.35
-
-# Secondary: align with jupiter_2_sean_policy.generate_signal_from_ohlc
-RSI_EXTREME_LONG_SKIP_ABOVE = 75.0
-RSI_EXTREME_SHORT_SKIP_BELOW = 25.0
-
-# Need full EMA200 + RSI at last index; 200 bars covers EMA200 at the last close.
-MIN_BARS = EMA_PERIOD
-
-REFERENCE_SOURCE = "jupiter_sean_policy:v3:regime_primary+rsi_extreme+atr_ratio"
+_J2_TO_BASELINE_REASON = {
+    "jupiter_2_no_signal": "no_signal",
+    "jupiter_2_atr_ratio_block": "atr_ratio_below_min",
+    "jupiter_2_rsi_extreme_block": "rsi_extreme_skip",
+    "jupiter_2_long_signal": "jupiter_policy_long_signal",
+    "jupiter_2_short_signal": "jupiter_policy_short_signal",
+    "insufficient_history": "insufficient_history",
+    "ohlc_parse_error": "ohlc_parse_error",
+}
 
 
 def _resolve_atr_ratio_from_features(feat: dict[str, Any]) -> float | None:
     """
-    ``tile`` from :func:`_build_tile_payload` carries ``atr_ratio`` and/or ``atr_current`` / ``atr_avg200``.
+    ``tile`` from :func:`_build_operator_tile_jupiter2` carries ``atr_ratio`` and/or ``atr_current`` / ``atr_avg200``.
 
     Ratio matches :func:`modules.anna_training.jupiter_2_sean_policy.generate_signal_from_ohlc`
     (simple mean TR / reference window — not Wilder-smoothed ATR series).
@@ -98,73 +92,19 @@ def _volume_from_bar(bar: dict[str, Any]) -> float | int | None:
     return None
 
 
-def regime_signal_flags(
-    *,
-    st_dir: int,
-    close: float,
-    ema200_last: float,
-    current_rsi_raw: float,
-    prev_close: float,
-) -> tuple[bool, bool]:
-    """
-    Primary Signal Breakdown (non-negotiable operator contract).
-
-    Long: ST bullish, close > EMA200, RSI > 52, close > prev close.
-    Short: ST bearish, close < EMA200, RSI < 48, close < prev close.
-    """
-    lg = (
-        st_dir == 1
-        and close > ema200_last
-        and current_rsi_raw > float(RSI_LONG_THRESHOLD)
-        and close > prev_close
-    )
-    sh = (
-        st_dir == -1
-        and close < ema200_last
-        and current_rsi_raw < float(RSI_SHORT_THRESHOLD)
-        and close < prev_close
-    )
-    return lg, sh
-
-
-def _build_tile_payload(
-    *,
+def _build_operator_tile_jupiter2(
     bars_asc: list[dict[str, Any]],
-    prev_bar: dict[str, Any],
-    cur: dict[str, Any],
-    i: int,
-    prev_rsi_raw: float,
-    current_rsi_raw: float,
-    highs: list[float],
-    lows: list[float],
-    closes: list[float],
-    st_dir: int,
-    ema200_last: float,
-    aggregate_short: bool,
-    aggregate_long: bool,
-    regime_short: bool,
-    regime_long: bool,
+    policy_features: dict[str, Any],
 ) -> dict[str, Any]:
-    """Rich context for operator tiles (same bar math as policy)."""
-    # ATR ratio — align with jupiter_2_sean_policy / TypeScript: simple mean TR (not Wilder).
-    # Wilder ATR remains used for Supertrend bands (above) only.
-    atr_simple = calculate_atr(closes, highs, lows)
-    if len(closes) >= 214:
-        avg_atr = calculate_atr(
-            closes[-214:-14],
-            highs[-214:-14],
-            lows[-214:-14],
-        )
-    elif len(closes) >= 200:
-        # Jupiter uses len>=200 with a 200-bar slice; that slice is empty until len>=214.
-        avg_atr = atr_simple
-    else:
-        avg_atr = atr_simple
-    ratio = (
-        (float(atr_simple) / float(avg_atr))
-        if avg_atr and avg_atr > 0
-        else 1.0
-    )
+    """Operator tile from Jupiter_2 diagnostics + OHLC (RSI = policy ``jupiter_2_rsi``)."""
+    prev_bar = bars_asc[-2]
+    cur = bars_asc[-1]
+    closes = [float(b["close"]) for b in bars_asc]
+    highs = [float(b["high"]) for b in bars_asc]
+    lows = [float(b["low"]) for b in bars_asc]
+    rsi_s = jupiter_2_rsi(closes)
+    prev_rsi = float(rsi_s[-2])
+    current_rsi = float(rsi_s[-1])
 
     po = float(prev_bar["open"])
     ph = float(prev_bar["high"])
@@ -177,16 +117,20 @@ def _build_tile_payload(
     higher_close = cc > pc
     lower_close = cc < pc
 
+    ema200_last = float(policy_features.get("ema200") or 0.0)
+    st_bull = bool(policy_features.get("supertrend_bullish"))
+    st_dir = 1 if st_bull else -1
+    long_core = bool(policy_features.get("long_signal_core"))
+    short_core = bool(policy_features.get("short_signal_core"))
+
+    atr_c = float(policy_features.get("atr") or 0.0)
+    avg_atr = float(policy_features.get("avg_atr_window") or 0.0)
+    atr_ratio = float(policy_features.get("atr_ratio") or 0.0)
+
     vol = _volume_from_bar(cur)
     ts = str(cur.get("candle_open_utc") or cur.get("candle_close_utc") or "").strip()
 
-    if st_dir == 1:
-        st_label = "BULLISH (green)"
-    elif st_dir == -1:
-        st_label = "BEARISH (red)"
-    else:
-        st_label = "NEUTRAL"
-
+    st_label = "BULLISH (green)" if st_bull else "BEARISH (red)"
     if cc > ema200_last:
         pvsem = "ABOVE"
     elif cc < ema200_last:
@@ -194,39 +138,46 @@ def _build_tile_payload(
     else:
         pvsem = "AT"
 
-    rsi_above_52 = current_rsi_raw > float(RSI_LONG_THRESHOLD)
-    rsi_below_48 = current_rsi_raw < float(RSI_SHORT_THRESHOLD)
+    rsi_above_52 = current_rsi > float(RSI_LONG_THRESHOLD)
+    rsi_below_48 = current_rsi < float(RSI_SHORT_THRESHOLD)
 
-    # Same pieces as aggregate_candles_signal_flags — makes "why is long raw false?" visible on the tile.
+    prev_candle = {"high": ph, "low": pl}
+    curr_candle = {"high": ch, "low": cl}
+    aggregate_short, aggregate_long = aggregate_candles_signal_flags(
+        prev_candle=prev_candle,
+        curr_candle=curr_candle,
+        prev_rsi_raw=prev_rsi,
+        current_rsi_raw=current_rsi,
+    )
     agg_long_low_sweep = (pl - cl > PRICE_EPSILON)
-    agg_long_rsi_rising = (current_rsi_raw - prev_rsi_raw > RSI_EPSILON)
-    agg_long_rsi_below_52 = current_rsi_raw < float(RSI_LONG_THRESHOLD)
+    agg_long_rsi_rising = (current_rsi - prev_rsi > RSI_EPSILON)
+    agg_long_rsi_below_52 = current_rsi < float(RSI_LONG_THRESHOLD)
     agg_short_high_sweep = (ch - ph > PRICE_EPSILON)
-    agg_short_rsi_falling = (prev_rsi_raw - current_rsi_raw > RSI_EPSILON)
-    agg_short_rsi_above_48 = current_rsi_raw > float(RSI_SHORT_THRESHOLD)
+    agg_short_rsi_falling = (prev_rsi - current_rsi > RSI_EPSILON)
+    agg_short_rsi_above_48 = current_rsi > float(RSI_SHORT_THRESHOLD)
 
     return {
         "tile": {
             "candle_open_utc": ts,
             "new_ohlcv": {"o": co, "h": ch, "l": cl, "c": cc, "v": vol},
             "prev_ohlc": {"o": po, "h": ph, "l": pl, "c": pc},
-            "prev_rsi": prev_rsi_raw,
-            "current_rsi": current_rsi_raw,
+            "prev_rsi": prev_rsi,
+            "current_rsi": current_rsi,
             "supertrend_label": st_label,
             "supertrend_direction": st_dir,
-            "atr_current": float(atr_simple),
-            "atr_avg200": float(avg_atr) if avg_atr and avg_atr > 0 else None,
-            "atr_ratio": float(ratio),
+            "atr_current": atr_c,
+            "atr_avg200": avg_atr if avg_atr > 0 else None,
+            "atr_ratio": atr_ratio,
             "price_vs_ema200": pvsem,
-            "ema200": float(ema200_last),
+            "ema200": ema200_last,
             "higher_close": higher_close,
             "lower_close": lower_close,
             "breakdown_long": {
-                "supertrend_bullish": st_dir == 1,
+                "supertrend_bullish": st_bull,
                 "above_ema": cc > ema200_last,
                 "rsi_gt_52": rsi_above_52,
                 "higher_close": higher_close,
-                "long_ok": regime_long,
+                "long_ok": long_core,
                 "aggregate_candles_long": aggregate_long,
                 "agg_long_components": {
                     "low_sweep": agg_long_low_sweep,
@@ -235,11 +186,11 @@ def _build_tile_payload(
                 },
             },
             "breakdown_short": {
-                "supertrend_bearish": st_dir == -1,
+                "supertrend_bearish": not st_bull,
                 "below_ema": cc < ema200_last,
                 "rsi_lt_48": rsi_below_48,
                 "lower_close": lower_close,
-                "short_ok": regime_short,
+                "short_ok": short_core,
                 "aggregate_candles_short": aggregate_short,
                 "agg_short_components": {
                     "high_sweep": agg_short_high_sweep,
@@ -481,20 +432,6 @@ def format_jupiter_tile_narrative_v1(
     return "\n".join(lines)
 
 
-def _ewm_mean_last(closes: list[float], span: int) -> float:
-    """
-    Last value of EWMA with ``span`` — matches ``pandas.Series.ewm(span=span, adjust=False).mean().iloc[-1]``
-    (no pandas; safe in minimal API containers).
-    """
-    if len(closes) < 1:
-        raise ValueError("closes empty")
-    alpha = 2.0 / (float(span) + 1.0)
-    ema = float(closes[0])
-    for x in closes[1:]:
-        ema = ema * (1.0 - alpha) + alpha * float(x)
-    return ema
-
-
 @dataclass(frozen=True)
 class SeanJupiterBaselineSignalV1:
     """Outcome of evaluating the **latest** closed bar vs the prior bar."""
@@ -551,82 +488,6 @@ def rsi_trading_core(series: list[float], period: int = RSI_PERIOD) -> list[floa
     return rsi_values
 
 
-def wilder_atr(
-    highs: list[float],
-    lows: list[float],
-    closes: list[float],
-    period: int = ATR_PERIOD,
-) -> list[float]:
-    """Wilder ATR; value at index ``period`` is first defined (NaN before)."""
-    n = len(closes)
-    atr = [float("nan")] * n
-    if n < period + 1:
-        return atr
-    tr = [0.0] * n
-    tr[0] = highs[0] - lows[0]
-    for i in range(1, n):
-        tr[i] = max(
-            highs[i] - lows[i],
-            abs(highs[i] - closes[i - 1]),
-            abs(lows[i] - closes[i - 1]),
-        )
-    atr[period] = sum(tr[1 : period + 1]) / period
-    for i in range(period + 1, n):
-        atr[i] = (atr[i - 1] * (period - 1) + tr[i]) / period
-    return atr
-
-
-def supertrend_direction_series(
-    highs: list[float],
-    lows: list[float],
-    closes: list[float],
-    *,
-    atr_period: int = ATR_PERIOD,
-    multiplier: float = SUPERTREND_MULTIPLIER,
-) -> list[int]:
-    """
-    TradingView-style Supertrend **direction**: ``1`` bullish, ``-1`` bearish, ``0`` unknown.
-
-    Uses hl2 ± multiplier * ATR for basic bands; final bands follow Pine-style hold rules.
-    """
-    n = len(closes)
-    out = [0] * n
-    if n < atr_period + 2:
-        return out
-    atr = wilder_atr(highs, lows, closes, atr_period)
-    src = [(highs[i] + lows[i]) / 2 for i in range(n)]
-    upper: list[float | None] = [None] * n
-    lower: list[float | None] = [None] * n
-    for i in range(n):
-        if math.isnan(atr[i]):
-            continue
-        ub = src[i] + multiplier * atr[i]
-        lb = src[i] - multiplier * atr[i]
-        if i == 0 or upper[i - 1] is None:
-            upper[i] = ub
-            lower[i] = lb
-            continue
-        pu = float(upper[i - 1])
-        pl = float(lower[i - 1])
-        pc = closes[i - 1]
-        lower[i] = lb if (lb > pl or pc < pl) else pl
-        upper[i] = ub if (ub < pu or pc > pu) else pu
-
-    for i in range(1, n):
-        if upper[i - 1] is None or lower[i - 1] is None or upper[i] is None or lower[i] is None:
-            continue
-        pu = float(upper[i - 1])
-        pl = float(lower[i - 1])
-        c = closes[i]
-        if c > pu:
-            out[i] = 1
-        elif c < pl:
-            out[i] = -1
-        else:
-            out[i] = out[i - 1]
-    return out
-
-
 def aggregate_candles_signal_flags(
     *,
     prev_candle: dict[str, float],
@@ -662,185 +523,48 @@ def evaluate_sean_jupiter_baseline_v1(
     bars_asc: list[dict[str, Any]],
 ) -> SeanJupiterBaselineSignalV1:
     """
-    Evaluate **latest** bar (``bars_asc[-1]``) as ``currCandle`` and ``bars_asc[-2]`` as ``prevCandle``.
+    Thin adapter over :func:`modules.anna_training.jupiter_2_sean_policy.evaluate_jupiter_2_sean`.
 
-    RSI indexing matches ``trading_core``: ``i = len - 1``, RSI at ``i`` and ``i-1`` over **all** closes.
+    Maps Jupiter_2 ``reason_code`` values to dashboard / ledger aliases and attaches the operator tile.
     """
-    if len(bars_asc) < MIN_BARS:
-        return SeanJupiterBaselineSignalV1(
-            trade=False,
-            side="flat",
-            reason_code="insufficient_history",
-            pnl_usd=None,
-            features={
-                "bars_asc_len": len(bars_asc),
-                "min_bars": MIN_BARS,
-                "reference": REFERENCE_SOURCE,
-            },
-        )
+    j2 = evaluate_jupiter_2_sean(bars_asc=bars_asc)
+    mapped_reason = _J2_TO_BASELINE_REASON.get(j2.reason_code, j2.reason_code)
 
-    prev_bar = bars_asc[-2]
-    cur = bars_asc[-1]
-    try:
-        prev_candle = {
-            "high": float(prev_bar["high"]),
-            "low": float(prev_bar["low"]),
-        }
-        curr_candle = {
-            "high": float(cur["high"]),
-            "low": float(cur["low"]),
-        }
-        o = float(cur["open"])
-        c = float(cur["close"])
-        highs = [float(b["high"]) for b in bars_asc]
-        lows = [float(b["low"]) for b in bars_asc]
-        closes = [float(b["close"]) for b in bars_asc]
-    except (TypeError, ValueError, KeyError):
-        return SeanJupiterBaselineSignalV1(
-            trade=False,
-            side="flat",
-            reason_code="ohlc_parse_error",
-            pnl_usd=None,
-            features={"reference": REFERENCE_SOURCE},
-        )
+    feat = dict(j2.features) if j2.features else {}
 
-    rsi_values = rsi_trading_core(closes, RSI_PERIOD)
-    i = len(bars_asc) - 1
-    prev_rsi_raw = rsi_values[i - 1]
-    current_rsi_raw = rsi_values[i]
+    if len(bars_asc) >= MIN_BARS and mapped_reason != "ohlc_parse_error":
+        try:
+            feat.update(_build_operator_tile_jupiter2(bars_asc, feat))
+        except (IndexError, KeyError, TypeError, ValueError):
+            pass
 
-    if math.isnan(prev_rsi_raw) or math.isnan(current_rsi_raw):
-        return SeanJupiterBaselineSignalV1(
-            trade=False,
-            side="flat",
-            reason_code="rsi_nan",
-            pnl_usd=None,
-            features={"reference": REFERENCE_SOURCE},
-        )
+    lg_core = bool(feat.get("long_signal_core"))
+    sh_core = bool(feat.get("short_signal_core"))
+    feat["short_signal_raw"] = sh_core
+    feat["long_signal_raw"] = lg_core
+    feat["short_signal"] = sh_core
+    feat["long_signal"] = lg_core
+    feat["min_notional_hint_usd"] = MIN_COLLATERAL_USD
+    feat["parity"] = "jupiter_2_sean:evaluate_jupiter_2_sean"
 
-    aggregate_short, aggregate_long = aggregate_candles_signal_flags(
-        prev_candle=prev_candle,
-        curr_candle=curr_candle,
-        prev_rsi_raw=prev_rsi_raw,
-        current_rsi_raw=current_rsi_raw,
-    )
-
-    st_dir = supertrend_direction_series(highs, lows, closes)[i]
-    ema200_last = _ewm_mean_last(closes, EMA_PERIOD)
-    pc = float(prev_bar["close"])
-    regime_long, regime_short = regime_signal_flags(
-        st_dir=st_dir,
-        close=c,
-        ema200_last=ema200_last,
-        current_rsi_raw=current_rsi_raw,
-        prev_close=pc,
-    )
-
-    raw_short = regime_short
-    raw_long = regime_long
-    short_ok = regime_short
-    long_ok = regime_long
-
-    feat: dict[str, Any] = {
-        "reference": REFERENCE_SOURCE,
-        "catalog_id": "jupiter_supertrend_ema_rsi_atr_v1",
-        "parity": "jupiter_policy_v3:regime_primary+rsi_extreme+atr_ratio",
-        "policy_version": "sean_jupiter_v3",
-        "prev_rsi": round(prev_rsi_raw, 8),
-        "current_rsi": round(current_rsi_raw, 8),
-        "short_signal_raw": raw_short,
-        "long_signal_raw": raw_long,
-        "short_signal": short_ok,
-        "long_signal": long_ok,
-        "aggregate_candles_long": aggregate_long,
-        "aggregate_candles_short": aggregate_short,
-        "supertrend_direction": st_dir,
-        "ema200": round(ema200_last, 8),
-        "close": round(c, 8),
-        "min_notional_hint_usd": MIN_NOTIONAL_USD,
-    }
-    feat.update(
-        _build_tile_payload(
-            bars_asc=bars_asc,
-            prev_bar=prev_bar,
-            cur=cur,
-            i=i,
-            prev_rsi_raw=prev_rsi_raw,
-            current_rsi_raw=current_rsi_raw,
-            highs=highs,
-            lows=lows,
-            closes=closes,
-            st_dir=st_dir,
-            ema200_last=ema200_last,
-            aggregate_short=aggregate_short,
-            aggregate_long=aggregate_long,
-            regime_short=regime_short,
-            regime_long=regime_long,
-        )
-    )
-
-    if not regime_long and not regime_short:
-        return SeanJupiterBaselineSignalV1(
-            trade=False,
-            side="flat",
-            reason_code="no_signal",
-            pnl_usd=None,
-            features=feat,
-        )
-
-    if regime_short and regime_long:
-        side = "short"
-        pnl = (o - c) * 1.0
-        reason = "jupiter_policy_short_signal"
-    elif regime_short:
-        side = "short"
-        pnl = (o - c) * 1.0
-        reason = "jupiter_policy_short_signal"
-    else:
-        side = "long"
-        pnl = (c - o) * 1.0
-        reason = "jupiter_policy_long_signal"
-
-    if side == "short" and current_rsi_raw < RSI_EXTREME_SHORT_SKIP_BELOW:
-        return SeanJupiterBaselineSignalV1(
-            trade=False,
-            side="flat",
-            reason_code="rsi_extreme_skip",
-            pnl_usd=None,
-            features={
-                **feat,
-                "policy_blockers": ["rsi_extreme_short_below_25"],
-            },
-        )
-    if side == "long" and current_rsi_raw > RSI_EXTREME_LONG_SKIP_ABOVE:
-        return SeanJupiterBaselineSignalV1(
-            trade=False,
-            side="flat",
-            reason_code="rsi_extreme_skip",
-            pnl_usd=None,
-            features={
-                **feat,
-                "policy_blockers": ["rsi_extreme_long_above_75"],
-            },
-        )
-
-    atr_ratio = _resolve_atr_ratio_from_features(feat)
-    if atr_ratio is not None and atr_ratio < ATR_RATIO_MIN:
-        return SeanJupiterBaselineSignalV1(
-            trade=False,
-            side="flat",
-            reason_code="atr_ratio_below_min",
-            pnl_usd=None,
-            features={
-                **feat,
-                "policy_blockers": ["atr_ratio_below_1.35"],
-            },
-        )
+    if mapped_reason == "atr_ratio_below_min":
+        feat.setdefault("policy_blockers", ["atr_ratio_below_1.35"])
+    elif mapped_reason == "rsi_extreme_skip":
+        try:
+            crf = float(feat.get("current_rsi", float("nan")))
+        except (TypeError, ValueError):
+            crf = float("nan")
+        if crf > 75.0:
+            feat.setdefault("policy_blockers", ["rsi_extreme_long_above_75"])
+        elif crf < 25.0:
+            feat.setdefault("policy_blockers", ["rsi_extreme_short_below_25"])
+        else:
+            feat.setdefault("policy_blockers", ["rsi_extreme"])
 
     return SeanJupiterBaselineSignalV1(
-        trade=True,
-        side=side,
-        reason_code=reason,
-        pnl_usd=round(pnl, 8),
+        trade=j2.trade,
+        side=j2.side,
+        reason_code=mapped_reason,
+        pnl_usd=j2.pnl_usd,
         features=feat,
     )
