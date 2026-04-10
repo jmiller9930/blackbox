@@ -96,6 +96,13 @@ def test_dashboard_baseline_jupiter_rule_row_colors() -> None:
     assert "tc-narr-stop" in text
 
 
+def test_dashboard_baseline_no_trade_amber_outline_only() -> None:
+    text = (WEB / "dashboard.html").read_text(encoding="utf-8")
+    assert ".tc-tr-baseline .tc-no-trade.tc-no-trade-amber" in text
+    assert "tc-verdict-no-trade-amber" in text
+    assert "noTradeVerdict" in text
+
+
 def test_app_js_three_dev_roles_and_staff_helpers() -> None:
     text = (WEB / "app.js").read_text(encoding="utf-8")
     assert "internal_member" in text

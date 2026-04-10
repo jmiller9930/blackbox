@@ -302,6 +302,27 @@
       text-transform: uppercase;
       color: #64748b;
     }
+    /* Baseline chain only: “no trade” footer — bold amber outline (not Anna lanes). */
+    .tc-tr-baseline .tc-no-trade.tc-no-trade-amber {
+      display: block;
+      margin-top: 0.35rem;
+      padding: 0.4rem 0.55rem;
+      font-weight: 800;
+      color: #92400e;
+      background: #fffbeb;
+      border: 3px solid #f59e0b;
+      border-radius: 4px;
+      box-sizing: border-box;
+    }
+    .tc-tr-baseline .tc-tile-verdict.tc-verdict-no-trade-amber {
+      color: #92400e;
+      padding: 0.4rem 0.55rem;
+      margin-bottom: 0.35rem;
+      background: #fffbeb;
+      border: 3px solid #f59e0b;
+      border-radius: 4px;
+      border-bottom: 3px solid #f59e0b;
+    }
     .tc-tile-verdict {
       grid-column: 1 / -1;
       font-size: 0.78rem;
@@ -967,9 +988,15 @@
       ? jupiterNarrativeLinesHtml(narr, 'Jupiter / Sean policy (5m bar)', baselineLane)
       : '';
     if (!c || c.empty) {
+      var ntBar =
+        baselineLane
+          ? 'tc-empty tc-no-trade tc-no-trade-amber'
+          : 'tc-empty tc-no-trade';
       return tcCellSurface(
         narrEl +
-          '<span class="tc-empty tc-no-trade" title="No execution trade for this 5m bar">no trade</span>'
+          '<span class="' +
+          ntBar +
+          '" title="No execution trade for this 5m bar">no trade</span>'
       );
     }
     var ck = row.chain_kind || '';
@@ -1037,9 +1064,12 @@
     var exT = tcShortTime(c.exit_time);
     var tradeCell = tcShortId(c.trade_id, 16);
     var traceCell = tcShortId(c.trace_id, 12);
+    var ocLower = String(ocDisp).trim().toLowerCase();
+    var noTradeVerdict = baselineLane && ocLower === 'no trade';
     var verdictLine =
       '<div class="tc-tile-verdict ' +
       wl +
+      (noTradeVerdict ? ' tc-verdict-no-trade-amber' : '') +
       '" title="Closed trade outcome for this 5m bar">' +
       esc(ocDisp) +
       '</div>';
