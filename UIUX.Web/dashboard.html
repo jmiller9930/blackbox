@@ -1363,7 +1363,7 @@
     if (recent && recent.length) {
       if (meta) {
         meta.textContent =
-          'Latest baseline fills from the execution ledger (newest first). Open the report for range filters and CSV.';
+          'Latest policy TRADE rows only (Sean Jupiter approved + matching execution — same rule as Baseline trades report “TRADE only”). Open the report for dates and CSV.';
       }
       var html = '';
       var ri;
@@ -1410,10 +1410,10 @@
     }
     if (meta) {
       meta.textContent =
-        'No baseline rows in the execution ledger yet — the chain below may still show policy evaluation.';
+        'No policy TRADE rows in recent ledger scans — raw ledger may still have rows; use the Baseline trades report with “All” or “NO TRADE only” to inspect. The chain below may still show policy evaluation.';
     }
     tbody.innerHTML =
-      '<tr><td colspan="4">No baseline executions recorded in the ledger.</td></tr>';
+      '<tr><td colspan="4">No policy TRADE executions in the recent window (or none yet).</td></tr>';
   }
 
   function renderTC(tc) {

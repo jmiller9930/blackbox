@@ -821,6 +821,87 @@ def _recent_baseline_trades_for_dashboard_strip(
     return out
 
 
+def _recent_baseline_policy_trade_rows_for_strip(
+    conn: sqlite3.Connection,
+    *,
+    limit: int = 3,
+    scan_cap: int = 400,
+    market_db_path: Path | None = None,
+) -> list[dict[str, Any]]:
+    """
+    Newest-first baseline executions that are **policy TRADE** (``policy_approved_execution``).
+
+    Scans up to ``scan_cap`` recent ledger rows until ``limit`` authoritative trades are found.
+    Matches the baseline report when scoped to **trade** only — unlike raw ledger strips.
+    """
+    lim = max(1, min(10, int(limit)))
+    cap = max(lim, min(2000, int(scan_cap)))
+    mpath = market_db_path
+    cur = conn.execute(
+        """
+        SELECT market_event_id, side, symbol, timeframe, entry_time, entry_price, exit_price,
+               exit_reason, exit_time, size, pnl_usd, created_at_utc, trade_id, mode
+        FROM execution_trades
+        WHERE lane = 'baseline' AND strategy_id = ?
+        ORDER BY COALESCE(created_at_utc, entry_time, '') DESC, trade_id DESC
+        LIMIT ?
+        """,
+        (RESERVED_STRATEGY_BASELINE, cap),
+    )
+    cols = [d[0] for d in cur.description]
+    out: list[dict[str, Any]] = []
+    for r in cur.fetchall():
+        ledger_row = dict(zip(cols, r))
+        mid = str(ledger_row.get("market_event_id") or "").strip()
+        if not mid:
+            continue
+        cell = _compact_baseline_cell_policy_bound(
+            conn, mid, ledger_row, market_db_path=mpath
+        )
+        if str(cell.get("baseline_display_reason") or "") != "policy_approved_execution":
+            continue
+        t = ledger_row.get("entry_time") or ledger_row.get("created_at_utc")
+        t_iso = _normalize_utc_iso_for_axis(t) if t else None
+        pnl = ledger_row.get("pnl_usd")
+        ep = ledger_row.get("entry_price")
+        xp = ledger_row.get("exit_price")
+        sym = str(ledger_row.get("symbol") or "").strip()
+        tf = str(ledger_row.get("timeframe") or "").strip()
+        mae_val: float | None = None
+        if sym and mpath and mpath.is_file():
+            mae_val, _ = compute_mae_usd_v1(
+                canonical_symbol=sym,
+                side=ledger_row.get("side"),
+                entry_price=ledger_row.get("entry_price"),
+                size=ledger_row.get("size"),
+                entry_time=ledger_row.get("entry_time"),
+                exit_time=ledger_row.get("exit_time"),
+                market_db_path=mpath,
+            )
+        out.append(
+            {
+                "market_event_id": mid,
+                "side": str(ledger_row.get("side") or "").strip().lower(),
+                "symbol": sym or None,
+                "timeframe": tf or None,
+                "mode": str(ledger_row.get("mode") or "").strip() or None,
+                "time_utc_iso": t_iso or "",
+                "outcome": _strip_outcome_from_pnl(pnl),
+                "pnl_usd": float(pnl) if pnl is not None else None,
+                "entry": float(ep) if ep is not None else None,
+                "exit": float(xp) if xp is not None else None,
+                "size": float(ledger_row["size"]) if ledger_row.get("size") is not None else None,
+                "exit_reason": str(ledger_row.get("exit_reason") or "").strip() or None,
+                "trade_id": str(ledger_row.get("trade_id") or "").strip() or None,
+                "mae_usd": round(mae_val, 6) if mae_val is not None else None,
+                "baseline_authority": "TRADE",
+            }
+        )
+        if len(out) >= lim:
+            break
+    return out
+
+
 BASELINE_TRADES_REPORT_SCHEMA = "blackbox_baseline_trades_report_v1"
 
 
@@ -1379,7 +1460,12 @@ def build_trade_chain_payload(
         baseline_ledger = _recent_baseline_trades_for_dashboard_strip(
             conn, limit=50, market_db_path=mpath
         )
-        recent_strip = baseline_ledger[:3]
+        recent_strip = _recent_baseline_policy_trade_rows_for_strip(
+            conn, limit=3, market_db_path=mpath
+        )
+        for rs in recent_strip:
+            mid_rs = str(rs.get("market_event_id") or "").strip()
+            rs["jupiter_tile_narrative"] = tile_narr.get(mid_rs, "") if mid_rs else ""
         for br in baseline_ledger:
             mid_k = str(br.get("market_event_id") or "").strip()
             br["jupiter_tile_narrative"] = tile_narr.get(mid_k, "") if mid_k else ""
