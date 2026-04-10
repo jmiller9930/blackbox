@@ -332,9 +332,16 @@ def format_jupiter_tile_narrative_v1(
     atr_a = tile.get("atr_avg200")
     atr_r = tile.get("atr_ratio")
     ratio_s = "n/a"
+    vol_gate = ""
     if atr_r is not None:
         try:
-            ratio_s = _tile_fmt_price(round(float(atr_r), 6))
+            arf = float(atr_r)
+            ratio_s = _tile_fmt_price(round(arf, 6))
+            vol_gate = (
+                " — Volatility gate: passes"
+                if arf >= float(ATR_RATIO_MIN)
+                else " — Volatility gate: blocked"
+            )
         except (TypeError, ValueError):
             ratio_s = str(atr_r)
     lines.append(
@@ -344,6 +351,7 @@ def format_jupiter_tile_narrative_v1(
         + _tile_fmt_price(atr_a)
         + " | Ratio="
         + ratio_s
+        + vol_gate
     )
 
     ema = tile.get("ema200")

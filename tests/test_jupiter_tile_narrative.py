@@ -29,7 +29,7 @@ def test_format_with_tile_includes_ohlc_and_signals() -> None:
             "supertrend_label": "BULLISH (green)",
             "atr_current": 0.133,
             "atr_avg200": 0.26,
-            "atr_ratio": 0.51,
+            "atr_ratio": 1.5,
             "price_vs_ema200": "ABOVE",
             "ema200": 81.86,
             "breakdown_long": {
@@ -58,6 +58,7 @@ def test_format_with_tile_includes_ohlc_and_signals() -> None:
     assert "Previous candle:" in t
     assert "Supertrend:" in t
     assert "ATR Analysis:" in t
+    assert "Volatility gate: passes" in t
     assert "Signal Breakdown" in t
     assert "Signal Breakdown → Long=true" in t
     assert "RSI>52=true" in t
@@ -113,3 +114,4 @@ def test_rsi_extreme_skip_uses_operator_filter_copy() -> None:
     assert "ATR-Supertrend SIGNAL → LONG" not in t
     assert "Signals: short=false" in t
     assert "Filter: extreme RSI" in t
+    assert "Volatility gate: blocked" in t
