@@ -129,6 +129,75 @@
     .dash-r3 button.sec { background: var(--panel); color: var(--text); }
     .dash-r3 button.tick { background: #0f766e; color: #fff; border-color: #0d9488; }
     .dash-r3 button:disabled { opacity: 0.45; cursor: not-allowed; }
+    /* Baseline strip — compact table above trade chain (last 2 executed baseline trades in current window) */
+    .bts-wrap {
+      flex-shrink: 0;
+      margin: 0 0.5rem 0.35rem;
+      border: 1px solid var(--panel-border);
+      border-radius: var(--radius-md);
+      background: var(--panel);
+      overflow: hidden;
+    }
+    .bts-head {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 0.35rem 0.75rem;
+      padding: 0.4rem 0.55rem;
+      border-bottom: 1px solid var(--panel-border);
+      background: rgba(15, 118, 110, 0.06);
+    }
+    .bts-head h2 {
+      margin: 0;
+      font-size: 0.82rem;
+      font-weight: 800;
+      color: #0f172a;
+    }
+    .bts-meta {
+      margin: 0;
+      flex: 1;
+      min-width: 12rem;
+      font-size: 0.65rem;
+      color: var(--muted);
+      font-weight: 600;
+      line-height: 1.35;
+    }
+    .bts-report {
+      font-size: 0.76rem;
+      font-weight: 800;
+      color: var(--accent);
+      text-decoration: none;
+      white-space: nowrap;
+    }
+    .bts-report:hover { text-decoration: underline; }
+    .bts-tablescroll { overflow: auto; max-width: 100%; }
+    .bts-t {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.68rem;
+    }
+    .bts-t th, .bts-t td {
+      text-align: left;
+      padding: 0.35rem 0.5rem;
+      border-bottom: 1px solid #f1f5f9;
+    }
+    .bts-t th {
+      font-size: 0.58rem;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      color: var(--muted);
+      font-weight: 800;
+    }
+    .bts-mono { font-family: ui-monospace, monospace; font-size: 0.65rem; word-break: break-all; }
+    .bts-pill {
+      display: inline-block;
+      padding: 0.08rem 0.35rem;
+      border-radius: 999px;
+      font-weight: 800;
+      font-size: 0.62rem;
+    }
+    .bts-pill.bts-long { background: #eff6ff; color: #1d4ed8; }
+    .bts-pill.bts-short { background: #fff7ed; color: #c2410c; }
     /* Row 4 — trade chain dominates */
     .dash-r4 {
       flex: 1; min-height: 0; display: flex; flex-direction: column;
@@ -681,11 +750,33 @@
       </div>
       <p id="pc-msg" style="font-size:0.7rem;color:var(--muted);margin:0.2rem 0.75rem 0.45rem"></p>
 
+      <section class="bts-wrap" aria-labelledby="bts-h">
+        <div class="bts-head">
+          <h2 id="bts-h">Recent baseline trades</h2>
+          <p class="bts-meta" id="bts-meta"></p>
+          <a class="bts-report" href="/baseline-trades.html" title="Full history, UTC range, CSV export">Full report &amp; CSV →</a>
+        </div>
+        <div class="bts-tablescroll">
+          <table class="bts-t">
+            <thead>
+              <tr>
+                <th scope="col">Time (UTC)</th>
+                <th scope="col">market_event_id</th>
+                <th scope="col">Side</th>
+                <th scope="col">Outcome</th>
+              </tr>
+            </thead>
+            <tbody id="bts-tbody">
+              <tr><td colspan="4">Loading…</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
       <!-- Row 4: trade chain (primary) -->
       <section class="dash-r4" aria-labelledby="tc-h">
         <div class="tc-section-head">
           <h2 id="tc-h">Trade chain</h2>
-          <a href="/baseline-trades.html" style="font-size:0.78rem;font-weight:700;color:var(--accent);text-decoration:none;white-space:nowrap" title="Baseline trades — full report and CSV (UTC range)">Baseline trades report →</a>
         </div>
         <div class="tc-flow" aria-hidden="true">
           <span class="tc-flow-seq"><span class="tc-flow-old">older</span> <span class="tc-flow-arrow">→</span> <span class="tc-flow-new">newer</span></span>
@@ -1249,6 +1340,90 @@
     });
   }
 
+  /** Last two baseline columns with a real execution (non-empty cell), newest first — same ledger as the chain. */
+  function renderBaselineStrip(tc) {
+    var tbody = document.getElementById('bts-tbody');
+    var meta = document.getElementById('bts-meta');
+    if (!tbody) return;
+    if (!meta) meta = null;
+    if (!tc || !tc.rows || !tc.rows.length) {
+      if (meta) meta.textContent = '';
+      tbody.innerHTML = '<tr><td colspan="4">No trade chain data.</td></tr>';
+      return;
+    }
+    var base = null;
+    var ri;
+    for (ri = 0; ri < tc.rows.length; ri++) {
+      if ((tc.rows[ri].chain_kind || '') === 'baseline') {
+        base = tc.rows[ri];
+        break;
+      }
+    }
+    if (!base) {
+      if (meta) meta.textContent = '';
+      tbody.innerHTML = '<tr><td colspan="4">No baseline row in bundle.</td></tr>';
+      return;
+    }
+    var axis = tc.event_axis || [];
+    var times = tc.event_axis_time_utc_iso || [];
+    var picked = [];
+    for (var i = axis.length - 1; i >= 0 && picked.length < 2; i--) {
+      var mid = axis[i];
+      var cell = base.cells && base.cells[mid] != null ? base.cells[mid] : null;
+      if (cell && !cell.empty) {
+        picked.push({ mid: mid, cell: cell, t: times.length > i ? times[i] : null });
+      }
+    }
+    if (!picked.length) {
+      if (meta) {
+        meta.textContent =
+          'No baseline executions in the visible chain columns — scroll the chain or open the report for the full ledger.';
+      }
+      tbody.innerHTML =
+        '<tr><td colspan="4">No baseline executions in this chain window.</td></tr>';
+      return;
+    }
+    if (meta) {
+      meta.textContent =
+        'Up to 2 most recent baseline executions in this window (same cells as the Baseline row below). Older events are to the left in the chain.';
+    }
+    var html = '';
+    for (ri = 0; ri < picked.length; ri++) {
+      var p = picked[ri];
+      var c = p.cell;
+      var tim = p.t != null && String(p.t).trim() !== '' ? String(p.t) : '—';
+      var sideRaw = c.side != null ? String(c.side).trim().toLowerCase() : '';
+      var oc =
+        c.outcome_display != null
+          ? String(c.outcome_display)
+          : c.outcome != null
+            ? String(c.outcome)
+            : '—';
+      var pill;
+      if (sideRaw === 'long' || sideRaw === 'short') {
+        pill =
+          '<span class="bts-pill bts-' +
+          (sideRaw === 'long' ? 'long' : 'short') +
+          '">' +
+          esc(sideRaw) +
+          '</span>';
+      } else {
+        pill = esc(sideRaw ? sideRaw : '—');
+      }
+      html +=
+        '<tr><td class="bts-mono">' +
+        esc(tim) +
+        '</td><td class="bts-mono">' +
+        esc(String(p.mid)) +
+        '</td><td>' +
+        pill +
+        '</td><td>' +
+        esc(oc) +
+        '</td></tr>';
+    }
+    tbody.innerHTML = html;
+  }
+
   function renderTC(tc) {
     var sig = tradeChainRenderSig(tc);
     if (__bbLastTradeChainRenderSig !== null && sig === __bbLastTradeChainRenderSig) {
@@ -1606,6 +1781,7 @@
     window.__bbNextPollEta = new Date(Date.now() + POLL_MS);
 
     renderTC(bundle.trade_chain || {});
+    renderBaselineStrip(bundle.trade_chain || {});
     renderOB(bundle.operational_boundary);
     renderLive(bundle);
     renderIntel(bundle);
