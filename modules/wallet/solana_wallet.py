@@ -192,6 +192,30 @@ def _rpc_health() -> dict[str, Any]:
         return {"ok": False, "detail": str(e)[:200]}
 
 
+def _rpc_status_after_balance_probe(
+    health: dict[str, Any],
+    *,
+    balance_err: str | None,
+    lamports: int | None,
+) -> dict[str, Any]:
+    """
+    ``getHealth`` is a weak signal on shared RPCs (rate limits, timeouts, inconsistent support).
+    A successful ``getBalance`` proves the same JSON-RPC endpoint can serve read traffic — use it
+    to avoid spurious ``solana_rpc.ok: false`` when the wallet is otherwise fine.
+    """
+    if health.get("ok"):
+        return health
+    if balance_err is None and lamports is not None:
+        return {
+            "ok": True,
+            "detail": {
+                "note": "getBalance succeeded while getHealth did not; treating RPC as reachable",
+                "get_health_probe": health.get("detail"),
+            },
+        }
+    return health
+
+
 def build_wallet_status_payload() -> dict[str, Any]:
     """
     Full status for dashboard + architect proof package.
@@ -245,6 +269,10 @@ def build_wallet_status_payload() -> dict[str, Any]:
         out["balance_lamports"] = lamports
         if lamports is not None:
             out["balance_sol"] = round(lamports / 1e9, 9)
+
+    out["solana_rpc"] = _rpc_status_after_balance_probe(
+        health, balance_err=berr, lamports=lamports
+    )
 
     if jup.get("ok") and jup.get("out_amount") and lamports is not None and lamports > 0:
         # Rough USD from micro-quote: 1M lamports worth of SOL -> USDC out (6 decimals)

@@ -815,7 +815,7 @@
       var n = Number(u);
       if (isFinite(n)) return '$' + n.toFixed(2);
     }
-    if (w.wallet_connected && w.solana_rpc_ok && w.balance_sol === 0) return '$0.00';
+    if (w.wallet_connected && w.balance_sol === 0) return '$0.00';
     return '—';
   }
 
@@ -1528,8 +1528,15 @@
     var st = String(ban.ui_state || ls.ui_state || seq.ui_state || 'unknown').toUpperCase();
     $('b-state').textContent = st;
     $('b-mode').textContent = String(ban.mode_label || (bundle.system_mode && bundle.system_mode.label) || '—');
-    var wok = !!(w.wallet_connected && w.solana_rpc_ok);
-    $('b-wal').textContent = wok ? '🟢' : '🔴';
+    var walOk = !!w.wallet_connected;
+    var rpcOk = !!w.solana_rpc_ok;
+    var wok = walOk && rpcOk;
+    $('b-wal').textContent = !walOk ? '🔴' : !rpcOk ? '🟡' : '🟢';
+    $('b-wal').title = !walOk
+      ? 'Wallet not connected (keypair / pubkey)'
+      : !rpcOk
+        ? 'Wallet loaded; Solana RPC probe failed (see bundle.wallet)'
+        : 'Wallet + RPC OK';
     $('b-bal').textContent = fmtUsd(w);
     $('b-dec').textContent = esc(ban.last_decision_compact || '—');
     $('b-ev').textContent = esc(String(ban.last_processed_market_event_id != null ? ban.last_processed_market_event_id : '—'));
@@ -1537,7 +1544,7 @@
     $('act-tid').textContent = esc(String(seq.test_id || '—'));
     $('act-sid').textContent = esc(String(seq.strategy_id || '—'));
 
-    $('c-wal').textContent = wok ? 'connected' : 'disconnected';
+    $('c-wal').textContent = !walOk ? 'disconnected' : !rpcOk ? 'connected (RPC degraded)' : 'connected';
     $('c-addr').textContent = esc(w.public_address || '—');
     $('c-bal').textContent = fmtUsd(w) + (w.balance_sol != null ? ' · ' + Number(w.balance_sol).toFixed(4) + ' SOL' : '');
     $('c-livepol').textContent = w.live_trading_blocked ? 'LIVE blocked (policy)' : 'LIVE not blocked (policy)';

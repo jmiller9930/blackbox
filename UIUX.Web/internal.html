@@ -918,10 +918,8 @@
             var n = Number(u);
             if (isFinite(n)) return "$" + n.toFixed(2);
           }
-          var rpcOk = p.solana_rpc && p.solana_rpc.ok;
-          var connected = !!p.wallet_connected && !!rpcOk;
           var lamports = p.balance_lamports;
-          if (connected && lamports === 0) return "$0.00";
+          if (p.wallet_connected && lamports === 0) return "$0.00";
           return "—";
         }
 
@@ -931,18 +929,28 @@
           var label = document.getElementById("wallet-pill-label");
           var usdEl = document.getElementById("wallet-pill-usd");
           if (!pill || !bubble || !label || !usdEl) return;
-          var rpcOk = p && p.solana_rpc && p.solana_rpc.ok;
-          var connected = !!(p && p.wallet_connected && rpcOk);
+          var walOk = !!(p && p.wallet_connected);
+          var rpcOk = !!(p && p.solana_rpc && p.solana_rpc.ok);
+          var fullOk = walOk && rpcOk;
           usdEl.textContent = formatWalletUsd(p);
-          if (connected) {
+          if (fullOk) {
             bubble.className = "agent-bubble agent-bubble--connected";
             label.textContent = "Wallet · ready";
             pill.classList.remove("wallet-pill--bad");
             pill.classList.add("wallet-pill--ok");
             pill.title =
-              "Solana wallet connected — " +
+              "Solana wallet + RPC OK — " +
               String((p && p.public_address) || "") +
               " — open dashboard.";
+          } else if (walOk && !rpcOk) {
+            bubble.className = "agent-bubble agent-bubble--unknown";
+            label.textContent = "Wallet · RPC degraded";
+            pill.classList.remove("wallet-pill--ok");
+            pill.classList.add("wallet-pill--bad");
+            pill.title =
+              "Keypair loaded but Solana RPC probe failed — " +
+              String((p && p.solana_rpc && JSON.stringify(p.solana_rpc.detail)) || "") +
+              " — check SOLANA_RPC_URL or retry.";
           } else {
             bubble.className = "agent-bubble agent-bubble--disconnected";
             label.textContent = "Wallet · offline";
