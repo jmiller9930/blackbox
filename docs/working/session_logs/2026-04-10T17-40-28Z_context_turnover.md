@@ -3,6 +3,7 @@
 | Field | Value |
 |--------|--------|
 | **UTC timestamp (filename)** | `2026-04-10T17-40-28Z` |
+| **Latest amendment stamp** | **`2026-04-10T17-57-05Z`** — **§18** added: direct answers to architect / agent questions **1–6** (tile colors, live copy, scope, clawbot proof, ops map, trade chain vs narrative). New architects: read **§18** after the table. |
 | **Amended (detail pass)** | Same calendar day — added **§12–17** (Jupiter policy semantics, data path, open questions). **Code-checked** against `modules/anna_training/dashboard_bundle.py` and related modules; **not** a substitute for live ops verification on `clawbot`. |
 | **Repository** | `blackbox` (local path: workspace root) |
 | **Git `HEAD` at original author time** | `3280424d1e5cdc747ca5a1a9a364b2d02de36550` (see `git log` for later commits) |
@@ -243,7 +244,7 @@ So **ledger/trade-chain semantics** are **separate** from **Jupiter tile narrati
 | 2 | **“Live” UI semantics** | Age fields, poll-based UI | Product choice: show **“live”** only when Pyth age &lt; *N* s, vs always surfacing **last closed bar** time regardless — **not** fully specified in code alone. |
 | 3 | **Per-line tile coloring API** | `features`, `operator_tile_narrative` | Optional **schema extension** to emit **`ok` / `stop` / `gate` / `neutral`** per narrative line — today coloring in UI beyond basic styling may need **bundle contract** change. |
 
-If the triad fixes **(2)** and **(3)**, web work can align **without** guessing execution or trading policy beyond the bundle.
+If the triad fixes **(2)** and **(3)**, web work can align **without** guessing execution or trading policy beyond the bundle. **Update:** defaults for **(2)** and **(3)** are now in **§18**.
 
 ---
 
@@ -261,4 +262,74 @@ If the triad fixes **(2)** and **(3)**, web work can align **without** guessing 
 
 ---
 
-*End of turnover log. Original filename timestamp is UTC at first document creation; §12–17 amended same calendar day. Adjust if re-exporting from another timezone.*
+## 18. Architect / agent decisions — questions 1–6 (answered)
+
+**Amended:** `2026-04-10T17-57-05Z` — supersedes open ambiguity in **§16** for items below where noted. Binding project work still follows `current_directive.md` and governance; these are **engineering defaults** for UI/bundle coordination.
+
+### 1 — Jupiter tile rule colors (production)
+
+**Decision: **C** now; **A** when we implement production rule-line styling.**
+
+| Option | Verdict |
+|--------|---------|
+| **A** — Structured per-line items in `/api/v1/dashboard/bundle` (`kind: ok\|stop\|gate\|neutral` + text) | **Preferred** when product authorizes **production** OK/stop/gate/neutral wiring — avoids fragile parsing and matches mockup intent. Requires explicit slice + schema review. |
+| **B** — Client parser on `operator_tile_narrative` | **Not preferred** as the long-term solution; only acceptable as a **short, agreed interim** if contract work is blocked (format must be **frozen** and tested). |
+| **C** — Mockup only (`jupiter_tile_rule_colors_mockup.html`); no wiring in `dashboard.html` yet | **Current default** — incremental polish on the live tile may continue (typography, baseline lane styling) **without** implying per-line semantic colors until **A** is approved. |
+
+---
+
+### 2 — “Live” wording on the dashboard
+
+**Decision: **B** (with optional **A** when threshold is specified by ops/product).**
+
+| Option | Verdict |
+|--------|---------|
+| **A** — “Live” only when Pyth age (or agreed signal) &lt; threshold | **Optional layer:** adopt when **N seconds** is written down (e.g. in ops map or directive). Do **not** invent **N** in UI-only work. |
+| **B** — Always show **last closed bar** time as authoritative for the **tile / bar context**; reserve strict **“live”** language for the **liveness strip** (and bundle freshness fields) | **Default:** avoids misleading “live” on the tile when the operator is looking at **closed-bar** semantics. |
+| **C** — Something else | Use only if a **directive** overrides; otherwise **B** + documented threshold for **A** when ready. |
+
+---
+
+### 3 — Scope of changes (UI vs bundle)
+
+**Decision: **A** by default; **B** when explicitly requested for (1).**
+
+| Option | Verdict |
+|--------|---------|
+| **A** — `UIUX.Web/` only (HTML/CSS/JS); no `dashboard_bundle.py` unless explicitly asked | **Default boundary** for “dashboard polish” threads. |
+| **B** — Small backend changes in `modules/anna_training/dashboard_bundle.py` (and related) if needed | **Allowed** when the triad explicitly scopes **structured tile lines** or other bundle keys — not implied by “fix CSS.” |
+
+---
+
+### 4 — Clawbot / operator verification
+
+**Decision: **B** + **A** (combined workflow).**
+
+| Option | Verdict |
+|--------|---------|
+| **A** — Operator pulls + compose + verifies; dev only commit + push | **True:** delivery to the lab is **not** complete until **clawbot** is updated and checked (see `clawbot-ui-deployment-complete.mdc`). |
+| **B** — Dev writes **exact** commands for operator to run | **Expected:** agent proposes **copy-pasteable** `git pull`, `docker compose` rebuild/restart, in-container grep/curl, browser hard refresh — operator **approves / runs** (especially when dev workspace is local). |
+| **C** — Remote SSH only; checklist without commands | Checklist is **not** enough without **exact** commands when the operator wants zero guesswork — prefer **B**’s command block. |
+
+---
+
+### 5 — Ops topology (turnover §16)
+
+**Decision: **later** (with a **yes** intent to add when material exists).**
+
+- **Now:** **No** single canonical ops map in repo (as of this amendment) that lists every daemon/service for **`pyth_stream_status.json`** + 5m bar closure on clawbot.
+- **Want:** **Yes** — add a short **`docs/working/`** note (or link into runbook) when ops/architect provides names (systemd units, compose services, cron). Until then, **§16** remains “inspect live host” for runtime certainty.
+
+---
+
+### 6 — Trade chain vs Jupiter tile narrative
+
+**Decision: align with turnover §13.2 — **never** drive baseline chain **outcomes** from `operator_tile_narrative` alone.**
+
+- **Trade chain cells** must follow **ledger / `policy_evaluations` / `trade` flag** semantics from the bundle (as documented in `dashboard_bundle.py`).
+- **`operator_tile_narrative`** (and Jupiter policy snapshot text) is **supplementary context** for the operator — useful for **why**, not authoritative for **whether** the chain row shows a trade vs NO TRADE vs WIN/LOSS.
+- If narrative and chain **appear** to disagree, **trust the chain semantics**; file a **bug** on backend/formatting, don’t “fix” in UI by preferring narrative.
+
+---
+
+*End of turnover log. Filename timestamp remains first creation; **§18** stamped `2026-04-10T17-57-05Z`. Adjust if re-exporting from another timezone.*
