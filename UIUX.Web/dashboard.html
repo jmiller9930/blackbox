@@ -449,12 +449,33 @@
       0% { transform: scale(1.35); opacity: 1; }
       100% { transform: scale(1); opacity: 1; }
     }
-    .tc-ledger-note {
+    /* Replaces former “Headers: Local / UTC” note — horizontal pan for #tc-scroll only */
+    .tc-pan-strip {
       flex-shrink: 0;
-      margin: 0;
-      font-size: 0.62rem;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem 0.85rem;
+      padding: 0.35rem 0.5rem 0.45rem;
+      background: #fff;
+      border-bottom: 1px solid var(--panel-border);
+    }
+    .tc-pan-strip[hidden] {
+      display: none !important;
+    }
+    .tc-pan-lbl {
+      font-size: 0.58rem;
+      font-weight: 700;
       color: var(--muted);
-      padding: 0.25rem 0.5rem 0.35rem;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      flex-shrink: 0;
+      user-select: none;
+    }
+    .tc-pan-strip input[type="range"] {
+      flex: 1;
+      min-width: 0;
+      height: 1.35rem;
+      accent-color: #334155;
     }
   </style>
 </head>
@@ -591,7 +612,19 @@
           <span class="tc-flow-seq"><span class="tc-flow-old">older</span> <span class="tc-flow-arrow">→</span> <span class="tc-flow-new">newer</span></span>
           <span class="tc-flow-now">now = right column</span>
         </div>
-        <p class="tc-ledger-note">Headers: <strong>Local</strong> = your browser clock &amp; zone · <strong>UTC</strong> = canonical ledger time. Recency shade is per column (same for all rows).</p>
+        <div class="tc-pan-strip" id="tc-pan-strip" hidden>
+          <span class="tc-pan-lbl" aria-hidden="true">older</span>
+          <input
+            type="range"
+            id="tc-pan-range"
+            min="0"
+            max="0"
+            value="0"
+            step="1"
+            aria-label="Pan trade chain columns horizontally (older events toward the left, newer toward the right)"
+          />
+          <span class="tc-pan-lbl" aria-hidden="true">newer</span>
+        </div>
         <div class="scroll" id="tc-scroll">
           <table class="tc-table" id="tc-table">
             <thead><tr><th scope="col">Chain</th></tr></thead>
@@ -1068,6 +1101,9 @@
       thead.innerHTML = '<th scope="col" class="tc-sticky-chain">Chain</th>';
       tbody.innerHTML =
         '<tr class="tc-empty-chain"><td colspan="99">No ledger rows yet.</td></tr>';
+      requestAnimationFrame(function () {
+        tcPanSliderRefresh();
+      });
       return;
     }
     var axis = tc.event_axis || [];
@@ -1119,6 +1155,9 @@
       tbody.appendChild(tr);
     });
     tcScrollTradeChainToEnd();
+    requestAnimationFrame(function () {
+      tcPanSliderRefresh();
+    });
   }
 
   /** Left edge of each thead th relative to the table (for column-aligned scroll). */
@@ -1206,14 +1245,58 @@
     });
   }
 
+  /** Trade chain panel only: range control for #tc-scroll (replaces ledger note row). */
+  var tcPanPointerDown = false;
+  function tcPanSliderRefresh() {
+    var sc = $('tc-scroll');
+    var strip = $('tc-pan-strip');
+    var rng = $('tc-pan-range');
+    if (!sc || !strip || !rng) {
+      return;
+    }
+    var max = Math.max(0, sc.scrollWidth - sc.clientWidth);
+    if (max < 1) {
+      strip.hidden = true;
+      return;
+    }
+    strip.hidden = false;
+    var mx = Math.round(max);
+    rng.min = '0';
+    rng.max = String(mx);
+    var v = Math.round(Math.min(mx, Math.max(0, sc.scrollLeft)));
+    if (String(rng.value) !== String(v)) {
+      rng.value = String(v);
+    }
+  }
+
+  function onTcPanRangeInput() {
+    var sc = $('tc-scroll');
+    var rng = $('tc-pan-range');
+    if (!sc || !rng) {
+      return;
+    }
+    var max = Math.max(0, sc.scrollWidth - sc.clientWidth);
+    var x = parseInt(rng.value, 10);
+    if (isNaN(x)) {
+      x = 0;
+    }
+    x = Math.max(0, Math.min(Math.round(max), x));
+    sc.scrollLeft = x;
+  }
+
   var tcUserScrollSnapTimer = null;
   function onTcUserScroll() {
+    tcPanSliderRefresh();
+    if (tcPanPointerDown) {
+      return;
+    }
     if (tcUserScrollSnapTimer) {
       clearTimeout(tcUserScrollSnapTimer);
     }
     tcUserScrollSnapTimer = setTimeout(function () {
       tcUserScrollSnapTimer = null;
       tcSnapTradeChainScrollNearest();
+      tcPanSliderRefresh();
     }, 120);
   }
 
@@ -1540,6 +1623,7 @@
     tcScrollResizeRaf = requestAnimationFrame(function () {
       tcScrollResizeRaf = null;
       tcScrollTradeChainToEnd();
+      tcPanSliderRefresh();
     });
   }
   window.addEventListener('resize', onTcLayoutResize);
@@ -1549,11 +1633,32 @@
   if (tcScrollHost) {
     tcScrollHost.addEventListener('scroll', onTcUserScroll, { passive: true });
     tcScrollHost.addEventListener('scrollend', function () {
+      if (tcPanPointerDown) {
+        return;
+      }
       if (tcUserScrollSnapTimer) {
         clearTimeout(tcUserScrollSnapTimer);
         tcUserScrollSnapTimer = null;
       }
       tcSnapTradeChainScrollNearest();
+      tcPanSliderRefresh();
+    });
+  }
+
+  var tcPanRangeEl = $('tc-pan-range');
+  if (tcPanRangeEl) {
+    tcPanRangeEl.addEventListener('input', onTcPanRangeInput);
+    tcPanRangeEl.addEventListener('pointerdown', function () {
+      tcPanPointerDown = true;
+    });
+    tcPanRangeEl.addEventListener('pointerup', function () {
+      tcPanPointerDown = false;
+      tcSnapTradeChainScrollNearest();
+      tcPanSliderRefresh();
+    });
+    tcPanRangeEl.addEventListener('pointercancel', function () {
+      tcPanPointerDown = false;
+      tcPanSliderRefresh();
     });
   }
 
