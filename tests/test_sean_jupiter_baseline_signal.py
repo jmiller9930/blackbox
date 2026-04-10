@@ -1,4 +1,4 @@
-"""Sean baseline signal — parity with trading_core aggregateCandles + rsi."""
+"""Sean baseline signal — regime primary + aggregateCandles reference + ATR/RSI extremes."""
 
 from __future__ import annotations
 
@@ -38,6 +38,35 @@ def test_insufficient_history() -> None:
     out = evaluate_sean_jupiter_baseline_v1(bars_asc=bars)
     assert out.trade is False
     assert out.reason_code == "insufficient_history"
+
+
+def test_regime_signal_flags_contract() -> None:
+    from modules.anna_training.sean_jupiter_baseline_signal import regime_signal_flags
+
+    lg, sh = regime_signal_flags(
+        st_dir=1,
+        close=105.0,
+        ema200_last=100.0,
+        current_rsi_raw=55.0,
+        prev_close=100.0,
+    )
+    assert lg is True and sh is False
+    lg2, _ = regime_signal_flags(
+        st_dir=1,
+        close=105.0,
+        ema200_last=100.0,
+        current_rsi_raw=51.0,
+        prev_close=100.0,
+    )
+    assert lg2 is False
+    _, sh2 = regime_signal_flags(
+        st_dir=-1,
+        close=95.0,
+        ema200_last=100.0,
+        current_rsi_raw=45.0,
+        prev_close=100.0,
+    )
+    assert sh2 is True
 
 
 def test_aggregate_candles_flags_short_parity() -> None:
@@ -137,17 +166,11 @@ def test_tile_atr_ratio_matches_jupiter_2_generate_signal() -> None:
 
 
 def test_atr_ratio_below_min_final_veto(monkeypatch: pytest.MonkeyPatch) -> None:
-    """After raw/ST/EMA pass, ATR ratio < 1.35 must return NO TRADE."""
+    """After primary regime + RSI extreme pass, ATR ratio < 1.35 must return NO TRADE."""
     import modules.anna_training.sean_jupiter_baseline_signal as m
     from modules.anna_training.sean_jupiter_baseline_signal import MIN_BARS, evaluate_sean_jupiter_baseline_v1
 
-    monkeypatch.setattr(m, "aggregate_candles_signal_flags", lambda **kw: (True, False))
-    monkeypatch.setattr(
-        m,
-        "supertrend_direction_series",
-        lambda highs, lows, closes: [-1] * len(closes),
-    )
-    monkeypatch.setattr(m, "_ewm_mean_last", lambda closes, period: 300.0)
+    monkeypatch.setattr(m, "regime_signal_flags", lambda **kw: (False, True))
 
     orig_tile = m._build_tile_payload
 
@@ -173,13 +196,7 @@ def test_atr_ratio_at_min_allows_trade(monkeypatch: pytest.MonkeyPatch) -> None:
     import modules.anna_training.sean_jupiter_baseline_signal as m
     from modules.anna_training.sean_jupiter_baseline_signal import ATR_RATIO_MIN, MIN_BARS, evaluate_sean_jupiter_baseline_v1
 
-    monkeypatch.setattr(m, "aggregate_candles_signal_flags", lambda **kw: (True, False))
-    monkeypatch.setattr(
-        m,
-        "supertrend_direction_series",
-        lambda highs, lows, closes: [-1] * len(closes),
-    )
-    monkeypatch.setattr(m, "_ewm_mean_last", lambda closes, period: 300.0)
+    monkeypatch.setattr(m, "regime_signal_flags", lambda **kw: (False, True))
 
     orig_tile = m._build_tile_payload
 
