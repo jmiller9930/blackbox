@@ -1263,13 +1263,20 @@ def build_trade_chain_payload(
 def _wallet_subset(full: dict[str, Any] | None) -> dict[str, Any]:
     if not full:
         return {
+            "wallet_configured": False,
             "wallet_connected": False,
             "solana_rpc_ok": False,
             "detail": "wallet_unavailable",
         }
     sig = full.get("signing_proof")
+    wc = bool(full.get("wallet_connected"))
+    addr = str(full.get("public_address") or "").strip()
+    # Operator “configured” = keypair+pubkey path succeeded or we still expose an address (identity on file).
+    # Distinct from ``solana_rpc_ok`` (live RPC read) — see dashboard banner vs RPC column.
+    wallet_configured = wc or bool(addr)
     return {
-        "wallet_connected": bool(full.get("wallet_connected")),
+        "wallet_configured": wallet_configured,
+        "wallet_connected": wc,
         "public_address": full.get("public_address"),
         "balance_sol": full.get("balance_sol"),
         "balance_usd_approx": full.get("balance_usd_approx"),

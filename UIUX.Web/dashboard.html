@@ -628,7 +628,9 @@
         <span class="sep">|</span>
         <span><span class="lbl">Mode</span> <span class="val" id="b-mode">—</span></span>
         <span class="sep">|</span>
-        <span><span class="lbl">Wallet</span> <span class="val" id="b-wal">—</span></span>
+        <span title="Keypair + address on file — not the same as Solana RPC reachability"><span class="lbl">Wallet ID</span> <span class="val" id="b-wal">—</span></span>
+        <span class="sep">|</span>
+        <span title="Can this node reach Solana RPC right now (balance/RPC reads)"><span class="lbl">RPC</span> <span class="val" id="b-rpc">—</span></span>
         <span class="sep">|</span>
         <span><span class="lbl">Balance</span> <span class="val" id="b-bal">—</span></span>
         <span class="sep">|</span>
@@ -655,8 +657,9 @@
 
       <!-- Row 3: wallet + trade mode (capital) -->
       <div class="dash-r3" id="dash-r3">
-        <div class="kv"><span class="k">Wallet</span><span class="v" id="c-wal">—</span></div>
+        <div class="kv"><span class="k">Wallet ID</span><span class="v" id="c-wal">—</span></div>
         <div class="kv"><span class="k">Address</span><span class="v" id="c-addr">—</span></div>
+        <div class="kv"><span class="k">Solana RPC</span><span class="v" id="c-rpc">—</span></div>
         <div class="kv"><span class="k">Balance</span><span class="v" id="c-bal">—</span></div>
         <div class="kv"><span class="k">LIVE policy</span><span class="v" id="c-livepol">—</span></div>
         <div class="kv"><span class="k">Baseline mode</span><span class="v" id="c-base">—</span></div>
@@ -817,7 +820,7 @@
       var n = Number(u);
       if (isFinite(n)) return '$' + n.toFixed(2);
     }
-    if (w.wallet_connected && w.balance_sol === 0) return '$0.00';
+    if ((w.wallet_configured || w.wallet_connected) && w.balance_sol === 0) return '$0.00';
     return '—';
   }
 
@@ -1530,12 +1533,21 @@
     var st = String(ban.ui_state || ls.ui_state || seq.ui_state || 'unknown').toUpperCase();
     $('b-state').textContent = st;
     $('b-mode').textContent = String(ban.mode_label || (bundle.system_mode && bundle.system_mode.label) || '—');
-    // Connected = backend says so OR we have a pubkey to show (same meaning for the operator).
-    var walOk = !!(w.wallet_connected || (w.public_address && String(w.public_address).trim()));
-    $('b-wal').textContent = walOk ? '🟢' : '🔴';
-    $('b-wal').title = walOk
-      ? 'Wallet connected (keypair / address on file)'
-      : 'Wallet not connected — no keypair or pubkey';
+    // #1 semantics: Wallet ID = configured identity only; RPC = live reachability (separate).
+    var idOk = !!(
+      w.wallet_configured ||
+      w.wallet_connected ||
+      (w.public_address && String(w.public_address).trim())
+    );
+    var rpcOk = !!w.solana_rpc_ok;
+    $('b-wal').textContent = idOk ? '🟢' : '🔴';
+    $('b-rpc').textContent = rpcOk ? '🟢' : '🔴';
+    $('b-wal').title = idOk
+      ? 'Wallet ID: keypair/address configured on this node (does not prove a trade will succeed).'
+      : 'Wallet ID: not configured — set KEYPAIR_PATH / BLACKBOX_SOLANA_KEYPAIR_PATH.';
+    $('b-rpc').title = rpcOk
+      ? 'Solana RPC: reachable from API (reads/balance).'
+      : 'Solana RPC: not OK from API — check SOLANA_RPC_URL / network; LIVE submits must still pass execution checks.';
     $('b-bal').textContent = fmtUsd(w);
     $('b-dec').textContent = esc(ban.last_decision_compact || '—');
     $('b-ev').textContent = esc(String(ban.last_processed_market_event_id != null ? ban.last_processed_market_event_id : '—'));
@@ -1543,8 +1555,9 @@
     $('act-tid').textContent = esc(String(seq.test_id || '—'));
     $('act-sid').textContent = esc(String(seq.strategy_id || '—'));
 
-    $('c-wal').textContent = walOk ? 'connected' : 'disconnected';
+    $('c-wal').textContent = idOk ? 'configured' : 'not configured';
     $('c-addr').textContent = esc(w.public_address || '—');
+    $('c-rpc').textContent = rpcOk ? 'reachable' : 'unreachable';
     $('c-bal').textContent = fmtUsd(w) + (w.balance_sol != null ? ' · ' + Number(w.balance_sol).toFixed(4) + ' SOL' : '');
     $('c-livepol').textContent = w.live_trading_blocked ? 'LIVE blocked (policy)' : 'LIVE not blocked (policy)';
     $('c-base').textContent = esc(String(cm.baseline_display || 'none'));
