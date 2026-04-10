@@ -299,10 +299,22 @@
       color: #334155;
       border: 1px solid #e2e8f0;
     }
-    details.dash-below { margin: 0.25rem 0.5rem; border: 1px solid var(--panel-border); border-radius: var(--radius-md); background: #fff; }
-    details.dash-below > summary { padding: 0.4rem 0.6rem; cursor: pointer; font-weight: 600; font-size: 0.78rem; }
-    details.dash-below .body { padding: 0 0.6rem 0.6rem; font-size: 0.78rem; }
-    details.dash-below pre { font-size: 0.65rem; overflow: auto; max-height: 200px; margin: 0; }
+    /* Static panels (no accordion — avoids duplicate “bottom stack” affordance) */
+    .dash-panel {
+      margin: 0.25rem 0.5rem;
+      border: 1px solid var(--panel-border);
+      border-radius: var(--radius-md);
+      background: #fff;
+    }
+    .dash-panel > .hd {
+      padding: 0.35rem 0.6rem;
+      font-weight: 600;
+      font-size: 0.78rem;
+      border-bottom: 1px solid var(--panel-border);
+    }
+    .dash-panel > .body { padding: 0 0.6rem 0.6rem; font-size: 0.78rem; }
+    .dash-panel pre { font-size: 0.65rem; overflow: auto; max-height: 200px; margin: 0; }
+    .dash-ob-static > .body { max-height: 14rem; overflow-y: auto; }
     .dash-form-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 0.35rem; }
     .dash-form-grid label { display: flex; flex-direction: column; gap: 0.15rem; font-size: 0.62rem; color: var(--muted); text-transform: uppercase; }
     .dash-form-grid input { padding: 0.3rem 0.4rem; font-size: 0.75rem; border: 1px solid var(--panel-border); border-radius: 4px; }
@@ -403,8 +415,8 @@
         </div>
         <div id="dash-ctl-msg"></div>
       </div>
-      <details class="dash-below">
-        <summary>Run configuration (paths for Start)</summary>
+      <section class="dash-panel" aria-labelledby="dash-run-h">
+        <div class="hd" id="dash-run-h">Run configuration (paths for Start)</div>
         <div class="body">
           <div class="dash-form-grid">
             <label>test_id <input type="text" id="dash_test_id"/></label>
@@ -416,7 +428,7 @@
             <label>artifacts_dir <input type="text" id="dash_artifacts_dir"/></label>
           </div>
         </div>
-      </details>
+      </section>
       <!-- Row 1: system banner (one strip) -->
       <div class="dash-r1" id="dash-r1" role="status" aria-live="polite">
         <span><span class="lbl">State</span> <span class="val" id="b-state">—</span></span>
@@ -473,11 +485,6 @@
       </div>
       <p id="pc-msg" style="font-size:0.7rem;color:var(--muted);margin:0.2rem 0.75rem 0.45rem"></p>
 
-      <details class="dash-below">
-        <summary>Operational boundary</summary>
-        <div class="body" id="ob-body"></div>
-      </details>
-
       <!-- Row 4: trade chain (primary) -->
       <section class="dash-r4" aria-labelledby="tc-h">
         <div class="tc-section-head">
@@ -496,6 +503,11 @@
         </div>
         <p style="margin:0;padding:0.25rem 0.5rem;font-size:0.62rem;color:var(--muted)" id="tc-note"></p>
         <p style="margin:0;padding:0 0.5rem 0.35rem;font-size:0.6rem;color:var(--muted);line-height:1.35" id="tc-hierarchy"></p>
+      </section>
+
+      <section class="dash-panel dash-ob-static" aria-labelledby="dash-ob-h">
+        <div class="hd" id="dash-ob-h">Operational boundary</div>
+        <div class="body" id="ob-body"></div>
       </section>
     </div>
   </div>
