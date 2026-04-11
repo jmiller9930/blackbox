@@ -292,6 +292,103 @@ def build_parallel_anna_paper_steps(
     return steps
 
 
+def build_baseline_lifecycle_exit_steps(
+    *,
+    market_event_id: str,
+    strategy_id: str,
+    bar: dict[str, Any],
+    mode: str,
+    trade_id: str,
+    trace_id: str,
+    pnl_usd: float,
+    side: str,
+    entry_price: float,
+    exit_price: float,
+    exit_reason: str,
+    economic_basis: str = "jupiter_2_sean_lifecycle_sl_tp",
+    signal_snapshot: dict[str, Any] | None = None,
+) -> list[dict[str, Any]]:
+    """Baseline lane: lifecycle exit — SL/TP fill (no bar-end close)."""
+    mid = (market_event_id or "").strip()
+    bar_id = bar.get("id")
+    if bar_id is None:
+        bar_id = mid
+
+    def _ts() -> str:
+        return utc_now_iso()
+
+    base_refs = build_input_refs(market_event_id=mid, bar_id=bar_id)
+    o = bar.get("open")
+    c = bar.get("close")
+    sd = (side or "long").strip().lower()
+    if sd not in ("long", "short"):
+        sd = "long"
+    sig = signal_snapshot if isinstance(signal_snapshot, dict) else {}
+    steps: list[dict[str, Any]] = [
+        {
+            "step_name": "ingest",
+            "timestamp": _ts(),
+            "input_refs": dict(base_refs),
+            "output": {
+                "source": "market_bars_5m",
+                "bridge": "baseline_ledger_bridge_v1",
+            },
+        },
+        {
+            "step_name": "feature_calc",
+            "timestamp": _ts(),
+            "input_refs": dict(base_refs),
+            "output": {
+                "ohlc": {
+                    "open": o,
+                    "high": bar.get("high"),
+                    "low": bar.get("low"),
+                    "close": c,
+                },
+                "economic_basis": economic_basis,
+                "jupiter_policy_signal": sig,
+            },
+        },
+        {
+            "step_name": "policy_check",
+            "timestamp": _ts(),
+            "input_refs": dict(base_refs),
+            "output": {"baseline_lane": True, "mode": mode, "trade_policy": "jupiter_perps_sean_rules_v1"},
+        },
+        {
+            "step_name": "decision",
+            "timestamp": _ts(),
+            "input_refs": dict(base_refs),
+            "output": {
+                "side": sd,
+                "size": 1.0,
+                "entry_price": float(entry_price),
+                "exit_price": float(exit_price),
+                "exit_reason": str(exit_reason),
+                "derived_pnl_usd": pnl_usd,
+            },
+        },
+        {
+            "step_name": "execution",
+            "timestamp": _ts(),
+            "input_refs": build_input_refs(
+                market_event_id=mid,
+                bar_id=bar_id,
+                ledger_ref="execution_trades",
+            ),
+            "output": {
+                "status": "written",
+                "trade_id": trade_id,
+                "trace_id": trace_id,
+                "lane": "baseline",
+                "mode": mode,
+            },
+        },
+    ]
+    _validate_steps(steps, market_event_id=mid)
+    return steps
+
+
 def build_baseline_bridge_steps(
     *,
     market_event_id: str,
@@ -773,16 +870,149 @@ def persist_baseline_trade_with_trace(
             db_path=db_path,
             conn=conn,
         )
-        from modules.anna_training.execution_ledger import insert_baseline_paper_lifecycle_events
+        conn.commit()
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        conn.close()
 
-        insert_baseline_paper_lifecycle_events(
+    return {
+        "trace_id": trace_id,
+        "trade_id": trade_id,
+        "market_event_id": market_event_id,
+        "strategy_id": RESERVED_STRATEGY_BASELINE,
+        "lane": "baseline",
+        "mode": mode,
+        "paper_stub": False,
+        "timestamp_start_utc": ts_start,
+        "timestamp_end_utc": ts_end,
+        "steps": steps,
+        "execution_trade": trade_row,
+    }
+
+
+def persist_baseline_lifecycle_close(
+    *,
+    market_event_id: str,
+    bar: dict[str, Any],
+    mode: str,
+    trade_id: str,
+    pnl_usd: float,
+    side: str,
+    entry_price: float,
+    exit_price: float,
+    exit_reason: str,
+    entry_time: str | None,
+    position_key: str,
+    context_snapshot: dict[str, Any],
+    notes: str | None,
+    db_path: Path | None = None,
+    signal_snapshot: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """
+    Persist a **closed** baseline Jupiter_2 lifecycle trade (STOP_LOSS / TAKE_PROFIT only).
+
+    Clears ``baseline_jupiter_open_positions`` for ``position_key`` and appends ``position_close``.
+    """
+    from modules.anna_training.execution_ledger import (
+        RESERVED_STRATEGY_BASELINE,
+        append_execution_trade,
+        append_position_event,
+        compute_pnl_usd,
+        delete_baseline_jupiter_open_state,
+        next_position_event_sequence,
+    )
+
+    trace_id = str(uuid.uuid4())
+    ts_start = utc_now_iso()
+    o = bar.get("open")
+    c = bar.get("close")
+    if o is None or c is None:
+        raise ValueError("bar_missing_ohlc")
+    sd = (side or "long").strip().lower()
+    if sd not in ("long", "short"):
+        sd = "long"
+    pnl = compute_pnl_usd(entry_price=float(entry_price), exit_price=float(exit_price), size=1.0, side=sd)
+    if not _pnl_close(pnl, float(pnl_usd)):
+        raise ValueError("pnl_usd mismatch for baseline lifecycle trace")
+    er = str(exit_reason or "").strip().upper()
+    if er not in ("STOP_LOSS", "TAKE_PROFIT"):
+        raise ValueError("exit_reason must be STOP_LOSS or TAKE_PROFIT")
+    steps = build_baseline_lifecycle_exit_steps(
+        market_event_id=market_event_id,
+        strategy_id=RESERVED_STRATEGY_BASELINE,
+        bar=bar,
+        mode=mode,
+        trade_id=trade_id,
+        trace_id=trace_id,
+        pnl_usd=pnl,
+        side=sd,
+        entry_price=float(entry_price),
+        exit_price=float(exit_price),
+        exit_reason=er,
+        signal_snapshot=signal_snapshot,
+    )
+    ts_end = utc_now_iso()
+
+    conn = connect_ledger(db_path)
+    try:
+        ensure_execution_ledger_schema(conn)
+        insert_decision_trace(
+            conn,
+            trace_id=trace_id,
+            market_event_id=market_event_id,
+            strategy_id=RESERVED_STRATEGY_BASELINE,
+            lane="baseline",
+            mode=mode,
+            paper_stub=False,
+            timestamp_start_utc=ts_start,
+            timestamp_end_utc=ts_end,
+            steps=steps,
+            trade_id=trade_id,
+            retrieved_memory_ids=[],
+            memory_used=False,
+            decision_summary="Baseline Jupiter_2 — lifecycle exit (SL/TP).",
+            baseline_action_json=None,
+            anna_action_json=None,
+            memory_ablation_off=False,
+        )
+        trade_row = append_execution_trade(
+            trade_id=trade_id,
+            strategy_id=RESERVED_STRATEGY_BASELINE,
+            lane="baseline",
+            mode=mode,
+            market_event_id=market_event_id,
+            symbol=str(bar.get("canonical_symbol") or "SOL-PERP"),
+            timeframe=str(bar.get("timeframe") or "5m"),
+            trace_id=trace_id,
+            side=sd,
+            entry_time=str(entry_time or bar.get("candle_open_utc") or ""),
+            entry_price=float(entry_price),
+            size=1.0,
+            exit_time=str(bar.get("candle_close_utc") or ""),
+            exit_price=float(exit_price),
+            exit_reason=er,
+            context_snapshot=context_snapshot,
+            notes=notes,
+            db_path=db_path,
+            conn=conn,
+        )
+        delete_baseline_jupiter_open_state(conn, position_key=position_key)
+        seq = next_position_event_sequence(conn, trade_id)
+        append_position_event(
             conn,
             trade_id=trade_id,
             market_event_id=market_event_id,
-            bar=bar,
-            side=sd,
-            pnl_usd=float(pnl),
-            mode=mode,
+            event_type="position_close",
+            payload={
+                "phase": "position_close",
+                "exit_price": float(exit_price),
+                "exit_reason": er,
+                "pnl_usd_1unit": float(pnl),
+                "economic_basis": "jupiter_2_sean_lifecycle_sl_tp",
+            },
+            sequence_num=seq,
         )
         conn.commit()
     except Exception:

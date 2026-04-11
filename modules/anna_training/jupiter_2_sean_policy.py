@@ -6,8 +6,8 @@ entries), dynamic sizing hints — **no venue execution** in this module.
 
 **Catalog id:** ``jupiter_2_sean_perps_v1``
 
-Exit / trailing (virtual SL-TP, debounce, etc.) are **operational** only — documented in
-``POLICY_NOTES``; not simulated here beyond entry + sizing snapshot.
+Exit / trailing / lifecycle enforcement live in ``modules/anna_training/jupiter_2_baseline_lifecycle.py``
+and ``baseline_ledger_bridge`` (paper). This module remains **entry + sizing** for the evaluator.
 """
 
 from __future__ import annotations
@@ -338,10 +338,6 @@ def evaluate_jupiter_2_sean(
     short_s, long_s, sig_px, diag = generate_signal_from_ohlc(closes, highs, lows)
     atr_ratio = float(diag.get("atr_ratio", 1.0))
 
-    cur = bars_asc[-1]
-    o = float(cur["open"])
-    c = float(cur["close"])
-
     feat: dict[str, Any] = {
         "reference": REFERENCE_SOURCE,
         "catalog_id": CATALOG_ID,
@@ -372,16 +368,13 @@ def evaluate_jupiter_2_sean(
 
     if short_s and long_s:
         side = "short"
-        pnl = (o - c) * 1.0
         reason = "jupiter_2_short_signal"
         feat["precedence"] = "short_over_long"
     elif short_s:
         side = "short"
-        pnl = (o - c) * 1.0
         reason = "jupiter_2_short_signal"
     else:
         side = "long"
-        pnl = (c - o) * 1.0
         reason = "jupiter_2_long_signal"
 
     feat["position_size_hint"] = calculate_position_size(free_collateral_usd, atr_ratio, side)
@@ -391,7 +384,7 @@ def evaluate_jupiter_2_sean(
         trade=True,
         side=side,
         reason_code=reason,
-        pnl_usd=round(float(pnl), 8),
+        pnl_usd=None,
         features=feat,
     )
 

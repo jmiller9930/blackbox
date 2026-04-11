@@ -347,8 +347,58 @@ def build_jupiter_policy_snapshot(
     out["would_trade"] = bool(sig.trade)
     out["side"] = sig.side
     out["reason_code"] = sig.reason_code
-    out["pnl_usd_open_to_close_hint"] = sig.pnl_usd
+    out["pnl_usd_open_to_close_hint"] = None
     out["features"] = dict(sig.features) if isinstance(sig.features, dict) else sig.features
+
+    import json
+    import sqlite3
+
+    from modules.anna_training.execution_ledger import (
+        baseline_jupiter_open_position_key,
+        fetch_baseline_jupiter_open_state_json,
+    )
+    from modules.anna_training.jupiter_2_baseline_lifecycle import (
+        BaselineOpenPosition,
+        unrealized_pnl_usd,
+    )
+
+    lpath = default_execution_ledger_path()
+    out["execution_ledger_path"] = str(lpath)
+    out["baseline_lifecycle"] = None
+    if lpath.is_file():
+        sym = str(last.get("canonical_symbol") or "SOL-PERP")
+        tf = str(last.get("timeframe") or "5m")
+        pk = baseline_jupiter_open_position_key(symbol=sym, timeframe=tf, mode="paper")
+        conn = sqlite3.connect(str(lpath))
+        try:
+            ensure_execution_ledger_schema(conn)
+            raw = fetch_baseline_jupiter_open_state_json(conn, position_key=pk)
+        finally:
+            conn.close()
+        if raw:
+            pos = BaselineOpenPosition.from_json_dict(json.loads(raw))
+            mark = float(last["close"])
+            ur = unrealized_pnl_usd(
+                entry=pos.entry_price, mark=mark, size=pos.size, side=pos.side
+            )
+            out["baseline_lifecycle"] = {
+                "position_open": True,
+                "trade_id": pos.trade_id,
+                "side": pos.side,
+                "entry_price": pos.entry_price,
+                "stop_loss": pos.stop_loss,
+                "take_profit": pos.take_profit,
+                "leverage": pos.leverage,
+                "risk_pct": pos.risk_pct,
+                "collateral_usd": pos.collateral_usd,
+                "notional_usd": pos.notional_usd,
+                "unrealized_pnl_usd": round(float(ur), 8),
+                "breakeven_applied": pos.breakeven_applied,
+                "entry_market_event_id": pos.entry_market_event_id,
+                "atr_entry": pos.atr_entry,
+            }
+        else:
+            out["baseline_lifecycle"] = {"position_open": False}
     sf = out["features"] if isinstance(out["features"], dict) else {}
     pb_list = sf.get("policy_blockers")
     pbl = [str(x) for x in pb_list] if isinstance(pb_list, list) else None

@@ -241,6 +241,119 @@ def _migrate_position_events_schema(conn: sqlite3.Connection, root: Path) -> Non
         conn.executescript(pe.read_text(encoding="utf-8"))
 
 
+def _migrate_baseline_jupiter_open_positions(conn: sqlite3.Connection) -> None:
+    cur = conn.execute(
+        "SELECT name FROM sqlite_master WHERE type='table' AND name='baseline_jupiter_open_positions'"
+    )
+    if cur.fetchone():
+        return
+    conn.execute(
+        """
+        CREATE TABLE baseline_jupiter_open_positions (
+          position_key TEXT PRIMARY KEY,
+          trade_id TEXT NOT NULL,
+          state_json TEXT NOT NULL,
+          updated_at_utc TEXT NOT NULL
+        )
+        """
+    )
+
+
+def baseline_jupiter_open_position_key(
+    *,
+    symbol: str,
+    timeframe: str,
+    mode: str,
+) -> str:
+    """Single baseline Jupiter_2 paper position key (one active position per lane)."""
+    sym = (symbol or "SOL-PERP").strip() or "SOL-PERP"
+    tf = (timeframe or "5m").strip() or "5m"
+    m = (mode or "paper").strip().lower() or "paper"
+    return f"baseline|{sym}|{tf}|{m}"
+
+
+def fetch_baseline_jupiter_open_state_json(
+    conn: sqlite3.Connection,
+    *,
+    position_key: str,
+) -> str | None:
+    row = conn.execute(
+        "SELECT state_json FROM baseline_jupiter_open_positions WHERE position_key = ?",
+        (position_key.strip(),),
+    ).fetchone()
+    return str(row[0]) if row and row[0] else None
+
+
+def upsert_baseline_jupiter_open_state(
+    conn: sqlite3.Connection,
+    *,
+    position_key: str,
+    trade_id: str,
+    state_json: str,
+) -> None:
+    ts = utc_now_iso()
+    conn.execute(
+        """
+        INSERT INTO baseline_jupiter_open_positions (position_key, trade_id, state_json, updated_at_utc)
+        VALUES (?, ?, ?, ?)
+        ON CONFLICT(position_key) DO UPDATE SET
+          trade_id = excluded.trade_id,
+          state_json = excluded.state_json,
+          updated_at_utc = excluded.updated_at_utc
+        """,
+        (position_key.strip(), str(trade_id).strip(), state_json, ts),
+    )
+
+
+def delete_baseline_jupiter_open_state(conn: sqlite3.Connection, *, position_key: str) -> None:
+    conn.execute(
+        "DELETE FROM baseline_jupiter_open_positions WHERE position_key = ?",
+        (position_key.strip(),),
+    )
+
+
+def next_position_event_sequence(conn: sqlite3.Connection, trade_id: str) -> int:
+    row = conn.execute(
+        "SELECT COALESCE(MAX(sequence_num), -1) + 1 FROM position_events WHERE trade_id = ?",
+        (str(trade_id).strip(),),
+    ).fetchone()
+    return int(row[0]) if row else 0
+
+
+def append_position_event(
+    conn: sqlite3.Connection,
+    *,
+    trade_id: str,
+    market_event_id: str,
+    event_type: str,
+    payload: dict[str, Any],
+    sequence_num: int | None = None,
+) -> int:
+    """Append one ``position_events`` row. If ``sequence_num`` is None, uses next free index for ``trade_id``."""
+    tid = str(trade_id).strip()
+    mid = str(market_event_id).strip()
+    seq = int(sequence_num) if sequence_num is not None else next_position_event_sequence(conn, tid)
+    eid = str(uuid.uuid4())
+    conn.execute(
+        """
+        INSERT OR IGNORE INTO position_events (
+          event_id, trade_id, market_event_id, lane, sequence_num, event_type, payload_json, created_at_utc, schema_version
+        ) VALUES (?, ?, ?, 'baseline', ?, ?, ?, ?, ?)
+        """,
+        (
+            eid,
+            tid,
+            mid,
+            seq,
+            str(event_type),
+            json.dumps(payload, default=str, sort_keys=True),
+            utc_now_iso(),
+            POSITION_EVENT_SCHEMA_VERSION,
+        ),
+    )
+    return seq
+
+
 def ensure_execution_ledger_schema(conn: sqlite3.Connection, root: Path | None = None) -> None:
     root = root or _repo_root()
     sql = root / "data" / "sqlite" / "schema_execution_ledger.sql"
@@ -255,6 +368,7 @@ def ensure_execution_ledger_schema(conn: sqlite3.Connection, root: Path | None =
     _migrate_sequential_learning_schema(conn, root)
     _migrate_policy_evaluation_schema(conn, root)
     _migrate_position_events_schema(conn, root)
+    _migrate_baseline_jupiter_open_positions(conn)
     conn.commit()
 
 
@@ -273,10 +387,10 @@ def insert_baseline_paper_lifecycle_events(
     mode: str,
 ) -> None:
     """
-    Record open + close for baseline **paper** same-bar trades (bucket 2).
+    Record open + close for **legacy** baseline same-bar mechanical trades (bucket 2).
 
-    Virtual TP/SL/trailing are ``null`` here until an execution engine appends
-    ``trail_update`` / ``tp_hit`` / ``sl_hit`` rows.
+    Jupiter_2 lifecycle uses ``position_open`` / ``position_close`` with SL/TP from
+    ``jupiter_2_baseline_lifecycle`` instead.
     """
     o = bar.get("open")
     c = bar.get("close")

@@ -20,6 +20,7 @@ Legacy: ``BASELINE_LEDGER_SIGNAL_MODE=legacy_mechanical_long`` — old open→cl
 from __future__ import annotations
 
 import hashlib
+import json
 import os
 import sqlite3
 import sys
@@ -78,6 +79,11 @@ def verify_market_event_id_matches_canonical_bar(bar: dict[str, Any]) -> str:
 def _baseline_trade_id(market_event_id: str, mode: str) -> str:
     h = hashlib.sha256(f"baseline|{market_event_id}|{mode}|v1".encode()).hexdigest()[:24]
     return f"bl_{h}"
+
+
+def _baseline_lifecycle_trade_id(entry_market_event_id: str, mode: str) -> str:
+    h = hashlib.sha256(f"baseline_lc|{entry_market_event_id}|{mode}|v1".encode()).hexdigest()[:24]
+    return f"bl_lc_{h}"
 
 
 def _signal_mode() -> str:
@@ -146,36 +152,271 @@ def run_baseline_ledger_bridge_tick(
     if not bars_asc or str(bars_asc[-1].get("market_event_id") or "") != mid:
         return {"ok": False, "reason": "bar_history_mismatch", "market_event_id": mid}
 
+    from modules.anna_training.jupiter_2_baseline_lifecycle import (
+        BaselineOpenPosition,
+        open_position_from_signal,
+        process_holding_bar,
+        unrealized_pnl_usd,
+    )
+    from modules.anna_training.jupiter_2_sean_policy import (
+        CATALOG_ID as baseline_catalog_id,
+        POLICY_ENGINE_ID,
+        calculate_atr,
+    )
     from modules.anna_training.sean_jupiter_baseline_signal import evaluate_sean_jupiter_baseline_v1
+
+    from modules.anna_training.execution_ledger import (
+        append_position_event,
+        baseline_jupiter_open_position_key,
+        connect_ledger,
+        ensure_execution_ledger_schema,
+        fetch_baseline_jupiter_open_state_json,
+        upsert_baseline_jupiter_open_state,
+        upsert_policy_evaluation,
+    )
+
+    sym = str(bar.get("canonical_symbol") or "SOL-PERP").strip() or "SOL-PERP"
+    tf = str(bar.get("timeframe") or "5m").strip() or "5m"
+    pos_key = baseline_jupiter_open_position_key(symbol=sym, timeframe=tf, mode=m)
+
+    closes: list[float] = []
+    highs: list[float] = []
+    lows: list[float] = []
+    for b in bars_asc:
+        try:
+            closes.append(float(b["close"]))
+            highs.append(float(b["high"]))
+            lows.append(float(b["low"]))
+        except (KeyError, TypeError, ValueError):
+            return {"ok": False, "reason": "bar_history_ohlc_parse_error", "market_event_id": mid}
+
+    conn_chk = connect_ledger(execution_ledger_db_path)
+    try:
+        ensure_execution_ledger_schema(conn_chk)
+        raw_open = fetch_baseline_jupiter_open_state_json(conn_chk, position_key=pos_key)
+    finally:
+        conn_chk.close()
 
     sig = evaluate_sean_jupiter_baseline_v1(bars_asc=bars_asc)
     policy_eval_write_error: str | None = None
-    if _policy_evaluation_log_enabled():
-        from modules.anna_training.execution_ledger import upsert_policy_evaluation
 
-        feat = dict(sig.features) if sig.features else {}
+    def _log_eval(
+        *,
+        trade: bool,
+        reason_code: str,
+        features: dict[str, Any],
+        side: str,
+        pnl_hint: float | None,
+    ) -> None:
+        nonlocal policy_eval_write_error
+        if not _policy_evaluation_log_enabled():
+            return
         try:
             upsert_policy_evaluation(
                 market_event_id=mid,
                 signal_mode=sm,
                 tick_mode=m,
-                trade=bool(sig.trade),
-                reason_code=str(sig.reason_code or ""),
-                features=feat,
-                side=str(sig.side) if sig.trade else "flat",
-                pnl_usd=(float(sig.pnl_usd) if sig.pnl_usd is not None else 0.0) if sig.trade else None,
+                trade=trade,
+                reason_code=reason_code,
+                features=features,
+                side=side,
+                pnl_usd=pnl_hint,
                 db_path=execution_ledger_db_path,
             )
         except sqlite3.OperationalError as exc:
-            # Readonly/locked ledger: still return policy outcome (do not abort tick).
             policy_eval_write_error = str(exc)
             print(
                 f"baseline_ledger_bridge: policy_evaluations write failed: {exc!r} market_event_id={mid}",
                 file=sys.stderr,
                 flush=True,
             )
+
+    catalog_id = baseline_catalog_id
+
+    if raw_open:
+        pos = BaselineOpenPosition.from_json_dict(json.loads(raw_open))
+        if pos.last_processed_market_event_id == mid:
+            feat = dict(sig.features) if sig.features else {}
+            feat["lifecycle"] = "holding"
+            feat["open_position"] = pos.to_json_dict()
+            _log_eval(
+                trade=False,
+                reason_code="jupiter_2_baseline_holding",
+                features=feat,
+                side=str(pos.side),
+                pnl_usd=None,
+            )
+            out: dict[str, Any] = {
+                "ok": True,
+                "lifecycle_idempotent": True,
+                "market_event_id": mid,
+                "signal_mode": sm,
+                "open_position": pos.to_json_dict(),
+            }
+            if policy_eval_write_error:
+                out["policy_evaluation_write_error"] = policy_eval_write_error
+            return out
+
+        np, ex = process_holding_bar(
+            pos,
+            market_event_id=mid,
+            closes=closes,
+            highs=highs,
+            lows=lows,
+            bar=bar,
+        )
+        if ex is not None:
+            er = str(ex.get("exit_reason") or "")
+            xprice = float(ex["exit_price"])
+            pnl_exit = float(ex["pnl_usd"])
+            tid = pos.trade_id
+            ctx = {
+                "source": "baseline_ledger_bridge_sean_jupiter_v1",
+                "policy_engine": POLICY_ENGINE_ID,
+                "trade_policy": "jupiter_perps",
+                "catalog_strategy_id": catalog_id,
+                "signal_mode": sm,
+                "lifecycle": "exit",
+                "exit_record": ex,
+                "entry_market_event_id": pos.entry_market_event_id,
+                "side": pos.side,
+            }
+            feat_x = dict(sig.features) if sig.features else {}
+            feat_x["lifecycle"] = "exit"
+            feat_x["exit"] = ex
+            _log_eval(
+                trade=False,
+                reason_code="jupiter_2_baseline_exit",
+                features=feat_x,
+                side=str(pos.side),
+                pnl_usd=None,
+            )
+            from .decision_trace import persist_baseline_lifecycle_close
+
+            try:
+                out = persist_baseline_lifecycle_close(
+                    market_event_id=mid,
+                    bar=bar,
+                    mode=m,
+                    trade_id=tid,
+                    pnl_usd=pnl_exit,
+                    side=pos.side,
+                    entry_price=float(pos.entry_price),
+                    exit_price=xprice,
+                    exit_reason=er,
+                    entry_time=str(pos.entry_candle_open_utc or bar.get("candle_open_utc") or ""),
+                    position_key=pos_key,
+                    context_snapshot=ctx,
+                    notes=f"baseline — Jupiter_2 lifecycle exit {er} ({catalog_id})",
+                    db_path=execution_ledger_db_path,
+                    signal_snapshot=dict(sig.features) if sig.features else None,
+                )
+            except sqlite3.IntegrityError:
+                return {
+                    "ok": True,
+                    "idempotent_skip": True,
+                    "market_event_id": mid,
+                    "trade_id": tid,
+                }
+            except sqlite3.OperationalError as exc:
+                print(
+                    f"baseline_ledger_bridge: lifecycle close write failed: {exc!r} market_event_id={mid}",
+                    file=sys.stderr,
+                    flush=True,
+                )
+                return {
+                    "ok": False,
+                    "reason": "execution_ledger_write_failed",
+                    "error": str(exc),
+                    "market_event_id": mid,
+                    "trade_id": tid,
+                }
+            row = out.get("execution_trade")
+            trace_meta = {k: v for k, v in out.items() if k != "execution_trade"}
+            ret = {
+                "ok": True,
+                "lifecycle_exit": ex,
+                "market_event_id": mid,
+                "trade_id": tid,
+                "mode": m,
+                "execution_trade": row,
+                "decision_trace": trace_meta,
+                "signal_mode": sm,
+                "side": pos.side,
+            }
+            if policy_eval_write_error:
+                ret["policy_evaluation_write_error"] = policy_eval_write_error
+            return ret
+
+        assert np is not None
+        ur = unrealized_pnl_usd(
+            entry=np.entry_price,
+            mark=float(bar["close"]),
+            size=np.size,
+            side=np.side,
+        )
+        feat_h = dict(sig.features) if sig.features else {}
+        feat_h["lifecycle"] = "holding"
+        feat_h["open_position"] = np.to_json_dict()
+        feat_h["unrealized_pnl_usd"] = round(float(ur), 8)
+        _log_eval(
+            trade=False,
+            reason_code="jupiter_2_baseline_holding",
+            features=feat_h,
+            side=str(np.side),
+            pnl_usd=None,
+        )
+        conn_u = connect_ledger(execution_ledger_db_path)
+        try:
+            ensure_execution_ledger_schema(conn_u)
+            upsert_baseline_jupiter_open_state(
+                conn_u,
+                position_key=pos_key,
+                trade_id=np.trade_id,
+                state_json=json.dumps(np.to_json_dict(), default=str),
+            )
+            conn_u.commit()
+        except sqlite3.OperationalError as exc:
+            print(
+                f"baseline_ledger_bridge: open state upsert failed: {exc!r} market_event_id={mid}",
+                file=sys.stderr,
+                flush=True,
+            )
+            return {
+                "ok": False,
+                "reason": "baseline_open_state_write_failed",
+                "error": str(exc),
+                "market_event_id": mid,
+            }
+        finally:
+            conn_u.close()
+
+        ret_h: dict[str, Any] = {
+            "ok": True,
+            "lifecycle": "holding",
+            "market_event_id": mid,
+            "trade_id": np.trade_id,
+            "mode": m,
+            "open_position": np.to_json_dict(),
+            "unrealized_pnl_usd": round(float(ur), 8),
+            "signal_mode": sm,
+            "side": np.side,
+        }
+        if policy_eval_write_error:
+            ret_h["policy_evaluation_write_error"] = policy_eval_write_error
+        return ret_h
+
+    feat0 = dict(sig.features) if sig.features else {}
+    _log_eval(
+        trade=bool(sig.trade),
+        reason_code=str(sig.reason_code or ""),
+        features=feat0,
+        side=str(sig.side) if sig.trade else "flat",
+        pnl_usd=None,
+    )
+
     if not sig.trade:
-        out: dict[str, Any] = {
+        out_nt: dict[str, Any] = {
             "ok": True,
             "no_trade": True,
             "market_event_id": mid,
@@ -184,88 +425,77 @@ def run_baseline_ledger_bridge_tick(
             "signal_mode": sm,
         }
         if policy_eval_write_error:
-            out["policy_evaluation_write_error"] = policy_eval_write_error
-        return out
+            out_nt["policy_evaluation_write_error"] = policy_eval_write_error
+        return out_nt
 
-    size = 1.0
-    tid = _baseline_trade_id(mid, m)
-    pnl = float(sig.pnl_usd) if sig.pnl_usd is not None else 0.0
-
-    from .decision_trace import persist_baseline_trade_with_trace
-    from modules.anna_training.jupiter_2_sean_policy import (
-        CATALOG_ID as baseline_catalog_id,
-        POLICY_ENGINE_ID,
+    atr_e = calculate_atr(closes, highs, lows)
+    tid = _baseline_lifecycle_trade_id(mid, m)
+    npos = open_position_from_signal(
+        trade_id=tid,
+        market_event_id=mid,
+        bar=bar,
+        side=sig.side,
+        atr_entry=float(atr_e),
+        size=1.0,
+        reason_code=str(sig.reason_code or ""),
+        signal_features=dict(sig.features) if sig.features else {},
     )
 
-    catalog_id = baseline_catalog_id
-    ctx = {
-        "source": "baseline_ledger_bridge_sean_jupiter_v1",
-        "policy_engine": POLICY_ENGINE_ID,
-        "trade_policy": "jupiter_perps",
-        "catalog_strategy_id": catalog_id,
-        "signal_mode": sm,
-        "reason_code": sig.reason_code,
-        "features": sig.features,
-        "side": sig.side,
-    }
-    notes = (
-        f"baseline — Jupiter_2 Sean policy ({catalog_id}) signal; "
-        f"{sig.reason_code} side={sig.side}"
-    )
-
+    conn_o = connect_ledger(execution_ledger_db_path)
     try:
-        out = persist_baseline_trade_with_trace(
-            market_event_id=mid,
-            bar=bar,
-            mode=m,
-            trade_id=tid,
-            pnl_usd=pnl,
-            context_snapshot=ctx,
-            notes=notes,
-            db_path=execution_ledger_db_path,
-            side=sig.side,
-            economic_basis="jupiter_2_sean_entry_open_to_close",
-            signal_snapshot=dict(sig.features),
+        ensure_execution_ledger_schema(conn_o)
+        upsert_baseline_jupiter_open_state(
+            conn_o,
+            position_key=pos_key,
+            trade_id=npos.trade_id,
+            state_json=json.dumps(npos.to_json_dict(), default=str),
         )
-    except sqlite3.IntegrityError:
-        return {
-            "ok": True,
-            "idempotent_skip": True,
-            "market_event_id": mid,
-            "trade_id": tid,
-        }
+        append_position_event(
+            conn_o,
+            trade_id=npos.trade_id,
+            market_event_id=mid,
+            event_type="position_open",
+            payload={
+                "phase": "position_open",
+                "entry_price": npos.entry_price,
+                "side": npos.side,
+                "virtual_sl": npos.stop_loss,
+                "virtual_tp": npos.take_profit,
+                "atr_entry": npos.atr_entry,
+                "economic_basis": "jupiter_2_sean_lifecycle",
+                "note": "Paper baseline — lifecycle entry at bar close; exits are SL/TP only.",
+            },
+            sequence_num=0,
+        )
+        conn_o.commit()
     except sqlite3.OperationalError as exc:
         print(
-            f"baseline_ledger_bridge: execution_trades write failed: {exc!r} market_event_id={mid}",
+            f"baseline_ledger_bridge: lifecycle open write failed: {exc!r} market_event_id={mid}",
             file=sys.stderr,
             flush=True,
         )
         return {
             "ok": False,
-            "reason": "execution_ledger_write_failed",
+            "reason": "baseline_open_state_write_failed",
             "error": str(exc),
             "market_event_id": mid,
-            "trade_id": tid,
-            "signal_mode": sm,
-            "side": sig.side,
         }
+    finally:
+        conn_o.close()
 
-    row = out.get("execution_trade")
-    trace_meta = {k: v for k, v in out.items() if k != "execution_trade"}
-
-    ret: dict[str, Any] = {
+    ret_o: dict[str, Any] = {
         "ok": True,
+        "lifecycle": "opened",
         "market_event_id": mid,
-        "trade_id": tid,
+        "trade_id": npos.trade_id,
         "mode": m,
-        "execution_trade": row,
-        "decision_trace": trace_meta,
+        "open_position": npos.to_json_dict(),
         "signal_mode": sm,
-        "side": sig.side,
+        "side": npos.side,
     }
     if policy_eval_write_error:
-        ret["policy_evaluation_write_error"] = policy_eval_write_error
-    return ret
+        ret_o["policy_evaluation_write_error"] = policy_eval_write_error
+    return ret_o
 
 
 def _run_legacy_mechanical_long(
@@ -330,6 +560,27 @@ def _run_legacy_mechanical_long(
             economic_basis="canonical_bar_open_to_close_long_1unit",
             signal_snapshot=None,
         )
+        from .execution_ledger import (
+            connect_ledger as _conn_ledger,
+            ensure_execution_ledger_schema as _ensure_el,
+            insert_baseline_paper_lifecycle_events,
+        )
+
+        _c = _conn_ledger(execution_ledger_db_path)
+        try:
+            _ensure_el(_c)
+            insert_baseline_paper_lifecycle_events(
+                _c,
+                trade_id=tid,
+                market_event_id=mid,
+                bar=bar,
+                side="long",
+                pnl_usd=float(pnl),
+                mode=mode,
+            )
+            _c.commit()
+        finally:
+            _c.close()
     except sqlite3.IntegrityError:
         return {
             "ok": True,
