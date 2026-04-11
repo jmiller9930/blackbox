@@ -164,6 +164,7 @@ def run_baseline_ledger_bridge_tick(
         calculate_atr,
     )
     from modules.anna_training.sean_jupiter_baseline_signal import evaluate_sean_jupiter_baseline_v1
+    from modules.anna_training.store import load_state
 
     from modules.anna_training.execution_ledger import (
         append_position_event,
@@ -197,7 +198,12 @@ def run_baseline_ledger_bridge_tick(
     finally:
         conn_chk.close()
 
-    sig = evaluate_sean_jupiter_baseline_v1(bars_asc=bars_asc)
+    st = load_state()
+    sig = evaluate_sean_jupiter_baseline_v1(
+        bars_asc=bars_asc,
+        training_state=st,
+        ledger_db_path=execution_ledger_db_path,
+    )
     policy_eval_write_error: str | None = None
 
     def _log_eval(

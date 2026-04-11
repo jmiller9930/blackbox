@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import math
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any
 
 from modules.anna_training.jupiter_2_sean_policy import (
@@ -532,13 +533,24 @@ def aggregate_candles_signal_flags(
 def evaluate_sean_jupiter_baseline_v1(
     *,
     bars_asc: list[dict[str, Any]],
+    free_collateral_usd: float | None = None,
+    training_state: dict[str, Any] | None = None,
+    ledger_db_path: Path | None = None,
 ) -> SeanJupiterBaselineSignalV1:
     """
     Thin adapter over :func:`modules.anna_training.jupiter_2_sean_policy.evaluate_jupiter_2_sean`.
 
     Maps Jupiter_2 ``reason_code`` values to dashboard / ledger aliases and attaches the operator tile.
+
+    ``free_collateral_usd`` / ``training_state`` / ``ledger_db_path`` are passed through for paper bankroll sizing
+    (see ``jupiter_2_paper_collateral``). If omitted, policy resolves from paper capital.
     """
-    j2 = evaluate_jupiter_2_sean(bars_asc=bars_asc)
+    j2 = evaluate_jupiter_2_sean(
+        bars_asc=bars_asc,
+        free_collateral_usd=free_collateral_usd,
+        training_state=training_state,
+        ledger_db_path=ledger_db_path,
+    )
     mapped_reason = _J2_TO_BASELINE_REASON.get(j2.reason_code, j2.reason_code)
 
     feat = dict(j2.features) if j2.features else {}

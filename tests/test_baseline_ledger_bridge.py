@@ -74,7 +74,7 @@ def test_baseline_and_anna_share_market_event_id(tmp_path: Path, monkeypatch: py
     from modules.anna_training.sean_jupiter_baseline_signal import SeanJupiterBaselineSignalV1
     from market_data.bar_lookup import fetch_latest_bar_row
 
-    def _fake_sean_jupiter(bars_asc: list) -> SeanJupiterBaselineSignalV1:
+    def _fake_sean_jupiter(bars_asc: list, **_kw: object) -> SeanJupiterBaselineSignalV1:
         return SeanJupiterBaselineSignalV1(
             trade=True,
             side="long",

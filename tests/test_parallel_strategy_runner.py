@@ -62,7 +62,7 @@ def test_parallel_runner_no_trade_when_signal_false(
 
     monkeypatch.setattr(
         "modules.anna_training.parallel_strategy_runner.evaluate_sean_jupiter_baseline_v1",
-        lambda bars_asc: SeanJupiterBaselineSignalV1(
+        lambda bars_asc, **_kw: SeanJupiterBaselineSignalV1(
             trade=False,
             side="flat",
             reason_code="no_signal",

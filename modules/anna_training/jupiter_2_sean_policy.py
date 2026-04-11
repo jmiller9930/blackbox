@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import math
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any
 
 # ==================== TRADING POLICY CONSTANTS (spec) ====================
@@ -295,13 +296,19 @@ class Jupiter2SeanPolicyResult:
 def evaluate_jupiter_2_sean(
     *,
     bars_asc: list[dict[str, Any]],
-    free_collateral_usd: float = 10_000.0,
+    free_collateral_usd: float | None = None,
+    training_state: dict[str, Any] | None = None,
+    ledger_db_path: Path | None = None,
 ) -> Jupiter2SeanPolicyResult:
     """
     Evaluate **latest** closed bar (``bars_asc[-1]``) under Jupiter_2 entry rules.
 
     ``bars_asc`` rows: ``open``, ``high``, ``low``, ``close`` (float-like); optional
     ``candle_open_utc``, ``tick_count``, etc. ignored for signal math.
+
+    ``free_collateral_usd`` drives ``calculate_position_size``. If omitted, resolves from
+    paper capital (see ``jupiter_2_paper_collateral.resolve_free_collateral_usd_for_jupiter_policy``),
+    not a hardcoded stub.
     """
     if len(bars_asc) < MIN_BARS:
         return Jupiter2SeanPolicyResult(
@@ -335,6 +342,19 @@ def evaluate_jupiter_2_sean(
         highs.append(h)
         lows.append(l)
 
+    if free_collateral_usd is None:
+        from modules.anna_training.jupiter_2_paper_collateral import (
+            resolve_free_collateral_usd_for_jupiter_policy,
+        )
+
+        free_collateral_usd, br_meta = resolve_free_collateral_usd_for_jupiter_policy(
+            training_state=training_state,
+            ledger_db_path=ledger_db_path,
+        )
+    else:
+        br_meta = {"source": "explicit", "free_collateral_usd": float(free_collateral_usd)}
+        free_collateral_usd = float(free_collateral_usd)
+
     short_s, long_s, sig_px, diag = generate_signal_from_ohlc(closes, highs, lows)
     atr_ratio = float(diag.get("atr_ratio", 1.0))
 
@@ -343,6 +363,8 @@ def evaluate_jupiter_2_sean(
         "catalog_id": CATALOG_ID,
         "policy_version": "jupiter_2_sean_v1.0",
         "confidence_threshold_note": CONFIDENCE_THRESHOLD,
+        "free_collateral_usd": float(free_collateral_usd),
+        "paper_bankroll": br_meta,
         **diag,
     }
 

@@ -343,7 +343,14 @@ def build_jupiter_policy_snapshot(
         "price_source": str(last.get("price_source") or "") or None,
     }
 
-    sig = evaluate_sean_jupiter_baseline_v1(bars_asc=bars)
+    from modules.anna_training.store import load_state as _load_training_state
+
+    _st = training_state if isinstance(training_state, dict) else _load_training_state()
+    sig = evaluate_sean_jupiter_baseline_v1(
+        bars_asc=bars,
+        training_state=_st,
+        ledger_db_path=default_execution_ledger_path(),
+    )
     out["would_trade"] = bool(sig.trade)
     out["side"] = sig.side
     out["reason_code"] = sig.reason_code
@@ -610,6 +617,7 @@ def _event_axis_jupiter_tile_narratives(
         evaluate_sean_jupiter_baseline_v1,
         format_jupiter_tile_narrative_v1,
     )
+    from modules.anna_training.store import load_state as _load_training_state
 
     out: dict[str, str] = {}
     if not event_axis:
@@ -669,7 +677,11 @@ def _event_axis_jupiter_tile_narratives(
                 )
                 continue
             sub = bars[: idx + 1]
-            sig = evaluate_sean_jupiter_baseline_v1(bars_asc=sub)
+            sig = evaluate_sean_jupiter_baseline_v1(
+                bars_asc=sub,
+                training_state=_load_training_state(),
+                ledger_db_path=default_execution_ledger_path(),
+            )
             sf = dict(sig.features) if isinstance(sig.features, dict) else {}
             pb = sf.get("policy_blockers")
             pbl = [str(x) for x in pb] if isinstance(pb, list) else None

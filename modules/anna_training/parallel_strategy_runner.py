@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Any
 
 from modules.anna_training.sean_jupiter_baseline_signal import evaluate_sean_jupiter_baseline_v1
+from modules.anna_training.store import load_state
 
 
 def _env_bool(name: str, default: bool) -> bool:
@@ -260,7 +261,11 @@ def run_parallel_anna_strategies_tick(
     finally:
         conn.close()
 
-    sig = evaluate_sean_jupiter_baseline_v1(bars_asc=bars_asc)
+    sig = evaluate_sean_jupiter_baseline_v1(
+        bars_asc=bars_asc,
+        training_state=load_state(),
+        ledger_db_path=execution_ledger_db_path,
+    )
     if not sig.trade:
         return {
             "ok": True,
