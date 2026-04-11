@@ -177,7 +177,7 @@ from modules.anna_training.quantitative_evaluation_layer.constants import (
     LIFECYCLE_TEST,
     LIFECYCLE_VALIDATED_STRATEGY,
 )
-from modules.anna_training.sequential_engine.mae_v1 import compute_mae_usd_v1
+from modules.anna_training.sequential_engine.mae_v1 import MAE_PROTOCOL_ID, compute_mae_usd_v1
 
 _MARKET_DB: Path | None = None
 
@@ -903,6 +903,77 @@ def _recent_baseline_policy_trade_rows_for_strip(
 
 
 BASELINE_TRADES_REPORT_SCHEMA = "blackbox_baseline_trades_report_v1"
+TRADE_EVENT_SYNTHESIS_SCHEMA = "trade_event_synthesis_v1"
+
+
+def _trade_event_synthesis_v1(
+    *,
+    policy_row: dict[str, Any] | None,
+    ledger_row: dict[str, Any],
+    compact_cell: dict[str, Any],
+    tile_narrative: str,
+    mae_usd: float | None,
+) -> dict[str, Any]:
+    """
+    One forensic bundle per baseline ledger row: policy (Sean) + execution facts + tile + MAE rule id.
+
+    Built at read time from existing tables; can later be persisted as the single materialized record.
+    """
+    verdict = (
+        "TRADE"
+        if str(compact_cell.get("baseline_display_reason") or "") == "policy_approved_execution"
+        else "NO_TRADE"
+    )
+    pol_snap: dict[str, Any] | None = None
+    if policy_row:
+        pol_snap = {
+            "market_event_id": policy_row.get("market_event_id"),
+            "lane": policy_row.get("lane"),
+            "strategy_id": policy_row.get("strategy_id"),
+            "signal_mode": policy_row.get("signal_mode"),
+            "tick_mode": policy_row.get("tick_mode"),
+            "trade": policy_row.get("trade"),
+            "side": policy_row.get("side"),
+            "reason_code": policy_row.get("reason_code"),
+            "features": policy_row.get("features"),
+            "pnl_usd": policy_row.get("pnl_usd"),
+            "evaluated_at_utc": policy_row.get("evaluated_at_utc"),
+        }
+    exec_snap = {
+        "trade_id": str(ledger_row.get("trade_id") or "").strip() or None,
+        "lane": "baseline",
+        "strategy_id": RESERVED_STRATEGY_BASELINE,
+        "mode": ledger_row.get("mode"),
+        "market_event_id": str(ledger_row.get("market_event_id") or ""),
+        "symbol": ledger_row.get("symbol"),
+        "timeframe": ledger_row.get("timeframe"),
+        "side": ledger_row.get("side"),
+        "entry_time": ledger_row.get("entry_time"),
+        "exit_time": ledger_row.get("exit_time"),
+        "entry_price": ledger_row.get("entry_price"),
+        "exit_price": ledger_row.get("exit_price"),
+        "size": ledger_row.get("size"),
+        "exit_reason": ledger_row.get("exit_reason"),
+        "pnl_usd": ledger_row.get("pnl_usd"),
+        "created_at_utc": ledger_row.get("created_at_utc"),
+    }
+    return {
+        "schema": TRADE_EVENT_SYNTHESIS_SCHEMA,
+        "market_event_id": str(ledger_row.get("market_event_id") or ""),
+        "verdict": verdict,
+        "baseline_display_reason": str(compact_cell.get("baseline_display_reason") or ""),
+        "economic_outcome": str(compact_cell.get("outcome") or ""),
+        "economic_outcome_display": str(compact_cell.get("outcome_display") or ""),
+        "policy_snapshot": pol_snap,
+        "execution_snapshot": exec_snap,
+        "jupiter_tile_narrative": tile_narrative or "",
+        "mae_usd": mae_usd,
+        "mae_protocol_id": MAE_PROTOCOL_ID,
+        "forensic_note": (
+            "Read-time synthesis for replay: Sean Jupiter policy_evaluations + execution_trades + "
+            "Jupiter tile narrative + MAE v1. Persist as single row in a future migration if desired."
+        ),
+    }
 
 
 def build_baseline_trades_report(
@@ -983,6 +1054,7 @@ def build_baseline_trades_report(
         candidates.sort(key=lambda x: x[0], reverse=True)
 
         mids_for_tiles: list[str] = []
+        meta_pairs: list[tuple[dict[str, Any], dict[str, Any]]] = []
         for _ts, ledger_row in candidates:
             mid = str(ledger_row.get("market_event_id") or "").strip()
             cell = _compact_baseline_cell_policy_bound(
@@ -1038,6 +1110,7 @@ def build_baseline_trades_report(
                     "policy_outcome": str(cell.get("outcome") or ""),
                 }
             )
+            meta_pairs.append((ledger_row, cell))
             mids_for_tiles.append(mid)
             if len(rows_out) >= lim:
                 break
@@ -1045,9 +1118,25 @@ def build_baseline_trades_report(
         tile_narr: dict[str, str] = {}
         if mids_for_tiles:
             tile_narr = _event_axis_jupiter_tile_narratives(conn, mids_for_tiles, mpath)
-        for r in rows_out:
+        for i, r in enumerate(rows_out):
             mk = str(r.get("market_event_id") or "").strip()
-            r["jupiter_tile_narrative"] = tile_narr.get(mk, "") if mk else ""
+            tile_text = tile_narr.get(mk, "") if mk else ""
+            r["jupiter_tile_narrative"] = tile_text
+            ledger_row_i, cell_i = meta_pairs[i]
+            pol_i = fetch_policy_evaluation_for_market_event(
+                conn,
+                mk,
+                lane=RESERVED_STRATEGY_BASELINE,
+                strategy_id=RESERVED_STRATEGY_BASELINE,
+                signal_mode="sean_jupiter_v1",
+            )
+            r["synthesis"] = _trade_event_synthesis_v1(
+                policy_row=pol_i,
+                ledger_row=ledger_row_i,
+                compact_cell=cell_i,
+                tile_narrative=tile_text,
+                mae_usd=r.get("mae_usd"),
+            )
     finally:
         conn.close()
 
@@ -1062,6 +1151,7 @@ def build_baseline_trades_report(
             "scanned_execution_rows": scanned,
             "max_scan_cap": scan_cap,
             "ledger_path": str(db_path),
+            "synthesis_schema": TRADE_EVENT_SYNTHESIS_SCHEMA,
         },
     }
 

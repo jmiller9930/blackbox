@@ -306,5 +306,9 @@ def test_build_baseline_trades_report_schema() -> None:
         assert "baseline_authority" in row
         assert row["baseline_authority"] in ("TRADE", "NO_TRADE")
         assert "baseline_authority_reason" in row
+        assert "synthesis" in row
+        assert (row["synthesis"] or {}).get("schema") == "trade_event_synthesis_v1"
+        assert "policy_snapshot" in row["synthesis"]
+        assert "execution_snapshot" in row["synthesis"]
 
 

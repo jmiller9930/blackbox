@@ -350,7 +350,10 @@
         <button type="button" class="bt-modal__close" id="bt-modal-close" aria-label="Close">×</button>
       </div>
       <p class="bt-sub" id="bt-modal-mid"></p>
+      <h3 style="margin:0.75rem 0 0.35rem;font-size:0.8rem;font-weight:800;color:#334155">Jupiter tile</h3>
       <pre id="bt-modal-pre"></pre>
+      <h3 style="margin:0.85rem 0 0.35rem;font-size:0.8rem;font-weight:800;color:#334155">Forensic synthesis (trade_event_synthesis_v1)</h3>
+      <pre id="bt-modal-synthesis" style="max-height:14rem;overflow:auto;font-size:0.65rem"></pre>
     </div>
   </div>
 
@@ -573,6 +576,13 @@
             ? String(row.jupiter_tile_narrative)
             : "(No tile narrative in this bundle for this id. It may be outside the current dashboard event window.)";
         pre.textContent = text;
+        var synEl = document.getElementById("bt-modal-synthesis");
+        if (synEl) {
+          synEl.textContent =
+            row && row.synthesis
+              ? JSON.stringify(row.synthesis, null, 2)
+              : "(No synthesis on this row.)";
+        }
         history.replaceState(null, "", "?mid=" + encodeURIComponent(mid));
         openModal();
       }
