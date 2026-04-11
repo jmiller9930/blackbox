@@ -4,9 +4,11 @@ from __future__ import annotations
 
 import pytest
 
+from modules.anna_training.execution_ledger import compute_pnl_usd
 from modules.anna_training.jupiter_2_baseline_lifecycle import (
     BaselineOpenPosition,
     apply_trailing_monotonic,
+    baseline_lifecycle_base_size_from_signal_features,
     evaluate_exit_ohlc,
     initial_sl_tp,
     open_position_from_signal,
@@ -89,10 +91,36 @@ def test_open_position_from_signal_sets_levels() -> None:
         bar=bar,
         side="long",
         atr_entry=1.0,
-        size=1.0,
         reason_code="jupiter_2_long_signal",
-        signal_features={"position_size_hint": {"leverage": 15}},
+        signal_features={
+            "position_size_hint": {"leverage": 15, "notional_usd": 1005.0},
+        },
     )
     assert p.entry_price == 100.5
     assert p.entry_candle_open_utc == "2026-01-01T12:00:00Z"
     assert p.stop_loss < p.entry_price < p.take_profit
+    assert p.size == pytest.approx(1005.0 / 100.5)
+    assert p.size_source == "notional_usd_div_entry_price"
+
+
+def test_same_price_move_scales_pnl_with_notional() -> None:
+    """Same % move → USD PnL proportional to notional (via base size)."""
+    entry = 100.0
+    exit_px = 101.0  # +1% on long
+    h1 = {"position_size_hint": {"notional_usd": 1000.0}}
+    h2 = {"position_size_hint": {"notional_usd": 3000.0}}
+    s1, _ = baseline_lifecycle_base_size_from_signal_features(entry_price=entry, signal_features=h1)
+    s2, _ = baseline_lifecycle_base_size_from_signal_features(entry_price=entry, signal_features=h2)
+    p1 = compute_pnl_usd(entry_price=entry, exit_price=exit_px, size=s1, side="long")
+    p2 = compute_pnl_usd(entry_price=entry, exit_price=exit_px, size=s2, side="long")
+    assert s2 == pytest.approx(3.0 * s1)
+    assert p2 == pytest.approx(3.0 * p1)
+
+
+def test_baseline_size_fallback_without_notional() -> None:
+    sz, src = baseline_lifecycle_base_size_from_signal_features(
+        entry_price=100.0,
+        signal_features={"position_size_hint": {"leverage": 15}},
+    )
+    assert sz == 1.0
+    assert src == "fallback_no_notional_usd"

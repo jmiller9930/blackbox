@@ -6,6 +6,7 @@ See directive: STOP_LOSS / TAKE_PROFIT only; same-bar ambiguity → stop-loss wi
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass, field, replace
 from typing import Any, Literal
 
@@ -41,6 +42,7 @@ class BaselineOpenPosition:
     notional_usd: float | None = None
     reason_code_at_entry: str = ""
     signal_features_snapshot: dict[str, Any] = field(default_factory=dict)
+    size_source: str = ""
 
     def to_json_dict(self) -> dict[str, Any]:
         return {
@@ -61,6 +63,7 @@ class BaselineOpenPosition:
             "notional_usd": self.notional_usd,
             "reason_code_at_entry": self.reason_code_at_entry,
             "signal_features_snapshot": dict(self.signal_features_snapshot),
+            "size_source": self.size_source,
         }
 
     @classmethod
@@ -83,6 +86,7 @@ class BaselineOpenPosition:
             notional_usd=float(d["notional_usd"]) if d.get("notional_usd") is not None else None,
             reason_code_at_entry=str(d.get("reason_code_at_entry") or ""),
             signal_features_snapshot=dict(d.get("signal_features_snapshot") or {}),
+            size_source=str(d.get("size_source") or ""),
         )
 
 
@@ -305,6 +309,40 @@ def process_holding_bar(
     return new_pos, None
 
 
+def baseline_lifecycle_base_size_from_signal_features(
+    *,
+    entry_price: float,
+    signal_features: dict[str, Any],
+) -> tuple[float, str]:
+    """
+    Base position size for ``compute_pnl_usd``: ``notional_usd / entry_price``.
+
+    Policy ``position_size_hint.notional_usd`` comes from bankroll-aware sizing
+    (``resolve_free_collateral_usd_for_jupiter_policy`` → ``calculate_position_size``).
+    Fallback **1.0** only when the hint is missing or invalid (index-style stub).
+    """
+    ep = float(entry_price)
+    if ep <= 0 or not math.isfinite(ep):
+        return 1.0, "fallback_invalid_entry_price"
+    ps = dict(signal_features or {})
+    psh = ps.get("position_size_hint")
+    if not isinstance(psh, dict):
+        return 1.0, "fallback_no_position_size_hint"
+    raw_n = psh.get("notional_usd")
+    if raw_n is None:
+        return 1.0, "fallback_no_notional_usd"
+    try:
+        notional = float(raw_n)
+    except (TypeError, ValueError):
+        return 1.0, "fallback_notional_parse"
+    if not math.isfinite(notional) or notional <= 0:
+        return 1.0, "fallback_notional_nonpositive"
+    sz = notional / ep
+    if not math.isfinite(sz) or sz <= 0:
+        return 1.0, "fallback_size_nonpositive"
+    return sz, "notional_usd_div_entry_price"
+
+
 def open_position_from_signal(
     *,
     trade_id: str,
@@ -312,11 +350,10 @@ def open_position_from_signal(
     bar: dict[str, Any],
     side: str,
     atr_entry: float,
-    size: float,
     reason_code: str,
     signal_features: dict[str, Any],
 ) -> BaselineOpenPosition:
-    """Entry price = **close** of the signal bar."""
+    """Entry price = **close** of the signal bar. ``size`` = policy notional / entry (see baseline helper)."""
     c = float(bar["close"])
     op_utc = str(bar.get("candle_open_utc") or "").strip()
     sl, tp = initial_sl_tp(entry=c, atr_entry=atr_entry, side=side)
@@ -332,6 +369,8 @@ def open_position_from_signal(
         col = float(psh["collateral_usd"]) if psh.get("collateral_usd") is not None else None
         notional = float(psh["notional_usd"]) if psh.get("notional_usd") is not None else None
 
+    sz, sz_src = baseline_lifecycle_base_size_from_signal_features(entry_price=c, signal_features=ps)
+
     return BaselineOpenPosition(
         trade_id=trade_id,
         side=(side or "").strip().lower(),
@@ -342,7 +381,7 @@ def open_position_from_signal(
         stop_loss=sl,
         take_profit=tp,
         breakeven_applied=False,
-        size=float(size),
+        size=float(sz),
         last_processed_market_event_id=str(market_event_id).strip(),
         leverage=lev,
         risk_pct=rp,
@@ -350,4 +389,5 @@ def open_position_from_signal(
         notional_usd=notional,
         reason_code_at_entry=str(reason_code or ""),
         signal_features_snapshot=ps,
+        size_source=str(sz_src),
     )

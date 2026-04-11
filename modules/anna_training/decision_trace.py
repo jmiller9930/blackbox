@@ -302,6 +302,7 @@ def build_baseline_lifecycle_exit_steps(
     trace_id: str,
     pnl_usd: float,
     side: str,
+    size: float,
     entry_price: float,
     exit_price: float,
     exit_reason: str,
@@ -361,7 +362,7 @@ def build_baseline_lifecycle_exit_steps(
             "input_refs": dict(base_refs),
             "output": {
                 "side": sd,
-                "size": 1.0,
+                "size": float(size),
                 "entry_price": float(entry_price),
                 "exit_price": float(exit_price),
                 "exit_reason": str(exit_reason),
@@ -900,6 +901,7 @@ def persist_baseline_lifecycle_close(
     trade_id: str,
     pnl_usd: float,
     side: str,
+    size: float,
     entry_price: float,
     exit_price: float,
     exit_reason: str,
@@ -933,7 +935,12 @@ def persist_baseline_lifecycle_close(
     sd = (side or "long").strip().lower()
     if sd not in ("long", "short"):
         sd = "long"
-    pnl = compute_pnl_usd(entry_price=float(entry_price), exit_price=float(exit_price), size=1.0, side=sd)
+    pnl = compute_pnl_usd(
+        entry_price=float(entry_price),
+        exit_price=float(exit_price),
+        size=float(size),
+        side=sd,
+    )
     if not _pnl_close(pnl, float(pnl_usd)):
         raise ValueError("pnl_usd mismatch for baseline lifecycle trace")
     er = str(exit_reason or "").strip().upper()
@@ -948,6 +955,7 @@ def persist_baseline_lifecycle_close(
         trace_id=trace_id,
         pnl_usd=pnl,
         side=sd,
+        size=float(size),
         entry_price=float(entry_price),
         exit_price=float(exit_price),
         exit_reason=er,
@@ -989,7 +997,7 @@ def persist_baseline_lifecycle_close(
             side=sd,
             entry_time=str(entry_time or bar.get("candle_open_utc") or ""),
             entry_price=float(entry_price),
-            size=1.0,
+            size=float(size),
             exit_time=str(bar.get("candle_close_utc") or ""),
             exit_price=float(exit_price),
             exit_reason=er,
@@ -1009,7 +1017,8 @@ def persist_baseline_lifecycle_close(
                 "phase": "position_close",
                 "exit_price": float(exit_price),
                 "exit_reason": er,
-                "pnl_usd_1unit": float(pnl),
+                "pnl_usd": float(pnl),
+                "size": float(size),
                 "economic_basis": "jupiter_2_sean_lifecycle_sl_tp",
             },
             sequence_num=seq,

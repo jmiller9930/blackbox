@@ -307,6 +307,7 @@ def run_baseline_ledger_bridge_tick(
                     trade_id=tid,
                     pnl_usd=pnl_exit,
                     side=pos.side,
+                    size=float(pos.size),
                     entry_price=float(pos.entry_price),
                     exit_price=xprice,
                     exit_reason=er,
@@ -442,7 +443,6 @@ def run_baseline_ledger_bridge_tick(
         bar=bar,
         side=sig.side,
         atr_entry=float(atr_e),
-        size=1.0,
         reason_code=str(sig.reason_code or ""),
         signal_features=dict(sig.features) if sig.features else {},
     )

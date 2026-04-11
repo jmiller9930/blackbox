@@ -1,8 +1,13 @@
 """Jupiter_2 baseline — **free_collateral_usd** for policy sizing (Sean ``calculate_position_size``).
 
-**Source of truth:** paper capital (dashboard / journal) — **not** a hardcoded stub.
+**Authoritative bankroll for baseline paper:** call only
+``resolve_free_collateral_usd_for_jupiter_policy`` from policy evaluation paths — do not duplicate
+defaults or alternate account assumptions elsewhere.
 
-Uses ``build_paper_capital_summary.current_equity_ledger`` (net contributed + baseline lane realized PnL).
+**Source of truth:** paper capital (dashboard / journal) — **not** a decorative stub.
+
+Uses ``build_paper_capital_summary.current_equity_ledger`` (net contributed + baseline lane realized PnL),
+floored at ``MIN_COLLATERAL_USD`` when equity is uninitialized.
 
 Optional override: env ``JUPITER_BASELINE_FREE_COLLATERAL_USD`` (ops/tests).
 """
@@ -35,6 +40,7 @@ def resolve_free_collateral_usd_for_jupiter_policy(
                     "source": "env:JUPITER_BASELINE_FREE_COLLATERAL_USD",
                     "override": True,
                     "free_collateral_usd": v,
+                    "authoritative_resolver": "resolve_free_collateral_usd_for_jupiter_policy",
                 }
         except ValueError:
             pass
@@ -51,6 +57,7 @@ def resolve_free_collateral_usd_for_jupiter_policy(
     usd = max(float(MIN_COLLATERAL_USD), base)
     return usd, {
         "source": "paper_capital:current_equity_ledger",
+        "authoritative_resolver": "resolve_free_collateral_usd_for_jupiter_policy",
         "current_equity_ledger": float(s.get("current_equity_ledger") or 0.0),
         "net_contributed_capital": nc,
         "free_collateral_usd": usd,
