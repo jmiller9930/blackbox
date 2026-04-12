@@ -200,38 +200,21 @@
     .bts-pill.bts-short { background: #fff7ed; color: #c2410c; }
     .bts-t tbody tr.bts-click-row { cursor: pointer; }
     .bts-t tbody tr.bts-click-row:hover { background: #f0f9ff; }
-    /* One-tile baseline position (authoritative vs per-column chain) */
-    .bl-live-wrap {
-      flex-shrink: 0;
-      margin: 0 0.5rem 0.35rem;
-      border: 1px solid #93c5fd;
-      border-radius: var(--radius-md);
-      background: linear-gradient(180deg, #eff6ff 0%, var(--panel) 100%);
-      overflow: hidden;
+    /* Baseline row: one <td colspan=N> updating tile while position is open (not one column per bar) */
+    .tc-baseline-live-span {
+      vertical-align: top;
+      padding: 0.5rem 0.65rem !important;
+      background: linear-gradient(180deg, #eff6ff 0%, #fff 100%) !important;
     }
-    .bl-live-head {
-      padding: 0.4rem 0.55rem;
-      border-bottom: 1px solid var(--panel-border);
-    }
-    .bl-live-head h2 {
-      margin: 0 0 0.2rem;
-      font-size: 0.82rem;
-      font-weight: 800;
-      color: #0f172a;
-    }
-    .bl-live-meta {
-      margin: 0;
+    .tc-baseline-live-hint {
+      margin: 0 0 0.5rem;
       font-size: 0.65rem;
       color: var(--muted);
       font-weight: 600;
-      line-height: 1.35;
       max-width: 52rem;
+      line-height: 1.35;
     }
-    .bl-live-card {
-      padding: 0.55rem 0.65rem 0.65rem;
-      font-size: 0.72rem;
-    }
-    .bl-live-phase {
+    .tc-baseline-live-tile .tc-bl-phase {
       display: inline-block;
       padding: 0.2rem 0.55rem;
       border-radius: 6px;
@@ -240,24 +223,24 @@
       letter-spacing: 0.04em;
       margin-bottom: 0.45rem;
     }
-    .bl-live-phase.open { background: #d1fae5; color: #065f46; }
-    .bl-live-phase.holding { background: #dbeafe; color: #1e40af; }
-    .bl-live-grid {
+    .tc-baseline-live-tile .tc-bl-phase.open { background: #d1fae5; color: #065f46; }
+    .tc-baseline-live-tile .tc-bl-phase.holding { background: #dbeafe; color: #1e40af; }
+    .tc-baseline-live-tile .tc-bl-grid {
       display: grid;
       grid-template-columns: auto 1fr;
       gap: 0.2rem 0.75rem;
       align-items: baseline;
-      max-width: 36rem;
+      max-width: 40rem;
     }
-    .bl-live-grid .k {
+    .tc-baseline-live-tile .tc-bl-grid .k {
       font-size: 0.58rem;
       text-transform: uppercase;
       letter-spacing: 0.04em;
       color: var(--muted);
       font-weight: 800;
     }
-    .bl-live-grid .v { font-weight: 600; color: #0f172a; word-break: break-word; }
-    .bl-live-grid .v.mono { font-family: ui-monospace, monospace; font-size: 0.66rem; }
+    .tc-baseline-live-tile .tc-bl-grid .v { font-weight: 600; color: #0f172a; word-break: break-word; }
+    .tc-baseline-live-tile .tc-bl-grid .v.mono { font-family: ui-monospace, monospace; font-size: 0.66rem; }
     /* Row 4 — trade chain dominates */
     .dash-r4 {
       flex: 1; min-height: 0; display: flex; flex-direction: column;
@@ -885,23 +868,12 @@
         </div>
       </section>
 
-      <!-- Single updating tile: current open baseline position (same trade_id until exit) -->
-      <section class="bl-live-wrap" id="bl-live-wrap" hidden aria-labelledby="bl-live-h">
-        <div class="bl-live-head">
-          <h2 id="bl-live-h">Baseline live trade</h2>
-          <p class="bl-live-meta" id="bl-live-meta">
-            One position for this <code>trade_id</code> — OPEN vs HOLDING is derived from entry bar vs current bar. Updates every poll.
-          </p>
-        </div>
-        <div class="bl-live-card" id="bl-live-card" role="status" aria-live="polite"></div>
-      </section>
-
       <!-- Row 4: trade chain (primary) -->
       <section class="dash-r4" aria-labelledby="tc-h">
         <div class="tc-section-head">
           <h2 id="tc-h">Trade chain</h2>
           <p class="tc-chain-note">
-            Columns are 5m evaluation snapshots (older → newer). For the <strong>same</strong> open trade, only the <strong>newest</strong> column shows the full tile; earlier bars show a compact OPEN/HOLDING strip. Use <strong>Baseline live trade</strong> above for one consolidated view.
+            <strong>Baseline</strong> while a trade is open: <strong>one</strong> tile spanning the timeline (updates every poll). After exit, baseline uses per-bar columns again. <strong>Anna</strong> rows always use per-bar columns.
           </p>
         </div>
         <div class="tc-flow" aria-hidden="true">
@@ -1648,20 +1620,10 @@
     });
   })();
 
-  /** Single consolidated tile: current open baseline position (OPEN if entry bar is latest evaluated bar, else HOLDING). */
-  function renderBaselineLiveCard(bundle) {
-    var wrap = $('bl-live-wrap');
-    var card = $('bl-live-card');
-    if (!wrap || !card) return;
-    var jp = bundle.jupiter_policy_snapshot || {};
-    var bl = jp.baseline_lifecycle;
-    if (!bl || !bl.position_open) {
-      wrap.hidden = true;
-      card.innerHTML = '';
-      return;
-    }
-    wrap.hidden = false;
-    var evMid = jp.evaluated_bar && jp.evaluated_bar.market_event_id;
+  /** HTML for the single updating baseline tile (OPEN vs HOLDING vs economics). Used when position_open. */
+  function buildBaselineLiveTileHtml(bl, jp) {
+    if (!bl || !bl.position_open) return '';
+    var evMid = jp && jp.evaluated_bar && jp.evaluated_bar.market_event_id;
     var entryMid = bl.entry_market_event_id;
     var phase = 'HOLDING';
     if (entryMid && evMid && String(entryMid) === String(evMid)) {
@@ -1672,13 +1634,15 @@
       if (x == null || x === '' || (typeof x === 'number' && isNaN(x))) return '—';
       return Number(x).toFixed(dec != null ? dec : 2);
     }
-    card.innerHTML =
-      '<div class="bl-live-phase ' +
+    return (
+      '<p class="tc-baseline-live-hint">Active baseline trade — single tile; values refresh every poll until exit.</p>' +
+      '<div class="tc-baseline-live-tile">' +
+      '<div class="tc-bl-phase ' +
       phaseCls +
       '">' +
       esc(phase) +
       '</div>' +
-      '<div class="bl-live-grid">' +
+      '<div class="tc-bl-grid">' +
       '<span class="k">trade_id</span><span class="v mono">' +
       esc(bl.trade_id || '—') +
       '</span>' +
@@ -1705,11 +1669,17 @@
       '<span class="k">entry bar</span><span class="v mono">' +
       esc(entryMid || '—') +
       '</span>' +
-      '</div>';
+      '</div></div>'
+    );
   }
 
-  function renderTC(tc) {
-    var sig = tradeChainRenderSig(tc);
+  function renderTC(tc, bundle) {
+    bundle = bundle || {};
+    var jp = bundle.jupiter_policy_snapshot || {};
+    var blOpen = jp.baseline_lifecycle;
+    var liveSig =
+      blOpen && blOpen.position_open ? JSON.stringify(blOpen) : '';
+    var sig = tradeChainRenderSig(tc) + '|' + liveSig;
     if (__bbLastTradeChainRenderSig !== null && sig === __bbLastTradeChainRenderSig) {
       requestAnimationFrame(function () {
         tcPanSliderRefresh();
@@ -1768,13 +1738,22 @@
       if (trCls) tr.className = trCls;
       var h = '<th scope="row">' + rowHead(row) + '</th>';
       var cells = '';
-      axis.forEach(function (mid, idx) {
-        var cell = (row.cells && row.cells[mid]) ? row.cells[mid] : null;
-        var isNow = axis.length > 0 && idx === axis.length - 1;
-        var cls = isNow ? ' class="tc-now"' : '';
-        var cellBg = tcColumnBgOnly(idx, nEv, row);
-        cells += '<td' + cls + ' style="' + cellBg + '">' + cellMini(cell, row) + '</td>';
-      });
+      if (ck === 'baseline' && blOpen && blOpen.position_open && nEv > 0) {
+        cells +=
+          '<td class="tc-baseline-live-span" colspan="' +
+          nEv +
+          '" role="status" aria-live="polite">' +
+          buildBaselineLiveTileHtml(blOpen, jp) +
+          '</td>';
+      } else {
+        axis.forEach(function (mid, idx) {
+          var cell = (row.cells && row.cells[mid]) ? row.cells[mid] : null;
+          var isNow = axis.length > 0 && idx === axis.length - 1;
+          var cls = isNow ? ' class="tc-now"' : '';
+          var cellBg = tcColumnBgOnly(idx, nEv, row);
+          cells += '<td' + cls + ' style="' + cellBg + '">' + cellMini(cell, row) + '</td>';
+        });
+      }
       tr.innerHTML = h + cells;
       tbody.appendChild(tr);
     });
@@ -2064,8 +2043,7 @@
     if (cr) cr.textContent = fmtMarketTime(new Date().toISOString(), tz2);
     window.__bbNextPollEta = new Date(Date.now() + POLL_MS);
 
-    renderBaselineLiveCard(bundle);
-    renderTC(bundle.trade_chain || {});
+    renderTC(bundle.trade_chain || {}, bundle);
     renderBaselineStrip(bundle.trade_chain || {});
     renderOB(bundle.operational_boundary);
     renderLive(bundle);
