@@ -276,7 +276,7 @@
       <div class="bt-section">
         <h1>Baseline trades report</h1>
         <p class="bt-desc">
-          Each row is a baseline ledger execution. <strong>Policy</strong> uses the same rule as the trade chain: <strong>TRADE</strong> only when Sean Jupiter policy approves and a matching execution exists; otherwise <strong>NO TRADE</strong> (see reason in hover). MAE uses 5m bars. QEL is cohort evaluation—see the QEL page.
+          Each row is a baseline ledger execution (a <strong>closed</strong> leg). The <strong>Lifecycle</strong> column uses the same labels as the dashboard trade chain: <strong>closed win</strong> / <strong>closed loss</strong> / <strong>closed flat</strong>. Below the table, <strong>Policy lifecycle</strong> lists <strong>open</strong> / <strong>held</strong> / <strong>closed</strong> ticks in your UTC window (from <code>meta.lifecycle_timeline</code>). MAE uses 5m bars. QEL is cohort evaluation—see the QEL page.
         </p>
 
         <div class="bt-filters">
@@ -322,6 +322,7 @@
                 <th title="Ledger mode: live, paper, or paper_stub.">Mode</th>
                 <th title="Position direction from the ledger: long or short.">Side</th>
                 <th title="TRADE = policy-approved baseline execution (same as trade chain WIN/LOSS path). NO TRADE = policy did not authorize this row as an economic baseline trade (see reason on hover).">Policy</th>
+                <th title="Same lifecycle wording as the trade chain: closed win / closed loss / closed flat for ledger-backed closes.">Lifecycle</th>
                 <th title="Position size (units or contracts) used with entry price for notional and MAE.">Size</th>
                 <th title="Why the position closed: stop, target, signal, manual, etc.">Exit reason</th>
                 <th title="Recorded entry price for the baseline leg.">Entry</th>
@@ -333,7 +334,24 @@
               </tr>
             </thead>
             <tbody id="bt-tbody">
-              <tr><td colspan="15">Loading…</td></tr>
+              <tr><td colspan="16">Loading…</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <h2 style="margin:1rem 0 0.35rem;font-size:0.95rem;font-weight:800;color:#0f172a">Policy lifecycle (open / held / closed)</h2>
+        <p class="bt-desc" style="margin-bottom:0.5rem">Same labels as the trade chain; includes bars without a ledger fill yet.</p>
+        <div class="bt-table-wrap">
+          <table class="bt-rpt">
+            <thead>
+              <tr>
+                <th title="Policy evaluation time (UTC).">Eval (UTC)</th>
+                <th title="market_event_id">market_event_id</th>
+                <th title="open, held, or closed">Phase</th>
+                <th title="Operator display string">Display</th>
+              </tr>
+            </thead>
+            <tbody id="bt-lifecycle-tbody">
+              <tr><td colspan="4">—</td></tr>
             </tbody>
           </table>
         </div>
@@ -360,7 +378,7 @@
   <script>
     (function () {
       var state = { rows: [], meta: {} };
-      var COLS = 15;
+      var COLS = 16;
       var TIP_QEL_ROW =
         "QEL scores and survival decisions apply to Anna strategy cohorts, not to each baseline ledger row. Open QEL evaluation in the nav for details.";
 
@@ -516,6 +534,10 @@
             '">' +
             esc(auth) +
             '</td><td title="' +
+            escAttr("Same vocabulary as trade chain (closed win / closed loss / closed flat).") +
+            '">' +
+            esc(r.lifecycle_display != null && String(r.lifecycle_display).trim() !== '' ? String(r.lifecycle_display) : "—") +
+            '</td><td title="' +
             escAttr("Size from ledger.") +
             '">' +
             esc(sz) +
@@ -558,6 +580,31 @@
         }
       }
 
+      function renderLifecycleTimeline(tl) {
+        var tb = document.getElementById("bt-lifecycle-tbody");
+        if (!tb) return;
+        if (!tl || !tl.length) {
+          tb.innerHTML = '<tr><td colspan="4">No open/held/closed policy ticks in this window (or no policy_evaluations yet).</td></tr>';
+          return;
+        }
+        var h = "";
+        var i;
+        for (i = 0; i < tl.length; i++) {
+          var e = tl[i];
+          h +=
+            '<tr><td class="bt-mono">' +
+            esc(e.evaluated_at_utc || "—") +
+            '</td><td class="bt-mono bt-mono--mid">' +
+            esc(e.market_event_id || "—") +
+            '</td><td>' +
+            esc(e.baseline_lifecycle_phase || "—") +
+            '</td><td>' +
+            esc(e.lifecycle_display || "—") +
+            "</td></tr>";
+        }
+        tb.innerHTML = h;
+      }
+
       function openTile(mid) {
         if (!mid) return;
         var line = document.getElementById("bt-modal-mid");
@@ -597,6 +644,8 @@
           "side",
           "baseline_authority",
           "baseline_authority_reason",
+          "lifecycle_display",
+          "baseline_lifecycle_phase",
           "size",
           "exit_reason",
           "entry",
@@ -641,17 +690,21 @@
             state.rows = bundle.rows || [];
             state.meta = bundle.meta || {};
             renderTable(state.rows);
+            renderLifecycleTimeline(state.meta.lifecycle_timeline || []);
             var m = state.meta;
+            var tl = m.lifecycle_timeline || [];
             foot.textContent =
               "Showing " +
               state.rows.length +
-              " row(s) (limit " +
+              " ledger row(s) (limit " +
               (m.limit || "?") +
               ", scope " +
               (m.scope || "?") +
               "). Scanned up to " +
               (m.scanned_execution_rows || "?") +
-              " baseline ledger rows in range. Policy column matches trade chain rule.";
+              " baseline ledger rows in range. Lifecycle column matches trade chain. Policy lifecycle table: " +
+              tl.length +
+              " tick(s).";
           })
           .catch(function (e) {
             foot.textContent = "Failed to load: " + String(e);

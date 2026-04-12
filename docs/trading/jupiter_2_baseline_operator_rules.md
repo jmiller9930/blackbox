@@ -49,6 +49,8 @@ must use **`long_ok` / `short_ok` that match the core** from policy: **`long_ok`
 
 Implementation: `long_ok` / `short_ok` are driven by `long_signal_core` / `short_signal_core` in the policy features (`_build_operator_tile_jupiter2`).
 
+**Dashboard / baseline trades report (same vocabulary):** **open** (entry bar; Jupiter lifecycle writes the ledger fill on exit only), **held** (position open on later 5m bars), **closed win** / **closed loss** / **closed flat** (realized outcome when the position closes). The trades report lists ledger rows (closed legs) and exposes `meta.lifecycle_timeline` for policy ticks in the UTC window.
+
 ---
 
 ## 2. Secondary: entry filters (only when core would allow a side)

@@ -397,13 +397,24 @@
       -webkit-text-stroke: 2.5px #0f172a;
       paint-order: stroke fill;
     }
-    /* Open lifecycle — not “no trade”; distinct from amber NO TRADE. */
-    .tc-tr-baseline .tc-tile-verdict.tc-verdict-holding {
+    /* Baseline lifecycle — not “no trade”; distinct from amber NO TRADE. */
+    .tc-tr-baseline .tc-tile-verdict.tc-verdict-open {
+      color: #059669;
+      -webkit-text-stroke: 0;
+      font-size: 1.05rem;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+    }
+    .tc-tr-baseline .tc-tile-verdict.tc-verdict-held {
       color: #0284c7;
       -webkit-text-stroke: 0;
       font-size: 1.05rem;
       letter-spacing: 0.04em;
       text-transform: uppercase;
+    }
+    .tc-tr-baseline .tc-tile-verdict.tc-verdict-closed {
+      font-size: 0.92rem;
+      letter-spacing: 0.03em;
     }
     .tc-tile-verdict {
       grid-column: 1 / -1;
@@ -519,7 +530,8 @@
     .wl-LOSS,
     .wl-FLAT,
     .wl-EVAL,
-    .wl-HOLDING {
+    .wl-OPEN,
+    .wl-HELD {
       color: #334155;
       font-weight: 700;
       font-style: normal;
@@ -528,7 +540,8 @@
     .tc-mini-muted .wl-LOSS,
     .tc-mini-muted .wl-FLAT,
     .tc-mini-muted .wl-EVAL,
-    .tc-mini-muted .wl-HOLDING {
+    .tc-mini-muted .wl-OPEN,
+    .tc-mini-muted .wl-HELD {
       font-weight: 600;
       color: #64748b;
     }
@@ -1148,9 +1161,12 @@
       c.pnl_usd != null &&
       !isNaN(Number(c.pnl_usd)) &&
       Math.abs(Number(c.pnl_usd)) <= 1e-9 &&
-      (ocDisp === 'WIN' || ocDisp === 'LOSS')
+      (ocDisp === 'WIN' ||
+        ocDisp === 'LOSS' ||
+        String(ocDisp).toLowerCase() === 'closed win' ||
+        String(ocDisp).toLowerCase() === 'closed loss')
     ) {
-      ocDisp = 'FLAT';
+      ocDisp = baselineLane ? 'closed flat' : 'FLAT';
     }
     var ocLower = String(ocDisp).trim().toLowerCase();
     var muted = !paired && (c.economic_authority === 'muted');
@@ -1160,7 +1176,15 @@
     else if (ocDisp === 'LOSS') wl = 'wl-LOSS';
     else if (ocDisp === 'FLAT') wl = 'wl-FLAT';
     else if (ocDisp === 'Eval') wl = 'wl-EVAL';
-    else if (ocLower === 'holding') wl = 'wl-HOLDING';
+    else if (ocLower.indexOf('closed ') === 0) {
+      var csub = ocLower.replace(/^closed\s+/, '').trim();
+      if (csub === 'win') wl = 'wl-WIN';
+      else if (csub === 'loss') wl = 'wl-LOSS';
+      else if (csub === 'flat') wl = 'wl-FLAT';
+      else if (csub.indexOf('eval') >= 0) wl = 'wl-EVAL';
+      else wl = 'wl-FLAT';
+    } else if (ocLower === 'open') wl = 'wl-OPEN';
+    else if (ocLower === 'held') wl = 'wl-HELD';
     var econCell = paired || (c.economic_authority === 'full');
     var wrapCls =
       'tc-mini' +
@@ -1187,15 +1211,23 @@
     var tradeCell = tcShortId(c.trade_id, 16);
     var traceCell = tcShortId(c.trace_id, 12);
     var noTradeVerdict = baselineLane && ocLower === 'no trade';
-    var holdingVerdict = baselineLane && ocLower === 'holding';
-    var verdictTitle = holdingVerdict
-      ? 'Open baseline position (holding — not exited on this bar)'
-      : 'Closed trade outcome for this 5m bar';
+    var openVerdict = baselineLane && ocLower === 'open';
+    var heldVerdict = baselineLane && ocLower === 'held';
+    var closedLifecycle = baselineLane && ocLower.indexOf('closed ') === 0;
+    var verdictTitle = openVerdict
+      ? 'Baseline lifecycle: position opened on this bar (ledger fill on exit).'
+      : heldVerdict
+        ? 'Baseline lifecycle: position open — not exited on this bar yet.'
+        : closedLifecycle
+          ? 'Baseline lifecycle: position closed on this bar (realized PnL).'
+          : 'Closed trade outcome for this 5m bar';
     var verdictLine =
       '<div class="tc-tile-verdict ' +
       wl +
       (noTradeVerdict ? ' tc-verdict-no-trade-amber' : '') +
-      (holdingVerdict ? ' tc-verdict-holding' : '') +
+      (openVerdict ? ' tc-verdict-open' : '') +
+      (heldVerdict ? ' tc-verdict-held' : '') +
+      (closedLifecycle ? ' tc-verdict-closed' : '') +
       '" title="' +
       esc(verdictTitle) +
       '">' +

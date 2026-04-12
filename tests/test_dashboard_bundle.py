@@ -297,8 +297,8 @@ def test_strip_outcome_zero_is_flat_not_win() -> None:
     assert _strip_outcome_from_pnl(-1e-8) == "LOSS"
 
 
-def test_compact_baseline_holding_shows_holding_not_no_trade(tmp_path: Path) -> None:
-    """Mid-lifecycle bars: policy trade=0 + holding reason must not render as NO_TRADE."""
+def test_compact_baseline_held_shows_held_not_no_trade(tmp_path: Path) -> None:
+    """Mid-lifecycle bars: policy trade=0 + holding reason → **held** (not NO_TRADE)."""
     ledger = tmp_path / "el.db"
     mid = "SOL-PERP_5m_2026-04-01T12:00:00Z"
     conn = connect_ledger(ledger)
@@ -316,9 +316,36 @@ def test_compact_baseline_holding_shows_holding_not_no_trade(tmp_path: Path) -> 
     conn.commit()
     cell = _compact_baseline_cell_policy_bound(conn, mid, None, market_db_path=None)
     conn.close()
-    assert cell["outcome"] == "HOLDING"
-    assert cell.get("baseline_display_reason") == "lifecycle_holding"
+    assert cell["outcome"] == "HELD"
+    assert cell.get("baseline_lifecycle_phase") == "held"
+    assert cell.get("outcome_display") == "held"
+    assert cell.get("baseline_display_reason") == "lifecycle_held"
     assert cell.get("empty") is False
+
+
+def test_compact_baseline_open_entry_no_ledger_row(tmp_path: Path) -> None:
+    """Entry bar: trade=1, no execution_trades row yet → **open** (lifecycle)."""
+    ledger = tmp_path / "el.db"
+    mid = "SOL-PERP_5m_2026-04-01T11:55:00Z"
+    conn = connect_ledger(ledger)
+    ensure_execution_ledger_schema(conn)
+    upsert_policy_evaluation(
+        market_event_id=mid,
+        signal_mode="sean_jupiter_v1",
+        tick_mode="paper",
+        trade=True,
+        reason_code="jupiter_2_sean_signal_ok",
+        features={"tile": {}},
+        side="long",
+        conn=conn,
+    )
+    conn.commit()
+    cell = _compact_baseline_cell_policy_bound(conn, mid, None, market_db_path=None)
+    conn.close()
+    assert cell["outcome"] == "OPEN"
+    assert cell.get("baseline_lifecycle_phase") == "open"
+    assert cell.get("outcome_display") == "open"
+    assert cell.get("baseline_display_reason") == "lifecycle_entry_open"
 
 
 def test_compact_baseline_exit_shows_win_from_ledger_when_policy_trade_false(tmp_path: Path) -> None:
@@ -392,6 +419,8 @@ def test_compact_baseline_exit_shows_win_from_ledger_when_policy_trade_false(tmp
     conn.close()
     assert cell.get("baseline_display_reason") == "lifecycle_exit_execution"
     assert cell["outcome"] == "WIN"
+    assert cell.get("baseline_lifecycle_phase") == "closed"
+    assert cell.get("outcome_display") == "closed win"
     assert cell.get("policy_trade") is False
 
 
@@ -401,6 +430,8 @@ def test_build_baseline_trades_report_schema() -> None:
     assert "rows" in rep and isinstance(rep["rows"], list)
     assert "meta" in rep and isinstance(rep["meta"], dict)
     assert rep["meta"].get("scope") == "all"
+    assert "lifecycle_timeline" in rep["meta"]
+    assert isinstance(rep["meta"]["lifecycle_timeline"], list)
     for row in rep["rows"]:
         assert "baseline_authority" in row
         assert row["baseline_authority"] in ("TRADE", "NO_TRADE")
