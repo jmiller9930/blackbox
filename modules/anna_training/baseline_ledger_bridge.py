@@ -263,6 +263,10 @@ def run_baseline_ledger_bridge_tick(
             feat_x = dict(sig.features) if sig.features else {}
             feat_x["lifecycle"] = "exit"
             feat_x["exit"] = ex
+            # Dashboard joins policy_evaluations → execution_trades by market_event_id; if that ever diverges,
+            # trade_id + open_position allow resolving the close row for CLOSED (not NO_TRADE).
+            feat_x["trade_id"] = tid
+            feat_x["open_position"] = pos.to_json_dict()
             _log_eval(
                 trade=False,
                 reason_code="jupiter_2_baseline_exit",

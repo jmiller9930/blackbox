@@ -427,6 +427,67 @@ def test_compact_baseline_exit_shows_win_from_ledger_when_policy_trade_false(tmp
     assert cell.get("policy_trade") is False
 
 
+def test_compact_baseline_exit_resolves_ledger_by_trade_id_when_column_mid_mismatches(
+    tmp_path: Path,
+) -> None:
+    """Exit bar policy + closing row keyed by trade_id when market_event_id != column mid (no HOLDING→NO_TRADE gap)."""
+    ledger = tmp_path / "el.db"
+    mid_exit_column = "SOL-PERP_5m_2026-04-01T12:05:00Z"
+    mid_row_stale = "SOL-PERP_5m_2026-04-01T12:00:00Z"
+    conn = connect_ledger(ledger)
+    ensure_execution_ledger_schema(conn)
+    upsert_policy_evaluation(
+        market_event_id=mid_exit_column,
+        signal_mode="sean_jupiter_v1",
+        tick_mode="paper",
+        trade=False,
+        reason_code="jupiter_2_baseline_exit",
+        features={
+            "lifecycle": "exit",
+            "trade_id": "bl_exit_tid_mismatch",
+            "open_position": {"trade_id": "bl_exit_tid_mismatch"},
+        },
+        side="long",
+        conn=conn,
+    )
+    conn.execute(
+        """INSERT INTO execution_trades (
+            trade_id, strategy_id, lane, mode, market_event_id, symbol, timeframe,
+            side, entry_time, entry_price, size, exit_time, exit_price, exit_reason,
+            pnl_usd, context_snapshot_json, notes, trace_id, schema_version, created_at_utc
+        ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+        (
+            "bl_exit_tid_mismatch",
+            "baseline",
+            "baseline",
+            "paper",
+            mid_row_stale,
+            "SOL-PERP",
+            "5m",
+            "long",
+            "2026-04-01T12:00:00Z",
+            100.0,
+            1.0,
+            "2026-04-01T12:05:00Z",
+            101.0,
+            "TAKE_PROFIT",
+            1.0,
+            "{}",
+            "",
+            None,
+            "execution_trade_v1",
+            "2026-04-01T12:05:02Z",
+        ),
+    )
+    conn.commit()
+    cell = _compact_baseline_cell_policy_bound(conn, mid_exit_column, None, market_db_path=None)
+    conn.close()
+    assert cell.get("baseline_display_reason") == "lifecycle_exit_execution"
+    assert cell["outcome"] == "WIN"
+    assert cell.get("baseline_lifecycle_phase") == "closed"
+    assert cell.get("outcome_display") == "closed win"
+
+
 def test_baseline_assign_lifecycle_tile_slots_open_held_run() -> None:
     axis = ["a", "b", "c"]
     cells = {

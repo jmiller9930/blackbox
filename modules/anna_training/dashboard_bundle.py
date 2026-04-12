@@ -835,6 +835,56 @@ def _fetch_trade(
     return dict(zip(cols, r))
 
 
+def _baseline_trade_id_from_exit_policy_features(features: Any) -> str | None:
+    """Resolve ``trade_id`` from policy ``features_json`` when ``reason_code=jupiter_2_baseline_exit``."""
+    if not isinstance(features, dict):
+        return None
+    for key in ("trade_id", "exit_trade_id"):
+        raw = features.get(key)
+        if raw is not None and str(raw).strip():
+            return str(raw).strip()
+    op = features.get("open_position")
+    if isinstance(op, dict) and op.get("trade_id"):
+        s = str(op["trade_id"]).strip()
+        return s or None
+    if isinstance(op, str) and op.strip():
+        try:
+            d = json.loads(op)
+            if isinstance(d, dict) and d.get("trade_id"):
+                s = str(d["trade_id"]).strip()
+                return s or None
+        except json.JSONDecodeError:
+            pass
+    return None
+
+
+def _fetch_baseline_ledger_row_by_trade_id(
+    conn: Any,
+    trade_id: str,
+) -> dict[str, Any] | None:
+    """Latest baseline execution row for ``trade_id`` (close row is authoritative for exit economics)."""
+    tid = str(trade_id or "").strip()
+    if not tid:
+        return None
+    cur = conn.execute(
+        """
+        SELECT trade_id, strategy_id, lane, mode, market_event_id, symbol, timeframe,
+               side, entry_time, entry_price, size, exit_time, exit_price, exit_reason,
+               pnl_usd, context_snapshot_json, notes, trace_id, created_at_utc
+        FROM execution_trades
+        WHERE trade_id = ? AND lane = ? AND strategy_id = ?
+        ORDER BY created_at_utc DESC, trade_id DESC
+        LIMIT 1
+        """,
+        (tid, RESERVED_STRATEGY_BASELINE, RESERVED_STRATEGY_BASELINE),
+    )
+    r = cur.fetchone()
+    if not r:
+        return None
+    cols = [d[0] for d in cur.description]
+    return dict(zip(cols, r))
+
+
 def _strip_outcome_from_pnl(pnl: Any) -> str:
     """Compact label for main-dashboard baseline strip (PnL sign).
 
@@ -2222,16 +2272,30 @@ def _compact_baseline_cell_policy_bound(
                 policy_row=pol,
                 reason=_BASELINE_HELD_DISPLAY_REASON,
             )
-        if rc == JUPITER_2_BASELINE_EXIT_RC and ledger_row:
-            cell = _compact_cell(ledger_row, market_db_path=market_db_path, chain_kind="baseline")
-            cell["policy_authoritative"] = True
-            cell["policy_trade"] = False
-            cell["policy_reason_code"] = rc
-            cell["policy_missing"] = False
-            cell["ledger_row_ignored"] = False
-            cell["baseline_display_reason"] = "lifecycle_exit_execution"
-            cell["economic_authority"] = "full"
-            return _apply_baseline_closed_lifecycle_fields(cell)
+        if rc == JUPITER_2_BASELINE_EXIT_RC:
+            # Prefer column-keyed ledger row; else resolve by trade_id from policy features so we never
+            # show NO_TRADE when the exit bar policy exists but market_event_id join failed.
+            lr = ledger_row
+            if not lr:
+                tid = _baseline_trade_id_from_exit_policy_features(pol.get("features"))
+                if tid:
+                    lr = _fetch_baseline_ledger_row_by_trade_id(conn, tid)
+            if lr:
+                cell = _compact_cell(lr, market_db_path=market_db_path, chain_kind="baseline")
+                cell["policy_authoritative"] = True
+                cell["policy_trade"] = False
+                cell["policy_reason_code"] = rc
+                cell["policy_missing"] = False
+                cell["ledger_row_ignored"] = False
+                cell["baseline_display_reason"] = "lifecycle_exit_execution"
+                cell["economic_authority"] = "full"
+                return _apply_baseline_closed_lifecycle_fields(cell)
+            return _baseline_policy_no_trade_cell(
+                market_event_id=mid,
+                policy_row=pol,
+                ledger_row=None,
+                reason="lifecycle_exit_no_ledger_row",
+            )
         return _baseline_policy_no_trade_cell(
             market_event_id=mid,
             policy_row=pol,
