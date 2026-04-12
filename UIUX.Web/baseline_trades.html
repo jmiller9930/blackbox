@@ -278,7 +278,7 @@
       <div class="bt-section">
         <h1>Baseline trades report</h1>
         <p class="bt-desc">
-          One row per completed baseline leg, correlated by <strong>trade_id</strong>. <strong>Path</strong> distinguishes Sean lifecycle (<code>bl_lc_…</code>) from same-bar / legacy (<code>bl_…</code>). <strong>Exit explain</strong> clarifies ledger <code>CLOSE</code> vs virtual <code>STOP_LOSS</code>/<code>TAKE_PROFIT</code>. <strong>SL/TP</strong> comes from the exit-bar policy snapshot when present. <strong>Lifecycle</strong> matches the dashboard trade chain. <strong>Click a row</strong> (or <strong>View</strong>) for the Jupiter tile narrative and forensic synthesis. Open/held ticks without a fill row appear on the <strong>dashboard trade chain</strong> columns, not here. MAE uses 5m bars. QEL is cohort evaluation—see the QEL page.
+          One row per completed baseline leg, correlated by <strong>trade_id</strong>. <strong>Path</strong> distinguishes Sean lifecycle (<code>bl_lc_…</code>) from same-bar / legacy (<code>bl_…</code>). <strong>Exit explain</strong> clarifies ledger <code>CLOSE</code> vs virtual <code>STOP_LOSS</code>/<code>TAKE_PROFIT</code>. <strong>SL (exit)</strong> and <strong>TP (exit)</strong> use the policy snapshot when present; if needed, values fall back to the ledger <code>exit_record</code> on the close. <strong>Lifecycle</strong> matches the dashboard trade chain. <strong>Click a row</strong> (or <strong>View</strong>) for the Jupiter tile narrative and forensic synthesis. Open/held ticks without a fill row appear on the <strong>dashboard trade chain</strong> columns, not here. MAE uses 5m bars. QEL is cohort evaluation—see the QEL page.
         </p>
 
         <div class="bt-filters">
@@ -331,7 +331,8 @@
                 <th title="Position size (units or contracts) used with entry price for notional and MAE.">Size</th>
                 <th title="Raw exit_reason from execution_trades.">Exit reason</th>
                 <th title="Operator-facing explanation (e.g. virtual SL/TP vs ledger CLOSE).">Exit explain</th>
-                <th title="SL/TP snapshot from exit-bar policy features when available.">SL/TP</th>
+                <th title="Stop price at exit (lifecycle virtual stop; policy or ledger exit_record).">SL (exit)</th>
+                <th title="Take-profit price at exit (lifecycle; policy or ledger exit_record).">TP (exit)</th>
                 <th title="lifecycle vs same_bar_or_legacy from trade_id prefix.">Path</th>
                 <th title="Recorded entry price for the baseline leg.">Entry px</th>
                 <th title="Recorded exit price for the baseline leg.">Exit px</th>
@@ -342,7 +343,7 @@
               </tr>
             </thead>
             <tbody id="bt-tbody">
-              <tr><td colspan="22">Loading…</td></tr>
+              <tr><td colspan="23">Loading…</td></tr>
             </tbody>
           </table>
         </div>
@@ -369,7 +370,7 @@
   <script>
     (function () {
       var state = { rows: [], meta: {} };
-      var COLS = 22;
+      var COLS = 23;
       var TIP_QEL_ROW =
         "QEL scores and survival decisions apply to Anna strategy cohorts, not to each baseline ledger row. Open QEL evaluation in the nav for details.";
 
@@ -395,6 +396,11 @@
       function fmtMae(m) {
         if (m == null || (typeof m === "number" && isNaN(m))) return "—";
         return Number(m).toFixed(4);
+      }
+
+      function fmtSlTpPx(n) {
+        if (n == null || n === "" || (typeof n === "number" && isNaN(n))) return "—";
+        return Number(n).toFixed(4);
       }
 
       function fmtPnl(pnl) {
@@ -503,8 +509,8 @@
             r.exit_reason_explanation != null && String(r.exit_reason_explanation).trim() !== ""
               ? String(r.exit_reason_explanation)
               : "—";
-          var sltp =
-            r.sl_tp_summary != null && String(r.sl_tp_summary).trim() !== "" ? String(r.sl_tp_summary) : "—";
+          var slPx = r.stop_loss_at_exit_price;
+          var tpPx = r.take_profit_at_exit_price;
           var pathK =
             r.trade_id_path_kind != null && String(r.trade_id_path_kind).trim() !== ""
               ? String(r.trade_id_path_kind)
@@ -578,9 +584,13 @@
             '">' +
             esc(exExpl) +
             '</td><td class="bt-mono" title="' +
-            escAttr("SL/TP from exit-bar policy features.") +
+            escAttr("Stop level at exit (policy snapshot or ledger exit_record).") +
             '">' +
-            esc(sltp) +
+            esc(fmtSlTpPx(slPx)) +
+            '</td><td class="bt-mono" title="' +
+            escAttr("Take-profit level at exit (policy snapshot or ledger exit_record).") +
+            '">' +
+            esc(fmtSlTpPx(tpPx)) +
             '</td><td title="' +
             escAttr("Path from trade_id prefix.") +
             '">' +
@@ -685,6 +695,8 @@
           "size",
           "exit_reason",
           "exit_reason_explanation",
+          "stop_loss_at_exit_price",
+          "take_profit_at_exit_price",
           "sl_tp_summary",
           "entry",
           "exit",

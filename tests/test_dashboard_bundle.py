@@ -440,6 +440,8 @@ def test_build_baseline_trades_report_schema() -> None:
         assert "exit_reason_explanation" in row
         assert "held_display" in row
         assert "sl_tp_summary" in row
+        assert "stop_loss_at_exit_price" in row
+        assert "take_profit_at_exit_price" in row
         assert "synthesis" in row
         assert (row["synthesis"] or {}).get("schema") == "trade_event_synthesis_v1"
         assert "policy_snapshot" in row["synthesis"]

@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 import os
 import sqlite3
 import sys
@@ -1076,29 +1077,65 @@ def _exit_reason_operator_explanation(exit_reason: str | None, path_kind: str) -
     return er or "—"
 
 
-def _sl_tp_summary_from_policy_features(features: Any) -> str | None:
-    if not isinstance(features, dict):
+def _coerce_finite_float(x: Any) -> float | None:
+    try:
+        if x is None:
+            return None
+        f = float(x)
+        return f if math.isfinite(f) else None
+    except (TypeError, ValueError):
         return None
-    parts: list[str] = []
+
+
+def _sl_tp_prices_from_features(features: Any) -> tuple[float | None, float | None]:
+    """SL/TP from policy ``features_json`` (exit bar or holding snapshot)."""
+    if not isinstance(features, dict):
+        return None, None
+    sl: float | None = None
+    tp: float | None = None
     ex = features.get("exit")
     if isinstance(ex, dict):
-        sl = ex.get("stop_at_exit")
-        tp = ex.get("take_profit_at_exit")
-        if sl is not None:
-            parts.append(f"SL@{sl}")
-        if tp is not None:
-            parts.append(f"TP@{tp}")
-    if not parts:
+        sl = _coerce_finite_float(ex.get("stop_at_exit"))
+        tp = _coerce_finite_float(ex.get("take_profit_at_exit"))
+    if sl is None or tp is None:
         op = features.get("open_position")
         if isinstance(op, dict):
-            sl = op.get("stop_loss")
-            tp = op.get("take_profit")
-            if sl is not None:
-                parts.append(f"SL@{sl}")
-            if tp is not None:
-                parts.append(f"TP@{tp}")
-    if not parts:
+            if sl is None:
+                sl = _coerce_finite_float(op.get("stop_loss"))
+            if tp is None:
+                tp = _coerce_finite_float(op.get("take_profit"))
+    return sl, tp
+
+
+def _sl_tp_prices_from_ledger_context(ledger_row: dict[str, Any]) -> tuple[float | None, float | None]:
+    """Fallback: lifecycle bridge persists ``exit_record`` on ``execution_trades.context_snapshot_json``."""
+    raw = ledger_row.get("context_snapshot_json")
+    if raw is None or raw == "":
+        return None, None
+    try:
+        ctx = json.loads(raw) if isinstance(raw, str) else raw
+    except (json.JSONDecodeError, TypeError):
+        return None, None
+    if not isinstance(ctx, dict):
+        return None, None
+    ex = ctx.get("exit_record")
+    if not isinstance(ex, dict):
+        return None, None
+    return (
+        _coerce_finite_float(ex.get("stop_at_exit")),
+        _coerce_finite_float(ex.get("take_profit_at_exit")),
+    )
+
+
+def _sl_tp_summary_from_policy_features(features: Any) -> str | None:
+    sl, tp = _sl_tp_prices_from_features(features)
+    if sl is None and tp is None:
         return None
+    parts: list[str] = []
+    if sl is not None:
+        parts.append(f"SL@{sl}")
+    if tp is not None:
+        parts.append(f"TP@{tp}")
     return " ".join(parts)
 
 
@@ -1252,7 +1289,8 @@ def build_baseline_trades_report(
         cur = conn.execute(
             """
             SELECT market_event_id, side, symbol, timeframe, entry_time, entry_price, exit_price,
-                   exit_reason, exit_time, size, pnl_usd, created_at_utc, trade_id, mode
+                   exit_reason, exit_time, size, pnl_usd, created_at_utc, trade_id, mode,
+                   context_snapshot_json
             FROM execution_trades
             WHERE lane = 'baseline' AND strategy_id = ?
             ORDER BY COALESCE(created_at_utc, entry_time, '') DESC
@@ -1380,8 +1418,24 @@ def build_baseline_trades_report(
             )
             exit_feat = _fetch_baseline_exit_policy_features(conn, mk)
             feat_for_sl = exit_feat if exit_feat else (pol_i.get("features") if pol_i else None)
-            sl_sum = _sl_tp_summary_from_policy_features(feat_for_sl)
-            r["sl_tp_summary"] = sl_sum if sl_sum else "—"
+            sl_p, tp_p = _sl_tp_prices_from_features(feat_for_sl or {})
+            if sl_p is None or tp_p is None:
+                lsl, ltp = _sl_tp_prices_from_ledger_context(ledger_row_i)
+                if sl_p is None:
+                    sl_p = lsl
+                if tp_p is None:
+                    tp_p = ltp
+            r["stop_loss_at_exit_price"] = sl_p
+            r["take_profit_at_exit_price"] = tp_p
+            if sl_p is not None or tp_p is not None:
+                parts_sl: list[str] = []
+                if sl_p is not None:
+                    parts_sl.append(f"SL@{sl_p}")
+                if tp_p is not None:
+                    parts_sl.append(f"TP@{tp_p}")
+                r["sl_tp_summary"] = " ".join(parts_sl)
+            else:
+                r["sl_tp_summary"] = "—"
             r["synthesis"] = _trade_event_synthesis_v1(
                 policy_row=pol_i,
                 ledger_row=ledger_row_i,
@@ -1406,7 +1460,9 @@ def build_baseline_trades_report(
             "synthesis_schema": TRADE_EVENT_SYNTHESIS_SCHEMA,
             "report_note": (
                 "Open/held/closed per bar appears on the dashboard trade chain columns; this report lists "
-                "ledger rows only. Use row click or ?mid= for tile narrative + synthesis."
+                "ledger rows only. SL/TP at exit: policy_evaluations exit/holding features when present; "
+                "else execution_trades.context_snapshot_json.exit_record (lifecycle persist). "
+                "Use row click or ?mid= for tile narrative + synthesis."
             ),
         },
     }
