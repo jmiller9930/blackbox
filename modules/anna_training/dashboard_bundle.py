@@ -1001,8 +1001,140 @@ def _recent_baseline_policy_trade_rows_for_strip(
     return out
 
 
-BASELINE_TRADES_REPORT_SCHEMA = "blackbox_baseline_trades_report_v1"
+BASELINE_TRADES_REPORT_SCHEMA = "blackbox_baseline_trades_report_v2"
 TRADE_EVENT_SYNTHESIS_SCHEMA = "trade_event_synthesis_v1"
+
+
+def _baseline_trade_id_path_kind(trade_id: str | None) -> str:
+    """``lifecycle`` (``bl_lc_``), ``same_bar_or_legacy`` (``bl_`` but not lifecycle), or ``unknown``."""
+    t = str(trade_id or "").strip()
+    if t.startswith("bl_lc_"):
+        return "lifecycle"
+    if t.startswith("bl_"):
+        return "same_bar_or_legacy"
+    return "unknown"
+
+
+def _bar_minutes_for_timeframe(tf: str | None) -> float:
+    s = str(tf or "").strip().lower()
+    if s in ("5m", "5min"):
+        return 5.0
+    if s in ("15m", "15min"):
+        return 15.0
+    if s in ("1h", "60m"):
+        return 60.0
+    return 5.0
+
+
+def _hold_duration_minutes_and_bars(
+    entry_ts_raw: Any,
+    exit_ts_raw: Any,
+    timeframe: str | None,
+) -> tuple[float | None, int | None]:
+    et = _parse_iso_ts(str(entry_ts_raw) if entry_ts_raw is not None else None)
+    xt = _parse_iso_ts(str(exit_ts_raw) if exit_ts_raw is not None else None)
+    if et is None or xt is None:
+        return None, None
+    if et.tzinfo is None:
+        et = et.replace(tzinfo=timezone.utc)
+    else:
+        et = et.astimezone(timezone.utc)
+    if xt.tzinfo is None:
+        xt = xt.replace(tzinfo=timezone.utc)
+    else:
+        xt = xt.astimezone(timezone.utc)
+    delta = xt - et
+    if delta.total_seconds() < 0:
+        return None, None
+    minutes = delta.total_seconds() / 60.0
+    bar_m = _bar_minutes_for_timeframe(timeframe)
+    bars = max(1, int(round(minutes / bar_m))) if bar_m > 0 else None
+    return minutes, bars
+
+
+def _format_held_display(
+    minutes: float | None,
+    bars: int | None,
+    timeframe: str | None,
+) -> str:
+    if minutes is None:
+        return "—"
+    tf_s = str(timeframe or "").strip() or "5m"
+    if bars is not None:
+        return f"{minutes:.1f} min (~{bars}×{tf_s})"
+    return f"{minutes:.1f} min"
+
+
+def _exit_reason_operator_explanation(exit_reason: str | None, path_kind: str) -> str:
+    er = str(exit_reason or "").strip().upper()
+    if er in ("STOP_LOSS", "TAKE_PROFIT"):
+        return "Virtual SL/TP exit (Sean lifecycle)."
+    if er == "CLOSE" and path_kind == "same_bar_or_legacy":
+        return "Ledger CLOSE — same-bar / non-lifecycle path; not virtual SL/TP."
+    if er == "CLOSE":
+        return "Ledger CLOSE — check trade_id (bl_lc_ = lifecycle) and policy_evaluations."
+    return er or "—"
+
+
+def _sl_tp_summary_from_policy_features(features: Any) -> str | None:
+    if not isinstance(features, dict):
+        return None
+    parts: list[str] = []
+    ex = features.get("exit")
+    if isinstance(ex, dict):
+        sl = ex.get("stop_at_exit")
+        tp = ex.get("take_profit_at_exit")
+        if sl is not None:
+            parts.append(f"SL@{sl}")
+        if tp is not None:
+            parts.append(f"TP@{tp}")
+    if not parts:
+        op = features.get("open_position")
+        if isinstance(op, dict):
+            sl = op.get("stop_loss")
+            tp = op.get("take_profit")
+            if sl is not None:
+                parts.append(f"SL@{sl}")
+            if tp is not None:
+                parts.append(f"TP@{tp}")
+    if not parts:
+        return None
+    return " ".join(parts)
+
+
+def _fetch_baseline_exit_policy_features(
+    conn: Any,
+    market_event_id: str,
+) -> dict[str, Any] | None:
+    """Latest exit-bar policy row for SL/TP lines (``jupiter_2_baseline_exit``)."""
+    mid = str(market_event_id or "").strip()
+    if not mid:
+        return None
+    cur = conn.execute(
+        """
+        SELECT features_json
+        FROM policy_evaluations
+        WHERE market_event_id = ? AND lane = ? AND strategy_id = ? AND signal_mode = ?
+          AND reason_code = ?
+        ORDER BY evaluated_at_utc DESC
+        LIMIT 1
+        """,
+        (
+            mid,
+            RESERVED_STRATEGY_BASELINE,
+            RESERVED_STRATEGY_BASELINE,
+            "sean_jupiter_v1",
+            JUPITER_2_BASELINE_EXIT_RC,
+        ),
+    )
+    r = cur.fetchone()
+    if not r or not r[0]:
+        return None
+    try:
+        feat = json.loads(r[0])
+    except json.JSONDecodeError:
+        return None
+    return feat if isinstance(feat, dict) else None
 
 
 def _trade_event_synthesis_v1(
@@ -1238,6 +1370,17 @@ def build_baseline_trades_report(
             t_iso = _normalize_utc_iso_for_axis(
                 ledger_row.get("entry_time") or ledger_row.get("created_at_utc")
             )
+            entry_time_utc_iso = _normalize_utc_iso_for_axis(ledger_row.get("entry_time"))
+            exit_time_utc_iso = _normalize_utc_iso_for_axis(ledger_row.get("exit_time"))
+            hdm, hbars = _hold_duration_minutes_and_bars(
+                ledger_row.get("entry_time"),
+                ledger_row.get("exit_time"),
+                tf or None,
+            )
+            tid_raw = str(ledger_row.get("trade_id") or "").strip() or None
+            path_kind = _baseline_trade_id_path_kind(tid_raw)
+            exit_expl = _exit_reason_operator_explanation(ledger_row.get("exit_reason"), path_kind)
+            held_disp = _format_held_display(hdm, hbars, tf or None)
             pnl = ledger_row.get("pnl_usd")
             ep = ledger_row.get("entry_price")
             xp = ledger_row.get("exit_price")
@@ -1255,6 +1398,13 @@ def build_baseline_trades_report(
 
             rows_out.append(
                 {
+                    "trade_id": tid_raw,
+                    "trade_id_path_kind": path_kind,
+                    "entry_time_utc_iso": entry_time_utc_iso or "",
+                    "exit_time_utc_iso": exit_time_utc_iso or "",
+                    "hold_duration_minutes": round(hdm, 4) if hdm is not None else None,
+                    "hold_bars_estimate": hbars,
+                    "held_display": held_disp,
                     "market_event_id": mid,
                     "side": str(ledger_row.get("side") or "").strip().lower(),
                     "symbol": sym or None,
@@ -1267,7 +1417,7 @@ def build_baseline_trades_report(
                     "exit": float(xp) if xp is not None else None,
                     "size": float(ledger_row["size"]) if ledger_row.get("size") is not None else None,
                     "exit_reason": str(ledger_row.get("exit_reason") or "").strip() or None,
-                    "trade_id": str(ledger_row.get("trade_id") or "").strip() or None,
+                    "exit_reason_explanation": exit_expl,
                     "mae_usd": round(mae_val, 6) if mae_val is not None else None,
                     "baseline_authority": authority,
                     "baseline_authority_reason": reason,
@@ -1297,6 +1447,10 @@ def build_baseline_trades_report(
                 strategy_id=RESERVED_STRATEGY_BASELINE,
                 signal_mode="sean_jupiter_v1",
             )
+            exit_feat = _fetch_baseline_exit_policy_features(conn, mk)
+            feat_for_sl = exit_feat if exit_feat else (pol_i.get("features") if pol_i else None)
+            sl_sum = _sl_tp_summary_from_policy_features(feat_for_sl)
+            r["sl_tp_summary"] = sl_sum if sl_sum else "—"
             r["synthesis"] = _trade_event_synthesis_v1(
                 policy_row=pol_i,
                 ledger_row=ledger_row_i,

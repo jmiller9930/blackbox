@@ -436,6 +436,11 @@ def test_build_baseline_trades_report_schema() -> None:
         assert "baseline_authority" in row
         assert row["baseline_authority"] in ("TRADE", "NO_TRADE")
         assert "baseline_authority_reason" in row
+        assert "trade_id_path_kind" in row
+        assert row["trade_id_path_kind"] in ("lifecycle", "same_bar_or_legacy", "unknown")
+        assert "exit_reason_explanation" in row
+        assert "held_display" in row
+        assert "sl_tp_summary" in row
         assert "synthesis" in row
         assert (row["synthesis"] or {}).get("schema") == "trade_event_synthesis_v1"
         assert "policy_snapshot" in row["synthesis"]

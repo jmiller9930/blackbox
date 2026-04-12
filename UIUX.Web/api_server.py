@@ -2025,7 +2025,7 @@ class Handler(BaseHTTPRequestHandler):
                     500,
                     {
                         "ok": False,
-                        "schema": "blackbox_baseline_trades_report_v1",
+                        "schema": "blackbox_baseline_trades_report_v2",
                         "error": str(e)[:500],
                         "trace_id": str(uuid.uuid4()),
                     },
