@@ -16,6 +16,7 @@ from modules.anna_training.execution_ledger import (
 from modules.anna_training.dashboard_bundle import (
     BASELINE_TRADES_REPORT_SCHEMA,
     _baseline_assign_lifecycle_tile_slots,
+    _baseline_lifecycle_for_dashboard_from_active_snapshot,
     build_baseline_active_position_snapshot,
     _compact_baseline_cell_policy_bound,
     _event_axis_jupiter_tile_narratives,
@@ -490,5 +491,53 @@ def test_build_baseline_trades_report_schema() -> None:
         assert (row["synthesis"] or {}).get("schema") == "trade_event_synthesis_v1"
         assert "policy_snapshot" in row["synthesis"]
         assert "execution_snapshot" in row["synthesis"]
+
+
+def test_baseline_lifecycle_for_dashboard_from_active_snapshot_maps_open() -> None:
+    assert _baseline_lifecycle_for_dashboard_from_active_snapshot({"position_open": False}) == {
+        "position_open": False
+    }
+    bl = _baseline_lifecycle_for_dashboard_from_active_snapshot(
+        {
+            "position_open": True,
+            "trade_id": "t1",
+            "side": "long",
+            "entry_price": 100.0,
+            "stop_loss": 90.0,
+            "take_profit": 110.0,
+            "leverage": 5.0,
+            "risk_pct": 1.0,
+            "collateral_usd": 100.0,
+            "notional_usd": 500.0,
+            "unrealized_pnl_usd": 1.23,
+            "breakeven_applied": False,
+            "entry_market_event_id": "mid1",
+            "entry_candle_open_utc": "2025-06-01T00:00:00Z",
+            "atr_entry": 0.5,
+        }
+    )
+    assert bl["position_open"] is True
+    assert bl["trade_id"] == "t1"
+    assert bl["entry_candle_open_utc"] == "2025-06-01T00:00:00Z"
+    assert bl["unrealized_pnl_usd"] == 1.23
+
+
+def test_trade_chain_inject_axis_creates_single_column(tmp_path: Path) -> None:
+    """When bars + execution axis are empty, inject_axis_mid yields one \"now\" column for the live tile."""
+    ledger = tmp_path / "empty.sqlite"
+    conn = connect_ledger(ledger)
+    ensure_execution_ledger_schema(conn)
+    conn.close()
+    missing_market = tmp_path / "no_such_market.sqlite"
+    tc = build_trade_chain_payload(
+        db_path=ledger,
+        max_events=8,
+        market_db_path=missing_market,
+        inject_axis_mid="evt_injected_1",
+        inject_axis_time_utc_iso="2025-01-01T12:00:00Z",
+    )
+    assert tc["event_axis"] == ["evt_injected_1"]
+    assert tc["event_axis_source"] == "open_baseline_injected"
+    assert len(tc["event_axis_time_utc_iso"]) == 1
 
 

@@ -1550,9 +1550,34 @@ def build_baseline_active_position_snapshot(
             "atr_entry": pos.atr_entry,
             "reason_code_at_entry": pos.reason_code_at_entry,
             "last_processed_market_event_id": pos.last_processed_market_event_id,
+            "entry_candle_open_utc": pos.entry_candle_open_utc,
         }
     )
     return out
+
+
+def _baseline_lifecycle_for_dashboard_from_active_snapshot(snap: dict[str, Any]) -> dict[str, Any]:
+    """``baseline_lifecycle`` shape for ``dashboard.html`` — ledger is authoritative for open state."""
+    if not snap.get("position_open"):
+        return {"position_open": False}
+    et = snap.get("entry_candle_open_utc") or snap.get("entry_time")
+    return {
+        "position_open": True,
+        "trade_id": snap.get("trade_id"),
+        "side": snap.get("side"),
+        "entry_price": snap.get("entry_price"),
+        "stop_loss": snap.get("stop_loss"),
+        "take_profit": snap.get("take_profit"),
+        "leverage": snap.get("leverage"),
+        "risk_pct": snap.get("risk_pct"),
+        "collateral_usd": snap.get("collateral_usd"),
+        "notional_usd": snap.get("notional_usd"),
+        "unrealized_pnl_usd": snap.get("unrealized_pnl_usd"),
+        "breakeven_applied": snap.get("breakeven_applied"),
+        "entry_market_event_id": snap.get("entry_market_event_id"),
+        "entry_candle_open_utc": et,
+        "atr_entry": snap.get("atr_entry"),
+    }
 
 
 def build_baseline_trades_report(
@@ -2443,6 +2468,8 @@ def build_trade_chain_payload(
     db_path: Path | None = None,
     max_events: int = 24,
     market_db_path: Path | None = None,
+    inject_axis_mid: str | None = None,
+    inject_axis_time_utc_iso: str | None = None,
 ) -> dict[str, Any]:
     """Horizontal chains × vertical event axis; baseline column is policy-authoritative (policy_evaluations)."""
     db_path = db_path or default_execution_ledger_path()
@@ -2459,6 +2486,14 @@ def build_trade_chain_payload(
         if not event_axis:
             event_axis, event_axis_time_utc_iso = _distinct_event_axis_with_times(conn, limit=max_events)
             event_axis_source = "execution_trades_fallback"
+        inj_mid = str(inject_axis_mid or "").strip()
+        if not event_axis and inj_mid:
+            inj_t = str(inject_axis_time_utc_iso or "").strip() or None
+            if inj_t:
+                inj_t = _normalize_utc_iso_for_axis(inj_t) or inj_t
+            event_axis = [inj_mid]
+            event_axis_time_utc_iso = [inj_t]
+            event_axis_source = "open_baseline_injected"
         tile_narr = _event_axis_jupiter_tile_narratives(conn, event_axis, mpath)
         baseline_ledger = _recent_baseline_trades_for_dashboard_strip(
             conn, limit=50, market_db_path=mpath
@@ -2723,6 +2758,30 @@ def build_dashboard_bundle(
 
     tc = build_trade_chain_payload(db_path=db_path, max_events=max_events)
 
+    baseline_active_snap: dict[str, Any] = {}
+    try:
+        baseline_active_snap = build_baseline_active_position_snapshot(
+            db_path=db_path,
+            market_db_path=_market_db_path(),
+        )
+    except Exception:
+        baseline_active_snap = {}
+    if baseline_active_snap.get("position_open") and not (tc.get("event_axis") or []):
+        inj = str(
+            baseline_active_snap.get("mark_market_event_id")
+            or baseline_active_snap.get("last_processed_market_event_id")
+            or baseline_active_snap.get("entry_market_event_id")
+            or ""
+        ).strip()
+        if inj:
+            et = baseline_active_snap.get("entry_candle_open_utc") or baseline_active_snap.get("entry_time")
+            tc = build_trade_chain_payload(
+                db_path=db_path,
+                max_events=max_events,
+                inject_axis_mid=inj,
+                inject_axis_time_utc_iso=str(et).strip() if et else None,
+            )
+
     operator_trading: dict[str, Any] = {}
     try:
         from modules.anna_training.operator_trading_strategy import build_operator_trading_bundle_part
@@ -2853,6 +2912,36 @@ def build_dashboard_bundle(
             "schema": "jupiter_policy_snapshot_v1",
             "error": str(e)[:400],
         }
+
+    # Open baseline position must appear in the dashboard even when bar fetch / MIN_BARS fails:
+    # ``build_jupiter_policy_snapshot`` can return early without ``baseline_lifecycle``.
+    try:
+        snap = baseline_active_snap if isinstance(baseline_active_snap, dict) else {}
+        if not snap:
+            try:
+                snap = build_baseline_active_position_snapshot(
+                    db_path=db_path,
+                    market_db_path=_market_db_path(),
+                )
+            except Exception:
+                snap = {}
+        if snap.get("position_open"):
+            jupiter_policy_snapshot["baseline_lifecycle"] = _baseline_lifecycle_for_dashboard_from_active_snapshot(
+                snap
+            )
+            ev = jupiter_policy_snapshot.get("evaluated_bar")
+            if not isinstance(ev, dict) or not str(ev.get("market_event_id") or "").strip():
+                mid = str(snap.get("mark_market_event_id") or snap.get("last_processed_market_event_id") or "")
+                if mid:
+                    jupiter_policy_snapshot["evaluated_bar"] = {
+                        **(ev if isinstance(ev, dict) else {}),
+                        "market_event_id": mid,
+                    }
+        elif "baseline_lifecycle" not in jupiter_policy_snapshot:
+            jupiter_policy_snapshot["baseline_lifecycle"] = {"position_open": False}
+    except Exception:
+        if "baseline_lifecycle" not in jupiter_policy_snapshot:
+            jupiter_policy_snapshot["baseline_lifecycle"] = {"position_open": False}
 
     learning_summary_for_vis: dict[str, Any] = {
         "ui_state": ui_state,
