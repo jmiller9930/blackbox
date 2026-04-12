@@ -1,56 +1,62 @@
 #!/usr/bin/env python3
 """
-Deterministic Sean Jupiter **baseline lifecycle** proof harness (paper).
+Deterministic Sean Jupiter **baseline lifecycle** regression harness (paper).
 
-Drives the **real** runtime chain (no UI mocks, no hand-inserted execution_trades rows):
+**Location:** ``trading/scripts/trade_harness/baseline_lifecycle_deterministic_harness.py``
 
-1. ``evaluate_sean_jupiter_baseline_v1`` / ``evaluate_jupiter_2_sean`` on synthetic OHLC
+Permanent verification tool: deterministic, repeatable, **isolated** from the live ledger (temp DBs),
+runnable on demand whenever policy, execution, or ledger code changes.
+
+**Runtime chain (real code, no fake execution_trades rows):**
+
+1. ``evaluate_jupiter_2_sean`` / ``evaluate_sean_jupiter_baseline_v1`` on synthetic OHLC
 2. ``run_baseline_ledger_bridge_tick`` ×3 → open → hold → ``persist_baseline_lifecycle_close``
-3. Temp ``market_data.db`` + ``execution_ledger.db`` (same schema as production)
+3. Temp ``market_data.db`` + ``execution_ledger.db`` (production schema)
 
-**Bar window (documented)**
+**Collateral:** ``JUPITER_BASELINE_FREE_COLLATERAL_USD`` is set for the harness run so policy sizing
+matches ``calculate_position_size(free_collateral, atr_ratio, side)`` (same path as live resolver
+override — see ``jupiter_2_paper_collateral.py``).
 
-- **Base series:** 280 consecutive 5m bars starting ``2026-01-01T00:00:00Z`` (``SOL-PERP``).
-  OHLC is generated with ``random.Random(136)`` and the same walk as
-  ``tests/test_jupiter_2_sean_policy._synthetic_bars``-style noise (bounded), such that
-  ``evaluate_jupiter_2_sean(..., free_collateral_usd=1000)`` returns **trade=True**,
-  **side=long**, ``reason_code=jupiter_2_long_signal`` on the **last** base bar (index 279).
-  Seed **136** is fixed so the run is repeatable across machines.
+**Bar window**
 
-- **Bar 280 (hold):** OHLC chosen so ``process_holding_bar`` does **not** hit SL/TP (long: low above
-  stop, high below take-profit). Flat-ish continuation.
+- **Base:** 280 consecutive 5m ``SOL-PERP`` bars from ``2026-01-01T00:00:00Z``; OHLC from
+  ``random.Random(136)``. Last bar yields **long** entry under Jupiter_2.
+- **Bar 280:** hold (no SL/TP).
+- **Bar 281:** **STOP_LOSS** exit.
 
-- **Bar 281 (exit):** OHLC chosen so intrabar range hits **STOP_LOSS** (long: low ≤ stop).
+Stored ``entry_time`` → ``exit_time`` span is **15 minutes** (≥ **12** minutes required).
 
-Hold wall-clock span from stored ``entry_time`` (open of signal candle) to ``exit_time`` (close of
-exit candle) is **15 minutes** (three 5m steps), satisfying **> 5 minutes**.
+**Scaling checks (non-optional)**
 
-**Pass criteria**
-
-- ``trade_id`` starts with ``bl_lc_``
-- ``exit_reason`` is ``STOP_LOSS`` or ``TAKE_PROFIT``
-- ``size`` ≠ 1.0 when policy sizing supplies ``position_size_hint.notional_usd`` (paper collateral path)
-- ``position_open`` / ``position_close`` rows exist; ``context_snapshot_json`` on the trade row
+From ``free_collateral_usd`` (env), ``risk_pct``, ``leverage``, ``notional_usd`` in policy output,
+compute expected ``size = notional_usd / entry_price`` and assert persisted size matches (tolerance).
+Assert PnL matches ``compute_pnl_usd`` for persisted size. Fail harness if not.
 
 Usage::
 
-  python3 scripts/ops/baseline_lifecycle_deterministic_harness.py
-  python3 scripts/ops/baseline_lifecycle_deterministic_harness.py --json > proof.json
+  python3 trading/scripts/trade_harness/baseline_lifecycle_deterministic_harness.py > proof.json
 
-Exit code 0 on success; non-zero if assertions fail.
+Env:
+
+- ``BASELINE_HARNESS_TMP`` — directory for temp SQLite files (default: ``data/tmp/baseline_harness``)
+- ``JUPITER_BASELINE_FREE_COLLATERAL_USD`` — set by harness to :data:`HARNESS_FREE_COLLATERAL_USD` unless
+  already set (override for local experiments)
 """
 from __future__ import annotations
 
 import argparse
 import json
+import math
 import os
+import random
 import sqlite3
 import sys
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from typing import Any
 
-# Repo root on sys.path
-_ROOT = Path(__file__).resolve().parents[2]
+# Repo root: trading/scripts/trade_harness/ -> parents[3]
+_ROOT = Path(__file__).resolve().parents[3]
 if str(_ROOT) not in sys.path:
     sys.path.insert(0, str(_ROOT))
 _RUNTIME = _ROOT / "scripts" / "runtime"
@@ -63,24 +69,34 @@ from market_data.market_event_id import make_market_event_id
 from market_data.store import connect_market_db, ensure_market_schema, upsert_market_bar_5m
 from market_data.canonical_bar import CanonicalBarV1
 
-from modules.anna_training.baseline_ledger_bridge import run_baseline_ledger_bridge_tick
+from modules.anna_training.baseline_ledger_bridge import (
+    _baseline_lifecycle_trade_id,
+    run_baseline_ledger_bridge_tick,
+)
+from modules.anna_training.execution_ledger import compute_pnl_usd
 from modules.anna_training.jupiter_2_baseline_lifecycle import (
     initial_sl_tp,
     open_position_from_signal,
     process_holding_bar,
 )
-from modules.anna_training.jupiter_2_sean_policy import calculate_atr, evaluate_jupiter_2_sean
-from modules.anna_training.baseline_ledger_bridge import _baseline_lifecycle_trade_id
-
+from modules.anna_training.jupiter_2_sean_policy import (
+    calculate_atr,
+    calculate_position_size,
+    evaluate_jupiter_2_sean,
+)
 
 HARNESS_SEED = 136
 N_BASE_BARS = 280
-# First candle open UTC for bar index 0
+HARNESS_FREE_COLLATERAL_USD = 1000.0
 ANCHOR_OPEN = datetime(2026, 1, 1, 0, 0, 0, tzinfo=timezone.utc)
 
+SIZE_REL_TOL = 1e-7
+SIZE_ABS_TOL = 1e-9
+PNL_TOL = 1e-6
+MIN_HOLD_MINUTES = 12.0
 
-def _synth_ohlc(rng: "random.Random", n: int) -> list[dict[str, float]]:
-    """Same construction as search loop: bounded random walk OHLC."""
+
+def _synth_ohlc(rng: random.Random, n: int) -> list[dict[str, float]]:
     p = 100.0
     out: list[dict[str, float]] = []
     for _ in range(n):
@@ -118,21 +134,18 @@ def _bar_to_canonical(i: int, o: float, h: float, l: float, c: float) -> Canonic
         close=c,
         tick_count=3,
         volume_base=None,
-        price_source="deterministic_harness",
+        price_source="trade_harness_deterministic",
     )
 
 
 def _design_hold_exit(
     base: list[dict[str, float]],
-    *,
-    free_collateral_usd: float,
 ) -> tuple[dict[str, float], dict[str, float]]:
-    """Return (hold_bar, exit_bar) OHLC dicts for long lifecycle after base series."""
     closes = [float(b["close"]) for b in base]
     highs = [float(b["high"]) for b in base]
     lows = [float(b["low"]) for b in base]
     atr = calculate_atr(closes, highs, lows)
-    sig = evaluate_jupiter_2_sean(bars_asc=base, free_collateral_usd=free_collateral_usd)
+    sig = evaluate_jupiter_2_sean(bars_asc=base)
     assert sig.trade and sig.side == "long"
     entry = float(base[-1]["close"])
     sl, tp = initial_sl_tp(entry=entry, atr_entry=atr, side="long")
@@ -186,23 +199,115 @@ def _design_hold_exit(
     return hold, exit_bar
 
 
+def _apply_harness_env() -> None:
+    """Isolate harness: force paper collateral so sizing matches policy tables."""
+    if not (os.environ.get("JUPITER_BASELINE_FREE_COLLATERAL_USD") or "").strip():
+        os.environ["JUPITER_BASELINE_FREE_COLLATERAL_USD"] = str(HARNESS_FREE_COLLATERAL_USD)
+
+
+def _expected_policy_sizing(
+    *,
+    free_collateral_usd: float,
+    atr_ratio: float,
+    side: str,
+    entry_price: float,
+) -> dict[str, float]:
+    psh = calculate_position_size(free_collateral_usd, atr_ratio, side)
+    notional = float(psh["notional_usd"])
+    exp_size = notional / float(entry_price)
+    return {
+        "expected_notional_usd": notional,
+        "expected_size": exp_size,
+        "expected_risk_pct": float(psh["risk_pct"]),
+        "expected_leverage": float(psh["leverage"]),
+        "expected_collateral_usd": float(psh["collateral_usd"]),
+    }
+
+
+def _validate_capital_scaling(
+    *,
+    free_collateral_usd: float,
+    atr_ratio: float,
+    side: str,
+    entry_price: float,
+    actual_size: float,
+    entry_px: float,
+    exit_px: float,
+    pnl_usd: float,
+) -> dict[str, Any]:
+    exp = _expected_policy_sizing(
+        free_collateral_usd=free_collateral_usd,
+        atr_ratio=atr_ratio,
+        side=side,
+        entry_price=entry_price,
+    )
+    exp_sz = float(exp["expected_size"])
+    act_sz = float(actual_size)
+    delta = act_sz - exp_sz
+    rel = abs(delta) / max(abs(exp_sz), 1e-12)
+    ok_size = rel <= SIZE_REL_TOL or abs(delta) <= SIZE_ABS_TOL
+    if not ok_size:
+        raise AssertionError(
+            f"size mismatch: expected {exp_sz!r} actual {act_sz!r} delta {delta!r} rel {rel!r}"
+        )
+
+    one_ok = math.isclose(exp_sz, 1.0, rel_tol=0.0, abs_tol=1e-9)
+    if not one_ok and math.isclose(act_sz, 1.0, rel_tol=0.0, abs_tol=1e-9):
+        raise AssertionError(
+            "persisted size is 1.0 but policy expected size is not 1.0 — capital scaling not applied"
+        )
+
+    exp_pnl = compute_pnl_usd(
+        entry_price=float(entry_px),
+        exit_price=float(exit_px),
+        size=act_sz,
+        side=side,
+    )
+    pnl_delta = float(pnl_usd) - float(exp_pnl)
+    pnl_ok = abs(pnl_delta) <= PNL_TOL
+    if not pnl_ok:
+        raise AssertionError(
+            f"PnL sanity: expected {exp_pnl!r} from size*price; got {pnl_usd!r} delta {pnl_delta!r}"
+        )
+
+    return {
+        "free_collateral_usd": float(free_collateral_usd),
+        "atr_ratio_used": float(atr_ratio),
+        "expected_notional_usd": exp["expected_notional_usd"],
+        "expected_size": exp_sz,
+        "expected_risk_pct": exp["expected_risk_pct"],
+        "expected_leverage": exp["expected_leverage"],
+        "expected_collateral_usd": exp["expected_collateral_usd"],
+        "actual_size": act_sz,
+        "size_delta": delta,
+        "size_match_ok": True,
+        "expected_pnl_usd": float(exp_pnl),
+        "pnl_usd": float(pnl_usd),
+        "pnl_delta": pnl_delta,
+        "pnl_sanity_check": "pass" if pnl_ok else "fail",
+    }
+
+
 def run_harness(
     *,
-    json_out: bool,
     keep_tmp: bool,
-) -> dict:
-    import random
+) -> dict[str, Any]:
+    _apply_harness_env()
+    free_usd = float(os.environ.get("JUPITER_BASELINE_FREE_COLLATERAL_USD") or HARNESS_FREE_COLLATERAL_USD)
 
     rng = random.Random(HARNESS_SEED)
     ohlc = _synth_ohlc(rng, N_BASE_BARS)
-    sig_chk = evaluate_jupiter_2_sean(bars_asc=ohlc, free_collateral_usd=1000.0)
+    sig_chk = evaluate_jupiter_2_sean(bars_asc=ohlc)
     if not (sig_chk.trade and sig_chk.side == "long"):
         raise RuntimeError(
             "Harness seed/window mismatch: expected long signal on last base bar. "
             f"Got trade={sig_chk.trade} side={sig_chk.side} reason={sig_chk.reason_code}"
         )
+    feat0 = dict(sig_chk.features) if sig_chk.features else {}
+    atr_ratio_signal = float(feat0.get("atr_ratio") or 1.0)
+    entry_price_signal = float(ohlc[-1]["close"])
 
-    hold_d, exit_d = _design_hold_exit(ohlc, free_collateral_usd=1000.0)
+    hold_d, exit_d = _design_hold_exit(ohlc)
 
     tmp_root = Path(os.environ.get("BASELINE_HARNESS_TMP") or _ROOT / "data" / "tmp" / "baseline_harness")
     tmp_root.mkdir(parents=True, exist_ok=True)
@@ -238,10 +343,9 @@ def run_harness(
         raise RuntimeError(f"expected open, got {r1}")
 
     conn = connect_market_db(market_db)
-    hi = N_BASE_BARS
     upsert_market_bar_5m(
         conn,
-        _bar_to_canonical(hi, hold_d["open"], hold_d["high"], hold_d["low"], hold_d["close"]),
+        _bar_to_canonical(N_BASE_BARS, hold_d["open"], hold_d["high"], hold_d["low"], hold_d["close"]),
     )
     conn.close()
 
@@ -253,10 +357,15 @@ def run_harness(
         raise RuntimeError(f"expected holding, got {r2}")
 
     conn = connect_market_db(market_db)
-    ei = N_BASE_BARS + 1
     upsert_market_bar_5m(
         conn,
-        _bar_to_canonical(ei, exit_d["open"], exit_d["high"], exit_d["low"], exit_d["close"]),
+        _bar_to_canonical(
+            N_BASE_BARS + 1,
+            exit_d["open"],
+            exit_d["high"],
+            exit_d["low"],
+            exit_d["close"],
+        ),
     )
     conn.close()
 
@@ -270,37 +379,69 @@ def run_harness(
     tid = str(r3.get("trade_id") or "")
     proof = _fetch_proof_package(ledger_db, tid)
 
-    # Assertions (contract)
     if not tid.startswith("bl_lc_"):
         raise AssertionError(f"trade_id must be lifecycle bl_lc_, got {tid!r}")
     et_row = proof["execution_trades_row"]
     er = str(et_row.get("exit_reason") or "")
     if er not in ("STOP_LOSS", "TAKE_PROFIT"):
         raise AssertionError(f"exit_reason must be SL/TP, got {er!r}")
-    sz = float(et_row.get("size") or 0.0)
-    if abs(sz - 1.0) < 1e-9:
-        raise AssertionError("expected size != 1.0 when policy sizing is wired")
     held = proof.get("held_duration_minutes")
-    if held is None or held <= 5.0:
-        raise AssertionError(f"held duration must be > 5 min, got {held}")
+    if held is None or float(held) < MIN_HOLD_MINUTES:
+        raise AssertionError(
+            f"held duration must be >= {MIN_HOLD_MINUTES} min, got {held}"
+        )
 
-    out = {
+    pop = proof.get("position_open_payload") or {}
+    risk_pct = float(pop.get("risk_pct")) if pop.get("risk_pct") is not None else None
+    lev = float(pop.get("leverage")) if pop.get("leverage") is not None else None
+
+    actual_size = float(et_row.get("size") or 0.0)
+    entry_px = float(et_row.get("entry_price") or 0.0)
+    exit_px = float(et_row.get("exit_price") or 0.0)
+    pnl_u = float(et_row.get("pnl_usd") or 0.0)
+    side = str(et_row.get("side") or "long")
+
+    scaling = _validate_capital_scaling(
+        free_collateral_usd=free_usd,
+        atr_ratio=atr_ratio_signal,
+        side=side,
+        entry_price=entry_price_signal,
+        actual_size=actual_size,
+        entry_px=entry_px,
+        exit_px=exit_px,
+        pnl_usd=pnl_u,
+    )
+    scaling["risk_pct"] = risk_pct
+    scaling["leverage"] = lev
+
+    out: dict[str, Any] = {
         "harness": {
+            "name": "baseline_lifecycle_deterministic",
             "seed": HARNESS_SEED,
             "n_base_bars": N_BASE_BARS,
             "anchor_candle_open_utc": ANCHOR_OPEN.isoformat().replace("+00:00", "Z"),
-            "bridge_ticks": [r1, r2, r3],
+            "min_hold_minutes_required": MIN_HOLD_MINUTES,
+            "jupiter_baseline_free_collateral_usd": free_usd,
+            "bridge_ticks_summary": [
+                {"tick": 1, "lifecycle": r1.get("lifecycle"), "ok": r1.get("ok")},
+                {"tick": 2, "lifecycle": r2.get("lifecycle"), "ok": r2.get("ok")},
+                {"tick": 3, "lifecycle_exit": bool(r3.get("lifecycle_exit")), "ok": r3.get("ok")},
+            ],
         },
+        "capital_scaling": scaling,
+        # Top-level aliases for operators / diff vs live closes
+        "expected_notional_usd": scaling["expected_notional_usd"],
+        "expected_size": scaling["expected_size"],
+        "actual_size": scaling["actual_size"],
+        "size_delta": scaling["size_delta"],
+        "pnl_sanity_check": scaling["pnl_sanity_check"],
         **proof,
     }
-    if json_out:
-        print(json.dumps(out, indent=2, default=str))
-    else:
-        print(json.dumps(out, indent=2, default=str))
+    print(json.dumps(out, indent=2, default=str))
     return out
 
 
-def _fetch_proof_package(ledger_db: Path, trade_id: str) -> dict:
+def _fetch_proof_package(ledger_db: Path, trade_id: str) -> dict[str, Any]:
     conn = sqlite3.connect(ledger_db)
     conn.row_factory = sqlite3.Row
     row = conn.execute(
@@ -380,12 +521,12 @@ def _fetch_proof_package(ledger_db: Path, trade_id: str) -> dict:
 
 
 def main() -> None:
-    ap = argparse.ArgumentParser(description="Deterministic baseline lifecycle proof harness.")
-    ap.add_argument("--json", action="store_true", help="Alias for default JSON stdout")
-    ap.add_argument("--keep-tmp", action="store_true", help="Do not delete temp DBs before run")
+    ap = argparse.ArgumentParser(description="Deterministic baseline lifecycle regression harness.")
+    ap.add_argument("--json", action="store_true", help="(default) JSON on stdout")
+    ap.add_argument("--keep-tmp", action="store_true", help="Keep temp SQLite files")
     args = ap.parse_args()
     try:
-        run_harness(json_out=args.json, keep_tmp=args.keep_tmp)
+        run_harness(keep_tmp=args.keep_tmp)
     except Exception as exc:
         print(json.dumps({"ok": False, "error": str(exc)}), file=sys.stderr)
         sys.exit(1)
