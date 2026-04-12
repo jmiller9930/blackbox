@@ -33,6 +33,9 @@ class BaselineOpenPosition:
     atr_entry: float
     stop_loss: float
     take_profit: float
+    # Immutable entry levels (stop_loss/take_profit fields may trail / breakeven)
+    initial_stop_loss: float
+    initial_take_profit: float
     breakeven_applied: bool
     size: float
     last_processed_market_event_id: str
@@ -54,6 +57,8 @@ class BaselineOpenPosition:
             "atr_entry": self.atr_entry,
             "stop_loss": self.stop_loss,
             "take_profit": self.take_profit,
+            "initial_stop_loss": self.initial_stop_loss,
+            "initial_take_profit": self.initial_take_profit,
             "breakeven_applied": self.breakeven_applied,
             "size": self.size,
             "last_processed_market_event_id": self.last_processed_market_event_id,
@@ -77,6 +82,8 @@ class BaselineOpenPosition:
             atr_entry=float(d["atr_entry"]),
             stop_loss=float(d["stop_loss"]),
             take_profit=float(d["take_profit"]),
+            initial_stop_loss=float(d.get("initial_stop_loss", d.get("stop_loss", 0.0))),
+            initial_take_profit=float(d.get("initial_take_profit", d.get("take_profit", 0.0))),
             breakeven_applied=bool(d.get("breakeven_applied", False)),
             size=float(d.get("size", 1.0)),
             last_processed_market_event_id=str(d["last_processed_market_event_id"]),
@@ -385,6 +392,8 @@ def open_position_from_signal(
         atr_entry=float(atr_entry),
         stop_loss=sl,
         take_profit=tp,
+        initial_stop_loss=float(sl),
+        initial_take_profit=float(tp),
         breakeven_applied=False,
         size=float(sz),
         last_processed_market_event_id=str(market_event_id).strip(),

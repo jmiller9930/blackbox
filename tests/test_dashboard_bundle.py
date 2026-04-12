@@ -431,6 +431,10 @@ def test_build_baseline_trades_report_schema() -> None:
     assert "meta" in rep and isinstance(rep["meta"], dict)
     assert rep["meta"].get("scope") == "all"
     assert rep["meta"].get("report_note")
+    assert "direction_summary" in rep["meta"]
+    assert "long_count" in rep["meta"]["direction_summary"]
+    assert "pnl_semantics" in rep["meta"]
+    assert rep["meta"]["pnl_semantics"].get("fees_included") is False
     for row in rep["rows"]:
         assert "baseline_authority" in row
         assert row["baseline_authority"] in ("TRADE", "NO_TRADE")

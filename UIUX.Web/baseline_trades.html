@@ -186,6 +186,32 @@
       color: var(--muted);
       font-weight: 600;
     }
+    .bt-econ-banner {
+      margin: 0 0 0.75rem;
+      padding: 0.55rem 0.75rem;
+      font-size: 0.72rem;
+      font-weight: 600;
+      color: #78350f;
+      background: #fffbeb;
+      border: 1px solid #fcd34d;
+      border-radius: var(--radius-md);
+      max-width: 52rem;
+      line-height: 1.45;
+    }
+    .bt-dir-summary {
+      margin: 0 0 0.65rem;
+      font-size: 0.72rem;
+      font-weight: 700;
+      color: #0f172a;
+    }
+    .bt-modal-human {
+      font-size: 0.72rem;
+      line-height: 1.45;
+      color: #1e293b;
+      margin: 0.35rem 0 0.35rem;
+    }
+    .bt-modal-human strong { color: #0f172a; }
+    .bt-modal-human p { margin: 0.35rem 0; }
     /* Modal */
     .bt-modal[hidden] { display: none !important; }
     .bt-modal {
@@ -278,8 +304,12 @@
       <div class="bt-section">
         <h1>Baseline trades report</h1>
         <p class="bt-desc">
-          <strong>One row per trade</strong> (<code>trade_id</code>); duplicate ledger lines are collapsed. Columns <strong>Open / Held / Exit / Status</strong> describe the same trade in time. Entry and exit SL/TP are explicit prices. <strong>Click a row</strong> for a <strong>trade snapshot</strong> (not a signal debugger); policy candle text is optional below. CSV includes full API fields. Open/held bars without a fill appear on the <strong>dashboard trade chain</strong>. QEL is cohort evaluation—see the QEL page.
+          <strong>One row per trade</strong> (<code>trade_id</code>). <strong>Open → Held → Exit/Status</strong> are one lifecycle on that row. Sizing columns show how base size was chosen. <strong>Click a row</strong> for a readable trade snapshot; candle diagnostics are optional below. Open/held bars without a fill appear on the <strong>dashboard trade chain</strong>. QEL is cohort evaluation—see the QEL page.
         </p>
+        <p class="bt-econ-banner" id="bt-econ-banner" role="status">
+          <strong>PnL column:</strong> gross model USD from fill prices and size—<strong>not</strong> net of fees, funding, or slippage. Small dollar amounts are normal when the price move is small. Full wording is in API <code>meta.pnl_semantics</code> after load.
+        </p>
+        <p class="bt-dir-summary" id="bt-direction-summary" aria-live="polite"></p>
 
         <div class="bt-filters">
           <div class="bt-field">
@@ -330,6 +360,9 @@
                 <th title="TRADE vs NO TRADE.">Policy</th>
                 <th title="Outcome display.">Outcome</th>
                 <th title="Position size (base units).">Size</th>
+                <th title="How size was derived (policy notional / entry, default paper notional, or fallback).">Size src</th>
+                <th title="Approximate notional USD (policy or size × entry).">Notional $</th>
+                <th title="Free collateral USD used for policy position_size_hint (when recorded).">Free collat $</th>
                 <th title="Ledger exit_reason.">Exit reason</th>
                 <th title="Stop loss price at entry (lifecycle).">SL entry</th>
                 <th title="Take profit price at entry (lifecycle).">TP entry</th>
@@ -338,13 +371,13 @@
                 <th title="Entry price.">Entry px</th>
                 <th title="Exit price.">Exit px</th>
                 <th title="Realized PnL USD.">PnL USD</th>
-                <th title="The biggest loss this trade showed while it was still open, before it closed.">Worst loss during trade ($)</th>
+                <th title="The biggest loss this trade showed while it was still open, before it closed.">Worst loss while open ($)</th>
                 <th title="QEL — see QEL page.">QEL</th>
                 <th title="Open trade snapshot.">View</th>
               </tr>
             </thead>
             <tbody id="bt-tbody">
-              <tr><td colspan="24">Loading…</td></tr>
+              <tr><td colspan="27">Loading…</td></tr>
             </tbody>
           </table>
         </div>
@@ -361,8 +394,12 @@
         <button type="button" class="bt-modal__close" id="bt-modal-close" aria-label="Close">×</button>
       </div>
       <p class="bt-sub" id="bt-modal-mid"></p>
-      <h3 style="margin:0.65rem 0 0.35rem;font-size:0.8rem;font-weight:800;color:#334155">Trade object</h3>
-      <pre id="bt-modal-snapshot" style="max-height:12rem;overflow:auto;font-size:0.68rem;background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:0.65rem"></pre>
+      <h3 style="margin:0.65rem 0 0.35rem;font-size:0.8rem;font-weight:800;color:#334155">Trade snapshot</h3>
+      <div id="bt-modal-human" class="bt-modal-human"></div>
+      <details style="margin-top:0.5rem">
+        <summary style="font-size:0.72rem;font-weight:700;color:#64748b;cursor:pointer">Raw snapshot JSON</summary>
+        <pre id="bt-modal-snapshot" style="margin-top:0.45rem;max-height:10rem;overflow:auto;font-size:0.65rem;background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:0.65rem"></pre>
+      </details>
       <details style="margin-top:0.75rem">
         <summary style="font-size:0.75rem;font-weight:700;color:#64748b;cursor:pointer">Policy signal context (5m bar narrative)</summary>
         <pre id="bt-modal-pre" style="margin-top:0.5rem;max-height:10rem;overflow:auto;font-size:0.65rem"></pre>
@@ -375,7 +412,7 @@
   <script>
     (function () {
       var state = { rows: [], meta: {} };
-      var COLS = 24;
+      var COLS = 27;
       var TIP_QEL_ROW =
         "QEL scores and survival decisions apply to Anna strategy cohorts, not to each baseline ledger row. Open QEL evaluation in the nav for details.";
 
@@ -412,6 +449,46 @@
         if (pnl == null || (typeof pnl === "number" && isNaN(pnl))) return "—";
         var v = Number(pnl);
         return (v >= 0 ? "+" : "") + v.toFixed(2);
+      }
+
+      function fmtMoney(n) {
+        if (n == null || n === "" || (typeof n === "number" && isNaN(n))) return "—";
+        return Number(n).toFixed(2);
+      }
+
+      function formatSnapshotHuman(snap) {
+        if (!snap || typeof snap !== "object") return "<p>—</p>";
+        var e = snap.economic_interpretation || {};
+        var ent = snap.entry || {};
+        var sz = snap.sizing || {};
+        var rk = snap.risk || {};
+        var lc = snap.lifecycle || {};
+        var oc = snap.outcome || {};
+        var h = "";
+        h += "<p><strong>Economic meaning</strong><br>" + esc(e.operator_note || "—") + "</p>";
+        h += "<p><strong>Identity</strong><br>";
+        h += "trade_id: " + esc(snap.trade_id || "—") + "<br>";
+        h += "market_event_id (exit bar): " + esc(snap.market_event_id || "—") + "<br>";
+        h += "lane: " + esc(snap.strategy_lane || "—") + " · mode: " + esc(snap.mode || "—") + "</p>";
+        h += "<p><strong>Entry</strong><br>";
+        h += "time: " + esc(ent.time_utc_iso || "—") + "<br>";
+        h += "price: " + esc(ent.price != null ? String(ent.price) : "—") + " · side: " + esc(ent.side || "—") + "</p>";
+        h += "<p><strong>Sizing</strong><br>";
+        h += "size: " + esc(sz.size != null ? String(sz.size) : "—") + " · source: " + esc(sz.size_source || "—") + "<br>";
+        h += "notional USD (approx): " + esc(sz.notional_usd != null ? String(sz.notional_usd) : "—") + "<br>";
+        h += "free collateral USD (policy): " + esc(sz.free_collateral_usd != null ? String(sz.free_collateral_usd) : "—") + "<br>";
+        h += "leverage: " + esc(sz.leverage != null ? String(sz.leverage) : "—") + " · risk %: " + esc(sz.risk_pct != null ? String(sz.risk_pct) : "—") + "</p>";
+        h += "<p><strong>Risk (lifecycle)</strong><br>";
+        h += "SL entry: " + esc(rk.stop_loss_entry_price != null ? String(rk.stop_loss_entry_price) : "—") + " · TP entry: " + esc(rk.take_profit_entry_price != null ? String(rk.take_profit_entry_price) : "—") + "<br>";
+        h += "SL exit (model): " + esc(rk.stop_loss_exit_price != null ? String(rk.stop_loss_exit_price) : "—") + " · TP exit (model): " + esc(rk.take_profit_exit_price != null ? String(rk.take_profit_exit_price) : "—") + "</p>";
+        h += "<p><strong>Lifecycle</strong><br>";
+        h += "open: " + esc(lc.open_time_utc_iso || "—") + " · held: " + esc(lc.held_display || "—") + "<br>";
+        h += "close: " + esc(lc.close_time_utc_iso || "—") + " · status: " + esc(lc.closed_label || "—") + "<br>";
+        h += "exit_reason: " + esc(lc.exit_reason_raw || "—") + "</p>";
+        h += "<p><strong>Outcome</strong><br>";
+        h += "realized PnL USD (gross model): " + esc(oc.realized_pnl_usd != null ? String(oc.realized_pnl_usd) : "—") + "<br>";
+        h += "worst loss while open ($): " + esc(oc.worst_loss_while_open_usd != null ? String(oc.worst_loss_while_open_usd) : "—") + "</p>";
+        return h;
       }
 
       function closeModal() {
@@ -594,6 +671,22 @@
             '">' +
             esc(sz) +
             '</td><td class="bt-mono" title="' +
+            escAttr("Sizing provenance from position_open or policy.") +
+            '">' +
+            esc(
+              r.size_source != null && String(r.size_source).trim() !== ""
+                ? String(r.size_source)
+                : "—"
+            ) +
+            '</td><td title="' +
+            escAttr("Approximate notional USD.") +
+            '">' +
+            esc(fmtMoney(r.notional_usd)) +
+            '</td><td title="' +
+            escAttr("Free collateral used for policy sizing when recorded.") +
+            '">' +
+            esc(fmtMoney(r.free_collateral_usd)) +
+            '</td><td class="bt-mono" title="' +
             escAttr("Exit reason from ledger.") +
             '">' +
             esc(r.exit_reason || "—") +
@@ -673,9 +766,13 @@
         var line = document.getElementById("bt-modal-mid");
         var pre = document.getElementById("bt-modal-pre");
         var snapEl = document.getElementById("bt-modal-snapshot");
+        var humEl = document.getElementById("bt-modal-human");
         line.textContent =
           (tid ? "trade_id: " + tid : "") +
           (mid ? (tid ? " · " : "") + "market_event_id: " + mid : "");
+        if (humEl) {
+          humEl.innerHTML = formatSnapshotHuman(row.operator_trade_snapshot);
+        }
         if (snapEl) {
           snapEl.textContent = row.operator_trade_snapshot
             ? JSON.stringify(row.operator_trade_snapshot, null, 2)
@@ -720,8 +817,12 @@
           "lifecycle_display",
           "baseline_lifecycle_phase",
           "size",
-          "notional_usd",
           "size_source",
+          "notional_usd",
+          "free_collateral_usd",
+          "leverage",
+          "risk_pct",
+          "collateral_usd",
           "exit_reason",
           "stop_loss_entry_price",
           "take_profit_entry_price",
@@ -772,6 +873,22 @@
             state.meta = bundle.meta || {};
             renderTable(state.rows);
             var m = state.meta;
+            var ds = m.direction_summary || {};
+            var dirEl = document.getElementById("bt-direction-summary");
+            if (dirEl) {
+              dirEl.textContent =
+                "Direction in this window: long " +
+                (ds.long_count != null ? ds.long_count : "—") +
+                " · short " +
+                (ds.short_count != null ? ds.short_count : "—");
+            }
+            var ban = document.getElementById("bt-econ-banner");
+            if (ban && m.pnl_semantics && m.pnl_semantics.operator_note) {
+              ban.innerHTML =
+                "<strong>PnL column:</strong> " +
+                esc(m.pnl_semantics.operator_note) +
+                " API field: <code>meta.pnl_semantics</code>.";
+            }
             foot.textContent =
               "Showing " +
               state.rows.length +

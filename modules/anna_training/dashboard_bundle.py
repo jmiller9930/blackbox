@@ -1002,7 +1002,7 @@ def _recent_baseline_policy_trade_rows_for_strip(
     return out
 
 
-BASELINE_TRADES_REPORT_SCHEMA = "blackbox_baseline_trades_report_v4"
+BASELINE_TRADES_REPORT_SCHEMA = "blackbox_baseline_trades_report_v5"
 TRADE_EVENT_SYNTHESIS_SCHEMA = "trade_event_synthesis_v1"
 
 
@@ -1182,6 +1182,58 @@ def _fetch_position_open_payload(conn: Any, trade_id: str | None) -> dict[str, A
     return p if isinstance(p, dict) else None
 
 
+def _ledger_context_parsed(ledger_row: dict[str, Any]) -> dict[str, Any]:
+    raw = ledger_row.get("context_snapshot_json")
+    if raw is None or raw == "":
+        return {}
+    try:
+        ctx = json.loads(raw) if isinstance(raw, str) else raw
+    except (json.JSONDecodeError, TypeError):
+        return {}
+    return ctx if isinstance(ctx, dict) else {}
+
+
+def _entry_sl_tp_from_open_or_context(
+    pos_open: dict[str, Any] | None,
+    ledger_row: dict[str, Any],
+) -> tuple[float | None, float | None]:
+    """Lifecycle entry SL/TP: position_open, else execution_trades.context_snapshot_json (close persist)."""
+    sle: float | None = None
+    tpe: float | None = None
+    if pos_open:
+        sle = _coerce_finite_float(pos_open.get("virtual_sl"))
+        tpe = _coerce_finite_float(pos_open.get("virtual_tp"))
+        if sle is None:
+            sle = _coerce_finite_float(pos_open.get("initial_stop_loss"))
+        if tpe is None:
+            tpe = _coerce_finite_float(pos_open.get("initial_take_profit"))
+    ctx = _ledger_context_parsed(ledger_row)
+    if sle is None:
+        sle = _coerce_finite_float(ctx.get("initial_stop_loss"))
+    if tpe is None:
+        tpe = _coerce_finite_float(ctx.get("initial_take_profit"))
+    return sle, tpe
+
+
+def _free_collateral_usd_for_row(
+    conn: Any,
+    pos_open: dict[str, Any] | None,
+    ledger_row: dict[str, Any],
+) -> float | None:
+    if pos_open:
+        fc = _coerce_finite_float(pos_open.get("free_collateral_usd"))
+        if fc is not None:
+            return fc
+    ctx = _ledger_context_parsed(ledger_row)
+    em = str(ctx.get("entry_market_event_id") or "").strip()
+    if em:
+        pol = fetch_policy_evaluation_for_market_event(conn, em)
+        feat = pol.get("features") if pol else None
+        if isinstance(feat, dict):
+            return _coerce_finite_float(feat.get("free_collateral_usd"))
+    return None
+
+
 def _lifecycle_closed_label(exit_reason: str | None, outcome: str | None) -> str:
     er = str(exit_reason or "").strip().upper()
     oc = str(outcome or "").strip().upper()
@@ -1190,9 +1242,23 @@ def _lifecycle_closed_label(exit_reason: str | None, outcome: str | None) -> str
     return er or oc or "—"
 
 
+PNL_SEMANTICS_OPERATOR_V1: dict[str, Any] = {
+    "pnl_usd_kind": "gross_model_usd",
+    "fees_included": False,
+    "funding_included": False,
+    "slippage_included": False,
+    "operator_note": (
+        "PnL shown is gross model PnL from fill prices and size (long: (exit−entry)×size; short: (entry−exit)×size). "
+        "Fees, funding, and slippage are not modeled. Cent-scale values are normal when the price move is small."
+    ),
+}
+
+
 def _operator_trade_snapshot_row(
     *,
     trade_id: str | None,
+    market_event_id: str | None,
+    mode: str | None,
     strategy_lane: str,
     entry_time_utc_iso: str,
     exit_time_utc_iso: str,
@@ -1201,7 +1267,11 @@ def _operator_trade_snapshot_row(
     entry_px: float | None,
     exit_px: float | None,
     size: float | None,
+    size_source: str | None,
     notional_usd: float | None,
+    free_collateral_usd: float | None,
+    leverage: int | None,
+    collateral_usd: float | None,
     stop_loss_entry: float | None,
     take_profit_entry: float | None,
     stop_loss_exit: float | None,
@@ -1214,33 +1284,43 @@ def _operator_trade_snapshot_row(
     mae_usd: float | None,
 ) -> dict[str, Any]:
     return {
-        "schema": "operator_trade_snapshot_v1",
+        "schema": "operator_trade_snapshot_v2",
         "trade_id": trade_id,
+        "market_event_id": market_event_id,
+        "mode": mode,
         "strategy_lane": strategy_lane,
+        "economic_interpretation": dict(PNL_SEMANTICS_OPERATOR_V1),
         "entry": {
             "time_utc_iso": entry_time_utc_iso or None,
             "price": entry_px,
             "side": side,
+        },
+        "sizing": {
+            "size": size,
+            "size_source": size_source,
+            "notional_usd": notional_usd,
+            "free_collateral_usd": free_collateral_usd,
+            "leverage": leverage,
+            "risk_pct": risk_pct,
+            "collateral_usd": collateral_usd,
         },
         "risk": {
             "stop_loss_entry_price": stop_loss_entry,
             "take_profit_entry_price": take_profit_entry,
             "stop_loss_exit_price": stop_loss_exit,
             "take_profit_exit_price": take_profit_exit,
-            "risk_pct": risk_pct,
-            "size": size,
-            "notional_usd_approx": notional_usd,
         },
         "lifecycle": {
             "phase": lifecycle_phase,
+            "open_time_utc_iso": entry_time_utc_iso or None,
             "held_display": held_display,
-            "exit_time_utc_iso": exit_time_utc_iso or None,
+            "close_time_utc_iso": exit_time_utc_iso or None,
             "exit_reason_raw": exit_reason,
             "closed_label": closed_label,
         },
         "outcome": {
             "realized_pnl_usd": pnl_usd,
-            "worst_loss_during_trade_usd": mae_usd,
+            "worst_loss_while_open_usd": mae_usd,
         },
     }
 
@@ -1473,14 +1553,26 @@ def build_baseline_trades_report(
 
             oc = _strip_outcome_from_pnl(pnl)
             closed_lbl = _lifecycle_closed_label(ledger_row.get("exit_reason"), oc)
-            sle = _coerce_finite_float(pos_open.get("virtual_sl")) if pos_open else None
-            tpe = _coerce_finite_float(pos_open.get("virtual_tp")) if pos_open else None
+            sle, tpe = _entry_sl_tp_from_open_or_context(pos_open, ledger_row)
             notion = _coerce_finite_float(pos_open.get("notional_usd")) if pos_open else None
             if notion is None and ep is not None and ledger_row.get("size") is not None:
                 try:
                     notion = float(ep) * float(ledger_row["size"])
                 except (TypeError, ValueError):
                     notion = None
+            sz_src = (
+                str(pos_open.get("size_source") or "").strip() or None if pos_open else None
+            )
+            lev_o = pos_open.get("leverage") if pos_open else None
+            try:
+                lev_i = int(lev_o) if lev_o is not None else None
+            except (TypeError, ValueError):
+                lev_i = None
+            rp_o = pos_open.get("risk_pct") if pos_open else None
+            rp_f = float(rp_o) if rp_o is not None else None
+            col_o = pos_open.get("collateral_usd") if pos_open else None
+            col_f = float(col_o) if col_o is not None else None
+            fc_usd = _free_collateral_usd_for_row(conn, pos_open, ledger_row)
 
             rows_out.append(
                 {
@@ -1497,9 +1589,11 @@ def build_baseline_trades_report(
                     "stop_loss_entry_price": sle,
                     "take_profit_entry_price": tpe,
                     "notional_usd": round(notion, 6) if notion is not None else None,
-                    "size_source": str(pos_open.get("size_source") or "").strip() or None
-                    if pos_open
-                    else None,
+                    "size_source": sz_src,
+                    "free_collateral_usd": round(fc_usd, 6) if fc_usd is not None else None,
+                    "leverage": lev_i,
+                    "risk_pct": rp_f,
+                    "collateral_usd": round(col_f, 6) if col_f is not None else None,
                     "market_event_id": mid,
                     "side": str(ledger_row.get("side") or "").strip().lower(),
                     "symbol": sym or None,
@@ -1565,6 +1659,8 @@ def build_baseline_trades_report(
             )
             r["operator_trade_snapshot"] = _operator_trade_snapshot_row(
                 trade_id=r.get("trade_id"),
+                market_event_id=str(r.get("market_event_id") or "").strip() or None,
+                mode=r.get("mode"),
                 strategy_lane="baseline",
                 entry_time_utc_iso=str(r.get("entry_time_utc_iso") or ""),
                 exit_time_utc_iso=str(r.get("exit_time_utc_iso") or ""),
@@ -1573,12 +1669,16 @@ def build_baseline_trades_report(
                 entry_px=r.get("entry"),
                 exit_px=r.get("exit"),
                 size=r.get("size"),
+                size_source=r.get("size_source"),
                 notional_usd=r.get("notional_usd"),
+                free_collateral_usd=r.get("free_collateral_usd"),
+                leverage=r.get("leverage"),
+                collateral_usd=r.get("collateral_usd"),
                 stop_loss_entry=r.get("stop_loss_entry_price"),
                 take_profit_entry=r.get("take_profit_entry_price"),
                 stop_loss_exit=sl_p,
                 take_profit_exit=tp_p,
-                risk_pct=None,
+                risk_pct=r.get("risk_pct"),
                 lifecycle_phase="CLOSED",
                 exit_reason=r.get("exit_reason"),
                 closed_label=str(r.get("lifecycle_closed_label") or ""),
@@ -1595,6 +1695,9 @@ def build_baseline_trades_report(
     finally:
         conn.close()
 
+    long_count = sum(1 for r in rows_out if str(r.get("side") or "").lower() == "long")
+    short_count = sum(1 for r in rows_out if str(r.get("side") or "").lower() == "short")
+
     return {
         "schema": BASELINE_TRADES_REPORT_SCHEMA,
         "rows": rows_out,
@@ -1607,11 +1710,16 @@ def build_baseline_trades_report(
             "max_scan_cap": scan_cap,
             "ledger_path": str(db_path),
             "synthesis_schema": TRADE_EVENT_SYNTHESIS_SCHEMA,
+            "direction_summary": {
+                "long_count": long_count,
+                "short_count": short_count,
+                "window_note": "Counts apply to rows returned after scope filter (one row per trade_id).",
+            },
+            "pnl_semantics": dict(PNL_SEMANTICS_OPERATOR_V1),
             "report_note": (
-                "Open/held/closed per bar appears on the dashboard trade chain columns; this report lists "
-                "ledger rows only. SL/TP at exit: policy_evaluations exit/holding features when present; "
-                "else execution_trades.context_snapshot_json.exit_record (lifecycle persist). "
-                "Use row click or ?mid= for tile narrative + synthesis."
+                "Baseline close rows: SL/TP at entry from position_open or context_snapshot initial_stop_loss/"
+                "initial_take_profit. Exit SL/TP from policy features or lifecycle exit_record. "
+                "PnL is gross model USD (see pnl_semantics). Dashboard trade chain shows open/held bars."
             ),
         },
     }

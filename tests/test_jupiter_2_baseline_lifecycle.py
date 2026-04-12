@@ -55,6 +55,8 @@ def test_process_exit_stop_long() -> None:
         atr_entry=1.0,
         stop_loss=98.4,
         take_profit=104.0,
+        initial_stop_loss=98.4,
+        initial_take_profit=104.0,
         breakeven_applied=False,
         size=1.0,
         last_processed_market_event_id="E0",

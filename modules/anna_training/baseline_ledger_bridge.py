@@ -286,6 +286,8 @@ def run_baseline_ledger_bridge_tick(
                 "exit_record": ex,
                 "entry_market_event_id": pos.entry_market_event_id,
                 "side": pos.side,
+                "initial_stop_loss": float(pos.initial_stop_loss),
+                "initial_take_profit": float(pos.initial_take_profit),
             }
             feat_x = dict(sig.features) if sig.features else {}
             feat_x["lifecycle"] = "exit"
@@ -447,6 +449,13 @@ def run_baseline_ledger_bridge_tick(
         signal_features=dict(sig.features) if sig.features else {},
     )
 
+    feat_open = dict(sig.features) if sig.features else {}
+    fc_usd = feat_open.get("free_collateral_usd")
+    try:
+        fc_f = float(fc_usd) if fc_usd is not None else None
+    except (TypeError, ValueError):
+        fc_f = None
+
     conn_o = connect_ledger(execution_ledger_db_path)
     try:
         ensure_execution_ledger_schema(conn_o)
@@ -470,6 +479,12 @@ def run_baseline_ledger_bridge_tick(
                 "size_source": npos.size_source,
                 "virtual_sl": npos.stop_loss,
                 "virtual_tp": npos.take_profit,
+                "initial_stop_loss": float(npos.initial_stop_loss),
+                "initial_take_profit": float(npos.initial_take_profit),
+                "leverage": npos.leverage,
+                "risk_pct": npos.risk_pct,
+                "collateral_usd": npos.collateral_usd,
+                "free_collateral_usd": fc_f,
                 "atr_entry": npos.atr_entry,
                 "economic_basis": "jupiter_2_sean_lifecycle",
                 "note": "Paper baseline — lifecycle entry at bar close; exits are SL/TP only.",
