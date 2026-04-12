@@ -74,8 +74,38 @@ Tile filter strings (examples): `Filter: ATR ratio below 1.35 – skipping entry
 
 ---
 
-## 3. Related docs
+## 3. Learning dataset (Phase 1) — baseline lifecycle only
+
+**Package:** `modules/anna_training/learning_layer/` (schema, labels, dataset builder, walk-forward report).  
+**Schema version:** `learning_dataset_baseline_v1` (see `learning_layer/schema.py` and `schema_dict()`).
+
+**Data lineage (authoritative, no parallel policy):**
+
+| Source | Role |
+|--------|------|
+| `execution_trades` | Baseline lane, `exit_reason` in `STOP_LOSS` / `TAKE_PROFIT`, economic modes; prices, size, `pnl_usd` |
+| `context_snapshot_json` | `entry_market_event_id` for entry bar join |
+| `policy_evaluations` | Policy features at **entry** `market_event_id` (`signal_mode` e.g. `sean_jupiter_v1`) |
+| `market_bars_5m` | OHLC at entry and exit mids; `volume_base` only if present (nullable) |
+
+**Canonical label definitions** (must match code in `learning_layer/label_specs.py`):
+
+| Label | Definition |
+|-------|------------|
+| `trade_success` | `exit_reason == TAKE_PROFIT` |
+| `stopped_early` | `exit_reason == STOP_LOSS` |
+| `beats_baseline` | Phase 1: `pnl_usd > 0` (vs **flat**; not a second baseline series). Future schema may add paired-strategy deltas. |
+| `whipsaw_flag` | `stopped_early` **and** within the next `WHIPSAW_LOOKAHEAD_BARS` closed 5m bars after the exit bar: **long** — `max(high) >= entry_price`; **short** — `min(low) <= entry_price`. |
+
+**Walk-forward (Phase 1):** time-ordered row index splits in `walk_forward_report.py` — no random shuffles; report exposes counts, label balance, `row_quality`, and Phase 2 blockers.
+
+**Scope:** Phase 1 does **not** train models, run shadow scorers, or change baseline execution.
+
+---
+
+## 4. Related docs
 
 - [`docs/architect/ANNA_GOES_TO_SCHOOL.md`](../architect/ANNA_GOES_TO_SCHOOL.md) — baseline vs Anna context  
+- [`docs/architect/learning_primary_metric_change_process.md`](../architect/learning_primary_metric_change_process.md) — learning governance / metrics (broader than this baseline dataset)  
 - [`basetrade/README.md`](../../basetrade/README.md) — parity harness for `evaluate_sean_jupiter_baseline_v1`  
 - [`UIUX.Web/mockups/jupiter_tile_rule_colors_mockup.html`](../../UIUX.Web/mockups/jupiter_tile_rule_colors_mockup.html) — **UI intent only** (colors / readability); does not change policy math
