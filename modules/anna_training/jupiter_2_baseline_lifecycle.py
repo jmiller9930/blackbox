@@ -309,6 +309,10 @@ def process_holding_bar(
     return new_pos, None
 
 
+# When policy hints are absent or invalid, use paper notional so size is not stuck at 1.0 index stub.
+_DEFAULT_BASELINE_NOTIONAL_USD = 100.0
+
+
 def baseline_lifecycle_base_size_from_signal_features(
     *,
     entry_price: float,
@@ -319,28 +323,29 @@ def baseline_lifecycle_base_size_from_signal_features(
 
     Policy ``position_size_hint.notional_usd`` comes from bankroll-aware sizing
     (``resolve_free_collateral_usd_for_jupiter_policy`` → ``calculate_position_size``).
-    Fallback **1.0** only when the hint is missing or invalid (index-style stub).
+    If that path is missing or invalid, uses ``_DEFAULT_BASELINE_NOTIONAL_USD`` (100 USD paper default).
     """
     ep = float(entry_price)
     if ep <= 0 or not math.isfinite(ep):
         return 1.0, "fallback_invalid_entry_price"
     ps = dict(signal_features or {})
     psh = ps.get("position_size_hint")
-    if not isinstance(psh, dict):
-        return 1.0, "fallback_no_position_size_hint"
-    raw_n = psh.get("notional_usd")
-    if raw_n is None:
-        return 1.0, "fallback_no_notional_usd"
-    try:
-        notional = float(raw_n)
-    except (TypeError, ValueError):
-        return 1.0, "fallback_notional_parse"
-    if not math.isfinite(notional) or notional <= 0:
-        return 1.0, "fallback_notional_nonpositive"
-    sz = notional / ep
-    if not math.isfinite(sz) or sz <= 0:
-        return 1.0, "fallback_size_nonpositive"
-    return sz, "notional_usd_div_entry_price"
+    if isinstance(psh, dict):
+        raw_n = psh.get("notional_usd")
+        if raw_n is not None:
+            try:
+                notional = float(raw_n)
+            except (TypeError, ValueError):
+                notional = None
+            else:
+                if math.isfinite(notional) and notional > 0:
+                    sz = notional / ep
+                    if math.isfinite(sz) and sz > 0:
+                        return sz, "notional_usd_div_entry_price"
+    sz_d = _DEFAULT_BASELINE_NOTIONAL_USD / ep
+    if math.isfinite(sz_d) and sz_d > 0:
+        return float(sz_d), "default_baseline_notional_usd_100"
+    return 1.0, "fallback_size_nonpositive"
 
 
 def open_position_from_signal(

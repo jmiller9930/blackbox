@@ -278,7 +278,7 @@
       <div class="bt-section">
         <h1>Baseline trades report</h1>
         <p class="bt-desc">
-          One row per completed baseline leg, correlated by <strong>trade_id</strong>. <strong>SL (exit)</strong> and <strong>TP (exit)</strong> use the policy snapshot when present; if needed, values fall back to the ledger <code>exit_record</code> on the close. <strong>Lifecycle</strong> matches the dashboard trade chain. <strong>Click a row</strong> (or <strong>View</strong>) for the Jupiter tile narrative and forensic synthesis (extra API fields such as path/explain remain in JSON and CSV). Open/held ticks without a fill row appear on the <strong>dashboard trade chain</strong> columns, not here. MAE uses 5m bars. QEL is cohort evaluation—see the QEL page.
+          <strong>One row per trade</strong> (<code>trade_id</code>); duplicate ledger lines are collapsed. Columns <strong>Open / Held / Exit / Status</strong> describe the same trade in time. Entry and exit SL/TP are explicit prices. <strong>Click a row</strong> for a <strong>trade snapshot</strong> (not a signal debugger); policy candle text is optional below. CSV includes full API fields. Open/held bars without a fill appear on the <strong>dashboard trade chain</strong>. QEL is cohort evaluation—see the QEL page.
         </p>
 
         <div class="bt-filters">
@@ -317,31 +317,34 @@
           <table class="bt-rpt">
             <thead>
               <tr>
-                <th title="Stable id for the trade leg; bl_lc_ is Sean lifecycle, bl_ without lc is same-bar/legacy.">trade_id</th>
-                <th title="Entry instant (UTC) from the ledger.">Entry (UTC)</th>
-                <th title="Exit instant (UTC) from the ledger.">Exit (UTC)</th>
-                <th title="Hold duration and approximate bar count at the ledger timeframe.">Held</th>
-                <th title="Instrument symbol from the ledger; used with size and prices for MAE bar lookup.">Sym</th>
-                <th title="Timeframe stored on the execution (for example 5m).">TF</th>
-                <th title="Correlates this fill with the dashboard event axis and the Jupiter tile narrative.">market_event_id</th>
-                <th title="Ledger mode: live, paper, or paper_stub.">Mode</th>
-                <th title="Position direction from the ledger: long or short.">Side</th>
-                <th title="TRADE = policy-approved baseline execution (same as trade chain WIN/LOSS path). NO TRADE = policy did not authorize this row as an economic baseline trade (see reason on hover).">Policy</th>
-                <th title="Same lifecycle wording as the trade chain: closed win / closed loss / closed flat for ledger-backed closes.">Lifecycle</th>
-                <th title="Position size (units or contracts) used with entry price for notional and MAE.">Size</th>
-                <th title="Raw exit_reason from execution_trades.">Exit reason</th>
-                <th title="Stop price at exit (lifecycle virtual stop; policy or ledger exit_record).">SL (exit)</th>
-                <th title="Take-profit price at exit (lifecycle; policy or ledger exit_record).">TP (exit)</th>
-                <th title="Recorded entry price for the baseline leg.">Entry px</th>
-                <th title="Recorded exit price for the baseline leg.">Exit px</th>
-                <th title="Realized profit or loss in USD for this baseline execution.">PnL USD</th>
-                <th title="MAE (maximum adverse excursion) in USD: worst mark-to-market against you over 5m bars between entry and exit. Used with PnL for Anna vs baseline WIN / NOT WIN pairing when both legs qualify.">MAE USD</th>
-                <th title="QEL (Quantitative Evaluation Layer): survival checkpoints and strategy lifecycle for Anna candidates—not a single scalar per baseline row here. Use QEL evaluation in the nav for cohort results.">QEL</th>
-                <th title="Opens the formatted Jupiter policy tile text for this market_event_id.">Tile</th>
+                <th title="One trade id per row (deduplicated).">trade_id</th>
+                <th title="When the position opened (ledger entry time, UTC).">Open (UTC)</th>
+                <th title="Time in trade and approximate bars.">Held</th>
+                <th title="When the position closed (UTC).">Exit (UTC)</th>
+                <th title="Exit reason and outcome.">Status</th>
+                <th title="Symbol.">Sym</th>
+                <th title="Timeframe.">TF</th>
+                <th title="Close bar event id.">market_event_id</th>
+                <th title="Mode.">Mode</th>
+                <th title="Side.">Side</th>
+                <th title="TRADE vs NO TRADE.">Policy</th>
+                <th title="Outcome display.">Outcome</th>
+                <th title="Position size (base units).">Size</th>
+                <th title="Ledger exit_reason.">Exit reason</th>
+                <th title="Stop loss price at entry (lifecycle).">SL entry</th>
+                <th title="Take profit price at entry (lifecycle).">TP entry</th>
+                <th title="Stop level at exit.">SL exit</th>
+                <th title="Take profit level at exit.">TP exit</th>
+                <th title="Entry price.">Entry px</th>
+                <th title="Exit price.">Exit px</th>
+                <th title="Realized PnL USD.">PnL USD</th>
+                <th title="The biggest loss this trade showed while it was still open, before it closed.">Worst loss during trade ($)</th>
+                <th title="QEL — see QEL page.">QEL</th>
+                <th title="Open trade snapshot.">View</th>
               </tr>
             </thead>
             <tbody id="bt-tbody">
-              <tr><td colspan="21">Loading…</td></tr>
+              <tr><td colspan="24">Loading…</td></tr>
             </tbody>
           </table>
         </div>
@@ -354,12 +357,16 @@
     <div class="bt-modal__backdrop" id="bt-modal-backdrop" aria-label="Close dialog"></div>
     <div class="bt-modal__panel" role="dialog" aria-modal="true" aria-labelledby="bt-modal-title">
       <div class="bt-modal__head">
-        <h2 id="bt-modal-title">Tile narrative</h2>
+        <h2 id="bt-modal-title">Trade snapshot</h2>
         <button type="button" class="bt-modal__close" id="bt-modal-close" aria-label="Close">×</button>
       </div>
       <p class="bt-sub" id="bt-modal-mid"></p>
-      <h3 style="margin:0.75rem 0 0.35rem;font-size:0.8rem;font-weight:800;color:#334155">Jupiter tile</h3>
-      <pre id="bt-modal-pre"></pre>
+      <h3 style="margin:0.65rem 0 0.35rem;font-size:0.8rem;font-weight:800;color:#334155">Trade object</h3>
+      <pre id="bt-modal-snapshot" style="max-height:12rem;overflow:auto;font-size:0.68rem;background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:0.65rem"></pre>
+      <details style="margin-top:0.75rem">
+        <summary style="font-size:0.75rem;font-weight:700;color:#64748b;cursor:pointer">Policy signal context (5m bar narrative)</summary>
+        <pre id="bt-modal-pre" style="margin-top:0.5rem;max-height:10rem;overflow:auto;font-size:0.65rem"></pre>
+      </details>
       <h3 style="margin:0.85rem 0 0.35rem;font-size:0.8rem;font-weight:800;color:#334155">Forensic synthesis (trade_event_synthesis_v1)</h3>
       <pre id="bt-modal-synthesis" style="max-height:14rem;overflow:auto;font-size:0.65rem"></pre>
     </div>
@@ -368,7 +375,7 @@
   <script>
     (function () {
       var state = { rows: [], meta: {} };
-      var COLS = 21;
+      var COLS = 24;
       var TIP_QEL_ROW =
         "QEL scores and survival decisions apply to Anna strategy cohorts, not to each baseline ledger row. Open QEL evaluation in the nav for details.";
 
@@ -475,7 +482,7 @@
         var h = "";
         var i;
         var tipMae =
-          "MAE (USD): max adverse excursion on 5m bars in the trade window. Empty when bars or inputs are missing.";
+          "The biggest loss this trade showed while it was still open, before it closed.";
         for (i = 0; i < rows.length; i++) {
           var r = rows[i];
           var mid = r.market_event_id || "";
@@ -492,39 +499,60 @@
           var reason = r.baseline_authority_reason || "";
           var mode = r.mode != null ? String(r.mode) : "—";
           var tid = r.trade_id != null && String(r.trade_id).trim() !== "" ? String(r.trade_id) : "—";
-          var entryT =
-            r.entry_time_utc_iso != null && String(r.entry_time_utc_iso).trim() !== ""
-              ? String(r.entry_time_utc_iso)
-              : r.time_utc_iso != null && String(r.time_utc_iso).trim() !== ""
-                ? String(r.time_utc_iso)
+          var openUtc =
+            r.lifecycle_open_at_utc != null && String(r.lifecycle_open_at_utc).trim() !== ""
+              ? String(r.lifecycle_open_at_utc)
+              : r.entry_time_utc_iso != null && String(r.entry_time_utc_iso).trim() !== ""
+                ? String(r.entry_time_utc_iso)
+                : r.time_utc_iso != null && String(r.time_utc_iso).trim() !== ""
+                  ? String(r.time_utc_iso)
+                  : "—";
+          var exitUtc =
+            r.lifecycle_closed_at_utc != null && String(r.lifecycle_closed_at_utc).trim() !== ""
+              ? String(r.lifecycle_closed_at_utc)
+              : r.exit_time_utc_iso != null && String(r.exit_time_utc_iso).trim() !== ""
+                ? String(r.exit_time_utc_iso)
                 : "—";
-          var exitT =
-            r.exit_time_utc_iso != null && String(r.exit_time_utc_iso).trim() !== ""
-              ? String(r.exit_time_utc_iso)
+          var held =
+            r.lifecycle_held_display != null && String(r.lifecycle_held_display).trim() !== ""
+              ? String(r.lifecycle_held_display)
+              : r.held_display != null && String(r.held_display).trim() !== ""
+                ? String(r.held_display)
+                : "—";
+          var statusLbl =
+            r.lifecycle_closed_label != null && String(r.lifecycle_closed_label).trim() !== ""
+              ? String(r.lifecycle_closed_label)
               : "—";
-          var held = r.held_display != null && String(r.held_display).trim() !== "" ? String(r.held_display) : "—";
-          var slPx = r.stop_loss_at_exit_price;
-          var tpPx = r.take_profit_at_exit_price;
+          var slEn = r.stop_loss_entry_price;
+          var tpEn = r.take_profit_entry_price;
+          var slEx = r.stop_loss_exit_price;
+          var tpEx = r.take_profit_exit_price;
           h +=
-            '<tr class="bt-click-row" data-mid="' +
+            '<tr class="bt-click-row" data-row-idx="' +
+            i +
+            '" data-mid="' +
             escAttr(mid) +
-            '" title="Click row: Jupiter tile narrative and forensic synthesis">' +
+            '" title="Click row: trade snapshot (policy narrative is optional below)">' +
             '<td class="bt-mono bt-mono--mid" title="' +
-            escAttr("Correlates execution_trades with policy_evaluations.") +
+            escAttr("One row per trade_id.") +
             '">' +
             esc(tid) +
             '</td><td class="bt-mono" title="' +
-            escAttr("Entry instant UTC.") +
+            escAttr("Position opened (UTC).") +
             '">' +
-            esc(entryT) +
-            '</td><td class="bt-mono" title="' +
-            escAttr("Exit instant UTC.") +
-            '">' +
-            esc(exitT) +
+            esc(openUtc) +
             '</td><td title="' +
-            escAttr("Hold duration and approximate bars.") +
+            escAttr("Time in trade.") +
             '">' +
             esc(held) +
+            '</td><td class="bt-mono" title="' +
+            escAttr("Position closed (UTC).") +
+            '">' +
+            esc(exitUtc) +
+            '</td><td title="' +
+            escAttr("Exit outcome label.") +
+            '">' +
+            esc(statusLbl) +
             '</td><td class="bt-mono" title="' +
             escAttr("Symbol from ledger.") +
             '">' +
@@ -534,7 +562,7 @@
             '">' +
             esc(tf) +
             '</td><td class="bt-mono bt-mono--mid" title="' +
-            escAttr("Event id: ties to tile and trade chain columns.") +
+            escAttr("Close bar event id.") +
             '">' +
             esc(mid) +
             '</td><td title="' +
@@ -558,11 +586,11 @@
             '">' +
             esc(auth) +
             '</td><td title="' +
-            escAttr("Same vocabulary as trade chain (closed win / closed loss / closed flat).") +
+            escAttr("Outcome display (same vocabulary as trade chain).") +
             '">' +
             esc(r.lifecycle_display != null && String(r.lifecycle_display).trim() !== '' ? String(r.lifecycle_display) : "—") +
             '</td><td title="' +
-            escAttr("Size from ledger.") +
+            escAttr("Position size (base units).") +
             '">' +
             esc(sz) +
             '</td><td class="bt-mono" title="' +
@@ -570,13 +598,21 @@
             '">' +
             esc(r.exit_reason || "—") +
             '</td><td class="bt-mono" title="' +
-            escAttr("Stop level at exit (policy snapshot or ledger exit_record).") +
+            escAttr("Stop loss at entry.") +
             '">' +
-            esc(fmtSlTpPx(slPx)) +
+            esc(fmtSlTpPx(slEn)) +
             '</td><td class="bt-mono" title="' +
-            escAttr("Take-profit level at exit (policy snapshot or ledger exit_record).") +
+            escAttr("Take profit at entry.") +
             '">' +
-            esc(fmtSlTpPx(tpPx)) +
+            esc(fmtSlTpPx(tpEn)) +
+            '</td><td class="bt-mono" title="' +
+            escAttr("Stop level at exit.") +
+            '">' +
+            esc(fmtSlTpPx(slEx)) +
+            '</td><td class="bt-mono" title="' +
+            escAttr("Take profit level at exit.") +
+            '">' +
+            esc(fmtSlTpPx(tpEx)) +
             "</td><td title=\"" +
             escAttr("Entry price.") +
             '">' +
@@ -597,8 +633,10 @@
             esc(fmtMae(r.mae_usd)) +
             '</td><td class="bt-td-tip" title="' +
             escAttr(TIP_QEL_ROW) +
-            '">—</td><td><button type="button" class="bt-view-btn" title="' +
-            escAttr("Open Jupiter tile narrative in a popup.") +
+            '">—</td><td><button type="button" class="bt-view-btn" data-row-idx="' +
+            i +
+            '" title="' +
+            escAttr("Open trade snapshot.") +
             '">View</button></td></tr>';
         }
         tb.innerHTML = h;
@@ -607,7 +645,7 @@
           (function (idx) {
             btns[i].addEventListener("click", function (ev) {
               ev.stopPropagation();
-              openTile(rows[idx].market_event_id);
+              openTile(idx);
             });
           })(i);
         }
@@ -619,46 +657,53 @@
         tb.dataset.bbRowWire = "1";
         tb.addEventListener("click", function (e) {
           if (e.target.closest("button")) return;
-          var tr = e.target.closest("tr[data-mid]");
+          var tr = e.target.closest("tr[data-row-idx]");
           if (!tr) return;
-          var m = tr.getAttribute("data-mid");
-          if (m) openTile(m);
+          var ix = tr.getAttribute("data-row-idx");
+          if (ix != null && ix !== "") openTile(parseInt(ix, 10));
         });
       })();
 
-      function openTile(mid) {
-        if (!mid) return;
+      function openTile(rowIndex) {
+        if (rowIndex == null || isNaN(rowIndex)) return;
+        var row = state.rows[rowIndex];
+        if (!row) return;
+        var mid = row.market_event_id || "";
+        var tid = row.trade_id != null ? String(row.trade_id) : "";
         var line = document.getElementById("bt-modal-mid");
         var pre = document.getElementById("bt-modal-pre");
-        line.textContent = "market_event_id: " + mid;
-        var row = null;
-        var j;
-        for (j = 0; j < state.rows.length; j++) {
-          if (state.rows[j].market_event_id === mid) {
-            row = state.rows[j];
-            break;
-          }
+        var snapEl = document.getElementById("bt-modal-snapshot");
+        line.textContent =
+          (tid ? "trade_id: " + tid : "") +
+          (mid ? (tid ? " · " : "") + "market_event_id: " + mid : "");
+        if (snapEl) {
+          snapEl.textContent = row.operator_trade_snapshot
+            ? JSON.stringify(row.operator_trade_snapshot, null, 2)
+            : "(No operator_trade_snapshot on this row.)";
         }
         var text =
-          row && row.jupiter_tile_narrative && String(row.jupiter_tile_narrative).trim()
+          row.jupiter_tile_narrative && String(row.jupiter_tile_narrative).trim()
             ? String(row.jupiter_tile_narrative)
-            : "(No tile narrative in this bundle for this id. It may be outside the current dashboard event window.)";
+            : "(No policy bar narrative in this bundle.)";
         pre.textContent = text;
         var synEl = document.getElementById("bt-modal-synthesis");
         if (synEl) {
-          synEl.textContent =
-            row && row.synthesis
-              ? JSON.stringify(row.synthesis, null, 2)
-              : "(No synthesis on this row.)";
+          synEl.textContent = row.synthesis
+            ? JSON.stringify(row.synthesis, null, 2)
+            : "(No synthesis on this row.)";
         }
-        history.replaceState(null, "", "?mid=" + encodeURIComponent(mid));
+        var q = mid ? "?mid=" + encodeURIComponent(mid) : tid ? "?tid=" + encodeURIComponent(tid) : "?row=" + rowIndex;
+        history.replaceState(null, "", q);
         openModal();
       }
 
       function rowsToCsv(rows) {
         var cols = [
           "trade_id",
-          "trade_id_path_kind",
+          "lifecycle_open_at_utc",
+          "lifecycle_held_display",
+          "lifecycle_closed_at_utc",
+          "lifecycle_closed_label",
           "entry_time_utc_iso",
           "exit_time_utc_iso",
           "held_display",
@@ -675,15 +720,19 @@
           "lifecycle_display",
           "baseline_lifecycle_phase",
           "size",
+          "notional_usd",
+          "size_source",
           "exit_reason",
-          "exit_reason_explanation",
-          "stop_loss_at_exit_price",
-          "take_profit_at_exit_price",
+          "stop_loss_entry_price",
+          "take_profit_entry_price",
+          "stop_loss_exit_price",
+          "take_profit_exit_price",
           "sl_tp_summary",
           "entry",
           "exit",
           "pnl_usd",
           "mae_usd",
+          "operator_trade_snapshot",
         ];
         var lines = [cols.join(",")];
         var r, k, val, line;
@@ -726,13 +775,13 @@
             foot.textContent =
               "Showing " +
               state.rows.length +
-              " ledger row(s) (limit " +
+              " trade(s) (limit " +
               (m.limit || "?") +
               ", scope " +
               (m.scope || "?") +
               "). Scanned up to " +
               (m.scanned_execution_rows || "?") +
-              " baseline ledger rows in range. Click a row for tile + synthesis.";
+              " baseline ledger rows in range. Click a row for trade snapshot.";
           })
           .catch(function (e) {
             foot.textContent = "Failed to load: " + String(e);
@@ -766,7 +815,23 @@
       load().then(function () {
         var q = new URLSearchParams(location.search);
         var mid = q.get("mid");
-        if (mid) openTile(mid);
+        var tidQ = q.get("tid");
+        var j;
+        if (mid) {
+          for (j = 0; j < state.rows.length; j++) {
+            if (String(state.rows[j].market_event_id || "") === mid) {
+              openTile(j);
+              break;
+            }
+          }
+        } else if (tidQ) {
+          for (j = 0; j < state.rows.length; j++) {
+            if (String(state.rows[j].trade_id || "") === tidQ) {
+              openTile(j);
+              break;
+            }
+          }
+        }
       });
     })();
   </script>

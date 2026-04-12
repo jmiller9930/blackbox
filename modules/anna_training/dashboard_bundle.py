@@ -1002,7 +1002,7 @@ def _recent_baseline_policy_trade_rows_for_strip(
     return out
 
 
-BASELINE_TRADES_REPORT_SCHEMA = "blackbox_baseline_trades_report_v3"
+BASELINE_TRADES_REPORT_SCHEMA = "blackbox_baseline_trades_report_v4"
 TRADE_EVENT_SYNTHESIS_SCHEMA = "trade_event_synthesis_v1"
 
 
@@ -1137,6 +1137,112 @@ def _sl_tp_summary_from_policy_features(features: Any) -> str | None:
     if tp is not None:
         parts.append(f"TP@{tp}")
     return " ".join(parts)
+
+
+def _dedupe_candidates_by_trade_id(
+    candidates: list[tuple[datetime, dict[str, Any]]],
+) -> list[tuple[datetime, dict[str, Any]]]:
+    """One ledger row per ``trade_id`` (newest by sort timestamp). Rows without ``trade_id`` are kept."""
+    best: dict[str, tuple[datetime, dict[str, Any]]] = {}
+    no_tid: list[tuple[datetime, dict[str, Any]]] = []
+    for ts, row in candidates:
+        tid = str(row.get("trade_id") or "").strip()
+        if not tid:
+            no_tid.append((ts, row))
+            continue
+        cur = best.get(tid)
+        if cur is None or ts > cur[0]:
+            best[tid] = (ts, row)
+    out = list(best.values()) + no_tid
+    out.sort(key=lambda x: x[0], reverse=True)
+    return out
+
+
+def _fetch_position_open_payload(conn: Any, trade_id: str | None) -> dict[str, Any] | None:
+    """First ``position_open`` event for baseline lifecycle (initial SL/TP, size, notional)."""
+    tid = str(trade_id or "").strip()
+    if not tid:
+        return None
+    cur = conn.execute(
+        """
+        SELECT payload_json FROM position_events
+        WHERE trade_id = ? AND lane = 'baseline' AND event_type = 'position_open'
+        ORDER BY sequence_num ASC
+        LIMIT 1
+        """,
+        (tid,),
+    )
+    r = cur.fetchone()
+    if not r or not r[0]:
+        return None
+    try:
+        p = json.loads(r[0])
+    except json.JSONDecodeError:
+        return None
+    return p if isinstance(p, dict) else None
+
+
+def _lifecycle_closed_label(exit_reason: str | None, outcome: str | None) -> str:
+    er = str(exit_reason or "").strip().upper()
+    oc = str(outcome or "").strip().upper()
+    if er and oc:
+        return f"{er} · {oc}"
+    return er or oc or "—"
+
+
+def _operator_trade_snapshot_row(
+    *,
+    trade_id: str | None,
+    strategy_lane: str,
+    entry_time_utc_iso: str,
+    exit_time_utc_iso: str,
+    held_display: str,
+    side: str | None,
+    entry_px: float | None,
+    exit_px: float | None,
+    size: float | None,
+    notional_usd: float | None,
+    stop_loss_entry: float | None,
+    take_profit_entry: float | None,
+    stop_loss_exit: float | None,
+    take_profit_exit: float | None,
+    risk_pct: float | None,
+    lifecycle_phase: str,
+    exit_reason: str | None,
+    closed_label: str,
+    pnl_usd: float | None,
+    mae_usd: float | None,
+) -> dict[str, Any]:
+    return {
+        "schema": "operator_trade_snapshot_v1",
+        "trade_id": trade_id,
+        "strategy_lane": strategy_lane,
+        "entry": {
+            "time_utc_iso": entry_time_utc_iso or None,
+            "price": entry_px,
+            "side": side,
+        },
+        "risk": {
+            "stop_loss_entry_price": stop_loss_entry,
+            "take_profit_entry_price": take_profit_entry,
+            "stop_loss_exit_price": stop_loss_exit,
+            "take_profit_exit_price": take_profit_exit,
+            "risk_pct": risk_pct,
+            "size": size,
+            "notional_usd_approx": notional_usd,
+        },
+        "lifecycle": {
+            "phase": lifecycle_phase,
+            "held_display": held_display,
+            "exit_time_utc_iso": exit_time_utc_iso or None,
+            "exit_reason_raw": exit_reason,
+            "closed_label": closed_label,
+        },
+        "outcome": {
+            "realized_pnl_usd": pnl_usd,
+            "worst_loss_during_trade_usd": mae_usd,
+        },
+    }
 
 
 def _fetch_baseline_exit_policy_features(
@@ -1318,9 +1424,10 @@ def build_baseline_trades_report(
             candidates.append((ts or datetime(1970, 1, 1, tzinfo=timezone.utc), row))
 
         candidates.sort(key=lambda x: x[0], reverse=True)
+        candidates = _dedupe_candidates_by_trade_id(candidates)
 
         mids_for_tiles: list[str] = []
-        meta_pairs: list[tuple[dict[str, Any], dict[str, Any]]] = []
+        meta_pairs: list[tuple[dict[str, Any], dict[str, Any], dict[str, Any] | None]] = []
         for _ts, ledger_row in candidates:
             mid = str(ledger_row.get("market_event_id") or "").strip()
             cell = _compact_baseline_cell_policy_bound(
@@ -1347,8 +1454,7 @@ def build_baseline_trades_report(
                 tf or None,
             )
             tid_raw = str(ledger_row.get("trade_id") or "").strip() or None
-            path_kind = _baseline_trade_id_path_kind(tid_raw)
-            exit_expl = _exit_reason_operator_explanation(ledger_row.get("exit_reason"), path_kind)
+            pos_open = _fetch_position_open_payload(conn, tid_raw)
             held_disp = _format_held_display(hdm, hbars, tf or None)
             pnl = ledger_row.get("pnl_usd")
             ep = ledger_row.get("entry_price")
@@ -1365,28 +1471,47 @@ def build_baseline_trades_report(
                     market_db_path=mpath,
                 )
 
+            oc = _strip_outcome_from_pnl(pnl)
+            closed_lbl = _lifecycle_closed_label(ledger_row.get("exit_reason"), oc)
+            sle = _coerce_finite_float(pos_open.get("virtual_sl")) if pos_open else None
+            tpe = _coerce_finite_float(pos_open.get("virtual_tp")) if pos_open else None
+            notion = _coerce_finite_float(pos_open.get("notional_usd")) if pos_open else None
+            if notion is None and ep is not None and ledger_row.get("size") is not None:
+                try:
+                    notion = float(ep) * float(ledger_row["size"])
+                except (TypeError, ValueError):
+                    notion = None
+
             rows_out.append(
                 {
                     "trade_id": tid_raw,
-                    "trade_id_path_kind": path_kind,
+                    "lifecycle_open_at_utc": entry_time_utc_iso or "",
+                    "lifecycle_held_display": held_disp,
+                    "lifecycle_closed_at_utc": exit_time_utc_iso or "",
+                    "lifecycle_closed_label": closed_lbl,
                     "entry_time_utc_iso": entry_time_utc_iso or "",
                     "exit_time_utc_iso": exit_time_utc_iso or "",
                     "hold_duration_minutes": round(hdm, 4) if hdm is not None else None,
                     "hold_bars_estimate": hbars,
                     "held_display": held_disp,
+                    "stop_loss_entry_price": sle,
+                    "take_profit_entry_price": tpe,
+                    "notional_usd": round(notion, 6) if notion is not None else None,
+                    "size_source": str(pos_open.get("size_source") or "").strip() or None
+                    if pos_open
+                    else None,
                     "market_event_id": mid,
                     "side": str(ledger_row.get("side") or "").strip().lower(),
                     "symbol": sym or None,
                     "timeframe": tf or None,
                     "mode": str(ledger_row.get("mode") or "").strip() or None,
                     "time_utc_iso": t_iso or "",
-                    "outcome": _strip_outcome_from_pnl(pnl),
+                    "outcome": oc,
                     "pnl_usd": float(pnl) if pnl is not None else None,
                     "entry": float(ep) if ep is not None else None,
                     "exit": float(xp) if xp is not None else None,
                     "size": float(ledger_row["size"]) if ledger_row.get("size") is not None else None,
                     "exit_reason": str(ledger_row.get("exit_reason") or "").strip() or None,
-                    "exit_reason_explanation": exit_expl,
                     "mae_usd": round(mae_val, 6) if mae_val is not None else None,
                     "baseline_authority": authority,
                     "baseline_authority_reason": reason,
@@ -1396,7 +1521,7 @@ def build_baseline_trades_report(
                     "lifecycle_display": str(cell.get("outcome_display") or ""),
                 }
             )
-            meta_pairs.append((ledger_row, cell))
+            meta_pairs.append((ledger_row, cell, pos_open))
             mids_for_tiles.append(mid)
             if len(rows_out) >= lim:
                 break
@@ -1408,7 +1533,7 @@ def build_baseline_trades_report(
             mk = str(r.get("market_event_id") or "").strip()
             tile_text = tile_narr.get(mk, "") if mk else ""
             r["jupiter_tile_narrative"] = tile_text
-            ledger_row_i, cell_i = meta_pairs[i]
+            ledger_row_i, cell_i, _pos_open_i = meta_pairs[i]
             pol_i = fetch_policy_evaluation_for_market_event(
                 conn,
                 mk,
@@ -1425,17 +1550,41 @@ def build_baseline_trades_report(
                     sl_p = lsl
                 if tp_p is None:
                     tp_p = ltp
-            r["stop_loss_at_exit_price"] = sl_p
-            r["take_profit_at_exit_price"] = tp_p
-            if sl_p is not None or tp_p is not None:
-                parts_sl: list[str] = []
-                if sl_p is not None:
-                    parts_sl.append(f"SL@{sl_p}")
-                if tp_p is not None:
-                    parts_sl.append(f"TP@{tp_p}")
-                r["sl_tp_summary"] = " ".join(parts_sl)
-            else:
-                r["sl_tp_summary"] = "—"
+            r["stop_loss_exit_price"] = sl_p
+            r["take_profit_exit_price"] = tp_p
+            r["sl_tp_summary"] = (
+                " ".join(
+                    x
+                    for x in (
+                        f"SL@{sl_p}" if sl_p is not None else None,
+                        f"TP@{tp_p}" if tp_p is not None else None,
+                    )
+                    if x
+                )
+                or "—"
+            )
+            r["operator_trade_snapshot"] = _operator_trade_snapshot_row(
+                trade_id=r.get("trade_id"),
+                strategy_lane="baseline",
+                entry_time_utc_iso=str(r.get("entry_time_utc_iso") or ""),
+                exit_time_utc_iso=str(r.get("exit_time_utc_iso") or ""),
+                held_display=str(r.get("lifecycle_held_display") or r.get("held_display") or ""),
+                side=r.get("side"),
+                entry_px=r.get("entry"),
+                exit_px=r.get("exit"),
+                size=r.get("size"),
+                notional_usd=r.get("notional_usd"),
+                stop_loss_entry=r.get("stop_loss_entry_price"),
+                take_profit_entry=r.get("take_profit_entry_price"),
+                stop_loss_exit=sl_p,
+                take_profit_exit=tp_p,
+                risk_pct=None,
+                lifecycle_phase="CLOSED",
+                exit_reason=r.get("exit_reason"),
+                closed_label=str(r.get("lifecycle_closed_label") or ""),
+                pnl_usd=r.get("pnl_usd"),
+                mae_usd=r.get("mae_usd"),
+            )
             r["synthesis"] = _trade_event_synthesis_v1(
                 policy_row=pol_i,
                 ledger_row=ledger_row_i,

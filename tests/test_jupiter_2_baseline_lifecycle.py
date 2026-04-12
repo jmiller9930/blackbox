@@ -118,9 +118,10 @@ def test_same_price_move_scales_pnl_with_notional() -> None:
 
 
 def test_baseline_size_fallback_without_notional() -> None:
+    """Missing notional in hint → default paper notional (100 USD) / entry."""
     sz, src = baseline_lifecycle_base_size_from_signal_features(
-        entry_price=100.0,
+        entry_price=200.0,
         signal_features={"position_size_hint": {"leverage": 15}},
     )
-    assert sz == 1.0
-    assert src == "fallback_no_notional_usd"
+    assert sz == pytest.approx(0.5)
+    assert src == "default_baseline_notional_usd_100"
