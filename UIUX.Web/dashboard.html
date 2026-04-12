@@ -364,6 +364,27 @@
     .tc-mini .lab { color: var(--muted); font-size: 0.58rem; text-transform: uppercase; }
     .tc-mini-muted .lab { opacity: 0.85; }
     .tc-mini-muted { opacity: 0.88; }
+    .tc-lifecycle-continuation {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 0.25rem 0.4rem;
+      padding: 0.35rem 0.25rem;
+      font-size: 0.68rem;
+      font-weight: 700;
+      color: #64748b;
+      background: linear-gradient(90deg, #f1f5f9 0%, #fff 100%);
+      border-radius: 6px;
+      border: 1px dashed #cbd5e1;
+    }
+    .tc-lifecycle-continuation-mark { color: #94a3b8; font-size: 0.85rem; line-height: 1; }
+    .tc-lifecycle-continuation-tid { font-family: ui-monospace, monospace; font-size: 0.62rem; color: #334155; word-break: break-all; }
+    .tc-lifecycle-continuation-note {
+      font-size: 0.58rem;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: #94a3b8;
+    }
     .tc-empty { color: var(--muted); }
     .tc-no-trade {
       display: inline-block;
@@ -1109,6 +1130,21 @@
 
   function cellMini(c, row) {
     var baselineLane = (row.chain_kind || '') === 'baseline';
+    if (baselineLane && c && c.lifecycle_tile_slot === 'continuation') {
+      var tidShort =
+        c.lifecycle_trade_id != null && String(c.lifecycle_trade_id).trim() !== ''
+          ? tcShortId(String(c.lifecycle_trade_id), 20)
+          : '—';
+      return tcCellSurface(
+        '<div class="tc-lifecycle-continuation" title="Same baseline trade; current OPEN/HOLDING/CLOSED state is on the newest column.">' +
+          '<span class="tc-lifecycle-continuation-mark" aria-hidden="true">↳</span>' +
+          '<span class="tc-lifecycle-continuation-tid">' +
+          esc(tidShort) +
+          '</span>' +
+          '<span class="tc-lifecycle-continuation-note">continued</span>' +
+          '</div>'
+      );
+    }
     var narr = c && c.jupiter_tile_narrative ? String(c.jupiter_tile_narrative) : '';
     var narrEl = narr
       ? jupiterNarrativeLinesHtml(narr, 'Jupiter / Sean policy (5m bar)', baselineLane)
@@ -1154,6 +1190,15 @@
     var modeRaw = String(c.mode || '—');
     var modeDisp = modeRaw === 'paper_stub' ? 'eval / non-economic' : modeRaw;
     var ocDisp = String(c.outcome_display != null ? c.outcome_display : c.outcome || '—');
+    if (
+      baselineLane &&
+      c.lifecycle_tile_slot === 'primary' &&
+      c.baseline_lifecycle_phase
+    ) {
+      var ph0 = String(c.baseline_lifecycle_phase || '').toLowerCase();
+      if (ph0 === 'open') ocDisp = 'OPEN';
+      else if (ph0 === 'held') ocDisp = 'HOLDING';
+    }
     var paired = (vs === 'WIN' || vs === 'NOT_WIN');
     if (paired) {
       ocDisp = vs === 'WIN' ? 'WIN' : 'NOT';
@@ -1171,6 +1216,9 @@
       ocDisp = baselineLane ? 'closed flat' : 'FLAT';
     }
     var ocLower = String(ocDisp).trim().toLowerCase();
+    if (ocLower === 'holding') {
+      ocLower = 'held';
+    }
     var muted = !paired && (c.economic_authority === 'muted');
     var wl = 'wl-FLAT';
     if (ocDisp === 'WIN') wl = 'wl-WIN';

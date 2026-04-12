@@ -15,6 +15,7 @@ from modules.anna_training.execution_ledger import (
 )
 from modules.anna_training.dashboard_bundle import (
     BASELINE_TRADES_REPORT_SCHEMA,
+    _baseline_assign_lifecycle_tile_slots,
     build_baseline_active_position_snapshot,
     _compact_baseline_cell_policy_bound,
     _event_axis_jupiter_tile_narratives,
@@ -423,6 +424,36 @@ def test_compact_baseline_exit_shows_win_from_ledger_when_policy_trade_false(tmp
     assert cell.get("baseline_lifecycle_phase") == "closed"
     assert cell.get("outcome_display") == "closed win"
     assert cell.get("policy_trade") is False
+
+
+def test_baseline_assign_lifecycle_tile_slots_open_held_run() -> None:
+    axis = ["a", "b", "c"]
+    cells = {
+        "a": {"baseline_display_reason": "lifecycle_held", "empty": False},
+        "b": {"baseline_display_reason": "lifecycle_held", "empty": False},
+        "c": {"baseline_display_reason": "lifecycle_held", "empty": False},
+    }
+    _baseline_assign_lifecycle_tile_slots(
+        event_axis=axis, cells=cells, open_trade_id="bl_lc_test"
+    )
+    assert cells["a"]["lifecycle_tile_slot"] == "continuation"
+    assert cells["b"]["lifecycle_tile_slot"] == "continuation"
+    assert cells["c"]["lifecycle_tile_slot"] == "primary"
+    assert cells["c"]["lifecycle_trade_id"] == "bl_lc_test"
+
+
+def test_baseline_assign_lifecycle_tile_slots_closed_primary() -> None:
+    axis = ["x"]
+    cells = {
+        "x": {
+            "baseline_display_reason": "lifecycle_exit_execution",
+            "baseline_lifecycle_phase": "closed",
+            "trade_id": "bl_lc_close1",
+        }
+    }
+    _baseline_assign_lifecycle_tile_slots(event_axis=axis, cells=cells, open_trade_id=None)
+    assert cells["x"]["lifecycle_tile_slot"] == "primary"
+    assert cells["x"]["lifecycle_trade_id"] == "bl_lc_close1"
 
 
 def test_build_baseline_trades_report_schema() -> None:

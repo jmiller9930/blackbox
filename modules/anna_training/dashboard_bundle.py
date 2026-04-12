@@ -2042,6 +2042,81 @@ def _baseline_policy_held_cell(
     }
 
 
+def _baseline_open_position_trade_id(conn: Any) -> str | None:
+    """Active baseline Jupiter paper position trade_id from ``baseline_jupiter_open_positions``, if any."""
+    from modules.anna_training.execution_ledger import (
+        baseline_jupiter_open_position_key,
+        fetch_baseline_jupiter_open_state_json,
+    )
+
+    pk = baseline_jupiter_open_position_key(symbol="SOL-PERP", timeframe="5m", mode="paper")
+    raw = fetch_baseline_jupiter_open_state_json(conn, position_key=pk)
+    if not raw:
+        return None
+    try:
+        d = json.loads(raw)
+    except json.JSONDecodeError:
+        return None
+    t = str(d.get("trade_id") or "").strip()
+    return t or None
+
+
+def _baseline_assign_lifecycle_tile_slots(
+    *,
+    event_axis: list[str],
+    cells: dict[str, Any],
+    open_trade_id: str | None,
+) -> None:
+    """
+    Main dashboard: one persistent baseline trade tile — only the **newest** column for an open/held run
+    is ``primary`` (full OPEN/HOLDING tile); earlier columns in the same run are ``continuation`` (minimal).
+
+    Closed exits always get ``primary`` (single column per close).
+    """
+    n = len(event_axis)
+    i = 0
+    while i < n:
+        mid = event_axis[i]
+        c = cells.get(mid)
+        if not isinstance(c, dict):
+            i += 1
+            continue
+        br = str(c.get("baseline_display_reason") or "")
+        phase = str(c.get("baseline_lifecycle_phase") or "").strip().lower()
+        is_closed = phase == "closed" or br in (
+            "lifecycle_exit_execution",
+            "policy_approved_execution",
+        )
+        if is_closed:
+            nc = dict(c)
+            tid = str(nc.get("trade_id") or "").strip() or None
+            nc["lifecycle_trade_id"] = tid or open_trade_id
+            nc["lifecycle_tile_slot"] = "primary"
+            cells[mid] = nc
+            i += 1
+            continue
+        if br not in (_BASELINE_OPEN_DISPLAY_REASON, _BASELINE_HELD_DISPLAY_REASON):
+            i += 1
+            continue
+        j = i
+        while j < n:
+            midj = event_axis[j]
+            cj = cells.get(midj)
+            if not isinstance(cj, dict):
+                break
+            brj = str(cj.get("baseline_display_reason") or "")
+            if brj not in (_BASELINE_OPEN_DISPLAY_REASON, _BASELINE_HELD_DISPLAY_REASON):
+                break
+            j += 1
+        for k in range(i, j):
+            midk = event_axis[k]
+            ck = dict(cells.get(midk) or {})
+            ck["lifecycle_trade_id"] = open_trade_id
+            ck["lifecycle_tile_slot"] = "continuation" if k < j - 1 else "primary"
+            cells[midk] = ck
+        i = j
+
+
 def _baseline_policy_no_trade_cell(
     *,
     market_event_id: str,
@@ -2415,6 +2490,8 @@ def build_trade_chain_payload(
                 "account_note": (
                     "Baseline lifecycle labels match the report: **open** (entry bar, fill on exit), **held** "
                     "(mid-trade), **closed win / closed loss / closed flat** (ledger-backed). "
+                    "While a trade is open, only the **newest** column shows the full tile; earlier bars show "
+                    "a minimal continuation marker (same trade_id). "
                     "Otherwise **no trade** when policy does not authorize."
                 ),
             }
@@ -2489,10 +2566,20 @@ def build_trade_chain_payload(
                         epsilon=pair_eps,
                     )
                     r["cells"][mid] = {**ac, **pair}
+        if bi is not None and event_axis:
+            _baseline_assign_lifecycle_tile_slots(
+                event_axis=event_axis,
+                cells=rows_out[bi]["cells"],
+                open_trade_id=_baseline_open_position_trade_id(conn),
+            )
         for r in rows_out:
+            ck_row = str(r.get("chain_kind") or "")
             for mid in event_axis:
                 d = dict(r["cells"].get(mid) or {})
-                d["jupiter_tile_narrative"] = tile_narr.get(str(mid).strip(), "")
+                narr = tile_narr.get(str(mid).strip(), "")
+                if ck_row == "baseline" and d.get("lifecycle_tile_slot") == "continuation":
+                    narr = ""
+                d["jupiter_tile_narrative"] = narr
                 r["cells"][mid] = d
     finally:
         conn.close()
@@ -2510,7 +2597,9 @@ def build_trade_chain_payload(
         "event_axis_note": (
             "Columns are distinct market_event_id values (oldest left → newest right). "
             "Axis prefers recent rows from market_bars_5m when available; else execution_trades. "
-            "Baseline lifecycle: **open** → **held** → **closed** (win/loss/flat); same vocabulary as baseline trades report."
+            "Baseline lifecycle: **open** → **held** → **closed** (win/loss/flat); same vocabulary as baseline trades report. "
+            "One open baseline trade uses one **primary** tile on the newest column; older columns in that run are "
+            "**continuation** (minimal), not repeated full HELD tiles."
         ),
         "jupiter_tile_narrative_schema": "jupiter_tile_narrative_v1",
         "recency": {
