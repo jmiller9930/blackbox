@@ -1237,51 +1237,43 @@
     return '<div class="tc-cell-surface">' + inner + '</div>';
   }
 
-  function cellMini(c, row) {
+  function baselineLifecyclePositionOpen(bl) {
+    if (!bl || bl.position_open == null) return false;
+    if (bl.position_open === true) return true;
+    var s = String(bl.position_open).toLowerCase();
+    return s === 'true' || s === '1';
+  }
+
+  function cellMini(c, row, opts) {
+    opts = opts || {};
+    var jp = opts.jp || {};
+    var bl = jp.baseline_lifecycle || {};
+    var colIdx = opts.colIndex;
+    var nAxis = opts.nEv;
     var baselineLane = (row.chain_kind || '') === 'baseline';
+    // One trade, one live surface: never repeat OPEN/HOLDING on earlier columns when ledger says position is open.
+    if (
+      baselineLane &&
+      baselineLifecyclePositionOpen(bl) &&
+      typeof colIdx === 'number' &&
+      typeof nAxis === 'number' &&
+      nAxis > 0 &&
+      colIdx < nAxis - 1
+    ) {
+      var openTid = String(bl.trade_id || '').trim();
+      var ctid = c
+        ? String(c.lifecycle_trade_id != null ? c.lifecycle_trade_id : c.trade_id || '').trim()
+        : '';
+      if (!openTid || !ctid || openTid === ctid) {
+        return tcCellSurface(
+          '<span class="tc-baseline-anchor-dash" title="Open baseline trade — live tile is in the now column">—</span>'
+        );
+      }
+    }
+    // Continuation slots are anchors only — not duplicate OPEN/HOLDING tiles (per-bar vs per-trade).
     if (baselineLane && c && c.lifecycle_tile_slot === 'continuation') {
-      var br = String(c.baseline_display_reason || '');
-      var ph = String(c.baseline_lifecycle_phase || '').toLowerCase();
-      var ocLabel = '—';
-      if (ph === 'open' || br === 'lifecycle_entry_open') ocLabel = 'OPEN';
-      else if (ph === 'held' || br === 'lifecycle_held') ocLabel = 'HOLDING';
-      var tidShort =
-        c.lifecycle_trade_id != null && String(c.lifecycle_trade_id).trim() !== ''
-          ? tcShortId(String(c.lifecycle_trade_id), 22)
-          : '—';
-      var sideU =
-        c.side != null && String(c.side).trim() !== ''
-          ? String(c.side).toUpperCase()
-          : '—';
-      var sym = c.symbol != null && String(c.symbol).trim() !== '' ? esc(String(c.symbol)) : '—';
-      var tf =
-        c.timeframe != null && String(c.timeframe).trim() !== ''
-          ? esc(String(c.timeframe))
-          : '';
-      var symTf = tf ? sym + ' · ' + tf : sym;
-      var wl =
-        ocLabel === 'OPEN' ? 'tc-verdict-open' : ocLabel === 'HOLDING' ? 'tc-verdict-held' : '';
       return tcCellSurface(
-        '<div class="tc-lifecycle-continuation-rich" title="Same baseline trade as newer columns; full economics on the newest column and in Baseline live trade above.">' +
-          (wl
-            ? '<div class="tc-tile-verdict ' +
-              wl +
-              '" title="Lifecycle label on this 5m bar (same trade_id).">' +
-              esc(ocLabel) +
-              '</div>'
-            : '<div class="tc-tile-verdict">' + esc(ocLabel) + '</div>') +
-          '<p class="tc-lifecycle-continuation-hint">Earlier bar · same trade_id</p>' +
-          '<div class="tc-mini tc-lifecycle-continuation-grid">' +
-          '<span class="lab">trade</span><span class="tc-id">' +
-          esc(tidShort) +
-          '</span>' +
-          '<span class="lab">sym</span><span>' +
-          symTf +
-          '</span>' +
-          '<span class="lab">side</span><span>' +
-          esc(sideU) +
-          '</span>' +
-          '</div></div>'
+        '<span class="tc-baseline-anchor-dash" title="Same baseline trade — full state only in the newest (now) column">—</span>'
       );
     }
     var narr = c && c.jupiter_tile_narrative ? String(c.jupiter_tile_narrative) : '';
@@ -1754,9 +1746,9 @@
     bundle = bundle || {};
     var jp = bundle.jupiter_policy_snapshot || {};
     var blOpen = jp.baseline_lifecycle;
-    var liveSig =
-      blOpen && blOpen.position_open ? JSON.stringify(blOpen) : '';
-    if (blOpen && blOpen.position_open) {
+    var blPosOpen = baselineLifecyclePositionOpen(blOpen);
+    var liveSig = blPosOpen && blOpen ? JSON.stringify(blOpen) : '';
+    if (blPosOpen && blOpen) {
       liveSig += '|wall:' + Math.floor(Date.now() / 2000);
     }
     var sig = tradeChainRenderSig(tc) + '|' + liveSig;
@@ -1825,7 +1817,7 @@
       if (trCls) tr.className = trCls;
       var h = '<th scope="row">' + rowHead(row) + '</th>';
       var cells = '';
-      if (ck === 'baseline' && blOpen && blOpen.position_open && nEv > 0) {
+      if (ck === 'baseline' && blPosOpen && blOpen && nEv > 0) {
         axis.forEach(function (mid, idx) {
           var isLast = idx === nEv - 1;
           var cls = isLast ? ' class="tc-now"' : '';
@@ -1854,7 +1846,14 @@
           var isNow = axis.length > 0 && idx === axis.length - 1;
           var cls = isNow ? ' class="tc-now"' : '';
           var cellBg = tcColumnBgOnly(idx, nEv, row);
-          cells += '<td' + cls + ' style="' + cellBg + '">' + cellMini(cell, row) + '</td>';
+          cells +=
+            '<td' +
+            cls +
+            ' style="' +
+            cellBg +
+            '">' +
+            cellMini(cell, row, { jp: jp, colIndex: idx, nEv: nEv }) +
+            '</td>';
         });
       }
       tr.innerHTML = h + cells;
