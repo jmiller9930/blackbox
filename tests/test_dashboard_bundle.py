@@ -15,6 +15,7 @@ from modules.anna_training.execution_ledger import (
 )
 from modules.anna_training.dashboard_bundle import (
     BASELINE_TRADES_REPORT_SCHEMA,
+    _compact_baseline_cell_policy_bound,
     _event_axis_jupiter_tile_narratives,
     _pair_vs_baseline_for_cells,
     _strip_outcome_from_pnl,
@@ -294,6 +295,104 @@ def test_strip_outcome_zero_is_flat_not_win() -> None:
     assert _strip_outcome_from_pnl(-1e-10) == "FLAT"
     assert _strip_outcome_from_pnl(1e-8) == "WIN"
     assert _strip_outcome_from_pnl(-1e-8) == "LOSS"
+
+
+def test_compact_baseline_holding_shows_holding_not_no_trade(tmp_path: Path) -> None:
+    """Mid-lifecycle bars: policy trade=0 + holding reason must not render as NO_TRADE."""
+    ledger = tmp_path / "el.db"
+    mid = "SOL-PERP_5m_2026-04-01T12:00:00Z"
+    conn = connect_ledger(ledger)
+    ensure_execution_ledger_schema(conn)
+    upsert_policy_evaluation(
+        market_event_id=mid,
+        signal_mode="sean_jupiter_v1",
+        tick_mode="paper",
+        trade=False,
+        reason_code="jupiter_2_baseline_holding",
+        features={"lifecycle": "holding"},
+        side="long",
+        conn=conn,
+    )
+    conn.commit()
+    cell = _compact_baseline_cell_policy_bound(conn, mid, None, market_db_path=None)
+    conn.close()
+    assert cell["outcome"] == "HOLDING"
+    assert cell.get("baseline_display_reason") == "lifecycle_holding"
+    assert cell.get("empty") is False
+
+
+def test_compact_baseline_exit_shows_win_from_ledger_when_policy_trade_false(tmp_path: Path) -> None:
+    """Exit bar: trade=0 + jupiter_2_baseline_exit + closing row → WIN/LOSS from ledger."""
+    ledger = tmp_path / "el.db"
+    mid = "SOL-PERP_5m_2026-04-01T12:05:00Z"
+    conn = connect_ledger(ledger)
+    ensure_execution_ledger_schema(conn)
+    upsert_policy_evaluation(
+        market_event_id=mid,
+        signal_mode="sean_jupiter_v1",
+        tick_mode="paper",
+        trade=False,
+        reason_code="jupiter_2_baseline_exit",
+        features={"lifecycle": "exit"},
+        side="long",
+        conn=conn,
+    )
+    conn.execute(
+        """INSERT INTO execution_trades (
+            trade_id, strategy_id, lane, mode, market_event_id, symbol, timeframe,
+            side, entry_time, entry_price, size, exit_time, exit_price, exit_reason,
+            pnl_usd, context_snapshot_json, notes, trace_id, schema_version, created_at_utc
+        ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+        (
+            "bl_exit1",
+            "baseline",
+            "baseline",
+            "paper",
+            mid,
+            "SOL-PERP",
+            "5m",
+            "long",
+            "2026-04-01T12:00:00Z",
+            100.0,
+            1.0,
+            "2026-04-01T12:05:00Z",
+            101.0,
+            "TAKE_PROFIT",
+            1.0,
+            "{}",
+            "",
+            None,
+            "execution_trade_v1",
+            "2026-04-01T12:05:02Z",
+        ),
+    )
+    conn.commit()
+    ledger_row = {
+        "trade_id": "bl_exit1",
+        "strategy_id": "baseline",
+        "lane": "baseline",
+        "mode": "paper",
+        "market_event_id": mid,
+        "symbol": "SOL-PERP",
+        "timeframe": "5m",
+        "side": "long",
+        "entry_time": "2026-04-01T12:00:00Z",
+        "entry_price": 100.0,
+        "size": 1.0,
+        "exit_time": "2026-04-01T12:05:00Z",
+        "exit_price": 101.0,
+        "exit_reason": "TAKE_PROFIT",
+        "pnl_usd": 1.0,
+        "created_at_utc": "2026-04-01T12:05:02Z",
+        "trace_id": None,
+        "notes": "",
+        "context_snapshot_json": "{}",
+    }
+    cell = _compact_baseline_cell_policy_bound(conn, mid, ledger_row, market_db_path=None)
+    conn.close()
+    assert cell.get("baseline_display_reason") == "lifecycle_exit_execution"
+    assert cell["outcome"] == "WIN"
+    assert cell.get("policy_trade") is False
 
 
 def test_build_baseline_trades_report_schema() -> None:

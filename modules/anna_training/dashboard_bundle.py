@@ -3,10 +3,12 @@ Aggregated operator dashboard payload: trade chain, sequential status, wallet su
 
 Trade chain: horizontal event axis (columns) × vertical chains (baseline, Anna test, Anna strategy rows).
 
-**Baseline row:** WIN/LOSS is bound to ``policy_evaluations`` (``signal_mode=sean_jupiter_v1`` is the **historic env
-label** for “Sean baseline path”; the **engine** is always **Jupiter_2**, see ``jupiter_2_sean_policy``) plus
-a matching execution row when ``trade=1``. Missing policy or ``trade=0`` renders NO TRADE even if
-``execution_trades`` contains a baseline row (non-authoritative artifacts are not displayed as outcomes).
+**Baseline row:** Closed-trade WIN/LOSS is bound to ``policy_evaluations`` (``signal_mode=sean_jupiter_v1`` is the
+**historic env label** for “Sean baseline path”; the **engine** is always **Jupiter_2**, see ``jupiter_2_sean_policy``)
+plus a matching ``execution_trades`` row. Policy ``trade=1`` is **new entry**; mid-position bars use
+``trade=0`` with ``reason_code=jupiter_2_baseline_holding`` (display **HOLDING**). Exit bars use ``trade=0`` with
+``jupiter_2_baseline_exit`` and a closing ledger row (display WIN/LOSS from realized PnL). Other ``trade=0`` cases
+still render NO TRADE even if the ledger has stray rows (non-authoritative artifacts are not displayed as outcomes).
 
 **Jupiter policy snapshot:** ``evaluate_sean_jupiter_baseline_v1`` → ``evaluate_jupiter_2_sean`` (bar-derived; paper).
 """
@@ -24,6 +26,14 @@ from pathlib import Path
 from typing import Any
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
+
+# Baseline lifecycle — must match ``baseline_ledger_bridge`` policy_evaluations.reason_code.
+JUPITER_2_BASELINE_HOLDING_RC = "jupiter_2_baseline_holding"
+JUPITER_2_BASELINE_EXIT_RC = "jupiter_2_baseline_exit"
+# Compact-cell reasons that count as a closed baseline trade (ledger row + policy) for reports / strips / synthesis.
+_BASELINE_CLOSED_TRADE_DISPLAY_REASONS = frozenset(
+    ("policy_approved_execution", "lifecycle_exit_execution")
+)
 
 # Operator-visible cadence (must match dashboard.html poll interval and docker-compose defaults).
 DASHBOARD_CLIENT_POLL_INTERVAL_MS = 1500
@@ -891,7 +901,8 @@ def _recent_baseline_policy_trade_rows_for_strip(
     market_db_path: Path | None = None,
 ) -> list[dict[str, Any]]:
     """
-    Newest-first baseline executions that are **policy TRADE** (``policy_approved_execution``).
+    Newest-first baseline executions that are **policy-authoritative closed trades**
+    (``policy_approved_execution`` or ``lifecycle_exit_execution``).
 
     Scans up to ``scan_cap`` recent ledger rows until ``limit`` authoritative trades are found.
     Matches the baseline report when scoped to **trade** only — unlike raw ledger strips.
@@ -920,7 +931,7 @@ def _recent_baseline_policy_trade_rows_for_strip(
         cell = _compact_baseline_cell_policy_bound(
             conn, mid, ledger_row, market_db_path=mpath
         )
-        if str(cell.get("baseline_display_reason") or "") != "policy_approved_execution":
+        if str(cell.get("baseline_display_reason") or "") not in _BASELINE_CLOSED_TRADE_DISPLAY_REASONS:
             continue
         t = ledger_row.get("entry_time") or ledger_row.get("created_at_utc")
         t_iso = _normalize_utc_iso_for_axis(t) if t else None
@@ -981,11 +992,8 @@ def _trade_event_synthesis_v1(
 
     Built at read time from existing tables; can later be persisted as the single materialized record.
     """
-    verdict = (
-        "TRADE"
-        if str(compact_cell.get("baseline_display_reason") or "") == "policy_approved_execution"
-        else "NO_TRADE"
-    )
+    br = str(compact_cell.get("baseline_display_reason") or "")
+    verdict = "TRADE" if br in _BASELINE_CLOSED_TRADE_DISPLAY_REASONS else "NO_TRADE"
     pol_snap: dict[str, Any] | None = None
     if policy_row:
         pol_snap = {
@@ -1123,7 +1131,7 @@ def build_baseline_trades_report(
                 conn, mid, ledger_row, market_db_path=mpath
             )
             reason = str(cell.get("baseline_display_reason") or "")
-            is_trade = reason == "policy_approved_execution"
+            is_trade = reason in _BASELINE_CLOSED_TRADE_DISPLAY_REASONS
             authority = "TRADE" if is_trade else "NO_TRADE"
             if sc == "trade" and authority != "TRADE":
                 continue
@@ -1291,6 +1299,67 @@ def _event_axis_from_market_bars(mpath: Path | None, *, limit: int) -> tuple[lis
     return mids, times
 
 
+def _symbol_tf_from_market_event_id(market_event_id: str) -> tuple[str | None, str | None]:
+    """Best-effort parse ``SYMBOL_TF_ISO8601`` from canonical ``market_event_id`` (e.g. ``SOL-PERP_5m_...``)."""
+    s = str(market_event_id or "").strip()
+    if not s:
+        return (None, None)
+    for sep in ("_5m_", "_15m_", "_1h_", "_4h_", "_1d_"):
+        if sep in s:
+            sym = s.split(sep, 1)[0].strip()
+            tf = sep.strip("_")
+            return (sym or None, tf or None)
+    return (None, None)
+
+
+def _baseline_policy_holding_cell(
+    *,
+    market_event_id: str,
+    policy_row: dict[str, Any],
+    reason: str = "lifecycle_holding",
+) -> dict[str, Any]:
+    """Open position mid-lifecycle: policy says ``trade=0`` but reason is baseline holding (not flat)."""
+    mid = str(market_event_id).strip()
+    feat = policy_row.get("features") if isinstance(policy_row.get("features"), dict) else {}
+    sym, tf = _symbol_tf_from_market_event_id(mid)
+    if not sym:
+        op = feat.get("open_position")
+        if isinstance(op, dict):
+            sym2, tf2 = _symbol_tf_from_market_event_id(str(op.get("entry_market_event_id") or ""))
+            sym = sym or sym2
+            tf = tf or tf2
+    tm = str(policy_row.get("tick_mode") or "").strip().lower()
+    mode_out = tm if tm in ("paper", "live") else "paper"
+    return {
+        "empty": False,
+        "market_event_id": mid,
+        "trade_id": None,
+        "trace_id": None,
+        "symbol": sym,
+        "timeframe": tf,
+        "side": policy_row.get("side"),
+        "exit_reason": None,
+        "entry": None,
+        "exit": None,
+        "entry_time": None,
+        "exit_time": None,
+        "size": None,
+        "notional_usd_approx": None,
+        "pnl_usd": None,
+        "mae_usd": None,
+        "outcome": "HOLDING",
+        "outcome_display": "holding",
+        "economic_authority": "policy_gated",
+        "mode": mode_out,
+        "policy_authoritative": True,
+        "policy_trade": False,
+        "policy_reason_code": str(policy_row.get("reason_code") or ""),
+        "policy_missing": False,
+        "ledger_row_ignored": False,
+        "baseline_display_reason": reason,
+    }
+
+
 def _baseline_policy_no_trade_cell(
     *,
     market_event_id: str,
@@ -1337,8 +1406,13 @@ def _compact_baseline_cell_policy_bound(
     market_db_path: Path | None,
 ) -> dict[str, Any]:
     """
-    Baseline WIN/LOSS only when ``policy_evaluations`` (Sean Jupiter) has ``trade=1`` and a matching ledger row.
-    Missing policy, ``trade=0``, or missing execution all render NO_TRADE (ledger artifacts are non-authoritative).
+    Baseline column semantics:
+
+    - **New entry:** ``policy_evaluations.trade=1`` and a matching ledger row → WIN/LOSS from execution.
+    - **Holding:** ``trade=0`` and ``reason_code=jupiter_2_baseline_holding`` → **HOLDING** (open lifecycle).
+    - **Exit:** ``trade=0`` and ``reason_code=jupiter_2_baseline_exit`` with a closing ledger row → WIN/LOSS from PnL.
+    - Otherwise missing policy, other ``trade=0``, or missing execution where required → **NO_TRADE**
+      (ledger-only artifacts are non-authoritative).
     """
     pol = fetch_policy_evaluation_for_market_event(
         conn,
@@ -1355,7 +1429,24 @@ def _compact_baseline_cell_policy_bound(
             ledger_row=ledger_row,
             reason="policy_missing",
         )
+    rc = str(pol.get("reason_code") or "")
     if not pol.get("trade"):
+        if rc == JUPITER_2_BASELINE_HOLDING_RC:
+            return _baseline_policy_holding_cell(
+                market_event_id=mid,
+                policy_row=pol,
+                reason="lifecycle_holding",
+            )
+        if rc == JUPITER_2_BASELINE_EXIT_RC and ledger_row:
+            cell = _compact_cell(ledger_row, market_db_path=market_db_path, chain_kind="baseline")
+            cell["policy_authoritative"] = True
+            cell["policy_trade"] = False
+            cell["policy_reason_code"] = rc
+            cell["policy_missing"] = False
+            cell["ledger_row_ignored"] = False
+            cell["baseline_display_reason"] = "lifecycle_exit_execution"
+            cell["economic_authority"] = "full"
+            return cell
         return _baseline_policy_no_trade_cell(
             market_event_id=mid,
             policy_row=pol,
@@ -1638,8 +1729,10 @@ def build_trade_chain_payload(
                 "row_tier": "primary",
                 "accent_slot": None,
                 "account_note": (
-                    "Baseline display is policy-authoritative: WIN/LOSS only when policy_evaluations "
-                    "(Sean Jupiter) approves a trade and a matching execution row exists; otherwise NO TRADE."
+                    "Baseline display is policy-authoritative: WIN/LOSS when policy_evaluations "
+                    "(Sean Jupiter) approves entry and a matching execution row exists, or on lifecycle exit "
+                    "with a closing row; mid-trade bars show HOLDING when reason is baseline holding; "
+                    "otherwise NO TRADE."
                 ),
             }
         ]
@@ -1734,7 +1827,8 @@ def build_trade_chain_payload(
         "event_axis_note": (
             "Columns are distinct market_event_id values (oldest left → newest right). "
             "Axis prefers recent rows from market_bars_5m when available; else execution_trades. "
-            "Baseline WIN/LOSS is bound to policy_evaluations (Sean Jupiter), not ledger row presence alone."
+            "Baseline: entry+ledger or lifecycle exit+ledger → WIN/LOSS; holding reason → HOLDING; "
+            "otherwise NO TRADE (ledger alone is not authoritative)."
         ),
         "jupiter_tile_narrative_schema": "jupiter_tile_narrative_v1",
         "recency": {

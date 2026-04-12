@@ -397,6 +397,14 @@
       -webkit-text-stroke: 2.5px #0f172a;
       paint-order: stroke fill;
     }
+    /* Open lifecycle — not “no trade”; distinct from amber NO TRADE. */
+    .tc-tr-baseline .tc-tile-verdict.tc-verdict-holding {
+      color: #0284c7;
+      -webkit-text-stroke: 0;
+      font-size: 1.05rem;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+    }
     .tc-tile-verdict {
       grid-column: 1 / -1;
       font-size: 0.78rem;
@@ -510,7 +518,8 @@
     .wl-WIN,
     .wl-LOSS,
     .wl-FLAT,
-    .wl-EVAL {
+    .wl-EVAL,
+    .wl-HOLDING {
       color: #334155;
       font-weight: 700;
       font-style: normal;
@@ -518,7 +527,8 @@
     .tc-mini-muted .wl-WIN,
     .tc-mini-muted .wl-LOSS,
     .tc-mini-muted .wl-FLAT,
-    .tc-mini-muted .wl-EVAL {
+    .tc-mini-muted .wl-EVAL,
+    .tc-mini-muted .wl-HOLDING {
       font-weight: 600;
       color: #64748b;
     }
@@ -1142,6 +1152,7 @@
     ) {
       ocDisp = 'FLAT';
     }
+    var ocLower = String(ocDisp).trim().toLowerCase();
     var muted = !paired && (c.economic_authority === 'muted');
     var wl = 'wl-FLAT';
     if (ocDisp === 'WIN') wl = 'wl-WIN';
@@ -1149,6 +1160,7 @@
     else if (ocDisp === 'LOSS') wl = 'wl-LOSS';
     else if (ocDisp === 'FLAT') wl = 'wl-FLAT';
     else if (ocDisp === 'Eval') wl = 'wl-EVAL';
+    else if (ocLower === 'holding') wl = 'wl-HOLDING';
     var econCell = paired || (c.economic_authority === 'full');
     var wrapCls =
       'tc-mini' +
@@ -1174,13 +1186,19 @@
     var exT = tcShortTime(c.exit_time);
     var tradeCell = tcShortId(c.trade_id, 16);
     var traceCell = tcShortId(c.trace_id, 12);
-    var ocLower = String(ocDisp).trim().toLowerCase();
     var noTradeVerdict = baselineLane && ocLower === 'no trade';
+    var holdingVerdict = baselineLane && ocLower === 'holding';
+    var verdictTitle = holdingVerdict
+      ? 'Open baseline position (holding — not exited on this bar)'
+      : 'Closed trade outcome for this 5m bar';
     var verdictLine =
       '<div class="tc-tile-verdict ' +
       wl +
       (noTradeVerdict ? ' tc-verdict-no-trade-amber' : '') +
-      '" title="Closed trade outcome for this 5m bar">' +
+      (holdingVerdict ? ' tc-verdict-holding' : '') +
+      '" title="' +
+      esc(verdictTitle) +
+      '">' +
       esc(ocDisp) +
       '</div>';
     return tcCellSurface(
