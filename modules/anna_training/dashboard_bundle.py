@@ -415,6 +415,7 @@ def build_jupiter_policy_snapshot(
                 "unrealized_pnl_usd": round(float(ur), 8),
                 "breakeven_applied": pos.breakeven_applied,
                 "entry_market_event_id": pos.entry_market_event_id,
+                "entry_candle_open_utc": pos.entry_candle_open_utc,
                 "atr_entry": pos.atr_entry,
             }
         else:

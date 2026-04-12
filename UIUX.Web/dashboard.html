@@ -200,9 +200,22 @@
     .bts-pill.bts-short { background: #fff7ed; color: #c2410c; }
     .bts-t tbody tr.bts-click-row { cursor: pointer; }
     .bts-t tbody tr.bts-click-row:hover { background: #f0f9ff; }
-    /* Baseline row: one <td colspan=N> updating tile while position is open (not one column per bar) */
-    .tc-baseline-live-span {
+    /* Baseline open: placeholders left; live tile only in rightmost column */
+    .tc-baseline-anchor-empty {
+      vertical-align: middle !important;
+      text-align: center;
+      background: #f1f5f9 !important;
+      color: #94a3b8;
+    }
+    .tc-baseline-anchor-dash {
+      font-size: 1.1rem;
+      font-weight: 700;
+      letter-spacing: 0.06em;
+    }
+    .tc-baseline-live-cell {
       vertical-align: top;
+      min-width: 14rem;
+      max-width: 28rem;
       padding: 0.5rem 0.65rem !important;
       background: linear-gradient(180deg, #eff6ff 0%, #fff 100%) !important;
     }
@@ -269,6 +282,23 @@
       font-weight: 600;
       line-height: 1.4;
       max-width: 56rem;
+    }
+    .tc-anna-toggle {
+      flex: 0 0 auto;
+      display: flex;
+      align-items: center;
+      gap: 0.35rem;
+      margin: 0;
+      font-size: 0.65rem;
+      font-weight: 700;
+      color: #334155;
+      cursor: pointer;
+      user-select: none;
+    }
+    .tc-anna-toggle input {
+      width: 1rem;
+      height: 1rem;
+      accent-color: var(--accent, #0f766e);
     }
     .dash-r4 h2 {
       margin: 0;
@@ -872,8 +902,12 @@
       <section class="dash-r4" aria-labelledby="tc-h">
         <div class="tc-section-head">
           <h2 id="tc-h">Trade chain</h2>
+          <label class="tc-anna-toggle">
+            <input type="checkbox" id="tc-show-anna" />
+            Show Anna lanes (test / strategy — per-bar, independent of baseline)
+          </label>
           <p class="tc-chain-note">
-            <strong>Baseline</strong> while a trade is open: <strong>one</strong> tile spanning the timeline (updates every poll). After exit, baseline uses per-bar columns again. <strong>Anna</strong> rows always use per-bar columns.
+            With an <strong>open</strong> baseline position, the <strong>live</strong> OPEN/HOLDING tile is only in the <strong>rightmost (now)</strong> column; earlier columns are placeholders. After exit, baseline uses per-bar columns again. Uncheck Anna to focus on baseline only.
           </p>
         </div>
         <div class="tc-flow" aria-hidden="true">
@@ -930,10 +964,30 @@
   <script>
 (function () {
   var LS_KEY = 'blackbox_dashboard_seq_form_v1';
+  /** "1" = show Anna test/strategy rows in trade chain; default unset = baseline-only (Anna hidden). */
+  var LS_ANNA = 'bb_dash_show_anna';
   var POLL_MS = 1500;
   /** Skip full trade-chain DOM rebuild when display payload unchanged (avoids tile flicker every poll). */
   var __bbLastTradeChainRenderSig = null;
   function $(id) { return document.getElementById(id); }
+
+  function showAnnaChains() {
+    return localStorage.getItem(LS_ANNA) === '1';
+  }
+
+  function wireTcAnnaToggle() {
+    var cb = $('tc-show-anna');
+    if (!cb || cb.dataset.bbWired) return;
+    cb.dataset.bbWired = '1';
+    cb.checked = showAnnaChains();
+    cb.addEventListener('change', function () {
+      localStorage.setItem(LS_ANNA, cb.checked ? '1' : '0');
+      __bbLastTradeChainRenderSig = null;
+      if (window.__bbLastBundle) {
+        renderTC(window.__bbLastBundle.trade_chain || {}, window.__bbLastBundle);
+      }
+    });
+  }
 
   function loadForm() {
     try {
@@ -1620,7 +1674,24 @@
     });
   })();
 
-  /** HTML for the single updating baseline tile (OPEN vs HOLDING vs economics). Used when position_open. */
+  function baselineRunningDurationLabel(bl) {
+    var t = bl.entry_candle_open_utc;
+    if (!t || String(t).trim() === '') return '—';
+    var s = String(t).trim();
+    var d = new Date(s.endsWith('Z') || s.indexOf('+') >= 0 || s.indexOf('-') >= 10 ? s : s + 'Z');
+    if (isNaN(d.getTime())) return '—';
+    var mins = (Date.now() - d.getTime()) / 60000;
+    if (mins < 0) return '—';
+    var h = Math.floor(mins / 60);
+    var m = Math.floor(mins % 60);
+    var sec = Math.floor((mins - Math.floor(mins)) * 60);
+    if (h >= 72) return Math.floor(mins / 1440) + 'd+';
+    if (h >= 1) return h + 'h ' + (m < 10 ? '0' : '') + m + 'm';
+    if (mins >= 1) return Math.floor(mins) + 'm ' + (sec < 10 ? '0' : '') + sec + 's';
+    return (mins * 60).toFixed(0) + 's';
+  }
+
+  /** HTML for the single updating baseline tile (OPEN vs HOLDING vs economics). Used when position_open — only in rightmost column. */
   function buildBaselineLiveTileHtml(bl, jp) {
     if (!bl || !bl.position_open) return '';
     var evMid = jp && jp.evaluated_bar && jp.evaluated_bar.market_event_id;
@@ -1635,7 +1706,7 @@
       return Number(x).toFixed(dec != null ? dec : 2);
     }
     return (
-      '<p class="tc-baseline-live-hint">Active baseline trade — single tile; values refresh every poll until exit.</p>' +
+      '<p class="tc-baseline-live-hint">Live baseline — this column is <strong>now</strong>. Updates every poll until exit.</p>' +
       '<div class="tc-baseline-live-tile">' +
       '<div class="tc-bl-phase ' +
       phaseCls +
@@ -1648,6 +1719,9 @@
       '</span>' +
       '<span class="k">side</span><span class="v">' +
       esc(String(bl.side || '—').toUpperCase()) +
+      '</span>' +
+      '<span class="k">running</span><span class="v">' +
+      esc(baselineRunningDurationLabel(bl)) +
       '</span>' +
       '<span class="k">unrealized PnL USD</span><span class="v">' +
       esc(fmtN(bl.unrealized_pnl_usd, 4)) +
@@ -1679,6 +1753,9 @@
     var blOpen = jp.baseline_lifecycle;
     var liveSig =
       blOpen && blOpen.position_open ? JSON.stringify(blOpen) : '';
+    if (blOpen && blOpen.position_open) {
+      liveSig += '|wall:' + Math.floor(Date.now() / 2000);
+    }
     var sig = tradeChainRenderSig(tc) + '|' + liveSig;
     if (__bbLastTradeChainRenderSig !== null && sig === __bbLastTradeChainRenderSig) {
       requestAnimationFrame(function () {
@@ -1725,7 +1802,14 @@
     });
     thead.innerHTML = th;
     tbody.innerHTML = '';
-    tc.rows.forEach(function (row) {
+    var rowList = tc.rows || [];
+    if (!showAnnaChains()) {
+      rowList = rowList.filter(function (r) {
+        var ck = r.chain_kind || '';
+        return ck !== 'anna_test' && ck !== 'anna_strategy';
+      });
+    }
+    rowList.forEach(function (row) {
       var tr = document.createElement('tr');
       var ck = row.chain_kind || '';
       var trCls = '';
@@ -1739,12 +1823,28 @@
       var h = '<th scope="row">' + rowHead(row) + '</th>';
       var cells = '';
       if (ck === 'baseline' && blOpen && blOpen.position_open && nEv > 0) {
-        cells +=
-          '<td class="tc-baseline-live-span" colspan="' +
-          nEv +
-          '" role="status" aria-live="polite">' +
-          buildBaselineLiveTileHtml(blOpen, jp) +
-          '</td>';
+        axis.forEach(function (mid, idx) {
+          var isLast = idx === nEv - 1;
+          var cls = isLast ? ' class="tc-now"' : '';
+          var cellBg = tcColumnBgOnly(idx, nEv, row);
+          if (!isLast) {
+            cells +=
+              '<td class="tc-baseline-anchor-empty"' +
+              cls +
+              ' style="' +
+              cellBg +
+              '"><span class="tc-baseline-anchor-dash" title="Open baseline trade — live tile is in the now column">—</span></td>';
+          } else {
+            cells +=
+              '<td class="tc-baseline-live-cell"' +
+              cls +
+              ' role="status" aria-live="polite" style="' +
+              cellBg +
+              '">' +
+              buildBaselineLiveTileHtml(blOpen, jp) +
+              '</td>';
+          }
+        });
       } else {
         axis.forEach(function (mid, idx) {
           var cell = (row.cells && row.cells[mid]) ? row.cells[mid] : null;
@@ -2043,6 +2143,8 @@
     if (cr) cr.textContent = fmtMarketTime(new Date().toISOString(), tz2);
     window.__bbNextPollEta = new Date(Date.now() + POLL_MS);
 
+    wireTcAnnaToggle();
+    window.__bbLastBundle = bundle;
     renderTC(bundle.trade_chain || {}, bundle);
     renderBaselineStrip(bundle.trade_chain || {});
     renderOB(bundle.operational_boundary);
