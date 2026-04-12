@@ -83,6 +83,20 @@ Implementation: `jupiter_2_baseline_lifecycle.py`. **Closed 5m bars only.** Entr
 
 Unrealized PnL while **held** can be reflected in policy features (`unrealized_pnl_usd` in the bridge); realized PnL appears on the **exit** bar when the position closes.
 
+### Full accounting (open → held → closed) — what is persisted, where to validate
+
+You do **not** need a screenshot to prove **held**: it is in **`policy_evaluations`** with the same `reason_code` the UI uses. Use this table to reconcile one round-trip **by `trade_id`** (from `execution_trades` on close, or from `features_json.open_position.trade_id` while holding).
+
+| Phase | Table(s) | What to read | Math / checks |
+|--------|------------|--------------|----------------|
+| **Open** (entry bar) | `policy_evaluations` | One row for that bar’s `market_event_id`: **`trade = 1`**, `reason_code` = signal reason (e.g. policy-approved path). **Features** are **signal/tile features only** — there is **no** second policy upsert on the same tick with `open_position`; the DB row is written **before** `open_position` is persisted. | `trade_id` is **not** in `features_json` on this row; the stable id is **`bl_lc_<hash>`** from `_baseline_lifecycle_trade_id(entry_market_event_id, mode)` (see `baseline_ledger_bridge.py`). |
+| **Held** (each subsequent bar until exit) | `policy_evaluations` | **`trade = 0`**, **`reason_code = jupiter_2_baseline_holding`**. **`features_json`**: `lifecycle: "holding"`, **`open_position`** (full `BaselineOpenPosition` JSON: `trade_id`, `entry_price`, `stop_loss`, `take_profit` after breakeven/trail updates, `size`, `entry_market_event_id`, …), **`unrealized_pnl_usd`** (mark = bar **close** vs entry, same size/side as `compute_pnl_usd`). | Recompute unrealized: `compute_pnl_usd(entry_price=entry, exit_price=close, size=size, side=side)` — should match `unrealized_pnl_usd` (within float noise). |
+| **Closed** (exit bar) | `policy_evaluations` + `execution_trades` + `position_events` | Policy: **`reason_code = jupiter_2_baseline_exit`**, `features_json` has `lifecycle: "exit"` and **`exit`** (exit price, `exit_reason` **STOP_LOSS** / **TAKE_PROFIT**, `pnl_usd`, …). **`execution_trades`** row: **`trade_id`** PK, **`pnl_usd`**, **`entry_price`**, **`exit_price`**, **`exit_reason`**, **`context_snapshot_json`** (includes **`entry_market_event_id`**). **`position_events`**: `position_open` (seq 0) at entry `market_event_id`, `position_close` at exit. | Realized PnL: `compute_pnl_usd(entry_price, exit_price, size, side)` must match **`execution_trades.pnl_usd`** (bridge enforces this in `persist_baseline_lifecycle_close`). |
+
+**Dashboard / bundle:** “**open**” is **not** a row with `open_position` in SQLite — it is **`trade=1` and no ledger row yet** (`dashboard_bundle._compact_baseline_cell_policy_bound` + `_baseline_policy_open_cell`). “**held**” is **`jupiter_2_baseline_holding`**. “**closed**” comes from the **ledger** row plus exit policy.
+
+**Read-only helper (repo root):** `python3 scripts/runtime/baseline_trade_accounting.py --trade-id '<id>'` — prints execution row, `position_events`, and matching policy rows; checks PnL vs `compute_pnl_usd`. DB path: **`BLACKBOX_EXECUTION_LEDGER_PATH`**, else `data/sqlite/execution_ledger.db`.
+
 ---
 
 ## 2. Secondary: entry filters (only when core would allow a side)
