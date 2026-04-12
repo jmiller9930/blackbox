@@ -49,7 +49,24 @@ must use **`long_ok` / `short_ok` that match the core** from policy: **`long_ok`
 
 Implementation: `long_ok` / `short_ok` are driven by `long_signal_core` / `short_signal_core` in the policy features (`_build_operator_tile_jupiter2`).
 
-**Dashboard / baseline trades report (same vocabulary):** **open** (entry bar; Jupiter lifecycle writes the ledger fill on exit only), **held** (position open on later 5m bars), **closed win** / **closed loss** / **closed flat** (realized outcome when the position closes). The trades report lists ledger rows (closed legs) and exposes `meta.lifecycle_timeline` for policy ticks in the UTC window.
+### Trade in progress — operator cheat sheet (do not forget)
+
+Use **one vocabulary** on the dashboard trade chain and the baseline trades report: **open → held → closed** (with **closed win / closed loss / closed flat** for realized PnL).
+
+| Phase | What it means | Policy / data (Sean Jupiter v1) | `execution_trades` row on this `market_event_id`? |
+|--------|----------------|----------------------------------|-----------------------------------------------------|
+| **open** | You entered on **this** 5m bar; position is live. | `policy_evaluations.trade = 1` (entry). Jupiter_2 lifecycle does **not** write a baseline fill row until **exit** — so **no** ledger row for the entry bar. | Usually **no** (lifecycle path) |
+| **held** | Trade still open; you have **not** exited on **this** bar. | `trade = 0`, `reason_code = jupiter_2_baseline_holding` | **No** |
+| **closed win / loss / flat** | Trade **closed** this bar; PnL is realized. | Exit path: `trade = 0`, `reason_code = jupiter_2_baseline_exit`, plus closing ledger row; or legacy same-bar policy + row | **Yes** (the close is the row you see) |
+| **no trade** | Not in an authorized open/held/closed story for this bar (gated, missing policy, stray ledger, etc.). | Varies | May or may not exist; display does **not** treat stray rows as outcomes |
+
+**Where it shows up**
+
+- **Dashboard → trade chain (baseline row):** One **column per 5m bar** — you should see **open** on the entry column, **held** on each column until exit, then **closed …** on the exit column.
+- **Baseline trades report — top table:** Rows are **ledger executions** (mostly **closes**). **Lifecycle** column uses the same **closed …** labels for those rows.
+- **Baseline trades report — Policy lifecycle table:** From API `meta.lifecycle_timeline` — lists **open**, **held**, and **closed** policy ticks in the selected UTC window (this is where **open/held** appear even without a fill row).
+
+**Code anchor:** `modules/anna_training/dashboard_bundle.py` (`_compact_baseline_cell_policy_bound`). Bridge / lifecycle: `baseline_ledger_bridge.py`, `jupiter_2_baseline_lifecycle.py`.
 
 ---
 
