@@ -1,10 +1,11 @@
-"""Baseline → execution_ledger: **Jupiter_2 Sean policy** (signal-gated) or legacy mechanical row.
+"""Baseline → execution_ledger: **Jupiter_2 Sean lifecycle** only (signal-gated).
 
-Default **signal mode** env value is still ``sean_jupiter_v1`` (historic name; do not read as “old Jupiter policy”).
-The evaluator is **only** ``modules/anna_training/jupiter_2_sean_policy.evaluate_jupiter_2_sean`` via
-``sean_jupiter_baseline_signal.evaluate_sean_jupiter_baseline_v1`` (adapter over Jupiter_2).
+**Signal mode** is always ``sean_jupiter_v1`` (historic env name); the evaluator is
+``modules/anna_training/jupiter_2_sean_policy.evaluate_jupiter_2_sean`` via
+``sean_jupiter_baseline_signal.evaluate_sean_jupiter_baseline_v1``. The legacy mechanical
+one-bar OHLC writer is **not** in runtime.
 
-**Execution trades:** still **at most one** baseline ``execution_trades`` row per ``market_event_id`` when the policy fires.
+**Execution trades:** baseline ``execution_trades`` rows are **lifecycle** closes (``bl_lc_…``), not per-bar.
 
 **Policy evaluations:** every evaluated tick writes/upserts ``policy_evaluations`` (including ``trade=false``),
 for backtest joins to ``market_bars_5m``. Disable with ``BASELINE_POLICY_EVALUATION_LOG=0``.
@@ -13,8 +14,6 @@ for backtest joins to ``market_bars_5m``. Disable with ``BASELINE_POLICY_EVALUAT
 each successful ``market_bars_5m`` upsert when ``BASELINE_LEDGER_AFTER_CANONICAL_BAR`` is on (default), so the
 ledger stays aligned with Hermes/Pyth ingest without relying only on the Karpathy loop. Disable with
 ``BASELINE_LEDGER_AFTER_CANONICAL_BAR=0`` (e.g. unit tests).
-
-Legacy: ``BASELINE_LEDGER_SIGNAL_MODE=legacy_mechanical_long`` — old open→close long every bar (lab only).
 """
 
 from __future__ import annotations
@@ -37,11 +36,6 @@ def _env_bool(name: str, default: bool) -> bool:
 
 def _policy_evaluation_log_enabled() -> bool:
     return _env_bool("BASELINE_POLICY_EVALUATION_LOG", True)
-
-
-def _legacy_mechanical_allowed() -> bool:
-    """Lab-only OHLC-long-every-bar path. Off by default (integrity: Sean policy is authoritative)."""
-    return _env_bool("BASELINE_LEGACY_MECHANICAL_ALLOWED", False)
 
 
 def _runtime_scripts() -> Path:
@@ -76,20 +70,13 @@ def verify_market_event_id_matches_canonical_bar(bar: dict[str, Any]) -> str:
     return stored
 
 
-def _baseline_trade_id(market_event_id: str, mode: str) -> str:
-    h = hashlib.sha256(f"baseline|{market_event_id}|{mode}|v1".encode()).hexdigest()[:24]
-    return f"bl_{h}"
-
-
 def _baseline_lifecycle_trade_id(entry_market_event_id: str, mode: str) -> str:
     h = hashlib.sha256(f"baseline_lc|{entry_market_event_id}|{mode}|v1".encode()).hexdigest()[:24]
     return f"bl_lc_{h}"
 
 
 def _signal_mode() -> str:
-    raw = (os.environ.get("BASELINE_LEDGER_SIGNAL_MODE") or "sean_jupiter_v1").strip().lower()
-    if raw in ("legacy", "legacy_mechanical", "legacy_mechanical_long", "mechanical"):
-        return "legacy_mechanical_long"
+    """Sean Jupiter lifecycle only; ``BASELINE_LEDGER_SIGNAL_MODE`` legacy aliases are ignored."""
     return "sean_jupiter_v1"
 
 
@@ -100,12 +87,10 @@ def run_baseline_ledger_bridge_tick(
     mode: str | None = None,
 ) -> dict[str, Any]:
     """
-    Append **at most one** baseline row per ``market_event_id`` when Sean Jupiter signal (or legacy) fires.
+    Sean Jupiter **lifecycle** baseline: opens/holds/closes via SL/TP rules; no legacy mechanical writer.
 
     Env:
       BASELINE_LEDGER_BRIDGE — default **on**; ``0`` disables all baseline writes.
-      BASELINE_LEDGER_SIGNAL_MODE — ``sean_jupiter_v1`` (default) | ``legacy_mechanical_long``.
-      BASELINE_LEGACY_MECHANICAL_ALLOWED — default **off**; ``1`` required for ``legacy_mechanical_long`` (lab only).
       BASELINE_LEDGER_MODE — ``paper`` (default) or ``live``.
       BASELINE_POLICY_EVALUATION_LOG — default **on**; ``0`` skips ``policy_evaluations`` upserts only.
 
@@ -123,13 +108,6 @@ def run_baseline_ledger_bridge_tick(
         m = "paper"
 
     sm = _signal_mode()
-    if sm == "legacy_mechanical_long" and not _legacy_mechanical_allowed():
-        return {
-            "ok": False,
-            "reason": "legacy_mechanical_long_disabled",
-            "detail": "Mechanical OHLC baseline is quarantined. Set BASELINE_LEGACY_MECHANICAL_ALLOWED=1 for lab-only use.",
-            "signal_mode": sm,
-        }
 
     bar = fetch_latest_bar_row(db_path=market_data_db_path)
     if not bar:
@@ -140,13 +118,6 @@ def run_baseline_ledger_bridge_tick(
     c = bar.get("close")
     if o is None or c is None:
         return {"ok": False, "reason": "bar_missing_ohlc", "market_event_id": mid}
-    if sm == "legacy_mechanical_long":
-        return _run_legacy_mechanical_long(
-            bar=bar,
-            mid=mid,
-            mode=m,
-            execution_ledger_db_path=execution_ledger_db_path,
-        )
 
     bars_asc = fetch_recent_bars_asc(limit=280, db_path=market_data_db_path)
     if not bars_asc or str(bars_asc[-1].get("market_event_id") or "") != mid:
@@ -212,7 +183,7 @@ def run_baseline_ledger_bridge_tick(
         reason_code: str,
         features: dict[str, Any],
         side: str,
-        pnl_hint: float | None,
+        pnl_usd: float | None,
     ) -> None:
         nonlocal policy_eval_write_error
         if not _policy_evaluation_log_enabled():
@@ -226,7 +197,7 @@ def run_baseline_ledger_bridge_tick(
                 reason_code=reason_code,
                 features=features,
                 side=side,
-                pnl_usd=pnl_hint,
+                pnl_usd=pnl_usd,
                 db_path=execution_ledger_db_path,
             )
         except sqlite3.OperationalError as exc:
@@ -520,108 +491,3 @@ def run_baseline_ledger_bridge_tick(
     if policy_eval_write_error:
         ret_o["policy_evaluation_write_error"] = policy_eval_write_error
     return ret_o
-
-
-def _run_legacy_mechanical_long(
-    *,
-    bar: dict[str, Any],
-    mid: str,
-    mode: str,
-    execution_ledger_db_path: Path | None,
-) -> dict[str, Any]:
-    from .decision_trace import persist_baseline_trade_with_trace
-    from .execution_ledger import compute_pnl_usd, upsert_policy_evaluation
-
-    o = bar.get("open")
-    c = bar.get("close")
-    size = 1.0
-    tid = _baseline_trade_id(mid, mode)
-    pnl = compute_pnl_usd(entry_price=float(o), exit_price=float(c), size=size, side="long")
-
-    tm = mode if mode in ("live", "paper") else "paper"
-    if _policy_evaluation_log_enabled():
-        try:
-            upsert_policy_evaluation(
-                market_event_id=mid,
-                signal_mode="legacy_mechanical_long",
-                tick_mode=tm,
-                trade=True,
-                reason_code="legacy_mechanical_long",
-                features={
-                    "source": "baseline_ledger_bridge_v1",
-                    "economic_basis": "canonical_bar_open_to_close_long_1unit",
-                    "price_source": bar.get("price_source"),
-                    "tick_count": bar.get("tick_count"),
-                },
-                side="long",
-                pnl_usd=pnl,
-                db_path=execution_ledger_db_path,
-            )
-        except sqlite3.OperationalError as exc:
-            print(
-                f"baseline_ledger_bridge: policy_evaluations write failed (legacy): {exc!r} "
-                f"market_event_id={mid}",
-                file=sys.stderr,
-                flush=True,
-            )
-
-    try:
-        out = persist_baseline_trade_with_trace(
-            market_event_id=mid,
-            bar=bar,
-            mode=mode,
-            trade_id=tid,
-            pnl_usd=pnl,
-            context_snapshot={
-                "source": "baseline_ledger_bridge_v1",
-                "price_source": bar.get("price_source"),
-                "tick_count": bar.get("tick_count"),
-                "economic_basis": "canonical_bar_open_to_close_long_1unit",
-            },
-            notes="legacy mechanical baseline — OHLC long 1 unit (not Sean signal)",
-            db_path=execution_ledger_db_path,
-            side="long",
-            economic_basis="canonical_bar_open_to_close_long_1unit",
-            signal_snapshot=None,
-        )
-        from .execution_ledger import (
-            connect_ledger as _conn_ledger,
-            ensure_execution_ledger_schema as _ensure_el,
-            insert_baseline_paper_lifecycle_events,
-        )
-
-        _c = _conn_ledger(execution_ledger_db_path)
-        try:
-            _ensure_el(_c)
-            insert_baseline_paper_lifecycle_events(
-                _c,
-                trade_id=tid,
-                market_event_id=mid,
-                bar=bar,
-                side="long",
-                pnl_usd=float(pnl),
-                mode=mode,
-            )
-            _c.commit()
-        finally:
-            _c.close()
-    except sqlite3.IntegrityError:
-        return {
-            "ok": True,
-            "idempotent_skip": True,
-            "market_event_id": mid,
-            "trade_id": tid,
-        }
-
-    row = out.get("execution_trade")
-    trace_meta = {k: v for k, v in out.items() if k != "execution_trade"}
-
-    return {
-        "ok": True,
-        "market_event_id": mid,
-        "trade_id": tid,
-        "mode": mode,
-        "execution_trade": row,
-        "decision_trace": trace_meta,
-        "signal_mode": "legacy_mechanical_long",
-    }

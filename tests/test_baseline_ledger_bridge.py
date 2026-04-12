@@ -60,8 +60,7 @@ def test_baseline_and_anna_share_market_event_id(tmp_path: Path, monkeypatch: py
     monkeypatch.setenv("BLACKBOX_EXECUTION_LEDGER_PATH", str(ledger_db))
     monkeypatch.setenv("ANNA_PARALLEL_STRATEGY_IDS", "jupiter_supertrend_ema_rsi_atr_v1")
     monkeypatch.setenv("BASELINE_LEDGER_BRIDGE", "1")
-    monkeypatch.setenv("BASELINE_LEDGER_SIGNAL_MODE", "legacy_mechanical_long")
-    monkeypatch.setenv("BASELINE_LEGACY_MECHANICAL_ALLOWED", "1")
+    monkeypatch.setenv("BASELINE_LEDGER_SIGNAL_MODE", "sean_jupiter_v1")
 
     mid = _seed_closed_sol_bar(market_db, monkeypatch)
 
@@ -80,11 +79,15 @@ def test_baseline_and_anna_share_market_event_id(tmp_path: Path, monkeypatch: py
             side="long",
             reason_code="test_fixture_signal",
             pnl_usd=0.5,
-            features={"reference": "test"},
+            features={"reference": "test", "free_collateral_usd": 1000.0},
         )
 
     monkeypatch.setattr(
         "modules.anna_training.parallel_strategy_runner.evaluate_sean_jupiter_baseline_v1",
+        _fake_sean_jupiter,
+    )
+    monkeypatch.setattr(
+        "modules.anna_training.sean_jupiter_baseline_signal.evaluate_sean_jupiter_baseline_v1",
         _fake_sean_jupiter,
     )
 
@@ -102,21 +105,17 @@ def test_baseline_and_anna_share_market_event_id(tmp_path: Path, monkeypatch: py
     assert base.get("ok") is True
     assert base.get("market_event_id") == mid
     assert base.get("mode") == "paper"
+    assert base.get("lifecycle") == "opened"
+    assert str(base.get("trade_id") or "").startswith("bl_lc_")
 
     rows = query_trades_by_market_event_id(mid, db_path=ledger_db)
-    assert len(rows) == 2
+    # Sean lifecycle: baseline execution_trades row is written on exit, not on open.
     assert {r["market_event_id"] for r in rows} == {mid}
-    assert {r["lane"] for r in rows} == {"anna", "baseline"}
-    sids = {r["strategy_id"] for r in rows}
-    assert "baseline" in sids
-    assert "jupiter_supertrend_ema_rsi_atr_v1" in sids
-    for r in rows:
-        if r["lane"] == "baseline":
-            assert r["mode"] == "paper"
-            assert r["pnl_usd"] is not None
-        if r["lane"] == "anna":
-            assert r["mode"] == "paper"
-            assert r["pnl_usd"] is not None
+    assert {r["lane"] for r in rows} == {"anna"}
+    anna_rows = [r for r in rows if r["lane"] == "anna"]
+    assert len(anna_rows) == 1
+    assert anna_rows[0]["mode"] == "paper"
+    assert anna_rows[0]["pnl_usd"] is not None
 
     bar = fetch_latest_bar_row(db_path=market_db)
     assert bar is not None
@@ -126,8 +125,8 @@ def test_baseline_and_anna_share_market_event_id(tmp_path: Path, monkeypatch: py
         market_data_db_path=market_db,
         execution_ledger_db_path=ledger_db,
     )
-    assert base2.get("idempotent_skip") is True
-    assert len(query_trades_by_market_event_id(mid, db_path=ledger_db)) == 2
+    assert base2.get("lifecycle_idempotent") is True
+    assert len(query_trades_by_market_event_id(mid, db_path=ledger_db)) == 1
 
 
 def test_corrupt_stored_market_event_id_rejected(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

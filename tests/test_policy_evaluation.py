@@ -17,17 +17,12 @@ if str(RUNTIME) not in sys.path:
     sys.path.insert(0, str(RUNTIME))
 
 
-def test_legacy_mechanical_blocked_without_lab_flag(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("BASELINE_LEDGER_BRIDGE", "1")
+def test_legacy_signal_mode_env_ignored(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Legacy mechanical mode is removed; env aliases do not switch writers."""
     monkeypatch.setenv("BASELINE_LEDGER_SIGNAL_MODE", "legacy_mechanical_long")
-    monkeypatch.delenv("BASELINE_LEGACY_MECHANICAL_ALLOWED", raising=False)
-    from modules.anna_training.baseline_ledger_bridge import run_baseline_ledger_bridge_tick
+    from modules.anna_training.baseline_ledger_bridge import _signal_mode
 
-    r = run_baseline_ledger_bridge_tick(
-        market_data_db_path=Path("/nonexistent/market_data.db"),
-        execution_ledger_db_path=Path("/nonexistent/execution_ledger.db"),
-    )
-    assert r.get("reason") == "legacy_mechanical_long_disabled"
+    assert _signal_mode() == "sean_jupiter_v1"
 
 
 def test_upsert_policy_evaluation_idempotent(tmp_path: Path) -> None:
@@ -74,7 +69,7 @@ def test_upsert_policy_evaluation_idempotent(tmp_path: Path) -> None:
     conn.close()
 
 
-def test_baseline_bridge_writes_policy_eval_legacy(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_baseline_bridge_writes_policy_eval_sean_path(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("BASELINE_LEDGER_AFTER_CANONICAL_BAR", "0")
     monkeypatch.setenv("MARKET_BAR_MEMBERSHIP", "inserted_at")
     market_db = tmp_path / "market_data.db"
@@ -82,8 +77,23 @@ def test_baseline_bridge_writes_policy_eval_legacy(tmp_path: Path, monkeypatch: 
     monkeypatch.setenv("BLACKBOX_EXECUTION_LEDGER_PATH", str(ledger_db))
     monkeypatch.setenv("BLACKBOX_MARKET_DATA_PATH", str(market_db))
     monkeypatch.setenv("BASELINE_LEDGER_BRIDGE", "1")
-    monkeypatch.setenv("BASELINE_LEDGER_SIGNAL_MODE", "legacy_mechanical_long")
-    monkeypatch.setenv("BASELINE_LEGACY_MECHANICAL_ALLOWED", "1")
+    monkeypatch.setenv("BASELINE_LEDGER_SIGNAL_MODE", "sean_jupiter_v1")
+
+    from modules.anna_training.sean_jupiter_baseline_signal import SeanJupiterBaselineSignalV1
+
+    def _mock_eval(*_a: object, **_k: object) -> SeanJupiterBaselineSignalV1:
+        return SeanJupiterBaselineSignalV1(
+            trade=False,
+            side="flat",
+            reason_code="mocked_no_trade",
+            pnl_usd=None,
+            features={"reference": "test"},
+        )
+
+    monkeypatch.setattr(
+        "modules.anna_training.sean_jupiter_baseline_signal.evaluate_sean_jupiter_baseline_v1",
+        _mock_eval,
+    )
 
     sys.path.insert(0, str(ROOT / "scripts" / "runtime"))
     from market_data.canonical_time import candle_close_utc_exclusive, last_closed_candle_open_utc  # noqa: E402
@@ -133,27 +143,28 @@ def test_baseline_bridge_writes_policy_eval_legacy(tmp_path: Path, monkeypatch: 
         execution_ledger_db_path=ledger_db,
     )
     assert r.get("ok") is True
+    assert r.get("no_trade") is True
+    assert r.get("reason_code") == "mocked_no_trade"
     bar = fetch_latest_bar_row(db_path=market_db)
     assert bar is not None
     assert str(bar.get("market_event_id")) == mid
 
     lconn = sqlite3.connect(ledger_db)
     prow = lconn.execute(
-        "SELECT trade, reason_code, side, features_json FROM policy_evaluations WHERE market_event_id = ?",
+        "SELECT trade, reason_code, side, signal_mode, features_json FROM policy_evaluations WHERE market_event_id = ?",
         (mid,),
     ).fetchone()
     assert prow is not None
-    assert prow[0] == 1
-    assert prow[1] == "legacy_mechanical_long"
-    assert prow[2] == "long"
-    assert json.loads(prow[3]).get("economic_basis") == "canonical_bar_open_to_close_long_1unit"
-    pe = lconn.execute(
-        "SELECT COUNT(*), MIN(event_type), MAX(event_type) FROM position_events WHERE market_event_id = ?",
+    assert prow[0] == 0
+    assert prow[1] == "mocked_no_trade"
+    assert prow[2] == "flat"
+    assert prow[3] == "sean_jupiter_v1"
+    assert json.loads(prow[4]).get("reference") == "test"
+    n_pe = lconn.execute(
+        "SELECT COUNT(*) FROM position_events WHERE market_event_id = ?",
         (mid,),
-    ).fetchone()
-    assert pe[0] == 2
-    types = {r[0] for r in lconn.execute("SELECT event_type FROM position_events WHERE market_event_id = ?", (mid,))}
-    assert types == {"position_open", "position_close"}
+    ).fetchone()[0]
+    assert n_pe == 0
     lconn.close()
 
 
@@ -168,8 +179,25 @@ def test_canonical_bar_refresh_invokes_baseline_ledger_when_enabled(
     monkeypatch.setenv("BLACKBOX_EXECUTION_LEDGER_PATH", str(ledger_db))
     monkeypatch.setenv("BLACKBOX_MARKET_DATA_PATH", str(market_db))
     monkeypatch.setenv("BASELINE_LEDGER_BRIDGE", "1")
-    monkeypatch.setenv("BASELINE_LEDGER_SIGNAL_MODE", "legacy_mechanical_long")
-    monkeypatch.setenv("BASELINE_LEGACY_MECHANICAL_ALLOWED", "1")
+    monkeypatch.setenv("BASELINE_LEDGER_SIGNAL_MODE", "sean_jupiter_v1")
+
+    from modules.anna_training.sean_jupiter_baseline_signal import (
+        SeanJupiterBaselineSignalV1,
+    )
+
+    def _mock_eval_canon(*_a: object, **_k: object) -> SeanJupiterBaselineSignalV1:
+        return SeanJupiterBaselineSignalV1(
+            trade=False,
+            side="flat",
+            reason_code="mocked_no_trade",
+            pnl_usd=None,
+            features={},
+        )
+
+    monkeypatch.setattr(
+        "modules.anna_training.sean_jupiter_baseline_signal.evaluate_sean_jupiter_baseline_v1",
+        _mock_eval_canon,
+    )
 
     sys.path.insert(0, str(ROOT / "scripts" / "runtime"))
     from datetime import datetime, timedelta, timezone
