@@ -858,6 +858,18 @@ def _baseline_trade_id_from_exit_policy_features(features: Any) -> str | None:
     return None
 
 
+def _baseline_ledger_row_is_closed_execution(row: dict[str, Any] | None) -> bool:
+    """True when this column's ledger row is a baseline fill with exit (lifecycle close or same-bar)."""
+    if not row or not isinstance(row, dict):
+        return False
+    if str(row.get("lane") or "").strip().lower() != RESERVED_STRATEGY_BASELINE:
+        return False
+    et = row.get("exit_time")
+    if et is None:
+        return False
+    return bool(str(et).strip())
+
+
 def _fetch_baseline_ledger_row_by_trade_id(
     conn: Any,
     trade_id: str,
@@ -2245,6 +2257,9 @@ def _compact_baseline_cell_policy_bound(
     - **held:** ``trade=0`` and ``reason_code=jupiter_2_baseline_holding``.
     - **closed:** ledger row + policy — ``policy_approved_execution`` (e.g. legacy same-bar) or
       ``lifecycle_exit_execution`` — display **closed win / closed loss / closed flat**.
+    - **Ledger-first close:** if ``execution_trades`` has a baseline row for this ``market_event_id`` with
+      ``exit_time`` set, treat as **closed** even when ``policy_evaluations`` was overwritten by a later
+      pass (e.g. ATR gate on the same bar id) so the reason_code is no longer ``jupiter_2_baseline_exit``.
     - Otherwise → **NO_TRADE** (non-authoritative ledger artifacts are not shown as outcomes).
     """
     pol = fetch_policy_evaluation_for_market_event(
@@ -2265,6 +2280,21 @@ def _compact_baseline_cell_policy_bound(
     rc = str(pol.get("reason_code") or "")
     if pol.get("trade") and not ledger_row:
         return _baseline_policy_open_cell(market_event_id=mid, policy_row=pol)
+    # Closed fill for this bar: ledger is authoritative; policy row may not still say baseline exit.
+    if (
+        ledger_row
+        and _baseline_ledger_row_is_closed_execution(ledger_row)
+        and not pol.get("trade")
+    ):
+        cell = _compact_cell(ledger_row, market_db_path=market_db_path, chain_kind="baseline")
+        cell["policy_authoritative"] = True
+        cell["policy_trade"] = False
+        cell["policy_reason_code"] = rc
+        cell["policy_missing"] = False
+        cell["ledger_row_ignored"] = False
+        cell["baseline_display_reason"] = "lifecycle_exit_execution"
+        cell["economic_authority"] = "full"
+        return _apply_baseline_closed_lifecycle_fields(cell)
     if not pol.get("trade"):
         if rc == JUPITER_2_BASELINE_HOLDING_RC:
             return _baseline_policy_held_cell(

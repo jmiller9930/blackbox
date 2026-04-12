@@ -488,6 +488,82 @@ def test_compact_baseline_exit_resolves_ledger_by_trade_id_when_column_mid_misma
     assert cell.get("outcome_display") == "closed win"
 
 
+def test_compact_baseline_exit_shows_closed_when_policy_row_overwritten_not_exit_rc(
+    tmp_path: Path,
+) -> None:
+    """Exit bar: ledger has close row but policy_evaluations reason is not jupiter_2_baseline_exit (e.g. ATR gate)."""
+    ledger = tmp_path / "el.db"
+    mid = "SOL-PERP_5m_2026-04-12T23:30:00Z"
+    conn = connect_ledger(ledger)
+    ensure_execution_ledger_schema(conn)
+    upsert_policy_evaluation(
+        market_event_id=mid,
+        signal_mode="sean_jupiter_v1",
+        tick_mode="paper",
+        trade=False,
+        reason_code="atr_ratio_below_min",
+        features={"block": "atr_ratio_below_min"},
+        side="long",
+        conn=conn,
+    )
+    conn.execute(
+        """INSERT INTO execution_trades (
+            trade_id, strategy_id, lane, mode, market_event_id, symbol, timeframe,
+            side, entry_time, entry_price, size, exit_time, exit_price, exit_reason,
+            pnl_usd, context_snapshot_json, notes, trace_id, schema_version, created_at_utc
+        ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+        (
+            "bl_exit_policy_overwritten",
+            "baseline",
+            "baseline",
+            "paper",
+            mid,
+            "SOL-PERP",
+            "5m",
+            "long",
+            "2026-04-12T23:10:00Z",
+            100.0,
+            1.0,
+            "2026-04-12T23:35:00Z",
+            99.0,
+            "STOP_LOSS",
+            -0.5,
+            "{}",
+            "",
+            None,
+            "execution_trade_v1",
+            "2026-04-12T23:35:02Z",
+        ),
+    )
+    conn.commit()
+    lr = {
+        "trade_id": "bl_exit_policy_overwritten",
+        "strategy_id": "baseline",
+        "lane": "baseline",
+        "mode": "paper",
+        "market_event_id": mid,
+        "symbol": "SOL-PERP",
+        "timeframe": "5m",
+        "side": "long",
+        "entry_time": "2026-04-12T23:10:00Z",
+        "entry_price": 100.0,
+        "size": 1.0,
+        "exit_time": "2026-04-12T23:35:00Z",
+        "exit_price": 99.0,
+        "exit_reason": "STOP_LOSS",
+        "pnl_usd": -0.5,
+        "created_at_utc": "2026-04-12T23:35:02Z",
+        "trace_id": None,
+        "notes": "",
+        "context_snapshot_json": "{}",
+    }
+    cell = _compact_baseline_cell_policy_bound(conn, mid, lr, market_db_path=None)
+    conn.close()
+    assert cell.get("baseline_display_reason") == "lifecycle_exit_execution"
+    assert cell.get("baseline_lifecycle_phase") == "closed"
+    assert cell.get("outcome_display") == "closed loss"
+
+
 def test_baseline_assign_lifecycle_tile_slots_open_held_run() -> None:
     axis = ["a", "b", "c"]
     cells = {
