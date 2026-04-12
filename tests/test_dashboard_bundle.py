@@ -18,6 +18,7 @@ from modules.anna_training.dashboard_bundle import (
     _baseline_assign_lifecycle_tile_slots,
     _baseline_lifecycle_for_dashboard_from_active_snapshot,
     build_baseline_active_position_snapshot,
+    build_baseline_closed_operator_tile_snapshot,
     _compact_baseline_cell_policy_bound,
     _event_axis_jupiter_tile_narratives,
     _pair_vs_baseline_for_cells,
@@ -26,6 +27,77 @@ from modules.anna_training.dashboard_bundle import (
     build_dashboard_bundle,
     build_trade_chain_payload,
 )
+
+
+def test_build_baseline_closed_operator_tile_snapshot_latest_lifecycle_close(tmp_path: Path) -> None:
+    ledger = tmp_path / "el.db"
+    conn = connect_ledger(ledger)
+    ensure_execution_ledger_schema(conn)
+    conn.execute(
+        """INSERT INTO execution_trades (
+            trade_id, strategy_id, lane, mode, market_event_id, symbol, timeframe,
+            side, entry_time, entry_price, size, exit_time, exit_price, exit_reason,
+            pnl_usd, context_snapshot_json, notes, trace_id, schema_version, created_at_utc
+        ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+        (
+            "bl_lc_older",
+            "baseline",
+            "baseline",
+            "paper",
+            "SOL-PERP_5m_2026-04-01T10:00:00Z",
+            "SOL-PERP",
+            "5m",
+            "long",
+            "2026-04-01T10:00:00Z",
+            100.0,
+            1.0,
+            "2026-04-01T10:15:00Z",
+            100.5,
+            "TAKE_PROFIT",
+            0.4,
+            "{}",
+            "",
+            None,
+            "execution_trade_v1",
+            "2026-04-01T10:15:01Z",
+        ),
+    )
+    conn.execute(
+        """INSERT INTO execution_trades (
+            trade_id, strategy_id, lane, mode, market_event_id, symbol, timeframe,
+            side, entry_time, entry_price, size, exit_time, exit_price, exit_reason,
+            pnl_usd, context_snapshot_json, notes, trace_id, schema_version, created_at_utc
+        ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+        (
+            "bl_lc_newer",
+            "baseline",
+            "baseline",
+            "paper",
+            "SOL-PERP_5m_2026-04-01T11:00:00Z",
+            "SOL-PERP",
+            "5m",
+            "short",
+            "2026-04-01T10:45:00Z",
+            100.0,
+            1.0,
+            "2026-04-01T11:05:00Z",
+            99.5,
+            "STOP_LOSS",
+            -0.6,
+            "{}",
+            "",
+            None,
+            "execution_trade_v1",
+            "2026-04-01T11:05:02Z",
+        ),
+    )
+    conn.commit()
+    conn.close()
+    snap = build_baseline_closed_operator_tile_snapshot(db_path=ledger, market_db_path=None)
+    assert snap is not None
+    assert snap.get("trade_id") == "bl_lc_newer"
+    assert snap.get("schema") == "blackbox_baseline_closed_operator_tile_v1"
+    assert snap.get("outcome_display")
 
 
 def test_build_trade_chain_payload_schema() -> None:

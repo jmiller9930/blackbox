@@ -870,6 +870,12 @@ def _baseline_ledger_row_is_closed_execution(row: dict[str, Any] | None) -> bool
     return bool(str(et).strip())
 
 
+def _baseline_lifecycle_trade_id(row: dict[str, Any] | None) -> bool:
+    """Sean Jupiter lifecycle closes use deterministic ``bl_lc_…`` trade ids."""
+    tid = str((row or {}).get("trade_id") or "").strip()
+    return tid.startswith("bl_lc_")
+
+
 def _fetch_baseline_ledger_row_by_trade_id(
     conn: Any,
     trade_id: str,
@@ -996,6 +1002,9 @@ def _recent_baseline_policy_trade_rows_for_strip(
 
     Scans up to ``scan_cap`` recent ledger rows until ``limit`` authoritative trades are found.
     Matches the baseline report when scoped to **trade** only — unlike raw ledger strips.
+
+    Order by **exit_time** (then insert time) so the strip's newest row aligns with the **latest closed**
+    trade in the chain, not merely the most recently inserted ledger row.
     """
     lim = max(1, min(10, int(limit)))
     cap = max(lim, min(2000, int(scan_cap)))
@@ -1006,7 +1015,10 @@ def _recent_baseline_policy_trade_rows_for_strip(
                exit_reason, exit_time, size, pnl_usd, created_at_utc, trade_id, mode
         FROM execution_trades
         WHERE lane = 'baseline' AND strategy_id = ?
-        ORDER BY COALESCE(created_at_utc, entry_time, '') DESC, trade_id DESC
+          AND exit_time IS NOT NULL AND trim(exit_time) != ''
+        ORDER BY COALESCE(exit_time, '') DESC,
+                 COALESCE(created_at_utc, entry_time, '') DESC,
+                 trade_id DESC
         LIMIT ?
         """,
         (RESERVED_STRATEGY_BASELINE, cap),
@@ -1642,6 +1654,75 @@ def _baseline_lifecycle_for_dashboard_from_active_snapshot(snap: dict[str, Any])
     }
 
 
+def build_baseline_closed_operator_tile_snapshot(
+    *,
+    db_path: Path | None = None,
+    market_db_path: Path | None = None,
+) -> dict[str, Any] | None:
+    """
+    Latest **lifecycle** baseline close (``bl_lc_…``) for the single in-column operator tile when flat.
+
+    Economics come from ``execution_trades`` + the same compact outcome path as the trade chain.
+    """
+    lp = db_path or default_execution_ledger_path()
+    if not lp.is_file():
+        return None
+    mpath = market_db_path if market_db_path is not None else _market_db_path()
+    conn = connect_ledger(lp)
+    try:
+        ensure_execution_ledger_schema(conn)
+        cur = conn.execute(
+            """
+            SELECT trade_id, strategy_id, lane, mode, market_event_id, symbol, timeframe,
+                   side, entry_time, entry_price, size, exit_time, exit_price, exit_reason,
+                   pnl_usd, context_snapshot_json, notes, trace_id, created_at_utc
+            FROM execution_trades
+            WHERE lane = ? AND strategy_id = ?
+              AND trade_id LIKE 'bl_lc_%'
+              AND exit_time IS NOT NULL AND trim(exit_time) != ''
+            ORDER BY COALESCE(exit_time, '') DESC, trade_id DESC
+            LIMIT 1
+            """,
+            (RESERVED_STRATEGY_BASELINE, RESERVED_STRATEGY_BASELINE),
+        )
+        r = cur.fetchone()
+        if not r:
+            return None
+        cols = [d[0] for d in cur.description]
+        row = dict(zip(cols, r))
+    finally:
+        conn.close()
+    cell = _compact_cell(row, market_db_path=mpath, chain_kind="baseline")
+    cell = _apply_baseline_closed_lifecycle_fields(cell)
+    tf = str(row.get("timeframe") or "5m")
+    hold_min, _bars = _hold_duration_minutes_and_bars(
+        row.get("entry_time"),
+        row.get("exit_time"),
+        tf,
+    )
+    return {
+        "schema": "blackbox_baseline_closed_operator_tile_v1",
+        "show": True,
+        "trade_id": cell.get("trade_id"),
+        "side": cell.get("side"),
+        "symbol": cell.get("symbol"),
+        "timeframe": cell.get("timeframe"),
+        "entry_time": cell.get("entry_time"),
+        "exit_time": cell.get("exit_time"),
+        "held_duration_minutes": round(float(hold_min), 4) if hold_min is not None else None,
+        "entry_price": cell.get("entry"),
+        "exit_price": cell.get("exit"),
+        "size": cell.get("size"),
+        "notional_usd_approx": cell.get("notional_usd_approx"),
+        "pnl_usd": cell.get("pnl_usd"),
+        "exit_reason": cell.get("exit_reason"),
+        "outcome": cell.get("outcome"),
+        "outcome_display": cell.get("outcome_display"),
+        "market_event_id": cell.get("market_event_id"),
+        "mode": cell.get("mode"),
+    }
+
+
 def build_baseline_trades_report(
     *,
     db_path: Path | None = None,
@@ -2271,6 +2352,22 @@ def _compact_baseline_cell_policy_bound(
     )
     mid = str(market_event_id).strip()
     if pol is None:
+        # No policy row: do not infer WIN/LOSS from arbitrary ledger artifacts (see unit test). Lifecycle
+        # closes (``bl_lc_…``) may still be shown CLOSED when policy_evaluations was never written for this mid.
+        if (
+            ledger_row
+            and _baseline_ledger_row_is_closed_execution(ledger_row)
+            and _baseline_lifecycle_trade_id(ledger_row)
+        ):
+            cell = _compact_cell(ledger_row, market_db_path=market_db_path, chain_kind="baseline")
+            cell["policy_authoritative"] = True
+            cell["policy_trade"] = False
+            cell["policy_reason_code"] = ""
+            cell["policy_missing"] = True
+            cell["ledger_row_ignored"] = False
+            cell["baseline_display_reason"] = "lifecycle_exit_execution"
+            cell["economic_authority"] = "full"
+            return _apply_baseline_closed_lifecycle_fields(cell)
         return _baseline_policy_no_trade_cell(
             market_event_id=mid,
             policy_row=None,
@@ -3036,6 +3133,18 @@ def build_dashboard_bundle(
     except Exception:
         if "baseline_lifecycle" not in jupiter_policy_snapshot:
             jupiter_policy_snapshot["baseline_lifecycle"] = {"position_open": False}
+
+    try:
+        blc = jupiter_policy_snapshot.get("baseline_lifecycle") or {}
+        if not bool(blc.get("position_open")):
+            ct = build_baseline_closed_operator_tile_snapshot(
+                db_path=db_path,
+                market_db_path=_market_db_path(),
+            )
+            if ct:
+                jupiter_policy_snapshot["baseline_closed_operator_tile"] = ct
+    except Exception:
+        pass
 
     learning_summary_for_vis: dict[str, Any] = {
         "ui_state": ui_state,

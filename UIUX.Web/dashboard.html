@@ -241,6 +241,7 @@
     }
     .tc-baseline-live-tile .tc-bl-phase.open { background: #d1fae5; color: #065f46; }
     .tc-baseline-live-tile .tc-bl-phase.holding { background: #dbeafe; color: #1e40af; }
+    .tc-baseline-live-tile .tc-bl-phase.closed { background: #e0e7ff; color: #3730a3; }
     .tc-baseline-live-tile .tc-bl-grid {
       display: grid;
       grid-template-columns: auto 1fr;
@@ -1686,6 +1687,65 @@
     return (mins * 60).toFixed(0) + 's';
   }
 
+  function formatHeldMinutes(mins) {
+    if (mins == null || mins === '' || (typeof mins === 'number' && isNaN(mins))) return '—';
+    var m = Number(mins);
+    if (m < 0) return '—';
+    var h = Math.floor(m / 60);
+    var r = Math.floor(m % 60);
+    if (h >= 72) return Math.floor(m / 1440) + 'd+';
+    if (h >= 1) return h + 'h ' + (r < 10 ? '0' : '') + r + 'm';
+    if (m >= 1) return Math.floor(m) + 'm';
+    return (m * 60).toFixed(0) + 's';
+  }
+
+  /** Ledger-backed CLOSED state in the same tile chrome as OPEN/HOLDING (right column only). */
+  function buildBaselineClosedOperatorTileHtml(tile) {
+    if (!tile || !tile.show) return '';
+    function fmtN(x, dec) {
+      if (x == null || x === '' || (typeof x === 'number' && isNaN(x))) return '—';
+      return Number(x).toFixed(dec != null ? dec : 2);
+    }
+    var od = tile.outcome_display != null ? String(tile.outcome_display) : '—';
+    return (
+      '<p class="tc-baseline-live-hint">Baseline <strong>closed</strong> — same tile. Economics from execution ledger.</p>' +
+      '<div class="tc-baseline-live-tile">' +
+      '<div class="tc-bl-phase closed">CLOSED</div>' +
+      '<div class="tc-bl-grid">' +
+      '<span class="k">outcome</span><span class="v">' +
+      esc(od) +
+      '</span>' +
+      '<span class="k">trade_id</span><span class="v mono">' +
+      esc(tile.trade_id || '—') +
+      '</span>' +
+      '<span class="k">side</span><span class="v">' +
+      esc(String(tile.side || '—').toUpperCase()) +
+      '</span>' +
+      '<span class="k">held</span><span class="v">' +
+      esc(formatHeldMinutes(tile.held_duration_minutes)) +
+      '</span>' +
+      '<span class="k">realized PnL USD</span><span class="v">' +
+      esc(fmtN(tile.pnl_usd, 4)) +
+      '</span>' +
+      '<span class="k">notional USD</span><span class="v">' +
+      esc(fmtN(tile.notional_usd_approx, 2)) +
+      '</span>' +
+      '<span class="k">entry</span><span class="v">' +
+      esc(fmtN(tile.entry_price, 4)) +
+      '</span>' +
+      '<span class="k">exit</span><span class="v">' +
+      esc(fmtN(tile.exit_price, 4)) +
+      '</span>' +
+      '<span class="k">exit reason</span><span class="v">' +
+      esc(String(tile.exit_reason || '—')) +
+      '</span>' +
+      '<span class="k">exit bar</span><span class="v mono">' +
+      esc(tile.market_event_id || '—') +
+      '</span>' +
+      '</div></div>'
+    );
+  }
+
   /** HTML for the single updating baseline tile (OPEN vs HOLDING vs economics). Used when position_open — only in rightmost column. */
   function buildBaselineLiveTileHtml(bl, jp) {
     if (!bl || !bl.position_open) return '';
@@ -1742,14 +1802,31 @@
     );
   }
 
+  /** One operator tile: OPEN/HOLDING (live) or CLOSED (ledger) in the same slot — never compact cells for baseline while open or showing last close. */
+  function buildBaselineOperatorTileHtml(bl, jp) {
+    var t = jp.baseline_closed_operator_tile;
+    if (bl && baselineLifecyclePositionOpen(bl)) {
+      return buildBaselineLiveTileHtml(bl, jp);
+    }
+    if (t && t.show) {
+      return buildBaselineClosedOperatorTileHtml(t);
+    }
+    return '';
+  }
+
   function renderTC(tc, bundle) {
     bundle = bundle || {};
     var jp = bundle.jupiter_policy_snapshot || {};
     var blOpen = jp.baseline_lifecycle;
     var blPosOpen = baselineLifecyclePositionOpen(blOpen);
-    var liveSig = blPosOpen && blOpen ? JSON.stringify(blOpen) : '';
+    var closedOp = jp.baseline_closed_operator_tile;
+    var useBaselineSingleTile =
+      (blPosOpen && blOpen) || (closedOp && closedOp.show);
+    var liveSig = '';
     if (blPosOpen && blOpen) {
-      liveSig += '|wall:' + Math.floor(Date.now() / 2000);
+      liveSig = JSON.stringify(blOpen) + '|wall:' + Math.floor(Date.now() / 2000);
+    } else if (closedOp && closedOp.show) {
+      liveSig = JSON.stringify(closedOp);
     }
     var sig = tradeChainRenderSig(tc) + '|' + liveSig;
     if (__bbLastTradeChainRenderSig !== null && sig === __bbLastTradeChainRenderSig) {
@@ -1817,7 +1894,7 @@
       if (trCls) tr.className = trCls;
       var h = '<th scope="row">' + rowHead(row) + '</th>';
       var cells = '';
-      if (ck === 'baseline' && blPosOpen && blOpen && nEv > 0) {
+      if (ck === 'baseline' && useBaselineSingleTile && nEv > 0) {
         axis.forEach(function (mid, idx) {
           var isLast = idx === nEv - 1;
           var cls = isLast ? ' class="tc-now"' : '';
@@ -1828,7 +1905,7 @@
               cls +
               ' style="' +
               cellBg +
-              '"><span class="tc-baseline-anchor-dash" title="Open baseline trade — live tile is in the now column">—</span></td>';
+              '"><span class="tc-baseline-anchor-dash" title="Baseline — single operator tile in the now column">—</span></td>';
           } else {
             cells +=
               '<td class="tc-baseline-live-cell"' +
@@ -1836,7 +1913,7 @@
               ' role="status" aria-live="polite" style="' +
               cellBg +
               '">' +
-              buildBaselineLiveTileHtml(blOpen, jp) +
+              buildBaselineOperatorTileHtml(blOpen, jp) +
               '</td>';
           }
         });
