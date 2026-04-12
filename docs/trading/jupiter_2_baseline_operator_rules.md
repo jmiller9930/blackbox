@@ -68,6 +68,21 @@ Use **one vocabulary** on the dashboard trade chain and the baseline trades repo
 
 **Code anchor:** `modules/anna_training/dashboard_bundle.py` (`_compact_baseline_cell_policy_bound`). Bridge / lifecycle: `baseline_ledger_bridge.py`, `jupiter_2_baseline_lifecycle.py`.
 
+#### While the trade is open: SL, TP, breakeven, trail (paper baseline)
+
+Implementation: `jupiter_2_baseline_lifecycle.py`. **Closed 5m bars only.** Entry is at **bar close** when the signal fires; the **first** exit evaluation is on the **next** bar (not the entry bar intrabar).
+
+| Piece | Rule (high level) |
+|--------|-------------------|
+| **Initial SL / TP** | From **ATR at entry**: stop distance = **1.6 × ATR**, target distance = **4.0 × ATR** (`SL_ATR_MULT`, `TP_ATR_MULT`). Long: SL below entry, TP above; short: reversed. |
+| **Breakeven** | One-time: if price moves **≥ 0.2%** in your favor from entry (`BREAKEVEN_MOVE_PCT`), stop is ratcheted to **entry** (long: stop ≥ entry; short: stop ≤ entry). |
+| **Trailing stop** | **Monotonic** “chandelier” off the bar’s close using **current-bar ATR** and the same **1.6 × ATR** distance — stop only **tightens**, never loosens vs the previous stop. |
+| **Exit evaluation** | Each holding bar: after breakeven + trail updates, **OHLC range** is tested against **stop** and **take profit**. |
+| **SL vs TP same bar** | If **both** levels are touched in the same bar’s range → **stop loss wins** (deterministic). |
+| **Exit reasons in ledger** | Only **`STOP_LOSS`** and **`TAKE_PROFIT`** (persisted on the closing `execution_trades` row / lifecycle exit). |
+
+Unrealized PnL while **held** can be reflected in policy features (`unrealized_pnl_usd` in the bridge); realized PnL appears on the **exit** bar when the position closes.
+
 ---
 
 ## 2. Secondary: entry filters (only when core would allow a side)
