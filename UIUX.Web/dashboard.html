@@ -198,6 +198,8 @@
     }
     .bts-pill.bts-long { background: #eff6ff; color: #1d4ed8; }
     .bts-pill.bts-short { background: #fff7ed; color: #c2410c; }
+    .bts-t tbody tr.bts-click-row { cursor: pointer; }
+    .bts-t tbody tr.bts-click-row:hover { background: #f0f9ff; }
     /* Row 4 — trade chain dominates */
     .dash-r4 {
       flex: 1; min-height: 0; display: flex; flex-direction: column;
@@ -1424,6 +1426,10 @@
             ? String(r.time_utc_iso)
             : '—';
         var mid = r.market_event_id != null ? String(r.market_event_id) : '—';
+        var rowMid =
+          r.market_event_id != null && String(r.market_event_id).trim() !== ''
+            ? String(r.market_event_id).trim()
+            : '';
         var sideRaw = r.side != null ? String(r.side).trim().toLowerCase() : '';
         var oc = r.outcome != null ? String(r.outcome) : '—';
         if (r.pnl_usd != null && !isNaN(Number(r.pnl_usd))) {
@@ -1444,8 +1450,14 @@
         } else {
           pill = esc(sideRaw ? sideRaw : '—');
         }
+        var trOpen = rowMid
+          ? '<tr data-mid="' +
+            escAttr(rowMid) +
+            '" class="bts-click-row" title="Open baseline trades report with tile narrative for this event">'
+          : '<tr>';
         html +=
-          '<tr><td class="bts-mono">' +
+          trOpen +
+          '<td class="bts-mono">' +
           esc(tim) +
           '</td><td class="bts-mono">' +
           esc(mid) +
@@ -1465,6 +1477,18 @@
     tbody.innerHTML =
       '<tr><td colspan="4">No policy TRADE executions in the recent window (or none yet).</td></tr>';
   }
+
+  (function wireBtsBaselineNavigate() {
+    var tb = document.getElementById('bts-tbody');
+    if (!tb || tb.dataset.bbBtsNav) return;
+    tb.dataset.bbBtsNav = '1';
+    tb.addEventListener('click', function (e) {
+      var tr = e.target.closest('tr[data-mid]');
+      if (!tr) return;
+      var m = tr.getAttribute('data-mid');
+      if (m) window.location.href = '/baseline-trades.html?mid=' + encodeURIComponent(m);
+    });
+  })();
 
   function renderTC(tc) {
     var sig = tradeChainRenderSig(tc);

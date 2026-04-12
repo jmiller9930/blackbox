@@ -63,8 +63,7 @@ Use **one vocabulary** on the dashboard trade chain and the baseline trades repo
 **Where it shows up**
 
 - **Dashboard → trade chain (baseline row):** One **column per 5m bar** — you should see **open** on the entry column, **held** on each column until exit, then **closed …** on the exit column.
-- **Baseline trades report — top table:** Rows are **ledger executions** (mostly **closes**). **Lifecycle** column uses the same **closed …** labels for those rows.
-- **Baseline trades report — Policy lifecycle table:** From API `meta.lifecycle_timeline` — lists **open**, **held**, and **closed** policy ticks in the selected UTC window (this is where **open/held** appear even without a fill row).
+- **Baseline trades report (single table):** Rows are **ledger executions** (mostly **closes**). **Lifecycle** column uses the same **closed …** labels for those rows. **Click a row** (or **View**) for Jupiter tile narrative + forensic synthesis. **Open/held** bars (no fill row yet) are visible only on the **dashboard trade chain** baseline columns, not as separate report rows.
 
 **Code anchor:** `modules/anna_training/dashboard_bundle.py` (`_compact_baseline_cell_policy_bound`). Bridge / lifecycle: `baseline_ledger_bridge.py`, `jupiter_2_baseline_lifecycle.py`.
 

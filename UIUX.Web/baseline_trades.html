@@ -155,6 +155,8 @@
     }
     .bt-rpt th[title]:hover { color: #0f172a; }
     .bt-rpt tbody tr:hover { background: #fafbfc; }
+    .bt-rpt tbody tr.bt-click-row { cursor: pointer; }
+    .bt-rpt tbody tr.bt-click-row:hover { background: #f0f9ff; }
     .bt-mono { font-family: ui-monospace, monospace; font-size: 0.66rem; word-break: break-all; }
     .bt-mono--mid { max-width: 9rem; }
     .bt-long { background: rgba(59, 130, 246, 0.06); }
@@ -276,7 +278,7 @@
       <div class="bt-section">
         <h1>Baseline trades report</h1>
         <p class="bt-desc">
-          One row per completed baseline leg, correlated by <strong>trade_id</strong>. <strong>Path</strong> distinguishes Sean lifecycle (<code>bl_lc_…</code>) from same-bar / legacy (<code>bl_…</code>). <strong>Exit explain</strong> clarifies ledger <code>CLOSE</code> vs virtual <code>STOP_LOSS</code>/<code>TAKE_PROFIT</code>. <strong>SL/TP</strong> comes from the exit-bar policy snapshot when present. <strong>Lifecycle</strong> matches the dashboard trade chain. MAE uses 5m bars. QEL is cohort evaluation—see the QEL page.
+          One row per completed baseline leg, correlated by <strong>trade_id</strong>. <strong>Path</strong> distinguishes Sean lifecycle (<code>bl_lc_…</code>) from same-bar / legacy (<code>bl_…</code>). <strong>Exit explain</strong> clarifies ledger <code>CLOSE</code> vs virtual <code>STOP_LOSS</code>/<code>TAKE_PROFIT</code>. <strong>SL/TP</strong> comes from the exit-bar policy snapshot when present. <strong>Lifecycle</strong> matches the dashboard trade chain. <strong>Click a row</strong> (or <strong>View</strong>) for the Jupiter tile narrative and forensic synthesis. Open/held ticks without a fill row appear on the <strong>dashboard trade chain</strong> columns, not here. MAE uses 5m bars. QEL is cohort evaluation—see the QEL page.
         </p>
 
         <div class="bt-filters">
@@ -508,7 +510,10 @@
               ? String(r.trade_id_path_kind)
               : "—";
           h +=
-            '<tr><td class="bt-mono bt-mono--mid" title="' +
+            '<tr class="bt-click-row" data-mid="' +
+            escAttr(mid) +
+            '" title="Click row: Jupiter tile narrative and forensic synthesis">' +
+            '<td class="bt-mono bt-mono--mid" title="' +
             escAttr("Correlates execution_trades with policy_evaluations.") +
             '">' +
             esc(tid) +
@@ -608,12 +613,26 @@
         var btns = tb.querySelectorAll(".bt-view-btn");
         for (i = 0; i < btns.length; i++) {
           (function (idx) {
-            btns[i].addEventListener("click", function () {
+            btns[i].addEventListener("click", function (ev) {
+              ev.stopPropagation();
               openTile(rows[idx].market_event_id);
             });
           })(i);
         }
       }
+
+      (function wireBaselineRowClick() {
+        var tb = document.getElementById("bt-tbody");
+        if (!tb || tb.dataset.bbRowWire) return;
+        tb.dataset.bbRowWire = "1";
+        tb.addEventListener("click", function (e) {
+          if (e.target.closest("button")) return;
+          var tr = e.target.closest("tr[data-mid]");
+          if (!tr) return;
+          var m = tr.getAttribute("data-mid");
+          if (m) openTile(m);
+        });
+      })();
 
       function openTile(mid) {
         if (!mid) return;

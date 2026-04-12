@@ -430,8 +430,7 @@ def test_build_baseline_trades_report_schema() -> None:
     assert "rows" in rep and isinstance(rep["rows"], list)
     assert "meta" in rep and isinstance(rep["meta"], dict)
     assert rep["meta"].get("scope") == "all"
-    assert "lifecycle_timeline" in rep["meta"]
-    assert isinstance(rep["meta"]["lifecycle_timeline"], list)
+    assert rep["meta"].get("report_note")
     for row in rep["rows"]:
         assert "baseline_authority" in row
         assert row["baseline_authority"] in ("TRADE", "NO_TRADE")

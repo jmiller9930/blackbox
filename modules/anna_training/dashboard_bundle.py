@@ -1001,7 +1001,7 @@ def _recent_baseline_policy_trade_rows_for_strip(
     return out
 
 
-BASELINE_TRADES_REPORT_SCHEMA = "blackbox_baseline_trades_report_v2"
+BASELINE_TRADES_REPORT_SCHEMA = "blackbox_baseline_trades_report_v3"
 TRADE_EVENT_SYNTHESIS_SCHEMA = "trade_event_synthesis_v1"
 
 
@@ -1204,74 +1204,6 @@ def _trade_event_synthesis_v1(
     }
 
 
-def _baseline_lifecycle_timeline(
-    conn: Any,
-    *,
-    from_dt: datetime | None,
-    to_dt: datetime | None,
-    market_db_path: Path | None,
-    limit: int = 250,
-) -> list[dict[str, Any]]:
-    """Sean Jupiter policy ticks in the window: **open / held / closed** only (same cells as trade chain)."""
-    lim = max(20, min(500, int(limit)))
-    scan_cap = max(lim * 4, 400)
-
-    def _utc(dt: datetime) -> datetime:
-        if dt.tzinfo is None:
-            return dt.replace(tzinfo=timezone.utc)
-        return dt.astimezone(timezone.utc)
-
-    cur = conn.execute(
-        """
-        SELECT market_event_id, evaluated_at_utc
-        FROM policy_evaluations
-        WHERE lane = ? AND strategy_id = ? AND signal_mode = ?
-        ORDER BY evaluated_at_utc DESC
-        LIMIT ?
-        """,
-        (RESERVED_STRATEGY_BASELINE, RESERVED_STRATEGY_BASELINE, "sean_jupiter_v1", scan_cap),
-    )
-    out: list[dict[str, Any]] = []
-    for mid_raw, ev_raw in cur.fetchall():
-        mid = str(mid_raw or "").strip()
-        if not mid:
-            continue
-        ev_ts = _parse_iso_ts(str(ev_raw) if ev_raw else None)
-        if ev_ts is not None:
-            ev_ts = ev_ts.astimezone(timezone.utc) if ev_ts.tzinfo else ev_ts.replace(tzinfo=timezone.utc)
-        if from_dt or to_dt:
-            if ev_ts is None:
-                continue
-            evu = _utc(ev_ts)
-            if from_dt and evu < _utc(from_dt):
-                continue
-            if to_dt and evu > _utc(to_dt):
-                continue
-        tr = _fetch_trade(
-            conn,
-            mid,
-            lane=RESERVED_STRATEGY_BASELINE,
-            strategy_id=RESERVED_STRATEGY_BASELINE,
-        )
-        cell = _compact_baseline_cell_policy_bound(conn, mid, tr, market_db_path=market_db_path)
-        phase = cell.get("baseline_lifecycle_phase")
-        if phase not in ("open", "held", "closed"):
-            continue
-        out.append(
-            {
-                "market_event_id": mid,
-                "evaluated_at_utc": _normalize_utc_iso_for_axis(ev_raw),
-                "baseline_lifecycle_phase": phase,
-                "lifecycle_display": str(cell.get("outcome_display") or ""),
-                "policy_outcome": str(cell.get("outcome") or ""),
-                "baseline_display_reason": str(cell.get("baseline_display_reason") or ""),
-            }
-        )
-        if len(out) >= lim:
-            break
-    return out
-
-
 def build_baseline_trades_report(
     *,
     db_path: Path | None = None,
@@ -1310,7 +1242,6 @@ def build_baseline_trades_report(
 
     conn = connect_ledger(db_path)
     rows_out: list[dict[str, Any]] = []
-    lifecycle_timeline: list[dict[str, Any]] = []
     scanned = 0
     try:
         ensure_execution_ledger_schema(conn)
@@ -1458,13 +1389,6 @@ def build_baseline_trades_report(
                 tile_narrative=tile_text,
                 mae_usd=r.get("mae_usd"),
             )
-        lifecycle_timeline = _baseline_lifecycle_timeline(
-            conn,
-            from_dt=from_dt,
-            to_dt=to_dt,
-            market_db_path=mpath,
-            limit=250,
-        )
     finally:
         conn.close()
 
@@ -1480,10 +1404,9 @@ def build_baseline_trades_report(
             "max_scan_cap": scan_cap,
             "ledger_path": str(db_path),
             "synthesis_schema": TRADE_EVENT_SYNTHESIS_SCHEMA,
-            "lifecycle_timeline": lifecycle_timeline,
-            "lifecycle_timeline_note": (
-                "Policy ticks in the UTC window with baseline_lifecycle_phase in {open, held, closed}. "
-                "Same labels as the dashboard trade chain; includes bars without a ledger fill (open/held)."
+            "report_note": (
+                "Open/held/closed per bar appears on the dashboard trade chain columns; this report lists "
+                "ledger rows only. Use row click or ?mid= for tile narrative + synthesis."
             ),
         },
     }
