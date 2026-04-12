@@ -273,12 +273,12 @@
     <div class="dash-main">
       <div class="bt-back">
         <a class="dash-return" href="/dashboard.html">← Back to Dashboard</a>
-        <span class="bt-muted">Report API: <code>/api/v1/dashboard/baseline-trades-report</code> (UTC window, max rows, policy filter). <strong>View</strong> opens the Jupiter tile. CSV matches the table.</span>
+        <span class="bt-muted">Report API: <code>/api/v1/dashboard/baseline-trades-report</code> (UTC window, max rows, policy filter). <strong>View</strong> opens the Jupiter tile. Download CSV includes full API fields; the table is operator-focused.</span>
       </div>
       <div class="bt-section">
         <h1>Baseline trades report</h1>
         <p class="bt-desc">
-          One row per completed baseline leg, correlated by <strong>trade_id</strong>. <strong>Path</strong> distinguishes Sean lifecycle (<code>bl_lc_…</code>) from same-bar / legacy (<code>bl_…</code>). <strong>Exit explain</strong> clarifies ledger <code>CLOSE</code> vs virtual <code>STOP_LOSS</code>/<code>TAKE_PROFIT</code>. <strong>SL (exit)</strong> and <strong>TP (exit)</strong> use the policy snapshot when present; if needed, values fall back to the ledger <code>exit_record</code> on the close. <strong>Lifecycle</strong> matches the dashboard trade chain. <strong>Click a row</strong> (or <strong>View</strong>) for the Jupiter tile narrative and forensic synthesis. Open/held ticks without a fill row appear on the <strong>dashboard trade chain</strong> columns, not here. MAE uses 5m bars. QEL is cohort evaluation—see the QEL page.
+          One row per completed baseline leg, correlated by <strong>trade_id</strong>. <strong>SL (exit)</strong> and <strong>TP (exit)</strong> use the policy snapshot when present; if needed, values fall back to the ledger <code>exit_record</code> on the close. <strong>Lifecycle</strong> matches the dashboard trade chain. <strong>Click a row</strong> (or <strong>View</strong>) for the Jupiter tile narrative and forensic synthesis (extra API fields such as path/explain remain in JSON and CSV). Open/held ticks without a fill row appear on the <strong>dashboard trade chain</strong> columns, not here. MAE uses 5m bars. QEL is cohort evaluation—see the QEL page.
         </p>
 
         <div class="bt-filters">
@@ -330,10 +330,8 @@
                 <th title="Same lifecycle wording as the trade chain: closed win / closed loss / closed flat for ledger-backed closes.">Lifecycle</th>
                 <th title="Position size (units or contracts) used with entry price for notional and MAE.">Size</th>
                 <th title="Raw exit_reason from execution_trades.">Exit reason</th>
-                <th title="Operator-facing explanation (e.g. virtual SL/TP vs ledger CLOSE).">Exit explain</th>
                 <th title="Stop price at exit (lifecycle virtual stop; policy or ledger exit_record).">SL (exit)</th>
                 <th title="Take-profit price at exit (lifecycle; policy or ledger exit_record).">TP (exit)</th>
-                <th title="lifecycle vs same_bar_or_legacy from trade_id prefix.">Path</th>
                 <th title="Recorded entry price for the baseline leg.">Entry px</th>
                 <th title="Recorded exit price for the baseline leg.">Exit px</th>
                 <th title="Realized profit or loss in USD for this baseline execution.">PnL USD</th>
@@ -343,7 +341,7 @@
               </tr>
             </thead>
             <tbody id="bt-tbody">
-              <tr><td colspan="23">Loading…</td></tr>
+              <tr><td colspan="21">Loading…</td></tr>
             </tbody>
           </table>
         </div>
@@ -370,7 +368,7 @@
   <script>
     (function () {
       var state = { rows: [], meta: {} };
-      var COLS = 23;
+      var COLS = 21;
       var TIP_QEL_ROW =
         "QEL scores and survival decisions apply to Anna strategy cohorts, not to each baseline ledger row. Open QEL evaluation in the nav for details.";
 
@@ -505,16 +503,8 @@
               ? String(r.exit_time_utc_iso)
               : "—";
           var held = r.held_display != null && String(r.held_display).trim() !== "" ? String(r.held_display) : "—";
-          var exExpl =
-            r.exit_reason_explanation != null && String(r.exit_reason_explanation).trim() !== ""
-              ? String(r.exit_reason_explanation)
-              : "—";
           var slPx = r.stop_loss_at_exit_price;
           var tpPx = r.take_profit_at_exit_price;
-          var pathK =
-            r.trade_id_path_kind != null && String(r.trade_id_path_kind).trim() !== ""
-              ? String(r.trade_id_path_kind)
-              : "—";
           h +=
             '<tr class="bt-click-row" data-mid="' +
             escAttr(mid) +
@@ -579,10 +569,6 @@
             escAttr("Exit reason from ledger.") +
             '">' +
             esc(r.exit_reason || "—") +
-            '</td><td title="' +
-            escAttr("Operator explanation.") +
-            '">' +
-            esc(exExpl) +
             '</td><td class="bt-mono" title="' +
             escAttr("Stop level at exit (policy snapshot or ledger exit_record).") +
             '">' +
@@ -591,10 +577,6 @@
             escAttr("Take-profit level at exit (policy snapshot or ledger exit_record).") +
             '">' +
             esc(fmtSlTpPx(tpPx)) +
-            '</td><td title="' +
-            escAttr("Path from trade_id prefix.") +
-            '">' +
-            esc(pathK) +
             "</td><td title=\"" +
             escAttr("Entry price.") +
             '">' +
