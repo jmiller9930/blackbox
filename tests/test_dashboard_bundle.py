@@ -15,6 +15,7 @@ from modules.anna_training.execution_ledger import (
 )
 from modules.anna_training.dashboard_bundle import (
     BASELINE_TRADES_REPORT_SCHEMA,
+    build_baseline_active_position_snapshot,
     _compact_baseline_cell_policy_bound,
     _event_axis_jupiter_tile_narratives,
     _pair_vs_baseline_for_cells,
@@ -431,6 +432,13 @@ def test_build_baseline_trades_report_schema() -> None:
     assert "meta" in rep and isinstance(rep["meta"], dict)
     assert rep["meta"].get("scope") == "all"
     assert rep["meta"].get("report_note")
+    ap = rep["meta"].get("active_position")
+    assert isinstance(ap, dict)
+    assert "position_open" in ap
+    assert ap.get("schema") == "blackbox_baseline_active_position_v1"
+    snap = build_baseline_active_position_snapshot()
+    assert snap.get("schema") == "blackbox_baseline_active_position_v1"
+    assert "position_open" in snap
     assert "direction_summary" in rep["meta"]
     assert "long_count" in rep["meta"]["direction_summary"]
     assert "pnl_semantics" in rep["meta"]

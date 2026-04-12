@@ -1002,7 +1002,7 @@ def _recent_baseline_policy_trade_rows_for_strip(
     return out
 
 
-BASELINE_TRADES_REPORT_SCHEMA = "blackbox_baseline_trades_report_v5"
+BASELINE_TRADES_REPORT_SCHEMA = "blackbox_baseline_trades_report_v6"
 TRADE_EVENT_SYNTHESIS_SCHEMA = "trade_event_synthesis_v1"
 
 
@@ -1427,6 +1427,133 @@ def _trade_event_synthesis_v1(
     }
 
 
+def build_baseline_active_position_snapshot(
+    *,
+    db_path: Path | None = None,
+    market_db_path: Path | None = None,
+    symbol: str = "SOL-PERP",
+    timeframe: str = "5m",
+    mode: str = "paper",
+) -> dict[str, Any]:
+    """
+    Current open baseline Jupiter position from ``baseline_jupiter_open_positions`` plus latest bar mark.
+
+    Used for operator validation when the trades table is closed-fill–only: ``trade_id``, sizing, SL/TP,
+    unrealized PnL, and running duration.
+    """
+    from modules.anna_training.execution_ledger import (
+        baseline_jupiter_open_position_key,
+        fetch_baseline_jupiter_open_state_json,
+    )
+    from modules.anna_training.jupiter_2_baseline_lifecycle import (
+        BaselineOpenPosition,
+        unrealized_pnl_usd,
+    )
+
+    lp = db_path or default_execution_ledger_path()
+    out: dict[str, Any] = {
+        "schema": "blackbox_baseline_active_position_v1",
+        "position_open": False,
+        "ledger_path": str(lp),
+        "position_key": None,
+    }
+    if not lp.is_file():
+        out["note"] = "execution_ledger_not_found"
+        return out
+
+    mpath = market_db_path if market_db_path is not None else _market_db_path()
+    sym = (symbol or "SOL-PERP").strip() or "SOL-PERP"
+    tf = (timeframe or "5m").strip() or "5m"
+    md = (mode or "paper").strip().lower() or "paper"
+    pk = baseline_jupiter_open_position_key(symbol=sym, timeframe=tf, mode=md)
+    out["position_key"] = pk
+
+    conn = connect_ledger(lp)
+    try:
+        ensure_execution_ledger_schema(conn)
+        raw = fetch_baseline_jupiter_open_state_json(conn, position_key=pk)
+    finally:
+        conn.close()
+
+    if not raw:
+        return out
+
+    pos = BaselineOpenPosition.from_json_dict(json.loads(raw))
+    mark: float | None = None
+    last_mid: str | None = None
+    mark_candle_close_utc: str | None = None
+    if mpath and mpath.is_file():
+        _ensure_runtime_for_market_imports()
+        from market_data.bar_lookup import fetch_latest_bar_row
+
+        bar = fetch_latest_bar_row(db_path=mpath, canonical_symbol=sym)
+        if bar:
+            try:
+                mark = float(bar.get("close"))
+                last_mid = str(bar.get("market_event_id") or "").strip() or None
+                cco = bar.get("candle_close_utc")
+                mark_candle_close_utc = str(cco).strip() if cco else None
+            except (TypeError, ValueError):
+                mark = None
+
+    if mark is None:
+        mark = float(pos.entry_price)
+
+    ur = unrealized_pnl_usd(entry=pos.entry_price, mark=mark, size=pos.size, side=pos.side)
+    sf = pos.signal_features_snapshot if isinstance(pos.signal_features_snapshot, dict) else {}
+    fc = sf.get("free_collateral_usd")
+    try:
+        fc_f = float(fc) if fc is not None else None
+    except (TypeError, ValueError):
+        fc_f = None
+
+    run_min: float | None = None
+    et = pos.entry_candle_open_utc
+    if et:
+        dt = _parse_iso_ts(str(et))
+        if dt is not None:
+            if dt.tzinfo is None:
+                dt = dt.replace(tzinfo=timezone.utc)
+            else:
+                dt = dt.astimezone(timezone.utc)
+            run_min = (datetime.now(timezone.utc) - dt).total_seconds() / 60.0
+
+    out.update(
+        {
+            "position_open": True,
+            "trade_id": pos.trade_id,
+            "side": pos.side,
+            "mode": md,
+            "symbol": sym,
+            "timeframe": tf,
+            "entry_time": pos.entry_candle_open_utc,
+            "entry_market_event_id": pos.entry_market_event_id,
+            "entry_price": pos.entry_price,
+            "mark_price": mark,
+            "mark_market_event_id": last_mid,
+            "mark_candle_close_utc": mark_candle_close_utc,
+            "unrealized_pnl_usd": round(float(ur), 8),
+            "size": pos.size,
+            "size_source": pos.size_source,
+            "notional_usd": pos.notional_usd,
+            "collateral_usd": pos.collateral_usd,
+            "free_collateral_usd": fc_f,
+            "leverage": pos.leverage,
+            "risk_pct": pos.risk_pct,
+            "stop_loss": pos.stop_loss,
+            "take_profit": pos.take_profit,
+            "initial_stop_loss": pos.initial_stop_loss,
+            "initial_take_profit": pos.initial_take_profit,
+            "breakeven_applied": pos.breakeven_applied,
+            "running_duration_minutes": round(float(run_min), 4) if run_min is not None else None,
+            "atr_entry": pos.atr_entry,
+            "reason_code_at_entry": pos.reason_code_at_entry,
+            "last_processed_market_event_id": pos.last_processed_market_event_id,
+        }
+    )
+    return out
+
+
 def build_baseline_trades_report(
     *,
     db_path: Path | None = None,
@@ -1698,6 +1825,11 @@ def build_baseline_trades_report(
     long_count = sum(1 for r in rows_out if str(r.get("side") or "").lower() == "long")
     short_count = sum(1 for r in rows_out if str(r.get("side") or "").lower() == "short")
 
+    active_position = build_baseline_active_position_snapshot(
+        db_path=db_path,
+        market_db_path=mpath,
+    )
+
     return {
         "schema": BASELINE_TRADES_REPORT_SCHEMA,
         "rows": rows_out,
@@ -1710,6 +1842,7 @@ def build_baseline_trades_report(
             "max_scan_cap": scan_cap,
             "ledger_path": str(db_path),
             "synthesis_schema": TRADE_EVENT_SYNTHESIS_SCHEMA,
+            "active_position": active_position,
             "direction_summary": {
                 "long_count": long_count,
                 "short_count": short_count,
@@ -1719,7 +1852,9 @@ def build_baseline_trades_report(
             "report_note": (
                 "Baseline close rows: SL/TP at entry from position_open or context_snapshot initial_stop_loss/"
                 "initial_take_profit. Exit SL/TP from policy features or lifecycle exit_record. "
-                "PnL is gross model USD (see pnl_semantics). Dashboard trade chain shows open/held bars."
+                "PnL is gross model USD (see pnl_semantics). Open baseline position (unrealized PnL, SL/TP, "
+                "sizing) is in meta.active_position when baseline_jupiter_open_positions has a row. "
+                "Dashboard trade chain shows open/held bars."
             ),
         },
     }

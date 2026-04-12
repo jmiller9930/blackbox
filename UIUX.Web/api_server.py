@@ -2025,7 +2025,26 @@ class Handler(BaseHTTPRequestHandler):
                     500,
                     {
                         "ok": False,
-                        "schema": "blackbox_baseline_trades_report_v5",
+                        "schema": "blackbox_baseline_trades_report_v6",
+                        "error": str(e)[:500],
+                        "trace_id": str(uuid.uuid4()),
+                    },
+                    no_cache=True,
+                )
+                return
+            self._json(200, body, no_cache=True)
+            return
+        if path == "/api/v1/dashboard/baseline-active-position":
+            try:
+                from modules.anna_training.dashboard_bundle import build_baseline_active_position_snapshot
+
+                body = build_baseline_active_position_snapshot()
+            except Exception as e:  # noqa: BLE001
+                self._json(
+                    500,
+                    {
+                        "ok": False,
+                        "schema": "blackbox_baseline_active_position_v1",
                         "error": str(e)[:500],
                         "trace_id": str(uuid.uuid4()),
                     },

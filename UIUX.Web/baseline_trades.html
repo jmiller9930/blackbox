@@ -198,6 +198,56 @@
       max-width: 52rem;
       line-height: 1.45;
     }
+    .bt-active-panel {
+      margin: 0 0 1rem;
+      padding: 0.75rem 1rem;
+      background: #fff;
+      border: 1px solid var(--panel-border);
+      border-radius: var(--radius-md);
+      box-shadow: 0 1px 2px rgba(15, 23, 42, 0.06);
+      max-width: 56rem;
+    }
+    .bt-active-panel--empty {
+      background: #f8fafc;
+    }
+    .bt-active-panel--open {
+      border-color: #93c5fd;
+      background: linear-gradient(180deg, #eff6ff 0%, #fff 100%);
+    }
+    .bt-active-h {
+      margin: 0 0 0.35rem;
+      font-size: 0.88rem;
+      font-weight: 800;
+      color: #0f172a;
+    }
+    .bt-active-muted {
+      margin: 0 0 0.65rem;
+      font-size: 0.68rem;
+      color: var(--muted);
+      font-weight: 600;
+      line-height: 1.45;
+    }
+    .bt-active-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(11rem, 1fr));
+      gap: 0.35rem 1rem;
+      margin: 0;
+      font-size: 0.72rem;
+    }
+    .bt-active-grid dt {
+      margin: 0;
+      font-size: 0.58rem;
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      color: var(--muted);
+    }
+    .bt-active-grid dd {
+      margin: 0 0 0.35rem;
+      font-weight: 700;
+      color: #0f172a;
+      word-break: break-word;
+    }
     .bt-dir-summary {
       margin: 0 0 0.65rem;
       font-size: 0.72rem;
@@ -299,17 +349,18 @@
     <div class="dash-main">
       <div class="bt-back">
         <a class="dash-return" href="/dashboard.html">← Back to Dashboard</a>
-        <span class="bt-muted">Report API: <code>/api/v1/dashboard/baseline-trades-report</code> (UTC window, max rows, policy filter). <strong>View</strong> opens the Jupiter tile. Download CSV includes full API fields; the table is operator-focused.</span>
+        <span class="bt-muted">Report API: <code>/api/v1/dashboard/baseline-trades-report</code> (includes <code>meta.active_position</code>). Standalone: <code>/api/v1/dashboard/baseline-active-position</code>. <strong>View</strong> opens the trade snapshot. CSV is table rows only.</span>
       </div>
       <div class="bt-section">
         <h1>Baseline trades report</h1>
         <p class="bt-desc">
-          <strong>One row per trade</strong> (<code>trade_id</code>). <strong>Open → Held → Exit/Status</strong> are one lifecycle on that row. Sizing columns show how base size was chosen. <strong>Click a row</strong> for a readable trade snapshot; candle diagnostics are optional below. Open/held bars without a fill appear on the <strong>dashboard trade chain</strong>. QEL is cohort evaluation—see the QEL page.
+          <strong>One row per closed trade</strong> (<code>trade_id</code>) from ledger fills. <strong>Active baseline position</strong> (open Jupiter paper key) is shown above the table when present—same economic fields as the dashboard lifecycle tile (mark, unrealized PnL, SL/TP, sizing). <strong>Click a row</strong> for a closed-trade snapshot. Open/held bars also appear on the <strong>dashboard trade chain</strong>. QEL is cohort evaluation—see the QEL page.
         </p>
         <p class="bt-econ-banner" id="bt-econ-banner" role="status">
           <strong>PnL column:</strong> gross model USD from fill prices and size—<strong>not</strong> net of fees, funding, or slippage. Small dollar amounts are normal when the price move is small. Full wording is in API <code>meta.pnl_semantics</code> after load.
         </p>
         <p class="bt-dir-summary" id="bt-direction-summary" aria-live="polite"></p>
+        <div id="bt-active-panel" class="bt-active-panel" role="region" aria-live="polite" aria-label="Active baseline position"></div>
 
         <div class="bt-filters">
           <div class="bt-field">
@@ -860,6 +911,97 @@
         URL.revokeObjectURL(a.href);
       }
 
+      function renderActivePosition(meta) {
+        var el = document.getElementById("bt-active-panel");
+        if (!el) return;
+        var ap = meta && meta.active_position;
+        if (!ap || typeof ap !== "object") {
+          el.innerHTML = "";
+          el.removeAttribute("hidden");
+          return;
+        }
+        if (!ap.position_open) {
+          el.className = "bt-active-panel bt-active-panel--empty";
+          el.innerHTML =
+            '<h2 class="bt-active-h">Active baseline position</h2>' +
+            '<p class="bt-active-muted">No open position for key <code>' +
+            esc(ap.position_key || "baseline|SOL-PERP|5m|paper") +
+            "</code>. The table below lists <strong>closed</strong> executions only.</p>";
+          return;
+        }
+        var side = String(ap.side || "").toLowerCase();
+        var sideCls = side === "short" ? "bt-short" : "bt-long";
+        var pnl = ap.unrealized_pnl_usd;
+        var pnlCls =
+          pnl == null ? "" : Number(pnl) >= 0 ? "bt-pnl-pos" : "bt-pnl-neg";
+        var dur =
+          ap.running_duration_minutes != null && !isNaN(Number(ap.running_duration_minutes))
+            ? Number(ap.running_duration_minutes).toFixed(2) + " min"
+            : "—";
+        var sltp =
+          "SL " +
+          fmtSlTpPx(ap.stop_loss) +
+          " · TP " +
+          fmtSlTpPx(ap.take_profit) +
+          " <span class=\"bt-active-muted\" style=\"font-weight:600\">(initial SL " +
+          fmtSlTpPx(ap.initial_stop_loss) +
+          " · TP " +
+          fmtSlTpPx(ap.initial_take_profit) +
+          ")</span>";
+        el.className = "bt-active-panel bt-active-panel--open";
+        el.innerHTML =
+          '<h2 class="bt-active-h">Active baseline position</h2>' +
+          '<p class="bt-active-muted">Open state from <code>baseline_jupiter_open_positions</code>; mark from latest bar. Unrealized PnL is gross model USD (same semantics as the PnL banner).</p>' +
+          '<dl class="bt-active-grid">' +
+          "<dt>trade_id</dt><dd class=\"bt-mono\">" +
+          esc(ap.trade_id) +
+          "</dd>" +
+          "<dt>Entry (UTC)</dt><dd class=\"bt-mono\">" +
+          esc(ap.entry_time) +
+          "</dd>" +
+          "<dt>Running</dt><dd>" +
+          esc(dur) +
+          "</dd>" +
+          "<dt>Side</dt><dd class=\"" +
+          escAttr(sideCls) +
+          "\">" +
+          esc(side || "—") +
+          "</dd>" +
+          "<dt>Unrealized PnL USD</dt><dd class=\"" +
+          escAttr(pnlCls) +
+          "\">" +
+          esc(fmtPnl(pnl)) +
+          "</dd>" +
+          "<dt>Size</dt><dd>" +
+          esc(ap.size != null ? String(ap.size) : "—") +
+          " <span class=\"bt-active-muted\" style=\"font-weight:600\">(" +
+          esc(ap.size_source || "—") +
+          ")</span></dd>" +
+          "<dt>Notional USD</dt><dd>" +
+          esc(fmtMoney(ap.notional_usd)) +
+          "</dd>" +
+          "<dt>Free collateral USD</dt><dd>" +
+          esc(fmtMoney(ap.free_collateral_usd)) +
+          "</dd>" +
+          "<dt>Entry / mark</dt><dd>" +
+          esc(fmtNum(ap.entry_price)) +
+          " / " +
+          esc(fmtNum(ap.mark_price)) +
+          "</dd>" +
+          "<dt>SL / TP</dt><dd>" +
+          sltp +
+          "</dd>" +
+          "<dt>Leverage · risk %</dt><dd>" +
+          esc(ap.leverage != null ? String(ap.leverage) : "—") +
+          " · " +
+          esc(ap.risk_pct != null ? String(ap.risk_pct) : "—") +
+          "</dd>" +
+          "<dt>Entry market_event_id</dt><dd class=\"bt-mono bt-mono--mid\">" +
+          esc(ap.entry_market_event_id) +
+          "</dd>" +
+          "</dl>";
+      }
+
       function load() {
         var foot = document.getElementById("bt-foot");
         foot.textContent = "Loading…";
@@ -882,6 +1024,7 @@
                 " · short " +
                 (ds.short_count != null ? ds.short_count : "—");
             }
+            renderActivePosition(m);
             var ban = document.getElementById("bt-econ-banner");
             if (ban && m.pnl_semantics && m.pnl_semantics.operator_note) {
               ban.innerHTML =
