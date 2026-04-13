@@ -269,6 +269,8 @@ Required fields (JSON line or structured log):
 
 This section turns the LDD into an implementable checklist: **decisions**, **missing contracts**, and **where code lives today**. The next implementer should close or explicitly defer each item.
 
+**Resolved defaults:** Recommended answers for these gaps are in **§17 Gap resolutions** — use them unless the Architect overrides.
+
 ### 16.1 Deployment and runtime boundary
 
 | Gap | What to decide / produce |
@@ -399,6 +401,118 @@ Each LDD tool needs **exact** Python/HTTP binding, **inputs**, and **error shape
 
 ---
 
+## 17. Gap resolutions (recommended v1 defaults)
+
+**Purpose:** Answer the open items in §16 so implementation can proceed without re-litigating basics. Architect may override; update this section and the changelog when decisions change.
+
+### 17.1 Deployment and runtime (§16.1)
+
+| Gap | Recommended resolution |
+|-----|-------------------------|
+| Bolt vs OpenClaw | **Primary path:** OpenClaw Slack dispatch on clawbot (patched `dispatch.ts`). **Single interpreter:** new Python package/module (e.g. `messaging_interface/operator_router/`) invoked from ingress; **Bolt** (`slack_adapter.py`) may call the same module later for parity — not two different tool paths. |
+| Thread-aware ingress | Extend ingress to accept **JSON on stdin** or env **`SLACK_OPERATOR_CONTEXT_JSON`**: `{ "text", "team_id", "channel_id", "thread_ts", "user_id" }`. Plain argv text remains supported for tests; production passes full context. |
+| Streaming vs single reply | **Contract:** No user-visible assistant tokens until **tools complete** (or clarification question emitted). `trace_id` created at **start of turn**; streaming (if any) only for **final NL wrap**, not interleaved with tool calls. |
+
+### 17.2 OpenClaw ↔ BlackBox (§16.2)
+
+| Gap | Recommended resolution |
+|-----|-------------------------|
+| Replace/wrap ingress | **Wrap:** New `slack_operator_router.py` (or extend `slack_anna_ingress.py`) — order: greeting → named strip → **operator router** (intent/tools) → exit 2 to embedded model only if router declines. Exit codes: `0` = router handled, `2` = fall through. **Timeouts:** router 90s hard cap; tool sub-calls individually timed. |
+| trace_id ownership | **Python generates** UUID v4 at router entry; echo in first audit log line; pass to OpenClaw via stderr prefix or structured line gateway can parse (define one line format). |
+| Build/restart proof | Follow existing **`apply_openclaw_*`** docs: clawbot `git pull` blackbox + openclaw, `pnpm build` when `dispatch.ts` changes, `systemctl --user restart openclaw-gateway` (or project standard). |
+
+### 17.3 Telegram vs Slack (§16.3)
+
+| Gap | Recommended resolution |
+|-----|-------------------------|
+| Coexistence | **Phase 1:** Implement **Slack/OpenClaw only** for the operator router. Telegram keeps **`message_router`** behavior; add a **feature parity matrix** in PR when Slack MVP ships (do not block Slack on Telegram). |
+
+### 17.4 Intent + slot extraction (§16.4)
+
+| Gap | Recommended resolution |
+|-----|-------------------------|
+| Parser stack | **Rules-first** for high-precision patterns (e.g. “last N trades”, “wallet”, “bundle”); **LLM JSON schema** for the rest; on invalid JSON → single clarify “I didn’t catch the filters — …”. |
+| Model/runtime | **Same Ollama base URL as Anna** unless `OPERATOR_ROUTER_MODEL` set; keeps ops simple. |
+| Golden tests | **`tests/fixtures/operator_intents/*.json`** — CI runs **offline** (mock tools). |
+| intent_schema_version | **`modules/anna_training/operator_router/schema.py`** (or equivalent) — constant `INTENT_SCHEMA_VERSION = "1"`. |
+
+### 17.5 Tool bindings (§16.5)
+
+| Gap | Recommended resolution |
+|-----|-------------------------|
+| HTTP vs in-process | **In-process** on clawbot where Python shares repo + env (`BLACKBOX_*`). **HTTP** optional for tests against `api_server` or remote host — same tool implementation, two transports behind one interface. |
+| list vs report | **`list_trades`** → `fetch_trade_export_rows` (fast strip); **`export_trades` / formal baseline** → `build_baseline_trades_report` when scope needs policy classification — intent maps utterance to one or the other. |
+
+### 17.6 Thread context store (§16.6)
+
+| Gap | Recommended resolution |
+|-----|-------------------------|
+| SQLite vs Redis | **SQLite** file: `data/sqlite/operator_slack_threads.sqlite` (or under `BLACKBOX_CONTEXT_ROOT`) — single-writer, simple backup. |
+| Thread key | **`sha256(team_id + ":" + channel_id + ":" + thread_ts)`** hex or string concat unique index. |
+| TTL | **7 days** last-access eviction; configurable. |
+| Duplicate memory | **New table** `operator_thread_state` — do **not** overload `anna_modules/context_memory.py` for Slack operator keys; may **read** context_engine events for health but not mix PnL into thread table. |
+
+### 17.7 Named presentation (§16.7)
+
+| Gap | Recommended resolution |
+|-----|-------------------------|
+| Invoke patterns | **`Anna,` / `Anna:` / `DATA,` / `DATA:`** line-leading; case-insensitive; strip before intent. Add **`@anna` / `@data`** substring match consistent with existing Slack patterns. |
+| Outbound formatting | Extend **`slack_persona_enforcement.py`** routes to `system \| anna \| data` — **same** enforcement philosophy (no extra facts). |
+| OpenClaw env | Set **`SLACK_PERSONA_ROUTE`** from router result for send path. |
+
+### 17.8 Documentation tools (§16.8)
+
+| Gap | Recommended resolution |
+|-----|-------------------------|
+| Allowlist | Config file **`config/operator_doc_allowlist.txt`** — one glob or prefix per line: `docs/`, `agents/`, `UIUX.Web/content/`, `README.md` at repo root optional. |
+| Search | **`rg` subprocess** with timeout **3s**, max matches **40**; deterministic sort by path. |
+| tool.docs.read | **Max 512 KiB**; UTF-8; reject binary. |
+| LLM | System prompt: **“Answer only from EXCERPTS; if insufficient say so; cite Sources: path.”** |
+
+### 17.9 Audit logging (§16.9)
+
+| Gap | Recommended resolution |
+|-----|-------------------------|
+| Log sink | **`logs/operator_router.jsonl`** (repo-relative on clawbot) **or** append to **`FOREMAN_V2_UNIFIED_LOG_PATH`** when set — one line JSON per turn. |
+| Redaction | Log **Slack user id** hashed; tool args: **truncate** strings > 500 chars; never log **tokens**. |
+
+### 17.10 Clarification defaults (§16.10)
+
+| Gap | Recommended resolution |
+|-----|-------------------------|
+| Config file | **`config/operator_clarify_defaults.yaml`** — e.g. `list_trades: { limit: 15, scope: baseline, order: exit_time_desc }`. Operator doc one paragraph pointing to file. |
+
+### 17.11 Slack product behavior (§16.11)
+
+| Gap | Recommended resolution |
+|-----|-------------------------|
+| Thread replies | **Always** reply in **same thread** as user when `thread_ts` present; top-level only when user message was top-level. |
+| Architect blocks | **Keep** for diagnostics in dev/staging; **optional** in prod operator channel (env flag). |
+
+### 17.12 Security (§16.12)
+
+| Gap | Recommended resolution |
+|-----|-------------------------|
+| Allowlist | Env **`SLACK_OPERATOR_ALLOWED_WORKSPACE_IDS`** (comma-separated); empty = disabled check (dev only). |
+| Rate limits | **30** tool-heavy turns / user / hour (configurable). |
+| Secrets | Never log `SLACK_BOT_TOKEN`, OpenClaw tokens, or wallet keys. |
+
+### 17.13 Acceptance tests (§16.13)
+
+| Gap | Recommended resolution |
+|-----|-------------------------|
+| Default vs named | **pytest** with mocked tools: assert `tool_calls` list identical for `why no trade` vs `Anna, why no trade`. |
+| Grounding | Assert any message containing `$` or `balance` implies `tool.wallet.get` in captured log. |
+
+### 17.14 Governance (§16.14)
+
+| Gap | Recommended resolution |
+|-----|-------------------------|
+| Phase scope | **First PR** ships §12 checklist items **1–6** minimum; item **7** (doc QA) may follow in same release if small; otherwise next PR. State in PR body. |
+
+---
+
 ## Changelog
 
 - **2026-04-10:** Moved document into `docs/architect/slack_conversational_operator/`; added §16 Implementation gaps for implementer handoff.
+- **2026-04-13:** Added §17 Gap resolutions (recommended v1 defaults) to answer §16 open items for implementation.
