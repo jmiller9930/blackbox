@@ -55,6 +55,10 @@ def test_build_trade_chain_payload_schema() -> None:
     assert tc["rows"][0].get("row_tier") == "primary"
     assert (tc.get("recency") or {}).get("axis_order") == "oldest_left_newest_right"
     assert tc.get("jupiter_tile_narrative_schema") == "jupiter_tile_narrative_v1"
+    bmd = tc.get("binance_market_data") or {}
+    assert bmd.get("schema") == "binance_market_data_surface_v1"
+    assert "public_rest_ping" in bmd
+    assert "kline_quote_volume_coverage" in bmd
     bjp = tc.get("baseline_jupiter_policy") or {}
     assert bjp.get("schema") == "baseline_jupiter_policy_selector_v1"
     assert bjp.get("active_id") == "jup_v2"

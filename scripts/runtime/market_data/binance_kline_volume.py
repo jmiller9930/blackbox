@@ -138,6 +138,57 @@ def fetch_binance_quote_volume_5m(
         return None
 
 
+def probe_binance_public_rest_ping(timeout_sec: float = 8.0) -> dict[str, Any]:
+    """
+    Lightweight ``GET /api/v3/ping`` — same host as klines; use for **reachability** (API container → Binance).
+
+    Distinct from per-bar ``volume_base`` (kline quote volume). Never raises; always returns a dict.
+    """
+    import time
+    import uuid
+
+    url = "https://api.binance.com/api/v3/ping"
+    trace_id = str(uuid.uuid4())
+    t0 = time.perf_counter()
+    req = urllib.request.Request(
+        url,
+        method="GET",
+        headers={"User-Agent": "blackbox-binance-probe/1"},
+    )
+    try:
+        to = max(3.0, min(30.0, float(timeout_sec)))
+        with urllib.request.urlopen(req, timeout=to, context=_ssl_context()) as resp:
+            latency_ms = (time.perf_counter() - t0) * 1000.0
+            return {
+                "ok": True,
+                "latency_ms": round(latency_ms, 2),
+                "http_status": int(resp.status),
+                "error": None,
+                "url": url,
+                "trace_id": trace_id,
+            }
+    except urllib.error.HTTPError as e:
+        latency_ms = (time.perf_counter() - t0) * 1000.0
+        return {
+            "ok": False,
+            "latency_ms": round(latency_ms, 2),
+            "http_status": int(e.code),
+            "error": str(e.reason or e),
+            "url": url,
+            "trace_id": trace_id,
+        }
+    except Exception as e:
+        latency_ms = (time.perf_counter() - t0) * 1000.0
+        return {
+            "ok": False,
+            "latency_ms": round(latency_ms, 2),
+            "http_status": None,
+            "error": str(e),
+            "url": url,
+            "trace_id": trace_id,
+        }
+
+
 def enrich_canonical_bar_volume_from_binance(bar: CanonicalBarV1) -> tuple[CanonicalBarV1, dict[str, Any]]:
     """
     Set ``volume_base`` from Binance 5m kline quote volume; leave OHLC/tick_count from Pyth rollup unchanged.

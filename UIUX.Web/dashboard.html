@@ -549,6 +549,26 @@
       background: #ef4444;
       box-shadow: 0 0 0 1px rgba(15, 23, 42, 0.28);
     }
+    .tc-binance-rest-pill {
+      display: inline-block;
+      font-size: 0.52rem;
+      font-weight: 800;
+      letter-spacing: 0.04em;
+      padding: 0.1rem 0.28rem;
+      border-radius: 3px;
+      border: 1px solid #cbd5e1;
+      flex-shrink: 0;
+    }
+    .tc-binance-rest-ok {
+      color: #14532d;
+      background: #dcfce7;
+      border-color: #86efac;
+    }
+    .tc-binance-rest-bad {
+      color: #7f1d1d;
+      background: #fee2e2;
+      border-color: #fca5a5;
+    }
     .tc-jup-policy-chip {
       display: inline-block;
       font-size: 0.58rem;
@@ -1696,6 +1716,10 @@
     var bjpol = jpBundle.baseline_jupiter_policy || {};
     var jupLab = String(bjpol.active_label || 'JUPv2').trim() || 'JUPv2';
     var binanceDotHtml = '';
+    var binanceRestHtml = '';
+    var bmd = opts.binanceMd || {};
+    var pr = bmd.public_rest_ping || {};
+    var cov = bmd.kline_quote_volume_coverage || {};
     if (baselineLane && jupLab === 'JUPv3') {
       var bVolOk = c && c.binance_kline_volume_ok === true;
       binanceDotHtml =
@@ -1704,16 +1728,46 @@
         '" title="' +
         esc(
           bVolOk
-            ? 'Binance kline quote volume on this bar (volume_base) — same field as the volume spike gate. Click or Enter: live Binance REST ping (connectivity from API server).'
-            : 'No Binance quote volume on this bar (volume_base missing or zero). Click or Enter: live Binance REST ping (connectivity from API server).'
+            ? 'Quote volume on THIS 5m bar (volume_base in DB from Binance klines). Green = data present for spike gate — not the same as Binance REST ping. Click: ping test.'
+            : 'No quote volume on this bar in DB (volume_base missing or zero). This is bar data lag/miss — not the same as “Binance API offline.” Click: ping test.'
         ) +
         '" aria-label="' +
-        esc(bVolOk ? 'Binance kline volume present' : 'Binance kline volume missing') +
+        esc(
+          bVolOk
+            ? 'Binance quote volume present on this bar'
+            : 'No Binance quote volume on this bar'
+        ) +
         '"></span>';
+      var pok = pr.ok === true;
+      var covN = cov.recent_closed_bars_scanned;
+      var covW = cov.bars_with_quote_volume;
+      var covBit =
+        covN != null && covW != null
+          ? ' DB: ' + covW + '/' + covN + ' recent bars have kline quote volume.'
+          : '';
+      binanceRestHtml =
+        '<span class="tc-binance-rest-pill ' +
+        (pok ? 'tc-binance-rest-ok' : 'tc-binance-rest-bad') +
+        '" title="' +
+        esc(
+          pok
+            ? 'Binance public REST reachable from this dashboard API (GET /api/v3/ping). ' +
+                (pr.latency_ms != null ? Math.round(Number(pr.latency_ms)) + ' ms. ' : '') +
+                'Separate from per-bar volume (dot).' +
+                covBit
+            : 'Binance public REST not OK from API host: ' +
+                String(pr.error != null ? pr.error : pr.http_status != null ? 'HTTP ' + pr.http_status : 'unknown') +
+                '.' +
+                covBit
+        ) +
+        '">' +
+        esc(pok ? 'REST · OK' : 'REST · down') +
+        '</span>';
     }
     var jupChipHtml = baselineLane
       ? '<div class="tc-jup-policy-row">' +
         binanceDotHtml +
+        binanceRestHtml +
         '<div class="tc-jup-policy-chip" title="Jupiter baseline policy version">' +
         esc(jupLab) +
         '</div></div>'
@@ -2674,6 +2728,7 @@
 
   function renderTC(tc, bundle) {
     bundle = bundle || {};
+    var binanceMd = (tc && tc.binance_market_data) || {};
     var jp = bundle.jupiter_policy_snapshot || {};
     var blOpen = jp.baseline_lifecycle;
     var blPosOpen = baselineLifecyclePositionOpen(blOpen);
@@ -2784,6 +2839,7 @@
             '">' +
             cellMini(cellL, row, {
               jp: jp,
+              binanceMd: binanceMd,
               colIndex: idx,
               nEv: nEv,
               baselineAnchorIdx: anchorIdx,
@@ -2815,7 +2871,7 @@
             ' style="' +
             cellBg +
             '">' +
-            cellMini(cell, row, { jp: jp, colIndex: idx, nEv: nEv }) +
+            cellMini(cell, row, { jp: jp, binanceMd: binanceMd, colIndex: idx, nEv: nEv }) +
             '</td>';
         });
       }
@@ -3416,8 +3472,8 @@
             var st = j && j.http_status != null ? String(j.http_status) : '—';
             window.alert(
               ok
-                ? 'Binance REST ping OK — ' + ms + ' ms (HTTP ' + st + '). Dot color = kline volume on this bar, not reachability.'
-                : 'Binance REST ping failed — HTTP ' + st + (err ? ': ' + err : '') + '. Dot color = kline volume on this bar.'
+                ? 'Binance REST ping OK — ' + ms + ' ms (HTTP ' + st + '). REST pill + this ping = reachability. Colored dot = quote volume on this bar in DB.'
+                : 'Binance REST ping failed — HTTP ' + st + (err ? ': ' + err : '') + '. See REST pill on JUPv3 row.'
             );
           })
           .catch(function () {

@@ -4082,6 +4082,34 @@ def _anna_vs_baseline_aggregate(scorecard: list[dict[str, Any]]) -> dict[str, in
     return {"wins": w, "not_wins": nw, "excluded": exc}
 
 
+def _kline_quote_volume_coverage_stats(conn: Any, canonical_symbol: str, limit: int) -> dict[str, Any]:
+    """How many recent ``market_bars_5m`` rows have ``volume_base`` from Binance klines."""
+    rows = conn.execute(
+        """
+        SELECT volume_base FROM market_bars_5m
+        WHERE canonical_symbol = ? AND timeframe = '5m'
+        ORDER BY candle_open_utc DESC
+        LIMIT ?
+        """,
+        (canonical_symbol, int(limit)),
+    ).fetchall()
+    n = len(rows)
+    with_v = 0
+    for (v,) in rows:
+        if v is None:
+            continue
+        try:
+            if float(v) > 0:
+                with_v += 1
+        except (TypeError, ValueError):
+            pass
+    return {
+        "schema": "kline_quote_volume_coverage_v1",
+        "recent_closed_bars_scanned": n,
+        "bars_with_quote_volume": with_v,
+    }
+
+
 def build_trade_chain_payload(
     *,
     db_path: Path | None = None,
@@ -4312,6 +4340,39 @@ def build_trade_chain_payload(
     scorecard = _build_trade_chain_scorecard(rows_out)
     anna_agg = _anna_vs_baseline_aggregate(scorecard)
 
+    binance_market_data: dict[str, Any] = {
+        "schema": "binance_market_data_surface_v1",
+        "public_rest_ping": {"ok": False, "error": "probe_uninitialized"},
+        "kline_quote_volume_coverage": {},
+    }
+    try:
+        _ensure_market_runtime_path()
+        from market_data.binance_kline_volume import probe_binance_public_rest_ping
+
+        binance_market_data["public_rest_ping"] = probe_binance_public_rest_ping()
+    except Exception as exc:
+        binance_market_data["public_rest_ping"] = {
+            "ok": False,
+            "error": str(exc)[:240],
+            "http_status": None,
+            "latency_ms": None,
+        }
+    if mpath and mpath.is_file():
+        import sqlite3
+
+        cstat = sqlite3.connect(str(mpath))
+        try:
+            binance_market_data["kline_quote_volume_coverage"] = _kline_quote_volume_coverage_stats(
+                cstat, axis_sym, 24
+            )
+        except Exception:
+            binance_market_data["kline_quote_volume_coverage"] = {
+                "schema": "kline_quote_volume_coverage_v1",
+                "error": "coverage_query_failed",
+            }
+        finally:
+            cstat.close()
+
     return {
         "schema": "blackbox_trade_chain_v1",
         "ledger_path": str(db_path),
@@ -4332,6 +4393,7 @@ def build_trade_chain_payload(
             "older columns in that run are **continuation** (minimal)."
         ),
         "five_m_ingest_freshness": five_m_ingest_freshness,
+        "binance_market_data": binance_market_data,
         "jupiter_tile_narrative_schema": "jupiter_tile_narrative_v1",
         "recency": {
             "axis_order": "oldest_left_newest_right",
