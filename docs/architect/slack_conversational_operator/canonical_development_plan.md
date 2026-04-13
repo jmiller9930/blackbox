@@ -8,6 +8,8 @@
 **Companion LDD:** [`slack_conversational_operator_system_ldd.md`](slack_conversational_operator_system_ldd.md)  
 **Related:** [`../development_plan.md`](../development_plan.md) (Phase 5+ spine), [`../../blackbox_master_plan.md`](../../blackbox_master_plan.md) (master plan).
 
+**Governance alignment:** This document is the **canonical narrative** for phases, operator accept/reject tests, and proof bars. **Per-phase closure** (documentation sync, git proof, execution log, architect handoff) follows the **standard directive form**: one file per slice under [`../directives/`](../directives/) — `directive_bbx_slack_001_governance_lock.md` through `directive_bbx_slack_009_deferred_scope_fence.md` — aligned with [`../directives/DIRECTIVE_TEMPLATE.md`](../directives/DIRECTIVE_TEMPLATE.md) and indexed in [`../directives/README.md`](../directives/README.md). The plan below remains authoritative for **what** each phase means; the directive file is the **contracted closure vehicle** for **when** that slice is officially opened or closed.
+
 ---
 
 ## Plan intent

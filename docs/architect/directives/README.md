@@ -24,7 +24,16 @@ Add new directives here as **`directive_<id>_<short_title>.md`** and a row in th
 | **—** | Expose master plan via raw Git URL (ChatGPT / tooling) | [`../../cursor_directive_expose_master_plan.md`](../../cursor_directive_expose_master_plan.md) | Active (ops) |
 | **4.6.4** | Anna benchmark / architect submission artifact | [`../../benchmarks/anna_directive_4_6_4_architect_submission.md`](../../benchmarks/anna_directive_4_6_4_architect_submission.md) | Benchmark / evidence |
 | **Global** | Mandatory clawbot proof (all phases) | [`../global_clawbot_proof_standard.md`](../global_clawbot_proof_standard.md) | Non-negotiable |
-| **BBX-SLACK-001…009** | Slack → OpenClaw / BlackBox conversational operator (phased program) | [`../slack_conversational_operator/canonical_development_plan.md`](../slack_conversational_operator/canonical_development_plan.md) | **Canonical plan** — issue individual directive files per phase when active |
+| **BBX-SLACK-001** | Slack operator — governance lock (Phase 0) | [`directive_bbx_slack_001_governance_lock.md`](directive_bbx_slack_001_governance_lock.md) | Program umbrella + LDD pointers; close per template |
+| **BBX-SLACK-002** | Slack operator — end-to-end transport path | [`directive_bbx_slack_002_transport_path.md`](directive_bbx_slack_002_transport_path.md) | Activate after 001 acceptance |
+| **BBX-SLACK-003** | Slack operator — intent and clarification loop | [`directive_bbx_slack_003_intent_clarification.md`](directive_bbx_slack_003_intent_clarification.md) | Activate after 002 acceptance |
+| **BBX-SLACK-004** | Slack operator — grounded tool layer | [`directive_bbx_slack_004_grounded_tool_layer.md`](directive_bbx_slack_004_grounded_tool_layer.md) | Activate after 003 acceptance |
+| **BBX-SLACK-005** | Slack operator — context integration | [`directive_bbx_slack_005_context_integration.md`](directive_bbx_slack_005_context_integration.md) | Activate after 004 (order vs 006 per canonical plan) |
+| **BBX-SLACK-006** | Slack operator — named-agent overlays | [`directive_bbx_slack_006_named_agent_overlays.md`](directive_bbx_slack_006_named_agent_overlays.md) | Activate after 004 |
+| **BBX-SLACK-007** | Slack operator — auditability and operator proof | [`directive_bbx_slack_007_auditability.md`](directive_bbx_slack_007_auditability.md) | Activate when program order allows |
+| **BBX-SLACK-008** | Slack operator — MVP stabilization | [`directive_bbx_slack_008_mvp_stabilization.md`](directive_bbx_slack_008_mvp_stabilization.md) | Activate after prior phases |
+| **BBX-SLACK-009** | Slack operator — deferred scope fence (not MVP) | [`directive_bbx_slack_009_deferred_scope_fence.md`](directive_bbx_slack_009_deferred_scope_fence.md) | Docs/governance record; may accept early |
+| **—** | Slack operator — full phased narrative + operator tests | [`../slack_conversational_operator/canonical_development_plan.md`](../slack_conversational_operator/canonical_development_plan.md) | **Canonical program expectations** (not a substitute for per-ID directive files) |
 
 ---
 
