@@ -785,50 +785,6 @@
     .tc-tile-narr-baseline .tc-narr-gate .tc-tile-val {
       color: #0f172a;
     }
-    /*
-      HOLDING tile — “latest bar” policy only answers: would we open a NEW trade from flat here?
-      Use one calm style (no red/green) so it is not read as “your open position is failing.”
-    */
-    .tc-tile-narr-wrap.tc-tile-narr-mono-snapshot {
-      border-left: 3px solid #0ea5e9;
-      background: #f0f9ff;
-      display: flex;
-      flex-direction: column;
-      gap: 0.28rem;
-      padding: 0.35rem 0.4rem;
-      border-radius: 6px;
-    }
-    .tc-tile-narr-mono-snapshot .tc-narr-row {
-      display: grid;
-      grid-template-columns: 0.55rem auto 1fr;
-      column-gap: 0.3rem;
-      align-items: start;
-      padding: 0.3rem 0.4rem;
-      margin: 0;
-      border-radius: 6px;
-      border-left: 4px solid #38bdf8;
-      background: #e0f2fe;
-    }
-    .tc-tile-narr-mono-snapshot .tc-narr-row .tc-tile-bullet {
-      padding-top: 0.06rem;
-      color: #0369a1;
-    }
-    .tc-tile-narr-mono-snapshot .lab {
-      color: #0c4a6e !important;
-    }
-    .tc-tile-narr-mono-snapshot .tc-tile-val {
-      color: #0f172a !important;
-    }
-    .tc-jup-flat-snapshot-hint {
-      font-size: 0.62rem;
-      color: #0369a1;
-      line-height: 1.4;
-      margin: 0 0 0.4rem;
-      padding: 0.3rem 0.35rem;
-      background: #f0f9ff;
-      border-radius: 4px;
-      border: 1px solid #bae6fd;
-    }
     /* Trade mini cell: outcome text — no green/red for WIN / LOSS / NOT */
     .wl-WIN,
     .wl-LOSS,
@@ -1550,17 +1506,12 @@
     return 'neutral';
   }
 
-  /**
-   * @param narrColorMode optional: omit or 'gates' = green/red row semantics (entry & chain columns).
-   *        'mono' = single informational style — use for “latest bar, new entry from flat only” on HOLDING tile.
-   */
-  function jupiterNarrativeLinesHtml(raw, titleAttr, baselineLane, narrColorMode) {
+  function jupiterNarrativeLinesHtml(raw, titleAttr, baselineLane) {
     if (raw == null || String(raw).trim() === '') return '';
     var text = String(raw).replace(/\r\n/g, '\n');
     var lines = text.split('\n');
     var rows = [];
     var j;
-    var mono = baselineLane && narrColorMode === 'mono';
     for (j = 0; j < lines.length; j++) {
       var fullLine = lines[j];
       var row = jupiterLineToLabVal(fullLine);
@@ -1572,9 +1523,7 @@
         '</span><span class="tc-tile-val">' +
         esc(row.val) +
         '</span>';
-      if (mono) {
-        rows.push('<div class="tc-narr-row">' + inner + '</div>');
-      } else if (baselineLane) {
+      if (baselineLane) {
         var rc = classifyBaselineJupiterNarrRow(fullLine);
         rows.push('<div class="tc-narr-row tc-narr-' + rc + '">' + inner + '</div>');
       } else {
@@ -1583,9 +1532,7 @@
     }
     if (!rows.length) return '';
     var ta = titleAttr ? ' title="' + esc(titleAttr) + '"' : '';
-    var narrCls = '';
-    if (mono) narrCls = ' tc-tile-narr-mono-snapshot';
-    else if (baselineLane) narrCls = ' tc-tile-narr-baseline';
+    var narrCls = baselineLane ? ' tc-tile-narr-baseline' : '';
     return '<div class="tc-tile-narr-wrap' + narrCls + '"' + ta + '>' + rows.join('') + '</div>';
   }
 
@@ -1701,11 +1648,11 @@
           ? 'tc-empty tc-no-trade tc-no-trade-amber'
           : 'tc-empty tc-no-trade';
       return tcCellSurface(
-        jupStack +
-          jupChipHtml +
+        jupChipHtml +
           '<span class="' +
           ntBar +
-          '" title="No execution trade for this 5m bar">no trade</span>'
+          '" title="No execution trade for this 5m bar">no trade</span>' +
+          jupStack
       );
     }
     var ck = row.chain_kind || '';
@@ -1884,8 +1831,7 @@
       esc(ocDisp) +
       '</div>';
     return tcCellSurface(
-      jupStack +
-        jupChipHtml +
+      jupChipHtml +
         vsLine +
         '<div class="' +
         wrapCls +
@@ -1943,7 +1889,8 @@
         '<span class="lab">trace</span><span>' +
         traceCell +
         '</span>' +
-        '</div>'
+        '</div>' +
+        jupStack
     );
   }
 
@@ -2423,29 +2370,12 @@
         '<div class="tc-jup-entry-h">' +
         esc('Why we entered — entry bar ' + emLive) +
         '</div>' +
-        '<p class="tc-jup-missing-note">Entry policy text unavailable (no ledger row and bars could not be recomputed). Check market DB and API logs.</p>' +
+        '<p class="tc-jup-missing-note">Entry policy unavailable — check ledger row and market DB.</p>' +
         '</div>';
     }
-    var opNarrLive = '';
-    if (jp && jp.operator_tile_narrative && String(jp.operator_tile_narrative).trim() !== '') {
-      opNarrLive =
-        '<div class="tc-jup-gates-h">Latest closed bar — new entry from flat only</div>' +
-        '<p class="tc-jup-flat-snapshot-hint" role="note">' +
-        'This block does <strong>not</strong> judge your open trade. It only shows whether a <strong>new</strong> entry would fire on this bar if you were flat. ' +
-        'While <strong>HOLDING</strong>, “no signal” here is normal — exit is separate (SL/TP/bridge), not this checklist.' +
-        '</p>' +
-        jupiterNarrativeLinesHtml(String(jp.operator_tile_narrative), 'Latest closed bar — new entry check only', true, 'mono');
-    }
-    var opScope =
-      jp.operator_tile_narrative_scope_note && String(jp.operator_tile_narrative_scope_note).trim() !== ''
-        ? '<div class="tc-jup-scope-note" role="note">' + esc(String(jp.operator_tile_narrative_scope_note)) + '</div>'
-        : '';
-    var gatesBelow =
-      (entryInner ? '<div class="tc-jup-gates-section">' + entryInner + '</div>' : '') +
-      (opNarrLive ? '<div class="tc-jup-gates-section">' + opNarrLive + '</div>' : '');
+    var gatesBelow = entryInner ? '<div class="tc-jup-gates-section">' + entryInner + '</div>' : '';
     return (
       '<p class="tc-baseline-live-hint">Active baseline trade — timeline to the right is hidden until this position closes. Updates every poll.</p>' +
-      opScope +
       '<div class="tc-baseline-live-tile">' +
       '<div class="tc-jup-policy-chip" style="margin:0 0 0.35rem 0" title="Jupiter baseline policy version">' +
       esc(jupLive) +
