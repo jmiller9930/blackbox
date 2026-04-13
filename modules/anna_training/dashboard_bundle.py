@@ -637,15 +637,18 @@ def build_jupiter_policy_snapshot(
         out["last_daemon_bridge_tick"] = cbl
 
     # Operator JUP chips + live tile read ``baseline_jupiter_policy`` from this snapshot (not trade_chain).
+    # Always open the ledger path (``connect_ledger`` creates the file if absent).
+    # Do **not** gate on ``lpath.is_file()`` — parallel bundle workers can create the
+    # DB after this snapshot runs; that race left ``policy_slot`` stuck on jup_v2 and
+    # the live tile showed JUPv2 even when KV held jup_v3.
     lpath = default_execution_ledger_path()
     policy_slot = "jup_v2"
-    if lpath.is_file():
-        _c0 = connect_ledger(lpath)
-        try:
-            ensure_execution_ledger_schema(_c0)
-            policy_slot = get_baseline_jupiter_policy_slot(_c0)
-        finally:
-            _c0.close()
+    _c0 = connect_ledger(lpath)
+    try:
+        ensure_execution_ledger_schema(_c0)
+        policy_slot = get_baseline_jupiter_policy_slot(_c0)
+    finally:
+        _c0.close()
     out["baseline_jupiter_policy"] = {
         "schema": "baseline_jupiter_policy_selector_v1",
         "active_id": policy_slot,
