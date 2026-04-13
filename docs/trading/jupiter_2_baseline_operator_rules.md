@@ -94,6 +94,15 @@ You do **not** need a screenshot to prove **held**: it is in **`policy_evaluatio
 
 **Dashboard / bundle:** “**open**” is **not** a row with `open_position` in SQLite — it is **`trade=1` and no ledger row yet** (`dashboard_bundle._compact_baseline_cell_policy_bound` + `_baseline_policy_open_cell`). “**held**” is **`jupiter_2_baseline_holding`**. “**closed**” comes from the **ledger** row plus exit policy.
 
+### PnL dollars vs bankroll (same `trade_id`, full hold)
+
+- **One lifecycle trade** uses **one** `trade_id` for the whole hold (30 minutes = many 5m bars, still the same id). **Held** duration on the report is **entry time → exit time** from the **single** closing `execution_trades` row. **Every** closed row in the baseline trades **table** is a **close** (lifecycle does not insert a ledger row at entry); **open / held** appear only on the **dashboard trade chain**, not as extra report rows.
+- **Realized PnL** is **not** “return on your full wallet.” Code: `compute_pnl_usd` — long: `(exit - entry) * size` with **size** = **notional / entry price**, and **notional** comes from Sean `calculate_position_size` in `jupiter_2_sean_policy.py`:
+  - `risk_dollars = free_collateral_usd × risk_pct` (e.g. 1% of bankroll),
+  - `collateral_usd = max(MIN_COLLATERAL_USD, risk_dollars)` (the **risk slice**),
+  - `notional_usd = collateral_usd × leverage`.
+- Example: **$1000** bankroll, **1%** risk, **15×** leverage → risk slice **$10**, notional **$150**. A **$0.16** win is **~0.11% of that notional**—small, but **not** “$0.16 on $1000” unless you misread **bankroll** as **position notional**. The baseline trades report shows **Notional $**, **Risk $** (risk slice), **Bankroll $ (policy)**, and **PnL % vs notional** for sanity checks.
+
 **Read-only helper (repo root):** `python3 scripts/runtime/baseline_trade_accounting.py --trade-id '<id>'` — prints execution row, `position_events`, and matching policy rows; checks PnL vs `compute_pnl_usd`. DB path: **`BLACKBOX_EXECUTION_LEDGER_PATH`**, else `data/sqlite/execution_ledger.db`.
 
 ---

@@ -357,7 +357,7 @@
           <strong>One row per closed trade</strong> (<code>trade_id</code>) from ledger fills. Lifecycle <code>trade_id</code> (<code>bl_lc_…</code>) is derived from the <strong>entry</strong> bar identity; the <code>market_event_id</code> column on each row is the <strong>exit</strong> bar where the close was recorded—use the <strong>Entry MEI</strong> column when you need to line up with the opening bar. <strong>Active baseline position</strong> (open Jupiter paper key) is shown above the table when present—same economic fields as the dashboard lifecycle tile (mark, unrealized PnL, SL/TP, sizing). <strong>Click a row</strong> for a closed-trade snapshot. Open/held bars also appear on the <strong>dashboard trade chain</strong>. QEL is cohort evaluation—see the QEL page.
         </p>
         <p class="bt-econ-banner" id="bt-econ-banner" role="status">
-          <strong>PnL column:</strong> gross model USD from fill prices and size—<strong>not</strong> net of fees, funding, or slippage. Small dollar amounts are normal when the price move is small. Full wording is in API <code>meta.pnl_semantics</code> after load.
+          <strong>PnL column:</strong> gross model USD: <code>(exit − entry) × size</code> in quote terms. <strong>Not</strong> “return on full bankroll”—Sean sizing builds <strong>notional</strong> from <strong>risk slice × leverage</strong> (see <strong>Risk $</strong> vs <strong>Bankroll $</strong>). PnL shows <strong>% vs notional</strong> in parentheses. Not net of fees, funding, or slippage. Full wording: API <code>meta.pnl_semantics</code> after load.
         </p>
         <p class="bt-dir-summary" id="bt-direction-summary" aria-live="polite"></p>
         <div id="bt-active-panel" class="bt-active-panel" role="region" aria-live="polite" aria-label="Active baseline position"></div>
@@ -413,8 +413,9 @@
                 <th title="Outcome display.">Outcome</th>
                 <th title="Position size (base units).">Size</th>
                 <th title="How size was derived (policy notional / entry, default paper notional, or fallback).">Size src</th>
-                <th title="Approximate notional USD (policy or size × entry).">Notional $</th>
-                <th title="Free collateral USD used for policy position_size_hint (when recorded).">Free collat $</th>
+                <th title="Position notional USD (≈ entry × size); this is what PnL % is measured against.">Notional $</th>
+                <th title="Sean risk slice: max(MIN, bankroll × risk_pct) from position_size_hint; notional = Risk $ × leverage.">Risk $</th>
+                <th title="Paper bankroll / equity passed into policy as free_collateral_usd for sizing—not the full notional and not the same as Risk $.">Bankroll $ (policy)</th>
                 <th title="Ledger exit_reason.">Exit reason</th>
                 <th title="Stop loss price at entry (lifecycle).">SL entry</th>
                 <th title="Take profit price at entry (lifecycle).">TP entry</th>
@@ -429,7 +430,7 @@
               </tr>
             </thead>
             <tbody id="bt-tbody">
-              <tr><td colspan="28">Loading…</td></tr>
+              <tr><td colspan="29">Loading…</td></tr>
             </tbody>
           </table>
         </div>
@@ -464,7 +465,7 @@
   <script>
     (function () {
       var state = { rows: [], meta: {} };
-      var COLS = 28;
+      var COLS = 29;
       var TIP_QEL_ROW =
         "QEL scores and survival decisions apply to Anna strategy cohorts, not to each baseline ledger row. Open QEL evaluation in the nav for details.";
 
@@ -501,6 +502,24 @@
         if (pnl == null || (typeof pnl === "number" && isNaN(pnl))) return "—";
         var v = Number(pnl);
         return (v >= 0 ? "+" : "") + v.toFixed(2);
+      }
+
+      function fmtPnlWithPct(r) {
+        var base = fmtPnl(r.pnl_usd);
+        var pct = r.pnl_pct_notional;
+        if (
+          pct == null ||
+          r.pnl_usd == null ||
+          (typeof pct === "number" && isNaN(pct))
+        ) {
+          return base;
+        }
+        return (
+          base +
+          ' <span class="bt-muted" style="font-size:0.82em;font-weight:600">(' +
+          Number(pct).toFixed(3) +
+          "% vs notional)</span>"
+        );
       }
 
       function fmtMoney(n) {
@@ -739,11 +758,15 @@
                 : "—"
             ) +
             '</td><td title="' +
-            escAttr("Approximate notional USD.") +
+            escAttr("Notional USD (entry × size); PnL % is vs this.") +
             '">' +
             esc(fmtMoney(r.notional_usd)) +
             '</td><td title="' +
-            escAttr("Free collateral used for policy sizing when recorded.") +
+            escAttr("Sean risk slice from position_size_hint (notional = Risk × leverage).") +
+            '">' +
+            esc(fmtMoney(r.collateral_usd)) +
+            '</td><td title="' +
+            escAttr("Paper bankroll input to policy (free_collateral_usd)—not stake for one trade.") +
             '">' +
             esc(fmtMoney(r.free_collateral_usd)) +
             '</td><td class="bt-mono" title="' +
@@ -777,9 +800,9 @@
             '</td><td class="' +
             pnlCls +
             '" title="' +
-            escAttr("Realized PnL USD.") +
+            escAttr("Gross model PnL USD; parentheses = percent of notional (not of bankroll).") +
             '">' +
-            esc(fmtPnl(pnl)) +
+            fmtPnlWithPct(r) +
             '</td><td class="bt-td-tip" title="' +
             escAttr(tipMae) +
             '">' +
@@ -895,6 +918,7 @@
           "entry",
           "exit",
           "pnl_usd",
+          "pnl_pct_notional",
           "mae_usd",
           "operator_trade_snapshot",
         ];

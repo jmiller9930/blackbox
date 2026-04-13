@@ -1418,6 +1418,9 @@ PNL_SEMANTICS_OPERATOR_V1: dict[str, Any] = {
     "slippage_included": False,
     "operator_note": (
         "PnL shown is gross model PnL from fill prices and size (long: (exit−entry)×size; short: (entry−exit)×size). "
+        "Size comes from policy notional / entry price, not from headline bankroll alone. Sean sizing uses "
+        "notional ≈ max(MIN_COLLATERAL, bankroll × risk_pct) × leverage (see calculate_position_size), so "
+        "dollar PnL vs bankroll can look tiny—compare to Notional $ and pnl_pct_notional. "
         "Fees, funding, and slippage are not modeled. Cent-scale values are normal when the price move is small."
     ),
 }
@@ -1904,6 +1907,11 @@ def build_baseline_trades_report(
             col_f = float(col_o) if col_o is not None else None
             fc_usd = _free_collateral_usd_for_row(conn, pos_open, ledger_row)
 
+            pnl_f = float(pnl) if pnl is not None else None
+            pnl_pct_notional: float | None = None
+            if notion is not None and pnl_f is not None and float(notion) > 1e-12:
+                pnl_pct_notional = round(100.0 * pnl_f / float(notion), 6)
+
             rows_out.append(
                 {
                     "trade_id": tid_raw,
@@ -1932,7 +1940,8 @@ def build_baseline_trades_report(
                     "mode": str(ledger_row.get("mode") or "").strip() or None,
                     "time_utc_iso": t_iso or "",
                     "outcome": oc,
-                    "pnl_usd": float(pnl) if pnl is not None else None,
+                    "pnl_usd": pnl_f,
+                    "pnl_pct_notional": pnl_pct_notional,
                     "entry": float(ep) if ep is not None else None,
                     "exit": float(xp) if xp is not None else None,
                     "size": float(ledger_row["size"]) if ledger_row.get("size") is not None else None,

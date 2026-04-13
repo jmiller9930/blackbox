@@ -619,6 +619,7 @@ def test_build_baseline_trades_report_schema() -> None:
     assert rep["meta"]["pnl_semantics"].get("fees_included") is False
     for row in rep["rows"]:
         assert "entry_market_event_id" in row
+        assert "pnl_pct_notional" in row
         assert "baseline_authority" in row
         assert row["baseline_authority"] in ("TRADE", "NO_TRADE")
         assert "baseline_authority_reason" in row
