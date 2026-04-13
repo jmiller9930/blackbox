@@ -4166,6 +4166,37 @@ def build_dashboard_bundle(
     except Exception:
         training_st = {}
 
+    ui_state = str((seq or {}).get("ui_state") or "idle")
+    ev_rem = 0
+    try:
+        total = int((seq or {}).get("events_total_lines") or 0)
+        cur = int((seq or {}).get("events_cursor_line") or 0)
+        ev_rem = max(0, total - cur)
+    except (TypeError, ValueError):
+        pass
+
+    learning_active = ui_state == "running"
+    tick_banner = None
+    if ui_state == "running" and ev_rem > 0:
+        tick_banner = (
+            f"Sequential learning advances via batch ticks (~every {SEQUENTIAL_TICK_SIDECAR_INTERVAL_SEC_DEFAULT}s "
+            "when the `sequential-tick` sidecar is running) or manual Tick / POST tick."
+        )
+    elif ui_state == "running" and ev_rem == 0:
+        tick_banner = "Running — event queue empty (end of file or cursor at end)."
+
+    last_dec = (seq or {}).get("last_decision_row")
+    last_dec_s = None
+    if isinstance(last_dec, dict):
+        last_dec_s = json.dumps(last_dec, default=str)[:800]
+    elif last_dec is not None:
+        last_dec_s = str(last_dec)[:800]
+    last_dec_banner = _compact_last_decision(last_dec if isinstance(last_dec, dict) else None)
+
+    sprt = (seq or {}).get("last_sprt_decision")
+    if sprt is None and isinstance((seq or {}).get("last_tick_summary"), dict):
+        sprt = ((seq or {}).get("last_tick_summary") or {}).get("last_sprt")
+
     mdb_for_snap = _market_db_path()
 
     def _bundle_parallel_tc() -> dict[str, Any]:
@@ -4194,13 +4225,50 @@ def build_dashboard_bundle(
                 "default_system_strategy_id": RESERVED_STRATEGY_BASELINE,
             }
 
-    with ThreadPoolExecutor(max_workers=3) as _pool:
+    def _bundle_parallel_pyth_pack() -> tuple[dict[str, Any], dict[str, Any], int]:
+        ps = _pyth_probe_snapshot(_REPO_ROOT)
+        try:
+            from modules.anna_training.readiness import check_pyth_sse_tape
+
+            tape = check_pyth_sse_tape(_REPO_ROOT)
+        except Exception:
+            tape = {"ok": False, "reason": "check_failed"}
+        n5 = _count_pyth_sse_ticks_since_minutes(5.0)
+        return ps, tape, n5
+
+    def _bundle_parallel_paper_cap() -> dict[str, Any] | None:
+        try:
+            from modules.anna_training.paper_capital import build_paper_capital_summary
+
+            return build_paper_capital_summary(training_state=training_st, ledger_db_path=db_path)
+        except Exception:
+            return None
+
+    def _bundle_parallel_jupiter() -> dict[str, Any]:
+        try:
+            return build_jupiter_policy_snapshot(
+                market_db_path=None,
+                training_state=training_st,
+            )
+        except Exception as e:
+            return {
+                "schema": "jupiter_policy_snapshot_v1",
+                "error": str(e)[:400],
+            }
+
+    with ThreadPoolExecutor(max_workers=6) as _pool:
         _f_tc = _pool.submit(_bundle_parallel_tc)
         _f_snap = _pool.submit(_bundle_parallel_snap)
         _f_ot = _pool.submit(_bundle_parallel_operator_trading)
+        _f_pyth = _pool.submit(_bundle_parallel_pyth_pack)
+        _f_pc = _pool.submit(_bundle_parallel_paper_cap)
+        _f_jup = _pool.submit(_bundle_parallel_jupiter)
         tc = _f_tc.result()
         baseline_active_snap = _f_snap.result()
         operator_trading = _f_ot.result()
+        pyth_snap, pyth_sse_tape, sse_ticks_5m = _f_pyth.result()
+        paper_cap = _f_pc.result()
+        jupiter_policy_snapshot = _f_jup.result()
 
     if baseline_active_snap.get("position_open") and not (tc.get("event_axis") or []):
         inj = str(
@@ -4218,34 +4286,7 @@ def build_dashboard_bundle(
                 inject_axis_time_utc_iso=str(et).strip() if et else None,
             )
 
-    ui_state = str((seq or {}).get("ui_state") or "idle")
-    ev_rem = 0
-    try:
-        total = int((seq or {}).get("events_total_lines") or 0)
-        cur = int((seq or {}).get("events_cursor_line") or 0)
-        ev_rem = max(0, total - cur)
-    except (TypeError, ValueError):
-        pass
-
-    learning_active = ui_state == "running"
-    tick_banner = None
-    if ui_state == "running" and ev_rem > 0:
-        tick_banner = (
-            f"Sequential learning advances via batch ticks (~every {SEQUENTIAL_TICK_SIDECAR_INTERVAL_SEC_DEFAULT}s "
-            "when the `sequential-tick` sidecar is running) or manual Tick / POST tick."
-        )
-    elif ui_state == "running" and ev_rem == 0:
-        tick_banner = "Running — event queue empty (end of file or cursor at end)."
-
     now_utc = datetime.now(timezone.utc)
-    pyth_snap = _pyth_probe_snapshot(_REPO_ROOT)
-    try:
-        from modules.anna_training.readiness import check_pyth_sse_tape
-
-        pyth_sse_tape = check_pyth_sse_tape(_REPO_ROOT)
-    except Exception:
-        pyth_sse_tape = {"ok": False, "reason": "check_failed"}
-    sse_ticks_5m = _count_pyth_sse_ticks_since_minutes(5.0)
     tick_stale = _sequential_tick_staleness(
         ui_state=ui_state,
         events_remaining=ev_rem,
@@ -4297,40 +4338,9 @@ def build_dashboard_bundle(
         ),
     }
 
-    last_dec = (seq or {}).get("last_decision_row")
-    last_dec_s = None
-    if isinstance(last_dec, dict):
-        last_dec_s = json.dumps(last_dec, default=str)[:800]
-    elif last_dec is not None:
-        last_dec_s = str(last_dec)[:800]
-    last_dec_banner = _compact_last_decision(last_dec if isinstance(last_dec, dict) else None)
-
-    sprt = (seq or {}).get("last_sprt_decision")
-    if sprt is None and isinstance((seq or {}).get("last_tick_summary"), dict):
-        sprt = ((seq or {}).get("last_tick_summary") or {}).get("last_sprt")
-
     live_policy_blocked = bool(wallet.get("live_trading_blocked"))
 
     mc = tc.get("market_clock") if isinstance(tc, dict) else None
-    paper_cap: dict[str, Any] | None = None
-    try:
-        from modules.anna_training.paper_capital import build_paper_capital_summary
-
-        paper_cap = build_paper_capital_summary(training_state=training_st, ledger_db_path=db_path)
-    except Exception:
-        paper_cap = None
-
-    jupiter_policy_snapshot: dict[str, Any] = {}
-    try:
-        jupiter_policy_snapshot = build_jupiter_policy_snapshot(
-            market_db_path=None,
-            training_state=training_st,
-        )
-    except Exception as e:
-        jupiter_policy_snapshot = {
-            "schema": "jupiter_policy_snapshot_v1",
-            "error": str(e)[:400],
-        }
 
     # Open baseline position must appear in the dashboard even when bar fetch / MIN_BARS fails:
     # ``build_jupiter_policy_snapshot`` can return early without ``baseline_lifecycle``.
@@ -4381,41 +4391,48 @@ def build_dashboard_bundle(
         "events_processed_total": (seq or {}).get("events_processed_total"),
     }
 
-    intelligence_visibility: dict[str, Any] | None = None
-    try:
-        from modules.anna_training.intelligence_visibility import build_intelligence_visibility
+    llm_pf = (training_st or {}).get("karpathy_last_llm_preflight")
+    if not isinstance(llm_pf, dict):
+        llm_pf = {}
+    mdb_s = str((tc.get("market_db_path") or "") or "").strip() or None
 
-        llm_pf = (training_st or {}).get("karpathy_last_llm_preflight")
-        if not isinstance(llm_pf, dict):
-            llm_pf = {}
-        mdb_s = str((tc.get("market_db_path") or "") or "").strip() or None
-        intelligence_visibility = build_intelligence_visibility(
-            repo_root=_REPO_ROOT,
-            seq=seq if isinstance(seq, dict) else {},
-            trade_chain=tc if isinstance(tc, dict) else {},
-            operator_trading=operator_trading if isinstance(operator_trading, dict) else {},
-            learning_summary=learning_summary_for_vis,
-            pyth_snapshot=pyth_snap if isinstance(pyth_snap, dict) else {},
-            market_db_path=mdb_s,
-            training_state=training_st if isinstance(training_st, dict) else {},
-            llm_preflight_from_state=llm_pf,
-        )
-    except Exception as e:
-        intelligence_visibility = {
-            "schema": "anna_intelligence_visibility_v1",
-            "error": str(e)[:400],
-        }
+    def _bundle_parallel_intelligence_visibility() -> dict[str, Any]:
+        try:
+            from modules.anna_training.intelligence_visibility import build_intelligence_visibility
 
-    learning_proof: dict[str, Any] | None = None
-    try:
-        from modules.anna_training.learning_proof import build_learning_proof_bundle
+            return build_intelligence_visibility(
+                repo_root=_REPO_ROOT,
+                seq=seq if isinstance(seq, dict) else {},
+                trade_chain=tc if isinstance(tc, dict) else {},
+                operator_trading=operator_trading if isinstance(operator_trading, dict) else {},
+                learning_summary=learning_summary_for_vis,
+                pyth_snapshot=pyth_snap if isinstance(pyth_snap, dict) else {},
+                market_db_path=mdb_s,
+                training_state=training_st if isinstance(training_st, dict) else {},
+                llm_preflight_from_state=llm_pf,
+            )
+        except Exception as e:
+            return {
+                "schema": "anna_intelligence_visibility_v1",
+                "error": str(e)[:400],
+            }
 
-        learning_proof = build_learning_proof_bundle(trade_chain=tc, db_path=db_path)
-    except Exception as e:
-        learning_proof = {
-            "schema": "learning_proof_bundle_v1",
-            "error": str(e)[:400],
-        }
+    def _bundle_parallel_learning_proof() -> dict[str, Any]:
+        try:
+            from modules.anna_training.learning_proof import build_learning_proof_bundle
+
+            return build_learning_proof_bundle(trade_chain=tc, db_path=db_path)
+        except Exception as e:
+            return {
+                "schema": "learning_proof_bundle_v1",
+                "error": str(e)[:400],
+            }
+
+    with ThreadPoolExecutor(max_workers=2) as _pool_vis:
+        _f_iv = _pool_vis.submit(_bundle_parallel_intelligence_visibility)
+        _f_lp = _pool_vis.submit(_bundle_parallel_learning_proof)
+        intelligence_visibility = _f_iv.result()
+        learning_proof = _f_lp.result()
 
     return {
         "schema": "blackbox_dashboard_bundle_v1",

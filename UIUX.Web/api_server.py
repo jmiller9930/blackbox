@@ -2,6 +2,7 @@
 """Minimal BLACK BOX UI truth API for /api/v1/*."""
 from __future__ import annotations
 
+import gzip
 import json
 import os
 import sys
@@ -1790,9 +1791,16 @@ class Handler(BaseHTTPRequestHandler):
         *,
         no_cache: bool = False,
     ) -> None:
-        payload = json.dumps(body).encode("utf-8")
+        payload = json.dumps(body, separators=(",", ":")).encode("utf-8")
+        enc = (self.headers.get("Accept-Encoding") or "").lower()
+        use_gzip = len(payload) > 2048 and "gzip" in enc
+        if use_gzip:
+            payload = gzip.compress(payload, compresslevel=6)
         self.send_response(code)
         self.send_header("Content-Type", "application/json; charset=utf-8")
+        if use_gzip:
+            self.send_header("Content-Encoding", "gzip")
+            self.send_header("Vary", "Accept-Encoding")
         if no_cache:
             self.send_header("Cache-Control", "no-store, no-cache, must-revalidate, max-age=0")
             self.send_header("Pragma", "no-cache")

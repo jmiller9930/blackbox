@@ -3337,10 +3337,8 @@
     });
   }
 
-  /* Defer first bundle fetch one frame so shell + "Loading…" can paint before long JSON work. */
-  requestAnimationFrame(function () {
-    refresh();
-  });
+  /* Start bundle fetch immediately — DOM is parsed; static shell + "Loading…" already in the tree. */
+  refresh();
   setInterval(refresh, POLL_MS);
   setInterval(tickClocks, 250);
 })();
