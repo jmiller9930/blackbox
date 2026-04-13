@@ -787,6 +787,76 @@ def _baseline_entry_narrative_for_active_slot(
     return nar
 
 
+def _tile_bar_selection_proof(
+    mpath: Path,
+    *,
+    use_v3: bool,
+    last_bar: dict[str, Any],
+    canonical_symbol: str,
+) -> dict[str, Any]:
+    """
+    Operator/engineering proof: tile uses ``bars[-1]`` from fetch; compare to SQL MAX and wall-clock last closed.
+    """
+    _ensure_market_runtime_path()
+    try:
+        from market_data.canonical_time import format_candle_open_iso_z, last_closed_candle_open_utc
+    except Exception:
+        return {
+            "schema": "tile_bar_selection_proof_v1",
+            "error": "canonical_time_unavailable",
+        }
+
+    exp = format_candle_open_iso_z(last_closed_candle_open_utc())
+    sel_open = str(last_bar.get("candle_open_utc") or "").strip() or None
+    sel_mid = str(last_bar.get("market_event_id") or "").strip() or None
+    proof: dict[str, Any] = {
+        "schema": "tile_bar_selection_proof_v1",
+        "resolved_market_db_path": str(mpath.resolve()),
+        "freshness_table": "binance_strategy_bars_5m" if use_v3 else "market_bars_5m",
+        "expected_last_closed_candle_open_utc": exp,
+        "selected_candle_open_utc": sel_open,
+        "selected_market_event_id": sel_mid,
+        "db_max_candle_open_utc": None,
+        "selection_matches_db_max": None,
+        "db_matches_expected_last_closed": None,
+    }
+    try:
+        conn = sqlite3.connect(str(mpath))
+        try:
+            if use_v3:
+                cur = conn.execute(
+                    "SELECT name FROM sqlite_master WHERE type='table' AND name='binance_strategy_bars_5m'"
+                )
+                if not cur.fetchone():
+                    proof["notes"] = "binance_strategy_bars_5m_missing"
+                else:
+                    row = conn.execute(
+                        """
+                        SELECT MAX(candle_open_utc) FROM binance_strategy_bars_5m
+                        WHERE timeframe = '5m' AND canonical_symbol = ?
+                        """,
+                        (canonical_symbol,),
+                    ).fetchone()
+                    proof["db_max_candle_open_utc"] = str(row[0]).strip() if row and row[0] else None
+            else:
+                row = conn.execute(
+                    """
+                    SELECT MAX(candle_open_utc) FROM market_bars_5m
+                    WHERE timeframe = '5m' AND canonical_symbol = ?
+                    """,
+                    (canonical_symbol,),
+                ).fetchone()
+                proof["db_max_candle_open_utc"] = str(row[0]).strip() if row and row[0] else None
+        finally:
+            conn.close()
+    except Exception as exc:
+        proof["query_error"] = repr(exc)
+    dbm = proof.get("db_max_candle_open_utc")
+    proof["selection_matches_db_max"] = bool(sel_open and dbm and sel_open == dbm)
+    proof["db_matches_expected_last_closed"] = bool(dbm and dbm == exp)
+    return proof
+
+
 def build_jupiter_policy_snapshot(
     *,
     market_db_path: Path | None = None,
@@ -914,6 +984,30 @@ def build_jupiter_policy_snapshot(
         return out
 
     last = bars[-1]
+    sym_last = str(last.get("canonical_symbol") or "SOL-PERP").strip() or "SOL-PERP"
+    out["tile_bar_selection_proof"] = _tile_bar_selection_proof(
+        mpath,
+        use_v3=use_v3,
+        last_bar=last,
+        canonical_symbol=sym_last,
+    )
+    if (os.environ.get("BLACKBOX_JUPITER_TILE_DEBUG") or "").strip().lower() in (
+        "1",
+        "true",
+        "yes",
+    ):
+        _tbp = out.get("tile_bar_selection_proof") if isinstance(out.get("tile_bar_selection_proof"), dict) else {}
+        print(
+            "jupiter_tile_debug: "
+            f"slot={policy_slot!r} "
+            f"selected_open={_tbp.get('selected_candle_open_utc')!r} "
+            f"selected_meid={_tbp.get('selected_market_event_id')!r} "
+            f"db_max={_tbp.get('db_max_candle_open_utc')!r} "
+            f"expected_last_closed={_tbp.get('expected_last_closed_candle_open_utc')!r} "
+            f"path={_tbp.get('resolved_market_db_path')!r}",
+            file=sys.stderr,
+            flush=True,
+        )
     out["evaluated_bar"] = {
         "market_event_id": str(last.get("market_event_id") or ""),
         "candle_open_utc": str(last.get("candle_open_utc") or ""),
@@ -965,7 +1059,7 @@ def build_jupiter_policy_snapshot(
     out["execution_ledger_path"] = str(lpath)
     out["baseline_lifecycle"] = None
     if lpath.is_file():
-        sym = str(last.get("canonical_symbol") or "SOL-PERP")
+        sym = sym_last
         tf = str(last.get("timeframe") or "5m")
         conn = connect_ledger(lpath)
         try:
@@ -4681,8 +4775,10 @@ def build_dashboard_bundle(
 
     def _bundle_parallel_jupiter() -> dict[str, Any]:
         try:
+            # Use the same resolved DB path as the rest of the bundle (``mdb_for_snap``), not a fresh
+            # ``_market_db_path()`` call inside the worker — avoids any divergence from caching / races.
             return build_jupiter_policy_snapshot(
-                market_db_path=None,
+                market_db_path=mdb_for_snap,
                 training_state=training_st,
             )
         except Exception as e:
