@@ -129,6 +129,24 @@
     .dash-r3 button.sec { background: var(--panel); color: var(--text); }
     .dash-r3 button.tick { background: #0f766e; color: #fff; border-color: #0d9488; }
     .dash-r3 button:disabled { opacity: 0.45; cursor: not-allowed; }
+    /* Jupiter baseline policy selector — visible “policy switch” on paper-capital row */
+    .jup-policy-highlight {
+      display: inline-flex;
+      align-items: center;
+      padding: 0.35rem 0.5rem;
+      background: #e0f2fe;
+      border: 1px solid #93c5fd;
+      border-radius: 6px;
+      box-shadow: 0 1px 2px rgba(14, 116, 144, 0.08);
+    }
+    .jup-policy-highlight select {
+      font-size: 0.75rem;
+      padding: 0.22rem 0.45rem;
+      max-width: 10rem;
+      border: 1px solid #bae6fd;
+      border-radius: 4px;
+      background: var(--panel-bg, #fff);
+    }
     /* Baseline strip — compact table above trade chain (last 2 executed baseline trades in current window) */
     .bts-wrap {
       flex-shrink: 0;
@@ -993,10 +1011,12 @@
         <div class="kv"><span class="k">Anna PnL (what-if, lane)</span><span class="v" id="pc-pnl-anna">—</span></div>
         <div class="kv"><span class="k">Current paper balance</span><span class="v" id="pc-balance">—</span></div>
         <div class="kv"><span class="k">Jupiter baseline policy</span><span class="v" style="display:flex;align-items:center;gap:0.35rem;flex-wrap:wrap">
-          <select id="dash-baseline-jupiter-policy" aria-label="Jupiter baseline policy version" style="font-size:0.75rem;padding:0.22rem 0.45rem;max-width:10rem;border:1px solid var(--panel-border);border-radius:4px;background:var(--panel-bg, #fff)">
-            <option value="jup_v2" selected>JUPv2</option>
-            <option value="jup_v3">JUPv3</option>
-          </select>
+          <span class="jup-policy-highlight">
+            <select id="dash-baseline-jupiter-policy" aria-label="Jupiter baseline policy version">
+              <option value="jup_v2" selected>JUPv2</option>
+              <option value="jup_v3">JUPv3</option>
+            </select>
+          </span>
         </span></div>
       </div>
       <p id="pc-msg" style="font-size:0.7rem;color:var(--muted);margin:0.2rem 0.75rem 0.45rem"></p>
