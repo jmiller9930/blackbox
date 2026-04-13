@@ -446,10 +446,14 @@
           </div>
           <div class="bt-field">
             <label for="bt-scope">Show</label>
-            <select id="bt-scope" style="font-weight:700;min-width:14rem">
-              <option value="all">All (ledger rows)</option>
-              <option value="trade" selected>Close policy TRADE</option>
-              <option value="no_trade">Close not policy TRADE</option>
+            <select
+              id="bt-scope"
+              style="font-weight:700;min-width:16rem"
+              title="TRADE = only closes classified policy_approved_execution or lifecycle_exit_execution. NO_TRADE = other closes. All = both."
+            >
+              <option value="all">All baseline closes (TRADE + not TRADE)</option>
+              <option value="trade" selected>TRADE closes only (real policy trades)</option>
+              <option value="no_trade">Not TRADE on close only</option>
             </select>
           </div>
           <div class="bt-field">
@@ -464,7 +468,7 @@
             <strong>UTC</strong> dates — check the <strong>year</strong> matches your data (e.g. 2026 vs 2024). This table lists <strong>completed</strong> trades only (open holds appear on the main Dashboard trade chain until they close).
             <strong>Close time in range</strong> = show trades that <strong>finished</strong> between From and To — so a trade that opened yesterday but closed today still appears for “today.”
             <strong>Open time in range</strong> = show trades that <strong>started</strong> in that window (older behavior; can hide long trades that closed in the window but opened earlier).
-            <strong>Show</strong> filters policy labels on the close row. Click <strong>Apply</strong> after changing filters.
+            <strong>Show:</strong> <strong>TRADE closes only</strong> = deterministic — only closes whose policy reason is <code>policy_approved_execution</code> or <code>lifecycle_exit_execution</code> (that is the full set of “count as TRADE” in code; no guessing). Use <strong>All baseline closes</strong> if you want every close row TRADE + not TRADE. Click <strong>Apply</strong> after changing filters.
           </p>
         </div>
 
@@ -626,9 +630,9 @@
       /** API scope query param → operator label (matches scope dropdown). */
       function scopeLabelApi(sc) {
         var s = String(sc || "").toLowerCase();
-        if (s === "trade") return "Close policy TRADE";
-        if (s === "no_trade") return "Close not policy TRADE";
-        if (s === "all") return "All ledger rows";
+        if (s === "trade") return "TRADE closes only";
+        if (s === "no_trade") return "Not TRADE on close only";
+        if (s === "all") return "All baseline closes";
         return sc || "—";
       }
 
