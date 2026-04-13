@@ -539,6 +539,7 @@
       height: 0.55rem;
       border-radius: 50%;
       flex-shrink: 0;
+      cursor: pointer;
     }
     .tc-binance-vol-ok {
       background: #22c55e;
@@ -1698,13 +1699,13 @@
     if (baselineLane && jupLab === 'JUPv3') {
       var bVolOk = c && c.binance_kline_volume_ok === true;
       binanceDotHtml =
-        '<span class="tc-binance-vol-dot ' +
+        '<span tabindex="0" role="button" class="tc-binance-vol-dot ' +
         (bVolOk ? 'tc-binance-vol-ok' : 'tc-binance-vol-bad') +
         '" title="' +
         esc(
           bVolOk
-            ? 'Binance kline quote volume on this bar (volume_base) — same field as the volume spike gate'
-            : 'No Binance quote volume on this bar (volume_base missing or zero) — spike gate not fed by kline API data'
+            ? 'Binance kline quote volume on this bar (volume_base) — same field as the volume spike gate. Click or Enter: live Binance REST ping (connectivity from API server).'
+            : 'No Binance quote volume on this bar (volume_base missing or zero). Click or Enter: live Binance REST ping (connectivity from API server).'
         ) +
         '" aria-label="' +
         esc(bVolOk ? 'Binance kline volume present' : 'Binance kline volume missing') +
@@ -3398,6 +3399,47 @@
       tcSnapTradeChainScrollNearest();
       tcPanSliderRefresh();
     });
+    if (!tcScrollHost.dataset.bbBinancePing) {
+      tcScrollHost.dataset.bbBinancePing = '1';
+      function runBinancePingFromDot(dot) {
+        if (!dot) return;
+        dot.style.opacity = '0.55';
+        fetch('/api/v1/market/binance/ping', { cache: 'no-store' })
+          .then(function (r) {
+            return r.json();
+          })
+          .then(function (j) {
+            dot.style.opacity = '';
+            var ok = j && j.ok === true;
+            var ms = j && j.latency_ms != null ? String(j.latency_ms) : '—';
+            var err = j && j.error ? String(j.error) : '';
+            var st = j && j.http_status != null ? String(j.http_status) : '—';
+            window.alert(
+              ok
+                ? 'Binance REST ping OK — ' + ms + ' ms (HTTP ' + st + '). Dot color = kline volume on this bar, not reachability.'
+                : 'Binance REST ping failed — HTTP ' + st + (err ? ': ' + err : '') + '. Dot color = kline volume on this bar.'
+            );
+          })
+          .catch(function () {
+            dot.style.opacity = '';
+            window.alert('Binance REST ping request failed (network or dashboard API).');
+          });
+      }
+      tcScrollHost.addEventListener('click', function (e) {
+        var dot = e.target && e.target.closest ? e.target.closest('.tc-binance-vol-dot') : null;
+        if (!dot) return;
+        e.preventDefault();
+        e.stopPropagation();
+        runBinancePingFromDot(dot);
+      });
+      tcScrollHost.addEventListener('keydown', function (e) {
+        if (e.key !== 'Enter' && e.key !== ' ') return;
+        var dot = e.target && e.target.closest ? e.target.closest('.tc-binance-vol-dot') : null;
+        if (!dot) return;
+        e.preventDefault();
+        runBinancePingFromDot(dot);
+      });
+    }
   }
 
   var tcPanRangeEl = $('tc-pan-range');

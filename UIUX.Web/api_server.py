@@ -333,6 +333,48 @@ def build_pyth_status() -> dict[str, Any]:
     }
 
 
+def build_binance_ping() -> dict[str, Any]:
+    """Live connectivity: ``GET https://api.binance.com/api/v3/ping`` from the API server host."""
+    import time
+    import urllib.error
+    import urllib.request
+
+    url = "https://api.binance.com/api/v3/ping"
+    t0 = time.perf_counter()
+    try:
+        req = urllib.request.Request(url, method="GET")
+        with urllib.request.urlopen(req, timeout=8) as resp:
+            latency_ms = (time.perf_counter() - t0) * 1000.0
+            return {
+                "ok": True,
+                "latency_ms": round(latency_ms, 2),
+                "http_status": int(resp.status),
+                "error": None,
+                "url": url,
+                "trace_id": str(uuid.uuid4()),
+            }
+    except urllib.error.HTTPError as e:
+        latency_ms = (time.perf_counter() - t0) * 1000.0
+        return {
+            "ok": False,
+            "latency_ms": round(latency_ms, 2),
+            "http_status": int(e.code),
+            "error": str(e.reason or e),
+            "url": url,
+            "trace_id": str(uuid.uuid4()),
+        }
+    except Exception as e:
+        latency_ms = (time.perf_counter() - t0) * 1000.0
+        return {
+            "ok": False,
+            "latency_ms": round(latency_ms, 2),
+            "http_status": None,
+            "error": str(e),
+            "url": url,
+            "trace_id": str(uuid.uuid4()),
+        }
+
+
 def build_anna_summary() -> dict[str, Any]:
     runtime, agents = build_status()
     pyth = build_pyth_status()
@@ -1844,6 +1886,9 @@ class Handler(BaseHTTPRequestHandler):
                 limit = 40
             items = data.get("items") if isinstance(data.get("items"), list) else []
             self._json(200, {"items": items[-limit:], "trace_id": str(uuid.uuid4())})
+            return
+        if path == "/api/v1/market/binance/ping":
+            self._json(200, build_binance_ping(), no_cache=True)
             return
         if path == "/api/v1/anna/summary":
             self._json(200, build_anna_summary())

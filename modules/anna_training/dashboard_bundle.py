@@ -400,13 +400,13 @@ def _recompute_jupiter_narrative_for_market_event_id(
     policy_slot: str,
     training_state: dict[str, Any] | None,
     prefetch_bars: list[dict[str, Any]] | None = None,
-) -> tuple[str, dict[str, Any] | None]:
+) -> tuple[str, dict[str, Any] | None, dict[str, Any] | None]:
     """
     When ``policy_evaluations`` has no row (or empty narrative), recompute from ``market_bars_5m``
     so the operator always sees **why this bar** for the active Jupiter slot (Sean v2 vs v3).
 
-    Returns ``(narrative, jupiter_v3_gates)``. Gates are only set for Jupiter_3 (v3 slot); else
-    ``None``.
+    Returns ``(narrative, jupiter_v3_gates, policy_features)``. Gates are only set for Jupiter_3 (v3 slot); else
+    ``None``. ``policy_features`` is the evaluator feature dict (for ``binance_kline_volume_ok`` alignment with the narrative).
     """
     from modules.anna_training.jupiter_3_sean_policy import MIN_BARS as MIN_BARS_JUPITER_3
     from modules.anna_training.sean_jupiter_baseline_signal import (
@@ -419,7 +419,7 @@ def _recompute_jupiter_narrative_for_market_event_id(
 
     mid = str(market_event_id or "").strip()
     if not mid or not market_db_path.is_file():
-        return "", None
+        return "", None, None
     use_v3 = policy_slot == BASELINE_POLICY_SLOT_JUP_V3
     min_bars = MIN_BARS_JUPITER_3 if use_v3 else MIN_BARS_JUPITER_2
     sm = signal_mode_for_baseline_policy_slot(policy_slot)
@@ -428,7 +428,7 @@ def _recompute_jupiter_narrative_for_market_event_id(
     try:
         from market_data.bar_lookup import fetch_bars_asc_through_market_event_id, fetch_recent_bars_asc
     except Exception:
-        return "", None
+        return "", None, None
     try:
         bars: list[dict[str, Any]]
         if prefetch_bars is not None and len(prefetch_bars) > 0:
@@ -446,7 +446,7 @@ def _recompute_jupiter_narrative_for_market_event_id(
                 None,
             )
         if idx is None or len(bars[: idx + 1]) < min_bars:
-            return "", None
+            return "", None, None
         sub = bars[: idx + 1]
         if use_v3:
             sig = evaluate_sean_jupiter_baseline_v3(
@@ -475,9 +475,9 @@ def _recompute_jupiter_narrative_for_market_event_id(
             side=str(sig.side or "flat"),
             policy_blockers=pbl,
         )
-        return text, gates
+        return text, gates, sf
     except Exception:
-        return "", None
+        return "", None, None
 
 
 def _jupiter_v3_gates_from_policy_row(pol_e: dict[str, Any] | None) -> dict[str, Any] | None:
@@ -683,7 +683,7 @@ def _baseline_entry_snapshot_for_active_slot(
             if (s or "").strip() or g:
                 return (s or "").strip(), g
         if policy_slot == BASELINE_POLICY_SLOT_JUP_V3 and market_db_path and market_db_path.is_file():
-            s2, g2 = _recompute_jupiter_narrative_for_market_event_id(
+            s2, g2, _sf2 = _recompute_jupiter_narrative_for_market_event_id(
                 em,
                 market_db_path,
                 policy_slot=BASELINE_POLICY_SLOT_JUP_V3,
@@ -721,7 +721,7 @@ def _baseline_entry_snapshot_for_active_slot(
     if (s or "").strip():
         return s.strip(), _jupiter_v3_gates_from_policy_row(pol_e)
     if market_db_path and market_db_path.is_file():
-        s2, g2 = _recompute_jupiter_narrative_for_market_event_id(
+        s2, g2, _sf2 = _recompute_jupiter_narrative_for_market_event_id(
             em,
             market_db_path,
             policy_slot=policy_slot,
@@ -939,7 +939,7 @@ def build_jupiter_policy_snapshot(
                         entry_gates = dict(rg)
                 elif use_v3 and emid and mpath.is_file():
                     try:
-                        _audit_nar, audit_gates = _recompute_jupiter_narrative_for_market_event_id(
+                        _audit_nar, audit_gates, _audit_sf = _recompute_jupiter_narrative_for_market_event_id(
                             emid,
                             mpath,
                             policy_slot=BASELINE_POLICY_SLOT_JUP_V3,
@@ -1207,7 +1207,7 @@ def _event_axis_jupiter_tile_narratives(
     conn: Any,
     event_axis: list[str],
     market_db_path: Path | None,
-) -> tuple[dict[str, str], dict[str, dict[str, Any]]]:
+) -> tuple[dict[str, str], dict[str, dict[str, Any]], dict[str, bool]]:
     """
     Per-``market_event_id`` multi-line Jupiter / Sean policy tile (operator requirement).
 
@@ -1219,8 +1219,9 @@ def _event_axis_jupiter_tile_narratives(
     One **prefetch** of recent bars is shared across all columns to avoid N× SQLite scans per
     bundle (major latency win).
 
-    Returns ``(narratives_by_mid, jupiter_v3_gates_by_mid)`` — gates only for V3 recompute/persisted
-    rows that include ``jupiter_v3_gates``.
+    Returns ``(narratives_by_mid, jupiter_v3_gates_by_mid, binance_kline_volume_ok_by_mid)`` —
+    ``binance_*`` matches the **same** recomputed/persisted features as the narrative (avoids red dot
+    vs “Using real Binance volume” mismatch).
     """
     from modules.anna_training.execution_ledger import (
         SIGNAL_MODE_JUPITER_2,
@@ -1232,8 +1233,9 @@ def _event_axis_jupiter_tile_narratives(
 
     out: dict[str, str] = {}
     gates_out: dict[str, dict[str, Any]] = {}
+    binance_out: dict[str, bool] = {}
     if not event_axis:
-        return out, gates_out
+        return out, gates_out, binance_out
 
     mpath = market_db_path
     _ensure_runtime_for_market_imports()
@@ -1283,6 +1285,7 @@ def _event_axis_jupiter_tile_narratives(
             )
             if jg:
                 gates_out[mid_s] = jg
+            binance_out[mid_s] = _binance_kline_volume_ok_from_features(f)
             continue
 
         if not mpath or not mpath.is_file():
@@ -1293,9 +1296,10 @@ def _event_axis_jupiter_tile_narratives(
                 trade=False,
                 side="flat",
             )
+            binance_out[mid_s] = False
             continue
         try:
-            nar, g = _recompute_jupiter_narrative_for_market_event_id(
+            nar, g, sf_re = _recompute_jupiter_narrative_for_market_event_id(
                 mid_s,
                 mpath,
                 policy_slot=policy_slot,
@@ -1306,6 +1310,9 @@ def _event_axis_jupiter_tile_narratives(
                 out[mid_s] = nar.strip()
                 if g:
                     gates_out[mid_s] = g
+                binance_out[mid_s] = _binance_kline_volume_ok_from_features(
+                    sf_re if isinstance(sf_re, dict) else None
+                )
             else:
                 out[mid_s] = format_baseline_jupiter_tile_narrative(
                     signal_mode=sm_active,
@@ -1314,13 +1321,15 @@ def _event_axis_jupiter_tile_narratives(
                     trade=False,
                     side="flat",
                 )
+                binance_out[mid_s] = False
         except Exception as e:
             out[mid_s] = (
                 "Jupiter tile (event column): build failed — "
                 + str(e)[:400]
                 + "\n(Check BLACKBOX_MARKET_DATA_PATH, execution_ledger policy_evaluations, API restart after deploy.)"
             )
-    return out, gates_out
+            binance_out[mid_s] = False
+    return out, gates_out, binance_out
 
 
 def _compact_cell(
@@ -3072,8 +3081,11 @@ def build_baseline_trades_report(
 
         tile_narr: dict[str, str] = {}
         tile_v3_gates: dict[str, dict[str, Any]] = {}
+        tile_binance_axis: dict[str, bool] = {}
         if mids_for_tiles:
-            tile_narr, tile_v3_gates = _event_axis_jupiter_tile_narratives(conn, mids_for_tiles, mpath)
+            tile_narr, tile_v3_gates, tile_binance_axis = _event_axis_jupiter_tile_narratives(
+                conn, mids_for_tiles, mpath
+            )
         for i, r in enumerate(rows_out):
             mk = str(r.get("market_event_id") or "").strip()
             tile_text = tile_narr.get(mk, "") if mk else ""
@@ -3083,9 +3095,12 @@ def build_baseline_trades_report(
             ledger_row_i, cell_i, _pos_open_i = meta_pairs[i]
             pol_i = fetch_baseline_policy_evaluation_for_market_event(conn, mk)
             _pfeat = pol_i.get("features") if isinstance(pol_i, dict) else None
-            r["binance_kline_volume_ok"] = _binance_kline_volume_ok_from_features(
-                dict(_pfeat) if isinstance(_pfeat, dict) else None
-            )
+            if mk and mk in tile_binance_axis:
+                r["binance_kline_volume_ok"] = bool(tile_binance_axis.get(mk))
+            else:
+                r["binance_kline_volume_ok"] = _binance_kline_volume_ok_from_features(
+                    dict(_pfeat) if isinstance(_pfeat, dict) else None
+                )
             r["baseline_jupiter_policy_tag"] = baseline_jupiter_policy_tag_from_signal_mode(
                 str((pol_i or {}).get("signal_mode") or "")
             )
@@ -4127,7 +4142,9 @@ def build_trade_chain_payload(
             event_axis_time_utc_iso = [inj_t]
             event_axis_candle_close_utc_iso = [_five_m_close_after_open_iso(inj_t)]
             event_axis_source = "open_baseline_injected"
-        tile_narr, tile_v3_gates_axis = _event_axis_jupiter_tile_narratives(conn, event_axis, mpath)
+        tile_narr, tile_v3_gates_axis, tile_binance_axis = _event_axis_jupiter_tile_narratives(
+            conn, event_axis, mpath
+        )
         baseline_ledger = _recent_baseline_trades_for_dashboard_strip(
             conn, limit=50, market_db_path=mpath
         )
@@ -4143,9 +4160,12 @@ def build_trade_chain_payload(
                 fetch_baseline_policy_evaluation_for_market_event(conn, mid_rs) if mid_rs else None
             )
             _pf_rs = pol_rs.get("features") if isinstance(pol_rs, dict) else None
-            rs["binance_kline_volume_ok"] = _binance_kline_volume_ok_from_features(
-                dict(_pf_rs) if isinstance(_pf_rs, dict) else None
-            )
+            if mid_rs and mid_rs in tile_binance_axis:
+                rs["binance_kline_volume_ok"] = bool(tile_binance_axis.get(mid_rs))
+            else:
+                rs["binance_kline_volume_ok"] = _binance_kline_volume_ok_from_features(
+                    dict(_pf_rs) if isinstance(_pf_rs, dict) else None
+                )
         for br in baseline_ledger:
             mid_k = str(br.get("market_event_id") or "").strip()
             br["jupiter_tile_narrative"] = tile_narr.get(mid_k, "") if mid_k else ""
@@ -4153,9 +4173,12 @@ def build_trade_chain_payload(
                 br["jupiter_v3_gates"] = tile_v3_gates_axis[mid_k]
             pol_br = fetch_baseline_policy_evaluation_for_market_event(conn, mid_k) if mid_k else None
             _pf_br = pol_br.get("features") if isinstance(pol_br, dict) else None
-            br["binance_kline_volume_ok"] = _binance_kline_volume_ok_from_features(
-                dict(_pf_br) if isinstance(_pf_br, dict) else None
-            )
+            if mid_k and mid_k in tile_binance_axis:
+                br["binance_kline_volume_ok"] = bool(tile_binance_axis.get(mid_k))
+            else:
+                br["binance_kline_volume_ok"] = _binance_kline_volume_ok_from_features(
+                    dict(_pf_br) if isinstance(_pf_br, dict) else None
+                )
         baseline_trades_report_rows = baseline_ledger
         tests, strats, note = _strategy_buckets(conn)
         lc_map = _lifecycle_by_strategy(conn)
@@ -4269,11 +4292,14 @@ def build_trade_chain_payload(
                 if ck_row == "baseline" and mid_k and tile_v3_gates_axis.get(mid_k):
                     d["jupiter_v3_gates"] = tile_v3_gates_axis[mid_k]
                 if ck_row == "baseline" and mid_k:
-                    pol_cell = fetch_baseline_policy_evaluation_for_market_event(conn, mid_k)
-                    _pf_cell = pol_cell.get("features") if isinstance(pol_cell, dict) else None
-                    d["binance_kline_volume_ok"] = _binance_kline_volume_ok_from_features(
-                        dict(_pf_cell) if isinstance(_pf_cell, dict) else None
-                    )
+                    if mid_k in tile_binance_axis:
+                        d["binance_kline_volume_ok"] = bool(tile_binance_axis.get(mid_k))
+                    else:
+                        pol_cell = fetch_baseline_policy_evaluation_for_market_event(conn, mid_k)
+                        _pf_cell = pol_cell.get("features") if isinstance(pol_cell, dict) else None
+                        d["binance_kline_volume_ok"] = _binance_kline_volume_ok_from_features(
+                            dict(_pf_cell) if isinstance(_pf_cell, dict) else None
+                        )
                 if ck_row == "baseline" and narr and not d.get("jupiter_tile_narrative_scope"):
                     d["jupiter_tile_narrative_scope"] = "current_bar"
                     d["jupiter_tile_narrative_scope_note"] = (
