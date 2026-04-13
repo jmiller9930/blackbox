@@ -11,6 +11,7 @@ import pytest
 from modules.anna_training.execution_ledger import (
     connect_ledger,
     ensure_execution_ledger_schema,
+    set_baseline_jupiter_policy_slot,
     upsert_policy_evaluation,
 )
 from modules.anna_training.dashboard_bundle import (
@@ -725,5 +726,95 @@ def test_trade_chain_inject_axis_creates_single_column(tmp_path: Path) -> None:
     assert len(tc["event_axis_time_utc_iso"]) == 1
     assert len(tc["event_axis_candle_close_utc_iso"]) == 1
     assert tc["event_axis_candle_close_utc_iso"][0] == "2025-01-01T12:05:00Z"
+
+
+def test_trade_chain_jup_v3_event_axis_uses_binance_strategy_bars_not_pyth_strip(
+    tmp_path: Path,
+) -> None:
+    """JUPv3 columns must follow binance_strategy_bars_5m; a stale Pyth strip must not freeze the rightmost bar."""
+    import modules.anna_training.dashboard_bundle as dbmod
+
+    dbmod._MARKET_DB = None
+    repo_root = Path(__file__).resolve().parents[1]
+
+    mid_pyth = "SOL-PERP_5m_2026-01-15T12:00:00Z"
+    mid_binance = "SOL-PERP_5m_2026-01-15T14:00:00Z"
+
+    market = tmp_path / "m.db"
+    conn_m = sqlite3.connect(market)
+    conn_m.execute(
+        """CREATE TABLE market_bars_5m (
+            id INTEGER PRIMARY KEY,
+            canonical_symbol TEXT NOT NULL,
+            tick_symbol TEXT NOT NULL,
+            timeframe TEXT NOT NULL,
+            candle_open_utc TEXT NOT NULL,
+            candle_close_utc TEXT NOT NULL,
+            market_event_id TEXT NOT NULL UNIQUE,
+            open REAL, high REAL, low REAL, close REAL,
+            tick_count INTEGER NOT NULL DEFAULT 0,
+            volume_base REAL,
+            price_source TEXT NOT NULL DEFAULT 'pyth_primary',
+            bar_schema_version TEXT NOT NULL DEFAULT 'canonical_bar_v1',
+            computed_at TEXT NOT NULL
+        )"""
+    )
+    conn_m.executescript((repo_root / "data/sqlite/schema_phase5_binance_strategy_bars.sql").read_text(encoding="utf-8"))
+    conn_m.execute(
+        """INSERT INTO market_bars_5m (
+            canonical_symbol, tick_symbol, timeframe, candle_open_utc, candle_close_utc,
+            market_event_id, open, high, low, close, tick_count, computed_at
+        ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)""",
+        (
+            "SOL-PERP",
+            "SOL-PERP",
+            "5m",
+            "2026-01-15T12:00:00Z",
+            "2026-01-15T12:05:00Z",
+            mid_pyth,
+            100.0,
+            101.0,
+            99.0,
+            100.5,
+            1,
+            "2026-01-15T12:05:01Z",
+        ),
+    )
+    conn_m.execute(
+        """INSERT INTO binance_strategy_bars_5m (
+            canonical_symbol, tick_symbol, timeframe, candle_open_utc, candle_close_utc,
+            market_event_id, open, high, low, close, volume_base_asset, quote_volume_usdt,
+            computed_at
+        ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+        (
+            "SOL-PERP",
+            "SOL-PERP",
+            "5m",
+            "2026-01-15T14:00:00Z",
+            "2026-01-15T14:05:00Z",
+            mid_binance,
+            200.0,
+            201.0,
+            199.0,
+            200.5,
+            500.0,
+            100000.0,
+            "2026-01-15T14:05:01Z",
+        ),
+    )
+    conn_m.commit()
+    conn_m.close()
+
+    ledger = tmp_path / "el.db"
+    conn_l = connect_ledger(ledger)
+    ensure_execution_ledger_schema(conn_l)
+    set_baseline_jupiter_policy_slot(conn_l, "jup_v3")
+    conn_l.commit()
+    conn_l.close()
+
+    tc = dbmod.build_trade_chain_payload(db_path=ledger, market_db_path=market, max_events=8)
+    assert tc.get("event_axis_source") == "binance_strategy_bars_5m"
+    assert tc["recency"]["newest_market_event_id"] == mid_binance
+    assert mid_pyth not in (tc.get("event_axis") or [])
 
 

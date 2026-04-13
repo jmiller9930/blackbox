@@ -3556,6 +3556,54 @@ def _event_axis_from_market_bars(
     return mids, times, closes
 
 
+def _event_axis_from_binance_strategy_bars(
+    mpath: Path | None,
+    *,
+    limit: int,
+    canonical_symbol: str | None = None,
+) -> tuple[list[str], list[str | None], list[str | None]]:
+    """
+    Recent closed 5m bars from **Binance strategy OHLCV** (oldest→newest).
+
+    Used for **JUPv3** trade-chain columns so the horizontal axis matches
+    ``binance_strategy_bars_5m`` / ``five_m_ingest_freshness`` — not ``market_bars_5m`` (Pyth),
+    which can lag hours behind while Binance sync is current.
+    """
+    if not mpath or not mpath.is_file():
+        return [], [], []
+    sym = (canonical_symbol or "").strip() or _BASELINE_CANONICAL_SYMBOL_DEFAULT
+    lim = max(4, min(48, int(limit)))
+    conn = sqlite3.connect(str(mpath))
+    try:
+        cur = conn.execute(
+            """
+            SELECT market_event_id, candle_open_utc, candle_close_utc
+            FROM binance_strategy_bars_5m
+            WHERE timeframe = '5m' AND canonical_symbol = ?
+            ORDER BY candle_open_utc DESC
+            LIMIT ?
+            """,
+            (sym, lim),
+        )
+        rows = list(reversed(cur.fetchall()))
+    except Exception:
+        return [], [], []
+    finally:
+        conn.close()
+    mids: list[str] = []
+    times: list[str | None] = []
+    closes: list[str | None] = []
+    for r in rows:
+        if not r or not r[0]:
+            continue
+        mids.append(str(r[0]))
+        o = _normalize_utc_iso_for_axis(r[1])
+        times.append(o)
+        cc = _normalize_utc_iso_for_axis(r[2]) if len(r) > 2 and r[2] is not None else None
+        closes.append(cc or _five_m_close_after_open_iso(o))
+    return mids, times, closes
+
+
 def _format_jupiter_tile_narrative_from_policy_row(pol: dict[str, Any] | None) -> str:
     """Plain multi-line operator text from a ``policy_evaluations``-shaped row."""
     if not pol:
@@ -4324,10 +4372,24 @@ def build_trade_chain_payload(
         )
         # Closed 5m bars only — newest column is the last **completed** bucket (decision at roll).
         # No synthetic "forming" column; operators should not see EVAL PENDING for an in-progress candle.
-        event_axis, event_axis_time_utc_iso, event_axis_candle_close_utc_iso = _event_axis_from_market_bars(
-            mpath, limit=max_events, canonical_symbol=axis_sym
-        )
-        event_axis_source = "market_bars_5m"
+        #
+        # JUPv3: axis MUST follow binance_strategy_bars_5m. Using market_bars_5m (Pyth) here pins the
+        # rightmost column to a stale open time when Pyth ingest lags Binance — wrong tile timestamp
+        # and a chain that never advances to newer closed bars until Pyth catches up.
+        if _slot == BASELINE_POLICY_SLOT_JUP_V3:
+            event_axis, event_axis_time_utc_iso, event_axis_candle_close_utc_iso = (
+                _event_axis_from_binance_strategy_bars(
+                    mpath, limit=max_events, canonical_symbol=axis_sym
+                )
+            )
+            event_axis_source = "binance_strategy_bars_5m"
+        else:
+            event_axis, event_axis_time_utc_iso, event_axis_candle_close_utc_iso = (
+                _event_axis_from_market_bars(
+                    mpath, limit=max_events, canonical_symbol=axis_sym
+                )
+            )
+            event_axis_source = "market_bars_5m"
         if not event_axis:
             event_axis, event_axis_time_utc_iso = _distinct_event_axis_with_times(conn, limit=max_events)
             event_axis_source = "execution_trades_fallback"
@@ -4556,12 +4618,13 @@ def build_trade_chain_payload(
         "event_axis_source": event_axis_source,
         "event_axis_note": (
             "Columns are distinct market_event_id values (oldest left → newest right). "
-            "Axis is **closed** 5m bars from market_bars_5m (filtered by canonical_symbol for baseline) when available; "
-            "else execution_trades. "
+            "Axis is **closed** 5m bars: **JUPv3** uses binance_strategy_bars_5m (Binance OHLCV); **JUPv2** uses "
+            "market_bars_5m (Pyth rollup). Same canonical_symbol filter for baseline. If that table has no rows, "
+            "fallback is execution_trades (or inject). "
             "No in-progress column — newest column is the last **completed** bucket (decision at roll; matches "
             "last_closed_candle_open_utc when ingest keeps up). "
-            "If five_m_ingest_freshness.closed_bucket_lag > 0, the DB is missing the newest closed bucket — "
-            "fix Hermes/tick ingest and canonical bar refresh, not column ordering. "
+            "If five_m_ingest_freshness.closed_bucket_lag > 0, the authoritative table for the active slot is missing "
+            "the newest closed bucket — fix the relevant pipeline (Binance strategy sync for JUPv3; Hermes/Pyth for JUPv2). "
             "Baseline lifecycle: **open** → **held** → **closed**; primary tile on newest column when position open; "
             "older columns in that run are **continuation** (minimal)."
         ),
