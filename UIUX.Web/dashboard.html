@@ -212,6 +212,7 @@
     .bts-t.bt-rpt-dash .bt-short { background: rgba(234, 88, 12, 0.06); }
     .bts-t.bt-rpt-dash .bt-pnl-pos { color: #047857; font-weight: 800; }
     .bts-t.bt-rpt-dash .bt-pnl-neg { color: #b91c1c; font-weight: 800; }
+    .bts-t.bt-rpt-dash .bt-pnl-flat { color: #b45309; font-weight: 800; }
     .bts-t.bt-rpt-dash .bt-auth-trade { font-weight: 800; color: #0f766e; }
     .bts-t.bt-rpt-dash .bt-auth-notrade { font-weight: 700; color: #64748b; }
     .bts-t.bt-rpt-dash .bt-muted { color: var(--muted); font-size: 0.82em; font-weight: 600; }
@@ -1249,6 +1250,15 @@
     var v = Number(pnl);
     return (v >= 0 ? '+' : '') + v.toFixed(2);
   }
+  /** Green / red / amber for PnL USD column (±ε treated as flat). */
+  function btsRptPnlToneClassUsd(pnl) {
+    if (pnl == null || pnl === '') return '';
+    var v = Number(pnl);
+    if (isNaN(v)) return '';
+    if (Math.abs(v) < 1e-8) return 'bt-pnl-flat';
+    return v > 0 ? 'bt-pnl-pos' : 'bt-pnl-neg';
+  }
+
   function btsRptFmtPnlWithPct(r) {
     var base = btsRptFmtPnl(r.pnl_usd);
     var pct = r.pnl_pct_notional;
@@ -1871,8 +1881,7 @@
         var side = String(r.side || '').toLowerCase();
         var cls = side === 'short' ? 'bt-short' : 'bt-long';
         var pnl = r.pnl_usd;
-        var pnlCls =
-          pnl == null ? '' : Number(pnl) >= 0 ? 'bt-pnl-pos' : 'bt-pnl-neg';
+        var pnlCls = btsRptPnlToneClassUsd(pnl);
         var sym = r.symbol != null ? String(r.symbol) : '—';
         var tf = r.timeframe != null ? String(r.timeframe) : '—';
         var sz = btsRptFmtNum(r.size);

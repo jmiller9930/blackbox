@@ -201,6 +201,8 @@
     .bt-short { background: rgba(234, 88, 12, 0.06); }
     .bt-pnl-pos { color: #047857; font-weight: 800; }
     .bt-pnl-neg { color: #b91c1c; font-weight: 800; }
+    /* Zero / flat realized or unrealized PnL (neither win nor loss at display precision). */
+    .bt-pnl-flat { color: #b45309; font-weight: 800; }
     .bt-auth-trade { font-weight: 800; color: #0f766e; }
     .bt-auth-notrade { font-weight: 700; color: #64748b; }
     .bt-rpt a { color: var(--accent); font-weight: 700; }
@@ -589,6 +591,15 @@
         return (v >= 0 ? "+" : "") + v.toFixed(2);
       }
 
+      /** Green / red / amber cell class for PnL USD (±ε treated as flat). */
+      function pnlToneClassUsd(pnl) {
+        if (pnl == null || pnl === "") return "";
+        var v = Number(pnl);
+        if (isNaN(v)) return "";
+        if (Math.abs(v) < 1e-8) return "bt-pnl-flat";
+        return v > 0 ? "bt-pnl-pos" : "bt-pnl-neg";
+      }
+
       function fmtPnlWithPct(r) {
         var base = fmtPnl(r.pnl_usd);
         var pct = r.pnl_pct_notional;
@@ -766,8 +777,7 @@
           var side = String(r.side || "").toLowerCase();
           var cls = side === "short" ? "bt-short" : "bt-long";
           var pnl = r.pnl_usd;
-          var pnlCls =
-            pnl == null ? "" : Number(pnl) >= 0 ? "bt-pnl-pos" : "bt-pnl-neg";
+          var pnlCls = pnlToneClassUsd(pnl);
           var sym = r.symbol != null ? String(r.symbol) : "—";
           var tf = r.timeframe != null ? String(r.timeframe) : "—";
           var sz = fmtNum(r.size);
@@ -1129,8 +1139,7 @@
         var side = String(ap.side || "").toLowerCase();
         var sideCls = side === "short" ? "bt-short" : "bt-long";
         var pnl = ap.unrealized_pnl_usd;
-        var pnlCls =
-          pnl == null ? "" : Number(pnl) >= 0 ? "bt-pnl-pos" : "bt-pnl-neg";
+        var pnlCls = pnlToneClassUsd(pnl);
         var dur =
           ap.running_duration_minutes != null && !isNaN(Number(ap.running_duration_minutes))
             ? Number(ap.running_duration_minutes).toFixed(2) + " min"
