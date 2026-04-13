@@ -354,7 +354,7 @@
       <div class="bt-section">
         <h1>Baseline trades report</h1>
         <p class="bt-desc">
-          <strong>One row per closed trade</strong> (<code>trade_id</code>) from ledger fills. Lifecycle <code>trade_id</code> (<code>bl_lc_…</code>) is derived from the <strong>entry</strong> bar identity; the <code>market_event_id</code> column on each row is the <strong>exit</strong> bar where the close was recorded—use the <strong>Entry MEI</strong> column when you need to line up with the opening bar. <strong>Active baseline position</strong> (open Jupiter paper key) is shown above the table when present—same economic fields as the dashboard lifecycle tile (mark, unrealized PnL, SL/TP, sizing). <strong>Click a row</strong> for a closed-trade snapshot. Open/held bars also appear on the <strong>dashboard trade chain</strong>. QEL is cohort evaluation—see the QEL page.
+          <strong>One row per closed trade</strong> (<code>trade_id</code>) from ledger fills—there are <strong>no</strong> open-position rows here. <strong>Held</strong> (mid-trade, position still open) exists only on the <strong>dashboard trade chain</strong>, not in this table. The <strong>Duration</strong> column is how long the position was open until <strong>this</strong> close, not “held” state. Lifecycle <code>trade_id</code> (<code>bl_lc_…</code>) is derived from the <strong>entry</strong> bar; <code>market_event_id</code> on each row is the <strong>exit</strong> bar. <strong>Policy</strong> TRADE / NO TRADE classifies this <strong>close</strong> row (orthogonal to idle NO TRADE vs held on the chain). <strong>Active baseline position</strong> is above when present. <strong>Click a row</strong> for snapshot. QEL is cohort evaluation—see the QEL page.
         </p>
         <p class="bt-econ-banner" id="bt-econ-banner" role="status">
           <strong>PnL column:</strong> gross model USD: <code>(exit − entry) × size</code> in quote terms. <strong>Not</strong> “return on full bankroll”—Sean sizing builds <strong>notional</strong> from <strong>risk slice × leverage</strong> (see <strong>Risk $</strong> vs <strong>Bankroll $</strong>). PnL shows <strong>% vs notional</strong> in parentheses. Not net of fees, funding, or slippage. Full wording: API <code>meta.pnl_semantics</code> after load.
@@ -377,10 +377,10 @@
           </div>
           <div class="bt-field">
             <label for="bt-scope">Show</label>
-            <select id="bt-scope" style="font-weight:700;min-width:11rem">
+            <select id="bt-scope" style="font-weight:700;min-width:14rem">
               <option value="all">All (ledger rows)</option>
-              <option value="trade" selected>TRADE only</option>
-              <option value="no_trade">NO TRADE only</option>
+              <option value="trade" selected>Close policy TRADE</option>
+              <option value="no_trade">Close not policy TRADE</option>
             </select>
           </div>
           <div class="bt-field">
@@ -394,7 +394,7 @@
               JSON by trade_id
             </button>
           </div>
-          <p class="bt-note">Dates are interpreted as <strong>UTC</strong> (labels above). <strong>Apply</strong> runs the report query with your window, max rows, and policy filter.</p>
+          <p class="bt-note">Dates are <strong>UTC</strong>. <strong>Apply</strong> runs the query. Scope filters <strong>policy classification on the ledger close</strong>, not lifecycle <strong>held</strong> (open position—that is trade chain only).</p>
         </div>
 
         <div class="bt-table-wrap">
@@ -404,7 +404,7 @@
                 <th title="Lifecycle key from entry bar + mode (bl_lc_…); not the same string as exit market_event_id.">trade_id</th>
                 <th title="Entry bar market_event_id when recorded (lifecycle); aligns trade_id with the opening candle.">Entry MEI</th>
                 <th title="When the position opened (ledger entry time, UTC).">Open (UTC)</th>
-                <th title="Time in trade and approximate bars.">Held</th>
+                <th title="How long this position was open until exit (closed fills only). Not lifecycle held (open position) — that is on the dashboard trade chain.">Duration</th>
                 <th title="When the position closed (UTC).">Exit (UTC)</th>
                 <th title="Exit reason and outcome.">Status</th>
                 <th title="Symbol.">Sym</th>
@@ -412,7 +412,7 @@
                 <th title="Exit/close bar market_event_id on this ledger row (Jupiter tile narrative is keyed here).">market_event_id</th>
                 <th title="Mode.">Mode</th>
                 <th title="Side.">Side</th>
-                <th title="TRADE vs NO TRADE.">Policy</th>
+                <th title="Policy classification for this closed ledger row (authoritative close vs other). Not the same as trade-chain held vs idle NO TRADE.">Policy</th>
                 <th title="Outcome display.">Outcome</th>
                 <th title="Position size (base units).">Size</th>
                 <th title="How size was derived (policy notional / entry, default paper notional, or fallback).">Size src</th>
@@ -701,7 +701,7 @@
             '">' +
             esc(openUtc) +
             '</td><td title="' +
-            escAttr("Time in trade.") +
+            escAttr("Duration: entry to exit for this close (not open-position held).") +
             '">' +
             esc(held) +
             '</td><td class="bt-mono" title="' +

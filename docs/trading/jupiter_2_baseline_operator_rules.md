@@ -51,14 +51,14 @@ Implementation: `long_ok` / `short_ok` are driven by `long_signal_core` / `short
 
 ### Trade in progress — operator cheat sheet (do not forget)
 
-Use **one vocabulary** on the dashboard trade chain and the baseline trades report: **open → held → closed** (with **closed win / closed loss / closed flat** for realized PnL).
+On the **trade chain**, lifecycle order is **open → held → closed** (with **closed win / closed loss / closed flat** for realized PnL). **`held` means only one thing: an open position still in progress** (you have not exited yet on later bars). It is **not** related to policy **NO_TRADE** (idle / no baseline story on a bar)—those are different axes.
 
 | Phase | What it means | Policy / data (Sean Jupiter v1) | `execution_trades` row on this `market_event_id`? |
 |--------|----------------|----------------------------------|-----------------------------------------------------|
 | **open** | You entered on **this** 5m bar; position is live. | `policy_evaluations.trade = 1` (entry). Jupiter_2 lifecycle does **not** write a baseline fill row until **exit** — so **no** ledger row for the entry bar. | Usually **no** (lifecycle path) |
-| **held** | Trade still open; you have **not** exited on **this** bar. | `trade = 0`, `reason_code = jupiter_2_baseline_holding` | **No** |
+| **held** | **Open position**: trade still open; you have **not** exited on **this** bar (mid-trade). | `trade = 0`, `reason_code = jupiter_2_baseline_holding` | **No** |
 | **closed win / loss / flat** | Trade **closed** this bar; PnL is realized. | Exit path: `trade = 0`, `reason_code = jupiter_2_baseline_exit`, plus closing ledger row; or legacy same-bar policy + row | **Yes** (the close is the row you see) |
-| **no trade** | Not in an authorized open/held/closed story for this bar (gated, missing policy, stray ledger, etc.). | Varies | May or may not exist; display does **not** treat stray rows as outcomes |
+| **no trade** | **Not** in an open/held/closed lifecycle for this bar (idle, gated, stray ledger, etc.)—**not** the same as **held**. | Varies | May or may not exist; display does **not** treat stray rows as outcomes |
 
 **Where it shows up**
 

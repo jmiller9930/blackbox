@@ -3,8 +3,9 @@ Aggregated operator dashboard payload: trade chain, sequential status, wallet su
 
 Trade chain: horizontal event axis (columns) × vertical chains (baseline, Anna test, Anna strategy rows).
 
-**Baseline row:** Operator lifecycle labels are **open** (entry, no fill row yet), **held** (mid-trade), **closed win /
-closed loss / closed flat** (ledger-backed close or legacy same-bar fill). Policy uses ``signal_mode=sean_jupiter_v1``
+**Baseline row:** Operator lifecycle labels are **open** (entry, no fill row yet), **held** (only while a **position
+is open**—mid-trade bars on the chain), **closed win / closed loss / closed flat** (ledger-backed close or legacy
+same-bar fill). **Held** is unrelated to policy **NO_TRADE** (idle bar). Policy uses ``signal_mode=sean_jupiter_v1``
 (historic env label); engine is **Jupiter_2** (``jupiter_2_sean_policy``). Other gated ``trade=0`` cases still render
 **no trade** when non-authoritative.
 
@@ -1831,9 +1832,14 @@ def build_baseline_trades_report(
     max_scan: int = 20000,
 ) -> dict[str, Any]:
     """
-    Filtered baseline ledger report with policy-authoritative **TRADE** vs **NO_TRADE** per row.
+    Filtered baseline ledger report: **closed** ``execution_trades`` rows only (lifecycle **open** /
+    **held** do not appear here—those are **trade chain** columns while a position is still open).
 
-    ``scope``: ``all`` | ``trade`` | ``no_trade`` — filters rows after policy classification.
+    Per row, ``baseline_authority`` **TRADE** / **NO_TRADE** is policy classification on the **close**
+    (authoritative closed fill vs other ledger row), **not** lifecycle **held** and **not** the same
+    idea as idle-bar **NO_TRADE** on the chain.
+
+    ``scope``: ``all`` | ``trade`` | ``no_trade`` — filters rows after that policy classification.
 
     Time window uses ``COALESCE(entry_time, created_at_utc)`` compared in UTC. Rows without a
     parseable timestamp are excluded when any bound is set.
@@ -2149,9 +2155,16 @@ def build_baseline_trades_report(
                 "PnL is gross model USD (see pnl_semantics). Open baseline position (unrealized PnL, SL/TP, "
                 "sizing) is in meta.active_position when baseline_jupiter_open_positions has a row. "
                 "Dashboard trade chain shows open/held bars. "
+                "Lifecycle held = open position only (trade chain); this report is closed fills only—Policy TRADE/NO_TRADE "
+                "here classifies the close row, not held vs idle. "
                 "For Jupiter lifecycle, trade_id (bl_lc_*) is keyed off entry bar identity; ledger market_event_id "
                 "on each row is the exit bar where the close was written—rows also expose entry_market_event_id "
                 "from context when present."
+            ),
+            "lifecycle_note": (
+                "held (HOLDING) applies only to an open baseline position on the dashboard trade chain, not to rows "
+                "in this close-only report; baseline_authority TRADE/NO_TRADE here is policy classification on the "
+                "ledger close, orthogonal to held."
             ),
         },
     }
