@@ -2555,6 +2555,44 @@ def _baseline_lifecycle_for_dashboard_from_active_snapshot(snap: dict[str, Any])
     }
 
 
+def _merge_jupiter_entry_policy_from_policy_snapshot(
+    dashboard_bl: dict[str, Any],
+    policy_bl: dict[str, Any] | None,
+) -> None:
+    """
+    ``build_jupiter_policy_snapshot`` recomputes ``entry_jupiter_v3_gates`` / narrative for the open
+    position. The bundle then assigns ``baseline_lifecycle`` from ``build_baseline_active_position_snapshot``,
+    which can omit that recompute when ledger snapshots are empty. Merge policy snapshot entry fields
+    into ``dashboard_bl`` when they are missing so JUPv3 live tiles are not stuck on “unavailable.”
+    """
+    if not dashboard_bl.get("position_open") or not isinstance(policy_bl, dict) or not policy_bl.get(
+        "position_open"
+    ):
+        return
+    tid_d = str(dashboard_bl.get("trade_id") or "").strip()
+    tid_p = str(policy_bl.get("trade_id") or "").strip()
+    if tid_d and tid_p and tid_d != tid_p:
+        return
+    em_d = str(dashboard_bl.get("entry_market_event_id") or "").strip()
+    em_p = str(policy_bl.get("entry_market_event_id") or "").strip()
+    if em_d and em_p and em_d != em_p:
+        return
+    g = dashboard_bl.get("entry_jupiter_v3_gates")
+    has_gates = isinstance(g, dict) and len(g) > 0
+    if not has_gates:
+        pg = policy_bl.get("entry_jupiter_v3_gates")
+        if isinstance(pg, dict) and pg:
+            dashboard_bl["entry_jupiter_v3_gates"] = pg
+    nar = dashboard_bl.get("entry_jupiter_tile_narrative")
+    nar_s = (nar or "").strip() if isinstance(nar, str) else ""
+    if not nar_s:
+        pn = policy_bl.get("entry_jupiter_tile_narrative")
+        if isinstance(pn, str) and pn.strip():
+            dashboard_bl["entry_jupiter_tile_narrative"] = pn.strip()
+        elif pn:
+            dashboard_bl["entry_jupiter_tile_narrative"] = pn
+
+
 def build_baseline_trades_report(
     *,
     db_path: Path | None = None,
@@ -4284,9 +4322,14 @@ def build_dashboard_bundle(
             except Exception:
                 snap = {}
         if snap.get("position_open"):
-            jupiter_policy_snapshot["baseline_lifecycle"] = _baseline_lifecycle_for_dashboard_from_active_snapshot(
-                snap
+            policy_bl_before = (
+                jupiter_policy_snapshot["baseline_lifecycle"]
+                if isinstance(jupiter_policy_snapshot.get("baseline_lifecycle"), dict)
+                else None
             )
+            bl_dash = _baseline_lifecycle_for_dashboard_from_active_snapshot(snap)
+            _merge_jupiter_entry_policy_from_policy_snapshot(bl_dash, policy_bl_before)
+            jupiter_policy_snapshot["baseline_lifecycle"] = bl_dash
             ev = jupiter_policy_snapshot.get("evaluated_bar")
             if not isinstance(ev, dict) or not str(ev.get("market_event_id") or "").strip():
                 mid = str(snap.get("mark_market_event_id") or snap.get("last_processed_market_event_id") or "")
