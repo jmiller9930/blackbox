@@ -508,23 +508,19 @@ def _baseline_entry_snapshot_for_active_slot(
     """
     **Why we opened** narrative and optional **Jupiter_3 gate table** for the entry ``market_event_id``.
 
-    The operator Jupiter slot (``baseline_operator_kv``) can be **JUPv3** while the persisted
-    ``policy_evaluations`` row for that bar was written under **v2** (``sean_jupiter_v1``). For v3
-    slot, **prefer** a fresh v3 evaluation from ``market_bars_5m`` so the dashboard matches the
-    policy version the operator selected—not a stale v2 Supertrend tile.
+    **Authority:** Immutable snapshots on ``BaselineOpenPosition`` (``entry_policy_narrative_snapshot`` /
+    ``entry_jupiter_v3_gates_snapshot``) are returned first when the open position matches ``entry_mid``.
+    Only when those are absent do we fall back to ``policy_evaluations`` or bar recompute (legacy paths).
     """
     em = str(entry_mid or "").strip()
     if not em:
         return "", None
+    persisted = _entry_snapshot_from_persisted_open_position(conn, em)
+    if persisted is not None:
+        pnar, pgates = persisted
+        if pnar or pgates is not None:
+            return pnar, pgates
     policy_slot = get_baseline_jupiter_policy_slot(conn)
-    # JUPv3: do **not** short-circuit on persisted ``BaselineOpenPosition`` snapshots. Those fields
-    # have been observed wrong (this-bar eval stored as entry); we must recompute at ``entry_mid``.
-    if policy_slot != BASELINE_POLICY_SLOT_JUP_V3:
-        persisted = _entry_snapshot_from_persisted_open_position(conn, em)
-        if persisted is not None:
-            pnar, pgates = persisted
-            if pnar or pgates is not None:
-                return pnar, pgates
     st = training_state if isinstance(training_state, dict) else None
     if st is None:
         from modules.anna_training.store import load_state as _load_training_state
@@ -710,7 +706,10 @@ def build_jupiter_policy_snapshot(
 
     import json
 
-    from modules.anna_training.execution_ledger import lookup_baseline_jupiter_open_state_json
+    from modules.anna_training.execution_ledger import (
+        BASELINE_POLICY_SLOT_JUP_V3,
+        lookup_baseline_jupiter_open_state_json,
+    )
     from modules.anna_training.jupiter_2_baseline_lifecycle import (
         BaselineOpenPosition,
         unrealized_pnl_usd,
@@ -735,23 +734,29 @@ def build_jupiter_policy_snapshot(
                 entry_nar = (pos.entry_policy_narrative_snapshot or "").strip()
                 eg = pos.entry_jupiter_v3_gates_snapshot
                 entry_gates: dict[str, Any] | None = dict(eg) if isinstance(eg, dict) else None
-                # Recompute at entry bar. For JUPv3, always prefer fresh gates/narrative over persisted
-                # ledger snapshots — they can be wrong (e.g. this-bar eval stored as "entry").
-                if emid:
+                audit_gates: dict[str, Any] | None = None
+                # JUPv3: entry gates/narrative are immutable at open — never replace with recompute.
+                # Optional bar recompute is jupiter_v3_gates_recomputed_audit only (labeled not entry).
+                if emid and not use_v3:
                     rn, rg = _baseline_entry_snapshot_for_active_slot(
                         conn, emid, mpath, _st, prefetch_bars=bars
                     )
-                    if use_v3:
-                        if isinstance(rg, dict) and len(rg) > 0:
-                            entry_gates = dict(rg)
-                        if isinstance(rn, str) and rn.strip():
-                            entry_nar = rn.strip()
-                    else:
-                        if not entry_nar and rn:
-                            entry_nar = (str(rn) or "").strip()
-                        if entry_gates is None and isinstance(rg, dict):
-                            entry_gates = dict(rg)
-                out["baseline_lifecycle"] = {
+                    if not entry_nar and rn:
+                        entry_nar = (str(rn) or "").strip()
+                    if entry_gates is None and isinstance(rg, dict):
+                        entry_gates = dict(rg)
+                elif use_v3 and emid and mpath.is_file():
+                    try:
+                        _audit_nar, audit_gates = _recompute_jupiter_narrative_for_market_event_id(
+                            emid,
+                            mpath,
+                            policy_slot=BASELINE_POLICY_SLOT_JUP_V3,
+                            training_state=_st,
+                            prefetch_bars=bars,
+                        )
+                    except Exception:
+                        audit_gates = None
+                blifecycle: dict[str, Any] = {
                     "position_open": True,
                     "trade_id": pos.trade_id,
                     "side": pos.side,
@@ -770,6 +775,12 @@ def build_jupiter_policy_snapshot(
                     "entry_jupiter_tile_narrative": entry_nar or None,
                     "entry_jupiter_v3_gates": entry_gates,
                 }
+                if use_v3 and isinstance(audit_gates, dict) and len(audit_gates) > 0:
+                    blifecycle["jupiter_v3_gates_recomputed_audit"] = dict(audit_gates)
+                    blifecycle["jupiter_v3_gates_recomputed_audit_scope_note"] = (
+                        "Current bar evaluation (not entry)"
+                    )
+                out["baseline_lifecycle"] = blifecycle
             else:
                 out["baseline_lifecycle"] = {"position_open": False}
         finally:
@@ -2571,11 +2582,11 @@ def _merge_jupiter_entry_policy_from_policy_snapshot(
     policy_bl: dict[str, Any] | None,
 ) -> None:
     """
-    ``build_jupiter_policy_snapshot`` recomputes ``entry_jupiter_v3_gates`` / narrative at
-    ``entry_market_event_id`` each bundle. The bundle then assigns ``baseline_lifecycle`` from
-    ``build_baseline_active_position_snapshot``, which may carry **stale or wrong** persisted
-    snapshots (e.g. this-bar gates saved under entry). When trade ids align, **prefer** the policy
-    snapshot entry fields whenever present — they are the authoritative recompute for the entry bar.
+    Merge policy snapshot into the ledger-backed ``baseline_lifecycle`` copy.
+
+    **Entry gates and entry narrative** are immutable at open; the active-position snapshot is
+    authoritative. Only **fill missing** entry fields from the policy snapshot. Optional
+    recomputed-audit fields from the policy snapshot are copied for operator diagnostics (not entry).
     """
     if not dashboard_bl.get("position_open") or not isinstance(policy_bl, dict) or not policy_bl.get(
         "position_open"
@@ -2589,14 +2600,24 @@ def _merge_jupiter_entry_policy_from_policy_snapshot(
     em_p = str(policy_bl.get("entry_market_event_id") or "").strip()
     if em_d and em_p and em_d != em_p:
         return
-    pg = policy_bl.get("entry_jupiter_v3_gates")
-    if isinstance(pg, dict) and len(pg) > 0:
-        dashboard_bl["entry_jupiter_v3_gates"] = dict(pg)
-    pn = policy_bl.get("entry_jupiter_tile_narrative")
-    if isinstance(pn, str) and pn.strip():
-        dashboard_bl["entry_jupiter_tile_narrative"] = pn.strip()
-    elif pn:
-        dashboard_bl["entry_jupiter_tile_narrative"] = pn
+    dg = dashboard_bl.get("entry_jupiter_v3_gates")
+    if not isinstance(dg, dict) or len(dg) == 0:
+        pg = policy_bl.get("entry_jupiter_v3_gates")
+        if isinstance(pg, dict) and len(pg) > 0:
+            dashboard_bl["entry_jupiter_v3_gates"] = dict(pg)
+    dn = dashboard_bl.get("entry_jupiter_tile_narrative")
+    if not (isinstance(dn, str) and dn.strip()):
+        pn = policy_bl.get("entry_jupiter_tile_narrative")
+        if isinstance(pn, str) and pn.strip():
+            dashboard_bl["entry_jupiter_tile_narrative"] = pn.strip()
+        elif pn:
+            dashboard_bl["entry_jupiter_tile_narrative"] = pn
+    ag = policy_bl.get("jupiter_v3_gates_recomputed_audit")
+    if isinstance(ag, dict) and len(ag) > 0:
+        dashboard_bl["jupiter_v3_gates_recomputed_audit"] = dict(ag)
+    an = policy_bl.get("jupiter_v3_gates_recomputed_audit_scope_note")
+    if isinstance(an, str) and an.strip():
+        dashboard_bl["jupiter_v3_gates_recomputed_audit_scope_note"] = an.strip()
 
 
 def build_baseline_trades_report(
@@ -3202,13 +3223,13 @@ def _enrich_baseline_jupiter_context_for_cell(
             entry_mid = em or None
         if entry_mid:
             cell["baseline_entry_market_event_id"] = entry_mid
-            nar, entry_gates = _baseline_entry_snapshot_for_active_slot(
-                conn, entry_mid, market_db_path, training_state
-            )
-            if nar:
-                cell["baseline_entry_jupiter_tile_narrative"] = nar
-            if entry_gates:
-                cell["baseline_entry_jupiter_v3_gates"] = entry_gates
+            persisted = _entry_snapshot_from_persisted_open_position(conn, entry_mid)
+            if persisted:
+                nar, entry_gates = persisted
+                if nar:
+                    cell["baseline_entry_jupiter_tile_narrative"] = nar
+                if entry_gates:
+                    cell["baseline_entry_jupiter_v3_gates"] = entry_gates
             pol_e = fetch_baseline_policy_evaluation_for_market_event(conn, entry_mid)
             if pol_e:
                 cell["baseline_entry_policy_reason_code"] = str(pol_e.get("reason_code") or "") or None

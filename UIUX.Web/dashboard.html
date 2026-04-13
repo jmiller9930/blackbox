@@ -2509,7 +2509,27 @@
         '<p class="tc-jup-missing-note">Entry policy unavailable — check ledger row and market DB.</p>' +
         '</div>';
     }
-    var gatesBelow = entryInner ? '<div class="tc-jup-gates-section">' + entryInner + '</div>' : '';
+    var auditGates = bl.jupiter_v3_gates_recomputed_audit;
+    var auditNote = bl.jupiter_v3_gates_recomputed_audit_scope_note;
+    var auditInner = '';
+    if (auditGates && typeof auditGates === 'object') {
+      auditInner =
+        '<div class="tc-jup-entry-wrap tc-jup-audit">' +
+        '<div class="tc-jup-entry-h">' +
+        esc(jupLive + ' — diagnostics (not entry)') +
+        '</div>' +
+        (auditNote ? '<div class="tc-jup-scope-note">' + esc(String(auditNote)) + '</div>' : '') +
+        jupiterV3GatesTableHtml(
+          auditGates,
+          'Recomputed from current bar history — audit only; compare to policy at entry above'
+        ) +
+        '</div>';
+    }
+    var gatesBelow = entryInner
+      ? '<div class="tc-jup-gates-section">' + entryInner + (auditInner ? auditInner : '') + '</div>'
+      : auditInner
+        ? '<div class="tc-jup-gates-section">' + auditInner + '</div>'
+        : '';
     return (
       '<p class="tc-baseline-live-hint">Active baseline trade — timeline to the right is hidden until this position closes. Updates every poll.</p>' +
       '<div class="tc-baseline-live-tile">' +
