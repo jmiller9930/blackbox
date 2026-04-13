@@ -199,16 +199,26 @@
     .bt-mono--mid { max-width: 9rem; }
     .bt-long { background: rgba(59, 130, 246, 0.06); }
     .bt-short { background: rgba(234, 88, 12, 0.06); }
-    .bt-pnl-pos { color: #047857; font-weight: 800; }
-    .bt-pnl-neg { color: #b91c1c; font-weight: 800; }
-    /* Flat / zero PnL: yellow field so it is never mistaken for red loss (amber text alone read as “bad”). */
-    .bt-rpt td.bt-pnl-flat {
-      background: rgba(254, 240, 138, 0.75);
-      color: #713f12;
+    /* PnL badges: saturated fill + white text (win / loss / flat). */
+    .bt-pnl-pos {
+      background: #047857;
+      color: #fff;
       font-weight: 800;
     }
+    .bt-pnl-neg {
+      background: #b91c1c;
+      color: #fff;
+      font-weight: 800;
+    }
+    .bt-rpt td.bt-pnl-flat {
+      background: #a16207;
+      color: #fff;
+      font-weight: 800;
+    }
+    .bt-pnl-pos .bt-muted,
+    .bt-pnl-neg .bt-muted,
     .bt-rpt td.bt-pnl-flat .bt-muted {
-      color: rgba(113, 63, 18, 0.78) !important;
+      color: rgba(255, 255, 255, 0.92) !important;
       font-weight: 600;
     }
     .bt-auth-trade { font-weight: 800; color: #0f766e; }
