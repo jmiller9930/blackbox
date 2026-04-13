@@ -622,6 +622,8 @@ def test_build_baseline_trades_report_schema() -> None:
     crc = rep["meta"].get("close_row_contract") or {}
     assert crc.get("one_close_row_per_trade_id") is True
     assert "meaning" in crc
+    assert "paper_bankroll_at_report_time_meta" in rep["meta"]
+    assert "paper_bankroll_time_note" in rep["meta"]
     for row in rep["rows"]:
         assert "entry_market_event_id" in row
         assert "pnl_pct_notional" in row

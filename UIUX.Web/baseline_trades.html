@@ -998,6 +998,13 @@
           for (k = 0; k < cols.length; k++) {
             val = rows[r][cols[k]];
             if (val == null) val = "";
+            else if (typeof val === "object") {
+              try {
+                val = JSON.stringify(val);
+              } catch (e) {
+                val = String(val);
+              }
+            }
             val = String(val).replace(/"/g, '""');
             if (/[",\n]/.test(val)) val = '"' + val + '"';
             line.push(val);
@@ -1132,11 +1139,24 @@
             }
             renderActivePosition(m);
             var ban = document.getElementById("bt-econ-banner");
-            if (ban && m.pnl_semantics && m.pnl_semantics.operator_note) {
-              ban.innerHTML =
-                "<strong>PnL column:</strong> " +
-                esc(m.pnl_semantics.operator_note) +
-                " API field: <code>meta.pnl_semantics</code>.";
+            if (ban) {
+              var brNow =
+                m.paper_bankroll_at_report_time_usd != null &&
+                !isNaN(Number(m.paper_bankroll_at_report_time_usd))
+                  ? "<br><strong>Paper bankroll (now):</strong> $" +
+                    Number(m.paper_bankroll_at_report_time_usd).toFixed(2) +
+                    " — <code>meta.paper_bankroll_at_report_time_*</code>. Per-row <strong>Bankroll $</strong> comes from "
+                    "policy at <em>trade</em> time; raising capital does not rewrite stored policy rows for past bars."
+                  : "";
+              if (m.pnl_semantics && m.pnl_semantics.operator_note) {
+                ban.innerHTML =
+                  "<strong>PnL column:</strong> " +
+                  esc(m.pnl_semantics.operator_note) +
+                  " API: <code>meta.pnl_semantics</code>." +
+                  brNow;
+              } else if (brNow) {
+                ban.innerHTML = brNow.replace(/^<br>/, "");
+              }
             }
             foot.textContent =
               "Showing " +

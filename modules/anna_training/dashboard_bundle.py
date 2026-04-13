@@ -1446,6 +1446,43 @@ def _merge_baseline_row_economics_from_policy(
     return fc, col, rp, lev, provenance
 
 
+def _resolve_entry_market_event_id_from_policy(
+    conn: Any,
+    exit_mid: str,
+) -> str | None:
+    """
+    Ledger context / ``position_open`` often omit ``entry_market_event_id`` on same-bar / legacy closes.
+    Policy ``features_json`` on the exit bar (and lifecycle exit row) usually still carries
+    ``entry_market_event_id`` or ``open_position.entry_market_event_id`` — required to join **entry**
+    policy for ``free_collateral_usd`` / ``paper_bankroll``.
+    """
+    mid = str(exit_mid or "").strip()
+    if not mid:
+        return None
+    pol = fetch_policy_evaluation_for_market_event(conn, mid)
+    feat = pol.get("features") if isinstance(pol, dict) else None
+    if isinstance(feat, dict):
+        em = str(feat.get("entry_market_event_id") or "").strip() or None
+        if em:
+            return em
+        op = feat.get("open_position")
+        if isinstance(op, dict):
+            em = str(op.get("entry_market_event_id") or "").strip() or None
+            if em:
+                return em
+    exl = _fetch_baseline_exit_policy_features(conn, mid)
+    if isinstance(exl, dict):
+        em = str(exl.get("entry_market_event_id") or "").strip() or None
+        if em:
+            return em
+        op = exl.get("open_position")
+        if isinstance(op, dict):
+            em = str(op.get("entry_market_event_id") or "").strip() or None
+            if em:
+                return em
+    return None
+
+
 def _enrich_compact_baseline_dashboard_cell(
     conn: Any,
     market_event_id: str,
@@ -2187,6 +2224,8 @@ def build_baseline_trades_report(
                 em = pos_open.get("entry_market_event_id")
                 if em:
                     entry_mid_raw = str(em).strip() or None
+            if not entry_mid_raw:
+                entry_mid_raw = _resolve_entry_market_event_id_from_policy(conn, mid)
             held_disp = _format_held_display(hdm, hbars, tf or None)
             pnl = ledger_row.get("pnl_usd")
             ep = ledger_row.get("entry_price")
@@ -2375,6 +2414,19 @@ def build_baseline_trades_report(
     long_count = sum(1 for r in rows_out if str(r.get("side") or "").lower() == "long")
     short_count = sum(1 for r in rows_out if str(r.get("side") or "").lower() == "short")
 
+    paper_br_usd: float | None = None
+    paper_br_meta: dict[str, Any] = {}
+    try:
+        from modules.anna_training.jupiter_2_paper_collateral import (
+            resolve_free_collateral_usd_for_jupiter_policy,
+        )
+
+        paper_br_usd, paper_br_meta = resolve_free_collateral_usd_for_jupiter_policy(
+            ledger_db_path=db_path
+        )
+    except Exception:
+        paper_br_usd, paper_br_meta = None, {}
+
     active_position = build_baseline_active_position_snapshot(
         db_path=db_path,
         market_db_path=mpath,
@@ -2420,6 +2472,16 @@ def build_baseline_trades_report(
                     "baseline round-trip; multiple rows are multiple independent trades, not slices of one parent trade."
                 ),
             },
+            "paper_bankroll_at_report_time_usd": (
+                round(float(paper_br_usd), 6) if paper_br_usd is not None else None
+            ),
+            "paper_bankroll_at_report_time_meta": paper_br_meta,
+            "paper_bankroll_time_note": (
+                "paper_bankroll_at_report_time_* is resolver output **at report load** (journal + env "
+                "JUPITER_BASELINE_FREE_COLLATERAL_USD). Per-row free_collateral_usd comes from policy snapshots "
+                "**at trade time** (entry/exit features). Increasing capital changes **new** bars; re-run or "
+                "re-materialize policy rows if you need historical rows to reflect a new bankroll."
+            ),
             "orphan_rows_without_trade_id": orphan_rows_without_trade_id,
             "pnl_semantics": dict(PNL_SEMANTICS_OPERATOR_V1),
             "report_note": (
