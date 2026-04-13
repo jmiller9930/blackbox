@@ -111,6 +111,29 @@ services:
       - /mnt/SQLlite_dB:/mnt/SQLlite_dB
     restart: unless-stopped
 
+  # Jupiter_3: advance ``binance_strategy_bars_5m`` on a timer (Binance REST). Without this service,
+  # the table stalls after a manual one-shot sync — temporal failure for closed-bar evaluation.
+  binance-strategy-bars-sync:
+    image: python:3.11-alpine
+    working_dir: /repo
+    environment:
+      BLACKBOX_REPO_ROOT: /repo
+      BLACKBOX_MARKET_DATA_PATH: ${BLACKBOX_MARKET_DATA_PATH:-}
+      BINANCE_STRATEGY_SYNC_INTERVAL_SEC: ${BINANCE_STRATEGY_SYNC_INTERVAL_SEC:-120}
+    command:
+      [
+        "sh",
+        "-c",
+        "pip install -q --no-cache-dir certifi && exec python3 scripts/runtime/binance_strategy_bars_sync_loop.py",
+      ]
+    volumes:
+      - ../:/repo
+      - /mnt/SQLlite_dB:/mnt/SQLlite_dB
+    dns:
+      - 8.8.8.8
+      - 8.8.4.4
+    restart: unless-stopped
+
   web:
     build: .
     depends_on:

@@ -10,6 +10,11 @@ Environment:
   BLACKBOX_BINANCE_KLINE_SYMBOL — Binance spot symbol (default ``SOLUSDT``).
   BLACKBOX_BINANCE_STRATEGY_KLINE_LIMIT — default ``1000`` (max 1000).
   BLACKBOX_BINANCE_KLINE_TIMEOUT_SEC — HTTP timeout (default ``20``).
+
+**Scheduling:** This module does not run on a timer by itself. Production must use
+``binance_strategy_bars_sync_loop.py`` (see ``UIUX.Web/docker-compose.yml`` service
+``binance-strategy-bars-sync``) or an equivalent cron/systemd job; otherwise the table
+stalls after the last manual run.
 """
 
 from __future__ import annotations
@@ -17,6 +22,7 @@ from __future__ import annotations
 import json
 import os
 import sys
+import time
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -123,10 +129,20 @@ def sync_binance_strategy_bars_into_db(
     conn = connect_market_db(db_path)
     try:
         ensure_market_schema(conn)
+        now_ms = int(time.time() * 1000)
         for cand in raw:
             if not isinstance(cand, (list, tuple)) or len(cand) < 8:
                 n_skip += 1
                 continue
+            # Binance appends the **current** open candle as the last row; close time (index 6) is
+            # still in the future until the bucket closes. Skip — V3 evaluates **closed** bars only.
+            try:
+                close_ms = int(cand[6])
+                if close_ms > now_ms:
+                    n_skip += 1
+                    continue
+            except (TypeError, ValueError):
+                pass
             parsed = _parse_kline_row(cand)
             if parsed is None:
                 n_skip += 1
