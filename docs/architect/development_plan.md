@@ -189,6 +189,16 @@ Target: resume full-stack University and optional external context-provider expa
 
 **Deploy:** `git pull` + restart API; hard-refresh browser — stale static files explain “no UI change” on clawbot.
 
+### Slack conversational operator — canonical directive sequence (BBX-SLACK-*)
+
+**Canonical plan (governance + engineering):** [`slack_conversational_operator/canonical_development_plan.md`](slack_conversational_operator/canonical_development_plan.md)
+
+**Low-level design:** [`slack_conversational_operator/slack_conversational_operator_system_ldd.md`](slack_conversational_operator/slack_conversational_operator_system_ldd.md)
+
+Directive-driven delivery: **one bounded slice at a time**, proof returned, operator test, accept or reject. Phases **0–7** map to **BBX-SLACK-001** through **008**; deferred scope is **BBX-SLACK-009**. **Constraint:** Jupiter V2 trading policy behavior remains **untouched** by this workstream unless separately authorized.
+
+**Ordering note:** Implement **001–004** (governance lock → transport → intent → grounded tools) before named-agent overlays (**006**) and full context integration (**005**) per the recommended order in the canonical plan.
+
 ---
 
 ## Phase 5 — Core trading engine (next active build)

@@ -41,6 +41,8 @@ It is the **single source of truth** for project **rehydration** (Architect, Cur
 
 **Architect directives (registry):** [`docs/architect/directives/README.md`](architect/directives/README.md) — e.g. **4.6.3.3** (closed), **4.6.3.4** (Slack + config).
 
+**Slack conversational operator program (canonical):** Phased directive sequence **BBX-SLACK-001** through **009** — [`docs/architect/slack_conversational_operator/canonical_development_plan.md`](architect/slack_conversational_operator/canonical_development_plan.md). Directive-driven slices; **V2 policy untouched** unless separately authorized; companion LDD in the same folder.
+
 **Status Synchronization Rule (mandatory):**
 - The master plan and directive execution log must remain synchronized.
 - If a twig/sub-step is recorded as active, complete, closed, implemented, or corrected in the execution log, the master plan must reflect the same status granularity in the same change set (broader umbrella wording is not sufficient for a more specific log entry).

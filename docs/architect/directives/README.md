@@ -24,6 +24,7 @@ Add new directives here as **`directive_<id>_<short_title>.md`** and a row in th
 | **—** | Expose master plan via raw Git URL (ChatGPT / tooling) | [`../../cursor_directive_expose_master_plan.md`](../../cursor_directive_expose_master_plan.md) | Active (ops) |
 | **4.6.4** | Anna benchmark / architect submission artifact | [`../../benchmarks/anna_directive_4_6_4_architect_submission.md`](../../benchmarks/anna_directive_4_6_4_architect_submission.md) | Benchmark / evidence |
 | **Global** | Mandatory clawbot proof (all phases) | [`../global_clawbot_proof_standard.md`](../global_clawbot_proof_standard.md) | Non-negotiable |
+| **BBX-SLACK-001…009** | Slack → OpenClaw / BlackBox conversational operator (phased program) | [`../slack_conversational_operator/canonical_development_plan.md`](../slack_conversational_operator/canonical_development_plan.md) | **Canonical plan** — issue individual directive files per phase when active |
 
 ---
 
