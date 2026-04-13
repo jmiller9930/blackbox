@@ -520,6 +520,29 @@
       padding: 0.06rem 0.32rem;
       margin-bottom: 0.12rem;
     }
+    .tc-jup-scope-note {
+      font-size: 0.65rem;
+      color: var(--muted);
+      line-height: 1.35;
+      margin: 0 0 0.35rem;
+      padding: 0.25rem 0.35rem;
+      background: #f8fafc;
+      border-radius: 4px;
+      border: 1px solid #e2e8f0;
+    }
+    .tc-jup-entry-wrap {
+      margin: 0 0 0.4rem;
+      padding: 0.35rem 0.4rem;
+      border-radius: 6px;
+      border: 1px solid #bae6fd;
+      background: linear-gradient(180deg, #f0f9ff 0%, #fff 100%);
+    }
+    .tc-jup-entry-h {
+      font-size: 0.68rem;
+      font-weight: 700;
+      color: #0369a1;
+      margin: 0 0 0.25rem;
+    }
     .tc-mini { display: grid; grid-template-columns: auto 1fr; gap: 0.1rem 0.35rem; align-items: baseline; }
     .tc-mini .tc-id { font-family: ui-monospace, monospace; font-size: 0.62rem; word-break: break-all; }
     .tc-mini .lab { color: var(--muted); font-size: 0.58rem; text-transform: uppercase; }
@@ -1519,16 +1542,42 @@
       );
     }
     var narr = c && c.jupiter_tile_narrative ? String(c.jupiter_tile_narrative) : '';
+    var scopeNote = '';
+    if (baselineLane && c && c.jupiter_tile_narrative_scope_note) {
+      scopeNote =
+        '<div class="tc-jup-scope-note" role="note">' +
+        esc(String(c.jupiter_tile_narrative_scope_note)) +
+        '</div>';
+    }
+    var entrySnap = '';
+    if (baselineLane && c && c.baseline_entry_jupiter_tile_narrative) {
+      var emid =
+        c.baseline_entry_market_event_id != null && String(c.baseline_entry_market_event_id).trim() !== ''
+          ? String(c.baseline_entry_market_event_id).trim()
+          : '';
+      entrySnap =
+        '<div class="tc-jup-entry-wrap">' +
+        '<div class="tc-jup-entry-h">' +
+        esc(emid ? 'Why we entered — entry bar ' + emid : 'Why we entered — entry bar policy') +
+        '</div>' +
+        jupiterNarrativeLinesHtml(
+          String(c.baseline_entry_jupiter_tile_narrative),
+          'Entry-bar policy snapshot',
+          baselineLane
+        ) +
+        '</div>';
+    }
     var narrEl = narr
-      ? jupiterNarrativeLinesHtml(narr, 'Jupiter / Sean policy (5m bar)', baselineLane)
+      ? jupiterNarrativeLinesHtml(narr, 'Jupiter / Sean policy (this bar)', baselineLane)
       : '';
+    var jupStack = scopeNote + entrySnap + narrEl;
     if (!c || c.empty) {
       var ntBar =
         baselineLane
           ? 'tc-empty tc-no-trade tc-no-trade-amber'
           : 'tc-empty tc-no-trade';
       return tcCellSurface(
-        narrEl +
+        jupStack +
           jupChipHtml +
           '<span class="' +
           ntBar +
@@ -1711,7 +1760,7 @@
       esc(ocDisp) +
       '</div>';
     return tcCellSurface(
-      narrEl +
+      jupStack +
         jupChipHtml +
         vsLine +
         '<div class="' +
@@ -2231,8 +2280,28 @@
       jp && jp.baseline_jupiter_policy && jp.baseline_jupiter_policy.active_label
         ? String(jp.baseline_jupiter_policy.active_label)
         : 'JUPv2';
+    var entrySnapLive = '';
+    if (bl.entry_jupiter_tile_narrative && String(bl.entry_jupiter_tile_narrative).trim() !== '') {
+      var emLive =
+        bl.entry_market_event_id != null && String(bl.entry_market_event_id).trim() !== ''
+          ? String(bl.entry_market_event_id).trim()
+          : '';
+      entrySnapLive =
+        '<div class="tc-jup-entry-wrap" style="margin-bottom:0.5rem">' +
+        '<div class="tc-jup-entry-h">' +
+        esc(emLive ? 'Why we entered — entry bar ' + emLive : 'Why we entered — entry bar policy') +
+        '</div>' +
+        jupiterNarrativeLinesHtml(String(bl.entry_jupiter_tile_narrative), 'Entry bar policy', true) +
+        '</div>';
+    }
+    var opScope =
+      jp.operator_tile_narrative_scope_note && String(jp.operator_tile_narrative_scope_note).trim() !== ''
+        ? '<div class="tc-jup-scope-note" role="note">' + esc(String(jp.operator_tile_narrative_scope_note)) + '</div>'
+        : '';
     return (
       '<p class="tc-baseline-live-hint">Active baseline trade — timeline to the right is hidden until this position closes. Updates every poll.</p>' +
+      opScope +
+      entrySnapLive +
       '<div class="tc-baseline-live-tile">' +
       '<div class="tc-jup-policy-chip" style="margin:0 0 0.35rem 0" title="Jupiter baseline policy version">' +
       esc(jupLive) +

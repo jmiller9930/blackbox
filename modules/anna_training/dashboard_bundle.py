@@ -510,33 +510,39 @@ def build_jupiter_policy_snapshot(
         try:
             ensure_execution_ledger_schema(conn)
             raw, _pk = lookup_baseline_jupiter_open_state_json(conn, symbol=sym, timeframe=tf, mode="paper")
+            if raw:
+                pos = BaselineOpenPosition.from_json_dict(json.loads(raw))
+                mark = float(last["close"])
+                ur = unrealized_pnl_usd(
+                    entry=pos.entry_price, mark=mark, size=pos.size, side=pos.side
+                )
+                emid = str(pos.entry_market_event_id or "").strip()
+                entry_nar = ""
+                if emid:
+                    pol_ent = fetch_baseline_policy_evaluation_for_market_event(conn, emid)
+                    entry_nar = _format_jupiter_tile_narrative_from_policy_row(pol_ent)
+                out["baseline_lifecycle"] = {
+                    "position_open": True,
+                    "trade_id": pos.trade_id,
+                    "side": pos.side,
+                    "entry_price": pos.entry_price,
+                    "stop_loss": pos.stop_loss,
+                    "take_profit": pos.take_profit,
+                    "leverage": pos.leverage,
+                    "risk_pct": pos.risk_pct,
+                    "collateral_usd": pos.collateral_usd,
+                    "notional_usd": pos.notional_usd,
+                    "unrealized_pnl_usd": round(float(ur), 8),
+                    "breakeven_applied": pos.breakeven_applied,
+                    "entry_market_event_id": pos.entry_market_event_id,
+                    "entry_candle_open_utc": pos.entry_candle_open_utc,
+                    "atr_entry": pos.atr_entry,
+                    "entry_jupiter_tile_narrative": entry_nar or None,
+                }
+            else:
+                out["baseline_lifecycle"] = {"position_open": False}
         finally:
             conn.close()
-        if raw:
-            pos = BaselineOpenPosition.from_json_dict(json.loads(raw))
-            mark = float(last["close"])
-            ur = unrealized_pnl_usd(
-                entry=pos.entry_price, mark=mark, size=pos.size, side=pos.side
-            )
-            out["baseline_lifecycle"] = {
-                "position_open": True,
-                "trade_id": pos.trade_id,
-                "side": pos.side,
-                "entry_price": pos.entry_price,
-                "stop_loss": pos.stop_loss,
-                "take_profit": pos.take_profit,
-                "leverage": pos.leverage,
-                "risk_pct": pos.risk_pct,
-                "collateral_usd": pos.collateral_usd,
-                "notional_usd": pos.notional_usd,
-                "unrealized_pnl_usd": round(float(ur), 8),
-                "breakeven_applied": pos.breakeven_applied,
-                "entry_market_event_id": pos.entry_market_event_id,
-                "entry_candle_open_utc": pos.entry_candle_open_utc,
-                "atr_entry": pos.atr_entry,
-            }
-        else:
-            out["baseline_lifecycle"] = {"position_open": False}
     sf = out["features"] if isinstance(out["features"], dict) else {}
     pb_list = sf.get("policy_blockers")
     pbl = [str(x) for x in pb_list] if isinstance(pb_list, list) else None
@@ -546,6 +552,11 @@ def build_jupiter_policy_snapshot(
         trade=bool(sig.trade),
         side=str(sig.side or "flat"),
         policy_blockers=pbl,
+    )
+    out["operator_tile_narrative_scope"] = "latest_closed_bar"
+    out["operator_tile_narrative_scope_note"] = (
+        "Reflects the **latest closed bar** in this snapshot only. "
+        "When a position is open, see baseline_lifecycle.entry_jupiter_tile_narrative for the **entry bar** policy text."
     )
 
     # Explicit alignment chips for UI (same booleans as in features)
@@ -2797,6 +2808,70 @@ def _event_axis_from_market_bars(
     return mids, times, closes
 
 
+def _format_jupiter_tile_narrative_from_policy_row(pol: dict[str, Any] | None) -> str:
+    """Plain multi-line operator text from a ``policy_evaluations``-shaped row."""
+    if not pol:
+        return ""
+    from modules.anna_training.sean_jupiter_baseline_signal import format_jupiter_tile_narrative_v1
+
+    f = pol.get("features") if isinstance(pol.get("features"), dict) else {}
+    pb = f.get("policy_blockers")
+    pbl = [str(x) for x in pb] if isinstance(pb, list) else None
+    return format_jupiter_tile_narrative_v1(
+        features=dict(f) if isinstance(f, dict) else {},
+        reason_code=str(pol.get("reason_code") or ""),
+        trade=bool(pol.get("trade")),
+        side=str(pol.get("side") or "flat"),
+        policy_blockers=pbl,
+    )
+
+
+def _enrich_baseline_jupiter_context_for_cell(
+    conn: Any,
+    cell: dict[str, Any],
+    pol: dict[str, Any],
+    *,
+    phase: str,
+) -> dict[str, Any]:
+    """
+    Operator clarity: per-column ``jupiter_tile_narrative`` is **this bar**; held rows need **entry** context.
+    ``phase`` is ``open`` | ``held``.
+    """
+    if phase == "open":
+        cell["jupiter_tile_narrative_scope"] = "entry_bar"
+        cell["jupiter_tile_narrative_scope_note"] = (
+            "Policy details below are for this column’s bar — the lifecycle **entry** bar."
+        )
+        em = str(pol.get("market_event_id") or "").strip()
+        if em:
+            cell["baseline_entry_market_event_id"] = em
+        return cell
+    if phase == "held":
+        cell["jupiter_tile_narrative_scope"] = "current_bar"
+        cell["jupiter_tile_narrative_scope_note"] = (
+            "Policy details below are for **this bar only** (not the entry bar). "
+            "Holding means a position remains open from a **prior** bar."
+        )
+        feat = pol.get("features") if isinstance(pol.get("features"), dict) else {}
+        entry_mid: str | None = None
+        op = feat.get("open_position")
+        if isinstance(op, dict):
+            entry_mid = str(op.get("entry_market_event_id") or "").strip() or None
+        if not entry_mid:
+            em = str(feat.get("entry_market_event_id") or "").strip()
+            entry_mid = em or None
+        if entry_mid:
+            cell["baseline_entry_market_event_id"] = entry_mid
+            pol_e = fetch_baseline_policy_evaluation_for_market_event(conn, entry_mid)
+            nar = _format_jupiter_tile_narrative_from_policy_row(pol_e)
+            if nar:
+                cell["baseline_entry_jupiter_tile_narrative"] = nar
+            if pol_e:
+                cell["baseline_entry_policy_reason_code"] = str(pol_e.get("reason_code") or "") or None
+        return cell
+    return cell
+
+
 def _symbol_tf_from_market_event_id(market_event_id: str) -> tuple[str | None, str | None]:
     """Best-effort parse ``SYMBOL_TF_ISO8601`` from canonical ``market_event_id`` (e.g. ``SOL-PERP_5m_...``)."""
     s = str(market_event_id or "").strip()
@@ -3087,7 +3162,12 @@ def _compact_baseline_cell_policy_bound(
         )
     rc = str(pol.get("reason_code") or "")
     if pol.get("trade") and not ledger_row:
-        return _baseline_policy_open_cell(market_event_id=mid, policy_row=pol)
+        return _enrich_baseline_jupiter_context_for_cell(
+            conn,
+            _baseline_policy_open_cell(market_event_id=mid, policy_row=pol),
+            pol,
+            phase="open",
+        )
     # Closed fill for this bar: ledger is authoritative; policy row may not still say baseline exit.
     if (
         ledger_row
@@ -3111,10 +3191,15 @@ def _compact_baseline_cell_policy_bound(
         )
     if not pol.get("trade"):
         if rc == JUPITER_2_BASELINE_HOLDING_RC:
-            return _baseline_policy_held_cell(
-                market_event_id=mid,
-                policy_row=pol,
-                reason=_BASELINE_HELD_DISPLAY_REASON,
+            return _enrich_baseline_jupiter_context_for_cell(
+                conn,
+                _baseline_policy_held_cell(
+                    market_event_id=mid,
+                    policy_row=pol,
+                    reason=_BASELINE_HELD_DISPLAY_REASON,
+                ),
+                pol,
+                phase="held",
             )
         if rc == JUPITER_2_BASELINE_EXIT_RC:
             # Prefer column-keyed ledger row; else resolve by trade_id from policy features so we never
@@ -3565,6 +3650,11 @@ def build_trade_chain_payload(
                 if ck_row == "baseline" and d.get("lifecycle_tile_slot") == "continuation":
                     narr = ""
                 d["jupiter_tile_narrative"] = narr
+                if ck_row == "baseline" and narr and not d.get("jupiter_tile_narrative_scope"):
+                    d["jupiter_tile_narrative_scope"] = "current_bar"
+                    d["jupiter_tile_narrative_scope_note"] = (
+                        "Policy lines below are for **this column’s bar** (its market_event_id)."
+                    )
                 r["cells"][mid] = d
     finally:
         conn.close()
