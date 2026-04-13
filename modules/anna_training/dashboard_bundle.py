@@ -1654,75 +1654,6 @@ def _baseline_lifecycle_for_dashboard_from_active_snapshot(snap: dict[str, Any])
     }
 
 
-def build_baseline_closed_operator_tile_snapshot(
-    *,
-    db_path: Path | None = None,
-    market_db_path: Path | None = None,
-) -> dict[str, Any] | None:
-    """
-    Latest **lifecycle** baseline close (``bl_lc_…``) for the single in-column operator tile when flat.
-
-    Economics come from ``execution_trades`` + the same compact outcome path as the trade chain.
-    """
-    lp = db_path or default_execution_ledger_path()
-    if not lp.is_file():
-        return None
-    mpath = market_db_path if market_db_path is not None else _market_db_path()
-    conn = connect_ledger(lp)
-    try:
-        ensure_execution_ledger_schema(conn)
-        cur = conn.execute(
-            """
-            SELECT trade_id, strategy_id, lane, mode, market_event_id, symbol, timeframe,
-                   side, entry_time, entry_price, size, exit_time, exit_price, exit_reason,
-                   pnl_usd, context_snapshot_json, notes, trace_id, created_at_utc
-            FROM execution_trades
-            WHERE lane = ? AND strategy_id = ?
-              AND trade_id LIKE 'bl_lc_%'
-              AND exit_time IS NOT NULL AND trim(exit_time) != ''
-            ORDER BY COALESCE(exit_time, '') DESC, trade_id DESC
-            LIMIT 1
-            """,
-            (RESERVED_STRATEGY_BASELINE, RESERVED_STRATEGY_BASELINE),
-        )
-        r = cur.fetchone()
-        if not r:
-            return None
-        cols = [d[0] for d in cur.description]
-        row = dict(zip(cols, r))
-    finally:
-        conn.close()
-    cell = _compact_cell(row, market_db_path=mpath, chain_kind="baseline")
-    cell = _apply_baseline_closed_lifecycle_fields(cell)
-    tf = str(row.get("timeframe") or "5m")
-    hold_min, _bars = _hold_duration_minutes_and_bars(
-        row.get("entry_time"),
-        row.get("exit_time"),
-        tf,
-    )
-    return {
-        "schema": "blackbox_baseline_closed_operator_tile_v1",
-        "show": True,
-        "trade_id": cell.get("trade_id"),
-        "side": cell.get("side"),
-        "symbol": cell.get("symbol"),
-        "timeframe": cell.get("timeframe"),
-        "entry_time": cell.get("entry_time"),
-        "exit_time": cell.get("exit_time"),
-        "held_duration_minutes": round(float(hold_min), 4) if hold_min is not None else None,
-        "entry_price": cell.get("entry"),
-        "exit_price": cell.get("exit"),
-        "size": cell.get("size"),
-        "notional_usd_approx": cell.get("notional_usd_approx"),
-        "pnl_usd": cell.get("pnl_usd"),
-        "exit_reason": cell.get("exit_reason"),
-        "outcome": cell.get("outcome"),
-        "outcome_display": cell.get("outcome_display"),
-        "market_event_id": cell.get("market_event_id"),
-        "mode": cell.get("mode"),
-    }
-
-
 def build_baseline_trades_report(
     *,
     db_path: Path | None = None,
@@ -2100,6 +2031,63 @@ def _event_axis_from_market_bars(mpath: Path | None, *, limit: int) -> tuple[lis
         mids.append(str(r[0]))
         times.append(_normalize_utc_iso_for_axis(r[1]))
     return mids, times
+
+
+def _append_in_progress_5m_bar_to_axis(
+    mids: list[str],
+    times: list[str | None],
+    *,
+    max_events: int,
+) -> tuple[list[str], list[str | None]]:
+    """
+    Rightmost column must be the **current** 5m interval when wall clock has passed the last
+    stored bar's open (next bar started). Axis from ``market_bars_5m`` is last **closed** bars only;
+    append one synthetic column so e.g. 7:00 appears after 6:55 when time is 7:01.
+    """
+    if not mids:
+        return mids, times
+    _ensure_runtime_for_market_imports()
+    from datetime import timedelta, timezone
+
+    from market_data.market_event_id import make_market_event_id, parse_market_event_id
+
+    last_mid = str(mids[-1]).strip()
+    parsed = parse_market_event_id(last_mid)
+    if not parsed:
+        return mids, times
+    sym, tf, ts_s = parsed
+    if tf != "5m":
+        return mids, times
+    ts_norm = ts_s if str(ts_s).endswith("Z") else str(ts_s) + "Z"
+    dt_open = _parse_iso_ts(ts_norm)
+    if dt_open is None:
+        return mids, times
+    if dt_open.tzinfo is None:
+        dt_open = dt_open.replace(tzinfo=timezone.utc)
+    else:
+        dt_open = dt_open.astimezone(timezone.utc)
+    next_open = dt_open + timedelta(minutes=5)
+    now = datetime.now(timezone.utc)
+    if now < next_open:
+        return mids, times
+    mid_new = make_market_event_id(
+        canonical_symbol=sym,
+        candle_open_utc=next_open,
+        timeframe=tf,
+    )
+    if mid_new in mids:
+        return mids, times
+    iso = next_open.isoformat().replace("+00:00", "Z")
+    out_m = list(mids) + [mid_new]
+    out_t = list(times)
+    while len(out_t) < len(mids):
+        out_t.append(None)
+    out_t.append(iso)
+    max_cols = max(4, min(48, int(max_events)))
+    while len(out_m) > max_cols:
+        out_m = out_m[1:]
+        out_t = out_t[1:]
+    return out_m, out_t
 
 
 def _symbol_tf_from_market_event_id(market_event_id: str) -> tuple[str | None, str | None]:
@@ -2674,6 +2662,12 @@ def build_trade_chain_payload(
         ensure_execution_ledger_schema(conn)
         event_axis, event_axis_time_utc_iso = _event_axis_from_market_bars(mpath, limit=max_events)
         event_axis_source = "market_bars_5m"
+        if event_axis and event_axis_source == "market_bars_5m":
+            event_axis, event_axis_time_utc_iso = _append_in_progress_5m_bar_to_axis(
+                event_axis,
+                event_axis_time_utc_iso,
+                max_events=max_events,
+            )
         if not event_axis:
             event_axis, event_axis_time_utc_iso = _distinct_event_axis_with_times(conn, limit=max_events)
             event_axis_source = "execution_trades_fallback"
@@ -3133,18 +3127,6 @@ def build_dashboard_bundle(
     except Exception:
         if "baseline_lifecycle" not in jupiter_policy_snapshot:
             jupiter_policy_snapshot["baseline_lifecycle"] = {"position_open": False}
-
-    try:
-        blc = jupiter_policy_snapshot.get("baseline_lifecycle") or {}
-        if not bool(blc.get("position_open")):
-            ct = build_baseline_closed_operator_tile_snapshot(
-                db_path=db_path,
-                market_db_path=_market_db_path(),
-            )
-            if ct:
-                jupiter_policy_snapshot["baseline_closed_operator_tile"] = ct
-    except Exception:
-        pass
 
     learning_summary_for_vis: dict[str, Any] = {
         "ui_state": ui_state,
