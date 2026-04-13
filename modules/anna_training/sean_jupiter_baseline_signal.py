@@ -455,6 +455,50 @@ def format_jupiter_tile_narrative_v1(
     return "\n".join(lines)
 
 
+def format_baseline_jupiter_tile_narrative(
+    *,
+    signal_mode: str,
+    features: Any,
+    reason_code: str,
+    trade: bool,
+    side: str,
+    policy_blockers: list[str] | None = None,
+) -> str:
+    """
+    Dispatch **Jupiter_2** rich tile (``features["tile"]`` — Supertrend / EMA200 / ATR ratio) vs
+    **Jupiter_3** narrative (``features["jupiter_policy_narrative"]`` or key dump).
+
+    Persisted ``policy_evaluations`` must pass each row's ``signal_mode`` so historical v2 bars
+    still show v2 rules after the operator switches the active slot to v3.
+    """
+    from modules.anna_training.execution_ledger import SIGNAL_MODE_JUPITER_3
+
+    feat = features if isinstance(features, dict) else {}
+    sm = (signal_mode or "").strip()
+    parity = str(feat.get("parity") or "")
+    is_j3 = sm == SIGNAL_MODE_JUPITER_3 or "jupiter_3" in parity
+    if is_j3:
+        jn = feat.get("jupiter_policy_narrative")
+        if isinstance(jn, str) and jn.strip():
+            return jn.strip()
+        return _format_jupiter_3_operator_narrative(
+            feat,
+            reason_code=reason_code,
+            trade=bool(trade),
+            side=str(side or "flat"),
+        )
+    pb = policy_blockers
+    if pb is None and isinstance(feat.get("policy_blockers"), list):
+        pb = [str(x) for x in feat["policy_blockers"]]
+    return format_jupiter_tile_narrative_v1(
+        features=feat,
+        reason_code=reason_code,
+        trade=bool(trade),
+        side=str(side or "flat"),
+        policy_blockers=pb,
+    )
+
+
 @dataclass(frozen=True)
 class SeanJupiterBaselineSignalV1:
     """Outcome of evaluating the **latest** closed bar vs the prior bar."""

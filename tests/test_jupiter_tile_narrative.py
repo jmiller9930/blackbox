@@ -2,7 +2,11 @@
 
 from __future__ import annotations
 
-from modules.anna_training.sean_jupiter_baseline_signal import format_jupiter_tile_narrative_v1
+from modules.anna_training.execution_ledger import SIGNAL_MODE_JUPITER_2, SIGNAL_MODE_JUPITER_3
+from modules.anna_training.sean_jupiter_baseline_signal import (
+    format_baseline_jupiter_tile_narrative,
+    format_jupiter_tile_narrative_v1,
+)
 
 
 def test_format_without_tile_shows_reason() -> None:
@@ -115,3 +119,59 @@ def test_rsi_extreme_skip_uses_operator_filter_copy() -> None:
     assert "Signals: short=false" in t
     assert "Filter: extreme RSI" in t
     assert "Volatility gate: blocked" in t
+
+
+def test_baseline_dispatcher_v3_uses_jupiter_policy_narrative_string() -> None:
+    custom = "Jupiter_3 — EMA9/21 bias long; BOS ok; volume spike yes; NO TRADE (reason)."
+    t = format_baseline_jupiter_tile_narrative(
+        signal_mode=SIGNAL_MODE_JUPITER_3,
+        features={"jupiter_policy_narrative": custom, "tile": {}},
+        reason_code="no_signal",
+        trade=False,
+        side="flat",
+    )
+    assert t == custom
+    assert "Supertrend" not in t
+
+
+def test_baseline_dispatcher_v2_still_uses_supertrend_tile() -> None:
+    features = {
+        "short_signal_raw": False,
+        "long_signal_raw": False,
+        "tile": {
+            "candle_open_utc": "2026-04-06T18:30:00.000Z",
+            "new_ohlcv": {"o": 82.0, "h": 83.0, "l": 81.0, "c": 82.1, "v": 590},
+            "prev_ohlc": {"o": 82.1, "h": 83.0, "l": 82.0, "c": 82.08},
+            "prev_rsi": 59.85,
+            "current_rsi": 52.4,
+            "supertrend_label": "BULLISH (green)",
+            "atr_current": 0.127,
+            "atr_avg200": 0.094,
+            "atr_ratio": 1.35,
+            "price_vs_ema200": "BELOW",
+            "ema200": 81.986,
+            "breakdown_long": {
+                "supertrend_bullish": True,
+                "above_ema": False,
+                "rsi_gt_52": True,
+                "higher_close": False,
+                "long_ok": False,
+            },
+            "breakdown_short": {
+                "supertrend_bearish": False,
+                "below_ema": True,
+                "rsi_lt_48": False,
+                "lower_close": True,
+                "short_ok": False,
+            },
+        },
+    }
+    t = format_baseline_jupiter_tile_narrative(
+        signal_mode=SIGNAL_MODE_JUPITER_2,
+        features=features,
+        reason_code="no_signal",
+        trade=False,
+        side="flat",
+    )
+    assert "Supertrend:" in t
+    assert "SIG LONG false" in t or "long=false" in t

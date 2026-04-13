@@ -387,7 +387,7 @@ def build_jupiter_policy_snapshot(
         MIN_BARS as MIN_BARS_JUPITER_2,
         evaluate_sean_jupiter_baseline_v1,
         evaluate_sean_jupiter_baseline_v3,
-        format_jupiter_tile_narrative_v1,
+        format_baseline_jupiter_tile_narrative,
     )
 
     mpath = market_db_path if market_db_path is not None else _market_db_path()
@@ -557,7 +557,8 @@ def build_jupiter_policy_snapshot(
     sf = out["features"] if isinstance(out["features"], dict) else {}
     pb_list = sf.get("policy_blockers")
     pbl = [str(x) for x in pb_list] if isinstance(pb_list, list) else None
-    out["operator_tile_narrative"] = format_jupiter_tile_narrative_v1(
+    out["operator_tile_narrative"] = format_baseline_jupiter_tile_narrative(
+        signal_mode=str(out.get("baseline_signal_mode") or ""),
         features=sf,
         reason_code=str(sig.reason_code or ""),
         trade=bool(sig.trade),
@@ -785,12 +786,16 @@ def _event_axis_jupiter_tile_narratives(
     from persisted ``features_json`` (and row trade/side/reason_code) — never recomputed from
     bars. Recompute from ``market_bars_5m`` only when **no** policy row is present.
     """
-    from modules.anna_training.execution_ledger import fetch_baseline_policy_evaluation_for_market_event
+    from modules.anna_training.execution_ledger import (
+        SIGNAL_MODE_JUPITER_2,
+        SIGNAL_MODE_JUPITER_3,
+        fetch_baseline_policy_evaluation_for_market_event,
+    )
     from modules.anna_training.sean_jupiter_baseline_signal import (
         MIN_BARS as MIN_BARS_JUPITER_2,
         evaluate_sean_jupiter_baseline_v1,
         evaluate_sean_jupiter_baseline_v3,
-        format_jupiter_tile_narrative_v1,
+        format_baseline_jupiter_tile_narrative,
     )
     from modules.anna_training.jupiter_3_sean_policy import MIN_BARS as MIN_BARS_JUPITER_3
     from modules.anna_training.store import load_state as _load_training_state
@@ -808,6 +813,7 @@ def _event_axis_jupiter_tile_narratives(
 
     use_v3 = get_baseline_jupiter_policy_slot(conn) == BASELINE_POLICY_SLOT_JUP_V3
     min_bars = MIN_BARS_JUPITER_3 if use_v3 else MIN_BARS_JUPITER_2
+    sm_active = SIGNAL_MODE_JUPITER_3 if use_v3 else SIGNAL_MODE_JUPITER_2
 
     for mid in event_axis:
         mid_s = str(mid or "").strip()
@@ -818,7 +824,8 @@ def _event_axis_jupiter_tile_narratives(
             f = dict(row["features"]) if isinstance(row.get("features"), dict) else {}
             pb = f.get("policy_blockers")
             pbl = [str(x) for x in pb] if isinstance(pb, list) else None
-            out[mid_s] = format_jupiter_tile_narrative_v1(
+            out[mid_s] = format_baseline_jupiter_tile_narrative(
+                signal_mode=str(row.get("signal_mode") or ""),
                 features=f,
                 reason_code=str(row.get("reason_code") or ""),
                 trade=bool(row.get("trade")),
@@ -827,7 +834,8 @@ def _event_axis_jupiter_tile_narratives(
             )
             continue
         if not mpath or not mpath.is_file():
-            out[mid_s] = format_jupiter_tile_narrative_v1(
+            out[mid_s] = format_baseline_jupiter_tile_narrative(
+                signal_mode=sm_active,
                 features={},
                 reason_code="market_db_unavailable",
                 trade=False,
@@ -857,7 +865,8 @@ def _event_axis_jupiter_tile_narratives(
                     None,
                 )
             if idx is None or len(bars[: idx + 1]) < min_bars:
-                out[mid_s] = format_jupiter_tile_narrative_v1(
+                out[mid_s] = format_baseline_jupiter_tile_narrative(
+                    signal_mode=sm_active,
                     features={},
                     reason_code="bar_not_in_window_or_short_history",
                     trade=False,
@@ -880,7 +889,8 @@ def _event_axis_jupiter_tile_narratives(
             sf = dict(sig.features) if isinstance(sig.features, dict) else {}
             pb = sf.get("policy_blockers")
             pbl = [str(x) for x in pb] if isinstance(pb, list) else None
-            out[mid_s] = format_jupiter_tile_narrative_v1(
+            out[mid_s] = format_baseline_jupiter_tile_narrative(
+                signal_mode=sm_active,
                 features=sf,
                 reason_code=sig.reason_code,
                 trade=sig.trade,
@@ -2823,12 +2833,13 @@ def _format_jupiter_tile_narrative_from_policy_row(pol: dict[str, Any] | None) -
     """Plain multi-line operator text from a ``policy_evaluations``-shaped row."""
     if not pol:
         return ""
-    from modules.anna_training.sean_jupiter_baseline_signal import format_jupiter_tile_narrative_v1
+    from modules.anna_training.sean_jupiter_baseline_signal import format_baseline_jupiter_tile_narrative
 
     f = pol.get("features") if isinstance(pol.get("features"), dict) else {}
     pb = f.get("policy_blockers")
     pbl = [str(x) for x in pb] if isinstance(pb, list) else None
-    return format_jupiter_tile_narrative_v1(
+    return format_baseline_jupiter_tile_narrative(
+        signal_mode=str(pol.get("signal_mode") or ""),
         features=dict(f) if isinstance(f, dict) else {},
         reason_code=str(pol.get("reason_code") or ""),
         trade=bool(pol.get("trade")),
