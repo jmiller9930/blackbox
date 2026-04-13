@@ -1737,7 +1737,7 @@
     if (recent && recent.length) {
       if (meta) {
         meta.textContent =
-          'Latest Close policy TRADE rows only (Sean Jupiter authoritative close — same as Reports dashboard › Baseline trades scope “Close policy TRADE”). Open Reports dashboard for dates, scope, and CSV.';
+          'Latest rows for Show → Trades only (Sean Jupiter authoritative close — same as Reports dashboard). Open Reports dashboard for dates, scope, and CSV.';
       }
       var html = '';
       var ri;
@@ -1794,7 +1794,7 @@
     }
     if (meta) {
       meta.textContent =
-        'No Close policy TRADE rows in recent window — raw ledger may still have rows; open Reports dashboard › Baseline trades and set scope to “All ledger rows” or “Close not policy TRADE” to inspect. The trade chain below may still show evaluation.';
+        'No Trades rows in recent window — raw ledger may still have rows; open Reports dashboard and set Show to ALL baseline or No trades to inspect. The trade chain below may still show evaluation.';
     }
     tbody.innerHTML =
       '<tr><td colspan="4">No policy TRADE executions in the recent window (or none yet).</td></tr>';
