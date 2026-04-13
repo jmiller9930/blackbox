@@ -526,6 +526,28 @@
     /* Anna lane chips: neutral slate only (no second accent palette). */
     .tc-chip-anna-kind { background: #f1f5f9; color: #475569; margin-right: 0.2rem; border: 1px solid #e2e8f0; }
     .tc-chip-life { background: #f1f5f9; color: #475569; border: 1px solid #e2e8f0; }
+    .tc-jup-policy-row {
+      display: flex;
+      align-items: center;
+      gap: 0.35rem;
+      flex-wrap: wrap;
+      margin-bottom: 0.12rem;
+    }
+    .tc-binance-vol-dot {
+      display: inline-block;
+      width: 0.55rem;
+      height: 0.55rem;
+      border-radius: 50%;
+      flex-shrink: 0;
+    }
+    .tc-binance-vol-ok {
+      background: #22c55e;
+      box-shadow: 0 0 0 1px rgba(15, 23, 42, 0.28);
+    }
+    .tc-binance-vol-bad {
+      background: #ef4444;
+      box-shadow: 0 0 0 1px rgba(15, 23, 42, 0.28);
+    }
     .tc-jup-policy-chip {
       display: inline-block;
       font-size: 0.58rem;
@@ -536,7 +558,7 @@
       border: 1px solid #94a3b8;
       border-radius: 3px;
       padding: 0.06rem 0.32rem;
-      margin-bottom: 0.12rem;
+      margin-bottom: 0;
     }
     .tc-jup-scope-note {
       font-size: 0.65rem;
@@ -1672,10 +1694,28 @@
     var jpBundle = opts.jp || {};
     var bjpol = jpBundle.baseline_jupiter_policy || {};
     var jupLab = String(bjpol.active_label || 'JUPv2').trim() || 'JUPv2';
+    var binanceDotHtml = '';
+    if (baselineLane && jupLab === 'JUPv3') {
+      var bVolOk = c && c.binance_kline_volume_ok === true;
+      binanceDotHtml =
+        '<span class="tc-binance-vol-dot ' +
+        (bVolOk ? 'tc-binance-vol-ok' : 'tc-binance-vol-bad') +
+        '" title="' +
+        esc(
+          bVolOk
+            ? 'Binance kline quote volume on this bar (volume_base) — same field as the volume spike gate'
+            : 'No Binance quote volume on this bar (volume_base missing or zero) — spike gate not fed by kline API data'
+        ) +
+        '" aria-label="' +
+        esc(bVolOk ? 'Binance kline volume present' : 'Binance kline volume missing') +
+        '"></span>';
+    }
     var jupChipHtml = baselineLane
-      ? '<div class="tc-jup-policy-chip" title="Jupiter baseline policy version">' +
+      ? '<div class="tc-jup-policy-row">' +
+        binanceDotHtml +
+        '<div class="tc-jup-policy-chip" title="Jupiter baseline policy version">' +
         esc(jupLab) +
-        '</div>'
+        '</div></div>'
       : '';
     // One trade, one live surface: never repeat OPEN/HOLDING on earlier columns when ledger says position is open.
     // When baselineAnchorIdx is set, renderTC places the live tile at that column with colspan — left columns use real cells; skip this dash.

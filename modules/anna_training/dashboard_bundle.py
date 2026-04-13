@@ -51,6 +51,30 @@ _BASELINE_CANONICAL_SYMBOL_DEFAULT = "SOL-PERP"
 BASELINE_JUPITER_POLICY_VERSION_TAG = "JUPv2"
 
 
+def _binance_kline_volume_ok_from_features(features: dict[str, Any] | None) -> bool:
+    """
+    Sean / operator **green ball**: this bar's policy features include usable **Binance kline quote
+    volume** (same field the Jupiter_3 spike gate uses: ``market_bars_5m.volume_base`` from REST klines).
+
+    Not an HTTP probe — **True** means persisted policy snapshot says quote volume is present and positive.
+    """
+    if not isinstance(features, dict) or not features:
+        return False
+    eb = features.get("evaluated_bar")
+    if isinstance(eb, dict):
+        note = str(eb.get("volume_source_note") or "")
+        if note == "binance_kline_quote_volume":
+            try:
+                return float(eb.get("volume_base") or 0) > 0
+            except (TypeError, ValueError):
+                return False
+    try:
+        cv = float(features.get("candle_volume") or 0)
+    except (TypeError, ValueError):
+        cv = 0.0
+    return cv > 0
+
+
 def _trade_chain_axis_canonical_symbol() -> str:
     raw = (os.environ.get("BLACKBOX_TRADE_CHAIN_CANONICAL_SYMBOL") or "").strip()
     return raw or _BASELINE_CANONICAL_SYMBOL_DEFAULT
@@ -862,6 +886,9 @@ def build_jupiter_policy_snapshot(
     out["reason_code"] = sig.reason_code
     out["pnl_usd_open_to_close_hint"] = None
     out["features"] = dict(sig.features) if isinstance(sig.features, dict) else sig.features
+    if use_v3:
+        _feat_snap = out["features"] if isinstance(out.get("features"), dict) else {}
+        out["binance_kline_volume_ok"] = _binance_kline_volume_ok_from_features(_feat_snap)
 
     import json
 
@@ -3055,6 +3082,10 @@ def build_baseline_trades_report(
                 r["jupiter_v3_gates"] = tile_v3_gates[mk]
             ledger_row_i, cell_i, _pos_open_i = meta_pairs[i]
             pol_i = fetch_baseline_policy_evaluation_for_market_event(conn, mk)
+            _pfeat = pol_i.get("features") if isinstance(pol_i, dict) else None
+            r["binance_kline_volume_ok"] = _binance_kline_volume_ok_from_features(
+                dict(_pfeat) if isinstance(_pfeat, dict) else None
+            )
             r["baseline_jupiter_policy_tag"] = baseline_jupiter_policy_tag_from_signal_mode(
                 str((pol_i or {}).get("signal_mode") or "")
             )
@@ -4108,11 +4139,23 @@ def build_trade_chain_payload(
             rs["jupiter_tile_narrative"] = tile_narr.get(mid_rs, "") if mid_rs else ""
             if mid_rs and tile_v3_gates_axis.get(mid_rs):
                 rs["jupiter_v3_gates"] = tile_v3_gates_axis[mid_rs]
+            pol_rs = (
+                fetch_baseline_policy_evaluation_for_market_event(conn, mid_rs) if mid_rs else None
+            )
+            _pf_rs = pol_rs.get("features") if isinstance(pol_rs, dict) else None
+            rs["binance_kline_volume_ok"] = _binance_kline_volume_ok_from_features(
+                dict(_pf_rs) if isinstance(_pf_rs, dict) else None
+            )
         for br in baseline_ledger:
             mid_k = str(br.get("market_event_id") or "").strip()
             br["jupiter_tile_narrative"] = tile_narr.get(mid_k, "") if mid_k else ""
             if mid_k and tile_v3_gates_axis.get(mid_k):
                 br["jupiter_v3_gates"] = tile_v3_gates_axis[mid_k]
+            pol_br = fetch_baseline_policy_evaluation_for_market_event(conn, mid_k) if mid_k else None
+            _pf_br = pol_br.get("features") if isinstance(pol_br, dict) else None
+            br["binance_kline_volume_ok"] = _binance_kline_volume_ok_from_features(
+                dict(_pf_br) if isinstance(_pf_br, dict) else None
+            )
         baseline_trades_report_rows = baseline_ledger
         tests, strats, note = _strategy_buckets(conn)
         lc_map = _lifecycle_by_strategy(conn)
@@ -4225,6 +4268,12 @@ def build_trade_chain_payload(
                 mid_k = str(mid).strip()
                 if ck_row == "baseline" and mid_k and tile_v3_gates_axis.get(mid_k):
                     d["jupiter_v3_gates"] = tile_v3_gates_axis[mid_k]
+                if ck_row == "baseline" and mid_k:
+                    pol_cell = fetch_baseline_policy_evaluation_for_market_event(conn, mid_k)
+                    _pf_cell = pol_cell.get("features") if isinstance(pol_cell, dict) else None
+                    d["binance_kline_volume_ok"] = _binance_kline_volume_ok_from_features(
+                        dict(_pf_cell) if isinstance(_pf_cell, dict) else None
+                    )
                 if ck_row == "baseline" and narr and not d.get("jupiter_tile_narrative_scope"):
                     d["jupiter_tile_narrative_scope"] = "current_bar"
                     d["jupiter_tile_narrative_scope_note"] = (
