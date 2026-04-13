@@ -1033,7 +1033,7 @@ def _recent_baseline_trades_for_dashboard_strip(
     mpath = market_db_path
     cur = conn.execute(
         """
-        SELECT market_event_id, side, symbol, timeframe, entry_time, entry_price, exit_price,
+        SELECT lane, strategy_id, market_event_id, side, symbol, timeframe, entry_time, entry_price, exit_price,
                exit_reason, exit_time, size, pnl_usd, created_at_utc, trade_id
         FROM execution_trades
         WHERE lane = 'baseline' AND strategy_id = ?
@@ -1097,6 +1097,10 @@ def _recent_baseline_policy_trade_rows_for_strip(
 
     Scans up to ``scan_cap`` recent ledger rows until ``limit`` authoritative trades are found.
     Matches the baseline report when scoped to **trade** only — unlike raw ledger strips.
+    Ledger rows must include ``lane`` / ``strategy_id`` so lifecycle closes classify like the report.
+
+    This is a **condensed preview** (row cap), not a full duplicate of Reports: no CSV, no arbitrary
+    date window, no modal — use Reports for SL/TP columns, full lifecycle, exports.
 
     Order by **exit_time** (then insert time) so the strip's newest row aligns with the **latest closed**
     trade in the chain, not merely the most recently inserted ledger row.
@@ -1106,7 +1110,7 @@ def _recent_baseline_policy_trade_rows_for_strip(
     mpath = market_db_path
     cur = conn.execute(
         """
-        SELECT market_event_id, side, symbol, timeframe, entry_time, entry_price, exit_price,
+        SELECT lane, strategy_id, market_event_id, side, symbol, timeframe, entry_time, entry_price, exit_price,
                exit_reason, exit_time, size, pnl_usd, created_at_utc, trade_id, mode
         FROM execution_trades
         WHERE lane = 'baseline' AND strategy_id = ?
@@ -3297,7 +3301,7 @@ def build_trade_chain_payload(
             conn, limit=50, market_db_path=mpath
         )
         recent_strip = _recent_baseline_policy_trade_rows_for_strip(
-            conn, limit=3, market_db_path=mpath
+            conn, limit=5, market_db_path=mpath
         )
         for rs in recent_strip:
             mid_rs = str(rs.get("market_event_id") or "").strip()
