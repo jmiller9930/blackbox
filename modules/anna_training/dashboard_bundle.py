@@ -515,12 +515,15 @@ def _baseline_entry_snapshot_for_active_slot(
     em = str(entry_mid or "").strip()
     if not em:
         return "", None
-    persisted = _entry_snapshot_from_persisted_open_position(conn, em)
-    if persisted is not None:
-        pnar, pgates = persisted
-        if pnar or pgates is not None:
-            return pnar, pgates
     policy_slot = get_baseline_jupiter_policy_slot(conn)
+    # JUPv3: do **not** short-circuit on persisted ``BaselineOpenPosition`` snapshots. Those fields
+    # have been observed wrong (this-bar eval stored as entry); we must recompute at ``entry_mid``.
+    if policy_slot != BASELINE_POLICY_SLOT_JUP_V3:
+        persisted = _entry_snapshot_from_persisted_open_position(conn, em)
+        if persisted is not None:
+            pnar, pgates = persisted
+            if pnar or pgates is not None:
+                return pnar, pgates
     st = training_state if isinstance(training_state, dict) else None
     if st is None:
         from modules.anna_training.store import load_state as _load_training_state
