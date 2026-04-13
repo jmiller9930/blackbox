@@ -354,7 +354,7 @@
       <div class="bt-section">
         <h1>Baseline trades report</h1>
         <p class="bt-desc">
-          <strong>One row per closed trade</strong> (<code>trade_id</code>) from ledger fills. <strong>Active baseline position</strong> (open Jupiter paper key) is shown above the table when present—same economic fields as the dashboard lifecycle tile (mark, unrealized PnL, SL/TP, sizing). <strong>Click a row</strong> for a closed-trade snapshot. Open/held bars also appear on the <strong>dashboard trade chain</strong>. QEL is cohort evaluation—see the QEL page.
+          <strong>One row per closed trade</strong> (<code>trade_id</code>) from ledger fills. Lifecycle <code>trade_id</code> (<code>bl_lc_…</code>) is derived from the <strong>entry</strong> bar identity; the <code>market_event_id</code> column on each row is the <strong>exit</strong> bar where the close was recorded—use the <strong>Entry MEI</strong> column when you need to line up with the opening bar. <strong>Active baseline position</strong> (open Jupiter paper key) is shown above the table when present—same economic fields as the dashboard lifecycle tile (mark, unrealized PnL, SL/TP, sizing). <strong>Click a row</strong> for a closed-trade snapshot. Open/held bars also appear on the <strong>dashboard trade chain</strong>. QEL is cohort evaluation—see the QEL page.
         </p>
         <p class="bt-econ-banner" id="bt-econ-banner" role="status">
           <strong>PnL column:</strong> gross model USD from fill prices and size—<strong>not</strong> net of fees, funding, or slippage. Small dollar amounts are normal when the price move is small. Full wording is in API <code>meta.pnl_semantics</code> after load.
@@ -398,14 +398,15 @@
           <table class="bt-rpt">
             <thead>
               <tr>
-                <th title="One trade id per row (deduplicated).">trade_id</th>
+                <th title="Lifecycle key from entry bar + mode (bl_lc_…); not the same string as exit market_event_id.">trade_id</th>
+                <th title="Entry bar market_event_id when recorded (lifecycle); aligns trade_id with the opening candle.">Entry MEI</th>
                 <th title="When the position opened (ledger entry time, UTC).">Open (UTC)</th>
                 <th title="Time in trade and approximate bars.">Held</th>
                 <th title="When the position closed (UTC).">Exit (UTC)</th>
                 <th title="Exit reason and outcome.">Status</th>
                 <th title="Symbol.">Sym</th>
                 <th title="Timeframe.">TF</th>
-                <th title="Close bar event id.">market_event_id</th>
+                <th title="Exit/close bar market_event_id on this ledger row (Jupiter tile narrative is keyed here).">market_event_id</th>
                 <th title="Mode.">Mode</th>
                 <th title="Side.">Side</th>
                 <th title="TRADE vs NO TRADE.">Policy</th>
@@ -428,7 +429,7 @@
               </tr>
             </thead>
             <tbody id="bt-tbody">
-              <tr><td colspan="27">Loading…</td></tr>
+              <tr><td colspan="28">Loading…</td></tr>
             </tbody>
           </table>
         </div>
@@ -463,7 +464,7 @@
   <script>
     (function () {
       var state = { rows: [], meta: {} };
-      var COLS = 27;
+      var COLS = 28;
       var TIP_QEL_ROW =
         "QEL scores and survival decisions apply to Anna strategy cohorts, not to each baseline ledger row. Open QEL evaluation in the nav for details.";
 
@@ -627,6 +628,10 @@
           var reason = r.baseline_authority_reason || "";
           var mode = r.mode != null ? String(r.mode) : "—";
           var tid = r.trade_id != null && String(r.trade_id).trim() !== "" ? String(r.trade_id) : "—";
+          var entryMei =
+            r.entry_market_event_id != null && String(r.entry_market_event_id).trim() !== ""
+              ? String(r.entry_market_event_id)
+              : "—";
           var openUtc =
             r.lifecycle_open_at_utc != null && String(r.lifecycle_open_at_utc).trim() !== ""
               ? String(r.lifecycle_open_at_utc)
@@ -662,9 +667,13 @@
             escAttr(mid) +
             '" title="Click row: trade snapshot (policy narrative is optional below)">' +
             '<td class="bt-mono bt-mono--mid" title="' +
-            escAttr("One row per trade_id.") +
+            escAttr("Lifecycle trade key; see Entry MEI column for opening bar id.") +
             '">' +
             esc(tid) +
+            '</td><td class="bt-mono bt-mono--mid" title="' +
+            escAttr("Entry bar market_event_id (from lifecycle context); differs from exit market_event_id.") +
+            '">' +
+            esc(entryMei) +
             '</td><td class="bt-mono" title="' +
             escAttr("Position opened (UTC).") +
             '">' +
@@ -818,9 +827,11 @@
         var pre = document.getElementById("bt-modal-pre");
         var snapEl = document.getElementById("bt-modal-snapshot");
         var humEl = document.getElementById("bt-modal-human");
+        var emid = row.entry_market_event_id != null ? String(row.entry_market_event_id) : "";
         line.textContent =
           (tid ? "trade_id: " + tid : "") +
-          (mid ? (tid ? " · " : "") + "market_event_id: " + mid : "");
+          (emid ? (tid ? " · " : "") + "entry MEI: " + emid : "") +
+          (mid ? (tid || emid ? " · " : "") + "exit MEI: " + mid : "");
         if (humEl) {
           humEl.innerHTML = formatSnapshotHuman(row.operator_trade_snapshot);
         }
@@ -848,6 +859,7 @@
       function rowsToCsv(rows) {
         var cols = [
           "trade_id",
+          "entry_market_event_id",
           "lifecycle_open_at_utc",
           "lifecycle_held_display",
           "lifecycle_closed_at_utc",

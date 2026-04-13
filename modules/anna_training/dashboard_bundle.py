@@ -1859,6 +1859,12 @@ def build_baseline_trades_report(
             )
             tid_raw = str(ledger_row.get("trade_id") or "").strip() or None
             pos_open = _fetch_position_open_payload(conn, tid_raw)
+            ctx_ledger = _ledger_context_parsed(ledger_row)
+            entry_mid_raw = str(ctx_ledger.get("entry_market_event_id") or "").strip() or None
+            if not entry_mid_raw and pos_open:
+                em = pos_open.get("entry_market_event_id")
+                if em:
+                    entry_mid_raw = str(em).strip() or None
             held_disp = _format_held_display(hdm, hbars, tf or None)
             pnl = ledger_row.get("pnl_usd")
             ep = ledger_row.get("entry_price")
@@ -1901,6 +1907,7 @@ def build_baseline_trades_report(
             rows_out.append(
                 {
                     "trade_id": tid_raw,
+                    "entry_market_event_id": entry_mid_raw,
                     "lifecycle_open_at_utc": entry_time_utc_iso or "",
                     "lifecycle_held_display": held_disp,
                     "lifecycle_closed_at_utc": exit_time_utc_iso or "",
@@ -2051,7 +2058,10 @@ def build_baseline_trades_report(
                 "initial_take_profit. Exit SL/TP from policy features or lifecycle exit_record. "
                 "PnL is gross model USD (see pnl_semantics). Open baseline position (unrealized PnL, SL/TP, "
                 "sizing) is in meta.active_position when baseline_jupiter_open_positions has a row. "
-                "Dashboard trade chain shows open/held bars."
+                "Dashboard trade chain shows open/held bars. "
+                "For Jupiter lifecycle, trade_id (bl_lc_*) is keyed off entry bar identity; ledger market_event_id "
+                "on each row is the exit bar where the close was written—rows also expose entry_market_event_id "
+                "from context when present."
             ),
         },
     }
