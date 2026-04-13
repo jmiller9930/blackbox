@@ -22,7 +22,7 @@
 
 **Canonical directive-driven program:** [`slack_conversational_operator/canonical_development_plan.md`](slack_conversational_operator/canonical_development_plan.md) — **BBX-SLACK-001** through **009**, operator accept/reject loop, deferred MVP items.
 
-**Technical LDD:** [`slack_conversational_operator/slack_conversational_operator_system_ldd.md`](slack_conversational_operator/slack_conversational_operator_system_ldd.md) — includes **§0.5** / **§24** (live route inventory, interception posture, cutover; not a greenfield build).
+**Technical LDD:** [`slack_conversational_operator/slack_conversational_operator_system_ldd.md`](slack_conversational_operator/slack_conversational_operator_system_ldd.md) — includes **§0.5** / **§24** (live route inventory, interception posture, cutover) and **§25** (readiness gate — **no BBX-SLACK-002 code start** until **§25.3** package accepted).
 
 **Constraint:** Jupiter **V2** trading policy behavior remains **untouched** by this workstream unless **separately authorized**.
 

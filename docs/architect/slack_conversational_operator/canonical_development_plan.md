@@ -18,7 +18,7 @@ We are building a **Slack-native conversational operator interface** for BlackBo
 
 This plan is **not** one giant build. It is a **sequence of directives**. Each directive must produce **implementation plus proof**. Each directive is subject to **operator validation** and explicit **accept or reject**.
 
-**Implementation posture (architect):** This program is **not** a greenfield Slack stack. OpenClaw and existing bridges are **already live**; BBX-SLACK is **interception and grounding** — insert the operator router and tool layer into the **current** path. **Inventory the live route map** on clawbot, then change behavior with explicit **preserved vs narrowed** proof. See companion LDD [`slack_conversational_operator_system_ldd.md`](slack_conversational_operator_system_ldd.md) **§0.5** (posture) and **§24** (inventory, interception, cutover, rollback, architect questions). **§24.6–§24.7** deliverables and architect answers must be satisfied before treating BBX-SLACK-002 as open for serious implementation.
+**Implementation posture (architect):** This program is **not** a greenfield Slack stack. OpenClaw and existing bridges are **already live**; BBX-SLACK is **interception and grounding** — insert the operator router and tool layer into the **current** path. **Inventory the live route map** on clawbot, then change behavior with explicit **preserved vs narrowed** proof. See companion LDD [`slack_conversational_operator_system_ldd.md`](slack_conversational_operator_system_ldd.md) **§0.5** (posture), **§24** (inventory, interception, cutover, architect questions), and **§25** (**readiness gate — no BBX-SLACK-002 implementation start** until the **§25.3** governance return package is complete and accepted).
 
 ---
 

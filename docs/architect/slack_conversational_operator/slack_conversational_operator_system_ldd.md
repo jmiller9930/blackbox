@@ -1,7 +1,7 @@
 # Slack Conversational Operator System — Low-Level Design (LDD)
 
 **Status:** Contractual (implementation target)  
-**Lock-down (BBX-SLACK-002):** §0 (boundary + **posture**), §4.4, §12 (first PR items 1–6), §§19–22, **§24** (runtime fit, inventory, cutover) — normative for implementation and proof.  
+**Lock-down (BBX-SLACK-002):** §0 (boundary + **posture**), §4.4, §12 (first PR items 1–6), §§19–22, **§24** (runtime fit, inventory, cutover), **§25** (readiness gate — **no implementation start** until governance package complete) — normative for implementation and proof.  
 **Audience:** Engineering (implementer), Operator (acceptance), Architect (governance)  
 **Scope:** Slack-native conversational interface over BlackBox / OpenClaw with **grounded** answers, **optional named-agent presentation**, **document-grounded** project Q&A, and **auditable** routing.
 
@@ -761,9 +761,12 @@ Execute in order **before** claiming operator-visible E2E:
 
 ### 18.11 Implementation readiness gate (BBX-SLACK-002)
 
+**Hard gate:** **§25** — no implementation until governance package (**§25.3**) is returned and accepted.
+
 **Do not start BBX-SLACK-002 implementation** until:
 
-- [ ] **§0** (boundary / truth discipline), **§24** (runtime inventory + cutover), and **§23** (alignment pass) accepted **or** amended with Architect sign-off; **§24.7** questions resolved or explicitly deferred.
+- [ ] **§25** (readiness gate) — **§25.3** return package complete and **accepted**.
+- [ ] **§0** (boundary / truth discipline), **§24** (runtime inventory + cutover), and **§23** (alignment pass) accepted **or** amended with Architect sign-off; **§24.7** questions answered or **written deferrals** per **§25**.
 - [ ] **§19** (Architect lock-down) accepted **or** amended with Architect sign-off.
 - [ ] **OpenClaw patch plan** pinned: owner, `dispatch.ts` change list, rollback, verification step.
 - [ ] **First PR scope** locked: **§12 items 1–6 only** (item 7 excluded unless Architect reopens).
@@ -1050,11 +1053,12 @@ CREATE INDEX idx_operator_thread_access ON operator_thread_state(last_access_at_
 
 ### 23.3 BBX-SLACK-002 implementation readiness
 
-**After this alignment pass is accepted by the Architect:**
+**Superseded for “start coding” authorization by §25.** LDD technical content may be accepted, but **BBX-SLACK-002 implementation does not start** until **§25.3** governance return package is **complete and accepted**.
 
-- The LDD is **implementation-ready** for **BBX-SLACK-002** **first PR** scope (**§12 items 1–6**): transport + router skeleton + Phase 1 tools in §20 + thread §21 + access §22 + audit/trace §19.4.
-- **Not** opened for **§12 item 7** until that scope is explicitly added.
-- **Do not** begin implementation until **this** document (including §0, §23, and **§24** posture + inventory acceptance) is **accepted**; proof follows **§18.8–§18.9** and **canonical_development_plan** BBX-SLACK-002 proof bar.
+When **§25** authorizes implementation:
+
+- First PR scope remains **§12 items 1–6** (not item 7 unless reopened).
+- Proof follows **§18.8–§18.9** and **canonical_development_plan** BBX-SLACK-002.
 
 ---
 
@@ -1139,7 +1143,55 @@ Engineering should **not** assume answers; obtain explicit direction:
 6. **OpenClaw version:** Pin a **minimum** gateway / extension version for the context-json patch, or follow **live** clawbot only?
 7. **Anna pipeline:** Should **anna_entry** remain the handler for **non-operator** Anna traffic when router declines, unchanged?
 
-**After these are answered and §24.6 deliverables are met:** §23.3 implementation-ready gate may be **reasserted** for BBX-SLACK-002.
+**After these are answered and §24.6 deliverables are met:** see **§25** for the **authoritative** implementation authorization gate.
+
+---
+
+## 25. Readiness gate — no BBX-SLACK-002 implementation until governance package complete
+
+**Status:** Architect-issued gate (governance-readiness). **This section is the formal memo to engineering**; treat it as binding alongside §24.
+
+**Rule:** Do **not** begin BBX-SLACK-002 implementation until the **return package** below is **completed, returned, and accepted**.
+
+The initiative is held at **governance-readiness**. The LDD requires **runtime-fit and cutover** work (**§24**) before the workstream becomes a **build directive**. Treat the next phase as a **documentation and interrogation packet**, not a coding start.
+
+### 25.1 What must happen before implementation is authorized
+
+1. **Fill §24.2** current-state route inventory and **verify on clawbot**.  
+   Include: live Slack/OpenClaw route map; **default/system** path behavior; **explicit Anna** behavior; any other live persona/backend paths; current **invoke** patterns; what is **BlackBox-grounded today** vs **embedded/default** behavior.
+
+2. **Return §24.4** preserved vs replaced vs narrowed as an **explicit signed-off table.**  
+   No ambiguity on: **operator router vs legacy Anna precedence**; what remains **embedded/default**; what becomes **grounded**; what behavior is **intentionally narrowed**.
+
+3. **Return §24.5** cutover plan.  
+   Include: **`SLACK_OPERATOR_ROUTER_ENABLED` default recommendation**; **rollback** steps; **proof of no accidental regression** expectations.
+
+4. **Route the §24.7 architect questions** and return **answers** or **written deferrals** (with owner and re-open criteria). Do **not** assume these in implementation.
+
+### 25.2 Questions that must be answered (from §24.7)
+
+1. For a message that matches **both** legacy explicit-Anna rules **and** operator-router in-scope intent, which runs first, and can both run in one turn?
+2. Is BBX-SLACK-002 **OpenClaw-only** for first merge, or must Bolt **`slack_adapter`** call the operator router in the **same** PR?
+3. Is any **production channel** required to stay **embedded-only** indefinitely?
+4. Should **`SLACK_OPERATOR_ROUTER_ENABLED`** default **on** or **off** for first clawbot deploy?
+5. If more traffic is grounded and fewer turns go to embedded generic chat, is that **acceptable UX** in operator channels?
+6. Do we **pin** a minimum OpenClaw gateway/extension version for the context-json patch, or follow **live clawbot** only?
+7. Should **`anna_entry`** remain the handler for non-operator Anna traffic when the router declines, **unchanged**?
+
+### 25.3 Return package required from engineering
+
+1. Filled **§24.2** inventory with **clawbot evidence**.
+2. Explicit **§24.4** preserved / replaced / narrowed decision table (signed off).
+3. Explicit **§24.5** flag and rollback recommendation.
+4. **Answers or written deferrals** for all **§24.7** questions.
+5. **Final statement:** **“BBX-SLACK-002 implementation-ready”** or **“not implementation-ready.”**
+
+**No implementation work starts** until that package is **returned and accepted** (Architect / governance).
+
+### 25.4 Relation to other sections
+
+- **§18.11** — implementation readiness checklist; **§25** is the **hard gate** on BBX-SLACK-002 start.
+- **§23.3** — prior alignment language; **§25.3** supersedes for **authorization to code**.
 
 ---
 
@@ -1152,3 +1204,4 @@ Engineering should **not** assume answers; obtain explicit direction:
 - **2026-04-13:** Architect lock-down: §4.4 decline boundary; §§19–22 (persona authority BlackBox-only, Phase 1 tool schemas incl. ingest stale rules, trace stderr format, thread DDL, channel access + dev mode); §12/§17/§18 aligned; BBX-SLACK-002 first PR items **1–6 only**.
 - **2026-04-13:** Alignment pass: **§0** OpenClaw/BLACK BOX boundary, platform fit, truth discipline, persona split (exit 0 vs exit 2); **§4.4** in-scope domains explicit; **§17.7/§19.2** persona table; **§23** delta package + readiness; governance cross-refs in header.
 - **2026-04-13:** Architect runtime-fit: **§0.5** interception-not-greenfield posture; **§24** current-state route inventory, insertion order, preserved/replaced, cutover/rollback, deliverables, **§24.7** architect questions; readiness gated on **§24.6**.
+- **2026-04-13:** **§25** Readiness gate — formal “no BBX-SLACK-002 implementation until governance package” memo (§24.2–§24.7 return package + acceptance).
