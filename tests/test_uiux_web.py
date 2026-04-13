@@ -291,6 +291,7 @@ def test_internal_users_requires_internal_admin() -> None:
 def test_nginx_baseline_hardening() -> None:
     text = (WEB / "nginx/default.conf").read_text(encoding="utf-8")
     assert "server_tokens off" in text
+    assert "/etc/nginx/ssl/active.crt" in text and "/etc/nginx/ssl/active.key" in text
     assert "TLSv1.2" in text and "TLSv1.3" in text
     assert "X-Content-Type-Options" in text
     assert "X-Frame-Options" in text
@@ -301,6 +302,7 @@ def test_nginx_baseline_hardening() -> None:
 def test_dockerfile_uses_explicit_copy_not_leaky_nginx_root() -> None:
     """Ensure site root is not a blind COPY that publishes nginx/ under html."""
     text = (WEB / "Dockerfile").read_text(encoding="utf-8")
+    assert "docker-entrypoint-web.sh" in text
     assert "COPY nginx/default.conf" in text
     assert "COPY index.html" in text
     assert "anna.html" in text

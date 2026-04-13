@@ -126,6 +126,9 @@ services:
       - "443:443"
       - "80:80"
     # Host repo config — avoids 404 on /anna/* after git pull without rebuilding the image.
+    # Optional TLS: place fullchain.pem + privkey.pem in ./ssl/ (e.g. certbot or internal CA).
+    # When missing, container uses the baked self-signed cert (browser warning).
     volumes:
       - ./nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
+      - ./ssl:/etc/nginx/ssl/host:ro
     restart: unless-stopped

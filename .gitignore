@@ -70,3 +70,7 @@ external/
 
 # Optional governance signal bus (local tail / operator; archive separately if needed)
 .governance/bus.log
+
+# Operator TLS material for UIUX.Web (fullchain.pem / privkey.pem); keep ssl/.gitkeep only
+UIUX.Web/ssl/*.pem
+UIUX.Web/ssl/*.key
