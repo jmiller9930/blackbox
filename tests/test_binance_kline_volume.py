@@ -52,7 +52,7 @@ def test_fetch_quote_volume_parses_kline_row(monkeypatch: pytest.MonkeyPatch) ->
         def __exit__(self, *a: object) -> None:
             return None
 
-    def _urlopen(req: object, timeout: float = 0) -> _Resp:  # noqa: ARG001
+    def _urlopen(req: object, timeout: float = 0, **_kw: object) -> _Resp:  # noqa: ARG001
         return _Resp()
 
     monkeypatch.setenv("BLACKBOX_BINANCE_KLINE_ENABLED", "1")

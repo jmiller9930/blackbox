@@ -16,6 +16,8 @@ from __future__ import annotations
 
 import json
 import os
+import ssl
+import sys
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -25,6 +27,18 @@ from typing import Any
 
 from market_data.canonical_bar import CanonicalBarV1
 from market_data.canonical_instrument import CANONICAL_INSTRUMENT_SOL_PERP
+
+
+def _ssl_context() -> ssl.SSLContext:
+    """Alpine/bare Python images often lack system CA bundle; align with pyth_sse_ingest."""
+    ctx = ssl.create_default_context()
+    try:
+        import certifi
+
+        ctx.load_verify_locations(certifi.where())
+    except ImportError:
+        pass
+    return ctx
 
 
 def _binance_enabled() -> bool:
@@ -73,7 +87,7 @@ def fetch_binance_quote_volume_5m(
             "symbol": (binance_symbol or "").strip().upper(),
             "interval": "5m",
             "startTime": start_ms,
-            "limit": 1,
+            "limit": 24,
         }
     )
     url = f"https://api.binance.com/api/v3/klines?{qs}"
@@ -83,21 +97,40 @@ def fetch_binance_quote_volume_5m(
         headers={"User-Agent": "blackbox-canonical-bar/1 (+binance klines volume)"},
     )
     try:
-        with urllib.request.urlopen(req, timeout=timeout_sec) as resp:
+        with urllib.request.urlopen(req, timeout=timeout_sec, context=_ssl_context()) as resp:
             raw = resp.read().decode("utf-8")
             data = json.loads(raw)
-    except (urllib.error.URLError, TimeoutError, json.JSONDecodeError, OSError, ValueError):
+    except (urllib.error.URLError, TimeoutError, json.JSONDecodeError, OSError, ValueError) as exc:
+        print(
+            f"binance_kline_volume: fetch failed symbol={binance_symbol!r} start_ms={start_ms}: {exc!r}",
+            file=sys.stderr,
+            flush=True,
+        )
         return None
     if not isinstance(data, list) or len(data) < 1:
+        print(
+            f"binance_kline_volume: empty klines symbol={binance_symbol!r} start_ms={start_ms}",
+            file=sys.stderr,
+            flush=True,
+        )
         return None
-    row = data[0]
-    if not isinstance(row, (list, tuple)) or len(row) < 8:
-        return None
-    try:
-        k_open_ms = int(row[0])
-    except (TypeError, ValueError):
-        return None
-    if k_open_ms != start_ms:
+    row = None
+    for cand in data:
+        if not isinstance(cand, (list, tuple)) or len(cand) < 8:
+            continue
+        try:
+            if int(cand[0]) == start_ms:
+                row = cand
+                break
+        except (TypeError, ValueError):
+            continue
+    if row is None:
+        print(
+            f"binance_kline_volume: no row for open_ms={start_ms} symbol={binance_symbol!r} "
+            f"(got {len(data)} klines, first_open={data[0][0]!r})",
+            file=sys.stderr,
+            flush=True,
+        )
         return None
     try:
         return float(row[7])

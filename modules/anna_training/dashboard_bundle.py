@@ -53,21 +53,21 @@ BASELINE_JUPITER_POLICY_VERSION_TAG = "JUPv2"
 
 def _binance_kline_volume_ok_from_features(features: dict[str, Any] | None) -> bool:
     """
-    Sean / operator **green ball**: this bar's policy features include usable **Binance kline quote
-    volume** (same field the Jupiter_3 spike gate uses: ``market_bars_5m.volume_base`` from REST klines).
+    Sean / operator **green ball**: usable **exchange quote volume** on the evaluated bar.
 
-    Not an HTTP probe — **True** means persisted policy snapshot says quote volume is present and positive.
+    Ingest fills ``market_bars_5m.volume_base`` only from Binance klines (Pyth has no volume). Any
+    positive ``evaluated_bar.volume_base`` counts — no tick-count fallback exists in Jupiter_3.
     """
     if not isinstance(features, dict) or not features:
         return False
     eb = features.get("evaluated_bar")
     if isinstance(eb, dict):
-        note = str(eb.get("volume_source_note") or "")
-        if note == "binance_kline_quote_volume":
-            try:
-                return float(eb.get("volume_base") or 0) > 0
-            except (TypeError, ValueError):
-                return False
+        try:
+            vb = float(eb.get("volume_base") or 0)
+        except (TypeError, ValueError):
+            vb = 0.0
+        if vb > 0:
+            return True
     try:
         cv = float(features.get("candle_volume") or 0)
     except (TypeError, ValueError):
