@@ -300,31 +300,42 @@ def baseline_jupiter_open_position_key(
     return f"baseline|{sym}|{tf}|{m}"
 
 
+def _parse_baseline_jupiter_policy_slot_value(raw: str | None) -> str | None:
+    """Return ``jup_v2`` / ``jup_v3`` if *raw* matches a known alias; else ``None`` (treat as unset)."""
+    v = (raw or "").strip().lower()
+    if not v:
+        return None
+    if v in (BASELINE_POLICY_SLOT_JUP_V3, "jup_v3", "v3", "jupiter_3"):
+        return BASELINE_POLICY_SLOT_JUP_V3
+    if v in (BASELINE_POLICY_SLOT_JUP_V2, "jup_v2", "v2", "jupiter_2"):
+        return BASELINE_POLICY_SLOT_JUP_V2
+    return None
+
+
 def get_baseline_jupiter_policy_slot(conn: sqlite3.Connection) -> str:
     """
     Active baseline Jupiter policy for runtime (bridge, dashboard, parallel runner).
 
-    Order: env ``BASELINE_JUPITER_POLICY_SLOT`` (ci/tests), then ``baseline_operator_kv``, default **jup_v2**.
+    Order: ``baseline_operator_kv`` (dashboard dropdown / operator) when set and parseable, then env
+    ``BASELINE_JUPITER_POLICY_SLOT`` (deploy / CI default), then **jup_v2**.
+
+    Operator selection must not lose to compose env once persisted — see dashboard POST
+    ``/api/v1/dashboard/baseline-jupiter-policy``.
     """
-    raw = (os.environ.get("BASELINE_JUPITER_POLICY_SLOT") or "").strip().lower()
-    if raw in ("jup_v3", "v3", "jupiter_3"):
-        return BASELINE_POLICY_SLOT_JUP_V3
-    if raw in ("jup_v2", "v2", "jupiter_2"):
-        return BASELINE_POLICY_SLOT_JUP_V2
     try:
         row = conn.execute(
             "SELECT value FROM baseline_operator_kv WHERE key = ?",
             (BASELINE_OPERATOR_KV_JUPITER_POLICY_SLOT,),
         ).fetchone()
         if row and str(row[0]).strip():
-            v = str(row[0]).strip().lower()
-            # Same aliases as env branch so operator KV matches dashboard / compose.
-            if v in (BASELINE_POLICY_SLOT_JUP_V3, "jup_v3", "v3", "jupiter_3"):
-                return BASELINE_POLICY_SLOT_JUP_V3
-            if v in (BASELINE_POLICY_SLOT_JUP_V2, "jup_v2", "v2", "jupiter_2"):
-                return BASELINE_POLICY_SLOT_JUP_V2
+            ps = _parse_baseline_jupiter_policy_slot_value(str(row[0]))
+            if ps is not None:
+                return ps
     except sqlite3.OperationalError:
         pass
+    ev = _parse_baseline_jupiter_policy_slot_value(os.environ.get("BASELINE_JUPITER_POLICY_SLOT"))
+    if ev is not None:
+        return ev
     return BASELINE_POLICY_SLOT_JUP_V2
 
 

@@ -18,7 +18,7 @@ if str(RUNTIME) not in sys.path:
 
 
 def test_baseline_jupiter_policy_slot_from_env_and_kv(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    """Operator slot: env override, then KV; maps to signal_mode labels."""
+    """Operator KV (dashboard dropdown) wins over env once set; env used when KV unset."""
     monkeypatch.delenv("BASELINE_JUPITER_POLICY_SLOT", raising=False)
     db = tmp_path / "ledger.db"
     from modules.anna_training.execution_ledger import (
@@ -37,12 +37,18 @@ def test_baseline_jupiter_policy_slot_from_env_and_kv(tmp_path: Path, monkeypatc
     conn.commit()
     assert get_baseline_jupiter_policy_slot(conn) == BASELINE_POLICY_SLOT_JUP_V3
     assert signal_mode_for_baseline_policy_slot(BASELINE_POLICY_SLOT_JUP_V3) == "sean_jupiter_v3"
+
+    # Persisted operator choice must not lose to compose env pinning jup_v2.
+    monkeypatch.setenv("BASELINE_JUPITER_POLICY_SLOT", "jup_v2")
+    assert get_baseline_jupiter_policy_slot(conn) == BASELINE_POLICY_SLOT_JUP_V3
     conn.close()
 
-    monkeypatch.setenv("BASELINE_JUPITER_POLICY_SLOT", "jup_v2")
-    conn = sqlite3.connect(db)
-    assert get_baseline_jupiter_policy_slot(conn) == BASELINE_POLICY_SLOT_JUP_V2
-    conn.close()
+    db2 = tmp_path / "ledger2.db"
+    monkeypatch.setenv("BASELINE_JUPITER_POLICY_SLOT", "jup_v3")
+    conn2 = sqlite3.connect(db2)
+    ensure_execution_ledger_schema(conn2)
+    assert get_baseline_jupiter_policy_slot(conn2) == BASELINE_POLICY_SLOT_JUP_V3
+    conn2.close()
 
 
 def test_upsert_policy_evaluation_idempotent(tmp_path: Path) -> None:
