@@ -2036,6 +2036,28 @@ def _event_axis_from_market_bars(mpath: Path | None, *, limit: int) -> tuple[lis
     return mids, times
 
 
+def _five_m_candle_close_utc_from_mid(market_event_id: str) -> datetime | None:
+    """Return candle **close** (exclusive end) in UTC for a canonical ``…_5m_<ISO>Z`` id, or ``None``."""
+    _ensure_runtime_for_market_imports()
+    from market_data.market_event_id import parse_market_event_id
+
+    parsed = parse_market_event_id(str(market_event_id or "").strip())
+    if not parsed:
+        return None
+    _sym, tf, ts_s = parsed
+    if tf != "5m":
+        return None
+    ts_norm = ts_s if str(ts_s).endswith("Z") else str(ts_s) + "Z"
+    dt_open = _parse_iso_ts(ts_norm)
+    if dt_open is None:
+        return None
+    if dt_open.tzinfo is None:
+        dt_open = dt_open.replace(tzinfo=timezone.utc)
+    else:
+        dt_open = dt_open.astimezone(timezone.utc)
+    return dt_open + timedelta(minutes=5)
+
+
 def _append_in_progress_5m_bar_to_axis(
     mids: list[str],
     times: list[str | None],
@@ -2043,9 +2065,12 @@ def _append_in_progress_5m_bar_to_axis(
     max_events: int,
 ) -> tuple[list[str], list[str | None]]:
     """
-    Rightmost column must be the **current** 5m interval when wall clock has passed the last
-    stored bar's open (next bar started). Axis from ``market_bars_5m`` is last **closed** bars only;
-    append one synthetic column so e.g. 7:00 appears after 6:55 when time is 7:01.
+    Rightmost column: **only while** wall clock is **inside** the current 5m bucket after the last
+    **closed** bar in ``market_bars_5m``. Axis rows are closed bars (oldest→newest); we append **one**
+    synthetic ``market_event_id`` for the **in-progress** bucket (``next_open``) **only if**
+    ``now < next_open + 5m``. Once the boundary passes (bar closed), we **do not** append: evaluation
+    belongs to that closed bar in DB/policy — avoids **EVAL PENDING** for an interval that already
+    ended (operator “five minutes in the past” defect).
     """
     if not mids:
         return mids, times
@@ -2072,6 +2097,11 @@ def _append_in_progress_5m_bar_to_axis(
     next_open = dt_open + timedelta(minutes=5)
     now = datetime.now(timezone.utc)
     if now < next_open:
+        return mids, times
+    bucket_close = next_open + timedelta(minutes=5)
+    if now >= bucket_close:
+        # Bar that opened at next_open has closed — do not show synthetic “forming” column;
+        # wait for market_bars_5m + policy upsert on the next poll.
         return mids, times
     mid_new = make_market_event_id(
         canonical_symbol=sym,
@@ -2316,6 +2346,45 @@ def _baseline_policy_bar_pending_cell(
     }
 
 
+def _baseline_policy_bar_sync_lag_cell(
+    *,
+    market_event_id: str,
+    ledger_row: dict[str, Any] | None,
+) -> dict[str, Any]:
+    """
+    Candle **close boundary has passed** (5m bucket ended) but ``market_bars_5m`` / policy row not
+    visible yet — not “evaluating the past”; ingest or bridge will populate on the next tick.
+    """
+    mid = str(market_event_id).strip()
+    return {
+        "empty": True,
+        "market_event_id": mid,
+        "trade_id": None,
+        "trace_id": None,
+        "symbol": None,
+        "timeframe": None,
+        "side": None,
+        "exit_reason": None,
+        "entry": None,
+        "exit": None,
+        "entry_time": None,
+        "exit_time": None,
+        "size": None,
+        "notional_usd_approx": None,
+        "pnl_usd": None,
+        "mae_usd": None,
+        "outcome": "SYNC_LAG",
+        "outcome_display": "sync pending",
+        "economic_authority": "policy_gated",
+        "policy_authoritative": False,
+        "policy_trade": None,
+        "policy_reason_code": None,
+        "policy_missing": True,
+        "ledger_row_ignored": ledger_row is not None,
+        "baseline_display_reason": "bar_closed_market_row_pending",
+    }
+
+
 def _baseline_policy_no_trade_cell(
     *,
     market_event_id: str,
@@ -2410,6 +2479,12 @@ def _compact_baseline_cell_policy_bound(
         except Exception:
             bar_exists = False
         if not bar_exists:
+            close_dt = _five_m_candle_close_utc_from_mid(mid)
+            now_utc = datetime.now(timezone.utc)
+            if close_dt is not None and now_utc >= close_dt:
+                return _baseline_policy_bar_sync_lag_cell(
+                    market_event_id=mid, ledger_row=ledger_row
+                )
             return _baseline_policy_bar_pending_cell(market_event_id=mid, ledger_row=ledger_row)
         return _baseline_policy_no_trade_cell(
             market_event_id=mid,
@@ -2876,9 +2951,11 @@ def build_trade_chain_payload(
         "event_axis_note": (
             "Columns are distinct market_event_id values (oldest left → newest right). "
             "Axis prefers recent rows from market_bars_5m when available; else execution_trades. "
-            "Baseline lifecycle: **open** → **held** → **closed** (win/loss/flat); same vocabulary as baseline trades report. "
-            "One open baseline trade uses one **primary** tile on the newest column; older columns in that run are "
-            "**continuation** (minimal), not repeated full HELD tiles."
+            "A **forming** column is appended only while wall clock is **inside** the current 5m bucket; after the "
+            "boundary, the strip uses closed bars only until the next bucket opens (avoids EVAL PENDING for an "
+            "interval that already closed). "
+            "Baseline lifecycle: **open** → **held** → **closed**; one **primary** tile on the newest column when "
+            "position is open; older columns in that run are **continuation** (minimal)."
         ),
         "jupiter_tile_narrative_schema": "jupiter_tile_narrative_v1",
         "recency": {

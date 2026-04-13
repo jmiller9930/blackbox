@@ -526,6 +526,14 @@
       letter-spacing: 0.04em;
       text-transform: uppercase;
     }
+    /* Bar closed at boundary; DB/policy row not visible yet (short lag vs wall clock). */
+    .tc-tr-baseline .tc-tile-verdict.tc-verdict-sync {
+      color: #c2410c;
+      -webkit-text-stroke: 0;
+      font-size: 1.05rem;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+    }
     .tc-tr-baseline .tc-tile-verdict.tc-verdict-closed {
       font-size: 0.92rem;
       letter-spacing: 0.03em;
@@ -919,12 +927,12 @@
             Show Anna lanes (test / strategy — per-bar, independent of baseline)
           </label>
           <p class="tc-chain-note">
-            The <strong>right column</strong> is the <strong>current</strong> 5m interval when wall time has entered it (forming candle); otherwise closed bars only. To the left are <strong>resolved</strong> evaluations (NO TRADE / OPEN). With an <strong>open</strong> baseline position, the live OPEN/HOLDING tile follows the anchor rules; uncheck Anna to focus on baseline only.
+            The <strong>right column</strong> is a <strong>forming</strong> 5m bucket only while wall clock is <strong>inside</strong> that interval (before the boundary); after the close, the strip shows the last <strong>closed</strong> bar until market_data/policy update (no fake “eval pending” for an already-closed bar). To the left are <strong>resolved</strong> evaluations. Open baseline: OPEN/HOLDING anchor rules; uncheck Anna for baseline only.
           </p>
         </div>
         <div class="tc-flow" aria-hidden="true">
           <span class="tc-flow-seq"><span class="tc-flow-old">older</span> <span class="tc-flow-arrow">→</span> <span class="tc-flow-new">newer</span></span>
-          <span class="tc-flow-now">newest = right column (includes forming)</span>
+          <span class="tc-flow-now">newest = right (forming only inside open bucket)</span>
         </div>
         <div class="tc-pan-strip" id="tc-pan-strip" hidden>
           <span class="tc-pan-lbl" aria-hidden="true">older</span>
@@ -1316,15 +1324,27 @@
       : '';
     if (!c || c.empty) {
       var br = c && String(c.baseline_display_reason || '');
+      var od0 = c && String(c.outcome_display || '').toLowerCase();
+      var syncLag =
+        baselineLane &&
+        c &&
+        (br === 'bar_closed_market_row_pending' || od0 === 'sync pending');
+      if (syncLag) {
+        return tcCellSurface(
+          narrEl +
+            '<div class="tc-tile-verdict wl-EVAL tc-verdict-sync" title="This 5m bar already closed at the boundary; waiting for market_bars_5m + policy upsert (next ingest tick). Not a forming candle.">' +
+            'SYNC PENDING</div>'
+        );
+      }
       var pend =
         baselineLane &&
         c &&
         (br === 'bar_forming_no_closed_bar' ||
-          String(c.outcome_display || '').toLowerCase() === 'eval pending');
+          od0 === 'eval pending');
       if (pend) {
         return tcCellSurface(
           narrEl +
-            '<div class="tc-tile-verdict wl-EVAL tc-verdict-pending" title="This 5m candle is not closed in market_data yet. Full Sean evaluation (trade vs no trade and gates) appears after the bar closes.">' +
+            '<div class="tc-tile-verdict wl-EVAL tc-verdict-pending" title="Current 5m bucket still open (wall clock inside this interval). Full Sean evaluation appears right after this bar closes at the 5m boundary.">' +
             'EVAL PENDING</div>'
         );
       }
