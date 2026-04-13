@@ -1345,6 +1345,107 @@ def _baseline_report_size_and_notional(
     return size_out, notion, basis, note
 
 
+def _coerce_leverage_int(v: Any) -> int | None:
+    if v is None:
+        return None
+    try:
+        i = int(round(float(v)))
+        return i if i > 0 else None
+    except (TypeError, ValueError):
+        return None
+
+
+def _economics_from_policy_feature_dict(feat: dict[str, Any]) -> dict[str, Any]:
+    """
+    Extract bankroll / Sean risk slice / leverage from Jupiter policy ``features_json``.
+
+    Shapes: top-level ``free_collateral_usd``, nested ``position_size_hint``, ``open_position``
+    (lifecycle), ``paper_bankroll`` meta.
+    """
+    out: dict[str, Any] = {
+        "free_collateral_usd": _coerce_finite_float(feat.get("free_collateral_usd")),
+        "collateral_usd": None,
+        "risk_pct": None,
+        "leverage": None,
+    }
+    psh = feat.get("position_size_hint")
+    if isinstance(psh, dict):
+        if out["collateral_usd"] is None:
+            out["collateral_usd"] = _coerce_finite_float(psh.get("collateral_usd"))
+        if out["risk_pct"] is None:
+            out["risk_pct"] = _coerce_finite_float(psh.get("risk_pct"))
+        if out["leverage"] is None:
+            out["leverage"] = _coerce_leverage_int(psh.get("leverage"))
+    op = feat.get("open_position")
+    if isinstance(op, dict):
+        if out["collateral_usd"] is None:
+            out["collateral_usd"] = _coerce_finite_float(op.get("collateral_usd"))
+        if out["risk_pct"] is None:
+            out["risk_pct"] = _coerce_finite_float(op.get("risk_pct"))
+        if out["leverage"] is None:
+            out["leverage"] = _coerce_leverage_int(op.get("leverage"))
+    pb = feat.get("paper_bankroll")
+    if isinstance(pb, dict) and out["free_collateral_usd"] is None:
+        out["free_collateral_usd"] = _coerce_finite_float(pb.get("free_collateral_usd"))
+    return out
+
+
+def _merge_baseline_row_economics_from_policy(
+    conn: Any,
+    *,
+    exit_mid: str,
+    entry_mid: str | None,
+    free_collateral_usd: float | None,
+    collateral_usd: float | None,
+    risk_pct: float | None,
+    leverage: int | None,
+) -> tuple[float | None, float | None, float | None, int | None, str | None]:
+    """
+    When ``baseline_jupiter_open_positions`` / ledger context omit sizing, recover from
+    ``policy_evaluations.features_json`` (exit lifecycle row, generic exit row, entry signal row).
+    """
+    fc = free_collateral_usd
+    col = collateral_usd
+    rp = risk_pct
+    lev = leverage
+    provenance: str | None = None
+
+    def _take(src: dict[str, Any], label: str) -> None:
+        nonlocal fc, col, rp, lev, provenance
+        if not src:
+            return
+        if fc is None and src.get("free_collateral_usd") is not None:
+            fc = float(src["free_collateral_usd"])
+            provenance = provenance or label
+        if col is None and src.get("collateral_usd") is not None:
+            col = float(src["collateral_usd"])
+            provenance = provenance or label
+        if rp is None and src.get("risk_pct") is not None:
+            rp = float(src["risk_pct"])
+            provenance = provenance or label
+        if lev is None and src.get("leverage") is not None:
+            lev = _coerce_leverage_int(src.get("leverage"))
+            if lev is not None:
+                provenance = provenance or label
+
+    ex_lifecycle = _fetch_baseline_exit_policy_features(conn, exit_mid)
+    if isinstance(ex_lifecycle, dict):
+        _take(_economics_from_policy_feature_dict(ex_lifecycle), "policy_exit_lifecycle_features")
+
+    pol_x = fetch_policy_evaluation_for_market_event(conn, exit_mid)
+    fx = pol_x.get("features") if isinstance(pol_x, dict) else None
+    if isinstance(fx, dict):
+        _take(_economics_from_policy_feature_dict(fx), "policy_exit_bar")
+
+    if entry_mid:
+        pol_e = fetch_policy_evaluation_for_market_event(conn, entry_mid)
+        fe = pol_e.get("features") if isinstance(pol_e, dict) else None
+        if isinstance(fe, dict):
+            _take(_economics_from_policy_feature_dict(fe), "policy_entry_bar")
+
+    return fc, col, rp, lev, provenance
+
+
 def _sl_tp_summary_from_policy_features(features: Any) -> str | None:
     sl, tp = _sl_tp_prices_from_features(features)
     if sl is None and tp is None:
@@ -1496,6 +1597,7 @@ def _nested_baseline_trade_from_flat_row(r: dict[str, Any]) -> dict[str, Any]:
             "size": r.get("size"),
             "size_note": r.get("size_note"),
             "size_source": r.get("size_source"),
+            "economics_provenance_note": r.get("economics_provenance_note"),
             "entry_price": r.get("entry"),
             "exit_price": r.get("exit"),
         },
@@ -2035,6 +2137,15 @@ def build_baseline_trades_report(
             col_o = pos_open.get("collateral_usd") if pos_open else None
             col_f = float(col_o) if col_o is not None else None
             fc_usd = _free_collateral_usd_for_row(conn, pos_open, ledger_row)
+            fc_usd, col_f, rp_f, lev_i, econ_prov = _merge_baseline_row_economics_from_policy(
+                conn,
+                exit_mid=mid,
+                entry_mid=entry_mid_raw,
+                free_collateral_usd=fc_usd,
+                collateral_usd=col_f,
+                risk_pct=rp_f,
+                leverage=lev_i,
+            )
 
             pnl_f = float(pnl) if pnl is not None else None
             pnl_pct_notional: float | None = None
@@ -2083,6 +2194,7 @@ def build_baseline_trades_report(
                         )
                     ),
                     "size_note": size_note,
+                    "economics_provenance_note": econ_prov,
                     "exit_reason": str(ledger_row.get("exit_reason") or "").strip() or None,
                     "mae_usd": round(mae_val, 6) if mae_val is not None else None,
                     "baseline_authority": authority,

@@ -13,7 +13,7 @@ COPY docker-entrypoint-web.sh /docker-entrypoint-web.sh
 RUN chmod +x /docker-entrypoint-web.sh
 
 COPY nginx/default.conf /etc/nginx/conf.d/default.conf
-COPY index.html login.html internal.html anna.html dashboard.html intelligence-method.html internal-plan.html internal-users.html account-settings.html consumer.html guide.html docs.html docs-anna-language.html docs-system-usage.html docs-ui-context.html docs-web-architecture.html forgot-password.html reset-password.html verify-email.html register.html 404.html styles.css app.js text-scale.js /usr/share/nginx/html/
+COPY index.html login.html internal.html anna.html dashboard.html baseline_trades.html intelligence-method.html internal-plan.html internal-users.html account-settings.html consumer.html guide.html docs.html docs-anna-language.html docs-system-usage.html docs-ui-context.html docs-web-architecture.html forgot-password.html reset-password.html verify-email.html register.html 404.html styles.css app.js text-scale.js /usr/share/nginx/html/
 COPY assets /usr/share/nginx/html/assets/
 COPY content /usr/share/nginx/html/content/
 

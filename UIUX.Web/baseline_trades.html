@@ -48,6 +48,12 @@
       font-weight: 600;
       max-width: 42rem;
     }
+    .bt-na {
+      font-size: 0.72rem;
+      font-weight: 700;
+      color: #94a3b8;
+      font-style: italic;
+    }
     .bt-section {
       flex: 1;
       overflow: auto;
@@ -527,6 +533,21 @@
         return Number(n).toFixed(2);
       }
 
+      /** Money fields: never leave a blank cell — show explicit Not recorded + tooltip. */
+      function fmtMoneyOrMissing(n, provenance, kind) {
+        kind = kind || "value";
+        if (n == null || n === "" || (typeof n === "number" && isNaN(n))) {
+          var t =
+            "Not recorded — no " +
+            kind +
+            " in baseline open-position snapshot or policy_evaluations features (entry/exit bar) for this row.";
+          if (provenance && String(provenance).trim() !== "")
+            t += " Enrichment tried: " + String(provenance).trim() + ".";
+          return '<span class="bt-na" title="' + escAttr(t) + '">Not recorded</span>';
+        }
+        return fmtMoney(n);
+      }
+
       /** API scope query param → operator label (matches scope dropdown). */
       function scopeLabelApi(sc) {
         var s = String(sc || "").toLowerCase();
@@ -540,7 +561,8 @@
       function policyCloseLabel(auth) {
         if (auth === "TRADE") return "Close · policy TRADE";
         if (auth === "NO_TRADE") return "Close · not policy TRADE";
-        return String(auth || "—");
+        if (auth == null || String(auth).trim() === "") return "Not recorded";
+        return String(auth);
       }
 
       function formatSnapshotHuman(snap) {
@@ -665,6 +687,16 @@
           var sizeTitle =
             "Position size (base units)." +
             (sizeNote ? " " + sizeNote : "");
+          var econP =
+            r.economics_provenance_note != null && String(r.economics_provenance_note).trim() !== ""
+              ? String(r.economics_provenance_note).trim()
+              : "";
+          var riskTip =
+            "Sean risk slice (collateral_usd). " +
+            (econP ? "Enrichment: " + econP + ". " : "") +
+            (r.risk_pct != null && !isNaN(Number(r.risk_pct))
+              ? "risk_pct=" + Number(r.risk_pct).toFixed(4) + " (fraction of bankroll)."
+              : "");
           var auth = r.baseline_authority || "—";
           var authDisp = policyCloseLabel(auth);
           var authCls = auth === "TRADE" ? "bt-auth-trade" : "bt-auth-notrade";
@@ -781,17 +813,23 @@
                 : "—"
             ) +
             '</td><td title="' +
-            escAttr("Notional USD (entry × size); PnL % is vs this.") +
+            escAttr(
+              "Notional USD (entry × size); PnL % is vs this." +
+                (econP ? " Enrichment: " + econP + "." : "")
+            ) +
             '">' +
-            esc(fmtMoney(r.notional_usd)) +
+            fmtMoneyOrMissing(r.notional_usd, econP, "notional (entry×size)") +
             '</td><td title="' +
-            escAttr("Sean risk slice from position_size_hint (notional = Risk × leverage).") +
+            escAttr(riskTip || "Sean risk slice (collateral_usd).") +
             '">' +
-            esc(fmtMoney(r.collateral_usd)) +
+            fmtMoneyOrMissing(r.collateral_usd, econP, "risk slice (collateral_usd)") +
             '</td><td title="' +
-            escAttr("Paper bankroll input to policy (free_collateral_usd)—not stake for one trade.") +
+            escAttr(
+              "Paper bankroll input to policy (free_collateral_usd)—not stake for one trade." +
+                (econP ? " Enrichment: " + econP + "." : "")
+            ) +
             '">' +
-            esc(fmtMoney(r.free_collateral_usd)) +
+            fmtMoneyOrMissing(r.free_collateral_usd, econP, "bankroll (free_collateral_usd)") +
             '</td><td class="bt-mono" title="' +
             escAttr("Exit reason from ledger.") +
             '">' +
@@ -932,6 +970,7 @@
           "free_collateral_usd",
           "leverage",
           "risk_pct",
+          "economics_provenance_note",
           "collateral_usd",
           "exit_reason",
           "stop_loss_entry_price",
