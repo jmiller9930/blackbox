@@ -182,10 +182,10 @@
       border-bottom: 1px solid #f1f5f9;
     }
     .bts-t th {
-      font-size: 0.58rem;
-      text-transform: uppercase;
-      letter-spacing: 0.04em;
-      color: var(--muted);
+      font-size: 0.68rem;
+      text-transform: none;
+      letter-spacing: normal;
+      color: #0f172a;
       font-weight: 800;
     }
     .bts-mono { font-family: ui-monospace, monospace; font-size: 0.65rem; word-break: break-all; }
@@ -378,6 +378,11 @@
     }
     .tc-table { border-collapse: separate; border-spacing: 0; font-size: 0.65rem; min-width: max-content; }
     .tc-table th, .tc-table td { border-right: 1px solid var(--panel-border); border-bottom: 1px solid var(--panel-border); padding: 0.25rem 0.3rem; vertical-align: top; }
+    .tc-table thead th {
+      font-size: 0.65rem;
+      font-weight: 800;
+      color: #0f172a;
+    }
     /* Sticky chain column: fixed width + opaque seam; high z-index + layer so event tiles never paint left of this rail. */
     /* Opaque “overhang” past the chain rail: covers subpixel bleed from scrolling td columns (the persistent sliver). */
     .tc-table thead tr th:first-child.tc-sticky-chain::after,
