@@ -437,6 +437,49 @@ def _recompute_jupiter_narrative_for_market_event_id(
         return ""
 
 
+def _baseline_entry_narrative_for_active_slot(
+    conn: Any,
+    entry_mid: str,
+    market_db_path: Path | None,
+    training_state: dict[str, Any] | None,
+) -> str:
+    """
+    **Why we opened** text for the entry ``market_event_id``.
+
+    The operator Jupiter slot (``baseline_operator_kv``) can be **JUPv3** while the persisted
+    ``policy_evaluations`` row for that bar was written under **v2** (``sean_jupiter_v1``). For v3
+    slot, **prefer** a fresh v3 evaluation from ``market_bars_5m`` so the dashboard matches the
+    policy version the operator selected—not a stale v2 Supertrend tile.
+    """
+    em = str(entry_mid or "").strip()
+    if not em:
+        return ""
+    policy_slot = get_baseline_jupiter_policy_slot(conn)
+    st = training_state if isinstance(training_state, dict) else None
+    if st is None:
+        from modules.anna_training.store import load_state as _load_training_state
+
+        st = _load_training_state()
+    if policy_slot == BASELINE_POLICY_SLOT_JUP_V3 and market_db_path and market_db_path.is_file():
+        s = _recompute_jupiter_narrative_for_market_event_id(
+            em, market_db_path, policy_slot=policy_slot, training_state=st
+        )
+        if (s or "").strip():
+            return s.strip()
+    pol_e = fetch_baseline_policy_evaluation_for_market_event(conn, em)
+    s = _format_jupiter_tile_narrative_from_policy_row(pol_e)
+    if (s or "").strip():
+        return s.strip()
+    if market_db_path and market_db_path.is_file():
+        return (
+            _recompute_jupiter_narrative_for_market_event_id(
+                em, market_db_path, policy_slot=policy_slot, training_state=st
+            )
+            or ""
+        ).strip()
+    return ""
+
+
 def build_jupiter_policy_snapshot(
     *,
     market_db_path: Path | None = None,
@@ -605,15 +648,9 @@ def build_jupiter_policy_snapshot(
                 emid = str(pos.entry_market_event_id or "").strip()
                 entry_nar = ""
                 if emid:
-                    pol_ent = fetch_baseline_policy_evaluation_for_market_event(conn, emid)
-                    entry_nar = _format_jupiter_tile_narrative_from_policy_row(pol_ent)
-                    if not (entry_nar or "").strip():
-                        entry_nar = _recompute_jupiter_narrative_for_market_event_id(
-                            emid,
-                            mpath,
-                            policy_slot=policy_slot,
-                            training_state=_st,
-                        )
+                    entry_nar = _baseline_entry_narrative_for_active_slot(
+                        conn, emid, mpath, _st
+                    )
                 out["baseline_lifecycle"] = {
                     "position_open": True,
                     "trade_id": pos.trade_id,
@@ -2996,6 +3033,8 @@ def _enrich_baseline_jupiter_context_for_cell(
     pol: dict[str, Any],
     *,
     phase: str,
+    market_db_path: Path | None = None,
+    training_state: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """
     Operator clarity: per-column ``jupiter_tile_narrative`` is **this bar**; held rows need **entry** context.
@@ -3026,10 +3065,12 @@ def _enrich_baseline_jupiter_context_for_cell(
             entry_mid = em or None
         if entry_mid:
             cell["baseline_entry_market_event_id"] = entry_mid
-            pol_e = fetch_baseline_policy_evaluation_for_market_event(conn, entry_mid)
-            nar = _format_jupiter_tile_narrative_from_policy_row(pol_e)
+            nar = _baseline_entry_narrative_for_active_slot(
+                conn, entry_mid, market_db_path, training_state
+            )
             if nar:
                 cell["baseline_entry_jupiter_tile_narrative"] = nar
+            pol_e = fetch_baseline_policy_evaluation_for_market_event(conn, entry_mid)
             if pol_e:
                 cell["baseline_entry_policy_reason_code"] = str(pol_e.get("reason_code") or "") or None
         return cell
@@ -3331,6 +3372,7 @@ def _compact_baseline_cell_policy_bound(
             _baseline_policy_open_cell(market_event_id=mid, policy_row=pol),
             pol,
             phase="open",
+            market_db_path=market_db_path,
         )
     # Closed fill for this bar: ledger is authoritative; policy row may not still say baseline exit.
     if (
@@ -3364,6 +3406,7 @@ def _compact_baseline_cell_policy_bound(
                 ),
                 pol,
                 phase="held",
+                market_db_path=market_db_path,
             )
             return _enrich_baseline_held_cell_economics(
                 conn, held_cell, market_db_path=market_db_path
