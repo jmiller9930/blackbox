@@ -1445,6 +1445,59 @@
     var exT = tcShortTime(c.exit_time);
     var tradeCell = tcShortId(c.trade_id, 16);
     var traceCell = tcShortId(c.trace_id, 12);
+    var szDisp =
+      c.size != null && !isNaN(Number(c.size)) ? Number(c.size).toFixed(4) : '—';
+    var econBaseline = '';
+    if (baselineLane && c && !c.empty) {
+      var br =
+        c.free_collateral_usd != null && !isNaN(Number(c.free_collateral_usd))
+          ? Number(c.free_collateral_usd).toFixed(2)
+          : '—';
+      var rk =
+        c.collateral_usd != null && !isNaN(Number(c.collateral_usd))
+          ? Number(c.collateral_usd).toFixed(2)
+          : '—';
+      var rpc =
+        c.risk_pct != null && !isNaN(Number(c.risk_pct))
+          ? (Number(c.risk_pct) * 100).toFixed(2) + '%'
+          : '—';
+      var slin =
+        c.stop_loss_entry_price != null && !isNaN(Number(c.stop_loss_entry_price))
+          ? Number(c.stop_loss_entry_price).toFixed(4)
+          : '—';
+      var tpin =
+        c.take_profit_entry_price != null && !isNaN(Number(c.take_profit_entry_price))
+          ? Number(c.take_profit_entry_price).toFixed(4)
+          : '—';
+      var slout =
+        c.stop_loss_exit_price != null && !isNaN(Number(c.stop_loss_exit_price))
+          ? Number(c.stop_loss_exit_price).toFixed(4)
+          : '—';
+      var tpout =
+        c.take_profit_exit_price != null && !isNaN(Number(c.take_profit_exit_price))
+          ? Number(c.take_profit_exit_price).toFixed(4)
+          : '—';
+      econBaseline =
+        '<span class="lab">bankroll $</span><span title="free_collateral_usd (policy input)">' +
+        esc(br) +
+        '</span>' +
+        '<span class="lab">risk $</span><span title="Sean risk slice (collateral_usd)">' +
+        esc(rk) +
+        '</span>' +
+        '<span class="lab">risk %</span><span>' +
+        esc(rpc) +
+        '</span>' +
+        '<span class="lab">SL/TP in</span><span>' +
+        esc(slin) +
+        ' / ' +
+        esc(tpin) +
+        '</span>' +
+        '<span class="lab">SL/TP exit</span><span>' +
+        esc(slout) +
+        ' / ' +
+        esc(tpout) +
+        '</span>';
+    }
     var noTradeVerdict = baselineLane && ocLower === 'no trade';
     var openVerdict = baselineLane && ocLower === 'open';
     var heldVerdict = baselineLane && ocLower === 'held';
@@ -1481,6 +1534,9 @@
         '<span class="lab">side</span><span>' +
         side +
         '</span>' +
+        '<span class="lab">size</span><span title="Base units; reconciled vs position_open when ledger stub">' +
+        esc(szDisp) +
+        '</span>' +
         '<span class="lab">entry</span><span>' +
         ent +
         '</span>' +
@@ -1493,9 +1549,17 @@
         '<span class="lab">out t</span><span>' +
         exT +
         '</span>' +
-        '<span class="lab">pnl</span><span>' +
+        '<span class="lab">pnl $</span><span>' +
         esc(pnl) +
+        (baselineLane &&
+        c.pnl_pct_notional != null &&
+        !isNaN(Number(c.pnl_pct_notional))
+          ? ' <span style="font-size:0.78em;opacity:0.88">(' +
+            esc(Number(c.pnl_pct_notional).toFixed(3)) +
+            '% notional)</span>'
+          : '') +
         '</span>' +
+        econBaseline +
         '<span class="lab">MAE</span><span>' +
         esc(mae) +
         '</span>' +

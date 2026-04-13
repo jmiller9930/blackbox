@@ -1446,6 +1446,89 @@ def _merge_baseline_row_economics_from_policy(
     return fc, col, rp, lev, provenance
 
 
+def _enrich_compact_baseline_dashboard_cell(
+    conn: Any,
+    market_event_id: str,
+    ledger_row: dict[str, Any],
+    cell: dict[str, Any],
+    market_db_path: Path | None,
+) -> dict[str, Any]:
+    """
+    Dashboard trade-chain baseline cells use ``_compact_cell`` (PnL/size/MAE only). Add the same
+    economics + SL/TP as ``build_baseline_trades_report`` so the main dashboard is not missing
+    bankroll / risk / stops next to PnL.
+    """
+    if not cell or cell.get("empty"):
+        return cell
+    tid = str(ledger_row.get("trade_id") or "").strip() or None
+    pos_open = _fetch_position_open_payload(conn, tid) if tid else None
+    ep = ledger_row.get("entry_price")
+    size_eff, notion, _basis, size_note = _baseline_report_size_and_notional(
+        ledger_row, pos_open, ep
+    )
+    if size_eff is not None:
+        cell["size"] = float(size_eff)
+    if size_note:
+        cell["size_note"] = size_note
+    if notion is not None:
+        cell["notional_usd_approx"] = round(float(notion), 4)
+    lev_i = _coerce_leverage_int(pos_open.get("leverage")) if pos_open else None
+    rp_f = float(pos_open["risk_pct"]) if pos_open and pos_open.get("risk_pct") is not None else None
+    col_f = float(pos_open["collateral_usd"]) if pos_open and pos_open.get("collateral_usd") is not None else None
+    fc_usd = _free_collateral_usd_for_row(conn, pos_open, ledger_row)
+    mid = str(market_event_id).strip()
+    em = str(_ledger_context_parsed(ledger_row).get("entry_market_event_id") or "").strip() or None
+    if not em and pos_open:
+        em = str(pos_open.get("entry_market_event_id") or "").strip() or None
+    fc_usd, col_f, rp_f, lev_i, econ_prov = _merge_baseline_row_economics_from_policy(
+        conn,
+        exit_mid=mid,
+        entry_mid=em,
+        free_collateral_usd=fc_usd,
+        collateral_usd=col_f,
+        risk_pct=rp_f,
+        leverage=lev_i,
+    )
+    cell["free_collateral_usd"] = round(fc_usd, 6) if fc_usd is not None else None
+    cell["collateral_usd"] = round(col_f, 6) if col_f is not None else None
+    cell["risk_pct"] = rp_f
+    cell["leverage"] = lev_i
+    cell["economics_provenance_note"] = econ_prov
+    sle, tpe = _entry_sl_tp_from_open_or_context(pos_open, ledger_row)
+    cell["stop_loss_entry_price"] = sle
+    cell["take_profit_entry_price"] = tpe
+    exf = _fetch_baseline_exit_policy_features(conn, mid)
+    sl_x, tp_x = _sl_tp_prices_from_features(exf or {})
+    if sl_x is None or tp_x is None:
+        lsl, ltp = _sl_tp_prices_from_ledger_context(ledger_row)
+        if sl_x is None:
+            sl_x = lsl
+        if tp_x is None:
+            tp_x = ltp
+    cell["stop_loss_exit_price"] = sl_x
+    cell["take_profit_exit_price"] = tp_x
+    pnl_f = cell.get("pnl_usd")
+    if notion is not None and pnl_f is not None and float(notion) > 1e-12:
+        try:
+            cell["pnl_pct_notional"] = round(100.0 * float(pnl_f) / float(notion), 6)
+        except (TypeError, ValueError):
+            pass
+    sym = str(ledger_row.get("symbol") or "").strip()
+    sz_mae = size_eff if size_eff is not None else ledger_row.get("size")
+    if sym and market_db_path and market_db_path.is_file():
+        mae_val, _ = compute_mae_usd_v1(
+            canonical_symbol=sym,
+            side=ledger_row.get("side"),
+            entry_price=ledger_row.get("entry_price"),
+            size=sz_mae,
+            entry_time=ledger_row.get("entry_time"),
+            exit_time=ledger_row.get("exit_time"),
+            market_db_path=market_db_path,
+        )
+        cell["mae_usd"] = round(mae_val, 6) if mae_val is not None else cell.get("mae_usd")
+    return cell
+
+
 def _sl_tp_summary_from_policy_features(features: Any) -> str | None:
     sl, tp = _sl_tp_prices_from_features(features)
     if sl is None and tp is None:
@@ -1526,6 +1609,10 @@ def _entry_sl_tp_from_open_or_context(
             sle = _coerce_finite_float(pos_open.get("initial_stop_loss"))
         if tpe is None:
             tpe = _coerce_finite_float(pos_open.get("initial_take_profit"))
+        if sle is None:
+            sle = _coerce_finite_float(pos_open.get("stop_loss"))
+        if tpe is None:
+            tpe = _coerce_finite_float(pos_open.get("take_profit"))
     ctx = _ledger_context_parsed(ledger_row)
     if sle is None:
         sle = _coerce_finite_float(ctx.get("initial_stop_loss"))
@@ -2722,7 +2809,13 @@ def _compact_baseline_cell_policy_bound(
             cell["ledger_row_ignored"] = False
             cell["baseline_display_reason"] = "lifecycle_exit_execution"
             cell["economic_authority"] = "full"
-            return _apply_baseline_closed_lifecycle_fields(cell)
+            return _enrich_compact_baseline_dashboard_cell(
+                conn,
+                mid,
+                ledger_row,
+                _apply_baseline_closed_lifecycle_fields(cell),
+                market_db_path,
+            )
         _ensure_runtime_for_market_imports()
         try:
             from market_data.bar_lookup import fetch_bar_by_market_event_id
@@ -2764,7 +2857,13 @@ def _compact_baseline_cell_policy_bound(
         cell["ledger_row_ignored"] = False
         cell["baseline_display_reason"] = "lifecycle_exit_execution"
         cell["economic_authority"] = "full"
-        return _apply_baseline_closed_lifecycle_fields(cell)
+        return _enrich_compact_baseline_dashboard_cell(
+            conn,
+            mid,
+            ledger_row,
+            _apply_baseline_closed_lifecycle_fields(cell),
+            market_db_path,
+        )
     if not pol.get("trade"):
         if rc == JUPITER_2_BASELINE_HOLDING_RC:
             return _baseline_policy_held_cell(
@@ -2789,7 +2888,13 @@ def _compact_baseline_cell_policy_bound(
                 cell["ledger_row_ignored"] = False
                 cell["baseline_display_reason"] = "lifecycle_exit_execution"
                 cell["economic_authority"] = "full"
-                return _apply_baseline_closed_lifecycle_fields(cell)
+                return _enrich_compact_baseline_dashboard_cell(
+                    conn,
+                    mid,
+                    lr,
+                    _apply_baseline_closed_lifecycle_fields(cell),
+                    market_db_path,
+                )
             return _baseline_policy_no_trade_cell(
                 market_event_id=mid,
                 policy_row=pol,
@@ -2817,7 +2922,13 @@ def _compact_baseline_cell_policy_bound(
     cell["ledger_row_ignored"] = False
     cell["baseline_display_reason"] = "policy_approved_execution"
     cell["economic_authority"] = "full"
-    return _apply_baseline_closed_lifecycle_fields(cell)
+    return _enrich_compact_baseline_dashboard_cell(
+        conn,
+        mid,
+        ledger_row,
+        _apply_baseline_closed_lifecycle_fields(cell),
+        market_db_path,
+    )
 
 
 def _ledger_has_live_anna(conn: Any) -> bool:
