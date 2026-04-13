@@ -1613,13 +1613,6 @@
       );
     }
     var narr = c && c.jupiter_tile_narrative ? String(c.jupiter_tile_narrative) : '';
-    var scopeNote = '';
-    if (baselineLane && c && c.jupiter_tile_narrative_scope_note) {
-      scopeNote =
-        '<div class="tc-jup-scope-note" role="note">' +
-        esc(String(c.jupiter_tile_narrative_scope_note)) +
-        '</div>';
-    }
     var entrySnap = '';
     if (baselineLane && c && c.baseline_entry_jupiter_tile_narrative) {
       var emid =
@@ -1629,7 +1622,11 @@
       entrySnap =
         '<div class="tc-jup-entry-wrap">' +
         '<div class="tc-jup-entry-h">' +
-        esc(emid ? 'Why we entered — entry bar ' + emid : 'Why we entered — entry bar policy') +
+        esc(
+          jupLab +
+            ' — policy at entry' +
+            (emid ? ' — ' + emid : '')
+        ) +
         '</div>' +
         jupiterNarrativeLinesHtml(
           String(c.baseline_entry_jupiter_tile_narrative),
@@ -1638,9 +1635,22 @@
         ) +
         '</div>';
     }
-    var narrEl = narr
-      ? jupiterNarrativeLinesHtml(narr, 'Jupiter / Sean policy (this bar)', baselineLane)
-      : '';
+    var phHold =
+      baselineLane &&
+      c &&
+      String(c.baseline_lifecycle_phase || '').toLowerCase() === 'held';
+    var onePolicyHeld = phHold && entrySnap;
+    var narrEl =
+      narr && !onePolicyHeld
+        ? jupiterNarrativeLinesHtml(narr, 'Jupiter / Sean policy (this bar)', baselineLane)
+        : '';
+    var scopeNote = '';
+    if (baselineLane && c && c.jupiter_tile_narrative_scope_note && !onePolicyHeld) {
+      scopeNote =
+        '<div class="tc-jup-scope-note" role="note">' +
+        esc(String(c.jupiter_tile_narrative_scope_note)) +
+        '</div>';
+    }
     var jupStack = scopeNote + entrySnap + narrEl;
     if (!c || c.empty) {
       var ntBar =
@@ -2360,7 +2370,7 @@
       entryInner =
         '<div class="tc-jup-entry-wrap">' +
         '<div class="tc-jup-entry-h">' +
-        esc(emLive ? 'Why we entered — entry bar ' + emLive : 'Why we entered — entry bar policy') +
+        esc(jupLive + ' — policy at entry' + (emLive ? ' — ' + emLive : '')) +
         '</div>' +
         jupiterNarrativeLinesHtml(String(bl.entry_jupiter_tile_narrative), 'Entry bar policy', true) +
         '</div>';
@@ -2368,7 +2378,7 @@
       entryInner =
         '<div class="tc-jup-entry-wrap tc-jup-gates-missing">' +
         '<div class="tc-jup-entry-h">' +
-        esc('Why we entered — entry bar ' + emLive) +
+        esc(jupLive + ' — policy at entry — ' + emLive) +
         '</div>' +
         '<p class="tc-jup-missing-note">Entry policy unavailable — check ledger row and market DB.</p>' +
         '</div>';

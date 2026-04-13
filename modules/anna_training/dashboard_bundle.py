@@ -1832,6 +1832,66 @@ def _enrich_compact_baseline_dashboard_cell(
     return cell
 
 
+def _enrich_baseline_held_cell_economics(
+    conn: Any,
+    cell: dict[str, Any],
+    *,
+    market_db_path: Path | None,
+) -> dict[str, Any]:
+    """
+    **Held** trade-chain columns have no ``execution_trades`` row yet — :func:`_enrich_compact_baseline_dashboard_cell`
+    never runs. Hydrate trade_id, entry, size, SL/TP, bankroll fields from the open baseline position snapshot
+    (same source as the live HOLDING tile).
+    """
+    from modules.anna_training.execution_ledger import lookup_baseline_jupiter_open_state_json
+    from modules.anna_training.jupiter_2_baseline_lifecycle import BaselineOpenPosition
+
+    if not cell or cell.get("empty"):
+        return cell
+    raw, _pk = lookup_baseline_jupiter_open_state_json(conn, symbol="SOL-PERP", timeframe="5m", mode="paper")
+    if not raw:
+        return cell
+    try:
+        pos = BaselineOpenPosition.from_json_dict(json.loads(raw))
+    except (json.JSONDecodeError, TypeError, KeyError, ValueError):
+        return cell
+    cell["trade_id"] = pos.trade_id
+    cell["entry"] = float(pos.entry_price)
+    cell["size"] = float(pos.size)
+    cell["leverage"] = pos.leverage
+    if pos.collateral_usd is not None:
+        cell["collateral_usd"] = round(float(pos.collateral_usd), 6)
+    cell["risk_pct"] = pos.risk_pct
+    if pos.notional_usd is not None:
+        cell["notional_usd_approx"] = round(float(pos.notional_usd), 4)
+    cell["stop_loss_entry_price"] = pos.stop_loss
+    cell["take_profit_entry_price"] = pos.take_profit
+    cell["stop_loss_exit_price"] = pos.stop_loss
+    cell["take_profit_exit_price"] = pos.take_profit
+    pos_d = pos.to_json_dict()
+    fake_lr = {
+        "trade_id": pos.trade_id,
+        "context_snapshot_json": json.dumps({"entry_market_event_id": pos.entry_market_event_id}),
+    }
+    fc = _free_collateral_usd_for_row(conn, pos_d, fake_lr)
+    if fc is not None:
+        cell["free_collateral_usd"] = round(float(fc), 6)
+    sym = str(cell.get("symbol") or "SOL-PERP").strip()
+    if sym and market_db_path and market_db_path.is_file():
+        mae_val, _ = compute_mae_usd_v1(
+            canonical_symbol=sym,
+            side=cell.get("side"),
+            entry_price=cell.get("entry"),
+            size=cell.get("size"),
+            entry_time=pos.entry_candle_open_utc or None,
+            exit_time=None,
+            market_db_path=market_db_path,
+        )
+        if mae_val is not None:
+            cell["mae_usd"] = round(mae_val, 6)
+    return cell
+
+
 def _sl_tp_summary_from_policy_features(features: Any) -> str | None:
     sl, tp = _sl_tp_prices_from_features(features)
     if sl is None and tp is None:
@@ -3295,7 +3355,7 @@ def _compact_baseline_cell_policy_bound(
         )
     if not pol.get("trade"):
         if rc == JUPITER_2_BASELINE_HOLDING_RC:
-            return _enrich_baseline_jupiter_context_for_cell(
+            held_cell = _enrich_baseline_jupiter_context_for_cell(
                 conn,
                 _baseline_policy_held_cell(
                     market_event_id=mid,
@@ -3304,6 +3364,9 @@ def _compact_baseline_cell_policy_bound(
                 ),
                 pol,
                 phase="held",
+            )
+            return _enrich_baseline_held_cell_economics(
+                conn, held_cell, market_db_path=market_db_path
             )
         if rc == JUPITER_2_BASELINE_EXIT_RC:
             # Prefer column-keyed ledger row; else resolve by trade_id from policy features so we never
