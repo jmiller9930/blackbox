@@ -1697,10 +1697,15 @@
       );
     }
     var narr = c && c.jupiter_tile_narrative ? String(c.jupiter_tile_narrative) : '';
+    var entryHasGates =
+      baselineLane &&
+      c &&
+      c.baseline_entry_jupiter_v3_gates &&
+      typeof c.baseline_entry_jupiter_v3_gates === 'object';
     var entryHas =
       baselineLane &&
       c &&
-      ((c.baseline_entry_jupiter_v3_gates && typeof c.baseline_entry_jupiter_v3_gates === 'object') ||
+      (entryHasGates ||
         (c.baseline_entry_jupiter_tile_narrative &&
           String(c.baseline_entry_jupiter_tile_narrative).trim() !== ''));
     var entrySnap = '';
@@ -1718,7 +1723,7 @@
             (emid ? ' — ' + emid : '')
         ) +
         '</div>' +
-        (c.baseline_entry_jupiter_v3_gates
+        (entryHasGates
           ? jupiterV3GatesTableHtml(
               c.baseline_entry_jupiter_v3_gates,
               'Entry — gates (all five must pass to arm that side)'
@@ -1745,11 +1750,13 @@
         esc(String(c.jupiter_tile_narrative_scope_note)) +
         '</div>';
     }
+    // One gate table per tile: entry gates replace this-bar gates for this cell (no stacking).
     var colGates = '';
-    if (!posOpenBaseline && baselineLane && c && c.jupiter_v3_gates) {
+    if (!posOpenBaseline && !entryHasGates && baselineLane && c && c.jupiter_v3_gates) {
       colGates = jupiterV3GatesTableHtml(c.jupiter_v3_gates, 'This bar — gates');
     } else if (
       !posOpenBaseline &&
+      !entryHasGates &&
       baselineLane &&
       jupLab === 'JUPv3' &&
       jp.jupiter_v3_gates &&
