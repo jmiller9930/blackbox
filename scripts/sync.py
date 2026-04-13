@@ -10,9 +10,9 @@ Environment overrides:
   BLACKBOX_REMOTE_BRANCH Branch to pull on remote (default: main)
 
 Usage (from repo root):
-  python3 sync.py
-  python3 sync.py --dry-run
-  python3 sync.py --skip-push
+  python3 scripts/sync.py
+  python3 scripts/sync.py --dry-run
+  python3 scripts/sync.py --skip-push
 """
 
 from __future__ import annotations
@@ -28,15 +28,15 @@ DEFAULT_REMOTE_DIR = os.environ.get("BLACKBOX_REMOTE_HOME", "blackbox")
 DEFAULT_REMOTE_BRANCH = os.environ.get("BLACKBOX_REMOTE_BRANCH", "main")
 
 
-def _find_git_root(start: str | None = None) -> str:
-    cwd = os.path.abspath(start or os.getcwd())
-    cur = cwd
+def _find_git_root() -> str:
+    """Repo root: walk upward from this file until .git exists."""
+    cur = os.path.dirname(os.path.abspath(__file__))
     while True:
         if os.path.isdir(os.path.join(cur, ".git")):
             return cur
         parent = os.path.dirname(cur)
         if parent == cur:
-            sys.stderr.write(f"sync.py: no .git found from {cwd}\n")
+            sys.stderr.write(f"sync.py: no .git found above {__file__}\n")
             sys.exit(1)
         cur = parent
 
@@ -89,7 +89,6 @@ def _sync_push(repo: str, branch: str, *, dry_run: bool, skip_push: bool) -> Non
 
 
 def _remote_script(remote_dir_name: str, pull_branch: str) -> str:
-    # bash -lc on remote; ~ expanded by remote shell
     return f"""set -eu
 cd ~/{remote_dir_name}
 git fetch origin
@@ -117,7 +116,6 @@ def _remote_pull_and_restart(
         print("---")
         return
     print(f"SSH {ssh_target}: git pull + docker compose (UIUX.Web) …", flush=True)
-    # bash -s reads script from stdin — avoids quoting bugs; --noprofile/--norc avoids login noise.
     r = subprocess.run(
         [
             "ssh",
