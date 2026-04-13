@@ -972,6 +972,7 @@
         <div class="kv"><span class="k">Jupiter baseline policy</span><span class="v" style="display:flex;align-items:center;gap:0.35rem;flex-wrap:wrap">
           <select id="dash-baseline-jupiter-policy" aria-label="Jupiter baseline policy version" style="font-size:0.75rem;padding:0.22rem 0.45rem;max-width:10rem;border:1px solid var(--panel-border);border-radius:4px;background:var(--panel-bg, #fff)">
             <option value="jup_v2" selected>JUPv2</option>
+            <option value="jup_v3">JUPv3</option>
           </select>
         </span></div>
       </div>
@@ -2767,6 +2768,37 @@
         op.textContent = String(o.label != null ? o.label : op.value);
         if (ai && op.value === ai) op.selected = true;
         sel.appendChild(op);
+      }
+      if (!sel.dataset.bbJupPolChangeWired) {
+        sel.dataset.bbJupPolChangeWired = '1';
+        sel.addEventListener('change', function () {
+          var v = String(sel.value || '').trim();
+          if (!v) return;
+          var msg = $('pc-msg');
+          if (msg) msg.textContent = 'Setting baseline Jupiter policy…';
+          fetch('/api/v1/dashboard/baseline-jupiter-policy', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ policy_slot: v })
+          })
+            .then(function (r) {
+              return r.json().then(function (j) {
+                return { ok: r.ok, j: j };
+              });
+            })
+            .then(function (x) {
+              if (!x.ok || !x.j || x.j.ok === false) {
+                var err = x.j && x.j.error ? String(x.j.error) : 'Policy save failed';
+                if (msg) msg.textContent = err;
+                return;
+              }
+              if (msg) msg.textContent = 'Baseline policy: ' + v + ' (saved)';
+              refresh();
+            })
+            .catch(function (e) {
+              if (msg) msg.textContent = String(e);
+            });
+        });
       }
     })();
 

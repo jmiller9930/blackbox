@@ -1,9 +1,9 @@
-"""Baseline → execution_ledger: **Jupiter_2 Sean lifecycle** only (signal-gated).
+"""Baseline → execution_ledger: **Jupiter_2 / Jupiter_3 Sean lifecycle** (signal-gated).
 
-**Signal mode** is always ``sean_jupiter_v1`` (historic env name); the evaluator is
-``modules/anna_training/jupiter_2_sean_policy.evaluate_jupiter_2_sean`` via
-``sean_jupiter_baseline_signal.evaluate_sean_jupiter_baseline_v1``. The legacy mechanical
-one-bar OHLC writer is **not** in runtime.
+**Signal mode** is ``sean_jupiter_v1`` (Jupiter_2) or ``sean_jupiter_v3`` (Jupiter_3), selected by
+``baseline_operator_kv`` / env (see :func:`execution_ledger.get_baseline_jupiter_policy_slot`).
+Lifecycle SL/TP uses :mod:`jupiter_2_baseline_lifecycle` for both (same exit mechanics until v3-specific
+lifecycle is added).
 
 **Execution trades:** baseline ``execution_trades`` rows are **lifecycle** closes (``bl_lc_…``), not per-bar.
 
@@ -75,11 +75,6 @@ def _baseline_lifecycle_trade_id(entry_market_event_id: str, mode: str) -> str:
     return f"bl_lc_{h}"
 
 
-def _signal_mode() -> str:
-    """Sean Jupiter lifecycle only; ``BASELINE_LEDGER_SIGNAL_MODE`` legacy aliases are ignored."""
-    return "sean_jupiter_v1"
-
-
 def run_baseline_ledger_bridge_tick(
     *,
     market_data_db_path: Path | None = None,
@@ -107,8 +102,6 @@ def run_baseline_ledger_bridge_tick(
     if m not in ("live", "paper"):
         m = "paper"
 
-    sm = _signal_mode()
-
     bar = fetch_latest_bar_row(db_path=market_data_db_path)
     if not bar:
         return {"ok": False, "reason": "no_canonical_bar"}
@@ -129,27 +122,36 @@ def run_baseline_ledger_bridge_tick(
         process_holding_bar,
         unrealized_pnl_usd,
     )
+    from modules.anna_training.jupiter_2_sean_policy import calculate_atr
     from modules.anna_training.jupiter_2_sean_policy import (
-        CATALOG_ID as baseline_catalog_id,
-        POLICY_ENGINE_ID,
-        calculate_atr,
+        CATALOG_ID as CATALOG_ID_JUPITER_2,
+        POLICY_ENGINE_ID as POLICY_ENGINE_ID_JUPITER_2,
     )
-    from modules.anna_training.sean_jupiter_baseline_signal import evaluate_sean_jupiter_baseline_v1
+    from modules.anna_training.jupiter_3_sean_policy import (
+        CATALOG_ID as CATALOG_ID_JUPITER_3,
+        POLICY_ENGINE_ID as POLICY_ENGINE_ID_JUPITER_3,
+    )
+    from modules.anna_training.sean_jupiter_baseline_signal import (
+        evaluate_sean_jupiter_baseline_v1,
+        evaluate_sean_jupiter_baseline_v3,
+    )
     from modules.anna_training.store import load_state
 
     from modules.anna_training.execution_ledger import (
+        BASELINE_POLICY_SLOT_JUP_V3,
         append_position_event,
         baseline_jupiter_open_position_key,
         connect_ledger,
         ensure_execution_ledger_schema,
-        fetch_baseline_jupiter_open_state_json,
+        get_baseline_jupiter_policy_slot,
+        lookup_baseline_jupiter_open_state_json,
+        signal_mode_for_baseline_policy_slot,
         upsert_baseline_jupiter_open_state,
         upsert_policy_evaluation,
     )
 
     sym = str(bar.get("canonical_symbol") or "SOL-PERP").strip() or "SOL-PERP"
     tf = str(bar.get("timeframe") or "5m").strip() or "5m"
-    pos_key = baseline_jupiter_open_position_key(symbol=sym, timeframe=tf, mode=m)
 
     closes: list[float] = []
     highs: list[float] = []
@@ -165,16 +167,34 @@ def run_baseline_ledger_bridge_tick(
     conn_chk = connect_ledger(execution_ledger_db_path)
     try:
         ensure_execution_ledger_schema(conn_chk)
-        raw_open = fetch_baseline_jupiter_open_state_json(conn_chk, position_key=pos_key)
+        policy_slot = get_baseline_jupiter_policy_slot(conn_chk)
+        raw_open, pos_key = lookup_baseline_jupiter_open_state_json(
+            conn_chk, symbol=sym, timeframe=tf, mode=m
+        )
+        if pos_key is None:
+            pos_key = baseline_jupiter_open_position_key(symbol=sym, timeframe=tf, mode=m, policy_slot=policy_slot)
     finally:
         conn_chk.close()
 
-    st = load_state()
-    sig = evaluate_sean_jupiter_baseline_v1(
-        bars_asc=bars_asc,
-        training_state=st,
-        ledger_db_path=execution_ledger_db_path,
+    sm = signal_mode_for_baseline_policy_slot(policy_slot)
+    baseline_catalog_id = CATALOG_ID_JUPITER_3 if policy_slot == BASELINE_POLICY_SLOT_JUP_V3 else CATALOG_ID_JUPITER_2
+    POLICY_ENGINE_ID = (
+        POLICY_ENGINE_ID_JUPITER_3 if policy_slot == BASELINE_POLICY_SLOT_JUP_V3 else POLICY_ENGINE_ID_JUPITER_2
     )
+
+    st = load_state()
+    if policy_slot == BASELINE_POLICY_SLOT_JUP_V3:
+        sig = evaluate_sean_jupiter_baseline_v3(
+            bars_asc=bars_asc,
+            training_state=st,
+            ledger_db_path=execution_ledger_db_path,
+        )
+    else:
+        sig = evaluate_sean_jupiter_baseline_v1(
+            bars_asc=bars_asc,
+            training_state=st,
+            ledger_db_path=execution_ledger_db_path,
+        )
     policy_eval_write_error: str | None = None
 
     def _log_eval(

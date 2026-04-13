@@ -1,8 +1,7 @@
-"""Baseline signal — **Jupiter_2 Sean policy only** (``jupiter_2_sean_policy.py``).
+"""Baseline signal — **Jupiter_2** and **Jupiter_3** Sean policies.
 
-:func:`evaluate_sean_jupiter_baseline_v1` is a **thin adapter** over
-:func:`modules.anna_training.jupiter_2_sean_policy.evaluate_jupiter_2_sean`. No separate Wilder
-Supertrend, no duplicate regime math — tile and ledger see the same outputs as Jupiter_2.
+:func:`evaluate_sean_jupiter_baseline_v1` wraps :func:`jupiter_2_sean_policy.evaluate_jupiter_2_sean`.
+:func:`evaluate_sean_jupiter_baseline_v3` wraps :func:`jupiter_3_sean_policy.evaluate_jupiter_3_sean`.
 
 Helpers ``aggregate_candles_signal_flags`` and ``rsi_trading_core`` remain for tests and demos only.
 **Paper measurement** only (no venue submit).
@@ -25,6 +24,10 @@ from modules.anna_training.jupiter_2_sean_policy import (
     evaluate_jupiter_2_sean,
     rsi as jupiter_2_rsi,
 )
+from modules.anna_training.jupiter_3_sean_policy import (
+    CATALOG_ID as CATALOG_ID_JUPITER_3,
+    evaluate_jupiter_3_sean,
+)
 
 # --- Shared constants (aggregateCandles / trading_core RSI tests) ---
 RSI_PERIOD = 14
@@ -39,6 +42,14 @@ _J2_TO_BASELINE_REASON = {
     "jupiter_2_rsi_extreme_block": "rsi_extreme_skip",
     "jupiter_2_long_signal": "jupiter_policy_long_signal",
     "jupiter_2_short_signal": "jupiter_policy_short_signal",
+    "insufficient_history": "insufficient_history",
+    "ohlc_parse_error": "ohlc_parse_error",
+}
+
+_J3_TO_BASELINE_REASON = {
+    "jupiter_3_no_signal": "no_signal",
+    "jupiter_3_long_signal": "jupiter_policy_long_signal",
+    "jupiter_3_short_signal": "jupiter_policy_short_signal",
     "insufficient_history": "insufficient_history",
     "ohlc_parse_error": "ohlc_parse_error",
 }
@@ -589,5 +600,75 @@ def evaluate_sean_jupiter_baseline_v1(
         side=j2.side,
         reason_code=mapped_reason,
         pnl_usd=j2.pnl_usd,
+        features=feat,
+    )
+
+
+def _format_jupiter_3_operator_narrative(
+    feat: dict[str, Any],
+    *,
+    reason_code: str,
+    trade: bool,
+    side: str,
+) -> str:
+    """Plain-text tile for Jupiter_3 (distinct from Jupiter_2 Supertrend tile)."""
+    lines = [
+        "Policy: Jupiter_3 (EMA9/21, BOS, volume spike, expected_move gate)",
+        f"catalog_id={feat.get('catalog_id', CATALOG_ID_JUPITER_3)}",
+        f"trade={trade} side={side} reason_code={reason_code}",
+    ]
+    for k in (
+        "ema9",
+        "ema21",
+        "bullish_bias",
+        "bearish_bias",
+        "current_rsi",
+        "volume_spike",
+        "expected_move",
+        "prior_swing_high",
+        "prior_swing_low",
+        "long_bos",
+        "short_bos",
+    ):
+        if k in feat and feat[k] is not None:
+            lines.append(f"{k}={feat[k]}")
+    return "\n".join(lines)
+
+
+def evaluate_sean_jupiter_baseline_v3(
+    *,
+    bars_asc: list[dict[str, Any]],
+    free_collateral_usd: float | None = None,
+    training_state: dict[str, Any] | None = None,
+    ledger_db_path: Path | None = None,
+) -> SeanJupiterBaselineSignalV1:
+    """
+    Thin adapter over :func:`jupiter_3_sean_policy.evaluate_jupiter_3_sean` — same return shape as v1.
+    """
+    j3 = evaluate_jupiter_3_sean(
+        bars_asc=bars_asc,
+        free_collateral_usd=free_collateral_usd,
+        training_state=training_state,
+        ledger_db_path=ledger_db_path,
+    )
+    mapped_reason = _J3_TO_BASELINE_REASON.get(j3.reason_code, j3.reason_code)
+    feat = dict(j3.features) if j3.features else {}
+    feat["short_signal_raw"] = bool(feat.get("short_signal_core"))
+    feat["long_signal_raw"] = bool(feat.get("long_signal_core"))
+    feat["short_signal"] = feat["short_signal_raw"]
+    feat["long_signal"] = feat["long_signal_raw"]
+    feat["min_notional_hint_usd"] = MIN_COLLATERAL_USD
+    feat["parity"] = "jupiter_3_sean:evaluate_jupiter_3_sean"
+    feat["jupiter_policy_narrative"] = _format_jupiter_3_operator_narrative(
+        feat,
+        reason_code=mapped_reason,
+        trade=j3.trade,
+        side=str(j3.side or "flat"),
+    )
+    return SeanJupiterBaselineSignalV1(
+        trade=j3.trade,
+        side=j3.side,
+        reason_code=mapped_reason,
+        pnl_usd=j3.pnl_usd,
         features=feat,
     )

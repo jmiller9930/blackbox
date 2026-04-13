@@ -2287,6 +2287,75 @@ class Handler(BaseHTTPRequestHandler):
             r["trace_id"] = trace_id
             self._json(code, r, no_cache=True)
             return
+        path_norm = (parsed.path or "").rstrip("/") or "/"
+        if path_norm == "/api/v1/dashboard/baseline-jupiter-policy":
+            body = self._read_json_body()
+            trace_id = str(uuid.uuid4())
+            try:
+                from modules.anna_training.execution_ledger import (
+                    baseline_jupiter_policy_label_for_slot,
+                    connect_ledger,
+                    default_execution_ledger_path,
+                    ensure_execution_ledger_schema,
+                    get_baseline_jupiter_policy_slot,
+                    set_baseline_jupiter_policy_slot,
+                )
+            except Exception as e:  # noqa: BLE001
+                self._json(
+                    500,
+                    {
+                        "ok": False,
+                        "error": str(e)[:500],
+                        "trace_id": trace_id,
+                    },
+                    no_cache=True,
+                )
+                return
+            raw_slot = str(body.get("policy_slot") or body.get("id") or "").strip().lower()
+            ldb = default_execution_ledger_path()
+            try:
+                conn = connect_ledger(ldb)
+                try:
+                    ensure_execution_ledger_schema(conn)
+                    set_baseline_jupiter_policy_slot(conn, raw_slot)
+                    conn.commit()
+                    active = get_baseline_jupiter_policy_slot(conn)
+                finally:
+                    conn.close()
+            except ValueError as e:
+                self._json(
+                    400,
+                    {
+                        "ok": False,
+                        "error": str(e),
+                        "trace_id": trace_id,
+                    },
+                    no_cache=True,
+                )
+                return
+            except Exception as e:  # noqa: BLE001
+                self._json(
+                    500,
+                    {
+                        "ok": False,
+                        "error": str(e)[:500],
+                        "trace_id": trace_id,
+                    },
+                    no_cache=True,
+                )
+                return
+            self._json(
+                200,
+                {
+                    "ok": True,
+                    "schema": "baseline_jupiter_policy_set_v1",
+                    "active_id": active,
+                    "active_label": baseline_jupiter_policy_label_for_slot(active),
+                    "trace_id": trace_id,
+                },
+                no_cache=True,
+            )
+            return
         self._json(404, {"error": "not_found", "path": parsed.path})
 
     def log_message(self, _format: str, *_args: Any) -> None:

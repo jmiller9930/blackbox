@@ -17,12 +17,32 @@ if str(RUNTIME) not in sys.path:
     sys.path.insert(0, str(RUNTIME))
 
 
-def test_legacy_signal_mode_env_ignored(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Legacy mechanical mode is removed; env aliases do not switch writers."""
-    monkeypatch.setenv("BASELINE_LEDGER_SIGNAL_MODE", "legacy_mechanical_long")
-    from modules.anna_training.baseline_ledger_bridge import _signal_mode
+def test_baseline_jupiter_policy_slot_from_env_and_kv(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Operator slot: env override, then KV; maps to signal_mode labels."""
+    monkeypatch.delenv("BASELINE_JUPITER_POLICY_SLOT", raising=False)
+    db = tmp_path / "ledger.db"
+    from modules.anna_training.execution_ledger import (
+        BASELINE_POLICY_SLOT_JUP_V2,
+        BASELINE_POLICY_SLOT_JUP_V3,
+        ensure_execution_ledger_schema,
+        get_baseline_jupiter_policy_slot,
+        set_baseline_jupiter_policy_slot,
+        signal_mode_for_baseline_policy_slot,
+    )
 
-    assert _signal_mode() == "sean_jupiter_v1"
+    conn = sqlite3.connect(db)
+    ensure_execution_ledger_schema(conn)
+    assert get_baseline_jupiter_policy_slot(conn) == BASELINE_POLICY_SLOT_JUP_V2
+    set_baseline_jupiter_policy_slot(conn, BASELINE_POLICY_SLOT_JUP_V3)
+    conn.commit()
+    assert get_baseline_jupiter_policy_slot(conn) == BASELINE_POLICY_SLOT_JUP_V3
+    assert signal_mode_for_baseline_policy_slot(BASELINE_POLICY_SLOT_JUP_V3) == "sean_jupiter_v3"
+    conn.close()
+
+    monkeypatch.setenv("BASELINE_JUPITER_POLICY_SLOT", "jup_v2")
+    conn = sqlite3.connect(db)
+    assert get_baseline_jupiter_policy_slot(conn) == BASELINE_POLICY_SLOT_JUP_V2
+    conn.close()
 
 
 def test_upsert_policy_evaluation_idempotent(tmp_path: Path) -> None:

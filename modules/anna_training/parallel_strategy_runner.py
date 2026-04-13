@@ -1,4 +1,4 @@
-"""Parallel Anna paper strategies per market_event_id — **Jupiter_2** (same baseline policy) signal-gated ledger writes."""
+"""Parallel Anna paper strategies per market_event_id — Sean Jupiter baseline signal (v2/v3 per operator slot)."""
 
 from __future__ import annotations
 
@@ -9,7 +9,10 @@ import sys
 from pathlib import Path
 from typing import Any
 
-from modules.anna_training.sean_jupiter_baseline_signal import evaluate_sean_jupiter_baseline_v1
+from modules.anna_training.sean_jupiter_baseline_signal import (
+    evaluate_sean_jupiter_baseline_v1,
+    evaluate_sean_jupiter_baseline_v3,
+)
 from modules.anna_training.store import load_state
 
 
@@ -194,9 +197,12 @@ def run_parallel_anna_strategies_tick(
         persist_parallel_anna_stub_trade_with_trace,
     )
     from modules.anna_training.execution_ledger import (
+        BASELINE_POLICY_SLOT_JUP_V3,
         RESERVED_STRATEGY_BASELINE,
         connect_ledger,
         ensure_execution_ledger_schema,
+        get_baseline_jupiter_policy_slot,
+        signal_mode_for_baseline_policy_slot,
         sync_strategy_registry_from_catalog,
     )
 
@@ -252,27 +258,39 @@ def run_parallel_anna_strategies_tick(
 
     conn = connect_ledger(execution_ledger_db_path)
     stub_migration: dict[str, Any] = {"ok": True, "updated": 0}
+    policy_slot = "jup_v2"
     try:
         ensure_execution_ledger_schema(conn)
         stub_migration = _migrate_anna_parallel_stub_rows_to_paper(
             conn, market_db_path=market_data_db_path
         )
         sync_strategy_registry_from_catalog(conn)
+        policy_slot = get_baseline_jupiter_policy_slot(conn)
     finally:
         conn.close()
 
-    sig = evaluate_sean_jupiter_baseline_v1(
-        bars_asc=bars_asc,
-        training_state=load_state(),
-        ledger_db_path=execution_ledger_db_path,
-    )
+    use_v3 = policy_slot == BASELINE_POLICY_SLOT_JUP_V3
+    sm = signal_mode_for_baseline_policy_slot(policy_slot)
+    if use_v3:
+        sig = evaluate_sean_jupiter_baseline_v3(
+            bars_asc=bars_asc,
+            training_state=load_state(),
+            ledger_db_path=execution_ledger_db_path,
+        )
+    else:
+        sig = evaluate_sean_jupiter_baseline_v1(
+            bars_asc=bars_asc,
+            training_state=load_state(),
+            ledger_db_path=execution_ledger_db_path,
+        )
     if not sig.trade:
         return {
             "ok": True,
             "no_trade": True,
             "market_event_id": mid,
             "reason_code": sig.reason_code,
-            "signal_mode": "sean_jupiter_v1",
+            "signal_mode": sm,
+            "baseline_jupiter_policy_slot": policy_slot,
             "features": sig.features,
             "strategies": strategies,
             "parallel_mode": mode,
@@ -285,7 +303,8 @@ def run_parallel_anna_strategies_tick(
     ctx = {
         **base_ctx,
         "parallel_signal": {
-            "signal_mode": "sean_jupiter_v1",
+            "signal_mode": sm,
+            "baseline_jupiter_policy_slot": policy_slot,
             "reason_code": sig.reason_code,
             "side": sig.side,
             "features": sig.features,
@@ -307,8 +326,8 @@ def run_parallel_anna_strategies_tick(
                     signal_reason_code=str(sig.reason_code or ""),
                     context_snapshot={**ctx, "parallel_mode": "paper"},
                     notes=(
-                        "parallel_runner economic paper — Sean Jupiter v1 signal; "
-                        f"open→close {sig.side}, size 1"
+                        "parallel_runner economic paper — Sean Jupiter baseline signal "
+                        f"({policy_slot}); open→close {sig.side}, size 1"
                     ),
                     db_path=execution_ledger_db_path,
                 )
@@ -341,6 +360,8 @@ def run_parallel_anna_strategies_tick(
         "market_event_id": mid,
         "strategies": strategies,
         "parallel_mode": mode,
+        "signal_mode": sm,
+        "baseline_jupiter_policy_slot": policy_slot,
         "stub_migration": stub_migration,
         "trades_written": len(written),
         "trade_ids": written,

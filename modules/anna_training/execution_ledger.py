@@ -13,6 +13,13 @@ from typing import Any
 from modules.anna_training.store import utc_now_iso
 
 RESERVED_STRATEGY_BASELINE = "baseline"
+# Baseline Jupiter policy slot (operator dropdown) — persisted in ``baseline_operator_kv``.
+BASELINE_POLICY_SLOT_JUP_V2 = "jup_v2"
+BASELINE_POLICY_SLOT_JUP_V3 = "jup_v3"
+BASELINE_OPERATOR_KV_JUPITER_POLICY_SLOT = "baseline_jupiter_policy_slot"
+# policy_evaluations.signal_mode — one distinct string per engine (historic v1 label = Jupiter_2).
+SIGNAL_MODE_JUPITER_2 = "sean_jupiter_v1"
+SIGNAL_MODE_JUPITER_3 = "sean_jupiter_v3"
 VALID_LANES = frozenset({"baseline", "anna"})
 VALID_MODES = frozenset({"live", "paper", "paper_stub"})
 SCHEMA_VERSION = "execution_trade_v1"
@@ -259,17 +266,158 @@ def _migrate_baseline_jupiter_open_positions(conn: sqlite3.Connection) -> None:
     )
 
 
+def _migrate_baseline_operator_kv(conn: sqlite3.Connection) -> None:
+    cur = conn.execute(
+        "SELECT name FROM sqlite_master WHERE type='table' AND name='baseline_operator_kv'"
+    )
+    if cur.fetchone():
+        return
+    conn.execute(
+        """
+        CREATE TABLE baseline_operator_kv (
+          key TEXT PRIMARY KEY,
+          value TEXT NOT NULL,
+          updated_at_utc TEXT NOT NULL
+        )
+        """
+    )
+
+
 def baseline_jupiter_open_position_key(
     *,
     symbol: str,
     timeframe: str,
     mode: str,
+    policy_slot: str | None = None,
 ) -> str:
-    """Single baseline Jupiter_2 paper position key (one active position per lane)."""
+    """Baseline open-position key. Prefer ``policy_slot`` (jup_v2 / jup_v3) so policies do not share state."""
     sym = (symbol or "SOL-PERP").strip() or "SOL-PERP"
     tf = (timeframe or "5m").strip() or "5m"
     m = (mode or "paper").strip().lower() or "paper"
+    ps = (policy_slot or "").strip()
+    if ps:
+        return f"baseline|{sym}|{tf}|{m}|{ps}"
     return f"baseline|{sym}|{tf}|{m}"
+
+
+def get_baseline_jupiter_policy_slot(conn: sqlite3.Connection) -> str:
+    """
+    Active baseline Jupiter policy for runtime (bridge, dashboard, parallel runner).
+
+    Order: env ``BASELINE_JUPITER_POLICY_SLOT`` (ci/tests), then ``baseline_operator_kv``, default **jup_v2**.
+    """
+    raw = (os.environ.get("BASELINE_JUPITER_POLICY_SLOT") or "").strip().lower()
+    if raw in ("jup_v3", "v3", "jupiter_3"):
+        return BASELINE_POLICY_SLOT_JUP_V3
+    if raw in ("jup_v2", "v2", "jupiter_2"):
+        return BASELINE_POLICY_SLOT_JUP_V2
+    try:
+        row = conn.execute(
+            "SELECT value FROM baseline_operator_kv WHERE key = ?",
+            (BASELINE_OPERATOR_KV_JUPITER_POLICY_SLOT,),
+        ).fetchone()
+        if row and str(row[0]).strip():
+            v = str(row[0]).strip().lower()
+            if v in (BASELINE_POLICY_SLOT_JUP_V3, "jup_v3"):
+                return BASELINE_POLICY_SLOT_JUP_V3
+    except sqlite3.OperationalError:
+        pass
+    return BASELINE_POLICY_SLOT_JUP_V2
+
+
+def set_baseline_jupiter_policy_slot(conn: sqlite3.Connection, policy_slot: str) -> None:
+    """Persist operator policy slot (``jup_v2`` or ``jup_v3``)."""
+    ps = (policy_slot or "").strip().lower()
+    if ps not in (BASELINE_POLICY_SLOT_JUP_V2, BASELINE_POLICY_SLOT_JUP_V3):
+        raise ValueError("policy_slot must be jup_v2 or jup_v3")
+    ts = utc_now_iso()
+    conn.execute(
+        """
+        INSERT INTO baseline_operator_kv (key, value, updated_at_utc)
+        VALUES (?, ?, ?)
+        ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at_utc = excluded.updated_at_utc
+        """,
+        (BASELINE_OPERATOR_KV_JUPITER_POLICY_SLOT, ps, ts),
+    )
+
+
+def signal_mode_for_baseline_policy_slot(policy_slot: str) -> str:
+    return SIGNAL_MODE_JUPITER_3 if policy_slot == BASELINE_POLICY_SLOT_JUP_V3 else SIGNAL_MODE_JUPITER_2
+
+
+def baseline_jupiter_policy_label_for_slot(policy_slot: str) -> str:
+    """Operator-facing short label for dashboard / bundle (``JUPv2`` / ``JUPv3``)."""
+    return "JUPv3" if (policy_slot or "").strip() == BASELINE_POLICY_SLOT_JUP_V3 else "JUPv2"
+
+
+def baseline_jupiter_policy_tag_from_signal_mode(signal_mode: str | None) -> str:
+    """Derive strip/table tag from ``policy_evaluations.signal_mode``."""
+    sm = (signal_mode or "").strip()
+    return "JUPv3" if sm == SIGNAL_MODE_JUPITER_3 else "JUPv2"
+
+
+def lookup_baseline_jupiter_open_state_json(
+    conn: sqlite3.Connection,
+    *,
+    symbol: str,
+    timeframe: str,
+    mode: str,
+) -> tuple[str | None, str | None]:
+    """
+    Return ``(state_json, position_key)`` for the active policy slot, then legacy unsuffixed key.
+    """
+    slot = get_baseline_jupiter_policy_slot(conn)
+    pk_new = baseline_jupiter_open_position_key(
+        symbol=symbol, timeframe=timeframe, mode=mode, policy_slot=slot
+    )
+    raw = fetch_baseline_jupiter_open_state_json(conn, position_key=pk_new)
+    if raw:
+        return raw, pk_new
+    pk_legacy = baseline_jupiter_open_position_key(symbol=symbol, timeframe=timeframe, mode=mode)
+    raw2 = fetch_baseline_jupiter_open_state_json(conn, position_key=pk_legacy)
+    if raw2:
+        return raw2, pk_legacy
+    return None, None
+
+
+def fetch_baseline_policy_evaluation_for_market_event(
+    conn: sqlite3.Connection,
+    market_event_id: str,
+    *,
+    lane: str = RESERVED_STRATEGY_BASELINE,
+    strategy_id: str = RESERVED_STRATEGY_BASELINE,
+    prefer_active_slot: bool = True,
+) -> dict[str, Any] | None:
+    """Latest baseline policy row for ``market_event_id``.
+
+    When ``prefer_active_slot`` is True (default), tries the operator-selected engine first
+    (``get_baseline_jupiter_policy_slot``), then the other ``signal_mode`` so historic rows still resolve
+    after a policy switch.
+    """
+    mid = (market_event_id or "").strip()
+    if not mid:
+        return None
+    modes: list[str]
+    if prefer_active_slot:
+        slot = get_baseline_jupiter_policy_slot(conn)
+        primary = signal_mode_for_baseline_policy_slot(slot)
+        secondary = (
+            SIGNAL_MODE_JUPITER_3 if primary == SIGNAL_MODE_JUPITER_2 else SIGNAL_MODE_JUPITER_2
+        )
+        modes = [primary, secondary]
+    else:
+        modes = [SIGNAL_MODE_JUPITER_2, SIGNAL_MODE_JUPITER_3]
+    seen: set[str] = set()
+    for sm in modes:
+        if sm in seen:
+            continue
+        seen.add(sm)
+        row = fetch_policy_evaluation_for_market_event(
+            conn, mid, lane=lane, strategy_id=strategy_id, signal_mode=sm
+        )
+        if row:
+            return row
+    return None
 
 
 def fetch_baseline_jupiter_open_state_json(
@@ -369,6 +517,7 @@ def ensure_execution_ledger_schema(conn: sqlite3.Connection, root: Path | None =
     _migrate_policy_evaluation_schema(conn, root)
     _migrate_position_events_schema(conn, root)
     _migrate_baseline_jupiter_open_positions(conn)
+    _migrate_baseline_operator_kv(conn)
     conn.commit()
 
 
