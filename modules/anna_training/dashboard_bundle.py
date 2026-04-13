@@ -731,15 +731,22 @@ def build_jupiter_policy_snapshot(
                 entry_nar = (pos.entry_policy_narrative_snapshot or "").strip()
                 eg = pos.entry_jupiter_v3_gates_snapshot
                 entry_gates: dict[str, Any] | None = dict(eg) if isinstance(eg, dict) else None
-                # Fill whichever is missing: older opens may have narrative but no gate snapshot (or vice versa).
-                if emid and (not entry_nar or entry_gates is None):
+                # Recompute at entry bar. For JUPv3, always prefer fresh gates/narrative over persisted
+                # ledger snapshots — they can be wrong (e.g. this-bar eval stored as "entry").
+                if emid:
                     rn, rg = _baseline_entry_snapshot_for_active_slot(
                         conn, emid, mpath, _st, prefetch_bars=bars
                     )
-                    if not entry_nar and rn:
-                        entry_nar = (str(rn) or "").strip()
-                    if entry_gates is None and isinstance(rg, dict):
-                        entry_gates = dict(rg)
+                    if use_v3:
+                        if isinstance(rg, dict) and len(rg) > 0:
+                            entry_gates = dict(rg)
+                        if isinstance(rn, str) and rn.strip():
+                            entry_nar = rn.strip()
+                    else:
+                        if not entry_nar and rn:
+                            entry_nar = (str(rn) or "").strip()
+                        if entry_gates is None and isinstance(rg, dict):
+                            entry_gates = dict(rg)
                 out["baseline_lifecycle"] = {
                     "position_open": True,
                     "trade_id": pos.trade_id,
