@@ -1,6 +1,10 @@
 """
 Recompute and persist the last closed 5m bar from ticks (call after each tick ingest).
 
+**OHLC** comes from Pyth/Hermes ticks only. **Volume** (``volume_base``) is filled from **Binance**
+``/api/v3/klines`` quote asset volume for the same 5m UTC open (see ``binance_kline_volume``), not from
+tick counts.
+
 After a successful ``market_bars_5m`` upsert, optionally runs
 :func:`modules.anna_training.baseline_ledger_bridge.run_baseline_ledger_bridge_tick` so
 ``policy_evaluations`` / baseline ``execution_trades`` stay aligned with ingest (not only the
@@ -19,6 +23,7 @@ import sys
 from pathlib import Path
 from typing import Any
 
+from market_data.binance_kline_volume import enrich_canonical_bar_volume_from_binance
 from market_data.canonical_bar import build_canonical_bar_from_ticks
 from market_data.canonical_instrument import TIMEFRAME_5M, canonical_symbol_for_tick_symbol
 from market_data.canonical_time import format_candle_open_iso_z, last_closed_candle_open_utc
@@ -87,6 +92,7 @@ def refresh_last_closed_bar_from_ticks(conn: Any, tick_symbol: str) -> dict[str,
             "candle_open_utc": format_candle_open_iso_z(last_open),
             "tick_count": len(ticks),
         }
+    bar, binance_meta = enrich_canonical_bar_volume_from_binance(bar)
     upsert_market_bar_5m(conn, bar)
     out: dict[str, Any] = {
         "ok": True,
@@ -94,6 +100,8 @@ def refresh_last_closed_bar_from_ticks(conn: Any, tick_symbol: str) -> dict[str,
         "canonical_symbol": canonical,
         "candle_open_utc": format_candle_open_iso_z(last_open),
         "tick_count": bar.tick_count,
+        "volume_base": bar.volume_base,
+        "binance_kline": binance_meta,
     }
     bridge = _baseline_ledger_bridge_after_bar_refresh(conn)
     if bridge is not None:

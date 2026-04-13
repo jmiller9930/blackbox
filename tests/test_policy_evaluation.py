@@ -97,6 +97,7 @@ def test_upsert_policy_evaluation_idempotent(tmp_path: Path) -> None:
 
 def test_baseline_bridge_writes_policy_eval_sean_path(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("BASELINE_LEDGER_AFTER_CANONICAL_BAR", "0")
+    monkeypatch.setenv("BLACKBOX_BINANCE_KLINE_ENABLED", "0")
     monkeypatch.setenv("MARKET_BAR_MEMBERSHIP", "inserted_at")
     market_db = tmp_path / "market_data.db"
     ledger_db = tmp_path / "execution_ledger.db"
@@ -199,6 +200,7 @@ def test_canonical_bar_refresh_invokes_baseline_ledger_when_enabled(
 ) -> None:
     """``refresh_last_closed_bar_from_ticks`` runs the baseline bridge when AFTER_CANONICAL_BAR is on."""
     monkeypatch.setenv("BASELINE_LEDGER_AFTER_CANONICAL_BAR", "1")
+    monkeypatch.setenv("BLACKBOX_BINANCE_KLINE_ENABLED", "0")
     monkeypatch.setenv("MARKET_BAR_MEMBERSHIP", "inserted_at")
     market_db = tmp_path / "market_data.db"
     ledger_db = tmp_path / "execution_ledger.db"

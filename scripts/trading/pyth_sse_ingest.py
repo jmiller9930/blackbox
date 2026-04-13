@@ -20,6 +20,9 @@ Environment:
   PYTH_SSE_CONF_RATIO_MAX — only when ``PYTH_SSE_APPLY_CONF_GATE=1`` (default 0.001)
   PYTH_SSE_BAR_REFRESH_SEC — min seconds between *throttled* bar refreshes (default 15); refresh still runs
   immediately when UTC ``last_closed_candle_open`` advances (new 5m bucket to materialize).
+  BLACKBOX_BINANCE_KLINE_ENABLED — ``1`` (default): after each closed 5m rollup, fetch Binance ``/api/v3/klines``
+  quote volume into ``market_bars_5m.volume_base`` (Pyth supplies OHLC only). Set ``0`` to skip (tests/airgap).
+  BLACKBOX_BINANCE_KLINE_SYMBOL — Binance spot symbol for SOL baseline (default ``SOLUSDT``).
   MARKET_BAR_MEMBERSHIP — ``oracle_publish`` (default, Sean) | ``inserted_at`` — see ``store.bar_membership_mode``
   BASELINE_LEDGER_AFTER_CANONICAL_BAR — ``1`` (default): after each ``market_bars_5m`` upsert, run baseline
   policy → ``execution_ledger.db`` (see ``basetrade/README.md``); ``0`` to disable

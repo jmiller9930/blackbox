@@ -22,6 +22,7 @@ from _paths import repo_root  # noqa: E402
 
 def _seed_closed_sol_bar(market_db: Path, monkeypatch: pytest.MonkeyPatch) -> str:
     monkeypatch.setenv("BASELINE_LEDGER_AFTER_CANONICAL_BAR", "0")
+    monkeypatch.setenv("BLACKBOX_BINANCE_KLINE_ENABLED", "0")
     monkeypatch.setenv("MARKET_BAR_MEMBERSHIP", "inserted_at")
     conn = connect_market_db(market_db)
     ensure_market_schema(conn, repo_root())
