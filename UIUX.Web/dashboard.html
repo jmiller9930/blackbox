@@ -518,6 +518,14 @@
       letter-spacing: 0.04em;
       text-transform: uppercase;
     }
+    /* Forming bar / not in market_bars yet — not an evaluated NO TRADE. */
+    .tc-tr-baseline .tc-tile-verdict.tc-verdict-pending {
+      color: #7c3aed;
+      -webkit-text-stroke: 0;
+      font-size: 1.05rem;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+    }
     .tc-tr-baseline .tc-tile-verdict.tc-verdict-closed {
       font-size: 0.92rem;
       letter-spacing: 0.03em;
@@ -1307,6 +1315,19 @@
       ? jupiterNarrativeLinesHtml(narr, 'Jupiter / Sean policy (5m bar)', baselineLane)
       : '';
     if (!c || c.empty) {
+      var br = c && String(c.baseline_display_reason || '');
+      var pend =
+        baselineLane &&
+        c &&
+        (br === 'bar_forming_no_closed_bar' ||
+          String(c.outcome_display || '').toLowerCase() === 'eval pending');
+      if (pend) {
+        return tcCellSurface(
+          narrEl +
+            '<div class="tc-tile-verdict wl-EVAL tc-verdict-pending" title="This 5m candle is not closed in market_data yet. Full Sean evaluation (trade vs no trade and gates) appears after the bar closes.">' +
+            'EVAL PENDING</div>'
+        );
+      }
       var ntBar =
         baselineLane
           ? 'tc-empty tc-no-trade tc-no-trade-amber'

@@ -2277,6 +2277,45 @@ def _baseline_assign_lifecycle_tile_slots(
         i = j
 
 
+def _baseline_policy_bar_pending_cell(
+    *,
+    market_event_id: str,
+    ledger_row: dict[str, Any] | None,
+) -> dict[str, Any]:
+    """
+    Axis column for a **synthetic** ``market_event_id`` (in-progress 5m) **before** a row exists in
+    ``market_bars_5m``. Not an evaluated **NO_TRADE** — full Sean tile + policy verdict appear after close.
+    """
+    mid = str(market_event_id).strip()
+    return {
+        "empty": True,
+        "market_event_id": mid,
+        "trade_id": None,
+        "trace_id": None,
+        "symbol": None,
+        "timeframe": None,
+        "side": None,
+        "exit_reason": None,
+        "entry": None,
+        "exit": None,
+        "entry_time": None,
+        "exit_time": None,
+        "size": None,
+        "notional_usd_approx": None,
+        "pnl_usd": None,
+        "mae_usd": None,
+        "outcome": "PENDING_BAR",
+        "outcome_display": "eval pending",
+        "economic_authority": "policy_gated",
+        "policy_authoritative": False,
+        "policy_trade": None,
+        "policy_reason_code": None,
+        "policy_missing": True,
+        "ledger_row_ignored": ledger_row is not None,
+        "baseline_display_reason": "bar_forming_no_closed_bar",
+    }
+
+
 def _baseline_policy_no_trade_cell(
     *,
     market_event_id: str,
@@ -2359,6 +2398,19 @@ def _compact_baseline_cell_policy_bound(
             cell["baseline_display_reason"] = "lifecycle_exit_execution"
             cell["economic_authority"] = "full"
             return _apply_baseline_closed_lifecycle_fields(cell)
+        _ensure_runtime_for_market_imports()
+        try:
+            from market_data.bar_lookup import fetch_bar_by_market_event_id
+
+            bar_exists = (
+                market_db_path is not None
+                and market_db_path.is_file()
+                and fetch_bar_by_market_event_id(mid, db_path=market_db_path) is not None
+            )
+        except Exception:
+            bar_exists = False
+        if not bar_exists:
+            return _baseline_policy_bar_pending_cell(market_event_id=mid, ledger_row=ledger_row)
         return _baseline_policy_no_trade_cell(
             market_event_id=mid,
             policy_row=None,
