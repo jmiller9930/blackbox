@@ -318,8 +318,11 @@ def get_baseline_jupiter_policy_slot(conn: sqlite3.Connection) -> str:
         ).fetchone()
         if row and str(row[0]).strip():
             v = str(row[0]).strip().lower()
-            if v in (BASELINE_POLICY_SLOT_JUP_V3, "jup_v3"):
+            # Same aliases as env branch so operator KV matches dashboard / compose.
+            if v in (BASELINE_POLICY_SLOT_JUP_V3, "jup_v3", "v3", "jupiter_3"):
                 return BASELINE_POLICY_SLOT_JUP_V3
+            if v in (BASELINE_POLICY_SLOT_JUP_V2, "jup_v2", "v2", "jupiter_2"):
+                return BASELINE_POLICY_SLOT_JUP_V2
     except sqlite3.OperationalError:
         pass
     return BASELINE_POLICY_SLOT_JUP_V2
