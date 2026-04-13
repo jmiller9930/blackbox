@@ -70,7 +70,7 @@
   function injectBaseStyles() {
     if (document.getElementById("bb-text-scale-injected-css")) return;
     var css =
-      "#bb-text-scale-widget{position:fixed;bottom:max(10px,env(safe-area-inset-bottom));right:max(10px,env(safe-area-inset-right));z-index:2147483647;display:flex;flex-wrap:wrap;align-items:center;gap:6px 8px;max-width:min(100vw - 20px,20rem);padding:8px 10px;border-radius:12px;border:1px solid rgba(15,23,42,0.15);background:rgba(255,255,255,0.97);box-shadow:0 6px 24px rgba(15,23,42,0.12);font-family:system-ui,-apple-system,sans-serif;font-size:14px}" +
+      "#bb-text-scale-widget{position:fixed;top:max(10px,env(safe-area-inset-top));right:max(10px,env(safe-area-inset-right));z-index:2147483647;display:flex;flex-wrap:wrap;align-items:center;gap:6px 8px;max-width:min(100vw - 20px,20rem);padding:8px 10px;border-radius:12px;border:1px solid rgba(15,23,42,0.15);background:rgba(255,255,255,0.97);box-shadow:0 6px 24px rgba(15,23,42,0.12);font-family:system-ui,-apple-system,sans-serif;font-size:14px}" +
       "#bb-text-scale-widget .bb-ts-label{font-weight:700;font-size:11px;color:#64748b;text-transform:uppercase;letter-spacing:0.06em;width:100%;margin:0}" +
       "#bb-text-scale-widget .bb-ts-row{display:flex;flex-wrap:wrap;align-items:center;gap:6px;width:100%}" +
       "#bb-text-scale-widget button.bb-ts-icon{min-width:40px;height:36px;padding:0 10px;border-radius:8px;border:1px solid #cbd5e1;background:#f1f5f9;color:#0f172a;font-size:18px;font-weight:700;line-height:1;cursor:pointer;font-family:inherit}" +
