@@ -1,7 +1,7 @@
 # Slack Conversational Operator System — Low-Level Design (LDD)
 
 **Status:** Contractual (implementation target)  
-**Lock-down (BBX-SLACK-002):** §0 (boundary), §4.4, §12 (first PR items 1–6), §§19–22 — normative for implementation and proof.  
+**Lock-down (BBX-SLACK-002):** §0 (boundary + **posture**), §4.4, §12 (first PR items 1–6), §§19–22, **§24** (runtime fit, inventory, cutover) — normative for implementation and proof.  
 **Audience:** Engineering (implementer), Operator (acceptance), Architect (governance)  
 **Scope:** Slack-native conversational interface over BlackBox / OpenClaw with **grounded** answers, **optional named-agent presentation**, **document-grounded** project Q&A, and **auditable** routing.
 
@@ -51,6 +51,19 @@ BBX-SLACK is a **new conversational operator slice** (Slack → OpenClaw → BLA
 **Metadata:** OpenClaw may set **`SLACK_PERSONA_ROUTE`** (or equivalent) for routing/display **without** rewriting BLACK BOX stdout.
 
 **Invalid:** Applying **both** BlackBox and OpenClaw **text** enforcement to the **same** bridge output.
+
+### 0.5 Implementation posture — interception, not greenfield (architect)
+
+BBX-SLACK is **not** a blank-slate messaging build. **OpenClaw** already provides Slack-facing backend, dispatch, and **embedded** conversational behavior; **BLACK BOX** already has domain/runtime/tooling and an **Anna** bridge (`scripts/openclaw/slack_anna_ingress.py`, `anna_entry.py` path). **Default/system** paths can answer **broad generic** prompts via the gateway when the bridge does not handle the turn.
+
+**Normative posture:**
+
+1. **Inventory before behavior change** — Document the **live** route map (§24.2); verify on **clawbot** where host-specific.
+2. **Insert, do not replace wholesale** — The **operator router** is a **layer** in the existing bridge/ingress order (see §24.3). Do **not** duplicate parallel Slack stacks unless this LDD explicitly authorizes them.
+3. **Preserve or narrow intentionally** — If existing default/system behavior is **unchanged**, state so and **prove** (regression checklist). If it is **narrowed** (e.g. fewer messages reach embedded-only), state the **new boundary** and **prove** it matches §4.4.
+4. **Cutover in docs first** — Current state, target state, interception point, fallback, rollback: **§24**.
+
+**Truth boundary remains hard (§0.3):** generic or embedded behavior must **not** become source of truth for trading/system facts; those flow through BLACK BOX tools.
 
 ---
 
@@ -750,7 +763,7 @@ Execute in order **before** claiming operator-visible E2E:
 
 **Do not start BBX-SLACK-002 implementation** until:
 
-- [ ] **§0** (boundary / truth discipline) and **§23** (alignment pass) accepted **or** amended with Architect sign-off.
+- [ ] **§0** (boundary / truth discipline), **§24** (runtime inventory + cutover), and **§23** (alignment pass) accepted **or** amended with Architect sign-off; **§24.7** questions resolved or explicitly deferred.
 - [ ] **§19** (Architect lock-down) accepted **or** amended with Architect sign-off.
 - [ ] **OpenClaw patch plan** pinned: owner, `dispatch.ts` change list, rollback, verification step.
 - [ ] **First PR scope** locked: **§12 items 1–6 only** (item 7 excluded unless Architect reopens).
@@ -1004,8 +1017,6 @@ CREATE INDEX idx_operator_thread_access ON operator_thread_state(last_access_at_
 
 ---
 
----
-
 ## 23. Alignment pass — delta summary, explicit decisions, readiness (BBX-SLACK LDD)
 
 **Purpose:** Deliver the **return package** for architect acceptance: what changed, locked answers, and whether BBX-SLACK-002 may open.
@@ -1023,6 +1034,7 @@ CREATE INDEX idx_operator_thread_access ON operator_thread_state(last_access_at_
 | 7 | Access control | **§22** | Workspace + **channel** + optional user; **dev-mode** bypass explicit. |
 | 8 | First-merge scope | **§12**, **§19.7** | **§12 items 1–6 only**; **item 7** (doc Q&A) **excluded** from first implementation PR unless Architect reopens. |
 | 9 | Truth discipline | **§0.3** | Facts from BLACK BOX tools only for in-scope domains; not from persona, gateway, or embedded model for those domains. |
+| 10 | Runtime fit (not greenfield) | **§0.5**, **§24** | Interception posture; current-state route table; preserved/replaced; cutover/rollback; **§24.7** questions for architect. |
 
 ### 23.2 Explicit answers (open decisions)
 
@@ -1042,7 +1054,92 @@ CREATE INDEX idx_operator_thread_access ON operator_thread_state(last_access_at_
 
 - The LDD is **implementation-ready** for **BBX-SLACK-002** **first PR** scope (**§12 items 1–6**): transport + router skeleton + Phase 1 tools in §20 + thread §21 + access §22 + audit/trace §19.4.
 - **Not** opened for **§12 item 7** until that scope is explicitly added.
-- **Do not** begin implementation until **this** document (including §0 and §23) is **accepted**; proof follows **§18.8–§18.9** and **canonical_development_plan** BBX-SLACK-002 proof bar.
+- **Do not** begin implementation until **this** document (including §0, §23, and **§24** posture + inventory acceptance) is **accepted**; proof follows **§18.8–§18.9** and **canonical_development_plan** BBX-SLACK-002 proof bar.
+
+---
+
+## 24. Runtime fit — current-state inventory, interception, cutover (architect)
+
+**Purpose:** Canonical alignment with the architect’s review: **build from what runs today**, document **preserved vs replaced**, and lock **cutover/rollback** so engineering does not treat BBX-SLACK as greenfield.
+
+### 24.1 What this initiative is
+
+| It is | It is not |
+|-------|-----------|
+| **Architectural interception + grounding** — insert operator router, tools, audit, thread state into the **existing** Slack→OpenClaw→BlackBox path | A replacement of OpenClaw or a second Slack server |
+| **Fit-and-tighten** — inventory, then layer | Rebuild-from-scratch messaging |
+
+### 24.2 Current-state route inventory (repo truth; verify on clawbot)
+
+Engineering must **complete and attach evidence** (log excerpts, `dispatch.ts` snippet, config) for the **live** host. The table below is **starting point** from repository knowledge; **rows marked TBD** require clawbot verification.
+
+| Route | Entry surface | When it runs | What answers | Grounded in BLACK BOX tools? | Code / host anchor |
+|-------|----------------|--------------|--------------|-------------------------------|----------------------|
+| **OpenClaw — embedded default** | `~/openclaw` Slack gateway, main dispatch after bridge | Bridge returns **exit 2**, or bridge not taken | **Embedded** model / gateway default behavior — **generic** conversation | **No** — not operator tool truth | OpenClaw repo (not in blackbox); behavior **TBD** per gateway version |
+| **OpenClaw — Anna bridge** | Patched `dispatch.ts` → `slack_anna_ingress.py` | Explicit Anna route or greeting short-circuit per script | **anna_entry**-style output or deterministic greeting | **Pipeline** grounding rules as today — **not** yet full §6 operator router | `scripts/openclaw/slack_anna_ingress.py`, `apply_openclaw_dispatch_anna_ingress.py` |
+| **OpenClaw — bridge failure** | Same spawn | Nonzero exit ≠ 0,2 | Gateway logs error; may fall through | N/A | Patch script stderr handling |
+| **Bolt — Socket Mode** | `messaging_interface/slack_adapter.py` | `messaging.backend=slack`, local process | `run_dispatch_pipeline` → shared Telegram-format pipeline | Same as **existing** messaging governance — **not** §20 operator tool registry | `messaging_interface/slack_adapter.py`, `messaging_interface/pipeline.py` |
+| **Persona outbound (Bolt)** | After pipeline | Always for Bolt | `enforce_slack_outbound`, architect blocks optional | N/A | `slack_persona_enforcement.py`, `slack_architect_diagnostics.py` |
+
+**Invoke patterns (today):** Explicit Anna: `messaging_interface/anna_slack_route.py` (word Anna, `@anna`, leading `Anna,`). OpenClaw patch uses **stripSlackMentionsForCommandDetection** before bridge.
+
+**Gap to close:** One **diagram or appendix** (in PR or this doc) with **clawbot**-verified order: message received → … → bridge → exit code → embedded.
+
+### 24.3 Target interception (layer insertion)
+
+**Intent:** Add **`messaging_interface/operator_router/`** (this LDD) **inside** the existing bridge entry — **not** a second Slack ingress.
+
+**Normative insertion order (conceptual):**
+
+1. Parse context (**§17.1** / §18.3).
+2. Deterministic **greeting** (if retained) — unchanged unless Architect narrows.
+3. **Operator router** — in-scope → tools / `clarify` / exit 0 with grounded reply (**§4.4** forbids bypass).
+4. If router **declines** per **§4.4** only → **exit 2** → existing **embedded** path.
+5. **Legacy Anna bridge** behavior (e.g. `anna_entry`) — **preserved** only where **not** superseded by operator router; exact **precedence** must be stated in implementation PR (Architect approval if ambiguous).
+
+**Do not** add a **duplicate** Bolt + OpenClaw path for the same operator facts without directive authorization.
+
+### 24.4 Preserved vs replaced vs narrowed
+
+| Item | Disposition | Proof expectation |
+|------|-------------|-------------------|
+| OpenClaw Slack connection, gateway process | **Preserved** | No change to tokens/host model in BBX-SLACK-002 unless cutover doc says otherwise |
+| `dispatch.ts` bridge spawn | **Extended** (env/stdin context) | Patch diff + `pnpm build` proof |
+| Embedded model path for **true** out-of-scope chat | **Preserved** | Logs show exit 2 only per §4.4 |
+| **Anna** subprocess path for messages **not** captured by operator router | **Preserved** until router covers superset | Before/after behavior note in PR |
+| Operator factual answers | **Replaced** from “generic/embedded” to **tool-backed** when in-scope | Audit log shows `tool_calls` |
+| Bolt `slack_adapter` | **Unchanged** in first PR unless explicitly in scope | N/A or separate PR |
+
+**If default/system breadth is narrowed** (fewer messages go to embedded): document **operator-visible** change and Architect acceptance.
+
+### 24.5 Cutover, flags, rollback
+
+| Mechanism | Requirement |
+|-----------|-------------|
+| **Feature flag** | Implementation **should** use an env flag (e.g. `SLACK_OPERATOR_ROUTER_ENABLED`) defaulting to **off** or **on** per Architect — **state in PR**. |
+| **Rollback** | Revert flag + prior `slack_anna_ingress` / dispatch behavior; **record** gateway restart steps (**§18.8**). |
+| **Proof of no accidental regression** | Checklist: greeting, explicit Anna, exit 2 generic chat still behave per **§24.4** unless intentionally changed |
+
+### 24.6 Deliverables before serious BBX-SLACK-002 implementation
+
+1. **Current-state route inventory** — **§24.2** table **filled and verified** on clawbot (evidence links or log excerpts).
+2. **LDD** — This section + **§0.5** accepted as the **fit** narrative.
+3. **Explicit preserved / replaced** — **§24.4** signed off (no ambiguity on router vs Anna precedence).
+4. **Cutover** — Flag default and rollback **agreed** (**§24.5**).
+
+### 24.7 Questions for architect (resolve before sustainable implementation)
+
+Engineering should **not** assume answers; obtain explicit direction:
+
+1. **Precedence:** For a message that matches **both** legacy explicit-Anna rules **and** operator-router in-scope intent, which runs **first**, and can both run in one turn?
+2. **Bolt:** Is BBX-SLACK-002 **OpenClaw-only** for first merge, or must Bolt **slack_adapter** call the operator router in the **same** PR?
+3. **Embedded path:** Is any **production channel** required to stay **embedded-only** (no router) indefinitely?
+4. **Feature flag default:** `SLACK_OPERATOR_ROUTER_ENABLED` — **on** or **off** for first deploy to clawbot?
+5. **Narrowing UX:** If more traffic is grounded (fewer exit 2), is reduced “generic chatty” behavior **acceptable** in operator channels?
+6. **OpenClaw version:** Pin a **minimum** gateway / extension version for the context-json patch, or follow **live** clawbot only?
+7. **Anna pipeline:** Should **anna_entry** remain the handler for **non-operator** Anna traffic when router declines, unchanged?
+
+**After these are answered and §24.6 deliverables are met:** §23.3 implementation-ready gate may be **reasserted** for BBX-SLACK-002.
 
 ---
 
@@ -1054,3 +1151,4 @@ CREATE INDEX idx_operator_thread_access ON operator_thread_state(last_access_at_
 - **2026-04-13:** Added §18 End-to-end process map (deployment order, sequences, readiness gate).
 - **2026-04-13:** Architect lock-down: §4.4 decline boundary; §§19–22 (persona authority BlackBox-only, Phase 1 tool schemas incl. ingest stale rules, trace stderr format, thread DDL, channel access + dev mode); §12/§17/§18 aligned; BBX-SLACK-002 first PR items **1–6 only**.
 - **2026-04-13:** Alignment pass: **§0** OpenClaw/BLACK BOX boundary, platform fit, truth discipline, persona split (exit 0 vs exit 2); **§4.4** in-scope domains explicit; **§17.7/§19.2** persona table; **§23** delta package + readiness; governance cross-refs in header.
+- **2026-04-13:** Architect runtime-fit: **§0.5** interception-not-greenfield posture; **§24** current-state route inventory, insertion order, preserved/replaced, cutover/rollback, deliverables, **§24.7** architect questions; readiness gated on **§24.6**.
