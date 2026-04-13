@@ -731,10 +731,9 @@ def build_jupiter_policy_snapshot(
 
     import json
 
-    from modules.anna_training.execution_ledger import (
-        BASELINE_POLICY_SLOT_JUP_V3,
-        lookup_baseline_jupiter_open_state_json,
-    )
+    # Do not import BASELINE_POLICY_SLOT_JUP_V3 here — a function-local import would
+    # shadow the module-level name and cause UnboundLocalError on earlier uses (e.g. use_v3).
+    from modules.anna_training.execution_ledger import lookup_baseline_jupiter_open_state_json
     from modules.anna_training.jupiter_2_baseline_lifecycle import (
         BaselineOpenPosition,
         unrealized_pnl_usd,
