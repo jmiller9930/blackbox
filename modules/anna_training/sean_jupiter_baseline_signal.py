@@ -655,27 +655,145 @@ def _format_jupiter_3_operator_narrative(
     trade: bool,
     side: str,
 ) -> str:
-    """Plain-text tile for Jupiter_3 (distinct from Jupiter_2 Supertrend tile)."""
-    lines = [
-        "Policy: Jupiter_3 (EMA9/21, BOS, volume spike, expected_move gate)",
-        f"catalog_id={feat.get('catalog_id', CATALOG_ID_JUPITER_3)}",
-        f"trade={trade} side={side} reason_code={reason_code}",
-    ]
-    for k in (
-        "ema9",
-        "ema21",
-        "bullish_bias",
-        "bearish_bias",
-        "current_rsi",
-        "volume_spike",
-        "expected_move",
-        "prior_swing_high",
-        "prior_swing_low",
-        "long_bos",
-        "short_bos",
-    ):
-        if k in feat and feat[k] is not None:
-            lines.append(f"{k}={feat[k]}")
+    """
+    Sean / superjup-style operator tile — **Jupiter_3** (distinct from Jupiter_2 Supertrend tile).
+
+    Parity with live bot log: Binance quote volume line, OHLCV, conviction filters, BOS, ATR gate,
+    signal breakdown. Requires ``evaluated_bar`` + policy diagnostics (from ``evaluate_jupiter_3_sean``).
+    """
+    lines: list[str] = []
+    eb = feat.get("evaluated_bar") if isinstance(feat.get("evaluated_bar"), dict) else {}
+    v_note = str(eb.get("volume_source_note") or "")
+    v_base = eb.get("volume_base")
+    if v_base is None:
+        try:
+            v_base = float(feat.get("candle_volume")) if feat.get("candle_volume") is not None else None
+        except (TypeError, ValueError):
+            v_base = None
+
+    if v_note == "binance_kline_quote_volume" and v_base is not None:
+        try:
+            vf = float(v_base)
+            vdisp = str(int(vf)) if vf == int(vf) else _tile_fmt_price(vf)
+        except (TypeError, ValueError):
+            vdisp = str(v_base)
+        lines.append(f"Using real Binance volume: {vdisp}")
+    elif v_base is not None:
+        try:
+            vf = float(v_base)
+            lines.append(
+                f"Volume (quote units): {_tile_fmt_price(vf)} — "
+                "not flagged as Binance kline (missing/zero volume_base on bar)"
+            )
+        except (TypeError, ValueError):
+            lines.append("Volume: unavailable")
+    else:
+        lines.append(
+            "Using real Binance volume: (unavailable — ensure market_bars include volume_base from Binance klines)"
+        )
+
+    ts = _tile_ts_iso_z(str(eb.get("candle_open_utc") or ""))
+    o, h, l, c = eb.get("open"), eb.get("high"), eb.get("low"), eb.get("close")
+    vv = eb.get("volume_base")
+    vol_s = ""
+    if vv is not None:
+        try:
+            fv = float(vv)
+            vol_s = str(int(fv)) if fv == int(fv) else _tile_fmt_price(fv)
+        except (TypeError, ValueError):
+            vol_s = str(vv)
+    lines.append(
+        "New 5-min candle formed: Timestamp="
+        + ts
+        + ", O="
+        + _tile_fmt_price(o)
+        + ", H="
+        + _tile_fmt_price(h)
+        + ", L="
+        + _tile_fmt_price(l)
+        + ", C="
+        + _tile_fmt_price(c)
+        + ", V="
+        + vol_s
+    )
+
+    lines.append("")
+    lines.append("=== CONVICTION MOMENTUM FILTERS ===")
+    lines.append("EMA9      : " + _tile_fmt_price(feat.get("ema9")))
+    lines.append("EMA21     : " + _tile_fmt_price(feat.get("ema21")))
+    blab = feat.get("bias_label")
+    if not blab:
+        bb = bool(feat.get("bullish_bias"))
+        be = bool(feat.get("bearish_bias"))
+        if bb and not be:
+            blab = "BULLISH"
+        elif be and not bb:
+            blab = "BEARISH"
+        else:
+            blab = "NEUTRAL"
+    lines.append("Bias      : " + str(blab))
+    lines.append("RSI(14)   : " + _tile_fmt_rsi(feat.get("current_rsi")))
+
+    avg_v = feat.get("avg_volume")
+    cv = feat.get("candle_volume")
+    vsp = bool(feat.get("volume_spike"))
+    if avg_v is not None and cv is not None:
+        try:
+            av = float(avg_v)
+            cvf = float(cv)
+            cv_txt = str(int(cvf)) if cvf == int(cvf) else _tile_fmt_price(cvf)
+            lines.append(
+                f"Volume Spike: {cv_txt} vs Avg={av:.0f} → {'yes' if vsp else 'no'}"
+            )
+        except (TypeError, ValueError):
+            lines.append(f"Volume Spike: (n/a) → {'yes' if vsp else 'no'}")
+    else:
+        lines.append(f"Volume Spike: n/a → {'yes' if vsp else 'no'}")
+
+    lines.append("")
+    lines.append("BOS Check:")
+    lines.append("Last 5 High = " + _tile_fmt_price(feat.get("prior_swing_high")))
+    lines.append("Last 5 Low  = " + _tile_fmt_price(feat.get("prior_swing_low")))
+    cc = eb.get("close") if eb else None
+    if cc is None:
+        cc = feat.get("signal_price")
+    lbos = bool(feat.get("long_bos"))
+    sbos = bool(feat.get("short_bos"))
+    lines.append(
+        "Current price "
+        + _tile_fmt_price(cc)
+        + " → long BOS: "
+        + ("yes" if lbos else "no")
+        + ", short BOS: "
+        + ("yes" if sbos else "no")
+    )
+
+    lines.append(
+        "ATR(14) = "
+        + _tile_fmt_price(feat.get("atr"))
+        + " | Expected Move (ATR×2.5) = $"
+        + _tile_fmt_price(feat.get("expected_move"))
+    )
+
+    lines.append("")
+    lines.append("=== SIGNAL BREAKDOWN ===")
+    lg = bool(feat.get("long_signal_core"))
+    sg = bool(feat.get("short_signal_core"))
+    lines.append("Long  = " + _tile_lower_bool(lg))
+    lines.append("Short = " + _tile_lower_bool(sg))
+
+    lines.append("")
+    lines.append(
+        "Policy: Jupiter_3 · catalog_id="
+        + str(feat.get("catalog_id", CATALOG_ID_JUPITER_3))
+        + " · trade="
+        + _tile_lower_bool(trade)
+        + " side="
+        + str(side)
+        + " reason_code="
+        + str(reason_code)
+    )
+
     return "\n".join(lines)
 
 

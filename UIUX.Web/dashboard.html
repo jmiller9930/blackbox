@@ -1527,6 +1527,14 @@
       if (/^ema|prior_swing|current_rsi/i.test(kk)) return 'neutral';
       return 'neutral';
     }
+    if (/^Using real Binance volume:/i.test(s)) return 'neutral';
+    if (/^=== CONVICTION MOMENTUM FILTERS ===/i.test(s) || /^=== SIGNAL BREAKDOWN ===/i.test(s)) return 'neutral';
+    if (/^BOS Check:/i.test(s) || /^Last 5 High\s*=/i.test(s) || /^Last 5 Low\s*=/i.test(s)) return 'neutral';
+    if (/^Volume Spike:/i.test(s)) return 'neutral';
+    if (/^EMA9\s*:/i.test(s) || /^EMA21\s*:/i.test(s) || /^Bias\s*:/i.test(s) || /^RSI\(14\)\s*:/i.test(s)) return 'neutral';
+    if (/^Current price\s/i.test(s) && /BOS/i.test(s)) return 'neutral';
+    if (/^ATR\(14\)\s*=/i.test(s)) return 'neutral';
+    if (/^Long\s+=\s+/i.test(s) || /^Short\s+=\s+/i.test(s)) return 'neutral';
     if (/^New 5-min candle formed:/i.test(s) || /^Previous candle:/i.test(s) || /^Current candle:/i.test(s)) return 'neutral';
     if (/^Supertrend:/i.test(s)) return 'neutral';
     if (/^ATR Analysis:/i.test(s)) {

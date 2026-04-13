@@ -284,12 +284,20 @@ def generate_signal_from_ohlc_v3(
         },
     }
 
+    if bullish_bias and not bearish_bias:
+        bias_label = "BULLISH"
+    elif bearish_bias and not bullish_bias:
+        bias_label = "BEARISH"
+    else:
+        bias_label = "NEUTRAL"
+
     diag.update(
         {
             "ema9": float(e9),
             "ema21": float(e21),
             "bullish_bias": bullish_bias,
             "bearish_bias": bearish_bias,
+            "bias_label": bias_label,
             "current_rsi": float(current_rsi),
             "atr": float(atr),
             "expected_move": float(expected_move),
@@ -364,6 +372,23 @@ class Jupiter3SeanPolicyResult:
     features: dict[str, Any]
 
 
+def _evaluated_bar_snapshot(bars_asc: list[dict[str, Any]]) -> dict[str, Any]:
+    """OHLCV + timestamp for the evaluated (last) bar — operator tile parity with Binance klines."""
+    lb = bars_asc[-1]
+    snap: dict[str, Any] = {"candle_open_utc": str(lb.get("candle_open_utc") or "").strip()}
+    t = _float_ohlc(lb)
+    vol = _volume_from_bar(lb)
+    if t:
+        o, h, l, c = t
+        snap["open"] = o
+        snap["high"] = h
+        snap["low"] = l
+        snap["close"] = c
+    snap["volume_base"] = float(vol)
+    snap["volume_source_note"] = "binance_kline_quote_volume" if vol > 0 else "missing_or_zero"
+    return snap
+
+
 def evaluate_jupiter_3_sean(
     *,
     bars_asc: list[dict[str, Any]],
@@ -435,6 +460,7 @@ def evaluate_jupiter_3_sean(
         "paper_bankroll": br_meta,
         **diag,
     }
+    feat["evaluated_bar"] = _evaluated_bar_snapshot(bars_asc)
 
     if diag.get("reason") == "length_mismatch":
         return Jupiter3SeanPolicyResult(
