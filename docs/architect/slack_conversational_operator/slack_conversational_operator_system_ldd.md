@@ -434,7 +434,7 @@ Each LDD tool needs **exact** Python/HTTP binding, **inputs**, and **error shape
 | Parser stack | **Rules-first** for high-precision patterns (e.g. “last N trades”, “wallet”, “bundle”); **LLM JSON schema** for the rest; on invalid JSON → single clarify “I didn’t catch the filters — …”. |
 | Model/runtime | **Same Ollama base URL as Anna** unless `OPERATOR_ROUTER_MODEL` set; keeps ops simple. |
 | Golden tests | **`tests/fixtures/operator_intents/*.json`** — CI runs **offline** (mock tools). |
-| intent_schema_version | **`modules/anna_training/operator_router/schema.py`** (or equivalent) — constant `INTENT_SCHEMA_VERSION = "1"`. |
+| intent_schema_version | **`messaging_interface/operator_router/schema.py`** (or equivalent under the same package as §17.1) — constant `INTENT_SCHEMA_VERSION = "1"`. |
 
 ### 17.5 Tool bindings (§16.5)
 
@@ -516,3 +516,4 @@ Each LDD tool needs **exact** Python/HTTP binding, **inputs**, and **error shape
 
 - **2026-04-10:** Moved document into `docs/architect/slack_conversational_operator/`; added §16 Implementation gaps for implementer handoff.
 - **2026-04-13:** Added §17 Gap resolutions (recommended v1 defaults) to answer §16 open items for implementation.
+- **2026-04-13:** Aligned §17.4 schema path with §17.1 package location (`messaging_interface/operator_router/`).
