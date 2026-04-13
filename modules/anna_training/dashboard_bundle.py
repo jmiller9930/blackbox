@@ -2560,10 +2560,11 @@ def _merge_jupiter_entry_policy_from_policy_snapshot(
     policy_bl: dict[str, Any] | None,
 ) -> None:
     """
-    ``build_jupiter_policy_snapshot`` recomputes ``entry_jupiter_v3_gates`` / narrative for the open
-    position. The bundle then assigns ``baseline_lifecycle`` from ``build_baseline_active_position_snapshot``,
-    which can omit that recompute when ledger snapshots are empty. Merge policy snapshot entry fields
-    into ``dashboard_bl`` when they are missing so JUPv3 live tiles are not stuck on “unavailable.”
+    ``build_jupiter_policy_snapshot`` recomputes ``entry_jupiter_v3_gates`` / narrative at
+    ``entry_market_event_id`` each bundle. The bundle then assigns ``baseline_lifecycle`` from
+    ``build_baseline_active_position_snapshot``, which may carry **stale or wrong** persisted
+    snapshots (e.g. this-bar gates saved under entry). When trade ids align, **prefer** the policy
+    snapshot entry fields whenever present — they are the authoritative recompute for the entry bar.
     """
     if not dashboard_bl.get("position_open") or not isinstance(policy_bl, dict) or not policy_bl.get(
         "position_open"
@@ -2577,20 +2578,14 @@ def _merge_jupiter_entry_policy_from_policy_snapshot(
     em_p = str(policy_bl.get("entry_market_event_id") or "").strip()
     if em_d and em_p and em_d != em_p:
         return
-    g = dashboard_bl.get("entry_jupiter_v3_gates")
-    has_gates = isinstance(g, dict) and len(g) > 0
-    if not has_gates:
-        pg = policy_bl.get("entry_jupiter_v3_gates")
-        if isinstance(pg, dict) and pg:
-            dashboard_bl["entry_jupiter_v3_gates"] = pg
-    nar = dashboard_bl.get("entry_jupiter_tile_narrative")
-    nar_s = (nar or "").strip() if isinstance(nar, str) else ""
-    if not nar_s:
-        pn = policy_bl.get("entry_jupiter_tile_narrative")
-        if isinstance(pn, str) and pn.strip():
-            dashboard_bl["entry_jupiter_tile_narrative"] = pn.strip()
-        elif pn:
-            dashboard_bl["entry_jupiter_tile_narrative"] = pn
+    pg = policy_bl.get("entry_jupiter_v3_gates")
+    if isinstance(pg, dict) and len(pg) > 0:
+        dashboard_bl["entry_jupiter_v3_gates"] = dict(pg)
+    pn = policy_bl.get("entry_jupiter_tile_narrative")
+    if isinstance(pn, str) and pn.strip():
+        dashboard_bl["entry_jupiter_tile_narrative"] = pn.strip()
+    elif pn:
+        dashboard_bl["entry_jupiter_tile_narrative"] = pn
 
 
 def build_baseline_trades_report(
