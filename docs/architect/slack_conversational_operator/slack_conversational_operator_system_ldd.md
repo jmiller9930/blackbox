@@ -1,6 +1,7 @@
 # Slack Conversational Operator System — Low-Level Design (LDD)
 
 **Status:** Contractual (implementation target)  
+**Lock-down (BBX-SLACK-002):** §4.4, §12 (first PR items 1–6), §§19–22 — normative for implementation and proof.  
 **Audience:** Engineering (implementer), Operator (acceptance), Architect (governance)  
 **Scope:** Slack-native conversational interface over BlackBox / OpenClaw with **grounded** answers, **optional named-agent presentation**, **document-grounded** project Q&A, and **auditable** routing.
 
@@ -78,6 +79,30 @@ There shall be **no** code path where:
 - `presentation_route=anna` calls different SQL/APIs than `presentation_route=default` for the **same** `(intent, slots)`.
 
 Exception (explicitly allowed, separate intents): **non-factual** “analyst narrative” or **long-form** analysis may be a distinct intent (`deep_analysis`) that **still** must ground **factual claims** via tools or cite **docs**; **must not** invent ledger rows.
+
+### 4.4 Router decline boundary (exit 2) — contractual
+
+**Goal:** Avoid a **second truth system** (embedded model) answering BlackBox factual or doc-grounded domains. `exit 2` fallthrough to the OpenClaw embedded model is **narrow**.
+
+**Inside the operator router (must not decline; must handle or `clarify`):**
+
+| Domain | Examples | Route |
+|--------|----------|--------|
+| **System / trading state (class A)** | Trades, PnL, wallet, ingest freshness, policy/tile explanations, bundle slices | Tools + reply, or `clarify` for missing slots |
+| **Project documentation (class B)** | Questions answerable from allowlisted docs with citations | `doc_project_qa` + tools, or `clarify` |
+| **Ambiguous operator intent (class C)** | Missing scope, missing anchor | `clarify` (max 2 questions), not exit 2 |
+
+**Exit 2 (`router_declined`) is allowed only** when the message is **clearly general chat** with no reasonable mapping to classes A–C, e.g.:
+
+- Greetings / small talk with **no** operational hook (optional: deterministic short reply with exit 0 instead — implementation choice; if so, exit 2 never used for greetings).
+- Creative writing, unrelated trivia, or other topics **not** covered by tools or allowlisted docs, **and** the router’s classifier confidence is below threshold with **no** safe tool path.
+
+**Exit 2 is forbidden** when any of the following apply:
+
+- User asks about **ledger, trades, wallet, ingest, policy, dashboard/bundle, or project docs** — even if phrasing is vague (use `clarify` or default tools per config).
+- User mixes in-scope and out-of-scope content — **process the in-scope part** (split reply or clarify); do not exit 2 for the whole turn.
+
+**Audit:** Every turn including **exit 2** writes the §10 audit line. For exit 2, include `router_declined: true`, `decline_reason` (enum), and `trace_id` (§19.4).
 
 ---
 
@@ -225,6 +250,8 @@ Required fields (JSON line or structured log):
 
 ## 12. Phased Implementation Checklist (Implementer)
 
+**First-merge scope (BBX-SLACK-002, locked):** Phase 1 items **1–6 only** in the **first implementation PR**. Item **7** (`doc_project_qa`) is **out of scope** for that PR unless the Architect explicitly reopens scope. PR body must state: `BBX-SLACK-002: §12 items 1–6`.
+
 ### Phase 1 (MVP)
 
 1. [ ] Tool registry + `tool.trades.list`, `tool.bundle.get`, `tool.wallet.get`, `tool.ingest.freshness` wired to real code paths.
@@ -285,8 +312,8 @@ This section turns the LDD into an implementable checklist: **decisions**, **mis
 
 | Gap | What to decide / produce |
 |-----|----------------------------|
-| **Replace/wrap ingress** | New router vs extending `slack_anna_ingress.py`; exit codes, max output size, timeouts. |
-| **trace_id ownership** | Generated in Python vs TypeScript; propagated into gateway logs. |
+| **Replace/wrap ingress** | New router vs extending `slack_anna_ingress.py`; exit codes, max output size, timeouts. **Decline:** §4.4. |
+| **trace_id ownership** | **Resolved:** Python generates; handoff **§19.4** (stderr line). |
 | **Build/restart proof** | Document clawbot steps: `git pull`, `pnpm build` in `~/openclaw` when `dispatch.ts` changes, gateway restart — aligned with existing patch script comments. |
 
 ### 16.3 Router vs existing Telegram dispatch
@@ -417,8 +444,8 @@ Each LDD tool needs **exact** Python/HTTP binding, **inputs**, and **error shape
 
 | Gap | Recommended resolution |
 |-----|-------------------------|
-| Replace/wrap ingress | **Wrap:** New `slack_operator_router.py` (or extend `slack_anna_ingress.py`) — order: greeting → named strip → **operator router** (intent/tools) → exit 2 to embedded model only if router declines. Exit codes: `0` = router handled, `2` = fall through. **Timeouts:** router 90s hard cap; tool sub-calls individually timed. |
-| trace_id ownership | **Python generates** UUID v4 at router entry; echo in first audit log line; pass to OpenClaw via stderr prefix or structured line gateway can parse (define one line format). |
+| Replace/wrap ingress | **Wrap:** New `slack_operator_router.py` (or extend `slack_anna_ingress.py`) — order: greeting → named strip → **operator router** (intent/tools) → exit 2 **only** per §4.4. Exit codes: `0` = router handled, `2` = fall through. **Timeouts:** router 90s hard cap; tool sub-calls individually timed. |
+| trace_id handoff | **Exact format (§19.4):** first line of **stderr** must be `BLACKBOX_TRACE_JSON:` + single JSON object (no pretty-print, one line). **Stdout** is **only** the operator-facing reply text (or empty on exit 2). Gateway parses stderr line for correlation only. |
 | Build/restart proof | Follow existing **`apply_openclaw_*`** docs: clawbot `git pull` blackbox + openclaw, `pnpm build` when `dispatch.ts` changes, `systemctl --user restart openclaw-gateway` (or project standard). |
 
 ### 17.3 Telegram vs Slack (§16.3)
@@ -448,7 +475,7 @@ Each LDD tool needs **exact** Python/HTTP binding, **inputs**, and **error shape
 | Gap | Recommended resolution |
 |-----|-------------------------|
 | SQLite vs Redis | **SQLite** file: `data/sqlite/operator_slack_threads.sqlite` (or under `BLACKBOX_CONTEXT_ROOT`) — single-writer, simple backup. |
-| Thread key | **`sha256(team_id + ":" + channel_id + ":" + thread_ts)`** hex or string concat unique index. |
+| Thread key | **Normative:** §21 (`thread_key` formula and `thread_ts_effective`). |
 | TTL | **7 days** last-access eviction; configurable. |
 | Duplicate memory | **New table** `operator_thread_state` — do **not** overload `anna_modules/context_memory.py` for Slack operator keys; may **read** context_engine events for health but not mix PnL into thread table. |
 
@@ -457,8 +484,8 @@ Each LDD tool needs **exact** Python/HTTP binding, **inputs**, and **error shape
 | Gap | Recommended resolution |
 |-----|-------------------------|
 | Invoke patterns | **`Anna,` / `Anna:` / `DATA,` / `DATA:`** line-leading; case-insensitive; strip before intent. Add **`@anna` / `@data`** substring match consistent with existing Slack patterns. |
-| Outbound formatting | Extend **`slack_persona_enforcement.py`** routes to `system \| anna \| data` — **same** enforcement philosophy (no extra facts). |
-| OpenClaw env | Set **`SLACK_PERSONA_ROUTE`** from router result for send path. |
+| **Persona enforcement authority (single owner)** | **BlackBox only.** Final reply text must pass through **`messaging_interface/slack_persona_enforcement.py`** (or successor in `messaging_interface/operator_router/`) **before** stdout. **OpenClaw must not** apply `run_slack_persona_enforce` (or any second persona/strip pass) to text produced by the BlackBox bridge on **exit 0**. Duplicate enforcement is **invalid** and can strip or double-mangle content. OpenClaw may set **`SLACK_PERSONA_ROUTE`** (or equivalent) for **metadata only** (e.g. display), not for re-transforming body text. |
+| OpenClaw env | Set **`SLACK_PERSONA_ROUTE`** from router result for send path (metadata; **no** text rewrite). |
 
 ### 17.8 Documentation tools (§16.8)
 
@@ -493,7 +520,7 @@ Each LDD tool needs **exact** Python/HTTP binding, **inputs**, and **error shape
 
 | Gap | Recommended resolution |
 |-----|-------------------------|
-| Allowlist | Env **`SLACK_OPERATOR_ALLOWED_WORKSPACE_IDS`** (comma-separated); empty = disabled check (dev only). |
+| Allowlist | Env **`SLACK_OPERATOR_ALLOWED_WORKSPACE_IDS`**; **`SLACK_OPERATOR_ALLOWED_CHANNEL_IDS`** (**§22** — channel required for prod expectation). Optional **`SLACK_OPERATOR_ALLOWED_USER_IDS`**. **`SLACK_OPERATOR_DEV_MODE=1`** skips allowlists (non-prod only). |
 | Rate limits | **30** tool-heavy turns / user / hour (configurable). |
 | Secrets | Never log `SLACK_BOT_TOKEN`, OpenClaw tokens, or wallet keys. |
 
@@ -508,7 +535,7 @@ Each LDD tool needs **exact** Python/HTTP binding, **inputs**, and **error shape
 
 | Gap | Recommended resolution |
 |-----|-------------------------|
-| Phase scope | **First PR** ships §12 checklist items **1–6** minimum; item **7** (doc QA) may follow in same release if small; otherwise next PR. State in PR body. |
+| Phase scope | **Locked:** §12 first-merge **1–6 only**; item **7** in a **subsequent** PR unless Architect reopens. PR body must cite `BBX-SLACK-002` and item range. |
 
 ---
 
@@ -569,25 +596,25 @@ Order is **normative** for audit consistency:
 
 1. **Generate `trace_id`** (UUID v4) at router entry (§17.2).
 2. **Rate limit** check (per user/hour; §17.12).
-3. **Workspace allowlist** (if env set; §17.12).
-4. **Load thread row** from `operator_thread_state` by `thread_key` (§17.6); create if missing.
+3. **Access control** — workspace, **channel**, optional user (§22); dev-mode rules apply.
+4. **Load thread row** from `operator_thread_state` by `thread_key` (**§21**); create if missing.
 5. **Greeting short-circuit** (unchanged deterministic reply, if desired) before heavy work.
 6. **Strip named invoke** (`Anna,`, `DATA,`, etc.) → set `presentation_route` (§4, §17.7).
 7. **Intent + slots** (rules-first + LLM JSON; §17.4) → may emit **clarify** only (no tools).
-8. **Tool phase** (class A): run registry calls; **no** assistant text before tools complete (§17.1). Class B: `doc_project_qa` → search/read allowlist → LLM summarization with excerpts only (§7.3).
+8. **Tool phase** (class A): run registry calls; **no** assistant text before tools complete (§17.1). Class B (`doc_project_qa`): **out of scope for first PR** (§12 item 7); omit this branch until shipped.
 9. **Update thread row** (anchors, last tool result refs, clarification flags).
 10. **Append audit log** (one JSON line per §10).
 11. **Format** reply (persona overlay only; §5).
 12. **Return** stdout to caller; exit `0` if handled.
 
-**If router declines** (not in scope for operator MVP): exit `2`, empty or minimal stdout per existing bridge contract.
+**If router declines** (only per **§4.4**): exit `2`, empty or minimal stdout; audit `router_declined`, `decline_reason`.
 
 ---
 
 ### 18.5 Reply path back to Slack (OpenClaw)
 
-1. Python stdout is **plain text** consumed by gateway.
-2. **Persona enforcement** may run in **OpenClaw** (`run_slack_persona_enforce.py` / send path) or be mirrored in **BlackBox** before stdout — **one** place must enforce; avoid double-stripping. §17 sets `SLACK_PERSONA_ROUTE` from router result.
+1. Python **stdout** is **plain text** only (operator reply). **Stderr** carries **trace handoff** (§19.4) and optional diagnostics; gateway must not treat stderr as user-visible.
+2. **Persona enforcement** is **BlackBox-only** (§17.7). OpenClaw **does not** re-apply persona rules to bridge stdout.
 3. **Architect diagnostics blocks** (`slack_architect_diagnostics.py` — optional by env in §17.11) are **Bolt-era**; OpenClaw path may omit unless wired.
 
 ---
@@ -669,18 +696,265 @@ Execute in order **before** claiming operator-visible E2E:
 | Blocker | Owner | Resolution |
 |---------|--------|------------|
 | **Context JSON not passed from gateway** | OpenClaw + BlackBox | Patch `dispatch.ts` + document in apply script or `scripts/openclaw/` README. |
-| **Persona enforcement duplicated** | Engineering | Decide single enforcement point (§18.5). |
+| **Persona enforcement duplicated** | **Resolved** | **BlackBox only** (§17.7, §18.5). |
 | **Bolt parity** | Optional | Defer until path A stable. |
 
 ---
 
-### 18.11 Implementation readiness gate
+### 18.11 Implementation readiness gate (BBX-SLACK-002)
 
-Before starting implementation work:
+**Do not start BBX-SLACK-002 implementation** until:
 
-- [ ] **§18** read and accepted (or amended with Architect sign-off).
-- [ ] **OpenClaw patch** plan agreed: who edits `dispatch.ts`, when, and how rollback works.
-- [ ] **MVP scope:** §12 items **1–6** vs **+7** (doc QA) agreed for first merge.
+- [ ] **§19** (Architect lock-down) accepted **or** amended with Architect sign-off.
+- [ ] **OpenClaw patch plan** pinned: owner, `dispatch.ts` change list, rollback, verification step.
+- [ ] **First PR scope** locked: **§12 items 1–6 only** (item 7 excluded unless Architect reopens).
+
+**No proof claim** for BBX-SLACK-002 first PR until:
+
+- [ ] **§18.8** deployment order executed on clawbot for the commit under test.
+- [ ] **§18.9** verification ladder: at least **L3** (bridge + fake env) on clawbot; **L4** for operator-visible “done.”
+
+---
+
+## 19. Architect lock-down (normative contracts)
+
+This section satisfies the **BBX-SLACK LDD lock-down** before implementation: decline boundary, single persona owner, Phase 1 tool contracts, `trace_id` format, thread store, access control, first-merge scope, and governance sequence.
+
+### 19.1 Router decline boundary
+
+**Normative:** Same as **§4.4**. Implementers must not broaden exit 2 without Architect approval.
+
+### 19.2 Persona enforcement authority
+
+**Normative:** **BlackBox** is the **sole** authority for outbound persona / safety transforms on **bridge-produced** text (`slack_persona_enforcement.py` or successor). **OpenClaw** must not apply a second enforcement layer to that text. See **§17.7** and **§18.5**.
+
+### 19.3 Phase 1 tool contracts
+
+**Normative:** Full input/output/error/`source_refs` for each Phase 1 tool are in **§20**. Implementations must match.
+
+### 19.4 `trace_id` handoff format (mechanical)
+
+**Producer:** Python router **first** writes **exactly one line** to **stderr**, before any other stderr output:
+
+```text
+BLACKBOX_TRACE_JSON:{"schema":"blackbox_trace_handoff_v1","trace_id":"<UUIDv4>"}
+```
+
+Rules:
+
+- **One line**; JSON is **minified** (no newlines inside).
+- `trace_id` MUST equal the `trace_id` field in the audit log line for that turn (§10).
+- **Consumer (OpenClaw gateway):** parse this prefix **only**; strip from operator logs if needed; correlate gateway logs with `trace_id`.
+- **Stdout:** operator reply text only (exit 0) or empty/minimal (exit 2). **Never** embed `trace_id` in stdout.
+
+### 19.5 Thread state contract
+
+**Normative:** DDL, normalization, anchors, clarification lifecycle, TTL, concurrency: **§21**.
+
+### 19.6 Access control
+
+**Normative:** Workspace + **channel** (+ optional user) allowlists and **dev-mode** exception: **§22**.
+
+### 19.7 First-merge scope
+
+**Normative:** **§12** — first implementation PR for BBX-SLACK-002 ships **items 1–6 only**; **item 7** (`doc_project_qa`) is **excluded** unless Architect reopens.
+
+### 19.8 Governance sequence
+
+1. **LDD delta** (this document, §§4.4, 12, 17–22) **accepted** by Architect.
+2. **BBX-SLACK-002** implementation **start** explicitly authorized.
+3. **Proof** per **§18.8–§18.9**; no “done” without L3/L4 as agreed.
+
+---
+
+## 20. Phase 1 tool contracts (schemas)
+
+**Common success envelope:**
+
+```json
+{
+  "ok": true,
+  "tool_id": "<tool_id>",
+  "data": {},
+  "source_refs": []
+}
+```
+
+**Common error envelope:**
+
+```json
+{
+  "ok": false,
+  "tool_id": "<tool_id>",
+  "error": {
+    "code": "TOOL_FAILED | VALIDATION | NOT_FOUND | CONFIG",
+    "message": "human-readable",
+    "detail": {}
+  }
+}
+```
+
+**`source_refs` entries** (per call, non-empty on success):
+
+| `type` | Fields | When |
+|--------|--------|------|
+| `ledger_sql` | `query` (redacted or parameterized shape), `tables` | SQLite execution/trades |
+| `bundle` | `build`: `build_dashboard_bundle`, `max_events` | Bundle tool |
+| `api` | `path`, `method` | HTTP transport |
+| `module` | `module`, `function` | In-process call |
+
+---
+
+### 20.1 `tool.trades.list`
+
+**Input (JSON schema, conceptually):**
+
+| Field | Type | Required | Notes |
+|-------|------|----------|--------|
+| `limit` | int | no | Default from `config/operator_clarify_defaults.yaml` (§17.10); max 500. |
+| `scope` | `"baseline"` \| `"all"` | no | Default baseline. |
+| `order` | `"exit_time_desc"` \| `"created_desc"` | no | Default exit_time_desc. |
+
+**Output `data`:** `{ "rows": [ ... ], "row_schema": "trade_export_v1" }` — rows are JSON-serializable dicts from `fetch_trade_export_rows` (or equivalent) **without** adding fields not in tool output.
+
+**`source_refs`:** `[{ "type": "ledger_sql", "tables": ["execution_trades", ...], "query": "parameterized: fetch_trade_export_rows limit=?" }]` (exact shape logged; redact ids if needed).
+
+**Errors:** `VALIDATION` if limit out of range; `TOOL_FAILED` on DB exception.
+
+---
+
+### 20.2 `tool.bundle.get`
+
+**Input:**
+
+| Field | Type | Required | Notes |
+|-------|------|----------|--------|
+| `max_events` | int | no | Default from config; cap 50. |
+
+**Output `data`:** `{ "bundle": <object> }` where `<object>` is the JSON-serializable return of `build_dashboard_bundle(max_events=...)`.
+
+**`source_refs`:** `[{ "type": "module", "module": "modules.anna_training.dashboard_bundle", "function": "build_dashboard_bundle" }]`.
+
+**Errors:** `TOOL_FAILED` if build raises; `CONFIG` if DB paths missing.
+
+---
+
+### 20.3 `tool.wallet.get`
+
+**Input:** `{}` or `{ "asset": "SOL" }` (optional filter; if unsupported, ignore and return full payload).
+
+**Output `data`:** `{ "wallet": <object> }` — `build_wallet_status_payload()` JSON.
+
+**`source_refs`:** `[{ "type": "module", "module": "modules.wallet", "function": "build_wallet_status_payload" }]`.
+
+**Errors:** `TOOL_FAILED` on exception.
+
+---
+
+### 20.4 `tool.ingest.freshness`
+
+**Purpose:** Surface **5m ingest alignment** for the **trade-chain axis** (same semantics as dashboard `five_m_ingest_freshness` in `dashboard_bundle` — see `_five_m_ingest_freshness` in code).
+
+**Input:**
+
+| Field | Type | Required | Notes |
+|-------|------|----------|--------|
+| `lane` | `"v2"` \| `"v3"` \| `"both"` | no | Maps to baseline policy slot / which table is authoritative for the strip; **both** returns v2 + v3 slices. |
+
+Implementation uses **active baseline policy slot** from ledger (same as bundle) to decide whether `market_bars_5m` vs `binance_strategy_bars_5m` is authoritative for v3 vs v2.
+
+**Output `data`:** `{ "lanes": { ... } }` where each lane includes:
+
+| Field | Meaning |
+|-------|---------|
+| `schema` | `five_m_ingest_freshness_v2` (from bundle helper) |
+| `canonical_symbol` | Axis symbol used |
+| `expected_last_closed_candle_open_utc` | ISO Z |
+| `db_newest_closed_candle_open_utc` | ISO Z or null |
+| `closed_bucket_lag` | int ≥ 0 or null (null if indeterminate) |
+| `aligns_with_closed_strip` | bool or null |
+| `freshness_source` | `market_bars_5m` \| `binance_strategy_bars_5m` |
+| `notes` | e.g. `market_db_missing`, `market_data_runtime_unavailable` |
+
+**Stale (normative):**
+
+- **`stale: true`** iff any of: `closed_bucket_lag` is **not null** and **`> 0`**; OR `aligns_with_closed_strip` is **false**; OR `notes` is a non-null **non-empty** string (e.g. missing DB).
+- **`stale: false`** iff `closed_bucket_lag === 0` **and** `aligns_with_closed_strip === true` **and** no error `notes`.
+- Otherwise **`stale: null`** (unknown) and operator text must say **indeterminate**, not guess.
+
+**Computed helper in `data`:** `stale` (bool \| null) per lane **must** be set by the tool from the rules above (implementer does not reinterpret).
+
+**`source_refs`:** `[{ "type": "module", "module": "modules.anna_training.dashboard_bundle", "function": "_five_m_ingest_freshness" }]` and `[{ "type": "bundle", "build": "build_dashboard_bundle" }]` if implemented via bundle slice only.
+
+**Errors:** `TOOL_FAILED` on exception; `CONFIG` if market DB path unusable.
+
+---
+
+## 21. Thread state contract (SQLite)
+
+**Database file:** `data/sqlite/operator_slack_threads.sqlite` (or path under `BLACKBOX_CONTEXT_ROOT` if set — single canonical path per deployment).
+
+**Table `operator_thread_state`:**
+
+```sql
+CREATE TABLE operator_thread_state (
+  thread_key TEXT PRIMARY KEY,
+  team_id TEXT NOT NULL,
+  channel_id TEXT NOT NULL,
+  thread_ts TEXT NOT NULL,
+  last_intent TEXT,
+  last_slots_json TEXT,
+  anchors_json TEXT NOT NULL DEFAULT '{}',
+  clarification_pending INTEGER NOT NULL DEFAULT 0,
+  clarification_missing_slots_json TEXT,
+  last_tool_result_ref_json TEXT,
+  updated_at_utc TEXT NOT NULL,
+  last_access_at_utc TEXT NOT NULL
+);
+CREATE INDEX idx_operator_thread_access ON operator_thread_state(last_access_at_utc);
+```
+
+**`thread_key`:** `sha256_hex(lower(team_id) + ":" + lower(channel_id) + ":" + thread_ts))` — **UTF-8**, **hex** 64 chars (normative).
+
+**Top-level vs thread normalization (Slack):**
+
+- Let `ts` = message timestamp string from Slack.
+- Let `thread_ts` = thread parent from Slack (may be absent for top-level).
+- **`thread_ts_effective` = `thread_ts` if present and non-empty, else `ts`.** Store `thread_ts_effective` in `thread_ts` column for the row key.
+
+**Anchor update rules:**
+
+- After a **successful** tool call whose `data` includes a `trade_id` or `market_event_id` (or list first row), merge into `anchors_json` (`last_trade_id`, `last_market_event_id`).
+- **Overwrite** on newer successful tool result in the **same** turn chain; **append** not required.
+
+**Clarification lifecycle:**
+
+- Set `clarification_pending = 1` and `clarification_missing_slots_json` when emitting **clarify**.
+- On the **next** user message in the same thread, clear `clarification_pending` after slots resolved or defaults applied.
+
+**TTL:** Delete or archive rows where `last_access_at_utc` older than **7 days** (configurable); **touch** `last_access_at_utc` on every read and write.
+
+**Concurrency:** SQLite **WAL** recommended. **Expectation:** one writer at a time per process; gateway may spawn concurrent Python — use **busy_timeout** 5000 ms and **retry once** on `SQLITE_BUSY`, or serialize bridge invocations per `channel_id` (implementation choice; document in PR).
+
+---
+
+## 22. Access control (tightened)
+
+**Order of checks (before router work):** trace → rate limit → workspace → channel → user (each if configured).
+
+| Control | Env var | Behavior |
+|---------|---------|----------|
+| Workspace | `SLACK_OPERATOR_ALLOWED_WORKSPACE_IDS` | Comma-separated Slack team/workspace IDs. If **set**, message **must** match; else **reject** (exit 0 with short “unauthorized” or exit 2 with log — **pick one** and log `access_denied`; do not leak). |
+| **Channel** | `SLACK_OPERATOR_ALLOWED_CHANNEL_IDS` | Comma-separated channel IDs. If **set**, message **must** be in one; **required for production** operator surfaces (Architect expectation). |
+| User (optional) | `SLACK_OPERATOR_ALLOWED_USER_IDS` | Comma-separated Slack user IDs. If **set**, only these users may invoke tools. |
+
+**Dev-mode exception (explicit):**
+
+| Env | Behavior |
+|-----|----------|
+| `SLACK_OPERATOR_DEV_MODE=1` | **Skip** workspace, channel, and user allowlist checks. **Must not** be set in production. When active, **every** request logs **one** WARNING line to audit log with `dev_mode: true`. |
+
+**Empty env:** If workspace list is **empty**, workspace check is **skipped** (same as §17.12) — **only** for non-production; production deployments **must** set channel allowlist at minimum.
 
 ---
 
@@ -690,3 +964,4 @@ Before starting implementation work:
 - **2026-04-13:** Added §17 Gap resolutions (recommended v1 defaults) to answer §16 open items for implementation.
 - **2026-04-13:** Aligned §17.4 schema path with §17.1 package location (`messaging_interface/operator_router/`).
 - **2026-04-13:** Added §18 End-to-end process map (deployment order, sequences, readiness gate).
+- **2026-04-13:** Architect lock-down: §4.4 decline boundary; §§19–22 (persona authority BlackBox-only, Phase 1 tool schemas incl. ingest stale rules, trace stderr format, thread DDL, channel access + dev mode); §12/§17/§18 aligned; BBX-SLACK-002 first PR items **1–6 only**.
