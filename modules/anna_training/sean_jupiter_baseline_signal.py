@@ -671,25 +671,31 @@ def _format_jupiter_3_operator_narrative(
         except (TypeError, ValueError):
             v_base = None
 
-    if v_note == "binance_kline_quote_volume" and v_base is not None:
+    # Binance kline path sets ``volume_source_note`` in ``_evaluated_bar_snapshot`` (jupiter_3_sean_policy):
+    # strategy bars → base-asset volume; other feeds → quote. Both are real Binance when those notes are set.
+    _binance_kline = frozenset({"binance_kline_quote_volume", "binance_kline_base_volume"})
+    if v_note in _binance_kline and v_base is not None:
         try:
             vf = float(v_base)
             vdisp = str(int(vf)) if vf == int(vf) else _tile_fmt_price(vf)
         except (TypeError, ValueError):
             vdisp = str(v_base)
-        lines.append(f"Using real Binance volume: {vdisp}")
+        if v_note == "binance_kline_base_volume":
+            lines.append(f"Using real Binance volume (base asset): {vdisp}")
+        else:
+            lines.append(f"Using real Binance volume (quote USDT): {vdisp}")
     elif v_base is not None:
         try:
             vf = float(v_base)
             lines.append(
-                f"Volume (quote units): {_tile_fmt_price(vf)} — "
-                "not flagged as Binance kline (missing/zero volume_base on bar)"
+                f"Volume: {_tile_fmt_price(vf)} — not from Binance kline feed "
+                "(non-strategy bar or mixed source; check price_source on bar)"
             )
         except (TypeError, ValueError):
             lines.append("Volume: unavailable")
     else:
         lines.append(
-            "Using real Binance volume: (unavailable — ensure market_bars include volume_base from Binance klines)"
+            "Binance volume: unavailable — bar missing volume_base / volume for kline evaluation"
         )
 
     ts = _tile_ts_iso_z(str(eb.get("candle_open_utc") or ""))
