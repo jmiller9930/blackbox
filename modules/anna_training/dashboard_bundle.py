@@ -1112,7 +1112,8 @@ def _recent_baseline_policy_trade_rows_for_strip(
     cur = conn.execute(
         """
         SELECT lane, strategy_id, market_event_id, side, symbol, timeframe, entry_time, entry_price, exit_price,
-               exit_reason, exit_time, size, pnl_usd, created_at_utc, trade_id, mode
+               exit_reason, exit_time, size, pnl_usd, created_at_utc, trade_id, mode,
+               context_snapshot_json
         FROM execution_trades
         WHERE lane = 'baseline' AND strategy_id = ?
           AND exit_time IS NOT NULL AND trim(exit_time) != ''
