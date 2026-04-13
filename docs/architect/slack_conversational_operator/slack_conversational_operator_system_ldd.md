@@ -1,13 +1,56 @@
 # Slack Conversational Operator System — Low-Level Design (LDD)
 
 **Status:** Contractual (implementation target)  
-**Lock-down (BBX-SLACK-002):** §4.4, §12 (first PR items 1–6), §§19–22 — normative for implementation and proof.  
+**Lock-down (BBX-SLACK-002):** §0 (boundary), §4.4, §12 (first PR items 1–6), §§19–22 — normative for implementation and proof.  
 **Audience:** Engineering (implementer), Operator (acceptance), Architect (governance)  
 **Scope:** Slack-native conversational interface over BlackBox / OpenClaw with **grounded** answers, **optional named-agent presentation**, **document-grounded** project Q&A, and **auditable** routing.
+
+**Governance cross-references (must stay aligned):** [`PROJECT_SYSTEM_SPECIFICATION.md`](../PROJECT_SYSTEM_SPECIFICATION.md) (multi-surface platform, messaging ingress), [`development_governance.md`](../development_governance.md) (BBX-SLACK program pointer), [`canonical_development_plan.md`](canonical_development_plan.md) (phases BBX-SLACK-001+).
 
 **Document location:** `docs/architect/slack_conversational_operator/` (this folder is the working home for this system’s architecture).
 
 **Out of scope for this LDD:** Live venue order submission; full training-system integration; replacing HTTP APIs with LLM inference for factual trading data.
+
+---
+
+## 0. System boundary, platform fit, and truth discipline
+
+This section **locks the OpenClaw / BLACK BOX boundary** so engineering does not build against an ambiguous model. It is **normative** for BBX-SLACK-002 and matches the canonical plan’s **single default ingress** and **grounded tool** requirements.
+
+### 0.1 BLACK BOX vs OpenClaw — responsibility split
+
+| Layer | What it is | Owns (this initiative) |
+|-------|------------|---------------------------|
+| **BLACK BOX** | Repository **system of record** — domain modules, tools, runtime, dashboards, governance, **source-of-truth** behavior (`~/blackbox`). | **Operator router** package; **intent/slots**; **grounded tool registry**; **audit** JSON contract per turn; **SQLite** operator thread state; **access-control** checks in Python; **final reply text** for bridge **exit 0** (including presentation/containment rules **on that text** before stdout). **All factual** answers about trading/system state must be **assembled here** from tools or `clarify` / doc path — never invented in the gateway. |
+| **OpenClaw** | **Interaction / backend** layer on the lab host — Slack-facing **ingress**, gateway process, **dispatch**, bridge **invocation**, streaming UX, credentials, lifecycle (**outside** this repo). | Slack **connection**; **dispatch.ts** → spawn BlackBox bridge; pass **context payload**; **stderr** correlation with **trace**; **embedded** assistant path when bridge **exit 2** (general chat / out-of-scope). OpenClaw **does not** author ledger rows, policy outcomes, wallet balances, ingest metrics, or bundle truth. |
+
+**No blurring:** OpenClaw is not a second place to “decide” operator facts. BLACK BOX is not a second Slack server — Slack I/O stays in the gateway.
+
+### 0.2 Platform fit (multi-surface BLACK BOX)
+
+BBX-SLACK is a **new conversational operator slice** (Slack → OpenClaw → BLACK BOX router) **inside** an already **multi-surface** platform (`PROJECT_SYSTEM_SPECIFICATION.md` — Telegram/Slack, UIUX.Web, runtime CLIs, sandbox dashboards).
+
+**This slice does not replace:** Telegram messaging, **Bolt** Socket Mode, **UIUX.Web** dashboard/API, **scripts/runtime** CLIs, legacy operator dashboards, or other surfaces. It **adds** a governed Slack operator path; **convergence** means alternate ingresses (e.g. Bolt) should call the **same** router module when wired — **not** that other surfaces are removed.
+
+### 0.3 Truth-system discipline (non-negotiable)
+
+- **Factual** answers about **trading activity, system status, policy explanation, wallet state, ingest state, dashboard/bundle state** MUST come only from **BLACK BOX** **grounded router + tool layer** (or `clarify` / allowlisted **doc** tools when class B is in scope — **§12 item 7**).
+- **Persona** (named or default) is **presentation only** and MUST NOT add or alter facts (**§2 P5**).
+- **OpenClaw embedded model** output (after **exit 2**) is **not** operator-grounded truth for **§4.4** in-scope domains; it is **general** chat. Operators must not be led to treat it as ledger/API truth.
+- **Gateway** configuration and **persona wiring** in OpenClaw do **not** override the **tool-only** rule for in-scope operator questions.
+
+### 0.4 Persona enforcement — one owner per path (no duplicate transforms)
+
+**Two paths, one rule: each body of text is enforced exactly once.**
+
+| Path | Who applies final text rules before Slack sees it |
+|------|---------------------------------------------------|
+| **Bridge success (exit 0)** — operator router reply | **BLACK BOX** only: `messaging_interface/slack_persona_enforcement.py` (or successor) on **stdout** content. **OpenClaw must not** run `run_slack_persona_enforce` (or any second strip) on that text. |
+| **Embedded / fallback (exit 2)** — gateway model | **OpenClaw** only: gateway-owned persona/containment for **that** response stream. **BLACK BOX does not** post-process exit 2. |
+
+**Metadata:** OpenClaw may set **`SLACK_PERSONA_ROUTE`** (or equivalent) for routing/display **without** rewriting BLACK BOX stdout.
+
+**Invalid:** Applying **both** BlackBox and OpenClaw **text** enforcement to the **same** bridge output.
 
 ---
 
@@ -38,6 +81,8 @@ Move from **ambiguous intent** to a **contract**: intent labels, slots, tool cal
 ---
 
 ## 3. High-Level Architecture
+
+**Boundary:** See **§0** — OpenClaw transports; BLACK BOX interprets and grounds.
 
 ```
 Slack (only operator interface for this system)
@@ -88,8 +133,8 @@ Exception (explicitly allowed, separate intents): **non-factual** “analyst nar
 
 | Domain | Examples | Route |
 |--------|----------|--------|
-| **System / trading state (class A)** | Trades, PnL, wallet, ingest freshness, policy/tile explanations, bundle slices | Tools + reply, or `clarify` for missing slots |
-| **Project documentation (class B)** | Questions answerable from allowlisted docs with citations | `doc_project_qa` + tools, or `clarify` |
+| **System / trading state (class A)** | **System status**, **trading activity**, **policy explanation**, **wallet state**, **ingest state**, **dashboard/bundle state**, tile/trade explanations | Tools + reply, or `clarify` for missing slots |
+| **Project documentation (class B)** | **Project docs** — questions answerable from allowlisted docs with citations | `doc_project_qa` + tools, or `clarify` (when §12 item 7 shipped) |
 | **Ambiguous operator intent (class C)** | Missing scope, missing anchor | `clarify` (max 2 questions), not exit 2 |
 
 **Exit 2 (`router_declined`) is allowed only** when the message is **clearly general chat** with no reasonable mapping to classes A–C, e.g.:
@@ -484,8 +529,8 @@ Each LDD tool needs **exact** Python/HTTP binding, **inputs**, and **error shape
 | Gap | Recommended resolution |
 |-----|-------------------------|
 | Invoke patterns | **`Anna,` / `Anna:` / `DATA,` / `DATA:`** line-leading; case-insensitive; strip before intent. Add **`@anna` / `@data`** substring match consistent with existing Slack patterns. |
-| **Persona enforcement authority (single owner)** | **BlackBox only.** Final reply text must pass through **`messaging_interface/slack_persona_enforcement.py`** (or successor in `messaging_interface/operator_router/`) **before** stdout. **OpenClaw must not** apply `run_slack_persona_enforce` (or any second persona/strip pass) to text produced by the BlackBox bridge on **exit 0**. Duplicate enforcement is **invalid** and can strip or double-mangle content. OpenClaw may set **`SLACK_PERSONA_ROUTE`** (or equivalent) for **metadata only** (e.g. display), not for re-transforming body text. |
-| OpenClaw env | Set **`SLACK_PERSONA_ROUTE`** from router result for send path (metadata; **no** text rewrite). |
+| **Persona enforcement (one owner per path)** | **Normative:** **§0.4**. **Exit 0:** BLACK BOX only **text** enforcement before stdout; OpenClaw **must not** re-enforce bridge text. **Exit 2:** OpenClaw owns embedded path persona/containment. **Duplicate** enforcement on the same bridge body is **invalid**. |
+| OpenClaw env | Set **`SLACK_PERSONA_ROUTE`** from router result for send path (metadata; **no** rewrite of BLACK BOX stdout). |
 
 ### 17.8 Documentation tools (§16.8)
 
@@ -614,7 +659,7 @@ Order is **normative** for audit consistency:
 ### 18.5 Reply path back to Slack (OpenClaw)
 
 1. Python **stdout** is **plain text** only (operator reply). **Stderr** carries **trace handoff** (§19.4) and optional diagnostics; gateway must not treat stderr as user-visible.
-2. **Persona enforcement** is **BlackBox-only** (§17.7). OpenClaw **does not** re-apply persona rules to bridge stdout.
+2. **Persona / containment:** **§0.4** — BLACK BOX applies final rules to **exit 0** text before post; OpenClaw applies rules only to **exit 2** embedded responses. OpenClaw **must not** re-enforce BLACK BOX stdout.
 3. **Architect diagnostics blocks** (`slack_architect_diagnostics.py` — optional by env in §17.11) are **Bolt-era**; OpenClaw path may omit unless wired.
 
 ---
@@ -696,7 +741,7 @@ Execute in order **before** claiming operator-visible E2E:
 | Blocker | Owner | Resolution |
 |---------|--------|------------|
 | **Context JSON not passed from gateway** | OpenClaw + BlackBox | Patch `dispatch.ts` + document in apply script or `scripts/openclaw/` README. |
-| **Persona enforcement duplicated** | **Resolved** | **BlackBox only** (§17.7, §18.5). |
+| **Persona enforcement duplicated** | **Resolved** | **§0.4** — one owner per path (BLACK BOX exit 0, OpenClaw exit 2). |
 | **Bolt parity** | Optional | Defer until path A stable. |
 
 ---
@@ -705,6 +750,7 @@ Execute in order **before** claiming operator-visible E2E:
 
 **Do not start BBX-SLACK-002 implementation** until:
 
+- [ ] **§0** (boundary / truth discipline) and **§23** (alignment pass) accepted **or** amended with Architect sign-off.
 - [ ] **§19** (Architect lock-down) accepted **or** amended with Architect sign-off.
 - [ ] **OpenClaw patch plan** pinned: owner, `dispatch.ts` change list, rollback, verification step.
 - [ ] **First PR scope** locked: **§12 items 1–6 only** (item 7 excluded unless Architect reopens).
@@ -718,7 +764,7 @@ Execute in order **before** claiming operator-visible E2E:
 
 ## 19. Architect lock-down (normative contracts)
 
-This section satisfies the **BBX-SLACK LDD lock-down** before implementation: decline boundary, single persona owner, Phase 1 tool contracts, `trace_id` format, thread store, access control, first-merge scope, and governance sequence.
+**System boundary:** **§0** (OpenClaw vs BLACK BOX) is prerequisite; this section satisfies the **BBX-SLACK LDD lock-down** before implementation: decline boundary, persona split per path, Phase 1 tool contracts, `trace_id` format, thread store, access control, first-merge scope, and governance sequence.
 
 ### 19.1 Router decline boundary
 
@@ -726,7 +772,7 @@ This section satisfies the **BBX-SLACK LDD lock-down** before implementation: de
 
 ### 19.2 Persona enforcement authority
 
-**Normative:** **BlackBox** is the **sole** authority for outbound persona / safety transforms on **bridge-produced** text (`slack_persona_enforcement.py` or successor). **OpenClaw** must not apply a second enforcement layer to that text. See **§17.7** and **§18.5**.
+**Normative:** **§0.4** — BLACK BOX **text** enforcement for **exit 0** bridge stdout; OpenClaw owns **exit 2** embedded path; **no** duplicate transforms on the same bridge body. See **§17.7** and **§18.5**.
 
 ### 19.3 Phase 1 tool contracts
 
@@ -958,6 +1004,48 @@ CREATE INDEX idx_operator_thread_access ON operator_thread_state(last_access_at_
 
 ---
 
+---
+
+## 23. Alignment pass — delta summary, explicit decisions, readiness (BBX-SLACK LDD)
+
+**Purpose:** Deliver the **return package** for architect acceptance: what changed, locked answers, and whether BBX-SLACK-002 may open.
+
+### 23.1 Delta summary by section
+
+| # | Topic | Where locked | Summary |
+|---|--------|----------------|--------|
+| 1 | OpenClaw / BLACK BOX boundary | **§0.1** | OpenClaw = Slack ingress, dispatch, bridge invoke, exit 2 embedded path. BLACK BOX = router, tools, audit, thread DB, access checks, **grounded** factual assembly, **exit 0** final text. |
+| 2 | System fit | **§0.2** | New Slack slice; **does not** replace Telegram, Bolt, UIUX.Web, CLIs, other surfaces. |
+| 3 | Router decline (`exit 2`) | **§4.4** | In-scope: system status, trading, policy, wallet, ingest, dashboard, project docs (when item 7 shipped) → **never** exit 2 for bypass; use tools or `clarify`. Exit 2 only for clearly out-of-scope chat per table. |
+| 4 | Persona enforcement | **§0.4**, **§17.7**, **§19.2** | **One transform per path:** BLACK BOX for **exit 0** text; OpenClaw for **exit 2** embedded; **no** duplicate enforcement on bridge stdout. |
+| 5 | Phase 1 tools | **§20** | Input/output/error envelopes, `source_refs`, **ingest stale** rules (`closed_bucket_lag`, `aligns_with_closed_strip`, `notes`). |
+| 6 | Thread state | **§21** | DDL, `thread_key`, `thread_ts_effective`, anchors, clarification, TTL, concurrency. |
+| 7 | Access control | **§22** | Workspace + **channel** + optional user; **dev-mode** bypass explicit. |
+| 8 | First-merge scope | **§12**, **§19.7** | **§12 items 1–6 only**; **item 7** (doc Q&A) **excluded** from first implementation PR unless Architect reopens. |
+| 9 | Truth discipline | **§0.3** | Facts from BLACK BOX tools only for in-scope domains; not from persona, gateway, or embedded model for those domains. |
+
+### 23.2 Explicit answers (open decisions)
+
+| Decision | Answer |
+|----------|--------|
+| Where does grounded operator logic run? | **BLACK BOX** Python only. |
+| Where does Slack transport + gateway live? | **OpenClaw** on lab host. |
+| Persona on bridge reply? | **BLACK BOX** final text rules **before** stdout (**§0.4**). |
+| Persona on embedded fallback? | **OpenClaw** (exit 2 path only). |
+| First PR includes doc Q&A (§12 item 7)? | **No** — **1–6 only** for BBX-SLACK-002 first merge. |
+| Contradiction with `PROJECT_SYSTEM_SPECIFICATION.md`? | **None** — multi-surface + messaging ingress; this slice is **explicit** Slack→OpenClaw→BlackBox; PSS “outbound enforcement before send” applies per **path** (§0.4). |
+| Contradiction with `canonical_development_plan.md`? | **None** — single default ingress, grounded tools, no parallel truth; **no new MVP scope** beyond governed checklist. |
+
+### 23.3 BBX-SLACK-002 implementation readiness
+
+**After this alignment pass is accepted by the Architect:**
+
+- The LDD is **implementation-ready** for **BBX-SLACK-002** **first PR** scope (**§12 items 1–6**): transport + router skeleton + Phase 1 tools in §20 + thread §21 + access §22 + audit/trace §19.4.
+- **Not** opened for **§12 item 7** until that scope is explicitly added.
+- **Do not** begin implementation until **this** document (including §0 and §23) is **accepted**; proof follows **§18.8–§18.9** and **canonical_development_plan** BBX-SLACK-002 proof bar.
+
+---
+
 ## Changelog
 
 - **2026-04-10:** Moved document into `docs/architect/slack_conversational_operator/`; added §16 Implementation gaps for implementer handoff.
@@ -965,3 +1053,4 @@ CREATE INDEX idx_operator_thread_access ON operator_thread_state(last_access_at_
 - **2026-04-13:** Aligned §17.4 schema path with §17.1 package location (`messaging_interface/operator_router/`).
 - **2026-04-13:** Added §18 End-to-end process map (deployment order, sequences, readiness gate).
 - **2026-04-13:** Architect lock-down: §4.4 decline boundary; §§19–22 (persona authority BlackBox-only, Phase 1 tool schemas incl. ingest stale rules, trace stderr format, thread DDL, channel access + dev mode); §12/§17/§18 aligned; BBX-SLACK-002 first PR items **1–6 only**.
+- **2026-04-13:** Alignment pass: **§0** OpenClaw/BLACK BOX boundary, platform fit, truth discipline, persona split (exit 0 vs exit 2); **§4.4** in-scope domains explicit; **§17.7/§19.2** persona table; **§23** delta package + readiness; governance cross-refs in header.
