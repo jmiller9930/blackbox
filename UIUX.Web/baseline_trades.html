@@ -413,7 +413,7 @@
                 <th title="Mode.">Mode</th>
                 <th title="Side.">Side</th>
                 <th title="Policy classification for this closed ledger row (authoritative close vs other). Not the same as trade-chain held vs idle NO TRADE.">Policy</th>
-                <th title="Outcome display.">Outcome</th>
+                <th title="Closed-trade economic display (win/loss/flat, etc.). Not trade-chain held.">Outcome</th>
                 <th title="Position size (base units).">Size</th>
                 <th title="How size was derived (policy notional / entry, default paper notional, or fallback).">Size src</th>
                 <th title="Position notional USD (≈ entry × size); this is what PnL % is measured against.">Notional $</th>
@@ -528,6 +528,22 @@
       function fmtMoney(n) {
         if (n == null || n === "" || (typeof n === "number" && isNaN(n))) return "—";
         return Number(n).toFixed(2);
+      }
+
+      /** API scope query param → operator label (matches scope dropdown). */
+      function scopeLabelApi(sc) {
+        var s = String(sc || "").toLowerCase();
+        if (s === "trade") return "Close policy TRADE";
+        if (s === "no_trade") return "Close not policy TRADE";
+        if (s === "all") return "All ledger rows";
+        return sc || "—";
+      }
+
+      /** Policy column: closed-row classification (not trade-chain held vs idle). */
+      function policyCloseLabel(auth) {
+        if (auth === "TRADE") return "Close · policy TRADE";
+        if (auth === "NO_TRADE") return "Close · not policy TRADE";
+        return String(auth || "—");
       }
 
       function formatSnapshotHuman(snap) {
@@ -646,6 +662,7 @@
           var tf = r.timeframe != null ? String(r.timeframe) : "—";
           var sz = fmtNum(r.size);
           var auth = r.baseline_authority || "—";
+          var authDisp = policyCloseLabel(auth);
           var authCls = auth === "TRADE" ? "bt-auth-trade" : "bt-auth-notrade";
           var reason = r.baseline_authority_reason || "";
           var mode = r.mode != null ? String(r.mode) : "—";
@@ -738,14 +755,13 @@
             authCls +
             '" title="' +
             escAttr(
-              reason
-                ? "baseline_display_reason=" + reason
-                : "Policy: TRADE only when policy_approved_execution."
+              (reason ? "baseline_display_reason=" + reason + ". " : "") +
+                "Closed fill classification only—not lifecycle held (open position) or idle NO TRADE on the chain."
             ) +
             '">' +
-            esc(auth) +
+            esc(authDisp) +
             '</td><td title="' +
-            escAttr("Outcome display (same vocabulary as trade chain).") +
+            escAttr("Economic / display label for this closed row (PnL outcome).") +
             '">' +
             esc(r.lifecycle_display != null && String(r.lifecycle_display).trim() !== '' ? String(r.lifecycle_display) : "—") +
             '</td><td title="' +
@@ -1086,15 +1102,17 @@
             foot.textContent =
               "Showing " +
               state.rows.length +
-              " trade(s) (limit " +
+              " row(s) (limit " +
               (m.limit || "?") +
               ", scope " +
-              (m.scope || "?") +
-              "). Nested index: " +
+              scopeLabelApi(m.scope) +
+              "). trades_by_trade_id: " +
               Object.keys(state.tradesByTradeId || {}).length +
-              " key(s) in trades_by_trade_id. Scanned up to " +
+              " trade_id(s). Scanned " +
               (m.scanned_execution_rows || "?") +
-              " baseline ledger rows in range. Click a row for trade snapshot.";
+              " ledger row(s). " +
+              (m.lifecycle_note ? String(m.lifecycle_note) + " " : "") +
+              "Click a row for snapshot.";
           })
           .catch(function (e) {
             foot.textContent = "Failed to load: " + String(e);

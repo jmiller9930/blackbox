@@ -1673,7 +1673,7 @@
     if (recent && recent.length) {
       if (meta) {
         meta.textContent =
-          'Latest policy TRADE rows only (Sean Jupiter approved + matching execution — same rule as Baseline trades report “TRADE only”). Open the report for dates and CSV.';
+          'Latest Close policy TRADE rows only (Sean Jupiter authoritative close — same as Baseline trades report scope “Close policy TRADE”). Open the report for dates, scope, and CSV.';
       }
       var html = '';
       var ri;
@@ -1730,7 +1730,7 @@
     }
     if (meta) {
       meta.textContent =
-        'No policy TRADE rows in recent ledger scans — raw ledger may still have rows; use the Baseline trades report with “All” or “NO TRADE only” to inspect. The chain below may still show policy evaluation.';
+        'No Close policy TRADE rows in recent window — raw ledger may still have rows; open Baseline trades report and set scope to “All ledger rows” or “Close not policy TRADE” to inspect. The trade chain below may still show evaluation.';
     }
     tbody.innerHTML =
       '<tr><td colspan="4">No policy TRADE executions in the recent window (or none yet).</td></tr>';
