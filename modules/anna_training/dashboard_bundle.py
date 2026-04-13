@@ -1130,13 +1130,22 @@ def _recent_baseline_policy_trade_rows_for_strip(
         )
         if str(cell.get("baseline_display_reason") or "") not in _BASELINE_CLOSED_TRADE_DISPLAY_REASONS:
             continue
-        t = ledger_row.get("entry_time") or ledger_row.get("created_at_utc")
-        t_iso = _normalize_utc_iso_for_axis(t) if t else None
         pnl = ledger_row.get("pnl_usd")
         ep = ledger_row.get("entry_price")
         xp = ledger_row.get("exit_price")
         sym = str(ledger_row.get("symbol") or "").strip()
         tf = str(ledger_row.get("timeframe") or "").strip()
+        entry_iso = _normalize_utc_iso_for_axis(ledger_row.get("entry_time"))
+        exit_iso = _normalize_utc_iso_for_axis(ledger_row.get("exit_time"))
+        # Strip is ordered by exit_time; primary clock for operators is exit (matches Reports default).
+        t_legacy = ledger_row.get("entry_time") or ledger_row.get("created_at_utc")
+        time_utc_iso_legacy = _normalize_utc_iso_for_axis(t_legacy) if t_legacy else None
+        notion = _notional_usd(ep, ledger_row.get("size"))
+        pnl_f = float(pnl) if pnl is not None else None
+        pnl_pct: float | None = None
+        if notion is not None and pnl_f is not None and float(notion) > 1e-12:
+            pnl_pct = round(100.0 * pnl_f / float(notion), 6)
+        policy_outcome_display = str(cell.get("outcome_display") or "").strip() or None
         mae_val: float | None = None
         if sym and mpath and mpath.is_file():
             mae_val, _ = compute_mae_usd_v1(
@@ -1155,9 +1164,15 @@ def _recent_baseline_policy_trade_rows_for_strip(
                 "symbol": sym or None,
                 "timeframe": tf or None,
                 "mode": str(ledger_row.get("mode") or "").strip() or None,
-                "time_utc_iso": t_iso or "",
+                # Legacy: was entry/created only — confusing vs exit sort. Prefer entry_time_utc_iso / exit_time_utc_iso.
+                "time_utc_iso": exit_iso or time_utc_iso_legacy or "",
+                "entry_time_utc_iso": entry_iso or "",
+                "exit_time_utc_iso": exit_iso or "",
                 "outcome": _strip_outcome_from_pnl(pnl),
-                "pnl_usd": float(pnl) if pnl is not None else None,
+                "policy_outcome_display": policy_outcome_display,
+                "pnl_usd": pnl_f,
+                "pnl_pct_notional": pnl_pct,
+                "notional_usd": float(notion) if notion is not None else None,
                 "entry": float(ep) if ep is not None else None,
                 "exit": float(xp) if xp is not None else None,
                 "size": float(ledger_row["size"]) if ledger_row.get("size") is not None else None,

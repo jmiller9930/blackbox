@@ -200,6 +200,7 @@
     .bts-pill.bts-short { background: #fff7ed; color: #c2410c; }
     .bts-t tbody tr.bts-click-row { cursor: pointer; }
     .bts-t tbody tr.bts-click-row:hover { background: #f0f9ff; }
+    .bts-muted { color: var(--muted); font-weight: 500; }
     /* Baseline open: placeholders left; live tile only in rightmost column */
     .tc-baseline-anchor-empty {
       vertical-align: middle !important;
@@ -915,14 +916,20 @@
           <table class="bts-t">
             <thead>
               <tr>
-                <th scope="col">Time (UTC)</th>
-                <th scope="col">market_event_id</th>
+                <th scope="col" title="Lifecycle key (bl_lc_… / bl_…); same identity as Reports.">trade_id</th>
+                <th scope="col" title="Ledger exit_time — strip is sorted by this (newest first).">Exit (UTC)</th>
+                <th scope="col" title="Ledger entry_time.">Entry (UTC)</th>
+                <th scope="col">Market · TF</th>
                 <th scope="col">Side</th>
-                <th scope="col">Outcome</th>
+                <th scope="col" title="Policy outcome label (Reports-style).">Outcome</th>
+                <th scope="col" title="Gross model PnL; % is vs row notional (Reports semantics).">PnL</th>
+                <th scope="col" title="≈ entry × size (USD scale of position).">Notional $</th>
+                <th scope="col" title="Worst loss while open (MAE v1) when available.">MAE $</th>
+                <th scope="col" title="Close row / 5m bar id (exit bar).">Exit bar (market_event_id)</th>
               </tr>
             </thead>
             <tbody id="bts-tbody">
-              <tr><td colspan="4">Loading…</td></tr>
+              <tr><td colspan="10">Loading…</td></tr>
             </tbody>
           </table>
         </div>
@@ -1730,37 +1737,71 @@
     if (!tbody) return;
     if (!tc) {
       if (meta) meta.textContent = '';
-      tbody.innerHTML = '<tr><td colspan="4">No trade chain data.</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="10">No trade chain data.</td></tr>';
       return;
     }
     var recent = tc.recent_baseline_trades;
     if (recent && recent.length) {
       if (meta) {
         meta.textContent =
-          'Latest rows for Show → Trades only (Sean Jupiter authoritative close — same as Reports dashboard). Open Reports dashboard for dates, scope, and CSV.';
+          'Same ledger + policy classification as Reports (Show → Trades). Exit column = sort key (newest exit first). Click a row for full snapshot on Reports. CSV / wide window: Reports dashboard →';
       }
       var html = '';
       var ri;
       for (ri = 0; ri < recent.length; ri++) {
         var r = recent[ri];
-        var tim =
-          r.time_utc_iso != null && String(r.time_utc_iso).trim() !== ''
-            ? String(r.time_utc_iso)
+        var exT =
+          r.exit_time_utc_iso != null && String(r.exit_time_utc_iso).trim() !== ''
+            ? String(r.exit_time_utc_iso)
+            : r.time_utc_iso != null && String(r.time_utc_iso).trim() !== ''
+              ? String(r.time_utc_iso)
+              : '—';
+        var enT =
+          r.entry_time_utc_iso != null && String(r.entry_time_utc_iso).trim() !== ''
+            ? String(r.entry_time_utc_iso)
             : '—';
         var mid = r.market_event_id != null ? String(r.market_event_id) : '—';
         var rowMid =
           r.market_event_id != null && String(r.market_event_id).trim() !== ''
             ? String(r.market_event_id).trim()
             : '';
+        var tid =
+          r.trade_id != null && String(r.trade_id).trim() !== ''
+            ? String(r.trade_id).trim()
+            : '';
+        var tidShow = tid ? tcShortId(tid, 22) : '—';
+        var symTf =
+          (r.symbol != null ? String(r.symbol) : '—') +
+          ' · ' +
+          (r.timeframe != null ? String(r.timeframe) : '—');
         var sideRaw = r.side != null ? String(r.side).trim().toLowerCase() : '';
+        var polOut = r.policy_outcome_display != null && String(r.policy_outcome_display).trim() !== ''
+          ? String(r.policy_outcome_display).trim()
+          : '';
         var oc = r.outcome != null ? String(r.outcome) : '—';
+        if (Math.abs(Number(r.pnl_usd || 0)) <= 1e-9 && (oc === 'WIN' || oc === 'LOSS')) {
+          oc = 'FLAT';
+        }
+        var outcomeCell = polOut ? esc(polOut) + ' <span class="bts-muted">(' + esc(oc) + ')</span>' : esc(oc);
+        var pnlParts = [];
         if (r.pnl_usd != null && !isNaN(Number(r.pnl_usd))) {
           var pv = Number(r.pnl_usd);
-          if (Math.abs(pv) <= 1e-9 && (oc === 'WIN' || oc === 'LOSS')) {
-            oc = 'FLAT';
-          }
-          oc += ' (' + (pv >= 0 ? '+' : '') + pv.toFixed(2) + ' USD)';
+          pnlParts.push((pv >= 0 ? '+' : '') + pv.toFixed(4) + ' USD');
         }
+        if (r.pnl_pct_notional != null && !isNaN(Number(r.pnl_pct_notional))) {
+          pnlParts.push('(' + Number(r.pnl_pct_notional).toFixed(3) + '% vs notional)');
+        }
+        var pnlCell = pnlParts.length ? pnlParts.join(' ') : '—';
+        var notion =
+          r.notional_usd != null && !isNaN(Number(r.notional_usd))
+            ? Number(r.notional_usd).toFixed(2)
+            : '—';
+        var mae =
+          r.mae_usd != null && !isNaN(Number(r.mae_usd)) ? Number(r.mae_usd).toFixed(4) : '—';
+        var narr = r.jupiter_tile_narrative != null ? String(r.jupiter_tile_narrative).trim() : '';
+        var rowTitle = narr
+          ? 'Open Reports — snapshot. ' + narr.slice(0, 200) + (narr.length > 200 ? '…' : '')
+          : 'Open Reports — baseline trades (same trade_id as this row).';
         var pill;
         if (sideRaw === 'long' || sideRaw === 'short') {
           pill =
@@ -1772,21 +1813,37 @@
         } else {
           pill = esc(sideRaw ? sideRaw : '—');
         }
-        var trOpen = rowMid
-          ? '<tr data-mid="' +
-            escAttr(rowMid) +
-            '" class="bts-click-row" title="Open Reports dashboard (baseline trades) with tile narrative for this event">'
-          : '<tr>';
+        var trAttrs =
+          (rowMid ? ' data-mid="' + escAttr(rowMid) + '"' : '') +
+          (tid ? ' data-tid="' + escAttr(tid) + '"' : '');
         html +=
-          trOpen +
-          '<td class="bts-mono">' +
-          esc(tim) +
+          '<tr' +
+          trAttrs +
+          ' class="bts-click-row"' +
+          (rowTitle ? ' title="' + escAttr(rowTitle) + '"' : '') +
+          '>' +
+          '<td class="bts-mono" title="' +
+          escAttr(tid) +
+          '">' +
+          esc(tidShow) +
           '</td><td class="bts-mono">' +
-          esc(mid) +
+          esc(exT) +
+          '</td><td class="bts-mono">' +
+          esc(enT) +
+          '</td><td class="bts-mono" style="font-size:0.68rem">' +
+          esc(symTf) +
           '</td><td>' +
           pill +
-          '</td><td>' +
-          esc(oc) +
+          '</td><td style="font-size:0.72rem;line-height:1.35">' +
+          outcomeCell +
+          '</td><td class="bts-mono" style="font-size:0.68rem">' +
+          pnlCell +
+          '</td><td class="bts-mono" style="font-size:0.68rem">' +
+          esc(notion) +
+          '</td><td class="bts-mono" style="font-size:0.68rem">' +
+          esc(mae) +
+          '</td><td class="bts-mono" style="font-size:0.62rem">' +
+          esc(mid) +
           '</td></tr>';
       }
       tbody.innerHTML = html;
@@ -1797,7 +1854,7 @@
         'No Trades rows in recent window — raw ledger may still have rows; open Reports dashboard and set Show to ALL baseline or No trades to inspect. The trade chain below may still show evaluation.';
     }
     tbody.innerHTML =
-      '<tr><td colspan="4">No policy TRADE executions in the recent window (or none yet).</td></tr>';
+      '<tr><td colspan="10">No policy TRADE executions in the recent window (or none yet).</td></tr>';
   }
 
   (function wireBtsBaselineNavigate() {
@@ -1805,10 +1862,14 @@
     if (!tb || tb.dataset.bbBtsNav) return;
     tb.dataset.bbBtsNav = '1';
     tb.addEventListener('click', function (e) {
-      var tr = e.target.closest('tr[data-mid]');
+      var tr = e.target.closest('tr[data-mid], tr[data-tid]');
       if (!tr) return;
-      var m = tr.getAttribute('data-mid');
-      if (m) window.location.href = '/baseline-trades.html?mid=' + encodeURIComponent(m);
+      var m = tr.getAttribute('data-mid') || '';
+      var t = tr.getAttribute('data-tid') || '';
+      var q = [];
+      if (t) q.push('tid=' + encodeURIComponent(t));
+      if (m) q.push('mid=' + encodeURIComponent(m));
+      if (q.length) window.location.href = '/baseline-trades.html?' + q.join('&');
     });
   })();
 

@@ -60,8 +60,11 @@ def test_build_trade_chain_payload_schema() -> None:
     for row in tc["recent_baseline_trades"]:
         assert set(row.keys()) >= {
             "market_event_id",
+            "trade_id",
             "side",
             "time_utc_iso",
+            "entry_time_utc_iso",
+            "exit_time_utc_iso",
             "outcome",
             "pnl_usd",
         }
