@@ -201,6 +201,31 @@
     .bts-t tbody tr.bts-click-row { cursor: pointer; }
     .bts-t tbody tr.bts-click-row:hover { background: #f0f9ff; }
     .bts-muted { color: var(--muted); font-weight: 500; }
+    /* Recent baseline strip: same cell semantics as Reports (baseline_trades.html bt-rpt). */
+    .bts-t.bt-rpt-dash .bt-mono {
+      font-family: ui-monospace, monospace;
+      font-size: 0.66rem;
+      word-break: break-all;
+    }
+    .bts-t.bt-rpt-dash .bt-mono--mid { max-width: 9rem; }
+    .bts-t.bt-rpt-dash .bt-long { background: rgba(59, 130, 246, 0.06); }
+    .bts-t.bt-rpt-dash .bt-short { background: rgba(234, 88, 12, 0.06); }
+    .bts-t.bt-rpt-dash .bt-pnl-pos { color: #047857; font-weight: 800; }
+    .bts-t.bt-rpt-dash .bt-pnl-neg { color: #b91c1c; font-weight: 800; }
+    .bts-t.bt-rpt-dash .bt-auth-trade { font-weight: 800; color: #0f766e; }
+    .bts-t.bt-rpt-dash .bt-auth-notrade { font-weight: 700; color: #64748b; }
+    .bts-t.bt-rpt-dash .bt-muted { color: var(--muted); font-size: 0.82em; font-weight: 600; }
+    .bts-t.bt-rpt-dash .bt-na { color: #94a3b8; font-style: italic; }
+    .bts-t.bt-rpt-dash .bt-td-tip { cursor: help; }
+    .bts-t.bt-rpt-dash a.bt-view-btn {
+      font: inherit;
+      font-size: 0.7rem;
+      font-weight: 700;
+      color: var(--accent);
+      cursor: pointer;
+      text-decoration: underline;
+    }
+    .bts-t.bt-rpt-dash a.bt-view-btn:hover { color: #0d5c56; }
     /* Baseline open: placeholders left; live tile only in rightmost column */
     .tc-baseline-anchor-empty {
       vertical-align: middle !important;
@@ -913,27 +938,42 @@
           <a class="bts-report" href="/baseline-trades.html" title="Reports dashboard — baseline trades, UTC range, CSV export">Reports dashboard →</a>
         </div>
         <div class="bts-tablescroll">
-          <table class="bts-t">
+          <table class="bts-t bt-rpt-dash">
             <thead>
               <tr>
-                <th scope="col" title="Lifecycle key (bl_lc_… / bl_…); same identity as Reports.">trade_id</th>
-                <th scope="col" title="Ledger exit_time — rows sorted newest exit first (same as Reports default).">Exit (UTC)</th>
-                <th scope="col" title="Ledger entry_time.">Entry (UTC)</th>
-                <th scope="col" title="Open → close hold length.">Hold</th>
-                <th scope="col">Market · TF</th>
-                <th scope="col">Side</th>
-                <th scope="col" title="Position size (base units).">Size</th>
-                <th scope="col" title="Policy outcome label (Reports-style).">Outcome</th>
-                <th scope="col" title="Gross model PnL; % is vs row notional (Reports semantics).">PnL</th>
-                <th scope="col" title="≈ entry × size (USD scale of position).">Notional $</th>
-                <th scope="col" title="Stop / take profit at entry (position_open or context).">SL / TP entry</th>
-                <th scope="col" title="SL / TP at exit bar (policy features or ledger context).">SL / TP exit</th>
-                <th scope="col" title="Worst loss while open (MAE v1) when available.">MAE $</th>
-                <th scope="col" title="Close row / bar id (exit bar).">Exit bar</th>
+                <th title="Lifecycle key from entry bar + mode (bl_lc_…); not the same string as exit market_event_id.">trade_id</th>
+                <th title="Entry bar market_event_id when recorded (lifecycle); aligns trade_id with the opening candle.">Entry MEI</th>
+                <th title="When the position opened (ledger entry time, UTC).">Open (UTC)</th>
+                <th title="How long this position was open until exit (closed fills only). Not lifecycle held (open position) — that is on the dashboard trade chain.">Duration</th>
+                <th title="When the position closed (UTC).">Exit (UTC)</th>
+                <th title="Exit reason and outcome.">Status</th>
+                <th title="Symbol.">Sym</th>
+                <th title="Timeframe.">TF</th>
+                <th title="Exit/close bar market_event_id on this ledger row (Jupiter tile narrative is keyed here).">market_event_id</th>
+                <th title="Mode.">Mode</th>
+                <th title="Side.">Side</th>
+                <th title="Policy classification for this closed ledger row (authoritative close vs other). Not the same as trade-chain held vs idle NO TRADE.">Policy</th>
+                <th title="Closed-trade economic display (win/loss/flat, etc.). Not trade-chain held.">Outcome</th>
+                <th title="Position size (base units). If ledger had a 1.0 stub, report uses position_open when available—hover cell or see size_note in API/CSV.">Size</th>
+                <th title="How size was derived (position_open or policy).">Size src</th>
+                <th title="Position notional USD (≈ entry × size); this is what PnL % is measured against.">Notional $</th>
+                <th title="Sean risk slice: max(MIN, bankroll × risk_pct) from position_size_hint; notional = Risk $ × leverage.">Risk $</th>
+                <th title="Paper bankroll / equity passed into policy as free_collateral_usd for sizing—not the full notional and not the same as Risk $.">Bankroll $ (policy)</th>
+                <th title="Ledger exit_reason.">Exit reason</th>
+                <th title="Stop loss price at entry (lifecycle).">SL entry</th>
+                <th title="Take profit price at entry (lifecycle).">TP entry</th>
+                <th title="Stop level at exit.">SL exit</th>
+                <th title="Take profit level at exit.">TP exit</th>
+                <th title="Entry price.">Entry px</th>
+                <th title="Exit price.">Exit px</th>
+                <th title="Realized PnL USD.">PnL USD</th>
+                <th title="The biggest loss this trade showed while it was still open, before it closed.">Worst loss while open ($)</th>
+                <th title="QEL — see QEL page.">QEL</th>
+                <th title="Open trade snapshot on Reports.">View</th>
               </tr>
             </thead>
             <tbody id="bts-tbody">
-              <tr><td colspan="14">Loading…</td></tr>
+              <tr><td colspan="29">Loading…</td></tr>
             </tbody>
           </table>
         </div>
@@ -1183,6 +1223,71 @@
   function btsFmtPx(n) {
     if (n == null || n === '' || (typeof n === 'number' && isNaN(n))) return '—';
     return Number(n).toFixed(4);
+  }
+
+  /** Mirrors baseline_trades.html formatters for the 29-column Recent Baseline strip. */
+  var BTS_DASH_TIP_QEL =
+    'QEL scores and survival decisions apply to Anna strategy cohorts, not to each baseline ledger row. Open QEL evaluation in the nav for details.';
+  function btsRptFmtNum(n) {
+    if (n == null || n === '' || (typeof n === 'number' && isNaN(n))) return '—';
+    return Number(n).toFixed(2);
+  }
+  function btsRptFmtPx(n) {
+    if (n == null || n === '' || (typeof n === 'number' && isNaN(n))) return '—';
+    return Number(n).toFixed(4);
+  }
+  function btsRptFmtMae(m) {
+    if (m == null || (typeof m === 'number' && isNaN(m))) return '—';
+    return Number(m).toFixed(4);
+  }
+  function btsRptFmtSlTpPx(n) {
+    if (n == null || n === '' || (typeof n === 'number' && isNaN(n))) return '—';
+    return Number(n).toFixed(4);
+  }
+  function btsRptFmtPnl(pnl) {
+    if (pnl == null || (typeof pnl === 'number' && isNaN(pnl))) return '—';
+    var v = Number(pnl);
+    return (v >= 0 ? '+' : '') + v.toFixed(2);
+  }
+  function btsRptFmtPnlWithPct(r) {
+    var base = btsRptFmtPnl(r.pnl_usd);
+    var pct = r.pnl_pct_notional;
+    if (
+      pct == null ||
+      r.pnl_usd == null ||
+      (typeof pct === 'number' && isNaN(pct))
+    ) {
+      return base;
+    }
+    return (
+      base +
+      ' <span class="bt-muted">(' +
+      Number(pct).toFixed(3) +
+      '% vs notional)</span>'
+    );
+  }
+  function btsRptFmtMoney(n) {
+    if (n == null || n === '' || (typeof n === 'number' && isNaN(n))) return '—';
+    return Number(n).toFixed(2);
+  }
+  function btsRptFmtMoneyOrMissing(n, provenance, kind) {
+    kind = kind || 'value';
+    if (n == null || n === '' || (typeof n === 'number' && isNaN(n))) {
+      var t =
+        'Not recorded — no ' +
+        kind +
+        ' in baseline open-position snapshot or policy_evaluations features (entry/exit bar) for this row.';
+      if (provenance && String(provenance).trim() !== '')
+        t += ' Enrichment tried: ' + String(provenance).trim() + '.';
+      return '<span class="bt-na" title="' + escAttr(t) + '">Not recorded</span>';
+    }
+    return btsRptFmtMoney(n);
+  }
+  function btsRptPolicyCloseLabel(auth) {
+    if (auth === 'TRADE') return 'Close · policy TRADE';
+    if (auth === 'NO_TRADE') return 'Close · not policy TRADE';
+    if (auth == null || String(auth).trim() === '') return 'Not recorded';
+    return String(auth);
   }
 
   /** Parse Jupiter narrative lines into label/value (matches format_jupiter_tile_narrative_v1). */
@@ -1740,148 +1845,251 @@
     });
   }
 
-  /** Last two baseline columns with a real execution (non-empty cell), newest first — same ledger as the chain. */
+  /** Last five closed baseline rows — same 29 columns and cell order as Reports (`baseline_trades.html`). */
   function renderBaselineStrip(tc) {
     var tbody = document.getElementById('bts-tbody');
     var meta = document.getElementById('bts-meta');
     if (!tbody) return;
     if (!tc) {
       if (meta) meta.textContent = '';
-      tbody.innerHTML = '<tr><td colspan="14">No trade chain data.</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="29">No trade chain data.</td></tr>';
       return;
     }
     var recent = tc.recent_baseline_trades;
     if (recent && recent.length) {
       if (meta) {
         meta.textContent =
-          'Same data contract as Reports (Show → Trades): newest exits first, same economics and SL/TP fields. Reports is for CSV export and custom UTC date ranges — not a different truth.';
+          'Last 5 closed baseline trades — same columns and labels as the Reports dashboard (newest exit first). Use Reports for date range, CSV, and the full trade snapshot modal.';
       }
-      var html = '';
-      var ri;
-      for (ri = 0; ri < recent.length; ri++) {
-        var r = recent[ri];
-        var exT =
-          r.exit_time_utc_iso != null && String(r.exit_time_utc_iso).trim() !== ''
-            ? String(r.exit_time_utc_iso)
-            : r.time_utc_iso != null && String(r.time_utc_iso).trim() !== ''
-              ? String(r.time_utc_iso)
-              : '—';
-        var enT =
-          r.entry_time_utc_iso != null && String(r.entry_time_utc_iso).trim() !== ''
-            ? String(r.entry_time_utc_iso)
-            : '—';
-        var mid = r.market_event_id != null ? String(r.market_event_id) : '—';
-        var rowMid =
-          r.market_event_id != null && String(r.market_event_id).trim() !== ''
-            ? String(r.market_event_id).trim()
+      var h = '';
+      var tipMae =
+        'The biggest loss this trade showed while it was still open, before it closed.';
+      var i;
+      for (i = 0; i < recent.length; i++) {
+        var r = recent[i];
+        var mid = r.market_event_id || '';
+        var side = String(r.side || '').toLowerCase();
+        var cls = side === 'short' ? 'bt-short' : 'bt-long';
+        var pnl = r.pnl_usd;
+        var pnlCls =
+          pnl == null ? '' : Number(pnl) >= 0 ? 'bt-pnl-pos' : 'bt-pnl-neg';
+        var sym = r.symbol != null ? String(r.symbol) : '—';
+        var tf = r.timeframe != null ? String(r.timeframe) : '—';
+        var sz = btsRptFmtNum(r.size);
+        var sizeNote =
+          r.size_note != null && String(r.size_note).trim() !== ''
+            ? String(r.size_note).trim()
             : '';
+        var sizeTitle =
+          'Position size (base units).' + (sizeNote ? ' ' + sizeNote : '');
+        var econP =
+          r.economics_provenance_note != null && String(r.economics_provenance_note).trim() !== ''
+            ? String(r.economics_provenance_note).trim()
+            : '';
+        var riskTip =
+          'Sean risk slice (collateral_usd). ' +
+          (econP ? 'Enrichment: ' + econP + '. ' : '') +
+          (r.risk_pct != null && !isNaN(Number(r.risk_pct))
+            ? 'risk_pct=' + Number(r.risk_pct).toFixed(4) + ' (fraction of bankroll).'
+            : '');
+        var auth = r.baseline_authority || '—';
+        var authDisp = btsRptPolicyCloseLabel(auth);
+        var authCls = auth === 'TRADE' ? 'bt-auth-trade' : 'bt-auth-notrade';
+        var reason = r.baseline_authority_reason || '';
+        var mode = r.mode != null ? String(r.mode) : '—';
         var tid =
-          r.trade_id != null && String(r.trade_id).trim() !== ''
-            ? String(r.trade_id).trim()
-            : '';
-        var tidShow = tid ? tcShortId(tid, 22) : '—';
-        var hold = '—';
-        if (r.hold_duration_minutes != null && !isNaN(Number(r.hold_duration_minutes))) {
-          var hmv = Number(r.hold_duration_minutes);
-          hold = hmv >= 60 ? (hmv / 60).toFixed(2) + ' h' : hmv.toFixed(1) + ' min';
-        }
-        var sz =
-          r.size != null && !isNaN(Number(r.size)) ? Number(r.size).toFixed(4) : '—';
-        var sltpEnt = btsFmtPx(r.stop_loss_entry_price) + ' / ' + btsFmtPx(r.take_profit_entry_price);
-        var sltpEx = btsFmtPx(r.stop_loss_exit_price) + ' / ' + btsFmtPx(r.take_profit_exit_price);
-        var symTf =
-          (r.symbol != null ? String(r.symbol) : '—') +
-          ' · ' +
-          (r.timeframe != null ? String(r.timeframe) : '—');
-        var sideRaw = r.side != null ? String(r.side).trim().toLowerCase() : '';
-        var polOut = r.policy_outcome_display != null && String(r.policy_outcome_display).trim() !== ''
-          ? String(r.policy_outcome_display).trim()
-          : '';
-        var oc = r.outcome != null ? String(r.outcome) : '—';
-        if (Math.abs(Number(r.pnl_usd || 0)) <= 1e-9 && (oc === 'WIN' || oc === 'LOSS')) {
-          oc = 'FLAT';
-        }
-        var outcomeCell = polOut ? esc(polOut) + ' <span class="bts-muted">(' + esc(oc) + ')</span>' : esc(oc);
-        var pnlParts = [];
-        if (r.pnl_usd != null && !isNaN(Number(r.pnl_usd))) {
-          var pv = Number(r.pnl_usd);
-          pnlParts.push((pv >= 0 ? '+' : '') + pv.toFixed(4) + ' USD');
-        }
-        if (r.pnl_pct_notional != null && !isNaN(Number(r.pnl_pct_notional))) {
-          pnlParts.push('(' + Number(r.pnl_pct_notional).toFixed(3) + '% vs notional)');
-        }
-        var pnlCell = pnlParts.length ? pnlParts.join(' ') : '—';
-        var notion =
-          r.notional_usd != null && !isNaN(Number(r.notional_usd))
-            ? Number(r.notional_usd).toFixed(2)
+          r.trade_id != null && String(r.trade_id).trim() !== '' ? String(r.trade_id) : '—';
+        var entryMei =
+          r.entry_market_event_id != null && String(r.entry_market_event_id).trim() !== ''
+            ? String(r.entry_market_event_id)
             : '—';
-        var mae =
-          r.mae_usd != null && !isNaN(Number(r.mae_usd)) ? Number(r.mae_usd).toFixed(4) : '—';
-        var narr = r.jupiter_tile_narrative != null ? String(r.jupiter_tile_narrative).trim() : '';
-        var rowTitle = narr
-          ? 'Optional: open Reports for tile narrative + modal. ' + narr.slice(0, 200) + (narr.length > 200 ? '…' : '')
-          : 'Row shows same economics as Reports (Show → Trades). Click for optional deep link.';
-        var pill;
-        if (sideRaw === 'long' || sideRaw === 'short') {
-          pill =
-            '<span class="bts-pill bts-' +
-            (sideRaw === 'long' ? 'long' : 'short') +
-            '">' +
-            esc(sideRaw) +
-            '</span>';
-        } else {
-          pill = esc(sideRaw ? sideRaw : '—');
-        }
-        var trAttrs =
-          (rowMid ? ' data-mid="' + escAttr(rowMid) + '"' : '') +
-          (tid ? ' data-tid="' + escAttr(tid) + '"' : '');
-        html +=
-          '<tr' +
-          trAttrs +
-          ' class="bts-click-row"' +
-          (rowTitle ? ' title="' + escAttr(rowTitle) + '"' : '') +
-          '>' +
-          '<td class="bts-mono" title="' +
-          escAttr(tid) +
+        var openUtc =
+          r.lifecycle_open_at_utc != null && String(r.lifecycle_open_at_utc).trim() !== ''
+            ? String(r.lifecycle_open_at_utc)
+            : r.entry_time_utc_iso != null && String(r.entry_time_utc_iso).trim() !== ''
+              ? String(r.entry_time_utc_iso)
+              : r.time_utc_iso != null && String(r.time_utc_iso).trim() !== ''
+                ? String(r.time_utc_iso)
+                : '—';
+        var exitUtc =
+          r.lifecycle_closed_at_utc != null && String(r.lifecycle_closed_at_utc).trim() !== ''
+            ? String(r.lifecycle_closed_at_utc)
+            : r.exit_time_utc_iso != null && String(r.exit_time_utc_iso).trim() !== ''
+              ? String(r.exit_time_utc_iso)
+              : '—';
+        var held =
+          r.lifecycle_held_display != null && String(r.lifecycle_held_display).trim() !== ''
+            ? String(r.lifecycle_held_display)
+            : r.held_display != null && String(r.held_display).trim() !== ''
+              ? String(r.held_display)
+              : '—';
+        var statusLbl =
+          r.lifecycle_closed_label != null && String(r.lifecycle_closed_label).trim() !== ''
+            ? String(r.lifecycle_closed_label)
+            : '—';
+        var slEn = r.stop_loss_entry_price;
+        var tpEn = r.take_profit_entry_price;
+        var slEx = r.stop_loss_exit_price;
+        var tpEx = r.take_profit_exit_price;
+        var tidAttr = tid !== '—' ? tid : '';
+        var midAttr = mid ? String(mid) : '';
+        var viewQs = [];
+        if (tidAttr) viewQs.push('tid=' + encodeURIComponent(tidAttr));
+        if (midAttr) viewQs.push('mid=' + encodeURIComponent(midAttr));
+        var viewHref = viewQs.length ? '/baseline-trades.html?' + viewQs.join('&') : '/baseline-trades.html';
+        h +=
+          '<tr class="bts-click-row bt-click-row" data-row-idx="' +
+          i +
+          '" data-mid="' +
+          escAttr(midAttr) +
+          '" data-tid="' +
+          escAttr(tidAttr) +
+          '" title="Click row or View: open this trade on Reports.">' +
+          '<td class="bt-mono bt-mono--mid" title="' +
+          escAttr('Lifecycle trade key; see Entry MEI column for opening bar id.') +
           '">' +
-          tidShow +
-          '</td><td class="bts-mono">' +
-          esc(exT) +
-          '</td><td class="bts-mono">' +
-          esc(enT) +
-          '</td><td class="bts-mono" style="font-size:0.68rem">' +
-          esc(hold) +
-          '</td><td class="bts-mono" style="font-size:0.68rem">' +
-          esc(symTf) +
-          '</td><td>' +
-          pill +
-          '</td><td class="bts-mono" style="font-size:0.68rem">' +
+          esc(tid) +
+          '</td><td class="bt-mono bt-mono--mid" title="' +
+          escAttr('Entry bar market_event_id (from lifecycle context); differs from exit market_event_id.') +
+          '">' +
+          esc(entryMei) +
+          '</td><td class="bt-mono" title="' +
+          escAttr('Position opened (UTC).') +
+          '">' +
+          esc(openUtc) +
+          '</td><td title="' +
+          escAttr('Duration: entry to exit for this close (not open-position held).') +
+          '">' +
+          esc(held) +
+          '</td><td class="bt-mono" title="' +
+          escAttr('Position closed (UTC).') +
+          '">' +
+          esc(exitUtc) +
+          '</td><td title="' +
+          escAttr('Exit outcome label.') +
+          '">' +
+          esc(statusLbl) +
+          '</td><td class="bt-mono" title="' +
+          escAttr('Symbol from ledger.') +
+          '">' +
+          esc(sym) +
+          '</td><td title="' +
+          escAttr('Timeframe from ledger.') +
+          '">' +
+          esc(tf) +
+          '</td><td class="bt-mono bt-mono--mid" title="' +
+          escAttr('Close bar event id.') +
+          '">' +
+          esc(mid || '—') +
+          '</td><td title="' +
+          escAttr('Ledger mode (live / paper / paper_stub).') +
+          '">' +
+          esc(mode) +
+          '</td><td class="' +
+          cls +
+          '" title="' +
+          escAttr('Side from ledger.') +
+          '">' +
+          esc(side || '—') +
+          '</td><td class="' +
+          authCls +
+          '" title="' +
+          escAttr(
+            (reason ? 'baseline_display_reason=' + reason + '. ' : '') +
+              'Closed fill classification only—not lifecycle held (open position) or idle NO TRADE on the chain.'
+          ) +
+          '">' +
+          esc(authDisp) +
+          '</td><td title="' +
+          escAttr('Economic / display label for this closed row (PnL outcome).') +
+          '">' +
+          esc(
+            r.lifecycle_display != null && String(r.lifecycle_display).trim() !== ''
+              ? String(r.lifecycle_display)
+              : '—'
+          ) +
+          '</td><td title="' +
+          escAttr(sizeTitle) +
+          '">' +
           esc(sz) +
-          '</td><td style="font-size:0.72rem;line-height:1.35">' +
-          outcomeCell +
-          '</td><td class="bts-mono" style="font-size:0.68rem">' +
-          pnlCell +
-          '</td><td class="bts-mono" style="font-size:0.68rem">' +
-          esc(notion) +
-          '</td><td class="bts-mono" style="font-size:0.62rem;line-height:1.35" title="SL / TP at entry">' +
-          esc(sltpEnt) +
-          '</td><td class="bts-mono" style="font-size:0.62rem;line-height:1.35" title="SL / TP at exit bar">' +
-          esc(sltpEx) +
-          '</td><td class="bts-mono" style="font-size:0.68rem">' +
-          esc(mae) +
-          '</td><td class="bts-mono" style="font-size:0.62rem">' +
-          esc(mid) +
-          '</td></tr>';
+          '</td><td class="bt-mono" title="' +
+          escAttr('Sizing provenance from position_open or policy.') +
+          '">' +
+          esc(
+            r.size_source != null && String(r.size_source).trim() !== ''
+              ? String(r.size_source)
+              : '—'
+          ) +
+          '</td><td title="' +
+          escAttr(
+            'Notional USD (entry × size); PnL % is vs this.' + (econP ? ' Enrichment: ' + econP + '.' : '')
+          ) +
+          '">' +
+          btsRptFmtMoneyOrMissing(r.notional_usd, econP, 'notional (entry×size)') +
+          '</td><td title="' +
+          escAttr(riskTip || 'Sean risk slice (collateral_usd).') +
+          '">' +
+          btsRptFmtMoneyOrMissing(r.collateral_usd, econP, 'risk slice (collateral_usd)') +
+          '</td><td title="' +
+          escAttr(
+            'Paper bankroll input to policy (free_collateral_usd)—not stake for one trade.' +
+              (econP ? ' Enrichment: ' + econP + '.' : '')
+          ) +
+          '">' +
+          btsRptFmtMoneyOrMissing(r.free_collateral_usd, econP, 'bankroll (free_collateral_usd)') +
+          '</td><td class="bt-mono" title="' +
+          escAttr('Exit reason from ledger.') +
+          '">' +
+          esc(r.exit_reason || '—') +
+          '</td><td class="bt-mono" title="' +
+          escAttr('Stop loss at entry.') +
+          '">' +
+          esc(btsRptFmtSlTpPx(slEn)) +
+          '</td><td class="bt-mono" title="' +
+          escAttr('Take profit at entry.') +
+          '">' +
+          esc(btsRptFmtSlTpPx(tpEn)) +
+          '</td><td class="bt-mono" title="' +
+          escAttr('Stop level at exit.') +
+          '">' +
+          esc(btsRptFmtSlTpPx(slEx)) +
+          '</td><td class="bt-mono" title="' +
+          escAttr('Take profit level at exit.') +
+          '">' +
+          esc(btsRptFmtSlTpPx(tpEx)) +
+          '</td><td title="' +
+          escAttr('Entry price.') +
+          '">' +
+          btsRptFmtPx(r.entry) +
+          '</td><td title="' +
+          escAttr('Exit price.') +
+          '">' +
+          btsRptFmtPx(r.exit) +
+          '</td><td class="' +
+          pnlCls +
+          '" title="' +
+          escAttr('Gross model PnL USD; parentheses = percent of notional (not of bankroll).') +
+          '">' +
+          btsRptFmtPnlWithPct(r) +
+          '</td><td class="bt-td-tip" title="' +
+          escAttr(tipMae) +
+          '">' +
+          esc(btsRptFmtMae(r.mae_usd)) +
+          '</td><td class="bt-td-tip" title="' +
+          escAttr(BTS_DASH_TIP_QEL) +
+          '">—</td><td><a class="bt-view-btn" href="' +
+          escAttr(viewHref) +
+          '">View</a></td></tr>';
       }
-      tbody.innerHTML = html;
+      tbody.innerHTML = h;
       return;
     }
     if (meta) {
       meta.textContent =
-        'No Trades rows in recent window — raw ledger may still have rows; open Reports dashboard and set Show to ALL baseline or No trades to inspect. The trade chain below may still show evaluation.';
+        'No closed baseline trades in the recent scan — open Reports dashboard to inspect the full ledger or widen filters. The trade chain below may still show evaluation.';
     }
     tbody.innerHTML =
-      '<tr><td colspan="14">No policy TRADE executions in the recent window (or none yet).</td></tr>';
+      '<tr><td colspan="29">No policy TRADE executions in the recent window (or none yet).</td></tr>';
   }
 
   (function wireBtsBaselineNavigate() {
@@ -1889,6 +2097,7 @@
     if (!tb || tb.dataset.bbBtsNav) return;
     tb.dataset.bbBtsNav = '1';
     tb.addEventListener('click', function (e) {
+      if (e.target.closest('a[href]')) return;
       var tr = e.target.closest('tr[data-mid], tr[data-tid]');
       if (!tr) return;
       var m = tr.getAttribute('data-mid') || '';

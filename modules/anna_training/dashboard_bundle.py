@@ -1099,8 +1099,9 @@ def _recent_baseline_policy_trade_rows_for_strip(
     Matches the baseline report when scoped to **trade** only — unlike raw ledger strips.
     Ledger rows must include ``lane`` / ``strategy_id`` so lifecycle closes classify like the report.
 
-    This is a **condensed preview** (row cap), not a full duplicate of Reports: no CSV, no arbitrary
-    date window, no modal — use Reports for SL/TP columns, full lifecycle, exports.
+    Row shape matches **Reports** baseline trades (same economics and column-oriented fields as
+    ``build_baseline_trades_report``). The dashboard shows **five** newest rows only; Reports adds CSV,
+    date filters, and the trade snapshot modal.
 
     Order by **exit_time** (then insert time) so the strip's newest row aligns with the **latest closed**
     trade in the chain, not merely the most recently inserted ledger row.
@@ -1134,6 +1135,7 @@ def _recent_baseline_policy_trade_rows_for_strip(
         )
         if str(cell.get("baseline_display_reason") or "") not in _BASELINE_CLOSED_TRADE_DISPLAY_REASONS:
             continue
+        reason = str(cell.get("baseline_display_reason") or "")
         pnl = ledger_row.get("pnl_usd")
         ep = ledger_row.get("entry_price")
         xp = ledger_row.get("exit_price")
@@ -1141,33 +1143,65 @@ def _recent_baseline_policy_trade_rows_for_strip(
         tf = str(ledger_row.get("timeframe") or "").strip()
         entry_iso = _normalize_utc_iso_for_axis(ledger_row.get("entry_time"))
         exit_iso = _normalize_utc_iso_for_axis(ledger_row.get("exit_time"))
-        # Strip is ordered by exit_time; primary clock for operators is exit (matches Reports default).
         t_legacy = ledger_row.get("entry_time") or ledger_row.get("created_at_utc")
         time_utc_iso_legacy = _normalize_utc_iso_for_axis(t_legacy) if t_legacy else None
-        notion = _notional_usd(ep, ledger_row.get("size"))
-        pnl_f = float(pnl) if pnl is not None else None
-        pnl_pct: float | None = None
-        if notion is not None and pnl_f is not None and float(notion) > 1e-12:
-            pnl_pct = round(100.0 * pnl_f / float(notion), 6)
-        policy_outcome_display = str(cell.get("outcome_display") or "").strip() or None
+        tid_raw = str(ledger_row.get("trade_id") or "").strip() or None
+        pos_open = _fetch_position_open_payload(conn, tid_raw) if tid_raw else None
+        ctx_ledger = _ledger_context_parsed(ledger_row)
+        entry_mid_raw = str(ctx_ledger.get("entry_market_event_id") or "").strip() or None
+        if not entry_mid_raw and pos_open:
+            em = pos_open.get("entry_market_event_id")
+            if em:
+                entry_mid_raw = str(em).strip() or None
+        if not entry_mid_raw:
+            entry_mid_raw = _resolve_entry_market_event_id_from_policy(conn, mid)
+        hdm, hbars = _hold_duration_minutes_and_bars(
+            ledger_row.get("entry_time"),
+            ledger_row.get("exit_time"),
+            tf or None,
+        )
+        held_disp = _format_held_display(hdm, hbars, tf or None)
+        oc = _strip_outcome_from_pnl(pnl)
+        closed_lbl = _lifecycle_closed_label(ledger_row.get("exit_reason"), oc)
+        sle, tpe = _entry_sl_tp_from_open_or_context(pos_open, ledger_row)
+        size_eff, notion, _size_basis, size_note = _baseline_report_size_and_notional(
+            ledger_row, pos_open, ep
+        )
+        sz_src = (
+            str(pos_open.get("size_source") or "").strip() or None if pos_open else None
+        )
+        if size_note:
+            sz_src = (sz_src + " · " if sz_src else "") + "report_size_from_position_open"
+        mae_sz = size_eff if size_eff is not None else ledger_row.get("size")
         mae_val: float | None = None
         if sym and mpath and mpath.is_file():
             mae_val, _ = compute_mae_usd_v1(
                 canonical_symbol=sym,
                 side=ledger_row.get("side"),
                 entry_price=ledger_row.get("entry_price"),
-                size=ledger_row.get("size"),
+                size=mae_sz,
                 entry_time=ledger_row.get("entry_time"),
                 exit_time=ledger_row.get("exit_time"),
                 market_db_path=mpath,
             )
-        tid_raw = str(ledger_row.get("trade_id") or "").strip() or None
-        pos_open = _fetch_position_open_payload(conn, tid_raw) if tid_raw else None
-        sle, tpe = _entry_sl_tp_from_open_or_context(pos_open, ledger_row)
-        hdm, hbars = _hold_duration_minutes_and_bars(
-            ledger_row.get("entry_time"),
-            ledger_row.get("exit_time"),
-            tf or None,
+        lev_o = pos_open.get("leverage") if pos_open else None
+        try:
+            lev_i = int(lev_o) if lev_o is not None else None
+        except (TypeError, ValueError):
+            lev_i = None
+        rp_o = pos_open.get("risk_pct") if pos_open else None
+        rp_f = float(rp_o) if rp_o is not None else None
+        col_o = pos_open.get("collateral_usd") if pos_open else None
+        col_f = float(col_o) if col_o is not None else None
+        fc_usd = _free_collateral_usd_for_row(conn, pos_open, ledger_row)
+        fc_usd, col_f, rp_f, lev_i, econ_prov = _merge_baseline_row_economics_from_policy(
+            conn,
+            exit_mid=mid,
+            entry_mid=entry_mid_raw,
+            free_collateral_usd=fc_usd,
+            collateral_usd=col_f,
+            risk_pct=rp_f,
+            leverage=lev_i,
         )
         pol_exit = fetch_policy_evaluation_for_market_event(
             conn,
@@ -1189,35 +1223,54 @@ def _recent_baseline_policy_trade_rows_for_strip(
                 sl_exit = lsl
             if tp_exit is None:
                 tp_exit = ltp
+        pnl_f = float(pnl) if pnl is not None else None
+        pnl_pct: float | None = None
+        if notion is not None and pnl_f is not None and float(notion) > 1e-12:
+            pnl_pct = round(100.0 * pnl_f / float(notion), 6)
+        policy_outcome_display = str(cell.get("outcome_display") or "").strip() or None
+        lifecycle_display = policy_outcome_display or ""
         out.append(
             {
+                "schema_row": "baseline_trades_report_row_v1",
+                "trade_id": tid_raw,
+                "entry_market_event_id": entry_mid_raw,
+                "lifecycle_open_at_utc": entry_iso or "",
+                "lifecycle_held_display": held_disp,
+                "lifecycle_closed_at_utc": exit_iso or "",
+                "lifecycle_closed_label": closed_lbl,
+                "entry_time_utc_iso": entry_iso or "",
+                "exit_time_utc_iso": exit_iso or "",
+                "held_display": held_disp,
                 "market_event_id": mid,
                 "side": str(ledger_row.get("side") or "").strip().lower(),
                 "symbol": sym or None,
                 "timeframe": tf or None,
                 "mode": str(ledger_row.get("mode") or "").strip() or None,
-                # Legacy: was entry/created only — confusing vs exit sort. Prefer entry_time_utc_iso / exit_time_utc_iso.
                 "time_utc_iso": exit_iso or time_utc_iso_legacy or "",
-                "entry_time_utc_iso": entry_iso or "",
-                "exit_time_utc_iso": exit_iso or "",
-                "outcome": _strip_outcome_from_pnl(pnl),
+                "baseline_authority": "TRADE",
+                "baseline_authority_reason": reason,
+                "lifecycle_display": lifecycle_display,
+                "outcome": oc,
                 "policy_outcome_display": policy_outcome_display,
-                "pnl_usd": pnl_f,
-                "pnl_pct_notional": pnl_pct,
-                "notional_usd": float(notion) if notion is not None else None,
-                "entry": float(ep) if ep is not None else None,
-                "exit": float(xp) if xp is not None else None,
-                "size": float(ledger_row["size"]) if ledger_row.get("size") is not None else None,
+                "size": float(size_eff) if size_eff is not None else None,
+                "size_note": size_note or None,
+                "size_source": sz_src,
+                "notional_usd": round(float(notion), 6) if notion is not None else None,
+                "collateral_usd": round(col_f, 6) if col_f is not None else None,
+                "free_collateral_usd": round(fc_usd, 6) if fc_usd is not None else None,
+                "economics_provenance_note": econ_prov,
                 "exit_reason": str(ledger_row.get("exit_reason") or "").strip() or None,
-                "trade_id": str(ledger_row.get("trade_id") or "").strip() or None,
-                "mae_usd": round(mae_val, 6) if mae_val is not None else None,
-                "hold_duration_minutes": round(hdm, 4) if hdm is not None else None,
-                "hold_bars_estimate": hbars,
                 "stop_loss_entry_price": sle,
                 "take_profit_entry_price": tpe,
                 "stop_loss_exit_price": sl_exit,
                 "take_profit_exit_price": tp_exit,
-                "baseline_authority": "TRADE",
+                "entry": float(ep) if ep is not None else None,
+                "exit": float(xp) if xp is not None else None,
+                "pnl_usd": pnl_f,
+                "pnl_pct_notional": pnl_pct,
+                "mae_usd": round(mae_val, 6) if mae_val is not None else None,
+                "hold_duration_minutes": round(hdm, 4) if hdm is not None else None,
+                "hold_bars_estimate": hbars,
             }
         )
         if len(out) >= lim:
@@ -3335,7 +3388,7 @@ def build_trade_chain_payload(
             conn, limit=50, market_db_path=mpath
         )
         recent_strip = _recent_baseline_policy_trade_rows_for_strip(
-            conn, limit=15, market_db_path=mpath
+            conn, limit=5, market_db_path=mpath
         )
         for rs in recent_strip:
             mid_rs = str(rs.get("market_event_id") or "").strip()
