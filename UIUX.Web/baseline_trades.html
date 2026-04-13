@@ -201,8 +201,16 @@
     .bt-short { background: rgba(234, 88, 12, 0.06); }
     .bt-pnl-pos { color: #047857; font-weight: 800; }
     .bt-pnl-neg { color: #b91c1c; font-weight: 800; }
-    /* Zero / flat realized or unrealized PnL (neither win nor loss at display precision). */
-    .bt-pnl-flat { color: #b45309; font-weight: 800; }
+    /* Flat / zero PnL: yellow field so it is never mistaken for red loss (amber text alone read as “bad”). */
+    .bt-rpt td.bt-pnl-flat {
+      background: rgba(254, 240, 138, 0.75);
+      color: #713f12;
+      font-weight: 800;
+    }
+    .bt-rpt td.bt-pnl-flat .bt-muted {
+      color: rgba(113, 63, 18, 0.78) !important;
+      font-weight: 600;
+    }
     .bt-auth-trade { font-weight: 800; color: #0f766e; }
     .bt-auth-notrade { font-weight: 700; color: #64748b; }
     .bt-rpt a { color: var(--accent); font-weight: 700; }
