@@ -120,7 +120,11 @@ def _float_ohlc(bar: dict[str, Any]) -> tuple[float, float, float, float] | None
 
 
 def _volume_from_bar(bar: dict[str, Any]) -> float:
-    """Prefer ``volume_base`` (market_bars); fall back to ``volume`` or 0."""
+    """
+    Exchange / kline volume only: ``volume_base`` or ``volume`` on the bar row.
+
+    **No** ``tick_count`` fallback — Pyth delivers prices only; tick counts are not market volume.
+    """
     for k in ("volume_base", "volume"):
         v = bar.get(k)
         if v is not None:
@@ -128,12 +132,6 @@ def _volume_from_bar(bar: dict[str, Any]) -> float:
                 return float(v)
             except (TypeError, ValueError):
                 pass
-    t = bar.get("tick_count")
-    if t is not None:
-        try:
-            return float(int(t))
-        except (TypeError, ValueError):
-            pass
     return 0.0
 
 
@@ -373,7 +371,7 @@ class Jupiter3SeanPolicyResult:
 
 
 def _evaluated_bar_snapshot(bars_asc: list[dict[str, Any]]) -> dict[str, Any]:
-    """OHLCV + timestamp for the evaluated (last) bar — operator tile parity with Binance klines."""
+    """OHLCV + timestamp for the evaluated (last) bar; volume only when present on the bar (kline path)."""
     lb = bars_asc[-1]
     snap: dict[str, Any] = {"candle_open_utc": str(lb.get("candle_open_utc") or "").strip()}
     t = _float_ohlc(lb)
@@ -399,7 +397,8 @@ def evaluate_jupiter_3_sean(
     """
     Evaluate **latest** closed bar (``bars_asc[-1]``) under Jupiter_3 entry rules.
 
-    Each bar may include ``volume_base`` or ``volume`` for volume spike; if all zeros, ``volume_spike`` is False.
+    Each bar may include ``volume_base`` or ``volume`` (exchange / kline) for volume spike.
+    ``tick_count`` is ignored for volume — Pyth-only bars without ``volume_base`` behave as zero volume.
     """
     if len(bars_asc) < MIN_BARS:
         return Jupiter3SeanPolicyResult(

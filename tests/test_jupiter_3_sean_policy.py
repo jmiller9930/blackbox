@@ -22,6 +22,30 @@ def test_insufficient_history() -> None:
     assert r.reason_code == "insufficient_history"
 
 
+def test_volume_does_not_use_pyth_tick_count() -> None:
+    """``tick_count`` is not exchange volume — must not fill volume spike / Binance line."""
+    n = max(MIN_BARS, 45)
+    bars: list[dict] = []
+    for i in range(n):
+        c = 50.0 + i * 0.5
+        h = c + 2.0
+        l = c - 0.5
+        bars.append(
+            {
+                "open": c - 0.1,
+                "high": h,
+                "low": l,
+                "close": c,
+                "tick_count": 99999,
+            }
+        )
+    r = evaluate_jupiter_3_sean(bars_asc=bars, free_collateral_usd=5000.0)
+    eb = (r.features or {}).get("evaluated_bar")
+    assert isinstance(eb, dict)
+    assert float(eb.get("volume_base") or 0) == 0.0
+    assert eb.get("volume_source_note") == "missing_or_zero"
+
+
 def test_no_signal_neutral_bias() -> None:
     """Flat EMA structure → no long/short bias → no trade."""
     n = max(MIN_BARS, 45)
