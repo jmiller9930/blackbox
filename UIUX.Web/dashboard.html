@@ -1750,11 +1750,11 @@
         '</div>';
     }
     // While a baseline position is open, only entry context matters — no duplicate "this bar" policy block.
+    // JUPv3: show **both** Sean numeric narrative (OHLCV, EMA, RSI, volume vs avg, BOS, ATR) **and** the
+    // PASS/FAIL gate table when the bundle supplies both — gates alone omit the numbers Sean asked for.
     var posOpenBaseline = baselineLane && baselineLifecyclePositionOpen(bl);
     var narrEl =
-      narr &&
-      !posOpenBaseline &&
-      !(baselineLane && c && c.jupiter_v3_gates)
+      narr && !posOpenBaseline
         ? jupiterNarrativeLinesHtml(narr, 'Jupiter / Sean policy (this bar)', baselineLane)
         : '';
     var scopeNote = '';
