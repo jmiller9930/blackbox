@@ -434,10 +434,14 @@
             <input id="bt-max" type="number" value="50" min="1" max="500" style="width:5.5rem" />
           </div>
           <div class="bt-field">
-            <label for="bt-time-basis">Time window applies to</label>
-            <select id="bt-time-basis" style="font-weight:700;min-width:12rem">
-              <option value="exit" selected>Exit time (closes in window)</option>
-              <option value="entry">Entry time (opens in window)</option>
+            <label for="bt-time-basis">Match trades by</label>
+            <select
+              id="bt-time-basis"
+              style="font-weight:700;min-width:14rem"
+              title="Close time = rows whose exit falls in From–To (best for “what closed that day,” including long holds that opened the day before). Open time = rows whose entry falls in From–To."
+            >
+              <option value="exit" selected>Close time in range (recommended)</option>
+              <option value="entry">Open time in range</option>
             </select>
           </div>
           <div class="bt-field">
@@ -456,7 +460,12 @@
             <button type="button" class="bt-btn" id="bt-csv">Download CSV</button>
             <button type="button" class="bt-btn" id="bt-xlsx">Download XLSX</button>
           </div>
-          <p class="bt-note">Dates are <strong>UTC</strong>. <strong>Exit time</strong> = include trades whose <strong>close</strong> falls in the window (use this for “what closed today,” including long holds that opened earlier). <strong>Entry time</strong> = opens in the window. <strong>Apply</strong> runs the query. Scope filters <strong>policy classification on the ledger close</strong>, not lifecycle <strong>held</strong> (open position—that is trade chain only).</p>
+          <p class="bt-note">
+            <strong>UTC</strong> dates — check the <strong>year</strong> matches your data (e.g. 2026 vs 2024). This table lists <strong>completed</strong> trades only (open holds appear on the main Dashboard trade chain until they close).
+            <strong>Close time in range</strong> = show trades that <strong>finished</strong> between From and To — so a trade that opened yesterday but closed today still appears for “today.”
+            <strong>Open time in range</strong> = show trades that <strong>started</strong> in that window (older behavior; can hide long trades that closed in the window but opened earlier).
+            <strong>Show</strong> filters policy labels on the close row. Click <strong>Apply</strong> after changing filters.
+          </p>
         </div>
 
         <div class="bt-table-wrap">
@@ -625,8 +634,8 @@
 
       function timeBasisLabel(tb) {
         var s = String(tb || "").toLowerCase();
-        if (s === "exit") return "exit time";
-        if (s === "entry") return "entry time";
+        if (s === "exit") return "close time in range";
+        if (s === "entry") return "open time in range";
         return s || "—";
       }
 
@@ -737,7 +746,10 @@
           tb.innerHTML =
             '<tr><td colspan="' +
             COLS +
-            '">No baseline executions in the ledger.</td></tr>';
+            '" style="padding:0.85rem 0.5rem;font-size:0.78rem;line-height:1.45;color:#475569">' +
+            "<strong>No rows for this range and filters.</strong> " +
+            "Confirm <strong>UTC year</strong> (e.g. live data may be 2026, not 2024), widen From–To, raise <strong>Max rows</strong>, or set <strong>Show</strong> to “All (ledger rows).” " +
+            "Only <strong>closed</strong> trades appear here — opens are on the Dashboard until exit.</td></tr>";
           return;
         }
         var h = "";
