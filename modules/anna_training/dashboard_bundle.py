@@ -1297,6 +1297,54 @@ def _sl_tp_prices_from_ledger_context(ledger_row: dict[str, Any]) -> tuple[float
     )
 
 
+def _baseline_report_size_and_notional(
+    ledger_row: dict[str, Any],
+    pos_open: dict[str, Any] | None,
+    entry_price: Any,
+) -> tuple[float | None, float | None, str | None, str | None]:
+    """
+    Display size + notional for the close report.
+
+    Legacy ``execution_trades`` rows sometimes still have ``size=1.0`` (index stub) while
+    ``position_open`` has the real lifecycle size. Prefer ``position_open`` when ledger looks
+    like a 1.0 stub and open state disagrees.
+    """
+    lr_raw = ledger_row.get("size")
+    try:
+        lr_sz = float(lr_raw) if lr_raw is not None else None
+    except (TypeError, ValueError):
+        lr_sz = None
+    po_sz: float | None = None
+    if pos_open:
+        try:
+            ps = pos_open.get("size")
+            if ps is not None:
+                po_sz = float(ps)
+        except (TypeError, ValueError):
+            po_sz = None
+    basis = "ledger"
+    note: str | None = None
+    size_out = lr_sz
+    if po_sz is not None and po_sz > 0 and math.isfinite(po_sz):
+        if lr_sz is None or (lr_sz is not None and abs(lr_sz - 1.0) < 1e-9 and abs(po_sz - 1.0) > 1e-9):
+            size_out = po_sz
+            basis = "position_open"
+            if lr_sz is not None and abs(lr_sz - 1.0) < 1e-9:
+                note = "size from position_open (ledger row still had 1.0 stub)"
+        elif lr_sz is None:
+            size_out = po_sz
+            basis = "position_open"
+    if size_out is not None and (not math.isfinite(size_out) or size_out <= 0):
+        size_out = None
+
+    ep = _coerce_finite_float(entry_price)
+    notion = _coerce_finite_float(pos_open.get("notional_usd")) if pos_open else None
+    if notion is None and ep is not None and size_out is not None:
+        notion = ep * float(size_out)
+
+    return size_out, notion, basis, note
+
+
 def _sl_tp_summary_from_policy_features(features: Any) -> str | None:
     sl, tp = _sl_tp_prices_from_features(features)
     if sl is None and tp is None:
@@ -1446,6 +1494,7 @@ def _nested_baseline_trade_from_flat_row(r: dict[str, Any]) -> dict[str, Any]:
             "leverage": r.get("leverage"),
             "risk_pct": r.get("risk_pct"),
             "size": r.get("size"),
+            "size_note": r.get("size_note"),
             "size_source": r.get("size_source"),
             "entry_price": r.get("entry"),
             "exit_price": r.get("exit"),
@@ -1905,6 +1954,15 @@ def build_baseline_trades_report(
         candidates.sort(key=lambda x: x[0], reverse=True)
         candidates = _dedupe_candidates_by_trade_id(candidates)
 
+        def _ledger_exit_dt_sort(row: dict[str, Any]) -> datetime:
+            raw = row.get("exit_time") or row.get("created_at_utc")
+            dt = _parse_iso_ts(str(raw) if raw is not None else "")
+            if dt is None:
+                return datetime(1970, 1, 1, tzinfo=timezone.utc)
+            return dt.astimezone(timezone.utc) if dt.tzinfo else dt.replace(tzinfo=timezone.utc)
+
+        candidates.sort(key=lambda x: _ledger_exit_dt_sort(x[1]), reverse=True)
+
         mids_for_tiles: list[str] = []
         meta_pairs: list[tuple[dict[str, Any], dict[str, Any], dict[str, Any] | None]] = []
         for _ts, ledger_row in candidates:
@@ -1944,30 +2002,29 @@ def build_baseline_trades_report(
             pnl = ledger_row.get("pnl_usd")
             ep = ledger_row.get("entry_price")
             xp = ledger_row.get("exit_price")
+            oc = _strip_outcome_from_pnl(pnl)
+            closed_lbl = _lifecycle_closed_label(ledger_row.get("exit_reason"), oc)
+            sle, tpe = _entry_sl_tp_from_open_or_context(pos_open, ledger_row)
+            size_eff, notion, _size_basis, size_note = _baseline_report_size_and_notional(
+                ledger_row, pos_open, ep
+            )
+            sz_src = (
+                str(pos_open.get("size_source") or "").strip() or None if pos_open else None
+            )
+            if size_note:
+                sz_src = (sz_src + " · " if sz_src else "") + "report_size_from_position_open"
             mae_val: float | None = None
             if sym and mpath and mpath.is_file():
+                mae_sz = size_eff if size_eff is not None else ledger_row.get("size")
                 mae_val, _ = compute_mae_usd_v1(
                     canonical_symbol=sym,
                     side=ledger_row.get("side"),
                     entry_price=ledger_row.get("entry_price"),
-                    size=ledger_row.get("size"),
+                    size=mae_sz,
                     entry_time=ledger_row.get("entry_time"),
                     exit_time=ledger_row.get("exit_time"),
                     market_db_path=mpath,
                 )
-
-            oc = _strip_outcome_from_pnl(pnl)
-            closed_lbl = _lifecycle_closed_label(ledger_row.get("exit_reason"), oc)
-            sle, tpe = _entry_sl_tp_from_open_or_context(pos_open, ledger_row)
-            notion = _coerce_finite_float(pos_open.get("notional_usd")) if pos_open else None
-            if notion is None and ep is not None and ledger_row.get("size") is not None:
-                try:
-                    notion = float(ep) * float(ledger_row["size"])
-                except (TypeError, ValueError):
-                    notion = None
-            sz_src = (
-                str(pos_open.get("size_source") or "").strip() or None if pos_open else None
-            )
             lev_o = pos_open.get("leverage") if pos_open else None
             try:
                 lev_i = int(lev_o) if lev_o is not None else None
@@ -2016,7 +2073,16 @@ def build_baseline_trades_report(
                     "pnl_pct_notional": pnl_pct_notional,
                     "entry": float(ep) if ep is not None else None,
                     "exit": float(xp) if xp is not None else None,
-                    "size": float(ledger_row["size"]) if ledger_row.get("size") is not None else None,
+                    "size": (
+                        float(size_eff)
+                        if size_eff is not None
+                        else (
+                            float(ledger_row["size"])
+                            if ledger_row.get("size") is not None
+                            else None
+                        )
+                    ),
+                    "size_note": size_note,
                     "exit_reason": str(ledger_row.get("exit_reason") or "").strip() or None,
                     "mae_usd": round(mae_val, 6) if mae_val is not None else None,
                     "baseline_authority": authority,

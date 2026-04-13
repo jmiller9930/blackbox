@@ -349,12 +349,12 @@
     <div class="dash-main">
       <div class="bt-back">
         <a class="dash-return" href="/dashboard.html">← Back to Dashboard</a>
-        <span class="bt-muted">Report API: <code>/api/v1/dashboard/baseline-trades-report</code> — <code>trades_by_trade_id</code> maps each <code>trade_id</code> to a nested bundle (same data as <code>rows</code>, organized). <code>meta.active_position</code>. Standalone: <code>/api/v1/dashboard/baseline-active-position</code>. <strong>View</strong> opens the trade snapshot. CSV = flat rows; use <strong>JSON by trade_id</strong> for nested export.</span>
+        <span class="bt-muted">API: <code>/api/v1/dashboard/baseline-trades-report</code> · <code>meta.active_position</code> · <code>/api/v1/dashboard/baseline-active-position</code>. <strong>View</strong> = full snapshot for that <code>trade_id</code>. CSV = table columns.</span>
       </div>
       <div class="bt-section">
         <h1>Baseline trades report</h1>
         <p class="bt-desc">
-          <strong>One row per closed trade</strong> (<code>trade_id</code>) from ledger fills—there are <strong>no</strong> open-position rows here. <strong>Held</strong> (mid-trade, position still open) exists only on the <strong>dashboard trade chain</strong>, not in this table. The <strong>Duration</strong> column is how long the position was open until <strong>this</strong> close, not “held” state. Lifecycle <code>trade_id</code> (<code>bl_lc_…</code>) is derived from the <strong>entry</strong> bar; <code>market_event_id</code> on each row is the <strong>exit</strong> bar. <strong>Policy</strong> TRADE / NO TRADE classifies this <strong>close</strong> row (orthogonal to idle NO TRADE vs held on the chain). <strong>Active baseline position</strong> is above when present. <strong>Click a row</strong> for snapshot. QEL is cohort evaluation—see the QEL page.
+          <strong>One row = one completed trade</strong> (one <code>trade_id</code>). Ten rows in a short window means <strong>ten separate trades</strong>, not one trade “split”—each row is independent. Detail for that trade is in the row + <strong>View</strong> (snapshot, SL/TP, sizing notes). <strong>Held</strong> (open position) only appears on the <strong>dashboard trade chain</strong>. <strong>Duration</strong> = time from open to this exit. Rows sort <strong>newest exit first</strong>. <code>bl_lc_…</code> is keyed from entry; <code>market_event_id</code> here is the exit bar. QEL = cohort page.
         </p>
         <p class="bt-econ-banner" id="bt-econ-banner" role="status">
           <strong>PnL column:</strong> gross model USD: <code>(exit − entry) × size</code> in quote terms. <strong>Not</strong> “return on full bankroll”—Sean sizing builds <strong>notional</strong> from <strong>risk slice × leverage</strong> (see <strong>Risk $</strong> vs <strong>Bankroll $</strong>). PnL shows <strong>% vs notional</strong> in parentheses. Not net of fees, funding, or slippage. Full wording: API <code>meta.pnl_semantics</code> after load.
@@ -390,9 +390,6 @@
           <div class="bt-export">
             <button type="button" class="bt-btn" id="bt-csv">Download CSV</button>
             <button type="button" class="bt-btn" id="bt-xlsx">Download XLSX</button>
-            <button type="button" class="bt-btn bt-btn--primary" id="bt-json-tradeid" title="Nested JSON: one object per trade_id">
-              JSON by trade_id
-            </button>
           </div>
           <p class="bt-note">Dates are <strong>UTC</strong>. <strong>Apply</strong> runs the query. Scope filters <strong>policy classification on the ledger close</strong>, not lifecycle <strong>held</strong> (open position—that is trade chain only).</p>
         </div>
@@ -414,7 +411,7 @@
                 <th title="Side.">Side</th>
                 <th title="Policy classification for this closed ledger row (authoritative close vs other). Not the same as trade-chain held vs idle NO TRADE.">Policy</th>
                 <th title="Closed-trade economic display (win/loss/flat, etc.). Not trade-chain held.">Outcome</th>
-                <th title="Position size (base units).">Size</th>
+                <th title="Position size (base units). If ledger had a 1.0 stub, report uses position_open when available—hover cell or see size_note in API/CSV.">Size</th>
                 <th title="How size was derived (policy notional / entry, default paper notional, or fallback).">Size src</th>
                 <th title="Position notional USD (≈ entry × size); this is what PnL % is measured against.">Notional $</th>
                 <th title="Sean risk slice: max(MIN, bankroll × risk_pct) from position_size_hint; notional = Risk $ × leverage.">Risk $</th>
@@ -661,6 +658,13 @@
           var sym = r.symbol != null ? String(r.symbol) : "—";
           var tf = r.timeframe != null ? String(r.timeframe) : "—";
           var sz = fmtNum(r.size);
+          var sizeNote =
+            r.size_note != null && String(r.size_note).trim() !== ""
+              ? String(r.size_note).trim()
+              : "";
+          var sizeTitle =
+            "Position size (base units)." +
+            (sizeNote ? " " + sizeNote : "");
           var auth = r.baseline_authority || "—";
           var authDisp = policyCloseLabel(auth);
           var authCls = auth === "TRADE" ? "bt-auth-trade" : "bt-auth-notrade";
@@ -765,7 +769,7 @@
             '">' +
             esc(r.lifecycle_display != null && String(r.lifecycle_display).trim() !== '' ? String(r.lifecycle_display) : "—") +
             '</td><td title="' +
-            escAttr("Position size (base units).") +
+            escAttr(sizeTitle) +
             '">' +
             esc(sz) +
             '</td><td class="bt-mono" title="' +
@@ -922,6 +926,7 @@
           "lifecycle_display",
           "baseline_lifecycle_phase",
           "size",
+          "size_note",
           "size_source",
           "notional_usd",
           "free_collateral_usd",
@@ -959,17 +964,6 @@
 
       function downloadCsv(text, name) {
         var blob = new Blob([text], { type: "text/csv;charset=utf-8" });
-        var a = document.createElement("a");
-        a.href = URL.createObjectURL(blob);
-        a.download = name;
-        a.click();
-        URL.revokeObjectURL(a.href);
-      }
-
-      function downloadJson(obj, name) {
-        var blob = new Blob([JSON.stringify(obj, null, 2)], {
-          type: "application/json;charset=utf-8",
-        });
         var a = document.createElement("a");
         a.href = URL.createObjectURL(blob);
         a.download = name;
@@ -1102,17 +1096,15 @@
             foot.textContent =
               "Showing " +
               state.rows.length +
-              " row(s) (limit " +
+              " closed trade row(s) (limit " +
               (m.limit || "?") +
               ", scope " +
               scopeLabelApi(m.scope) +
-              "). trades_by_trade_id: " +
-              Object.keys(state.tradesByTradeId || {}).length +
-              " trade_id(s). Scanned " +
+              "). Scanned " +
               (m.scanned_execution_rows || "?") +
               " ledger row(s). " +
               (m.lifecycle_note ? String(m.lifecycle_note) + " " : "") +
-              "Click a row for snapshot.";
+              "Click a row or View for snapshot.";
           })
           .catch(function (e) {
             foot.textContent = "Failed to load: " + String(e);
@@ -1140,14 +1132,6 @@
         }
         downloadCsv(rowsToCsv(state.rows), "baseline_trades_export.csv");
         alert("Downloaded CSV (same data as future XLSX until a spreadsheet export is implemented).");
-      };
-      document.getElementById("bt-json-tradeid").onclick = function () {
-        var m = state.tradesByTradeId || {};
-        if (!m || typeof m !== "object" || !Object.keys(m).length) {
-          alert("No trades_by_trade_id loaded yet (reload report).");
-          return;
-        }
-        downloadJson(m, "baseline_trades_by_trade_id.json");
       };
 
       defaultTodayUtcRange();
