@@ -4,6 +4,8 @@
 **Audience:** Engineering (implementer), Operator (acceptance), Architect (governance)  
 **Scope:** Slack-native conversational interface over BlackBox / OpenClaw with **grounded** answers, **optional named-agent presentation**, **document-grounded** project Q&A, and **auditable** routing.
 
+**Document location:** `docs/architect/slack_conversational_operator/` (this folder is the working home for this system’s architecture).
+
 **Out of scope for this LDD:** Live venue order submission; full training-system integration; replacing HTTP APIs with LLM inference for factual trading data.
 
 ---
@@ -260,3 +262,143 @@ Required fields (JSON line or structured log):
 
 - **Owner:** Engineering (with Architect approval on intent schema changes).
 - **Updates:** When adding intents/tools, bump `intent_schema_version` and append a short changelog at the end of this file.
+
+---
+
+## 16. Implementation gaps (fill before / during coding)
+
+This section turns the LDD into an implementable checklist: **decisions**, **missing contracts**, and **where code lives today**. The next implementer should close or explicitly defer each item.
+
+### 16.1 Deployment and runtime boundary
+
+| Gap | What to decide / produce |
+|-----|----------------------------|
+| **Bolt vs OpenClaw vs both** | Today: **Bolt** uses `messaging_interface/slack_adapter.py` → `run_dispatch_pipeline` (no OpenClaw). **OpenClaw** uses patched `dispatch.ts` + `scripts/openclaw/slack_anna_ingress.py` (Anna short-circuit only). Decide whether the conversational operator runs **only** behind OpenClaw, or whether both paths must call the **same** interpreter (shared Python package + two entrypoints). |
+| **Thread-aware ingress** | LDD §8 assumes `team_id`, `channel`, `thread_ts`. `slack_anna_ingress.py` currently receives **text only**. Specify argv/env/JSON body for one turn, including thread metadata. |
+| **Streaming vs single reply** | OpenClaw may stream; LDD assumes auditable **turns**. Define whether tools block until complete before any assistant text, and how `trace_id` spans partial streams. |
+
+**Primary paths:** `messaging_interface/slack_adapter.py`, `messaging_interface/pipeline.py`, `scripts/openclaw/slack_anna_ingress.py`, `scripts/openclaw/apply_openclaw_dispatch_anna_ingress.py`, OpenClaw `extensions/slack/.../dispatch.ts` on **clawbot** (not in this repo).
+
+### 16.2 OpenClaw ↔ BlackBox contract
+
+| Gap | What to decide / produce |
+|-----|----------------------------|
+| **Replace/wrap ingress** | New router vs extending `slack_anna_ingress.py`; exit codes, max output size, timeouts. |
+| **trace_id ownership** | Generated in Python vs TypeScript; propagated into gateway logs. |
+| **Build/restart proof** | Document clawbot steps: `git pull`, `pnpm build` in `~/openclaw` when `dispatch.ts` changes, gateway restart — aligned with existing patch script comments. |
+
+### 16.3 Router vs existing Telegram dispatch
+
+| Gap | What to decide / produce |
+|-----|----------------------------|
+| **Coexistence** | `run_dispatch_pipeline` → `telegram_interface/message_router` + `agent_dispatcher` is **hashtag/persona** routing, not §6 intents. Map: migrate Slack/OpenClaw only vs all transports; feature parity table (e.g. `#status`, `@data` vs `bundle_snapshot`, `ingest_status`). |
+
+**Primary paths:** `messaging_interface/pipeline.py`, `scripts/runtime/telegram_interface/`.
+
+### 16.4 Intent + slot extraction
+
+| Gap | What to decide / produce |
+|-----|----------------------------|
+| **Parser stack** | LLM + JSON schema vs rules-first + LLM fallback; behavior on invalid JSON. |
+| **Model/runtime** | Same as Anna (`OLLAMA_*`) vs dedicated routing model. |
+| **Golden tests** | Fixture location (e.g. `tests/fixtures/operator_intents/`), CI policy (network/mock). |
+| **intent_schema_version** | Single module constant; bump on schema change (§15 changelog). |
+
+### 16.5 Tool bindings (sign off each tool)
+
+Each LDD tool needs **exact** Python/HTTP binding, **inputs**, and **error shapes**.
+
+| Tool ID | Repository anchors (verify when wiring) |
+|---------|----------------------------------------|
+| `tool.trades.*` | `modules/anna_training/trade_export_csv.py` (`fetch_trade_export_rows`); baseline reporting via `build_baseline_trades_report` (see `modules/anna_training/dashboard_bundle.py` / tests). Decide list vs report per utterance. |
+| `tool.bundle.get` | `build_dashboard_bundle` in `modules/anna_training/dashboard_bundle.py` (parameters, e.g. `max_events`). |
+| `tool.wallet.get` | `modules/wallet/solana_wallet.py` → `build_wallet_status_payload`. |
+| `tool.ingest.freshness` | Bundle keys such as `five_m_ingest_freshness`, `event_axis_source`; define “stale.” |
+| `tool.policy.row` | Helpers around `policy_evaluations` (e.g. `fetch_policy_evaluation_for_market_event`, baseline variants — see `dashboard_bundle`). |
+| `tool.context_engine.status` | `modules/context_engine/status.py` → `build_context_engine_status`. |
+| **HTTP alternative** | `UIUX.Web/api_server.py` — base URL, auth, when to use HTTP vs in-process (containers/tests). |
+
+### 16.6 Thread context store (net new)
+
+| Gap | What to decide / produce |
+|-----|----------------------------|
+| **SQLite vs Redis** | Schema/migrations; connection string or file path. |
+| **Thread key** | Normalize `team_id + channel_id + thread_ts`; top-level vs reply behavior. |
+| **TTL / eviction** | §8.3; locking/concurrency. |
+| **Avoid duplicate memory** | Relate to `scripts/runtime/anna_modules/context_memory.py` and `modules/context_engine/store.py` — reuse vs separate **operator thread** store (single source of truth). |
+
+### 16.7 Named presentation routes
+
+| Gap | What to decide / produce |
+|-----|----------------------------|
+| **Invoke patterns** | §4.2 “case rules TBD”; extend beyond `messaging_interface/anna_slack_route.py` (Anna-only today). |
+| **Outbound formatting** | `messaging_interface/slack_persona_enforcement.py` is `system \| anna`; extend for `data` and LDD routes without branching tools. |
+| **OpenClaw env** | e.g. `SLACK_PERSONA_ROUTE` pattern in patched `dispatch.ts`. |
+
+### 16.8 Documentation tools (class B)
+
+| Gap | What to decide / produce |
+|-----|----------------------------|
+| **Allowlist config** | Exact repo roots; no `..` / symlink escape. |
+| **Search** | ripgrep (timeout, encoding) vs index; test determinism. |
+| **`tool.docs.read`** | Max bytes; citation format (“Sources:” + path + heading). |
+| **LLM** | Strict “summarize only provided excerpts” prompt. |
+
+### 16.9 Audit logging
+
+| Gap | What to decide / produce |
+|-----|----------------------------|
+| **Log sink** | File vs unified operator log (e.g. `FOREMAN_V2_UNIFIED_LOG_PATH` where applicable). |
+| **Redaction** | `input_hash` vs redacted args; Slack user ids. |
+
+### 16.10 Clarification defaults
+
+| Gap | What to decide / produce |
+|-----|----------------------------|
+| **Config file** | §9 safe defaults (`limit`, `scope`, etc.) in one contractual artifact (path + schema). |
+
+### 16.11 Slack product behavior
+
+| Gap | What to decide / produce |
+|-----|----------------------------|
+| **Thread replies** | Bolt `say` must use `thread_ts` where appropriate so §8 keys match reality (`slack_adapter.py`). |
+| **Blocks vs plain text** | Architect blocks: `slack_architect_diagnostics.py` — keep/drop for new flow. |
+| **Phase 2** | CSV upload API (`files.upload`) per §12. |
+
+### 16.12 Security and operations
+
+| Gap | What to decide / produce |
+|-----|----------------------------|
+| **Allowlist** | Workspaces/channels allowed to invoke tools. |
+| **Rate limits** | Doc search + DB-heavy tools. |
+| **Secrets** | No tokens in logs. |
+
+### 16.13 Automated acceptance tests
+
+| Gap | What to decide / produce |
+|-----|----------------------------|
+| **Default vs named** | Same `tool_calls` / same numeric facts (structured compare). |
+| **Grounding** | Assertions that PnL/wallet claims imply tool log lines. |
+
+### 16.14 Program / governance alignment
+
+| Gap | What to decide / produce |
+|-----|----------------------------|
+| **Phase scope** | Repo phase rules vs this LDD; first PR may ship §12 MVP subset — state explicitly in PR if needed. |
+
+### 16.15 Repository map (quick reference)
+
+| Area | Paths |
+|------|--------|
+| Slack transport | `messaging_interface/slack_adapter.py`, `slack_persona_enforcement.py`, `anna_slack_route.py`, `slack_architect_diagnostics.py` |
+| OpenClaw bridge | `scripts/openclaw/slack_anna_ingress.py`, `apply_openclaw_dispatch_anna_ingress.py`, `apply_openclaw_slack_patch.py` |
+| Shared dispatch | `messaging_interface/pipeline.py`, `scripts/runtime/telegram_interface/` |
+| Bundle / trades / policy | `modules/anna_training/dashboard_bundle.py`, `modules/anna_training/trade_export_csv.py` |
+| Wallet / context engine | `modules/wallet/`, `modules/context_engine/status.py` |
+| HTTP API | `UIUX.Web/api_server.py` |
+
+---
+
+## Changelog
+
+- **2026-04-10:** Moved document into `docs/architect/slack_conversational_operator/`; added §16 Implementation gaps for implementer handoff.
