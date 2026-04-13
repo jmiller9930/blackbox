@@ -43,6 +43,85 @@ DASHBOARD_CLIENT_POLL_INTERVAL_MS = 1500
 SEQUENTIAL_TICK_SIDECAR_INTERVAL_SEC_DEFAULT = 5
 PYTH_STREAM_PROBE_INTERVAL_SEC_DEFAULT = 15
 
+# Trade-chain axis + ingest freshness: baseline SOL perp matches ingest / market_event_id prefix.
+_BASELINE_CANONICAL_SYMBOL_DEFAULT = "SOL-PERP"
+
+
+def _trade_chain_axis_canonical_symbol() -> str:
+    raw = (os.environ.get("BLACKBOX_TRADE_CHAIN_CANONICAL_SYMBOL") or "").strip()
+    return raw or _BASELINE_CANONICAL_SYMBOL_DEFAULT
+
+
+def _ensure_market_runtime_path() -> None:
+    rt = _REPO_ROOT / "scripts" / "runtime"
+    if str(rt) not in sys.path:
+        sys.path.insert(0, str(rt))
+
+
+def _five_m_ingest_freshness(mpath: Path | None, *, canonical_symbol: str) -> dict[str, Any]:
+    """
+    Compare clock **expected** last closed 5m open vs **MAX(candle_open_utc)** in ``market_bars_5m``.
+
+    If ``closed_bucket_lag`` > 0, SQLite is missing the newest completed bucket — **ingest / bar refresh**,
+    not trade-chain column math. ``aligns_with_closed_strip`` is True when lag is 0.
+    """
+    out: dict[str, Any] = {
+        "schema": "five_m_ingest_freshness_v1",
+        "canonical_symbol": canonical_symbol,
+        "expected_last_closed_candle_open_utc": None,
+        "db_newest_closed_candle_open_utc": None,
+        "closed_bucket_lag": None,
+        "aligns_with_closed_strip": None,
+        "notes": None,
+    }
+    _ensure_market_runtime_path()
+    try:
+        from market_data.canonical_time import format_candle_open_iso_z, last_closed_candle_open_utc
+    except Exception:
+        out["notes"] = "market_data_runtime_unavailable"
+        return out
+    exp = last_closed_candle_open_utc()
+    out["expected_last_closed_candle_open_utc"] = format_candle_open_iso_z(exp)
+    if not mpath or not mpath.is_file():
+        out["notes"] = "market_db_missing"
+        return out
+    try:
+        conn = sqlite3.connect(str(mpath))
+        try:
+            row = conn.execute(
+                """
+                SELECT MAX(candle_open_utc) FROM market_bars_5m
+                WHERE timeframe = '5m' AND canonical_symbol = ?
+                """,
+                (canonical_symbol,),
+            ).fetchone()
+        finally:
+            conn.close()
+    except Exception as exc:
+        out["notes"] = f"query_error:{exc!r}"
+        return out
+    raw_max = row[0] if row else None
+    if raw_max is None or str(raw_max).strip() == "":
+        out["notes"] = "no_closed_bars_for_symbol"
+        return out
+    out["db_newest_closed_candle_open_utc"] = str(raw_max).strip()
+    db_open = _parse_iso_ts(str(raw_max))
+    if db_open is None:
+        out["notes"] = "db_max_open_parse_failed"
+        return out
+    if db_open.tzinfo is None:
+        db_open = db_open.replace(tzinfo=timezone.utc)
+    delta_sec = (exp - db_open.astimezone(timezone.utc)).total_seconds()
+    if delta_sec < -1.0:
+        out["notes"] = "db_newer_than_clock"
+        out["closed_bucket_lag"] = 0
+        out["aligns_with_closed_strip"] = True
+        return out
+    lag = int(delta_sec // 300)
+    out["closed_bucket_lag"] = max(0, lag)
+    out["aligns_with_closed_strip"] = lag == 0
+    return out
+
 
 def _parse_iso_ts(ts: str | None) -> datetime | None:
     if not ts or not str(ts).strip():
@@ -2019,10 +2098,16 @@ def _distinct_event_axis_with_times(conn: Any, *, limit: int) -> tuple[list[str]
     return mids, times
 
 
-def _event_axis_from_market_bars(mpath: Path | None, *, limit: int) -> tuple[list[str], list[str | None]]:
+def _event_axis_from_market_bars(
+    mpath: Path | None,
+    *,
+    limit: int,
+    canonical_symbol: str | None = None,
+) -> tuple[list[str], list[str | None]]:
     """Recent closed 5m bars (oldest→newest) — preferred column axis for policy-aligned dashboard."""
     if not mpath or not mpath.is_file():
         return [], []
+    sym = (canonical_symbol or "").strip() or _BASELINE_CANONICAL_SYMBOL_DEFAULT
     lim = max(4, min(48, int(limit)))
     conn = sqlite3.connect(str(mpath))
     try:
@@ -2030,11 +2115,11 @@ def _event_axis_from_market_bars(mpath: Path | None, *, limit: int) -> tuple[lis
             """
             SELECT market_event_id, candle_open_utc
             FROM market_bars_5m
-            WHERE timeframe = '5m'
+            WHERE timeframe = '5m' AND canonical_symbol = ?
             ORDER BY candle_open_utc DESC
             LIMIT ?
             """,
-            (lim,),
+            (sym, lim),
         )
         rows = list(reversed(cur.fetchall()))
     except Exception:
@@ -2639,9 +2724,13 @@ def build_trade_chain_payload(
     conn = connect_ledger(db_path)
     try:
         ensure_execution_ledger_schema(conn)
+        axis_sym = _trade_chain_axis_canonical_symbol()
+        five_m_ingest_freshness = _five_m_ingest_freshness(mpath, canonical_symbol=axis_sym)
         # Closed 5m bars only — newest column is the last **completed** bucket (decision at roll).
         # No synthetic "forming" column; operators should not see EVAL PENDING for an in-progress candle.
-        event_axis, event_axis_time_utc_iso = _event_axis_from_market_bars(mpath, limit=max_events)
+        event_axis, event_axis_time_utc_iso = _event_axis_from_market_bars(
+            mpath, limit=max_events, canonical_symbol=axis_sym
+        )
         event_axis_source = "market_bars_5m"
         if not event_axis:
             event_axis, event_axis_time_utc_iso = _distinct_event_axis_with_times(conn, limit=max_events)
@@ -2792,11 +2881,16 @@ def build_trade_chain_payload(
         "event_axis_source": event_axis_source,
         "event_axis_note": (
             "Columns are distinct market_event_id values (oldest left → newest right). "
-            "Axis is **closed** 5m bars from market_bars_5m when available; else execution_trades. "
-            "No in-progress column — newest column is the last **completed** bucket (evaluation at roll). "
+            "Axis is **closed** 5m bars from market_bars_5m (filtered by canonical_symbol for baseline) when available; "
+            "else execution_trades. "
+            "No in-progress column — newest column is the last **completed** bucket (decision at roll; matches "
+            "last_closed_candle_open_utc when ingest keeps up). "
+            "If five_m_ingest_freshness.closed_bucket_lag > 0, the DB is missing the newest closed bucket — "
+            "fix Hermes/tick ingest and canonical bar refresh, not column ordering. "
             "Baseline lifecycle: **open** → **held** → **closed**; primary tile on newest column when position open; "
             "older columns in that run are **continuation** (minimal)."
         ),
+        "five_m_ingest_freshness": five_m_ingest_freshness,
         "jupiter_tile_narrative_schema": "jupiter_tile_narrative_v1",
         "recency": {
             "axis_order": "oldest_left_newest_right",
