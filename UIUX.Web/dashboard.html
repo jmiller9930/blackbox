@@ -1697,11 +1697,17 @@
       );
     }
     var narr = c && c.jupiter_tile_narrative ? String(c.jupiter_tile_narrative) : '';
+    var entryPolicyLab =
+      c && c.baseline_entry_policy_label != null && String(c.baseline_entry_policy_label).trim() !== ''
+        ? String(c.baseline_entry_policy_label).trim()
+        : jupLab;
+    var entryAuth = c && c.baseline_entry_policy_authority != null ? String(c.baseline_entry_policy_authority) : '';
     var entryHasGates =
       baselineLane &&
       c &&
       c.baseline_entry_jupiter_v3_gates &&
-      typeof c.baseline_entry_jupiter_v3_gates === 'object';
+      typeof c.baseline_entry_jupiter_v3_gates === 'object' &&
+      entryAuth !== 'jupiter_2_sean';
     var entryHas =
       baselineLane &&
       c &&
@@ -1718,7 +1724,7 @@
         '<div class="tc-jup-entry-wrap">' +
         '<div class="tc-jup-entry-h">' +
         esc(
-          jupLab +
+          entryPolicyLab +
             ' — policy at entry' +
             (emid ? ' — ' + emid : '')
         ) +
@@ -2479,21 +2485,27 @@
       jp && jp.baseline_jupiter_policy && jp.baseline_jupiter_policy.active_label
         ? String(jp.baseline_jupiter_policy.active_label)
         : 'JUPv2';
+    var entryAtOpen =
+      bl.entry_policy_label != null && String(bl.entry_policy_label).trim() !== ''
+        ? String(bl.entry_policy_label).trim()
+        : jupLive;
     var emLive =
       bl.entry_market_event_id != null && String(bl.entry_market_event_id).trim() !== ''
         ? String(bl.entry_market_event_id).trim()
         : '';
     var entryInner = '';
     if (
-      (bl.entry_jupiter_v3_gates && typeof bl.entry_jupiter_v3_gates === 'object') ||
+        (bl.entry_jupiter_v3_gates &&
+        typeof bl.entry_jupiter_v3_gates === 'object' &&
+        bl.entry_policy_authority !== 'jupiter_2_sean') ||
       (bl.entry_jupiter_tile_narrative && String(bl.entry_jupiter_tile_narrative).trim() !== '')
     ) {
       entryInner =
         '<div class="tc-jup-entry-wrap">' +
         '<div class="tc-jup-entry-h">' +
-        esc(jupLive + ' — policy at entry' + (emLive ? ' — ' + emLive : '')) +
+        esc(entryAtOpen + ' — policy at entry' + (emLive ? ' — ' + emLive : '')) +
         '</div>' +
-        (bl.entry_jupiter_v3_gates
+        (bl.entry_jupiter_v3_gates && bl.entry_policy_authority !== 'jupiter_2_sean'
           ? jupiterV3GatesTableHtml(
               bl.entry_jupiter_v3_gates,
               'Entry — gates (all five must pass per side)'
@@ -2504,7 +2516,7 @@
       entryInner =
         '<div class="tc-jup-entry-wrap tc-jup-gates-missing">' +
         '<div class="tc-jup-entry-h">' +
-        esc(jupLive + ' — policy at entry — ' + emLive) +
+        esc(entryAtOpen + ' — policy at entry — ' + emLive) +
         '</div>' +
         '<p class="tc-jup-missing-note">Entry policy unavailable — check ledger row and market DB.</p>' +
         '</div>';
@@ -2533,8 +2545,8 @@
     return (
       '<p class="tc-baseline-live-hint">Active baseline trade — timeline to the right is hidden until this position closes. Updates every poll.</p>' +
       '<div class="tc-baseline-live-tile">' +
-      '<div class="tc-jup-policy-chip" style="margin:0 0 0.35rem 0" title="Jupiter baseline policy version">' +
-      esc(jupLive) +
+      '<div class="tc-jup-policy-chip" style="margin:0 0 0.35rem 0" title="Policy engine at entry (this trade)">' +
+      esc(entryAtOpen) +
       '</div>' +
       '<div class="tc-bl-phase ' +
       phaseCls +

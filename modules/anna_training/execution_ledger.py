@@ -370,6 +370,44 @@ def baseline_jupiter_policy_tag_from_signal_mode(signal_mode: str | None) -> str
     return "JUPv3" if sm == SIGNAL_MODE_JUPITER_3 else "JUPv2"
 
 
+def entry_policy_authority_from_signal_features(sf: dict[str, Any] | None) -> str:
+    """
+    Classify **which evaluator produced the entry** from persisted ``signal_features_snapshot``
+    (``BaselineOpenPosition`` / policy row ``open_position``), not the operator's current slot.
+
+    Returns one of: ``jupiter_2_sean``, ``jupiter_3_sean``, ``unknown``.
+    """
+    if not isinstance(sf, dict) or not sf:
+        return "unknown"
+    parity = str(sf.get("parity") or "").lower()
+    if "jupiter_3" in parity:
+        return "jupiter_3_sean"
+    if "jupiter_2" in parity:
+        return "jupiter_2_sean"
+    cat = str(sf.get("catalog_id") or "").lower()
+    if "jupiter_3" in cat:
+        return "jupiter_3_sean"
+    if "jupiter_2" in cat:
+        return "jupiter_2_sean"
+    pe = str(sf.get("policy_engine") or "").lower()
+    if "jupiter_3" in pe or "jupiter_3" in str(sf.get("policy_version") or "").lower():
+        return "jupiter_3_sean"
+    jg = sf.get("jupiter_v3_gates")
+    if isinstance(jg, dict) and str(jg.get("schema") or "") == "jupiter_v3_gates_v1":
+        return "jupiter_3_sean"
+    return "unknown"
+
+
+def baseline_entry_policy_label_for_authority(authority: str) -> str:
+    """Short operator label for the **entry** bar (distinct from the live selector chip)."""
+    a = (authority or "").strip().lower()
+    if a == "jupiter_3_sean":
+        return "JUPv3"
+    if a == "jupiter_2_sean":
+        return "Jupiter_2 Sean"
+    return "Policy (unknown)"
+
+
 def lookup_baseline_jupiter_open_state_json(
     conn: sqlite3.Connection,
     *,
