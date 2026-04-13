@@ -18,7 +18,8 @@ Environment:
   PYTH_SSE_DEDUPE_PUBLISH_TIME — only for ``dedupe_publish``: skip duplicate ``publish_time`` (default 1)
   PYTH_SSE_APPLY_CONF_GATE — ``0`` (default) = insert every valid parse; ``1`` = use ``PYTH_SSE_CONF_RATIO_MAX``
   PYTH_SSE_CONF_RATIO_MAX — only when ``PYTH_SSE_APPLY_CONF_GATE=1`` (default 0.001)
-  PYTH_SSE_BAR_REFRESH_SEC — throttle for ``refresh_last_closed_bar_from_ticks`` (default 15)
+  PYTH_SSE_BAR_REFRESH_SEC — min seconds between *throttled* bar refreshes (default 15); refresh still runs
+  immediately when UTC ``last_closed_candle_open`` advances (new 5m bucket to materialize).
   MARKET_BAR_MEMBERSHIP — ``oracle_publish`` (default, Sean) | ``inserted_at`` — see ``store.bar_membership_mode``
   BASELINE_LEDGER_AFTER_CANONICAL_BAR — ``1`` (default): after each ``market_bars_5m`` upsert, run baseline
   policy → ``execution_ledger.db`` (see ``basetrade/README.md``); ``0`` to disable
@@ -53,6 +54,8 @@ USER_AGENT = "blackbox-pyth-sse-ingest/1 (+stream)"
 _DEFAULT_FEED = "ef0d8b6fda2ceba41da15d4095d1da392a0d2f8ed0c6c7bc0f4cfac8c280b56d"
 
 _last_bar_refresh_monotonic: float = 0.0
+# After a successful upsert for this candle_open ISO, throttle applies until the *next* bucket closes.
+_last_refreshed_for_open_iso: str | None = None
 
 
 def _ssl_context() -> ssl.SSLContext:
@@ -126,18 +129,30 @@ def _sse_url() -> str:
 
 
 def _maybe_refresh_canonical_bar(conn: Any, symbol: str) -> None:
-    """Keep ``market_bars_5m`` aligned with the SSE tape (throttled)."""
-    global _last_bar_refresh_monotonic  # noqa: PLW0603
-    now = time.monotonic()
-    if now - _last_bar_refresh_monotonic < _bar_refresh_sec():
-        return
-    _last_bar_refresh_monotonic = now
-    try:
-        from market_data.canonical_bar_refresh import refresh_last_closed_bar_from_ticks
+    """Keep ``market_bars_5m`` aligned with the SSE tape.
 
-        refresh_last_closed_bar_from_ticks(conn, symbol)
+    Throttle limits redundant work when the target bucket is unchanged. When UTC wall clock crosses
+    into a new **last closed** 5m bucket, refresh runs immediately on the next tick so the strip is
+    not stuck one full interval behind ingest.
+    """
+    global _last_bar_refresh_monotonic  # noqa: PLW0603
+    global _last_refreshed_for_open_iso  # noqa: PLW0603
+    from market_data.canonical_bar_refresh import refresh_last_closed_bar_from_ticks
+    from market_data.canonical_time import format_candle_open_iso_z, last_closed_candle_open_utc
+
+    target_open = format_candle_open_iso_z(last_closed_candle_open_utc())
+    force = _last_refreshed_for_open_iso != target_open
+    now = time.monotonic()
+    if not force and now - _last_bar_refresh_monotonic < _bar_refresh_sec():
+        return
+    try:
+        out = refresh_last_closed_bar_from_ticks(conn, symbol)
     except Exception as e:  # noqa: BLE001
         print(f"pyth_sse_ingest: bar_refresh {e!r}", flush=True)
+        return
+    _last_bar_refresh_monotonic = now
+    if isinstance(out, dict) and out.get("ok") is True:
+        _last_refreshed_for_open_iso = target_open
 
 
 def _observed_iso_from_publish(pub_i: int | None) -> str:

@@ -287,6 +287,15 @@
       line-height: 1.4;
       max-width: 56rem;
     }
+    .tc-sync-banner {
+      margin: 0.25rem 0 0;
+      flex: 1 1 100%;
+      font-size: 0.62rem;
+      font-weight: 700;
+      color: #b45309;
+      line-height: 1.35;
+      max-width: 56rem;
+    }
     .tc-anna-toggle {
       flex: 0 0 auto;
       display: flex;
@@ -929,6 +938,7 @@
           <p class="tc-chain-note">
             Columns are <strong>closed</strong> 5m bars only — the rightmost column is the last completed bucket (decision at the roll). No in-progress / “eval pending” column. Open baseline: OPEN/HOLDING anchor rules; uncheck Anna for baseline only.
           </p>
+          <p class="tc-sync-banner" id="tc-sync-banner" hidden aria-live="polite"></p>
         </div>
         <div class="tc-flow" aria-hidden="true">
           <span class="tc-flow-seq"><span class="tc-flow-old">older</span> <span class="tc-flow-arrow">→</span> <span class="tc-flow-new">newer</span></span>
@@ -1004,6 +1014,7 @@
       localStorage.setItem(LS_ANNA, cb.checked ? '1' : '0');
       __bbLastTradeChainRenderSig = null;
       if (window.__bbLastBundle) {
+        renderBarSyncBanner(window.__bbLastBundle.trade_chain || {});
         renderTC(window.__bbLastBundle.trade_chain || {}, window.__bbLastBundle);
       }
     });
@@ -1804,6 +1815,33 @@
     return '';
   }
 
+  /** SQLite vs clock: does not change baseline lifecycle tiles — banner only. */
+  function renderBarSyncBanner(tc) {
+    var el = $('tc-sync-banner');
+    if (!el) return;
+    var ff = tc && tc.five_m_ingest_freshness;
+    if (!ff || ff.closed_bucket_lag == null) {
+      el.hidden = true;
+      el.textContent = '';
+      return;
+    }
+    var lag = Number(ff.closed_bucket_lag);
+    if (!isFinite(lag) || lag <= 0) {
+      el.hidden = true;
+      el.textContent = '';
+      return;
+    }
+    el.hidden = false;
+    el.textContent =
+      'Bar sync warning: market_data is ' +
+      lag +
+      ' closed bucket(s) behind wall-clock (DB newest open ' +
+      String(ff.db_newest_closed_candle_open_utc || '—') +
+      ' vs expected last-closed open ' +
+      String(ff.expected_last_closed_candle_open_utc || '—') +
+      '). Check pyth-sse-ingest and BLACKBOX_MARKET_DATA_PATH.';
+  }
+
   function renderTC(tc, bundle) {
     bundle = bundle || {};
     var jp = bundle.jupiter_policy_snapshot || {};
@@ -2256,6 +2294,7 @@
 
     wireTcAnnaToggle();
     window.__bbLastBundle = bundle;
+    renderBarSyncBanner(bundle.trade_chain || {});
     renderTC(bundle.trade_chain || {}, bundle);
     renderBaselineStrip(bundle.trade_chain || {});
     renderOB(bundle.operational_boundary);
