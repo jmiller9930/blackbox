@@ -1697,8 +1697,14 @@
       );
     }
     var narr = c && c.jupiter_tile_narrative ? String(c.jupiter_tile_narrative) : '';
+    var entryHas =
+      baselineLane &&
+      c &&
+      ((c.baseline_entry_jupiter_v3_gates && typeof c.baseline_entry_jupiter_v3_gates === 'object') ||
+        (c.baseline_entry_jupiter_tile_narrative &&
+          String(c.baseline_entry_jupiter_tile_narrative).trim() !== ''));
     var entrySnap = '';
-    if (baselineLane && c && c.baseline_entry_jupiter_tile_narrative) {
+    if (entryHas) {
       var emid =
         c.baseline_entry_market_event_id != null && String(c.baseline_entry_market_event_id).trim() !== ''
           ? String(c.baseline_entry_market_event_id).trim()
@@ -1724,28 +1730,26 @@
             )) +
         '</div>';
     }
-    var phHold =
-      baselineLane &&
-      c &&
-      String(c.baseline_lifecycle_phase || '').toLowerCase() === 'held';
-    var onePolicyHeld = phHold && entrySnap;
+    // While a baseline position is open, only entry context matters — no duplicate "this bar" policy block.
+    var posOpenBaseline = baselineLane && baselineLifecyclePositionOpen(bl);
     var narrEl =
       narr &&
-      !onePolicyHeld &&
+      !posOpenBaseline &&
       !(baselineLane && c && c.jupiter_v3_gates)
         ? jupiterNarrativeLinesHtml(narr, 'Jupiter / Sean policy (this bar)', baselineLane)
         : '';
     var scopeNote = '';
-    if (baselineLane && c && c.jupiter_tile_narrative_scope_note && !onePolicyHeld) {
+    if (baselineLane && c && c.jupiter_tile_narrative_scope_note && !posOpenBaseline) {
       scopeNote =
         '<div class="tc-jup-scope-note" role="note">' +
         esc(String(c.jupiter_tile_narrative_scope_note)) +
         '</div>';
     }
     var colGates = '';
-    if (baselineLane && c && c.jupiter_v3_gates) {
+    if (!posOpenBaseline && baselineLane && c && c.jupiter_v3_gates) {
       colGates = jupiterV3GatesTableHtml(c.jupiter_v3_gates, 'This bar — gates');
     } else if (
+      !posOpenBaseline &&
       baselineLane &&
       jupLab === 'JUPv3' &&
       jp.jupiter_v3_gates &&

@@ -534,8 +534,8 @@ def _baseline_entry_snapshot_for_active_slot(
             training_state=st,
             prefetch_bars=prefetch_bars,
         )
-        if (s or "").strip():
-            return s.strip(), g
+        if (s or "").strip() or g:
+            return (s or "").strip(), g
     pol_e = fetch_baseline_policy_evaluation_for_market_event(conn, em)
     s = _format_jupiter_tile_narrative_from_policy_row(pol_e)
     if (s or "").strip():
@@ -731,10 +731,15 @@ def build_jupiter_policy_snapshot(
                 entry_nar = (pos.entry_policy_narrative_snapshot or "").strip()
                 eg = pos.entry_jupiter_v3_gates_snapshot
                 entry_gates: dict[str, Any] | None = dict(eg) if isinstance(eg, dict) else None
-                if emid and (not entry_nar) and entry_gates is None:
-                    entry_nar, entry_gates = _baseline_entry_snapshot_for_active_slot(
+                # Fill whichever is missing: older opens may have narrative but no gate snapshot (or vice versa).
+                if emid and (not entry_nar or entry_gates is None):
+                    rn, rg = _baseline_entry_snapshot_for_active_slot(
                         conn, emid, mpath, _st, prefetch_bars=bars
                     )
+                    if not entry_nar and rn:
+                        entry_nar = (str(rn) or "").strip()
+                    if entry_gates is None and isinstance(rg, dict):
+                        entry_gates = dict(rg)
                 out["baseline_lifecycle"] = {
                     "position_open": True,
                     "trade_id": pos.trade_id,
