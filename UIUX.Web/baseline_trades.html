@@ -360,7 +360,7 @@
       <div class="bt-section">
         <h1>Baseline trades report</h1>
         <p class="bt-desc">
-          <strong>One row = one completed trade</strong> (one <code>trade_id</code>). Ten rows in a short window means <strong>ten separate trades</strong>, not one trade “split”—each row is independent. Detail for that trade is in the row + <strong>View</strong> (snapshot, SL/TP, sizing notes). <strong>Held</strong> (open position) only appears on the <strong>dashboard trade chain</strong>. <strong>Duration</strong> = time from open to this exit. Rows sort <strong>newest exit first</strong>. <code>bl_lc_…</code> is keyed from entry; <code>market_event_id</code> here is the exit bar. QEL = cohort page.
+          <strong>One row = one completed trade</strong> (one <code>trade_id</code>). The API <strong>dedupes</strong> the ledger to <strong>at most one close row per <code>trade_id</code></strong> here—there is <strong>no</strong> secret “set” or batch: if you see ten rows, that is <strong>ten separate round-trips</strong>, not one trade broken into ten. Detail for that trade is in the row + <strong>View</strong> (snapshot, SL/TP, sizing). <strong>Open / held</strong> (multi–5m-bar position still on) appears only on the <strong>dashboard trade chain</strong>, not as rows in this close-only table. <strong>Duration</strong> = open→exit for that close. Rows sort <strong>newest exit first</strong>. <code>bl_lc_…</code> is keyed from entry; <code>market_event_id</code> on the row is the <strong>exit</strong> bar. QEL = cohort page.
         </p>
         <p class="bt-econ-banner" id="bt-econ-banner" role="status">
           <strong>PnL column:</strong> gross model USD: <code>(exit − entry) × size</code> in quote terms. <strong>Not</strong> “return on full bankroll”—Sean sizing builds <strong>notional</strong> from <strong>risk slice × leverage</strong> (see <strong>Risk $</strong> vs <strong>Bankroll $</strong>). PnL shows <strong>% vs notional</strong> in parentheses. Not net of fees, funding, or slippage. Full wording: API <code>meta.pnl_semantics</code> after load.
@@ -1148,6 +1148,9 @@
               "). Scanned " +
               (m.scanned_execution_rows || "?") +
               " ledger row(s). " +
+              (m.close_row_contract && m.close_row_contract.one_close_row_per_trade_id
+                ? "At most one close row per trade_id (deduped)—rows are not grouped into sets. "
+                : "") +
               (m.lifecycle_note ? String(m.lifecycle_note) + " " : "") +
               "Click a row or View for snapshot.";
           })

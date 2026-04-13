@@ -2412,6 +2412,14 @@ def build_baseline_trades_report(
                 "trades_by_trade_id is a map of trade_id → nested trade bundle (same facts as rows, organized). "
                 "rows remains the ordered flat list for tables/CSV. One lifecycle close → one trade_id → one entry."
             ),
+            "close_row_contract": {
+                "one_close_row_per_trade_id": True,
+                "meaning": (
+                    "This report dedupes baseline execution_trades so you see at most one close row per trade_id "
+                    "in the result set. There is no hidden basket/bracket/set id: each row is one completed "
+                    "baseline round-trip; multiple rows are multiple independent trades, not slices of one parent trade."
+                ),
+            },
             "orphan_rows_without_trade_id": orphan_rows_without_trade_id,
             "pnl_semantics": dict(PNL_SEMANTICS_OPERATOR_V1),
             "report_note": (

@@ -619,6 +619,9 @@ def test_build_baseline_trades_report_schema() -> None:
     assert "long_count" in rep["meta"]["direction_summary"]
     assert "pnl_semantics" in rep["meta"]
     assert rep["meta"]["pnl_semantics"].get("fees_included") is False
+    crc = rep["meta"].get("close_row_contract") or {}
+    assert crc.get("one_close_row_per_trade_id") is True
+    assert "meaning" in crc
     for row in rep["rows"]:
         assert "entry_market_event_id" in row
         assert "pnl_pct_notional" in row
