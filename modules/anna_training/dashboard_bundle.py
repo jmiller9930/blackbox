@@ -2105,6 +2105,7 @@ def build_baseline_trades_report(
     limit: int = 50,
     scope: str = "all",
     max_scan: int = 20000,
+    time_basis: str = "entry",
 ) -> dict[str, Any]:
     """
     Filtered baseline ledger report: **closed** ``execution_trades`` rows only (lifecycle **open** /
@@ -2116,8 +2117,10 @@ def build_baseline_trades_report(
 
     ``scope``: ``all`` | ``trade`` | ``no_trade`` — filters rows after that policy classification.
 
-    Time window uses ``COALESCE(entry_time, created_at_utc)`` compared in UTC. Rows without a
-    parseable timestamp are excluded when any bound is set.
+    ``time_basis``: ``entry`` | ``exit`` — which timestamp is compared to ``from_utc_iso`` / ``to_utc_iso``.
+    **entry** (default) uses ``COALESCE(entry_time, created_at_utc)``. **exit** uses ``exit_time``
+    (falls back to ``created_at_utc``) so “calendar day of the close” includes long holds that **opened**
+    on a prior day. Rows without a parseable timestamp for the chosen basis are excluded when any bound is set.
     """
     db_path = db_path or default_execution_ledger_path()
     mpath = market_db_path if market_db_path is not None else _market_db_path()
@@ -2126,6 +2129,10 @@ def build_baseline_trades_report(
     sc = str(scope or "all").strip().lower()
     if sc not in ("all", "trade", "no_trade"):
         sc = "all"
+
+    tb = str(time_basis or "entry").strip().lower()
+    if tb not in ("entry", "exit"):
+        tb = "entry"
 
     from_dt = _parse_iso_ts(from_utc_iso) if (from_utc_iso and str(from_utc_iso).strip()) else None
     to_dt = _parse_iso_ts(to_utc_iso) if (to_utc_iso and str(to_utc_iso).strip()) else None
@@ -2163,7 +2170,10 @@ def build_baseline_trades_report(
         for r in cur.fetchall():
             scanned += 1
             row = dict(zip(cols, r))
-            raw_t = row.get("entry_time") or row.get("created_at_utc")
+            if tb == "exit":
+                raw_t = row.get("exit_time") or row.get("created_at_utc")
+            else:
+                raw_t = row.get("entry_time") or row.get("created_at_utc")
             ts = _parse_iso_ts(str(raw_t) if raw_t is not None else None)
             if ts is not None:
                 ts = ts.astimezone(timezone.utc) if ts.tzinfo else ts.replace(tzinfo=timezone.utc)
@@ -2414,6 +2424,21 @@ def build_baseline_trades_report(
     long_count = sum(1 for r in rows_out if str(r.get("side") or "").lower() == "long")
     short_count = sum(1 for r in rows_out if str(r.get("side") or "").lower() == "short")
 
+    pnl_sum_usd: float | None = None
+    pnl_rows_with_value = 0
+    for r in rows_out:
+        p = r.get("pnl_usd")
+        if p is None:
+            continue
+        try:
+            pf = float(p)
+        except (TypeError, ValueError):
+            continue
+        pnl_rows_with_value += 1
+        pnl_sum_usd = (pnl_sum_usd or 0.0) + pf
+    if pnl_sum_usd is not None:
+        pnl_sum_usd = round(pnl_sum_usd, 8)
+
     paper_br_usd: float | None = None
     paper_br_meta: dict[str, Any] = {}
     try:
@@ -2448,8 +2473,11 @@ def build_baseline_trades_report(
         "meta": {
             "from_utc_iso": from_utc_iso,
             "to_utc_iso": to_utc_iso,
+            "time_basis": tb,
             "limit": lim,
             "scope": sc,
+            "pnl_sum_usd": pnl_sum_usd,
+            "pnl_rows_summed": pnl_rows_with_value,
             "scanned_execution_rows": scanned,
             "max_scan_cap": scan_cap,
             "ledger_path": str(db_path),

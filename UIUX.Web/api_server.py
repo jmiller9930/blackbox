@@ -2006,19 +2006,23 @@ class Handler(BaseHTTPRequestHandler):
                 q = parse_qs(parsed.query or "")
                 from_u = (q.get("from_utc") or [""])[0].strip() or None
                 to_u = (q.get("to_utc") or [""])[0].strip() or None
-                raw_lim = (q.get("limit") or ["10"])[0]
+                raw_lim = (q.get("limit") or ["50"])[0]
                 try:
                     lim = max(1, min(500, int(raw_lim)))
                 except ValueError:
-                    lim = 10
+                    lim = 50
                 scope = (q.get("scope") or ["trade"])[0].strip().lower()
                 if scope not in ("all", "trade", "no_trade"):
                     scope = "trade"
+                tb = (q.get("time_basis") or ["entry"])[0].strip().lower()
+                if tb not in ("entry", "exit"):
+                    tb = "entry"
                 body = build_baseline_trades_report(
                     from_utc_iso=from_u,
                     to_utc_iso=to_u,
                     limit=lim,
                     scope=scope,
+                    time_basis=tb,
                 )
             except Exception as e:  # noqa: BLE001
                 self._json(

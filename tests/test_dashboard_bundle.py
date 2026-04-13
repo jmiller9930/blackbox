@@ -606,6 +606,9 @@ def test_build_baseline_trades_report_schema() -> None:
     assert "trades_by_trade_id" in rep and isinstance(rep["trades_by_trade_id"], dict)
     assert "meta" in rep and isinstance(rep["meta"], dict)
     assert rep["meta"].get("scope") == "all"
+    assert rep["meta"].get("time_basis") == "entry"
+    assert "pnl_sum_usd" in rep["meta"]
+    assert "pnl_rows_summed" in rep["meta"]
     assert rep["meta"].get("report_note")
     assert rep["meta"].get("lifecycle_note")
     ap = rep["meta"].get("active_position")

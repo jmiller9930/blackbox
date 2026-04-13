@@ -781,7 +781,7 @@
   <div class="dash-app">
     <nav class="dash-nav" aria-label="Primary">
       <a class="is-active" href="/dashboard.html">Dashboard</a>
-      <a href="/baseline-trades.html">Baseline trades</a>
+      <a href="/baseline-trades.html">Reports dashboard</a>
       <a href="/internal.html">Operator Panel</a>
       <a href="/anna/evaluation">QEL evaluation</a>
       <a href="/anna/event-view">Event view</a>
@@ -909,7 +909,7 @@
         <div class="bts-head">
           <h2 id="bts-h">Recent baseline trades</h2>
           <p class="bts-meta" id="bts-meta"></p>
-          <a class="bts-report" href="/baseline-trades.html" title="Full history, UTC range, CSV export">Full report &amp; CSV →</a>
+          <a class="bts-report" href="/baseline-trades.html" title="Reports dashboard — baseline trades, UTC range, CSV export">Reports dashboard →</a>
         </div>
         <div class="bts-tablescroll">
           <table class="bts-t">
@@ -1737,7 +1737,7 @@
     if (recent && recent.length) {
       if (meta) {
         meta.textContent =
-          'Latest Close policy TRADE rows only (Sean Jupiter authoritative close — same as Baseline trades report scope “Close policy TRADE”). Open the report for dates, scope, and CSV.';
+          'Latest Close policy TRADE rows only (Sean Jupiter authoritative close — same as Reports dashboard › Baseline trades scope “Close policy TRADE”). Open Reports dashboard for dates, scope, and CSV.';
       }
       var html = '';
       var ri;
@@ -1775,7 +1775,7 @@
         var trOpen = rowMid
           ? '<tr data-mid="' +
             escAttr(rowMid) +
-            '" class="bts-click-row" title="Open baseline trades report with tile narrative for this event">'
+            '" class="bts-click-row" title="Open Reports dashboard (baseline trades) with tile narrative for this event">'
           : '<tr>';
         html +=
           trOpen +
@@ -1794,7 +1794,7 @@
     }
     if (meta) {
       meta.textContent =
-        'No Close policy TRADE rows in recent window — raw ledger may still have rows; open Baseline trades report and set scope to “All ledger rows” or “Close not policy TRADE” to inspect. The trade chain below may still show evaluation.';
+        'No Close policy TRADE rows in recent window — raw ledger may still have rows; open Reports dashboard › Baseline trades and set scope to “All ledger rows” or “Close not policy TRADE” to inspect. The trade chain below may still show evaluation.';
     }
     tbody.innerHTML =
       '<tr><td colspan="4">No policy TRADE executions in the recent window (or none yet).</td></tr>';

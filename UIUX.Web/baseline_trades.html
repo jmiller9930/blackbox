@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>BLACK BOX — Baseline trades report</title>
+  <title>BLACK BOX — Reports dashboard</title>
   <link rel="stylesheet" href="/styles.css" />
   <script src="/text-scale.js"></script>
   <style>
@@ -72,6 +72,38 @@
       font-weight: 600;
       max-width: 52rem;
       line-height: 1.45;
+    }
+    .bt-reports-index {
+      margin: 0 0 1rem;
+      padding: 0.65rem 0.85rem;
+      background: #fff;
+      border: 1px solid var(--panel-border);
+      border-radius: var(--radius-md);
+      font-size: 0.74rem;
+      font-weight: 600;
+      color: #0f172a;
+      max-width: 52rem;
+    }
+    .bt-reports-index .bt-reports-index__h {
+      margin: 0 0 0.35rem;
+      font-size: 0.62rem;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--muted);
+    }
+    .bt-reports-index ul {
+      margin: 0;
+      padding-left: 1.1rem;
+    }
+    .bt-reports-index a {
+      color: var(--accent);
+      font-weight: 800;
+    }
+    .bt-report-section h2 {
+      margin: 0 0 0.5rem;
+      font-size: 0.95rem;
+      font-weight: 800;
+      color: #0f172a;
     }
     .bt-filters {
       display: flex;
@@ -342,7 +374,7 @@
   <div class="dash-app">
     <nav class="dash-nav" aria-label="Primary">
       <a href="/dashboard.html">Dashboard</a>
-      <a class="is-active" href="/baseline-trades.html">Baseline trades</a>
+      <a class="is-active" href="/baseline-trades.html">Reports dashboard</a>
       <a href="/internal.html">Operator Panel</a>
       <a href="/anna/evaluation">QEL evaluation</a>
       <a href="/anna/event-view">Event view</a>
@@ -358,7 +390,21 @@
         <span class="bt-muted">API: <code>/api/v1/dashboard/baseline-trades-report</code> · <code>meta.active_position</code> · <code>/api/v1/dashboard/baseline-active-position</code>. <strong>View</strong> = full snapshot for that <code>trade_id</code>. CSV = table columns.</span>
       </div>
       <div class="bt-section">
-        <h1>Baseline trades report</h1>
+        <h1>Reports dashboard</h1>
+        <p class="bt-desc" style="margin-bottom:0.65rem">
+          Ledger-backed operator reports. Use the index below to jump to a report; more reports can be added here over time.
+        </p>
+        <nav class="bt-reports-index" aria-label="Reports available on this page">
+          <p class="bt-reports-index__h">Reports</p>
+          <ul>
+            <li>
+              <a href="#report-baseline-trades">Baseline trades</a> — closed baseline <code>execution_trades</code>, UTC window, CSV export (this page).
+            </li>
+          </ul>
+        </nav>
+
+        <section id="report-baseline-trades" class="bt-report-section" aria-labelledby="report-baseline-h">
+        <h2 id="report-baseline-h">Baseline trades</h2>
         <p class="bt-desc">
           <strong>One row = one completed trade</strong> (one <code>trade_id</code>). The API <strong>dedupes</strong> the ledger to <strong>at most one close row per <code>trade_id</code></strong> here—there is <strong>no</strong> secret “set” or batch: if you see ten rows, that is <strong>ten separate round-trips</strong>, not one trade broken into ten. Detail for that trade is in the row + <strong>View</strong> (snapshot, SL/TP, sizing). <strong>Open / held</strong> (multi–5m-bar position still on) appears only on the <strong>dashboard trade chain</strong>, not as rows in this close-only table. <strong>Duration</strong> = open→exit for that close. Rows sort <strong>newest exit first</strong>. <code>bl_lc_…</code> is keyed from entry; <code>market_event_id</code> on the row is the <strong>exit</strong> bar. QEL = cohort page.
         </p>
@@ -385,7 +431,14 @@
           </div>
           <div class="bt-field">
             <label for="bt-max">Max rows</label>
-            <input id="bt-max" type="number" value="10" min="1" max="500" style="width:5.5rem" />
+            <input id="bt-max" type="number" value="50" min="1" max="500" style="width:5.5rem" />
+          </div>
+          <div class="bt-field">
+            <label for="bt-time-basis">Time window applies to</label>
+            <select id="bt-time-basis" style="font-weight:700;min-width:12rem">
+              <option value="exit" selected>Exit time (closes in window)</option>
+              <option value="entry">Entry time (opens in window)</option>
+            </select>
           </div>
           <div class="bt-field">
             <label for="bt-scope">Show</label>
@@ -403,7 +456,7 @@
             <button type="button" class="bt-btn" id="bt-csv">Download CSV</button>
             <button type="button" class="bt-btn" id="bt-xlsx">Download XLSX</button>
           </div>
-          <p class="bt-note">Dates are <strong>UTC</strong>. <strong>Apply</strong> runs the query. Scope filters <strong>policy classification on the ledger close</strong>, not lifecycle <strong>held</strong> (open position—that is trade chain only).</p>
+          <p class="bt-note">Dates are <strong>UTC</strong>. <strong>Exit time</strong> = include trades whose <strong>close</strong> falls in the window (use this for “what closed today,” including long holds that opened earlier). <strong>Entry time</strong> = opens in the window. <strong>Apply</strong> runs the query. Scope filters <strong>policy classification on the ledger close</strong>, not lifecycle <strong>held</strong> (open position—that is trade chain only).</p>
         </div>
 
         <div class="bt-table-wrap">
@@ -447,6 +500,7 @@
           </table>
         </div>
         <p class="bt-foot" id="bt-foot">Loading…</p>
+        </section>
       </div>
     </div>
   </div>
@@ -498,6 +552,12 @@
       function fmtNum(n) {
         if (n == null || n === "" || (typeof n === "number" && isNaN(n))) return "—";
         return Number(n).toFixed(2);
+      }
+
+      /** Entry/exit px: extra decimals so PnL reconciles when 2dp looks identical. */
+      function fmtPx(n) {
+        if (n == null || n === "" || (typeof n === "number" && isNaN(n))) return "—";
+        return Number(n).toFixed(4);
       }
 
       function fmtMae(m) {
@@ -561,6 +621,13 @@
         if (s === "no_trade") return "Close not policy TRADE";
         if (s === "all") return "All ledger rows";
         return sc || "—";
+      }
+
+      function timeBasisLabel(tb) {
+        var s = String(tb || "").toLowerCase();
+        if (s === "exit") return "exit time";
+        if (s === "entry") return "entry time";
+        return s || "—";
       }
 
       /** Policy column: closed-row classification (not trade-chain held vs idle). */
@@ -655,10 +722,12 @@
         if (from) qs.push("from_utc=" + encodeURIComponent(from));
         if (to) qs.push("to_utc=" + encodeURIComponent(to));
         var mx = parseInt(document.getElementById("bt-max").value, 10);
-        if (isNaN(mx) || mx < 1) mx = 10;
+        if (isNaN(mx) || mx < 1) mx = 50;
         qs.push("limit=" + encodeURIComponent(String(Math.min(500, mx))));
         var scope = (document.getElementById("bt-scope") || {}).value || "trade";
         qs.push("scope=" + encodeURIComponent(scope));
+        var tb = (document.getElementById("bt-time-basis") || {}).value || "exit";
+        qs.push("time_basis=" + encodeURIComponent(tb === "entry" ? "entry" : "exit"));
         return "/api/v1/dashboard/baseline-trades-report?" + qs.join("&");
       }
 
@@ -859,11 +928,11 @@
             "</td><td title=\"" +
             escAttr("Entry price.") +
             '">' +
-            fmtNum(r.entry) +
+            fmtPx(r.entry) +
             "</td><td title=\"" +
             escAttr("Exit price.") +
             '">' +
-            fmtNum(r.exit) +
+            fmtPx(r.exit) +
             '</td><td class="' +
             pnlCls +
             '" title="' +
@@ -1158,14 +1227,33 @@
                 ban.innerHTML = brNow.replace(/^<br>/, "");
               }
             }
+            var sumPart = "";
+            if (
+              m.pnl_sum_usd != null &&
+              !isNaN(Number(m.pnl_sum_usd)) &&
+              (m.pnl_rows_summed != null ? Number(m.pnl_rows_summed) > 0 : true)
+            ) {
+              var ps = Number(m.pnl_sum_usd);
+              sumPart =
+                " Sum of PnL USD in this result set: " +
+                (ps >= 0 ? "+" : "") +
+                ps.toFixed(4) +
+                " (" +
+                (m.pnl_rows_summed != null ? String(m.pnl_rows_summed) : "?") +
+                " row(s) with PnL).";
+            }
             foot.textContent =
               "Showing " +
               state.rows.length +
               " closed trade row(s) (limit " +
               (m.limit || "?") +
+              ", window on " +
+              timeBasisLabel(m.time_basis) +
               ", scope " +
               scopeLabelApi(m.scope) +
-              "). Scanned " +
+              ")." +
+              sumPart +
+              " Scanned " +
               (m.scanned_execution_rows || "?") +
               " ledger row(s). " +
               (m.close_row_contract && m.close_row_contract.one_close_row_per_trade_id
