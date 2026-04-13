@@ -47,6 +47,9 @@ PYTH_STREAM_PROBE_INTERVAL_SEC_DEFAULT = 15
 # Trade-chain axis + ingest freshness: baseline SOL perp matches ingest / market_event_id prefix.
 _BASELINE_CANONICAL_SYMBOL_DEFAULT = "SOL-PERP"
 
+# Shown on baseline strip, reports, and trade-chain tiles until a distinct Jupiter v3 path exists.
+BASELINE_JUPITER_POLICY_VERSION_TAG = "JUPv2"
+
 
 def _trade_chain_axis_canonical_symbol() -> str:
     raw = (os.environ.get("BLACKBOX_TRADE_CHAIN_CANONICAL_SYMBOL") or "").strip()
@@ -1079,6 +1082,7 @@ def _recent_baseline_trades_for_dashboard_strip(
                 "exit_reason": str(row.get("exit_reason") or "").strip() or None,
                 "trade_id": str(row.get("trade_id") or "").strip() or None,
                 "mae_usd": round(mae_val, 6) if mae_val is not None else None,
+                "baseline_jupiter_policy_tag": BASELINE_JUPITER_POLICY_VERSION_TAG,
             }
         )
     return out
@@ -1272,6 +1276,7 @@ def _recent_baseline_policy_trade_rows_for_strip(
                 "mae_usd": round(mae_val, 6) if mae_val is not None else None,
                 "hold_duration_minutes": round(hdm, 4) if hdm is not None else None,
                 "hold_bars_estimate": hbars,
+                "baseline_jupiter_policy_tag": BASELINE_JUPITER_POLICY_VERSION_TAG,
             }
         )
         if len(out) >= lim:
@@ -2446,6 +2451,7 @@ def build_baseline_trades_report(
                     "policy_outcome": str(cell.get("outcome") or ""),
                     "baseline_lifecycle_phase": cell.get("baseline_lifecycle_phase"),
                     "lifecycle_display": str(cell.get("outcome_display") or ""),
+                    "baseline_jupiter_policy_tag": BASELINE_JUPITER_POLICY_VERSION_TAG,
                 }
             )
             meta_pairs.append((ledger_row, cell, pos_open))
@@ -3554,6 +3560,14 @@ def build_trade_chain_payload(
         "rows": rows_out,
         "recent_baseline_trades": recent_strip,
         "baseline_trades_report_rows": baseline_trades_report_rows,
+        "baseline_jupiter_policy": {
+            "schema": "baseline_jupiter_policy_selector_v1",
+            "active_id": "jup_v2",
+            "active_label": BASELINE_JUPITER_POLICY_VERSION_TAG,
+            "options": [
+                {"id": "jup_v2", "label": BASELINE_JUPITER_POLICY_VERSION_TAG},
+            ],
+        },
     }
 
 

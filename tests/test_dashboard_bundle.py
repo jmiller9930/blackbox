@@ -55,6 +55,11 @@ def test_build_trade_chain_payload_schema() -> None:
     assert tc["rows"][0].get("row_tier") == "primary"
     assert (tc.get("recency") or {}).get("axis_order") == "oldest_left_newest_right"
     assert tc.get("jupiter_tile_narrative_schema") == "jupiter_tile_narrative_v1"
+    bjp = tc.get("baseline_jupiter_policy") or {}
+    assert bjp.get("schema") == "baseline_jupiter_policy_selector_v1"
+    assert bjp.get("active_id") == "jup_v2"
+    assert bjp.get("active_label") == "JUPv2"
+    assert isinstance(bjp.get("options"), list) and bjp["options"]
     assert "recent_baseline_trades" in tc
     assert isinstance(tc["recent_baseline_trades"], list)
     for row in tc["recent_baseline_trades"]:
@@ -67,7 +72,9 @@ def test_build_trade_chain_payload_schema() -> None:
             "exit_time_utc_iso",
             "outcome",
             "pnl_usd",
+            "baseline_jupiter_policy_tag",
         }
+        assert row.get("baseline_jupiter_policy_tag") == "JUPv2"
     assert "baseline_trades_report_rows" in tc
     assert isinstance(tc["baseline_trades_report_rows"], list)
     assert len(tc["baseline_trades_report_rows"]) >= len(tc["recent_baseline_trades"])
@@ -634,6 +641,7 @@ def test_build_baseline_trades_report_schema() -> None:
         assert "entry_market_event_id" in row
         assert "pnl_pct_notional" in row
         assert "baseline_authority" in row
+        assert row.get("baseline_jupiter_policy_tag") == "JUPv2"
     tid_keys = set(rep["trades_by_trade_id"].keys())
     row_tids = {str(x.get("trade_id") or "").strip() for x in rep["rows"] if str(x.get("trade_id") or "").strip()}
     assert tid_keys == row_tids
@@ -648,20 +656,20 @@ def test_build_baseline_trades_report_schema() -> None:
         fr = flat_by_tid[tid]
         assert bundle["economics"].get("pnl_usd") == fr.get("pnl_usd")
         assert bundle["identity"].get("exit_market_event_id") == fr.get("market_event_id")
-        assert row["baseline_authority"] in ("TRADE", "NO_TRADE")
-        assert "baseline_authority_reason" in row
-        assert "lifecycle_open_at_utc" in row
-        assert "lifecycle_closed_label" in row
-        assert "held_display" in row
-        assert "stop_loss_entry_price" in row
-        assert "take_profit_entry_price" in row
-        assert "stop_loss_exit_price" in row
-        assert "take_profit_exit_price" in row
-        assert "operator_trade_snapshot" in row
-        assert "synthesis" in row
-        assert (row["synthesis"] or {}).get("schema") == "trade_event_synthesis_v1"
-        assert "policy_snapshot" in row["synthesis"]
-        assert "execution_snapshot" in row["synthesis"]
+        assert fr["baseline_authority"] in ("TRADE", "NO_TRADE")
+        assert "baseline_authority_reason" in fr
+        assert "lifecycle_open_at_utc" in fr
+        assert "lifecycle_closed_label" in fr
+        assert "held_display" in fr
+        assert "stop_loss_entry_price" in fr
+        assert "take_profit_entry_price" in fr
+        assert "stop_loss_exit_price" in fr
+        assert "take_profit_exit_price" in fr
+        assert "operator_trade_snapshot" in fr
+        assert "synthesis" in fr
+        assert (fr["synthesis"] or {}).get("schema") == "trade_event_synthesis_v1"
+        assert "policy_snapshot" in fr["synthesis"]
+        assert "execution_snapshot" in fr["synthesis"]
 
 
 def test_baseline_lifecycle_for_dashboard_from_active_snapshot_maps_open() -> None:

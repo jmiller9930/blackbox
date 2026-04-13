@@ -509,6 +509,7 @@
                 <th title="Timeframe.">TF</th>
                 <th title="Exit/close bar market_event_id on this ledger row (Jupiter tile narrative is keyed here).">market_event_id</th>
                 <th title="Mode.">Mode</th>
+                <th title="Jupiter baseline policy version (paper path). Distinct from Policy (ledger close classification).">JUP</th>
                 <th title="Side.">Side</th>
                 <th title="Policy classification for this closed ledger row (authoritative close vs other). Not the same as trade-chain held vs idle NO TRADE.">Policy</th>
                 <th title="Closed-trade economic display (win/loss/flat, etc.). Not trade-chain held.">Outcome</th>
@@ -531,7 +532,7 @@
               </tr>
             </thead>
             <tbody id="bt-tbody">
-              <tr><td colspan="29">Loading…</td></tr>
+              <tr><td colspan="30">Loading…</td></tr>
             </tbody>
           </table>
         </div>
@@ -567,7 +568,7 @@
   <script>
     (function () {
       var state = { rows: [], meta: {}, tradesByTradeId: {} };
-      var COLS = 29;
+      var COLS = 30;
       var TIP_QEL_ROW =
         "QEL scores and survival decisions apply to Anna strategy cohorts, not to each baseline ledger row. Open QEL evaluation in the nav for details.";
 
@@ -825,6 +826,10 @@
           var authCls = auth === "TRADE" ? "bt-auth-trade" : "bt-auth-notrade";
           var reason = r.baseline_authority_reason || "";
           var mode = r.mode != null ? String(r.mode) : "—";
+          var jupTag =
+            r.baseline_jupiter_policy_tag != null && String(r.baseline_jupiter_policy_tag).trim() !== ""
+              ? String(r.baseline_jupiter_policy_tag).trim()
+              : "JUPv2";
           var tid = r.trade_id != null && String(r.trade_id).trim() !== "" ? String(r.trade_id) : "—";
           var entryMei =
             r.entry_market_event_id != null && String(r.entry_market_event_id).trim() !== ""
@@ -904,6 +909,10 @@
             escAttr("Ledger mode (live / paper / paper_stub).") +
             '">' +
             esc(mode) +
+            '</td><td title="' +
+            escAttr("Jupiter baseline policy version (paper path).") +
+            '">' +
+            esc(jupTag) +
             '</td><td class="' +
             cls +
             '" title="' +

@@ -508,6 +508,18 @@
     /* Anna lane chips: neutral slate only (no second accent palette). */
     .tc-chip-anna-kind { background: #f1f5f9; color: #475569; margin-right: 0.2rem; border: 1px solid #e2e8f0; }
     .tc-chip-life { background: #f1f5f9; color: #475569; border: 1px solid #e2e8f0; }
+    .tc-jup-policy-chip {
+      display: inline-block;
+      font-size: 0.58rem;
+      font-weight: 700;
+      letter-spacing: 0.03em;
+      color: #0f172a;
+      background: linear-gradient(180deg, #e2e8f0, #cbd5e1);
+      border: 1px solid #94a3b8;
+      border-radius: 3px;
+      padding: 0.06rem 0.32rem;
+      margin-bottom: 0.12rem;
+    }
     .tc-mini { display: grid; grid-template-columns: auto 1fr; gap: 0.1rem 0.35rem; align-items: baseline; }
     .tc-mini .tc-id { font-family: ui-monospace, monospace; font-size: 0.62rem; word-break: break-all; }
     .tc-mini .lab { color: var(--muted); font-size: 0.58rem; text-transform: uppercase; }
@@ -957,6 +969,11 @@
         <div class="kv"><span class="k">Trading PnL (baseline book)</span><span class="v" id="pc-pnl">—</span></div>
         <div class="kv"><span class="k">Anna PnL (what-if, lane)</span><span class="v" id="pc-pnl-anna">—</span></div>
         <div class="kv"><span class="k">Current paper balance</span><span class="v" id="pc-balance">—</span></div>
+        <div class="kv"><span class="k">Jupiter baseline policy</span><span class="v" style="display:flex;align-items:center;gap:0.35rem;flex-wrap:wrap">
+          <select id="dash-baseline-jupiter-policy" aria-label="Jupiter baseline policy version" style="font-size:0.75rem;padding:0.22rem 0.45rem;max-width:10rem;border:1px solid var(--panel-border);border-radius:4px;background:var(--panel-bg, #fff)">
+            <option value="jup_v2" selected>JUPv2</option>
+          </select>
+        </span></div>
       </div>
       <p id="pc-msg" style="font-size:0.7rem;color:var(--muted);margin:0.2rem 0.75rem 0.45rem"></p>
 
@@ -980,6 +997,7 @@
                 <th title="Timeframe.">TF</th>
                 <th title="Exit/close bar market_event_id on this ledger row (Jupiter tile narrative is keyed here).">market_event_id</th>
                 <th title="Mode.">Mode</th>
+                <th title="Jupiter baseline policy version (paper path). Distinct from Policy (ledger close classification).">JUP</th>
                 <th title="Side.">Side</th>
                 <th title="Policy classification for this closed ledger row (authoritative close vs other). Not the same as trade-chain held vs idle NO TRADE.">Policy</th>
                 <th title="Closed-trade economic display (win/loss/flat, etc.). Not trade-chain held.">Outcome</th>
@@ -1002,7 +1020,7 @@
               </tr>
             </thead>
             <tbody id="bts-tbody">
-              <tr><td colspan="29">Loading…</td></tr>
+              <tr><td colspan="30">Loading…</td></tr>
             </tbody>
           </table>
         </div>
@@ -1254,7 +1272,7 @@
     return Number(n).toFixed(4);
   }
 
-  /** Mirrors baseline_trades.html formatters for the 29-column Recent Baseline strip. */
+  /** Mirrors baseline_trades.html formatters for the 30-column Recent Baseline strip. */
   var BTS_DASH_TIP_QEL =
     'QEL scores and survival decisions apply to Anna strategy cohorts, not to each baseline ledger row. Open QEL evaluation in the nav for details.';
   function btsRptFmtNum(n) {
@@ -1464,6 +1482,14 @@
     var colIdx = opts.colIndex;
     var nAxis = opts.nEv;
     var baselineLane = (row.chain_kind || '') === 'baseline';
+    var jpBundle = opts.jp || {};
+    var bjpol = jpBundle.baseline_jupiter_policy || {};
+    var jupLab = String(bjpol.active_label || 'JUPv2').trim() || 'JUPv2';
+    var jupChipHtml = baselineLane
+      ? '<div class="tc-jup-policy-chip" title="Jupiter baseline policy version">' +
+        esc(jupLab) +
+        '</div>'
+      : '';
     // One trade, one live surface: never repeat OPEN/HOLDING on earlier columns when ledger says position is open.
     // When baselineAnchorIdx is set, renderTC places the live tile at that column with colspan — left columns use real cells; skip this dash.
     if (
@@ -1502,6 +1528,7 @@
           : 'tc-empty tc-no-trade';
       return tcCellSurface(
         narrEl +
+          jupChipHtml +
           '<span class="' +
           ntBar +
           '" title="No execution trade for this 5m bar">no trade</span>'
@@ -1684,6 +1711,7 @@
       '</div>';
     return tcCellSurface(
       narrEl +
+        jupChipHtml +
         vsLine +
         '<div class="' +
         wrapCls +
@@ -1884,14 +1912,14 @@
     });
   }
 
-  /** Last five closed baseline rows — same 29 columns and cell order as Reports (`baseline_trades.html`). */
+  /** Last five closed baseline rows — same 30 columns and cell order as Reports (`baseline_trades.html`). */
   function renderBaselineStrip(tc) {
     var tbody = document.getElementById('bts-tbody');
     var meta = document.getElementById('bts-meta');
     if (!tbody) return;
     if (!tc) {
       if (meta) meta.textContent = '';
-      tbody.innerHTML = '<tr><td colspan="29">No trade chain data.</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="30">No trade chain data.</td></tr>';
       return;
     }
     var recent = tc.recent_baseline_trades;
@@ -1935,6 +1963,10 @@
         var authCls = auth === 'TRADE' ? 'bt-auth-trade' : 'bt-auth-notrade';
         var reason = r.baseline_authority_reason || '';
         var mode = r.mode != null ? String(r.mode) : '—';
+        var jupTag =
+          r.baseline_jupiter_policy_tag != null && String(r.baseline_jupiter_policy_tag).trim() !== ''
+            ? String(r.baseline_jupiter_policy_tag).trim()
+            : 'JUPv2';
         var tid =
           r.trade_id != null && String(r.trade_id).trim() !== '' ? String(r.trade_id) : '—';
         var entryMei =
@@ -2023,6 +2055,10 @@
           escAttr('Ledger mode (live / paper / paper_stub).') +
           '">' +
           esc(mode) +
+          '</td><td title="' +
+          escAttr('Jupiter baseline policy version (paper path).') +
+          '">' +
+          esc(jupTag) +
           '</td><td class="' +
           cls +
           '" title="' +
@@ -2127,7 +2163,7 @@
         'No closed baseline trades in the recent scan — open Reports dashboard to inspect the full ledger or widen filters. The trade chain below may still show evaluation.';
     }
     tbody.innerHTML =
-      '<tr><td colspan="29">No policy TRADE executions in the recent window (or none yet).</td></tr>';
+      '<tr><td colspan="30">No policy TRADE executions in the recent window (or none yet).</td></tr>';
   }
 
   (function wireBtsBaselineNavigate() {
@@ -2190,9 +2226,16 @@
       if (x == null || x === '' || (typeof x === 'number' && isNaN(x))) return '—';
       return Number(x).toFixed(dec != null ? dec : 2);
     }
+    var jupLive =
+      jp && jp.baseline_jupiter_policy && jp.baseline_jupiter_policy.active_label
+        ? String(jp.baseline_jupiter_policy.active_label)
+        : 'JUPv2';
     return (
       '<p class="tc-baseline-live-hint">Active baseline trade — timeline to the right is hidden until this position closes. Updates every poll.</p>' +
       '<div class="tc-baseline-live-tile">' +
+      '<div class="tc-jup-policy-chip" style="margin:0 0 0.35rem 0" title="Jupiter baseline policy version">' +
+      esc(jupLive) +
+      '</div>' +
       '<div class="tc-bl-phase ' +
       phaseCls +
       '">' +
@@ -2707,6 +2750,25 @@
       $('pc-pnl-anna').textContent = pc ? fmtPc(pnlA) : '—';
     }
     if ($('pc-balance')) $('pc-balance').textContent = pc ? fmtPc(pc.current_equity_ledger) : '—';
+
+    (function wireBaselineJupiterPolicySelect() {
+      var sel = $('dash-baseline-jupiter-policy');
+      var tc0 = bundle.trade_chain || {};
+      var bjp = tc0.baseline_jupiter_policy;
+      if (!sel || !bjp || !bjp.options || !bjp.options.length) return;
+      sel.innerHTML = '';
+      var opts = bjp.options;
+      var ai = String(bjp.active_id || '').trim();
+      var oi;
+      for (oi = 0; oi < opts.length; oi++) {
+        var o = opts[oi];
+        var op = document.createElement('option');
+        op.value = String(o.id != null ? o.id : '');
+        op.textContent = String(o.label != null ? o.label : op.value);
+        if (ai && op.value === ai) op.selected = true;
+        sel.appendChild(op);
+      }
+    })();
 
     var tickReq = !!ls.tick_required;
     $('btnTick').disabled = !tickReq;
