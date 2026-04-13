@@ -66,6 +66,9 @@ def ensure_market_schema(conn: sqlite3.Connection, root: Path | None = None) -> 
     p2 = root / "data" / "sqlite" / "schema_phase5_canonical_bars.sql"
     if p2.is_file():
         conn.executescript(p2.read_text(encoding="utf-8"))
+    p3 = root / "data" / "sqlite" / "schema_phase5_binance_strategy_bars.sql"
+    if p3.is_file():
+        conn.executescript(p3.read_text(encoding="utf-8"))
     conn.commit()
 
 
@@ -350,6 +353,70 @@ def upsert_market_bar_5m(conn: sqlite3.Connection, bar: CanonicalBarV1) -> None:
             r["volume_base"],
             r["price_source"],
             r["bar_schema_version"],
+            computed,
+        ),
+    )
+    conn.commit()
+
+
+def upsert_binance_strategy_bar_5m(
+    conn: sqlite3.Connection,
+    *,
+    canonical_symbol: str,
+    tick_symbol: str,
+    timeframe: str,
+    candle_open_utc: str,
+    candle_close_utc: str,
+    market_event_id: str,
+    open_px: float | None,
+    high_px: float | None,
+    low_px: float | None,
+    close_px: float | None,
+    volume_base_asset: float | None,
+    quote_volume_usdt: float | None,
+    price_source: str = "binance_klines_strategy_v1",
+    bar_schema_version: str = "binance_strategy_bar_v1",
+) -> None:
+    """
+    Jupiter_3 only — one closed 5m row from Binance ``/api/v3/klines`` (OHLC + base volume + quote volume).
+
+    Does **not** modify ``market_bars_5m`` (V2 / Pyth rollup path unchanged).
+    """
+    computed = datetime.now(timezone.utc).replace(microsecond=0).strftime("%Y-%m-%dT%H:%M:%SZ")
+    conn.execute(
+        """
+        INSERT INTO binance_strategy_bars_5m (
+          canonical_symbol, tick_symbol, timeframe,
+          candle_open_utc, candle_close_utc, market_event_id,
+          open, high, low, close, volume_base_asset, quote_volume_usdt,
+          price_source, bar_schema_version, computed_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(market_event_id) DO UPDATE SET
+          open = excluded.open,
+          high = excluded.high,
+          low = excluded.low,
+          close = excluded.close,
+          volume_base_asset = excluded.volume_base_asset,
+          quote_volume_usdt = excluded.quote_volume_usdt,
+          price_source = excluded.price_source,
+          bar_schema_version = excluded.bar_schema_version,
+          computed_at = excluded.computed_at
+        """,
+        (
+            canonical_symbol,
+            tick_symbol,
+            timeframe,
+            candle_open_utc,
+            candle_close_utc,
+            market_event_id,
+            open_px,
+            high_px,
+            low_px,
+            close_px,
+            volume_base_asset,
+            quote_volume_usdt,
+            price_source,
+            bar_schema_version,
             computed,
         ),
     )

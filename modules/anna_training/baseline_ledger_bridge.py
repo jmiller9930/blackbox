@@ -8,7 +8,8 @@ lifecycle is added).
 **Execution trades:** baseline ``execution_trades`` rows are **lifecycle** closes (``bl_lc_…``), not per-bar.
 
 **Policy evaluations:** every evaluated tick writes/upserts ``policy_evaluations`` (including ``trade=false``),
-for backtest joins to ``market_bars_5m``. Disable with ``BASELINE_POLICY_EVALUATION_LOG=0``.
+for backtest joins to bars (``market_bars_5m`` for Jupiter_2; ``binance_strategy_bars_5m`` for Jupiter_3).
+Disable with ``BASELINE_POLICY_EVALUATION_LOG=0``.
 
 **Ingest alignment:** :func:`market_data.canonical_bar_refresh.refresh_last_closed_bar_from_ticks` calls this after
 each successful ``market_bars_5m`` upsert when ``BASELINE_LEDGER_AFTER_CANONICAL_BAR`` is on (default), so the
@@ -96,15 +97,41 @@ def run_baseline_ledger_bridge_tick(
         return {"enabled": False, "reason": "BASELINE_LEDGER_BRIDGE off"}
 
     _ensure_runtime_path()
-    from market_data.bar_lookup import fetch_latest_bar_row, fetch_recent_bars_asc
+    from market_data.bar_lookup import (
+        fetch_latest_bar_row,
+        fetch_latest_bar_row_binance_strategy,
+        fetch_recent_bars_asc,
+        fetch_recent_bars_asc_binance_strategy,
+    )
 
     m = (mode or os.environ.get("BASELINE_LEDGER_MODE") or "paper").strip().lower()
     if m not in ("live", "paper"):
         m = "paper"
 
-    bar = fetch_latest_bar_row(db_path=market_data_db_path)
-    if not bar:
-        return {"ok": False, "reason": "no_canonical_bar"}
+    from modules.anna_training.execution_ledger import (
+        BASELINE_POLICY_SLOT_JUP_V3,
+        connect_ledger,
+        ensure_execution_ledger_schema,
+        get_baseline_jupiter_policy_slot,
+    )
+
+    conn_slot = connect_ledger(execution_ledger_db_path)
+    try:
+        ensure_execution_ledger_schema(conn_slot)
+        policy_slot = get_baseline_jupiter_policy_slot(conn_slot)
+    finally:
+        conn_slot.close()
+
+    if policy_slot == BASELINE_POLICY_SLOT_JUP_V3:
+        bar = fetch_latest_bar_row_binance_strategy(db_path=market_data_db_path)
+        if not bar:
+            return {"ok": False, "reason": "no_binance_strategy_bar"}
+        bars_asc = fetch_recent_bars_asc_binance_strategy(db_path=market_data_db_path)
+    else:
+        bar = fetch_latest_bar_row(db_path=market_data_db_path)
+        if not bar:
+            return {"ok": False, "reason": "no_canonical_bar"}
+        bars_asc = fetch_recent_bars_asc(limit=280, db_path=market_data_db_path)
 
     mid = verify_market_event_id_matches_canonical_bar(bar)
     o = bar.get("open")
@@ -112,7 +139,6 @@ def run_baseline_ledger_bridge_tick(
     if o is None or c is None:
         return {"ok": False, "reason": "bar_missing_ohlc", "market_event_id": mid}
 
-    bars_asc = fetch_recent_bars_asc(limit=280, db_path=market_data_db_path)
     if not bars_asc or str(bars_asc[-1].get("market_event_id") or "") != mid:
         return {"ok": False, "reason": "bar_history_mismatch", "market_event_id": mid}
 
@@ -143,7 +169,6 @@ def run_baseline_ledger_bridge_tick(
         baseline_jupiter_open_position_key,
         connect_ledger,
         ensure_execution_ledger_schema,
-        get_baseline_jupiter_policy_slot,
         lookup_baseline_jupiter_open_state_json,
         signal_mode_for_baseline_policy_slot,
         upsert_baseline_jupiter_open_state,
@@ -167,7 +192,6 @@ def run_baseline_ledger_bridge_tick(
     conn_chk = connect_ledger(execution_ledger_db_path)
     try:
         ensure_execution_ledger_schema(conn_chk)
-        policy_slot = get_baseline_jupiter_policy_slot(conn_chk)
         raw_open, pos_key = lookup_baseline_jupiter_open_state_json(
             conn_chk, symbol=sym, timeframe=tf, mode=m
         )

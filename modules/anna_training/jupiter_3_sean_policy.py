@@ -383,7 +383,11 @@ def _evaluated_bar_snapshot(bars_asc: list[dict[str, Any]]) -> dict[str, Any]:
         snap["low"] = l
         snap["close"] = c
     snap["volume_base"] = float(vol)
-    snap["volume_source_note"] = "binance_kline_quote_volume" if vol > 0 else "missing_or_zero"
+    ps = str(lb.get("price_source") or "").strip()
+    if "binance_klines_strategy" in ps:
+        snap["volume_source_note"] = "binance_kline_base_volume" if vol > 0 else "missing_or_zero"
+    else:
+        snap["volume_source_note"] = "binance_kline_quote_volume" if vol > 0 else "missing_or_zero"
     return snap
 
 

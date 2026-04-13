@@ -53,10 +53,11 @@ BASELINE_JUPITER_POLICY_VERSION_TAG = "JUPv2"
 
 def _binance_kline_volume_ok_from_features(features: dict[str, Any] | None) -> bool:
     """
-    Sean / operator **green ball**: usable **exchange quote volume** on the evaluated bar.
+    Sean / operator **green ball**: usable **exchange volume** on the evaluated bar.
 
-    Ingest fills ``market_bars_5m.volume_base`` only from Binance klines (Pyth has no volume). Any
-    positive ``evaluated_bar.volume_base`` counts — no tick-count fallback exists in Jupiter_3.
+    Jupiter_2: ``market_bars_5m`` may use Binance **quote** volume in ``volume_base``. Jupiter_3
+    (Binance strategy bars): ``evaluated_bar.volume_base`` is **base-asset** volume from klines.
+    Any positive ``evaluated_bar.volume_base`` counts — no tick-count fallback in Jupiter_3.
     """
     if not isinstance(features, dict) or not features:
         return False
@@ -402,8 +403,9 @@ def _recompute_jupiter_narrative_for_market_event_id(
     prefetch_bars: list[dict[str, Any]] | None = None,
 ) -> tuple[str, dict[str, Any] | None, dict[str, Any] | None]:
     """
-    When ``policy_evaluations`` has no row (or empty narrative), recompute from ``market_bars_5m``
-    so the operator always sees **why this bar** for the active Jupiter slot (Sean v2 vs v3).
+    When ``policy_evaluations`` has no row (or empty narrative), recompute from stored bars so the
+    operator always sees **why this bar** for the active Jupiter slot: **``market_bars_5m``** (Jupiter_2)
+    or **``binance_strategy_bars_5m``** (Jupiter_3).
 
     Returns ``(narrative, jupiter_v3_gates, policy_features)``. Gates are only set for Jupiter_3 (v3 slot); else
     ``None``. ``policy_features`` is the evaluator feature dict (for ``binance_kline_volume_ok`` alignment with the narrative).
@@ -426,13 +428,21 @@ def _recompute_jupiter_narrative_for_market_event_id(
     st = training_state if isinstance(training_state, dict) else _load_training_state()
     _ensure_runtime_for_market_imports()
     try:
-        from market_data.bar_lookup import fetch_bars_asc_through_market_event_id, fetch_recent_bars_asc
+        from market_data.bar_lookup import (
+            fetch_bars_asc_through_market_event_id,
+            fetch_bars_asc_through_market_event_id_binance_strategy,
+            fetch_recent_bars_asc,
+            fetch_recent_bars_asc_binance_strategy,
+            jupiter3_binance_strategy_lookback,
+        )
     except Exception:
         return "", None, None
     try:
         bars: list[dict[str, Any]]
         if prefetch_bars is not None and len(prefetch_bars) > 0:
             bars = prefetch_bars
+        elif use_v3:
+            bars = fetch_recent_bars_asc_binance_strategy(db_path=market_db_path)
         else:
             bars = fetch_recent_bars_asc(limit=280, db_path=market_db_path)
         idx = next(
@@ -440,7 +450,13 @@ def _recompute_jupiter_narrative_for_market_event_id(
             None,
         )
         if idx is None or len(bars[: idx + 1]) < min_bars:
-            bars = fetch_bars_asc_through_market_event_id(mid, db_path=market_db_path, max_lookback=600)
+            if use_v3:
+                lb = jupiter3_binance_strategy_lookback()
+                bars = fetch_bars_asc_through_market_event_id_binance_strategy(
+                    mid, db_path=market_db_path, max_lookback=lb
+                )
+            else:
+                bars = fetch_bars_asc_through_market_event_id(mid, db_path=market_db_path, max_lookback=600)
             idx = next(
                 (j for j, b in enumerate(bars) if str(b.get("market_event_id") or "").strip() == mid),
                 None,
@@ -822,26 +838,36 @@ def build_jupiter_policy_snapshot(
         out["hint"] = "Set BLACKBOX_MARKET_DATA_PATH or ingest market_bars_5m."
         return out
 
+    use_v3 = policy_slot == BASELINE_POLICY_SLOT_JUP_V3
     try:
         _ensure_runtime_for_market_imports()
-        from market_data.bar_lookup import fetch_recent_bars_asc
+        from market_data.bar_lookup import (
+            fetch_recent_bars_asc,
+            fetch_recent_bars_asc_binance_strategy,
+            jupiter3_binance_strategy_lookback,
+        )
 
-        bars = fetch_recent_bars_asc(limit=280, db_path=mpath)
+        if use_v3:
+            bars = fetch_recent_bars_asc_binance_strategy(db_path=mpath)
+        else:
+            bars = fetch_recent_bars_asc(limit=280, db_path=mpath)
     except Exception as e:
         out["error"] = f"fetch_bars_failed:{e!s}"[:240]
         return out
 
     out["baseline_jupiter_policy_slot"] = policy_slot
-    use_v3 = policy_slot == BASELINE_POLICY_SLOT_JUP_V3
     min_bars = MIN_BARS_JUPITER_3 if use_v3 else MIN_BARS_JUPITER_2
     out["policy_engine"] = POLICY_ENGINE_ID_JUPITER_3 if use_v3 else POLICY_ENGINE_ID_JUPITER_2
     out["policy_catalog_id"] = JUPITER_3_CATALOG_ID if use_v3 else JUPITER_2_CATALOG_ID
     out["policy_spec_version"] = POLICY_SPEC_VERSION_JUPITER_3 if use_v3 else POLICY_SPEC_VERSION_JUPITER_2
     out["baseline_signal_mode"] = SIGNAL_MODE_JUPITER_3 if use_v3 else SIGNAL_MODE_JUPITER_2
     if use_v3:
+        out["baseline_jupiter_policy"]["strategy_bar_source"] = "binance_5m_ohlcv"
+        out["bars_lookback"] = jupiter3_binance_strategy_lookback()
         out["what_this_is"] = (
-            "Bar-derived Jupiter_3 Sean policy (EMA9/21 bias, RSI, volume spike, BOS vs prior swing, ATR expected move). "
-            "Shows whether the latest closed bar would fire a paper baseline trade."
+            "Jupiter_3 Sean policy on **Binance 5m OHLC + base volume** (not Pyth-derived candles). "
+            "EMA9/21 bias, RSI, volume spike vs full-series average, BOS vs prior swing, ATR expected move. "
+            "Paper baseline: whether the latest closed Binance bar would fire a trade."
         )
 
     out["bars_fetched"] = len(bars)
@@ -850,6 +876,11 @@ def build_jupiter_policy_snapshot(
         out["error"] = "insufficient_history"
         out["hint"] = (
             f"Need at least {min_bars} closed bars for the active Jupiter baseline policy (slot={policy_slot!r})."
+            + (
+                " Run scripts/runtime/market_data/binance_strategy_bars_sync.py to populate binance_strategy_bars_5m."
+                if use_v3
+                else ""
+            )
         )
         return out
 
@@ -863,7 +894,9 @@ def build_jupiter_policy_snapshot(
         "low": last.get("low"),
         "close": last.get("close"),
         "tick_count": last.get("tick_count"),
+        "volume_base": last.get("volume_base"),
         "price_source": str(last.get("price_source") or "") or None,
+        "strategy_bar_source": (str(last.get("strategy_bar_source")) if use_v3 else None),
     }
 
     from modules.anna_training.store import load_state as _load_training_state
@@ -1213,8 +1246,8 @@ def _event_axis_jupiter_tile_narratives(
 
     **Persisted row** is used when it matches the operator slot: ``jup_v2`` → any row;
     ``jup_v3`` → only rows with ``signal_mode`` Jupiter_3. If the slot is **JUPv3** but the
-    ledger row was written under **v2**, we **recompute** from ``market_bars_5m`` so the strip
-    does not show Supertrend text under a JUPv3 chip.
+    ledger row was written under **v2**, we **recompute** from stored bars (``binance_strategy_bars_5m``
+    for Jupiter_3, ``market_bars_5m`` for Jupiter_2) so the strip does not show Supertrend text under a JUPv3 chip.
 
     One **prefetch** of recent bars is shared across all columns to avoid N× SQLite scans per
     bundle (major latency win).
@@ -1239,7 +1272,6 @@ def _event_axis_jupiter_tile_narratives(
 
     mpath = market_db_path
     _ensure_runtime_for_market_imports()
-    from market_data.bar_lookup import fetch_recent_bars_asc
 
     use_v3 = get_baseline_jupiter_policy_slot(conn) == BASELINE_POLICY_SLOT_JUP_V3
     sm_active = SIGNAL_MODE_JUPITER_3 if use_v3 else SIGNAL_MODE_JUPITER_2
@@ -1249,7 +1281,16 @@ def _event_axis_jupiter_tile_narratives(
     prefetch: list[dict[str, Any]] | None = None
     if mpath and mpath.is_file():
         try:
-            prefetch = fetch_recent_bars_asc(limit=280, db_path=mpath)
+            from market_data.bar_lookup import (
+                fetch_recent_bars_asc,
+                fetch_recent_bars_asc_binance_strategy,
+            )
+
+            prefetch = (
+                fetch_recent_bars_asc_binance_strategy(db_path=mpath)
+                if use_v3
+                else fetch_recent_bars_asc(limit=280, db_path=mpath)
+            )
         except Exception:
             prefetch = None
 
@@ -2634,6 +2675,8 @@ def build_baseline_active_position_snapshot(
     unrealized PnL, and running duration.
     """
     from modules.anna_training.execution_ledger import (
+        BASELINE_POLICY_SLOT_JUP_V3,
+        get_baseline_jupiter_policy_slot,
         lookup_baseline_jupiter_open_state_json,
     )
     from modules.anna_training.jupiter_2_baseline_lifecycle import (
@@ -2657,9 +2700,11 @@ def build_baseline_active_position_snapshot(
     tf = (timeframe or "5m").strip() or "5m"
     md = (mode or "paper").strip().lower() or "paper"
 
+    policy_slot = "jup_v2"
     conn = connect_ledger(lp)
     try:
         ensure_execution_ledger_schema(conn)
+        policy_slot = get_baseline_jupiter_policy_slot(conn)
         raw, pk = lookup_baseline_jupiter_open_state_json(conn, symbol=sym, timeframe=tf, mode=md)
         out["position_key"] = pk
     finally:
@@ -2674,9 +2719,12 @@ def build_baseline_active_position_snapshot(
     mark_candle_close_utc: str | None = None
     if mpath and mpath.is_file():
         _ensure_runtime_for_market_imports()
-        from market_data.bar_lookup import fetch_latest_bar_row
+        from market_data.bar_lookup import fetch_latest_bar_row, fetch_latest_bar_row_binance_strategy
 
-        bar = fetch_latest_bar_row(db_path=mpath, canonical_symbol=sym)
+        if policy_slot == BASELINE_POLICY_SLOT_JUP_V3:
+            bar = fetch_latest_bar_row_binance_strategy(db_path=mpath, canonical_symbol=sym)
+        else:
+            bar = fetch_latest_bar_row(db_path=mpath, canonical_symbol=sym)
         if bar:
             try:
                 mark = float(bar.get("close"))

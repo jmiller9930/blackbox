@@ -187,8 +187,11 @@ def run_parallel_anna_strategies_tick(
     _ensure_runtime_path()
     from market_data.bar_lookup import (
         fetch_latest_bar_row,
+        fetch_latest_bar_row_binance_strategy,
         fetch_latest_market_event_id,
+        fetch_latest_market_event_id_binance_strategy,
         fetch_recent_bars_asc,
+        fetch_recent_bars_asc_binance_strategy,
     )
 
     from modules.anna_training.baseline_ledger_bridge import verify_market_event_id_matches_canonical_bar
@@ -206,13 +209,32 @@ def run_parallel_anna_strategies_tick(
         sync_strategy_registry_from_catalog,
     )
 
-    mid = fetch_latest_market_event_id(db_path=market_data_db_path)
+    conn_slot = connect_ledger(execution_ledger_db_path)
+    try:
+        ensure_execution_ledger_schema(conn_slot)
+        policy_slot_early = get_baseline_jupiter_policy_slot(conn_slot)
+    finally:
+        conn_slot.close()
+
+    use_v3_early = policy_slot_early == BASELINE_POLICY_SLOT_JUP_V3
+    if use_v3_early:
+        mid = fetch_latest_market_event_id_binance_strategy(db_path=market_data_db_path)
+        bar = fetch_latest_bar_row_binance_strategy(db_path=market_data_db_path) or {}
+        bars_asc = fetch_recent_bars_asc_binance_strategy(db_path=market_data_db_path)
+    else:
+        mid = fetch_latest_market_event_id(db_path=market_data_db_path)
+        bar = fetch_latest_bar_row(db_path=market_data_db_path) or {}
+        bars_asc = fetch_recent_bars_asc(limit=280, db_path=market_data_db_path)
+
     if not mid:
         return {"ok": False, "reason": "no_market_event_id", "trades_written": 0}
 
-    bar = fetch_latest_bar_row(db_path=market_data_db_path) or {}
     if not bar:
-        return {"ok": False, "reason": "no_canonical_bar"}
+        return {
+            "ok": False,
+            "reason": "no_binance_strategy_bar" if use_v3_early else "no_canonical_bar",
+            "trades_written": 0,
+        }
 
     try:
         verified_mid = verify_market_event_id_matches_canonical_bar(bar)
@@ -227,7 +249,6 @@ def run_parallel_anna_strategies_tick(
             "mid_bar": verified_mid,
         }
 
-    bars_asc = fetch_recent_bars_asc(limit=280, db_path=market_data_db_path)
     if not bars_asc or str(bars_asc[-1].get("market_event_id") or "") != mid:
         return {
             "ok": False,
@@ -258,7 +279,7 @@ def run_parallel_anna_strategies_tick(
 
     conn = connect_ledger(execution_ledger_db_path)
     stub_migration: dict[str, Any] = {"ok": True, "updated": 0}
-    policy_slot = "jup_v2"
+    policy_slot = policy_slot_early
     try:
         ensure_execution_ledger_schema(conn)
         stub_migration = _migrate_anna_parallel_stub_rows_to_paper(
