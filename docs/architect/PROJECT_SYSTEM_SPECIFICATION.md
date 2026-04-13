@@ -1,10 +1,43 @@
 # BLACK BOX — Project System Specification
 
+## Preface — snapshot, drift, and how to read this repo
+
+**As of 2026-04:** The platform has **grown in layers** (early “Layer 1–4” sandbox stack, Anna messaging, learning/execution scripts, lab **Docker** operator UI, Slack/OpenClaw bridges, training bundles). **No single file** was written on day one as the eternal wiring diagram; **several documents** capture overlapping truths from different eras. When they disagree on a detail, treat **`docs/blackbox_master_plan.md`** as the **roadmap / implemented-status** tie-breaker for phases, and treat **this specification** plus **runtime paths you can run** (`scripts/runtime/…`, `UIUX.Web/…`, `modules/…`) as **evidence of what is actually in the tree**.
+
+If you need **one sentence:** BLACK BOX is a **governance-heavy trading intelligence codebase** with **multiple operator surfaces** (legacy read-only sandbox dashboard, lab **UIUX.Web** API + dashboard, Telegram/Slack messaging), **not** a single shrink-wrapped “product install” with one installer.
+
+---
+
 ## Purpose
 
 This document gives a high-level, architect-turnover view of what BLACK BOX is, what it is not, and what is currently implemented.
 
 It is intended to prevent role/mission confusion during handoff.
+
+---
+
+## Where the “whole system” is documented (stitch map)
+
+Use this table to find **which doc answers which question**. Everything below is **in-repo**; paths are relative to the repository root.
+
+| Question | Start here | Notes |
+|----------|----------------|-------|
+| **Roadmap, phase status, what is “closed” vs next** | [`../blackbox_master_plan.md`](../blackbox_master_plan.md) | Single source of truth for **phase narrative**; keep aligned with reality. |
+| **Task spine / engineering checklist (large)** | [`development_plan.md`](development_plan.md) | Deep slice plans; not a substitute for master plan status. |
+| **Operational “what can I run today” (sandbox / layers lens)** | [`../blackbox_system_usage_current.md`](../blackbox_system_usage_current.md) | Emphasizes **Playground, legacy operator dashboard, approval** paths; **distinct** from lab **UIUX.Web** dashboard (see master plan). |
+| **Lab operator web (Anna training / bundle / trade chain)** | [`../blackbox_master_plan.md`](../blackbox_master_plan.md) (search *Operator web dashboard*), [`development_plan.md`](development_plan.md) (Pillar 1), code under **`UIUX.Web/`** + **`modules/anna_training/`** | Typically deployed via **`UIUX.Web/docker-compose.yml`** on **clawbot** per project workflow docs; **not** the same as `scripts/runtime/operator_dashboard/`. |
+| **Messaging ingress (Telegram / Slack), routing, grounding** | This spec (sections below), [`global_clawbot_proof_standard.md`](global_clawbot_proof_standard.md), [`../runtime/execution_context.md`](../runtime/execution_context.md) | Proof often requires **clawbot** host, not only a Mac clone. |
+| **Slack → OpenClaw conversational operator (program)** | [`slack_conversational_operator/canonical_development_plan.md`](slack_conversational_operator/canonical_development_plan.md) + LDD in the same folder | Future/concurrent slice; **not** all of BBX is implied by Anna messaging closure alone. |
+| **Local Mac vs clawbot vs Git** | [`local_remote_development_workflow.md`](local_remote_development_workflow.md) | Avoids “SSH works therefore I edited the server” confusion. |
+| **Directive contracts and closure** | [`directives/README.md`](directives/README.md), [`directives/directive_execution_log.md`](directives/directive_execution_log.md) | Work packages and evidence trail. |
+
+**Installed / runtime reality (high level):**
+
+- **Repository:** Python package layout, **`scripts/runtime/`** CLIs, **`modules/`** libraries, tests under **`tests/`**.
+- **Primary lab host for mandated proofs:** **`clawbot.a51.corp`**, canonical tree **`~/blackbox`** — see **`execution_context`** and proof standard.
+- **Sandbox read-only dashboard (older stack):** `scripts/runtime/operator_dashboard/` — local WSGI, sandbox DB.
+- **Lab operator stack (Docker):** `UIUX.Web/` — **`api_server.py`**, **`dashboard.html`**, nginx image; **rebuild/restart** rules apply when operator-visible assets change.
+- **Messaging:** Telegram and Slack paths per master plan and messaging modules; OpenClaw bridge where bridged — not identical to the BBX conversational operator program doc (different scope envelope).
 
 ---
 

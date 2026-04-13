@@ -6,6 +6,8 @@ This document explains how the BLACKBOX system works **as built today**, what is
 
 This is **not future design** — this is **current operational reality**. Roadmap (including Phase 5+) is in [`blackbox_master_plan.md`](blackbox_master_plan.md).
 
+**Scope note:** This file uses the **Layer 1–4** lens (Playground, **legacy** operator dashboard under `scripts/runtime/operator_dashboard/`, approval UI). The lab **operator web** stack (**`UIUX.Web/`**, Docker on clawbot, **Anna training / bundle** APIs) is **separate** and is described in the master plan (*Operator web dashboard*) and in [`architect/PROJECT_SYSTEM_SPECIFICATION.md`](architect/PROJECT_SYSTEM_SPECIFICATION.md) under **Where the “whole system” is documented**. Read both if you need the full “what is installed where” picture.
+
 ---
 
 ## 1. System overview
