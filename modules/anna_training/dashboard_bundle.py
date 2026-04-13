@@ -268,6 +268,7 @@ from modules.anna_training.execution_ledger import (
     get_baseline_jupiter_policy_slot,
     SIGNAL_MODE_JUPITER_2,
     SIGNAL_MODE_JUPITER_3,
+    signal_mode_for_baseline_policy_slot,
 )
 from modules.anna_training.quantitative_evaluation_layer.constants import (
     LIFECYCLE_ARCHIVED,
@@ -360,6 +361,80 @@ def _compact_baseline_ledger_last(raw: Any) -> dict[str, Any] | None:
     if isinstance(feat, dict):
         out["features"] = feat
     return out if len(out) > 1 else None
+
+
+def _recompute_jupiter_narrative_for_market_event_id(
+    market_event_id: str,
+    market_db_path: Path,
+    *,
+    policy_slot: str,
+    training_state: dict[str, Any] | None,
+) -> str:
+    """
+    When ``policy_evaluations`` has no row (or empty narrative), recompute from ``market_bars_5m``
+    so the operator always sees **why this bar** for the active Jupiter slot (Sean v2 vs v3).
+    """
+    from modules.anna_training.jupiter_3_sean_policy import MIN_BARS as MIN_BARS_JUPITER_3
+    from modules.anna_training.sean_jupiter_baseline_signal import (
+        MIN_BARS as MIN_BARS_JUPITER_2,
+        evaluate_sean_jupiter_baseline_v1,
+        evaluate_sean_jupiter_baseline_v3,
+        format_baseline_jupiter_tile_narrative,
+    )
+    from modules.anna_training.store import load_state as _load_training_state
+
+    mid = str(market_event_id or "").strip()
+    if not mid or not market_db_path.is_file():
+        return ""
+    use_v3 = policy_slot == BASELINE_POLICY_SLOT_JUP_V3
+    min_bars = MIN_BARS_JUPITER_3 if use_v3 else MIN_BARS_JUPITER_2
+    sm = signal_mode_for_baseline_policy_slot(policy_slot)
+    st = training_state if isinstance(training_state, dict) else _load_training_state()
+    _ensure_runtime_for_market_imports()
+    try:
+        from market_data.bar_lookup import fetch_bars_asc_through_market_event_id, fetch_recent_bars_asc
+    except Exception:
+        return ""
+    try:
+        bars = fetch_recent_bars_asc(limit=280, db_path=market_db_path)
+        idx = next(
+            (j for j, b in enumerate(bars) if str(b.get("market_event_id") or "").strip() == mid),
+            None,
+        )
+        if idx is None or len(bars[: idx + 1]) < min_bars:
+            bars = fetch_bars_asc_through_market_event_id(mid, db_path=market_db_path, max_lookback=600)
+            idx = next(
+                (j for j, b in enumerate(bars) if str(b.get("market_event_id") or "").strip() == mid),
+                None,
+            )
+        if idx is None or len(bars[: idx + 1]) < min_bars:
+            return ""
+        sub = bars[: idx + 1]
+        if use_v3:
+            sig = evaluate_sean_jupiter_baseline_v3(
+                bars_asc=sub,
+                training_state=st,
+                ledger_db_path=default_execution_ledger_path(),
+            )
+        else:
+            sig = evaluate_sean_jupiter_baseline_v1(
+                bars_asc=sub,
+                training_state=st,
+                ledger_db_path=default_execution_ledger_path(),
+            )
+        sf = dict(sig.features) if isinstance(sig.features, dict) else {}
+        pb = sf.get("policy_blockers")
+        pbl = [str(x) for x in pb] if isinstance(pb, list) else None
+        return format_baseline_jupiter_tile_narrative(
+            signal_mode=sm,
+            features=sf,
+            reason_code=str(sig.reason_code or ""),
+            trade=bool(sig.trade),
+            side=str(sig.side or "flat"),
+            policy_blockers=pbl,
+        )
+    except Exception:
+        return ""
 
 
 def build_jupiter_policy_snapshot(
@@ -532,6 +607,13 @@ def build_jupiter_policy_snapshot(
                 if emid:
                     pol_ent = fetch_baseline_policy_evaluation_for_market_event(conn, emid)
                     entry_nar = _format_jupiter_tile_narrative_from_policy_row(pol_ent)
+                    if not (entry_nar or "").strip():
+                        entry_nar = _recompute_jupiter_narrative_for_market_event_id(
+                            emid,
+                            mpath,
+                            policy_slot=policy_slot,
+                            training_state=_st,
+                        )
                 out["baseline_lifecycle"] = {
                     "position_open": True,
                     "trade_id": pos.trade_id,

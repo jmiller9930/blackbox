@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Mock — Jupiter_3 policy gates on baseline HOLDING tile (Sean policy)</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    :root { --panel-border: #e2e8f0; --muted: #64748b; --text: #0f172a; }
+    body { font-family: system-ui, sans-serif; margin: 1rem; color: var(--text); background: #f8fafc; max-width: 36rem; }
+    h1 { font-size: 1rem; margin: 0 0 0.5rem; }
+    p.lead { font-size: 0.8rem; color: var(--muted); margin: 0 0 1rem; line-height: 1.45; }
+    .tc-baseline-live-tile {
+      border: 1px solid var(--panel-border);
+      border-radius: 8px;
+      padding: 0.5rem 0.6rem;
+      background: #fff;
+      margin-bottom: 0;
+    }
+    .tc-jup-policy-chip {
+      display: inline-block;
+      font-size: 0.58rem;
+      font-weight: 700;
+      letter-spacing: 0.03em;
+      background: linear-gradient(180deg, #e2e8f0, #cbd5e1);
+      border: 1px solid #94a3b8;
+      border-radius: 3px;
+      padding: 0.06rem 0.32rem;
+      margin-bottom: 0.35rem;
+    }
+    .tc-bl-phase.holding {
+      font-size: 0.75rem;
+      font-weight: 800;
+      color: #1d4ed8;
+      margin-bottom: 0.35rem;
+    }
+    .tc-bl-grid {
+      display: grid;
+      grid-template-columns: auto 1fr;
+      gap: 0.15rem 0.5rem;
+      font-size: 0.68rem;
+    }
+    .tc-bl-grid .k { color: var(--muted); text-transform: uppercase; font-size: 0.58rem; }
+    .tc-bl-grid .v { font-weight: 600; }
+    .tc-bl-grid .mono { font-family: ui-monospace, monospace; font-size: 0.62rem; word-break: break-all; }
+    .tc-jup-gates-section {
+      margin-top: 0.55rem;
+      padding-top: 0.45rem;
+      border-top: 1px solid var(--panel-border);
+    }
+    .tc-jup-entry-wrap {
+      margin: 0;
+      padding: 0.35rem 0.4rem;
+      border-radius: 6px;
+      border: 1px solid #bae6fd;
+      background: linear-gradient(180deg, #f0f9ff 0%, #fff 100%);
+    }
+    .tc-jup-entry-h {
+      font-size: 0.68rem;
+      font-weight: 700;
+      color: #0369a1;
+      margin: 0 0 0.25rem;
+    }
+    .tc-jup-gates-h {
+      font-size: 0.62rem;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--muted);
+      font-weight: 700;
+      margin: 0 0 0.3rem;
+    }
+    .tc-tile-narr-wrap.tc-tile-narr-baseline {
+      border-left: 3px solid #475569;
+      background: #f1f5f9;
+      display: flex;
+      flex-direction: column;
+      gap: 0.28rem;
+      padding: 0.35rem 0.4rem;
+    }
+    .tc-tile-narr-baseline .tc-narr-row {
+      display: grid;
+      grid-template-columns: 0.55rem auto 1fr;
+      column-gap: 0.3rem;
+      padding: 0.35rem 0.45rem;
+      border-radius: 6px;
+      border-left: 4px solid #94a3b8;
+      background: #f1f5f9;
+      font-size: 0.62rem;
+    }
+    .tc-tile-narr-baseline .tc-narr-ok { border-left-color: #059669; background: #d1fae5; }
+    .tc-tile-narr-baseline .tc-narr-stop { border-left-color: #e11d48; background: #ffe4e6; }
+    .tc-tile-narr-baseline .tc-narr-gate { border-left-color: #b91c1c; background: #fecaca; font-weight: 600; }
+    .tc-tile-narr-baseline .tc-narr-neutral { border-left-color: #94a3b8; background: #f1f5f9; }
+    .lab { color: #334155; font-size: 0.58rem; text-transform: uppercase; font-weight: 600; }
+    .tc-tile-val { color: #0f172a; }
+  </style>
+</head>
+<body>
+  <h1>Baseline HOLDING tile — trade mechanics first, Sean Jupiter_3 gates below</h1>
+  <p class="lead">
+    Same layout as <code>dashboard.html</code> <code>buildBaselineLiveTileHtml</code>: position grid on top;
+    then <strong>Why we entered</strong> (entry <code>market_event_id</code> policy text from ledger or recomputed from bars);
+    then <strong>Policy — this closed bar</strong> (latest evaluated bar for the active slot). Colors use the same
+    baseline lane heuristics as v2 (green / rose / red) extended for Jupiter_3 <code>key=value</code> lines from
+    <code>_format_jupiter_3_operator_narrative</code>.
+  </p>
+
+  <div class="tc-baseline-live-tile">
+    <div class="tc-jup-policy-chip">JUPv3</div>
+    <div class="tc-bl-phase holding">HOLDING</div>
+    <div class="tc-bl-grid">
+      <span class="k">trade_id</span><span class="v mono">bl_lc_ae8e6a8b…</span>
+      <span class="k">side</span><span class="v">LONG</span>
+      <span class="k">running</span><span class="v">15m 16s</span>
+      <span class="k">entry bar</span><span class="v mono">SOL-PERP_5m_2026-04-13T12:30:00Z</span>
+    </div>
+  </div>
+
+  <div class="tc-jup-gates-section">
+    <div class="tc-jup-entry-wrap">
+      <div class="tc-jup-entry-h">Why we entered — entry bar SOL-PERP_5m_2026-04-13T12:30:00Z</div>
+      <div class="tc-tile-narr-wrap tc-tile-narr-baseline">
+        <div class="tc-narr-row tc-narr-neutral"><span>•</span><span class="lab">policy</span><span class="tc-tile-val">Jupiter_3 (EMA9/21, BOS, volume spike, expected_move gate)</span></div>
+        <div class="tc-narr-row tc-narr-neutral"><span>•</span><span class="lab">catalog_id</span><span class="tc-tile-val">jupiter_3_sean_v1</span></div>
+        <div class="tc-narr-row tc-narr-ok"><span>•</span><span class="lab">decision</span><span class="tc-tile-val">True side=long reason_code=policy_approved_long</span></div>
+        <div class="tc-narr-row tc-narr-neutral"><span>•</span><span class="lab">ema9</span><span class="tc-tile-val">81.42</span></div>
+        <div class="tc-narr-row tc-narr-ok"><span>•</span><span class="lab">bullish_bias</span><span class="tc-tile-val">True</span></div>
+        <div class="tc-narr-row tc-narr-ok"><span>•</span><span class="lab">long_bos</span><span class="tc-tile-val">True</span></div>
+        <div class="tc-narr-row tc-narr-ok"><span>•</span><span class="lab">volume_spike</span><span class="tc-tile-val">True</span></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="tc-jup-gates-section">
+    <div class="tc-jup-gates-h">Policy — this closed bar (active Jupiter slot)</div>
+    <div class="tc-tile-narr-wrap tc-tile-narr-baseline">
+      <div class="tc-narr-row tc-narr-stop"><span>•</span><span class="lab">decision</span><span class="tc-tile-val">False side=flat reason_code=no_signal</span></div>
+      <div class="tc-narr-row tc-narr-neutral"><span>•</span><span class="lab">ema9</span><span class="tc-tile-val">81.55</span></div>
+    </div>
+  </div>
+</body>
+</html>
