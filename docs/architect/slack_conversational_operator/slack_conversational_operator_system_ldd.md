@@ -512,8 +512,181 @@ Each LDD tool needs **exact** Python/HTTP binding, **inputs**, and **error shape
 
 ---
 
+## 18. End-to-end process map (complete before implementation)
+
+**Purpose:** One place that maps **every hop** from operator message to reply, including **hosts**, **repos**, **exit codes**, and **deployment order**. Implementation must not start until this section is accepted (or explicitly amended).
+
+**Primary product path (per §17):** Slack → **OpenClaw gateway** on **clawbot** → **BlackBox Python** (`slack_anna_ingress` / operator router) → tools → reply → OpenClaw → Slack.
+
+**Secondary path (parity, not MVP):** Slack → **Bolt Socket Mode** (`slack_adapter.py`) → same operator router module (future wiring).
+
+---
+
+### 18.1 Actors and data stores
+
+| Actor | Role |
+|-------|------|
+| **Slack API** | Delivers messages; receives replies (threaded or channel). |
+| **OpenClaw gateway** | Node process on clawbot; Slack adapter; streaming/draft; invokes BlackBox bridge script. |
+| **BlackBox repo** (`~/blackbox`) | Operator router, tools, SQLite thread state, audit logs, config files. |
+| **Ollama (optional)** | Intent/slot JSON and doc-summary LLM when enabled; CI uses mocks. |
+| **SQLite** | `operator_slack_threads` (§17.6); existing ledger DBs unchanged by this LDD. |
+
+---
+
+### 18.2 Ingress paths (two doors, one interpreter)
+
+| Path | Entry | When used |
+|------|--------|-----------|
+| **A — OpenClaw (primary)** | Patched `dispatch.ts` in **`~/openclaw`** calls `python3 …/slack_anna_ingress.py` (and eventually passes **context JSON** — see §18.3). | Production operator Slack wired through OpenClaw. |
+| **B — Bolt (secondary)** | `messaging_interface/slack_adapter.py` | Direct Socket Mode from BlackBox; **not** required for MVP if all Slack goes through OpenClaw. |
+
+**Contract:** Both paths must eventually call the **same** `messaging_interface/operator_router/` implementation (§17.1). MVP may ship **path A only**.
+
+---
+
+### 18.3 OpenClaw → BlackBox bridge (current vs target)
+
+**Current (repo today):**
+
+1. `dispatch.ts` runs `slack_anna_ingress.py` with **one string argv** (message text after mention strip).
+2. Exit `0` + stdout → deliver reply as Anna; exit `2` → fall through to **embedded model** in gateway.
+3. Greeting short-circuit and explicit-Anna routing in `slack_anna_ingress.py`.
+
+**Target (full operator LDD):**
+
+1. Gateway must supply **`SLACK_OPERATOR_CONTEXT_JSON`** (or stdin JSON) with at least: `text`, `team_id`, `channel_id`, `thread_ts`, `user_id` (§17.1).
+2. `slack_anna_ingress.py` (or thin wrapper) loads context → calls **operator router** (§7–10).
+3. Router returns **handled** (stdout = reply text, exit `0`) or **decline** (exit `2`) so embedded model can run for out-of-scope chat.
+
+**Gap to close before E2E proof:** A **small patch** to OpenClaw `dispatch.ts` on clawbot (same pattern as `apply_openclaw_dispatch_anna_ingress.py`) to set env and/or argv when invoking Python. BlackBox repo can ship **patch instructions** or an **idempotent apply script**; the TypeScript file lives **outside** this repo.
+
+---
+
+### 18.4 Single-turn processing (Python, ordered steps)
+
+Order is **normative** for audit consistency:
+
+1. **Generate `trace_id`** (UUID v4) at router entry (§17.2).
+2. **Rate limit** check (per user/hour; §17.12).
+3. **Workspace allowlist** (if env set; §17.12).
+4. **Load thread row** from `operator_thread_state` by `thread_key` (§17.6); create if missing.
+5. **Greeting short-circuit** (unchanged deterministic reply, if desired) before heavy work.
+6. **Strip named invoke** (`Anna,`, `DATA,`, etc.) → set `presentation_route` (§4, §17.7).
+7. **Intent + slots** (rules-first + LLM JSON; §17.4) → may emit **clarify** only (no tools).
+8. **Tool phase** (class A): run registry calls; **no** assistant text before tools complete (§17.1). Class B: `doc_project_qa` → search/read allowlist → LLM summarization with excerpts only (§7.3).
+9. **Update thread row** (anchors, last tool result refs, clarification flags).
+10. **Append audit log** (one JSON line per §10).
+11. **Format** reply (persona overlay only; §5).
+12. **Return** stdout to caller; exit `0` if handled.
+
+**If router declines** (not in scope for operator MVP): exit `2`, empty or minimal stdout per existing bridge contract.
+
+---
+
+### 18.5 Reply path back to Slack (OpenClaw)
+
+1. Python stdout is **plain text** consumed by gateway.
+2. **Persona enforcement** may run in **OpenClaw** (`run_slack_persona_enforce.py` / send path) or be mirrored in **BlackBox** before stdout — **one** place must enforce; avoid double-stripping. §17 sets `SLACK_PERSONA_ROUTE` from router result.
+3. **Architect diagnostics blocks** (`slack_architect_diagnostics.py` — optional by env in §17.11) are **Bolt-era**; OpenClaw path may omit unless wired.
+
+---
+
+### 18.6 Sequence (Mermaid — OpenClaw primary)
+
+```mermaid
+sequenceDiagram
+  participant User as Operator
+  participant Slack as Slack API
+  participant GW as OpenClaw gateway
+  participant Py as slack_anna_ingress + operator_router
+  participant DB as operator_thread SQLite
+  participant Tools as Tool registry
+  participant Ledger as Ledger bundle APIs
+
+  User->>Slack: message in channel/thread
+  Slack->>GW: event
+  GW->>Py: spawn + context JSON + text
+  Py->>DB: load thread state
+  Py->>Py: intent slots + clarify
+  alt tools needed
+    Py->>Tools: tool calls
+    Tools->>Ledger: in-process or HTTP
+    Ledger-->>Tools: JSON
+    Tools-->>Py: JSON
+  end
+  Py->>DB: save anchors + TTL
+  Py->>Py: audit JSONL line
+  Py-->>GW: stdout reply text exit 0
+  GW->>Slack: post reply
+  Slack-->>User: sees message
+```
+
+---
+
+### 18.7 Configuration and secrets (runtime)
+
+| Item | Source | Notes |
+|------|--------|------|
+| Slack tokens | OpenClaw env / config | Not logged by BlackBox (§17.12). |
+| `SLACK_OPERATOR_CONTEXT_JSON` | Set by gateway | **Must** be implemented by OpenClaw patch for threaded operator UX. |
+| `SLACK_OPERATOR_ALLOWED_WORKSPACE_IDS` | BlackBox env | Empty = skip check (dev). |
+| `OPERATOR_ROUTER_MODEL` | Optional | Overrides default Ollama model for intent. |
+| `FOREMAN_V2_UNIFIED_LOG_PATH` | Optional | Audit sink alternative (§17.9). |
+| Doc allowlist / clarify defaults | `config/` files (§17.8, §17.10) | Repo-relative on clawbot after `git pull`. |
+
+---
+
+### 18.8 Deployment order (clawbot, canonical)
+
+Execute in order **before** claiming operator-visible E2E:
+
+1. **`git pull`** in `~/blackbox` on clawbot (commit under test).
+2. **OpenClaw:** apply or verify `dispatch.ts` patch for **context JSON** + bridge invocation; **`pnpm build`** in `~/openclaw` if TS changed.
+3. **Restart** `openclaw-gateway` (or project-standard service).
+4. **Python deps** on clawbot if new packages added (`requirements.txt`).
+5. **Config:** create `config/operator_doc_allowlist.txt`, `config/operator_clarify_defaults.yaml` if missing (defaults).
+6. **SQLite:** ensure `data/sqlite/` (or chosen path) writable for thread DB.
+7. **Smoke:** send a Slack message that **must** hit tools (e.g. wallet status); verify **audit line** and correct reply.
+
+**Dashboard/UI:** Not applicable for this system (Slack-only per LDD).
+
+---
+
+### 18.9 Verification ladder (proof, not “done” until E2E passes)
+
+| Level | What proves | Host |
+|-------|-------------|------|
+| **L1** | Unit tests: router, tools mocked, golden intents | CI / dev |
+| **L2** | SQLite thread store + audit file format | CI / dev |
+| **L3** | `slack_anna_ingress` with fake env JSON on clawbot | **clawbot** |
+| **L4** | Live Slack thread: reply + audit + tool_calls in log | **clawbot** + operator |
+
+---
+
+### 18.10 Blockers to “entire process” completeness
+
+| Blocker | Owner | Resolution |
+|---------|--------|------------|
+| **Context JSON not passed from gateway** | OpenClaw + BlackBox | Patch `dispatch.ts` + document in apply script or `scripts/openclaw/` README. |
+| **Persona enforcement duplicated** | Engineering | Decide single enforcement point (§18.5). |
+| **Bolt parity** | Optional | Defer until path A stable. |
+
+---
+
+### 18.11 Implementation readiness gate
+
+Before starting implementation work:
+
+- [ ] **§18** read and accepted (or amended with Architect sign-off).
+- [ ] **OpenClaw patch** plan agreed: who edits `dispatch.ts`, when, and how rollback works.
+- [ ] **MVP scope:** §12 items **1–6** vs **+7** (doc QA) agreed for first merge.
+
+---
+
 ## Changelog
 
 - **2026-04-10:** Moved document into `docs/architect/slack_conversational_operator/`; added §16 Implementation gaps for implementer handoff.
 - **2026-04-13:** Added §17 Gap resolutions (recommended v1 defaults) to answer §16 open items for implementation.
 - **2026-04-13:** Aligned §17.4 schema path with §17.1 package location (`messaging_interface/operator_router/`).
+- **2026-04-13:** Added §18 End-to-end process map (deployment order, sequences, readiness gate).
