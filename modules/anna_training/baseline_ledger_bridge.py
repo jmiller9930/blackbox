@@ -442,6 +442,7 @@ def run_baseline_ledger_bridge_tick(
         atr_entry=float(atr_e),
         reason_code=str(sig.reason_code or ""),
         signal_features=dict(sig.features) if sig.features else {},
+        signal_mode=sm,
     )
 
     feat_open = dict(sig.features) if sig.features else {}

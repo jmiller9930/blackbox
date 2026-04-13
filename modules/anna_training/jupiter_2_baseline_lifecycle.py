@@ -10,7 +10,10 @@ import math
 from dataclasses import dataclass, field, replace
 from typing import Any, Literal
 
-from modules.anna_training.execution_ledger import compute_pnl_usd
+from modules.anna_training.execution_ledger import (
+    SIGNAL_MODE_JUPITER_3,
+    compute_pnl_usd,
+)
 from modules.anna_training.jupiter_2_sean_policy import calculate_atr
 
 SL_ATR_MULT = 1.6
@@ -46,8 +49,12 @@ class BaselineOpenPosition:
     reason_code_at_entry: str = ""
     signal_features_snapshot: dict[str, Any] = field(default_factory=dict)
     size_source: str = ""
+    #: Immutable UI snapshot at entry (not recomputed on refresh). V3: optional gate table in parallel.
+    entry_policy_narrative_snapshot: str = ""
+    entry_jupiter_v3_gates_snapshot: dict[str, Any] | None = None
 
     def to_json_dict(self) -> dict[str, Any]:
+        d_gates = self.entry_jupiter_v3_gates_snapshot
         return {
             "trade_id": self.trade_id,
             "side": self.side,
@@ -69,10 +76,14 @@ class BaselineOpenPosition:
             "reason_code_at_entry": self.reason_code_at_entry,
             "signal_features_snapshot": dict(self.signal_features_snapshot),
             "size_source": self.size_source,
+            "entry_policy_narrative_snapshot": self.entry_policy_narrative_snapshot,
+            "entry_jupiter_v3_gates_snapshot": dict(d_gates) if isinstance(d_gates, dict) else None,
         }
 
     @classmethod
     def from_json_dict(cls, d: dict[str, Any]) -> BaselineOpenPosition:
+        _raw_gates = d.get("entry_jupiter_v3_gates_snapshot")
+        _gates_parsed = dict(_raw_gates) if isinstance(_raw_gates, dict) else None
         return cls(
             trade_id=str(d["trade_id"]),
             side=str(d["side"]),
@@ -94,6 +105,8 @@ class BaselineOpenPosition:
             reason_code_at_entry=str(d.get("reason_code_at_entry") or ""),
             signal_features_snapshot=dict(d.get("signal_features_snapshot") or {}),
             size_source=str(d.get("size_source") or ""),
+            entry_policy_narrative_snapshot=str(d.get("entry_policy_narrative_snapshot") or ""),
+            entry_jupiter_v3_gates_snapshot=_gates_parsed,
         )
 
 
@@ -364,8 +377,13 @@ def open_position_from_signal(
     atr_entry: float,
     reason_code: str,
     signal_features: dict[str, Any],
+    signal_mode: str = "",
 ) -> BaselineOpenPosition:
-    """Entry price = **close** of the signal bar. ``size`` = policy notional / entry (see baseline helper)."""
+    """Entry price = **close** of the signal bar. ``size`` = policy notional / entry (see baseline helper).
+
+    ``entry_policy_narrative_snapshot`` / ``entry_jupiter_v3_gates_snapshot`` are set **once** at entry
+    for stable dashboard display (no per-refresh recompute).
+    """
     c = float(bar["close"])
     op_utc = str(bar.get("candle_open_utc") or "").strip()
     sl, tp = initial_sl_tp(entry=c, atr_entry=atr_entry, side=side)
@@ -382,6 +400,29 @@ def open_position_from_signal(
         notional = float(psh["notional_usd"]) if psh.get("notional_usd") is not None else None
 
     sz, sz_src = baseline_lifecycle_base_size_from_signal_features(entry_price=c, signal_features=ps)
+
+    sm = (signal_mode or "").strip()
+    nar_snap = ""
+    gates_snap: dict[str, Any] | None = None
+    if sm == SIGNAL_MODE_JUPITER_3:
+        jn = ps.get("jupiter_policy_narrative")
+        if isinstance(jn, str) and jn.strip():
+            nar_snap = jn.strip()
+        jg = ps.get("jupiter_v3_gates")
+        gates_snap = dict(jg) if isinstance(jg, dict) else None
+    elif sm:
+        from modules.anna_training.sean_jupiter_baseline_signal import format_baseline_jupiter_tile_narrative
+
+        pb = ps.get("policy_blockers")
+        pbl = [str(x) for x in pb] if isinstance(pb, list) else None
+        nar_snap = format_baseline_jupiter_tile_narrative(
+            signal_mode=sm,
+            features=ps,
+            reason_code=str(reason_code or ""),
+            trade=True,
+            side=str(side or "flat"),
+            policy_blockers=pbl,
+        ).strip()
 
     return BaselineOpenPosition(
         trade_id=trade_id,
@@ -404,4 +445,6 @@ def open_position_from_signal(
         reason_code_at_entry=str(reason_code or ""),
         signal_features_snapshot=ps,
         size_source=str(sz_src),
+        entry_policy_narrative_snapshot=nar_snap,
+        entry_jupiter_v3_gates_snapshot=gates_snap,
     )

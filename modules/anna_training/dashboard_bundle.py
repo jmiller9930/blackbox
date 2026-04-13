@@ -267,6 +267,7 @@ from modules.anna_training.execution_ledger import (
     ensure_execution_ledger_schema,
     fetch_baseline_policy_evaluation_for_market_event,
     get_baseline_jupiter_policy_slot,
+    lookup_baseline_jupiter_open_state_json,
     SIGNAL_MODE_JUPITER_2,
     SIGNAL_MODE_JUPITER_3,
     signal_mode_for_baseline_policy_slot,
@@ -461,6 +462,41 @@ def _jupiter_v3_gates_from_policy_row(pol_e: dict[str, Any] | None) -> dict[str,
     return jg if isinstance(jg, dict) else None
 
 
+def _entry_snapshot_from_persisted_open_position(
+    conn: Any,
+    entry_mid: str,
+) -> tuple[str, dict[str, Any] | None] | None:
+    """
+    Prefer **immutable entry snapshots** stored on ``BaselineOpenPosition`` at position open
+    (not recomputed each bundle refresh).
+    """
+    import json
+
+    from modules.anna_training.jupiter_2_baseline_lifecycle import BaselineOpenPosition
+
+    em = str(entry_mid or "").strip()
+    if not em:
+        return None
+    sym, tf = _symbol_tf_from_market_event_id(em)
+    sym = (sym or "SOL-PERP").strip() or "SOL-PERP"
+    tf = (tf or "5m").strip() or "5m"
+    raw, _pk = lookup_baseline_jupiter_open_state_json(conn, symbol=sym, timeframe=tf, mode="paper")
+    if not raw:
+        return None
+    try:
+        pos = BaselineOpenPosition.from_json_dict(json.loads(raw))
+    except (json.JSONDecodeError, KeyError, TypeError, ValueError):
+        return None
+    if str(pos.entry_market_event_id or "").strip() != em:
+        return None
+    nar = (pos.entry_policy_narrative_snapshot or "").strip()
+    eg = pos.entry_jupiter_v3_gates_snapshot
+    gates: dict[str, Any] | None = dict(eg) if isinstance(eg, dict) else None
+    if nar or gates is not None:
+        return nar, gates
+    return None
+
+
 def _baseline_entry_snapshot_for_active_slot(
     conn: Any,
     entry_mid: str,
@@ -479,6 +515,11 @@ def _baseline_entry_snapshot_for_active_slot(
     em = str(entry_mid or "").strip()
     if not em:
         return "", None
+    persisted = _entry_snapshot_from_persisted_open_position(conn, em)
+    if persisted is not None:
+        pnar, pgates = persisted
+        if pnar or pgates is not None:
+            return pnar, pgates
     policy_slot = get_baseline_jupiter_policy_slot(conn)
     st = training_state if isinstance(training_state, dict) else None
     if st is None:
@@ -687,9 +728,10 @@ def build_jupiter_policy_snapshot(
                     entry=pos.entry_price, mark=mark, size=pos.size, side=pos.side
                 )
                 emid = str(pos.entry_market_event_id or "").strip()
-                entry_nar = ""
-                entry_gates: dict[str, Any] | None = None
-                if emid:
+                entry_nar = (pos.entry_policy_narrative_snapshot or "").strip()
+                eg = pos.entry_jupiter_v3_gates_snapshot
+                entry_gates: dict[str, Any] | None = dict(eg) if isinstance(eg, dict) else None
+                if emid and (not entry_nar) and entry_gates is None:
                     entry_nar, entry_gates = _baseline_entry_snapshot_for_active_slot(
                         conn, emid, mpath, _st, prefetch_bars=bars
                     )
@@ -2468,6 +2510,12 @@ def build_baseline_active_position_snapshot(
             "reason_code_at_entry": pos.reason_code_at_entry,
             "last_processed_market_event_id": pos.last_processed_market_event_id,
             "entry_candle_open_utc": pos.entry_candle_open_utc,
+            "entry_jupiter_tile_narrative": (pos.entry_policy_narrative_snapshot or "").strip() or None,
+            "entry_jupiter_v3_gates": (
+                dict(pos.entry_jupiter_v3_gates_snapshot)
+                if isinstance(pos.entry_jupiter_v3_gates_snapshot, dict)
+                else None
+            ),
         }
     )
     return out
@@ -2497,6 +2545,8 @@ def _baseline_lifecycle_for_dashboard_from_active_snapshot(snap: dict[str, Any])
         # For trade-chain anchor column (evaluated bar) when position_open — matches dashboard.html baselineOpenAnchorColumnIndex.
         "mark_market_event_id": snap.get("mark_market_event_id"),
         "last_processed_market_event_id": snap.get("last_processed_market_event_id"),
+        "entry_jupiter_tile_narrative": snap.get("entry_jupiter_tile_narrative"),
+        "entry_jupiter_v3_gates": snap.get("entry_jupiter_v3_gates"),
     }
 
 
