@@ -603,6 +603,7 @@ def test_build_baseline_trades_report_schema() -> None:
     rep = build_baseline_trades_report(limit=10, scope="all")
     assert rep.get("schema") == BASELINE_TRADES_REPORT_SCHEMA
     assert "rows" in rep and isinstance(rep["rows"], list)
+    assert "trades_by_trade_id" in rep and isinstance(rep["trades_by_trade_id"], dict)
     assert "meta" in rep and isinstance(rep["meta"], dict)
     assert rep["meta"].get("scope") == "all"
     assert rep["meta"].get("report_note")
@@ -621,6 +622,20 @@ def test_build_baseline_trades_report_schema() -> None:
         assert "entry_market_event_id" in row
         assert "pnl_pct_notional" in row
         assert "baseline_authority" in row
+    tid_keys = set(rep["trades_by_trade_id"].keys())
+    row_tids = {str(x.get("trade_id") or "").strip() for x in rep["rows"] if str(x.get("trade_id") or "").strip()}
+    assert tid_keys == row_tids
+    flat_by_tid = {
+        str(r.get("trade_id") or "").strip(): r
+        for r in rep["rows"]
+        if str(r.get("trade_id") or "").strip()
+    }
+    for tid, bundle in rep["trades_by_trade_id"].items():
+        assert bundle.get("trade_id") == tid
+        assert "identity" in bundle and "timing" in bundle and "economics" in bundle
+        fr = flat_by_tid[tid]
+        assert bundle["economics"].get("pnl_usd") == fr.get("pnl_usd")
+        assert bundle["identity"].get("exit_market_event_id") == fr.get("market_event_id")
         assert row["baseline_authority"] in ("TRADE", "NO_TRADE")
         assert "baseline_authority_reason" in row
         assert "lifecycle_open_at_utc" in row

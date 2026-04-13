@@ -349,7 +349,7 @@
     <div class="dash-main">
       <div class="bt-back">
         <a class="dash-return" href="/dashboard.html">← Back to Dashboard</a>
-        <span class="bt-muted">Report API: <code>/api/v1/dashboard/baseline-trades-report</code> (includes <code>meta.active_position</code>). Standalone: <code>/api/v1/dashboard/baseline-active-position</code>. <strong>View</strong> opens the trade snapshot. CSV is table rows only.</span>
+        <span class="bt-muted">Report API: <code>/api/v1/dashboard/baseline-trades-report</code> — <code>trades_by_trade_id</code> maps each <code>trade_id</code> to a nested bundle (same data as <code>rows</code>, organized). <code>meta.active_position</code>. Standalone: <code>/api/v1/dashboard/baseline-active-position</code>. <strong>View</strong> opens the trade snapshot. CSV = flat rows; use <strong>JSON by trade_id</strong> for nested export.</span>
       </div>
       <div class="bt-section">
         <h1>Baseline trades report</h1>
@@ -390,6 +390,9 @@
           <div class="bt-export">
             <button type="button" class="bt-btn" id="bt-csv">Download CSV</button>
             <button type="button" class="bt-btn" id="bt-xlsx">Download XLSX</button>
+            <button type="button" class="bt-btn bt-btn--primary" id="bt-json-tradeid" title="Nested JSON: one object per trade_id">
+              JSON by trade_id
+            </button>
           </div>
           <p class="bt-note">Dates are interpreted as <strong>UTC</strong> (labels above). <strong>Apply</strong> runs the report query with your window, max rows, and policy filter.</p>
         </div>
@@ -464,7 +467,7 @@
 
   <script>
     (function () {
-      var state = { rows: [], meta: {} };
+      var state = { rows: [], meta: {}, tradesByTradeId: {} };
       var COLS = 29;
       var TIP_QEL_ROW =
         "QEL scores and survival decisions apply to Anna strategy cohorts, not to each baseline ledger row. Open QEL evaluation in the nav for details.";
@@ -947,6 +950,17 @@
         URL.revokeObjectURL(a.href);
       }
 
+      function downloadJson(obj, name) {
+        var blob = new Blob([JSON.stringify(obj, null, 2)], {
+          type: "application/json;charset=utf-8",
+        });
+        var a = document.createElement("a");
+        a.href = URL.createObjectURL(blob);
+        a.download = name;
+        a.click();
+        URL.revokeObjectURL(a.href);
+      }
+
       function renderActivePosition(meta) {
         var el = document.getElementById("bt-active-panel");
         if (!el) return;
@@ -1049,6 +1063,7 @@
           .then(function (bundle) {
             state.rows = bundle.rows || [];
             state.meta = bundle.meta || {};
+            state.tradesByTradeId = bundle.trades_by_trade_id || {};
             renderTable(state.rows);
             var m = state.meta;
             var ds = m.direction_summary || {};
@@ -1075,7 +1090,9 @@
               (m.limit || "?") +
               ", scope " +
               (m.scope || "?") +
-              "). Scanned up to " +
+              "). Nested index: " +
+              Object.keys(state.tradesByTradeId || {}).length +
+              " key(s) in trades_by_trade_id. Scanned up to " +
               (m.scanned_execution_rows || "?") +
               " baseline ledger rows in range. Click a row for trade snapshot.";
           })
@@ -1105,6 +1122,14 @@
         }
         downloadCsv(rowsToCsv(state.rows), "baseline_trades_export.csv");
         alert("Downloaded CSV (same data as future XLSX until a spreadsheet export is implemented).");
+      };
+      document.getElementById("bt-json-tradeid").onclick = function () {
+        var m = state.tradesByTradeId || {};
+        if (!m || typeof m !== "object" || !Object.keys(m).length) {
+          alert("No trades_by_trade_id loaded yet (reload report).");
+          return;
+        }
+        downloadJson(m, "baseline_trades_by_trade_id.json");
       };
 
       defaultTodayUtcRange();

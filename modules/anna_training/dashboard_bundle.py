@@ -1171,7 +1171,7 @@ def _recent_baseline_policy_trade_rows_for_strip(
     return out
 
 
-BASELINE_TRADES_REPORT_SCHEMA = "blackbox_baseline_trades_report_v6"
+BASELINE_TRADES_REPORT_SCHEMA = "blackbox_baseline_trades_report_v7"
 TRADE_EVENT_SYNTHESIS_SCHEMA = "trade_event_synthesis_v1"
 
 
@@ -1409,6 +1409,72 @@ def _lifecycle_closed_label(exit_reason: str | None, outcome: str | None) -> str
     if er and oc:
         return f"{er} · {oc}"
     return er or oc or "—"
+
+
+def _nested_baseline_trade_from_flat_row(r: dict[str, Any]) -> dict[str, Any]:
+    """
+    One logical trade as nested JSON: ``trade_id`` is also the map key in ``trades_by_trade_id``;
+    inner structure groups identity, timing, economics, policy, artifacts.
+    """
+    exit_mei = str(r.get("market_event_id") or "").strip() or None
+    return {
+        "trade_id": str(r.get("trade_id") or "").strip() or None,
+        "identity": {
+            "entry_market_event_id": r.get("entry_market_event_id"),
+            "exit_market_event_id": exit_mei,
+            "symbol": r.get("symbol"),
+            "timeframe": r.get("timeframe"),
+            "mode": r.get("mode"),
+            "side": r.get("side"),
+        },
+        "timing": {
+            "open_utc": r.get("lifecycle_open_at_utc") or r.get("entry_time_utc_iso"),
+            "exit_utc": r.get("lifecycle_closed_at_utc") or r.get("exit_time_utc_iso"),
+            "held_display": r.get("lifecycle_held_display") or r.get("held_display"),
+            "hold_duration_minutes": r.get("hold_duration_minutes"),
+            "hold_bars_estimate": r.get("hold_bars_estimate"),
+            "eval_bar_time_utc_iso": r.get("time_utc_iso"),
+        },
+        "economics": {
+            "pnl_usd": r.get("pnl_usd"),
+            "pnl_pct_notional": r.get("pnl_pct_notional"),
+            "outcome": r.get("outcome"),
+            "notional_usd": r.get("notional_usd"),
+            "collateral_usd": r.get("collateral_usd"),
+            "free_collateral_usd": r.get("free_collateral_usd"),
+            "leverage": r.get("leverage"),
+            "risk_pct": r.get("risk_pct"),
+            "size": r.get("size"),
+            "size_source": r.get("size_source"),
+            "entry_price": r.get("entry"),
+            "exit_price": r.get("exit"),
+        },
+        "policy": {
+            "baseline_authority": r.get("baseline_authority"),
+            "baseline_authority_reason": r.get("baseline_authority_reason"),
+            "display": r.get("lifecycle_display") or r.get("policy_outcome_display"),
+            "policy_outcome": r.get("policy_outcome"),
+            "baseline_lifecycle_phase": r.get("baseline_lifecycle_phase"),
+        },
+        "stops": {
+            "sl_tp_summary": r.get("sl_tp_summary"),
+            "stop_loss_entry_price": r.get("stop_loss_entry_price"),
+            "take_profit_entry_price": r.get("take_profit_entry_price"),
+            "stop_loss_exit_price": r.get("stop_loss_exit_price"),
+            "take_profit_exit_price": r.get("take_profit_exit_price"),
+        },
+        "ledger": {
+            "exit_reason": r.get("exit_reason"),
+        },
+        "narrative": {
+            "jupiter_tile_narrative": r.get("jupiter_tile_narrative"),
+        },
+        "operator_trade_snapshot": r.get("operator_trade_snapshot"),
+        "synthesis": r.get("synthesis"),
+        "forensics": {
+            "mae_usd": r.get("mae_usd"),
+        },
+    }
 
 
 PNL_SEMANTICS_OPERATOR_V1: dict[str, Any] = {
@@ -2043,9 +2109,19 @@ def build_baseline_trades_report(
         market_db_path=mpath,
     )
 
+    trades_by_trade_id: dict[str, Any] = {}
+    orphan_rows_without_trade_id: list[dict[str, Any]] = []
+    for r in rows_out:
+        tid = str(r.get("trade_id") or "").strip()
+        if tid:
+            trades_by_trade_id[tid] = _nested_baseline_trade_from_flat_row(r)
+        else:
+            orphan_rows_without_trade_id.append(r)
+
     return {
         "schema": BASELINE_TRADES_REPORT_SCHEMA,
         "rows": rows_out,
+        "trades_by_trade_id": trades_by_trade_id,
         "meta": {
             "from_utc_iso": from_utc_iso,
             "to_utc_iso": to_utc_iso,
@@ -2061,6 +2137,11 @@ def build_baseline_trades_report(
                 "short_count": short_count,
                 "window_note": "Counts apply to rows returned after scope filter (one row per trade_id).",
             },
+            "trades_index_note": (
+                "trades_by_trade_id is a map of trade_id → nested trade bundle (same facts as rows, organized). "
+                "rows remains the ordered flat list for tables/CSV. One lifecycle close → one trade_id → one entry."
+            ),
+            "orphan_rows_without_trade_id": orphan_rows_without_trade_id,
             "pnl_semantics": dict(PNL_SEMANTICS_OPERATOR_V1),
             "report_note": (
                 "Baseline close rows: SL/TP at entry from position_open or context_snapshot initial_stop_loss/"

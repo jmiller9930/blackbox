@@ -64,6 +64,7 @@ Use **one vocabulary** on the dashboard trade chain and the baseline trades repo
 
 - **Dashboard → trade chain (baseline row):** One **column per 5m bar** — you should see **open** on the entry column, **held** on each column until exit, then **closed …** on the exit column.
 - **Baseline trades report (single table):** Rows are **ledger executions** (mostly **closes**). **Lifecycle** column uses the same **closed …** labels for those rows. **Click a row** (or **View**) for Jupiter tile narrative + forensic synthesis. **Open/held** bars (no fill row yet) are visible only on the **dashboard trade chain** baseline columns, not as separate report rows.
+- **Report API (`/api/v1/dashboard/baseline-trades-report`):** Response includes **`trades_by_trade_id`** — an object whose **keys are `trade_id`** and whose values are **nested bundles** (`identity`, `timing`, `economics`, `policy`, `synthesis`, …). **`rows`** remains the flat ordered list for tables/CSV. Prefer **`trades_by_trade_id`** when you want one JSON document per trade instead of a flat “series” of rows.
 
 **Code anchor:** `modules/anna_training/dashboard_bundle.py` (`_compact_baseline_cell_policy_bound`). Bridge / lifecycle: `baseline_ledger_bridge.py`, `jupiter_2_baseline_lifecycle.py`.
 
