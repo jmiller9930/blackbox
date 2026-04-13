@@ -414,6 +414,26 @@ def build_jupiter_policy_snapshot(
     if cbl:
         out["last_daemon_bridge_tick"] = cbl
 
+    # Operator JUP chips + live tile read ``baseline_jupiter_policy`` from this snapshot (not trade_chain).
+    lpath = default_execution_ledger_path()
+    policy_slot = "jup_v2"
+    if lpath.is_file():
+        _c0 = connect_ledger(lpath)
+        try:
+            ensure_execution_ledger_schema(_c0)
+            policy_slot = get_baseline_jupiter_policy_slot(_c0)
+        finally:
+            _c0.close()
+    out["baseline_jupiter_policy"] = {
+        "schema": "baseline_jupiter_policy_selector_v1",
+        "active_id": policy_slot,
+        "active_label": baseline_jupiter_policy_label_for_slot(policy_slot),
+        "options": [
+            {"id": "jup_v2", "label": "JUPv2"},
+            {"id": "jup_v3", "label": "JUPv3"},
+        ],
+    }
+
     if not mpath or not mpath.is_file():
         out["error"] = "market_db_missing"
         out["hint"] = "Set BLACKBOX_MARKET_DATA_PATH or ingest market_bars_5m."
@@ -428,18 +448,9 @@ def build_jupiter_policy_snapshot(
         out["error"] = f"fetch_bars_failed:{e!s}"[:240]
         return out
 
-    lpath = default_execution_ledger_path()
-    policy_slot = "jup_v2"
-    if lpath.is_file():
-        _c = connect_ledger(lpath)
-        try:
-            ensure_execution_ledger_schema(_c)
-            policy_slot = get_baseline_jupiter_policy_slot(_c)
-        finally:
-            _c.close()
+    out["baseline_jupiter_policy_slot"] = policy_slot
     use_v3 = policy_slot == BASELINE_POLICY_SLOT_JUP_V3
     min_bars = MIN_BARS_JUPITER_3 if use_v3 else MIN_BARS_JUPITER_2
-    out["baseline_jupiter_policy_slot"] = policy_slot
     out["policy_engine"] = POLICY_ENGINE_ID_JUPITER_3 if use_v3 else POLICY_ENGINE_ID_JUPITER_2
     out["policy_catalog_id"] = JUPITER_3_CATALOG_ID if use_v3 else JUPITER_2_CATALOG_ID
     out["policy_spec_version"] = POLICY_SPEC_VERSION_JUPITER_3 if use_v3 else POLICY_SPEC_VERSION_JUPITER_2
