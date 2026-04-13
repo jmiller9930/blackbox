@@ -463,6 +463,30 @@ def _jupiter_v3_gates_from_policy_row(pol_e: dict[str, Any] | None) -> dict[str,
     return jg if isinstance(jg, dict) else None
 
 
+def _v3_entry_narrative_and_gates_from_open_position(pos: Any) -> tuple[str, dict[str, Any] | None]:
+    """
+    Entry policy for display: prefer ``entry_policy_narrative_snapshot`` and
+    ``entry_jupiter_v3_gates_snapshot``; if either is missing, recover from
+    ``signal_features_snapshot`` (same evaluator payload persisted at open).
+    """
+    nar = (getattr(pos, "entry_policy_narrative_snapshot", None) or "").strip()
+    eg = getattr(pos, "entry_jupiter_v3_gates_snapshot", None)
+    gates: dict[str, Any] | None = dict(eg) if isinstance(eg, dict) else None
+    if isinstance(gates, dict) and len(gates) == 0:
+        gates = None
+    sf = getattr(pos, "signal_features_snapshot", None)
+    sfd = sf if isinstance(sf, dict) else {}
+    if not nar:
+        jpn = sfd.get("jupiter_policy_narrative")
+        if isinstance(jpn, str) and jpn.strip():
+            nar = jpn.strip()
+    if gates is None:
+        jg = sfd.get("jupiter_v3_gates")
+        if isinstance(jg, dict) and len(jg) > 0:
+            gates = dict(jg)
+    return nar, gates
+
+
 def _entry_snapshot_from_persisted_open_position(
     conn: Any,
     entry_mid: str,
@@ -490,9 +514,7 @@ def _entry_snapshot_from_persisted_open_position(
         return None
     if str(pos.entry_market_event_id or "").strip() != em:
         return None
-    nar = (pos.entry_policy_narrative_snapshot or "").strip()
-    eg = pos.entry_jupiter_v3_gates_snapshot
-    gates: dict[str, Any] | None = dict(eg) if isinstance(eg, dict) else None
+    nar, gates = _v3_entry_narrative_and_gates_from_open_position(pos)
     if nar or gates is not None:
         return nar, gates
     return None
@@ -731,9 +753,7 @@ def build_jupiter_policy_snapshot(
                     entry=pos.entry_price, mark=mark, size=pos.size, side=pos.side
                 )
                 emid = str(pos.entry_market_event_id or "").strip()
-                entry_nar = (pos.entry_policy_narrative_snapshot or "").strip()
-                eg = pos.entry_jupiter_v3_gates_snapshot
-                entry_gates: dict[str, Any] | None = dict(eg) if isinstance(eg, dict) else None
+                entry_nar, entry_gates = _v3_entry_narrative_and_gates_from_open_position(pos)
                 audit_gates: dict[str, Any] | None = None
                 # JUPv3: entry gates/narrative are immutable at open — never replace with recompute.
                 # Optional bar recompute is jupiter_v3_gates_recomputed_audit only (labeled not entry).
@@ -2505,6 +2525,8 @@ def build_baseline_active_position_snapshot(
                 dt = dt.astimezone(timezone.utc)
             run_min = (datetime.now(timezone.utc) - dt).total_seconds() / 60.0
 
+    enar, egates = _v3_entry_narrative_and_gates_from_open_position(pos)
+
     out.update(
         {
             "position_open": True,
@@ -2537,12 +2559,8 @@ def build_baseline_active_position_snapshot(
             "reason_code_at_entry": pos.reason_code_at_entry,
             "last_processed_market_event_id": pos.last_processed_market_event_id,
             "entry_candle_open_utc": pos.entry_candle_open_utc,
-            "entry_jupiter_tile_narrative": (pos.entry_policy_narrative_snapshot or "").strip() or None,
-            "entry_jupiter_v3_gates": (
-                dict(pos.entry_jupiter_v3_gates_snapshot)
-                if isinstance(pos.entry_jupiter_v3_gates_snapshot, dict)
-                else None
-            ),
+            "entry_jupiter_tile_narrative": enar or None,
+            "entry_jupiter_v3_gates": egates,
         }
     )
     return out
