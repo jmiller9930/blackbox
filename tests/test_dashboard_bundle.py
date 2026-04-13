@@ -33,6 +33,8 @@ def test_build_trade_chain_payload_schema() -> None:
     assert tc.get("schema") == "blackbox_trade_chain_v1"
     assert "event_axis" in tc
     assert "event_axis_time_utc_iso" in tc
+    assert "event_axis_candle_close_utc_iso" in tc
+    assert len(tc["event_axis_candle_close_utc_iso"]) == len(tc["event_axis"])
     axis = tc["event_axis"]
     times = tc["event_axis_time_utc_iso"]
     assert isinstance(axis, list)
@@ -679,5 +681,7 @@ def test_trade_chain_inject_axis_creates_single_column(tmp_path: Path) -> None:
     assert tc["event_axis"] == ["evt_injected_1"]
     assert tc["event_axis_source"] == "open_baseline_injected"
     assert len(tc["event_axis_time_utc_iso"]) == 1
+    assert len(tc["event_axis_candle_close_utc_iso"]) == 1
+    assert tc["event_axis_candle_close_utc_iso"][0] == "2025-01-01T12:05:00Z"
 
 

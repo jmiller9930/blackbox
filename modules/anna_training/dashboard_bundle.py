@@ -2057,6 +2057,32 @@ def build_baseline_trades_report(
     }
 
 
+def _five_m_close_after_open_iso(open_iso: str | None) -> str | None:
+    """Exclusive bar end for 5m UTC bars (same grid as ``canonical_time``)."""
+    if not open_iso:
+        return None
+    dt = _parse_iso_ts(str(open_iso).strip())
+    if dt is None:
+        return None
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    else:
+        dt = dt.astimezone(timezone.utc)
+    return _normalize_utc_iso_for_axis(dt + timedelta(minutes=5))
+
+
+def _open_iso_from_market_event_id(mid: str) -> str | None:
+    """Parse ``…_5m_<ISO>`` / ``…_15m_<ISO>`` tail to normalized open UTC ISO."""
+    s = str(mid or "").strip()
+    for sep in ("_5m_", "_15m_", "_1h_", "_4h_", "_1d_"):
+        if sep in s:
+            frag = s.split(sep, 1)[1].strip()
+            if not frag:
+                continue
+            return _normalize_utc_iso_for_axis(frag)
+    return None
+
+
 def _normalize_utc_iso_for_axis(ts: Any) -> str | None:
     """Normalize ledger timestamp to UTC ISO for browser (canonical column instant)."""
     if ts is None:
@@ -2103,17 +2129,17 @@ def _event_axis_from_market_bars(
     *,
     limit: int,
     canonical_symbol: str | None = None,
-) -> tuple[list[str], list[str | None]]:
-    """Recent closed 5m bars (oldest→newest) — preferred column axis for policy-aligned dashboard."""
+) -> tuple[list[str], list[str | None], list[str | None]]:
+    """Recent closed 5m bars (oldest→newest) — open + **close** UTC for operator lockstep with the roll."""
     if not mpath or not mpath.is_file():
-        return [], []
+        return [], [], []
     sym = (canonical_symbol or "").strip() or _BASELINE_CANONICAL_SYMBOL_DEFAULT
     lim = max(4, min(48, int(limit)))
     conn = sqlite3.connect(str(mpath))
     try:
         cur = conn.execute(
             """
-            SELECT market_event_id, candle_open_utc
+            SELECT market_event_id, candle_open_utc, candle_close_utc
             FROM market_bars_5m
             WHERE timeframe = '5m' AND canonical_symbol = ?
             ORDER BY candle_open_utc DESC
@@ -2123,17 +2149,21 @@ def _event_axis_from_market_bars(
         )
         rows = list(reversed(cur.fetchall()))
     except Exception:
-        return [], []
+        return [], [], []
     finally:
         conn.close()
     mids: list[str] = []
     times: list[str | None] = []
+    closes: list[str | None] = []
     for r in rows:
         if not r or not r[0]:
             continue
         mids.append(str(r[0]))
-        times.append(_normalize_utc_iso_for_axis(r[1]))
-    return mids, times
+        o = _normalize_utc_iso_for_axis(r[1])
+        times.append(o)
+        cc = _normalize_utc_iso_for_axis(r[2]) if len(r) > 2 and r[2] is not None else None
+        closes.append(cc or _five_m_close_after_open_iso(o))
+    return mids, times, closes
 
 
 def _symbol_tf_from_market_event_id(market_event_id: str) -> tuple[str | None, str | None]:
@@ -2728,13 +2758,16 @@ def build_trade_chain_payload(
         five_m_ingest_freshness = _five_m_ingest_freshness(mpath, canonical_symbol=axis_sym)
         # Closed 5m bars only — newest column is the last **completed** bucket (decision at roll).
         # No synthetic "forming" column; operators should not see EVAL PENDING for an in-progress candle.
-        event_axis, event_axis_time_utc_iso = _event_axis_from_market_bars(
+        event_axis, event_axis_time_utc_iso, event_axis_candle_close_utc_iso = _event_axis_from_market_bars(
             mpath, limit=max_events, canonical_symbol=axis_sym
         )
         event_axis_source = "market_bars_5m"
         if not event_axis:
             event_axis, event_axis_time_utc_iso = _distinct_event_axis_with_times(conn, limit=max_events)
             event_axis_source = "execution_trades_fallback"
+            event_axis_candle_close_utc_iso = [
+                _five_m_close_after_open_iso(_open_iso_from_market_event_id(mid)) for mid in event_axis
+            ]
         inj_mid = str(inject_axis_mid or "").strip()
         if not event_axis and inj_mid:
             inj_t = str(inject_axis_time_utc_iso or "").strip() or None
@@ -2742,6 +2775,7 @@ def build_trade_chain_payload(
                 inj_t = _normalize_utc_iso_for_axis(inj_t) or inj_t
             event_axis = [inj_mid]
             event_axis_time_utc_iso = [inj_t]
+            event_axis_candle_close_utc_iso = [_five_m_close_after_open_iso(inj_t)]
             event_axis_source = "open_baseline_injected"
         tile_narr = _event_axis_jupiter_tile_narratives(conn, event_axis, mpath)
         baseline_ledger = _recent_baseline_trades_for_dashboard_strip(
@@ -2878,6 +2912,7 @@ def build_trade_chain_payload(
         "market_db_path": str(mpath) if mpath else None,
         "event_axis": event_axis,
         "event_axis_time_utc_iso": event_axis_time_utc_iso,
+        "event_axis_candle_close_utc_iso": event_axis_candle_close_utc_iso,
         "event_axis_source": event_axis_source,
         "event_axis_note": (
             "Columns are distinct market_event_id values (oldest left → newest right). "

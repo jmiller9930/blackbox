@@ -418,6 +418,7 @@
     .tc-hdr-lab { font-size: 0.52rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); }
     .tc-hdr-primary { font-weight: 700; font-size: 0.62rem; color: var(--text); }
     .tc-hdr-utc { font-size: 0.58rem; color: var(--muted); font-weight: 600; }
+    .tc-hdr-sub { font-size: 0.52rem; color: var(--muted); font-weight: 600; margin-top: 0.15rem; }
     .tc-hdr-fallback { font-size: 0.6rem; word-break: break-all; font-weight: 600; color: var(--text); }
     .tc-flow {
       flex-shrink: 0;
@@ -1563,11 +1564,22 @@
     return null;
   }
 
-  /** Primary: browser local + zone label; secondary: HH:MM UTC (canonical). */
-  function tcAxisHeaderHtml(mid, isoUtc, isNow) {
-    var d = tcParseAxisInstant(isoUtc, mid);
-    var nowRow = isNow ? '<span class="tc-hdr-now">now</span>' : '';
-    if (!d) {
+  /** Bar **close** is primary (decision at roll); open is secondary — avoids “behind the clock” misread. */
+  function tcBarCloseInstant(isoOpen, isoClose, mid) {
+    if (isoClose != null && String(isoClose).trim()) {
+      var c = tcParseAxisInstant(isoClose, null);
+      if (c && !isNaN(c.getTime())) return c;
+    }
+    var o = tcParseAxisInstant(isoOpen, mid);
+    if (!o || isNaN(o.getTime())) return null;
+    return new Date(o.getTime() + 5 * 60 * 1000);
+  }
+
+  function tcAxisHeaderHtml(mid, isoOpen, isoClose, isNow) {
+    var dClose = tcBarCloseInstant(isoOpen, isoClose, mid);
+    var dOpen = tcParseAxisInstant(isoOpen, mid);
+    var nowRow = isNow ? '<span class="tc-hdr-now">latest bar</span>' : '';
+    if (!dClose && !dOpen) {
       return (
         '<div class="tc-hdr-stack">' +
         nowRow +
@@ -1575,6 +1587,7 @@
         '</div>'
       );
     }
+    var primary = dClose || dOpen;
     var localFmt = new Intl.DateTimeFormat(undefined, {
       hour: 'numeric',
       minute: '2-digit',
@@ -1587,14 +1600,25 @@
       hour12: false,
       timeZone: 'UTC',
     });
-    var utcStr = utcFmt.format(d).replace(/\s/g, '') + ' UTC';
+    var closeLocal = localFmt.format(primary);
+    var closeUtc = utcFmt.format(primary).replace(/\s/g, '') + ' UTC';
+    var openLine = '';
+    if (dOpen && dClose && dOpen.getTime() !== dClose.getTime()) {
+      openLine =
+        '<span class="tc-hdr-sub">Bar open ' +
+        esc(localFmt.format(dOpen)) +
+        ' · ' +
+        esc(utcFmt.format(dOpen).replace(/\s/g, '') + ' UTC') +
+        '</span>';
+    }
     return (
       '<div class="tc-hdr-stack">' +
       nowRow +
-      '<span class="tc-hdr-lab">Local</span>' +
-      '<span class="tc-hdr-primary">' + esc(localFmt.format(d)) + '</span>' +
-      '<span class="tc-hdr-lab">UTC</span>' +
-      '<span class="tc-hdr-utc">' + esc(utcStr) + '</span>' +
+      '<span class="tc-hdr-lab">Closes (decision)</span>' +
+      '<span class="tc-hdr-primary">' + esc(closeLocal) + '</span>' +
+      '<span class="tc-hdr-lab">Closes UTC</span>' +
+      '<span class="tc-hdr-utc">' + esc(closeUtc) + '</span>' +
+      openLine +
       '</div>'
     );
   }
@@ -1602,12 +1626,13 @@
   /** Stable JSON of axis + row heads + cells only (excludes market_clock, scorecard, etc.). */
   function tradeChainRenderSig(tc) {
     if (!tc || !tc.rows || !tc.rows.length) {
-      return JSON.stringify({
-        v: 1,
-        empty: true,
-        axis: (tc && tc.event_axis) || [],
-        times: (tc && tc.event_axis_time_utc_iso) || []
-      });
+    return JSON.stringify({
+      v: 1,
+      empty: true,
+      axis: (tc && tc.event_axis) || [],
+      times: (tc && tc.event_axis_time_utc_iso) || [],
+      closes: (tc && tc.event_axis_candle_close_utc_iso) || []
+    });
     }
     var axis = tc.event_axis || [];
     var rows = tc.rows.map(function (row) {
@@ -1629,6 +1654,7 @@
       empty: false,
       axis: axis,
       times: tc.event_axis_time_utc_iso || [],
+      closes: tc.event_axis_candle_close_utc_iso || [],
       rows: rows
     });
   }
@@ -1889,16 +1915,18 @@
     }
     var axis = tc.event_axis || [];
     var axisTimes = tc.event_axis_time_utc_iso || [];
+    var axisCloses = tc.event_axis_candle_close_utc_iso || [];
     var nEv = axis.length;
     var th = '<th scope="col" class="tc-sticky-chain">Chain</th>';
     axis.forEach(function (mid, idx) {
       var isNow = axis.length > 0 && idx === axis.length - 1;
       var nowCls = isNow ? ' tc-now' : '';
-      var isoUtc = axisTimes.length > idx ? axisTimes[idx] : null;
-      var d = tcParseAxisInstant(isoUtc, mid);
+      var isoOpen = axisTimes.length > idx ? axisTimes[idx] : null;
+      var isoClose = axisCloses.length > idx ? axisCloses[idx] : null;
+      var dC = tcBarCloseInstant(isoOpen, isoClose, mid);
       var thTitle = escAttr(
-        d
-          ? String(mid) + ' — canonical UTC: ' + d.toISOString()
+        dC
+          ? String(mid) + ' — bar close UTC: ' + dC.toISOString()
           : String(mid)
       );
       var bgStyle = tcColumnBgOnly(idx, nEv, null);
@@ -1907,7 +1935,7 @@
         ' title="' + thTitle + '"' +
         ' style="' + bgStyle + '"' +
         '>' +
-        tcAxisHeaderHtml(mid, isoUtc, isNow) +
+        tcAxisHeaderHtml(mid, isoOpen, isoClose, isNow) +
         '</th>';
     });
     thead.innerHTML = th;
