@@ -1230,7 +1230,7 @@
                 !isNaN(Number(m.paper_bankroll_at_report_time_usd))
                   ? "<br><strong>Paper bankroll (now):</strong> $" +
                     Number(m.paper_bankroll_at_report_time_usd).toFixed(2) +
-                    " — <code>meta.paper_bankroll_at_report_time_*</code>. Per-row <strong>Bankroll $</strong> comes from "
+                    " — <code>meta.paper_bankroll_at_report_time_*</code>. Per-row <strong>Bankroll $</strong> comes from " +
                     "policy at <em>trade</em> time; raising capital does not rewrite stored policy rows for past bars."
                   : "";
               if (m.pnl_semantics && m.pnl_semantics.operator_note) {
