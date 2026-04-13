@@ -151,3 +151,8 @@ def test_evaluate_trade_long_with_hint() -> None:
     hint = (r.features or {}).get("position_size_hint") or {}
     assert hint.get("leverage") in (10, 20, 30)
     assert "confidence_score" in r.features
+    jg = (r.features or {}).get("jupiter_v3_gates")
+    assert isinstance(jg, dict) and jg.get("schema") == "jupiter_v3_gates_v1"
+    assert len(jg.get("rows") or []) == 5
+    assert jg["long"]["all_ok"] is True
+    assert isinstance(jg["short"]["all_ok"], bool)

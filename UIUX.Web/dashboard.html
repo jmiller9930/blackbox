@@ -581,6 +581,46 @@
       margin: 0;
       line-height: 1.35;
     }
+    .tc-jup-gates-table-wrap {
+      margin: 0.35rem 0 0;
+      overflow-x: auto;
+    }
+    .tc-jup-gates-caption {
+      font-size: 0.6rem;
+      font-weight: 700;
+      color: #0c4a6e;
+      margin: 0 0 0.2rem;
+    }
+    .tc-jup-gates-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.6rem;
+    }
+    .tc-jup-gates-table th,
+    .tc-jup-gates-table td {
+      border: 1px solid #cbd5e1;
+      padding: 0.12rem 0.22rem;
+      text-align: center;
+      vertical-align: middle;
+    }
+    .tc-jup-gates-table th:first-child,
+    .tc-jup-gates-table td:first-child {
+      text-align: left;
+    }
+    .tc-jup-gates-table th {
+      background: #f1f5f9;
+      font-weight: 700;
+    }
+    .tc-jup-gate-pass {
+      background: #ecfdf5;
+      color: #065f46;
+      font-weight: 700;
+    }
+    .tc-jup-gate-fail {
+      background: #fef2f2;
+      color: #991b1b;
+      font-weight: 700;
+    }
     .tc-mini { display: grid; grid-template-columns: auto 1fr; gap: 0.1rem 0.35rem; align-items: baseline; }
     .tc-mini .tc-id { font-family: ui-monospace, monospace; font-size: 0.62rem; word-break: break-all; }
     .tc-mini .lab { color: var(--muted); font-size: 0.58rem; text-transform: uppercase; }
@@ -1506,6 +1546,50 @@
     return 'neutral';
   }
 
+  /** Jupiter_3 — Gate | LONG | SHORT table from bundle ``jupiter_v3_gates_v1`` (all five AND gates per side). */
+  function jupiterV3GatesTableHtml(gates, caption) {
+    if (!gates || typeof gates !== 'object') return '';
+    var rows = gates.rows;
+    if (!rows || !rows.length) return '';
+    var cap =
+      caption != null && String(caption).trim() !== ''
+        ? '<div class="tc-jup-gates-caption">' + esc(String(caption)) + '</div>'
+        : '';
+    var h =
+      '<table class="tc-jup-gates-table" role="grid" aria-label="Jupiter V3 entry gates">' +
+      '<thead><tr><th scope="col">Gate</th><th scope="col">LONG</th><th scope="col">SHORT</th></tr></thead><tbody>';
+    var i;
+    for (i = 0; i < rows.length; i++) {
+      var rw = rows[i];
+      if (!rw) continue;
+      var lab = rw.label != null ? String(rw.label) : '';
+      var lo = !!rw.long_ok;
+      var so = !!rw.short_ok;
+      h +=
+        '<tr><td>' +
+        esc(lab) +
+        '</td><td class="' +
+        (lo ? 'tc-jup-gate-pass' : 'tc-jup-gate-fail') +
+        '">' +
+        esc(lo ? 'PASS' : 'FAIL') +
+        '</td><td class="' +
+        (so ? 'tc-jup-gate-pass' : 'tc-jup-gate-fail') +
+        '">' +
+        esc(so ? 'PASS' : 'FAIL') +
+        '</td></tr>';
+    }
+    h += '</tbody></table>';
+    var lg = gates.long && gates.long.all_ok;
+    var sg = gates.short && gates.short.all_ok;
+    h +=
+      '<div class="tc-jup-gates-caption" style="margin-top:0.25rem">' +
+      esc('All gates (long): ' + (lg ? 'YES — would qualify' : 'NO')) +
+      ' · ' +
+      esc('All gates (short): ' + (sg ? 'YES — would qualify' : 'NO')) +
+      '</div>';
+    return '<div class="tc-jup-gates-table-wrap">' + cap + h + '</div>';
+  }
+
   function jupiterNarrativeLinesHtml(raw, titleAttr, baselineLane) {
     if (raw == null || String(raw).trim() === '') return '';
     var text = String(raw).replace(/\r\n/g, '\n');
@@ -1633,6 +1717,12 @@
           'Entry-bar policy snapshot',
           baselineLane
         ) +
+        (c.baseline_entry_jupiter_v3_gates
+          ? jupiterV3GatesTableHtml(
+              c.baseline_entry_jupiter_v3_gates,
+              'Entry — gates (LONG and SHORT columns; all five must pass to arm that side)'
+            )
+          : '') +
         '</div>';
     }
     var phHold =
@@ -1651,7 +1741,21 @@
         esc(String(c.jupiter_tile_narrative_scope_note)) +
         '</div>';
     }
-    var jupStack = scopeNote + entrySnap + narrEl;
+    var latestGates = '';
+    if (
+      baselineLane &&
+      jupLab === 'JUPv3' &&
+      jp.jupiter_v3_gates &&
+      typeof opts.colIndex === 'number' &&
+      typeof opts.nEv === 'number' &&
+      opts.colIndex === opts.nEv - 1
+    ) {
+      latestGates = jupiterV3GatesTableHtml(
+        jp.jupiter_v3_gates,
+        'This bar — gates (latest closed candle)'
+      );
+    }
+    var jupStack = scopeNote + entrySnap + narrEl + latestGates;
     if (!c || c.empty) {
       var ntBar =
         baselineLane
@@ -2373,6 +2477,12 @@
         esc(jupLive + ' — policy at entry' + (emLive ? ' — ' + emLive : '')) +
         '</div>' +
         jupiterNarrativeLinesHtml(String(bl.entry_jupiter_tile_narrative), 'Entry bar policy', true) +
+        (bl.entry_jupiter_v3_gates
+          ? jupiterV3GatesTableHtml(
+              bl.entry_jupiter_v3_gates,
+              'Entry — gates (all five must pass per side)'
+            )
+          : '') +
         '</div>';
     } else if (emLive) {
       entryInner =

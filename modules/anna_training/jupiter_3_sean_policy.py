@@ -218,6 +218,72 @@ def generate_signal_from_ohlc_v3(
         and expected_move >= MIN_EXPECTED_MOVE
     )
 
+    rsi_long_ok = current_rsi >= RSI_LONG_THRESHOLD
+    rsi_short_ok = current_rsi <= RSI_SHORT_THRESHOLD
+    em_ok = expected_move >= MIN_EXPECTED_MOVE
+    jupiter_v3_gates: dict[str, Any] = {
+        "schema": "jupiter_v3_gates_v1",
+        "rows": [
+            {
+                "id": "bias",
+                "label": "EMA bias (9/21 + close vs 21)",
+                "long_ok": bullish_bias,
+                "short_ok": bearish_bias,
+            },
+            {
+                "id": "rsi",
+                "label": f"RSI band (long ≥ {RSI_LONG_THRESHOLD:g}, short ≤ {RSI_SHORT_THRESHOLD:g})",
+                "long_ok": rsi_long_ok,
+                "short_ok": rsi_short_ok,
+            },
+            {
+                "id": "volume_spike",
+                "label": f"Volume spike (>{VOLUME_SPIKE_MULTIPLIER:g}× avg)",
+                "long_ok": volume_spike,
+                "short_ok": volume_spike,
+            },
+            {
+                "id": "bos",
+                "label": "BOS vs prior 5-bar swing",
+                "long_ok": long_bos,
+                "short_ok": short_bos,
+            },
+            {
+                "id": "expected_move",
+                "label": f"Expected move ≥ {MIN_EXPECTED_MOVE:g} (ATR×2.5)",
+                "long_ok": em_ok,
+                "short_ok": em_ok,
+            },
+        ],
+        "long": {
+            "bias_ok": bullish_bias,
+            "rsi_ok": rsi_long_ok,
+            "volume_spike_ok": volume_spike,
+            "bos_ok": long_bos,
+            "expected_move_ok": em_ok,
+            "all_ok": long_signal,
+        },
+        "short": {
+            "bias_ok": bearish_bias,
+            "rsi_ok": rsi_short_ok,
+            "volume_spike_ok": volume_spike,
+            "bos_ok": short_bos,
+            "expected_move_ok": em_ok,
+            "all_ok": short_signal,
+        },
+        "thresholds": {
+            "rsi_long_min": RSI_LONG_THRESHOLD,
+            "rsi_short_max": RSI_SHORT_THRESHOLD,
+            "volume_spike_multiplier": VOLUME_SPIKE_MULTIPLIER,
+            "min_expected_move_usd": MIN_EXPECTED_MOVE,
+        },
+        "snapshot": {
+            "current_rsi": float(current_rsi),
+            "expected_move": float(expected_move),
+            "atr": float(atr),
+        },
+    }
+
     diag.update(
         {
             "ema9": float(e9),
@@ -236,6 +302,7 @@ def generate_signal_from_ohlc_v3(
             "short_bos": short_bos,
             "long_signal_core": long_signal,
             "short_signal_core": short_signal,
+            "jupiter_v3_gates": jupiter_v3_gates,
         }
     )
     return short_signal, long_signal, current_close, diag
