@@ -3154,8 +3154,20 @@
     strip.innerHTML = h;
   }
 
+  /** Single in-flight bundle request — overlapping refresh() + poll share one fetch (reduces server pile-up). */
+  var __bbBundleInflight = null;
   function fetchBundle() {
-    return fetch('/api/v1/dashboard/bundle?max_events=10', { cache: 'no-store' }).then(function (r) { return r.json(); });
+    if (__bbBundleInflight) {
+      return __bbBundleInflight;
+    }
+    __bbBundleInflight = fetch('/api/v1/dashboard/bundle?max_events=10', { cache: 'no-store' })
+      .then(function (r) {
+        return r.json();
+      })
+      .finally(function () {
+        __bbBundleInflight = null;
+      });
+    return __bbBundleInflight;
   }
 
   function fmtCtl(j) {
@@ -3325,7 +3337,10 @@
     });
   }
 
-  refresh();
+  /* Defer first bundle fetch one frame so shell + "Loading…" can paint before long JSON work. */
+  requestAnimationFrame(function () {
+    refresh();
+  });
   setInterval(refresh, POLL_MS);
   setInterval(tickClocks, 250);
 })();
