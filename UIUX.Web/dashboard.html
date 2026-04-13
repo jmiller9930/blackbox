@@ -917,19 +917,23 @@
             <thead>
               <tr>
                 <th scope="col" title="Lifecycle key (bl_lc_… / bl_…); same identity as Reports.">trade_id</th>
-                <th scope="col" title="Ledger exit_time — strip is sorted by this (newest first).">Exit (UTC)</th>
+                <th scope="col" title="Ledger exit_time — rows sorted newest exit first (same as Reports default).">Exit (UTC)</th>
                 <th scope="col" title="Ledger entry_time.">Entry (UTC)</th>
+                <th scope="col" title="Open → close hold length.">Hold</th>
                 <th scope="col">Market · TF</th>
                 <th scope="col">Side</th>
+                <th scope="col" title="Position size (base units).">Size</th>
                 <th scope="col" title="Policy outcome label (Reports-style).">Outcome</th>
                 <th scope="col" title="Gross model PnL; % is vs row notional (Reports semantics).">PnL</th>
                 <th scope="col" title="≈ entry × size (USD scale of position).">Notional $</th>
+                <th scope="col" title="Stop / take profit at entry (position_open or context).">SL / TP entry</th>
+                <th scope="col" title="SL / TP at exit bar (policy features or ledger context).">SL / TP exit</th>
                 <th scope="col" title="Worst loss while open (MAE v1) when available.">MAE $</th>
-                <th scope="col" title="Close row / 5m bar id (exit bar).">Exit bar (market_event_id)</th>
+                <th scope="col" title="Close row / bar id (exit bar).">Exit bar</th>
               </tr>
             </thead>
             <tbody id="bts-tbody">
-              <tr><td colspan="10">Loading…</td></tr>
+              <tr><td colspan="14">Loading…</td></tr>
             </tbody>
           </table>
         </div>
@@ -1173,6 +1177,12 @@
       esc(s.slice(-tail)) +
       '</span>'
     );
+  }
+
+  /** Price cells aligned with Reports (4 dp). */
+  function btsFmtPx(n) {
+    if (n == null || n === '' || (typeof n === 'number' && isNaN(n))) return '—';
+    return Number(n).toFixed(4);
   }
 
   /** Parse Jupiter narrative lines into label/value (matches format_jupiter_tile_narrative_v1). */
@@ -1737,14 +1747,14 @@
     if (!tbody) return;
     if (!tc) {
       if (meta) meta.textContent = '';
-      tbody.innerHTML = '<tr><td colspan="10">No trade chain data.</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="14">No trade chain data.</td></tr>';
       return;
     }
     var recent = tc.recent_baseline_trades;
     if (recent && recent.length) {
       if (meta) {
         meta.textContent =
-          'Same ledger + policy classification as Reports (Show → Trades). Exit column = sort key (newest exit first). Click a row for full snapshot on Reports. CSV / wide window: Reports dashboard →';
+          'Same data contract as Reports (Show → Trades): newest exits first, same economics and SL/TP fields. Reports is for CSV export and custom UTC date ranges — not a different truth.';
       }
       var html = '';
       var ri;
@@ -1770,6 +1780,15 @@
             ? String(r.trade_id).trim()
             : '';
         var tidShow = tid ? tcShortId(tid, 22) : '—';
+        var hold = '—';
+        if (r.hold_duration_minutes != null && !isNaN(Number(r.hold_duration_minutes))) {
+          var hmv = Number(r.hold_duration_minutes);
+          hold = hmv >= 60 ? (hmv / 60).toFixed(2) + ' h' : hmv.toFixed(1) + ' min';
+        }
+        var sz =
+          r.size != null && !isNaN(Number(r.size)) ? Number(r.size).toFixed(4) : '—';
+        var sltpEnt = btsFmtPx(r.stop_loss_entry_price) + ' / ' + btsFmtPx(r.take_profit_entry_price);
+        var sltpEx = btsFmtPx(r.stop_loss_exit_price) + ' / ' + btsFmtPx(r.take_profit_exit_price);
         var symTf =
           (r.symbol != null ? String(r.symbol) : '—') +
           ' · ' +
@@ -1800,8 +1819,8 @@
           r.mae_usd != null && !isNaN(Number(r.mae_usd)) ? Number(r.mae_usd).toFixed(4) : '—';
         var narr = r.jupiter_tile_narrative != null ? String(r.jupiter_tile_narrative).trim() : '';
         var rowTitle = narr
-          ? 'Open Reports — snapshot. ' + narr.slice(0, 200) + (narr.length > 200 ? '…' : '')
-          : 'Open Reports — baseline trades (same trade_id as this row).';
+          ? 'Optional: open Reports for tile narrative + modal. ' + narr.slice(0, 200) + (narr.length > 200 ? '…' : '')
+          : 'Row shows same economics as Reports (Show → Trades). Click for optional deep link.';
         var pill;
         if (sideRaw === 'long' || sideRaw === 'short') {
           pill =
@@ -1825,21 +1844,29 @@
           '<td class="bts-mono" title="' +
           escAttr(tid) +
           '">' +
-          esc(tidShow) +
+          tidShow +
           '</td><td class="bts-mono">' +
           esc(exT) +
           '</td><td class="bts-mono">' +
           esc(enT) +
           '</td><td class="bts-mono" style="font-size:0.68rem">' +
+          esc(hold) +
+          '</td><td class="bts-mono" style="font-size:0.68rem">' +
           esc(symTf) +
           '</td><td>' +
           pill +
+          '</td><td class="bts-mono" style="font-size:0.68rem">' +
+          esc(sz) +
           '</td><td style="font-size:0.72rem;line-height:1.35">' +
           outcomeCell +
           '</td><td class="bts-mono" style="font-size:0.68rem">' +
           pnlCell +
           '</td><td class="bts-mono" style="font-size:0.68rem">' +
           esc(notion) +
+          '</td><td class="bts-mono" style="font-size:0.62rem;line-height:1.35" title="SL / TP at entry">' +
+          esc(sltpEnt) +
+          '</td><td class="bts-mono" style="font-size:0.62rem;line-height:1.35" title="SL / TP at exit bar">' +
+          esc(sltpEx) +
           '</td><td class="bts-mono" style="font-size:0.68rem">' +
           esc(mae) +
           '</td><td class="bts-mono" style="font-size:0.62rem">' +
@@ -1854,7 +1881,7 @@
         'No Trades rows in recent window — raw ledger may still have rows; open Reports dashboard and set Show to ALL baseline or No trades to inspect. The trade chain below may still show evaluation.';
     }
     tbody.innerHTML =
-      '<tr><td colspan="10">No policy TRADE executions in the recent window (or none yet).</td></tr>';
+      '<tr><td colspan="14">No policy TRADE executions in the recent window (or none yet).</td></tr>';
   }
 
   (function wireBtsBaselineNavigate() {

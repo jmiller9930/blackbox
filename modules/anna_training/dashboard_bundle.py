@@ -1105,7 +1105,7 @@ def _recent_baseline_policy_trade_rows_for_strip(
     Order by **exit_time** (then insert time) so the strip's newest row aligns with the **latest closed**
     trade in the chain, not merely the most recently inserted ledger row.
     """
-    lim = max(1, min(10, int(limit)))
+    lim = max(1, min(25, int(limit)))
     cap = max(lim, min(2000, int(scan_cap)))
     mpath = market_db_path
     cur = conn.execute(
@@ -1161,6 +1161,34 @@ def _recent_baseline_policy_trade_rows_for_strip(
                 exit_time=ledger_row.get("exit_time"),
                 market_db_path=mpath,
             )
+        tid_raw = str(ledger_row.get("trade_id") or "").strip() or None
+        pos_open = _fetch_position_open_payload(conn, tid_raw) if tid_raw else None
+        sle, tpe = _entry_sl_tp_from_open_or_context(pos_open, ledger_row)
+        hdm, hbars = _hold_duration_minutes_and_bars(
+            ledger_row.get("entry_time"),
+            ledger_row.get("exit_time"),
+            tf or None,
+        )
+        pol_exit = fetch_policy_evaluation_for_market_event(
+            conn,
+            mid,
+            lane=RESERVED_STRATEGY_BASELINE,
+            strategy_id=RESERVED_STRATEGY_BASELINE,
+            signal_mode="sean_jupiter_v1",
+        )
+        exit_feat = _fetch_baseline_exit_policy_features(conn, mid)
+        _raw_pf = (pol_exit or {}).get("features")
+        pol_feat = _raw_pf if isinstance(_raw_pf, dict) else {}
+        feat_for_exit_sl = exit_feat if exit_feat else pol_feat
+        if not isinstance(feat_for_exit_sl, dict):
+            feat_for_exit_sl = {}
+        sl_exit, tp_exit = _sl_tp_prices_from_features(feat_for_exit_sl)
+        if sl_exit is None or tp_exit is None:
+            lsl, ltp = _sl_tp_prices_from_ledger_context(ledger_row)
+            if sl_exit is None:
+                sl_exit = lsl
+            if tp_exit is None:
+                tp_exit = ltp
         out.append(
             {
                 "market_event_id": mid,
@@ -1183,6 +1211,12 @@ def _recent_baseline_policy_trade_rows_for_strip(
                 "exit_reason": str(ledger_row.get("exit_reason") or "").strip() or None,
                 "trade_id": str(ledger_row.get("trade_id") or "").strip() or None,
                 "mae_usd": round(mae_val, 6) if mae_val is not None else None,
+                "hold_duration_minutes": round(hdm, 4) if hdm is not None else None,
+                "hold_bars_estimate": hbars,
+                "stop_loss_entry_price": sle,
+                "take_profit_entry_price": tpe,
+                "stop_loss_exit_price": sl_exit,
+                "take_profit_exit_price": tp_exit,
                 "baseline_authority": "TRADE",
             }
         )
@@ -3301,7 +3335,7 @@ def build_trade_chain_payload(
             conn, limit=50, market_db_path=mpath
         )
         recent_strip = _recent_baseline_policy_trade_rows_for_strip(
-            conn, limit=5, market_db_path=mpath
+            conn, limit=15, market_db_path=mpath
         )
         for rs in recent_strip:
             mid_rs = str(rs.get("market_event_id") or "").strip()
