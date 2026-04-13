@@ -200,6 +200,75 @@ def fetch_bar_by_market_event_id(
         conn.close()
 
 
+def fetch_bars_asc_through_market_event_id(
+    market_event_id: str,
+    *,
+    db_path: Path | None = None,
+    canonical_symbol: str = CANONICAL_INSTRUMENT_SOL_PERP,
+    max_lookback: int = 600,
+) -> list[dict[str, Any]]:
+    """
+    Closed bars **oldest first**, ending at the bar identified by ``market_event_id`` (inclusive).
+
+    Used when the last-N-bars window (e.g. 280) does not include an older ``market_event_id`` still
+    present on the trade-chain axis — avoids ``bar_not_in_window_or_short_history`` for valid ids.
+    """
+    mid = (market_event_id or "").strip()
+    if not mid:
+        return []
+    target = fetch_bar_by_market_event_id(
+        mid, db_path=db_path, canonical_symbol=canonical_symbol
+    )
+    if not target:
+        return []
+    co = target.get("candle_open_utc")
+    if co is None:
+        return []
+    lim = max(1, int(max_lookback))
+    p = db_path or default_market_data_path()
+    if not p.is_file():
+        return []
+    conn = sqlite3.connect(f"file:{p}?mode=ro", uri=True)
+    try:
+        cur = conn.execute(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name='market_bars_5m'"
+        )
+        if cur.fetchone() is None:
+            return []
+        rows = conn.execute(
+            """
+            SELECT id, canonical_symbol, timeframe, candle_open_utc, candle_close_utc,
+                   market_event_id, open, high, low, close, tick_count, price_source, computed_at
+            FROM market_bars_5m
+            WHERE canonical_symbol = ? AND candle_open_utc <= ?
+            ORDER BY candle_open_utc DESC, id DESC
+            LIMIT ?
+            """,
+            (canonical_symbol, co, lim),
+        ).fetchall()
+        if not rows:
+            return []
+        keys = [
+            "id",
+            "canonical_symbol",
+            "timeframe",
+            "candle_open_utc",
+            "candle_close_utc",
+            "market_event_id",
+            "open",
+            "high",
+            "low",
+            "close",
+            "tick_count",
+            "price_source",
+            "computed_at",
+        ]
+        rev = [dict(zip(keys, row)) for row in rows]
+        return list(reversed(rev))
+    finally:
+        conn.close()
+
+
 def ensure_market_db_has_bar_table(db_path: Path | None = None) -> bool:
     """True if ``market_bars_5m`` exists (schema applied)."""
     p = db_path or default_market_data_path()

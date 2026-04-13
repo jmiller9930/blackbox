@@ -927,12 +927,12 @@
             Show Anna lanes (test / strategy — per-bar, independent of baseline)
           </label>
           <p class="tc-chain-note">
-            The <strong>right column</strong> is a <strong>forming</strong> 5m bucket only while wall clock is <strong>inside</strong> that interval (before the boundary); after the close, the strip shows the last <strong>closed</strong> bar until market_data/policy update (no fake “eval pending” for an already-closed bar). To the left are <strong>resolved</strong> evaluations. Open baseline: OPEN/HOLDING anchor rules; uncheck Anna for baseline only.
+            Columns are <strong>closed</strong> 5m bars only — the rightmost column is the last completed bucket (decision at the roll). No in-progress / “eval pending” column. Open baseline: OPEN/HOLDING anchor rules; uncheck Anna for baseline only.
           </p>
         </div>
         <div class="tc-flow" aria-hidden="true">
           <span class="tc-flow-seq"><span class="tc-flow-old">older</span> <span class="tc-flow-arrow">→</span> <span class="tc-flow-new">newer</span></span>
-          <span class="tc-flow-now">newest = right (forming only inside open bucket)</span>
+          <span class="tc-flow-now">newest = right (last closed bar)</span>
         </div>
         <div class="tc-pan-strip" id="tc-pan-strip" hidden>
           <span class="tc-pan-lbl" aria-hidden="true">older</span>
@@ -1323,31 +1323,6 @@
       ? jupiterNarrativeLinesHtml(narr, 'Jupiter / Sean policy (5m bar)', baselineLane)
       : '';
     if (!c || c.empty) {
-      var br = c && String(c.baseline_display_reason || '');
-      var od0 = c && String(c.outcome_display || '').toLowerCase();
-      var syncLag =
-        baselineLane &&
-        c &&
-        (br === 'bar_closed_market_row_pending' || od0 === 'sync pending');
-      if (syncLag) {
-        return tcCellSurface(
-          narrEl +
-            '<div class="tc-tile-verdict wl-EVAL tc-verdict-sync" title="This 5m bar already closed at the boundary; waiting for market_bars_5m + policy upsert (next ingest tick). Not a forming candle.">' +
-            'SYNC PENDING</div>'
-        );
-      }
-      var pend =
-        baselineLane &&
-        c &&
-        (br === 'bar_forming_no_closed_bar' ||
-          od0 === 'eval pending');
-      if (pend) {
-        return tcCellSurface(
-          narrEl +
-            '<div class="tc-tile-verdict wl-EVAL tc-verdict-pending" title="Current 5m bucket still open (wall clock inside this interval). Full Sean evaluation appears right after this bar closes at the 5m boundary.">' +
-            'EVAL PENDING</div>'
-        );
-      }
       var ntBar =
         baselineLane
           ? 'tc-empty tc-no-trade tc-no-trade-amber'

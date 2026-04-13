@@ -663,7 +663,10 @@ def _event_axis_jupiter_tile_narratives(
 
     mpath = market_db_path
     _ensure_runtime_for_market_imports()
-    from market_data.bar_lookup import fetch_recent_bars_asc
+    from market_data.bar_lookup import (
+        fetch_bars_asc_through_market_event_id,
+        fetch_recent_bars_asc,
+    )
 
     for mid in event_axis:
         mid_s = str(mid or "").strip()
@@ -706,6 +709,18 @@ def _event_axis_jupiter_tile_narratives(
                 ),
                 None,
             )
+            if idx is None or len(bars[: idx + 1]) < MIN_BARS:
+                bars = fetch_bars_asc_through_market_event_id(
+                    mid_s, db_path=mpath, max_lookback=600
+                )
+                idx = next(
+                    (
+                        j
+                        for j, b in enumerate(bars)
+                        if str(b.get("market_event_id") or "").strip() == mid_s
+                    ),
+                    None,
+                )
             if idx is None or len(bars[: idx + 1]) < MIN_BARS:
                 out[mid_s] = format_jupiter_tile_narrative_v1(
                     features={},
@@ -2036,93 +2051,6 @@ def _event_axis_from_market_bars(mpath: Path | None, *, limit: int) -> tuple[lis
     return mids, times
 
 
-def _five_m_candle_close_utc_from_mid(market_event_id: str) -> datetime | None:
-    """Return candle **close** (exclusive end) in UTC for a canonical ``…_5m_<ISO>Z`` id, or ``None``."""
-    _ensure_runtime_for_market_imports()
-    from market_data.market_event_id import parse_market_event_id
-
-    parsed = parse_market_event_id(str(market_event_id or "").strip())
-    if not parsed:
-        return None
-    _sym, tf, ts_s = parsed
-    if tf != "5m":
-        return None
-    ts_norm = ts_s if str(ts_s).endswith("Z") else str(ts_s) + "Z"
-    dt_open = _parse_iso_ts(ts_norm)
-    if dt_open is None:
-        return None
-    if dt_open.tzinfo is None:
-        dt_open = dt_open.replace(tzinfo=timezone.utc)
-    else:
-        dt_open = dt_open.astimezone(timezone.utc)
-    return dt_open + timedelta(minutes=5)
-
-
-def _append_in_progress_5m_bar_to_axis(
-    mids: list[str],
-    times: list[str | None],
-    *,
-    max_events: int,
-) -> tuple[list[str], list[str | None]]:
-    """
-    Rightmost column: **only while** wall clock is **inside** the current 5m bucket after the last
-    **closed** bar in ``market_bars_5m``. Axis rows are closed bars (oldest→newest); we append **one**
-    synthetic ``market_event_id`` for the **in-progress** bucket (``next_open``) **only if**
-    ``now < next_open + 5m``. Once the boundary passes (bar closed), we **do not** append: evaluation
-    belongs to that closed bar in DB/policy — avoids **EVAL PENDING** for an interval that already
-    ended (operator “five minutes in the past” defect).
-    """
-    if not mids:
-        return mids, times
-    _ensure_runtime_for_market_imports()
-    from datetime import timedelta, timezone
-
-    from market_data.market_event_id import make_market_event_id, parse_market_event_id
-
-    last_mid = str(mids[-1]).strip()
-    parsed = parse_market_event_id(last_mid)
-    if not parsed:
-        return mids, times
-    sym, tf, ts_s = parsed
-    if tf != "5m":
-        return mids, times
-    ts_norm = ts_s if str(ts_s).endswith("Z") else str(ts_s) + "Z"
-    dt_open = _parse_iso_ts(ts_norm)
-    if dt_open is None:
-        return mids, times
-    if dt_open.tzinfo is None:
-        dt_open = dt_open.replace(tzinfo=timezone.utc)
-    else:
-        dt_open = dt_open.astimezone(timezone.utc)
-    next_open = dt_open + timedelta(minutes=5)
-    now = datetime.now(timezone.utc)
-    if now < next_open:
-        return mids, times
-    bucket_close = next_open + timedelta(minutes=5)
-    if now >= bucket_close:
-        # Bar that opened at next_open has closed — do not show synthetic “forming” column;
-        # wait for market_bars_5m + policy upsert on the next poll.
-        return mids, times
-    mid_new = make_market_event_id(
-        canonical_symbol=sym,
-        candle_open_utc=next_open,
-        timeframe=tf,
-    )
-    if mid_new in mids:
-        return mids, times
-    iso = next_open.isoformat().replace("+00:00", "Z")
-    out_m = list(mids) + [mid_new]
-    out_t = list(times)
-    while len(out_t) < len(mids):
-        out_t.append(None)
-    out_t.append(iso)
-    max_cols = max(4, min(48, int(max_events)))
-    while len(out_m) > max_cols:
-        out_m = out_m[1:]
-        out_t = out_t[1:]
-    return out_m, out_t
-
-
 def _symbol_tf_from_market_event_id(market_event_id: str) -> tuple[str | None, str | None]:
     """Best-effort parse ``SYMBOL_TF_ISO8601`` from canonical ``market_event_id`` (e.g. ``SOL-PERP_5m_...``)."""
     s = str(market_event_id or "").strip()
@@ -2307,84 +2235,6 @@ def _baseline_assign_lifecycle_tile_slots(
         i = j
 
 
-def _baseline_policy_bar_pending_cell(
-    *,
-    market_event_id: str,
-    ledger_row: dict[str, Any] | None,
-) -> dict[str, Any]:
-    """
-    Axis column for a **synthetic** ``market_event_id`` (in-progress 5m) **before** a row exists in
-    ``market_bars_5m``. Not an evaluated **NO_TRADE** — full Sean tile + policy verdict appear after close.
-    """
-    mid = str(market_event_id).strip()
-    return {
-        "empty": True,
-        "market_event_id": mid,
-        "trade_id": None,
-        "trace_id": None,
-        "symbol": None,
-        "timeframe": None,
-        "side": None,
-        "exit_reason": None,
-        "entry": None,
-        "exit": None,
-        "entry_time": None,
-        "exit_time": None,
-        "size": None,
-        "notional_usd_approx": None,
-        "pnl_usd": None,
-        "mae_usd": None,
-        "outcome": "PENDING_BAR",
-        "outcome_display": "eval pending",
-        "economic_authority": "policy_gated",
-        "policy_authoritative": False,
-        "policy_trade": None,
-        "policy_reason_code": None,
-        "policy_missing": True,
-        "ledger_row_ignored": ledger_row is not None,
-        "baseline_display_reason": "bar_forming_no_closed_bar",
-    }
-
-
-def _baseline_policy_bar_sync_lag_cell(
-    *,
-    market_event_id: str,
-    ledger_row: dict[str, Any] | None,
-) -> dict[str, Any]:
-    """
-    Candle **close boundary has passed** (5m bucket ended) but ``market_bars_5m`` / policy row not
-    visible yet — not “evaluating the past”; ingest or bridge will populate on the next tick.
-    """
-    mid = str(market_event_id).strip()
-    return {
-        "empty": True,
-        "market_event_id": mid,
-        "trade_id": None,
-        "trace_id": None,
-        "symbol": None,
-        "timeframe": None,
-        "side": None,
-        "exit_reason": None,
-        "entry": None,
-        "exit": None,
-        "entry_time": None,
-        "exit_time": None,
-        "size": None,
-        "notional_usd_approx": None,
-        "pnl_usd": None,
-        "mae_usd": None,
-        "outcome": "SYNC_LAG",
-        "outcome_display": "sync pending",
-        "economic_authority": "policy_gated",
-        "policy_authoritative": False,
-        "policy_trade": None,
-        "policy_reason_code": None,
-        "policy_missing": True,
-        "ledger_row_ignored": ledger_row is not None,
-        "baseline_display_reason": "bar_closed_market_row_pending",
-    }
-
-
 def _baseline_policy_no_trade_cell(
     *,
     market_event_id: str,
@@ -2479,13 +2329,12 @@ def _compact_baseline_cell_policy_bound(
         except Exception:
             bar_exists = False
         if not bar_exists:
-            close_dt = _five_m_candle_close_utc_from_mid(mid)
-            now_utc = datetime.now(timezone.utc)
-            if close_dt is not None and now_utc >= close_dt:
-                return _baseline_policy_bar_sync_lag_cell(
-                    market_event_id=mid, ledger_row=ledger_row
-                )
-            return _baseline_policy_bar_pending_cell(market_event_id=mid, ledger_row=ledger_row)
+            return _baseline_policy_no_trade_cell(
+                market_event_id=mid,
+                policy_row=None,
+                ledger_row=ledger_row,
+                reason="no_closed_bar_in_market_db",
+            )
         return _baseline_policy_no_trade_cell(
             market_event_id=mid,
             policy_row=None,
@@ -2790,17 +2639,10 @@ def build_trade_chain_payload(
     conn = connect_ledger(db_path)
     try:
         ensure_execution_ledger_schema(conn)
+        # Closed 5m bars only — newest column is the last **completed** bucket (decision at roll).
+        # No synthetic "forming" column; operators should not see EVAL PENDING for an in-progress candle.
         event_axis, event_axis_time_utc_iso = _event_axis_from_market_bars(mpath, limit=max_events)
         event_axis_source = "market_bars_5m"
-        # Append current open 5m interval when wall clock is past the last bar's next open — live
-        # axis surface (forming candle column) alongside closed bars; baseline uses eval_pending / policy
-        # when that bar is not yet in market_bars_5m.
-        if event_axis and event_axis_source == "market_bars_5m":
-            event_axis, event_axis_time_utc_iso = _append_in_progress_5m_bar_to_axis(
-                event_axis,
-                event_axis_time_utc_iso,
-                max_events=max_events,
-            )
         if not event_axis:
             event_axis, event_axis_time_utc_iso = _distinct_event_axis_with_times(conn, limit=max_events)
             event_axis_source = "execution_trades_fallback"
@@ -2950,12 +2792,10 @@ def build_trade_chain_payload(
         "event_axis_source": event_axis_source,
         "event_axis_note": (
             "Columns are distinct market_event_id values (oldest left → newest right). "
-            "Axis prefers recent rows from market_bars_5m when available; else execution_trades. "
-            "A **forming** column is appended only while wall clock is **inside** the current 5m bucket; after the "
-            "boundary, the strip uses closed bars only until the next bucket opens (avoids EVAL PENDING for an "
-            "interval that already closed). "
-            "Baseline lifecycle: **open** → **held** → **closed**; one **primary** tile on the newest column when "
-            "position is open; older columns in that run are **continuation** (minimal)."
+            "Axis is **closed** 5m bars from market_bars_5m when available; else execution_trades. "
+            "No in-progress column — newest column is the last **completed** bucket (evaluation at roll). "
+            "Baseline lifecycle: **open** → **held** → **closed**; primary tile on newest column when position open; "
+            "older columns in that run are **continuation** (minimal)."
         ),
         "jupiter_tile_narrative_schema": "jupiter_tile_narrative_v1",
         "recency": {
