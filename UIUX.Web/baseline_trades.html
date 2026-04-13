@@ -365,6 +365,12 @@
         <p class="bt-econ-banner" id="bt-econ-banner" role="status">
           <strong>PnL column:</strong> gross model USD: <code>(exit − entry) × size</code> in quote terms. <strong>Not</strong> “return on full bankroll”—Sean sizing builds <strong>notional</strong> from <strong>risk slice × leverage</strong> (see <strong>Risk $</strong> vs <strong>Bankroll $</strong>). PnL shows <strong>% vs notional</strong> in parentheses. Not net of fees, funding, or slippage. Full wording: API <code>meta.pnl_semantics</code> after load.
         </p>
+        <p class="bt-desc" style="margin-top:-0.35rem;border-left:3px solid #94a3b8;padding-left:0.75rem">
+          <strong>How to read dollars:</strong> <strong>Notional $</strong> ≈ entry × size (scale of <em>this</em> position)—it is <strong>not</strong> “everything in your account.”
+          <strong>Bankroll $ (policy)</strong> is the paper equity input used to <em>size</em> risk; <strong>PnL USD</strong> is the outcome on <em>this</em> closed trade only.
+          Example: notional ~100 and PnL +0.16 means about a <strong>0.16% move on ~$100 of exposure</strong>, not “$0.16 on $1,000 bankroll” unless you compute return on bankroll yourself.
+          <strong>Duration ~5 minutes</strong> on 5m baseline replay is normal: lifecycle exits are tied to <strong>closed 5m bars</strong>, so many trades span one bar to the next.
+        </p>
         <p class="bt-dir-summary" id="bt-direction-summary" aria-live="polite"></p>
         <div id="bt-active-panel" class="bt-active-panel" role="region" aria-live="polite" aria-label="Active baseline position"></div>
 
