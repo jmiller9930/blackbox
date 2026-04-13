@@ -1741,8 +1741,10 @@
         esc(String(c.jupiter_tile_narrative_scope_note)) +
         '</div>';
     }
-    var latestGates = '';
-    if (
+    var colGates = '';
+    if (baselineLane && c && c.jupiter_v3_gates) {
+      colGates = jupiterV3GatesTableHtml(c.jupiter_v3_gates, 'This bar — gates');
+    } else if (
       baselineLane &&
       jupLab === 'JUPv3' &&
       jp.jupiter_v3_gates &&
@@ -1750,12 +1752,12 @@
       typeof opts.nEv === 'number' &&
       opts.colIndex === opts.nEv - 1
     ) {
-      latestGates = jupiterV3GatesTableHtml(
+      colGates = jupiterV3GatesTableHtml(
         jp.jupiter_v3_gates,
         'This bar — gates (latest closed candle)'
       );
     }
-    var jupStack = scopeNote + entrySnap + narrEl + latestGates;
+    var jupStack = scopeNote + entrySnap + narrEl + colGates;
     if (!c || c.empty) {
       var ntBar =
         baselineLane

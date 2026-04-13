@@ -257,6 +257,7 @@ def compute_next_tick_eta(
 
 
 from modules.anna_training.execution_ledger import (
+    BASELINE_POLICY_SLOT_JUP_V2,
     BASELINE_POLICY_SLOT_JUP_V3,
     RESERVED_STRATEGY_BASELINE,
     baseline_jupiter_policy_label_for_slot,
@@ -369,6 +370,7 @@ def _recompute_jupiter_narrative_for_market_event_id(
     *,
     policy_slot: str,
     training_state: dict[str, Any] | None,
+    prefetch_bars: list[dict[str, Any]] | None = None,
 ) -> tuple[str, dict[str, Any] | None]:
     """
     When ``policy_evaluations`` has no row (or empty narrative), recompute from ``market_bars_5m``
@@ -399,7 +401,11 @@ def _recompute_jupiter_narrative_for_market_event_id(
     except Exception:
         return "", None
     try:
-        bars = fetch_recent_bars_asc(limit=280, db_path=market_db_path)
+        bars: list[dict[str, Any]]
+        if prefetch_bars is not None and len(prefetch_bars) > 0:
+            bars = prefetch_bars
+        else:
+            bars = fetch_recent_bars_asc(limit=280, db_path=market_db_path)
         idx = next(
             (j for j, b in enumerate(bars) if str(b.get("market_event_id") or "").strip() == mid),
             None,
@@ -460,6 +466,7 @@ def _baseline_entry_snapshot_for_active_slot(
     entry_mid: str,
     market_db_path: Path | None,
     training_state: dict[str, Any] | None,
+    prefetch_bars: list[dict[str, Any]] | None = None,
 ) -> tuple[str, dict[str, Any] | None]:
     """
     **Why we opened** narrative and optional **Jupiter_3 gate table** for the entry ``market_event_id``.
@@ -480,7 +487,11 @@ def _baseline_entry_snapshot_for_active_slot(
         st = _load_training_state()
     if policy_slot == BASELINE_POLICY_SLOT_JUP_V3 and market_db_path and market_db_path.is_file():
         s, g = _recompute_jupiter_narrative_for_market_event_id(
-            em, market_db_path, policy_slot=policy_slot, training_state=st
+            em,
+            market_db_path,
+            policy_slot=policy_slot,
+            training_state=st,
+            prefetch_bars=prefetch_bars,
         )
         if (s or "").strip():
             return s.strip(), g
@@ -490,7 +501,11 @@ def _baseline_entry_snapshot_for_active_slot(
         return s.strip(), _jupiter_v3_gates_from_policy_row(pol_e)
     if market_db_path and market_db_path.is_file():
         s2, g2 = _recompute_jupiter_narrative_for_market_event_id(
-            em, market_db_path, policy_slot=policy_slot, training_state=st
+            em,
+            market_db_path,
+            policy_slot=policy_slot,
+            training_state=st,
+            prefetch_bars=prefetch_bars,
         )
         return (s2 or "").strip(), g2
     return "", None
@@ -676,7 +691,7 @@ def build_jupiter_policy_snapshot(
                 entry_gates: dict[str, Any] | None = None
                 if emid:
                     entry_nar, entry_gates = _baseline_entry_snapshot_for_active_slot(
-                        conn, emid, mpath, _st
+                        conn, emid, mpath, _st, prefetch_bars=bars
                     )
                 out["baseline_lifecycle"] = {
                     "position_open": True,
@@ -929,49 +944,63 @@ def _event_axis_jupiter_tile_narratives(
     conn: Any,
     event_axis: list[str],
     market_db_path: Path | None,
-) -> dict[str, str]:
+) -> tuple[dict[str, str], dict[str, dict[str, Any]]]:
     """
     Per-``market_event_id`` multi-line Jupiter / Sean policy tile (operator requirement).
 
-    When a ``policy_evaluations`` row exists for the event, the narrative is **always** derived
-    from persisted ``features_json`` (and row trade/side/reason_code) — never recomputed from
-    bars. Recompute from ``market_bars_5m`` only when **no** policy row is present.
+    **Persisted row** is used when it matches the operator slot: ``jup_v2`` → any row;
+    ``jup_v3`` → only rows with ``signal_mode`` Jupiter_3. If the slot is **JUPv3** but the
+    ledger row was written under **v2**, we **recompute** from ``market_bars_5m`` so the strip
+    does not show Supertrend text under a JUPv3 chip.
+
+    One **prefetch** of recent bars is shared across all columns to avoid N× SQLite scans per
+    bundle (major latency win).
+
+    Returns ``(narratives_by_mid, jupiter_v3_gates_by_mid)`` — gates only for V3 recompute/persisted
+    rows that include ``jupiter_v3_gates``.
     """
     from modules.anna_training.execution_ledger import (
         SIGNAL_MODE_JUPITER_2,
         SIGNAL_MODE_JUPITER_3,
         fetch_baseline_policy_evaluation_for_market_event,
     )
-    from modules.anna_training.sean_jupiter_baseline_signal import (
-        MIN_BARS as MIN_BARS_JUPITER_2,
-        evaluate_sean_jupiter_baseline_v1,
-        evaluate_sean_jupiter_baseline_v3,
-        format_baseline_jupiter_tile_narrative,
-    )
-    from modules.anna_training.jupiter_3_sean_policy import MIN_BARS as MIN_BARS_JUPITER_3
+    from modules.anna_training.sean_jupiter_baseline_signal import format_baseline_jupiter_tile_narrative
     from modules.anna_training.store import load_state as _load_training_state
 
     out: dict[str, str] = {}
+    gates_out: dict[str, dict[str, Any]] = {}
     if not event_axis:
-        return out
+        return out, gates_out
 
     mpath = market_db_path
     _ensure_runtime_for_market_imports()
-    from market_data.bar_lookup import (
-        fetch_bars_asc_through_market_event_id,
-        fetch_recent_bars_asc,
-    )
+    from market_data.bar_lookup import fetch_recent_bars_asc
 
     use_v3 = get_baseline_jupiter_policy_slot(conn) == BASELINE_POLICY_SLOT_JUP_V3
-    min_bars = MIN_BARS_JUPITER_3 if use_v3 else MIN_BARS_JUPITER_2
     sm_active = SIGNAL_MODE_JUPITER_3 if use_v3 else SIGNAL_MODE_JUPITER_2
+    policy_slot = BASELINE_POLICY_SLOT_JUP_V3 if use_v3 else BASELINE_POLICY_SLOT_JUP_V2
+    st = _load_training_state()
+
+    prefetch: list[dict[str, Any]] | None = None
+    if mpath and mpath.is_file():
+        try:
+            prefetch = fetch_recent_bars_asc(limit=280, db_path=mpath)
+        except Exception:
+            prefetch = None
 
     for mid in event_axis:
         mid_s = str(mid or "").strip()
         if not mid_s:
             continue
         row = fetch_baseline_policy_evaluation_for_market_event(conn, mid_s)
+        use_persisted = False
         if row:
+            sm_row = str(row.get("signal_mode") or "").strip()
+            if not use_v3:
+                use_persisted = True
+            elif sm_row == SIGNAL_MODE_JUPITER_3:
+                use_persisted = True
+        if use_persisted and row:
             f = dict(row["features"]) if isinstance(row.get("features"), dict) else {}
             pb = f.get("policy_blockers")
             pbl = [str(x) for x in pb] if isinstance(pb, list) else None
@@ -983,7 +1012,16 @@ def _event_axis_jupiter_tile_narratives(
                 side=str(row.get("side") or "flat"),
                 policy_blockers=pbl,
             )
+            jg = _jupiter_v3_gates_from_policy_row(
+                {
+                    "signal_mode": row.get("signal_mode"),
+                    "features": f,
+                }
+            )
+            if jg:
+                gates_out[mid_s] = jg
             continue
+
         if not mpath or not mpath.is_file():
             out[mid_s] = format_baseline_jupiter_tile_narrative(
                 signal_mode=sm_active,
@@ -994,28 +1032,18 @@ def _event_axis_jupiter_tile_narratives(
             )
             continue
         try:
-            bars = fetch_recent_bars_asc(limit=280, db_path=mpath)
-            idx = next(
-                (
-                    j
-                    for j, b in enumerate(bars)
-                    if str(b.get("market_event_id") or "").strip() == mid_s
-                ),
-                None,
+            nar, g = _recompute_jupiter_narrative_for_market_event_id(
+                mid_s,
+                mpath,
+                policy_slot=policy_slot,
+                training_state=st,
+                prefetch_bars=prefetch,
             )
-            if idx is None or len(bars[: idx + 1]) < min_bars:
-                bars = fetch_bars_asc_through_market_event_id(
-                    mid_s, db_path=mpath, max_lookback=600
-                )
-                idx = next(
-                    (
-                        j
-                        for j, b in enumerate(bars)
-                        if str(b.get("market_event_id") or "").strip() == mid_s
-                    ),
-                    None,
-                )
-            if idx is None or len(bars[: idx + 1]) < min_bars:
+            if (nar or "").strip():
+                out[mid_s] = nar.strip()
+                if g:
+                    gates_out[mid_s] = g
+            else:
                 out[mid_s] = format_baseline_jupiter_tile_narrative(
                     signal_mode=sm_active,
                     features={},
@@ -1023,38 +1051,13 @@ def _event_axis_jupiter_tile_narratives(
                     trade=False,
                     side="flat",
                 )
-                continue
-            sub = bars[: idx + 1]
-            if use_v3:
-                sig = evaluate_sean_jupiter_baseline_v3(
-                    bars_asc=sub,
-                    training_state=_load_training_state(),
-                    ledger_db_path=default_execution_ledger_path(),
-                )
-            else:
-                sig = evaluate_sean_jupiter_baseline_v1(
-                    bars_asc=sub,
-                    training_state=_load_training_state(),
-                    ledger_db_path=default_execution_ledger_path(),
-                )
-            sf = dict(sig.features) if isinstance(sig.features, dict) else {}
-            pb = sf.get("policy_blockers")
-            pbl = [str(x) for x in pb] if isinstance(pb, list) else None
-            out[mid_s] = format_baseline_jupiter_tile_narrative(
-                signal_mode=sm_active,
-                features=sf,
-                reason_code=sig.reason_code,
-                trade=sig.trade,
-                side=sig.side,
-                policy_blockers=pbl,
-            )
         except Exception as e:
             out[mid_s] = (
                 "Jupiter tile (event column): build failed — "
                 + str(e)[:400]
                 + "\n(Check BLACKBOX_MARKET_DATA_PATH, execution_ledger policy_evaluations, API restart after deploy.)"
             )
-    return out
+    return out, gates_out
 
 
 def _compact_cell(
@@ -2748,12 +2751,15 @@ def build_baseline_trades_report(
                 break
 
         tile_narr: dict[str, str] = {}
+        tile_v3_gates: dict[str, dict[str, Any]] = {}
         if mids_for_tiles:
-            tile_narr = _event_axis_jupiter_tile_narratives(conn, mids_for_tiles, mpath)
+            tile_narr, tile_v3_gates = _event_axis_jupiter_tile_narratives(conn, mids_for_tiles, mpath)
         for i, r in enumerate(rows_out):
             mk = str(r.get("market_event_id") or "").strip()
             tile_text = tile_narr.get(mk, "") if mk else ""
             r["jupiter_tile_narrative"] = tile_text
+            if mk and tile_v3_gates.get(mk):
+                r["jupiter_v3_gates"] = tile_v3_gates[mk]
             ledger_row_i, cell_i, _pos_open_i = meta_pairs[i]
             pol_i = fetch_baseline_policy_evaluation_for_market_event(conn, mk)
             r["baseline_jupiter_policy_tag"] = baseline_jupiter_policy_tag_from_signal_mode(
@@ -3772,7 +3778,7 @@ def build_trade_chain_payload(
             event_axis_time_utc_iso = [inj_t]
             event_axis_candle_close_utc_iso = [_five_m_close_after_open_iso(inj_t)]
             event_axis_source = "open_baseline_injected"
-        tile_narr = _event_axis_jupiter_tile_narratives(conn, event_axis, mpath)
+        tile_narr, tile_v3_gates_axis = _event_axis_jupiter_tile_narratives(conn, event_axis, mpath)
         baseline_ledger = _recent_baseline_trades_for_dashboard_strip(
             conn, limit=50, market_db_path=mpath
         )
@@ -3782,9 +3788,13 @@ def build_trade_chain_payload(
         for rs in recent_strip:
             mid_rs = str(rs.get("market_event_id") or "").strip()
             rs["jupiter_tile_narrative"] = tile_narr.get(mid_rs, "") if mid_rs else ""
+            if mid_rs and tile_v3_gates_axis.get(mid_rs):
+                rs["jupiter_v3_gates"] = tile_v3_gates_axis[mid_rs]
         for br in baseline_ledger:
             mid_k = str(br.get("market_event_id") or "").strip()
             br["jupiter_tile_narrative"] = tile_narr.get(mid_k, "") if mid_k else ""
+            if mid_k and tile_v3_gates_axis.get(mid_k):
+                br["jupiter_v3_gates"] = tile_v3_gates_axis[mid_k]
         baseline_trades_report_rows = baseline_ledger
         tests, strats, note = _strategy_buckets(conn)
         lc_map = _lifecycle_by_strategy(conn)
@@ -3894,6 +3904,9 @@ def build_trade_chain_payload(
                 if ck_row == "baseline" and d.get("lifecycle_tile_slot") == "continuation":
                     narr = ""
                 d["jupiter_tile_narrative"] = narr
+                mid_k = str(mid).strip()
+                if ck_row == "baseline" and mid_k and tile_v3_gates_axis.get(mid_k):
+                    d["jupiter_v3_gates"] = tile_v3_gates_axis[mid_k]
                 if ck_row == "baseline" and narr and not d.get("jupiter_tile_narrative_scope"):
                     d["jupiter_tile_narrative_scope"] = "current_bar"
                     d["jupiter_tile_narrative_scope_note"] = (
