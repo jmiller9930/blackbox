@@ -1986,6 +1986,22 @@
     if (!sc) return;
     var max = Math.max(0, sc.scrollWidth - sc.clientWidth);
     var snaps = tcTradeChainColumnSnapScrollLefts();
+    /* Column starts alone undershoot the true right edge; without `max`, releasing the pan slider
+       at “newest” snaps left to the last column’s left edge and feels like the control fights you. */
+    var k;
+    var hasMax = false;
+    for (k = 0; k < snaps.length; k++) {
+      if (Math.abs(snaps[k] - max) < 1.5) {
+        hasMax = true;
+        break;
+      }
+    }
+    if (max > 0 && !hasMax) {
+      snaps = snaps.concat([max]);
+      snaps.sort(function (a, b) {
+        return a - b;
+      });
+    }
     var cur = sc.scrollLeft;
     var best = snaps[0];
     var bestDist = Math.abs(cur - best);
