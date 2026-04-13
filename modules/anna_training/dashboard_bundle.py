@@ -2717,9 +2717,15 @@ def build_trade_chain_payload(
         ensure_execution_ledger_schema(conn)
         event_axis, event_axis_time_utc_iso = _event_axis_from_market_bars(mpath, limit=max_events)
         event_axis_source = "market_bars_5m"
-        # Do not append a synthetic "current open" 5m column: rightmost = latest **closed** bar in
-        # market_bars_5m so baseline shows last resolved NO TRADE / OPEN, not EVAL PENDING (Option 2).
-        # See _append_in_progress_5m_bar_to_axis if a segregated forming-candle view is added later.
+        # Append current open 5m interval when wall clock is past the last bar's next open — live
+        # axis surface (forming candle column) alongside closed bars; baseline uses eval_pending / policy
+        # when that bar is not yet in market_bars_5m.
+        if event_axis and event_axis_source == "market_bars_5m":
+            event_axis, event_axis_time_utc_iso = _append_in_progress_5m_bar_to_axis(
+                event_axis,
+                event_axis_time_utc_iso,
+                max_events=max_events,
+            )
         if not event_axis:
             event_axis, event_axis_time_utc_iso = _distinct_event_axis_with_times(conn, limit=max_events)
             event_axis_source = "execution_trades_fallback"

@@ -919,12 +919,12 @@
             Show Anna lanes (test / strategy — per-bar, independent of baseline)
           </label>
           <p class="tc-chain-note">
-            The <strong>right column</strong> is the latest <strong>closed</strong> 5m bar (evaluated policy) — not a forming candle. With an <strong>open</strong> baseline position, the live OPEN/HOLDING tile anchors at the evaluated bar; earlier columns are history. Uncheck Anna to focus on baseline only.
+            The <strong>right column</strong> is the <strong>current</strong> 5m interval when wall time has entered it (forming candle); otherwise closed bars only. To the left are <strong>resolved</strong> evaluations (NO TRADE / OPEN). With an <strong>open</strong> baseline position, the live OPEN/HOLDING tile follows the anchor rules; uncheck Anna to focus on baseline only.
           </p>
         </div>
         <div class="tc-flow" aria-hidden="true">
           <span class="tc-flow-seq"><span class="tc-flow-old">older</span> <span class="tc-flow-arrow">→</span> <span class="tc-flow-new">newer</span></span>
-          <span class="tc-flow-now">latest resolved = right column</span>
+          <span class="tc-flow-now">newest = right column (includes forming)</span>
         </div>
         <div class="tc-pan-strip" id="tc-pan-strip" hidden>
           <span class="tc-pan-lbl" aria-hidden="true">older</span>
