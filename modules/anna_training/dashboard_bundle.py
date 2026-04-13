@@ -2155,8 +2155,8 @@ def build_baseline_trades_report(
         fetch_limit = 500000 if wide_history else scan_cap
         cur = conn.execute(
             """
-            SELECT market_event_id, side, symbol, timeframe, entry_time, entry_price, exit_price,
-                   exit_reason, exit_time, size, pnl_usd, created_at_utc, trade_id, mode,
+            SELECT lane, strategy_id, market_event_id, side, symbol, timeframe, entry_time, entry_price,
+                   exit_price, exit_reason, exit_time, size, pnl_usd, created_at_utc, trade_id, mode,
                    context_snapshot_json
             FROM execution_trades
             WHERE lane = 'baseline' AND strategy_id = ?
