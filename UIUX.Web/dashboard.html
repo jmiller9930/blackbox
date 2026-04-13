@@ -1250,13 +1250,14 @@
     var v = Number(pnl);
     return (v >= 0 ? '+' : '') + v.toFixed(2);
   }
-  /** Green / red / amber for PnL USD column (±ε treated as flat). */
+  /** Green / red / amber for PnL USD — same 2 dp as displayed text; avoids $0.00 showing red/green from float dust. */
   function btsRptPnlToneClassUsd(pnl) {
     if (pnl == null || pnl === '') return '';
     var v = Number(pnl);
     if (isNaN(v)) return '';
-    if (Math.abs(v) < 1e-8) return 'bt-pnl-flat';
-    return v > 0 ? 'bt-pnl-pos' : 'bt-pnl-neg';
+    var rounded = Number(v.toFixed(2));
+    if (rounded === 0) return 'bt-pnl-flat';
+    return rounded > 0 ? 'bt-pnl-pos' : 'bt-pnl-neg';
   }
 
   function btsRptFmtPnlWithPct(r) {
