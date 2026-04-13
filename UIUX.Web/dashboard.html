@@ -1245,6 +1245,29 @@
     return s === 'true' || s === '1';
   }
 
+  /**
+   * Column index of the active baseline trade on event_axis (evaluated bar, else mark, else entry).
+   * Used to render one live tile with colspan — no baseline cells to the right while position_open.
+   */
+  function baselineOpenAnchorColumnIndex(axis, jp) {
+    var bl = jp.baseline_lifecycle || {};
+    var ev = jp.evaluated_bar && jp.evaluated_bar.market_event_id;
+    var mark = bl.mark_market_event_id || bl.last_processed_market_event_id;
+    var entry = bl.entry_market_event_id;
+    var target = ev || mark || entry;
+    if (!target || !axis || !axis.length) return Math.max(0, axis.length - 1);
+    var t = String(target).trim();
+    var i;
+    for (i = 0; i < axis.length; i++) {
+      if (String(axis[i]).trim() === t) return i;
+    }
+    for (i = 0; i < axis.length; i++) {
+      var ax = String(axis[i]);
+      if (ax === t || ax.indexOf(t) >= 0 || t.indexOf(ax) >= 0) return i;
+    }
+    return Math.max(0, axis.length - 1);
+  }
+
   function cellMini(c, row, opts) {
     opts = opts || {};
     var jp = opts.jp || {};
@@ -1253,9 +1276,11 @@
     var nAxis = opts.nEv;
     var baselineLane = (row.chain_kind || '') === 'baseline';
     // One trade, one live surface: never repeat OPEN/HOLDING on earlier columns when ledger says position is open.
+    // When baselineAnchorIdx is set, renderTC places the live tile at that column with colspan — left columns use real cells; skip this dash.
     if (
       baselineLane &&
       baselineLifecyclePositionOpen(bl) &&
+      opts.baselineAnchorIdx == null &&
       typeof colIdx === 'number' &&
       typeof nAxis === 'number' &&
       nAxis > 0 &&
@@ -1714,7 +1739,7 @@
       return Number(x).toFixed(dec != null ? dec : 2);
     }
     return (
-      '<p class="tc-baseline-live-hint">Live baseline — this column is <strong>now</strong>. Updates every poll until exit.</p>' +
+      '<p class="tc-baseline-live-hint">Active baseline trade — timeline to the right is hidden until this position closes. Updates every poll.</p>' +
       '<div class="tc-baseline-live-tile">' +
       '<div class="tc-bl-phase ' +
       phaseCls +
@@ -1769,9 +1794,23 @@
     var blOpen = jp.baseline_lifecycle;
     var blPosOpen = baselineLifecyclePositionOpen(blOpen);
     var useBaselineSingleTile = blPosOpen && blOpen;
+    var axisPre = tc.event_axis || [];
+    var anchorIdxPre =
+      useBaselineSingleTile && axisPre.length
+        ? baselineOpenAnchorColumnIndex(axisPre, jp)
+        : -1;
     var liveSig = '';
     if (blPosOpen && blOpen) {
-      liveSig = JSON.stringify(blOpen) + '|wall:' + Math.floor(Date.now() / 2000);
+      liveSig =
+        JSON.stringify(blOpen) +
+        '|anchor:' +
+        anchorIdxPre +
+        '|ev:' +
+        (jp.evaluated_bar && jp.evaluated_bar.market_event_id
+          ? String(jp.evaluated_bar.market_event_id)
+          : '') +
+        '|wall:' +
+        Math.floor(Date.now() / 2000);
     }
     var sig = tradeChainRenderSig(tc) + '|' + liveSig;
     if (__bbLastTradeChainRenderSig !== null && sig === __bbLastTradeChainRenderSig) {
@@ -1840,28 +1879,44 @@
       var h = '<th scope="row">' + rowHead(row) + '</th>';
       var cells = '';
       if (ck === 'baseline' && useBaselineSingleTile && nEv > 0) {
-        axis.forEach(function (mid, idx) {
-          var isLast = idx === nEv - 1;
-          var cls = isLast ? ' class="tc-now"' : '';
-          var cellBg = tcColumnBgOnly(idx, nEv, row);
-          if (!isLast) {
-            cells +=
-              '<td class="tc-baseline-anchor-empty"' +
-              cls +
-              ' style="' +
-              cellBg +
-              '"><span class="tc-baseline-anchor-dash" title="Baseline — single operator tile in the now column">—</span></td>';
-          } else {
-            cells +=
-              '<td class="tc-baseline-live-cell"' +
-              cls +
-              ' role="status" aria-live="polite" style="' +
-              cellBg +
-              '">' +
-              buildBaselineOperatorTileHtml(blOpen, jp) +
-              '</td>';
-          }
-        });
+        var anchorIdx = baselineOpenAnchorColumnIndex(axis, jp);
+        if (anchorIdx < 0) anchorIdx = 0;
+        if (anchorIdx >= nEv) anchorIdx = nEv - 1;
+        var span = nEv - anchorIdx;
+        var idx;
+        for (idx = 0; idx < anchorIdx; idx++) {
+          var midL = axis[idx];
+          var isNowL = nEv > 0 && idx === nEv - 1;
+          var clsL = isNowL ? ' class="tc-now"' : '';
+          var cellBgL = tcColumnBgOnly(idx, nEv, row);
+          var cellL = (row.cells && row.cells[midL]) ? row.cells[midL] : null;
+          cells +=
+            '<td' +
+            clsL +
+            ' style="' +
+            cellBgL +
+            '">' +
+            cellMini(cellL, row, {
+              jp: jp,
+              colIndex: idx,
+              nEv: nEv,
+              baselineAnchorIdx: anchorIdx,
+            }) +
+            '</td>';
+        }
+        var isNowAnchor = nEv > 0 && anchorIdx === nEv - 1;
+        var clsAnchor = 'tc-baseline-live-cell' + (isNowAnchor ? ' tc-now' : '');
+        var cellBgA = tcColumnBgOnly(anchorIdx, nEv, row);
+        cells +=
+          '<td class="' +
+          clsAnchor +
+          '" colspan="' +
+          span +
+          '" role="status" aria-live="polite" style="' +
+          cellBgA +
+          '" title="Active baseline trade — no further baseline columns until CLOSED">' +
+          buildBaselineOperatorTileHtml(blOpen, jp) +
+          '</td>';
       } else {
         axis.forEach(function (mid, idx) {
           var cell = (row.cells && row.cells[mid]) ? row.cells[mid] : null;

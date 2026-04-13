@@ -1651,6 +1651,9 @@ def _baseline_lifecycle_for_dashboard_from_active_snapshot(snap: dict[str, Any])
         "entry_market_event_id": snap.get("entry_market_event_id"),
         "entry_candle_open_utc": et,
         "atr_entry": snap.get("atr_entry"),
+        # For trade-chain anchor column (evaluated bar) when position_open — matches dashboard.html baselineOpenAnchorColumnIndex.
+        "mark_market_event_id": snap.get("mark_market_event_id"),
+        "last_processed_market_event_id": snap.get("last_processed_market_event_id"),
     }
 
 
