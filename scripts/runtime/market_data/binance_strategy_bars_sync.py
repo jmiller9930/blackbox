@@ -126,6 +126,7 @@ def sync_binance_strategy_bars_into_db(
     tf = TIMEFRAME_5M
     n_ok = 0
     n_skip = 0
+    max_open_written: str | None = None
     conn = connect_market_db(db_path)
     try:
         ensure_market_schema(conn)
@@ -154,12 +155,13 @@ def sync_binance_strategy_bars_into_db(
                 candle_open_utc=candle_open_utc,
                 timeframe=tf,
             )
+            co_iso = format_candle_open_iso_z(candle_open_utc)
             upsert_binance_strategy_bar_5m(
                 conn,
                 canonical_symbol=canonical_symbol,
                 tick_symbol=tick_symbol,
                 timeframe=tf,
-                candle_open_utc=format_candle_open_iso_z(candle_open_utc),
+                candle_open_utc=co_iso,
                 candle_close_utc=format_candle_open_iso_z(close_boundary),
                 market_event_id=meid,
                 open_px=o,
@@ -170,9 +172,11 @@ def sync_binance_strategy_bars_into_db(
                 quote_volume_usdt=qv,
             )
             n_ok += 1
+            max_open_written = co_iso
     finally:
         conn.close()
 
+    wall_utc = datetime.now(timezone.utc).replace(microsecond=0).strftime("%Y-%m-%dT%H:%M:%SZ")
     return {
         "ok": True,
         "binance_symbol": sym,
@@ -180,6 +184,8 @@ def sync_binance_strategy_bars_into_db(
         "rows_upserted": n_ok,
         "rows_skipped": n_skip,
         "limit_requested": lim,
+        "wall_clock_utc": wall_utc,
+        "max_candle_open_utc_written": max_open_written,
     }
 
 

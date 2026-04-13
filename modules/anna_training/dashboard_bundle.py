@@ -87,16 +87,30 @@ def _ensure_market_runtime_path() -> None:
         sys.path.insert(0, str(rt))
 
 
-def _five_m_ingest_freshness(mpath: Path | None, *, canonical_symbol: str) -> dict[str, Any]:
+def _five_m_ingest_freshness(
+    mpath: Path | None,
+    *,
+    canonical_symbol: str,
+    baseline_policy_slot: str | None = None,
+) -> dict[str, Any]:
     """
-    Compare clock **expected** last closed 5m open vs **MAX(candle_open_utc)** in ``market_bars_5m``.
+    Compare clock **expected** last closed 5m open vs **MAX(candle_open_utc)** in the authoritative table:
 
-    If ``closed_bucket_lag`` > 0, SQLite is missing the newest completed bucket — **ingest / bar refresh**,
-    not trade-chain column math. ``aligns_with_closed_strip`` is True when lag is 0.
+    - **Jupiter_2 (``jup_v2``):** ``market_bars_5m`` (Pyth rollup + optional volume enrich).
+    - **Jupiter_3 (``jup_v3``):** ``binance_strategy_bars_5m`` (Binance OHLCV). Using ``market_bars_5m`` here
+      falsely shows lag when Pyth ingest is behind but Binance sync is current.
+
+    If ``closed_bucket_lag`` > 0, the relevant pipeline is behind — not trade-chain column math.
+    ``aligns_with_closed_strip`` is True when lag is 0.
     """
+    from modules.anna_training.execution_ledger import BASELINE_POLICY_SLOT_JUP_V3
+
+    use_binance = (baseline_policy_slot or "").strip() == BASELINE_POLICY_SLOT_JUP_V3
     out: dict[str, Any] = {
-        "schema": "five_m_ingest_freshness_v1",
+        "schema": "five_m_ingest_freshness_v2",
         "canonical_symbol": canonical_symbol,
+        "baseline_policy_slot": (baseline_policy_slot or "").strip() or None,
+        "freshness_source": "binance_strategy_bars_5m" if use_binance else "market_bars_5m",
         "expected_last_closed_candle_open_utc": None,
         "db_newest_closed_candle_open_utc": None,
         "closed_bucket_lag": None,
@@ -117,13 +131,28 @@ def _five_m_ingest_freshness(mpath: Path | None, *, canonical_symbol: str) -> di
     try:
         conn = sqlite3.connect(str(mpath))
         try:
-            row = conn.execute(
-                """
-                SELECT MAX(candle_open_utc) FROM market_bars_5m
-                WHERE timeframe = '5m' AND canonical_symbol = ?
-                """,
-                (canonical_symbol,),
-            ).fetchone()
+            if use_binance:
+                cur = conn.execute(
+                    "SELECT name FROM sqlite_master WHERE type='table' AND name='binance_strategy_bars_5m'"
+                )
+                if cur.fetchone() is None:
+                    out["notes"] = "binance_strategy_bars_5m_missing_run_schema"
+                    return out
+                row = conn.execute(
+                    """
+                    SELECT MAX(candle_open_utc) FROM binance_strategy_bars_5m
+                    WHERE timeframe = '5m' AND canonical_symbol = ?
+                    """,
+                    (canonical_symbol,),
+                ).fetchone()
+            else:
+                row = conn.execute(
+                    """
+                    SELECT MAX(candle_open_utc) FROM market_bars_5m
+                    WHERE timeframe = '5m' AND canonical_symbol = ?
+                    """,
+                    (canonical_symbol,),
+                ).fetchone()
         finally:
             conn.close()
     except Exception as exc:
@@ -4196,7 +4225,9 @@ def build_trade_chain_payload(
             ],
         }
         axis_sym = _trade_chain_axis_canonical_symbol()
-        five_m_ingest_freshness = _five_m_ingest_freshness(mpath, canonical_symbol=axis_sym)
+        five_m_ingest_freshness = _five_m_ingest_freshness(
+            mpath, canonical_symbol=axis_sym, baseline_policy_slot=_slot
+        )
         # Closed 5m bars only — newest column is the last **completed** bucket (decision at roll).
         # No synthetic "forming" column; operators should not see EVAL PENDING for an in-progress candle.
         event_axis, event_axis_time_utc_iso, event_axis_candle_close_utc_iso = _event_axis_from_market_bars(

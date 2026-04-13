@@ -49,7 +49,8 @@ def test_build_trade_chain_payload_schema() -> None:
     assert isinstance(tc["anna_vs_baseline_aggregate"], dict)
     assert "market_clock" in tc
     ff = tc.get("five_m_ingest_freshness") or {}
-    assert ff.get("schema") == "five_m_ingest_freshness_v1"
+    assert ff.get("schema") == "five_m_ingest_freshness_v2"
+    assert ff.get("freshness_source") == "market_bars_5m"
     assert "closed_bucket_lag" in ff
     assert tc["rows"][0].get("chain_kind") == "baseline"
     assert tc["rows"][0].get("row_tier") == "primary"

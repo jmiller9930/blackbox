@@ -2716,14 +2716,22 @@
       return;
     }
     el.hidden = false;
+    var src = String(ff.freshness_source || 'market_bars_5m');
+    var hint =
+      src === 'binance_strategy_bars_5m'
+        ? 'Check binance-strategy-bars-sync and BLACKBOX_MARKET_DATA_PATH.'
+        : 'Check pyth-sse-ingest and BLACKBOX_MARKET_DATA_PATH.';
     el.textContent =
-      'Bar sync warning: market_data is ' +
+      'Bar sync warning: ' +
+      src +
+      ' is ' +
       lag +
       ' closed bucket(s) behind wall-clock (DB newest open ' +
       String(ff.db_newest_closed_candle_open_utc || '—') +
       ' vs expected last-closed open ' +
       String(ff.expected_last_closed_candle_open_utc || '—') +
-      '). Check pyth-sse-ingest and BLACKBOX_MARKET_DATA_PATH.';
+      '). ' +
+      hint;
   }
 
   function renderTC(tc, bundle) {
