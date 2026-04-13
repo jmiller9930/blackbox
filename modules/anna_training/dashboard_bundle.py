@@ -20,6 +20,7 @@ import os
 import sqlite3
 import sys
 import uuid
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
@@ -4157,16 +4158,50 @@ def build_dashboard_bundle(
 
     mode = _system_mode_label(wallet=wallet_full, ledger_has_live_anna=ledger_live)
 
-    tc = build_trade_chain_payload(db_path=db_path, max_events=max_events)
-
-    baseline_active_snap: dict[str, Any] = {}
+    training_st: dict[str, Any] | None = None
     try:
-        baseline_active_snap = build_baseline_active_position_snapshot(
-            db_path=db_path,
-            market_db_path=_market_db_path(),
-        )
+        from modules.anna_training.store import load_state
+
+        training_st = load_state()
     except Exception:
-        baseline_active_snap = {}
+        training_st = {}
+
+    mdb_for_snap = _market_db_path()
+
+    def _bundle_parallel_tc() -> dict[str, Any]:
+        return build_trade_chain_payload(db_path=db_path, max_events=max_events)
+
+    def _bundle_parallel_snap() -> dict[str, Any]:
+        try:
+            return build_baseline_active_position_snapshot(
+                db_path=db_path,
+                market_db_path=mdb_for_snap,
+            )
+        except Exception:
+            return {}
+
+    def _bundle_parallel_operator_trading() -> dict[str, Any]:
+        try:
+            from modules.anna_training.operator_trading_strategy import build_operator_trading_bundle_part
+
+            return build_operator_trading_bundle_part(db_path)
+        except Exception:
+            return {
+                "schema": "operator_trading_strategy_v1",
+                "designated_strategy_id": None,
+                "cookie_jar": [],
+                "eligible_strategy_ids": [],
+                "default_system_strategy_id": RESERVED_STRATEGY_BASELINE,
+            }
+
+    with ThreadPoolExecutor(max_workers=3) as _pool:
+        _f_tc = _pool.submit(_bundle_parallel_tc)
+        _f_snap = _pool.submit(_bundle_parallel_snap)
+        _f_ot = _pool.submit(_bundle_parallel_operator_trading)
+        tc = _f_tc.result()
+        baseline_active_snap = _f_snap.result()
+        operator_trading = _f_ot.result()
+
     if baseline_active_snap.get("position_open") and not (tc.get("event_axis") or []):
         inj = str(
             baseline_active_snap.get("mark_market_event_id")
@@ -4182,20 +4217,6 @@ def build_dashboard_bundle(
                 inject_axis_mid=inj,
                 inject_axis_time_utc_iso=str(et).strip() if et else None,
             )
-
-    operator_trading: dict[str, Any] = {}
-    try:
-        from modules.anna_training.operator_trading_strategy import build_operator_trading_bundle_part
-
-        operator_trading = build_operator_trading_bundle_part(db_path)
-    except Exception:
-        operator_trading = {
-            "schema": "operator_trading_strategy_v1",
-            "designated_strategy_id": None,
-            "cookie_jar": [],
-            "eligible_strategy_ids": [],
-            "default_system_strategy_id": RESERVED_STRATEGY_BASELINE,
-        }
 
     ui_state = str((seq or {}).get("ui_state") or "idle")
     ev_rem = 0
@@ -4292,12 +4313,9 @@ def build_dashboard_bundle(
 
     mc = tc.get("market_clock") if isinstance(tc, dict) else None
     paper_cap: dict[str, Any] | None = None
-    training_st: dict[str, Any] | None = None
     try:
         from modules.anna_training.paper_capital import build_paper_capital_summary
-        from modules.anna_training.store import load_state
 
-        training_st = load_state()
         paper_cap = build_paper_capital_summary(training_state=training_st, ledger_db_path=db_path)
     except Exception:
         paper_cap = None
