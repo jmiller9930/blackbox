@@ -8,7 +8,7 @@ Usage:
 Run after Phases 1 through 7 are installed to validate the full pipeline including learning ledger and scorecards.
 
 Version:
-v7.1
+v7.3
 
 Change History:
 - v1.0 Initial Phase 1 replay shell.
@@ -20,16 +20,19 @@ Change History:
 - v7.0 Added learning ledger, outcome records from closed trades, and signal scorecards.
 - v7.1 Baseline v1: deterministic IDs, single execution→learning bridge, baseline report + checksum.
 - v7.2 Authoritative replay driven by baseline strategy manifest (`configs/manifests/baseline_v1_recipe.json`).
+- v7.3 `run_manifest_replay()` for programmatic / experiment flows; optional `--manifest` CLI (no env required).
 """
 
 from __future__ import annotations
 
+import argparse
 import os
 from pathlib import Path
 from typing import Any
 
 from renaissance_v4.core.decision_contract import DecisionContract
 from renaissance_v4.core.market_state_builder import build_market_state
+from renaissance_v4.core.outcome_record import OutcomeRecord
 from renaissance_v4.core.performance_metrics import compute_excursion_mae_mfe
 from renaissance_v4.core.pnl import compute_pnl
 from renaissance_v4.manifest.runtime import (
@@ -50,21 +53,37 @@ from renaissance_v4.utils.db import get_connection
 
 MIN_ROWS_REQUIRED = 50
 
-_DEFAULT_MANIFEST = (
-    Path(__file__).resolve().parent.parent / "configs" / "manifests" / "baseline_v1_recipe.json"
-)
+_RV4_ROOT = Path(__file__).resolve().parent.parent
+_REPO_ROOT = _RV4_ROOT.parent
+
+_DEFAULT_MANIFEST = _RV4_ROOT / "configs" / "manifests" / "baseline_v1_recipe.json"
 
 
-def load_replay_manifest() -> tuple[dict[str, Any], Path]:
+def load_replay_manifest(explicit: Path | str | None = None) -> tuple[dict[str, Any], Path]:
     """
     Load and validate the strategy manifest for replay.
 
-    Override path with env ``RENAISSANCE_REPLAY_MANIFEST`` (absolute or repo-relative).
+    Resolution order when ``explicit`` is None:
+    1. Env ``RENAISSANCE_REPLAY_MANIFEST`` (absolute or cwd-relative)
+    2. Default baseline recipe path
+
+    When ``explicit`` is set, it is the authoritative path (CLI / experiment jobs — no env required).
     """
-    override = (os.environ.get("RENAISSANCE_REPLAY_MANIFEST") or "").strip()
-    path = Path(override) if override else _DEFAULT_MANIFEST
+    if explicit is not None:
+        path = Path(explicit)
+        if not path.is_file():
+            alt = _REPO_ROOT / path
+            if alt.is_file():
+                path = alt
+    else:
+        override = (os.environ.get("RENAISSANCE_REPLAY_MANIFEST") or "").strip()
+        path = Path(override) if override else _DEFAULT_MANIFEST
+        if not path.is_file():
+            alt = _REPO_ROOT / path
+            if alt.is_file():
+                path = alt
     if not path.is_file():
-        raise FileNotFoundError(f"[replay] manifest not found: {path.resolve()}")
+        raise FileNotFoundError(f"[replay] manifest not found: {path}")
     manifest = load_manifest_file(path)
     errs = validate_manifest_against_catalog(manifest)
     if errs:
@@ -72,10 +91,17 @@ def load_replay_manifest() -> tuple[dict[str, Any], Path]:
     return manifest, path.resolve()
 
 
-def main() -> None:
+def run_manifest_replay(
+    manifest_path: Path | str | None = None,
+    *,
+    emit_baseline_artifacts: bool = True,
+    verbose: bool = True,
+) -> dict[str, Any]:
     """
-    Iterate through historical bars in strict chronological order.
-    Learning outcomes ONLY from closed trades via execution_learning_bridge (no synthetic paths).
+    Execute one full deterministic replay using the manifest resolution rules in ``load_replay_manifest``.
+
+    When ``emit_baseline_artifacts`` is False (experiment / multi-strategy runs), baseline markdown and
+    full outcome exports are skipped so baseline reference files are not overwritten.
     """
     connection = get_connection()
     rows = connection.execute(
@@ -87,18 +113,20 @@ def main() -> None:
     ).fetchall()
 
     dataset_bars = len(rows)
-    print(f"[replay] Loaded {dataset_bars} bars")
+    if verbose:
+        print(f"[replay] Loaded {dataset_bars} bars")
 
     if dataset_bars < MIN_ROWS_REQUIRED:
         raise RuntimeError(
             f"[replay] Need at least {MIN_ROWS_REQUIRED} bars, found {dataset_bars}"
         )
 
-    manifest, manifest_path = load_replay_manifest()
-    print(
-        f"[replay] manifest strategy_id={manifest.get('strategy_id')} "
-        f"baseline_tag={manifest.get('baseline_tag')} path={manifest_path}"
-    )
+    manifest, resolved_manifest_path = load_replay_manifest(manifest_path)
+    if verbose:
+        print(
+            f"[replay] manifest strategy_id={manifest.get('strategy_id')} "
+            f"baseline_tag={manifest.get('baseline_tag')} path={resolved_manifest_path}"
+        )
 
     signals = build_signals_from_manifest(manifest)
     factor_fn = resolve_factor_fn(manifest)
@@ -176,9 +204,10 @@ def main() -> None:
                     regime=regime,
                 )
                 closes_recorded += 1
-                print(
-                    f"[execution] bar_pnl={bar_pnl:.6f} cumulative_pnl={exec_manager.cumulative_pnl:.6f}"
-                )
+                if verbose:
+                    print(
+                        f"[execution] bar_pnl={bar_pnl:.6f} cumulative_pnl={exec_manager.cumulative_pnl:.6f}"
+                    )
                 exit_this_bar = {
                     "reason": reason,
                     "exit_price": exit_price,
@@ -259,13 +288,13 @@ def main() -> None:
                 "contributing_signals": fusion_result.contributing_signals,
                 "suppressed_signals": fusion_result.suppressed_signals,
             },
-            )
+        )
 
         assert decision.timestamp == state.timestamp
 
         processed += 1
 
-        if processed % 5000 == 0:
+        if verbose and processed % 5000 == 0:
             print(
                 "[replay] Progress "
                 f"processed={processed} timestamp={decision.timestamp} "
@@ -284,7 +313,8 @@ def main() -> None:
         exec_manager.cumulative_pnl,
         len(ledger.outcomes),
     )
-    print(f"[VALIDATION_CHECKSUM] {vchk}")
+    if verbose:
+        print(f"[VALIDATION_CHECKSUM] {vchk}")
 
     sanity = {
         "fusion_no_trade_bars": fusion_no_trade_bars,
@@ -294,21 +324,53 @@ def main() -> None:
         "closes_recorded": closes_recorded,
     }
 
-    write_baseline_report(
-        None,
-        dataset_bars=dataset_bars,
-        summary=summary,
-        scorecards=scorecards,
-        cumulative_pnl=exec_manager.cumulative_pnl,
-        validation_checksum=vchk,
-        sanity=sanity,
-        outcomes=ledger.outcomes,
-    )
-    maybe_export_outcomes_full(ledger.outcomes)
+    if emit_baseline_artifacts:
+        write_baseline_report(
+            None,
+            dataset_bars=dataset_bars,
+            summary=summary,
+            scorecards=scorecards,
+            cumulative_pnl=exec_manager.cumulative_pnl,
+            validation_checksum=vchk,
+            sanity=sanity,
+            outcomes=ledger.outcomes,
+        )
+        maybe_export_outcomes_full(ledger.outcomes)
 
-    print(f"[replay] Final summary metrics: {summary}")
-    print(f"[replay] Final signal scorecards: {scorecards}")
-    print("[replay] Phase 7 replay completed successfully")
+    if verbose:
+        print(f"[replay] Final summary metrics: {summary}")
+        print(f"[replay] Final signal scorecards: {scorecards}")
+        print("[replay] Phase 7 replay completed successfully")
+
+    outcomes: list[OutcomeRecord] = list(ledger.outcomes)
+    return {
+        "manifest": manifest,
+        "manifest_path": str(resolved_manifest_path),
+        "dataset_bars": dataset_bars,
+        "outcomes": outcomes,
+        "validation_checksum": vchk,
+        "summary": summary,
+        "scorecards": scorecards,
+        "cumulative_pnl": exec_manager.cumulative_pnl,
+        "sanity": sanity,
+    }
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(description="RenaissanceV4 deterministic manifest-driven replay")
+    parser.add_argument(
+        "--manifest",
+        type=str,
+        default=None,
+        help="Strategy manifest JSON (repo-relative or absolute). Overrides RENAISSANCE_REPLAY_MANIFEST when set.",
+    )
+    args = parser.parse_args()
+    manifest_arg: Path | str | None = args.manifest
+    run_manifest_replay(
+        manifest_path=manifest_arg,
+        emit_baseline_artifacts=True,
+        verbose=True,
+    )
 
 
 if __name__ == "__main__":

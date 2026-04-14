@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
@@ -184,7 +185,41 @@ def _render_mc_report(title: str, cfg: MonteCarloConfig, mc: Any, det: dict, bar
     return "\n".join(lines) + "\n"
 
 
+def _slug_strategy_id(strategy_id: str) -> str:
+    s = re.sub(r"[^a-zA-Z0-9_.-]+", "_", strategy_id.strip())
+    return (s[:96] if s else "strategy").strip("_") or "strategy"
+
+
 def cmd_compare(args: argparse.Namespace) -> int:
+    repo_root = RV4_ROOT.parent
+    cpath = Path(args.candidate_trades)
+    if not cpath.is_file():
+        alt = repo_root / cpath
+        if alt.is_file():
+            cpath = alt
+    lineage = getattr(args, "lineage_extra", None)
+    if not isinstance(lineage, dict):
+        lineage = {
+            "experiment_type": "robustness_compare",
+            "candidate_trades": str(cpath.resolve()),
+        }
+    return _compare_from_trades(args, cpath, lineage)
+
+
+def _compare_from_trades(
+    args: argparse.Namespace,
+    cpath: Path,
+    lineage: dict[str, Any],
+) -> int:
+    repo_root = RV4_ROOT.parent
+    if not cpath.is_file():
+        alt = repo_root / cpath
+        if alt.is_file():
+            cpath = alt
+    if not cpath.is_file():
+        print(f"[robustness] ERROR: candidate trades not found: {cpath}", file=sys.stderr)
+        return 1
+
     if not BASELINE_MC_JSON.exists() or not BASELINE_DET_JSON.exists():
         print(
             "[robustness] ERROR: Baseline reference missing. Run first:\n"
@@ -197,7 +232,6 @@ def cmd_compare(args: argparse.Namespace) -> int:
     det_b = baseline_full["deterministic"]
     mc_b = baseline_full["monte_carlo"]
 
-    cpath = Path(args.candidate_trades)
     trades, _bars = load_trades_json(cpath)
     outs = outcomes_from_trade_dicts(trades)
     det_c = compute_summary_metrics(outs)
@@ -252,23 +286,32 @@ def cmd_compare(args: argparse.Namespace) -> int:
         encoding="utf-8",
     )
 
+    summary_payload: dict[str, Any] = {
+        "experiment_id": args.experiment_id,
+        "candidate_trades": str(cpath.resolve()),
+        "deterministic": det_c,
+        "monte_carlo": mc_c,
+        "recommendation": rec.label,
+        "classification": rec.label,
+        "baseline_reference": lineage.get("baseline_reference") or BASELINE_TAG,
+        "strategy_id": lineage.get("strategy_id"),
+        "manifest_path": lineage.get("manifest_path"),
+        "manifest_path_repo": lineage.get("manifest_path_repo"),
+    }
     summary_json = STATE_DIR / f"monte_carlo_{args.experiment_id}_summary.json"
-    summary_json.write_text(
-        json.dumps(
-            {
-                "experiment_id": args.experiment_id,
-                "candidate_trades": str(cpath.resolve()),
-                "deterministic": det_c,
-                "monte_carlo": mc_c,
-                "recommendation": rec.label,
-            },
-            indent=2,
-        ),
-        encoding="utf-8",
-    )
+    summary_json.write_text(json.dumps(summary_payload, indent=2), encoding="utf-8")
 
     rob_path.write_text(
-        _render_robustness_report(comp, rec, det_b, det_c, comp.monte_carlo_baseline_by_mode, comp.monte_carlo_candidate_by_mode, primary_mode),
+        _render_robustness_report(
+            comp,
+            rec,
+            det_b,
+            det_c,
+            comp.monte_carlo_baseline_by_mode,
+            comp.monte_carlo_candidate_by_mode,
+            primary_mode,
+            lineage=lineage,
+        ),
         encoding="utf-8",
     )
     exp_path.write_text(
@@ -279,11 +322,16 @@ def cmd_compare(args: argparse.Namespace) -> int:
             rec,
             str(mc_path.relative_to(RV4_ROOT)),
             str(rob_path.relative_to(RV4_ROOT)),
+            lineage=lineage,
         ),
         encoding="utf-8",
     )
 
     _now = datetime.now(timezone.utc).isoformat()
+    exp_type = str(lineage.get("experiment_type") or "robustness_compare")
+    extra = dict(lineage)
+    extra.setdefault("candidate_trades", str(cpath.resolve()))
+
     append_experiment(
         ExperimentRecord(
             experiment_id=args.experiment_id,
@@ -301,29 +349,131 @@ def cmd_compare(args: argparse.Namespace) -> int:
             completed_at=_now,
             files_changed=list(args.files_changed or []),
             extra={
-                "experiment_type": "robustness_compare",
-                "candidate_trades": str(cpath),
+                **extra,
+                "experiment_type": exp_type,
             },
         )
     )
+    det_payload: dict[str, Any] = {"deterministic": det_c}
+    if lineage.get("strategy_id"):
+        det_payload["strategy_id"] = lineage.get("strategy_id")
+    if lineage.get("manifest_path"):
+        det_payload["manifest_path"] = lineage.get("manifest_path")
+    if lineage.get("baseline_reference"):
+        det_payload["baseline_reference"] = lineage.get("baseline_reference")
     (STATE_DIR / f"deterministic_{args.experiment_id}.json").write_text(
-        json.dumps({"deterministic": det_c}, indent=2),
+        json.dumps(det_payload, indent=2),
         encoding="utf-8",
     )
 
-    print(f"[robustness] recommendation: **{rec.label}** — {('; '.join(rec.reasons))}")
+    print(f"[robustness] experiment_id={args.experiment_id} recommendation={rec.label} classification={rec.label}")
+    if lineage.get("strategy_id"):
+        print(f"[robustness] strategy_id={lineage.get('strategy_id')} manifest_path={lineage.get('manifest_path')}")
     print(f"[robustness] comparison report -> {rob_path.resolve()}")
     return 0
 
 
-def _render_robustness_report(comp: Any, rec: Any, det_b: dict, det_c: dict, mc_b: dict, mc_c: dict, mode: str) -> str:
+def cmd_compare_manifest(args: argparse.Namespace) -> int:
+    """
+    Replay with the given manifest (no env var), export namespaced trades JSON, then baseline compare.
+    """
+    from renaissance_v4.research.replay_runner import run_manifest_replay
+    from renaissance_v4.research.trade_export import export_trades_json
+
+    repo_root = RV4_ROOT.parent
+    mf = Path(args.manifest)
+    if not mf.is_file():
+        alt = repo_root / mf
+        if alt.is_file():
+            mf = alt
+    if not mf.is_file():
+        print(f"[robustness] ERROR: manifest not found: {args.manifest}", file=sys.stderr)
+        return 1
+
+    print(
+        f"[robustness] compare-manifest experiment_id={args.experiment_id} manifest={mf.resolve()}",
+        flush=True,
+    )
+    rr = run_manifest_replay(manifest_path=mf, emit_baseline_artifacts=False, verbose=False)
+    manifest = rr["manifest"]
+    strategy_id = str(manifest.get("strategy_id") or "unknown")
+    baseline_ref = str(manifest.get("baseline_tag") or BASELINE_TAG)
+    slug = _slug_strategy_id(strategy_id)
+    out_path = REPORTS_EXP / f"trades_{args.experiment_id}_{slug}.json"
+    REPORTS_EXP.mkdir(parents=True, exist_ok=True)
+    export_trades_json(rr["outcomes"], out_path, dataset_bars=rr["dataset_bars"])
+
+    candidate_rel = str(out_path.relative_to(repo_root))
+    try:
+        mrepo = str(mf.resolve().relative_to(repo_root))
+    except ValueError:
+        mrepo = str(mf.resolve())
+    lineage = {
+        "experiment_type": "manifest_compare",
+        "strategy_id": strategy_id,
+        "baseline_reference": baseline_ref,
+        "manifest_path": str(mf.resolve()),
+        "manifest_path_repo": mrepo,
+        "replay_validation_checksum": rr["validation_checksum"],
+        "candidate_trades": str(out_path.resolve()),
+    }
+
+    c_ns = argparse.Namespace(
+        experiment_id=args.experiment_id,
+        candidate_trades=candidate_rel,
+        n_sims=args.n_sims,
+        seed=args.seed,
+        modes=args.modes,
+        path_length=args.path_length,
+        primary_mode=args.primary_mode,
+        description=args.description or f"Manifest-driven compare ({strategy_id}).",
+        subsystem=args.subsystem or "manifest",
+        branch=args.branch or _git_branch(),
+        commit=args.commit or _git_head(),
+        files_changed=list(args.files_changed or []),
+        lineage_extra=lineage,
+    )
+    return _compare_from_trades(c_ns, out_path.resolve(), lineage)
+
+
+def _render_robustness_report(
+    comp: Any,
+    rec: Any,
+    det_b: dict,
+    det_c: dict,
+    mc_b: dict,
+    mc_c: dict,
+    mode: str,
+    *,
+    lineage: dict[str, Any] | None = None,
+) -> str:
     d = comp.deterministic
+    head = [
+        "# Robustness comparison",
+        "",
+        f"**Candidate:** {comp.candidate_label}",
+        f"**Baseline tag:** {comp.baseline_tag}",
+    ]
+    if lineage:
+        sid = lineage.get("strategy_id")
+        mp = lineage.get("manifest_path") or lineage.get("manifest_path_repo")
+        br = lineage.get("baseline_reference")
+        if sid or mp or br:
+            head.append("")
+            head.append("## Experiment identity")
+            head.append("")
+            if sid:
+                head.append(f"- **strategy_id:** `{sid}`")
+            if br:
+                head.append(f"- **baseline_reference:** `{br}`")
+            if mp:
+                head.append(f"- **manifest_path:** `{mp}`")
+            chk = lineage.get("replay_validation_checksum")
+            if chk:
+                head.append(f"- **replay_validation_checksum:** `{chk}`")
     return "\n".join(
-        [
-            "# Robustness comparison",
-            "",
-            f"**Candidate:** {comp.candidate_label}",
-            f"**Baseline tag:** {comp.baseline_tag}",
+        head
+        + [
             "",
             "## Deterministic (authoritative)",
             "",
@@ -365,14 +515,39 @@ def _render_experiment_markdown(
     rec: Any,
     mc_rel: str,
     rob_rel: str,
+    *,
+    lineage: dict[str, Any] | None = None,
 ) -> str:
+    lin = lineage or {}
+    strat_line = (
+        f"- **strategy_id (manifest):** `{lin['strategy_id']}`"
+        if lin.get("strategy_id")
+        else "- **strategy_id (manifest):** _n/a (candidate JSON compare)_"
+    )
+    man_line = (
+        f"- **manifest_path:** `{lin.get('manifest_path') or lin.get('manifest_path_repo')}`"
+        if lin.get("manifest_path") or lin.get("manifest_path_repo")
+        else ""
+    )
+    br_line = (
+        f"- **baseline_reference:** `{lin.get('baseline_reference')}`"
+        if lin.get("baseline_reference")
+        else ""
+    )
+    lineage_extra = [strat_line]
+    if man_line:
+        lineage_extra.append(man_line)
+    if br_line:
+        lineage_extra.append(br_line)
     return "\n".join(
         [
             f"# Experiment `{args.experiment_id}`",
             "",
             "## Lineage",
             "",
-            f"- **Baseline tag:** {BASELINE_TAG}",
+            f"- **experiment_id:** `{args.experiment_id}`",
+            *lineage_extra,
+            f"- **Baseline tag (engine):** {BASELINE_TAG}",
             f"- **Branch:** {args.branch or _git_branch()}",
             f"- **Commit:** {args.commit or _git_head()}",
             f"- **Subsystem:** {args.subsystem or 'unspecified'}",
@@ -404,7 +579,7 @@ def _render_experiment_markdown(
             "",
             "## Status",
             "",
-            f"- **Recommendation:** {rec.label}",
+            f"- **Recommendation / classification:** {rec.label}",
             "- **Architect approval:** pending (governed loop)",
             "",
         ]
@@ -462,6 +637,29 @@ def build_parser() -> argparse.ArgumentParser:
     p_cmp.add_argument("--commit", type=str, default="")
     p_cmp.add_argument("--files-changed", nargs="*", default=[])
     p_cmp.set_defaults(func=cmd_compare)
+
+    p_mn = sub.add_parser(
+        "compare-manifest",
+        help="Replay with manifest (CLI path), export namespaced trades, compare vs frozen baseline",
+    )
+    p_mn.add_argument("--experiment-id", type=str, required=True)
+    p_mn.add_argument(
+        "--manifest",
+        type=str,
+        required=True,
+        help="Manifest JSON path (repo-relative e.g. renaissance_v4/configs/manifests/foo.json)",
+    )
+    p_mn.add_argument("--n-sims", type=int, default=10_000)
+    p_mn.add_argument("--seed", type=int, default=42)
+    p_mn.add_argument("--modes", type=str, default="shuffle,bootstrap")
+    p_mn.add_argument("--path-length", type=int, default=None)
+    p_mn.add_argument("--primary-mode", type=str, default="shuffle")
+    p_mn.add_argument("--description", type=str, default="")
+    p_mn.add_argument("--subsystem", type=str, default="")
+    p_mn.add_argument("--branch", type=str, default="")
+    p_mn.add_argument("--commit", type=str, default="")
+    p_mn.add_argument("--files-changed", nargs="*", default=[])
+    p_mn.set_defaults(func=cmd_compare_manifest)
 
     p_ex = sub.add_parser("example-flow", help="Compare baseline trades to themselves (pipeline check)")
     p_ex.add_argument("--n-sims", type=int, default=2000)

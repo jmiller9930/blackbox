@@ -1392,6 +1392,7 @@
             <div class="dash-rv4-actions">
               <button type="button" class="primary" id="rv4-btn-baseline-mc">Generate baseline Monte Carlo reference</button>
               <button type="button" id="rv4-btn-example">Example robustness pipeline check</button>
+              <button type="button" id="rv4-btn-manifest-compare">Manifest compare (replay + baseline)</button>
             </div>
             <p class="dash-rv4-msg" id="rv4-roadmap"></p>
             <p class="dash-rv4-msg" id="rv4-job-msg"></p>
@@ -1400,18 +1401,22 @@
         <div class="dash-rv4-card" style="margin-bottom:0.75rem">
           <h3>Experiment queue</h3>
           <table class="dash-rv4-table" id="rv4-exp-table">
-            <thead><tr><th>id</th><th>type</th><th>status</th><th>stage</th><th>recommendation</th><th>completed</th><th>created</th></tr></thead>
-            <tbody id="rv4-exp-tbody"><tr><td colspan="7">Loading…</td></tr></tbody>
+            <thead><tr><th>id</th><th>strategy</th><th>type</th><th>status</th><th>stage</th><th>recommendation</th><th>completed</th><th>created</th></tr></thead>
+            <tbody id="rv4-exp-tbody"><tr><td colspan="8">Loading…</td></tr></tbody>
           </table>
         </div>
         <div class="dash-rv4-card">
           <h3>Experiment detail</h3>
           <div class="dash-rv4-actions">
             <button type="button" id="rv4-btn-rerun" disabled>Compare candidate (robustness)</button>
+            <button type="button" id="rv4-btn-manifest-sel" disabled>Manifest compare (selected id)</button>
             <span class="dash-rv4-msg" id="rv4-sel-id"></span>
           </div>
           <div class="dash-rv4-detail" id="rv4-detail" hidden>
             <div class="kv"><span class="k">Description</span><span class="v" id="rv4-d-desc" style="text-align:left;max-width:70%">—</span></div>
+            <div class="kv"><span class="k">strategy_id</span><span class="v" id="rv4-d-strategy">—</span></div>
+            <div class="kv"><span class="k">manifest_path</span><span class="v" id="rv4-d-manifest" style="text-align:left;max-width:70%">—</span></div>
+            <div class="kv"><span class="k">baseline_reference</span><span class="v" id="rv4-d-baseline-ref">—</span></div>
             <div class="kv"><span class="k">Experiment type</span><span class="v" id="rv4-d-type">—</span></div>
             <div class="kv"><span class="k">Branch / commit</span><span class="v" id="rv4-d-git">—</span></div>
             <div class="kv"><span class="k">Recommendation</span><span class="v" id="rv4-d-rec">—</span></div>
@@ -4074,7 +4079,7 @@
         if (!tb) return;
         var rows = (j && j.experiments) || [];
         if (!rows.length) {
-          tb.innerHTML = '<tr><td colspan="7">No experiments in index yet.</td></tr>';
+          tb.innerHTML = '<tr><td colspan="8">No experiments in index yet.</td></tr>';
           return;
         }
         tb.innerHTML = rows
@@ -4085,6 +4090,8 @@
               id +
               '"><td>' +
               id +
+              '</td><td>' +
+              rv4Fmt(r.strategy_id) +
               '</td><td>' +
               rv4Fmt(r.experiment_type) +
               '</td><td>' +
@@ -4107,13 +4114,15 @@
             $('rv4-sel-id').textContent = rv4SelectedId ? 'Selected: ' + rv4SelectedId : '';
             var br = $('rv4-btn-rerun');
             if (br) br.disabled = !rv4SelectedId;
+            var bm = $('rv4-btn-manifest-sel');
+            if (bm) bm.disabled = !rv4SelectedId;
             rv4LoadDetail(rv4SelectedId);
           });
         });
       })
       .catch(function () {
         var tb = $('rv4-exp-tbody');
-        if (tb) tb.innerHTML = '<tr><td colspan="7">Failed to load experiments.</td></tr>';
+        if (tb) tb.innerHTML = '<tr><td colspan="8">Failed to load experiments.</td></tr>';
       });
     fetch('/api/v1/renaissance/jobs', { cache: 'no-store' })
       .then(function (r) {
@@ -4150,6 +4159,9 @@
         var ix = j.index || {};
         $('rv4-d-desc').textContent = ix.description || '—';
         var extra = ix.extra && typeof ix.extra === 'object' ? ix.extra : {};
+        $('rv4-d-strategy').textContent = j.strategy_id || extra.strategy_id || '—';
+        $('rv4-d-manifest').textContent = j.manifest_path || extra.manifest_path_repo || extra.manifest_path || '—';
+        $('rv4-d-baseline-ref').textContent = j.baseline_reference || extra.baseline_reference || '—';
         $('rv4-d-type').textContent = extra.experiment_type || ix.subsystem || '—';
         $('rv4-d-git').textContent = (ix.branch || '—') + ' @ ' + (ix.commit_hash || '—');
         $('rv4-d-rec').textContent = j.recommendation || ix.recommendation || '—';
@@ -4270,6 +4282,31 @@
       );
       if (!rel) return;
       rv4PostJob({ action: 'compare', experiment_id: rv4SelectedId, candidate_trades: rel });
+    });
+  }
+  var rv4m = $('rv4-btn-manifest-compare');
+  if (rv4m) {
+    rv4m.addEventListener('click', function () {
+      var eid = window.prompt('experiment_id (e.g. exp_manifest_20260414_abcd1234)', '');
+      if (!eid) return;
+      var mf = window.prompt(
+        'Manifest path under renaissance_v4/configs/manifests/',
+        'renaissance_v4/configs/manifests/candidate_robustness_compare.json'
+      );
+      if (!mf) return;
+      rv4PostJob({ action: 'compare_manifest', experiment_id: eid, manifest: mf });
+    });
+  }
+  var rv4ms = $('rv4-btn-manifest-sel');
+  if (rv4ms) {
+    rv4ms.addEventListener('click', function () {
+      if (!rv4SelectedId) return;
+      var mf = window.prompt(
+        'Manifest path under renaissance_v4/configs/manifests/',
+        'renaissance_v4/configs/manifests/candidate_robustness_compare.json'
+      );
+      if (!mf) return;
+      rv4PostJob({ action: 'compare_manifest', experiment_id: rv4SelectedId, manifest: mf });
     });
   }
   window.addEventListener('hashchange', rv4SetNavActive);

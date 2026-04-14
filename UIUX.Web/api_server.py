@@ -2742,6 +2742,7 @@ class Handler(BaseHTTPRequestHandler):
                     validate_candidate_trades_path,
                     validate_experiment_id,
                     validate_job_action,
+                    validate_manifest_path,
                 )
                 from renaissance_v4.ui_jobs import enqueue
 
@@ -2752,7 +2753,7 @@ class Handler(BaseHTTPRequestHandler):
                         {
                             "ok": False,
                             "error": "unsupported_action",
-                            "allowed": ["baseline_mc", "compare", "example_flow"],
+                            "allowed": ["baseline_mc", "compare", "compare_manifest", "example_flow"],
                             "trace_id": str(uuid.uuid4()),
                         },
                         no_cache=True,
@@ -2785,6 +2786,32 @@ class Handler(BaseHTTPRequestHandler):
                         action=action,
                         experiment_id=exp_s,
                         candidate_trades_rel=ct,
+                    )
+                elif action == "compare_manifest":
+                    if not exp_s or not validate_experiment_id(exp_s):
+                        self._json(
+                            400,
+                            {"ok": False, "error": "experiment_id_required", "trace_id": str(uuid.uuid4())},
+                            no_cache=True,
+                        )
+                        return
+                    mf = str(body.get("manifest") or body.get("manifest_path") or "").strip()
+                    if not mf or validate_manifest_path(_REPO_ROOT, mf) is None:
+                        self._json(
+                            400,
+                            {
+                                "ok": False,
+                                "error": "manifest_must_be_under_renaissance_v4/configs/manifests/",
+                                "trace_id": str(uuid.uuid4()),
+                            },
+                            no_cache=True,
+                        )
+                        return
+                    job = enqueue(
+                        _REPO_ROOT,
+                        action=action,
+                        experiment_id=exp_s,
+                        manifest_rel=mf,
                     )
                 else:
                     job = enqueue(

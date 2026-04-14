@@ -184,6 +184,7 @@ def build_experiments_list_payload(repo: Path) -> dict[str, Any]:
         completed_at = str(e.get("completed_at") or "") or (
             e.get("created_at", "") if e.get("status") == "complete" else ""
         )
+        strat = extra.get("strategy_id") if isinstance(extra.get("strategy_id"), str) else None
         rows.append(
             {
                 "experiment_id": eid,
@@ -192,7 +193,9 @@ def build_experiments_list_payload(repo: Path) -> dict[str, Any]:
                 "stage": jq.get("stage") or ("complete" if e.get("status") == "complete" else "—"),
                 "subsystem": e.get("subsystem", ""),
                 "recommendation": e.get("recommendation", ""),
-                "strategy_id": str(e.get("baseline_tag") or BASELINE_TAG),
+                "strategy_id": strat or str(e.get("baseline_tag") or BASELINE_TAG),
+                "baseline_reference": extra.get("baseline_reference") or e.get("baseline_tag") or BASELINE_TAG,
+                "manifest_path": extra.get("manifest_path_repo") or extra.get("manifest_path"),
                 "created_at": e.get("created_at", ""),
                 "completed_at": completed_at,
                 "branch": e.get("branch", ""),
@@ -213,6 +216,8 @@ def build_experiments_list_payload(repo: Path) -> dict[str, Any]:
                     "subsystem": j.get("action", ""),
                     "recommendation": "",
                     "strategy_id": BASELINE_TAG,
+                    "baseline_reference": BASELINE_TAG,
+                    "manifest_path": j.get("manifest_rel"),
                     "created_at": j.get("created_at", ""),
                     "completed_at": "",
                     "branch": "",
@@ -364,9 +369,22 @@ def build_experiment_detail_payload(repo: Path, experiment_id: str) -> dict[str,
 
     comparison_vs_baseline = _comparison_vs_baseline(repo, det_c, mc_c)
 
+    mc_j_full = mc_j if isinstance(mc_j, dict) else {}
+    ix_extra = (hit.get("extra") if isinstance(hit, dict) else None) or {}
+    if not isinstance(ix_extra, dict):
+        ix_extra = {}
+    strategy_id = ix_extra.get("strategy_id") or mc_j_full.get("strategy_id")
+    manifest_path = ix_extra.get("manifest_path_repo") or ix_extra.get("manifest_path") or mc_j_full.get(
+        "manifest_path_repo"
+    ) or mc_j_full.get("manifest_path")
+    baseline_reference = ix_extra.get("baseline_reference") or mc_j_full.get("baseline_reference") or BASELINE_TAG
+
     return {
         "schema": "renaissance_v4_ui_experiment_detail_v2",
         "experiment_id": experiment_id,
+        "strategy_id": strategy_id,
+        "manifest_path": manifest_path,
+        "baseline_reference": baseline_reference,
         "index": hit,
         "deterministic": det_c,
         "monte_carlo": mc_c,
@@ -409,6 +427,11 @@ def build_workbench_meta_payload() -> dict[str, Any]:
                 "label": "Candidate robustness experiment",
                 "description": "Requires a candidate trades JSON under renaissance_v4/reports/experiments/ and an experiment id.",
             },
+            {
+                "id": "compare_manifest",
+                "label": "Manifest-driven compare (replay + baseline)",
+                "description": "Replay using a manifest under renaissance_v4/configs/manifests/, export namespaced trades, compare vs frozen baseline.",
+            },
         ],
         "roadmap_experiment_types": [
             "Date-range replay slice",
@@ -420,7 +443,7 @@ def build_workbench_meta_payload() -> dict[str, Any]:
 
 
 def validate_job_action(action: str) -> bool:
-    return action in {"baseline_mc", "compare", "example_flow"}
+    return action in {"baseline_mc", "compare", "compare_manifest", "example_flow"}
 
 
 def validate_experiment_id(eid: str) -> bool:
@@ -437,6 +460,23 @@ def validate_candidate_trades_path(repo: Path, rel: str) -> Path | None:
     exp_root = (repo / "renaissance_v4" / "reports" / "experiments").resolve()
     try:
         p.relative_to(exp_root)
+    except ValueError:
+        return None
+    if not p.is_file() or p.suffix.lower() != ".json":
+        return None
+    return p
+
+
+def validate_manifest_path(repo: Path, rel: str) -> Path | None:
+    """Only allow strategy manifests under renaissance_v4/configs/manifests/."""
+    repo = repo.resolve()
+    rel = rel.strip().replace("\\", "/")
+    if ".." in rel or rel.startswith("/"):
+        return None
+    p = (repo / rel).resolve()
+    man_root = (repo / "renaissance_v4" / "configs" / "manifests").resolve()
+    try:
+        p.relative_to(man_root)
     except ValueError:
         return None
     if not p.is_file() or p.suffix.lower() != ".json":

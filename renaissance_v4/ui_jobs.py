@@ -16,7 +16,11 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from renaissance_v4.ui_api import validate_candidate_trades_path, validate_experiment_id
+from renaissance_v4.ui_api import (
+    validate_candidate_trades_path,
+    validate_experiment_id,
+    validate_manifest_path,
+)
 
 _job_lock = threading.Lock()
 _worker_started = False
@@ -48,7 +52,8 @@ def enqueue(
     *,
     action: str,
     experiment_id: str | None,
-    candidate_trades_rel: str | None,
+    candidate_trades_rel: str | None = None,
+    manifest_rel: str | None = None,
 ) -> dict[str, Any]:
     q = load_queue(repo)
     jobs = list(q.get("jobs") or [])
@@ -60,6 +65,7 @@ def enqueue(
         "experiment_id": experiment_id,
         "candidate_trades": candidate_trades_rel,
         "candidate_trades_rel": candidate_trades_rel,
+        "manifest_rel": manifest_rel,
         "status": "queued",
         "stage": "queued",
         "created_at": now,
@@ -144,11 +150,42 @@ def _run_job(repo: Path, job: dict[str, Any]) -> None:
             "--n-sims",
             "5000",
         ]
+    elif action == "compare_manifest":
+        if not exp or not validate_experiment_id(str(exp)):
+            upd(status="failed", stage="failed", message="invalid experiment_id", exit_code=-1)
+            return
+        mr = job.get("manifest_rel") or job.get("manifest")
+        if not mr:
+            upd(status="failed", stage="failed", message="missing manifest path", exit_code=-1)
+            return
+        vp = validate_manifest_path(repo, str(mr))
+        if not vp:
+            upd(status="failed", stage="failed", message="invalid manifest path", exit_code=-1)
+            return
+        mrel = str(vp.relative_to(repo))
+        cmd = [
+            py,
+            "-m",
+            "renaissance_v4.research.robustness_runner",
+            "compare-manifest",
+            "--experiment-id",
+            str(exp),
+            "--manifest",
+            mrel,
+            "--seed",
+            "42",
+            "--n-sims",
+            "5000",
+        ]
     else:
         upd(status="failed", stage="failed", message="unknown action", exit_code=-1)
         return
 
-    upd(stage="monte_carlo" if action in {"baseline_mc", "example_flow", "compare"} else "running")
+    upd(
+        stage="monte_carlo"
+        if action in {"baseline_mc", "example_flow", "compare", "compare_manifest"}
+        else "running"
+    )
     try:
         r = subprocess.run(
             cmd,
