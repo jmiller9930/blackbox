@@ -2624,6 +2624,36 @@ def _ledger_context_parsed(ledger_row: dict[str, Any]) -> dict[str, Any]:
     return ctx if isinstance(ctx, dict) else {}
 
 
+_JUP_TAG_RANK = {"JUPv4": 4, "JUPv3": 3, "JUPv2": 2}
+
+
+def _merge_entry_exit_jupiter_policy_tags(
+    entry_tag: str | None,
+    exit_tag: str | None,
+) -> str | None:
+    """
+    Combine per-bar policy tags for a closed trade.
+
+    Default: **entry bar wins** when its engine is the same or **newer** than exit (open decision
+    dominates a later exit-bar re-evaluation). If entry is **only JUPv2** and exit shows **v3/v4**,
+    use **exit** — legacy v2 rows on the entry bar often shadow the real v3 open without duplicate
+    rows on the same ``market_event_id``.
+    """
+    if not entry_tag and not exit_tag:
+        return None
+    if not entry_tag:
+        return exit_tag
+    if not exit_tag:
+        return entry_tag
+    re = _JUP_TAG_RANK.get(entry_tag, 0)
+    rx = _JUP_TAG_RANK.get(exit_tag, 0)
+    if re >= rx:
+        return entry_tag
+    if entry_tag == "JUPv2" and rx > re:
+        return exit_tag
+    return entry_tag
+
+
 def baseline_jupiter_policy_tag_for_execution_trade(
     conn: sqlite3.Connection,
     ledger_row: dict[str, Any],
@@ -2636,9 +2666,9 @@ def baseline_jupiter_policy_tag_for_execution_trade(
     policy only on that id with ``prefer_active_slot=True`` incorrectly labels old trades with the
     operator's current slot (e.g. all JUPv4).
 
-    Resolution uses ``prefer_active_slot=False`` (v4→v3→v2 so the highest engine row wins when several
-    exist for one bar). Falls back to the exit bar when
-    entry cannot be resolved.
+    Resolution uses ``prefer_active_slot=False`` (v4→v3→v2 per bar). **Entry and exit** bars are both
+    read when distinct; see :func:`_merge_entry_exit_jupiter_policy_tags` for merge rules (entry wins
+    over higher exit re-eval except stale JUPv2 on entry + v3/v4 on exit).
     """
     exit_mid = str(ledger_row.get("market_event_id") or "").strip()
     ctx = _ledger_context_parsed(ledger_row)
@@ -2649,19 +2679,29 @@ def baseline_jupiter_policy_tag_for_execution_trade(
         entry_mid = str(pos_open.get("entry_market_event_id") or "").strip() or None
     if not entry_mid:
         entry_mid = _resolve_entry_market_event_id_from_policy(conn, exit_mid)
-    seen: set[str] = set()
-    for mid in (entry_mid, exit_mid):
-        m = str(mid or "").strip()
-        if not m or m in seen:
-            continue
-        seen.add(m)
-        pol = fetch_baseline_policy_evaluation_for_market_event(
-            conn, m, prefer_active_slot=False
+    em = str(entry_mid or "").strip()
+    xm = str(exit_mid or "").strip()
+    entry_tag: str | None = None
+    exit_tag: str | None = None
+    if em:
+        pol_e = fetch_baseline_policy_evaluation_for_market_event(
+            conn, em, prefer_active_slot=False
         )
-        if pol:
-            return baseline_jupiter_policy_tag_from_signal_mode_optional(
-                str((pol or {}).get("signal_mode") or "")
+        if pol_e:
+            entry_tag = baseline_jupiter_policy_tag_from_signal_mode_optional(
+                str(pol_e.get("signal_mode") or "")
             )
+    if xm and xm != em:
+        pol_x = fetch_baseline_policy_evaluation_for_market_event(
+            conn, xm, prefer_active_slot=False
+        )
+        if pol_x:
+            exit_tag = baseline_jupiter_policy_tag_from_signal_mode_optional(
+                str(pol_x.get("signal_mode") or "")
+            )
+    merged = _merge_entry_exit_jupiter_policy_tags(entry_tag, exit_tag)
+    if merged:
+        return merged
     # Lifecycle bridge persists ``signal_mode`` on ``context_snapshot_json`` (close path). Use when
     # ``policy_evaluations`` is missing for legacy rows so the strip still shows the engine that ran.
     sm_ctx = str(ctx.get("signal_mode") or "").strip()
