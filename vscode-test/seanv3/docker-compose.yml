@@ -49,7 +49,9 @@ services:
       - ./capture:/capture
 
   # Jupiter — read-only dashboard; shares SQLite with seanv3 (host network → port 707 on host).
+  # build: . — same image as seanv3; avoids compose trying to pull seanv3:local from a registry.
   jupiter-web:
+    build: .
     image: seanv3:local
     container_name: jupiter-web
     network_mode: host
