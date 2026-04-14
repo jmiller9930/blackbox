@@ -5,7 +5,7 @@
 # still exiting ens192 because Binance CDN IPs were not in [Peer] AllowedIPs / host routes.
 #
 # Run on the host (needs root): sudo ./binance_api_route_via_proton_wg.sh
-# Optional cron (DNS/CDN drift): */10 * * * * root /path/to/this/script
+# Automatic (recommended on clawbot): scripts/clawbot/install_binance_wg_route_timer.sh (systemd every 10 min + boot)
 #
 # Does NOT enable full-tunnel; only merges current api.binance.com A records into the peer
 # allowed-ips and installs /32 routes via wg-proton-mx.

@@ -1,0 +1,14 @@
+# Install to /etc/systemd/system/ via install_binance_wg_route_timer.sh
+# Runs binance-wg-route.service shortly after boot and every 10 minutes (wall clock).
+
+[Unit]
+Description=Timer — refresh Binance API routes via Proton WG (CDN IP drift)
+
+[Timer]
+OnBootSec=2min
+OnCalendar=*:0/10
+Persistent=true
+Unit=binance-wg-route.service
+
+[Install]
+WantedBy=timers.target
