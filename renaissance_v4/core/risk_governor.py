@@ -12,6 +12,8 @@ v1.0
 
 Change History:
 - v1.0 Initial Phase 5 implementation.
+- v1.1 DV risk correction: tier thresholds and persistence compression aligned to observed effective-score
+  distribution (diagnostic_risk_v1.md); see correction_risk_v1.md.
 """
 
 from __future__ import annotations
@@ -21,15 +23,20 @@ from renaissance_v4.core.fusion_result import FusionResult
 from renaissance_v4.core.position_sizer import size_tier_to_fraction
 from renaissance_v4.core.risk_decision import RiskDecision
 
-FULL_SIZE_FUSION_MIN = 0.90
-REDUCED_SIZE_FUSION_MIN = 0.70
-PROBE_SIZE_FUSION_MIN = 0.55
+# Effective-score tiers (post-compression). Calibrated from full-history directional bars
+# (diagnostic_risk_v1.md): ~P50≈0.18, ~P75≈0.29, ~P90≈0.39, ~P95≈0.42 (histogram interpolation).
+# Prior 0.55/0.70/0.90 vs ~0.19 avg effective made probe unreachable.
+FULL_SIZE_FUSION_MIN = 0.42
+REDUCED_SIZE_FUSION_MIN = 0.30
+PROBE_SIZE_FUSION_MIN = 0.14
 
 HIGH_VOLATILITY_VETO = 0.030
 HIGH_VOLATILITY_REDUCE = 0.015
 
-LOW_PERSISTENCE_VETO = 0.25
-LOW_PERSISTENCE_REDUCE = 0.45
+# Persistence: pre-v1.1, persistence<=0.25 hard-zeroed too many directional bars (see diagnostic_risk_v1).
+LOW_PERSISTENCE_VETO = 0.08
+LOW_PERSISTENCE_REDUCE = 0.40
+PERSISTENCE_SOFT_MULTIPLIER = 0.72
 
 DRAWDOWN_PLACEHOLDER_FULL = 0.00
 DRAWDOWN_PLACEHOLDER_REDUCED = 0.10
@@ -85,14 +92,14 @@ def evaluate_risk(
         compression_factor = 0.0
         veto_reasons.append("volatility_too_high")
     elif features.volatility_20 >= HIGH_VOLATILITY_REDUCE:
-        compression_factor *= 0.50
+        compression_factor *= 0.62
         veto_reasons.append("volatility_compression_applied")
 
     if features.directional_persistence_10 <= LOW_PERSISTENCE_VETO:
         compression_factor = 0.0
         veto_reasons.append("persistence_too_low")
     elif features.directional_persistence_10 <= LOW_PERSISTENCE_REDUCE:
-        compression_factor *= 0.60
+        compression_factor *= PERSISTENCE_SOFT_MULTIPLIER
         veto_reasons.append("persistence_compression_applied")
 
     if drawdown_proxy >= DRAWDOWN_PLACEHOLDER_ZERO:
