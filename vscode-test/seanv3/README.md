@@ -19,6 +19,8 @@ Both rely on the **host** routing table for Binance (WireGuard split-tunnel on c
 
 **Jupiter** (read-only web app; container **`jupiter-web`):** binds **HTTP** on **707** (no TLS in the Node app). **Operator browser:** use **`http://clawbot.a51.corp:707/`** when on VPN/LAN, or **`http://jupv3.greyllc.net:737/`** (or your DNS) from the internet — **not** `localhost` unless you are SSH’d on clawbot or have a tunnel. **`http://127.0.0.1:707/`** is only correct **on the server itself** (e.g. SSH session). Default **`JUPITER_WEB_PORT=707`**. Public path: **WAN :737 → LAN :707**. **`/api/summary.json`**, wallet, position, trades. Deploy: `docker compose up -d` in this directory. Local dev: **`npm run jupiter`** (may need **`sudo`** for **707** on Linux).
 
+**Web vs TUI (same backend, two displays):** see [`JUPITER_WEB_TUI_ALIGNMENT.md`](JUPITER_WEB_TUI_ALIGNMENT.md).
+
 ### Lab deploy loop (`jupsync.py`)
 
 **Consistent update process:** commit in your clone → **`python3 scripts/jupsync.py`** from repo root. That **pushes** your branch to `origin`, **SSHs to clawbot**, **`git pull`** in `~/blackbox`, then **`docker compose up -d --build`** in **`vscode-test/seanv3`**. The script then **`curl`s `127.0.0.1:707/health` on clawbot only** (inside the SSH session — not your Mac). To **verify in a browser**, open **`http://clawbot.a51.corp:707/`** (or your public URL), not localhost. Skip the remote curl with **`--skip-health`**.
