@@ -20,6 +20,10 @@ data/sequential_engine/clawbot_demo_w10/
 data/sequential_engine/web_control/
 data/sqlite/*.db
 data/sqlite/*.db-journal
+
+# RenaissanceV4 local SQLite (ingest / replay)
+renaissance_v4/data/*.sqlite3
+renaissance_v4/data/*.sqlite3-journal
 data/logs/*.log
 
 # Messenger config with real tokens (use messaging_config.example.json + env)

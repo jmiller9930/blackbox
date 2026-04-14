@@ -1,0 +1,3 @@
+# RenaissanceV4 — Python dependencies
+# Starter modules use the standard library only (urllib, sqlite3, json).
+# Add numpy/pandas/etc. here when research modules require them.
