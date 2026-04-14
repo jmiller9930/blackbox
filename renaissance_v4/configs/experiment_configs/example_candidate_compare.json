@@ -1,0 +1,9 @@
+{
+  "experiment_id": "example_shadow",
+  "purpose": "Pipeline check: same trade export as baseline — expect inconclusive or improve.",
+  "baseline_tag": "RenaissanceV4_baseline_v1",
+  "commands": [
+    "python -m renaissance_v4.research.robustness_runner baseline-mc --seed 42",
+    "python -m renaissance_v4.research.robustness_runner example-flow --seed 42 --n-sims 2000"
+  ]
+}

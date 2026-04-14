@@ -1,0 +1,6 @@
+{
+  "experiment_id": "baseline_reference_only",
+  "purpose": "Generate frozen baseline Monte Carlo + deterministic reference (no candidate).",
+  "baseline_tag": "RenaissanceV4_baseline_v1",
+  "command": "python -m renaissance_v4.research.robustness_runner baseline-mc --seed 42"
+}
