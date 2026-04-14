@@ -1,5 +1,5 @@
 # Install to /etc/systemd/system/ via install_binance_wg_route_timer.sh (replaces __BLACKBOX_REPO__).
-# Refreshes Binance API IPs in wg-proton-mx when CDN/DNS drifts — see VPN/README.md.
+# ExecStart is knock-first: ping only; full WG repair runs only when ping fails (see knock script).
 
 [Unit]
 Description=Blackbox — Binance ping knock; WG repair if ping fails
