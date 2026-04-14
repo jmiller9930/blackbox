@@ -87,14 +87,14 @@ cd ~/blackbox
 sudo bash scripts/clawbot/binance_api_route_via_proton_wg.sh
 ```
 
-**Automatic refresh (recommended):** install the systemd timer on clawbot so **`api.binance.com`** is re-resolved and routes/`allowed-ips` are updated **on boot (after 2 minutes) and every 10 minutes** — no manual step when CDN IPs drift.
+**Automatic refresh (recommended):** install the systemd timer on clawbot. **Every 1 minute** it runs a **lightweight knock**: a single **`GET /api/v3/ping`** to Binance (minimal load — not a klines barrage). If HTTP **200**, it stops there. If **not** (e.g. **451**, CDN drift), it runs **`binance_api_route_via_proton_wg.sh`** to merge current **`api.binance.com`** IPs into **`wg-proton-mx`** and fix routes. First run **~45s after boot**.
 
 ```bash
 cd ~/blackbox && git pull origin main
 sudo BLACKBOX_REPO="$HOME/blackbox" ./scripts/clawbot/install_binance_wg_route_timer.sh
 ```
 
-Units live in `scripts/clawbot/systemd/` (`binance-wg-route.service` + `binance-wg-route.timer`). Check: `systemctl list-timers binance-wg-route.timer`, `journalctl -u binance-wg-route.service -n 50`.
+Units live in `scripts/clawbot/systemd/` (`binance-wg-route.service` + `binance-wg-route.timer`). Knock entrypoint: `scripts/clawbot/binance_api_knock_then_repair_if_needed.sh`. Check: `systemctl list-timers binance-wg-route.timer`, `journalctl -u binance-wg-route.service -n 50`.
 
 Persist **`AllowedIPs`** in `/etc/wireguard/wg-proton-mx.conf` when you have a stable workflow; Proton may still overwrite runtime **`wg set`** — the timer re-applies on the next interval.
 

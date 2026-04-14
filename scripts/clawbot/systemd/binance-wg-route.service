@@ -9,5 +9,6 @@ Wants=network-online.target
 
 [Service]
 Type=oneshot
-ExecStart=/bin/bash __BLACKBOX_REPO__/scripts/clawbot/binance_api_route_via_proton_wg.sh
-# Requires CAP_NET_ADMIN — run as root (default for system units).
+# Knock (GET /api/v3/ping only); full wg/route repair only if ping != 200 — see binance_api_knock_then_repair_if_needed.sh
+ExecStart=/bin/bash __BLACKBOX_REPO__/scripts/clawbot/binance_api_knock_then_repair_if_needed.sh
+# Requires CAP_NET_ADMIN for repair path — run as root (default for system units).

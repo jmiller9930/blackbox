@@ -1,12 +1,12 @@
 # Install to /etc/systemd/system/ via install_binance_wg_route_timer.sh
-# Runs binance-wg-route.service shortly after boot and every 10 minutes (wall clock).
+# Every 1 minute: lightweight Binance ping ("knock"); repair only on failure (CDN drift / 451).
 
 [Unit]
-Description=Timer — refresh Binance API routes via Proton WG (CDN IP drift)
+Description=Timer — Binance API keepalive knock + WG repair if needed (1 min)
 
 [Timer]
-OnBootSec=2min
-OnCalendar=*:0/10
+OnBootSec=45s
+OnCalendar=*:0/1
 Persistent=true
 Unit=binance-wg-route.service
 
