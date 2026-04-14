@@ -5,7 +5,7 @@ FROM node:22-alpine
 WORKDIR /app
 
 # Use image's built-in `node` user (GID 1000 already exists on node:alpine).
-COPY --chown=node:node app.mjs ./
+COPY --chown=node:node app.mjs backfill.mjs ./
 
 USER node
 

@@ -2,8 +2,11 @@
 # Binance traffic follows host split-tunnel (WireGuard); no VPN inside the container.
 #
 # NDJSON: tail -f capture/binance_klines.ndjson
-# SQLite (JUPv3 parity vs Blackbox): sqlite3 capture/sean_parity.db '.tables'
-#   Compare: python3 -m modules.anna_training.jup_v3_parity_compare capture/sean_parity.db
+# SQLite: capture/sean_parity.db — table sean_binance_kline_poll
+# Backfill ~3 days (864 bars; max 1000/request):
+#   docker compose run --rm -e SQLITE_PATH=/capture/sean_parity.db -e LIMIT=864 binance-klines \
+#     node --experimental-sqlite backfill.mjs
+# Compare to Blackbox (from repo root): PYTHONPATH=. python3 -m modules.anna_training.jup_v3_parity_compare ...
 services:
   binance-klines:
     build: .
