@@ -1,5 +1,7 @@
 # Turnover — Sean Binance klines / parity DB (next steps)
 
+**Container ops (clawbot deploy, logs, artifacts):** see **`README.md`** in this folder.
+
 ## Where things stand
 
 - **Host:** `clawbot.a51.corp`, repo `~/blackbox`.
