@@ -1,5 +1,7 @@
 # Turnover — Sean Binance klines / parity DB (next steps)
 
+**Why this exists:** Parity check for Blackbox — same Sean V3 strategy and same Binance bar data should yield **aligned trade vs no-trade** outcomes vs Blackbox (`policy_evaluations` / ledger). See **`../README.md`** (“What this is for”) and **`README.md`** (“What this project is for”).
+
 **Full index (vscode-test + VPN + Python paths):** **`../README.md`**.  
 **Container ops (clawbot deploy, logs, artifacts):** **`README.md`** in this folder.
 

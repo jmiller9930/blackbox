@@ -1,8 +1,21 @@
 # seanv3 (Docker)
 
-**Parity analog** for Blackbox: polls **Binance REST klines** over the **host** network (WireGuard / Proton **split-tunnel** for `api.binance.com`), optionally **connects a Solana wallet** (pubkey only in DB — secrets never logged), runs **paper-only** logging (no Jupiter program calls, no signed txs), and persists **all analog data** to onboard **SQLite** beside NDJSON.
+## What this project is for
 
-**Sean / Jupiter_3 authoritative logic** stays in **`modules/anna_training/jupiter_3_sean_policy.py`**; this service records **ingest + stub signals** for diff against Blackbox.
+**Purpose:** A **parity check** for **Blackbox**, not a second runtime that “drives” Blackbox.
+
+- **Sean V3** (policy + this ingest sidecar) and **Blackbox** are **independent** processes. There is **no** direct connection between them.
+- **Expected alignment:** The **same strategy** (Sean V3 / Jupiter_3) and the **same Binance API data** (same bars for the same `market_event_id` / candle open) should produce **matching decisions**:
+  - If Sean V3 **would trade** on a bar, Blackbox should **also** show a trade (or equivalent “trade permitted” / execution path) for that policy lane.
+  - If Sean V3 **would not trade**, Blackbox should **not** trade on that bar for that lane — **both flat** is the “in sync” outcome.
+
+**How you prove it:** Compare **this service’s** SQLite + NDJSON (`capture/`) to Blackbox **`binance_strategy_bars_5m`**, **`policy_evaluations`**, and ledger rows (see **`modules/anna_training/jup_v3_parity_compare.py`** and repo parity docs). Mismatches mean Blackbox or ingest is **out of parity**, not that the container is “wrong” by default.
+
+---
+
+**What it does technically:** **Parity analog** — polls **Binance REST klines** over the **host** network (WireGuard / Proton **split-tunnel** for `api.binance.com`), optionally **connects a Solana wallet** (pubkey only in DB — secrets never logged), runs **paper-only** logging (no Jupiter program calls, no signed txs), and persists **analog data** to onboard **SQLite** beside NDJSON.
+
+**Sean / Jupiter_3 authoritative policy logic** stays in **`modules/anna_training/jupiter_3_sean_policy.py`** inside Blackbox; this container records **ingest + analog events** so you can diff against Blackbox.
 
 **Parent index:** [`../README.md`](../README.md) — VPN scripts, Python parity commands, fast path.
 

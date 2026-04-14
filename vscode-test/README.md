@@ -1,6 +1,20 @@
 # vscode-test — lab / parity (Blackbox)
 
-This directory holds **standalone** tooling that is **outside** the main Python application tree. It serves as an **analog** for parity-checking Blackbox: same **Binance financial REST** path (via host **WireGuard / Proton** split-tunnel), optional **wallet identity** (pubkey only), **paper-only** signals (no on-chain execution), and **onboard SQLite** for polls + paper analog events. **Sean V3 policy truth** remains in Python (`jupiter_3_sean_policy.py`); this stack logs ingest + stub rows for comparison.
+## What this is for (parity check)
+
+**Goal:** Use this tree as a **parity check** on **Blackbox**. Sean V3 and Blackbox are **separate running systems** (there is no live wire between them). The point is to show they **behave the same** when they should:
+
+- **Same strategy** — Jupiter / Sean V3 policy as implemented in Blackbox (`jupiter_3_sean_policy.py`, baseline bridge, dashboard) should match the **intent** of Sean V3.
+- **Same market API path** — Binance OHLC used for that lane should come from the **same** REST/split-tunnel setup so bars match (`binance_strategy_bars_5m` vs `sean_parity.db` / ingest checks).
+
+**Success looks like:**  
+If **Sean V3 would take a trade** on a bar (signal says enter / side / sizing narrative), **Blackbox should show an equivalent trade** (or permitted execution path) for that policy lane. If **Sean V3 would take no trade**, **Blackbox should show no trade** for that lane on the same bar. **Flat on both sides** when the strategy says flat is the normal “in sync” outcome.
+
+**How you verify:** Compare captured Sean-side SQLite + Blackbox market DB + ledger/policy rows (e.g. `jup_v3_parity_compare`, dashboard/ledger audits) — not by assuming one process calls the other.
+
+---
+
+This directory holds **standalone** tooling **outside** the main Python app: **seanv3** (Docker) uses the same **Binance financial REST** path (host **WireGuard / Proton** split-tunnel), optional **wallet identity** (pubkey only), **paper-only** signals (no on-chain execution), and **onboard SQLite** for polls + analog events. **Authoritative Sean V3 policy math** remains in Python (`jupiter_3_sean_policy.py`); the container supports **ingest logging** and comparison.
 
 Optional local **TypeScript** experiments (`superjup.ts`) are separate and not required for the Docker analog.
 
