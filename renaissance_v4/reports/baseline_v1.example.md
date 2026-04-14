@@ -13,4 +13,4 @@ python3 -m renaissance_v4.research.replay_runner
 
 Then open `renaissance_v4/reports/baseline_v1.md`.
 
-Sections: dataset size, portfolio metrics (trades, win rate, expectancy, max drawdown, MAE/MFE), validation checksum, per-signal scorecards, sanity counters.
+Sections: dataset size and promotion target, portfolio metrics (trades, win rate, expectancy, max drawdown, MAE/MFE), validation checksum + determinism note, **trade-evidence sample table** (non-empty when trades close), per-signal scorecards, sanity counters + automated snapshot.

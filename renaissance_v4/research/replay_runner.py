@@ -32,7 +32,7 @@ from renaissance_v4.core.performance_metrics import compute_excursion_mae_mfe
 from renaissance_v4.core.pnl import compute_pnl
 from renaissance_v4.core.regime_classifier import classify_regime
 from renaissance_v4.core.risk_governor import evaluate_risk
-from renaissance_v4.research.baseline_report import write_baseline_report
+from renaissance_v4.research.baseline_report import maybe_export_outcomes_full, write_baseline_report
 from renaissance_v4.research.determinism import deterministic_decision_id, validation_checksum
 from renaissance_v4.research.execution_learning_bridge import record_closed_trade_to_ledger
 from renaissance_v4.research.learning_ledger import LearningLedger
@@ -270,7 +270,9 @@ def main() -> None:
         cumulative_pnl=exec_manager.cumulative_pnl,
         validation_checksum=vchk,
         sanity=sanity,
+        outcomes=ledger.outcomes,
     )
+    maybe_export_outcomes_full(ledger.outcomes)
 
     print(f"[replay] Final summary metrics: {summary}")
     print(f"[replay] Final signal scorecards: {scorecards}")

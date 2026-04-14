@@ -51,10 +51,11 @@ SQLite file: `renaissance_v4/data/renaissance_v4.sqlite3`.
 ## Baseline v1 acceptance (architect)
 
 - **Learning:** Outcomes **only** from closed simulated trades via `research/execution_learning_bridge.py` (no synthetic ledger paths).
-- **Determinism:** End of replay prints `[VALIDATION_CHECKSUM]` (hash of summary + cumulative PnL + outcome count). Run `./renaissance_v4/run_replay_twice_check.sh` after ingest or after `python3 -m renaissance_v4.data.seed_smoke_bars` (minimal bars for CI/smoke).
+- **Smoke vs promotion:** `seed_smoke_bars` (or tiny windows) proves the pipeline and determinism only. **`RenaissanceV4_baseline_v1`** requires **full-dataset** proof: real trades, PnL, populated scorecards, learning outcomes, and matching checksums on **≥1 year** of Binance **5m** data (ingest targets ~**2 years** SOLUSDT by default).
 - **Full validation:** `./renaissance_v4/run_full_validation.sh` (from repo root: `init_db` → **Binance ingest** → validator → replay). Ingest is long-running.
-- **Report:** `renaissance_v4/reports/baseline_v1.md` is written every replay (metrics + scorecards + sanity section).
-- **Phase 8–11:** **Not** wired into fusion or replay per directive (`promotion_engine` etc. remain scaffold).
+- **Determinism:** After full data is loaded, run `./renaissance_v4/run_replay_twice_check.sh` (or `./renaissance_v4/run_proof_bundle.sh` for both steps). The two `[VALIDATION_CHECKSUM]` lines must match **exactly**.
+- **Report:** `renaissance_v4/reports/baseline_v1.md` — portfolio metrics, **trade-evidence sample table** (when trades exist), per-signal scorecards, sanity snapshot. Optional full ledger: `RENAISSANCE_V4_EXPORT_OUTCOMES=1 python3 -m renaissance_v4.research.replay_runner` → `reports/outcomes_full.jsonl`.
+- **Phase 8–11:** **Not** wired into fusion or replay until baseline is signed (`promotion_engine.adjust_weight` etc. remain scaffold).
 
 ## Proof
 
