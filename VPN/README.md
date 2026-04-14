@@ -37,6 +37,21 @@ Sean parity klines backfill (preflights the Binance ping, then `docker compose r
 
 If those fail or hang while Binance-only WG is up, routing is wrong (too-wide **`AllowedIPs`** or conflicting **`ip rule`**).
 
+### Binance API must use Proton — operational rule
+
+**Intent:** Only **Binance REST** (and whatever narrow peers ops require) uses **`wg-proton-mx`**. **Everything else** uses the normal uplink (`ens192`, etc.). That is the split-tunnel contract above.
+
+**Why 451 happens with WG still “up”:** `api.binance.com` resolves to **CDN IPs that change**. If **`[Peer] AllowedIPs`** only lists the **VPN server** (e.g. one `/32`) and **not** the **current** Binance API addresses, the kernel routes Binance to **`ens192`** → Binance returns **451**. The tunnel is up; **Binance traffic was never selected for it.**
+
+**Fix on clawbot (root):** run the repo script whenever DNS/CDN drifts or after reboot — it merges **`api.binance.com`** A records into the peer **`allowed-ips`** and installs **`/32`** routes via **`wg-proton-mx`**, then checks ping **200**:
+
+```bash
+cd ~/blackbox
+sudo bash scripts/clawbot/binance_api_route_via_proton_wg.sh
+```
+
+Optional: install a **cron** (e.g. every 10 minutes) calling the same script so CDN rotations do not silently break routing again. Persist **`AllowedIPs`** in `/etc/wireguard/wg-proton-mx.conf` when you have a stable config workflow (Proton may overwrite runtime `wg set`; cron is the practical guard).
+
 ## Files
 
 - `Clawbot-MX-FREE-15.full-tunnel.DO-NOT-DEPLOY-ON-CLAWBOT.conf` — historical Proton profile (**full tunnel — not compliant** with lab selective-routing requirement; reference keys/peer only when building a split config).
