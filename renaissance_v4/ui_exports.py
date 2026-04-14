@@ -1,5 +1,5 @@
 """
-CSV export helpers for Renaissance workbench — reads saved JSON artifacts only (no recompute).
+CSV export helpers for Quant Research Kitchen V1 — reads saved JSON artifacts only (no recompute).
 """
 
 from __future__ import annotations

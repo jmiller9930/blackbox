@@ -386,7 +386,7 @@ def build_workbench_meta_payload() -> dict[str, Any]:
     """Approved launcher actions (governed subprocesses only — no freeform code)."""
     return {
         "schema": "renaissance_v4_ui_workbench_meta_v1",
-        "product": "Renaissance strategy analysis workbench",
+        "product": "Quant Research Kitchen V1",
         "baseline_reference": BASELINE_TAG,
         "governance_notes": [
             "Baseline logic is immutable; experiments run as separate harness jobs.",

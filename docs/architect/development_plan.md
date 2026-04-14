@@ -2,6 +2,8 @@
 
 **Canonical master roadmap:** [`docs/blackbox_master_plan.md`](../blackbox_master_plan.md) — this file lists **actionable tasks** for **Phase 5** and marks **Phase 6 / 7** as out of scope for the current sprint.
 
+**Quant Research Kitchen V1** (governed strategy research and validation platform; baseline **RenaissanceV4_baseline_v1** as first recipe): [`quant_research_kitchen_v1.md`](quant_research_kitchen_v1.md).
+
 **Status synchronization:** Updates that change phase scope or completion must update **`docs/blackbox_master_plan.md`** and **`docs/architect/directives/directive_execution_log.md`** in the same change set (`Plan/log status sync: PASS`).
 
 ---

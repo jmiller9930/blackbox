@@ -1,17 +1,19 @@
-# Renaissance strategy analysis workbench — version 1
+# Quant Research Kitchen V1 — workbench product spec (v1)
 
-This document is the **version 1** product spec for the governed, web-facing strategy analysis surface built on the existing Renaissance validation backend. It also serves as a short **SME usage** guide and lists **what remains manual** in v1.
+This document is the **version 1** product spec for **Quant Research Kitchen V1**: the governed, web-facing strategy research and validation surface built on the Renaissance validation backend. It also serves as a short **SME usage** guide and lists **what remains manual** in v1.
+
+**Architecture thesis (permanent layer):** [`docs/architect/quant_research_kitchen_v1.md`](../docs/architect/quant_research_kitchen_v1.md).
 
 ## Product identity
 
-- **What it is:** A workbench for reviewing the **locked baseline**, **Monte Carlo reference**, **approved experiments**, and **exports** — without mutating baseline code from the browser.
+- **What it is:** A workbench for reviewing the **locked baseline**, **Monte Carlo** reference, **approved experiments**, and **exports** — without mutating baseline code from the browser.
 - **What it is not:** A strategy builder, promotion console, or live trading UI.
 
-The first reference strategy remains **`RenaissanceV4_baseline_v1`**. The harness (`robustness_runner`, replay, Monte Carlo) is the single validation path.
+The first validated recipe remains **`RenaissanceV4_baseline_v1`**. The harness (`robustness_runner`, replay, Monte Carlo) is the single validation path.
 
 ## SME usage (operator browser)
 
-1. Open the BlackBox dashboard and go to **Renaissance** (`/dashboard.html#/renaissance`).
+1. Open the BlackBox dashboard and go to **Quant Research Kitchen V1** (`/dashboard.html#/renaissance`).
 2. **Baseline card:** Read tag, commit, deterministic metrics, Monte Carlo reference status.
 3. **Report links:** Open baseline markdown and Monte Carlo baseline markdown via API-served files (same artifacts on disk as validation).
 4. **CSV exports (baseline):** Download trades / deterministic metrics / Monte Carlo summary as CSV from saved JSON — no recompute at click time.
