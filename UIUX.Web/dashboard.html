@@ -601,6 +601,39 @@
       padding: 0.06rem 0.32rem;
       margin-bottom: 0;
     }
+    /* Policy tag beside NO TRADE / verdict — visible without scrolling the narrative */
+    .tc-baseline-verdict-policy-row {
+      display: flex;
+      flex-direction: row;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 0.5rem 0.75rem;
+      margin: 0 0 0.28rem;
+      width: 100%;
+      grid-column: 1 / -1;
+    }
+    .tc-baseline-verdict-policy-row .tc-tile-verdict {
+      margin-bottom: 0;
+      padding-bottom: 0;
+      border-bottom: none;
+    }
+    .tc-tr-baseline .tc-baseline-verdict-policy-row .tc-tile-verdict.tc-verdict-no-trade-amber {
+      margin-bottom: 0;
+    }
+    button.tc-jup-policy-chip-hero {
+      appearance: none;
+      -webkit-appearance: none;
+      cursor: default;
+      font: inherit;
+      line-height: 1.2;
+    }
+    .tc-jup-policy-chip-hero {
+      font-size: 0.78rem;
+      font-weight: 800;
+      padding: 0.14rem 0.5rem;
+      letter-spacing: 0.04em;
+      vertical-align: middle;
+    }
     .tc-jup-scope-note {
       font-size: 0.65rem;
       color: var(--muted);
@@ -1932,14 +1965,19 @@
         esc(pok ? 'REST · OK' : 'REST · down') +
         '</span>';
     }
-    var jupChipHtml = baselineLane
-      ? '<div class="tc-jup-policy-row">' +
-        binanceDotHtml +
-        binanceRestHtml +
-        '<div class="tc-jup-policy-chip" title="Policy version stored for this bar (policy_evaluations). Em dash = no row yet.">' +
-        esc(jupChipDisplay) +
-        '</div></div>'
-      : '';
+    var jupPolicyChipHtml =
+      baselineLane
+        ? '<button type="button" class="tc-jup-policy-chip tc-jup-policy-chip-hero" title="Policy version for this bar (policy_evaluations). Em dash = no row yet.">' +
+          esc(jupChipDisplay) +
+          '</button>'
+        : '';
+    var jupInfraOnlyHtml =
+      baselineLane
+        ? '<div class="tc-jup-policy-row tc-jup-policy-row--infra">' +
+          binanceDotHtml +
+          binanceRestHtml +
+          '</div>'
+        : '';
     // One trade, one live surface: never repeat OPEN/HOLDING on earlier columns when ledger says position is open.
     // When baselineAnchorIdx is set, renderTC places the live tile at that column with colspan — left columns use real cells; skip this dash.
     if (
@@ -2064,13 +2102,21 @@
         baselineLane
           ? 'tc-empty tc-no-trade tc-no-trade-amber'
           : 'tc-empty tc-no-trade';
-      return tcCellSurface(
-        jupChipHtml +
-          '<span class="' +
-          ntBar +
-          '" title="No execution trade for this 5m bar">no trade</span>' +
-          jupStack
-      );
+      var emptyNoTradeSpan =
+        '<span class="' +
+        ntBar +
+        '" title="No execution trade for this 5m bar">no trade</span>';
+      if (baselineLane) {
+        return tcCellSurface(
+          jupInfraOnlyHtml +
+            '<div class="tc-baseline-verdict-policy-row">' +
+            emptyNoTradeSpan +
+            jupPolicyChipHtml +
+            '</div>' +
+            jupStack
+        );
+      }
+      return tcCellSurface(emptyNoTradeSpan + jupStack);
     }
     var ck = row.chain_kind || '';
     var vs = (ck === 'anna_test' || ck === 'anna_strategy') ? c.vs_baseline : null;
@@ -2247,8 +2293,12 @@
       '">' +
       esc(ocDisp) +
       '</div>';
+    if (baselineLane) {
+      verdictLine =
+        '<div class="tc-baseline-verdict-policy-row">' + verdictLine + jupPolicyChipHtml + '</div>';
+    }
     return tcCellSurface(
-      jupChipHtml +
+      jupInfraOnlyHtml +
         vsLine +
         '<div class="' +
         wrapCls +
