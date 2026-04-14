@@ -37,6 +37,7 @@ def test_baseline_jupiter_policy_slot_from_env_and_kv(tmp_path: Path, monkeypatc
     conn.commit()
     assert get_baseline_jupiter_policy_slot(conn) == BASELINE_POLICY_SLOT_JUP_V3
     assert signal_mode_for_baseline_policy_slot(BASELINE_POLICY_SLOT_JUP_V3) == "sean_jupiter_v3"
+    assert signal_mode_for_baseline_policy_slot("v3") == "sean_jupiter_v3"
 
     # Persisted operator choice must not lose to compose env pinning jup_v2.
     monkeypatch.setenv("BASELINE_JUPITER_POLICY_SLOT", "jup_v2")
@@ -49,6 +50,27 @@ def test_baseline_jupiter_policy_slot_from_env_and_kv(tmp_path: Path, monkeypatc
     ensure_execution_ledger_schema(conn2)
     assert get_baseline_jupiter_policy_slot(conn2) == BASELINE_POLICY_SLOT_JUP_V3
     conn2.close()
+
+
+def test_signal_mode_rejects_unknown_policy_slot() -> None:
+    from modules.anna_training.execution_ledger import signal_mode_for_baseline_policy_slot
+
+    with pytest.raises(ValueError, match="unknown baseline Jupiter policy slot"):
+        signal_mode_for_baseline_policy_slot("jup_v4")
+
+
+def test_set_baseline_policy_slot_rejects_garbage(tmp_path: Path) -> None:
+    db = tmp_path / "ledger3.db"
+    from modules.anna_training.execution_ledger import (
+        ensure_execution_ledger_schema,
+        set_baseline_jupiter_policy_slot,
+    )
+
+    conn = sqlite3.connect(db)
+    ensure_execution_ledger_schema(conn)
+    with pytest.raises(ValueError, match="policy_slot must be one of"):
+        set_baseline_jupiter_policy_slot(conn, "not_a_slot")
+    conn.close()
 
 
 def test_upsert_policy_evaluation_idempotent(tmp_path: Path) -> None:

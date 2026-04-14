@@ -71,7 +71,29 @@ When policy says entry (including **short over long** if both fire):
 
 ---
 
-## 5. Related files (quick index)
+## 5. Switching policies (BlackBox baseline) — hardened selector
+
+You **can** switch which baseline Jupiter policy the BlackBox runtime uses (**`jup_v2`** vs **`jup_v3`**) without rewriting unrelated code. That is the point of a **selector** separate from the policy modules.
+
+**Mechanism (single source of truth):**
+
+| Source | Precedence |
+|--------|------------|
+| Persisted operator value | `baseline_operator_kv` key `baseline_jupiter_policy_slot` (e.g. dashboard **POST** `/api/v1/dashboard/baseline-jupiter-policy`) |
+| Else | Environment **`BASELINE_JUPITER_POLICY_SLOT`** |
+| Else | Default **`jup_v2`** |
+
+**Hardening (fail closed):**
+
+- Allowed slots are **`VALID_BASELINE_JUPITER_POLICY_SLOTS`** in `modules/anna_training/execution_ledger.py` (currently `jup_v2`, `jup_v3`). Aliases like `v3`, `jupiter_3` normalize to those constants.
+- **Unknown** strings do **not** silently select a policy: **`get_baseline_jupiter_policy_slot`** ignores invalid KV/env (stderr warning) and falls back; **`set_baseline_jupiter_policy_slot`** and **`signal_mode_for_baseline_policy_slot`** raise **`ValueError`**.
+- Adding a **future** slot (e.g. `jup_v4`) requires an explicit code change: new constant, extend the valid set, bridge/dashboard branches, and evaluator wiring — not a free-form string.
+
+**SeanV3 container** does not read this KV; it runs the Node policy in `vscode-test/seanv3/`. Parity is “same policy math + same bars,” not automatic cross-process coupling.
+
+---
+
+## 6. Related files (quick index)
 
 - Policy: `modules/anna_training/jupiter_3_sean_policy.py`
 - Sean mirror: `vscode-test/seanv3/jupiter_3_sean_policy.mjs`
@@ -79,3 +101,5 @@ When policy says entry (including **short over long** if both fire):
 - Parity CLI: `python3 -m modules.anna_training.jup_v3_parity_compare`
 
 **Superseded pointer:** Older one-pager lived at `docs/trading/jupiter_3_blackbox_sean_alignment.md` (now redirects here).
+
+- Selector + validation: `modules/anna_training/execution_ledger.py` (`normalize_baseline_jupiter_policy_slot`, `VALID_BASELINE_JUPITER_POLICY_SLOTS`)

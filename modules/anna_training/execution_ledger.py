@@ -6,6 +6,7 @@ import json
 import math
 import os
 import sqlite3
+import sys
 import uuid
 from pathlib import Path
 from typing import Any
@@ -16,6 +17,11 @@ RESERVED_STRATEGY_BASELINE = "baseline"
 # Baseline Jupiter policy slot (operator dropdown) — persisted in ``baseline_operator_kv``.
 BASELINE_POLICY_SLOT_JUP_V2 = "jup_v2"
 BASELINE_POLICY_SLOT_JUP_V3 = "jup_v3"
+# Hardened selector: only these slots map to evaluators and signal_mode. Adding a new policy
+# requires a new slot constant, bridge branch, and evaluator wiring — not a silent string.
+VALID_BASELINE_JUPITER_POLICY_SLOTS: frozenset[str] = frozenset(
+    {BASELINE_POLICY_SLOT_JUP_V2, BASELINE_POLICY_SLOT_JUP_V3}
+)
 BASELINE_OPERATOR_KV_JUPITER_POLICY_SLOT = "baseline_jupiter_policy_slot"
 # policy_evaluations.signal_mode — one distinct string per engine (historic v1 label = Jupiter_2).
 SIGNAL_MODE_JUPITER_2 = "sean_jupiter_v1"
@@ -300,8 +306,8 @@ def baseline_jupiter_open_position_key(
     return f"baseline|{sym}|{tf}|{m}"
 
 
-def _parse_baseline_jupiter_policy_slot_value(raw: str | None) -> str | None:
-    """Return ``jup_v2`` / ``jup_v3`` if *raw* matches a known alias; else ``None`` (treat as unset)."""
+def normalize_baseline_jupiter_policy_slot(raw: str | None) -> str | None:
+    """Map operator/env strings to **jup_v2** or **jup_v3**; unknown values → ``None`` (fail closed)."""
     v = (raw or "").strip().lower()
     if not v:
         return None
@@ -310,6 +316,15 @@ def _parse_baseline_jupiter_policy_slot_value(raw: str | None) -> str | None:
     if v in (BASELINE_POLICY_SLOT_JUP_V2, "jup_v2", "v2", "jupiter_2"):
         return BASELINE_POLICY_SLOT_JUP_V2
     return None
+
+
+def _warn_invalid_baseline_policy_slot(source: str, raw: str) -> None:
+    print(
+        f"execution_ledger: ignoring invalid baseline Jupiter policy slot from {source}: {raw!r} "
+        f"(allowed aliases resolve to {sorted(VALID_BASELINE_JUPITER_POLICY_SLOTS)})",
+        file=sys.stderr,
+        flush=True,
+    )
 
 
 def get_baseline_jupiter_policy_slot(conn: sqlite3.Connection) -> str:
@@ -328,22 +343,30 @@ def get_baseline_jupiter_policy_slot(conn: sqlite3.Connection) -> str:
             (BASELINE_OPERATOR_KV_JUPITER_POLICY_SLOT,),
         ).fetchone()
         if row and str(row[0]).strip():
-            ps = _parse_baseline_jupiter_policy_slot_value(str(row[0]))
+            raw = str(row[0]).strip()
+            ps = normalize_baseline_jupiter_policy_slot(raw)
             if ps is not None:
                 return ps
+            _warn_invalid_baseline_policy_slot("baseline_operator_kv", raw)
     except sqlite3.OperationalError:
         pass
-    ev = _parse_baseline_jupiter_policy_slot_value(os.environ.get("BASELINE_JUPITER_POLICY_SLOT"))
-    if ev is not None:
-        return ev
+    ev_raw = os.environ.get("BASELINE_JUPITER_POLICY_SLOT")
+    if ev_raw and str(ev_raw).strip():
+        ev = normalize_baseline_jupiter_policy_slot(ev_raw)
+        if ev is not None:
+            return ev
+        _warn_invalid_baseline_policy_slot("BASELINE_JUPITER_POLICY_SLOT", str(ev_raw).strip())
     return BASELINE_POLICY_SLOT_JUP_V2
 
 
 def set_baseline_jupiter_policy_slot(conn: sqlite3.Connection, policy_slot: str) -> None:
-    """Persist operator policy slot (``jup_v2`` or ``jup_v3``)."""
-    ps = (policy_slot or "").strip().lower()
-    if ps not in (BASELINE_POLICY_SLOT_JUP_V2, BASELINE_POLICY_SLOT_JUP_V3):
-        raise ValueError("policy_slot must be jup_v2 or jup_v3")
+    """Persist operator policy slot (must be a known member of ``VALID_BASELINE_JUPITER_POLICY_SLOTS``)."""
+    ps = normalize_baseline_jupiter_policy_slot(policy_slot)
+    if ps is None:
+        raise ValueError(
+            f"policy_slot must be one of {sorted(VALID_BASELINE_JUPITER_POLICY_SLOTS)} "
+            f"(or aliases jupiter_2/jupiter_3, v2/v3); got {policy_slot!r}"
+        )
     ts = utc_now_iso()
     conn.execute(
         """
@@ -356,12 +379,26 @@ def set_baseline_jupiter_policy_slot(conn: sqlite3.Connection, policy_slot: str)
 
 
 def signal_mode_for_baseline_policy_slot(policy_slot: str) -> str:
-    return SIGNAL_MODE_JUPITER_3 if policy_slot == BASELINE_POLICY_SLOT_JUP_V3 else SIGNAL_MODE_JUPITER_2
+    """Map **normalized** slot to ``policy_evaluations.signal_mode``. Unknown slot → ``ValueError``."""
+    ps = normalize_baseline_jupiter_policy_slot(policy_slot)
+    if ps is None:
+        raise ValueError(
+            f"unknown baseline Jupiter policy slot {policy_slot!r}; "
+            f"must normalize to one of {sorted(VALID_BASELINE_JUPITER_POLICY_SLOTS)}"
+        )
+    if ps == BASELINE_POLICY_SLOT_JUP_V3:
+        return SIGNAL_MODE_JUPITER_3
+    return SIGNAL_MODE_JUPITER_2
 
 
 def baseline_jupiter_policy_label_for_slot(policy_slot: str) -> str:
     """Operator-facing short label for dashboard / bundle (``JUPv2`` / ``JUPv3``)."""
-    return "JUPv3" if (policy_slot or "").strip() == BASELINE_POLICY_SLOT_JUP_V3 else "JUPv2"
+    ps = normalize_baseline_jupiter_policy_slot(policy_slot)
+    if ps == BASELINE_POLICY_SLOT_JUP_V3:
+        return "JUPv3"
+    if ps == BASELINE_POLICY_SLOT_JUP_V2:
+        return "JUPv2"
+    return "JUPv2"
 
 
 def baseline_jupiter_policy_tag_from_signal_mode(signal_mode: str | None) -> str:
