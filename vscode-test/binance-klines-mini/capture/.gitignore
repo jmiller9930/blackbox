@@ -1,0 +1,3 @@
+# Persisted NDJSON from the container — do not commit lab captures
+*
+!.gitignore

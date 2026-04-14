@@ -1,5 +1,8 @@
 # Run on clawbot: docker compose up -d --build
 # Binance traffic follows host split-tunnel (WireGuard); no VPN inside the container.
+#
+# NDJSON parity log (host path ./capture next to this file):
+#   tail -f capture/binance_klines.ndjson
 services:
   binance-klines:
     build: .
@@ -8,3 +11,6 @@ services:
     environment:
       BINANCE_KLINES_URL: https://api.binance.com/api/v3/klines?symbol=SOLUSDT&interval=5m&limit=1
       POLL_INTERVAL_MS: "300000"
+      CAPTURE_PATH: /capture/binance_klines.ndjson
+    volumes:
+      - ./capture:/capture
