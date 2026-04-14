@@ -620,6 +620,14 @@
     .tc-tr-baseline .tc-baseline-verdict-policy-row .tc-tile-verdict.tc-verdict-no-trade-amber {
       margin-bottom: 0;
     }
+    .tc-jup-policy-hero-label {
+      font-size: 0.58rem;
+      font-weight: 800;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--muted);
+      flex-shrink: 0;
+    }
     button.tc-jup-policy-chip-hero {
       appearance: none;
       -webkit-appearance: none;
@@ -1909,13 +1917,39 @@
     var jpBundle = opts.jp || {};
     var bjpol = jpBundle.baseline_jupiter_policy || {};
     var jupLab = String(bjpol.active_label || 'JUPv2').trim() || 'JUPv2';
-    // Persisted policy_evaluations only — never use active_label as a fake historical tag.
-    var jupResolved =
+    // Persisted policy_evaluations for this bar (strip/table).
+    var jupPersisted =
       c && c.baseline_jupiter_policy_tag != null && String(c.baseline_jupiter_policy_tag).trim() !== ''
         ? String(c.baseline_jupiter_policy_tag).trim()
         : null;
-    var jupChipDisplay = jupResolved != null ? jupResolved : '\u2014';
-    var jupBinanceRef = jupResolved != null ? jupResolved : jupLab;
+    // Latest column only: if no persisted row yet, show active operator slot (tooltip disclaims).
+    var jupHeroLiveFallback = false;
+    if (
+      baselineLane &&
+      jupPersisted == null &&
+      typeof colIdx === 'number' &&
+      typeof nAxis === 'number' &&
+      nAxis > 0 &&
+      colIdx === nAxis - 1
+    ) {
+      var alHero = bjpol.active_label != null && String(bjpol.active_label).trim() !== ''
+        ? String(bjpol.active_label).trim()
+        : '';
+      if (alHero) jupHeroLiveFallback = true;
+    }
+    var jupChipDisplay =
+      jupPersisted != null
+        ? jupPersisted
+        : jupHeroLiveFallback
+          ? String(bjpol.active_label || '').trim() || '\u2014'
+          : '\u2014';
+    var jupHeroChipTitle =
+      jupPersisted != null
+        ? 'Policy tag from policy_evaluations for this bar.'
+        : jupHeroLiveFallback
+          ? 'Active operator policy (no persisted policy_evaluation row for this bar yet).'
+          : 'No policy tag for this bar yet (em dash).';
+    var jupBinanceRef = jupPersisted != null ? jupPersisted : jupLab;
     var binanceDotHtml = '';
     var binanceRestHtml = '';
     var bmd = opts.binanceMd || {};
@@ -1967,7 +2001,10 @@
     }
     var jupPolicyChipHtml =
       baselineLane
-        ? '<button type="button" class="tc-jup-policy-chip tc-jup-policy-chip-hero" title="Policy version for this bar (policy_evaluations). Em dash = no row yet.">' +
+        ? '<span class="tc-jup-policy-hero-label">Policy</span>' +
+          '<button type="button" class="tc-jup-policy-chip tc-jup-policy-chip-hero" title="' +
+          escAttr(jupHeroChipTitle) +
+          '">' +
           esc(jupChipDisplay) +
           '</button>'
         : '';
@@ -2281,7 +2318,7 @@
         : closedLifecycle
           ? 'Baseline lifecycle: position closed on this bar (realized PnL).'
           : 'Closed trade outcome for this 5m bar';
-    var verdictLine =
+    var verdictInner =
       '<div class="tc-tile-verdict ' +
       wl +
       (noTradeVerdict ? ' tc-verdict-no-trade-amber' : '') +
@@ -2293,17 +2330,18 @@
       '">' +
       esc(ocDisp) +
       '</div>';
-    if (baselineLane) {
-      verdictLine =
-        '<div class="tc-baseline-verdict-policy-row">' + verdictLine + jupPolicyChipHtml + '</div>';
-    }
+    var baselineVerdictPolicyRow =
+      baselineLane
+        ? '<div class="tc-baseline-verdict-policy-row">' + verdictInner + jupPolicyChipHtml + '</div>'
+        : '';
     return tcCellSurface(
       jupInfraOnlyHtml +
         vsLine +
+        baselineVerdictPolicyRow +
         '<div class="' +
         wrapCls +
         '">' +
-        verdictLine +
+        (baselineLane ? '' : verdictInner) +
         '<span class="lab">sym</span><span>' +
         symTf +
         '</span>' +
