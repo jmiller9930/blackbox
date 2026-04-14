@@ -47,7 +47,7 @@
 
 ### Deploy / update
 
-**One-command helper (recommended):** [`seanv3py`](./seanv3py) — see **[`SEANV3PY.md`](./SEANV3PY.md)** (`./seanv3py deploy --pull`, `status`, `logs`, `stop`, etc.).
+**One-command helper (recommended):** [`seanv3py`](./seanv3py) or `python3 seanv3.py` — see **[`SEANV3PY.md`](./SEANV3PY.md)** for the full **operator process** (deploy → disconnect SSH → reconnect → `status` → `console` tmux reattach).
 
 Manual:
 
