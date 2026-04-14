@@ -190,6 +190,7 @@ def _root_cause_statement(stats: dict) -> str:
     fs = stats["fusion_short"]
     hyp = stats["hypothetical_entries"]
     r_dir_block = stats["risk_blocked_on_directional"]
+    reasons = stats["fusion_no_trade_reasons"]
 
     if hyp > 0:
         return (
@@ -198,11 +199,18 @@ def _root_cause_statement(stats: dict) -> str:
             "vs this diagnostic (unexpected if counts disagree)."
         )
 
-    if fn >= steps * 0.99:
+    if fl == 0 and fs == 0 and fn >= steps * 0.99:
+        g0 = reasons.get("no_gross_directional_score (no active long/short contributions)", 0)
+        low = reasons.get("fusion_score<0.55 (after overlap) or tie", 0)
+        cf = reasons.get(f"conflict_score>{MAX_CONFLICT_SCORE}", 0)
+        p0 = _pct(g0, steps)
+        p1 = _pct(low, steps)
         return (
-            "Fusion emitted **`no_trade` on nearly all decision bars** — signals rarely produced sufficient "
-            "weighted long/short evidence to pass fusion score and conflict gates; risk had almost no directional "
-            "opportunities to approve."
+            f"**Fusion never emitted `long` or `short` (0 / {steps} decision steps).** "
+            f"**{p0:.2f}%** of steps had **no gross directional score** ({g0} bars); "
+            f"**{p1:.2f}%** had non-zero gross but **fused score stayed below MIN_FUSION_SCORE** ({low} bars). "
+            f"Conflict bucket: {cf}. "
+            "**Risk** never sized a directional trade (`no_trade_from_fusion`); **execution received 0 opens**."
         )
 
     if (fl + fs) > 0 and r_dir_block == (fl + fs):

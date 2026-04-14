@@ -56,6 +56,7 @@ SQLite file: `renaissance_v4/data/renaissance_v4.sqlite3`.
 - **Determinism:** After full data is loaded, run `./renaissance_v4/run_replay_twice_check.sh` (or `./renaissance_v4/run_proof_bundle.sh` for both steps). The two `[VALIDATION_CHECKSUM]` lines must match **exactly**.
 - **Report:** `renaissance_v4/reports/baseline_v1.md` — portfolio metrics, **trade-evidence sample table** (when trades exist), per-signal scorecards, sanity snapshot. Optional full ledger: `RENAISSANCE_V4_EXPORT_OUTCOMES=1 python3 -m renaissance_v4.research.replay_runner` → `reports/outcomes_full.jsonl`.
 - **Phase 8–11:** **Not** wired into fusion or replay until baseline is signed (`promotion_engine.adjust_weight` etc. remain scaffold).
+- **Zero-trade diagnostic (read-only):** `python3 -m renaissance_v4.research.diagnostic_pipeline` → `reports/diagnostic_v1.md` (same signal→fusion→risk path as replay; **does not** change thresholds or logic).
 
 ### Runtime Ops (primary host) — mandatory full validation
 
