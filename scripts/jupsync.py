@@ -22,6 +22,13 @@ Usage:
   python3 scripts/jupsync.py --dry-run
   python3 scripts/jupsync.py --skip-push          # remote pull + compose only
   python3 scripts/jupsync.py --skip-health        # do not curl jupiter /health after
+
+Reachability (important):
+  The optional post-deploy ``curl http://127.0.0.1:707/health`` runs **on the lab host inside SSH** —
+  there ``127.0.0.1`` is correct. From your **laptop** or any machine that is not the server, use the
+  **server hostname** (e.g. ``http://clawbot.a51.corp:707/`` on VPN/LAN) or your **public DNS + port**
+  (e.g. ``http://jupv3.greyllc.net:737/``); do not use ``localhost`` unless you have an explicit tunnel.
+  Jupiter serves **HTTP** on 707 unless you terminate **HTTPS** in front (nginx, Caddy, etc.).
 """
 
 from __future__ import annotations
