@@ -87,14 +87,15 @@ python3 seanv3.py status
 
 | Command | What it does |
 |---------|----------------|
-| `./seanv3py deploy` | `docker compose build` then `up -d` — container **keeps running** after you close SSH. |
-| `./seanv3py deploy --pull` | `git pull origin main` at **repo root**, then deploy. |
+| `./seanv3py deploy` | **Host preflight** (Binance, compose `network_mode: host`, `capture/`, …), then `build` + `up -d`, then **container check** + log tail. Aborts before compose if checks fail. |
+| `./seanv3py deploy --pull` | `git pull origin main` at **repo root**, then same as `deploy`. |
+| `./seanv3py deploy --skip-preflight` | Emergency: skip checks (also `SEANV3_SKIP_PREFLIGHT=1`). Normal ops should use full preflight. |
 | `./seanv3py status` | `docker compose ps` — see if **seanv3** is **Up**. |
 | `./seanv3py logs` | `docker compose logs -f` — follow logs; **Ctrl+C** stops **tailing** only, not the container. |
 | `./seanv3py console` | **tmux**: create or **reattach** to session `seanv3` (name via `SEANV3_TMUX_SESSION`) running `docker compose logs -f`. |
 | `./seanv3py stop` | `docker compose down` — stops the stack. |
-| `./seanv3py restart` | `down`, then `build` + `up -d`. |
-| `./seanv3py restart --pull` | `down`, `git pull`, then `build` + `up -d`. |
+| `./seanv3py restart` | Host preflight, `down`, `build` + `up -d`, container check (same gates as `deploy`). |
+| `./seanv3py restart --pull` | `git pull`, then same as `restart`. |
 | `./seanv3py pull` | `git pull origin main` only (repo root). |
 | `./seanv3py preflight` | Automated checks: Binance ping + klines, `network_mode: host` in compose, `capture/` writable, optional SQLite + keypair JSON. |
 | `./seanv3py preflight --require-container` | Same, plus **`seanv3`** container must be **running** and prints last log lines. |

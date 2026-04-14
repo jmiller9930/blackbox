@@ -39,14 +39,14 @@ SeanV3-native (this file):
   test              Run unit tests (npm test)
 
 Docker / host (delegates to ./seanv3py):
-  deploy [--pull]   Build + up -d
+  deploy [--pull] [--skip-preflight]   Host preflight, then build + up + container check
   status            docker compose ps
   logs              docker compose logs -f
   console           tmux + logs -f
   stop              docker compose down
-  restart [--pull]  down + build + up
+  restart [--pull] [--skip-preflight]  Same preflight gates as deploy
   pull              git pull origin main (repo root)
-  preflight [--require-container]
+  preflight [--require-container]   Manual-only full / optional container checks
 
 Examples:
   python3 seanv3.py deploy --pull
