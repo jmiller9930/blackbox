@@ -2110,6 +2110,55 @@ class Handler(BaseHTTPRequestHandler):
                 return
             self._json(200, body, no_cache=True)
             return
+        if path == "/api/v1/dashboard/baseline-chain-validate":
+            try:
+                from modules.anna_training.baseline_chain_validate import validate_range
+
+                q = parse_qs(parsed.query or "")
+                mode = (q.get("mode") or ["single"])[0].strip().lower() or "single"
+                policy_slot = (q.get("policy_slot") or ["jup_v3"])[0].strip() or "jup_v3"
+                candle = (q.get("candle_open_utc") or q.get("candle_open") or [""])[0].strip() or None
+                last_n_raw = (q.get("last_n") or ["12"])[0]
+                try:
+                    last_n = int(last_n_raw)
+                except ValueError:
+                    last_n = 12
+                from_u = (q.get("from_utc") or q.get("from") or [""])[0].strip() or None
+                to_u = (q.get("to_utc") or q.get("to") or [""])[0].strip() or None
+                body = validate_range(
+                    mode=mode,
+                    policy_slot=policy_slot,
+                    candle_open_utc_iso=candle,
+                    last_n=last_n,
+                    from_utc_iso=from_u,
+                    to_utc_iso=to_u,
+                )
+            except ValueError as e:
+                self._json(
+                    400,
+                    {
+                        "schema": "baseline_chain_validate_v1",
+                        "ok": False,
+                        "error": str(e)[:500],
+                        "trace_id": str(uuid.uuid4()),
+                    },
+                    no_cache=True,
+                )
+                return
+            except Exception as e:  # noqa: BLE001
+                self._json(
+                    500,
+                    {
+                        "schema": "baseline_chain_validate_v1",
+                        "ok": False,
+                        "error": str(e)[:500],
+                        "trace_id": str(uuid.uuid4()),
+                    },
+                    no_cache=True,
+                )
+                return
+            self._json(200, body, no_cache=True)
+            return
         if path == "/api/v1/context-engine/status":
             if build_context_engine_status is None or record_api_probe is None:
                 self._json(
@@ -2341,6 +2390,42 @@ class Handler(BaseHTTPRequestHandler):
             self._json(code, r, no_cache=True)
             return
         path_norm = (parsed.path or "").rstrip("/") or "/"
+        if path_norm == "/api/v1/dashboard/baseline-chain-validate":
+            body = self._read_json_body()
+            trace_id = str(uuid.uuid4())
+            try:
+                from modules.anna_training.baseline_chain_validate import parse_request_body, validate_range
+
+                kwargs = parse_request_body(body)
+                out = validate_range(**kwargs)
+            except ValueError as e:
+                self._json(
+                    400,
+                    {
+                        "schema": "baseline_chain_validate_v1",
+                        "ok": False,
+                        "error": str(e)[:500],
+                        "trace_id": trace_id,
+                    },
+                    no_cache=True,
+                )
+                return
+            except Exception as e:  # noqa: BLE001
+                self._json(
+                    500,
+                    {
+                        "schema": "baseline_chain_validate_v1",
+                        "ok": False,
+                        "error": str(e)[:500],
+                        "trace_id": trace_id,
+                    },
+                    no_cache=True,
+                )
+                return
+            if isinstance(out, dict):
+                out["trace_id"] = trace_id
+            self._json(200, out, no_cache=True)
+            return
         if path_norm == "/api/v1/dashboard/baseline-jupiter-policy":
             body = self._read_json_body()
             trace_id = str(uuid.uuid4())
