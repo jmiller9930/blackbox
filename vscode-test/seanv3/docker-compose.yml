@@ -17,9 +17,12 @@
 #   docker compose run --rm -e SQLITE_PATH=/capture/sean_parity.db -e LIMIT=864 seanv3 \
 #     node --experimental-sqlite backfill.mjs
 # Optional external compare jobs exist elsewhere in the monorepo — not part of SeanV3 runtime.
+#
+# Read-only web UI (separate process): http://127.0.0.1:737/ — SEANV3_WEB_PORT (default 737).
 services:
   seanv3:
     build: .
+    image: seanv3:local
     container_name: seanv3
     # Required for Binance via Proton on host — do not remove (VPN/README.md).
     network_mode: host
@@ -44,3 +47,19 @@ services:
       # SEAN_ENGINE_SIZE_NOTIONAL_SOL: "1.0"
     volumes:
       - ./capture:/capture
+
+  # Read-only dashboard; shares SQLite with seanv3 (host network → port 737 on host).
+  seanv3-web:
+    image: seanv3:local
+    container_name: seanv3-web
+    network_mode: host
+    command: ["node", "--experimental-sqlite", "web_app.mjs"]
+    environment:
+      SQLITE_PATH: /capture/sean_parity.db
+      SEANV3_WEB_PORT: "737"
+      SEANV3_WEB_BIND: "0.0.0.0"
+    volumes:
+      - ./capture:/capture
+    depends_on:
+      - seanv3
+    restart: unless-stopped

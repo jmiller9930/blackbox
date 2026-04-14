@@ -4,7 +4,8 @@
   "type": "module",
   "scripts": {
     "test": "node --test test/seanv3.test.mjs && node --experimental-sqlite --test test/sean_engine.test.mjs",
-    "report": "node --experimental-sqlite report.mjs"
+    "report": "node --experimental-sqlite report.mjs",
+    "web": "node --experimental-sqlite web_app.mjs"
   },
   "dependencies": {
     "@solana/web3.js": "^1.98.4"

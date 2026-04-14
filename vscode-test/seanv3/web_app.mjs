@@ -1,0 +1,250 @@
+#!/usr/bin/env node
+/**
+ * Read-only SeanV3 web UI — wallet, position, recent trades from sean_parity.db.
+ * Default port 737 (SEANV3_WEB_PORT). Host networking recommended (same as app.mjs).
+ */
+import http from 'http';
+import { DatabaseSync } from 'node:sqlite';
+import { resolve } from 'path';
+import { fileURLToPath } from 'url';
+
+const __dirname = fileURLToPath(new URL('.', import.meta.url));
+
+function dbPath() {
+  const env = (process.env.SQLITE_PATH || process.env.SEAN_SQLITE_PATH || '').trim();
+  if (env) return resolve(env);
+  return resolve(__dirname, 'capture', 'sean_parity.db');
+}
+
+function esc(s) {
+  if (s == null) return '';
+  return String(s)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
+function buildSummary(db) {
+  const out = {
+    schema: 'seanv3_web_summary_v1',
+    sqlite_path: dbPath(),
+    wallet: null,
+    wallet_status: null,
+    position: null,
+    recent_trades: [],
+    last_kline: null,
+    error: null,
+  };
+
+  try {
+    const st = db.prepare(`SELECT v FROM analog_meta WHERE k = 'wallet_status'`).get();
+    if (st?.v) out.wallet_status = String(st.v);
+  } catch {
+    /* */
+  }
+
+  try {
+    const w = db.prepare(`SELECT pubkey_base58, keypair_path FROM paper_wallet WHERE id=1`).get();
+    if (w?.pubkey_base58) {
+      out.wallet = {
+        pubkey_base58: String(w.pubkey_base58),
+        keypair_path_suffix: w.keypair_path ? String(w.keypair_path).slice(-48) : null,
+      };
+    }
+  } catch {
+    /* */
+  }
+
+  try {
+    const p = db
+      .prepare(
+        `SELECT side, entry_price, size_notional_sol, entry_market_event_id, opened_at_utc, bars_held
+         FROM sean_paper_position WHERE id=1`
+      )
+      .get();
+    if (p) {
+      out.position = {
+        side: p.side != null ? String(p.side) : null,
+        entry_price: p.entry_price,
+        size_notional_sol: p.size_notional_sol,
+        entry_market_event_id: p.entry_market_event_id != null ? String(p.entry_market_event_id) : null,
+        opened_at_utc: p.opened_at_utc != null ? String(p.opened_at_utc) : null,
+        bars_held: p.bars_held,
+      };
+    }
+  } catch {
+    /* */
+  }
+
+  try {
+    const rows = db
+      .prepare(
+        `SELECT id, side, entry_time_utc, exit_time_utc, gross_pnl_usd, result_class, entry_market_event_id
+         FROM sean_paper_trades ORDER BY id DESC LIMIT 15`
+      )
+      .all();
+    out.recent_trades = rows.map((r) => ({
+      id: r.id,
+      side: r.side != null ? String(r.side) : null,
+      entry_time_utc: r.entry_time_utc != null ? String(r.entry_time_utc) : null,
+      exit_time_utc: r.exit_time_utc != null ? String(r.exit_time_utc) : null,
+      gross_pnl_usd: r.gross_pnl_usd,
+      result_class: r.result_class != null ? String(r.result_class) : null,
+      entry_market_event_id:
+        r.entry_market_event_id != null ? String(r.entry_market_event_id) : null,
+    }));
+  } catch {
+    /* */
+  }
+
+  try {
+    const k = db
+      .prepare(
+        `SELECT market_event_id, close_px, polled_at_utc FROM sean_binance_kline_poll
+         ORDER BY id DESC LIMIT 1`
+      )
+      .get();
+    if (k) {
+      out.last_kline = {
+        market_event_id: k.market_event_id != null ? String(k.market_event_id) : null,
+        close_px: k.close_px,
+        polled_at_utc: k.polled_at_utc != null ? String(k.polled_at_utc) : null,
+      };
+    }
+  } catch {
+    /* */
+  }
+
+  return out;
+}
+
+function htmlPage(data) {
+  const w = data.wallet;
+  const pos = data.position;
+  const trades = data.recent_trades || [];
+  const kl = data.last_kline;
+
+  const errBlock = data.error
+    ? `<p class="warn">SQLite: ${esc(data.error)}</p>`
+    : '';
+
+  const walletBlock = w
+    ? `<p><strong>Pubkey</strong><br><code>${esc(w.pubkey_base58)}</code></p>
+       <p class="muted">status: ${esc(data.wallet_status || '—')}</p>`
+    : '<p class="warn">No wallet row in <code>paper_wallet</code> — set KEYPAIR_PATH and restart <code>seanv3</code>.</p>';
+
+  const posBlock =
+    pos && String(pos.side) !== 'flat'
+      ? `<p><strong>Open</strong> ${esc(pos.side)} @ ${esc(pos.entry_price)} · mid ${esc(pos.entry_market_event_id)}</p>`
+      : '<p class="muted">Position: flat</p>';
+
+  const rows = trades
+    .map(
+      (t) =>
+        `<tr><td>${esc(t.id)}</td><td>${esc(t.side)}</td><td>${esc(t.exit_time_utc)}</td><td>${esc(t.gross_pnl_usd)}</td><td>${esc(t.result_class)}</td></tr>`
+    )
+    .join('');
+
+  const klBlock = kl
+    ? `<p class="muted">Last kline poll: ${esc(kl.market_event_id)} · close ${esc(kl.close_px)} · ${esc(kl.polled_at_utc)}</p>`
+    : '';
+
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>SeanV3</title>
+  <style>
+    body { font-family: system-ui, sans-serif; background: #0f1419; color: #e6edf3; margin: 0; padding: 1.25rem; }
+    h1 { font-size: 1.25rem; margin-top: 0; }
+    code { background: #21262d; padding: 0.1rem 0.35rem; border-radius: 4px; word-break: break-all; }
+    table { border-collapse: collapse; width: 100%; max-width: 56rem; font-size: 0.85rem; }
+    th, td { border: 1px solid #30363d; padding: 0.35rem 0.5rem; text-align: left; }
+    th { background: #161b22; }
+    .muted { color: #8b949e; font-size: 0.9rem; }
+    .warn { color: #d29922; }
+    a { color: #58a6ff; }
+  </style>
+</head>
+<body>
+  <h1>SeanV3 — read-only</h1>
+  <p class="muted">${esc(data.sqlite_path)}</p>
+  ${errBlock}
+  ${walletBlock}
+  ${posBlock}
+  ${klBlock}
+  <h2>Recent closed trades</h2>
+  <table>
+    <thead><tr><th>id</th><th>side</th><th>exit UTC</th><th>PnL USD</th><th>result</th></tr></thead>
+    <tbody>${rows || '<tr><td colspan="5" class="muted">No rows</td></tr>'}</tbody>
+  </table>
+  <p class="muted"><a href="/api/summary.json">summary.json</a> · <a href="/health">health</a></p>
+</body>
+</html>`;
+}
+
+const port = Math.max(1, Math.min(65535, parseInt(process.env.SEANV3_WEB_PORT || '737', 10) || 737));
+const bind = (process.env.SEANV3_WEB_BIND || '0.0.0.0').trim() || '0.0.0.0';
+
+const server = http.createServer((req, res) => {
+  const url = new URL(req.url || '/', `http://${req.headers.host || 'localhost'}`);
+
+  if (url.pathname === '/health') {
+    res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' });
+    res.end(JSON.stringify({ ok: true, schema: 'seanv3_web_health_v1', port, bind }));
+    return;
+  }
+
+  let summary = {
+    schema: 'seanv3_web_summary_v1',
+    sqlite_path: dbPath(),
+    wallet: null,
+    wallet_status: null,
+    position: null,
+    recent_trades: [],
+    last_kline: null,
+    error: null,
+  };
+
+  let db;
+  try {
+    db = new DatabaseSync(dbPath(), { readOnly: true });
+  } catch (e) {
+    summary.error = e instanceof Error ? e.message : String(e);
+  }
+
+  if (db) {
+    try {
+      summary = buildSummary(db);
+    } catch (e) {
+      summary.error = e instanceof Error ? e.message : String(e);
+    } finally {
+      try {
+        db.close();
+      } catch {
+        /* */
+      }
+    }
+  }
+
+  if (url.pathname === '/api/summary.json') {
+    res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' });
+    res.end(JSON.stringify(summary, null, 2));
+    return;
+  }
+
+  if (url.pathname === '/' || url.pathname === '/index.html') {
+    res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' });
+    res.end(htmlPage(summary));
+    return;
+  }
+
+  res.writeHead(404, { 'Content-Type': 'text/plain' });
+  res.end('not found');
+});
+
+server.listen(port, bind, () => {
+  console.error(`[seanv3-web] http://${bind}:${port}/  (read-only)`);
+});

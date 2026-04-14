@@ -17,6 +17,8 @@ You can run **both** on one host. BlackBox **nginx** (`UIUX.Web` compose) binds 
 
 Both rely on the **host** routing table for Binance (WireGuard split-tunnel on clawbot per `VPN/README.md`).
 
+**Read-only web UI (separate container `seanv3-web`):** **`http://127.0.0.1:737/`** (default **`SEANV3_WEB_PORT=737`**, host networking). Shows wallet pubkey, open position, recent `sean_paper_trades`, **`/api/summary.json`**. Run `docker compose up -d` (starts `seanv3` + `seanv3-web`) or locally `npm run web`.
+
 ---
 
 ## Target components (SeanV3 as its own system)
