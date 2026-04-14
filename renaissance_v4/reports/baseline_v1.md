@@ -10,9 +10,9 @@
 | Item | Value |
 |------|--------|
 | **Annotated tag** | `RenaissanceV4_baseline_v1` |
-| **Tag commit** | `1392b61760c7f0ce9411ad54258c50f6fc1f9c0e` (verify: `git rev-parse RenaissanceV4_baseline_v1^{commit}`) |
+| **Resolved commit** | `git rev-parse RenaissanceV4_baseline_v1^{commit}` (must match the tip that contains this file) |
 
-**Strategy/reports stack:** DV-013 code + diagnostic snapshot through **`6b902564ac9fc3e827f56332e4ec579555c25ee8`**; tag adds tracked **`baseline_v1.md`** and `.gitignore` adjustment only — no strategy code changes vs `6b90256`.
+**Strategy/reports stack:** DV-013 code + diagnostic snapshot through **`6b902564ac9fc3e827f56332e4ec579555c25ee8`**; later commits may add only promotion docs (e.g. this file) and gitignore — **no** strategy code changes after `6b90256` until a new baseline tag supersedes this one.
 
 After clone: `git fetch --tags && git checkout RenaissanceV4_baseline_v1`
 
