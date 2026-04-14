@@ -103,6 +103,13 @@ def test_dashboard_baseline_no_trade_amber_outline_only() -> None:
     assert "noTradeVerdict" in text
 
 
+def test_dashboard_trade_chain_tile_correlates_trade_id_and_mei() -> None:
+    text = (WEB / "dashboard.html").read_text(encoding="utf-8")
+    assert "tcTileCorrelateHtml" in text
+    assert "tc-tile-correlate" in text
+    assert "axisMid" in text
+
+
 def test_app_js_three_dev_roles_and_staff_helpers() -> None:
     text = (WEB / "app.js").read_text(encoding="utf-8")
     assert "internal_member" in text

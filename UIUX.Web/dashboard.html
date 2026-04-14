@@ -774,6 +774,35 @@
       padding-bottom: 0.2rem;
       border-bottom: 1px solid rgba(51, 65, 85, 0.35);
     }
+    /* Ledger ↔ column correlation (above Jupiter narrative blocks in each cell). */
+    .tc-tile-correlate {
+      font-size: 0.62rem;
+      line-height: 1.35;
+      font-family: ui-monospace, monospace;
+      color: #1e293b;
+      padding: 0.28rem 0.4rem;
+      margin: 0 0 0.35rem 0;
+      background: #f1f5f9;
+      border: 1px solid #cbd5e1;
+      border-radius: 4px;
+    }
+    .tc-tile-correlate .lab {
+      color: var(--muted);
+      font-size: 0.58rem;
+      text-transform: uppercase;
+      letter-spacing: 0.02em;
+      font-weight: 600;
+      margin-right: 0.2rem;
+    }
+    .tc-correlate-sep {
+      margin: 0 0.35rem;
+      opacity: 0.55;
+      font-weight: 600;
+    }
+    .tc-tile-correlate .tc-id {
+      font-weight: 600;
+      word-break: break-all;
+    }
     /* Jupiter 5m narrative — bullet + lab + value (baseline + Anna lanes; policy KV strip was removed from page header). */
     .tc-tile-narr-wrap {
       grid-column: 1 / -1;
@@ -1413,6 +1442,40 @@
     );
   }
 
+  /**
+   * Shows trade_id (lifecycle-aware) and this column's market_event_id so Jupiter tiles match
+   * the ledger row and the horizontal axis.
+   */
+  function tcTileCorrelateHtml(c, opts) {
+    opts = opts || {};
+    var tid = '';
+    if (c) {
+      if (c.lifecycle_trade_id != null && String(c.lifecycle_trade_id).trim() !== '') {
+        tid = String(c.lifecycle_trade_id).trim();
+      } else if (c.trade_id != null && String(c.trade_id).trim() !== '') {
+        tid = String(c.trade_id).trim();
+      }
+    }
+    var mei = '';
+    if (opts.axisMid != null && String(opts.axisMid).trim() !== '') {
+      mei = String(opts.axisMid).trim();
+    } else if (c && c.market_event_id != null && String(c.market_event_id).trim() !== '') {
+      mei = String(c.market_event_id).trim();
+    }
+    var fullTitle = 'trade_id: ' + (tid || '—') + ' · this column MEI: ' + (mei || '—');
+    return (
+      '<div class="tc-tile-correlate" title="' +
+      escAttr(fullTitle) +
+      '">' +
+      '<span class="lab">trade_id</span>' +
+      tcShortId(tid, 28) +
+      '<span class="tc-correlate-sep">·</span>' +
+      '<span class="lab">MEI</span>' +
+      tcShortId(mei, 28) +
+      '</div>'
+    );
+  }
+
   /** Price cells aligned with Reports (4 dp). */
   function btsFmtPx(n) {
     if (n == null || n === '' || (typeof n === 'number' && isNaN(n))) return '—';
@@ -1878,7 +1941,7 @@
         'This bar — gates (latest closed candle)'
       );
     }
-    var jupStack = scopeNote + entrySnap + narrEl + colGates;
+    var jupStack = tcTileCorrelateHtml(c, opts) + scopeNote + entrySnap + narrEl + colGates;
     if (!c || c.empty) {
       var ntBar =
         baselineLane
@@ -2851,6 +2914,7 @@
               colIndex: idx,
               nEv: nEv,
               baselineAnchorIdx: anchorIdx,
+              axisMid: midL,
             }) +
             '</td>';
         }
@@ -2879,7 +2943,13 @@
             ' style="' +
             cellBg +
             '">' +
-            cellMini(cell, row, { jp: jp, binanceMd: binanceMd, colIndex: idx, nEv: nEv }) +
+            cellMini(cell, row, {
+              jp: jp,
+              binanceMd: binanceMd,
+              colIndex: idx,
+              nEv: nEv,
+              axisMid: mid,
+            }) +
             '</td>';
         });
       }
