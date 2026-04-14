@@ -4,9 +4,9 @@ FROM node:22-alpine
 
 WORKDIR /app
 
-RUN addgroup -g 1000 app && adduser -D -u 1000 -G app app
-COPY --chown=app:app app.mjs ./
+# Use image's built-in `node` user (GID 1000 already exists on node:alpine).
+COPY --chown=node:node app.mjs ./
 
-USER app
+USER node
 
 CMD ["node", "app.mjs"]
