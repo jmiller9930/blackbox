@@ -16,7 +16,7 @@
 # Raw:
 #   docker compose run --rm -e SQLITE_PATH=/capture/sean_parity.db -e LIMIT=864 seanv3 \
 #     node --experimental-sqlite backfill.mjs
-# Compare to Blackbox (from repo root): PYTHONPATH=. python3 -m modules.anna_training.jup_v3_parity_compare ...
+# Optional external compare jobs exist elsewhere in the monorepo — not part of SeanV3 runtime.
 services:
   seanv3:
     build: .

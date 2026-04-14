@@ -1,14 +1,12 @@
-# seanv3 (Docker)
+# SeanV3 (Docker) — **standalone application**
 
-## Architectural principle (authoritative)
+SeanV3 is **its own application** in this repo: **`vscode-test/seanv3/`** (Node, Docker). It does **not** run inside or import the BlackBox application pod. Strategy, data, ledger, and reporting are **SeanV3-owned**.
 
-**BlackBox is one trade system. SeanV3 is another.** They must be designed so mismatches can be attributed to **one** system or the other, not to a fuzzy “parity harness.”
+**Operator initiative:** use the **SeanV3 operator TUI** — `scripts/operator/preflight_pyth_tui.py` (preflight, policy slots, oracle context). That TUI is the primary shell for “is the SeanV3 stack healthy, what policy slot is active, what does Hermes show” — not a BlackBox dashboard.
 
-**SeanV3** must be a **standalone paper trade engine**: its own market data, its own evaluation, its own **trade lifecycle** (open → manage → close with Sean V3 exit rules), its own **ledger and reporting**. Only **after** that exists should **comparison** to BlackBox run as a **separate layer**, treating SeanV3 as an **independent reference path**, not as an extension of BlackBox.
+**Optional, separate concern:** other systems in the monorepo may **compare** artifacts to SeanV3 **after** SeanV3 is complete on its own. That is **not** part of SeanV3 runtime and **not** required to operate SeanV3.
 
-The **operator TUI** (`scripts/operator/…`) sits **above** both: it can show health, paper P&amp;L, and **diff** BlackBox vs SeanV3 once both systems expose comparable artifacts.
-
-**Design risk to avoid:** Treating SeanV3 as a thin ingest + stub that only answers isolated bar questions. That cannot produce trustworthy win/loss or P&amp;L, and it blames ambiguity on “parity” when the real gap is **incomplete SeanV3 structure**.
+**Design risk to avoid:** Folding SeanV3 into “training” or “anna” paths mentally — those are **other** trees. SeanV3 code and operator flow stay under **`seanv3/`** + **`scripts/operator/`** for the TUI.
 
 ---
 
@@ -16,12 +14,12 @@ The **operator TUI** (`scripts/operator/…`) sits **above** both: it can show h
 
 | Layer | Requirement | Role in a complete SeanV3 |
 |--------|-------------|---------------------------|
-| **Market data** | Ingest and store **Binance 5m candles** in a **stable local store** with a **consistent `market_event_id`** (and aligned candle identity with BlackBox’s bar keying for later comparison). | Canonical bar tape for the engine. |
-| **Strategy evaluation** | Run **Sean V3 logic** against **that stored data** and emit **trade decisions** (enter / hold / exit / no-trade) **inside SeanV3**, without depending on BlackBox runtime for the decision. | May share a **spec** with `modules/anna_training/jupiter_3_sean_policy.py`, but the **running engine** is SeanV3-owned. |
+| **Market data** | Ingest and store **Binance 5m candles** in a **stable local store** with a **consistent `market_event_id`**. | Canonical bar tape for the engine. |
+| **Strategy evaluation** | Run **Sean V3 logic** in **SeanV3** (this stack) against stored bars — enter / hold / exit / no-trade **without** calling other apps. | Implemented in **`vscode-test/seanv3/`** (Node); not Python, not another pod. |
 | **Trade lifecycle** | **Open** a position object, **track** it, **close** per Sean V3 exit rules — not only bar-level yes/no. | Required for realistic P&amp;L and win/loss. |
 | **Parity ledger** | Append **trade records** with enough detail for analysis: entry time/price, side, exit time/price, gross P&amp;L, optional net P&amp;L, result classification, strategy metadata. | Source of truth for SeanV3 outcomes. |
 | **Reporting** | Trade list, win/loss counts, win rate, cumulative P&amp;L, per-trade detail (and optionally max drawdown later). | Operator and automation-facing. |
-| **Comparison** | **Last** — diff SeanV3 artifacts vs BlackBox **after** the above. | Uses the same comparison tools (`jup_v3_parity_compare`, etc.) as **reference vs reference**, not “helper vs master.” |
+| **External compare (optional)** | **Last** — only if you explicitly run a separate compare job. | Not part of SeanV3; does not ship inside this container. |
 
 ---
 
@@ -30,14 +28,14 @@ The **operator TUI** (`scripts/operator/…`) sits **above** both: it can show h
 | Layer | Status today |
 |------|----------------|
 | **Market data** | **Partial:** Binance klines poll + backfill into `sean_binance_kline_poll`, stable `market_event_id` in `app.mjs`. |
-| **Strategy evaluation** | **Slice exists:** `sean_engine_slice.mjs` (`sean_engine_slice_v1`) runs **inside SeanV3** on each **new** 5m bar — **placeholder rules** (not full `jupiter_3_sean_policy.py` parity). Full Sean V3 math in-process is a **next step**. |
+| **Strategy evaluation** | **Slice exists:** `sean_engine_slice.mjs` (`sean_engine_slice_v1`) runs **inside SeanV3** on each **new** 5m bar — **placeholder rules** until full Sean V3 rules are ported here. **Next step:** real policy in this folder only. |
 | **Trade lifecycle** | **Slice exists:** one paper slot (`sean_paper_position`) — open long → carry (`bars_held`) → close on stop or max-hold bars. |
 | **Sean trade ledger** | **Implemented:** `sean_paper_trades` + writer in `sean_ledger.mjs` (entry/exit, gross P&amp;L, `result_class`, metadata). |
 | **Legacy paper log** | `paper_trade_log` remains for ingest / stub / wallet events — **not** the Sean trade ledger. |
 | **Reporting** | **Ad hoc:** `SELECT * FROM sean_paper_trades`; dedicated SeanV3 reporting module **not** built yet. |
-| **Comparison** | **Still later:** do not use `jup_v3_parity_compare` as “Sean proved” until policy + exits match — comparison layer remains **separate**. |
+| **External compare** | **Not part of SeanV3** — run only if you choose, from another context. |
 
-**Implementation direction:** Harden **Sean-native** evaluation toward real Sean V3 rules, add **reporting**, **then** BlackBox comparison.
+**Implementation direction:** Harden **Sean-native** evaluation and **reporting** here; operator experience stays **TUI-first** (`scripts/operator/`).
 
 ---
 
@@ -163,15 +161,9 @@ docker compose logs -f
 # optional: LIMIT=1000 ./run-backfill-clawbot.sh
 ```
 
-### Parity vs Blackbox (Python)
+### Optional — external compare (not SeanV3)
 
-```bash
-cd ~/blackbox
-PYTHONPATH=. python3 -m modules.anna_training.jup_v3_parity_compare \
-  vscode-test/seanv3/capture/sean_parity.db
-```
-
-Set `BLACKBOX_MARKET_DATA_PATH` if needed.
+Some teams run a **separate** repo-root Python job to diff Sean SQLite against another system’s DB. That is **optional** and **not** required to build, run, or operate SeanV3. Do not treat it as SeanV3’s runtime.
 
 ---
 
@@ -180,7 +172,8 @@ Set `BLACKBOX_MARKET_DATA_PATH` if needed.
 | Doc | Role |
 |-----|------|
 | **`../README.md`** | vscode-test index |
-| **`TURNOVER_NEXT_STEPS.md`** | Architect checks, follow-ups |
+| **[`../../scripts/operator/preflight_pyth_tui.py`](../../scripts/operator/preflight_pyth_tui.py)** | **SeanV3 operator TUI** (preflight, policy registry, Hermes panel) |
+| **`TURNOVER_NEXT_STEPS.md`** | Supplementary checks (may reference optional compare tooling) |
 | **`../../VPN/README.md`** | Split-tunnel |
 | **`../../scripts/clawbot/binance_api_route_via_proton_wg.sh`** | Route repair |
 

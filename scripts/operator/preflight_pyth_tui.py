@@ -1,32 +1,22 @@
 #!/usr/bin/env python3
 """
-Terminal UI: header = active **policy** + preflight checks; body = Pyth (Hermes) SOL/USD oracle view.
+**SeanV3 operator TUI** — primary terminal shell for SeanV3 initiative: header = active **policy** slot
++ preflight checks; body = Pyth (Hermes) SOL/USD oracle context. Not a BlackBox pod UI.
 
-**Policy registry** (extend without forking the TUI): ``scripts/operator/policy_registry.json``
-(or override with ``BLACKBOX_POLICY_REGISTRY``). Each policy can describe:
+**Policy registry:** ``scripts/operator/policy_registry.json``. Override path with ``SEANV3_POLICY_REGISTRY``
+(or legacy ``BLACKBOX_POLICY_REGISTRY``). Policies describe optional TS entry paths and dataset modes for
+the SeanV3 stack; **this TUI does not execute** strategy code — run ``node <entry>`` elsewhere if needed.
 
-- ``kind``: ``builtin`` | ``typescript`` | ``python_module`` (future runners)
-- ``entry``: repo-relative path to a TS/JS file (for Sean strategies) — **the TUI does not execute it**;
-  run ``node <entry>`` (or your harness) in another terminal, or wire a dedicated runner later.
-- ``dataset``: ``env`` (use ``BLACKBOX_MARKET_DATA_PATH``) | ``isolated`` (dedicated SQLite under
-  ``data/sqlite/…``) — **recycle** shared tape vs **new dataset** per policy.
-
-There is no HTML dropdown in a terminal. Use ``--menu`` for a **picker dialog** (prompt_toolkit),
-or ``--policy <id>`` / ``BLACKBOX_ACTIVE_POLICY_ID``.
-
-This is an **operator surface** — not an order entry terminal. JUPv3 baseline axis is Binance;
-Pyth is oracle context.
+Use ``--menu`` for a picker dialog (prompt_toolkit), or ``--policy <id>`` / ``SEANV3_ACTIVE_POLICY_ID``.
 
 Usage (from repo root):
 
   PYTHONPATH=scripts/runtime python3 scripts/operator/preflight_pyth_tui.py
   PYTHONPATH=scripts/runtime python3 scripts/operator/preflight_pyth_tui.py --menu
-  PYTHONPATH=scripts/runtime python3 scripts/operator/preflight_pyth_tui.py --policy isolated_example
 
 Environment (optional):
-  BLACKBOX_POLICY_REGISTRY    — path to registry JSON (default: beside this script)
-  BLACKBOX_ACTIVE_POLICY_ID   — default policy id if ``--policy`` omitted
-  BLACKBOX_MARKET_DATA_PATH   — used when policy dataset mode is ``env`` / ``shared``
+  SEANV3_POLICY_REGISTRY / SEANV3_ACTIVE_POLICY_ID  (preferred; BLACKBOX_* names still accepted)
+  BLACKBOX_MARKET_DATA_PATH or SEAN_MARKET_DATA_PATH — optional SQLite tick check when dataset mode is env
   MARKET_TICK_SYMBOL          — default SOL-USD
   PYTH_SOL_USD_FEED_ID        — default Crypto.SOL/USD feed id (hex, no 0x)
 
@@ -69,7 +59,7 @@ def _repo_root() -> Path:
 
 
 def _default_registry_path() -> Path:
-    raw = (os.environ.get("BLACKBOX_POLICY_REGISTRY") or "").strip()
+    raw = (os.environ.get("SEANV3_POLICY_REGISTRY") or os.environ.get("BLACKBOX_POLICY_REGISTRY") or "").strip()
     if raw:
         return Path(raw).resolve()
     return _script_dir() / "policy_registry.json"
@@ -85,11 +75,15 @@ def load_policy_registry(path: Path) -> dict[str, Any]:
     return data
 
 
+def _env_market_data_path() -> str:
+    return (os.environ.get("SEAN_MARKET_DATA_PATH") or os.environ.get("BLACKBOX_MARKET_DATA_PATH") or "").strip()
+
+
 def resolve_effective_market_data_path(repo_root: Path, policy: dict[str, Any]) -> str | None:
     """Return SQLite path string for market_ticks check, or None to skip / use env-only messaging."""
     ds = policy.get("dataset")
     if not isinstance(ds, dict):
-        return (os.environ.get("BLACKBOX_MARKET_DATA_PATH") or "").strip() or None
+        return _env_market_data_path() or None
     mode = (ds.get("mode") or "env").strip().lower()
     if mode == "isolated":
         rel = (ds.get("sqlite_relative") or "").strip()
@@ -97,7 +91,7 @@ def resolve_effective_market_data_path(repo_root: Path, policy: dict[str, Any]) 
             return None
         return str((repo_root / rel).resolve())
     # env | shared
-    return (os.environ.get("BLACKBOX_MARKET_DATA_PATH") or "").strip() or None
+    return _env_market_data_path() or None
 
 
 def resolve_entry_path(repo_root: Path, policy: dict[str, Any]) -> Path | None:
@@ -133,7 +127,7 @@ class CheckResult:
 
 def _http_code(url: str, timeout: float = 12.0) -> tuple[int | None, str]:
     try:
-        req = urllib.request.Request(url, method="GET", headers={"User-Agent": "blackbox-preflight-tui"})
+        req = urllib.request.Request(url, method="GET", headers={"User-Agent": "seanv3-operator-tui"})
         with urllib.request.urlopen(req, timeout=timeout) as resp:
             return resp.getcode(), ""
     except urllib.error.HTTPError as e:
@@ -158,7 +152,7 @@ def _binance_klines() -> CheckResult:
             return CheckResult("Binance klines SOLUSDT 5m", False, err or "request failed")
         return CheckResult("Binance klines SOLUSDT 5m", False, f"HTTP {code}")
     try:
-        req = urllib.request.Request(_BINANCE_KLINES, headers={"User-Agent": "blackbox-preflight-tui"})
+        req = urllib.request.Request(_BINANCE_KLINES, headers={"User-Agent": "seanv3-operator-tui"})
         with urllib.request.urlopen(req, timeout=12.0) as resp:
             raw = resp.read(4).decode("utf-8", errors="replace")
         if raw.startswith("["):
@@ -172,7 +166,7 @@ def _hermes_pyth() -> tuple[CheckResult, dict[str, Any]]:
     fid = (os.environ.get("PYTH_SOL_USD_FEED_ID") or _DEFAULT_FEED).strip()
     url = f"{_HERMES_LATEST}?ids[]={fid}&parsed=true"
     try:
-        req = urllib.request.Request(url, headers={"User-Agent": "blackbox-preflight-tui"})
+        req = urllib.request.Request(url, headers={"User-Agent": "seanv3-operator-tui"})
         with urllib.request.urlopen(req, timeout=12.0) as resp:
             body = json.loads(resp.read().decode("utf-8"))
     except Exception as e:
@@ -203,10 +197,10 @@ def _parse_pyth_price(parsed: list[dict[str, Any]]) -> dict[str, Any]:
 
 
 def _market_db_tick(market_data_path: str | None = None) -> CheckResult:
-    raw = (market_data_path or "").strip() if market_data_path is not None else (os.environ.get("BLACKBOX_MARKET_DATA_PATH") or "").strip()
+    raw = (market_data_path or "").strip() if market_data_path is not None else _env_market_data_path()
     sym = (os.environ.get("MARKET_TICK_SYMBOL") or "SOL-USD").strip() or "SOL-USD"
     if not raw:
-        return CheckResult("SQLite market_ticks (optional)", True, "BLACKBOX_MARKET_DATA_PATH unset — skipped")
+        return CheckResult("SQLite market_ticks (optional)", True, "SEAN_MARKET_DATA_PATH unset — skipped")
     p = Path(raw)
     if not p.is_file():
         return CheckResult("SQLite market_ticks (optional)", True, f"no file {p} — skipped")
@@ -298,8 +292,7 @@ def _header_table(checks: list[CheckResult]) -> Table:
 
 def _main_panel(parsed: list[dict[str, Any]] | None, now_ts: float) -> Panel:
     note = (
-        "[dim]Oracle tape (Hermes). JUPv3 policy baseline is Binance klines; use this for "
-        "oracle context / cross-check, not as the sole trade axis.[/dim]"
+        "[dim]Oracle tape (Hermes). SeanV3 bar baseline is Binance; use this panel for oracle context.[/dim]"
     )
     if not parsed:
         return Panel(
@@ -384,7 +377,7 @@ def _parse_args(argv: list[str]) -> argparse.Namespace:
         "--registry",
         type=Path,
         default=None,
-        help="Path to policy_registry.json (default: beside this script or BLACKBOX_POLICY_REGISTRY)",
+        help="Path to policy_registry.json (default: beside this script or SEANV3_POLICY_REGISTRY)",
     )
     p.add_argument("--policy", type=str, default=None, help="Policy id from registry")
     p.add_argument("--list-policies", action="store_true", help="Print policy ids and exit")
@@ -411,7 +404,9 @@ def main(argv: list[str] | None = None) -> None:
             print(f"{pol['id']}\t{pol.get('label', '')}")
         return
 
-    env_policy = (os.environ.get("BLACKBOX_ACTIVE_POLICY_ID") or "").strip()
+    env_policy = (
+        os.environ.get("SEANV3_ACTIVE_POLICY_ID") or os.environ.get("BLACKBOX_ACTIVE_POLICY_ID") or ""
+    ).strip()
     want = (args.policy or env_policy or "").strip()
     if not want and policies:
         want = str(policies[0]["id"])
@@ -436,7 +431,9 @@ def main(argv: list[str] | None = None) -> None:
 
     console = Console()
     hermes_bucket: dict[str, Any] = {}
-    refresh = float(os.environ.get("BLACKBOX_TUI_REFRESH_SEC", "2.0"))
+    refresh = float(
+        os.environ.get("SEANV3_TUI_REFRESH_SEC") or os.environ.get("BLACKBOX_TUI_REFRESH_SEC") or "2.0"
+    )
 
     def render() -> Group:
         checks, _ = _run_checks(hermes_bucket, market_data_path=effective_db)
@@ -460,8 +457,8 @@ def main(argv: list[str] | None = None) -> None:
         return Group(pol, top, body)
 
     console.print(
-        "[dim]BLACK BOX — policy-aware preflight + Pyth TUI  "
-        "(Ctrl+C to exit | --menu to pick policy | export BLACKBOX_ACTIVE_POLICY_ID)[/dim]\n"
+        "[dim]SeanV3 operator TUI — preflight + policy + Pyth  "
+        "(Ctrl+C to exit | --menu | SEANV3_ACTIVE_POLICY_ID)[/dim]\n"
     )
     with Live(render(), console=console, refresh_per_second=min(1.0 / max(refresh, 0.25), 30.0)) as live:
         try:

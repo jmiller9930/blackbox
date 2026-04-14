@@ -1,6 +1,8 @@
-# seanv3py — Sean V3 Docker (end-to-end helper)
+# seanv3py — SeanV3 Docker (end-to-end helper)
 
-**`seanv3py`** (and optional **`seanv3.py`**) live next to `docker-compose.yml` so you can manage the **Sean V3** parity container (`seanv3`) from one entrypoint.
+**`seanv3py`** (and optional **`seanv3.py`**) live next to `docker-compose.yml` so you can manage the **SeanV3** application container (`seanv3`) from one entrypoint.
+
+**Operator TUI:** for a terminal dashboard (preflight, policy slots, Hermes), use **`scripts/operator/preflight_pyth_tui.py`** — that is the **SeanV3 operator initiative** shell, not the BlackBox web UI.
 
 It does **not** replace **`README.md`** or **`VPN/README.md`** — the stack still **must** use **`network_mode: host`** for Binance via Proton on clawbot.
 
@@ -90,9 +92,9 @@ python3 seanv3.py status
 
 ---
 
-## Pre-flight checklist (before you rely on parity / “paper” run)
+## Pre-flight checklist (SeanV3 paper stack)
 
-**Order:** run **host routing + API** checks first, then **deploy**, then **container + DB** checks. This stack is **`PAPER_TRADING=1`** in `docker-compose.yml` — it records parity data; it does **not** place live exchange orders. Real execution lives elsewhere in Blackbox when that phase is enabled.
+**Order:** run **host routing + API** checks first, then **deploy**, then **container + DB** checks. This stack is **`PAPER_TRADING=1`** in `docker-compose.yml` — paper only; no live exchange orders from SeanV3.
 
 | # | Check | Why |
 |---|--------|-----|
@@ -101,13 +103,15 @@ python3 seanv3.py status
 | 3 | **Binance `/api/v3/klines` (SOLUSDT 5m)** → 200 + JSON array | Same path the poller uses; catches CDN/geo issues early. |
 | 4 | **`docker-compose.yml` has `network_mode: host`** | Required so the container uses **host** routing (Proton split-tunnel). |
 | 5 | **`capture/` writable** | NDJSON + SQLite bind-mount must be writable. |
-| 6 | **SQLite `sean_parity.db`** (after first poll) | Table **`sean_binance_kline_poll`** should exist; compare vs Blackbox via **`jup_v3_parity_compare`** when you need alignment proof. |
-| 7 | **Wallet** (`capture/keypair.json` + **`KEYPAIR_PATH`** in compose if you want pubkey in DB) | Optional for parity; invalid JSON should fail preflight if the file exists. |
+| 6 | **SQLite `sean_parity.db`** (after first poll) | Tables **`sean_binance_kline_poll`** (+ Sean ledger when engine enabled) should populate. |
+| 7 | **Wallet** (`capture/keypair.json` + **`KEYPAIR_PATH`** in compose if you want pubkey in DB) | Optional; invalid JSON should fail preflight if the file exists. |
 | 8 | **Container up** + logs show **`ok`: true** (no 451) | Use `./seanv3py preflight --require-container` after **`deploy`**. |
 
 **Automated:** `./seanv3py preflight` (host + compose + capture + optional DB/keypair). After **`deploy`**, run **`./seanv3py preflight --require-container`**.
 
-**Not in the script (operator judgment):** disk space on `capture/`, clock skew, Blackbox **`market_data`** DB path for parity scripts, and any org-specific approvals before “trading” outside this container.
+**TUI:** run `PYTHONPATH=scripts/runtime python3 scripts/operator/preflight_pyth_tui.py` from repo root for the **SeanV3 operator** dashboard.
+
+**Not in the script (operator judgment):** disk space on `capture/`, clock skew, optional external DB paths for unrelated compare jobs.
 
 ## Environment
 
@@ -118,6 +122,7 @@ python3 seanv3.py status
 
 ## Related docs
 
-- **`README.md`** (this folder) — Sean V3 purpose, VPN table, capture paths.
+- **`README.md`** (this folder) — SeanV3 purpose, VPN table, capture paths.
+- **[`../../scripts/operator/preflight_pyth_tui.py`](../../scripts/operator/preflight_pyth_tui.py)** — **SeanV3 operator TUI** (preflight + policy + Hermes).
 - **`VPN/README.md`** (repo root) — WireGuard / Binance split-tunnel.
 - **`../README.md`** — vscode-test index.

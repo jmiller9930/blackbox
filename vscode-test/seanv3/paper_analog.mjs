@@ -1,8 +1,7 @@
 /**
- * Blackbox parity analog: paper-only — no on-chain txs, no Jupiter program calls.
- * Financial market data uses host routing (WireGuard / Proton for Binance) via Docker network_mode:host.
- *
- * Sean / Jupiter_3 truth remains in Python (`jupiter_3_sean_policy.py`). This layer logs bars + wallet + stub signals for comparison.
+ * SeanV3 paper analog: ingest + wallet + stub events — paper-only, no on-chain txs.
+ * Market data uses host routing (WireGuard / Proton for Binance) via Docker network_mode:host.
+ * Strategy truth and trade ledger for SeanV3 live in this stack (`sean_ledger`, engine); this table is auxiliary logging.
  */
 
 /** @param {import('node:sqlite').DatabaseSync} db */
@@ -93,7 +92,7 @@ export function logPaperEvent(db, { atUtc, marketEventId, eventKind, ohlcvJson, 
 export function logStubPaperSignal(db, ctx) {
   const details = JSON.stringify({
     engine: 'paper_analog_stub_v1',
-    note: 'Compare to modules/anna_training/jupiter_3_sean_policy.py / evaluate_sean_jupiter_baseline_v3',
+    note: 'Legacy stub row; SeanV3 trade outcomes use sean_paper_trades + engine',
     side_suggestion: 'flat',
     execution: 'paper_only_no_chain',
   });

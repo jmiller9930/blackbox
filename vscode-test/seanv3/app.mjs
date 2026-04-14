@@ -7,7 +7,7 @@
  * - NDJSON: CAPTURE_PATH
  * - SQLite: SQLITE_PATH — sean_binance_kline_poll + Sean ledger (sean_paper_position, sean_paper_trades) + paper_wallet + paper_trade_log
  * - Wallet: KEYPAIR_PATH (optional) — pubkey only in DB; never stores secrets in logs
- * - Paper: no chain txs; stub signals for comparison to Blackbox Sean V3 (Python authoritative)
+ * - Paper: no chain txs; stub + analog events; Sean trade engine uses sean_ledger + sean_engine_slice
  *
  * Requires: node --experimental-sqlite (Node 22+)
  */
@@ -208,9 +208,9 @@ function processPaperAnalog(db, { marketEventId, kline }) {
     eventKind: 'binance_kline_ingest',
     ohlcvJson,
     walletPubkey,
-    detailsJson: JSON.stringify({
+      detailsJson: JSON.stringify({
       source: 'rest_klines',
-      parity_note: 'Blackbox truth: binance_strategy_bars_5m + jupiter_3_sean_policy',
+      ingest_note: 'SeanV3 sean_binance_kline_poll',
     }),
   });
 

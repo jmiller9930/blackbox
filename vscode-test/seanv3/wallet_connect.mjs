@@ -1,5 +1,5 @@
 /**
- * Load Solana pubkey from a keypair JSON file (same format as solana-keygen / Blackbox trading_core).
+ * Load Solana pubkey from a keypair JSON file (standard solana-keygen format).
  * Never logs or persists secret key material — pubkey only for the analog DB.
  */
 import { readFile } from 'fs/promises';

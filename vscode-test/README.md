@@ -1,16 +1,16 @@
-# vscode-test — lab / SeanV3 + parity vs BlackBox
+# vscode-test — SeanV3 lab (standalone application)
 
 ## What this is for
 
-**BlackBox is one trade system. SeanV3 is another.** This tree hosts **SeanV3** as it grows into a **standalone paper engine** (own data, decisions, lifecycle, ledger, reporting). **Comparison** to BlackBox is a **separate layer** that only gives clean answers once SeanV3 can stand on its own — see **[`seanv3/README.md`](seanv3/README.md)** (architectural principle + gap table).
+**SeanV3** is a **standalone application** under **`seanv3/`** (Node + Docker): its own Binance path, SQLite, paper engine, and ledger. It does **not** import or run inside the BlackBox application pod.
 
-**Parity goal (after both systems are complete enough):** On the same Binance bar identity (`market_event_id` / candle open) and the same strategy intent, **SeanV3 outcomes** and **BlackBox outcomes** should be **diffable** without conflating “harness bug” with “strategy bug.”
+**Operator initiative:** the **SeanV3 operator TUI** lives at **`scripts/operator/preflight_pyth_tui.py`** (preflight, policy registry, Hermes context). Use that for the terminal operator experience.
 
-**How you verify (when wired):** SeanV3 ledger + reports vs BlackBox market DB / policy / ledger artifacts (e.g. `jup_v3_parity_compare`) — **not** by assuming one process calls the other.
+Details: **[`seanv3/README.md`](seanv3/README.md)**.
 
 ---
 
-This directory holds **standalone** tooling **outside** the main Python app: **seanv3** (Docker) uses the **Binance financial REST** path on the host (**WireGuard / Proton** split-tunnel), optional **wallet identity** (pubkey only), **paper-only** chain behavior, and local **SQLite** + NDJSON. Today’s container is **strong on ingest**; **evaluation + lifecycle + trade ledger** are **engineering backlog** per [`seanv3/README.md`](seanv3/README.md). BlackBox’s `jupiter_3_sean_policy.py` remains the **BlackBox** implementation of the strategy spec until SeanV3 runs its own evaluator in-process.
+This directory holds **SeanV3** and related lab scripts **outside** the main BlackBox Python app tree. **seanv3** (Docker) uses the **Binance** REST path on the host (**WireGuard / Proton** split-tunnel), optional wallet pubkey, **paper-only** behavior, and local **SQLite** + NDJSON.
 
 Optional local **TypeScript** experiments (`superjup.ts`) are separate and not required for the Docker analog.
 
@@ -24,7 +24,8 @@ Optional local **TypeScript** experiments (`superjup.ts`) are separate and not r
 
 | Doc | What it covers |
 |-----|----------------|
-| **[`seanv3/README.md`](seanv3/README.md)** | What the image is; **path on clawbot** `~/blackbox/vscode-test/seanv3`; **deploy** (`git pull`, `docker compose up -d --build`); **`network_mode: host`**; logs; **`capture/`** (NDJSON + SQLite); **`run-backfill-clawbot.sh`**; **`jup_v3_parity_compare`** command |
+| **[`seanv3/README.md`](seanv3/README.md)** | SeanV3 standalone app; **path on clawbot** `~/blackbox/vscode-test/seanv3`; deploy; **`network_mode: host`**; **`capture/`**; backfill |
+| **[`../scripts/operator/preflight_pyth_tui.py`](../scripts/operator/preflight_pyth_tui.py)** | **SeanV3 operator TUI** |
 | **[`seanv3/SEANV3PY.md`](seanv3/SEANV3PY.md)** | Operator script **`seanv3py`** — deploy / status / logs / stop / restart end-to-end |
 | **[`seanv3/TURNOVER_NEXT_STEPS.md`](seanv3/TURNOVER_NEXT_STEPS.md)** | Handoff: `sean_parity.db`, architect mechanical checks, parity command, poller / 451 notes |
 | **[`seanv3/docker-compose.yml`](seanv3/docker-compose.yml)** | Service env, volumes, inline comments |
@@ -40,13 +41,9 @@ Binance egress uses the **host** routing table (WireGuard **split-tunnel**). The
 | **[`scripts/clawbot/binance_api_knock_then_repair_if_needed.sh`](../scripts/clawbot/binance_api_knock_then_repair_if_needed.sh)** | Lightweight **`/api/v3/ping`** knock; invokes repair script if not HTTP 200 |
 | **[`scripts/clawbot/install_binance_wg_route_timer.sh`](../scripts/clawbot/install_binance_wg_route_timer.sh)** | Optional systemd timer for periodic knock + repair |
 
-### Python — Sean V3 policy vs parity tooling (main repo)
+### Other monorepo paths (not SeanV3 runtime)
 
-| Area | Path |
-|------|------|
-| Jupiter_3 policy | [`modules/anna_training/jupiter_3_sean_policy.py`](../modules/anna_training/jupiter_3_sean_policy.py) |
-| Baseline adapter (`evaluate_sean_jupiter_baseline_v3`) | [`modules/anna_training/sean_jupiter_baseline_signal.py`](../modules/anna_training/sean_jupiter_baseline_signal.py) |
-| Sean SQLite ↔ Blackbox compare | [`modules/anna_training/jup_v3_parity_compare.py`](../modules/anna_training/jup_v3_parity_compare.py) |
+Unrelated to SeanV3 Docker/TUI unless you explicitly run a separate compare job. SeanV3 strategy and ledger live under **`seanv3/`** only.
 
 ### TypeScript lab (optional; not the Docker image)
 
@@ -55,7 +52,7 @@ These files may exist only on a developer machine unless explicitly committed. T
 | File | Note |
 |------|------|
 | `superjup.ts` | Compile-safe stub; not deployed by default |
-| `superjup.ts.old` | Legacy reference bot — **do not** use for current parity proof; Python + `seanv3` are authoritative |
+| `superjup.ts.old` | Legacy reference — **not** SeanV3 runtime |
 
 ---
 
@@ -67,11 +64,11 @@ cd vscode-test/seanv3
 docker compose up -d --build
 ```
 
-Then read **[`seanv3/README.md`](seanv3/README.md)** first; use **[`seanv3/TURNOVER_NEXT_STEPS.md`](seanv3/TURNOVER_NEXT_STEPS.md)** for acceptance / parity follow-ups.
+Then read **[`seanv3/README.md`](seanv3/README.md)** first; **[`seanv3/TURNOVER_NEXT_STEPS.md`](seanv3/TURNOVER_NEXT_STEPS.md)** has lab handoff notes.
 
 ---
 
-## Related Blackbox docs
+## Related (rest of monorepo)
 
 - **[`docs/architect/local_remote_development_workflow.md`](../docs/architect/local_remote_development_workflow.md)** — local vs clawbot sync
-- **[`UIUX.Web/docker-compose.yml`](../UIUX.Web/docker-compose.yml)** — dashboard stack; some services use host network for the same Binance routing reason (see comments there)
+- **[`UIUX.Web/docker-compose.yml`](../UIUX.Web/docker-compose.yml)** — separate web stack (not SeanV3 TUI)

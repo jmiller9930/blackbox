@@ -1,6 +1,6 @@
 /**
  * First SeanV3-native paper engine slice: driven only from stored Binance klines + sean_ledger.
- * Not full jupiter_3_sean_policy parity — explicit placeholder rules to prove lifecycle + ledger.
+ * Placeholder rules until full Sean V3 policy is implemented in this folder — proves lifecycle + ledger only.
  *
  * Rules (sean_engine_slice_v1):
  * - One position slot: flat | long.

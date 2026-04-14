@@ -1,6 +1,8 @@
-# Turnover — Sean Binance klines / parity DB (next steps)
+# Turnover — Sean Binance klines / SQLite (next steps)
 
-**Why this exists:** Parity check for Blackbox — same Sean V3 strategy and same Binance bar data should yield **aligned trade vs no-trade** outcomes vs Blackbox (`policy_evaluations` / ledger). See **`../README.md`** (“What this is for”) and **`README.md`** (“What this project is for”).
+**Primary product:** **SeanV3** as its own application + **operator TUI** (`scripts/operator/preflight_pyth_tui.py`). This file is a **lab handoff** (mechanical checks, backfill notes). It may mention optional compare tooling elsewhere in the monorepo — that is **not** SeanV3 runtime.
+
+**Why this exists (historical):** Track Binance ingest quality and DB turnover on the lab host. See **`README.md`** in this folder for the SeanV3 architecture.
 
 **Full index (vscode-test + VPN + Python paths):** **`../README.md`**.  
 **Container ops (clawbot deploy, logs, artifacts):** **`README.md`** in this folder.
