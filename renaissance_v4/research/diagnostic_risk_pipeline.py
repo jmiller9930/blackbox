@@ -54,15 +54,19 @@ def _families_from_fusion(fr) -> list[str]:
 
 
 def _eff_bucket(es: float) -> str:
+    """Ordered buckets; probe floor may be < 0.25 — avoid inverted ranges."""
+    p = float(PROBE_SIZE_FUSION_MIN)
     if es < 0:
         return "<0"
+    if es < p:
+        return f"[0, {p})"
     if es < 0.25:
-        return "[0, 0.25)"
+        return f"[{p}, 0.25)"
     if es < 0.45:
         return "[0.25, 0.45)"
-    if es < PROBE_SIZE_FUSION_MIN:
-        return f"[0.45, {PROBE_SIZE_FUSION_MIN})"
-    return f">={PROBE_SIZE_FUSION_MIN}"
+    if es < 0.55:
+        return "[0.45, 0.55)"
+    return ">=0.55"
 
 
 def run_risk_diagnostic() -> dict:
@@ -266,7 +270,16 @@ def write_report(path: Path | None = None) -> Path:
         ]
     )
 
-    for bucket in ["<0", "[0, 0.25)", "[0.25, 0.45)", f"[0.45, {stats['probe_floor']})", f">={stats['probe_floor']}"]:
+    pf = stats["probe_floor"]
+    bucket_order = [
+        "<0",
+        f"[0, {pf})",
+        f"[{pf}, 0.25)",
+        "[0.25, 0.45)",
+        "[0.45, 0.55)",
+        ">=0.55",
+    ]
+    for bucket in bucket_order:
         c = stats["effective_hist_directional"].get(bucket, 0)
         lines.append(f"| {bucket} | {c} |")
 
