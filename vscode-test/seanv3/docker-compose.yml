@@ -55,6 +55,9 @@ services:
     image: seanv3:local
     container_name: jupiter-web
     network_mode: host
+    # Port 707 is <1024 (privileged); node user needs this to bind (Linux).
+    cap_add:
+      - NET_BIND_SERVICE
     command: ["node", "--experimental-sqlite", "jupiter_web.mjs"]
     environment:
       SQLITE_PATH: /capture/sean_parity.db
