@@ -19,6 +19,14 @@ Both rely on the **host** routing table for Binance (WireGuard split-tunnel on c
 
 **Jupiter** (read-only web app; container **`jupiter-web`):** on clawbot, **`http://clawbot.a51.corp:707/`** (same host: **`http://127.0.0.1:707/`**). Default **`JUPITER_WEB_PORT=707`** (legacy **`SEANV3_WEB_PORT`** still works). Public lab URL maps **WAN :737 → LAN :707** when using DNS to the same host. Shows wallet pubkey, open position, recent `sean_paper_trades`, **`/api/summary.json`**. Run `docker compose up -d` (starts `seanv3` + `jupiter-web`) or locally **`npm run jupiter`** / `npm run web` (local Node may need **`sudo`** or a port ≥1024 if bind to **707** fails). Ensure **:707** is allowed by host firewall if you browse from another machine.
 
+### Lab deploy loop (`jupsync.py`)
+
+**Consistent update process:** commit in your clone → **`python3 scripts/jupsync.py`** from repo root. That **pushes** your branch to `origin`, **SSHs to clawbot**, **`git pull`** in `~/blackbox`, then **`docker compose up -d --build`** in **`vscode-test/seanv3`** (rebuilds images and restarts `seanv3` + `jupiter-web`). A **`curl`** to **`http://127.0.0.1:707/health`** runs on the server afterward (skip with **`--skip-health`**).
+
+- **`--dry-run`** — print actions only. **`--skip-push`** — you already pushed; only remote pull + compose.
+- Same SSH/branch env vars as **`scripts/sync.py`** (`BLACKBOX_SYNC_SSH`, etc.); **`JUPSYNC_SSH`** / **`JUPSYNC_BRANCH`** override if needed.
+- **BlackBox operator UI** (nginx/api under `UIUX.Web`) is **not** updated by `jupsync.py` — use **`scripts/sync.py`** for that.
+
 ---
 
 ## Target components (SeanV3 as its own system)
