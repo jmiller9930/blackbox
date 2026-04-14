@@ -1,5 +1,8 @@
 /**
- * Parity analog: Binance REST (host VPN routing) + SQLite (poll + paper analog).
+ * Parity analog: Binance REST + SQLite (poll + paper analog).
+ *
+ * Binance MUST use the host routing table (WireGuard/Proton split-tunnel on clawbot). Deploy with
+ * docker-compose network_mode:host only — see VPN/README.md. No VPN inside the container.
  *
  * - NDJSON: CAPTURE_PATH
  * - SQLite: SQLITE_PATH — sean_binance_kline_poll + paper_wallet + paper_trade_log

@@ -1,7 +1,13 @@
 # Run on clawbot: docker compose up -d --build
 #
-# network_mode: host — required so egress uses the host routing table (WireGuard split-tunnel to
-# Binance). Default Docker bridge bypasses that path and Binance often returns HTTP 451.
+# --- Binance / VPN compliance (NON-NEGOTIABLE) ---
+# This service MUST use the HOST routing table so HTTPS to api.binance.com matches clawbot's
+# WireGuard split-tunnel (wg-proton-mx, narrow AllowedIPs). See VPN/README.md ("Traffic model",
+# "Scope — host networking"). Do NOT switch to bridge/NAT-only networking for production: Binance
+# often returns HTTP 451 when packets exit the wrong NIC. There is NO VPN client inside this image;
+# Proton runs on the host kernel only.
+#
+# network_mode: host — required (see above).
 #
 # NDJSON: tail -f capture/seanv3.ndjson
 # SQLite: capture/sean_parity.db — table sean_binance_kline_poll
@@ -15,6 +21,7 @@ services:
   seanv3:
     build: .
     container_name: seanv3
+    # Required for Binance via Proton on host — do not remove (VPN/README.md).
     network_mode: host
     restart: unless-stopped
     environment:

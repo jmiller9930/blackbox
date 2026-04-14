@@ -1,4 +1,5 @@
-# Egress uses the host routing table (WireGuard split-tunnel for Binance) via network_mode:host.
+# Binance HTTPS must use the HOST routing table — compose sets network_mode:host (VPN/README.md).
+# No WireGuard/Proton inside the image.
 FROM node:22-alpine
 
 WORKDIR /app

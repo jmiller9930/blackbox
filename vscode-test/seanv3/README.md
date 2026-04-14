@@ -64,9 +64,20 @@ docker compose up -d --build
 
 3. Restart the stack. Check logs for `paper wallet pubkey: ...` and `paper_trade_log` rows `wallet_connected`.
 
-### Why `network_mode: host`
+### VPN rules for Binance (mandatory)
 
-Binance egress must use the **host routing table** (WireGuard split-tunnel). The default Docker bridge often breaks Binance policy (**HTTP 451**). See **`VPN/README.md`** and **`scripts/clawbot/binance_api_route_via_proton_wg.sh`** if CDN IPs drift.
+Sean V3 **must** follow the same **clawbot host** rules as the rest of this repo for **`api.binance.com`** traffic:
+
+| Rule | How this stack complies |
+|------|---------------------------|
+| Binance egress via **Proton WG** on the host (`wg-proton-mx`), not the production NIC alone | **`network_mode: host`** so this process uses the **kernel routing table** on clawbot (same path as `VPN/README.md` traffic model). |
+| **No** VPN client inside the container | Image has **no** WireGuard/Proton packages — only `fetch()` to Binance. |
+| **Do not** use default Docker **bridge** for production Binance calls here | **Do not** remove **`network_mode: host`** from `docker-compose.yml` for this service; bridge NAT can bypass split-tunnel and cause **HTTP 451**. |
+| CDN / **`AllowedIPs`** drift on the host | Fix on the **host** with **`scripts/clawbot/binance_api_route_via_proton_wg.sh`** (see **`VPN/README.md`**). |
+
+Authoritative doc: **[`VPN/README.md`](../../VPN/README.md)** (lab requirement, traffic model, scope).
+
+**Backfill** (`./run-backfill-clawbot.sh`) uses **`docker compose run`** on the same **`seanv3`** service definition, so it inherits **`network_mode: host`** and the same Binance path as the long-running poller.
 
 ### Logs
 

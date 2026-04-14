@@ -38,7 +38,7 @@ This section states **exactly** what must happen on **clawbot** so engineering, 
 
 1. **`[Peer] AllowedIPs`** on the WireGuard config includes the **current** destination prefixes for Binance API (CDN IPs **change** — see `scripts/clawbot/binance_api_route_via_proton_wg.sh`), and  
 2. Host routes (e.g. **`/32`** via **`dev wg-proton-mx`**) match those destinations, and  
-3. Application processes that call Binance use the **host routing table** (e.g. **`network_mode: host`** on the relevant Docker services — see `UIUX.Web/docker-compose.yml` and `vscode-test/seanv3/docker-compose.yml`).
+3. Application processes that call Binance use the **host routing table** (e.g. **`network_mode: host`** on the relevant Docker services — see `UIUX.Web/docker-compose.yml` and `vscode-test/seanv3/docker-compose.yml`). The **Sean V3** parity container (**`seanv3`**) **must** keep **`network_mode: host`**; do not run it on the default bridge for production Binance traffic (see **`vscode-test/seanv3/README.md`** — VPN rules table).
 
 **Not in scope for “Binance via Proton”:** Trading venues other than Binance, wallet RPC, Solana JSON-RPC, Pyth/Hermes, Slack, Git, or generic web — those are **not** Binance API traffic and **must not** be forced through this tunnel unless a **separate** directive says so.
 
