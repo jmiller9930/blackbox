@@ -25,8 +25,7 @@ data/sqlite/*.db-journal
 renaissance_v4/data/*.sqlite3
 renaissance_v4/data/*.sqlite3-journal
 
-# Generated per run (regenerate via replay)
-renaissance_v4/reports/baseline_v1.md
+# RenaissanceV4: baseline_v1.md is tracked (DV-ARCH-REVIEW-014); do not gitignore.
 data/logs/*.log
 
 # Messenger config with real tokens (use messaging_config.example.json + env)
