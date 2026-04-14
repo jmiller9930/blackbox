@@ -87,7 +87,7 @@ You **can** switch which baseline Jupiter policy the BlackBox runtime uses (**`j
 
 - Allowed slots are **`VALID_BASELINE_JUPITER_POLICY_SLOTS`** in `modules/anna_training/execution_ledger.py` (currently `jup_v2`, `jup_v3`). Aliases like `v3`, `jupiter_3` normalize to those constants.
 - **Unknown** strings do **not** silently select a policy: **`get_baseline_jupiter_policy_slot`** ignores invalid KV/env (stderr warning) and falls back; **`set_baseline_jupiter_policy_slot`** and **`signal_mode_for_baseline_policy_slot`** raise **`ValueError`**.
-- Adding a **future** slot (e.g. `jup_v4`) requires an explicit code change: new constant, extend the valid set, bridge/dashboard branches, and evaluator wiring — not a free-form string.
+- Adding a **future** slot (e.g. `jup_v4`) requires an explicit code change: new constant, extend the valid set, bridge/dashboard branches, and evaluator wiring — not a free-form string. **Standard package layout** for new policies (Sean → engineering): [`policy_package_standard.md`](policy_package_standard.md).
 
 **SeanV3 container** does not read this KV; it runs the Node policy in `vscode-test/seanv3/`. Parity is “same policy math + same bars,” not automatic cross-process coupling.
 
