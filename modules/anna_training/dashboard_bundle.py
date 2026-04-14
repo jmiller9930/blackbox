@@ -4411,9 +4411,22 @@ def build_trade_chain_payload(
         baseline_ledger = _recent_baseline_trades_for_dashboard_strip(
             conn, limit=50, market_db_path=mpath
         )
-        recent_strip = _recent_baseline_policy_trade_rows_for_strip(
-            conn, limit=5, market_db_path=mpath
-        )
+        # Last-5 strip must match Reports (baseline_trades.html): same builder, exit-time ordering, dedupe.
+        recent_strip: list[dict[str, Any]] = []
+        try:
+            _rpt = build_baseline_trades_report(
+                db_path=db_path,
+                market_db_path=mpath,
+                limit=5,
+                scope="trade",
+                max_scan=100_000,
+                time_basis="exit",
+            )
+            recent_strip = list((_rpt.get("rows") or [])[:5])
+        except Exception:
+            recent_strip = _recent_baseline_policy_trade_rows_for_strip(
+                conn, limit=5, market_db_path=mpath
+            )
         for rs in recent_strip:
             mid_rs = str(rs.get("market_event_id") or "").strip()
             rs["jupiter_tile_narrative"] = tile_narr.get(mid_rs, "") if mid_rs else ""

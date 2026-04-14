@@ -3187,6 +3187,11 @@
   function render(bundle) {
     window.__bbLastBundle = bundle;
     try {
+    try {
+      renderBaselineStrip((bundle && bundle.trade_chain) || {});
+    } catch (e) {
+      if (typeof console !== 'undefined' && console.error) console.error('renderBaselineStrip', e);
+    }
     var w = bundle.wallet || {};
     var seq = bundle.sequential || {};
     var ls = bundle.learning_summary || {};
@@ -3325,11 +3330,12 @@
     renderOB(bundle.operational_boundary);
     renderLive(bundle);
     renderIntel(bundle);
-    } finally {
+    } catch (e) {
+      if (typeof console !== 'undefined' && console.error) console.error('render', e);
       try {
         renderBaselineStrip((bundle && bundle.trade_chain) || {});
-      } catch (e) {
-        if (typeof console !== 'undefined' && console.error) console.error('renderBaselineStrip', e);
+      } catch (e2) {
+        if (typeof console !== 'undefined' && console.error) console.error('renderBaselineStrip(recover)', e2);
       }
     }
   }
