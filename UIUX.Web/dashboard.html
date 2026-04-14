@@ -1118,7 +1118,7 @@
       <div class="dash-r2" style="border-bottom:1px solid var(--panel-border);background:#fffef9;padding:0.4rem 0.75rem;
         font-size:0.78rem">
         <a href="/baseline-chain-validate.html" style="font-weight:800;color:var(--accent);text-decoration:none">Baseline chain validation</a>
-        <span style="color:var(--muted);font-weight:600"> — Historical Binance + Pyth vs policy + ledger (JUPv3 timeline)</span>
+        <span style="color:var(--muted);font-weight:600"> — Historical Binance + Pyth vs policy + ledger (JUPv3/JUPv4 Binance timeline)</span>
       </div>
       <!-- Row 1: system banner (one strip) -->
       <div class="dash-r1" id="dash-r1" role="status" aria-live="polite">
@@ -1181,6 +1181,7 @@
             <select id="dash-baseline-jupiter-policy" aria-label="Jupiter baseline policy version">
               <option value="jup_v2" selected>JUPv2</option>
               <option value="jup_v3">JUPv3</option>
+              <option value="jup_v4">JUPv4</option>
             </select>
           </span>
         </span></div>
@@ -1747,6 +1748,12 @@
   }
 
   /** Jupiter_3 — Gate | LONG | SHORT table from bundle ``jupiter_v3_gates_v1`` (all five AND gates per side). */
+  /** JUPv3 and JUPv4 both use Binance strategy bars for baseline OHLCV. */
+  function jupLabelUsesBinanceStrategyBars(lab) {
+    var s = String(lab || '').trim();
+    return s === 'JUPv3' || s === 'JUPv4';
+  }
+
   function jupiterV3GatesTableHtml(gates, caption) {
     if (!gates || typeof gates !== 'object') return '';
     var rows = gates.rows;
@@ -1756,7 +1763,7 @@
         ? '<div class="tc-jup-gates-caption">' + esc(String(caption)) + '</div>'
         : '';
     var h =
-      '<table class="tc-jup-gates-table" role="grid" aria-label="Jupiter V3 entry gates">' +
+      '<table class="tc-jup-gates-table" role="grid" aria-label="Jupiter policy gates">' +
       '<thead><tr><th scope="col">Gate</th><th scope="col">LONG</th><th scope="col">SHORT</th></tr></thead><tbody>';
     var i;
     for (i = 0; i < rows.length; i++) {
@@ -1874,7 +1881,7 @@
     var bmd = opts.binanceMd || {};
     var pr = bmd.public_rest_ping || {};
     var cov = bmd.kline_quote_volume_coverage || {};
-    if (baselineLane && jupLab === 'JUPv3') {
+    if (baselineLane && jupLabelUsesBinanceStrategyBars(jupLab)) {
       var bVolOk = c && c.binance_kline_volume_ok === true;
       binanceDotHtml =
         '<span tabindex="0" role="button" class="tc-binance-vol-dot ' +
@@ -1959,11 +1966,16 @@
         ? String(c.baseline_entry_policy_label).trim()
         : jupLab;
     var entryAuth = c && c.baseline_entry_policy_authority != null ? String(c.baseline_entry_policy_authority) : '';
+    var entryGatesObj =
+      c && c.baseline_entry_jupiter_v4_gates && typeof c.baseline_entry_jupiter_v4_gates === 'object'
+        ? c.baseline_entry_jupiter_v4_gates
+        : c && c.baseline_entry_jupiter_v3_gates && typeof c.baseline_entry_jupiter_v3_gates === 'object'
+          ? c.baseline_entry_jupiter_v3_gates
+          : null;
     var entryHasGates =
       baselineLane &&
       c &&
-      c.baseline_entry_jupiter_v3_gates &&
-      typeof c.baseline_entry_jupiter_v3_gates === 'object' &&
+      entryGatesObj &&
       entryAuth !== 'jupiter_2_sean';
     var entryHas =
       baselineLane &&
@@ -1988,7 +2000,7 @@
         '</div>' +
         (entryHasGates
           ? jupiterV3GatesTableHtml(
-              c.baseline_entry_jupiter_v3_gates,
+              entryGatesObj,
               'Entry — gates (all five must pass to arm that side)'
             )
           : jupiterNarrativeLinesHtml(
@@ -1999,8 +2011,7 @@
         '</div>';
     }
     // While a baseline position is open, only entry context matters — no duplicate "this bar" policy block.
-    // JUPv3: show **both** Sean numeric narrative (OHLCV, EMA, RSI, volume vs avg, BOS, ATR) **and** the
-    // PASS/FAIL gate table when the bundle supplies both — gates alone omit the numbers Sean asked for.
+    // JUPv3/JUPv4: show **both** Sean numeric narrative **and** the PASS/FAIL gate table when supplied.
     var posOpenBaseline = baselineLane && baselineLifecyclePositionOpen(bl);
     var narrEl =
       narr && !posOpenBaseline
@@ -2015,22 +2026,30 @@
     }
     // One gate table per tile: if this cell already shows entry policy (gates or narrative), never add this-bar gates.
     var colGates = '';
-    if (!posOpenBaseline && !entryHas && baselineLane && c && c.jupiter_v3_gates) {
-      colGates = jupiterV3GatesTableHtml(c.jupiter_v3_gates, 'This bar — gates');
+    var thisBarGates =
+      c && c.jupiter_v4_gates && typeof c.jupiter_v4_gates === 'object'
+        ? c.jupiter_v4_gates
+        : c && c.jupiter_v3_gates && typeof c.jupiter_v3_gates === 'object'
+          ? c.jupiter_v3_gates
+          : null;
+    if (!posOpenBaseline && !entryHas && baselineLane && c && thisBarGates) {
+      colGates = jupiterV3GatesTableHtml(thisBarGates, 'This bar — gates');
     } else if (
       !posOpenBaseline &&
       !entryHas &&
       baselineLane &&
-      jupLab === 'JUPv3' &&
-      jp.jupiter_v3_gates &&
+      jupLabelUsesBinanceStrategyBars(jupLab) &&
       typeof opts.colIndex === 'number' &&
       typeof opts.nEv === 'number' &&
       opts.colIndex === opts.nEv - 1
     ) {
-      colGates = jupiterV3GatesTableHtml(
-        jp.jupiter_v3_gates,
-        'This bar — gates (latest closed candle)'
-      );
+      var snapGates = jp.jupiter_v4_gates || jp.jupiter_v3_gates;
+      if (snapGates && typeof snapGates === 'object') {
+        colGates = jupiterV3GatesTableHtml(
+          snapGates,
+          'This bar — gates (latest closed candle)'
+        );
+      }
     }
     var jupStack = tcTileCorrelateHtml(c, opts) + scopeNote + entrySnap + narrEl + colGates;
     if (!c || c.empty) {
@@ -2449,7 +2468,7 @@
           }
         } catch (e) {}
         meta.textContent =
-          'Last 5 closed baseline trades — same columns as Reports, newest exit first. Rows come only from execution_ledger (closed fills), not from live tile “would trade” text. If someone saw a JUPv3 signal on the tile but no new row here, the tile is policy evaluation (paper), while this strip is lifecycle ledger closes only. Use Reports for full history, CSV, and filters.' +
+          'Last 5 closed baseline trades — same columns as Reports, newest exit first. Rows come only from execution_ledger (closed fills), not from live tile “would trade” text. If someone saw a JUPv3/JUPv4 signal on the tile but no new row here, the tile is policy evaluation (paper), while this strip is lifecycle ledger closes only. Use Reports for full history, CSV, and filters.' +
           snapAt;
       }
       var h = '';
@@ -2763,10 +2782,14 @@
         ? String(bl.entry_market_event_id).trim()
         : '';
     var entryInner = '';
+    var entryGatesLive =
+      bl.entry_jupiter_v4_gates && typeof bl.entry_jupiter_v4_gates === 'object'
+        ? bl.entry_jupiter_v4_gates
+        : bl.entry_jupiter_v3_gates && typeof bl.entry_jupiter_v3_gates === 'object'
+          ? bl.entry_jupiter_v3_gates
+          : null;
     if (
-        (bl.entry_jupiter_v3_gates &&
-        typeof bl.entry_jupiter_v3_gates === 'object' &&
-        bl.entry_policy_authority !== 'jupiter_2_sean') ||
+        (entryGatesLive && bl.entry_policy_authority !== 'jupiter_2_sean') ||
       (bl.entry_jupiter_tile_narrative && String(bl.entry_jupiter_tile_narrative).trim() !== '')
     ) {
       entryInner =
@@ -2774,9 +2797,9 @@
         '<div class="tc-jup-entry-h">' +
         esc(entryAtOpen + ' — policy at entry' + (emLive ? ' — ' + emLive : '')) +
         '</div>' +
-        (bl.entry_jupiter_v3_gates && bl.entry_policy_authority !== 'jupiter_2_sean'
+        (entryGatesLive && bl.entry_policy_authority !== 'jupiter_2_sean'
           ? jupiterV3GatesTableHtml(
-              bl.entry_jupiter_v3_gates,
+              entryGatesLive,
               'Entry — gates (all five must pass per side)'
             )
           : jupiterNarrativeLinesHtml(String(bl.entry_jupiter_tile_narrative), 'Entry bar policy', true)) +
@@ -2790,8 +2813,10 @@
         '<p class="tc-jup-missing-note">Entry policy unavailable — check ledger row and market DB.</p>' +
         '</div>';
     }
-    var auditGates = bl.jupiter_v3_gates_recomputed_audit;
-    var auditNote = bl.jupiter_v3_gates_recomputed_audit_scope_note;
+    var auditGates = bl.jupiter_v4_gates_recomputed_audit || bl.jupiter_v3_gates_recomputed_audit;
+    var auditNote =
+      bl.jupiter_v4_gates_recomputed_audit_scope_note ||
+      bl.jupiter_v3_gates_recomputed_audit_scope_note;
     var auditInner = '';
     if (auditGates && typeof auditGates === 'object') {
       auditInner =
@@ -2897,7 +2922,7 @@
     if (contract && sev === 'warning') {
       el.classList.add('tc-sync-warn');
       el.textContent =
-        'Bar sync (within JUPv3 contract): ' +
+        'Bar sync (within JUPv3/JUPv4 Binance freshness contract): ' +
         src +
         ' is ' +
         lag +
@@ -2914,7 +2939,7 @@
     if (contract && sev === 'fault') {
       el.classList.add('tc-sync-fault');
       el.textContent =
-        'Bar sync FAULT (exceeds JUPv3 contract): ' +
+        'Bar sync FAULT (exceeds JUPv3/JUPv4 Binance freshness contract): ' +
         src +
         ' lag=' +
         lag +
@@ -3709,7 +3734,7 @@
             window.alert(
               ok
                 ? 'Binance REST ping OK — ' + ms + ' ms (HTTP ' + st + '). REST pill + this ping = reachability. Colored dot = quote volume on this bar in DB.'
-                : 'Binance REST ping failed — HTTP ' + st + (err ? ': ' + err : '') + '. See REST pill on JUPv3 row.'
+                : 'Binance REST ping failed — HTTP ' + st + (err ? ': ' + err : '') + '. See REST pill on JUPv3/JUPv4 row.'
             );
           })
           .catch(function () {

@@ -137,7 +137,7 @@
       <div class="bcv-back">
         <a class="dash-return" href="/dashboard.html">← Back to Dashboard</a>
         <span class="bcv-muted">
-          JUPv3: policy and ledger are checked against the same <code>market_event_id</code>.
+          JUPv3/JUPv4: policy and ledger are checked against the same <code>market_event_id</code> (Binance axis for those slots).
           Binance (<code>binance_strategy_bars_5m</code>) is the policy OHLC axis; Pyth (<code>market_bars_5m</code>)
           is loaded for oracle cross-check. Pick any past bar or range.
         </span>
@@ -152,6 +152,7 @@
           <label>Policy slot
             <select id="bcv-slot">
               <option value="jup_v3" selected>JUPv3</option>
+              <option value="jup_v4">JUPv4</option>
               <option value="jup_v2">JUPv2</option>
             </select>
           </label>

@@ -3043,6 +3043,14 @@ def build_baseline_active_position_snapshot(
     enar, egates = _v3_entry_narrative_and_gates_from_open_position(pos)
     entry_auth = entry_policy_authority_from_signal_features(sf)
     entry_lbl = baseline_entry_policy_label_for_authority(entry_auth)
+    v3_gates = None
+    v4_gates = None
+    if isinstance(egates, dict) and egates:
+        sch_e = str(egates.get("schema") or "")
+        if entry_auth == "jupiter_4_sean" or sch_e == "jupiter_v4_gates_v1":
+            v4_gates = egates
+        elif entry_auth == "jupiter_3_sean" or sch_e == "jupiter_v3_gates_v1":
+            v3_gates = egates
 
     out.update(
         {
@@ -3077,7 +3085,8 @@ def build_baseline_active_position_snapshot(
             "last_processed_market_event_id": pos.last_processed_market_event_id,
             "entry_candle_open_utc": pos.entry_candle_open_utc,
             "entry_jupiter_tile_narrative": enar or None,
-            "entry_jupiter_v3_gates": egates,
+            "entry_jupiter_v3_gates": v3_gates,
+            "entry_jupiter_v4_gates": v4_gates,
             "entry_policy_authority": entry_auth,
             "entry_policy_label": entry_lbl,
         }
@@ -3111,6 +3120,7 @@ def _baseline_lifecycle_for_dashboard_from_active_snapshot(snap: dict[str, Any])
         "last_processed_market_event_id": snap.get("last_processed_market_event_id"),
         "entry_jupiter_tile_narrative": snap.get("entry_jupiter_tile_narrative"),
         "entry_jupiter_v3_gates": snap.get("entry_jupiter_v3_gates"),
+        "entry_jupiter_v4_gates": snap.get("entry_jupiter_v4_gates"),
         "entry_policy_authority": snap.get("entry_policy_authority"),
         "entry_policy_label": snap.get("entry_policy_label"),
     }
@@ -3146,6 +3156,11 @@ def _merge_jupiter_entry_policy_from_policy_snapshot(
         if isinstance(pg, dict) and len(pg) > 0 and auth_d != "jupiter_2_sean":
             # Never inject V3 gate tables from the live snapshot onto a Jupiter_2 Sean entry.
             dashboard_bl["entry_jupiter_v3_gates"] = dict(pg)
+    dg4 = dashboard_bl.get("entry_jupiter_v4_gates")
+    if not isinstance(dg4, dict) or len(dg4) == 0:
+        pg4 = policy_bl.get("entry_jupiter_v4_gates")
+        if isinstance(pg4, dict) and len(pg4) > 0 and auth_d != "jupiter_2_sean":
+            dashboard_bl["entry_jupiter_v4_gates"] = dict(pg4)
     dn = dashboard_bl.get("entry_jupiter_tile_narrative")
     if not (isinstance(dn, str) and dn.strip()):
         pn = policy_bl.get("entry_jupiter_tile_narrative")
@@ -3159,6 +3174,12 @@ def _merge_jupiter_entry_policy_from_policy_snapshot(
     an = policy_bl.get("jupiter_v3_gates_recomputed_audit_scope_note")
     if isinstance(an, str) and an.strip():
         dashboard_bl["jupiter_v3_gates_recomputed_audit_scope_note"] = an.strip()
+    ag4 = policy_bl.get("jupiter_v4_gates_recomputed_audit")
+    if isinstance(ag4, dict) and len(ag4) > 0:
+        dashboard_bl["jupiter_v4_gates_recomputed_audit"] = dict(ag4)
+    an4 = policy_bl.get("jupiter_v4_gates_recomputed_audit_scope_note")
+    if isinstance(an4, str) and an4.strip():
+        dashboard_bl["jupiter_v4_gates_recomputed_audit_scope_note"] = an4.strip()
 
 
 def build_baseline_trades_report(
@@ -3850,10 +3871,15 @@ def _enrich_baseline_jupiter_context_for_cell(
             if nar:
                 cell["baseline_entry_jupiter_tile_narrative"] = nar
             if entry_gates and isinstance(entry_gates, dict):
+                sch_g = str(entry_gates.get("schema") or "")
                 if auth == "jupiter_3_sean":
                     cell["baseline_entry_jupiter_v3_gates"] = entry_gates
-                elif auth == "unknown" and str(entry_gates.get("schema") or "") == "jupiter_v3_gates_v1":
+                elif auth == "jupiter_4_sean":
+                    cell["baseline_entry_jupiter_v4_gates"] = entry_gates
+                elif auth == "unknown" and sch_g == "jupiter_v3_gates_v1":
                     cell["baseline_entry_jupiter_v3_gates"] = entry_gates
+                elif auth == "unknown" and sch_g == "jupiter_v4_gates_v1":
+                    cell["baseline_entry_jupiter_v4_gates"] = entry_gates
             pol_e = fetch_baseline_policy_evaluation_for_market_event(conn, entry_mid)
             if pol_e:
                 cell["baseline_entry_policy_reason_code"] = str(pol_e.get("reason_code") or "") or None
