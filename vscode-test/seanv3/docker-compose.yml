@@ -38,6 +38,8 @@ services:
       SQLITE_PATH: /capture/sean_parity.db
       # Optional: Solana keypair JSON (same format as solana-keygen). Only pubkey is stored in DB.
       # KEYPAIR_PATH: /capture/keypair.json
+      # RPC for cached on-chain SOL balance (operator gate when sean_funding_mode=chain).
+      SOLANA_RPC_URL: ${SOLANA_RPC_URL:-https://api.mainnet-beta.solana.com}
       # Paper (default). For live-capital path later: set "0" and follow operator governance — TUI `--actual` only shows intent.
       PAPER_TRADING: "1"
       # Simulated "account" for testing (USD label — no real custody). Frozen in DB on first run.
@@ -62,6 +64,10 @@ services:
       SQLITE_PATH: /capture/sean_parity.db
       JUPITER_WEB_PORT: "707"
       JUPITER_WEB_BIND: "0.0.0.0"
+      # POST /api/operator/* — set a secret; without it, writes return 503.
+      JUPITER_OPERATOR_TOKEN: ${JUPITER_OPERATOR_TOKEN:-}
+      # Set "1" to allow POST /api/operator/paper-stake (updates paper_starting_balance_usd in SQLite).
+      SEAN_ALLOW_PAPER_STAKE_EDIT: ${SEAN_ALLOW_PAPER_STAKE_EDIT:-0}
       # Same Binance origin as seanv3 (host routes per VPN/README.md).
       BINANCE_API_BASE_URL: ${BINANCE_API_BASE_URL:-https://api.binance.com}
       # Repo mount: policy registry + execution_ledger parity (read-only).

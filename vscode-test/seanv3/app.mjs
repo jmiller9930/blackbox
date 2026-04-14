@@ -29,6 +29,22 @@ import { processSeanEngine } from './sean_engine.mjs';
 import { ensureSeanLedgerSchema } from './sean_ledger.mjs';
 import { loadPubkeyFromKeypairFile } from './wallet_connect.mjs';
 
+async function refreshChainBalanceCache(db) {
+  if (!walletPubkey) return;
+  const rpc = (process.env.SOLANA_RPC_URL || 'https://api.mainnet-beta.solana.com').trim();
+  try {
+    const { Connection, PublicKey } = await import('@solana/web3.js');
+    const conn = new Connection(rpc, 'confirmed');
+    const lamports = await conn.getBalance(new PublicKey(walletPubkey));
+    setMeta(db, 'chain_sol_balance_lamports', String(lamports));
+    setMeta(db, 'chain_sol_balance_updated_utc', new Date().toISOString());
+    setMeta(db, 'chain_balance_error', '');
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    setMeta(db, 'chain_balance_error', msg);
+  }
+}
+
 const _binanceOrigin = (
   process.env.BINANCE_API_BASE_URL ||
   process.env.BINANCE_REST_BASE_URL ||
@@ -104,6 +120,9 @@ function initSqlite() {
     ensurePaperAnalogSchema(db);
     ensurePaperStartingBalanceUsd(db);
     ensureSeanLedgerSchema(db);
+    if (!getMeta(db, 'sean_funding_mode')) {
+      setMeta(db, 'sean_funding_mode', 'paper');
+    }
     return db;
   } catch (e) {
     console.error(`[seanv3] SQLite init failed: ${e.message}`);
@@ -277,6 +296,7 @@ async function fetchOnce() {
         latencyMs,
         reqUrl: url,
       });
+      await refreshChainBalanceCache(parityDb);
       processPaperAnalog(parityDb, { marketEventId, kline });
       if (seanEngineSliceOn()) {
         try {

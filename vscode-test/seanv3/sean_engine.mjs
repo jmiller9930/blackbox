@@ -23,6 +23,7 @@ import {
   evaluateExitOhlc,
   atrFromBarWindow,
 } from './sean_lifecycle.mjs';
+import { assertCanOpenPosition } from './funding_guards.mjs';
 
 export const SEAN_ENGINE_ID = 'sean_jupiter3_engine_v1';
 
@@ -157,6 +158,16 @@ export function processSeanEngine(db, { marketEventId, kline }) {
 
   const entry = closes[closes.length - 1];
   const lv = initialSlTp(entry, atr, side);
+
+  const gate = assertCanOpenPosition(db, {
+    markUsd: c,
+    closePx: c,
+    sizeNotionalSol: envSize(),
+  });
+  if (!gate.ok) {
+    console.error(`[seanv3] open blocked: ${gate.reason} — ${gate.detail}`);
+    return;
+  }
 
   openPaperPosition(db, {
     side,

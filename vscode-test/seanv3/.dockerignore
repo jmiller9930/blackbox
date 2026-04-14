@@ -7,6 +7,7 @@
 !sean_lifecycle.mjs
 !sean_ledger.mjs
 !sean_engine.mjs
+!funding_guards.mjs
 !report.mjs
 !jupiter_web.mjs
 !package.json

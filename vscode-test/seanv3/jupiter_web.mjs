@@ -14,6 +14,9 @@ import { DatabaseSync } from 'node:sqlite';
 import { resolve, join } from 'path';
 import { fileURLToPath } from 'url';
 
+import { assertCanOpenPosition, getPaperEquityUsd } from './funding_guards.mjs';
+import { setMeta } from './paper_analog.mjs';
+
 const __dirname = fileURLToPath(new URL('.', import.meta.url));
 
 const BB_LANE = 'baseline';
@@ -674,6 +677,60 @@ function computePaperLedger(markUsd) {
   }
 }
 
+/**
+ * Operator-facing funding snapshot + next-open gate (same rules as sean_engine + funding_guards).
+ * @param {string} seanPath
+ * @param {number | null} markUsd Hermes SOL/USD when available
+ * @param {Record<string, unknown>} base buildSummary output (needs last_kline for close)
+ */
+function buildOperatorPayload(seanPath, markUsd, base) {
+  const paperEnv = (process.env.PAPER_TRADING || '1').trim();
+  const paperEnvOn = paperEnv !== '0' && paperEnv !== 'false';
+  const tokenConfigured = Boolean((process.env.JUPITER_OPERATOR_TOKEN || '').trim());
+  const stakeEdit = ['1', 'true', 'yes'].includes((process.env.SEAN_ALLOW_PAPER_STAKE_EDIT || '').trim().toLowerCase());
+  let db;
+  try {
+    db = new DatabaseSync(seanPath, { readOnly: true });
+    const modeRow = db.prepare(`SELECT v FROM analog_meta WHERE k = 'sean_funding_mode'`).get();
+    const mode = modeRow?.v != null ? String(modeRow.v).trim() : 'paper';
+    const lamRow = db.prepare(`SELECT v FROM analog_meta WHERE k = 'chain_sol_balance_lamports'`).get();
+    const lamAtRow = db.prepare(`SELECT v FROM analog_meta WHERE k = 'chain_sol_balance_updated_utc'`).get();
+    const chErrRow = db.prepare(`SELECT v FROM analog_meta WHERE k = 'chain_balance_error'`).get();
+    const closeRaw = base?.last_kline?.close_px;
+    const closePx = closeRaw != null ? parseFloat(String(closeRaw)) : NaN;
+    const m = Number.isFinite(Number(markUsd)) ? Number(markUsd) : Number.isFinite(closePx) ? closePx : NaN;
+    const sizeSol = parseFloat(process.env.SEAN_ENGINE_SIZE_NOTIONAL_SOL || '1') || 1;
+    const eq = getPaperEquityUsd(db, m);
+    const gate = assertCanOpenPosition(db, {
+      markUsd: m,
+      closePx: Number.isFinite(closePx) ? closePx : m,
+      sizeNotionalSol: sizeSol,
+    });
+    return {
+      schema: 'jupiter_operator_state_v1',
+      sean_funding_mode: mode,
+      paper_trading_env: paperEnvOn,
+      chain_sol_balance_lamports: lamRow?.v != null ? String(lamRow.v) : null,
+      chain_balance_updated_utc: lamAtRow?.v != null ? String(lamAtRow.v) : null,
+      chain_balance_error: chErrRow?.v != null ? String(chErrRow.v) : null,
+      paper_equity_usd: eq,
+      next_open_gate: gate,
+      operator_controls: {
+        post_token_configured: tokenConfigured,
+        paper_stake_edit_allowed: stakeEdit,
+      },
+    };
+  } catch (e) {
+    return { schema: 'jupiter_operator_state_v1', error: e instanceof Error ? e.message : String(e) };
+  } finally {
+    try {
+      db?.close();
+    } catch {
+      /* */
+    }
+  }
+}
+
 async function buildFullView() {
   const rr = repoRoot();
   const seanPath = dbPath();
@@ -710,6 +767,7 @@ async function buildFullView() {
   const preflight = await runPreflight();
   const mark = preflight.oracle?.price != null ? Number(preflight.oracle.price) : null;
   const paperLedger = computePaperLedger(mark);
+  const operator = buildOperatorPayload(seanPath, mark, base);
 
   let parity = { rows: [], error: null, sean_db: seanPath, ledger_db: executionLedgerPath() };
   try {
@@ -725,6 +783,7 @@ async function buildFullView() {
     policy,
     preflight,
     parity,
+    operator,
     refresh_sec: Math.max(0, parseFloat(process.env.JUPITER_WEB_REFRESH_SEC || '3') || 3),
   };
 }
@@ -798,6 +857,7 @@ function htmlPage(v) {
   }
 
   const pf = v.preflight || {};
+  const o = pf.oracle;
   const chkRows = (pf.checks || [])
     .map((c) => {
       const st = c.ok ? '<span class="ok">OK</span>' : '<span class="bad">FAIL</span>';
@@ -809,7 +869,6 @@ function htmlPage(v) {
     : '<p class="ok"><strong>ALL ACTIVE</strong> — checks passing</p>';
 
   let oracleBlock = '<p class="muted">No Hermes parsed payload yet.</p>';
-  const o = pf.oracle;
   if (o) {
     const rel = o.price ? (o.conf / o.price) * 100 : 0;
     const wa = pf.wall_age_s != null ? `wall age ~${pf.wall_age_s.toFixed(1)}s` : '';
@@ -839,6 +898,72 @@ function htmlPage(v) {
     pos && String(pos.side) !== 'flat'
       ? `<p><strong>Open</strong> ${esc(pos.side)} @ ${esc(pos.entry_price)} · mid ${esc(pos.entry_market_event_id)}</p>`
       : '<p class="muted">Position: flat</p>';
+
+  const liveStrip = (() => {
+    const kc = kl?.close_px != null ? esc(kl.close_px) : '—';
+    const hp = o?.price != null ? esc(o.price.toFixed(4)) : '—';
+    return `<p><strong>Binance kline close</strong> ${kc} · <strong>Hermes SOL/USD</strong> ${hp} · <strong>poll</strong> ${esc(kl?.polled_at_utc || '—')}</p>`;
+  })();
+
+  const op = v.operator || {};
+  const gate = op.next_open_gate || {};
+  const gOk = gate.ok === true;
+  const pq = op.paper_equity_usd || {};
+  const eqStr =
+    pq.equity_usd != null && typeof pq.equity_usd === 'number' && Number.isFinite(pq.equity_usd)
+      ? pq.equity_usd.toFixed(4)
+      : '—';
+  let operatorBlock = '<p class="muted">Operator state unavailable.</p>';
+  if (!op.error) {
+    const postOk = op.operator_controls?.post_token_configured;
+    const stakeOk = op.operator_controls?.paper_stake_edit_allowed;
+    operatorBlock = `${liveStrip}
+      <p><strong>Funding mode (SQLite)</strong> <code>${esc(op.sean_funding_mode || 'paper')}</code>
+        · PAPER_TRADING env: ${op.paper_trading_env ? '<span class="ok">on (simulated)</span>' : '<span class="warn">off</span> (compose uses live path for chain gate)</p>
+      <p><strong>Paper equity</strong> ~${esc(eqStr)} USD
+        <span class="muted">(start ${esc(String(pq.starting_usd ?? '—'))} + realized ${esc(String(pq.realized_pnl_usd ?? '—'))} + unreal ${esc(String(pq.unrealized_usd ?? '—'))})</span></p>
+      <p><strong>On-chain SOL</strong> (cached) ${esc(op.chain_sol_balance_lamports || '—')} lamports
+        <span class="muted">${esc(op.chain_balance_updated_utc || '')}</span></p>
+      ${op.chain_balance_error ? `<p class="bad">${esc(op.chain_balance_error)}</p>` : ''}
+      <p><strong>Next engine open</strong> ${gOk ? '<span class="ok">allowed</span>' : '<span class="bad">blocked</span>'} — ${esc(gate.reason || '—')}
+        <span class="muted">${esc(gate.detail || '')}</span></p>
+      <p class="muted">${postOk ? 'POST /api/operator/* is enabled (token set on server).' : 'POST controls disabled — set JUPITER_OPERATOR_TOKEN in jupiter-web compose.'}</p>
+      ${
+        postOk
+          ? `<details><summary>Change mode / paper stake</summary>
+      <p class="muted">Bearer token matches <code>JUPITER_OPERATOR_TOKEN</code> on the server.</p>
+      <p><label>Token <input type="password" id="jw-op-token" size="28" autocomplete="off"/></label></p>
+      <p><label>Mode <select id="jw-mode"><option value="paper">paper</option><option value="chain">chain</option></select></label>
+        <button type="button" id="jw-save-mode">Save mode</button></p>
+      ${
+        stakeOk
+          ? `<p><label>Paper stake (USD) <input type="text" id="jw-stake" size="10" placeholder="1000"/></label>
+        <button type="button" id="jw-save-stake">Save stake</button></p>`
+          : '<p class="muted">Paper stake edit: set SEAN_ALLOW_PAPER_STAKE_EDIT=1 on jupiter-web.</p>'
+      }
+      </details>
+      <script>
+      (function(){
+        function tok(){ return (document.getElementById('jw-op-token')||{}).value||''; }
+        document.getElementById('jw-save-mode')?.addEventListener('click', async function(){
+          const mode = (document.getElementById('jw-mode')||{}).value||'paper';
+          const r = await fetch('/api/operator/funding-mode', { method:'POST', headers:{'Authorization':'Bearer '+tok(),'Content-Type':'application/json'}, body: JSON.stringify({mode}) });
+          alert(r.ok ? await r.text() : 'HTTP '+r.status+' '+await r.text());
+          if(r.ok) location.reload();
+        });
+        document.getElementById('jw-save-stake')?.addEventListener('click', async function(){
+          const usd = parseFloat((document.getElementById('jw-stake')||{}).value||'');
+          const r = await fetch('/api/operator/paper-stake', { method:'POST', headers:{'Authorization':'Bearer '+tok(),'Content-Type':'application/json'}, body: JSON.stringify({usd}) });
+          alert(r.ok ? await r.text() : 'HTTP '+r.status+' '+await r.text());
+          if(r.ok) location.reload();
+        });
+      })();
+      </script>`
+          : ''
+      }`;
+  } else {
+    operatorBlock = `<p class="warn">${esc(op.error)}</p>`;
+  }
 
   return `<!DOCTYPE html>
 <html lang="en">
@@ -877,10 +1002,11 @@ function htmlPage(v) {
       <h1>Jupiter — TUI parity (read-only)</h1>
       <p class="muted">Same checks + SQLite + ledger paths as preflight_pyth_tui.py · Auto-refresh ${esc(String(v.refresh_sec || 0))}s (JUPITER_WEB_REFRESH_SEC, 0=off)</p>
       <p class="muted">${esc(v.sqlite_path)} · repo: ${esc(v.repo_root)}</p>
-      <p><a href="https://jup.ag/perps/long/SOL-SOL" target="_blank" rel="noopener noreferrer">jup.ag SOL perps</a> · <a href="/api/summary.json">summary.json</a> · <a href="/health">health</a></p>
+      <p><a href="https://jup.ag/perps/long/SOL-SOL" target="_blank" rel="noopener noreferrer">jup.ag SOL perps</a> · <a href="/api/summary.json">summary.json</a> · <a href="/api/operator/state.json">operator/state.json</a> · <a href="/api/live-market.json">live-market.json</a> · <a href="/health">health</a></p>
     </section>
     ${v.error ? `<section class="panel"><p class="warn">${esc(v.error)}</p></section>` : ''}
     <section class="panel"><h2>Trading mode</h2>${tradingBlock}</section>
+    <section class="panel"><h2>Live market &amp; funding gates</h2>${operatorBlock}</section>
     <section class="panel"><h2>Active policy</h2>${policyBlock}</section>
     <section class="panel"><h2>Wallet (SeanV3 parity DB)</h2>${walletBlock}</section>
     <section class="panel"><h2>SeanV3 paper ledger (testing)</h2>${ledgerBlock}</section>
@@ -899,6 +1025,96 @@ function htmlPage(v) {
 </html>`;
 }
 
+function readRequestBody(req, limit = 65536) {
+  return new Promise((resolve, reject) => {
+    const chunks = [];
+    let n = 0;
+    req.on('data', (c) => {
+      n += c.length;
+      if (n > limit) {
+        reject(new Error('body too large'));
+        return;
+      }
+      chunks.push(c);
+    });
+    req.on('end', () => resolve(Buffer.concat(chunks).toString('utf8')));
+    req.on('error', reject);
+  });
+}
+
+/**
+ * @param {import('http').IncomingMessage} req
+ * @param {import('http').ServerResponse} res
+ * @param {string} pathname
+ */
+async function handleOperatorPost(req, res, pathname) {
+  const expected = (process.env.JUPITER_OPERATOR_TOKEN || '').trim();
+  if (!expected) {
+    res.writeHead(503, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' });
+    res.end(JSON.stringify({ error: 'JUPITER_OPERATOR_TOKEN not set on server' }));
+    return;
+  }
+  const auth = req.headers.authorization || '';
+  const tok = auth.startsWith('Bearer ') ? auth.slice(7).trim() : '';
+  if (tok !== expected) {
+    res.writeHead(401, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' });
+    res.end(JSON.stringify({ error: 'unauthorized' }));
+    return;
+  }
+  let body;
+  try {
+    const raw = await readRequestBody(req);
+    body = JSON.parse(raw || '{}');
+  } catch (e) {
+    res.writeHead(400, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' });
+    res.end(JSON.stringify({ error: e instanceof Error ? e.message : String(e) }));
+    return;
+  }
+  const seanPath = dbPath();
+  const dbw = new DatabaseSync(seanPath);
+  try {
+    if (pathname === '/api/operator/funding-mode') {
+      const m = String(body.mode || '').trim().toLowerCase();
+      if (m !== 'paper' && m !== 'chain' && m !== 'live') {
+        res.writeHead(400, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' });
+        res.end(JSON.stringify({ error: 'mode must be paper|chain|live' }));
+        return;
+      }
+      const store = m === 'live' ? 'chain' : m;
+      setMeta(dbw, 'sean_funding_mode', store);
+      res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' });
+      res.end(JSON.stringify({ ok: true, sean_funding_mode: store }));
+      return;
+    }
+    if (pathname === '/api/operator/paper-stake') {
+      const allow = ['1', 'true', 'yes'].includes((process.env.SEAN_ALLOW_PAPER_STAKE_EDIT || '').trim().toLowerCase());
+      if (!allow) {
+        res.writeHead(403, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' });
+        res.end(JSON.stringify({ error: 'SEAN_ALLOW_PAPER_STAKE_EDIT not enabled' }));
+        return;
+      }
+      const usd = Number(body.usd);
+      if (!Number.isFinite(usd) || usd <= 0) {
+        res.writeHead(400, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' });
+        res.end(JSON.stringify({ error: 'usd must be a positive number' }));
+        return;
+      }
+      setMeta(dbw, 'paper_starting_balance_usd', String(usd));
+      res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' });
+      res.end(JSON.stringify({ ok: true, paper_starting_balance_usd: usd }));
+      return;
+    }
+    res.writeHead(404, { 'Content-Type': 'application/json; charset=utf-8' });
+    res.end(JSON.stringify({ error: 'unknown path' }));
+  } finally {
+    try {
+      dbw.close();
+    } catch {
+      /* */
+    }
+  }
+}
+
 const portRaw = process.env.JUPITER_WEB_PORT || process.env.SEANV3_WEB_PORT || '707';
 const port = Math.max(1, Math.min(65535, parseInt(portRaw, 10) || 707));
 const bind = (process.env.JUPITER_WEB_BIND || process.env.SEANV3_WEB_BIND || '0.0.0.0').trim() || '0.0.0.0';
@@ -906,6 +1122,68 @@ const bind = (process.env.JUPITER_WEB_BIND || process.env.SEANV3_WEB_BIND || '0.
 const server = http.createServer((req, res) => {
   void (async () => {
     const url = new URL(req.url || '/', `http://${req.headers.host || 'localhost'}`);
+
+    if (
+      req.method === 'POST' &&
+      (url.pathname === '/api/operator/funding-mode' || url.pathname === '/api/operator/paper-stake')
+    ) {
+      await handleOperatorPost(req, res, url.pathname);
+      return;
+    }
+
+    if (url.pathname === '/api/operator/state.json' && req.method === 'GET') {
+      try {
+        const seanPath = dbPath();
+        const base = {
+          schema: 'jupiter_web_tui_view_v1',
+          error: null,
+        };
+        let db;
+        try {
+          db = new DatabaseSync(seanPath, { readOnly: true });
+          Object.assign(base, buildSummary(db));
+        } catch (e) {
+          base.error = e instanceof Error ? e.message : String(e);
+        } finally {
+          try {
+            db?.close();
+          } catch {
+            /* */
+          }
+        }
+        const preflight = await runPreflight();
+        const mark = preflight.oracle?.price != null ? Number(preflight.oracle.price) : null;
+        const operator = buildOperatorPayload(seanPath, mark, base);
+        res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' });
+        res.end(JSON.stringify(operator, null, 2));
+      } catch (e) {
+        res.writeHead(500, { 'Content-Type': 'application/json; charset=utf-8' });
+        res.end(JSON.stringify({ error: e instanceof Error ? e.message : String(e) }));
+      }
+      return;
+    }
+
+    if (url.pathname === '/api/live-market.json' && req.method === 'GET') {
+      try {
+        const view = await buildFullView();
+        const pf = view.preflight || {};
+        const checks = pf.checks || [];
+        const live = {
+          schema: 'jupiter_live_market_v1',
+          last_kline: view.last_kline || null,
+          oracle: pf.oracle || null,
+          preflight_degraded: Boolean(pf.degraded),
+          checks_binance: checks.filter((c) => /binance/i.test(String(c.name || ''))),
+          checks_hermes: checks.filter((c) => /hermes|pyth/i.test(String(c.name || ''))),
+        };
+        res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' });
+        res.end(JSON.stringify(live, null, 2));
+      } catch (e) {
+        res.writeHead(500, { 'Content-Type': 'application/json; charset=utf-8' });
+        res.end(JSON.stringify({ error: e instanceof Error ? e.message : String(e) }));
+      }
+      return;
+    }
 
     if (url.pathname === '/health') {
       res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' });
