@@ -1,7 +1,7 @@
 """Baseline → execution_ledger: **Jupiter_2 / Jupiter_3 Sean lifecycle** (signal-gated).
 
 **Signal mode** is ``sean_jupiter_v1`` (Jupiter_2), ``sean_jupiter_v3`` (Jupiter_3), or ``sean_jupiter_v4``
-(Jupiter_4), selected by ``baseline_operator_kv`` / env (see :func:`execution_ledger.get_baseline_jupiter_policy_slot`).
+(Jupiter_4), selected by :func:`execution_ledger.resolve_baseline_jupiter_policy_for_execution` (activation log + KV).
 Lifecycle SL/TP uses :mod:`jupiter_2_baseline_lifecycle` for both (same exit mechanics until v3-specific
 lifecycle is added).
 
@@ -111,31 +111,53 @@ def run_baseline_ledger_bridge_tick(
     from modules.anna_training.execution_ledger import (
         BASELINE_POLICY_SLOT_JUP_V3,
         BASELINE_POLICY_SLOT_JUP_V4,
+        apply_baseline_jupiter_policy_activation_at_bar,
         connect_ledger,
         ensure_execution_ledger_schema,
-        get_baseline_jupiter_policy_slot,
         policy_uses_binance_strategy_bars,
+        resolve_baseline_jupiter_policy_for_execution,
     )
 
     conn_slot = connect_ledger(execution_ledger_db_path)
     try:
         ensure_execution_ledger_schema(conn_slot)
-        policy_slot = get_baseline_jupiter_policy_slot(conn_slot)
+        slot0 = resolve_baseline_jupiter_policy_for_execution(conn_slot)
+        use_bin0 = policy_uses_binance_strategy_bars(slot0)
+        if use_bin0:
+            bar = fetch_latest_bar_row_binance_strategy(db_path=market_data_db_path)
+            if not bar:
+                return {"ok": False, "reason": "no_binance_strategy_bar"}
+            bars_asc = fetch_recent_bars_asc_binance_strategy(db_path=market_data_db_path)
+        else:
+            bar = fetch_latest_bar_row(db_path=market_data_db_path)
+            if not bar:
+                return {"ok": False, "reason": "no_canonical_bar"}
+            bars_asc = fetch_recent_bars_asc(limit=280, db_path=market_data_db_path)
+        mid = verify_market_event_id_matches_canonical_bar(bar)
+        co = str(bar.get("candle_open_utc") or "").strip()
+        apply_baseline_jupiter_policy_activation_at_bar(
+            conn_slot,
+            market_event_id=mid,
+            candle_open_utc=co,
+        )
+        slot1 = resolve_baseline_jupiter_policy_for_execution(conn_slot)
+        if policy_uses_binance_strategy_bars(slot1) != use_bin0:
+            if policy_uses_binance_strategy_bars(slot1):
+                bar = fetch_latest_bar_row_binance_strategy(db_path=market_data_db_path)
+                if not bar:
+                    return {"ok": False, "reason": "no_binance_strategy_bar"}
+                bars_asc = fetch_recent_bars_asc_binance_strategy(db_path=market_data_db_path)
+            else:
+                bar = fetch_latest_bar_row(db_path=market_data_db_path)
+                if not bar:
+                    return {"ok": False, "reason": "no_canonical_bar"}
+                bars_asc = fetch_recent_bars_asc(limit=280, db_path=market_data_db_path)
+            mid = verify_market_event_id_matches_canonical_bar(bar)
+        policy_slot = slot1
+        conn_slot.commit()
     finally:
         conn_slot.close()
 
-    if policy_uses_binance_strategy_bars(policy_slot):
-        bar = fetch_latest_bar_row_binance_strategy(db_path=market_data_db_path)
-        if not bar:
-            return {"ok": False, "reason": "no_binance_strategy_bar"}
-        bars_asc = fetch_recent_bars_asc_binance_strategy(db_path=market_data_db_path)
-    else:
-        bar = fetch_latest_bar_row(db_path=market_data_db_path)
-        if not bar:
-            return {"ok": False, "reason": "no_canonical_bar"}
-        bars_asc = fetch_recent_bars_asc(limit=280, db_path=market_data_db_path)
-
-    mid = verify_market_event_id_matches_canonical_bar(bar)
     o = bar.get("open")
     c = bar.get("close")
     if o is None or c is None:
@@ -172,8 +194,10 @@ def run_baseline_ledger_bridge_tick(
 
     from modules.anna_training.execution_ledger import (
         BASELINE_POLICY_SLOT_JUP_V3,
+        POLICY_ACTIVATION_SLOT_BASELINE_JUPITER,
         append_position_event,
         baseline_jupiter_open_position_key,
+        baseline_jupiter_policy_lineage,
         connect_ledger,
         ensure_execution_ledger_schema,
         lookup_baseline_jupiter_open_state_json,
@@ -208,6 +232,7 @@ def run_baseline_ledger_bridge_tick(
         conn_chk.close()
 
     sm = signal_mode_for_baseline_policy_slot(policy_slot)
+    policy_id_lineage, policy_version_lineage = baseline_jupiter_policy_lineage(policy_slot)
     if policy_slot == BASELINE_POLICY_SLOT_JUP_V4:
         baseline_catalog_id = CATALOG_ID_JUPITER_4
         POLICY_ENGINE_ID = POLICY_ENGINE_ID_JUPITER_4
@@ -260,6 +285,9 @@ def run_baseline_ledger_bridge_tick(
                 features=features,
                 side=side,
                 pnl_usd=pnl_usd,
+                policy_id=policy_id_lineage,
+                policy_version=policy_version_lineage,
+                slot=POLICY_ACTIVATION_SLOT_BASELINE_JUPITER,
                 db_path=execution_ledger_db_path,
             )
         except sqlite3.OperationalError as exc:
@@ -356,6 +384,10 @@ def run_baseline_ledger_bridge_tick(
                     notes=f"baseline — Jupiter_2 lifecycle exit {er} ({catalog_id})",
                     db_path=execution_ledger_db_path,
                     signal_snapshot=dict(sig.features) if sig.features else None,
+                    policy_id=policy_id_lineage,
+                    policy_version=policy_version_lineage,
+                    lineage_slot=POLICY_ACTIVATION_SLOT_BASELINE_JUPITER,
+                    originating_market_event_id=str(pos.entry_market_event_id or ""),
                 )
             except sqlite3.IntegrityError:
                 return {

@@ -15,6 +15,9 @@ CREATE TABLE IF NOT EXISTS policy_evaluations (
   pnl_usd REAL,
   evaluated_at_utc TEXT NOT NULL,
   schema_version TEXT NOT NULL DEFAULT 'policy_evaluation_v1',
+  policy_id TEXT,
+  policy_version TEXT,
+  slot TEXT,
   UNIQUE (market_event_id, lane, strategy_id, signal_mode)
 );
 

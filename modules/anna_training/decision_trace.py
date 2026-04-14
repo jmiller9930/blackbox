@@ -911,6 +911,10 @@ def persist_baseline_lifecycle_close(
     notes: str | None,
     db_path: Path | None = None,
     signal_snapshot: dict[str, Any] | None = None,
+    policy_id: str | None = None,
+    policy_version: str | None = None,
+    lineage_slot: str | None = None,
+    originating_market_event_id: str | None = None,
 ) -> dict[str, Any]:
     """
     Persist a **closed** baseline Jupiter_2 lifecycle trade (STOP_LOSS / TAKE_PROFIT only).
@@ -1003,6 +1007,10 @@ def persist_baseline_lifecycle_close(
             exit_reason=er,
             context_snapshot=context_snapshot,
             notes=notes,
+            policy_id=policy_id,
+            policy_version=policy_version,
+            lineage_slot=lineage_slot,
+            originating_market_event_id=originating_market_event_id,
             db_path=db_path,
             conn=conn,
         )

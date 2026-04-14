@@ -24,6 +24,8 @@ VALID_BASELINE_JUPITER_POLICY_SLOTS: frozenset[str] = frozenset(
     {BASELINE_POLICY_SLOT_JUP_V2, BASELINE_POLICY_SLOT_JUP_V3, BASELINE_POLICY_SLOT_JUP_V4}
 )
 BASELINE_OPERATOR_KV_JUPITER_POLICY_SLOT = "baseline_jupiter_policy_slot"
+# policy_activation_log.slot for baseline Jupiter policy family (one active row for this slot name).
+POLICY_ACTIVATION_SLOT_BASELINE_JUPITER = "baseline_jupiter"
 # policy_evaluations.signal_mode — one distinct string per engine (historic v1 label = Jupiter_2).
 SIGNAL_MODE_JUPITER_2 = "sean_jupiter_v1"
 SIGNAL_MODE_JUPITER_3 = "sean_jupiter_v3"
@@ -248,6 +250,42 @@ def _migrate_policy_evaluation_schema(conn: sqlite3.Connection, root: Path) -> N
     pe = root / "data" / "sqlite" / "schema_policy_evaluation.sql"
     if pe.is_file():
         conn.executescript(pe.read_text(encoding="utf-8"))
+    _migrate_policy_evaluation_lineage_columns(conn)
+
+
+def _migrate_policy_evaluation_lineage_columns(conn: sqlite3.Connection) -> None:
+    """DV-ARCH-023-B: policy lineage on policy_evaluations."""
+    cur = conn.execute("PRAGMA table_info(policy_evaluations)")
+    cols = {str(r[1]) for r in cur.fetchall()}
+    if "policy_id" not in cols:
+        conn.execute("ALTER TABLE policy_evaluations ADD COLUMN policy_id TEXT")
+    if "policy_version" not in cols:
+        conn.execute("ALTER TABLE policy_evaluations ADD COLUMN policy_version TEXT")
+    if "slot" not in cols:
+        conn.execute("ALTER TABLE policy_evaluations ADD COLUMN slot TEXT")
+
+
+def _migrate_policy_activation_schema(conn: sqlite3.Connection, root: Path) -> None:
+    """DV-ARCH-023-A: policy_activation_log + execution lineage columns."""
+    pa = root / "data" / "sqlite" / "schema_policy_activation.sql"
+    if pa.is_file():
+        conn.executescript(pa.read_text(encoding="utf-8"))
+
+
+def _migrate_execution_trades_lineage_columns(conn: sqlite3.Connection) -> None:
+    """DV-ARCH-023-B: policy lineage + originating market event on execution_trades."""
+    cur = conn.execute("PRAGMA table_info(execution_trades)")
+    cols = {str(r[1]) for r in cur.fetchall()}
+    if "policy_id" not in cols:
+        conn.execute("ALTER TABLE execution_trades ADD COLUMN policy_id TEXT")
+    if "policy_version" not in cols:
+        conn.execute("ALTER TABLE execution_trades ADD COLUMN policy_version TEXT")
+    if "slot" not in cols:
+        conn.execute("ALTER TABLE execution_trades ADD COLUMN slot TEXT")
+    if "originating_market_event_id" not in cols:
+        conn.execute(
+            "ALTER TABLE execution_trades ADD COLUMN originating_market_event_id TEXT"
+        )
 
 
 def _migrate_position_events_schema(conn: sqlite3.Connection, root: Path) -> None:
@@ -337,15 +375,12 @@ def _warn_invalid_baseline_policy_slot(source: str, raw: str) -> None:
     )
 
 
-def get_baseline_jupiter_policy_slot(conn: sqlite3.Connection) -> str:
+def _legacy_baseline_jupiter_policy_slot_from_kv_env(conn: sqlite3.Connection) -> str:
     """
-    Active baseline Jupiter policy for runtime (bridge, dashboard, parallel runner).
+    Operator / deploy selection from ``baseline_operator_kv`` and env (no activation log).
 
-    Order: ``baseline_operator_kv`` (dashboard dropdown / operator) when set and parseable, then env
-    ``BASELINE_JUPITER_POLICY_SLOT`` (deploy / CI default), then **jup_v2**.
-
-    Operator selection must not lose to compose env once persisted — see dashboard POST
-    ``/api/v1/dashboard/baseline-jupiter-policy``.
+    Order: ``baseline_operator_kv`` when set and parseable, then env
+    ``BASELINE_JUPITER_POLICY_SLOT``, then **jup_v2**.
     """
     try:
         row = conn.execute(
@@ -369,15 +404,242 @@ def get_baseline_jupiter_policy_slot(conn: sqlite3.Connection) -> str:
     return BASELINE_POLICY_SLOT_JUP_V2
 
 
-def set_baseline_jupiter_policy_slot(conn: sqlite3.Connection, policy_slot: str) -> None:
-    """Persist operator policy slot (must be a known member of ``VALID_BASELINE_JUPITER_POLICY_SLOTS``)."""
+def get_baseline_jupiter_policy_slot(conn: sqlite3.Connection) -> str:
+    """
+    Operator-facing baseline Jupiter policy (dashboard / KV): **immediate** selection.
+
+    For **execution** (evaluator + lineage), use
+    :func:`resolve_baseline_jupiter_policy_for_execution` so pending activations do not apply
+    until the next closed 5m boundary.
+    """
+    return _legacy_baseline_jupiter_policy_slot_from_kv_env(conn)
+
+
+def _policy_activation_table_ready(conn: sqlite3.Connection) -> bool:
+    cur = conn.execute(
+        "SELECT name FROM sqlite_master WHERE type='table' AND name='policy_activation_log'"
+    )
+    return cur.fetchone() is not None
+
+
+def baseline_jupiter_policy_lineage(policy_slot: str) -> tuple[str, str]:
+    """Return ``(policy_id, policy_version)`` (catalog id + policy engine id) for a normalized slot."""
+    ps = normalize_baseline_jupiter_policy_slot(policy_slot)
+    if ps is None:
+        raise ValueError(f"unknown baseline Jupiter policy slot {policy_slot!r}")
+    if ps == BASELINE_POLICY_SLOT_JUP_V4:
+        from modules.anna_training.jupiter_4_sean_policy import CATALOG_ID, POLICY_ENGINE_ID
+
+        return (CATALOG_ID, POLICY_ENGINE_ID)
+    if ps == BASELINE_POLICY_SLOT_JUP_V3:
+        from modules.anna_training.jupiter_3_sean_policy import CATALOG_ID, POLICY_ENGINE_ID
+
+        return (CATALOG_ID, POLICY_ENGINE_ID)
+    from modules.anna_training.jupiter_2_sean_policy import CATALOG_ID, POLICY_ENGINE_ID
+
+    return (CATALOG_ID, POLICY_ENGINE_ID)
+
+
+def baseline_slot_from_policy_lineage(policy_id: str | None, policy_version: str | None) -> str | None:
+    """Map stored lineage ids back to **jup_v2** / **jup_v3** / **jup_v4**."""
+    pid = (policy_id or "").strip()
+    if pid == "jupiter_4_sean_perps_v1":
+        return BASELINE_POLICY_SLOT_JUP_V4
+    if pid == "jupiter_3_sean_perps_v1":
+        return BASELINE_POLICY_SLOT_JUP_V3
+    if pid == "jupiter_2_sean_perps_v1":
+        return BASELINE_POLICY_SLOT_JUP_V2
+    pver = (policy_version or "").strip().lower()
+    if "jupiter_4" in pver or pver == "jupiter_4":
+        return BASELINE_POLICY_SLOT_JUP_V4
+    if "jupiter_3" in pver or pver == "jupiter_3":
+        return BASELINE_POLICY_SLOT_JUP_V3
+    if "jupiter_2" in pver or pver == "jupiter_2":
+        return BASELINE_POLICY_SLOT_JUP_V2
+    return None
+
+
+def resolve_baseline_jupiter_policy_for_execution(conn: sqlite3.Connection) -> str:
+    """
+    Effective baseline Jupiter policy for **evaluation** (respects activation log).
+
+    If ``policy_activation_log`` is empty, matches :func:`get_baseline_jupiter_policy_slot`.
+    If there is an **active** row, its lineage wins.
+    If there is only **pending**, returns ``previous_baseline_policy_slot`` captured at assignment.
+    """
+    ensure_execution_ledger_schema(conn)
+    if not _policy_activation_table_ready(conn):
+        return _legacy_baseline_jupiter_policy_slot_from_kv_env(conn)
+    n = conn.execute("SELECT COUNT(*) FROM policy_activation_log").fetchone()
+    if not n or int(n[0]) == 0:
+        return _legacy_baseline_jupiter_policy_slot_from_kv_env(conn)
+    row = conn.execute(
+        """
+        SELECT policy_id, policy_version FROM policy_activation_log
+        WHERE slot = ? AND activation_state = 'active'
+        ORDER BY id DESC
+        LIMIT 1
+        """,
+        (POLICY_ACTIVATION_SLOT_BASELINE_JUPITER,),
+    ).fetchone()
+    if row:
+        mapped = baseline_slot_from_policy_lineage(str(row[0] or ""), str(row[1] or ""))
+        if mapped:
+            return mapped
+        return _legacy_baseline_jupiter_policy_slot_from_kv_env(conn)
+    prow = conn.execute(
+        """
+        SELECT previous_baseline_policy_slot FROM policy_activation_log
+        WHERE slot = ? AND activation_state = 'pending'
+        ORDER BY id ASC
+        LIMIT 1
+        """,
+        (POLICY_ACTIVATION_SLOT_BASELINE_JUPITER,),
+    ).fetchone()
+    if prow and str(prow[0] or "").strip():
+        ps = normalize_baseline_jupiter_policy_slot(str(prow[0]).strip())
+        if ps is not None:
+            return ps
+    return _legacy_baseline_jupiter_policy_slot_from_kv_env(conn)
+
+
+def _import_canonical_time() -> tuple[Any, Any, Any]:
+    import sys
+
+    rt = Path(__file__).resolve().parents[2] / "scripts" / "runtime"
+    if str(rt) not in sys.path:
+        sys.path.insert(0, str(rt))
+    from market_data.canonical_time import (  # noqa: PLC0415
+        FIVE_MINUTES,
+        floor_utc_to_5m_open,
+        parse_iso_zulu_to_utc,
+    )
+
+    return floor_utc_to_5m_open, FIVE_MINUTES, parse_iso_zulu_to_utc
+
+
+def apply_baseline_jupiter_policy_activation_at_bar(
+    conn: sqlite3.Connection,
+    *,
+    market_event_id: str,
+    candle_open_utc: str,
+) -> None:
+    """
+    If a **pending** row is due (first closed 5m bar at/after next boundary from ``created_at_utc``),
+    supersede the current **active** (if any) and mark the row **active**.
+    """
+    if not _policy_activation_table_ready(conn):
+        return
+    mid = (market_event_id or "").strip()
+    co = (candle_open_utc or "").strip()
+    if not mid or not co:
+        return
+    floor_utc_to_5m_open, FIVE_MINUTES, parse_iso_zulu_to_utc = _import_canonical_time()
+    try:
+        bar_open = parse_iso_zulu_to_utc(co)
+    except ValueError:
+        return
+    while True:
+        cur = conn.execute(
+            """
+            SELECT id, created_at_utc FROM policy_activation_log
+            WHERE slot = ? AND activation_state = 'pending'
+            ORDER BY id ASC
+            LIMIT 1
+            """,
+            (POLICY_ACTIVATION_SLOT_BASELINE_JUPITER,),
+        )
+        pend = cur.fetchone()
+        if not pend:
+            return
+        pid, created_s = int(pend[0]), str(pend[1] or "")
+        try:
+            created_dt = parse_iso_zulu_to_utc(created_s)
+        except ValueError:
+            return
+        eligible_open = floor_utc_to_5m_open(created_dt) + FIVE_MINUTES
+        if bar_open < eligible_open:
+            return
+        conn.execute(
+            """
+            UPDATE policy_activation_log
+            SET activation_state = 'superseded'
+            WHERE slot = ? AND activation_state = 'active'
+            """,
+            (POLICY_ACTIVATION_SLOT_BASELINE_JUPITER,),
+        )
+        eff = utc_now_iso()
+        conn.execute(
+            """
+            UPDATE policy_activation_log
+            SET activation_state = 'active',
+                activation_effective_at_utc = ?,
+                activation_market_event_id = ?
+            WHERE id = ?
+            """,
+            (co, mid, pid),
+        )
+        row = conn.execute(
+            "SELECT policy_id, policy_version FROM policy_activation_log WHERE id = ?",
+            (pid,),
+        ).fetchone()
+        if row:
+            slot_eff = baseline_slot_from_policy_lineage(str(row[0] or ""), str(row[1] or ""))
+            if slot_eff:
+                conn.execute(
+                    """
+                    INSERT INTO baseline_operator_kv (key, value, updated_at_utc)
+                    VALUES (?, ?, ?)
+                    ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at_utc = excluded.updated_at_utc
+                    """,
+                    (BASELINE_OPERATOR_KV_JUPITER_POLICY_SLOT, slot_eff, eff),
+                )
+
+
+def set_baseline_jupiter_policy_slot(
+    conn: sqlite3.Connection,
+    policy_slot: str,
+    *,
+    assigned_by: str = "operator",
+) -> None:
+    """Persist operator policy slot; schedule **pending** activation + KV update (dashboard)."""
     ps = normalize_baseline_jupiter_policy_slot(policy_slot)
     if ps is None:
         raise ValueError(
             f"policy_slot must be one of {sorted(VALID_BASELINE_JUPITER_POLICY_SLOTS)} "
             f"(or aliases jupiter_2/jupiter_3/jupiter_4, v2/v3/v4); got {policy_slot!r}"
         )
+    ensure_execution_ledger_schema(conn)
+    eff = resolve_baseline_jupiter_policy_for_execution(conn)
+    pid, pver = baseline_jupiter_policy_lineage(ps)
     ts = utc_now_iso()
+    ab = (assigned_by or "").strip() or "operator"
+    if _policy_activation_table_ready(conn):
+        conn.execute(
+            """
+            UPDATE policy_activation_log
+            SET activation_state = 'superseded'
+            WHERE slot = ? AND activation_state = 'pending'
+            """,
+            (POLICY_ACTIVATION_SLOT_BASELINE_JUPITER,),
+        )
+        conn.execute(
+            """
+            INSERT INTO policy_activation_log (
+              policy_id, policy_version, slot, activation_state,
+              activation_effective_at_utc, activation_market_event_id,
+              assigned_by, created_at_utc, previous_baseline_policy_slot
+            ) VALUES (?, ?, ?, 'pending', NULL, NULL, ?, ?, ?)
+            """,
+            (
+                pid,
+                pver,
+                POLICY_ACTIVATION_SLOT_BASELINE_JUPITER,
+                ab,
+                ts,
+                eff,
+            ),
+        )
     conn.execute(
         """
         INSERT INTO baseline_operator_kv (key, value, updated_at_utc)
@@ -502,7 +764,7 @@ def lookup_baseline_jupiter_open_state_json(
     """
     Return ``(state_json, position_key)`` for the active policy slot, then legacy unsuffixed key.
     """
-    slot = get_baseline_jupiter_policy_slot(conn)
+    slot = resolve_baseline_jupiter_policy_for_execution(conn)
     pk_new = baseline_jupiter_open_position_key(
         symbol=symbol, timeframe=timeframe, mode=mode, policy_slot=slot
     )
@@ -526,8 +788,8 @@ def fetch_baseline_policy_evaluation_for_market_event(
 ) -> dict[str, Any] | None:
     """Latest baseline policy row for ``market_event_id``.
 
-    When ``prefer_active_slot`` is True (default), tries the operator-selected engine first
-    (``get_baseline_jupiter_policy_slot``), then the other ``signal_mode`` so historic rows still resolve
+    When ``prefer_active_slot`` is True (default), tries the execution-effective engine first
+    (``resolve_baseline_jupiter_policy_for_execution``), then the other ``signal_mode`` so historic rows still resolve
     after a policy switch.
 
     When ``prefer_active_slot`` is False (historic / strip / reports), tries **v4, then v3, then v2**.
@@ -539,7 +801,7 @@ def fetch_baseline_policy_evaluation_for_market_event(
         return None
     modes: list[str]
     if prefer_active_slot:
-        slot = get_baseline_jupiter_policy_slot(conn)
+        slot = resolve_baseline_jupiter_policy_for_execution(conn)
         primary = signal_mode_for_baseline_policy_slot(slot)
         others = [
             m
@@ -661,6 +923,8 @@ def ensure_execution_ledger_schema(conn: sqlite3.Connection, root: Path | None =
     _migrate_qel_schema(conn, root)
     _migrate_sequential_learning_schema(conn, root)
     _migrate_policy_evaluation_schema(conn, root)
+    _migrate_policy_activation_schema(conn, root)
+    _migrate_execution_trades_lineage_columns(conn)
     _migrate_position_events_schema(conn, root)
     _migrate_baseline_jupiter_open_positions(conn)
     _migrate_baseline_operator_kv(conn)
@@ -879,6 +1143,9 @@ def upsert_policy_evaluation(
     side: str | None = None,
     pnl_usd: float | None = None,
     evaluated_at_utc: str | None = None,
+    policy_id: str | None = None,
+    policy_version: str | None = None,
+    slot: str | None = None,
     db_path: Path | None = None,
     conn: sqlite3.Connection | None = None,
 ) -> None:
@@ -912,13 +1179,17 @@ def upsert_policy_evaluation(
         close_conn = True
     try:
         ensure_execution_ledger_schema(conn)
+        pid = (policy_id or "").strip() or None
+        pver = (policy_version or "").strip() or None
+        slot_v = (slot or "").strip() or None
         conn.execute(
             """
             INSERT INTO policy_evaluations (
               market_event_id, lane, strategy_id, signal_mode, tick_mode,
               trade, side, reason_code, features_json, pnl_usd,
-              evaluated_at_utc, schema_version
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+              evaluated_at_utc, schema_version,
+              policy_id, policy_version, slot
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(market_event_id, lane, strategy_id, signal_mode) DO UPDATE SET
               tick_mode = excluded.tick_mode,
               trade = excluded.trade,
@@ -927,7 +1198,10 @@ def upsert_policy_evaluation(
               features_json = excluded.features_json,
               pnl_usd = excluded.pnl_usd,
               evaluated_at_utc = excluded.evaluated_at_utc,
-              schema_version = excluded.schema_version
+              schema_version = excluded.schema_version,
+              policy_id = excluded.policy_id,
+              policy_version = excluded.policy_version,
+              slot = excluded.slot
             """,
             (
                 mid,
@@ -942,6 +1216,9 @@ def upsert_policy_evaluation(
                 (float(pnl_usd) if pnl_usd is not None else 0.0) if trade else None,
                 ts,
                 POLICY_EVALUATION_SCHEMA_VERSION,
+                pid,
+                pver,
+                slot_v,
             ),
         )
         conn.commit()
@@ -1026,6 +1303,10 @@ def append_execution_trade(
     pnl_usd: float | None = None,
     context_snapshot: dict[str, Any] | None = None,
     notes: str | None = None,
+    policy_id: str | None = None,
+    policy_version: str | None = None,
+    lineage_slot: str | None = None,
+    originating_market_event_id: str | None = None,
     db_path: Path | None = None,
     conn: sqlite3.Connection | None = None,
 ) -> dict[str, Any]:
@@ -1109,6 +1390,10 @@ def append_execution_trade(
         "trace_id": trid,
         "schema_version": SCHEMA_VERSION,
         "created_at_utc": created,
+        "policy_id": (policy_id or "").strip() or None,
+        "policy_version": (policy_version or "").strip() or None,
+        "slot": (lineage_slot or "").strip() or None,
+        "originating_market_event_id": (originating_market_event_id or "").strip() or None,
     }
 
     own_conn = conn is None
@@ -1120,8 +1405,9 @@ def append_execution_trade(
             INSERT INTO execution_trades (
               trade_id, strategy_id, lane, mode, market_event_id, symbol, timeframe,
               side, entry_time, entry_price, size, exit_time, exit_price, exit_reason,
-              pnl_usd, context_snapshot_json, notes, trace_id, schema_version, created_at_utc
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+              pnl_usd, context_snapshot_json, notes, trace_id, schema_version, created_at_utc,
+              policy_id, policy_version, slot, originating_market_event_id
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 row["trade_id"],
@@ -1144,6 +1430,10 @@ def append_execution_trade(
                 row["trace_id"],
                 row["schema_version"],
                 row["created_at_utc"],
+                row["policy_id"],
+                row["policy_version"],
+                row["slot"],
+                row["originating_market_event_id"],
             ),
         )
         if own_conn:

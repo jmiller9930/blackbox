@@ -29,7 +29,11 @@ CREATE TABLE IF NOT EXISTS execution_trades (
   notes TEXT,
   trace_id TEXT,
   schema_version TEXT NOT NULL DEFAULT 'execution_trade_v1',
-  created_at_utc TEXT NOT NULL
+  created_at_utc TEXT NOT NULL,
+  policy_id TEXT,
+  policy_version TEXT,
+  slot TEXT,
+  originating_market_event_id TEXT
 );
 
 CREATE INDEX IF NOT EXISTS idx_execution_trades_market_event

@@ -206,7 +206,7 @@ def run_parallel_anna_strategies_tick(
         RESERVED_STRATEGY_BASELINE,
         connect_ledger,
         ensure_execution_ledger_schema,
-        get_baseline_jupiter_policy_slot,
+        resolve_baseline_jupiter_policy_for_execution,
         policy_uses_binance_strategy_bars,
         signal_mode_for_baseline_policy_slot,
         sync_strategy_registry_from_catalog,
@@ -215,7 +215,7 @@ def run_parallel_anna_strategies_tick(
     conn_slot = connect_ledger(execution_ledger_db_path)
     try:
         ensure_execution_ledger_schema(conn_slot)
-        policy_slot_early = get_baseline_jupiter_policy_slot(conn_slot)
+        policy_slot_early = resolve_baseline_jupiter_policy_for_execution(conn_slot)
     finally:
         conn_slot.close()
 
@@ -289,7 +289,7 @@ def run_parallel_anna_strategies_tick(
             conn, market_db_path=market_data_db_path
         )
         sync_strategy_registry_from_catalog(conn)
-        policy_slot = get_baseline_jupiter_policy_slot(conn)
+        policy_slot = resolve_baseline_jupiter_policy_for_execution(conn)
     finally:
         conn.close()
 
