@@ -16,6 +16,8 @@ The file `Clawbot-MX-FREE-15.full-tunnel.DO-NOT-DEPLOY-ON-CLAWBOT.conf` is a Pro
 
 **Phase 1 split-tunnel procedure (architect pack):** [`vpn_phase1_split_tunnel.md`](vpn_phase1_split_tunnel.md) — objectives, steps, validation, recovery.
 
+**VPN master plan (all phases 1–7):** [`vpn_master_all_phases.md`](vpn_master_all_phases.md) — phased roadmap, policy routing, monitoring, failover, validation.
+
 ## Scope — host networking (not “Blackbox-only”)
 
 **WireGuard on clawbot is a machine concern.** `wg-proton-mx`, kernel routes, and **`[Peer] AllowedIPs`** (plus any **`/32`** routes merged by ops/scripts) live on the **host**. This is **not** a VPN that exists only inside a Blackbox container.
