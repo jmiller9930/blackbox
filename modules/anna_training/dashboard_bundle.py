@@ -1758,7 +1758,7 @@ def _recent_baseline_policy_trade_rows_for_strip(
     conn: sqlite3.Connection,
     *,
     limit: int = 3,
-    scan_cap: int = 400,
+    scan_cap: int = 2000,
     market_db_path: Path | None = None,
 ) -> list[dict[str, Any]]:
     """

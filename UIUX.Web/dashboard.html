@@ -1291,6 +1291,7 @@
       if (window.__bbLastBundle) {
         renderBarSyncBanner(window.__bbLastBundle.trade_chain || {});
         renderTC(window.__bbLastBundle.trade_chain || {}, window.__bbLastBundle);
+        renderBaselineStrip(window.__bbLastBundle.trade_chain || {});
       }
     });
   }
@@ -2346,8 +2347,16 @@
     var recent = tc.recent_baseline_trades;
     if (recent && recent.length) {
       if (meta) {
+        var snapAt = '';
+        try {
+          var lv = window.__bbLastBundle && window.__bbLastBundle.liveness;
+          if (lv && lv.bundle_snapshot_at) {
+            snapAt = ' Data refreshes every poll; last bundle snapshot: ' + String(lv.bundle_snapshot_at) + ' UTC.';
+          }
+        } catch (e) {}
         meta.textContent =
-          'Last 5 closed baseline trades — same columns and labels as the Reports dashboard (newest exit first). Use Reports for date range, CSV, and the full trade snapshot modal.';
+          'Last 5 closed baseline trades — same columns and labels as the Reports dashboard (newest exit first). Use Reports for date range, CSV, and the full trade snapshot modal.' +
+          snapAt;
       }
       var h = '';
       var tipMae =
@@ -3176,6 +3185,8 @@
   }
 
   function render(bundle) {
+    window.__bbLastBundle = bundle;
+    try {
     var w = bundle.wallet || {};
     var seq = bundle.sequential || {};
     var ls = bundle.learning_summary || {};
@@ -3309,13 +3320,18 @@
     window.__bbNextPollEta = new Date(Date.now() + POLL_MS);
 
     wireTcAnnaToggle();
-    window.__bbLastBundle = bundle;
     renderBarSyncBanner(bundle.trade_chain || {});
     renderTC(bundle.trade_chain || {}, bundle);
-    renderBaselineStrip(bundle.trade_chain || {});
     renderOB(bundle.operational_boundary);
     renderLive(bundle);
     renderIntel(bundle);
+    } finally {
+      try {
+        renderBaselineStrip((bundle && bundle.trade_chain) || {});
+      } catch (e) {
+        if (typeof console !== 'undefined' && console.error) console.error('renderBaselineStrip', e);
+      }
+    }
   }
 
   function renderIntel(bundle) {
