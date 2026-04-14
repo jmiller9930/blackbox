@@ -9,6 +9,8 @@ from pathlib import Path
 import pytest
 
 from modules.anna_training.execution_ledger import (
+    SIGNAL_MODE_JUPITER_3,
+    SIGNAL_MODE_JUPITER_4,
     connect_ledger,
     ensure_execution_ledger_schema,
     set_baseline_jupiter_policy_slot,
@@ -818,5 +820,81 @@ def test_trade_chain_jup_v3_event_axis_uses_binance_strategy_bars_not_pyth_strip
     assert tc.get("event_axis_source") == "binance_strategy_bars_5m"
     assert tc["recency"]["newest_market_event_id"] == mid_binance
     assert mid_pyth not in (tc.get("event_axis") or [])
+
+
+def test_trade_chain_baseline_tile_policy_tag_matches_recorded_signal_mode(
+    tmp_path: Path,
+) -> None:
+    """Active slot JUPv4 must not relabel bars whose stored evaluation is v3 (per-column tag from DB)."""
+    import modules.anna_training.dashboard_bundle as dbmod
+
+    dbmod._MARKET_DB = None
+    repo_root = Path(__file__).resolve().parents[1]
+    mid_v3 = "SOL-PERP_5m_2026-04-02T10:00:00Z"
+    mid_v4 = "SOL-PERP_5m_2026-04-02T11:00:00Z"
+
+    market = tmp_path / "m.db"
+    conn_m = sqlite3.connect(market)
+    conn_m.executescript(
+        (repo_root / "data/sqlite/schema_phase5_binance_strategy_bars.sql").read_text(encoding="utf-8")
+    )
+    for meid, co, cc in (
+        (mid_v3, "2026-04-02T10:00:00Z", "2026-04-02T10:05:00Z"),
+        (mid_v4, "2026-04-02T11:00:00Z", "2026-04-02T11:05:00Z"),
+    ):
+        conn_m.execute(
+            """INSERT INTO binance_strategy_bars_5m (
+                canonical_symbol, tick_symbol, timeframe, candle_open_utc, candle_close_utc,
+                market_event_id, open, high, low, close, volume_base_asset, quote_volume_usdt,
+                computed_at
+            ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+            (
+                "SOL-PERP",
+                "SOL-PERP",
+                "5m",
+                co,
+                cc,
+                meid,
+                100.0,
+                101.0,
+                99.0,
+                100.5,
+                500.0,
+                100000.0,
+                cc,
+            ),
+        )
+    conn_m.commit()
+    conn_m.close()
+
+    ledger = tmp_path / "el.db"
+    conn_l = connect_ledger(ledger)
+    ensure_execution_ledger_schema(conn_l)
+    set_baseline_jupiter_policy_slot(conn_l, "jup_v4")
+    upsert_policy_evaluation(
+        market_event_id=mid_v3,
+        signal_mode=SIGNAL_MODE_JUPITER_3,
+        tick_mode="paper",
+        trade=False,
+        reason_code="no_trade",
+        features={},
+        conn=conn_l,
+    )
+    upsert_policy_evaluation(
+        market_event_id=mid_v4,
+        signal_mode=SIGNAL_MODE_JUPITER_4,
+        tick_mode="paper",
+        trade=False,
+        reason_code="no_trade",
+        features={},
+        conn=conn_l,
+    )
+    conn_l.commit()
+    conn_l.close()
+
+    tc = build_trade_chain_payload(db_path=ledger, market_db_path=market, max_events=8)
+    baseline = next(r for r in tc["rows"] if r["chain_kind"] == "baseline")
+    assert baseline["cells"][mid_v3]["baseline_jupiter_policy_tag"] == "JUPv3"
+    assert baseline["cells"][mid_v4]["baseline_jupiter_policy_tag"] == "JUPv4"
 
 

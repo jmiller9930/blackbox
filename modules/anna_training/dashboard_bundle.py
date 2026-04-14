@@ -4767,10 +4767,17 @@ def build_trade_chain_payload(
                 if ck_row == "baseline" and mid_k and tile_v3_gates_axis.get(mid_k):
                     d["jupiter_v3_gates"] = tile_v3_gates_axis[mid_k]
                 if ck_row == "baseline" and mid_k:
+                    # Per-column tag from persisted policy_evaluations for this bar — not the operator's
+                    # current slot (avoids relabeling pre-shift history as the active policy).
+                    pol_cell = fetch_baseline_policy_evaluation_for_market_event(
+                        conn, mid_k, prefer_active_slot=False
+                    )
+                    d["baseline_jupiter_policy_tag"] = baseline_jupiter_policy_tag_from_signal_mode(
+                        str((pol_cell or {}).get("signal_mode") or "")
+                    )
                     if mid_k in tile_binance_axis:
                         d["binance_kline_volume_ok"] = bool(tile_binance_axis.get(mid_k))
                     else:
-                        pol_cell = fetch_baseline_policy_evaluation_for_market_event(conn, mid_k)
                         _pf_cell = pol_cell.get("features") if isinstance(pol_cell, dict) else None
                         d["binance_kline_volume_ok"] = _binance_kline_volume_ok_from_features(
                             dict(_pf_cell) if isinstance(_pf_cell, dict) else None

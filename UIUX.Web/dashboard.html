@@ -1876,12 +1876,16 @@
     var jpBundle = opts.jp || {};
     var bjpol = jpBundle.baseline_jupiter_policy || {};
     var jupLab = String(bjpol.active_label || 'JUPv2').trim() || 'JUPv2';
+    var jupTagForCell =
+      c && c.baseline_jupiter_policy_tag != null && String(c.baseline_jupiter_policy_tag).trim() !== ''
+        ? String(c.baseline_jupiter_policy_tag).trim()
+        : jupLab;
     var binanceDotHtml = '';
     var binanceRestHtml = '';
     var bmd = opts.binanceMd || {};
     var pr = bmd.public_rest_ping || {};
     var cov = bmd.kline_quote_volume_coverage || {};
-    if (baselineLane && jupLabelUsesBinanceStrategyBars(jupLab)) {
+    if (baselineLane && jupLabelUsesBinanceStrategyBars(jupTagForCell)) {
       var bVolOk = c && c.binance_kline_volume_ok === true;
       binanceDotHtml =
         '<span tabindex="0" role="button" class="tc-binance-vol-dot ' +
@@ -1930,7 +1934,7 @@
         binanceDotHtml +
         binanceRestHtml +
         '<div class="tc-jup-policy-chip" title="Jupiter baseline policy version">' +
-        esc(jupLab) +
+        esc(jupTagForCell) +
         '</div></div>'
       : '';
     // One trade, one live surface: never repeat OPEN/HOLDING on earlier columns when ledger says position is open.
@@ -2038,7 +2042,7 @@
       !posOpenBaseline &&
       !entryHas &&
       baselineLane &&
-      jupLabelUsesBinanceStrategyBars(jupLab) &&
+      jupLabelUsesBinanceStrategyBars(jupTagForCell) &&
       typeof opts.colIndex === 'number' &&
       typeof opts.nEv === 'number' &&
       opts.colIndex === opts.nEv - 1
