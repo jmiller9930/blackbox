@@ -59,6 +59,7 @@ SQLite file: `renaissance_v4/data/renaissance_v4.sqlite3`.
 - **Zero-trade diagnostic (read-only):** `python3 -m renaissance_v4.research.diagnostic_pipeline` → `reports/diagnostic_v1.md` (same signal→fusion→risk path as replay; **does not** change thresholds or logic).
 - **Fusion correction (DV-ARCH-CORRECTION-009):** `reports/correction_v1.md` — GM contribution + `MIN_FUSION_SCORE=0.35`; contribution audit `python3 -m renaissance_v4.research.fusion_contribution_audit`.
 - **Risk choke diagnostic (read-only):** `python3 -m renaissance_v4.research.diagnostic_risk_pipeline` → `reports/diagnostic_risk_v1.md` (veto/regime/family breakdown; **does not** change risk logic).
+- **Risk correction:** `reports/correction_risk_v1.md` — tier thresholds + persistence/vol softening aligned to measured effective-score distribution (`risk_governor` v1.1).
 
 ### Runtime Ops (primary host) — mandatory full validation
 
