@@ -120,6 +120,8 @@ def run_diagnostic() -> dict:
         with redirect_stdout(buf):
             fusion_result = fuse_signal_results(signal_results)
 
+        active_signal_names = [r.signal_name for r in signal_results if r.active]
+
         if fusion_result.direction == "long":
             fusion_long += 1
         elif fusion_result.direction == "short":
@@ -135,6 +137,7 @@ def run_diagnostic() -> dict:
                 features=features,
                 regime=regime,
                 drawdown_proxy=drawdown_proxy,
+                active_signal_names=active_signal_names,
             )
 
         if risk_decision.allowed:

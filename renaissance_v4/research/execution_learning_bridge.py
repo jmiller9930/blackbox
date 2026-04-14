@@ -63,6 +63,7 @@ def record_closed_trade_to_ledger(
         metadata={
             "stop_loss": closed_trade.stop_loss,
             "take_profit": closed_trade.take_profit,
+            "entry_regime": getattr(closed_trade, "entry_regime", "unknown"),
             "pipeline": "ExecutionManager→TradeState→close→OutcomeRecord→LearningLedger",
         },
     )

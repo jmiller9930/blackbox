@@ -97,6 +97,7 @@ def main() -> None:
             signal_results.append(result)
 
         fusion_result = fuse_signal_results(signal_results)
+        active_signal_names = [r.signal_name for r in signal_results if r.active]
 
         if fusion_result.direction == "no_trade":
             fusion_no_trade_bars += 1
@@ -110,6 +111,7 @@ def main() -> None:
             features=features,
             regime=regime,
             drawdown_proxy=drawdown_proxy,
+            active_signal_names=active_signal_names,
         )
 
         if not risk_decision.allowed:
@@ -157,7 +159,6 @@ def main() -> None:
 
         flat = exec_manager.current_trade is None or not exec_manager.current_trade.open
         opened_this_bar = False
-        active_signal_names = [r.signal_name for r in signal_results if r.active]
         if (
             flat
             and risk_decision.allowed
@@ -175,6 +176,7 @@ def main() -> None:
                 notional_fraction=risk_decision.notional_fraction,
                 bar_high=state.current_high,
                 bar_low=state.current_low,
+                entry_regime=regime,
             )
             opened_this_bar = True
             entries_attempted += 1

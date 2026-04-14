@@ -12,6 +12,7 @@ v1.0
 
 Change History:
 - v1.0 Initial Phase 2 implementation.
+- v1.1 DV-ARCH-CORRECTION-013: slightly widen `range` vs default `unstable` chop bucket.
 """
 
 from __future__ import annotations
@@ -56,7 +57,11 @@ def classify_regime(features: FeatureSet) -> str:
         and features.compression_ratio <= COMPRESSION_RATIO_LOW
     ):
         regime = "volatility_compression"
-    elif abs(features.ema_distance) < TREND_DISTANCE_THRESHOLD and features.directional_persistence_10 < PERSISTENCE_THRESHOLD:
+    elif (
+        abs(features.ema_distance) < TREND_DISTANCE_THRESHOLD * 1.12
+        and features.directional_persistence_10 <= PERSISTENCE_THRESHOLD + 0.06
+    ):
+        # Borderline chop previously fell through to `unstable`; label as range when not in a vol extreme.
         regime = "range"
 
     print(f"[regime_classifier] Regime classified as: {regime}")

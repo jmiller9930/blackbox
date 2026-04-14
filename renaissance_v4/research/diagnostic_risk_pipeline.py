@@ -118,6 +118,8 @@ def run_risk_diagnostic() -> dict:
             srs = [s.evaluate(state, features, regime) for s in signals]
             fusion_result = fuse_signal_results(srs)
 
+        active_signal_names = [r.signal_name for r in srs if r.active]
+
         if fusion_result.direction == "long":
             fusion_long += 1
         elif fusion_result.direction == "short":
@@ -134,6 +136,7 @@ def run_risk_diagnostic() -> dict:
                 features=features,
                 regime=regime,
                 drawdown_proxy=0.0,
+                active_signal_names=active_signal_names,
             )
 
         fs = float(fusion_result.fusion_score)

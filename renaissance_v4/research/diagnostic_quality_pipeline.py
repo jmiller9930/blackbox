@@ -98,11 +98,13 @@ def run_silent_replay() -> tuple[list[OutcomeRecord], int]:
             regime = classify_regime(features)
             signal_results = [s.evaluate(state, features, regime) for s in signals]
             fusion_result = fuse_signal_results(signal_results)
+            active_signal_names = [r.signal_name for r in signal_results if r.active]
             risk_decision = evaluate_risk(
                 fusion_result=fusion_result,
                 features=features,
                 regime=regime,
                 drawdown_proxy=0.0,
+                active_signal_names=active_signal_names,
             )
 
         if exec_manager.current_trade and exec_manager.current_trade.open:
@@ -134,7 +136,6 @@ def run_silent_replay() -> tuple[list[OutcomeRecord], int]:
                     )
 
         flat = exec_manager.current_trade is None or not exec_manager.current_trade.open
-        active_signal_names = [r.signal_name for r in signal_results if r.active]
         if (
             flat
             and risk_decision.allowed
@@ -153,6 +154,7 @@ def run_silent_replay() -> tuple[list[OutcomeRecord], int]:
                     notional_fraction=risk_decision.notional_fraction,
                     bar_high=state.current_high,
                     bar_low=state.current_low,
+                    entry_regime=regime,
                 )
 
         processed += 1

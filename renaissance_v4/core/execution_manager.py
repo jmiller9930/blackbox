@@ -10,14 +10,18 @@ v1.1
 Change History:
 - v1.0 Initial Phase 6 implementation.
 - v1.1 Phase 7: entry metadata, bar excursions for MAE/MFE, record_bar_extremes.
+- v1.2 DV-ARCH-CORRECTION-013: ATR stop/target geometry; entry_regime on open.
 """
 
 from __future__ import annotations
 
 from renaissance_v4.core.trade_state import TradeState
 
-ATR_STOP_MULT = 1.6
-ATR_TARGET_MULT = 4.0
+# DV-ARCH-CORRECTION-013: diagnostic_quality_v1 showed stop exits with avg MAE > avg MFE and
+# ~72% stop vs ~28% target — geometry favored stop-outs. Widen stop slightly, bring target closer
+# to improve target hit rate vs premature stops (reward/risk in ATR units ~1.88 vs prior ~2.5).
+ATR_STOP_MULT = 1.78
+ATR_TARGET_MULT = 3.35
 
 
 class ExecutionManager:
@@ -38,6 +42,7 @@ class ExecutionManager:
         notional_fraction: float,
         bar_high: float,
         bar_low: float,
+        entry_regime: str = "unknown",
     ) -> None:
         atr_eff = max(atr, 1e-12)
         if direction == "long":
@@ -58,6 +63,7 @@ class ExecutionManager:
             contributing_signal_names=list(contributing_signal_names),
             risk_size_tier=size_tier,
             risk_notional_fraction=notional_fraction,
+            entry_regime=entry_regime,
             min_low_seen=bar_low,
             max_high_seen=bar_high,
         )
