@@ -490,6 +490,8 @@
     .tc-hdr-now { font-size: 0.55rem; font-weight: 800; color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em; }
     .tc-hdr-lab { font-size: 0.52rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); }
     .tc-hdr-primary { font-weight: 700; font-size: 0.62rem; color: var(--text); }
+    .tc-hdr-nd { opacity: 0.55; font-weight: 600; }
+    .tc-hdr-sameinstant { font-size: 0.48rem; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; }
     .tc-hdr-utc { font-size: 0.58rem; color: var(--muted); font-weight: 600; }
     .tc-hdr-sub { font-size: 0.52rem; color: var(--muted); font-weight: 600; margin-top: 0.15rem; }
     .tc-hdr-fallback { font-size: 0.6rem; word-break: break-all; font-weight: 600; color: var(--text); }
@@ -1211,7 +1213,7 @@
             Show Anna lanes (test / strategy — per-bar, independent of baseline)
           </label>
           <p class="tc-chain-note">
-            Columns are <strong>closed</strong> 5m bars only — the rightmost column is the last completed bucket (decision at the roll). No in-progress / “eval pending” column. Open baseline: OPEN/HOLDING anchor rules; uncheck Anna for baseline only.
+            Columns are <strong>closed</strong> 5m bars only — the rightmost column is the last completed bucket (decision at the roll). No in-progress / “eval pending” column. Each column header lists bar close as <strong>local · UTC</strong> (same instant, two labels — not two different times). Open baseline: OPEN/HOLDING anchor rules; uncheck Anna for baseline only.
           </p>
           <p class="tc-sync-banner" id="tc-sync-banner" hidden aria-live="polite"></p>
         </div>
@@ -2277,22 +2279,26 @@
     });
     var closeLocal = localFmt.format(primary);
     var closeUtc = utcFmt.format(primary).replace(/\s/g, '') + ' UTC';
+    /* One fused line so “12:40 UTC” vs “7:45 PM Central” is never read as two different events. */
+    var closeDual = esc(closeLocal) + ' <span class="tc-hdr-nd">·</span> ' + esc(closeUtc);
     var openLine = '';
     if (dOpen && dClose && dOpen.getTime() !== dClose.getTime()) {
-      openLine =
-        '<span class="tc-hdr-sub">Bar open ' +
+      var openDual =
         esc(localFmt.format(dOpen)) +
-        ' · ' +
-        esc(utcFmt.format(dOpen).replace(/\s/g, '') + ' UTC') +
-        '</span>';
+        ' <span class="tc-hdr-nd">·</span> ' +
+        esc(utcFmt.format(dOpen).replace(/\s/g, '') + ' UTC');
+      openLine = '<span class="tc-hdr-sub">Bar open (same instant) ' + openDual + '</span>';
     }
+    var stackTitle =
+      'Same bar-close instant: first time is your browser locale (e.g. Central); second is UTC. They are not two different times.';
     return (
-      '<div class="tc-hdr-stack">' +
+      '<div class="tc-hdr-stack" title="' + escAttr(stackTitle) + '">' +
       nowRow +
-      '<span class="tc-hdr-lab">Closes (decision)</span>' +
-      '<span class="tc-hdr-primary">' + esc(closeLocal) + '</span>' +
-      '<span class="tc-hdr-lab">Closes UTC</span>' +
-      '<span class="tc-hdr-utc">' + esc(closeUtc) + '</span>' +
+      '<span class="tc-hdr-lab">Bar close (decision)</span>' +
+      '<span class="tc-hdr-primary">' +
+      closeDual +
+      '</span>' +
+      '<span class="tc-hdr-sameinstant">same instant — local · UTC</span>' +
       openLine +
       '</div>'
     );
