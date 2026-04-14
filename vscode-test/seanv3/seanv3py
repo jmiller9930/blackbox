@@ -17,9 +17,13 @@ Usage: seanv3py <command> [options]
   stop       docker compose down
   restart    stop then deploy (no git pull unless --pull)
   pull       git pull origin main only (from repo root)
+  preflight  host checks: Binance ping + klines, capture dir, optional DB/keypair; see --require-container
 
 Options (deploy / restart):
   --pull     Run git pull origin main before compose (default: off for deploy)
+
+Options (preflight):
+  --require-container   Fail if Docker container seanv3 is not running (use after deploy)
 
 Environment:
   BLACKBOX_REPO   Override repo root (default: parent of vscode-test/seanv3)
@@ -30,6 +34,8 @@ Examples:
   ./seanv3py status
   ./seanv3py logs
   ./seanv3py console    # re-run after SSH disconnect reattaches to same tmux (see SEANV3PY.md)
+  ./seanv3py preflight
+  ./seanv3py preflight --require-container
 
 Environment (console):
   SEANV3_TMUX_SESSION   tmux session name (default: seanv3)
@@ -119,6 +125,103 @@ case "$cmd" in
     ;;
   pull)
     do_pull
+    ;;
+  preflight)
+    require_container=0
+    if [[ "${1:-}" == "--require-container" ]]; then
+      require_container=1
+    fi
+    fail=0
+    tmpfile=""
+    tmpfile="$(mktemp)" || exit 1
+    trap 'rm -f "$tmpfile"' EXIT
+
+    echo "[preflight] 1. Binance GET /api/v3/ping (expect HTTP 200) ..."
+    code="$(curl -sS -o /dev/null -w '%{http_code}' --max-time 20 https://api.binance.com/api/v3/ping)"
+    if [[ "$code" != "200" ]]; then
+      echo "[preflight] FAIL: ping HTTP $code (expect 200; 451 often means wrong egress — VPN/README.md)"
+      fail=1
+    else
+      echo "[preflight] OK: ping $code"
+    fi
+
+    echo "[preflight] 2. Binance GET /api/v3/klines SOLUSDT 5m limit=1 (expect HTTP 200 + JSON array) ..."
+    code="$(curl -sS -o "$tmpfile" -w '%{http_code}' --max-time 20 'https://api.binance.com/api/v3/klines?symbol=SOLUSDT&interval=5m&limit=1')"
+    if [[ "$code" != "200" ]]; then
+      echo "[preflight] FAIL: klines HTTP $code"
+      fail=1
+    else
+      if head -c 1 "$tmpfile" | grep -q '\['; then
+        echo "[preflight] OK: klines body is a JSON array"
+      else
+        echo "[preflight] FAIL: klines body does not look like a JSON array"
+        fail=1
+      fi
+    fi
+
+    echo "[preflight] 3. docker-compose.yml network_mode: host (required for Binance via host WG) ..."
+    if grep -qE '^[[:space:]]*network_mode:[[:space:]]*host[[:space:]]*$' docker-compose.yml; then
+      echo "[preflight] OK: network_mode host"
+    else
+      echo "[preflight] FAIL: network_mode: host missing — Binance may return 451"
+      fail=1
+    fi
+
+    echo "[preflight] 4. capture/ writable (bind mount for NDJSON + SQLite) ..."
+    mkdir -p capture
+    if touch capture/.seanv3_preflight_write 2>/dev/null; then
+      rm -f capture/.seanv3_preflight_write
+      echo "[preflight] OK: capture/ writable"
+    else
+      echo "[preflight] FAIL: capture/ not writable"
+      fail=1
+    fi
+
+    echo "[preflight] 5. SQLite sean_parity.db (if present) ..."
+    if [[ -f capture/sean_parity.db ]]; then
+      if command -v sqlite3 >/dev/null 2>&1; then
+        if sqlite3 capture/sean_parity.db "SELECT 1 FROM sqlite_master WHERE type='table' AND name='sean_binance_kline_poll' LIMIT 1;" 2>/dev/null | grep -q 1; then
+          echo "[preflight] OK: table sean_binance_kline_poll exists"
+        else
+          echo "[preflight] WARN: DB file exists but sean_binance_kline_poll missing (first app run creates it)"
+        fi
+      else
+        echo "[preflight] WARN: sqlite3 not installed — skipping schema check"
+      fi
+    else
+      echo "[preflight] INFO: sean_parity.db not yet (created on first successful poll)"
+    fi
+
+    echo "[preflight] 6. Wallet keypair (optional) ..."
+    if [[ -f capture/keypair.json ]]; then
+      if python3 -c "import json; json.load(open('capture/keypair.json'))" 2>/dev/null; then
+        echo "[preflight] OK: capture/keypair.json is valid JSON (enable KEYPAIR_PATH in compose to use)"
+      else
+        echo "[preflight] FAIL: capture/keypair.json is not valid JSON"
+        fail=1
+      fi
+    else
+      echo "[preflight] INFO: no capture/keypair.json (optional unless KEYPAIR_PATH uncommented in compose)"
+    fi
+
+    if [[ "$require_container" -eq 1 ]]; then
+      echo "[preflight] 7. Docker container seanv3 running (--require-container) ..."
+      if docker inspect -f '{{.State.Running}}' seanv3 2>/dev/null | grep -q true; then
+        echo "[preflight] OK: container seanv3 is running"
+        echo "[preflight] 8. Recent logs (last 15 lines) ..."
+        do_compose logs --tail=15 seanv3 2>/dev/null || do_compose logs --tail=15 2>/dev/null || true
+      else
+        echo "[preflight] FAIL: container seanv3 not running — run: ./seanv3py deploy"
+        fail=1
+      fi
+    fi
+
+    if [[ "$fail" -ne 0 ]]; then
+      echo "[preflight] FAILED — fix items above before relying on parity / paper run."
+      exit 1
+    fi
+    echo "[preflight] All automated checks passed."
+    echo "[preflight] Reminder: this stack is PAPER_TRADING=1 parity (see docker-compose.yml) — not live exchange orders."
     ;;
   *)
     echo "Unknown command: $cmd" >&2

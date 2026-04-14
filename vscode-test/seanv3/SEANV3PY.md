@@ -85,6 +85,29 @@ python3 seanv3.py status
 | `./seanv3py restart` | `down`, then `build` + `up -d`. |
 | `./seanv3py restart --pull` | `down`, `git pull`, then `build` + `up -d`. |
 | `./seanv3py pull` | `git pull origin main` only (repo root). |
+| `./seanv3py preflight` | Automated checks: Binance ping + klines, `network_mode: host` in compose, `capture/` writable, optional SQLite + keypair JSON. |
+| `./seanv3py preflight --require-container` | Same, plus **`seanv3`** container must be **running** and prints last log lines. |
+
+---
+
+## Pre-flight checklist (before you rely on parity / “paper” run)
+
+**Order:** run **host routing + API** checks first, then **deploy**, then **container + DB** checks. This stack is **`PAPER_TRADING=1`** in `docker-compose.yml` — it records parity data; it does **not** place live exchange orders. Real execution lives elsewhere in Blackbox when that phase is enabled.
+
+| # | Check | Why |
+|---|--------|-----|
+| 1 | **WireGuard / Binance path** on the host (see **`VPN/README.md`**) | Wrong egress often yields **HTTP 451** from Binance, not an app bug. |
+| 2 | **Binance `/api/v3/ping` → 200** | Confirms HTTPS + API reachability from **this host**. |
+| 3 | **Binance `/api/v3/klines` (SOLUSDT 5m)** → 200 + JSON array | Same path the poller uses; catches CDN/geo issues early. |
+| 4 | **`docker-compose.yml` has `network_mode: host`** | Required so the container uses **host** routing (Proton split-tunnel). |
+| 5 | **`capture/` writable** | NDJSON + SQLite bind-mount must be writable. |
+| 6 | **SQLite `sean_parity.db`** (after first poll) | Table **`sean_binance_kline_poll`** should exist; compare vs Blackbox via **`jup_v3_parity_compare`** when you need alignment proof. |
+| 7 | **Wallet** (`capture/keypair.json` + **`KEYPAIR_PATH`** in compose if you want pubkey in DB) | Optional for parity; invalid JSON should fail preflight if the file exists. |
+| 8 | **Container up** + logs show **`ok`: true** (no 451) | Use `./seanv3py preflight --require-container` after **`deploy`**. |
+
+**Automated:** `./seanv3py preflight` (host + compose + capture + optional DB/keypair). After **`deploy`**, run **`./seanv3py preflight --require-container`**.
+
+**Not in the script (operator judgment):** disk space on `capture/`, clock skew, Blackbox **`market_data`** DB path for parity scripts, and any org-specific approvals before “trading” outside this container.
 
 ## Environment
 
