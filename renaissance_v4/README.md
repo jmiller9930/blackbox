@@ -57,6 +57,16 @@ SQLite file: `renaissance_v4/data/renaissance_v4.sqlite3`.
 - **Report:** `renaissance_v4/reports/baseline_v1.md` — portfolio metrics, **trade-evidence sample table** (when trades exist), per-signal scorecards, sanity snapshot. Optional full ledger: `RENAISSANCE_V4_EXPORT_OUTCOMES=1 python3 -m renaissance_v4.research.replay_runner` → `reports/outcomes_full.jsonl`.
 - **Phase 8–11:** **Not** wired into fusion or replay until baseline is signed (`promotion_engine.adjust_weight` etc. remain scaffold).
 
+### Runtime Ops (primary host) — mandatory full validation
+
+Run on **clawbot** (or equivalent): stable network, multi-hour window.
+
+1. `cd` to repo root, `git pull origin main`
+2. `./renaissance_v4/run_proof_bundle.sh`  
+   - Optional full outcome export: `RENAISSANCE_V4_EXPORT_OUTCOMES=1 ./renaissance_v4/run_proof_bundle.sh` → `reports/outcomes_full.jsonl`
+3. **Hand back:** `renaissance_v4/reports/baseline_v1.md`, terminal lines showing **two identical** `[VALIDATION_CHECKSUM]` values, and short answers to the sanity questions using **actual** metrics from that report (trades, fusion/risk counters, scorecards, drawdown).
+4. **Failure:** zero closed trades, checksum mismatch, missing report, or empty scorecards when trades exist (per architect directive).
+
 ## Proof
 
 - **Phase 1:** `phase1_code_pack.md` §7.
