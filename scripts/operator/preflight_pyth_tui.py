@@ -27,6 +27,8 @@ Environment (optional):
   SEANV3_SSL_INSECURE=1 (disables TLS verification — not for production).
   SEANV3_AUTO_INIT_LEDGER_DB=0 — do not create an empty capture/sean_parity.db when missing.
   SEAN_PAPER_STARTING_BALANCE_USD — fallback if analog_meta.paper_starting_balance_usd missing (default 1000)
+  SEANV3_TUI_TRADE_ROWS — max rows in Trade window table (default 20, max 50)
+  SEANV3_CANONICAL_SYMBOL — sym column (default SOL-PERP)
 
 Exit: Ctrl+C
 """
@@ -43,6 +45,7 @@ import time
 import urllib.error
 import urllib.request
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -463,6 +466,155 @@ def _sean_ledger_panel(repo_root: Path, mark_usd: float | None = None) -> Panel:
     )
 
 
+def _format_iso_utc_short(iso: str | None) -> str:
+    if not iso:
+        return "—"
+    try:
+        s = str(iso).strip().replace("Z", "+00:00")
+        dt = datetime.fromisoformat(s)
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        else:
+            dt = dt.astimezone(timezone.utc)
+        return dt.strftime("%b %d, %Y %H:%M UTC")
+    except (ValueError, TypeError):
+        return str(iso)[:22] + ("…" if len(str(iso)) > 22 else "")
+
+
+def _truncate_mid(s: str | None, n: int = 32) -> str:
+    if not s:
+        return "—"
+    t = str(s).strip()
+    return t if len(t) <= n else t[: n - 1] + "…"
+
+
+def _exit_reason_from_meta(meta_json: str | None) -> str:
+    if not meta_json:
+        return "—"
+    try:
+        o = json.loads(meta_json)
+        if isinstance(o, dict):
+            r = o.get("exit_reason") or o.get("exitReason")
+            if r:
+                return str(r)[:24]
+    except json.JSONDecodeError:
+        pass
+    return "—"
+
+
+def _recent_closed_trades_panel(repo_root: Path) -> Panel:
+    """One row per closed trade from sean_paper_trades (baseline-style accounting)."""
+    p = _default_sean_sqlite(repo_root)
+    if not p.is_file():
+        return Panel(
+            Text("[dim]No SQLite — run SeanV3 container to populate capture/sean_parity.db[/dim]"),
+            title="Recent paper trades (closed)",
+            border_style="dim",
+        )
+    raw_lim = (os.environ.get("SEANV3_TUI_TRADE_ROWS") or "20").strip()
+    try:
+        limit = max(1, min(50, int(raw_lim)))
+    except ValueError:
+        limit = 20
+    sym = (os.environ.get("SEANV3_CANONICAL_SYMBOL") or os.environ.get("CANONICAL_SYMBOL") or "SOL-PERP").strip() or "SOL-PERP"
+    try:
+        conn = sqlite3.connect(str(p))
+        try:
+            rows = conn.execute(
+                """
+                SELECT id, engine_id, side, entry_time_utc, exit_time_utc,
+                       entry_price, exit_price, size_notional_sol, gross_pnl_usd,
+                       result_class, entry_market_event_id, metadata_json
+                FROM sean_paper_trades
+                ORDER BY id DESC
+                LIMIT ?
+                """,
+                (limit,),
+            ).fetchall()
+        finally:
+            conn.close()
+    except sqlite3.Error as e:
+        return Panel(Text(str(e), style="red"), title="Recent paper trades (closed)", border_style="red")
+
+    if not rows:
+        return Panel(
+            Text("[dim]No closed trades yet — engine opens/closes per Jupiter_3 + lifecycle.[/dim]"),
+            title="Recent paper trades (closed)",
+            border_style="dim",
+        )
+
+    tbl = Table(
+        box=box.ROUNDED,
+        expand=True,
+        show_header=True,
+        header_style="bold",
+        title=f"[bold]Last {len(rows)} closed trade(s) — paper[/bold]",
+        caption="[dim]trade_id = sean_<rowid>; compare timing with BlackBox via market_event_id / UTC[/dim]",
+    )
+    for h in (
+        "trade_id",
+        "exit (UTC)",
+        "entry (UTC)",
+        "sym",
+        "side",
+        "entry px",
+        "exit px",
+        "size",
+        "PnL USD",
+        "result",
+        "exit detail",
+        "market_event_id",
+    ):
+        tbl.add_column(h, overflow="ellipsis", no_wrap=False)
+
+    for r in rows:
+        (
+            tid,
+            _engine_id,
+            side,
+            et,
+            xt,
+            epx,
+            xpx,
+            sz,
+            gross,
+            rc,
+            emid,
+            meta,
+        ) = r
+        trade_id = f"sean_{tid}"
+        g = float(gross)
+        pnl_cell: Text | str
+        if g > 1e-9:
+            pnl_cell = Text(f"{g:+.4f}", style="bold green")
+        elif g < -1e-9:
+            pnl_cell = Text(f"{g:+.4f}", style="bold red")
+        else:
+            pnl_cell = Text(f"{g:+.4f}", style="dim")
+
+        tbl.add_row(
+            trade_id,
+            _format_iso_utc_short(xt),
+            _format_iso_utc_short(et),
+            sym,
+            str(side),
+            f"{float(epx):.4f}",
+            f"{float(xpx):.4f}",
+            f"{float(sz):.4f}",
+            pnl_cell,
+            str(rc),
+            _exit_reason_from_meta(meta),
+            _truncate_mid(emid, 40),
+        )
+
+    return Panel(
+        tbl,
+        title="Trade window (ledger rows)",
+        subtitle="[dim]SeanV3 sean_paper_trades · mode=paper[/dim]",
+        border_style="blue",
+    )
+
+
 def _policy_panel(
     policy: dict[str, Any],
     *,
@@ -575,6 +727,7 @@ def main(argv: list[str] | None = None) -> None:
         mark = float(q_oracle["price"]) if q_oracle and q_oracle.get("price") is not None else None
         pol = _policy_panel(current, repo_root=repo_root, effective_db=effective_db, entry_resolved=entry_path)
         sean_p = _sean_ledger_panel(repo_root, mark_usd=mark)
+        trades_tbl = _recent_closed_trades_panel(repo_root)
         ht = _header_table(checks)
         strict_ok = all(c.ok for c in checks)
         banner = (
@@ -589,7 +742,7 @@ def main(argv: list[str] | None = None) -> None:
             border_style="green" if strict_ok else "red",
         )
         body = _main_panel(parsed, now_ts)
-        return Group(pol, sean_p, top, body)
+        return Group(pol, sean_p, trades_tbl, top, body)
 
     console.print(
         "[dim]SeanV3 operator TUI — preflight + policy + Pyth  "

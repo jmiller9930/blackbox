@@ -2,7 +2,7 @@
 
 SeanV3 is **its own application** in this repo: **`vscode-test/seanv3/`** (Node, Docker). It does **not** run inside or import the BlackBox application pod. Strategy, data, ledger, and reporting are **SeanV3-owned**.
 
-**Operator initiative:** use the **SeanV3 operator TUI** — `scripts/operator/preflight_pyth_tui.py` (preflight, policy slots, oracle context). That TUI is the primary shell for “is the SeanV3 stack healthy, what policy slot is active, what does Hermes show” — not a BlackBox dashboard.
+**Operator initiative:** use the **SeanV3 operator TUI** — `scripts/operator/preflight_pyth_tui.py` (preflight, policy slots, oracle context, **paper account summary**, **trade window** table of closed `sean_paper_trades` with `trade_id`, UTC timestamps, P&amp;L). That TUI is the primary shell for “is the SeanV3 stack healthy, what policy slot is active, what does Hermes show” — not a BlackBox dashboard.
 
 **Optional, separate concern:** other systems in the monorepo may **compare** artifacts to SeanV3 **after** SeanV3 is complete on its own. That is **not** part of SeanV3 runtime and **not** required to operate SeanV3.
 
