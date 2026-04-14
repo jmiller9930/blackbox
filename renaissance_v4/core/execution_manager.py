@@ -5,10 +5,11 @@ Purpose:
 Phase 6 paper execution: open trades with ATR-based stop/target, evaluate each bar with SL-first (pessimistic) same-bar rule.
 
 Version:
-v1.0
+v1.1
 
 Change History:
 - v1.0 Initial Phase 6 implementation.
+- v1.1 Phase 7: entry metadata, bar excursions for MAE/MFE, record_bar_extremes.
 """
 
 from __future__ import annotations
@@ -31,6 +32,12 @@ class ExecutionManager:
         direction: str,
         atr: float,
         size: float,
+        entry_time: int,
+        contributing_signal_names: list[str],
+        size_tier: str,
+        notional_fraction: float,
+        bar_high: float,
+        bar_low: float,
     ) -> None:
         atr_eff = max(atr, 1e-12)
         if direction == "long":
@@ -47,9 +54,29 @@ class ExecutionManager:
             stop_loss=stop,
             take_profit=target,
             size=size,
+            entry_time=entry_time,
+            contributing_signal_names=list(contributing_signal_names),
+            risk_size_tier=size_tier,
+            risk_notional_fraction=notional_fraction,
+            min_low_seen=bar_low,
+            max_high_seen=bar_high,
         )
 
         print(f"[execution] OPEN {direction} @ {price} SL={stop} TP={target} size={size:.4f}")
+
+    def record_bar_extremes(self, high: float, low: float) -> None:
+        """
+        Update running min/max bar range while a position is open (for MAE/MFE).
+        """
+        if not self.current_trade or not self.current_trade.open:
+            return
+        t = self.current_trade
+        if t.min_low_seen is None or t.max_high_seen is None:
+            t.min_low_seen = low
+            t.max_high_seen = high
+            return
+        t.min_low_seen = min(t.min_low_seen, low)
+        t.max_high_seen = max(t.max_high_seen, high)
 
     def evaluate_bar(self, high: float, low: float) -> tuple[str, float] | None:
         """
