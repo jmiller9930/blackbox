@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 /**
  * Jupiter — read-only web UI for SeanV3 parity data (wallet, position, trades from sean_parity.db).
- * Default port 737 (JUPITER_WEB_PORT or legacy SEANV3_WEB_PORT). Host networking recommended.
- * Lab: http://clawbot.a51.corp:737/ (operator browser on LAN/VPN).
+ * Default port 707 (JUPITER_WEB_PORT or legacy SEANV3_WEB_PORT). Host networking recommended.
+ * Lab: http://clawbot.a51.corp:707/ (operator browser on LAN/VPN).
  */
 import http from 'http';
 import { DatabaseSync } from 'node:sqlite';
@@ -187,8 +187,8 @@ function htmlPage(data) {
 </html>`;
 }
 
-const portRaw = process.env.JUPITER_WEB_PORT || process.env.SEANV3_WEB_PORT || '737';
-const port = Math.max(1, Math.min(65535, parseInt(portRaw, 10) || 737));
+const portRaw = process.env.JUPITER_WEB_PORT || process.env.SEANV3_WEB_PORT || '707';
+const port = Math.max(1, Math.min(65535, parseInt(portRaw, 10) || 707));
 const bind = (process.env.JUPITER_WEB_BIND || process.env.SEANV3_WEB_BIND || '0.0.0.0').trim() || '0.0.0.0';
 
 const server = http.createServer((req, res) => {

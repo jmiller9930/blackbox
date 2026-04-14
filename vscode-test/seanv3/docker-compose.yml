@@ -18,7 +18,7 @@
 #     node --experimental-sqlite backfill.mjs
 # Optional external compare jobs exist elsewhere in the monorepo — not part of SeanV3 runtime.
 #
-# Jupiter read-only web UI: http://clawbot.a51.corp:737/ — JUPITER_WEB_PORT (default 737; SEANV3_WEB_PORT still accepted).
+# Jupiter read-only web UI: http://clawbot.a51.corp:707/ — JUPITER_WEB_PORT (default 707; SEANV3_WEB_PORT still accepted).
 services:
   seanv3:
     build: .
@@ -48,7 +48,7 @@ services:
     volumes:
       - ./capture:/capture
 
-  # Jupiter — read-only dashboard; shares SQLite with seanv3 (host network → port 737 on host).
+  # Jupiter — read-only dashboard; shares SQLite with seanv3 (host network → port 707 on host).
   jupiter-web:
     image: seanv3:local
     container_name: jupiter-web
@@ -56,7 +56,7 @@ services:
     command: ["node", "--experimental-sqlite", "jupiter_web.mjs"]
     environment:
       SQLITE_PATH: /capture/sean_parity.db
-      JUPITER_WEB_PORT: "737"
+      JUPITER_WEB_PORT: "707"
       JUPITER_WEB_BIND: "0.0.0.0"
     volumes:
       - ./capture:/capture
