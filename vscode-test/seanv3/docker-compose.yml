@@ -35,6 +35,7 @@ services:
       SQLITE_PATH: /capture/sean_parity.db
       # Optional: Solana keypair JSON (same format as solana-keygen). Only pubkey is stored in DB.
       # KEYPAIR_PATH: /capture/keypair.json
+      # Paper (default). For live-capital path later: set "0" and follow operator governance — TUI `--actual` only shows intent.
       PAPER_TRADING: "1"
       # Simulated "account" for testing (USD label — no real custody). Frozen in DB on first run.
       SEAN_PAPER_STARTING_BALANCE_USD: "1000"

@@ -31,6 +31,8 @@ Environment (optional):
   SEANV3_TUI_PARITY_ROWS — max rows in Sean vs BlackBox parity table (default 18, max 40)
   SEANV3_CANONICAL_SYMBOL — sym column (default SOL-PERP)
   BLACKBOX_EXECUTION_LEDGER_PATH — SQLite for baseline ``execution_trades`` (default repo data/sqlite/execution_ledger.db)
+  KEYPAIR_PATH / SEANV3_KEYPAIR_PATH / BLACKBOX_SOLANA_KEYPAIR_PATH — Solana keypair JSON (SeanV3 loads pubkey into ``paper_wallet`` when the container runs)
+  SEANV3_TUI_ACTUAL=1 — same as ``--actual`` (banner: live-capital intent vs paper)
 
 Exit: Ctrl+C
 """
@@ -871,6 +873,90 @@ def _recent_closed_trades_panel(repo_root: Path) -> Panel:
     )
 
 
+def _resolve_keypair_path_env() -> str:
+    return (
+        os.environ.get("KEYPAIR_PATH")
+        or os.environ.get("SEANV3_KEYPAIR_PATH")
+        or os.environ.get("BLACKBOX_SOLANA_KEYPAIR_PATH")
+        or ""
+    ).strip()
+
+
+def _tui_actual_mode(args: argparse.Namespace) -> bool:
+    v = (os.environ.get("SEANV3_TUI_ACTUAL") or "").strip().lower()
+    if v in ("1", "true", "yes"):
+        return True
+    return bool(getattr(args, "actual", False))
+
+
+def _trading_mode_panel(*, actual: bool) -> Panel:
+    if actual:
+        body = (
+            "[bold white on red] ACTUAL [/bold white on red]  "
+            "[bold]Live-capital intent[/bold] — operator acknowledges risk. "
+            "Deploy SeanV3 with [bold]PAPER_TRADING=0[/bold] when you move off simulated paper; "
+            "the TUI flag does not change Docker by itself."
+        )
+        return Panel(Text.from_markup(body), title="Trading mode", border_style="red")
+    return Panel(
+        Text.from_markup(
+            "[bold cyan]PAPER[/bold cyan]  Simulated ledger — default. "
+            "Use [bold]--actual[/bold] or SEANV3_TUI_ACTUAL=1 when you want the live-intent banner."
+        ),
+        title="Trading mode",
+        border_style="cyan",
+    )
+
+
+def _wallet_panel(repo_root: Path) -> Panel:
+    """SeanV3 stores pubkey in capture/sean_parity.db ``paper_wallet`` after connectWalletOnce in app.mjs."""
+    p = _default_sean_sqlite(repo_root)
+    env_kp = _resolve_keypair_path_env()
+    lines: list[str] = []
+
+    if not p.is_file():
+        lines.append("[dim]Sean DB not found — start SeanV3 to create capture/sean_parity.db[/dim]")
+        if env_kp:
+            lines.append(f"Env keypair path set: [yellow]{env_kp}[/yellow]")
+        return Panel(Text.from_markup("\n".join(lines)), title="Wallet", border_style="dim")
+
+    try:
+        conn = sqlite3.connect(str(p))
+        try:
+            row = conn.execute(
+                "SELECT pubkey_base58, keypair_path FROM paper_wallet WHERE id=1"
+            ).fetchone()
+            st = conn.execute("SELECT v FROM analog_meta WHERE k='wallet_status'").fetchone()
+        finally:
+            conn.close()
+    except sqlite3.Error as e:
+        return Panel(Text(str(e), style="red"), title="Wallet", border_style="red")
+
+    if row and row[0]:
+        pk, kpath = str(row[0]).strip(), row[1]
+        status = (str(st[0]).strip() if st and st[0] else "") or "connected"
+        lines.append("[bold green]Connected[/bold green]  (pubkey on file in Sean DB)")
+        lines.append(f"[bold]Pubkey[/bold]  [cyan]{pk}[/cyan]")
+        if kpath:
+            lines.append(f"Recorded keypair path: [dim]{kpath}[/dim]")
+        if status:
+            lines.append(f"wallet_status: [dim]{status}[/dim]")
+    else:
+        lines.append("[yellow]Not connected in DB yet[/yellow] — SeanV3 writes pubkey when KEYPAIR_PATH is set and readable.")
+        if env_kp:
+            ep = Path(env_kp).expanduser()
+            if ep.is_file():
+                lines.append(f"Host env points to existing file: [green]{ep}[/green] — restart SeanV3 to ingest.")
+            else:
+                lines.append(f"Host env: [yellow]{env_kp}[/yellow] [dim](file missing?)[/dim]")
+        else:
+            lines.append("[dim]Set KEYPAIR_PATH (or SEANV3_KEYPAIR_PATH / BLACKBOX_SOLANA_KEYPAIR_PATH).[/dim]")
+
+    lines.append(f"DB: [dim]{p}[/dim]")
+    border = "green" if (row and row[0]) else "yellow"
+    return Panel(Text.from_markup("\n".join(lines)), title="Wallet (SeanV3 parity DB)", border_style=border)
+
+
 def _policy_panel(
     policy: dict[str, Any],
     *,
@@ -922,6 +1008,11 @@ def _parse_args(argv: list[str]) -> argparse.Namespace:
     p.add_argument("--policy", type=str, default=None, help="Policy id from registry")
     p.add_argument("--list-policies", action="store_true", help="Print policy ids and exit")
     p.add_argument("--menu", action="store_true", help="Interactive policy picker before the TUI")
+    p.add_argument(
+        "--actual",
+        action="store_true",
+        help="Banner: live-capital intent (use with SeanV3 PAPER_TRADING=0 when leaving paper). Env: SEANV3_TUI_ACTUAL=1",
+    )
     return p.parse_args(argv)
 
 
@@ -968,6 +1059,7 @@ def main(argv: list[str] | None = None) -> None:
 
     effective_db = resolve_effective_market_data_path(repo_root, current)
     entry_path = resolve_entry_path(repo_root, current)
+    actual_mode = _tui_actual_mode(args)
 
     console = Console()
     hermes_bucket: dict[str, Any] = {}
@@ -981,7 +1073,9 @@ def main(argv: list[str] | None = None) -> None:
         now_ts = time.time()
         q_oracle = _parse_pyth_price(parsed) if parsed else None
         mark = float(q_oracle["price"]) if q_oracle and q_oracle.get("price") is not None else None
+        mode_p = _trading_mode_panel(actual=actual_mode)
         pol = _policy_panel(current, repo_root=repo_root, effective_db=effective_db, entry_resolved=entry_path)
+        wallet_p = _wallet_panel(repo_root)
         sean_p = _sean_ledger_panel(repo_root, mark_usd=mark)
         trades_tbl = _recent_closed_trades_panel(repo_root)
         ht = _header_table(checks)
@@ -999,11 +1093,11 @@ def main(argv: list[str] | None = None) -> None:
         )
         body = _main_panel(parsed, now_ts)
         parity = _parity_panel(repo_root)
-        return Group(pol, sean_p, parity, trades_tbl, top, body)
+        return Group(mode_p, pol, wallet_p, sean_p, parity, trades_tbl, top, body)
 
     console.print(
         "[dim]SeanV3 operator TUI — preflight + policy + Pyth  "
-        "(Ctrl+C to exit | --menu | SEANV3_ACTIVE_POLICY_ID)[/dim]\n"
+        "(Ctrl+C to exit | --menu | --actual | SEANV3_ACTIVE_POLICY_ID)[/dim]\n"
     )
     with Live(render(), console=console, refresh_per_second=min(1.0 / max(refresh, 0.25), 30.0)) as live:
         try:
