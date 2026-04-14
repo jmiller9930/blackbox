@@ -1855,7 +1855,7 @@ def _recent_baseline_trades_for_dashboard_strip(
     cur = conn.execute(
         """
         SELECT lane, strategy_id, market_event_id, side, symbol, timeframe, entry_time, entry_price, exit_price,
-               exit_reason, exit_time, size, pnl_usd, created_at_utc, trade_id
+               exit_reason, exit_time, size, pnl_usd, created_at_utc, trade_id, context_snapshot_json
         FROM execution_trades
         WHERE lane = 'baseline' AND strategy_id = ?
         ORDER BY COALESCE(created_at_utc, entry_time, '') DESC, trade_id DESC
@@ -1885,13 +1885,7 @@ def _recent_baseline_trades_for_dashboard_strip(
                 exit_time=row.get("exit_time"),
                 market_db_path=mpath,
             )
-        mid_strip = str(row.get("market_event_id") or "").strip()
-        pol_rw = (
-            fetch_baseline_policy_evaluation_for_market_event(conn, mid_strip) if mid_strip else None
-        )
-        jup_tag = baseline_jupiter_policy_tag_from_signal_mode(
-            str((pol_rw or {}).get("signal_mode") or "")
-        )
+        jup_tag = baseline_jupiter_policy_tag_for_execution_trade(conn, row)
         out.append(
             {
                 "market_event_id": str(row.get("market_event_id") or ""),
@@ -2033,7 +2027,9 @@ def _recent_baseline_policy_trade_rows_for_strip(
             risk_pct=rp_f,
             leverage=lev_i,
         )
-        pol_exit = fetch_baseline_policy_evaluation_for_market_event(conn, mid)
+        pol_exit = fetch_baseline_policy_evaluation_for_market_event(
+            conn, mid, prefer_active_slot=False
+        )
         exit_feat = _fetch_baseline_exit_policy_features(conn, mid)
         _raw_pf = (pol_exit or {}).get("features")
         pol_feat = _raw_pf if isinstance(_raw_pf, dict) else {}
@@ -2095,8 +2091,8 @@ def _recent_baseline_policy_trade_rows_for_strip(
                 "mae_usd": round(mae_val, 6) if mae_val is not None else None,
                 "hold_duration_minutes": round(hdm, 4) if hdm is not None else None,
                 "hold_bars_estimate": hbars,
-                "baseline_jupiter_policy_tag": baseline_jupiter_policy_tag_from_signal_mode(
-                    str((pol_exit or {}).get("signal_mode") or "")
+                "baseline_jupiter_policy_tag": baseline_jupiter_policy_tag_for_execution_trade(
+                    conn, ledger_row
                 ),
             }
         )
@@ -2392,7 +2388,9 @@ def _resolve_entry_market_event_id_from_policy(
     mid = str(exit_mid or "").strip()
     if not mid:
         return None
-    pol = fetch_baseline_policy_evaluation_for_market_event(conn, mid)
+    pol = fetch_baseline_policy_evaluation_for_market_event(
+        conn, mid, prefer_active_slot=False
+    )
     feat = pol.get("features") if isinstance(pol, dict) else None
     if isinstance(feat, dict):
         em = str(feat.get("entry_market_event_id") or "").strip() or None
@@ -2625,6 +2623,46 @@ def _ledger_context_parsed(ledger_row: dict[str, Any]) -> dict[str, Any]:
     return ctx if isinstance(ctx, dict) else {}
 
 
+def baseline_jupiter_policy_tag_for_execution_trade(
+    conn: sqlite3.Connection,
+    ledger_row: dict[str, Any],
+) -> str:
+    """
+    Strip/report JUP label for a baseline ``execution_trades`` row.
+
+    Prefer ``policy_evaluations`` on the **entry** bar (the policy that produced the open decision).
+    The ledger row's ``market_event_id`` is often the **exit** bar on lifecycle closes; looking up
+    policy only on that id with ``prefer_active_slot=True`` incorrectly labels old trades with the
+    operator's current slot (e.g. all JUPv4).
+
+    Resolution uses ``prefer_active_slot=False`` (stable v2→v3→v4). Falls back to the exit bar when
+    entry cannot be resolved.
+    """
+    exit_mid = str(ledger_row.get("market_event_id") or "").strip()
+    ctx = _ledger_context_parsed(ledger_row)
+    tid_raw = str(ledger_row.get("trade_id") or "").strip() or None
+    pos_open = _fetch_position_open_payload(conn, tid_raw) if tid_raw else None
+    entry_mid = str(ctx.get("entry_market_event_id") or "").strip() or None
+    if not entry_mid and pos_open:
+        entry_mid = str(pos_open.get("entry_market_event_id") or "").strip() or None
+    if not entry_mid:
+        entry_mid = _resolve_entry_market_event_id_from_policy(conn, exit_mid)
+    seen: set[str] = set()
+    for mid in (entry_mid, exit_mid):
+        m = str(mid or "").strip()
+        if not m or m in seen:
+            continue
+        seen.add(m)
+        pol = fetch_baseline_policy_evaluation_for_market_event(
+            conn, m, prefer_active_slot=False
+        )
+        if pol:
+            return baseline_jupiter_policy_tag_from_signal_mode(
+                str((pol or {}).get("signal_mode") or "")
+            )
+    return baseline_jupiter_policy_tag_from_signal_mode("")
+
+
 def _entry_sl_tp_from_open_or_context(
     pos_open: dict[str, Any] | None,
     ledger_row: dict[str, Any],
@@ -2663,7 +2701,9 @@ def _free_collateral_usd_for_row(
     ctx = _ledger_context_parsed(ledger_row)
     em = str(ctx.get("entry_market_event_id") or "").strip()
     if em:
-        pol = fetch_baseline_policy_evaluation_for_market_event(conn, em)
+        pol = fetch_baseline_policy_evaluation_for_market_event(
+            conn, em, prefer_active_slot=False
+        )
         feat = pol.get("features") if pol else None
         if isinstance(feat, dict):
             return _coerce_finite_float(feat.get("free_collateral_usd"))
@@ -3446,7 +3486,9 @@ def build_baseline_trades_report(
             if mk and tile_v3_gates.get(mk):
                 r["jupiter_v3_gates"] = tile_v3_gates[mk]
             ledger_row_i, cell_i, _pos_open_i = meta_pairs[i]
-            pol_i = fetch_baseline_policy_evaluation_for_market_event(conn, mk)
+            pol_i = fetch_baseline_policy_evaluation_for_market_event(
+                conn, mk, prefer_active_slot=False
+            )
             _pfeat = pol_i.get("features") if isinstance(pol_i, dict) else None
             if mk and mk in tile_binance_axis:
                 r["binance_kline_volume_ok"] = bool(tile_binance_axis.get(mk))
@@ -3454,8 +3496,8 @@ def build_baseline_trades_report(
                 r["binance_kline_volume_ok"] = _binance_kline_volume_ok_from_features(
                     dict(_pfeat) if isinstance(_pfeat, dict) else None
                 )
-            r["baseline_jupiter_policy_tag"] = baseline_jupiter_policy_tag_from_signal_mode(
-                str((pol_i or {}).get("signal_mode") or "")
+            r["baseline_jupiter_policy_tag"] = baseline_jupiter_policy_tag_for_execution_trade(
+                conn, ledger_row_i
             )
             exit_feat = _fetch_baseline_exit_policy_features(conn, mk)
             feat_for_sl = exit_feat if exit_feat else (pol_i.get("features") if pol_i else None)

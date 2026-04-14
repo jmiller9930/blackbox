@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import sqlite3
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -20,6 +21,7 @@ from modules.anna_training.dashboard_bundle import (
     BASELINE_TRADES_REPORT_SCHEMA,
     _baseline_assign_lifecycle_tile_slots,
     _baseline_lifecycle_for_dashboard_from_active_snapshot,
+    baseline_jupiter_policy_tag_for_execution_trade,
     build_baseline_active_position_snapshot,
     _compact_baseline_cell_policy_bound,
     _event_axis_jupiter_tile_narratives,
@@ -896,5 +898,80 @@ def test_trade_chain_baseline_tile_policy_tag_matches_recorded_signal_mode(
     baseline = next(r for r in tc["rows"] if r["chain_kind"] == "baseline")
     assert baseline["cells"][mid_v3]["baseline_jupiter_policy_tag"] == "JUPv3"
     assert baseline["cells"][mid_v4]["baseline_jupiter_policy_tag"] == "JUPv4"
+
+
+def test_execution_trade_policy_tag_prefers_entry_bar_over_exit(tmp_path: Path) -> None:
+    """Strip/report tag must follow entry-bar policy when exit bar was re-evaluated under a newer mode."""
+    entry_mid = "SOL-PERP_5m_2026-06-01T08:00:00Z"
+    exit_mid = "SOL-PERP_5m_2026-06-01T10:00:00Z"
+    ledger = tmp_path / "el.db"
+    conn = connect_ledger(ledger)
+    ensure_execution_ledger_schema(conn)
+    set_baseline_jupiter_policy_slot(conn, "jup_v4")
+    upsert_policy_evaluation(
+        market_event_id=entry_mid,
+        signal_mode=SIGNAL_MODE_JUPITER_3,
+        tick_mode="paper",
+        trade=False,
+        reason_code="jupiter_2_baseline_holding",
+        features={"lifecycle": "holding"},
+        side="long",
+        conn=conn,
+    )
+    upsert_policy_evaluation(
+        market_event_id=exit_mid,
+        signal_mode=SIGNAL_MODE_JUPITER_4,
+        tick_mode="paper",
+        trade=False,
+        reason_code="jupiter_2_baseline_exit",
+        features={},
+        conn=conn,
+    )
+    ctx = json.dumps({"entry_market_event_id": entry_mid, "lifecycle": "exit"})
+    conn.execute(
+        """
+        INSERT INTO execution_trades (
+            trade_id, strategy_id, lane, mode, market_event_id, symbol, timeframe,
+            side, entry_time, entry_price, size, exit_time, exit_price, exit_reason,
+            pnl_usd, context_snapshot_json, notes, trace_id, schema_version, created_at_utc
+        ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+        """,
+        (
+            "tr_tag_entry",
+            "baseline",
+            "baseline",
+            "paper",
+            exit_mid,
+            "SOL-PERP",
+            "5m",
+            "long",
+            "2026-06-01T08:00:00Z",
+            100.0,
+            1.0,
+            "2026-06-01T10:05:00Z",
+            101.0,
+            "TAKE_PROFIT",
+            1.0,
+            ctx,
+            "fixture",
+            None,
+            "execution_trade_v1",
+            "2026-06-01T10:05:01Z",
+        ),
+    )
+    conn.commit()
+    cur = conn.execute(
+        """
+        SELECT lane, strategy_id, market_event_id, side, symbol, timeframe, entry_time, entry_price, exit_price,
+               exit_reason, exit_time, size, pnl_usd, created_at_utc, trade_id, mode,
+               context_snapshot_json
+        FROM execution_trades WHERE trade_id = ?
+        """,
+        ("tr_tag_entry",),
+    )
+    cols = [d[0] for d in cur.description]
+    ledger_row = dict(zip(cols, cur.fetchone()))
+    assert baseline_jupiter_policy_tag_for_execution_trade(conn, ledger_row) == "JUPv3"
+    conn.close()
 
 
