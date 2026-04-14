@@ -14,15 +14,23 @@
 
 The file `Clawbot-MX-FREE-15.full-tunnel.DO-NOT-DEPLOY-ON-CLAWBOT.conf` is a Proton download with **full tunnel** — **do not** deploy it to clawbot **as-is** for production; it violates the requirement above. Use **`wg-proton-binance-only.example.conf`** as a template and narrow **`AllowedIPs`** per operations.
 
+## Scope — host networking (not “Blackbox-only”)
+
+**WireGuard on clawbot is a machine concern.** `wg-proton-mx`, kernel routes, and **`[Peer] AllowedIPs`** (plus any **`/32`** routes merged by ops/scripts) live on the **host**. This is **not** a VPN that exists only inside a Blackbox container.
+
+**Who uses the tunnel:** Anything on that server whose packets **egress the host** toward Binance API destinations that the host routes via **`wg-proton-mx`** — including **other Docker containers** (typical **bridge** networks **NAT to the host**; the **host** then chooses the route by destination), **other users’ processes**, and **systemd services** — **if** they resolve the same Binance endpoints and you have **not** built a separate routing table or VPN **only** inside some other container. There is no requirement that only Blackbox code may use Proton for Binance on this host.
+
+**What is Blackbox-specific in *this* repo:** the **documentation** (this file), **maintenance scripts** under **`scripts/clawbot/`** (e.g. **`binance_api_route_via_proton_wg.sh`**), and **Docker Compose** choices (**`network_mode: host`** for our services in **`UIUX.Web/`**, **`vscode-test/seanv3/`**, etc.) so **our** stacks use the **normal host forwarding path** and the same routing table as the rest of the machine. The **tunnel interface itself** is **host infrastructure**, not a feature shipped only inside a Blackbox image.
+
 ## Traffic model (authoritative) — Binance via Proton WG vs production network
 
 This section states **exactly** what must happen on **clawbot** so engineering, operators, and audits align. It is not optional interpretation.
 
 ### Binance traffic — **must** use `wg-proton-mx` (Proton WireGuard)
 
-**Definition:** Any **outbound** traffic from clawbot whose **destination** is **Binance public API** used by Blackbox for market OHLC / connectivity checks. Today that is primarily:
+**Definition:** Any **outbound** traffic from clawbot whose **destination** is **Binance public API** (including Blackbox market OHLC / connectivity checks, and **any other process on the host** that hits the same API hosts). Today that is primarily:
 
-- **HTTPS** to **`api.binance.com`** (REST: ping, klines, and any path the repo calls under that host for Jupiter V3 / Sean parity).
+- **HTTPS** to **`api.binance.com`** (REST: ping, klines, and any path callers use under that host — Jupiter V3 / Sean parity, sync jobs, ad-hoc `curl`, etc.).
 
 **Requirement:** That traffic **must** leave the host through the **Proton WireGuard** interface **`wg-proton-mx`**, using the Proton exit so Binance applies **eligible** jurisdiction checks (symptom when wrong: **HTTP 451** if packets exit the **production** NIC instead).
 
