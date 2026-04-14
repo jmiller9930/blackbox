@@ -12,6 +12,7 @@ v1.0
 
 Change History:
 - v1.0 Initial Phase 4 implementation.
+- v1.1 DV-ARCH-CORRECTION-009: geometric-mean contribution; MIN_FUSION_SCORE 0.35 from measured scale.
 """
 
 from __future__ import annotations
