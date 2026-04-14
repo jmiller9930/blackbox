@@ -6,6 +6,8 @@
 
 **Modular manifest + plug-in registries** (core engine vs catalog vs manifest recipe): [`quant_research_kitchen_modularity_v1.md`](quant_research_kitchen_modularity_v1.md).
 
+**Strategy Research Agent (SRA)** — governed kitchen conductor role (interfaces + artifacts; not full autonomy in v1): [`strategy_research_agent_v1.md`](strategy_research_agent_v1.md).
+
 **Status synchronization:** Updates that change phase scope or completion must update **`docs/blackbox_master_plan.md`** and **`docs/architect/directives/directive_execution_log.md`** in the same change set (`Plan/log status sync: PASS`).
 
 ---

@@ -2,7 +2,7 @@
 
 This document is the **version 1** product spec for **Quant Research Kitchen V1**: the governed, web-facing strategy research and validation surface built on the Renaissance validation backend. It also serves as a short **SME usage** guide and lists **what remains manual** in v1.
 
-**Architecture thesis (permanent layer):** [`docs/architect/quant_research_kitchen_v1.md`](../docs/architect/quant_research_kitchen_v1.md). **Modular manifests + plug-in catalog:** [`docs/architect/quant_research_kitchen_modularity_v1.md`](../docs/architect/quant_research_kitchen_modularity_v1.md) — registry (`renaissance_v4/registry/catalog_v1.json`), manifests (`configs/manifests/`), `python -m renaissance_v4.manifest <file.json>`.
+**Architecture thesis (permanent layer):** [`docs/architect/quant_research_kitchen_v1.md`](../docs/architect/quant_research_kitchen_v1.md). **Modular manifests + plug-in catalog:** [`docs/architect/quant_research_kitchen_modularity_v1.md`](../docs/architect/quant_research_kitchen_modularity_v1.md) — registry (`renaissance_v4/registry/catalog_v1.json`), manifests (`configs/manifests/`), `python -m renaissance_v4.manifest <file.json>`. **Strategy Research Agent (SRA):** [`docs/architect/strategy_research_agent_v1.md`](../docs/architect/strategy_research_agent_v1.md).
 
 ## Product identity
 

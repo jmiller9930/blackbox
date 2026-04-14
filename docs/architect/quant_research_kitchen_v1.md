@@ -132,7 +132,15 @@ See §6 and project governance: no freeform strategy builder, no browser code ed
 
 ---
 
-## 12. Related
+## 12. Strategy Research Agent (SRA)
+
+A **first-class architectural role** — the governed **research conductor** for the kitchen (not the strategy itself). She will assemble **candidate manifests** from approved modules, launch **approved experiments**, read **baseline + artifacts**, compare candidates to baseline, and emit **recommendations** for **human** review. She **must not** mutate the locked baseline, bypass replay or Monte Carlo, self-promote, or run arbitrary code.
+
+**Full definition:** [`strategy_research_agent_v1.md`](strategy_research_agent_v1.md) — purpose, limits, interfaces, artifact model, approval boundary.
+
+---
+
+## 13. Related
 
 - [`renaissance_v4/WORKBENCH_V1.md`](../../renaissance_v4/WORKBENCH_V1.md) — product/API v1 detail.
 - [`renaissance_v4/ROBUSTNESS.md`](../../renaissance_v4/ROBUSTNESS.md) — robustness runner usage.

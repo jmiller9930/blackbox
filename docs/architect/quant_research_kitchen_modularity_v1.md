@@ -118,7 +118,14 @@ Arbitrary formula editor, unrestricted strategy creator, baseline promotion in U
 
 ---
 
-## 10. Related
+## 10. Strategy Research Agent (SRA)
+
+The **Strategy Research Agent** will operate this kitchen via the same **manifest**, **registry**, and **experiment APIs** — assembling candidate recipes, submitting jobs, reading artifacts, comparing to baseline, emitting **advisory** recommendations. She is **not** authorized to promote baselines or bypass validation. **Permanent role definition:** [`strategy_research_agent_v1.md`](strategy_research_agent_v1.md).
+
+---
+
+## 11. Related
 
 - Parent frame: [`quant_research_kitchen_v1.md`](quant_research_kitchen_v1.md)
 - Product/API v1: [`renaissance_v4/WORKBENCH_V1.md`](../../renaissance_v4/WORKBENCH_V1.md)
+- SRA role: [`strategy_research_agent_v1.md`](strategy_research_agent_v1.md)

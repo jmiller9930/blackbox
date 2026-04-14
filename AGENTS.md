@@ -24,6 +24,7 @@ This document defines agents for the BLACK BOX platform. The repository is built
 
 Later phases are expected to add additional agents, including:
 
+- **Strategy Research Agent (SRA)** — governed **research conductor** for **Quant Research Kitchen V1**: manifest assembly from approved modules, approved experiment jobs, artifact retrieval, baseline comparison, **advisory** recommendations — **not** baseline promotion or arbitrary code. **Architectural role (normative):** `docs/architect/strategy_research_agent_v1.md`. Not an autonomous implementation in v1; interfaces and artifacts are reserved so wiring does not require rework.
 - **Billy** — **hook** (executor) for the **Drift** trade policy (registry: `agents/billy/`). Drift is deprecated / not in service — see `docs/architect/ANNA_GOES_TO_SCHOOL.md` §1.1.2.1.
 - **Jack** — **hook** (executor) for the **Jupiter Perps** trade policy (registry: `agents/jack/`); **default** policy when unspecified; use **Billy** only when routing explicitly pins **Drift**
 - **Robbie**
