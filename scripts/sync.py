@@ -13,6 +13,9 @@ Usage (from repo root):
   python3 scripts/sync.py
   python3 scripts/sync.py --dry-run
   python3 scripts/sync.py --skip-push
+
+To push once and restart **both** SeanV3/Jupiter and this UI stack in a single SSH session, use
+``python3 scripts/jupsync.py --full-stack`` instead.
 """
 
 from __future__ import annotations

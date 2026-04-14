@@ -21,7 +21,8 @@ Usage:
   python3 scripts/jupsync.py
   python3 scripts/jupsync.py --dry-run
   python3 scripts/jupsync.py --skip-push          # remote pull + compose only
-  python3 scripts/jupsync.py --skip-health        # do not curl jupiter /health after
+  python3 scripts/jupsync.py --skip-health        # do not verify jupiter /health after deploy
+  python3 scripts/jupsync.py --full-stack         # also rebuild/restart UIUX.Web (dashboard nginx/api)
 
 Reachability (important):
   The optional post-deploy ``curl http://127.0.0.1:707/health`` runs **on the lab host inside SSH** —
@@ -29,6 +30,10 @@ Reachability (important):
   **server hostname** (e.g. ``http://clawbot.a51.corp:707/`` on VPN/LAN) or your **public DNS + port**
   (e.g. ``http://jupv3.greyllc.net:737/``); do not use ``localhost`` unless you have an explicit tunnel.
   Jupiter serves **HTTP** on 707 unless you terminate **HTTPS** in front (nginx, Caddy, etc.).
+
+Health verification runs **on the remote** after ``docker compose`` (retries with backoff). If it fails,
+the script exits **non-zero** and prints ``jupiter-web`` logs — unlike older versions that always exited 0.
+Optional env: ``JUPSYNC_HEALTH_ATTEMPTS`` (default 25), ``JUPSYNC_HEALTH_SLEEP_SEC`` (default 2).
 """
 
 from __future__ import annotations
@@ -88,21 +93,64 @@ def _sync_push(repo: str, branch: str, *, dry_run: bool, skip_push: bool) -> Non
     print("Push OK.")
 
 
-def _remote_script(remote_dir_name: str, pull_branch: str, *, health_check: bool) -> str:
-    health = ""
-    if health_check:
-        health = """
-echo "--- jupiter /health ---"
-curl -sS --connect-timeout 5 "http://127.0.0.1:707/health" || echo "(health check failed — is jupiter-web up?)"
+def _bash_jupiter_health(remote_dir_name: str) -> str:
+    """Bash fragment: retry /health on 127.0.0.1:707; exit 1 if never OK (runs on remote)."""
+    attempts = os.environ.get("JUPSYNC_HEALTH_ATTEMPTS", "25").strip() or "25"
+    sleep_s = os.environ.get("JUPSYNC_HEALTH_SLEEP_SEC", "2").strip() or "2"
+    return f"""
+echo "--- jupiter /health (retry until OK or fail) ---"
+_ok=0
+for _i in $(seq 1 {attempts}); do
+  if curl -sf --connect-timeout 3 "http://127.0.0.1:707/health" 2>/dev/null | grep -q '"ok"'; then
+    echo "jupiter-web health OK (attempt $_i)"
+    curl -sS --connect-timeout 5 "http://127.0.0.1:707/health"
+    echo ""
+    _ok=1
+    break
+  fi
+  echo "  waiting for jupiter-web on :707 (attempt $_i/{attempts}) …"
+  sleep {sleep_s}
+done
+if [ "$_ok" -ne 1 ]; then
+  echo "jupsync: ERROR — http://127.0.0.1:707/health never became healthy." >&2
+  cd ~/{remote_dir_name}/vscode-test/seanv3
+  docker compose ps -a >&2 || true
+  docker compose logs --tail 50 jupiter-web >&2 || true
+  exit 1
+fi
 """
+
+
+def _remote_script(
+    remote_dir_name: str,
+    pull_branch: str,
+    *,
+    health_check: bool,
+    full_stack: bool,
+) -> str:
+    health = _bash_jupiter_health(remote_dir_name) if health_check else ""
+
+    ui_block = ""
+    if full_stack:
+        ui_block = f"""
+echo "--- UIUX.Web (operator dashboard) ---"
+cd ~/{remote_dir_name}/UIUX.Web
+docker compose build web
+docker compose up -d
+docker compose restart api
+docker compose ps
+"""
+
     return f"""set -eu
 cd ~/{remote_dir_name}
 git fetch origin
 git pull origin {pull_branch}
 echo "REMOTE_HEAD=$(git rev-parse HEAD)"
+echo "--- SeanV3 + jupiter-web (vscode-test/seanv3) ---"
 cd vscode-test/seanv3
 docker compose up -d --build
 docker compose ps
+{ui_block}
 {health}
 """
 
@@ -114,8 +162,14 @@ def _remote_jupsync(
     *,
     dry_run: bool,
     health_check: bool,
+    full_stack: bool,
 ) -> None:
-    body = _remote_script(remote_dir_name, pull_branch, health_check=health_check)
+    body = _remote_script(
+        remote_dir_name,
+        pull_branch,
+        health_check=health_check,
+        full_stack=full_stack,
+    )
     if dry_run:
         print("[dry-run] ssh would run on remote:\n---")
         print(body)
@@ -159,7 +213,12 @@ def main() -> None:
     ap.add_argument(
         "--skip-health",
         action="store_true",
-        help="Skip post-deploy curl to http://127.0.0.1:707/health on remote",
+        help="Skip post-deploy Jupiter health verification on remote (not recommended)",
+    )
+    ap.add_argument(
+        "--full-stack",
+        action="store_true",
+        help="After SeanV3 compose, also build web + up + restart api in UIUX.Web (one SSH session)",
     )
     args = ap.parse_args()
 
@@ -183,6 +242,7 @@ def main() -> None:
         args.remote_branch,
         dry_run=args.dry_run,
         health_check=not args.skip_health,
+        full_stack=args.full_stack,
     )
 
 
