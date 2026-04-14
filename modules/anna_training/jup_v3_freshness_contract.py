@@ -16,7 +16,10 @@ import os
 from pathlib import Path
 from typing import Any
 
-from modules.anna_training.execution_ledger import BASELINE_POLICY_SLOT_JUP_V3
+from modules.anna_training.execution_ledger import (
+    BASELINE_POLICY_SLOT_JUP_V3,
+    BASELINE_POLICY_SLOT_JUP_V4,
+)
 
 JUP_V3_FRESHNESS_CONTRACT_ID = "jup_v3_five_m_binance_v1"
 JUP_V3_FRESHNESS_CONTRACT_VERSION = "1.0"
@@ -91,7 +94,7 @@ def build_jup_v3_timeline_proof(
     tc = trade_chain if isinstance(trade_chain, dict) else {}
     jp = jupiter_policy_snapshot if isinstance(jupiter_policy_snapshot, dict) else {}
     slot = (tc.get("baseline_jupiter_policy") or {}).get("active_id")
-    if slot != BASELINE_POLICY_SLOT_JUP_V3:
+    if slot not in (BASELINE_POLICY_SLOT_JUP_V3, BASELINE_POLICY_SLOT_JUP_V4):
         return None
     ff = tc.get("five_m_ingest_freshness") if isinstance(tc.get("five_m_ingest_freshness"), dict) else {}
     tbp = jp.get("tile_bar_selection_proof") if isinstance(jp.get("tile_bar_selection_proof"), dict) else {}
@@ -139,7 +142,7 @@ def build_jup_v3_timeline_proof(
         "schema": "jup_v3_timeline_proof_v1",
         "contract_id": JUP_V3_FRESHNESS_CONTRACT_ID,
         "contract_version": JUP_V3_FRESHNESS_CONTRACT_VERSION,
-        "policy_slot": BASELINE_POLICY_SLOT_JUP_V3,
+        "policy_slot": slot,
         "market_db_path": str(market_db_path.resolve()) if market_db_path else None,
         "freshness_source": ff.get("freshness_source"),
         "canonical_clock_expected_last_closed_candle_open_utc": exp,

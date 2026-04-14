@@ -1,14 +1,14 @@
 """Baseline → execution_ledger: **Jupiter_2 / Jupiter_3 Sean lifecycle** (signal-gated).
 
-**Signal mode** is ``sean_jupiter_v1`` (Jupiter_2) or ``sean_jupiter_v3`` (Jupiter_3), selected by
-``baseline_operator_kv`` / env (see :func:`execution_ledger.get_baseline_jupiter_policy_slot`).
+**Signal mode** is ``sean_jupiter_v1`` (Jupiter_2), ``sean_jupiter_v3`` (Jupiter_3), or ``sean_jupiter_v4``
+(Jupiter_4), selected by ``baseline_operator_kv`` / env (see :func:`execution_ledger.get_baseline_jupiter_policy_slot`).
 Lifecycle SL/TP uses :mod:`jupiter_2_baseline_lifecycle` for both (same exit mechanics until v3-specific
 lifecycle is added).
 
 **Execution trades:** baseline ``execution_trades`` rows are **lifecycle** closes (``bl_lc_…``), not per-bar.
 
 **Policy evaluations:** every evaluated tick writes/upserts ``policy_evaluations`` (including ``trade=false``),
-for backtest joins to bars (``market_bars_5m`` for Jupiter_2; ``binance_strategy_bars_5m`` for Jupiter_3).
+for backtest joins to bars (``market_bars_5m`` for Jupiter_2; ``binance_strategy_bars_5m`` for Jupiter_3 / Jupiter_4).
 Disable with ``BASELINE_POLICY_EVALUATION_LOG=0``.
 
 **Ingest alignment:** :func:`market_data.canonical_bar_refresh.refresh_last_closed_bar_from_ticks` calls this after
@@ -110,9 +110,11 @@ def run_baseline_ledger_bridge_tick(
 
     from modules.anna_training.execution_ledger import (
         BASELINE_POLICY_SLOT_JUP_V3,
+        BASELINE_POLICY_SLOT_JUP_V4,
         connect_ledger,
         ensure_execution_ledger_schema,
         get_baseline_jupiter_policy_slot,
+        policy_uses_binance_strategy_bars,
     )
 
     conn_slot = connect_ledger(execution_ledger_db_path)
@@ -122,7 +124,7 @@ def run_baseline_ledger_bridge_tick(
     finally:
         conn_slot.close()
 
-    if policy_slot == BASELINE_POLICY_SLOT_JUP_V3:
+    if policy_uses_binance_strategy_bars(policy_slot):
         bar = fetch_latest_bar_row_binance_strategy(db_path=market_data_db_path)
         if not bar:
             return {"ok": False, "reason": "no_binance_strategy_bar"}
@@ -157,9 +159,14 @@ def run_baseline_ledger_bridge_tick(
         CATALOG_ID as CATALOG_ID_JUPITER_3,
         POLICY_ENGINE_ID as POLICY_ENGINE_ID_JUPITER_3,
     )
+    from modules.anna_training.jupiter_4_sean_policy import (
+        CATALOG_ID as CATALOG_ID_JUPITER_4,
+        POLICY_ENGINE_ID as POLICY_ENGINE_ID_JUPITER_4,
+    )
     from modules.anna_training.sean_jupiter_baseline_signal import (
         evaluate_sean_jupiter_baseline_v1,
         evaluate_sean_jupiter_baseline_v3,
+        evaluate_sean_jupiter_baseline_v4,
     )
     from modules.anna_training.store import load_state
 
@@ -201,13 +208,24 @@ def run_baseline_ledger_bridge_tick(
         conn_chk.close()
 
     sm = signal_mode_for_baseline_policy_slot(policy_slot)
-    baseline_catalog_id = CATALOG_ID_JUPITER_3 if policy_slot == BASELINE_POLICY_SLOT_JUP_V3 else CATALOG_ID_JUPITER_2
-    POLICY_ENGINE_ID = (
-        POLICY_ENGINE_ID_JUPITER_3 if policy_slot == BASELINE_POLICY_SLOT_JUP_V3 else POLICY_ENGINE_ID_JUPITER_2
-    )
+    if policy_slot == BASELINE_POLICY_SLOT_JUP_V4:
+        baseline_catalog_id = CATALOG_ID_JUPITER_4
+        POLICY_ENGINE_ID = POLICY_ENGINE_ID_JUPITER_4
+    elif policy_slot == BASELINE_POLICY_SLOT_JUP_V3:
+        baseline_catalog_id = CATALOG_ID_JUPITER_3
+        POLICY_ENGINE_ID = POLICY_ENGINE_ID_JUPITER_3
+    else:
+        baseline_catalog_id = CATALOG_ID_JUPITER_2
+        POLICY_ENGINE_ID = POLICY_ENGINE_ID_JUPITER_2
 
     st = load_state()
-    if policy_slot == BASELINE_POLICY_SLOT_JUP_V3:
+    if policy_slot == BASELINE_POLICY_SLOT_JUP_V4:
+        sig = evaluate_sean_jupiter_baseline_v4(
+            bars_asc=bars_asc,
+            training_state=st,
+            ledger_db_path=execution_ledger_db_path,
+        )
+    elif policy_slot == BASELINE_POLICY_SLOT_JUP_V3:
         sig = evaluate_sean_jupiter_baseline_v3(
             bars_asc=bars_asc,
             training_state=st,

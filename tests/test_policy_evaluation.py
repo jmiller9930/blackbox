@@ -56,7 +56,17 @@ def test_signal_mode_rejects_unknown_policy_slot() -> None:
     from modules.anna_training.execution_ledger import signal_mode_for_baseline_policy_slot
 
     with pytest.raises(ValueError, match="unknown baseline Jupiter policy slot"):
-        signal_mode_for_baseline_policy_slot("jup_v4")
+        signal_mode_for_baseline_policy_slot("jup_v99")
+
+
+def test_signal_mode_accepts_jup_v4() -> None:
+    from modules.anna_training.execution_ledger import (
+        SIGNAL_MODE_JUPITER_4,
+        signal_mode_for_baseline_policy_slot,
+    )
+
+    assert signal_mode_for_baseline_policy_slot("jup_v4") == SIGNAL_MODE_JUPITER_4
+    assert signal_mode_for_baseline_policy_slot("v4") == SIGNAL_MODE_JUPITER_4
 
 
 def test_set_baseline_policy_slot_rejects_garbage(tmp_path: Path) -> None:

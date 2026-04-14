@@ -22,11 +22,14 @@ from typing import Any
 from modules.anna_training.execution_ledger import (
     BASELINE_POLICY_SLOT_JUP_V2,
     BASELINE_POLICY_SLOT_JUP_V3,
+    BASELINE_POLICY_SLOT_JUP_V4,
     RESERVED_STRATEGY_BASELINE,
     connect_ledger,
     default_execution_ledger_path,
     ensure_execution_ledger_schema,
     fetch_policy_evaluation_for_market_event,
+    normalize_baseline_jupiter_policy_slot,
+    policy_uses_binance_strategy_bars,
     signal_mode_for_baseline_policy_slot,
 )
 from modules.anna_training.store import utc_now_iso
@@ -77,14 +80,22 @@ def _canonical_symbol() -> str:
 
 
 def normalize_policy_slot(raw: str | None) -> str:
-    s = (raw or BASELINE_POLICY_SLOT_JUP_V3).strip().lower()
-    if s in (BASELINE_POLICY_SLOT_JUP_V2, "jupiter_2", "v2"):
+    s = (raw or BASELINE_POLICY_SLOT_JUP_V3).strip()
+    ps = normalize_baseline_jupiter_policy_slot(s)
+    if ps is not None:
+        return ps
+    sl = s.lower()
+    if sl in (BASELINE_POLICY_SLOT_JUP_V2, "jupiter_2", "v2"):
         return BASELINE_POLICY_SLOT_JUP_V2
     return BASELINE_POLICY_SLOT_JUP_V3
 
 
 def _market_table_for_slot(policy_slot: str) -> str:
-    return "binance_strategy_bars_5m" if policy_slot == BASELINE_POLICY_SLOT_JUP_V3 else "market_bars_5m"
+    return (
+        "binance_strategy_bars_5m"
+        if policy_uses_binance_strategy_bars(policy_slot)
+        else "market_bars_5m"
+    )
 
 
 def resolve_market_event_id(
@@ -133,14 +144,14 @@ def _build_cross_check(
     mid = (market_event_id or "").strip()
     if not mid:
         return {}
-    j3 = policy_slot == BASELINE_POLICY_SLOT_JUP_V3
+    j_binance = policy_uses_binance_strategy_bars(policy_slot)
     out: dict[str, Any] = {
         "jup_v3_policy_ohlc_authority": "binance_strategy_bars_5m",
         "oracle_pyth_bar_authority": "market_bars_5m",
         "note": (
-            "JUPv3 baseline policy evaluations are keyed to Binance OHLC for this bar. "
+            "JUPv3/JUPv4 baseline policy evaluations are keyed to Binance OHLC for this bar. "
             "Pyth rollup is shown for cross-check vs oracle tape; it is not the policy axis."
-            if j3
+            if j_binance
             else "JUPv2 policy uses Pyth canonical bars; Binance row is optional cross-check."
         ),
         "binance_strategy_bar": None,
@@ -173,8 +184,8 @@ def _cross_check_plain_lines(cross_check: dict[str, Any], policy_slot: str) -> l
         "",
         "TIMELINE / SOURCES (stored rows, same market_event_id):",
     ]
-    if policy_slot == BASELINE_POLICY_SLOT_JUP_V3:
-        lines.append("  Policy axis (JUPv3): Binance OHLC → binance_strategy_bars_5m")
+    if policy_slot in (BASELINE_POLICY_SLOT_JUP_V3, BASELINE_POLICY_SLOT_JUP_V4):
+        lines.append("  Policy axis (JUPv3/JUPv4): Binance OHLC → binance_strategy_bars_5m")
         lines.append("  Oracle context: Pyth rollup → market_bars_5m")
     else:
         lines.append("  Policy axis (JUPv2): Pyth → market_bars_5m")
@@ -686,7 +697,7 @@ def main_cli() -> None:
     import json
 
     p = argparse.ArgumentParser(description="Baseline chain validation harness")
-    p.add_argument("--policy-slot", default="jup_v3", help="jup_v2 or jup_v3")
+    p.add_argument("--policy-slot", default="jup_v3", help="jup_v2, jup_v3, or jup_v4")
     p.add_argument("--mode", choices=("single", "last_n", "range"), default="single")
     p.add_argument("--candle-open-utc", help="Bar open ISO Zulu")
     p.add_argument("--last-n", type=int, default=12)

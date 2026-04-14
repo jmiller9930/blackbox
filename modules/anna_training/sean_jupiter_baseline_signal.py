@@ -1,7 +1,8 @@
-"""Baseline signal — **Jupiter_2** and **Jupiter_3** Sean policies.
+"""Baseline signal — **Jupiter_2**, **Jupiter_3**, and **Jupiter_4** Sean policies.
 
 :func:`evaluate_sean_jupiter_baseline_v1` wraps :func:`jupiter_2_sean_policy.evaluate_jupiter_2_sean`.
 :func:`evaluate_sean_jupiter_baseline_v3` wraps :func:`jupiter_3_sean_policy.evaluate_jupiter_3_sean`.
+:func:`evaluate_sean_jupiter_baseline_v4` wraps :func:`jupiter_4_sean_policy.evaluate_jupiter_4_sean`.
 
 Helpers ``aggregate_candles_signal_flags`` and ``rsi_trading_core`` remain for tests and demos only.
 **Paper measurement** only (no venue submit).
@@ -28,6 +29,10 @@ from modules.anna_training.jupiter_3_sean_policy import (
     CATALOG_ID as CATALOG_ID_JUPITER_3,
     evaluate_jupiter_3_sean,
 )
+from modules.anna_training.jupiter_4_sean_policy import (
+    CATALOG_ID as CATALOG_ID_JUPITER_4,
+    evaluate_jupiter_4_sean,
+)
 
 # --- Shared constants (aggregateCandles / trading_core RSI tests) ---
 RSI_PERIOD = 14
@@ -50,6 +55,14 @@ _J3_TO_BASELINE_REASON = {
     "jupiter_3_no_signal": "no_signal",
     "jupiter_3_long_signal": "jupiter_policy_long_signal",
     "jupiter_3_short_signal": "jupiter_policy_short_signal",
+    "insufficient_history": "insufficient_history",
+    "ohlc_parse_error": "ohlc_parse_error",
+}
+
+_J4_TO_BASELINE_REASON = {
+    "jupiter_4_no_signal": "no_signal",
+    "jupiter_4_long_signal": "jupiter_policy_long_signal",
+    "jupiter_4_short_signal": "jupiter_policy_short_signal",
     "insufficient_history": "insufficient_history",
     "ohlc_parse_error": "ohlc_parse_error",
 }
@@ -471,11 +484,22 @@ def format_baseline_jupiter_tile_narrative(
     Persisted ``policy_evaluations`` must pass each row's ``signal_mode`` so historical v2 bars
     still show v2 rules after the operator switches the active slot to v3.
     """
-    from modules.anna_training.execution_ledger import SIGNAL_MODE_JUPITER_3
+    from modules.anna_training.execution_ledger import SIGNAL_MODE_JUPITER_3, SIGNAL_MODE_JUPITER_4
 
     feat = features if isinstance(features, dict) else {}
     sm = (signal_mode or "").strip()
     parity = str(feat.get("parity") or "")
+    is_j4 = sm == SIGNAL_MODE_JUPITER_4 or "jupiter_4" in parity
+    if is_j4:
+        jn = feat.get("jupiter_policy_narrative")
+        if isinstance(jn, str) and jn.strip():
+            return jn.strip()
+        return _format_jupiter_4_operator_narrative(
+            feat,
+            reason_code=reason_code,
+            trade=bool(trade),
+            side=str(side or "flat"),
+        )
     is_j3 = sm == SIGNAL_MODE_JUPITER_3 or "jupiter_3" in parity
     if is_j3:
         jn = feat.get("jupiter_policy_narrative")
@@ -806,6 +830,146 @@ def _format_jupiter_3_operator_narrative(
     return "\n".join(lines)
 
 
+def _format_jupiter_4_operator_narrative(
+    feat: dict[str, Any],
+    *,
+    reason_code: str,
+    trade: bool,
+    side: str,
+) -> str:
+    """Sean-style operator tile — **Jupiter_4** (EMA9/21 crossover + RSI + volume + ATR expected move)."""
+    lines: list[str] = []
+    eb = feat.get("evaluated_bar") if isinstance(feat.get("evaluated_bar"), dict) else {}
+    v_note = str(eb.get("volume_source_note") or "")
+    v_base = eb.get("volume_base")
+    if v_base is None:
+        try:
+            v_base = float(feat.get("candle_volume")) if feat.get("candle_volume") is not None else None
+        except (TypeError, ValueError):
+            v_base = None
+
+    _binance_kline = frozenset({"binance_kline_quote_volume", "binance_kline_base_volume"})
+    if v_note in _binance_kline and v_base is not None:
+        try:
+            vf = float(v_base)
+            vdisp = str(int(vf)) if vf == int(vf) else _tile_fmt_price(vf)
+        except (TypeError, ValueError):
+            vdisp = str(v_base)
+        if v_note == "binance_kline_base_volume":
+            lines.append(f"Using real Binance volume (base asset): {vdisp}")
+        else:
+            lines.append(f"Using real Binance volume (quote USDT): {vdisp}")
+    elif v_base is not None:
+        try:
+            vf = float(v_base)
+            lines.append(
+                f"Volume: {_tile_fmt_price(vf)} — not from Binance kline feed "
+                "(non-strategy bar or mixed source; check price_source on bar)"
+            )
+        except (TypeError, ValueError):
+            lines.append("Volume: unavailable")
+    else:
+        lines.append(
+            "Binance volume: unavailable — bar missing volume_base / volume for kline evaluation"
+        )
+
+    ts = _tile_ts_iso_z(str(eb.get("candle_open_utc") or ""))
+    o, h, l, c = eb.get("open"), eb.get("high"), eb.get("low"), eb.get("close")
+    vv = eb.get("volume_base")
+    vol_s = ""
+    if vv is not None:
+        try:
+            fv = float(vv)
+            vol_s = str(int(fv)) if fv == int(fv) else _tile_fmt_price(fv)
+        except (TypeError, ValueError):
+            vol_s = str(vv)
+    lines.append(
+        "New 5-min candle formed: Timestamp="
+        + ts
+        + ", O="
+        + _tile_fmt_price(o)
+        + ", H="
+        + _tile_fmt_price(h)
+        + ", L="
+        + _tile_fmt_price(l)
+        + ", C="
+        + _tile_fmt_price(c)
+        + ", V="
+        + vol_s
+    )
+
+    lines.append("")
+    lines.append("=== CONVICTION MOMENTUM FILTERS ===")
+    lines.append("EMA9      : " + _tile_fmt_price(feat.get("ema9")))
+    lines.append("EMA21     : " + _tile_fmt_price(feat.get("ema21")))
+    blab = feat.get("bias_label")
+    if not blab:
+        bb = bool(feat.get("bullish_bias"))
+        be = bool(feat.get("bearish_bias"))
+        if bb and not be:
+            blab = "BULLISH"
+        elif be and not bb:
+            blab = "BEARISH"
+        else:
+            blab = "NEUTRAL"
+    lines.append("Bias      : " + str(blab))
+    lines.append("RSI(14)   : " + _tile_fmt_rsi(feat.get("current_rsi")))
+
+    avg_v = feat.get("avg_volume")
+    cv = feat.get("candle_volume")
+    vsp = bool(feat.get("volume_spike"))
+    if avg_v is not None and cv is not None:
+        try:
+            av = float(avg_v)
+            cvf = float(cv)
+            cv_txt = str(int(cvf)) if cvf == int(cvf) else _tile_fmt_price(cvf)
+            lines.append(
+                f"Volume Spike: {cv_txt} vs Avg={av:.0f} → {'yes' if vsp else 'no'}"
+            )
+        except (TypeError, ValueError):
+            lines.append(f"Volume Spike: (n/a) → {'yes' if vsp else 'no'}")
+    else:
+        lines.append(f"Volume Spike: n/a → {'yes' if vsp else 'no'}")
+
+    lines.append("")
+    lines.append("=== CROSSOVER + EXPECTED MOVE ===")
+    lines.append(
+        "Bullish crossover (EMA9 crosses above EMA21): "
+        + _tile_lower_bool(feat.get("bullish_crossover"))
+    )
+    lines.append(
+        "Bearish crossover (EMA9 crosses below EMA21): "
+        + _tile_lower_bool(feat.get("bearish_crossover"))
+    )
+    lines.append(
+        "ATR(14) = "
+        + _tile_fmt_price(feat.get("atr"))
+        + " | Expected Move (ATR×2.5) = $"
+        + _tile_fmt_price(feat.get("expected_move"))
+    )
+
+    lines.append("")
+    lines.append("=== SIGNAL BREAKDOWN ===")
+    lg = bool(feat.get("long_signal_core"))
+    sg = bool(feat.get("short_signal_core"))
+    lines.append("Long  = " + _tile_lower_bool(lg))
+    lines.append("Short = " + _tile_lower_bool(sg))
+
+    lines.append("")
+    lines.append(
+        "Policy: Jupiter_4 · catalog_id="
+        + str(feat.get("catalog_id", CATALOG_ID_JUPITER_4))
+        + " · trade="
+        + _tile_lower_bool(trade)
+        + " side="
+        + str(side)
+        + " reason_code="
+        + str(reason_code)
+    )
+
+    return "\n".join(lines)
+
+
 def evaluate_sean_jupiter_baseline_v3(
     *,
     bars_asc: list[dict[str, Any]],
@@ -841,5 +1005,42 @@ def evaluate_sean_jupiter_baseline_v3(
         side=j3.side,
         reason_code=mapped_reason,
         pnl_usd=j3.pnl_usd,
+        features=feat,
+    )
+
+
+def evaluate_sean_jupiter_baseline_v4(
+    *,
+    bars_asc: list[dict[str, Any]],
+    free_collateral_usd: float | None = None,
+    training_state: dict[str, Any] | None = None,
+    ledger_db_path: Path | None = None,
+) -> SeanJupiterBaselineSignalV1:
+    """Thin adapter over :func:`jupiter_4_sean_policy.evaluate_jupiter_4_sean` — same return shape as v1/v3."""
+    j4 = evaluate_jupiter_4_sean(
+        bars_asc=bars_asc,
+        free_collateral_usd=free_collateral_usd,
+        training_state=training_state,
+        ledger_db_path=ledger_db_path,
+    )
+    mapped_reason = _J4_TO_BASELINE_REASON.get(j4.reason_code, j4.reason_code)
+    feat = dict(j4.features) if j4.features else {}
+    feat["short_signal_raw"] = bool(feat.get("short_signal_core"))
+    feat["long_signal_raw"] = bool(feat.get("long_signal_core"))
+    feat["short_signal"] = feat["short_signal_raw"]
+    feat["long_signal"] = feat["long_signal_raw"]
+    feat["min_notional_hint_usd"] = MIN_COLLATERAL_USD
+    feat["parity"] = "jupiter_4_sean:evaluate_jupiter_4_sean"
+    feat["jupiter_policy_narrative"] = _format_jupiter_4_operator_narrative(
+        feat,
+        reason_code=mapped_reason,
+        trade=j4.trade,
+        side=str(j4.side or "flat"),
+    )
+    return SeanJupiterBaselineSignalV1(
+        trade=j4.trade,
+        side=j4.side,
+        reason_code=mapped_reason,
+        pnl_usd=j4.pnl_usd,
         features=feat,
     )

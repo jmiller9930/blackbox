@@ -17,15 +17,17 @@ RESERVED_STRATEGY_BASELINE = "baseline"
 # Baseline Jupiter policy slot (operator dropdown) — persisted in ``baseline_operator_kv``.
 BASELINE_POLICY_SLOT_JUP_V2 = "jup_v2"
 BASELINE_POLICY_SLOT_JUP_V3 = "jup_v3"
+BASELINE_POLICY_SLOT_JUP_V4 = "jup_v4"
 # Hardened selector: only these slots map to evaluators and signal_mode. Adding a new policy
 # requires a new slot constant, bridge branch, and evaluator wiring — not a silent string.
 VALID_BASELINE_JUPITER_POLICY_SLOTS: frozenset[str] = frozenset(
-    {BASELINE_POLICY_SLOT_JUP_V2, BASELINE_POLICY_SLOT_JUP_V3}
+    {BASELINE_POLICY_SLOT_JUP_V2, BASELINE_POLICY_SLOT_JUP_V3, BASELINE_POLICY_SLOT_JUP_V4}
 )
 BASELINE_OPERATOR_KV_JUPITER_POLICY_SLOT = "baseline_jupiter_policy_slot"
 # policy_evaluations.signal_mode — one distinct string per engine (historic v1 label = Jupiter_2).
 SIGNAL_MODE_JUPITER_2 = "sean_jupiter_v1"
 SIGNAL_MODE_JUPITER_3 = "sean_jupiter_v3"
+SIGNAL_MODE_JUPITER_4 = "sean_jupiter_v4"
 VALID_LANES = frozenset({"baseline", "anna"})
 VALID_MODES = frozenset({"live", "paper", "paper_stub"})
 SCHEMA_VERSION = "execution_trade_v1"
@@ -296,7 +298,7 @@ def baseline_jupiter_open_position_key(
     mode: str,
     policy_slot: str | None = None,
 ) -> str:
-    """Baseline open-position key. Prefer ``policy_slot`` (jup_v2 / jup_v3) so policies do not share state."""
+    """Baseline open-position key. Prefer ``policy_slot`` (jup_v2 / jup_v3 / jup_v4) so policies do not share state."""
     sym = (symbol or "SOL-PERP").strip() or "SOL-PERP"
     tf = (timeframe or "5m").strip() or "5m"
     m = (mode or "paper").strip().lower() or "paper"
@@ -307,15 +309,23 @@ def baseline_jupiter_open_position_key(
 
 
 def normalize_baseline_jupiter_policy_slot(raw: str | None) -> str | None:
-    """Map operator/env strings to **jup_v2** or **jup_v3**; unknown values → ``None`` (fail closed)."""
+    """Map operator/env strings to **jup_v2** / **jup_v3** / **jup_v4**; unknown → ``None`` (fail closed)."""
     v = (raw or "").strip().lower()
     if not v:
         return None
+    if v in (BASELINE_POLICY_SLOT_JUP_V4, "jup_v4", "v4", "jupiter_4"):
+        return BASELINE_POLICY_SLOT_JUP_V4
     if v in (BASELINE_POLICY_SLOT_JUP_V3, "jup_v3", "v3", "jupiter_3"):
         return BASELINE_POLICY_SLOT_JUP_V3
     if v in (BASELINE_POLICY_SLOT_JUP_V2, "jup_v2", "v2", "jupiter_2"):
         return BASELINE_POLICY_SLOT_JUP_V2
     return None
+
+
+def policy_uses_binance_strategy_bars(policy_slot: str | None) -> bool:
+    """JUPv3 and JUPv4 read OHLCV from ``binance_strategy_bars_5m``."""
+    ps = normalize_baseline_jupiter_policy_slot((policy_slot or "").strip())
+    return ps in (BASELINE_POLICY_SLOT_JUP_V3, BASELINE_POLICY_SLOT_JUP_V4)
 
 
 def _warn_invalid_baseline_policy_slot(source: str, raw: str) -> None:
@@ -365,7 +375,7 @@ def set_baseline_jupiter_policy_slot(conn: sqlite3.Connection, policy_slot: str)
     if ps is None:
         raise ValueError(
             f"policy_slot must be one of {sorted(VALID_BASELINE_JUPITER_POLICY_SLOTS)} "
-            f"(or aliases jupiter_2/jupiter_3, v2/v3); got {policy_slot!r}"
+            f"(or aliases jupiter_2/jupiter_3/jupiter_4, v2/v3/v4); got {policy_slot!r}"
         )
     ts = utc_now_iso()
     conn.execute(
@@ -386,14 +396,18 @@ def signal_mode_for_baseline_policy_slot(policy_slot: str) -> str:
             f"unknown baseline Jupiter policy slot {policy_slot!r}; "
             f"must normalize to one of {sorted(VALID_BASELINE_JUPITER_POLICY_SLOTS)}"
         )
+    if ps == BASELINE_POLICY_SLOT_JUP_V4:
+        return SIGNAL_MODE_JUPITER_4
     if ps == BASELINE_POLICY_SLOT_JUP_V3:
         return SIGNAL_MODE_JUPITER_3
     return SIGNAL_MODE_JUPITER_2
 
 
 def baseline_jupiter_policy_label_for_slot(policy_slot: str) -> str:
-    """Operator-facing short label for dashboard / bundle (``JUPv2`` / ``JUPv3``)."""
+    """Operator-facing short label for dashboard / bundle (``JUPv2`` / ``JUPv3`` / ``JUPv4``)."""
     ps = normalize_baseline_jupiter_policy_slot(policy_slot)
+    if ps == BASELINE_POLICY_SLOT_JUP_V4:
+        return "JUPv4"
     if ps == BASELINE_POLICY_SLOT_JUP_V3:
         return "JUPv3"
     if ps == BASELINE_POLICY_SLOT_JUP_V2:
@@ -404,7 +418,11 @@ def baseline_jupiter_policy_label_for_slot(policy_slot: str) -> str:
 def baseline_jupiter_policy_tag_from_signal_mode(signal_mode: str | None) -> str:
     """Derive strip/table tag from ``policy_evaluations.signal_mode``."""
     sm = (signal_mode or "").strip()
-    return "JUPv3" if sm == SIGNAL_MODE_JUPITER_3 else "JUPv2"
+    if sm == SIGNAL_MODE_JUPITER_4:
+        return "JUPv4"
+    if sm == SIGNAL_MODE_JUPITER_3:
+        return "JUPv3"
+    return "JUPv2"
 
 
 def entry_policy_authority_from_signal_features(sf: dict[str, Any] | None) -> str:
@@ -412,23 +430,32 @@ def entry_policy_authority_from_signal_features(sf: dict[str, Any] | None) -> st
     Classify **which evaluator produced the entry** from persisted ``signal_features_snapshot``
     (``BaselineOpenPosition`` / policy row ``open_position``), not the operator's current slot.
 
-    Returns one of: ``jupiter_2_sean``, ``jupiter_3_sean``, ``unknown``.
+    Returns one of: ``jupiter_2_sean``, ``jupiter_3_sean``, ``jupiter_4_sean``, ``unknown``.
     """
     if not isinstance(sf, dict) or not sf:
         return "unknown"
     parity = str(sf.get("parity") or "").lower()
+    if "jupiter_4" in parity:
+        return "jupiter_4_sean"
     if "jupiter_3" in parity:
         return "jupiter_3_sean"
     if "jupiter_2" in parity:
         return "jupiter_2_sean"
     cat = str(sf.get("catalog_id") or "").lower()
+    if "jupiter_4" in cat:
+        return "jupiter_4_sean"
     if "jupiter_3" in cat:
         return "jupiter_3_sean"
     if "jupiter_2" in cat:
         return "jupiter_2_sean"
     pe = str(sf.get("policy_engine") or "").lower()
+    if "jupiter_4" in pe or "jupiter_4" in str(sf.get("policy_version") or "").lower():
+        return "jupiter_4_sean"
     if "jupiter_3" in pe or "jupiter_3" in str(sf.get("policy_version") or "").lower():
         return "jupiter_3_sean"
+    jg4 = sf.get("jupiter_v4_gates")
+    if isinstance(jg4, dict) and str(jg4.get("schema") or "") == "jupiter_v4_gates_v1":
+        return "jupiter_4_sean"
     jg = sf.get("jupiter_v3_gates")
     if isinstance(jg, dict) and str(jg.get("schema") or "") == "jupiter_v3_gates_v1":
         return "jupiter_3_sean"
@@ -438,6 +465,8 @@ def entry_policy_authority_from_signal_features(sf: dict[str, Any] | None) -> st
 def baseline_entry_policy_label_for_authority(authority: str) -> str:
     """Short operator label for the **entry** bar (distinct from the live selector chip)."""
     a = (authority or "").strip().lower()
+    if a == "jupiter_4_sean":
+        return "JUPv4"
     if a == "jupiter_3_sean":
         return "JUPv3"
     if a == "jupiter_2_sean":
@@ -490,12 +519,18 @@ def fetch_baseline_policy_evaluation_for_market_event(
     if prefer_active_slot:
         slot = get_baseline_jupiter_policy_slot(conn)
         primary = signal_mode_for_baseline_policy_slot(slot)
-        secondary = (
-            SIGNAL_MODE_JUPITER_3 if primary == SIGNAL_MODE_JUPITER_2 else SIGNAL_MODE_JUPITER_2
-        )
-        modes = [primary, secondary]
+        others = [
+            m
+            for m in (
+                SIGNAL_MODE_JUPITER_2,
+                SIGNAL_MODE_JUPITER_3,
+                SIGNAL_MODE_JUPITER_4,
+            )
+            if m != primary
+        ]
+        modes = [primary] + others
     else:
-        modes = [SIGNAL_MODE_JUPITER_2, SIGNAL_MODE_JUPITER_3]
+        modes = [SIGNAL_MODE_JUPITER_2, SIGNAL_MODE_JUPITER_3, SIGNAL_MODE_JUPITER_4]
     seen: set[str] = set()
     for sm in modes:
         if sm in seen:

@@ -65,7 +65,8 @@ def test_build_trade_chain_payload_schema() -> None:
     assert bjp.get("schema") == "baseline_jupiter_policy_selector_v1"
     assert bjp.get("active_id") == "jup_v2"
     assert bjp.get("active_label") == "JUPv2"
-    assert isinstance(bjp.get("options"), list) and len(bjp["options"]) == 2
+    assert isinstance(bjp.get("options"), list) and len(bjp["options"]) == 3
+    assert {o.get("id") for o in bjp["options"]} == {"jup_v2", "jup_v3", "jup_v4"}
     assert "recent_baseline_trades" in tc
     assert isinstance(tc["recent_baseline_trades"], list)
     for row in tc["recent_baseline_trades"]:

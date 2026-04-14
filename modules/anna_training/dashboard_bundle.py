@@ -114,9 +114,7 @@ def _five_m_ingest_freshness(
     If ``closed_bucket_lag`` > 0, the relevant pipeline is behind — not trade-chain column math.
     ``aligns_with_closed_strip`` is True when lag is 0.
     """
-    from modules.anna_training.execution_ledger import BASELINE_POLICY_SLOT_JUP_V3
-
-    use_binance = (baseline_policy_slot or "").strip() == BASELINE_POLICY_SLOT_JUP_V3
+    use_binance = policy_uses_binance_strategy_bars(baseline_policy_slot)
     out: dict[str, Any] = {
         "schema": "five_m_ingest_freshness_v2",
         "canonical_symbol": canonical_symbol,
@@ -326,6 +324,7 @@ def compute_next_tick_eta(
 from modules.anna_training.execution_ledger import (
     BASELINE_POLICY_SLOT_JUP_V2,
     BASELINE_POLICY_SLOT_JUP_V3,
+    BASELINE_POLICY_SLOT_JUP_V4,
     RESERVED_STRATEGY_BASELINE,
     baseline_entry_policy_label_for_authority,
     baseline_jupiter_policy_label_for_slot,
@@ -338,8 +337,10 @@ from modules.anna_training.execution_ledger import (
     fetch_policy_evaluation_for_market_event,
     get_baseline_jupiter_policy_slot,
     lookup_baseline_jupiter_open_state_json,
+    policy_uses_binance_strategy_bars,
     SIGNAL_MODE_JUPITER_2,
     SIGNAL_MODE_JUPITER_3,
+    SIGNAL_MODE_JUPITER_4,
     signal_mode_for_baseline_policy_slot,
 )
 from modules.anna_training.quantitative_evaluation_layer.constants import (
@@ -446,16 +447,18 @@ def _recompute_jupiter_narrative_for_market_event_id(
     """
     When ``policy_evaluations`` has no row (or empty narrative), recompute from stored bars so the
     operator always sees **why this bar** for the active Jupiter slot: **``market_bars_5m``** (Jupiter_2)
-    or **``binance_strategy_bars_5m``** (Jupiter_3).
+    or **``binance_strategy_bars_5m``** (Jupiter_3 / Jupiter_4).
 
-    Returns ``(narrative, jupiter_v3_gates, policy_features)``. Gates are only set for Jupiter_3 (v3 slot); else
-    ``None``. ``policy_features`` is the evaluator feature dict (for ``binance_kline_volume_ok`` alignment with the narrative).
+    Returns ``(narrative, jupiter_gates, policy_features)``. Gates are set for Jupiter_3 (``jupiter_v3_gates``)
+    or Jupiter_4 (``jupiter_v4_gates``) when present; else ``None``.
     """
     from modules.anna_training.jupiter_3_sean_policy import MIN_BARS as MIN_BARS_JUPITER_3
+    from modules.anna_training.jupiter_4_sean_policy import MIN_BARS as MIN_BARS_JUPITER_4
     from modules.anna_training.sean_jupiter_baseline_signal import (
         MIN_BARS as MIN_BARS_JUPITER_2,
         evaluate_sean_jupiter_baseline_v1,
         evaluate_sean_jupiter_baseline_v3,
+        evaluate_sean_jupiter_baseline_v4,
         format_baseline_jupiter_tile_narrative,
     )
     from modules.anna_training.store import load_state as _load_training_state
@@ -464,7 +467,14 @@ def _recompute_jupiter_narrative_for_market_event_id(
     if not mid or not market_db_path.is_file():
         return "", None, None
     use_v3 = policy_slot == BASELINE_POLICY_SLOT_JUP_V3
-    min_bars = MIN_BARS_JUPITER_3 if use_v3 else MIN_BARS_JUPITER_2
+    use_v4 = policy_slot == BASELINE_POLICY_SLOT_JUP_V4
+    use_binance = policy_uses_binance_strategy_bars(policy_slot)
+    if use_v4:
+        min_bars = MIN_BARS_JUPITER_4
+    elif use_v3:
+        min_bars = MIN_BARS_JUPITER_3
+    else:
+        min_bars = MIN_BARS_JUPITER_2
     sm = signal_mode_for_baseline_policy_slot(policy_slot)
     st = training_state if isinstance(training_state, dict) else _load_training_state()
     _ensure_runtime_for_market_imports()
@@ -482,7 +492,7 @@ def _recompute_jupiter_narrative_for_market_event_id(
         bars: list[dict[str, Any]]
         if prefetch_bars is not None and len(prefetch_bars) > 0:
             bars = prefetch_bars
-        elif use_v3:
+        elif use_binance:
             bars = fetch_recent_bars_asc_binance_strategy(db_path=market_db_path)
         else:
             bars = fetch_recent_bars_asc(limit=280, db_path=market_db_path)
@@ -491,7 +501,7 @@ def _recompute_jupiter_narrative_for_market_event_id(
             None,
         )
         if idx is None or len(bars[: idx + 1]) < min_bars:
-            if use_v3:
+            if use_binance:
                 lb = jupiter3_binance_strategy_lookback()
                 bars = fetch_bars_asc_through_market_event_id_binance_strategy(
                     mid, db_path=market_db_path, max_lookback=lb
@@ -505,7 +515,13 @@ def _recompute_jupiter_narrative_for_market_event_id(
         if idx is None or len(bars[: idx + 1]) < min_bars:
             return "", None, None
         sub = bars[: idx + 1]
-        if use_v3:
+        if use_v4:
+            sig = evaluate_sean_jupiter_baseline_v4(
+                bars_asc=sub,
+                training_state=st,
+                ledger_db_path=default_execution_ledger_path(),
+            )
+        elif use_v3:
             sig = evaluate_sean_jupiter_baseline_v3(
                 bars_asc=sub,
                 training_state=st,
@@ -523,6 +539,9 @@ def _recompute_jupiter_narrative_for_market_event_id(
         gates: dict[str, Any] | None = None
         if use_v3:
             jg = sf.get("jupiter_v3_gates")
+            gates = jg if isinstance(jg, dict) else None
+        elif use_v4:
+            jg = sf.get("jupiter_v4_gates")
             gates = jg if isinstance(jg, dict) else None
         text = format_baseline_jupiter_tile_narrative(
             signal_mode=sm,
@@ -544,6 +563,16 @@ def _jupiter_v3_gates_from_policy_row(pol_e: dict[str, Any] | None) -> dict[str,
     if not isinstance(feat, dict):
         return None
     jg = feat.get("jupiter_v3_gates")
+    return jg if isinstance(jg, dict) else None
+
+
+def _jupiter_v4_gates_from_policy_row(pol_e: dict[str, Any] | None) -> dict[str, Any] | None:
+    if not pol_e or str(pol_e.get("signal_mode") or "").strip() != SIGNAL_MODE_JUPITER_4:
+        return None
+    feat = pol_e.get("features")
+    if not isinstance(feat, dict):
+        return None
+    jg = feat.get("jupiter_v4_gates")
     return jg if isinstance(jg, dict) else None
 
 
@@ -578,9 +607,25 @@ def _v3_entry_narrative_and_gates_from_open_position(pos: Any) -> tuple[str, dic
             )
         return nar, None
 
+    if auth == "jupiter_4_sean":
+        nar = (getattr(pos, "entry_policy_narrative_snapshot", None) or "").strip()
+        eg = getattr(pos, "entry_jupiter_v4_gates_snapshot", None)
+        gates: dict[str, Any] | None = dict(eg) if isinstance(eg, dict) else None
+        if isinstance(gates, dict) and len(gates) == 0:
+            gates = None
+        if not nar:
+            jpn = sfd.get("jupiter_policy_narrative")
+            if isinstance(jpn, str) and jpn.strip():
+                nar = jpn.strip()
+        if gates is None:
+            jg = sfd.get("jupiter_v4_gates")
+            if isinstance(jg, dict) and len(jg) > 0:
+                gates = dict(jg)
+        return nar, gates
+
     nar = (getattr(pos, "entry_policy_narrative_snapshot", None) or "").strip()
     eg = getattr(pos, "entry_jupiter_v3_gates_snapshot", None)
-    gates: dict[str, Any] | None = dict(eg) if isinstance(eg, dict) else None
+    gates = dict(eg) if isinstance(eg, dict) else None
     if isinstance(gates, dict) and len(gates) == 0:
         gates = None
     if not nar:
@@ -751,6 +796,31 @@ def _baseline_entry_snapshot_for_active_slot(
                 return (s2 or "").strip(), g2
         return "", None
 
+    if auth == "jupiter_4_sean":
+        pol_v4 = fetch_policy_evaluation_for_market_event(
+            conn,
+            em,
+            lane=RESERVED_STRATEGY_BASELINE,
+            strategy_id=RESERVED_STRATEGY_BASELINE,
+            signal_mode=SIGNAL_MODE_JUPITER_4,
+        )
+        if pol_v4:
+            s = _format_jupiter_tile_narrative_from_policy_row(pol_v4)
+            g = _jupiter_v4_gates_from_policy_row(pol_v4)
+            if (s or "").strip() or g:
+                return (s or "").strip(), g
+        if policy_slot == BASELINE_POLICY_SLOT_JUP_V4 and market_db_path and market_db_path.is_file():
+            s2, g2, _sf2 = _recompute_jupiter_narrative_for_market_event_id(
+                em,
+                market_db_path,
+                policy_slot=BASELINE_POLICY_SLOT_JUP_V4,
+                training_state=st,
+                prefetch_bars=prefetch_bars,
+            )
+            if (s2 or "").strip() or g2:
+                return (s2 or "").strip(), g2
+        return "", None
+
     # unknown authority: prefer explicit policy rows (v3 then v2), then slot-consistent recompute
     pol_v3 = fetch_policy_evaluation_for_market_event(
         conn,
@@ -762,6 +832,18 @@ def _baseline_entry_snapshot_for_active_slot(
     if pol_v3 and _jupiter_v3_gates_from_policy_row(pol_v3):
         s = _format_jupiter_tile_narrative_from_policy_row(pol_v3)
         return (s or "").strip(), _jupiter_v3_gates_from_policy_row(pol_v3)
+    pol_v4 = fetch_policy_evaluation_for_market_event(
+        conn,
+        em,
+        lane=RESERVED_STRATEGY_BASELINE,
+        strategy_id=RESERVED_STRATEGY_BASELINE,
+        signal_mode=SIGNAL_MODE_JUPITER_4,
+    )
+    if pol_v4:
+        s4 = _format_jupiter_tile_narrative_from_policy_row(pol_v4)
+        g4 = _jupiter_v4_gates_from_policy_row(pol_v4)
+        if (s4 or "").strip() or g4:
+            return (s4 or "").strip(), g4
     pol_v2 = fetch_policy_evaluation_for_market_event(
         conn,
         em,
@@ -776,7 +858,10 @@ def _baseline_entry_snapshot_for_active_slot(
     pol_e = fetch_baseline_policy_evaluation_for_market_event(conn, em)
     s = _format_jupiter_tile_narrative_from_policy_row(pol_e)
     if (s or "").strip():
-        return s.strip(), _jupiter_v3_gates_from_policy_row(pol_e)
+        g_e = _jupiter_v3_gates_from_policy_row(pol_e)
+        if g_e is None:
+            g_e = _jupiter_v4_gates_from_policy_row(pol_e)
+        return s.strip(), g_e
     if market_db_path and market_db_path.is_file():
         s2, g2, _sf2 = _recompute_jupiter_narrative_for_market_event_id(
             em,
@@ -875,7 +960,7 @@ def build_jupiter_policy_snapshot(
     training_state: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """
-    Live **paper** Jupiter baseline policy view: same evaluator as ``baseline_ledger_bridge`` (slot v2 or v3).
+    Live **paper** Jupiter baseline policy view: same evaluator as ``baseline_ledger_bridge`` (v2 / v3 / v4 slot).
 
     Not a price tape; not venue execution. Refreshes every dashboard bundle request.
     """
@@ -890,10 +975,17 @@ def build_jupiter_policy_snapshot(
         POLICY_ENGINE_ID as POLICY_ENGINE_ID_JUPITER_3,
         POLICY_SPEC_VERSION as POLICY_SPEC_VERSION_JUPITER_3,
     )
+    from modules.anna_training.jupiter_4_sean_policy import (
+        CATALOG_ID as JUPITER_4_CATALOG_ID,
+        MIN_BARS as MIN_BARS_JUPITER_4,
+        POLICY_ENGINE_ID as POLICY_ENGINE_ID_JUPITER_4,
+        POLICY_SPEC_VERSION as POLICY_SPEC_VERSION_JUPITER_4,
+    )
     from modules.anna_training.sean_jupiter_baseline_signal import (
         MIN_BARS as MIN_BARS_JUPITER_2,
         evaluate_sean_jupiter_baseline_v1,
         evaluate_sean_jupiter_baseline_v3,
+        evaluate_sean_jupiter_baseline_v4,
         format_baseline_jupiter_tile_narrative,
     )
 
@@ -906,10 +998,11 @@ def build_jupiter_policy_snapshot(
         "baseline_signal_mode": SIGNAL_MODE_JUPITER_2,
         "baseline_signal_mode_note": (
             "Active slot from baseline_operator_kv / BASELINE_JUPITER_POLICY_SLOT: "
-            "jup_v2 → sean_jupiter_v1 (Jupiter_2), jup_v3 → sean_jupiter_v3 (Jupiter_3)."
+            "jup_v2 → sean_jupiter_v1 (Jupiter_2), jup_v3 → sean_jupiter_v3 (Jupiter_3), "
+            "jup_v4 → sean_jupiter_v4 (Jupiter_4)."
         ),
         "what_this_is": (
-            "Bar-derived Sean Jupiter baseline policy for the selected slot (Jupiter_2 or Jupiter_3). "
+            "Bar-derived Sean Jupiter baseline policy for the selected slot (Jupiter_2 / Jupiter_3 / Jupiter_4). "
             "Shows whether the latest closed bar would fire a paper baseline trade and which features aligned."
         ),
         "market_db_path": str(mpath) if mpath else None,
@@ -941,6 +1034,7 @@ def build_jupiter_policy_snapshot(
         "options": [
             {"id": "jup_v2", "label": "JUPv2"},
             {"id": "jup_v3", "label": "JUPv3"},
+            {"id": "jup_v4", "label": "JUPv4"},
         ],
     }
 
@@ -950,6 +1044,8 @@ def build_jupiter_policy_snapshot(
         return out
 
     use_v3 = policy_slot == BASELINE_POLICY_SLOT_JUP_V3
+    use_v4 = policy_slot == BASELINE_POLICY_SLOT_JUP_V4
+    use_binance = policy_uses_binance_strategy_bars(policy_slot)
     try:
         _ensure_runtime_for_market_imports()
         from market_data.bar_lookup import (
@@ -958,7 +1054,7 @@ def build_jupiter_policy_snapshot(
             jupiter3_binance_strategy_lookback,
         )
 
-        if use_v3:
+        if use_binance:
             bars = fetch_recent_bars_asc_binance_strategy(db_path=mpath)
         else:
             bars = fetch_recent_bars_asc(limit=280, db_path=mpath)
@@ -967,17 +1063,36 @@ def build_jupiter_policy_snapshot(
         return out
 
     out["baseline_jupiter_policy_slot"] = policy_slot
-    min_bars = MIN_BARS_JUPITER_3 if use_v3 else MIN_BARS_JUPITER_2
-    out["policy_engine"] = POLICY_ENGINE_ID_JUPITER_3 if use_v3 else POLICY_ENGINE_ID_JUPITER_2
-    out["policy_catalog_id"] = JUPITER_3_CATALOG_ID if use_v3 else JUPITER_2_CATALOG_ID
-    out["policy_spec_version"] = POLICY_SPEC_VERSION_JUPITER_3 if use_v3 else POLICY_SPEC_VERSION_JUPITER_2
-    out["baseline_signal_mode"] = SIGNAL_MODE_JUPITER_3 if use_v3 else SIGNAL_MODE_JUPITER_2
+    min_bars = MIN_BARS_JUPITER_4 if use_v4 else (MIN_BARS_JUPITER_3 if use_v3 else MIN_BARS_JUPITER_2)
+    if use_v4:
+        out["policy_engine"] = POLICY_ENGINE_ID_JUPITER_4
+        out["policy_catalog_id"] = JUPITER_4_CATALOG_ID
+        out["policy_spec_version"] = POLICY_SPEC_VERSION_JUPITER_4
+        out["baseline_signal_mode"] = SIGNAL_MODE_JUPITER_4
+    elif use_v3:
+        out["policy_engine"] = POLICY_ENGINE_ID_JUPITER_3
+        out["policy_catalog_id"] = JUPITER_3_CATALOG_ID
+        out["policy_spec_version"] = POLICY_SPEC_VERSION_JUPITER_3
+        out["baseline_signal_mode"] = SIGNAL_MODE_JUPITER_3
+    else:
+        out["policy_engine"] = POLICY_ENGINE_ID_JUPITER_2
+        out["policy_catalog_id"] = JUPITER_2_CATALOG_ID
+        out["policy_spec_version"] = POLICY_SPEC_VERSION_JUPITER_2
+        out["baseline_signal_mode"] = SIGNAL_MODE_JUPITER_2
     if use_v3:
         out["baseline_jupiter_policy"]["strategy_bar_source"] = "binance_5m_ohlcv"
         out["bars_lookback"] = jupiter3_binance_strategy_lookback()
         out["what_this_is"] = (
             "Jupiter_3 Sean policy on **Binance 5m OHLC + base volume** (not Pyth-derived candles). "
             "EMA9/21 bias, RSI, volume spike vs full-series average, BOS vs prior swing, ATR expected move. "
+            "Paper baseline: whether the latest closed Binance bar would fire a trade."
+        )
+    elif use_v4:
+        out["baseline_jupiter_policy"]["strategy_bar_source"] = "binance_5m_ohlcv"
+        out["bars_lookback"] = jupiter3_binance_strategy_lookback()
+        out["what_this_is"] = (
+            "Jupiter_4 Sean policy on **Binance 5m OHLC + volume** (not Pyth-derived candles). "
+            "EMA9/21 crossover, RSI bands, volume spike, ATR×2.5 expected move; confidence-weighted sizing. "
             "Paper baseline: whether the latest closed Binance bar would fire a trade."
         )
 
@@ -989,7 +1104,7 @@ def build_jupiter_policy_snapshot(
             f"Need at least {min_bars} closed bars for the active Jupiter baseline policy (slot={policy_slot!r})."
             + (
                 " Run scripts/runtime/market_data/binance_strategy_bars_sync.py to populate binance_strategy_bars_5m."
-                if use_v3
+                if use_binance
                 else ""
             )
         )
@@ -999,7 +1114,7 @@ def build_jupiter_policy_snapshot(
     sym_last = str(last.get("canonical_symbol") or "SOL-PERP").strip() or "SOL-PERP"
     out["tile_bar_selection_proof"] = _tile_bar_selection_proof(
         mpath,
-        use_v3=use_v3,
+        use_v3=use_binance,
         last_bar=last,
         canonical_symbol=sym_last,
     )
@@ -1031,13 +1146,19 @@ def build_jupiter_policy_snapshot(
         "tick_count": last.get("tick_count"),
         "volume_base": last.get("volume_base"),
         "price_source": str(last.get("price_source") or "") or None,
-        "strategy_bar_source": (str(last.get("strategy_bar_source")) if use_v3 else None),
+        "strategy_bar_source": (str(last.get("strategy_bar_source")) if use_binance else None),
     }
 
     from modules.anna_training.store import load_state as _load_training_state
 
     _st = training_state if isinstance(training_state, dict) else _load_training_state()
-    if use_v3:
+    if use_v4:
+        sig = evaluate_sean_jupiter_baseline_v4(
+            bars_asc=bars,
+            training_state=_st,
+            ledger_db_path=default_execution_ledger_path(),
+        )
+    elif use_v3:
         sig = evaluate_sean_jupiter_baseline_v3(
             bars_asc=bars,
             training_state=_st,
@@ -1054,7 +1175,7 @@ def build_jupiter_policy_snapshot(
     out["reason_code"] = sig.reason_code
     out["pnl_usd_open_to_close_hint"] = None
     out["features"] = dict(sig.features) if isinstance(sig.features, dict) else sig.features
-    if use_v3:
+    if use_binance:
         _feat_snap = out["features"] if isinstance(out.get("features"), dict) else {}
         out["binance_kline_volume_ok"] = _binance_kline_volume_ok_from_features(_feat_snap)
 
@@ -1090,9 +1211,9 @@ def build_jupiter_policy_snapshot(
                 )
                 entry_lbl = baseline_entry_policy_label_for_authority(entry_auth)
                 audit_gates: dict[str, Any] | None = None
-                # JUPv3: entry gates/narrative are immutable at open — never replace with recompute.
-                # Optional bar recompute is jupiter_v3_gates_recomputed_audit only (labeled not entry).
-                if emid and not use_v3:
+                # JUPv3/v4: entry gates/narrative are immutable at open — never replace with recompute.
+                # Optional bar recompute is jupiter_*_gates_recomputed_audit only (labeled not entry).
+                if emid and not use_binance:
                     rn, rg = _baseline_entry_snapshot_for_active_slot(
                         conn,
                         emid,
@@ -1111,6 +1232,17 @@ def build_jupiter_policy_snapshot(
                             emid,
                             mpath,
                             policy_slot=BASELINE_POLICY_SLOT_JUP_V3,
+                            training_state=_st,
+                            prefetch_bars=bars,
+                        )
+                    except Exception:
+                        audit_gates = None
+                elif use_v4 and emid and mpath.is_file():
+                    try:
+                        _audit_nar, audit_gates, _audit_sf = _recompute_jupiter_narrative_for_market_event_id(
+                            emid,
+                            mpath,
+                            policy_slot=BASELINE_POLICY_SLOT_JUP_V4,
                             training_state=_st,
                             prefetch_bars=bars,
                         )
@@ -1140,6 +1272,11 @@ def build_jupiter_policy_snapshot(
                 if use_v3 and isinstance(audit_gates, dict) and len(audit_gates) > 0:
                     blifecycle["jupiter_v3_gates_recomputed_audit"] = dict(audit_gates)
                     blifecycle["jupiter_v3_gates_recomputed_audit_scope_note"] = (
+                        "Current bar evaluation (not entry)"
+                    )
+                if use_v4 and isinstance(audit_gates, dict) and len(audit_gates) > 0:
+                    blifecycle["jupiter_v4_gates_recomputed_audit"] = dict(audit_gates)
+                    blifecycle["jupiter_v4_gates_recomputed_audit_scope_note"] = (
                         "Current bar evaluation (not entry)"
                     )
                 out["baseline_lifecycle"] = blifecycle
@@ -1176,6 +1313,10 @@ def build_jupiter_policy_snapshot(
         jg = feat.get("jupiter_v3_gates")
         if isinstance(jg, dict):
             out["jupiter_v3_gates"] = jg
+    if use_v4:
+        jg4 = feat.get("jupiter_v4_gates")
+        if isinstance(jg4, dict):
+            out["jupiter_v4_gates"] = jg4
     return out
 
 
@@ -1393,7 +1534,6 @@ def _event_axis_jupiter_tile_narratives(
     """
     from modules.anna_training.execution_ledger import (
         SIGNAL_MODE_JUPITER_2,
-        SIGNAL_MODE_JUPITER_3,
         fetch_baseline_policy_evaluation_for_market_event,
     )
     from modules.anna_training.sean_jupiter_baseline_signal import format_baseline_jupiter_tile_narrative
@@ -1408,9 +1548,9 @@ def _event_axis_jupiter_tile_narratives(
     mpath = market_db_path
     _ensure_runtime_for_market_imports()
 
-    use_v3 = get_baseline_jupiter_policy_slot(conn) == BASELINE_POLICY_SLOT_JUP_V3
-    sm_active = SIGNAL_MODE_JUPITER_3 if use_v3 else SIGNAL_MODE_JUPITER_2
-    policy_slot = BASELINE_POLICY_SLOT_JUP_V3 if use_v3 else BASELINE_POLICY_SLOT_JUP_V2
+    policy_slot = get_baseline_jupiter_policy_slot(conn)
+    use_binance_axis = policy_uses_binance_strategy_bars(policy_slot)
+    sm_active = signal_mode_for_baseline_policy_slot(policy_slot)
     st = _load_training_state()
 
     prefetch: list[dict[str, Any]] | None = None
@@ -1423,7 +1563,7 @@ def _event_axis_jupiter_tile_narratives(
 
             prefetch = (
                 fetch_recent_bars_asc_binance_strategy(db_path=mpath)
-                if use_v3
+                if use_binance_axis
                 else fetch_recent_bars_asc(limit=280, db_path=mpath)
             )
         except Exception:
@@ -1437,9 +1577,9 @@ def _event_axis_jupiter_tile_narratives(
         use_persisted = False
         if row:
             sm_row = str(row.get("signal_mode") or "").strip()
-            if not use_v3:
+            if sm_active == SIGNAL_MODE_JUPITER_2:
                 use_persisted = True
-            elif sm_row == SIGNAL_MODE_JUPITER_3:
+            elif sm_row == sm_active:
                 use_persisted = True
         if use_persisted and row:
             f = dict(row["features"]) if isinstance(row.get("features"), dict) else {}
@@ -1459,6 +1599,13 @@ def _event_axis_jupiter_tile_narratives(
                     "features": f,
                 }
             )
+            if not jg:
+                jg = _jupiter_v4_gates_from_policy_row(
+                    {
+                        "signal_mode": row.get("signal_mode"),
+                        "features": f,
+                    }
+                )
             if jg:
                 gates_out[mid_s] = jg
             binance_out[mid_s] = _binance_kline_volume_ok_from_features(f)
@@ -2694,11 +2841,13 @@ def _fetch_baseline_exit_policy_features(
     if not mid:
         return None
     slot = get_baseline_jupiter_policy_slot(conn)
-    primary = (
-        SIGNAL_MODE_JUPITER_3 if slot == BASELINE_POLICY_SLOT_JUP_V3 else SIGNAL_MODE_JUPITER_2
-    )
-    secondary = SIGNAL_MODE_JUPITER_3 if primary == SIGNAL_MODE_JUPITER_2 else SIGNAL_MODE_JUPITER_2
-    for sm in (primary, secondary):
+    primary = signal_mode_for_baseline_policy_slot(slot)
+    others = [
+        m
+        for m in (SIGNAL_MODE_JUPITER_2, SIGNAL_MODE_JUPITER_3, SIGNAL_MODE_JUPITER_4)
+        if m != primary
+    ]
+    for sm in [primary] + others:
         cur = conn.execute(
             """
             SELECT features_json
@@ -2810,9 +2959,9 @@ def build_baseline_active_position_snapshot(
     unrealized PnL, and running duration.
     """
     from modules.anna_training.execution_ledger import (
-        BASELINE_POLICY_SLOT_JUP_V3,
         get_baseline_jupiter_policy_slot,
         lookup_baseline_jupiter_open_state_json,
+        policy_uses_binance_strategy_bars,
     )
     from modules.anna_training.jupiter_2_baseline_lifecycle import (
         BaselineOpenPosition,
@@ -2856,7 +3005,7 @@ def build_baseline_active_position_snapshot(
         _ensure_runtime_for_market_imports()
         from market_data.bar_lookup import fetch_latest_bar_row, fetch_latest_bar_row_binance_strategy
 
-        if policy_slot == BASELINE_POLICY_SLOT_JUP_V3:
+        if policy_uses_binance_strategy_bars(policy_slot):
             bar = fetch_latest_bar_row_binance_strategy(db_path=mpath, canonical_symbol=sym)
         else:
             bar = fetch_latest_bar_row(db_path=mpath, canonical_symbol=sym)
@@ -4363,9 +4512,10 @@ def build_trade_chain_payload(
         "options": [
             {"id": "jup_v2", "label": "JUPv2"},
             {"id": "jup_v3", "label": "JUPv3"},
+            {"id": "jup_v4", "label": "JUPv4"},
         ],
     }
-    # True when JUPv3 Binance axis query returned no columns (before inject). Never mix in execution_trades ids.
+    # True when JUPv3/JUPv4 Binance axis query returned no columns (before inject). Never mix in execution_trades ids.
     binance_axis_empty_for_jup_v3 = False
     conn = connect_ledger(db_path)
     try:
@@ -4378,6 +4528,7 @@ def build_trade_chain_payload(
             "options": [
                 {"id": "jup_v2", "label": "JUPv2"},
                 {"id": "jup_v3", "label": "JUPv3"},
+                {"id": "jup_v4", "label": "JUPv4"},
             ],
         }
         axis_sym = _trade_chain_axis_canonical_symbol()
@@ -4387,10 +4538,10 @@ def build_trade_chain_payload(
         # Closed 5m bars only — newest column is the last **completed** bucket (decision at roll).
         # No synthetic "forming" column; operators should not see EVAL PENDING for an in-progress candle.
         #
-        # JUPv3: axis MUST follow binance_strategy_bars_5m. Using market_bars_5m (Pyth) here pins the
+        # JUPv3/v4: axis MUST follow binance_strategy_bars_5m. Using market_bars_5m (Pyth) here pins the
         # rightmost column to a stale open time when Pyth ingest lags Binance — wrong tile timestamp
         # and a chain that never advances to newer closed bars until Pyth catches up.
-        if _slot == BASELINE_POLICY_SLOT_JUP_V3:
+        if policy_uses_binance_strategy_bars(_slot):
             event_axis, event_axis_time_utc_iso, event_axis_candle_close_utc_iso = (
                 _event_axis_from_binance_strategy_bars(
                     mpath, limit=max_events, canonical_symbol=axis_sym
@@ -4407,7 +4558,7 @@ def build_trade_chain_payload(
             )
             event_axis_source = "market_bars_5m"
         if not event_axis:
-            if _slot == BASELINE_POLICY_SLOT_JUP_V3:
+            if policy_uses_binance_strategy_bars(_slot):
                 # Do not substitute ledger trade ids — they follow a different timeline than Binance bars/tiles.
                 event_axis_time_utc_iso = []
                 event_axis_candle_close_utc_iso = []

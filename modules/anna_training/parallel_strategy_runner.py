@@ -1,4 +1,4 @@
-"""Parallel Anna paper strategies per market_event_id — Sean Jupiter baseline signal (v2/v3 per operator slot)."""
+"""Parallel Anna paper strategies per market_event_id — Sean Jupiter baseline signal (v2/v3/v4 per operator slot)."""
 
 from __future__ import annotations
 
@@ -12,6 +12,7 @@ from typing import Any
 from modules.anna_training.sean_jupiter_baseline_signal import (
     evaluate_sean_jupiter_baseline_v1,
     evaluate_sean_jupiter_baseline_v3,
+    evaluate_sean_jupiter_baseline_v4,
 )
 from modules.anna_training.store import load_state
 
@@ -201,10 +202,12 @@ def run_parallel_anna_strategies_tick(
     )
     from modules.anna_training.execution_ledger import (
         BASELINE_POLICY_SLOT_JUP_V3,
+        BASELINE_POLICY_SLOT_JUP_V4,
         RESERVED_STRATEGY_BASELINE,
         connect_ledger,
         ensure_execution_ledger_schema,
         get_baseline_jupiter_policy_slot,
+        policy_uses_binance_strategy_bars,
         signal_mode_for_baseline_policy_slot,
         sync_strategy_registry_from_catalog,
     )
@@ -216,7 +219,7 @@ def run_parallel_anna_strategies_tick(
     finally:
         conn_slot.close()
 
-    use_v3_early = policy_slot_early == BASELINE_POLICY_SLOT_JUP_V3
+    use_v3_early = policy_uses_binance_strategy_bars(policy_slot_early)
     if use_v3_early:
         mid = fetch_latest_market_event_id_binance_strategy(db_path=market_data_db_path)
         bar = fetch_latest_bar_row_binance_strategy(db_path=market_data_db_path) or {}
@@ -290,9 +293,14 @@ def run_parallel_anna_strategies_tick(
     finally:
         conn.close()
 
-    use_v3 = policy_slot == BASELINE_POLICY_SLOT_JUP_V3
     sm = signal_mode_for_baseline_policy_slot(policy_slot)
-    if use_v3:
+    if policy_slot == BASELINE_POLICY_SLOT_JUP_V4:
+        sig = evaluate_sean_jupiter_baseline_v4(
+            bars_asc=bars_asc,
+            training_state=load_state(),
+            ledger_db_path=execution_ledger_db_path,
+        )
+    elif policy_slot == BASELINE_POLICY_SLOT_JUP_V3:
         sig = evaluate_sean_jupiter_baseline_v3(
             bars_asc=bars_asc,
             training_state=load_state(),
