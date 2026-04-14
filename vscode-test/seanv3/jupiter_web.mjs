@@ -213,6 +213,7 @@ function htmlPage(data) {
       <h1>Jupiter — read-only</h1>
       <p class="muted tagline">SeanV3 parity data (same SQLite as TUI) — not a terminal emulator.</p>
       <p class="muted">${esc(data.sqlite_path)}</p>
+      <p><a href="https://jup.ag/perps/long/SOL-SOL" target="_blank" rel="noopener noreferrer">Jupiter trading — SOL perps (jup.ag)</a></p>
     </section>
     ${errBlock ? `<section class="panel">${errBlock}</section>` : ''}
     <section class="panel">
@@ -231,7 +232,7 @@ function htmlPage(data) {
         <tbody>${rows || '<tr><td colspan="5" class="muted">No rows</td></tr>'}</tbody>
       </table>
     </section>
-    <p class="muted links footer"><a href="/api/summary.json">summary.json</a> · <a href="/health">health</a></p>
+    <p class="muted links footer"><a href="/api/summary.json">summary.json</a> · <a href="/health">health</a> · <a href="https://jup.ag/perps/long/SOL-SOL" target="_blank" rel="noopener noreferrer">jup.ag SOL perps</a></p>
   </div>
 </body>
 </html>`;
