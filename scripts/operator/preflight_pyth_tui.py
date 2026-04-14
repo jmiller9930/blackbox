@@ -352,7 +352,7 @@ def _main_panel(parsed: list[dict[str, Any]] | None, now_ts: float) -> Panel:
     rel = (q["conf"] / q["price"]) if q["price"] else 0.0
     body_txt = "\n".join(
         [
-            f"[bold cyan]SOL/USD[/bold]  [bold white]{q['price']:.4f}[/bold]  USD",
+            f"[bold cyan]SOL/USD[/bold cyan]  [bold white]{q['price']:.4f}[/bold white]  USD",
             f"Confidence band: ±{q['conf']:.6f}  ({rel * 100:.4f}% of price)",
             (
                 f"Publish time (unix): {pub}   wall age: ~{wall_age:.1f}s"
