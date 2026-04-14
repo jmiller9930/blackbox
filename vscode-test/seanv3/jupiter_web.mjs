@@ -919,7 +919,11 @@ function htmlPage(v) {
     const stakeOk = op.operator_controls?.paper_stake_edit_allowed;
     operatorBlock = `${liveStrip}
       <p><strong>Funding mode (SQLite)</strong> <code>${esc(op.sean_funding_mode || 'paper')}</code>
-        · PAPER_TRADING env: ${op.paper_trading_env ? '<span class="ok">on (simulated)</span>' : '<span class="warn">off</span> (compose uses live path for chain gate)</p>
+        · PAPER_TRADING env: ${
+          op.paper_trading_env
+            ? `<span class="ok">on (simulated)</span>`
+            : `<span class="warn">off</span> (compose uses live path for chain gate)`
+        }</p>
       <p><strong>Paper equity</strong> ~${esc(eqStr)} USD
         <span class="muted">(start ${esc(String(pq.starting_usd ?? '—'))} + realized ${esc(String(pq.realized_pnl_usd ?? '—'))} + unreal ${esc(String(pq.unrealized_usd ?? '—'))})</span></p>
       <p><strong>On-chain SOL</strong> (cached) ${esc(op.chain_sol_balance_lamports || '—')} lamports
