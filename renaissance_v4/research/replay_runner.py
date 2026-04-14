@@ -5,13 +5,14 @@ Purpose:
 Run a deterministic bar-by-bar replay over historical 5-minute bars.
 
 Usage:
-Run directly after database initialization and validation to confirm replay can process the dataset.
+Run directly after Phase 1 and Phase 2 files are installed to validate the market-state and feature pipeline.
 
 Version:
-v1.0
+v2.0
 
 Change History:
-- v1.0 Initial Phase 1 implementation.
+- v1.0 Initial Phase 1 replay shell.
+- v2.0 Added MarketState builder, feature engine, and regime classifier integration.
 """
 
 from __future__ import annotations
@@ -19,13 +20,18 @@ from __future__ import annotations
 import uuid
 
 from renaissance_v4.core.decision_contract import DecisionContract
+from renaissance_v4.core.feature_engine import build_feature_set
+from renaissance_v4.core.market_state_builder import build_market_state
+from renaissance_v4.core.regime_classifier import classify_regime
 from renaissance_v4.utils.db import get_connection
+
+MIN_ROWS_REQUIRED = 50
 
 
 def main() -> None:
     """
     Iterate through historical bars in strict chronological order.
-    For Phase 1, generate a placeholder no-trade decision object per bar to prove the replay path works.
+    Builds MarketState, FeatureSet, and regime output for each eligible replay step.
     """
     connection = get_connection()
     rows = connection.execute(
@@ -38,15 +44,24 @@ def main() -> None:
 
     print(f"[replay] Loaded {len(rows)} bars")
 
-    if not rows:
-        raise RuntimeError("[replay] No historical bars found")
+    if len(rows) < MIN_ROWS_REQUIRED:
+        raise RuntimeError(
+            f"[replay] Need at least {MIN_ROWS_REQUIRED} bars, found {len(rows)}"
+        )
 
-    for index, row in enumerate(rows, start=1):
+    processed = 0
+
+    for index in range(MIN_ROWS_REQUIRED, len(rows) + 1):
+        window = rows[:index]
+        state = build_market_state(window)
+        features = build_feature_set(state)
+        regime = classify_regime(features)
+
         decision = DecisionContract(
             decision_id=str(uuid.uuid4()),
-            symbol=row["symbol"],
-            timestamp=row["open_time"],
-            market_regime="unknown",
+            symbol=state.symbol,
+            timestamp=state.timestamp,
+            market_regime=regime,
             direction="no_trade",
             fusion_score=0.0,
             confidence_score=0.0,
@@ -54,21 +69,28 @@ def main() -> None:
             risk_budget=0.0,
             execution_allowed=False,
             reason_trace={
-                "phase": "phase_1_foundation",
-                "note": "Replay pipeline shell only; no signal logic yet",
-                "close": row["close"],
-                "volume": row["volume"],
+                "phase": "phase_2_market_interpretation",
+                "regime": regime,
+                "close": features.close_price,
+                "ema_distance": features.ema_distance,
+                "ema_slope": features.ema_slope,
+                "volatility_20": features.volatility_20,
+                "directional_persistence_10": features.directional_persistence_10,
             },
         )
 
-        if index % 5000 == 0:
+        processed += 1
+
+        if processed % 5000 == 0:
             print(
-                "[replay] Progress: "
-                f"processed={index} symbol={decision.symbol} "
-                f"timestamp={decision.timestamp} direction={decision.direction}"
+                "[replay] Progress "
+                f"processed={processed} "
+                f"timestamp={decision.timestamp} "
+                f"regime={decision.market_regime} "
+                f"direction={decision.direction}"
             )
 
-    print("[replay] Replay completed successfully")
+    print("[replay] Phase 2 replay completed successfully")
 
 
 if __name__ == "__main__":
