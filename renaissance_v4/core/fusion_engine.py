@@ -22,28 +22,44 @@ from renaissance_v4.core.fusion_result import FusionResult
 from renaissance_v4.core.signal_weights import get_signal_weight
 from renaissance_v4.signals.signal_result import SignalResult
 
-MIN_FUSION_SCORE = 0.55
+# DV-ARCH-CORRECTION-009: threshold aligned to measured GM contribution scale (see correction_v1.md).
+# Legacy product form produced winning-side scores ~0.01 typical / ~0.11 max — unreachable vs 0.55.
+MIN_FUSION_SCORE = 0.35
 MAX_CONFLICT_SCORE = 0.45
 MAX_OVERLAP_BUCKET_COUNT = 2
 OVERLAP_PENALTY_PER_EXTRA_SIGNAL = 0.08
 
+_EPS = 1e-12
+
+
+def _geometric_mean_four(conf: float, edge: float, regime_fit: float, stability: float) -> float:
+    """Fourth root of four factors in [0,1] (with epsilon floors); preserves ordering, avoids product collapse."""
+    c = max(conf, _EPS)
+    e = max(edge, _EPS)
+    rf = max(regime_fit, _EPS)
+    st = max(stability, _EPS)
+    return (c * e * rf * st) ** 0.25
+
 
 def _directional_contribution(signal: SignalResult) -> float:
     """
-    Convert a signal result into a weighted directional contribution before overlap adjustments.
+    Weighted directional contribution before overlap adjustments.
+
+    Uses **geometric mean** of confidence, expected_edge, regime_fit, stability (times signal weight).
+    The prior **product** form collapsed typical scores to ~1e-2 while MIN_FUSION_SCORE was 0.55, so fusion
+    never emitted long/short on full history (diagnostic_v1.md).
     """
     if not signal.active or signal.direction not in {"long", "short"}:
         return 0.0
 
     base_weight = get_signal_weight(signal.signal_name)
-    contribution = (
-        signal.confidence
-        * max(signal.expected_edge, 0.0)
-        * max(signal.regime_fit, 0.0)
-        * max(signal.stability_score, 0.0)
-        * base_weight
+    gm = _geometric_mean_four(
+        max(signal.confidence, 0.0),
+        max(signal.expected_edge, 0.0),
+        max(signal.regime_fit, 0.0),
+        max(signal.stability_score, 0.0),
     )
-    return contribution
+    return gm * base_weight
 
 
 def _signal_bucket(signal_name: str) -> str:

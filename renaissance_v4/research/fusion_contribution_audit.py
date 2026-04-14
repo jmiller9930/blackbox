@@ -16,6 +16,7 @@ from contextlib import redirect_stdout
 from renaissance_v4.core.feature_engine import build_feature_set
 from renaissance_v4.core.market_state_builder import build_market_state
 from renaissance_v4.core.regime_classifier import classify_regime
+from renaissance_v4.core.fusion_engine import _directional_contribution as fusion_directional_contribution
 from renaissance_v4.core.signal_weights import get_signal_weight
 from renaissance_v4.signals.breakout_expansion import BreakoutExpansionSignal
 from renaissance_v4.signals.mean_reversion_fade import MeanReversionFadeSignal
@@ -48,18 +49,6 @@ def _legacy_contribution(r: SignalResult) -> float:
         * max(r.stability_score, 0.0)
         * w
     )
-
-
-def _gm_contribution(r: SignalResult) -> float:
-    if not r.active or r.direction not in {"long", "short"}:
-        return 0.0
-    w = get_signal_weight(r.signal_name)
-    c = max(r.confidence, 1e-12)
-    e = max(r.expected_edge, 1e-12)
-    rf = max(r.regime_fit, 1e-12)
-    st = max(r.stability_score, 1e-12)
-    gm = (c * e * rf * st) ** 0.25
-    return gm * w
 
 
 def _percentiles(xs: list[float]) -> dict[str, float]:
@@ -138,7 +127,7 @@ def run_audit() -> dict:
         for r in srs:
             if r.active and r.direction in {"long", "short"}:
                 lg = _legacy_contribution(r)
-                gg = _gm_contribution(r)
+                gg = fusion_directional_contribution(r)
                 legacy_contribs_by_signal[r.signal_name].append(lg)
                 gm_contribs_by_signal[r.signal_name].append(gg)
                 if r.direction == "long":
