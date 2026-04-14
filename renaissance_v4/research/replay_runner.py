@@ -5,14 +5,15 @@ Purpose:
 Run a deterministic bar-by-bar replay over historical 5-minute bars.
 
 Usage:
-Run directly after Phase 1 and Phase 2 files are installed to validate the market-state and feature pipeline.
+Run directly after Phases 1 through 3 are installed to validate the market-state, feature, regime, and signal pipeline.
 
 Version:
-v2.0
+v3.0
 
 Change History:
 - v1.0 Initial Phase 1 replay shell.
 - v2.0 Added MarketState builder, feature engine, and regime classifier integration.
+- v3.0 Added signal evaluation layer integration.
 """
 
 from __future__ import annotations
@@ -23,6 +24,10 @@ from renaissance_v4.core.decision_contract import DecisionContract
 from renaissance_v4.core.feature_engine import build_feature_set
 from renaissance_v4.core.market_state_builder import build_market_state
 from renaissance_v4.core.regime_classifier import classify_regime
+from renaissance_v4.signals.breakout_expansion import BreakoutExpansionSignal
+from renaissance_v4.signals.mean_reversion_fade import MeanReversionFadeSignal
+from renaissance_v4.signals.pullback_continuation import PullbackContinuationSignal
+from renaissance_v4.signals.trend_continuation import TrendContinuationSignal
 from renaissance_v4.utils.db import get_connection
 
 MIN_ROWS_REQUIRED = 50
@@ -31,7 +36,7 @@ MIN_ROWS_REQUIRED = 50
 def main() -> None:
     """
     Iterate through historical bars in strict chronological order.
-    Builds MarketState, FeatureSet, and regime output for each eligible replay step.
+    Build MarketState, FeatureSet, regime, and signal outputs for each eligible replay step.
     """
     connection = get_connection()
     rows = connection.execute(
@@ -49,6 +54,13 @@ def main() -> None:
             f"[replay] Need at least {MIN_ROWS_REQUIRED} bars, found {len(rows)}"
         )
 
+    signals = [
+        TrendContinuationSignal(),
+        PullbackContinuationSignal(),
+        BreakoutExpansionSignal(),
+        MeanReversionFadeSignal(),
+    ]
+
     processed = 0
 
     for index in range(MIN_ROWS_REQUIRED, len(rows) + 1):
@@ -56,6 +68,20 @@ def main() -> None:
         state = build_market_state(window)
         features = build_feature_set(state)
         regime = classify_regime(features)
+
+        signal_results = []
+        active_signals = []
+        suppressed_signals = []
+
+        for signal in signals:
+            result = signal.evaluate(state, features, regime)
+            signal_results.append(result)
+            if result.active:
+                active_signals.append(result.signal_name)
+            else:
+                suppressed_signals.append(
+                    f"{result.signal_name}:{result.suppression_reason}"
+                )
 
         decision = DecisionContract(
             decision_id=str(uuid.uuid4()),
@@ -69,13 +95,11 @@ def main() -> None:
             risk_budget=0.0,
             execution_allowed=False,
             reason_trace={
-                "phase": "phase_2_market_interpretation",
+                "phase": "phase_3_signal_architecture",
                 "regime": regime,
-                "close": features.close_price,
-                "ema_distance": features.ema_distance,
-                "ema_slope": features.ema_slope,
-                "volatility_20": features.volatility_20,
-                "directional_persistence_10": features.directional_persistence_10,
+                "active_signals": active_signals,
+                "suppressed_signals": suppressed_signals,
+                "signal_count": len(signal_results),
             },
         )
 
@@ -87,10 +111,10 @@ def main() -> None:
                 f"processed={processed} "
                 f"timestamp={decision.timestamp} "
                 f"regime={decision.market_regime} "
-                f"direction={decision.direction}"
+                f"active_signals={active_signals}"
             )
 
-    print("[replay] Phase 2 replay completed successfully")
+    print("[replay] Phase 3 replay completed successfully")
 
 
 if __name__ == "__main__":
