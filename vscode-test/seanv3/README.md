@@ -19,7 +19,7 @@ Both rely on the **host** routing table for Binance (WireGuard split-tunnel on c
 
 **Jupiter** (read-only web app; container **`jupiter-web`):** binds **HTTP** on **707** (no TLS in the Node app). **Operator browser:** use **`http://clawbot.a51.corp:707/`** when on VPN/LAN, or **`http://jupv3.greyllc.net:737/`** (or your DNS) from the internet — **not** `localhost` unless you are SSH’d on clawbot or have a tunnel. **`http://127.0.0.1:707/`** is only correct **on the server itself** (e.g. SSH session). Default **`JUPITER_WEB_PORT=707`**. Public path: **WAN :737 → LAN :707**. **`/api/summary.json`**, wallet, position, trades. Deploy: `docker compose up -d` in this directory. Local dev: **`npm run jupiter`** (may need **`sudo`** for **707** on Linux).
 
-**Web vs TUI (same backend, two displays):** see [`JUPITER_WEB_TUI_ALIGNMENT.md`](JUPITER_WEB_TUI_ALIGNMENT.md).
+**Web vs TUI (same backend, two displays):** see [`JUPITER_WEB_TUI_ALIGNMENT.md`](JUPITER_WEB_TUI_ALIGNMENT.md). The Jupiter page mirrors `preflight_pyth_tui.py` panels (preflight, policy, wallet, paper ledger, parity, trades, oracle). Compose mounts **`../../` → `/repo:ro`** for policy registry + execution ledger; override **`JUPITER_WEB_REFRESH_SEC`** (default `3`, `0` disables HTML auto-refresh).
 
 ### Lab deploy loop (`jupsync.py`)
 
