@@ -67,6 +67,65 @@ def test_binance_strategy_bar_roundtrip_and_v3_fetch(tmp_path: Path) -> None:
     assert latest["close"] == pytest.approx(100.5)
 
 
+def test_binance_strategy_latest_snapshot_hot_path(tmp_path: Path) -> None:
+    """Sidecar JSON (same ingest pass as SQLite) is preferred when fresh; stale falls back to DB."""
+    import json
+
+    from market_data.bar_lookup import (
+        binance_strategy_latest_snapshot_path,
+        fetch_latest_bar_row_binance_strategy,
+        write_binance_strategy_latest_snapshot,
+    )
+
+    db = tmp_path / "market_data.db"
+    conn = connect_market_db(db)
+    ensure_market_schema(conn)
+
+    op = _one_bar_open()
+    close_b = candle_close_utc_exclusive(op)
+    meid = make_market_event_id(
+        canonical_symbol=CANONICAL_INSTRUMENT_SOL_PERP,
+        candle_open_utc=op,
+        timeframe=TIMEFRAME_5M,
+    )
+    upsert_binance_strategy_bar_5m(
+        conn,
+        canonical_symbol=CANONICAL_INSTRUMENT_SOL_PERP,
+        tick_symbol=TICK_SYMBOL_SOL_DEFAULT,
+        timeframe=TIMEFRAME_5M,
+        candle_open_utc=format_candle_open_iso_z(op),
+        candle_close_utc=format_candle_open_iso_z(close_b),
+        market_event_id=meid,
+        open_px=100.0,
+        high_px=101.0,
+        low_px=99.0,
+        close_px=100.5,
+        volume_base_asset=1234.5,
+        quote_volume_usdt=123456.0,
+    )
+    wall = datetime.now(timezone.utc).replace(microsecond=0).strftime("%Y-%m-%dT%H:%M:%SZ")
+    write_binance_strategy_latest_snapshot(
+        conn,
+        db,
+        CANONICAL_INSTRUMENT_SOL_PERP,
+        sync_wall_utc_iso=wall,
+    )
+    conn.close()
+
+    latest = fetch_latest_bar_row_binance_strategy(db_path=db)
+    assert latest is not None
+    assert latest["close"] == pytest.approx(100.5)
+
+    snap_path = binance_strategy_latest_snapshot_path(db, CANONICAL_INSTRUMENT_SOL_PERP)
+    data = json.loads(snap_path.read_text(encoding="utf-8"))
+    data["sync_wall_utc"] = "2020-01-01T00:00:00Z"
+    snap_path.write_text(json.dumps(data, separators=(",", ":"), sort_keys=True), encoding="utf-8")
+
+    latest2 = fetch_latest_bar_row_binance_strategy(db_path=db)
+    assert latest2 is not None
+    assert latest2["close"] == pytest.approx(100.5)
+
+
 def test_jupiter3_lookback_clamped(monkeypatch: pytest.MonkeyPatch) -> None:
     from market_data.bar_lookup import jupiter3_binance_strategy_lookback
 

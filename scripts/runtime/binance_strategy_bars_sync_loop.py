@@ -7,7 +7,7 @@ Intended for Docker Compose or systemd on the lab host (Binance reachable). With
 for Jupiter_3.
 
 Environment:
-  BINANCE_STRATEGY_SYNC_INTERVAL_SEC — seconds between runs (default ``120``, clamped 30..600).
+  BINANCE_STRATEGY_SYNC_INTERVAL_SEC — seconds between runs (default ``30``, clamped 15..600).
   BLACKBOX_MARKET_DATA_PATH — same as API / pyth-sse-ingest.
 """
 
@@ -26,10 +26,10 @@ if str(_REPO_RUNTIME) not in sys.path:
 
 def _interval_sec() -> float:
     try:
-        v = float((os.environ.get("BINANCE_STRATEGY_SYNC_INTERVAL_SEC") or "120").strip())
+        v = float((os.environ.get("BINANCE_STRATEGY_SYNC_INTERVAL_SEC") or "30").strip())
     except ValueError:
-        v = 120.0
-    return max(30.0, min(600.0, v))
+        v = 30.0
+    return max(15.0, min(600.0, v))
 
 
 def main() -> None:

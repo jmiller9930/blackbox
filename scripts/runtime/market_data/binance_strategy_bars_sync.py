@@ -15,6 +15,8 @@ Environment:
 ``binance_strategy_bars_sync_loop.py`` (see ``UIUX.Web/docker-compose.yml`` service
 ``binance-strategy-bars-sync``) or an equivalent cron/systemd job; otherwise the table
 stalls after the last manual run.
+Default loop interval is **30s** (floor **15s**); each successful run writes SQLite **and**
+a hot JSON snapshot (``binance_strategy_latest_*.json`` beside the DB) for fast dashboard reads.
 
 **Catch-up:** After the primary fetch, :func:`_catch_up_binance_strategy_to_clock` runs so a missed
 closed bucket (e.g. long loop interval) is repaired immediately instead of waiting for the next cycle.
@@ -284,6 +286,7 @@ def sync_binance_strategy_bars_into_db(
     n_skip = 0
     max_open_written: str | None = None
     catch_up: dict[str, Any] = {}
+    wall_utc = ""
     try:
         ensure_market_schema(conn)
         now_ms = int(time.time() * 1000)
@@ -308,10 +311,18 @@ def sync_binance_strategy_bars_into_db(
         if catch_up.get("catch_up_rows_upserted"):
             n_ok += int(catch_up.get("catch_up_rows_upserted") or 0)
             max_open_written = catch_up.get("db_max_candle_open_utc_after") or max_open_written
+        wall_utc = datetime.now(timezone.utc).replace(microsecond=0).strftime("%Y-%m-%dT%H:%M:%SZ")
+        from market_data.bar_lookup import write_binance_strategy_latest_snapshot
+
+        write_binance_strategy_latest_snapshot(
+            conn,
+            db_path,
+            canonical_symbol,
+            sync_wall_utc_iso=wall_utc,
+        )
     finally:
         conn.close()
 
-    wall_utc = datetime.now(timezone.utc).replace(microsecond=0).strftime("%Y-%m-%dT%H:%M:%SZ")
     return {
         "ok": True,
         "binance_symbol": sym,

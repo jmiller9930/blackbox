@@ -33,7 +33,12 @@ def bar_membership_mode() -> str:
 
 def connect_market_db(db_path: Path) -> sqlite3.Connection:
     db_path.parent.mkdir(parents=True, exist_ok=True)
-    return sqlite3.connect(db_path)
+    conn = sqlite3.connect(db_path)
+    # WAL lets API read-only connections see the latest committed rows while sync writes
+    # (reduces “stale bar” windows during ingest).
+    conn.execute("PRAGMA journal_mode=WAL")
+    conn.execute("PRAGMA busy_timeout=8000")
+    return conn
 
 
 def _migrate_market_ticks_tertiary(conn: sqlite3.Connection) -> None:
