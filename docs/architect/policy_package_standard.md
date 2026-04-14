@@ -99,8 +99,57 @@ JUPv3 is the **reference** for how policy, slots, and Sean mirrors interact: [`J
 
 ---
 
-## 5. Revision
+## 5. Eliminating failure points — “ready to run” from Grok (or any AI)
+
+You cannot remove **every** human step (slot wiring is still a repo change), but you **can** remove **rehash loops** from bad handoffs.
+
+### A. Contract before generation
+
+Give Sean (and Grok) **only**:
+
+1. This document’s **package layout** + **`POLICY_SPEC.yaml`** shape.
+2. The Grok instruction block in [`jupv4_grok_implementation_prompt.md`](jupv4_grok_implementation_prompt.md) (generalize the “Sean spec” paste for each policy).
+3. **Non‑negotiables:** canonical **`ohlcv_lists`** surface (no pandas‑only API unless you explicitly add an adapter); **no** `signal_mode` strings that don’t match `execution_ledger` naming.
+
+If the model ignores the contract, **reject the package** before integration — don’t “fix” ad hoc in the bridge.
+
+### B. Mechanical gate (before any review)
+
+Run the repo validator on the **folder** Sean returns:
+
+```bash
+python3 scripts/validate_policy_package.py docs/working/policy_packages/<your_policy_folder>
+```
+
+Requires **`pip install pyyaml`**. The script checks: required files exist, **`POLICY_SPEC.yaml`** parses and has required keys, policy **`.py`** **syntax‑valid**, and warns about missing entrypoint names.
+
+**Pass =** the package is **structurally** eligible. **Fail =** send back to Sean/Grok, not to engineering deep‑merge.
+
+### C. Automated tests (non‑negotiable for merge)
+
+Every policy package should ship **`fixtures/`** + **pytest** that assert:
+
+- Known synthetic OHLCV → **expected** gates / signals (golden vectors).
+- Insufficient bars → **fail closed** (no phantom signals).
+
+Add **`pytest`** for that module under `tests/` and wire **CI** (or pre‑merge hook) to run **`validate_policy_package` + `pytest`** on the policy tests. **Green CI =** math is stable; **red =** model or spec drift, not “someone’s opinion.”
+
+### D. One integration PR, not endless edits
+
+After B + C pass, **one** engineering PR does:
+
+- Slot + `signal_mode` + bridge + bundle (checklist §3).
+- No more policy logic changes in that PR unless tests fail.
+
+### E. Longer‑term (strongest reduction in AI failure)
+
+If policies stay **parameter‑driven** (same gate shape, different thresholds), move toward **declarative constants in `POLICY_SPEC.yaml` + a small interpreter** in-repo — LLM fills **numbers and descriptions**, not arbitrary Python. That’s **less flexible** but **fewer** ways to break Blackbox.
+
+---
+
+## 6. Revision
 
 | Version | Change |
 |---------|--------|
 | 1 | Initial standard: package layout, `POLICY_SPEC.yaml`, integration checklist. |
+| 2 | §5 failure‑point pipeline: validator script, CI/tests, declarative future note. |
