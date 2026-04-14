@@ -2016,16 +2016,11 @@
       c && c.baseline_jupiter_policy_tag != null && String(c.baseline_jupiter_policy_tag).trim() !== ''
         ? String(c.baseline_jupiter_policy_tag).trim()
         : null;
-    // Latest column only: if no persisted row yet, show active operator slot (tooltip disclaims).
+    // When policy_evaluations has no row for this bar, show active operator label on every column
+    // so the Policy chip is never blank on older bars (same visual weight as the newest column).
+    // Tooltip states this is a fallback — persisted tag still wins when present.
     var jupHeroLiveFallback = false;
-    if (
-      baselineLane &&
-      jupPersisted == null &&
-      typeof colIdx === 'number' &&
-      typeof nAxis === 'number' &&
-      nAxis > 0 &&
-      colIdx === nAxis - 1
-    ) {
+    if (baselineLane && jupPersisted == null) {
       var alHero = bjpol.active_label != null && String(bjpol.active_label).trim() !== ''
         ? String(bjpol.active_label).trim()
         : '';
@@ -2041,8 +2036,8 @@
       jupPersisted != null
         ? 'Policy tag from policy_evaluations for this bar.'
         : jupHeroLiveFallback
-          ? 'Active operator policy (no persisted policy_evaluation row for this bar yet).'
-          : 'No policy tag for this bar yet (em dash).';
+          ? 'No persisted policy_evaluation row for this bar — showing active operator Jupiter policy (use for empty cells; may differ from historical evaluation if DB is missing).'
+          : 'No policy tag and no active operator label — em dash.';
     var jupBinanceRef = jupPersisted != null ? jupPersisted : jupLab;
     var binanceDotHtml = '';
     var binanceRestHtml = '';
