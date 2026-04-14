@@ -14,6 +14,43 @@
 
 The file `Clawbot-MX-FREE-15.full-tunnel.DO-NOT-DEPLOY-ON-CLAWBOT.conf` is a Proton download with **full tunnel** — **do not** deploy it to clawbot **as-is** for production; it violates the requirement above. Use **`wg-proton-binance-only.example.conf`** as a template and narrow **`AllowedIPs`** per operations.
 
+## Traffic model (authoritative) — Binance via Proton WG vs production network
+
+This section states **exactly** what must happen on **clawbot** so engineering, operators, and audits align. It is not optional interpretation.
+
+### Binance traffic — **must** use `wg-proton-mx` (Proton WireGuard)
+
+**Definition:** Any **outbound** traffic from clawbot whose **destination** is **Binance public API** used by Blackbox for market OHLC / connectivity checks. Today that is primarily:
+
+- **HTTPS** to **`api.binance.com`** (REST: ping, klines, and any path the repo calls under that host for Jupiter V3 / Sean parity).
+
+**Requirement:** That traffic **must** leave the host through the **Proton WireGuard** interface **`wg-proton-mx`**, using the Proton exit so Binance applies **eligible** jurisdiction checks (symptom when wrong: **HTTP 451** if packets exit the **production** NIC instead).
+
+**Mechanism:** Linux sends those packets to **`wg-proton-mx`** only when:
+
+1. **`[Peer] AllowedIPs`** on the WireGuard config includes the **current** destination prefixes for Binance API (CDN IPs **change** — see `scripts/clawbot/binance_api_route_via_proton_wg.sh`), and  
+2. Host routes (e.g. **`/32`** via **`dev wg-proton-mx`**) match those destinations, and  
+3. Application processes that call Binance use the **host routing table** (e.g. **`network_mode: host`** on the relevant Docker services — see `UIUX.Web/docker-compose.yml` and `vscode-test/binance-klines-mini/docker-compose.yml`).
+
+**Not in scope for “Binance via Proton”:** Trading venues other than Binance, wallet RPC, Solana JSON-RPC, Pyth/Hermes, Slack, Git, or generic web — those are **not** Binance API traffic and **must not** be forced through this tunnel unless a **separate** directive says so.
+
+### Local and production network traffic — **must** use the normal production path
+
+**Definition:** Everything that is **not** Binance public API traffic as above, including:
+
+- **Same LAN / corporate / lab network:** SSH administration, internal IPs, monitoring, mounts, internal DNS, traffic between Docker and host where the **destination** is not Binance API.  
+- **General Internet (non-Binance):** Package installs, Git, Docker registry pulls, Slack/webhooks, public health checks, arbitrary `curl` to non-Binance hosts — **egress via the normal production uplink** (on clawbot typically the default route via **`ens192`** and gateway **`172.20.2.1`**, per live routing).  
+- **Operator-facing services** listening on clawbot (HTTPS dashboard, nginx): **inbound** sessions; return traffic follows normal forwarding unless the **server-initiated** leg is to Binance (then Binance rules above apply).
+
+**Requirement:** This traffic **must not** be dragged into a **full-tunnel** Proton profile. It uses the **main** routing table and **production** interface(s) so SSH, dashboards, and day-to-day operations stay stable — the same outcome as “no VPN for general use,” with **only** Binance API steered to Proton.
+
+### Summary table
+
+| Traffic class | Egress path | Interface / policy |
+|---------------|-------------|-------------------|
+| Binance public API (e.g. `api.binance.com`) | **Proton WireGuard** | `wg-proton-mx`, narrow `AllowedIPs` + maintained routes |
+| Local LAN, internal, and all other Internet | **Production network** | Default route / `ens192` (normal uplink), **not** full-tunnel WG |
+
 ### US-based and general Internet destinations (must stay reachable)
 
 **Split tunneling is not “Binance only” vs “internal only.”** Anything that is **not** listed in WireGuard **`AllowedIPs`** uses the **main** routing table and your **normal** ISP/LAN path — including:
@@ -101,6 +138,8 @@ sudo systemctl start wg-quick@wg-proton-mx
 ```
 
 ## Target architecture (internal admin vs Binance egress)
+
+Canonical detail: the **Traffic model (authoritative)** section at the top of this file (Binance via Proton WG vs production network).
 
 Intended data path:
 
