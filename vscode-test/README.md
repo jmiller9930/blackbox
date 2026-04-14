@@ -1,6 +1,8 @@
 # vscode-test — lab / parity (Blackbox)
 
-This directory holds **standalone** tooling that is **outside** the main Python application tree. It is used for **Binance REST parity**, **Jupiter Sean V3** cross-checks against `binance_strategy_bars_5m`, and optional local TypeScript experiments.
+This directory holds **standalone** tooling that is **outside** the main Python application tree. It serves as an **analog** for parity-checking Blackbox: same **Binance financial REST** path (via host **WireGuard / Proton** split-tunnel), optional **wallet identity** (pubkey only), **paper-only** signals (no on-chain execution), and **onboard SQLite** for polls + paper analog events. **Sean V3 policy truth** remains in Python (`jupiter_3_sean_policy.py`); this stack logs ingest + stub rows for comparison.
+
+Optional local **TypeScript** experiments (`superjup.ts`) are separate and not required for the Docker analog.
 
 **Canonical remote host:** **`clawbot.a51.corp`**, repo checkout **`~/blackbox`**. After any doc change, **`git pull origin main`** on the server so paths match this file.
 

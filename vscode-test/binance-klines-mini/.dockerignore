@@ -1,5 +1,9 @@
 *
 !app.mjs
 !backfill.mjs
+!paper_analog.mjs
+!wallet_connect.mjs
+!package.json
+!package-lock.json
 !Dockerfile
 

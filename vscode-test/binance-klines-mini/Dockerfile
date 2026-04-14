@@ -1,13 +1,15 @@
-# Minimal image; Node 18+ has global fetch. Egress uses the host routing table
-# (split-tunnel WireGuard on the host applies to container traffic by default).
+# Egress uses the host routing table (WireGuard split-tunnel for Binance) via network_mode:host.
 FROM node:22-alpine
 
 WORKDIR /app
 
+COPY package.json package-lock.json* ./
+RUN npm install --omit=dev && npm cache clean --force
+
 # Use image's built-in `node` user (GID 1000 already exists on node:alpine).
-COPY --chown=node:node app.mjs backfill.mjs ./
+COPY --chown=node:node app.mjs backfill.mjs paper_analog.mjs wallet_connect.mjs ./
 
 USER node
 
-# Built-in node:sqlite requires --experimental-sqlite (Node 22+).
+# node:sqlite requires --experimental-sqlite (Node 22+).
 CMD ["node", "--experimental-sqlite", "app.mjs"]

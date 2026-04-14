@@ -1,14 +1,27 @@
 /**
- * Minimal Binance klines poller for Docker on hosts with split-tunnel egress.
+ * Parity analog: Binance REST (host VPN routing) + SQLite (poll + paper analog).
  *
- * NDJSON: CAPTURE_PATH=/capture/binance_klines.ndjson
- * SQLite (JUPv3 parity vs Blackbox): SQLITE_PATH=/capture/sean_parity.db
+ * - NDJSON: CAPTURE_PATH
+ * - SQLite: SQLITE_PATH — sean_binance_kline_poll + paper_wallet + paper_trade_log
+ * - Wallet: KEYPAIR_PATH (optional) — pubkey only in DB; never stores secrets in logs
+ * - Paper: no chain txs; stub signals for comparison to Blackbox Sean V3 (Python authoritative)
  *
  * Requires: node --experimental-sqlite (Node 22+)
  */
 import { appendFile, mkdir } from 'fs/promises';
 import { dirname } from 'path';
+import { access } from 'fs/promises';
 import { DatabaseSync } from 'node:sqlite';
+
+import {
+  ensurePaperAnalogSchema,
+  getMeta,
+  logPaperEvent,
+  logStubPaperSignal,
+  setMeta,
+  upsertPaperWallet,
+} from './paper_analog.mjs';
+import { loadPubkeyFromKeypairFile } from './wallet_connect.mjs';
 
 const url =
   process.env.BINANCE_KLINES_URL ||
@@ -20,6 +33,10 @@ const intervalMs = Math.max(
 const capturePath = (process.env.CAPTURE_PATH || '').trim();
 const sqlitePath = (process.env.SQLITE_PATH || '').trim();
 const canonicalSymbol = (process.env.CANONICAL_SYMBOL || 'SOL-PERP').trim();
+const keypairPath = (process.env.KEYPAIR_PATH || '').trim();
+const paperTrading =
+  (process.env.PAPER_TRADING || '1').trim().toLowerCase() !== '0' &&
+  (process.env.PAPER_TRADING || '1').trim().toLowerCase() !== 'false';
 
 function marketEventIdFromOpenTimeMs(openTimeMs) {
   const d = new Date(Number(openTimeMs));
@@ -43,6 +60,8 @@ function summarizeKline(row) {
 
 /** @type {import('node:sqlite').DatabaseSync | null} */
 let parityDb = null;
+/** @type {string | null} */
+let walletPubkey = null;
 
 function initSqlite() {
   if (!sqlitePath) return null;
@@ -64,6 +83,7 @@ function initSqlite() {
       );
       CREATE INDEX IF NOT EXISTS idx_sean_poll_mid ON sean_binance_kline_poll (market_event_id);
     `);
+    ensurePaperAnalogSchema(db);
     return db;
   } catch (e) {
     console.error(`[binance-klines-mini] SQLite init failed: ${e.message}`);
@@ -102,6 +122,98 @@ async function appendNdjsonLine(obj) {
   );
 }
 
+async function connectWalletOnce(db) {
+  if (!keypairPath) {
+    console.error('[binance-klines-mini] KEYPAIR_PATH unset — paper wallet not connected (pubkey-only mode skipped)');
+    setMeta(db, 'wallet_status', 'no_keypair_path');
+    logPaperEvent(db, {
+      atUtc: new Date().toISOString(),
+      marketEventId: null,
+      eventKind: 'wallet_skipped',
+      ohlcvJson: null,
+      walletPubkey: null,
+      detailsJson: JSON.stringify({ reason: 'KEYPAIR_PATH empty' }),
+    });
+    return;
+  }
+  try {
+    await access(keypairPath);
+  } catch {
+    console.error(`[binance-klines-mini] KEYPAIR_PATH not readable: ${keypairPath}`);
+    setMeta(db, 'wallet_status', 'keypair_missing');
+    logPaperEvent(db, {
+      atUtc: new Date().toISOString(),
+      marketEventId: null,
+      eventKind: 'wallet_error',
+      ohlcvJson: null,
+      walletPubkey: null,
+      detailsJson: JSON.stringify({ reason: 'file_not_found', path: keypairPath }),
+    });
+    return;
+  }
+  try {
+    const w = await loadPubkeyFromKeypairFile(keypairPath);
+    if (!w) return;
+    walletPubkey = w.pubkeyBase58;
+    upsertPaperWallet(db, { pubkeyBase58: w.pubkeyBase58, keypairPath });
+    setMeta(db, 'wallet_status', 'connected');
+    setMeta(
+      db,
+      'financial_api_routing',
+      'host_table_wireguard_binance — see VPN/README.md; container uses network_mode:host'
+    );
+    logPaperEvent(db, {
+      atUtc: new Date().toISOString(),
+      marketEventId: null,
+      eventKind: 'wallet_connected',
+      ohlcvJson: null,
+      walletPubkey: walletPubkey,
+      detailsJson: JSON.stringify({
+        paper_only: true,
+        pubkey: walletPubkey,
+        keypair_path: keypairPath,
+      }),
+    });
+    console.error(`[binance-klines-mini] paper wallet pubkey: ${walletPubkey}`);
+  } catch (e) {
+    console.error(`[binance-klines-mini] wallet load failed: ${e.message}`);
+    logPaperEvent(db, {
+      atUtc: new Date().toISOString(),
+      marketEventId: null,
+      eventKind: 'wallet_error',
+      ohlcvJson: null,
+      walletPubkey: null,
+      detailsJson: JSON.stringify({ error: String(e.message) }),
+    });
+  }
+}
+
+function processPaperAnalog(db, { marketEventId, kline }) {
+  if (!paperTrading) return;
+  const ohlcvJson = JSON.stringify(kline);
+  logPaperEvent(db, {
+    atUtc: new Date().toISOString(),
+    marketEventId,
+    eventKind: 'binance_kline_ingest',
+    ohlcvJson,
+    walletPubkey,
+    detailsJson: JSON.stringify({
+      source: 'rest_klines',
+      parity_note: 'Blackbox truth: binance_strategy_bars_5m + jupiter_3_sean_policy',
+    }),
+  });
+
+  const lastStub = getMeta(db, 'last_stub_signal_open_ms');
+  const openMs = String(kline.openTime ?? '');
+  if (lastStub === openMs) return;
+  setMeta(db, 'last_stub_signal_open_ms', openMs);
+  logStubPaperSignal(db, {
+    marketEventId,
+    closePx: String(kline.close ?? ''),
+    walletPubkey,
+  });
+}
+
 async function fetchOnce() {
   const t0 = Date.now();
   const res = await fetch(url, {
@@ -130,6 +242,7 @@ async function fetchOnce() {
     url,
     kline,
     market_event_id: marketEventId || undefined,
+    paper_wallet: walletPubkey || undefined,
   };
   console.log(JSON.stringify(record));
   await appendNdjsonLine(record);
@@ -144,6 +257,7 @@ async function fetchOnce() {
         latencyMs,
         reqUrl: url,
       });
+      processPaperAnalog(parityDb, { marketEventId, kline });
     } catch (e) {
       console.error(`[binance-klines-mini] sqlite insert failed: ${e.message}`);
     }
@@ -154,9 +268,14 @@ async function main() {
   console.error(
     `[binance-klines-mini] poll every ${intervalMs}ms — ${url}` +
       (capturePath ? ` — ndjson: ${capturePath}` : '') +
-      (sqlitePath ? ` — sqlite: ${sqlitePath}` : '')
+      (sqlitePath ? ` — sqlite: ${sqlitePath}` : '') +
+      ` — paper: ${paperTrading}` +
+      (keypairPath ? ` — keypair: ${keypairPath}` : '')
   );
   parityDb = initSqlite();
+  if (parityDb) {
+    await connectWalletOnce(parityDb);
+  }
 
   for (;;) {
     try {
@@ -169,6 +288,16 @@ async function main() {
       };
       console.error(JSON.stringify(record));
       await appendNdjsonLine(record);
+      if (parityDb) {
+        logPaperEvent(parityDb, {
+          atUtc: new Date().toISOString(),
+          marketEventId: null,
+          eventKind: 'binance_fetch_error',
+          ohlcvJson: null,
+          walletPubkey,
+          detailsJson: JSON.stringify(record),
+        });
+      }
     }
     await new Promise((r) => setTimeout(r, intervalMs));
   }
