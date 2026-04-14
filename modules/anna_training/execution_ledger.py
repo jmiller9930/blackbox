@@ -427,13 +427,20 @@ def baseline_jupiter_policy_tag_from_signal_mode(signal_mode: str | None) -> str
 
 def baseline_jupiter_policy_tag_from_signal_mode_optional(signal_mode: str | None) -> str | None:
     """
-    Same mapping as :func:`baseline_jupiter_policy_tag_from_signal_mode`, but returns ``None`` when
-    ``signal_mode`` is missing. Use for operator UI so we do **not** label unknown bars as JUPv2.
+    Map ``policy_evaluations.signal_mode`` to strip label, or ``None`` when missing / unknown.
+
+    Unknown non-empty strings return ``None`` (not JUPv2) so the UI shows em dash instead of a false v2.
     """
     sm = (signal_mode or "").strip()
     if not sm:
         return None
-    return baseline_jupiter_policy_tag_from_signal_mode(sm)
+    if sm == SIGNAL_MODE_JUPITER_4:
+        return "JUPv4"
+    if sm == SIGNAL_MODE_JUPITER_3:
+        return "JUPv3"
+    if sm == SIGNAL_MODE_JUPITER_2:
+        return "JUPv2"
+    return None
 
 
 def entry_policy_authority_from_signal_features(sf: dict[str, Any] | None) -> str:
@@ -522,6 +529,10 @@ def fetch_baseline_policy_evaluation_for_market_event(
     When ``prefer_active_slot`` is True (default), tries the operator-selected engine first
     (``get_baseline_jupiter_policy_slot``), then the other ``signal_mode`` so historic rows still resolve
     after a policy switch.
+
+    When ``prefer_active_slot`` is False (historic / strip / reports), tries **v4, then v3, then v2**.
+    If multiple rows exist for the same bar (e.g. legacy v2 backfill plus v3 evaluator), the **highest**
+    version wins — otherwise v2 would always shadow v3/v4.
     """
     mid = (market_event_id or "").strip()
     if not mid:
@@ -541,7 +552,7 @@ def fetch_baseline_policy_evaluation_for_market_event(
         ]
         modes = [primary] + others
     else:
-        modes = [SIGNAL_MODE_JUPITER_2, SIGNAL_MODE_JUPITER_3, SIGNAL_MODE_JUPITER_4]
+        modes = [SIGNAL_MODE_JUPITER_4, SIGNAL_MODE_JUPITER_3, SIGNAL_MODE_JUPITER_2]
     seen: set[str] = set()
     for sm in modes:
         if sm in seen:

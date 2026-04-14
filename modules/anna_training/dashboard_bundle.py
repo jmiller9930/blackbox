@@ -2636,7 +2636,8 @@ def baseline_jupiter_policy_tag_for_execution_trade(
     policy only on that id with ``prefer_active_slot=True`` incorrectly labels old trades with the
     operator's current slot (e.g. all JUPv4).
 
-    Resolution uses ``prefer_active_slot=False`` (stable v2→v3→v4). Falls back to the exit bar when
+    Resolution uses ``prefer_active_slot=False`` (v4→v3→v2 so the highest engine row wins when several
+    exist for one bar). Falls back to the exit bar when
     entry cannot be resolved.
     """
     exit_mid = str(ledger_row.get("market_event_id") or "").strip()

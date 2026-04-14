@@ -10,10 +10,12 @@ from pathlib import Path
 import pytest
 
 from modules.anna_training.execution_ledger import (
+    SIGNAL_MODE_JUPITER_2,
     SIGNAL_MODE_JUPITER_3,
     SIGNAL_MODE_JUPITER_4,
     connect_ledger,
     ensure_execution_ledger_schema,
+    fetch_baseline_policy_evaluation_for_market_event,
     set_baseline_jupiter_policy_slot,
     upsert_policy_evaluation,
 )
@@ -900,6 +902,38 @@ def test_trade_chain_baseline_tile_policy_tag_matches_recorded_signal_mode(
     baseline = next(r for r in tc["rows"] if r["chain_kind"] == "baseline")
     assert baseline["cells"][mid_v3]["baseline_jupiter_policy_tag"] == "JUPv3"
     assert baseline["cells"][mid_v4]["baseline_jupiter_policy_tag"] == "JUPv4"
+
+
+def test_fetch_baseline_policy_eval_prefers_v3_over_v2_when_both_exist(tmp_path: Path) -> None:
+    """Same bar must not report v2 when a v3 policy_evaluations row also exists (reports / strip)."""
+    mid = "SOL-PERP_5m_2026-04-02T12:00:00Z"
+    ledger = tmp_path / "el.db"
+    conn = connect_ledger(ledger)
+    ensure_execution_ledger_schema(conn)
+    set_baseline_jupiter_policy_slot(conn, "jup_v3")
+    upsert_policy_evaluation(
+        market_event_id=mid,
+        signal_mode=SIGNAL_MODE_JUPITER_2,
+        tick_mode="paper",
+        trade=False,
+        reason_code="no_trade",
+        features={"legacy": True},
+        conn=conn,
+    )
+    upsert_policy_evaluation(
+        market_event_id=mid,
+        signal_mode=SIGNAL_MODE_JUPITER_3,
+        tick_mode="paper",
+        trade=False,
+        reason_code="no_trade",
+        features={},
+        conn=conn,
+    )
+    conn.commit()
+    pol = fetch_baseline_policy_evaluation_for_market_event(conn, mid, prefer_active_slot=False)
+    conn.close()
+    assert pol is not None
+    assert pol.get("signal_mode") == SIGNAL_MODE_JUPITER_3
 
 
 def test_execution_trade_policy_tag_prefers_entry_bar_over_exit(tmp_path: Path) -> None:
