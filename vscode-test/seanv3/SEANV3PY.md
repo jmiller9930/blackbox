@@ -67,7 +67,16 @@ flowchart TD
 chmod +x ~/blackbox/vscode-test/seanv3/seanv3py ~/blackbox/vscode-test/seanv3/seanv3.py
 ```
 
-Use either:
+**One entry point (recommended):** `python3 seanv3.py` — Docker commands pass through; **`tui`**, **`report`**, **`test`** are native:
+
+```bash
+python3 seanv3.py deploy --pull
+python3 seanv3.py tui              # operator TUI (Hermes + Sean ledger + preflight)
+python3 seanv3.py report
+python3 seanv3.py test
+```
+
+Same Docker commands also work via `./seanv3py` or `python3 seanv3.py`:
 
 ```bash
 ./seanv3py status

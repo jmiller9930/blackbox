@@ -10,6 +10,8 @@ usage() {
   cat <<'EOF'
 Usage: seanv3py <command> [options]
 
+  (For TUI / report / tests in one place, use: python3 seanv3.py tui | report | test)
+
   deploy     git pull (optional) + docker compose build + up -d
   status     docker compose ps
   logs       docker compose logs -f (follow; Ctrl+C stops tailing only)
