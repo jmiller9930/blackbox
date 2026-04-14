@@ -2,6 +2,8 @@
 
 Small **Node 22 Alpine** container that polls **Binance REST klines** (SOLUSDT 5m by default), writes **NDJSON** and optional **SQLite** for **Jupiter / Sean V3 parity** vs Blackbox ingest. It lives under `vscode-test/` but is **not** the TypeScript `superjup.ts` lab — that file is separate and is **not** run inside this image.
 
+**Parent index:** [`../README.md`](../README.md) — full doc map (VPN scripts, Python modules, fast path).
+
 ## Remote host (clawbot)
 
 **Canonical path:** `~/blackbox/vscode-test/binance-klines-mini` on **`clawbot.a51.corp`** (or any host with Docker + the same repo layout).
@@ -16,7 +18,7 @@ docker compose up -d --build
 
 ### Why `network_mode: host`
 
-Binance egress must use the **host routing table** (WireGuard **split-tunnel** to Binance-only prefixes). The default Docker bridge often does **not** follow that path and you may see **HTTP 451** or timeouts. See **`VPN/README.md`** at repo root.
+Binance egress must use the **host routing table** (WireGuard **split-tunnel** to Binance-only prefixes). The default Docker bridge often does **not** follow that path and you may see **HTTP 451** or timeouts. See **`VPN/README.md`** at repo root. If **`api.binance.com`** IPs drift (CDN), the host may need **`scripts/clawbot/binance_api_route_via_proton_wg.sh`** (see that script and **`VPN/README.md`**).
 
 ### Logs
 
@@ -62,8 +64,12 @@ Set `BLACKBOX_MARKET_DATA_PATH` if market DB is not `data/sqlite/market_data.db`
 
 ## Related docs
 
-- **`TURNOVER_NEXT_STEPS.md`** — architect checks, row counts, next steps.
-- **`VPN/README.md`** — split-tunnel / Binance-only WireGuard rules.
+| Doc | Role |
+|-----|------|
+| **`../README.md`** | **vscode-test** index — all links in one place |
+| **`TURNOVER_NEXT_STEPS.md`** | Architect checks, row counts, parity follow-ups |
+| **`../../VPN/README.md`** | Split-tunnel / Binance via `wg-proton-mx` |
+| **`../../scripts/clawbot/binance_api_route_via_proton_wg.sh`** | Refresh Binance API routes when CDN moves |
 
 ## Files
 

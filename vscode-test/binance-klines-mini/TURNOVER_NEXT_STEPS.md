@@ -1,6 +1,7 @@
 # Turnover — Sean Binance klines / parity DB (next steps)
 
-**Container ops (clawbot deploy, logs, artifacts):** see **`README.md`** in this folder.
+**Full index (vscode-test + VPN + Python paths):** **`../README.md`**.  
+**Container ops (clawbot deploy, logs, artifacts):** **`README.md`** in this folder.
 
 ## Where things stand
 
@@ -44,7 +45,10 @@
 
 | Artifact | Path |
 |----------|------|
+| **vscode-test index** | `vscode-test/README.md` |
 | Compose + service | `vscode-test/binance-klines-mini/docker-compose.yml` |
 | Backfill script | `vscode-test/binance-klines-mini/run-backfill-clawbot.sh` |
 | VPN / Binance egress | `VPN/README.md` |
+| WG route repair (CDN drift) | `scripts/clawbot/binance_api_route_via_proton_wg.sh` |
 | Parity module | `modules/anna_training/jup_v3_parity_compare.py` |
+| Sean V3 policy | `modules/anna_training/jupiter_3_sean_policy.py` |
