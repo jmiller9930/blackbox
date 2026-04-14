@@ -28,7 +28,9 @@ Environment (optional):
   SEANV3_AUTO_INIT_LEDGER_DB=0 — do not create an empty capture/sean_parity.db when missing.
   SEAN_PAPER_STARTING_BALANCE_USD — fallback if analog_meta.paper_starting_balance_usd missing (default 1000)
   SEANV3_TUI_TRADE_ROWS — max rows in Trade window table (default 20, max 50)
+  SEANV3_TUI_PARITY_ROWS — max rows in Sean vs BlackBox parity table (default 18, max 40)
   SEANV3_CANONICAL_SYMBOL — sym column (default SOL-PERP)
+  BLACKBOX_EXECUTION_LEDGER_PATH — SQLite for baseline ``execution_trades`` (default repo data/sqlite/execution_ledger.db)
 
 Exit: Ctrl+C
 """
@@ -36,6 +38,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import os
 import sqlite3
 import ssl
@@ -68,6 +71,11 @@ from rich.table import Table
 from rich.text import Text
 
 _DEFAULT_FEED = "ef0d8b6fda2ceba41da15d4095d1da392a0d2f8ed0c6c7bc0f4cfac8c280b56d"
+
+_BB_LANE = "baseline"
+_BB_STRATEGY = "baseline"
+# Relative entry-price tolerance for "MATCH" (fractional drift allowed).
+_PARITY_PRICE_REL_TOL = 0.005
 
 
 def _script_dir() -> Path:
@@ -502,6 +510,254 @@ def _exit_reason_from_meta(meta_json: str | None) -> str:
     return "—"
 
 
+def _default_execution_ledger_path(repo_root: Path) -> Path:
+    raw = (os.environ.get("BLACKBOX_EXECUTION_LEDGER_PATH") or "").strip()
+    if raw:
+        return Path(raw).expanduser().resolve()
+    return (repo_root / "data" / "sqlite" / "execution_ledger.db").resolve()
+
+
+def _parse_ts_sort(iso: str | None) -> float:
+    if not iso:
+        return 0.0
+    try:
+        s = str(iso).strip().replace("Z", "+00:00")
+        dt = datetime.fromisoformat(s)
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        else:
+            dt = dt.astimezone(timezone.utc)
+        return dt.timestamp()
+    except (ValueError, TypeError):
+        return 0.0
+
+
+def _side_norm(s: str | None) -> str:
+    return str(s or "").strip().lower()
+
+
+def _price_drift_ok(a: object | None, b: object | None, rel: float = _PARITY_PRICE_REL_TOL) -> bool:
+    try:
+        fa = float(a)  # type: ignore[arg-type]
+        fb = float(b)  # type: ignore[arg-type]
+    except (TypeError, ValueError):
+        return True
+    if not math.isfinite(fa) or not math.isfinite(fb):
+        return True
+    if fa <= 0 or fb <= 0:
+        return abs(fa - fb) < 1e-9
+    return abs(fa - fb) / max(fa, fb) <= rel
+
+
+def _fetch_bb_baseline_by_mid(ledger_path: Path, max_distinct: int) -> dict[str, dict[str, Any]]:
+    if not ledger_path.is_file():
+        return {}
+    try:
+        conn = sqlite3.connect(str(ledger_path))
+    except sqlite3.Error:
+        return {}
+    try:
+        cur = conn.execute(
+            """
+            SELECT market_event_id, side, entry_time, entry_price, size, trade_id, exit_time, created_at_utc
+            FROM execution_trades
+            WHERE lane = ? AND strategy_id = ?
+            ORDER BY created_at_utc DESC
+            """,
+            (_BB_LANE, _BB_STRATEGY),
+        )
+        out: dict[str, dict[str, Any]] = {}
+        for row in cur.fetchall():
+            mid = str(row[0] or "").strip()
+            if not mid or mid in out:
+                continue
+            out[mid] = {
+                "side": row[1],
+                "entry_time": row[2],
+                "entry_price": row[3],
+                "size": row[4],
+                "trade_id": row[5],
+                "exit_time": row[6],
+                "created_at_utc": row[7],
+            }
+            if len(out) >= max_distinct:
+                break
+        return out
+    except sqlite3.Error:
+        return {}
+    finally:
+        conn.close()
+
+
+def _fetch_sean_maps_for_parity(sean_db: Path, max_distinct: int) -> tuple[dict[str, dict[str, Any]], dict[str, Any] | None]:
+    """Closed trades (latest id per entry_market_event_id) + optional open position row."""
+    if not sean_db.is_file():
+        return {}, None
+    closed: dict[str, dict[str, Any]] = {}
+    open_row: dict[str, Any] | None = None
+    pos: tuple[Any, ...] | None = None
+    try:
+        conn = sqlite3.connect(str(sean_db))
+        try:
+            rows = conn.execute(
+                """
+                SELECT entry_market_event_id, side, entry_time_utc, entry_price, size_notional_sol, id, exit_time_utc
+                FROM sean_paper_trades
+                ORDER BY id DESC
+                """
+            ).fetchall()
+            for r in rows:
+                mid = str(r[0] or "").strip()
+                if not mid or mid in closed:
+                    continue
+                closed[mid] = {
+                    "kind": "closed",
+                    "side": r[1],
+                    "entry_time": r[2],
+                    "entry_price": r[3],
+                    "size": r[4],
+                    "sean_id": r[5],
+                    "exit_time": r[6],
+                }
+                if len(closed) >= max_distinct * 2:
+                    break
+            pos = conn.execute(
+                "SELECT side, entry_market_event_id, opened_at_utc, entry_price, size_notional_sol "
+                "FROM sean_paper_position WHERE id=1"
+            ).fetchone()
+        finally:
+            conn.close()
+    except sqlite3.Error:
+        return {}, None
+
+    if pos and _side_norm(pos[0]) not in ("", "flat") and str(pos[1] or "").strip():
+        omid = str(pos[1]).strip()
+        open_row = {
+            "kind": "open",
+            "side": pos[0],
+            "entry_time": pos[2],
+            "entry_price": pos[3],
+            "size": pos[4],
+            "entry_market_event_id": omid,
+        }
+        # Open position is the live truth for this bar; overlay same mid if present.
+        closed[omid] = open_row
+
+    return closed, open_row
+
+
+def _fmt_parity_side_cell(rec: dict[str, Any] | None) -> str:
+    if not rec:
+        return "[dim]—[/dim]"
+    side = _side_norm(rec.get("side"))
+    ep = rec.get("entry_price")
+    et = rec.get("entry_time")
+    kind = rec.get("kind")
+    try:
+        px = f"{float(ep):.4f}" if ep is not None else "?"
+    except (TypeError, ValueError):
+        px = "?"
+    tshort = _format_iso_utc_short(str(et) if et else None)
+    tag = " [dim]open[/dim]" if kind == "open" else ""
+    return f"{side or '?'} @ {px} · {tshort}{tag}"
+
+
+def _parity_match_text(sean: dict[str, Any] | None, bb: dict[str, Any] | None) -> Text:
+    if sean and bb:
+        ss = _side_norm(sean.get("side"))
+        bs = _side_norm(bb.get("side"))
+        if ss != bs:
+            return Text("SIDE mismatch", style="bold red")
+        if not _price_drift_ok(sean.get("entry_price"), bb.get("entry_price")):
+            return Text("MATCH (entry px drift)", style="bold yellow")
+        return Text("MATCH", style="bold green")
+    if sean and not bb:
+        return Text("Sean only — no BB row", style="bold red")
+    if bb and not sean:
+        return Text("BlackBox only — no Sean row", style="bold red")
+    return Text("—", style="dim")
+
+
+def _parity_panel(repo_root: Path) -> Panel:
+    """
+    Side-by-side parity: same market_event_id should show a trade on Sean and baseline BlackBox.
+    Rows = union of recent mids (sorted by latest entry time).
+    """
+    raw_lim = (os.environ.get("SEANV3_TUI_PARITY_ROWS") or "18").strip()
+    try:
+        max_rows = max(3, min(40, int(raw_lim)))
+    except ValueError:
+        max_rows = 18
+    max_fetch = max(max_rows * 3, 48)
+
+    sean_db = _default_sean_sqlite(repo_root)
+    ledger = _default_execution_ledger_path(repo_root)
+
+    sean_map, _open = _fetch_sean_maps_for_parity(sean_db, max_fetch)
+    bb_map = _fetch_bb_baseline_by_mid(ledger, max_fetch)
+
+    if not sean_db.is_file() and not ledger.is_file():
+        return Panel(
+            Text("[dim]Parity: no Sean DB and no execution ledger — set paths / run stacks.[/dim]"),
+            title="Parity (Sean V3 vs BlackBox baseline)",
+            border_style="dim",
+        )
+
+    all_mids: set[str] = set(sean_map.keys()) | set(bb_map.keys())
+    if not all_mids:
+        return Panel(
+            Text(
+                "[dim]No trades yet — parity rows appear when sean_paper_trades or "
+                "execution_trades (baseline) have market_event_id values.[/dim]"
+            ),
+            title="Parity (Sean V3 vs BlackBox baseline)",
+            border_style="dim",
+        )
+
+    def sort_key(mid: str) -> float:
+        s = sean_map.get(mid)
+        b = bb_map.get(mid)
+        ts = 0.0
+        if s:
+            ts = max(ts, _parse_ts_sort(str(s.get("entry_time") or "")))
+        if b:
+            ts = max(ts, _parse_ts_sort(str(b.get("entry_time") or b.get("created_at_utc") or "")))
+        return ts
+
+    ordered = sorted(all_mids, key=sort_key, reverse=True)[:max_rows]
+
+    tbl = Table(
+        box=box.ROUNDED,
+        expand=True,
+        show_header=True,
+        header_style="bold",
+        title="[bold]One bar = one decision key (market_event_id)[/bold]",
+        caption=(
+            f"[dim]Sean: {sean_db.name} · BlackBox ledger: {ledger.name} · "
+            f"baseline lane/strategy · entry px tol ±{_PARITY_PRICE_REL_TOL * 100:.1f}%[/dim]"
+        ),
+    )
+    tbl.add_column("market_event_id", overflow="ellipsis", no_wrap=False)
+    tbl.add_column("Sean V3", overflow="ellipsis", no_wrap=False)
+    tbl.add_column("BlackBox (baseline)", overflow="ellipsis", no_wrap=False)
+    tbl.add_column("Parity", overflow="ellipsis", no_wrap=False)
+
+    for mid in ordered:
+        s = sean_map.get(mid)
+        b = bb_map.get(mid)
+        sm = _fmt_parity_side_cell(s)
+        bm = _fmt_parity_side_cell(b) if b else "[dim]—[/dim]"
+        pm = _parity_match_text(s, b)
+        tbl.add_row(_truncate_mid(mid, 44), Text.from_markup(sm), Text.from_markup(bm), pm)
+
+    return Panel(
+        tbl,
+        title="Parity (Sean V3 vs BlackBox baseline)",
+        subtitle="[dim]Green MATCH = same bar + same side; red = missing row or side mismatch[/dim]",
+        border_style="magenta",
+    )
+
+
 def _recent_closed_trades_panel(repo_root: Path) -> Panel:
     """One row per closed trade from sean_paper_trades (baseline-style accounting)."""
     p = _default_sean_sqlite(repo_root)
@@ -742,7 +998,8 @@ def main(argv: list[str] | None = None) -> None:
             border_style="green" if strict_ok else "red",
         )
         body = _main_panel(parsed, now_ts)
-        return Group(pol, sean_p, trades_tbl, top, body)
+        parity = _parity_panel(repo_root)
+        return Group(pol, sean_p, parity, trades_tbl, top, body)
 
     console.print(
         "[dim]SeanV3 operator TUI — preflight + policy + Pyth  "
