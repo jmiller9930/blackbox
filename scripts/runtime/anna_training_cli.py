@@ -24,7 +24,7 @@ Examples (repo root):
   echo "My draft thesis..." | python3 scripts/runtime/anna_training_cli.py llm-cross-check
   python3 scripts/runtime/anna_training_cli.py math-check   # Wilson NIST-style cases (float vs Decimal); run before school
   python3 scripts/runtime/anna_training_cli.py quant-metrics  # paper P&L: Sharpe/Sortino proxies, DD, VaR/CVaR (math engine)
-  python3 scripts/runtime/anna_training_cli.py math-engine-full  # ARIMA/GARCH, annualized Sharpe, WFO, MC, ML, Kalman
+  python3 scripts/runtime/anna_training_cli.py math-engine-full  # ARIMA/GARCH, annualized Sharpe, WFO, Monte Carlo, ML, Kalman
   python3 scripts/runtime/anna_training_cli.py training-progress  # ACL-lite: next focus + bachelor eligibility + cumulative tail
   python3 scripts/runtime/anna_training_cli.py advance-curriculum bachelor_paper_track_v1  # Grade 12 → bachelor (gates + prereq)
   python3 scripts/runtime/anna_training_cli.py flush-runtime --yes   # stop Karpathy first: wipe entire anna_training dir (school + dashboard inputs) + execution requests + fresh state

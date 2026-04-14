@@ -31,8 +31,8 @@ def recommend(
 ) -> RecommendationResult:
     """
     Version-1 rules:
-    - degrade if candidate expectancy materially worse OR median MC terminal worse with worse DD
-    - improve if expectancy not worse, drawdown not materially worse, MC median terminal >= baseline, p95 DD not worse
+    - degrade if candidate expectancy materially worse OR median Monte Carlo terminal worse with worse DD
+    - improve if expectancy not worse, drawdown not materially worse, Monte Carlo median terminal >= baseline, p95 DD not worse
     - else inconclusive
     """
     reasons: list[str] = []
@@ -75,7 +75,7 @@ def recommend(
 
     if ec >= eb - expectancy_epsilon and ddc <= ddb * dd_tolerance_ratio and mc >= mb - abs(mb) * 0.02 and not worse_dd_mc:
         reasons.append(
-            f"deterministic expectancy maintained ({ec:.6f}), MC median terminal {mc:.6f} vs {mb:.6f} on mode {mc_mode}"
+            f"deterministic expectancy maintained ({ec:.6f}), Monte Carlo median terminal {mc:.6f} vs {mb:.6f} on mode {mc_mode}"
         )
         return RecommendationResult("improve", reasons)
 

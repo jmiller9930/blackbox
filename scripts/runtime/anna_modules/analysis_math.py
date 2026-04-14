@@ -73,7 +73,7 @@ def _load_paper_trades_safe() -> list[dict[str, Any]]:
 
 
 def _full_stack_facts(trades: list[dict[str, Any]]) -> tuple[list[str], dict[str, Any]]:
-    """ARIMA/GARCH/WFO/MC/ML/Kalman — requires deps; gated by ANNA_MATH_ENGINE_FULL=1."""
+    """ARIMA/GARCH/WFO/Monte Carlo/ML/Kalman — requires deps; gated by ANNA_MATH_ENGINE_FULL=1."""
     try:
         from modules.anna_training.math_engine_full.stack import (
             full_stack_fact_lines,

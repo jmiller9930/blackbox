@@ -1371,15 +1371,15 @@
             <div class="kv"><span class="k">Commit (git)</span><span class="v" id="rv4-bl-commit">—</span></div>
             <div class="kv"><span class="k">Trades (det.)</span><span class="v" id="rv4-bl-n">—</span></div>
             <div class="kv"><span class="k">Expectancy</span><span class="v" id="rv4-bl-e">—</span></div>
-            <div class="kv"><span class="k">Max DD</span><span class="v" id="rv4-bl-dd">—</span></div>
-            <div class="kv"><span class="k">MC reference</span><span class="v" id="rv4-bl-mc">—</span></div>
+            <div class="kv"><span class="k">Max drawdown</span><span class="v" id="rv4-bl-dd">—</span></div>
+            <div class="kv"><span class="k">Monte Carlo reference</span><span class="v" id="rv4-bl-mc">—</span></div>
             <p class="dash-rv4-msg" id="rv4-bl-reports"></p>
           </div>
           <div class="dash-rv4-card">
             <h3>Controls</h3>
             <p class="dash-rv4-msg">Governed jobs only — runs <code>robustness_runner</code> on the server (long-running).</p>
             <div class="dash-rv4-actions">
-              <button type="button" class="primary" id="rv4-btn-baseline-mc">Generate baseline MC reference</button>
+              <button type="button" class="primary" id="rv4-btn-baseline-mc">Generate baseline Monte Carlo reference</button>
               <button type="button" id="rv4-btn-example">Example flow (pipeline check)</button>
             </div>
             <p class="dash-rv4-msg" id="rv4-job-msg"></p>
@@ -3994,7 +3994,9 @@
         $('rv4-bl-n').textContent = rv4Fmt(det.total_trades);
         $('rv4-bl-e').textContent = rv4Fmt(det.expectancy);
         $('rv4-bl-dd').textContent = rv4Fmt(det.max_drawdown);
-        $('rv4-bl-mc').textContent = j.monte_carlo_reference_present ? 'present' : 'missing — run baseline job';
+        $('rv4-bl-mc').textContent = j.monte_carlo_reference_present
+          ? 'present'
+          : 'missing — run the baseline Monte Carlo reference job (button below)';
         var rp = j.reports || {};
         var bits = [];
         if (rp.baseline_v1_md) bits.push('baseline_v1.md');
@@ -4087,17 +4089,29 @@
         $('rv4-d-rec').textContent = j.recommendation || ix.recommendation || '—';
         var det = j.deterministic || {};
         $('rv4-d-det').textContent =
-          'n=' + rv4Fmt(det.total_trades) + ' E=' + rv4Fmt(det.expectancy) + ' maxDD=' + rv4Fmt(det.max_drawdown);
-        var mc = j.monte_carlo || {};
-        var modes = mc && typeof mc === 'object' ? Object.keys(mc) : [];
-        $('rv4-d-mc').textContent = modes.length ? modes.join(', ') + ' (see JSON)' : '—';
+          'n=' +
+          rv4Fmt(det.total_trades) +
+          ' expectancy=' +
+          rv4Fmt(det.expectancy) +
+          ' max_drawdown=' +
+          rv4Fmt(det.max_drawdown);
+        var monteCarlo = j.monte_carlo || {};
+        var modes = monteCarlo && typeof monteCarlo === 'object' ? Object.keys(monteCarlo) : [];
+        $('rv4-d-mc').textContent = modes.length
+          ? 'modes: ' + modes.join(', ') + ' (full detail in JSON below)'
+          : '—';
         var rp = j.report_paths || {};
         var pl = [];
         if (rp.experiment_md) pl.push(rp.experiment_md);
         if (rp.robustness_md) pl.push(rp.robustness_md);
         if (rp.monte_carlo_md) pl.push(rp.monte_carlo_md);
         $('rv4-d-paths').textContent = pl.length ? 'Reports: ' + pl.join(' | ') : 'No report files yet.';
-        if (pre) pre.textContent = JSON.stringify({ index: ix, deterministic: det, monte_carlo: mc }, null, 2);
+        if (pre)
+          pre.textContent = JSON.stringify(
+            { index: ix, deterministic: det, monte_carlo: monteCarlo },
+            null,
+            2
+          );
       })
       .catch(function () {
         if (pre) pre.textContent = 'Failed to load detail.';

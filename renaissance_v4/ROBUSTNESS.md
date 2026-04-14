@@ -24,9 +24,9 @@ This writes:
 | Artifact | Purpose |
 |----------|---------|
 | `renaissance_v4/state/baseline_deterministic.json` | Deterministic metrics from replay |
-| `renaissance_v4/state/baseline_monte_carlo_summary.json` | Full MC summaries (shuffle + bootstrap) |
+| `renaissance_v4/state/baseline_monte_carlo_summary.json` | Full Monte Carlo summaries (shuffle + bootstrap) |
 | `renaissance_v4/reports/experiments/baseline_v1_trades.json` | Normalized closed trades |
-| `renaissance_v4/reports/monte_carlo/monte_carlo_baseline_v1_reference.md` | Human-readable MC report |
+| `renaissance_v4/reports/monte_carlo/monte_carlo_baseline_v1_reference.md` | Human-readable Monte Carlo report |
 
 2. **Candidate workflow** (after changing code on a branch — one subsystem at a time):
 

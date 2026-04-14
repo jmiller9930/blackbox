@@ -1,5 +1,5 @@
 """
-Orchestrate full math stack: daily series, ARIMA/GARCH, annualized Sharpe, WFO, MC, ML, Kalman, coint.
+Orchestrate full math stack: daily series, ARIMA/GARCH, annualized Sharpe, WFO, Monte Carlo, ML, Kalman, coint.
 """
 from __future__ import annotations
 
