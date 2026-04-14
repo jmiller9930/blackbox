@@ -18,7 +18,7 @@
 #     node --experimental-sqlite backfill.mjs
 # Optional external compare jobs exist elsewhere in the monorepo — not part of SeanV3 runtime.
 #
-# Jupiter read-only web UI: http://clawbot.a51.corp:7070/ — JUPITER_WEB_PORT (default 7070; not 707 — privileged port on Linux for non-root).
+# Jupiter read-only web UI: http://clawbot.a51.corp:707/ — JUPITER_WEB_PORT (default 707). jupiter-web runs as root so Node can bind :707 on Linux.
 services:
   seanv3:
     build: .
@@ -48,17 +48,19 @@ services:
     volumes:
       - ./capture:/capture
 
-  # Jupiter — read-only dashboard; shares SQLite with seanv3 (host network → port 7070 on host).
+  # Jupiter — read-only dashboard; shares SQLite with seanv3 (host network → port 707 on host).
   # build: . — same image as seanv3; avoids compose trying to pull seanv3:local from a registry.
+  # user: root — bind to :707 on Linux (port <1024); seanv3 stays non-root.
   jupiter-web:
     build: .
     image: seanv3:local
     container_name: jupiter-web
     network_mode: host
+    user: "0:0"
     command: ["node", "--experimental-sqlite", "jupiter_web.mjs"]
     environment:
       SQLITE_PATH: /capture/sean_parity.db
-      JUPITER_WEB_PORT: "7070"
+      JUPITER_WEB_PORT: "707"
       JUPITER_WEB_BIND: "0.0.0.0"
     volumes:
       - ./capture:/capture

@@ -10,14 +10,14 @@ SeanV3 is **its own application** in this repo: **`vscode-test/seanv3/`** (Node,
 
 ### Same server as BlackBox UI (UIUX.Web)
 
-You can run **both** on one host. BlackBox **nginx** (`UIUX.Web` compose) binds **443** (and **80**); the **`api`** service uses **host network** and listens on **:8080**. The SeanV3 **poll/engine** container (`seanv3`) does not bind HTTP; **Jupiter** (`jupiter-web`) binds **:7070** on the host (`network_mode: host`), so it **does not use 443**. (Default **7070**, not **707** — ports &lt;1024 are privileged on Linux for non-root.) Start each stack from its directory:
+You can run **both** on one host. BlackBox **nginx** (`UIUX.Web` compose) binds **443** (and **80**); the **`api`** service uses **host network** and listens on **:8080**. The SeanV3 **poll/engine** container (`seanv3`) does not bind HTTP; **Jupiter** (`jupiter-web`) binds **:707** on the host (`network_mode: host`), so it **does not use 443**. (`jupiter-web` runs as root in compose so Node can bind port **707** on Linux.) Start each stack from its directory:
 
 - `cd UIUX.Web && docker compose up -d` (or your usual command)
 - `cd vscode-test/seanv3 && docker compose up -d --build`
 
 Both rely on the **host** routing table for Binance (WireGuard split-tunnel on clawbot per `VPN/README.md`).
 
-**Jupiter** (read-only web app; container **`jupiter-web`):** on clawbot, **`http://clawbot.a51.corp:7070/`** (same host: **`http://127.0.0.1:7070/`**). Default **`JUPITER_WEB_PORT=7070`** (legacy **`SEANV3_WEB_PORT`** still works). Public lab URL maps **WAN :737 → LAN :7070** when using DNS to the same host. Shows wallet pubkey, open position, recent `sean_paper_trades`, **`/api/summary.json`**. Run `docker compose up -d` (starts `seanv3` + `jupiter-web`) or locally **`npm run jupiter`** / `npm run web`. Ensure **:7070** is allowed by host firewall if you browse from another machine.
+**Jupiter** (read-only web app; container **`jupiter-web`):** on clawbot, **`http://clawbot.a51.corp:707/`** (same host: **`http://127.0.0.1:707/`**). Default **`JUPITER_WEB_PORT=707`** (legacy **`SEANV3_WEB_PORT`** still works). Public lab URL maps **WAN :737 → LAN :707** when using DNS to the same host. Shows wallet pubkey, open position, recent `sean_paper_trades`, **`/api/summary.json`**. Run `docker compose up -d` (starts `seanv3` + `jupiter-web`) or locally **`npm run jupiter`** / `npm run web` (local Node may need **`sudo`** or a port ≥1024 if bind to **707** fails). Ensure **:707** is allowed by host firewall if you browse from another machine.
 
 ---
 

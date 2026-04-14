@@ -1,9 +1,9 @@
 #!/usr/bin/env node
 /**
  * Jupiter — read-only web UI for SeanV3 parity data (wallet, position, trades from sean_parity.db).
- * Default port 7070 (unprivileged; 707 is privileged on Linux for non-root).
- * JUPITER_WEB_PORT or legacy SEANV3_WEB_PORT. Host networking recommended.
- * Lab: http://clawbot.a51.corp:7070/ (operator browser on LAN/VPN).
+ * Default port 707 (JUPITER_WEB_PORT or legacy SEANV3_WEB_PORT). Host networking recommended.
+ * On Linux, ports <1024 need root or NET_BIND_SERVICE — docker-compose runs jupiter-web as root for :707 only.
+ * Lab: http://clawbot.a51.corp:707/ (operator browser on LAN/VPN).
  */
 import http from 'http';
 import { DatabaseSync } from 'node:sqlite';
@@ -188,8 +188,8 @@ function htmlPage(data) {
 </html>`;
 }
 
-const portRaw = process.env.JUPITER_WEB_PORT || process.env.SEANV3_WEB_PORT || '7070';
-const port = Math.max(1, Math.min(65535, parseInt(portRaw, 10) || 7070));
+const portRaw = process.env.JUPITER_WEB_PORT || process.env.SEANV3_WEB_PORT || '707';
+const port = Math.max(1, Math.min(65535, parseInt(portRaw, 10) || 707));
 const bind = (process.env.JUPITER_WEB_BIND || process.env.SEANV3_WEB_BIND || '0.0.0.0').trim() || '0.0.0.0';
 
 const server = http.createServer((req, res) => {
