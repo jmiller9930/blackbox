@@ -5,7 +5,7 @@
  * docker-compose network_mode:host only — see VPN/README.md. No VPN inside the container.
  *
  * - NDJSON: CAPTURE_PATH
- * - SQLite: SQLITE_PATH — sean_binance_kline_poll + paper_wallet + paper_trade_log
+ * - SQLite: SQLITE_PATH — sean_binance_kline_poll + Sean ledger (sean_paper_position, sean_paper_trades) + paper_wallet + paper_trade_log
  * - Wallet: KEYPAIR_PATH (optional) — pubkey only in DB; never stores secrets in logs
  * - Paper: no chain txs; stub signals for comparison to Blackbox Sean V3 (Python authoritative)
  *
@@ -24,6 +24,8 @@ import {
   setMeta,
   upsertPaperWallet,
 } from './paper_analog.mjs';
+import { processSeanEngineSlice } from './sean_engine_slice.mjs';
+import { ensureSeanLedgerSchema } from './sean_ledger.mjs';
 import { loadPubkeyFromKeypairFile } from './wallet_connect.mjs';
 
 const url =
@@ -40,6 +42,11 @@ const keypairPath = (process.env.KEYPAIR_PATH || '').trim();
 const paperTrading =
   (process.env.PAPER_TRADING || '1').trim().toLowerCase() !== '0' &&
   (process.env.PAPER_TRADING || '1').trim().toLowerCase() !== 'false';
+
+const seanEngineSliceOn = () => {
+  const v = (process.env.SEAN_ENGINE_SLICE ?? '1').trim().toLowerCase();
+  return v !== '0' && v !== 'false' && v !== 'no';
+};
 
 function marketEventIdFromOpenTimeMs(openTimeMs) {
   const d = new Date(Number(openTimeMs));
@@ -87,6 +94,7 @@ function initSqlite() {
       CREATE INDEX IF NOT EXISTS idx_sean_poll_mid ON sean_binance_kline_poll (market_event_id);
     `);
     ensurePaperAnalogSchema(db);
+    ensureSeanLedgerSchema(db);
     return db;
   } catch (e) {
     console.error(`[seanv3] SQLite init failed: ${e.message}`);
@@ -261,6 +269,13 @@ async function fetchOnce() {
         reqUrl: url,
       });
       processPaperAnalog(parityDb, { marketEventId, kline });
+      if (seanEngineSliceOn()) {
+        try {
+          processSeanEngineSlice(parityDb, { marketEventId, kline });
+        } catch (engErr) {
+          console.error(`[seanv3] sean_engine_slice failed: ${engErr.message}`);
+        }
+      }
     } catch (e) {
       console.error(`[seanv3] sqlite insert failed: ${e.message}`);
     }
@@ -273,6 +288,7 @@ async function main() {
       (capturePath ? ` — ndjson: ${capturePath}` : '') +
       (sqlitePath ? ` — sqlite: ${sqlitePath}` : '') +
       ` — paper: ${paperTrading}` +
+      ` — sean_engine_slice: ${seanEngineSliceOn()}` +
       (keypairPath ? ` — keypair: ${keypairPath}` : '')
   );
   parityDb = initSqlite();

@@ -10,7 +10,7 @@
 # network_mode: host — required (see above).
 #
 # NDJSON: tail -f capture/seanv3.ndjson
-# SQLite: capture/sean_parity.db — table sean_binance_kline_poll
+# SQLite: capture/sean_parity.db — klines + Sean-native paper ledger (sean_paper_trades, …)
 # Backfill ~3 days (864 bars; max 1000/request) — use the host script (preflights Proton/Binance path):
 #   ./run-backfill-clawbot.sh
 # Raw:
@@ -32,5 +32,9 @@ services:
       # Optional: Solana keypair JSON (same format as solana-keygen). Only pubkey is stored in DB.
       # KEYPAIR_PATH: /capture/keypair.json
       PAPER_TRADING: "1"
+      # Sean-native paper engine slice (no BlackBox): open/carry/close + sean_paper_trades. Set "0" to disable.
+      SEAN_ENGINE_SLICE: "1"
+      # SEAN_ENGINE_STOP_FRAC: "0.02"
+      # SEAN_ENGINE_MAX_HOLD_BARS: "48"
     volumes:
       - ./capture:/capture
