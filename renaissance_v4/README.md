@@ -1,6 +1,6 @@
 # RenaissanceV4 (BlackBox)
 
-End-to-end replay through **Phase 7**: execution simulation plus **learning ledger**, **outcome records** (real closes from Phase 6), portfolio metrics, and **per-signal scorecards** (advisory lifecycle). Still **not live trading**. Architect sources: **`phase1_code_pack.md`** … **`phase7_code_pack.md`**.
+End-to-end replay through **Phase 7**; **Phases 8–11** add optional governance and research scaffolds (not yet wired into the main replay loop). Still **not live trading**. Architect sources: **`phase1_code_pack.md`** … **`phase7_code_pack.md`**, plus **`phase8_to_11_code_pack.md`**.
 
 **Implementation note:** `utils/db.py` resolves the SQLite path from the package location (not the process cwd), so `python -m renaissance_v4.data.init_db` works from any directory. `init_schema.py` is a thin alias for `init_db.py`.
 
@@ -13,6 +13,7 @@ End-to-end replay through **Phase 7**: execution simulation plus **learning ledg
 - **Phase 5:** `core/risk_decision.py`, `position_sizer.py`, `risk_governor.py` — `phase5_code_pack.md` §3.
 - **Phase 6:** `core/trade_state.py`, `execution_manager.py`, `pnl.py` — `phase6_code_pack.md`.
 - **Phase 7:** `core/outcome_record.py`, `performance_metrics.py`, `research/learning_ledger.py`, `signal_scorecard.py` — `phase7_code_pack.md`.
+- **Phases 8–11 (scaffold):** `core/promotion_engine.py`, `decay_detector.py`, `lifecycle_manager.py`, `portfolio_manager.py`, `research/walk_forward.py`, `agents/{analyst,executor,auditor}.py` — `phase8_to_11_code_pack.md`.
 
 `config/` and `tests/` remain for later phases.
 
