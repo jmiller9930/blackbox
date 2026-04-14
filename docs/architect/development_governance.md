@@ -13,8 +13,20 @@
 | [`directives/README.md`](directives/README.md) | Architect directive registry |
 | [`directives/directive_execution_log.md`](directives/directive_execution_log.md) | Directive closure / evidence |
 | [`../working/current_directive.md`](../working/current_directive.md) | Active implementation slice (when present) |
+| **[`policy_package_standard.md`](policy_package_standard.md)** | **Mandatory contract** for **any** new Jupiter baseline policy (JUPv3, JUPv4, JUPv5, …): Sean / AI output → reviewable package → merge. Not optional. |
 
 **Plan / log sync:** When scope or status changes, update **master plan** and **directive execution log** in the **same change set** with matching granularity (`Plan/log status sync: PASS`).
+
+### Jupiter baseline policy — Sean / AI → Blackbox (non‑negotiable)
+
+New baseline Jupiter policies are **not** ad-hoc Python in the bridge. They **must** follow the **policy package contract** end to end:
+
+1. **Read** [`policy_package_standard.md`](policy_package_standard.md) — folder layout, required **`POLICY_SPEC.yaml`**, **`INTEGRATION_CHECKLIST.md`**, engineering checklist (ledger slot, `signal_mode`, evaluator, `sean_jupiter_baseline_signal`, bundle/API, tests, deploy proof).
+2. **Generate** using the AI instruction pattern in [`jupv4_grok_implementation_prompt.md`](jupv4_grok_implementation_prompt.md) (same idea for **JUPv5+**; update titles/paths in the prompt as needed).
+3. **Gate mechanically** before deep integration: `python3 scripts/validate_policy_package.py <package_dir>` (requires PyYAML). **Fail closed** — send the package back, do not “fix forward” in ledger code without a passing package.
+4. **Integrate** in **one** PR: slot + wiring + tests per the checklist — no silent string slots.
+
+**Canonical reference policy:** [`JUPv3.md`](JUPv3.md). Blackbox does **not** execute unreviewed policy strings; merged code + tests + operator slot selection only.
 
 ---
 

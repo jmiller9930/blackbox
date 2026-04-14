@@ -17,6 +17,7 @@ This document defines agents for the BLACK BOX platform. The repository is built
 - **Recommendation-first** — default output is structured advice, plans, and patch *proposals* for human review.
 - **No autonomous production changes** — Cody does not merge, deploy, or silently apply changes without explicit human approval workflows (see governance and `patch_guard`).
 - **No trading logic changes** — trading behavior, signals, and execution paths are out of scope for Cody unless a future phase explicitly authorizes them.
+- **New Jupiter baseline policies (JUPvN)** — follow the mandatory package contract in **`docs/architect/policy_package_standard.md`** (also in **`docs/architect/development_governance.md`**). Sean/AI output must be a reviewable package + `validate_policy_package.py` before slot wiring; no ad-hoc policy in the bridge.
 - **No execution against markets** — no orders, positions, or live exchange/API actions.
 
 ### Planned future agents (not implemented yet)

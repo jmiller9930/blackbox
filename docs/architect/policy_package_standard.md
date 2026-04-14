@@ -1,5 +1,7 @@
 # Policy package standard (Sean → Blackbox)
 
+**Governance:** This document is **binding** for any new Jupiter baseline policy (**JUPvN**). It is listed in **`docs/architect/development_governance.md`** (authoritative documents + mandatory subsection) and in **`.cursor/rules/blackbox-session-always.mdc`** (Authority §10) so it cannot be treated as optional background reading.
+
 **Purpose:** One **repeatable shape** for every new baseline Jupiter policy (JUPv3, JUPv4, …) so Sean (or Grok on his spec) can hand engineering a **complete package**, and engineering can **integrate** it without reinventing wiring each time.
 
 **What this is not:** It is **not** “upload policy in the browser and execute.” Blackbox **does not** run unreviewed strings as policy. A policy becomes active only after **merge**, **slot wiring**, **tests**, and **deploy** per governance.
@@ -153,3 +155,4 @@ If policies stay **parameter‑driven** (same gate shape, different thresholds),
 |---------|--------|
 | 1 | Initial standard: package layout, `POLICY_SPEC.yaml`, integration checklist. |
 | 2 | §5 failure‑point pipeline: validator script, CI/tests, declarative future note. |
+| 3 | Governance cross-links: `development_governance.md`, `blackbox-session-always.mdc` Authority §10. |

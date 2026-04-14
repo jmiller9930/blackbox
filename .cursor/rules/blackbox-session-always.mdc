@@ -24,6 +24,7 @@ alwaysApply: true
 7. **How to answer the architect (proof format):** [`architect-proof-response.mdc`](architect-proof-response.mdc)
 8. **Triad peer — question before acting when wrong/unclear:** [`triad-engagement.mdc`](triad-engagement.mdc)
 9. **Foreman bridge authority before coding/validation:** [`foreman-bridge-enforcement.mdc`](foreman-bridge-enforcement.mdc)
+10. **Jupiter baseline policy (Sean / AI → Blackbox) — mandatory contract:** [`docs/architect/policy_package_standard.md`](../../docs/architect/policy_package_standard.md). Any new **JUPvN** must use this package layout + **`POLICY_SPEC.yaml`** + checklist; run **`scripts/validate_policy_package.py`** on the folder before integration. Canonical governance pointer: **`docs/architect/development_governance.md`** (same topic). **Do not** wire ad-hoc policy code without a package that passes the mechanical gate.
 
 ## Operating agreement
 
