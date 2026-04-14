@@ -501,6 +501,7 @@
             <thead>
               <tr>
                 <th title="Lifecycle key from entry bar + mode (bl_lc_…); not the same string as exit market_event_id.">trade_id</th>
+                <th title="Jupiter baseline policy at entry for this trade (policy_evaluations). Distinct from Policy (ledger close classification).">JUP</th>
                 <th title="Entry bar market_event_id when recorded (lifecycle); aligns trade_id with the opening candle.">Entry MEI</th>
                 <th title="When the position opened (ledger entry time, UTC).">Open (UTC)</th>
                 <th title="How long this position was open until exit (closed fills only). Not lifecycle held (open position) — that is on the dashboard trade chain.">Duration</th>
@@ -510,7 +511,6 @@
                 <th title="Timeframe.">TF</th>
                 <th title="Exit/close bar market_event_id on this ledger row (Jupiter tile narrative is keyed here).">market_event_id</th>
                 <th title="Mode.">Mode</th>
-                <th title="Jupiter baseline policy version (paper path). Distinct from Policy (ledger close classification).">JUP</th>
                 <th title="Side.">Side</th>
                 <th title="Policy classification for this closed ledger row (authoritative close vs other). Not the same as trade-chain held vs idle NO TRADE.">Policy</th>
                 <th title="Closed-trade economic display (win/loss/flat, etc.). Not trade-chain held.">Outcome</th>
@@ -874,6 +874,10 @@
             escAttr("Lifecycle trade key; see Entry MEI column for opening bar id.") +
             '">' +
             esc(tid) +
+            '</td><td title="' +
+            escAttr("Jupiter baseline policy version at entry (policy_evaluations).") +
+            '">' +
+            esc(jupTag) +
             '</td><td class="bt-mono bt-mono--mid" title="' +
             escAttr("Entry bar market_event_id (from lifecycle context); differs from exit market_event_id.") +
             '">' +
@@ -910,10 +914,6 @@
             escAttr("Ledger mode (live / paper / paper_stub).") +
             '">' +
             esc(mode) +
-            '</td><td title="' +
-            escAttr("Jupiter baseline policy version (paper path).") +
-            '">' +
-            esc(jupTag) +
             '</td><td class="' +
             cls +
             '" title="' +
