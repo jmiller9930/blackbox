@@ -30,7 +30,7 @@ This section states **exactly** what must happen on **clawbot** so engineering, 
 
 1. **`[Peer] AllowedIPs`** on the WireGuard config includes the **current** destination prefixes for Binance API (CDN IPs **change** — see `scripts/clawbot/binance_api_route_via_proton_wg.sh`), and  
 2. Host routes (e.g. **`/32`** via **`dev wg-proton-mx`**) match those destinations, and  
-3. Application processes that call Binance use the **host routing table** (e.g. **`network_mode: host`** on the relevant Docker services — see `UIUX.Web/docker-compose.yml` and `vscode-test/binance-klines-mini/docker-compose.yml`).
+3. Application processes that call Binance use the **host routing table** (e.g. **`network_mode: host`** on the relevant Docker services — see `UIUX.Web/docker-compose.yml` and `vscode-test/seanv3/docker-compose.yml`).
 
 **Not in scope for “Binance via Proton”:** Trading venues other than Binance, wallet RPC, Solana JSON-RPC, Pyth/Hermes, Slack, Git, or generic web — those are **not** Binance API traffic and **must not** be forced through this tunnel unless a **separate** directive says so.
 
@@ -70,7 +70,7 @@ curl -sS -o /dev/null -w '%{http_code}\n' https://api.github.com/
 curl -sS -o /dev/null -w '%{http_code}\n' https://api.binance.com/api/v3/ping
 ```
 
-Sean parity klines backfill (preflights the Binance ping, then `docker compose run`): `vscode-test/binance-klines-mini/run-backfill-clawbot.sh`.
+Sean parity klines backfill (preflights the Binance ping, then `docker compose run`): `vscode-test/seanv3/run-backfill-clawbot.sh`.
 
 If those fail or hang while Binance-only WG is up, routing is wrong (too-wide **`AllowedIPs`** or conflicting **`ip rule`**).
 

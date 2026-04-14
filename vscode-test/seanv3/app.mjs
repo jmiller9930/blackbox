@@ -86,7 +86,7 @@ function initSqlite() {
     ensurePaperAnalogSchema(db);
     return db;
   } catch (e) {
-    console.error(`[binance-klines-mini] SQLite init failed: ${e.message}`);
+    console.error(`[seanv3] SQLite init failed: ${e.message}`);
     return null;
   }
 }
@@ -117,14 +117,14 @@ async function appendNdjsonLine(obj) {
   await mkdir(dirname(capturePath), { recursive: true });
   await appendFile(
     capturePath,
-    JSON.stringify({ source: 'binance_klines_mini', ...obj }) + '\n',
+    JSON.stringify({ source: 'seanv3', ...obj }) + '\n',
     'utf8'
   );
 }
 
 async function connectWalletOnce(db) {
   if (!keypairPath) {
-    console.error('[binance-klines-mini] KEYPAIR_PATH unset — paper wallet not connected (pubkey-only mode skipped)');
+    console.error('[seanv3] KEYPAIR_PATH unset — paper wallet not connected (pubkey-only mode skipped)');
     setMeta(db, 'wallet_status', 'no_keypair_path');
     logPaperEvent(db, {
       atUtc: new Date().toISOString(),
@@ -139,7 +139,7 @@ async function connectWalletOnce(db) {
   try {
     await access(keypairPath);
   } catch {
-    console.error(`[binance-klines-mini] KEYPAIR_PATH not readable: ${keypairPath}`);
+    console.error(`[seanv3] KEYPAIR_PATH not readable: ${keypairPath}`);
     setMeta(db, 'wallet_status', 'keypair_missing');
     logPaperEvent(db, {
       atUtc: new Date().toISOString(),
@@ -174,9 +174,9 @@ async function connectWalletOnce(db) {
         keypair_path: keypairPath,
       }),
     });
-    console.error(`[binance-klines-mini] paper wallet pubkey: ${walletPubkey}`);
+    console.error(`[seanv3] paper wallet pubkey: ${walletPubkey}`);
   } catch (e) {
-    console.error(`[binance-klines-mini] wallet load failed: ${e.message}`);
+    console.error(`[seanv3] wallet load failed: ${e.message}`);
     logPaperEvent(db, {
       atUtc: new Date().toISOString(),
       marketEventId: null,
@@ -259,14 +259,14 @@ async function fetchOnce() {
       });
       processPaperAnalog(parityDb, { marketEventId, kline });
     } catch (e) {
-      console.error(`[binance-klines-mini] sqlite insert failed: ${e.message}`);
+      console.error(`[seanv3] sqlite insert failed: ${e.message}`);
     }
   }
 }
 
 async function main() {
   console.error(
-    `[binance-klines-mini] poll every ${intervalMs}ms — ${url}` +
+    `[seanv3] poll every ${intervalMs}ms — ${url}` +
       (capturePath ? ` — ndjson: ${capturePath}` : '') +
       (sqlitePath ? ` — sqlite: ${sqlitePath}` : '') +
       ` — paper: ${paperTrading}` +

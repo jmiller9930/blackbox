@@ -14,9 +14,9 @@ Optional local **TypeScript** experiments (`superjup.ts`) are separate and not r
 
 | Doc | What it covers |
 |-----|----------------|
-| **[`binance-klines-mini/README.md`](binance-klines-mini/README.md)** | What the image is; **path on clawbot** `~/blackbox/vscode-test/binance-klines-mini`; **deploy** (`git pull`, `docker compose up -d --build`); **`network_mode: host`**; logs; **`capture/`** (NDJSON + SQLite); **`run-backfill-clawbot.sh`**; **`jup_v3_parity_compare`** command |
-| **[`binance-klines-mini/TURNOVER_NEXT_STEPS.md`](binance-klines-mini/TURNOVER_NEXT_STEPS.md)** | Handoff: `sean_parity.db`, architect mechanical checks, parity command, poller / 451 notes |
-| **[`binance-klines-mini/docker-compose.yml`](binance-klines-mini/docker-compose.yml)** | Service env, volumes, inline comments |
+| **[`seanv3/README.md`](seanv3/README.md)** | What the image is; **path on clawbot** `~/blackbox/vscode-test/seanv3`; **deploy** (`git pull`, `docker compose up -d --build`); **`network_mode: host`**; logs; **`capture/`** (NDJSON + SQLite); **`run-backfill-clawbot.sh`**; **`jup_v3_parity_compare`** command |
+| **[`seanv3/TURNOVER_NEXT_STEPS.md`](seanv3/TURNOVER_NEXT_STEPS.md)** | Handoff: `sean_parity.db`, architect mechanical checks, parity command, poller / 451 notes |
+| **[`seanv3/docker-compose.yml`](seanv3/docker-compose.yml)** | Service env, volumes, inline comments |
 
 ### VPN / routing (required for Binance on the server)
 
@@ -39,12 +39,12 @@ Binance egress uses the **host** routing table (WireGuard **split-tunnel**). The
 
 ### TypeScript lab (optional; not the Docker image)
 
-These files may exist only on a developer machine unless explicitly committed. They are **not** required for the **`binance-klines-mini`** container.
+These files may exist only on a developer machine unless explicitly committed. They are **not** required for the **`seanv3`** container.
 
 | File | Note |
 |------|------|
 | `superjup.ts` | Compile-safe stub; not deployed by default |
-| `superjup.ts.old` | Legacy reference bot — **do not** use for current parity proof; Python + `binance-klines-mini` are authoritative |
+| `superjup.ts.old` | Legacy reference bot — **do not** use for current parity proof; Python + `seanv3` are authoritative |
 
 ---
 
@@ -52,11 +52,11 @@ These files may exist only on a developer machine unless explicitly committed. T
 
 ```bash
 cd ~/blackbox && git pull origin main
-cd vscode-test/binance-klines-mini
+cd vscode-test/seanv3
 docker compose up -d --build
 ```
 
-Then read **[`binance-klines-mini/README.md`](binance-klines-mini/README.md)** first; use **[`binance-klines-mini/TURNOVER_NEXT_STEPS.md`](binance-klines-mini/TURNOVER_NEXT_STEPS.md)** for acceptance / parity follow-ups.
+Then read **[`seanv3/README.md`](seanv3/README.md)** first; use **[`seanv3/TURNOVER_NEXT_STEPS.md`](seanv3/TURNOVER_NEXT_STEPS.md)** for acceptance / parity follow-ups.
 
 ---
 

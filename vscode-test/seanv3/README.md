@@ -1,4 +1,4 @@
-# binance-klines-mini (Docker)
+# seanv3 (Docker)
 
 **Parity analog** for Blackbox: polls **Binance REST klines** over the **host** network (WireGuard / Proton **split-tunnel** for `api.binance.com`), optionally **connects a Solana wallet** (pubkey only in DB — secrets never logged), runs **paper-only** logging (no Jupiter program calls, no signed txs), and persists **all analog data** to onboard **SQLite** beside NDJSON.
 
@@ -30,13 +30,13 @@
 
 ## Remote host (clawbot)
 
-**Canonical path:** `~/blackbox/vscode-test/binance-klines-mini` on **`clawbot.a51.corp`**.
+**Canonical path:** `~/blackbox/vscode-test/seanv3` on **`clawbot.a51.corp`**.
 
 ### Deploy / update
 
 ```bash
 cd ~/blackbox && git pull origin main
-cd vscode-test/binance-klines-mini
+cd vscode-test/seanv3
 docker compose up -d --build
 ```
 
@@ -58,7 +58,7 @@ Binance egress must use the **host routing table** (WireGuard split-tunnel). The
 ### Logs
 
 ```bash
-cd ~/blackbox/vscode-test/binance-klines-mini
+cd ~/blackbox/vscode-test/seanv3
 docker compose logs -f
 ```
 
@@ -66,7 +66,7 @@ docker compose logs -f
 
 | Path | Purpose |
 |------|---------|
-| `./capture/binance_klines.ndjson` | Append-only JSON lines per poll. |
+| `./capture/seanv3.ndjson` | Append-only JSON lines per poll. |
 | `./capture/sean_parity.db` | SQLite: klines poll + paper analog tables. |
 
 ### Environment (see `docker-compose.yml`)
@@ -91,7 +91,7 @@ docker compose logs -f
 ```bash
 cd ~/blackbox
 PYTHONPATH=. python3 -m modules.anna_training.jup_v3_parity_compare \
-  vscode-test/binance-klines-mini/capture/sean_parity.db
+  vscode-test/seanv3/capture/sean_parity.db
 ```
 
 Set `BLACKBOX_MARKET_DATA_PATH` if needed.

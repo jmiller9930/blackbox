@@ -3,24 +3,24 @@
 # network_mode: host — required so egress uses the host routing table (WireGuard split-tunnel to
 # Binance). Default Docker bridge bypasses that path and Binance often returns HTTP 451.
 #
-# NDJSON: tail -f capture/binance_klines.ndjson
+# NDJSON: tail -f capture/seanv3.ndjson
 # SQLite: capture/sean_parity.db — table sean_binance_kline_poll
 # Backfill ~3 days (864 bars; max 1000/request) — use the host script (preflights Proton/Binance path):
 #   ./run-backfill-clawbot.sh
 # Raw:
-#   docker compose run --rm -e SQLITE_PATH=/capture/sean_parity.db -e LIMIT=864 binance-klines \
+#   docker compose run --rm -e SQLITE_PATH=/capture/sean_parity.db -e LIMIT=864 seanv3 \
 #     node --experimental-sqlite backfill.mjs
 # Compare to Blackbox (from repo root): PYTHONPATH=. python3 -m modules.anna_training.jup_v3_parity_compare ...
 services:
-  binance-klines:
+  seanv3:
     build: .
-    container_name: binance-klines-mini
+    container_name: seanv3
     network_mode: host
     restart: unless-stopped
     environment:
       BINANCE_KLINES_URL: https://api.binance.com/api/v3/klines?symbol=SOLUSDT&interval=5m&limit=1
       POLL_INTERVAL_MS: "300000"
-      CAPTURE_PATH: /capture/binance_klines.ndjson
+      CAPTURE_PATH: /capture/seanv3.ndjson
       SQLITE_PATH: /capture/sean_parity.db
       # Optional: Solana keypair JSON (same format as solana-keygen). Only pubkey is stored in DB.
       # KEYPAIR_PATH: /capture/keypair.json

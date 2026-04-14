@@ -1,10 +1,10 @@
 """
-Compare Sean parity SQLite (klines-mini capture) to Blackbox JUPv3 truth:
+Compare Sean parity SQLite (``vscode-test/seanv3`` capture) to Blackbox JUPv3 truth:
 
 - ``binance_strategy_bars_5m`` (OHLCV)
 - ``policy_evaluations`` (``signal_mode=sean_jupiter_v3``)
 
-Sean DB is written by ``vscode-test/binance-klines-mini/app.mjs`` when ``SQLITE_PATH`` is set.
+Sean DB is written by ``vscode-test/seanv3/app.mjs`` when ``SQLITE_PATH`` is set.
 """
 
 from __future__ import annotations

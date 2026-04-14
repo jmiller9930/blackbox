@@ -25,5 +25,5 @@ export LIMIT
 docker compose run --rm \
   -e SQLITE_PATH=/capture/sean_parity.db \
   -e LIMIT="${LIMIT}" \
-  binance-klines \
+  seanv3 \
   node --experimental-sqlite /app/backfill.mjs

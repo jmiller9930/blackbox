@@ -6,14 +6,14 @@
 ## Where things stand
 
 - **Host:** `clawbot.a51.corp`, repo `~/blackbox`.
-- **Sean SQLite:** `vscode-test/binance-klines-mini/capture/sean_parity.db`, table `sean_binance_kline_poll`.
+- **Sean SQLite:** `vscode-test/seanv3/capture/sean_parity.db`, table `sean_binance_kline_poll`.
 - **Backfill:** Use **`./run-backfill-clawbot.sh`** (preflights `https://api.binance.com/api/v3/ping` = HTTP 200, then `docker compose run` backfill). Requires **host WireGuard split-tunnel** for Binance; container uses **`network_mode: host`** so it follows host routing. See **`VPN/README.md`**.
 - **BlackBox market OHLC:** `data/sqlite/market_data.db` (default `BLACKBOX_MARKET_DATA_PATH`), table `binance_strategy_bars_5m`.
 - **Dashboard stack (UIUX.Web):** On clawbot, `api` + `binance-strategy-bars-sync` use **host network** so Binance traffic follows WireGuard; nginx proxies to `host.docker.internal:8080`. After compose changes: `cd UIUX.Web && docker compose up -d --build` (see `docker-compose.yml` header).
 
 ## Done recently (engineering)
 
-- `network_mode: host` on `binance-klines` so egress matches host WG/Proton routing.
+- `network_mode: host` on the `seanv3` compose service so egress matches host WG/Proton routing.
 - `run-backfill-clawbot.sh` + compose comments; VPN doc for Binance-only egress.
 - Successful backfill run on clawbot: **864** klines inserted (`LIMIT=864`, `SOLUSDT`). DB may show **865** rows if the poller inserted one extra bar — re-run mechanical checks and dedupe if governance requires exactly 864.
 
@@ -31,13 +31,13 @@
    ```bash
    cd ~/blackbox && git pull origin main
    PYTHONPATH=. python3 -m modules.anna_training.jup_v3_parity_compare \
-     vscode-test/binance-klines-mini/capture/sean_parity.db
+     vscode-test/seanv3/capture/sean_parity.db
    ```
    Set `BLACKBOX_MARKET_DATA_PATH` if market DB is not the default path.
 
 3. **If row count must be exactly 864:** delete the extra poll row or stop the poller before backfill-only verification; document which `id` was removed.
 
-4. **Ongoing poller:** `docker compose up -d` in `vscode-test/binance-klines-mini` — expect inserts every poll interval when Binance returns 200; confirm logs do not show sustained **451**.
+4. **Ongoing poller:** `docker compose up -d` in `vscode-test/seanv3` — expect inserts every poll interval when Binance returns 200; confirm logs do not show sustained **451**.
 
 5. **If Binance ping fails again:** fix WG **`AllowedIPs`** / split-tunnel so `api.binance.com` resolves to paths covered by policy routing (see **`VPN/README.md`** — CDN IPs move; ops may need prefix updates).
 
@@ -46,8 +46,8 @@
 | Artifact | Path |
 |----------|------|
 | **vscode-test index** | `vscode-test/README.md` |
-| Compose + service | `vscode-test/binance-klines-mini/docker-compose.yml` |
-| Backfill script | `vscode-test/binance-klines-mini/run-backfill-clawbot.sh` |
+| Compose + service | `vscode-test/seanv3/docker-compose.yml` |
+| Backfill script | `vscode-test/seanv3/run-backfill-clawbot.sh` |
 | VPN / Binance egress | `VPN/README.md` |
 | WG route repair (CDN drift) | `scripts/clawbot/binance_api_route_via_proton_wg.sh` |
 | Parity module | `modules/anna_training/jup_v3_parity_compare.py` |
