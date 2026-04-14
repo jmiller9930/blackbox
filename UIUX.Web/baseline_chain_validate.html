@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>BLACK BOX — Baseline chain validation</title>
+  <link rel="stylesheet" href="/styles.css" />
+  <script src="/text-scale.js"></script>
+  <style>
+    html, body { height: 100%; margin: 0; }
+    .dash-app { display: flex; min-height: 100vh; align-items: stretch; }
+    .dash-nav {
+      width: 12.5rem; flex-shrink: 0; border-right: 1px solid var(--panel-border);
+      background: var(--panel); padding: var(--space-3) var(--space-2);
+      display: flex; flex-direction: column; gap: 0.25rem;
+      min-height: 0; overflow-y: auto;
+    }
+    .dash-nav a {
+      display: block; padding: 0.45rem 0.65rem; border-radius: var(--radius-md);
+      font-size: 0.85rem; font-weight: 600; color: var(--text); text-decoration: none;
+    }
+    .dash-nav a:hover { background: rgba(15, 23, 42, 0.06); }
+    .dash-nav a.is-active { background: var(--accent); color: var(--accent-contrast); }
+    .dash-main {
+      flex: 1; display: flex; flex-direction: column; min-width: 0; min-height: 0;
+      background: linear-gradient(180deg, #f8f8fa 0%, #eef1f5 100%);
+    }
+    .bcv-back {
+      flex-shrink: 0;
+      padding: 0.5rem 0.75rem;
+      border-bottom: 1px solid var(--panel-border);
+      background: var(--panel);
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 0.5rem 1rem;
+    }
+    .bcv-back a.dash-return {
+      font-size: 0.82rem;
+      font-weight: 800;
+      color: var(--accent);
+      text-decoration: none;
+    }
+    .bcv-back a.dash-return:hover { text-decoration: underline; }
+    .bcv-back .bcv-muted {
+      font-size: 0.68rem;
+      color: var(--muted);
+      font-weight: 600;
+      max-width: 48rem;
+      line-height: 1.4;
+    }
+    .bcv-section {
+      flex: 1;
+      overflow: auto;
+      padding: 0.65rem 0.75rem 1rem;
+    }
+    .bcv-section h1 {
+      margin: 0 0 0.35rem;
+      font-size: 1.05rem;
+      font-weight: 800;
+      color: #0f172a;
+    }
+    .bcv-desc {
+      margin: 0 0 1rem;
+      font-size: 0.74rem;
+      color: var(--muted);
+      font-weight: 600;
+      max-width: 52rem;
+      line-height: 1.45;
+    }
+    .bcv-form {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.5rem 1rem;
+      align-items: flex-end;
+      margin-bottom: 0.65rem;
+    }
+    .bcv-form label { font-size: 0.72rem; font-weight: 700; }
+    .bcv-form select, .bcv-form input[type="text"], .bcv-form input[type="number"] {
+      display: block;
+      margin-top: 0.2rem;
+      font-size: 0.78rem;
+    }
+    .bcv-form input[type="text"] { font-family: ui-monospace, monospace; font-size: 0.75rem; }
+    #bcv-run {
+      padding: 0.4rem 0.75rem;
+      border-radius: var(--radius-md);
+      border: 1px solid var(--panel-border);
+      background: var(--accent);
+      color: var(--accent-contrast);
+      font-weight: 700;
+      font-size: 0.78rem;
+      cursor: pointer;
+    }
+    #bcv-plain {
+      margin: 0 0 0.45rem;
+      font-size: 0.68rem;
+      white-space: pre-wrap;
+      max-height: min(28rem, 55vh);
+      overflow: auto;
+      background: #fff;
+      border: 1px solid var(--panel-border);
+      border-radius: 6px;
+      padding: 0.45rem;
+      font-family: ui-monospace, monospace;
+    }
+    #bcv-json {
+      margin: 0.35rem 0 0;
+      font-size: 0.62rem;
+      white-space: pre-wrap;
+      max-height: 14rem;
+      overflow: auto;
+      background: #0f172a;
+      color: #e2e8f0;
+      border-radius: 6px;
+      padding: 0.45rem;
+      font-family: ui-monospace, monospace;
+    }
+  </style>
+</head>
+<body>
+  <div class="dash-app">
+    <nav class="dash-nav" aria-label="Primary">
+      <a href="/dashboard.html">Dashboard</a>
+      <a class="is-active" href="/baseline-chain-validate.html">Baseline validation</a>
+      <a href="/baseline-trades.html">Reports dashboard</a>
+      <a href="/internal.html">Operator Panel</a>
+      <a href="/anna/evaluation">QEL evaluation</a>
+      <a href="/anna/event-view">Event view</a>
+      <a href="/anna.html">Anna hub</a>
+      <a href="/guide.html">System guide</a>
+      <a href="/anna/sequential-learning">Learning Engine</a>
+      <a href="/anna/training">Training Dashboard</a>
+      <a href="/intelligence-method.html">Intelligence METHOD</a>
+    </nav>
+    <div class="dash-main">
+      <div class="bcv-back">
+        <a class="dash-return" href="/dashboard.html">← Back to Dashboard</a>
+        <span class="bcv-muted">
+          JUPv3: policy and ledger are checked against the same <code>market_event_id</code>.
+          Binance (<code>binance_strategy_bars_5m</code>) is the policy OHLC axis; Pyth (<code>market_bars_5m</code>)
+          is loaded for oracle cross-check. Pick any past bar or range.
+        </span>
+      </div>
+      <div class="bcv-section">
+        <h1>Baseline chain validation</h1>
+        <p class="bcv-desc">
+          Read-only: compares stored Binance bar, Pyth bar, <code>policy_evaluations</code>, and
+          <code>execution_trades</code>. Does not re-run policy.
+        </p>
+        <div class="bcv-form">
+          <label>Policy slot
+            <select id="bcv-slot">
+              <option value="jup_v3" selected>JUPv3</option>
+              <option value="jup_v2">JUPv2</option>
+            </select>
+          </label>
+          <label>Mode
+            <select id="bcv-mode">
+              <option value="single" selected>Bar (UTC open)</option>
+              <option value="last_n">Last N bars</option>
+              <option value="range">Range</option>
+            </select>
+          </label>
+          <label>Bar / timestamp
+            <input id="bcv-candle" type="text" placeholder="2026-04-14T01:05:00Z" style="width:14rem" />
+          </label>
+          <label>Last N
+            <input id="bcv-lastn" type="number" min="1" max="96" value="12" style="width:4rem" />
+          </label>
+          <label>From UTC
+            <input id="bcv-from" type="text" placeholder="2026-04-14T00:00:00Z" style="width:12rem" />
+          </label>
+          <label>To UTC
+            <input id="bcv-to" type="text" placeholder="2026-04-14T04:00:00Z" style="width:12rem" />
+          </label>
+          <button type="button" id="bcv-run">Run validation</button>
+        </div>
+        <pre id="bcv-plain" aria-live="polite"></pre>
+        <details>
+          <summary style="cursor:pointer;font-size:0.72rem;font-weight:700;color:#64748b">Engineering JSON</summary>
+          <pre id="bcv-json"></pre>
+        </details>
+      </div>
+    </div>
+  </div>
+  <script>
+    function $(id) { return document.getElementById(id); }
+    $('bcv-run').addEventListener('click', function () {
+      var mode = ($('bcv-mode') || {}).value || 'single';
+      var slot = ($('bcv-slot') || {}).value || 'jup_v3';
+      var body = { mode: mode, policy_slot: slot };
+      if (mode === 'single') {
+        body.candle_open_utc = ($('bcv-candle') || {}).value.trim();
+      } else if (mode === 'last_n') {
+        body.last_n = parseInt(($('bcv-lastn') || {}).value, 10) || 12;
+      } else {
+        body.from_utc = ($('bcv-from') || {}).value.trim();
+        body.to_utc = ($('bcv-to') || {}).value.trim();
+      }
+      var plain = $('bcv-plain');
+      var jsel = $('bcv-json');
+      if (plain) plain.textContent = 'Running…';
+      fetch('/api/v1/dashboard/baseline-chain-validate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body)
+      })
+        .then(function (r) {
+          return r.json().then(function (j) {
+            return { ok: r.ok, j: j };
+          });
+        })
+        .then(function (x) {
+          if (plain) {
+            plain.textContent =
+              x.j && x.j.plain_english ? x.j.plain_english : JSON.stringify(x.j, null, 2);
+          }
+          if (jsel) jsel.textContent = JSON.stringify(x.j, null, 2);
+        })
+        .catch(function (e) {
+          if (plain) plain.textContent = String(e);
+        });
+    });
+  </script>
+</body>
+</html>

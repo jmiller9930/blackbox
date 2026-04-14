@@ -1953,6 +1953,15 @@ class Handler(BaseHTTPRequestHandler):
             if bt.is_file():
                 self._html(200, bt.read_text(encoding="utf-8"), no_cache=True)
                 return
+        if path in (
+            "/baseline-chain-validate",
+            "/baseline-chain-validate/",
+            "/baseline-chain-validate.html",
+        ):
+            bcv = _REPO_ROOT / "UIUX.Web" / "baseline_chain_validate.html"
+            if bcv.is_file():
+                self._html(200, bcv.read_text(encoding="utf-8"), no_cache=True)
+                return
         if path in ("/intelligence-method", "/intelligence-method/", "/intelligence-method.html"):
             im = _REPO_ROOT / "UIUX.Web" / "intelligence-method.html"
             if im.is_file():
@@ -2137,7 +2146,7 @@ class Handler(BaseHTTPRequestHandler):
                 self._json(
                     400,
                     {
-                        "schema": "baseline_chain_validate_v1",
+                        "schema": "baseline_chain_validate_v2",
                         "ok": False,
                         "error": str(e)[:500],
                         "trace_id": str(uuid.uuid4()),
@@ -2149,7 +2158,7 @@ class Handler(BaseHTTPRequestHandler):
                 self._json(
                     500,
                     {
-                        "schema": "baseline_chain_validate_v1",
+                        "schema": "baseline_chain_validate_v2",
                         "ok": False,
                         "error": str(e)[:500],
                         "trace_id": str(uuid.uuid4()),
@@ -2402,7 +2411,7 @@ class Handler(BaseHTTPRequestHandler):
                 self._json(
                     400,
                     {
-                        "schema": "baseline_chain_validate_v1",
+                        "schema": "baseline_chain_validate_v2",
                         "ok": False,
                         "error": str(e)[:500],
                         "trace_id": trace_id,
@@ -2414,7 +2423,7 @@ class Handler(BaseHTTPRequestHandler):
                 self._json(
                     500,
                     {
-                        "schema": "baseline_chain_validate_v1",
+                        "schema": "baseline_chain_validate_v2",
                         "ok": False,
                         "error": str(e)[:500],
                         "trace_id": trace_id,

@@ -1049,6 +1049,7 @@
   <div class="dash-app">
     <nav class="dash-nav" aria-label="Primary">
       <a class="is-active" href="/dashboard.html">Dashboard</a>
+      <a href="/baseline-chain-validate.html">Baseline validation</a>
       <a href="/baseline-trades.html">Reports dashboard</a>
       <a href="/internal.html">Operator Panel</a>
       <a href="/anna/evaluation">QEL evaluation</a>
@@ -1114,64 +1115,11 @@
         </div>
         <div id="dash-ctl-msg"></div>
       </div>
-      <!-- Baseline chain validation harness (market ↔ policy ↔ ledger; no chain UI recompute) -->
-      <details class="dash-intel-details" id="dash-bcv-wrap" style="border-bottom: 1px solid var(--panel-border);
-        background: #fffef9;">
-        <summary class="dash-intel-summary">
-          <span class="dash-intel-chevron" aria-hidden="true">▸</span>
-          <h2 class="dash-intel-summary-title" style="margin:0">Baseline chain validation</h2>
-          <span class="dash-intel-summary-hint">Compare Binance bar + policy_evaluations + execution_trades</span>
-        </summary>
-        <div class="dash-intel-inner">
-          <p class="dash-intel-sub" style="margin-top:0">
-            Validates stored layers for the selected policy slot (<code>jup_v3</code> uses
-            <code>binance_strategy_bars_5m</code>). Does not re-run policy.
-          </p>
-          <div style="display:flex;flex-wrap:wrap;gap:0.5rem 1rem;align-items:flex-end;margin-bottom:0.45rem">
-            <label style="font-size:0.72rem;font-weight:700">Policy slot
-              <select id="bcv-slot" style="display:block;margin-top:0.2rem;font-size:0.78rem">
-                <option value="jup_v3" selected>JUPv3</option>
-                <option value="jup_v2">JUPv2</option>
-              </select>
-            </label>
-            <label style="font-size:0.72rem;font-weight:700">Mode
-              <select id="bcv-mode" style="display:block;margin-top:0.2rem;font-size:0.78rem">
-                <option value="single" selected>Bar (UTC open)</option>
-                <option value="last_n">Last N bars</option>
-                <option value="range">Range</option>
-              </select>
-            </label>
-            <label style="font-size:0.72rem;font-weight:700">Bar / timestamp
-              <input id="bcv-candle" type="text" placeholder="2026-04-14T01:05:00Z"
-                style="display:block;margin-top:0.2rem;width:14rem;font-family:ui-monospace,monospace;font-size:0.75rem"/>
-            </label>
-            <label style="font-size:0.72rem;font-weight:700">Last N
-              <input id="bcv-lastn" type="number" min="1" max="96" value="12"
-                style="display:block;margin-top:0.2rem;width:4rem;font-size:0.78rem"/>
-            </label>
-            <label style="font-size:0.72rem;font-weight:700">From UTC
-              <input id="bcv-from" type="text" placeholder="2026-04-14T00:00:00Z"
-                style="display:block;margin-top:0.2rem;width:12rem;font-family:ui-monospace,monospace;font-size:0.75rem"/>
-            </label>
-            <label style="font-size:0.72rem;font-weight:700">To UTC
-              <input id="bcv-to" type="text" placeholder="2026-04-14T04:00:00Z"
-                style="display:block;margin-top:0.2rem;width:12rem;font-family:ui-monospace,monospace;font-size:0.75rem"/>
-            </label>
-            <button type="button" id="bcv-run" class="sec" style="padding:0.4rem 0.75rem;border-radius:var(--radius-md);
-              border:1px solid var(--panel-border);background:var(--accent);color:var(--accent-contrast);
-              font-weight:700;font-size:0.78rem;cursor:pointer">Run validation</button>
-          </div>
-          <pre id="bcv-plain" style="margin:0 0 0.45rem;font-size:0.68rem;white-space:pre-wrap;max-height:14rem;
-            overflow:auto;background:#fff;border:1px solid var(--panel-border);border-radius:6px;padding:0.45rem;
-            font-family:ui-monospace,monospace"></pre>
-          <details id="bcv-json-wrap" style="margin:0">
-            <summary style="cursor:pointer;font-size:0.72rem;font-weight:700;color:#64748b">Engineering JSON</summary>
-            <pre id="bcv-json" style="margin:0.35rem 0 0;font-size:0.62rem;white-space:pre-wrap;max-height:12rem;
-              overflow:auto;background:#0f172a;color:#e2e8f0;border-radius:6px;padding:0.45rem;
-              font-family:ui-monospace,monospace"></pre>
-          </details>
-        </div>
-      </details>
+      <div class="dash-r2" style="border-bottom:1px solid var(--panel-border);background:#fffef9;padding:0.4rem 0.75rem;
+        font-size:0.78rem">
+        <a href="/baseline-chain-validate.html" style="font-weight:800;color:var(--accent);text-decoration:none">Baseline chain validation</a>
+        <span style="color:var(--muted);font-weight:600"> — Historical Binance + Pyth vs policy + ledger (JUPv3 timeline)</span>
+      </div>
       <!-- Row 1: system banner (one strip) -->
       <div class="dash-r1" id="dash-r1" role="status" aria-live="polite">
         <span><span class="lbl">State</span> <span class="val" id="b-state">—</span></span>
@@ -3662,46 +3610,6 @@
   $('btnStop').addEventListener('click', function () { postCtl('stop', {}).then(function (x) { $('dash-ctl-msg').textContent = fmtCtl(x.j); refresh(); }); });
   $('btnReset').addEventListener('click', function () { if (!confirm('Reset?')) return; postCtl('reset', { archive: true }).then(function (x) { $('dash-ctl-msg').textContent = fmtCtl(x.j); refresh(); }); });
   $('btnTick').addEventListener('click', function () { postCtl('tick', { max_events: 5 }).then(function (x) { $('dash-ctl-msg').textContent = fmtCtl(x.j); refresh(); }); });
-
-  var bcvRun = $('bcv-run');
-  if (bcvRun) {
-    bcvRun.addEventListener('click', function () {
-      var mode = ($('bcv-mode') || {}).value || 'single';
-      var slot = ($('bcv-slot') || {}).value || 'jup_v3';
-      var body = { mode: mode, policy_slot: slot };
-      if (mode === 'single') {
-        body.candle_open_utc = ($('bcv-candle') || {}).value.trim();
-      } else if (mode === 'last_n') {
-        body.last_n = parseInt(($('bcv-lastn') || {}).value, 10) || 12;
-      } else {
-        body.from_utc = ($('bcv-from') || {}).value.trim();
-        body.to_utc = ($('bcv-to') || {}).value.trim();
-      }
-      var plain = $('bcv-plain');
-      var jsel = $('bcv-json');
-      if (plain) plain.textContent = 'Running…';
-      fetch('/api/v1/dashboard/baseline-chain-validate', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body)
-      })
-        .then(function (r) {
-          return r.json().then(function (j) {
-            return { ok: r.ok, j: j };
-          });
-        })
-        .then(function (x) {
-          if (plain) {
-            plain.textContent =
-              x.j && x.j.plain_english ? x.j.plain_english : JSON.stringify(x.j, null, 2);
-          }
-          if (jsel) jsel.textContent = JSON.stringify(x.j, null, 2);
-        })
-        .catch(function (e) {
-          if (plain) plain.textContent = String(e);
-        });
-    });
-  }
 
   function postPaperFlow(kind) {
     var amt = parseFloat(($('pc-deposit') || {}).value);

@@ -1,8 +1,11 @@
 """
 Baseline chain validation harness — market vs policy vs ledger for a 5m bar (JUPv3 / JUPv2).
 
-Contract (JUPv3): ``binance_strategy_bars_5m`` (market truth), ``policy_evaluations`` (decision),
+Contract (JUPv3): ``binance_strategy_bars_5m`` (policy OHLC axis), ``policy_evaluations`` (decision),
 ``execution_trades`` (recorded). Join key: ``market_event_id``.
+
+For the same ``market_event_id``, also loads ``market_bars_5m`` (Pyth oracle rollup) so operators can
+go back in time and cross-check Binance vs Pyth on the trade timeline (policy remains Binance-backed for JUPv3).
 
 Does not re-run policy; compares stored rows only.
 """
@@ -28,7 +31,7 @@ from modules.anna_training.execution_ledger import (
 )
 from modules.anna_training.store import utc_now_iso
 
-SCHEMA_VERSION = "baseline_chain_validate_v1"
+SCHEMA_VERSION = "baseline_chain_validate_v2"
 
 # Verdict strings (operator-facing; plain English).
 V_ALIGNED_NO_TRADE = "ALIGNED — NO TRADE"
@@ -102,6 +105,88 @@ def resolve_market_event_id(
 
 
 _ALLOWED_MARKET_TABLES = frozenset({"binance_strategy_bars_5m", "market_bars_5m"})
+
+
+def _float_close(row: dict[str, Any] | None) -> float | None:
+    if not row:
+        return None
+    c = row.get("close")
+    try:
+        return float(c) if c is not None else None
+    except (TypeError, ValueError):
+        return None
+
+
+def _build_cross_check(
+    *,
+    conn: sqlite3.Connection,
+    policy_slot: str,
+    primary_table: str,
+    market_event_id: str,
+    primary_row: dict[str, Any] | None,
+) -> dict[str, Any]:
+    """
+    For the same ``market_event_id``, load both Binance strategy OHLC and Pyth canonical 5m bar
+    so operators can scroll back in time and compare sources on the trade timeline.
+    JUPv3 policy uses Binance for the baseline axis; Pyth ``market_bars_5m`` is oracle context.
+    """
+    mid = (market_event_id or "").strip()
+    if not mid:
+        return {}
+    j3 = policy_slot == BASELINE_POLICY_SLOT_JUP_V3
+    out: dict[str, Any] = {
+        "jup_v3_policy_ohlc_authority": "binance_strategy_bars_5m",
+        "oracle_pyth_bar_authority": "market_bars_5m",
+        "note": (
+            "JUPv3 baseline policy evaluations are keyed to Binance OHLC for this bar. "
+            "Pyth rollup is shown for cross-check vs oracle tape; it is not the policy axis."
+            if j3
+            else "JUPv2 policy uses Pyth canonical bars; Binance row is optional cross-check."
+        ),
+        "binance_strategy_bar": None,
+        "oracle_pyth_bar": None,
+        "close_delta_pct_binance_vs_pyth": None,
+    }
+    b_row = (
+        primary_row
+        if primary_table == "binance_strategy_bars_5m"
+        else _fetch_market_row(conn, table="binance_strategy_bars_5m", market_event_id=mid)
+    )
+    p_row = (
+        primary_row
+        if primary_table == "market_bars_5m"
+        else _fetch_market_row(conn, table="market_bars_5m", market_event_id=mid)
+    )
+    out["binance_strategy_bar"] = b_row
+    out["oracle_pyth_bar"] = p_row
+    bc = _float_close(b_row)
+    pc = _float_close(p_row)
+    if bc is not None and pc is not None and abs(pc) > 1e-12:
+        out["close_delta_pct_binance_vs_pyth"] = round((bc - pc) / pc * 100.0, 6)
+    return out
+
+
+def _cross_check_plain_lines(cross_check: dict[str, Any], policy_slot: str) -> list[str]:
+    if not cross_check:
+        return []
+    lines: list[str] = [
+        "",
+        "TIMELINE / SOURCES (stored rows, same market_event_id):",
+    ]
+    if policy_slot == BASELINE_POLICY_SLOT_JUP_V3:
+        lines.append("  Policy axis (JUPv3): Binance OHLC → binance_strategy_bars_5m")
+        lines.append("  Oracle context: Pyth rollup → market_bars_5m")
+    else:
+        lines.append("  Policy axis (JUPv2): Pyth → market_bars_5m")
+        lines.append("  Cross-check: Binance → binance_strategy_bars_5m (if ingested)")
+    br = cross_check.get("binance_strategy_bar")
+    pr = cross_check.get("oracle_pyth_bar")
+    lines.append(f"  Binance bar: {'present' if br else 'missing'}")
+    lines.append(f"  Pyth bar: {'present' if pr else 'missing'}")
+    d = cross_check.get("close_delta_pct_binance_vs_pyth")
+    if d is not None:
+        lines.append(f"  Binance vs Pyth close delta: {d}% (relative to Pyth close)")
+    return lines
 
 
 def _fetch_market_row(
@@ -231,16 +316,31 @@ def validate_bar(
             verdict=V_INCOMPLETE,
             verdict_code="incomplete_data",
         )
-        return _bar_result_to_payload(out, policy_slot=slot, market_row=None, policy_row=None, ledger_rows=[])
+        return _bar_result_to_payload(
+            out,
+            policy_slot=slot,
+            market_row=None,
+            policy_row=None,
+            ledger_rows=[],
+            cross_check={},
+        )
 
     _ensure_runtime_for_market_imports()
     from market_data.store import connect_market_db, ensure_market_schema
 
+    cross_check: dict[str, Any] = {}
     mconn = connect_market_db(mpath)
     try:
         ensure_market_schema(mconn)
         market_row = _fetch_market_row(mconn, table=table, market_event_id=mid)
         market_present = market_row is not None
+        cross_check = _build_cross_check(
+            conn=mconn,
+            policy_slot=slot,
+            primary_table=table,
+            market_event_id=mid,
+            primary_row=market_row,
+        )
     finally:
         mconn.close()
 
@@ -258,7 +358,14 @@ def validate_bar(
             verdict=V_INCOMPLETE,
             verdict_code="incomplete_data",
         )
-        return _bar_result_to_payload(out, policy_slot=slot, market_row=market_row, policy_row=None, ledger_rows=[])
+        return _bar_result_to_payload(
+            out,
+            policy_slot=slot,
+            market_row=market_row,
+            policy_row=None,
+            ledger_rows=[],
+            cross_check=cross_check,
+        )
 
     pol: dict[str, Any] | None = None
     lconn = connect_ledger(lpath)
@@ -306,6 +413,7 @@ def validate_bar(
         market_row=market_row,
         policy_row=pol if policy_present else None,
         ledger_rows=ledger_rows,
+        cross_check=cross_check,
     )
 
 
@@ -316,6 +424,7 @@ def _bar_result_to_payload(
     market_row: dict[str, Any] | None,
     policy_row: dict[str, Any] | None,
     ledger_rows: list[dict[str, Any]],
+    cross_check: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     exp = "NO TRADE"
     dec = "NO TRADE"
@@ -333,6 +442,7 @@ def _bar_result_to_payload(
     elif out.recorded:
         rec = "(rows present)"
 
+    cc = cross_check if cross_check is not None else {}
     plain_lines = [
         f"BAR: {out.candle_open_utc}",
         f"market_event_id: {out.market_event_id}",
@@ -340,9 +450,9 @@ def _bar_result_to_payload(
         f"EXPECTED: {exp}",
         f"DECISION: {dec}",
         f"RECORDED: {rec}",
-        "",
-        f"RESULT: {out.verdict}",
     ]
+    plain_lines.extend(_cross_check_plain_lines(cc, policy_slot))
+    plain_lines.extend(["", f"RESULT: {out.verdict}"])
 
     structured = {
         "candle_open_utc": out.candle_open_utc,
@@ -364,6 +474,7 @@ def _bar_result_to_payload(
         "market_row": market_row,
         "policy_row": policy_row,
         "ledger_rows": ledger_rows,
+        "cross_check": cc,
     }
     return {
         "schema": SCHEMA_VERSION,
