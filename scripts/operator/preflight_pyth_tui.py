@@ -1,23 +1,40 @@
 #!/usr/bin/env python3
 """
-Terminal UI: header = preflight-style health checks; body = Pyth (Hermes) SOL/USD oracle view.
+Terminal UI: header = active **policy** + preflight checks; body = Pyth (Hermes) SOL/USD oracle view.
 
-This is an **operator surface** — not an order entry or execution terminal. JUPv3 policy uses
-Binance for the baseline axis; Pyth is oracle context / tape (see baseline_chain_validate docs).
+**Policy registry** (extend without forking the TUI): ``scripts/operator/policy_registry.json``
+(or override with ``BLACKBOX_POLICY_REGISTRY``). Each policy can describe:
+
+- ``kind``: ``builtin`` | ``typescript`` | ``python_module`` (future runners)
+- ``entry``: repo-relative path to a TS/JS file (for Sean strategies) — **the TUI does not execute it**;
+  run ``node <entry>`` (or your harness) in another terminal, or wire a dedicated runner later.
+- ``dataset``: ``env`` (use ``BLACKBOX_MARKET_DATA_PATH``) | ``isolated`` (dedicated SQLite under
+  ``data/sqlite/…``) — **recycle** shared tape vs **new dataset** per policy.
+
+There is no HTML dropdown in a terminal. Use ``--menu`` for a **picker dialog** (prompt_toolkit),
+or ``--policy <id>`` / ``BLACKBOX_ACTIVE_POLICY_ID``.
+
+This is an **operator surface** — not an order entry terminal. JUPv3 baseline axis is Binance;
+Pyth is oracle context.
 
 Usage (from repo root):
 
   PYTHONPATH=scripts/runtime python3 scripts/operator/preflight_pyth_tui.py
+  PYTHONPATH=scripts/runtime python3 scripts/operator/preflight_pyth_tui.py --menu
+  PYTHONPATH=scripts/runtime python3 scripts/operator/preflight_pyth_tui.py --policy isolated_example
 
 Environment (optional):
-  BLACKBOX_MARKET_DATA_PATH — if set and file exists, shows latest market_ticks row age vs wall clock.
-  MARKET_TICK_SYMBOL        — default SOL-USD
-  PYTH_SOL_USD_FEED_ID      — default Crypto.SOL/USD feed id (hex, no 0x)
+  BLACKBOX_POLICY_REGISTRY    — path to registry JSON (default: beside this script)
+  BLACKBOX_ACTIVE_POLICY_ID   — default policy id if ``--policy`` omitted
+  BLACKBOX_MARKET_DATA_PATH   — used when policy dataset mode is ``env`` / ``shared``
+  MARKET_TICK_SYMBOL          — default SOL-USD
+  PYTH_SOL_USD_FEED_ID        — default Crypto.SOL/USD feed id (hex, no 0x)
 
 Exit: Ctrl+C
 """
 from __future__ import annotations
 
+import argparse
 import json
 import os
 import sqlite3
@@ -41,6 +58,70 @@ _DEFAULT_FEED = "ef0d8b6fda2ceba41da15d4095d1da392a0d2f8ed0c6c7bc0f4cfac8c280b56
 _HERMES_LATEST = "https://hermes.pyth.network/v2/updates/price/latest"
 _BINANCE_PING = "https://api.binance.com/api/v3/ping"
 _BINANCE_KLINES = "https://api.binance.com/api/v3/klines?symbol=SOLUSDT&interval=5m&limit=1"
+
+
+def _script_dir() -> Path:
+    return Path(__file__).resolve().parent
+
+
+def _repo_root() -> Path:
+    return _script_dir().parents[2]
+
+
+def _default_registry_path() -> Path:
+    raw = (os.environ.get("BLACKBOX_POLICY_REGISTRY") or "").strip()
+    if raw:
+        return Path(raw).resolve()
+    return _script_dir() / "policy_registry.json"
+
+
+def load_policy_registry(path: Path) -> dict[str, Any]:
+    if not path.is_file():
+        raise FileNotFoundError(f"Policy registry not found: {path}")
+    data = json.loads(path.read_text(encoding="utf-8"))
+    policies = data.get("policies")
+    if not isinstance(policies, list) or not policies:
+        raise ValueError("Registry must contain a non-empty 'policies' array")
+    return data
+
+
+def resolve_effective_market_data_path(repo_root: Path, policy: dict[str, Any]) -> str | None:
+    """Return SQLite path string for market_ticks check, or None to skip / use env-only messaging."""
+    ds = policy.get("dataset")
+    if not isinstance(ds, dict):
+        return (os.environ.get("BLACKBOX_MARKET_DATA_PATH") or "").strip() or None
+    mode = (ds.get("mode") or "env").strip().lower()
+    if mode == "isolated":
+        rel = (ds.get("sqlite_relative") or "").strip()
+        if not rel:
+            return None
+        return str((repo_root / rel).resolve())
+    # env | shared
+    return (os.environ.get("BLACKBOX_MARKET_DATA_PATH") or "").strip() or None
+
+
+def resolve_entry_path(repo_root: Path, policy: dict[str, Any]) -> Path | None:
+    ent = policy.get("entry")
+    if ent is None or not str(ent).strip():
+        return None
+    return (repo_root / str(ent).strip()).resolve()
+
+
+def pick_policy_interactive(
+    policies: list[dict[str, Any]],
+    current_id: str | None,
+) -> str | None:
+    from prompt_toolkit.shortcuts import radiolist_dialog
+
+    values = [(str(p["id"]), str(p.get("label") or p["id"])) for p in policies if p.get("id")]
+    default = current_id if current_id in {v[0] for v in values} else (values[0][0] if values else None)
+    result = radiolist_dialog(
+        title="Active policy",
+        text="Choose registry policy (dataset + entry are shown in the TUI header).",
+        values=values,
+        default=default,
+    ).run()
+    return result
 
 
 @dataclass
@@ -121,8 +202,8 @@ def _parse_pyth_price(parsed: list[dict[str, Any]]) -> dict[str, Any]:
     }
 
 
-def _market_db_tick() -> CheckResult:
-    raw = (os.environ.get("BLACKBOX_MARKET_DATA_PATH") or "").strip()
+def _market_db_tick(market_data_path: str | None = None) -> CheckResult:
+    raw = (market_data_path or "").strip() if market_data_path is not None else (os.environ.get("BLACKBOX_MARKET_DATA_PATH") or "").strip()
     sym = (os.environ.get("MARKET_TICK_SYMBOL") or "SOL-USD").strip() or "SOL-USD"
     if not raw:
         return CheckResult("SQLite market_ticks (optional)", True, "BLACKBOX_MARKET_DATA_PATH unset — skipped")
@@ -185,7 +266,11 @@ def _docker_seanv3() -> CheckResult:
     return CheckResult("Docker seanv3 (optional)", True, "not running — skipped")
 
 
-def _run_checks(hermes_extra: dict[str, Any]) -> tuple[list[CheckResult], dict[str, Any]]:
+def _run_checks(
+    hermes_extra: dict[str, Any],
+    *,
+    market_data_path: str | None = None,
+) -> tuple[list[CheckResult], dict[str, Any]]:
     checks: list[CheckResult] = []
     checks.append(_binance_ping())
     checks.append(_binance_klines())
@@ -193,7 +278,7 @@ def _run_checks(hermes_extra: dict[str, Any]) -> tuple[list[CheckResult], dict[s
     checks.append(h_check)
     hermes_extra.clear()
     hermes_extra.update(extra)
-    checks.append(_market_db_tick())
+    checks.append(_market_db_tick(market_data_path))
     checks.append(_docker_seanv3())
     return checks, hermes_extra
 
@@ -253,15 +338,111 @@ def _main_panel(parsed: list[dict[str, Any]] | None, now_ts: float) -> Panel:
     )
 
 
-def main() -> None:
+def _policy_panel(
+    policy: dict[str, Any],
+    *,
+    repo_root: Path,
+    effective_db: str | None,
+    entry_resolved: Path | None,
+) -> Panel:
+    pid = policy.get("id", "?")
+    label = policy.get("label", pid)
+    kind = policy.get("kind", "builtin")
+    ds = policy.get("dataset") if isinstance(policy.get("dataset"), dict) else {}
+    mode = (ds.get("mode") or "?") if ds else "env"
+    db_line = effective_db or "[dim](none — tick check skipped or optional)[/dim]"
+    if effective_db and Path(effective_db).is_file():
+        db_line = f"[green]{effective_db}[/green]"
+    elif effective_db:
+        db_line = f"[yellow]{effective_db}[/yellow] [dim](file not created yet)[/dim]"
+
+    ent_line = "[dim]—[/dim]"
+    if entry_resolved is not None:
+        exists = entry_resolved.is_file()
+        ent_line = (
+            f"[green]{entry_resolved}[/green]" if exists else f"[yellow]{entry_resolved}[/yellow] [dim](missing)[/dim]"
+        )
+        ent_line += "\n[dim]Run separately: `node " + str(entry_resolved) + "` (TUI does not execute strategies.)[/dim]"
+
+    body = "\n".join(
+        [
+            f"[bold]{label}[/bold]  [dim]({pid})[/dim]  kind={kind}  dataset_mode={mode}",
+            f"Effective SQLite for tick check: {db_line}",
+            f"Strategy entry: {ent_line}",
+        ]
+    )
+    return Panel(
+        Text.from_markup(body),
+        title="[bold]Active policy[/bold] (registry — not a GUI dropdown; use --menu)",
+        border_style="cyan",
+    )
+
+
+def _parse_args(argv: list[str]) -> argparse.Namespace:
+    p = argparse.ArgumentParser(description="Preflight + Pyth operator TUI with policy registry.")
+    p.add_argument(
+        "--registry",
+        type=Path,
+        default=None,
+        help="Path to policy_registry.json (default: beside this script or BLACKBOX_POLICY_REGISTRY)",
+    )
+    p.add_argument("--policy", type=str, default=None, help="Policy id from registry")
+    p.add_argument("--list-policies", action="store_true", help="Print policy ids and exit")
+    p.add_argument("--menu", action="store_true", help="Interactive policy picker before the TUI")
+    return p.parse_args(argv)
+
+
+def main(argv: list[str] | None = None) -> None:
+    argv = argv if argv is not None else sys.argv[1:]
+    args = _parse_args(argv)
+    repo_root = _repo_root()
+    reg_path = args.registry.resolve() if args.registry else _default_registry_path()
+
+    try:
+        reg = load_policy_registry(reg_path)
+    except (OSError, ValueError, json.JSONDecodeError) as e:
+        print(f"Failed to load policy registry {reg_path}: {e}", file=sys.stderr)
+        sys.exit(1)
+
+    policies: list[dict[str, Any]] = [x for x in reg.get("policies", []) if isinstance(x, dict) and x.get("id")]
+
+    if args.list_policies:
+        for pol in policies:
+            print(f"{pol['id']}\t{pol.get('label', '')}")
+        return
+
+    env_policy = (os.environ.get("BLACKBOX_ACTIVE_POLICY_ID") or "").strip()
+    want = (args.policy or env_policy or "").strip()
+    if not want and policies:
+        want = str(policies[0]["id"])
+
+    current = next((p for p in policies if str(p["id"]) == want), None)
+    if current is None:
+        print(f"Unknown policy id {want!r}. Use --list-policies.", file=sys.stderr)
+        sys.exit(1)
+
+    if args.menu:
+        picked = pick_policy_interactive(policies, current["id"])
+        if picked is None:
+            print("Cancelled.", file=sys.stderr)
+            sys.exit(1)
+        nxt = next((p for p in policies if str(p["id"]) == picked), None)
+        if nxt is None:
+            sys.exit(1)
+        current = nxt
+
+    effective_db = resolve_effective_market_data_path(repo_root, current)
+    entry_path = resolve_entry_path(repo_root, current)
+
     console = Console()
     hermes_bucket: dict[str, Any] = {}
     refresh = float(os.environ.get("BLACKBOX_TUI_REFRESH_SEC", "2.0"))
 
     def render() -> Group:
-        checks, _ = _run_checks(hermes_bucket)
+        checks, _ = _run_checks(hermes_bucket, market_data_path=effective_db)
         parsed = hermes_bucket.get("parsed") if isinstance(hermes_bucket.get("parsed"), list) else None
         now_ts = time.time()
+        pol = _policy_panel(current, repo_root=repo_root, effective_db=effective_db, entry_resolved=entry_path)
         ht = _header_table(checks)
         strict_ok = all(c.ok for c in checks)
         banner = (
@@ -269,11 +450,19 @@ def main() -> None:
             if strict_ok
             else "[bold red]DEGRADED — fix failing checks before relying on runtime[/bold red]"
         )
-        top = Panel(ht, title=f"[bold]{banner}[/bold]", subtitle="Preflight strip (Binance + Hermes + optional DB/Docker)", border_style="green" if strict_ok else "red")
+        top = Panel(
+            ht,
+            title=f"[bold]{banner}[/bold]",
+            subtitle="Preflight strip (Binance + Hermes + optional DB/Docker)",
+            border_style="green" if strict_ok else "red",
+        )
         body = _main_panel(parsed, now_ts)
-        return Group(top, body)
+        return Group(pol, top, body)
 
-    console.print("[dim]BLACK BOX — preflight + Pyth oracle TUI  (Ctrl+C to exit)[/dim]\n")
+    console.print(
+        "[dim]BLACK BOX — policy-aware preflight + Pyth TUI  "
+        "(Ctrl+C to exit | --menu to pick policy | export BLACKBOX_ACTIVE_POLICY_ID)[/dim]\n"
+    )
     with Live(render(), console=console, refresh_per_second=min(1.0 / max(refresh, 0.25), 30.0)) as live:
         try:
             while True:

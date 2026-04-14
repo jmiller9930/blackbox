@@ -1,0 +1,36 @@
+{
+  "version": 1,
+  "description": "Operator TUI policy slots. Add entries as new strategies exist; point 'entry' at a TS/JS file (repo-relative) or Python module name for future runners.",
+  "policies": [
+    {
+      "id": "oracle_preflight_only",
+      "label": "Oracle + preflight only (no strategy entry)",
+      "kind": "builtin",
+      "entry": null,
+      "dataset": {
+        "mode": "env",
+        "note": "Uses BLACKBOX_MARKET_DATA_PATH from the environment when set."
+      }
+    },
+    {
+      "id": "isolated_example",
+      "label": "Example isolated SQLite (empty until ingest)",
+      "kind": "builtin",
+      "entry": null,
+      "dataset": {
+        "mode": "isolated",
+        "sqlite_relative": "data/sqlite/market_data_policy_isolated_example.db"
+      }
+    },
+    {
+      "id": "ts_pyth_probe",
+      "label": "TS: Hermes SSE probe (reference script — run with node separately)",
+      "kind": "typescript",
+      "entry": "basetrade/pyth_signal_probe.mjs",
+      "dataset": {
+        "mode": "shared",
+        "note": "Same DB as env unless you override path per run."
+      }
+    }
+  ]
+}
