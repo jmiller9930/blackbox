@@ -21,6 +21,13 @@ Both rely on the **host** routing table for Binance (WireGuard split-tunnel on c
 
 **Web vs TUI (same backend, two displays):** see [`JUPITER_WEB_TUI_ALIGNMENT.md`](JUPITER_WEB_TUI_ALIGNMENT.md). The Jupiter page mirrors `preflight_pyth_tui.py` panels (preflight, policy, wallet, paper ledger, parity, trades, oracle). Compose mounts **`../../` → `/repo:ro`** for policy registry + execution ledger; override **`JUPITER_WEB_REFRESH_SEC`** (default `3`, `0` disables HTML auto-refresh).
 
+**Troubleshooting — browser says “problem” / can’t load :707**
+
+1. **Use `http://` only.** Jupiter does **not** speak TLS on 707. **`https://clawbot…:707`** (or a browser upgrading to HTTPS) will fail with a generic error—use **`http://clawbot.a51.corp:707/`** exactly.
+2. **Prove the service on the server** (SSH on clawbot): `curl -sS http://127.0.0.1:707/health` — expect JSON with `"ok":true`. If that fails, check **`docker compose ps`** and **`docker logs jupiter-web --tail 80`** in **`~/blackbox/vscode-test/seanv3`**, then **`docker compose up -d --build`** after **`git pull`** succeeds.
+3. **From your laptop:** you must reach the host (VPN/LAN DNS for **`clawbot.a51.corp`**, or your public port-forward URL). **127.0.0.1:707** only works **on clawbot**, not on your Mac.
+4. If **`git pull`** on clawbot was blocked (e.g. untracked files), the running image may be old or containers unhealthy—fix the merge, redeploy, re-test `curl` on the server first.
+
 ### Lab deploy loop (`jupsync.py`)
 
 **Consistent update process:** commit in your clone → **`python3 scripts/jupsync.py`** from repo root. That **pushes** your branch to `origin`, **SSHs to clawbot**, **`git pull`** in `~/blackbox`, then **`docker compose up -d --build`** in **`vscode-test/seanv3`**. The script then **`curl`s `127.0.0.1:707/health` on clawbot only** (inside the SSH session — not your Mac). To **verify in a browser**, open **`http://clawbot.a51.corp:707/`** (or your public URL), not localhost. Skip the remote curl with **`--skip-health`**.
