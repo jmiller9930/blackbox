@@ -32,9 +32,8 @@ services:
       # Optional: Solana keypair JSON (same format as solana-keygen). Only pubkey is stored in DB.
       # KEYPAIR_PATH: /capture/keypair.json
       PAPER_TRADING: "1"
-      # Sean-native paper engine slice (no BlackBox): open/carry/close + sean_paper_trades. Set "0" to disable.
+      # Sean-native Jupiter_3 paper engine (no BlackBox). Set "0" to disable.
       SEAN_ENGINE_SLICE: "1"
-      # SEAN_ENGINE_STOP_FRAC: "0.02"
-      # SEAN_ENGINE_MAX_HOLD_BARS: "48"
+      # SEAN_ENGINE_SIZE_NOTIONAL_SOL: "1.0"
     volumes:
       - ./capture:/capture

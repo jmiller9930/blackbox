@@ -28,11 +28,11 @@ SeanV3 is **its own application** in this repo: **`vscode-test/seanv3/`** (Node,
 | Layer | Status today |
 |------|----------------|
 | **Market data** | **Partial:** Binance klines poll + backfill into `sean_binance_kline_poll`, stable `market_event_id` in `app.mjs`. |
-| **Strategy evaluation** | **Slice exists:** `sean_engine_slice.mjs` (`sean_engine_slice_v1`) runs **inside SeanV3** on each **new** 5m bar — **placeholder rules** until full Sean V3 rules are ported here. **Next step:** real policy in this folder only. |
-| **Trade lifecycle** | **Slice exists:** one paper slot (`sean_paper_position`) — open long → carry (`bars_held`) → close on stop or max-hold bars. |
-| **Sean trade ledger** | **Implemented:** `sean_paper_trades` + writer in `sean_ledger.mjs` (entry/exit, gross P&amp;L, `result_class`, metadata). |
-| **Legacy paper log** | `paper_trade_log` remains for ingest / stub / wallet events — **not** the Sean trade ledger. |
-| **Reporting** | **Ad hoc:** `SELECT * FROM sean_paper_trades`; dedicated SeanV3 reporting module **not** built yet. |
+| **Strategy evaluation** | **Implemented in Node:** `jupiter_3_sean_policy.mjs` (EMA/RSI/BOS/volume/expected-move gates) + `sean_engine.mjs` on each **new** 5m bar. |
+| **Trade lifecycle** | **Implemented:** ATR SL/TP (`sean_lifecycle.mjs`), breakeven, monotonic trailing, bar-range exit (SL wins if both touched). |
+| **Sean trade ledger** | **`sean_paper_trades`** + `sean_ledger.mjs` (long/short, entry/exit, P&amp;L, `engine_id`). |
+| **Legacy paper log** | `paper_trade_log` — ingest / stub / wallet; **not** the Sean trade ledger. |
+| **Reporting** | **`npm run report`** or `node --experimental-sqlite report.mjs` — JSON summary + last 10 trades. |
 | **External compare** | **Not part of SeanV3** — run only if you choose, from another context. |
 
 **Implementation direction:** Harden **Sean-native** evaluation and **reporting** here; operator experience stays **TUI-first** (`scripts/operator/`).
@@ -55,31 +55,35 @@ SeanV3 is **its own application** in this repo: **`vscode-test/seanv3/`** (Node,
 |---------|----------|
 | **Financial API (Binance)** | HTTPS klines — must follow **host** routing (`network_mode: host`). No VPN client inside the container. |
 | **Wallet** | Optional `KEYPAIR_PATH` → loads **pubkey** only; table `paper_wallet`. |
-| **Trading** | **Paper only** — no chain execution. Sean-native engine slice writes **`sean_paper_trades`**; legacy **`paper_trade_log`** still records ingest/stub/wallet. |
+| **Trading** | **Paper only** — Jupiter_3 signals + lifecycle write **`sean_paper_trades`**; **`paper_trade_log`** = ingest/stub/wallet. |
 | **Database** | Single SQLite file (`SQLITE_PATH`), same volume as capture. |
 
-### Sean-native paper engine slice (`sean_engine_slice_v1`)
+### Sean-native paper engine (`sean_jupiter3_engine_v1`)
 
-Runs in-process after each kline insert when **`SEAN_ENGINE_SLICE`** is not `0`/`false`/`no`. **BlackBox is not called.**
+Runs after each kline insert when **`SEAN_ENGINE_SLICE`** is not `0`/`false`/`no` (name retained for compatibility).
 
-- **Rules (placeholder):** first distinct 5m bar opens a **long** at that bar’s close; each new bar increments `bars_held`; exit if **stop** (close ≤ entry × (1 − `SEAN_ENGINE_STOP_FRAC`)) or **time** (`bars_held` ≥ `SEAN_ENGINE_MAX_HOLD_BARS`). This proves **lifecycle + ledger**, not full Sean V3 policy parity.
-- **Dedup:** one engine step per `market_event_id` (`analog_meta.sean_engine_last_bar_mid`).
+- **Entry:** `jupiter_3_sean_policy.mjs` — same structure as the Python reference (min bars, gates, short-over-long if both fire).
+- **Exit:** `sean_lifecycle.mjs` — initial SL/TP from ATR×1.6 / ×4.0, breakeven +0.2%, monotonic trailing; OHLC bar hit test (both SL+TP → SL wins).
+- **Dedup:** one step per `market_event_id` (`analog_meta.sean_engine_last_bar_mid`).
+- **Tests:** `npm test` from this directory.
 
 ### SQLite tables (onboard)
 
 | Table | Role |
 |-------|------|
 | `sean_binance_kline_poll` | Raw poll rows (Binance REST). |
-| `sean_paper_position` | Single-row open paper state (`side` flat/long, entry, `bars_held`). |
-| `sean_paper_trades` | **Closed** trades: entry/exit ids & times, prices, gross/net P&amp;L, `result_class`, `metadata_json`. |
-| `analog_meta` | Keys e.g. `wallet_status`, `sean_engine_last_bar_mid`, stub signal cursor. |
-| `paper_wallet` | One row: connected pubkey + `paper_only=1`. |
-| `paper_trade_log` | Legacy append-only events (ingest, stub signal, wallet lifecycle). |
+| `sean_paper_position` | Single-row state: `side`, entry, **SL/TP**, `atr_entry`, `breakeven_applied`, `bars_held`, … |
+| `sean_paper_trades` | Closed trades (`engine_id`, sides, times, prices, gross P&amp;L, `result_class`). |
+| `analog_meta` | `sean_engine_last_bar_mid`, wallet keys, stub cursor. |
+| `paper_wallet` | Optional pubkey. |
+| `paper_trade_log` | Legacy ingest/stub events. |
 
-**Quick reporting (SQLite):**
+**Reporting:**
 
-```sql
-SELECT id, entry_time_utc, exit_time_utc, gross_pnl_usd, result_class, engine_id FROM sean_paper_trades ORDER BY id DESC;
+```bash
+npm run report
+# or
+node --experimental-sqlite report.mjs --db ./capture/sean_parity.db
 ```
 
 ---
@@ -149,9 +153,7 @@ docker compose logs -f
 | `CAPTURE_PATH`, `SQLITE_PATH` | NDJSON + DB under `/capture`. |
 | `KEYPAIR_PATH` | Optional wallet JSON path inside container. |
 | `PAPER_TRADING` | `1` (default) or `0` to skip paper/stub logging. |
-| `SEAN_ENGINE_SLICE` | `1` (default in compose) enables `sean_engine_slice_v1`; `0`/`false`/`no` disables. |
-| `SEAN_ENGINE_STOP_FRAC` | Stop distance as fraction of entry (default `0.02`). |
-| `SEAN_ENGINE_MAX_HOLD_BARS` | Max 5m bars to hold before time exit (default `48`). |
+| `SEAN_ENGINE_SLICE` | `1` (default) enables Jupiter_3 engine; `0`/`false`/`no` disables. |
 | `SEAN_ENGINE_SIZE_NOTIONAL_SOL` | Notional size multiplier for P&amp;L (default `1.0`). |
 
 ### One-shot backfill (historical klines)
@@ -182,8 +184,11 @@ Some teams run a **separate** repo-root Python job to diff Sean SQLite against a
 | File | Role |
 |------|------|
 | `app.mjs` | Poll loop, NDJSON, klines + paper analog + Sean engine slice |
-| `sean_ledger.mjs` | Sean-owned `sean_paper_position` / `sean_paper_trades` schema + writer |
-| `sean_engine_slice.mjs` | First standalone paper loop (`sean_engine_slice_v1`) |
+| `jupiter_3_sean_policy.mjs` | Jupiter_3 Sean signal generation (Node) |
+| `sean_lifecycle.mjs` | SL/TP, breakeven, trailing, exit evaluation |
+| `sean_ledger.mjs` | Schema migrations + open/close/update position |
+| `sean_engine.mjs` | Main loop: policy + lifecycle + ledger |
+| `report.mjs` | CLI summary of `sean_paper_trades` |
 | `paper_analog.mjs` | Legacy analog schema + stub paper events |
 | `wallet_connect.mjs` | Pubkey from keypair file |
 | `backfill.mjs` | Historical klines |

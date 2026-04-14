@@ -7,7 +7,7 @@
  * - NDJSON: CAPTURE_PATH
  * - SQLite: SQLITE_PATH — sean_binance_kline_poll + Sean ledger (sean_paper_position, sean_paper_trades) + paper_wallet + paper_trade_log
  * - Wallet: KEYPAIR_PATH (optional) — pubkey only in DB; never stores secrets in logs
- * - Paper: no chain txs; stub + analog events; Sean trade engine uses sean_ledger + sean_engine_slice
+ * - Paper: no chain txs; stub + analog events; Sean trade engine: sean_ledger + sean_engine (Jupiter_3)
  *
  * Requires: node --experimental-sqlite (Node 22+)
  */
@@ -24,7 +24,7 @@ import {
   setMeta,
   upsertPaperWallet,
 } from './paper_analog.mjs';
-import { processSeanEngineSlice } from './sean_engine_slice.mjs';
+import { processSeanEngine } from './sean_engine.mjs';
 import { ensureSeanLedgerSchema } from './sean_ledger.mjs';
 import { loadPubkeyFromKeypairFile } from './wallet_connect.mjs';
 
@@ -271,9 +271,9 @@ async function fetchOnce() {
       processPaperAnalog(parityDb, { marketEventId, kline });
       if (seanEngineSliceOn()) {
         try {
-          processSeanEngineSlice(parityDb, { marketEventId, kline });
+          processSeanEngine(parityDb, { marketEventId, kline });
         } catch (engErr) {
-          console.error(`[seanv3] sean_engine_slice failed: ${engErr.message}`);
+          console.error(`[seanv3] sean_engine failed: ${engErr.message}`);
         }
       }
     } catch (e) {
@@ -288,7 +288,7 @@ async function main() {
       (capturePath ? ` — ndjson: ${capturePath}` : '') +
       (sqlitePath ? ` — sqlite: ${sqlitePath}` : '') +
       ` — paper: ${paperTrading}` +
-      ` — sean_engine_slice: ${seanEngineSliceOn()}` +
+      ` — sean_engine: ${seanEngineSliceOn()}` +
       (keypairPath ? ` — keypair: ${keypairPath}` : '')
   );
   parityDb = initSqlite();

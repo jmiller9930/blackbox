@@ -331,6 +331,51 @@ def _main_panel(parsed: list[dict[str, Any]] | None, now_ts: float) -> Panel:
     )
 
 
+def _default_sean_sqlite(repo_root: Path) -> Path:
+    raw = (os.environ.get("SEANV3_SQLITE_PATH") or "").strip()
+    if raw:
+        return Path(raw).resolve()
+    return (repo_root / "vscode-test" / "seanv3" / "capture" / "sean_parity.db").resolve()
+
+
+def _sean_ledger_panel(repo_root: Path) -> Panel:
+    p = _default_sean_sqlite(repo_root)
+    if not p.is_file():
+        return Panel(
+            Text.from_markup(f"[dim]SeanV3 DB not found: {p}[/dim]"),
+            title="SeanV3 paper ledger",
+            border_style="dim",
+        )
+    try:
+        conn = sqlite3.connect(str(p))
+        try:
+            n = int(conn.execute("SELECT COUNT(*) FROM sean_paper_trades").fetchone()[0])
+            last = conn.execute(
+                "SELECT gross_pnl_usd, result_class, side FROM sean_paper_trades ORDER BY id DESC LIMIT 1"
+            ).fetchone()
+            pos = conn.execute("SELECT side, entry_price FROM sean_paper_position WHERE id=1").fetchone()
+            total = conn.execute("SELECT COALESCE(SUM(gross_pnl_usd),0) FROM sean_paper_trades").fetchone()[0]
+        finally:
+            conn.close()
+    except sqlite3.Error as e:
+        return Panel(Text(str(e), style="red"), title="SeanV3 paper ledger", border_style="red")
+    lines = [
+        f"DB: {p}",
+        f"Closed trades: {n}  cumulative P&L ≈ {float(total):.4f} USD",
+    ]
+    if last:
+        lines.append(f"Last: {last[2]} {last[1]} pnl={last[0]}")
+    if pos and pos[0] and str(pos[0]) != "flat":
+        lines.append(f"Open: {pos[0]} @ {pos[1]}")
+    else:
+        lines.append("Open: flat")
+    return Panel(
+        Text.from_markup("\n".join(lines)),
+        title="SeanV3 paper ledger",
+        border_style="cyan",
+    )
+
+
 def _policy_panel(
     policy: dict[str, Any],
     *,
@@ -440,6 +485,7 @@ def main(argv: list[str] | None = None) -> None:
         parsed = hermes_bucket.get("parsed") if isinstance(hermes_bucket.get("parsed"), list) else None
         now_ts = time.time()
         pol = _policy_panel(current, repo_root=repo_root, effective_db=effective_db, entry_resolved=entry_path)
+        sean_p = _sean_ledger_panel(repo_root)
         ht = _header_table(checks)
         strict_ok = all(c.ok for c in checks)
         banner = (
@@ -454,7 +500,7 @@ def main(argv: list[str] | None = None) -> None:
             border_style="green" if strict_ok else "red",
         )
         body = _main_panel(parsed, now_ts)
-        return Group(pol, top, body)
+        return Group(pol, sean_p, top, body)
 
     console.print(
         "[dim]SeanV3 operator TUI — preflight + policy + Pyth  "
