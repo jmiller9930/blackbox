@@ -103,3 +103,21 @@ def resolve_factor_fn(manifest: dict[str, Any], *, catalog: dict[str, Any] | Non
     if not meta:
         raise KeyError(f"factor pipeline {pid} not in catalog")
     return _import_callable(str(meta["import_path"]), str(meta["callable"]))
+
+
+def build_execution_manager_from_manifest(
+    manifest: dict[str, Any],
+    *,
+    catalog: dict[str, Any] | None = None,
+) -> Any:
+    """Instantiate execution template class from catalog (e.g. ExecutionManager)."""
+    if catalog is None:
+        from renaissance_v4.registry import default_catalog_path
+
+        catalog = load_catalog(default_catalog_path())
+    eid = manifest.get("execution_template")
+    meta = next((e for e in catalog.get("execution_templates") or [] if e.get("id") == eid), None)
+    if not meta:
+        raise KeyError(f"execution_template {eid} not in catalog")
+    cls = _import_class(str(meta["import_path"]), str(meta["class_name"]))
+    return cls()

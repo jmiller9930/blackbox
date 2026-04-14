@@ -19,31 +19,57 @@ Change History:
 - v6.0 Added execution simulation and trade lifecycle hooks.
 - v7.0 Added learning ledger, outcome records from closed trades, and signal scorecards.
 - v7.1 Baseline v1: deterministic IDs, single execution→learning bridge, baseline report + checksum.
+- v7.2 Authoritative replay driven by baseline strategy manifest (`configs/manifests/baseline_v1_recipe.json`).
 """
 
 from __future__ import annotations
 
+import os
+from pathlib import Path
+from typing import Any
+
 from renaissance_v4.core.decision_contract import DecisionContract
-from renaissance_v4.core.execution_manager import ExecutionManager
-from renaissance_v4.core.feature_engine import build_feature_set
-from renaissance_v4.core.fusion_engine import fuse_signal_results
 from renaissance_v4.core.market_state_builder import build_market_state
 from renaissance_v4.core.performance_metrics import compute_excursion_mae_mfe
 from renaissance_v4.core.pnl import compute_pnl
-from renaissance_v4.core.regime_classifier import classify_regime
-from renaissance_v4.core.risk_governor import evaluate_risk
+from renaissance_v4.manifest.runtime import (
+    build_execution_manager_from_manifest,
+    build_signals_from_manifest,
+    resolve_factor_fn,
+    resolve_fusion,
+    resolve_regime_fn,
+    resolve_risk_fn,
+)
+from renaissance_v4.manifest.validate import load_manifest_file, validate_manifest_against_catalog
 from renaissance_v4.research.baseline_report import maybe_export_outcomes_full, write_baseline_report
 from renaissance_v4.research.determinism import deterministic_decision_id, validation_checksum
 from renaissance_v4.research.execution_learning_bridge import record_closed_trade_to_ledger
 from renaissance_v4.research.learning_ledger import LearningLedger
 from renaissance_v4.research.signal_scorecard import build_signal_scorecards
-from renaissance_v4.signals.breakout_expansion import BreakoutExpansionSignal
-from renaissance_v4.signals.mean_reversion_fade import MeanReversionFadeSignal
-from renaissance_v4.signals.pullback_continuation import PullbackContinuationSignal
-from renaissance_v4.signals.trend_continuation import TrendContinuationSignal
 from renaissance_v4.utils.db import get_connection
 
 MIN_ROWS_REQUIRED = 50
+
+_DEFAULT_MANIFEST = (
+    Path(__file__).resolve().parent.parent / "configs" / "manifests" / "baseline_v1_recipe.json"
+)
+
+
+def load_replay_manifest() -> tuple[dict[str, Any], Path]:
+    """
+    Load and validate the strategy manifest for replay.
+
+    Override path with env ``RENAISSANCE_REPLAY_MANIFEST`` (absolute or repo-relative).
+    """
+    override = (os.environ.get("RENAISSANCE_REPLAY_MANIFEST") or "").strip()
+    path = Path(override) if override else _DEFAULT_MANIFEST
+    if not path.is_file():
+        raise FileNotFoundError(f"[replay] manifest not found: {path.resolve()}")
+    manifest = load_manifest_file(path)
+    errs = validate_manifest_against_catalog(manifest)
+    if errs:
+        raise RuntimeError("[replay] manifest validation failed: " + "; ".join(errs))
+    return manifest, path.resolve()
 
 
 def main() -> None:
@@ -68,14 +94,18 @@ def main() -> None:
             f"[replay] Need at least {MIN_ROWS_REQUIRED} bars, found {dataset_bars}"
         )
 
-    signals = [
-        TrendContinuationSignal(),
-        PullbackContinuationSignal(),
-        BreakoutExpansionSignal(),
-        MeanReversionFadeSignal(),
-    ]
+    manifest, manifest_path = load_replay_manifest()
+    print(
+        f"[replay] manifest strategy_id={manifest.get('strategy_id')} "
+        f"baseline_tag={manifest.get('baseline_tag')} path={manifest_path}"
+    )
 
-    exec_manager = ExecutionManager()
+    signals = build_signals_from_manifest(manifest)
+    factor_fn = resolve_factor_fn(manifest)
+    regime_fn = resolve_regime_fn(manifest)
+    fusion_fn = resolve_fusion(manifest)
+    risk_fn = resolve_risk_fn(manifest)
+    exec_manager = build_execution_manager_from_manifest(manifest)
     ledger = LearningLedger()
     processed = 0
 
@@ -88,15 +118,15 @@ def main() -> None:
     for index in range(MIN_ROWS_REQUIRED, len(rows) + 1):
         window = rows[:index]
         state = build_market_state(window)
-        features = build_feature_set(state)
-        regime = classify_regime(features)
+        features = factor_fn(state)
+        regime = regime_fn(features)
 
         signal_results = []
         for signal in signals:
             result = signal.evaluate(state, features, regime)
             signal_results.append(result)
 
-        fusion_result = fuse_signal_results(signal_results)
+        fusion_result = fusion_fn(signal_results)
         active_signal_names = [r.signal_name for r in signal_results if r.active]
 
         if fusion_result.direction == "no_trade":
@@ -106,7 +136,7 @@ def main() -> None:
 
         drawdown_proxy = 0.0
 
-        risk_decision = evaluate_risk(
+        risk_decision = risk_fn(
             fusion_result=fusion_result,
             features=features,
             regime=regime,

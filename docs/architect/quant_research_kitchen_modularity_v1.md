@@ -70,18 +70,11 @@ python3 -m renaissance_v4.manifest renaissance_v4/configs/manifests/baseline_v1_
 
 ## 5. Code plan — plug-ins enter the engine without rewriting it
 
-1. **Today:** [`replay_runner.py`](../../renaissance_v4/research/replay_runner.py) hardcodes four signal classes and calls `build_feature_set`, `classify_regime`, `fuse_signal_results`, `evaluate_risk`, `ExecutionManager` — all correct for baseline v1.
+1. **Done (v7.2):** [`replay_runner.py`](../../renaissance_v4/research/replay_runner.py) loads **`baseline_v1_recipe.json`** (or `RENAISSANCE_REPLAY_MANIFEST`), validates, then uses **`build_signals_from_manifest`** and **`resolve_*` / `build_execution_manager_from_manifest`** for the full bar loop. **Integration note:** [`MANIFEST_REPLAY_INTEGRATION.md`](../../renaissance_v4/research/MANIFEST_REPLAY_INTEGRATION.md).
 
-2. **Next (incremental):** Replace the hardcoded `signals = [ ... ]` list with:
-   - `manifest = load_manifest_file(...)` or default path to `baseline_v1_recipe.json`
-   - `validate_manifest_against_catalog(manifest)` → abort with errors if non-empty
-   - `build_signals_from_manifest(manifest)` → same four instances as today when using baseline recipe
+2. **Next:** Robustness runner / workbench jobs — optional manifest path in job payload; validate before subprocess; pass `--manifest` when runner supports it.
 
-3. **Then:** Wire `factor_pipeline`, `regime_module`, `risk_model`, `fusion_module` from manifest via `renaissance_v4.manifest.runtime` (`resolve_factor_fn`, `resolve_regime_fn`, etc.) so the **same** bar loop calls resolved callables.
-
-4. **Robustness runner / workbench jobs:** Accept optional manifest path in job payload; validate before subprocess; pass `--manifest` when runner supports it.
-
-5. **No second replay engine:** All paths keep a single deterministic replay implementation file; behavior differences come from manifest + catalog only.
+3. **No second replay engine:** Single deterministic replay file; behavior differences come from manifest + catalog only.
 
 ---
 
