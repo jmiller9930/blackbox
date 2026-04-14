@@ -311,7 +311,7 @@ def write_report(path: Path | None = None) -> Path:
             "python3 -m renaissance_v4.research.diagnostic_risk_pipeline",
             "```",
             "",
-            f"Default output: `{_REPORT_DEFAULT}`",
+            "Default output: `renaissance_v4/reports/diagnostic_risk_v1.md`",
             "",
         ]
     )
