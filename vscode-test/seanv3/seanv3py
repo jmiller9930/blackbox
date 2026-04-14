@@ -13,6 +13,7 @@ Usage: seanv3py <command> [options]
   deploy     git pull (optional) + docker compose build + up -d
   status     docker compose ps
   logs       docker compose logs -f (follow; Ctrl+C stops tailing only)
+  console    persistent tmux session: attach to same session or create (logs -f)
   stop       docker compose down
   restart    stop then deploy (no git pull unless --pull)
   pull       git pull origin main only (from repo root)
@@ -28,6 +29,10 @@ Examples:
   ./seanv3py deploy --pull
   ./seanv3py status
   ./seanv3py logs
+  ./seanv3py console    # re-run after SSH disconnect reattaches to same tmux (see SEANV3PY.md)
+
+Environment (console):
+  SEANV3_TMUX_SESSION   tmux session name (default: seanv3)
 
 EOF
 }
@@ -82,6 +87,18 @@ case "$cmd" in
     ;;
   logs)
     do_compose logs -f
+    ;;
+  console|tmux)
+    # Same *terminal workspace* on the server across SSH logins — not the same SSH TCP session.
+    # Docker container is independent; this only persists the tmux pane (usually logs -f).
+    TMUX_SESSION="${SEANV3_TMUX_SESSION:-seanv3}"
+    if ! command -v tmux >/dev/null 2>&1; then
+      echo "[seanv3py] tmux not found. Install: sudo apt install tmux" >&2
+      echo "[seanv3py] Or use: ./seanv3py logs   (no persistent pane)" >&2
+      exit 1
+    fi
+    echo "[seanv3py] tmux session: $TMUX_SESSION (detach: Ctrl+b then d | reattach: ./seanv3py console)"
+    exec tmux new-session -A -s "$TMUX_SESSION" -c "$SEAN_DIR" sh -c 'exec docker compose logs -f'
     ;;
   stop|down)
     echo "[seanv3py] docker compose down"
