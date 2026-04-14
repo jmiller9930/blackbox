@@ -283,6 +283,7 @@ def cmd_compare(args: argparse.Namespace) -> int:
         encoding="utf-8",
     )
 
+    _now = datetime.now(timezone.utc).isoformat()
     append_experiment(
         ExperimentRecord(
             experiment_id=args.experiment_id,
@@ -296,9 +297,13 @@ def cmd_compare(args: argparse.Namespace) -> int:
             monte_carlo_summary_path=str(summary_json.resolve()),
             comparison_report_path=str(rob_path.resolve()),
             recommendation=rec.label,
-            created_at=datetime.now(timezone.utc).isoformat(),
+            created_at=_now,
+            completed_at=_now,
             files_changed=list(args.files_changed or []),
-            extra={"candidate_trades": str(cpath)},
+            extra={
+                "experiment_type": "robustness_compare",
+                "candidate_trades": str(cpath),
+            },
         )
     )
     (STATE_DIR / f"deterministic_{args.experiment_id}.json").write_text(

@@ -1861,6 +1861,26 @@ class Handler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(data)
 
+    def _bytes(
+        self,
+        code: int,
+        data: bytes,
+        *,
+        content_type: str,
+        filename: str | None = None,
+        no_cache: bool = True,
+    ) -> None:
+        self.send_response(code)
+        self.send_header("Content-Type", content_type)
+        if filename:
+            self.send_header("Content-Disposition", f'attachment; filename="{filename}"')
+        if no_cache:
+            self.send_header("Cache-Control", "no-store, no-cache, must-revalidate, max-age=0")
+            self.send_header("Pragma", "no-cache")
+        self.send_header("Content-Length", str(len(data)))
+        self.end_headers()
+        self.wfile.write(data)
+
     def do_GET(self) -> None:  # noqa: N802
         parsed = urlparse(self.path)
         path = parsed.path
@@ -2223,6 +2243,92 @@ class Handler(BaseHTTPRequestHandler):
                     no_cache=True,
                 )
             return
+        if path == "/api/v1/renaissance/workbench":
+            try:
+                from renaissance_v4.ui_api import build_workbench_meta_payload
+
+                body = build_workbench_meta_payload()
+                body["trace_id"] = str(uuid.uuid4())
+                self._json(200, body, no_cache=True)
+            except Exception as e:  # noqa: BLE001
+                self._json(
+                    500,
+                    {
+                        "schema": "renaissance_v4_ui_error_v1",
+                        "error": str(e)[:500],
+                        "trace_id": str(uuid.uuid4()),
+                    },
+                    no_cache=True,
+                )
+            return
+        if path == "/api/v1/renaissance/file":
+            q = parse_qs(parsed.query or "")
+            rel = (q.get("rel") or [""])[0].strip()
+            try:
+                from renaissance_v4.ui_api import resolve_safe_artifact_path
+
+                p = resolve_safe_artifact_path(_REPO_ROOT, rel)
+                if not p:
+                    self._json(
+                        404,
+                        {"error": "not_found", "trace_id": str(uuid.uuid4())},
+                        no_cache=True,
+                    )
+                    return
+                raw = p.read_bytes()
+                suf = p.suffix.lower()
+                ct = "text/plain; charset=utf-8"
+                if suf == ".md":
+                    ct = "text/markdown; charset=utf-8"
+                elif suf == ".json":
+                    ct = "application/json; charset=utf-8"
+                elif suf == ".csv":
+                    ct = "text/csv; charset=utf-8"
+                self._bytes(200, raw, content_type=ct, filename=p.name, no_cache=True)
+            except Exception as e:  # noqa: BLE001
+                self._json(
+                    500,
+                    {
+                        "schema": "renaissance_v4_ui_error_v1",
+                        "error": str(e)[:500],
+                        "trace_id": str(uuid.uuid4()),
+                    },
+                    no_cache=True,
+                )
+            return
+        if path == "/api/v1/renaissance/baseline/export":
+            q = parse_qs(parsed.query or "")
+            kind = (q.get("kind") or ["metrics"])[0].strip().lower()
+            if kind not in ("trades", "metrics", "monte_carlo"):
+                self._json(
+                    400,
+                    {"error": "invalid_kind", "allowed": ["trades", "metrics", "monte_carlo"]},
+                    no_cache=True,
+                )
+                return
+            try:
+                from renaissance_v4.ui_api import rv4_paths
+                from renaissance_v4.ui_exports import export_baseline_csv
+
+                p = rv4_paths(_REPO_ROOT)
+                out = export_baseline_csv(
+                    _REPO_ROOT,
+                    kind,
+                    reports_exp=p["experiments_dir"],
+                    state_dir=p["state"],
+                )
+                if not out:
+                    self._json(404, {"error": "artifact_missing", "trace_id": str(uuid.uuid4())}, no_cache=True)
+                    return
+                data, fn = out
+                self._bytes(200, data, content_type="text/csv; charset=utf-8", filename=fn, no_cache=True)
+            except Exception as e:  # noqa: BLE001
+                self._json(
+                    500,
+                    {"error": str(e)[:500], "trace_id": str(uuid.uuid4())},
+                    no_cache=True,
+                )
+            return
         if path == "/api/v1/renaissance/experiments":
             try:
                 from renaissance_v4.ui_api import build_experiments_list_payload
@@ -2242,10 +2348,58 @@ class Handler(BaseHTTPRequestHandler):
                 )
             return
         if path.startswith("/api/v1/renaissance/experiments/"):
-            eid = path[len("/api/v1/renaissance/experiments/") :].strip("/")
-            if not eid:
+            suffix = path[len("/api/v1/renaissance/experiments/") :].strip("/")
+            segs = [s for s in suffix.split("/") if s]
+            if not segs:
                 self._json(400, {"error": "missing_experiment_id", "trace_id": str(uuid.uuid4())}, no_cache=True)
                 return
+            if len(segs) >= 2 and segs[1] == "export":
+                eid = segs[0]
+                q = parse_qs(parsed.query or "")
+                kind = (q.get("kind") or ["metrics"])[0].strip().lower()
+                if kind not in ("trades", "metrics", "monte_carlo"):
+                    self._json(
+                        400,
+                        {"error": "invalid_kind", "allowed": ["trades", "metrics", "monte_carlo"]},
+                        no_cache=True,
+                    )
+                    return
+                try:
+                    from renaissance_v4.ui_api import get_candidate_trades_fallback, rv4_paths, validate_experiment_id
+                    from renaissance_v4.ui_exports import export_experiment_csv
+
+                    if not validate_experiment_id(eid):
+                        self._json(400, {"error": "invalid_experiment_id"}, no_cache=True)
+                        return
+                    p = rv4_paths(_REPO_ROOT)
+                    fb = get_candidate_trades_fallback(_REPO_ROOT, eid)
+                    out = export_experiment_csv(
+                        _REPO_ROOT,
+                        eid,
+                        kind,
+                        state_dir=p["state"],
+                        candidate_trades_fallback=fb,
+                    )
+                    if not out:
+                        self._json(404, {"error": "artifact_missing", "trace_id": str(uuid.uuid4())}, no_cache=True)
+                        return
+                    data, fn = out
+                    self._bytes(200, data, content_type="text/csv; charset=utf-8", filename=fn, no_cache=True)
+                except Exception as e:  # noqa: BLE001
+                    self._json(
+                        500,
+                        {
+                            "schema": "renaissance_v4_ui_error_v1",
+                            "error": str(e)[:500],
+                            "trace_id": str(uuid.uuid4()),
+                        },
+                        no_cache=True,
+                    )
+                return
+            if len(segs) != 1:
+                self._json(404, {"error": "not_found", "path": path}, no_cache=True)
+                return
+            eid = segs[0]
             try:
                 from renaissance_v4.ui_api import build_experiment_detail_payload
 

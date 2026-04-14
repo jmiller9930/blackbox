@@ -28,6 +28,7 @@ class ExperimentRecord:
     comparison_report_path: str
     recommendation: str
     created_at: str
+    completed_at: str | None = None
     files_changed: list[str] = field(default_factory=list)
     extra: dict[str, Any] = field(default_factory=dict)
 

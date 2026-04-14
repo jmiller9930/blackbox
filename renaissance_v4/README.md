@@ -2,6 +2,10 @@
 
 End-to-end replay through **Phase 7**; **Phases 8–11** add optional governance and research scaffolds (not yet wired into the main replay loop). Still **not live trading**. Architect sources: **`phase1_code_pack.md`** … **`phase7_code_pack.md`**, plus **`phase8_to_11_code_pack.md`**.
 
+## Strategy analysis workbench (SME / operator)
+
+The BlackBox dashboard **Renaissance** view is the governed web workbench for baseline review, Monte Carlo reference, approved experiment jobs, and CSV exports. **Spec, API summary, and v1 limitations:** [`WORKBENCH_V1.md`](WORKBENCH_V1.md).
+
 **Implementation note:** `utils/db.py` resolves the SQLite path from the package location (not the process cwd), so `python -m renaissance_v4.data.init_db` works from any directory. `init_schema.py` is a thin alias for `init_db.py`.
 
 ## Layout

@@ -57,6 +57,13 @@
     .dash-rv4-actions button { font-size: 0.72rem; padding: 0.3rem 0.5rem; border-radius: var(--radius-md); border: 1px solid var(--panel-border); background: var(--panel); cursor: pointer; }
     .dash-rv4-actions button.primary { background: var(--accent); color: var(--accent-contrast); border-color: transparent; font-weight: 600; }
     .dash-rv4-msg { font-size: 0.72rem; color: var(--muted); margin-top: 0.35rem; }
+    .dash-rv4-links { font-size: 0.72rem; margin: 0.35rem 0; line-height: 1.5; }
+    .dash-rv4-links a { color: var(--accent); margin-right: 0.65rem; white-space: nowrap; }
+    .dash-rv4-export-row { display: flex; flex-wrap: wrap; gap: 0.35rem; margin-top: 0.4rem; }
+    .dash-rv4-export-row a, .dash-rv4-export-row button.linkish {
+      font-size: 0.7rem; padding: 0.25rem 0.45rem; border-radius: var(--radius-md);
+      border: 1px solid var(--panel-border); background: var(--panel); cursor: pointer; text-decoration: none; color: var(--text);
+    }
     .dash-rv4-detail { margin-top: 0.75rem; padding: 0.75rem; border: 1px dashed var(--panel-border); border-radius: var(--radius-md); background: #fafbfc; font-size: 0.75rem; }
     .dash-rv4-detail pre { margin: 0.35rem 0 0; white-space: pre-wrap; word-break: break-word; max-height: 14rem; overflow: auto; font-size: 0.68rem; }
     .dash-main {
@@ -1138,7 +1145,7 @@
       <a href="/guide.html">System guide</a>
       <a href="/anna/sequential-learning">Learning Engine</a>
       <a href="/anna/training">Training Dashboard</a>
-      <a href="/dashboard.html#/renaissance" id="nav-rv4">RenaissanceV4</a>
+      <a href="/dashboard.html#/renaissance" id="nav-rv4">Renaissance</a>
       <a href="/intelligence-method.html">Intelligence METHOD</a>
       <button type="button" class="dash-nav-linklike" id="navDashPaths" title="Open run paths (same as Start dialog)">Run configuration</button>
       <button type="button" class="dash-nav-linklike" id="navDashOb" title="What runs vs shadow vs paper (from bundle)">Operational boundary</button>
@@ -1358,52 +1365,60 @@
       </section>
       </div>
 
-      <div id="dash-view-renaissance" class="dash-rv4-wrap" hidden aria-label="RenaissanceV4 validation">
-        <h2 class="dash-rv4-head">RenaissanceV4 — research &amp; validation</h2>
+      <div id="dash-view-renaissance" class="dash-rv4-wrap" hidden aria-label="Renaissance strategy analysis workbench">
+        <h2 class="dash-rv4-head">Renaissance — strategy analysis workbench</h2>
         <p class="dash-rv4-sub">
-          Non-trading control surface: baseline reference, experiment queue, Monte Carlo / robustness outcomes.
-          Data from <code>renaissance_v4/state</code> and reports on the API host repo mount.
+          Governed review surface for the locked baseline (<code>RenaissanceV4_baseline_v1</code>), Monte Carlo reference,
+          experiment queue, and exports. Same harness as validation — no trading, no baseline code edits from the browser.
+          Data: <code>renaissance_v4/state</code> and reports on the API host repo mount.
         </p>
         <div class="dash-rv4-grid">
           <div class="dash-rv4-card" id="rv4-baseline-card">
-            <h3>Baseline</h3>
-            <div class="kv"><span class="k">Tag</span><span class="v" id="rv4-bl-tag">—</span></div>
+            <h3>Active baseline</h3>
+            <div class="kv"><span class="k">Baseline tag</span><span class="v" id="rv4-bl-tag">—</span></div>
             <div class="kv"><span class="k">Commit (git)</span><span class="v" id="rv4-bl-commit">—</span></div>
-            <div class="kv"><span class="k">Trades (det.)</span><span class="v" id="rv4-bl-n">—</span></div>
+            <div class="kv"><span class="k">Deterministic trade count</span><span class="v" id="rv4-bl-n">—</span></div>
             <div class="kv"><span class="k">Expectancy</span><span class="v" id="rv4-bl-e">—</span></div>
             <div class="kv"><span class="k">Max drawdown</span><span class="v" id="rv4-bl-dd">—</span></div>
             <div class="kv"><span class="k">Monte Carlo reference</span><span class="v" id="rv4-bl-mc">—</span></div>
+            <div class="dash-rv4-links" id="rv4-bl-links"></div>
+            <div class="dash-rv4-export-row" id="rv4-bl-exports" aria-label="Baseline CSV exports"></div>
             <p class="dash-rv4-msg" id="rv4-bl-reports"></p>
           </div>
           <div class="dash-rv4-card">
-            <h3>Controls</h3>
-            <p class="dash-rv4-msg">Governed jobs only — runs <code>robustness_runner</code> on the server (long-running).</p>
+            <h3>Approved experiment launchers</h3>
+            <p class="dash-rv4-msg" id="rv4-wb-note">Governed jobs only — runs <code>robustness_runner</code> on the server (long-running). No freeform code.</p>
             <div class="dash-rv4-actions">
               <button type="button" class="primary" id="rv4-btn-baseline-mc">Generate baseline Monte Carlo reference</button>
-              <button type="button" id="rv4-btn-example">Example flow (pipeline check)</button>
+              <button type="button" id="rv4-btn-example">Example robustness pipeline check</button>
             </div>
+            <p class="dash-rv4-msg" id="rv4-roadmap"></p>
             <p class="dash-rv4-msg" id="rv4-job-msg"></p>
           </div>
         </div>
         <div class="dash-rv4-card" style="margin-bottom:0.75rem">
           <h3>Experiment queue</h3>
           <table class="dash-rv4-table" id="rv4-exp-table">
-            <thead><tr><th>id</th><th>status</th><th>stage</th><th>recommendation</th><th>updated</th></tr></thead>
-            <tbody id="rv4-exp-tbody"><tr><td colspan="5">Loading…</td></tr></tbody>
+            <thead><tr><th>id</th><th>type</th><th>status</th><th>stage</th><th>recommendation</th><th>completed</th><th>created</th></tr></thead>
+            <tbody id="rv4-exp-tbody"><tr><td colspan="7">Loading…</td></tr></tbody>
           </table>
         </div>
         <div class="dash-rv4-card">
-          <h3>Selected experiment</h3>
+          <h3>Experiment detail</h3>
           <div class="dash-rv4-actions">
-            <button type="button" id="rv4-btn-rerun" disabled>Rerun failed / compare</button>
+            <button type="button" id="rv4-btn-rerun" disabled>Compare candidate (robustness)</button>
             <span class="dash-rv4-msg" id="rv4-sel-id"></span>
           </div>
           <div class="dash-rv4-detail" id="rv4-detail" hidden>
             <div class="kv"><span class="k">Description</span><span class="v" id="rv4-d-desc" style="text-align:left;max-width:70%">—</span></div>
+            <div class="kv"><span class="k">Experiment type</span><span class="v" id="rv4-d-type">—</span></div>
             <div class="kv"><span class="k">Branch / commit</span><span class="v" id="rv4-d-git">—</span></div>
             <div class="kv"><span class="k">Recommendation</span><span class="v" id="rv4-d-rec">—</span></div>
             <div class="kv"><span class="k">Deterministic</span><span class="v" id="rv4-d-det">—</span></div>
             <div class="kv"><span class="k">Monte Carlo</span><span class="v" id="rv4-d-mc">—</span></div>
+            <div class="kv"><span class="k">vs baseline</span><span class="v" id="rv4-d-vs" style="text-align:left;max-width:85%">—</span></div>
+            <div class="dash-rv4-links" id="rv4-d-report-links"></div>
+            <div class="dash-rv4-export-row" id="rv4-d-exports" aria-label="Experiment CSV exports"></div>
             <p class="dash-rv4-msg" id="rv4-d-paths"></p>
             <pre id="rv4-d-pre"></pre>
           </div>
@@ -3982,6 +3997,18 @@
     return String(x);
   }
   function rv4Refresh() {
+    fetch('/api/v1/renaissance/workbench', { cache: 'no-store' })
+      .then(function (r) {
+        return r.json();
+      })
+      .then(function (w) {
+        var rm = $('rv4-roadmap');
+        if (rm && w && w.roadmap_experiment_types && w.roadmap_experiment_types.length) {
+          rm.textContent =
+            'Not in v1 UI yet (harness roadmap): ' + w.roadmap_experiment_types.join('; ') + '.';
+        }
+      })
+      .catch(function () {});
     fetch('/api/v1/renaissance/baseline', { cache: 'no-store' })
       .then(function (r) {
         return r.json();
@@ -3997,12 +4024,44 @@
         $('rv4-bl-mc').textContent = j.monte_carlo_reference_present
           ? 'present'
           : 'missing — run the baseline Monte Carlo reference job (button below)';
+        var linkHost = $('rv4-bl-links');
+        if (linkHost) {
+          linkHost.innerHTML = '';
+          (j.report_links || []).forEach(function (L) {
+            var a = document.createElement('a');
+            a.href = L.download_url || '#';
+            a.textContent = L.label || 'report';
+            a.target = '_blank';
+            a.rel = 'noopener';
+            if (L.title) a.title = L.title;
+            linkHost.appendChild(a);
+          });
+        }
+        var exHost = $('rv4-bl-exports');
+        if (exHost && j.export_urls) {
+          exHost.innerHTML = '';
+          function addCsv(label, u) {
+            var a = document.createElement('a');
+            a.href = u;
+            a.textContent = label;
+            a.className = 'linkish';
+            a.target = '_blank';
+            a.rel = 'noopener';
+            exHost.appendChild(a);
+          }
+          if (j.export_urls.trades_csv) addCsv('CSV trades', j.export_urls.trades_csv);
+          if (j.export_urls.metrics_csv) addCsv('CSV metrics', j.export_urls.metrics_csv);
+          if (j.export_urls.monte_carlo_csv) addCsv('CSV Monte Carlo summary', j.export_urls.monte_carlo_csv);
+        }
         var rp = j.reports || {};
         var bits = [];
         if (rp.baseline_v1_md) bits.push('baseline_v1.md');
+        if (rp.monte_carlo_baseline_reference_md) bits.push('monte_carlo baseline ref');
         if (rp.diagnostic_post_dv013) bits.push('diagnostic_quality_post_DV013.md');
         if (rp.correction_quality_v1) bits.push('correction_quality_v1.md');
-        $('rv4-bl-reports').textContent = bits.length ? 'Reports: ' + bits.join(', ') + ' (repo paths on API host)' : '';
+        $('rv4-bl-reports').textContent = bits.length
+          ? 'Artifact paths (API host): ' + bits.join(', ')
+          : '';
       })
       .catch(function () {});
     fetch('/api/v1/renaissance/experiments', { cache: 'no-store' })
@@ -4014,7 +4073,7 @@
         if (!tb) return;
         var rows = (j && j.experiments) || [];
         if (!rows.length) {
-          tb.innerHTML = '<tr><td colspan="5">No experiments in index yet.</td></tr>';
+          tb.innerHTML = '<tr><td colspan="7">No experiments in index yet.</td></tr>';
           return;
         }
         tb.innerHTML = rows
@@ -4026,11 +4085,15 @@
               '"><td>' +
               id +
               '</td><td>' +
+              rv4Fmt(r.experiment_type) +
+              '</td><td>' +
               rv4Fmt(r.status) +
               '</td><td>' +
               rv4Fmt(r.stage) +
               '</td><td>' +
               rv4Fmt(r.recommendation) +
+              '</td><td>' +
+              rv4Fmt(r.completed_at).slice(0, 19) +
               '</td><td>' +
               rv4Fmt(r.created_at).slice(0, 19) +
               '</td></tr>'
@@ -4049,7 +4112,7 @@
       })
       .catch(function () {
         var tb = $('rv4-exp-tbody');
-        if (tb) tb.innerHTML = '<tr><td colspan="5">Failed to load experiments.</td></tr>';
+        if (tb) tb.innerHTML = '<tr><td colspan="7">Failed to load experiments.</td></tr>';
       });
     fetch('/api/v1/renaissance/jobs', { cache: 'no-store' })
       .then(function (r) {
@@ -4085,6 +4148,8 @@
       .then(function (j) {
         var ix = j.index || {};
         $('rv4-d-desc').textContent = ix.description || '—';
+        var extra = ix.extra && typeof ix.extra === 'object' ? ix.extra : {};
+        $('rv4-d-type').textContent = extra.experiment_type || ix.subsystem || '—';
         $('rv4-d-git').textContent = (ix.branch || '—') + ' @ ' + (ix.commit_hash || '—');
         $('rv4-d-rec').textContent = j.recommendation || ix.recommendation || '—';
         var det = j.deterministic || {};
@@ -4100,15 +4165,59 @@
         $('rv4-d-mc').textContent = modes.length
           ? 'modes: ' + modes.join(', ') + ' (full detail in JSON below)'
           : '—';
+        var vs = j.comparison_vs_baseline;
+        var vsEl = $('rv4-d-vs');
+        if (vsEl) {
+          if (vs && vs.deterministic) {
+            var d = vs.deterministic;
+            vsEl.textContent =
+              'Δ expectancy ' +
+              (d.delta_expectancy != null ? Number(d.delta_expectancy).toFixed(6) : '—') +
+              ' · Δ max DD ' +
+              (d.delta_max_drawdown != null ? Number(d.delta_max_drawdown).toFixed(6) : '—') +
+              ' · Δ trades ' +
+              (d.delta_total_trades != null ? String(d.delta_total_trades) : '—');
+          } else {
+            vsEl.textContent = '— (need deterministic artifacts vs baseline)';
+          }
+        }
+        var rpt = $('rv4-d-report-links');
+        if (rpt) {
+          rpt.innerHTML = '';
+          (j.report_links || []).forEach(function (L) {
+            var a = document.createElement('a');
+            a.href = L.download_url || '#';
+            a.textContent = L.label || 'report';
+            a.target = '_blank';
+            a.rel = 'noopener';
+            rpt.appendChild(a);
+          });
+        }
+        var dex = $('rv4-d-exports');
+        if (dex && j.export_urls) {
+          dex.innerHTML = '';
+          function addExp(label, u) {
+            var a = document.createElement('a');
+            a.href = u;
+            a.textContent = label;
+            a.className = 'linkish';
+            a.target = '_blank';
+            a.rel = 'noopener';
+            dex.appendChild(a);
+          }
+          if (j.export_urls.trades_csv) addExp('CSV trades', j.export_urls.trades_csv);
+          if (j.export_urls.metrics_csv) addExp('CSV metrics', j.export_urls.metrics_csv);
+          if (j.export_urls.monte_carlo_csv) addExp('CSV Monte Carlo summary', j.export_urls.monte_carlo_csv);
+        }
         var rp = j.report_paths || {};
         var pl = [];
         if (rp.experiment_md) pl.push(rp.experiment_md);
         if (rp.robustness_md) pl.push(rp.robustness_md);
         if (rp.monte_carlo_md) pl.push(rp.monte_carlo_md);
-        $('rv4-d-paths').textContent = pl.length ? 'Reports: ' + pl.join(' | ') : 'No report files yet.';
+        $('rv4-d-paths').textContent = pl.length ? 'Artifact paths (API host): ' + pl.join(' | ') : 'No report files yet.';
         if (pre)
           pre.textContent = JSON.stringify(
-            { index: ix, deterministic: det, monte_carlo: monteCarlo },
+            { index: ix, deterministic: det, monte_carlo: monteCarlo, comparison_vs_baseline: vs },
             null,
             2
           );
