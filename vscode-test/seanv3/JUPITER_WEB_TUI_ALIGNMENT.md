@@ -16,9 +16,11 @@ So: **same facts, two renderers.** The web is not “less true”; it is **incom
 - **Things the TUI computes from non-DB sources** (e.g. preflight HTTP checks, BlackBox ledger paths): those must be **either** replicated in the web (call same helpers / show same files) **or** listed as **explicit exclusions** with a one-line reason.
 - **Layout:** Parity is **information parity** first; pixel-perfect Rich layout is optional.
 
-## Current gap (honest)
+## Implementation status
 
-The web today implements a **subset** of what the TUI shows (wallet/position/kline/recent trades from SQLite). The TUI adds panels and context (preflight, parity vs BlackBox, ledger detail, trading mode, policy, clock, etc.). Until the web surfaces **every operator-relevant field the TUI surfaces** (or we agree a written exclusion list), **“open browser = same as TUI”** is an aspiration, not a guarantee.
+`jupiter_web.mjs` targets **TUI parity**: trading mode, active policy (registry on mounted repo), wallet, Sean paper ledger (with Hermes mark when preflight succeeds), parity table (Sean DB + `execution_ledger.db`), full trade window columns, preflight strip (Binance + Hermes + optional market_ticks + docker), Pyth oracle panel, and **meta refresh** (`JUPITER_WEB_REFRESH_SEC`, default 3s). Mount **`../../:/repo:ro`** in compose so policy + ledger paths resolve inside the container.
+
+Remaining differences: **live** TUI refresh interval vs browser meta refresh; preflight uses **fetch** (same URLs as TUI); if **`execution_trades`** schema differs, parity may show an error until aligned.
 
 ## What needs to happen to be aligned (no code — checklist)
 

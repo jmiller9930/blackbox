@@ -62,8 +62,14 @@ services:
       SQLITE_PATH: /capture/sean_parity.db
       JUPITER_WEB_PORT: "707"
       JUPITER_WEB_BIND: "0.0.0.0"
+      # Same Binance origin as seanv3 (host routes per VPN/README.md).
+      BINANCE_API_BASE_URL: ${BINANCE_API_BASE_URL:-https://api.binance.com}
+      # Repo mount: policy registry + execution_ledger parity (read-only).
+      BLACKBOX_REPO_ROOT: /repo
+      BLACKBOX_EXECUTION_LEDGER_PATH: /repo/data/sqlite/execution_ledger.db
     volumes:
       - ./capture:/capture
+      - ../../:/repo:ro
     depends_on:
       - seanv3
     restart: unless-stopped
