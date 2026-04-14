@@ -9,4 +9,5 @@ COPY --chown=node:node app.mjs ./
 
 USER node
 
-CMD ["node", "app.mjs"]
+# Built-in node:sqlite requires --experimental-sqlite (Node 22+).
+CMD ["node", "--experimental-sqlite", "app.mjs"]

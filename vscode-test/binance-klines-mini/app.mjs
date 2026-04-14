@@ -1,12 +1,14 @@
 /**
- * Minimal Binance klines poller for Docker on hosts with split-tunnel egress
- * (e.g. WireGuard AllowedIPs → Binance only). Uses host routing; no VPN inside the container.
+ * Minimal Binance klines poller for Docker on hosts with split-tunnel egress.
  *
- * Optional NDJSON capture for parity vs blackbox ingest (join on kline.openTime / closeTime):
- *   CAPTURE_PATH=/capture/binance_klines.ndjson
+ * NDJSON: CAPTURE_PATH=/capture/binance_klines.ndjson
+ * SQLite (JUPv3 parity vs Blackbox): SQLITE_PATH=/capture/sean_parity.db
+ *
+ * Requires: node --experimental-sqlite (Node 22+)
  */
 import { appendFile, mkdir } from 'fs/promises';
 import { dirname } from 'path';
+import { DatabaseSync } from 'node:sqlite';
 
 const url =
   process.env.BINANCE_KLINES_URL ||
@@ -16,6 +18,15 @@ const intervalMs = Math.max(
   parseInt(process.env.POLL_INTERVAL_MS || '300000', 10)
 );
 const capturePath = (process.env.CAPTURE_PATH || '').trim();
+const sqlitePath = (process.env.SQLITE_PATH || '').trim();
+const canonicalSymbol = (process.env.CANONICAL_SYMBOL || 'SOL-PERP').trim();
+
+function marketEventIdFromOpenTimeMs(openTimeMs) {
+  const d = new Date(Number(openTimeMs));
+  const pad = (n) => String(n).padStart(2, '0');
+  const iso = `${d.getUTCFullYear()}-${pad(d.getUTCMonth() + 1)}-${pad(d.getUTCDate())}T${pad(d.getUTCHours())}:${pad(d.getUTCMinutes())}:${pad(d.getUTCSeconds())}Z`;
+  return `${canonicalSymbol}_5m_${iso}`;
+}
 
 function summarizeKline(row) {
   if (!Array.isArray(row) || row.length < 7) return row;
@@ -28,6 +39,57 @@ function summarizeKline(row) {
     volume: row[5],
     closeTime: row[6],
   };
+}
+
+/** @type {import('node:sqlite').DatabaseSync | null} */
+let parityDb = null;
+
+function initSqlite() {
+  if (!sqlitePath) return null;
+  try {
+    const db = new DatabaseSync(sqlitePath);
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS sean_binance_kline_poll (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        market_event_id TEXT NOT NULL,
+        candle_open_ms INTEGER NOT NULL,
+        open_px TEXT,
+        high_px TEXT,
+        low_px TEXT,
+        close_px TEXT,
+        volume_base TEXT,
+        polled_at_utc TEXT NOT NULL,
+        url TEXT,
+        latency_ms INTEGER
+      );
+      CREATE INDEX IF NOT EXISTS idx_sean_poll_mid ON sean_binance_kline_poll (market_event_id);
+    `);
+    return db;
+  } catch (e) {
+    console.error(`[binance-klines-mini] SQLite init failed: ${e.message}`);
+    return null;
+  }
+}
+
+function insertKlinePoll(db, { marketEventId, openMs, kline, polledAt, latencyMs, reqUrl }) {
+  const stmt = db.prepare(`
+    INSERT INTO sean_binance_kline_poll (
+      market_event_id, candle_open_ms, open_px, high_px, low_px, close_px, volume_base,
+      polled_at_utc, url, latency_ms
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `);
+  stmt.run(
+    marketEventId,
+    openMs,
+    kline.open ?? null,
+    kline.high ?? null,
+    kline.low ?? null,
+    kline.close ?? null,
+    kline.volume ?? null,
+    polledAt,
+    reqUrl,
+    latencyMs
+  );
 }
 
 async function appendNdjsonLine(obj) {
@@ -57,23 +119,45 @@ async function fetchOnce() {
     throw new Error(`Invalid JSON: ${bodyText.slice(0, 120)}`);
   }
   const kline = Array.isArray(data) && data.length ? summarizeKline(data[0]) : data;
+  const polledAt = new Date().toISOString();
+  const openMs = kline && kline.openTime != null ? Number(kline.openTime) : 0;
+  const marketEventId = openMs > 0 ? marketEventIdFromOpenTimeMs(openMs) : '';
+
   const record = {
     ok: true,
-    at: new Date().toISOString(),
+    at: polledAt,
     latencyMs,
     url,
     kline,
+    market_event_id: marketEventId || undefined,
   };
-  const line = JSON.stringify(record);
-  console.log(line);
+  console.log(JSON.stringify(record));
   await appendNdjsonLine(record);
+
+  if (parityDb && marketEventId && kline) {
+    try {
+      insertKlinePoll(parityDb, {
+        marketEventId,
+        openMs,
+        kline,
+        polledAt,
+        latencyMs,
+        reqUrl: url,
+      });
+    } catch (e) {
+      console.error(`[binance-klines-mini] sqlite insert failed: ${e.message}`);
+    }
+  }
 }
 
 async function main() {
   console.error(
     `[binance-klines-mini] poll every ${intervalMs}ms — ${url}` +
-      (capturePath ? ` — capture: ${capturePath}` : '')
+      (capturePath ? ` — ndjson: ${capturePath}` : '') +
+      (sqlitePath ? ` — sqlite: ${sqlitePath}` : '')
   );
+  parityDb = initSqlite();
+
   for (;;) {
     try {
       await fetchOnce();

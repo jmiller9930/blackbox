@@ -1,8 +1,9 @@
 # Run on clawbot: docker compose up -d --build
 # Binance traffic follows host split-tunnel (WireGuard); no VPN inside the container.
 #
-# NDJSON parity log (host path ./capture next to this file):
-#   tail -f capture/binance_klines.ndjson
+# NDJSON: tail -f capture/binance_klines.ndjson
+# SQLite (JUPv3 parity vs Blackbox): sqlite3 capture/sean_parity.db '.tables'
+#   Compare: python3 -m modules.anna_training.jup_v3_parity_compare capture/sean_parity.db
 services:
   binance-klines:
     build: .
@@ -12,5 +13,6 @@ services:
       BINANCE_KLINES_URL: https://api.binance.com/api/v3/klines?symbol=SOLUSDT&interval=5m&limit=1
       POLL_INTERVAL_MS: "300000"
       CAPTURE_PATH: /capture/binance_klines.ndjson
+      SQLITE_PATH: /capture/sean_parity.db
     volumes:
       - ./capture:/capture
