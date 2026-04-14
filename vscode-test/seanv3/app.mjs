@@ -18,6 +18,7 @@ import { DatabaseSync } from 'node:sqlite';
 
 import {
   ensurePaperAnalogSchema,
+  ensurePaperStartingBalanceUsd,
   getMeta,
   logPaperEvent,
   logStubPaperSignal,
@@ -101,6 +102,7 @@ function initSqlite() {
       CREATE INDEX IF NOT EXISTS idx_sean_poll_mid ON sean_binance_kline_poll (market_event_id);
     `);
     ensurePaperAnalogSchema(db);
+    ensurePaperStartingBalanceUsd(db);
     ensureSeanLedgerSchema(db);
     return db;
   } catch (e) {

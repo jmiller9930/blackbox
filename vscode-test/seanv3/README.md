@@ -21,6 +21,17 @@ SeanV3 is **its own application** in this repo: **`vscode-test/seanv3/`** (Node,
 | **Reporting** | Trade list, win/loss counts, win rate, cumulative P&amp;L, per-trade detail (and optionally max drawdown later). | Operator and automation-facing. |
 | **External compare (optional)** | **Last** — only if you explicitly run a separate compare job. | Not part of SeanV3; does not ship inside this container. |
 
+### Paper account (testing — not real money)
+
+- **`SEAN_PAPER_STARTING_BALANCE_USD`** (default **1000**) is the simulated **starting balance** in USD for operator psychology and reporting.
+- On first SQLite init, the value is **stored** in `analog_meta.paper_starting_balance_usd` and treated as the account baseline.
+- **Equity** ≈ starting + realized P&amp;L + **unrealized** (mark-to-market when a position is open). The TUI uses **Hermes** SOL/USD for mtm; **`report.mjs`** uses the **latest polled Binance close** as a mark proxy.
+- **Engine sizing** is still **`SEAN_ENGINE_SIZE_NOTIONAL_SOL`** (P&amp;L math uses the same units as `computePnlUsd` in `sean_lifecycle.mjs`).
+
+### SeanV3 vs BlackBox — “same policy” at the same time?
+
+Reasonable **directional** expectation: both can run **Jupiter_3-style** Sean logic, but **bit-identical** trades at the same wall-clock instant are **not guaranteed** unless you align **all** of: **canonical bar source** (SeanV3 uses `sean_binance_kline_poll`; BlackBox uses `market_bars_5m` / ingest path), **bar closure / `market_event_id`**, **engine version**, **MIN_BARS** warmup, and **poll timing**. Use a **shared harness** or diff tool if you need strict parity proof — not the default operator path.
+
 ---
 
 ## Current implementation status (honest)
@@ -154,6 +165,7 @@ docker compose logs -f
 | `CAPTURE_PATH`, `SQLITE_PATH` | NDJSON + DB under `/capture`. |
 | `KEYPAIR_PATH` | Optional wallet JSON path inside container. |
 | `PAPER_TRADING` | `1` (default) or `0` to skip paper/stub logging. |
+| `SEAN_PAPER_STARTING_BALANCE_USD` | Simulated account baseline for testing (default `1000`); stored in `analog_meta` on first run. |
 | `SEAN_ENGINE_SLICE` | `1` (default) enables Jupiter_3 engine; `0`/`false`/`no` disables. |
 | `SEAN_ENGINE_SIZE_NOTIONAL_SOL` | Notional size multiplier for P&amp;L (default `1.0`). |
 

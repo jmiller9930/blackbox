@@ -67,6 +67,20 @@ export function getMeta(db, k) {
 }
 
 /**
+ * One-time: persist paper "account" size for testing (USD notional label — no real funds).
+ * Env SEAN_PAPER_STARTING_BALANCE_USD (default 1000). Frozen in analog_meta after first set.
+ * @param {import('node:sqlite').DatabaseSync} db
+ */
+export function ensurePaperStartingBalanceUsd(db) {
+  const existing = getMeta(db, 'paper_starting_balance_usd');
+  if (existing != null && String(existing).trim() !== '') return;
+  const raw = (process.env.SEAN_PAPER_STARTING_BALANCE_USD || '1000').trim();
+  const n = parseFloat(raw);
+  const v = Number.isFinite(n) && n > 0 ? String(n) : '1000';
+  setMeta(db, 'paper_starting_balance_usd', v);
+}
+
+/**
  * @param {import('node:sqlite').DatabaseSync} db
  */
 export function logPaperEvent(db, { atUtc, marketEventId, eventKind, ohlcvJson, walletPubkey, detailsJson }) {

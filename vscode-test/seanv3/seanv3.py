@@ -13,6 +13,7 @@ All docker commands (status, logs, console, preflight, stop, …) pass through t
 Environment:
   BLACKBOX_REPO / repo auto: parent of vscode-test/seanv3
   SEANV3_SQLITE_PATH — optional; default set for tui to vscode-test/seanv3/capture/sean_parity.db
+  SEAN_PAPER_STARTING_BALANCE_USD — paper account baseline for TUI/report (default 1000; persisted in DB by app.mjs)
 """
 from __future__ import annotations
 

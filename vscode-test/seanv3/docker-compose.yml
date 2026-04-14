@@ -36,6 +36,8 @@ services:
       # Optional: Solana keypair JSON (same format as solana-keygen). Only pubkey is stored in DB.
       # KEYPAIR_PATH: /capture/keypair.json
       PAPER_TRADING: "1"
+      # Simulated "account" for testing (USD label — no real custody). Frozen in DB on first run.
+      SEAN_PAPER_STARTING_BALANCE_USD: "1000"
       # Sean-native Jupiter_3 paper engine (no BlackBox). Set "0" to disable.
       SEAN_ENGINE_SLICE: "1"
       # SEAN_ENGINE_SIZE_NOTIONAL_SOL: "1.0"

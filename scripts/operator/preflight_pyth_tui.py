@@ -26,6 +26,7 @@ Environment (optional):
   SSL_CERT_FILE / REQUESTS_CA_BUNDLE to a CA bundle; last resort for lab/VPN inspection:
   SEANV3_SSL_INSECURE=1 (disables TLS verification — not for production).
   SEANV3_AUTO_INIT_LEDGER_DB=0 — do not create an empty capture/sean_parity.db when missing.
+  SEAN_PAPER_STARTING_BALANCE_USD — fallback if analog_meta.paper_starting_balance_usd missing (default 1000)
 
 Exit: Ctrl+C
 """
@@ -378,12 +379,41 @@ def _default_sean_sqlite(repo_root: Path) -> Path:
     return (repo_root / "vscode-test" / "seanv3" / "capture" / "sean_parity.db").resolve()
 
 
-def _sean_ledger_panel(repo_root: Path) -> Panel:
+def _paper_starting_usd(conn: sqlite3.Connection) -> float:
+    try:
+        row = conn.execute(
+            "SELECT v FROM analog_meta WHERE k = ?",
+            ("paper_starting_balance_usd",),
+        ).fetchone()
+        if row and row[0] is not None:
+            v = float(str(row[0]).strip())
+            if v > 0:
+                return v
+    except (sqlite3.Error, ValueError, TypeError):
+        pass
+    raw = (os.environ.get("SEAN_PAPER_STARTING_BALANCE_USD") or "1000").strip()
+    try:
+        v = float(raw)
+        return v if v > 0 else 1000.0
+    except ValueError:
+        return 1000.0
+
+
+def _unrealized_usd(entry: float, mark: float, size: float, side: str) -> float:
+    sd = str(side).lower()
+    if sd == "long":
+        return (mark - entry) * size
+    if sd == "short":
+        return (entry - mark) * size
+    return 0.0
+
+
+def _sean_ledger_panel(repo_root: Path, mark_usd: float | None = None) -> Panel:
     p = _default_sean_sqlite(repo_root)
     if not p.is_file():
         return Panel(
             Text.from_markup(f"[dim]SeanV3 DB not found: {p}[/dim]"),
-            title="SeanV3 paper ledger",
+            title="SeanV3 paper ledger (testing)",
             border_style="dim",
         )
     try:
@@ -393,25 +423,42 @@ def _sean_ledger_panel(repo_root: Path) -> Panel:
             last = conn.execute(
                 "SELECT gross_pnl_usd, result_class, side FROM sean_paper_trades ORDER BY id DESC LIMIT 1"
             ).fetchone()
-            pos = conn.execute("SELECT side, entry_price FROM sean_paper_position WHERE id=1").fetchone()
+            pos = conn.execute(
+                "SELECT side, entry_price, size_notional_sol FROM sean_paper_position WHERE id=1"
+            ).fetchone()
             total = conn.execute("SELECT COALESCE(SUM(gross_pnl_usd),0) FROM sean_paper_trades").fetchone()[0]
+            starting = _paper_starting_usd(conn)
         finally:
             conn.close()
     except sqlite3.Error as e:
-        return Panel(Text(str(e), style="red"), title="SeanV3 paper ledger", border_style="red")
+        return Panel(Text(str(e), style="red"), title="SeanV3 paper ledger (testing)", border_style="red")
+    realized = float(total)
+    unreal = 0.0
+    open_line = "Open: flat"
+    if pos and pos[0] and str(pos[0]) != "flat" and mark_usd is not None:
+        try:
+            entry = float(pos[1])
+            size = float(pos[2] or 1.0)
+            unreal = _unrealized_usd(entry, float(mark_usd), size, str(pos[0]))
+            open_line = f"Open: {pos[0]} @ {pos[1]}  notional_sol≈{size:g}  mtm≈{unreal:+.4f} USD (Hermes mark)"
+        except (TypeError, ValueError):
+            open_line = f"Open: {pos[0]} @ {pos[1]}"
+    elif pos and pos[0] and str(pos[0]) != "flat":
+        open_line = f"Open: {pos[0]} @ {pos[1]}  (set Hermes OK for mtm)"
+    equity = starting + realized + unreal
     lines = [
-        f"DB: {p}",
-        f"Closed trades: {n}  cumulative P&L ≈ {float(total):.4f} USD",
+        "[bold]Paper account (simulated — not real funds)[/bold]",
+        f"Starting balance: {starting:.2f} USD  (SEAN_PAPER_STARTING_BALANCE_USD / analog_meta)",
+        f"Realized P&L: {realized:+.4f} USD  |  Closed trades: {n}",
+        f"[bold]Equity (est.): {equity:.4f} USD[/bold]  (= starting + realized + unrealized mtm)",
     ]
     if last:
-        lines.append(f"Last: {last[2]} {last[1]} pnl={last[0]}")
-    if pos and pos[0] and str(pos[0]) != "flat":
-        lines.append(f"Open: {pos[0]} @ {pos[1]}")
-    else:
-        lines.append("Open: flat")
+        lines.append(f"Last closed: {last[2]} {last[1]} pnl={last[0]}")
+    lines.append(open_line)
+    lines.append(f"DB: {p}")
     return Panel(
         Text.from_markup("\n".join(lines)),
-        title="SeanV3 paper ledger",
+        title="SeanV3 paper ledger (testing)",
         border_style="cyan",
     )
 
@@ -524,8 +571,10 @@ def main(argv: list[str] | None = None) -> None:
         checks, _ = _run_checks(hermes_bucket, market_data_path=effective_db)
         parsed = hermes_bucket.get("parsed") if isinstance(hermes_bucket.get("parsed"), list) else None
         now_ts = time.time()
+        q_oracle = _parse_pyth_price(parsed) if parsed else None
+        mark = float(q_oracle["price"]) if q_oracle and q_oracle.get("price") is not None else None
         pol = _policy_panel(current, repo_root=repo_root, effective_db=effective_db, entry_resolved=entry_path)
-        sean_p = _sean_ledger_panel(repo_root)
+        sean_p = _sean_ledger_panel(repo_root, mark_usd=mark)
         ht = _header_table(checks)
         strict_ok = all(c.ok for c in checks)
         banner = (
