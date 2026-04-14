@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
- * Read-only SeanV3 web UI — wallet, position, recent trades from sean_parity.db.
- * Default port 737 (SEANV3_WEB_PORT). Host networking recommended (same as app.mjs).
+ * Jupiter — read-only web UI for SeanV3 parity data (wallet, position, trades from sean_parity.db).
+ * Default port 737 (JUPITER_WEB_PORT or legacy SEANV3_WEB_PORT). Host networking recommended.
  */
 import http from 'http';
 import { DatabaseSync } from 'node:sqlite';
@@ -27,7 +27,8 @@ function esc(s) {
 
 function buildSummary(db) {
   const out = {
-    schema: 'seanv3_web_summary_v1',
+    schema: 'jupiter_web_summary_v1',
+    application: 'Jupiter',
     sqlite_path: dbPath(),
     wallet: null,
     wallet_status: null,
@@ -155,7 +156,7 @@ function htmlPage(data) {
 <head>
   <meta charset="utf-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
-  <title>SeanV3</title>
+  <title>Jupiter</title>
   <style>
     body { font-family: system-ui, sans-serif; background: #0f1419; color: #e6edf3; margin: 0; padding: 1.25rem; }
     h1 { font-size: 1.25rem; margin-top: 0; }
@@ -169,8 +170,8 @@ function htmlPage(data) {
   </style>
 </head>
 <body>
-  <h1>SeanV3 — read-only</h1>
-  <p class="muted">${esc(data.sqlite_path)}</p>
+  <h1>Jupiter — read-only</h1>
+  <p class="muted">SeanV3 parity · ${esc(data.sqlite_path)}</p>
   ${errBlock}
   ${walletBlock}
   ${posBlock}
@@ -185,20 +186,30 @@ function htmlPage(data) {
 </html>`;
 }
 
-const port = Math.max(1, Math.min(65535, parseInt(process.env.SEANV3_WEB_PORT || '737', 10) || 737));
-const bind = (process.env.SEANV3_WEB_BIND || '0.0.0.0').trim() || '0.0.0.0';
+const portRaw = process.env.JUPITER_WEB_PORT || process.env.SEANV3_WEB_PORT || '737';
+const port = Math.max(1, Math.min(65535, parseInt(portRaw, 10) || 737));
+const bind = (process.env.JUPITER_WEB_BIND || process.env.SEANV3_WEB_BIND || '0.0.0.0').trim() || '0.0.0.0';
 
 const server = http.createServer((req, res) => {
   const url = new URL(req.url || '/', `http://${req.headers.host || 'localhost'}`);
 
   if (url.pathname === '/health') {
     res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' });
-    res.end(JSON.stringify({ ok: true, schema: 'seanv3_web_health_v1', port, bind }));
+    res.end(
+      JSON.stringify({
+        ok: true,
+        schema: 'jupiter_web_health_v1',
+        application: 'Jupiter',
+        port,
+        bind,
+      })
+    );
     return;
   }
 
   let summary = {
-    schema: 'seanv3_web_summary_v1',
+    schema: 'jupiter_web_summary_v1',
+    application: 'Jupiter',
     sqlite_path: dbPath(),
     wallet: null,
     wallet_status: null,
@@ -246,5 +257,5 @@ const server = http.createServer((req, res) => {
 });
 
 server.listen(port, bind, () => {
-  console.error(`[seanv3-web] http://${bind}:${port}/  (read-only)`);
+  console.error(`[jupiter] http://${bind}:${port}/  (read-only)`);
 });
