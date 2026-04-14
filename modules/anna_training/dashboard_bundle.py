@@ -4353,6 +4353,8 @@ def build_trade_chain_payload(
             {"id": "jup_v3", "label": "JUPv3"},
         ],
     }
+    # True when JUPv3 Binance axis query returned no columns (before inject). Never mix in execution_trades ids.
+    binance_axis_empty_for_jup_v3 = False
     conn = connect_ledger(db_path)
     try:
         ensure_execution_ledger_schema(conn)
@@ -4383,6 +4385,8 @@ def build_trade_chain_payload(
                 )
             )
             event_axis_source = "binance_strategy_bars_5m"
+            if not event_axis:
+                binance_axis_empty_for_jup_v3 = True
         else:
             event_axis, event_axis_time_utc_iso, event_axis_candle_close_utc_iso = (
                 _event_axis_from_market_bars(
@@ -4391,11 +4395,17 @@ def build_trade_chain_payload(
             )
             event_axis_source = "market_bars_5m"
         if not event_axis:
-            event_axis, event_axis_time_utc_iso = _distinct_event_axis_with_times(conn, limit=max_events)
-            event_axis_source = "execution_trades_fallback"
-            event_axis_candle_close_utc_iso = [
-                _five_m_close_after_open_iso(_open_iso_from_market_event_id(mid)) for mid in event_axis
-            ]
+            if _slot == BASELINE_POLICY_SLOT_JUP_V3:
+                # Do not substitute ledger trade ids — they follow a different timeline than Binance bars/tiles.
+                event_axis_time_utc_iso = []
+                event_axis_candle_close_utc_iso = []
+                event_axis_source = "binance_strategy_bars_5m"
+            else:
+                event_axis, event_axis_time_utc_iso = _distinct_event_axis_with_times(conn, limit=max_events)
+                event_axis_source = "execution_trades_fallback"
+                event_axis_candle_close_utc_iso = [
+                    _five_m_close_after_open_iso(_open_iso_from_market_event_id(mid)) for mid in event_axis
+                ]
         inj_mid = str(inject_axis_mid or "").strip()
         if not event_axis and inj_mid:
             inj_t = str(inject_axis_time_utc_iso or "").strip() or None
@@ -4629,6 +4639,7 @@ def build_trade_chain_payload(
         "event_axis_time_utc_iso": event_axis_time_utc_iso,
         "event_axis_candle_close_utc_iso": event_axis_candle_close_utc_iso,
         "event_axis_source": event_axis_source,
+        "binance_axis_empty_for_jup_v3": binance_axis_empty_for_jup_v3,
         "event_axis_note": (
             "Columns are distinct market_event_id values (oldest left → newest right). "
             "Axis is **closed** 5m bars: **JUPv3** uses binance_strategy_bars_5m (Binance OHLCV); **JUPv2** uses "
@@ -4805,7 +4816,11 @@ def build_dashboard_bundle(
     mdb_for_snap = _market_db_path()
 
     def _bundle_parallel_tc() -> dict[str, Any]:
-        return build_trade_chain_payload(db_path=db_path, max_events=max_events)
+        return build_trade_chain_payload(
+            db_path=db_path,
+            max_events=max_events,
+            market_db_path=mdb_for_snap,
+        )
 
     def _bundle_parallel_snap() -> dict[str, Any]:
         try:
@@ -4889,6 +4904,7 @@ def build_dashboard_bundle(
             tc = build_trade_chain_payload(
                 db_path=db_path,
                 max_events=max_events,
+                market_db_path=mdb_for_snap,
                 inject_axis_mid=inj,
                 inject_axis_time_utc_iso=str(et).strip() if et else None,
             )
