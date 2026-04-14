@@ -1,0 +1,10 @@
+# Run on clawbot: docker compose up -d --build
+# Binance traffic follows host split-tunnel (WireGuard); no VPN inside the container.
+services:
+  binance-klines:
+    build: .
+    container_name: binance-klines-mini
+    restart: unless-stopped
+    environment:
+      BINANCE_KLINES_URL: https://api.binance.com/api/v3/klines?symbol=SOLUSDT&interval=5m&limit=1
+      POLL_INTERVAL_MS: "300000"
