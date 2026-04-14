@@ -8,6 +8,15 @@ SeanV3 is **its own application** in this repo: **`vscode-test/seanv3/`** (Node,
 
 **Design risk to avoid:** Folding SeanV3 into “training” or “anna” paths mentally — those are **other** trees. SeanV3 code and operator flow stay under **`seanv3/`** + **`scripts/operator/`** for the TUI.
 
+### Same server as BlackBox UI (UIUX.Web)
+
+You can run **both** on one host. BlackBox **nginx** (`UIUX.Web` compose) binds **443** (and **80**); the **`api`** service uses **host network** and listens on **:8080**. SeanV3 uses **`network_mode: host`** but **does not** run an HTTP server — it only polls Binance and writes SQLite — so it **does not compete for 443**. Start each stack from its directory:
+
+- `cd UIUX.Web && docker compose up -d` (or your usual command)
+- `cd vscode-test/seanv3 && docker compose up -d --build`
+
+Both rely on the **host** routing table for Binance (WireGuard split-tunnel on clawbot per `VPN/README.md`).
+
 ---
 
 ## Target components (SeanV3 as its own system)
