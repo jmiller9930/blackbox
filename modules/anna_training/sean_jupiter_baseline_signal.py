@@ -757,7 +757,10 @@ def _format_jupiter_3_operator_narrative(
         lines.append(f"Volume Spike: n/a → {'yes' if vsp else 'no'}")
 
     lines.append("")
-    lines.append("BOS Check:")
+    # One line with ": " so dashboard label/value split is never empty; BOS = break of prior swing.
+    lines.append(
+        "BOS Check: close must break prior 5-bar swing high (long) or low (short); current bar excluded from that range"
+    )
     lines.append("Last 5 High = " + _tile_fmt_price(feat.get("prior_swing_high")))
     lines.append("Last 5 Low  = " + _tile_fmt_price(feat.get("prior_swing_low")))
     cc = eb.get("close") if eb else None

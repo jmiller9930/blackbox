@@ -654,6 +654,14 @@
       color: #0c4a6e;
       margin: 0 0 0.2rem;
     }
+    .tc-jup-gates-hint {
+      font-size: 0.55rem;
+      font-weight: 600;
+      color: #475569;
+      margin: 0.35rem 0 0;
+      line-height: 1.35;
+      max-width: 28rem;
+    }
     .tc-jup-gates-table {
       width: 100%;
       border-collapse: collapse;
@@ -1640,6 +1648,14 @@
       m = s.match(pats[i][0]);
       if (m) return { lab: pats[i][1], val: m[1] != null ? m[1] : '' };
     }
+    m = s.match(/^BOS Check:\s*(.*)$/i);
+    if (m) return { lab: 'BOS Check', val: (m[1] != null ? m[1] : '').trim() };
+    m = s.match(/^Last 5 High\s*=\s*(.*)$/i);
+    if (m) return { lab: 'Last 5 High', val: (m[1] != null ? m[1] : '').trim() };
+    m = s.match(/^Last 5 Low\s*=\s*(.*)$/i);
+    if (m) return { lab: 'Last 5 Low', val: (m[1] != null ? m[1] : '').trim() };
+    m = s.match(/^Current price\s+(.+)$/i);
+    if (m && /BOS/i.test(s)) return { lab: 'BOS vs close', val: m[1].trim() };
     m = s.match(/^([a-zA-Z][a-zA-Z0-9_]*)=(.+)$/);
     if (m && String(m[1]).toLowerCase() !== 'trade') {
       return { lab: m[1], val: m[2] };
@@ -1686,11 +1702,24 @@
     }
     if (/^Using real Binance volume:/i.test(s)) return 'neutral';
     if (/^=== CONVICTION MOMENTUM FILTERS ===/i.test(s) || /^=== SIGNAL BREAKDOWN ===/i.test(s)) return 'neutral';
-    if (/^BOS Check:/i.test(s) || /^Last 5 High\s*=/i.test(s) || /^Last 5 Low\s*=/i.test(s)) return 'neutral';
+    if (/^BOS Check:/i.test(s)) return 'neutral';
+    if (/^Last 5 High\s*=/i.test(s) || /^Last 5 Low\s*=/i.test(s)) return 'neutral';
+    if (/^Volume Spike:.*→\s*no/i.test(s)) return 'gate';
+    if (/^Volume Spike:.*→\s*yes/i.test(s)) return 'ok';
     if (/^Volume Spike:/i.test(s)) return 'neutral';
     if (/^EMA9\s*:/i.test(s) || /^EMA21\s*:/i.test(s) || /^Bias\s*:/i.test(s) || /^RSI\(14\)\s*:/i.test(s)) return 'neutral';
-    if (/^Current price\s/i.test(s) && /BOS/i.test(s)) return 'neutral';
+    if (/^Current price\s/i.test(s) && /BOS/i.test(s)) {
+      if (/long BOS:\s*yes|short BOS:\s*yes/i.test(s)) return 'ok';
+      return 'stop';
+    }
+    if (/^ATR\(14\)\s*=/i.test(s) && /Expected Move/i.test(s)) {
+      var em = s.match(/Expected Move[^\d]*\$?([0-9.]+)/i);
+      if (em && !isNaN(parseFloat(em[1], 10)) && parseFloat(em[1], 10) < 0.8) return 'gate';
+      return 'neutral';
+    }
     if (/^ATR\(14\)\s*=/i.test(s)) return 'neutral';
+    if (/^Long\s+=\s+false/i.test(s) || /^Short\s+=\s+false/i.test(s)) return 'stop';
+    if (/^Long\s+=\s+true/i.test(s) || /^Short\s+=\s+true/i.test(s)) return 'ok';
     if (/^Long\s+=\s+/i.test(s) || /^Short\s+=\s+/i.test(s)) return 'neutral';
     if (/^New 5-min candle formed:/i.test(s) || /^Previous candle:/i.test(s) || /^Current candle:/i.test(s)) return 'neutral';
     if (/^Supertrend:/i.test(s)) return 'neutral';
@@ -1751,6 +1780,11 @@
       esc('All gates (long): ' + (lg ? 'YES — would qualify' : 'NO')) +
       ' · ' +
       esc('All gates (short): ' + (sg ? 'YES — would qualify' : 'NO')) +
+      '</div>' +
+      '<div class="tc-jup-gates-hint" role="note">' +
+      esc(
+        'To arm an entry, one side (LONG or SHORT) must be PASS on every gate — AND gate, not “most.”'
+      ) +
       '</div>';
     return '<div class="tc-jup-gates-table-wrap">' + cap + h + '</div>';
   }
