@@ -85,7 +85,8 @@ def test_build_trade_chain_payload_schema() -> None:
             "pnl_usd",
             "baseline_jupiter_policy_tag",
         }
-        assert row.get("baseline_jupiter_policy_tag") == "JUPv2"
+        tag = row.get("baseline_jupiter_policy_tag")
+        assert tag is None or tag in ("JUPv2", "JUPv3", "JUPv4")
     assert "baseline_trades_report_rows" in tc
     assert isinstance(tc["baseline_trades_report_rows"], list)
     assert len(tc["baseline_trades_report_rows"]) >= len(tc["recent_baseline_trades"])
@@ -653,7 +654,8 @@ def test_build_baseline_trades_report_schema() -> None:
         assert "entry_market_event_id" in row
         assert "pnl_pct_notional" in row
         assert "baseline_authority" in row
-        assert row.get("baseline_jupiter_policy_tag") == "JUPv2"
+        tag = row.get("baseline_jupiter_policy_tag")
+        assert tag is None or tag in ("JUPv2", "JUPv3", "JUPv4")
     tid_keys = set(rep["trades_by_trade_id"].keys())
     row_tids = {str(x.get("trade_id") or "").strip() for x in rep["rows"] if str(x.get("trade_id") or "").strip()}
     assert tid_keys == row_tids

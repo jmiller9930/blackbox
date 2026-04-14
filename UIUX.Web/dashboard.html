@@ -1876,16 +1876,19 @@
     var jpBundle = opts.jp || {};
     var bjpol = jpBundle.baseline_jupiter_policy || {};
     var jupLab = String(bjpol.active_label || 'JUPv2').trim() || 'JUPv2';
-    var jupTagForCell =
+    // Persisted policy_evaluations only — never use active_label as a fake historical tag.
+    var jupResolved =
       c && c.baseline_jupiter_policy_tag != null && String(c.baseline_jupiter_policy_tag).trim() !== ''
         ? String(c.baseline_jupiter_policy_tag).trim()
-        : jupLab;
+        : null;
+    var jupChipDisplay = jupResolved != null ? jupResolved : '\u2014';
+    var jupBinanceRef = jupResolved != null ? jupResolved : jupLab;
     var binanceDotHtml = '';
     var binanceRestHtml = '';
     var bmd = opts.binanceMd || {};
     var pr = bmd.public_rest_ping || {};
     var cov = bmd.kline_quote_volume_coverage || {};
-    if (baselineLane && jupLabelUsesBinanceStrategyBars(jupTagForCell)) {
+    if (baselineLane && jupLabelUsesBinanceStrategyBars(jupBinanceRef)) {
       var bVolOk = c && c.binance_kline_volume_ok === true;
       binanceDotHtml =
         '<span tabindex="0" role="button" class="tc-binance-vol-dot ' +
@@ -1933,8 +1936,8 @@
       ? '<div class="tc-jup-policy-row">' +
         binanceDotHtml +
         binanceRestHtml +
-        '<div class="tc-jup-policy-chip" title="Jupiter baseline policy version">' +
-        esc(jupTagForCell) +
+        '<div class="tc-jup-policy-chip" title="Policy version stored for this bar (policy_evaluations). Em dash = no row yet.">' +
+        esc(jupChipDisplay) +
         '</div></div>'
       : '';
     // One trade, one live surface: never repeat OPEN/HOLDING on earlier columns when ledger says position is open.
@@ -2042,7 +2045,7 @@
       !posOpenBaseline &&
       !entryHas &&
       baselineLane &&
-      jupLabelUsesBinanceStrategyBars(jupTagForCell) &&
+      jupLabelUsesBinanceStrategyBars(jupBinanceRef) &&
       typeof opts.colIndex === 'number' &&
       typeof opts.nEv === 'number' &&
       opts.colIndex === opts.nEv - 1
@@ -2472,7 +2475,7 @@
           }
         } catch (e) {}
         meta.textContent =
-          'Last 5 closed baseline trades — same columns as Reports, newest exit first. Rows come only from execution_ledger (closed fills), not from live tile “would trade” text. If someone saw a JUPv3/JUPv4 signal on the tile but no new row here, the tile is policy evaluation (paper), while this strip is lifecycle ledger closes only. Use Reports for full history, CSV, and filters.' +
+          'Last 5 closed baseline trades — same columns as Reports, newest exit first. Rows come only from execution_ledger (closed fills), not from live tile “would trade” text. JUP column = policy at entry from policy_evaluations (not the dropdown); em dash means no matching row. If someone saw a JUPv3/JUPv4 signal on the tile but no new row here, the tile is policy evaluation (paper), while this strip is lifecycle ledger closes only. Use Reports for full history, CSV, and filters.' +
           snapAt;
       }
       var h = '';
@@ -2513,7 +2516,7 @@
         var jupTag =
           r.baseline_jupiter_policy_tag != null && String(r.baseline_jupiter_policy_tag).trim() !== ''
             ? String(r.baseline_jupiter_policy_tag).trim()
-            : 'JUPv2';
+            : '\u2014';
         var tid =
           r.trade_id != null && String(r.trade_id).trim() !== '' ? String(r.trade_id) : '—';
         var entryMei =

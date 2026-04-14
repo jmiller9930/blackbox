@@ -329,6 +329,7 @@ from modules.anna_training.execution_ledger import (
     baseline_entry_policy_label_for_authority,
     baseline_jupiter_policy_label_for_slot,
     baseline_jupiter_policy_tag_from_signal_mode,
+    baseline_jupiter_policy_tag_from_signal_mode_optional,
     connect_ledger,
     default_execution_ledger_path,
     ensure_execution_ledger_schema,
@@ -2626,7 +2627,7 @@ def _ledger_context_parsed(ledger_row: dict[str, Any]) -> dict[str, Any]:
 def baseline_jupiter_policy_tag_for_execution_trade(
     conn: sqlite3.Connection,
     ledger_row: dict[str, Any],
-) -> str:
+) -> str | None:
     """
     Strip/report JUP label for a baseline ``execution_trades`` row.
 
@@ -2657,10 +2658,10 @@ def baseline_jupiter_policy_tag_for_execution_trade(
             conn, m, prefer_active_slot=False
         )
         if pol:
-            return baseline_jupiter_policy_tag_from_signal_mode(
+            return baseline_jupiter_policy_tag_from_signal_mode_optional(
                 str((pol or {}).get("signal_mode") or "")
             )
-    return baseline_jupiter_policy_tag_from_signal_mode("")
+    return None
 
 
 def _entry_sl_tp_from_open_or_context(
@@ -4674,7 +4675,11 @@ def build_trade_chain_payload(
             if mid_rs and tile_v3_gates_axis.get(mid_rs):
                 rs["jupiter_v3_gates"] = tile_v3_gates_axis[mid_rs]
             pol_rs = (
-                fetch_baseline_policy_evaluation_for_market_event(conn, mid_rs) if mid_rs else None
+                fetch_baseline_policy_evaluation_for_market_event(
+                    conn, mid_rs, prefer_active_slot=False
+                )
+                if mid_rs
+                else None
             )
             _pf_rs = pol_rs.get("features") if isinstance(pol_rs, dict) else None
             if mid_rs and mid_rs in tile_binance_axis:
@@ -4688,7 +4693,13 @@ def build_trade_chain_payload(
             br["jupiter_tile_narrative"] = tile_narr.get(mid_k, "") if mid_k else ""
             if mid_k and tile_v3_gates_axis.get(mid_k):
                 br["jupiter_v3_gates"] = tile_v3_gates_axis[mid_k]
-            pol_br = fetch_baseline_policy_evaluation_for_market_event(conn, mid_k) if mid_k else None
+            pol_br = (
+                fetch_baseline_policy_evaluation_for_market_event(
+                    conn, mid_k, prefer_active_slot=False
+                )
+                if mid_k
+                else None
+            )
             _pf_br = pol_br.get("features") if isinstance(pol_br, dict) else None
             if mid_k and mid_k in tile_binance_axis:
                 br["binance_kline_volume_ok"] = bool(tile_binance_axis.get(mid_k))
@@ -4814,7 +4825,7 @@ def build_trade_chain_payload(
                     pol_cell = fetch_baseline_policy_evaluation_for_market_event(
                         conn, mid_k, prefer_active_slot=False
                     )
-                    d["baseline_jupiter_policy_tag"] = baseline_jupiter_policy_tag_from_signal_mode(
+                    d["baseline_jupiter_policy_tag"] = baseline_jupiter_policy_tag_from_signal_mode_optional(
                         str((pol_cell or {}).get("signal_mode") or "")
                     )
                     if mid_k in tile_binance_axis:

@@ -425,6 +425,17 @@ def baseline_jupiter_policy_tag_from_signal_mode(signal_mode: str | None) -> str
     return "JUPv2"
 
 
+def baseline_jupiter_policy_tag_from_signal_mode_optional(signal_mode: str | None) -> str | None:
+    """
+    Same mapping as :func:`baseline_jupiter_policy_tag_from_signal_mode`, but returns ``None`` when
+    ``signal_mode`` is missing. Use for operator UI so we do **not** label unknown bars as JUPv2.
+    """
+    sm = (signal_mode or "").strip()
+    if not sm:
+        return None
+    return baseline_jupiter_policy_tag_from_signal_mode(sm)
+
+
 def entry_policy_authority_from_signal_features(sf: dict[str, Any] | None) -> str:
     """
     Classify **which evaluator produced the entry** from persisted ``signal_features_snapshot``
