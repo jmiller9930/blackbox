@@ -1,21 +1,52 @@
 # seanv3 (Docker)
 
-## What this project is for
+## Architectural principle (authoritative)
 
-**Purpose:** A **parity check** for **Blackbox**, not a second runtime that “drives” Blackbox.
+**BlackBox is one trade system. SeanV3 is another.** They must be designed so mismatches can be attributed to **one** system or the other, not to a fuzzy “parity harness.”
 
-- **Sean V3** (policy + this ingest sidecar) and **Blackbox** are **independent** processes. There is **no** direct connection between them.
-- **Expected alignment:** The **same strategy** (Sean V3 / Jupiter_3) and the **same Binance API data** (same bars for the same `market_event_id` / candle open) should produce **matching decisions**:
-  - If Sean V3 **would trade** on a bar, Blackbox should **also** show a trade (or equivalent “trade permitted” / execution path) for that policy lane.
-  - If Sean V3 **would not trade**, Blackbox should **not** trade on that bar for that lane — **both flat** is the “in sync” outcome.
+**SeanV3** must be a **standalone paper trade engine**: its own market data, its own evaluation, its own **trade lifecycle** (open → manage → close with Sean V3 exit rules), its own **ledger and reporting**. Only **after** that exists should **comparison** to BlackBox run as a **separate layer**, treating SeanV3 as an **independent reference path**, not as an extension of BlackBox.
 
-**How you prove it:** Compare **this service’s** SQLite + NDJSON (`capture/`) to Blackbox **`binance_strategy_bars_5m`**, **`policy_evaluations`**, and ledger rows (see **`modules/anna_training/jup_v3_parity_compare.py`** and repo parity docs). Mismatches mean Blackbox or ingest is **out of parity**, not that the container is “wrong” by default.
+The **operator TUI** (`scripts/operator/…`) sits **above** both: it can show health, paper P&amp;L, and **diff** BlackBox vs SeanV3 once both systems expose comparable artifacts.
+
+**Design risk to avoid:** Treating SeanV3 as a thin ingest + stub that only answers isolated bar questions. That cannot produce trustworthy win/loss or P&amp;L, and it blames ambiguity on “parity” when the real gap is **incomplete SeanV3 structure**.
 
 ---
 
-**What it does technically:** **Parity analog** — polls **Binance REST klines** over the **host** network (WireGuard / Proton **split-tunnel** for `api.binance.com`), optionally **connects a Solana wallet** (pubkey only in DB — secrets never logged), runs **paper-only** logging (no Jupiter program calls, no signed txs), and persists **analog data** to onboard **SQLite** beside NDJSON.
+## Target components (SeanV3 as its own system)
 
-**Sean / Jupiter_3 authoritative policy logic** stays in **`modules/anna_training/jupiter_3_sean_policy.py`** inside Blackbox; this container records **ingest + analog events** so you can diff against Blackbox.
+| Layer | Requirement | Role in a complete SeanV3 |
+|--------|-------------|---------------------------|
+| **Market data** | Ingest and store **Binance 5m candles** in a **stable local store** with a **consistent `market_event_id`** (and aligned candle identity with BlackBox’s bar keying for later comparison). | Canonical bar tape for the engine. |
+| **Strategy evaluation** | Run **Sean V3 logic** against **that stored data** and emit **trade decisions** (enter / hold / exit / no-trade) **inside SeanV3**, without depending on BlackBox runtime for the decision. | May share a **spec** with `modules/anna_training/jupiter_3_sean_policy.py`, but the **running engine** is SeanV3-owned. |
+| **Trade lifecycle** | **Open** a position object, **track** it, **close** per Sean V3 exit rules — not only bar-level yes/no. | Required for realistic P&amp;L and win/loss. |
+| **Parity ledger** | Append **trade records** with enough detail for analysis: entry time/price, side, exit time/price, gross P&amp;L, optional net P&amp;L, result classification, strategy metadata. | Source of truth for SeanV3 outcomes. |
+| **Reporting** | Trade list, win/loss counts, win rate, cumulative P&amp;L, per-trade detail (and optionally max drawdown later). | Operator and automation-facing. |
+| **Comparison** | **Last** — diff SeanV3 artifacts vs BlackBox **after** the above. | Uses the same comparison tools (`jup_v3_parity_compare`, etc.) as **reference vs reference**, not “helper vs master.” |
+
+---
+
+## Current implementation status (honest)
+
+What exists **today** in this folder is **not yet** the full standalone engine above. It is **partial**:
+
+| Layer | Status today |
+|------|----------------|
+| **Market data** | **Partial:** Binance klines poll + backfill into `sean_binance_kline_poll`, `market_event_id` helper in `app.mjs`. |
+| **Strategy evaluation** | **Not standalone:** Policy truth for parity has been **Python-authoritative** (`jupiter_3_sean_policy.py` in BlackBox); this container does **not** yet run the full Sean V3 evaluator as a first-class engine loop. |
+| **Trade lifecycle** | **Not implemented:** paper path is **ingest + stub / analog events**, not open/close position lifecycle with exit rules. |
+| **Parity ledger** | **Partial:** `paper_trade_log` is event-oriented, not a full **trade ledger** with entry/exit/P&amp;L as specified above. |
+| **Reporting** | **External / ad hoc:** NDJSON + SQLite queries; no dedicated SeanV3 reporting module yet. |
+| **Comparison** | **Available** against BlackBox for **bars / stub signals** — **premature** as a verdict on “strategy parity” until lifecycle + ledger exist. |
+
+**Implementation direction:** Evolve this repo into the **self-contained paper engine** (storage, decisions, lifecycle, ledger, reporting), **then** lock comparison as an independent layer.
+
+---
+
+## What this folder is for (operator + engineering)
+
+**Purpose:** Deploy and run the **SeanV3 stack** on the lab host: **Binance REST** over **host** routing (WireGuard / Proton split-tunnel), optional wallet pubkey, **paper-only** (no signed chain txs), local **SQLite** + NDJSON under `capture/`.
+
+**Historical note:** Earlier docs emphasized “parity analog” **ingest** first. The **architectural target** is now the **full SeanV3 system** in the table above; ingest remains the foundation.
 
 **Parent index:** [`../README.md`](../README.md) — VPN scripts, Python parity commands, fast path.
 
