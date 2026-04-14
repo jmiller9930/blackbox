@@ -29,6 +29,7 @@ Optional local **TypeScript** experiments (`superjup.ts`) are separate and not r
 | Doc | What it covers |
 |-----|----------------|
 | **[`seanv3/README.md`](seanv3/README.md)** | What the image is; **path on clawbot** `~/blackbox/vscode-test/seanv3`; **deploy** (`git pull`, `docker compose up -d --build`); **`network_mode: host`**; logs; **`capture/`** (NDJSON + SQLite); **`run-backfill-clawbot.sh`**; **`jup_v3_parity_compare`** command |
+| **[`seanv3/SEANV3PY.md`](seanv3/SEANV3PY.md)** | Operator script **`seanv3py`** — deploy / status / logs / stop / restart end-to-end |
 | **[`seanv3/TURNOVER_NEXT_STEPS.md`](seanv3/TURNOVER_NEXT_STEPS.md)** | Handoff: `sean_parity.db`, architect mechanical checks, parity command, poller / 451 notes |
 | **[`seanv3/docker-compose.yml`](seanv3/docker-compose.yml)** | Service env, volumes, inline comments |
 

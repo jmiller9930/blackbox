@@ -1,0 +1,111 @@
+#!/usr/bin/env bash
+# seanv3py — Sean V3 (Docker) operator: deploy, status, logs, stop, restart.
+# Run on clawbot from repo checkout, or anywhere if BLACKBOX_REPO is set.
+set -euo pipefail
+
+SEAN_DIR="$(cd "$(dirname "$0")" && pwd)"
+REPO_ROOT="$(cd "$SEAN_DIR/../.." && pwd)"
+
+usage() {
+  cat <<'EOF'
+Usage: seanv3py <command> [options]
+
+  deploy     git pull (optional) + docker compose build + up -d
+  status     docker compose ps
+  logs       docker compose logs -f (follow; Ctrl+C stops tailing only)
+  stop       docker compose down
+  restart    stop then deploy (no git pull unless --pull)
+  pull       git pull origin main only (from repo root)
+
+Options (deploy / restart):
+  --pull     Run git pull origin main before compose (default: off for deploy)
+
+Environment:
+  BLACKBOX_REPO   Override repo root (default: parent of vscode-test/seanv3)
+
+Examples:
+  ./seanv3py deploy
+  ./seanv3py deploy --pull
+  ./seanv3py status
+  ./seanv3py logs
+
+EOF
+}
+
+cd "$SEAN_DIR"
+
+repo_root() {
+  if [[ -n "${BLACKBOX_REPO:-}" ]]; then
+    echo "${BLACKBOX_REPO}"
+  else
+    echo "$REPO_ROOT"
+  fi
+}
+
+do_pull() {
+  local root
+  root="$(repo_root)"
+  echo "[seanv3py] git pull in $root"
+  git -C "$root" pull origin main
+}
+
+do_compose() {
+  # shellcheck disable=SC2068
+  docker compose "$@"
+}
+
+cmd="${1:-}"
+shift || true
+
+case "$cmd" in
+  ""|-h|--help|help)
+    usage
+    exit 0
+    ;;
+  deploy)
+    pull_flag=0
+    if [[ "${1:-}" == "--pull" ]]; then
+      pull_flag=1
+      shift || true
+    fi
+    if [[ "$pull_flag" -eq 1 ]]; then
+      do_pull
+    fi
+    echo "[seanv3py] docker compose build + up -d ($SEAN_DIR)"
+    do_compose build
+    do_compose up -d
+    echo "[seanv3py] done. Status:"
+    do_compose ps
+    ;;
+  status|ps)
+    do_compose ps -a
+    ;;
+  logs)
+    do_compose logs -f
+    ;;
+  stop|down)
+    echo "[seanv3py] docker compose down"
+    do_compose down
+    ;;
+  restart)
+    pull_flag=0
+    if [[ "${1:-}" == "--pull" ]]; then
+      pull_flag=1
+    fi
+    do_compose down
+    if [[ "$pull_flag" -eq 1 ]]; then
+      do_pull
+    fi
+    do_compose build
+    do_compose up -d
+    do_compose ps
+    ;;
+  pull)
+    do_pull
+    ;;
+  *)
+    echo "Unknown command: $cmd" >&2
+    usage
+    exit 1
+    ;;
+esac

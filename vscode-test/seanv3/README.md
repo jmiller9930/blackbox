@@ -47,6 +47,10 @@
 
 ### Deploy / update
 
+**One-command helper (recommended):** [`seanv3py`](./seanv3py) — see **[`SEANV3PY.md`](./SEANV3PY.md)** (`./seanv3py deploy --pull`, `status`, `logs`, `stop`, etc.).
+
+Manual:
+
 ```bash
 cd ~/blackbox && git pull origin main
 cd vscode-test/seanv3
