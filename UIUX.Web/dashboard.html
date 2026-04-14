@@ -219,6 +219,15 @@
     .bts-t tbody tr.bts-click-row { cursor: pointer; }
     .bts-t tbody tr.bts-click-row:hover { background: #f0f9ff; }
     .bts-muted { color: var(--muted); font-weight: 500; }
+    .bts-dual {
+      display: flex;
+      flex-direction: column;
+      gap: 0.06rem;
+      line-height: 1.2;
+      font-size: 0.62rem;
+    }
+    .bts-dual-line { display: block; }
+    .bts-dual-utc { color: var(--muted); font-weight: 600; font-size: 0.58rem; }
     /* Recent baseline strip: same cell semantics as Reports (baseline_trades.html bt-rpt). */
     .bts-t.bt-rpt-dash .bt-mono {
       font-family: ui-monospace, monospace;
@@ -1176,9 +1185,9 @@
               <tr>
                 <th title="Lifecycle key from entry bar + mode (bl_lc_…); not the same string as exit market_event_id.">trade_id</th>
                 <th title="Entry bar market_event_id when recorded (lifecycle); aligns trade_id with the opening candle.">Entry MEI</th>
-                <th title="When the position opened (ledger entry time, UTC).">Open (UTC)</th>
+                <th title="When the position opened — browser local time on first line, UTC on second (same instant).">Open (local · UTC)</th>
                 <th title="How long this position was open until exit (closed fills only). Not lifecycle held (open position) — that is on the dashboard trade chain.">Duration</th>
-                <th title="When the position closed (UTC).">Exit (UTC)</th>
+                <th title="When the position closed — browser local time on first line, UTC on second (same instant).">Exit (local · UTC)</th>
                 <th title="Exit reason and outcome.">Status</th>
                 <th title="Symbol.">Sym</th>
                 <th title="Timeframe.">TF</th>
@@ -1504,6 +1513,36 @@
   function btsRptFmtPx(n) {
     if (n == null || n === '' || (typeof n === 'number' && isNaN(n))) return '—';
     return Number(n).toFixed(4);
+  }
+  /** Ledger UTC ISO → two lines: browser local + UTC Zulu (same instant as trade chain headers). */
+  function btsFmtOpenExitDual(isoUtc) {
+    if (isoUtc == null || String(isoUtc).trim() === '' || String(isoUtc) === '—') return '—';
+    var s = String(isoUtc).trim();
+    var d = new Date(s);
+    if (isNaN(d.getTime())) return esc(s);
+    var localFmt = new Intl.DateTimeFormat(undefined, {
+      month: 'short',
+      day: 'numeric',
+      hour: 'numeric',
+      minute: '2-digit',
+      hour12: true,
+      timeZoneName: 'short',
+    });
+    var utcFmt = new Intl.DateTimeFormat('en-GB', {
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: false,
+      timeZone: 'UTC',
+    });
+    var utcStr = utcFmt.format(d).replace(/\s/g, '') + ' UTC';
+    return (
+      '<span class="bts-dual" title="Same instant: your browser locale (e.g. Central) and UTC; ledger stores UTC.">' +
+      '<span class="bts-dual-line">' +
+      esc(localFmt.format(d)) +
+      '</span><span class="bts-dual-line bts-dual-utc">' +
+      esc(utcStr) +
+      '</span></span>'
+    );
   }
   function btsRptFmtMae(m) {
     if (m == null || (typeof m === 'number' && isNaN(m))) return '—';
@@ -2370,7 +2409,7 @@
           }
         } catch (e) {}
         meta.textContent =
-          'Last 5 closed baseline trades — same columns and labels as the Reports dashboard (newest exit first). Use Reports for date range, CSV, and the full trade snapshot modal.' +
+          'Last 5 closed baseline trades — same columns as Reports, newest exit first. Rows come only from execution_ledger (closed fills), not from live tile “would trade” text. If someone saw a JUPv3 signal on the tile but no new row here, the tile is policy evaluation (paper), while this strip is lifecycle ledger closes only. Use Reports for full history, CSV, and filters.' +
           snapAt;
       }
       var h = '';
@@ -2469,17 +2508,17 @@
           '">' +
           esc(entryMei) +
           '</td><td class="bt-mono" title="' +
-          escAttr('Position opened (UTC).') +
+          escAttr('Position opened — local (browser) and UTC (same instant).') +
           '">' +
-          esc(openUtc) +
+          btsFmtOpenExitDual(openUtc) +
           '</td><td title="' +
           escAttr('Duration: entry to exit for this close (not open-position held).') +
           '">' +
           esc(held) +
           '</td><td class="bt-mono" title="' +
-          escAttr('Position closed (UTC).') +
+          escAttr('Position closed — local (browser) and UTC (same instant).') +
           '">' +
-          esc(exitUtc) +
+          btsFmtOpenExitDual(exitUtc) +
           '</td><td title="' +
           escAttr('Exit outcome label.') +
           '">' +
