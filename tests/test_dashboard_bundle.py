@@ -977,3 +977,62 @@ def test_execution_trade_policy_tag_prefers_entry_bar_over_exit(tmp_path: Path) 
     conn.close()
 
 
+def test_execution_trade_policy_tag_falls_back_to_context_signal_mode(tmp_path: Path) -> None:
+    """When policy_evaluations rows are absent, use bridge-persisted context_snapshot.signal_mode."""
+    exit_mid = "SOL-PERP_5m_2026-07-01T14:00:00Z"
+    ledger = tmp_path / "el.db"
+    conn = connect_ledger(ledger)
+    ensure_execution_ledger_schema(conn)
+    ctx = json.dumps(
+        {
+            "signal_mode": SIGNAL_MODE_JUPITER_4,
+            "lifecycle": "exit",
+            "entry_market_event_id": "SOL-PERP_5m_2026-07-01T12:00:00Z",
+        }
+    )
+    conn.execute(
+        """
+        INSERT INTO execution_trades (
+            trade_id, strategy_id, lane, mode, market_event_id, symbol, timeframe,
+            side, entry_time, entry_price, size, exit_time, exit_price, exit_reason,
+            pnl_usd, context_snapshot_json, notes, trace_id, schema_version, created_at_utc
+        ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+        """,
+        (
+            "tr_ctx_sm",
+            "baseline",
+            "baseline",
+            "paper",
+            exit_mid,
+            "SOL-PERP",
+            "5m",
+            "long",
+            "2026-07-01T12:00:00Z",
+            100.0,
+            1.0,
+            "2026-07-01T14:05:00Z",
+            101.0,
+            "TAKE_PROFIT",
+            1.0,
+            ctx,
+            "fixture",
+            None,
+            "execution_trade_v1",
+            "2026-07-01T14:05:01Z",
+        ),
+    )
+    conn.commit()
+    cur = conn.execute(
+        """
+        SELECT lane, strategy_id, market_event_id, side, symbol, timeframe, entry_time, entry_price, exit_price,
+               exit_reason, exit_time, size, pnl_usd, created_at_utc, trade_id, mode, context_snapshot_json
+        FROM execution_trades WHERE trade_id = ?
+        """,
+        ("tr_ctx_sm",),
+    )
+    cols = [d[0] for d in cur.description]
+    ledger_row = dict(zip(cols, cur.fetchone()))
+    assert baseline_jupiter_policy_tag_for_execution_trade(conn, ledger_row) == "JUPv4"
+    conn.close()
+
+

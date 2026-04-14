@@ -2661,6 +2661,26 @@ def baseline_jupiter_policy_tag_for_execution_trade(
             return baseline_jupiter_policy_tag_from_signal_mode_optional(
                 str((pol or {}).get("signal_mode") or "")
             )
+    # Lifecycle bridge persists ``signal_mode`` on ``context_snapshot_json`` (close path). Use when
+    # ``policy_evaluations`` is missing for legacy rows so the strip still shows the engine that ran.
+    sm_ctx = str(ctx.get("signal_mode") or "").strip()
+    tag_ctx = baseline_jupiter_policy_tag_from_signal_mode_optional(sm_ctx)
+    if tag_ctx:
+        return tag_ctx
+    if pos_open:
+        sm_po = str(pos_open.get("signal_mode") or "").strip()
+        tag_po = baseline_jupiter_policy_tag_from_signal_mode_optional(sm_po)
+        if tag_po:
+            return tag_po
+        sf = pos_open.get("signal_features_snapshot")
+        if isinstance(sf, dict):
+            auth = entry_policy_authority_from_signal_features(sf)
+            if auth == "jupiter_4_sean":
+                return "JUPv4"
+            if auth == "jupiter_3_sean":
+                return "JUPv3"
+            if auth == "jupiter_2_sean":
+                return "JUPv2"
     return None
 
 
