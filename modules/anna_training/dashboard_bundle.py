@@ -87,6 +87,17 @@ def _ensure_market_runtime_path() -> None:
         sys.path.insert(0, str(rt))
 
 
+def _finalize_five_m_ingest_freshness(out: dict[str, Any], use_binance: bool) -> dict[str, Any]:
+    """Attach JUPv3 contract fields; V2 stays ``freshness_contract_applies: false``."""
+    if use_binance:
+        from modules.anna_training.jup_v3_freshness_contract import enrich_jup_v3_five_m_freshness
+
+        enrich_jup_v3_five_m_freshness(out)
+    else:
+        out["freshness_contract_applies"] = False
+    return out
+
+
 def _five_m_ingest_freshness(
     mpath: Path | None,
     *,
@@ -111,6 +122,7 @@ def _five_m_ingest_freshness(
         "canonical_symbol": canonical_symbol,
         "baseline_policy_slot": (baseline_policy_slot or "").strip() or None,
         "freshness_source": "binance_strategy_bars_5m" if use_binance else "market_bars_5m",
+        "freshness_contract_applies": False,
         "expected_last_closed_candle_open_utc": None,
         "db_newest_closed_candle_open_utc": None,
         "closed_bucket_lag": None,
@@ -122,12 +134,12 @@ def _five_m_ingest_freshness(
         from market_data.canonical_time import format_candle_open_iso_z, last_closed_candle_open_utc
     except Exception:
         out["notes"] = "market_data_runtime_unavailable"
-        return out
+        return _finalize_five_m_ingest_freshness(out, use_binance)
     exp = last_closed_candle_open_utc()
     out["expected_last_closed_candle_open_utc"] = format_candle_open_iso_z(exp)
     if not mpath or not mpath.is_file():
         out["notes"] = "market_db_missing"
-        return out
+        return _finalize_five_m_ingest_freshness(out, use_binance)
     try:
         conn = sqlite3.connect(str(mpath))
         try:
@@ -137,7 +149,7 @@ def _five_m_ingest_freshness(
                 )
                 if cur.fetchone() is None:
                     out["notes"] = "binance_strategy_bars_5m_missing_run_schema"
-                    return out
+                    return _finalize_five_m_ingest_freshness(out, use_binance)
                 row = conn.execute(
                     """
                     SELECT MAX(candle_open_utc) FROM binance_strategy_bars_5m
@@ -157,16 +169,16 @@ def _five_m_ingest_freshness(
             conn.close()
     except Exception as exc:
         out["notes"] = f"query_error:{exc!r}"
-        return out
+        return _finalize_five_m_ingest_freshness(out, use_binance)
     raw_max = row[0] if row else None
     if raw_max is None or str(raw_max).strip() == "":
         out["notes"] = "no_closed_bars_for_symbol"
-        return out
+        return _finalize_five_m_ingest_freshness(out, use_binance)
     out["db_newest_closed_candle_open_utc"] = str(raw_max).strip()
     db_open = _parse_iso_ts(str(raw_max))
     if db_open is None:
         out["notes"] = "db_max_open_parse_failed"
-        return out
+        return _finalize_five_m_ingest_freshness(out, use_binance)
     if db_open.tzinfo is None:
         db_open = db_open.replace(tzinfo=timezone.utc)
     delta_sec = (exp - db_open.astimezone(timezone.utc)).total_seconds()
@@ -174,11 +186,11 @@ def _five_m_ingest_freshness(
         out["notes"] = "db_newer_than_clock"
         out["closed_bucket_lag"] = 0
         out["aligns_with_closed_strip"] = True
-        return out
+        return _finalize_five_m_ingest_freshness(out, use_binance)
     lag = int(delta_sec // 300)
     out["closed_bucket_lag"] = max(0, lag)
     out["aligns_with_closed_strip"] = lag == 0
-    return out
+    return _finalize_five_m_ingest_freshness(out, use_binance)
 
 
 def _parse_iso_ts(ts: str | None) -> datetime | None:
@@ -5019,6 +5031,17 @@ def build_dashboard_bundle(
         llm_pf = {}
     mdb_s = str((tc.get("market_db_path") or "") or "").strip() or None
 
+    try:
+        from modules.anna_training.jup_v3_freshness_contract import build_jup_v3_timeline_proof
+
+        jup_v3_timeline_proof = build_jup_v3_timeline_proof(
+            trade_chain=tc if isinstance(tc, dict) else {},
+            jupiter_policy_snapshot=jupiter_policy_snapshot if isinstance(jupiter_policy_snapshot, dict) else {},
+            market_db_path=mdb_for_snap,
+        )
+    except Exception:
+        jup_v3_timeline_proof = None
+
     def _bundle_parallel_intelligence_visibility() -> dict[str, Any]:
         try:
             from modules.anna_training.intelligence_visibility import build_intelligence_visibility
@@ -5116,4 +5139,5 @@ def build_dashboard_bundle(
         "intelligence_visibility": intelligence_visibility,
         "learning_proof": learning_proof,
         "jupiter_policy_snapshot": jupiter_policy_snapshot,
+        "jup_v3_timeline_proof": jup_v3_timeline_proof,
     }

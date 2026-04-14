@@ -360,9 +360,18 @@
       flex: 1 1 100%;
       font-size: 0.62rem;
       font-weight: 700;
-      color: #b45309;
       line-height: 1.35;
       max-width: 56rem;
+    }
+    .tc-sync-banner.tc-sync-ok {
+      color: #0f766e;
+    }
+    .tc-sync-banner.tc-sync-warn {
+      color: #b45309;
+    }
+    .tc-sync-banner.tc-sync-fault {
+      color: #b91c1c;
+      font-weight: 800;
     }
     .tc-anna-toggle {
       flex: 0 0 auto;
@@ -2781,6 +2790,7 @@
   function renderBarSyncBanner(tc) {
     var el = $('tc-sync-banner');
     if (!el) return;
+    el.classList.remove('tc-sync-warn', 'tc-sync-fault', 'tc-sync-ok');
     var ff = tc && tc.five_m_ingest_freshness;
     if (!ff || ff.closed_bucket_lag == null) {
       el.hidden = true;
@@ -2788,17 +2798,58 @@
       return;
     }
     var lag = Number(ff.closed_bucket_lag);
-    if (!isFinite(lag) || lag <= 0) {
+    if (!isFinite(lag) || lag < 0) {
+      el.hidden = true;
+      el.textContent = '';
+      return;
+    }
+    var sev = String(ff.freshness_severity || '');
+    var contract = ff.freshness_contract_applies === true;
+    var allowed = ff.allowed_closed_bucket_lag_max;
+    var src = String(ff.freshness_source || 'market_bars_5m');
+    var hintBinance = 'Check binance-strategy-bars-sync, catch-up logs, and BLACKBOX_MARKET_DATA_PATH.';
+    var hintPyth = 'Check pyth-sse-ingest and BLACKBOX_MARKET_DATA_PATH.';
+    if (lag === 0) {
       el.hidden = true;
       el.textContent = '';
       return;
     }
     el.hidden = false;
-    var src = String(ff.freshness_source || 'market_bars_5m');
-    var hint =
-      src === 'binance_strategy_bars_5m'
-        ? 'Check binance-strategy-bars-sync and BLACKBOX_MARKET_DATA_PATH.'
-        : 'Check pyth-sse-ingest and BLACKBOX_MARKET_DATA_PATH.';
+    if (contract && sev === 'warning') {
+      el.classList.add('tc-sync-warn');
+      el.textContent =
+        'Bar sync (within JUPv3 contract): ' +
+        src +
+        ' is ' +
+        lag +
+        ' closed bucket(s) behind canonical last-closed (allowed ≤ ' +
+        String(allowed != null ? allowed : '—') +
+        '). DB newest open ' +
+        String(ff.db_newest_closed_candle_open_utc || '—') +
+        ' vs expected ' +
+        String(ff.expected_last_closed_candle_open_utc || '—') +
+        '. ' +
+        (src === 'binance_strategy_bars_5m' ? hintBinance : hintPyth);
+      return;
+    }
+    if (contract && sev === 'fault') {
+      el.classList.add('tc-sync-fault');
+      el.textContent =
+        'Bar sync FAULT (exceeds JUPv3 contract): ' +
+        src +
+        ' lag=' +
+        lag +
+        ' buckets (allowed max ' +
+        String(allowed != null ? allowed : '—') +
+        '). DB ' +
+        String(ff.db_newest_closed_candle_open_utc || '—') +
+        ' vs expected last-closed ' +
+        String(ff.expected_last_closed_candle_open_utc || '—') +
+        '. ' +
+        (src === 'binance_strategy_bars_5m' ? hintBinance : hintPyth);
+      return;
+    }
+    el.classList.add('tc-sync-warn');
     el.textContent =
       'Bar sync warning: ' +
       src +
@@ -2809,7 +2860,7 @@
       ' vs expected last-closed open ' +
       String(ff.expected_last_closed_candle_open_utc || '—') +
       '). ' +
-      hint;
+      (src === 'binance_strategy_bars_5m' ? hintBinance : hintPyth);
   }
 
   function renderTC(tc, bundle) {

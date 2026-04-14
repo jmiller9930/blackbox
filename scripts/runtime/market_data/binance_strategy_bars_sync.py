@@ -15,6 +15,14 @@ Environment:
 ``binance_strategy_bars_sync_loop.py`` (see ``UIUX.Web/docker-compose.yml`` service
 ``binance-strategy-bars-sync``) or an equivalent cron/systemd job; otherwise the table
 stalls after the last manual run.
+
+**Catch-up:** After the primary fetch, :func:`_catch_up_binance_strategy_to_clock` runs so a missed
+closed bucket (e.g. long loop interval) is repaired immediately instead of waiting for the next cycle.
+
+Environment (additional):
+  BLACKBOX_BINANCE_STRATEGY_BACKFILL_MAX_ROUNDS — max catch-up fetch rounds per run (default ``12``).
+``BLACKBOX_JUPV3_MAX_ACCEPTABLE_CLOSED_BUCKET_LAG`` is consumed by the dashboard bundle contract
+(``modules/anna_training/jup_v3_freshness_contract.py``), not this script.
 """
 
 from __future__ import annotations
@@ -32,7 +40,12 @@ from typing import Any
 
 from market_data.binance_kline_volume import _ssl_context, binance_spot_symbol_for_canonical
 from market_data.canonical_instrument import CANONICAL_INSTRUMENT_SOL_PERP, TICK_SYMBOL_SOL_DEFAULT, TIMEFRAME_5M
-from market_data.canonical_time import candle_close_utc_exclusive, format_candle_open_iso_z
+from market_data.canonical_time import (
+    candle_close_utc_exclusive,
+    format_candle_open_iso_z,
+    last_closed_candle_open_utc,
+    parse_iso_zulu_to_utc,
+)
 from market_data.market_event_id import make_market_event_id
 from market_data.store import connect_market_db, ensure_market_schema, upsert_binance_strategy_bar_5m
 
@@ -43,6 +56,14 @@ def _strategy_kline_limit() -> int:
     except ValueError:
         n = 1000
     return max(1, min(1000, n))
+
+
+def _backfill_max_rounds() -> int:
+    try:
+        n = int((os.environ.get("BLACKBOX_BINANCE_STRATEGY_BACKFILL_MAX_ROUNDS") or "12").strip())
+    except ValueError:
+        n = 12
+    return max(1, min(48, n))
 
 
 def _timeout_sec() -> float:
@@ -103,6 +124,140 @@ def _parse_kline_row(
     return dt, o, h, l, c, base_vol, qv
 
 
+def _upsert_closed_klines_from_raw(
+    conn: Any,
+    raw: list[list[Any]],
+    *,
+    canonical_symbol: str,
+    tick_symbol: str,
+    tf: str,
+    now_ms: int,
+) -> dict[str, Any]:
+    """Upsert closed 5m klines only; returns counts and max open written."""
+    n_ok = 0
+    n_skip = 0
+    max_open_written: str | None = None
+    for cand in raw:
+        if not isinstance(cand, (list, tuple)) or len(cand) < 8:
+            n_skip += 1
+            continue
+        try:
+            close_ms = int(cand[6])
+            if close_ms > now_ms:
+                n_skip += 1
+                continue
+        except (TypeError, ValueError):
+            pass
+        parsed = _parse_kline_row(cand)
+        if parsed is None:
+            n_skip += 1
+            continue
+        candle_open_utc, o, h, l, c, base_vol, qv = parsed
+        close_boundary = candle_close_utc_exclusive(candle_open_utc)
+        meid = make_market_event_id(
+            canonical_symbol=canonical_symbol,
+            candle_open_utc=candle_open_utc,
+            timeframe=tf,
+        )
+        co_iso = format_candle_open_iso_z(candle_open_utc)
+        upsert_binance_strategy_bar_5m(
+            conn,
+            canonical_symbol=canonical_symbol,
+            tick_symbol=tick_symbol,
+            timeframe=tf,
+            candle_open_utc=co_iso,
+            candle_close_utc=format_candle_open_iso_z(close_boundary),
+            market_event_id=meid,
+            open_px=o,
+            high_px=h,
+            low_px=l,
+            close_px=c,
+            volume_base_asset=base_vol,
+            quote_volume_usdt=qv,
+        )
+        n_ok += 1
+        max_open_written = co_iso
+    return {
+        "rows_upserted": n_ok,
+        "rows_skipped": n_skip,
+        "max_candle_open_utc_written": max_open_written,
+    }
+
+
+def _db_max_binance_strategy_open(conn: Any, canonical_symbol: str) -> str | None:
+    cur = conn.execute(
+        "SELECT name FROM sqlite_master WHERE type='table' AND name='binance_strategy_bars_5m'"
+    )
+    if cur.fetchone() is None:
+        return None
+    row = conn.execute(
+        """
+        SELECT MAX(candle_open_utc) FROM binance_strategy_bars_5m
+        WHERE timeframe = '5m' AND canonical_symbol = ?
+        """,
+        (canonical_symbol,),
+    ).fetchone()
+    if not row or row[0] is None:
+        return None
+    return str(row[0]).strip()
+
+
+def _catch_up_binance_strategy_to_clock(
+    conn: Any,
+    *,
+    binance_symbol: str,
+    canonical_symbol: str,
+    tick_symbol: str,
+    tf: str,
+) -> dict[str, Any]:
+    """
+    If DB newest closed bar is older than ``last_closed_candle_open_utc()``, fetch again with a
+    fresh ``endTime`` and upsert until caught up or max rounds. Does **not** replace periodic sync;
+    it repairs missed buckets between loop iterations.
+    """
+    exp = last_closed_candle_open_utc()
+    exp_iso = format_candle_open_iso_z(exp)
+    rounds = 0
+    total_ok = 0
+    max_r = _backfill_max_rounds()
+    last_db: str | None = None
+    while rounds < max_r:
+        db_raw = _db_max_binance_strategy_open(conn, canonical_symbol)
+        last_db = db_raw
+        if not db_raw:
+            break
+        try:
+            db_dt = parse_iso_zulu_to_utc(db_raw)
+        except ValueError:
+            break
+        if db_dt >= exp:
+            break
+        now_ms = int(time.time() * 1000)
+        lim = min(500, _strategy_kline_limit())
+        raw = fetch_binance_klines_5m_chunk(binance_symbol=binance_symbol, limit=lim, end_ms=now_ms)
+        if raw is None:
+            break
+        u = _upsert_closed_klines_from_raw(
+            conn,
+            raw,
+            canonical_symbol=canonical_symbol,
+            tick_symbol=tick_symbol,
+            tf=tf,
+            now_ms=now_ms,
+        )
+        total_ok += int(u.get("rows_upserted") or 0)
+        if int(u.get("rows_upserted") or 0) == 0:
+            break
+        rounds += 1
+    return {
+        "catch_up_rounds": rounds,
+        "catch_up_rows_upserted": total_ok,
+        "canonical_expected_last_closed_candle_open_utc": exp_iso,
+        "db_max_candle_open_utc_before": last_db,
+        "db_max_candle_open_utc_after": _db_max_binance_strategy_open(conn, canonical_symbol),
+    }
+
+
 def sync_binance_strategy_bars_into_db(
     *,
     db_path: Path,
@@ -124,55 +279,35 @@ def sync_binance_strategy_bars_into_db(
 
     tick_symbol = TICK_SYMBOL_SOL_DEFAULT
     tf = TIMEFRAME_5M
+    conn = connect_market_db(db_path)
     n_ok = 0
     n_skip = 0
     max_open_written: str | None = None
-    conn = connect_market_db(db_path)
+    catch_up: dict[str, Any] = {}
     try:
         ensure_market_schema(conn)
         now_ms = int(time.time() * 1000)
-        for cand in raw:
-            if not isinstance(cand, (list, tuple)) or len(cand) < 8:
-                n_skip += 1
-                continue
-            # Binance appends the **current** open candle as the last row; close time (index 6) is
-            # still in the future until the bucket closes. Skip — V3 evaluates **closed** bars only.
-            try:
-                close_ms = int(cand[6])
-                if close_ms > now_ms:
-                    n_skip += 1
-                    continue
-            except (TypeError, ValueError):
-                pass
-            parsed = _parse_kline_row(cand)
-            if parsed is None:
-                n_skip += 1
-                continue
-            candle_open_utc, o, h, l, c, base_vol, qv = parsed
-            close_boundary = candle_close_utc_exclusive(candle_open_utc)
-            meid = make_market_event_id(
-                canonical_symbol=canonical_symbol,
-                candle_open_utc=candle_open_utc,
-                timeframe=tf,
-            )
-            co_iso = format_candle_open_iso_z(candle_open_utc)
-            upsert_binance_strategy_bar_5m(
-                conn,
-                canonical_symbol=canonical_symbol,
-                tick_symbol=tick_symbol,
-                timeframe=tf,
-                candle_open_utc=co_iso,
-                candle_close_utc=format_candle_open_iso_z(close_boundary),
-                market_event_id=meid,
-                open_px=o,
-                high_px=h,
-                low_px=l,
-                close_px=c,
-                volume_base_asset=base_vol,
-                quote_volume_usdt=qv,
-            )
-            n_ok += 1
-            max_open_written = co_iso
+        u0 = _upsert_closed_klines_from_raw(
+            conn,
+            raw,
+            canonical_symbol=canonical_symbol,
+            tick_symbol=tick_symbol,
+            tf=tf,
+            now_ms=now_ms,
+        )
+        n_ok = int(u0.get("rows_upserted") or 0)
+        n_skip = int(u0.get("rows_skipped") or 0)
+        max_open_written = u0.get("max_candle_open_utc_written")
+        catch_up = _catch_up_binance_strategy_to_clock(
+            conn,
+            binance_symbol=sym,
+            canonical_symbol=canonical_symbol,
+            tick_symbol=tick_symbol,
+            tf=tf,
+        )
+        if catch_up.get("catch_up_rows_upserted"):
+            n_ok += int(catch_up.get("catch_up_rows_upserted") or 0)
+            max_open_written = catch_up.get("db_max_candle_open_utc_after") or max_open_written
     finally:
         conn.close()
 
@@ -186,6 +321,7 @@ def sync_binance_strategy_bars_into_db(
         "limit_requested": lim,
         "wall_clock_utc": wall_utc,
         "max_candle_open_utc_written": max_open_written,
+        "catch_up": catch_up,
     }
 
 

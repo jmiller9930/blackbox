@@ -125,6 +125,7 @@ def test_build_dashboard_bundle_schema() -> None:
     assert jp.get("schema") == "jupiter_policy_snapshot_v1"
     assert "signal_readiness" not in jp
     assert "alignment_pills" not in jp
+    assert "jup_v3_timeline_proof" in b
 
 
 def test_pair_vs_baseline_for_cells() -> None:
