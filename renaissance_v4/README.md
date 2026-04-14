@@ -48,6 +48,14 @@ python3 -m renaissance_v4.research.replay_runner
 
 SQLite file: `renaissance_v4/data/renaissance_v4.sqlite3`.
 
+## Baseline v1 acceptance (architect)
+
+- **Learning:** Outcomes **only** from closed simulated trades via `research/execution_learning_bridge.py` (no synthetic ledger paths).
+- **Determinism:** End of replay prints `[VALIDATION_CHECKSUM]` (hash of summary + cumulative PnL + outcome count). Run `./renaissance_v4/run_replay_twice_check.sh` after ingest or after `python3 -m renaissance_v4.data.seed_smoke_bars` (minimal bars for CI/smoke).
+- **Full validation:** `./renaissance_v4/run_full_validation.sh` (from repo root: `init_db` → **Binance ingest** → validator → replay). Ingest is long-running.
+- **Report:** `renaissance_v4/reports/baseline_v1.md` is written every replay (metrics + scorecards + sanity section).
+- **Phase 8–11:** **Not** wired into fusion or replay per directive (`promotion_engine` etc. remain scaffold).
+
 ## Proof
 
 - **Phase 1:** `phase1_code_pack.md` §7.

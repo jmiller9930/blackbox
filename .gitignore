@@ -24,6 +24,9 @@ data/sqlite/*.db-journal
 # RenaissanceV4 local SQLite (ingest / replay)
 renaissance_v4/data/*.sqlite3
 renaissance_v4/data/*.sqlite3-journal
+
+# Generated per run (regenerate via replay)
+renaissance_v4/reports/baseline_v1.md
 data/logs/*.log
 
 # Messenger config with real tokens (use messaging_config.example.json + env)

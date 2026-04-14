@@ -8,7 +8,7 @@ Usage:
 Run after Phases 1 through 7 are installed to validate the full pipeline including learning ledger and scorecards.
 
 Version:
-v7.0
+v7.1
 
 Change History:
 - v1.0 Initial Phase 1 replay shell.
@@ -18,22 +18,23 @@ Change History:
 - v5.0 Added risk governor integration and execution gating.
 - v6.0 Added execution simulation and trade lifecycle hooks.
 - v7.0 Added learning ledger, outcome records from closed trades, and signal scorecards.
+- v7.1 Baseline v1: deterministic IDs, single execution→learning bridge, baseline report + checksum.
 """
 
 from __future__ import annotations
-
-import uuid
 
 from renaissance_v4.core.decision_contract import DecisionContract
 from renaissance_v4.core.execution_manager import ExecutionManager
 from renaissance_v4.core.feature_engine import build_feature_set
 from renaissance_v4.core.fusion_engine import fuse_signal_results
 from renaissance_v4.core.market_state_builder import build_market_state
-from renaissance_v4.core.outcome_record import OutcomeRecord
 from renaissance_v4.core.performance_metrics import compute_excursion_mae_mfe
 from renaissance_v4.core.pnl import compute_pnl
 from renaissance_v4.core.regime_classifier import classify_regime
 from renaissance_v4.core.risk_governor import evaluate_risk
+from renaissance_v4.research.baseline_report import write_baseline_report
+from renaissance_v4.research.determinism import deterministic_decision_id, validation_checksum
+from renaissance_v4.research.execution_learning_bridge import record_closed_trade_to_ledger
 from renaissance_v4.research.learning_ledger import LearningLedger
 from renaissance_v4.research.signal_scorecard import build_signal_scorecards
 from renaissance_v4.signals.breakout_expansion import BreakoutExpansionSignal
@@ -48,7 +49,7 @@ MIN_ROWS_REQUIRED = 50
 def main() -> None:
     """
     Iterate through historical bars in strict chronological order.
-    Build MarketState, FeatureSet, regime, signals, fusion, risk, execution, and record closed-trade outcomes.
+    Learning outcomes ONLY from closed trades via execution_learning_bridge (no synthetic paths).
     """
     connection = get_connection()
     rows = connection.execute(
@@ -59,11 +60,12 @@ def main() -> None:
         """
     ).fetchall()
 
-    print(f"[replay] Loaded {len(rows)} bars")
+    dataset_bars = len(rows)
+    print(f"[replay] Loaded {dataset_bars} bars")
 
-    if len(rows) < MIN_ROWS_REQUIRED:
+    if dataset_bars < MIN_ROWS_REQUIRED:
         raise RuntimeError(
-            f"[replay] Need at least {MIN_ROWS_REQUIRED} bars, found {len(rows)}"
+            f"[replay] Need at least {MIN_ROWS_REQUIRED} bars, found {dataset_bars}"
         )
 
     signals = [
@@ -76,6 +78,12 @@ def main() -> None:
     exec_manager = ExecutionManager()
     ledger = LearningLedger()
     processed = 0
+
+    fusion_no_trade_bars = 0
+    fusion_directional_bars = 0
+    risk_blocked_bars = 0
+    entries_attempted = 0
+    closes_recorded = 0
 
     for index in range(MIN_ROWS_REQUIRED, len(rows) + 1):
         window = rows[:index]
@@ -90,6 +98,11 @@ def main() -> None:
 
         fusion_result = fuse_signal_results(signal_results)
 
+        if fusion_result.direction == "no_trade":
+            fusion_no_trade_bars += 1
+        else:
+            fusion_directional_bars += 1
+
         drawdown_proxy = 0.0
 
         risk_decision = evaluate_risk(
@@ -98,6 +111,9 @@ def main() -> None:
             regime=regime,
             drawdown_proxy=drawdown_proxy,
         )
+
+        if not risk_decision.allowed:
+            risk_blocked_bars += 1
 
         confidence_score = fusion_result.fusion_score
         edge_score = max(fusion_result.long_score, fusion_result.short_score)
@@ -116,26 +132,18 @@ def main() -> None:
                 exec_manager.cumulative_pnl += bar_pnl
                 closed = exec_manager.current_trade
                 mae, mfe = compute_excursion_mae_mfe(closed)
-                contributing = list(closed.contributing_signal_names)
-                outcome = OutcomeRecord(
-                    trade_id=str(uuid.uuid4()),
-                    symbol=closed.symbol,
-                    direction=closed.direction,
-                    entry_time=closed.entry_time,
+                record_closed_trade_to_ledger(
+                    ledger,
+                    closed_trade=closed,
                     exit_time=state.timestamp,
-                    entry_price=closed.entry_price,
                     exit_price=exit_price,
-                    pnl=bar_pnl,
+                    exit_reason=reason,
+                    bar_pnl=bar_pnl,
                     mae=mae,
                     mfe=mfe,
-                    exit_reason=reason,
-                    contributing_signals=contributing,
                     regime=regime,
-                    size_tier=closed.risk_size_tier,
-                    notional_fraction=closed.risk_notional_fraction,
-                    metadata={"exit_price": exit_price},
                 )
-                ledger.record_outcome(outcome)
+                closes_recorded += 1
                 print(
                     f"[execution] bar_pnl={bar_pnl:.6f} cumulative_pnl={exec_manager.cumulative_pnl:.6f}"
                 )
@@ -169,13 +177,14 @@ def main() -> None:
                 bar_low=state.current_low,
             )
             opened_this_bar = True
+            entries_attempted += 1
 
         position_open_after = (
             exec_manager.current_trade is not None and exec_manager.current_trade.open
         )
 
         decision = DecisionContract(
-            decision_id=str(uuid.uuid4()),
+            decision_id=deterministic_decision_id(state.timestamp, index),
             symbol=state.symbol,
             timestamp=state.timestamp,
             market_regime=regime,
@@ -213,11 +222,14 @@ def main() -> None:
                 },
                 "learning": {
                     "outcomes_recorded": len(ledger.outcomes),
+                    "learning_source": "closed_trades_only_via_execution_learning_bridge",
                 },
                 "contributing_signals": fusion_result.contributing_signals,
                 "suppressed_signals": fusion_result.suppressed_signals,
             },
-        )
+            )
+
+        assert decision.timestamp == state.timestamp
 
         processed += 1
 
@@ -234,6 +246,31 @@ def main() -> None:
 
     summary = ledger.summary()
     scorecards = build_signal_scorecards(ledger.outcomes)
+
+    vchk = validation_checksum(
+        summary,
+        exec_manager.cumulative_pnl,
+        len(ledger.outcomes),
+    )
+    print(f"[VALIDATION_CHECKSUM] {vchk}")
+
+    sanity = {
+        "fusion_no_trade_bars": fusion_no_trade_bars,
+        "fusion_directional_bars": fusion_directional_bars,
+        "risk_blocked_bars": risk_blocked_bars,
+        "entries_attempted": entries_attempted,
+        "closes_recorded": closes_recorded,
+    }
+
+    write_baseline_report(
+        None,
+        dataset_bars=dataset_bars,
+        summary=summary,
+        scorecards=scorecards,
+        cumulative_pnl=exec_manager.cumulative_pnl,
+        validation_checksum=vchk,
+        sanity=sanity,
+    )
 
     print(f"[replay] Final summary metrics: {summary}")
     print(f"[replay] Final signal scorecards: {scorecards}")

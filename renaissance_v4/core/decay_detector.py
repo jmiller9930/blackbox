@@ -4,6 +4,8 @@ decay_detector.py
 Purpose:
 Phase 8 — detect persistent underperformance or stress that should freeze or reduce a signal.
 
+**BASELINE / GOVERNANCE:** Do not auto-enforce until `RenaissanceV4_baseline_v1` is accepted.
+
 Usage:
 Feed scorecard-style metrics; use output to gate weighting or lifecycle transitions.
 

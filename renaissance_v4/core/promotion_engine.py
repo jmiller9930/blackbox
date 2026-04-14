@@ -4,6 +4,9 @@ promotion_engine.py
 Purpose:
 Phase 8 — adaptive multipliers for signal weights from rolling expectancy and sample size.
 
+**BASELINE / GOVERNANCE:** Do not wire this into `fusion_engine` until
+`RenaissanceV4_baseline_v1` is accepted (architect directive). Scaffold only.
+
 Usage:
 Call from fusion or a future promotion loop when scorecard metrics are available.
 
