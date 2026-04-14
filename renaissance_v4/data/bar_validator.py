@@ -2,29 +2,30 @@
 bar_validator.py
 
 Purpose:
-Validate historical 5-minute Binance bars stored in SQLite.
+Validate that historical Binance 5-minute bars in SQLite are evenly spaced and ordered.
 
 Usage:
-Run after ingestion to detect gaps, duplicates, or ordering problems.
+Run after ingestion to catch missing bars or timestamp problems before replay work begins.
 
 Version:
 v1.0
 
 Change History:
-- v1.0 Initial implementation scaffold.
+- v1.0 Initial Phase 1 implementation.
 """
 
 from __future__ import annotations
 
 from renaissance_v4.utils.db import get_connection
 
-EXPECTED_SPACING_MS = 5 * 60 * 1000
 SYMBOL = "SOLUSDT"
+EXPECTED_SPACING_MS = 5 * 60 * 1000
 
 
 def main() -> None:
     """
-    Validate that all bars are strictly increasing and evenly spaced.
+    Verify that each adjacent bar is exactly 5 minutes apart.
+    Prints any gap to the screen and fails loudly if issues are found.
     """
     connection = get_connection()
     rows = connection.execute(
@@ -37,26 +38,27 @@ def main() -> None:
         (SYMBOL,),
     ).fetchall()
 
-    print(f"[validator] Loaded {len(rows)} bars for symbol {SYMBOL}")
+    print(f"[validator] Loaded {len(rows)} bars for {SYMBOL}")
 
     if not rows:
         raise RuntimeError("[validator] No bars found to validate")
 
-    gap_count = 0
+    issues = 0
+
     for index in range(1, len(rows)):
         previous_open = rows[index - 1]["open_time"]
         current_open = rows[index]["open_time"]
         delta = current_open - previous_open
 
         if delta != EXPECTED_SPACING_MS:
-            gap_count += 1
+            issues += 1
             print(
-                "[validator] Gap detected: "
+                "[validator] Spacing issue detected: "
                 f"index={index} previous_open={previous_open} current_open={current_open} delta={delta}"
             )
 
-    if gap_count > 0:
-        raise RuntimeError(f"[validator] Validation failed with {gap_count} spacing issues")
+    if issues:
+        raise RuntimeError(f"[validator] Validation failed with {issues} spacing issues")
 
     print("[validator] Validation passed with no spacing issues")
 

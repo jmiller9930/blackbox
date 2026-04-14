@@ -5,13 +5,13 @@ Purpose:
 Download historical Binance 5-minute klines and store them in SQLite.
 
 Usage:
-Run directly to backfill local historical market data for RenaissanceV4.
+Run directly to backfill approximately two years of SOLUSDT 5m data.
 
 Version:
 v1.0
 
 Change History:
-- v1.0 Initial implementation scaffold.
+- v1.0 Initial Phase 1 implementation.
 """
 
 from __future__ import annotations
@@ -29,11 +29,13 @@ BINANCE_KLINES_URL = "https://api.binance.com/api/v3/klines"
 SYMBOL = "SOLUSDT"
 INTERVAL = "5m"
 LIMIT = 1000
+FIVE_MINUTES_MS = 5 * 60 * 1000
 
 
 def fetch_klines(symbol: str, interval: str, start_time_ms: int, end_time_ms: int) -> list[list]:
     """
-    Fetch a batch of klines from Binance and print request boundaries for debugging.
+    Fetch one batch of klines from Binance.
+    Prints the request URL and response size for debugging.
     """
     params = {
         "symbol": symbol,
@@ -43,18 +45,20 @@ def fetch_klines(symbol: str, interval: str, start_time_ms: int, end_time_ms: in
         "limit": LIMIT,
     }
     url = f"{BINANCE_KLINES_URL}?{urlencode(params)}"
-    print(f"[ingest] Requesting klines: {url}")
+    print(f"[ingest] Requesting: {url}")
+
     with urlopen(url, timeout=30) as response:
         payload = json.loads(response.read().decode("utf-8"))
+
     print(f"[ingest] Received {len(payload)} bars")
     return payload
 
 
 def insert_klines(connection: sqlite3.Connection, symbol: str, klines: list[list]) -> None:
     """
-    Insert kline rows into SQLite with INSERT OR IGNORE semantics.
+    Insert bars into SQLite using INSERT OR IGNORE so reruns stay safe.
     """
-    print(f"[ingest] Inserting {len(klines)} bars into database")
+    print(f"[ingest] Inserting {len(klines)} rows into market_bars_5m")
     connection.executemany(
         """
         INSERT OR IGNORE INTO market_bars_5m (
@@ -86,34 +90,40 @@ def insert_klines(connection: sqlite3.Connection, symbol: str, klines: list[list
 
 def main() -> None:
     """
-    Backfill approximately two years of 5-minute SOLUSDT bars into SQLite.
+    Backfill approximately two years of 5-minute SOLUSDT bars from Binance.
+    This routine advances forward in time one batch at a time and prints progress.
     """
     connection = get_connection()
+
     now = datetime.now(timezone.utc)
     start = now - timedelta(days=730)
     cursor_ms = int(start.timestamp() * 1000)
     end_ms = int(now.timestamp() * 1000)
 
-    print(f"[ingest] Starting backfill for {SYMBOL} from {start.isoformat()} to {now.isoformat()}")
+    print(f"[ingest] Starting ingest for {SYMBOL}")
+    print(f"[ingest] From: {start.isoformat()}")
+    print(f"[ingest] To:   {now.isoformat()}")
 
     while cursor_ms < end_ms:
         batch = fetch_klines(SYMBOL, INTERVAL, cursor_ms, end_ms)
+
         if not batch:
-            print("[ingest] No more data returned, stopping")
+            print("[ingest] No more bars returned; stopping")
             break
 
         insert_klines(connection, SYMBOL, batch)
 
         last_open_time = int(batch[-1][0])
-        next_cursor = last_open_time + (5 * 60 * 1000)
-        if next_cursor <= cursor_ms:
-            raise RuntimeError("[ingest] Cursor did not advance; aborting to avoid infinite loop")
+        next_cursor_ms = last_open_time + FIVE_MINUTES_MS
 
-        cursor_ms = next_cursor
+        if next_cursor_ms <= cursor_ms:
+            raise RuntimeError("[ingest] Cursor failed to advance; aborting")
+
+        cursor_ms = next_cursor_ms
         print(f"[ingest] Advanced cursor to: {cursor_ms}")
         time.sleep(0.25)
 
-    print("[ingest] Historical backfill completed successfully")
+    print("[ingest] Historical ingest completed successfully")
 
 
 if __name__ == "__main__":

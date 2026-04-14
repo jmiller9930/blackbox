@@ -2,16 +2,16 @@
 decision_contract.py
 
 Purpose:
-Define the canonical RenaissanceV4 decision contract.
+Define the canonical Phase 1 decision contract for RenaissanceV4.
 
 Usage:
-Used by replay and live evaluation to ensure a single output structure.
+Used by replay and later live evaluation code to keep one consistent output structure.
 
 Version:
 v1.0
 
 Change History:
-- v1.0 Initial implementation scaffold.
+- v1.0 Initial Phase 1 implementation.
 """
 
 from __future__ import annotations
@@ -24,6 +24,7 @@ from typing import Any
 class DecisionContract:
     """
     Canonical decision object for one evaluation cycle.
+    This starts simple in Phase 1 and will expand in later phases.
     """
 
     decision_id: str
@@ -37,6 +38,3 @@ class DecisionContract:
     risk_budget: float
     execution_allowed: bool
     reason_trace: dict[str, Any] = field(default_factory=dict)
-    contributing_signals: list[str] = field(default_factory=list)
-    suppressed_signals: list[str] = field(default_factory=list)
-    risk_veto_reasons: list[str] = field(default_factory=list)
