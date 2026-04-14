@@ -325,19 +325,27 @@ def build_report(outcomes: list[OutcomeRecord], dataset_bars: int) -> str:
     tgt_m = by_exit.get("target", [])
     tgt_metrics = _metrics(tgt_m) if tgt_m else compute_summary_metrics([])
 
+    e_val = float(portfolio["expectancy"])
+    econ_line = (
+        f"**aggregate expectancy is negative** (`{e_val:.6f}`) with **large path drawdown** "
+        f"(`max_dd={portfolio['max_drawdown']:.4f}`)"
+        if e_val < 0
+        else f"**aggregate expectancy is positive** (`{e_val:.6f}`) but **residual risk** remains "
+        f"(`max_dd={portfolio['max_drawdown']:.4f}`)"
+    )
+
     lines.extend(
         [
             "",
             "## Dominant root cause (evidence-ranked)",
             "",
-            f"> The system is alive but economically weak because **aggregate expectancy is negative** "
-            f"(`{portfolio['expectancy']:.6f}`) with **large path drawdown** (`max_dd={portfolio['max_drawdown']:.4f}` on the equity curve built from these trades). "
+            f"> Portfolio summary: {econ_line} on the equity curve built from these trades. "
             f"**Regime:** the worst gross PnL bucket by **exit regime** is **`{worst_reg}`** "
             f"(gross PnL **{worst_reg_pnl:.6f}**). "
             f"**Signals (tagged rows):** the weakest named contributor among the four primaries is **`{worst_sig}`** "
             f"(gross PnL **{worst_sig_pnl:.6f}** across tagged outcomes). "
-            f"**Exit path:** stops dominate count (`stop` n={exit_m['total_trades']}, avg_pnl={exit_m['average_pnl']:.6f}) vs targets (`target` n={tgt_metrics['total_trades']}, avg_pnl={tgt_metrics['average_pnl']:.6f}), "
-            f"indicating **adverse exits hit more often than favorable targets** under current SL/TP geometry.",
+            f"**Exit path:** stops vs targets — `stop` n={exit_m['total_trades']} (avg_pnl={exit_m['average_pnl']:.6f}) vs "
+            f"`target` n={tgt_metrics['total_trades']} (avg_pnl={tgt_metrics['average_pnl']:.6f}).",
             "",
             "## Reproduce",
             "",
