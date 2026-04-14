@@ -2205,6 +2205,84 @@ class Handler(BaseHTTPRequestHandler):
                     },
                 )
             return
+        if path == "/api/v1/renaissance/baseline":
+            try:
+                from renaissance_v4.ui_api import build_baseline_payload
+
+                body = build_baseline_payload(_REPO_ROOT)
+                body["trace_id"] = str(uuid.uuid4())
+                self._json(200, body, no_cache=True)
+            except Exception as e:  # noqa: BLE001
+                self._json(
+                    500,
+                    {
+                        "schema": "renaissance_v4_ui_error_v1",
+                        "error": str(e)[:500],
+                        "trace_id": str(uuid.uuid4()),
+                    },
+                    no_cache=True,
+                )
+            return
+        if path == "/api/v1/renaissance/experiments":
+            try:
+                from renaissance_v4.ui_api import build_experiments_list_payload
+
+                body = build_experiments_list_payload(_REPO_ROOT)
+                body["trace_id"] = str(uuid.uuid4())
+                self._json(200, body, no_cache=True)
+            except Exception as e:  # noqa: BLE001
+                self._json(
+                    500,
+                    {
+                        "schema": "renaissance_v4_ui_error_v1",
+                        "error": str(e)[:500],
+                        "trace_id": str(uuid.uuid4()),
+                    },
+                    no_cache=True,
+                )
+            return
+        if path.startswith("/api/v1/renaissance/experiments/"):
+            eid = path[len("/api/v1/renaissance/experiments/") :].strip("/")
+            if not eid:
+                self._json(400, {"error": "missing_experiment_id", "trace_id": str(uuid.uuid4())}, no_cache=True)
+                return
+            try:
+                from renaissance_v4.ui_api import build_experiment_detail_payload
+
+                body = build_experiment_detail_payload(_REPO_ROOT, eid)
+                body["trace_id"] = str(uuid.uuid4())
+                self._json(200, body, no_cache=True)
+            except Exception as e:  # noqa: BLE001
+                self._json(
+                    500,
+                    {
+                        "schema": "renaissance_v4_ui_error_v1",
+                        "error": str(e)[:500],
+                        "trace_id": str(uuid.uuid4()),
+                    },
+                    no_cache=True,
+                )
+            return
+        if path == "/api/v1/renaissance/jobs":
+            try:
+                from renaissance_v4.ui_jobs import load_queue
+
+                q = load_queue(_REPO_ROOT)
+                q["trace_id"] = str(uuid.uuid4())
+                self._json(200, q, no_cache=True)
+            except Exception as e:  # noqa: BLE001
+                self._json(
+                    500,
+                    {"error": str(e)[:500], "trace_id": str(uuid.uuid4())},
+                    no_cache=True,
+                )
+            return
+        if path in ("/renaissance", "/renaissance/"):
+            self.send_response(302)
+            self.send_header("Location", "/dashboard.html#/renaissance")
+            self.send_header("Cache-Control", "no-store")
+            self.end_headers()
+            return
         self._json(404, {"error": "not_found", "path": path})
 
     def do_POST(self) -> None:  # noqa: N802
@@ -2502,6 +2580,72 @@ class Handler(BaseHTTPRequestHandler):
                 },
                 no_cache=True,
             )
+            return
+        if parsed.path == "/api/v1/renaissance/jobs":
+            body = self._read_json_body()
+            try:
+                from renaissance_v4.ui_api import (
+                    validate_candidate_trades_path,
+                    validate_experiment_id,
+                    validate_job_action,
+                )
+                from renaissance_v4.ui_jobs import enqueue
+
+                action = str(body.get("action") or "").strip()
+                if not validate_job_action(action):
+                    self._json(
+                        400,
+                        {
+                            "ok": False,
+                            "error": "unsupported_action",
+                            "allowed": ["baseline_mc", "compare", "example_flow"],
+                            "trace_id": str(uuid.uuid4()),
+                        },
+                        no_cache=True,
+                    )
+                    return
+                exp = body.get("experiment_id")
+                exp_s = str(exp).strip() if exp else None
+                if action == "compare":
+                    if not exp_s or not validate_experiment_id(exp_s):
+                        self._json(
+                            400,
+                            {"ok": False, "error": "experiment_id_required", "trace_id": str(uuid.uuid4())},
+                            no_cache=True,
+                        )
+                        return
+                    ct = str(body.get("candidate_trades") or "").strip()
+                    if not ct or validate_candidate_trades_path(_REPO_ROOT, ct) is None:
+                        self._json(
+                            400,
+                            {
+                                "ok": False,
+                                "error": "candidate_trades_must_be_under_renaissance_v4/reports/experiments/",
+                                "trace_id": str(uuid.uuid4()),
+                            },
+                            no_cache=True,
+                        )
+                        return
+                    job = enqueue(
+                        _REPO_ROOT,
+                        action=action,
+                        experiment_id=exp_s,
+                        candidate_trades_rel=ct,
+                    )
+                else:
+                    job = enqueue(
+                        _REPO_ROOT,
+                        action=action,
+                        experiment_id=exp_s,
+                        candidate_trades_rel=None,
+                    )
+                self._json(200, {"ok": True, "job": job, "trace_id": str(uuid.uuid4())}, no_cache=True)
+            except Exception as e:  # noqa: BLE001
+                self._json(
+                    500,
+                    {"ok": False, "error": str(e)[:500], "trace_id": str(uuid.uuid4())},
+                    no_cache=True,
+                )
             return
         self._json(404, {"error": "not_found", "path": parsed.path})
 

@@ -3965,6 +3965,201 @@
     });
   }
 
+  /* RenaissanceV4 panel — hash route #/renaissance (research / validation only) */
+  var RV4_POLL_MS = 8000;
+  var rv4SelectedId = null;
+  function rv4SetNavActive() {
+    var h = (window.location.hash || '').replace(/^#/, '');
+    var isRv4 = h === '/renaissance' || h === 'renaissance';
+    var home = $('nav-dash-home');
+    var rv4 = $('nav-rv4');
+    var vd = $('dash-view-default');
+    var vr = $('dash-view-renaissance');
+    if (home) home.classList.toggle('is-active', !isRv4);
+    if (rv4) rv4.classList.toggle('is-active', isRv4);
+    if (vd) vd.hidden = isRv4;
+    if (vr) vr.hidden = !isRv4;
+    if (isRv4) rv4Refresh();
+  }
+  function rv4Fmt(x) {
+    if (x == null || x === '') return '—';
+    if (typeof x === 'number' && !isNaN(x)) return String(x);
+    return String(x);
+  }
+  function rv4Refresh() {
+    fetch('/api/v1/renaissance/baseline', { cache: 'no-store' })
+      .then(function (r) {
+        return r.json();
+      })
+      .then(function (j) {
+        if (!j || j.error) return;
+        var det = j.deterministic || {};
+        $('rv4-bl-tag').textContent = j.baseline_tag || '—';
+        $('rv4-bl-commit').textContent = j.commit_hint || '—';
+        $('rv4-bl-n').textContent = rv4Fmt(det.total_trades);
+        $('rv4-bl-e').textContent = rv4Fmt(det.expectancy);
+        $('rv4-bl-dd').textContent = rv4Fmt(det.max_drawdown);
+        $('rv4-bl-mc').textContent = j.monte_carlo_reference_present ? 'present' : 'missing — run baseline job';
+        var rp = j.reports || {};
+        var bits = [];
+        if (rp.baseline_v1_md) bits.push('baseline_v1.md');
+        if (rp.diagnostic_post_dv013) bits.push('diagnostic_quality_post_DV013.md');
+        if (rp.correction_quality_v1) bits.push('correction_quality_v1.md');
+        $('rv4-bl-reports').textContent = bits.length ? 'Reports: ' + bits.join(', ') + ' (repo paths on API host)' : '';
+      })
+      .catch(function () {});
+    fetch('/api/v1/renaissance/experiments', { cache: 'no-store' })
+      .then(function (r) {
+        return r.json();
+      })
+      .then(function (j) {
+        var tb = $('rv4-exp-tbody');
+        if (!tb) return;
+        var rows = (j && j.experiments) || [];
+        if (!rows.length) {
+          tb.innerHTML = '<tr><td colspan="5">No experiments in index yet.</td></tr>';
+          return;
+        }
+        tb.innerHTML = rows
+          .map(function (r) {
+            var id = String(r.experiment_id || '').replace(/[<>&]/g, '');
+            return (
+              '<tr data-exp="' +
+              id +
+              '"><td>' +
+              id +
+              '</td><td>' +
+              rv4Fmt(r.status) +
+              '</td><td>' +
+              rv4Fmt(r.stage) +
+              '</td><td>' +
+              rv4Fmt(r.recommendation) +
+              '</td><td>' +
+              rv4Fmt(r.created_at).slice(0, 19) +
+              '</td></tr>'
+            );
+          })
+          .join('');
+        Array.prototype.forEach.call(tb.querySelectorAll('tr[data-exp]'), function (tr) {
+          tr.addEventListener('click', function () {
+            rv4SelectedId = tr.getAttribute('data-exp');
+            $('rv4-sel-id').textContent = rv4SelectedId ? 'Selected: ' + rv4SelectedId : '';
+            var br = $('rv4-btn-rerun');
+            if (br) br.disabled = !rv4SelectedId;
+            rv4LoadDetail(rv4SelectedId);
+          });
+        });
+      })
+      .catch(function () {
+        var tb = $('rv4-exp-tbody');
+        if (tb) tb.innerHTML = '<tr><td colspan="5">Failed to load experiments.</td></tr>';
+      });
+    fetch('/api/v1/renaissance/jobs', { cache: 'no-store' })
+      .then(function (r) {
+        return r.json();
+      })
+      .then(function (j) {
+        var jobs = (j && j.jobs) || [];
+        var last = jobs[jobs.length - 1];
+        var el = $('rv4-job-msg');
+        if (el && last) {
+          el.textContent =
+            'Last job: ' +
+            (last.job_id || '') +
+            ' — ' +
+            (last.status || '') +
+            ' (' +
+            (last.stage || '') +
+            ')' +
+            (last.exit_code != null ? ' exit=' + last.exit_code : '');
+        }
+      })
+      .catch(function () {});
+  }
+  function rv4LoadDetail(eid) {
+    var d = $('rv4-detail');
+    var pre = $('rv4-d-pre');
+    if (!eid || !d) return;
+    d.hidden = false;
+    fetch('/api/v1/renaissance/experiments/' + encodeURIComponent(eid), { cache: 'no-store' })
+      .then(function (r) {
+        return r.json();
+      })
+      .then(function (j) {
+        var ix = j.index || {};
+        $('rv4-d-desc').textContent = ix.description || '—';
+        $('rv4-d-git').textContent = (ix.branch || '—') + ' @ ' + (ix.commit_hash || '—');
+        $('rv4-d-rec').textContent = j.recommendation || ix.recommendation || '—';
+        var det = j.deterministic || {};
+        $('rv4-d-det').textContent =
+          'n=' + rv4Fmt(det.total_trades) + ' E=' + rv4Fmt(det.expectancy) + ' maxDD=' + rv4Fmt(det.max_drawdown);
+        var mc = j.monte_carlo || {};
+        var modes = mc && typeof mc === 'object' ? Object.keys(mc) : [];
+        $('rv4-d-mc').textContent = modes.length ? modes.join(', ') + ' (see JSON)' : '—';
+        var rp = j.report_paths || {};
+        var pl = [];
+        if (rp.experiment_md) pl.push(rp.experiment_md);
+        if (rp.robustness_md) pl.push(rp.robustness_md);
+        if (rp.monte_carlo_md) pl.push(rp.monte_carlo_md);
+        $('rv4-d-paths').textContent = pl.length ? 'Reports: ' + pl.join(' | ') : 'No report files yet.';
+        if (pre) pre.textContent = JSON.stringify({ index: ix, deterministic: det, monte_carlo: mc }, null, 2);
+      })
+      .catch(function () {
+        if (pre) pre.textContent = 'Failed to load detail.';
+      });
+  }
+  function rv4PostJob(payload) {
+    var msg = $('rv4-job-msg');
+    if (msg) msg.textContent = 'Submitting job…';
+    fetch('/api/v1/renaissance/jobs', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    })
+      .then(function (r) {
+        return r.json();
+      })
+      .then(function (j) {
+        if (msg) msg.textContent = j.ok ? 'Job queued: ' + (j.job && j.job.job_id ? j.job.job_id : '') : (j.error || 'error');
+        setTimeout(rv4Refresh, 500);
+      })
+      .catch(function () {
+        if (msg) msg.textContent = 'Request failed.';
+      });
+  }
+  var rv4b = $('rv4-btn-baseline-mc');
+  if (rv4b) {
+    rv4b.addEventListener('click', function () {
+      if (!window.confirm('Start baseline Monte Carlo reference on the server? This can take many minutes.')) return;
+      rv4PostJob({ action: 'baseline_mc' });
+    });
+  }
+  var rv4e = $('rv4-btn-example');
+  if (rv4e) {
+    rv4e.addEventListener('click', function () {
+      if (!window.confirm('Run example robustness flow (pipeline check)?')) return;
+      rv4PostJob({ action: 'example_flow' });
+    });
+  }
+  var rv4rr = $('rv4-btn-rerun');
+  if (rv4rr) {
+    rv4rr.addEventListener('click', function () {
+      if (!rv4SelectedId) return;
+      var rel = window.prompt(
+        'Candidate trades JSON path under renaissance_v4/reports/experiments/ (e.g. experiments/candidate.json)',
+        'renaissance_v4/reports/experiments/baseline_v1_trades.json'
+      );
+      if (!rel) return;
+      rv4PostJob({ action: 'compare', experiment_id: rv4SelectedId, candidate_trades: rel });
+    });
+  }
+  window.addEventListener('hashchange', rv4SetNavActive);
+  rv4SetNavActive();
+  setInterval(function () {
+    var h = (window.location.hash || '').replace(/^#/, '');
+    if (h === '/renaissance' || h === 'renaissance') rv4Refresh();
+  }, RV4_POLL_MS);
+
   /* Start bundle fetch immediately — DOM is parsed; static shell + "Loading…" already in the tree. */
   refresh();
   setInterval(refresh, POLL_MS);

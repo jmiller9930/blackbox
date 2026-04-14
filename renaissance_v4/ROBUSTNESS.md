@@ -69,6 +69,12 @@ python3 -m renaissance_v4.research.robustness_runner example-flow --seed 42 --n-
 | `research/experiment_tracker.py` | Append-only `state/experiment_index.json` |
 | `research/robustness_runner.py` | CLI orchestration |
 
+## Operator dashboard (BLACK BOX UI)
+
+- **Nav:** Dashboard → **RenaissanceV4** (hash `#/renaissance`), or open `/renaissance` (redirects to the same view).
+- **API:** `GET /api/v1/renaissance/baseline`, `…/experiments`, `…/experiments/<id>`, `GET|POST /api/v1/renaissance/jobs` (same origin as other dashboard APIs).
+- **Jobs** enqueue `robustness_runner` subprocesses on the API host (long-running); do not spam.
+
 ## Rules
 
 - Monte Carlo **never invents** trades; inputs are **only** replay PnLs.
