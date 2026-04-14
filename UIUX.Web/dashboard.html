@@ -29,6 +29,36 @@
       font-family: inherit;
     }
     .dash-nav button.dash-nav-linklike:hover { background: rgba(15, 23, 42, 0.06); }
+    /* RenaissanceV4 research panel (hash route #/renaissance) */
+    .dash-rv4-wrap {
+      flex: 1; overflow: auto; padding: 0.75rem 1rem 1.5rem;
+      min-height: 0;
+    }
+    .dash-rv4-head { font-size: 1.05rem; font-weight: 800; margin: 0 0 0.5rem; color: var(--text); }
+    .dash-rv4-sub { font-size: 0.78rem; color: var(--muted); margin: 0 0 1rem; max-width: 52rem; }
+    .dash-rv4-grid {
+      display: grid; gap: 0.75rem;
+      grid-template-columns: repeat(auto-fill, minmax(17rem, 1fr));
+      margin-bottom: 1rem;
+    }
+    .dash-rv4-card {
+      background: var(--panel); border: 1px solid var(--panel-border); border-radius: var(--radius-md);
+      padding: 0.65rem 0.75rem; font-size: 0.78rem;
+    }
+    .dash-rv4-card h3 { margin: 0 0 0.35rem; font-size: 0.82rem; font-weight: 700; }
+    .dash-rv4-card .kv { display: flex; justify-content: space-between; gap: 0.5rem; margin: 0.2rem 0; }
+    .dash-rv4-card .k { color: var(--muted); }
+    .dash-rv4-card .v { font-family: ui-monospace, monospace; text-align: right; word-break: break-all; }
+    .dash-rv4-table { width: 100%; border-collapse: collapse; font-size: 0.75rem; }
+    .dash-rv4-table th, .dash-rv4-table td { border-bottom: 1px solid var(--panel-border); padding: 0.35rem 0.25rem; text-align: left; }
+    .dash-rv4-table tr[data-exp] { cursor: pointer; }
+    .dash-rv4-table tr[data-exp]:hover { background: rgba(15, 23, 42, 0.04); }
+    .dash-rv4-actions { display: flex; flex-wrap: wrap; gap: 0.35rem; margin-top: 0.5rem; }
+    .dash-rv4-actions button { font-size: 0.72rem; padding: 0.3rem 0.5rem; border-radius: var(--radius-md); border: 1px solid var(--panel-border); background: var(--panel); cursor: pointer; }
+    .dash-rv4-actions button.primary { background: var(--accent); color: var(--accent-contrast); border-color: transparent; font-weight: 600; }
+    .dash-rv4-msg { font-size: 0.72rem; color: var(--muted); margin-top: 0.35rem; }
+    .dash-rv4-detail { margin-top: 0.75rem; padding: 0.75rem; border: 1px dashed var(--panel-border); border-radius: var(--radius-md); background: #fafbfc; font-size: 0.75rem; }
+    .dash-rv4-detail pre { margin: 0.35rem 0 0; white-space: pre-wrap; word-break: break-word; max-height: 14rem; overflow: auto; font-size: 0.68rem; }
     .dash-main {
       flex: 1; display: flex; flex-direction: column; min-width: 0; min-height: 0;
       background: linear-gradient(180deg, #f8f8fa 0%, #eef1f5 100%);
@@ -620,12 +650,13 @@
     .tc-tr-baseline .tc-baseline-verdict-policy-row .tc-tile-verdict.tc-verdict-no-trade-amber {
       margin-bottom: 0;
     }
-    .tc-jup-policy-hero-label {
+    /* Hero policy pill beside verdict — high-contrast green so it reads at a glance */
+    .tc-baseline-verdict-policy-row .tc-jup-policy-hero-label {
       font-size: 0.58rem;
       font-weight: 800;
       letter-spacing: 0.08em;
       text-transform: uppercase;
-      color: var(--muted);
+      color: #047857;
       flex-shrink: 0;
     }
     button.tc-jup-policy-chip-hero {
@@ -635,12 +666,20 @@
       font: inherit;
       line-height: 1.2;
     }
-    .tc-jup-policy-chip-hero {
+    .tc-baseline-verdict-policy-row .tc-jup-policy-chip-hero {
       font-size: 0.78rem;
       font-weight: 800;
-      padding: 0.14rem 0.5rem;
+      padding: 0.14rem 0.55rem;
       letter-spacing: 0.04em;
       vertical-align: middle;
+      color: #fff;
+      background: linear-gradient(180deg, #34d399 0%, #10b981 45%, #059669 100%);
+      border: 1px solid #047857;
+      border-radius: 4px;
+      box-shadow:
+        0 2px 8px rgba(5, 150, 105, 0.45),
+        0 0 0 1px rgba(255, 255, 255, 0.2) inset;
+      text-shadow: 0 1px 0 rgba(0, 0, 0, 0.18);
     }
     .tc-jup-scope-note {
       font-size: 0.65rem;
@@ -1089,7 +1128,7 @@
 <body>
   <div class="dash-app">
     <nav class="dash-nav" aria-label="Primary">
-      <a class="is-active" href="/dashboard.html">Dashboard</a>
+      <a class="is-active" href="/dashboard.html#/" id="nav-dash-home">Dashboard</a>
       <a href="/baseline-chain-validate.html">Baseline validation</a>
       <a href="/baseline-trades.html">Reports dashboard</a>
       <a href="/internal.html">Operator Panel</a>
@@ -1099,11 +1138,13 @@
       <a href="/guide.html">System guide</a>
       <a href="/anna/sequential-learning">Learning Engine</a>
       <a href="/anna/training">Training Dashboard</a>
+      <a href="/dashboard.html#/renaissance" id="nav-rv4">RenaissanceV4</a>
       <a href="/intelligence-method.html">Intelligence METHOD</a>
       <button type="button" class="dash-nav-linklike" id="navDashPaths" title="Open run paths (same as Start dialog)">Run configuration</button>
       <button type="button" class="dash-nav-linklike" id="navDashOb" title="What runs vs shadow vs paper (from bundle)">Operational boundary</button>
     </nav>
     <div class="dash-main">
+      <div id="dash-view-default">
       <!-- Row 0: liveness / cadence (heartbeat on each poll) -->
       <div class="dash-live is-not_running" id="dash-live" role="status" aria-live="polite">
         <div class="dash-live-main">
@@ -1315,6 +1356,59 @@
           </table>
         </div>
       </section>
+      </div>
+
+      <div id="dash-view-renaissance" class="dash-rv4-wrap" hidden aria-label="RenaissanceV4 validation">
+        <h2 class="dash-rv4-head">RenaissanceV4 — research &amp; validation</h2>
+        <p class="dash-rv4-sub">
+          Non-trading control surface: baseline reference, experiment queue, Monte Carlo / robustness outcomes.
+          Data from <code>renaissance_v4/state</code> and reports on the API host repo mount.
+        </p>
+        <div class="dash-rv4-grid">
+          <div class="dash-rv4-card" id="rv4-baseline-card">
+            <h3>Baseline</h3>
+            <div class="kv"><span class="k">Tag</span><span class="v" id="rv4-bl-tag">—</span></div>
+            <div class="kv"><span class="k">Commit (git)</span><span class="v" id="rv4-bl-commit">—</span></div>
+            <div class="kv"><span class="k">Trades (det.)</span><span class="v" id="rv4-bl-n">—</span></div>
+            <div class="kv"><span class="k">Expectancy</span><span class="v" id="rv4-bl-e">—</span></div>
+            <div class="kv"><span class="k">Max DD</span><span class="v" id="rv4-bl-dd">—</span></div>
+            <div class="kv"><span class="k">MC reference</span><span class="v" id="rv4-bl-mc">—</span></div>
+            <p class="dash-rv4-msg" id="rv4-bl-reports"></p>
+          </div>
+          <div class="dash-rv4-card">
+            <h3>Controls</h3>
+            <p class="dash-rv4-msg">Governed jobs only — runs <code>robustness_runner</code> on the server (long-running).</p>
+            <div class="dash-rv4-actions">
+              <button type="button" class="primary" id="rv4-btn-baseline-mc">Generate baseline MC reference</button>
+              <button type="button" id="rv4-btn-example">Example flow (pipeline check)</button>
+            </div>
+            <p class="dash-rv4-msg" id="rv4-job-msg"></p>
+          </div>
+        </div>
+        <div class="dash-rv4-card" style="margin-bottom:0.75rem">
+          <h3>Experiment queue</h3>
+          <table class="dash-rv4-table" id="rv4-exp-table">
+            <thead><tr><th>id</th><th>status</th><th>stage</th><th>recommendation</th><th>updated</th></tr></thead>
+            <tbody id="rv4-exp-tbody"><tr><td colspan="5">Loading…</td></tr></tbody>
+          </table>
+        </div>
+        <div class="dash-rv4-card">
+          <h3>Selected experiment</h3>
+          <div class="dash-rv4-actions">
+            <button type="button" id="rv4-btn-rerun" disabled>Rerun failed / compare</button>
+            <span class="dash-rv4-msg" id="rv4-sel-id"></span>
+          </div>
+          <div class="dash-rv4-detail" id="rv4-detail" hidden>
+            <div class="kv"><span class="k">Description</span><span class="v" id="rv4-d-desc" style="text-align:left;max-width:70%">—</span></div>
+            <div class="kv"><span class="k">Branch / commit</span><span class="v" id="rv4-d-git">—</span></div>
+            <div class="kv"><span class="k">Recommendation</span><span class="v" id="rv4-d-rec">—</span></div>
+            <div class="kv"><span class="k">Deterministic</span><span class="v" id="rv4-d-det">—</span></div>
+            <div class="kv"><span class="k">Monte Carlo</span><span class="v" id="rv4-d-mc">—</span></div>
+            <p class="dash-rv4-msg" id="rv4-d-paths"></p>
+            <pre id="rv4-d-pre"></pre>
+          </div>
+        </div>
+      </div>
     </div>
   </div>
 
