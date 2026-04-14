@@ -50,9 +50,12 @@ def main() -> None:
     if not checklist.is_file():
         errors.append(f"Missing required file: {checklist}")
 
-    py_files = sorted(glob.glob(str(root / "jupiter_*_sean_policy.py")))
+    py_files = sorted(
+        set(glob.glob(str(root / "jupiter_*_sean_policy.py")))
+        | set(glob.glob(str(root / "jupiter_*_policy.py")))
+    )
     if not py_files:
-        errors.append("Missing jupiter_*_sean_policy.py under package dir")
+        errors.append("Missing jupiter_*_sean_policy.py or jupiter_*_policy.py under package dir")
 
     if errors:
         for e in errors:
