@@ -135,7 +135,7 @@ function htmlPage(data) {
   const walletBlock = w
     ? `<p><strong>Pubkey</strong><br><code>${esc(w.pubkey_base58)}</code></p>
        <p class="muted">status: ${esc(data.wallet_status || '—')}</p>`
-    : '<p class="warn">No wallet row in <code>paper_wallet</code> — set KEYPAIR_PATH and restart <code>seanv3</code>.</p>';
+    : '<p class="warn">No wallet row in <code>paper_wallet</code> — set <code>KEYPAIR_PATH</code> and restart <code>seanv3</code>.</p>';
 
   const posBlock =
     pos && String(pos.side) !== 'flat'
@@ -160,30 +160,79 @@ function htmlPage(data) {
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <title>Jupiter</title>
   <style>
-    body { font-family: system-ui, sans-serif; background: #0f1419; color: #e6edf3; margin: 0; padding: 1.25rem; }
-    h1 { font-size: 1.25rem; margin-top: 0; }
-    code { background: #21262d; padding: 0.1rem 0.35rem; border-radius: 4px; word-break: break-all; }
-    table { border-collapse: collapse; width: 100%; max-width: 56rem; font-size: 0.85rem; }
+    * { box-sizing: border-box; }
+    body {
+      font-family: ui-monospace, "Cascadia Code", "SF Mono", Menlo, Consolas, monospace;
+      background: #0c0c0c;
+      color: #e6edf3;
+      margin: 0;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 1.5rem 1rem 2rem;
+    }
+    .wrap {
+      width: 100%;
+      max-width: 88ch;
+    }
+    .panel {
+      border: 1px solid #3d3d3d;
+      border-radius: 2px;
+      padding: 0.75rem 1rem;
+      margin-bottom: 0.75rem;
+      background: #121212;
+    }
+    .panel h2 {
+      font-size: 0.75rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: #8b949e;
+      margin: 0 0 0.5rem 0;
+      border-bottom: 1px solid #30363d;
+      padding-bottom: 0.35rem;
+    }
+    h1 { font-size: 1.1rem; margin: 0 0 0.35rem 0; font-weight: 600; }
+    .tagline { margin: 0 0 0.25rem 0; }
+    code { background: #1e1e1e; padding: 0.1rem 0.35rem; border: 1px solid #333; word-break: break-all; }
+    table { border-collapse: collapse; width: 100%; font-size: 0.8rem; }
     th, td { border: 1px solid #30363d; padding: 0.35rem 0.5rem; text-align: left; }
     th { background: #161b22; }
-    .muted { color: #8b949e; font-size: 0.9rem; }
+    .muted { color: #8b949e; font-size: 0.88rem; }
     .warn { color: #d29922; }
     a { color: #58a6ff; }
+    footer.links { margin-top: 0.5rem; }
+    p { margin: 0.35rem 0; }
+    p:first-child { margin-top: 0; }
   </style>
 </head>
 <body>
-  <h1>Jupiter — read-only</h1>
-  <p class="muted">SeanV3 parity · ${esc(data.sqlite_path)}</p>
-  ${errBlock}
-  ${walletBlock}
-  ${posBlock}
-  ${klBlock}
-  <h2>Recent closed trades</h2>
-  <table>
-    <thead><tr><th>id</th><th>side</th><th>exit UTC</th><th>PnL USD</th><th>result</th></tr></thead>
-    <tbody>${rows || '<tr><td colspan="5" class="muted">No rows</td></tr>'}</tbody>
-  </table>
-  <p class="muted"><a href="/api/summary.json">summary.json</a> · <a href="/health">health</a></p>
+  <div class="wrap">
+    <section class="panel">
+      <h1>Jupiter — read-only</h1>
+      <p class="muted tagline">SeanV3 parity data (same SQLite as TUI) — not a terminal emulator.</p>
+      <p class="muted">${esc(data.sqlite_path)}</p>
+    </section>
+    ${errBlock ? `<section class="panel">${errBlock}</section>` : ''}
+    <section class="panel">
+      <h2>Wallet</h2>
+      ${walletBlock}
+    </section>
+    <section class="panel">
+      <h2>Position &amp; last kline</h2>
+      ${posBlock}
+      ${klBlock}
+    </section>
+    <section class="panel">
+      <h2>Recent closed trades</h2>
+      <table>
+        <thead><tr><th>id</th><th>side</th><th>exit UTC</th><th>PnL USD</th><th>result</th></tr></thead>
+        <tbody>${rows || '<tr><td colspan="5" class="muted">No rows</td></tr>'}</tbody>
+      </table>
+    </section>
+    <p class="muted links footer"><a href="/api/summary.json">summary.json</a> · <a href="/health">health</a></p>
+  </div>
 </body>
 </html>`;
 }
