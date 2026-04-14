@@ -6,6 +6,7 @@
 - **Sean SQLite:** `vscode-test/binance-klines-mini/capture/sean_parity.db`, table `sean_binance_kline_poll`.
 - **Backfill:** Use **`./run-backfill-clawbot.sh`** (preflights `https://api.binance.com/api/v3/ping` = HTTP 200, then `docker compose run` backfill). Requires **host WireGuard split-tunnel** for Binance; container uses **`network_mode: host`** so it follows host routing. See **`VPN/README.md`**.
 - **BlackBox market OHLC:** `data/sqlite/market_data.db` (default `BLACKBOX_MARKET_DATA_PATH`), table `binance_strategy_bars_5m`.
+- **Dashboard stack (UIUX.Web):** On clawbot, `api` + `binance-strategy-bars-sync` use **host network** so Binance traffic follows WireGuard; nginx proxies to `host.docker.internal:8080`. After compose changes: `cd UIUX.Web && docker compose up -d --build` (see `docker-compose.yml` header).
 
 ## Done recently (engineering)
 
