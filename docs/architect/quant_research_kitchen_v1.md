@@ -5,6 +5,28 @@
 
 ---
 
+## End-State Objective
+
+Quant Research Kitchen V1 must support:
+
+- the use of **any indicator, derived variable, or feature**;
+- the ability to **combine** these into **testable strategy recipes** (manifests);
+- **deterministic evaluation** using:
+  - quantitative mathematics;
+  - algorithmic decision systems;
+- **optional** integration of:
+  - machine learning models;
+  - statistical inference methods;
+  - optimization routines.
+
+**System behavior (required):** The platform must enable **structured composition** of indicators into strategies, **controlled exploration** of combinations (not arbitrary randomness), **reproducible and traceable** strategy definitions, **deterministic validation** via replay, and **robustness validation** via Monte Carlo or an **equivalent** governed stress layer.
+
+**Constraints (non-negotiable even as capability expands):** Preserve **parity** (same bars, evaluator, lifecycle where applicable), **deterministic outputs** for validation, **traceability** of all strategy components, and **auditability** of all generated results.
+
+**Machine learning (boundary):** ML is allowed in principle but must **operate within the manifest system** (explicit inputs and outputs), be **reproducible and versioned**, **not bypass validation layers**, and **not introduce non-deterministic execution in validation paths**. This document step does **not** implement ML, change the execution engine, alter policy package format, or add runtime learning loops — see §6 (v1 scope) and §8 (ML policy).
+
+---
+
 ## 1. Definition
 
 **Quant Research Kitchen V1** is the formal name for the BlackBox **governed, web-based strategy research and validation platform**. It is not a single-strategy project.
