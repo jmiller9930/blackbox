@@ -3,6 +3,11 @@
 !backfill.mjs
 !paper_analog.mjs
 !wallet_connect.mjs
+!jupiter_3_sean_policy.mjs
+!sean_lifecycle.mjs
+!sean_ledger.mjs
+!sean_engine.mjs
+!report.mjs
 !package.json
 !package-lock.json
 !Dockerfile
