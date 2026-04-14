@@ -1,0 +1,126 @@
+{
+  "schema": "renaissance_v4_plugin_catalog_v1",
+  "catalog_version": "1.0.0",
+  "description": "Authoritative registry of plug-in modules for Quant Research Kitchen V1. New modules are added here and implemented in code — not by editing replay_runner ad hoc.",
+  "factor_pipelines": [
+    {
+      "id": "feature_set_v1",
+      "version": "1.0.0",
+      "name": "Core deterministic feature pipeline",
+      "purpose": "Build FeatureSet from MarketState (Phase 2 stack).",
+      "import_path": "renaissance_v4.core.feature_engine",
+      "callable": "build_feature_set",
+      "kind": "callable",
+      "required_inputs": ["MarketState"],
+      "output_contract": "FeatureSet"
+    }
+  ],
+  "signals": [
+    {
+      "id": "trend_continuation",
+      "version": "1.0.0",
+      "name": "Trend continuation",
+      "import_path": "renaissance_v4.signals.trend_continuation",
+      "class_name": "TrendContinuationSignal",
+      "kind": "class",
+      "required_factors": ["feature_set_v1"],
+      "compatible_regimes": ["trend_up", "trend_down", "range", "unstable", "volatility_expansion", "volatility_compression"],
+      "output_contract": "SignalResult"
+    },
+    {
+      "id": "pullback_continuation",
+      "version": "1.0.0",
+      "name": "Pullback continuation",
+      "import_path": "renaissance_v4.signals.pullback_continuation",
+      "class_name": "PullbackContinuationSignal",
+      "kind": "class",
+      "required_factors": ["feature_set_v1"],
+      "compatible_regimes": ["trend_up", "trend_down", "range", "unstable", "volatility_expansion", "volatility_compression"],
+      "output_contract": "SignalResult"
+    },
+    {
+      "id": "breakout_expansion",
+      "version": "1.0.0",
+      "name": "Breakout expansion",
+      "import_path": "renaissance_v4.signals.breakout_expansion",
+      "class_name": "BreakoutExpansionSignal",
+      "kind": "class",
+      "required_factors": ["feature_set_v1"],
+      "compatible_regimes": ["trend_up", "trend_down", "range", "unstable", "volatility_expansion", "volatility_compression"],
+      "output_contract": "SignalResult"
+    },
+    {
+      "id": "mean_reversion_fade",
+      "version": "1.0.0",
+      "name": "Mean reversion fade",
+      "import_path": "renaissance_v4.signals.mean_reversion_fade",
+      "class_name": "MeanReversionFadeSignal",
+      "kind": "class",
+      "required_factors": ["feature_set_v1"],
+      "compatible_regimes": ["trend_up", "trend_down", "range", "unstable", "volatility_expansion", "volatility_compression"],
+      "output_contract": "SignalResult"
+    }
+  ],
+  "regime_classifiers": [
+    {
+      "id": "regime_v1_default",
+      "version": "1.0.0",
+      "name": "Baseline regime classifier",
+      "import_path": "renaissance_v4.core.regime_classifier",
+      "callable": "classify_regime",
+      "kind": "callable",
+      "required_factors": ["feature_set_v1"],
+      "output_states": ["trend_up", "trend_down", "range", "unstable", "volatility_expansion", "volatility_compression"]
+    }
+  ],
+  "risk_models": [
+    {
+      "id": "risk_governor_v1_default",
+      "version": "1.0.0",
+      "name": "Baseline risk governor",
+      "import_path": "renaissance_v4.core.risk_governor",
+      "callable": "evaluate_risk",
+      "kind": "callable",
+      "expected_inputs": ["FusionResult", "FeatureSet", "regime", "active_signal_names"],
+      "allowed_tiers": ["documented_in_risk_governor"]
+    }
+  ],
+  "fusion_engines": [
+    {
+      "id": "fusion_geometric_v1",
+      "version": "1.0.0",
+      "name": "Geometric-mean fusion (DV-ARCH-CORRECTION-009)",
+      "import_path": "renaissance_v4.core.fusion_engine",
+      "callable": "fuse_signal_results",
+      "kind": "callable",
+      "output_contract": "FusionResult"
+    }
+  ],
+  "execution_templates": [
+    {
+      "id": "execution_manager_v1_default",
+      "version": "1.0.0",
+      "name": "Default execution simulation manager",
+      "import_path": "renaissance_v4.core.execution_manager",
+      "class_name": "ExecutionManager",
+      "kind": "class",
+      "notes": "Entry/exit simulation; same-bar rules live with manager configuration in code until manifest wiring expands."
+    }
+  ],
+  "stop_target_templates": [
+    {
+      "id": "none",
+      "version": "1.0.0",
+      "name": "No separate stop/target template (use execution manager defaults)",
+      "import_path": null,
+      "callable": null,
+      "kind": "placeholder"
+    }
+  ],
+  "allowed_experiment_types": [
+    "replay_full_history",
+    "robustness_compare",
+    "baseline_monte_carlo_reference",
+    "example_pipeline_check"
+  ]
+}

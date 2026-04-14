@@ -1,0 +1,54 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://blackbox.local/schemas/strategy_manifest_v1.schema.json",
+  "title": "Quant Research Kitchen — strategy manifest v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "manifest_version",
+    "strategy_id",
+    "strategy_name",
+    "baseline_tag",
+    "timeframe",
+    "factor_pipeline",
+    "signal_modules",
+    "regime_module",
+    "risk_model",
+    "fusion_module",
+    "execution_template",
+    "experiment_type"
+  ],
+  "properties": {
+    "schema": { "const": "strategy_manifest_v1" },
+    "manifest_version": { "type": "string", "pattern": "^1\\.0$" },
+    "strategy_id": { "type": "string", "minLength": 4, "maxLength": 128 },
+    "strategy_name": { "type": "string", "maxLength": 256 },
+    "baseline_tag": { "type": "string" },
+    "symbol": { "type": ["string", "null"] },
+    "timeframe": { "type": "string", "examples": ["5m", "15m", "1h"] },
+    "start_date": { "type": ["string", "null"], "description": "ISO8601 date or null for full DB range" },
+    "end_date": { "type": ["string", "null"] },
+    "factor_pipeline": { "type": "string", "description": "Registered factor pipeline id" },
+    "signal_modules": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "type": "string" }
+    },
+    "regime_module": { "type": "string" },
+    "risk_model": { "type": "string" },
+    "fusion_module": { "type": "string" },
+    "execution_template": { "type": "string" },
+    "stop_target_template": { "type": ["string", "null"] },
+    "monte_carlo_config": {
+      "type": ["object", "null"],
+      "additionalProperties": true
+    },
+    "experiment_type": {
+      "type": "string",
+      "description": "Governed experiment class",
+      "examples": ["replay_full_history", "robustness_compare", "baseline_monte_carlo_reference"]
+    },
+    "notes": { "type": "string" }
+  }
+}

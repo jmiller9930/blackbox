@@ -11,6 +11,10 @@
 
 **RenaissanceV4_baseline_v1** is the **first validated recipe** (locked baseline) inside this kitchen. The **RenaissanceV4** codebase (replay, robustness runner, Monte Carlo, reports) is the **validation engine** behind the kitchen.
 
+### Modular, manifest-driven system (engineering direction)
+
+The kitchen must evolve as a **modular, manifest-driven** strategy system: **core engine stable**, **plug-ins** (factors, signals, regime, risk, execution templates) **registered**, **strategy runs defined by manifest**. New behavior is added via plug-ins and catalog entries — not by forking replay. **Permanent spec:** [`quant_research_kitchen_modularity_v1.md`](quant_research_kitchen_modularity_v1.md) (registry, manifest schema, examples, integration plan).
+
 ---
 
 ## 2. System identity
