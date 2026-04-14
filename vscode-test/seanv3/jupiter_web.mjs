@@ -2,6 +2,7 @@
 /**
  * Jupiter — read-only web UI for SeanV3 parity data (wallet, position, trades from sean_parity.db).
  * Default port 737 (JUPITER_WEB_PORT or legacy SEANV3_WEB_PORT). Host networking recommended.
+ * Lab: http://clawbot.a51.corp:737/ (operator browser on LAN/VPN).
  */
 import http from 'http';
 import { DatabaseSync } from 'node:sqlite';
