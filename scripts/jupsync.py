@@ -25,15 +25,17 @@ Usage:
   python3 scripts/jupsync.py --full-stack         # also rebuild/restart UIUX.Web (dashboard nginx/api)
 
 Reachability (important):
-  The optional post-deploy ``curl http://127.0.0.1:707/health`` runs **on the lab host inside SSH** —
-  there ``127.0.0.1`` is correct. From your **laptop** or any machine that is not the server, use the
-  **server hostname** (e.g. ``http://clawbot.a51.corp:707/`` on VPN/LAN) or your **public DNS + port**
-  (e.g. ``http://jupv3.greyllc.net:737/``); do not use ``localhost`` unless you have an explicit tunnel.
-  Jupiter serves **HTTP** on 707 unless you terminate **HTTPS** in front (nginx, Caddy, etc.).
+  Post-deploy health uses **the same URL operators use in a browser**, not loopback. The remote script
+  (run over **SSH on the lab host**) curls ``JUPSYNC_JUPITER_HEALTH_URL`` (default
+  ``http://clawbot.a51.corp:707/health``). You can also run that ``curl`` yourself from any machine that
+  reaches the lab (VPN/LAN) — it is **not** a “local Mac” check. Public example:
+  ``http://jupv3.greyllc.net:737/health`` — set ``JUPSYNC_JUPITER_HEALTH_URL`` if your proof URL differs.
+  Use **http** only (no TLS on the Node app on 707 unless you terminate TLS in front).
 
 Health verification runs **on the remote** after ``docker compose`` (retries with backoff). If it fails,
 the script exits **non-zero** and prints ``jupiter-web`` logs — unlike older versions that always exited 0.
-Optional env: ``JUPSYNC_HEALTH_ATTEMPTS`` (default 25), ``JUPSYNC_HEALTH_SLEEP_SEC`` (default 2).
+Optional env: ``JUPSYNC_HEALTH_ATTEMPTS`` (default 25), ``JUPSYNC_HEALTH_SLEEP_SEC`` (default 2),
+``JUPSYNC_JUPITER_HEALTH_URL`` (full URL to ``/health``, default ``http://clawbot.a51.corp:707/health``).
 """
 
 from __future__ import annotations
@@ -42,6 +44,7 @@ import argparse
 import os
 import subprocess
 import sys
+from shlex import quote as sh_quote
 
 
 DEFAULT_SSH = os.environ.get("JUPSYNC_SSH") or os.environ.get("BLACKBOX_SYNC_SSH", "jmiller@clawbot.a51.corp")
@@ -93,26 +96,36 @@ def _sync_push(repo: str, branch: str, *, dry_run: bool, skip_push: bool) -> Non
     print("Push OK.")
 
 
-def _bash_jupiter_health(remote_dir_name: str) -> str:
-    """Bash fragment: retry /health on 127.0.0.1:707; exit 1 if never OK (runs on remote)."""
+def _jupiter_health_url() -> str:
+    """Full URL for GET /health — lab hostname by default (same as operator browser), not 127.0.0.1."""
+    u = (os.environ.get("JUPSYNC_JUPITER_HEALTH_URL") or os.environ.get("JUPITER_HEALTH_URL") or "").strip()
+    if u:
+        return u
+    return "http://clawbot.a51.corp:707/health"
+
+
+def _bash_jupiter_health(remote_dir_name: str, health_url: str) -> str:
+    """Bash fragment: retry GET health_url; exit 1 if never OK (runs on remote over SSH)."""
     attempts = os.environ.get("JUPSYNC_HEALTH_ATTEMPTS", "25").strip() or "25"
     sleep_s = os.environ.get("JUPSYNC_HEALTH_SLEEP_SEC", "2").strip() or "2"
+    uq = sh_quote(health_url)
     return f"""
 echo "--- jupiter /health (retry until OK or fail) ---"
+echo "  URL: {health_url}"
 _ok=0
 for _i in $(seq 1 {attempts}); do
-  if curl -sf --connect-timeout 3 "http://127.0.0.1:707/health" 2>/dev/null | grep -q '"ok"'; then
+  if curl -sf --connect-timeout 3 {uq} 2>/dev/null | grep -q '"ok"'; then
     echo "jupiter-web health OK (attempt $_i)"
-    curl -sS --connect-timeout 5 "http://127.0.0.1:707/health"
+    curl -sS --connect-timeout 5 {uq}
     echo ""
     _ok=1
     break
   fi
-  echo "  waiting for jupiter-web on :707 (attempt $_i/{attempts}) …"
+  echo "  waiting for jupiter-web (attempt $_i/{attempts}) …"
   sleep {sleep_s}
 done
 if [ "$_ok" -ne 1 ]; then
-  echo "jupsync: ERROR — http://127.0.0.1:707/health never became healthy." >&2
+  echo "jupsync: ERROR — {health_url} never became healthy." >&2
   cd ~/{remote_dir_name}/vscode-test/seanv3
   docker compose ps -a >&2 || true
   docker compose logs --tail 50 jupiter-web >&2 || true
@@ -127,8 +140,9 @@ def _remote_script(
     *,
     health_check: bool,
     full_stack: bool,
+    health_url: str,
 ) -> str:
-    health = _bash_jupiter_health(remote_dir_name) if health_check else ""
+    health = _bash_jupiter_health(remote_dir_name, health_url) if health_check else ""
 
     ui_block = ""
     if full_stack:
@@ -169,6 +183,7 @@ def _remote_jupsync(
         pull_branch,
         health_check=health_check,
         full_stack=full_stack,
+        health_url=_jupiter_health_url(),
     )
     if dry_run:
         print("[dry-run] ssh would run on remote:\n---")

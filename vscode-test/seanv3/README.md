@@ -17,20 +17,20 @@ You can run **both** on one host. BlackBox **nginx** (`UIUX.Web` compose) binds 
 
 Both rely on the **host** routing table for Binance (WireGuard split-tunnel on clawbot per `VPN/README.md`).
 
-**Jupiter** (read-only web app; container **`jupiter-web`):** binds **HTTP** on **707** (no TLS in the Node app). **Operator browser:** use **`http://clawbot.a51.corp:707/`** when on VPN/LAN, or **`http://jupv3.greyllc.net:737/`** (or your DNS) from the internet — **not** `localhost` unless you are SSH’d on clawbot or have a tunnel. **`http://127.0.0.1:707/`** is only correct **on the server itself** (e.g. SSH session). Default **`JUPITER_WEB_PORT=707`**. Public path: **WAN :737 → LAN :707**. **`/api/summary.json`**, wallet, position, trades. Deploy: `docker compose up -d` in this directory. Local dev: **`npm run jupiter`** (may need **`sudo`** for **707** on Linux).
+**Jupiter** (read-only web app; container **`jupiter-web`):** binds **HTTP** on **707** on the **lab host** (no TLS in the Node app). **Operator browser:** **`http://clawbot.a51.corp:707/`** on VPN/LAN, or **`http://jupv3.greyllc.net:737/`** from the internet. **Proof from your machine (VPN):** `curl -sS http://clawbot.a51.corp:707/health` — same URL class as the browser, **not** loopback on your laptop. Default **`JUPITER_WEB_PORT=707`**. Public path: **WAN :737 → LAN :707**. **`/api/summary.json`**, wallet, position, trades. Deploy on **clawbot:** `docker compose up -d` in this directory. Editor-only dev clone: **`npm run jupiter`** (may need **`sudo`** for **707** on Linux).
 
 **Web vs TUI (same backend, two displays):** see [`JUPITER_WEB_TUI_ALIGNMENT.md`](JUPITER_WEB_TUI_ALIGNMENT.md). The Jupiter page mirrors `preflight_pyth_tui.py` panels (preflight, policy, wallet, paper ledger, parity, trades, oracle). Compose mounts **`../../` → `/repo:ro`** for policy registry + execution ledger; override **`JUPITER_WEB_REFRESH_SEC`** (default `3`, `0` disables HTML auto-refresh).
 
 **Troubleshooting — browser says “problem” / can’t load :707**
 
-1. **Use `http://` only.** Jupiter does **not** speak TLS on 707. **`https://clawbot…:707`** (or a browser upgrading to HTTPS) will fail with a generic error—use **`http://clawbot.a51.corp:707/`** exactly.
-2. **Prove the service on the server** (SSH on clawbot): `curl -sS http://127.0.0.1:707/health` — expect JSON with `"ok":true`. If that fails, check **`docker compose ps`** and **`docker logs jupiter-web --tail 80`** in **`~/blackbox/vscode-test/seanv3`**, then **`docker compose up -d --build`** after **`git pull`** succeeds.
-3. **From your laptop:** you must reach the host (VPN/LAN DNS for **`clawbot.a51.corp`**, or your public port-forward URL). **127.0.0.1:707** only works **on clawbot**, not on your Mac.
-4. If **`git pull`** on clawbot was blocked (e.g. untracked files), the running image may be old or containers unhealthy—fix the merge, redeploy, re-test `curl` on the server first.
+1. **Use `http://` only.** Jupiter does **not** speak TLS on 707. **`https://…:707`** will fail—use **`http://clawbot.a51.corp:707/`** (or your public URL).
+2. **Prove reachability the same way everywhere:** `curl -sS http://clawbot.a51.corp:707/health` from any machine on VPN/LAN (expect JSON with `"ok":true`). Or over SSH in one shot: `ssh jmiller@clawbot.a51.corp 'curl -sS http://clawbot.a51.corp:707/health'`. If that fails, on **clawbot** run **`docker compose ps`** and **`docker logs jupiter-web --tail 80`** in **`~/blackbox/vscode-test/seanv3`**, then **`docker compose up -d --build`** after **`git pull`** succeeds.
+3. **`jupsync.py`** uses the same default health URL (`JUPSYNC_JUPITER_HEALTH_URL`, default `http://clawbot.a51.corp:707/health`) on the remote host after deploy — not `127.0.0.1`.
+4. If **`git pull`** on clawbot was blocked (e.g. untracked files), fix the merge and redeploy before re-testing.
 
 ### Lab deploy loop (`jupsync.py`)
 
-**Consistent update process:** commit in your clone → **`python3 scripts/jupsync.py`** from repo root. That **pushes** your branch to `origin`, **SSHs to clawbot**, **`git pull`** in `~/blackbox`, then **`docker compose up -d --build`** in **`vscode-test/seanv3`**. The script then **`curl`s `127.0.0.1:707/health` on clawbot only** (inside the SSH session — not your Mac). To **verify in a browser**, open **`http://clawbot.a51.corp:707/`** (or your public URL), not localhost. Skip the remote curl with **`--skip-health`**.
+**Consistent update process:** commit in your clone → **`python3 scripts/jupsync.py`** from repo root. That **pushes** to `origin`, **SSHs to clawbot**, **`git pull`** in `~/blackbox`, then **`docker compose up -d --build`** in **`vscode-test/seanv3`**. The script then **curls the lab health URL** (default **`http://clawbot.a51.corp:707/health`**, over SSH on the lab host — override with **`JUPSYNC_JUPITER_HEALTH_URL`**). **Verify in a browser** with the same host: **`http://clawbot.a51.corp:707/`**. Skip the health step with **`--skip-health`**.
 
 - **`--dry-run`** — print actions only. **`--skip-push`** — you already pushed; only remote pull + compose.
 - Same SSH/branch env vars as **`scripts/sync.py`** (`BLACKBOX_SYNC_SSH`, etc.); **`JUPSYNC_SSH`** / **`JUPSYNC_BRANCH`** override if needed.
