@@ -1,0 +1,20 @@
+policy_package_version: 1
+generator_version: 022-c-1
+manifest_hash: 8b33dd012ad220eb6079f0318c71638ebf518e5822ee677f9a6540156922acdf
+replay_checksum: 9012edeac8f3cafad6dc30152ef8fd6a0d8765162d2360e615ec25db0675f817
+policy:
+  id: exp_candidate_compare_001
+  display_name: "Candidate trades vs frozen baseline (robustness compare)"
+  baseline_policy_slot: research_kitchen_generated
+  signal_mode: kitchen_manifest_exp_candidate_compare_001
+  catalog_id: exp_candidate_compare_001
+  timeframe: 5m
+  instrument: "SOLUSDT"
+
+inputs:
+  canonical: ohlcv_lists
+
+parity:
+  kitchen_replay_module: renaissance_v4/research/replay_runner.py
+  manifest_path: renaissance_v4/configs/manifests/candidate_robustness_compare.json
+

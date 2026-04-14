@@ -1,0 +1,26 @@
+{
+  "schema": "policy_generator_022c_index_v1",
+  "generator_version": "022-c-1",
+  "entries": [
+    {
+      "schema": "policy_generator_022c_package_meta_v1",
+      "generator_version": "022-c-1",
+      "strategy_id": "exp_candidate_compare_001",
+      "manifest_path": "renaissance_v4/configs/manifests/candidate_robustness_compare.json",
+      "manifest_hash": "8b33dd012ad220eb6079f0318c71638ebf518e5822ee677f9a6540156922acdf",
+      "replay_checksum": "9012edeac8f3cafad6dc30152ef8fd6a0d8765162d2360e615ec25db0675f817",
+      "package_dir": "policies/generated/exp_candidate_compare_001",
+      "generated_at_utc": "2026-04-14T23:47:10.860550+00:00"
+    },
+    {
+      "schema": "policy_generator_022c_package_meta_v1",
+      "generator_version": "022-c-1",
+      "strategy_id": "renaissance_baseline_v1_stack",
+      "manifest_path": "renaissance_v4/configs/manifests/baseline_v1_recipe.json",
+      "manifest_hash": "224fd8f625fae7bd4008274fbcf4597140f8757fdce25e565132c73a9b21e5d2",
+      "replay_checksum": "9012edeac8f3cafad6dc30152ef8fd6a0d8765162d2360e615ec25db0675f817",
+      "package_dir": "policies/generated/renaissance_baseline_v1_stack",
+      "generated_at_utc": "2026-04-14T23:47:10.858707+00:00"
+    }
+  ]
+}
