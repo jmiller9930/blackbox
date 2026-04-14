@@ -2,7 +2,7 @@
 # Refreshes Binance API IPs in wg-proton-mx when CDN/DNS drifts — see VPN/README.md.
 
 [Unit]
-Description=Blackbox — route Binance API (api.binance.com) via wg-proton-mx
+Description=Blackbox — Binance ping knock; WG repair if ping fails
 Documentation=file:__BLACKBOX_REPO__/VPN/README.md
 After=network-online.target
 Wants=network-online.target
