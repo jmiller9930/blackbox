@@ -1212,6 +1212,7 @@
           </label>
           <p class="tc-chain-note">
             Columns are <strong>closed</strong> 5m bars only — the rightmost column is the last completed bucket (decision at the roll). No in-progress / “eval pending” column. Open baseline: OPEN/HOLDING anchor rules; uncheck Anna for baseline only.
+            <strong>Column header times</strong> use the <strong>market clock</strong> zone (same as the Liveness row — e.g. UTC for SOL-PERP), not your browser’s local timezone.
           </p>
           <p class="tc-sync-banner" id="tc-sync-banner" hidden aria-live="polite"></p>
         </div>
@@ -2250,7 +2251,8 @@
     return new Date(o.getTime() + 5 * 60 * 1000);
   }
 
-  function tcAxisHeaderHtml(mid, isoOpen, isoClose, isNow) {
+  function tcAxisHeaderHtml(mid, isoOpen, isoClose, isNow, marketTz) {
+    marketTz = marketTz || 'UTC';
     var dClose = tcBarCloseInstant(isoOpen, isoClose, mid);
     var dOpen = tcParseAxisInstant(isoOpen, mid);
     var nowRow = isNow ? '<span class="tc-hdr-now">latest bar</span>' : '';
@@ -2263,11 +2265,13 @@
       );
     }
     var primary = dClose || dOpen;
+    /* Align with bundle.market_clock (baseline) — same zone as Liveness row; not browser local. */
     var localFmt = new Intl.DateTimeFormat(undefined, {
       hour: 'numeric',
       minute: '2-digit',
       hour12: true,
       timeZoneName: 'short',
+      timeZone: marketTz,
     });
     var utcFmt = new Intl.DateTimeFormat('en-GB', {
       hour: '2-digit',
@@ -2286,8 +2290,12 @@
         esc(utcFmt.format(dOpen).replace(/\s/g, '') + ' UTC') +
         '</span>';
     }
+    var hdrTitle =
+      'Bar close instant in ' +
+      marketTz +
+      ' (baseline market clock — matches Liveness). Second line is Zulu.';
     return (
-      '<div class="tc-hdr-stack">' +
+      '<div class="tc-hdr-stack" title="' + escAttr(hdrTitle) + '">' +
       nowRow +
       '<span class="tc-hdr-lab">Closes (decision)</span>' +
       '<span class="tc-hdr-primary">' + esc(closeLocal) + '</span>' +
@@ -2808,6 +2816,8 @@
 
   function renderTC(tc, bundle) {
     bundle = bundle || {};
+    var mcHdr = bundle.market_clock || (tc && tc.market_clock) || {};
+    var marketTzHdr = mcHdr.iana_timezone || 'UTC';
     var binanceMd = (tc && tc.binance_market_data) || {};
     var jp = bundle.jupiter_policy_snapshot || {};
     var blOpen = jp.baseline_lifecycle;
@@ -2874,7 +2884,7 @@
         ' title="' + thTitle + '"' +
         ' style="' + bgStyle + '"' +
         '>' +
-        tcAxisHeaderHtml(mid, isoOpen, isoClose, isNow) +
+        tcAxisHeaderHtml(mid, isoOpen, isoClose, isNow, marketTzHdr) +
         '</th>';
     });
     thead.innerHTML = th;
