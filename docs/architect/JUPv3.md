@@ -2,6 +2,8 @@
 
 **Purpose:** Single place for **what governs** Jupiter V3 Sean behavior, how BlackBox and SeanV3 relate, and where the code lives. Read this before arguing about “the same policy” or which file is “truth.”
 
+**Control model:** Trading behavior is **not** free‑form. The runtime **points at a named policy implementation** (Python canonical + Node mirror below); that policy **defines what constitutes an entry signal** and the **gates** for long/short. Engines, bridges, and ledgers **apply** that policy to bar data and then run lifecycle/ledger rules. **Change trading intent by changing the policy module (and its mirror),** not by scattering one‑off logic elsewhere.
+
 ---
 
 ## 1. Policy (authoritative)
