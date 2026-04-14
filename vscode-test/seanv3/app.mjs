@@ -28,9 +28,16 @@ import { processSeanEngine } from './sean_engine.mjs';
 import { ensureSeanLedgerSchema } from './sean_ledger.mjs';
 import { loadPubkeyFromKeypairFile } from './wallet_connect.mjs';
 
+const _binanceOrigin = (
+  process.env.BINANCE_API_BASE_URL ||
+  process.env.BINANCE_REST_BASE_URL ||
+  'https://api.binance.com'
+)
+  .trim()
+  .replace(/\/$/, '');
 const url =
   process.env.BINANCE_KLINES_URL ||
-  'https://api.binance.com/api/v3/klines?symbol=SOLUSDT&interval=5m&limit=1';
+  `${_binanceOrigin}/api/v3/klines?symbol=SOLUSDT&interval=5m&limit=1`;
 const intervalMs = Math.max(
   5_000,
   parseInt(process.env.POLL_INTERVAL_MS || '300000', 10)

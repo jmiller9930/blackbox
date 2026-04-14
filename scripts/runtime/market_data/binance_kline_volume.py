@@ -6,6 +6,7 @@ from Binance ``/api/v3/klines`` (field index 7, quote asset volume), keyed to th
 the canonical bar.
 
 Environment:
+  BINANCE_API_BASE_URL — Binance REST origin (default ``https://api.binance.com``); alias ``BINANCE_REST_BASE_URL``
   BLACKBOX_BINANCE_KLINE_ENABLED — ``1`` (default) fetch quote volume after each closed-bar rollup;
     set ``0`` to skip (tests / airgap).
   BLACKBOX_BINANCE_KLINE_SYMBOL — Binance spot symbol for SOL baseline (default ``SOLUSDT``).
@@ -27,6 +28,7 @@ from typing import Any
 
 from market_data.canonical_bar import CanonicalBarV1
 from market_data.canonical_instrument import CANONICAL_INSTRUMENT_SOL_PERP
+from market_data.public_data_urls import binance_api_origin, binance_ping_url
 
 
 def _ssl_context() -> ssl.SSLContext:
@@ -90,7 +92,7 @@ def fetch_binance_quote_volume_5m(
             "limit": 24,
         }
     )
-    url = f"https://api.binance.com/api/v3/klines?{qs}"
+    url = f"{binance_api_origin()}/api/v3/klines?{qs}"
     req = urllib.request.Request(
         url,
         method="GET",
@@ -147,7 +149,7 @@ def probe_binance_public_rest_ping(timeout_sec: float = 8.0) -> dict[str, Any]:
     import time
     import uuid
 
-    url = "https://api.binance.com/api/v3/ping"
+    url = binance_ping_url()
     trace_id = str(uuid.uuid4())
     t0 = time.perf_counter()
     req = urllib.request.Request(

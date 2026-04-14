@@ -14,7 +14,7 @@ From repo root::
 
 While running, prints ``V=`` for the latest 5m bucket every 10s (see ``run(..., progress_sec=...)`` to change).
 
-Environment (optional): ``PYTH_SOL_USD_FEED_ID``, same as ``pyth_sse_ingest``.
+Environment (optional): ``PYTH_SOL_USD_FEED_ID``, ``PYTH_HERMES_BASE_URL`` — same as ``pyth_sse_ingest``.
 """
 from __future__ import annotations
 
@@ -37,6 +37,7 @@ from market_data.canonical_time import floor_utc_to_5m_open, format_candle_open_
 from market_data.hermes_sse_price import (  # noqa: E402
     tape_price_and_publish_from_entry,
 )
+from market_data.public_data_urls import hermes_price_stream_url  # noqa: E402
 
 USER_AGENT = "blackbox-hermes-sse-sandbox-v/1"
 _DEFAULT_FEED = "ef0d8b6fda2ceba41da15d4095d1da392a0d2f8ed0c6c7bc0f4cfac8c280b56d"
@@ -57,7 +58,7 @@ def _sse_url() -> str:
     import os
 
     fid = (os.environ.get("PYTH_SOL_USD_FEED_ID") or _DEFAULT_FEED).strip()
-    return f"https://hermes.pyth.network/v2/updates/price/stream?ids[]={fid}"
+    return hermes_price_stream_url(fid)
 
 
 def _bucket_key_for_publish_unix(pub_i: int) -> str:

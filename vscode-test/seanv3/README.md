@@ -148,7 +148,8 @@ docker compose logs -f
 
 | Variable | Purpose |
 |----------|---------|
-| `BINANCE_KLINES_URL` | Default public klines URL. |
+| `BINANCE_API_BASE_URL` | Binance REST origin (default `https://api.binance.com`); same env as BlackBox `public_data_urls`. Host routing: `VPN/README.md`. |
+| `BINANCE_KLINES_URL` | Optional full klines URL override; if unset, built from `BINANCE_API_BASE_URL`. |
 | `POLL_INTERVAL_MS` | Default `300000` (5m); min 5s in code. |
 | `CAPTURE_PATH`, `SQLITE_PATH` | NDJSON + DB under `/capture`. |
 | `KEYPAIR_PATH` | Optional wallet JSON path inside container. |

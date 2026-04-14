@@ -50,7 +50,14 @@ function initDb(path) {
 }
 
 async function main() {
-  const url = `https://api.binance.com/api/v3/klines?symbol=${encodeURIComponent(
+  const binanceOrigin = (
+    process.env.BINANCE_API_BASE_URL ||
+    process.env.BINANCE_REST_BASE_URL ||
+    'https://api.binance.com'
+  )
+    .trim()
+    .replace(/\/$/, '');
+  const url = `${binanceOrigin}/api/v3/klines?symbol=${encodeURIComponent(
     symbol
   )}&interval=5m&limit=${limit}`;
   const t0 = Date.now();

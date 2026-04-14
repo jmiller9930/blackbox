@@ -32,6 +32,8 @@ This section states **exactly** what must happen on **clawbot** so engineering, 
 
 - **HTTPS** to **`api.binance.com`** (REST: ping, klines, and any path callers use under that host — Jupiter V3 / Sean parity, sync jobs, ad-hoc `curl`, etc.).
 
+  **Code default:** Callers use that host unless `BINANCE_API_BASE_URL` overrides the origin (`scripts/runtime/market_data/public_data_urls.py`). Hermes/Pyth uses `PYTH_HERMES_BASE_URL` (default `https://hermes.pyth.network`) and is **not** steered by the Binance Proton tunnel — see “Not in scope” below.
+
 **Requirement:** That traffic **must** leave the host through the **Proton WireGuard** interface **`wg-proton-mx`**, using the Proton exit so Binance applies **eligible** jurisdiction checks (symptom when wrong: **HTTP 451** if packets exit the **production** NIC instead).
 
 **Mechanism:** Linux sends those packets to **`wg-proton-mx`** only when:

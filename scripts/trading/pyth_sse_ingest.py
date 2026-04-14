@@ -12,6 +12,7 @@ optional conf/price filtering (legacy Drift-style). Optional ``price_change`` = 
 Hermes integer ``(price, expo)`` differs from the last stored tick (exact identity; no float epsilon).
 
 Environment:
+  PYTH_HERMES_BASE_URL — Hermes origin (default ``https://hermes.pyth.network``); alias ``HERMES_PYTH_BASE_URL``
   PYTH_SOL_USD_FEED_ID — 64-hex feed id (default: SOL/USD)
   MARKET_TICK_SYMBOL — logical symbol (default SOL-USD)
   PYTH_SSE_TICK_POLICY — ``every_message`` (default, Sean tape / V) | ``price_change`` | ``dedupe_publish``
@@ -51,6 +52,7 @@ from market_data.hermes_sse_price import (  # noqa: E402
     price_from_hermes_parsed_entry,
     tape_price_and_publish_from_entry,
 )
+from market_data.public_data_urls import hermes_price_stream_url  # noqa: E402
 from market_data.store import connect_market_db, ensure_market_schema, insert_tick  # noqa: E402
 
 USER_AGENT = "blackbox-pyth-sse-ingest/1 (+stream)"
@@ -127,8 +129,7 @@ def _tick_policy() -> str:
 
 
 def _sse_url() -> str:
-    fid = _feed_id()
-    return f"https://hermes.pyth.network/v2/updates/price/stream?ids[]={fid}"
+    return hermes_price_stream_url(_feed_id())
 
 
 def _maybe_refresh_canonical_bar(conn: Any, symbol: str) -> None:

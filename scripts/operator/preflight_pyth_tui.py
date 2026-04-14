@@ -19,6 +19,13 @@ Environment (optional):
   BLACKBOX_MARKET_DATA_PATH or SEAN_MARKET_DATA_PATH — optional SQLite tick check when dataset mode is env
   MARKET_TICK_SYMBOL          — default SOL-USD
   PYTH_SOL_USD_FEED_ID        — default Crypto.SOL/USD feed id (hex, no 0x)
+  PYTH_HERMES_BASE_URL        — Hermes origin (default https://hermes.pyth.network); alias HERMES_PYTH_BASE_URL
+  BINANCE_API_BASE_URL        — Binance REST origin (default https://api.binance.com); host routing per VPN/README.md
+  BLACKBOX_BINANCE_KLINE_SYMBOL / BINANCE_SYMBOL — spot symbol for klines smoke (default SOLUSDT)
+  TLS: prefer ``pip install certifi`` if you see CERTIFICATE_VERIFY_FAILED on macOS; or set
+  SSL_CERT_FILE / REQUESTS_CA_BUNDLE to a CA bundle; last resort for lab/VPN inspection:
+  SEANV3_SSL_INSECURE=1 (disables TLS verification — not for production).
+  SEANV3_AUTO_INIT_LEDGER_DB=0 — do not create an empty capture/sean_parity.db when missing.
 
 Exit: Ctrl+C
 """
@@ -28,6 +35,7 @@ import argparse
 import json
 import os
 import sqlite3
+import ssl
 import subprocess
 import sys
 import time
@@ -37,6 +45,17 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+_REPO_ROOT = Path(__file__).resolve().parents[2]
+_RUNTIME = str(_REPO_ROOT / "scripts" / "runtime")
+if _RUNTIME not in sys.path:
+    sys.path.insert(0, _RUNTIME)
+
+from market_data.public_data_urls import (  # noqa: E402
+    binance_klines_url,
+    binance_ping_url,
+    hermes_price_latest_parsed_url,
+)
+
 from rich import box
 from rich.console import Console, Group
 from rich.live import Live
@@ -45,9 +64,6 @@ from rich.table import Table
 from rich.text import Text
 
 _DEFAULT_FEED = "ef0d8b6fda2ceba41da15d4095d1da392a0d2f8ed0c6c7bc0f4cfac8c280b56d"
-_HERMES_LATEST = "https://hermes.pyth.network/v2/updates/price/latest"
-_BINANCE_PING = "https://api.binance.com/api/v3/ping"
-_BINANCE_KLINES = "https://api.binance.com/api/v3/klines?symbol=SOLUSDT&interval=5m&limit=1"
 
 
 def _script_dir() -> Path:
@@ -125,10 +141,31 @@ class CheckResult:
     detail: str
 
 
+def _ssl_context() -> ssl.SSLContext:
+    if (os.environ.get("SEANV3_SSL_INSECURE") or "").strip().lower() in ("1", "true", "yes"):
+        return ssl._create_unverified_context()
+    ctx = ssl.create_default_context()
+    try:
+        import certifi
+
+        ctx.load_verify_locations(certifi.where())
+    except ImportError:
+        pass
+    return ctx
+
+
+def _binance_spot_symbol() -> str:
+    return (
+        os.environ.get("BLACKBOX_BINANCE_KLINE_SYMBOL")
+        or os.environ.get("BINANCE_SYMBOL")
+        or "SOLUSDT"
+    ).strip().upper() or "SOLUSDT"
+
+
 def _http_code(url: str, timeout: float = 12.0) -> tuple[int | None, str]:
     try:
         req = urllib.request.Request(url, method="GET", headers={"User-Agent": "seanv3-operator-tui"})
-        with urllib.request.urlopen(req, timeout=timeout) as resp:
+        with urllib.request.urlopen(req, timeout=timeout, context=_ssl_context()) as resp:
             return resp.getcode(), ""
     except urllib.error.HTTPError as e:
         return e.code, str(e.reason)
@@ -137,7 +174,7 @@ def _http_code(url: str, timeout: float = 12.0) -> tuple[int | None, str]:
 
 
 def _binance_ping() -> CheckResult:
-    code, err = _http_code(_BINANCE_PING)
+    code, err = _http_code(binance_ping_url())
     if code == 200:
         return CheckResult("Binance /api/v3/ping", True, f"HTTP {code}")
     if code is None:
@@ -146,14 +183,17 @@ def _binance_ping() -> CheckResult:
 
 
 def _binance_klines() -> CheckResult:
-    code, err = _http_code(_BINANCE_KLINES)
+    sym = _binance_spot_symbol()
+    klines_url = binance_klines_url(symbol=sym, interval="5m", limit=1)
+    label = f"Binance klines {sym} 5m"
+    code, err = _http_code(klines_url)
     if code != 200:
         if code is None:
-            return CheckResult("Binance klines SOLUSDT 5m", False, err or "request failed")
-        return CheckResult("Binance klines SOLUSDT 5m", False, f"HTTP {code}")
+            return CheckResult(label, False, err or "request failed")
+        return CheckResult(label, False, f"HTTP {code}")
     try:
-        req = urllib.request.Request(_BINANCE_KLINES, headers={"User-Agent": "seanv3-operator-tui"})
-        with urllib.request.urlopen(req, timeout=12.0) as resp:
+        req = urllib.request.Request(klines_url, headers={"User-Agent": "seanv3-operator-tui"})
+        with urllib.request.urlopen(req, timeout=12.0, context=_ssl_context()) as resp:
             raw = resp.read(4).decode("utf-8", errors="replace")
         if raw.startswith("["):
             return CheckResult("Binance klines (body)", True, "JSON array")
@@ -164,10 +204,10 @@ def _binance_klines() -> CheckResult:
 
 def _hermes_pyth() -> tuple[CheckResult, dict[str, Any]]:
     fid = (os.environ.get("PYTH_SOL_USD_FEED_ID") or _DEFAULT_FEED).strip()
-    url = f"{_HERMES_LATEST}?ids[]={fid}&parsed=true"
+    url = hermes_price_latest_parsed_url(fid)
     try:
         req = urllib.request.Request(url, headers={"User-Agent": "seanv3-operator-tui"})
-        with urllib.request.urlopen(req, timeout=12.0) as resp:
+        with urllib.request.urlopen(req, timeout=12.0, context=_ssl_context()) as resp:
             body = json.loads(resp.read().decode("utf-8"))
     except Exception as e:
         return CheckResult("Hermes Pyth latest (parsed)", False, str(e)), {}

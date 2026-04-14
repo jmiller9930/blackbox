@@ -25,7 +25,11 @@ services:
     network_mode: host
     restart: unless-stopped
     environment:
-      BINANCE_KLINES_URL: https://api.binance.com/api/v3/klines?symbol=SOLUSDT&interval=5m&limit=1
+      # Same origin as BlackBox Python/Node (scripts/runtime/market_data/public_data_urls.py).
+      # Host WireGuard steers this host to Proton per VPN/README.md — no VPN inside the container.
+      BINANCE_API_BASE_URL: ${BINANCE_API_BASE_URL:-https://api.binance.com}
+      # Optional: full klines URL override (else built from BINANCE_API_BASE_URL in app.mjs).
+      # BINANCE_KLINES_URL: https://api.binance.com/api/v3/klines?symbol=SOLUSDT&interval=5m&limit=1
       POLL_INTERVAL_MS: "300000"
       CAPTURE_PATH: /capture/seanv3.ndjson
       SQLITE_PATH: /capture/sean_parity.db

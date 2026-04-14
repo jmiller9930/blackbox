@@ -9,7 +9,14 @@ import EventSource from "eventsource";
 
 const FEED =
   "ef0d8b6fda2ceba41da15d4095d1da392a0d2f8ed0c6c7bc0f4cfac8c280b56d";
-const URL = `https://hermes.pyth.network/v2/updates/price/stream?ids[]=${FEED}`;
+const HERMES_ORIGIN = (
+  process.env.PYTH_HERMES_BASE_URL ||
+  process.env.HERMES_PYTH_BASE_URL ||
+  "https://hermes.pyth.network"
+)
+  .trim()
+  .replace(/\/$/, "");
+const URL = `${HERMES_ORIGIN}/v2/updates/price/stream?ids[]=${FEED}`;
 const durationSec = Math.max(5, parseInt(process.argv[2] || "1800", 10) || 1800);
 
 let messages = 0;
