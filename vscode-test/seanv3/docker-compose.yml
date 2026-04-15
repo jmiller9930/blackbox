@@ -76,7 +76,7 @@ services:
       BINANCE_API_BASE_URL: ${BINANCE_API_BASE_URL:-https://api.binance.com}
       # Mirror seanv3 so the dashboard shows which Node policy the engine uses.
       SEAN_JUPITER_POLICY: ${SEAN_JUPITER_POLICY:-jupiter_4}
-      # 1 = block POST /api/operator/*; POST /api/v1/jupiter/set-policy (Bearer) still allowed for external strategy push.
+      # 1 = block POST /api/operator/*; sole write remains POST /api/v1/jupiter/active-policy (Bearer), validated policy id only.
       JUPITER_WEB_READ_ONLY: ${JUPITER_WEB_READ_ONLY:-1}
       # Repo mount: policy registry + execution_ledger parity (read-only).
       BLACKBOX_REPO_ROOT: /repo

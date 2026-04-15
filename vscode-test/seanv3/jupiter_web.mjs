@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * Jupiter dashboard + JSON API. GET surfaces are unauthenticated (restrict via network).
- * JUPITER_WEB_READ_ONLY=1 blocks POST /api/operator/*; POST /api/v1/jupiter/set-policy (Bearer) remains for strategy push.
+ * JUPITER_WEB_READ_ONLY=1 blocks POST /api/operator/*; sole write: POST /api/v1/jupiter/active-policy (Bearer).
  *
  * Mount repo read-only at BLACKBOX_REPO_ROOT for policy registry + execution_ledger parity.
  * Default port 707. Lab: http://clawbot.a51.corp:707/
@@ -22,6 +22,14 @@ import {
   normalizePolicyId,
   resolveJupiterPolicy,
 } from './jupiter_policy_runtime.mjs';
+
+/** GET /api/v1/jupiter/policy — observability only. */
+const JUPITER_POLICY_OBSERVABILITY_CONTRACT = 'jupiter_policy_observability_v1';
+/**
+ * Sole write: select one of the shipped policy modules (ALLOWED_POLICY_IDS).
+ * Records analog_meta.jupiter_active_policy; engine applies on next cycle. Does not mutate trades/bars.
+ */
+const JUPITER_ACTIVE_POLICY_SWITCH_CONTRACT = 'jupiter_active_policy_switch_v1';
 
 function parseSolanaPubkeyBase58(raw) {
   const s = String(raw ?? '').trim();
@@ -97,7 +105,7 @@ function esc(s) {
     .replace(/"/g, '&quot;');
 }
 
-/** When true, POST /api/operator/* returns 403; POST /api/v1/jupiter/set-policy still works with Bearer. */
+/** When true, POST /api/operator/* returns 403; POST /api/v1/jupiter/active-policy (alias set-policy) still works with Bearer. */
 function jupiterWebReadOnly() {
   return ['1', 'true', 'yes'].includes((process.env.JUPITER_WEB_READ_ONLY || '').trim().toLowerCase());
 }
@@ -898,7 +906,7 @@ function frontDoorHtml() {
   <div class="hero">
     <img src="/static/jupiter_front_door.png" alt="Jupiter — financial rings" width="920" height="auto"/>
     <h1>Jupiter — operator lab</h1>
-    <p>SeanV3 paper engine, parity vs BlackBox baseline. Dashboard is read-only for wallet/funding when <code>JUPITER_WEB_READ_ONLY=1</code>; strategy policy can be pushed via <code>POST /api/v1/jupiter/set-policy</code> (Bearer).</p>
+    <p>SeanV3 paper engine, parity vs BlackBox baseline. Dashboard is read-only for wallet/funding when <code>JUPITER_WEB_READ_ONLY=1</code>; sole write is <strong>set active Jupiter policy</strong> — <code>POST /api/v1/jupiter/active-policy</code> (Bearer).</p>
     <a class="btn" href="/dashboard">Open dashboard</a>
     <p class="note">No login UI — restrict with VPN/firewall. Operator Bearer token required for policy POST only when read-only.</p>
   </div>
@@ -988,7 +996,7 @@ function htmlPage(v) {
       <option value="jup_v3" ${ap === 'jup_v3' ? 'selected' : ''}>JUPv3</option>
       <option value="jup_mc_test" ${ap === 'jup_mc_test' ? 'selected' : ''}>JUP-MC-Test</option>
     </select></label>
-    <button type="button" id="jw-apply-policy">Apply policy</button></p>
+    <button type="button" id="jw-apply-policy">Set active Jupiter policy</button></p>
     ${postOk ? `<p class="muted">Uses Bearer token in <strong>Operator token</strong> panel above.</p>
     <script>
     (function(){
@@ -999,7 +1007,7 @@ function htmlPage(v) {
       document.getElementById('jw-apply-policy')?.addEventListener('click', async function(){
         const pol=(document.getElementById('jw-jupiter-policy')||{}).value||'jup_v4';
         const tok=(document.getElementById('jw-op-token')||{}).value||'';
-        const r=await fetch('/api/v1/jupiter/set-policy',{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+tok},body:JSON.stringify({policy:pol})});
+        const r=await fetch('/api/v1/jupiter/active-policy',{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+tok},body:JSON.stringify({policy:pol})});
         const t=await r.text();
         alert(r.ok? t : 'HTTP '+r.status+' '+t);
         if(r.ok) location.reload();
@@ -1012,7 +1020,7 @@ function htmlPage(v) {
       <p class="muted small">This <strong>Policy</strong> selector is the Jupiter/Sean runtime strategy (<code>jupiter_active_policy</code>). It is <em>not</em> the BlackBox <code>policy_registry.json</code> “strategy entry” line (that registry is for other operator tools only).</p>
       ${
         readOnly
-          ? '<p class="muted small">Read-only API: wallet/funding POSTs are off. Other apps may push strategy via <code>POST /api/v1/jupiter/set-policy</code> (Bearer).</p>'
+          ? '<p class="muted small">Read-only API: wallet/funding POSTs are off. Other apps may <strong>set active Jupiter policy</strong> via <code>POST /api/v1/jupiter/active-policy</code> (Bearer).</p>'
           : ''
       }`
     : `<p><strong>PAPER</strong> — Simulated ledger (default). SEANV3_TUI_ACTUAL=1 for live-intent banner.</p>
@@ -1020,7 +1028,7 @@ function htmlPage(v) {
       <p class="muted small">This <strong>Policy</strong> selector is the Jupiter/Sean runtime strategy (<code>jupiter_active_policy</code>). Ignore BlackBox registry “strategy entry” elsewhere — not used here.</p>
       ${
         readOnly
-          ? '<p class="muted small">Read-only API: wallet/funding POSTs are off. Other apps may push strategy via <code>POST /api/v1/jupiter/set-policy</code> (Bearer).</p>'
+          ? '<p class="muted small">Read-only API: wallet/funding POSTs are off. Other apps may <strong>set active Jupiter policy</strong> via <code>POST /api/v1/jupiter/active-policy</code> (Bearer).</p>'
           : ''
       }`;
 
@@ -1063,7 +1071,7 @@ function htmlPage(v) {
           ? `<p class="ok">Pubkey in DB — <code>${esc(w.pubkey_base58)}</code> · ${esc(v.wallet_status || '—')}</p>`
           : `<p class="warn">No pubkey in DB — use <code>KEYPAIR_PATH</code> on seanv3 or temporarily set <code>JUPITER_WEB_READ_ONLY=0</code> to register via UI.</p>`
       }
-      <p class="muted small"><strong>External strategy push:</strong> <code>POST /api/v1/jupiter/set-policy</code> · header <code>Authorization: Bearer &lt;JUPITER_OPERATOR_TOKEN&gt;</code> · body <code>{"policy":"jup_v4"}</code> (or <code>jup_v3</code>, <code>jup_mc_test</code>).</p>`;
+      <p class="muted small"><strong>Set active Jupiter policy (sole write):</strong> <code>POST /api/v1/jupiter/active-policy</code> · <code>Authorization: Bearer &lt;token&gt;</code> · body exactly <code>{"policy":"jup_v4"}</code> (or <code>jup_v3</code>, <code>jup_mc_test</code>). Alias: <code>/api/v1/jupiter/set-policy</code>.</p>`;
     } else {
       walletFundingBlock = `
       <p class="muted"><strong>Paper wallet</strong> — <strong>Equity = bankroll + realized PnL + unrealized</strong> (same numbers the engine uses). Raising “Add paper funds” increases <strong>bankroll</strong> immediately after save + reload. <strong>Chain wallet</strong> switches the gate to cached SOL; live fills still need <code>PAPER_TRADING=0</code> on seanv3 + restart.</p>
@@ -1251,7 +1259,7 @@ function htmlPage(v) {
     ? `<section class="panel"><h2>Operator token</h2>
       <p class="muted">Same secret as <code>JUPITER_OPERATOR_TOKEN</code> on jupiter-web (see <code>lab_operator_token.env</code> in this stack). ${
         readOnly
-          ? '<strong>Read-only mode:</strong> use Bearer only for <strong>Apply policy</strong> below — wallet/funding POSTs are disabled.'
+          ? '<strong>Read-only mode:</strong> use Bearer only for <strong>Set active Jupiter policy</strong> below — wallet/funding POSTs are disabled.'
           : 'Used for policy switch, paper wallet, funding mode, and paper stake'
       } — <em>not</em> your Solana wallet.</p>
       <p><label>Bearer <input type="${bearerInputType}" id="jw-op-token" size="44" value="${esc(prefillBearer)}" autocomplete="off" spellcheck="false"/></label></p>
@@ -1423,7 +1431,22 @@ function handleJupiterPolicyGet(res) {
     db = new DatabaseSync(seanPath, { readOnly: true });
     const p = resolveJupiterPolicy(db);
     res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' });
-    res.end(JSON.stringify({ active_policy: p.policyId, source: p.source }));
+    res.end(
+      JSON.stringify({
+        contract: JUPITER_POLICY_OBSERVABILITY_CONTRACT,
+        active_policy: p.policyId,
+        source: p.source,
+        allowed_policies: [...ALLOWED_POLICY_IDS],
+        api: {
+          sole_write: 'POST /api/v1/jupiter/active-policy',
+          sole_write_alias: 'POST /api/v1/jupiter/set-policy',
+          body: { policy: 'jup_v4 | jup_v3 | jup_mc_test' },
+          auth: 'Authorization: Bearer JUPITER_OPERATOR_TOKEN',
+          effect:
+            'Writes analog_meta.jupiter_active_policy only; engine reads it each cycle. Does not mutate trades, bars, or lifecycle state.',
+        },
+      })
+    );
   } catch (e) {
     res.writeHead(500, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' });
     res.end(JSON.stringify({ error: e instanceof Error ? e.message : String(e) }));
@@ -1436,7 +1459,7 @@ function handleJupiterPolicyGet(res) {
   }
 }
 
-async function handleJupiterPolicySet(req, res) {
+async function handleJupiterActivePolicyPost(req, res) {
   const expected = (process.env.JUPITER_OPERATOR_TOKEN || '').trim();
   if (!expected) {
     res.writeHead(503, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' });
@@ -1459,10 +1482,54 @@ async function handleJupiterPolicySet(req, res) {
     res.end(JSON.stringify({ error: e instanceof Error ? e.message : String(e) }));
     return;
   }
+  if (body === null || typeof body !== 'object' || Array.isArray(body)) {
+    res.writeHead(400, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' });
+    res.end(
+      JSON.stringify({
+        error: 'invalid_body',
+        contract: JUPITER_ACTIVE_POLICY_SWITCH_CONTRACT,
+        message: 'Body must be a JSON object with exactly one property: "policy" (approved identifier).',
+      })
+    );
+    return;
+  }
+  const keys = Object.keys(body);
+  if (keys.length !== 1 || keys[0] !== 'policy') {
+    res.writeHead(400, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' });
+    res.end(
+      JSON.stringify({
+        error: 'invalid_body',
+        contract: JUPITER_ACTIVE_POLICY_SWITCH_CONTRACT,
+        message:
+          'Only {"policy":"<id>"} is accepted — no extra fields, scripts, or package paths. Approved ids only.',
+        allowed_keys: ['policy'],
+        allowed_policies: [...ALLOWED_POLICY_IDS],
+      })
+    );
+    return;
+  }
+  if (typeof body.policy !== 'string') {
+    res.writeHead(400, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' });
+    res.end(
+      JSON.stringify({
+        error: 'invalid_policy_type',
+        message: 'policy must be a string (approved identifier)',
+        allowed_policies: [...ALLOWED_POLICY_IDS],
+      })
+    );
+    return;
+  }
   const nid = normalizePolicyId(body.policy);
   if (!nid || !ALLOWED_POLICY_IDS.includes(nid)) {
     res.writeHead(400, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' });
-    res.end(JSON.stringify({ error: 'invalid policy', allowed: [...ALLOWED_POLICY_IDS] }));
+    res.end(
+      JSON.stringify({
+        error: 'policy_not_in_approved_set',
+        contract: JUPITER_ACTIVE_POLICY_SWITCH_CONTRACT,
+        message: 'Unknown or unapproved policy identifier — maps only to shipped SeanV3 modules.',
+        allowed_policies: [...ALLOWED_POLICY_IDS],
+      })
+    );
     return;
   }
   const seanPath = dbPath();
@@ -1471,9 +1538,20 @@ async function handleJupiterPolicySet(req, res) {
     const before = resolveJupiterPolicy(dbw).policyId;
     setMeta(dbw, JUPITER_ACTIVE_POLICY_KEY, nid);
     const after = resolveJupiterPolicy(dbw).policyId;
-    console.error(`[jupiter] policy switch: ${before} → ${after}`);
+    console.error(`[jupiter] set active Jupiter policy: ${before} → ${after}`);
     res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' });
-    res.end(JSON.stringify({ ok: true, active_policy: after, source: 'runtime_config' }));
+    res.end(
+      JSON.stringify({
+        ok: true,
+        contract: JUPITER_ACTIVE_POLICY_SWITCH_CONTRACT,
+        operation: 'set_active_jupiter_policy',
+        active_policy: after,
+        previous_policy: before,
+        source: 'runtime_config',
+        applied_on_next_engine_cycle: true,
+        does_not_mutate: ['trade_history', 'bars', 'lifecycle_bypass', 'arbitrary_strategy_load'],
+      })
+    );
   } catch (e) {
     res.writeHead(500, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' });
     res.end(JSON.stringify({ error: e instanceof Error ? e.message : String(e) }));
@@ -1506,7 +1584,7 @@ async function handleOperatorPost(req, res, pathname) {
       JSON.stringify({
         error: 'read_only',
         message:
-          'Wallet/funding/stake POST disabled (JUPITER_WEB_READ_ONLY). Strategy policy: POST /api/v1/jupiter/set-policy with Bearer.',
+          'Wallet/funding/stake POST disabled (JUPITER_WEB_READ_ONLY). Sole write: POST /api/v1/jupiter/active-policy with Bearer.',
       })
     );
     return;
@@ -1591,8 +1669,11 @@ const server = http.createServer((req, res) => {
       handleJupiterPolicyGet(res);
       return;
     }
-    if (url.pathname === '/api/v1/jupiter/set-policy' && req.method === 'POST') {
-      await handleJupiterPolicySet(req, res);
+    if (
+      (url.pathname === '/api/v1/jupiter/active-policy' || url.pathname === '/api/v1/jupiter/set-policy') &&
+      req.method === 'POST'
+    ) {
+      await handleJupiterActivePolicyPost(req, res);
       return;
     }
 
