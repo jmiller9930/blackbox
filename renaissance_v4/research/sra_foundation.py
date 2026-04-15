@@ -1,9 +1,10 @@
 """
-DV-ARCH-SRA-FOUNDATION-030 / 031 / 032 / 033 — SRA hypotheses, variants, ranking, promotion readiness.
+DV-ARCH-SRA-FOUNDATION-030 / 031 / 032 / 033 / 034 — SRA hypotheses, variants, ranking, promotion readiness.
 
 Does not implement learning loops or change ingestion / evaluation logic. Uses existing
 ``compare-manifest`` (robustness_runner) for the full Kitchen flow.
-Promotion evaluation is readiness-only (no activation).
+Promotion evaluation is readiness-only (no activation). Controlled activation after approval is in
+``sra_handoff`` (DV-ARCH-SRA-HANDOFF-034).
 """
 
 from __future__ import annotations
@@ -712,6 +713,19 @@ def load_promotion_candidates_file() -> dict[str, Any]:
         "generated_at": None,
         "candidates": [],
     }
+
+
+def get_promotion_ready_candidates() -> list[dict[str, Any]]:
+    """
+    DV-ARCH-SRA-HANDOFF-034 — candidates from ``promotion_candidates.json`` with ``eligible == True``.
+
+    Does not re-evaluate; returns stored rows only.
+    """
+    out: list[dict[str, Any]] = []
+    for c in load_promotion_candidates_file().get("candidates") or []:
+        if isinstance(c, dict) and c.get("eligible") is True:
+            out.append(c)
+    return out
 
 
 def upsert_promotion_candidate(entry: dict[str, Any]) -> dict[str, Any]:

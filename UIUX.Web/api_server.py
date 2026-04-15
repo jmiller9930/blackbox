@@ -2261,6 +2261,24 @@ class Handler(BaseHTTPRequestHandler):
                     no_cache=True,
                 )
             return
+        if path == "/api/v1/renaissance/promotion-candidates":
+            try:
+                from renaissance_v4.research.sra_handoff import build_promotion_candidates_api_payload
+
+                body = build_promotion_candidates_api_payload()
+                body["trace_id"] = str(uuid.uuid4())
+                self._json(200, body, no_cache=True)
+            except Exception as e:  # noqa: BLE001
+                self._json(
+                    500,
+                    {
+                        "schema": "renaissance_v4_ui_error_v1",
+                        "error": str(e)[:500],
+                        "trace_id": str(uuid.uuid4()),
+                    },
+                    no_cache=True,
+                )
+            return
         if path == "/api/v1/renaissance/file":
             q = parse_qs(parsed.query or "")
             rel = (q.get("rel") or [""])[0].strip()
@@ -2631,6 +2649,31 @@ class Handler(BaseHTTPRequestHandler):
             self._json(code, r, no_cache=True)
             return
         path_norm = (parsed.path or "").rstrip("/") or "/"
+        if path_norm == "/api/v1/renaissance/promotion-approve":
+            body = self._read_json_body() or {}
+            trace_id = str(uuid.uuid4())
+            parent = str(body.get("parent_hypothesis_id") or "").strip()
+            try:
+                from renaissance_v4.research.sra_handoff import approve_promotion
+
+                r = approve_promotion(parent, repo_root=_REPO_ROOT, assigned_by="renaissance_api")
+            except ValueError as e:
+                self._json(
+                    400,
+                    {"ok": False, "error": str(e), "trace_id": trace_id},
+                    no_cache=True,
+                )
+                return
+            except Exception as e:  # noqa: BLE001
+                self._json(
+                    500,
+                    {"ok": False, "error": str(e)[:500], "trace_id": trace_id},
+                    no_cache=True,
+                )
+                return
+            r["trace_id"] = trace_id
+            self._json(200, r, no_cache=True)
+            return
         if path_norm == "/api/v1/dashboard/baseline-chain-validate":
             body = self._read_json_body()
             trace_id = str(uuid.uuid4())

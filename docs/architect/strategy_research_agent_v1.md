@@ -126,6 +126,8 @@ Structured inputs and durable traceability **without** ML or feedback loops:
 
 **Promotion readiness (DV-ARCH-SRA-PROMOTION-033):** `evaluate_promotion_candidate(parent_hypothesis_id)` checks the top-ranked variant against thresholds (`SRA_PROMOTION_MIN_TRADES`, `SRA_PROMOTION_MAX_DRAWDOWN_FLOOR`), `classification == improve`, finite expectancy, and `key_metrics.pipeline_ok`. Readiness only — **no** BlackBox activation. Output: [`promotion_candidates.json`](../../renaissance_v4/state/promotion_candidates.json). CLI: `python -m renaissance_v4.research.sra_foundation promote <parent_hypothesis_id>`.
 
+**Operator handoff (DV-ARCH-SRA-HANDOFF-034):** `get_promotion_ready_candidates()` returns stored rows with `eligible == true` only. HTTP: `GET /api/v1/renaissance/promotion-candidates` (eligible list with `hypothesis_id` = selected variant, `key_metrics`, `experiment_id`); `POST /api/v1/renaissance/promotion-approve` with JSON `{"parent_hypothesis_id": "<parent>"}` calls `approve_promotion` in `renaissance_v4/research/sra_handoff.py`, which enqueues **pending** baseline Jupiter activation via the same ledger path as `POST /api/v1/dashboard/baseline-jupiter-policy` (no auto-approve). Requires merged parent/selected `parameters` to include `handoff_jupiter_slot` or `policy_slot` (or `baseline_jupiter_slot`) resolving to `jup_v2` / `jup_v3` / `jup_v4`. If `policy_package_repo_path` or `policy_package_path` is set, it must resolve to a directory under `policies/` with `POLICY_SPEC.yaml`.
+
 ---
 
 ## 10. Related

@@ -387,3 +387,219 @@ def test_run_promote_cli_writes_promotion_json(tmp_path: Path, monkeypatch: pyte
     assert len(data["candidates"]) == 1
     assert data["candidates"][0]["parent_hypothesis_id"] == "p_prom"
     assert data["candidates"][0]["eligible"] is True
+
+
+def test_get_promotion_ready_candidates_only_eligible(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    from renaissance_v4.research import sra_foundation as sf
+
+    prom_path = tmp_path / "promotion_candidates.json"
+    prom_path.write_text(
+        json.dumps(
+            {
+                "schema": "renaissance_v4_promotion_candidates_v1",
+                "candidates": [
+                    {
+                        "parent_hypothesis_id": "a",
+                        "eligible": True,
+                        "selected_hypothesis_id": "x",
+                    },
+                    {"parent_hypothesis_id": "b", "eligible": False},
+                ],
+            },
+            indent=2,
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(sf, "promotion_candidates_json_path", lambda: prom_path)
+    ready = sf.get_promotion_ready_candidates()
+    assert len(ready) == 1
+    assert ready[0]["parent_hypothesis_id"] == "a"
+
+
+def test_build_promotion_candidates_api_payload_maps_hypothesis_id(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from renaissance_v4.research import sra_foundation as sf
+    from renaissance_v4.research.sra_handoff import build_promotion_candidates_api_payload
+
+    prom_path = tmp_path / "promotion_candidates.json"
+    prom_path.write_text(
+        json.dumps(
+            {
+                "candidates": [
+                    {
+                        "parent_hypothesis_id": "p",
+                        "selected_hypothesis_id": "sel",
+                        "experiment_id": "ex1",
+                        "key_metrics": {"k": 1},
+                        "eligible": True,
+                    }
+                ],
+            },
+            indent=2,
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(sf, "promotion_candidates_json_path", lambda: prom_path)
+    body = build_promotion_candidates_api_payload()
+    assert body["schema"] == "renaissance_v4_promotion_candidates_handoff_v1"
+    assert len(body["candidates"]) == 1
+    c0 = body["candidates"][0]
+    assert c0["hypothesis_id"] == "sel"
+    assert c0["experiment_id"] == "ex1"
+    assert c0["key_metrics"] == {"k": 1}
+
+
+def test_approve_promotion_enqueues_pending(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    from renaissance_v4.research import sra_foundation as sf
+    from renaissance_v4.research.sra_handoff import approve_promotion
+    from modules.anna_training.execution_ledger import connect_ledger, ensure_execution_ledger_schema
+
+    ldb = tmp_path / "el.db"
+    monkeypatch.setattr(
+        "modules.anna_training.execution_ledger.default_execution_ledger_path",
+        lambda: ldb,
+    )
+
+    hyp = tmp_path / "hypotheses.jsonl"
+    hyp.write_text(
+        json.dumps(
+            {"hypothesis_id": "par1", "parameters": {"handoff_jupiter_slot": "jup_v3"}},
+            sort_keys=True,
+        )
+        + "\n"
+        + json.dumps(
+            {
+                "hypothesis_id": "sel1",
+                "parent_hypothesis_id": "par1",
+                "parameters": {},
+            },
+            sort_keys=True,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    prom_path = tmp_path / "promotion_candidates.json"
+    prom_path.write_text(
+        json.dumps(
+            {
+                "candidates": [
+                    {
+                        "parent_hypothesis_id": "par1",
+                        "selected_hypothesis_id": "sel1",
+                        "experiment_id": "exp_e",
+                        "eligible": True,
+                    }
+                ],
+            },
+            indent=2,
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(sf, "hypotheses_jsonl_path", lambda: hyp)
+    monkeypatch.setattr(sf, "promotion_candidates_json_path", lambda: prom_path)
+
+    out = approve_promotion("par1", repo_root=tmp_path)
+    assert out["ok"] is True
+    assert out["target_jupiter_slot"] == "jup_v3"
+
+    conn = connect_ledger(ldb)
+    try:
+        ensure_execution_ledger_schema(conn)
+        n = conn.execute(
+            "SELECT COUNT(*) FROM policy_activation_log WHERE activation_state = 'pending'"
+        ).fetchone()
+        assert n and int(n[0]) >= 1
+    finally:
+        conn.close()
+
+
+def test_approve_promotion_rejects_without_jupiter_slot(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from renaissance_v4.research import sra_foundation as sf
+    from renaissance_v4.research.sra_handoff import approve_promotion
+
+    hyp = tmp_path / "hypotheses.jsonl"
+    hyp.write_text(
+        json.dumps({"hypothesis_id": "par2", "parameters": {}}, sort_keys=True)
+        + "\n"
+        + json.dumps(
+            {"hypothesis_id": "sel2", "parent_hypothesis_id": "par2", "parameters": {}},
+            sort_keys=True,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    prom_path = tmp_path / "promotion_candidates.json"
+    prom_path.write_text(
+        json.dumps(
+            {
+                "candidates": [
+                    {
+                        "parent_hypothesis_id": "par2",
+                        "selected_hypothesis_id": "sel2",
+                        "experiment_id": "e",
+                        "eligible": True,
+                    }
+                ],
+            },
+            indent=2,
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(sf, "hypotheses_jsonl_path", lambda: hyp)
+    monkeypatch.setattr(sf, "promotion_candidates_json_path", lambda: prom_path)
+
+    with pytest.raises(ValueError, match="handoff_jupiter_slot"):
+        approve_promotion("par2", repo_root=tmp_path)
+
+
+def test_approve_promotion_rejects_bad_policy_package_path(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from renaissance_v4.research import sra_foundation as sf
+    from renaissance_v4.research.sra_handoff import approve_promotion
+
+    hyp = tmp_path / "hypotheses.jsonl"
+    hyp.write_text(
+        json.dumps(
+            {
+                "hypothesis_id": "par3",
+                "parameters": {
+                    "handoff_jupiter_slot": "jup_v2",
+                    "policy_package_repo_path": "policies/does_not_exist_pkg",
+                },
+            },
+            sort_keys=True,
+        )
+        + "\n"
+        + json.dumps(
+            {"hypothesis_id": "sel3", "parent_hypothesis_id": "par3", "parameters": {}},
+            sort_keys=True,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    prom_path = tmp_path / "promotion_candidates.json"
+    prom_path.write_text(
+        json.dumps(
+            {
+                "candidates": [
+                    {
+                        "parent_hypothesis_id": "par3",
+                        "selected_hypothesis_id": "sel3",
+                        "experiment_id": "e",
+                        "eligible": True,
+                    }
+                ],
+            },
+            indent=2,
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(sf, "hypotheses_jsonl_path", lambda: hyp)
+    monkeypatch.setattr(sf, "promotion_candidates_json_path", lambda: prom_path)
+
+    with pytest.raises(ValueError, match="policy_package_repo_path"):
+        approve_promotion("par3", repo_root=ROOT)
