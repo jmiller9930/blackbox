@@ -124,6 +124,8 @@ Structured inputs and durable traceability **without** ML or feedback loops:
 
 **Results aggregation (DV-ARCH-SRA-RESULTS-032):** Read `hypothesis_results.jsonl` (latest row per `hypothesis_id`). `rank_hypothesis_variants(parent_hypothesis_id)` orders by classification (`improve` → `inconclusive` → `degrade`), then deterministic metrics (`expectancy`, `max_drawdown`, `total_trades`, then `hypothesis_id`). Writes/merges [`hypothesis_rankings.json`](../../renaissance_v4/state/hypothesis_rankings.json). CLI: `python -m renaissance_v4.research.sra_foundation rank <parent_hypothesis_id>`.
 
+**Promotion readiness (DV-ARCH-SRA-PROMOTION-033):** `evaluate_promotion_candidate(parent_hypothesis_id)` checks the top-ranked variant against thresholds (`SRA_PROMOTION_MIN_TRADES`, `SRA_PROMOTION_MAX_DRAWDOWN_FLOOR`), `classification == improve`, finite expectancy, and `key_metrics.pipeline_ok`. Readiness only — **no** BlackBox activation. Output: [`promotion_candidates.json`](../../renaissance_v4/state/promotion_candidates.json). CLI: `python -m renaissance_v4.research.sra_foundation promote <parent_hypothesis_id>`.
+
 ---
 
 ## 10. Related

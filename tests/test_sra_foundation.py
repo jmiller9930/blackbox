@@ -236,3 +236,154 @@ def test_write_manifest_for_run_paths(tmp_path: Path, monkeypatch: pytest.Monkey
     assert p.suffix == ".json"
     data = json.loads(p.read_text(encoding="utf-8"))
     assert data["strategy_id"] == "x"
+
+
+def test_evaluate_promotion_candidate_eligible(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    from renaissance_v4.research import sra_foundation as sf
+
+    res = tmp_path / "hypothesis_results.jsonl"
+    res.write_text(
+        json.dumps(
+            {
+                "hypothesis_id": "best1",
+                "parent_hypothesis_id": "par_elig",
+                "experiment_id": "exp_1",
+                "classification": "improve",
+                "key_metrics": {
+                    "pipeline_ok": True,
+                    "deterministic": {
+                        "expectancy": 0.1,
+                        "total_trades": 10,
+                        "max_drawdown": -0.05,
+                    },
+                },
+            },
+            sort_keys=True,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    rank_path = tmp_path / "hypothesis_rankings.json"
+    rank_path.write_text(
+        json.dumps(
+            {
+                "rankings": [
+                    {
+                        "parent_hypothesis_id": "par_elig",
+                        "best_variant": "best1",
+                        "ordered_variants": ["best1"],
+                    }
+                ],
+                "schema": "renaissance_v4_hypothesis_rankings_v1",
+            },
+            indent=2,
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(sf, "hypothesis_results_jsonl_path", lambda: res)
+    monkeypatch.setattr(sf, "hypothesis_rankings_json_path", lambda: rank_path)
+    monkeypatch.setenv("SRA_PROMOTION_MIN_TRADES", "5")
+    monkeypatch.setenv("SRA_PROMOTION_MAX_DRAWDOWN_FLOOR", "-1.0")
+
+    out = sf.evaluate_promotion_candidate("par_elig")
+    assert out["eligible"] is True
+    assert out["reason"] is None
+    assert out["selected_hypothesis_id"] == "best1"
+    assert out["experiment_id"] == "exp_1"
+
+
+def test_evaluate_promotion_candidate_not_improve(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    from renaissance_v4.research import sra_foundation as sf
+
+    res = tmp_path / "hypothesis_results.jsonl"
+    res.write_text(
+        json.dumps(
+            {
+                "hypothesis_id": "v1",
+                "parent_hypothesis_id": "par_x",
+                "classification": "inconclusive",
+                "key_metrics": {
+                    "pipeline_ok": True,
+                    "deterministic": {"expectancy": 0.0, "total_trades": 99, "max_drawdown": -0.01},
+                },
+            },
+            sort_keys=True,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    rank_path = tmp_path / "hypothesis_rankings.json"
+    rank_path.write_text(
+        json.dumps(
+            {
+                "rankings": [
+                    {
+                        "parent_hypothesis_id": "par_x",
+                        "best_variant": "v1",
+                        "ordered_variants": ["v1"],
+                    }
+                ],
+                "schema": "renaissance_v4_hypothesis_rankings_v1",
+            },
+            indent=2,
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(sf, "hypothesis_results_jsonl_path", lambda: res)
+    monkeypatch.setattr(sf, "hypothesis_rankings_json_path", lambda: rank_path)
+
+    out = sf.evaluate_promotion_candidate("par_x")
+    assert out["eligible"] is False
+    assert out["reason"] == "classification_not_improve"
+
+
+def test_run_promote_cli_writes_promotion_json(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    from renaissance_v4.research import sra_foundation as sf
+
+    res = tmp_path / "hypothesis_results.jsonl"
+    res.write_text(
+        json.dumps(
+            {
+                "hypothesis_id": "b",
+                "parent_hypothesis_id": "p_prom",
+                "experiment_id": "e",
+                "classification": "improve",
+                "key_metrics": {
+                    "pipeline_ok": True,
+                    "deterministic": {"expectancy": 1.0, "total_trades": 8, "max_drawdown": -0.1},
+                },
+            },
+            sort_keys=True,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    rank_path = tmp_path / "hypothesis_rankings.json"
+    rank_path.write_text(
+        json.dumps(
+            {
+                "rankings": [
+                    {
+                        "parent_hypothesis_id": "p_prom",
+                        "best_variant": "b",
+                        "ordered_variants": ["b"],
+                    }
+                ],
+                "schema": "renaissance_v4_hypothesis_rankings_v1",
+            },
+            indent=2,
+        ),
+        encoding="utf-8",
+    )
+    prom_path = tmp_path / "promotion_candidates.json"
+    monkeypatch.setattr(sf, "hypothesis_results_jsonl_path", lambda: res)
+    monkeypatch.setattr(sf, "hypothesis_rankings_json_path", lambda: rank_path)
+    monkeypatch.setattr(sf, "promotion_candidates_json_path", lambda: prom_path)
+    monkeypatch.setenv("SRA_PROMOTION_MIN_TRADES", "5")
+
+    sf.run_promote_cli("p_prom")
+    data = json.loads(prom_path.read_text(encoding="utf-8"))
+    assert data["schema"] == "renaissance_v4_promotion_candidates_v1"
+    assert len(data["candidates"]) == 1
+    assert data["candidates"][0]["parent_hypothesis_id"] == "p_prom"
+    assert data["candidates"][0]["eligible"] is True

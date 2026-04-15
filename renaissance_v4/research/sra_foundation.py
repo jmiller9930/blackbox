@@ -1,8 +1,9 @@
 """
-DV-ARCH-SRA-FOUNDATION-030 / 031 / 032 — SRA hypotheses, variants, Kitchen runs, results ranking.
+DV-ARCH-SRA-FOUNDATION-030 / 031 / 032 / 033 — SRA hypotheses, variants, ranking, promotion readiness.
 
 Does not implement learning loops or change ingestion / evaluation logic. Uses existing
 ``compare-manifest`` (robustness_runner) for the full Kitchen flow.
+Promotion evaluation is readiness-only (no activation).
 """
 
 from __future__ import annotations
@@ -10,6 +11,7 @@ from __future__ import annotations
 import argparse
 import copy
 import json
+import math
 import os
 import re
 import subprocess
@@ -41,6 +43,31 @@ def hypothesis_results_jsonl_path() -> Path:
 
 def hypothesis_rankings_json_path() -> Path:
     return _rv4_root() / "state" / "hypothesis_rankings.json"
+
+
+def promotion_candidates_json_path() -> Path:
+    return _rv4_root() / "state" / "promotion_candidates.json"
+
+
+def promotion_min_trades() -> int:
+    """Minimum deterministic total_trades for promotion readiness (override: ``SRA_PROMOTION_MIN_TRADES``)."""
+    raw = os.environ.get("SRA_PROMOTION_MIN_TRADES", "5").strip()
+    try:
+        return max(0, int(raw))
+    except ValueError:
+        return 5
+
+
+def promotion_max_drawdown_floor() -> float:
+    """
+    Candidate ``max_drawdown`` must be >= this value (e.g. -0.25 means not worse than -25%).
+    Override: ``SRA_PROMOTION_MAX_DRAWDOWN_FLOOR`` (default ``-1.0``, very permissive).
+    """
+    raw = os.environ.get("SRA_PROMOTION_MAX_DRAWDOWN_FLOOR", "-1.0").strip()
+    try:
+        return float(raw)
+    except ValueError:
+        return -1.0
 
 
 def baseline_manifest_template_path() -> Path:
@@ -552,6 +579,178 @@ def _cmd_rank(args: argparse.Namespace) -> int:
     return 0
 
 
+# --- DV-ARCH-SRA-PROMOTION-033 — promotion readiness (no activation) ---
+
+
+def _best_variant_from_rankings_file(parent_hypothesis_id: str) -> str | None:
+    pid = str(parent_hypothesis_id).strip()
+    data = load_hypothesis_rankings_file()
+    for r in data.get("rankings") or []:
+        if str(r.get("parent_hypothesis_id") or "").strip() != pid:
+            continue
+        bv = r.get("best_variant")
+        if bv is None:
+            return None
+        s = str(bv).strip()
+        return s or None
+    return None
+
+
+def evaluate_promotion_candidate(parent_hypothesis_id: str) -> dict[str, Any]:
+    """
+    Qualify the top-ranked variant for promotion **readiness** only (deterministic rules).
+
+    Reads ``hypothesis_rankings.json`` when present; otherwise uses in-memory
+    ``rank_hypothesis_variants`` for ``best_variant``.
+    """
+    pid = str(parent_hypothesis_id).strip()
+    evaluated_at = datetime.now(timezone.utc).isoformat()
+    min_tt = promotion_min_trades()
+    mdd_floor = promotion_max_drawdown_floor()
+
+    selected = _best_variant_from_rankings_file(pid)
+    if selected is None:
+        selected = rank_hypothesis_variants(pid).get("best_variant")
+
+    base: dict[str, Any] = {
+        "parent_hypothesis_id": pid,
+        "selected_hypothesis_id": selected,
+        "experiment_id": None,
+        "classification": None,
+        "key_metrics": None,
+        "eligible": False,
+        "reason": None,
+        "evaluated_at": evaluated_at,
+    }
+
+    if not selected:
+        base["reason"] = "no_ranked_variant_for_parent"
+        return base
+
+    latest = load_hypothesis_results_latest_by_id()
+    row = latest.get(selected)
+    if row is None:
+        base["reason"] = "no_result_row_for_selected_hypothesis"
+        return base
+
+    base["experiment_id"] = row.get("experiment_id")
+    cls = str(row.get("classification") or "").strip().lower()
+    base["classification"] = row.get("classification")
+    km = row.get("key_metrics") if isinstance(row.get("key_metrics"), dict) else {}
+    base["key_metrics"] = copy.deepcopy(km)
+
+    if km.get("pipeline_ok") is not True:
+        base["reason"] = "pipeline_not_ok_or_incomplete"
+        return base
+
+    if cls != "improve":
+        base["reason"] = "classification_not_improve"
+        return base
+
+    det = km.get("deterministic") if isinstance(km.get("deterministic"), dict) else {}
+    exp = det.get("expectancy")
+    if exp is None:
+        base["reason"] = "expectancy_missing"
+        return base
+    try:
+        exp_f = float(exp)
+    except (TypeError, ValueError):
+        base["reason"] = "expectancy_not_numeric"
+        return base
+    if not math.isfinite(exp_f):
+        base["reason"] = "expectancy_not_finite"
+        return base
+
+    try:
+        tt = int(det.get("total_trades")) if det.get("total_trades") is not None else None
+    except (TypeError, ValueError):
+        tt = None
+    if tt is None:
+        base["reason"] = "total_trades_missing"
+        return base
+    if tt < min_tt:
+        base["reason"] = f"total_trades_below_minimum (need>={min_tt}, got={tt})"
+        return base
+
+    try:
+        mdd = float(det.get("max_drawdown")) if det.get("max_drawdown") is not None else None
+    except (TypeError, ValueError):
+        mdd = None
+    if mdd is None:
+        base["reason"] = "max_drawdown_missing"
+        return base
+    if not math.isfinite(mdd):
+        base["reason"] = "max_drawdown_not_finite"
+        return base
+    if mdd < mdd_floor:
+        base["reason"] = (
+            f"max_drawdown_below_floor (need>={mdd_floor}, got={mdd})"
+        )
+        return base
+
+    base["eligible"] = True
+    base["reason"] = None
+    return base
+
+
+def load_promotion_candidates_file() -> dict[str, Any]:
+    p = promotion_candidates_json_path()
+    if not p.is_file():
+        return {
+            "schema": "renaissance_v4_promotion_candidates_v1",
+            "generated_at": None,
+            "candidates": [],
+        }
+    try:
+        raw = json.loads(p.read_text(encoding="utf-8"))
+        if isinstance(raw, dict) and isinstance(raw.get("candidates"), list):
+            return raw
+    except (json.JSONDecodeError, OSError):
+        pass
+    return {
+        "schema": "renaissance_v4_promotion_candidates_v1",
+        "generated_at": None,
+        "candidates": [],
+    }
+
+
+def upsert_promotion_candidate(entry: dict[str, Any]) -> dict[str, Any]:
+    data = load_promotion_candidates_file()
+    cands: list[dict[str, Any]] = list(data.get("candidates") or [])
+    pid = str(entry.get("parent_hypothesis_id") or "").strip()
+    replaced = False
+    for i, r in enumerate(cands):
+        if str(r.get("parent_hypothesis_id") or "").strip() == pid:
+            cands[i] = entry
+            replaced = True
+            break
+    if not replaced:
+        cands.append(entry)
+    cands.sort(key=lambda x: str(x.get("parent_hypothesis_id") or ""))
+    data["candidates"] = cands
+    data["generated_at"] = datetime.now(timezone.utc).isoformat()
+    p = promotion_candidates_json_path()
+    p.parent.mkdir(parents=True, exist_ok=True)
+    p.write_text(json.dumps(data, indent=2, sort_keys=True), encoding="utf-8")
+    return data
+
+
+def run_promote_cli(parent_hypothesis_id: str) -> dict[str, Any]:
+    entry = evaluate_promotion_candidate(parent_hypothesis_id)
+    upsert_promotion_candidate(entry)
+    return entry
+
+
+def _cmd_promote(args: argparse.Namespace) -> int:
+    try:
+        out = run_promote_cli(args.parent_hypothesis_id)
+    except Exception as e:  # noqa: BLE001
+        print(json.dumps({"ok": False, "error": str(e)}), file=sys.stderr)
+        return 1
+    print(json.dumps({"ok": True, "promotion": out}, indent=2, default=str))
+    return 0
+
+
 def _cmd_add(args: argparse.Namespace) -> int:
     raw = Path(args.file).read_text(encoding="utf-8")
     record = json.loads(raw)
@@ -594,7 +793,9 @@ def _cmd_variants(args: argparse.Namespace) -> int:
 
 
 def build_parser() -> argparse.ArgumentParser:
-    p = argparse.ArgumentParser(description="SRA foundation — DV-ARCH-SRA-FOUNDATION-030 / VARIANTS-031")
+    p = argparse.ArgumentParser(
+        description="SRA foundation — 030 / 031 / 032 / 033 (hypotheses, variants, rank, promotion readiness)"
+    )
     sub = p.add_subparsers(dest="cmd", required=True)
 
     a = sub.add_parser("add", help="Append a hypothesis record from a JSON file")
@@ -625,6 +826,13 @@ def build_parser() -> argparse.ArgumentParser:
     )
     rk.add_argument("parent_hypothesis_id", type=str)
     rk.set_defaults(func=_cmd_rank)
+
+    pr = sub.add_parser(
+        "promote",
+        help="DV-ARCH-SRA-PROMOTION-033 — evaluate top variant for promotion readiness, write promotion_candidates.json",
+    )
+    pr.add_argument("parent_hypothesis_id", type=str)
+    pr.set_defaults(func=_cmd_promote)
 
     return p
 
