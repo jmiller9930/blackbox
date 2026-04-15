@@ -1,8 +1,10 @@
-# Policy wiring surface map (v1)
+# Policy wiring surface map (v2)
 
 **Directive:** DV-ARCH-CLARIFICATION-029 — Policy Wiring Clarification — Source of Truth Across All Surfaces  
-**Status:** Documentation only (no code changes in this step).  
+**Status:** Living map — **§5** defines Renaissance vs Dashboard ownership, shared-file edit lock, and persisted-vs-preview bright line (v2).  
 **Scope:** **Baseline Jupiter** policies (`jup_v2` / `jup_v3` / `jup_v4`) — the integrated Sean evaluators in `modules/anna_training/jupiter_*_sean_policy.py`. Custom policy **ingestion** (024-C) will plug into the same surfaces once implemented; this map is the checklist so nothing is missed.
+
+**File name** remains `policy_wiring_surface_map_v1.md` for stable links; **document revision** is **v2** (see §8).
 
 **Related:** [`blackbox_policy_kitchen_integration_writeup.md`](blackbox_policy_kitchen_integration_writeup.md), [`policy_activation_lineage_spec.md`](policy_activation_lineage_spec.md), [`DV-ARCH-POLICY-LOAD-028_unified_policy_submission.md`](DV-ARCH-POLICY-LOAD-028_unified_policy_submission.md).
 
@@ -255,7 +257,8 @@ These files (or surfaces) affect **both** Kitchen/backend truth and what the ope
 |----------------|------------|
 | `modules/anna_training/dashboard_bundle.py` | Builds API payloads: persisted vs preview, trade chain, policy tags. |
 | `tests/test_dashboard_bundle.py` | Contract tests for bundle behavior and truth semantics. |
-| `UIUX.Web/api_server.py` | When API payloads or routes affect **both** Renaissance workflows and dashboard consumers. |
+| `UIUX.Web/api_server.py` | When API payloads or routes affect **both** Renaissance workflows and dashboard consumers (e.g. `dashboard/bundle`, `baseline-jupiter-policy`, `policy-evaluation-forensic`). |
+| `modules/anna_training/baseline_ledger_bridge.py` | Writes **`policy_evaluations`** / lifecycle truth on each tick — coordinates with Dashboard when semantics of persisted vs preview change. |
 | Any function that **determines** | Active policy, pending policy, historical policy attribution, **preview vs persisted truth**. |
 
 **Edit lock protocol (before changing a shared-boundary file):**
@@ -314,4 +317,4 @@ DOC: docs/architect/policy_wiring_surface_map_v1.md
 | Version | Change |
 |---------|--------|
 | 1 | Initial surface map per DV-ARCH-CLARIFICATION-029. |
-| 2 | §5 Team ownership, shared-boundary edit lock, persisted-vs-preview bright line (cross-team coordination). |
+| 2 | §5 Team ownership, shared-boundary edit lock, persisted-vs-preview bright line; doc title v2; `baseline_ledger_bridge` listed as shared when persisted semantics change; `.cursor/rules/renaissance-dashboard-boundary.mdc` pointer. |
