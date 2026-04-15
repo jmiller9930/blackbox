@@ -19,6 +19,12 @@ export const VOLUME_SPIKE_MULTIPLIER = 1.2;
 export const MIN_EXPECTED_MOVE = 0.5;
 export const ATR_PERIOD = 14;
 
+/**
+ * Optional overrides for API validation / MC2 lane (DV-ARCH-JUPITER-MC2-039).
+ * Default behavior unchanged when omitted.
+ * @typedef {{ volumeSpikeMultiplier?: number }} JupiterV4SignalOpts
+ */
+
 /** Aligned with Python: max(EMA_LONG_PERIOD, ATR_PERIOD) + 50 */
 export const MIN_BARS = Math.max(EMA_LONG_PERIOD, ATR_PERIOD) + 50;
 
@@ -31,9 +37,18 @@ export const POLICY_ENGINE_ID = 'jupiter_4';
  * @param {number[]} highs
  * @param {number[]} lows
  * @param {number[]} volumes
+ * @param {JupiterV4SignalOpts} [opts]
  * @returns {{ shortSignal: boolean, longSignal: boolean, signalPrice: number, diag: Record<string, unknown> }}
  */
-export function generateSignalFromOhlcV4(closes, highs, lows, volumes) {
+export function generateSignalFromOhlcV4(closes, highs, lows, volumes, opts) {
+  const volMult =
+    opts != null &&
+    typeof opts === 'object' &&
+    typeof opts.volumeSpikeMultiplier === 'number' &&
+    Number.isFinite(opts.volumeSpikeMultiplier) &&
+    opts.volumeSpikeMultiplier > 0
+      ? opts.volumeSpikeMultiplier
+      : VOLUME_SPIKE_MULTIPLIER;
   const diag = { policy_engine: POLICY_ENGINE_ID, catalog_id: CATALOG_ID };
   const n = closes.length;
   if (n < MIN_BARS) {
@@ -73,7 +88,7 @@ export function generateSignalFromOhlcV4(closes, highs, lows, volumes) {
 
   const avgVolume = volumes.reduce((a, b) => a + b, 0) / Math.max(volumes.length, 1);
   const candleVol = volumes[n - 1];
-  const volumeSpike = candleVol > avgVolume * VOLUME_SPIKE_MULTIPLIER;
+  const volumeSpike = candleVol > avgVolume * volMult;
 
   const atrVal = calculateAtr(closes, highs, lows);
   const expectedMove = atrVal * 2.5;
@@ -117,7 +132,7 @@ export function generateSignalFromOhlcV4(closes, highs, lows, volumes) {
       },
       {
         id: 'volume_spike',
-        label: `Volume spike (>${VOLUME_SPIKE_MULTIPLIER}× avg)`,
+        label: `Volume spike (>${volMult}× avg)`,
         long_ok: volumeSpike,
         short_ok: volumeSpike,
       },
@@ -139,6 +154,7 @@ export function generateSignalFromOhlcV4(closes, highs, lows, volumes) {
   };
 
   Object.assign(diag, {
+    volume_spike_multiplier_effective: volMult,
     ema9: e9,
     ema21: e21,
     bullish_crossover: bullishCrossover,

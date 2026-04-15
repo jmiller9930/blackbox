@@ -22,15 +22,21 @@ import {
   MIN_BARS as MIN_BARS_MC,
   ENGINE_ID as ENGINE_ID_MC,
 } from './jupiter_mc_test_policy.mjs';
+import {
+  generateSignalFromOhlcMc2,
+  resolveEntrySide as resolveEntrySideMc2,
+  MIN_BARS as MIN_BARS_MC2,
+  ENGINE_ID as ENGINE_ID_MC2,
+} from './jupiter_mc2_policy.mjs';
 
 export const JUPITER_ACTIVE_POLICY_KEY = 'jupiter_active_policy';
 
 /** Canonical ids for API / UI / meta storage */
-export const ALLOWED_POLICY_IDS = Object.freeze(['jup_v4', 'jup_v3', 'jup_mc_test']);
+export const ALLOWED_POLICY_IDS = Object.freeze(['jup_v4', 'jup_v3', 'jup_mc_test', 'jup_mc2']);
 
 /**
  * @param {string | null | undefined} s
- * @returns {'jup_v4' | 'jup_v3' | 'jup_mc_test' | null}
+ * @returns {'jup_v4' | 'jup_v3' | 'jup_mc_test' | 'jup_mc2' | null}
  */
 export function normalizePolicyId(s) {
   const t = String(s ?? '')
@@ -40,13 +46,14 @@ export function normalizePolicyId(s) {
   if (t === 'jup_v4' || t === 'jupiter_4' || t === 'v4') return 'jup_v4';
   if (t === 'jup_v3' || t === 'jupiter_3' || t === 'v3') return 'jup_v3';
   if (t === 'jup_mc_test' || t === 'jupiter_mc_test' || t === 'mc_test') return 'jup_mc_test';
+  if (t === 'jup_mc2' || t === 'jupiter_mc2' || t === 'mc2') return 'jup_mc2';
   return null;
 }
 
 /**
  * @param {import('node:sqlite').DatabaseSync} db
  * @returns {{
- *   policyId: 'jup_v4' | 'jup_v3' | 'jup_mc_test',
+ *   policyId: 'jup_v4' | 'jup_v3' | 'jup_mc_test' | 'jup_mc2',
  *   source: 'runtime_config' | 'environment' | 'default',
  *   minBars: number,
  *   generateEntrySignal: Function,
@@ -97,6 +104,17 @@ export function resolveJupiterPolicy(db) {
       resolveEntrySide: resolveEntrySideMc,
       engineId: 'sean_jupiter_mc_test_engine_v1',
       policyEngineTag: ENGINE_ID_MC,
+    };
+  }
+  if (id === 'jup_mc2') {
+    return {
+      policyId: 'jup_mc2',
+      source,
+      minBars: MIN_BARS_MC2,
+      generateEntrySignal: generateSignalFromOhlcMc2,
+      resolveEntrySide: resolveEntrySideMc2,
+      engineId: 'sean_jupiter_mc2_engine_v1',
+      policyEngineTag: ENGINE_ID_MC2,
     };
   }
   return {

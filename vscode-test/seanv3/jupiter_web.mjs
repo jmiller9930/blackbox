@@ -1069,10 +1069,11 @@ function htmlPage(v) {
     <p><strong>Policy</strong> (runtime — next bar onward; does not close or force-open positions)</p>
     <p class="muted">Active: <code id="jw-ap-code">${esc(ap)}</code> · source: <code id="jw-ap-src">${esc(src)}</code> · meta key <code>${esc(JUPITER_ACTIVE_POLICY_KEY)}</code></p>
     <div id="jw-policy-control" class="jw-policy-box jw-policy-idle">
-      <p class="op-row" style="margin-top:0"><label>JUPv4 / JUPv3 / JUP-MC-Test <select id="jw-jupiter-policy">
+      <p class="op-row" style="margin-top:0"><label>JUPv4 / JUPv3 / JUP-MC-Test / JUP-MC2 <select id="jw-jupiter-policy">
       <option value="jup_v4" ${ap === 'jup_v4' ? 'selected' : ''}>JUPv4</option>
       <option value="jup_v3" ${ap === 'jup_v3' ? 'selected' : ''}>JUPv3</option>
       <option value="jup_mc_test" ${ap === 'jup_mc_test' ? 'selected' : ''}>JUP-MC-Test</option>
+      <option value="jup_mc2" ${ap === 'jup_mc2' ? 'selected' : ''}>JUP-MC2</option>
     </select></label>
     <button type="button" id="jw-apply-policy" class="fund-btn">Set active Jupiter policy</button></p>
       <p id="jw-policy-status" class="jw-policy-status small"></p>
@@ -1191,7 +1192,7 @@ function htmlPage(v) {
           ? `<p class="ok">Pubkey in DB — <code>${esc(w.pubkey_base58)}</code> · ${esc(v.wallet_status || '—')}</p>`
           : `<p class="warn">No pubkey in DB — use <code>KEYPAIR_PATH</code> on seanv3 or temporarily set <code>JUPITER_WEB_READ_ONLY=0</code> to register via UI.</p>`
       }
-      <p class="muted small"><strong>Set active Jupiter policy (sole write):</strong> <code>POST /api/v1/jupiter/active-policy</code> · <code>Authorization: Bearer &lt;token&gt;</code> · body exactly <code>{"policy":"jup_v4"}</code> (or <code>jup_v3</code>, <code>jup_mc_test</code>). Alias: <code>/api/v1/jupiter/set-policy</code>.</p>`;
+      <p class="muted small"><strong>Set active Jupiter policy (sole write):</strong> <code>POST /api/v1/jupiter/active-policy</code> · <code>Authorization: Bearer &lt;token&gt;</code> · body exactly <code>{"policy":"jup_v4"}</code> (or <code>jup_v3</code>, <code>jup_mc_test</code>, <code>jup_mc2</code>). Alias: <code>/api/v1/jupiter/set-policy</code>.</p>`;
     } else {
       walletFundingBlock = `
       <p class="muted"><strong>Paper wallet</strong> — <strong>Equity = bankroll + realized PnL + unrealized</strong> (same numbers the engine uses). Raising “Add paper funds” increases <strong>bankroll</strong> immediately after save + reload. <strong>Chain wallet</strong> switches the gate to cached SOL; live fills still need <code>PAPER_TRADING=0</code> on seanv3 + restart.</p>
@@ -1615,7 +1616,7 @@ function handleJupiterPolicyGet(res) {
         api: {
           sole_write: 'POST /api/v1/jupiter/active-policy',
           sole_write_alias: 'POST /api/v1/jupiter/set-policy',
-          body: { policy: 'jup_v4 | jup_v3 | jup_mc_test' },
+          body: { policy: 'jup_v4 | jup_v3 | jup_mc_test | jup_mc2' },
           auth: 'Authorization: Bearer JUPITER_OPERATOR_TOKEN',
           effect:
             'Writes analog_meta.jupiter_active_policy only; engine reads it each cycle. Does not mutate trades, bars, or lifecycle state.',
