@@ -334,10 +334,11 @@ from modules.anna_training.execution_ledger import (
     default_execution_ledger_path,
     ensure_execution_ledger_schema,
     entry_policy_authority_from_signal_features,
+    baseline_jupiter_policy_slot_for_market_data,
     fetch_baseline_policy_evaluation_for_market_event,
     fetch_policy_evaluation_for_market_event,
-    get_baseline_jupiter_policy_slot,
     lookup_baseline_jupiter_open_state_json,
+    resolve_baseline_jupiter_policy_for_execution,
     policy_uses_binance_strategy_bars,
     SIGNAL_MODE_JUPITER_2,
     SIGNAL_MODE_JUPITER_3,
@@ -752,7 +753,7 @@ def _baseline_entry_snapshot_for_active_slot(
         from modules.anna_training.store import load_state as _load_training_state
 
         st = _load_training_state()
-    policy_slot = get_baseline_jupiter_policy_slot(conn)
+    policy_slot = baseline_jupiter_policy_slot_for_market_data(conn)
 
     if auth == "jupiter_2_sean" and sf:
         sd = "long"
@@ -1022,16 +1023,18 @@ def build_jupiter_policy_snapshot(
     # the live tile showed JUPv2 even when KV held jup_v3.
     lpath = default_execution_ledger_path()
     policy_slot = "jup_v2"
+    exec_slot = "jup_v2"
     _c0 = connect_ledger(lpath)
     try:
         ensure_execution_ledger_schema(_c0)
-        policy_slot = get_baseline_jupiter_policy_slot(_c0)
+        exec_slot = resolve_baseline_jupiter_policy_for_execution(_c0)
+        policy_slot = baseline_jupiter_policy_slot_for_market_data(_c0)
     finally:
         _c0.close()
     out["baseline_jupiter_policy"] = {
         "schema": "baseline_jupiter_policy_selector_v1",
-        "active_id": policy_slot,
-        "active_label": baseline_jupiter_policy_label_for_slot(policy_slot),
+        "active_id": exec_slot,
+        "active_label": baseline_jupiter_policy_label_for_slot(exec_slot),
         "options": [
             {"id": "jup_v2", "label": "JUPv2"},
             {"id": "jup_v3", "label": "JUPv3"},
@@ -1549,7 +1552,7 @@ def _event_axis_jupiter_tile_narratives(
     mpath = market_db_path
     _ensure_runtime_for_market_imports()
 
-    policy_slot = get_baseline_jupiter_policy_slot(conn)
+    policy_slot = baseline_jupiter_policy_slot_for_market_data(conn)
     use_binance_axis = policy_uses_binance_strategy_bars(policy_slot)
     sm_active = signal_mode_for_baseline_policy_slot(policy_slot)
     st = _load_training_state()
@@ -2942,7 +2945,7 @@ def _fetch_baseline_exit_policy_features(
     mid = str(market_event_id or "").strip()
     if not mid:
         return None
-    slot = get_baseline_jupiter_policy_slot(conn)
+    slot = resolve_baseline_jupiter_policy_for_execution(conn)
     primary = signal_mode_for_baseline_policy_slot(slot)
     others = [
         m
@@ -3061,7 +3064,7 @@ def build_baseline_active_position_snapshot(
     unrealized PnL, and running duration.
     """
     from modules.anna_training.execution_ledger import (
-        get_baseline_jupiter_policy_slot,
+        baseline_jupiter_policy_slot_for_market_data,
         lookup_baseline_jupiter_open_state_json,
         policy_uses_binance_strategy_bars,
     )
@@ -3090,7 +3093,7 @@ def build_baseline_active_position_snapshot(
     conn = connect_ledger(lp)
     try:
         ensure_execution_ledger_schema(conn)
-        policy_slot = get_baseline_jupiter_policy_slot(conn)
+        policy_slot = baseline_jupiter_policy_slot_for_market_data(conn)
         raw, pk = lookup_baseline_jupiter_open_state_json(conn, symbol=sym, timeframe=tf, mode=md)
         out["position_key"] = pk
     finally:
@@ -4650,11 +4653,12 @@ def build_trade_chain_payload(
     conn = connect_ledger(db_path)
     try:
         ensure_execution_ledger_schema(conn)
-        _slot = get_baseline_jupiter_policy_slot(conn)
+        _slot_exec = resolve_baseline_jupiter_policy_for_execution(conn)
+        _slot = baseline_jupiter_policy_slot_for_market_data(conn)
         baseline_jupiter_policy_obj = {
             "schema": "baseline_jupiter_policy_selector_v1",
-            "active_id": _slot,
-            "active_label": baseline_jupiter_policy_label_for_slot(_slot),
+            "active_id": _slot_exec,
+            "active_label": baseline_jupiter_policy_label_for_slot(_slot_exec),
             "options": [
                 {"id": "jup_v2", "label": "JUPv2"},
                 {"id": "jup_v3", "label": "JUPv3"},

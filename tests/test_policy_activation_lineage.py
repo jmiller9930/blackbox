@@ -90,6 +90,34 @@ def test_activation_at_next_bar_boundary(tmp_path: Path) -> None:
     conn.close()
 
 
+def test_enqueue_activation_does_not_update_operator_kv(tmp_path: Path) -> None:
+    """023-C: explicit enqueue must not write baseline_operator_kv (dashboard uses API snapshot)."""
+    from modules.anna_training.execution_ledger import (
+        BASELINE_POLICY_SLOT_JUP_V2,
+        POLICY_ACTIVATION_SLOT_BASELINE_JUPITER,
+        baseline_jupiter_policy_lineage,
+        ensure_execution_ledger_schema,
+        enqueue_baseline_jupiter_policy_activation,
+        get_baseline_jupiter_policy_slot,
+    )
+
+    db = tmp_path / "kv.db"
+    conn = sqlite3.connect(db)
+    ensure_execution_ledger_schema(conn)
+    assert get_baseline_jupiter_policy_slot(conn) == BASELINE_POLICY_SLOT_JUP_V2
+    pid, pver = baseline_jupiter_policy_lineage("jup_v4")
+    enqueue_baseline_jupiter_policy_activation(
+        conn,
+        policy_id=pid,
+        policy_version=pver,
+        slot=POLICY_ACTIVATION_SLOT_BASELINE_JUPITER,
+        assigned_by="test",
+    )
+    conn.commit()
+    assert get_baseline_jupiter_policy_slot(conn) == BASELINE_POLICY_SLOT_JUP_V2
+    conn.close()
+
+
 def test_upsert_policy_evaluation_lineage_columns(tmp_path: Path) -> None:
     from modules.anna_training.execution_ledger import (
         POLICY_ACTIVATION_SLOT_BASELINE_JUPITER,

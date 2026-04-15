@@ -2668,16 +2668,19 @@ class Handler(BaseHTTPRequestHandler):
             self._json(200, out, no_cache=True)
             return
         if path_norm == "/api/v1/dashboard/baseline-jupiter-policy":
-            body = self._read_json_body()
+            body = self._read_json_body() or {}
             trace_id = str(uuid.uuid4())
             try:
                 from modules.anna_training.execution_ledger import (
                     baseline_jupiter_policy_label_for_slot,
+                    baseline_jupiter_policy_lineage,
+                    baseline_jupiter_policy_activation_api_snapshot,
                     connect_ledger,
                     default_execution_ledger_path,
+                    enqueue_baseline_jupiter_policy_activation,
+                    normalize_baseline_jupiter_policy_slot,
+                    POLICY_ACTIVATION_SLOT_BASELINE_JUPITER,
                     ensure_execution_ledger_schema,
-                    get_baseline_jupiter_policy_slot,
-                    set_baseline_jupiter_policy_slot,
                 )
             except Exception as e:  # noqa: BLE001
                 self._json(
@@ -2690,15 +2693,43 @@ class Handler(BaseHTTPRequestHandler):
                     no_cache=True,
                 )
                 return
-            raw_slot = str(body.get("policy_slot") or body.get("id") or "").strip().lower()
             ldb = default_execution_ledger_path()
             try:
                 conn = connect_ledger(ldb)
                 try:
                     ensure_execution_ledger_schema(conn)
-                    set_baseline_jupiter_policy_slot(conn, raw_slot)
+                    pid = str(body.get("policy_id") or "").strip()
+                    pver = str(body.get("policy_version") or "").strip()
+                    slot = str(body.get("slot") or "").strip()
+                    if pid and pver and slot:
+                        enqueue_baseline_jupiter_policy_activation(
+                            conn,
+                            policy_id=pid,
+                            policy_version=pver,
+                            slot=slot,
+                            assigned_by="dashboard_api",
+                        )
+                    else:
+                        raw_slot = str(body.get("policy_slot") or body.get("id") or "").strip().lower()
+                        if not raw_slot:
+                            raise ValueError(
+                                "Provide policy_id, policy_version, and slot, or policy_slot (legacy)"
+                            )
+                        ps = normalize_baseline_jupiter_policy_slot(raw_slot)
+                        if ps is None:
+                            raise ValueError(
+                                "policy_slot must be jup_v2, jup_v3, or jup_v4 (or aliases v2/v3/v4)"
+                            )
+                        lp = baseline_jupiter_policy_lineage(ps)
+                        enqueue_baseline_jupiter_policy_activation(
+                            conn,
+                            policy_id=lp[0],
+                            policy_version=lp[1],
+                            slot=POLICY_ACTIVATION_SLOT_BASELINE_JUPITER,
+                            assigned_by="dashboard_api",
+                        )
                     conn.commit()
-                    active = get_baseline_jupiter_policy_slot(conn)
+                    snap = baseline_jupiter_policy_activation_api_snapshot(conn)
                 finally:
                     conn.close()
             except ValueError as e:
@@ -2723,14 +2754,22 @@ class Handler(BaseHTTPRequestHandler):
                     no_cache=True,
                 )
                 return
+            exec_slot = str(snap.get("effective_baseline_policy_slot") or "jup_v2")
+            cap = snap.get("current_active_policy") or {}
             self._json(
                 200,
                 {
                     "ok": True,
-                    "schema": "baseline_jupiter_policy_set_v1",
-                    "active_id": active,
-                    "active_label": baseline_jupiter_policy_label_for_slot(active),
+                    "schema": "baseline_jupiter_policy_set_v2",
+                    "current_active_policy": snap.get("current_active_policy"),
+                    "pending_policy": snap.get("pending_policy"),
+                    "effective_on": snap.get("effective_on"),
+                    "active_id": exec_slot,
+                    "active_label": baseline_jupiter_policy_label_for_slot(exec_slot),
                     "trace_id": trace_id,
+                    "policy_id": cap.get("policy_id"),
+                    "policy_version": cap.get("policy_version"),
+                    "slot": cap.get("slot"),
                 },
                 no_cache=True,
             )

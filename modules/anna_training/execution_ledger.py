@@ -503,6 +503,150 @@ def resolve_baseline_jupiter_policy_for_execution(conn: sqlite3.Connection) -> s
     return _legacy_baseline_jupiter_policy_slot_from_kv_env(conn)
 
 
+def pending_baseline_jupiter_target_slot(conn: sqlite3.Connection) -> str | None:
+    """If a **pending** activation exists, return its target **jup_v2** / **jup_v3** / **jup_v4**."""
+    if not _policy_activation_table_ready(conn):
+        return None
+    row = conn.execute(
+        """
+        SELECT policy_id, policy_version FROM policy_activation_log
+        WHERE slot = ? AND activation_state = 'pending'
+        ORDER BY id ASC
+        LIMIT 1
+        """,
+        (POLICY_ACTIVATION_SLOT_BASELINE_JUPITER,),
+    ).fetchone()
+    if not row:
+        return None
+    return baseline_slot_from_policy_lineage(str(row[0] or ""), str(row[1] or ""))
+
+
+def baseline_jupiter_policy_slot_for_market_data(conn: sqlite3.Connection) -> str:
+    """
+    Bar feed + operator preview tiles: **pending** target (if any), else execution-effective slot.
+
+    Keeps Binance vs Pyth alignment with the policy the operator queued or that is running.
+    """
+    ensure_execution_ledger_schema(conn)
+    p = pending_baseline_jupiter_target_slot(conn)
+    if p:
+        return p
+    return resolve_baseline_jupiter_policy_for_execution(conn)
+
+
+def next_pending_activation_effective_on_iso(created_at_utc: str) -> str:
+    """First closed-bar open UTC when a pending row created at ``created_at_utc`` may activate."""
+    floor_utc_to_5m_open, FIVE_MINUTES, parse_iso_zulu_to_utc = _import_canonical_time()
+    import sys
+
+    rt = Path(__file__).resolve().parents[2] / "scripts" / "runtime"
+    if str(rt) not in sys.path:
+        sys.path.insert(0, str(rt))
+    from market_data.canonical_time import format_candle_open_iso_z  # noqa: PLC0415
+
+    dt = parse_iso_zulu_to_utc(created_at_utc)
+    eligible = floor_utc_to_5m_open(dt) + FIVE_MINUTES
+    return format_candle_open_iso_z(eligible)
+
+
+def baseline_jupiter_policy_activation_api_snapshot(conn: sqlite3.Connection) -> dict[str, Any]:
+    """Response payload for POST / baseline-jupiter-policy (current, pending, next boundary)."""
+    ensure_execution_ledger_schema(conn)
+    exec_slot = resolve_baseline_jupiter_policy_for_execution(conn)
+    pid_a, pver_a = baseline_jupiter_policy_lineage(exec_slot)
+    current_active_policy = {
+        "policy_id": pid_a,
+        "policy_version": pver_a,
+        "slot": POLICY_ACTIVATION_SLOT_BASELINE_JUPITER,
+    }
+    pending_policy: dict[str, str] | None = None
+    effective_on: str | None = None
+    if _policy_activation_table_ready(conn):
+        row = conn.execute(
+            """
+            SELECT policy_id, policy_version, slot, created_at_utc
+            FROM policy_activation_log
+            WHERE slot = ? AND activation_state = 'pending'
+            ORDER BY id ASC
+            LIMIT 1
+            """,
+            (POLICY_ACTIVATION_SLOT_BASELINE_JUPITER,),
+        ).fetchone()
+        if row:
+            pending_policy = {
+                "policy_id": str(row[0] or ""),
+                "policy_version": str(row[1] or ""),
+                "slot": str(row[2] or ""),
+            }
+            cre = str(row[3] or "")
+            if cre:
+                try:
+                    effective_on = next_pending_activation_effective_on_iso(cre)
+                except ValueError:
+                    effective_on = None
+    return {
+        "current_active_policy": current_active_policy,
+        "pending_policy": pending_policy,
+        "effective_on": effective_on,
+        "effective_baseline_policy_slot": exec_slot,
+    }
+
+
+def enqueue_baseline_jupiter_policy_activation(
+    conn: sqlite3.Connection,
+    *,
+    policy_id: str,
+    policy_version: str,
+    slot: str,
+    assigned_by: str = "api",
+) -> None:
+    """
+    Insert a **pending** activation only — does **not** update ``baseline_operator_kv`` or activate.
+
+    Canonicalizes ``policy_id`` / ``policy_version`` via known baseline slots.
+    """
+    slot_n = (slot or "").strip()
+    if slot_n != POLICY_ACTIVATION_SLOT_BASELINE_JUPITER:
+        raise ValueError(
+            f"slot must be {POLICY_ACTIVATION_SLOT_BASELINE_JUPITER!r} for baseline Jupiter activation"
+        )
+    mapped = baseline_slot_from_policy_lineage(policy_id.strip(), policy_version.strip())
+    if mapped is None:
+        raise ValueError("unrecognized policy_id / policy_version for baseline Jupiter activation")
+    pid_c, pver_c = baseline_jupiter_policy_lineage(mapped)
+    ensure_execution_ledger_schema(conn)
+    if not _policy_activation_table_ready(conn):
+        raise ValueError("policy_activation_log is not available")
+    eff = resolve_baseline_jupiter_policy_for_execution(conn)
+    ts = utc_now_iso()
+    ab = (assigned_by or "").strip() or "api"
+    conn.execute(
+        """
+        UPDATE policy_activation_log
+        SET activation_state = 'superseded'
+        WHERE slot = ? AND activation_state = 'pending'
+        """,
+        (POLICY_ACTIVATION_SLOT_BASELINE_JUPITER,),
+    )
+    conn.execute(
+        """
+        INSERT INTO policy_activation_log (
+          policy_id, policy_version, slot, activation_state,
+          activation_effective_at_utc, activation_market_event_id,
+          assigned_by, created_at_utc, previous_baseline_policy_slot
+        ) VALUES (?, ?, ?, 'pending', NULL, NULL, ?, ?, ?)
+        """,
+        (
+            pid_c,
+            pver_c,
+            POLICY_ACTIVATION_SLOT_BASELINE_JUPITER,
+            ab,
+            ts,
+            eff,
+        ),
+    )
+
+
 def _import_canonical_time() -> tuple[Any, Any, Any]:
     import sys
 
@@ -602,7 +746,7 @@ def set_baseline_jupiter_policy_slot(
     *,
     assigned_by: str = "operator",
 ) -> None:
-    """Persist operator policy slot; schedule **pending** activation + KV update (dashboard)."""
+    """Persist operator policy slot in KV; schedule **pending** activation (tests / legacy helpers)."""
     ps = normalize_baseline_jupiter_policy_slot(policy_slot)
     if ps is None:
         raise ValueError(
@@ -610,36 +754,16 @@ def set_baseline_jupiter_policy_slot(
             f"(or aliases jupiter_2/jupiter_3/jupiter_4, v2/v3/v4); got {policy_slot!r}"
         )
     ensure_execution_ledger_schema(conn)
-    eff = resolve_baseline_jupiter_policy_for_execution(conn)
     pid, pver = baseline_jupiter_policy_lineage(ps)
-    ts = utc_now_iso()
-    ab = (assigned_by or "").strip() or "operator"
     if _policy_activation_table_ready(conn):
-        conn.execute(
-            """
-            UPDATE policy_activation_log
-            SET activation_state = 'superseded'
-            WHERE slot = ? AND activation_state = 'pending'
-            """,
-            (POLICY_ACTIVATION_SLOT_BASELINE_JUPITER,),
+        enqueue_baseline_jupiter_policy_activation(
+            conn,
+            policy_id=pid,
+            policy_version=pver,
+            slot=POLICY_ACTIVATION_SLOT_BASELINE_JUPITER,
+            assigned_by=assigned_by,
         )
-        conn.execute(
-            """
-            INSERT INTO policy_activation_log (
-              policy_id, policy_version, slot, activation_state,
-              activation_effective_at_utc, activation_market_event_id,
-              assigned_by, created_at_utc, previous_baseline_policy_slot
-            ) VALUES (?, ?, ?, 'pending', NULL, NULL, ?, ?, ?)
-            """,
-            (
-                pid,
-                pver,
-                POLICY_ACTIVATION_SLOT_BASELINE_JUPITER,
-                ab,
-                ts,
-                eff,
-            ),
-        )
+    ts = utc_now_iso()
     conn.execute(
         """
         INSERT INTO baseline_operator_kv (key, value, updated_at_utc)
