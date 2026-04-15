@@ -88,7 +88,11 @@ Five cycles were **not** executed in the environment that produced §2. Use the 
 
 ## 5. Git commit reference
 
-Report and stabilization-related fixes: **`cd10a5f`** (see `git log -1 --oneline` after pull on primary host).
+Evidence commit on `main`: locate with  
+`git log --oneline -1 --grep=STABILIZATION-035`  
+or  
+`git log -1 --oneline -- docs/validation/stabilization_035_report.md`  
+after pull on the integration host.
 
 ---
 
