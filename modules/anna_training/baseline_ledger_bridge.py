@@ -16,6 +16,12 @@ arm a trade on this bar?) and **``did_trade``** (whether this persisted row repr
 the same meaning as the ``trade`` column for lifecycle rows, where ``trade`` is forced false for holding/exit).
 That separates qualification from lifecycle/execution presentation without overloading ``trade=false`` alone.
 
+**Normal-operation gap (``would_trade=true``, ``did_trade=false``):** on a **flat** bar, ``_log_eval`` sets both from
+``sig.trade`` — they cannot diverge. When they diverge, **``reason_code``** is always one of: **``jupiter_2_baseline_holding``**
+(already in a position on this bar — idempotent re-tick or holding update; no duplicate entry) or **``jupiter_2_baseline_exit``**
+(exit bar; row is not a new entry). There is no other intended silent path. If ``BASELINE_POLICY_EVALUATION_LOG=0`` or SQLite
+write fails, see ``policy_evaluation_write_error`` / stderr — not a semantic “miss,” but a persistence failure.
+
 **Ingest alignment:** :func:`market_data.canonical_bar_refresh.refresh_last_closed_bar_from_ticks` calls this after
 each successful ``market_bars_5m`` upsert when ``BASELINE_LEDGER_AFTER_CANONICAL_BAR`` is on (default), so the
 ledger stays aligned with Hermes/Pyth ingest without relying only on the Karpathy loop. Disable with
