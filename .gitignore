@@ -46,6 +46,9 @@ trading_core/keypair.base58
 vscode-test/lab_dashboard_login.env
 vscode-test/seanv3/.env
 
+# npm (never commit dependency trees)
+node_modules/
+
 # Local secrets (never commit)
 .env
 .env.bak

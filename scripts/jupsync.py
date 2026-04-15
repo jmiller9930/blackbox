@@ -5,8 +5,9 @@ Jupiter / SeanV3 lab sync — push local git to origin, pull on clawbot, rebuild
 
 Process (operator):
   1. Run ``python3 scripts/jupsync.py`` from repo root (Mac or any machine with git + ssh).
-  2. By default, if the working tree is dirty, the script **stages all changes** (``git add -A``)
-     and **commits** with an auto message (override with ``-m``). Use ``--no-commit`` to skip.
+  2. By default, if the working tree is dirty, the script stages **tracked** changes (``git add -u``)
+     and **commits** with an auto message (override with ``-m``). Untracked files are **not** auto-added;
+     run ``git add <paths>`` first for new files. Use ``--no-commit`` to skip.
   3. Script pushes current branch to origin, SSHs to the lab host, ``git pull``, then
      ``docker compose up -d --build`` in ``vscode-test/seanv3``.
 
@@ -101,10 +102,10 @@ def _auto_commit(
     default_msg = f"jupsync auto-commit {datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')}"
     msg = (message or default_msg).strip() or default_msg
     if dry_run:
-        print(f"[dry-run] git add -A && git commit -m {msg!r}")
+        print(f"[dry-run] git add -u && git commit -m {msg!r}")
         return
-    print("Working tree dirty — staging all and committing …", flush=True)
-    subprocess.run(["git", "add", "-A"], cwd=repo, check=True)
+    print("Working tree dirty — staging tracked changes (git add -u) and committing …", flush=True)
+    subprocess.run(["git", "add", "-u"], cwd=repo, check=True)
     staged = subprocess.run(["git", "diff", "--cached", "--quiet"], cwd=repo)
     if staged.returncode == 0:
         print("Nothing left to commit after staging (ignored-only changes?).", file=sys.stderr)
