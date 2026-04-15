@@ -432,6 +432,11 @@ def build_workbench_meta_payload() -> dict[str, Any]:
                 "label": "Manifest-driven compare (replay + baseline)",
                 "description": "Replay using a manifest under renaissance_v4/configs/manifests/, export namespaced trades, compare vs frozen baseline.",
             },
+            {
+                "id": "ingest_policy",
+                "label": "Ingest policy package (full Kitchen pipeline)",
+                "description": "DV-ARCH-POLICY-INGESTION-024-C — validate package, replay via parity.manifest_path, Monte Carlo + baseline compare; appears as a normal experiment.",
+            },
         ],
         "roadmap_experiment_types": [
             "Date-range replay slice",
@@ -443,7 +448,7 @@ def build_workbench_meta_payload() -> dict[str, Any]:
 
 
 def validate_job_action(action: str) -> bool:
-    return action in {"baseline_mc", "compare", "compare_manifest", "example_flow"}
+    return action in {"baseline_mc", "compare", "compare_manifest", "example_flow", "ingest_policy"}
 
 
 def validate_experiment_id(eid: str) -> bool:
@@ -480,5 +485,29 @@ def validate_manifest_path(repo: Path, rel: str) -> Path | None:
     except ValueError:
         return None
     if not p.is_file() or p.suffix.lower() != ".json":
+        return None
+    return p
+
+
+def validate_policy_package_path(repo: Path, rel: str) -> Path | None:
+    """Policy package directory under policies/ with POLICY_SPEC.yaml (DV-ARCH-POLICY-INGESTION-024-C)."""
+    repo = repo.resolve()
+    rel = rel.strip().replace("\\", "/")
+    if not rel or ".." in rel or rel.startswith("/"):
+        return None
+    p = (repo / rel).resolve()
+    try:
+        p.relative_to(repo)
+    except ValueError:
+        return None
+    policies_root = (repo / "policies").resolve()
+    try:
+        p.relative_to(policies_root)
+    except ValueError:
+        return None
+    if not p.is_dir():
+        return None
+    spec = p / "POLICY_SPEC.yaml"
+    if not spec.is_file():
         return None
     return p

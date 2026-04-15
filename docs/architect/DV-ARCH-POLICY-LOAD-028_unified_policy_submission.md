@@ -201,7 +201,8 @@ Use this list to **avoid** re-specifying the same flow in multiple places. Other
 
 | Item | Directive / module | Role relative to §2 |
 |------|---------------------|------------------------|
-| Policy package **validation** → deterministic replay artifact | **DV-ARCH-POLICY-INGESTION-024-A** — `renaissance_v4/research/policy_package_ingest.py` (`run_policy_package_replay`) | **First slices** of validation + replay; **not** yet Monte Carlo / baseline compare / approval state machine. |
+| Policy package **validation** → deterministic replay artifact | **DV-ARCH-POLICY-INGESTION-024-A** — `renaissance_v4/research/policy_package_ingest.py` (`run_policy_package_replay`) | Replay-only helper; full pipeline is **024-C** (`robustness_runner ingest-policy` / `ingest_policy` job). |
+| Policy package **full Kitchen pipeline** (MC + baseline + index) | **DV-ARCH-POLICY-INGESTION-024-C** — `renaissance_v4/research/robustness_runner.py` (`ingest-policy`) | Same engines as `compare-manifest`; requires `parity.manifest_path`. |
 | Activation **scheduling** + lineage on eval/trades | **DV-ARCH-POLICY-ACTIVATION-023** — `modules/anna_training/execution_ledger.py` (`policy_activation_log`); see [`policy_activation_lineage_spec.md`](policy_activation_lineage_spec.md) | **Not** a Kitchen bypass; applies to **which integrated slot** runs at the bar boundary. |
 | Baseline dashboard **POST** `/api/v1/dashboard/baseline-jupiter-policy` | `UIUX.Web/api_server.py` | Enqueues **pending** activation for **built-in** slots only; see §3.4. **Custom packages** must not use this endpoint as a substitute for Kitchen evaluation. |
 

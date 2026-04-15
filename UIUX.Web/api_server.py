@@ -2785,6 +2785,7 @@ class Handler(BaseHTTPRequestHandler):
                     validate_experiment_id,
                     validate_job_action,
                     validate_manifest_path,
+                    validate_policy_package_path,
                 )
                 from renaissance_v4.ui_jobs import enqueue
 
@@ -2795,7 +2796,13 @@ class Handler(BaseHTTPRequestHandler):
                         {
                             "ok": False,
                             "error": "unsupported_action",
-                            "allowed": ["baseline_mc", "compare", "compare_manifest", "example_flow"],
+                            "allowed": [
+                                "baseline_mc",
+                                "compare",
+                                "compare_manifest",
+                                "example_flow",
+                                "ingest_policy",
+                            ],
                             "trace_id": str(uuid.uuid4()),
                         },
                         no_cache=True,
@@ -2854,6 +2861,32 @@ class Handler(BaseHTTPRequestHandler):
                         action=action,
                         experiment_id=exp_s,
                         manifest_rel=mf,
+                    )
+                elif action == "ingest_policy":
+                    if not exp_s or not validate_experiment_id(exp_s):
+                        self._json(
+                            400,
+                            {"ok": False, "error": "experiment_id_required", "trace_id": str(uuid.uuid4())},
+                            no_cache=True,
+                        )
+                        return
+                    pr = str(body.get("policy_path") or "").strip()
+                    if not pr or validate_policy_package_path(_REPO_ROOT, pr) is None:
+                        self._json(
+                            400,
+                            {
+                                "ok": False,
+                                "error": "policy_path_must_be_policies_directory_with_POLICY_SPEC_yaml",
+                                "trace_id": str(uuid.uuid4()),
+                            },
+                            no_cache=True,
+                        )
+                        return
+                    job = enqueue(
+                        _REPO_ROOT,
+                        action=action,
+                        experiment_id=exp_s,
+                        policy_path_rel=pr,
                     )
                 else:
                     job = enqueue(

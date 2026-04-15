@@ -26,6 +26,8 @@
 
 **Canonical package ingest (replay slice):** `renaissance_v4/research/policy_package_ingest.py` — validation → `run_manifest_replay` path (**DV-ARCH-POLICY-INGESTION-024-A**).
 
+**Full Kitchen evaluation parity (024-C):** `robustness_runner ingest-policy` and `POST /api/v1/renaissance/jobs` with `action=ingest_policy` run the **same** path as manifest compare — validate → `run_manifest_replay` → trade export → Monte Carlo → `compare_summaries` / `recommend` → artifacts + `experiment_index.json`. Requires `parity.manifest_path` in the package’s `POLICY_SPEC.yaml`.
+
 ---
 
 ## 1. How the current BlackBox policy system works

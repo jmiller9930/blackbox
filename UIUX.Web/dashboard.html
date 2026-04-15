@@ -1393,6 +1393,7 @@
               <button type="button" class="primary" id="rv4-btn-baseline-mc">Generate baseline Monte Carlo reference</button>
               <button type="button" id="rv4-btn-example">Example robustness pipeline check</button>
               <button type="button" id="rv4-btn-manifest-compare">Manifest compare (replay + baseline)</button>
+              <button type="button" id="rv4-btn-ingest-policy">Ingest policy package (full pipeline)</button>
             </div>
             <p class="dash-rv4-msg" id="rv4-roadmap"></p>
             <p class="dash-rv4-msg" id="rv4-job-msg"></p>
@@ -4295,6 +4296,19 @@
       );
       if (!mf) return;
       rv4PostJob({ action: 'compare_manifest', experiment_id: eid, manifest: mf });
+    });
+  }
+  var rv4ip = $('rv4-btn-ingest-policy');
+  if (rv4ip) {
+    rv4ip.addEventListener('click', function () {
+      var eid = window.prompt('experiment_id (e.g. exp_ingest_20260414_abcd1234)', '');
+      if (!eid) return;
+      var pp = window.prompt(
+        'Policy package path under policies/ (must include POLICY_SPEC.yaml with parity.manifest_path)',
+        'policies/generated/renaissance_baseline_v1_stack'
+      );
+      if (!pp) return;
+      rv4PostJob({ action: 'ingest_policy', experiment_id: eid, policy_path: pp });
     });
   }
   var rv4ms = $('rv4-btn-manifest-sel');

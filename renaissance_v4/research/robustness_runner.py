@@ -266,6 +266,7 @@ def _compare_from_trades(
         mc_baseline=mc_b[primary_mode],
         mc_candidate=mc_c[primary_mode],
     )
+    lineage["classification"] = rec.label
 
     REPORTS_ROB.mkdir(parents=True, exist_ok=True)
     REPORTS_EXP.mkdir(parents=True, exist_ok=True)
@@ -298,6 +299,13 @@ def _compare_from_trades(
         "manifest_path": lineage.get("manifest_path"),
         "manifest_path_repo": lineage.get("manifest_path_repo"),
     }
+    if str(lineage.get("source_type") or "") == "ingested_policy":
+        summary_payload["policy_id"] = lineage.get("policy_id")
+        summary_payload["policy_version"] = lineage.get("policy_version")
+        summary_payload["policy_slug"] = lineage.get("policy_slug")
+        summary_payload["source_type"] = "ingested_policy"
+        summary_payload["policy_path"] = lineage.get("policy_path")
+        summary_payload["replay_validation_checksum"] = lineage.get("replay_validation_checksum")
     summary_json = STATE_DIR / f"monte_carlo_{args.experiment_id}_summary.json"
     summary_json.write_text(json.dumps(summary_payload, indent=2), encoding="utf-8")
 
@@ -354,20 +362,44 @@ def _compare_from_trades(
             },
         )
     )
-    det_payload: dict[str, Any] = {"deterministic": det_c}
-    if lineage.get("strategy_id"):
-        det_payload["strategy_id"] = lineage.get("strategy_id")
-    if lineage.get("manifest_path"):
-        det_payload["manifest_path"] = lineage.get("manifest_path")
-    if lineage.get("baseline_reference"):
-        det_payload["baseline_reference"] = lineage.get("baseline_reference")
+    if str(lineage.get("source_type") or "") == "ingested_policy":
+        det_payload = {
+            "schema": "deterministic_ingested_policy_v1",
+            "experiment_id": args.experiment_id,
+            "policy_id": lineage.get("policy_id"),
+            "policy_version": lineage.get("policy_version"),
+            "policy_slug": lineage.get("policy_slug"),
+            "source_type": "ingested_policy",
+            "baseline_reference": lineage.get("baseline_reference") or BASELINE_TAG,
+            "classification": rec.label,
+            "deterministic": det_c,
+            "lineage": {
+                "experiment_id": args.experiment_id,
+                "policy_id": lineage.get("policy_id"),
+                "policy_version": lineage.get("policy_version"),
+                "policy_slug": lineage.get("policy_slug"),
+                "source_type": "ingested_policy",
+                "baseline_reference": lineage.get("baseline_reference") or BASELINE_TAG,
+                "classification": rec.label,
+            },
+        }
+    else:
+        det_payload = {"deterministic": det_c}
+        if lineage.get("strategy_id"):
+            det_payload["strategy_id"] = lineage.get("strategy_id")
+        if lineage.get("manifest_path"):
+            det_payload["manifest_path"] = lineage.get("manifest_path")
+        if lineage.get("baseline_reference"):
+            det_payload["baseline_reference"] = lineage.get("baseline_reference")
     (STATE_DIR / f"deterministic_{args.experiment_id}.json").write_text(
         json.dumps(det_payload, indent=2),
         encoding="utf-8",
     )
 
     print(f"[robustness] experiment_id={args.experiment_id} recommendation={rec.label} classification={rec.label}")
-    if lineage.get("strategy_id"):
+    if lineage.get("policy_path"):
+        print(f"[robustness] policy_path={lineage.get('policy_path')}")
+    elif lineage.get("strategy_id"):
         print(f"[robustness] strategy_id={lineage.get('strategy_id')} manifest_path={lineage.get('manifest_path')}")
     print(f"[robustness] comparison report -> {rob_path.resolve()}")
     return 0
@@ -436,6 +468,118 @@ def cmd_compare_manifest(args: argparse.Namespace) -> int:
     return _compare_from_trades(c_ns, out_path.resolve(), lineage)
 
 
+def cmd_ingest_policy(args: argparse.Namespace) -> int:
+    """
+    DV-ARCH-POLICY-INGESTION-024-C — validate → manifest replay (replay_runner) → trade export
+    → Monte Carlo + baseline compare (same path as compare / compare-manifest).
+
+    Requires ``parity.manifest_path`` in POLICY_SPEC.yaml so replay yields outcomes; no alternate replay.
+    """
+    from renaissance_v4.research.policy_package_ingest import (
+        _load_policy_spec_yaml,
+        _policy_slug_safe,
+        _repo_relative_path,
+        _resolve_manifest_path,
+        _validate_policy_package_subprocess,
+    )
+    from renaissance_v4.research.replay_runner import run_manifest_replay
+    from renaissance_v4.research.trade_export import export_trades_json
+
+    repo_root = RV4_ROOT.parent
+    raw = Path(args.policy_path)
+    package_dir = (repo_root / raw).resolve() if not raw.is_absolute() else raw.resolve()
+    if not package_dir.is_dir():
+        print(f"[robustness] ERROR: policy package directory not found: {args.policy_path}", file=sys.stderr)
+        return 1
+
+    try:
+        _validate_policy_package_subprocess(package_dir)
+    except Exception as e:  # noqa: BLE001
+        print(f"[robustness] ERROR: validation failed: {e}", file=sys.stderr)
+        return 1
+
+    try:
+        spec_data = _load_policy_spec_yaml(package_dir)
+    except Exception as e:  # noqa: BLE001
+        print(f"[robustness] ERROR: POLICY_SPEC.yaml: {e}", file=sys.stderr)
+        return 1
+
+    pol = spec_data.get("policy")
+    if not isinstance(pol, dict):
+        print("[robustness] ERROR: POLICY_SPEC.yaml must contain policy: mapping", file=sys.stderr)
+        return 1
+
+    manifest_resolved = _resolve_manifest_path(spec_data, repo_root)
+    if manifest_resolved is None or not manifest_resolved.is_file():
+        print(
+            "[robustness] ERROR: ingest_policy requires parity.manifest_path in POLICY_SPEC.yaml "
+            "pointing to a manifest file under the repo (same replay engine as compare-manifest).",
+            file=sys.stderr,
+        )
+        return 1
+
+    policy_id = str(pol.get("id") or "").strip()
+    if not policy_id:
+        print("[robustness] ERROR: policy.id is required in POLICY_SPEC.yaml", file=sys.stderr)
+        return 1
+
+    policy_version = str(
+        pol.get("policy_version") or pol.get("catalog_id") or ""
+    ).strip() or "unspecified"
+    policy_slug = _policy_slug_safe(pol)
+    rel_policy = _repo_relative_path(
+        args.policy_path if not raw.is_absolute() else package_dir,
+        repo_root,
+    )
+
+    print(
+        f"[robustness] ingest-policy experiment_id={args.experiment_id} policy_path={package_dir}",
+        flush=True,
+    )
+    rr = run_manifest_replay(
+        manifest_path=manifest_resolved,
+        emit_baseline_artifacts=False,
+        verbose=False,
+    )
+
+    out_path = REPORTS_EXP / f"trades_{args.experiment_id}_{policy_slug}.json"
+    REPORTS_EXP.mkdir(parents=True, exist_ok=True)
+    export_trades_json(rr["outcomes"], out_path, dataset_bars=rr["dataset_bars"])
+
+    candidate_rel = str(out_path.relative_to(repo_root))
+    lineage = {
+        "experiment_type": "ingest_policy",
+        "strategy_id": policy_slug,
+        "policy_id": policy_id,
+        "policy_version": policy_version,
+        "policy_slug": policy_slug,
+        "source_type": "ingested_policy",
+        "baseline_reference": BASELINE_TAG,
+        "manifest_path": None,
+        "manifest_path_repo": None,
+        "policy_path": rel_policy,
+        "replay_validation_checksum": rr["validation_checksum"],
+        "candidate_trades": str(out_path.resolve()),
+    }
+
+    c_ns = argparse.Namespace(
+        experiment_id=args.experiment_id,
+        candidate_trades=candidate_rel,
+        n_sims=args.n_sims,
+        seed=args.seed,
+        modes=args.modes,
+        path_length=args.path_length,
+        primary_mode=args.primary_mode,
+        description=args.description or f"Ingest policy package ({policy_id}) — full Kitchen pipeline.",
+        subsystem=args.subsystem or "ingest_policy",
+        branch=args.branch or _git_branch(),
+        commit=args.commit or _git_head(),
+        files_changed=list(args.files_changed or []),
+        lineage_extra=lineage,
+    )
+    return _compare_from_trades(c_ns, out_path.resolve(), lineage)
+
+
 def _render_robustness_report(
     comp: Any,
     rec: Any,
@@ -458,7 +602,8 @@ def _render_robustness_report(
         sid = lineage.get("strategy_id")
         mp = lineage.get("manifest_path") or lineage.get("manifest_path_repo")
         br = lineage.get("baseline_reference")
-        if sid or mp or br:
+        pp = lineage.get("policy_path")
+        if sid or mp or br or pp:
             head.append("")
             head.append("## Experiment identity")
             head.append("")
@@ -466,6 +611,8 @@ def _render_robustness_report(
                 head.append(f"- **strategy_id:** `{sid}`")
             if br:
                 head.append(f"- **baseline_reference:** `{br}`")
+            if pp:
+                head.append(f"- **policy_path:** `{pp}`")
             if mp:
                 head.append(f"- **manifest_path:** `{mp}`")
             chk = lineage.get("replay_validation_checksum")
@@ -524,6 +671,11 @@ def _render_experiment_markdown(
         if lin.get("strategy_id")
         else "- **strategy_id (manifest):** _n/a (candidate JSON compare)_"
     )
+    policy_line = (
+        f"- **policy_path:** `{lin.get('policy_path')}`"
+        if lin.get("policy_path")
+        else ""
+    )
     man_line = (
         f"- **manifest_path:** `{lin.get('manifest_path') or lin.get('manifest_path_repo')}`"
         if lin.get("manifest_path") or lin.get("manifest_path_repo")
@@ -535,6 +687,8 @@ def _render_experiment_markdown(
         else ""
     )
     lineage_extra = [strat_line]
+    if policy_line:
+        lineage_extra.append(policy_line)
     if man_line:
         lineage_extra.append(man_line)
     if br_line:
@@ -660,6 +814,29 @@ def build_parser() -> argparse.ArgumentParser:
     p_mn.add_argument("--commit", type=str, default="")
     p_mn.add_argument("--files-changed", nargs="*", default=[])
     p_mn.set_defaults(func=cmd_compare_manifest)
+
+    p_ip = sub.add_parser(
+        "ingest-policy",
+        help="DV-ARCH-POLICY-INGESTION-024-C — policy package → validate → replay → MC → baseline (manifest required)",
+    )
+    p_ip.add_argument("--experiment-id", type=str, required=True)
+    p_ip.add_argument(
+        "--policy-path",
+        type=str,
+        required=True,
+        help="Repo-relative path to policy package directory (POLICY_SPEC.yaml with parity.manifest_path)",
+    )
+    p_ip.add_argument("--n-sims", type=int, default=10_000)
+    p_ip.add_argument("--seed", type=int, default=42)
+    p_ip.add_argument("--modes", type=str, default="shuffle,bootstrap")
+    p_ip.add_argument("--path-length", type=int, default=None)
+    p_ip.add_argument("--primary-mode", type=str, default="shuffle")
+    p_ip.add_argument("--description", type=str, default="")
+    p_ip.add_argument("--subsystem", type=str, default="")
+    p_ip.add_argument("--branch", type=str, default="")
+    p_ip.add_argument("--commit", type=str, default="")
+    p_ip.add_argument("--files-changed", nargs="*", default=[])
+    p_ip.set_defaults(func=cmd_ingest_policy)
 
     p_ex = sub.add_parser("example-flow", help="Compare baseline trades to themselves (pipeline check)")
     p_ex.add_argument("--n-sims", type=int, default=2000)

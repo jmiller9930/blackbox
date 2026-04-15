@@ -9,7 +9,9 @@ DV-ARCH-POLICY-INGESTION-024-A — policy package → validation → replay → 
 - Otherwise, if the package policy module defines ``replay_manifest_policy_checksum``,
   delegates to that (same checksum contract as generated Kitchen packages).
 
-No Monte Carlo, no UI, no job queue.
+**024-C (full Kitchen parity):** use ``python -m renaissance_v4.research.robustness_runner ingest-policy``
+or ``POST /api/v1/renaissance/jobs`` with ``action=ingest_policy`` — validate → replay → Monte Carlo →
+baseline compare → reports + experiment index (requires ``parity.manifest_path`` for trade export).
 """
 
 from __future__ import annotations

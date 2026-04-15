@@ -20,6 +20,7 @@ from renaissance_v4.ui_api import (
     validate_candidate_trades_path,
     validate_experiment_id,
     validate_manifest_path,
+    validate_policy_package_path,
 )
 
 _job_lock = threading.Lock()
@@ -54,6 +55,7 @@ def enqueue(
     experiment_id: str | None,
     candidate_trades_rel: str | None = None,
     manifest_rel: str | None = None,
+    policy_path_rel: str | None = None,
 ) -> dict[str, Any]:
     q = load_queue(repo)
     jobs = list(q.get("jobs") or [])
@@ -66,6 +68,7 @@ def enqueue(
         "candidate_trades": candidate_trades_rel,
         "candidate_trades_rel": candidate_trades_rel,
         "manifest_rel": manifest_rel,
+        "policy_path": policy_path_rel,
         "status": "queued",
         "stage": "queued",
         "created_at": now,
@@ -177,13 +180,41 @@ def _run_job(repo: Path, job: dict[str, Any]) -> None:
             "--n-sims",
             "5000",
         ]
+    elif action == "ingest_policy":
+        if not exp or not validate_experiment_id(str(exp)):
+            upd(status="failed", stage="failed", message="invalid experiment_id", exit_code=-1)
+            return
+        pp = job.get("policy_path")
+        if not pp:
+            upd(status="failed", stage="failed", message="missing policy_path", exit_code=-1)
+            return
+        vp = validate_policy_package_path(repo, str(pp))
+        if not vp:
+            upd(status="failed", stage="failed", message="invalid policy_path", exit_code=-1)
+            return
+        prel = str(vp.relative_to(repo))
+        cmd = [
+            py,
+            "-m",
+            "renaissance_v4.research.robustness_runner",
+            "ingest-policy",
+            "--experiment-id",
+            str(exp),
+            "--policy-path",
+            prel,
+            "--seed",
+            "42",
+            "--n-sims",
+            "5000",
+        ]
     else:
         upd(status="failed", stage="failed", message="unknown action", exit_code=-1)
         return
 
     upd(
         stage="monte_carlo"
-        if action in {"baseline_mc", "example_flow", "compare", "compare_manifest"}
+        if action
+        in {"baseline_mc", "example_flow", "compare", "compare_manifest", "ingest_policy"}
         else "running"
     )
     try:
