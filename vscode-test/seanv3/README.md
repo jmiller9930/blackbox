@@ -19,6 +19,8 @@ Both rely on the **host** routing table for Binance (WireGuard split-tunnel on c
 
 **Jupiter** (read-only web app; container **`jupiter-web`):** binds **HTTP** on **707** on the **lab host** (no TLS in the Node app). **Operator browser:** **`http://clawbot.a51.corp:707/`** on VPN/LAN, or **`http://jupv3.greyllc.net:737/`** from the internet. **Proof from your machine (VPN):** `curl -sS http://clawbot.a51.corp:707/health` — same URL class as the browser, **not** loopback on your laptop. Default **`JUPITER_WEB_PORT=707`**. Public path: **WAN :737 → LAN :707**. **`/api/summary.json`**, wallet, position, trades. Deploy on **clawbot:** `docker compose up -d` in this directory. Editor-only dev clone: **`npm run jupiter`** (may need **`sudo`** for **707** on Linux).
 
+**Operator writes (Jupiter):** set **`JUPITER_OPERATOR_TOKEN`** on **`jupiter-web`**, then use the **Operator token** field in the browser (Bearer). **Register wallet** posts a Solana **pubkey** to SQLite (`POST /api/operator/paper-wallet`) so paper **open** gates work without mounting **`KEYPAIR_PATH`** on seanv3; **Save mode** (`paper`|`chain`), **Save stake** (simulated USD — **`SEAN_ALLOW_PAPER_STAKE_EDIT`** defaults to **on** for `jupiter-web` in compose). Policy switch: `GET`/`POST /api/v1/jupiter/policy`.
+
 **Web vs TUI (same backend, two displays):** see [`JUPITER_WEB_TUI_ALIGNMENT.md`](JUPITER_WEB_TUI_ALIGNMENT.md). The Jupiter page mirrors `preflight_pyth_tui.py` panels (preflight, policy, wallet, paper ledger, parity, trades, oracle). Compose mounts **`../../` → `/repo:ro`** for policy registry + execution ledger; override **`JUPITER_WEB_REFRESH_SEC`** (default `3`, `0` disables HTML auto-refresh).
 
 **Troubleshooting — browser says “problem” / can’t load :707**

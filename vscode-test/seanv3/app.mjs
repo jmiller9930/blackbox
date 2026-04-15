@@ -162,7 +162,15 @@ async function appendNdjsonLine(obj) {
 }
 
 async function connectWalletOnce(db) {
+  const existingPw = db.prepare(`SELECT pubkey_base58, keypair_path FROM paper_wallet WHERE id=1`).get();
+  const kpTag = existingPw?.keypair_path != null ? String(existingPw.keypair_path) : '';
   if (!keypairPath) {
+    if (existingPw?.pubkey_base58 && kpTag === 'jupiter_operator_ui') {
+      walletPubkey = String(existingPw.pubkey_base58);
+      setMeta(db, 'wallet_status', 'connected');
+      console.error('[seanv3] paper wallet: operator UI pubkey (no KEYPAIR_PATH on host)');
+      return;
+    }
     console.error('[seanv3] KEYPAIR_PATH unset — paper wallet not connected (pubkey-only mode skipped)');
     setMeta(db, 'wallet_status', 'no_keypair_path');
     logPaperEvent(db, {

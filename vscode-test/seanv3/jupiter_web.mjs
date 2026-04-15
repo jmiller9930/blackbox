@@ -15,13 +15,25 @@ import { resolve, join } from 'path';
 import { fileURLToPath } from 'url';
 
 import { assertCanOpenPosition, getPaperEquityUsd } from './funding_guards.mjs';
-import { setMeta } from './paper_analog.mjs';
+import { setMeta, upsertPaperWallet } from './paper_analog.mjs';
+import { PublicKey } from '@solana/web3.js';
 import {
   ALLOWED_POLICY_IDS,
   JUPITER_ACTIVE_POLICY_KEY,
   normalizePolicyId,
   resolveJupiterPolicy,
 } from './jupiter_policy_runtime.mjs';
+
+function parseSolanaPubkeyBase58(raw) {
+  const s = String(raw ?? '').trim();
+  if (!s) return null;
+  try {
+    const pk = new PublicKey(s);
+    return pk.toBase58();
+  } catch {
+    return null;
+  }
+}
 
 const __dirname = fileURLToPath(new URL('.', import.meta.url));
 
@@ -817,7 +829,7 @@ function htmlPage(v) {
       <option value="jup_mc_test" ${ap === 'jup_mc_test' ? 'selected' : ''}>JUP-MC-Test</option>
     </select></label>
     <button type="button" id="jw-apply-policy">Apply policy</button></p>
-    ${postOk ? `<p class="muted">Bearer <input type="password" id="jw-policy-token" size="24" placeholder="JUPITER_OPERATOR_TOKEN"/> (same as operator POST)</p>
+    ${postOk ? `<p class="muted">Uses Bearer token in <strong>Operator token</strong> panel above.</p>
     <script>
     (function(){
       fetch('/api/v1/jupiter/policy').then(r=>r.json()).then(j=>{
@@ -826,7 +838,7 @@ function htmlPage(v) {
       }).catch(function(){});
       document.getElementById('jw-apply-policy')?.addEventListener('click', async function(){
         const pol=(document.getElementById('jw-jupiter-policy')||{}).value||'jup_v4';
-        const tok=(document.getElementById('jw-policy-token')||document.getElementById('jw-op-token')||{}).value||'';
+        const tok=(document.getElementById('jw-op-token')||{}).value||'';
         const r=await fetch('/api/v1/jupiter/set-policy',{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+tok},body:JSON.stringify({policy:pol})});
         const t=await r.text();
         alert(r.ok? t : 'HTTP '+r.status+' '+t);
@@ -869,11 +881,10 @@ function htmlPage(v) {
       <p><code>${esc(w.pubkey_base58)}</code></p>
       <p class="muted">wallet_status: ${esc(v.wallet_status || '—')}</p>`;
   } else {
-    walletBlock = `<p class="warn">Not connected in DB yet — SeanV3 writes pubkey when KEYPAIR_PATH is set and readable.</p>`;
+    walletBlock = `<p class="warn">Not connected in DB yet.</p>
+      <p class="muted">Use <strong>Live market &amp; funding gates</strong> → <em>Register wallet</em> (operator token), or mount a keypair and set <code>KEYPAIR_PATH</code> for seanv3.</p>`;
     if (keypairEnv) {
       walletBlock += `<p class="muted">Env: <code>${esc(keypairEnv)}</code></p>`;
-    } else {
-      walletBlock += `<p class="muted">Set KEYPAIR_PATH (or SEANV3_KEYPAIR_PATH / BLACKBOX_SOLANA_KEYPAIR_PATH).</p>`;
     }
   }
 
@@ -953,14 +964,18 @@ function htmlPage(v) {
   const gate = op.next_open_gate || {};
   const gOk = gate.ok === true;
   const pq = op.paper_equity_usd || {};
+  const modeCur = String(op.sean_funding_mode || 'paper').trim();
+  const stakeNum =
+    pq.starting_usd != null && Number.isFinite(Number(pq.starting_usd)) ? Number(pq.starting_usd) : 1000;
+  const pkPref = w?.pubkey_base58 ? String(w.pubkey_base58) : '';
   const eqStr =
     pq.equity_usd != null && typeof pq.equity_usd === 'number' && Number.isFinite(pq.equity_usd)
       ? pq.equity_usd.toFixed(4)
       : '—';
   let operatorBlock = '<p class="muted">Operator state unavailable.</p>';
   if (!op.error) {
-    const postOk = op.operator_controls?.post_token_configured;
-    const stakeOk = op.operator_controls?.paper_stake_edit_allowed;
+    const opPostOk = Boolean(op.operator_controls?.post_token_configured);
+    const stakeOk = Boolean(op.operator_controls?.paper_stake_edit_allowed);
     operatorBlock = `${liveStrip}
       <p><strong>Funding mode (SQLite)</strong> <code>${esc(op.sean_funding_mode || 'paper')}</code>
         · PAPER_TRADING env: ${
@@ -975,24 +990,36 @@ function htmlPage(v) {
       ${op.chain_balance_error ? `<p class="bad">${esc(op.chain_balance_error)}</p>` : ''}
       <p><strong>Next engine open</strong> ${gOk ? '<span class="ok">allowed</span>' : '<span class="bad">blocked</span>'} — ${esc(gate.reason || '—')}
         <span class="muted">${esc(gate.detail || '')}</span></p>
-      <p class="muted">${postOk ? 'POST /api/operator/* is enabled (token set on server).' : 'POST controls disabled — set JUPITER_OPERATOR_TOKEN in jupiter-web compose.'}</p>
+      <p class="muted">${opPostOk ? 'POST /api/operator/* is enabled (Bearer in Operator token panel).' : 'POST controls disabled — set JUPITER_OPERATOR_TOKEN in jupiter-web compose.'}</p>
       ${
-        postOk
-          ? `<details><summary>Change mode / paper stake</summary>
-      <p class="muted">Bearer token matches <code>JUPITER_OPERATOR_TOKEN</code> on the server.</p>
-      <p><label>Token <input type="password" id="jw-op-token" size="28" autocomplete="off"/></label></p>
-      <p><label>Mode <select id="jw-mode"><option value="paper">paper</option><option value="chain">chain</option></select></label>
+        opPostOk
+          ? `<div class="op-box">
+      <p class="muted"><strong>Operator actions</strong> — writes shared SQLite. Paste Bearer token in the <strong>Operator token</strong> panel above.</p>
+      <p class="op-row"><label>Paper wallet (base58 pubkey) <input type="text" id="jw-pubkey" size="48" value="${esc(pkPref)}" placeholder="Solana address" spellcheck="false" autocomplete="off"/></label>
+        <button type="button" id="jw-save-wallet">Register wallet</button></p>
+      <p class="muted small">Sets <code>wallet_status=connected</code> for paper gates. Persists across seanv3 restarts. For live signing, use <code>KEYPAIR_PATH</code> on seanv3 instead.</p>
+      <p class="op-row"><label>Funding mode <select id="jw-mode">
+        <option value="paper" ${modeCur === 'paper' ? 'selected' : ''}>paper</option>
+        <option value="chain" ${modeCur === 'chain' || modeCur === 'live' ? 'selected' : ''}>chain</option>
+      </select></label>
         <button type="button" id="jw-save-mode">Save mode</button></p>
       ${
         stakeOk
-          ? `<p><label>Paper stake (USD) <input type="text" id="jw-stake" size="10" placeholder="1000"/></label>
+          ? `<p class="op-row"><label>Paper starting balance (USD) <input type="text" id="jw-stake" size="14" value="${esc(String(stakeNum))}"/></label>
         <button type="button" id="jw-save-stake">Save stake</button></p>`
-          : '<p class="muted">Paper stake edit: set SEAN_ALLOW_PAPER_STAKE_EDIT=1 on jupiter-web.</p>'
+          : '<p class="muted">Paper stake edit disabled — set SEAN_ALLOW_PAPER_STAKE_EDIT=1 on jupiter-web.</p>'
       }
-      </details>
+      </div>
       <script>
       (function(){
         function tok(){ return (document.getElementById('jw-op-token')||{}).value||''; }
+        document.getElementById('jw-save-wallet')?.addEventListener('click', async function(){
+          const pubkey_base58 = (document.getElementById('jw-pubkey')||{}).value||'';
+          const r = await fetch('/api/operator/paper-wallet', { method:'POST', headers:{'Authorization':'Bearer '+tok(),'Content-Type':'application/json'}, body: JSON.stringify({pubkey_base58}) });
+          const t = await r.text();
+          alert(r.ok ? t : 'HTTP '+r.status+' '+t);
+          if(r.ok) location.reload();
+        });
         document.getElementById('jw-save-mode')?.addEventListener('click', async function(){
           const mode = (document.getElementById('jw-mode')||{}).value||'paper';
           const r = await fetch('/api/operator/funding-mode', { method:'POST', headers:{'Authorization':'Bearer '+tok(),'Content-Type':'application/json'}, body: JSON.stringify({mode}) });
@@ -1012,6 +1039,15 @@ function htmlPage(v) {
   } else {
     operatorBlock = `<p class="warn">${esc(op.error)}</p>`;
   }
+
+  const tokenPanel = postOk
+    ? `<section class="panel"><h2>Operator token</h2>
+      <p class="muted">Same secret as <code>JUPITER_OPERATOR_TOKEN</code> on jupiter-web. Used for policy switch, paper wallet, funding mode, and paper stake.</p>
+      <p><label>Bearer <input type="password" id="jw-op-token" size="44" autocomplete="off" spellcheck="false"/></label></p>
+    </section>`
+    : `<section class="panel"><h2>Operator token</h2>
+      <p class="warn">POST actions are off until you set <code>JUPITER_OPERATOR_TOKEN</code> on jupiter-web and restart the container.</p>
+    </section>`;
 
   return `<!DOCTYPE html>
 <html lang="en">
@@ -1042,6 +1078,9 @@ function htmlPage(v) {
     a { color: #58a6ff; }
     .scroll { overflow-x: auto; }
     p { margin: 0.35rem 0; }
+    .op-box { border: 1px dashed #30363d; padding: 0.6rem 0.75rem; margin-top: 0.5rem; border-radius: 2px; background: #0e0e10; }
+    .op-row { margin: 0.45rem 0; display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: center; }
+    .small { font-size: 0.78rem; }
   </style>
 </head>
 <body>
@@ -1052,6 +1091,7 @@ function htmlPage(v) {
       <p class="muted">${esc(v.sqlite_path)} · repo: ${esc(v.repo_root)}</p>
       <p><a href="https://jup.ag/perps/long/SOL-SOL" target="_blank" rel="noopener noreferrer">jup.ag SOL perps</a> · <a href="/api/summary.json">summary.json</a> · <a href="/api/operator/state.json">operator/state.json</a> · <a href="/api/live-market.json">live-market.json</a> · <a href="/health">health</a></p>
     </section>
+    ${tokenPanel}
     ${v.error ? `<section class="panel"><p class="warn">${esc(v.error)}</p></section>` : ''}
     <section class="panel"><h2>Trading mode</h2>${tradingBlock}</section>
     <section class="panel"><h2>Live market &amp; funding gates</h2>${operatorBlock}</section>
@@ -1191,6 +1231,20 @@ async function handleOperatorPost(req, res, pathname) {
   const seanPath = dbPath();
   const dbw = new DatabaseSync(seanPath);
   try {
+    if (pathname === '/api/operator/paper-wallet') {
+      const pk = parseSolanaPubkeyBase58(body.pubkey_base58);
+      if (!pk) {
+        res.writeHead(400, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' });
+        res.end(JSON.stringify({ error: 'invalid pubkey_base58 (Solana base58 public key)' }));
+        return;
+      }
+      upsertPaperWallet(dbw, { pubkeyBase58: pk, keypairPath: 'jupiter_operator_ui' });
+      setMeta(dbw, 'wallet_status', 'connected');
+      console.error(`[jupiter] paper wallet set via operator UI: ${pk}`);
+      res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' });
+      res.end(JSON.stringify({ ok: true, pubkey_base58: pk, wallet_status: 'connected' }));
+      return;
+    }
     if (pathname === '/api/operator/funding-mode') {
       const m = String(body.mode || '').trim().toLowerCase();
       if (m !== 'paper' && m !== 'chain' && m !== 'live') {
@@ -1252,7 +1306,9 @@ const server = http.createServer((req, res) => {
 
     if (
       req.method === 'POST' &&
-      (url.pathname === '/api/operator/funding-mode' || url.pathname === '/api/operator/paper-stake')
+      (url.pathname === '/api/operator/funding-mode' ||
+        url.pathname === '/api/operator/paper-stake' ||
+        url.pathname === '/api/operator/paper-wallet')
     ) {
       await handleOperatorPost(req, res, url.pathname);
       return;
