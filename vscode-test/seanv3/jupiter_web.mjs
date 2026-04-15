@@ -1,8 +1,7 @@
 #!/usr/bin/env node
 /**
- * Jupiter — read-only web UI aligned with scripts/operator/preflight_pyth_tui.py panels:
- * trading mode, active policy, wallet, Sean paper ledger, parity vs BlackBox baseline,
- * closed trades, preflight strip, Pyth oracle window. Same SQLite + same external checks.
+ * Jupiter dashboard + JSON API. GET surfaces are unauthenticated (restrict via network).
+ * JUPITER_WEB_READ_ONLY=1 blocks POST /api/operator/*; POST /api/v1/jupiter/set-policy (Bearer) remains for strategy push.
  *
  * Mount repo read-only at BLACKBOX_REPO_ROOT for policy registry + execution_ledger parity.
  * Default port 707. Lab: http://clawbot.a51.corp:707/
@@ -96,6 +95,11 @@ function esc(s) {
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;');
+}
+
+/** When true, POST /api/operator/* returns 403; POST /api/v1/jupiter/set-policy still works with Bearer. */
+function jupiterWebReadOnly() {
+  return ['1', 'true', 'yes'].includes((process.env.JUPITER_WEB_READ_ONLY || '').trim().toLowerCase());
 }
 
 function formatIsoUtcShort(iso) {
@@ -856,6 +860,8 @@ function buildOperatorPayload(seanPath, markUsd, base) {
       operator_controls: {
         post_token_configured: tokenConfigured,
         paper_stake_edit_allowed: stakeEdit,
+        wallet_operator_writes_allowed: !jupiterWebReadOnly(),
+        read_only_except_policy: jupiterWebReadOnly(),
       },
     };
   } catch (e) {
@@ -892,9 +898,9 @@ function frontDoorHtml() {
   <div class="hero">
     <img src="/static/jupiter_front_door.png" alt="Jupiter — financial rings" width="920" height="auto"/>
     <h1>Jupiter — operator lab</h1>
-    <p>SeanV3 paper engine, parity vs BlackBox baseline, wallet &amp; funding controls. POST actions require a Bearer token.</p>
+    <p>SeanV3 paper engine, parity vs BlackBox baseline. Dashboard is read-only for wallet/funding when <code>JUPITER_WEB_READ_ONLY=1</code>; strategy policy can be pushed via <code>POST /api/v1/jupiter/set-policy</code> (Bearer).</p>
     <a class="btn" href="/dashboard">Open dashboard</a>
-    <p class="note">This URL has no login screen — restrict access with VPN/firewall. Writes use <code>JUPITER_OPERATOR_TOKEN</code> on the server.</p>
+    <p class="note">No login UI — restrict with VPN/firewall. Operator Bearer token required for policy POST only when read-only.</p>
   </div>
 </body>
 </html>`;
@@ -936,6 +942,7 @@ async function buildFullView() {
     sean_jupiter_policy: (process.env.SEAN_JUPITER_POLICY || 'jupiter_4').trim(),
     jupiter_runtime: jupiterRuntime,
     post_token_configured: Boolean((process.env.JUPITER_OPERATOR_TOKEN || '').trim()),
+    read_only_except_policy: jupiterWebReadOnly(),
   };
 
   const policy = loadPolicyPanel(rr);
@@ -955,6 +962,7 @@ async function buildFullView() {
     ...base,
     paper_ledger: paperLedger,
     trading_mode: tradingMode,
+    read_only_except_policy: jupiterWebReadOnly(),
     policy,
     preflight,
     parity,
@@ -964,6 +972,7 @@ async function buildFullView() {
 }
 
 function htmlPage(v) {
+  const readOnly = Boolean(v.read_only_except_policy);
   const refresh = v.refresh_sec > 0 ? `<meta http-equiv="refresh" content="${esc(String(v.refresh_sec))}"/>` : '';
   const tm = v.trading_mode || {};
   const actual = tm.actual_banner;
@@ -1000,10 +1009,20 @@ function htmlPage(v) {
   const tradingBlock = actual
     ? `<p class="warn"><strong>ACTUAL</strong> — Live-capital intent. Deploy with PAPER_TRADING=0 when leaving paper; this banner does not change Docker.</p>
       ${policySel}
-      <p class="muted small">This <strong>Policy</strong> selector is the Jupiter/Sean runtime strategy (<code>jupiter_active_policy</code>). It is <em>not</em> the BlackBox <code>policy_registry.json</code> “strategy entry” line (that registry is for other operator tools only).</p>`
+      <p class="muted small">This <strong>Policy</strong> selector is the Jupiter/Sean runtime strategy (<code>jupiter_active_policy</code>). It is <em>not</em> the BlackBox <code>policy_registry.json</code> “strategy entry” line (that registry is for other operator tools only).</p>
+      ${
+        readOnly
+          ? '<p class="muted small">Read-only API: wallet/funding POSTs are off. Other apps may push strategy via <code>POST /api/v1/jupiter/set-policy</code> (Bearer).</p>'
+          : ''
+      }`
     : `<p><strong>PAPER</strong> — Simulated ledger (default). SEANV3_TUI_ACTUAL=1 for live-intent banner.</p>
       ${policySel}
-      <p class="muted small">This <strong>Policy</strong> selector is the Jupiter/Sean runtime strategy (<code>jupiter_active_policy</code>). Ignore BlackBox registry “strategy entry” elsewhere — not used here.</p>`;
+      <p class="muted small">This <strong>Policy</strong> selector is the Jupiter/Sean runtime strategy (<code>jupiter_active_policy</code>). Ignore BlackBox registry “strategy entry” elsewhere — not used here.</p>
+      ${
+        readOnly
+          ? '<p class="muted small">Read-only API: wallet/funding POSTs are off. Other apps may push strategy via <code>POST /api/v1/jupiter/set-policy</code> (Bearer).</p>'
+          : ''
+      }`;
 
   const w = v.wallet;
   const keypairEnv = v.paper_ledger?.keypair_env || v.keypair_env || '';
@@ -1028,7 +1047,25 @@ function htmlPage(v) {
 
   let walletFundingBlock = '<p class="muted">Operator state unavailable.</p>';
   if (!op.error) {
-    walletFundingBlock = `
+    if (readOnly) {
+      walletFundingBlock = `
+      <p class="warn"><strong>Read-only HTTP API</strong> — <code>JUPITER_WEB_READ_ONLY=1</code>. Wallet, funding mode, and paper stake cannot be changed via <code>POST /api/operator/*</code>. Use <code>KEYPAIR_PATH</code> on <strong>seanv3</strong> or SQLite for wallet state, or set <code>JUPITER_WEB_READ_ONLY=0</code> to re-enable dashboard writes.</p>
+      <p class="muted"><strong>Paper wallet</strong> — <strong>Equity = bankroll + realized PnL + unrealized</strong>.</p>
+      <p><strong>Paper PnL (live)</strong> — equity ~<strong>${esc(eqStr)}</strong> USD
+        <span class="muted">= bankroll ${esc(String(pq.starting_usd ?? '—'))} + realized ${esc(String(pq.realized_pnl_usd ?? '—'))} + unreal ${esc(String(pq.unrealized_usd ?? '—'))}</span>
+        ${pl ? ` · closed: ${esc(String(pl.closed_trade_count))}` : ''}</p>
+      ${pl?.open_line ? `<p class="muted">${esc(pl.open_line)}</p>` : ''}
+      <p class="muted">Stored funding mode: <code>${esc(modeCur)}</code> · PAPER_TRADING: ${
+        op.paper_trading_env ? `<span class="ok">on</span>` : `<span class="warn">off</span>`
+      }</p>
+      ${
+        w?.pubkey_base58
+          ? `<p class="ok">Pubkey in DB — <code>${esc(w.pubkey_base58)}</code> · ${esc(v.wallet_status || '—')}</p>`
+          : `<p class="warn">No pubkey in DB — use <code>KEYPAIR_PATH</code> on seanv3 or temporarily set <code>JUPITER_WEB_READ_ONLY=0</code> to register via UI.</p>`
+      }
+      <p class="muted small"><strong>External strategy push:</strong> <code>POST /api/v1/jupiter/set-policy</code> · header <code>Authorization: Bearer &lt;JUPITER_OPERATOR_TOKEN&gt;</code> · body <code>{"policy":"jup_v4"}</code> (or <code>jup_v3</code>, <code>jup_mc_test</code>).</p>`;
+    } else {
+      walletFundingBlock = `
       <p class="muted"><strong>Paper wallet</strong> — <strong>Equity = bankroll + realized PnL + unrealized</strong> (same numbers the engine uses). Raising “Add paper funds” increases <strong>bankroll</strong> immediately after save + reload. <strong>Chain wallet</strong> switches the gate to cached SOL; live fills still need <code>PAPER_TRADING=0</code> on seanv3 + restart.</p>
       <p><strong>Paper PnL (live)</strong> — equity ~<strong>${esc(eqStr)}</strong> USD
         <span class="muted">= bankroll ${esc(String(pq.starting_usd ?? '—'))} + realized ${esc(String(pq.realized_pnl_usd ?? '—'))} + unreal ${esc(String(pq.unrealized_usd ?? '—'))}</span>
@@ -1085,6 +1122,7 @@ function htmlPage(v) {
       </script>`
           : `<p class="warn">Set <code>JUPITER_OPERATOR_TOKEN</code> on jupiter-web to enable Register / stake / Paper↔Chain.</p>`
       }`;
+    }
   } else {
     walletFundingBlock = `<p class="warn">${esc(op.error)}</p>`;
   }
@@ -1093,7 +1131,9 @@ function htmlPage(v) {
   if (w?.pubkey_base58) {
     walletBlock = `<p class="muted">Pubkey also listed in <strong>Wallet &amp; funding</strong> above.</p>`;
   } else {
-    walletBlock = `<p class="warn">No pubkey — complete <strong>Wallet &amp; funding</strong> above.</p>`;
+    walletBlock = readOnly
+      ? `<p class="warn">No pubkey in DB — see <strong>Wallet &amp; funding</strong> for options (<code>KEYPAIR_PATH</code> or disable read-only).</p>`
+      : `<p class="warn">No pubkey — complete <strong>Wallet &amp; funding</strong> above.</p>`;
     if (keypairEnv) {
       walletBlock += `<p class="muted">Optional file path on seanv3: <code>${esc(keypairEnv)}</code></p>`;
     }
@@ -1209,7 +1249,11 @@ function htmlPage(v) {
   const bearerInputType = prefillBearer ? 'text' : 'password';
   const tokenPanel = postOk
     ? `<section class="panel"><h2>Operator token</h2>
-      <p class="muted">Same secret as <code>JUPITER_OPERATOR_TOKEN</code> on jupiter-web (see <code>lab_operator_token.env</code> in this stack). Used for policy switch, paper wallet, funding mode, and paper stake — <em>not</em> your Solana wallet.</p>
+      <p class="muted">Same secret as <code>JUPITER_OPERATOR_TOKEN</code> on jupiter-web (see <code>lab_operator_token.env</code> in this stack). ${
+        readOnly
+          ? '<strong>Read-only mode:</strong> use Bearer only for <strong>Apply policy</strong> below — wallet/funding POSTs are disabled.'
+          : 'Used for policy switch, paper wallet, funding mode, and paper stake'
+      } — <em>not</em> your Solana wallet.</p>
       <p><label>Bearer <input type="${bearerInputType}" id="jw-op-token" size="44" value="${esc(prefillBearer)}" autocomplete="off" spellcheck="false"/></label></p>
       ${
         prefillBearer
@@ -1454,6 +1498,17 @@ async function handleOperatorPost(req, res, pathname) {
   if (tok !== expected) {
     res.writeHead(401, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' });
     res.end(JSON.stringify({ error: 'unauthorized' }));
+    return;
+  }
+  if (jupiterWebReadOnly()) {
+    res.writeHead(403, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' });
+    res.end(
+      JSON.stringify({
+        error: 'read_only',
+        message:
+          'Wallet/funding/stake POST disabled (JUPITER_WEB_READ_ONLY). Strategy policy: POST /api/v1/jupiter/set-policy with Bearer.',
+      })
+    );
     return;
   }
   let body;
