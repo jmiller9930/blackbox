@@ -4,6 +4,10 @@
 
 **Purpose:** One **repeatable shape** for every new baseline Jupiter policy (JUPv3, JUPv4, …) so Sean (or Grok on his spec) can hand engineering a **complete package**, and engineering can **integrate** it without reinventing wiring each time.
 
+**Single integration overview** (policy system, assignment, package flow, Kitchen → BlackBox, activation): [`blackbox_policy_kitchen_integration_writeup.md`](blackbox_policy_kitchen_integration_writeup.md).
+
+**Live assignment (product):** No policy may be assigned to the **live** BlackBox slot until it has passed **Quant Research Kitchen** evaluation on the **unified** submission pipeline. Dashboard actions submit for **Kitchen evaluation**, not instant activation. **[`DV-ARCH-POLICY-LOAD-028_unified_policy_submission.md`](DV-ARCH-POLICY-LOAD-028_unified_policy_submission.md)**.
+
 **What this is not:** It is **not** “upload policy in the browser and execute.” Blackbox **does not** run unreviewed strings as policy. A policy becomes active only after **merge**, **slot wiring**, **tests**, and **deploy** per governance.
 
 **What “load” means here:** **Load into the system** = accepted package → code review → repo merge → extend `VALID_BASELINE_JUPITER_POLICY_SLOTS` + evaluator + dashboard/ledger hooks → operator can select the new slot when **validated**.
@@ -149,10 +153,20 @@ If policies stay **parameter‑driven** (same gate shape, different thresholds),
 
 ---
 
-## 6. Revision
+## 6. Policy activation and lineage (target; not the same as package layout)
+
+Package layout answers **what to merge**. **Assignment** answers **when** a policy becomes live and **how** trades/tiles are attributed. Those are separate concerns.
+
+Target product rules (pending → next closed evaluation boundary, durable artifacts, forward-only lineage) live in **[`policy_activation_lineage_spec.md`](policy_activation_lineage_spec.md)**. Extend `POLICY_SPEC.yaml` with activation metadata when engineering implements that spec.
+
+---
+
+## 7. Revision
 
 | Version | Change |
 |---------|--------|
 | 1 | Initial standard: package layout, `POLICY_SPEC.yaml`, integration checklist. |
 | 2 | §5 failure‑point pipeline: validator script, CI/tests, declarative future note. |
 | 3 | Governance cross-links: `development_governance.md`, `blackbox-session-always.mdc` Authority §10. |
+| 4 | §6 pointer to **policy activation and lineage** spec (authoring vs assignment). |
+| 5 | Purpose pointer: **Kitchen-first** live assignment (**DV-ARCH-POLICY-LOAD-028**). |

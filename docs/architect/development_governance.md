@@ -14,6 +14,8 @@
 | [`directives/directive_execution_log.md`](directives/directive_execution_log.md) | Directive closure / evidence |
 | [`../working/current_directive.md`](../working/current_directive.md) | Active implementation slice (when present) |
 | **[`policy_package_standard.md`](policy_package_standard.md)** | **Mandatory contract** for **any** new Jupiter baseline policy (JUPv3, JUPv4, JUPv5, …): Sean / AI output → reviewable package → merge. Not optional. |
+| **[`blackbox_policy_kitchen_integration_writeup.md`](blackbox_policy_kitchen_integration_writeup.md)** | **Single integration summary** — how policy works, assignment, policy package standard, Kitchen manifest → BlackBox path, activation boundary (as-is vs target). |
+| **[`DV-ARCH-POLICY-LOAD-028_unified_policy_submission.md`](DV-ARCH-POLICY-LOAD-028_unified_policy_submission.md)** | **Kitchen-first policy submission** — no live assignment without Kitchen evaluation; unified dashboard + Kitchen backend; explicit states; UI language. |
 
 **Plan / log sync:** When scope or status changes, update **master plan** and **directive execution log** in the **same change set** with matching granularity (`Plan/log status sync: PASS`).
 
@@ -27,6 +29,8 @@ New baseline Jupiter policies are **not** ad-hoc Python in the bridge. They **mu
 4. **Integrate** in **one** PR: slot + wiring + tests per the checklist — no silent string slots.
 
 **Canonical reference policy:** [`JUPv3.md`](JUPv3.md). Blackbox does **not** execute unreviewed policy strings; merged code + tests + operator slot selection only.
+
+**Kitchen before live slot (product rule):** [`DV-ARCH-POLICY-LOAD-028_unified_policy_submission.md`](DV-ARCH-POLICY-LOAD-028_unified_policy_submission.md) — unified submission pipeline; dashboard must not offer a bypass; activation only after **`approved_for_activation`** (or equivalent).
 
 ---
 
