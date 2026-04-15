@@ -1,0 +1,111 @@
+/**
+ * Runtime Jupiter policy resolution for SeanV3 — DV-ARCH-JUPITER-POLICY-SWITCH-037.
+ * Order: analog_meta.jupiter_active_policy → SEAN_JUPITER_POLICY → default jup_v4.
+ * Evaluated fresh each engine cycle (no module-level policy cache).
+ */
+import { getMeta } from './paper_analog.mjs';
+import {
+  generateSignalFromOhlcV3,
+  resolveEntrySide as resolveEntrySideV3,
+  MIN_BARS as MIN_BARS_V3,
+  ENGINE_ID as ENGINE_ID_V3,
+} from './jupiter_3_sean_policy.mjs';
+import {
+  generateSignalFromOhlcV4,
+  resolveEntrySide as resolveEntrySideV4,
+  MIN_BARS as MIN_BARS_V4,
+  ENGINE_ID as ENGINE_ID_V4,
+} from './jupiter_4_sean_policy.mjs';
+import {
+  generateSignalFromOhlcMcTest,
+  resolveEntrySide as resolveEntrySideMc,
+  MIN_BARS as MIN_BARS_MC,
+  ENGINE_ID as ENGINE_ID_MC,
+} from './jupiter_mc_test_policy.mjs';
+
+export const JUPITER_ACTIVE_POLICY_KEY = 'jupiter_active_policy';
+
+/** Canonical ids for API / UI / meta storage */
+export const ALLOWED_POLICY_IDS = Object.freeze(['jup_v4', 'jup_v3', 'jup_mc_test']);
+
+/**
+ * @param {string | null | undefined} s
+ * @returns {'jup_v4' | 'jup_v3' | 'jup_mc_test' | null}
+ */
+export function normalizePolicyId(s) {
+  const t = String(s ?? '')
+    .trim()
+    .toLowerCase();
+  if (!t) return null;
+  if (t === 'jup_v4' || t === 'jupiter_4' || t === 'v4') return 'jup_v4';
+  if (t === 'jup_v3' || t === 'jupiter_3' || t === 'v3') return 'jup_v3';
+  if (t === 'jup_mc_test' || t === 'jupiter_mc_test' || t === 'mc_test') return 'jup_mc_test';
+  return null;
+}
+
+/**
+ * @param {import('node:sqlite').DatabaseSync} db
+ * @returns {{
+ *   policyId: 'jup_v4' | 'jup_v3' | 'jup_mc_test',
+ *   source: 'runtime_config' | 'environment' | 'default',
+ *   minBars: number,
+ *   generateEntrySignal: Function,
+ *   resolveEntrySide: (a: boolean, b: boolean) => string | null,
+ *   engineId: string,
+ *   policyEngineTag: string,
+ * }}
+ */
+export function resolveJupiterPolicy(db) {
+  let source = /** @type {'runtime_config' | 'environment' | 'default'} */ ('default');
+  let id = normalizePolicyId(getMeta(db, JUPITER_ACTIVE_POLICY_KEY));
+
+  if (id) {
+    source = 'runtime_config';
+  } else {
+    const envId = normalizePolicyId(process.env.SEAN_JUPITER_POLICY);
+    if (envId) {
+      id = envId;
+      source = 'environment';
+    } else {
+      id = 'jup_v4';
+      source = 'default';
+    }
+  }
+
+  if (!ALLOWED_POLICY_IDS.includes(id)) {
+    id = 'jup_v4';
+    source = 'default';
+  }
+
+  if (id === 'jup_v3') {
+    return {
+      policyId: 'jup_v3',
+      source,
+      minBars: MIN_BARS_V3,
+      generateEntrySignal: generateSignalFromOhlcV3,
+      resolveEntrySide: resolveEntrySideV3,
+      engineId: 'sean_jupiter3_engine_v1',
+      policyEngineTag: ENGINE_ID_V3,
+    };
+  }
+  if (id === 'jup_mc_test') {
+    return {
+      policyId: 'jup_mc_test',
+      source,
+      minBars: MIN_BARS_MC,
+      generateEntrySignal: generateSignalFromOhlcMcTest,
+      resolveEntrySide: resolveEntrySideMc,
+      engineId: 'sean_jupiter_mc_test_engine_v1',
+      policyEngineTag: ENGINE_ID_MC,
+    };
+  }
+  return {
+    policyId: 'jup_v4',
+    source,
+    minBars: MIN_BARS_V4,
+    generateEntrySignal: generateSignalFromOhlcV4,
+    resolveEntrySide: resolveEntrySideV4,
+    engineId: 'sean_jupiter4_engine_v1',
+    policyEngineTag: ENGINE_ID_V4,
+  };
+}

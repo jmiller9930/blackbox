@@ -1,6 +1,7 @@
 /**
- * SeanV3 paper engine: Jupiter entry policy (v4 default, v3 optional) + ATR lifecycle exits (sean_lifecycle.mjs).
- * Policy: SEAN_JUPITER_POLICY=jupiter_4 (default) | jupiter_3 — aligns BlackBox JUPv4 vs legacy JUPv3.
+ * SeanV3 paper engine: runtime Jupiter policy (DB → env → default) + ATR lifecycle exits.
+ * DV-ARCH-JUPITER-POLICY-SWITCH-037 — policy evaluated fresh each cycle; entries use active policy;
+ * exits use entry-time engine ids from position metadata (lifecycle unchanged by policy switch).
  */
 
 import { getMeta, setMeta } from './paper_analog.mjs';
@@ -10,18 +11,7 @@ import {
   updatePositionLifecycle,
   writeClosedTradeAndFlat,
 } from './sean_ledger.mjs';
-import {
-  generateSignalFromOhlcV3,
-  resolveEntrySide as resolveEntrySideV3,
-  MIN_BARS as MIN_BARS_V3,
-  ENGINE_ID as ENGINE_ID_V3,
-} from './jupiter_3_sean_policy.mjs';
-import {
-  generateSignalFromOhlcV4,
-  resolveEntrySide as resolveEntrySideV4,
-  MIN_BARS as MIN_BARS_V4,
-  ENGINE_ID as ENGINE_ID_V4,
-} from './jupiter_4_sean_policy.mjs';
+import { resolveJupiterPolicy } from './jupiter_policy_runtime.mjs';
 import {
   initialSlTp,
   computePnlUsd,
@@ -31,24 +21,6 @@ import {
   atrFromBarWindow,
 } from './sean_lifecycle.mjs';
 import { assertCanOpenPosition } from './funding_guards.mjs';
-
-const _policy = (process.env.SEAN_JUPITER_POLICY || 'jupiter_4').trim().toLowerCase();
-const useJupiter3 = _policy === 'jupiter_3' || _policy === 'jup_v3' || _policy === '3';
-
-const MIN_BARS = useJupiter3 ? MIN_BARS_V3 : MIN_BARS_V4;
-const POLICY_ENGINE_TAG = useJupiter3 ? ENGINE_ID_V3 : ENGINE_ID_V4;
-
-function generateEntrySignal(closes, highs, lows, vols) {
-  if (useJupiter3) return generateSignalFromOhlcV3(closes, highs, lows, vols);
-  return generateSignalFromOhlcV4(closes, highs, lows, vols);
-}
-
-function resolveEntrySide(shortSignal, longSignal) {
-  if (useJupiter3) return resolveEntrySideV3(shortSignal, longSignal);
-  return resolveEntrySideV4(shortSignal, longSignal);
-}
-
-export const SEAN_ENGINE_ID = useJupiter3 ? 'sean_jupiter3_engine_v1' : 'sean_jupiter4_engine_v1';
 
 function envSize() {
   const v = parseFloat(process.env.SEAN_ENGINE_SIZE_NOTIONAL_SOL || '1');
@@ -74,17 +46,36 @@ function parseFloatPx(x) {
   return parseFloat(String(x));
 }
 
+/** @returns {{ entryEngineId: string, entryPolicyTag: string }} */
+function entryIdsFromPositionMetadata(pos) {
+  let entryEngineId = 'sean_jupiter4_engine_v1';
+  let entryPolicyTag = '';
+  try {
+    if (pos.metadata_json) {
+      const m = JSON.parse(String(pos.metadata_json));
+      if (m.entry_sean_engine_id) entryEngineId = String(m.entry_sean_engine_id);
+      if (m.entry_policy_engine) entryPolicyTag = String(m.entry_policy_engine);
+    }
+  } catch {
+    /* */
+  }
+  return { entryEngineId, entryPolicyTag };
+}
+
 /**
  * @param {import('node:sqlite').DatabaseSync} db
  * @param {{ marketEventId: string, kline: { openTime?: number, open?: string, high?: string, low?: string, close?: string, volume?: string } }} ctx
  */
 export function processSeanEngine(db, { marketEventId, kline }) {
+  const policy = resolveJupiterPolicy(db);
+  const minBars = policy.minBars;
+
   const lastMid = getMeta(db, 'sean_engine_last_bar_mid');
   if (lastMid === marketEventId) return;
   setMeta(db, 'sean_engine_last_bar_mid', marketEventId);
 
   const rows = loadCanonicalBars(db);
-  if (rows.length < MIN_BARS) return;
+  if (rows.length < minBars) return;
 
   const o = parseFloatPx(kline?.open);
   const h = parseFloatPx(kline?.high);
@@ -142,8 +133,10 @@ export function processSeanEngine(db, { marketEventId, kline }) {
     const ex = evaluateExitOhlc(pos.side, sl, tp, o, h, l, c);
     if (ex) {
       const gross = computePnlUsd(pos.entry_price, ex.fill, pos.size_notional_sol, pos.side);
+      const { entryEngineId, entryPolicyTag } = entryIdsFromPositionMetadata(pos);
+      const polTag = entryPolicyTag || policy.policyEngineTag;
       writeClosedTradeAndFlat(db, {
-        engineId: SEAN_ENGINE_ID,
+        engineId: entryEngineId,
         side: pos.side,
         entryMarketEventId: pos.entry_market_event_id || marketEventId,
         exitMarketEventId: marketEventId,
@@ -154,12 +147,12 @@ export function processSeanEngine(db, { marketEventId, kline }) {
         sizeNotionalSol: pos.size_notional_sol,
         grossPnlUsd: gross,
         metadataJson: JSON.stringify({
-          policy_engine: POLICY_ENGINE_TAG,
+          policy_engine: polTag,
           exit_reason: ex.reason,
           atr_t: atrT,
         }),
       });
-      console.error(`[seanv3] ${SEAN_ENGINE_ID} closed ${pos.side} gross_pnl=${gross.toFixed(4)} ${ex.reason}`);
+      console.error(`[seanv3] ${entryEngineId} closed ${pos.side} gross_pnl=${gross.toFixed(4)} ${ex.reason}`);
       return;
     }
 
@@ -172,8 +165,8 @@ export function processSeanEngine(db, { marketEventId, kline }) {
     return;
   }
 
-  const sig = generateEntrySignal(closes, highs, lows, vols);
-  const side = resolveEntrySide(sig.shortSignal, sig.longSignal);
+  const sig = policy.generateEntrySignal(closes, highs, lows, vols);
+  const side = policy.resolveEntrySide(sig.shortSignal, sig.longSignal);
   if (!side) return;
 
   const atr = sig.diag.atr;
@@ -198,7 +191,13 @@ export function processSeanEngine(db, { marketEventId, kline }) {
     candleOpenMs: last.oms,
     entryPrice: entry,
     sizeNotionalSol: envSize(),
-    metadata: { policy_engine: POLICY_ENGINE_TAG, signal: sig.diag },
+    metadata: {
+      policy_engine: policy.policyEngineTag,
+      entry_policy_id: policy.policyId,
+      entry_sean_engine_id: policy.engineId,
+      entry_policy_engine: policy.policyEngineTag,
+      signal: sig.diag,
+    },
     stopLoss: lv.stopLoss,
     takeProfit: lv.takeProfit,
     initialStopLoss: lv.stopLoss,
@@ -206,5 +205,5 @@ export function processSeanEngine(db, { marketEventId, kline }) {
     atrEntry: atr,
     lastProcessedMarketEventId: marketEventId,
   });
-  console.error(`[seanv3] ${SEAN_ENGINE_ID} opened ${side} @ ${entry} mid=${marketEventId}`);
+  console.error(`[seanv3] ${policy.engineId} opened ${side} @ ${entry} mid=${marketEventId} policy=${policy.policyId}`);
 }

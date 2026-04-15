@@ -5,6 +5,8 @@
 !wallet_connect.mjs
 !jupiter_3_sean_policy.mjs
 !jupiter_4_sean_policy.mjs
+!jupiter_mc_test_policy.mjs
+!jupiter_policy_runtime.mjs
 !sean_lifecycle.mjs
 !sean_ledger.mjs
 !sean_engine.mjs

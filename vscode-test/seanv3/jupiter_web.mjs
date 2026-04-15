@@ -16,6 +16,12 @@ import { fileURLToPath } from 'url';
 
 import { assertCanOpenPosition, getPaperEquityUsd } from './funding_guards.mjs';
 import { setMeta } from './paper_analog.mjs';
+import {
+  ALLOWED_POLICY_IDS,
+  JUPITER_ACTIVE_POLICY_KEY,
+  normalizePolicyId,
+  resolveJupiterPolicy,
+} from './jupiter_policy_runtime.mjs';
 
 const __dirname = fileURLToPath(new URL('.', import.meta.url));
 
@@ -744,10 +750,13 @@ async function buildFullView() {
     error: null,
   };
 
+  let jupiterRuntime = { active_policy: 'jup_v4', source: 'default' };
   let db;
   try {
     db = new DatabaseSync(seanPath, { readOnly: true });
     Object.assign(base, buildSummary(db));
+    const rp = resolveJupiterPolicy(db);
+    jupiterRuntime = { active_policy: rp.policyId, source: rp.source };
   } catch (e) {
     base.error = e instanceof Error ? e.message : String(e);
   } finally {
@@ -762,6 +771,8 @@ async function buildFullView() {
     actual_banner: ['1', 'true', 'yes'].includes((process.env.SEANV3_TUI_ACTUAL || '').trim().toLowerCase()),
     paper_trading: (process.env.PAPER_TRADING || '1').trim() !== '0',
     sean_jupiter_policy: (process.env.SEAN_JUPITER_POLICY || 'jupiter_4').trim(),
+    jupiter_runtime: jupiterRuntime,
+    post_token_configured: Boolean((process.env.JUPITER_OPERATOR_TOKEN || '').trim()),
   };
 
   const policy = loadPolicyPanel(rr);
@@ -793,12 +804,41 @@ function htmlPage(v) {
   const refresh = v.refresh_sec > 0 ? `<meta http-equiv="refresh" content="${esc(String(v.refresh_sec))}"/>` : '';
   const tm = v.trading_mode || {};
   const actual = tm.actual_banner;
-  const jp = tm.sean_jupiter_policy || 'jupiter_4';
+  const jr = tm.jupiter_runtime || {};
+  const ap = jr.active_policy || 'jup_v4';
+  const src = jr.source || 'default';
+  const postOk = Boolean(tm.post_token_configured);
+  const policySel = `
+    <p><strong>Policy</strong> (runtime — next bar onward; does not close or force-open positions)</p>
+    <p class="muted">Active: <code>${esc(ap)}</code> · source: <code>${esc(src)}</code> · meta key <code>${esc(JUPITER_ACTIVE_POLICY_KEY)}</code></p>
+    <p><label>JUPv4 / JUPv3 / JUP-MC-Test <select id="jw-jupiter-policy">
+      <option value="jup_v4" ${ap === 'jup_v4' ? 'selected' : ''}>JUPv4</option>
+      <option value="jup_v3" ${ap === 'jup_v3' ? 'selected' : ''}>JUPv3</option>
+      <option value="jup_mc_test" ${ap === 'jup_mc_test' ? 'selected' : ''}>JUP-MC-Test</option>
+    </select></label>
+    <button type="button" id="jw-apply-policy">Apply policy</button></p>
+    ${postOk ? `<p class="muted">Bearer <input type="password" id="jw-policy-token" size="24" placeholder="JUPITER_OPERATOR_TOKEN"/> (same as operator POST)</p>
+    <script>
+    (function(){
+      fetch('/api/v1/jupiter/policy').then(r=>r.json()).then(j=>{
+        const s=document.getElementById('jw-jupiter-policy');
+        if(s && j.active_policy) s.value=j.active_policy;
+      }).catch(function(){});
+      document.getElementById('jw-apply-policy')?.addEventListener('click', async function(){
+        const pol=(document.getElementById('jw-jupiter-policy')||{}).value||'jup_v4';
+        const tok=(document.getElementById('jw-policy-token')||document.getElementById('jw-op-token')||{}).value||'';
+        const r=await fetch('/api/v1/jupiter/set-policy',{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+tok},body:JSON.stringify({policy:pol})});
+        const t=await r.text();
+        alert(r.ok? t : 'HTTP '+r.status+' '+t);
+        if(r.ok) location.reload();
+      });
+    })();
+    </script>` : '<p class="muted">Set <code>JUPITER_OPERATOR_TOKEN</code> on jupiter-web to enable policy switching.</p>'}`;
   const tradingBlock = actual
     ? `<p class="warn"><strong>ACTUAL</strong> — Live-capital intent. Deploy with PAPER_TRADING=0 when leaving paper; this banner does not change Docker.</p>
-      <p class="muted">Sean engine policy (Node): <code>${esc(jp)}</code> · <code>SEAN_JUPITER_POLICY</code> (jupiter_4 = JUPv4 gates, jupiter_3 = legacy BOS)</p>`
+      ${policySel}`
     : `<p><strong>PAPER</strong> — Simulated ledger (default). SEANV3_TUI_ACTUAL=1 for live-intent banner.</p>
-      <p class="muted">Sean engine policy (Node): <code>${esc(jp)}</code> · <code>SEAN_JUPITER_POLICY</code></p>`;
+      ${policySel}`;
 
   let policyBlock = '';
   if (v.policy?.error) {
@@ -1055,6 +1095,76 @@ function readRequestBody(req, limit = 65536) {
  * @param {import('http').ServerResponse} res
  * @param {string} pathname
  */
+function handleJupiterPolicyGet(res) {
+  const seanPath = dbPath();
+  let db;
+  try {
+    db = new DatabaseSync(seanPath, { readOnly: true });
+    const p = resolveJupiterPolicy(db);
+    res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' });
+    res.end(JSON.stringify({ active_policy: p.policyId, source: p.source }));
+  } catch (e) {
+    res.writeHead(500, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' });
+    res.end(JSON.stringify({ error: e instanceof Error ? e.message : String(e) }));
+  } finally {
+    try {
+      db?.close();
+    } catch {
+      /* */
+    }
+  }
+}
+
+async function handleJupiterPolicySet(req, res) {
+  const expected = (process.env.JUPITER_OPERATOR_TOKEN || '').trim();
+  if (!expected) {
+    res.writeHead(503, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' });
+    res.end(JSON.stringify({ error: 'JUPITER_OPERATOR_TOKEN not set on server' }));
+    return;
+  }
+  const auth = req.headers.authorization || '';
+  const tok = auth.startsWith('Bearer ') ? auth.slice(7).trim() : '';
+  if (tok !== expected) {
+    res.writeHead(401, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' });
+    res.end(JSON.stringify({ error: 'unauthorized' }));
+    return;
+  }
+  let body;
+  try {
+    const raw = await readRequestBody(req);
+    body = JSON.parse(raw || '{}');
+  } catch (e) {
+    res.writeHead(400, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' });
+    res.end(JSON.stringify({ error: e instanceof Error ? e.message : String(e) }));
+    return;
+  }
+  const nid = normalizePolicyId(body.policy);
+  if (!nid || !ALLOWED_POLICY_IDS.includes(nid)) {
+    res.writeHead(400, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' });
+    res.end(JSON.stringify({ error: 'invalid policy', allowed: [...ALLOWED_POLICY_IDS] }));
+    return;
+  }
+  const seanPath = dbPath();
+  const dbw = new DatabaseSync(seanPath);
+  try {
+    const before = resolveJupiterPolicy(dbw).policyId;
+    setMeta(dbw, JUPITER_ACTIVE_POLICY_KEY, nid);
+    const after = resolveJupiterPolicy(dbw).policyId;
+    console.error(`[jupiter] policy switch: ${before} → ${after}`);
+    res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' });
+    res.end(JSON.stringify({ ok: true, active_policy: after, source: 'runtime_config' }));
+  } catch (e) {
+    res.writeHead(500, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' });
+    res.end(JSON.stringify({ error: e instanceof Error ? e.message : String(e) }));
+  } finally {
+    try {
+      dbw.close();
+    } catch {
+      /* */
+    }
+  }
+}
+
 async function handleOperatorPost(req, res, pathname) {
   const expected = (process.env.JUPITER_OPERATOR_TOKEN || '').trim();
   if (!expected) {
@@ -1130,6 +1240,15 @@ const bind = (process.env.JUPITER_WEB_BIND || process.env.SEANV3_WEB_BIND || '0.
 const server = http.createServer((req, res) => {
   void (async () => {
     const url = new URL(req.url || '/', `http://${req.headers.host || 'localhost'}`);
+
+    if (url.pathname === '/api/v1/jupiter/policy' && req.method === 'GET') {
+      handleJupiterPolicyGet(res);
+      return;
+    }
+    if (url.pathname === '/api/v1/jupiter/set-policy' && req.method === 'POST') {
+      await handleJupiterPolicySet(req, res);
+      return;
+    }
 
     if (
       req.method === 'POST' &&

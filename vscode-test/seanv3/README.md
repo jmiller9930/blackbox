@@ -101,7 +101,7 @@ Reasonable **directional** expectation: both can run **Jupiter_3-style** Sean lo
 
 Runs after each kline insert when **`SEAN_ENGINE_SLICE`** is not `0`/`false`/`no` (name retained for compatibility).
 
-- **Entry policy (Node):** **`SEAN_JUPITER_POLICY`** — default **`jupiter_4`** (`jupiter_4_sean_policy.mjs`), aligned with BlackBox **JUPv4** / `modules/anna_training/jupiter_4_sean_policy.py` (crossover + RSI 52/48 + volume 1.2× + expected move ≥ 0.5). Set **`jupiter_3`** to use the legacy BOS stack (`jupiter_3_sean_policy.mjs`).
+- **Entry policy (runtime):** **`analog_meta.jupiter_active_policy`** is the primary source of truth (`jup_v4` | `jup_v3` | `jup_mc_test`). If unset, **`SEAN_JUPITER_POLICY`** is used (`jupiter_4` / `jupiter_3` / `jupiter_mc_test` aliases), then default **`jup_v4`**. The engine reads this **each processing cycle** (no long-lived cache). **Operator API:** `GET /api/v1/jupiter/policy`, `POST /api/v1/jupiter/set-policy` (Bearer `JUPITER_OPERATOR_TOKEN`). Dashboard: **Policy** selector.
 - **Exit:** `sean_lifecycle.mjs` — initial SL/TP from ATR×1.6 / ×4.0, breakeven +0.2%, monotonic trailing; OHLC bar hit test (both SL+TP → SL wins).
 - **Dedup:** one step per `market_event_id` (`analog_meta.sean_engine_last_bar_mid`).
 - **Tests:** `npm test` from this directory.
@@ -113,7 +113,7 @@ Runs after each kline insert when **`SEAN_ENGINE_SLICE`** is not `0`/`false`/`no
 | `sean_binance_kline_poll` | Raw poll rows (Binance REST). |
 | `sean_paper_position` | Single-row state: `side`, entry, **SL/TP**, `atr_entry`, `breakeven_applied`, `bars_held`, … |
 | `sean_paper_trades` | Closed trades (`engine_id`, sides, times, prices, gross P&amp;L, `result_class`). |
-| `analog_meta` | `sean_engine_last_bar_mid`, wallet keys, stub cursor. |
+| `analog_meta` | `sean_engine_last_bar_mid`, **`jupiter_active_policy`**, wallet keys, stub cursor. |
 | `paper_wallet` | Optional pubkey. |
 | `paper_trade_log` | Legacy ingest/stub events. |
 

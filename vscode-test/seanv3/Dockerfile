@@ -10,7 +10,8 @@ RUN npm install --omit=dev && npm cache clean --force
 # Use image's built-in `node` user (GID 1000 already exists on node:alpine).
 COPY --chown=node:node \
   app.mjs backfill.mjs paper_analog.mjs wallet_connect.mjs funding_guards.mjs \
-  jupiter_3_sean_policy.mjs jupiter_4_sean_policy.mjs sean_lifecycle.mjs sean_ledger.mjs sean_engine.mjs report.mjs jupiter_web.mjs ./
+  jupiter_3_sean_policy.mjs jupiter_4_sean_policy.mjs jupiter_mc_test_policy.mjs jupiter_policy_runtime.mjs \
+  sean_lifecycle.mjs sean_ledger.mjs sean_engine.mjs report.mjs jupiter_web.mjs ./
 
 USER node
 
