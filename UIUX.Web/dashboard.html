@@ -698,21 +698,6 @@
       border-radius: 4px;
       border: 1px solid #e2e8f0;
     }
-    .tc-jup-preview {
-      font-size: 0.65rem;
-      line-height: 1.35;
-      margin: 0.35rem 0 0.35rem;
-      padding: 0.35rem 0.4rem;
-      border-radius: 4px;
-      border: 1px dashed #f59e0b;
-      background: #fffbeb;
-      color: #78350f;
-    }
-    .tc-jup-preview-label {
-      font-weight: 700;
-      margin-bottom: 0.25rem;
-      color: #b45309;
-    }
     .tc-trade-semantics {
       font-size: 0.62rem;
       line-height: 1.35;
@@ -2238,20 +2223,6 @@
       narr && !posOpenBaseline
         ? jupiterNarrativeLinesHtml(narr, 'Jupiter / Sean policy (this bar)', baselineLane)
         : '';
-    var prevTile =
-      baselineLane && c && c.jupiter_tile_preview && typeof c.jupiter_tile_preview === 'object'
-        ? c.jupiter_tile_preview
-        : null;
-    var prevN = prevTile && prevTile.narrative != null ? String(prevTile.narrative).trim() : '';
-    var prevEl =
-      prevN && !posOpenBaseline
-        ? '<div class="tc-jup-preview" role="note">' +
-          '<div class="tc-jup-preview-label">' +
-          esc(String(prevTile.label || 'Preview — not persisted')) +
-          '</div>' +
-          jupiterNarrativeLinesHtml(prevN, 'Recomputed preview (audit)', baselineLane) +
-          '</div>'
-        : '';
     var scopeNote = '';
     if (baselineLane && c && c.jupiter_tile_narrative_scope_note && !posOpenBaseline) {
       scopeNote =
@@ -2286,7 +2257,7 @@
         );
       }
     }
-    var jupStack = tcTileCorrelateHtml(c, opts) + scopeNote + entrySnap + narrEl + prevEl + colGates;
+    var jupStack = tcTileCorrelateHtml(c, opts) + scopeNote + entrySnap + narrEl + colGates;
     if (!c || c.empty) {
       var ntBar =
         baselineLane
