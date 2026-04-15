@@ -970,26 +970,101 @@ function htmlPage(v) {
 
   const w = v.wallet;
   const keypairEnv = v.paper_ledger?.keypair_env || v.keypair_env || '';
+  const pl = v.paper_ledger;
+
+  const op = v.operator || {};
+  const gate = op.next_open_gate || {};
+  const gOk = gate.ok === true;
+  const pq = op.paper_equity_usd || {};
+  const modeCur = String(op.sean_funding_mode || 'paper').trim();
+  const stakeNum =
+    pq.starting_usd != null && Number.isFinite(Number(pq.starting_usd)) ? Number(pq.starting_usd) : 1000;
+  const pkPref = w?.pubkey_base58 ? String(w.pubkey_base58) : '';
+  const eqStr =
+    pq.equity_usd != null && typeof pq.equity_usd === 'number' && Number.isFinite(pq.equity_usd)
+      ? pq.equity_usd.toFixed(4)
+      : '—';
+  const opPostOk = Boolean(op.operator_controls?.post_token_configured);
+  const stakeOk = Boolean(op.operator_controls?.paper_stake_edit_allowed);
+  const paperModeOn = modeCur === 'paper';
+  const chainModeOn = modeCur === 'chain' || modeCur === 'live';
+
+  let walletFundingBlock = '<p class="muted">Operator state unavailable.</p>';
+  if (!op.error) {
+    walletFundingBlock = `
+      <p class="muted"><strong>Paper wallet</strong> — simulated bankroll + realized/unreal PnL (same equity the engine uses for opens). <strong>Chain wallet</strong> — gate uses cached on-chain SOL; for real fills you still need <code>PAPER_TRADING=0</code> on <strong>seanv3</strong> in compose + container restart.</p>
+      <p><strong>Paper PnL</strong> — equity ~<strong>${esc(eqStr)}</strong> USD
+        <span class="muted">(start ${esc(String(pq.starting_usd ?? '—'))} + realized ${esc(String(pq.realized_pnl_usd ?? '—'))} + unreal ${esc(String(pq.unrealized_usd ?? '—'))})</span>
+        ${pl ? ` · closed trades: ${esc(String(pl.closed_trade_count))}` : ''}</p>
+      ${pl?.open_line ? `<p class="muted">${esc(pl.open_line)}</p>` : ''}
+      <div class="fund-toggle" role="group" aria-label="Paper vs chain funding gate">
+        <button type="button" class="fund-btn ${paperModeOn ? 'selected' : ''}" id="jw-fund-paper">Paper wallet (simulated)</button>
+        <button type="button" class="fund-btn ${chainModeOn ? 'selected' : ''}" id="jw-fund-chain">Chain wallet (live balance)</button>
+      </div>
+      <p class="muted small">Stored mode: <code>${esc(modeCur)}</code> · PAPER_TRADING: ${
+        op.paper_trading_env ? `<span class="ok">on</span> (paper path)` : `<span class="warn">off</span>`
+      }</p>
+      ${
+        w?.pubkey_base58
+          ? `<p class="ok">Pubkey registered — <code>${esc(w.pubkey_base58)}</code> · ${esc(v.wallet_status || '—')}</p>`
+          : `<p class="bad"><strong>Register a pubkey below</strong> to clear <code>wallet_not_connected</code> (no KEYPAIR file required).</p>`
+      }
+      ${
+        opPostOk
+          ? `<div class="op-box">
+        <p class="op-row"><label>Solana pubkey <input type="text" id="jw-pubkey" size="52" value="${esc(pkPref)}" placeholder="base58" spellcheck="false" autocomplete="off"/></label>
+          <button type="button" id="jw-save-wallet">Register pubkey</button></p>
+        ${
+          stakeOk
+            ? `<p class="op-row"><label>Paper starting balance USD <input type="text" id="jw-stake" size="14" value="${esc(String(stakeNum))}"/></label>
+          <button type="button" id="jw-save-stake">Save stake</button></p>`
+            : '<p class="muted">Paper stake edit disabled on server.</p>'
+        }
+      </div>
+      <script>
+      (function(){
+        function tok(){ return (document.getElementById('jw-op-token')||{}).value||''; }
+        async function postMode(mode){
+          const r = await fetch('/api/operator/funding-mode', { method:'POST', headers:{'Authorization':'Bearer '+tok(),'Content-Type':'application/json'}, body: JSON.stringify({mode}) });
+          alert(r.ok ? await r.text() : 'HTTP '+r.status+' '+await r.text());
+          if(r.ok) location.reload();
+        }
+        document.getElementById('jw-fund-paper')?.addEventListener('click', function(){ postMode('paper'); });
+        document.getElementById('jw-fund-chain')?.addEventListener('click', function(){ postMode('chain'); });
+        document.getElementById('jw-save-wallet')?.addEventListener('click', async function(){
+          const pubkey_base58 = (document.getElementById('jw-pubkey')||{}).value||'';
+          const r = await fetch('/api/operator/paper-wallet', { method:'POST', headers:{'Authorization':'Bearer '+tok(),'Content-Type':'application/json'}, body: JSON.stringify({pubkey_base58}) });
+          alert(r.ok ? await r.text() : 'HTTP '+r.status+' '+await r.text());
+          if(r.ok) location.reload();
+        });
+        document.getElementById('jw-save-stake')?.addEventListener('click', async function(){
+          const usd = parseFloat((document.getElementById('jw-stake')||{}).value||'');
+          const r = await fetch('/api/operator/paper-stake', { method:'POST', headers:{'Authorization':'Bearer '+tok(),'Content-Type':'application/json'}, body: JSON.stringify({usd}) });
+          alert(r.ok ? await r.text() : 'HTTP '+r.status+' '+await r.text());
+          if(r.ok) location.reload();
+        });
+      })();
+      </script>`
+          : `<p class="warn">Set <code>JUPITER_OPERATOR_TOKEN</code> on jupiter-web to enable Register / stake / Paper↔Chain.</p>`
+      }`;
+  } else {
+    walletFundingBlock = `<p class="warn">${esc(op.error)}</p>`;
+  }
+
   let walletBlock = '';
   if (w?.pubkey_base58) {
-    walletBlock = `<p><span class="ok">Connected</span> (pubkey in DB)</p>
-      <p><code>${esc(w.pubkey_base58)}</code></p>
-      <p class="muted">wallet_status: ${esc(v.wallet_status || '—')}</p>`;
+    walletBlock = `<p class="muted">Pubkey also listed in <strong>Wallet &amp; funding</strong> above.</p>`;
   } else {
-    walletBlock = `<p class="warn">Not connected in DB yet.</p>
-      <p class="muted">Use <strong>Live market &amp; funding gates</strong> → <em>Register wallet</em> (operator token), or mount a keypair and set <code>KEYPAIR_PATH</code> for seanv3.</p>`;
+    walletBlock = `<p class="warn">No pubkey — complete <strong>Wallet &amp; funding</strong> above.</p>`;
     if (keypairEnv) {
-      walletBlock += `<p class="muted">Env: <code>${esc(keypairEnv)}</code></p>`;
+      walletBlock += `<p class="muted">Optional file path on seanv3: <code>${esc(keypairEnv)}</code></p>`;
     }
   }
 
-  const pl = v.paper_ledger;
   let ledgerBlock = '<p class="muted">—</p>';
   if (pl) {
-    ledgerBlock = `<p><strong>Paper account (simulated)</strong></p>
-      <p>Starting: ${esc(String(pl.starting_balance_usd))} USD · Realized: ${esc(String(pl.realized_pnl_usd))} · Closed: ${esc(String(pl.closed_trade_count))}</p>
-      <p><strong>Equity (est.):</strong> ${esc(String(pl.equity_est_usd?.toFixed ? pl.equity_est_usd.toFixed(4) : pl.equity_est_usd))} USD</p>
-      <p class="muted">${esc(pl.open_line || '')}</p>`;
+    ledgerBlock = `<p><strong>Paper ledger</strong> — starting ${esc(String(pl.starting_balance_usd))} USD · realized ${esc(String(pl.realized_pnl_usd))} · equity ~${esc(String(pl.equity_est_usd?.toFixed ? pl.equity_est_usd.toFixed(4) : pl.equity_est_usd))} USD</p>
+      <p class="muted">Same figures as <strong>Wallet &amp; funding</strong>; trade list below.</p>`;
   }
 
   let parityRows = '';
@@ -1067,22 +1142,8 @@ function htmlPage(v) {
     return `<p><strong>Binance kline close</strong> ${kc} · <strong>Hermes SOL/USD</strong> ${hp} · <strong>poll</strong> ${esc(kl?.polled_at_utc || '—')}</p>`;
   })();
 
-  const op = v.operator || {};
-  const gate = op.next_open_gate || {};
-  const gOk = gate.ok === true;
-  const pq = op.paper_equity_usd || {};
-  const modeCur = String(op.sean_funding_mode || 'paper').trim();
-  const stakeNum =
-    pq.starting_usd != null && Number.isFinite(Number(pq.starting_usd)) ? Number(pq.starting_usd) : 1000;
-  const pkPref = w?.pubkey_base58 ? String(w.pubkey_base58) : '';
-  const eqStr =
-    pq.equity_usd != null && typeof pq.equity_usd === 'number' && Number.isFinite(pq.equity_usd)
-      ? pq.equity_usd.toFixed(4)
-      : '—';
   let operatorBlock = '<p class="muted">Operator state unavailable.</p>';
   if (!op.error) {
-    const opPostOk = Boolean(op.operator_controls?.post_token_configured);
-    const stakeOk = Boolean(op.operator_controls?.paper_stake_edit_allowed);
     operatorBlock = `${liveStrip}
       <p><strong>Funding mode (SQLite)</strong> <code>${esc(op.sean_funding_mode || 'paper')}</code>
         · PAPER_TRADING env: ${
@@ -1097,52 +1158,7 @@ function htmlPage(v) {
       ${op.chain_balance_error ? `<p class="bad">${esc(op.chain_balance_error)}</p>` : ''}
       <p><strong>Next engine open</strong> ${gOk ? '<span class="ok">allowed</span>' : '<span class="bad">blocked</span>'} — ${esc(gate.reason || '—')}
         <span class="muted">${esc(gate.detail || '')}</span></p>
-      <p class="muted">${opPostOk ? 'POST /api/operator/* is enabled (Bearer in Operator token panel).' : 'POST controls disabled — set JUPITER_OPERATOR_TOKEN in jupiter-web compose.'}</p>
-      ${
-        opPostOk
-          ? `<div class="op-box">
-      <p class="muted"><strong>Operator actions</strong> — writes shared SQLite. Paste Bearer token in the <strong>Operator token</strong> panel above.</p>
-      <p class="op-row"><label>Paper wallet (base58 pubkey) <input type="text" id="jw-pubkey" size="48" value="${esc(pkPref)}" placeholder="Solana address" spellcheck="false" autocomplete="off"/></label>
-        <button type="button" id="jw-save-wallet">Register wallet</button></p>
-      <p class="muted small">Sets <code>wallet_status=connected</code> for paper gates. Persists across seanv3 restarts. For live signing, use <code>KEYPAIR_PATH</code> on seanv3 instead.</p>
-      <p class="op-row"><label>Funding mode <select id="jw-mode">
-        <option value="paper" ${modeCur === 'paper' ? 'selected' : ''}>paper</option>
-        <option value="chain" ${modeCur === 'chain' || modeCur === 'live' ? 'selected' : ''}>chain</option>
-      </select></label>
-        <button type="button" id="jw-save-mode">Save mode</button></p>
-      ${
-        stakeOk
-          ? `<p class="op-row"><label>Paper starting balance (USD) <input type="text" id="jw-stake" size="14" value="${esc(String(stakeNum))}"/></label>
-        <button type="button" id="jw-save-stake">Save stake</button></p>`
-          : '<p class="muted">Paper stake edit disabled — set SEAN_ALLOW_PAPER_STAKE_EDIT=1 on jupiter-web.</p>'
-      }
-      </div>
-      <script>
-      (function(){
-        function tok(){ return (document.getElementById('jw-op-token')||{}).value||''; }
-        document.getElementById('jw-save-wallet')?.addEventListener('click', async function(){
-          const pubkey_base58 = (document.getElementById('jw-pubkey')||{}).value||'';
-          const r = await fetch('/api/operator/paper-wallet', { method:'POST', headers:{'Authorization':'Bearer '+tok(),'Content-Type':'application/json'}, body: JSON.stringify({pubkey_base58}) });
-          const t = await r.text();
-          alert(r.ok ? t : 'HTTP '+r.status+' '+t);
-          if(r.ok) location.reload();
-        });
-        document.getElementById('jw-save-mode')?.addEventListener('click', async function(){
-          const mode = (document.getElementById('jw-mode')||{}).value||'paper';
-          const r = await fetch('/api/operator/funding-mode', { method:'POST', headers:{'Authorization':'Bearer '+tok(),'Content-Type':'application/json'}, body: JSON.stringify({mode}) });
-          alert(r.ok ? await r.text() : 'HTTP '+r.status+' '+await r.text());
-          if(r.ok) location.reload();
-        });
-        document.getElementById('jw-save-stake')?.addEventListener('click', async function(){
-          const usd = parseFloat((document.getElementById('jw-stake')||{}).value||'');
-          const r = await fetch('/api/operator/paper-stake', { method:'POST', headers:{'Authorization':'Bearer '+tok(),'Content-Type':'application/json'}, body: JSON.stringify({usd}) });
-          alert(r.ok ? await r.text() : 'HTTP '+r.status+' '+await r.text());
-          if(r.ok) location.reload();
-        });
-      })();
-      </script>`
-          : ''
-      }`;
+      <p class="muted">Controls: <strong>Wallet &amp; funding</strong> panel (above this section).</p>`;
   } else {
     operatorBlock = `<p class="warn">${esc(op.error)}</p>`;
   }
@@ -1188,6 +1204,10 @@ function htmlPage(v) {
     .op-box { border: 1px dashed #30363d; padding: 0.6rem 0.75rem; margin-top: 0.5rem; border-radius: 2px; background: #0e0e10; }
     .op-row { margin: 0.45rem 0; display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: center; }
     .small { font-size: 0.78rem; }
+    .fund-toggle { display: flex; flex-wrap: wrap; gap: 0.5rem; margin: 0.65rem 0; }
+    .fund-btn { font: inherit; padding: 0.4rem 0.85rem; border-radius: 2px; border: 1px solid #30363d; background: #1a1a1c; color: #e6edf3; cursor: pointer; }
+    .fund-btn:hover { border-color: #58a6ff; }
+    .fund-btn.selected { border-color: #3fb950; background: rgba(63, 185, 80, 0.12); }
     .trade-row { cursor: pointer; }
     .trade-win { background: rgba(63, 185, 80, 0.14); }
     .trade-loss { background: rgba(248, 81, 73, 0.1); }
@@ -1208,10 +1228,11 @@ function htmlPage(v) {
     </section>
     ${tokenPanel}
     ${v.error ? `<section class="panel"><p class="warn">${esc(v.error)}</p></section>` : ''}
+    <section class="panel"><h2>Wallet &amp; funding</h2>${walletFundingBlock}</section>
     <section class="panel"><h2>Trading mode</h2>${tradingBlock}</section>
-    <section class="panel"><h2>Live market &amp; funding gates</h2>${operatorBlock}</section>
+    <section class="panel"><h2>Live market &amp; gates</h2>${operatorBlock}</section>
     <section class="panel"><h2>Active policy</h2>${policyBlock}</section>
-    <section class="panel"><h2>Wallet (SeanV3 parity DB)</h2>${walletBlock}</section>
+    <section class="panel"><h2>Wallet status</h2>${walletBlock}</section>
     <section class="panel"><h2>SeanV3 paper ledger (testing)</h2>${ledgerBlock}</section>
     <section class="panel"><h2>Parity (Sean V3 vs BlackBox baseline)</h2>
       <p class="muted">Sean: ${esc(v.parity?.sean_db || '')} · Ledger: ${esc(v.parity?.ledger_db || '')}</p>

@@ -66,7 +66,12 @@ export function assertCanOpenPosition(db, ctx) {
 
   const ws = getMeta(db, 'wallet_status');
   if (ws !== 'connected') {
-    return { ok: false, reason: 'wallet_not_connected', detail: 'Set KEYPAIR_PATH and restart seanv3 so pubkey is stored.' };
+    return {
+      ok: false,
+      reason: 'wallet_not_connected',
+      detail:
+        'Jupiter → Wallet & funding: Register pubkey (Bearer), or set KEYPAIR_PATH on seanv3 for file-based pubkey.',
+    };
   }
   const pk = db.prepare(`SELECT pubkey_base58 FROM paper_wallet WHERE id=1`).get();
   if (!pk?.pubkey_base58) {
