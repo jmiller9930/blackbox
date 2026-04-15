@@ -13,7 +13,7 @@
 | **STATUS (code + registration)** | **complete** — `jup_mc2` implemented and listed in `GET /api/v1/jupiter/policy` → `allowed_policies` |
 | **STATUS (live operator proof on host)** | **pending** — run **§4** on clawbot after deploy (Bearer token, engine cycle) |
 
-**COMMIT:** `bdf1d20` (includes MC2 implementation + proof doc; re-verify after `git pull` on primary host).
+**COMMIT:** `26ef379` (MC2 implementation + proof doc; re-verify after `git pull` on primary host).
 
 ---
 
