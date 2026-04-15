@@ -2667,6 +2667,9 @@ class Handler(BaseHTTPRequestHandler):
                 out["trace_id"] = trace_id
             self._json(200, out, no_cache=True)
             return
+        # DV-ARCH-POLICY-LOAD-028: New/custom policy packages must go through Kitchen evaluation
+        # (unified pipeline) before live assignment — do not use this endpoint as a package bypass.
+        # This route only enqueues pending activation among built-in integrated slots (jup_v2|v3|v4).
         if path_norm == "/api/v1/dashboard/baseline-jupiter-policy":
             body = self._read_json_body() or {}
             trace_id = str(uuid.uuid4())

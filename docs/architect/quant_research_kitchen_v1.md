@@ -3,6 +3,8 @@
 **Status:** Normative product + platform thesis (governed research, not ad hoc).  
 **Route (v1):** `/dashboard.html#/renaissance` — display name **Quant Research Kitchen V1**; implementation path remains `renaissance_v4/`.
 
+**Policy submission (platform rule):** All policies destined for the **live** BlackBox slot must pass **Kitchen evaluation** first on the **unified** pipeline — evaluation-first, activation later. Dashboard and Kitchen must not fork into separate loaders. See **[`DV-ARCH-POLICY-LOAD-028_unified_policy_submission.md`](DV-ARCH-POLICY-LOAD-028_unified_policy_submission.md)** (§3.4 distinguishes built-in baseline version selection vs new policy packages).
+
 ---
 
 ## End-State Objective

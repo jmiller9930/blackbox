@@ -3,7 +3,7 @@
 **To:** Engineering  
 **Cc:** Dashboard Engineering / Research / Runtime Ops  
 **Re:** Unified Policy Submission Flow — All Policies Must Pass Kitchen Evaluation Before Live Assignment  
-**Status:** Rule **documented** in-repo; **implementation** (unified pipeline, state machine, UI) is **required product direction** — track separately with proof when shipped.
+**Status:** Rule **documented** in-repo. **Partial backend** exists (see §13); **full** unified state machine, Kitchen-routed dashboard **package** submit, and enforcement gates remain **tracked** with proof when shipped.
 
 ---
 
@@ -68,6 +68,17 @@ Kitchen remains the **canonical evaluation surface** for:
 ### 3.3 Activation boundary
 
 Only policies that already have a **successful Kitchen evaluation** and are marked **eligible** may enter the activation flow handled by the BlackBox assignment mechanism.
+
+### 3.4 Built-in baseline version selector vs policy package submission
+
+Do **not** conflate these:
+
+| Surface | What it is | Kitchen-first rule |
+|--------|------------|---------------------|
+| **Main dashboard — Jupiter baseline dropdown** (`jup_v2` / `jup_v3` / `jup_v4`) | Chooses among **already merged, integrated** evaluator binaries in-repo. | Changing the slot **schedules activation** at the next closed-bar boundary ([DV-ARCH-POLICY-ACTIVATION-023](policy_activation_lineage_spec.md)); it is **not** uploading a new policy package. These engines were merged under governance before the operator could select them. |
+| **Policy package** (folder with `POLICY_SPEC.yaml`, new/custom recipe) | New or candidate policy **content** destined for the live slot. | Must go through the **full** path in §2 (validation → … → `approved_for_activation`) on the **canonical** pipeline; **no** direct “load into live” from upload or a dashboard shortcut. |
+
+Future **dashboard** controls that **submit a package file or path** must route into the **same** Kitchen evaluation pipeline as Research Kitchen — not a separate “quick load” API.
 
 ---
 
@@ -173,14 +184,28 @@ Successful when:
 
 **RE:** DV-ARCH-POLICY-LOAD-028  
 
-**Documentation status:** captured in this file and cross-links.  
+**Documentation status:** captured in this file and cross-links (see §7).  
 
-**Implementation status:** open until unified pipeline + states + UI match §3–§6.  
+**Implementation status:** **partial** — see §13 (inventory). **Not** closed until explicit policy states, Kitchen-routed package submit from dashboard (if product adds one), and **`approved_for_activation`** gating are implemented and proven.  
 
 ```
-STATUS: documentation complete (implementation pending)
+STATUS: documentation complete; implementation partial (see §13)
 COMMIT: (record git rev-parse HEAD on branch that merged this doc)
 ```
+
+---
+
+## 13. Related implementation inventory (avoid duplicating work)
+
+Use this list to **avoid** re-specifying the same flow in multiple places. Other directives may add code; this section only **maps** them to LOAD-028.
+
+| Item | Directive / module | Role relative to §2 |
+|------|---------------------|------------------------|
+| Policy package **validation** → deterministic replay artifact | **DV-ARCH-POLICY-INGESTION-024-A** — `renaissance_v4/research/policy_package_ingest.py` (`run_policy_package_replay`) | **First slices** of validation + replay; **not** yet Monte Carlo / baseline compare / approval state machine. |
+| Activation **scheduling** + lineage on eval/trades | **DV-ARCH-POLICY-ACTIVATION-023** — `modules/anna_training/execution_ledger.py` (`policy_activation_log`); see [`policy_activation_lineage_spec.md`](policy_activation_lineage_spec.md) | **Not** a Kitchen bypass; applies to **which integrated slot** runs at the bar boundary. |
+| Baseline dashboard **POST** `/api/v1/dashboard/baseline-jupiter-policy` | `UIUX.Web/api_server.py` | Enqueues **pending** activation for **built-in** slots only; see §3.4. **Custom packages** must not use this endpoint as a substitute for Kitchen evaluation. |
+
+**Still open for LOAD-028 alignment:** persisted **state machine** (`submitted` … `approved_for_activation`), Monte Carlo + baseline comparison wired to the **same** submission id, dashboard/Kitchen **single** submit API for **packages**, and UI copy audit (§6) on any future upload control.
 
 ---
 
@@ -189,3 +214,4 @@ COMMIT: (record git rev-parse HEAD on branch that merged this doc)
 | Version | Change |
 |---------|--------|
 | 1 | Architect memo ingested; permanent architecture record. |
+| 2 | §3.4 built-in vs package; §13 implementation inventory; §11 partial status. |

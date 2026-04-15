@@ -1265,9 +1265,9 @@
         <div class="kv"><span class="k">Trading PnL (baseline book)</span><span class="v" id="pc-pnl">—</span></div>
         <div class="kv"><span class="k">Anna PnL (what-if, lane)</span><span class="v" id="pc-pnl-anna">—</span></div>
         <div class="kv"><span class="k">Current paper balance</span><span class="v" id="pc-balance">—</span></div>
-        <div class="kv"><span class="k">Jupiter baseline policy</span><span class="v" style="display:flex;align-items:center;gap:0.35rem;flex-wrap:wrap">
+        <div class="kv"><span class="k">Jupiter baseline version</span><span class="v" style="display:flex;align-items:center;gap:0.35rem;flex-wrap:wrap">
           <span class="jup-policy-highlight">
-            <select id="dash-baseline-jupiter-policy" aria-label="Jupiter baseline policy version">
+            <select id="dash-baseline-jupiter-policy" aria-label="Integrated Jupiter baseline version (activation schedules at next closed bar; not a custom policy upload). Custom packages must go through Quant Research Kitchen evaluation first.">
               <option value="jup_v2" selected>JUPv2</option>
               <option value="jup_v3">JUPv3</option>
               <option value="jup_v4">JUPv4</option>
@@ -3652,7 +3652,7 @@
           var v = String(sel.value || '').trim();
           if (!v) return;
           var msg = $('pc-msg');
-          if (msg) msg.textContent = 'Setting baseline Jupiter policy…';
+          if (msg) msg.textContent = 'Scheduling baseline version activation…';
           fetch('/api/v1/dashboard/baseline-jupiter-policy', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -3669,7 +3669,7 @@
                 if (msg) msg.textContent = err;
                 return;
               }
-              if (msg) msg.textContent = 'Baseline policy: ' + v + ' (saved)';
+              if (msg) msg.textContent = 'Baseline version ' + v + ' — activation scheduled (next closed 5m bar). New policy packages: use Kitchen evaluation first.';
               refresh();
             })
             .catch(function (e) {

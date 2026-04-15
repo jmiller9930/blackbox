@@ -22,7 +22,9 @@
 
 **Full directive:** [`DV-ARCH-POLICY-LOAD-028_unified_policy_submission.md`](DV-ARCH-POLICY-LOAD-028_unified_policy_submission.md).
 
-**As-is note:** §1–§2 below describe **current** code paths (merged Python, KV slot). Until the Kitchen gate is implemented in API/UI, **documentation** states the rule; **enforcement** is a follow-on implementation task.
+**As-is note:** §1–§2 below describe **current** code paths (merged Python, operator KV + **activation log** for execution-effective slot). Full **Kitchen gate** for **new policy packages** (persisted states through `approved_for_activation`) is **not** yet enforced in API/UI for arbitrary uploads; **documentation** states the rule; **enforcement** for package submit is tracked under [DV-ARCH-POLICY-LOAD-028](DV-ARCH-POLICY-LOAD-028_unified_policy_submission.md) §13.
+
+**Canonical package ingest (replay slice):** `renaissance_v4/research/policy_package_ingest.py` — validation → `run_manifest_replay` path (**DV-ARCH-POLICY-INGESTION-024-A**).
 
 ---
 
@@ -44,15 +46,13 @@
 
 **Selector:** Exactly **one** active **baseline Jupiter policy slot** at a time for baseline signal math: **`jup_v2`**, **`jup_v3`**, or **`jup_v4`**.
 
-**Resolution order** (`get_baseline_jupiter_policy_slot` in `modules/anna_training/execution_ledger.py`):
+**Resolution (execution — which evaluator runs):** `resolve_baseline_jupiter_policy_for_execution()` — **active** row in `policy_activation_log` when present, else pending’s **previous** effective slot, else legacy KV/env (**DV-ARCH-POLICY-ACTIVATION-023**).
 
-1. SQLite **`baseline_operator_kv`**, key **`baseline_jupiter_policy_slot`**, value normalized to `jup_v2` | `jup_v3` | `jup_v4` (aliases like `v4`, `jupiter_4` accepted).
-2. Else environment **`BASELINE_JUPITER_POLICY_SLOT`** (same normalization).
-3. Else default **`jup_v2`**.
+**Operator / display preference (KV):** `get_baseline_jupiter_policy_slot()` — reads **`baseline_operator_kv`** for the dashboard label, then env, then default `jup_v2`.
 
-Invalid values are **rejected** (warning, fallback) — not silently mapped to a random policy.
+**Activation scheduling:** Dashboard **POST** `/api/v1/dashboard/baseline-jupiter-policy` enqueues **pending** activation (and does **not** treat built-in slot change as a Kitchen **package** submit). See [LOAD-028](DV-ARCH-POLICY-LOAD-028_unified_policy_submission.md) §3.4 — this is **not** a substitute for evaluating a **new** policy package.
 
-**Operator surface:** Dashboard **POST** `/api/v1/dashboard/baseline-jupiter-policy` persists the KV row.
+Invalid slot strings are **rejected** (warning, fallback) — not silently mapped to a random policy.
 
 **Signal mode:** Each slot maps to a distinct **`policy_evaluations.signal_mode`** string (e.g. `jup_v4` → `sean_jupiter_v4`) for attribution and joins.
 
