@@ -2,7 +2,7 @@
 
 **Directive:** DV-ARCH-STABILIZATION-035  
 **Report path:** `docs/validation/stabilization_035_report.md`  
-**Recorded:** 2026-04-14  
+**Last updated:** 2026-04-15 (execution attempt + evidence refresh)
 
 ---
 
@@ -14,23 +14,13 @@
 | **STATUS (full directive)** | **not met** |
 | **REPORT** | `docs/validation/stabilization_035_report.md` |
 
-**Why not met:** The directive requires **≥5 full end-to-end operational cycles** including Kitchen replay + Monte Carlo + compare, **live** policy activation observation at the **next closed 5m bar**, and **dashboard** verification (tiles, pending vs active, no policy bleed). Those steps need a **primary host** environment with populated `market_bars_5m` (or equivalent), execution ledger, and operator/browser confirmation. This report records **automated regression evidence** from the development workspace and **one correctness fix** uncovered during stabilization-related testing; it does **not** substitute for the five live cycles.
+**Why not met:** Fewer than **five** full operational cycles completed. A **first failure** was hit while attempting to establish baseline Kitchen prerequisites on the local workspace (see **§3**). Per directive: **stop**, document, fix environment or data, **rerun the same cycle** — do not continue numbered cycles on a broken prerequisite.
 
 ---
 
-## 1. Isolated defect fixed during stabilization (dashboard integrity)
+## 1. Automated regression (local — not a substitute for §3)
 
-**Symptom:** `ValueError: too many values to unpack` in `build_trade_chain_payload` / `build_dashboard_bundle` because `_event_axis_jupiter_tile_narratives` was extended to return **four** values `(narratives, gates, binance_ok, preview)` but two call sites still unpacked **three**.
-
-**Fix:** Unpack the fourth return value (preview map) at both internal call sites; align `tests/test_dashboard_bundle.py` with the four-tuple API.
-
-**Rationale:** Matches §4.6 (dashboard integrity / single authority for Jupiter tiles) — the runtime must not throw while building the bundle.
-
----
-
-## 2. Automated regression evidence (local)
-
-Commands run from repository root:
+Command (repository root):
 
 ```bash
 python3 -m pytest tests/test_sra_foundation.py \
@@ -41,68 +31,107 @@ python3 -m pytest tests/test_sra_foundation.py \
 
 | Where | What | Result |
 |-------|------|--------|
-| Local workspace | pytest: SRA foundation, execution ledger, operator dashboard, dashboard bundle | **46 passed** (after unpack fix) |
-| Git | Evidence commit | see **§5** |
+| Local workspace (2026-04-15) | pytest suites above | **49 passed** |
 
-**Coverage note:** These tests exercise ranking rules, promotion handoff (034), ledger activation enqueue patterns, and dashboard bundle schema/tile behavior where fixtures provide SQLite DBs. They do **not** replace a full Kitchen `compare-manifest` run against production-scale market data.
-
----
-
-## 3. Mandatory test cycles (operational) — template
-
-Five cycles were **not** executed in the environment that produced §2. Use the table below on **clawbot** (or equivalent primary host) with real data and record one row per cycle.
-
-| Cycle | hypothesis_id | experiment_ids (variants) | selected variant | classification | promotion eligible | approval executed | activation observed (pending → active @ boundary) | Issues |
-|-------|---------------|---------------------------|------------------|----------------|--------------------|-------------------|-----------------------------------------------------|--------|
-| 1 | | | | | | | | |
-| 2 | | | | | | | | |
-| 3 | | | | | | | | |
-| 4 | | | | | | | | |
-| 5 | | | | | | | | |
-
-**Per-cycle steps (directive §3):**
-
-1. Create hypothesis (append to `renaissance_v4/state/hypotheses.jsonl` or CLI `sra_foundation add`).
-2. Generate variants: `python -m renaissance_v4.research.sra_foundation variants <parent_id> 3` (minimum 3).
-3. Execute each variant: `python -m renaissance_v4.research.sra_foundation run <hypothesis_id>` (requires Kitchen DB + baseline MC artifacts).
-4. Rank: `python -m renaissance_v4.research.sra_foundation rank <parent_id>`.
-5. Promotion readiness: `python -m renaissance_v4.research.sra_foundation promote <parent_id>`.
-6. If eligible: set `parameters.handoff_jupiter_slot` on parent or selected hypothesis, then `POST /api/v1/renaissance/promotion-approve` with `parent_hypothesis_id` (or equivalent `approve_promotion` call).
-7. Observe activation: pending row in `policy_activation_log`, effective only after next closed 5m boundary (no mid-bar switch).
+**Coverage note:** Unit/integration tests use fixtures and small SQLite DBs. They do **not** prove trade firing under live bars, 5m activation boundaries, or browser dashboard behavior.
 
 ---
 
-## 4. Validation checklist vs directive §4
+## 2. Operator execution attempt — real observations (2026-04-15)
 
-| § | Requirement | Evidence in this report |
-|---|--------------|-------------------------|
-| 4.1 Kitchen correctness | Replay, MC, compare, artifacts | **Not executed** end-to-end here; requires §3 cycles on primary host |
-| 4.2 Ranking + selection | Deterministic rules, stability | **Partial:** `tests/test_sra_foundation.py` (ranking + promotion rules) |
-| 4.3 Promotion readiness | Eligible vs reasons | **Partial:** same + `get_promotion_ready_candidates` / handoff tests |
-| 4.4 Activation | Pending, boundary, supersede | **Partial:** ledger unit tests; live boundary **not** observed here |
-| 4.5 Ledger + lineage | policy_evaluations, trades, no mutation | **Partial:** ledger tests; full lineage audit **not** run on live DB |
-| 4.6 Dashboard integrity | Active vs pending, no bleed | **Partial:** dashboard bundle tests + unpack fix; **browser** proof **not** done here |
-| 4.7 Failure handling | Ingest fail, run fail, MC fail | **Partial:** covered by selective tests; **not** a dedicated triage matrix in this run |
+**Host:** Local development clone (`/Users/bigmac/Documents/code_projects/blackbox`).  
+**Intent:** Run **cycle 1** steps 1–3 (hypothesis → variants → Kitchen execute) before rank/promote/approve.
+
+### 2.1 Database sanity (Renaissance replay DB)
+
+| Check | Observation |
+|-------|-------------|
+| Path | `renaissance_v4/data/renaissance_v4.sqlite3` (exists) |
+| `market_bars_5m` row count | **60** (meets replay `MIN_ROWS_REQUIRED` of 50) |
+
+### 2.2 Steps executed (cycle 1 — partial)
+
+| Step | Command / action | Result |
+|------|------------------|--------|
+| 1 | Create hypothesis — JSON with valid catalog signals + `python -m renaissance_v4.research.sra_foundation add <file>` | **OK** — `hypothesis_id` `stab035_c0_parent` appended |
+| 2 | Variants — `… sra_foundation variants stab035_c0_parent 3` | **OK** — three ids returned (`…_var_001_signal_toggle`, `…_002_mc_config_offset`, `…_003_signal_toggle`) |
+| 3 | Execute variant 1 — `… sra_foundation run stab035_c0_parent_var_001_signal_toggle --n-sims 200 --seed 42` | **Pipeline not OK** — `compare-manifest` exit code 1; stderr: **Baseline reference missing. Run first:** `python -m renaissance_v4.research.robustness_runner baseline-mc --seed 42` |
+| 3b | Baseline prerequisite — `… robustness_runner baseline-mc --seed 42` | **FAILED** — `ValueError: Monte Carlo requires a non-empty PnL series (closed trades).` |
+
+**Stopping point (directive §6 / §7):** Do **not** proceed to rank / promote / approve / activation / dashboard for cycle 1 until `baseline-mc` succeeds. No cycles 2–5 were started.
+
+### 2.3 First failure — root cause (engineering)
+
+| Symptom | `baseline-mc` cannot build Monte Carlo reference because **PnL series is empty** (no closed trades from baseline replay path on this dataset). |
+|---------|-----------------------------------------------------------------------------------------------------------------------------------------------------|
+| Impact | `compare-manifest` cannot classify vs baseline; SRA `run` records `pipeline_ok: false`. |
+| Likely needs | Execution environment where baseline replay produces **non-zero closed trades** (sufficient history / manifest / data quality), **or** seeded baseline trade artifacts as expected by `robustness_runner`, per Kitchen docs. **Not assumed** — must be verified on **primary host** (e.g. clawbot) with operator data. |
+
+### 2.4 Workspace cleanup
+
+Local smoke appended lines to `renaissance_v4/state/hypotheses.jsonl`, `hypothesis_results.jsonl`, and created transient manifest/report files. These were **reverted/removed** after capture so the git tree stays clean. **Re-run on primary host** should use a dedicated branch or agreed state paths if persistence is required for audit.
 
 ---
 
-## 5. Git commit reference
+## 3. Mandatory test cycles (operational) — status
 
-Evidence commit on `main`: locate with  
-`git log --oneline -1 --grep=STABILIZATION-035`  
-or  
-`git log -1 --oneline -- docs/validation/stabilization_035_report.md`  
-after pull on the integration host.
+| Cycle | hypothesis_id | experiment_ids (variants) | selected variant | classification | promotion eligible | approval | activation @ boundary | Dashboard / ledger watch | Issues |
+|-------|-----------------|----------------------------|------------------|----------------|--------------------|---------|-------------------------|---------------------------|--------|
+| 1 | `stab035_c0_parent` (smoke) | `exp_20260415_56242176` (one variant run only) | — | — (run incomplete) | — | — | **not observed** | **not observed** | **BLOCKED:** `baseline-mc` failed — empty PnL series |
+| 2 | — | — | — | — | — | — | — | — | **not started** |
+| 3 | — | — | — | — | — | — | — | — | **not started** |
+| 4 | — | — | — | — | — | — | — | — | **not started** |
+| 5 | — | — | — | — | — | — | — | — | **not started** |
 
 ---
 
-## 6. Completion criteria (directive §8)
+## 4. What you’re looking for (directive) — evidence status
+
+| Area | Status on this report |
+|------|------------------------|
+| **1. Trade firing correctness** | **Not observed** — no successful full compare path. |
+| **2. Policy activation (pending → active @ next 5m)** | **Not observed** — approval not reached. |
+| **3. Dashboard truth (primary persisted / preview separated)** | **Not observed live**; partial code-level evidence via pytest §1 and prior `64c7bc9` work on `main`. |
+| **4. Lineage (`policy_id` on trades)** | **Not audited** on live ledger. |
+| **5. Failure behavior** | **Observed:** bad prerequisite (`baseline-mc`) fails with explicit exception; `sra_foundation run` records failed pipeline without claiming success. **No** policy-ingestion failure test in this session. |
+
+---
+
+## 5. Isolated defect fixed during earlier stabilization work (historical)
+
+**Symptom:** `ValueError: too many values to unpack` in `build_trade_chain_payload` / `build_dashboard_bundle` when `_event_axis_jupiter_tile_narratives` returned four values.
+
+**Fix:** Unpack four values at call sites; tests updated. (Landed on `main` in stabilization-related commits; see git history.)
+
+---
+
+## 6. Git reference
+
+Locate evidence commits:
+
+```bash
+git log --oneline -1 -- docs/validation/stabilization_035_report.md
+git log --oneline --grep=STABILIZATION-035
+```
+
+---
+
+## 7. Completion criteria (directive §8)
 
 | Criterion | Met? |
 |-----------|------|
-| ≥5 full cycles without defects | **No** — cycles not run in scope of this report |
-| All validation checks pass | **No** — operational and dashboard checks incomplete |
-| Dashboard and backend consistent | **Partial** — automated bundle tests pass after fix |
-| No policy bleed / lineage errors | **Not proven** in live run |
+| ≥5 full cycles without defects | **No** |
+| All validation checks pass | **No** |
+| Dashboard and backend consistent under real use | **Not proven** here |
+| No policy bleed / lineage errors in live run | **Not proven** here |
 
-**To close DV-ARCH-STABILIZATION-035:** Complete §3 table for five cycles on primary host, attach command logs and dashboard screenshots or `curl` proofs as required by governance, and update this file **STATUS** to **complete** with evidence.
+**Next step for closure:** On **primary host** with valid Kitchen baseline artifacts and non-empty baseline PnL path: rerun **cycle 1** from step 3 after successful `baseline-mc`, then continue through rank → promote → approve → boundary observation → dashboard. Update this report with **verbatim** logs and operator notes.
+
+---
+
+## 8. Revision
+
+| Version | Change |
+|---------|--------|
+| 1 | Initial template; pytest-only evidence. |
+| 2 | Real smoke attempt: `baseline-mc` failure documented; cycle table row 1 filled; stop rule applied. |
