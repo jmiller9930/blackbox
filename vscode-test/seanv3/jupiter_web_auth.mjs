@@ -308,17 +308,50 @@ function authShell(title, bodyHtml) {
 <html lang="en"><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width, initial-scale=1"/>
 <title>${htmlEscape(title)}</title>
 <style>
-body{margin:0;min-height:100vh;background:#0c0c0c;color:#e6edf3;font-family:system-ui,Segoe UI,sans-serif;display:flex;align-items:center;justify-content:center;padding:1.5rem;}
-.card{max-width:420px;width:100%;background:#121212;border:1px solid #30363d;border-radius:6px;padding:1.25rem 1.35rem;}
-h1{font-size:1rem;margin:0 0 0.75rem;font-weight:600;}
-p{color:#8b949e;font-size:0.88rem;line-height:1.45;margin:0.5rem 0;}
-label{display:block;margin:0.65rem 0 0.25rem;font-size:0.82rem;color:#8b949e;}
-input{width:100%;box-sizing:border-box;padding:0.45rem 0.5rem;border-radius:4px;border:1px solid #30363d;background:#0d1117;color:#e6edf3;font:inherit;}
-button,.btn{margin-top:0.85rem;padding:0.5rem 1rem;border-radius:4px;border:1px solid #30363d;background:#21262d;color:#58a6ff;font:inherit;cursor:pointer;font-weight:600;width:100%;}
-button:hover,.btn:hover{background:#30363d;}
-a{color:#58a6ff;}
-.err{color:#f85149;font-size:0.85rem;margin-top:0.5rem;}
-.ok{color:#3fb950;font-size:0.85rem;margin-top:0.5rem;}
+/* Full-bleed lab artwork at full visibility (not the 15% dashboard tint). */
+html,body{height:100%;}
+body{
+  margin:0;min-height:100vh;color:#e6edf3;font-family:system-ui,Segoe UI,sans-serif;
+  display:flex;align-items:center;justify-content:center;padding:1.25rem;
+  background:#050508 url(/static/jupiter_front_door.png) center center / cover no-repeat;
+  background-color:#050508;
+}
+/* Light scrim so type stays readable; art still reads clearly. */
+body::after{
+  content:'';position:fixed;inset:0;background:linear-gradient(160deg,rgba(5,5,8,0.35),rgba(5,5,8,0.55));pointer-events:none;z-index:0;
+}
+.card{
+  position:relative;z-index:1;max-width:420px;width:100%;
+  background:rgba(12,12,14,0.72);border:1px solid rgba(255,255,255,0.12);border-radius:10px;padding:1.35rem 1.4rem;
+  box-shadow:0 12px 40px rgba(0,0,0,0.45);backdrop-filter:blur(10px);
+}
+h1{font-size:1.05rem;margin:0 0 0.65rem;font-weight:600;text-shadow:0 1px 2px rgba(0,0,0,0.6);}
+p{color:#c9d1d9;font-size:0.88rem;line-height:1.45;margin:0.5rem 0;text-shadow:0 1px 2px rgba(0,0,0,0.5);}
+label{display:block;margin:0.75rem 0 0.3rem;font-size:0.78rem;font-weight:600;text-transform:uppercase;letter-spacing:0.04em;color:#e6edf3;}
+/* Knockouts: type through “holes” so the artwork shows inside the field. */
+input.jw-knockout{
+  width:100%;box-sizing:border-box;padding:0.55rem 0.65rem;border-radius:6px;font:inherit;font-size:0.95rem;color:#f0f6fc;
+  border:2px solid rgba(255,255,255,0.45);
+  background:rgba(0,0,0,0.18);
+  backdrop-filter:blur(8px) saturate(1.1);
+  box-shadow:inset 0 0 0 1px rgba(0,0,0,0.25);
+}
+input.jw-knockout::placeholder{color:rgba(230,237,243,0.45);}
+input.jw-knockout:focus{
+  outline:none;border-color:rgba(88,166,255,0.85);
+  background:rgba(0,0,0,0.28);
+  box-shadow:0 0 0 3px rgba(88,166,255,0.2),inset 0 0 0 1px rgba(0,0,0,0.3);
+}
+button,.btn{
+  margin-top:1rem;padding:0.55rem 1rem;border-radius:6px;border:1px solid rgba(88,166,255,0.45);
+  background:rgba(33,38,45,0.92);color:#58a6ff;font:inherit;cursor:pointer;font-weight:600;width:100%;
+  backdrop-filter:blur(6px);
+}
+button:hover,.btn:hover{background:rgba(48,54,61,0.95);border-color:rgba(88,166,255,0.75);}
+a{color:#79c0ff;}
+.err{color:#ffb1a8;font-size:0.85rem;margin-top:0.5rem;}
+.ok{color:#aff5c4;font-size:0.85rem;margin-top:0.5rem;}
+code{font-size:0.8rem;background:rgba(0,0,0,0.35);padding:0.1rem 0.35rem;border-radius:4px;}
 </style></head><body><div class="card">${bodyHtml}</div></body></html>`;
 }
 
@@ -361,9 +394,9 @@ export async function handleJupiterAuthHttp(req, res, url, ctx) {
       <form method="post" action="/auth/login">
         <input type="hidden" name="next" value="${htmlEscape(next)}"/>
         <label for="username">Username</label>
-        <input id="username" name="username" type="text" autocomplete="username" value="${htmlEscape(allowedUser)}" required autocapitalize="off"/>
+        <input class="jw-knockout" id="username" name="username" type="text" autocomplete="username" value="${htmlEscape(allowedUser)}" required autocapitalize="off"/>
         <label for="password">Password</label>
-        <input id="password" name="password" type="password" autocomplete="current-password" required/>
+        <input class="jw-knockout" id="password" name="password" type="password" autocomplete="current-password" required/>
         <button type="submit">Sign in</button>
       </form>
       <p style="margin-top:1rem"><a href="/auth/forgot">Forgot password</a></p>`
@@ -388,8 +421,8 @@ export async function handleJupiterAuthHttp(req, res, url, ctx) {
           'Sign in — Jupiter lab',
           `<h1>Sign in</h1><p class="err">Invalid username or password.</p>
           <form method="post" action="/auth/login"><input type="hidden" name="next" value="${htmlEscape(next)}"/>
-          <label for="username">Username</label><input id="username" name="username" type="text" value="${htmlEscape(username)}" required autocapitalize="off"/>
-          <label for="password">Password</label><input id="password" name="password" type="password" required/>
+          <label for="username">Username</label><input class="jw-knockout" id="username" name="username" type="text" value="${htmlEscape(username)}" required autocapitalize="off"/>
+          <label for="password">Password</label><input class="jw-knockout" id="password" name="password" type="password" required/>
           <button type="submit">Sign in</button></form>
           <p style="margin-top:1rem"><a href="/auth/forgot">Forgot password</a></p>`
         );
@@ -491,9 +524,9 @@ export async function handleJupiterAuthHttp(req, res, url, ctx) {
       <form method="post" action="/auth/reset">
         <input type="hidden" name="token" value="${htmlEscape(token)}"/>
         <label for="p1">New password</label>
-        <input id="p1" name="p1" type="password" autocomplete="new-password" required minlength="8"/>
+        <input class="jw-knockout" id="p1" name="p1" type="password" autocomplete="new-password" required minlength="8"/>
         <label for="p2">Confirm</label>
-        <input id="p2" name="p2" type="password" autocomplete="new-password" required minlength="8"/>
+        <input class="jw-knockout" id="p2" name="p2" type="password" autocomplete="new-password" required minlength="8"/>
         <button type="submit">Save password</button>
       </form>`
     );
@@ -514,8 +547,8 @@ export async function handleJupiterAuthHttp(req, res, url, ctx) {
         `<h1>Try again</h1><p class="err">Passwords must match and be at least 8 characters.</p>
         <form method="post" action="/auth/reset">
         <input type="hidden" name="token" value="${htmlEscape(token)}"/>
-        <label for="p1">New password</label><input id="p1" name="p1" type="password" required minlength="8"/>
-        <label for="p2">Confirm</label><input id="p2" name="p2" type="password" required minlength="8"/>
+        <label for="p1">New password</label><input class="jw-knockout" id="p1" name="p1" type="password" required minlength="8"/>
+        <label for="p2">Confirm</label><input class="jw-knockout" id="p2" name="p2" type="password" required minlength="8"/>
         <button type="submit">Save password</button></form>`
       );
       res.writeHead(400, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' });

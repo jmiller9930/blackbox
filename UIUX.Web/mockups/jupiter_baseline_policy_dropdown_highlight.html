@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Mock — Jupiter baseline policy dropdown highlight</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    :root {
+      --panel-border: #e2e8f0;
+      --muted: #64748b;
+      --text: #0f172a;
+      --panel: #f8fafc;
+    }
+    body {
+      font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+      margin: 1.5rem;
+      color: var(--text);
+      background: #f1f5f9;
+    }
+    h1 { font-size: 1rem; margin: 0 0 1rem; font-weight: 700; }
+    .compare {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 1.25rem;
+      max-width: 52rem;
+    }
+    @media (max-width: 700px) { .compare { grid-template-columns: 1fr; } }
+    .card {
+      background: #fff;
+      border: 1px solid var(--panel-border);
+      border-radius: 8px;
+      padding: 0.75rem 1rem 1rem;
+    }
+    .card h2 {
+      margin: 0 0 0.75rem;
+      font-size: 0.75rem;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--muted);
+      font-weight: 700;
+    }
+    .dash-r3 {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(140px, 1fr));
+      gap: 0.35rem 0.75rem;
+      padding: 0.45rem 0;
+      font-size: 0.74rem;
+    }
+    .dash-r3 .kv { display: flex; flex-direction: column; gap: 0.1rem; }
+    .dash-r3 .k {
+      font-size: 0.62rem;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--muted);
+      font-weight: 700;
+    }
+    .dash-r3 .v { font-family: ui-monospace, monospace; }
+    /* Current (dashboard today): plain select */
+    select.plain {
+      font-size: 0.75rem;
+      padding: 0.22rem 0.45rem;
+      max-width: 10rem;
+      border: 1px solid var(--panel-border);
+      border-radius: 4px;
+      background: #fff;
+    }
+    /* Proposed: light sky blue box around control */
+    .jup-policy-highlight {
+      display: inline-flex;
+      align-items: center;
+      padding: 0.35rem 0.5rem;
+      background: #e0f2fe; /* sky-100 */
+      border: 1px solid #93c5fd; /* blue-300 — readable edge on white */
+      border-radius: 6px;
+      box-shadow: 0 1px 2px rgba(14, 116, 144, 0.08);
+    }
+    .jup-policy-highlight select {
+      font-size: 0.75rem;
+      padding: 0.22rem 0.45rem;
+      max-width: 10rem;
+      border: 1px solid #bae6fd;
+      border-radius: 4px;
+      background: #fff;
+    }
+    p.note {
+      margin: 1rem 0 0;
+      font-size: 0.72rem;
+      color: var(--muted);
+      max-width: 52rem;
+      line-height: 1.45;
+    }
+  </style>
+</head>
+<body>
+  <h1>Jupiter baseline policy dropdown — highlight mockup</h1>
+  <p class="note">
+    Left: current styling (select only). Right: proposed — a light sky blue padded box
+    (<code>#e0f2fe</code> fill, <code>#93c5fd</code> border) so the control reads as a distinct “policy switch” on the paper-capital row.
+  </p>
+  <div class="compare">
+    <div class="card">
+      <h2>Current</h2>
+      <div class="dash-r3">
+        <div class="kv">
+          <span class="k">Anna mode</span>
+          <span class="v">paper only (policy lock)</span>
+        </div>
+        <div class="kv">
+          <span class="k">Jupiter baseline policy</span>
+          <span class="v" style="display:flex;align-items:center;gap:0.35rem;flex-wrap:wrap">
+            <select class="plain" aria-label="Jupiter baseline policy version">
+              <option>JUPv2</option>
+              <option selected>JUPv3</option>
+            </select>
+          </span>
+        </div>
+      </div>
+    </div>
+    <div class="card">
+      <h2>Proposed (sky blue box)</h2>
+      <div class="dash-r3">
+        <div class="kv">
+          <span class="k">Anna mode</span>
+          <span class="v">paper only (policy lock)</span>
+        </div>
+        <div class="kv">
+          <span class="k">Jupiter baseline policy</span>
+          <span class="v" style="display:flex;align-items:center;gap:0.35rem;flex-wrap:wrap">
+            <span class="jup-policy-highlight">
+              <select aria-label="Jupiter baseline policy version">
+                <option>JUPv2</option>
+                <option selected>JUPv3</option>
+              </select>
+            </span>
+          </span>
+        </div>
+      </div>
+    </div>
+  </div>
+  <p class="note">
+    Open this file in a browser: <code>UIUX.Web/mockups/jupiter_baseline_policy_dropdown_highlight.html</code>
+  </p>
+</body>
+</html>

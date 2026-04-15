@@ -4,8 +4,9 @@ Jupiter / SeanV3 lab sync — push local git to origin, pull on clawbot, rebuild
 ``vscode-test/seanv3`` (``seanv3`` + ``jupiter-web``).
 
 Process (operator):
-  1. Commit your changes in the blackbox repo (or use --skip-push if origin already has them).
-  2. Run ``python3 scripts/jupsync.py`` from repo root (Mac or any machine with git + ssh).
+  1. Run ``python3 scripts/jupsync.py`` from repo root (Mac or any machine with git + ssh).
+  2. By default, if the working tree is dirty, the script **stages all changes** (``git add -A``)
+     and **commits** with an auto message (override with ``-m``). Use ``--no-commit`` to skip.
   3. Script pushes current branch to origin, SSHs to the lab host, ``git pull``, then
      ``docker compose up -d --build`` in ``vscode-test/seanv3``.
 
@@ -20,6 +21,8 @@ Environment (optional):
 Usage:
   python3 scripts/jupsync.py
   python3 scripts/jupsync.py --dry-run
+  python3 scripts/jupsync.py --no-commit          # push/deploy only; do not auto-commit local changes
+  python3 scripts/jupsync.py -m "fix login knockout"   # custom auto-commit message when dirty
   python3 scripts/jupsync.py --skip-push          # remote pull + compose only
   python3 scripts/jupsync.py --skip-health        # do not verify jupiter /health after deploy
   python3 scripts/jupsync.py --full-stack         # also rebuild/restart UIUX.Web (dashboard nginx/api)
@@ -44,6 +47,7 @@ import argparse
 import os
 import subprocess
 import sys
+from datetime import datetime, timezone
 from shlex import quote as sh_quote
 
 
@@ -70,6 +74,43 @@ def _run(cmd: list[str], *, cwd: str | None = None, check: bool = True) -> subpr
 
 def _branch(repo: str) -> str:
     return _run(["git", "rev-parse", "--abbrev-ref", "HEAD"], cwd=repo).stdout.strip()
+
+
+def _working_tree_dirty(repo: str) -> bool:
+    return bool(_run(["git", "status", "--porcelain"], cwd=repo).stdout.strip())
+
+
+def _auto_commit(
+    repo: str,
+    *,
+    dry_run: bool,
+    no_commit: bool,
+    message: str | None,
+) -> None:
+    """If the repo has uncommitted changes, stage all and commit so push can reach the remote."""
+    if no_commit:
+        if _working_tree_dirty(repo):
+            print(
+                "Working tree has uncommitted changes; --no-commit set — push may not include them.",
+                file=sys.stderr,
+            )
+        return
+    if not _working_tree_dirty(repo):
+        print("Working tree clean; nothing to commit.")
+        return
+    default_msg = f"jupsync auto-commit {datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')}"
+    msg = (message or default_msg).strip() or default_msg
+    if dry_run:
+        print(f"[dry-run] git add -A && git commit -m {msg!r}")
+        return
+    print("Working tree dirty — staging all and committing …", flush=True)
+    subprocess.run(["git", "add", "-A"], cwd=repo, check=True)
+    staged = subprocess.run(["git", "diff", "--cached", "--quiet"], cwd=repo)
+    if staged.returncode == 0:
+        print("Nothing left to commit after staging (ignored-only changes?).", file=sys.stderr)
+        return
+    subprocess.run(["git", "commit", "-m", msg], cwd=repo, check=True)
+    print("Commit OK.", flush=True)
 
 
 def _sync_push(repo: str, branch: str, *, dry_run: bool, skip_push: bool) -> None:
@@ -224,6 +265,18 @@ def main() -> None:
     )
     ap.add_argument("--remote-branch", default=DEFAULT_REMOTE_BRANCH, help="Branch to pull on remote")
     ap.add_argument("--dry-run", action="store_true", help="Print actions only")
+    ap.add_argument(
+        "--no-commit",
+        action="store_true",
+        help="Do not run git add/commit when the working tree is dirty (default is to auto-commit)",
+    )
+    ap.add_argument(
+        "-m",
+        "--commit-message",
+        default=None,
+        metavar="MSG",
+        help="Message for auto-commit when dirty (default: timestamped jupsync auto-commit)",
+    )
     ap.add_argument("--skip-push", action="store_true", help="Skip git push; still SSH pull + compose")
     ap.add_argument(
         "--skip-health",
@@ -250,6 +303,7 @@ def main() -> None:
             file=sys.stderr,
         )
 
+    _auto_commit(repo, dry_run=args.dry_run, no_commit=args.no_commit, message=args.commit_message)
     _sync_push(repo, branch, dry_run=args.dry_run, skip_push=args.skip_push)
     _remote_jupsync(
         args.ssh,

@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
- * Jupiter dashboard + JSON API. GET surfaces are unauthenticated unless JUPITER_WEB_LOGIN_USER
- * and JUPITER_WEB_LOGIN_PASSWORD are set (HTTP Basic Auth for the whole site except GET /health).
+ * Jupiter dashboard + JSON API. Browser gate: JUPITER_AUTH_MODE=none | basic | session (see README).
+ * Session mode: /auth/login, cookie sessions, /auth/forgot + email reset (Resend) or stderr link.
  * JUPITER_WEB_READ_ONLY=1 blocks POST /api/operator/*; sole write: POST /api/v1/jupiter/active-policy (Bearer).
  *
  * Mount repo read-only at BLACKBOX_REPO_ROOT for policy registry + execution_ledger parity.

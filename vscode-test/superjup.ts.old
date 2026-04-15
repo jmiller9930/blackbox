@@ -1,0 +1,1056 @@
+import { promises as fs } from 'fs';
+import {
+ Connection,
+ Keypair,
+ PublicKey,
+ ComputeBudgetProgram,
+ VersionedTransaction,
+ TransactionMessage,
+ SystemProgram,
+} from '@solana/web3.js';
+import * as anchor from '@coral-xyz/anchor';
+import {
+ getAssociatedTokenAddressSync,
+ createAssociatedTokenAccountIdempotentInstruction,
+ TOKEN_PROGRAM_ID,
+ ASSOCIATED_TOKEN_PROGRAM_ID,
+ NATIVE_MINT,
+ createSyncNativeInstruction,
+} from '@solana/spl-token';
+import { EventSource } from 'eventsource';
+import fetch from 'node-fetch';
+
+// ====================== JUPITER PERPS CONSTANTS ======================
+const PROGRAM_ID = new PublicKey('PERPHjGBqRHArX4DySjwM6UJHiR3sWAatqfdBS2qQJu');
+const POOL = new PublicKey('5BUwFW4nRbftYTDMbgxykoFWqWHPzahFSNAaaaJtVKsq');
+const SOL_CUSTODY = new PublicKey('7xS2gz2bTp3fwCC7knJvUWTEU9Tycczu6VhJYKgi1wdz');
+const USDC_CUSTODY = new PublicKey('G18jKKXQwBbrHeiK3C9MRXhkHsLHf7XgCSisykV46EZa');
+const USDC_MINT = new PublicKey('EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v');
+
+const BASE_RISK_PCT = 0.01;
+const MAX_RISK_PCT = 0.03;
+const MIN_COLLATERAL_USD = 10;
+const SLIPPAGE_PCT = 0.02;
+const CLOSE_SLIPPAGE_PCT = 0.08;
+const MOD_DEBOUNCE_MS = 5000;
+const SPREAD_BUFFER_PCT = 0.002;
+const CONFIDENCE_THRESHOLD = 0.001;
+
+// STRATEGY CONSTANTS
+const EMA_SHORT_PERIOD = 9;
+const EMA_LONG_PERIOD = 21;
+const RSI_PERIOD = 14;
+const RSI_LONG_THRESHOLD = 55;
+const RSI_SHORT_THRESHOLD = 45;
+const VOLUME_SPIKE_MULTIPLIER = 1.5;
+const BOS_LOOKBACK_CANDLES = 5;
+const MIN_EXPECTED_MOVE = 0.80;
+const ATR_PERIOD = 14;
+const ROUND_TRIP_FEE_USD = 0.22;
+
+const QUICKNODE_RPC = 'https://cosmological-necessary-night.solana-mainnet.quiknode.pro/3ce4cb4882615016431846577ab1733015d397b7/';
+const PUBLIC_SOLANA_WS = 'wss://api.mainnet-beta.solana.com';
+const KEYPAIR_PATH = 'new-keypair3.json';
+const PYTH_SSE_URL = 'https://hermes.pyth.network/v2/updates/price/stream?ids[]=ef0d8b6fda2ceba41da15d4095d1da392a0d2f8ed0c6c7bc0f4cfac8c280b56d';
+const BINANCE_KLINES_URL = 'https://api.binance.com/api/v3/klines?symbol=SOLUSDT&interval=5m&limit=2';
+
+// ====================== JUPITER IDL ======================
+import { IDL as jupiterPerpsIdl } from './jupiter-perpetuals-idl';
+
+interface Candle {
+ open: number;
+ high: number;
+ low: number;
+ close: number;
+ volume: number;
+}
+
+function generatePositionRequestPda({
+ positionPubkey,
+ requestChange,
+ counter,
+}: {
+ positionPubkey: PublicKey;
+ requestChange: 'increase' | 'decrease';
+ counter?: anchor.BN;
+}) {
+ if (!counter) counter = new anchor.BN(Math.floor(Math.random() * 1_000_000_000));
+ const requestChangeEnum = requestChange === 'increase' ? [1] : [2];
+ const [positionRequest] = PublicKey.findProgramAddressSync(
+ [Buffer.from('position_request'), positionPubkey.toBuffer(), counter.toArrayLike(Buffer, 'le', 8), Buffer.from(requestChangeEnum)],
+ PROGRAM_ID
+ );
+ return { positionRequest, counter };
+}
+
+class JupiterPerpsClient {
+ private program: anchor.Program;
+ private connection: Connection;
+ private wallet: anchor.Wallet;
+ private userPubkey: PublicKey;
+ private longPositionPda?: PublicKey;
+ private shortPositionPda?: PublicKey;
+ private perpetualsPda?: PublicKey;
+ private eventAuthorityPda?: PublicKey;
+ private positionSubscriptions: number[] = [];
+
+ constructor(connection: Connection, wallet: anchor.Wallet) {
+ this.connection = connection;
+ this.wallet = wallet;
+ this.userPubkey = wallet.publicKey;
+ const provider = new anchor.AnchorProvider(connection, wallet, { commitment: 'confirmed' });
+ this.program = new anchor.Program(jupiterPerpsIdl as any, PROGRAM_ID, provider);
+ }
+
+ private computePdas() {
+ if (!this.userPubkey) return;
+ this.longPositionPda = PublicKey.findProgramAddressSync(
+ [Buffer.from('position'), this.userPubkey.toBuffer(), POOL.toBuffer(), SOL_CUSTODY.toBuffer(), SOL_CUSTODY.toBuffer(), Buffer.from([1])],
+ PROGRAM_ID
+ )[0];
+ this.shortPositionPda = PublicKey.findProgramAddressSync(
+ [Buffer.from('position'), this.userPubkey.toBuffer(), POOL.toBuffer(), SOL_CUSTODY.toBuffer(), USDC_CUSTODY.toBuffer(), Buffer.from([2])],
+ PROGRAM_ID
+ )[0];
+ this.perpetualsPda = PublicKey.findProgramAddressSync([Buffer.from('perpetuals')], PROGRAM_ID)[0];
+ this.eventAuthorityPda = PublicKey.findProgramAddressSync([Buffer.from('__event_authority')], PROGRAM_ID)[0];
+ console.info(`✅ Long Position PDA (SOL collateral): ${this.longPositionPda.toBase58()}`);
+ console.info(`✅ Short Position PDA (USDC collateral): ${this.shortPositionPda.toBase58()}`);
+ }
+
+ private getCollateralCustody(direction: 'long' | 'short'): PublicKey {
+ return direction === 'long' ? SOL_CUSTODY : USDC_CUSTODY;
+ }
+
+ private getInputMint(direction: 'long' | 'short'): PublicKey {
+ return direction === 'long' ? NATIVE_MINT : USDC_MINT;
+ }
+
+ private getDesiredMint(direction: 'long' | 'short'): PublicKey {
+ return direction === 'long' ? NATIVE_MINT : USDC_MINT;
+ }
+
+ private getFundingAccount(direction: 'long' | 'short'): PublicKey {
+ return getAssociatedTokenAddressSync(this.getInputMint(direction), this.userPubkey);
+ }
+
+ async getUsdcBalance(): Promise<number> {
+ const ata = getAssociatedTokenAddressSync(USDC_MINT, this.userPubkey);
+ try {
+ const balance = await this.connection.getTokenAccountBalance(ata);
+ return Number(balance.value.amount) / 1_000_000;
+ } catch {
+ return 0;
+ }
+ }
+
+ async getSolBalance(): Promise<number> {
+ const balance = await this.connection.getBalance(this.userPubkey);
+ return balance / 1_000_000_000;
+ }
+
+ async getFreeCollateral(direction: 'long' | 'short', currentPrice: number): Promise<number> {
+ if (direction === 'long') {
+ const sol = await this.getSolBalance();
+ return sol * currentPrice;
+ } else {
+ return await this.getUsdcBalance();
+ }
+ }
+
+ async subscribe(callback: (accountInfo: any) => void) {
+ this.computePdas();
+ if (this.longPositionPda) {
+ const subId = this.connection.onAccountChange(this.longPositionPda, callback, 'confirmed');
+ this.positionSubscriptions.push(subId);
+ }
+ if (this.shortPositionPda) {
+ const subId = this.connection.onAccountChange(this.shortPositionPda, callback, 'confirmed');
+ this.positionSubscriptions.push(subId);
+ }
+ console.info('✅ Real-time Position PDA subscriptions active (LONG + SHORT)');
+ }
+
+ async unsubscribe() {
+ for (const sub of this.positionSubscriptions) await this.connection.removeAccountChangeListener(sub);
+ this.positionSubscriptions = [];
+ }
+
+ async getPerpPosition() {
+ if (!this.longPositionPda || !this.shortPositionPda) this.computePdas();
+ try {
+ const longPos: any = await this.program.account.position.fetch(this.longPositionPda!);
+ if (longPos && longPos.sizeUsd && !longPos.sizeUsd.eq(new anchor.BN(0))) return longPos;
+ } catch {}
+ try {
+ const shortPos: any = await this.program.account.position.fetch(this.shortPositionPda!);
+ if (shortPos && shortPos.sizeUsd && !shortPos.sizeUsd.eq(new anchor.BN(0))) return shortPos;
+ } catch {}
+ return null;
+ }
+
+ async placePerpOrder(params: { direction: 'long' | 'short'; sizeDelta: number; collateralDeltaUsd: number; price: number }) {
+ this.computePdas();
+ const direction = params.direction;
+ const price = params.price;
+ const collateralUsd = Math.max(MIN_COLLATERAL_USD, params.collateralDeltaUsd);
+ const slippageMultiplier = direction === 'long' ? (1 + SLIPPAGE_PCT) : (1 - SLIPPAGE_PCT);
+ const priceSlippage = new anchor.BN(Math.floor(price * slippageMultiplier * 1_000_000));
+ const positionPda = direction === 'long' ? this.longPositionPda! : this.shortPositionPda!;
+ const { positionRequest, counter } = generatePositionRequestPda({ positionPubkey: positionPda, requestChange: 'increase' });
+ const inputMint = this.getInputMint(direction);
+ const collateralCustody = this.getCollateralCustody(direction);
+ const fundingAccount = this.getFundingAccount(direction);
+ const positionRequestAta = getAssociatedTokenAddressSync(inputMint, positionRequest, true);
+
+ console.info(`🔥 Opening ${direction.toUpperCase()} | Collateral: $${collateralUsd.toFixed(2)}`);
+
+ const preInstructions: any[] = [];
+ let collateralTokenDelta: anchor.BN;
+
+ if (direction === 'long') {
+ collateralTokenDelta = new anchor.BN(Math.floor((collateralUsd / price) * 1_000_000_000));
+ preInstructions.push(createAssociatedTokenAccountIdempotentInstruction(this.userPubkey, fundingAccount, this.userPubkey, NATIVE_MINT));
+ preInstructions.push(SystemProgram.transfer({ fromPubkey: this.userPubkey, toPubkey: fundingAccount, lamports: BigInt(collateralTokenDelta.toString()) }));
+ preInstructions.push(createSyncNativeInstruction(fundingAccount));
+ } else {
+ collateralTokenDelta = new anchor.BN(Math.floor(collateralUsd * 1_000_000));
+ }
+
+ const increaseIx = await this.program.methods
+ .createIncreasePositionMarketRequest({
+ sizeUsdDelta: new anchor.BN(params.sizeDelta),
+ collateralTokenDelta,
+ side: direction === 'long' ? { long: {} } : { short: {} },
+ priceSlippage,
+ jupiterMinimumOut: null,
+ counter,
+ })
+ .accounts({
+ owner: this.userPubkey,
+ fundingAccount,
+ perpetuals: this.perpetualsPda!,
+ pool: POOL,
+ position: positionPda,
+ positionRequest,
+ positionRequestAta,
+ custody: SOL_CUSTODY,
+ collateralCustody,
+ inputMint,
+ referral: null as any,
+ tokenProgram: TOKEN_PROGRAM_ID,
+ associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
+ systemProgram: SystemProgram.programId,
+ eventAuthority: this.eventAuthorityPda!,
+ program: PROGRAM_ID,
+ })
+ .instruction();
+
+ const { blockhash } = await this.connection.getLatestBlockhash('confirmed');
+ const message = new TransactionMessage({
+ payerKey: this.userPubkey,
+ recentBlockhash: blockhash,
+ instructions: [
+ ComputeBudgetProgram.setComputeUnitLimit({ units: 1_400_000 }),
+ ComputeBudgetProgram.setComputeUnitPrice({ microLamports: 100_000 }),
+ ...preInstructions,
+ increaseIx,
+ ],
+ }).compileToV0Message();
+
+ const tx = new VersionedTransaction(message);
+ tx.sign([this.wallet.payer]);
+ const signature = await this.connection.sendTransaction(tx, { skipPreflight: false, maxRetries: 3 });
+ await this.connection.confirmTransaction(signature, 'confirmed');
+ console.info(`✅ ${direction.toUpperCase()} request submitted → ${signature}`);
+ return signature;
+ }
+
+ async closePositionMarket(currentPrice: number) {
+ const position = await this.getPerpPosition();
+ if (!position) return;
+ const direction = (position as any).side?.short ? 'short' : 'long';
+ const positionPda = direction === 'long' ? this.longPositionPda! : this.shortPositionPda!;
+ const { positionRequest, counter } = generatePositionRequestPda({ positionPubkey: positionPda, requestChange: 'decrease' });
+ const desiredMint = this.getDesiredMint(direction);
+ const receivingAccount = getAssociatedTokenAddressSync(desiredMint, this.userPubkey);
+ const positionRequestAta = getAssociatedTokenAddressSync(desiredMint, positionRequest, true);
+ const slippageMultiplier = direction === 'long' ? (1 - CLOSE_SLIPPAGE_PCT) : (1 + CLOSE_SLIPPAGE_PCT);
+ const priceSlippage = new anchor.BN(Math.floor(currentPrice * slippageMultiplier * 1_000_000));
+
+ const decreaseIx = await this.program.methods
+ .createDecreasePositionMarketRequest({
+ collateralUsdDelta: new anchor.BN(0),
+ sizeUsdDelta: new anchor.BN(0),
+ priceSlippage,
+ entirePosition: true,
+ jupiterMinimumOut: null,
+ counter,
+ })
+ .accounts({
+ owner: this.userPubkey,
+ receivingAccount,
+ perpetuals: this.perpetualsPda!,
+ pool: POOL,
+ position: positionPda,
+ positionRequest,
+ positionRequestAta,
+ custody: SOL_CUSTODY,
+ collateralCustody: this.getCollateralCustody(direction),
+ desiredMint,
+ referral: null as any,
+ tokenProgram: TOKEN_PROGRAM_ID,
+ associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
+ systemProgram: SystemProgram.programId,
+ eventAuthority: this.eventAuthorityPda!,
+ program: PROGRAM_ID,
+ })
+ .instruction();
+
+ const { blockhash } = await this.connection.getLatestBlockhash('confirmed');
+ const message = new TransactionMessage({
+ payerKey: this.userPubkey,
+ recentBlockhash: blockhash,
+ instructions: [
+ ComputeBudgetProgram.setComputeUnitLimit({ units: 1_400_000 }),
+ ComputeBudgetProgram.setComputeUnitPrice({ microLamports: 100_000 }),
+ decreaseIx,
+ ],
+ }).compileToV0Message();
+
+ const tx = new VersionedTransaction(message);
+ tx.sign([this.wallet.payer]);
+ const signature = await this.connection.sendTransaction(tx, { skipPreflight: false, maxRetries: 3 });
+ await this.connection.confirmTransaction(signature, 'confirmed');
+ console.info(`✅ CLOSE ${direction.toUpperCase()} request submitted → ${signature}`);
+ return signature;
+ }
+
+ async cancelOrders() { console.info('Jupiter cancelOrders called (placeholder)'); }
+ async cancelOrder(_orderId: string) { console.info('Jupiter cancelOrder called (placeholder)'); }
+}
+
+// ====================== TRADING BOT ======================
+class TradingBot {
+ private jupiterClient: JupiterPerpsClient | null = null;
+ private priceBuffer: { timestamp: Date; price: number }[] = [];
+ private df5min: { timestamp: Date; candle: Candle }[] = [];
+ private breakEvenLocked: boolean = false;
+ private position: number = 0;
+ private entryPrice: number = 0.0;
+ private trailSl: number = 0.0;
+ private trailTp: number = 0.0;
+ private lastPriceUpdate: number = 0.0;
+ private lastModTime: number = 0;
+ private lastPrice: number | null = null;
+ private pythSse: EventSource | null = null;
+ private pythReconnectAttempts: number = 0;
+ private slOrderId: string | undefined = undefined;
+ private tpOrderId: string | undefined = undefined;
+ private userPubkey: PublicKey | null = null;
+ private pendingSignal: { short: boolean; long: boolean; price: number } | null = null;
+ private updateInProgress: boolean = false;
+ private isClosing: boolean = false;
+ private isOpeningPosition: boolean = false;
+ private lastEntryTime: number = 0;
+ private lastLiveBosTime: number = 0;
+ private lastLossTime: number = 0;
+
+ private last5Highs: number[] = [];
+ private last5Lows: number[] = [];
+ private ema9Values: number[] = [];
+ private ema21Values: number[] = [];
+ private avgVolume: number = 0;
+ private lastCandleTimestamp: number = 0;
+
+ // ==================== TRADE LOGGING ====================
+ private currentTrade: any = null;
+ private weeklyLogFile: string = '';
+
+ private getWeeklyLogFilePath(): string {
+ const now = new Date();
+ const day = now.getDay();
+ const diff = now.getDate() - day + (day === 0 ? -6 : 1);
+ const monday = new Date(now.getFullYear(), now.getMonth(), diff);
+ const dateStr = monday.toISOString().slice(0, 10).replace(/-/g, '');
+ return `trades_${dateStr}.json`;
+ }
+
+ private async loadTradesLog(): Promise<any[]> {
+ const filePath = this.getWeeklyLogFilePath();
+ this.weeklyLogFile = filePath;
+ try {
+ const data = await fs.readFile(filePath, 'utf-8');
+ return JSON.parse(data);
+ } catch {
+ return [];
+ }
+ }
+
+ private async saveTradesLog(trades: any[]) {
+ await fs.writeFile(this.weeklyLogFile, JSON.stringify(trades, null, 2));
+ }
+
+ private calculateEstimatedPnL(direction: number, entryPrice: number, exitPrice: number, leverage: number, collateralUsd: number): number {
+ const pct = direction === 1 ? (exitPrice - entryPrice) / entryPrice : (entryPrice - exitPrice) / entryPrice;
+ return pct * leverage * collateralUsd;
+ }
+
+ private async startNewTradeLog(direction: 'long' | 'short', entryPrice: number, leverage: number, leverageReason: string, collateralUsd: number, atr: number, confidenceScore: number) {
+ const trades = await this.loadTradesLog();
+ const closes = this.df5min.map(d => d.candle.close);
+ const rsiValues = this.rsi(closes);
+ this.currentTrade = {
+ tradeId: Date.now().toString(),
+ entryTime: new Date().toISOString(),
+ direction,
+ entryPrice,
+ leverage,
+ leverageReason,
+ collateralUsd,
+ notionalSizeUsd: collateralUsd * leverage,
+ atrAtEntry: atr,
+ confidenceScore,
+ ema9AtEntry: this.ema9Values[this.ema9Values.length - 1],
+ ema21AtEntry: this.ema21Values[this.ema21Values.length - 1],
+ rsiAtEntry: rsiValues[rsiValues.length - 1] || 50,
+ volumeAtEntry: this.df5min[this.df5min.length - 1].candle.volume,
+ tpSlHistory: [],
+ exitTime: null,
+ exitPrice: null,
+ exitTrigger: null,
+ estimatedPnLUsd: null,
+ netPnLAfterFees: null,
+ status: 'open'
+ };
+ this.currentTrade.tpSlHistory.push({
+ timestamp: new Date().toISOString(),
+ tp: this.trailTp,
+ sl: this.trailSl,
+ reason: 'initial'
+ });
+ trades.push(this.currentTrade);
+ await this.saveTradesLog(trades);
+ console.info(`📝 TRADE LOG STARTED → ${direction.toUpperCase()} @ ${entryPrice.toFixed(8)} | Lev ${leverage}x (conf ${confidenceScore}/10)`);
+ }
+
+ private async logTpSlShift(reason: string) {
+ if (!this.currentTrade) return;
+ this.currentTrade.tpSlHistory.push({
+ timestamp: new Date().toISOString(),
+ tp: this.trailTp,
+ sl: this.trailSl,
+ reason
+ });
+ const trades = await this.loadTradesLog();
+ const idx = trades.findIndex((t: any) => t.tradeId === this.currentTrade.tradeId);
+ if (idx > -1) trades[idx] = this.currentTrade;
+ await this.saveTradesLog(trades);
+ }
+
+ private async finalizeTrade(exitTrigger: string, exitPrice: number) {
+ if (!this.currentTrade) return;
+ const grossPnL = this.calculateEstimatedPnL(this.position, this.entryPrice, exitPrice, this.currentTrade.leverage, this.currentTrade.collateralUsd);
+ const netPnL = grossPnL - ROUND_TRIP_FEE_USD;
+ this.currentTrade.exitTime = new Date().toISOString();
+ this.currentTrade.exitPrice = exitPrice;
+ this.currentTrade.exitTrigger = exitTrigger;
+ this.currentTrade.estimatedPnLUsd = grossPnL;
+ this.currentTrade.netPnLAfterFees = netPnL;
+ this.currentTrade.status = 'closed';
+ const trades = await this.loadTradesLog();
+ const idx = trades.findIndex((t: any) => t.tradeId === this.currentTrade.tradeId);
+ if (idx > -1) trades[idx] = this.currentTrade;
+ await this.saveTradesLog(trades);
+ console.info(`💰 TRADE CLOSED | Trigger: ${exitTrigger} | Gross $${grossPnL.toFixed(2)} | Net after fees $${netPnL.toFixed(2)} | File: ${this.weeklyLogFile}`);
+ this.currentTrade = null;
+ }
+
+ private calculateConfidenceScore(bullishBias: boolean, rsi: number, volumeSpike: boolean, expectedMove: number, atr: number): number {
+ let score = 2; // base for bias
+ if ((bullishBias && rsi >= RSI_LONG_THRESHOLD) || (!bullishBias && rsi <= RSI_SHORT_THRESHOLD)) score += 3;
+ if (volumeSpike) score += 2;
+ if (expectedMove >= MIN_EXPECTED_MOVE * 1.2) score += 2;
+ if (atr > 0.10) score += 1;
+ return Math.min(10, score);
+ }
+
+ private async fetchLatestBinanceKline(): Promise<Candle | null> {
+ try {
+ const response = await fetch(BINANCE_KLINES_URL);
+ const data: any[] = await response.json();
+ if (!data || data.length < 1) return null;
+ const k = data[0];
+ return {
+ open: parseFloat(k[1]),
+ high: parseFloat(k[2]),
+ low: parseFloat(k[3]),
+ close: parseFloat(k[4]),
+ volume: parseFloat(k[5])
+ };
+ } catch {
+ console.warn('⚠️ Could not fetch latest Binance volume');
+ return null;
+ }
+ }
+
+ public async initJupiter() {
+ try {
+ console.info('Starting initJupiter (Jupiter Perps only)...');
+ const connection = new Connection(QUICKNODE_RPC, { commitment: 'confirmed', wsEndpoint: PUBLIC_SOLANA_WS });
+ const keypairJson = await fs.readFile(KEYPAIR_PATH, 'utf-8');
+ const keypairArray = JSON.parse(keypairJson);
+ const keypair = Keypair.fromSecretKey(Uint8Array.from(keypairArray));
+ const wallet = new anchor.Wallet(keypair);
+
+ this.jupiterClient = new JupiterPerpsClient(connection, wallet);
+ this.userPubkey = keypair.publicKey;
+
+ console.info(`Loaded wallet: ${this.userPubkey.toBase58()}`);
+
+ await this.jupiterClient.subscribe((accountInfo) => this.handlePositionUpdate(accountInfo));
+
+ console.info('Jupiter Perps client ready + real-time Position PDA subscription active');
+
+ await this.fetchHistoricalCandles();
+ this.setupPythSse();
+
+ const existingPosition = await this.jupiterClient.getPerpPosition();
+ if (existingPosition) {
+ console.info('✅ Detected existing position on startup — adopting...');
+ await this.adoptPosition(existingPosition);
+ } else {
+ console.info('No position found on startup');
+ }
+ } catch (e) {
+ console.error(`Init error: ${e}`);
+ process.exit(1);
+ }
+ }
+
+ private async handlePositionUpdate(accountInfo: any) {
+ try {
+ const position = await this.jupiterClient!.getPerpPosition();
+ const wasOpen = this.position !== 0;
+ const isNowOpen = position && position.sizeUsd && !(position.sizeUsd as anchor.BN).eq(new anchor.BN(0));
+
+ if (isNowOpen && this.position === 0) await this.adoptPosition(position);
+ else if (!isNowOpen && wasOpen) {
+ if (Date.now() - this.lastEntryTime < 60000) {
+ console.info('⚠️ Ignoring premature PDA close signal (race condition after open)');
+ return;
+ }
+ console.info('✅ Position closed via real-time PDA update');
+ if (this.currentTrade) await this.finalizeTrade('external_close', this.lastPrice || 0);
+ this.position = 0;
+ this.isClosing = false;
+ this.isOpeningPosition = false;
+ await this.cancelRemnantOrders();
+ }
+ } catch (e) {
+ console.error('Real-time position update error:', e);
+ }
+ }
+
+ private async fetchHistoricalCandles() {
+ try {
+ console.info('Fetching 1000 most recent 5-min historical candles from BINANCE...');
+ const response = await fetch('https://api.binance.com/api/v3/klines?symbol=SOLUSDT&interval=5m&limit=1000');
+ const data: any[] = await response.json();
+ this.df5min = data.map((c: any) => ({
+ timestamp: new Date(c[0]),
+ candle: { open: parseFloat(c[1]), high: parseFloat(c[2]), low: parseFloat(c[3]), close: parseFloat(c[4]), volume: parseFloat(c[5]) }
+ }));
+
+ if (this.df5min.length < EMA_LONG_PERIOD + ATR_PERIOD + 100) {
+ const oldestCandle = this.df5min[0].candle;
+ const oldestTs = this.df5min[0].timestamp.getTime();
+ const padCount = EMA_LONG_PERIOD + ATR_PERIOD + 100 - this.df5min.length;
+ for (let i = 1; i <= padCount; i++) {
+ const dummyTs = new Date(oldestTs - i * 5 * 60 * 1000);
+ this.df5min.unshift({ timestamp: dummyTs, candle: { ...oldestCandle } });
+ }
+ }
+
+ this.initializeIndicators();
+ console.info(`Loaded ${this.df5min.length} real Binance historical candles`);
+ } catch (e) {
+ console.error('Binance candles fetch error:', e);
+ }
+ }
+
+ private initializeIndicators() {
+ const closes = this.df5min.map(d => d.candle.close);
+ const volumes = this.df5min.map(d => d.candle.volume);
+ this.ema9Values = this.ema(closes, EMA_SHORT_PERIOD);
+ this.ema21Values = this.ema(closes, EMA_LONG_PERIOD);
+ this.avgVolume = volumes.reduce((a, b) => a + b, 0) / volumes.length || 10000;
+
+ this.last5Highs = this.df5min.slice(-BOS_LOOKBACK_CANDLES).map(d => d.candle.high);
+ this.last5Lows = this.df5min.slice(-BOS_LOOKBACK_CANDLES).map(d => d.candle.low);
+ }
+
+ private ema(series: number[], period: number): number[] {
+ const emaValues: number[] = Array(series.length).fill(NaN);
+ if (series.length < period) return emaValues;
+ let sum = 0;
+ for (let i = 0; i < period; i++) sum += series[i];
+ emaValues[period - 1] = sum / period;
+ const alpha = 2 / (period + 1);
+ for (let i = period; i < series.length; i++) {
+ emaValues[i] = (series[i] * alpha) + (emaValues[i - 1] * (1 - alpha));
+ }
+ return emaValues;
+ }
+
+ private rsi(series: number[], period: number = RSI_PERIOD): number[] {
+ const rsiValues: number[] = Array(series.length).fill(NaN);
+ if (series.length < period) return rsiValues;
+ let gain = 0, loss = 0;
+ for (let i = 1; i <= period; i++) {
+ const delta = series[i] - series[i - 1];
+ if (delta > 0) gain += delta; else loss -= delta;
+ }
+ let avgGain = gain / period;
+ let avgLoss = loss / period;
+ if (avgGain === 0 && avgLoss === 0) { avgGain = 0.001; avgLoss = 0.001; }
+ let rs = avgLoss === 0 ? Infinity : avgGain / avgLoss;
+ rsiValues[period] = 100 - (100 / (1 + rs));
+ for (let i = period + 1; i < series.length; i++) {
+ const delta = series[i] - series[i - 1];
+ const currentGain = delta > 0 ? delta : 0;
+ const currentLoss = delta < 0 ? -delta : 0;
+ avgGain = (avgGain * (period - 1) + currentGain) / period;
+ avgLoss = (avgLoss * (period - 1) + currentLoss) / period;
+ rs = avgLoss === 0 ? Infinity : avgGain / avgLoss;
+ rsiValues[i] = 100 - (100 / (1 + rs));
+ }
+ return rsiValues;
+ }
+
+ private calculateATR(closes: number[], highs: number[], lows: number[]): number {
+ if (closes.length < ATR_PERIOD + 1) return 0.25;
+ let trSum = 0;
+ for (let i = 1; i <= ATR_PERIOD; i++) {
+ const high = highs[closes.length - i];
+ const low = lows[closes.length - i];
+ const prevClose = closes[closes.length - i - 1];
+ const tr1 = high - low;
+ const tr2 = Math.abs(high - prevClose);
+ const tr3 = Math.abs(low - prevClose);
+ trSum += Math.max(tr1, tr2, tr3);
+ }
+ return trSum / ATR_PERIOD;
+ }
+
+ private setupPythSse() {
+ console.info('Setting up Pyth SSE...');
+ this.pythSse = new EventSource(PYTH_SSE_URL);
+ this.pythSse.addEventListener('open', () => console.info('Pyth SSE connected'));
+ this.pythSse.onmessage = (event) => {
+ try {
+ const data = JSON.parse(event.data);
+ if (data.parsed && data.parsed.length > 0) {
+ const priceData = data.parsed[0].price;
+ if (priceData && priceData.price && priceData.conf && priceData.expo) {
+ const rawPrice = Number(priceData.price) * Math.pow(10, priceData.expo);
+ const confidence = Number(priceData.conf) * Math.pow(10, priceData.expo);
+ if (confidence / rawPrice > CONFIDENCE_THRESHOLD) return;
+ if (rawPrice === this.lastPrice) return;
+
+ this.lastPrice = rawPrice;
+ console.info(`Pyth price: ${rawPrice} (±${confidence})`);
+
+ const now = new Date();
+ this.priceBuffer.push({ timestamp: now, price: rawPrice });
+ this.aggregateCandles();
+ this.checkLiveBreakOfStructure(rawPrice);
+ this.checkPriceMovementForUpdate();
+ this.checkVirtualStopOrTakeProfit(rawPrice);
+ }
+ }
+ } catch (e) {
+ console.error('Pyth SSE message error:', e);
+ }
+ };
+ this.pythSse.onerror = (e) => {
+ console.error('Pyth SSE error:', e);
+ this.pythSse?.close();
+ const delay = Math.min(5000 * Math.pow(2, this.pythReconnectAttempts), 60000);
+ this.pythReconnectAttempts++;
+ setTimeout(() => this.setupPythSse(), delay);
+ };
+ console.info('Pyth SSE initialized');
+ }
+
+ private async checkLiveBreakOfStructure(currentPrice: number) {
+ // Only for logging now - entries are handled on closed 5-min candles
+ if (this.df5min.length < BOS_LOOKBACK_CANDLES) return;
+ const bullishBias = this.ema9Values[this.ema9Values.length - 1] > this.ema21Values[this.ema21Values.length - 1] &&
+ this.df5min[this.df5min.length - 1].candle.close > this.ema21Values[this.ema21Values.length - 1];
+ const bearishBias = this.ema9Values[this.ema9Values.length - 1] < this.ema21Values[this.ema21Values.length - 1] &&
+ this.df5min[this.df5min.length - 1].candle.close < this.ema21Values[this.ema21Values.length - 1];
+
+ const recentHigh = Math.max(...this.last5Highs);
+ const recentLow = Math.min(...this.last5Lows);
+
+ if (bullishBias && currentPrice > recentHigh) console.info(`📈 Live BOS LONG possible at ${currentPrice.toFixed(8)}`);
+ if (bearishBias && currentPrice < recentLow) console.info(`📉 Live BOS SHORT possible at ${currentPrice.toFixed(8)}`);
+ }
+
+ private async checkVirtualStopOrTakeProfit(currentPrice: number) {
+ if (this.position === 0 || this.isClosing) return;
+
+ let hit = false;
+ let trigger = '';
+ if (this.position === 1) {
+ if (currentPrice <= this.trailSl) { hit = true; trigger = 'SL'; }
+ else if (currentPrice >= this.trailTp) { hit = true; trigger = 'TP'; }
+ } else if (this.position === -1) {
+ if (currentPrice >= this.trailSl) { hit = true; trigger = 'SL'; }
+ else if (currentPrice <= this.trailTp) { hit = true; trigger = 'TP'; }
+ }
+
+ if (hit) {
+ this.isClosing = true;
+ console.info(`🛑 Virtual ${trigger} HIT at ${currentPrice.toFixed(8)}`);
+ try {
+ await this.jupiterClient!.closePositionMarket(currentPrice);
+ if (this.currentTrade) await this.finalizeTrade(trigger, currentPrice);
+ if (trigger === 'SL') this.lastLossTime = Date.now();
+ } catch (e) {
+ console.error('Close request error:', e);
+ }
+ this.isClosing = false;
+ }
+ }
+
+ private async checkPriceMovementForUpdate() {
+ if (this.updateInProgress || this.lastPrice === null || this.position === 0) return;
+ const now = Date.now();
+ if (now - this.lastModTime < MOD_DEBOUNCE_MS) return;
+ this.updateInProgress = true;
+ try {
+ await this.updateTrailingOrders();
+ this.lastModTime = now;
+ } finally {
+ this.updateInProgress = false;
+ }
+ }
+
+ private async updateTrailingOrders() {
+ if (this.position === 0 || this.lastPrice === null) return;
+ const closes = this.df5min.map(d => d.candle.close);
+ const highs = this.df5min.map(d => d.candle.high);
+ const lows = this.df5min.map(d => d.candle.low);
+ const atr = this.calculateATR(closes, highs, lows);
+
+ let tpModified = false;
+ let slModified = false;
+ let shiftReason = '';
+
+ const profitPct = this.position === 1 ? (this.lastPrice - this.entryPrice) / this.entryPrice : (this.entryPrice - this.lastPrice) / this.entryPrice;
+
+ if (!this.breakEvenLocked && profitPct > 0.005) {
+ console.info('Locked breakeven profit (+0.5%)');
+ if (this.position === 1) this.trailSl = this.entryPrice * (1 + 0.0005);
+ else this.trailSl = this.entryPrice * (1 - 0.0005);
+ this.breakEvenLocked = true;
+ slModified = true;
+ shiftReason = 'breakeven_lock';
+ }
+
+ if (profitPct > 0.01) {
+ if (this.position === 1) {
+ const newTrailSl = this.lastPrice - 1.2 * atr;
+ const newTrailTp = this.lastPrice + 3.0 * atr;
+ if (newTrailSl > this.trailSl) { this.trailSl = newTrailSl; slModified = true; shiftReason = shiftReason || 'ATR_trailing'; }
+ if (newTrailTp > this.trailTp) { this.trailTp = newTrailTp; tpModified = true; }
+ } else {
+ const newTrailSl = this.lastPrice + 1.2 * atr;
+ const newTrailTp = this.lastPrice - 3.0 * atr;
+ if (newTrailSl < this.trailSl) { this.trailSl = newTrailSl; slModified = true; shiftReason = shiftReason || 'ATR_trailing'; }
+ if (newTrailTp < this.trailTp) { this.trailTp = newTrailTp; tpModified = true; }
+ }
+ }
+
+ if (tpModified || slModified) {
+ console.info(`🔄 ATR Trailing update → TP=${this.trailTp.toFixed(8)}, SL=${this.trailSl.toFixed(8)} | ATR=${atr.toFixed(6)}`);
+ console.info(`📊 Current position: ${this.position === 1 ? 'LONG' : 'SHORT'} | Virtual TP: ${this.trailTp.toFixed(6)} | Virtual SL: ${this.trailSl.toFixed(6)}`);
+ await this.batchModifyOrders(tpModified, slModified);
+ if (this.currentTrade) await this.logTpSlShift(shiftReason || 'ATR_trailing');
+ this.lastPriceUpdate = this.lastPrice;
+ }
+ }
+
+ private async batchModifyOrders(tpModified: boolean, slModified: boolean) {
+ try {
+ if (slModified) await this.cancelAndPlaceSLOrder();
+ if (tpModified) await this.cancelAndPlaceTPOrder();
+ } catch (e) {
+ console.error('Batch mod error:', e);
+ await this.cancelRemnantOrders();
+ await this.batchModifyOrders(true, true);
+ }
+ }
+
+ private async adoptPosition(perpPosition: any) {
+ try {
+ console.info('Raw Jupiter Position data received (manual trade detection):', JSON.stringify(perpPosition, null, 2));
+ if (!perpPosition) return;
+
+ const sizeUsd = perpPosition.sizeUsd || perpPosition.size || new anchor.BN(0);
+ if (sizeUsd.eq(new anchor.BN(0))) { this.position = 0; return; }
+
+ this.position = perpPosition.side?.short ? -1 : 1;
+ this.entryPrice = perpPosition.price ? Number(perpPosition.price) / 1e6 : 0;
+
+ console.info(`✅ Adopted ${this.position === 1 ? 'LONG' : 'SHORT'} position at ${this.entryPrice.toFixed(4)}`);
+
+ const closes = this.df5min.map(d => d.candle.close);
+ const highs = this.df5min.map(d => d.candle.high);
+ const lows = this.df5min.map(d => d.candle.low);
+ const atr = this.calculateATR(closes, highs, lows);
+
+ const initialSlDistance = Math.max(0.55, atr * 2.0);
+ if (this.position === 1) {
+ this.trailSl = this.entryPrice - initialSlDistance - SPREAD_BUFFER_PCT * this.entryPrice;
+ this.trailTp = this.entryPrice + 3.0 * atr;
+ } else {
+ this.trailSl = this.entryPrice + initialSlDistance + SPREAD_BUFFER_PCT * this.entryPrice;
+ this.trailTp = this.entryPrice - 3.0 * atr;
+ }
+
+ this.lastPriceUpdate = this.entryPrice;
+ this.breakEvenLocked = false;
+ await this.cancelRemnantOrders();
+
+ console.info(`📊 Current position: ${this.position === 1 ? 'LONG' : 'SHORT'} | Virtual TP: ${this.trailTp.toFixed(6)} | Virtual SL: ${this.trailSl.toFixed(6)}`);
+ } catch (e) {
+ console.error('Adopt position error:', e);
+ this.position = 0;
+ }
+ }
+
+ private async cancelRemnantOrders() {
+ console.info('Canceling remnant orders...');
+ await this.jupiterClient!.cancelOrders();
+ this.slOrderId = undefined;
+ this.tpOrderId = undefined;
+ }
+
+ private async aggregateCandles() {
+ try {
+ const now = new Date();
+ const fiveMinAgo = new Date(now.getTime() - 5 * 60 * 1000);
+ this.priceBuffer = this.priceBuffer.filter(p => p.timestamp >= new Date(fiveMinAgo.getTime() - 30 * 5 * 60 * 1000));
+
+ const minutes = Math.floor(now.getMinutes() / 5) * 5;
+ const currentMin = new Date(now.getFullYear(), now.getMonth(), now.getDate(), now.getHours(), minutes, 0, 0);
+
+ if (currentMin.getTime() === this.lastCandleTimestamp) return;
+ this.lastCandleTimestamp = currentMin.getTime();
+
+ const recentPrices = this.priceBuffer.filter(p => p.timestamp >= fiveMinAgo).map(p => p.price);
+ if (recentPrices.length === 0) return;
+
+ let candle: Candle = {
+ open: recentPrices[0],
+ high: Math.max(...recentPrices),
+ low: Math.min(...recentPrices),
+ close: recentPrices[recentPrices.length - 1],
+ volume: recentPrices.length
+ };
+
+ const binanceCandle = await this.fetchLatestBinanceKline();
+ if (binanceCandle) {
+ candle.volume = binanceCandle.volume;
+ console.info(`Using real Binance volume: ${candle.volume.toFixed(0)}`);
+ }
+
+ this.df5min.push({ timestamp: currentMin, candle });
+ this.df5min = this.df5min.slice(-(EMA_LONG_PERIOD + ATR_PERIOD + 100));
+
+ this.last5Highs.shift();
+ this.last5Highs.push(candle.high);
+ this.last5Lows.shift();
+ this.last5Lows.push(candle.low);
+
+ const closes = this.df5min.map(d => d.candle.close);
+ const volumes = this.df5min.map(d => d.candle.volume);
+ this.ema9Values = this.ema(closes, EMA_SHORT_PERIOD);
+ this.ema21Values = this.ema(closes, EMA_LONG_PERIOD);
+ this.avgVolume = volumes.reduce((a, b) => a + b, 0) / volumes.length || 10000;
+
+ console.info(`\nNew 5-min candle formed: Timestamp=${currentMin.toISOString()}`);
+ console.info(`O=${candle.open.toFixed(8)} | H=${candle.high.toFixed(8)} | L=${candle.low.toFixed(8)} | C=${candle.close.toFixed(8)} | V=${candle.volume}`);
+
+ if (this.df5min.length >= EMA_LONG_PERIOD + 2) {
+ const currentClose = closes[closes.length - 1];
+ const rsiValues = this.rsi(closes);
+ const currentRsi = rsiValues[rsiValues.length - 1] || 50;
+ const atr = this.calculateATR(closes, this.df5min.map(d => d.candle.high), this.df5min.map(d => d.candle.low));
+
+ const bullishBias = this.ema9Values[this.ema9Values.length - 1] > this.ema21Values[this.ema21Values.length - 1] &&
+ currentClose > this.ema21Values[this.ema21Values.length - 1];
+
+ const bearishBias = this.ema9Values[this.ema9Values.length - 1] < this.ema21Values[this.ema21Values.length - 1] &&
+ currentClose < this.ema21Values[this.ema21Values.length - 1];
+
+ const volumeSpike = candle.volume > this.avgVolume * VOLUME_SPIKE_MULTIPLIER;
+
+ const recentHigh = Math.max(...this.last5Highs);
+ const recentLow = Math.min(...this.last5Lows);
+
+ console.info(`\n=== CONVICTION MOMENTUM FILTERS ===`);
+ console.info(`EMA9 : ${this.ema9Values[this.ema9Values.length - 1].toFixed(4)}`);
+ console.info(`EMA21 : ${this.ema21Values[this.ema21Values.length - 1].toFixed(4)}`);
+ console.info(`Bias : ${bullishBias ? '**BULLISH**' : bearishBias ? '**BEARISH**' : 'NEUTRAL'}`);
+ console.info(`RSI(14) : ${currentRsi.toFixed(2)}`);
+
+ console.info(`Volume Spike: ${candle.volume.toFixed(0)} vs Avg=${this.avgVolume.toFixed(0)} → ${volumeSpike ? '**YES**' : 'no'}`);
+
+ console.info(`\nBOS Check:`);
+ console.info(`Last 5 High = ${recentHigh.toFixed(4)}`);
+ console.info(`Last 5 Low = ${recentLow.toFixed(4)}`);
+ console.info(`Current price ${currentClose.toFixed(4)} ${bullishBias && currentClose > recentHigh ? '> Last5 High → **LONG BOS triggered**' : bearishBias && currentClose < recentLow ? '< Last5 Low → **SHORT BOS triggered**' : '→ no BOS'}`);
+
+ const expectedMove = atr * 2.5;
+ console.info(`ATR(14) = ${atr.toFixed(3)} | Expected Move (ATR×2.5) = $${expectedMove.toFixed(2)}`);
+
+ console.info(`\n=== SIGNAL BREAKDOWN ===`);
+ const longSignal = bullishBias && currentRsi >= RSI_LONG_THRESHOLD && volumeSpike && currentClose > recentHigh && expectedMove >= MIN_EXPECTED_MOVE;
+ const shortSignal = bearishBias && currentRsi <= RSI_SHORT_THRESHOLD && volumeSpike && currentClose < recentLow && expectedMove >= MIN_EXPECTED_MOVE;
+
+ console.info(`Long = ${longSignal}`);
+ console.info(`Short = ${shortSignal}`);
+
+ if (longSignal || shortSignal) {
+ console.info(`\n🚀 HIGH-CONFIDENCE ${longSignal ? 'LONG' : 'SHORT'} SIGNAL at ${currentClose.toFixed(4)}`);
+ this.processSignals(shortSignal, longSignal, currentClose);
+ }
+ }
+ } catch (e) {
+ console.error('Aggregate error:', e);
+ }
+ }
+
+ private async processSignals(shortSignal: boolean, longSignal: boolean, signalPrice: number) {
+ if (this.isOpeningPosition || Date.now() - this.lastLossTime < 900000) return;
+
+ this.isOpeningPosition = true;
+ const direction = shortSignal ? 'short' : 'long';
+
+ // === FLIP LOGIC ===
+ const opposite = (this.position === 1 && shortSignal) || (this.position === -1 && longSignal);
+ if (this.position !== 0 && opposite) {
+ console.info(`🔄 HIGH-CONFIDENCE FLIP → closing current + opening opposite`);
+ this.isClosing = true;
+ await this.jupiterClient!.closePositionMarket(signalPrice);
+ if (this.currentTrade) await this.finalizeTrade('flip_close', signalPrice);
+ this.position = 0;
+ this.isClosing = false;
+ }
+
+ if (this.position !== 0) {
+ this.isOpeningPosition = false;
+ return;
+ }
+
+ const closes = this.df5min.map(d => d.candle.close);
+ const highs = this.df5min.map(d => d.candle.high);
+ const lows = this.df5min.map(d => d.candle.low);
+ const atr = this.calculateATR(closes, highs, lows);
+ const bullishBias = this.ema9Values[this.ema9Values.length - 1] > this.ema21Values[this.ema21Values.length - 1] &&
+ this.df5min[this.df5min.length - 1].candle.close > this.ema21Values[this.ema21Values.length - 1];
+ const volumeSpike = this.df5min[this.df5min.length - 1].candle.volume > this.avgVolume * VOLUME_SPIKE_MULTIPLIER;
+ const expectedMove = atr * 2.5;
+ const currentRsi = this.rsi(closes)[this.rsi(closes).length - 1] || 50;
+ const confidenceScore = this.calculateConfidenceScore(bullishBias, currentRsi, volumeSpike, expectedMove, atr);
+
+ const freeCollateral = await this.jupiterClient!.getFreeCollateral(direction, signalPrice);
+ const collateralDollars = Math.max(MIN_COLLATERAL_USD, freeCollateral * BASE_RISK_PCT);
+
+ let targetLeverage = 10;
+ let leverageReason = 'low confidence';
+ if (confidenceScore >= 8) {
+ targetLeverage = 30;
+ leverageReason = 'high confidence (8-10)';
+ } else if (confidenceScore >= 6) {
+ targetLeverage = 20;
+ leverageReason = 'medium-high confidence';
+ }
+
+ const notionalSize = collateralDollars * targetLeverage;
+ const baseAmount = Math.floor(notionalSize * 1_000_000);
+
+ console.info(`💰 ${direction.toUpperCase()} collateral available: $${freeCollateral.toFixed(2)} | Using: $${collateralDollars.toFixed(2)}`);
+ console.info(`🔥 LEVERAGE CHOSEN: ${targetLeverage}x → ${leverageReason} | Conf ${confidenceScore}/10`);
+
+ await this.jupiterClient!.cancelOrders();
+
+ try {
+ await this.jupiterClient!.placePerpOrder({
+ direction,
+ sizeDelta: baseAmount,
+ collateralDeltaUsd: collateralDollars,
+ price: signalPrice,
+ });
+
+ const initialSlDistance = Math.max(0.55, atr * 2.0);
+ if (shortSignal) {
+ this.trailSl = signalPrice + initialSlDistance + SPREAD_BUFFER_PCT * signalPrice;
+ this.trailTp = signalPrice - 3.0 * atr;
+ } else {
+ this.trailSl = signalPrice - initialSlDistance - SPREAD_BUFFER_PCT * signalPrice;
+ this.trailTp = signalPrice + 3.0 * atr;
+ }
+ this.entryPrice = signalPrice;
+ this.lastPriceUpdate = signalPrice;
+ this.position = shortSignal ? -1 : 1;
+ this.breakEvenLocked = false;
+ this.lastEntryTime = Date.now();
+
+ console.info(`📊 Current position: ${this.position === 1 ? 'LONG' : 'SHORT'} | Virtual TP: ${this.trailTp.toFixed(6)} | Virtual SL: ${this.trailSl.toFixed(6)}`);
+
+ await this.startNewTradeLog(direction, signalPrice, targetLeverage, leverageReason, collateralDollars, atr, confidenceScore);
+
+ } catch (e) {
+ console.error('Entry transaction failed:', e);
+ console.info('❌ Position state NOT updated because transaction failed');
+ }
+
+ setTimeout(() => { this.isOpeningPosition = false; }, 30000);
+ }
+
+ private async cancelAndPlaceSLOrder() { await this.jupiterClient!.cancelOrder(this.slOrderId || ''); }
+ private async cancelAndPlaceTPOrder() { await this.jupiterClient!.cancelOrder(this.tpOrderId || ''); }
+
+ private async closePosition() {
+ console.info('Closing position on Jupiter');
+ await this.jupiterClient!.cancelOrders();
+ }
+
+ public async run() {
+ await this.initJupiter();
+
+ process.on('SIGINT', async () => {
+ console.info('Shutdown');
+ if (this.pythSse) this.pythSse.close();
+ if (this.jupiterClient) await this.jupiterClient.unsubscribe();
+ if (this.position !== 0) await this.jupiterClient!.closePositionMarket(this.lastPrice || 0);
+ if (this.currentTrade) await this.finalizeTrade('manual_shutdown', this.lastPrice || 0);
+ await this.cancelRemnantOrders();
+ console.info('Done');
+ process.exit(0);
+ });
+
+ await new Promise(() => {});
+ }
+}
+
+async function main() {
+ const bot = new TradingBot();
+ await bot.run();
+}
+main().catch(console.error);
