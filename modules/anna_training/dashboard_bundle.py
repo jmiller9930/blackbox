@@ -4986,7 +4986,10 @@ def build_trade_chain_payload(
             for mid in event_axis:
                 d = dict(r["cells"].get(mid) or {})
                 narr = tile_narr.get(str(mid).strip(), "")
-                if ck_row == "baseline" and d.get("lifecycle_tile_slot") == "continuation":
+                baseline_continuation = (
+                    ck_row == "baseline" and d.get("lifecycle_tile_slot") == "continuation"
+                )
+                if baseline_continuation:
                     narr = ""
                 d["jupiter_tile_narrative"] = narr
                 mid_k = str(mid).strip()
@@ -5008,7 +5011,7 @@ def build_trade_chain_payload(
                         d["binance_kline_volume_ok"] = _binance_kline_volume_ok_from_features(
                             dict(_pf_cell) if isinstance(_pf_cell, dict) else None
                         )
-                    pv = tile_preview_axis.get(mid_k)
+                    pv = None if baseline_continuation else tile_preview_axis.get(mid_k)
                     if pv:
                         d["jupiter_tile_preview"] = pv
                     d["operator_truth_provenance_v1"] = {

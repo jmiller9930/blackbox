@@ -321,6 +321,35 @@ def test_jupiter_tile_narrative_authoritative_from_ledger_without_tile(
     assert "New 5-min candle formed" not in text
 
 
+def test_jupiter_tile_persisted_row_primary_when_operator_slot_mismatches(tmp_path: Path) -> None:
+    """JUPv3 slot + only Jupiter_2 policy row: tile narrative matches persisted row (same authority as compact)."""
+    import modules.anna_training.dashboard_bundle as dbmod
+
+    dbmod._MARKET_DB = None
+    mid = "SOL-PERP_5m_2026-04-01T14:00:00Z"
+    ledger = tmp_path / "el.db"
+    market = tmp_path / "m.db"
+    conn_l = connect_ledger(ledger)
+    ensure_execution_ledger_schema(conn_l)
+    set_baseline_jupiter_policy_slot(conn_l, "jup_v3")
+    upsert_policy_evaluation(
+        market_event_id=mid,
+        signal_mode=SIGNAL_MODE_JUPITER_2,
+        tick_mode="paper",
+        trade=False,
+        reason_code="persisted_v2_only_fixture",
+        features={"fixture": "v2_row_under_v3_slot"},
+        conn=conn_l,
+    )
+    conn_l.commit()
+    cell = _compact_baseline_cell_policy_bound(conn_l, mid, None, market_db_path=None)
+    narr, _g, _b, preview = _event_axis_jupiter_tile_narratives(conn_l, [mid], market)
+    conn_l.close()
+    assert cell.get("outcome") == "NO_TRADE"
+    assert "persisted_v2_only_fixture" in (narr.get(mid) or "")
+    assert cell.get("policy_trade") is False
+
+
 def test_strip_outcome_zero_is_flat_not_win() -> None:
     assert _strip_outcome_from_pnl(0) == "FLAT"
     assert _strip_outcome_from_pnl(0.0) == "FLAT"
