@@ -190,7 +190,7 @@ Successful when:
 
 ```
 STATUS: documentation complete; implementation partial (see §13)
-COMMIT: (record git rev-parse HEAD on branch that merged this doc)
+COMMIT: 69eee4e
 ```
 
 ---
