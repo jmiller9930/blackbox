@@ -999,30 +999,11 @@ function htmlPage(v) {
     </script>` : '<p class="muted">Set <code>JUPITER_OPERATOR_TOKEN</code> on jupiter-web to enable policy switching.</p>'}`;
   const tradingBlock = actual
     ? `<p class="warn"><strong>ACTUAL</strong> — Live-capital intent. Deploy with PAPER_TRADING=0 when leaving paper; this banner does not change Docker.</p>
-      ${policySel}`
+      ${policySel}
+      <p class="muted small">This <strong>Policy</strong> selector is the Jupiter/Sean runtime strategy (<code>jupiter_active_policy</code>). It is <em>not</em> the BlackBox <code>policy_registry.json</code> “strategy entry” line (that registry is for other operator tools only).</p>`
     : `<p><strong>PAPER</strong> — Simulated ledger (default). SEANV3_TUI_ACTUAL=1 for live-intent banner.</p>
-      ${policySel}`;
-
-  let policyBlock = '';
-  if (v.policy?.error) {
-    policyBlock = `<p class="warn">${esc(v.policy.error)}</p>`;
-  } else if (v.policy?.id) {
-    const ed = v.policy.effective_db;
-    const edLine = ed
-      ? existsSync(ed)
-        ? `<span class="ok">file</span> ${esc(ed)}`
-        : `<span class="warn">missing</span> ${esc(ed)}`
-      : '(none — tick optional)';
-    const ent = v.policy.entry_path;
-    const entLine = ent
-      ? existsSync(ent)
-        ? `${esc(ent)}`
-        : `${esc(ent)} <span class="warn">(missing)</span>`
-      : '—';
-    policyBlock = `<p><strong>${esc(v.policy.label)}</strong> <span class="muted">(${esc(v.policy.id)})</span> kind=${esc(v.policy.kind)} dataset_mode=${esc(v.policy.dataset_mode)}</p>
-      <p class="muted">Effective SQLite (tick): ${edLine}</p>
-      <p class="muted">Strategy entry: ${entLine}</p>`;
-  }
+      ${policySel}
+      <p class="muted small">This <strong>Policy</strong> selector is the Jupiter/Sean runtime strategy (<code>jupiter_active_policy</code>). Ignore BlackBox registry “strategy entry” elsewhere — not used here.</p>`;
 
   const w = v.wallet;
   const keypairEnv = v.paper_ledger?.keypair_env || v.keypair_env || '';
@@ -1048,10 +1029,10 @@ function htmlPage(v) {
   let walletFundingBlock = '<p class="muted">Operator state unavailable.</p>';
   if (!op.error) {
     walletFundingBlock = `
-      <p class="muted"><strong>Paper wallet</strong> — simulated bankroll + realized/unreal PnL (same equity the engine uses for opens). <strong>Chain wallet</strong> — gate uses cached on-chain SOL; for real fills you still need <code>PAPER_TRADING=0</code> on <strong>seanv3</strong> in compose + container restart.</p>
-      <p><strong>Paper PnL</strong> — equity ~<strong>${esc(eqStr)}</strong> USD
-        <span class="muted">(start ${esc(String(pq.starting_usd ?? '—'))} + realized ${esc(String(pq.realized_pnl_usd ?? '—'))} + unreal ${esc(String(pq.unrealized_usd ?? '—'))})</span>
-        ${pl ? ` · closed trades: ${esc(String(pl.closed_trade_count))}` : ''}</p>
+      <p class="muted"><strong>Paper wallet</strong> — <strong>Equity = bankroll + realized PnL + unrealized</strong> (same numbers the engine uses). Raising “Add paper funds” increases <strong>bankroll</strong> immediately after save + reload. <strong>Chain wallet</strong> switches the gate to cached SOL; live fills still need <code>PAPER_TRADING=0</code> on seanv3 + restart.</p>
+      <p><strong>Paper PnL (live)</strong> — equity ~<strong>${esc(eqStr)}</strong> USD
+        <span class="muted">= bankroll ${esc(String(pq.starting_usd ?? '—'))} + realized ${esc(String(pq.realized_pnl_usd ?? '—'))} + unreal ${esc(String(pq.unrealized_usd ?? '—'))}</span>
+        ${pl ? ` · closed: ${esc(String(pl.closed_trade_count))}` : ''}</p>
       ${pl?.open_line ? `<p class="muted">${esc(pl.open_line)}</p>` : ''}
       <div class="fund-toggle" role="group" aria-label="Paper vs chain funding gate">
         <button type="button" class="fund-btn ${paperModeOn ? 'selected' : ''}" id="jw-fund-paper">Paper wallet (simulated)</button>
@@ -1072,9 +1053,10 @@ function htmlPage(v) {
           <button type="button" id="jw-save-wallet">Register pubkey</button></p>
         ${
           stakeOk
-            ? `<p class="op-row"><label>Paper starting balance USD <input type="text" id="jw-stake" size="14" value="${esc(String(stakeNum))}"/></label>
-          <button type="button" id="jw-save-stake">Save stake</button></p>`
-            : '<p class="muted">Paper stake edit disabled on server.</p>'
+            ? `<p class="op-row"><label>Add paper funds (USD bankroll) <input type="number" step="0.01" min="0" id="jw-stake" size="16" value="${esc(String(stakeNum))}"/></label>
+          <button type="button" class="fund-btn" id="jw-save-stake">Apply to bankroll &amp; PnL</button></p>
+          <p class="muted small">Writes <code>paper_starting_balance_usd</code> in SQLite — no manual DB edit. Page reload refreshes equity everywhere below.</p>`
+            : '<p class="muted">Paper bankroll edit disabled on server (SEAN_ALLOW_PAPER_STAKE_EDIT).</p>'
         }
       </div>
       <script>
@@ -1219,10 +1201,21 @@ function htmlPage(v) {
     operatorBlock = `<p class="warn">${esc(op.error)}</p>`;
   }
 
+  const opTokEnv = (process.env.JUPITER_OPERATOR_TOKEN || '').trim();
+  const prefillBearer =
+    ['1', 'true', 'yes'].includes((process.env.JUPITER_WEB_PREFILL_BEARER || '').trim().toLowerCase()) && opTokEnv
+      ? opTokEnv
+      : '';
+  const bearerInputType = prefillBearer ? 'text' : 'password';
   const tokenPanel = postOk
     ? `<section class="panel"><h2>Operator token</h2>
-      <p class="muted">Same secret as <code>JUPITER_OPERATOR_TOKEN</code> on jupiter-web. Used for policy switch, paper wallet, funding mode, and paper stake.</p>
-      <p><label>Bearer <input type="password" id="jw-op-token" size="44" autocomplete="off" spellcheck="false"/></label></p>
+      <p class="muted">Same secret as <code>JUPITER_OPERATOR_TOKEN</code> on jupiter-web (see <code>lab_operator_token.env</code> in this stack). Used for policy switch, paper wallet, funding mode, and paper stake — <em>not</em> your Solana wallet.</p>
+      <p><label>Bearer <input type="${bearerInputType}" id="jw-op-token" size="44" value="${esc(prefillBearer)}" autocomplete="off" spellcheck="false"/></label></p>
+      ${
+        prefillBearer
+          ? '<p class="muted small">Prefilled while <code>JUPITER_WEB_PREFILL_BEARER=1</code>. Set to <code>0</code> in <code>lab_operator_token.env</code> to hide.</p>'
+          : ''
+      }
     </section>`
     : `<section class="panel"><h2>Operator token</h2>
       <p class="warn">POST actions are off until you set <code>JUPITER_OPERATOR_TOKEN</code> on jupiter-web and restart the container.</p>
@@ -1264,6 +1257,8 @@ function htmlPage(v) {
     .fund-btn { font: inherit; padding: 0.4rem 0.85rem; border-radius: 2px; border: 1px solid #30363d; background: #1a1a1c; color: #e6edf3; cursor: pointer; }
     .fund-btn:hover { border-color: #58a6ff; }
     .fund-btn.selected { border-color: #3fb950; background: rgba(63, 185, 80, 0.12); }
+    .pubkey-banner { font-size: 0.85rem; padding: 0.5rem 0.65rem; border-radius: 2px; border: 1px solid #30363d; background: #0d1117; margin-top: 0.5rem; word-break: break-all; }
+    .pubkey-banner code { font-size: 0.8rem; }
     .trade-row { cursor: pointer; }
     .trade-win { background: rgba(63, 185, 80, 0.14); }
     .trade-loss { background: rgba(248, 81, 73, 0.1); }
@@ -1277,17 +1272,34 @@ function htmlPage(v) {
 <body>
   <div class="wrap">
     <section class="panel">
-      <h1>Jupiter — TUI parity (read-only)</h1>
-      <p class="muted">Same checks + SQLite + ledger paths as preflight_pyth_tui.py · Auto-refresh ${esc(String(v.refresh_sec || 0))}s (JUPITER_WEB_REFRESH_SEC, 0=off)</p>
+      <h1>Jupiter — operator dashboard</h1>
+      ${
+        w?.pubkey_base58
+          ? `<p class="pubkey-banner"><strong>Paper wallet pubkey (published)</strong><br/><code id="jw-pubkey-published">${esc(w.pubkey_base58)}</code>
+        <button type="button" class="fund-btn" id="jw-copy-pk" style="margin-top:0.35rem">Copy pubkey</button></p>`
+          : `<p class="pubkey-banner bad"><strong>No pubkey published yet</strong> — scroll to <strong>Wallet &amp; funding</strong>, paste your base58 address, click <strong>Register pubkey</strong> (requires operator token). Same flow as the VS Code SeanV3 path: stored in <code>paper_wallet</code>.</p>`
+      }
+      <p class="muted">SQLite + parity vs BlackBox baseline · Auto-refresh ${esc(String(v.refresh_sec || 0))}s</p>
       <p class="muted">${esc(v.sqlite_path)} · repo: ${esc(v.repo_root)}</p>
       <p><a href="/">Front door</a> · <a href="https://jup.ag/perps/long/SOL-SOL" target="_blank" rel="noopener noreferrer">jup.ag SOL perps</a> · <a href="/api/summary.json">summary.json</a> · <a href="/api/operator/state.json">operator/state.json</a> · <a href="/api/live-market.json">live-market.json</a> · <a href="/health">health</a></p>
+      <script>
+      (function(){
+        document.getElementById('jw-copy-pk')?.addEventListener('click', function(){
+          var el = document.getElementById('jw-pubkey-published');
+          if (!el) return;
+          var t = el.textContent || '';
+          if (navigator.clipboard && navigator.clipboard.writeText) {
+            navigator.clipboard.writeText(t).then(function(){ alert('Copied'); }).catch(function(){ prompt('Copy:', t); });
+          } else { prompt('Copy:', t); }
+        });
+      })();
+      </script>
     </section>
     ${tokenPanel}
     ${v.error ? `<section class="panel"><p class="warn">${esc(v.error)}</p></section>` : ''}
     <section class="panel"><h2>Wallet &amp; funding</h2>${walletFundingBlock}</section>
     <section class="panel"><h2>Trading mode</h2>${tradingBlock}</section>
     <section class="panel"><h2>Live market &amp; gates</h2>${operatorBlock}</section>
-    <section class="panel"><h2>Active policy</h2>${policyBlock}</section>
     <section class="panel"><h2>Wallet status</h2>${walletBlock}</section>
     <section class="panel"><h2>SeanV3 paper ledger (testing)</h2>${ledgerBlock}</section>
     <section class="panel"><h2>Parity (Jupiter vs BlackBox baseline)</h2>
