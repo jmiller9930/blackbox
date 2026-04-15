@@ -1,7 +1,8 @@
 /**
  * Session login + email password reset for jupiter-web (optional; lab).
  * Login id: JUPITER_AUTH_USERNAME (default admin). Reset links go to JUPITER_AUTH_EMAIL.
- * Secrets: JUPITER_SESSION_SECRET, optional RESEND_API_KEY for outbound mail.
+ * Secrets: JUPITER_SESSION_SECRET. Outbound reset mail: optional SMTP (JUPITER_SMTP_*)
+ * or Resend (RESEND_API_KEY). SMTP wins when host + user + password are set.
  */
 import { createHash, createHmac, randomBytes, scryptSync, timingSafeEqual } from 'node:crypto';
 import { DatabaseSync } from 'node:sqlite';
@@ -217,30 +218,92 @@ export function clearSessionCookie(res) {
   res.setHeader('Set-Cookie', `${COOKIE}=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0${secure}`);
 }
 
+function isSmtpConfigured() {
+  const host = (process.env.JUPITER_SMTP_HOST || '').trim();
+  const user = (process.env.JUPITER_SMTP_USER || '').trim();
+  const pass = (process.env.JUPITER_SMTP_PASS || process.env.JUPITER_SMTP_PASSWORD || '').trim();
+  return Boolean(host && user && pass);
+}
+
+/**
+ * Gmail: use App Password (Google Account → Security → 2-Step → App passwords), not your normal password.
+ * Typical: JUPITER_SMTP_HOST=smtp.gmail.com JUPITER_SMTP_PORT=587 JUPITER_SMTP_USER=you@gmail.com JUPITER_SMTP_PASS=xxxx
+ *
+ * @returns {Promise<{ ok: boolean, mode: string, transport?: 'smtp' | 'resend', loggedUrl: boolean, resendId?: string, httpStatus?: number, detail?: string }>}
+ */
 async function sendPasswordResetEmail(to, resetUrl) {
+  const subject = 'Reset your Jupiter lab password';
+  const text = `Set a new password (about one hour):\n${resetUrl}\n\nIf you did not request a reset, ignore this email.`;
+  const html = `<p><a href="${resetUrl}">Set a new password</a></p><p>This link expires in about one hour. If you did not request a reset, ignore this email.</p><p>Forgot again? Use <strong>Forgot password</strong> on the login page to get a new link.</p>`;
+
+  if (isSmtpConfigured()) {
+    try {
+      const nodemailer = (await import('nodemailer')).default;
+      const host = (process.env.JUPITER_SMTP_HOST || '').trim();
+      const user = (process.env.JUPITER_SMTP_USER || '').trim();
+      const pass = (process.env.JUPITER_SMTP_PASS || process.env.JUPITER_SMTP_PASSWORD || '').trim();
+      const port = Math.max(1, parseInt(process.env.JUPITER_SMTP_PORT || '587', 10) || 587);
+      const secure =
+        process.env.JUPITER_SMTP_SECURE === '1' || process.env.JUPITER_SMTP_SECURE === 'true' || port === 465;
+      const from = (process.env.JUPITER_SMTP_FROM || `Jupiter Lab <${user}>`).trim();
+      console.error(`[jupiter-auth] sending reset via SMTP: host=${host} port=${port} to=${to} from=${from}`);
+      const transporter = nodemailer.createTransport({
+        host,
+        port,
+        secure,
+        auth: { user, pass },
+      });
+      const info = await transporter.sendMail({ from, to, subject, text, html });
+      console.error(`[jupiter-auth] SMTP sent: messageId=${info.messageId || 'ok'}`);
+      return { ok: true, mode: 'sent', transport: 'smtp', loggedUrl: false };
+    } catch (e) {
+      const detail = e instanceof Error ? e.message : String(e);
+      console.error('[jupiter-auth] SMTP error:', detail);
+      console.error('[jupiter-auth] recovery — same reset URL still valid ~1h:');
+      console.error(resetUrl);
+      return { ok: false, mode: 'smtp_error', loggedUrl: false, detail };
+    }
+  }
+
   const key = (process.env.RESEND_API_KEY || '').trim();
   const from = (process.env.RESEND_FROM || 'Jupiter Lab <onboarding@resend.dev>').trim();
   if (!key) {
-    console.error('[jupiter-auth] RESEND_API_KEY not set — password reset link (use within 1h):');
+    console.error('[jupiter-auth] No SMTP (set JUPITER_SMTP_HOST, JUPITER_SMTP_USER, JUPITER_SMTP_PASS) and no RESEND_API_KEY — no outbound email. Reset link (use within 1h):');
     console.error(resetUrl);
-    return { ok: false, logged: true };
+    console.error(
+      '[jupiter-auth] Configure Gmail SMTP in .env (see JUPITER_SMTP_* in .env.example) or set RESEND_API_KEY; restart jupiter-web.'
+    );
+    return { ok: false, mode: 'skipped_no_key', loggedUrl: true };
   }
+  console.error(`[jupiter-auth] sending reset via Resend: to=${to} from=${from}`);
   const r = await fetch('https://api.resend.com/emails', {
     method: 'POST',
     headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
     body: JSON.stringify({
       from,
       to: [to],
-      subject: 'Reset your Jupiter lab password',
-      html: `<p><a href="${resetUrl}">Set a new password</a></p><p>This link expires in about one hour. If you did not request a reset, ignore this email.</p><p>Forgot again? Use <strong>Forgot password</strong> on the login page to get a new link.</p>`,
+      subject,
+      text,
+      html,
     }),
   });
   const t = await r.text();
-  if (!r.ok) {
-    console.error('[jupiter-auth] Resend error:', r.status, t);
-    return { ok: false, logged: false };
+  let parsed = null;
+  try {
+    parsed = JSON.parse(t);
+  } catch {
+    /* Resend may return non-JSON on some errors */
   }
-  return { ok: true, logged: false };
+  if (!r.ok) {
+    const detail = (parsed && typeof parsed.message === 'string' && parsed.message) || t.slice(0, 500);
+    console.error('[jupiter-auth] Resend HTTP error:', r.status, t);
+    console.error('[jupiter-auth] recovery — same reset URL still valid ~1h (use or share from host logs only):');
+    console.error(resetUrl);
+    return { ok: false, mode: 'resend_error', loggedUrl: false, httpStatus: r.status, detail };
+  }
+  const id = parsed && typeof parsed.id === 'string' ? parsed.id : '';
+  console.error(`[jupiter-auth] Resend accepted: id=${id || '(none)'} to=${to}`);
+  return { ok: true, mode: 'sent', transport: 'resend', loggedUrl: false, resendId: id };
 }
 
 function buildResetUrl(base, token) {
@@ -255,7 +318,7 @@ function buildResetUrl(base, token) {
 export async function createResetAndEmail(db) {
   const un = getConfiguredUsername();
   const row = db.prepare(`SELECT username FROM ${USER_TABLE} WHERE username = ?`).get(un);
-  if (!row) return { ok: true, generic: true };
+  if (!row) return { ok: true, generic: true, emailResult: null, mailTo: getConfiguredAuthEmail() };
   const mailTo = getConfiguredAuthEmail();
   const token = randomBytes(32).toString('hex');
   const th = hashToken(token);
@@ -264,8 +327,13 @@ export async function createResetAndEmail(db) {
   db.prepare(`INSERT INTO ${RESET_TABLE} (token_hash, username, expires_utc) VALUES (?, ?, ?)`).run(th, un, exp);
   const base = getPublicBaseUrl();
   const url = buildResetUrl(base, token);
-  await sendPasswordResetEmail(mailTo, url);
-  return { ok: true, generic: true };
+  if (!base) {
+    console.error(
+      '[jupiter-auth] JUPITER_PUBLIC_BASE_URL is empty — email clients need an absolute URL. Set it (e.g. http://clawbot.a51.corp:707).'
+    );
+  }
+  const emailResult = await sendPasswordResetEmail(mailTo, url);
+  return { ok: true, generic: true, emailResult, mailTo };
 }
 
 /** Read-only: token valid and not expired (does not delete). */
@@ -453,7 +521,7 @@ export async function handleJupiterAuthHttp(req, res, url, ctx) {
     const body = authShell(
       'Forgot password — Jupiter lab',
       `<h1>Forgot password</h1>
-      <p>We will send a one-time reset link to <strong>${htmlEscape(mail)}</strong> (about one hour to use it). If Resend is not configured, check <code>docker logs jupiter-web</code> for the link.</p>
+      <p>We will send a one-time reset link to <strong>${htmlEscape(mail)}</strong> (about one hour). Configure <strong>SMTP</strong> (<code>JUPITER_SMTP_*</code>) or <strong>Resend</strong> (<code>RESEND_API_KEY</code>) on the server; otherwise the link is only in <code>docker logs jupiter-web</code>.</p>
       <form method="post" action="/auth/forgot">
         <button type="submit">Email me a reset link</button>
       </form>
@@ -466,10 +534,12 @@ export async function handleJupiterAuthHttp(req, res, url, ctx) {
 
   if (p === '/auth/forgot' && req.method === 'POST') {
     let db;
+    /** @type {Awaited<ReturnType<typeof createResetAndEmail>> | null} */
+    let created = null;
     try {
       db = new DatabaseSync(ctx.dbPath());
       ensureJupiterWebAuthSchema(db);
-      await createResetAndEmail(db);
+      created = await createResetAndEmail(db);
     } finally {
       try {
         db?.close();
@@ -477,15 +547,46 @@ export async function handleJupiterAuthHttp(req, res, url, ctx) {
         /* */
       }
     }
-    const body = authShell(
-      'Check email — Jupiter lab',
-      `<h1>Check your email</h1>
-      <p class="ok">If this lab account exists, we sent a reset link to your registered address. The link expires in about one hour.</p>
-      <p>Forgot again? Repeat this page to get a new link.</p>
-      <p><a href="/auth/login">Back to sign in</a></p>`
-    );
+    const mail = created?.mailTo ?? getConfiguredAuthEmail();
+    const er = created?.emailResult;
+    let forgotBody;
+    if (!er) {
+      forgotBody = authShell(
+        'Check email — Jupiter lab',
+        `<h1>Check your email</h1>
+        <p class="ok">If this lab account exists, we sent a reset link to <strong>${htmlEscape(mail)}</strong>. The link expires in about one hour.</p>
+        <p><a href="/auth/login">Back to sign in</a></p>`
+      );
+    } else if (er.ok) {
+      const via = er.transport === 'smtp' ? 'SMTP' : 'Resend';
+      forgotBody = authShell(
+        'Check email — Jupiter lab',
+        `<h1>Check your email</h1>
+        <p class="ok">We sent a password reset link to <strong>${htmlEscape(mail)}</strong> (via ${via}). It expires in about one hour. Check spam/junk if you do not see it.</p>
+        <p><a href="/auth/login">Back to sign in</a></p>`
+      );
+    } else if (er.mode === 'skipped_no_key') {
+      forgotBody = authShell(
+        'Reset link — Jupiter lab',
+        `<h1>Email not sent (no mail transport)</h1>
+        <p class="err">Neither <strong>SMTP</strong> (<code>JUPITER_SMTP_HOST</code>, <code>JUPITER_SMTP_USER</code>, <code>JUPITER_SMTP_PASS</code>) nor <strong>Resend</strong> (<code>RESEND_API_KEY</code>) is configured, so nothing was delivered to <strong>${htmlEscape(mail)}</strong>.</p>
+        <p>Add settings to <code>vscode-test/seanv3/.env</code>, restart <code>jupiter-web</code>, then try again.</p>
+        <p class="ok">The one-time link was printed to <code>docker logs jupiter-web</code> (valid ~1 hour).</p>
+        <p><a href="/auth/login">Back to sign in</a></p>`
+      );
+    } else {
+      const isSmtp = er.mode === 'smtp_error';
+      forgotBody = authShell(
+        'Email failed — Jupiter lab',
+        `<h1>Could not send email</h1>
+        <p class="err">${isSmtp ? 'SMTP' : 'Resend'} error${!isSmtp && er.httpStatus != null ? ` (HTTP ${er.httpStatus})` : ''}: ${htmlEscape(er.detail || 'See server logs.')}</p>
+        <p>${isSmtp ? 'Check Gmail App Password, 2-Step Verification, and <code>JUPITER_SMTP_*</code> values.' : 'Verify <code>RESEND_API_KEY</code> and <code>RESEND_FROM</code>.'}</p>
+        <p class="ok">A recovery URL was still logged to <code>docker logs jupiter-web</code>; the reset token remains valid for about one hour.</p>
+        <p><a href="/auth/forgot">Try again</a> · <a href="/auth/login">Sign in</a></p>`
+      );
+    }
     res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' });
-    res.end(body);
+    res.end(forgotBody);
     return true;
   }
 

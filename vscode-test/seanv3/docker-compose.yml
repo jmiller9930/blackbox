@@ -85,6 +85,13 @@ services:
       BLACKBOX_EXECUTION_LEDGER_PATH: /repo/data/sqlite/execution_ledger.db
       # Session auth (required when JUPITER_AUTH_MODE=session): set in vscode-test/seanv3/.env (gitignored) or export before compose.
       JUPITER_SESSION_SECRET: ${JUPITER_SESSION_SECRET:-}
+      # Password reset email: SMTP (e.g. Gmail App Password) if set; else Resend; else logs only.
+      JUPITER_SMTP_HOST: ${JUPITER_SMTP_HOST:-}
+      JUPITER_SMTP_PORT: ${JUPITER_SMTP_PORT:-}
+      JUPITER_SMTP_SECURE: ${JUPITER_SMTP_SECURE:-}
+      JUPITER_SMTP_USER: ${JUPITER_SMTP_USER:-}
+      JUPITER_SMTP_PASS: ${JUPITER_SMTP_PASS:-}
+      JUPITER_SMTP_FROM: ${JUPITER_SMTP_FROM:-}
       RESEND_API_KEY: ${RESEND_API_KEY:-}
       RESEND_FROM: ${RESEND_FROM:-}
       JUPITER_AUTH_BOOTSTRAP_PASSWORD: ${JUPITER_AUTH_BOOTSTRAP_PASSWORD:-}
