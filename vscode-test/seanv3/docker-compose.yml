@@ -37,7 +37,7 @@ services:
       CAPTURE_PATH: /capture/seanv3.ndjson
       SQLITE_PATH: /capture/sean_parity.db
       # Optional: Solana keypair JSON (same format as solana-keygen). Only pubkey is stored in DB.
-      # KEYPAIR_PATH: /capture/keypair.json
+      KEYPAIR_PATH: /capture/keypair.json
       # RPC for cached on-chain SOL balance (operator gate when sean_funding_mode=chain).
       SOLANA_RPC_URL: ${SOLANA_RPC_URL:-https://api.mainnet-beta.solana.com}
       # Paper (default). For live-capital path later: set "0" and follow operator governance — TUI `--actual` only shows intent.
