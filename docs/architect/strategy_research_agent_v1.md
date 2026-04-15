@@ -120,6 +120,8 @@ Structured inputs and durable traceability **without** ML or feedback loops:
 
 **Execution:** `python -m renaissance_v4.research.sra_foundation run <hypothesis_id>` writes `configs/manifests/sra_*_*.json` and invokes the existing **`compare-manifest`** pipeline (full Kitchen flow). Does **not** modify ingestion (024-C) or evaluators.
 
+**Controlled variants (DV-ARCH-SRA-VARIANTS-031):** `generate_variants_from_hypothesis(hypothesis_id, n_variants)` appends derived rows to `hypotheses.jsonl` with `parent_hypothesis_id`, `variant_type` (`signal_toggle` = drop one resolved signal, `mc_config_offset` = single Monte Carlo seed bump), and `variant_index`. One bounded change per variant; deterministic for the same base + N. CLI: `… sra_foundation variants <id> <N>`. Result lines in `hypothesis_results.jsonl` copy parent/variant fields for traceability.
+
 ---
 
 ## 10. Related

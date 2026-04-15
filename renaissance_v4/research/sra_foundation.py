@@ -1,5 +1,5 @@
 """
-DV-ARCH-SRA-FOUNDATION-030 — Strategy Research Agent foundation: hypotheses, manifest generation, Kitchen run, results.
+DV-ARCH-SRA-FOUNDATION-030 / DV-ARCH-SRA-VARIANTS-031 — SRA hypotheses, controlled variants, Kitchen runs.
 
 Does not implement learning loops or change ingestion / evaluation logic. Uses existing
 ``compare-manifest`` (robustness_runner) for the full Kitchen flow.
@@ -8,6 +8,7 @@ Does not implement learning loops or change ingestion / evaluation logic. Uses e
 from __future__ import annotations
 
 import argparse
+import copy
 import json
 import os
 import re
@@ -85,6 +86,92 @@ def get_hypothesis_by_id(hypothesis_id: str) -> dict[str, Any] | None:
         if str(h.get("hypothesis_id") or "").strip() == hid:
             last = h
     return last
+
+
+def _effective_signal_modules(hypothesis: dict[str, Any]) -> list[str]:
+    """Resolved signal_modules for a hypothesis (parameters override, else baseline template)."""
+    params = hypothesis.get("parameters")
+    if isinstance(params, dict) and isinstance(params.get("signal_modules"), list):
+        return [str(x) for x in params["signal_modules"]]
+    tpl = json.loads(baseline_manifest_template_path().read_text(encoding="utf-8"))
+    sm = tpl.get("signal_modules")
+    if not isinstance(sm, list):
+        return []
+    return [str(x) for x in sm]
+
+
+def _template_monte_carlo_config() -> dict[str, Any]:
+    tpl = json.loads(baseline_manifest_template_path().read_text(encoding="utf-8"))
+    mc = tpl.get("monte_carlo_config")
+    return copy.deepcopy(mc) if isinstance(mc, dict) else {}
+
+
+def generate_variants_from_hypothesis(hypothesis_id: str, n_variants: int) -> list[str]:
+    """
+    DV-ARCH-SRA-VARIANTS-031 — Produce N deterministic, bounded hypotheses from a base record.
+
+    Each variant changes **at most one** controlled aspect per record (signal set OR Monte Carlo seed offset).
+    Appends rows to ``hypotheses.jsonl`` with ``parent_hypothesis_id``, ``variant_type``, ``variant_index``.
+
+    Does not perform random search: the sequence is fixed for a given ``(base_id, n_variants)``.
+    """
+    if n_variants < 1:
+        raise ValueError("n_variants must be >= 1")
+    base = get_hypothesis_by_id(hypothesis_id)
+    if base is None:
+        raise LookupError(f"hypothesis_id not found: {hypothesis_id}")
+
+    base_id = str(base.get("hypothesis_id") or "").strip()
+    sm = _effective_signal_modules(base)
+    if len(sm) < 1:
+        raise ValueError("base hypothesis must resolve to a non-empty signal_modules list")
+
+    new_ids: list[str] = []
+    now = datetime.now(timezone.utc).isoformat()
+
+    for i in range(n_variants):
+        # Cycle variant types: single-parameter change only (no multi-stage edits).
+        mode = i % 2
+        variant_type: str
+        params = copy.deepcopy(base.get("parameters") or {})
+        if not isinstance(params, dict):
+            params = {}
+
+        if mode == 0 and len(sm) > 1:
+            variant_type = "signal_toggle"
+            drop_idx = i % len(sm)
+            new_sm = [x for j, x in enumerate(sm) if j != drop_idx]
+            params["signal_modules"] = new_sm
+        else:
+            variant_type = "mc_config_offset"
+            mc = params.get("monte_carlo_config")
+            if not isinstance(mc, dict):
+                mc = _template_monte_carlo_config()
+            else:
+                mc = copy.deepcopy(mc)
+            base_seed = int(mc.get("seed") if mc.get("seed") is not None else 42)
+            mc["seed"] = base_seed + (i + 1) * 31
+            params["monte_carlo_config"] = mc
+
+        vid = f"{base_id}_var_{i + 1:03d}_{_slug(variant_type, max_len=24)}"
+        strat = f"sra_{_slug(vid, max_len=80)}"
+        params["strategy_id"] = strat
+
+        record: dict[str, Any] = {
+            "hypothesis_id": vid,
+            "description": f"Variant {i + 1}/{n_variants} of {base_id} ({variant_type})",
+            "parameters": params,
+            "created_at": now,
+            "created_by": "system",
+            "parent_hypothesis_id": base_id,
+            "variant_type": variant_type,
+            "variant_index": i,
+        }
+        generate_manifest_from_hypothesis(record)
+        append_hypothesis(record)
+        new_ids.append(vid)
+
+    return new_ids
 
 
 def generate_manifest_from_hypothesis(
@@ -254,6 +341,8 @@ def execute_hypothesis(
     ts = datetime.now(timezone.utc).isoformat()
     strat = str(manifest.get("strategy_id") or "")
 
+    lineage_fields = _lineage_fields_from_hypothesis(hyp)
+
     if r.returncode != 0:
         rec = {
             "hypothesis_id": hypothesis_id,
@@ -268,6 +357,7 @@ def execute_hypothesis(
             },
             "manifest_path_repo": man_rel,
             "timestamp": ts,
+            **lineage_fields,
         }
         append_hypothesis_result(rec)
         return rec
@@ -285,9 +375,24 @@ def execute_hypothesis(
         "key_metrics": {**_key_metrics_from_summary(summary), "pipeline_ok": True},
         "manifest_path_repo": man_rel,
         "timestamp": ts,
+        **lineage_fields,
     }
     append_hypothesis_result(rec)
     return rec
+
+
+def _lineage_fields_from_hypothesis(hyp: dict[str, Any]) -> dict[str, Any]:
+    """DV-ARCH-SRA-VARIANTS-031 — trace variant → parent in results."""
+    out: dict[str, Any] = {}
+    pid = hyp.get("parent_hypothesis_id")
+    if pid is not None and str(pid).strip():
+        out["parent_hypothesis_id"] = str(pid).strip()
+    vt = hyp.get("variant_type")
+    if vt is not None and str(vt).strip():
+        out["variant_type"] = str(vt).strip()
+    if "variant_index" in hyp and hyp["variant_index"] is not None:
+        out["variant_index"] = hyp["variant_index"]
+    return out
 
 
 def _cmd_add(args: argparse.Namespace) -> int:
@@ -321,8 +426,18 @@ def _cmd_dry_run(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_variants(args: argparse.Namespace) -> int:
+    try:
+        ids = generate_variants_from_hypothesis(args.hypothesis_id, int(args.n_variants))
+    except Exception as e:  # noqa: BLE001
+        print(json.dumps({"ok": False, "error": str(e)}), file=sys.stderr)
+        return 1
+    print(json.dumps({"ok": True, "hypothesis_ids": ids}, indent=2))
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
-    p = argparse.ArgumentParser(description="SRA foundation — DV-ARCH-SRA-FOUNDATION-030")
+    p = argparse.ArgumentParser(description="SRA foundation — DV-ARCH-SRA-FOUNDATION-030 / VARIANTS-031")
     sub = p.add_subparsers(dest="cmd", required=True)
 
     a = sub.add_parser("add", help="Append a hypothesis record from a JSON file")
@@ -338,6 +453,14 @@ def build_parser() -> argparse.ArgumentParser:
     d = sub.add_parser("dry-run", help="Print generated manifest JSON for a hypothesis_id")
     d.add_argument("hypothesis_id", type=str)
     d.set_defaults(func=_cmd_dry_run)
+
+    v = sub.add_parser(
+        "variants",
+        help="DV-ARCH-SRA-VARIANTS-031 — generate N controlled variants (append hypotheses.jsonl)",
+    )
+    v.add_argument("hypothesis_id", type=str)
+    v.add_argument("n_variants", type=int)
+    v.set_defaults(func=_cmd_variants)
 
     return p
 
