@@ -1908,6 +1908,19 @@ function jupiterPublicPath(pathname, method) {
   return false;
 }
 
+/**
+ * When ``JUPITER_AUTH_MODE=session``, browser users have a cookie session; automation uses the
+ * same ``Authorization: Bearer`` secret as ``POST /api/v1/jupiter/active-policy`` (DV-ARCH-JUPITER-MC2-039).
+ */
+function jupiterOperatorBearerMatches(req) {
+  const expected = (process.env.JUPITER_OPERATOR_TOKEN || '').trim();
+  if (!expected) return false;
+  const auth = String(req.headers.authorization || '');
+  if (!auth.startsWith('Bearer ')) return false;
+  const tok = auth.slice(7).trim();
+  return tok.length > 0 && tok === expected;
+}
+
 const server = http.createServer((req, res) => {
   void (async () => {
     const url = new URL(req.url || '/', `http://${req.headers.host || 'localhost'}`);
@@ -1921,7 +1934,7 @@ const server = http.createServer((req, res) => {
         const wantsJson =
           url.pathname.startsWith('/api') ||
           (accept.includes('application/json') && !accept.includes('text/html'));
-        if (!requireJupiterSession(req, res, url, { wantsJson })) return;
+        if (!jupiterOperatorBearerMatches(req) && !requireJupiterSession(req, res, url, { wantsJson })) return;
       }
     } else if (mode === 'basic') {
       if (!jupiterWebBasicAuthOk(req, res, url)) return;
