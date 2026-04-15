@@ -97,11 +97,11 @@ Reasonable **directional** expectation: both can run **Jupiter_3-style** Sean lo
 | **Trading** | **Paper only** — Jupiter_3 signals + lifecycle write **`sean_paper_trades`**; **`paper_trade_log`** = ingest/stub/wallet. |
 | **Database** | Single SQLite file (`SQLITE_PATH`), same volume as capture. |
 
-### Sean-native paper engine (`sean_jupiter3_engine_v1`)
+### Sean-native paper engine (`sean_jupiter4_engine_v1` / `sean_jupiter3_engine_v1`)
 
 Runs after each kline insert when **`SEAN_ENGINE_SLICE`** is not `0`/`false`/`no` (name retained for compatibility).
 
-- **Entry:** `jupiter_3_sean_policy.mjs` — same structure as the Python reference (min bars, gates, short-over-long if both fire).
+- **Entry policy (Node):** **`SEAN_JUPITER_POLICY`** — default **`jupiter_4`** (`jupiter_4_sean_policy.mjs`), aligned with BlackBox **JUPv4** / `modules/anna_training/jupiter_4_sean_policy.py` (crossover + RSI 52/48 + volume 1.2× + expected move ≥ 0.5). Set **`jupiter_3`** to use the legacy BOS stack (`jupiter_3_sean_policy.mjs`).
 - **Exit:** `sean_lifecycle.mjs` — initial SL/TP from ATR×1.6 / ×4.0, breakeven +0.2%, monotonic trailing; OHLC bar hit test (both SL+TP → SL wins).
 - **Dedup:** one step per `market_event_id` (`analog_meta.sean_engine_last_bar_mid`).
 - **Tests:** `npm test` from this directory.

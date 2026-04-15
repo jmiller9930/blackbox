@@ -761,6 +761,7 @@ async function buildFullView() {
   const tradingMode = {
     actual_banner: ['1', 'true', 'yes'].includes((process.env.SEANV3_TUI_ACTUAL || '').trim().toLowerCase()),
     paper_trading: (process.env.PAPER_TRADING || '1').trim() !== '0',
+    sean_jupiter_policy: (process.env.SEAN_JUPITER_POLICY || 'jupiter_4').trim(),
   };
 
   const policy = loadPolicyPanel(rr);
@@ -792,9 +793,12 @@ function htmlPage(v) {
   const refresh = v.refresh_sec > 0 ? `<meta http-equiv="refresh" content="${esc(String(v.refresh_sec))}"/>` : '';
   const tm = v.trading_mode || {};
   const actual = tm.actual_banner;
+  const jp = tm.sean_jupiter_policy || 'jupiter_4';
   const tradingBlock = actual
-    ? `<p class="warn"><strong>ACTUAL</strong> — Live-capital intent. Deploy with PAPER_TRADING=0 when leaving paper; this banner does not change Docker.</p>`
-    : `<p><strong>PAPER</strong> — Simulated ledger (default). SEANV3_TUI_ACTUAL=1 for live-intent banner.</p>`;
+    ? `<p class="warn"><strong>ACTUAL</strong> — Live-capital intent. Deploy with PAPER_TRADING=0 when leaving paper; this banner does not change Docker.</p>
+      <p class="muted">Sean engine policy (Node): <code>${esc(jp)}</code> · <code>SEAN_JUPITER_POLICY</code> (jupiter_4 = JUPv4 gates, jupiter_3 = legacy BOS)</p>`
+    : `<p><strong>PAPER</strong> — Simulated ledger (default). SEANV3_TUI_ACTUAL=1 for live-intent banner.</p>
+      <p class="muted">Sean engine policy (Node): <code>${esc(jp)}</code> · <code>SEAN_JUPITER_POLICY</code></p>`;
 
   let policyBlock = '';
   if (v.policy?.error) {

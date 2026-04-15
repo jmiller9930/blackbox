@@ -1,5 +1,6 @@
 /**
- * SeanV3 paper engine: Jupiter_3 entry (jupiter_3_sean_policy.mjs) + ATR lifecycle exits (sean_lifecycle.mjs).
+ * SeanV3 paper engine: Jupiter entry policy (v4 default, v3 optional) + ATR lifecycle exits (sean_lifecycle.mjs).
+ * Policy: SEAN_JUPITER_POLICY=jupiter_4 (default) | jupiter_3 — aligns BlackBox JUPv4 vs legacy JUPv3.
  */
 
 import { getMeta, setMeta } from './paper_analog.mjs';
@@ -11,10 +12,16 @@ import {
 } from './sean_ledger.mjs';
 import {
   generateSignalFromOhlcV3,
-  resolveEntrySide,
-  MIN_BARS,
-  ENGINE_ID as POLICY_ENGINE_TAG,
+  resolveEntrySide as resolveEntrySideV3,
+  MIN_BARS as MIN_BARS_V3,
+  ENGINE_ID as ENGINE_ID_V3,
 } from './jupiter_3_sean_policy.mjs';
+import {
+  generateSignalFromOhlcV4,
+  resolveEntrySide as resolveEntrySideV4,
+  MIN_BARS as MIN_BARS_V4,
+  ENGINE_ID as ENGINE_ID_V4,
+} from './jupiter_4_sean_policy.mjs';
 import {
   initialSlTp,
   computePnlUsd,
@@ -25,7 +32,23 @@ import {
 } from './sean_lifecycle.mjs';
 import { assertCanOpenPosition } from './funding_guards.mjs';
 
-export const SEAN_ENGINE_ID = 'sean_jupiter3_engine_v1';
+const _policy = (process.env.SEAN_JUPITER_POLICY || 'jupiter_4').trim().toLowerCase();
+const useJupiter3 = _policy === 'jupiter_3' || _policy === 'jup_v3' || _policy === '3';
+
+const MIN_BARS = useJupiter3 ? MIN_BARS_V3 : MIN_BARS_V4;
+const POLICY_ENGINE_TAG = useJupiter3 ? ENGINE_ID_V3 : ENGINE_ID_V4;
+
+function generateEntrySignal(closes, highs, lows, vols) {
+  if (useJupiter3) return generateSignalFromOhlcV3(closes, highs, lows, vols);
+  return generateSignalFromOhlcV4(closes, highs, lows, vols);
+}
+
+function resolveEntrySide(shortSignal, longSignal) {
+  if (useJupiter3) return resolveEntrySideV3(shortSignal, longSignal);
+  return resolveEntrySideV4(shortSignal, longSignal);
+}
+
+export const SEAN_ENGINE_ID = useJupiter3 ? 'sean_jupiter3_engine_v1' : 'sean_jupiter4_engine_v1';
 
 function envSize() {
   const v = parseFloat(process.env.SEAN_ENGINE_SIZE_NOTIONAL_SOL || '1');
@@ -149,7 +172,7 @@ export function processSeanEngine(db, { marketEventId, kline }) {
     return;
   }
 
-  const sig = generateSignalFromOhlcV3(closes, highs, lows, vols);
+  const sig = generateEntrySignal(closes, highs, lows, vols);
   const side = resolveEntrySide(sig.shortSignal, sig.longSignal);
   if (!side) return;
 

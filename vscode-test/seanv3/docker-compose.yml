@@ -44,8 +44,10 @@ services:
       PAPER_TRADING: "1"
       # Simulated "account" for testing (USD label — no real custody). Frozen in DB on first run.
       SEAN_PAPER_STARTING_BALANCE_USD: "1000"
-      # Sean-native Jupiter_3 paper engine (no BlackBox). Set "0" to disable.
+      # Sean-native paper engine (no BlackBox). Set "0" to disable.
       SEAN_ENGINE_SLICE: "1"
+      # jupiter_4 (default) = same gates as BlackBox JUPv4; jupiter_3 = legacy BOS stack in Node.
+      SEAN_JUPITER_POLICY: ${SEAN_JUPITER_POLICY:-jupiter_4}
       # SEAN_ENGINE_SIZE_NOTIONAL_SOL: "1.0"
     volumes:
       - ./capture:/capture
@@ -70,6 +72,8 @@ services:
       SEAN_ALLOW_PAPER_STAKE_EDIT: ${SEAN_ALLOW_PAPER_STAKE_EDIT:-0}
       # Same Binance origin as seanv3 (host routes per VPN/README.md).
       BINANCE_API_BASE_URL: ${BINANCE_API_BASE_URL:-https://api.binance.com}
+      # Mirror seanv3 so the dashboard shows which Node policy the engine uses.
+      SEAN_JUPITER_POLICY: ${SEAN_JUPITER_POLICY:-jupiter_4}
       # Repo mount: policy registry + execution_ledger parity (read-only).
       BLACKBOX_REPO_ROOT: /repo
       BLACKBOX_EXECUTION_LEDGER_PATH: /repo/data/sqlite/execution_ledger.db
