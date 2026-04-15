@@ -1025,6 +1025,7 @@ function jwLivePollScript(refreshSec) {
     var tt=document.getElementById('jw-trades-tbody'); if(tt&&j.recent_trades){var rt=j.recent_trades;tt.innerHTML=rt.length?rt.map(function(t){return'<tr class="trade-row '+trCls(t.result_class)+'" data-trade-id="'+E(String(t.id))+'"><td>'+E(t.trade_id)+'</td><td>'+E(isoUtc(t.exit_time_utc))+'</td><td>'+E(isoUtc(t.entry_time_utc))+'</td><td>'+E(t.symbol)+'</td><td>'+E(t.side)+'</td><td>'+E(t.entry_price)+'</td><td>'+E(t.exit_price)+'</td><td>'+E(t.size_notional_sol)+'</td><td>'+E(t.gross_pnl_usd)+'</td><td>'+E(t.result_class)+'</td><td>'+E(t.exit_reason)+'</td><td>'+E(T(t.entry_market_event_id,40))+'</td><td>'+E(T(t.exit_market_event_id,40))+'</td></tr>';}).join(''):'<tr><td colspan="13" class="muted">No closed trades yet</td></tr>';jwWireTrades();}
     var dj=document.getElementById('jw-trade-jump'); if(dj&&j.all_trades_dropdown){var cur=dj.value, opts=j.all_trades_dropdown.length?('<option value="">All trades \\u2014 pick to jump + detail ('+j.all_trades_dropdown.length+')</option>'+j.all_trades_dropdown.map(function(d){return'<option value="'+E(String(d.id))+'">'+E(d.label)+'</option>';})).join(''):'<option value="">No closed trades</option>';dj.innerHTML=opts; if(cur)try{dj.value=cur;}catch(e){}}
     var clk=document.getElementById('jw-live-clock'); if(clk)clk.textContent='Last update '+new Date().toISOString().slice(11,19)+' UTC';
+    if(typeof window.jwPolicySyncVisual==='function')window.jwPolicySyncVisual();
   }
   function jwWireTrades(){var sel=document.getElementById('jw-trade-jump');var pre=document.getElementById('jw-trade-detail');document.querySelectorAll('#jw-trades-tbody tr.trade-row').forEach(function(tr){tr.onclick=function(){var id=tr.getAttribute('data-trade-id');if(!id)return;if(sel)sel.value=id;if(pre)fetch('/api/v1/sean/trade/'+id+'.json').then(function(r){return r.text();}).then(function(t){pre.textContent=t;}).catch(function(e){pre.textContent=String(e);});};});}
   window.jwLiveRefresh=function(){return fetch('/api/summary.json').then(function(r){return r.json();}).then(apply);};
@@ -1050,26 +1051,69 @@ function htmlPage(v) {
   const policySel = `
     <p><strong>Policy</strong> (runtime — next bar onward; does not close or force-open positions)</p>
     <p class="muted">Active: <code id="jw-ap-code">${esc(ap)}</code> · source: <code id="jw-ap-src">${esc(src)}</code> · meta key <code>${esc(JUPITER_ACTIVE_POLICY_KEY)}</code></p>
-    <p><label>JUPv4 / JUPv3 / JUP-MC-Test <select id="jw-jupiter-policy">
+    <div id="jw-policy-control" class="jw-policy-box jw-policy-idle">
+      <p class="op-row" style="margin-top:0"><label>JUPv4 / JUPv3 / JUP-MC-Test <select id="jw-jupiter-policy">
       <option value="jup_v4" ${ap === 'jup_v4' ? 'selected' : ''}>JUPv4</option>
       <option value="jup_v3" ${ap === 'jup_v3' ? 'selected' : ''}>JUPv3</option>
       <option value="jup_mc_test" ${ap === 'jup_mc_test' ? 'selected' : ''}>JUP-MC-Test</option>
     </select></label>
-    <button type="button" id="jw-apply-policy">Set active Jupiter policy</button></p>
+    <button type="button" id="jw-apply-policy" class="fund-btn">Set active Jupiter policy</button></p>
+      <p id="jw-policy-status" class="jw-policy-status small"></p>
+    </div>
     ${postOk ? `<p class="muted">Uses Bearer token in <strong>Operator token</strong> panel above.</p>
     <script>
     (function(){
+      function jwPolicySyncVisual(){
+        var box=document.getElementById('jw-policy-control');
+        var sel=document.getElementById('jw-jupiter-policy');
+        var code=document.getElementById('jw-ap-code');
+        var st=document.getElementById('jw-policy-status');
+        if(!box||!sel||!code)return;
+        var err=box.getAttribute('data-policy-error');
+        box.classList.remove('jw-policy-idle','jw-policy-active','jw-policy-error');
+        if(err){
+          box.classList.add('jw-policy-error');
+          if(st){ st.textContent=err; }
+          return;
+        }
+        var active=String(code.textContent||'').trim();
+        var selv=String(sel.value||'').trim();
+        if(active&&selv===active){
+          box.classList.add('jw-policy-active');
+          if(st){ st.textContent='Policy is set and active — runtime is using '+selv+' (SQLite jupiter_active_policy; engine applies on the next eligible cycle).'; }
+        }else{
+          box.classList.add('jw-policy-idle');
+          if(st){ st.textContent='White: selection not applied or differs from Active above — choose a policy and click Set active Jupiter policy.'; }
+        }
+      }
+      window.jwPolicySyncVisual=jwPolicySyncVisual;
       fetch('/api/v1/jupiter/policy').then(r=>r.json()).then(j=>{
-        const s=document.getElementById('jw-jupiter-policy');
-        if(s && j.active_policy) s.value=j.active_policy;
-      }).catch(function(){});
+        var s=document.getElementById('jw-jupiter-policy');
+        if(s&&j.active_policy)s.value=j.active_policy;
+        jwPolicySyncVisual();
+      }).catch(function(){ jwPolicySyncVisual(); });
+      document.getElementById('jw-jupiter-policy')?.addEventListener('change',function(){
+        document.getElementById('jw-policy-control')?.removeAttribute('data-policy-error');
+        jwPolicySyncVisual();
+      });
       document.getElementById('jw-apply-policy')?.addEventListener('click', async function(){
-        const pol=(document.getElementById('jw-jupiter-policy')||{}).value||'jup_v4';
-        const tok=(document.getElementById('jw-op-token')||{}).value||'';
-        const r=await fetch('/api/v1/jupiter/active-policy',{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+tok},body:JSON.stringify({policy:pol})});
-        const t=await r.text();
-        alert(r.ok? t : 'HTTP '+r.status+' '+t);
-        if(r.ok){ if(typeof window.jwLiveRefresh==='function') window.jwLiveRefresh(); else location.reload(); }
+        var box=document.getElementById('jw-policy-control');
+        var pol=(document.getElementById('jw-jupiter-policy')||{}).value||'jup_v4';
+        var tok=(document.getElementById('jw-op-token')||{}).value||'';
+        if(box)box.removeAttribute('data-policy-error');
+        jwPolicySyncVisual();
+        var r=await fetch('/api/v1/jupiter/active-policy',{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+tok},body:JSON.stringify({policy:pol})});
+        var t=await r.text();
+        if(!r.ok){
+          var msg='Could not set policy — HTTP '+r.status+'. '+t.slice(0,220);
+          if(box)box.setAttribute('data-policy-error',msg);
+          jwPolicySyncVisual();
+          alert(msg);
+          return;
+        }
+        if(typeof window.jwLiveRefresh==='function')await window.jwLiveRefresh();
+        else location.reload();
+        jwPolicySyncVisual();
       });
     })();
     </script>` : '<p class="muted">Set <code>JUPITER_OPERATOR_TOKEN</code> on jupiter-web to enable policy switching.</p>'}`;
@@ -1317,7 +1361,8 @@ function htmlPage(v) {
       : '';
   const bearerInputType = prefillBearer ? 'text' : 'password';
   const tokenPanel = postOk
-    ? `<section class="panel"><h2>Operator token</h2>
+    ? `<section class="panel"><h2 class="jw-panel-head"><button type="button" class="jw-panel-toggle" aria-expanded="true" aria-controls="jw-pan-token"><span class="jw-caret" aria-hidden="true">▼</span> Operator token</button></h2>
+      <div class="jw-panel-body" id="jw-pan-token">
       <p class="muted">Same secret as <code>JUPITER_OPERATOR_TOKEN</code> on jupiter-web (see <code>lab_operator_token.env</code> in this stack). ${
         readOnly
           ? '<strong>Read-only mode:</strong> use Bearer only for <strong>Set active Jupiter policy</strong> below — wallet/funding POSTs are disabled.'
@@ -1329,10 +1374,11 @@ function htmlPage(v) {
           ? '<p class="muted small">Prefilled while <code>JUPITER_WEB_PREFILL_BEARER=1</code>. Set to <code>0</code> in <code>lab_operator_token.env</code> to hide.</p>'
           : ''
       }
-    </section>`
-    : `<section class="panel"><h2>Operator token</h2>
+    </div></section>`
+    : `<section class="panel"><h2 class="jw-panel-head"><button type="button" class="jw-panel-toggle" aria-expanded="true" aria-controls="jw-pan-token"><span class="jw-caret" aria-hidden="true">▼</span> Operator token</button></h2>
+      <div class="jw-panel-body" id="jw-pan-token">
       <p class="warn">POST actions are off until you set <code>JUPITER_OPERATOR_TOKEN</code> on jupiter-web and restart the container.</p>
-    </section>`;
+    </div></section>`;
 
   return `<!DOCTYPE html>
 <html lang="en">
@@ -1343,10 +1389,33 @@ function htmlPage(v) {
   <title>Jupiter — TUI parity</title>
   <style>
     * { box-sizing: border-box; }
-    body { font-family: ui-monospace, Menlo, Consolas, monospace; background: #0c0c0c; color: #e6edf3; margin: 0; min-height: 100vh; display: flex; flex-direction: column; align-items: center; padding: 1rem; }
-    .wrap { width: 100%; max-width: 120ch; }
+    body { font-family: ui-monospace, Menlo, Consolas, monospace; background: #0c0c0c; color: #e6edf3; margin: 0; min-height: 100vh; display: flex; flex-direction: column; align-items: center; padding: 1rem; position: relative; isolation: isolate; }
+    body::before {
+      content: '';
+      position: fixed;
+      inset: 0;
+      z-index: 0;
+      background: url(/static/jupiter_front_door.png) center center / cover no-repeat;
+      opacity: 0.15;
+      pointer-events: none;
+    }
+    .wrap { width: 100%; max-width: 120ch; position: relative; z-index: 1; }
     .panel { border: 1px solid #3d3d3d; border-radius: 2px; padding: 0.75rem 1rem; margin-bottom: 0.75rem; background: #121212; }
-    .panel h2 { font-size: 0.7rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: #8b949e; margin: 0 0 0.5rem 0; border-bottom: 1px solid #30363d; padding-bottom: 0.35rem; }
+    .panel h2.jw-panel-head { font-size: 0.7rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: #8b949e; margin: 0 0 0.5rem 0; border-bottom: 1px solid #30363d; padding-bottom: 0.35rem; }
+    .jw-panel-toggle { all: unset; display: flex; align-items: center; gap: 0.4rem; cursor: pointer; width: 100%; box-sizing: border-box; font: inherit; font-size: 0.7rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: #8b949e; }
+    .jw-panel-toggle:hover { color: #c9d1d9; }
+    .jw-caret { display: inline-block; min-width: 1em; text-align: center; color: #58a6ff; font-size: 0.7rem; line-height: 1; }
+    .jw-policy-box { border-radius: 4px; padding: 0.5rem 0.65rem; margin: 0.35rem 0; border: 1px solid #30363d; transition: background 0.15s, border-color 0.15s; }
+    .jw-policy-idle { background: #f6f8fa; color: #0d1117; border-color: #d0d7de; }
+    .jw-policy-idle select, .jw-policy-idle .fund-btn { background: #ffffff; color: #0d1117; border-color: #d0d7de; }
+    .jw-policy-idle .jw-policy-status { color: #57606a; }
+    .jw-policy-active { background: rgba(88, 166, 255, 0.22); border-color: rgba(88, 166, 255, 0.55); color: #e6edf3; }
+    .jw-policy-active select, .jw-policy-active .fund-btn { background: rgba(200, 230, 255, 0.95); color: #0d1117; border-color: #58a6ff; }
+    .jw-policy-active .jw-policy-status { color: #c9d1d9; }
+    .jw-policy-error { background: rgba(248, 81, 73, 0.18); border-color: rgba(248, 81, 73, 0.55); }
+    .jw-policy-error select, .jw-policy-error .fund-btn { background: #ffeef0; color: #0d1117; border-color: #f85149; }
+    .jw-policy-error .jw-policy-status { color: #ffb1ab; }
+    .jw-policy-status { margin: 0.35rem 0 0 0; }
     h1 { font-size: 1.1rem; margin: 0 0 0.35rem 0; }
     code { background: #1e1e1e; padding: 0.1rem 0.35rem; border: 1px solid #333; }
     table { border-collapse: collapse; width: 100%; font-size: 0.72rem; }
@@ -1386,6 +1455,8 @@ function htmlPage(v) {
 <body>
   <div class="wrap">
     <section class="panel">
+      <h2 class="jw-panel-head"><button type="button" class="jw-panel-toggle" aria-expanded="true" aria-controls="jw-pan-overview"><span class="jw-caret" aria-hidden="true">▼</span> Dashboard overview</button></h2>
+      <div class="jw-panel-body" id="jw-pan-overview">
       <h1>Jupiter — operator dashboard</h1>
       ${
         w?.pubkey_base58
@@ -1413,21 +1484,23 @@ function htmlPage(v) {
         });
       })();
       </script>
+    </div>
     </section>
     ${tokenPanel}
-    ${v.error ? `<section class="panel"><p class="warn">${esc(v.error)}</p></section>` : ''}
-    <section class="panel"><h2>Wallet &amp; funding</h2>${walletFundingBlock}</section>
-    <section class="panel"><h2>Trading mode</h2>${tradingBlock}</section>
-    <section class="panel"><h2>Live market &amp; gates</h2>${operatorBlock}</section>
-    <section class="panel"><h2>Wallet status</h2>${walletBlock}</section>
-    <section class="panel"><h2>SeanV3 paper ledger (testing)</h2>${ledgerBlock}</section>
-    <section class="panel"><h2>Parity (Jupiter vs BlackBox baseline)</h2>
+    ${v.error ? `<section class="panel"><h2 class="jw-panel-head"><button type="button" class="jw-panel-toggle" aria-expanded="true" aria-controls="jw-pan-err"><span class="jw-caret" aria-hidden="true">▼</span> Error</button></h2><div class="jw-panel-body" id="jw-pan-err"><p class="warn">${esc(v.error)}</p></div></section>` : ''}
+    <section class="panel"><h2 class="jw-panel-head"><button type="button" class="jw-panel-toggle" aria-expanded="true" aria-controls="jw-pan-wallet-fund"><span class="jw-caret" aria-hidden="true">▼</span> Wallet &amp; funding</button></h2><div class="jw-panel-body" id="jw-pan-wallet-fund">${walletFundingBlock}</div></section>
+    <section class="panel"><h2 class="jw-panel-head"><button type="button" class="jw-panel-toggle" aria-expanded="true" aria-controls="jw-pan-trading"><span class="jw-caret" aria-hidden="true">▼</span> Trading mode</button></h2><div class="jw-panel-body" id="jw-pan-trading">${tradingBlock}</div></section>
+    <section class="panel"><h2 class="jw-panel-head"><button type="button" class="jw-panel-toggle" aria-expanded="true" aria-controls="jw-pan-live"><span class="jw-caret" aria-hidden="true">▼</span> Live market &amp; gates</button></h2><div class="jw-panel-body" id="jw-pan-live">${operatorBlock}</div></section>
+    <section class="panel"><h2 class="jw-panel-head"><button type="button" class="jw-panel-toggle" aria-expanded="true" aria-controls="jw-pan-wallet-st"><span class="jw-caret" aria-hidden="true">▼</span> Wallet status</button></h2><div class="jw-panel-body" id="jw-pan-wallet-st">${walletBlock}</div></section>
+    <section class="panel"><h2 class="jw-panel-head"><button type="button" class="jw-panel-toggle" aria-expanded="true" aria-controls="jw-pan-ledger"><span class="jw-caret" aria-hidden="true">▼</span> SeanV3 paper ledger (testing)</button></h2><div class="jw-panel-body" id="jw-pan-ledger">${ledgerBlock}</div></section>
+    <section class="panel"><h2 class="jw-panel-head"><button type="button" class="jw-panel-toggle" aria-expanded="true" aria-controls="jw-pan-parity"><span class="jw-caret" aria-hidden="true">▼</span> Parity (Jupiter vs BlackBox baseline)</button></h2>
+      <div class="jw-panel-body" id="jw-pan-parity">
       <p class="muted">Jupiter DB: ${esc(v.parity?.sean_db || '')} · baseline ledger: ${esc(v.parity?.ledger_db || '')}</p>
       ${v.parity?.parity_align_note ? `<p class="muted small">${esc(v.parity.parity_align_note)}</p>` : ''}
       <div class="scroll"><table><thead><tr><th>market_event_id</th><th>Jupiter</th><th>BlackBox</th><th>Parity</th></tr></thead><tbody id="jw-parity-tbody">${parityRows}</tbody></table></div>
-    </section>
-    <section class="panel"><h2>Position &amp; last kline (Sean DB)</h2><div id="jw-pos-kl-block">${posBlock}${klBlock}</div></section>
-    <section class="panel"><h2>Trade window (Sean paper trades)</h2>
+    </div></section>
+    <section class="panel"><h2 class="jw-panel-head"><button type="button" class="jw-panel-toggle" aria-expanded="true" aria-controls="jw-pan-pos"><span class="jw-caret" aria-hidden="true">▼</span> Position &amp; last kline (Sean DB)</button></h2><div class="jw-panel-body" id="jw-pan-pos"><div id="jw-pos-kl-block">${posBlock}${klBlock}</div></div></section>
+    <section class="panel"><h2 class="jw-panel-head"><button type="button" class="jw-panel-toggle" aria-expanded="true" aria-controls="jw-pan-trades"><span class="jw-caret" aria-hidden="true">▼</span> Trade window (Sean paper trades)</button></h2><div class="jw-panel-body" id="jw-pan-trades">
       <p class="op-row">
         <label>Jump to trade <select id="jw-trade-jump">${tradeJumpOpts}</select></label>
         <a class="csv-btn" href="/api/v1/sean/trades.csv">Download all trades (CSV)</a>
@@ -1461,10 +1534,26 @@ function htmlPage(v) {
         });
       })();
       </script>
-    </section>
-    <section class="panel"><h2>Preflight strip</h2><div id="jw-preflight-banner">${banner}</div><div class="scroll"><table><thead><tr><th>Check</th><th>Status</th><th>Detail</th></tr></thead><tbody id="jw-preflight-tbody">${chkRows}</tbody></table></div></section>
-    <section class="panel"><h2>Trade / oracle window (Pyth SOL/USD)</h2><div id="jw-oracle-block">${oracleBlock}</div></section>
+    </div></section>
+    <section class="panel"><h2 class="jw-panel-head"><button type="button" class="jw-panel-toggle" aria-expanded="true" aria-controls="jw-pan-preflight"><span class="jw-caret" aria-hidden="true">▼</span> Preflight strip</button></h2><div class="jw-panel-body" id="jw-pan-preflight"><div id="jw-preflight-banner">${banner}</div><div class="scroll"><table><thead><tr><th>Check</th><th>Status</th><th>Detail</th></tr></thead><tbody id="jw-preflight-tbody">${chkRows}</tbody></table></div></div></section>
+    <section class="panel"><h2 class="jw-panel-head"><button type="button" class="jw-panel-toggle" aria-expanded="true" aria-controls="jw-pan-oracle"><span class="jw-caret" aria-hidden="true">▼</span> Trade / oracle window (Pyth SOL/USD)</button></h2><div class="jw-panel-body" id="jw-pan-oracle"><div id="jw-oracle-block">${oracleBlock}</div></div></section>
   </div>
+  <script>
+  (function(){
+    document.querySelectorAll('.jw-panel-toggle').forEach(function(btn){
+      btn.addEventListener('click', function(){
+        var id = btn.getAttribute('aria-controls');
+        var body = id ? document.getElementById(id) : null;
+        if (!body) return;
+        var exp = btn.getAttribute('aria-expanded') === 'true';
+        btn.setAttribute('aria-expanded', exp ? 'false' : 'true');
+        body.hidden = exp;
+        var care = btn.querySelector('.jw-caret');
+        if (care) care.textContent = exp ? '\\u25b6' : '\\u25bc';
+      });
+    });
+  })();
+  </script>
   ${useLivePoll ? jwLivePollScript(v.refresh_sec) : ''}
 </body>
 </html>`;
