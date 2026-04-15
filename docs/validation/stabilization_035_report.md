@@ -2,7 +2,7 @@
 
 **Directive:** DV-ARCH-STABILIZATION-035  
 **Report path:** `docs/validation/stabilization_035_report.md`  
-**Last updated:** 2026-04-15 (execution attempt + evidence refresh)
+**Last updated:** 2026-04-15 (040 primary-host evidence + 035 history)
 
 ---
 
@@ -135,3 +135,61 @@ git log --oneline --grep=STABILIZATION-035
 |---------|--------|
 | 1 | Initial template; pytest-only evidence. |
 | 2 | Real smoke attempt: `baseline-mc` failure documented; cycle table row 1 filled; stop rule applied. |
+| 3 | **DV-ARCH-JUPITER-MC-UNBLOCK-040** evidence (primary host); MC unblock **not met** — zero closed trades in native ledger at verification time. |
+
+---
+
+## 9. DV-ARCH-JUPITER-MC-UNBLOCK-040 — Jupiter trade generation for Monte Carlo unblock
+
+**Directive:** DV-ARCH-JUPITER-MC-UNBLOCK-040  
+**Purpose:** Use Jupiter policy `jup_mc_test` (fallback `jup_mc2`) to produce real closed trades so Monte Carlo and stabilization cycle 1 can proceed past the `baseline-mc` empty-PnL block documented in §2.3.
+
+### 9.1 Response header (040)
+
+| Field | Value |
+|-------|--------|
+| **RE:** | DV-ARCH-JUPITER-MC-UNBLOCK-040 |
+| **STATUS** | **not met** |
+| **COMMIT** | `8254280` |
+
+**Why not met:** The Jupiter runtime on **primary host** (`clawbot`) was confirmed on **`jup_mc_test`**, but **`sean_paper_trades` contained zero closed rows** at verification time. Without a non-empty closed-trade PnL series from the native Sean/Jupiter ledger, steps 5–7 of the directive (export → Monte Carlo → resume stabilization cycle 1) could not be executed. No trades were fabricated or injected.
+
+### 9.2 Evidence (clawbot — 2026-04-15)
+
+| Step | Command / check | Result |
+|------|-------------------|--------|
+| Active policy (API) | `curl -sS -H "Authorization: Bearer …" http://127.0.0.1:707/api/v1/jupiter/policy` | `"active_policy": "jup_mc_test"` |
+| Active policy (DB) | `SELECT k,v FROM analog_meta WHERE k='jupiter_active_policy'` on `~/blackbox/vscode-test/seanv3/capture/sean_parity.db` | `jupiter_active_policy` = **`jup_mc_test`** |
+| Set policy | Not required — already `jup_mc_test` (idempotent POST would match) | — |
+| Closed trades | `SELECT COUNT(*) FROM sean_paper_trades` | **0** |
+| Open position row | `sean_paper_position` | Single row, **`side='flat'`** (no open directional position) |
+| Containers | `docker ps` | `seanv3`, `jupiter-web` **Up** |
+
+**Fallback (`jup_mc2`):** Not switched in this verification window. With **zero** closes under `jup_mc_test`, switching policy would not by itself satisfy “enough closed trades” until the engine actually opens and closes positions; document if/when the operator switches after a **reasonable observation window** still yields insufficient closes.
+
+### 9.3 Required validation checklist (040 §4)
+
+| Requirement | Met? |
+|---------------|------|
+| Jupiter running under intended policy | **Yes** — `jup_mc_test` (API + `analog_meta`) |
+| Trades opening | **Not observed** — position remains flat |
+| Trades closing | **No** — `sean_paper_trades` empty |
+| Non-empty PnL series | **No** |
+| Monte Carlo runs successfully on that series | **No** — blocked (empty series) |
+| Stabilization cycle 1 resumed from blocked point | **No** — same blocker as §2.3 until closed trades exist |
+
+### 9.4 Artifacts requested (040 §6)
+
+| Artifact | Status |
+|----------|--------|
+| Active policy confirmation | **§9.2** |
+| Number of closed trades generated | **0** |
+| Sample trade evidence | **N/A** (no rows) |
+| Monte Carlo completed | **No** |
+| Updated stabilization report | **This section** |
+
+### 9.5 Next failure / next step
+
+**Next failure:** Engine did not produce **any** closed trades in `sean_paper_trades` while policy was `jup_mc_test` (bars/signals/guards — **not diagnosed** in this operational pass; directive excluded lifecycle and policy loosening).
+
+**Next step:** Continue observation on **clawbot** until `sean_paper_trades` is non-empty; export **`GET /api/v1/sean/trades.csv`** (or JSON per trade API), map rows to `renaissance_v4_closed_trades_v1` if feeding Kitchen `robustness_runner compare`, run **`run_monte_carlo`** on the real PnL list, then rerun **stabilization cycle 1** step 3 (`sra_foundation run` / `compare-manifest`) after **`baseline-mc`** or an agreed baseline artifact path that uses the same non-empty real series. If **`jup_mc_test`** still yields insufficient closes after a reasonable window, switch to **`jup_mc2`** per §7 and repeat.
