@@ -107,7 +107,22 @@ v1 **does not** require full autonomous SRA behavior. v1 **does** require:
 
 ---
 
-## 9. Related
+## 9. Foundation — hypothesis + experiment loop (Phase 1, DV-ARCH-SRA-FOUNDATION-030)
+
+Structured inputs and durable traceability **without** ML or feedback loops:
+
+| Artifact | Role |
+|----------|------|
+| [`renaissance_v4/state/hypotheses.jsonl`](../../renaissance_v4/state/hypotheses.jsonl) | Append-only hypotheses (`hypothesis_id`, `description`, `parameters`, `created_at`, `created_by`). Manual JSON is OK; see [`hypotheses.example.jsonl`](../../renaissance_v4/state/hypotheses.example.jsonl). |
+| [`renaissance_v4/state/hypothesis_results.jsonl`](../../renaissance_v4/state/hypothesis_results.jsonl) | One line per run: `hypothesis_id`, `experiment_id`, `strategy_id`, `classification`, `key_metrics`, `timestamp`, plus `manifest_path_repo` when applicable. |
+
+**Manifest generation:** `renaissance_v4.research.sra_foundation.generate_manifest_from_hypothesis` merges `parameters` onto the locked [`baseline_v1_recipe.json`](../../renaissance_v4/configs/manifests/baseline_v1_recipe.json) template and validates against [`catalog_v1.json`](../../renaissance_v4/registry/catalog_v1.json) (deterministic for identical hypothesis records).
+
+**Execution:** `python -m renaissance_v4.research.sra_foundation run <hypothesis_id>` writes `configs/manifests/sra_*_*.json` and invokes the existing **`compare-manifest`** pipeline (full Kitchen flow). Does **not** modify ingestion (024-C) or evaluators.
+
+---
+
+## 10. Related
 
 - Kitchen frame: [`quant_research_kitchen_v1.md`](quant_research_kitchen_v1.md)
 - Modularity: [`quant_research_kitchen_modularity_v1.md`](quant_research_kitchen_modularity_v1.md)
