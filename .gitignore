@@ -42,6 +42,9 @@ ops/hermes_pm.env
 trading_core/keypair.json
 trading_core/keypair.base58
 
+# vscode-test: local override for Jupiter dashboard Basic Auth (defaults are in lab_dashboard_login.defaults.env)
+vscode-test/lab_dashboard_login.env
+
 # Local secrets (never commit)
 .env
 .env.bak

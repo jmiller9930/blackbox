@@ -65,6 +65,8 @@ services:
     env_file:
       # Committed lab token + optional Bearer prefill (see lab_operator_token.env).
       - lab_operator_token.env
+      # Browser Basic Auth (admin / default password); see ../lab_dashboard_login.defaults.env
+      - ../lab_dashboard_login.defaults.env
     environment:
       SQLITE_PATH: /capture/sean_parity.db
       JUPITER_WEB_PORT: "707"

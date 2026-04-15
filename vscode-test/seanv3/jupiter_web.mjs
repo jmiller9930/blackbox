@@ -1,12 +1,14 @@
 #!/usr/bin/env node
 /**
- * Jupiter dashboard + JSON API. GET surfaces are unauthenticated (restrict via network).
+ * Jupiter dashboard + JSON API. GET surfaces are unauthenticated unless JUPITER_WEB_LOGIN_USER
+ * and JUPITER_WEB_LOGIN_PASSWORD are set (HTTP Basic Auth for the whole site except GET /health).
  * JUPITER_WEB_READ_ONLY=1 blocks POST /api/operator/*; sole write: POST /api/v1/jupiter/active-policy (Bearer).
  *
  * Mount repo read-only at BLACKBOX_REPO_ROOT for policy registry + execution_ledger parity.
  * Default port 707. Lab: http://clawbot.a51.corp:707/
  */
 import { execSync } from 'child_process';
+import { createHash, timingSafeEqual } from 'node:crypto';
 import { existsSync, readFileSync } from 'fs';
 import http from 'http';
 import { DatabaseSync } from 'node:sqlite';
@@ -884,6 +886,12 @@ function buildOperatorPayload(seanPath, markUsd, base) {
 }
 
 function frontDoorHtml() {
+  const basicOn =
+    Boolean((process.env.JUPITER_WEB_LOGIN_USER || '').trim()) &&
+    Boolean((process.env.JUPITER_WEB_LOGIN_PASSWORD || '').trim());
+  const loginNote = basicOn
+    ? `<p class="note">Browser login is <strong>HTTP Basic Auth</strong> (user/password from <code>JUPITER_WEB_LOGIN_*</code>; see <code>vscode-test/lab_dashboard_login.defaults.env</code>). Operator <strong>Bearer</strong> for API POSTs is separate.`
+    : `<p class="note">No browser login configured — restrict with VPN/firewall. Operator Bearer token required for policy POST when read-only.</p>`;
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -908,7 +916,7 @@ function frontDoorHtml() {
     <h1>Jupiter — operator lab</h1>
     <p>SeanV3 paper engine, parity vs BlackBox baseline. Dashboard is read-only for wallet/funding when <code>JUPITER_WEB_READ_ONLY=1</code>; sole write is <strong>set active Jupiter policy</strong> — <code>POST /api/v1/jupiter/active-policy</code> (Bearer).</p>
     <a class="btn" href="/dashboard">Open dashboard</a>
-    <p class="note">No login UI — restrict with VPN/firewall. Operator Bearer token required for policy POST only when read-only.</p>
+    ${loginNote}
   </div>
 </body>
 </html>`;
@@ -1818,9 +1826,67 @@ const portRaw = process.env.JUPITER_WEB_PORT || process.env.SEANV3_WEB_PORT || '
 const port = Math.max(1, Math.min(65535, parseInt(portRaw, 10) || 707));
 const bind = (process.env.JUPITER_WEB_BIND || process.env.SEANV3_WEB_BIND || '0.0.0.0').trim() || '0.0.0.0';
 
+function sha256utf8(s) {
+  return createHash('sha256').update(String(s), 'utf8').digest();
+}
+
+/**
+ * Optional HTTP Basic Auth when JUPITER_WEB_LOGIN_USER and JUPITER_WEB_LOGIN_PASSWORD are both non-empty.
+ * Exempt: GET /health (probes). Compare via SHA-256 to reduce timing leaks on length.
+ */
+function jupiterWebBasicAuthOk(req, res, url) {
+  const u = (process.env.JUPITER_WEB_LOGIN_USER || '').trim();
+  const p = (process.env.JUPITER_WEB_LOGIN_PASSWORD || '').trim();
+  if (!u || !p) return true;
+  if (url.pathname === '/health' && req.method === 'GET') return true;
+  const hdr = req.headers.authorization || '';
+  if (!hdr.startsWith('Basic ')) {
+    res.writeHead(401, {
+      'Content-Type': 'text/plain; charset=utf-8',
+      'WWW-Authenticate': 'Basic realm="Jupiter lab"',
+      'Cache-Control': 'no-store',
+    });
+    res.end('Unauthorized');
+    return false;
+  }
+  let decoded = '';
+  try {
+    decoded = Buffer.from(hdr.slice(6).trim(), 'base64').toString('utf8');
+  } catch {
+    decoded = '';
+  }
+  const colon = decoded.indexOf(':');
+  const gotUser = colon >= 0 ? decoded.slice(0, colon) : decoded;
+  const gotPass = colon >= 0 ? decoded.slice(colon + 1) : '';
+  const hu = sha256utf8(gotUser);
+  const hp = sha256utf8(gotPass);
+  const eu = sha256utf8(u);
+  const ep = sha256utf8(p);
+  if (hu.length !== eu.length || hp.length !== ep.length) {
+    res.writeHead(401, {
+      'Content-Type': 'text/plain; charset=utf-8',
+      'WWW-Authenticate': 'Basic realm="Jupiter lab"',
+      'Cache-Control': 'no-store',
+    });
+    res.end('Unauthorized');
+    return false;
+  }
+  if (!timingSafeEqual(hu, eu) || !timingSafeEqual(hp, ep)) {
+    res.writeHead(401, {
+      'Content-Type': 'text/plain; charset=utf-8',
+      'WWW-Authenticate': 'Basic realm="Jupiter lab"',
+      'Cache-Control': 'no-store',
+    });
+    res.end('Unauthorized');
+    return false;
+  }
+  return true;
+}
+
 const server = http.createServer((req, res) => {
   void (async () => {
     const url = new URL(req.url || '/', `http://${req.headers.host || 'localhost'}`);
+    if (!jupiterWebBasicAuthOk(req, res, url)) return;
 
     if (url.pathname === '/api/v1/jupiter/policy' && req.method === 'GET') {
       handleJupiterPolicyGet(res);
