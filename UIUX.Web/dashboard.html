@@ -762,6 +762,9 @@
     .tc-jup-gates-table-wrap {
       margin: 0.35rem 0 0;
       overflow-x: auto;
+      isolation: isolate;
+      contain: layout;
+      min-width: 0;
     }
     .tc-jup-gates-caption {
       font-size: 0.6rem;
@@ -779,8 +782,10 @@
     }
     .tc-jup-gates-table {
       width: 100%;
+      min-width: 12rem;
       border-collapse: collapse;
       font-size: 0.6rem;
+      table-layout: auto;
     }
     .tc-jup-gates-table th,
     .tc-jup-gates-table td {
@@ -867,6 +872,19 @@
       -webkit-text-stroke: 2.5px #0f172a;
       paint-order: stroke fill;
     }
+    .tc-tr-baseline .tc-tile-verdict.tc-verdict-qualifies-no-open {
+      padding: 0;
+      margin-bottom: 0.25rem;
+      background: transparent;
+      border: none;
+      border-bottom: none !important;
+      font-size: 1.05rem;
+      color: #0d9488;
+      -webkit-text-stroke: 0;
+      text-transform: none;
+      letter-spacing: 0.02em;
+      font-weight: 800;
+    }
     /* Baseline lifecycle — not “no trade”; distinct from amber NO TRADE. */
     .tc-tr-baseline .tc-tile-verdict.tc-verdict-open {
       color: #059669;
@@ -945,6 +963,16 @@
     .tc-tile-correlate .tc-id {
       font-weight: 600;
       word-break: break-all;
+    }
+    .tc-mei-clock-hint {
+      display: block;
+      margin-top: 0.2rem;
+      font-size: 0.52rem;
+      font-weight: 600;
+      color: #64748b;
+      font-family: inherit;
+      line-height: 1.35;
+      max-width: 28rem;
     }
     /* Jupiter 5m narrative — bullet + lab + value (baseline + Anna lanes; policy KV strip was removed from page header). */
     .tc-tile-narr-wrap {
@@ -1693,6 +1721,13 @@
       '<span class="tc-correlate-sep">·</span>' +
       '<span class="lab">MEI</span>' +
       tcShortId(mei, 28) +
+      '<span class="tc-mei-clock-hint" title="' +
+      escAttr(
+        'MEI uses candle open UTC (canonical id key). Column header “bar close” is open+5m — same bar, two clocks.'
+      ) +
+      '">' +
+      esc('MEI = candle open · header = bar close (same bar)') +
+      '</span>' +
       '</div>'
     );
   }
@@ -1987,6 +2022,30 @@
     return '<div class="tc-jup-gates-table-wrap">' + cap + h + '</div>';
   }
 
+  /**
+   * When the gate table is shown, drop narrative lines that repeat the same PASS/FAIL / POLICY summary
+   * (single source: indicators above, structured gates below).
+   */
+  function jupiterNarrativeStripLinesDuplicatedByGateTable(raw) {
+    if (raw == null || String(raw).trim() === '') return '';
+    var lines = String(raw).replace(/\r\n/g, '\n').split('\n');
+    var out = [];
+    var i;
+    for (i = 0; i < lines.length; i++) {
+      var ln = lines[i];
+      var t = String(ln).trim();
+      if (!t) {
+        out.push(ln);
+        continue;
+      }
+      if (/^POLICY\b/i.test(t)) continue;
+      if (/^NOTE\s+Long\s*=/i.test(t)) continue;
+      if (/^NOTE\s+Short\s*=/i.test(t)) continue;
+      out.push(ln);
+    }
+    return out.join('\n').replace(/\n{3,}/g, '\n\n').trim();
+  }
+
   function jupiterNarrativeLinesHtml(raw, titleAttr, baselineLane) {
     if (raw == null || String(raw).trim() === '') return '';
     var text = String(raw).replace(/\r\n/g, '\n');
@@ -2232,11 +2291,25 @@
         '</div>';
     }
     // While a baseline position is open, only entry context matters — no duplicate "this bar" policy block.
-    // JUPv3/JUPv4: show **both** Sean numeric narrative **and** the PASS/FAIL gate table when supplied.
+    // JUPv3/JUPv4: indicator narrative + one gate table footer (strip POLICY / NOTE Long|Short when table present).
     var posOpenBaseline = baselineLane && baselineLifecyclePositionOpen(bl);
+    var thisBarGatesEarly =
+      c && c.jupiter_v4_gates && typeof c.jupiter_v4_gates === 'object'
+        ? c.jupiter_v4_gates
+        : c && c.jupiter_v3_gates && typeof c.jupiter_v3_gates === 'object'
+          ? c.jupiter_v3_gates
+          : null;
+    var narrForCell =
+      narr && !posOpenBaseline && thisBarGatesEarly
+        ? jupiterNarrativeStripLinesDuplicatedByGateTable(narr)
+        : narr;
     var narrEl =
-      narr && !posOpenBaseline
-        ? jupiterNarrativeLinesHtml(narr, 'Jupiter / Sean policy (this bar)', baselineLane)
+      narrForCell && !posOpenBaseline
+        ? jupiterNarrativeLinesHtml(
+            narrForCell,
+            'Jupiter / Sean policy (this bar)',
+            baselineLane
+          )
         : '';
     var prevTile =
       baselineLane && c && c.jupiter_tile_preview && typeof c.jupiter_tile_preview === 'object'
@@ -2261,12 +2334,7 @@
     }
     // One gate table per tile: if this cell already shows entry policy (gates or narrative), never add this-bar gates.
     var colGates = '';
-    var thisBarGates =
-      c && c.jupiter_v4_gates && typeof c.jupiter_v4_gates === 'object'
-        ? c.jupiter_v4_gates
-        : c && c.jupiter_v3_gates && typeof c.jupiter_v3_gates === 'object'
-          ? c.jupiter_v3_gates
-          : null;
+    var thisBarGates = thisBarGatesEarly;
     if (!posOpenBaseline && !entryHas && baselineLane && c && thisBarGates) {
       colGates = jupiterV3GatesTableHtml(thisBarGates, 'This bar — gates');
     } else if (
@@ -2362,6 +2430,15 @@
     ) {
       ocDisp = baselineLane ? 'closed flat' : 'FLAT';
     }
+    var qualifiesNoOpenVerdict =
+      baselineLane &&
+      c &&
+      String(ocDisp).trim().toLowerCase() === 'no trade' &&
+      c.operator_would_trade === true &&
+      c.operator_did_trade === false;
+    if (qualifiesNoOpenVerdict) {
+      ocDisp = 'QUALIFIES — NO OPEN';
+    }
     var ocLower = String(ocDisp).trim().toLowerCase();
     if (ocLower === 'holding') {
       ocLower = 'held';
@@ -2380,8 +2457,9 @@
       else if (csub === 'flat') wl = 'wl-FLAT';
       else if (csub.indexOf('eval') >= 0) wl = 'wl-EVAL';
       else wl = 'wl-FLAT';
-    } else if (ocLower === 'open') wl = 'wl-OPEN';
+    }     else if (ocLower === 'open') wl = 'wl-OPEN';
     else if (ocLower === 'held') wl = 'wl-HELD';
+    else if (qualifiesNoOpenVerdict) wl = 'wl-FLAT';
     var econCell = paired || (c.economic_authority === 'full');
     var wrapCls =
       'tc-mini' +
@@ -2460,7 +2538,7 @@
         esc(tpout) +
         '</span>';
     }
-    var noTradeVerdict = baselineLane && ocLower === 'no trade';
+    var noTradeVerdict = baselineLane && (ocLower === 'no trade' || qualifiesNoOpenVerdict);
     var openVerdict = baselineLane && ocLower === 'open';
     var heldVerdict = baselineLane && ocLower === 'held';
     var closedLifecycle = baselineLane && ocLower.indexOf('closed ') === 0;
@@ -2470,11 +2548,14 @@
         ? 'Baseline lifecycle: position open — not exited on this bar yet.'
         : closedLifecycle
           ? 'Baseline lifecycle: position closed on this bar (realized PnL).'
-          : 'Closed trade outcome for this 5m bar';
+          : qualifiesNoOpenVerdict
+            ? 'Evaluator arms a side on this bar; no lifecycle open on this bar — same evaluation as gate table below.'
+            : 'Closed trade outcome for this 5m bar';
     var verdictInner =
       '<div class="tc-tile-verdict ' +
       wl +
       (noTradeVerdict ? ' tc-verdict-no-trade-amber' : '') +
+      (qualifiesNoOpenVerdict ? ' tc-verdict-qualifies-no-open' : '') +
       (openVerdict ? ' tc-verdict-open' : '') +
       (heldVerdict ? ' tc-verdict-held' : '') +
       (closedLifecycle ? ' tc-verdict-closed' : '') +
