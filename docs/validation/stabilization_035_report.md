@@ -150,7 +150,7 @@ git log --oneline --grep=STABILIZATION-035
 |-------|--------|
 | **RE:** | DV-ARCH-JUPITER-MC-UNBLOCK-040 |
 | **STATUS** | **not met** |
-| **COMMIT** | `8254280` |
+| **COMMIT** | `a416658` |
 
 **Why not met:** The Jupiter runtime on **primary host** (`clawbot`) was confirmed on **`jup_mc_test`**, but **`sean_paper_trades` contained zero closed rows** at verification time. Without a non-empty closed-trade PnL series from the native Sean/Jupiter ledger, steps 5–7 of the directive (export → Monte Carlo → resume stabilization cycle 1) could not be executed. No trades were fabricated or injected.
 
