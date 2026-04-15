@@ -98,6 +98,106 @@ def test_generate_variants_from_hypothesis_appends_and_validates(
         sf.generate_manifest_from_hypothesis(h)
 
 
+def test_rank_hypothesis_variants_ordering(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    from renaissance_v4.research import sra_foundation as sf
+
+    results = tmp_path / "hypothesis_results.jsonl"
+    lines = [
+        {
+            "hypothesis_id": "v_degrade",
+            "parent_hypothesis_id": "parent_x",
+            "classification": "degrade",
+            "key_metrics": {"deterministic": {"expectancy": 0.5, "max_drawdown": -0.1, "total_trades": 10}},
+        },
+        {
+            "hypothesis_id": "v_improve_low",
+            "parent_hypothesis_id": "parent_x",
+            "classification": "improve",
+            "key_metrics": {"deterministic": {"expectancy": 0.1, "max_drawdown": -0.2, "total_trades": 5}},
+        },
+        {
+            "hypothesis_id": "v_improve_high",
+            "parent_hypothesis_id": "parent_x",
+            "classification": "improve",
+            "key_metrics": {"deterministic": {"expectancy": 0.3, "max_drawdown": -0.15, "total_trades": 8}},
+        },
+        {
+            "hypothesis_id": "v_inconclusive",
+            "parent_hypothesis_id": "parent_x",
+            "classification": "inconclusive",
+            "key_metrics": {"deterministic": {"expectancy": 0.9, "max_drawdown": -0.01, "total_trades": 99}},
+        },
+    ]
+    results.write_text(
+        "\n".join(json.dumps(x, sort_keys=True) for x in lines) + "\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(sf, "hypothesis_results_jsonl_path", lambda: results)
+
+    r = sf.rank_hypothesis_variants("parent_x")
+    assert r["best_variant"] == "v_improve_high"
+    assert r["ordered_variants"][0] == "v_improve_high"
+    assert r["ordered_variants"][1] == "v_improve_low"
+    assert "v_inconclusive" in r["ordered_variants"]
+    assert r["ordered_variants"][-1] == "v_degrade"
+
+
+def test_run_rank_cli_persists_rankings(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    from renaissance_v4.research import sra_foundation as sf
+
+    res = tmp_path / "hypothesis_results.jsonl"
+    res.write_text(
+        json.dumps(
+            {
+                "hypothesis_id": "v1",
+                "parent_hypothesis_id": "par",
+                "classification": "improve",
+                "key_metrics": {"deterministic": {"expectancy": 0.2}},
+            },
+            sort_keys=True,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    rank_path = tmp_path / "hypothesis_rankings.json"
+    monkeypatch.setattr(sf, "hypothesis_results_jsonl_path", lambda: res)
+    monkeypatch.setattr(sf, "hypothesis_rankings_json_path", lambda: rank_path)
+
+    out = sf.run_rank_cli("par")
+    assert out["best_variant"] == "v1"
+    data = json.loads(rank_path.read_text(encoding="utf-8"))
+    assert data["schema"] == "renaissance_v4_hypothesis_rankings_v1"
+    assert len(data["rankings"]) == 1
+    assert data["rankings"][0]["parent_hypothesis_id"] == "par"
+
+
+def test_rank_deterministic_tiebreak_hypothesis_id(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    from renaissance_v4.research import sra_foundation as sf
+
+    results = tmp_path / "hypothesis_results.jsonl"
+    lines = [
+        {
+            "hypothesis_id": "b",
+            "parent_hypothesis_id": "p",
+            "classification": "improve",
+            "key_metrics": {"deterministic": {"expectancy": 1.0, "max_drawdown": -0.1, "total_trades": 1}},
+        },
+        {
+            "hypothesis_id": "a",
+            "parent_hypothesis_id": "p",
+            "classification": "improve",
+            "key_metrics": {"deterministic": {"expectancy": 1.0, "max_drawdown": -0.1, "total_trades": 1}},
+        },
+    ]
+    results.write_text(
+        "\n".join(json.dumps(x, sort_keys=True) for x in lines) + "\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(sf, "hypothesis_results_jsonl_path", lambda: results)
+    r = sf.rank_hypothesis_variants("p")
+    assert r["ordered_variants"] == ["a", "b"]
+
+
 def test_lineage_fields_on_results_shape() -> None:
     from renaissance_v4.research.sra_foundation import _lineage_fields_from_hypothesis
 

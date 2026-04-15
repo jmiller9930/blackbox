@@ -122,6 +122,8 @@ Structured inputs and durable traceability **without** ML or feedback loops:
 
 **Controlled variants (DV-ARCH-SRA-VARIANTS-031):** `generate_variants_from_hypothesis(hypothesis_id, n_variants)` appends derived rows to `hypotheses.jsonl` with `parent_hypothesis_id`, `variant_type` (`signal_toggle` = drop one resolved signal, `mc_config_offset` = single Monte Carlo seed bump), and `variant_index`. One bounded change per variant; deterministic for the same base + N. CLI: `… sra_foundation variants <id> <N>`. Result lines in `hypothesis_results.jsonl` copy parent/variant fields for traceability.
 
+**Results aggregation (DV-ARCH-SRA-RESULTS-032):** Read `hypothesis_results.jsonl` (latest row per `hypothesis_id`). `rank_hypothesis_variants(parent_hypothesis_id)` orders by classification (`improve` → `inconclusive` → `degrade`), then deterministic metrics (`expectancy`, `max_drawdown`, `total_trades`, then `hypothesis_id`). Writes/merges [`hypothesis_rankings.json`](../../renaissance_v4/state/hypothesis_rankings.json). CLI: `python -m renaissance_v4.research.sra_foundation rank <parent_hypothesis_id>`.
+
 ---
 
 ## 10. Related

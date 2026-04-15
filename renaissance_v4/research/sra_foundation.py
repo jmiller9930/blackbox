@@ -1,5 +1,5 @@
 """
-DV-ARCH-SRA-FOUNDATION-030 / DV-ARCH-SRA-VARIANTS-031 — SRA hypotheses, controlled variants, Kitchen runs.
+DV-ARCH-SRA-FOUNDATION-030 / 031 / 032 — SRA hypotheses, variants, Kitchen runs, results ranking.
 
 Does not implement learning loops or change ingestion / evaluation logic. Uses existing
 ``compare-manifest`` (robustness_runner) for the full Kitchen flow.
@@ -37,6 +37,10 @@ def hypotheses_jsonl_path() -> Path:
 
 def hypothesis_results_jsonl_path() -> Path:
     return _rv4_root() / "state" / "hypothesis_results.jsonl"
+
+
+def hypothesis_rankings_json_path() -> Path:
+    return _rv4_root() / "state" / "hypothesis_rankings.json"
 
 
 def baseline_manifest_template_path() -> Path:
@@ -395,6 +399,159 @@ def _lineage_fields_from_hypothesis(hyp: dict[str, Any]) -> dict[str, Any]:
     return out
 
 
+# --- DV-ARCH-SRA-RESULTS-032 — aggregate results, rank variants ---
+
+
+def load_hypothesis_results_latest_by_id() -> dict[str, dict[str, Any]]:
+    """Last JSON line per hypothesis_id wins (traceability to latest run)."""
+    p = hypothesis_results_jsonl_path()
+    out: dict[str, dict[str, Any]] = {}
+    if not p.is_file():
+        return out
+    for row in _iter_jsonl(p):
+        hid = str(row.get("hypothesis_id") or "").strip()
+        if hid:
+            out[hid] = row
+    return out
+
+
+def _classification_priority(cls: str | None) -> int:
+    c = str(cls or "inconclusive").strip().lower()
+    if c == "improve":
+        return 0
+    if c == "inconclusive":
+        return 1
+    if c == "degrade":
+        return 2
+    return 1
+
+
+def _rank_sort_key(row: dict[str, Any]) -> tuple[Any, ...]:
+    """
+    Deterministic ordering: class (improve < inconclusive < degrade), then higher expectancy,
+    then higher max_drawdown (less negative loss), then more trades, then hypothesis_id.
+    """
+    cls = str(row.get("classification") or "inconclusive").strip().lower()
+    prio = _classification_priority(cls)
+    km = row.get("key_metrics") if isinstance(row.get("key_metrics"), dict) else {}
+    det = km.get("deterministic") if isinstance(km.get("deterministic"), dict) else {}
+    try:
+        exp = float(det.get("expectancy")) if det.get("expectancy") is not None else float("-inf")
+    except (TypeError, ValueError):
+        exp = float("-inf")
+    try:
+        mdd = float(det.get("max_drawdown")) if det.get("max_drawdown") is not None else float("-inf")
+    except (TypeError, ValueError):
+        mdd = float("-inf")
+    try:
+        tt = int(det.get("total_trades")) if det.get("total_trades") is not None else -1
+    except (TypeError, ValueError):
+        tt = -1
+    hid = str(row.get("hypothesis_id") or "")
+    # Ascending sort: lower prio first; then higher exp (negate); then higher mdd; then higher tt; then hid
+    return (prio, -exp, -mdd, -tt, hid)
+
+
+def results_for_parent(
+    parent_hypothesis_id: str,
+    *,
+    latest_by_id: dict[str, dict[str, Any]] | None = None,
+) -> list[dict[str, Any]]:
+    """Rows whose parent matches, or base hypothesis row (hypothesis_id == parent)."""
+    pid = str(parent_hypothesis_id).strip()
+    pool = latest_by_id if latest_by_id is not None else load_hypothesis_results_latest_by_id()
+    out: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    for row in pool.values():
+        ph = str(row.get("parent_hypothesis_id") or "").strip()
+        hid = str(row.get("hypothesis_id") or "").strip()
+        if ph == pid and hid:
+            if hid not in seen:
+                seen.add(hid)
+                out.append(row)
+        elif hid == pid:
+            if hid not in seen:
+                seen.add(hid)
+                out.append(row)
+    return out
+
+
+def rank_hypothesis_variants(parent_hypothesis_id: str) -> dict[str, Any]:
+    """
+    DV-ARCH-SRA-RESULTS-032 — Rank variants for one parent (improve > inconclusive > degrade;
+    within class: deterministic expectancy / drawdown / trades / id).
+    """
+    rows = results_for_parent(parent_hypothesis_id)
+    sorted_rows = sorted(rows, key=_rank_sort_key)
+    ordered_ids = [str(r.get("hypothesis_id") or "").strip() for r in sorted_rows if r.get("hypothesis_id")]
+    best = ordered_ids[0] if ordered_ids else None
+    return {
+        "parent_hypothesis_id": str(parent_hypothesis_id).strip(),
+        "best_variant": best,
+        "ordered_variants": ordered_ids,
+    }
+
+
+def load_hypothesis_rankings_file() -> dict[str, Any]:
+    p = hypothesis_rankings_json_path()
+    if not p.is_file():
+        return {
+            "schema": "renaissance_v4_hypothesis_rankings_v1",
+            "generated_at": None,
+            "rankings": [],
+        }
+    try:
+        raw = json.loads(p.read_text(encoding="utf-8"))
+        if isinstance(raw, dict) and isinstance(raw.get("rankings"), list):
+            return raw
+    except (json.JSONDecodeError, OSError):
+        pass
+    return {
+        "schema": "renaissance_v4_hypothesis_rankings_v1",
+        "generated_at": None,
+        "rankings": [],
+    }
+
+
+def upsert_parent_ranking(entry: dict[str, Any]) -> dict[str, Any]:
+    """Merge one parent block into hypothesis_rankings.json (deterministic ordering of file by parent id)."""
+    data = load_hypothesis_rankings_file()
+    rankings: list[dict[str, Any]] = list(data.get("rankings") or [])
+    pid = str(entry.get("parent_hypothesis_id") or "").strip()
+    replaced = False
+    for i, r in enumerate(rankings):
+        if str(r.get("parent_hypothesis_id") or "").strip() == pid:
+            rankings[i] = entry
+            replaced = True
+            break
+    if not replaced:
+        rankings.append(entry)
+    rankings.sort(key=lambda x: str(x.get("parent_hypothesis_id") or ""))
+    data["rankings"] = rankings
+    data["generated_at"] = datetime.now(timezone.utc).isoformat()
+    p = hypothesis_rankings_json_path()
+    p.parent.mkdir(parents=True, exist_ok=True)
+    p.write_text(json.dumps(data, indent=2, sort_keys=True), encoding="utf-8")
+    return data
+
+
+def run_rank_cli(parent_hypothesis_id: str) -> dict[str, Any]:
+    """Compute ranking, persist hypothesis_rankings.json, return entry."""
+    entry = rank_hypothesis_variants(parent_hypothesis_id)
+    upsert_parent_ranking(entry)
+    return entry
+
+
+def _cmd_rank(args: argparse.Namespace) -> int:
+    try:
+        out = run_rank_cli(args.parent_hypothesis_id)
+    except Exception as e:  # noqa: BLE001
+        print(json.dumps({"ok": False, "error": str(e)}), file=sys.stderr)
+        return 1
+    print(json.dumps({"ok": True, "ranking": out}, indent=2))
+    return 0
+
+
 def _cmd_add(args: argparse.Namespace) -> int:
     raw = Path(args.file).read_text(encoding="utf-8")
     record = json.loads(raw)
@@ -461,6 +618,13 @@ def build_parser() -> argparse.ArgumentParser:
     v.add_argument("hypothesis_id", type=str)
     v.add_argument("n_variants", type=int)
     v.set_defaults(func=_cmd_variants)
+
+    rk = sub.add_parser(
+        "rank",
+        help="DV-ARCH-SRA-RESULTS-032 — rank variants for a parent, write hypothesis_rankings.json",
+    )
+    rk.add_argument("parent_hypothesis_id", type=str)
+    rk.set_defaults(func=_cmd_rank)
 
     return p
 
