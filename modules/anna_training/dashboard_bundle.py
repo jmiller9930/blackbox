@@ -447,9 +447,10 @@ def _recompute_jupiter_narrative_for_market_event_id(
     prefetch_bars: list[dict[str, Any]] | None = None,
 ) -> tuple[str, dict[str, Any] | None, dict[str, Any] | None]:
     """
-    When ``policy_evaluations`` has no row (or empty narrative), recompute from stored bars so the
-    operator always sees **why this bar** for the active Jupiter slot: **``market_bars_5m``** (Jupiter_2)
-    or **``binance_strategy_bars_5m``** (Jupiter_3 / Jupiter_4).
+    Recompute Sean Jupiter narrative + gates from **stored bars** (same evaluators as the bridge).
+
+    **Not operator truth:** use only for ``preview_*`` / ``audit_*`` surfaces. Primary tiles must use
+    persisted ``policy_evaluations`` (see ``_event_axis_jupiter_tile_narratives``).
 
     Returns ``(narrative, jupiter_gates, policy_features)``. Gates are set for Jupiter_3 (``jupiter_v3_gates``)
     or Jupiter_4 (``jupiter_v4_gates``) when present; else ``None``.
@@ -729,23 +730,26 @@ def _baseline_entry_snapshot_for_active_slot(
     training_state: dict[str, Any] | None,
     prefetch_bars: list[dict[str, Any]] | None = None,
     trade_id: str | None = None,
-) -> tuple[str, dict[str, Any] | None]:
+) -> tuple[str, dict[str, Any] | None, dict[str, Any] | None]:
     """
     **Why we opened** narrative and optional **Jupiter_3 gate table** for the entry ``market_event_id``.
 
     **Authority:** Uses persisted ``signal_features_snapshot`` to decide Jupiter_2 vs Jupiter_3 — **not**
     the operator's current baseline slot. Avoids showing V3 recomputation for trades opened under V2.
+
+    **Third tuple element:** optional ``preview`` dict (recompute) — ``Preview — not persisted`` only;
+    never merged into the primary entry narrative or gates returned in positions 0–1.
     """
     from modules.anna_training.sean_jupiter_baseline_signal import format_baseline_jupiter_tile_narrative
 
     em = str(entry_mid or "").strip()
     if not em:
-        return "", None
+        return "", None, None
     persisted = _entry_snapshot_from_persisted_open_position(conn, em)
     if persisted is not None:
         pnar, pgates = persisted
         if pnar or pgates is not None:
-            return pnar, pgates
+            return pnar, pgates, None
     sf = _signal_features_snapshot_for_entry(conn, em, trade_id)
     auth = entry_policy_authority_from_signal_features(sf)
     st = training_state if isinstance(training_state, dict) else None
@@ -771,7 +775,7 @@ def _baseline_entry_snapshot_for_active_slot(
             side=sd,
             policy_blockers=pbl,
         )
-        return (s or "").strip(), None
+        return (s or "").strip(), None, None
 
     if auth == "jupiter_3_sean":
         pol_v3 = fetch_policy_evaluation_for_market_event(
@@ -785,7 +789,8 @@ def _baseline_entry_snapshot_for_active_slot(
             s = _format_jupiter_tile_narrative_from_policy_row(pol_v3)
             g = _jupiter_v3_gates_from_policy_row(pol_v3)
             if (s or "").strip() or g:
-                return (s or "").strip(), g
+                return (s or "").strip(), g, None
+        preview: dict[str, Any] | None = None
         if policy_slot == BASELINE_POLICY_SLOT_JUP_V3 and market_db_path and market_db_path.is_file():
             s2, g2, _sf2 = _recompute_jupiter_narrative_for_market_event_id(
                 em,
@@ -795,8 +800,14 @@ def _baseline_entry_snapshot_for_active_slot(
                 prefetch_bars=prefetch_bars,
             )
             if (s2 or "").strip() or g2:
-                return (s2 or "").strip(), g2
-        return "", None
+                preview = _operator_policy_preview_not_persisted_v1(
+                    reason="entry_bar_missing_jupiter_v3_policy_row",
+                    narrative=(s2 or "").strip(),
+                    gates=g2,
+                    persisted_signal_mode=SIGNAL_MODE_JUPITER_3,
+                    active_signal_mode=SIGNAL_MODE_JUPITER_3,
+                )
+        return "", None, preview
 
     if auth == "jupiter_4_sean":
         pol_v4 = fetch_policy_evaluation_for_market_event(
@@ -810,7 +821,8 @@ def _baseline_entry_snapshot_for_active_slot(
             s = _format_jupiter_tile_narrative_from_policy_row(pol_v4)
             g = _jupiter_v4_gates_from_policy_row(pol_v4)
             if (s or "").strip() or g:
-                return (s or "").strip(), g
+                return (s or "").strip(), g, None
+        preview4: dict[str, Any] | None = None
         if policy_slot == BASELINE_POLICY_SLOT_JUP_V4 and market_db_path and market_db_path.is_file():
             s2, g2, _sf2 = _recompute_jupiter_narrative_for_market_event_id(
                 em,
@@ -820,8 +832,14 @@ def _baseline_entry_snapshot_for_active_slot(
                 prefetch_bars=prefetch_bars,
             )
             if (s2 or "").strip() or g2:
-                return (s2 or "").strip(), g2
-        return "", None
+                preview4 = _operator_policy_preview_not_persisted_v1(
+                    reason="entry_bar_missing_jupiter_v4_policy_row",
+                    narrative=(s2 or "").strip(),
+                    gates=g2,
+                    persisted_signal_mode=SIGNAL_MODE_JUPITER_4,
+                    active_signal_mode=SIGNAL_MODE_JUPITER_4,
+                )
+        return "", None, preview4
 
     # unknown authority: prefer explicit policy rows (v3 then v2), then slot-consistent recompute
     pol_v3 = fetch_policy_evaluation_for_market_event(
@@ -833,7 +851,7 @@ def _baseline_entry_snapshot_for_active_slot(
     )
     if pol_v3 and _jupiter_v3_gates_from_policy_row(pol_v3):
         s = _format_jupiter_tile_narrative_from_policy_row(pol_v3)
-        return (s or "").strip(), _jupiter_v3_gates_from_policy_row(pol_v3)
+        return (s or "").strip(), _jupiter_v3_gates_from_policy_row(pol_v3), None
     pol_v4 = fetch_policy_evaluation_for_market_event(
         conn,
         em,
@@ -845,7 +863,7 @@ def _baseline_entry_snapshot_for_active_slot(
         s4 = _format_jupiter_tile_narrative_from_policy_row(pol_v4)
         g4 = _jupiter_v4_gates_from_policy_row(pol_v4)
         if (s4 or "").strip() or g4:
-            return (s4 or "").strip(), g4
+            return (s4 or "").strip(), g4, None
     pol_v2 = fetch_policy_evaluation_for_market_event(
         conn,
         em,
@@ -856,14 +874,15 @@ def _baseline_entry_snapshot_for_active_slot(
     if pol_v2:
         s = _format_jupiter_tile_narrative_from_policy_row(pol_v2)
         if (s or "").strip():
-            return s.strip(), None
+            return s.strip(), None, None
     pol_e = fetch_baseline_policy_evaluation_for_market_event(conn, em)
     s = _format_jupiter_tile_narrative_from_policy_row(pol_e)
     if (s or "").strip():
         g_e = _jupiter_v3_gates_from_policy_row(pol_e)
         if g_e is None:
             g_e = _jupiter_v4_gates_from_policy_row(pol_e)
-        return s.strip(), g_e
+        return s.strip(), g_e, None
+    preview_u: dict[str, Any] | None = None
     if market_db_path and market_db_path.is_file():
         s2, g2, _sf2 = _recompute_jupiter_narrative_for_market_event_id(
             em,
@@ -872,8 +891,15 @@ def _baseline_entry_snapshot_for_active_slot(
             training_state=st,
             prefetch_bars=prefetch_bars,
         )
-        return (s2 or "").strip(), g2
-    return "", None
+        if (s2 or "").strip() or g2:
+            preview_u = _operator_policy_preview_not_persisted_v1(
+                reason="entry_snapshot_unknown_authority_no_policy_row",
+                narrative=(s2 or "").strip(),
+                gates=g2,
+                persisted_signal_mode=None,
+                active_signal_mode=signal_mode_for_baseline_policy_slot(policy_slot),
+            )
+    return "", None, preview_u
 
 
 def _baseline_entry_narrative_for_active_slot(
@@ -882,7 +908,9 @@ def _baseline_entry_narrative_for_active_slot(
     market_db_path: Path | None,
     training_state: dict[str, Any] | None,
 ) -> str:
-    nar, _gates = _baseline_entry_snapshot_for_active_slot(conn, entry_mid, market_db_path, training_state)
+    nar, _gates, _prev = _baseline_entry_snapshot_for_active_slot(
+        conn, entry_mid, market_db_path, training_state
+    )
     return nar
 
 
@@ -1215,10 +1243,11 @@ def build_jupiter_policy_snapshot(
                 )
                 entry_lbl = baseline_entry_policy_label_for_authority(entry_auth)
                 audit_gates: dict[str, Any] | None = None
+                entry_policy_preview: dict[str, Any] | None = None
                 # JUPv3/v4: entry gates/narrative are immutable at open — never replace with recompute.
                 # Optional bar recompute is jupiter_*_gates_recomputed_audit only (labeled not entry).
                 if emid and not use_binance:
-                    rn, rg = _baseline_entry_snapshot_for_active_slot(
+                    rn, rg, rprev = _baseline_entry_snapshot_for_active_slot(
                         conn,
                         emid,
                         mpath,
@@ -1230,6 +1259,8 @@ def build_jupiter_policy_snapshot(
                         entry_nar = (str(rn) or "").strip()
                     if entry_gates is None and isinstance(rg, dict):
                         entry_gates = dict(rg)
+                    if isinstance(rprev, dict) and rprev.get("schema"):
+                        entry_policy_preview = rprev
                 elif use_v3 and emid and mpath.is_file():
                     try:
                         _audit_nar, audit_gates, _audit_sf = _recompute_jupiter_narrative_for_market_event_id(
@@ -1273,6 +1304,8 @@ def build_jupiter_policy_snapshot(
                     "entry_policy_authority": entry_auth,
                     "entry_policy_label": entry_lbl,
                 }
+                if entry_policy_preview:
+                    blifecycle["entry_jupiter_policy_preview"] = entry_policy_preview
                 if use_v3 and isinstance(audit_gates, dict) and len(audit_gates) > 0:
                     blifecycle["jupiter_v3_gates_recomputed_audit"] = dict(audit_gates)
                     blifecycle["jupiter_v3_gates_recomputed_audit_scope_note"] = (
@@ -1469,6 +1502,63 @@ def _notional_usd(entry_price: float | None, size: float | None) -> float | None
     return round(ep * sz, 4)
 
 
+def _jupiter_tile_operator_primary_from_persisted_row(
+    row: dict[str, Any],
+) -> tuple[str, dict[str, Any] | None, bool]:
+    """
+    One persisted ``policy_evaluations`` row → narrative, optional gate table, Binance volume dot.
+    Single authority for the operator tile story (no bar recompute).
+    """
+    from modules.anna_training.sean_jupiter_baseline_signal import format_baseline_jupiter_tile_narrative
+
+    f = dict(row["features"]) if isinstance(row.get("features"), dict) else {}
+    pb = f.get("policy_blockers")
+    pbl = [str(x) for x in pb] if isinstance(pb, list) else None
+    text = format_baseline_jupiter_tile_narrative(
+        signal_mode=str(row.get("signal_mode") or ""),
+        features=f,
+        reason_code=str(row.get("reason_code") or ""),
+        trade=bool(row.get("trade")),
+        side=str(row.get("side") or "flat"),
+        policy_blockers=pbl,
+    )
+    wrap = {"signal_mode": row.get("signal_mode"), "features": f}
+    jg = _jupiter_v3_gates_from_policy_row(wrap)
+    if not jg:
+        jg = _jupiter_v4_gates_from_policy_row(wrap)
+    binance_ok = _binance_kline_volume_ok_from_features(f)
+    return (text, jg, binance_ok)
+
+
+def _operator_policy_preview_not_persisted_v1(
+    *,
+    reason: str,
+    narrative: str,
+    gates: dict[str, Any] | None,
+    persisted_signal_mode: str | None = None,
+    active_signal_mode: str | None = None,
+) -> dict[str, Any]:
+    """Quarantined recompute / what-if payload — never mixed into primary headline or gates."""
+    b: dict[str, Any] = {
+        "schema": "operator_policy_preview_not_persisted_v1",
+        "label": "Preview — not persisted",
+        "provenance": "recompute",
+        "reason": reason,
+        "narrative": (narrative or "").strip(),
+    }
+    if gates and isinstance(gates, dict) and len(gates) > 0:
+        sch = str(gates.get("schema") or "").lower()
+        if "v4" in sch or "jupiter_v4" in sch:
+            b["jupiter_v4_gates"] = gates
+        else:
+            b["jupiter_v3_gates"] = gates
+    if persisted_signal_mode:
+        b["persisted_signal_mode"] = persisted_signal_mode
+    if active_signal_mode:
+        b["active_operator_signal_mode"] = active_signal_mode
+    return b
+
+
 def _pair_vs_baseline_for_cells(
     baseline_cell: dict[str, Any],
     anna_cell: dict[str, Any],
@@ -1520,21 +1610,22 @@ def _event_axis_jupiter_tile_narratives(
     conn: Any,
     event_axis: list[str],
     market_db_path: Path | None,
-) -> tuple[dict[str, str], dict[str, dict[str, Any]], dict[str, bool]]:
+) -> tuple[dict[str, str], dict[str, dict[str, Any]], dict[str, bool], dict[str, dict[str, Any]]]:
     """
     Per-``market_event_id`` multi-line Jupiter / Sean policy tile (operator requirement).
 
-    **Persisted row** is used when it matches the operator slot: ``jup_v2`` → any row;
-    ``jup_v3`` → only rows with ``signal_mode`` Jupiter_3. If the slot is **JUPv3** but the
-    ledger row was written under **v2**, we **recompute** from stored bars (``binance_strategy_bars_5m``
-    for Jupiter_3, ``market_bars_5m`` for Jupiter_2) so the strip does not show Supertrend text under a JUPv3 chip.
+    **Single authority (DB → ledger → dashboard):** primary narrative, gates, and the Binance volume
+    dot are derived from **one** ``policy_evaluations`` row per bar — the same row selection as
+    ``fetch_baseline_policy_evaluation_for_market_event`` (active slot first, then fallbacks). We do
+    **not** substitute bar recomputation for persisted policy when the operator slot differs from the
+    row's ``signal_mode`` (that caused split-brain: NO TRADE headline vs trade=true narrative).
 
-    One **prefetch** of recent bars is shared across all columns to avoid N× SQLite scans per
-    bundle (major latency win).
+    Optional **preview** (recompute) is returned separately in the fourth dict, labeled
+    ``Preview — not persisted``, for audit only — never merged into the primary tile story.
 
-    Returns ``(narratives_by_mid, jupiter_v3_gates_by_mid, binance_kline_volume_ok_by_mid)`` —
-    ``binance_*`` matches the **same** recomputed/persisted features as the narrative (avoids red dot
-    vs “Using real Binance volume” mismatch).
+    One **prefetch** of recent bars is shared across all columns for preview recompute only.
+
+    Returns ``(narratives_by_mid, gates_by_mid, binance_kline_volume_ok_by_mid, preview_by_mid)``.
     """
     from modules.anna_training.execution_ledger import (
         SIGNAL_MODE_JUPITER_2,
@@ -1546,8 +1637,9 @@ def _event_axis_jupiter_tile_narratives(
     out: dict[str, str] = {}
     gates_out: dict[str, dict[str, Any]] = {}
     binance_out: dict[str, bool] = {}
+    preview_out: dict[str, dict[str, Any]] = {}
     if not event_axis:
-        return out, gates_out, binance_out
+        return out, gates_out, binance_out, preview_out
 
     mpath = market_db_path
     _ensure_runtime_for_market_imports()
@@ -1578,41 +1670,37 @@ def _event_axis_jupiter_tile_narratives(
         if not mid_s:
             continue
         row = fetch_baseline_policy_evaluation_for_market_event(conn, mid_s)
-        use_persisted = False
         if row:
-            sm_row = str(row.get("signal_mode") or "").strip()
-            if sm_active == SIGNAL_MODE_JUPITER_2:
-                use_persisted = True
-            elif sm_row == sm_active:
-                use_persisted = True
-        if use_persisted and row:
-            f = dict(row["features"]) if isinstance(row.get("features"), dict) else {}
-            pb = f.get("policy_blockers")
-            pbl = [str(x) for x in pb] if isinstance(pb, list) else None
-            out[mid_s] = format_baseline_jupiter_tile_narrative(
-                signal_mode=str(row.get("signal_mode") or ""),
-                features=f,
-                reason_code=str(row.get("reason_code") or ""),
-                trade=bool(row.get("trade")),
-                side=str(row.get("side") or "flat"),
-                policy_blockers=pbl,
-            )
-            jg = _jupiter_v3_gates_from_policy_row(
-                {
-                    "signal_mode": row.get("signal_mode"),
-                    "features": f,
-                }
-            )
-            if not jg:
-                jg = _jupiter_v4_gates_from_policy_row(
-                    {
-                        "signal_mode": row.get("signal_mode"),
-                        "features": f,
-                    }
-                )
+            text, jg, binance_ok = _jupiter_tile_operator_primary_from_persisted_row(row)
+            out[mid_s] = text
             if jg:
                 gates_out[mid_s] = jg
-            binance_out[mid_s] = _binance_kline_volume_ok_from_features(f)
+            binance_out[mid_s] = binance_ok
+            sm_row = str(row.get("signal_mode") or "").strip()
+            slot_mismatch = bool(
+                sm_row
+                and sm_active != SIGNAL_MODE_JUPITER_2
+                and sm_row != sm_active
+            )
+            if slot_mismatch and mpath and mpath.is_file():
+                try:
+                    nar_p, g_p, _sf_p = _recompute_jupiter_narrative_for_market_event_id(
+                        mid_s,
+                        mpath,
+                        policy_slot=policy_slot,
+                        training_state=st,
+                        prefetch_bars=prefetch,
+                    )
+                    if (nar_p or "").strip() or (g_p and len(g_p) > 0):
+                        preview_out[mid_s] = _operator_policy_preview_not_persisted_v1(
+                            reason="operator_slot_differs_from_persisted_signal_mode",
+                            narrative=(nar_p or "").strip(),
+                            gates=g_p,
+                            persisted_signal_mode=sm_row,
+                            active_signal_mode=sm_active,
+                        )
+                except Exception:
+                    pass
             continue
 
         if not mpath or not mpath.is_file():
@@ -1625,38 +1713,43 @@ def _event_axis_jupiter_tile_narratives(
             )
             binance_out[mid_s] = False
             continue
+        out[mid_s] = format_baseline_jupiter_tile_narrative(
+            signal_mode=sm_active,
+            features={},
+            reason_code="policy_row_missing",
+            trade=False,
+            side="flat",
+        )
+        binance_out[mid_s] = False
         try:
-            nar, g, sf_re = _recompute_jupiter_narrative_for_market_event_id(
+            nar, g, _sf_re = _recompute_jupiter_narrative_for_market_event_id(
                 mid_s,
                 mpath,
                 policy_slot=policy_slot,
                 training_state=st,
                 prefetch_bars=prefetch,
             )
-            if (nar or "").strip():
-                out[mid_s] = nar.strip()
-                if g:
-                    gates_out[mid_s] = g
-                binance_out[mid_s] = _binance_kline_volume_ok_from_features(
-                    sf_re if isinstance(sf_re, dict) else None
+            if (nar or "").strip() or (g and len(g) > 0):
+                preview_out[mid_s] = _operator_policy_preview_not_persisted_v1(
+                    reason="no_persisted_policy_row",
+                    narrative=(nar or "").strip(),
+                    gates=g,
+                    persisted_signal_mode=None,
+                    active_signal_mode=sm_active,
                 )
-            else:
-                out[mid_s] = format_baseline_jupiter_tile_narrative(
-                    signal_mode=sm_active,
-                    features={},
-                    reason_code="bar_not_in_window_or_short_history",
-                    trade=False,
-                    side="flat",
-                )
-                binance_out[mid_s] = False
         except Exception as e:
-            out[mid_s] = (
-                "Jupiter tile (event column): build failed — "
-                + str(e)[:400]
-                + "\n(Check BLACKBOX_MARKET_DATA_PATH, execution_ledger policy_evaluations, API restart after deploy.)"
+            preview_out[mid_s] = _operator_policy_preview_not_persisted_v1(
+                reason="preview_recompute_failed",
+                narrative=(
+                    "Preview build failed — "
+                    + str(e)[:320]
+                    + "\n(Check BLACKBOX_MARKET_DATA_PATH, API restart after deploy.)"
+                ),
+                gates=None,
+                persisted_signal_mode=None,
+                active_signal_mode=sm_active,
             )
-            binance_out[mid_s] = False
-    return out, gates_out, binance_out
+    return out, gates_out, binance_out, preview_out
 
 
 def _compact_cell(
@@ -3540,8 +3633,9 @@ def build_baseline_trades_report(
         tile_narr: dict[str, str] = {}
         tile_v3_gates: dict[str, dict[str, Any]] = {}
         tile_binance_axis: dict[str, bool] = {}
+        tile_preview: dict[str, dict[str, Any]] = {}
         if mids_for_tiles:
-            tile_narr, tile_v3_gates, tile_binance_axis = _event_axis_jupiter_tile_narratives(
+            tile_narr, tile_v3_gates, tile_binance_axis, tile_preview = _event_axis_jupiter_tile_narratives(
                 conn, mids_for_tiles, mpath
             )
         for i, r in enumerate(rows_out):
@@ -3550,6 +3644,14 @@ def build_baseline_trades_report(
             r["jupiter_tile_narrative"] = tile_text
             if mk and tile_v3_gates.get(mk):
                 r["jupiter_v3_gates"] = tile_v3_gates[mk]
+            if mk and tile_preview.get(mk):
+                r["jupiter_tile_preview"] = tile_preview[mk]
+            r["operator_truth_provenance_v1"] = {
+                "schema": "operator_truth_provenance_v1",
+                "jupiter_tile_narrative": "persisted_policy_evaluations",
+                "jupiter_v3_gates": "persisted_policy_evaluations",
+                "jupiter_tile_preview": ("recompute" if (mk and tile_preview.get(mk)) else None),
+            }
             ledger_row_i, cell_i, _pos_open_i = meta_pairs[i]
             pol_i = fetch_baseline_policy_evaluation_for_market_event(
                 conn, mk, prefer_active_slot=False
@@ -3959,7 +4061,7 @@ def _enrich_baseline_jupiter_context_for_cell(
             if persisted:
                 nar, entry_gates = persisted
             if (not nar) or (entry_gates is None):
-                n2, g2 = _baseline_entry_snapshot_for_active_slot(
+                n2, g2, p2 = _baseline_entry_snapshot_for_active_slot(
                     conn,
                     entry_mid,
                     market_db_path,
@@ -3971,6 +4073,8 @@ def _enrich_baseline_jupiter_context_for_cell(
                     nar = n2
                 if entry_gates is None and g2:
                     entry_gates = g2
+                if isinstance(p2, dict) and p2.get("schema"):
+                    cell["baseline_entry_jupiter_policy_preview"] = p2
             sf_entry = _signal_features_snapshot_for_entry(conn, entry_mid, tid)
             auth = entry_policy_authority_from_signal_features(sf_entry)
             cell["baseline_entry_policy_authority"] = auth
@@ -4712,7 +4816,7 @@ def build_trade_chain_payload(
             event_axis_time_utc_iso = [inj_t]
             event_axis_candle_close_utc_iso = [_five_m_close_after_open_iso(inj_t)]
             event_axis_source = "open_baseline_injected"
-        tile_narr, tile_v3_gates_axis, tile_binance_axis = _event_axis_jupiter_tile_narratives(
+        tile_narr, tile_v3_gates_axis, tile_binance_axis, tile_preview_axis = _event_axis_jupiter_tile_narratives(
             conn, event_axis, mpath
         )
         baseline_ledger = _recent_baseline_trades_for_dashboard_strip(
@@ -4739,6 +4843,8 @@ def build_trade_chain_payload(
             rs["jupiter_tile_narrative"] = tile_narr.get(mid_rs, "") if mid_rs else ""
             if mid_rs and tile_v3_gates_axis.get(mid_rs):
                 rs["jupiter_v3_gates"] = tile_v3_gates_axis[mid_rs]
+            if mid_rs and tile_preview_axis.get(mid_rs):
+                rs["jupiter_tile_preview"] = tile_preview_axis[mid_rs]
             pol_rs = (
                 fetch_baseline_policy_evaluation_for_market_event(
                     conn, mid_rs, prefer_active_slot=False
@@ -4758,6 +4864,8 @@ def build_trade_chain_payload(
             br["jupiter_tile_narrative"] = tile_narr.get(mid_k, "") if mid_k else ""
             if mid_k and tile_v3_gates_axis.get(mid_k):
                 br["jupiter_v3_gates"] = tile_v3_gates_axis[mid_k]
+            if mid_k and tile_preview_axis.get(mid_k):
+                br["jupiter_tile_preview"] = tile_preview_axis[mid_k]
             pol_br = (
                 fetch_baseline_policy_evaluation_for_market_event(
                     conn, mid_k, prefer_active_slot=False
@@ -4900,6 +5008,15 @@ def build_trade_chain_payload(
                         d["binance_kline_volume_ok"] = _binance_kline_volume_ok_from_features(
                             dict(_pf_cell) if isinstance(_pf_cell, dict) else None
                         )
+                    pv = tile_preview_axis.get(mid_k)
+                    if pv:
+                        d["jupiter_tile_preview"] = pv
+                    d["operator_truth_provenance_v1"] = {
+                        "schema": "operator_truth_provenance_v1",
+                        "jupiter_tile_narrative": "persisted_policy_evaluations",
+                        "jupiter_v3_gates": "persisted_policy_evaluations",
+                        "jupiter_tile_preview": ("recompute" if pv else None),
+                    }
                 if ck_row == "baseline" and narr and not d.get("jupiter_tile_narrative_scope"):
                     d["jupiter_tile_narrative_scope"] = "current_bar"
                     d["jupiter_tile_narrative_scope_note"] = (

@@ -313,7 +313,7 @@ def test_jupiter_tile_narrative_authoritative_from_ledger_without_tile(
         features={},
         conn=conn_l,
     )
-    narr, _gates, _bin = _event_axis_jupiter_tile_narratives(conn_l, [mid], market)
+    narr, _gates, _bin, _preview = _event_axis_jupiter_tile_narratives(conn_l, [mid], market)
     conn_l.close()
 
     text = narr.get(mid, "")
