@@ -236,7 +236,55 @@ No other route in `api_server.py` was found that writes **`baseline_operator_kv`
 
 ---
 
-## 5. File index (quick reference)
+## 5. Team ownership and shared-boundary protocol (Renaissance vs Dashboard)
+
+**Purpose:** Prevent accidental cross-team drift on **truth vs presentation**. Current `main` history may be sequential; **from here forward**, shared files require coordination.
+
+### 5.1 Ownership
+
+| Team | Owns |
+|------|------|
+| **Renaissance** | `renaissance_v4/*`; SRA / hypothesis / variants / ranking / promotion readiness; policy generation / ingestion; experiment artifacts and Kitchen backend. |
+| **Dashboard** | `UIUX.Web/dashboard.html`; operator-facing HTML, labels, preview **presentation**; visual rendering and wording. |
+
+### 5.2 Shared boundary — edit lock required
+
+These files (or surfaces) affect **both** Kitchen/backend truth and what the operator sees. **Do not edit in parallel without a lock.**
+
+| File / surface | Why shared |
+|----------------|------------|
+| `modules/anna_training/dashboard_bundle.py` | Builds API payloads: persisted vs preview, trade chain, policy tags. |
+| `tests/test_dashboard_bundle.py` | Contract tests for bundle behavior and truth semantics. |
+| `UIUX.Web/api_server.py` | When API payloads or routes affect **both** Renaissance workflows and dashboard consumers. |
+| Any function that **determines** | Active policy, pending policy, historical policy attribution, **preview vs persisted truth**. |
+
+**Edit lock protocol (before changing a shared-boundary file):**
+
+1. **Pull** `main` (or your integration branch).
+2. **Announce** the lock (file or surface) in the team channel / thread so the other team does not start conflicting work.
+3. **Finish** and **merge** (small, reviewable PR or direct push per governance).
+4. **Release** the lock when merged.
+
+### 5.3 Behavioral bright line (non-negotiable)
+
+| Rule | Meaning |
+|------|---------|
+| **Persisted DB / ledger truth wins** for **primary** narrative, gates, and headline semantics tied to a bar or trade. |
+| **Recompute** may appear only as **labeled preview** or **audit** fields (e.g. preview blocks, `jupiter_tile_preview`, audit-only paths) — never silently substituted for persisted truth in the primary story. |
+
+| Team may… | Team must not… |
+|-----------|----------------|
+| **Dashboard** — improve preview **presentation** (layout, labels, wording). | Change **truth semantics** (what counts as primary vs preview, or which DB row drives the main tile). |
+| **Renaissance** — improve Kitchen / policy / experiment **logic**. | Change **operator HTML behavior** (`dashboard.html` copy/structure) **without** coordination. |
+
+### 5.4 Conclusion (status)
+
+- Sequential history on `main` does **not** by itself require rollback.
+- **Going forward:** treat `dashboard_bundle.py` and `dashboard.html` as **hard boundaries** with the lock protocol above.
+
+---
+
+## 6. File index (quick reference)
 
 | Area | Primary files |
 |------|----------------|
@@ -251,7 +299,7 @@ No other route in `api_server.py` was found that writes **`baseline_operator_kv`
 
 ---
 
-## 6. Response header (DV-ARCH-CLARIFICATION-029)
+## 7. Response header (DV-ARCH-CLARIFICATION-029)
 
 ```
 RE: DV-ARCH-CLARIFICATION-029
@@ -261,8 +309,9 @@ DOC: docs/architect/policy_wiring_surface_map_v1.md
 
 ---
 
-## 7. Revision
+## 8. Revision
 
 | Version | Change |
 |---------|--------|
 | 1 | Initial surface map per DV-ARCH-CLARIFICATION-029. |
+| 2 | §5 Team ownership, shared-boundary edit lock, persisted-vs-preview bright line (cross-team coordination). |

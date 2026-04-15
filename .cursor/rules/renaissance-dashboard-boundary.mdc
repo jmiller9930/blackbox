@@ -1,0 +1,13 @@
+---
+description: Renaissance vs Dashboard ownership — shared files need edit lock; persisted truth vs preview
+globs: modules/anna_training/dashboard_bundle.py,tests/test_dashboard_bundle.py,UIUX.Web/dashboard.html,UIUX.Web/api_server.py
+alwaysApply: false
+---
+
+# Renaissance / Dashboard shared boundary
+
+**Canonical doc:** [`docs/architect/policy_wiring_surface_map_v1.md`](docs/architect/policy_wiring_surface_map_v1.md) §5.
+
+**Before editing the globbed files:** pull `main`, **announce a lock** on the file/surface, merge, **release lock**.
+
+**Bright line:** persisted DB / ledger truth drives **primary** narrative; recompute only in **labeled** preview or audit fields. Dashboard may change **presentation**, not truth semantics. Renaissance may change Kitchen/policy logic, not **`dashboard.html`** behavior without coordination.
