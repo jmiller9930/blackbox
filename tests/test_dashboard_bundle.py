@@ -28,6 +28,7 @@ from modules.anna_training.dashboard_bundle import (
     build_policy_evaluation_forensic_v1,
     _compact_baseline_cell_policy_bound,
     _event_axis_jupiter_tile_narratives,
+    _operator_truth_provenance_v1_for_baseline_cell,
     _operator_trade_semantics_from_policy_row,
     _pair_vs_baseline_for_cells,
     _strip_outcome_from_pnl,
@@ -35,6 +36,25 @@ from modules.anna_training.dashboard_bundle import (
     build_dashboard_bundle,
     build_trade_chain_payload,
 )
+
+
+def test_operator_truth_provenance_missing_row_not_labeled_persisted() -> None:
+    o = _operator_truth_provenance_v1_for_baseline_cell(
+        persisted_policy_row=None, has_jupiter_tile_preview=True
+    )
+    assert o["jupiter_tile_narrative"] == "no_persisted_policy_row"
+    assert o["jupiter_v3_gates"] == "no_persisted_policy_row"
+    assert o["jupiter_tile_preview"] == "recompute"
+
+
+def test_operator_truth_provenance_with_persisted_row() -> None:
+    o = _operator_truth_provenance_v1_for_baseline_cell(
+        persisted_policy_row={"id": 1, "reason_code": "no_signal", "trade": 0},
+        has_jupiter_tile_preview=False,
+    )
+    assert o["jupiter_tile_narrative"] == "persisted_policy_evaluations"
+    assert o["jupiter_v3_gates"] == "persisted_policy_evaluations"
+    assert o["jupiter_tile_preview"] is None
 
 
 def test_build_trade_chain_payload_schema() -> None:

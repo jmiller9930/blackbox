@@ -744,6 +744,20 @@
       margin: 0;
       line-height: 1.35;
     }
+    .tc-jup-gate-region {
+      margin: 0.35rem 0 0;
+      padding: 0.35rem 0.45rem;
+      border-radius: 6px;
+      border: 1px solid var(--panel-border);
+      background: #f8fafc;
+    }
+    .tc-jup-gate-unavailable {
+      font-size: 0.62rem;
+      color: #475569;
+      line-height: 1.4;
+      margin: 0;
+      font-weight: 500;
+    }
     .tc-jup-gates-table-wrap {
       margin: 0.35rem 0 0;
       overflow-x: auto;
@@ -1972,6 +1986,56 @@
     return '<div class="tc-jup-gates-table-wrap">' + cap + h + '</div>';
   }
 
+  /**
+   * When no authoritative gate table is available for this column, disclose that explicitly.
+   * Missing data is not the same as "all gates FAIL" — operator must not infer PASS/FAIL from absence.
+   */
+  function baselineJupiterGatePlaceholderHtml(c) {
+    var parts = [];
+    if (c && c.policy_missing === true) {
+      parts.push(
+        'No persisted policy_evaluations row for this bar — an authoritative gate table cannot be loaded from the ledger.'
+      );
+    }
+    if (c && c.baseline_display_reason) {
+      parts.push('Context: ' + String(c.baseline_display_reason) + '.');
+    }
+    if (
+      c &&
+      c.operator_truth_provenance_v1 &&
+      c.operator_truth_provenance_v1.jupiter_v3_gates === 'no_persisted_policy_row'
+    ) {
+      parts.push(
+        'Provenance: narrative and gates are not labeled as persisted policy for this market_event_id.'
+      );
+    }
+    if (c && c.policy_trade !== undefined && c.policy_trade !== null) {
+      parts.push('Persisted policy trade flag: ' + String(c.policy_trade) + '.');
+    } else if (c && c.policy_missing === true) {
+      parts.push('Persisted policy trade flag: not available (no policy row).');
+    }
+    parts.push(
+      'This does not mean every gate failed — gate PASS/FAIL truth was unavailable for display on this column.'
+    );
+    var body = parts.join(' ');
+    return (
+      '<div class="tc-jup-gates-caption">Policy gates (this bar)</div>' +
+      '<p class="tc-jup-gate-unavailable" role="note">' +
+      esc(body) +
+      '</p>'
+    );
+  }
+
+  /** One gate region per baseline tile: real table or explicit unavailable placeholder (not silent omission). */
+  function baselineJupiterGateRegionHtml(colGatesInner, c, baselineLane, posOpenBaseline, entryHas) {
+    if (!baselineLane || posOpenBaseline || entryHas) return colGatesInner || '';
+    var hasTable = colGatesInner && String(colGatesInner).trim() !== '';
+    var inner = hasTable ? colGatesInner : baselineJupiterGatePlaceholderHtml(c);
+    return (
+      '<div class="tc-jup-gate-region" role="region" aria-label="Policy gates this bar">' + inner + '</div>'
+    );
+  }
+
   function jupiterNarrativeLinesHtml(raw, titleAttr, baselineLane) {
     if (raw == null || String(raw).trim() === '') return '';
     var text = String(raw).replace(/\r\n/g, '\n');
@@ -2257,7 +2321,12 @@
         );
       }
     }
-    var jupStack = tcTileCorrelateHtml(c, opts) + scopeNote + entrySnap + narrEl + colGates;
+    var jupStack =
+      tcTileCorrelateHtml(c, opts) +
+      scopeNote +
+      entrySnap +
+      narrEl +
+      baselineJupiterGateRegionHtml(colGates, c, baselineLane, posOpenBaseline, entryHas);
     if (!c || c.empty) {
       var ntBar =
         baselineLane

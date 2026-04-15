@@ -421,6 +421,32 @@ from modules.anna_training.sequential_engine.mae_v1 import MAE_PROTOCOL_ID, comp
 _MARKET_DB: Path | None = None
 
 
+def _operator_truth_provenance_v1_for_baseline_cell(
+    *,
+    persisted_policy_row: dict[str, Any] | None,
+    has_jupiter_tile_preview: bool,
+) -> dict[str, Any]:
+    """Which layer supplied tile fields. Never label narrative/gates as persisted when no DB row exists."""
+    preview = "recompute" if has_jupiter_tile_preview else None
+    if (
+        persisted_policy_row is not None
+        and isinstance(persisted_policy_row, dict)
+        and len(persisted_policy_row) > 0
+    ):
+        return {
+            "schema": "operator_truth_provenance_v1",
+            "jupiter_tile_narrative": "persisted_policy_evaluations",
+            "jupiter_v3_gates": "persisted_policy_evaluations",
+            "jupiter_tile_preview": preview,
+        }
+    return {
+        "schema": "operator_truth_provenance_v1",
+        "jupiter_tile_narrative": "no_persisted_policy_row",
+        "jupiter_v3_gates": "no_persisted_policy_row",
+        "jupiter_tile_preview": preview,
+    }
+
+
 def _market_db_path() -> Path | None:
     global _MARKET_DB
     if _MARKET_DB is not None:
@@ -3890,17 +3916,19 @@ def build_baseline_trades_report(
                 r["jupiter_v3_gates"] = tile_v3_gates[mk]
             if mk and tile_preview.get(mk):
                 r["jupiter_tile_preview"] = tile_preview[mk]
-            r["operator_truth_provenance_v1"] = {
-                "schema": "operator_truth_provenance_v1",
-                "jupiter_tile_narrative": "persisted_policy_evaluations",
-                "jupiter_v3_gates": "persisted_policy_evaluations",
-                "jupiter_tile_preview": ("recompute" if (mk and tile_preview.get(mk)) else None),
-            }
             ledger_row_i, cell_i, _pos_open_i = meta_pairs[i]
-            pol_i = fetch_baseline_policy_evaluation_for_market_event(
-                conn, mk, prefer_active_slot=False
+            pol_i = (
+                fetch_baseline_policy_evaluation_for_market_event(
+                    conn, mk, prefer_active_slot=False
+                )
+                if mk
+                else None
             )
-            _pfeat = pol_i.get("features") if isinstance(pol_i, dict) else None
+            r["operator_truth_provenance_v1"] = _operator_truth_provenance_v1_for_baseline_cell(
+                persisted_policy_row=pol_i if isinstance(pol_i, dict) else None,
+                has_jupiter_tile_preview=bool(mk and tile_preview.get(mk)),
+            )
+            _pfeat = (pol_i or {}).get("features") if isinstance(pol_i, dict) else None
             if mk and mk in tile_binance_axis:
                 r["binance_kline_volume_ok"] = bool(tile_binance_axis.get(mk))
             else:
@@ -5248,19 +5276,17 @@ def build_trade_chain_payload(
                     if mid_k in tile_binance_axis:
                         d["binance_kline_volume_ok"] = bool(tile_binance_axis.get(mid_k))
                     else:
-                        _pf_cell = pol_cell.get("features") if isinstance(pol_cell, dict) else None
+                        _pf_cell = (pol_cell or {}).get("features") if isinstance(pol_cell, dict) else None
                         d["binance_kline_volume_ok"] = _binance_kline_volume_ok_from_features(
                             dict(_pf_cell) if isinstance(_pf_cell, dict) else None
                         )
                     pv = tile_preview_axis.get(mid_k)
                     if pv:
                         d["jupiter_tile_preview"] = pv
-                    d["operator_truth_provenance_v1"] = {
-                        "schema": "operator_truth_provenance_v1",
-                        "jupiter_tile_narrative": "persisted_policy_evaluations",
-                        "jupiter_v3_gates": "persisted_policy_evaluations",
-                        "jupiter_tile_preview": ("recompute" if pv else None),
-                    }
+                    d["operator_truth_provenance_v1"] = _operator_truth_provenance_v1_for_baseline_cell(
+                        persisted_policy_row=pol_cell if isinstance(pol_cell, dict) else None,
+                        has_jupiter_tile_preview=bool(pv),
+                    )
                     d = _attach_operator_trade_semantics_to_baseline_cell(conn, mid_k, d)
                 if ck_row == "baseline" and narr and not d.get("jupiter_tile_narrative_scope"):
                     d["jupiter_tile_narrative_scope"] = "current_bar"
