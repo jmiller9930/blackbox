@@ -979,9 +979,68 @@ async function buildFullView() {
   };
 }
 
+/**
+ * Client-side polling via fetch(/api/summary.json) — avoids &lt;meta refresh&gt; full-page flicker.
+ * (WebSocket would add a dependency; SSE is an alternative later.)
+ */
+function jwLivePollScript(refreshSec) {
+  const ms = Math.max(2000, Math.floor((Number(refreshSec) || 3) * 1000));
+  return `<script>
+(function(){
+  var POLL_MS=${ms};
+  function E(s){return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
+  function T(s,n){s=String(s||'');return s.length<=n?s:s.slice(0,n-1)+'\\u2026';}
+  function isoUtc(s){if(!s)return'\\u2014';try{var d=new Date(String(s).trim().replace('Z','+00:00'));return isNaN(d.getTime())?String(s).slice(0,22):d.toISOString().slice(0,16).replace('T',' ')+' UTC';}catch(e){return String(s).slice(0,22);}}
+  function trCls(rc){var x=String(rc||'').toLowerCase();if(x==='win')return'trade-win';if(x==='loss')return'trade-loss';return'trade-flat';}
+  function apply(j){
+    if(!j||j.error)return;
+    var tm=j.trading_mode||{}, jr=tm.jupiter_runtime||{};
+    var a=document.getElementById('jw-ap-code'); if(a)a.textContent=jr.active_policy||'';
+    a=document.getElementById('jw-ap-src'); if(a)a.textContent=jr.source||'';
+    var sel=document.getElementById('jw-jupiter-policy'); if(sel&&jr.active_policy)sel.value=jr.active_policy;
+    var op=j.operator||{};
+    if(op.error)return;
+    var pq=op.paper_equity_usd||{}, gate=op.next_open_gate||{};
+    var pf=j.preflight||{}, o=pf.oracle, kl=j.last_kline;
+    var kc=kl&&kl.close_px!=null?E(kl.close_px):'\\u2014';
+    var hp=o&&o.price!=null?E(Number(o.price).toFixed(4)):'\\u2014';
+    var ls=document.getElementById('jw-live-strip');
+    if(ls){ls.innerHTML='<p><strong>Binance kline close</strong> '+kc+' \\u00b7 <strong>Hermes SOL/USD</strong> '+hp+' \\u00b7 <strong>poll</strong> '+E(kl&&kl.polled_at_utc||'\\u2014')+'</p>';ls.classList.add('jw-pulse');setTimeout(function(){ls.classList.remove('jw-pulse');},200);}
+    var ev=document.getElementById('jw-op-eq-val'); if(ev){var eq=pq.equity_usd!=null&&isFinite(Number(pq.equity_usd))?Number(pq.equity_usd).toFixed(4):'\\u2014';ev.textContent=eq;}
+    var eb=document.getElementById('jw-op-eq-brk'); if(eb)eb.textContent='(start '+E(pq.starting_usd!=null?pq.starting_usd:'\\u2014')+' + realized '+E(pq.realized_pnl_usd!=null?pq.realized_pnl_usd:'\\u2014')+' + unreal '+E(pq.unrealized_usd!=null?pq.unrealized_usd:'\\u2014')+')';
+    var cl=document.getElementById('jw-chain-lam'); if(cl)cl.textContent=op.chain_sol_balance_lamports||'\\u2014';
+    var ca=document.getElementById('jw-chain-at'); if(ca)ca.textContent=op.chain_balance_updated_utc||'';
+    var gl=document.getElementById('jw-gate-line'); if(gl){var gOk=gate.ok===true;gl.innerHTML='<strong>Next engine open</strong> '+(gOk?'<span class="ok">allowed</span>':'<span class="bad">blocked</span>')+' \\u2014 '+E(gate.reason||'\\u2014')+' <span class="muted">'+E(gate.detail||'')+'</span>';}
+    var wv=document.getElementById('jw-wallet-eq-val'); if(wv){var eq2=pq.equity_usd!=null&&isFinite(Number(pq.equity_usd))?Number(pq.equity_usd).toFixed(4):'\\u2014';wv.textContent=eq2;}
+    var wb=document.getElementById('jw-wallet-eq-brk'); if(wb)wb.textContent='= bankroll '+E(pq.starting_usd!=null?pq.starting_usd:'\\u2014')+' + realized '+E(pq.realized_pnl_usd!=null?pq.realized_pnl_usd:'\\u2014')+' + unreal '+E(pq.unrealized_usd!=null?pq.unrealized_usd:'\\u2014');
+    var pl=j.paper_ledger, lb=document.getElementById('jw-ledger-block');
+    if(lb&&pl)lb.innerHTML='<p><strong>Paper ledger</strong> \\u2014 starting '+E(pl.starting_balance_usd)+' USD \\u00b7 realized '+E(pl.realized_pnl_usd)+' \\u00b7 equity ~'+E(pl.equity_est_usd!=null&&isFinite(Number(pl.equity_est_usd))?Number(pl.equity_est_usd).toFixed(4):pl.equity_est_usd)+' USD</p><p class="muted">Same figures as <strong>Wallet &amp; funding</strong>; trade list below.</p>';
+    var pos=j.position, pkb=document.getElementById('jw-pos-kl-block');
+    if(pkb){var posHtml=(pos&&String(pos.side)!=='flat')?('<p><strong>Open</strong> '+E(pos.side)+' @ '+E(pos.entry_price)+' \\u00b7 mid '+E(pos.entry_market_event_id)+'</p>'):'<p class="muted">Position: flat</p>';var klHtml=kl?('<p class="muted">Last kline poll: '+E(kl.market_event_id)+' \\u00b7 close '+E(kl.close_px)+' \\u00b7 '+E(kl.polled_at_utc)+'</p>'):'';pkb.innerHTML=posHtml+klHtml;}
+    var pfb=document.getElementById('jw-preflight-banner'); if(pfb)pfb.innerHTML=pf.degraded?'<p class="bad"><strong>DEGRADED</strong> \\u2014 fix failing checks before relying on runtime.</p>':'<p class="ok"><strong>ALL ACTIVE</strong> \\u2014 checks passing</p>';
+    var pft=document.getElementById('jw-preflight-tbody'); if(pft&&pf.checks){pft.innerHTML=pf.checks.map(function(c){var st=c.ok?'<span class="ok">OK</span>':'<span class="bad">FAIL</span>';return'<tr><td>'+E(c.name)+'</td><td>'+st+'</td><td>'+E(c.detail)+'</td></tr>';}).join('');}
+    var ob=document.getElementById('jw-oracle-block');
+    if(ob){if(o){var rel=o.price?Number(o.conf)/Number(o.price)*100:0;ob.innerHTML='<p><strong>SOL/USD</strong> '+E(Number(o.price).toFixed(4))+' USD</p><p class="muted">Confidence \\u00b1'+E(Number(o.conf).toFixed(6))+' ('+E(rel.toFixed(4))+'% of price)</p><p class="muted">Publish unix: '+E(String(o.publish_time))+' '+(pf.wall_age_s!=null?'wall age ~'+Number(pf.wall_age_s).toFixed(1)+'s':'')+'</p><p class="muted">Feed: '+E(T(o.feed_id,20))+'</p>';}else ob.innerHTML='<p class="muted">No Hermes parsed payload yet.</p>';}
+    var pt=document.getElementById('jw-parity-tbody'); if(pt&&j.parity){var pr=j.parity;if(pr.error&&!(pr.rows&&pr.rows.length))pt.innerHTML='<tr><td colspan="4" class="muted">'+E(pr.error)+'</td></tr>';else if(!pr.rows||!pr.rows.length)pt.innerHTML='<tr><td colspan="4" class="muted">No parity rows yet (need trades with market_event_id + optional execution_ledger.db).</td></tr>';else pt.innerHTML=pr.rows.map(function(r){var pc=r.parity_cls==='ok'?'p-ok':r.parity_cls==='warn'?'p-warn':r.parity_cls==='bad'?'p-bad':'p-dim';return'<tr><td>'+E(T(r.market_event_id,44))+'</td><td>'+E(r.sean_cell)+'</td><td>'+E(r.bb_cell)+'</td><td class="'+pc+'">'+E(r.parity)+'</td></tr>';}).join('');}
+    var tt=document.getElementById('jw-trades-tbody'); if(tt&&j.recent_trades){var rt=j.recent_trades;tt.innerHTML=rt.length?rt.map(function(t){return'<tr class="trade-row '+trCls(t.result_class)+'" data-trade-id="'+E(String(t.id))+'"><td>'+E(t.trade_id)+'</td><td>'+E(isoUtc(t.exit_time_utc))+'</td><td>'+E(isoUtc(t.entry_time_utc))+'</td><td>'+E(t.symbol)+'</td><td>'+E(t.side)+'</td><td>'+E(t.entry_price)+'</td><td>'+E(t.exit_price)+'</td><td>'+E(t.size_notional_sol)+'</td><td>'+E(t.gross_pnl_usd)+'</td><td>'+E(t.result_class)+'</td><td>'+E(t.exit_reason)+'</td><td>'+E(T(t.entry_market_event_id,40))+'</td><td>'+E(T(t.exit_market_event_id,40))+'</td></tr>';}).join(''):'<tr><td colspan="13" class="muted">No closed trades yet</td></tr>';jwWireTrades();}
+    var dj=document.getElementById('jw-trade-jump'); if(dj&&j.all_trades_dropdown){var cur=dj.value, opts=j.all_trades_dropdown.length?('<option value="">All trades \\u2014 pick to jump + detail ('+j.all_trades_dropdown.length+')</option>'+j.all_trades_dropdown.map(function(d){return'<option value="'+E(String(d.id))+'">'+E(d.label)+'</option>';})).join(''):'<option value="">No closed trades</option>';dj.innerHTML=opts; if(cur)try{dj.value=cur;}catch(e){}}
+    var clk=document.getElementById('jw-live-clock'); if(clk)clk.textContent='Last update '+new Date().toISOString().slice(11,19)+' UTC';
+  }
+  function jwWireTrades(){var sel=document.getElementById('jw-trade-jump');var pre=document.getElementById('jw-trade-detail');document.querySelectorAll('#jw-trades-tbody tr.trade-row').forEach(function(tr){tr.onclick=function(){var id=tr.getAttribute('data-trade-id');if(!id)return;if(sel)sel.value=id;if(pre)fetch('/api/v1/sean/trade/'+id+'.json').then(function(r){return r.text();}).then(function(t){pre.textContent=t;}).catch(function(e){pre.textContent=String(e);});};});}
+  window.jwLiveRefresh=function(){return fetch('/api/summary.json').then(function(r){return r.json();}).then(apply);};
+  fetch('/api/summary.json').then(function(r){return r.json();}).then(apply).catch(function(){});
+  setInterval(function(){fetch('/api/summary.json').then(function(r){return r.json();}).then(apply).catch(function(){});},POLL_MS);
+})();
+<\/script>`;
+}
+
 function htmlPage(v) {
   const readOnly = Boolean(v.read_only_except_policy);
-  const refresh = v.refresh_sec > 0 ? `<meta http-equiv="refresh" content="${esc(String(v.refresh_sec))}"/>` : '';
+  const useLivePoll = !['0', 'false', 'no'].includes((process.env.JUPITER_WEB_LIVE_POLL || '1').trim().toLowerCase());
+  const refresh =
+    !useLivePoll && v.refresh_sec > 0
+      ? `<meta http-equiv="refresh" content="${esc(String(v.refresh_sec))}"/>`
+      : '';
   const tm = v.trading_mode || {};
   const actual = tm.actual_banner;
   const jr = tm.jupiter_runtime || {};
@@ -990,7 +1049,7 @@ function htmlPage(v) {
   const postOk = Boolean(tm.post_token_configured);
   const policySel = `
     <p><strong>Policy</strong> (runtime — next bar onward; does not close or force-open positions)</p>
-    <p class="muted">Active: <code>${esc(ap)}</code> · source: <code>${esc(src)}</code> · meta key <code>${esc(JUPITER_ACTIVE_POLICY_KEY)}</code></p>
+    <p class="muted">Active: <code id="jw-ap-code">${esc(ap)}</code> · source: <code id="jw-ap-src">${esc(src)}</code> · meta key <code>${esc(JUPITER_ACTIVE_POLICY_KEY)}</code></p>
     <p><label>JUPv4 / JUPv3 / JUP-MC-Test <select id="jw-jupiter-policy">
       <option value="jup_v4" ${ap === 'jup_v4' ? 'selected' : ''}>JUPv4</option>
       <option value="jup_v3" ${ap === 'jup_v3' ? 'selected' : ''}>JUPv3</option>
@@ -1010,7 +1069,7 @@ function htmlPage(v) {
         const r=await fetch('/api/v1/jupiter/active-policy',{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+tok},body:JSON.stringify({policy:pol})});
         const t=await r.text();
         alert(r.ok? t : 'HTTP '+r.status+' '+t);
-        if(r.ok) location.reload();
+        if(r.ok){ if(typeof window.jwLiveRefresh==='function') window.jwLiveRefresh(); else location.reload(); }
       });
     })();
     </script>` : '<p class="muted">Set <code>JUPITER_OPERATOR_TOKEN</code> on jupiter-web to enable policy switching.</p>'}`;
@@ -1059,10 +1118,10 @@ function htmlPage(v) {
       walletFundingBlock = `
       <p class="warn"><strong>Read-only HTTP API</strong> — <code>JUPITER_WEB_READ_ONLY=1</code>. Wallet, funding mode, and paper stake cannot be changed via <code>POST /api/operator/*</code>. Use <code>KEYPAIR_PATH</code> on <strong>seanv3</strong> or SQLite for wallet state, or set <code>JUPITER_WEB_READ_ONLY=0</code> to re-enable dashboard writes.</p>
       <p class="muted"><strong>Paper wallet</strong> — <strong>Equity = bankroll + realized PnL + unrealized</strong>.</p>
-      <p><strong>Paper PnL (live)</strong> — equity ~<strong>${esc(eqStr)}</strong> USD
-        <span class="muted">= bankroll ${esc(String(pq.starting_usd ?? '—'))} + realized ${esc(String(pq.realized_pnl_usd ?? '—'))} + unreal ${esc(String(pq.unrealized_usd ?? '—'))}</span>
+      <p><strong>Paper PnL (live)</strong> — equity ~<strong id="jw-wallet-eq-val">${esc(eqStr)}</strong> USD
+        <span class="muted" id="jw-wallet-eq-brk">= bankroll ${esc(String(pq.starting_usd ?? '—'))} + realized ${esc(String(pq.realized_pnl_usd ?? '—'))} + unreal ${esc(String(pq.unrealized_usd ?? '—'))}</span>
         ${pl ? ` · closed: ${esc(String(pl.closed_trade_count))}` : ''}</p>
-      ${pl?.open_line ? `<p class="muted">${esc(pl.open_line)}</p>` : ''}
+      ${pl?.open_line ? `<p class="muted" id="jw-wallet-openline">${esc(pl.open_line)}</p>` : ''}
       <p class="muted">Stored funding mode: <code>${esc(modeCur)}</code> · PAPER_TRADING: ${
         op.paper_trading_env ? `<span class="ok">on</span>` : `<span class="warn">off</span>`
       }</p>
@@ -1075,10 +1134,10 @@ function htmlPage(v) {
     } else {
       walletFundingBlock = `
       <p class="muted"><strong>Paper wallet</strong> — <strong>Equity = bankroll + realized PnL + unrealized</strong> (same numbers the engine uses). Raising “Add paper funds” increases <strong>bankroll</strong> immediately after save + reload. <strong>Chain wallet</strong> switches the gate to cached SOL; live fills still need <code>PAPER_TRADING=0</code> on seanv3 + restart.</p>
-      <p><strong>Paper PnL (live)</strong> — equity ~<strong>${esc(eqStr)}</strong> USD
-        <span class="muted">= bankroll ${esc(String(pq.starting_usd ?? '—'))} + realized ${esc(String(pq.realized_pnl_usd ?? '—'))} + unreal ${esc(String(pq.unrealized_usd ?? '—'))}</span>
+      <p><strong>Paper PnL (live)</strong> — equity ~<strong id="jw-wallet-eq-val">${esc(eqStr)}</strong> USD
+        <span class="muted" id="jw-wallet-eq-brk">= bankroll ${esc(String(pq.starting_usd ?? '—'))} + realized ${esc(String(pq.realized_pnl_usd ?? '—'))} + unreal ${esc(String(pq.unrealized_usd ?? '—'))}</span>
         ${pl ? ` · closed: ${esc(String(pl.closed_trade_count))}` : ''}</p>
-      ${pl?.open_line ? `<p class="muted">${esc(pl.open_line)}</p>` : ''}
+      ${pl?.open_line ? `<p class="muted" id="jw-wallet-openline">${esc(pl.open_line)}</p>` : ''}
       <div class="fund-toggle" role="group" aria-label="Paper vs chain funding gate">
         <button type="button" class="fund-btn ${paperModeOn ? 'selected' : ''}" id="jw-fund-paper">Paper wallet (simulated)</button>
         <button type="button" class="fund-btn ${chainModeOn ? 'selected' : ''}" id="jw-fund-chain">Chain wallet (live balance)</button>
@@ -1110,7 +1169,7 @@ function htmlPage(v) {
         async function postMode(mode){
           const r = await fetch('/api/operator/funding-mode', { method:'POST', headers:{'Authorization':'Bearer '+tok(),'Content-Type':'application/json'}, body: JSON.stringify({mode}) });
           alert(r.ok ? await r.text() : 'HTTP '+r.status+' '+await r.text());
-          if(r.ok) location.reload();
+          if(r.ok){ if(typeof window.jwLiveRefresh==='function') window.jwLiveRefresh(); else location.reload(); }
         }
         document.getElementById('jw-fund-paper')?.addEventListener('click', function(){ postMode('paper'); });
         document.getElementById('jw-fund-chain')?.addEventListener('click', function(){ postMode('chain'); });
@@ -1118,13 +1177,13 @@ function htmlPage(v) {
           const pubkey_base58 = (document.getElementById('jw-pubkey')||{}).value||'';
           const r = await fetch('/api/operator/paper-wallet', { method:'POST', headers:{'Authorization':'Bearer '+tok(),'Content-Type':'application/json'}, body: JSON.stringify({pubkey_base58}) });
           alert(r.ok ? await r.text() : 'HTTP '+r.status+' '+await r.text());
-          if(r.ok) location.reload();
+          if(r.ok){ if(typeof window.jwLiveRefresh==='function') window.jwLiveRefresh(); else location.reload(); }
         });
         document.getElementById('jw-save-stake')?.addEventListener('click', async function(){
           const usd = parseFloat((document.getElementById('jw-stake')||{}).value||'');
           const r = await fetch('/api/operator/paper-stake', { method:'POST', headers:{'Authorization':'Bearer '+tok(),'Content-Type':'application/json'}, body: JSON.stringify({usd}) });
           alert(r.ok ? await r.text() : 'HTTP '+r.status+' '+await r.text());
-          if(r.ok) location.reload();
+          if(r.ok){ if(typeof window.jwLiveRefresh==='function') window.jwLiveRefresh(); else location.reload(); }
         });
       })();
       </script>`
@@ -1147,10 +1206,11 @@ function htmlPage(v) {
     }
   }
 
-  let ledgerBlock = '<p class="muted">—</p>';
+  let ledgerBlock =
+    '<div id="jw-ledger-block"><p class="muted">—</p></div>';
   if (pl) {
-    ledgerBlock = `<p><strong>Paper ledger</strong> — starting ${esc(String(pl.starting_balance_usd))} USD · realized ${esc(String(pl.realized_pnl_usd))} · equity ~${esc(String(pl.equity_est_usd?.toFixed ? pl.equity_est_usd.toFixed(4) : pl.equity_est_usd))} USD</p>
-      <p class="muted">Same figures as <strong>Wallet &amp; funding</strong>; trade list below.</p>`;
+    ledgerBlock = `<div id="jw-ledger-block"><p><strong>Paper ledger</strong> — starting ${esc(String(pl.starting_balance_usd))} USD · realized ${esc(String(pl.realized_pnl_usd))} · equity ~${esc(String(pl.equity_est_usd?.toFixed ? pl.equity_est_usd.toFixed(4) : pl.equity_est_usd))} USD</p>
+      <p class="muted">Same figures as <strong>Wallet &amp; funding</strong>; trade list below.</p></div>`;
   }
 
   let parityRows = '';
@@ -1230,21 +1290,22 @@ function htmlPage(v) {
 
   let operatorBlock = '<p class="muted">Operator state unavailable.</p>';
   if (!op.error) {
-    operatorBlock = `${liveStrip}
+    const operatorDetailsOnly = `
       <p><strong>Funding mode (SQLite)</strong> <code>${esc(op.sean_funding_mode || 'paper')}</code>
         · PAPER_TRADING env: ${
           op.paper_trading_env
             ? `<span class="ok">on (simulated)</span>`
             : `<span class="warn">off</span> (compose uses live path for chain gate)`
         }</p>
-      <p><strong>Paper equity</strong> ~${esc(eqStr)} USD
-        <span class="muted">(start ${esc(String(pq.starting_usd ?? '—'))} + realized ${esc(String(pq.realized_pnl_usd ?? '—'))} + unreal ${esc(String(pq.unrealized_usd ?? '—'))})</span></p>
-      <p><strong>On-chain SOL</strong> (cached) ${esc(op.chain_sol_balance_lamports || '—')} lamports
-        <span class="muted">${esc(op.chain_balance_updated_utc || '')}</span></p>
-      ${op.chain_balance_error ? `<p class="bad">${esc(op.chain_balance_error)}</p>` : ''}
-      <p><strong>Next engine open</strong> ${gOk ? '<span class="ok">allowed</span>' : '<span class="bad">blocked</span>'} — ${esc(gate.reason || '—')}
+      <p><strong>Paper equity</strong> ~<span id="jw-op-eq-val">${esc(eqStr)}</span> USD
+        <span class="muted" id="jw-op-eq-brk">(start ${esc(String(pq.starting_usd ?? '—'))} + realized ${esc(String(pq.realized_pnl_usd ?? '—'))} + unreal ${esc(String(pq.unrealized_usd ?? '—'))})</span></p>
+      <p><strong>On-chain SOL</strong> (cached) <span id="jw-chain-lam">${esc(op.chain_sol_balance_lamports || '—')}</span> lamports
+        <span class="muted" id="jw-chain-at">${esc(op.chain_balance_updated_utc || '')}</span></p>
+      ${op.chain_balance_error ? `<p class="bad" id="jw-chain-err">${esc(op.chain_balance_error)}</p>` : ''}
+      <p id="jw-gate-line"><strong>Next engine open</strong> ${gOk ? '<span class="ok">allowed</span>' : '<span class="bad">blocked</span>'} — ${esc(gate.reason || '—')}
         <span class="muted">${esc(gate.detail || '')}</span></p>
       <p class="muted">Controls: <strong>Wallet &amp; funding</strong> panel (above this section).</p>`;
+    operatorBlock = `<div id="jw-live-strip">${liveStrip}</div><div id="jw-operator-details">${operatorDetailsOnly}</div>`;
   } else {
     operatorBlock = `<p class="warn">${esc(op.error)}</p>`;
   }
@@ -1319,6 +1380,7 @@ function htmlPage(v) {
     a.csv-btn:hover { background: #1f2428; }
     .trade-snap-h { font-size: 0.72rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; color: #8b949e; margin: 0.75rem 0 0.35rem 0; }
     pre.trade-detail { margin: 0; max-height: 42vh; overflow: auto; font-size: 0.68rem; line-height: 1.35; white-space: pre-wrap; word-break: break-word; background: #0a0a0b; border: 1px solid #30363d; padding: 0.5rem 0.6rem; border-radius: 2px; }
+    #jw-live-strip.jw-pulse { outline: 1px solid rgba(88, 166, 255, 0.25); border-radius: 2px; }
   </style>
 </head>
 <body>
@@ -1331,7 +1393,12 @@ function htmlPage(v) {
         <button type="button" class="fund-btn" id="jw-copy-pk" style="margin-top:0.35rem">Copy pubkey</button></p>`
           : `<p class="pubkey-banner bad"><strong>No pubkey published yet</strong> — scroll to <strong>Wallet &amp; funding</strong>, paste your base58 address, click <strong>Register pubkey</strong> (requires operator token). Same flow as the VS Code SeanV3 path: stored in <code>paper_wallet</code>.</p>`
       }
-      <p class="muted">SQLite + parity vs BlackBox baseline · Auto-refresh ${esc(String(v.refresh_sec || 0))}s</p>
+      <p class="muted" id="jw-header-sub">SQLite + parity vs BlackBox baseline · ${
+        useLivePoll
+          ? `Live poll ${esc(String(v.refresh_sec || 0))}s (no full page reload)`
+          : `Auto-refresh ${esc(String(v.refresh_sec || 0))}s`
+      }</p>
+      <p class="muted small" id="jw-live-clock" style="opacity:0.85"></p>
       <p class="muted">${esc(v.sqlite_path)} · repo: ${esc(v.repo_root)}</p>
       <p><a href="/">Front door</a> · <a href="https://jup.ag/perps/long/SOL-SOL" target="_blank" rel="noopener noreferrer">jup.ag SOL perps</a> · <a href="/api/summary.json">summary.json</a> · <a href="/api/operator/state.json">operator/state.json</a> · <a href="/api/live-market.json">live-market.json</a> · <a href="/health">health</a></p>
       <script>
@@ -1357,16 +1424,16 @@ function htmlPage(v) {
     <section class="panel"><h2>Parity (Jupiter vs BlackBox baseline)</h2>
       <p class="muted">Jupiter DB: ${esc(v.parity?.sean_db || '')} · baseline ledger: ${esc(v.parity?.ledger_db || '')}</p>
       ${v.parity?.parity_align_note ? `<p class="muted small">${esc(v.parity.parity_align_note)}</p>` : ''}
-      <div class="scroll"><table><thead><tr><th>market_event_id</th><th>Jupiter</th><th>BlackBox</th><th>Parity</th></tr></thead><tbody>${parityRows}</tbody></table></div>
+      <div class="scroll"><table><thead><tr><th>market_event_id</th><th>Jupiter</th><th>BlackBox</th><th>Parity</th></tr></thead><tbody id="jw-parity-tbody">${parityRows}</tbody></table></div>
     </section>
-    <section class="panel"><h2>Position &amp; last kline (Sean DB)</h2>${posBlock}${klBlock}</section>
+    <section class="panel"><h2>Position &amp; last kline (Sean DB)</h2><div id="jw-pos-kl-block">${posBlock}${klBlock}</div></section>
     <section class="panel"><h2>Trade window (Sean paper trades)</h2>
       <p class="op-row">
         <label>Jump to trade <select id="jw-trade-jump">${tradeJumpOpts}</select></label>
         <a class="csv-btn" href="/api/v1/sean/trades.csv">Download all trades (CSV)</a>
       </p>
       <p class="muted small">Winning trades are tinted light green. CSV includes standard columns plus full <code>metadata_json</code> (entry <code>signal</code> + exit snapshot for closes written with the current engine). BlackBox baseline trade synthesis tiles use a different pipeline.</p>
-      <div class="scroll"><table><thead><tr><th>trade_id</th><th>exit UTC</th><th>entry UTC</th><th>sym</th><th>side</th><th>entry px</th><th>exit px</th><th>size</th><th>PnL</th><th>result</th><th>exit</th><th>entry MEI</th><th>exit MEI</th></tr></thead><tbody>${tradeRows}</tbody></table></div>
+      <div class="scroll" id="jw-trades-scroll"><table><thead><tr><th>trade_id</th><th>exit UTC</th><th>entry UTC</th><th>sym</th><th>side</th><th>entry px</th><th>exit px</th><th>size</th><th>PnL</th><th>result</th><th>exit</th><th>entry MEI</th><th>exit MEI</th></tr></thead><tbody id="jw-trades-tbody">${tradeRows}</tbody></table></div>
       <h3 class="trade-snap-h">Trade snapshot (JSON)</h3>
       <pre id="jw-trade-detail" class="trade-detail">Select a trade from the dropdown, or click a row.</pre>
       <script>
@@ -1395,9 +1462,10 @@ function htmlPage(v) {
       })();
       </script>
     </section>
-    <section class="panel"><h2>Preflight strip</h2>${banner}<div class="scroll"><table><thead><tr><th>Check</th><th>Status</th><th>Detail</th></tr></thead><tbody>${chkRows}</tbody></table></div></section>
-    <section class="panel"><h2>Trade / oracle window (Pyth SOL/USD)</h2>${oracleBlock}</section>
+    <section class="panel"><h2>Preflight strip</h2><div id="jw-preflight-banner">${banner}</div><div class="scroll"><table><thead><tr><th>Check</th><th>Status</th><th>Detail</th></tr></thead><tbody id="jw-preflight-tbody">${chkRows}</tbody></table></div></section>
+    <section class="panel"><h2>Trade / oracle window (Pyth SOL/USD)</h2><div id="jw-oracle-block">${oracleBlock}</div></section>
   </div>
+  ${useLivePoll ? jwLivePollScript(v.refresh_sec) : ''}
 </body>
 </html>`;
 }
