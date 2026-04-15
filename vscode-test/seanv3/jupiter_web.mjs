@@ -674,6 +674,7 @@ function buildSummary(db) {
     wallet_status: null,
     position: null,
     recent_trades: [],
+    recent_no_trades: [],
     all_trades_dropdown: [],
     last_kline: null,
     error: null,
@@ -760,6 +761,26 @@ function buildSummary(db) {
     }));
   } catch {
     /* */
+  }
+
+  const noTradeLimit = Math.min(50, Math.max(1, parseInt(process.env.SEANV3_TUI_NO_TRADE_ROWS || '30', 10) || 30));
+  try {
+    const nrows = db
+      .prepare(
+        `SELECT id, at_utc, market_event_id, policy_id, reason_code, details_json
+         FROM sean_no_trade_log ORDER BY id DESC LIMIT ?`
+      )
+      .all(noTradeLimit);
+    out.recent_no_trades = nrows.map((r) => ({
+      id: r.id,
+      at_utc: r.at_utc != null ? String(r.at_utc) : null,
+      market_event_id: r.market_event_id != null ? String(r.market_event_id) : null,
+      policy_id: r.policy_id != null ? String(r.policy_id) : null,
+      reason_code: r.reason_code != null ? String(r.reason_code) : null,
+      details_preview: truncateMid(r.details_json, 200),
+    }));
+  } catch {
+    /* table missing on legacy DB until migrate */
   }
 
   try {
@@ -1008,6 +1029,7 @@ function jwLivePollScript(refreshSec) {
   function T(s,n){s=String(s||'');return s.length<=n?s:s.slice(0,n-1)+'\\u2026';}
   function isoUtc(s){if(!s)return'\\u2014';try{var d=new Date(String(s).trim().replace('Z','+00:00'));return isNaN(d.getTime())?String(s).slice(0,22):d.toISOString().slice(0,16).replace('T',' ')+' UTC';}catch(e){return String(s).slice(0,22);}}
   function trCls(rc){var x=String(rc||'').toLowerCase();if(x==='win')return'trade-win';if(x==='loss')return'trade-loss';return'trade-flat';}
+  function ntCls(rc){var x=String(rc||'').toLowerCase();if(x==='open_blocked')return'nt-blocked';if(x==='no_atr')return'nt-warn';if(x==='no_entry_signal')return'nt-signal';return'nt-dim';}
   function apply(j){
     if(!j||j.error)return;
     var tm=j.trading_mode||{}, jr=tm.jupiter_runtime||{};
@@ -1039,6 +1061,7 @@ function jwLivePollScript(refreshSec) {
     if(ob){if(o){var rel=o.price?Number(o.conf)/Number(o.price)*100:0;ob.innerHTML='<p><strong>SOL/USD</strong> '+E(Number(o.price).toFixed(4))+' USD</p><p class="muted">Confidence \\u00b1'+E(Number(o.conf).toFixed(6))+' ('+E(rel.toFixed(4))+'% of price)</p><p class="muted">Publish unix: '+E(String(o.publish_time))+' '+(pf.wall_age_s!=null?'wall age ~'+Number(pf.wall_age_s).toFixed(1)+'s':'')+'</p><p class="muted">Feed: '+E(T(o.feed_id,20))+'</p>';}else ob.innerHTML='<p class="muted">No Hermes parsed payload yet.</p>';}
     var pt=document.getElementById('jw-parity-tbody'); if(pt&&j.parity){var pr=j.parity;if(pr.error&&!(pr.rows&&pr.rows.length))pt.innerHTML='<tr><td colspan="4" class="muted">'+E(pr.error)+'</td></tr>';else if(!pr.rows||!pr.rows.length)pt.innerHTML='<tr><td colspan="4" class="muted">No parity rows yet (need trades with market_event_id + optional execution_ledger.db).</td></tr>';else pt.innerHTML=pr.rows.map(function(r){var pc=r.parity_cls==='ok'?'p-ok':r.parity_cls==='warn'?'p-warn':r.parity_cls==='bad'?'p-bad':'p-dim';return'<tr><td>'+E(T(r.market_event_id,44))+'</td><td>'+E(r.sean_cell)+'</td><td>'+E(r.bb_cell)+'</td><td class="'+pc+'">'+E(r.parity)+'</td></tr>';}).join('');}
     var tt=document.getElementById('jw-trades-tbody'); if(tt&&j.recent_trades){var rt=j.recent_trades;tt.innerHTML=rt.length?rt.map(function(t){return'<tr class="trade-row '+trCls(t.result_class)+'" data-trade-id="'+E(String(t.id))+'"><td>'+E(t.trade_id)+'</td><td>'+E(isoUtc(t.exit_time_utc))+'</td><td>'+E(isoUtc(t.entry_time_utc))+'</td><td>'+E(t.symbol)+'</td><td>'+E(t.side)+'</td><td>'+E(t.entry_price)+'</td><td>'+E(t.exit_price)+'</td><td>'+E(t.size_notional_sol)+'</td><td>'+E(t.gross_pnl_usd)+'</td><td>'+E(t.result_class)+'</td><td>'+E(t.exit_reason)+'</td><td>'+E(T(t.entry_market_event_id,40))+'</td><td>'+E(T(t.exit_market_event_id,40))+'</td></tr>';}).join(''):'<tr><td colspan="13" class="muted">No closed trades yet</td></tr>';jwWireTrades();}
+    var nt=document.getElementById('jw-no-trade-tbody'); if(nt&&j.recent_no_trades){var rn=j.recent_no_trades;nt.innerHTML=rn.length?rn.map(function(n){return'<tr class="'+ntCls(n.reason_code)+'"><td>'+E(String(n.id))+'</td><td>'+E(isoUtc(n.at_utc))+'</td><td>'+E(T(n.market_event_id,44))+'</td><td>'+E(n.policy_id||'\\u2014')+'</td><td>'+E(n.reason_code)+'</td><td class="muted">'+E(n.details_preview)+'</td></tr>';}).join(''):'<tr><td colspan="6" class="muted">No no-entry events logged yet</td></tr>';}
     var dj=document.getElementById('jw-trade-jump'); if(dj&&j.all_trades_dropdown){var cur=dj.value, opts=j.all_trades_dropdown.length?('<option value="">All trades \\u2014 pick to jump + detail ('+j.all_trades_dropdown.length+')</option>'+j.all_trades_dropdown.map(function(d){return'<option value="'+E(String(d.id))+'">'+E(d.label)+'</option>';})).join(''):'<option value="">No closed trades</option>';dj.innerHTML=opts; if(cur)try{dj.value=cur;}catch(e){}}
     var clk=document.getElementById('jw-live-clock'); if(clk)clk.textContent='Last update '+new Date().toISOString().slice(11,19)+' UTC';
     if(typeof window.jwPolicySyncVisual==='function')window.jwPolicySyncVisual();
@@ -1333,6 +1356,23 @@ function htmlPage(v) {
         .join('')
     : '<tr><td colspan="13" class="muted">No closed trades yet</td></tr>';
 
+  const noTrades = v.recent_no_trades || [];
+  const ntCls = (rc) => {
+    const s = String(rc || '').toLowerCase();
+    if (s === 'open_blocked') return 'nt-blocked';
+    if (s === 'no_atr') return 'nt-warn';
+    if (s === 'no_entry_signal') return 'nt-signal';
+    return 'nt-dim';
+  };
+  const noTradeRows = noTrades.length
+    ? noTrades
+        .map(
+          (n) =>
+            `<tr class="${ntCls(n.reason_code)}"><td>${esc(String(n.id))}</td><td>${esc(formatIsoUtcShort(n.at_utc))}</td><td>${esc(truncateMid(n.market_event_id, 44))}</td><td>${esc(n.policy_id || '—')}</td><td>${esc(n.reason_code)}</td><td class="muted">${esc(n.details_preview)}</td></tr>`
+        )
+        .join('')
+    : '<tr><td colspan="6" class="muted">No no-entry events logged yet</td></tr>';
+
   const kl = v.last_kline;
   const klBlock = kl
     ? `<p class="muted">Last kline poll: ${esc(kl.market_event_id)} · close ${esc(kl.close_px)} · ${esc(kl.polled_at_utc)}</p>`
@@ -1463,6 +1503,10 @@ function htmlPage(v) {
     .trade-win { background: rgba(63, 185, 80, 0.14); }
     .trade-loss { background: rgba(248, 81, 73, 0.1); }
     .trade-flat { background: transparent; }
+    .nt-blocked { background: rgba(248, 81, 73, 0.08); }
+    .nt-warn { background: rgba(210, 153, 34, 0.1); }
+    .nt-signal { background: rgba(139, 148, 158, 0.08); }
+    .nt-dim { background: transparent; }
     a.csv-btn { display: inline-block; padding: 0.25rem 0.6rem; border: 1px solid #30363d; border-radius: 2px; color: #58a6ff; text-decoration: none; font-size: 0.85rem; }
     a.csv-btn:hover { background: #1f2428; }
     .trade-snap-h { font-size: 0.72rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; color: #8b949e; margin: 0.75rem 0 0.35rem 0; }
@@ -1525,6 +1569,7 @@ function htmlPage(v) {
         <a class="csv-btn" href="/api/v1/sean/trades.csv">Download all trades (CSV)</a>
       </p>
       <p class="muted small">Winning trades are tinted light green. CSV includes standard columns plus full <code>metadata_json</code> (entry <code>signal</code> + exit snapshot for closes written with the current engine). BlackBox baseline trade synthesis tiles use a different pipeline.</p>
+      <p class="muted small jw-panel-sync-hint">Time sync: same <code>/api/summary.json</code> poll as the live strip (${esc(String(v.refresh_sec || 0))}s). This panel: <strong>closed</strong> paper trades only (<code>sean_paper_trades</code>).</p>
       <div class="scroll" id="jw-trades-scroll"><table><thead><tr><th>trade_id</th><th>exit UTC</th><th>entry UTC</th><th>sym</th><th>side</th><th>entry px</th><th>exit px</th><th>size</th><th>PnL</th><th>result</th><th>exit</th><th>entry MEI</th><th>exit MEI</th></tr></thead><tbody id="jw-trades-tbody">${tradeRows}</tbody></table></div>
       <h3 class="trade-snap-h">Trade snapshot (JSON)</h3>
       <pre id="jw-trade-detail" class="trade-detail">Select a trade from the dropdown, or click a row.</pre>
@@ -1553,6 +1598,11 @@ function htmlPage(v) {
         });
       })();
       </script>
+    </div></section>
+    <section class="panel"><h2 class="jw-panel-head"><button type="button" class="jw-panel-toggle" aria-expanded="true" aria-controls="jw-pan-no-trade"><span class="jw-caret" aria-hidden="true">▼</span> No-entry log (flat bar, no open)</button></h2><div class="jw-panel-body" id="jw-pan-no-trade">
+      <p class="muted small jw-panel-sync-hint">Time sync: same <code>/api/summary.json</code> poll as the live strip (${esc(String(v.refresh_sec || 0))}s). This panel: <strong>no-entry</strong> decisions only (<code>sean_no_trade_log</code>) — not closed trades.</p>
+      <p class="muted small">Rows are written when the engine evaluates a bar flat and does not open: no signal, invalid ATR, or funding gate block. Full JSON is stored in SQLite; preview is truncated.</p>
+      <div class="scroll" id="jw-no-trade-scroll"><table><thead><tr><th>id</th><th>at UTC</th><th>market_event_id</th><th>policy</th><th>reason</th><th>details (preview)</th></tr></thead><tbody id="jw-no-trade-tbody">${noTradeRows}</tbody></table></div>
     </div></section>
     <section class="panel"><h2 class="jw-panel-head"><button type="button" class="jw-panel-toggle" aria-expanded="true" aria-controls="jw-pan-preflight"><span class="jw-caret" aria-hidden="true">▼</span> Preflight strip</button></h2><div class="jw-panel-body" id="jw-pan-preflight"><div id="jw-preflight-banner">${banner}</div><div class="scroll"><table><thead><tr><th>Check</th><th>Status</th><th>Detail</th></tr></thead><tbody id="jw-preflight-tbody">${chkRows}</tbody></table></div></div></section>
     <section class="panel"><h2 class="jw-panel-head"><button type="button" class="jw-panel-toggle" aria-expanded="true" aria-controls="jw-pan-oracle"><span class="jw-caret" aria-hidden="true">▼</span> Trade / oracle window (Pyth SOL/USD)</button></h2><div class="jw-panel-body" id="jw-pan-oracle"><div id="jw-oracle-block">${oracleBlock}</div></div></section>

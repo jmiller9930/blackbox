@@ -59,6 +59,14 @@ export function ensureSeanLedgerSchema(db) {
     );
     CREATE INDEX IF NOT EXISTS idx_sean_trades_entry_mid ON sean_paper_trades (entry_market_event_id);
     CREATE INDEX IF NOT EXISTS idx_sean_trades_exit_utc ON sean_paper_trades (exit_time_utc);
+    CREATE TABLE IF NOT EXISTS sean_no_trade_log (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      at_utc TEXT NOT NULL,
+      market_event_id TEXT NOT NULL,
+      policy_id TEXT,
+      reason_code TEXT NOT NULL,
+      details_json TEXT
+    );
   `);
   migratePositionLifecycle(db);
   const row = db.prepare(`SELECT id FROM sean_paper_position WHERE id = 1`).get();
@@ -207,6 +215,25 @@ export function updatePositionLifecycle(db, u) {
 
 export function incrementBarsHeld(db) {
   db.prepare(`UPDATE sean_paper_position SET bars_held = bars_held + 1 WHERE id = 1 AND side != 'flat'`).run();
+}
+
+/**
+ * Persist a flat-bar engine outcome (no new paper trade). Used by Jupiter web "No-entry" panel.
+ * @param {import('node:sqlite').DatabaseSync} db
+ * @param {{ atUtc: string, marketEventId: string, policyId?: string | null, reasonCode: string, detailsJson?: string | null }} o
+ */
+export function appendNoTradeLog(db, o) {
+  const dj = o.detailsJson != null ? String(o.detailsJson).slice(0, 12000) : null;
+  db.prepare(
+    `INSERT INTO sean_no_trade_log (at_utc, market_event_id, policy_id, reason_code, details_json)
+     VALUES (?, ?, ?, ?, ?)`
+  ).run(
+    o.atUtc,
+    o.marketEventId,
+    o.policyId ?? null,
+    o.reasonCode,
+    dj
+  );
 }
 
 /**

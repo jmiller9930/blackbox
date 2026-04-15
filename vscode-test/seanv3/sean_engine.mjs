@@ -10,6 +10,7 @@ import {
   openPaperPosition,
   updatePositionLifecycle,
   writeClosedTradeAndFlat,
+  appendNoTradeLog,
 } from './sean_ledger.mjs';
 import { resolveJupiterPolicy } from './jupiter_policy_runtime.mjs';
 import {
@@ -60,6 +61,21 @@ function entryIdsFromPositionMetadata(pos) {
     /* */
   }
   return { entryEngineId, entryPolicyTag };
+}
+
+/** @param {import('node:sqlite').DatabaseSync} db */
+function logNoTrade(db, policy, marketEventId, reasonCode, extra) {
+  try {
+    appendNoTradeLog(db, {
+      atUtc: new Date().toISOString(),
+      marketEventId,
+      policyId: policy?.policyId ?? null,
+      reasonCode,
+      detailsJson: JSON.stringify(extra ?? {}).slice(0, 12000),
+    });
+  } catch (e) {
+    console.error('[seanv3] appendNoTradeLog:', e);
+  }
 }
 
 /**
@@ -194,10 +210,20 @@ export function processSeanEngine(db, { marketEventId, kline }) {
 
   const sig = policy.generateEntrySignal(closes, highs, lows, vols);
   const side = policy.resolveEntrySide(sig.shortSignal, sig.longSignal);
-  if (!side) return;
+  if (!side) {
+    logNoTrade(db, policy, marketEventId, 'no_entry_signal', {
+      diag: sig.diag,
+      long: sig.longSignal,
+      short: sig.shortSignal,
+    });
+    return;
+  }
 
   const atr = sig.diag.atr;
-  if (typeof atr !== 'number' || !(atr > 0)) return;
+  if (typeof atr !== 'number' || !(atr > 0)) {
+    logNoTrade(db, policy, marketEventId, 'no_atr', { diag: sig.diag, atr: sig.diag?.atr });
+    return;
+  }
 
   const entry = closes[closes.length - 1];
   const lv = initialSlTp(entry, atr, side);
@@ -209,6 +235,10 @@ export function processSeanEngine(db, { marketEventId, kline }) {
   });
   if (!gate.ok) {
     console.error(`[seanv3] open blocked: ${gate.reason} — ${gate.detail}`);
+    logNoTrade(db, policy, marketEventId, 'open_blocked', {
+      gate_reason: gate.reason,
+      gate_detail: gate.detail,
+    });
     return;
   }
 
