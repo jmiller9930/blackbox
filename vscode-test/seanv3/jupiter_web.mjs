@@ -24,6 +24,13 @@ import {
   normalizePolicyId,
   resolveJupiterPolicy,
 } from './jupiter_policy_runtime.mjs';
+import {
+  bootstrapJupiterAuthUserIfNeeded,
+  ensureJupiterWebAuthSchema,
+  getSessionSecret,
+  handleJupiterAuthHttp,
+  requireJupiterSession,
+} from './jupiter_web_auth.mjs';
 
 /** GET /api/v1/jupiter/policy — observability only. */
 const JUPITER_POLICY_OBSERVABILITY_CONTRACT = 'jupiter_policy_observability_v1';
@@ -886,12 +893,13 @@ function buildOperatorPayload(seanPath, markUsd, base) {
 }
 
 function frontDoorHtml() {
-  const basicOn =
-    Boolean((process.env.JUPITER_WEB_LOGIN_USER || '').trim()) &&
-    Boolean((process.env.JUPITER_WEB_LOGIN_PASSWORD || '').trim());
-  const loginNote = basicOn
-    ? `<p class="note">Browser login is <strong>HTTP Basic Auth</strong> (user/password from <code>JUPITER_WEB_LOGIN_*</code>; see <code>vscode-test/lab_dashboard_login.defaults.env</code>). Operator <strong>Bearer</strong> for API POSTs is separate.`
-    : `<p class="note">No browser login configured — restrict with VPN/firewall. Operator Bearer token required for policy POST when read-only.</p>`;
+  const mode = jupiterAuthMode();
+  const loginNote =
+    mode === 'session'
+      ? `<p class="note">Browser login: <strong><a href="/auth/login">Sign in</a></strong> (session). Forgot password uses email reset. Operator <strong>Bearer</strong> for API POSTs is separate.</p>`
+      : mode === 'basic'
+        ? `<p class="note">Browser login is <strong>HTTP Basic Auth</strong> (<code>JUPITER_WEB_LOGIN_*</code>). Operator <strong>Bearer</strong> for API POSTs is separate.</p>`
+        : `<p class="note">No browser login configured — restrict with VPN/firewall. Operator Bearer token required for policy POST when read-only.</p>`;
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -1036,9 +1044,10 @@ function jwLivePollScript(refreshSec) {
     if(typeof window.jwPolicySyncVisual==='function')window.jwPolicySyncVisual();
   }
   function jwWireTrades(){var sel=document.getElementById('jw-trade-jump');var pre=document.getElementById('jw-trade-detail');document.querySelectorAll('#jw-trades-tbody tr.trade-row').forEach(function(tr){tr.onclick=function(){var id=tr.getAttribute('data-trade-id');if(!id)return;if(sel)sel.value=id;if(pre)fetch('/api/v1/sean/trade/'+id+'.json').then(function(r){return r.text();}).then(function(t){pre.textContent=t;}).catch(function(e){pre.textContent=String(e);});};});}
-  window.jwLiveRefresh=function(){return fetch('/api/summary.json').then(function(r){return r.json();}).then(apply);};
-  fetch('/api/summary.json').then(function(r){return r.json();}).then(apply).catch(function(){});
-  setInterval(function(){fetch('/api/summary.json').then(function(r){return r.json();}).then(apply).catch(function(){});},POLL_MS);
+  function sumFetch(){return fetch('/api/summary.json').then(function(r){if(r.status===401){location.href='/auth/login';return Promise.reject();}return r.json();});}
+  window.jwLiveRefresh=function(){return sumFetch().then(apply);};
+  sumFetch().then(apply).catch(function(){});
+  setInterval(function(){sumFetch().then(apply).catch(function(){});},POLL_MS);
 })();
 <\/script>`;
 }
@@ -1466,6 +1475,7 @@ function htmlPage(v) {
       <h2 class="jw-panel-head"><button type="button" class="jw-panel-toggle" aria-expanded="true" aria-controls="jw-pan-overview"><span class="jw-caret" aria-hidden="true">▼</span> Dashboard overview</button></h2>
       <div class="jw-panel-body" id="jw-pan-overview">
       <h1>Jupiter — operator dashboard</h1>
+      ${jupiterAuthMode() === 'session' ? '<p class="muted small"><a href="/auth/logout">Log out</a></p>' : ''}
       ${
         w?.pubkey_base58
           ? `<p class="pubkey-banner"><strong>Paper wallet pubkey (published)</strong><br/><code id="jw-pubkey-published">${esc(w.pubkey_base58)}</code>
@@ -1883,10 +1893,38 @@ function jupiterWebBasicAuthOk(req, res, url) {
   return true;
 }
 
+function jupiterAuthMode() {
+  const m = (process.env.JUPITER_AUTH_MODE || '').trim().toLowerCase();
+  if (m === 'session' || m === 'basic' || m === 'none') return m;
+  if ((process.env.JUPITER_WEB_LOGIN_USER || '').trim() && (process.env.JUPITER_WEB_LOGIN_PASSWORD || '').trim())
+    return 'basic';
+  return 'none';
+}
+
+function jupiterPublicPath(pathname, method) {
+  if (pathname === '/health' && method === 'GET') return true;
+  if (pathname === '/static/jupiter_front_door.png' && method === 'GET') return true;
+  return false;
+}
+
 const server = http.createServer((req, res) => {
   void (async () => {
     const url = new URL(req.url || '/', `http://${req.headers.host || 'localhost'}`);
-    if (!jupiterWebBasicAuthOk(req, res, url)) return;
+    const mode = jupiterAuthMode();
+
+    if (mode === 'session') {
+      const authHandled = await handleJupiterAuthHttp(req, res, url, { dbPath, readRequestBody });
+      if (authHandled) return;
+      if (!jupiterPublicPath(url.pathname, req.method)) {
+        const accept = req.headers.accept || '';
+        const wantsJson =
+          url.pathname.startsWith('/api') ||
+          (accept.includes('application/json') && !accept.includes('text/html'));
+        if (!requireJupiterSession(req, res, url, { wantsJson })) return;
+      }
+    } else if (mode === 'basic') {
+      if (!jupiterWebBasicAuthOk(req, res, url)) return;
+    }
 
     if (url.pathname === '/api/v1/jupiter/policy' && req.method === 'GET') {
       handleJupiterPolicyGet(res);
@@ -2121,6 +2159,30 @@ const server = http.createServer((req, res) => {
   });
 });
 
+if (jupiterAuthMode() === 'session' && !getSessionSecret()) {
+  console.error('[jupiter] FATAL: JUPITER_AUTH_MODE=session requires JUPITER_SESSION_SECRET (long random string)');
+  process.exit(1);
+}
+
+{
+  let db;
+  try {
+    if (jupiterAuthMode() === 'session') {
+      db = new DatabaseSync(dbPath());
+      ensureJupiterWebAuthSchema(db);
+      bootstrapJupiterAuthUserIfNeeded(db);
+    }
+  } catch (e) {
+    console.error('[jupiter] auth bootstrap:', e instanceof Error ? e.message : e);
+  } finally {
+    try {
+      db?.close();
+    } catch {
+      /* */
+    }
+  }
+}
+
 server.listen(port, bind, () => {
-  console.error(`[jupiter] http://${bind}:${port}/ front door · http://${bind}:${port}/dashboard operator UI`);
+  console.error(`[jupiter] http://${bind}:${port}/ front door · http://${bind}:${port}/dashboard operator UI · auth=${jupiterAuthMode()}`);
 });

@@ -44,6 +44,7 @@ trading_core/keypair.base58
 
 # vscode-test: local override for Jupiter dashboard Basic Auth (defaults are in lab_dashboard_login.defaults.env)
 vscode-test/lab_dashboard_login.env
+vscode-test/seanv3/.env
 
 # Local secrets (never commit)
 .env
