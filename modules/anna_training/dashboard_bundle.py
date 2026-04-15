@@ -5580,19 +5580,45 @@ def build_dashboard_bundle(
                 "error": str(e)[:400],
             }
 
-    with ThreadPoolExecutor(max_workers=6) as _pool:
+    def _bundle_parallel_ingest_health() -> dict[str, Any]:
+        try:
+            from modules.anna_training.ingest_health import compute_ingest_health
+
+            if mdb_for_snap is None or not Path(mdb_for_snap).is_file():
+                return {
+                    "schema": "ingest_health_v1",
+                    "healthy": False,
+                    "state": "critical",
+                    "operator_alert_code": "TAPE_STALLED",
+                    "message": "market database path unavailable for ingest health",
+                    "ui_trust_tape_data": False,
+                }
+            return compute_ingest_health(market_db_path=Path(mdb_for_snap))
+        except Exception as e:
+            return {
+                "schema": "ingest_health_v1",
+                "healthy": False,
+                "state": "critical",
+                "operator_alert_code": "TAPE_STALLED",
+                "message": str(e)[:300],
+                "ui_trust_tape_data": False,
+            }
+
+    with ThreadPoolExecutor(max_workers=7) as _pool:
         _f_tc = _pool.submit(_bundle_parallel_tc)
         _f_snap = _pool.submit(_bundle_parallel_snap)
         _f_ot = _pool.submit(_bundle_parallel_operator_trading)
         _f_pyth = _pool.submit(_bundle_parallel_pyth_pack)
         _f_pc = _pool.submit(_bundle_parallel_paper_cap)
         _f_jup = _pool.submit(_bundle_parallel_jupiter)
+        _f_ih = _pool.submit(_bundle_parallel_ingest_health)
         tc = _f_tc.result()
         baseline_active_snap = _f_snap.result()
         operator_trading = _f_ot.result()
         pyth_snap, pyth_sse_tape, sse_ticks_5m = _f_pyth.result()
         paper_cap = _f_pc.result()
         jupiter_policy_snapshot = _f_jup.result()
+        ingest_health = _f_ih.result()
 
     if baseline_active_snap.get("position_open") and not (tc.get("event_axis") or []):
         inj = str(
@@ -5654,6 +5680,10 @@ def build_dashboard_bundle(
             "pyth_sse_ticks_5m": sse_ticks_5m,
             "pyth_sse_last_inserted_at": (pyth_sse_tape or {}).get("last_sse_inserted_at"),
             "tick_staleness": tick_stale,
+            "ingest_health_healthy": bool((ingest_health or {}).get("healthy")),
+            "ingest_health_state": (ingest_health or {}).get("state"),
+            "ingest_health_alert_code": (ingest_health or {}).get("operator_alert_code"),
+            "hermes_tick_age_seconds": ((ingest_health or {}).get("tick") or {}).get("age_seconds"),
         },
         "next_tick": next_tick,
         "not_exchange_tick_stream": (
@@ -5830,4 +5860,5 @@ def build_dashboard_bundle(
         "learning_proof": learning_proof,
         "jupiter_policy_snapshot": jupiter_policy_snapshot,
         "jup_v3_timeline_proof": jup_v3_timeline_proof,
+        "ingest_health": ingest_health,
     }

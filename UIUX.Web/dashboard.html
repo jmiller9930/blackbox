@@ -69,6 +69,28 @@
     .dash-main {
       flex: 1; display: flex; flex-direction: column; min-width: 0; min-height: 0;
       background: linear-gradient(180deg, #f8f8fa 0%, #eef1f5 100%);
+      position: relative;
+    }
+    /* Hermes tape / canonical bar watchdog — must dominate quiet-UI failure modes */
+    .dash-tape-banner {
+      display: none;
+      flex-shrink: 0;
+      padding: 0.55rem 0.85rem;
+      font-size: 0.88rem;
+      font-weight: 800;
+      background: #7f1d1d;
+      color: #fef2f2;
+      border-bottom: 2px solid #450a0a;
+      line-height: 1.35;
+    }
+    .dash-tape-banner.is-active { display: block; }
+    .dash-main.tape-untrusted::after {
+      content: "";
+      pointer-events: none;
+      position: absolute;
+      inset: 0;
+      background: rgba(15, 23, 42, 0.06);
+      z-index: 5;
     }
     /* Row 1 — single banner strip */
     .dash-r1 {
@@ -1177,7 +1199,8 @@
       <button type="button" class="dash-nav-linklike" id="navDashPaths" title="Open run paths (same as Start dialog)">Run configuration</button>
       <button type="button" class="dash-nav-linklike" id="navDashOb" title="What runs vs shadow vs paper (from bundle)">Operational boundary</button>
     </nav>
-    <div class="dash-main">
+    <div class="dash-main" id="dash-main-root">
+      <div class="dash-tape-banner" id="dash-tape-banner" role="alert" aria-live="assertive"></div>
       <div id="dash-view-default">
       <!-- Row 0: liveness / cadence (heartbeat on each poll) -->
       <div class="dash-live is-not_running" id="dash-live" role="status" aria-live="polite">
@@ -3655,6 +3678,32 @@
   function render(bundle) {
     window.__bbLastBundle = bundle;
     try {
+    /* Hermes tape + canonical bar ingest watchdog (bundle.ingest_health) */
+    (function renderIngestTapeBanner() {
+      var ih = bundle && bundle.ingest_health ? bundle.ingest_health : null;
+      var tapeOk = !ih || ih.healthy === true;
+      var tb = $('dash-tape-banner');
+      if (tb) {
+        if (!tapeOk) {
+          tb.classList.add('is-active');
+          var code = ih && ih.operator_alert_code ? String(ih.operator_alert_code) : 'TAPE_STALLED';
+          var msg = ih && ih.message ? String(ih.message) : 'Tape health check failed.';
+          tb.innerHTML =
+            '<div><strong>TAPE NOT RELIABLE</strong> — ' +
+            esc(code) +
+            '. ' +
+            esc(msg) +
+            '</div><div style="font-weight:600;font-size:0.78rem;margin-top:0.35rem;opacity:0.95">' +
+            'No trustworthy Hermes tick stream and/or current 5m bar — baseline tiles, evaluations, and trade ' +
+            'readiness are not reliable until ingest recovers. Do not interpret policy or PnL as live truth.</div>';
+        } else {
+          tb.classList.remove('is-active');
+          tb.innerHTML = '';
+        }
+      }
+      var dmr = $('dash-main-root');
+      if (dmr) dmr.classList.toggle('tape-untrusted', !tapeOk);
+    })();
     try {
       renderBaselineStrip((bundle && bundle.trade_chain) || {});
     } catch (e) {

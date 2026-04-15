@@ -1910,6 +1910,34 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/api/v1/market/binance/ping":
             self._json(200, build_binance_ping(), no_cache=True)
             return
+        if path == "/api/v1/market/ingest-health":
+            try:
+                from modules.anna_training.dashboard_bundle import _market_db_path
+                from modules.anna_training.ingest_health import compute_ingest_health
+
+                mp = _market_db_path()
+                if mp is None or not mp.is_file():
+                    self._json(
+                        200,
+                        {
+                            "schema": "ingest_health_v1",
+                            "healthy": False,
+                            "state": "critical",
+                            "operator_alert_code": "TAPE_STALLED",
+                            "message": "market database path unavailable",
+                            "ui_trust_tape_data": False,
+                        },
+                        no_cache=True,
+                    )
+                else:
+                    self._json(200, compute_ingest_health(market_db_path=mp), no_cache=True)
+            except Exception as e:
+                self._json(
+                    500,
+                    {"schema": "ingest_health_v1", "healthy": False, "error": str(e)[:400]},
+                    no_cache=True,
+                )
+            return
         if path == "/api/v1/anna/summary":
             self._json(200, build_anna_summary())
             return
