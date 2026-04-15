@@ -2120,6 +2120,38 @@ class Handler(BaseHTTPRequestHandler):
                 return
             self._json(200, body, no_cache=True)
             return
+        if path == "/api/v1/dashboard/policy-evaluation-forensic":
+            try:
+                from modules.anna_training.dashboard_bundle import build_policy_evaluation_forensic_v1
+
+                q = parse_qs(parsed.query or "")
+                mid = (q.get("market_event_id") or [""])[0].strip()
+                if not mid:
+                    self._json(
+                        400,
+                        {
+                            "schema": "policy_evaluation_forensic_v1",
+                            "ok": False,
+                            "error": "market_event_id query parameter required",
+                        },
+                        no_cache=True,
+                    )
+                    return
+                body = build_policy_evaluation_forensic_v1(market_event_id=mid)
+            except Exception as e:  # noqa: BLE001
+                self._json(
+                    500,
+                    {
+                        "schema": "policy_evaluation_forensic_v1",
+                        "ok": False,
+                        "error": str(e)[:500],
+                        "trace_id": str(uuid.uuid4()),
+                    },
+                    no_cache=True,
+                )
+                return
+            self._json(200, body, no_cache=True)
+            return
         if path == "/api/v1/dashboard/baseline-active-position":
             try:
                 from modules.anna_training.dashboard_bundle import build_baseline_active_position_snapshot

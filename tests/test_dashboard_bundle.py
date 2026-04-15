@@ -25,6 +25,7 @@ from modules.anna_training.dashboard_bundle import (
     _baseline_lifecycle_for_dashboard_from_active_snapshot,
     baseline_jupiter_policy_tag_for_execution_trade,
     build_baseline_active_position_snapshot,
+    build_policy_evaluation_forensic_v1,
     _compact_baseline_cell_policy_bound,
     _event_axis_jupiter_tile_narratives,
     _pair_vs_baseline_for_cells,
@@ -319,6 +320,31 @@ def test_jupiter_tile_narrative_authoritative_from_ledger_without_tile(
     text = narr.get(mid, "")
     assert "ledger_authoritative_fixture" in text
     assert "New 5-min candle formed" not in text
+
+
+def test_policy_evaluation_forensic_v1_holding_note(tmp_path: Path) -> None:
+    """Forensic flags lifecycle reason_code rows (trade=False is expected, not raw arming)."""
+    ledger = tmp_path / "el.db"
+    mid = "SOL-PERP_5m_2026-04-01T15:00:00Z"
+    conn = connect_ledger(ledger)
+    ensure_execution_ledger_schema(conn)
+    upsert_policy_evaluation(
+        market_event_id=mid,
+        signal_mode=SIGNAL_MODE_JUPITER_3,
+        tick_mode="paper",
+        trade=False,
+        reason_code="jupiter_2_baseline_holding",
+        features={"lifecycle": "holding"},
+        side="long",
+        conn=conn,
+    )
+    conn.commit()
+    conn.close()
+    out = build_policy_evaluation_forensic_v1(market_event_id=mid, db_path=ledger, market_db_path=None)
+    assert out.get("schema") == "policy_evaluation_forensic_v1"
+    assert out.get("ok") is True
+    notes = " ".join(out.get("notes") or [])
+    assert "lifecycle" in notes.lower() or "holding" in notes.lower()
 
 
 def test_jupiter_tile_persisted_row_primary_when_operator_slot_mismatches(tmp_path: Path) -> None:

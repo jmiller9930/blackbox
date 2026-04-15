@@ -438,22 +438,19 @@ def _compact_baseline_ledger_last(raw: Any) -> dict[str, Any] | None:
     return out if len(out) > 1 else None
 
 
-def _recompute_jupiter_narrative_for_market_event_id(
+def _baseline_sean_evaluate_at_market_event_id(
     market_event_id: str,
     market_db_path: Path,
     *,
     policy_slot: str,
     training_state: dict[str, Any] | None,
     prefetch_bars: list[dict[str, Any]] | None = None,
-) -> tuple[str, dict[str, Any] | None, dict[str, Any] | None]:
+) -> dict[str, Any] | None:
     """
-    Recompute Sean Jupiter narrative + gates from **stored bars** (same evaluators as the bridge).
+    Run the same Sean Jupiter evaluator + bar window as ``baseline_ledger_bridge`` / preview recompute.
 
-    **Not operator truth:** use only for ``preview_*`` / ``audit_*`` surfaces. Primary tiles must use
-    persisted ``policy_evaluations`` (see ``_event_axis_jupiter_tile_narratives``).
-
-    Returns ``(narrative, jupiter_gates, policy_features)``. Gates are set for Jupiter_3 (``jupiter_v3_gates``)
-    or Jupiter_4 (``jupiter_v4_gates``) when present; else ``None``.
+    Returns a dict with ``trade``, ``side``, ``reason_code``, ``signal_mode``, ``features``, ``bars_window_len``,
+    or ``None`` if the bar cannot be evaluated (missing DB, short history, import failure).
     """
     from modules.anna_training.jupiter_3_sean_policy import MIN_BARS as MIN_BARS_JUPITER_3
     from modules.anna_training.jupiter_4_sean_policy import MIN_BARS as MIN_BARS_JUPITER_4
@@ -462,13 +459,12 @@ def _recompute_jupiter_narrative_for_market_event_id(
         evaluate_sean_jupiter_baseline_v1,
         evaluate_sean_jupiter_baseline_v3,
         evaluate_sean_jupiter_baseline_v4,
-        format_baseline_jupiter_tile_narrative,
     )
     from modules.anna_training.store import load_state as _load_training_state
 
     mid = str(market_event_id or "").strip()
     if not mid or not market_db_path.is_file():
-        return "", None, None
+        return None
     use_v3 = policy_slot == BASELINE_POLICY_SLOT_JUP_V3
     use_v4 = policy_slot == BASELINE_POLICY_SLOT_JUP_V4
     use_binance = policy_uses_binance_strategy_bars(policy_slot)
@@ -490,7 +486,7 @@ def _recompute_jupiter_narrative_for_market_event_id(
             jupiter3_binance_strategy_lookback,
         )
     except Exception:
-        return "", None, None
+        return None
     try:
         bars: list[dict[str, Any]]
         if prefetch_bars is not None and len(prefetch_bars) > 0:
@@ -516,7 +512,7 @@ def _recompute_jupiter_narrative_for_market_event_id(
                 None,
             )
         if idx is None or len(bars[: idx + 1]) < min_bars:
-            return "", None, None
+            return None
         sub = bars[: idx + 1]
         if use_v4:
             sig = evaluate_sean_jupiter_baseline_v4(
@@ -537,26 +533,212 @@ def _recompute_jupiter_narrative_for_market_event_id(
                 ledger_db_path=default_execution_ledger_path(),
             )
         sf = dict(sig.features) if isinstance(sig.features, dict) else {}
-        pb = sf.get("policy_blockers")
-        pbl = [str(x) for x in pb] if isinstance(pb, list) else None
-        gates: dict[str, Any] | None = None
-        if use_v3:
-            jg = sf.get("jupiter_v3_gates")
-            gates = jg if isinstance(jg, dict) else None
-        elif use_v4:
-            jg = sf.get("jupiter_v4_gates")
-            gates = jg if isinstance(jg, dict) else None
-        text = format_baseline_jupiter_tile_narrative(
-            signal_mode=sm,
-            features=sf,
-            reason_code=str(sig.reason_code or ""),
-            trade=bool(sig.trade),
-            side=str(sig.side or "flat"),
-            policy_blockers=pbl,
-        )
-        return text, gates, sf
+        return {
+            "schema": "baseline_sean_eval_snapshot_v1",
+            "policy_slot": policy_slot,
+            "signal_mode": sm,
+            "trade": bool(sig.trade),
+            "side": str(sig.side or "flat"),
+            "reason_code": str(sig.reason_code or ""),
+            "features": sf,
+            "bars_window_len": len(sub),
+            "evaluator": "v4" if use_v4 else ("v3" if use_v3 else "v1"),
+        }
     except Exception:
+        return None
+
+
+def _recompute_jupiter_narrative_for_market_event_id(
+    market_event_id: str,
+    market_db_path: Path,
+    *,
+    policy_slot: str,
+    training_state: dict[str, Any] | None,
+    prefetch_bars: list[dict[str, Any]] | None = None,
+) -> tuple[str, dict[str, Any] | None, dict[str, Any] | None]:
+    """
+    Recompute Sean Jupiter narrative + gates from **stored bars** (same evaluators as the bridge).
+
+    **Not operator truth:** use only for ``preview_*`` / ``audit_*`` surfaces. Primary tiles must use
+    persisted ``policy_evaluations`` (see ``_event_axis_jupiter_tile_narratives``).
+
+    Returns ``(narrative, jupiter_gates, policy_features)``. Gates are set for Jupiter_3 (``jupiter_v3_gates``)
+    or Jupiter_4 (``jupiter_v4_gates``) when present; else ``None``.
+    """
+    from modules.anna_training.sean_jupiter_baseline_signal import format_baseline_jupiter_tile_narrative
+
+    use_v3 = policy_slot == BASELINE_POLICY_SLOT_JUP_V3
+    use_v4 = policy_slot == BASELINE_POLICY_SLOT_JUP_V4
+    snap = _baseline_sean_evaluate_at_market_event_id(
+        market_event_id,
+        market_db_path,
+        policy_slot=policy_slot,
+        training_state=training_state,
+        prefetch_bars=prefetch_bars,
+    )
+    if not snap:
         return "", None, None
+    sf = snap.get("features")
+    if not isinstance(sf, dict):
+        sf = {}
+    sm = str(snap.get("signal_mode") or "")
+    pb = sf.get("policy_blockers")
+    pbl = [str(x) for x in pb] if isinstance(pb, list) else None
+    gates: dict[str, Any] | None = None
+    if use_v3:
+        jg = sf.get("jupiter_v3_gates")
+        gates = jg if isinstance(jg, dict) else None
+    elif use_v4:
+        jg = sf.get("jupiter_v4_gates")
+        gates = jg if isinstance(jg, dict) else None
+    text = format_baseline_jupiter_tile_narrative(
+        signal_mode=sm,
+        features=sf,
+        reason_code=str(snap.get("reason_code") or ""),
+        trade=bool(snap.get("trade")),
+        side=str(snap.get("side") or "flat"),
+        policy_blockers=pbl,
+    )
+    return text, gates, sf
+
+
+def build_policy_evaluation_forensic_v1(
+    *,
+    market_event_id: str,
+    db_path: Path | None = None,
+    market_db_path: Path | None = None,
+) -> dict[str, Any]:
+    """
+    Data-level RCA for one bar: **all** persisted ``policy_evaluations`` rows vs a fresh Sean evaluation
+    for the **current** execution policy slot (same code path as preview recompute).
+
+    Use this to answer whether persisted truth disagrees with re-eval, and *why* (lifecycle semantics,
+    wrong ``signal_mode`` row, slot change, etc.). Does not mutate the database.
+    """
+    from modules.anna_training.store import load_state as _load_training_state
+
+    mid = str(market_event_id or "").strip()
+    ldb = db_path or default_execution_ledger_path()
+    mpath = market_db_path if market_db_path is not None else _market_db_path()
+    out: dict[str, Any] = {
+        "schema": "policy_evaluation_forensic_v1",
+        "market_event_id": mid,
+        "ok": False,
+        "error": None,
+        "persisted_rows_all_signal_modes": [],
+        "primary_row_prefer_active_slot": None,
+        "execution_policy_slot": None,
+        "recomputed_sean_eval": None,
+        "comparison": None,
+        "notes": [],
+    }
+    if not mid:
+        out["error"] = "market_event_id_required"
+        return out
+
+    conn = connect_ledger(ldb)
+    try:
+        ensure_execution_ledger_schema(conn)
+        slot_exec = resolve_baseline_jupiter_policy_for_execution(conn)
+        out["execution_policy_slot"] = slot_exec
+        cur = conn.execute(
+            """
+            SELECT signal_mode, tick_mode, trade, side, reason_code, evaluated_at_utc,
+                   policy_id, policy_version, slot
+            FROM policy_evaluations
+            WHERE market_event_id = ? AND lane = ? AND strategy_id = ?
+            ORDER BY signal_mode ASC
+            """,
+            (mid, RESERVED_STRATEGY_BASELINE, RESERVED_STRATEGY_BASELINE),
+        )
+        cols = [d[0] for d in cur.description]
+        for row in cur.fetchall():
+            r = dict(zip(cols, row))
+            r["trade"] = bool(r.get("trade"))
+            out["persisted_rows_all_signal_modes"].append(r)
+
+        primary = fetch_baseline_policy_evaluation_for_market_event(conn, mid, prefer_active_slot=True)
+        if primary:
+            pf = primary.get("features") if isinstance(primary.get("features"), dict) else {}
+            out["primary_row_prefer_active_slot"] = {
+                "signal_mode": str(primary.get("signal_mode") or ""),
+                "trade": bool(primary.get("trade")),
+                "side": str(primary.get("side") or ""),
+                "reason_code": str(primary.get("reason_code") or ""),
+                "evaluated_at_utc": str(primary.get("evaluated_at_utc") or ""),
+                "tick_mode": str(primary.get("tick_mode") or ""),
+                "policy_id": primary.get("policy_id"),
+                "policy_version": primary.get("policy_version"),
+                "slot": primary.get("slot"),
+                "features_keys_sample": sorted(str(k) for k in list(pf.keys())[:40]),
+            }
+        else:
+            out["notes"].append("No policy_evaluations row for this market_event_id (baseline lane).")
+
+        if primary and str(primary.get("reason_code") or "") in (
+            JUPITER_2_BASELINE_HOLDING_RC,
+            JUPITER_2_BASELINE_EXIT_RC,
+        ):
+            out["notes"].append(
+                "Persisted row uses lifecycle reason_code: policy_evaluations stores trade=False for "
+                "holding/exit bars by contract — this is not the raw 'arming' signal. Compare recomputed "
+                "flat-bar signal only when no position/holding applied at write time."
+            )
+
+        st = _load_training_state()
+        re_eval = None
+        if not mpath.is_file():
+            out["notes"].append(
+                "Market DB path missing or not a file — recomputed_sean_eval unavailable (set BLACKBOX_MARKET_DATA_PATH or pass market_db_path)."
+            )
+        else:
+            re_eval = _baseline_sean_evaluate_at_market_event_id(
+                mid, mpath, policy_slot=slot_exec, training_state=st, prefetch_bars=None
+            )
+            if re_eval is None:
+                out["notes"].append(
+                    "Recompute returned no snapshot (bar not in window, insufficient history, or evaluator error)."
+                )
+        out["recomputed_sean_eval"] = re_eval
+
+        cmp: dict[str, Any] = {
+            "trade_persisted_primary": bool(primary.get("trade")) if primary else None,
+            "trade_recomputed": re_eval.get("trade") if isinstance(re_eval, dict) else None,
+            "signal_mode_persisted_primary": str(primary.get("signal_mode") or "") if primary else None,
+            "signal_mode_recomputed": re_eval.get("signal_mode") if isinstance(re_eval, dict) else None,
+            "differ_on_trade": None,
+        }
+        if primary and isinstance(re_eval, dict):
+            cmp["differ_on_trade"] = bool(primary.get("trade")) != bool(re_eval.get("trade"))
+        out["comparison"] = cmp
+
+        if cmp.get("differ_on_trade") and primary:
+            rc = str(primary.get("reason_code") or "")
+            if rc in (JUPITER_2_BASELINE_HOLDING_RC, JUPITER_2_BASELINE_EXIT_RC):
+                out["notes"].append(
+                    "Difference expected: persisted row encodes lifecycle state (not raw evaluator trade bit)."
+                )
+            elif rc and "holding" in rc.lower():
+                out["notes"].append("Check whether this is a lifecycle/holding classification row.")
+            else:
+                out["notes"].append(
+                    "Possible causes for flat-bar mismatch: different evaluated_at inputs (training_state, "
+                    "ledger parity), bar window length vs bridge tick, second tick overwrite, or comparing "
+                    "different signal_mode rows (unique key per engine)."
+                )
+
+        if len(out["persisted_rows_all_signal_modes"]) > 1:
+            out["notes"].append(
+                "Multiple signal_mode rows exist for this bar — fetch selection depends on prefer_active_slot "
+                "and ordering (see execution_ledger.fetch_baseline_policy_evaluation_for_market_event)."
+            )
+
+        out["ok"] = True
+    except Exception as exc:
+        out["error"] = str(exc)[:500]
+    finally:
+        conn.close()
+    return out
 
 
 def _jupiter_v3_gates_from_policy_row(pol_e: dict[str, Any] | None) -> dict[str, Any] | None:
