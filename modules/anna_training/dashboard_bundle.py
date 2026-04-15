@@ -51,6 +51,68 @@ _BASELINE_CANONICAL_SYMBOL_DEFAULT = "SOL-PERP"
 BASELINE_JUPITER_POLICY_VERSION_TAG = "JUPv2"
 
 
+def _operator_trade_semantics_from_policy_row(pol: dict[str, Any] | None) -> dict[str, Any]:
+    """
+    Split **qualification** (would the strategy trade this bar?) from **persisted entry** (``did_trade`` —
+    new open on this bar, same intent as ``policy_evaluations.trade`` for flat bars).
+
+    Populated from ``features_json.would_trade`` / ``features_json.did_trade`` when the bridge has written them;
+    legacy rows infer where possible.
+    """
+    if not pol:
+        return {
+            "would_trade": None,
+            "did_trade": None,
+            "provenance": "no_policy_row",
+        }
+    feat = pol.get("features") if isinstance(pol.get("features"), dict) else {}
+    rc = str(pol.get("reason_code") or "")
+    wt_raw = feat.get("would_trade")
+    dt_raw = feat.get("did_trade")
+    if wt_raw is not None:
+        would_trade = bool(wt_raw)
+        wt_prov = "persisted_features"
+    elif rc in (JUPITER_2_BASELINE_HOLDING_RC, JUPITER_2_BASELINE_EXIT_RC):
+        would_trade = None
+        wt_prov = "legacy_unknown_upgrade_bridge"
+    else:
+        would_trade = bool(pol.get("trade"))
+        wt_prov = "legacy_inferred_trade_column"
+    if dt_raw is not None:
+        did_trade = bool(dt_raw)
+        dt_prov = "persisted_features"
+    elif rc in (JUPITER_2_BASELINE_HOLDING_RC, JUPITER_2_BASELINE_EXIT_RC):
+        did_trade = False
+        dt_prov = "legacy_lifecycle"
+    else:
+        did_trade = bool(pol.get("trade"))
+        dt_prov = "legacy_inferred_trade_column"
+    return {
+        "would_trade": would_trade,
+        "did_trade": did_trade,
+        "provenance": f"would_trade:{wt_prov};did_trade:{dt_prov}",
+    }
+
+
+def _attach_operator_trade_semantics_to_baseline_cell(
+    conn: Any,
+    market_event_id: str,
+    cell: dict[str, Any],
+) -> dict[str, Any]:
+    """Attach ``operator_would_trade`` / ``operator_did_trade`` for trade-chain baseline cells."""
+    if not cell or cell.get("empty"):
+        return cell
+    mid = str(market_event_id or "").strip()
+    if not mid:
+        return cell
+    pol = fetch_baseline_policy_evaluation_for_market_event(conn, mid, prefer_active_slot=True)
+    sem = _operator_trade_semantics_from_policy_row(pol)
+    cell["operator_would_trade"] = sem["would_trade"]
+    cell["operator_did_trade"] = sem["did_trade"]
+    cell["operator_trade_semantics_provenance"] = sem["provenance"]
+    return cell
+
+
 def _binance_kline_volume_ok_from_features(features: dict[str, Any] | None) -> bool:
     """
     Sean / operator **green ball**: usable **exchange volume** on the evaluated bar.
@@ -5202,6 +5264,7 @@ def build_trade_chain_payload(
                         "jupiter_v3_gates": "persisted_policy_evaluations",
                         "jupiter_tile_preview": ("recompute" if pv else None),
                     }
+                    d = _attach_operator_trade_semantics_to_baseline_cell(conn, mid_k, d)
                 if ck_row == "baseline" and narr and not d.get("jupiter_tile_narrative_scope"):
                     d["jupiter_tile_narrative_scope"] = "current_bar"
                     d["jupiter_tile_narrative_scope_note"] = (

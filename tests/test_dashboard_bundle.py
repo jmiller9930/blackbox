@@ -28,6 +28,7 @@ from modules.anna_training.dashboard_bundle import (
     build_policy_evaluation_forensic_v1,
     _compact_baseline_cell_policy_bound,
     _event_axis_jupiter_tile_narratives,
+    _operator_trade_semantics_from_policy_row,
     _pair_vs_baseline_for_cells,
     _strip_outcome_from_pnl,
     build_baseline_trades_report,
@@ -320,6 +321,28 @@ def test_jupiter_tile_narrative_authoritative_from_ledger_without_tile(
     text = narr.get(mid, "")
     assert "ledger_authoritative_fixture" in text
     assert "New 5-min candle formed" not in text
+
+
+def test_operator_trade_semantics_qualification_vs_entry() -> None:
+    """Holding row: did_trade false; would_trade from features when bridge writes it."""
+    r = _operator_trade_semantics_from_policy_row(
+        {
+            "trade": False,
+            "reason_code": "jupiter_2_baseline_holding",
+            "features": {"would_trade": True, "did_trade": False},
+        }
+    )
+    assert r["would_trade"] is True
+    assert r["did_trade"] is False
+    legacy = _operator_trade_semantics_from_policy_row(
+        {
+            "trade": False,
+            "reason_code": "jupiter_2_baseline_holding",
+            "features": {},
+        }
+    )
+    assert legacy["would_trade"] is None
+    assert legacy["did_trade"] is False
 
 
 def test_policy_evaluation_forensic_v1_holding_note(tmp_path: Path) -> None:

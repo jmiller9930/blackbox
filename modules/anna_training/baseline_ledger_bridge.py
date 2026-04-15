@@ -11,6 +11,11 @@ lifecycle is added).
 for backtest joins to bars (``market_bars_5m`` for Jupiter_2; ``binance_strategy_bars_5m`` for Jupiter_3 / Jupiter_4).
 Disable with ``BASELINE_POLICY_EVALUATION_LOG=0``.
 
+**Semantics (``features_json``):** each row includes **``would_trade``** (evaluator qualification: would the strategy
+arm a trade on this bar?) and **``did_trade``** (whether this persisted row represents a **new entry** on this bar —
+the same meaning as the ``trade`` column for lifecycle rows, where ``trade`` is forced false for holding/exit).
+That separates qualification from lifecycle/execution presentation without overloading ``trade=false`` alone.
+
 **Ingest alignment:** :func:`market_data.canonical_bar_refresh.refresh_last_closed_bar_from_ticks` calls this after
 each successful ``market_bars_5m`` upsert when ``BASELINE_LEDGER_AFTER_CANONICAL_BAR`` is on (default), so the
 ledger stays aligned with Hermes/Pyth ingest without relying only on the Karpathy loop. Disable with
@@ -271,10 +276,14 @@ def run_baseline_ledger_bridge_tick(
         features: dict[str, Any],
         side: str,
         pnl_usd: float | None,
+        sig_trade: bool,
     ) -> None:
         nonlocal policy_eval_write_error
         if not _policy_evaluation_log_enabled():
             return
+        fe = dict(features)
+        fe["would_trade"] = bool(sig_trade)
+        fe["did_trade"] = bool(trade)
         try:
             upsert_policy_evaluation(
                 market_event_id=mid,
@@ -282,7 +291,7 @@ def run_baseline_ledger_bridge_tick(
                 tick_mode=m,
                 trade=trade,
                 reason_code=reason_code,
-                features=features,
+                features=fe,
                 side=side,
                 pnl_usd=pnl_usd,
                 policy_id=policy_id_lineage,
@@ -312,6 +321,7 @@ def run_baseline_ledger_bridge_tick(
                 features=feat,
                 side=str(pos.side),
                 pnl_usd=None,
+                sig_trade=bool(sig.trade),
             )
             out: dict[str, Any] = {
                 "ok": True,
@@ -363,6 +373,7 @@ def run_baseline_ledger_bridge_tick(
                 features=feat_x,
                 side=str(pos.side),
                 pnl_usd=None,
+                sig_trade=bool(sig.trade),
             )
             from .decision_trace import persist_baseline_lifecycle_close
 
@@ -443,6 +454,7 @@ def run_baseline_ledger_bridge_tick(
             features=feat_h,
             side=str(np.side),
             pnl_usd=None,
+            sig_trade=bool(sig.trade),
         )
         conn_u = connect_ledger(execution_ledger_db_path)
         try:
@@ -491,6 +503,7 @@ def run_baseline_ledger_bridge_tick(
         features=feat0,
         side=str(sig.side) if sig.trade else "flat",
         pnl_usd=None,
+        sig_trade=bool(sig.trade),
     )
 
     if not sig.trade:

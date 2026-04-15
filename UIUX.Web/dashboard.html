@@ -713,6 +713,19 @@
       margin-bottom: 0.25rem;
       color: #b45309;
     }
+    .tc-trade-semantics {
+      font-size: 0.62rem;
+      line-height: 1.35;
+      margin: 0.25rem 0 0;
+      color: var(--muted);
+      font-weight: 500;
+    }
+    .tc-ts-q {
+      color: #0f766e;
+    }
+    .tc-ts-e {
+      color: #1d4ed8;
+    }
     .tc-jup-entry-wrap {
       margin: 0 0 0.4rem;
       padding: 0.35rem 0.4rem;
@@ -2470,9 +2483,28 @@
       '">' +
       esc(ocDisp) +
       '</div>';
+    var semLine = '';
+    if (
+      baselineLane &&
+      c &&
+      !c.empty &&
+      (c.operator_would_trade != null || c.operator_did_trade != null)
+    ) {
+      var qw =
+        c.operator_would_trade === true ? 'yes' : c.operator_would_trade === false ? 'no' : 'n/a';
+      var qd =
+        c.operator_did_trade === true ? 'yes' : c.operator_did_trade === false ? 'no' : 'n/a';
+      semLine =
+        '<div class="tc-trade-semantics" title="Qualifies: strategy evaluator on this bar. Opened: new entry persisted on this bar (would_trade / did_trade in policy features).">' +
+        '<span class="tc-ts-q">Qualifies: ' +
+        qw +
+        '</span> · <span class="tc-ts-e">Opened: ' +
+        qd +
+        '</span></div>';
+    }
     var baselineVerdictPolicyRow =
       baselineLane
-        ? '<div class="tc-baseline-verdict-policy-row">' + verdictInner + jupPolicyChipHtml + '</div>'
+        ? '<div class="tc-baseline-verdict-policy-row">' + verdictInner + semLine + jupPolicyChipHtml + '</div>'
         : '';
     return tcCellSurface(
       jupInfraOnlyHtml +
