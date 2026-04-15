@@ -4,7 +4,7 @@
 **Intent:** One place that answers how policy works **today**, how assignment works, how the **standardized policy package** fits in, what a **Kitchen manifest** must become to run in BlackBox, and what **activation boundary** means (as implemented vs target).  
 **This is not a code change** — alignment and unknown-reduction only.
 
-**Deeper references:** [`policy_package_standard.md`](policy_package_standard.md) (binding contract), [`DV-ARCH-INTAKE-021_blackbox_engine_policy_kitchen_alignment.md`](DV-ARCH-INTAKE-021_blackbox_engine_policy_kitchen_alignment.md) (detailed as-is engine), [`policy_activation_lineage_spec.md`](policy_activation_lineage_spec.md) (target activation + lineage).
+**Deeper references:** [`policy_package_standard.md`](policy_package_standard.md) (binding contract), [`DV-ARCH-INTAKE-021_blackbox_engine_policy_kitchen_alignment.md`](DV-ARCH-INTAKE-021_blackbox_engine_policy_kitchen_alignment.md) (detailed as-is engine), [`policy_activation_lineage_spec.md`](policy_activation_lineage_spec.md) (target activation + lineage), **[`policy_wiring_surface_map_v1.md`](policy_wiring_surface_map_v1.md)** (all surfaces — functions, tables, failure modes).
 
 ---
 

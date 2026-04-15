@@ -16,6 +16,7 @@
 | **[`policy_package_standard.md`](policy_package_standard.md)** | **Mandatory contract** for **any** new Jupiter baseline policy (JUPv3, JUPv4, JUPv5, …): Sean / AI output → reviewable package → merge. Not optional. |
 | **[`blackbox_policy_kitchen_integration_writeup.md`](blackbox_policy_kitchen_integration_writeup.md)** | **Single integration summary** — how policy works, assignment, policy package standard, Kitchen manifest → BlackBox path, activation boundary (as-is vs target). |
 | **[`DV-ARCH-POLICY-LOAD-028_unified_policy_submission.md`](DV-ARCH-POLICY-LOAD-028_unified_policy_submission.md)** | **Kitchen-first policy submission** — no live assignment without Kitchen evaluation; unified dashboard + Kitchen backend; explicit states; UI language. |
+| **[`policy_wiring_surface_map_v1.md`](policy_wiring_surface_map_v1.md)** | **Policy wiring map (DV-ARCH-CLARIFICATION-029)** — assignment, execution resolution, ledger, dashboard, API, attribution; concrete functions and tables. |
 
 **Plan / log sync:** When scope or status changes, update **master plan** and **directive execution log** in the **same change set** with matching granularity (`Plan/log status sync: PASS`).
 
