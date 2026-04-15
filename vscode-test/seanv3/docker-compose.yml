@@ -88,6 +88,7 @@ services:
       RESEND_API_KEY: ${RESEND_API_KEY:-}
       RESEND_FROM: ${RESEND_FROM:-}
       JUPITER_AUTH_BOOTSTRAP_PASSWORD: ${JUPITER_AUTH_BOOTSTRAP_PASSWORD:-}
+      JUPITER_AUTH_USERNAME: ${JUPITER_AUTH_USERNAME:-admin}
     volumes:
       - ./capture:/capture
       - ../../:/repo:ro

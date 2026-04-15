@@ -1,7 +1,7 @@
 /**
  * Session login + email password reset for jupiter-web (optional; lab).
+ * Login id: JUPITER_AUTH_USERNAME (default admin). Reset links go to JUPITER_AUTH_EMAIL.
  * Secrets: JUPITER_SESSION_SECRET, optional RESEND_API_KEY for outbound mail.
- * Single user email: JUPITER_AUTH_EMAIL (default jmiller9930@om3.us).
  */
 import { createHash, createHmac, randomBytes, scryptSync, timingSafeEqual } from 'node:crypto';
 import { DatabaseSync } from 'node:sqlite';
@@ -14,7 +14,7 @@ const USER_TABLE = 'jupiter_web_auth_user';
 export function ensureJupiterWebAuthSchema(db) {
   db.exec(`
     CREATE TABLE IF NOT EXISTS ${USER_TABLE} (
-      email TEXT PRIMARY KEY COLLATE NOCASE,
+      username TEXT PRIMARY KEY COLLATE NOCASE,
       password_scrypt BLOB NOT NULL,
       salt BLOB NOT NULL,
       updated_utc TEXT NOT NULL
@@ -22,15 +22,53 @@ export function ensureJupiterWebAuthSchema(db) {
     CREATE TABLE IF NOT EXISTS ${RESET_TABLE} (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       token_hash TEXT NOT NULL UNIQUE,
-      email TEXT NOT NULL COLLATE NOCASE,
+      username TEXT NOT NULL COLLATE NOCASE,
       expires_utc TEXT NOT NULL
     );
     CREATE INDEX IF NOT EXISTS idx_jw_reset_exp ON ${RESET_TABLE} (expires_utc);
   `);
+  migrateAuthSchemaEmailToUsername(db);
+}
+
+function migrateAuthSchemaEmailToUsername(db) {
+  try {
+    const cols = db.prepare(`PRAGMA table_info(${USER_TABLE})`).all();
+    const names = cols.map((/** @type {{ name: string }} */ c) => c.name);
+    if (names.includes('email') && !names.includes('username')) {
+      db.exec(`ALTER TABLE ${USER_TABLE} RENAME COLUMN email TO username`);
+    }
+  } catch (e) {
+    console.error('[jupiter-auth] user table migrate:', e instanceof Error ? e.message : e);
+  }
+  try {
+    const cols = db.prepare(`PRAGMA table_info(${RESET_TABLE})`).all();
+    const names = cols.map((/** @type {{ name: string }} */ c) => c.name);
+    if (names.includes('email') && !names.includes('username')) {
+      db.exec(`ALTER TABLE ${RESET_TABLE} RENAME COLUMN email TO username`);
+    }
+  } catch (e) {
+    console.error('[jupiter-auth] reset table migrate:', e instanceof Error ? e.message : e);
+  }
+  const em = getConfiguredAuthEmail();
+  const un = getConfiguredUsername();
+  if (em.includes('@') && un) {
+    const row = db.prepare(`SELECT password_scrypt, salt, updated_utc FROM ${USER_TABLE} WHERE username = ?`).get(em);
+    if (row) {
+      db.prepare(`DELETE FROM ${USER_TABLE} WHERE username = ?`).run(em);
+      db.prepare(
+        `INSERT INTO ${USER_TABLE} (username, password_scrypt, salt, updated_utc) VALUES (?, ?, ?, ?)`
+      ).run(un, row.password_scrypt, row.salt, row.updated_utc);
+      console.error(`[jupiter-auth] migrated login id from ${em} to username ${un}`);
+    }
+  }
 }
 
 export function getConfiguredAuthEmail() {
   return (process.env.JUPITER_AUTH_EMAIL || 'jmiller9930@om3.us').trim().toLowerCase();
+}
+
+export function getConfiguredUsername() {
+  return (process.env.JUPITER_AUTH_USERNAME || 'admin').trim().toLowerCase();
 }
 
 export function getSessionSecret() {
@@ -65,8 +103,8 @@ function parseCookies(cookieHeader) {
   return out;
 }
 
-function signSessionPayload(email, expSec, secret) {
-  const payload = `${expSec}|${email}`;
+function signSessionPayload(user, expSec, secret) {
+  const payload = `${expSec}|${user}`;
   const sig = createHmac('sha256', secret).update(payload, 'utf8').digest('base64url');
   return Buffer.from(`${payload}|${sig}`, 'utf8').toString('base64url');
 }
@@ -90,9 +128,9 @@ function verifySessionCookie(raw, secret) {
   const first = payload.indexOf('|');
   if (first === -1) return null;
   const expSec = parseInt(payload.slice(0, first), 10);
-  const email = payload.slice(first + 1);
+  const user = payload.slice(first + 1);
   if (!Number.isFinite(expSec) || expSec < Math.floor(Date.now() / 1000)) return null;
-  return { email: email.toLowerCase(), expSec };
+  return { user: user.toLowerCase(), expSec };
 }
 
 /**
@@ -107,31 +145,31 @@ export function getSessionFromRequest(req, secret) {
 
 /**
  * @param {import('node:sqlite').DatabaseSync} db
- * @param {string} email
+ * @param {string} username
  * @param {string} password
  */
-export function upsertUserPassword(db, email, password) {
+export function upsertUserPassword(db, username, password) {
   const salt = randomBytes(16);
   const pw = hashPassword(password, salt);
-  const em = String(email).trim().toLowerCase();
+  const u = String(username).trim().toLowerCase();
   db.prepare(
-    `INSERT INTO ${USER_TABLE} (email, password_scrypt, salt, updated_utc)
+    `INSERT INTO ${USER_TABLE} (username, password_scrypt, salt, updated_utc)
      VALUES (?, ?, ?, ?)
-     ON CONFLICT(email) DO UPDATE SET
+     ON CONFLICT(username) DO UPDATE SET
        password_scrypt = excluded.password_scrypt,
        salt = excluded.salt,
        updated_utc = excluded.updated_utc`
-  ).run(em, pw, salt, new Date().toISOString());
+  ).run(u, pw, salt, new Date().toISOString());
 }
 
 /**
  * @param {import('node:sqlite').DatabaseSync} db
- * @param {string} email
+ * @param {string} username
  * @param {string} password
  */
-export function verifyUserPassword(db, email, password) {
-  const em = String(email).trim().toLowerCase();
-  const row = db.prepare(`SELECT password_scrypt, salt FROM ${USER_TABLE} WHERE email = ?`).get(em);
+export function verifyUserPassword(db, username, password) {
+  const u = String(username).trim().toLowerCase();
+  const row = db.prepare(`SELECT password_scrypt, salt FROM ${USER_TABLE} WHERE username = ?`).get(u);
   if (!row) return false;
   const got = hashPassword(password, row.salt);
   const exp = row.password_scrypt;
@@ -144,24 +182,28 @@ export function verifyUserPassword(db, email, password) {
  * @param {import('node:sqlite').DatabaseSync} db
  */
 export function bootstrapJupiterAuthUserIfNeeded(db) {
-  const email = getConfiguredAuthEmail();
+  const username = getConfiguredUsername();
   const bootstrap =
-    (process.env.JUPITER_AUTH_BOOTSTRAP_PASSWORD || process.env.JUPITER_WEB_LOGIN_PASSWORD || '').trim();
-  if (!email || !bootstrap) return;
+    (
+      process.env.JUPITER_AUTH_BOOTSTRAP_PASSWORD ||
+      process.env.JUPITER_WEB_LOGIN_PASSWORD ||
+      ''
+    ).trim();
+  if (!username || !bootstrap) return;
   const n = db.prepare(`SELECT COUNT(*) AS c FROM ${USER_TABLE}`).get();
   const count = n && typeof n.c === 'number' ? n.c : 0;
   if (count > 0) return;
-  upsertUserPassword(db, email, bootstrap);
+  upsertUserPassword(db, username, bootstrap);
   console.error(
-    `[jupiter-auth] bootstrapped login for ${email} from env — remove JUPITER_AUTH_BOOTSTRAP_PASSWORD / JUPITER_WEB_LOGIN_PASSWORD from the container`
+    `[jupiter-auth] bootstrapped login for username ${username} from env — remove JUPITER_AUTH_BOOTSTRAP_PASSWORD / JUPITER_WEB_LOGIN_PASSWORD from the container`
   );
 }
 
 /** @param {import('http').ServerResponse} res */
-export function setSessionCookie(res, email, secret) {
+export function setSessionCookie(res, username, secret) {
   const maxAgeSec = Math.max(60, Math.min(60 * 60 * 24 * 30, parseInt(process.env.JUPITER_SESSION_MAX_AGE_SEC || '604800', 10) || 604800));
   const expSec = Math.floor(Date.now() / 1000) + maxAgeSec;
-  const val = signSessionPayload(email.toLowerCase(), expSec, secret);
+  const val = signSessionPayload(username.toLowerCase(), expSec, secret);
   const secure = process.env.JUPITER_SESSION_COOKIE_SECURE === '1' ? '; Secure' : '';
   res.setHeader(
     'Set-Cookie',
@@ -209,43 +251,40 @@ function buildResetUrl(base, token) {
 
 /**
  * @param {import('node:sqlite').DatabaseSync} db
- * @param {string} email
  */
-export async function createResetAndEmail(db, email) {
-  const allowed = getConfiguredAuthEmail();
-  const em = String(email || '').trim().toLowerCase();
-  const row = db.prepare(`SELECT email FROM ${USER_TABLE} WHERE email = ?`).get(allowed);
-  if (em !== allowed || !row) {
-    return { ok: true, generic: true };
-  }
+export async function createResetAndEmail(db) {
+  const un = getConfiguredUsername();
+  const row = db.prepare(`SELECT username FROM ${USER_TABLE} WHERE username = ?`).get(un);
+  if (!row) return { ok: true, generic: true };
+  const mailTo = getConfiguredAuthEmail();
   const token = randomBytes(32).toString('hex');
   const th = hashToken(token);
   const exp = new Date(Date.now() + 60 * 60 * 1000).toISOString();
-  db.prepare(`DELETE FROM ${RESET_TABLE} WHERE email = ?`).run(allowed);
-  db.prepare(`INSERT INTO ${RESET_TABLE} (token_hash, email, expires_utc) VALUES (?, ?, ?)`).run(th, allowed, exp);
+  db.prepare(`DELETE FROM ${RESET_TABLE} WHERE username = ?`).run(un);
+  db.prepare(`INSERT INTO ${RESET_TABLE} (token_hash, username, expires_utc) VALUES (?, ?, ?)`).run(th, un, exp);
   const base = getPublicBaseUrl();
   const url = buildResetUrl(base, token);
-  await sendPasswordResetEmail(allowed, url);
+  await sendPasswordResetEmail(mailTo, url);
   return { ok: true, generic: true };
 }
 
 /** Read-only: token valid and not expired (does not delete). */
 export function peekResetToken(db, token) {
   const th = hashToken(token);
-  const row = db.prepare(`SELECT email, expires_utc FROM ${RESET_TABLE} WHERE token_hash = ?`).get(th);
+  const row = db.prepare(`SELECT username, expires_utc FROM ${RESET_TABLE} WHERE token_hash = ?`).get(th);
   if (!row) return null;
   const exp = new Date(String(row.expires_utc)).getTime();
   if (!Number.isFinite(exp) || Date.now() > exp) {
     db.prepare(`DELETE FROM ${RESET_TABLE} WHERE token_hash = ?`).run(th);
     return null;
   }
-  return String(row.email).toLowerCase();
+  return String(row.username).toLowerCase();
 }
 
 /** Verify and delete token row (use on POST after password change). */
 export function consumeResetToken(db, token) {
   const th = hashToken(token);
-  const row = db.prepare(`SELECT email, expires_utc FROM ${RESET_TABLE} WHERE token_hash = ?`).get(th);
+  const row = db.prepare(`SELECT username, expires_utc FROM ${RESET_TABLE} WHERE token_hash = ?`).get(th);
   if (!row) return null;
   const exp = new Date(String(row.expires_utc)).getTime();
   if (!Number.isFinite(exp) || Date.now() > exp) {
@@ -253,7 +292,7 @@ export function consumeResetToken(db, token) {
     return null;
   }
   db.prepare(`DELETE FROM ${RESET_TABLE} WHERE token_hash = ?`).run(th);
-  return String(row.email).toLowerCase();
+  return String(row.username).toLowerCase();
 }
 
 export function htmlEscape(s) {
@@ -311,18 +350,18 @@ export async function handleJupiterAuthHttp(req, res, url, ctx) {
     return true;
   }
 
-  const allowedEmail = getConfiguredAuthEmail();
+  const allowedUser = getConfiguredUsername();
 
   if (p === '/auth/login' && req.method === 'GET') {
     const next = url.searchParams.get('next') || '/dashboard';
     const body = authShell(
       'Sign in — Jupiter lab',
       `<h1>Sign in</h1>
-      <p>Use the email and password for this lab. Forgot? Use the link below.</p>
+      <p>Username and password for this lab. Forgot password? We email a reset link to your registered address.</p>
       <form method="post" action="/auth/login">
         <input type="hidden" name="next" value="${htmlEscape(next)}"/>
-        <label for="email">Email</label>
-        <input id="email" name="email" type="email" autocomplete="username" value="${htmlEscape(allowedEmail)}" required/>
+        <label for="username">Username</label>
+        <input id="username" name="username" type="text" autocomplete="username" value="${htmlEscape(allowedUser)}" required autocapitalize="off"/>
         <label for="password">Password</label>
         <input id="password" name="password" type="password" autocomplete="current-password" required/>
         <button type="submit">Sign in</button>
@@ -337,19 +376,19 @@ export async function handleJupiterAuthHttp(req, res, url, ctx) {
   if (p === '/auth/login' && req.method === 'POST') {
     const raw = await ctx.readRequestBody(req);
     const f = parseForm(raw);
-    const email = String(f.email || '').trim().toLowerCase();
+    const username = String(f.username || '').trim().toLowerCase();
     const password = String(f.password || '');
     const next = String(f.next || '/dashboard').startsWith('/') ? String(f.next || '/dashboard') : '/dashboard';
     let db;
     try {
       db = new DatabaseSync(ctx.dbPath());
       ensureJupiterWebAuthSchema(db);
-      if (email !== allowedEmail || !verifyUserPassword(db, email, password)) {
+      if (username !== allowedUser || !verifyUserPassword(db, username, password)) {
         const body = authShell(
           'Sign in — Jupiter lab',
-          `<h1>Sign in</h1><p class="err">Invalid email or password.</p>
+          `<h1>Sign in</h1><p class="err">Invalid username or password.</p>
           <form method="post" action="/auth/login"><input type="hidden" name="next" value="${htmlEscape(next)}"/>
-          <label for="email">Email</label><input id="email" name="email" type="email" value="${htmlEscape(email)}" required/>
+          <label for="username">Username</label><input id="username" name="username" type="text" value="${htmlEscape(username)}" required autocapitalize="off"/>
           <label for="password">Password</label><input id="password" name="password" type="password" required/>
           <button type="submit">Sign in</button></form>
           <p style="margin-top:1rem"><a href="/auth/forgot">Forgot password</a></p>`
@@ -358,7 +397,7 @@ export async function handleJupiterAuthHttp(req, res, url, ctx) {
         res.end(body);
         return true;
       }
-      setSessionCookie(res, email, secret);
+      setSessionCookie(res, username, secret);
       redirect(res, next);
       return true;
     } finally {
@@ -377,14 +416,13 @@ export async function handleJupiterAuthHttp(req, res, url, ctx) {
   }
 
   if (p === '/auth/forgot' && req.method === 'GET') {
+    const mail = getConfiguredAuthEmail();
     const body = authShell(
       'Forgot password — Jupiter lab',
       `<h1>Forgot password</h1>
-      <p>If your email is registered, we will send a reset link (about one hour to use the link).</p>
+      <p>We will send a one-time reset link to <strong>${htmlEscape(mail)}</strong> (about one hour to use it). If Resend is not configured, check <code>docker logs jupiter-web</code> for the link.</p>
       <form method="post" action="/auth/forgot">
-        <label for="email">Email</label>
-        <input id="email" name="email" type="email" value="${htmlEscape(allowedEmail)}" required/>
-        <button type="submit">Send reset link</button>
+        <button type="submit">Email me a reset link</button>
       </form>
       <p style="margin-top:1rem"><a href="/auth/login">Back to sign in</a></p>`
     );
@@ -394,14 +432,11 @@ export async function handleJupiterAuthHttp(req, res, url, ctx) {
   }
 
   if (p === '/auth/forgot' && req.method === 'POST') {
-    const raw = await ctx.readRequestBody(req);
-    const f = parseForm(raw);
-    const email = String(f.email || '').trim().toLowerCase();
     let db;
     try {
       db = new DatabaseSync(ctx.dbPath());
       ensureJupiterWebAuthSchema(db);
-      await createResetAndEmail(db, email);
+      await createResetAndEmail(db);
     } finally {
       try {
         db?.close();
@@ -412,7 +447,7 @@ export async function handleJupiterAuthHttp(req, res, url, ctx) {
     const body = authShell(
       'Check email — Jupiter lab',
       `<h1>Check your email</h1>
-      <p class="ok">If an account exists for that address, we sent a reset link. The link expires in about one hour.</p>
+      <p class="ok">If this lab account exists, we sent a reset link to your registered address. The link expires in about one hour.</p>
       <p>Forgot again? Repeat this page to get a new link.</p>
       <p><a href="/auth/login">Back to sign in</a></p>`
     );
@@ -526,8 +561,8 @@ export async function handleJupiterAuthHttp(req, res, url, ctx) {
 export function requireJupiterSession(req, res, url, opts) {
   const secret = getSessionSecret();
   const sess = getSessionFromRequest(req, secret);
-  const allowed = getConfiguredAuthEmail();
-  if (sess && sess.email === allowed) return true;
+  const allowed = getConfiguredUsername();
+  if (sess && sess.user === allowed) return true;
 
   if (opts.wantsJson) {
     res.writeHead(401, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' });
