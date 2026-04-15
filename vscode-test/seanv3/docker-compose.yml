@@ -94,7 +94,8 @@ services:
       JUPITER_SMTP_FROM: ${JUPITER_SMTP_FROM:-}
       RESEND_API_KEY: ${RESEND_API_KEY:-}
       RESEND_FROM: ${RESEND_FROM:-}
-      JUPITER_AUTH_BOOTSTRAP_PASSWORD: ${JUPITER_AUTH_BOOTSTRAP_PASSWORD:-}
+      # Do not set JUPITER_AUTH_BOOTSTRAP_PASSWORD here — an empty ${...:-} overrides env_file and
+      # skips first-time user creation; lab defaults come from ../lab_dashboard_login.defaults.env.
       JUPITER_AUTH_USERNAME: ${JUPITER_AUTH_USERNAME:-admin}
     volumes:
       - ./capture:/capture
