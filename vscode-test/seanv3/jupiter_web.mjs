@@ -120,13 +120,95 @@ function exitReasonFromMeta(metaJson) {
   try {
     const o = JSON.parse(String(metaJson));
     if (o && typeof o === 'object') {
-      const r = o.exit_reason || o.exitReason;
-      if (r) return String(r).slice(0, 24);
+      const r = o.exit?.reason ?? o.exit_reason ?? o.exitReason;
+      if (r) return String(r).slice(0, 48);
     }
   } catch {
     /* */
   }
   return '—';
+}
+
+function csvEscapeCell(val) {
+  const s = val == null ? '' : String(val);
+  if (/[",\r\n]/.test(s)) return `"${s.replace(/"/g, '""')}"`;
+  return s;
+}
+
+/** @param {import('node:sqlite').DatabaseSync} db */
+function buildSeanTradesCsv(db) {
+  const sym =
+    (process.env.SEANV3_CANONICAL_SYMBOL || process.env.CANONICAL_SYMBOL || 'SOL-PERP').trim() || 'SOL-PERP';
+  const max = Math.min(10000, Math.max(1, parseInt(process.env.SEANV3_TRADE_CSV_MAX || '5000', 10) || 5000));
+  const rows = db
+    .prepare(
+      `SELECT id, engine_id, side, entry_market_event_id, exit_market_event_id,
+              entry_time_utc, exit_time_utc, entry_price, exit_price, size_notional_sol,
+              gross_pnl_usd, net_pnl_usd, result_class, metadata_json
+       FROM sean_paper_trades ORDER BY id ASC LIMIT ?`
+    )
+    .all(max);
+  const headers = [
+    'trade_id',
+    'id',
+    'symbol',
+    'engine_id',
+    'side',
+    'entry_market_event_id',
+    'exit_market_event_id',
+    'entry_time_utc',
+    'exit_time_utc',
+    'entry_price',
+    'exit_price',
+    'size_notional_sol',
+    'notional_usd_entry_approx',
+    'gross_pnl_usd',
+    'net_pnl_usd',
+    'result_class',
+    'exit_reason_flat',
+    'policy_engine_flat',
+    'metadata_json',
+  ];
+  const lines = [headers.join(',')];
+  for (const r of rows) {
+    const ep = Number(r.entry_price);
+    const sz = Number(r.size_notional_sol);
+    const nom = Number.isFinite(ep) && Number.isFinite(sz) ? ep * sz : '';
+    const meta = r.metadata_json != null ? String(r.metadata_json) : '';
+    let exitReason = '';
+    let polEng = '';
+    try {
+      const o = JSON.parse(meta || '{}');
+      exitReason = String(o.exit?.reason ?? o.exit_reason ?? '');
+      polEng = String(o.policy_engine ?? o.entry_policy_engine ?? '');
+    } catch {
+      /* */
+    }
+    lines.push(
+      [
+        csvEscapeCell(`sean_${r.id}`),
+        csvEscapeCell(r.id),
+        csvEscapeCell(sym),
+        csvEscapeCell(r.engine_id),
+        csvEscapeCell(r.side),
+        csvEscapeCell(r.entry_market_event_id),
+        csvEscapeCell(r.exit_market_event_id),
+        csvEscapeCell(r.entry_time_utc),
+        csvEscapeCell(r.exit_time_utc),
+        csvEscapeCell(r.entry_price),
+        csvEscapeCell(r.exit_price),
+        csvEscapeCell(r.size_notional_sol),
+        csvEscapeCell(nom),
+        csvEscapeCell(r.gross_pnl_usd),
+        csvEscapeCell(r.net_pnl_usd),
+        csvEscapeCell(r.result_class),
+        csvEscapeCell(exitReason),
+        csvEscapeCell(polEng),
+        csvEscapeCell(meta),
+      ].join(',')
+    );
+  }
+  return lines.join('\r\n');
 }
 
 function parseTsSort(iso) {
@@ -546,6 +628,7 @@ function buildSummary(db) {
     wallet_status: null,
     position: null,
     recent_trades: [],
+    all_trades_dropdown: [],
     last_kline: null,
     error: null,
     keypair_env: keypairEnv || null,
@@ -592,11 +675,12 @@ function buildSummary(db) {
   }
 
   const tradeLimit = Math.min(50, Math.max(1, parseInt(process.env.SEANV3_TUI_TRADE_ROWS || '20', 10) || 20));
+  const dropLimit = Math.min(500, Math.max(10, parseInt(process.env.SEANV3_TRADE_DROPDOWN_MAX || '200', 10) || 200));
   try {
     const rows = db
       .prepare(
         `SELECT id, engine_id, side, entry_time_utc, exit_time_utc, entry_price, exit_price,
-                size_notional_sol, gross_pnl_usd, result_class, entry_market_event_id, metadata_json
+                size_notional_sol, gross_pnl_usd, result_class, entry_market_event_id, exit_market_event_id, metadata_json
          FROM sean_paper_trades ORDER BY id DESC LIMIT ?`
       )
       .all(tradeLimit);
@@ -614,8 +698,19 @@ function buildSummary(db) {
       gross_pnl_usd: r.gross_pnl_usd,
       result_class: r.result_class != null ? String(r.result_class) : null,
       entry_market_event_id: r.entry_market_event_id != null ? String(r.entry_market_event_id) : null,
+      exit_market_event_id: r.exit_market_event_id != null ? String(r.exit_market_event_id) : null,
       exit_reason: exitReasonFromMeta(r.metadata_json),
       symbol: sym,
+    }));
+    const drows = db
+      .prepare(
+        `SELECT id, side, exit_time_utc, gross_pnl_usd FROM sean_paper_trades ORDER BY id DESC LIMIT ?`
+      )
+      .all(dropLimit);
+    out.all_trades_dropdown = drows.map((r) => ({
+      id: r.id,
+      trade_id: `sean_${r.id}`,
+      label: `#${r.id} ${String(r.side)} · ${formatIsoUtcShort(r.exit_time_utc)} · ${Number(r.gross_pnl_usd).toFixed(4)} USD`,
     }));
   } catch {
     /* */
@@ -934,14 +1029,26 @@ function htmlPage(v) {
   }
 
   const trades = v.recent_trades || [];
+  const drop = v.all_trades_dropdown || [];
+  const tradeJumpOpts = drop.length
+    ? `<option value="">All trades — pick to jump + detail (${drop.length})</option>${drop
+        .map((d) => `<option value="${esc(String(d.id))}">${esc(d.label)}</option>`)
+        .join('')}`
+    : '<option value="">No closed trades</option>';
+  const trCls = (rc) => {
+    const s = String(rc || '').toLowerCase();
+    if (s === 'win') return 'trade-win';
+    if (s === 'loss') return 'trade-loss';
+    return 'trade-flat';
+  };
   const tradeRows = trades.length
     ? trades
         .map(
           (t) =>
-            `<tr><td>${esc(t.trade_id)}</td><td>${esc(formatIsoUtcShort(t.exit_time_utc))}</td><td>${esc(formatIsoUtcShort(t.entry_time_utc))}</td><td>${esc(t.symbol)}</td><td>${esc(t.side)}</td><td>${esc(t.entry_price)}</td><td>${esc(t.exit_price)}</td><td>${esc(t.size_notional_sol)}</td><td>${esc(t.gross_pnl_usd)}</td><td>${esc(t.result_class)}</td><td>${esc(t.exit_reason)}</td><td>${esc(truncateMid(t.entry_market_event_id, 40))}</td></tr>`
+            `<tr class="trade-row ${trCls(t.result_class)}" data-trade-id="${esc(String(t.id))}"><td>${esc(t.trade_id)}</td><td>${esc(formatIsoUtcShort(t.exit_time_utc))}</td><td>${esc(formatIsoUtcShort(t.entry_time_utc))}</td><td>${esc(t.symbol)}</td><td>${esc(t.side)}</td><td>${esc(t.entry_price)}</td><td>${esc(t.exit_price)}</td><td>${esc(t.size_notional_sol)}</td><td>${esc(t.gross_pnl_usd)}</td><td>${esc(t.result_class)}</td><td>${esc(t.exit_reason)}</td><td>${esc(truncateMid(t.entry_market_event_id, 40))}</td><td>${esc(truncateMid(t.exit_market_event_id, 40))}</td></tr>`
         )
         .join('')
-    : '<tr><td colspan="12" class="muted">No closed trades yet</td></tr>';
+    : '<tr><td colspan="13" class="muted">No closed trades yet</td></tr>';
 
   const kl = v.last_kline;
   const klBlock = kl
@@ -1081,6 +1188,14 @@ function htmlPage(v) {
     .op-box { border: 1px dashed #30363d; padding: 0.6rem 0.75rem; margin-top: 0.5rem; border-radius: 2px; background: #0e0e10; }
     .op-row { margin: 0.45rem 0; display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: center; }
     .small { font-size: 0.78rem; }
+    .trade-row { cursor: pointer; }
+    .trade-win { background: rgba(63, 185, 80, 0.14); }
+    .trade-loss { background: rgba(248, 81, 73, 0.1); }
+    .trade-flat { background: transparent; }
+    a.csv-btn { display: inline-block; padding: 0.25rem 0.6rem; border: 1px solid #30363d; border-radius: 2px; color: #58a6ff; text-decoration: none; font-size: 0.85rem; }
+    a.csv-btn:hover { background: #1f2428; }
+    .trade-snap-h { font-size: 0.72rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; color: #8b949e; margin: 0.75rem 0 0.35rem 0; }
+    pre.trade-detail { margin: 0; max-height: 42vh; overflow: auto; font-size: 0.68rem; line-height: 1.35; white-space: pre-wrap; word-break: break-word; background: #0a0a0b; border: 1px solid #30363d; padding: 0.5rem 0.6rem; border-radius: 2px; }
   </style>
 </head>
 <body>
@@ -1103,8 +1218,40 @@ function htmlPage(v) {
       <div class="scroll"><table><thead><tr><th>market_event_id</th><th>Sean V3</th><th>BlackBox</th><th>Parity</th></tr></thead><tbody>${parityRows}</tbody></table></div>
     </section>
     <section class="panel"><h2>Position &amp; last kline (Sean DB)</h2>${posBlock}${klBlock}</section>
-    <section class="panel"><h2>Trade window (ledger rows)</h2>
-      <div class="scroll"><table><thead><tr><th>trade_id</th><th>exit UTC</th><th>entry UTC</th><th>sym</th><th>side</th><th>entry px</th><th>exit px</th><th>size</th><th>PnL</th><th>result</th><th>exit</th><th>market_event_id</th></tr></thead><tbody>${tradeRows}</tbody></table></div>
+    <section class="panel"><h2>Trade window (Sean paper trades)</h2>
+      <p class="op-row">
+        <label>Jump to trade <select id="jw-trade-jump">${tradeJumpOpts}</select></label>
+        <a class="csv-btn" href="/api/v1/sean/trades.csv">Download all trades (CSV)</a>
+      </p>
+      <p class="muted small">Winning trades are tinted light green. CSV includes standard columns plus full <code>metadata_json</code> (entry <code>signal</code> + exit snapshot for closes written with the current engine). BlackBox baseline trade synthesis tiles use a different pipeline.</p>
+      <div class="scroll"><table><thead><tr><th>trade_id</th><th>exit UTC</th><th>entry UTC</th><th>sym</th><th>side</th><th>entry px</th><th>exit px</th><th>size</th><th>PnL</th><th>result</th><th>exit</th><th>entry MEI</th><th>exit MEI</th></tr></thead><tbody>${tradeRows}</tbody></table></div>
+      <h3 class="trade-snap-h">Trade snapshot (JSON)</h3>
+      <pre id="jw-trade-detail" class="trade-detail">Select a trade from the dropdown, or click a row.</pre>
+      <script>
+      (function(){
+        var pre = document.getElementById('jw-trade-detail');
+        var sel = document.getElementById('jw-trade-jump');
+        function loadDetail(id) {
+          if (!pre || !id) return;
+          fetch('/api/v1/sean/trade/'+id+'.json').then(function(r){ return r.text(); }).then(function(t){ pre.textContent = t; }).catch(function(e){ pre.textContent = String(e); });
+        }
+        if (sel) sel.addEventListener('change', function(){
+          var id = this.value;
+          if (!id) { if (pre) pre.textContent = 'Select a trade from the dropdown, or click a row.'; return; }
+          var row = document.querySelector('tr[data-trade-id="'+id+'"]');
+          if (row) row.scrollIntoView({ behavior:'smooth', block:'center' });
+          loadDetail(id);
+        });
+        document.querySelectorAll('tr.trade-row').forEach(function(tr){
+          tr.addEventListener('click', function(){
+            var id = this.getAttribute('data-trade-id');
+            if (!id) return;
+            if (sel) sel.value = id;
+            loadDetail(id);
+          });
+        });
+      })();
+      </script>
     </section>
     <section class="panel"><h2>Preflight strip</h2>${banner}<div class="scroll"><table><thead><tr><th>Check</th><th>Status</th><th>Detail</th></tr></thead><tbody>${chkRows}</tbody></table></div></section>
     <section class="panel"><h2>Trade / oracle window (Pyth SOL/USD)</h2>${oracleBlock}</section>
@@ -1364,6 +1511,96 @@ const server = http.createServer((req, res) => {
       } catch (e) {
         res.writeHead(500, { 'Content-Type': 'application/json; charset=utf-8' });
         res.end(JSON.stringify({ error: e instanceof Error ? e.message : String(e) }));
+      }
+      return;
+    }
+
+    if (url.pathname === '/api/v1/sean/trades.csv' && req.method === 'GET') {
+      let db;
+      try {
+        db = new DatabaseSync(dbPath(), { readOnly: true });
+        const body = buildSeanTradesCsv(db);
+        res.writeHead(200, {
+          'Content-Type': 'text/csv; charset=utf-8',
+          'Content-Disposition': 'attachment; filename="sean_paper_trades.csv"',
+          'Cache-Control': 'no-store',
+        });
+        res.end(body);
+      } catch (e) {
+        res.writeHead(500, { 'Content-Type': 'application/json; charset=utf-8' });
+        res.end(JSON.stringify({ error: e instanceof Error ? e.message : String(e) }));
+      } finally {
+        try {
+          db?.close();
+        } catch {
+          /* */
+        }
+      }
+      return;
+    }
+
+    const tradeDetailMatch = url.pathname.match(/^\/api\/v1\/sean\/trade\/(\d+)\.json$/);
+    if (tradeDetailMatch && req.method === 'GET') {
+      const tid = parseInt(tradeDetailMatch[1], 10);
+      let db;
+      try {
+        db = new DatabaseSync(dbPath(), { readOnly: true });
+        const row = db
+          .prepare(
+            `SELECT id, engine_id, side, entry_market_event_id, exit_market_event_id,
+                    entry_time_utc, exit_time_utc, entry_price, exit_price, size_notional_sol,
+                    gross_pnl_usd, net_pnl_usd, result_class, metadata_json
+             FROM sean_paper_trades WHERE id = ?`
+          )
+          .get(tid);
+        if (!row) {
+          res.writeHead(404, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' });
+          res.end(JSON.stringify({ error: 'trade not found' }));
+          return;
+        }
+        const sym =
+          (process.env.SEANV3_CANONICAL_SYMBOL || process.env.CANONICAL_SYMBOL || 'SOL-PERP').trim() || 'SOL-PERP';
+        let metaParsed = null;
+        try {
+          metaParsed = row.metadata_json ? JSON.parse(String(row.metadata_json)) : null;
+        } catch {
+          metaParsed = { parse_error: true, raw: String(row.metadata_json) };
+        }
+        const ep = Number(row.entry_price);
+        const sz = Number(row.size_notional_sol);
+        const payload = {
+          schema: 'jupiter_sean_trade_detail_v1',
+          id: row.id,
+          trade_id: `sean_${row.id}`,
+          symbol: sym,
+          lane: 'sean_paper',
+          engine_id: row.engine_id,
+          side: row.side,
+          entry_market_event_id: row.entry_market_event_id,
+          exit_market_event_id: row.exit_market_event_id,
+          entry_time_utc: row.entry_time_utc,
+          exit_time_utc: row.exit_time_utc,
+          entry_price: row.entry_price,
+          exit_price: row.exit_price,
+          size_notional_sol: row.size_notional_sol,
+          gross_pnl_usd: row.gross_pnl_usd,
+          net_pnl_usd: row.net_pnl_usd,
+          result_class: row.result_class,
+          notional_usd_entry_approx: Number.isFinite(ep) && Number.isFinite(sz) ? ep * sz : null,
+          metadata_parsed: metaParsed,
+          metadata_json: row.metadata_json != null ? String(row.metadata_json) : null,
+        };
+        res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' });
+        res.end(JSON.stringify(payload, null, 2));
+      } catch (e) {
+        res.writeHead(500, { 'Content-Type': 'application/json; charset=utf-8' });
+        res.end(JSON.stringify({ error: e instanceof Error ? e.message : String(e) }));
+      } finally {
+        try {
+          db?.close();
+        } catch {
+          /* */
+        }
       }
       return;
     }

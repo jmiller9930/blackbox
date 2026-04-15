@@ -21,6 +21,8 @@ Both rely on the **host** routing table for Binance (WireGuard split-tunnel on c
 
 **Operator writes (Jupiter):** set **`JUPITER_OPERATOR_TOKEN`** on **`jupiter-web`**, then use the **Operator token** field in the browser (Bearer). **Register wallet** posts a Solana **pubkey** to SQLite (`POST /api/operator/paper-wallet`) so paper **open** gates work without mounting **`KEYPAIR_PATH`** on seanv3; **Save mode** (`paper`|`chain`), **Save stake** (simulated USD — **`SEAN_ALLOW_PAPER_STAKE_EDIT`** defaults to **on** for `jupiter-web` in compose). Policy switch: `GET`/`POST /api/v1/jupiter/policy`.
 
+**Trades (Sean paper):** dashboard **Trade window** — jump dropdown, row click → JSON snapshot, **`GET /api/v1/sean/trades.csv`** export (standard columns + full **`metadata_json`**). Per-trade: **`GET /api/v1/sean/trade/<id>.json`**. Baseline BlackBox “trade synthesis” / execution-ledger tiles are separate; export those from the baseline UI if needed.
+
 **Web vs TUI (same backend, two displays):** see [`JUPITER_WEB_TUI_ALIGNMENT.md`](JUPITER_WEB_TUI_ALIGNMENT.md). The Jupiter page mirrors `preflight_pyth_tui.py` panels (preflight, policy, wallet, paper ledger, parity, trades, oracle). Compose mounts **`../../` → `/repo:ro`** for policy registry + execution ledger; override **`JUPITER_WEB_REFRESH_SEC`** (default `3`, `0` disables HTML auto-refresh).
 
 **Troubleshooting — browser says “problem” / can’t load :707**

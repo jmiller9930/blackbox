@@ -135,6 +135,12 @@ export function processSeanEngine(db, { marketEventId, kline }) {
       const gross = computePnlUsd(pos.entry_price, ex.fill, pos.size_notional_sol, pos.side);
       const { entryEngineId, entryPolicyTag } = entryIdsFromPositionMetadata(pos);
       const polTag = entryPolicyTag || policy.policyEngineTag;
+      let entrySnap = {};
+      try {
+        if (pos.metadata_json) entrySnap = JSON.parse(String(pos.metadata_json));
+      } catch {
+        /* */
+      }
       writeClosedTradeAndFlat(db, {
         engineId: entryEngineId,
         side: pos.side,
@@ -147,6 +153,27 @@ export function processSeanEngine(db, { marketEventId, kline }) {
         sizeNotionalSol: pos.size_notional_sol,
         grossPnlUsd: gross,
         metadataJson: JSON.stringify({
+          schema: 'sean_paper_trade_snapshot_v1',
+          entry_policy_id: entrySnap.entry_policy_id,
+          entry_sean_engine_id: entrySnap.entry_sean_engine_id,
+          entry_policy_engine: entrySnap.entry_policy_engine,
+          signal: entrySnap.signal,
+          position_at_exit: {
+            initial_stop_loss: pos.initial_stop_loss,
+            initial_take_profit: pos.initial_take_profit,
+            stop_loss: sl,
+            take_profit: tp,
+            breakeven_applied: br,
+            atr_entry: pos.atr_entry,
+            bars_held: pos.bars_held,
+          },
+          exit: {
+            reason: ex.reason,
+            fill_price: ex.fill,
+            atr_t: atrT,
+            exit_market_event_id: marketEventId,
+            exit_time_utc: exitTimeUtc,
+          },
           policy_engine: polTag,
           exit_reason: ex.reason,
           atr_t: atrT,
