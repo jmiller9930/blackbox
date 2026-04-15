@@ -36,6 +36,7 @@ function parseSolanaPubkeyBase58(raw) {
 }
 
 const __dirname = fileURLToPath(new URL('.', import.meta.url));
+const FRONT_DOOR_PNG = join(__dirname, 'static', 'jupiter_front_door.png');
 
 const BB_LANE = 'baseline';
 const BB_STRATEGY = 'baseline';
@@ -484,14 +485,20 @@ function fmtParityCell(rec) {
   return `${side || '?'} @ ${px} · ${tshort}${tag}`;
 }
 
-function parityMatchText(sean, bb) {
+/**
+ * @param {boolean} policyAligned When false (Jupiter policy ≠ JUPITER_PARITY_ALIGNED_POLICY), parity column is blank — baseline compare not meaningful.
+ */
+function parityMatchText(sean, bb, policyAligned) {
+  if (!policyAligned) {
+    return { text: '—', cls: 'dim' };
+  }
   if (sean && bb) {
     if (sideNorm(sean.side) !== sideNorm(bb.side)) return { text: 'SIDE mismatch', cls: 'bad' };
     if (!priceDriftOk(sean.entry_price, bb.entry_price)) return { text: 'MATCH (entry px drift)', cls: 'warn' };
     return { text: 'MATCH', cls: 'ok' };
   }
-  if (sean && !bb) return { text: 'Sean only — no BB row', cls: 'bad' };
-  if (bb && !sean) return { text: 'BlackBox only — no Sean row', cls: 'bad' };
+  if (sean && !bb) return { text: 'Jupiter only — no BlackBox row', cls: 'bad' };
+  if (bb && !sean) return { text: 'BlackBox only — no Jupiter row', cls: 'bad' };
   return { text: '—', cls: 'dim' };
 }
 
@@ -501,6 +508,24 @@ function buildParityRows(seanDbPath, ledgerPath, maxRows) {
     out.error = 'Sean DB missing';
     return out;
   }
+  let policyAligned = true;
+  let alignNote = '';
+  try {
+    const dba = new DatabaseSync(seanDbPath, { readOnly: true });
+    const alignTarget =
+      normalizePolicyId(process.env.JUPITER_PARITY_ALIGNED_POLICY || 'jup_v4') || 'jup_v4';
+    const active = resolveJupiterPolicy(dba).policyId;
+    policyAligned = active === alignTarget;
+    alignNote = policyAligned
+      ? `aligned policy ${active} (compare vs BlackBox baseline)`
+      : `Jupiter policy ${active} ≠ compare target ${alignTarget} — parity column blank (set JUPITER_PARITY_ALIGNED_POLICY on jupiter-web to match)`;
+    dba.close();
+  } catch {
+    policyAligned = true;
+  }
+  out.parity_policy_aligned = policyAligned;
+  out.parity_align_note = alignNote;
+
   const maxFetch = Math.max(maxRows * 3, 48);
   let seanDb;
   const seanMap = new Map();
@@ -607,7 +632,7 @@ function buildParityRows(seanDbPath, ledgerPath, maxRows) {
   for (const mid of slice) {
     const s = seanMap.get(mid);
     const b = bbMap.get(mid);
-    const pm = parityMatchText(s, b);
+    const pm = parityMatchText(s, b, policyAligned);
     out.rows.push({
       market_event_id: mid,
       sean_cell: fmtParityCell(s),
@@ -842,6 +867,37 @@ function buildOperatorPayload(seanPath, markUsd, base) {
       /* */
     }
   }
+}
+
+function frontDoorHtml() {
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Jupiter — lab</title>
+  <style>
+    body { margin:0; min-height:100vh; background:#050508; color:#e6edf3; font-family: system-ui, Segoe UI, sans-serif; display:flex; flex-direction:column; align-items:center; justify-content:center; padding:1.5rem; }
+    .hero { max-width:min(920px, 96vw); text-align:center; }
+    img { max-width:100%; height:auto; border-radius:4px; border:1px solid #30363d; }
+    h1 { font-size:1.15rem; font-weight:600; margin:1rem 0 0.5rem; }
+    p { color:#8b949e; font-size:0.9rem; max-width: 56ch; margin: 0.5rem auto; line-height:1.45; }
+    a.btn { display:inline-block; margin-top:1rem; padding:0.55rem 1.25rem; background:#21262d; color:#58a6ff; border:1px solid #30363d; border-radius:4px; text-decoration:none; font-weight:600; }
+    a.btn:hover { background:#30363d; }
+    .note { color:#d29922; font-size:0.82rem; margin-top:1.1rem; }
+    code { background:#1e1e1e; padding:0.1rem 0.35rem; border-radius:2px; }
+  </style>
+</head>
+<body>
+  <div class="hero">
+    <img src="/static/jupiter_front_door.png" alt="Jupiter — financial rings" width="920" height="auto"/>
+    <h1>Jupiter — operator lab</h1>
+    <p>SeanV3 paper engine, parity vs BlackBox baseline, wallet &amp; funding controls. POST actions require a Bearer token.</p>
+    <a class="btn" href="/dashboard">Open dashboard</a>
+    <p class="note">This URL has no login screen — restrict access with VPN/firewall. Writes use <code>JUPITER_OPERATOR_TOKEN</code> on the server.</p>
+  </div>
+</body>
+</html>`;
 }
 
 async function buildFullView() {
@@ -1224,7 +1280,7 @@ function htmlPage(v) {
       <h1>Jupiter — TUI parity (read-only)</h1>
       <p class="muted">Same checks + SQLite + ledger paths as preflight_pyth_tui.py · Auto-refresh ${esc(String(v.refresh_sec || 0))}s (JUPITER_WEB_REFRESH_SEC, 0=off)</p>
       <p class="muted">${esc(v.sqlite_path)} · repo: ${esc(v.repo_root)}</p>
-      <p><a href="https://jup.ag/perps/long/SOL-SOL" target="_blank" rel="noopener noreferrer">jup.ag SOL perps</a> · <a href="/api/summary.json">summary.json</a> · <a href="/api/operator/state.json">operator/state.json</a> · <a href="/api/live-market.json">live-market.json</a> · <a href="/health">health</a></p>
+      <p><a href="/">Front door</a> · <a href="https://jup.ag/perps/long/SOL-SOL" target="_blank" rel="noopener noreferrer">jup.ag SOL perps</a> · <a href="/api/summary.json">summary.json</a> · <a href="/api/operator/state.json">operator/state.json</a> · <a href="/api/live-market.json">live-market.json</a> · <a href="/health">health</a></p>
     </section>
     ${tokenPanel}
     ${v.error ? `<section class="panel"><p class="warn">${esc(v.error)}</p></section>` : ''}
@@ -1234,9 +1290,10 @@ function htmlPage(v) {
     <section class="panel"><h2>Active policy</h2>${policyBlock}</section>
     <section class="panel"><h2>Wallet status</h2>${walletBlock}</section>
     <section class="panel"><h2>SeanV3 paper ledger (testing)</h2>${ledgerBlock}</section>
-    <section class="panel"><h2>Parity (Sean V3 vs BlackBox baseline)</h2>
-      <p class="muted">Sean: ${esc(v.parity?.sean_db || '')} · Ledger: ${esc(v.parity?.ledger_db || '')}</p>
-      <div class="scroll"><table><thead><tr><th>market_event_id</th><th>Sean V3</th><th>BlackBox</th><th>Parity</th></tr></thead><tbody>${parityRows}</tbody></table></div>
+    <section class="panel"><h2>Parity (Jupiter vs BlackBox baseline)</h2>
+      <p class="muted">Jupiter DB: ${esc(v.parity?.sean_db || '')} · baseline ledger: ${esc(v.parity?.ledger_db || '')}</p>
+      ${v.parity?.parity_align_note ? `<p class="muted small">${esc(v.parity.parity_align_note)}</p>` : ''}
+      <div class="scroll"><table><thead><tr><th>market_event_id</th><th>Jupiter</th><th>BlackBox</th><th>Parity</th></tr></thead><tbody>${parityRows}</tbody></table></div>
     </section>
     <section class="panel"><h2>Position &amp; last kline (Sean DB)</h2>${posBlock}${klBlock}</section>
     <section class="panel"><h2>Trade window (Sean paper trades)</h2>
@@ -1653,7 +1710,27 @@ const server = http.createServer((req, res) => {
       return;
     }
 
-    if (url.pathname === '/' || url.pathname === '/index.html') {
+    if (url.pathname === '/static/jupiter_front_door.png' && req.method === 'GET') {
+      if (!existsSync(FRONT_DOOR_PNG)) {
+        res.writeHead(404, { 'Content-Type': 'text/plain' });
+        res.end('front door image missing (rebuild image with static/)');
+        return;
+      }
+      res.writeHead(200, { 'Content-Type': 'image/png', 'Cache-Control': 'public, max-age=3600' });
+      res.end(readFileSync(FRONT_DOOR_PNG));
+      return;
+    }
+
+    if (url.pathname === '/' && req.method === 'GET') {
+      res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' });
+      res.end(frontDoorHtml());
+      return;
+    }
+
+    if (
+      (url.pathname === '/dashboard' || url.pathname === '/dashboard/' || url.pathname === '/index.html') &&
+      req.method === 'GET'
+    ) {
       try {
         const view = await buildFullView();
         res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' });
@@ -1674,5 +1751,5 @@ const server = http.createServer((req, res) => {
 });
 
 server.listen(port, bind, () => {
-  console.error(`[jupiter] http://${bind}:${port}/  (TUI parity view)`);
+  console.error(`[jupiter] http://${bind}:${port}/ front door · http://${bind}:${port}/dashboard operator UI`);
 });

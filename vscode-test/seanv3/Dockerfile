@@ -12,6 +12,7 @@ COPY --chown=node:node \
   app.mjs backfill.mjs paper_analog.mjs wallet_connect.mjs funding_guards.mjs \
   jupiter_3_sean_policy.mjs jupiter_4_sean_policy.mjs jupiter_mc_test_policy.mjs jupiter_policy_runtime.mjs \
   sean_lifecycle.mjs sean_ledger.mjs sean_engine.mjs report.mjs jupiter_web.mjs ./
+COPY --chown=node:node static/ ./static/
 
 USER node
 
