@@ -60,10 +60,19 @@ def _baseline_ledger_bridge_after_bar_refresh(conn: Any) -> dict[str, Any] | Non
         sys.path.insert(0, str(_REPO_ROOT))
 
     from modules.anna_training.baseline_ledger_bridge import run_baseline_ledger_bridge_tick
+    from modules.anna_training.execution_ledger import sqlite_retry_on_locked
+
+    def _run() -> dict[str, Any]:
+        return run_baseline_ledger_bridge_tick(market_data_db_path=mp)
 
     try:
-        return run_baseline_ledger_bridge_tick(market_data_db_path=mp)
+        return sqlite_retry_on_locked(_run, label="baseline_ledger_bridge_after_bar_refresh")
     except Exception as exc:  # noqa: BLE001 — surface any unexpected failure in status dict
+        print(
+            f"PERSISTENCE_FAILURE_EVENT baseline_ledger_bridge_after_bar_refresh_final error={exc!r}",
+            file=sys.stderr,
+            flush=True,
+        )
         return {"ok": False, "reason": "baseline_ledger_bridge_exception", "error": repr(exc)}
 
 

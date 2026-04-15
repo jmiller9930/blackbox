@@ -7,9 +7,13 @@ import math
 import os
 import sqlite3
 import sys
+import time
 import uuid
+from collections.abc import Callable
 from pathlib import Path
-from typing import Any
+from typing import Any, TypeVar
+
+T_co = TypeVar("T_co")
 
 from modules.anna_training.store import utc_now_iso
 
@@ -39,6 +43,40 @@ PNL_EPSILON = 1e-6
 
 def _repo_root() -> Path:
     return Path(__file__).resolve().parents[2]
+
+
+def sqlite_retry_on_locked(
+    op: Callable[[], T_co],
+    *,
+    attempts: int = 16,
+    initial_delay_sec: float = 0.05,
+    label: str = "sqlite_op",
+) -> T_co:
+    """
+    Retry on SQLite ``database is locked`` / ``SQLITE_BUSY`` — transient contention must not
+    permanently drop ``policy_evaluations`` rows (ingest + bridge + API readers).
+    """
+    delay = initial_delay_sec
+    last: BaseException | None = None
+    for i in range(attempts):
+        try:
+            return op()
+        except sqlite3.OperationalError as e:
+            last = e
+            msg = str(e).lower()
+            if "locked" not in msg and "busy" not in msg:
+                raise
+            if i >= attempts - 1:
+                print(
+                    f"PERSISTENCE_FAILURE_EVENT {label} exhausted_after={attempts} error={e!r}",
+                    file=sys.stderr,
+                    flush=True,
+                )
+                raise
+            time.sleep(delay)
+            delay = min(delay * 2.0, 2.0)
+    assert last is not None
+    raise last
 
 
 def default_execution_ledger_path() -> Path:
@@ -243,7 +281,14 @@ def _strict_trade_identity() -> bool:
 def connect_ledger(db_path: Path | None = None) -> sqlite3.Connection:
     p = db_path or default_execution_ledger_path()
     p.parent.mkdir(parents=True, exist_ok=True)
-    return sqlite3.connect(p)
+    conn = sqlite3.connect(str(p), timeout=30.0)
+    # busy_timeout: wait for readers/writers (ms). WAL reduces exclusive locks vs rollback journal.
+    conn.execute("PRAGMA busy_timeout=60000")
+    try:
+        conn.execute("PRAGMA journal_mode=WAL")
+    except sqlite3.Error:
+        pass
+    return conn
 
 
 def _migrate_policy_evaluation_schema(conn: sqlite3.Connection, root: Path) -> None:
@@ -1306,46 +1351,67 @@ def upsert_policy_evaluation(
         pid = (policy_id or "").strip() or None
         pver = (policy_version or "").strip() or None
         slot_v = (slot or "").strip() or None
-        conn.execute(
-            """
-            INSERT INTO policy_evaluations (
-              market_event_id, lane, strategy_id, signal_mode, tick_mode,
-              trade, side, reason_code, features_json, pnl_usd,
-              evaluated_at_utc, schema_version,
-              policy_id, policy_version, slot
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            ON CONFLICT(market_event_id, lane, strategy_id, signal_mode) DO UPDATE SET
-              tick_mode = excluded.tick_mode,
-              trade = excluded.trade,
-              side = excluded.side,
-              reason_code = excluded.reason_code,
-              features_json = excluded.features_json,
-              pnl_usd = excluded.pnl_usd,
-              evaluated_at_utc = excluded.evaluated_at_utc,
-              schema_version = excluded.schema_version,
-              policy_id = excluded.policy_id,
-              policy_version = excluded.policy_version,
-              slot = excluded.slot
-            """,
-            (
-                mid,
-                lane,
-                strategy_id,
-                sm,
-                tm,
-                1 if trade else 0,
-                sd,
-                str(reason_code or ""),
-                payload,
-                (float(pnl_usd) if pnl_usd is not None else 0.0) if trade else None,
-                ts,
-                POLICY_EVALUATION_SCHEMA_VERSION,
-                pid,
-                pver,
-                slot_v,
-            ),
+        tup = (
+            mid,
+            lane,
+            strategy_id,
+            sm,
+            tm,
+            1 if trade else 0,
+            sd,
+            str(reason_code or ""),
+            payload,
+            (float(pnl_usd) if pnl_usd is not None else 0.0) if trade else None,
+            ts,
+            POLICY_EVALUATION_SCHEMA_VERSION,
+            pid,
+            pver,
+            slot_v,
         )
-        conn.commit()
+
+        def _write_and_verify() -> None:
+            conn.execute(
+                """
+                INSERT INTO policy_evaluations (
+                  market_event_id, lane, strategy_id, signal_mode, tick_mode,
+                  trade, side, reason_code, features_json, pnl_usd,
+                  evaluated_at_utc, schema_version,
+                  policy_id, policy_version, slot
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(market_event_id, lane, strategy_id, signal_mode) DO UPDATE SET
+                  tick_mode = excluded.tick_mode,
+                  trade = excluded.trade,
+                  side = excluded.side,
+                  reason_code = excluded.reason_code,
+                  features_json = excluded.features_json,
+                  pnl_usd = excluded.pnl_usd,
+                  evaluated_at_utc = excluded.evaluated_at_utc,
+                  schema_version = excluded.schema_version,
+                  policy_id = excluded.policy_id,
+                  policy_version = excluded.policy_version,
+                  slot = excluded.slot
+                """,
+                tup,
+            )
+            conn.commit()
+            cur = conn.execute(
+                """
+                SELECT COUNT(*) FROM policy_evaluations
+                WHERE market_event_id = ? AND lane = ? AND strategy_id = ? AND signal_mode = ?
+                """,
+                (mid, lane, strategy_id, sm),
+            )
+            n = int(cur.fetchone()[0])
+            if n != 1:
+                print(
+                    f"PERSISTENCE_FAILURE_EVENT policy_evaluations_verify_failed count={n} "
+                    f"market_event_id={mid!r} signal_mode={sm!r}",
+                    file=sys.stderr,
+                    flush=True,
+                )
+                raise RuntimeError(f"policy_evaluation_row_verify_failed count={n} mid={mid}")
+
+        sqlite_retry_on_locked(_write_and_verify, label="upsert_policy_evaluation")
     finally:
         if close_conn:
             conn.close()

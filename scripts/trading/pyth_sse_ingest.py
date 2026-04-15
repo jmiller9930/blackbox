@@ -55,6 +55,10 @@ from market_data.hermes_sse_price import (  # noqa: E402
 from market_data.public_data_urls import hermes_price_stream_url  # noqa: E402
 from market_data.store import connect_market_db, ensure_market_schema, insert_tick  # noqa: E402
 
+if str(_ROOT) not in sys.path:
+    sys.path.insert(0, str(_ROOT))
+from modules.anna_training.execution_ledger import sqlite_retry_on_locked  # noqa: E402
+
 USER_AGENT = "blackbox-pyth-sse-ingest/1 (+stream)"
 _DEFAULT_FEED = "ef0d8b6fda2ceba41da15d4095d1da392a0d2f8ed0c6c7bc0f4cfac8c280b56d"
 
@@ -149,9 +153,22 @@ def _maybe_refresh_canonical_bar(conn: Any, symbol: str) -> None:
     now = time.monotonic()
     if not force and now - _last_bar_refresh_monotonic < _bar_refresh_sec():
         return
+
+    def _refresh() -> dict[str, Any]:
+        return refresh_last_closed_bar_from_ticks(conn, symbol)
+
     try:
-        out = refresh_last_closed_bar_from_ticks(conn, symbol)
+        out = sqlite_retry_on_locked(
+            _refresh,
+            label="pyth_sse_ingest_bar_refresh",
+            attempts=24,
+        )
     except Exception as e:  # noqa: BLE001
+        print(
+            f"PERSISTENCE_FAILURE_EVENT pyth_sse_bar_refresh_final error={e!r}",
+            file=sys.stderr,
+            flush=True,
+        )
         print(f"pyth_sse_ingest: bar_refresh {e!r}", flush=True)
         return
     _last_bar_refresh_monotonic = now

@@ -37,7 +37,7 @@ def connect_market_db(db_path: Path) -> sqlite3.Connection:
     # WAL lets API read-only connections see the latest committed rows while sync writes
     # (reduces “stale bar” windows during ingest).
     conn.execute("PRAGMA journal_mode=WAL")
-    conn.execute("PRAGMA busy_timeout=8000")
+    conn.execute("PRAGMA busy_timeout=30000")
     return conn
 
 

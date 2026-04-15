@@ -305,7 +305,7 @@ def run_baseline_ledger_bridge_tick(
                 slot=POLICY_ACTIVATION_SLOT_BASELINE_JUPITER,
                 db_path=execution_ledger_db_path,
             )
-        except sqlite3.OperationalError as exc:
+        except (sqlite3.OperationalError, RuntimeError) as exc:
             policy_eval_write_error = str(exc)
             print(
                 f"baseline_ledger_bridge: policy_evaluations write failed: {exc!r} market_event_id={mid}",
