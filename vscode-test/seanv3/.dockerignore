@@ -13,6 +13,7 @@
 !funding_guards.mjs
 !report.mjs
 !jupiter_web.mjs
+!jupiter_web_auth.mjs
 !package.json
 !package-lock.json
 !Dockerfile
