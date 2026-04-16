@@ -501,8 +501,35 @@ def assign_mechanical_candidate(
                 "detail": "Set KITCHEN_JUPITER_CONTROL_BASE and KITCHEN_JUPITER_OPERATOR_TOKEN so Kitchen can apply and verify Jupiter runtime.",
             }
         pre_get = jupiter_get_policy(base, tok)
-        if pre_get.get("ok") and isinstance(pre_get.get("json"), dict):
-            prev_policy_for_ledger = str(pre_get["json"].get("active_policy") or "").strip()
+        if not pre_get.get("ok"):
+            return {
+                "ok": False,
+                "error": "jupiter_runtime_unreachable_before_assign",
+                "http_status": pre_get.get("http_status"),
+                "detail": pre_get.get("body_snippet"),
+            }
+        pre_js = pre_get.get("json") or {}
+        if not isinstance(pre_js, dict):
+            return {
+                "ok": False,
+                "error": "jupiter_runtime_invalid_policy_payload",
+                "detail": "GET /api/v1/jupiter/policy did not return a JSON object.",
+            }
+        prev_policy_for_ledger = str(pre_js.get("active_policy") or "").strip()
+        allowed_raw = pre_js.get("allowed_policies")
+        allowed_list = [str(x).strip() for x in allowed_raw] if isinstance(allowed_raw, list) else []
+        if allowed_list and active_pid not in allowed_list:
+            return {
+                "ok": False,
+                "error": "jupiter_runtime_policy_set_mismatch",
+                "detail": (
+                    f"Kitchen registry assigns {active_pid!r}, but this Jupiter instance's allowed_policies "
+                    "does not include it. Redeploy Sean (vscode-test/seanv3) so ALLOWED_POLICY_IDS matches "
+                    "renaissance_v4/config/kitchen_policy_registry_v1.json, or align the registry."
+                ),
+                "active_runtime_policy_id": active_pid,
+                "jupiter_allowed_policies": allowed_list,
+            }
         post = jupiter_post_active_policy(base, tok, active_pid)
         if not post.get("ok"):
             return {

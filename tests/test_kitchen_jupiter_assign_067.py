@@ -125,7 +125,10 @@ def test_assign_jupiter_post_ok_but_verify_fails_no_persist(
         if "/jupiter/policy" in u:
             policy_n[0] += 1
             if policy_n[0] == 1:
-                return _MockResp(200, b'{"active_policy":"jup_mc_test","allowed_policies":["jup_mc_test"]}')
+                return _MockResp(
+                    200,
+                    b'{"active_policy":"jup_mc_test","allowed_policies":["jup_v4","jup_mc_test","jup_kitchen_mechanical_v1"]}',
+                )
             return _MockResp(200, b'{"active_policy":"jup_v4","allowed_policies":["jup_v4"]}')
         raise AssertionError(u)
 
@@ -134,6 +137,33 @@ def test_assign_jupiter_post_ok_but_verify_fails_no_persist(
     assert r.get("ok") is False
     assert r.get("error") == "runtime_verify_mismatch"
     assert not runtime_assignment_store_path(tmp_path).is_file()
+
+
+def test_assign_fails_when_jupiter_allowed_policies_omit_registry_target(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """DV-077 — no POST if Jupiter GET allowed_policies does not include registry slot."""
+    _copy_registry(tmp_path)
+    monkeypatch.setenv("KITCHEN_JUPITER_CONTROL_BASE", "http://sean.test")
+    monkeypatch.setenv("KITCHEN_JUPITER_OPERATOR_TOKEN", "tok")
+    _write_pass(tmp_path, "sub_nom")
+
+    def fake_urlopen(req: object, timeout: float | None = None) -> _MockResp:
+        u = getattr(req, "full_url", "")
+        if "active-policy" in u:
+            raise AssertionError("POST must not run when policy set mismatches")
+        if "/jupiter/policy" in u:
+            return _MockResp(
+                200,
+                b'{"active_policy":"jup_mc_test","allowed_policies":["jup_v4","jup_mc_test","jup_mc2"]}',
+            )
+        raise AssertionError(u)
+
+    monkeypatch.setattr("urllib.request.urlopen", fake_urlopen)
+    r = assign_mechanical_candidate_to_jupiter(tmp_path, "sub_nom")
+    assert r.get("ok") is False
+    assert r.get("error") == "jupiter_runtime_policy_set_mismatch"
+    assert "jup_kitchen_mechanical_v1" not in (r.get("jupiter_allowed_policies") or [])
 
 
 def test_assign_rejects_wrong_candidate_id(tmp_path: Path) -> None:

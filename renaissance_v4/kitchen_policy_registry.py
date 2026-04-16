@@ -2,6 +2,10 @@
 DV-074 — Single Kitchen policy registry (shared source of truth for approved runtime policy IDs).
 
 Kitchen, Jupiter operator UI, and BlackBox adapters must only assign policies listed here.
+
+DV-077 — The mechanical slot policy ID must also appear in the live Jupiter runtime
+`allowed_policies` (GET /api/v1/jupiter/policy); assignment fails with a clear error if the
+registry and runtime sets diverge.
 """
 
 from __future__ import annotations
