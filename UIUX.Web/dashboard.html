@@ -319,6 +319,10 @@
     button.dash-rv4-cand-assign-btn { font-size: 0.72rem; padding: 0.3rem 0.45rem; border-radius: var(--radius-md); border: 1px solid var(--panel-border); background: var(--panel); cursor: pointer; }
     button.dash-rv4-cand-assign-btn.primary { background: var(--accent); color: var(--accent-contrast); border-color: transparent; font-weight: 600; }
     button.dash-rv4-cand-assign-btn:disabled { opacity: 0.65; cursor: not-allowed; }
+    #rv4-kitchen-assign-global-status.is-rv4-drift-warn {
+      color: #b45309;
+      font-weight: 700;
+    }
     /* DV-053 / 053A — full-screen policy evaluation panel (replaces default Kitchen) */
     .dash-rv4-wrap.rv4-eval-mode .dash-rv4-kitchen-default {
       display: none !important;
@@ -4844,24 +4848,61 @@
     var el = $('rv4-kitchen-assign-global-status');
     if (!el) return;
     var j = rv4KitchenAssignmentPayload;
-    if (!j || !j.assignment) {
-      el.textContent =
-        'Runtime assignment (' +
-        rv4ExecPretty(rv4GetExecutionTarget()) +
-        '): none recorded yet for this target.';
+    if (!j) {
+      el.textContent = 'Kitchen runtime status: not loaded.';
+      el.classList.remove('is-rv4-drift-warn');
       return;
     }
-    var a = j.assignment;
-    el.textContent =
-      'Runtime assignment for ' +
-      String(j.execution_target || rv4GetExecutionTarget()) +
-      ': approved slot ' +
-      String(a.approved_runtime_slot_id || '—') +
-      ' · active policy ' +
-      String(a.active_runtime_policy_id || '—') +
-      ' · submission ' +
-      String(a.submission_id || '—') +
-      '.';
+    var rt = j.runtime;
+    var drift = j.drift;
+    var parts = [];
+    if (rt && rt.ok && rt.active_policy != null && String(rt.active_policy) !== '') {
+      parts.push(
+        'Runtime (authoritative): active policy ' +
+          String(rt.active_policy) +
+          (rt.source ? ' · source ' + String(rt.source) : '')
+      );
+    } else if (rt && !rt.ok) {
+      parts.push(
+        'Runtime query failed: ' +
+          String(rt.error || 'unknown') +
+          (rt.detail ? ' — ' + String(rt.detail).slice(0, 220) : '')
+      );
+    }
+    if (j.assignment) {
+      var a = j.assignment;
+      parts.push(
+        'Kitchen last assigned: policy ' +
+          String(a.active_runtime_policy_id || '—') +
+          ' · slot ' +
+          String(a.approved_runtime_slot_id || '—') +
+          ' · submission ' +
+          String(a.submission_id || '—')
+      );
+    } else {
+      parts.push('Kitchen last assigned: (none recorded for this target)');
+    }
+    if (drift && drift.state) {
+      if (drift.state === 'match') {
+        parts.push('Drift: none — Kitchen and runtime agree.');
+      } else {
+        parts.push(
+          'Drift warning [' +
+            String(drift.state) +
+            ']: ' +
+            String(drift.detail || '') +
+            (drift.runtime_active_policy != null
+              ? ' · runtime policy ' + String(drift.runtime_active_policy)
+              : '') +
+            (drift.kitchen_active_policy_id != null
+              ? ' · kitchen policy ' + String(drift.kitchen_active_policy_id)
+              : '')
+        );
+      }
+    }
+    el.textContent = parts.join(' ');
+    var warn = drift && drift.state && drift.state !== 'match';
+    el.classList.toggle('is-rv4-drift-warn', !!warn);
   }
   function rv4InitCollapsiblePanels() {
     [

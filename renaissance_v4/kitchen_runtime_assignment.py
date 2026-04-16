@@ -1,9 +1,10 @@
 """
-DV-068 — Multi-target Kitchen → runtime assignment (governed approved-slot model).
+DV-068 / DV-074 — Multi-target Kitchen → runtime assignment with runtime as source of truth.
 
-Flow: **Kitchen candidate** → **approved runtime slot** → **execution target** → **active runtime policy id** for that target.
+Flow: **Kitchen candidate** → **approved runtime slot** → **execution target** → **active runtime policy id**.
 
-No arbitrary TS execution: only registered slot ids per target. Jupiter uses SeanV3 POST; BlackBox slot is reserved with a clear adapter hook.
+DV-074: Assignment **never** persists unless the runtime accepts the change and a read-back confirms the
+active policy. Kitchen local store records intent; **runtime GET** is authoritative for \"what is running\".
 """
 
 from __future__ import annotations
@@ -17,23 +18,14 @@ from pathlib import Path
 from typing import Any
 
 from renaissance_v4.execution_targets import normalize_execution_target
+from renaissance_v4.kitchen_policy_registry import (
+    approved_mechanical_by_target,
+    load_registry,
+    runtime_policy_approved,
+)
 from renaissance_v4.policy_intake.storage import read_json, submission_dir
 
 MECHANICAL_CANDIDATE_POLICY_ID = "kitchen_mechanical_always_long_v1"
-
-# Approved mechanical proof slots per execution target (must match shipped runtime registry when wired).
-APPROVED_MECHANICAL_BY_TARGET: dict[str, dict[str, str]] = {
-    "jupiter": {
-        "approved_runtime_slot_id": "jup_kitchen_mechanical_v1",
-        "active_runtime_policy_id": "jup_kitchen_mechanical_v1",
-        "runtime_adapter": "seanv3_jupiter_active_policy",
-    },
-    "blackbox": {
-        "approved_runtime_slot_id": "bb_kitchen_mechanical_v1",
-        "active_runtime_policy_id": "bb_kitchen_mechanical_v1",
-        "runtime_adapter": "reserved_blackbox_control_plane",
-    },
-}
 
 STORE_SCHEMA = "kitchen_runtime_assignment_store_v1"
 STATE_FILENAME = "kitchen_runtime_assignment.json"
@@ -115,6 +107,259 @@ def get_assignment(repo: Path, execution_target: str | None) -> dict[str, Any] |
     return row if isinstance(row, dict) else None
 
 
+def _http_json(
+    method: str,
+    url: str,
+    *,
+    data: bytes | None = None,
+    headers: dict[str, str] | None = None,
+    timeout: float = 30.0,
+) -> tuple[int, Any | None, str]:
+    """Return (status, parsed_json_or_none, body_snippet)."""
+    h = dict(headers or {})
+    m = method.upper()
+    if m == "GET":
+        req = urllib.request.Request(url, headers=h)
+    else:
+        req = urllib.request.Request(url, data=data, headers=h, method=m)
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
+            raw = resp.read().decode("utf-8", errors="replace")
+            status = getattr(resp, "status", 200)
+            try:
+                return status, json.loads(raw), raw[:4000]
+            except json.JSONDecodeError:
+                return status, None, raw[:4000]
+    except urllib.error.HTTPError as e:
+        body = (e.read() or b"").decode("utf-8", errors="replace")
+        try:
+            return e.code, json.loads(body), body[:4000]
+        except json.JSONDecodeError:
+            return e.code, None, body[:4000]
+    except OSError as e:
+        return 0, None, str(e)[:2000]
+
+
+def jupiter_post_active_policy(base: str, token: str, policy_id: str) -> dict[str, Any]:
+    url = base.rstrip("/") + "/api/v1/jupiter/active-policy"
+    payload = json.dumps({"policy": policy_id}).encode("utf-8")
+    h = {
+        "Content-Type": "application/json",
+        "Authorization": f"Bearer {token}",
+    }
+    status, js, snippet = _http_json("POST", url, data=payload, headers=h)
+    ok_http = status == 200
+    ok_body = isinstance(js, dict) and js.get("ok") is True
+    return {
+        "ok": ok_http and ok_body,
+        "http_status": status,
+        "json": js,
+        "body_snippet": snippet,
+    }
+
+
+def jupiter_get_policy(base: str, token: str) -> dict[str, Any]:
+    url = base.rstrip("/") + "/api/v1/jupiter/policy"
+    h = {"Authorization": f"Bearer {token}"}
+    status, js, snippet = _http_json("GET", url, headers=h)
+    ok = status == 200 and isinstance(js, dict) and "active_policy" in js
+    return {
+        "ok": ok,
+        "http_status": status,
+        "json": js if isinstance(js, dict) else None,
+        "body_snippet": snippet,
+    }
+
+
+def query_jupiter_runtime_truth(
+    repo: Path,
+    *,
+    http_jupiter_base: str | None = None,
+    http_jupiter_token: str | None = None,
+) -> dict[str, Any]:
+    """Authoritative Jupiter runtime policy via GET /api/v1/jupiter/policy (Bearer)."""
+    repo = repo.resolve()
+    base = (http_jupiter_base or os.environ.get("KITCHEN_JUPITER_CONTROL_BASE") or "").strip()
+    tok = (http_jupiter_token or os.environ.get("KITCHEN_JUPITER_OPERATOR_TOKEN") or "").strip()
+    if not base or not tok:
+        return {
+            "ok": False,
+            "error": "jupiter_runtime_not_configured",
+            "detail": "Set KITCHEN_JUPITER_CONTROL_BASE and KITCHEN_JUPITER_OPERATOR_TOKEN on the API host.",
+            "execution_target": "jupiter",
+        }
+    r = jupiter_get_policy(base, tok)
+    if not r.get("ok"):
+        return {
+            "ok": False,
+            "error": "jupiter_runtime_unreachable",
+            "http_status": r.get("http_status"),
+            "detail": r.get("body_snippet"),
+            "execution_target": "jupiter",
+        }
+    js = r.get("json") or {}
+    active = str(js.get("active_policy") or "").strip()
+    allowed = js.get("allowed_policies")
+    unknown = False
+    try:
+        unknown = bool(active) and not runtime_policy_approved(repo, "jupiter", active)
+    except (OSError, ValueError, FileNotFoundError):
+        unknown = True
+    return {
+        "ok": True,
+        "execution_target": "jupiter",
+        "active_policy": active,
+        "source": js.get("source"),
+        "allowed_policies": allowed if isinstance(allowed, list) else [],
+        "unknown_runtime_policy": unknown,
+        "raw": js,
+    }
+
+
+def query_blackbox_runtime_truth(
+    repo: Path,
+    *,
+    http_blackbox_base: str | None = None,
+    http_blackbox_token: str | None = None,
+) -> dict[str, Any]:
+    """Placeholder until BlackBox exposes GET active policy (DV-074)."""
+    base = (http_blackbox_base or os.environ.get("KITCHEN_BLACKBOX_CONTROL_BASE") or "").strip()
+    tok = (http_blackbox_token or os.environ.get("KITCHEN_BLACKBOX_OPERATOR_TOKEN") or "").strip()
+    if not base or not tok:
+        return {
+            "ok": False,
+            "error": "blackbox_runtime_not_configured",
+            "detail": "Set KITCHEN_BLACKBOX_CONTROL_BASE and KITCHEN_BLACKBOX_OPERATOR_TOKEN when the BlackBox policy API exists.",
+            "execution_target": "blackbox",
+        }
+    return {
+        "ok": False,
+        "error": "blackbox_runtime_api_not_implemented",
+        "detail": "Wire GET active policy for BlackBox; adapter not implemented yet.",
+        "execution_target": "blackbox",
+    }
+
+
+def query_runtime_truth(
+    repo: Path,
+    execution_target: str | None,
+    *,
+    http_jupiter_base: str | None = None,
+    http_jupiter_token: str | None = None,
+    http_blackbox_base: str | None = None,
+    http_blackbox_token: str | None = None,
+) -> dict[str, Any]:
+    et = normalize_execution_target(execution_target)
+    if et == "jupiter":
+        return query_jupiter_runtime_truth(
+            repo,
+            http_jupiter_base=http_jupiter_base,
+            http_jupiter_token=http_jupiter_token,
+        )
+    if et == "blackbox":
+        return query_blackbox_runtime_truth(
+            repo,
+            http_blackbox_base=http_blackbox_base,
+            http_blackbox_token=http_blackbox_token,
+        )
+    return {"ok": False, "error": "unsupported_execution_target", "execution_target": et}
+
+
+def mechanical_slot_safe(repo: Path, et: str) -> dict[str, Any] | None:
+    try:
+        reg = load_registry(repo)
+    except (OSError, ValueError, FileNotFoundError):
+        return None
+    ms = reg.get("mechanical_slot") or {}
+    if not isinstance(ms, dict):
+        return None
+    row = ms.get(et)
+    return row if isinstance(row, dict) else None
+
+
+def drift_status(
+    repo: Path,
+    execution_target: str | None,
+    kitchen_row: dict[str, Any] | None,
+    runtime_payload: dict[str, Any],
+) -> dict[str, Any]:
+    """
+    Compare Kitchen last assignment vs runtime truth.
+
+    States: match | runtime_unreachable | kitchen_unassigned | runtime_diverged | unknown_runtime_policy
+    """
+    et = normalize_execution_target(execution_target)
+    if not runtime_payload.get("ok"):
+        err = str(runtime_payload.get("error") or "runtime_unreachable")
+        return {
+            "state": "runtime_unreachable",
+            "detail": runtime_payload.get("detail") or err,
+            "error_code": err,
+        }
+    r_active = str(runtime_payload.get("active_policy") or "").strip()
+    if runtime_payload.get("unknown_runtime_policy"):
+        return {
+            "state": "unknown_runtime_policy",
+            "detail": "Runtime reports a policy id that is not in kitchen_policy_registry_v1 — manual change or skew.",
+            "runtime_active_policy": r_active,
+        }
+    if not kitchen_row:
+        return {
+            "state": "kitchen_unassigned",
+            "detail": "Kitchen has no recorded assignment for this target; runtime still has an active policy.",
+            "runtime_active_policy": r_active,
+        }
+    k_active = str(kitchen_row.get("active_runtime_policy_id") or "").strip()
+    if k_active and r_active and k_active == r_active:
+        return {"state": "match", "detail": None, "runtime_active_policy": r_active, "kitchen_active_policy_id": k_active}
+    return {
+        "state": "runtime_diverged",
+        "detail": "Kitchen last assigned policy does not match runtime (policy may have been changed outside Kitchen).",
+        "runtime_active_policy": r_active,
+        "kitchen_active_policy_id": k_active,
+    }
+
+
+def build_kitchen_runtime_read_payload(
+    repo: Path,
+    execution_target: str | None,
+    *,
+    http_jupiter_base: str | None = None,
+    http_jupiter_token: str | None = None,
+    http_blackbox_base: str | None = None,
+    http_blackbox_token: str | None = None,
+) -> dict[str, Any]:
+    """Merged payload for GET /api/v1/renaissance/kitchen-runtime-assignment."""
+    repo = repo.resolve()
+    et = normalize_execution_target(execution_target)
+    row = get_assignment(repo, et)
+    reg = load_registry(repo)
+    rt = query_runtime_truth(
+        repo,
+        et,
+        http_jupiter_base=http_jupiter_base,
+        http_jupiter_token=http_jupiter_token,
+        http_blackbox_base=http_blackbox_base,
+        http_blackbox_token=http_blackbox_token,
+    )
+    drift = drift_status(repo, et, row, rt)
+    return {
+        "schema": "kitchen_runtime_assignment_read_v2",
+        "execution_target": et,
+        "assignment": row,
+        "mechanical_candidate_policy_id": MECHANICAL_CANDIDATE_POLICY_ID,
+        "policy_registry": {
+            "schema": reg.get("schema"),
+            "runtime_policies": reg.get("runtime_policies"),
+        },
+        "approved_slots_by_target": {
+            k: v["approved_runtime_slot_id"] for k, v in approved_mechanical_by_target(repo).items()
+        },
+        "runtime": rt,
+        "drift": drift,
+    }
+
+
 def assign_mechanical_candidate(
     repo: Path,
     submission_id: str,
@@ -122,11 +367,12 @@ def assign_mechanical_candidate(
     *,
     http_jupiter_base: str | None = None,
     http_jupiter_token: str | None = None,
+    http_blackbox_base: str | None = None,
+    http_blackbox_token: str | None = None,
 ) -> dict[str, Any]:
     """
-    Assign passing mechanical intake to the approved slot for the given execution target.
-
-    ``execution_target`` defaults from the intake report's ``execution_target`` (must match).
+    Assign passing mechanical intake: **runtime must accept and read-back must match** (DV-074).
+    Does not write local store unless verification succeeds.
     """
     repo = repo.resolve()
     rep_path = submission_dir(repo, submission_id) / "report" / "intake_report.json"
@@ -154,13 +400,21 @@ def assign_mechanical_candidate(
             "execution_target_intake": rep_et,
         }
 
-    if et not in APPROVED_MECHANICAL_BY_TARGET:
+    mech = mechanical_slot_safe(repo, et)
+    if not mech:
         return {"ok": False, "error": "unsupported_execution_target", "execution_target": et}
 
-    mapping = APPROVED_MECHANICAL_BY_TARGET[et]
-    slot = mapping["approved_runtime_slot_id"]
-    active_pid = mapping["active_runtime_policy_id"]
-    adapter = mapping["runtime_adapter"]
+    slot = mech["approved_runtime_slot_id"]
+    active_pid = mech["active_runtime_policy_id"]
+    adapter = mech.get("runtime_adapter", "")
+
+    if not runtime_policy_approved(repo, et, active_pid):
+        return {
+            "ok": False,
+            "error": "policy_not_in_registry",
+            "detail": f"Runtime policy {active_pid!r} is not approved in kitchen_policy_registry_v1 for {et}.",
+            "active_runtime_policy_id": active_pid,
+        }
 
     record: dict[str, Any] = {
         "schema": "kitchen_runtime_assignment_record_v1",
@@ -174,46 +428,65 @@ def assign_mechanical_candidate(
         "runtime_adapter": adapter,
     }
 
-    http_ok: bool | None = None
-    http_detail: str | None = None
-
     if et == "jupiter":
         base = (http_jupiter_base or os.environ.get("KITCHEN_JUPITER_CONTROL_BASE") or "").strip()
         tok = (http_jupiter_token or os.environ.get("KITCHEN_JUPITER_OPERATOR_TOKEN") or "").strip()
-        if base and tok:
-            url = base.rstrip("/") + "/api/v1/jupiter/active-policy"
-            payload = json.dumps({"policy": active_pid}).encode("utf-8")
-            req = urllib.request.Request(
-                url,
-                data=payload,
-                method="POST",
-                headers={"Content-Type": "application/json", "Authorization": f"Bearer {tok}"},
-            )
-            try:
-                with urllib.request.urlopen(req, timeout=30) as resp:
-                    raw = resp.read().decode("utf-8", errors="replace")
-                    http_ok = resp.status == 200
-                    http_detail = raw[:2000]
-            except urllib.error.HTTPError as e:
-                http_ok = False
-                http_detail = (e.read() or b"").decode("utf-8", errors="replace")[:2000]
-            except OSError as e:
-                http_ok = False
-                http_detail = str(e)[:2000]
-        else:
-            http_ok = None
-            http_detail = (
-                "Jupiter: set KITCHEN_JUPITER_CONTROL_BASE and KITCHEN_JUPITER_OPERATOR_TOKEN on the API host to POST to SeanV3."
-            )
+        if not base or not tok:
+            return {
+                "ok": False,
+                "error": "jupiter_runtime_not_configured",
+                "detail": "Set KITCHEN_JUPITER_CONTROL_BASE and KITCHEN_JUPITER_OPERATOR_TOKEN so Kitchen can apply and verify Jupiter runtime.",
+            }
+        post = jupiter_post_active_policy(base, tok, active_pid)
+        if not post.get("ok"):
+            return {
+                "ok": False,
+                "error": "jupiter_runtime_post_failed",
+                "http_status": post.get("http_status"),
+                "detail": post.get("body_snippet"),
+                "post_json": post.get("json"),
+            }
+        verify = jupiter_get_policy(base, tok)
+        if not verify.get("ok"):
+            return {
+                "ok": False,
+                "error": "jupiter_runtime_readback_failed",
+                "http_status": verify.get("http_status"),
+                "detail": verify.get("body_snippet"),
+            }
+        js = verify.get("json") or {}
+        live = str(js.get("active_policy") or "").strip()
+        if live != active_pid:
+            return {
+                "ok": False,
+                "error": "runtime_verify_mismatch",
+                "detail": "POST succeeded but GET /api/v1/jupiter/policy does not report the assigned policy.",
+                "expected_active_policy": active_pid,
+                "runtime_active_policy": live,
+            }
+        if not runtime_policy_approved(repo, "jupiter", live):
+            return {
+                "ok": False,
+                "error": "runtime_reports_unregistered_policy",
+                "detail": "Runtime active policy is not listed in kitchen_policy_registry_v1.",
+                "runtime_active_policy": live,
+            }
+        record["runtime_http_post_ok"] = True
+        record["runtime_http_detail"] = str((post.get("json") or {}))[:2000]
+        record["runtime_verify"] = {"source": js.get("source"), "allowed_policies": js.get("allowed_policies")}
     elif et == "blackbox":
-        http_ok = None
-        http_detail = (
-            "BlackBox: runtime control-plane adapter not wired (DV-068); assignment persisted for audit. "
-            "Implement KITCHEN_BLACKBOX_* when the BlackBox active-policy API exists."
+        bb = query_blackbox_runtime_truth(
+            repo,
+            http_blackbox_base=http_blackbox_base,
+            http_blackbox_token=http_blackbox_token,
         )
-
-    record["runtime_http_post_ok"] = http_ok
-    record["runtime_http_detail"] = http_detail
+        return {
+            "ok": False,
+            "error": bb.get("error") or "blackbox_runtime_unavailable",
+            "detail": bb.get("detail"),
+        }
+    else:
+        return {"ok": False, "error": "unsupported_execution_target", "execution_target": et}
 
     store = read_store(repo)
     store.setdefault("assignments_by_target", {})
@@ -224,7 +497,29 @@ def assign_mechanical_candidate(
     return out
 
 
-# --- Backward-compatible names (DV-067 callers) ---
+# --- Legacy module-level map for imports that expect APPROVED_MECHANICAL_BY_TARGET (repo-agnostic defaults) ---
+
+_DEFAULT_MECH: dict[str, dict[str, str]] = {
+    "jupiter": {
+        "approved_runtime_slot_id": "jup_kitchen_mechanical_v1",
+        "active_runtime_policy_id": "jup_kitchen_mechanical_v1",
+        "runtime_adapter": "seanv3_jupiter_active_policy",
+    },
+    "blackbox": {
+        "approved_runtime_slot_id": "bb_kitchen_mechanical_v1",
+        "active_runtime_policy_id": "bb_kitchen_mechanical_v1",
+        "runtime_adapter": "reserved_blackbox_control_plane",
+    },
+}
+
+
+def _approved_fallback() -> dict[str, dict[str, str]]:
+    return dict(_DEFAULT_MECH)
+
+
+# Exported name: tests and api may use with repo-aware helper
+APPROVED_MECHANICAL_BY_TARGET: dict[str, dict[str, str]] = _approved_fallback()
+
 
 def read_assignment(repo: Path) -> dict[str, Any] | None:
     """Return Jupiter row only (legacy read shape for old GET handler)."""

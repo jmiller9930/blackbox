@@ -2379,10 +2379,11 @@ class Handler(BaseHTTPRequestHandler):
             trace_id = str(uuid.uuid4())
             try:
                 from renaissance_v4.execution_targets import normalize_execution_target
+                from renaissance_v4.kitchen_policy_registry import load_registry
                 from renaissance_v4.kitchen_runtime_assignment import (
-                    APPROVED_MECHANICAL_BY_TARGET,
                     MECHANICAL_CANDIDATE_POLICY_ID,
-                    get_assignment,
+                    approved_mechanical_by_target,
+                    build_kitchen_runtime_read_payload,
                     read_store,
                 )
 
@@ -2390,32 +2391,31 @@ class Handler(BaseHTTPRequestHandler):
                 et_raw = (q.get("execution_target") or [""])[0].strip()
                 if et_raw:
                     et = normalize_execution_target(et_raw)
-                    row = get_assignment(_REPO_ROOT, et)
+                    payload = build_kitchen_runtime_read_payload(_REPO_ROOT, et)
+                    payload["trace_id"] = trace_id
                     self._json(
                         200,
-                        {
-                            "schema": "kitchen_runtime_assignment_read_v1",
-                            "execution_target": et,
-                            "assignment": row,
-                            "mechanical_candidate_policy_id": MECHANICAL_CANDIDATE_POLICY_ID,
-                            "approved_slots_by_target": {
-                                k: v["approved_runtime_slot_id"] for k, v in APPROVED_MECHANICAL_BY_TARGET.items()
-                            },
-                            "trace_id": trace_id,
-                        },
+                        payload,
                         no_cache=True,
                     )
                 else:
                     st = read_store(_REPO_ROOT)
+                    reg = load_registry(_REPO_ROOT)
                     self._json(
                         200,
                         {
-                            "schema": "kitchen_runtime_assignment_store_read_v1",
+                            "schema": "kitchen_runtime_assignment_store_read_v2",
                             "store": st,
                             "mechanical_candidate_policy_id": MECHANICAL_CANDIDATE_POLICY_ID,
                             "approved_slots_by_target": {
-                                k: v["approved_runtime_slot_id"] for k, v in APPROVED_MECHANICAL_BY_TARGET.items()
+                                k: v["approved_runtime_slot_id"]
+                                for k, v in approved_mechanical_by_target(_REPO_ROOT).items()
                             },
+                            "policy_registry": {
+                                "schema": reg.get("schema"),
+                                "runtime_policies": reg.get("runtime_policies"),
+                            },
+                            "note": "Per-target runtime truth and drift: GET with ?execution_target=jupiter|blackbox (DV-074).",
                             "trace_id": trace_id,
                         },
                         no_cache=True,
@@ -2446,12 +2446,12 @@ class Handler(BaseHTTPRequestHandler):
             trace_id = str(uuid.uuid4())
             try:
                 from renaissance_v4.kitchen_runtime_assignment import (
-                    APPROVED_MECHANICAL_BY_TARGET,
                     MECHANICAL_CANDIDATE_POLICY_ID,
+                    approved_mechanical_by_target,
                     get_assignment,
                 )
 
-                jupiter_slot = APPROVED_MECHANICAL_BY_TARGET["jupiter"]["approved_runtime_slot_id"]
+                jupiter_slot = approved_mechanical_by_target(_REPO_ROOT)["jupiter"]["approved_runtime_slot_id"]
                 a = get_assignment(_REPO_ROOT, "jupiter")
                 self._json(
                     200,

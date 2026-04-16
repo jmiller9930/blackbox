@@ -8,7 +8,7 @@
 | `GET` | `/api/v1/renaissance/policy-intake/<submission_id>` | Read persisted `intake_report.json` |
 | `POST` | `/api/v1/renaissance/policy-intake/<submission_id>/archive` | JSON body `{"is_active": false}` soft-archives; `{"is_active": true}` restores. (DV-066) |
 | `GET` | `/api/v1/renaissance/intake-candidates` | Query: `execution_target`, `include_archived` (0/1), `collapse_duplicates` (default 1: one row per `candidate_policy_id`, newest first). (DV-061 / DV-066) |
-| `POST` | `/api/v1/renaissance/kitchen-runtime-assignment` | Body `{"submission_id":"...","execution_target":"jupiter"|"blackbox"}`. Governed mechanical candidate only; persists `renaissance_v4/state/kitchen_runtime_assignment.json` **per target**. Jupiter: optional SeanV3 POST when `KITCHEN_JUPITER_*` env is set. BlackBox: persisted; HTTP adapter reserved. (DV-067 / DV-068) |
+| `POST` | `/api/v1/renaissance/kitchen-runtime-assignment` | Body `{"submission_id":"...","execution_target":"jupiter"|"blackbox"}`. Governed mechanical candidate only; approved ids come from `renaissance_v4/config/kitchen_policy_registry_v1.json`. **DV-074:** Jupiter persists only after SeanV3 POST **and** GET verify; no fake success without runtime. GET includes `runtime` + `drift`. BlackBox assign fails until runtime API is wired. |
 | `GET` | `/api/v1/renaissance/kitchen-runtime-assignment` | Query `execution_target` for one row, or omit for full store. |
 | `POST` | `/api/v1/renaissance/kitchen-assign-jupiter` | **Deprecated alias** — same as runtime-assignment with `execution_target: jupiter`. |
 | `GET` | `/api/v1/renaissance/kitchen-jupiter-assignment` | **Deprecated** — use `kitchen-runtime-assignment?execution_target=jupiter`. |
