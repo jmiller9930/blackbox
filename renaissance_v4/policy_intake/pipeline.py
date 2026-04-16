@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import json
 import math
+import os
 import re
 import subprocess
 import uuid
@@ -13,6 +14,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from renaissance_v4.execution_targets import BASELINE_COMPARED_LABELS, LABELS, normalize_execution_target
 from renaissance_v4.policy_intake.storage import ensure_submission_layout, write_json
 from renaissance_v4.policy_intake.ts_validate import validate_typescript_file
 from renaissance_v4.policy_spec.normalize import normalize_policy
@@ -54,16 +56,21 @@ def _static_sanity(canonical: dict[str, Any]) -> tuple[bool, list[str]]:
     return len(errs) == 0, errs
 
 
-def _run_ts_deterministic(repo: Path, ts_path: Path, bar_count: int) -> dict[str, Any]:
+def _run_ts_deterministic(
+    repo: Path, ts_path: Path, bar_count: int, *, execution_target: str
+) -> dict[str, Any]:
     harness = repo / "renaissance_v4" / "policy_intake" / "run_ts_intake_eval.mjs"
     if not harness.is_file():
         return {"ok": False, "error": "missing_run_ts_intake_eval_mjs"}
+    env = dict(os.environ)
+    env["BLACKBOX_EXECUTION_TARGET"] = execution_target
     r = subprocess.run(
         ["node", str(harness), str(ts_path.resolve()), str(int(bar_count))],
         cwd=str(repo),
         capture_output=True,
         text=True,
         timeout=300,
+        env=env,
     )
     raw = (r.stdout or "").strip().splitlines()
     line = raw[-1] if raw else ""
@@ -84,16 +91,21 @@ def run_intake_pipeline(
     original_filename: str,
     *,
     test_window_bars: int = 800,
+    execution_target: str | None = None,
 ) -> dict[str, Any]:
     """
     Run stages 1–6. Returns full report dict (persisted under report/intake_report.json).
     """
     repo_root = repo_root.resolve()
+    et = normalize_execution_target(execution_target)
     submission_id = uuid.uuid4().hex[:24]
     paths = ensure_submission_layout(repo_root, submission_id)
     report: dict[str, Any] = {
         "schema": "policy_intake_report_v1",
         "submission_id": submission_id,
+        "execution_target": et,
+        "execution_target_label": LABELS.get(et, et),
+        "compared_against_baseline_label": BASELINE_COMPARED_LABELS.get(et, "Baseline"),
         "original_filename": original_filename,
         "detected_kind": _detect_kind(original_filename),
         "stages": {},
@@ -238,7 +250,7 @@ def run_intake_pipeline(
         write_json(paths["report"] / "intake_report.json", report)
         return report
 
-    det = _run_ts_deterministic(repo_root, raw_path, test_window_bars)
+    det = _run_ts_deterministic(repo_root, raw_path, test_window_bars, execution_target=et)
     report["stages"]["stage_5_deterministic"] = det
     if not det.get("ok"):
         report["errors"].append(str(det.get("error") or "deterministic_failed"))

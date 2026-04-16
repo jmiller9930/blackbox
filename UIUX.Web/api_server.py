@@ -2289,11 +2289,26 @@ class Handler(BaseHTTPRequestHandler):
             return
         if path == "/api/v1/renaissance/baseline":
             try:
+                from renaissance_v4.execution_targets import normalize_execution_target
                 from renaissance_v4.ui_api import build_baseline_payload
 
-                body = build_baseline_payload(_REPO_ROOT)
+                q = parse_qs(parsed.query or "")
+                et_raw = (q.get("execution_target") or ["jupiter"])[0].strip()
+                et = normalize_execution_target(et_raw)
+                body = build_baseline_payload(_REPO_ROOT, execution_target=et)
                 body["trace_id"] = str(uuid.uuid4())
                 self._json(200, body, no_cache=True)
+            except ValueError as e:
+                self._json(
+                    400,
+                    {
+                        "schema": "renaissance_v4_ui_error_v1",
+                        "error": "invalid_execution_target",
+                        "detail": str(e)[:500],
+                        "trace_id": str(uuid.uuid4()),
+                    },
+                    no_cache=True,
+                )
             except Exception as e:  # noqa: BLE001
                 self._json(
                     500,
@@ -2409,21 +2424,52 @@ class Handler(BaseHTTPRequestHandler):
                 )
                 return
             try:
+                from renaissance_v4.execution_targets import normalize_execution_target, paths_for_execution_target
                 from renaissance_v4.ui_api import rv4_paths
                 from renaissance_v4.ui_exports import export_baseline_csv
 
+                et_raw = (q.get("execution_target") or ["jupiter"])[0].strip()
+                et = normalize_execution_target(et_raw)
                 p = rv4_paths(_REPO_ROOT)
+                pt = paths_for_execution_target(_REPO_ROOT, et)
+                csv_trades = (
+                    "blackbox_baseline_v1_trades.csv"
+                    if et == "blackbox"
+                    else "baseline_v1_trades.csv"
+                )
+                csv_metrics = (
+                    "blackbox_baseline_metrics.csv"
+                    if et == "blackbox"
+                    else "baseline_deterministic_metrics.csv"
+                )
+                csv_mc = (
+                    "blackbox_baseline_monte_carlo.csv"
+                    if et == "blackbox"
+                    else "baseline_monte_carlo_summary.csv"
+                )
                 out = export_baseline_csv(
                     _REPO_ROOT,
                     kind,
                     reports_exp=p["experiments_dir"],
                     state_dir=p["state"],
+                    baseline_trades_json=pt.get("baseline_trades_json"),
+                    baseline_det_json=pt["baseline_det"],
+                    baseline_mc_json=pt["baseline_mc"],
+                    csv_trades_name=csv_trades,
+                    csv_metrics_name=csv_metrics,
+                    csv_mc_name=csv_mc,
                 )
                 if not out:
                     self._json(404, {"error": "artifact_missing", "trace_id": str(uuid.uuid4())}, no_cache=True)
                     return
                 data, fn = out
                 self._bytes(200, data, content_type="text/csv; charset=utf-8", filename=fn, no_cache=True)
+            except ValueError as e:
+                self._json(
+                    400,
+                    {"error": "invalid_execution_target", "detail": str(e)[:500], "trace_id": str(uuid.uuid4())},
+                    no_cache=True,
+                )
             except Exception as e:  # noqa: BLE001
                 self._json(
                     500,
@@ -2787,11 +2833,49 @@ class Handler(BaseHTTPRequestHandler):
                     no_cache=True,
                 )
                 return
+            exec_raw = None
+            if "execution_target" in fs:
+                ex_item = fs["execution_target"]
+                if hasattr(ex_item, "value"):
+                    v = ex_item.value
+                    exec_raw = v.decode("utf-8", errors="replace") if isinstance(v, bytes) else str(v or "")
             trace_id = str(uuid.uuid4())
             try:
+                from renaissance_v4.execution_targets import assert_baseline_for_intake, normalize_execution_target
                 from renaissance_v4.policy_intake.pipeline import run_intake_pipeline
 
-                rep = run_intake_pipeline(_REPO_ROOT, raw, fn, test_window_bars=800)
+                try:
+                    et = normalize_execution_target(exec_raw)
+                except ValueError as ve:
+                    self._json(
+                        400,
+                        {
+                            "ok": False,
+                            "error": "invalid_execution_target",
+                            "detail": str(ve)[:500],
+                            "trace_id": trace_id,
+                        },
+                        no_cache=True,
+                    )
+                    return
+                try:
+                    assert_baseline_for_intake(_REPO_ROOT, et)
+                except ValueError as ve:
+                    self._json(
+                        503,
+                        {
+                            "ok": False,
+                            "error": "baseline_missing_for_execution_target",
+                            "detail": str(ve)[:1200],
+                            "execution_target": et,
+                            "trace_id": trace_id,
+                        },
+                        no_cache=True,
+                    )
+                    return
+                rep = run_intake_pipeline(
+                    _REPO_ROOT, raw, fn, test_window_bars=800, execution_target=et
+                )
             except Exception as e:  # noqa: BLE001
                 self._json(
                     500,

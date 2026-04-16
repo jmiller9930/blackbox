@@ -145,6 +145,30 @@
     .dash-rv4-intake-summary { font-size: 0.78rem; font-weight: 600; margin: 0.35rem 0 0.25rem; }
     #rv4-btn-policy-intake:disabled { opacity: 0.55; cursor: not-allowed; }
     .dash-rv4-file-label.primary.dash-rv4-intake-ctl-disabled { pointer-events: none; opacity: 0.55; cursor: not-allowed; }
+    /* DV-055 — execution target selector */
+    .dash-rv4-exec-target-wrap {
+      max-width: 68rem;
+      margin: 0 auto 1.25rem;
+      padding: 0.85rem 1rem;
+      border: 1px solid var(--panel-border);
+      border-radius: var(--radius-md);
+      background: rgba(15, 23, 42, 0.35);
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 0.65rem 1rem;
+    }
+    .dash-rv4-exec-target-label { font-weight: 700; font-size: 0.85rem; margin: 0; }
+    .dash-rv4-exec-target-select {
+      min-width: 11rem;
+      padding: 0.4rem 0.55rem;
+      border-radius: var(--radius-sm);
+      border: 1px solid var(--panel-border);
+      background: var(--panel);
+      color: var(--text);
+      font-size: 0.88rem;
+    }
+    .dash-rv4-exec-target-wrap #rv4-eval-under-line { margin: 0; flex: 1 1 12rem; }
     /* DV-053 / 053A — full-screen policy evaluation panel (replaces default Kitchen) */
     .dash-rv4-wrap.rv4-eval-mode .dash-rv4-kitchen-default {
       display: none !important;
@@ -1683,6 +1707,15 @@
           </p>
         </div>
 
+        <div class="dash-rv4-exec-target-wrap" id="rv4-exec-target-wrap">
+          <label class="dash-rv4-exec-target-label" for="rv4-exec-target">Execution Target</label>
+          <select id="rv4-exec-target" class="dash-rv4-exec-target-select" aria-describedby="rv4-eval-under-line">
+            <option value="jupiter" selected>Jupiter</option>
+            <option value="blackbox">BlackBox</option>
+          </select>
+          <p id="rv4-eval-under-line" class="dash-rv4-intake-hint is-ready">Evaluating under: Jupiter</p>
+        </div>
+
         <section class="dash-rv4-section dash-rv4-intake" aria-labelledby="rv4-intake-h">
           <h3 id="rv4-intake-h" class="dash-rv4-section-title">Policy Intake</h3>
           <p class="dash-rv4-intake-lead">
@@ -1709,6 +1742,7 @@
         <div class="dash-rv4-mid-grid">
           <section class="dash-rv4-section" aria-labelledby="rv4-baseline-h">
             <h3 id="rv4-baseline-h" class="dash-rv4-section-title">Active Baseline</h3>
+            <p id="rv4-baseline-scope-line" class="dash-rv4-intake-hint" hidden></p>
             <div class="dash-rv4-card dash-rv4-baseline-only" id="rv4-baseline-card">
               <div class="kv"><span class="k">Name</span><span class="v" id="rv4-bl-tag">—</span></div>
               <div class="kv"><span class="k">Trade count</span><span class="v" id="rv4-bl-n">—</span></div>
@@ -1774,6 +1808,8 @@
             <button type="button" class="dash-rv4-eval-back-btn" id="rv4-eval-back-header">Back to Kitchen</button>
           </header>
           <div class="dash-rv4-eval-filectx">
+            <p class="dash-rv4-eval-one-line" id="rv4-eval-exec-line">Execution Target: —</p>
+            <p class="dash-rv4-eval-one-line" id="rv4-eval-compare-line">Compared Against: —</p>
             <p class="dash-rv4-eval-one-line" id="rv4-eval-file-line">File: —</p>
             <p class="dash-rv4-eval-one-line" id="rv4-eval-status-line">Status: —</p>
           </div>
@@ -4462,13 +4498,43 @@
     if (rv4) rv4.classList.toggle('is-active', isRv4);
     if (vd) vd.hidden = isRv4;
     if (vr) vr.hidden = !isRv4;
-    if (isRv4) rv4Refresh();
-    if (isRv4) rv4IntakeUpdateGate();
+    if (isRv4) {
+      rv4UpdateEvalUnderLine();
+      rv4Refresh();
+      rv4IntakeUpdateGate();
+    }
   }
   function rv4Fmt(x) {
     if (x == null || x === '') return '—';
     if (typeof x === 'number' && !isNaN(x)) return String(x);
     return String(x);
+  }
+  function rv4GetExecutionTarget() {
+    var sel = $('rv4-exec-target');
+    var v = sel && sel.value ? String(sel.value).toLowerCase() : 'jupiter';
+    return v === 'blackbox' ? 'blackbox' : 'jupiter';
+  }
+  function rv4ExecPretty(slug) {
+    return slug === 'blackbox' ? 'BlackBox' : 'Jupiter';
+  }
+  function rv4UpdateEvalUnderLine() {
+    var line = $('rv4-eval-under-line');
+    if (line) line.textContent = 'Evaluating under: ' + rv4ExecPretty(rv4GetExecutionTarget());
+  }
+  function rv4EvalSetTargetLines(slug, rep) {
+    var et = (rep && rep.execution_target) || slug || rv4GetExecutionTarget();
+    if (et !== 'jupiter' && et !== 'blackbox') et = 'jupiter';
+    var el = $('rv4-eval-exec-line');
+    var cl = $('rv4-eval-compare-line');
+    var lab = rep && rep.execution_target_label ? rep.execution_target_label : rv4ExecPretty(et);
+    var cmp =
+      rep && rep.compared_against_baseline_label
+        ? rep.compared_against_baseline_label
+        : et === 'blackbox'
+          ? 'BlackBox Baseline'
+          : 'Jupiter Baseline';
+    if (el) el.textContent = 'Execution Target: ' + lab;
+    if (cl) cl.textContent = 'Compared Against: ' + cmp;
   }
   function rv4Refresh() {
     fetch('/api/v1/renaissance/workbench', { cache: 'no-store' })
@@ -4483,12 +4549,53 @@
         }
       })
       .catch(function () {});
-    fetch('/api/v1/renaissance/baseline', { cache: 'no-store' })
+    fetch(
+      '/api/v1/renaissance/baseline?execution_target=' + encodeURIComponent(rv4GetExecutionTarget()),
+      { cache: 'no-store' }
+    )
       .then(function (r) {
         return r.json();
       })
       .then(function (j) {
         if (!j || j.error) return;
+        var scope = $('rv4-baseline-scope-line');
+        if (scope) {
+          scope.hidden = false;
+          scope.textContent =
+            'Scope: ' +
+            (j.execution_target_label || rv4ExecPretty(rv4GetExecutionTarget())) +
+            ' — compared against ' +
+            (j.compared_against_baseline_label || 'baseline');
+        }
+        if (j.baseline_error && String(j.baseline_error).trim()) {
+          if (scope) {
+            scope.hidden = false;
+            scope.textContent =
+              'Baseline unavailable for ' +
+              (j.execution_target_label || rv4ExecPretty(rv4GetExecutionTarget())) +
+              ': ' +
+              String(j.baseline_error).slice(0, 220);
+          }
+          $('rv4-bl-tag').textContent = '—';
+          $('rv4-bl-n').textContent = '—';
+          $('rv4-bl-e').textContent = '—';
+          $('rv4-bl-dd').textContent = '—';
+          $('rv4-bl-mc').textContent = 'unavailable';
+          var linkHost0 = $('rv4-bl-links');
+          if (linkHost0) linkHost0.innerHTML = '';
+          var exHost0 = $('rv4-bl-exports');
+          if (exHost0) exHost0.innerHTML = '';
+          $('rv4-bl-reports').textContent = '';
+          return;
+        }
+        if (scope) {
+          scope.hidden = false;
+          scope.textContent =
+            'Scope: ' +
+            (j.execution_target_label || rv4ExecPretty(rv4GetExecutionTarget())) +
+            ' — ' +
+            (j.compared_against_baseline_label || 'baseline');
+        }
         var det = j.deterministic || {};
         $('rv4-bl-tag').textContent = j.baseline_tag || '—';
         $('rv4-bl-n').textContent = rv4Fmt(det.total_trades);
@@ -4969,6 +5076,10 @@
     wrap.hidden = false;
   }
   function rv4EvalResetPanel() {
+    var el = $('rv4-eval-exec-line');
+    var cl = $('rv4-eval-compare-line');
+    if (el) el.textContent = 'Execution Target: —';
+    if (cl) cl.textContent = 'Compared Against: —';
     rv4EvalSetFileLine('—');
     rv4EvalSetStatusLine('—');
     var pw = $('rv4-eval-processing-wrap');
@@ -5080,9 +5191,11 @@
       if (!p || rv4IntakeInFlight) return;
       var fd = new FormData();
       fd.append('policy_file', p.fileObj, p.fname);
+      fd.append('execution_target', rv4GetExecutionTarget());
       var loadedName = p.readyLabel || p.fname;
       rv4IntakeEnterEvalMode();
       rv4EvalResetPanel();
+      rv4EvalSetTargetLines(rv4GetExecutionTarget(), null);
       rv4EvalSetFileLine(loadedName);
       rv4EvalSetStatusLine('Uploading…');
       rv4EvalShowPendingProcessing();
@@ -5106,14 +5219,17 @@
             j = null;
           }
           if (!res.ok || res.status !== 200) {
+            rv4EvalSetTargetLines(rv4GetExecutionTarget(), j || null);
             rv4EvalSetStatusLine('Failed');
             var pw = $('rv4-eval-processing-wrap');
             if (pw) pw.hidden = true;
             var dwErr = $('rv4-eval-diagnostics-wrap');
             if (dwErr) dwErr.hidden = true;
             var errMsg =
-              (j && (j.error || j.detail)) ||
-              (res.text ? String(res.text).slice(0, 1200) : 'HTTP ' + res.status);
+              j && j.error === 'baseline_missing_for_execution_target' && j.detail
+                ? String(j.detail)
+                : (j && (j.detail || j.error)) ||
+                  (res.text ? String(res.text).slice(0, 1200) : 'HTTP ' + res.status);
             rv4EvalShowOutcomeFail(rv4EvalShortReasonFromText(errMsg));
             rv4IntakeSetRawReport(res.text || '(empty response)');
             return;
@@ -5128,6 +5244,7 @@
             rv4IntakeSetRawReport(res.text || '');
             return;
           }
+          rv4EvalSetTargetLines(rv4GetExecutionTarget(), j);
           rv4EvalSetStatusLine('Upload complete');
           var S = j.stages || {};
           rv4EvalFillProcessingFromStages(S);
@@ -5182,6 +5299,14 @@
       );
       if (!mf) return;
       rv4PostJob({ action: 'compare_manifest', experiment_id: rv4SelectedId, manifest: mf });
+    });
+  }
+  var rv4ExecSel = $('rv4-exec-target');
+  if (rv4ExecSel) {
+    rv4ExecSel.addEventListener('change', function () {
+      rv4UpdateEvalUnderLine();
+      var h = (window.location.hash || '').replace(/^#/, '');
+      if (h === '/renaissance' || h === 'renaissance') rv4Refresh();
     });
   }
   window.addEventListener('hashchange', rv4SetNavActive);

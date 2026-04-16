@@ -143,18 +143,24 @@ def export_baseline_csv(
     *,
     reports_exp: Path,
     state_dir: Path,
+    baseline_trades_json: Path | None = None,
+    baseline_det_json: Path | None = None,
+    baseline_mc_json: Path | None = None,
+    csv_trades_name: str = "baseline_v1_trades.csv",
+    csv_metrics_name: str = "baseline_deterministic_metrics.csv",
+    csv_mc_name: str = "baseline_monte_carlo_summary.csv",
 ) -> tuple[bytes, str] | None:
-    """kind: trades | metrics | monte_carlo — baseline reference artifacts."""
+    """kind: trades | metrics | monte_carlo — baseline reference artifacts (per execution target)."""
     repo = repo.resolve()
-    baseline_trades = reports_exp / "baseline_v1_trades.json"
-    det_path = state_dir / "baseline_deterministic.json"
-    mc_path = state_dir / "baseline_monte_carlo_summary.json"
+    baseline_trades = baseline_trades_json or (reports_exp / "baseline_v1_trades.json")
+    det_path = baseline_det_json or (state_dir / "baseline_deterministic.json")
+    mc_path = baseline_mc_json or (state_dir / "baseline_monte_carlo_summary.json")
 
     if kind == "trades":
         if not baseline_trades.is_file():
             return None
         rows = trades_json_to_csv_rows(repo, baseline_trades)
-        b, fn = csv_bytes_from_rows(rows, "baseline_v1_trades.csv")
+        b, fn = csv_bytes_from_rows(rows, csv_trades_name)
         return b, fn
 
     if kind == "metrics":
@@ -163,7 +169,7 @@ def export_baseline_csv(
         if not det and isinstance(dj, dict):
             det = dj
         rows = deterministic_json_to_metric_rows(det if isinstance(det, dict) else None)
-        b, fn = csv_bytes_from_rows(rows, "baseline_deterministic_metrics.csv")
+        b, fn = csv_bytes_from_rows(rows, csv_metrics_name)
         return b, fn
 
     if kind == "monte_carlo":
@@ -174,7 +180,7 @@ def export_baseline_csv(
         if not isinstance(mc, dict):
             return None
         rows = monte_carlo_summary_to_rows(mc)
-        b, fn = csv_bytes_from_rows(rows, "baseline_monte_carlo_summary.csv")
+        b, fn = csv_bytes_from_rows(rows, csv_mc_name)
         return b, fn
 
     return None

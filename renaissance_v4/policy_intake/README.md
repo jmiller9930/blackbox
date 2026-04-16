@@ -4,7 +4,7 @@
 
 | Method | Path | Role |
 |--------|------|------|
-| `POST` | `/api/v1/renaissance/policy-intake` | `multipart/form-data` field **`policy_file`** (max 8 MiB) |
+| `POST` | `/api/v1/renaissance/policy-intake` | `multipart/form-data`: **`policy_file`** (max 8 MiB) and **`execution_target`** (`jupiter` or `blackbox`; default `jupiter` if omitted). Evaluation and baseline scope use this target only (DV-055). |
 | `GET` | `/api/v1/renaissance/policy-intake/<submission_id>` | Read persisted `intake_report.json` |
 
 ## UI

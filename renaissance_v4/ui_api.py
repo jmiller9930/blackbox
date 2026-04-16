@@ -12,6 +12,15 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import quote
 
+from renaissance_v4.execution_targets import (
+    BASELINE_COMPARED_LABELS,
+    BASELINE_TAGS,
+    LABELS,
+    baseline_artifacts_present,
+    normalize_execution_target,
+    paths_for_execution_target,
+)
+
 BASELINE_TAG = "RenaissanceV4_baseline_v1"
 
 
@@ -96,9 +105,14 @@ def resolve_safe_artifact_path(repo: Path, rel: str) -> Path | None:
     return p
 
 
-def build_baseline_payload(repo: Path) -> dict[str, Any]:
+def build_baseline_payload(repo: Path, *, execution_target: str | None = None) -> dict[str, Any]:
+    """Baseline snapshot for the selected execution target (Jupiter vs BlackBox). No cross-target fallback."""
     repo = repo.resolve()
-    p = rv4_paths(repo)
+    et = normalize_execution_target(execution_target)
+    tag = BASELINE_TAGS.get(et, BASELINE_TAG)
+    p = paths_for_execution_target(repo, et)
+    ready, baseline_err = baseline_artifacts_present(repo, et)
+
     det = _read_json(p["baseline_det"]) or {}
     mc = _read_json(p["baseline_mc"]) or {}
     deterministic = det.get("deterministic") if isinstance(det, dict) else {}
@@ -133,17 +147,35 @@ def build_baseline_payload(repo: Path) -> dict[str, Any]:
                 }
             )
 
+    qet = quote(et, safe="")
+    export_base = f"/api/v1/renaissance/baseline/export?execution_target={qet}"
+    csv_names = (
+        ("blackbox_baseline_v1_trades.csv", "blackbox_baseline_metrics.csv", "blackbox_baseline_monte_carlo.csv")
+        if et == "blackbox"
+        else ("baseline_v1_trades.csv", "baseline_deterministic_metrics.csv", "baseline_monte_carlo_summary.csv")
+    )
+
     return {
-        "schema": "renaissance_v4_ui_baseline_v2",
-        "baseline_tag": BASELINE_TAG,
-        "strategy_id": BASELINE_TAG,
+        "schema": "renaissance_v4_ui_baseline_v3",
+        "execution_target": et,
+        "execution_target_label": LABELS.get(et, et),
+        "compared_against_baseline_label": BASELINE_COMPARED_LABELS.get(et, "Baseline"),
+        "baseline_ready": ready,
+        "baseline_error": None if ready else baseline_err,
+        "baseline_tag": tag,
+        "strategy_id": tag,
         "commit_hint": git_head,
         "reports": reports_map,
         "report_links": report_links,
         "export_urls": {
-            "trades_csv": "/api/v1/renaissance/baseline/export?kind=trades",
-            "metrics_csv": "/api/v1/renaissance/baseline/export?kind=metrics",
-            "monte_carlo_csv": "/api/v1/renaissance/baseline/export?kind=monte_carlo",
+            "trades_csv": f"{export_base}&kind=trades",
+            "metrics_csv": f"{export_base}&kind=metrics",
+            "monte_carlo_csv": f"{export_base}&kind=monte_carlo",
+        },
+        "export_csv_filenames": {
+            "trades_csv": csv_names[0],
+            "metrics_csv": csv_names[1],
+            "monte_carlo_csv": csv_names[2],
         },
         "deterministic": deterministic if isinstance(deterministic, dict) else {},
         "monte_carlo_reference_present": bool(mc) and isinstance(mc.get("monte_carlo"), dict),
@@ -416,7 +448,10 @@ def build_workbench_meta_payload() -> dict[str, Any]:
             "post_url": "/api/v1/renaissance/policy-intake",
             "status_url_template": "/api/v1/renaissance/policy-intake/{submission_id}",
             "multipart_field": "policy_file",
+            "execution_target_field": "execution_target",
+            "execution_target_values": ["jupiter", "blackbox"],
             "doc": "renaissance_v4/policy_intake/README.md",
+            "note": "DV-055: All intake requests must include execution_target; evaluation and baseline are scoped to that target only.",
         },
         "approved_job_actions": [
             {
