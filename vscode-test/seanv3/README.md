@@ -60,6 +60,8 @@ Jupiter’s Node process serves **plain HTTP** on **`JUPITER_WEB_PORT`** (defaul
 
 **Troubleshooting — browser says “problem” / can’t load :707**
 
+0. **“Secure connection failed” on `https://…:707` (or `https://clawbot…:707`):** expected. **707 is HTTP only** — there is no TLS handshake on that port. Use **`http://clawbot.a51.corp:707/…`** or your **WAN** URL with **`http://`** (example: **`http://jupv3.greyllc.net:737/…`** when the router forwards **WAN :737 → host :707**). For **`https://`**, use the **Jupiter-only Caddy** sidecar on **:8443** and a URL like **`https://jupv3.greyllc.net:8443/…`** (router must forward that WAN port to host **8443**), not **:707**.
+
 1. **Direct to port 707:** use **`http://` only** — Jupiter does **not** terminate TLS on 707, so **`https://…:707`** fails. **`https://…:8443`** is correct when the **Jupiter-only** Caddy sidecar is running (see **HTTPS** above).
 2. **Prove reachability the same way everywhere:** `curl -sS http://clawbot.a51.corp:707/health` from any machine on VPN/LAN (expect JSON with `"ok":true`). Or over SSH in one shot: `ssh jmiller@clawbot.a51.corp 'curl -sS http://clawbot.a51.corp:707/health'`. If that fails, on **clawbot** run **`docker compose ps`** and **`docker logs jupiter-web --tail 80`** in **`~/blackbox/vscode-test/seanv3`**, then **`docker compose up -d --build`** after **`git pull`** succeeds.
 3. **`jupsync.py`** uses the same default health URL (`JUPSYNC_JUPITER_HEALTH_URL`, default `http://clawbot.a51.corp:707/health`) on the remote host after deploy — not `127.0.0.1`.
