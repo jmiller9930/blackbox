@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import cgi
 import gzip
+import hmac
 import io
 import json
 import os
@@ -1816,6 +1817,24 @@ TRAINING_DASHBOARD_HTML = """<!DOCTYPE html>
 """
 
 
+def _kitchen_blackbox_get_authorized(handler: BaseHTTPRequestHandler) -> bool:
+    exp = (os.environ.get("KITCHEN_BLACKBOX_OPERATOR_TOKEN") or "").strip()
+    if not exp:
+        return True
+    auth = (handler.headers.get("Authorization") or "").strip()
+    tok = auth[7:].strip() if auth.startswith("Bearer ") else ""
+    return hmac.compare_digest(tok, exp)
+
+
+def _kitchen_blackbox_post_authorized(handler: BaseHTTPRequestHandler) -> bool:
+    exp = (os.environ.get("KITCHEN_BLACKBOX_OPERATOR_TOKEN") or "").strip()
+    if not exp:
+        return False
+    auth = (handler.headers.get("Authorization") or "").strip()
+    tok = auth[7:].strip() if auth.startswith("Bearer ") else ""
+    return hmac.compare_digest(tok, exp)
+
+
 class Handler(BaseHTTPRequestHandler):
     def _read_json_body(self) -> dict[str, Any]:
         ln = int(self.headers.get("Content-Length") or 0)
@@ -1889,6 +1908,14 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/api/v1/runtime/status":
             runtime, _ = build_status()
             self._json(200, runtime)
+            return
+        if path == "/api/v1/blackbox/policy":
+            if not _kitchen_blackbox_get_authorized(self):
+                self._json(401, {"ok": False, "error": "unauthorized"}, no_cache=True)
+                return
+            from renaissance_v4.blackbox_policy_control_plane import get_policy_observability_payload
+
+            self._json(200, get_policy_observability_payload(_REPO_ROOT), no_cache=True)
             return
         if path == "/api/v1/agents/status":
             _, agents = build_status()
@@ -2820,6 +2847,48 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_POST(self) -> None:  # noqa: N802
         parsed = urlparse(self.path)
+        path_norm_early = (parsed.path or "").rstrip("/") or "/"
+        if path_norm_early == "/api/v1/blackbox/active-policy":
+            trace_id = str(uuid.uuid4())
+            if not _kitchen_blackbox_post_authorized(self):
+                exp = (os.environ.get("KITCHEN_BLACKBOX_OPERATOR_TOKEN") or "").strip()
+                if not exp:
+                    self._json(
+                        503,
+                        {
+                            "ok": False,
+                            "error": "operator_token_not_configured",
+                            "detail": "Set KITCHEN_BLACKBOX_OPERATOR_TOKEN on the API host.",
+                            "trace_id": trace_id,
+                        },
+                        no_cache=True,
+                    )
+                else:
+                    self._json(401, {"ok": False, "error": "unauthorized", "trace_id": trace_id}, no_cache=True)
+                return
+            body = self._read_json_body() or {}
+            pid = str(body.get("policy") or "").strip()
+            from renaissance_v4.blackbox_policy_control_plane import set_active_policy
+
+            ok, err = set_active_policy(_REPO_ROOT, pid)
+            if not ok:
+                self._json(
+                    400,
+                    {"ok": False, "error": err or "set_failed", "trace_id": trace_id},
+                    no_cache=True,
+                )
+                return
+            self._json(
+                200,
+                {
+                    "ok": True,
+                    "active_policy": pid,
+                    "contract": "blackbox_active_policy_switch_v1",
+                    "trace_id": trace_id,
+                },
+                no_cache=True,
+            )
+            return
         parts = [p for p in parsed.path.strip("/").split("/") if p]
         if (
             len(parts) == 6

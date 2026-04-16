@@ -43,6 +43,9 @@ services:
       # Must match the Jupiter UI host:port you use in the browser (same Sean/jupiter-web process).
       KITCHEN_JUPITER_CONTROL_BASE: ${KITCHEN_JUPITER_CONTROL_BASE:-}
       KITCHEN_JUPITER_OPERATOR_TOKEN: ${KITCHEN_JUPITER_OPERATOR_TOKEN:-}
+      # Kitchen ↔ BlackBox policy control plane (DV-071). Loopback to this api_server when using network_mode: host.
+      KITCHEN_BLACKBOX_CONTROL_BASE: ${KITCHEN_BLACKBOX_CONTROL_BASE:-http://127.0.0.1:8080}
+      KITCHEN_BLACKBOX_OPERATOR_TOKEN: ${KITCHEN_BLACKBOX_OPERATOR_TOKEN:-}
       # Baseline bridge: Sean Jupiter lifecycle only (legacy mechanical writer removed from runtime).
       BASELINE_LEDGER_SIGNAL_MODE: sean_jupiter_v1
       BASELINE_LEGACY_MECHANICAL_ALLOWED: "0"

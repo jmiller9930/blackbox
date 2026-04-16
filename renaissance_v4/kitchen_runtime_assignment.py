@@ -126,7 +126,7 @@ def reconcile_assignment_store_to_runtime_truth(
     """
     repo = repo.resolve()
     et = normalize_execution_target(execution_target)
-    if et != "jupiter":
+    if et not in ("jupiter", "blackbox"):
         return None
     if not kitchen_row_before or not runtime_payload.get("ok"):
         return None
@@ -143,7 +143,9 @@ def reconcile_assignment_store_to_runtime_truth(
     if not isinstance(row, dict):
         return None
     row["active_runtime_policy_id"] = r_active
-    row["operator_action"] = "runtime_read_back_reconcile_dv070"
+    row["operator_action"] = (
+        "runtime_read_back_reconcile_dv070" if et == "jupiter" else "runtime_read_back_reconcile_dv071"
+    )
     row["reconciled_at_utc"] = _utc_now()
     row["reconcile_source"] = "runtime_get"
     store.setdefault("assignments_by_target", {})[et] = row
@@ -154,7 +156,11 @@ def reconcile_assignment_store_to_runtime_truth(
         previous_policy_id=k_active,
         new_policy_id=r_active,
         source="reconciliation",
-        detail="dv070_kitchen_collapsed_to_runtime_read_back",
+        detail=(
+            "dv070_kitchen_collapsed_to_runtime_read_back"
+            if et == "jupiter"
+            else "dv071_kitchen_collapsed_to_runtime_read_back"
+        ),
     )
     return row
 
@@ -223,6 +229,37 @@ def jupiter_get_policy(base: str, token: str) -> dict[str, Any]:
     }
 
 
+def blackbox_post_active_policy(base: str, token: str, policy_id: str) -> dict[str, Any]:
+    url = base.rstrip("/") + "/api/v1/blackbox/active-policy"
+    payload = json.dumps({"policy": policy_id}).encode("utf-8")
+    h = {
+        "Content-Type": "application/json",
+        "Authorization": f"Bearer {token}",
+    }
+    status, js, snippet = _http_json("POST", url, data=payload, headers=h)
+    ok_http = status == 200
+    ok_body = isinstance(js, dict) and js.get("ok") is True
+    return {
+        "ok": ok_http and ok_body,
+        "http_status": status,
+        "json": js,
+        "body_snippet": snippet,
+    }
+
+
+def blackbox_get_policy(base: str, token: str) -> dict[str, Any]:
+    url = base.rstrip("/") + "/api/v1/blackbox/policy"
+    h = {"Authorization": f"Bearer {token}"}
+    status, js, snippet = _http_json("GET", url, headers=h)
+    ok = status == 200 and isinstance(js, dict) and "active_policy" in js
+    return {
+        "ok": ok,
+        "http_status": status,
+        "json": js if isinstance(js, dict) else None,
+        "body_snippet": snippet,
+    }
+
+
 def query_jupiter_runtime_truth(
     repo: Path,
     *,
@@ -274,21 +311,42 @@ def query_blackbox_runtime_truth(
     http_blackbox_base: str | None = None,
     http_blackbox_token: str | None = None,
 ) -> dict[str, Any]:
-    """Placeholder until BlackBox exposes GET active policy (DV-074)."""
+    """Authoritative BlackBox policy via GET /api/v1/blackbox/policy (Bearer), DV-071."""
+    repo = repo.resolve()
     base = (http_blackbox_base or os.environ.get("KITCHEN_BLACKBOX_CONTROL_BASE") or "").strip()
     tok = (http_blackbox_token or os.environ.get("KITCHEN_BLACKBOX_OPERATOR_TOKEN") or "").strip()
     if not base or not tok:
         return {
             "ok": False,
             "error": "blackbox_runtime_not_configured",
-            "detail": "Set KITCHEN_BLACKBOX_CONTROL_BASE and KITCHEN_BLACKBOX_OPERATOR_TOKEN when the BlackBox policy API exists.",
+            "detail": "Set KITCHEN_BLACKBOX_CONTROL_BASE and KITCHEN_BLACKBOX_OPERATOR_TOKEN on the API host.",
             "execution_target": "blackbox",
         }
+    r = blackbox_get_policy(base, tok)
+    if not r.get("ok"):
+        return {
+            "ok": False,
+            "error": "blackbox_runtime_unreachable",
+            "http_status": r.get("http_status"),
+            "detail": r.get("body_snippet"),
+            "execution_target": "blackbox",
+        }
+    js = r.get("json") or {}
+    active = str(js.get("active_policy") or "").strip()
+    allowed = js.get("allowed_policies")
+    unknown = False
+    try:
+        unknown = bool(active) and not runtime_policy_approved(repo, "blackbox", active)
+    except (OSError, ValueError, FileNotFoundError):
+        unknown = True
     return {
-        "ok": False,
-        "error": "blackbox_runtime_api_not_implemented",
-        "detail": "Wire GET active policy for BlackBox; adapter not implemented yet.",
+        "ok": True,
         "execution_target": "blackbox",
+        "active_policy": active,
+        "source": js.get("source"),
+        "allowed_policies": allowed if isinstance(allowed, list) else [],
+        "unknown_runtime_policy": unknown,
+        "raw": js,
     }
 
 
@@ -631,16 +689,86 @@ def assign_mechanical_candidate(
         record["runtime_http_detail"] = str((post.get("json") or {}))[:2000]
         record["runtime_verify"] = {"source": js.get("source"), "allowed_policies": js.get("allowed_policies")}
     elif et == "blackbox":
-        bb = query_blackbox_runtime_truth(
-            repo,
-            http_blackbox_base=http_blackbox_base,
-            http_blackbox_token=http_blackbox_token,
-        )
-        return {
-            "ok": False,
-            "error": bb.get("error") or "blackbox_runtime_unavailable",
-            "detail": bb.get("detail"),
-        }
+        base = (http_blackbox_base or os.environ.get("KITCHEN_BLACKBOX_CONTROL_BASE") or "").strip()
+        tok = (http_blackbox_token or os.environ.get("KITCHEN_BLACKBOX_OPERATOR_TOKEN") or "").strip()
+        if not base or not tok:
+            return {
+                "ok": False,
+                "error": "blackbox_runtime_not_configured",
+                "detail": "Set KITCHEN_BLACKBOX_CONTROL_BASE and KITCHEN_BLACKBOX_OPERATOR_TOKEN so Kitchen can apply and verify BlackBox runtime.",
+            }
+        pre_get = blackbox_get_policy(base, tok)
+        if not pre_get.get("ok"):
+            return {
+                "ok": False,
+                "error": "blackbox_runtime_unreachable_before_assign",
+                "http_status": pre_get.get("http_status"),
+                "detail": pre_get.get("body_snippet"),
+            }
+        pre_js = pre_get.get("json") or {}
+        if not isinstance(pre_js, dict):
+            return {
+                "ok": False,
+                "error": "blackbox_runtime_invalid_policy_payload",
+                "detail": "GET /api/v1/blackbox/policy did not return a JSON object.",
+            }
+        prev_policy_for_ledger = str(pre_js.get("active_policy") or "").strip()
+        allowed_raw = pre_js.get("allowed_policies")
+        allowed_list = [str(x).strip() for x in allowed_raw] if isinstance(allowed_raw, list) else []
+        if allowed_list and active_pid not in allowed_list:
+            return {
+                "ok": False,
+                "error": "blackbox_runtime_policy_set_mismatch",
+                "detail": (
+                    f"Kitchen registry assigns {active_pid!r}, but this BlackBox instance's allowed_policies "
+                    "does not include it. Align kitchen_policy_registry_v1.json runtime_policies.blackbox with the API host."
+                ),
+                "active_runtime_policy_id": active_pid,
+                "blackbox_allowed_policies": allowed_list,
+            }
+        try:
+            from renaissance_v4.kitchen_policy_lifecycle import mark_assignment_requested
+
+            mark_assignment_requested(repo, submission_id, et, intent_runtime_policy_id=active_pid)
+        except Exception:
+            pass
+        post = blackbox_post_active_policy(base, tok, active_pid)
+        if not post.get("ok"):
+            return {
+                "ok": False,
+                "error": "blackbox_runtime_post_failed",
+                "http_status": post.get("http_status"),
+                "detail": post.get("body_snippet"),
+                "post_json": post.get("json"),
+            }
+        verify = blackbox_get_policy(base, tok)
+        if not verify.get("ok"):
+            return {
+                "ok": False,
+                "error": "blackbox_runtime_readback_failed",
+                "http_status": verify.get("http_status"),
+                "detail": verify.get("body_snippet"),
+            }
+        js = verify.get("json") or {}
+        live = str(js.get("active_policy") or "").strip()
+        if live != active_pid:
+            return {
+                "ok": False,
+                "error": "runtime_verify_mismatch",
+                "detail": "POST succeeded but GET /api/v1/blackbox/policy does not report the assigned policy.",
+                "expected_active_policy": active_pid,
+                "runtime_active_policy": live,
+            }
+        if not runtime_policy_approved(repo, "blackbox", live):
+            return {
+                "ok": False,
+                "error": "runtime_reports_unregistered_policy",
+                "detail": "Runtime active policy is not listed in kitchen_policy_registry_v1.",
+                "runtime_active_policy": live,
+            }
+        record["runtime_http_post_ok"] = True
+        record["runtime_http_detail"] = str((post.get("json") or {}))[:2000]
+        record["runtime_verify"] = {"source": js.get("source"), "allowed_policies": js.get("allowed_policies")}
     else:
         return {"ok": False, "error": "unsupported_execution_target", "execution_target": et}
 
@@ -649,7 +777,7 @@ def assign_mechanical_candidate(
     store["assignments_by_target"][et] = record
     write_store(repo, store)
 
-    if et == "jupiter":
+    if et in ("jupiter", "blackbox"):
         append_ledger_entry(
             repo,
             execution_target=et,
