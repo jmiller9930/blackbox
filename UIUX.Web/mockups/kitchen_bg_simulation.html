@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Quant Kitchen — background simulation (15% art)</title>
+  <link rel="stylesheet" href="../styles.css"/>
+  <style>
+    html, body { height: 100%; margin: 0; }
+    /* Same layering as dashboard #dash-view-renaissance */
+    .sim-rv4 {
+      max-width: 52rem;
+      margin: 0 auto;
+      padding: 1rem 1.25rem 2rem;
+      min-height: 100vh;
+      box-sizing: border-box;
+      position: relative;
+      isolation: isolate;
+      background: var(--bg);
+    }
+    .sim-rv4::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background: url("../assets/quant-kitchen-bg.png") center top / cover no-repeat;
+      opacity: 0.15;
+      pointer-events: none;
+      z-index: 0;
+    }
+    .sim-rv4 > * { position: relative; z-index: 1; }
+    .sim-intro {
+      background: rgba(255, 255, 255, 0.88);
+      border: 1px solid var(--panel-border);
+      border-radius: 8px;
+      padding: 0.6rem 0.85rem;
+      margin-bottom: 0.85rem;
+      font-size: 0.85rem;
+      color: var(--muted);
+    }
+    .sim-panel {
+      background: rgba(255, 255, 255, 0.94);
+      border: 1px solid var(--panel-border);
+      border-radius: 8px;
+      padding: 0.9rem 1rem;
+      margin-bottom: 0.85rem;
+      box-shadow: 0 1px 3px rgba(15, 23, 42, 0.07);
+    }
+    .sim-panel h2 { margin: 0 0 0.5rem; font-size: 0.95rem; }
+    .sim-row { display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: center; margin: 0.5rem 0; }
+    .sim-row label { font-size: 0.78rem; font-weight: 600; }
+    .sim-row select, .sim-row input[type="text"] {
+      padding: 0.4rem 0.5rem;
+      border-radius: 6px;
+      border: 1px solid var(--panel-border);
+      background: #fff;
+      font-size: 0.85rem;
+    }
+    .sim-row textarea {
+      width: 100%;
+      min-height: 5rem;
+      padding: 0.45rem;
+      border-radius: 6px;
+      border: 1px solid var(--panel-border);
+      background: #fff;
+      font-family: ui-monospace, monospace;
+      font-size: 0.72rem;
+      box-sizing: border-box;
+    }
+    .sim-note { font-size: 0.78rem; color: var(--muted); margin-top: 0.75rem; line-height: 1.45; }
+  </style>
+</head>
+<body>
+  <div class="sim-rv4">
+    <div class="sim-intro">
+      <strong>Simulation only</strong> — same background treatment as <code>#/renaissance</code> on the dashboard:
+      art layer at <strong>15% opacity</strong>, copy and form controls on solid/frosted panels. Open this file from the
+      <code>UIUX.Web</code> tree (or serve the site) so <code>../assets/quant-kitchen-bg.png</code> loads.
+    </div>
+    <div class="sim-panel">
+      <h2>Execution target</h2>
+      <div class="sim-row">
+        <label for="sim-t">Target</label>
+        <select id="sim-t"><option>Jupiter</option><option>BlackBox</option></select>
+      </div>
+    </div>
+    <div class="sim-panel">
+      <h2>Policy intake</h2>
+      <div class="sim-row">
+        <label for="sim-f">Paste policy</label>
+      </div>
+      <textarea id="sim-f" placeholder="// policy snippet…"></textarea>
+    </div>
+    <div class="sim-panel">
+      <h2>Candidate policies</h2>
+      <p style="margin:0;font-size:0.78rem;color:var(--muted)">Table rows would sit on this same solid surface.</p>
+    </div>
+    <p class="sim-note">
+      If this feels busy, lower the art strength in CSS (<code>.dash-rv4-wrap::before { opacity: 0.1; }</code>)
+      or add a slightly stronger frosted intro (increase <code>rgba(255,255,255,…)</code> on panels).
+    </p>
+  </div>
+</body>
+</html>

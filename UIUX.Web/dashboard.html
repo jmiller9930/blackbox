@@ -33,6 +33,63 @@
     .dash-rv4-wrap {
       flex: 1; overflow: auto; padding: 0.75rem 1rem 1.5rem;
       min-height: 0;
+      position: relative;
+      isolation: isolate;
+      background: var(--bg);
+    }
+    /* Atmospheric art at ~15% opacity — keep UI on solid/frosted surfaces so fields stay readable */
+    .dash-rv4-wrap::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background: url("/assets/quant-kitchen-bg.png") center top / cover no-repeat;
+      opacity: 0.15;
+      pointer-events: none;
+      z-index: 0;
+    }
+    .dash-rv4-wrap > * {
+      position: relative;
+      z-index: 1;
+    }
+    .dash-rv4-wrap .dash-rv4-kitchen-intro {
+      background: rgba(255, 255, 255, 0.88);
+      border: 1px solid var(--panel-border);
+      border-radius: var(--radius-md);
+      padding: 0.65rem 0.85rem 0.75rem;
+      margin-bottom: 0.85rem;
+      box-shadow: 0 1px 2px rgba(15, 23, 42, 0.05);
+    }
+    .dash-rv4-wrap .dash-rv4-exec-target-wrap {
+      background: rgba(255, 255, 255, 0.94) !important;
+      box-shadow: 0 1px 3px rgba(15, 23, 42, 0.07);
+    }
+    .dash-rv4-wrap .dash-rv4-card,
+    .dash-rv4-wrap .dash-rv4-intake,
+    .dash-rv4-wrap .dash-rv4-detail,
+    .dash-rv4-wrap .dash-rv4-eval-panel {
+      background: rgba(255, 255, 255, 0.94);
+      box-shadow: 0 1px 3px rgba(15, 23, 42, 0.07);
+    }
+    .dash-rv4-wrap .dash-rv4-intake textarea,
+    .dash-rv4-wrap .dash-rv4-exec-target-select,
+    .dash-rv4-wrap select,
+    .dash-rv4-wrap input:not([type="checkbox"]):not([type="radio"]) {
+      background: #fff;
+    }
+    .dash-rv4-wrap .dash-rv4-section.dash-rv4-candidates,
+    .dash-rv4-wrap .dash-rv4-section.dash-rv4-results {
+      background: rgba(255, 255, 255, 0.92);
+      border: 1px solid var(--panel-border);
+      border-radius: var(--radius-md);
+      padding: 0.85rem 1rem 1rem;
+      box-shadow: 0 1px 3px rgba(15, 23, 42, 0.06);
+    }
+    .dash-rv4-wrap .dash-rv4-mid-grid {
+      background: rgba(255, 255, 255, 0.92);
+      border: 1px solid var(--panel-border);
+      border-radius: var(--radius-md);
+      padding: 0.85rem 1rem 1rem;
+      box-shadow: 0 1px 3px rgba(15, 23, 42, 0.06);
     }
     .dash-rv4-head { font-size: 1.05rem; font-weight: 800; margin: 0 0 0.5rem; color: var(--text); }
     .dash-rv4-sub { font-size: 0.78rem; color: var(--muted); margin: 0 0 1rem; max-width: 52rem; }
