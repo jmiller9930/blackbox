@@ -1,21 +1,16 @@
 #!/usr/bin/env python3
 """
-Renaissance / research sync — align local git with origin, pull on the lab host, reload API only.
+Renaissance / research sync — align local git with origin, pull on the lab host, rebuild and restart UI.
 
-**Default (minimal):** same git flow as ``scripts/sync.py``, but on the remote we **do not** rebuild the
-``web`` (nginx) image or ``docker compose up`` the full UI stack. We only ensure the **api** container
-is up and **restart** it so Python reloads imports from the bind-mounted repo (``renaissance_v4/``,
-``UIUX.Web/api_server.py``, ``dashboard.html`` served via the API route, etc.).
+**Default (full):** push (if needed), remote ``git pull``, then ``docker compose build`` (all services with
+a build), ``docker compose up -d``, and ``docker compose restart api``. This keeps **nginx** (``web``),
+**baked static assets**, and **api** images aligned with the repo — same class of fix as nginx
+``/assets/`` routing and ``COPY assets`` into the web image.
 
-**Why not restart ``web`` every time?** The operator dashboard at ``/dashboard.html`` is proxied to
-``api`` and reads ``UIUX.Web/dashboard.html`` from the repo mount — no nginx image rebuild needed for
-those edits. Rebuilding ``web`` is for static assets baked into the nginx image (e.g. ``index.html``,
-``styles.css``) or nginx config changes.
+**Faster path:** ``--api-only`` — only ``docker compose up -d api`` + ``restart api`` when you know only
+repo-mounted Python/HTML via the API changed and nginx/static did not.
 
-**When to use something else:**
-  - Full operator UI stack (build ``web`` + ``up -d`` + restart ``api``): ``python3 scripts/sync.py``
-    or ``python3 scripts/jupsync.py --full-stack`` (SeanV3 + optional UI).
-  - This script with ``--rebuild-web``: Renaissance code + nginx-served static changes in one shot.
+**Git only:** ``--git-only`` — remote pull only; no docker.
 
 Environment (optional, same family as ``sync.py`` / ``jupsync.py``):
   BLACKBOX_SYNC_SSH / RENSYNC_SSH   SSH target (default: jmiller@clawbot.a51.corp)
@@ -26,8 +21,8 @@ Usage (from repo root):
   python3 scripts/rensync.py
   python3 scripts/rensync.py --dry-run
   python3 scripts/rensync.py --skip-push
-  python3 scripts/rensync.py --rebuild-web      # also rebuild nginx image + full compose up (rare)
-  python3 scripts/rensync.py --git-only         # remote git pull only; no docker
+  python3 scripts/rensync.py --api-only      # restart api only (no full compose build)
+  python3 scripts/rensync.py --git-only      # remote git pull only; no docker
 """
 
 from __future__ import annotations
@@ -102,8 +97,7 @@ def _remote_script(
     remote_dir_name: str,
     pull_branch: str,
     *,
-    git_only: bool,
-    rebuild_web: bool,
+    mode: str,
 ) -> str:
     git_block = f"""set -eu
 cd ~/{remote_dir_name}
@@ -111,25 +105,26 @@ git fetch origin
 git pull origin {pull_branch}
 echo "REMOTE_HEAD=$(git rev-parse HEAD)"
 """
-    if git_only:
+    if mode == "git_only":
         return git_block
 
-    if rebuild_web:
+    if mode == "api_only":
         return git_block + f"""
-echo "--- UIUX.Web: rebuild web + full stack + restart api (same as scripts/sync.py) ---"
-cd ~/{remote_dir_name}/UIUX.Web
-docker compose build web
-docker compose up -d
-docker compose restart api
-docker compose ps
-"""
-
-    return git_block + f"""
-echo "--- UIUX.Web: restart api only (Renaissance / repo-mounted Python + dashboard route) ---"
+echo "--- UIUX.Web: api only (up + restart) — use default rensync for full rebuild ---"
 cd ~/{remote_dir_name}/UIUX.Web
 docker compose up -d api
 docker compose restart api
 docker compose ps api
+"""
+
+    # full — build all images in compose file, bring stack up, restart api for import reload
+    return git_block + f"""
+echo "--- UIUX.Web: docker compose build + up -d + restart api (full) ---"
+cd ~/{remote_dir_name}/UIUX.Web
+docker compose build
+docker compose up -d
+docker compose restart api
+docker compose ps
 """
 
 
@@ -139,22 +134,24 @@ def _remote_rensync(
     pull_branch: str,
     *,
     dry_run: bool,
-    git_only: bool,
-    rebuild_web: bool,
+    mode: str,
 ) -> None:
     body = _remote_script(
         remote_dir_name,
         pull_branch,
-        git_only=git_only,
-        rebuild_web=rebuild_web,
+        mode=mode,
     )
     if dry_run:
         print("[dry-run] ssh would run on remote:\n---")
         print(body)
         print("---")
         return
-    label = "git pull only" if git_only else ("rebuild web + compose" if rebuild_web else "git pull + restart api")
-    print(f"SSH {ssh_target}: {label} …", flush=True)
+    labels = {
+        "git_only": "git pull only",
+        "api_only": "git pull + api restart only",
+        "full": "git pull + docker compose build + up -d + restart api",
+    }
+    print(f"SSH {ssh_target}: {labels[mode]} …", flush=True)
     r = subprocess.run(
         [
             "ssh",
@@ -178,8 +175,7 @@ def _remote_rensync(
 
 def main() -> None:
     ap = argparse.ArgumentParser(
-        description="Push to origin, pull on remote, restart UIUX.Web api only (default). "
-        "Use --rebuild-web when nginx image / static assets need rebuilding."
+        description="Push to origin, pull on remote, then rebuild UIUX.Web stack (default) or api-only."
     )
     ap.add_argument("--ssh", default=DEFAULT_SSH, help=f"SSH user@host (default: {DEFAULT_SSH})")
     ap.add_argument(
@@ -189,22 +185,40 @@ def main() -> None:
     )
     ap.add_argument("--remote-branch", default=DEFAULT_REMOTE_BRANCH, help="Branch to pull on remote")
     ap.add_argument("--dry-run", action="store_true", help="Print actions only")
-    ap.add_argument("--skip-push", action="store_true", help="Skip git push; still SSH pull + restart")
+    ap.add_argument("--skip-push", action="store_true", help="Skip git push; still SSH pull + docker")
     ap.add_argument(
         "--git-only",
         action="store_true",
         help="Only git fetch/pull on remote; do not run docker compose",
     )
     ap.add_argument(
+        "--api-only",
+        action="store_true",
+        help="Skip full compose build; only docker compose up -d api + restart api (faster)",
+    )
+    ap.add_argument(
         "--rebuild-web",
         action="store_true",
-        help="Rebuild nginx web image and docker compose up -d (use when static-in-image files changed)",
+        help=argparse.SUPPRESS,
     )
     args = ap.parse_args()
 
-    if args.git_only and args.rebuild_web:
-        sys.stderr.write("rensync.py: use only one of --git-only or --rebuild-web.\n")
+    if args.git_only and args.api_only:
+        sys.stderr.write("rensync.py: use only one of --git-only or --api-only.\n")
         sys.exit(2)
+
+    if args.rebuild_web:
+        print(
+            "rensync.py: note: --rebuild-web is obsolete; full rebuild is now the default (remove the flag).",
+            file=sys.stderr,
+        )
+
+    if args.git_only:
+        mode = "git_only"
+    elif args.api_only:
+        mode = "api_only"
+    else:
+        mode = "full"
 
     repo = _find_git_root()
     branch = _branch(repo)
@@ -225,8 +239,7 @@ def main() -> None:
         args.remote_dir,
         args.remote_branch,
         dry_run=args.dry_run,
-        git_only=args.git_only,
-        rebuild_web=args.rebuild_web,
+        mode=mode,
     )
 
 
