@@ -38,12 +38,14 @@
       background: var(--bg);
     }
     /* Top banner — full-width hero (replaces faded background art) */
+    /* Side bleed only — no negative top margin: parent .dash-rv4-wrap has overflow:auto and
+       clips content pulled above its padding edge, which was shaving the top of the hero art. */
     .dash-rv4-kitchen-banner-wrap {
       width: calc(100% + 2rem);
       max-width: none;
-      margin: -0.75rem -1rem 0.85rem -1rem;
+      margin: 0 -1rem 0.85rem -1rem;
       padding: 0;
-      overflow: hidden;
+      overflow: visible;
       border-radius: 0;
       line-height: 0;
       border-bottom: 1px solid var(--panel-border);
@@ -53,7 +55,7 @@
       display: flex;
       align-items: center;
       justify-content: center;
-      min-height: min(36vh, 420px);
+      min-height: min(32vh, 380px);
     }
     .dash-rv4-kitchen-banner {
       display: block;
