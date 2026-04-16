@@ -8,6 +8,7 @@
 !jupiter_mc_test_policy.mjs
 !jupiter_mc2_policy.mjs
 !jupiter_pipeline_proof_policy.mjs
+!jupiter_kitchen_mechanical_policy.mjs
 !jupiter_policy_runtime.mjs
 !sean_lifecycle.mjs
 !sean_ledger.mjs
