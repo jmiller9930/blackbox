@@ -1,6 +1,18 @@
 # PolicySpecV1 + normalization (DV-ARCH-CANONICAL-POLICY-SPEC-046)
 
-## Response header
+## DV-063 — Canonical indicator vocabulary (frozen structure)
+
+| Field | Answer |
+|--------|--------|
+| **RE:** | DV-ARCH-CANONICAL-POLICY-VOCABULARY-063 |
+| **Where declarations live** | Top-level **`indicators`** on PolicySpecV1 (`policy_spec_v1.json`). Shape: `schema_version` (`policy_indicators_v1`), **`declarations`**, optional **`gates`**, optional **`notes`**. |
+| **Frozen vocabulary** | `INDICATOR_KIND_VOCABULARY` in **`renaissance_v4/policy_spec/indicators_v1.py`** — includes EMA, SMA, RSI, ATR, MACD, Bollinger Bands, VWAP, Supertrend, Stochastic, ADX, plus CCI, Williams %R, MFI, OBV, Parabolic SAR, Ichimoku, Donchian, `volume_filter`, `divergence`, `body_measurement`, `fixed_threshold`, `threshold_group`. |
+| **Per-indicator parameters** | Each declaration is `{ "id": "<unique>", "kind": "<vocabulary>", "params": { ... } }`. Params are validated **only** for declared `kind` (see `indicators_v1._validate_params_for_kind`). |
+| **Thresholds / gates** | Optional **`indicators.gates`**: `{ "indicator_id": "<declaration id>", "operator": "<lt|lte|gt|gte|eq|between|cross_above|cross_below>", "value": <number or [a,b]>, "reference_indicator_id": "..." }`. Gates reference `declarations[].id` only. |
+| **Validation** | **Declared** kinds must be in the frozen set and params must match the kind. **Undeclared** kinds are not validated. **Empty** `declarations` is valid. Unknown keys under `indicators` are rejected. Implementation: `validate_indicators_section()`. |
+| **Harness** | Intake sets **`RV4_POLICY_INDICATORS_JSON`** for the Node process; **`run_ts_intake_eval.mjs`** echoes **`policy_indicators`** on the harness JSON line (structure mirror + kind set). |
+
+## Response header (046)
 
 | Field | Value |
 |-------|--------|

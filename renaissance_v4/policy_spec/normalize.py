@@ -10,17 +10,29 @@ from __future__ import annotations
 import copy
 from typing import Any
 
+from renaissance_v4.policy_spec.indicators_v1 import coerce_indicators_section
 from renaissance_v4.policy_spec.policy_spec_v1 import (
     DeploymentMetadataSpec,
     DiagnosticsContractSpec,
     ExitModelSpec,
     IdentitySpec,
+    IndicatorsSectionSpec,
     InputsSpec,
     PolicySpecV1,
     RiskSizingSpec,
     SignalLogicSpec,
     StrategySpec,
 )
+
+
+def _indicators_from_input(raw: Any) -> IndicatorsSectionSpec:
+    d = coerce_indicators_section(raw if isinstance(raw, dict) else None)
+    return IndicatorsSectionSpec(
+        schema_version=str(d.get("schema_version") or "policy_indicators_v1"),
+        declarations=list(d.get("declarations") or []),
+        gates=list(d.get("gates") or []),
+        notes=str(d.get("notes") or "")[:4000],
+    )
 
 
 def normalize_policy(input_policy: Any) -> dict[str, Any]:
@@ -94,6 +106,9 @@ def _from_policy_package_v1(data: dict[str, Any]) -> dict[str, Any]:
         "constants": data.get("constants"),
     }
 
+    ind_raw = data.get("indicators")
+    if not isinstance(ind_raw, dict) and isinstance(pol, dict):
+        ind_raw = pol.get("indicators")
     spec = PolicySpecV1(
         identity=ident,
         strategy=strategy,
@@ -107,6 +122,7 @@ def _from_policy_package_v1(data: dict[str, Any]) -> dict[str, Any]:
             promotion_eligible=False,
             monte_carlo_bootstrap=True,
         ),
+        indicators=_indicators_from_input(ind_raw if isinstance(ind_raw, dict) else None),
         source_submission={"instrument": inst, "raw_policy": pol, "extra": extra},
     )
     return spec.to_canonical_dict()
@@ -141,6 +157,7 @@ def _from_loose_dict(data: dict[str, Any]) -> dict[str, Any]:
         exit_model=ExitModelSpec(),
         diagnostics_contract=DiagnosticsContractSpec(),
         deployment_metadata=DeploymentMetadataSpec(),
+        indicators=_indicators_from_input(data.get("indicators")),
         source_submission={"raw": data},
     )
     return spec.to_canonical_dict()

@@ -73,6 +73,19 @@ class DeploymentMetadataSpec:
 
 
 @dataclass
+class IndicatorsSectionSpec:
+    """
+    DV-063: selective indicator declarations + optional gates.
+    See ``renaissance_v4/policy_spec/indicators_v1.py`` for frozen vocabulary and validation.
+    """
+
+    schema_version: str = "policy_indicators_v1"
+    declarations: list[dict[str, Any]] = field(default_factory=list)
+    gates: list[dict[str, Any]] = field(default_factory=list)
+    notes: str = ""
+
+
+@dataclass
 class PolicySpecV1:
     """Canonical policy specification (internal)."""
 
@@ -84,6 +97,7 @@ class PolicySpecV1:
     exit_model: ExitModelSpec = field(default_factory=ExitModelSpec)
     diagnostics_contract: DiagnosticsContractSpec = field(default_factory=DiagnosticsContractSpec)
     deployment_metadata: DeploymentMetadataSpec = field(default_factory=DeploymentMetadataSpec)
+    indicators: IndicatorsSectionSpec = field(default_factory=IndicatorsSectionSpec)
     source_submission: dict[str, Any] = field(default_factory=dict)
 
     def to_canonical_dict(self) -> dict[str, Any]:

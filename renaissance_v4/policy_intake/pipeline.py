@@ -18,6 +18,11 @@ from typing import Any
 from renaissance_v4.execution_targets import BASELINE_COMPARED_LABELS, LABELS, normalize_execution_target
 from renaissance_v4.policy_intake.storage import ensure_submission_layout, write_json
 from renaissance_v4.policy_intake.ts_validate import validate_typescript_file
+from renaissance_v4.policy_spec.indicators_v1 import (
+    coerce_indicators_section,
+    indicators_section_json_for_harness,
+    validate_indicators_section,
+)
 from renaissance_v4.policy_spec.normalize import normalize_policy
 from renaissance_v4.policy_spec.policy_spec_v1 import policy_spec_v1_validate_minimal
 
@@ -54,6 +59,7 @@ def _static_sanity(canonical: dict[str, Any]) -> tuple[bool, list[str]]:
     for sec in ("risk_sizing", "exit_model"):
         if not isinstance(canonical.get(sec), dict):
             errs.append(f"invalid_section:{sec}")
+    errs.extend(validate_indicators_section(canonical.get("indicators")))
     return len(errs) == 0, errs
 
 
@@ -76,13 +82,20 @@ def _parse_harness_stdout(stdout: str) -> dict[str, Any]:
 
 
 def _run_ts_deterministic(
-    repo: Path, ts_path: Path, bar_count: int, *, execution_target: str
+    repo: Path,
+    ts_path: Path,
+    bar_count: int,
+    *,
+    execution_target: str,
+    indicators_section: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     harness = repo / "renaissance_v4" / "policy_intake" / "run_ts_intake_eval.mjs"
     if not harness.is_file():
         return {"ok": False, "error": "missing_run_ts_intake_eval_mjs"}
     env = dict(os.environ)
     env["BLACKBOX_EXECUTION_TARGET"] = execution_target
+    ind = coerce_indicators_section(indicators_section)
+    env["RV4_POLICY_INDICATORS_JSON"] = indicators_section_json_for_harness(ind)
     r = subprocess.run(
         ["node", str(harness), str(ts_path.resolve()), str(int(bar_count))],
         cwd=str(repo),
@@ -240,9 +253,8 @@ def run_intake_pipeline(
         return report
 
     assert canonical is not None
-    write_json(paths["canonical"] / "policy_spec_v1.json", canonical)
 
-    # Stage 4
+    # Stage 4 — validate before persisting canonical (indicator unknown keys must fail before coerce)
     report["stages"]["stage_4_static"] = {"status": "in_progress"}
     ok_s, static_errs = _static_sanity(canonical)
     report["stages"]["stage_4_static"] = {"ok": ok_s, "errors": static_errs}
@@ -250,6 +262,9 @@ def run_intake_pipeline(
         report["errors"].extend(static_errs)
         write_json(paths["report"] / "intake_report.json", report)
         return report
+
+    canonical["indicators"] = coerce_indicators_section(canonical.get("indicators"))
+    write_json(paths["canonical"] / "policy_spec_v1.json", canonical)
 
     # Stage 5 — deterministic test
     report["stages"]["stage_5_deterministic"] = {
@@ -270,7 +285,13 @@ def run_intake_pipeline(
         write_json(paths["report"] / "intake_report.json", report)
         return report
 
-    det = _run_ts_deterministic(repo_root, raw_path, test_window_bars, execution_target=et)
+    det = _run_ts_deterministic(
+        repo_root,
+        raw_path,
+        test_window_bars,
+        execution_target=et,
+        indicators_section=canonical.get("indicators") if isinstance(canonical.get("indicators"), dict) else None,
+    )
     report["stages"]["stage_5_deterministic"] = det
     if not det.get("ok"):
         report["errors"].append(str(det.get("error") or "deterministic_failed"))

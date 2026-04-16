@@ -35,6 +35,16 @@
     "exit_model": { "type": "object" },
     "diagnostics_contract": { "type": "object" },
     "deployment_metadata": { "type": "object" },
+    "indicators": {
+      "type": "object",
+      "description": "DV-063 selective indicator declarations (policy_indicators_v1). See indicators_v1.py.",
+      "properties": {
+        "schema_version": { "type": "string" },
+        "declarations": { "type": "array" },
+        "gates": { "type": "array" },
+        "notes": { "type": "string" }
+      }
+    },
     "source_submission": { "type": "object" }
   }
 }

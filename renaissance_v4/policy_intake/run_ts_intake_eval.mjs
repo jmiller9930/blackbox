@@ -4,6 +4,10 @@
  * Contract: bundled module exports generateSignalFromOhlc(closes, highs, lows, volumes)
  * returning { longSignal, shortSignal, signalPrice }.
  *
+ * DV-063: Parent process sets RV4_POLICY_INDICATORS_JSON (canonical indicators section). The harness
+ * validates structure (ids, kinds in frozen vocabulary, gate refs) and echoes policy_indicators on stdout.
+ * Policies may read process.env.RV4_POLICY_INDICATORS_JSON in Node for the same declarations.
+ *
  * Usage: node run_ts_intake_eval.mjs <absolute-path-to.ts> <bar_count>
  * stdout: one JSON line
  */
@@ -16,6 +20,95 @@ import { pathToFileURL } from 'node:url';
 
 function fail(msg, detail = {}) {
   console.log(JSON.stringify({ ok: false, error: msg, ...detail }));
+}
+
+/** Mirror renaissance_v4/policy_spec/indicators_v1.py INDICATOR_KIND_VOCABULARY (keep in sync). */
+const INDICATOR_KIND_VOCABULARY = new Set([
+  'ema',
+  'sma',
+  'rsi',
+  'atr',
+  'macd',
+  'bollinger_bands',
+  'vwap',
+  'supertrend',
+  'stochastic',
+  'adx',
+  'cci',
+  'williams_r',
+  'mfi',
+  'obv',
+  'parabolic_sar',
+  'ichimoku',
+  'donchian',
+  'volume_filter',
+  'divergence',
+  'body_measurement',
+  'fixed_threshold',
+  'threshold_group',
+]);
+
+function summarizePolicyIndicatorsFromEnv() {
+  const raw = process.env.RV4_POLICY_INDICATORS_JSON;
+  if (!raw || !String(raw).trim()) {
+    return {
+      validated: true,
+      source: 'empty_env',
+      schema_version: 'policy_indicators_v1',
+      declaration_count: 0,
+      gate_count: 0,
+      kinds: [],
+    };
+  }
+  try {
+    const o = JSON.parse(raw);
+    if (!o || typeof o !== 'object') {
+      return { validated: false, error: 'not_object' };
+    }
+    const decls = Array.isArray(o.declarations) ? o.declarations : [];
+    const errs = [];
+    const ids = new Set();
+    for (let i = 0; i < decls.length; i++) {
+      const d = decls[i];
+      if (!d || typeof d !== 'object') {
+        errs.push(`declarations[${i}]_not_object`);
+        continue;
+      }
+      const id = String(d.id || '').trim();
+      const kind = String(d.kind || '').trim().toLowerCase();
+      if (!id) errs.push(`declarations[${i}]_missing_id`);
+      else if (ids.has(id)) errs.push(`duplicate_id:${id}`);
+      else ids.add(id);
+      if (!kind) errs.push(`declarations[${i}]_missing_kind`);
+      else if (!INDICATOR_KIND_VOCABULARY.has(kind)) errs.push(`declarations[${i}]_unknown_kind:${kind}`);
+      if (d.params != null && typeof d.params !== 'object') errs.push(`declarations[${i}]_params_not_object`);
+    }
+    const gates = Array.isArray(o.gates) ? o.gates : [];
+    for (let i = 0; i < gates.length; i++) {
+      const g = gates[i];
+      if (!g || typeof g !== 'object') {
+        errs.push(`gates[${i}]_not_object`);
+        continue;
+      }
+      const gid = String(g.indicator_id || '').trim();
+      if (gid && !ids.has(gid)) errs.push(`gates[${i}]_unknown_indicator_id:${gid}`);
+    }
+    const kinds = [...new Set(decls.map((d) => String(d.kind || '').toLowerCase()).filter(Boolean))];
+    return {
+      validated: errs.length === 0,
+      errors: errs.length ? errs : undefined,
+      schema_version: o.schema_version || 'policy_indicators_v1',
+      declaration_count: decls.length,
+      gate_count: gates.length,
+      kinds,
+    };
+  } catch (e) {
+    return {
+      validated: false,
+      error: 'json_parse',
+      detail: String(e && e.message ? e.message : e).slice(0, 500),
+    };
+  }
 }
 
 async function main() {
@@ -145,6 +238,7 @@ async function main() {
     trades_opened: tradesOpened,
     trades_closed: tradesClosed,
     pnl_summary: { realized: Number.isFinite(pnlSum) ? pnlSum : 0, currency: 'abstract' },
+    policy_indicators: summarizePolicyIndicatorsFromEnv(),
   };
 
   if (process.env.RV4_INTAKE_HARNESS_DEBUG === '1') {
