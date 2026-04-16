@@ -1752,53 +1752,10 @@ function htmlPage(v) {
 </head>
 <body>
   <div class="wrap">
-    <section class="panel">
-      <h2 class="jw-panel-head"><button type="button" class="jw-panel-toggle" aria-expanded="false" aria-controls="jw-pan-overview"><span class="jw-caret" aria-hidden="true">▶</span> Dashboard overview</button></h2>
-      <div class="jw-panel-body" id="jw-pan-overview" hidden>
-      <h1>Jupiter — operator dashboard</h1>
-      ${jupiterAuthMode() === 'session' ? '<p class="muted small"><a href="/auth/logout">Log out</a></p>' : ''}
-      ${
-        w?.pubkey_base58
-          ? `<p class="pubkey-banner"><strong>Paper wallet pubkey (published)</strong><br/><code id="jw-pubkey-published">${esc(w.pubkey_base58)}</code>
-        <button type="button" class="fund-btn" id="jw-copy-pk" style="margin-top:0.35rem">Copy pubkey</button></p>`
-          : `<p class="pubkey-banner bad"><strong>No pubkey published yet</strong> — scroll to <strong>Wallet &amp; funding</strong>, paste your base58 address, click <strong>Register pubkey</strong> (requires operator token). Same flow as the VS Code SeanV3 path: stored in <code>paper_wallet</code>.</p>`
-      }
-      <p class="muted" id="jw-header-sub">SQLite + parity vs BlackBox baseline · ${
-        useLivePoll
-          ? `Live poll ${esc(String(v.refresh_sec || 0))}s (no full page reload)`
-          : `Auto-refresh ${esc(String(v.refresh_sec || 0))}s`
-      }</p>
-      <p class="muted small" id="jw-live-clock" style="opacity:0.85"></p>
-      <p class="muted">${esc(v.sqlite_path)} · repo: ${esc(v.repo_root)}</p>
-      <p><a href="/">Front door</a> · <a href="https://jup.ag/perps/long/SOL-SOL" target="_blank" rel="noopener noreferrer">jup.ag SOL perps</a> · <a href="/api/summary.json">summary.json</a> · <a href="/api/operator/state.json">operator/state.json</a> · <a href="/api/live-market.json">live-market.json</a> · <a href="/health">health</a></p>
-      <script>
-      (function(){
-        document.getElementById('jw-copy-pk')?.addEventListener('click', function(){
-          var el = document.getElementById('jw-pubkey-published');
-          if (!el) return;
-          var t = el.textContent || '';
-          if (navigator.clipboard && navigator.clipboard.writeText) {
-            navigator.clipboard.writeText(t).then(function(){ alert('Copied'); }).catch(function(){ prompt('Copy:', t); });
-          } else { prompt('Copy:', t); }
-        });
-      })();
-      </script>
-    </div>
-    </section>
-    ${tokenPanel}
-    ${v.error ? `<section class="panel"><h2 class="jw-panel-head"><button type="button" class="jw-panel-toggle" aria-expanded="false" aria-controls="jw-pan-err"><span class="jw-caret" aria-hidden="true">▶</span> Error</button></h2><div class="jw-panel-body" id="jw-pan-err" hidden><p class="warn">${esc(v.error)}</p></div></section>` : ''}
     <section class="panel"><h2 class="jw-panel-head"><button type="button" class="jw-panel-toggle" aria-expanded="false" aria-controls="jw-pan-wallet-fund"><span class="jw-caret" aria-hidden="true">▶</span> Wallet &amp; funding</button></h2><div class="jw-panel-body" id="jw-pan-wallet-fund" hidden>${walletFundingBlock}</div></section>
+    <section class="panel"><h2 class="jw-panel-head"><button type="button" class="jw-panel-toggle" aria-expanded="false" aria-controls="jw-pan-wallet-st"><span class="jw-caret" aria-hidden="true">▶</span> Wallet status</button></h2><div class="jw-panel-body" id="jw-pan-wallet-st" hidden>${walletBlock}</div></section>
     <section class="panel"><h2 class="jw-panel-head"><button type="button" class="jw-panel-toggle" aria-expanded="false" aria-controls="jw-pan-trading"><span class="jw-caret" aria-hidden="true">▶</span> Trading mode</button></h2><div class="jw-panel-body" id="jw-pan-trading" hidden>${tradingBlock}</div></section>
     <section class="panel"><h2 class="jw-panel-head"><button type="button" class="jw-panel-toggle" aria-expanded="false" aria-controls="jw-pan-live"><span class="jw-caret" aria-hidden="true">▶</span> Live market &amp; gates</button></h2><div class="jw-panel-body" id="jw-pan-live" hidden>${operatorBlock}</div></section>
-    <section class="panel"><h2 class="jw-panel-head"><button type="button" class="jw-panel-toggle" aria-expanded="false" aria-controls="jw-pan-wallet-st"><span class="jw-caret" aria-hidden="true">▶</span> Wallet status</button></h2><div class="jw-panel-body" id="jw-pan-wallet-st" hidden>${walletBlock}</div></section>
-    <section class="panel"><h2 class="jw-panel-head"><button type="button" class="jw-panel-toggle" aria-expanded="false" aria-controls="jw-pan-ledger"><span class="jw-caret" aria-hidden="true">▶</span> SeanV3 paper ledger (testing)</button></h2><div class="jw-panel-body" id="jw-pan-ledger" hidden>${ledgerBlock}</div></section>
-    <section class="panel"><h2 class="jw-panel-head"><button type="button" class="jw-panel-toggle" aria-expanded="false" aria-controls="jw-pan-parity"><span class="jw-caret" aria-hidden="true">▶</span> Parity (Jupiter vs BlackBox baseline)</button></h2>
-      <div class="jw-panel-body" id="jw-pan-parity" hidden>
-      <p class="muted">Jupiter DB: ${esc(v.parity?.sean_db || '')} · baseline ledger: ${esc(v.parity?.ledger_db || '')}</p>
-      ${v.parity?.parity_align_note ? `<p class="muted small">${esc(v.parity.parity_align_note)}</p>` : ''}
-      <div class="scroll"><table><thead><tr><th>market_event_id</th><th>Jupiter</th><th>BlackBox</th><th>Parity</th></tr></thead><tbody id="jw-parity-tbody">${parityRows}</tbody></table></div>
-    </div></section>
-    <section class="panel"><h2 class="jw-panel-head"><button type="button" class="jw-panel-toggle" aria-expanded="false" aria-controls="jw-pan-pos"><span class="jw-caret" aria-hidden="true">▶</span> Position &amp; last kline (Sean DB)</button></h2><div class="jw-panel-body" id="jw-pan-pos" hidden><div id="jw-pos-kl-block">${posBlock}${klBlock}</div></div></section>
     <section class="panel"><h2 class="jw-panel-head"><button type="button" class="jw-panel-toggle" aria-expanded="true" aria-controls="jw-pan-trades"><span class="jw-caret" aria-hidden="true">▼</span> Trade window (Sean paper trades)</button></h2><div class="jw-panel-body" id="jw-pan-trades">
       <p class="op-row">
         <label>Jump to trade <select id="jw-trade-jump">${tradeJumpOpts}</select></label>
@@ -1845,6 +1802,47 @@ function htmlPage(v) {
       <p class="muted small">Click <strong>View</strong> for full indicators, gates, and raw diagnostics (loaded from the ledger row, not the summary poll).</p>
       <div class="scroll" id="jw-no-trade-scroll"><table><thead><tr><th>Time (UTC)</th><th>market_event_id</th><th>policy</th><th>reason</th><th></th></tr></thead><tbody id="jw-no-trade-tbody">${noTradeRows}</tbody></table></div>
     </div></section>
+    <section class="panel"><h2 class="jw-panel-head"><button type="button" class="jw-panel-toggle" aria-expanded="false" aria-controls="jw-pan-pos"><span class="jw-caret" aria-hidden="true">▶</span> Position &amp; last kline (Sean DB)</button></h2><div class="jw-panel-body" id="jw-pan-pos" hidden><div id="jw-pos-kl-block">${posBlock}${klBlock}</div></div></section>
+    <section class="panel">
+      <h2 class="jw-panel-head"><button type="button" class="jw-panel-toggle" aria-expanded="false" aria-controls="jw-pan-overview"><span class="jw-caret" aria-hidden="true">▶</span> Dashboard overview</button></h2>
+      <div class="jw-panel-body" id="jw-pan-overview" hidden>
+      <h1>Jupiter — operator dashboard</h1>
+      ${jupiterAuthMode() === 'session' ? '<p class="muted small"><a href="/auth/logout">Log out</a></p>' : ''}
+      ${
+        w?.pubkey_base58
+          ? `<p class="pubkey-banner"><strong>Paper wallet pubkey (published)</strong><br/><code id="jw-pubkey-published">${esc(w.pubkey_base58)}</code>
+        <button type="button" class="fund-btn" id="jw-copy-pk" style="margin-top:0.35rem">Copy pubkey</button></p>`
+          : `<p class="pubkey-banner bad"><strong>No pubkey published yet</strong> — scroll to <strong>Wallet &amp; funding</strong>, paste your base58 address, click <strong>Register pubkey</strong> (requires operator token). Same flow as the VS Code SeanV3 path: stored in <code>paper_wallet</code>.</p>`
+      }
+      <p class="muted" id="jw-header-sub">SQLite + parity vs BlackBox baseline · ${
+        useLivePoll
+          ? `Live poll ${esc(String(v.refresh_sec || 0))}s (no full page reload)`
+          : `Auto-refresh ${esc(String(v.refresh_sec || 0))}s`
+      }</p>
+      <p class="muted small" id="jw-live-clock" style="opacity:0.85"></p>
+      <p class="muted">${esc(v.sqlite_path)} · repo: ${esc(v.repo_root)}</p>
+      <p><a href="/">Front door</a> · <a href="https://jup.ag/perps/long/SOL-SOL" target="_blank" rel="noopener noreferrer">jup.ag SOL perps</a> · <a href="/api/summary.json">summary.json</a> · <a href="/api/operator/state.json">operator/state.json</a> · <a href="/api/live-market.json">live-market.json</a> · <a href="/health">health</a></p>
+      <script>
+      (function(){
+        document.getElementById('jw-copy-pk')?.addEventListener('click', function(){
+          var el = document.getElementById('jw-pubkey-published');
+          if (!el) return;
+          var t = el.textContent || '';
+          if (navigator.clipboard && navigator.clipboard.writeText) {
+            navigator.clipboard.writeText(t).then(function(){ alert('Copied'); }).catch(function(){ prompt('Copy:', t); });
+          } else { prompt('Copy:', t); }
+        });
+      })();
+      </script>
+    </div>
+    </section>
+    <section class="panel"><h2 class="jw-panel-head"><button type="button" class="jw-panel-toggle" aria-expanded="false" aria-controls="jw-pan-ledger"><span class="jw-caret" aria-hidden="true">▶</span> SeanV3 paper ledger (testing)</button></h2><div class="jw-panel-body" id="jw-pan-ledger" hidden>${ledgerBlock}</div></section>
+    <section class="panel"><h2 class="jw-panel-head"><button type="button" class="jw-panel-toggle" aria-expanded="false" aria-controls="jw-pan-parity"><span class="jw-caret" aria-hidden="true">▶</span> Parity (Jupiter vs BlackBox baseline)</button></h2>
+      <div class="jw-panel-body" id="jw-pan-parity" hidden>
+      <p class="muted">Jupiter DB: ${esc(v.parity?.sean_db || '')} · baseline ledger: ${esc(v.parity?.ledger_db || '')}</p>
+      ${v.parity?.parity_align_note ? `<p class="muted small">${esc(v.parity.parity_align_note)}</p>` : ''}
+      <div class="scroll"><table><thead><tr><th>market_event_id</th><th>Jupiter</th><th>BlackBox</th><th>Parity</th></tr></thead><tbody id="jw-parity-tbody">${parityRows}</tbody></table></div>
+    </div></section>
     <section class="panel"><h2 class="jw-panel-head"><button type="button" class="jw-panel-toggle" aria-expanded="false" aria-controls="jw-pan-trade-open"><span class="jw-caret" aria-hidden="true">▶</span> TRADE_OPEN decision log (bar opened position)</button></h2><div class="jw-panel-body" id="jw-pan-trade-open" hidden>
       <p class="op-row" style="margin-top:0;flex-wrap:wrap;align-items:center">
         <a class="csv-btn" href="/api/v1/sean/trade-open-decisions.csv">Export TRADE_OPEN decisions (CSV)</a>
@@ -1856,6 +1854,8 @@ function htmlPage(v) {
     </div></section>
     <section class="panel"><h2 class="jw-panel-head"><button type="button" class="jw-panel-toggle" aria-expanded="false" aria-controls="jw-pan-preflight"><span class="jw-caret" aria-hidden="true">▶</span> Preflight strip</button></h2><div class="jw-panel-body" id="jw-pan-preflight" hidden><div id="jw-preflight-banner">${banner}</div><div class="scroll"><table><thead><tr><th>Check</th><th>Status</th><th>Detail</th></tr></thead><tbody id="jw-preflight-tbody">${chkRows}</tbody></table></div></div></section>
     <section class="panel"><h2 class="jw-panel-head"><button type="button" class="jw-panel-toggle" aria-expanded="false" aria-controls="jw-pan-oracle"><span class="jw-caret" aria-hidden="true">▶</span> Trade / oracle window (Pyth SOL/USD)</button></h2><div class="jw-panel-body" id="jw-pan-oracle" hidden><div id="jw-oracle-block">${oracleBlock}</div></div></section>
+    ${tokenPanel}
+    ${v.error ? `<section class="panel"><h2 class="jw-panel-head"><button type="button" class="jw-panel-toggle" aria-expanded="false" aria-controls="jw-pan-err"><span class="jw-caret" aria-hidden="true">▶</span> Error</button></h2><div class="jw-panel-body" id="jw-pan-err" hidden><p class="warn">${esc(v.error)}</p></div></section>` : ''}
   </div>
   <div id="jw-nt-drawer-root" class="jw-nt-drawer-backdrop" hidden aria-hidden="true">
     <aside class="jw-nt-drawer" role="dialog" aria-modal="true" aria-labelledby="jw-nt-drawer-title" onclick="event.stopPropagation()">
