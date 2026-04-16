@@ -18,7 +18,7 @@
 #     node --experimental-sqlite backfill.mjs
 # Optional external compare jobs exist elsewhere in the monorepo — not part of SeanV3 runtime.
 #
-# Jupiter read-only web UI: host :707 — http://clawbot.a51.corp:707/ or WAN http://jupv3.greyllc.net:737/ (JUPITER_WEB_PORT default 707). jupiter-web runs as root so Node can bind :707 on Linux.
+# Jupiter read-only web UI: host :707 — http://clawbot.a51.corp:707/ or WAN http://jupv3.greyllc.net:707/ (JUPITER_WEB_PORT default 707). jupiter-web runs as root so Node can bind :707 on Linux.
 services:
   seanv3:
     build: .

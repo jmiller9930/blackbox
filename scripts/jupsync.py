@@ -32,8 +32,8 @@ Usage:
 Reachability (important):
   Post-deploy health uses **the same URL operators use in a browser**, not loopback. The remote script
   (run over **SSH on the lab host**) curls ``JUPSYNC_JUPITER_HEALTH_URL`` (default
-  ``http://jupv3.greyllc.net:737/health`` — WAN :737 → host :707). Override with e.g.
-  ``http://clawbot.a51.corp:707/health`` if you only verify from VPN/LAN.
+  ``http://jupv3.greyllc.net:707/health`` — WAN HTTP on :707). Override with e.g.
+  ``http://127.0.0.1:707/health`` if hairpin NAT blocks the WAN URL from the host.
   For plain **http** :707 use an **http** health URL. If you use the Jupiter-only HTTPS sidecar
   (``docker-compose.jupiter-https.yml``, host **:8443**), set e.g.
   ``JUPSYNC_JUPITER_HEALTH_URL=https://clawbot.a51.corp:8443/health`` — the script uses ``curl -k``
@@ -42,7 +42,7 @@ Reachability (important):
 Health verification runs **on the remote** after ``docker compose`` (retries with backoff). If it fails,
 the script exits **non-zero** and prints ``jupiter-web`` logs — unlike older versions that always exited 0.
 Optional env: ``JUPSYNC_HEALTH_ATTEMPTS`` (default 25), ``JUPSYNC_HEALTH_SLEEP_SEC`` (default 2),
-``JUPSYNC_JUPITER_HEALTH_URL`` (full URL to ``/health``, default ``http://jupv3.greyllc.net:737/health``).
+``JUPSYNC_JUPITER_HEALTH_URL`` (full URL to ``/health``, default ``http://jupv3.greyllc.net:707/health``).
 """
 
 from __future__ import annotations
@@ -146,7 +146,7 @@ def _jupiter_health_url() -> str:
     u = (os.environ.get("JUPSYNC_JUPITER_HEALTH_URL") or os.environ.get("JUPITER_HEALTH_URL") or "").strip()
     if u:
         return u
-    return "http://jupv3.greyllc.net:737/health"
+    return "http://jupv3.greyllc.net:707/health"
 
 
 def _bash_jupiter_health(
