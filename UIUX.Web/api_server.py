@@ -2442,6 +2442,65 @@ class Handler(BaseHTTPRequestHandler):
                     no_cache=True,
                 )
             return
+        if path == "/api/v1/renaissance/kitchen-policy-ledger":
+            trace_id = str(uuid.uuid4())
+            try:
+                from renaissance_v4.execution_targets import normalize_execution_target
+                from renaissance_v4.kitchen_policy_ledger import ledger_entries_for_target
+
+                q = parse_qs(parsed.query or "")
+                et_raw = (q.get("execution_target") or [""])[0].strip()
+                lim_raw = (q.get("limit") or ["50"])[0].strip()
+                try:
+                    limit = max(1, min(200, int(lim_raw)))
+                except ValueError:
+                    limit = 50
+                if not et_raw:
+                    self._json(
+                        400,
+                        {
+                            "schema": "renaissance_v4_ui_error_v1",
+                            "error": "missing_execution_target",
+                            "detail": "Query execution_target=jupiter|blackbox is required",
+                            "trace_id": trace_id,
+                        },
+                        no_cache=True,
+                    )
+                    return
+                et = normalize_execution_target(et_raw)
+                entries = ledger_entries_for_target(_REPO_ROOT, et, limit=limit)
+                self._json(
+                    200,
+                    {
+                        "schema": "kitchen_policy_assignment_ledger_read_v1",
+                        "execution_target": et,
+                        "entries": entries,
+                        "trace_id": trace_id,
+                    },
+                    no_cache=True,
+                )
+            except ValueError as e:
+                self._json(
+                    400,
+                    {
+                        "schema": "renaissance_v4_ui_error_v1",
+                        "error": "invalid_execution_target",
+                        "detail": str(e)[:500],
+                        "trace_id": trace_id,
+                    },
+                    no_cache=True,
+                )
+            except Exception as e:  # noqa: BLE001
+                self._json(
+                    500,
+                    {
+                        "schema": "renaissance_v4_ui_error_v1",
+                        "error": str(e)[:500],
+                        "trace_id": trace_id,
+                    },
+                    no_cache=True,
+                )
+            return
         if path == "/api/v1/renaissance/kitchen-jupiter-assignment":
             trace_id = str(uuid.uuid4())
             try:

@@ -120,6 +120,12 @@ def test_dashboard_dv070_kitchen_assign_per_row_and_generalized_endpoint() -> No
     assert "rv4-btn-kitchen-assign-runtime" not in text
 
 
+def test_dashboard_dv074a_ledger_strip_present() -> None:
+    text = (WEB / "dashboard.html").read_text(encoding="utf-8")
+    assert "rv4-kitchen-ledger-strip" in text
+    assert "ledger_tail" in text
+
+
 def test_dashboard_dv071_paste_reset_after_submit() -> None:
     """DV-071 — paste buffer cleared and paste mode closed after completed paste evaluation."""
     text = (WEB / "dashboard.html").read_text(encoding="utf-8")

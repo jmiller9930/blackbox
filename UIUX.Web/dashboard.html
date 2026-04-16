@@ -1973,6 +1973,7 @@
           </div>
           <p class="dash-rv4-msg" id="rv4-cand-selected-line">No candidate selected — use Select on a row above.</p>
           <p class="dash-rv4-msg" id="rv4-kitchen-assign-global-status" style="margin-top:0.5rem" aria-live="polite"></p>
+          <p class="dash-rv4-msg" id="rv4-kitchen-ledger-strip" style="margin-top:0.25rem;font-size:0.7rem;color:var(--muted);line-height:1.45" hidden aria-live="polite"></p>
         </section>
           </div>
         </details>
@@ -4903,6 +4904,31 @@
     el.textContent = parts.join(' ');
     var warn = drift && drift.state && drift.state !== 'match';
     el.classList.toggle('is-rv4-drift-warn', !!warn);
+    var ledEl = $('rv4-kitchen-ledger-strip');
+    if (ledEl) {
+      var tail = j.ledger_tail;
+      if (tail && tail.length) {
+        ledEl.hidden = false;
+        ledEl.textContent =
+          'Assignment ledger (newest first): ' +
+          tail
+            .map(function (e) {
+              return (
+                String(e.timestamp_utc || '').slice(0, 19) +
+                ' ' +
+                String(e.source || '') +
+                ' ' +
+                String(e.previous_policy_id || '—') +
+                ' → ' +
+                String(e.new_policy_id || '—')
+              );
+            })
+            .join(' · ');
+      } else {
+        ledEl.hidden = true;
+        ledEl.textContent = '';
+      }
+    }
   }
   function rv4InitCollapsiblePanels() {
     [

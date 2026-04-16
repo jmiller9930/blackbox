@@ -18,6 +18,12 @@ from pathlib import Path
 from typing import Any
 
 from renaissance_v4.execution_targets import normalize_execution_target
+from renaissance_v4.kitchen_policy_ledger import (
+    append_ledger_entry,
+    get_external_dedupe_fingerprint,
+    ledger_entries_for_target,
+    set_external_dedupe_fingerprint,
+)
 from renaissance_v4.kitchen_policy_registry import (
     approved_mechanical_by_target,
     load_registry,
@@ -320,6 +326,58 @@ def drift_status(
     }
 
 
+def maybe_record_external_runtime_change(
+    repo: Path,
+    execution_target: str,
+    kitchen_row: dict[str, Any] | None,
+    rt: dict[str, Any],
+) -> dict[str, Any] | None:
+    """
+    DV-074A — When runtime truth differs from last Kitchen assignment, append an ``external`` ledger entry
+    (deduped). Unknown registry policies get a separate dedupe key.
+    """
+    et = normalize_execution_target(execution_target)
+    if not rt.get("ok"):
+        return None
+    r_active = str(rt.get("active_policy") or "").strip()
+    if not r_active:
+        return None
+
+    if rt.get("unknown_runtime_policy"):
+        fp = f"unreg:{r_active}"
+        if get_external_dedupe_fingerprint(repo, et) == fp:
+            return None
+        e = append_ledger_entry(
+            repo,
+            execution_target=et,
+            previous_policy_id=str(kitchen_row.get("active_runtime_policy_id") or "") if kitchen_row else "",
+            new_policy_id=r_active,
+            source="external",
+            detail="runtime_active_policy_not_in_shared_registry",
+        )
+        set_external_dedupe_fingerprint(repo, et, fp)
+        return e
+
+    if not kitchen_row:
+        return None
+    k_active = str(kitchen_row.get("active_runtime_policy_id") or "").strip()
+    if not k_active or k_active == r_active:
+        return None
+    fp = f"drift:{k_active}|{r_active}"
+    if get_external_dedupe_fingerprint(repo, et) == fp:
+        return None
+    e = append_ledger_entry(
+        repo,
+        execution_target=et,
+        previous_policy_id=k_active,
+        new_policy_id=r_active,
+        source="external",
+        detail="runtime_diverged_from_last_kitchen_assignment",
+    )
+    set_external_dedupe_fingerprint(repo, et, fp)
+    return e
+
+
 def build_kitchen_runtime_read_payload(
     repo: Path,
     execution_target: str | None,
@@ -343,8 +401,10 @@ def build_kitchen_runtime_read_payload(
         http_blackbox_token=http_blackbox_token,
     )
     drift = drift_status(repo, et, row, rt)
+    maybe_record_external_runtime_change(repo, et, row, rt)
+    ledger_tail = ledger_entries_for_target(repo, et, limit=20)
     return {
-        "schema": "kitchen_runtime_assignment_read_v2",
+        "schema": "kitchen_runtime_assignment_read_v3",
         "execution_target": et,
         "assignment": row,
         "mechanical_candidate_policy_id": MECHANICAL_CANDIDATE_POLICY_ID,
@@ -357,6 +417,8 @@ def build_kitchen_runtime_read_payload(
         },
         "runtime": rt,
         "drift": drift,
+        "ledger_tail": ledger_tail,
+        "ledger_note": "Append-only history (Kitchen assigns + external/runtime drift). Rollback must use registry + ledger.",
     }
 
 
@@ -428,6 +490,7 @@ def assign_mechanical_candidate(
         "runtime_adapter": adapter,
     }
 
+    prev_policy_for_ledger = ""
     if et == "jupiter":
         base = (http_jupiter_base or os.environ.get("KITCHEN_JUPITER_CONTROL_BASE") or "").strip()
         tok = (http_jupiter_token or os.environ.get("KITCHEN_JUPITER_OPERATOR_TOKEN") or "").strip()
@@ -437,6 +500,9 @@ def assign_mechanical_candidate(
                 "error": "jupiter_runtime_not_configured",
                 "detail": "Set KITCHEN_JUPITER_CONTROL_BASE and KITCHEN_JUPITER_OPERATOR_TOKEN so Kitchen can apply and verify Jupiter runtime.",
             }
+        pre_get = jupiter_get_policy(base, tok)
+        if pre_get.get("ok") and isinstance(pre_get.get("json"), dict):
+            prev_policy_for_ledger = str(pre_get["json"].get("active_policy") or "").strip()
         post = jupiter_post_active_policy(base, tok, active_pid)
         if not post.get("ok"):
             return {
@@ -492,6 +558,16 @@ def assign_mechanical_candidate(
     store.setdefault("assignments_by_target", {})
     store["assignments_by_target"][et] = record
     write_store(repo, store)
+
+    if et == "jupiter":
+        append_ledger_entry(
+            repo,
+            execution_target=et,
+            previous_policy_id=prev_policy_for_ledger,
+            new_policy_id=str(record.get("active_runtime_policy_id") or ""),
+            source="kitchen",
+            detail="kitchen_assign_runtime_confirmed",
+        )
 
     out: dict[str, Any] = {"ok": True, **record}
     return out

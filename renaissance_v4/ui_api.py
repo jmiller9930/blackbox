@@ -450,6 +450,7 @@ def build_workbench_meta_payload() -> dict[str, Any]:
             "archive_url_template": "/api/v1/renaissance/policy-intake/{submission_id}/archive",
             "kitchen_runtime_assignment_post_url": "/api/v1/renaissance/kitchen-runtime-assignment",
             "kitchen_runtime_assignment_read_url": "/api/v1/renaissance/kitchen-runtime-assignment",
+            "kitchen_policy_ledger_read_url_template": "/api/v1/renaissance/kitchen-policy-ledger?execution_target={execution_target}",
             "kitchen_assign_jupiter_url": "/api/v1/renaissance/kitchen-assign-jupiter",
             "kitchen_jupiter_assignment_read_url": "/api/v1/renaissance/kitchen-jupiter-assignment",
             "note_dv_068": "Prefer kitchen-runtime-assignment; Jupiter-only URLs are deprecated aliases.",

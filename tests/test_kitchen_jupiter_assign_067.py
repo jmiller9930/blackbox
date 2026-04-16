@@ -1,4 +1,4 @@
-"""DV-067 / DV-074 — Kitchen → runtime assignment (registry + runtime truth)."""
+"""DV-067 / DV-074 / DV-074A — Kitchen → runtime assignment + ledger."""
 
 from __future__ import annotations
 
@@ -8,12 +8,14 @@ from pathlib import Path
 
 import pytest
 
+from renaissance_v4.kitchen_policy_ledger import read_ledger
 from renaissance_v4.kitchen_runtime_assignment import (
     assign_mechanical_candidate,
     assign_mechanical_candidate_to_jupiter,
     build_kitchen_runtime_read_payload,
     get_assignment,
     legacy_jupiter_assignment_path,
+    maybe_record_external_runtime_change,
     runtime_assignment_store_path,
 )
 
@@ -101,6 +103,10 @@ def test_assign_jupiter_succeeds_when_runtime_post_and_get_verify(
     assert r.get("active_runtime_policy_id") == "jup_kitchen_mechanical_v1"
     p = runtime_assignment_store_path(tmp_path)
     assert p.is_file()
+    led = read_ledger(tmp_path)
+    assert len(led.get("entries") or []) == 1
+    assert led["entries"][0]["source"] == "kitchen"
+    assert led["entries"][0]["new_policy_id"] == "jup_kitchen_mechanical_v1"
 
 
 def test_assign_jupiter_post_ok_but_verify_fails_no_persist(
@@ -110,16 +116,17 @@ def test_assign_jupiter_post_ok_but_verify_fails_no_persist(
     monkeypatch.setenv("KITCHEN_JUPITER_CONTROL_BASE", "http://sean.test")
     monkeypatch.setenv("KITCHEN_JUPITER_OPERATOR_TOKEN", "tok")
     _write_pass(tmp_path, "subx")
+    policy_n = [0]
 
     def fake_urlopen(req: object, timeout: float | None = None) -> _MockResp:
         u = getattr(req, "full_url", "")
         if "active-policy" in u:
             return _MockResp(200, b'{"ok":true,"active_policy":"jup_kitchen_mechanical_v1"}')
         if "/jupiter/policy" in u:
-            return _MockResp(
-                200,
-                b'{"active_policy":"jup_v4","allowed_policies":["jup_v4"],"source":"runtime_config"}',
-            )
+            policy_n[0] += 1
+            if policy_n[0] == 1:
+                return _MockResp(200, b'{"active_policy":"jup_mc_test","allowed_policies":["jup_mc_test"]}')
+            return _MockResp(200, b'{"active_policy":"jup_v4","allowed_policies":["jup_v4"]}')
         raise AssertionError(u)
 
     monkeypatch.setattr("urllib.request.urlopen", fake_urlopen)
@@ -194,7 +201,7 @@ def test_read_payload_includes_drift_when_runtime_unconfigured(
     monkeypatch.delenv("KITCHEN_JUPITER_CONTROL_BASE", raising=False)
     monkeypatch.delenv("KITCHEN_JUPITER_OPERATOR_TOKEN", raising=False)
     p = build_kitchen_runtime_read_payload(tmp_path, "jupiter")
-    assert p.get("schema") == "kitchen_runtime_assignment_read_v2"
+    assert p.get("schema") == "kitchen_runtime_assignment_read_v3"
     assert p.get("runtime", {}).get("ok") is False
     assert p.get("drift", {}).get("state") == "runtime_unreachable"
 
@@ -222,3 +229,16 @@ def test_read_payload_match_when_mocked_runtime_agrees_with_kitchen(
     assign_mechanical_candidate_to_jupiter(tmp_path, "s2")
     p = build_kitchen_runtime_read_payload(tmp_path, "jupiter")
     assert p.get("drift", {}).get("state") == "match"
+    assert isinstance(p.get("ledger_tail"), list)
+
+
+def test_external_ledger_deduped_on_repeated_poll(tmp_path: Path) -> None:
+    _copy_registry(tmp_path)
+    row = {"active_runtime_policy_id": "jup_kitchen_mechanical_v1"}
+    rt = {"ok": True, "active_policy": "jup_v4", "unknown_runtime_policy": False}
+    maybe_record_external_runtime_change(tmp_path, "jupiter", row, rt)
+    maybe_record_external_runtime_change(tmp_path, "jupiter", row, rt)
+    led = read_ledger(tmp_path)
+    assert len(led.get("entries") or []) == 1
+    assert led["entries"][0]["source"] == "external"
+    assert led["entries"][0]["new_policy_id"] == "jup_v4"
