@@ -48,9 +48,12 @@ services:
       SEAN_ENGINE_SLICE: "1"
       # jupiter_4 (default) = same gates as BlackBox JUPv4; jupiter_3 = legacy BOS stack in Node.
       SEAN_JUPITER_POLICY: ${SEAN_JUPITER_POLICY:-jupiter_4}
+      # DV-070 — same policy registry allowlist as Jupiter web (read-only).
+      BLACKBOX_REPO_ROOT: /repo
       # SEAN_ENGINE_SIZE_NOTIONAL_SOL: "1.0"
     volumes:
       - ./capture:/capture
+      - ../../:/repo:ro
 
   # Jupiter — read-only dashboard; shares SQLite with seanv3 (host network → port 707 on host).
   # build: . — same image as seanv3; avoids compose trying to pull seanv3:local from a registry.

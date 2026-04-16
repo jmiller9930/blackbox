@@ -41,17 +41,11 @@ import {
   ENGINE_ID as ENGINE_ID_KITCHEN_MECHANICAL,
 } from './jupiter_kitchen_mechanical_policy.mjs';
 
-export const JUPITER_ACTIVE_POLICY_KEY = 'jupiter_active_policy';
+import { ALLOWED_POLICY_IDS } from './jupiter_registry_allowlist.mjs';
 
-/** Canonical ids for API / UI / meta storage */
-export const ALLOWED_POLICY_IDS = Object.freeze([
-  'jup_v4',
-  'jup_v3',
-  'jup_mc_test',
-  'jup_mc2',
-  'jup_pipeline_proof_v1',
-  'jup_kitchen_mechanical_v1',
-]);
+export { ALLOWED_POLICY_IDS };
+
+export const JUPITER_ACTIVE_POLICY_KEY = 'jupiter_active_policy';
 
 /**
  * @param {string | null | undefined} s

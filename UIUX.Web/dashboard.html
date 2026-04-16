@@ -5006,10 +5006,20 @@
         var tl = String(r.execution_target_label || r.execution_target || '—').replace(/[<>&]/g, '');
         var cr = String(r.created_utc || '—').replace(/[<>&]/g, '');
         var st = String(r.intake_status || 'pass').replace(/[<>&]/g, '');
-        var lc = r.lifecycle || {};
-        var runningGreen = String(lc.state || '') === 'assigned_runtime_confirmed';
-        var runDot = runningGreen
-          ? '<span class="dash-rv4-lifecycle-running" title="Runtime confirmed active (read-back)">&#9679;</span> '
+        /* DV-070 — green only when runtime read-back matches this row's assignment (not lifecycle intent alone) */
+        var kPay = rv4KitchenAssignmentPayload || {};
+        var kRt = kPay.runtime || {};
+        var kDr = kPay.drift || {};
+        var kAsg = kPay.assignment || null;
+        var runtimeMatch =
+          kRt &&
+          kRt.ok &&
+          kDr.state === 'match' &&
+          kAsg &&
+          String(kAsg.submission_id || '') === String(r.submission_id || '') &&
+          String(kRt.active_policy || '') === String(kAsg.active_runtime_policy_id || '');
+        var runDot = runtimeMatch
+          ? '<span class="dash-rv4-lifecycle-running" title="Runtime active policy (read-back) matches assignment">&#9679;</span> '
           : '';
         var sel = rv4SelectedCandSid === r.submission_id;
         var isArch = r.is_active === false;
