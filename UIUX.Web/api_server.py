@@ -2375,23 +2375,92 @@ class Handler(BaseHTTPRequestHandler):
                     no_cache=True,
                 )
             return
+        if path == "/api/v1/renaissance/kitchen-runtime-assignment":
+            trace_id = str(uuid.uuid4())
+            try:
+                from renaissance_v4.execution_targets import normalize_execution_target
+                from renaissance_v4.kitchen_runtime_assignment import (
+                    APPROVED_MECHANICAL_BY_TARGET,
+                    MECHANICAL_CANDIDATE_POLICY_ID,
+                    get_assignment,
+                    read_store,
+                )
+
+                q = parse_qs(parsed.query or "")
+                et_raw = (q.get("execution_target") or [""])[0].strip()
+                if et_raw:
+                    et = normalize_execution_target(et_raw)
+                    row = get_assignment(_REPO_ROOT, et)
+                    self._json(
+                        200,
+                        {
+                            "schema": "kitchen_runtime_assignment_read_v1",
+                            "execution_target": et,
+                            "assignment": row,
+                            "mechanical_candidate_policy_id": MECHANICAL_CANDIDATE_POLICY_ID,
+                            "approved_slots_by_target": {
+                                k: v["approved_runtime_slot_id"] for k, v in APPROVED_MECHANICAL_BY_TARGET.items()
+                            },
+                            "trace_id": trace_id,
+                        },
+                        no_cache=True,
+                    )
+                else:
+                    st = read_store(_REPO_ROOT)
+                    self._json(
+                        200,
+                        {
+                            "schema": "kitchen_runtime_assignment_store_read_v1",
+                            "store": st,
+                            "mechanical_candidate_policy_id": MECHANICAL_CANDIDATE_POLICY_ID,
+                            "approved_slots_by_target": {
+                                k: v["approved_runtime_slot_id"] for k, v in APPROVED_MECHANICAL_BY_TARGET.items()
+                            },
+                            "trace_id": trace_id,
+                        },
+                        no_cache=True,
+                    )
+            except ValueError as e:
+                self._json(
+                    400,
+                    {
+                        "schema": "renaissance_v4_ui_error_v1",
+                        "error": "invalid_execution_target",
+                        "detail": str(e)[:500],
+                        "trace_id": trace_id,
+                    },
+                    no_cache=True,
+                )
+            except Exception as e:  # noqa: BLE001
+                self._json(
+                    500,
+                    {
+                        "schema": "renaissance_v4_ui_error_v1",
+                        "error": str(e)[:500],
+                        "trace_id": trace_id,
+                    },
+                    no_cache=True,
+                )
+            return
         if path == "/api/v1/renaissance/kitchen-jupiter-assignment":
             trace_id = str(uuid.uuid4())
             try:
-                from renaissance_v4.kitchen_jupiter_control import (
-                    JUPITER_MECHANICAL_SLOT,
+                from renaissance_v4.kitchen_runtime_assignment import (
+                    APPROVED_MECHANICAL_BY_TARGET,
                     MECHANICAL_CANDIDATE_POLICY_ID,
-                    read_assignment,
+                    get_assignment,
                 )
 
-                a = read_assignment(_REPO_ROOT)
+                jupiter_slot = APPROVED_MECHANICAL_BY_TARGET["jupiter"]["approved_runtime_slot_id"]
+                a = get_assignment(_REPO_ROOT, "jupiter")
                 self._json(
                     200,
                     {
                         "schema": "kitchen_jupiter_assignment_read_v1",
                         "assignment": a,
                         "mechanical_candidate_policy_id": MECHANICAL_CANDIDATE_POLICY_ID,
-                        "jupiter_policy_slot": JUPITER_MECHANICAL_SLOT,
+                        "jupiter_policy_slot": jupiter_slot,
+                        "note": "Prefer GET /api/v1/renaissance/kitchen-runtime-assignment?execution_target=jupiter (DV-068).",
                         "trace_id": trace_id,
                     },
                     no_cache=True,
@@ -2914,6 +2983,57 @@ class Handler(BaseHTTPRequestHandler):
             self._json(code, r, no_cache=True)
             return
         path_norm = (parsed.path or "").rstrip("/") or "/"
+        if path_norm == "/api/v1/renaissance/kitchen-runtime-assignment":
+            trace_id = str(uuid.uuid4())
+            body = self._read_json_body() or {}
+            sid = str(body.get("submission_id") or "").strip()
+            et_raw = str(body.get("execution_target") or "").strip()
+            if not sid:
+                self._json(
+                    400,
+                    {
+                        "ok": False,
+                        "error": "missing_submission_id",
+                        "detail": "JSON body must include submission_id and execution_target",
+                        "trace_id": trace_id,
+                    },
+                    no_cache=True,
+                )
+                return
+            if not et_raw:
+                self._json(
+                    400,
+                    {
+                        "ok": False,
+                        "error": "missing_execution_target",
+                        "detail": "JSON body must include execution_target (jupiter | blackbox)",
+                        "trace_id": trace_id,
+                    },
+                    no_cache=True,
+                )
+                return
+            try:
+                from renaissance_v4.kitchen_runtime_assignment import assign_mechanical_candidate
+
+                r = assign_mechanical_candidate(_REPO_ROOT, sid, et_raw)
+            except ValueError as e:
+                self._json(
+                    400,
+                    {"ok": False, "error": "invalid_execution_target", "detail": str(e)[:500], "trace_id": trace_id},
+                    no_cache=True,
+                )
+                return
+            except Exception as e:  # noqa: BLE001
+                self._json(
+                    500,
+                    {"ok": False, "error": str(e)[:800], "trace_id": trace_id},
+                    no_cache=True,
+                )
+                return
+            r["trace_id"] = trace_id
+            code = 200 if r.get("ok") else 400
+            self._json(code, r, no_cache=True)
+            return
         if path_norm == "/api/v1/renaissance/kitchen-assign-jupiter":
             trace_id = str(uuid.uuid4())
             body = self._read_json_body() or {}
@@ -2924,14 +3044,14 @@ class Handler(BaseHTTPRequestHandler):
                     {
                         "ok": False,
                         "error": "missing_submission_id",
-                        "detail": "JSON body must include submission_id",
+                        "detail": "JSON body must include submission_id (legacy alias: use kitchen-runtime-assignment with execution_target)",
                         "trace_id": trace_id,
                     },
                     no_cache=True,
                 )
                 return
             try:
-                from renaissance_v4.kitchen_jupiter_control import assign_mechanical_candidate_to_jupiter
+                from renaissance_v4.kitchen_runtime_assignment import assign_mechanical_candidate_to_jupiter
 
                 r = assign_mechanical_candidate_to_jupiter(_REPO_ROOT, sid)
             except Exception as e:  # noqa: BLE001
@@ -2942,6 +3062,7 @@ class Handler(BaseHTTPRequestHandler):
                 )
                 return
             r["trace_id"] = trace_id
+            r["note"] = "Deprecated alias: prefer POST /api/v1/renaissance/kitchen-runtime-assignment (DV-068)."
             code = 200 if r.get("ok") else 400
             self._json(code, r, no_cache=True)
             return
