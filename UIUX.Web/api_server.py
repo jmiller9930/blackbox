@@ -2320,6 +2320,50 @@ class Handler(BaseHTTPRequestHandler):
                     no_cache=True,
                 )
             return
+        if path == "/api/v1/renaissance/intake-candidates":
+            q = parse_qs(parsed.query or "")
+            et_raw = (q.get("execution_target") or [""])[0].strip()
+            trace_id = str(uuid.uuid4())
+            try:
+                from renaissance_v4.execution_targets import normalize_execution_target
+                from renaissance_v4.policy_intake.candidates_registry import list_intake_candidates
+
+                et: str | None = None
+                if et_raw:
+                    et = normalize_execution_target(et_raw)
+                rows = list_intake_candidates(_REPO_ROOT, execution_target=et)
+                self._json(
+                    200,
+                    {
+                        "schema": "renaissance_v4_ui_intake_candidates_v1",
+                        "candidates": rows,
+                        "execution_target_filter": et,
+                        "trace_id": trace_id,
+                    },
+                    no_cache=True,
+                )
+            except ValueError as e:
+                self._json(
+                    400,
+                    {
+                        "schema": "renaissance_v4_ui_error_v1",
+                        "error": "invalid_execution_target",
+                        "detail": str(e)[:500],
+                        "trace_id": trace_id,
+                    },
+                    no_cache=True,
+                )
+            except Exception as e:  # noqa: BLE001
+                self._json(
+                    500,
+                    {
+                        "schema": "renaissance_v4_ui_error_v1",
+                        "error": str(e)[:500],
+                        "trace_id": trace_id,
+                    },
+                    no_cache=True,
+                )
+            return
         if path.startswith("/api/v1/renaissance/policy-intake/"):
             sid = path[len("/api/v1/renaissance/policy-intake/") :].strip().strip("/")
             if not sid or ".." in sid:

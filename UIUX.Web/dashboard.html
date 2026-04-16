@@ -171,6 +171,10 @@
       font-size: 0.88rem;
     }
     .dash-rv4-exec-target-wrap #rv4-eval-under-line { margin: 0; flex: 1 1 12rem; }
+    .dash-rv4-cand-table-wrap { overflow-x: auto; margin-top: 0.5rem; }
+    tr.dash-rv4-cand-row.is-selected { background: rgba(59, 130, 246, 0.08); }
+    .dash-rv4-cand-sel-btn { font-size: 0.72rem; padding: 0.25rem 0.5rem; border-radius: var(--radius-md); border: 1px solid var(--panel-border); background: var(--panel); cursor: pointer; }
+    .dash-rv4-cand-sel-btn.is-active { background: var(--accent); color: var(--accent-contrast); border-color: transparent; font-weight: 600; }
     /* DV-053 / 053A — full-screen policy evaluation panel (replaces default Kitchen) */
     .dash-rv4-wrap.rv4-eval-mode .dash-rv4-kitchen-default {
       display: none !important;
@@ -1743,6 +1747,34 @@
             <p id="rv4-intake-gate-msg" class="dash-rv4-intake-hint">Select or paste a policy file</p>
             <p id="rv4-intake-ready-line" class="dash-rv4-intake-hint is-ready" hidden></p>
           </div>
+        </section>
+
+        <section class="dash-rv4-section dash-rv4-candidates" aria-labelledby="rv4-cand-h">
+          <h3 id="rv4-cand-h" class="dash-rv4-section-title">Candidate Policies</h3>
+          <p class="dash-rv4-intake-hint">
+            <strong>Lifecycle:</strong> Upload Policy → Pass Intake → Candidate Policy → Select Candidate → Compare vs Baseline → Assign later.
+            Passing intake does <strong>not</strong> activate or assign a policy.
+          </p>
+          <p id="rv4-cand-context" class="dash-rv4-intake-hint is-ready" aria-live="polite">
+            Execution Target: — · Compared Against: — · No candidate selected for comparison.
+          </p>
+          <p id="rv4-cand-single-hint" class="dash-rv4-msg" hidden></p>
+          <div class="dash-rv4-cand-table-wrap">
+            <table class="dash-rv4-table" id="rv4-cand-table" aria-label="Successful intake candidates">
+              <thead>
+                <tr>
+                  <th scope="col">Select</th>
+                  <th scope="col">Candidate ID</th>
+                  <th scope="col">Source file</th>
+                  <th scope="col">Target</th>
+                  <th scope="col">Created (UTC)</th>
+                  <th scope="col">Intake</th>
+                </tr>
+              </thead>
+              <tbody id="rv4-cand-tbody"><tr><td colspan="6">Loading…</td></tr></tbody>
+            </table>
+          </div>
+          <p class="dash-rv4-msg" id="rv4-cand-selected-line">No candidate selected — use Select on a row above.</p>
         </section>
 
         <div class="dash-rv4-mid-grid">
@@ -4544,6 +4576,167 @@
     if (el) el.textContent = 'Execution Target: ' + lab;
     if (cl) cl.textContent = 'Compared Against: ' + cmp;
   }
+  var rv4CandidatesCache = [];
+  var rv4SelectedCandSid = null;
+  function rv4ComparedAgainstLabel() {
+    return rv4GetExecutionTarget() === 'blackbox' ? 'BlackBox Baseline' : 'Jupiter Baseline';
+  }
+  function rv4UpdateCandContextBar() {
+    var el = $('rv4-cand-context');
+    if (!el) return;
+    var et = rv4ExecPretty(rv4GetExecutionTarget());
+    var cmp = rv4ComparedAgainstLabel();
+    var line =
+      'Execution Target: ' + et + ' · Compared Against: ' + cmp + ' · ';
+    if (rv4SelectedCandSid) {
+      var row = rv4CandidatesCache.filter(function (c) {
+        return c.submission_id === rv4SelectedCandSid;
+      })[0];
+      if (row) {
+        line +=
+          'Candidate under test: ' +
+          row.candidate_policy_id +
+          ' (submission ' +
+          row.submission_id +
+          '). Use Evaluation Actions below to compare vs baseline for this target only.';
+      } else {
+        line += 'No candidate selected for comparison.';
+      }
+    } else {
+      line += 'No candidate selected for comparison.';
+    }
+    el.textContent = line;
+  }
+  function rv4ClearCandidateSelection() {
+    rv4SelectedCandSid = null;
+    Array.prototype.forEach.call(document.querySelectorAll('tr.dash-rv4-cand-row'), function (tr) {
+      tr.classList.remove('is-selected');
+    });
+    Array.prototype.forEach.call(document.querySelectorAll('button.dash-rv4-cand-sel-btn'), function (b) {
+      b.classList.remove('is-active');
+      b.textContent = 'Select';
+    });
+    var sl = $('rv4-cand-selected-line');
+    if (sl) sl.textContent = 'No candidate selected — use Select on a row above.';
+    rv4UpdateCandContextBar();
+  }
+  function rv4SelectCandidateRow(sid) {
+    rv4SelectedCandSid = sid;
+    Array.prototype.forEach.call(document.querySelectorAll('tr.dash-rv4-cand-row'), function (tr) {
+      var match = tr.getAttribute('data-sid') === sid;
+      tr.classList.toggle('is-selected', match);
+    });
+    Array.prototype.forEach.call(document.querySelectorAll('button.dash-rv4-cand-sel-btn'), function (b) {
+      var match = b.getAttribute('data-sid') === sid;
+      b.classList.toggle('is-active', match);
+      b.textContent = match ? 'Selected' : 'Select';
+    });
+    var row = rv4CandidatesCache.filter(function (c) {
+      return c.submission_id === sid;
+    })[0];
+    var sl = $('rv4-cand-selected-line');
+    if (sl && row) {
+      sl.textContent =
+        'Selected: ' +
+        row.candidate_policy_id +
+        ' — submission ' +
+        row.submission_id +
+        ' (scoped to this execution target).';
+    }
+    rv4UpdateCandContextBar();
+  }
+  function rv4RenderCandidates(rows) {
+    var tb = $('rv4-cand-tbody');
+    var hint = $('rv4-cand-single-hint');
+    if (!tb) return;
+    if (!rows || !rows.length) {
+      tb.innerHTML =
+        '<tr><td colspan="6">No successful candidates for this execution target yet. Pass intake first.</td></tr>';
+      if (hint) hint.hidden = true;
+      rv4ClearCandidateSelection();
+      return;
+    }
+    if (
+      rv4SelectedCandSid &&
+      !rows.some(function (r) {
+        return r.submission_id === rv4SelectedCandSid;
+      })
+    ) {
+      rv4SelectedCandSid = null;
+    }
+    tb.innerHTML = rows
+      .map(function (r) {
+        var sid = String(r.submission_id || '').replace(/[<>&]/g, '');
+        var cid = String(r.candidate_policy_id || '').replace(/[<>&]/g, '');
+        var fn = String(r.original_filename || '—').replace(/[<>&]/g, '');
+        var tl = String(r.execution_target_label || r.execution_target || '—').replace(/[<>&]/g, '');
+        var cr = String(r.created_utc || '—').replace(/[<>&]/g, '');
+        var st = String(r.intake_status || 'pass').replace(/[<>&]/g, '');
+        var sel = rv4SelectedCandSid === r.submission_id;
+        return (
+          '<tr class="dash-rv4-cand-row' +
+          (sel ? ' is-selected' : '') +
+          '" data-sid="' +
+          sid +
+          '"><td><button type="button" class="dash-rv4-cand-sel-btn' +
+          (sel ? ' is-active' : '') +
+          '" data-sid="' +
+          sid +
+          '">' +
+          (sel ? 'Selected' : 'Select') +
+          '</button></td><td>' +
+          cid +
+          '</td><td>' +
+          fn +
+          '</td><td>' +
+          tl +
+          '</td><td>' +
+          cr.slice(0, 24) +
+          '</td><td>' +
+          st +
+          '</td></tr>'
+        );
+      })
+      .join('');
+    Array.prototype.forEach.call(tb.querySelectorAll('button.dash-rv4-cand-sel-btn'), function (btn) {
+      btn.addEventListener('click', function () {
+        rv4SelectCandidateRow(btn.getAttribute('data-sid'));
+      });
+    });
+    if (hint) {
+      if (rows.length === 1) {
+        hint.hidden = false;
+        hint.textContent =
+          'One candidate for this target — click Select to confirm it as the candidate under test.';
+      } else {
+        hint.hidden = true;
+      }
+    }
+    rv4UpdateCandContextBar();
+  }
+  function rv4LoadCandidates() {
+    var h = (window.location.hash || '').replace(/^#/, '');
+    if (h !== '/renaissance' && h !== 'renaissance') return;
+    fetch(
+      '/api/v1/renaissance/intake-candidates?execution_target=' + encodeURIComponent(rv4GetExecutionTarget()),
+      { cache: 'no-store' }
+    )
+      .then(function (r) {
+        return r.json();
+      })
+      .then(function (j) {
+        if (!j || j.error) {
+          rv4RenderCandidates([]);
+          return;
+        }
+        rv4CandidatesCache = j.candidates || [];
+        rv4RenderCandidates(rv4CandidatesCache);
+      })
+      .catch(function () {
+        var tb = $('rv4-cand-tbody');
+        if (tb) tb.innerHTML = '<tr><td colspan="6">Failed to load candidates.</td></tr>';
+      });
+  }
   function rv4Refresh() {
     fetch('/api/v1/renaissance/workbench', { cache: 'no-store' })
       .then(function (r) {
@@ -4728,6 +4921,7 @@
         }
       })
       .catch(function () {});
+    rv4LoadCandidates();
   }
   function rv4LoadDetail(eid) {
     var d = $('rv4-detail');
@@ -5295,6 +5489,7 @@
         })
         .finally(function () {
           rv4IntakeDone();
+          rv4LoadCandidates();
         });
     });
   }
