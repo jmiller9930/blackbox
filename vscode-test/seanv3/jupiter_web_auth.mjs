@@ -228,6 +228,10 @@ function isSmtpConfigured() {
 /**
  * Gmail: use App Password (Google Account → Security → 2-Step → App passwords), not your normal password.
  * Typical: JUPITER_SMTP_HOST=smtp.gmail.com JUPITER_SMTP_PORT=587 JUPITER_SMTP_USER=you@gmail.com JUPITER_SMTP_PASS=xxxx
+ * When host is smtp.gmail.com we use Nodemailer's built-in Gmail transport (STARTTLS + correct defaults).
+ * Troubleshooting: ensure recipient matches JUPITER_AUTH_EMAIL; set JUPITER_PUBLIC_BASE_URL for clickable links;
+ * if send fails, check docker logs for [jupiter-auth] SMTP error — Invalid login = wrong app password or 2FA off;
+ * Connection timeout = host firewall blocking outbound 587/465.
  *
  * @returns {Promise<{ ok: boolean, mode: string, transport?: 'smtp' | 'resend', loggedUrl: boolean, resendId?: string, httpStatus?: number, detail?: string }>}
  */
@@ -246,13 +250,33 @@ async function sendPasswordResetEmail(to, resetUrl) {
       const secure =
         process.env.JUPITER_SMTP_SECURE === '1' || process.env.JUPITER_SMTP_SECURE === 'true' || port === 465;
       const from = (process.env.JUPITER_SMTP_FROM || `Jupiter Lab <${user}>`).trim();
-      console.error(`[jupiter-auth] sending reset via SMTP: host=${host} port=${port} to=${to} from=${from}`);
-      const transporter = nodemailer.createTransport({
-        host,
-        port,
-        secure,
-        auth: { user, pass },
-      });
+      const smtpDebug = process.env.JUPITER_SMTP_DEBUG === '1' || process.env.JUPITER_SMTP_DEBUG === 'true';
+      const gmailHost = /^smtp\.gmail\.com$/i.test(host.trim());
+      console.error(
+        `[jupiter-auth] sending reset via SMTP: host=${host} port=${port} to=${to} from=${from} gmailTransport=${gmailHost}`
+      );
+      let transportOpts;
+      if (gmailHost) {
+        transportOpts = {
+          service: 'gmail',
+          auth: { user, pass },
+          ...(smtpDebug ? { debug: true } : {}),
+        };
+      } else {
+        const requireTls =
+          !secure &&
+          port === 587 &&
+          (process.env.JUPITER_SMTP_REQUIRE_TLS !== '0' && process.env.JUPITER_SMTP_REQUIRE_TLS !== 'false');
+        transportOpts = {
+          host,
+          port,
+          secure,
+          ...(requireTls ? { requireTLS: true } : {}),
+          auth: { user, pass },
+          ...(smtpDebug ? { debug: true } : {}),
+        };
+      }
+      const transporter = nodemailer.createTransport(transportOpts);
       const info = await transporter.sendMail({ from, to, subject, text, html });
       console.error(`[jupiter-auth] SMTP sent: messageId=${info.messageId || 'ok'}`);
       return { ok: true, mode: 'sent', transport: 'smtp', loggedUrl: false };
