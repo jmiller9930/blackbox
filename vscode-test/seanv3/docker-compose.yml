@@ -61,8 +61,16 @@ services:
     container_name: jupiter-web
     network_mode: host
     user: "0:0"
-    # Run from repo mount so git pull on the host updates the live server (image /app copy is stale).
-    command: ["node", "--experimental-sqlite", "/repo/vscode-test/seanv3/jupiter_web.mjs"]
+    # Image bakes /app/*.mjs at build time; repo is mounted at /repo. Sync JS + static from the mount
+    # into /app on each start so git pull + restart picks up dashboard/API changes without rebuilding.
+    command:
+      - sh
+      - -c
+      - |
+          set -e
+          cp /repo/vscode-test/seanv3/*.mjs /app/
+          cp -r /repo/vscode-test/seanv3/static /app/
+          exec node --experimental-sqlite /app/jupiter_web.mjs
     env_file:
       # Committed lab token + optional Bearer prefill (see lab_operator_token.env).
       - lab_operator_token.env
