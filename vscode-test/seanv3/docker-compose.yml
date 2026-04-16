@@ -61,7 +61,8 @@ services:
     container_name: jupiter-web
     network_mode: host
     user: "0:0"
-    command: ["node", "--experimental-sqlite", "jupiter_web.mjs"]
+    # Run from repo mount so git pull on the host updates the live server (image /app copy is stale).
+    command: ["node", "--experimental-sqlite", "/repo/vscode-test/seanv3/jupiter_web.mjs"]
     env_file:
       # Committed lab token + optional Bearer prefill (see lab_operator_token.env).
       - lab_operator_token.env
