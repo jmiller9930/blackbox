@@ -49,6 +49,8 @@
     .dash-rv4-card .kv { display: flex; justify-content: space-between; gap: 0.5rem; margin: 0.2rem 0; }
     .dash-rv4-card .k { color: var(--muted); }
     .dash-rv4-card .v { font-family: ui-monospace, monospace; text-align: right; word-break: break-all; }
+    #rv4-bl-primary { font-family: inherit; font-weight: 700; color: var(--text); }
+    .dash-rv4-card .v.dash-rv4-bl-id { font-size: 0.72rem; color: var(--muted); }
     .dash-rv4-table { width: 100%; border-collapse: collapse; font-size: 0.75rem; }
     .dash-rv4-table th, .dash-rv4-table td { border-bottom: 1px solid var(--panel-border); padding: 0.35rem 0.25rem; text-align: left; }
     .dash-rv4-table tr[data-exp] { cursor: pointer; }
@@ -1747,8 +1749,10 @@
           <section class="dash-rv4-section" aria-labelledby="rv4-baseline-h">
             <h3 id="rv4-baseline-h" class="dash-rv4-section-title">Active Baseline</h3>
             <p id="rv4-baseline-scope-line" class="dash-rv4-intake-hint" hidden></p>
+            <p id="rv4-baseline-unavail-detail" class="dash-rv4-intake-hint" hidden></p>
             <div class="dash-rv4-card dash-rv4-baseline-only" id="rv4-baseline-card">
-              <div class="kv"><span class="k">Name</span><span class="v" id="rv4-bl-tag">—</span></div>
+              <div class="kv"><span class="k">Baseline</span><span class="v" id="rv4-bl-primary">—</span></div>
+              <div class="kv"><span class="k">ID</span><span class="v dash-rv4-bl-id" id="rv4-bl-id">—</span></div>
               <div class="kv"><span class="k">Trade count</span><span class="v" id="rv4-bl-n">—</span></div>
               <div class="kv"><span class="k">Expectancy</span><span class="v" id="rv4-bl-e">—</span></div>
               <div class="kv"><span class="k">Max drawdown</span><span class="v" id="rv4-bl-dd">—</span></div>
@@ -4563,24 +4567,24 @@
       .then(function (j) {
         if (!j || j.error) return;
         var scope = $('rv4-baseline-scope-line');
-        if (scope) {
-          scope.hidden = false;
-          scope.textContent =
-            'Scope: ' +
-            (j.execution_target_label || rv4ExecPretty(rv4GetExecutionTarget())) +
-            ' — compared against ' +
-            (j.compared_against_baseline_label || 'baseline');
-        }
+        var unavail = $('rv4-baseline-unavail-detail');
+        var etLab = j.execution_target_label || rv4ExecPretty(rv4GetExecutionTarget());
+        var cmpLab = j.compared_against_baseline_label || 'baseline';
         if (j.baseline_error && String(j.baseline_error).trim()) {
           if (scope) {
             scope.hidden = false;
-            scope.textContent =
-              'Baseline unavailable for ' +
-              (j.execution_target_label || rv4ExecPretty(rv4GetExecutionTarget())) +
-              ': ' +
-              String(j.baseline_error).slice(0, 220);
+            scope.textContent = 'Scope: ' + etLab + ' — Baseline unavailable';
           }
-          $('rv4-bl-tag').textContent = '—';
+          if (unavail) {
+            unavail.hidden = false;
+            unavail.textContent =
+              'Baseline unavailable for ' +
+              etLab +
+              ': ' +
+              String(j.baseline_error).slice(0, 320);
+          }
+          $('rv4-bl-primary').textContent = '—';
+          $('rv4-bl-id').textContent = '—';
           $('rv4-bl-n').textContent = '—';
           $('rv4-bl-e').textContent = '—';
           $('rv4-bl-dd').textContent = '—';
@@ -4592,16 +4596,17 @@
           $('rv4-bl-reports').textContent = '';
           return;
         }
+        if (unavail) {
+          unavail.hidden = true;
+          unavail.textContent = '';
+        }
         if (scope) {
           scope.hidden = false;
-          scope.textContent =
-            'Scope: ' +
-            (j.execution_target_label || rv4ExecPretty(rv4GetExecutionTarget())) +
-            ' — ' +
-            (j.compared_against_baseline_label || 'baseline');
+          scope.textContent = 'Scope: ' + etLab + ' — ' + cmpLab;
         }
         var det = j.deterministic || {};
-        $('rv4-bl-tag').textContent = j.baseline_tag || '—';
+        $('rv4-bl-primary').textContent = cmpLab;
+        $('rv4-bl-id').textContent = j.baseline_tag ? 'ID: ' + j.baseline_tag : '—';
         $('rv4-bl-n').textContent = rv4Fmt(det.total_trades);
         $('rv4-bl-e').textContent = rv4Fmt(det.expectancy);
         $('rv4-bl-dd').textContent = rv4Fmt(det.max_drawdown);
