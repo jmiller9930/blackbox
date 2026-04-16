@@ -6,7 +6,8 @@
 |--------|------|------|
 | `POST` | `/api/v1/renaissance/policy-intake` | `multipart/form-data`: **`policy_file`** (max 8 MiB) and **`execution_target`** (`jupiter` or `blackbox`; default `jupiter` if omitted). Evaluation and baseline scope use this target only (DV-055). |
 | `GET` | `/api/v1/renaissance/policy-intake/<submission_id>` | Read persisted `intake_report.json` |
-| `GET` | `/api/v1/renaissance/intake-candidates?execution_target=jupiter` | Successful candidates only (`pass`, `candidate_policy_id`, canonical spec present). Omit query to list all targets. (DV-061) |
+| `POST` | `/api/v1/renaissance/policy-intake/<submission_id>/archive` | JSON body `{"is_active": false}` soft-archives; `{"is_active": true}` restores. (DV-066) |
+| `GET` | `/api/v1/renaissance/intake-candidates` | Query: `execution_target`, `include_archived` (0/1), `collapse_duplicates` (default 1: one row per `candidate_policy_id`, newest first). (DV-061 / DV-066) |
 
 ## UI
 

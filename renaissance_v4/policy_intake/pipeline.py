@@ -351,6 +351,7 @@ def run_intake_pipeline(
     cid = str(canonical.get("identity", {}).get("policy_id") or f"kitchen_candidate_{submission_id[:16]}")
     report["candidate_policy_id"] = cid
     report["pass"] = True
+    report["is_active"] = True  # DV-066: soft-archive via intake report; default visible in Kitchen
     canonical.setdefault("identity", {})
     if isinstance(canonical["identity"], dict):
         canonical["identity"]["policy_id"] = cid

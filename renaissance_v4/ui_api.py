@@ -447,11 +447,13 @@ def build_workbench_meta_payload() -> dict[str, Any]:
         "policy_intake": {
             "post_url": "/api/v1/renaissance/policy-intake",
             "status_url_template": "/api/v1/renaissance/policy-intake/{submission_id}",
+            "archive_url_template": "/api/v1/renaissance/policy-intake/{submission_id}/archive",
             "multipart_field": "policy_file",
             "execution_target_field": "execution_target",
             "execution_target_values": ["jupiter", "blackbox"],
             "doc": "renaissance_v4/policy_intake/README.md",
             "note": "DV-055: All intake requests must include execution_target; evaluation and baseline are scoped to that target only.",
+            "dv_066": "Soft-archive: POST archive_url with JSON {\"is_active\":false}; restore with {\"is_active\":true}.",
         },
         "approved_job_actions": [
             {

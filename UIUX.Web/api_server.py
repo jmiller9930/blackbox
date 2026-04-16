@@ -2323,6 +2323,10 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/api/v1/renaissance/intake-candidates":
             q = parse_qs(parsed.query or "")
             et_raw = (q.get("execution_target") or [""])[0].strip()
+            inc_arch_raw = (q.get("include_archived") or ["0"])[0].strip().lower()
+            include_archived = inc_arch_raw in ("1", "true", "yes")
+            collapse_raw = (q.get("collapse_duplicates") or ["1"])[0].strip().lower()
+            collapse_duplicates = collapse_raw not in ("0", "false", "no")
             trace_id = str(uuid.uuid4())
             try:
                 from renaissance_v4.execution_targets import normalize_execution_target
@@ -2331,13 +2335,20 @@ class Handler(BaseHTTPRequestHandler):
                 et: str | None = None
                 if et_raw:
                     et = normalize_execution_target(et_raw)
-                rows = list_intake_candidates(_REPO_ROOT, execution_target=et)
+                rows = list_intake_candidates(
+                    _REPO_ROOT,
+                    execution_target=et,
+                    include_archived=include_archived,
+                    collapse_duplicate_policy_ids=collapse_duplicates,
+                )
                 self._json(
                     200,
                     {
                         "schema": "renaissance_v4_ui_intake_candidates_v1",
                         "candidates": rows,
                         "execution_target_filter": et,
+                        "include_archived": include_archived,
+                        "collapse_duplicates": collapse_duplicates,
                         "trace_id": trace_id,
                     },
                     no_cache=True,
@@ -2365,7 +2376,23 @@ class Handler(BaseHTTPRequestHandler):
                 )
             return
         if path.startswith("/api/v1/renaissance/policy-intake/"):
-            sid = path[len("/api/v1/renaissance/policy-intake/") :].strip().strip("/")
+            rest = path[len("/api/v1/renaissance/policy-intake/") :].strip().strip("/")
+            if not rest or ".." in rest:
+                self._json(400, {"ok": False, "error": "invalid_submission_id"}, no_cache=True)
+                return
+            parts_pi = [p for p in rest.split("/") if p]
+            if len(parts_pi) == 2 and parts_pi[1] == "archive":
+                self._json(
+                    405,
+                    {
+                        "ok": False,
+                        "error": "method_not_allowed",
+                        "detail": "POST /api/v1/renaissance/policy-intake/{submission_id}/archive",
+                    },
+                    no_cache=True,
+                )
+                return
+            sid = parts_pi[0] if parts_pi else ""
             if not sid or ".." in sid:
                 self._json(400, {"ok": False, "error": "invalid_submission_id"}, no_cache=True)
                 return
@@ -2634,6 +2661,38 @@ class Handler(BaseHTTPRequestHandler):
     def do_POST(self) -> None:  # noqa: N802
         parsed = urlparse(self.path)
         parts = [p for p in parsed.path.strip("/").split("/") if p]
+        if (
+            len(parts) == 6
+            and parts[:4] == ["api", "v1", "renaissance", "policy-intake"]
+            and parts[5] == "archive"
+        ):
+            sid = parts[4]
+            if ".." in sid or not sid:
+                self._json(400, {"ok": False, "error": "invalid_submission_id"}, no_cache=True)
+                return
+            body = self._read_json_body() or {}
+            if "is_active" in body:
+                is_active = bool(body.get("is_active"))
+            elif body.get("archived") is True:
+                is_active = False
+            elif body.get("archived") is False:
+                is_active = True
+            else:
+                is_active = False
+            trace_id = str(uuid.uuid4())
+            try:
+                from renaissance_v4.policy_intake.candidates_registry import set_intake_candidate_active
+
+                r = set_intake_candidate_active(_REPO_ROOT, sid, is_active=is_active)
+            except Exception as e:  # noqa: BLE001
+                self._json(500, {"ok": False, "error": str(e)[:500], "trace_id": trace_id}, no_cache=True)
+                return
+            if not r.get("ok"):
+                self._json(400, {**r, "trace_id": trace_id}, no_cache=True)
+                return
+            r["trace_id"] = trace_id
+            self._json(200, r, no_cache=True)
+            return
         if len(parts) == 5 and parts[:2] == ["api", "v1"] and parts[2] == "agents":
             agent_id = parts[3].lower()
             action = parts[4].lower()

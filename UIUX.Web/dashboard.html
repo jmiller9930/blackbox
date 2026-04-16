@@ -190,6 +190,45 @@
     .dash-rv4-intake-file-loaded .rv4-fl-name { font-weight: 700; }
     .dash-rv4-intake-file-loaded .rv4-fl-sub { display: block; font-size: 0.72rem; font-weight: 600; color: var(--muted); margin-top: 0.2rem; }
     .dash-rv4-intake-file-loaded[hidden] { display: none !important; }
+    .dash-rv4-intake-selection-strip {
+      margin: 0.65rem 0 0.35rem;
+      padding: 0.55rem 0.75rem;
+      border-radius: 6px;
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      background: rgba(0, 200, 140, 0.09);
+      display: flex;
+      flex-wrap: wrap;
+      align-items: baseline;
+      gap: 0.35rem 0.75rem;
+    }
+    .dash-rv4-intake-selection-strip[hidden] { display: none !important; }
+    .dash-rv4-intake-selection-label { font-size: 0.72rem; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; }
+    .dash-rv4-intake-selection-name { font-size: 0.95rem; color: var(--text); }
+    .dash-rv4-intake-selection-meta { font-size: 0.75rem; color: var(--muted); }
+    .dash-rv4-file-label.primary.dash-rv4-intake-has-file {
+      box-shadow: 0 0 0 2px rgba(0, 200, 150, 0.5);
+      border-radius: 4px;
+    }
+    .dash-rv4-cand-toolbar {
+      font-size: 0.78rem;
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 0.5rem 1rem;
+      margin: 0.35rem 0 0.55rem;
+    }
+    .dash-rv4-cand-toolbar label { display: inline-flex; align-items: center; gap: 0.35rem; cursor: pointer; }
+    tr.dash-rv4-cand-row.is-archived { opacity: 0.7; }
+    .dash-rv4-cand-dup-badge {
+      font-size: 0.65rem;
+      font-weight: 700;
+      padding: 0.1rem 0.35rem;
+      border-radius: 4px;
+      background: rgba(255, 180, 80, 0.2);
+      color: var(--text);
+      vertical-align: middle;
+      margin-left: 0.25rem;
+    }
     .dash-rv4-intake-processing-h {
       font-size: 0.76rem; font-weight: 700; margin: 0.65rem 0 0.25rem; color: var(--text);
     }
@@ -1790,18 +1829,23 @@
             This is not deployment — only evaluation toward a <strong>candidate</strong> policy record.
           </p>
           <div class="dash-rv4-intake-controls">
-            <label class="dash-rv4-file-label primary">Choose file
+            <label class="dash-rv4-file-label primary" id="rv4-intake-file-label">Choose file
               <input type="file" id="rv4-intake-file" class="dash-rv4-file-input" accept=".ts,.yaml,.yml,.json,application/json,text/yaml,text/x-yaml" />
             </label>
             <button type="button" class="dash-nav-linklike" id="rv4-intake-paste-toggle" aria-expanded="false">Paste instead</button>
+          </div>
+          <div id="rv4-intake-selection-strip" class="dash-rv4-intake-selection-strip" hidden aria-live="polite">
+            <span class="dash-rv4-intake-selection-label">Ready to evaluate</span>
+            <strong id="rv4-intake-selection-name" class="dash-rv4-intake-selection-name">—</strong>
+            <span id="rv4-intake-selection-meta" class="dash-rv4-intake-selection-meta"></span>
           </div>
           <div id="rv4-intake-paste-panel" class="dash-rv4-intake-paste-panel" hidden>
             <label for="rv4-intake-paste">Paste policy source (sent as <code>policy_upload.ts</code>)</label>
             <textarea id="rv4-intake-paste" spellcheck="false" placeholder="Paste TypeScript here…"></textarea>
           </div>
           <div class="dash-rv4-intake-submit-wrap">
-            <button type="button" class="primary" id="rv4-btn-policy-intake" disabled>Submit for evaluation</button>
-            <p id="rv4-intake-gate-msg" class="dash-rv4-intake-hint">Select or paste a policy file</p>
+            <button type="button" class="primary" id="rv4-btn-policy-intake" hidden>Upload &amp; evaluate</button>
+            <p id="rv4-intake-gate-msg" class="dash-rv4-intake-hint">Select a file (evaluates automatically) or paste and use Upload &amp; evaluate</p>
             <p id="rv4-intake-ready-line" class="dash-rv4-intake-hint is-ready" hidden></p>
           </div>
         </section>
@@ -1816,6 +1860,10 @@
             Execution Target: — · Compared Against: — · No candidate selected for comparison.
           </p>
           <p id="rv4-cand-single-hint" class="dash-rv4-msg" hidden></p>
+          <div class="dash-rv4-cand-toolbar">
+            <label><input type="checkbox" id="rv4-cand-show-archived" /> Show archived policies</label>
+            <span class="dash-rv4-intake-hint" style="margin:0">Newest first · duplicate policy IDs collapsed to latest intake</span>
+          </div>
           <div class="dash-rv4-cand-table-wrap">
             <table class="dash-rv4-table" id="rv4-cand-table" aria-label="Successful intake candidates">
               <thead>
@@ -1826,9 +1874,10 @@
                   <th scope="col">Target</th>
                   <th scope="col">Created (UTC)</th>
                   <th scope="col">Intake</th>
+                  <th scope="col">Actions</th>
                 </tr>
               </thead>
-              <tbody id="rv4-cand-tbody"><tr><td colspan="6">Loading…</td></tr></tbody>
+              <tbody id="rv4-cand-tbody"><tr><td colspan="7">Loading…</td></tr></tbody>
             </table>
           </div>
           <p class="dash-rv4-msg" id="rv4-cand-selected-line">No candidate selected — use Select on a row above.</p>
@@ -4634,6 +4683,7 @@
     if (cl) cl.textContent = 'Compared Against: ' + cmp;
   }
   var rv4CandidatesCache = [];
+  var rv4CandShowArchived = false;
   var rv4SelectedCandSid = null;
   function rv4ComparedAgainstLabel() {
     return rv4GetExecutionTarget() === 'blackbox' ? 'BlackBox Baseline' : 'Jupiter Baseline';
@@ -4708,7 +4758,7 @@
     if (!tb) return;
     if (!rows || !rows.length) {
       tb.innerHTML =
-        '<tr><td colspan="6">No successful candidates for this execution target yet. Pass intake first.</td></tr>';
+        '<tr><td colspan="7">No successful candidates for this execution target yet. Pass intake first.</td></tr>';
       if (hint) hint.hidden = true;
       rv4ClearCandidateSelection();
       return;
@@ -4730,9 +4780,25 @@
         var cr = String(r.created_utc || '—').replace(/[<>&]/g, '');
         var st = String(r.intake_status || 'pass').replace(/[<>&]/g, '');
         var sel = rv4SelectedCandSid === r.submission_id;
+        var isArch = r.is_active === false;
+        var dup = parseInt(String(r.same_policy_submission_count || '1'), 10);
+        var dupBadge =
+          dup > 1
+            ? '<span class="dash-rv4-cand-dup-badge" title="Total intakes with this candidate policy id">' +
+              dup +
+              '×</span>'
+            : '';
+        var actBtn = isArch
+          ? '<button type="button" class="dash-nav-linklike rv4-cand-restore" data-sid="' +
+            sid +
+            '">Restore</button>'
+          : '<button type="button" class="dash-nav-linklike rv4-cand-archive" data-sid="' +
+            sid +
+            '" title="Hide from list (soft archive)">Archive</button>';
         return (
           '<tr class="dash-rv4-cand-row' +
           (sel ? ' is-selected' : '') +
+          (isArch ? ' is-archived' : '') +
           '" data-sid="' +
           sid +
           '"><td><button type="button" class="dash-rv4-cand-sel-btn' +
@@ -4743,6 +4809,7 @@
           (sel ? 'Selected' : 'Select') +
           '</button></td><td>' +
           cid +
+          dupBadge +
           '</td><td>' +
           fn +
           '</td><td>' +
@@ -4751,6 +4818,8 @@
           cr.slice(0, 24) +
           '</td><td>' +
           st +
+          '</td><td>' +
+          actBtn +
           '</td></tr>'
         );
       })
@@ -4758,6 +4827,66 @@
     Array.prototype.forEach.call(tb.querySelectorAll('button.dash-rv4-cand-sel-btn'), function (btn) {
       btn.addEventListener('click', function () {
         rv4SelectCandidateRow(btn.getAttribute('data-sid'));
+      });
+    });
+    Array.prototype.forEach.call(tb.querySelectorAll('button.rv4-cand-archive'), function (btn) {
+      btn.addEventListener('click', function (ev) {
+        ev.stopPropagation();
+        var sid = btn.getAttribute('data-sid');
+        if (!sid) return;
+        btn.disabled = true;
+        fetch('/api/v1/renaissance/policy-intake/' + encodeURIComponent(sid) + '/archive', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ is_active: false }),
+        })
+          .then(function (r) {
+            return r.json().then(function (j) {
+              return { ok: r.ok, j: j };
+            });
+          })
+          .then(function (x) {
+            if (!x.ok || !x.j || !x.j.ok) {
+              window.alert(x.j && x.j.error ? String(x.j.error) : 'Archive failed');
+            }
+            rv4LoadCandidates();
+          })
+          .catch(function () {
+            window.alert('Archive request failed');
+          })
+          .finally(function () {
+            btn.disabled = false;
+          });
+      });
+    });
+    Array.prototype.forEach.call(tb.querySelectorAll('button.rv4-cand-restore'), function (btn) {
+      btn.addEventListener('click', function (ev) {
+        ev.stopPropagation();
+        var sid = btn.getAttribute('data-sid');
+        if (!sid) return;
+        btn.disabled = true;
+        fetch('/api/v1/renaissance/policy-intake/' + encodeURIComponent(sid) + '/archive', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ is_active: true }),
+        })
+          .then(function (r) {
+            return r.json().then(function (j) {
+              return { ok: r.ok, j: j };
+            });
+          })
+          .then(function (x) {
+            if (!x.ok || !x.j || !x.j.ok) {
+              window.alert(x.j && x.j.error ? String(x.j.error) : 'Restore failed');
+            }
+            rv4LoadCandidates();
+          })
+          .catch(function () {
+            window.alert('Restore request failed');
+          })
+          .finally(function () {
+            btn.disabled = false;
+          });
       });
     });
     if (hint) {
@@ -4774,10 +4903,13 @@
   function rv4LoadCandidates() {
     var h = (window.location.hash || '').replace(/^#/, '');
     if (h !== '/renaissance' && h !== 'renaissance') return;
-    fetch(
-      '/api/v1/renaissance/intake-candidates?execution_target=' + encodeURIComponent(rv4GetExecutionTarget()),
-      { cache: 'no-store' }
-    )
+    var q =
+      '/api/v1/renaissance/intake-candidates?execution_target=' +
+      encodeURIComponent(rv4GetExecutionTarget()) +
+      '&include_archived=' +
+      (rv4CandShowArchived ? '1' : '0') +
+      '&collapse_duplicates=1';
+    fetch(q, { cache: 'no-store' })
       .then(function (r) {
         return r.json();
       })
@@ -4791,7 +4923,7 @@
       })
       .catch(function () {
         var tb = $('rv4-cand-tbody');
-        if (tb) tb.innerHTML = '<tr><td colspan="6">Failed to load candidates.</td></tr>';
+        if (tb) tb.innerHTML = '<tr><td colspan="7">Failed to load candidates.</td></tr>';
       });
   }
   function rv4Refresh() {
@@ -5395,6 +5527,18 @@
   function rv4IntakeClearOutput() {
     rv4EvalResetPanel();
   }
+  function rv4IntakeIsPasteMode() {
+    var pp = $('rv4-intake-paste-panel');
+    var ta = $('rv4-intake-paste');
+    return !!(pp && !pp.hidden && ta && String(ta.value || '').trim().length > 0);
+  }
+  function rv4IntakeSyncPasteButtonVisibility() {
+    var btn = $('rv4-btn-policy-intake');
+    if (!btn) return;
+    var pasteOk = rv4IntakeIsPasteMode() && !rv4IntakeInFlight;
+    btn.hidden = !pasteOk;
+    btn.disabled = !pasteOk;
+  }
   function rv4IntakeUpdateGate() {
     var btn = $('rv4-btn-policy-intake');
     var gate = $('rv4-intake-gate-msg');
@@ -5402,23 +5546,42 @@
     var fin = $('rv4-intake-file');
     var pasteTa = $('rv4-intake-paste');
     var p = rv4IntakeGetPayload();
-    var canSubmit = !!p && !rv4IntakeInFlight;
-    if (btn) btn.disabled = !canSubmit;
-    if (gate) gate.hidden = !!p || rv4IntakeInFlight;
-    if (ready) {
-      if (p && !rv4IntakeInFlight) {
-        ready.hidden = false;
-        ready.textContent = 'File ready: ' + p.readyLabel;
-      } else {
-        ready.hidden = true;
-        ready.textContent = '';
-      }
+    var pasteOnly = rv4IntakeIsPasteMode();
+    var fileChosen = !!(fin && fin.files && fin.files[0]) && !pasteOnly;
+    var canSubmitPaste = !!pasteOnly && !!p && !rv4IntakeInFlight;
+    if (btn) {
+      btn.disabled = !canSubmitPaste;
+      btn.hidden = !pasteOnly;
     }
+    if (gate) {
+      gate.hidden = !!(rv4IntakeInFlight || fileChosen || pasteOnly);
+    }
+    if (ready) {
+      ready.hidden = true;
+      ready.textContent = '';
+    }
+    var strip = $('rv4-intake-selection-strip');
+    var sn = $('rv4-intake-selection-name');
+    var sm = $('rv4-intake-selection-meta');
+    var fileLbl = $('rv4-intake-file-label') || (fin && fin.closest ? fin.closest('label') : null);
+    if (strip && sn && sm && fileChosen && fin.files[0]) {
+      strip.hidden = false;
+      sn.textContent = fin.files[0].name;
+      var sz = fin.files[0].size;
+      sm.textContent =
+        typeof sz === 'number' ? '(' + (sz >= 1024 ? Math.round(sz / 1024) + ' KB' : sz + ' B') + ')' : '';
+    } else if (strip) {
+      strip.hidden = true;
+      sn.textContent = '—';
+      sm.textContent = '';
+    }
+    if (fileLbl) fileLbl.classList.toggle('dash-rv4-intake-has-file', !!fileChosen);
     if (fin) fin.disabled = rv4IntakeInFlight;
     if (pasteTa) pasteTa.disabled = rv4IntakeInFlight;
     if (rv4PasteToggle) rv4PasteToggle.disabled = rv4IntakeInFlight;
-    var fileLbl = fin && fin.closest ? fin.closest('label') : null;
-    if (fileLbl) fileLbl.classList.toggle('dash-rv4-intake-ctl-disabled', rv4IntakeInFlight);
+    if (fileLbl && fileLbl.classList)
+      fileLbl.classList.toggle('dash-rv4-intake-ctl-disabled', rv4IntakeInFlight);
+    rv4IntakeSyncPasteButtonVisibility();
   }
   if (rv4PasteToggle && rv4PastePanel) {
     rv4PasteToggle.addEventListener('click', function () {
@@ -5432,12 +5595,105 @@
   }
   var rv4IntakeFile = $('rv4-intake-file');
   var rv4IntakePaste = $('rv4-intake-paste');
+  function rv4IntakeRunEvaluation() {
+    var p = rv4IntakeGetPayload();
+    if (!p || rv4IntakeInFlight) return;
+    var fd = new FormData();
+    fd.append('policy_file', p.fileObj, p.fname);
+    fd.append('execution_target', rv4GetExecutionTarget());
+    var loadedName = p.readyLabel || p.fname;
+    rv4IntakeEnterEvalMode();
+    rv4EvalResetPanel();
+    rv4EvalSetTargetLines(rv4GetExecutionTarget(), null);
+    rv4EvalSetFileLine(loadedName);
+    rv4EvalSetStatusLine('Uploading…');
+    rv4EvalShowPendingProcessing();
+    rv4IntakeInFlight = true;
+    rv4IntakeUpdateGate();
+    function rv4IntakeDone() {
+      rv4IntakeInFlight = false;
+      rv4IntakeUpdateGate();
+    }
+    fetch('/api/v1/renaissance/policy-intake', { method: 'POST', body: fd })
+      .then(function (r) {
+        return r.text().then(function (t) {
+          return { ok: r.ok, status: r.status, text: t };
+        });
+      })
+      .then(function (res) {
+        var j = null;
+        try {
+          if (res.text) j = JSON.parse(res.text);
+        } catch (e) {
+          j = null;
+        }
+        if (!res.ok || res.status !== 200) {
+          rv4EvalSetTargetLines(rv4GetExecutionTarget(), j || null);
+          rv4EvalSetStatusLine('Failed');
+          var pw = $('rv4-eval-processing-wrap');
+          if (pw) pw.hidden = true;
+          var dwErr = $('rv4-eval-diagnostics-wrap');
+          if (dwErr) dwErr.hidden = true;
+          var errMsg =
+            j && j.error === 'baseline_missing_for_execution_target' && j.detail
+              ? String(j.detail)
+              : (j && (j.detail || j.error)) ||
+                (res.text ? String(res.text).slice(0, 1200) : 'HTTP ' + res.status);
+          rv4EvalShowOutcomeFail(rv4EvalShortReasonFromText(errMsg));
+          rv4IntakeSetRawReport(res.text || '(empty response)');
+          return;
+        }
+        if (!j || typeof j !== 'object') {
+          rv4EvalSetStatusLine('Failed');
+          var pw2 = $('rv4-eval-processing-wrap');
+          if (pw2) pw2.hidden = true;
+          rv4EvalShowOutcomeFail('Invalid JSON in server response.');
+          var dw2 = $('rv4-eval-diagnostics-wrap');
+          if (dw2) dw2.hidden = true;
+          rv4IntakeSetRawReport(res.text || '');
+          return;
+        }
+        rv4EvalSetTargetLines(rv4GetExecutionTarget(), j);
+        rv4EvalSetStatusLine('Upload complete');
+        var S = j.stages || {};
+        rv4EvalFillProcessingFromStages(S);
+        rv4EvalShowOutcome(j);
+        rv4EvalFillDiagnostics(j);
+        rv4IntakeSetRawReport(JSON.stringify(j, null, 2));
+        if (j && j.submission_id && j.pass) {
+          return fetch('/api/v1/renaissance/policy-intake/' + encodeURIComponent(j.submission_id))
+            .then(function (r2) {
+              return r2.json();
+            })
+            .then(function (j2) {
+              rv4IntakeSetRawReport(JSON.stringify(j2, null, 2));
+            });
+        }
+      })
+      .catch(function () {
+        rv4EvalSetStatusLine('Failed');
+        var pw3 = $('rv4-eval-processing-wrap');
+        if (pw3) pw3.hidden = true;
+        rv4EvalShowOutcomeFail('Network error — could not reach the server.');
+        var dw3 = $('rv4-eval-diagnostics-wrap');
+        if (dw3) dw3.hidden = true;
+        rv4IntakeSetRawReport('Request failed (network or server).');
+      })
+      .finally(function () {
+        rv4IntakeDone();
+        rv4LoadCandidates();
+      });
+  }
   if (rv4IntakeFile) {
     rv4IntakeFile.addEventListener('change', function () {
       if (rv4IntakeInFlight) return;
       rv4IntakeClearOutput();
       rv4IntakeExitEvalMode();
       rv4IntakeUpdateGate();
+      if (rv4IntakeIsPasteMode()) return;
+      if (rv4IntakeFile.files && rv4IntakeFile.files[0]) {
+        rv4IntakeRunEvaluation();
+      }
     });
   }
   if (rv4IntakePaste) {
@@ -5461,93 +5717,14 @@
   var rv4pi = $('rv4-btn-policy-intake');
   if (rv4pi) {
     rv4pi.addEventListener('click', function () {
-      var p = rv4IntakeGetPayload();
-      if (!p || rv4IntakeInFlight) return;
-      var fd = new FormData();
-      fd.append('policy_file', p.fileObj, p.fname);
-      fd.append('execution_target', rv4GetExecutionTarget());
-      var loadedName = p.readyLabel || p.fname;
-      rv4IntakeEnterEvalMode();
-      rv4EvalResetPanel();
-      rv4EvalSetTargetLines(rv4GetExecutionTarget(), null);
-      rv4EvalSetFileLine(loadedName);
-      rv4EvalSetStatusLine('Uploading…');
-      rv4EvalShowPendingProcessing();
-      rv4IntakeInFlight = true;
-      rv4IntakeUpdateGate();
-      function rv4IntakeDone() {
-        rv4IntakeInFlight = false;
-        rv4IntakeUpdateGate();
-      }
-      fetch('/api/v1/renaissance/policy-intake', { method: 'POST', body: fd })
-        .then(function (r) {
-          return r.text().then(function (t) {
-            return { ok: r.ok, status: r.status, text: t };
-          });
-        })
-        .then(function (res) {
-          var j = null;
-          try {
-            if (res.text) j = JSON.parse(res.text);
-          } catch (e) {
-            j = null;
-          }
-          if (!res.ok || res.status !== 200) {
-            rv4EvalSetTargetLines(rv4GetExecutionTarget(), j || null);
-            rv4EvalSetStatusLine('Failed');
-            var pw = $('rv4-eval-processing-wrap');
-            if (pw) pw.hidden = true;
-            var dwErr = $('rv4-eval-diagnostics-wrap');
-            if (dwErr) dwErr.hidden = true;
-            var errMsg =
-              j && j.error === 'baseline_missing_for_execution_target' && j.detail
-                ? String(j.detail)
-                : (j && (j.detail || j.error)) ||
-                  (res.text ? String(res.text).slice(0, 1200) : 'HTTP ' + res.status);
-            rv4EvalShowOutcomeFail(rv4EvalShortReasonFromText(errMsg));
-            rv4IntakeSetRawReport(res.text || '(empty response)');
-            return;
-          }
-          if (!j || typeof j !== 'object') {
-            rv4EvalSetStatusLine('Failed');
-            var pw2 = $('rv4-eval-processing-wrap');
-            if (pw2) pw2.hidden = true;
-            rv4EvalShowOutcomeFail('Invalid JSON in server response.');
-            var dw2 = $('rv4-eval-diagnostics-wrap');
-            if (dw2) dw2.hidden = true;
-            rv4IntakeSetRawReport(res.text || '');
-            return;
-          }
-          rv4EvalSetTargetLines(rv4GetExecutionTarget(), j);
-          rv4EvalSetStatusLine('Upload complete');
-          var S = j.stages || {};
-          rv4EvalFillProcessingFromStages(S);
-          rv4EvalShowOutcome(j);
-          rv4EvalFillDiagnostics(j);
-          rv4IntakeSetRawReport(JSON.stringify(j, null, 2));
-          if (j && j.submission_id && j.pass) {
-            return fetch('/api/v1/renaissance/policy-intake/' + encodeURIComponent(j.submission_id))
-              .then(function (r2) {
-                return r2.json();
-              })
-              .then(function (j2) {
-                rv4IntakeSetRawReport(JSON.stringify(j2, null, 2));
-              });
-          }
-        })
-        .catch(function () {
-          rv4EvalSetStatusLine('Failed');
-          var pw3 = $('rv4-eval-processing-wrap');
-          if (pw3) pw3.hidden = true;
-          rv4EvalShowOutcomeFail('Network error — could not reach the server.');
-          var dw3 = $('rv4-eval-diagnostics-wrap');
-          if (dw3) dw3.hidden = true;
-          rv4IntakeSetRawReport('Request failed (network or server).');
-        })
-        .finally(function () {
-          rv4IntakeDone();
-          rv4LoadCandidates();
-        });
+      rv4IntakeRunEvaluation();
+    });
+  }
+  var rv4CandShowArchivedEl = $('rv4-cand-show-archived');
+  if (rv4CandShowArchivedEl) {
+    rv4CandShowArchivedEl.addEventListener('change', function () {
+      rv4CandShowArchived = !!rv4CandShowArchivedEl.checked;
+      rv4LoadCandidates();
     });
   }
   rv4IntakeUpdateGate();
