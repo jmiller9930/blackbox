@@ -13,7 +13,7 @@ from renaissance_v4.policy_intake.pipeline import run_intake_pipeline
 
 def test_parse_harness_stdout_prefers_json_line() -> None:
     """DV-060: tolerate extra stdout lines before the harness JSON on some hosts."""
-    stdout = "(node:1) ExperimentalWarning: …\n{\"ok\": true, \"signals_total\": 3, \"harness_revision\": \"int_ohlc_v3\"}\n"
+    stdout = "(node:1) ExperimentalWarning: …\n{\"ok\": true, \"signals_total\": 3, \"harness_revision\": \"int_ohlc_v4\"}\n"
     got = policy_pipeline._parse_harness_stdout(stdout)
     assert got.get("ok") is True
     assert got.get("signals_total") == 3

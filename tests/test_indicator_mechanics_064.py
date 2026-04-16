@@ -61,7 +61,7 @@ def test_ts_fixture_with_supported_indicators_passes_e2e() -> None:
     rep = run_intake_pipeline(root, raw, "minimal_direction_policy.ts", test_window_bars=400)
     assert rep.get("pass") is True, rep.get("errors")
     det = (rep.get("stages") or {}).get("stage_5_deterministic") or {}
-    assert det.get("harness_revision") == "int_ohlc_v3"
+    assert det.get("harness_revision") == "int_ohlc_v4"
     ctx = det.get("indicator_evaluation_context") or {}
     last = ctx.get("last_bar_indicators") or {}
     assert "rsi_main" in last

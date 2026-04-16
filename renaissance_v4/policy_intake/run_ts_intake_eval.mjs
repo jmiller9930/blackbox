@@ -13,8 +13,12 @@
  *
  * Usage: node run_ts_intake_eval.mjs <absolute-path-to.ts> <bar_count>
  * stdout: one JSON line
+ *
+ * DV-065: Counting uses normalizeIntakeSignalOutput() so policies may return legacy
+ * { longSignal, shortSignal } or aliases (long/short booleans, nested signal, direction).
  */
 import { buildSeriesByDeclarationId, indicatorsAtBar } from './indicator_engine.mjs';
+import { makeSignalProbe, normalizeIntakeSignalOutput } from './intake_signal_normalize.mjs';
 import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { mkdtempSync, readFileSync } from 'node:fs';
@@ -200,15 +204,12 @@ async function main() {
     return fn.length >= 5 ? fn(sl, sh, slo, sv, ctx) : fn(sl, sh, slo, sv);
   }
 
+  const exportName = typeof mod.generateSignalFromOhlc === 'function' ? 'generateSignalFromOhlc' : 'default';
+
   let longBars = 0;
   let shortBars = 0;
-  for (let end = minBars; end <= nBars; end++) {
-    const out = callPolicy(end);
-    if (out && out.longSignal) longBars++;
-    if (out && out.shortSignal) shortBars++;
-  }
-
-  const signalsTotal = longBars + shortBars;
+  const probeFirst = [];
+  const ringLast = [];
 
   let tradesOpened = 0;
   let tradesClosed = 0;
@@ -216,36 +217,53 @@ async function main() {
 
   let firstEnd = -1;
   let firstOut = null;
+  let firstNorm = null;
+
   for (let end = minBars; end <= nBars; end++) {
-    const out = callPolicy(end);
-    if (out && (out.longSignal || out.shortSignal)) {
+    const raw = callPolicy(end);
+    const norm = normalizeIntakeSignalOutput(raw);
+    if (norm.longSignal) longBars++;
+    if (norm.shortSignal) shortBars++;
+
+    const probe = makeSignalProbe(end, raw, norm);
+    if (probeFirst.length < 5) probeFirst.push(probe);
+    ringLast.push(probe);
+    if (ringLast.length > 5) ringLast.shift();
+
+    if (firstEnd < 0 && (norm.longSignal || norm.shortSignal)) {
       firstEnd = end;
-      firstOut = out;
-      break;
+      firstOut = raw;
+      firstNorm = norm;
     }
   }
 
-  if (firstEnd >= 0 && firstOut) {
+  const signalsTotal = longBars + shortBars;
+
+  if (firstEnd >= 0 && firstOut && firstNorm) {
     const entryIdx = firstEnd - 1;
-    const isLong = !!firstOut.longSignal && !firstOut.shortSignal;
-    const isShort = !!firstOut.shortSignal && !firstOut.longSignal;
-    const sideLong = isLong || (!isShort && !isLong ? firstOut.longSignal : isLong);
+    const longSide = !!firstNorm.longSignal && !firstNorm.shortSignal;
+    const shortSide = !!firstNorm.shortSignal && !firstNorm.longSignal;
+    let side = 0;
+    if (longSide) side = 1;
+    else if (shortSide) side = -1;
+    else side = firstNorm.shortSignal ? -1 : 1;
     const entryPx = closes[entryIdx];
     tradesOpened = 1;
     const exitIdx = Math.min(entryIdx + 1, nBars - 1);
     const exitPx = closes[exitIdx];
     tradesClosed = 1;
-    const longSide = !!firstOut.longSignal && !firstOut.shortSignal;
-    const shortSide = !!firstOut.shortSignal && !firstOut.longSignal;
-    let side = 0;
-    if (longSide) side = 1;
-    else if (shortSide) side = -1;
-    else side = firstOut.shortSignal ? -1 : 1;
     pnlSum = side * (exitPx - entryPx);
   }
 
+  let tsSha256 = '';
+  try {
+    tsSha256 = createHash('sha256').update(readFileSync(tsPath)).digest('hex');
+  } catch (e) {
+    tsSha256 = `read_error:${String(e && e.message ? e.message : e)}`;
+  }
+
   /** Proves which harness logic ran (DV-060); integer OHLC series — not sin/float. */
-  const HARNESS_REVISION = 'int_ohlc_v3';
+  const HARNESS_REVISION = 'int_ohlc_v4';
 
   const out = {
     ok: true,
@@ -264,29 +282,41 @@ async function main() {
       series_ids: Object.keys(seriesById).filter((k) => !k.startsWith('_')),
       last_bar_indicators: indicatorsAtBar(seriesById, nBars - 1),
     },
+    signal_contract: {
+      schema: 'kitchen_intake_signal_v1',
+      harness_revision: HARNESS_REVISION,
+      original_basename: basename(tsPath),
+      content_sha256: tsSha256,
+      export_name: exportName,
+      fn_length: typeof fn === 'function' ? fn.length : -1,
+      invocation:
+        exportName +
+        '(closes, highs, lows, volumes' +
+        (fn.length >= 5 ? ', ctx /* policy indicators */)' : ')'),
+      counts_using: 'normalizeIntakeSignalOutput(raw).longSignal / .shortSignal (legacy + aliases)',
+      first_five_bar_returns: probeFirst,
+      last_five_bar_returns: ringLast,
+      viability_inputs: {
+        signals_total: signalsTotal,
+        signals_long: longBars,
+        signals_short: shortBars,
+        trades_opened: tradesOpened,
+        trades_closed: tradesClosed,
+      },
+    },
   };
 
   if (process.env.RV4_INTAKE_HARNESS_DEBUG === '1') {
-    let tsSha = '';
-    try {
-      tsSha = createHash('sha256').update(readFileSync(tsPath)).digest('hex');
-    } catch (e) {
-      tsSha = `read_error:${String(e && e.message ? e.message : e)}`;
-    }
     const endProbe = Math.max(minBars, 2);
-    const slP = closes.slice(0, endProbe);
-    const shP = highs.slice(0, endProbe);
-    const sloP = lows.slice(0, endProbe);
-    const svP = vols.slice(0, endProbe);
     out.intake_debug = {
       fixture_basename: basename(tsPath),
-      ts_sha256: tsSha,
-      export_name:
-        typeof mod.generateSignalFromOhlc === 'function' ? 'generateSignalFromOhlc' : 'default',
+      ts_sha256: tsSha256,
+      export_name: exportName,
       ohlc_first3_close: closes.slice(0, 3),
       ohlc_last3_close: closes.slice(-3),
       probe_end_bars: endProbe,
       probe_policy_out: callPolicy(endProbe),
+      probe_normalized: normalizeIntakeSignalOutput(callPolicy(endProbe)),
     };
   }
 

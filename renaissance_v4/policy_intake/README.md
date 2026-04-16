@@ -44,7 +44,22 @@ Sean-style multi-file policies that import local modules may fail bundling until
 
 The intake eval harness (`policy_intake/run_ts_intake_eval.mjs`) generates synthetic bars with **strictly increasing integer closes** so policies that compare consecutive closes see stable strict inequality on every host (Linux/macOS, Docker, etc.). A prior sin-based series could produce consecutive closes equal within floating-point noise on some platforms, yielding **no signals** and a misleading live FAIL while local runs passed.
 
-Successful harness JSON includes **`harness_revision`** (e.g. `int_ohlc_v3`) and **`indicator_evaluation_context`** (DV-064) so operators can confirm synthetic OHLC logic and per-bar indicator values passed into the policy. Stage 1 stores **`content_sha256`** of the raw upload for byte-identical comparisons across hosts.
+Successful harness JSON includes **`harness_revision`** (e.g. `int_ohlc_v4`), **`signal_contract`** (DV-065), and **`indicator_evaluation_context`** (DV-064). Stage 1 **`content_sha256`** matches **`signal_contract.content_sha256`** on the same TS bytes.
+
+### Signal contract (DV-065)
+
+The harness invokes **`generateSignalFromOhlc`** (or **`default`**) with **`(closes, highs, lows, volumes)`** and optionally a **5th `ctx`** when the policy function accepts ≥5 parameters.
+
+**Counting signals** uses **`normalizeIntakeSignalOutput`** in **`intake_signal_normalize.mjs`**, which maps:
+
+- **Primary:** `longSignal`, `shortSignal` (booleans)
+- **Aliases:** `long`, `short` booleans
+- **Nested:** `signal.longSignal` / `signal.short` / `signal.direction` / `signal.side`
+- **Top-level:** `direction` / `side` (string or number)
+
+**Browser upload** and **`POST /api/v1/renaissance/policy-intake`** both call **`run_intake_pipeline`** with the same bytes — identical harness output for the same file.
+
+Persisted proof: **`stages.stage_5_deterministic.signal_contract`** in **`report/intake_report.json`** (`first_five_bar_returns`, `last_five_bar_returns`, `viability_inputs`, `content_sha256`).
 
 **Optional deep debug (DV-060):** set environment variable **`RV4_INTAKE_HARNESS_DEBUG=1`** on the API process; the harness adds an **`intake_debug`** object (file SHA-256, first/last closes, sample policy output). The Python runner also scans stdout for the last valid JSON object with an `ok` key so stray Node warnings on stdout cannot corrupt parsing.
 
