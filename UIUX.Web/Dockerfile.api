@@ -1,0 +1,9 @@
+# API server for BLACK BOX UI — Python + Node toolchain for Renaissance policy intake (TypeScript
+# validation via npx/esbuild and node harness). See renaissance_v4/policy_intake/README.md.
+FROM python:3.11-alpine
+
+RUN apk add --no-cache nodejs npm \
+    && node -v \
+    && npx -v
+
+WORKDIR /repo

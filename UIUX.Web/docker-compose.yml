@@ -13,7 +13,10 @@
 # ``web`` + ``sequential-tick`` reach the API via host.docker.internal:8080 (requires free host :8080).
 services:
   api:
-    image: python:3.11-alpine
+    build:
+      context: .
+      dockerfile: Dockerfile.api
+    image: uiuxweb-api:3.11-node
     working_dir: /repo
     # Same egress as host WG split-tunnel — required for Binance klines + /api/v1/market/binance/ping.
     network_mode: host

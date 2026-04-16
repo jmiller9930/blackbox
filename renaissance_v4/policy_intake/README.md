@@ -40,6 +40,16 @@ Specs parse and normalize to **PolicySpecV1**. Deterministic signal/trade/PnL pr
 - `canonical/policy_spec_v1.json` — normalized
 - `report/intake_report.json` — full staged report
 
+## API container runtime (required)
+
+Policy intake calls **`npx`** (esbuild) and **`node`** (deterministic harness). The **`api`** Docker image is built from **`UIUX.Web/Dockerfile.api`**, which extends `python:3.11-alpine` and installs **`nodejs`** + **`npm`** (provides **`npx`**). This is an explicit image dependency — not an undocumented host-only tool.
+
+After changing the API image definition, rebuild and restart (example):
+
+`cd UIUX.Web && docker compose build api && docker compose up -d api`
+
+Verify inside the running container: `node -v` and `npx -v`.
+
 ## STATUS
 
-**Partial / incremental:** Structural validation uses `tsc` and `npx` (`typescript`, `esbuild`) on the API host. Primary-host proof (operator upload end-to-end) is required for directive closure.
+Structural validation uses `npx` (`esbuild`) and `node` on the API host as above. Primary-host proof (operator upload end-to-end) is required for directive closure.
