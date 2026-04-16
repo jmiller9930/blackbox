@@ -233,6 +233,108 @@ function buildSeanTradesCsv(db) {
   return lines.join('\r\n');
 }
 
+/** @param {import('node:sqlite').DatabaseSync} db */
+function buildNoTradeDecisionsCsv(db) {
+  const max = Math.min(
+    5000,
+    Math.max(1, parseInt(process.env.SEANV3_NO_TRADE_EXPORT_MAX || process.env.SEANV3_TUI_NO_TRADE_ROWS || '500', 10) || 500)
+  );
+  const rows = db
+    .prepare(
+      `SELECT id, outcome, market_event_id, timestamp_utc, symbol, timeframe, policy_id, policy_engine_tag, engine_id,
+              policy_resolution_source, signal_mode, candidate_side, reason_code,
+              indicator_values_json, gate_results_json, features_json, trade_id, schema_version
+       FROM sean_bar_decisions WHERE outcome = 'NO_TRADE' ORDER BY id DESC LIMIT ?`
+    )
+    .all(max);
+  const headers = [
+    'id',
+    'outcome',
+    'market_event_id',
+    'timestamp_utc',
+    'symbol',
+    'timeframe',
+    'policy_id',
+    'policy_engine_tag',
+    'engine_id',
+    'policy_resolution_source',
+    'signal_mode',
+    'candidate_side',
+    'reason_code',
+    'indicator_values_json',
+    'gate_results_json',
+    'features_json',
+    'trade_id',
+    'schema_version',
+  ];
+  const lines = [headers.join(',')];
+  for (const r of rows) {
+    lines.push(
+      [
+        csvEscapeCell(r.id),
+        csvEscapeCell(r.outcome),
+        csvEscapeCell(r.market_event_id),
+        csvEscapeCell(r.timestamp_utc),
+        csvEscapeCell(r.symbol),
+        csvEscapeCell(r.timeframe),
+        csvEscapeCell(r.policy_id),
+        csvEscapeCell(r.policy_engine_tag),
+        csvEscapeCell(r.engine_id),
+        csvEscapeCell(r.policy_resolution_source),
+        csvEscapeCell(r.signal_mode),
+        csvEscapeCell(r.candidate_side),
+        csvEscapeCell(r.reason_code),
+        csvEscapeCell(r.indicator_values_json),
+        csvEscapeCell(r.gate_results_json),
+        csvEscapeCell(r.features_json),
+        csvEscapeCell(r.trade_id),
+        csvEscapeCell(r.schema_version),
+      ].join(',')
+    );
+  }
+  return lines.join('\r\n');
+}
+
+/**
+ * @param {Record<string, unknown>} row
+ * @returns {Record<string, unknown>}
+ */
+function barDecisionDetailPayload(row) {
+  /** @param {unknown} j */
+  const parse = (j) => {
+    if (j == null || j === '') return null;
+    try {
+      return JSON.parse(String(j));
+    } catch {
+      return { _parse_error: true, raw: String(j).slice(0, 2000) };
+    }
+  };
+  return {
+    schema: 'jupiter_sean_bar_decision_detail_v1',
+    id: row.id,
+    outcome: row.outcome,
+    market_event_id: row.market_event_id,
+    timestamp_utc: row.timestamp_utc,
+    symbol: row.symbol,
+    timeframe: row.timeframe,
+    policy_id: row.policy_id,
+    policy_engine_tag: row.policy_engine_tag,
+    engine_id: row.engine_id,
+    policy_resolution_source: row.policy_resolution_source,
+    signal_mode: row.signal_mode,
+    candidate_side: row.candidate_side,
+    reason_code: row.reason_code,
+    trade_id: row.trade_id,
+    schema_version: row.schema_version,
+    indicator_values: parse(row.indicator_values_json),
+    gate_results: parse(row.gate_results_json),
+    features: parse(row.features_json),
+    indicator_values_json: row.indicator_values_json != null ? String(row.indicator_values_json) : null,
+    gate_results_json: row.gate_results_json != null ? String(row.gate_results_json) : null,
+    features_json: row.features_json != null ? String(row.features_json) : null,
+  };
+}
+
 function parseTsSort(iso) {
   if (!iso) return 0;
   try {
@@ -767,7 +869,7 @@ function buildSummary(db) {
   try {
     const nrows = db
       .prepare(
-        `SELECT id, timestamp_utc AS at_utc, market_event_id, policy_id, reason_code, features_json, indicator_values_json
+        `SELECT id, timestamp_utc AS at_utc, market_event_id, policy_id, reason_code
          FROM sean_bar_decisions WHERE outcome = 'NO_TRADE' ORDER BY id DESC LIMIT ?`
       )
       .all(noTradeLimit);
@@ -777,7 +879,6 @@ function buildSummary(db) {
       market_event_id: r.market_event_id != null ? String(r.market_event_id) : null,
       policy_id: r.policy_id != null ? String(r.policy_id) : null,
       reason_code: r.reason_code != null ? String(r.reason_code) : null,
-      details_preview: truncateMid(r.features_json || r.indicator_values_json, 200),
     }));
   } catch {
     /* table missing on legacy DB until migrate */
@@ -1061,7 +1162,7 @@ function jwLivePollScript(refreshSec) {
     if(ob){if(o){var rel=o.price?Number(o.conf)/Number(o.price)*100:0;ob.innerHTML='<p><strong>SOL/USD</strong> '+E(Number(o.price).toFixed(4))+' USD</p><p class="muted">Confidence \\u00b1'+E(Number(o.conf).toFixed(6))+' ('+E(rel.toFixed(4))+'% of price)</p><p class="muted">Publish unix: '+E(String(o.publish_time))+' '+(pf.wall_age_s!=null?'wall age ~'+Number(pf.wall_age_s).toFixed(1)+'s':'')+'</p><p class="muted">Feed: '+E(T(o.feed_id,20))+'</p>';}else ob.innerHTML='<p class="muted">No Hermes parsed payload yet.</p>';}
     var pt=document.getElementById('jw-parity-tbody'); if(pt&&j.parity){var pr=j.parity;if(pr.error&&!(pr.rows&&pr.rows.length))pt.innerHTML='<tr><td colspan="4" class="muted">'+E(pr.error)+'</td></tr>';else if(!pr.rows||!pr.rows.length)pt.innerHTML='<tr><td colspan="4" class="muted">No parity rows yet (need trades with market_event_id + optional execution_ledger.db).</td></tr>';else pt.innerHTML=pr.rows.map(function(r){var pc=r.parity_cls==='ok'?'p-ok':r.parity_cls==='warn'?'p-warn':r.parity_cls==='bad'?'p-bad':'p-dim';return'<tr><td>'+E(T(r.market_event_id,44))+'</td><td>'+E(r.sean_cell)+'</td><td>'+E(r.bb_cell)+'</td><td class="'+pc+'">'+E(r.parity)+'</td></tr>';}).join('');}
     var tt=document.getElementById('jw-trades-tbody'); if(tt&&j.recent_trades){var rt=j.recent_trades;tt.innerHTML=rt.length?rt.map(function(t){return'<tr class="trade-row '+trCls(t.result_class)+'" data-trade-id="'+E(String(t.id))+'"><td>'+E(t.trade_id)+'</td><td>'+E(isoUtc(t.exit_time_utc))+'</td><td>'+E(isoUtc(t.entry_time_utc))+'</td><td>'+E(t.symbol)+'</td><td>'+E(t.side)+'</td><td>'+E(t.entry_price)+'</td><td>'+E(t.exit_price)+'</td><td>'+E(t.size_notional_sol)+'</td><td>'+E(t.gross_pnl_usd)+'</td><td>'+E(t.result_class)+'</td><td>'+E(t.exit_reason)+'</td><td>'+E(T(t.entry_market_event_id,40))+'</td><td>'+E(T(t.exit_market_event_id,40))+'</td></tr>';}).join(''):'<tr><td colspan="13" class="muted">No closed trades yet</td></tr>';jwWireTrades();}
-    var nt=document.getElementById('jw-no-trade-tbody'); if(nt&&j.recent_no_trades){var rn=j.recent_no_trades;nt.innerHTML=rn.length?rn.map(function(n){return'<tr class="'+ntCls(n.reason_code)+'"><td>'+E(String(n.id))+'</td><td>'+E(isoUtc(n.at_utc))+'</td><td>'+E(T(n.market_event_id,44))+'</td><td>'+E(n.policy_id||'\\u2014')+'</td><td>'+E(n.reason_code)+'</td><td class="muted">'+E(n.details_preview)+'</td></tr>';}).join(''):'<tr><td colspan="6" class="muted">No no-entry events logged yet</td></tr>';}
+    var nt=document.getElementById('jw-no-trade-tbody'); if(nt&&j.recent_no_trades){var rn=j.recent_no_trades;nt.innerHTML=rn.length?rn.map(function(n){var mid=String(n.market_event_id||'');return'<tr class="'+ntCls(n.reason_code)+'"><td>'+E(isoUtc(n.at_utc))+'</td><td title="'+E(mid)+'">'+E(T(mid,44))+'</td><td>'+E(n.policy_id||'\\u2014')+'</td><td>'+E(n.reason_code)+'</td><td><button type="button" class="fund-btn jw-nt-view" data-decision-id="'+E(String(n.id))+'">View</button></td></tr>';}).join(''):'<tr><td colspan="5" class="muted">No NO_TRADE decisions yet</td></tr>';}
     var dj=document.getElementById('jw-trade-jump'); if(dj&&j.all_trades_dropdown){var cur=dj.value, opts=j.all_trades_dropdown.length?('<option value="">All trades \\u2014 pick to jump + detail ('+j.all_trades_dropdown.length+')</option>'+j.all_trades_dropdown.map(function(d){return'<option value="'+E(String(d.id))+'">'+E(d.label)+'</option>';})).join(''):'<option value="">No closed trades</option>';dj.innerHTML=opts; if(cur)try{dj.value=cur;}catch(e){}}
     var clk=document.getElementById('jw-live-clock'); if(clk)clk.textContent='Last update '+new Date().toISOString().slice(11,19)+' UTC';
     if(typeof window.jwPolicySyncVisual==='function')window.jwPolicySyncVisual();
@@ -1366,12 +1467,12 @@ function htmlPage(v) {
   };
   const noTradeRows = noTrades.length
     ? noTrades
-        .map(
-          (n) =>
-            `<tr class="${ntCls(n.reason_code)}"><td>${esc(String(n.id))}</td><td>${esc(formatIsoUtcShort(n.at_utc))}</td><td>${esc(truncateMid(n.market_event_id, 44))}</td><td>${esc(n.policy_id || '—')}</td><td>${esc(n.reason_code)}</td><td class="muted">${esc(n.details_preview)}</td></tr>`
-        )
+        .map((n) => {
+          const mid = n.market_event_id != null ? String(n.market_event_id) : '';
+          return `<tr class="${ntCls(n.reason_code)}"><td>${esc(formatIsoUtcShort(n.at_utc))}</td><td title="${esc(mid)}">${esc(truncateMid(mid, 44))}</td><td>${esc(n.policy_id || '—')}</td><td>${esc(n.reason_code)}</td><td><button type="button" class="fund-btn jw-nt-view" data-decision-id="${esc(String(n.id))}">View</button></td></tr>`;
+        })
         .join('')
-    : '<tr><td colspan="6" class="muted">No no-entry events logged yet</td></tr>';
+    : '<tr><td colspan="5" class="muted">No NO_TRADE decisions yet</td></tr>';
 
   const kl = v.last_kline;
   const klBlock = kl
@@ -1507,6 +1608,20 @@ function htmlPage(v) {
     .nt-warn { background: rgba(210, 153, 34, 0.1); }
     .nt-signal { background: rgba(139, 148, 158, 0.08); }
     .nt-dim { background: transparent; }
+    #jw-no-trade-scroll { max-height: min(40vh, 28rem); overflow-y: auto; overflow-x: auto; }
+    #jw-no-trade-scroll thead th { position: sticky; top: 0; z-index: 1; }
+    .jw-nt-drawer-backdrop { position: fixed; inset: 0; z-index: 2000; background: rgba(5, 5, 8, 0.72); display: none; align-items: stretch; justify-content: flex-end; }
+    .jw-nt-drawer-backdrop.jw-nt-open { display: flex; }
+    .jw-nt-drawer { width: min(42rem, 96vw); max-width: 100%; background: #121212; border-left: 1px solid #30363d; overflow-y: auto; box-sizing: border-box; padding: 0.75rem 1rem 1.25rem; box-shadow: -4px 0 24px rgba(0,0,0,0.45); }
+    .jw-nt-drawer-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 0.75rem; margin-bottom: 0.75rem; border-bottom: 1px solid #30363d; padding-bottom: 0.5rem; }
+    .jw-nt-drawer-head h3 { margin: 0; font-size: 0.95rem; font-weight: 600; }
+    .jw-nt-h4 { font-size: 0.72rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; color: #8b949e; margin: 0.85rem 0 0.35rem 0; }
+    .jw-nt-dl { margin: 0; display: grid; grid-template-columns: 11rem 1fr; gap: 0.25rem 0.75rem; font-size: 0.78rem; }
+    .jw-nt-dl dt { color: #8b949e; margin: 0; }
+    .jw-nt-dl dd { margin: 0; word-break: break-word; }
+    .jw-nt-kv { width: 100%; font-size: 0.72rem; margin: 0.25rem 0 0.5rem 0; }
+    .jw-nt-kv th { background: #161b22; }
+    .jw-nt-pre { margin: 0.35rem 0 0 0; padding: 0.5rem 0.6rem; background: #0a0a0b; border: 1px solid #30363d; border-radius: 2px; font-size: 0.68rem; line-height: 1.35; white-space: pre-wrap; word-break: break-word; max-height: 40vh; overflow: auto; }
     a.csv-btn { display: inline-block; padding: 0.25rem 0.6rem; border: 1px solid #30363d; border-radius: 2px; color: #58a6ff; text-decoration: none; font-size: 0.85rem; }
     a.csv-btn:hover { background: #1f2428; }
     .trade-snap-h { font-size: 0.72rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; color: #8b949e; margin: 0.75rem 0 0.35rem 0; }
@@ -1599,14 +1714,117 @@ function htmlPage(v) {
       })();
       </script>
     </div></section>
-    <section class="panel"><h2 class="jw-panel-head"><button type="button" class="jw-panel-toggle" aria-expanded="true" aria-controls="jw-pan-no-trade"><span class="jw-caret" aria-hidden="true">▼</span> No-entry log (flat bar, no open)</button></h2><div class="jw-panel-body" id="jw-pan-no-trade">
-      <p class="muted small jw-panel-sync-hint">Time sync: same <code>/api/summary.json</code> poll as the live strip (${esc(String(v.refresh_sec || 0))}s). This panel: <strong>NO_TRADE</strong> rows from <code>sean_bar_decisions</code> — not closed trades.</p>
-      <p class="muted small">Rows are written when the engine evaluates a bar flat and does not open: no signal, invalid ATR, or funding gate block. Full JSON is stored in SQLite; preview is truncated.</p>
-      <div class="scroll" id="jw-no-trade-scroll"><table><thead><tr><th>id</th><th>at UTC</th><th>market_event_id</th><th>policy</th><th>reason</th><th>details (preview)</th></tr></thead><tbody id="jw-no-trade-tbody">${noTradeRows}</tbody></table></div>
+    <section class="panel"><h2 class="jw-panel-head"><button type="button" class="jw-panel-toggle" aria-expanded="true" aria-controls="jw-pan-no-trade"><span class="jw-caret" aria-hidden="true">▼</span> NO_TRADE decision log (flat bar, no open)</button></h2><div class="jw-panel-body" id="jw-pan-no-trade">
+      <p class="op-row" style="margin-top:0;flex-wrap:wrap;align-items:center">
+        <a class="csv-btn" href="/api/v1/sean/no-trade-decisions.csv">Export NO_TRADE decisions (CSV)</a>
+        <span class="muted small">Same rows as this table — full <code>indicator_values_json</code>, <code>gate_results_json</code>, <code>features_json</code> for analysis.</span>
+      </p>
+      <p class="muted small jw-panel-sync-hint">Time sync: same <code>/api/summary.json</code> poll as the live strip (${esc(String(v.refresh_sec || 0))}s). Source: <code>sean_bar_decisions</code> where <code>outcome = NO_TRADE</code>.</p>
+      <p class="muted small">Click <strong>View</strong> for full indicators, gates, and raw diagnostics (loaded from the ledger row, not the summary poll).</p>
+      <div class="scroll" id="jw-no-trade-scroll"><table><thead><tr><th>Time (UTC)</th><th>market_event_id</th><th>policy</th><th>reason</th><th></th></tr></thead><tbody id="jw-no-trade-tbody">${noTradeRows}</tbody></table></div>
     </div></section>
     <section class="panel"><h2 class="jw-panel-head"><button type="button" class="jw-panel-toggle" aria-expanded="true" aria-controls="jw-pan-preflight"><span class="jw-caret" aria-hidden="true">▼</span> Preflight strip</button></h2><div class="jw-panel-body" id="jw-pan-preflight"><div id="jw-preflight-banner">${banner}</div><div class="scroll"><table><thead><tr><th>Check</th><th>Status</th><th>Detail</th></tr></thead><tbody id="jw-preflight-tbody">${chkRows}</tbody></table></div></div></section>
     <section class="panel"><h2 class="jw-panel-head"><button type="button" class="jw-panel-toggle" aria-expanded="true" aria-controls="jw-pan-oracle"><span class="jw-caret" aria-hidden="true">▼</span> Trade / oracle window (Pyth SOL/USD)</button></h2><div class="jw-panel-body" id="jw-pan-oracle"><div id="jw-oracle-block">${oracleBlock}</div></div></section>
   </div>
+  <div id="jw-nt-drawer-root" class="jw-nt-drawer-backdrop" hidden aria-hidden="true">
+    <aside class="jw-nt-drawer" role="dialog" aria-modal="true" aria-labelledby="jw-nt-drawer-title" onclick="event.stopPropagation()">
+      <div class="jw-nt-drawer-head">
+        <h3 id="jw-nt-drawer-title">NO_TRADE decision</h3>
+        <button type="button" class="fund-btn" id="jw-nt-drawer-close">Close</button>
+      </div>
+      <div id="jw-nt-drawer-body"><p class="muted">Select <strong>View</strong> on a row.</p></div>
+    </aside>
+  </div>
+  <script>
+  (function(){
+    function E(s){return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
+    function kvTable(obj){
+      if(!obj||typeof obj!=='object'||Array.isArray(obj)) return '<p class="muted">—</p>';
+      var keys = Object.keys(obj);
+      if(!keys.length) return '<p class="muted">—</p>';
+      var rows = keys.map(function(k){
+        var v = obj[k];
+        var cell = (v !== null && typeof v === 'object') ? JSON.stringify(v) : String(v);
+        return '<tr><td>'+E(k)+'</td><td>'+E(cell.length>1200?cell.slice(0,1199)+'…':cell)+'</td></tr>';
+      }).join('');
+      return '<table class="jw-nt-kv"><thead><tr><th>Field</th><th>Value</th></tr></thead><tbody>'+rows+'</tbody></table>';
+    }
+    function gateHtml(g){
+      if(!g||typeof g!=='object') return '<p class="muted">—</p>';
+      var h = '';
+      if(g.funding_gate !== undefined){
+        h += '<p class="muted small"><strong>Funding gate</strong></p>';
+        h += kvTable(g.funding_gate === null ? { note: 'not evaluated on this path' } : (typeof g.funding_gate === 'object' && g.funding_gate ? g.funding_gate : { value: g.funding_gate }));
+      }
+      if(g.strategy && typeof g.strategy === 'object'){
+        h += '<p class="muted small" style="margin-top:0.5rem"><strong>Strategy gates</strong></p>';
+        var sr = g.strategy.rows;
+        if(Array.isArray(sr)){
+          h += '<table class="jw-nt-kv"><thead><tr><th>id</th><th>label</th><th>long_ok</th><th>short_ok</th></tr></thead><tbody>';
+          sr.forEach(function(rw){
+            h += '<tr><td>'+E(rw.id)+'</td><td>'+E(rw.label||'')+'</td><td>'+E(String(rw.long_ok))+'</td><td>'+E(String(rw.short_ok))+'</td></tr>';
+          });
+          h += '</tbody></table>';
+          if(g.strategy.long) h += '<p class="muted small">long.all_ok: '+E(String(g.strategy.long.all_ok))+'</p>';
+          if(g.strategy.short) h += '<p class="muted small">short.all_ok: '+E(String(g.strategy.short.all_ok))+'</p>';
+        } else { h += '<pre class="jw-nt-pre">'+E(JSON.stringify(g.strategy,null,2))+'</pre>'; }
+      }
+      return h || '<pre class="jw-nt-pre">'+E(JSON.stringify(g,null,2))+'</pre>';
+    }
+    var root = document.getElementById('jw-nt-drawer-root');
+    var body = document.getElementById('jw-nt-drawer-body');
+    var title = document.getElementById('jw-nt-drawer-title');
+    function closeNt(){
+      if(!root) return;
+      root.hidden = true;
+      root.setAttribute('aria-hidden','true');
+      root.classList.remove('jw-nt-open');
+      document.body.style.overflow = '';
+    }
+    function openNt(id){
+      if(!body||!title) return;
+      body.innerHTML = '<p class="muted">Loading…</p>';
+      if(root){ root.hidden = false; root.setAttribute('aria-hidden','false'); root.classList.add('jw-nt-open'); document.body.style.overflow = 'hidden'; }
+      fetch('/api/v1/sean/decision/'+id+'.json').then(function(r){
+        if(r.status===401){ location.href='/auth/login'; return Promise.reject(); }
+        return r.json();
+      }).then(function(d){
+        if(d.error){ body.innerHTML = '<p class="warn">'+E(String(d.error))+'</p>'; return; }
+        title.textContent = 'NO_TRADE #' + String(d.id) + ' — ' + String(d.reason_code || '');
+        var html = '';
+        html += '<h4 class="jw-nt-h4">Summary</h4><dl class="jw-nt-dl">';
+        [['market_event_id', d.market_event_id],['timestamp_utc', d.timestamp_utc],['symbol', d.symbol],['timeframe', d.timeframe],['policy_id', d.policy_id],['policy_engine_tag', d.policy_engine_tag],['engine_id', d.engine_id],['candidate_side', d.candidate_side],['reason_code', d.reason_code],['trade_id', d.trade_id]].forEach(function(p){
+          html += '<dt>'+E(p[0])+'</dt><dd>'+E(p[1]!=null?String(p[1]):'—')+'</dd>';
+        });
+        html += '</dl>';
+        html += '<h4 class="jw-nt-h4">Indicators</h4>' + kvTable(d.indicator_values);
+        html += '<h4 class="jw-nt-h4">Gates</h4>' + gateHtml(d.gate_results);
+        html += '<h4 class="jw-nt-h4">Raw diagnostics (features)</h4>';
+        body.innerHTML = html;
+        var featObj = d.features;
+        if (featObj == null && d.features_json) {
+          try { featObj = JSON.parse(String(d.features_json)); } catch (err) { featObj = { _parse_error: true, raw: String(d.features_json).slice(0, 8000) }; }
+        }
+        if (featObj == null) featObj = {};
+        var pre = document.createElement('pre');
+        pre.className = 'jw-nt-pre';
+        pre.textContent = JSON.stringify(featObj, null, 2);
+        body.appendChild(pre);
+      }).catch(function(e){ body.innerHTML = '<p class="warn">'+E(String(e))+'</p>'; });
+    }
+    document.getElementById('jw-nt-drawer-close')?.addEventListener('click', closeNt);
+    root?.addEventListener('click', function(e){ if(e.target === root) closeNt(); });
+    document.addEventListener('keydown', function(e){ if(e.key==='Escape') closeNt(); });
+    document.addEventListener('click', function(e){
+      var btn = e.target && e.target.closest && e.target.closest('.jw-nt-view');
+      if(!btn) return;
+      var did = btn.getAttribute('data-decision-id');
+      if(!did) return;
+      e.preventDefault();
+      openNt(did);
+    });
+  })();
+  </script>
   <script>
   (function(){
     document.querySelectorAll('.jw-panel-toggle').forEach(function(btn){
@@ -2077,6 +2295,63 @@ const server = http.createServer((req, res) => {
           'Cache-Control': 'no-store',
         });
         res.end(body);
+      } catch (e) {
+        res.writeHead(500, { 'Content-Type': 'application/json; charset=utf-8' });
+        res.end(JSON.stringify({ error: e instanceof Error ? e.message : String(e) }));
+      } finally {
+        try {
+          db?.close();
+        } catch {
+          /* */
+        }
+      }
+      return;
+    }
+
+    if (url.pathname === '/api/v1/sean/no-trade-decisions.csv' && req.method === 'GET') {
+      let db;
+      try {
+        db = new DatabaseSync(dbPath(), { readOnly: true });
+        const body = buildNoTradeDecisionsCsv(db);
+        res.writeHead(200, {
+          'Content-Type': 'text/csv; charset=utf-8',
+          'Content-Disposition': 'attachment; filename="sean_bar_decisions_no_trade.csv"',
+          'Cache-Control': 'no-store',
+        });
+        res.end(body);
+      } catch (e) {
+        res.writeHead(500, { 'Content-Type': 'application/json; charset=utf-8' });
+        res.end(JSON.stringify({ error: e instanceof Error ? e.message : String(e) }));
+      } finally {
+        try {
+          db?.close();
+        } catch {
+          /* */
+        }
+      }
+      return;
+    }
+
+    const barDecisionMatch = url.pathname.match(/^\/api\/v1\/sean\/decision\/(\d+)\.json$/);
+    if (barDecisionMatch && req.method === 'GET') {
+      const did = parseInt(barDecisionMatch[1], 10);
+      let db;
+      try {
+        db = new DatabaseSync(dbPath(), { readOnly: true });
+        const row = db.prepare(`SELECT * FROM sean_bar_decisions WHERE id = ?`).get(did);
+        if (!row) {
+          res.writeHead(404, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' });
+          res.end(JSON.stringify({ error: 'decision not found' }));
+          return;
+        }
+        if (String(row.outcome) !== 'NO_TRADE') {
+          res.writeHead(404, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' });
+          res.end(JSON.stringify({ error: 'use this endpoint for NO_TRADE rows only' }));
+          return;
+        }
+        const payload = barDecisionDetailPayload(row);
+        res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' });
+        res.end(JSON.stringify(payload, null, 2));
       } catch (e) {
         res.writeHead(500, { 'Content-Type': 'application/json; charset=utf-8' });
         res.end(JSON.stringify({ error: e instanceof Error ? e.message : String(e) }));
