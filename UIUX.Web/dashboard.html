@@ -101,10 +101,28 @@
       width: 100%; min-height: 6rem; font-family: ui-monospace, monospace; font-size: 0.72rem;
       padding: 0.45rem; border-radius: var(--radius-md); border: 1px solid var(--panel-border); box-sizing: border-box;
     }
-    .dash-rv4-intake-submit-wrap { margin-top: 0.5rem; }
+    .dash-rv4-intake-submit-wrap { margin-top: 0.5rem; display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem 0.75rem; }
+    .dash-rv4-intake-hint {
+      font-size: 0.74rem; color: var(--muted); margin: 0.35rem 0 0; width: 100%;
+      flex: 1 1 100%;
+    }
+    .dash-rv4-intake-hint.is-ready { color: var(--text); font-weight: 600; }
+    .dash-rv4-intake-upload-line {
+      font-size: 0.76rem; margin: 0.4rem 0 0.25rem; min-height: 1.15rem;
+    }
+    .dash-rv4-intake-upload-line.is-busy { color: var(--accent); font-weight: 600; }
+    .dash-rv4-intake-upload-line.is-ok { color: #166534; font-weight: 600; }
+    .dash-rv4-intake-upload-line.is-err { color: #7f1d1d; font-weight: 600; }
+    .dash-rv4-intake-error {
+      display: none; font-size: 0.76rem; color: #7f1d1d; background: rgba(127, 29, 29, 0.08);
+      border: 1px solid rgba(127, 29, 29, 0.25); border-radius: var(--radius-md); padding: 0.5rem 0.65rem; margin: 0.5rem 0 0; white-space: pre-wrap; word-break: break-word;
+    }
+    .dash-rv4-intake-error.is-visible { display: block; }
     .dash-rv4-intake-subh { font-size: 0.78rem; font-weight: 700; margin: 0.85rem 0 0.4rem; color: var(--text); }
     .dash-rv4-intake-pre { max-height: 18rem; margin-top: 0.5rem; }
     .dash-rv4-intake-summary { font-size: 0.78rem; font-weight: 600; margin: 0.35rem 0 0.25rem; }
+    #rv4-btn-policy-intake:disabled { opacity: 0.55; cursor: not-allowed; }
+    .dash-rv4-file-label.primary.dash-rv4-intake-ctl-disabled { pointer-events: none; opacity: 0.55; cursor: not-allowed; }
     .dash-rv4-mid-grid {
       display: grid;
       grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
@@ -1505,11 +1523,15 @@
             <textarea id="rv4-intake-paste" spellcheck="false" placeholder="Paste TypeScript here…"></textarea>
           </div>
           <div class="dash-rv4-intake-submit-wrap">
-            <button type="button" class="primary" id="rv4-btn-policy-intake">Submit for evaluation</button>
+            <button type="button" class="primary" id="rv4-btn-policy-intake" disabled>Submit for evaluation</button>
+            <p id="rv4-intake-gate-msg" class="dash-rv4-intake-hint">Select or paste a policy file</p>
+            <p id="rv4-intake-ready-line" class="dash-rv4-intake-hint is-ready" hidden></p>
           </div>
+          <p id="rv4-intake-upload-line" class="dash-rv4-intake-upload-line" hidden aria-live="polite"></p>
+          <div id="rv4-intake-error" class="dash-rv4-intake-error" role="alert" aria-live="assertive"></div>
           <h4 class="dash-rv4-intake-subh">Results</h4>
           <p id="rv4-intake-summary" class="dash-rv4-intake-summary" hidden></p>
-          <ol id="rv4-intake-stages" class="dash-rv4-msg" style="margin:0.35rem 0 0 1rem;line-height:1.55"></ol>
+          <ol id="rv4-intake-stages" class="dash-rv4-msg" style="margin:0.35rem 0 0 1rem;line-height:1.55" hidden></ol>
           <pre id="rv4-intake-result" class="dash-rv4-detail dash-rv4-intake-pre" hidden></pre>
         </section>
 
@@ -4240,6 +4262,7 @@
     if (vd) vd.hidden = isRv4;
     if (vr) vr.hidden = !isRv4;
     if (isRv4) rv4Refresh();
+    if (isRv4) rv4IntakeUpdateGate();
   }
   function rv4Fmt(x) {
     if (x == null || x === '') return '—';
@@ -4542,69 +4565,220 @@
   }
   var rv4PasteToggle = $('rv4-intake-paste-toggle');
   var rv4PastePanel = $('rv4-intake-paste-panel');
+  var rv4IntakeInFlight = false;
+  function rv4IntakeGetPayload() {
+    var fin = $('rv4-intake-file');
+    var pasteTa = $('rv4-intake-paste');
+    var usePaste = pasteTa && rv4PastePanel && !rv4PastePanel.hidden && String(pasteTa.value || '').trim();
+    if (usePaste) {
+      var blob = new Blob([pasteTa.value], { type: 'text/plain' });
+      return {
+        fileObj: new File([blob], 'policy_upload.ts', { type: 'text/plain' }),
+        fname: 'policy_upload.ts',
+        readyLabel: 'policy_upload.ts (pasted)',
+      };
+    }
+    if (fin && fin.files && fin.files[0]) {
+      var f = fin.files[0];
+      if (!f.size) return null;
+      return { fileObj: f, fname: f.name, readyLabel: f.name };
+    }
+    return null;
+  }
+  function rv4IntakeSetUploadLine(text, kind) {
+    var ul = $('rv4-intake-upload-line');
+    if (!ul) return;
+    ul.hidden = !text;
+    ul.textContent = text || '';
+    ul.classList.remove('is-busy', 'is-ok', 'is-err');
+    if (kind === 'busy') ul.classList.add('is-busy');
+    else if (kind === 'ok') ul.classList.add('is-ok');
+    else if (kind === 'err') ul.classList.add('is-err');
+  }
+  function rv4IntakeSetError(msg) {
+    var el = $('rv4-intake-error');
+    if (!el) return;
+    if (msg) {
+      el.textContent = msg;
+      el.classList.add('is-visible');
+    } else {
+      el.textContent = '';
+      el.classList.remove('is-visible');
+    }
+  }
+  function rv4IntakeClearOutput() {
+    var st = $('rv4-intake-stages');
+    var sum = $('rv4-intake-summary');
+    var pre = $('rv4-intake-result');
+    if (st) {
+      st.innerHTML = '';
+      st.hidden = true;
+    }
+    if (sum) {
+      sum.hidden = true;
+      sum.textContent = '';
+      sum.style.color = '';
+    }
+    if (pre) {
+      pre.hidden = true;
+      pre.textContent = '';
+      pre.style.display = '';
+    }
+    rv4IntakeSetError('');
+    rv4IntakeSetUploadLine('', '');
+  }
+  function rv4IntakeUpdateGate() {
+    var btn = $('rv4-btn-policy-intake');
+    var gate = $('rv4-intake-gate-msg');
+    var ready = $('rv4-intake-ready-line');
+    var fin = $('rv4-intake-file');
+    var pasteTa = $('rv4-intake-paste');
+    var p = rv4IntakeGetPayload();
+    var canSubmit = !!p && !rv4IntakeInFlight;
+    if (btn) btn.disabled = !canSubmit;
+    if (gate) gate.hidden = !!p || rv4IntakeInFlight;
+    if (ready) {
+      if (p && !rv4IntakeInFlight) {
+        ready.hidden = false;
+        ready.textContent = 'File ready: ' + p.readyLabel;
+      } else {
+        ready.hidden = true;
+        ready.textContent = '';
+      }
+    }
+    if (fin) fin.disabled = rv4IntakeInFlight;
+    if (pasteTa) pasteTa.disabled = rv4IntakeInFlight;
+    if (rv4PasteToggle) rv4PasteToggle.disabled = rv4IntakeInFlight;
+    var fileLbl = fin && fin.closest ? fin.closest('label') : null;
+    if (fileLbl) fileLbl.classList.toggle('dash-rv4-intake-ctl-disabled', rv4IntakeInFlight);
+  }
   if (rv4PasteToggle && rv4PastePanel) {
     rv4PasteToggle.addEventListener('click', function () {
+      if (rv4IntakeInFlight) return;
       var open = rv4PastePanel.hidden;
       rv4PastePanel.hidden = !open;
       rv4PasteToggle.setAttribute('aria-expanded', open ? 'true' : 'false');
       rv4PasteToggle.textContent = open ? 'Hide paste' : 'Paste instead';
+      rv4IntakeUpdateGate();
+    });
+  }
+  var rv4IntakeFile = $('rv4-intake-file');
+  var rv4IntakePaste = $('rv4-intake-paste');
+  if (rv4IntakeFile) {
+    rv4IntakeFile.addEventListener('change', function () {
+      if (rv4IntakeInFlight) return;
+      rv4IntakeClearOutput();
+      rv4IntakeUpdateGate();
+    });
+  }
+  if (rv4IntakePaste) {
+    rv4IntakePaste.addEventListener('input', function () {
+      if (rv4IntakeInFlight) return;
+      rv4IntakeClearOutput();
+      rv4IntakeUpdateGate();
     });
   }
   var rv4pi = $('rv4-btn-policy-intake');
   if (rv4pi) {
     rv4pi.addEventListener('click', function () {
-      var fin = $('rv4-intake-file');
-      var pasteTa = $('rv4-intake-paste');
+      var p = rv4IntakeGetPayload();
+      if (!p || rv4IntakeInFlight) return;
       var st = $('rv4-intake-stages');
       var pre = $('rv4-intake-result');
       var sum = $('rv4-intake-summary');
-      var fileObj = null;
-      var fname = 'policy_upload.ts';
-      if (pasteTa && rv4PastePanel && !rv4PastePanel.hidden && String(pasteTa.value || '').trim()) {
-        var blob = new Blob([pasteTa.value], { type: 'text/plain' });
-        fileObj = new File([blob], fname, { type: 'text/plain' });
-      } else if (fin && fin.files && fin.files[0]) {
-        fileObj = fin.files[0];
-        fname = fileObj.name;
-      }
-      if (!fileObj) {
-        alert('Choose a file or paste policy source (.ts, .yaml, or .json).');
-        return;
-      }
       var fd = new FormData();
-      fd.append('policy_file', fileObj, fname);
-      if (sum) {
-        sum.hidden = false;
-        sum.style.color = '';
-        sum.textContent = 'Running intake…';
-      }
-      if (st) {
-        st.innerHTML = '';
-        [
-          'Upload status',
-          'Validation result',
-          'Normalization result',
-          'Static checks',
-          'Test result',
-          'Pass / fail gate',
-        ].forEach(function (label, i) {
-          var li = document.createElement('li');
-          li.textContent = (i + 1) + '. ' + label + ' — in progress…';
-          li.dataset.stage = String(i);
-          st.appendChild(li);
-        });
-      }
-      if (pre) {
-        pre.style.display = 'block';
-        pre.textContent = 'Uploading…';
+      fd.append('policy_file', p.fileObj, p.fname);
+      rv4IntakeInFlight = true;
+      rv4IntakeUpdateGate();
+      rv4IntakeClearOutput();
+      rv4IntakeSetUploadLine('Uploading…', 'busy');
+      var pipelineLabels = [
+        'Upload status',
+        'Validation result',
+        'Normalization result',
+        'Static checks',
+        'Test result',
+        'Pass / fail gate',
+      ];
+      function rv4IntakeDone() {
+        rv4IntakeInFlight = false;
+        rv4IntakeUpdateGate();
       }
       fetch('/api/v1/renaissance/policy-intake', { method: 'POST', body: fd })
         .then(function (r) {
-          return r.json();
+          return r.text().then(function (t) {
+            return { ok: r.ok, status: r.status, text: t };
+          });
         })
-        .then(function (j) {
-          if (pre) pre.textContent = JSON.stringify(j, null, 2);
+        .then(function (res) {
+          var j = null;
+          try {
+            if (res.text) j = JSON.parse(res.text);
+          } catch (e) {
+            j = null;
+          }
+          if (!res.ok || res.status !== 200) {
+            rv4IntakeSetUploadLine('Upload failed', 'err');
+            var errMsg =
+              (j && (j.error || j.detail)) ||
+              (res.text ? String(res.text).slice(0, 1200) : 'HTTP ' + res.status);
+            rv4IntakeSetError(String(errMsg));
+            if (pre) {
+              pre.hidden = false;
+              pre.style.display = 'block';
+              pre.textContent = res.text || '(empty response)';
+            }
+            if (sum) {
+              sum.hidden = false;
+              sum.style.color = '#7f1d1d';
+              sum.textContent = 'Upload did not complete successfully.';
+            }
+            return;
+          }
+          if (!j || typeof j !== 'object') {
+            rv4IntakeSetUploadLine('Upload failed', 'err');
+            rv4IntakeSetError('Invalid JSON in server response.');
+            if (pre) {
+              pre.hidden = false;
+              pre.style.display = 'block';
+              pre.textContent = res.text || '';
+            }
+            return;
+          }
+          rv4IntakeSetUploadLine('Upload complete', 'ok');
+          if (st) {
+            st.innerHTML = '';
+            st.hidden = false;
+            var order = [
+              'stage_1_intake',
+              'stage_2_structural',
+              'stage_3_normalization',
+              'stage_4_static',
+              'stage_5_deterministic',
+              'stage_6_viability',
+            ];
+            order.forEach(function (key, i) {
+              var row = j.stages ? j.stages[key] : null;
+              var li = document.createElement('li');
+              if (!row) {
+                li.textContent = (i + 1) + '. ' + pipelineLabels[i] + ' — (no data)';
+              } else {
+                var tail = row.ok === false ? ' — failed' : row.ok === true ? ' — done' : ' — ' + (row.status || '');
+                var det = row.detail ? ' — ' + String(row.detail).slice(0, 160) : '';
+                if (Array.isArray(row.errors) && row.errors.length)
+                  det = ' — ' + row.errors.join('; ').slice(0, 220);
+                li.textContent = (i + 1) + '. ' + pipelineLabels[i] + tail + det;
+              }
+              st.appendChild(li);
+            });
+          }
+          if (pre) {
+            pre.hidden = false;
+            pre.style.display = 'block';
+            pre.textContent = JSON.stringify(j, null, 2);
+          }
           if (sum) {
+            sum.hidden = false;
             if (j.pass) {
               sum.style.color = 'var(--text)';
               sum.textContent =
@@ -4614,24 +4788,6 @@
               sum.textContent =
                 'Outcome: FAIL — ' + (j.errors && j.errors.length ? j.errors.join('; ') : 'see detail below');
             }
-          }
-          if (st && j && j.stages) {
-            var order = ['stage_1_intake', 'stage_2_structural', 'stage_3_normalization', 'stage_4_static', 'stage_5_deterministic', 'stage_6_viability'];
-            var labels = [
-              'Upload status',
-              'Validation result',
-              'Normalization result',
-              'Static checks',
-              'Test result',
-              'Pass / fail gate',
-            ];
-            order.forEach(function (key, i) {
-              var row = j.stages[key];
-              var li = st.children[i];
-              if (!li || !row) return;
-              var tail = row.ok === false ? ' — failed' : row.ok === true ? ' — done' : ' — ' + (row.status || '');
-              li.textContent = (i + 1) + '. ' + labels[i] + tail + (row.detail ? ' — ' + String(row.detail).slice(0, 160) : '');
-            });
           }
           if (j && j.submission_id && j.pass) {
             return fetch('/api/v1/renaissance/policy-intake/' + encodeURIComponent(j.submission_id))
@@ -4644,15 +4800,25 @@
           }
         })
         .catch(function () {
-          if (pre) pre.textContent = 'Request failed (network or server).';
+          rv4IntakeSetUploadLine('Upload failed', 'err');
+          rv4IntakeSetError('Network error — could not reach the server.');
+          if (pre) {
+            pre.hidden = false;
+            pre.style.display = 'block';
+            pre.textContent = 'Request failed (network or server).';
+          }
           if (sum) {
             sum.hidden = false;
             sum.style.color = '#7f1d1d';
-            sum.textContent = 'Outcome: FAIL — network or server error.';
+            sum.textContent = 'Upload did not complete successfully.';
           }
+        })
+        .finally(function () {
+          rv4IntakeDone();
         });
     });
   }
+  rv4IntakeUpdateGate();
   var rv4ip = $('rv4-btn-ingest-policy');
   if (rv4ip) {
     rv4ip.addEventListener('click', function () {
