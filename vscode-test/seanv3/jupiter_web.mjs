@@ -233,20 +233,37 @@ function buildSeanTradesCsv(db) {
   return lines.join('\r\n');
 }
 
-/** @param {import('node:sqlite').DatabaseSync} db */
-function buildNoTradeDecisionsCsv(db) {
-  const max = Math.min(
+/** Max rows for bar-decision CSV exports (NO_TRADE and TRADE_OPEN). */
+function barDecisionsCsvMaxRows() {
+  return Math.min(
     5000,
-    Math.max(1, parseInt(process.env.SEANV3_NO_TRADE_EXPORT_MAX || process.env.SEANV3_TUI_NO_TRADE_ROWS || '500', 10) || 500)
+    Math.max(
+      1,
+      parseInt(
+        process.env.SEANV3_BAR_DECISION_EXPORT_MAX ||
+          process.env.SEANV3_NO_TRADE_EXPORT_MAX ||
+          process.env.SEANV3_TUI_NO_TRADE_ROWS ||
+          '500',
+        10
+      ) || 500
+    )
   );
+}
+
+/**
+ * @param {import('node:sqlite').DatabaseSync} db
+ * @param {'NO_TRADE' | 'TRADE_OPEN'} outcome
+ */
+function buildBarDecisionsCsv(db, outcome) {
+  const max = barDecisionsCsvMaxRows();
   const rows = db
     .prepare(
       `SELECT id, outcome, market_event_id, timestamp_utc, symbol, timeframe, policy_id, policy_engine_tag, engine_id,
               policy_resolution_source, signal_mode, candidate_side, reason_code,
               indicator_values_json, gate_results_json, features_json, trade_id, schema_version
-       FROM sean_bar_decisions WHERE outcome = 'NO_TRADE' ORDER BY id DESC LIMIT ?`
+       FROM sean_bar_decisions WHERE outcome = ? ORDER BY id DESC LIMIT ?`
     )
-    .all(max);
+    .all(outcome, max);
   const headers = [
     'id',
     'outcome',
@@ -295,6 +312,16 @@ function buildNoTradeDecisionsCsv(db) {
   return lines.join('\r\n');
 }
 
+/** @param {import('node:sqlite').DatabaseSync} db */
+function buildNoTradeDecisionsCsv(db) {
+  return buildBarDecisionsCsv(db, 'NO_TRADE');
+}
+
+/** @param {import('node:sqlite').DatabaseSync} db */
+function buildTradeOpenDecisionsCsv(db) {
+  return buildBarDecisionsCsv(db, 'TRADE_OPEN');
+}
+
 /**
  * @param {Record<string, unknown>} row
  * @returns {Record<string, unknown>}
@@ -333,6 +360,62 @@ function barDecisionDetailPayload(row) {
     gate_results_json: row.gate_results_json != null ? String(row.gate_results_json) : null,
     features_json: row.features_json != null ? String(row.features_json) : null,
   };
+}
+
+/**
+ * Adds optional `sean_paper_trades` snapshot when `trade_id` is set (TRADE_OPEN path).
+ *
+ * @param {import('node:sqlite').DatabaseSync} db
+ * @param {Record<string, unknown>} payload from {@link barDecisionDetailPayload}
+ */
+function augmentBarDecisionDetail(db, payload) {
+  const tid = payload.trade_id;
+  if (tid == null || tid === '') {
+    return payload;
+  }
+  const id = Number(tid);
+  if (!Number.isFinite(id)) {
+    return { ...payload, paper_trade_link: { trade_id: tid, note: 'trade_id is not numeric' } };
+  }
+  try {
+    const pt = db
+      .prepare(
+        `SELECT id, engine_id, side, entry_market_event_id, exit_market_event_id,
+                entry_time_utc, exit_time_utc, entry_price, exit_price, size_notional_sol,
+                gross_pnl_usd, net_pnl_usd, result_class, metadata_json
+         FROM sean_paper_trades WHERE id = ?`
+      )
+      .get(id);
+    if (!pt) {
+      return {
+        ...payload,
+        paper_trade_link: { trade_id: id, note: 'no matching row in sean_paper_trades (lifecycle table)' },
+      };
+    }
+    return {
+      ...payload,
+      paper_trade_snapshot: {
+        schema: 'jupiter_sean_paper_trade_snapshot_v1',
+        id: pt.id,
+        trade_id_label: `sean_${pt.id}`,
+        engine_id: pt.engine_id != null ? String(pt.engine_id) : null,
+        side: pt.side != null ? String(pt.side) : null,
+        entry_market_event_id: pt.entry_market_event_id != null ? String(pt.entry_market_event_id) : null,
+        exit_market_event_id: pt.exit_market_event_id != null ? String(pt.exit_market_event_id) : null,
+        entry_time_utc: pt.entry_time_utc != null ? String(pt.entry_time_utc) : null,
+        exit_time_utc: pt.exit_time_utc != null ? String(pt.exit_time_utc) : null,
+        entry_price: pt.entry_price,
+        exit_price: pt.exit_price,
+        size_notional_sol: pt.size_notional_sol,
+        gross_pnl_usd: pt.gross_pnl_usd,
+        net_pnl_usd: pt.net_pnl_usd,
+        result_class: pt.result_class != null ? String(pt.result_class) : null,
+        metadata_json: pt.metadata_json != null ? String(pt.metadata_json) : null,
+      },
+    };
+  } catch {
+    return payload;
+  }
 }
 
 function parseTsSort(iso) {
@@ -777,6 +860,7 @@ function buildSummary(db) {
     position: null,
     recent_trades: [],
     recent_no_trades: [],
+    recent_trade_opens: [],
     all_trades_dropdown: [],
     last_kline: null,
     error: null,
@@ -882,6 +966,27 @@ function buildSummary(db) {
     }));
   } catch {
     /* table missing on legacy DB until migrate */
+  }
+
+  const tradeOpenLimit = Math.min(50, Math.max(1, parseInt(process.env.SEANV3_TUI_TRADE_OPEN_ROWS || '30', 10) || 30));
+  try {
+    const trows = db
+      .prepare(
+        `SELECT id, timestamp_utc AS at_utc, market_event_id, policy_id, candidate_side, reason_code, trade_id
+         FROM sean_bar_decisions WHERE outcome = 'TRADE_OPEN' ORDER BY id DESC LIMIT ?`
+      )
+      .all(tradeOpenLimit);
+    out.recent_trade_opens = trows.map((r) => ({
+      id: r.id,
+      at_utc: r.at_utc != null ? String(r.at_utc) : null,
+      market_event_id: r.market_event_id != null ? String(r.market_event_id) : null,
+      policy_id: r.policy_id != null ? String(r.policy_id) : null,
+      candidate_side: r.candidate_side != null ? String(r.candidate_side) : null,
+      reason_code: r.reason_code != null ? String(r.reason_code) : null,
+      trade_id: r.trade_id != null ? Number(r.trade_id) : null,
+    }));
+  } catch {
+    /* */
   }
 
   try {
@@ -1162,7 +1267,8 @@ function jwLivePollScript(refreshSec) {
     if(ob){if(o){var rel=o.price?Number(o.conf)/Number(o.price)*100:0;ob.innerHTML='<p><strong>SOL/USD</strong> '+E(Number(o.price).toFixed(4))+' USD</p><p class="muted">Confidence \\u00b1'+E(Number(o.conf).toFixed(6))+' ('+E(rel.toFixed(4))+'% of price)</p><p class="muted">Publish unix: '+E(String(o.publish_time))+' '+(pf.wall_age_s!=null?'wall age ~'+Number(pf.wall_age_s).toFixed(1)+'s':'')+'</p><p class="muted">Feed: '+E(T(o.feed_id,20))+'</p>';}else ob.innerHTML='<p class="muted">No Hermes parsed payload yet.</p>';}
     var pt=document.getElementById('jw-parity-tbody'); if(pt&&j.parity){var pr=j.parity;if(pr.error&&!(pr.rows&&pr.rows.length))pt.innerHTML='<tr><td colspan="4" class="muted">'+E(pr.error)+'</td></tr>';else if(!pr.rows||!pr.rows.length)pt.innerHTML='<tr><td colspan="4" class="muted">No parity rows yet (need trades with market_event_id + optional execution_ledger.db).</td></tr>';else pt.innerHTML=pr.rows.map(function(r){var pc=r.parity_cls==='ok'?'p-ok':r.parity_cls==='warn'?'p-warn':r.parity_cls==='bad'?'p-bad':'p-dim';return'<tr><td>'+E(T(r.market_event_id,44))+'</td><td>'+E(r.sean_cell)+'</td><td>'+E(r.bb_cell)+'</td><td class="'+pc+'">'+E(r.parity)+'</td></tr>';}).join('');}
     var tt=document.getElementById('jw-trades-tbody'); if(tt&&j.recent_trades){var rt=j.recent_trades;tt.innerHTML=rt.length?rt.map(function(t){return'<tr class="trade-row '+trCls(t.result_class)+'" data-trade-id="'+E(String(t.id))+'"><td>'+E(t.trade_id)+'</td><td>'+E(isoUtc(t.exit_time_utc))+'</td><td>'+E(isoUtc(t.entry_time_utc))+'</td><td>'+E(t.symbol)+'</td><td>'+E(t.side)+'</td><td>'+E(t.entry_price)+'</td><td>'+E(t.exit_price)+'</td><td>'+E(t.size_notional_sol)+'</td><td>'+E(t.gross_pnl_usd)+'</td><td>'+E(t.result_class)+'</td><td>'+E(t.exit_reason)+'</td><td>'+E(T(t.entry_market_event_id,40))+'</td><td>'+E(T(t.exit_market_event_id,40))+'</td></tr>';}).join(''):'<tr><td colspan="13" class="muted">No closed trades yet</td></tr>';jwWireTrades();}
-    var nt=document.getElementById('jw-no-trade-tbody'); if(nt&&j.recent_no_trades){var rn=j.recent_no_trades;nt.innerHTML=rn.length?rn.map(function(n){var mid=String(n.market_event_id||'');return'<tr class="'+ntCls(n.reason_code)+'"><td>'+E(isoUtc(n.at_utc))+'</td><td title="'+E(mid)+'">'+E(T(mid,44))+'</td><td>'+E(n.policy_id||'\\u2014')+'</td><td>'+E(n.reason_code)+'</td><td><button type="button" class="fund-btn jw-nt-view" data-decision-id="'+E(String(n.id))+'">View</button></td></tr>';}).join(''):'<tr><td colspan="5" class="muted">No NO_TRADE decisions yet</td></tr>';}
+    var nt=document.getElementById('jw-no-trade-tbody'); if(nt&&j.recent_no_trades){var rn=j.recent_no_trades;nt.innerHTML=rn.length?rn.map(function(n){var mid=String(n.market_event_id||'');return'<tr class="'+ntCls(n.reason_code)+'"><td>'+E(isoUtc(n.at_utc))+'</td><td title="'+E(mid)+'">'+E(T(mid,44))+'</td><td>'+E(n.policy_id||'\\u2014')+'</td><td>'+E(n.reason_code)+'</td><td><button type="button" class="fund-btn jw-bar-decision-view" data-decision-id="'+E(String(n.id))+'">View</button></td></tr>';}).join(''):'<tr><td colspan="5" class="muted">No NO_TRADE decisions yet</td></tr>';}
+    var to=document.getElementById('jw-trade-open-tbody'); if(to&&j.recent_trade_opens){var ro=j.recent_trade_opens;to.innerHTML=ro.length?ro.map(function(n){var mid=String(n.market_event_id||'');var side=String(n.candidate_side||'\\u2014');return'<tr class="to-open"><td>'+E(isoUtc(n.at_utc))+'</td><td title="'+E(mid)+'">'+E(T(mid,44))+'</td><td>'+E(n.policy_id||'\\u2014')+'</td><td>'+E(side)+'</td><td>'+E(n.reason_code)+'</td><td><button type="button" class="fund-btn jw-bar-decision-view" data-decision-id="'+E(String(n.id))+'">View</button></td></tr>';}).join(''):'<tr><td colspan="6" class="muted">No TRADE_OPEN decisions yet</td></tr>';}
     var dj=document.getElementById('jw-trade-jump'); if(dj&&j.all_trades_dropdown){var cur=dj.value, opts=j.all_trades_dropdown.length?('<option value="">All trades \\u2014 pick to jump + detail ('+j.all_trades_dropdown.length+')</option>'+j.all_trades_dropdown.map(function(d){return'<option value="'+E(String(d.id))+'">'+E(d.label)+'</option>';})).join(''):'<option value="">No closed trades</option>';dj.innerHTML=opts; if(cur)try{dj.value=cur;}catch(e){}}
     var clk=document.getElementById('jw-live-clock'); if(clk)clk.textContent='Last update '+new Date().toISOString().slice(11,19)+' UTC';
     if(typeof window.jwPolicySyncVisual==='function')window.jwPolicySyncVisual();
@@ -1469,10 +1575,22 @@ function htmlPage(v) {
     ? noTrades
         .map((n) => {
           const mid = n.market_event_id != null ? String(n.market_event_id) : '';
-          return `<tr class="${ntCls(n.reason_code)}"><td>${esc(formatIsoUtcShort(n.at_utc))}</td><td title="${esc(mid)}">${esc(truncateMid(mid, 44))}</td><td>${esc(n.policy_id || '—')}</td><td>${esc(n.reason_code)}</td><td><button type="button" class="fund-btn jw-nt-view" data-decision-id="${esc(String(n.id))}">View</button></td></tr>`;
+          return `<tr class="${ntCls(n.reason_code)}"><td>${esc(formatIsoUtcShort(n.at_utc))}</td><td title="${esc(mid)}">${esc(truncateMid(mid, 44))}</td><td>${esc(n.policy_id || '—')}</td><td>${esc(n.reason_code)}</td><td><button type="button" class="fund-btn jw-bar-decision-view" data-decision-id="${esc(String(n.id))}">View</button></td></tr>`;
         })
         .join('')
     : '<tr><td colspan="5" class="muted">No NO_TRADE decisions yet</td></tr>';
+
+  const tradeOpens = v.recent_trade_opens || [];
+  const toCls = () => 'to-open';
+  const tradeOpenRows = tradeOpens.length
+    ? tradeOpens
+        .map((n) => {
+          const mid = n.market_event_id != null ? String(n.market_event_id) : '';
+          const side = n.candidate_side != null ? String(n.candidate_side) : '—';
+          return `<tr class="${toCls()}"><td>${esc(formatIsoUtcShort(n.at_utc))}</td><td title="${esc(mid)}">${esc(truncateMid(mid, 44))}</td><td>${esc(n.policy_id || '—')}</td><td>${esc(side)}</td><td>${esc(n.reason_code)}</td><td><button type="button" class="fund-btn jw-bar-decision-view" data-decision-id="${esc(String(n.id))}">View</button></td></tr>`;
+        })
+        .join('')
+    : '<tr><td colspan="6" class="muted">No TRADE_OPEN decisions yet</td></tr>';
 
   const kl = v.last_kline;
   const klBlock = kl
@@ -1610,6 +1728,9 @@ function htmlPage(v) {
     .nt-dim { background: transparent; }
     #jw-no-trade-scroll { max-height: min(40vh, 28rem); overflow-y: auto; overflow-x: auto; }
     #jw-no-trade-scroll thead th { position: sticky; top: 0; z-index: 1; }
+    .to-open { background: rgba(88, 166, 255, 0.1); }
+    #jw-trade-open-scroll { max-height: min(40vh, 28rem); overflow-y: auto; overflow-x: auto; }
+    #jw-trade-open-scroll thead th { position: sticky; top: 0; z-index: 1; }
     .jw-nt-drawer-backdrop { position: fixed; inset: 0; z-index: 2000; background: rgba(5, 5, 8, 0.72); display: none; align-items: stretch; justify-content: flex-end; }
     .jw-nt-drawer-backdrop.jw-nt-open { display: flex; }
     .jw-nt-drawer { width: min(42rem, 96vw); max-width: 100%; background: #121212; border-left: 1px solid #30363d; overflow-y: auto; box-sizing: border-box; padding: 0.75rem 1rem 1.25rem; box-shadow: -4px 0 24px rgba(0,0,0,0.45); }
@@ -1683,7 +1804,8 @@ function htmlPage(v) {
         <label>Jump to trade <select id="jw-trade-jump">${tradeJumpOpts}</select></label>
         <a class="csv-btn" href="/api/v1/sean/trades.csv">Download all trades (CSV)</a>
       </p>
-      <p class="muted small">Winning trades are tinted light green. CSV includes standard columns plus full <code>metadata_json</code> (entry <code>signal</code> + exit snapshot for closes written with the current engine). BlackBox baseline trade synthesis tiles use a different pipeline.</p>
+      <p class="muted small">Winning trades are tinted light green. This CSV is the <strong>lifecycle / closed-trade</strong> table (<code>sean_paper_trades</code>) — not the bar <code>decision_ledger</code>. For open-decision rows at the bar, use <strong>TRADE_OPEN decision log</strong> + <code>/api/v1/sean/trade-open-decisions.csv</code>.</p>
+      <p class="muted small">CSV includes standard columns plus full <code>metadata_json</code> (entry <code>signal</code> + exit snapshot for closes written with the current engine). BlackBox baseline trade synthesis tiles use a different pipeline.</p>
       <p class="muted small jw-panel-sync-hint">Time sync: same <code>/api/summary.json</code> poll as the live strip (${esc(String(v.refresh_sec || 0))}s). This panel: <strong>closed</strong> paper trades only (<code>sean_paper_trades</code>).</p>
       <div class="scroll" id="jw-trades-scroll"><table><thead><tr><th>trade_id</th><th>exit UTC</th><th>entry UTC</th><th>sym</th><th>side</th><th>entry px</th><th>exit px</th><th>size</th><th>PnL</th><th>result</th><th>exit</th><th>entry MEI</th><th>exit MEI</th></tr></thead><tbody id="jw-trades-tbody">${tradeRows}</tbody></table></div>
       <h3 class="trade-snap-h">Trade snapshot (JSON)</h3>
@@ -1723,13 +1845,22 @@ function htmlPage(v) {
       <p class="muted small">Click <strong>View</strong> for full indicators, gates, and raw diagnostics (loaded from the ledger row, not the summary poll).</p>
       <div class="scroll" id="jw-no-trade-scroll"><table><thead><tr><th>Time (UTC)</th><th>market_event_id</th><th>policy</th><th>reason</th><th></th></tr></thead><tbody id="jw-no-trade-tbody">${noTradeRows}</tbody></table></div>
     </div></section>
+    <section class="panel"><h2 class="jw-panel-head"><button type="button" class="jw-panel-toggle" aria-expanded="true" aria-controls="jw-pan-trade-open"><span class="jw-caret" aria-hidden="true">▼</span> TRADE_OPEN decision log (bar opened position)</button></h2><div class="jw-panel-body" id="jw-pan-trade-open">
+      <p class="op-row" style="margin-top:0;flex-wrap:wrap;align-items:center">
+        <a class="csv-btn" href="/api/v1/sean/trade-open-decisions.csv">Export TRADE_OPEN decisions (CSV)</a>
+        <span class="muted small">Same rows as this table — full <code>indicator_values_json</code>, <code>gate_results_json</code>, <code>features_json</code>, <code>trade_id</code> (decision ledger).</span>
+      </p>
+      <p class="muted small jw-panel-sync-hint">Time sync: same <code>/api/summary.json</code> poll as the live strip (${esc(String(v.refresh_sec || 0))}s). Source: <code>sean_bar_decisions</code> where <code>outcome = TRADE_OPEN</code>.</p>
+      <p class="muted small">Click <strong>View</strong> for full detail (same API as NO_TRADE — <code>/api/v1/sean/decision/:id.json</code>). When <code>trade_id</code> is set, the drawer includes a linked <code>sean_paper_trades</code> snapshot for lifecycle context.</p>
+      <div class="scroll" id="jw-trade-open-scroll"><table><thead><tr><th>Time (UTC)</th><th>market_event_id</th><th>policy</th><th>side</th><th>reason</th><th></th></tr></thead><tbody id="jw-trade-open-tbody">${tradeOpenRows}</tbody></table></div>
+    </div></section>
     <section class="panel"><h2 class="jw-panel-head"><button type="button" class="jw-panel-toggle" aria-expanded="true" aria-controls="jw-pan-preflight"><span class="jw-caret" aria-hidden="true">▼</span> Preflight strip</button></h2><div class="jw-panel-body" id="jw-pan-preflight"><div id="jw-preflight-banner">${banner}</div><div class="scroll"><table><thead><tr><th>Check</th><th>Status</th><th>Detail</th></tr></thead><tbody id="jw-preflight-tbody">${chkRows}</tbody></table></div></div></section>
     <section class="panel"><h2 class="jw-panel-head"><button type="button" class="jw-panel-toggle" aria-expanded="true" aria-controls="jw-pan-oracle"><span class="jw-caret" aria-hidden="true">▼</span> Trade / oracle window (Pyth SOL/USD)</button></h2><div class="jw-panel-body" id="jw-pan-oracle"><div id="jw-oracle-block">${oracleBlock}</div></div></section>
   </div>
   <div id="jw-nt-drawer-root" class="jw-nt-drawer-backdrop" hidden aria-hidden="true">
     <aside class="jw-nt-drawer" role="dialog" aria-modal="true" aria-labelledby="jw-nt-drawer-title" onclick="event.stopPropagation()">
       <div class="jw-nt-drawer-head">
-        <h3 id="jw-nt-drawer-title">NO_TRADE decision</h3>
+        <h3 id="jw-nt-drawer-title">Bar decision</h3>
         <button type="button" class="fund-btn" id="jw-nt-drawer-close">Close</button>
       </div>
       <div id="jw-nt-drawer-body"><p class="muted">Select <strong>View</strong> on a row.</p></div>
@@ -1790,13 +1921,27 @@ function htmlPage(v) {
         return r.json();
       }).then(function(d){
         if(d.error){ body.innerHTML = '<p class="warn">'+E(String(d.error))+'</p>'; return; }
-        title.textContent = 'NO_TRADE #' + String(d.id) + ' — ' + String(d.reason_code || '');
+        title.textContent = String(d.outcome || 'BAR') + ' #' + String(d.id) + ' — ' + String(d.reason_code || '');
         var html = '';
         html += '<h4 class="jw-nt-h4">Summary</h4><dl class="jw-nt-dl">';
-        [['market_event_id', d.market_event_id],['timestamp_utc', d.timestamp_utc],['symbol', d.symbol],['timeframe', d.timeframe],['policy_id', d.policy_id],['policy_engine_tag', d.policy_engine_tag],['engine_id', d.engine_id],['candidate_side', d.candidate_side],['reason_code', d.reason_code],['trade_id', d.trade_id]].forEach(function(p){
+        [['outcome', d.outcome],['market_event_id', d.market_event_id],['timestamp_utc', d.timestamp_utc],['symbol', d.symbol],['timeframe', d.timeframe],['policy_id', d.policy_id],['policy_engine_tag', d.policy_engine_tag],['engine_id', d.engine_id],['candidate_side', d.candidate_side],['reason_code', d.reason_code],['trade_id', d.trade_id]].forEach(function(p){
           html += '<dt>'+E(p[0])+'</dt><dd>'+E(p[1]!=null?String(p[1]):'—')+'</dd>';
         });
         html += '</dl>';
+        if (d.paper_trade_snapshot && typeof d.paper_trade_snapshot === 'object') {
+          var pts = d.paper_trade_snapshot;
+          html += '<h4 class="jw-nt-h4">Linked paper trade (sean_paper_trades)</h4><dl class="jw-nt-dl">';
+          [['trade_id_label', pts.trade_id_label],['engine_id', pts.engine_id],['side', pts.side],['entry_market_event_id', pts.entry_market_event_id],['exit_market_event_id', pts.exit_market_event_id],['entry_time_utc', pts.entry_time_utc],['exit_time_utc', pts.exit_time_utc],['entry_price', pts.entry_price],['exit_price', pts.exit_price],['size_notional_sol', pts.size_notional_sol],['gross_pnl_usd', pts.gross_pnl_usd],['net_pnl_usd', pts.net_pnl_usd],['result_class', pts.result_class]].forEach(function(p){
+            html += '<dt>'+E(p[0])+'</dt><dd>'+E(p[1]!=null?String(p[1]):'—')+'</dd>';
+          });
+          html += '</dl>';
+          if (pts.metadata_json) {
+            html += '<p class="muted small">metadata_json (lifecycle)</p><pre class="jw-nt-pre">'+E(String(pts.metadata_json).length>6000?String(pts.metadata_json).slice(0,5999)+'…':String(pts.metadata_json))+'</pre>';
+          }
+        }
+        if (d.paper_trade_link && d.paper_trade_link.note) {
+          html += '<p class="muted small">'+E(String(d.paper_trade_link.note))+'</p>';
+        }
         html += '<h4 class="jw-nt-h4">Indicators</h4>' + kvTable(d.indicator_values);
         html += '<h4 class="jw-nt-h4">Gates</h4>' + gateHtml(d.gate_results);
         html += '<h4 class="jw-nt-h4">Raw diagnostics (features)</h4>';
@@ -1816,7 +1961,7 @@ function htmlPage(v) {
     root?.addEventListener('click', function(e){ if(e.target === root) closeNt(); });
     document.addEventListener('keydown', function(e){ if(e.key==='Escape') closeNt(); });
     document.addEventListener('click', function(e){
-      var btn = e.target && e.target.closest && e.target.closest('.jw-nt-view');
+      var btn = e.target && e.target.closest && e.target.closest('.jw-bar-decision-view');
       if(!btn) return;
       var did = btn.getAttribute('data-decision-id');
       if(!did) return;
@@ -2332,6 +2477,30 @@ const server = http.createServer((req, res) => {
       return;
     }
 
+    if (url.pathname === '/api/v1/sean/trade-open-decisions.csv' && req.method === 'GET') {
+      let db;
+      try {
+        db = new DatabaseSync(dbPath(), { readOnly: true });
+        const body = buildTradeOpenDecisionsCsv(db);
+        res.writeHead(200, {
+          'Content-Type': 'text/csv; charset=utf-8',
+          'Content-Disposition': 'attachment; filename="sean_bar_decisions_trade_open.csv"',
+          'Cache-Control': 'no-store',
+        });
+        res.end(body);
+      } catch (e) {
+        res.writeHead(500, { 'Content-Type': 'application/json; charset=utf-8' });
+        res.end(JSON.stringify({ error: e instanceof Error ? e.message : String(e) }));
+      } finally {
+        try {
+          db?.close();
+        } catch {
+          /* */
+        }
+      }
+      return;
+    }
+
     const barDecisionMatch = url.pathname.match(/^\/api\/v1\/sean\/decision\/(\d+)\.json$/);
     if (barDecisionMatch && req.method === 'GET') {
       const did = parseInt(barDecisionMatch[1], 10);
@@ -2344,12 +2513,14 @@ const server = http.createServer((req, res) => {
           res.end(JSON.stringify({ error: 'decision not found' }));
           return;
         }
-        if (String(row.outcome) !== 'NO_TRADE') {
+        const o = String(row.outcome || '');
+        if (o !== 'NO_TRADE' && o !== 'TRADE_OPEN') {
           res.writeHead(404, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' });
-          res.end(JSON.stringify({ error: 'use this endpoint for NO_TRADE rows only' }));
+          res.end(JSON.stringify({ error: 'unsupported outcome for bar decision detail' }));
           return;
         }
-        const payload = barDecisionDetailPayload(row);
+        let payload = barDecisionDetailPayload(row);
+        payload = augmentBarDecisionDetail(db, payload);
         res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' });
         res.end(JSON.stringify(payload, null, 2));
       } catch (e) {
