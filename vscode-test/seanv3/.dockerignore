@@ -10,6 +10,7 @@
 !jupiter_policy_runtime.mjs
 !sean_lifecycle.mjs
 !sean_ledger.mjs
+!decision_ledger.mjs
 !sean_engine.mjs
 !funding_guards.mjs
 !report.mjs
