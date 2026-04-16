@@ -145,55 +145,158 @@
     .dash-rv4-intake-summary { font-size: 0.78rem; font-weight: 600; margin: 0.35rem 0 0.25rem; }
     #rv4-btn-policy-intake:disabled { opacity: 0.55; cursor: not-allowed; }
     .dash-rv4-file-label.primary.dash-rv4-intake-ctl-disabled { pointer-events: none; opacity: 0.55; cursor: not-allowed; }
-    /* DV-053 — isolated policy evaluation mode (hide baseline / actions / experiment queue) */
-    .dash-rv4-wrap.rv4-eval-mode .dash-rv4-kitchen-intro,
-    .dash-rv4-wrap.rv4-eval-mode .dash-rv4-mid-grid,
-    .dash-rv4-wrap.rv4-eval-mode .dash-rv4-results {
+    /* DV-053 / 053A — full-screen policy evaluation panel (replaces default Kitchen) */
+    .dash-rv4-wrap.rv4-eval-mode .dash-rv4-kitchen-default {
       display: none !important;
     }
-    .dash-rv4-wrap.rv4-eval-mode {
-      max-width: 44rem;
+    .dash-rv4-wrap.rv4-eval-mode #rv4-eval-panel {
+      display: block !important;
+    }
+    #dash-main-root.rv4-kitchen-eval .dash-tape-banner {
+      display: none !important;
+    }
+    .dash-rv4-eval-panel {
+      max-width: 68rem;
       margin: 0 auto;
-      padding: 0 0.85rem 2rem;
+      padding: 0 1rem 2.5rem;
       box-sizing: border-box;
+      overflow-x: hidden;
+      animation: rv4-eval-panel-in 0.22s ease;
     }
-    .dash-rv4-wrap.rv4-eval-mode .dash-rv4-intake {
-      max-width: 100%;
+    @keyframes rv4-eval-panel-in {
+      from { opacity: 0; }
+      to { opacity: 1; }
+    }
+    .dash-rv4-eval-panel[hidden] { display: none !important; }
+    .dash-rv4-eval-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 1rem;
+      flex-wrap: wrap;
+      padding: 0.75rem 0 1.25rem;
+      border-bottom: 1px solid var(--panel-border);
+      margin-bottom: 1.5rem;
+    }
+    .dash-rv4-eval-title {
       margin: 0;
+      font-size: 1.15rem;
+      font-weight: 800;
+      letter-spacing: 0.02em;
+      color: var(--text);
     }
-    .dash-rv4-intake-raw-details {
-      margin-top: 0.65rem;
-      border: 1px solid var(--panel-border);
-      border-radius: var(--radius-md);
-      padding: 0.35rem 0.65rem;
-      background: var(--panel);
-    }
-    .dash-rv4-intake-raw-details[hidden] { display: none !important; }
-    .dash-rv4-intake-raw-details > summary {
-      cursor: pointer;
-      font-size: 0.76rem;
-      font-weight: 600;
-      color: var(--muted);
-      list-style: none;
-    }
-    .dash-rv4-intake-raw-details > summary::-webkit-details-marker { display: none; }
-    .dash-rv4-intake-raw-details .dash-rv4-intake-pre {
-      margin-top: 0.45rem;
-      max-height: 16rem;
-      overflow: auto;
-      font-size: 0.68rem;
-    }
-    #rv4-intake-back-kitchen {
-      margin-top: 1.15rem;
-      font-size: 0.78rem;
-      padding: 0.45rem 0.85rem;
+    .dash-rv4-eval-back-btn {
+      font-size: 0.8rem;
+      padding: 0.45rem 0.9rem;
       border-radius: var(--radius-md);
       border: 1px solid var(--panel-border);
       background: var(--panel);
       color: var(--text);
       cursor: pointer;
+      font-weight: 600;
     }
-    #rv4-intake-back-kitchen[hidden] { display: none !important; }
+    .dash-rv4-eval-back-btn.primary {
+      background: var(--accent);
+      color: var(--accent-contrast);
+      border-color: transparent;
+    }
+    .dash-rv4-eval-filectx {
+      margin-bottom: 1.5rem;
+    }
+    .dash-rv4-eval-one-line {
+      margin: 0;
+      font-size: 0.82rem;
+      color: var(--text);
+      line-height: 1.5;
+    }
+    .dash-rv4-eval-one-line + .dash-rv4-eval-one-line { margin-top: 0.25rem; }
+    .dash-rv4-eval-section {
+      margin-bottom: 1.5rem;
+    }
+    .dash-rv4-eval-h3 {
+      margin: 0 0 0.65rem;
+      font-size: 0.85rem;
+      font-weight: 800;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+    }
+    .dash-rv4-eval-rows { display: flex; flex-direction: column; gap: 0.5rem; }
+    .dash-rv4-eval-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 1rem;
+      padding: 0.4rem 0;
+      border-bottom: 1px solid rgba(148, 163, 184, 0.25);
+      font-size: 0.82rem;
+    }
+    .dash-rv4-eval-row:last-child { border-bottom: none; }
+    .dash-rv4-eval-row-l { color: var(--text); }
+    .dash-rv4-eval-row-r {
+      font-size: 1rem;
+      flex-shrink: 0;
+      font-weight: 700;
+      color: var(--muted);
+    }
+    .dash-rv4-eval-row-r.is-ok { color: #166534; }
+    .dash-rv4-eval-row-r.is-fail { color: #b91c1c; }
+    .dash-rv4-eval-outcome-wrap { text-align: center; margin: 1.75rem 0 1.5rem; }
+    .dash-rv4-eval-outcome {
+      font-size: 2.25rem;
+      font-weight: 900;
+      letter-spacing: 0.04em;
+      line-height: 1.15;
+    }
+    .dash-rv4-eval-outcome.is-pass { color: #166534; }
+    .dash-rv4-eval-outcome.is-fail { color: #b91c1c; }
+    .dash-rv4-eval-outcome-sub {
+      margin: 0.75rem 0 0;
+      font-size: 1rem;
+      font-weight: 600;
+      color: var(--text);
+      line-height: 1.45;
+      max-width: 36rem;
+      margin-left: auto;
+      margin-right: auto;
+    }
+    .dash-rv4-eval-diagnostics {
+      font-size: 0.82rem;
+      line-height: 1.55;
+      color: var(--text);
+    }
+    .dash-rv4-eval-diagnostics p { margin: 0.35rem 0; }
+    .dash-rv4-eval-raw {
+      margin-top: 1.5rem;
+      border: 1px solid var(--panel-border);
+      border-radius: var(--radius-md);
+      padding: 0.5rem 0.75rem;
+      background: var(--panel);
+    }
+    .dash-rv4-eval-raw[hidden] { display: none !important; }
+    .dash-rv4-eval-raw > summary {
+      cursor: pointer;
+      font-size: 0.8rem;
+      font-weight: 700;
+      color: var(--muted);
+      list-style: none;
+    }
+    .dash-rv4-eval-raw > summary::-webkit-details-marker { display: none; }
+    .dash-rv4-eval-raw pre {
+      margin: 0.65rem 0 0;
+      max-height: 18rem;
+      overflow: auto;
+      font-size: 0.68rem;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+    .dash-rv4-eval-footer {
+      display: flex;
+      justify-content: center;
+      margin-top: 2rem;
+      padding-top: 1rem;
+      border-top: 1px dashed var(--panel-border);
+    }
     .dash-rv4-mid-grid {
       display: grid;
       grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
@@ -1571,6 +1674,7 @@
       </div>
 
       <div id="dash-view-renaissance" class="dash-rv4-wrap" hidden aria-label="Quant Research Kitchen">
+        <div class="dash-rv4-kitchen-default">
         <div class="dash-rv4-kitchen-intro">
           <h2 class="dash-rv4-head">Quant Research Kitchen</h2>
           <p class="dash-rv4-sub">
@@ -1600,21 +1704,6 @@
             <p id="rv4-intake-gate-msg" class="dash-rv4-intake-hint">Select or paste a policy file</p>
             <p id="rv4-intake-ready-line" class="dash-rv4-intake-hint is-ready" hidden></p>
           </div>
-          <div id="rv4-intake-upload-activity" class="dash-rv4-intake-upload-activity" hidden aria-live="polite">
-            <span id="rv4-intake-spinner" class="dash-rv4-intake-spinner" role="status" aria-label="Uploading"></span>
-            <span id="rv4-intake-upload-msg">Uploading…</span>
-          </div>
-          <p id="rv4-intake-file-loaded" class="dash-rv4-intake-file-loaded" hidden></p>
-          <div id="rv4-intake-error" class="dash-rv4-intake-error" role="alert" aria-live="assertive"></div>
-          <h4 class="dash-rv4-intake-subh">Results</h4>
-          <p id="rv4-intake-summary" class="dash-rv4-intake-summary" hidden></p>
-          <p id="rv4-intake-processing-h" class="dash-rv4-intake-processing-h" hidden>Processing</p>
-          <ol id="rv4-intake-stages" class="dash-rv4-msg" style="margin:0.35rem 0 0 1rem;line-height:1.55" hidden></ol>
-          <details id="rv4-intake-raw-details" class="dash-rv4-intake-raw-details" hidden>
-            <summary>View raw report</summary>
-            <pre id="rv4-intake-result" class="dash-rv4-detail dash-rv4-intake-pre"></pre>
-          </details>
-          <button type="button" id="rv4-intake-back-kitchen" hidden>Back to Kitchen</button>
         </section>
 
         <div class="dash-rv4-mid-grid">
@@ -1677,6 +1766,36 @@
             <pre id="rv4-d-pre"></pre>
           </div>
         </section>
+        </div>
+
+        <div id="rv4-eval-panel" class="dash-rv4-eval-panel" hidden aria-label="Policy evaluation">
+          <header class="dash-rv4-eval-header">
+            <h2 class="dash-rv4-eval-title">Policy Evaluation</h2>
+            <button type="button" class="dash-rv4-eval-back-btn" id="rv4-eval-back-header">Back to Kitchen</button>
+          </header>
+          <div class="dash-rv4-eval-filectx">
+            <p class="dash-rv4-eval-one-line" id="rv4-eval-file-line">File: —</p>
+            <p class="dash-rv4-eval-one-line" id="rv4-eval-status-line">Status: —</p>
+          </div>
+          <section class="dash-rv4-eval-section" id="rv4-eval-processing-wrap" hidden>
+            <h3 class="dash-rv4-eval-h3">Processing</h3>
+            <div id="rv4-eval-stage-rows" class="dash-rv4-eval-rows" aria-live="polite"></div>
+          </section>
+          <section class="dash-rv4-eval-section dash-rv4-eval-outcome-wrap" id="rv4-eval-outcome-wrap" hidden>
+            <div id="rv4-eval-outcome" class="dash-rv4-eval-outcome" role="status"></div>
+            <p id="rv4-eval-outcome-sub" class="dash-rv4-eval-outcome-sub"></p>
+          </section>
+          <section class="dash-rv4-eval-section" id="rv4-eval-diagnostics-wrap" hidden>
+            <div id="rv4-eval-diagnostics" class="dash-rv4-eval-diagnostics"></div>
+          </section>
+          <details id="rv4-eval-raw-details" class="dash-rv4-eval-raw" hidden>
+            <summary>View Raw Report</summary>
+            <pre id="rv4-eval-raw-pre"></pre>
+          </details>
+          <div class="dash-rv4-eval-footer">
+            <button type="button" class="dash-rv4-eval-back-btn primary" id="rv4-eval-back-footer">Back to Kitchen</button>
+          </div>
+        </div>
       </div>
     </div>
   </div>
@@ -4667,74 +4786,9 @@
     }
     return null;
   }
-  function rv4IntakeShowUploadSpinner() {
-    var act = $('rv4-intake-upload-activity');
-    var sp = $('rv4-intake-spinner');
-    var msg = $('rv4-intake-upload-msg');
-    if (act) act.hidden = false;
-    if (sp) sp.hidden = false;
-    if (msg) msg.textContent = 'Uploading…';
-  }
-  function rv4IntakeHideUploadActivity() {
-    var act = $('rv4-intake-upload-activity');
-    var sp = $('rv4-intake-spinner');
-    if (act) act.hidden = true;
-    if (sp) sp.hidden = true;
-  }
-  function rv4IntakeShowFileLoadedBanner(displayName) {
-    var el = $('rv4-intake-file-loaded');
-    if (!el) return;
-    el.textContent = '';
-    var a = document.createElement('span');
-    a.className = 'rv4-fl-name';
-    a.textContent = 'File loaded: ' + String(displayName || '—');
-    var b = document.createElement('span');
-    b.className = 'rv4-fl-sub';
-    b.textContent = 'Upload complete';
-    el.appendChild(a);
-    el.appendChild(b);
-    el.hidden = false;
-  }
-  function rv4IntakeHideFileLoadedBanner() {
-    var el = $('rv4-intake-file-loaded');
-    if (el) {
-      el.hidden = true;
-      el.textContent = '';
-    }
-  }
-  function rv4IntakeStageTail(row) {
-    if (!row) return ' — (no data)';
-    var tail = row.ok === false ? ' — failed' : row.ok === true ? ' — done' : ' — ' + (row.status || '…');
-    var det = '';
-    if (row.detail) det = ' — ' + String(row.detail).slice(0, 140);
-    if (Array.isArray(row.errors) && row.errors.length) det = ' — ' + row.errors.join('; ').slice(0, 220);
-    return tail + det;
-  }
-  function rv4IntakeValidationTail(S) {
-    var s2 = S.stage_2_structural;
-    var s4 = S.stage_4_static;
-    if (s2 && s2.ok === false) return rv4IntakeStageTail(s2);
-    if (s4 && s4.ok === false) return rv4IntakeStageTail(s4);
-    if (s2 && s2.ok === true && s4 && s4.ok === true) return ' — done';
-    if (s2 && s2.ok === true && !s4) return ' — …';
-    if (s2 && s2.ok === true && s4) return rv4IntakeStageTail(s4);
-    if (!s2 && !s4) return ' — (no data)';
-    return rv4IntakeStageTail(s2 || s4);
-  }
-  function rv4IntakeSetError(msg) {
-    var el = $('rv4-intake-error');
-    if (!el) return;
-    if (msg) {
-      el.textContent = msg;
-      el.classList.add('is-visible');
-    } else {
-      el.textContent = '';
-      el.classList.remove('is-visible');
-    }
-  }
   function rv4IntakeSetRawReport(text) {
-    var pre = $('rv4-intake-result');
-    var det = $('rv4-intake-raw-details');
+    var pre = $('rv4-eval-raw-pre');
+    var det = $('rv4-eval-raw-details');
     if (!pre || !det) return;
     pre.textContent = text || '';
     if (text && String(text).trim().length) {
@@ -4745,36 +4799,216 @@
       det.removeAttribute('open');
     }
   }
+  function rv4EvalSetFileLine(name) {
+    var el = $('rv4-eval-file-line');
+    if (el) el.textContent = 'File: ' + String(name || '—');
+  }
+  function rv4EvalSetStatusLine(s) {
+    var el = $('rv4-eval-status-line');
+    if (el) el.textContent = 'Status: ' + String(s || '—');
+  }
+  function rv4EvalIcon(ok) {
+    if (ok === true) return '✓';
+    if (ok === false) return '✗';
+    return '…';
+  }
+  function rv4EvalRow(label, rClass, iconChar) {
+    var d = document.createElement('div');
+    d.className = 'dash-rv4-eval-row';
+    var l = document.createElement('span');
+    l.className = 'dash-rv4-eval-row-l';
+    l.textContent = label;
+    var r = document.createElement('span');
+    r.className = 'dash-rv4-eval-row-r';
+    if (rClass === 'ok') r.classList.add('is-ok');
+    else if (rClass === 'fail') r.classList.add('is-fail');
+    r.textContent = iconChar;
+    d.appendChild(l);
+    d.appendChild(r);
+    return d;
+  }
+  function rv4EvalValidationOk(S) {
+    var s2 = S.stage_2_structural;
+    var s4 = S.stage_4_static;
+    if (s2 && s2.ok === false) return false;
+    if (s4 && s4.ok === false) return false;
+    if (s2 && s2.ok === true && s4 && s4.ok === true) return true;
+    return null;
+  }
+  function rv4EvalShowPendingProcessing() {
+    var host = $('rv4-eval-stage-rows');
+    var pw = $('rv4-eval-processing-wrap');
+    if (pw) pw.hidden = false;
+    if (!host) return;
+    host.innerHTML = '';
+    ['Upload complete', 'Validation', 'Normalization', 'Testing', 'Pass / fail'].forEach(function (lbl) {
+      host.appendChild(rv4EvalRow(lbl, 'neutral', '…'));
+    });
+  }
+  function rv4EvalFillProcessingFromStages(S) {
+    var host = $('rv4-eval-stage-rows');
+    var pw = $('rv4-eval-processing-wrap');
+    if (pw) pw.hidden = false;
+    if (!host) return;
+    host.innerHTML = '';
+    var s1 = S.stage_1_intake;
+    host.appendChild(
+      rv4EvalRow(
+        'Upload complete',
+        s1 && s1.ok === true ? 'ok' : s1 && s1.ok === false ? 'fail' : 'neutral',
+        rv4EvalIcon(s1 ? s1.ok : null)
+      )
+    );
+    var vOk = rv4EvalValidationOk(S);
+    host.appendChild(
+      rv4EvalRow(
+        'Validation',
+        vOk === true ? 'ok' : vOk === false ? 'fail' : 'neutral',
+        rv4EvalIcon(vOk)
+      )
+    );
+    var s3 = S.stage_3_normalization;
+    var nOk = s3 ? s3.ok : null;
+    host.appendChild(
+      rv4EvalRow(
+        'Normalization',
+        nOk === true ? 'ok' : nOk === false ? 'fail' : 'neutral',
+        rv4EvalIcon(nOk)
+      )
+    );
+    var s5 = S.stage_5_deterministic;
+    var tOk = s5 ? s5.ok : null;
+    host.appendChild(
+      rv4EvalRow(
+        'Testing',
+        tOk === true ? 'ok' : tOk === false ? 'fail' : 'neutral',
+        rv4EvalIcon(tOk)
+      )
+    );
+    var s6 = S.stage_6_viability;
+    var pOk = s6 ? s6.ok : null;
+    host.appendChild(
+      rv4EvalRow(
+        'Pass / fail',
+        pOk === true ? 'ok' : pOk === false ? 'fail' : 'neutral',
+        rv4EvalIcon(pOk)
+      )
+    );
+  }
+  function rv4EvalShortReason(j) {
+    if (!j || j.pass) return '';
+    if (j.errors && j.errors.length) {
+      return j.errors
+        .map(function (e) {
+          return String(e).split(':')[0].slice(0, 48);
+        })
+        .slice(0, 3)
+        .join(' · ');
+    }
+    return 'Policy checks did not pass';
+  }
+  function rv4EvalShortReasonFromText(t) {
+    var s = String(t || '').replace(/\s+/g, ' ').trim();
+    return s.length > 160 ? s.slice(0, 157) + '…' : s;
+  }
+  function rv4EvalShowOutcome(j) {
+    var ow = $('rv4-eval-outcome-wrap');
+    var oc = $('rv4-eval-outcome');
+    var os = $('rv4-eval-outcome-sub');
+    if (!ow || !oc || !os) return;
+    ow.hidden = false;
+    if (j.pass) {
+      oc.className = 'dash-rv4-eval-outcome is-pass';
+      oc.textContent = 'PASS';
+      os.textContent = 'Candidate Policy: ' + (j.candidate_policy_id || j.submission_id || '—');
+    } else {
+      oc.className = 'dash-rv4-eval-outcome is-fail';
+      oc.textContent = 'FAIL';
+      os.textContent = 'Reason: ' + rv4EvalShortReason(j);
+    }
+  }
+  function rv4EvalShowOutcomeFail(reasonText) {
+    var ow = $('rv4-eval-outcome-wrap');
+    var oc = $('rv4-eval-outcome');
+    var os = $('rv4-eval-outcome-sub');
+    if (!ow || !oc || !os) return;
+    ow.hidden = false;
+    oc.className = 'dash-rv4-eval-outcome is-fail';
+    oc.textContent = 'FAIL';
+    os.textContent = 'Reason: ' + reasonText;
+  }
+  function rv4EvalFillDiagnostics(j) {
+    var el = $('rv4-eval-diagnostics');
+    var wrap = $('rv4-eval-diagnostics-wrap');
+    if (!el || !wrap) return;
+    el.innerHTML = '';
+    function line(t) {
+      var p = document.createElement('p');
+      p.textContent = t;
+      return p;
+    }
+    if (!j || !j.stages) {
+      wrap.hidden = true;
+      return;
+    }
+    var s5 = j.stages.stage_5_deterministic;
+    if (j.pass && s5 && s5.ok) {
+      var sig = s5.signals_total != null ? s5.signals_total : '—';
+      el.appendChild(line('Signals generated: ' + sig));
+      el.appendChild(line('Trades opened: ' + (s5.trades_opened != null ? s5.trades_opened : '—')));
+      el.appendChild(line('Trades closed: ' + (s5.trades_closed != null ? s5.trades_closed : '—')));
+      var pnlOk = s5.pnl_summary && typeof s5.pnl_summary === 'object';
+      el.appendChild(line('PnL: ' + (pnlOk ? 'present' : '—')));
+    } else if (j.errors && j.errors.length) {
+      j.errors.forEach(function (e) {
+        el.appendChild(line(String(e)));
+      });
+    } else {
+      el.appendChild(line('No additional diagnostics.'));
+    }
+    wrap.hidden = false;
+  }
+  function rv4EvalResetPanel() {
+    rv4EvalSetFileLine('—');
+    rv4EvalSetStatusLine('—');
+    var pw = $('rv4-eval-processing-wrap');
+    if (pw) pw.hidden = true;
+    var sr = $('rv4-eval-stage-rows');
+    if (sr) sr.innerHTML = '';
+    var ow = $('rv4-eval-outcome-wrap');
+    if (ow) ow.hidden = true;
+    var oc = $('rv4-eval-outcome');
+    var os = $('rv4-eval-outcome-sub');
+    if (oc) {
+      oc.textContent = '';
+      oc.className = 'dash-rv4-eval-outcome';
+    }
+    if (os) os.textContent = '';
+    var dw = $('rv4-eval-diagnostics-wrap');
+    if (dw) dw.hidden = true;
+    var di = $('rv4-eval-diagnostics');
+    if (di) di.innerHTML = '';
+    rv4IntakeSetRawReport('');
+  }
   function rv4IntakeEnterEvalMode() {
     var w = $('dash-view-renaissance');
     if (w) w.classList.add('rv4-eval-mode');
-    var bk = $('rv4-intake-back-kitchen');
-    if (bk) bk.hidden = false;
+    var main = $('dash-main-root');
+    if (main) main.classList.add('rv4-kitchen-eval');
+    var panel = $('rv4-eval-panel');
+    if (panel) panel.hidden = false;
   }
   function rv4IntakeExitEvalMode() {
     var w = $('dash-view-renaissance');
     if (w) w.classList.remove('rv4-eval-mode');
-    var bk = $('rv4-intake-back-kitchen');
-    if (bk) bk.hidden = true;
+    var main = $('dash-main-root');
+    if (main) main.classList.remove('rv4-kitchen-eval');
+    var panel = $('rv4-eval-panel');
+    if (panel) panel.hidden = true;
+    rv4EvalResetPanel();
   }
   function rv4IntakeClearOutput() {
-    var st = $('rv4-intake-stages');
-    var sum = $('rv4-intake-summary');
-    var ph = $('rv4-intake-processing-h');
-    if (st) {
-      st.innerHTML = '';
-      st.hidden = true;
-    }
-    if (ph) ph.hidden = true;
-    if (sum) {
-      sum.hidden = true;
-      sum.textContent = '';
-      sum.style.color = '';
-    }
-    rv4IntakeSetRawReport('');
-    rv4IntakeSetError('');
-    rv4IntakeHideUploadActivity();
-    rv4IntakeHideFileLoadedBanner();
+    rv4EvalResetPanel();
   }
   function rv4IntakeUpdateGate() {
     var btn = $('rv4-btn-policy-intake');
@@ -4829,30 +5063,31 @@
       rv4IntakeUpdateGate();
     });
   }
-  var rv4IntakeBack = $('rv4-intake-back-kitchen');
-  if (rv4IntakeBack) {
-    rv4IntakeBack.addEventListener('click', function () {
-      if (rv4IntakeInFlight) return;
-      rv4IntakeClearOutput();
-      rv4IntakeExitEvalMode();
-      rv4IntakeUpdateGate();
-    });
+  function rv4EvalBack() {
+    if (rv4IntakeInFlight) return;
+    rv4IntakeClearOutput();
+    rv4IntakeExitEvalMode();
+    rv4IntakeUpdateGate();
   }
+  var rv4EvalBackH = $('rv4-eval-back-header');
+  var rv4EvalBackF = $('rv4-eval-back-footer');
+  if (rv4EvalBackH) rv4EvalBackH.addEventListener('click', rv4EvalBack);
+  if (rv4EvalBackF) rv4EvalBackF.addEventListener('click', rv4EvalBack);
   var rv4pi = $('rv4-btn-policy-intake');
   if (rv4pi) {
     rv4pi.addEventListener('click', function () {
       var p = rv4IntakeGetPayload();
       if (!p || rv4IntakeInFlight) return;
-      var st = $('rv4-intake-stages');
-      var sum = $('rv4-intake-summary');
       var fd = new FormData();
       fd.append('policy_file', p.fileObj, p.fname);
+      var loadedName = p.readyLabel || p.fname;
       rv4IntakeEnterEvalMode();
+      rv4EvalResetPanel();
+      rv4EvalSetFileLine(loadedName);
+      rv4EvalSetStatusLine('Uploading…');
+      rv4EvalShowPendingProcessing();
       rv4IntakeInFlight = true;
       rv4IntakeUpdateGate();
-      rv4IntakeClearOutput();
-      rv4IntakeShowUploadSpinner();
-      var loadedName = p.readyLabel || p.fname;
       function rv4IntakeDone() {
         rv4IntakeInFlight = false;
         rv4IntakeUpdateGate();
@@ -4871,55 +5106,34 @@
             j = null;
           }
           if (!res.ok || res.status !== 200) {
-            rv4IntakeHideUploadActivity();
-            rv4IntakeHideFileLoadedBanner();
+            rv4EvalSetStatusLine('Failed');
+            var pw = $('rv4-eval-processing-wrap');
+            if (pw) pw.hidden = true;
+            var dwErr = $('rv4-eval-diagnostics-wrap');
+            if (dwErr) dwErr.hidden = true;
             var errMsg =
               (j && (j.error || j.detail)) ||
               (res.text ? String(res.text).slice(0, 1200) : 'HTTP ' + res.status);
-            rv4IntakeSetError(String(errMsg));
+            rv4EvalShowOutcomeFail(rv4EvalShortReasonFromText(errMsg));
             rv4IntakeSetRawReport(res.text || '(empty response)');
             return;
           }
           if (!j || typeof j !== 'object') {
-            rv4IntakeHideUploadActivity();
-            rv4IntakeHideFileLoadedBanner();
-            rv4IntakeSetError('Invalid JSON in server response.');
+            rv4EvalSetStatusLine('Failed');
+            var pw2 = $('rv4-eval-processing-wrap');
+            if (pw2) pw2.hidden = true;
+            rv4EvalShowOutcomeFail('Invalid JSON in server response.');
+            var dw2 = $('rv4-eval-diagnostics-wrap');
+            if (dw2) dw2.hidden = true;
             rv4IntakeSetRawReport(res.text || '');
             return;
           }
-          rv4IntakeHideUploadActivity();
-          rv4IntakeShowFileLoadedBanner(loadedName);
+          rv4EvalSetStatusLine('Upload complete');
           var S = j.stages || {};
-          var ph = $('rv4-intake-processing-h');
-          if (ph) ph.hidden = false;
-          if (st) {
-            st.innerHTML = '';
-            st.hidden = false;
-            var rows = [
-              { k: 'validation', label: 'Validation', text: rv4IntakeValidationTail(S) },
-              { k: 'norm', label: 'Normalization', text: rv4IntakeStageTail(S.stage_3_normalization) },
-              { k: 'test', label: 'Testing', text: rv4IntakeStageTail(S.stage_5_deterministic) },
-              { k: 'pf', label: 'Pass / fail', text: rv4IntakeStageTail(S.stage_6_viability) },
-            ];
-            rows.forEach(function (r, i) {
-              var li = document.createElement('li');
-              li.textContent = i + 1 + '. ' + r.label + r.text;
-              st.appendChild(li);
-            });
-          }
+          rv4EvalFillProcessingFromStages(S);
+          rv4EvalShowOutcome(j);
+          rv4EvalFillDiagnostics(j);
           rv4IntakeSetRawReport(JSON.stringify(j, null, 2));
-          if (sum) {
-            sum.hidden = false;
-            if (j.pass) {
-              sum.style.color = 'var(--text)';
-              sum.textContent =
-                'Outcome: PASS — candidate policy id: ' + (j.candidate_policy_id || j.submission_id || '—');
-            } else {
-              sum.style.color = '#7f1d1d';
-              sum.textContent =
-                'Outcome: FAIL — ' + (j.errors && j.errors.length ? j.errors.join('; ') : 'see detail below');
-            }
-          }
           if (j && j.submission_id && j.pass) {
             return fetch('/api/v1/renaissance/policy-intake/' + encodeURIComponent(j.submission_id))
               .then(function (r2) {
@@ -4931,9 +5145,12 @@
           }
         })
         .catch(function () {
-          rv4IntakeHideUploadActivity();
-          rv4IntakeHideFileLoadedBanner();
-          rv4IntakeSetError('Network error — could not reach the server.');
+          rv4EvalSetStatusLine('Failed');
+          var pw3 = $('rv4-eval-processing-wrap');
+          if (pw3) pw3.hidden = true;
+          rv4EvalShowOutcomeFail('Network error — could not reach the server.');
+          var dw3 = $('rv4-eval-diagnostics-wrap');
+          if (dw3) dw3.hidden = true;
           rv4IntakeSetRawReport('Request failed (network or server).');
         })
         .finally(function () {
