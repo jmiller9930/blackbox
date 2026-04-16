@@ -402,6 +402,14 @@ def build_kitchen_runtime_read_payload(
     )
     drift = drift_status(repo, et, row, rt)
     maybe_record_external_runtime_change(repo, et, row, rt)
+    lc_sum: dict[str, Any] = {"schema": "kitchen_policy_lifecycle_summary_v1", "by_submission_id": {}}
+    try:
+        from renaissance_v4.kitchen_policy_lifecycle import lifecycle_summary_for_target, reconcile_with_drift
+
+        reconcile_with_drift(repo, et, row, drift, rt)
+        lc_sum = lifecycle_summary_for_target(repo, et)
+    except Exception:
+        pass
     ledger_tail = ledger_entries_for_target(repo, et, limit=20)
     return {
         "schema": "kitchen_runtime_assignment_read_v3",
@@ -417,6 +425,7 @@ def build_kitchen_runtime_read_payload(
         },
         "runtime": rt,
         "drift": drift,
+        "lifecycle": lc_sum,
         "ledger_tail": ledger_tail,
         "ledger_note": "Append-only history (Kitchen assigns + external/runtime drift). Rollback must use registry + ledger.",
     }
@@ -530,6 +539,12 @@ def assign_mechanical_candidate(
                 "active_runtime_policy_id": active_pid,
                 "jupiter_allowed_policies": allowed_list,
             }
+        try:
+            from renaissance_v4.kitchen_policy_lifecycle import mark_assignment_requested
+
+            mark_assignment_requested(repo, submission_id, et, intent_runtime_policy_id=active_pid)
+        except Exception:
+            pass
         post = jupiter_post_active_policy(base, tok, active_pid)
         if not post.get("ok"):
             return {
@@ -595,6 +610,18 @@ def assign_mechanical_candidate(
             source="kitchen",
             detail="kitchen_assign_runtime_confirmed",
         )
+        try:
+            from renaissance_v4.kitchen_policy_lifecycle import mark_assigned_runtime_confirmed
+
+            mark_assigned_runtime_confirmed(
+                repo,
+                submission_id,
+                et,
+                runtime_policy_id=str(record.get("active_runtime_policy_id") or ""),
+                candidate_policy_id=str(record.get("candidate_policy_id") or ""),
+            )
+        except Exception:
+            pass
 
     out: dict[str, Any] = {"ok": True, **record}
     return out

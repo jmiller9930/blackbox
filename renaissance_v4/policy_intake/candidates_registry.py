@@ -14,6 +14,7 @@ from pathlib import Path
 from typing import Any
 
 from renaissance_v4.execution_targets import LABELS, normalize_execution_target
+from renaissance_v4.kitchen_policy_lifecycle import attach_lifecycle_to_candidate_rows, set_retired
 from renaissance_v4.policy_intake.storage import intake_root, read_json, submission_dir, write_json
 
 
@@ -42,6 +43,8 @@ def set_intake_candidate_active(repo: Path, submission_id: str, *, is_active: bo
         return {"ok": False, "error": "missing_candidate_policy_id", "submission_id": submission_id}
     rep["is_active"] = bool(is_active)
     write_json(rep_path, rep)
+    et = normalize_execution_target(str(rep.get("execution_target") or "jupiter"))
+    set_retired(repo, submission_id, et, retired=(rep["is_active"] is False))
     return {"ok": True, "submission_id": submission_id, "is_active": rep["is_active"]}
 
 
@@ -131,6 +134,6 @@ def list_intake_candidates(
                 continue
             seen.add(pid)
             collapsed.append(r)
-        return collapsed
+        return attach_lifecycle_to_candidate_rows(repo, collapsed)
 
-    return rows
+    return attach_lifecycle_to_candidate_rows(repo, rows)

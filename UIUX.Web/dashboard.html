@@ -316,6 +316,13 @@
       font-weight: 600;
       margin: 0.25rem 0 0;
     }
+    /* DV-069 — runtime-confirmed active policy (read-back), not intent alone */
+    .dash-rv4-lifecycle-running {
+      color: #16a34a;
+      font-size: 0.75rem;
+      margin-right: 0.3rem;
+      vertical-align: middle;
+    }
     button.dash-rv4-cand-assign-btn { font-size: 0.72rem; padding: 0.3rem 0.45rem; border-radius: var(--radius-md); border: 1px solid var(--panel-border); background: var(--panel); cursor: pointer; }
     button.dash-rv4-cand-assign-btn.primary { background: var(--accent); color: var(--accent-contrast); border-color: transparent; font-weight: 600; }
     button.dash-rv4-cand-assign-btn:disabled { opacity: 0.65; cursor: not-allowed; }
@@ -4999,6 +5006,11 @@
         var tl = String(r.execution_target_label || r.execution_target || '—').replace(/[<>&]/g, '');
         var cr = String(r.created_utc || '—').replace(/[<>&]/g, '');
         var st = String(r.intake_status || 'pass').replace(/[<>&]/g, '');
+        var lc = r.lifecycle || {};
+        var runningGreen = String(lc.state || '') === 'assigned_runtime_confirmed';
+        var runDot = runningGreen
+          ? '<span class="dash-rv4-lifecycle-running" title="Runtime confirmed active (read-back)">&#9679;</span> '
+          : '';
         var sel = rv4SelectedCandSid === r.submission_id;
         var isArch = r.is_active === false;
         var dup = parseInt(String(r.same_policy_submission_count || '1'), 10);
@@ -5075,6 +5087,7 @@
           '">' +
           (sel ? 'Selected' : 'Select') +
           '</button></td><td>' +
+          runDot +
           cid +
           dupBadge +
           '</td><td>' +

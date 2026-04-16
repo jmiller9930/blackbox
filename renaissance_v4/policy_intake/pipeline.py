@@ -28,6 +28,16 @@ from renaissance_v4.policy_spec.normalize import normalize_policy
 from renaissance_v4.policy_spec.policy_spec_v1 import policy_spec_v1_validate_minimal
 
 
+def _finalize_intake_lifecycle(repo_root: Path, report: dict[str, Any]) -> None:
+    """DV-069 — persist shared lifecycle row for this intake outcome (never raises)."""
+    try:
+        from renaissance_v4.kitchen_policy_lifecycle import apply_intake_report_to_lifecycle
+
+        apply_intake_report_to_lifecycle(repo_root, report)
+    except Exception:
+        pass
+
+
 def _reject_xml(name: str) -> bool:
     return name.lower().endswith(".xml")
 
@@ -164,6 +174,7 @@ def run_intake_pipeline(
         report["stages"]["stage_1_intake"] = {"ok": False, "detail": "XML uploads are not supported"}
         report["errors"].append("unsupported_format: XML")
         write_json(paths["report"] / "intake_report.json", report)
+        _finalize_intake_lifecycle(repo_root, report)
         return report
 
     # Stage 1
@@ -174,6 +185,7 @@ def run_intake_pipeline(
         report["stages"]["stage_1_intake"] = {"ok": False, "detail": str(e)}
         report["errors"].append(f"intake_storage_failed:{e}")
         write_json(paths["report"] / "intake_report.json", report)
+        _finalize_intake_lifecycle(repo_root, report)
         return report
 
     report["stages"]["stage_1_intake"] = {
@@ -199,6 +211,7 @@ def run_intake_pipeline(
         if not ok_ts:
             report["errors"].append(f"typescript_compile_failed:{msg[:500]}")
             write_json(paths["report"] / "intake_report.json", report)
+            _finalize_intake_lifecycle(repo_root, report)
             return report
 
         report["stages"]["stage_3_normalization"] = {"status": "in_progress"}
@@ -227,6 +240,7 @@ def run_intake_pipeline(
             report["stages"]["stage_3_normalization"] = {"ok": False, "errors": norm_errs}
             report["errors"].extend(norm_errs)
             write_json(paths["report"] / "intake_report.json", report)
+            _finalize_intake_lifecycle(repo_root, report)
             return report
         report["stages"]["stage_3_normalization"] = {"ok": True, "detail": "derived_from_ts_metadata_heuristic"}
 
@@ -240,6 +254,7 @@ def run_intake_pipeline(
                     report["stages"]["stage_2_structural"] = {"ok": False, "detail": "PyYAML not installed on API host"}
                     report["errors"].append("missing_pyyaml")
                     write_json(paths["report"] / "intake_report.json", report)
+                    _finalize_intake_lifecycle(repo_root, report)
                     return report
                 data = yaml.safe_load(raw_bytes.decode("utf-8", errors="replace"))
             else:
@@ -250,6 +265,7 @@ def run_intake_pipeline(
             report["stages"]["stage_2_structural"] = {"ok": False, "detail": str(e)}
             report["errors"].append(f"parse_failed:{e}")
             write_json(paths["report"] / "intake_report.json", report)
+            _finalize_intake_lifecycle(repo_root, report)
             return report
         report["stages"]["stage_2_structural"] = {"ok": True, "detail": "parsed"}
 
@@ -260,12 +276,14 @@ def run_intake_pipeline(
             report["stages"]["stage_3_normalization"] = {"ok": False, "detail": str(e)}
             report["errors"].append(f"normalization_failed:{e}")
             write_json(paths["report"] / "intake_report.json", report)
+            _finalize_intake_lifecycle(repo_root, report)
             return report
         report["stages"]["stage_3_normalization"] = {"ok": True}
     else:
         report["errors"].append("unsupported_file_extension")
         report["stages"]["stage_2_structural"] = {"ok": False, "detail": "Unsupported extension; use .ts, .yaml, .yml, or .json"}
         write_json(paths["report"] / "intake_report.json", report)
+        _finalize_intake_lifecycle(repo_root, report)
         return report
 
     assert canonical is not None
@@ -277,6 +295,7 @@ def run_intake_pipeline(
     if not ok_s:
         report["errors"].extend(static_errs)
         write_json(paths["report"] / "intake_report.json", report)
+        _finalize_intake_lifecycle(repo_root, report)
         return report
 
     canonical["indicators"] = coerce_indicators_section(canonical.get("indicators"))
@@ -299,6 +318,7 @@ def run_intake_pipeline(
         report["errors"].append(det["error"])
         report["pass"] = False
         write_json(paths["report"] / "intake_report.json", report)
+        _finalize_intake_lifecycle(repo_root, report)
         return report
 
     det = _run_ts_deterministic(
@@ -312,6 +332,7 @@ def run_intake_pipeline(
     if not det.get("ok"):
         report["errors"].append(str(det.get("error") or "deterministic_failed"))
         write_json(paths["report"] / "intake_report.json", report)
+        _finalize_intake_lifecycle(repo_root, report)
         return report
 
     sig = int(det.get("signals_total") or 0)
@@ -346,6 +367,7 @@ def run_intake_pipeline(
         if not pnl_ok:
             report["errors"].append("invalid_or_nan_pnl")
         write_json(paths["report"] / "intake_report.json", report)
+        _finalize_intake_lifecycle(repo_root, report)
         return report
 
     cid = str(canonical.get("identity", {}).get("policy_id") or f"kitchen_candidate_{submission_id[:16]}")
@@ -361,4 +383,5 @@ def run_intake_pipeline(
         canonical["deployment_metadata"]["promotion_eligible"] = False
     write_json(paths["canonical"] / "policy_spec_v1.json", canonical)
     write_json(paths["report"] / "intake_report.json", report)
+    _finalize_intake_lifecycle(repo_root, report)
     return report
