@@ -27,6 +27,7 @@ Usage:
   python3 scripts/jupsync.py --skip-push          # remote pull + compose only
   python3 scripts/jupsync.py --skip-health        # do not verify jupiter /health after deploy
   python3 scripts/jupsync.py --full-stack         # also rebuild/restart UIUX.Web (dashboard nginx/api)
+  python3 scripts/jupsync.py --jupiter-https      # also compose jupiter-https (Caddy on :8443 → :707)
 
 Reachability (important):
   Post-deploy health uses **the same URL operators use in a browser**, not loopback. The remote script
@@ -34,7 +35,10 @@ Reachability (important):
   ``http://clawbot.a51.corp:707/health``). You can also run that ``curl`` yourself from any machine that
   reaches the lab (VPN/LAN) — it is **not** a “local Mac” check. Public example:
   ``http://jupv3.greyllc.net:737/health`` — set ``JUPSYNC_JUPITER_HEALTH_URL`` if your proof URL differs.
-  Use **http** only (no TLS on the Node app on 707 unless you terminate TLS in front).
+  For plain **http** :707 use an **http** health URL. If you use the Jupiter-only HTTPS sidecar
+  (``docker-compose.jupiter-https.yml``, host **:8443**), set e.g.
+  ``JUPSYNC_JUPITER_HEALTH_URL=https://clawbot.a51.corp:8443/health`` — the script uses ``curl -k``
+  for **https** URLs (self-signed Caddy ``tls internal``).
 
 Health verification runs **on the remote** after ``docker compose`` (retries with backoff). If it fails,
 the script exits **non-zero** and prints ``jupiter-web`` logs — unlike older versions that always exited 0.
@@ -146,19 +150,35 @@ def _jupiter_health_url() -> str:
     return "http://clawbot.a51.corp:707/health"
 
 
-def _bash_jupiter_health(remote_dir_name: str, health_url: str) -> str:
+def _bash_jupiter_health(
+    remote_dir_name: str, health_url: str, *, jupiter_https: bool
+) -> str:
     """Bash fragment: retry GET health_url; exit 1 if never OK (runs on remote over SSH)."""
     attempts = os.environ.get("JUPSYNC_HEALTH_ATTEMPTS", "25").strip() or "25"
     sleep_s = os.environ.get("JUPSYNC_HEALTH_SLEEP_SEC", "2").strip() or "2"
     uq = sh_quote(health_url)
+    # Self-signed Jupiter HTTPS sidecar (Caddy tls internal) needs curl -k
+    curl_flags = "-kSf" if health_url.strip().lower().startswith("https://") else "-sf"
+    curl_show = "curl -kS" if health_url.strip().lower().startswith("https://") else "curl -sS"
+    if jupiter_https:
+        diag = f"""
+  cd ~/{remote_dir_name}/vscode-test/seanv3
+  docker compose -f docker-compose.yml -f docker-compose.jupiter-https.yml ps -a >&2 || true
+  docker compose -f docker-compose.yml -f docker-compose.jupiter-https.yml logs --tail 50 jupiter-web >&2 || true
+  docker compose -f docker-compose.yml -f docker-compose.jupiter-https.yml logs --tail 30 jupiter-https >&2 || true"""
+    else:
+        diag = f"""
+  cd ~/{remote_dir_name}/vscode-test/seanv3
+  docker compose ps -a >&2 || true
+  docker compose logs --tail 50 jupiter-web >&2 || true"""
     return f"""
 echo "--- jupiter /health (retry until OK or fail) ---"
 echo "  URL: {health_url}"
 _ok=0
 for _i in $(seq 1 {attempts}); do
-  if curl -sf --connect-timeout 3 {uq} 2>/dev/null | grep -q '"ok"'; then
+  if curl {curl_flags} --connect-timeout 3 {uq} 2>/dev/null | grep -q '"ok"'; then
     echo "jupiter-web health OK (attempt $_i)"
-    curl -sS --connect-timeout 5 {uq}
+    {curl_show} --connect-timeout 5 {uq}
     echo ""
     _ok=1
     break
@@ -168,9 +188,7 @@ for _i in $(seq 1 {attempts}); do
 done
 if [ "$_ok" -ne 1 ]; then
   echo "jupsync: ERROR — {health_url} never became healthy." >&2
-  cd ~/{remote_dir_name}/vscode-test/seanv3
-  docker compose ps -a >&2 || true
-  docker compose logs --tail 50 jupiter-web >&2 || true
+{diag}
   exit 1
 fi
 """
@@ -183,8 +201,13 @@ def _remote_script(
     health_check: bool,
     full_stack: bool,
     health_url: str,
+    jupiter_https: bool,
 ) -> str:
-    health = _bash_jupiter_health(remote_dir_name, health_url) if health_check else ""
+    health = (
+        _bash_jupiter_health(remote_dir_name, health_url, jupiter_https=jupiter_https)
+        if health_check
+        else ""
+    )
 
     ui_block = ""
     if full_stack:
@@ -197,6 +220,14 @@ docker compose restart api
 docker compose ps
 """
 
+    compose = "docker compose up -d --build"
+    compose_ps = "docker compose ps"
+    if jupiter_https:
+        compose = (
+            "docker compose -f docker-compose.yml -f docker-compose.jupiter-https.yml up -d --build"
+        )
+        compose_ps = "docker compose -f docker-compose.yml -f docker-compose.jupiter-https.yml ps"
+
     return f"""set -eu
 cd ~/{remote_dir_name}
 git fetch origin
@@ -204,8 +235,8 @@ git pull origin {pull_branch}
 echo "REMOTE_HEAD=$(git rev-parse HEAD)"
 echo "--- SeanV3 + jupiter-web (vscode-test/seanv3) ---"
 cd vscode-test/seanv3
-docker compose up -d --build
-docker compose ps
+{compose}
+{compose_ps}
 {ui_block}
 {health}
 """
@@ -219,6 +250,7 @@ def _remote_jupsync(
     dry_run: bool,
     health_check: bool,
     full_stack: bool,
+    jupiter_https: bool,
 ) -> None:
     body = _remote_script(
         remote_dir_name,
@@ -226,6 +258,7 @@ def _remote_jupsync(
         health_check=health_check,
         full_stack=full_stack,
         health_url=_jupiter_health_url(),
+        jupiter_https=jupiter_https,
     )
     if dry_run:
         print("[dry-run] ssh would run on remote:\n---")
@@ -289,6 +322,12 @@ def main() -> None:
         action="store_true",
         help="After SeanV3 compose, also build web + up + restart api in UIUX.Web (one SSH session)",
     )
+    ap.add_argument(
+        "--jupiter-https",
+        action="store_true",
+        help="Use SeanV3 compose with docker-compose.jupiter-https.yml (Caddy TLS on host :8443 → :707); "
+        "does not change UIUX.Web. Set JUPSYNC_JUPITER_HEALTH_URL to https://…:8443/health if health checks use HTTPS.",
+    )
     args = ap.parse_args()
 
     repo = _find_git_root()
@@ -313,6 +352,7 @@ def main() -> None:
         dry_run=args.dry_run,
         health_check=not args.skip_health,
         full_stack=args.full_stack,
+        jupiter_https=args.jupiter_https,
     )
 
 

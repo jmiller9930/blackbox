@@ -37,9 +37,30 @@ Operator **`JUPITER_OPERATOR_TOKEN`** (Bearer) for **`POST /api/v1/jupiter/activ
 
 **Web vs TUI (same backend, two displays):** see [`JUPITER_WEB_TUI_ALIGNMENT.md`](JUPITER_WEB_TUI_ALIGNMENT.md). The Jupiter page mirrors `preflight_pyth_tui.py` panels (preflight, policy, wallet, paper ledger, parity, trades, oracle). Compose mounts **`../../` → `/repo:ro`** for policy registry + execution ledger; override **`JUPITER_WEB_REFRESH_SEC`** (default `3`, `0` disables HTML auto-refresh).
 
+**HTTPS — browser “Not secure” / password-field warning**
+
+Jupiter’s Node process serves **plain HTTP** on **`JUPITER_WEB_PORT`** (default 707). Browsers warn on password fields over HTTP because **credentials cross the wire unencrypted to that origin**. That is **not** something you fix in HTML or app code — you fix **transport** with **TLS**. If operators can reach the UI from the **public Internet** (not only VPN/LAN), treat **HTTPS as required** for login and session cookies — not optional.
+
+- **In-repo, Jupiter-only (does not touch BlackBox / `UIUX.Web`):** a separate compose file runs **Caddy** on host **`8443`** (default) and proxies to **`jupiter-web` on :707**. BlackBox can keep **443** for its own nginx; no shared config.
+
+  ```bash
+  cd vscode-test/seanv3
+  docker compose -f docker-compose.yml -f docker-compose.jupiter-https.yml up -d --build
+  ```
+
+  Operators use **`https://<host>:8443/dashboard`**. Caddy uses **`tls internal`** (self-signed) until you replace **`jupiter-https/Caddyfile`** with a public hostname + real certs (see **`jupiter-https/Caddyfile.public.example`**). Override host port with **`JUPITER_HTTPS_PORT`** (e.g. `8443`).
+
+  **`jupsync.py`** (optional): **`python3 scripts/jupsync.py --jupiter-https`** runs the same compose merge on the remote host. Set **`JUPITER_PUBLIC_BASE_URL=https://<host>:8443`**, **`JUPITER_SESSION_COOKIE_SECURE=1`** in **`seanv3/.env`**, and **`JUPSYNC_JUPITER_HEALTH_URL=https://<host>:8443/health`** (health check uses **`curl -k`** for self-signed).
+
+- **`JUPITER_PUBLIC_BASE_URL`** — must match the URL operators use (include **`:8443`** when using the sidecar).
+
+- **`JUPITER_SESSION_COOKIE_SECURE=1`** — set **only** when everyone reaches the UI over **HTTPS**; leave unset for direct **`http://…:707`** only.
+
+- **Bare-metal nginx on the host** (optional): **`nginx-jupiter-https.example.conf`** — copy to the host’s nginx, **not** into `UIUX.Web`; use only if you prefer system nginx instead of the Caddy container.
+
 **Troubleshooting — browser says “problem” / can’t load :707**
 
-1. **Use `http://` only.** Jupiter does **not** speak TLS on 707. **`https://…:707`** will fail—use **`http://clawbot.a51.corp:707/`** (or your public URL).
+1. **Direct to port 707:** use **`http://` only** — Jupiter does **not** terminate TLS on 707, so **`https://…:707`** fails. **`https://…:8443`** is correct when the **Jupiter-only** Caddy sidecar is running (see **HTTPS** above).
 2. **Prove reachability the same way everywhere:** `curl -sS http://clawbot.a51.corp:707/health` from any machine on VPN/LAN (expect JSON with `"ok":true`). Or over SSH in one shot: `ssh jmiller@clawbot.a51.corp 'curl -sS http://clawbot.a51.corp:707/health'`. If that fails, on **clawbot** run **`docker compose ps`** and **`docker logs jupiter-web --tail 80`** in **`~/blackbox/vscode-test/seanv3`**, then **`docker compose up -d --build`** after **`git pull`** succeeds.
 3. **`jupsync.py`** uses the same default health URL (`JUPSYNC_JUPITER_HEALTH_URL`, default `http://clawbot.a51.corp:707/health`) on the remote host after deploy — not `127.0.0.1`.
 4. If **`git pull`** on clawbot was blocked (e.g. untracked files), fix the merge and redeploy before re-testing.

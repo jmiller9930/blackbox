@@ -1,0 +1,26 @@
+# Jupiter HTTPS sidecar — ONLY this stack; does NOT modify UIUX.Web / BlackBox nginx.
+#
+# jupiter-web keeps plain HTTP on host :707. This container binds host :8443 (default) and
+# terminates TLS, then proxies to host.docker.internal:707.
+#
+#   cd vscode-test/seanv3
+#   docker compose -f docker-compose.yml -f docker-compose.jupiter-https.yml up -d
+#
+# Browse: https://<host>:8443/dashboard  (self-signed warning until you use real certs / trust CA)
+#
+# Env: JUPITER_PUBLIC_BASE_URL=https://<host>:8443  and  JUPITER_SESSION_COOKIE_SECURE=1  in .env
+# Optional: JUPITER_HTTPS_PORT=8443  (host port mapped to container 443)
+
+services:
+  jupiter-https:
+    image: caddy:2-alpine
+    container_name: jupiter-https
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    ports:
+      - "${JUPITER_HTTPS_PORT:-8443}:443"
+    volumes:
+      - ./jupiter-https/Caddyfile:/etc/caddy/Caddyfile:ro
+    depends_on:
+      - jupiter-web
+    restart: unless-stopped
