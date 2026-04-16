@@ -280,6 +280,11 @@ def validate_indicators_section(section: Any) -> list[str]:
         if ref2 and ref2 not in decl_set:
             errs.append(f"{gl}: reference_indicator_id must match a declaration id")
 
+    # DV-064: no silent declaration-only / unsupported indicators in intake
+    from renaissance_v4.policy_spec.indicator_mechanics import mechanical_support_errors_for_declarations
+
+    errs.extend(mechanical_support_errors_for_declarations(decls))
+
     return errs
 
 

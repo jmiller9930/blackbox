@@ -8,9 +8,13 @@
  * validates structure (ids, kinds in frozen vocabulary, gate refs) and echoes policy_indicators on stdout.
  * Policies may read process.env.RV4_POLICY_INDICATORS_JSON in Node for the same declarations.
  *
+ * DV-064: Optional 5th argument ``ctx`` = { schemaVersion, indicators } where ``indicators`` maps
+ * declaration id → numeric value or composite object at the **current** bar (end of slice).
+ *
  * Usage: node run_ts_intake_eval.mjs <absolute-path-to.ts> <bar_count>
  * stdout: one JSON line
  */
+import { buildSeriesByDeclarationId, indicatorsAtBar } from './indicator_engine.mjs';
 import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { mkdtempSync, readFileSync } from 'node:fs';
@@ -172,14 +176,34 @@ async function main() {
     vols.push(800 + (i % 40));
   }
 
-  let longBars = 0;
-  let shortBars = 0;
-  for (let end = minBars; end <= nBars; end++) {
+  let seriesById = {};
+  try {
+    const raw = process.env.RV4_POLICY_INDICATORS_JSON;
+    if (raw && String(raw).trim()) {
+      const o = JSON.parse(raw);
+      const decls = Array.isArray(o.declarations) ? o.declarations : [];
+      seriesById = buildSeriesByDeclarationId(decls, closes, highs, lows, vols);
+    }
+  } catch (e) {
+    seriesById = {};
+  }
+
+  function callPolicy(end) {
     const sl = closes.slice(0, end);
     const sh = highs.slice(0, end);
     const slo = lows.slice(0, end);
     const sv = vols.slice(0, end);
-    const out = fn(sl, sh, slo, sv);
+    const ctx = {
+      schemaVersion: 'policy_indicators_v1',
+      indicators: indicatorsAtBar(seriesById, end - 1),
+    };
+    return fn.length >= 5 ? fn(sl, sh, slo, sv, ctx) : fn(sl, sh, slo, sv);
+  }
+
+  let longBars = 0;
+  let shortBars = 0;
+  for (let end = minBars; end <= nBars; end++) {
+    const out = callPolicy(end);
     if (out && out.longSignal) longBars++;
     if (out && out.shortSignal) shortBars++;
   }
@@ -193,11 +217,7 @@ async function main() {
   let firstEnd = -1;
   let firstOut = null;
   for (let end = minBars; end <= nBars; end++) {
-    const sl = closes.slice(0, end);
-    const sh = highs.slice(0, end);
-    const slo = lows.slice(0, end);
-    const sv = vols.slice(0, end);
-    const out = fn(sl, sh, slo, sv);
+    const out = callPolicy(end);
     if (out && (out.longSignal || out.shortSignal)) {
       firstEnd = end;
       firstOut = out;
@@ -225,7 +245,7 @@ async function main() {
   }
 
   /** Proves which harness logic ran (DV-060); integer OHLC series — not sin/float. */
-  const HARNESS_REVISION = 'int_ohlc_v2';
+  const HARNESS_REVISION = 'int_ohlc_v3';
 
   const out = {
     ok: true,
@@ -239,6 +259,11 @@ async function main() {
     trades_closed: tradesClosed,
     pnl_summary: { realized: Number.isFinite(pnlSum) ? pnlSum : 0, currency: 'abstract' },
     policy_indicators: summarizePolicyIndicatorsFromEnv(),
+    indicator_evaluation_context: {
+      mechanics_revision: 'indicator_mechanics_v1',
+      series_ids: Object.keys(seriesById).filter((k) => !k.startsWith('_')),
+      last_bar_indicators: indicatorsAtBar(seriesById, nBars - 1),
+    },
   };
 
   if (process.env.RV4_INTAKE_HARNESS_DEBUG === '1') {
@@ -261,7 +286,7 @@ async function main() {
       ohlc_first3_close: closes.slice(0, 3),
       ohlc_last3_close: closes.slice(-3),
       probe_end_bars: endProbe,
-      probe_policy_out: fn(slP, shP, sloP, svP),
+      probe_policy_out: callPolicy(endProbe),
     };
   }
 

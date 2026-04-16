@@ -18,6 +18,7 @@ from typing import Any
 from renaissance_v4.execution_targets import BASELINE_COMPARED_LABELS, LABELS, normalize_execution_target
 from renaissance_v4.policy_intake.storage import ensure_submission_layout, write_json
 from renaissance_v4.policy_intake.ts_validate import validate_typescript_file
+from renaissance_v4.policy_spec.indicator_mechanics import mechanical_support_json_for_harness
 from renaissance_v4.policy_spec.indicators_v1 import (
     coerce_indicators_section,
     indicators_section_json_for_harness,
@@ -29,6 +30,17 @@ from renaissance_v4.policy_spec.policy_spec_v1 import policy_spec_v1_validate_mi
 
 def _reject_xml(name: str) -> bool:
     return name.lower().endswith(".xml")
+
+
+def _extract_rv4_policy_indicators_json_from_ts(text: str) -> dict[str, Any] | None:
+    """Parse optional /* RV4_POLICY_INDICATORS { ... } */ block (DV-064)."""
+    m = re.search(r"/\*\s*RV4_POLICY_INDICATORS\s*(\{[\s\S]*?\})\s*\*/", text)
+    if not m:
+        return None
+    try:
+        return json.loads(m.group(1))
+    except json.JSONDecodeError:
+        return None
 
 
 def _detect_kind(filename: str) -> str:
@@ -96,6 +108,7 @@ def _run_ts_deterministic(
     env["BLACKBOX_EXECUTION_TARGET"] = execution_target
     ind = coerce_indicators_section(indicators_section)
     env["RV4_POLICY_INDICATORS_JSON"] = indicators_section_json_for_harness(ind)
+    env["RV4_MECHANICAL_REGISTRY_JSON"] = mechanical_support_json_for_harness()
     r = subprocess.run(
         ["node", str(harness), str(ts_path.resolve()), str(int(bar_count))],
         cwd=str(repo),
@@ -202,6 +215,9 @@ def run_intake_pipeline(
                 "timeframe": "5m",
                 "signal_type": "other",
             }
+            embedded = _extract_rv4_policy_indicators_json_from_ts(text)
+            if embedded is not None:
+                loose["indicators"] = embedded
             canonical = normalize_policy(loose)
             canonical.setdefault("source_submission", {})
             if isinstance(canonical["source_submission"], dict):

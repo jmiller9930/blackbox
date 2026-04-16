@@ -12,6 +12,16 @@
 | **Validation** | **Declared** kinds must be in the frozen set and params must match the kind. **Undeclared** kinds are not validated. **Empty** `declarations` is valid. Unknown keys under `indicators` are rejected. Implementation: `validate_indicators_section()`. |
 | **Harness** | Intake sets **`RV4_POLICY_INDICATORS_JSON`** for the Node process; **`run_ts_intake_eval.mjs`** echoes **`policy_indicators`** on the harness JSON line (structure mirror + kind set). |
 
+## DV-064 — Indicator mechanics (end-to-end)
+
+| Field | Answer |
+|--------|--------|
+| **RE:** | DV-ARCH-INDICATOR-MECHANICS-064 |
+| **Mechanical registry** | **`MECHANICAL_CLASS_BY_KIND`** in **`renaissance_v4/policy_spec/indicator_mechanics.py`**. |
+| **Intake failure text** | **`indicator_declared_but_not_mechanically_supported: \<kind\>`** when a declared kind is not `mechanically_supported`. |
+| **Harness** | **`indicator_engine.mjs`** computes series from synthetic OHLCV; **`run_ts_intake_eval.mjs`** passes **`ctx.indicators`** as the optional 5th argument to **`generateSignalFromOhlc`**. |
+| **Extension** | Add vocabulary + params + class + **`indicator_engine.mjs`** implementation — PolicySpecV1 **`indicators`** shape unchanged. |
+
 ## Response header (046)
 
 | Field | Value |

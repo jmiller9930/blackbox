@@ -1,5 +1,11 @@
 """Canonical policy spec (PolicySpecV1) and normalization."""
 
+from renaissance_v4.policy_spec.indicator_mechanics import (
+    MECHANICAL_CLASS_BY_KIND,
+    MechanicalClass,
+    assert_registry_covers_vocabulary,
+    mechanical_support_errors_for_declarations,
+)
 from renaissance_v4.policy_spec.indicators_v1 import (
     INDICATOR_KIND_VOCABULARY,
     INDICATORS_SCHEMA_VERSION,
@@ -13,8 +19,12 @@ from renaissance_v4.policy_spec.policy_spec_v1 import PolicySpecV1, policy_spec_
 __all__ = [
     "INDICATOR_KIND_VOCABULARY",
     "INDICATORS_SCHEMA_VERSION",
+    "MECHANICAL_CLASS_BY_KIND",
+    "MechanicalClass",
+    "assert_registry_covers_vocabulary",
     "coerce_indicators_section",
     "default_indicators_section",
+    "mechanical_support_errors_for_declarations",
     "normalize_policy",
     "PolicySpecV1",
     "policy_spec_v1_validate_minimal",
