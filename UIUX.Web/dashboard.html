@@ -5527,6 +5527,8 @@
   var rv4PasteToggle = $('rv4-intake-paste-toggle');
   var rv4PastePanel = $('rv4-intake-paste-panel');
   var rv4IntakeInFlight = false;
+  /** Set during rv4IntakeRunEvaluation — paste submit completed with a valid evaluation JSON (DV-071). */
+  var rv4IntakeLastPasteRunCompletedOk = false;
   function rv4IntakeGetPayload() {
     var fin = $('rv4-intake-file');
     var pasteTa = $('rv4-intake-paste');
@@ -5788,6 +5790,32 @@
   function rv4IntakeClearOutput() {
     rv4EvalResetPanel();
   }
+  /**
+   * DV-071 — After a completed paste submission, clear buffer, exit paste mode, restore default intake chrome.
+   * Does not close the evaluation result panel (operator still sees PASS/FAIL).
+   */
+  function rv4IntakeResetPasteAfterSubmit() {
+    var ta = $('rv4-intake-paste');
+    var pp = $('rv4-intake-paste-panel');
+    var togg = $('rv4-intake-paste-toggle');
+    if (ta) ta.value = '';
+    if (pp) pp.hidden = true;
+    if (togg) {
+      togg.setAttribute('aria-expanded', 'false');
+      togg.textContent = 'Paste instead';
+    }
+    var fin = $('rv4-intake-file');
+    if (fin) fin.value = '';
+    var strip = $('rv4-intake-selection-strip');
+    var sn = $('rv4-intake-selection-name');
+    var sm = $('rv4-intake-selection-meta');
+    if (strip) strip.hidden = true;
+    if (sn) sn.textContent = '—';
+    if (sm) sm.textContent = '';
+    var fileLbl = $('rv4-intake-file-label');
+    if (fileLbl) fileLbl.classList.remove('dash-rv4-intake-has-file');
+    rv4IntakeUpdateGate();
+  }
   function rv4IntakeIsPasteMode() {
     var pp = $('rv4-intake-paste-panel');
     var ta = $('rv4-intake-paste');
@@ -5859,6 +5887,15 @@
   function rv4IntakeRunEvaluation() {
     var p = rv4IntakeGetPayload();
     if (!p || rv4IntakeInFlight) return;
+    var ppStart = $('rv4-intake-paste-panel');
+    var taStart = $('rv4-intake-paste');
+    var wasPasteSubmit = !!(
+      ppStart &&
+      !ppStart.hidden &&
+      taStart &&
+      String(taStart.value || '').trim().length > 0
+    );
+    rv4IntakeLastPasteRunCompletedOk = false;
     var fd = new FormData();
     fd.append('policy_file', p.fileObj, p.fname);
     fd.append('execution_target', rv4GetExecutionTarget());
@@ -5914,6 +5951,7 @@
           rv4IntakeSetRawReport(res.text || '');
           return;
         }
+        rv4IntakeLastPasteRunCompletedOk = true;
         rv4EvalSetTargetLines(rv4GetExecutionTarget(), j);
         rv4EvalSetStatusLine('Upload complete');
         var S = j.stages || {};
@@ -5942,6 +5980,9 @@
       })
       .finally(function () {
         rv4IntakeDone();
+        if (wasPasteSubmit && rv4IntakeLastPasteRunCompletedOk) {
+          rv4IntakeResetPasteAfterSubmit();
+        }
         rv4LoadCandidates();
       });
   }

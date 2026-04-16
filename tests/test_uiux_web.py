@@ -120,6 +120,14 @@ def test_dashboard_dv070_kitchen_assign_per_row_and_generalized_endpoint() -> No
     assert "rv4-btn-kitchen-assign-runtime" not in text
 
 
+def test_dashboard_dv071_paste_reset_after_submit() -> None:
+    """DV-071 — paste buffer cleared and paste mode closed after completed paste evaluation."""
+    text = (WEB / "dashboard.html").read_text(encoding="utf-8")
+    assert "rv4IntakeResetPasteAfterSubmit" in text
+    assert "wasPasteSubmit" in text
+    assert "rv4IntakeLastPasteRunCompletedOk" in text
+
+
 def test_app_js_three_dev_roles_and_staff_helpers() -> None:
     text = (WEB / "app.js").read_text(encoding="utf-8")
     assert "internal_member" in text
