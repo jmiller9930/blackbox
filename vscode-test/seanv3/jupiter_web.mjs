@@ -2043,8 +2043,8 @@ function htmlPage(v) {
     .jw-st-muted { color: #8b949e; }
     .jw-text-scale-float {
       position: fixed;
-      top: max(0.45rem, env(safe-area-inset-top, 0px));
-      right: max(0.45rem, env(safe-area-inset-right, 0px));
+      top: max(8px, env(safe-area-inset-top, 0px));
+      right: max(8px, env(safe-area-inset-right, 0px));
       z-index: 1500;
       display: flex;
       flex-direction: column;
@@ -2060,9 +2060,9 @@ function htmlPage(v) {
       display: flex;
       align-items: center;
       justify-content: center;
-      min-width: 2.1rem;
-      min-height: 1.65rem;
-      padding: 0.12rem 0.28rem;
+      min-width: 34px;
+      min-height: 26px;
+      padding: 2px 6px;
       border: 1px solid #30363d;
       border-radius: 3px;
       background: rgba(22, 27, 34, 0.94);
