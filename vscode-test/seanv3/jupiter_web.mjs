@@ -1961,10 +1961,45 @@ function htmlPage(v) {
     }
     .wrap { width: 100%; max-width: 120ch; position: relative; z-index: 1; }
     .panel { border: 1px solid #3d3d3d; border-radius: 2px; padding: 0.75rem 1rem; margin-bottom: 0.75rem; background: #121212; }
-    .panel h2.jw-panel-head { font-size: 0.7rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: #8b949e; margin: 0 0 0.5rem 0; border-bottom: 1px solid #30363d; padding-bottom: 0.35rem; }
-    .jw-panel-toggle { all: unset; display: flex; align-items: center; gap: 0.4rem; cursor: pointer; width: 100%; box-sizing: border-box; font: inherit; font-size: 0.7rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: #8b949e; }
+    .panel h2.jw-panel-head {
+      font-family: ui-monospace, Menlo, Consolas, monospace;
+      font-size: 0.7rem;
+      font-weight: 600;
+      line-height: 1.3;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: #8b949e;
+      margin: 0 0 0.5rem 0;
+      border-bottom: 1px solid #30363d;
+      padding-bottom: 0.35rem;
+    }
+    .jw-panel-toggle {
+      all: unset;
+      display: flex;
+      align-items: center;
+      gap: 0.4rem;
+      cursor: pointer;
+      width: 100%;
+      box-sizing: border-box;
+      font-family: ui-monospace, Menlo, Consolas, monospace;
+      font-size: 0.7rem;
+      font-weight: 600;
+      line-height: 1.3;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: #8b949e;
+    }
     .jw-panel-toggle:hover { color: #c9d1d9; }
-    .jw-caret { display: inline-block; min-width: 1em; text-align: center; color: #58a6ff; font-size: 0.7rem; line-height: 1; }
+    .jw-caret {
+      display: inline-block;
+      min-width: 1em;
+      text-align: center;
+      color: #58a6ff;
+      font-family: ui-monospace, Menlo, Consolas, monospace;
+      font-size: 0.7rem;
+      font-weight: 600;
+      line-height: 1.3;
+    }
     .jw-policy-box { border-radius: 4px; padding: 0.5rem 0.65rem; margin: 0.35rem 0; border: 1px solid #30363d; transition: background 0.15s, border-color 0.15s; }
     .jw-policy-idle { background: #f6f8fa; color: #0d1117; border-color: #d0d7de; }
     .jw-policy-idle select, .jw-policy-idle .fund-btn { background: #ffffff; color: #0d1117; border-color: #d0d7de; }
@@ -2145,7 +2180,7 @@ function htmlPage(v) {
       <div class="scroll" id="jw-no-trade-scroll"><table><thead><tr><th>Time (UTC)</th><th>market_event_id</th><th>policy</th><th>reason</th><th></th></tr></thead><tbody id="jw-no-trade-tbody">${noTradeRows}</tbody></table></div>
     </div></section>
     <section class="panel"><h2 class="jw-panel-head"><button type="button" class="jw-panel-toggle" aria-expanded="false" aria-controls="jw-pan-wallet-st"><span class="jw-caret" aria-hidden="true">▶</span> Wallet status</button></h2><div class="jw-panel-body" id="jw-pan-wallet-st" hidden>${walletBlock}</div></section>
-    <section class="panel"><h2 class="jw-panel-head"><button type="button" class="jw-panel-toggle" aria-expanded="false" aria-controls="jw-pan-trading"><span class="jw-caret" aria-hidden="true">▶</span> Trading mode</button></h2><div class="jw-panel-body" id="jw-pan-trading" hidden>${tradingBlock}</div></section>
+    <section class="panel"><h2 class="jw-panel-head"><button type="button" class="jw-panel-toggle" aria-expanded="false" aria-controls="jw-pan-trading"><span class="jw-caret" aria-hidden="true">▶</span> Policy trade mode</button></h2><div class="jw-panel-body" id="jw-pan-trading" hidden>${tradingBlock}</div></section>
     <section class="panel"><h2 class="jw-panel-head"><button type="button" class="jw-panel-toggle" aria-expanded="false" aria-controls="jw-pan-live"><span class="jw-caret" aria-hidden="true">▶</span> Live market &amp; gates</button></h2><div class="jw-panel-body" id="jw-pan-live" hidden>${operatorBlock}</div></section>
     <section class="panel"><h2 class="jw-panel-head"><button type="button" class="jw-panel-toggle" aria-expanded="false" aria-controls="jw-pan-pos"><span class="jw-caret" aria-hidden="true">▶</span> Position &amp; last kline (Sean DB)</button></h2><div class="jw-panel-body" id="jw-pan-pos" hidden><div id="jw-pos-kl-block">${posBlock}${klBlock}</div></div></section>
     <section class="panel">
