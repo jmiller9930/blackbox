@@ -1,0 +1,40 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://blackbox.local/schemas/policy_spec_v1.schema.json",
+  "title": "PolicySpecV1",
+  "description": "Canonical internal policy schema (DV-ARCH-CANONICAL-POLICY-SPEC-046).",
+  "type": "object",
+  "required": ["identity", "strategy"],
+  "additionalProperties": true,
+  "properties": {
+    "identity": {
+      "type": "object",
+      "required": ["policy_id"],
+      "properties": {
+        "policy_id": { "type": "string" },
+        "policy_family": { "type": "string" },
+        "version": { "type": "string" },
+        "author": { "type": "string" },
+        "policy_class": {
+          "type": "string",
+          "enum": ["training", "candidate", "baseline", "production"]
+        }
+      }
+    },
+    "strategy": {
+      "type": "object",
+      "properties": {
+        "timeframe": { "type": "string" },
+        "description": { "type": "string" },
+        "signal_type": { "type": "string" }
+      }
+    },
+    "inputs": { "type": "object" },
+    "signal_logic": { "type": "object" },
+    "risk_sizing": { "type": "object" },
+    "exit_model": { "type": "object" },
+    "diagnostics_contract": { "type": "object" },
+    "deployment_metadata": { "type": "object" },
+    "source_submission": { "type": "object" }
+  }
+}

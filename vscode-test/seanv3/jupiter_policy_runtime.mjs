@@ -28,15 +28,27 @@ import {
   MIN_BARS as MIN_BARS_MC2,
   ENGINE_ID as ENGINE_ID_MC2,
 } from './jupiter_mc2_policy.mjs';
+import {
+  generateSignalFromOhlcPipelineProof,
+  resolveEntrySide as resolveEntrySidePipelineProof,
+  MIN_BARS as MIN_BARS_PIPELINE_PROOF,
+  ENGINE_ID as ENGINE_ID_PIPELINE_PROOF,
+} from './jupiter_pipeline_proof_policy.mjs';
 
 export const JUPITER_ACTIVE_POLICY_KEY = 'jupiter_active_policy';
 
 /** Canonical ids for API / UI / meta storage */
-export const ALLOWED_POLICY_IDS = Object.freeze(['jup_v4', 'jup_v3', 'jup_mc_test', 'jup_mc2']);
+export const ALLOWED_POLICY_IDS = Object.freeze([
+  'jup_v4',
+  'jup_v3',
+  'jup_mc_test',
+  'jup_mc2',
+  'jup_pipeline_proof_v1',
+]);
 
 /**
  * @param {string | null | undefined} s
- * @returns {'jup_v4' | 'jup_v3' | 'jup_mc_test' | 'jup_mc2' | null}
+ * @returns {'jup_v4' | 'jup_v3' | 'jup_mc_test' | 'jup_mc2' | 'jup_pipeline_proof_v1' | null}
  */
 export function normalizePolicyId(s) {
   const t = String(s ?? '')
@@ -47,13 +59,21 @@ export function normalizePolicyId(s) {
   if (t === 'jup_v3' || t === 'jupiter_3' || t === 'v3') return 'jup_v3';
   if (t === 'jup_mc_test' || t === 'jupiter_mc_test' || t === 'mc_test') return 'jup_mc_test';
   if (t === 'jup_mc2' || t === 'jupiter_mc2' || t === 'mc2') return 'jup_mc2';
+  if (
+    t === 'jup_pipeline_proof_v1' ||
+    t === 'pipeline_proof' ||
+    t === 'pipeline_proof_v1' ||
+    t === 'jupiter_pipeline_proof'
+  ) {
+    return 'jup_pipeline_proof_v1';
+  }
   return null;
 }
 
 /**
  * @param {import('node:sqlite').DatabaseSync} db
  * @returns {{
- *   policyId: 'jup_v4' | 'jup_v3' | 'jup_mc_test' | 'jup_mc2',
+ *   policyId: 'jup_v4' | 'jup_v3' | 'jup_mc_test' | 'jup_mc2' | 'jup_pipeline_proof_v1',
  *   source: 'runtime_config' | 'environment' | 'default',
  *   minBars: number,
  *   generateEntrySignal: Function,
@@ -115,6 +135,17 @@ export function resolveJupiterPolicy(db) {
       resolveEntrySide: resolveEntrySideMc2,
       engineId: 'sean_jupiter_mc2_engine_v1',
       policyEngineTag: ENGINE_ID_MC2,
+    };
+  }
+  if (id === 'jup_pipeline_proof_v1') {
+    return {
+      policyId: 'jup_pipeline_proof_v1',
+      source,
+      minBars: MIN_BARS_PIPELINE_PROOF,
+      generateEntrySignal: generateSignalFromOhlcPipelineProof,
+      resolveEntrySide: resolveEntrySidePipelineProof,
+      engineId: 'sean_jupiter_pipeline_proof_engine_v1',
+      policyEngineTag: ENGINE_ID_PIPELINE_PROOF,
     };
   }
   return {

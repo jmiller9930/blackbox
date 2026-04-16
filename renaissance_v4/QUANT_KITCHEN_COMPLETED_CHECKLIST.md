@@ -97,6 +97,7 @@ The items below are **implemented capability** in-repo. They are **not** a subst
 | Directive | Outcome | Evidence |
 |-----------|---------|----------|
 | DV-ARCH-FLOW-CORRECTION-043 | **Complete** (status language + Jupiter policy path documented here) | This file, §“Operational truth” + §“Jupiter policy” |
+| DV-ARCH-CANONICAL-POLICY-SPEC-046 | **Partial** — PolicySpecV1 + `normalize_policy` + `jup_pipeline_proof_v1` in Sean; full parity + lab trade/MC proof open | `renaissance_v4/policy_spec/README.md` |
 | DV-ARCH-JUPITER-MC2-039 | **Complete** | `docs/validation/DV-ARCH-JUPITER-MC2-039.md` |
 | DV-ARCH-STABILIZATION-035 (full 5 cycles) | **Not met** | `docs/validation/stabilization_035_report.md` |
 | DV-ARCH-JUPITER-MC-UNBLOCK-040 | **Not met** | Same report, §9 |
