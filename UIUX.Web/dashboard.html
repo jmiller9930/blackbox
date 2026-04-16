@@ -294,6 +294,31 @@
     tr.dash-rv4-cand-row.is-selected { background: rgba(59, 130, 246, 0.08); }
     .dash-rv4-cand-sel-btn { font-size: 0.72rem; padding: 0.25rem 0.5rem; border-radius: var(--radius-md); border: 1px solid var(--panel-border); background: var(--panel); cursor: pointer; }
     .dash-rv4-cand-sel-btn.is-active { background: var(--accent); color: var(--accent-contrast); border-color: transparent; font-weight: 600; }
+    /* DV-070 — per-row Kitchen runtime assign (always visible; disabled shows reason) */
+    .dash-rv4-cand-assign-cell { vertical-align: top; min-width: 11.5rem; max-width: 16rem; }
+    .dash-rv4-assign-debug {
+      font-size: 0.62rem;
+      color: var(--muted);
+      line-height: 1.35;
+      margin: 0 0 0.35rem;
+      font-family: ui-monospace, monospace;
+      word-break: break-word;
+    }
+    .dash-rv4-assign-reason {
+      font-size: 0.65rem;
+      color: #b45309;
+      margin: 0.3rem 0 0;
+      line-height: 1.35;
+    }
+    .dash-rv4-assign-recorded {
+      font-size: 0.62rem;
+      color: var(--text);
+      font-weight: 600;
+      margin: 0.25rem 0 0;
+    }
+    button.dash-rv4-cand-assign-btn { font-size: 0.72rem; padding: 0.3rem 0.45rem; border-radius: var(--radius-md); border: 1px solid var(--panel-border); background: var(--panel); cursor: pointer; }
+    button.dash-rv4-cand-assign-btn.primary { background: var(--accent); color: var(--accent-contrast); border-color: transparent; font-weight: 600; }
+    button.dash-rv4-cand-assign-btn:disabled { opacity: 0.65; cursor: not-allowed; }
     /* DV-053 / 053A — full-screen policy evaluation panel (replaces default Kitchen) */
     .dash-rv4-wrap.rv4-eval-mode .dash-rv4-kitchen-default {
       display: none !important;
@@ -1936,14 +1961,14 @@
                   <th scope="col">Created (UTC)</th>
                   <th scope="col">Intake</th>
                   <th scope="col">Actions</th>
+                  <th scope="col">Assign to runtime</th>
                 </tr>
               </thead>
-              <tbody id="rv4-cand-tbody"><tr><td colspan="7">Loading…</td></tr></tbody>
+              <tbody id="rv4-cand-tbody"><tr><td colspan="8">Loading…</td></tr></tbody>
             </table>
           </div>
           <p class="dash-rv4-msg" id="rv4-cand-selected-line">No candidate selected — use Select on a row above.</p>
-          <p class="dash-rv4-msg" id="rv4-jupiter-assign-hint" style="margin-top:0.65rem"></p>
-          <button type="button" class="primary" id="rv4-btn-kitchen-assign-runtime" disabled>Assign to this execution target (approved slot)</button>
+          <p class="dash-rv4-msg" id="rv4-kitchen-assign-global-status" style="margin-top:0.5rem" aria-live="polite"></p>
         </section>
           </div>
         </details>
@@ -4765,64 +4790,78 @@
     var sl = $('rv4-cand-selected-line');
     if (sl) sl.textContent = 'No candidate selected — use Select on a row above.';
     rv4UpdateCandContextBar();
-    rv4UpdateKitchenRuntimeAssignGate();
   }
   var RV4_MECHANICAL_CANDIDATE_ID = 'kitchen_mechanical_always_long_v1';
-  function rv4UpdateKitchenRuntimeAssignGate() {
-    var btn = $('rv4-btn-kitchen-assign-runtime');
-    var hint = $('rv4-jupiter-assign-hint');
-    if (!btn) return;
-    var row = rv4CandidatesCache.filter(function (c) {
-      return c.submission_id === rv4SelectedCandSid;
-    })[0];
-    var et = rv4GetExecutionTarget();
-    var ok =
-      row &&
-      String(row.candidate_policy_id || '') === RV4_MECHANICAL_CANDIDATE_ID &&
-      (et === 'jupiter' || et === 'blackbox');
-    btn.disabled = !ok;
-    if (!hint) return;
-    if (!row) {
-      hint.textContent = '';
-    } else if (String(row.candidate_policy_id || '') !== RV4_MECHANICAL_CANDIDATE_ID) {
-      hint.textContent =
-        'Assignment uses the governed mechanical proof candidate id ' +
-        RV4_MECHANICAL_CANDIDATE_ID +
-        ' (see tests/fixtures/policy_intake/kitchen_mechanical_always_long.ts).';
-    } else if (et !== 'jupiter' && et !== 'blackbox') {
-      hint.textContent = 'Select execution target Jupiter or BlackBox.';
-    } else {
-      hint.textContent =
-        'Assign persists per-target runtime mapping (kitchen_runtime_assignment.json). Jupiter: optional POST to SeanV3 when KITCHEN_JUPITER_* env is set. BlackBox: persisted for audit until the control-plane adapter is wired.';
-    }
+  var rv4KitchenAssignmentPayload = null;
+  function rv4Esc(s) {
+    return String(s)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;');
   }
-  function rv4LoadKitchenAssignmentStatus() {
-    fetch(
-      '/api/v1/renaissance/kitchen-runtime-assignment?execution_target=' +
-        encodeURIComponent(rv4GetExecutionTarget()),
-      { cache: 'no-store' }
-    )
-      .then(function (r) {
-        return r.json();
-      })
-      .then(function (j) {
-        var hint = $('rv4-jupiter-assign-hint');
-        if (!hint || !j || !j.assignment) return;
-        var a = j.assignment;
-        var line =
-          'Recorded assignment [' +
-          String(j.execution_target || rv4GetExecutionTarget()) +
-          ']: slot ' +
-          String(a.approved_runtime_slot_id || '—') +
-          ' · active policy ' +
-          String(a.active_runtime_policy_id || '—') +
-          ' · submission ' +
-          String(a.submission_id || '—') +
-          '.';
-        if (hint.textContent && hint.textContent.indexOf('Recorded assignment') >= 0) return;
-        hint.textContent = hint.textContent ? hint.textContent + ' ' + line : line;
-      })
-      .catch(function () {});
+  function rv4IntakeIsPass(row) {
+    return String(row.intake_status || '')
+      .trim()
+      .toLowerCase() === 'pass';
+  }
+  /**
+   * DV-070 — eligibility for governed mechanical assign (per row + current execution target).
+   * Rows are already filtered to the selected target by the API; we still validate policy id + PASS.
+   */
+  function rv4RowKitchenAssignEligibility(row) {
+    if (row.is_active === false) {
+      return { ok: false, reason: 'Archived candidates cannot be assigned — use Restore first.' };
+    }
+    var et = rv4GetExecutionTarget();
+    var rowEt = String(row.execution_target || '').toLowerCase();
+    if (rowEt === 'blackbox' || rowEt === 'jupiter') {
+      if (rowEt !== et) {
+        return {
+          ok: false,
+          reason: 'Row target (' + rowEt + ') does not match execution target selector (' + et + '). Refresh the list.',
+        };
+      }
+    }
+    if (!rv4IntakeIsPass(row)) {
+      return { ok: false, reason: 'Intake status must be PASS for assignment.' };
+    }
+    if (String(row.candidate_policy_id || '') !== RV4_MECHANICAL_CANDIDATE_ID) {
+      return {
+        ok: false,
+        reason:
+          'Only governed mechanical candidate id ' +
+          RV4_MECHANICAL_CANDIDATE_ID +
+          ' can use this assign path.',
+      };
+    }
+    if (et !== 'jupiter' && et !== 'blackbox') {
+      return { ok: false, reason: 'Set execution target to Jupiter or BlackBox (header selector).' };
+    }
+    return { ok: true, reason: '' };
+  }
+  function rv4UpdateKitchenAssignGlobalStatus() {
+    var el = $('rv4-kitchen-assign-global-status');
+    if (!el) return;
+    var j = rv4KitchenAssignmentPayload;
+    if (!j || !j.assignment) {
+      el.textContent =
+        'Runtime assignment (' +
+        rv4ExecPretty(rv4GetExecutionTarget()) +
+        '): none recorded yet for this target.';
+      return;
+    }
+    var a = j.assignment;
+    el.textContent =
+      'Runtime assignment for ' +
+      String(j.execution_target || rv4GetExecutionTarget()) +
+      ': approved slot ' +
+      String(a.approved_runtime_slot_id || '—') +
+      ' · active policy ' +
+      String(a.active_runtime_policy_id || '—') +
+      ' · submission ' +
+      String(a.submission_id || '—') +
+      '.';
   }
   function rv4InitCollapsiblePanels() {
     [
@@ -4865,7 +4904,6 @@
         ' (scoped to this execution target).';
     }
     rv4UpdateCandContextBar();
-    rv4UpdateKitchenRuntimeAssignGate();
   }
   function rv4RenderCandidates(rows) {
     var tb = $('rv4-cand-tbody');
@@ -4873,7 +4911,7 @@
     if (!tb) return;
     if (!rows || !rows.length) {
       tb.innerHTML =
-        '<tr><td colspan="7">No successful candidates for this execution target yet. Pass intake first.</td></tr>';
+        '<tr><td colspan="8">No successful candidates for this execution target yet. Pass intake first.</td></tr>';
       if (hint) hint.hidden = true;
       rv4ClearCandidateSelection();
       return;
@@ -4910,6 +4948,53 @@
           : '<button type="button" class="dash-nav-linklike rv4-cand-archive" data-sid="' +
             sid +
             '" title="Hide from list (soft archive)">Archive</button>';
+        var etNow = rv4GetExecutionTarget();
+        var mechEligible =
+          rv4IntakeIsPass(r) &&
+          String(r.candidate_policy_id || '') === RV4_MECHANICAL_CANDIDATE_ID &&
+          String(r.execution_target || '').toLowerCase() === etNow &&
+          (etNow === 'jupiter' || etNow === 'blackbox');
+        var elig = rv4RowKitchenAssignEligibility(r);
+        var asg = rv4KitchenAssignmentPayload && rv4KitchenAssignmentPayload.assignment;
+        var assignedHere =
+          asg && String(asg.submission_id || '') === String(r.submission_id || '');
+        var canAssign = elig.ok && !assignedHere;
+        var dbgLine =
+          'candidate_policy_id: ' +
+          String(r.candidate_policy_id || '—') +
+          ' · execution_target: ' +
+          String(r.execution_target || '—') +
+          ' · eligible: ' +
+          (mechEligible ? 'yes' : 'no');
+        var reasonText = assignedHere
+          ? 'This submission is already the recorded assignment for this execution target.'
+          : elig.ok
+            ? ''
+            : elig.reason;
+        var btnLabel = assignedHere ? 'Assigned' : 'Assign to runtime';
+        var assignCell =
+          '<td class="dash-rv4-cand-assign-cell">' +
+          '<div class="dash-rv4-assign-debug">' +
+          rv4Esc(dbgLine) +
+          '</div>' +
+          '<button type="button" class="dash-rv4-cand-assign-btn primary" data-sid="' +
+          sid +
+          '"' +
+          (canAssign ? '' : ' disabled') +
+          '>' +
+          btnLabel +
+          '</button>' +
+          (reasonText
+            ? '<p class="dash-rv4-assign-reason">' + rv4Esc(reasonText) + '</p>'
+            : '') +
+          (assignedHere && asg
+            ? '<p class="dash-rv4-assign-recorded">Active runtime policy: ' +
+              rv4Esc(String(asg.active_runtime_policy_id || '—')) +
+              ' · slot ' +
+              rv4Esc(String(asg.approved_runtime_slot_id || '—')) +
+              '</p>'
+            : '') +
+          '</td>';
         return (
           '<tr class="dash-rv4-cand-row' +
           (sel ? ' is-selected' : '') +
@@ -4935,7 +5020,9 @@
           st +
           '</td><td>' +
           actBtn +
-          '</td></tr>'
+          '</td>' +
+          assignCell +
+          '</tr>'
         );
       })
       .join('');
@@ -5014,7 +5101,51 @@
       }
     }
     rv4UpdateCandContextBar();
-    rv4UpdateKitchenRuntimeAssignGate();
+    Array.prototype.forEach.call(tb.querySelectorAll('button.dash-rv4-cand-assign-btn'), function (btn) {
+      btn.addEventListener('click', function (ev) {
+        ev.stopPropagation();
+        var sid = btn.getAttribute('data-sid');
+        if (!sid || btn.disabled) return;
+        btn.disabled = true;
+        fetch('/api/v1/renaissance/kitchen-runtime-assignment', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            submission_id: sid,
+            execution_target: rv4GetExecutionTarget(),
+          }),
+        })
+          .then(function (r) {
+            return r.json().then(function (j) {
+              return { ok: r.ok, j: j };
+            });
+          })
+          .then(function (x) {
+            if (!x.ok || !x.j || !x.j.ok) {
+              window.alert(
+                x.j && (x.j.error || x.j.detail) ? String(x.j.error || x.j.detail) : 'Assign failed'
+              );
+              btn.disabled = false;
+              return;
+            }
+            window.alert(
+              'Kitchen → runtime [' +
+                String(x.j.execution_target || '') +
+                ']: approved slot ' +
+                String(x.j.approved_runtime_slot_id || '') +
+                ' · active policy ' +
+                String(x.j.active_runtime_policy_id || '') +
+                ' · runtime_http_post_ok=' +
+                String(x.j.runtime_http_post_ok)
+            );
+            rv4LoadCandidates();
+          })
+          .catch(function () {
+            window.alert('Assign request failed');
+            btn.disabled = false;
+          });
+      });
+    });
   }
   function rv4LoadCandidates() {
     var h = (window.location.hash || '').replace(/^#/, '');
@@ -5025,21 +5156,35 @@
       '&include_archived=' +
       (rv4CandShowArchived ? '1' : '0') +
       '&collapse_duplicates=1';
+    var assignQ =
+      '/api/v1/renaissance/kitchen-runtime-assignment?execution_target=' +
+      encodeURIComponent(rv4GetExecutionTarget());
     fetch(q, { cache: 'no-store' })
       .then(function (r) {
         return r.json();
       })
       .then(function (j) {
         if (!j || j.error) {
+          rv4CandidatesCache = [];
+          rv4KitchenAssignmentPayload = null;
+          rv4UpdateKitchenAssignGlobalStatus();
           rv4RenderCandidates([]);
-          return;
+          return undefined;
         }
         rv4CandidatesCache = j.candidates || [];
+        return fetch(assignQ, { cache: 'no-store' }).then(function (r2) {
+          return r2.json();
+        });
+      })
+      .then(function (aj) {
+        if (aj === undefined) return;
+        rv4KitchenAssignmentPayload = aj && typeof aj === 'object' ? aj : null;
+        rv4UpdateKitchenAssignGlobalStatus();
         rv4RenderCandidates(rv4CandidatesCache);
       })
       .catch(function () {
         var tb = $('rv4-cand-tbody');
-        if (tb) tb.innerHTML = '<tr><td colspan="7">Failed to load candidates.</td></tr>';
+        if (tb) tb.innerHTML = '<tr><td colspan="8">Failed to load candidates.</td></tr>';
       });
   }
   function rv4Refresh() {
@@ -5227,7 +5372,6 @@
       })
       .catch(function () {});
     rv4LoadCandidates();
-    rv4LoadKitchenAssignmentStatus();
   }
   function rv4LoadDetail(eid) {
     var d = $('rv4-detail');
@@ -5845,51 +5989,7 @@
     });
   }
   rv4InitCollapsiblePanels();
-  var rv4AssignBtn = $('rv4-btn-kitchen-assign-runtime');
-  if (rv4AssignBtn) {
-    rv4AssignBtn.addEventListener('click', function () {
-      if (!rv4SelectedCandSid || rv4AssignBtn.disabled) return;
-      rv4AssignBtn.disabled = true;
-      fetch('/api/v1/renaissance/kitchen-runtime-assignment', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          submission_id: rv4SelectedCandSid,
-          execution_target: rv4GetExecutionTarget(),
-        }),
-      })
-        .then(function (r) {
-          return r.json().then(function (j) {
-            return { ok: r.ok, j: j };
-          });
-        })
-        .then(function (x) {
-          if (!x.ok || !x.j || !x.j.ok) {
-            window.alert(
-              x.j && (x.j.error || x.j.detail) ? String(x.j.error || x.j.detail) : 'Assign failed'
-            );
-          } else {
-            window.alert(
-              'Kitchen → runtime [' +
-                String(x.j.execution_target || '') +
-                ']: slot ' +
-                String(x.j.approved_runtime_slot_id || '') +
-                '. HTTP ok: ' +
-                String(x.j.runtime_http_post_ok)
-            );
-          }
-          rv4LoadKitchenAssignmentStatus();
-        })
-        .catch(function () {
-          window.alert('Assign request failed');
-        })
-        .finally(function () {
-          rv4AssignBtn.disabled = false;
-          rv4UpdateKitchenRuntimeAssignGate();
-        });
-    });
-  }
-  rv4LoadKitchenAssignmentStatus();
+  rv4LoadCandidates();
   rv4IntakeUpdateGate();
   var rv4ip = $('rv4-btn-ingest-policy');
   if (rv4ip) {

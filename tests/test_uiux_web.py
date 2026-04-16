@@ -110,6 +110,16 @@ def test_dashboard_trade_chain_tile_correlates_trade_id_and_mei() -> None:
     assert "axisMid" in text
 
 
+def test_dashboard_dv070_kitchen_assign_per_row_and_generalized_endpoint() -> None:
+    """DV-070 — assign control visible per candidate row; no legacy Jupiter-only POST in UI."""
+    text = (WEB / "dashboard.html").read_text(encoding="utf-8")
+    assert "dash-rv4-cand-assign-btn" in text
+    assert "Assign to runtime" in text
+    assert "/api/v1/renaissance/kitchen-runtime-assignment" in text
+    assert "kitchen-assign-jupiter" not in text
+    assert "rv4-btn-kitchen-assign-runtime" not in text
+
+
 def test_app_js_three_dev_roles_and_staff_helpers() -> None:
     text = (WEB / "app.js").read_text(encoding="utf-8")
     assert "internal_member" in text
