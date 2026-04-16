@@ -17,7 +17,7 @@ You can run **both** on one host. BlackBox **nginx** (`UIUX.Web` compose) binds 
 
 Both rely on the **host** routing table for Binance (WireGuard split-tunnel on clawbot per `VPN/README.md`).
 
-**Jupiter** (read-only web app; container **`jupiter-web`):** binds **HTTP** on **707** on the **lab host** (no TLS in the Node app). **`/`** = front door (Jupiter image + link). **`/dashboard`** = full operator UI (TUI parity). **WAN (HTTP):** **`http://jupv3.greyllc.net:707/…`** (WAN **:707 → host :707**). **VPN/LAN:** **`http://clawbot.a51.corp:707/…`**. **WAN (HTTPS):** not on **707** — use **`https://jupv3.greyllc.net:8443/…`** after **`docker-compose.jupiter-https.yml`** is up and the router forwards **WAN :8443 → host :8443**; set **`JUPITER_PUBLIC_BASE_URL=https://jupv3.greyllc.net:8443`** and **`JUPITER_SESSION_COOKIE_SECURE=1`**. **Proof:** `curl -sS http://jupv3.greyllc.net:707/health` — same URL class as the browser, **not** loopback on your laptop. Default **`JUPITER_WEB_PORT=707`**. **`/api/summary.json`**, wallet, position, trades. Deploy on **clawbot:** `docker compose up -d` in this directory. Editor-only dev clone: **`npm run jupiter`** (may need **`sudo`** for **707** on Linux).
+**Jupiter** (read-only web app; container **`jupiter-web`):** binds **HTTP** on **707** on the **lab host** (no TLS in the Node app). **`/`** = front door (Jupiter image + link). **`/dashboard`** = full operator UI (TUI parity). **WAN:** **`http://jupv3.greyllc.net:707/…`**. **VPN/LAN:** **`http://clawbot.a51.corp:707/…`**. Browsers may warn “not secure” on password fields over HTTP — that is expected unless you terminate TLS elsewhere (not shipped in this repo). **`JUPITER_PUBLIC_BASE_URL`** in **`lab_dashboard_login.defaults.env`** must match the URL you use (for password-reset links). **Proof:** `curl -sS http://jupv3.greyllc.net:707/health`. Default **`JUPITER_WEB_PORT=707`**. Deploy on **clawbot:** `docker compose up -d` in this directory.
 
 **Browser login (optional):** compose loads **`vscode-test/lab_dashboard_login.defaults.env`**. Set **`JUPITER_AUTH_MODE`** to **`session`** (recommended) or **`basic`** / **`none`**.
 
@@ -37,39 +37,16 @@ Operator **`JUPITER_OPERATOR_TOKEN`** (Bearer) for **`POST /api/v1/jupiter/activ
 
 **Web vs TUI (same backend, two displays):** see [`JUPITER_WEB_TUI_ALIGNMENT.md`](JUPITER_WEB_TUI_ALIGNMENT.md). The Jupiter page mirrors `preflight_pyth_tui.py` panels (preflight, policy, wallet, paper ledger, parity, trades, oracle). Compose mounts **`../../` → `/repo:ro`** for policy registry + execution ledger; override **`JUPITER_WEB_REFRESH_SEC`** (default `3`, `0` disables HTML auto-refresh).
 
-**HTTPS — browser “Not secure” / password-field warning**
-
-Jupiter’s Node process serves **plain HTTP** on **`JUPITER_WEB_PORT`** (default 707). Browsers warn on password fields over HTTP because **credentials cross the wire unencrypted to that origin**. That is **not** something you fix in HTML or app code — you fix **transport** with **TLS**. If operators can reach the UI from the **public Internet** (not only VPN/LAN), treat **HTTPS as required** for login and session cookies — not optional.
-
-- **In-repo, Jupiter-only (does not touch BlackBox / `UIUX.Web`):** a separate compose file runs **Caddy** on host **`8443`** (default) and proxies to **`jupiter-web` on :707**. BlackBox can keep **443** for its own nginx; no shared config.
-
-  ```bash
-  cd vscode-test/seanv3
-  docker compose -f docker-compose.yml -f docker-compose.jupiter-https.yml up -d --build
-  ```
-
-  Operators use **`https://<host>:8443/dashboard`**. Caddy uses **`tls internal`** (self-signed) until you replace **`jupiter-https/Caddyfile`** with a public hostname + real certs (see **`jupiter-https/Caddyfile.public.example`**). Override host port with **`JUPITER_HTTPS_PORT`** (e.g. `8443`).
-
-  **`jupsync.py`** (optional): **`python3 scripts/jupsync.py --jupiter-https`** runs the same compose merge on the remote host. Set **`JUPITER_PUBLIC_BASE_URL=https://<host>:8443`**, **`JUPITER_SESSION_COOKIE_SECURE=1`** in **`seanv3/.env`**, and **`JUPSYNC_JUPITER_HEALTH_URL=https://<host>:8443/health`** (health check uses **`curl -k`** for self-signed).
-
-- **`JUPITER_PUBLIC_BASE_URL`** — must match the URL operators use (include **`:8443`** when using the sidecar).
-
-- **`JUPITER_SESSION_COOKIE_SECURE=1`** — set **only** when everyone reaches the UI over **HTTPS**; leave unset for direct **`http://…:707`** only.
-
-- **Bare-metal nginx on the host** (optional): **`nginx-jupiter-https.example.conf`** — copy to the host’s nginx, **not** into `UIUX.Web`; use only if you prefer system nginx instead of the Caddy container.
-
 **Troubleshooting — browser says “problem” / can’t load :707**
 
-0. **“Secure connection failed” on `https://jupv3…:707`:** expected. **707 on the Jupiter process is HTTP only** — **`https://` on that port cannot work.** Use **`http://jupv3.greyllc.net:707/…`** for plain HTTP, or **`https://jupv3.greyllc.net:8443/…`** for HTTPS (Caddy sidecar + forward **:8443**).
-
-1. **Direct to port 707:** use **`http://` only** — Jupiter does **not** terminate TLS on 707, so **`https://…:707`** fails. **`https://…:8443`** is correct when the **Jupiter-only** Caddy sidecar is running (see **HTTPS** above).
-2. **Prove reachability the same way everywhere:** `curl -sS http://jupv3.greyllc.net:707/health` from the Internet (or `http://clawbot.a51.corp:707/health` on VPN). Or over SSH: `ssh jmiller@clawbot.a51.corp 'curl -sS http://clawbot.a51.corp:707/health'`. If that fails, on **clawbot** run **`docker compose ps`** and **`docker logs jupiter-web --tail 80`** in **`~/blackbox/vscode-test/seanv3`**, then **`docker compose up -d --build`** after **`git pull`** succeeds.
-3. **`jupsync.py`** uses the default health URL (`JUPSYNC_JUPITER_HEALTH_URL`, default **`http://jupv3.greyllc.net:707/health`**) on the remote host after deploy — not `127.0.0.1`. If the lab host cannot curl its own WAN URL (hairpin NAT), set **`JUPSYNC_JUPITER_HEALTH_URL=http://127.0.0.1:707/health`** for checks only, or **`http://clawbot.a51.corp:707/health`** on VPN.
-4. If **`git pull`** on clawbot was blocked (e.g. untracked files), fix the merge and redeploy before re-testing.
+1. **Use `http://` for port 707** — Jupiter does **not** speak **`https://`** on **707**. **`https://…:707`** will fail.
+2. **Prove reachability:** `curl -sS http://jupv3.greyllc.net:707/health` (WAN) or `http://clawbot.a51.corp:707/health` (VPN). On **clawbot:** **`docker compose ps`**, **`docker logs jupiter-web --tail 80`** in **`~/blackbox/vscode-test/seanv3`**.
+3. **`jupsync.py`** post-deploy health (default **`http://clawbot.a51.corp:707/health`**) — override with **`JUPSYNC_JUPITER_HEALTH_URL`** if needed (e.g. WAN or **`http://127.0.0.1:707/health`** for hairpin NAT).
+4. **Password-reset links** — must match **`JUPITER_PUBLIC_BASE_URL`** (defaults **`http://jupv3.greyllc.net:707`**). Do **not** set **`JUPITER_SESSION_COOKIE_SECURE=1`** in **`.env`** unless you actually use HTTPS in the browser; **Secure** cookies on **http://** will block login.
 
 ### Lab deploy loop (`jupsync.py`)
 
-**Consistent update process:** commit in your clone → **`python3 scripts/jupsync.py`** from repo root. That **pushes** to `origin`, **SSHs to clawbot**, **`git pull`** in `~/blackbox`, then **`docker compose up -d --build`** in **`vscode-test/seanv3`**. The script then **curls the lab health URL** (default **`http://jupv3.greyllc.net:707/health`** — override with **`JUPSYNC_JUPITER_HEALTH_URL`**). **Verify in a browser:** **`http://jupv3.greyllc.net:707/`** (WAN HTTP) or **`https://jupv3.greyllc.net:8443/`** (WAN HTTPS with Caddy sidecar) or **`http://clawbot.a51.corp:707/`** (VPN). Skip the health step with **`--skip-health`**.
+**Consistent update process:** commit in your clone → **`python3 scripts/jupsync.py`** from repo root. That **pushes** to `origin`, **SSHs to clawbot**, **`git pull`** in `~/blackbox`, then **`docker compose up -d --build`** in **`vscode-test/seanv3`**. The script then **curls** the health URL (default **`http://clawbot.a51.corp:707/health`**). **Verify in a browser:** **`http://jupv3.greyllc.net:707/`** or **`http://clawbot.a51.corp:707/`**. Skip the health step with **`--skip-health`**.
 
 - **`--dry-run`** — print actions only. **`--skip-push`** — you already pushed; only remote pull + compose.
 - Same SSH/branch env vars as **`scripts/sync.py`** (`BLACKBOX_SYNC_SSH`, etc.); **`JUPSYNC_SSH`** / **`JUPSYNC_BRANCH`** override if needed.

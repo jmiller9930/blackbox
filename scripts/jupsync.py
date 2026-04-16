@@ -27,22 +27,16 @@ Usage:
   python3 scripts/jupsync.py --skip-push          # remote pull + compose only
   python3 scripts/jupsync.py --skip-health        # do not verify jupiter /health after deploy
   python3 scripts/jupsync.py --full-stack         # also rebuild/restart UIUX.Web (dashboard nginx/api)
-  python3 scripts/jupsync.py --jupiter-https      # also compose jupiter-https (Caddy on :8443 → :707)
 
 Reachability (important):
-  Post-deploy health uses **the same URL operators use in a browser**, not loopback. The remote script
-  (run over **SSH on the lab host**) curls ``JUPSYNC_JUPITER_HEALTH_URL`` (default
-  ``http://jupv3.greyllc.net:707/health`` — WAN HTTP on :707). Override with e.g.
-  ``http://127.0.0.1:707/health`` if hairpin NAT blocks the WAN URL from the host.
-  For plain **http** :707 use an **http** health URL. If you use the Jupiter-only HTTPS sidecar
-  (``docker-compose.jupiter-https.yml``, host **:8443**), set e.g.
-  ``JUPSYNC_JUPITER_HEALTH_URL=https://clawbot.a51.corp:8443/health`` — the script uses ``curl -k``
-  for **https** URLs (self-signed Caddy ``tls internal``).
+  Post-deploy health curls ``JUPSYNC_JUPITER_HEALTH_URL`` (default ``http://clawbot.a51.corp:707/health``).
+  Override if your proof URL differs (e.g. WAN ``http://jupv3.greyllc.net:707/health``). If the lab host
+  cannot curl its own WAN hostname (hairpin NAT), use ``http://127.0.0.1:707/health``.
 
 Health verification runs **on the remote** after ``docker compose`` (retries with backoff). If it fails,
 the script exits **non-zero** and prints ``jupiter-web`` logs — unlike older versions that always exited 0.
 Optional env: ``JUPSYNC_HEALTH_ATTEMPTS`` (default 25), ``JUPSYNC_HEALTH_SLEEP_SEC`` (default 2),
-``JUPSYNC_JUPITER_HEALTH_URL`` (full URL to ``/health``, default ``http://jupv3.greyllc.net:707/health``).
+``JUPSYNC_JUPITER_HEALTH_URL`` (full URL to ``/health``).
 """
 
 from __future__ import annotations
@@ -142,34 +136,20 @@ def _sync_push(repo: str, branch: str, *, dry_run: bool, skip_push: bool) -> Non
 
 
 def _jupiter_health_url() -> str:
-    """Full URL for GET /health — lab hostname by default (same as operator browser), not 127.0.0.1."""
+    """Full URL for GET /health — lab hostname by default, not 127.0.0.1."""
     u = (os.environ.get("JUPSYNC_JUPITER_HEALTH_URL") or os.environ.get("JUPITER_HEALTH_URL") or "").strip()
     if u:
         return u
-    return "http://jupv3.greyllc.net:707/health"
+    return "http://clawbot.a51.corp:707/health"
 
 
-def _bash_jupiter_health(
-    remote_dir_name: str, health_url: str, *, jupiter_https: bool
-) -> str:
+def _bash_jupiter_health(remote_dir_name: str, health_url: str) -> str:
     """Bash fragment: retry GET health_url; exit 1 if never OK (runs on remote over SSH)."""
     attempts = os.environ.get("JUPSYNC_HEALTH_ATTEMPTS", "25").strip() or "25"
     sleep_s = os.environ.get("JUPSYNC_HEALTH_SLEEP_SEC", "2").strip() or "2"
     uq = sh_quote(health_url)
-    # Self-signed Jupiter HTTPS sidecar (Caddy tls internal) needs curl -k
     curl_flags = "-kSf" if health_url.strip().lower().startswith("https://") else "-sf"
     curl_show = "curl -kS" if health_url.strip().lower().startswith("https://") else "curl -sS"
-    if jupiter_https:
-        diag = f"""
-  cd ~/{remote_dir_name}/vscode-test/seanv3
-  docker compose -f docker-compose.yml -f docker-compose.jupiter-https.yml ps -a >&2 || true
-  docker compose -f docker-compose.yml -f docker-compose.jupiter-https.yml logs --tail 50 jupiter-web >&2 || true
-  docker compose -f docker-compose.yml -f docker-compose.jupiter-https.yml logs --tail 30 jupiter-https >&2 || true"""
-    else:
-        diag = f"""
-  cd ~/{remote_dir_name}/vscode-test/seanv3
-  docker compose ps -a >&2 || true
-  docker compose logs --tail 50 jupiter-web >&2 || true"""
     return f"""
 echo "--- jupiter /health (retry until OK or fail) ---"
 echo "  URL: {health_url}"
@@ -187,7 +167,9 @@ for _i in $(seq 1 {attempts}); do
 done
 if [ "$_ok" -ne 1 ]; then
   echo "jupsync: ERROR — {health_url} never became healthy." >&2
-{diag}
+  cd ~/{remote_dir_name}/vscode-test/seanv3
+  docker compose ps -a >&2 || true
+  docker compose logs --tail 50 jupiter-web >&2 || true
   exit 1
 fi
 """
@@ -200,13 +182,8 @@ def _remote_script(
     health_check: bool,
     full_stack: bool,
     health_url: str,
-    jupiter_https: bool,
 ) -> str:
-    health = (
-        _bash_jupiter_health(remote_dir_name, health_url, jupiter_https=jupiter_https)
-        if health_check
-        else ""
-    )
+    health = _bash_jupiter_health(remote_dir_name, health_url) if health_check else ""
 
     ui_block = ""
     if full_stack:
@@ -219,14 +196,6 @@ docker compose restart api
 docker compose ps
 """
 
-    compose = "docker compose up -d --build"
-    compose_ps = "docker compose ps"
-    if jupiter_https:
-        compose = (
-            "docker compose -f docker-compose.yml -f docker-compose.jupiter-https.yml up -d --build"
-        )
-        compose_ps = "docker compose -f docker-compose.yml -f docker-compose.jupiter-https.yml ps"
-
     return f"""set -eu
 cd ~/{remote_dir_name}
 git fetch origin
@@ -234,8 +203,8 @@ git pull origin {pull_branch}
 echo "REMOTE_HEAD=$(git rev-parse HEAD)"
 echo "--- SeanV3 + jupiter-web (vscode-test/seanv3) ---"
 cd vscode-test/seanv3
-{compose}
-{compose_ps}
+docker compose up -d --build
+docker compose ps
 {ui_block}
 {health}
 """
@@ -249,7 +218,6 @@ def _remote_jupsync(
     dry_run: bool,
     health_check: bool,
     full_stack: bool,
-    jupiter_https: bool,
 ) -> None:
     body = _remote_script(
         remote_dir_name,
@@ -257,7 +225,6 @@ def _remote_jupsync(
         health_check=health_check,
         full_stack=full_stack,
         health_url=_jupiter_health_url(),
-        jupiter_https=jupiter_https,
     )
     if dry_run:
         print("[dry-run] ssh would run on remote:\n---")
@@ -321,12 +288,6 @@ def main() -> None:
         action="store_true",
         help="After SeanV3 compose, also build web + up + restart api in UIUX.Web (one SSH session)",
     )
-    ap.add_argument(
-        "--jupiter-https",
-        action="store_true",
-        help="Use SeanV3 compose with docker-compose.jupiter-https.yml (Caddy TLS on host :8443 → :707); "
-        "does not change UIUX.Web. Set JUPSYNC_JUPITER_HEALTH_URL to https://…:8443/health if health checks use HTTPS.",
-    )
     args = ap.parse_args()
 
     repo = _find_git_root()
@@ -351,7 +312,6 @@ def main() -> None:
         dry_run=args.dry_run,
         health_check=not args.skip_health,
         full_stack=args.full_stack,
-        jupiter_https=args.jupiter_https,
     )
 
 

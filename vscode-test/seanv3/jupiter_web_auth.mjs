@@ -353,7 +353,7 @@ export async function createResetAndEmail(db) {
   const url = buildResetUrl(base, token);
   if (!base) {
     console.error(
-      '[jupiter-auth] JUPITER_PUBLIC_BASE_URL is empty — email clients need an absolute URL. Set it (e.g. http://jupv3.greyllc.net:707 or https://jupv3.greyllc.net:8443).'
+      '[jupiter-auth] JUPITER_PUBLIC_BASE_URL is empty — email clients need an absolute URL. Set it (e.g. http://jupv3.greyllc.net:707).'
     );
   }
   const emailResult = await sendPasswordResetEmail(mailTo, url);
