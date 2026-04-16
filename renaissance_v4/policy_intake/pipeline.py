@@ -4,6 +4,7 @@ Staged policy intake pipeline (DV-ARCH-KITCHEN-POLICY-INTAKE-048).
 
 from __future__ import annotations
 
+import hashlib
 import json
 import math
 import os
@@ -56,6 +57,24 @@ def _static_sanity(canonical: dict[str, Any]) -> tuple[bool, list[str]]:
     return len(errs) == 0, errs
 
 
+def _parse_harness_stdout(stdout: str) -> dict[str, Any]:
+    """
+    Return the harness JSON object. Prefer the last line that is a full JSON object with an ``ok`` key
+    (DV-060: Node or tooling may emit warnings on stdout before the JSON line on some hosts).
+    """
+    lines = [ln.strip() for ln in (stdout or "").splitlines() if ln.strip()]
+    for ln in reversed(lines):
+        if not ln.startswith("{"):
+            continue
+        try:
+            obj = json.loads(ln)
+            if isinstance(obj, dict) and "ok" in obj:
+                return obj
+        except json.JSONDecodeError:
+            continue
+    return {}
+
+
 def _run_ts_deterministic(
     repo: Path, ts_path: Path, bar_count: int, *, execution_target: str
 ) -> dict[str, Any]:
@@ -72,17 +91,17 @@ def _run_ts_deterministic(
         timeout=300,
         env=env,
     )
-    raw = (r.stdout or "").strip().splitlines()
-    line = raw[-1] if raw else ""
-    try:
-        return json.loads(line) if line else {"ok": False, "error": "empty_harness_output", "stderr": r.stderr[:2000]}
-    except json.JSONDecodeError:
-        return {
-            "ok": False,
-            "error": "harness_json_parse_error",
-            "stdout": (r.stdout or "")[:4000],
-            "stderr": (r.stderr or "")[:4000],
-        }
+    out = _parse_harness_stdout(r.stdout or "")
+    if out:
+        if r.stderr and r.stderr.strip():
+            out = {**out, "harness_stderr_tail": (r.stderr or "")[-1500:]}
+        return out
+    return {
+        "ok": False,
+        "error": "harness_json_parse_error",
+        "stdout": (r.stdout or "")[:4000],
+        "stderr": (r.stderr or "")[:4000],
+    }
 
 
 def run_intake_pipeline(
@@ -135,6 +154,7 @@ def run_intake_pipeline(
         "ok": True,
         "stored_path": str(raw_path.relative_to(repo_root)),
         "bytes": len(raw_bytes),
+        "content_sha256": hashlib.sha256(raw_bytes).hexdigest(),
         "timestamp_utc": datetime.now(timezone.utc).isoformat(),
     }
 

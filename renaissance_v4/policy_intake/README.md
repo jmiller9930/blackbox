@@ -32,6 +32,10 @@ Sean-style multi-file policies that import local modules may fail bundling until
 
 The intake eval harness (`policy_intake/run_ts_intake_eval.mjs`) generates synthetic bars with **strictly increasing integer closes** so policies that compare consecutive closes see stable strict inequality on every host (Linux/macOS, Docker, etc.). A prior sin-based series could produce consecutive closes equal within floating-point noise on some platforms, yielding **no signals** and a misleading live FAIL while local runs passed.
 
+Successful harness JSON includes **`harness_revision`** (e.g. `int_ohlc_v2`) so operators can confirm which series logic ran. Stage 1 stores **`content_sha256`** of the raw upload for byte-identical comparisons across hosts.
+
+**Optional deep debug (DV-060):** set environment variable **`RV4_INTAKE_HARNESS_DEBUG=1`** on the API process; the harness adds an **`intake_debug`** object (file SHA-256, first/last closes, sample policy output). The Python runner also scans stdout for the last valid JSON object with an `ok` key so stray Node warnings on stdout cannot corrupt parsing.
+
 ## YAML / JSON
 
 Specs parse and normalize to **PolicySpecV1**. Deterministic signal/trade/PnL proof **requires** a TypeScript evaluator; YAML/JSON-only uploads stop after static checks with an explicit message.

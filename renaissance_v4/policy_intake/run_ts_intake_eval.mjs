@@ -8,9 +8,10 @@
  * stdout: one JSON line
  */
 import { spawnSync } from 'node:child_process';
-import { mkdtempSync } from 'node:fs';
+import { createHash } from 'node:crypto';
+import { mkdtempSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { basename, join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 
 function fail(msg, detail = {}) {
@@ -130,19 +131,47 @@ async function main() {
     pnlSum = side * (exitPx - entryPx);
   }
 
-  console.log(
-    JSON.stringify({
-      ok: true,
-      test_window_bars: nBars,
-      min_bars_used: minBars,
-      signals_long: longBars,
-      signals_short: shortBars,
-      signals_total: signalsTotal,
-      trades_opened: tradesOpened,
-      trades_closed: tradesClosed,
-      pnl_summary: { realized: Number.isFinite(pnlSum) ? pnlSum : 0, currency: 'abstract' },
-    }),
-  );
+  /** Proves which harness logic ran (DV-060); integer OHLC series — not sin/float. */
+  const HARNESS_REVISION = 'int_ohlc_v2';
+
+  const out = {
+    ok: true,
+    harness_revision: HARNESS_REVISION,
+    test_window_bars: nBars,
+    min_bars_used: minBars,
+    signals_long: longBars,
+    signals_short: shortBars,
+    signals_total: signalsTotal,
+    trades_opened: tradesOpened,
+    trades_closed: tradesClosed,
+    pnl_summary: { realized: Number.isFinite(pnlSum) ? pnlSum : 0, currency: 'abstract' },
+  };
+
+  if (process.env.RV4_INTAKE_HARNESS_DEBUG === '1') {
+    let tsSha = '';
+    try {
+      tsSha = createHash('sha256').update(readFileSync(tsPath)).digest('hex');
+    } catch (e) {
+      tsSha = `read_error:${String(e && e.message ? e.message : e)}`;
+    }
+    const endProbe = Math.max(minBars, 2);
+    const slP = closes.slice(0, endProbe);
+    const shP = highs.slice(0, endProbe);
+    const sloP = lows.slice(0, endProbe);
+    const svP = vols.slice(0, endProbe);
+    out.intake_debug = {
+      fixture_basename: basename(tsPath),
+      ts_sha256: tsSha,
+      export_name:
+        typeof mod.generateSignalFromOhlc === 'function' ? 'generateSignalFromOhlc' : 'default',
+      ohlc_first3_close: closes.slice(0, 3),
+      ohlc_last3_close: closes.slice(-3),
+      probe_end_bars: endProbe,
+      probe_policy_out: fn(slP, shP, sloP, svP),
+    };
+  }
+
+  console.log(JSON.stringify(out));
 }
 
 main().catch((e) => {
