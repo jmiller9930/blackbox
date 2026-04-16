@@ -303,11 +303,12 @@ function computeStatusStrip(v) {
   };
 }
 
-function statusStripHtml(s) {
+function statusStripHtml(s, sessionChrome = false) {
+  const stripCls = `jw-status-strip${sessionChrome ? ' jw-status-strip--session' : ''}`;
   const wSub =
     s.walletSub &&
     `<span class="jw-st-sub" id="jw-st-wallet-sub">${esc(s.walletSub)}</span>`;
-  return `<div id="jw-status-strip" class="jw-status-strip" role="region" aria-label="Operator status">
+  return `<div id="jw-status-strip" class="${stripCls}" role="region" aria-label="Operator status">
     <div class="jw-st-item"><span class="jw-st-k">Wallet</span><span class="jw-st-v ${s.walletCls}" id="jw-st-wallet"><span id="jw-st-wallet-main">${esc(s.walletMain)}</span>${wSub ? ` ${wSub}` : ''}</span></div>
     <div class="jw-st-item"><span class="jw-st-k">Pyth</span><span class="jw-st-v ${s.pythCls}" id="jw-st-pyth">${esc(s.pythLabel)}</span></div>
     <div class="jw-st-item"><span class="jw-st-k">Binance</span><span class="jw-st-v ${s.bnCls}" id="jw-st-binance">${esc(s.bnLabel)}</span></div>
@@ -1936,7 +1937,8 @@ function htmlPage(v) {
       <p class="warn">POST actions are off until you set <code>JUPITER_OPERATOR_TOKEN</code> on jupiter-web and restart the container.</p>
     </div></section>`;
 
-  const statusStripMarkup = statusStripHtml(computeStatusStrip(v));
+  const sessionChrome = jupiterAuthMode() === 'session';
+  const statusStripMarkup = statusStripHtml(computeStatusStrip(v), sessionChrome);
 
   return `<!DOCTYPE html>
 <html lang="en">
@@ -2067,6 +2069,7 @@ function htmlPage(v) {
     pre.trade-detail { margin: 0; max-height: 42vh; overflow: auto; font-size: 0.68rem; line-height: 1.35; white-space: pre-wrap; word-break: break-word; background: #0a0a0b; border: 1px solid #30363d; padding: 0.5rem 0.6rem; border-radius: 2px; }
     #jw-live-strip.jw-pulse { outline: 1px solid rgba(88, 166, 255, 0.25); border-radius: 2px; }
     .jw-status-strip { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0.35rem 0.9rem; width: 100%; max-width: 120ch; padding: 0.45rem 0.65rem; padding-right: 3.5rem; margin: 0 auto 0.65rem auto; border: 1px solid #30363d; border-radius: 2px; background: #161b22; font-size: 0.7rem; line-height: 1.35; box-sizing: border-box; z-index: 2; position: relative; }
+    .jw-status-strip--session { padding-left: 3.5rem; }
     .jw-st-item { display: inline-flex; flex-wrap: nowrap; align-items: baseline; gap: 0.35rem; }
     .jw-st-k { color: #8b949e; font-size: 0.62rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; white-space: nowrap; }
     .jw-st-v { font-weight: 600; white-space: nowrap; }
@@ -2089,7 +2092,20 @@ function htmlPage(v) {
       line-height: 1;
       pointer-events: auto;
     }
-    .jw-text-scale-float button {
+    .jw-logout-float {
+      position: fixed;
+      top: max(8px, env(safe-area-inset-top, 0px));
+      left: max(8px, env(safe-area-inset-left, 0px));
+      z-index: 1500;
+      display: flex;
+      flex-direction: column;
+      gap: 3px;
+      font-family: system-ui, -apple-system, Segoe UI, sans-serif;
+      font-size: 11px;
+      line-height: 1;
+      pointer-events: auto;
+    }
+    .jw-chrome-float-btn {
       all: unset;
       box-sizing: border-box;
       display: flex;
@@ -2097,7 +2113,7 @@ function htmlPage(v) {
       justify-content: center;
       min-width: 34px;
       min-height: 26px;
-      padding: 2px 6px;
+      padding: 2px 8px;
       border: 1px solid #30363d;
       border-radius: 3px;
       background: rgba(22, 27, 34, 0.94);
@@ -2107,10 +2123,13 @@ function htmlPage(v) {
       letter-spacing: -0.02em;
       cursor: pointer;
       box-shadow: 0 1px 6px rgba(0, 0, 0, 0.45);
+      white-space: nowrap;
+      text-decoration: none;
     }
-    .jw-text-scale-float button:hover { border-color: #58a6ff; color: #f0f6fc; }
-    .jw-text-scale-float button:focus-visible { outline: 2px solid #58a6ff; outline-offset: 2px; }
-    .jw-text-scale-float button:active { transform: scale(0.97); }
+    a.jw-chrome-float-btn { cursor: pointer; }
+    .jw-chrome-float-btn:hover { border-color: #58a6ff; color: #f0f6fc; }
+    .jw-chrome-float-btn:focus-visible { outline: 2px solid #58a6ff; outline-offset: 2px; }
+    .jw-chrome-float-btn:active { transform: scale(0.97); }
   </style>
   <script>
   (function(){
@@ -2131,6 +2150,11 @@ function htmlPage(v) {
 </head>
 <body>
   ${statusStripMarkup}
+  ${
+    sessionChrome
+      ? `<div id="jw-logout-float" class="jw-logout-float" role="navigation" aria-label="Session"><a href="/auth/logout" class="jw-chrome-float-btn">Log out</a></div>`
+      : ''
+  }
   <div class="wrap">
     <section class="panel"><h2 class="jw-panel-head"><button type="button" class="jw-panel-toggle" aria-expanded="false" aria-controls="jw-pan-wallet-fund"><span class="jw-caret" aria-hidden="true">▶</span> Wallet &amp; funding</button></h2><div class="jw-panel-body" id="jw-pan-wallet-fund" hidden>${walletFundingBlock}</div></section>
     <section class="panel"><h2 class="jw-panel-head"><button type="button" class="jw-panel-toggle" aria-expanded="true" aria-controls="jw-pan-trades"><span class="jw-caret" aria-hidden="true">▼</span> Trade window (Sean paper trades)</button></h2><div class="jw-panel-body" id="jw-pan-trades">
@@ -2187,7 +2211,6 @@ function htmlPage(v) {
       <h2 class="jw-panel-head"><button type="button" class="jw-panel-toggle" aria-expanded="false" aria-controls="jw-pan-overview"><span class="jw-caret" aria-hidden="true">▶</span> Dashboard overview</button></h2>
       <div class="jw-panel-body" id="jw-pan-overview" hidden>
       <h1>Jupiter — operator dashboard</h1>
-      ${jupiterAuthMode() === 'session' ? '<p class="muted small"><a href="/auth/logout">Log out</a></p>' : ''}
       ${
         w?.pubkey_base58
           ? `<p class="pubkey-banner"><strong>Paper wallet pubkey (published)</strong><br/><code id="jw-pubkey-published">${esc(w.pubkey_base58)}</code>
@@ -2247,8 +2270,8 @@ function htmlPage(v) {
     </aside>
   </div>
   <div id="jw-text-scale-float" class="jw-text-scale-float" role="toolbar" aria-label="Text size">
-    <button type="button" id="jw-text-scale-up" title="Larger text" aria-label="Larger text">A+</button>
-    <button type="button" id="jw-text-scale-down" title="Smaller text" aria-label="Smaller text">A\u2212</button>
+    <button type="button" class="jw-chrome-float-btn" id="jw-text-scale-up" title="Larger text" aria-label="Larger text">A+</button>
+    <button type="button" class="jw-chrome-float-btn" id="jw-text-scale-down" title="Smaller text" aria-label="Smaller text">A\u2212</button>
   </div>
   <script>
   (function(){
