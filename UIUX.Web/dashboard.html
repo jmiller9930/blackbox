@@ -145,6 +145,55 @@
     .dash-rv4-intake-summary { font-size: 0.78rem; font-weight: 600; margin: 0.35rem 0 0.25rem; }
     #rv4-btn-policy-intake:disabled { opacity: 0.55; cursor: not-allowed; }
     .dash-rv4-file-label.primary.dash-rv4-intake-ctl-disabled { pointer-events: none; opacity: 0.55; cursor: not-allowed; }
+    /* DV-053 — isolated policy evaluation mode (hide baseline / actions / experiment queue) */
+    .dash-rv4-wrap.rv4-eval-mode .dash-rv4-kitchen-intro,
+    .dash-rv4-wrap.rv4-eval-mode .dash-rv4-mid-grid,
+    .dash-rv4-wrap.rv4-eval-mode .dash-rv4-results {
+      display: none !important;
+    }
+    .dash-rv4-wrap.rv4-eval-mode {
+      max-width: 44rem;
+      margin: 0 auto;
+      padding: 0 0.85rem 2rem;
+      box-sizing: border-box;
+    }
+    .dash-rv4-wrap.rv4-eval-mode .dash-rv4-intake {
+      max-width: 100%;
+      margin: 0;
+    }
+    .dash-rv4-intake-raw-details {
+      margin-top: 0.65rem;
+      border: 1px solid var(--panel-border);
+      border-radius: var(--radius-md);
+      padding: 0.35rem 0.65rem;
+      background: var(--panel);
+    }
+    .dash-rv4-intake-raw-details[hidden] { display: none !important; }
+    .dash-rv4-intake-raw-details > summary {
+      cursor: pointer;
+      font-size: 0.76rem;
+      font-weight: 600;
+      color: var(--muted);
+      list-style: none;
+    }
+    .dash-rv4-intake-raw-details > summary::-webkit-details-marker { display: none; }
+    .dash-rv4-intake-raw-details .dash-rv4-intake-pre {
+      margin-top: 0.45rem;
+      max-height: 16rem;
+      overflow: auto;
+      font-size: 0.68rem;
+    }
+    #rv4-intake-back-kitchen {
+      margin-top: 1.15rem;
+      font-size: 0.78rem;
+      padding: 0.45rem 0.85rem;
+      border-radius: var(--radius-md);
+      border: 1px solid var(--panel-border);
+      background: var(--panel);
+      color: var(--text);
+      cursor: pointer;
+    }
+    #rv4-intake-back-kitchen[hidden] { display: none !important; }
     .dash-rv4-mid-grid {
       display: grid;
       grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
@@ -1522,11 +1571,13 @@
       </div>
 
       <div id="dash-view-renaissance" class="dash-rv4-wrap" hidden aria-label="Quant Research Kitchen">
-        <h2 class="dash-rv4-head">Quant Research Kitchen</h2>
-        <p class="dash-rv4-sub">
-          Validate strategies against the locked baseline, run evaluations on the server, and review results.
-          Uploading a policy here does <strong>not</strong> deploy or activate it in production.
-        </p>
+        <div class="dash-rv4-kitchen-intro">
+          <h2 class="dash-rv4-head">Quant Research Kitchen</h2>
+          <p class="dash-rv4-sub">
+            Validate strategies against the locked baseline, run evaluations on the server, and review results.
+            Uploading a policy here does <strong>not</strong> deploy or activate it in production.
+          </p>
+        </div>
 
         <section class="dash-rv4-section dash-rv4-intake" aria-labelledby="rv4-intake-h">
           <h3 id="rv4-intake-h" class="dash-rv4-section-title">Policy Intake</h3>
@@ -1559,7 +1610,11 @@
           <p id="rv4-intake-summary" class="dash-rv4-intake-summary" hidden></p>
           <p id="rv4-intake-processing-h" class="dash-rv4-intake-processing-h" hidden>Processing</p>
           <ol id="rv4-intake-stages" class="dash-rv4-msg" style="margin:0.35rem 0 0 1rem;line-height:1.55" hidden></ol>
-          <pre id="rv4-intake-result" class="dash-rv4-detail dash-rv4-intake-pre" hidden></pre>
+          <details id="rv4-intake-raw-details" class="dash-rv4-intake-raw-details" hidden>
+            <summary>View raw report</summary>
+            <pre id="rv4-intake-result" class="dash-rv4-detail dash-rv4-intake-pre"></pre>
+          </details>
+          <button type="button" id="rv4-intake-back-kitchen" hidden>Back to Kitchen</button>
         </section>
 
         <div class="dash-rv4-mid-grid">
@@ -4677,10 +4732,34 @@
       el.classList.remove('is-visible');
     }
   }
+  function rv4IntakeSetRawReport(text) {
+    var pre = $('rv4-intake-result');
+    var det = $('rv4-intake-raw-details');
+    if (!pre || !det) return;
+    pre.textContent = text || '';
+    if (text && String(text).trim().length) {
+      det.hidden = false;
+      det.removeAttribute('open');
+    } else {
+      det.hidden = true;
+      det.removeAttribute('open');
+    }
+  }
+  function rv4IntakeEnterEvalMode() {
+    var w = $('dash-view-renaissance');
+    if (w) w.classList.add('rv4-eval-mode');
+    var bk = $('rv4-intake-back-kitchen');
+    if (bk) bk.hidden = false;
+  }
+  function rv4IntakeExitEvalMode() {
+    var w = $('dash-view-renaissance');
+    if (w) w.classList.remove('rv4-eval-mode');
+    var bk = $('rv4-intake-back-kitchen');
+    if (bk) bk.hidden = true;
+  }
   function rv4IntakeClearOutput() {
     var st = $('rv4-intake-stages');
     var sum = $('rv4-intake-summary');
-    var pre = $('rv4-intake-result');
     var ph = $('rv4-intake-processing-h');
     if (st) {
       st.innerHTML = '';
@@ -4692,11 +4771,7 @@
       sum.textContent = '';
       sum.style.color = '';
     }
-    if (pre) {
-      pre.hidden = true;
-      pre.textContent = '';
-      pre.style.display = '';
-    }
+    rv4IntakeSetRawReport('');
     rv4IntakeSetError('');
     rv4IntakeHideUploadActivity();
     rv4IntakeHideFileLoadedBanner();
@@ -4742,6 +4817,7 @@
     rv4IntakeFile.addEventListener('change', function () {
       if (rv4IntakeInFlight) return;
       rv4IntakeClearOutput();
+      rv4IntakeExitEvalMode();
       rv4IntakeUpdateGate();
     });
   }
@@ -4749,6 +4825,16 @@
     rv4IntakePaste.addEventListener('input', function () {
       if (rv4IntakeInFlight) return;
       rv4IntakeClearOutput();
+      rv4IntakeExitEvalMode();
+      rv4IntakeUpdateGate();
+    });
+  }
+  var rv4IntakeBack = $('rv4-intake-back-kitchen');
+  if (rv4IntakeBack) {
+    rv4IntakeBack.addEventListener('click', function () {
+      if (rv4IntakeInFlight) return;
+      rv4IntakeClearOutput();
+      rv4IntakeExitEvalMode();
       rv4IntakeUpdateGate();
     });
   }
@@ -4758,10 +4844,10 @@
       var p = rv4IntakeGetPayload();
       if (!p || rv4IntakeInFlight) return;
       var st = $('rv4-intake-stages');
-      var pre = $('rv4-intake-result');
       var sum = $('rv4-intake-summary');
       var fd = new FormData();
       fd.append('policy_file', p.fileObj, p.fname);
+      rv4IntakeEnterEvalMode();
       rv4IntakeInFlight = true;
       rv4IntakeUpdateGate();
       rv4IntakeClearOutput();
@@ -4791,22 +4877,14 @@
               (j && (j.error || j.detail)) ||
               (res.text ? String(res.text).slice(0, 1200) : 'HTTP ' + res.status);
             rv4IntakeSetError(String(errMsg));
-            if (pre) {
-              pre.hidden = false;
-              pre.style.display = 'block';
-              pre.textContent = res.text || '(empty response)';
-            }
+            rv4IntakeSetRawReport(res.text || '(empty response)');
             return;
           }
           if (!j || typeof j !== 'object') {
             rv4IntakeHideUploadActivity();
             rv4IntakeHideFileLoadedBanner();
             rv4IntakeSetError('Invalid JSON in server response.');
-            if (pre) {
-              pre.hidden = false;
-              pre.style.display = 'block';
-              pre.textContent = res.text || '';
-            }
+            rv4IntakeSetRawReport(res.text || '');
             return;
           }
           rv4IntakeHideUploadActivity();
@@ -4829,11 +4907,7 @@
               st.appendChild(li);
             });
           }
-          if (pre) {
-            pre.hidden = false;
-            pre.style.display = 'block';
-            pre.textContent = JSON.stringify(j, null, 2);
-          }
+          rv4IntakeSetRawReport(JSON.stringify(j, null, 2));
           if (sum) {
             sum.hidden = false;
             if (j.pass) {
@@ -4852,7 +4926,7 @@
                 return r2.json();
               })
               .then(function (j2) {
-                if (pre) pre.textContent = JSON.stringify(j2, null, 2);
+                rv4IntakeSetRawReport(JSON.stringify(j2, null, 2));
               });
           }
         })
@@ -4860,11 +4934,7 @@
           rv4IntakeHideUploadActivity();
           rv4IntakeHideFileLoadedBanner();
           rv4IntakeSetError('Network error — could not reach the server.');
-          if (pre) {
-            pre.hidden = false;
-            pre.style.display = 'block';
-            pre.textContent = 'Request failed (network or server).';
-          }
+          rv4IntakeSetRawReport('Request failed (network or server).');
         })
         .finally(function () {
           rv4IntakeDone();
