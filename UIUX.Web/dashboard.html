@@ -66,6 +66,72 @@
     }
     .dash-rv4-detail { margin-top: 0.75rem; padding: 0.75rem; border: 1px dashed var(--panel-border); border-radius: var(--radius-md); background: #fafbfc; font-size: 0.75rem; }
     .dash-rv4-detail pre { margin: 0.35rem 0 0; white-space: pre-wrap; word-break: break-word; max-height: 14rem; overflow: auto; font-size: 0.68rem; }
+    /* Kitchen layout — DV-ARCH-KITCHEN-UI-AND-POLICY-INTAKE-048A */
+    .dash-rv4-section {
+      margin-bottom: 1.35rem;
+      padding-bottom: 1.25rem;
+      border-bottom: 1px solid rgba(15, 23, 42, 0.08);
+    }
+    .dash-rv4-section:last-child { border-bottom: none; margin-bottom: 0; padding-bottom: 0; }
+    .dash-rv4-section-title {
+      font-size: 0.95rem; font-weight: 800; margin: 0 0 0.5rem; color: var(--text);
+      letter-spacing: 0.02em;
+    }
+    .dash-rv4-intake {
+      background: var(--panel);
+      border: 1px solid var(--panel-border);
+      border-radius: var(--radius-md);
+      padding: 1rem 1.1rem 1.15rem;
+      box-shadow: 0 1px 2px rgba(15, 23, 42, 0.06);
+    }
+    .dash-rv4-intake-lead { font-size: 0.8rem; color: var(--muted); margin: 0 0 0.85rem; max-width: 44rem; line-height: 1.45; }
+    .dash-rv4-intake-controls { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem 0.75rem; margin-bottom: 0.65rem; }
+    .dash-rv4-file-label.primary {
+      display: inline-flex; align-items: center; justify-content: center;
+      font-size: 0.78rem; font-weight: 600; padding: 0.45rem 0.85rem;
+      border-radius: var(--radius-md); background: var(--accent); color: var(--accent-contrast);
+      cursor: pointer; border: none;
+    }
+    .dash-rv4-file-label .dash-rv4-file-input {
+      position: absolute; width: 0.01px; height: 0.01px; opacity: 0; overflow: hidden; z-index: -1;
+    }
+    .dash-rv4-intake-paste-panel { margin: 0.5rem 0 0.65rem; }
+    .dash-rv4-intake-paste-panel label { display: block; font-size: 0.72rem; color: var(--muted); margin-bottom: 0.35rem; }
+    .dash-rv4-intake-paste-panel textarea {
+      width: 100%; min-height: 6rem; font-family: ui-monospace, monospace; font-size: 0.72rem;
+      padding: 0.45rem; border-radius: var(--radius-md); border: 1px solid var(--panel-border); box-sizing: border-box;
+    }
+    .dash-rv4-intake-submit-wrap { margin-top: 0.5rem; }
+    .dash-rv4-intake-subh { font-size: 0.78rem; font-weight: 700; margin: 0.85rem 0 0.4rem; color: var(--text); }
+    .dash-rv4-intake-pre { max-height: 18rem; margin-top: 0.5rem; }
+    .dash-rv4-intake-summary { font-size: 0.78rem; font-weight: 600; margin: 0.35rem 0 0.25rem; }
+    .dash-rv4-mid-grid {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+      gap: 1.15rem;
+      align-items: start;
+      margin-bottom: 1.25rem;
+    }
+    @media (max-width: 960px) {
+      .dash-rv4-mid-grid { grid-template-columns: 1fr; }
+    }
+    .dash-rv4-baseline-links { margin-top: 0.65rem; padding-top: 0.5rem; border-top: 1px dashed var(--panel-border); }
+    .dash-rv4-baseline-links .dash-rv4-links { margin: 0 0 0.4rem; }
+    .dash-rv4-actions-col {
+      display: flex; flex-direction: column; gap: 0.65rem;
+      max-width: 22rem;
+    }
+    .dash-rv4-actions-col button {
+      font-size: 0.78rem; padding: 0.45rem 0.65rem; border-radius: var(--radius-md);
+      border: 1px solid var(--panel-border); background: var(--panel); cursor: pointer; text-align: left;
+    }
+    .dash-rv4-actions-col button.primary {
+      background: var(--accent); color: var(--accent-contrast); border-color: transparent; font-weight: 600;
+    }
+    .dash-rv4-results .dash-rv4-table th,
+    .dash-rv4-results .dash-rv4-table td { padding: 0.45rem 0.4rem; }
+    .dash-rv4-exp-actions { display: flex; flex-wrap: wrap; gap: 0.5rem; margin: 0.5rem 0 0.65rem; align-items: center; }
+    .dash-rv4-exp-actions button { font-size: 0.75rem; padding: 0.35rem 0.55rem; }
     .dash-main {
       flex: 1; display: flex; flex-direction: column; min-width: 0; min-height: 0;
       background: linear-gradient(180deg, #f8f8fa 0%, #eef1f5 100%);
@@ -1415,65 +1481,79 @@
       </section>
       </div>
 
-      <div id="dash-view-renaissance" class="dash-rv4-wrap" hidden aria-label="Quant Research Kitchen V1">
-        <h2 class="dash-rv4-head">Quant Research Kitchen V1</h2>
+      <div id="dash-view-renaissance" class="dash-rv4-wrap" hidden aria-label="Quant Research Kitchen">
+        <h2 class="dash-rv4-head">Quant Research Kitchen</h2>
         <p class="dash-rv4-sub">
-          Governed, web-based strategy research and validation. The locked baseline recipe is
-          <code>RenaissanceV4_baseline_v1</code>; deterministic replay is authoritative; Monte Carlo is the stress layer.
-          Inspect baseline and experiments, launch approved jobs, compare results, export CSV from saved artifacts.
-          Route <code>#/renaissance</code> — data: <code>renaissance_v4/state</code> and reports on the API host mount.
+          Validate strategies against the locked baseline, run evaluations on the server, and review results.
+          Uploading a policy here does <strong>not</strong> deploy or activate it in production.
         </p>
-        <div class="dash-rv4-grid">
-          <div class="dash-rv4-card" id="rv4-baseline-card">
-            <h3>Active baseline</h3>
-            <div class="kv"><span class="k">Baseline tag</span><span class="v" id="rv4-bl-tag">—</span></div>
-            <div class="kv"><span class="k">Commit (git)</span><span class="v" id="rv4-bl-commit">—</span></div>
-            <div class="kv"><span class="k">Deterministic trade count</span><span class="v" id="rv4-bl-n">—</span></div>
-            <div class="kv"><span class="k">Expectancy</span><span class="v" id="rv4-bl-e">—</span></div>
-            <div class="kv"><span class="k">Max drawdown</span><span class="v" id="rv4-bl-dd">—</span></div>
-            <div class="kv"><span class="k">Monte Carlo reference</span><span class="v" id="rv4-bl-mc">—</span></div>
-            <div class="dash-rv4-links" id="rv4-bl-links"></div>
-            <div class="dash-rv4-export-row" id="rv4-bl-exports" aria-label="Baseline CSV exports"></div>
-            <p class="dash-rv4-msg" id="rv4-bl-reports"></p>
-          </div>
-          <div class="dash-rv4-card">
-            <h3>Approved experiment launchers</h3>
-            <p class="dash-rv4-msg" id="rv4-wb-note">Governed jobs only — runs <code>robustness_runner</code> on the server (long-running). No freeform code.</p>
-            <div class="dash-rv4-actions">
-              <button type="button" class="primary" id="rv4-btn-baseline-mc">Generate baseline Monte Carlo reference</button>
-              <button type="button" id="rv4-btn-example">Example robustness pipeline check</button>
-              <button type="button" id="rv4-btn-manifest-compare">Manifest compare (replay + baseline)</button>
-              <button type="button" id="rv4-btn-ingest-policy">Ingest policy package (full pipeline)</button>
-            </div>
-            <p class="dash-rv4-msg" id="rv4-roadmap"></p>
-            <p class="dash-rv4-msg" id="rv4-job-msg"></p>
-          </div>
-        </div>
-        <div class="dash-rv4-card" style="margin-bottom:0.75rem">
-          <h3>Submit Policy for Evaluation</h3>
-          <p class="dash-rv4-msg">
-            Upload does <strong>not</strong> deploy or activate. Passing intake means a <strong>candidate policy</strong> for Kitchen use only — not live trading.
-            Primary format: <code>.ts</code> exporting <code>generateSignalFromOhlc</code> (see <code>renaissance_v4/policy_intake/README.md</code>). Also <code>.yaml</code> / <code>.json</code> (spec-only; deterministic trade proof requires TypeScript).
+
+        <section class="dash-rv4-section dash-rv4-intake" aria-labelledby="rv4-intake-h">
+          <h3 id="rv4-intake-h" class="dash-rv4-section-title">Policy Intake</h3>
+          <p class="dash-rv4-intake-lead">
+            Upload a policy (TypeScript preferred). The system will validate, normalize, and test it before making it available.
+            This is not deployment — only evaluation toward a <strong>candidate</strong> policy record.
           </p>
-          <div class="dash-rv4-actions" style="align-items:center">
-            <input type="file" id="rv4-intake-file" accept=".ts,.yaml,.yml,.json,application/json,text/yaml,text/x-yaml" style="font-size:0.75rem;max-width:100%" />
-            <button type="button" class="primary" id="rv4-btn-policy-intake">Upload &amp; run intake</button>
+          <div class="dash-rv4-intake-controls">
+            <label class="dash-rv4-file-label primary">Choose file
+              <input type="file" id="rv4-intake-file" class="dash-rv4-file-input" accept=".ts,.yaml,.yml,.json,application/json,text/yaml,text/x-yaml" />
+            </label>
+            <button type="button" class="dash-nav-linklike" id="rv4-intake-paste-toggle" aria-expanded="false">Paste instead</button>
           </div>
-          <ol id="rv4-intake-stages" class="dash-rv4-msg" style="margin:0.5rem 0 0 1rem;line-height:1.5"></ol>
-          <pre id="rv4-intake-result" class="dash-rv4-detail" style="margin-top:0.5rem;max-height:16rem;display:none"></pre>
+          <div id="rv4-intake-paste-panel" class="dash-rv4-intake-paste-panel" hidden>
+            <label for="rv4-intake-paste">Paste policy source (sent as <code>policy_upload.ts</code>)</label>
+            <textarea id="rv4-intake-paste" spellcheck="false" placeholder="Paste TypeScript here…"></textarea>
+          </div>
+          <div class="dash-rv4-intake-submit-wrap">
+            <button type="button" class="primary" id="rv4-btn-policy-intake">Submit for evaluation</button>
+          </div>
+          <h4 class="dash-rv4-intake-subh">Results</h4>
+          <p id="rv4-intake-summary" class="dash-rv4-intake-summary" hidden></p>
+          <ol id="rv4-intake-stages" class="dash-rv4-msg" style="margin:0.35rem 0 0 1rem;line-height:1.55"></ol>
+          <pre id="rv4-intake-result" class="dash-rv4-detail dash-rv4-intake-pre" hidden></pre>
+        </section>
+
+        <div class="dash-rv4-mid-grid">
+          <section class="dash-rv4-section" aria-labelledby="rv4-baseline-h">
+            <h3 id="rv4-baseline-h" class="dash-rv4-section-title">Active Baseline</h3>
+            <div class="dash-rv4-card dash-rv4-baseline-only" id="rv4-baseline-card">
+              <div class="kv"><span class="k">Name</span><span class="v" id="rv4-bl-tag">—</span></div>
+              <div class="kv"><span class="k">Trade count</span><span class="v" id="rv4-bl-n">—</span></div>
+              <div class="kv"><span class="k">Expectancy</span><span class="v" id="rv4-bl-e">—</span></div>
+              <div class="kv"><span class="k">Max drawdown</span><span class="v" id="rv4-bl-dd">—</span></div>
+              <div class="kv"><span class="k">Monte Carlo status</span><span class="v" id="rv4-bl-mc">—</span></div>
+            </div>
+            <div class="dash-rv4-baseline-links" id="rv4-bl-links-wrap">
+              <div class="dash-rv4-links" id="rv4-bl-links"></div>
+              <div class="dash-rv4-export-row" id="rv4-bl-exports" aria-label="Baseline CSV exports"></div>
+              <p class="dash-rv4-msg" id="rv4-bl-reports"></p>
+            </div>
+          </section>
+          <section class="dash-rv4-section" aria-labelledby="rv4-eval-h">
+            <h3 id="rv4-eval-h" class="dash-rv4-section-title">Evaluation Actions</h3>
+            <p class="dash-rv4-msg" id="rv4-wb-note">Server-side jobs only (may take minutes). Does not change live trading.</p>
+            <div class="dash-rv4-actions-col">
+              <button type="button" class="primary" id="rv4-btn-baseline-mc">Run baseline Monte Carlo</button>
+              <button type="button" id="rv4-btn-example">Run robustness check</button>
+              <button type="button" id="rv4-btn-manifest-compare">Compare policy vs baseline</button>
+              <button type="button" id="rv4-btn-ingest-policy">Run policy evaluation pipeline</button>
+            </div>
+            <p class="dash-rv4-msg" id="rv4-job-msg"></p>
+            <p class="dash-rv4-msg" id="rv4-roadmap"></p>
+          </section>
         </div>
-        <div class="dash-rv4-card" style="margin-bottom:0.75rem">
-          <h3>Experiment queue</h3>
+
+        <section class="dash-rv4-section dash-rv4-results" aria-labelledby="rv4-results-h">
+          <h3 id="rv4-results-h" class="dash-rv4-section-title">Results</h3>
+          <h4 style="font-size:0.82rem;font-weight:700;margin:0.5rem 0 0.35rem">Experiment queue</h4>
           <table class="dash-rv4-table" id="rv4-exp-table">
             <thead><tr><th>id</th><th>strategy</th><th>type</th><th>status</th><th>stage</th><th>recommendation</th><th>completed</th><th>created</th></tr></thead>
             <tbody id="rv4-exp-tbody"><tr><td colspan="8">Loading…</td></tr></tbody>
           </table>
-        </div>
-        <div class="dash-rv4-card">
-          <h3>Experiment detail</h3>
-          <div class="dash-rv4-actions">
-            <button type="button" id="rv4-btn-rerun" disabled>Compare candidate (robustness)</button>
-            <button type="button" id="rv4-btn-manifest-sel" disabled>Manifest compare (selected id)</button>
+          <h4 style="font-size:0.82rem;font-weight:700;margin:1rem 0 0.35rem">Experiment detail</h4>
+          <div class="dash-rv4-exp-actions">
+            <button type="button" id="rv4-btn-rerun" disabled>Compare selected candidate vs baseline</button>
+            <button type="button" id="rv4-btn-manifest-sel" disabled>Compare using selected experiment (manifest)</button>
             <span class="dash-rv4-msg" id="rv4-sel-id"></span>
           </div>
           <div class="dash-rv4-detail" id="rv4-detail" hidden>
@@ -1492,7 +1572,7 @@
             <p class="dash-rv4-msg" id="rv4-d-paths"></p>
             <pre id="rv4-d-pre"></pre>
           </div>
-        </div>
+        </section>
       </div>
     </div>
   </div>
@@ -4187,7 +4267,6 @@
         if (!j || j.error) return;
         var det = j.deterministic || {};
         $('rv4-bl-tag').textContent = j.baseline_tag || '—';
-        $('rv4-bl-commit').textContent = j.commit_hint || '—';
         $('rv4-bl-n').textContent = rv4Fmt(det.total_trades);
         $('rv4-bl-e').textContent = rv4Fmt(det.expectancy);
         $('rv4-bl-dd').textContent = rv4Fmt(det.max_drawdown);
@@ -4461,27 +4540,59 @@
       rv4PostJob({ action: 'compare_manifest', experiment_id: eid, manifest: mf });
     });
   }
+  var rv4PasteToggle = $('rv4-intake-paste-toggle');
+  var rv4PastePanel = $('rv4-intake-paste-panel');
+  if (rv4PasteToggle && rv4PastePanel) {
+    rv4PasteToggle.addEventListener('click', function () {
+      var open = rv4PastePanel.hidden;
+      rv4PastePanel.hidden = !open;
+      rv4PasteToggle.setAttribute('aria-expanded', open ? 'true' : 'false');
+      rv4PasteToggle.textContent = open ? 'Hide paste' : 'Paste instead';
+    });
+  }
   var rv4pi = $('rv4-btn-policy-intake');
   if (rv4pi) {
     rv4pi.addEventListener('click', function () {
       var fin = $('rv4-intake-file');
+      var pasteTa = $('rv4-intake-paste');
       var st = $('rv4-intake-stages');
       var pre = $('rv4-intake-result');
-      if (!fin || !fin.files || !fin.files[0]) {
-        alert('Choose a policy file first (.ts, .yaml, or .json).');
+      var sum = $('rv4-intake-summary');
+      var fileObj = null;
+      var fname = 'policy_upload.ts';
+      if (pasteTa && rv4PastePanel && !rv4PastePanel.hidden && String(pasteTa.value || '').trim()) {
+        var blob = new Blob([pasteTa.value], { type: 'text/plain' });
+        fileObj = new File([blob], fname, { type: 'text/plain' });
+      } else if (fin && fin.files && fin.files[0]) {
+        fileObj = fin.files[0];
+        fname = fileObj.name;
+      }
+      if (!fileObj) {
+        alert('Choose a file or paste policy source (.ts, .yaml, or .json).');
         return;
       }
       var fd = new FormData();
-      fd.append('policy_file', fin.files[0], fin.files[0].name);
+      fd.append('policy_file', fileObj, fname);
+      if (sum) {
+        sum.hidden = false;
+        sum.style.color = '';
+        sum.textContent = 'Running intake…';
+      }
       if (st) {
         st.innerHTML = '';
-        ['File received', 'Structural validation', 'Normalization', 'Static checks', 'Deterministic test', 'Viability gate']
-          .forEach(function (label, i) {
-            var li = document.createElement('li');
-            li.textContent = (i + 1) + '. ' + label + ' — in progress…';
-            li.dataset.stage = String(i);
-            st.appendChild(li);
-          });
+        [
+          'Upload status',
+          'Validation result',
+          'Normalization result',
+          'Static checks',
+          'Test result',
+          'Pass / fail gate',
+        ].forEach(function (label, i) {
+          var li = document.createElement('li');
+          li.textContent = (i + 1) + '. ' + label + ' — in progress…';
+          li.dataset.stage = String(i);
+          st.appendChild(li);
+        });
       }
       if (pre) {
         pre.style.display = 'block';
@@ -4493,16 +4604,33 @@
         })
         .then(function (j) {
           if (pre) pre.textContent = JSON.stringify(j, null, 2);
+          if (sum) {
+            if (j.pass) {
+              sum.style.color = 'var(--text)';
+              sum.textContent =
+                'Outcome: PASS — candidate policy id: ' + (j.candidate_policy_id || j.submission_id || '—');
+            } else {
+              sum.style.color = '#7f1d1d';
+              sum.textContent =
+                'Outcome: FAIL — ' + (j.errors && j.errors.length ? j.errors.join('; ') : 'see detail below');
+            }
+          }
           if (st && j && j.stages) {
             var order = ['stage_1_intake', 'stage_2_structural', 'stage_3_normalization', 'stage_4_static', 'stage_5_deterministic', 'stage_6_viability'];
-            var labels = ['File received', 'Structural validation', 'Normalization', 'Static checks', 'Deterministic test', 'Viability gate'];
+            var labels = [
+              'Upload status',
+              'Validation result',
+              'Normalization result',
+              'Static checks',
+              'Test result',
+              'Pass / fail gate',
+            ];
             order.forEach(function (key, i) {
               var row = j.stages[key];
               var li = st.children[i];
               if (!li || !row) return;
-              var ok = row.ok === true || row.status === 'in_progress';
               var tail = row.ok === false ? ' — failed' : row.ok === true ? ' — done' : ' — ' + (row.status || '');
-              li.textContent = (i + 1) + '. ' + labels[i] + tail + (row.detail ? ' — ' + String(row.detail).slice(0, 120) : '');
+              li.textContent = (i + 1) + '. ' + labels[i] + tail + (row.detail ? ' — ' + String(row.detail).slice(0, 160) : '');
             });
           }
           if (j && j.submission_id && j.pass) {
@@ -4517,16 +4645,21 @@
         })
         .catch(function () {
           if (pre) pre.textContent = 'Request failed (network or server).';
+          if (sum) {
+            sum.hidden = false;
+            sum.style.color = '#7f1d1d';
+            sum.textContent = 'Outcome: FAIL — network or server error.';
+          }
         });
     });
   }
   var rv4ip = $('rv4-btn-ingest-policy');
   if (rv4ip) {
     rv4ip.addEventListener('click', function () {
-      var eid = window.prompt('experiment_id (e.g. exp_ingest_20260414_abcd1234)', '');
+      var eid = window.prompt('Experiment id for this pipeline run (e.g. exp_eval_20260414_abcd1234)', '');
       if (!eid) return;
       var pp = window.prompt(
-        'Policy package path under policies/ (must include POLICY_SPEC.yaml with parity.manifest_path)',
+        'Policy package path under policies/ (POLICY_SPEC.yaml with parity.manifest_path)',
         'policies/generated/renaissance_baseline_v1_stack'
       );
       if (!pp) return;
