@@ -1880,6 +1880,28 @@ function htmlPage(v) {
       }).join('');
       return '<table class="jw-nt-kv"><thead><tr><th>Field</th><th>Value</th></tr></thead><tbody>'+rows+'</tbody></table>';
     }
+    /** Display-only: omit strategy.schema from stringified gate JSON (does not mutate API object). */
+    function strategyJsonForDisplay(strat){
+      if(!strat||typeof strat!=='object') return '{}';
+      var copy = {};
+      for(var k in strat){
+        if(!Object.prototype.hasOwnProperty.call(strat,k)) continue;
+        if(k === 'schema') continue;
+        copy[k] = strat[k];
+      }
+      return JSON.stringify(copy,null,2);
+    }
+    /** Display-only full gate_results fallback without strategy.schema leakage. */
+    function gateResultsJsonForDisplay(g){
+      if(!g||typeof g!=='object') return '{}';
+      try {
+        var o = JSON.parse(JSON.stringify(g));
+        if(o.strategy && typeof o.strategy === 'object' && Object.prototype.hasOwnProperty.call(o.strategy,'schema')) delete o.strategy.schema;
+        return JSON.stringify(o,null,2);
+      } catch (err) {
+        return JSON.stringify(g,null,2);
+      }
+    }
     function gateHtml(g){
       if(!g||typeof g!=='object') return '<p class="muted">—</p>';
       var h = '';
@@ -1888,7 +1910,7 @@ function htmlPage(v) {
         h += kvTable(g.funding_gate === null ? { note: 'not evaluated on this path' } : (typeof g.funding_gate === 'object' && g.funding_gate ? g.funding_gate : { value: g.funding_gate }));
       }
       if(g.strategy && typeof g.strategy === 'object'){
-        h += '<p class="muted small" style="margin-top:0.5rem"><strong>Strategy gates</strong></p>';
+        h += '<p class="muted small" style="margin-top:0.5rem"><strong>Policy Gates</strong></p>';
         var sr = g.strategy.rows;
         if(Array.isArray(sr)){
           h += '<table class="jw-nt-kv"><thead><tr><th>id</th><th>label</th><th>long_ok</th><th>short_ok</th></tr></thead><tbody>';
@@ -1898,9 +1920,9 @@ function htmlPage(v) {
           h += '</tbody></table>';
           if(g.strategy.long) h += '<p class="muted small">long.all_ok: '+E(String(g.strategy.long.all_ok))+'</p>';
           if(g.strategy.short) h += '<p class="muted small">short.all_ok: '+E(String(g.strategy.short.all_ok))+'</p>';
-        } else { h += '<pre class="jw-nt-pre">'+E(JSON.stringify(g.strategy,null,2))+'</pre>'; }
+        } else { h += '<pre class="jw-nt-pre">'+E(strategyJsonForDisplay(g.strategy))+'</pre>'; }
       }
-      return h || '<pre class="jw-nt-pre">'+E(JSON.stringify(g,null,2))+'</pre>';
+      return h || '<pre class="jw-nt-pre">'+E(gateResultsJsonForDisplay(g))+'</pre>';
     }
     var root = document.getElementById('jw-nt-drawer-root');
     var body = document.getElementById('jw-nt-drawer-body');
@@ -1921,7 +1943,8 @@ function htmlPage(v) {
         return r.json();
       }).then(function(d){
         if(d.error){ body.innerHTML = '<p class="warn">'+E(String(d.error))+'</p>'; return; }
-        title.textContent = String(d.outcome || 'BAR') + ' #' + String(d.id) + ' — ' + String(d.reason_code || '');
+        var polLabel = (d.policy_id != null && String(d.policy_id).trim() !== '') ? String(d.policy_id).trim() : 'Policy';
+        title.textContent = polLabel + ' — ' + String(d.outcome || 'BAR') + ' #' + String(d.id) + ' — ' + String(d.reason_code || '');
         var html = '';
         html += '<h4 class="jw-nt-h4">Summary</h4><dl class="jw-nt-dl">';
         [['outcome', d.outcome],['market_event_id', d.market_event_id],['timestamp_utc', d.timestamp_utc],['symbol', d.symbol],['timeframe', d.timeframe],['policy_id', d.policy_id],['policy_engine_tag', d.policy_engine_tag],['engine_id', d.engine_id],['candidate_side', d.candidate_side],['reason_code', d.reason_code],['trade_id', d.trade_id]].forEach(function(p){
