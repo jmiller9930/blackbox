@@ -1450,6 +1450,19 @@
           </div>
         </div>
         <div class="dash-rv4-card" style="margin-bottom:0.75rem">
+          <h3>Submit Policy for Evaluation</h3>
+          <p class="dash-rv4-msg">
+            Upload does <strong>not</strong> deploy or activate. Passing intake means a <strong>candidate policy</strong> for Kitchen use only — not live trading.
+            Primary format: <code>.ts</code> exporting <code>generateSignalFromOhlc</code> (see <code>renaissance_v4/policy_intake/README.md</code>). Also <code>.yaml</code> / <code>.json</code> (spec-only; deterministic trade proof requires TypeScript).
+          </p>
+          <div class="dash-rv4-actions" style="align-items:center">
+            <input type="file" id="rv4-intake-file" accept=".ts,.yaml,.yml,.json,application/json,text/yaml,text/x-yaml" style="font-size:0.75rem;max-width:100%" />
+            <button type="button" class="primary" id="rv4-btn-policy-intake">Upload &amp; run intake</button>
+          </div>
+          <ol id="rv4-intake-stages" class="dash-rv4-msg" style="margin:0.5rem 0 0 1rem;line-height:1.5"></ol>
+          <pre id="rv4-intake-result" class="dash-rv4-detail" style="margin-top:0.5rem;max-height:16rem;display:none"></pre>
+        </div>
+        <div class="dash-rv4-card" style="margin-bottom:0.75rem">
           <h3>Experiment queue</h3>
           <table class="dash-rv4-table" id="rv4-exp-table">
             <thead><tr><th>id</th><th>strategy</th><th>type</th><th>status</th><th>stage</th><th>recommendation</th><th>completed</th><th>created</th></tr></thead>
@@ -4446,6 +4459,65 @@
       );
       if (!mf) return;
       rv4PostJob({ action: 'compare_manifest', experiment_id: eid, manifest: mf });
+    });
+  }
+  var rv4pi = $('rv4-btn-policy-intake');
+  if (rv4pi) {
+    rv4pi.addEventListener('click', function () {
+      var fin = $('rv4-intake-file');
+      var st = $('rv4-intake-stages');
+      var pre = $('rv4-intake-result');
+      if (!fin || !fin.files || !fin.files[0]) {
+        alert('Choose a policy file first (.ts, .yaml, or .json).');
+        return;
+      }
+      var fd = new FormData();
+      fd.append('policy_file', fin.files[0], fin.files[0].name);
+      if (st) {
+        st.innerHTML = '';
+        ['File received', 'Structural validation', 'Normalization', 'Static checks', 'Deterministic test', 'Viability gate']
+          .forEach(function (label, i) {
+            var li = document.createElement('li');
+            li.textContent = (i + 1) + '. ' + label + ' — in progress…';
+            li.dataset.stage = String(i);
+            st.appendChild(li);
+          });
+      }
+      if (pre) {
+        pre.style.display = 'block';
+        pre.textContent = 'Uploading…';
+      }
+      fetch('/api/v1/renaissance/policy-intake', { method: 'POST', body: fd })
+        .then(function (r) {
+          return r.json();
+        })
+        .then(function (j) {
+          if (pre) pre.textContent = JSON.stringify(j, null, 2);
+          if (st && j && j.stages) {
+            var order = ['stage_1_intake', 'stage_2_structural', 'stage_3_normalization', 'stage_4_static', 'stage_5_deterministic', 'stage_6_viability'];
+            var labels = ['File received', 'Structural validation', 'Normalization', 'Static checks', 'Deterministic test', 'Viability gate'];
+            order.forEach(function (key, i) {
+              var row = j.stages[key];
+              var li = st.children[i];
+              if (!li || !row) return;
+              var ok = row.ok === true || row.status === 'in_progress';
+              var tail = row.ok === false ? ' — failed' : row.ok === true ? ' — done' : ' — ' + (row.status || '');
+              li.textContent = (i + 1) + '. ' + labels[i] + tail + (row.detail ? ' — ' + String(row.detail).slice(0, 120) : '');
+            });
+          }
+          if (j && j.submission_id && j.pass) {
+            return fetch('/api/v1/renaissance/policy-intake/' + encodeURIComponent(j.submission_id))
+              .then(function (r2) {
+                return r2.json();
+              })
+              .then(function (j2) {
+                if (pre) pre.textContent = JSON.stringify(j2, null, 2);
+              });
+          }
+        })
+        .catch(function () {
+          if (pre) pre.textContent = 'Request failed (network or server).';
+        });
     });
   }
   var rv4ip = $('rv4-btn-ingest-policy');

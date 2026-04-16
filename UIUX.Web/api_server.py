@@ -2,7 +2,9 @@
 """Minimal BLACK BOX UI truth API for /api/v1/*."""
 from __future__ import annotations
 
+import cgi
 import gzip
+import io
 import json
 import os
 import sys
@@ -2303,6 +2305,28 @@ class Handler(BaseHTTPRequestHandler):
                     no_cache=True,
                 )
             return
+        if path.startswith("/api/v1/renaissance/policy-intake/"):
+            sid = path[len("/api/v1/renaissance/policy-intake/") :].strip().strip("/")
+            if not sid or ".." in sid:
+                self._json(400, {"ok": False, "error": "invalid_submission_id"}, no_cache=True)
+                return
+            try:
+                from renaissance_v4.policy_intake.storage import read_json, submission_dir
+
+                rep_path = submission_dir(_REPO_ROOT, sid) / "report" / "intake_report.json"
+                rep = read_json(rep_path)
+                if not isinstance(rep, dict):
+                    self._json(404, {"ok": False, "error": "unknown_submission"}, no_cache=True)
+                    return
+                rep["trace_id"] = str(uuid.uuid4())
+                self._json(200, rep, no_cache=True)
+            except Exception as e:  # noqa: BLE001
+                self._json(
+                    500,
+                    {"ok": False, "error": str(e)[:500], "trace_id": str(uuid.uuid4())},
+                    no_cache=True,
+                )
+            return
         if path == "/api/v1/renaissance/workbench":
             try:
                 from renaissance_v4.ui_api import build_workbench_meta_payload
@@ -2709,6 +2733,76 @@ class Handler(BaseHTTPRequestHandler):
             self._json(code, r, no_cache=True)
             return
         path_norm = (parsed.path or "").rstrip("/") or "/"
+        if path_norm == "/api/v1/renaissance/policy-intake":
+            ct = (self.headers.get("Content-Type") or "").split(";")[0].strip().lower()
+            if ct != "multipart/form-data":
+                self._json(
+                    400,
+                    {
+                        "ok": False,
+                        "error": "expected_multipart_form_data",
+                        "detail": "Use enctype multipart/form-data and field name policy_file",
+                        "trace_id": str(uuid.uuid4()),
+                    },
+                    no_cache=True,
+                )
+                return
+            try:
+                n = int(self.headers.get("Content-Length") or 0)
+            except ValueError:
+                n = 0
+            if n <= 0 or n > 8 * 1024 * 1024:
+                self._json(
+                    400,
+                    {"ok": False, "error": "invalid_content_length", "max_bytes": 8388608},
+                    no_cache=True,
+                )
+                return
+            body = self.rfile.read(n)
+            full_ct = self.headers.get("Content-Type") or ""
+            env = {
+                "REQUEST_METHOD": "POST",
+                "CONTENT_TYPE": full_ct,
+                "CONTENT_LENGTH": str(len(body)),
+            }
+            fs = cgi.FieldStorage(fp=io.BytesIO(body), environ=env, keep_blank_values=True)
+            fn = None
+            raw = b""
+            if "policy_file" in fs:
+                item = fs["policy_file"]
+                fn = getattr(item, "filename", None) or None
+                if hasattr(item, "file") and item.file:
+                    raw = item.file.read()
+                elif item.value:
+                    raw = item.value if isinstance(item.value, bytes) else str(item.value).encode("utf-8")
+            if not fn or not raw:
+                self._json(
+                    400,
+                    {
+                        "ok": False,
+                        "error": "missing_policy_file",
+                        "detail": "Provide multipart field policy_file",
+                        "trace_id": str(uuid.uuid4()),
+                    },
+                    no_cache=True,
+                )
+                return
+            trace_id = str(uuid.uuid4())
+            try:
+                from renaissance_v4.policy_intake.pipeline import run_intake_pipeline
+
+                rep = run_intake_pipeline(_REPO_ROOT, raw, fn, test_window_bars=800)
+            except Exception as e:  # noqa: BLE001
+                self._json(
+                    500,
+                    {"ok": False, "error": str(e)[:800], "trace_id": trace_id},
+                    no_cache=True,
+                )
+                return
+            if isinstance(rep, dict):
+                rep["trace_id"] = trace_id
+            self._json(200, rep, no_cache=True)
+            return
         if path_norm == "/api/v1/renaissance/promotion-approve":
             body = self._read_json_body() or {}
             trace_id = str(uuid.uuid4())

@@ -25,6 +25,9 @@ data/sqlite/*.db-journal
 renaissance_v4/data/*.sqlite3
 renaissance_v4/data/*.sqlite3-journal
 
+# Operator policy intake uploads (DV-048) — host-local
+renaissance_v4/state/policy_intake_submissions/
+
 # RenaissanceV4: baseline_v1.md is tracked (DV-ARCH-REVIEW-014); do not gitignore.
 data/logs/*.log
 

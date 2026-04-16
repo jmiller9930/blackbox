@@ -410,7 +410,14 @@ def build_workbench_meta_payload() -> dict[str, Any]:
             "Baseline logic is immutable; experiments run as separate harness jobs.",
             "Promotion to production is not available from the UI.",
             "Monte Carlo supplements deterministic replay; it does not replace it.",
+            "Policy intake (DV-048): POST /api/v1/renaissance/policy-intake — evaluation only; not deployment or activation.",
         ],
+        "policy_intake": {
+            "post_url": "/api/v1/renaissance/policy-intake",
+            "status_url_template": "/api/v1/renaissance/policy-intake/{submission_id}",
+            "multipart_field": "policy_file",
+            "doc": "renaissance_v4/policy_intake/README.md",
+        },
         "approved_job_actions": [
             {
                 "id": "baseline_mc",
