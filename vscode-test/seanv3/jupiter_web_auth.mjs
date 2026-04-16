@@ -79,7 +79,11 @@ export function getSessionSecret() {
 }
 
 export function getPublicBaseUrl() {
-  const u = (process.env.JUPITER_PUBLIC_BASE_URL || '').trim().replace(/\/$/, '');
+  let u = (process.env.JUPITER_PUBLIC_BASE_URL || '').trim().replace(/\/$/, '');
+  // WAN is :707; legacy env/email used :737 — rewrite so reset links match the router.
+  if (/jupv3\.greyllc\.net:737/i.test(u)) {
+    u = u.replace(/:737/gi, ':707');
+  }
   return u || '';
 }
 
