@@ -107,12 +107,34 @@
       flex: 1 1 100%;
     }
     .dash-rv4-intake-hint.is-ready { color: var(--text); font-weight: 600; }
-    .dash-rv4-intake-upload-line {
-      font-size: 0.76rem; margin: 0.4rem 0 0.25rem; min-height: 1.15rem;
+    .dash-rv4-intake-upload-activity {
+      display: flex; align-items: center; gap: 0.45rem;
+      font-size: 0.76rem; margin: 0.45rem 0 0.25rem; min-height: 1.35rem;
+      color: var(--accent); font-weight: 600;
     }
-    .dash-rv4-intake-upload-line.is-busy { color: var(--accent); font-weight: 600; }
-    .dash-rv4-intake-upload-line.is-ok { color: #166534; font-weight: 600; }
-    .dash-rv4-intake-upload-line.is-err { color: #7f1d1d; font-weight: 600; }
+    .dash-rv4-intake-upload-activity[hidden] { display: none !important; }
+    .dash-rv4-intake-spinner {
+      display: inline-block; flex-shrink: 0;
+      width: 0.95rem; height: 0.95rem;
+      border: 2px solid rgba(51, 65, 85, 0.35);
+      border-top-color: var(--accent);
+      border-radius: 50%;
+      animation: rv4-intake-spin 0.65s linear infinite;
+      vertical-align: middle;
+    }
+    .dash-rv4-intake-spinner[hidden] { display: none !important; }
+    @keyframes rv4-intake-spin { to { transform: rotate(360deg); } }
+    .dash-rv4-intake-file-loaded {
+      font-size: 0.78rem; font-weight: 600; color: #166534; margin: 0.35rem 0 0.15rem;
+      line-height: 1.4;
+    }
+    .dash-rv4-intake-file-loaded .rv4-fl-name { font-weight: 700; }
+    .dash-rv4-intake-file-loaded .rv4-fl-sub { display: block; font-size: 0.72rem; font-weight: 600; color: var(--muted); margin-top: 0.2rem; }
+    .dash-rv4-intake-file-loaded[hidden] { display: none !important; }
+    .dash-rv4-intake-processing-h {
+      font-size: 0.76rem; font-weight: 700; margin: 0.65rem 0 0.25rem; color: var(--text);
+    }
+    .dash-rv4-intake-processing-h[hidden] { display: none !important; }
     .dash-rv4-intake-error {
       display: none; font-size: 0.76rem; color: #7f1d1d; background: rgba(127, 29, 29, 0.08);
       border: 1px solid rgba(127, 29, 29, 0.25); border-radius: var(--radius-md); padding: 0.5rem 0.65rem; margin: 0.5rem 0 0; white-space: pre-wrap; word-break: break-word;
@@ -1527,10 +1549,15 @@
             <p id="rv4-intake-gate-msg" class="dash-rv4-intake-hint">Select or paste a policy file</p>
             <p id="rv4-intake-ready-line" class="dash-rv4-intake-hint is-ready" hidden></p>
           </div>
-          <p id="rv4-intake-upload-line" class="dash-rv4-intake-upload-line" hidden aria-live="polite"></p>
+          <div id="rv4-intake-upload-activity" class="dash-rv4-intake-upload-activity" hidden aria-live="polite">
+            <span id="rv4-intake-spinner" class="dash-rv4-intake-spinner" role="status" aria-label="Uploading"></span>
+            <span id="rv4-intake-upload-msg">Uploading…</span>
+          </div>
+          <p id="rv4-intake-file-loaded" class="dash-rv4-intake-file-loaded" hidden></p>
           <div id="rv4-intake-error" class="dash-rv4-intake-error" role="alert" aria-live="assertive"></div>
           <h4 class="dash-rv4-intake-subh">Results</h4>
           <p id="rv4-intake-summary" class="dash-rv4-intake-summary" hidden></p>
+          <p id="rv4-intake-processing-h" class="dash-rv4-intake-processing-h" hidden>Processing</p>
           <ol id="rv4-intake-stages" class="dash-rv4-msg" style="margin:0.35rem 0 0 1rem;line-height:1.55" hidden></ol>
           <pre id="rv4-intake-result" class="dash-rv4-detail dash-rv4-intake-pre" hidden></pre>
         </section>
@@ -4585,15 +4612,59 @@
     }
     return null;
   }
-  function rv4IntakeSetUploadLine(text, kind) {
-    var ul = $('rv4-intake-upload-line');
-    if (!ul) return;
-    ul.hidden = !text;
-    ul.textContent = text || '';
-    ul.classList.remove('is-busy', 'is-ok', 'is-err');
-    if (kind === 'busy') ul.classList.add('is-busy');
-    else if (kind === 'ok') ul.classList.add('is-ok');
-    else if (kind === 'err') ul.classList.add('is-err');
+  function rv4IntakeShowUploadSpinner() {
+    var act = $('rv4-intake-upload-activity');
+    var sp = $('rv4-intake-spinner');
+    var msg = $('rv4-intake-upload-msg');
+    if (act) act.hidden = false;
+    if (sp) sp.hidden = false;
+    if (msg) msg.textContent = 'Uploading…';
+  }
+  function rv4IntakeHideUploadActivity() {
+    var act = $('rv4-intake-upload-activity');
+    var sp = $('rv4-intake-spinner');
+    if (act) act.hidden = true;
+    if (sp) sp.hidden = true;
+  }
+  function rv4IntakeShowFileLoadedBanner(displayName) {
+    var el = $('rv4-intake-file-loaded');
+    if (!el) return;
+    el.textContent = '';
+    var a = document.createElement('span');
+    a.className = 'rv4-fl-name';
+    a.textContent = 'File loaded: ' + String(displayName || '—');
+    var b = document.createElement('span');
+    b.className = 'rv4-fl-sub';
+    b.textContent = 'Upload complete';
+    el.appendChild(a);
+    el.appendChild(b);
+    el.hidden = false;
+  }
+  function rv4IntakeHideFileLoadedBanner() {
+    var el = $('rv4-intake-file-loaded');
+    if (el) {
+      el.hidden = true;
+      el.textContent = '';
+    }
+  }
+  function rv4IntakeStageTail(row) {
+    if (!row) return ' — (no data)';
+    var tail = row.ok === false ? ' — failed' : row.ok === true ? ' — done' : ' — ' + (row.status || '…');
+    var det = '';
+    if (row.detail) det = ' — ' + String(row.detail).slice(0, 140);
+    if (Array.isArray(row.errors) && row.errors.length) det = ' — ' + row.errors.join('; ').slice(0, 220);
+    return tail + det;
+  }
+  function rv4IntakeValidationTail(S) {
+    var s2 = S.stage_2_structural;
+    var s4 = S.stage_4_static;
+    if (s2 && s2.ok === false) return rv4IntakeStageTail(s2);
+    if (s4 && s4.ok === false) return rv4IntakeStageTail(s4);
+    if (s2 && s2.ok === true && s4 && s4.ok === true) return ' — done';
+    if (s2 && s2.ok === true && !s4) return ' — …';
+    if (s2 && s2.ok === true && s4) return rv4IntakeStageTail(s4);
+    if (!s2 && !s4) return ' — (no data)';
+    return rv4IntakeStageTail(s2 || s4);
   }
   function rv4IntakeSetError(msg) {
     var el = $('rv4-intake-error');
@@ -4610,10 +4681,12 @@
     var st = $('rv4-intake-stages');
     var sum = $('rv4-intake-summary');
     var pre = $('rv4-intake-result');
+    var ph = $('rv4-intake-processing-h');
     if (st) {
       st.innerHTML = '';
       st.hidden = true;
     }
+    if (ph) ph.hidden = true;
     if (sum) {
       sum.hidden = true;
       sum.textContent = '';
@@ -4625,7 +4698,8 @@
       pre.style.display = '';
     }
     rv4IntakeSetError('');
-    rv4IntakeSetUploadLine('', '');
+    rv4IntakeHideUploadActivity();
+    rv4IntakeHideFileLoadedBanner();
   }
   function rv4IntakeUpdateGate() {
     var btn = $('rv4-btn-policy-intake');
@@ -4691,15 +4765,8 @@
       rv4IntakeInFlight = true;
       rv4IntakeUpdateGate();
       rv4IntakeClearOutput();
-      rv4IntakeSetUploadLine('Uploading…', 'busy');
-      var pipelineLabels = [
-        'Upload status',
-        'Validation result',
-        'Normalization result',
-        'Static checks',
-        'Test result',
-        'Pass / fail gate',
-      ];
+      rv4IntakeShowUploadSpinner();
+      var loadedName = p.readyLabel || p.fname;
       function rv4IntakeDone() {
         rv4IntakeInFlight = false;
         rv4IntakeUpdateGate();
@@ -4718,7 +4785,8 @@
             j = null;
           }
           if (!res.ok || res.status !== 200) {
-            rv4IntakeSetUploadLine('Upload failed', 'err');
+            rv4IntakeHideUploadActivity();
+            rv4IntakeHideFileLoadedBanner();
             var errMsg =
               (j && (j.error || j.detail)) ||
               (res.text ? String(res.text).slice(0, 1200) : 'HTTP ' + res.status);
@@ -4728,15 +4796,11 @@
               pre.style.display = 'block';
               pre.textContent = res.text || '(empty response)';
             }
-            if (sum) {
-              sum.hidden = false;
-              sum.style.color = '#7f1d1d';
-              sum.textContent = 'Upload did not complete successfully.';
-            }
             return;
           }
           if (!j || typeof j !== 'object') {
-            rv4IntakeSetUploadLine('Upload failed', 'err');
+            rv4IntakeHideUploadActivity();
+            rv4IntakeHideFileLoadedBanner();
             rv4IntakeSetError('Invalid JSON in server response.');
             if (pre) {
               pre.hidden = false;
@@ -4745,30 +4809,23 @@
             }
             return;
           }
-          rv4IntakeSetUploadLine('Upload complete', 'ok');
+          rv4IntakeHideUploadActivity();
+          rv4IntakeShowFileLoadedBanner(loadedName);
+          var S = j.stages || {};
+          var ph = $('rv4-intake-processing-h');
+          if (ph) ph.hidden = false;
           if (st) {
             st.innerHTML = '';
             st.hidden = false;
-            var order = [
-              'stage_1_intake',
-              'stage_2_structural',
-              'stage_3_normalization',
-              'stage_4_static',
-              'stage_5_deterministic',
-              'stage_6_viability',
+            var rows = [
+              { k: 'validation', label: 'Validation', text: rv4IntakeValidationTail(S) },
+              { k: 'norm', label: 'Normalization', text: rv4IntakeStageTail(S.stage_3_normalization) },
+              { k: 'test', label: 'Testing', text: rv4IntakeStageTail(S.stage_5_deterministic) },
+              { k: 'pf', label: 'Pass / fail', text: rv4IntakeStageTail(S.stage_6_viability) },
             ];
-            order.forEach(function (key, i) {
-              var row = j.stages ? j.stages[key] : null;
+            rows.forEach(function (r, i) {
               var li = document.createElement('li');
-              if (!row) {
-                li.textContent = (i + 1) + '. ' + pipelineLabels[i] + ' — (no data)';
-              } else {
-                var tail = row.ok === false ? ' — failed' : row.ok === true ? ' — done' : ' — ' + (row.status || '');
-                var det = row.detail ? ' — ' + String(row.detail).slice(0, 160) : '';
-                if (Array.isArray(row.errors) && row.errors.length)
-                  det = ' — ' + row.errors.join('; ').slice(0, 220);
-                li.textContent = (i + 1) + '. ' + pipelineLabels[i] + tail + det;
-              }
+              li.textContent = i + 1 + '. ' + r.label + r.text;
               st.appendChild(li);
             });
           }
@@ -4800,17 +4857,13 @@
           }
         })
         .catch(function () {
-          rv4IntakeSetUploadLine('Upload failed', 'err');
+          rv4IntakeHideUploadActivity();
+          rv4IntakeHideFileLoadedBanner();
           rv4IntakeSetError('Network error — could not reach the server.');
           if (pre) {
             pre.hidden = false;
             pre.style.display = 'block';
             pre.textContent = 'Request failed (network or server).';
-          }
-          if (sum) {
-            sum.hidden = false;
-            sum.style.color = '#7f1d1d';
-            sum.textContent = 'Upload did not complete successfully.';
           }
         })
         .finally(function () {
