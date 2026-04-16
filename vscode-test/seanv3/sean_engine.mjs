@@ -10,8 +10,9 @@ import {
   openPaperPosition,
   updatePositionLifecycle,
   writeClosedTradeAndFlat,
-  appendNoTradeLog,
+  insertBarDecision,
 } from './sean_ledger.mjs';
+import { indicatorValuesFromDiag, gateResultsJson, REASON } from './decision_ledger.mjs';
 import { resolveJupiterPolicy } from './jupiter_policy_runtime.mjs';
 import {
   initialSlTp,
@@ -64,18 +65,27 @@ function entryIdsFromPositionMetadata(pos) {
 }
 
 /** @param {import('node:sqlite').DatabaseSync} db */
-function logNoTrade(db, policy, marketEventId, reasonCode, extra) {
-  try {
-    appendNoTradeLog(db, {
-      atUtc: new Date().toISOString(),
-      marketEventId,
-      policyId: policy?.policyId ?? null,
-      reasonCode,
-      detailsJson: JSON.stringify(extra ?? {}).slice(0, 12000),
-    });
-  } catch (e) {
-    console.error('[seanv3] appendNoTradeLog:', e);
-  }
+function writeFlatBarDecision(db, policy, marketEventId, payload) {
+  const sym = (process.env.SEANV3_CANONICAL_SYMBOL || process.env.CANONICAL_SYMBOL || 'SOL-PERP').trim() || 'SOL-PERP';
+  const tf = (process.env.SEAN_BAR_TIMEFRAME || '5m').trim() || '5m';
+  insertBarDecision(db, {
+    outcome: payload.outcome,
+    marketEventId,
+    timestampUtc: new Date().toISOString(),
+    symbol: sym,
+    timeframe: tf,
+    policyId: policy.policyId,
+    policyEngineTag: policy.policyEngineTag,
+    engineId: policy.engineId,
+    policyResolutionSource: policy.source,
+    signalMode: policy.policyId,
+    candidateSide: payload.candidateSide,
+    reasonCode: payload.reasonCode,
+    indicatorValuesJson: payload.indicatorValuesJson,
+    gateResultsJson: payload.gateResultsJson,
+    featuresJson: payload.featuresJson,
+    tradeId: payload.tradeId ?? null,
+  });
 }
 
 /**
@@ -209,19 +219,35 @@ export function processSeanEngine(db, { marketEventId, kline }) {
   }
 
   const sig = policy.generateEntrySignal(closes, highs, lows, vols);
+  const diag = sig.diag && typeof sig.diag === 'object' ? sig.diag : {};
+  const featuresJson = JSON.stringify(diag);
+  const indJson = indicatorValuesFromDiag(sig);
+
   const side = policy.resolveEntrySide(sig.shortSignal, sig.longSignal);
+  const candidateSide = side === 'long' ? 'long' : side === 'short' ? 'short' : 'none';
+
   if (!side) {
-    logNoTrade(db, policy, marketEventId, 'no_entry_signal', {
-      diag: sig.diag,
-      long: sig.longSignal,
-      short: sig.shortSignal,
+    writeFlatBarDecision(db, policy, marketEventId, {
+      outcome: 'NO_TRADE',
+      candidateSide: 'none',
+      reasonCode: REASON.NO_CANDIDATE_SIDE,
+      indicatorValuesJson: indJson,
+      gateResultsJson: gateResultsJson(diag, null),
+      featuresJson,
     });
     return;
   }
 
   const atr = sig.diag.atr;
   if (typeof atr !== 'number' || !(atr > 0)) {
-    logNoTrade(db, policy, marketEventId, 'no_atr', { diag: sig.diag, atr: sig.diag?.atr });
+    writeFlatBarDecision(db, policy, marketEventId, {
+      outcome: 'NO_TRADE',
+      candidateSide,
+      reasonCode: REASON.ATR_INVALID,
+      indicatorValuesJson: indJson,
+      gateResultsJson: gateResultsJson(diag, null),
+      featuresJson,
+    });
     return;
   }
 
@@ -235,9 +261,13 @@ export function processSeanEngine(db, { marketEventId, kline }) {
   });
   if (!gate.ok) {
     console.error(`[seanv3] open blocked: ${gate.reason} — ${gate.detail}`);
-    logNoTrade(db, policy, marketEventId, 'open_blocked', {
-      gate_reason: gate.reason,
-      gate_detail: gate.detail,
+    writeFlatBarDecision(db, policy, marketEventId, {
+      outcome: 'NO_TRADE',
+      candidateSide,
+      reasonCode: REASON.FUNDING_GATE_BLOCKED,
+      indicatorValuesJson: indJson,
+      gateResultsJson: gateResultsJson(diag, { ok: gate.ok, reason: gate.reason, detail: gate.detail }),
+      featuresJson,
     });
     return;
   }
@@ -261,6 +291,15 @@ export function processSeanEngine(db, { marketEventId, kline }) {
     initialTakeProfit: lv.takeProfit,
     atrEntry: atr,
     lastProcessedMarketEventId: marketEventId,
+  });
+  writeFlatBarDecision(db, policy, marketEventId, {
+    outcome: 'TRADE_OPEN',
+    candidateSide,
+    reasonCode: REASON.TRADE_OPEN_OK,
+    indicatorValuesJson: indJson,
+    gateResultsJson: gateResultsJson(diag, { ok: gate.ok, reason: gate.reason, detail: gate.detail }),
+    featuresJson,
+    tradeId: null,
   });
   console.error(`[seanv3] ${policy.engineId} opened ${side} @ ${entry} mid=${marketEventId} policy=${policy.policyId}`);
 }

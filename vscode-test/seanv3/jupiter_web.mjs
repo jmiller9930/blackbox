@@ -767,8 +767,8 @@ function buildSummary(db) {
   try {
     const nrows = db
       .prepare(
-        `SELECT id, at_utc, market_event_id, policy_id, reason_code, details_json
-         FROM sean_no_trade_log ORDER BY id DESC LIMIT ?`
+        `SELECT id, timestamp_utc AS at_utc, market_event_id, policy_id, reason_code, features_json, indicator_values_json
+         FROM sean_bar_decisions WHERE outcome = 'NO_TRADE' ORDER BY id DESC LIMIT ?`
       )
       .all(noTradeLimit);
     out.recent_no_trades = nrows.map((r) => ({
@@ -777,7 +777,7 @@ function buildSummary(db) {
       market_event_id: r.market_event_id != null ? String(r.market_event_id) : null,
       policy_id: r.policy_id != null ? String(r.policy_id) : null,
       reason_code: r.reason_code != null ? String(r.reason_code) : null,
-      details_preview: truncateMid(r.details_json, 200),
+      details_preview: truncateMid(r.features_json || r.indicator_values_json, 200),
     }));
   } catch {
     /* table missing on legacy DB until migrate */
@@ -1029,7 +1029,7 @@ function jwLivePollScript(refreshSec) {
   function T(s,n){s=String(s||'');return s.length<=n?s:s.slice(0,n-1)+'\\u2026';}
   function isoUtc(s){if(!s)return'\\u2014';try{var d=new Date(String(s).trim().replace('Z','+00:00'));return isNaN(d.getTime())?String(s).slice(0,22):d.toISOString().slice(0,16).replace('T',' ')+' UTC';}catch(e){return String(s).slice(0,22);}}
   function trCls(rc){var x=String(rc||'').toLowerCase();if(x==='win')return'trade-win';if(x==='loss')return'trade-loss';return'trade-flat';}
-  function ntCls(rc){var x=String(rc||'').toLowerCase();if(x==='open_blocked')return'nt-blocked';if(x==='no_atr')return'nt-warn';if(x==='no_entry_signal')return'nt-signal';return'nt-dim';}
+  function ntCls(rc){var x=String(rc||'').toLowerCase();if(x==='open_blocked'||x==='funding_gate_blocked')return'nt-blocked';if(x==='no_atr'||x==='atr_invalid')return'nt-warn';if(x==='no_entry_signal'||x==='no_candidate_side')return'nt-signal';return'nt-dim';}
   function apply(j){
     if(!j||j.error)return;
     var tm=j.trading_mode||{}, jr=tm.jupiter_runtime||{};
@@ -1359,9 +1359,9 @@ function htmlPage(v) {
   const noTrades = v.recent_no_trades || [];
   const ntCls = (rc) => {
     const s = String(rc || '').toLowerCase();
-    if (s === 'open_blocked') return 'nt-blocked';
-    if (s === 'no_atr') return 'nt-warn';
-    if (s === 'no_entry_signal') return 'nt-signal';
+    if (s === 'open_blocked' || s === 'funding_gate_blocked') return 'nt-blocked';
+    if (s === 'no_atr' || s === 'atr_invalid') return 'nt-warn';
+    if (s === 'no_entry_signal' || s === 'no_candidate_side') return 'nt-signal';
     return 'nt-dim';
   };
   const noTradeRows = noTrades.length
@@ -1600,7 +1600,7 @@ function htmlPage(v) {
       </script>
     </div></section>
     <section class="panel"><h2 class="jw-panel-head"><button type="button" class="jw-panel-toggle" aria-expanded="true" aria-controls="jw-pan-no-trade"><span class="jw-caret" aria-hidden="true">▼</span> No-entry log (flat bar, no open)</button></h2><div class="jw-panel-body" id="jw-pan-no-trade">
-      <p class="muted small jw-panel-sync-hint">Time sync: same <code>/api/summary.json</code> poll as the live strip (${esc(String(v.refresh_sec || 0))}s). This panel: <strong>no-entry</strong> decisions only (<code>sean_no_trade_log</code>) — not closed trades.</p>
+      <p class="muted small jw-panel-sync-hint">Time sync: same <code>/api/summary.json</code> poll as the live strip (${esc(String(v.refresh_sec || 0))}s). This panel: <strong>NO_TRADE</strong> rows from <code>sean_bar_decisions</code> — not closed trades.</p>
       <p class="muted small">Rows are written when the engine evaluates a bar flat and does not open: no signal, invalid ATR, or funding gate block. Full JSON is stored in SQLite; preview is truncated.</p>
       <div class="scroll" id="jw-no-trade-scroll"><table><thead><tr><th>id</th><th>at UTC</th><th>market_event_id</th><th>policy</th><th>reason</th><th>details (preview)</th></tr></thead><tbody id="jw-no-trade-tbody">${noTradeRows}</tbody></table></div>
     </div></section>

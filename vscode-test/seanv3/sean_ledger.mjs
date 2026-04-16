@@ -67,6 +67,29 @@ export function ensureSeanLedgerSchema(db) {
       reason_code TEXT NOT NULL,
       details_json TEXT
     );
+    CREATE TABLE IF NOT EXISTS sean_bar_decisions (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      outcome TEXT NOT NULL CHECK (outcome IN ('TRADE_OPEN', 'NO_TRADE')),
+      market_event_id TEXT NOT NULL,
+      timestamp_utc TEXT NOT NULL,
+      symbol TEXT NOT NULL,
+      timeframe TEXT NOT NULL,
+      policy_id TEXT NOT NULL,
+      policy_engine_tag TEXT NOT NULL,
+      engine_id TEXT NOT NULL,
+      policy_resolution_source TEXT,
+      signal_mode TEXT,
+      candidate_side TEXT NOT NULL CHECK (candidate_side IN ('long', 'short', 'none')),
+      reason_code TEXT NOT NULL,
+      indicator_values_json TEXT NOT NULL,
+      gate_results_json TEXT NOT NULL,
+      features_json TEXT,
+      trade_id INTEGER,
+      schema_version INTEGER NOT NULL DEFAULT 1,
+      UNIQUE (market_event_id)
+    );
+    CREATE INDEX IF NOT EXISTS idx_sean_bar_decisions_ts ON sean_bar_decisions (timestamp_utc DESC);
+    CREATE INDEX IF NOT EXISTS idx_sean_bar_decisions_outcome ON sean_bar_decisions (outcome);
   `);
   migratePositionLifecycle(db);
   const row = db.prepare(`SELECT id FROM sean_paper_position WHERE id = 1`).get();
@@ -218,21 +241,55 @@ export function incrementBarsHeld(db) {
 }
 
 /**
- * Persist a flat-bar engine outcome (no new paper trade). Used by Jupiter web "No-entry" panel.
  * @param {import('node:sqlite').DatabaseSync} db
- * @param {{ atUtc: string, marketEventId: string, policyId?: string | null, reasonCode: string, detailsJson?: string | null }} o
+ * @param {{
+ *   outcome: 'TRADE_OPEN' | 'NO_TRADE',
+ *   marketEventId: string,
+ *   timestampUtc: string,
+ *   symbol: string,
+ *   timeframe: string,
+ *   policyId: string,
+ *   policyEngineTag: string,
+ *   engineId: string,
+ *   policyResolutionSource: string | null,
+ *   signalMode: string | null,
+ *   candidateSide: 'long' | 'short' | 'none',
+ *   reasonCode: string,
+ *   indicatorValuesJson: string,
+ *   gateResultsJson: string,
+ *   featuresJson: string | null,
+ *   tradeId: number | null,
+ *   schemaVersion?: number,
+ * }} row
  */
-export function appendNoTradeLog(db, o) {
-  const dj = o.detailsJson != null ? String(o.detailsJson).slice(0, 12000) : null;
+export function insertBarDecision(db, row) {
+  const fv =
+    row.featuresJson != null ? String(row.featuresJson).slice(0, 240000) : null;
   db.prepare(
-    `INSERT INTO sean_no_trade_log (at_utc, market_event_id, policy_id, reason_code, details_json)
-     VALUES (?, ?, ?, ?, ?)`
+    `INSERT INTO sean_bar_decisions (
+      outcome, market_event_id, timestamp_utc, symbol, timeframe,
+      policy_id, policy_engine_tag, engine_id, policy_resolution_source, signal_mode,
+      candidate_side, reason_code, indicator_values_json, gate_results_json, features_json,
+      trade_id, schema_version
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
   ).run(
-    o.atUtc,
-    o.marketEventId,
-    o.policyId ?? null,
-    o.reasonCode,
-    dj
+    row.outcome,
+    row.marketEventId,
+    row.timestampUtc,
+    row.symbol,
+    row.timeframe,
+    row.policyId,
+    row.policyEngineTag,
+    row.engineId,
+    row.policyResolutionSource ?? null,
+    row.signalMode ?? null,
+    row.candidateSide,
+    row.reasonCode,
+    row.indicatorValuesJson,
+    row.gateResultsJson,
+    fv,
+    row.tradeId ?? null,
+    row.schemaVersion ?? 1
   );
 }
 
