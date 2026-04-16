@@ -37,15 +37,25 @@
       isolation: isolate;
       background: var(--bg);
     }
-    /* Atmospheric art at ~15% opacity — keep UI on solid/frosted surfaces so fields stay readable */
-    .dash-rv4-wrap::before {
-      content: "";
-      position: absolute;
-      inset: 0;
-      background: url("/assets/quant-kitchen-bg.png") center top / cover no-repeat;
-      opacity: 0.15;
-      pointer-events: none;
-      z-index: 0;
+    /* Top banner — full-width hero (replaces faded background art) */
+    .dash-rv4-kitchen-banner-wrap {
+      width: calc(100% + 2rem);
+      max-width: none;
+      margin: -0.75rem -1rem 0.85rem -1rem;
+      padding: 0;
+      overflow: hidden;
+      border-radius: 0;
+      line-height: 0;
+      border-bottom: 1px solid var(--panel-border);
+      box-shadow: 0 2px 8px rgba(15, 23, 42, 0.12);
+    }
+    .dash-rv4-kitchen-banner {
+      width: 100%;
+      height: auto;
+      max-height: min(32vh, 360px);
+      display: block;
+      object-fit: cover;
+      object-position: center center;
     }
     .dash-rv4-wrap > * {
       position: relative;
@@ -1863,6 +1873,17 @@
       </div>
 
       <div id="dash-view-renaissance" class="dash-rv4-wrap" hidden aria-label="Quant Research Kitchen">
+        <div class="dash-rv4-kitchen-banner-wrap">
+          <img
+            class="dash-rv4-kitchen-banner"
+            src="/assets/quant-kitchen-banner.png"
+            alt="Quantitive Kitchen"
+            width="1920"
+            height="640"
+            loading="lazy"
+            decoding="async"
+          />
+        </div>
         <div class="dash-rv4-kitchen-default">
         <div class="dash-rv4-kitchen-intro">
           <h2 class="dash-rv4-head">Quant Research Kitchen</h2>
