@@ -63,22 +63,19 @@ async function main() {
   const minBars =
     typeof mod.MIN_BARS === 'number' && Number.isFinite(mod.MIN_BARS) ? mod.MIN_BARS : 2;
 
+  // DV-056: Deterministic OHLC identical on every host (Alpine/Linux/macOS). The previous sin-based
+  // series could yield consecutive closes equal within float noise on some platforms, so policies
+  // comparing c vs p never saw strict inequality → zero signals → live FAIL vs local PASS.
   const closes = [];
   const highs = [];
   const lows = [];
   const vols = [];
-  let px = 100;
   for (let i = 0; i < nBars; i++) {
-    const d = (Math.sin(i / 11) + (i % 5) * 0.02) * 0.35;
-    px += d;
-    const c = px;
-    const h = c + Math.abs(d) + 0.05;
-    const l = c - Math.abs(d) - 0.05;
-    const v = 800 + (i % 40);
+    const c = 100 + i;
     closes.push(c);
-    highs.push(h);
-    lows.push(l);
-    vols.push(v);
+    highs.push(c + 1);
+    lows.push(c - 1);
+    vols.push(800 + (i % 40));
   }
 
   let longBars = 0;

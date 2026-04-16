@@ -28,6 +28,10 @@ Optional: `export const MIN_BARS: number`.
 
 Sean-style multi-file policies that import local modules may fail bundling until those paths exist in-repo; self-contained uploads are the reliable v1 path.
 
+## Deterministic harness (DV-056)
+
+The intake eval harness (`policy_intake/run_ts_intake_eval.mjs`) generates synthetic bars with **strictly increasing integer closes** so policies that compare consecutive closes see stable strict inequality on every host (Linux/macOS, Docker, etc.). A prior sin-based series could produce consecutive closes equal within floating-point noise on some platforms, yielding **no signals** and a misleading live FAIL while local runs passed.
+
 ## YAML / JSON
 
 Specs parse and normalize to **PolicySpecV1**. Deterministic signal/trade/PnL proof **requires** a TypeScript evaluator; YAML/JSON-only uploads stop after static checks with an explicit message.

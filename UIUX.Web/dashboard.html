@@ -173,6 +173,10 @@
     .dash-rv4-wrap.rv4-eval-mode .dash-rv4-kitchen-default {
       display: none !important;
     }
+    /* DV-056 — isolate eval: hide every direct child of Kitchen except the eval panel (queue, detail, baseline, etc.) */
+    .dash-rv4-wrap.rv4-eval-mode > *:not(#rv4-eval-panel) {
+      display: none !important;
+    }
     .dash-rv4-wrap.rv4-eval-mode #rv4-eval-panel {
       display: block !important;
     }
@@ -5002,12 +5006,26 @@
       )
     );
   }
+  function rv4EvalFriendlyErr(code) {
+    var c = String(code || '').split(':')[0].trim();
+    var m = {
+      no_signals_generated_in_test_window: 'No signals generated in test window',
+      no_trade_opened_in_simulation: 'No trades opened in deterministic simulation',
+      no_trade_closed_in_simulation: 'No trades closed in deterministic simulation',
+      typescript_compile_failed: 'TypeScript compile failed',
+      missing_export_generateSignalFromOhlc: 'Missing required export',
+      esbuild_bundle_failed: 'Bundle failed (esbuild)',
+      deterministic_execution_requires_typescript_module: 'Deterministic test requires a TypeScript module',
+      invalid_or_nan_pnl: 'Invalid PnL in simulation',
+    };
+    return m[c] || c.slice(0, 56);
+  }
   function rv4EvalShortReason(j) {
     if (!j || j.pass) return '';
     if (j.errors && j.errors.length) {
       return j.errors
         .map(function (e) {
-          return String(e).split(':')[0].slice(0, 48);
+          return rv4EvalFriendlyErr(e);
         })
         .slice(0, 3)
         .join(' · ');
