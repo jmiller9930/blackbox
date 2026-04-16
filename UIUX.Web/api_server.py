@@ -7,6 +7,7 @@ import gzip
 import hmac
 import io
 import json
+import mimetypes
 import os
 import sys
 import uuid
@@ -1826,6 +1827,22 @@ def _kitchen_blackbox_get_authorized(handler: BaseHTTPRequestHandler) -> bool:
     return hmac.compare_digest(tok, exp)
 
 
+def _repo_uiux_asset_path(repo_root: Path, url_path: str) -> Path | None:
+    """Resolve ``/assets/...`` under ``UIUX.Web/assets`` on the repo mount; None if unsafe or missing."""
+    if not url_path.startswith("/assets/"):
+        return None
+    rel = url_path[len("/assets/") :]
+    if not rel or ".." in rel.replace("\\", "/"):
+        return None
+    base = (repo_root / "UIUX.Web" / "assets").resolve()
+    candidate = (base / rel).resolve()
+    try:
+        candidate.relative_to(base)
+    except ValueError:
+        return None
+    return candidate if candidate.is_file() else None
+
+
 def _kitchen_blackbox_post_authorized(handler: BaseHTTPRequestHandler) -> bool:
     exp = (os.environ.get("KITCHEN_BLACKBOX_OPERATOR_TOKEN") or "").strip()
     if not exp:
@@ -1905,6 +1922,20 @@ class Handler(BaseHTTPRequestHandler):
     def do_GET(self) -> None:  # noqa: N802
         parsed = urlparse(self.path)
         path = parsed.path
+        if path.startswith("/assets/"):
+            ap = _repo_uiux_asset_path(_REPO_ROOT, path)
+            if ap is None:
+                self.send_error(404)
+                return
+            data = ap.read_bytes()
+            ctype = mimetypes.guess_type(str(ap))[0] or "application/octet-stream"
+            self.send_response(200)
+            self.send_header("Content-Type", ctype)
+            self.send_header("Cache-Control", "public, max-age=600")
+            self.send_header("Content-Length", str(len(data)))
+            self.end_headers()
+            self.wfile.write(data)
+            return
         if path == "/api/v1/runtime/status":
             runtime, _ = build_status()
             self._json(200, runtime)
