@@ -443,6 +443,7 @@ button:hover,.btn:hover{background:rgba(48,54,61,0.95);border-color:rgba(88,166,
 a{color:#79c0ff;}
 .err{color:#ffb1a8;font-size:0.85rem;margin-top:0.5rem;}
 .ok{color:#aff5c4;font-size:0.85rem;margin-top:0.5rem;}
+.muted{color:#8b949e;font-size:0.82rem;line-height:1.4;margin:0.35rem 0 0.75rem;}
 code{font-size:0.8rem;background:rgba(0,0,0,0.35);padding:0.1rem 0.35rem;border-radius:4px;}
 </style></head><body><div class="card">${bodyHtml}</div></body></html>`;
 }
@@ -646,12 +647,13 @@ export async function handleJupiterAuthHttp(req, res, url, ctx) {
     const body = authShell(
       'Set new password',
       `<h1>Set a new password</h1>
+      <p class="muted">At least <strong>8 characters</strong>. Type the <strong>same</strong> password in both boxes, then save.</p>
       <form method="post" action="/auth/reset">
         <input type="hidden" name="token" value="${htmlEscape(token)}"/>
         <label for="p1">New password</label>
         <input class="jw-knockout" id="p1" name="p1" type="password" autocomplete="new-password" required minlength="8"/>
-        <label for="p2">Confirm</label>
-        <input class="jw-knockout" id="p2" name="p2" type="password" autocomplete="new-password" required minlength="8"/>
+        <label for="p2">Confirm new password</label>
+        <input class="jw-knockout" id="p2" name="p2" type="password" autocomplete="new-password" required minlength="8" placeholder="Same as above"/>
         <button type="submit">Save password</button>
       </form>`
     );
@@ -666,14 +668,21 @@ export async function handleJupiterAuthHttp(req, res, url, ctx) {
     const token = String(f.token || '');
     const p1 = String(f.p1 || '');
     const p2 = String(f.p2 || '');
-    if (p1 !== p2 || p1.length < 8) {
+    let errMsg = '';
+    if (p1.length < 8) { errMsg = 'Password must be at least 8 characters.'; }
+    else if (!p2.trim()) { errMsg = 'Enter the same password again in <strong>Confirm new password</strong>.'; }
+    else if (p1 !== p2) { errMsg = 'The two fields do not match — re-enter both.'; }
+    if (errMsg) {
       const body = authShell(
         'Reset password',
-        `<h1>Try again</h1><p class="err">Passwords must match and be at least 8 characters.</p>
+        `<h1>Try again</h1><p class="err">${errMsg}</p>
+        <p class="muted">Both fields are required. They must match.</p>
         <form method="post" action="/auth/reset">
         <input type="hidden" name="token" value="${htmlEscape(token)}"/>
-        <label for="p1">New password</label><input class="jw-knockout" id="p1" name="p1" type="password" required minlength="8"/>
-        <label for="p2">Confirm</label><input class="jw-knockout" id="p2" name="p2" type="password" required minlength="8"/>
+        <label for="p1">New password</label>
+        <input class="jw-knockout" id="p1" name="p1" type="password" autocomplete="new-password" required minlength="8" value="${htmlEscape(p1)}"/>
+        <label for="p2">Confirm new password</label>
+        <input class="jw-knockout" id="p2" name="p2" type="password" autocomplete="new-password" required minlength="8" placeholder="Same as above"/>
         <button type="submit">Save password</button></form>`
       );
       res.writeHead(400, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' });
