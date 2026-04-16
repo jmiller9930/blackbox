@@ -34,6 +34,12 @@ import {
   MIN_BARS as MIN_BARS_PIPELINE_PROOF,
   ENGINE_ID as ENGINE_ID_PIPELINE_PROOF,
 } from './jupiter_pipeline_proof_policy.mjs';
+import {
+  generateSignalFromOhlcKitchenMechanical,
+  resolveEntrySide as resolveEntrySideKitchenMechanical,
+  MIN_BARS as MIN_BARS_KITCHEN_MECHANICAL,
+  ENGINE_ID as ENGINE_ID_KITCHEN_MECHANICAL,
+} from './jupiter_kitchen_mechanical_policy.mjs';
 
 export const JUPITER_ACTIVE_POLICY_KEY = 'jupiter_active_policy';
 
@@ -44,11 +50,12 @@ export const ALLOWED_POLICY_IDS = Object.freeze([
   'jup_mc_test',
   'jup_mc2',
   'jup_pipeline_proof_v1',
+  'jup_kitchen_mechanical_v1',
 ]);
 
 /**
  * @param {string | null | undefined} s
- * @returns {'jup_v4' | 'jup_v3' | 'jup_mc_test' | 'jup_mc2' | 'jup_pipeline_proof_v1' | null}
+ * @returns {'jup_v4' | 'jup_v3' | 'jup_mc_test' | 'jup_mc2' | 'jup_pipeline_proof_v1' | 'jup_kitchen_mechanical_v1' | null}
  */
 export function normalizePolicyId(s) {
   const t = String(s ?? '')
@@ -67,13 +74,20 @@ export function normalizePolicyId(s) {
   ) {
     return 'jup_pipeline_proof_v1';
   }
+  if (
+    t === 'jup_kitchen_mechanical_v1' ||
+    t === 'kitchen_mechanical' ||
+    t === 'kitchen_mechanical_always_long'
+  ) {
+    return 'jup_kitchen_mechanical_v1';
+  }
   return null;
 }
 
 /**
  * @param {import('node:sqlite').DatabaseSync} db
  * @returns {{
- *   policyId: 'jup_v4' | 'jup_v3' | 'jup_mc_test' | 'jup_mc2' | 'jup_pipeline_proof_v1',
+ *   policyId: 'jup_v4' | 'jup_v3' | 'jup_mc_test' | 'jup_mc2' | 'jup_pipeline_proof_v1' | 'jup_kitchen_mechanical_v1',
  *   source: 'runtime_config' | 'environment' | 'default',
  *   minBars: number,
  *   generateEntrySignal: Function,
@@ -146,6 +160,17 @@ export function resolveJupiterPolicy(db) {
       resolveEntrySide: resolveEntrySidePipelineProof,
       engineId: 'sean_jupiter_pipeline_proof_engine_v1',
       policyEngineTag: ENGINE_ID_PIPELINE_PROOF,
+    };
+  }
+  if (id === 'jup_kitchen_mechanical_v1') {
+    return {
+      policyId: 'jup_kitchen_mechanical_v1',
+      source,
+      minBars: MIN_BARS_KITCHEN_MECHANICAL,
+      generateEntrySignal: generateSignalFromOhlcKitchenMechanical,
+      resolveEntrySide: resolveEntrySideKitchenMechanical,
+      engineId: 'sean_jupiter_kitchen_mechanical_engine_v1',
+      policyEngineTag: ENGINE_ID_KITCHEN_MECHANICAL,
     };
   }
   return {

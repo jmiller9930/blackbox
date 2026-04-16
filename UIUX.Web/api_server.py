@@ -2375,6 +2375,38 @@ class Handler(BaseHTTPRequestHandler):
                     no_cache=True,
                 )
             return
+        if path == "/api/v1/renaissance/kitchen-jupiter-assignment":
+            trace_id = str(uuid.uuid4())
+            try:
+                from renaissance_v4.kitchen_jupiter_control import (
+                    JUPITER_MECHANICAL_SLOT,
+                    MECHANICAL_CANDIDATE_POLICY_ID,
+                    read_assignment,
+                )
+
+                a = read_assignment(_REPO_ROOT)
+                self._json(
+                    200,
+                    {
+                        "schema": "kitchen_jupiter_assignment_read_v1",
+                        "assignment": a,
+                        "mechanical_candidate_policy_id": MECHANICAL_CANDIDATE_POLICY_ID,
+                        "jupiter_policy_slot": JUPITER_MECHANICAL_SLOT,
+                        "trace_id": trace_id,
+                    },
+                    no_cache=True,
+                )
+            except Exception as e:  # noqa: BLE001
+                self._json(
+                    500,
+                    {
+                        "schema": "renaissance_v4_ui_error_v1",
+                        "error": str(e)[:500],
+                        "trace_id": trace_id,
+                    },
+                    no_cache=True,
+                )
+            return
         if path.startswith("/api/v1/renaissance/policy-intake/"):
             rest = path[len("/api/v1/renaissance/policy-intake/") :].strip().strip("/")
             if not rest or ".." in rest:
@@ -2882,6 +2914,37 @@ class Handler(BaseHTTPRequestHandler):
             self._json(code, r, no_cache=True)
             return
         path_norm = (parsed.path or "").rstrip("/") or "/"
+        if path_norm == "/api/v1/renaissance/kitchen-assign-jupiter":
+            trace_id = str(uuid.uuid4())
+            body = self._read_json_body() or {}
+            sid = str(body.get("submission_id") or "").strip()
+            if not sid:
+                self._json(
+                    400,
+                    {
+                        "ok": False,
+                        "error": "missing_submission_id",
+                        "detail": "JSON body must include submission_id",
+                        "trace_id": trace_id,
+                    },
+                    no_cache=True,
+                )
+                return
+            try:
+                from renaissance_v4.kitchen_jupiter_control import assign_mechanical_candidate_to_jupiter
+
+                r = assign_mechanical_candidate_to_jupiter(_REPO_ROOT, sid)
+            except Exception as e:  # noqa: BLE001
+                self._json(
+                    500,
+                    {"ok": False, "error": str(e)[:800], "trace_id": trace_id},
+                    no_cache=True,
+                )
+                return
+            r["trace_id"] = trace_id
+            code = 200 if r.get("ok") else 400
+            self._json(code, r, no_cache=True)
+            return
         if path_norm == "/api/v1/renaissance/policy-intake":
             ct = (self.headers.get("Content-Type") or "").split(";")[0].strip().lower()
             if ct != "multipart/form-data":

@@ -46,3 +46,17 @@ def test_intake_pipeline_fixture_minimal_direction_policy_ts() -> None:
     assert rep.get("schema") == "policy_intake_report_v1"
     assert rep.get("pass") is True, rep.get("errors")
     assert rep.get("candidate_policy_id") == "fixture_minimal_direction_v1"
+
+
+def test_intake_pipeline_kitchen_mechanical_always_long_ts() -> None:
+    """DV-067 mechanical proof policy (parity with SeanV3 jup_kitchen_mechanical_v1)."""
+    root = Path(__file__).resolve().parents[1]
+    fix = root / "tests" / "fixtures" / "policy_intake" / "kitchen_mechanical_always_long.ts"
+    if not fix.is_file():
+        pytest.skip("fixture missing")
+    if shutil.which("node") is None:
+        pytest.skip("node not on PATH")
+    raw = fix.read_bytes()
+    rep = run_intake_pipeline(root, raw, "kitchen_mechanical_always_long.ts", test_window_bars=400)
+    assert rep.get("pass") is True, rep.get("errors")
+    assert rep.get("candidate_policy_id") == "kitchen_mechanical_always_long_v1"

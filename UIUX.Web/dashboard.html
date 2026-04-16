@@ -229,6 +229,29 @@
       vertical-align: middle;
       margin-left: 0.25rem;
     }
+    .dash-rv4-results-primary {
+      border: 1px solid rgba(59, 130, 246, 0.35);
+      background: linear-gradient(180deg, rgba(59, 130, 246, 0.06), transparent 48%);
+      border-radius: var(--radius-md);
+      padding: 1rem 1.1rem 1.15rem;
+      margin-bottom: 0.85rem;
+    }
+    .dash-rv4-panel {
+      margin-bottom: 0.65rem;
+      border: 1px solid var(--panel-border);
+      border-radius: var(--radius-md);
+      padding: 0.35rem 0.75rem 0.75rem;
+      background: var(--panel);
+    }
+    .dash-rv4-panel > summary {
+      cursor: pointer;
+      font-size: 0.95rem;
+      font-weight: 800;
+      padding: 0.35rem 0;
+      list-style: none;
+    }
+    .dash-rv4-panel > summary::-webkit-details-marker { display: none; }
+    .dash-rv4-panel .dash-rv4-panel-body { padding-top: 0.35rem; }
     .dash-rv4-intake-processing-h {
       font-size: 0.76rem; font-weight: 700; margin: 0.65rem 0 0.25rem; color: var(--text);
     }
@@ -1822,8 +1845,42 @@
           <p id="rv4-eval-under-line" class="dash-rv4-intake-hint is-ready">Evaluating under: Jupiter</p>
         </div>
 
+        <section class="dash-rv4-section dash-rv4-results dash-rv4-results-primary" aria-labelledby="rv4-results-h">
+          <h3 id="rv4-results-h" class="dash-rv4-section-title">Results — experiment queue (primary workspace)</h3>
+          <p class="dash-rv4-intake-hint" style="margin-top:0">Server-side experiments and job status. Collapse other panels below to focus here.</p>
+          <h4 style="font-size:0.82rem;font-weight:700;margin:0.5rem 0 0.35rem">Experiment queue</h4>
+          <table class="dash-rv4-table" id="rv4-exp-table">
+            <thead><tr><th>id</th><th>strategy</th><th>type</th><th>status</th><th>stage</th><th>recommendation</th><th>completed</th><th>created</th></tr></thead>
+            <tbody id="rv4-exp-tbody"><tr><td colspan="8">Loading…</td></tr></tbody>
+          </table>
+          <h4 style="font-size:0.82rem;font-weight:700;margin:1rem 0 0.35rem">Experiment detail</h4>
+          <div class="dash-rv4-exp-actions">
+            <button type="button" id="rv4-btn-rerun" disabled>Compare selected candidate vs baseline</button>
+            <button type="button" id="rv4-btn-manifest-sel" disabled>Compare using selected experiment (manifest)</button>
+            <span class="dash-rv4-msg" id="rv4-sel-id"></span>
+          </div>
+          <div class="dash-rv4-detail" id="rv4-detail" hidden>
+            <div class="kv"><span class="k">Description</span><span class="v" id="rv4-d-desc" style="text-align:left;max-width:70%">—</span></div>
+            <div class="kv"><span class="k">strategy_id</span><span class="v" id="rv4-d-strategy">—</span></div>
+            <div class="kv"><span class="k">manifest_path</span><span class="v" id="rv4-d-manifest" style="text-align:left;max-width:70%">—</span></div>
+            <div class="kv"><span class="k">baseline_reference</span><span class="v" id="rv4-d-baseline-ref">—</span></div>
+            <div class="kv"><span class="k">Experiment type</span><span class="v" id="rv4-d-type">—</span></div>
+            <div class="kv"><span class="k">Branch / commit</span><span class="v" id="rv4-d-git">—</span></div>
+            <div class="kv"><span class="k">Recommendation</span><span class="v" id="rv4-d-rec">—</span></div>
+            <div class="kv"><span class="k">Deterministic</span><span class="v" id="rv4-d-det">—</span></div>
+            <div class="kv"><span class="k">Monte Carlo</span><span class="v" id="rv4-d-mc">—</span></div>
+            <div class="kv"><span class="k">vs baseline</span><span class="v" id="rv4-d-vs" style="text-align:left;max-width:85%">—</span></div>
+            <div class="dash-rv4-links" id="rv4-d-report-links"></div>
+            <div class="dash-rv4-export-row" id="rv4-d-exports" aria-label="Experiment CSV exports"></div>
+            <p class="dash-rv4-msg" id="rv4-d-paths"></p>
+            <pre id="rv4-d-pre"></pre>
+          </div>
+        </section>
+
+        <details class="dash-rv4-panel" id="rv4-panel-intake">
+          <summary class="dash-rv4-section-title" id="rv4-intake-h" style="display:list-item">Policy Intake</summary>
+          <div class="dash-rv4-panel-body">
         <section class="dash-rv4-section dash-rv4-intake" aria-labelledby="rv4-intake-h">
-          <h3 id="rv4-intake-h" class="dash-rv4-section-title">Policy Intake</h3>
           <p class="dash-rv4-intake-lead">
             Upload a policy (TypeScript preferred). The system will validate, normalize, and test it before making it available.
             This is not deployment — only evaluation toward a <strong>candidate</strong> policy record.
@@ -1849,9 +1906,13 @@
             <p id="rv4-intake-ready-line" class="dash-rv4-intake-hint is-ready" hidden></p>
           </div>
         </section>
+          </div>
+        </details>
 
+        <details class="dash-rv4-panel" id="rv4-panel-candidates">
+          <summary class="dash-rv4-section-title" id="rv4-cand-h" style="display:list-item">Candidate Policies</summary>
+          <div class="dash-rv4-panel-body">
         <section class="dash-rv4-section dash-rv4-candidates" aria-labelledby="rv4-cand-h">
-          <h3 id="rv4-cand-h" class="dash-rv4-section-title">Candidate Policies</h3>
           <p class="dash-rv4-intake-hint">
             <strong>Lifecycle:</strong> Upload Policy → Pass Intake → Candidate Policy → Select Candidate → Compare vs Baseline → Assign later.
             Passing intake does <strong>not</strong> activate or assign a policy.
@@ -1881,8 +1942,15 @@
             </table>
           </div>
           <p class="dash-rv4-msg" id="rv4-cand-selected-line">No candidate selected — use Select on a row above.</p>
+          <p class="dash-rv4-msg" id="rv4-jupiter-assign-hint" style="margin-top:0.65rem"></p>
+          <button type="button" class="primary" id="rv4-btn-kitchen-assign-jupiter" disabled>Assign to Jupiter (mechanical proof policy)</button>
         </section>
+          </div>
+        </details>
 
+        <details class="dash-rv4-panel" id="rv4-panel-baseline">
+          <summary class="dash-rv4-section-title" style="display:list-item">Baseline &amp; evaluation actions</summary>
+          <div class="dash-rv4-panel-body">
         <div class="dash-rv4-mid-grid">
           <section class="dash-rv4-section" aria-labelledby="rv4-baseline-h">
             <h3 id="rv4-baseline-h" class="dash-rv4-section-title">Active Baseline</h3>
@@ -1915,37 +1983,8 @@
             <p class="dash-rv4-msg" id="rv4-roadmap"></p>
           </section>
         </div>
-
-        <section class="dash-rv4-section dash-rv4-results" aria-labelledby="rv4-results-h">
-          <h3 id="rv4-results-h" class="dash-rv4-section-title">Results</h3>
-          <h4 style="font-size:0.82rem;font-weight:700;margin:0.5rem 0 0.35rem">Experiment queue</h4>
-          <table class="dash-rv4-table" id="rv4-exp-table">
-            <thead><tr><th>id</th><th>strategy</th><th>type</th><th>status</th><th>stage</th><th>recommendation</th><th>completed</th><th>created</th></tr></thead>
-            <tbody id="rv4-exp-tbody"><tr><td colspan="8">Loading…</td></tr></tbody>
-          </table>
-          <h4 style="font-size:0.82rem;font-weight:700;margin:1rem 0 0.35rem">Experiment detail</h4>
-          <div class="dash-rv4-exp-actions">
-            <button type="button" id="rv4-btn-rerun" disabled>Compare selected candidate vs baseline</button>
-            <button type="button" id="rv4-btn-manifest-sel" disabled>Compare using selected experiment (manifest)</button>
-            <span class="dash-rv4-msg" id="rv4-sel-id"></span>
           </div>
-          <div class="dash-rv4-detail" id="rv4-detail" hidden>
-            <div class="kv"><span class="k">Description</span><span class="v" id="rv4-d-desc" style="text-align:left;max-width:70%">—</span></div>
-            <div class="kv"><span class="k">strategy_id</span><span class="v" id="rv4-d-strategy">—</span></div>
-            <div class="kv"><span class="k">manifest_path</span><span class="v" id="rv4-d-manifest" style="text-align:left;max-width:70%">—</span></div>
-            <div class="kv"><span class="k">baseline_reference</span><span class="v" id="rv4-d-baseline-ref">—</span></div>
-            <div class="kv"><span class="k">Experiment type</span><span class="v" id="rv4-d-type">—</span></div>
-            <div class="kv"><span class="k">Branch / commit</span><span class="v" id="rv4-d-git">—</span></div>
-            <div class="kv"><span class="k">Recommendation</span><span class="v" id="rv4-d-rec">—</span></div>
-            <div class="kv"><span class="k">Deterministic</span><span class="v" id="rv4-d-det">—</span></div>
-            <div class="kv"><span class="k">Monte Carlo</span><span class="v" id="rv4-d-mc">—</span></div>
-            <div class="kv"><span class="k">vs baseline</span><span class="v" id="rv4-d-vs" style="text-align:left;max-width:85%">—</span></div>
-            <div class="dash-rv4-links" id="rv4-d-report-links"></div>
-            <div class="dash-rv4-export-row" id="rv4-d-exports" aria-label="Experiment CSV exports"></div>
-            <p class="dash-rv4-msg" id="rv4-d-paths"></p>
-            <pre id="rv4-d-pre"></pre>
-          </div>
-        </section>
+        </details>
         </div>
 
         <div id="rv4-eval-panel" class="dash-rv4-eval-panel" hidden aria-label="Policy evaluation">
@@ -4726,6 +4765,74 @@
     var sl = $('rv4-cand-selected-line');
     if (sl) sl.textContent = 'No candidate selected — use Select on a row above.';
     rv4UpdateCandContextBar();
+    rv4UpdateJupiterAssignGate();
+  }
+  var RV4_MECHANICAL_CANDIDATE_ID = 'kitchen_mechanical_always_long_v1';
+  function rv4UpdateJupiterAssignGate() {
+    var btn = $('rv4-btn-kitchen-assign-jupiter');
+    var hint = $('rv4-jupiter-assign-hint');
+    if (!btn) return;
+    var row = rv4CandidatesCache.filter(function (c) {
+      return c.submission_id === rv4SelectedCandSid;
+    })[0];
+    var ok =
+      rv4GetExecutionTarget() === 'jupiter' &&
+      row &&
+      String(row.candidate_policy_id || '') === RV4_MECHANICAL_CANDIDATE_ID;
+    btn.disabled = !ok;
+    if (!hint) return;
+    if (!row) {
+      hint.textContent = '';
+    } else if (String(row.candidate_policy_id || '') !== RV4_MECHANICAL_CANDIDATE_ID) {
+      hint.textContent =
+        'Jupiter assign (DV-067) is only for the mechanical proof candidate id ' +
+        RV4_MECHANICAL_CANDIDATE_ID +
+        ' (upload tests/fixtures/policy_intake/kitchen_mechanical_always_long.ts).';
+    } else if (rv4GetExecutionTarget() !== 'jupiter') {
+      hint.textContent = 'Switch execution target to Jupiter to assign.';
+    } else {
+      hint.textContent =
+        'Assign writes kitchen_jupiter_assignment.json and POSTs to SeanV3 active-policy when API env KITCHEN_JUPITER_CONTROL_BASE + KITCHEN_JUPITER_OPERATOR_TOKEN are set.';
+    }
+  }
+  function rv4LoadKitchenAssignmentStatus() {
+    fetch('/api/v1/renaissance/kitchen-jupiter-assignment', { cache: 'no-store' })
+      .then(function (r) {
+        return r.json();
+      })
+      .then(function (j) {
+        var hint = $('rv4-jupiter-assign-hint');
+        if (!hint || !j || !j.assignment) return;
+        var a = j.assignment;
+        var line =
+          'Recorded assignment: Jupiter slot ' +
+          String(a.jupiter_policy_slot || '—') +
+          ' · submission ' +
+          String(a.submission_id || '—') +
+          ' · candidate ' +
+          String(a.candidate_policy_id || '—') +
+          '.';
+        if (hint.textContent && hint.textContent.indexOf('Recorded assignment') >= 0) return;
+        hint.textContent = hint.textContent ? hint.textContent + ' ' + line : line;
+      })
+      .catch(function () {});
+  }
+  function rv4InitCollapsiblePanels() {
+    [
+      { id: 'rv4-panel-intake', key: 'rv4_panel_intake_open' },
+      { id: 'rv4-panel-candidates', key: 'rv4_panel_candidates_open' },
+      { id: 'rv4-panel-baseline', key: 'rv4_panel_baseline_open' },
+    ].forEach(function (p) {
+      var el = $(p.id);
+      if (!el) return;
+      var v = localStorage.getItem(p.key);
+      if (v === '1') el.open = true;
+      else if (v === '0') el.open = false;
+      else el.open = false;
+      el.addEventListener('toggle', function () {
+        localStorage.setItem(p.key, el.open ? '1' : '0');
+      });
+    });
   }
   function rv4SelectCandidateRow(sid) {
     rv4SelectedCandSid = sid;
@@ -4751,6 +4858,7 @@
         ' (scoped to this execution target).';
     }
     rv4UpdateCandContextBar();
+    rv4UpdateJupiterAssignGate();
   }
   function rv4RenderCandidates(rows) {
     var tb = $('rv4-cand-tbody');
@@ -4899,6 +5007,7 @@
       }
     }
     rv4UpdateCandContextBar();
+    rv4UpdateJupiterAssignGate();
   }
   function rv4LoadCandidates() {
     var h = (window.location.hash || '').replace(/^#/, '');
@@ -5111,6 +5220,7 @@
       })
       .catch(function () {});
     rv4LoadCandidates();
+    rv4LoadKitchenAssignmentStatus();
   }
   function rv4LoadDetail(eid) {
     var d = $('rv4-detail');
@@ -5727,6 +5837,47 @@
       rv4LoadCandidates();
     });
   }
+  rv4InitCollapsiblePanels();
+  var rv4AssignBtn = $('rv4-btn-kitchen-assign-jupiter');
+  if (rv4AssignBtn) {
+    rv4AssignBtn.addEventListener('click', function () {
+      if (!rv4SelectedCandSid || rv4AssignBtn.disabled) return;
+      rv4AssignBtn.disabled = true;
+      fetch('/api/v1/renaissance/kitchen-assign-jupiter', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ submission_id: rv4SelectedCandSid }),
+      })
+        .then(function (r) {
+          return r.json().then(function (j) {
+            return { ok: r.ok, j: j };
+          });
+        })
+        .then(function (x) {
+          if (!x.ok || !x.j || !x.j.ok) {
+            window.alert(
+              x.j && (x.j.error || x.j.detail) ? String(x.j.error || x.j.detail) : 'Assign failed'
+            );
+          } else {
+            window.alert(
+              'Kitchen → Jupiter: slot ' +
+                String(x.j.jupiter_policy_slot || '') +
+                '. SeanV3 HTTP POST ok: ' +
+                String(x.j.jupiter_http_post_ok)
+            );
+          }
+          rv4LoadKitchenAssignmentStatus();
+        })
+        .catch(function () {
+          window.alert('Assign request failed');
+        })
+        .finally(function () {
+          rv4AssignBtn.disabled = false;
+          rv4UpdateJupiterAssignGate();
+        });
+    });
+  }
+  rv4LoadKitchenAssignmentStatus();
   rv4IntakeUpdateGate();
   var rv4ip = $('rv4-btn-ingest-policy');
   if (rv4ip) {

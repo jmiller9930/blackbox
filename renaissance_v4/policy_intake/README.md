@@ -8,6 +8,8 @@
 | `GET` | `/api/v1/renaissance/policy-intake/<submission_id>` | Read persisted `intake_report.json` |
 | `POST` | `/api/v1/renaissance/policy-intake/<submission_id>/archive` | JSON body `{"is_active": false}` soft-archives; `{"is_active": true}` restores. (DV-066) |
 | `GET` | `/api/v1/renaissance/intake-candidates` | Query: `execution_target`, `include_archived` (0/1), `collapse_duplicates` (default 1: one row per `candidate_policy_id`, newest first). (DV-061 / DV-066) |
+| `POST` | `/api/v1/renaissance/kitchen-assign-jupiter` | Body `{"submission_id":"..."}`. Only for passing intake with `candidate_policy_id` = `kitchen_mechanical_always_long_v1` (Jupiter target). Persists `renaissance_v4/state/kitchen_jupiter_assignment.json` and optionally POSTs `{"policy":"jup_kitchen_mechanical_v1"}` to SeanV3 when `KITCHEN_JUPITER_CONTROL_BASE` + `KITCHEN_JUPITER_OPERATOR_TOKEN` are set on the API host. (DV-067) |
+| `GET` | `/api/v1/renaissance/kitchen-jupiter-assignment` | Last persisted assignment (or null). (DV-067) |
 
 ## UI
 
