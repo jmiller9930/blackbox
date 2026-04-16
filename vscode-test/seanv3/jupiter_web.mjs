@@ -1947,6 +1947,8 @@ function htmlPage(v) {
   <title>Jupiter — TUI parity</title>
   <style>
     * { box-sizing: border-box; }
+    :root { --jw-text-scale: 1; }
+    html { font-size: calc(16px * var(--jw-text-scale)); }
     body { font-family: ui-monospace, Menlo, Consolas, monospace; background: #0c0c0c; color: #e6edf3; margin: 0; min-height: 100vh; display: flex; flex-direction: column; align-items: center; padding: 1rem; position: relative; isolation: isolate; }
     body::before {
       content: '';
@@ -2029,7 +2031,7 @@ function htmlPage(v) {
     .trade-snap-h { font-size: 0.72rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; color: #8b949e; margin: 0.75rem 0 0.35rem 0; }
     pre.trade-detail { margin: 0; max-height: 42vh; overflow: auto; font-size: 0.68rem; line-height: 1.35; white-space: pre-wrap; word-break: break-word; background: #0a0a0b; border: 1px solid #30363d; padding: 0.5rem 0.6rem; border-radius: 2px; }
     #jw-live-strip.jw-pulse { outline: 1px solid rgba(88, 166, 255, 0.25); border-radius: 2px; }
-    .jw-status-strip { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0.35rem 0.9rem; width: 100%; max-width: 120ch; padding: 0.45rem 0.65rem; margin: 0 auto 0.65rem auto; border: 1px solid #30363d; border-radius: 2px; background: #161b22; font-size: 0.7rem; line-height: 1.35; box-sizing: border-box; z-index: 2; position: relative; }
+    .jw-status-strip { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0.35rem 0.9rem; width: 100%; max-width: 120ch; padding: 0.45rem 0.65rem; padding-right: 3.5rem; margin: 0 auto 0.65rem auto; border: 1px solid #30363d; border-radius: 2px; background: #161b22; font-size: 0.7rem; line-height: 1.35; box-sizing: border-box; z-index: 2; position: relative; }
     .jw-st-item { display: inline-flex; flex-wrap: nowrap; align-items: baseline; gap: 0.35rem; }
     .jw-st-k { color: #8b949e; font-size: 0.62rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; white-space: nowrap; }
     .jw-st-v { font-weight: 600; white-space: nowrap; }
@@ -2039,7 +2041,58 @@ function htmlPage(v) {
     .jw-st-warn { color: #d29922; }
     .jw-st-bad { color: #f85149; }
     .jw-st-muted { color: #8b949e; }
+    .jw-text-scale-float {
+      position: fixed;
+      top: max(0.45rem, env(safe-area-inset-top, 0px));
+      right: max(0.45rem, env(safe-area-inset-right, 0px));
+      z-index: 1500;
+      display: flex;
+      flex-direction: column;
+      gap: 3px;
+      font-family: system-ui, -apple-system, Segoe UI, sans-serif;
+      font-size: 11px;
+      line-height: 1;
+      pointer-events: auto;
+    }
+    .jw-text-scale-float button {
+      all: unset;
+      box-sizing: border-box;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-width: 2.1rem;
+      min-height: 1.65rem;
+      padding: 0.12rem 0.28rem;
+      border: 1px solid #30363d;
+      border-radius: 3px;
+      background: rgba(22, 27, 34, 0.94);
+      color: #c9d1d9;
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+      cursor: pointer;
+      box-shadow: 0 1px 6px rgba(0, 0, 0, 0.45);
+    }
+    .jw-text-scale-float button:hover { border-color: #58a6ff; color: #f0f6fc; }
+    .jw-text-scale-float button:focus-visible { outline: 2px solid #58a6ff; outline-offset: 2px; }
+    .jw-text-scale-float button:active { transform: scale(0.97); }
   </style>
+  <script>
+  (function(){
+    try {
+      var KEY = 'jw_dashboard_text_scale_v1';
+      var STEPS = [0.8, 0.85, 0.9, 0.95, 1, 1.05, 1.1, 1.15, 1.2, 1.25, 1.3, 1.35, 1.4];
+      var raw = parseFloat(localStorage.getItem(KEY) || '1');
+      if (!isFinite(raw)) raw = 1;
+      var best = STEPS[0], bestDiff = 999;
+      for (var i = 0; i < STEPS.length; i++) {
+        var d = Math.abs(STEPS[i] - raw);
+        if (d < bestDiff) { bestDiff = d; best = STEPS[i]; }
+      }
+      document.documentElement.style.setProperty('--jw-text-scale', String(best));
+    } catch (e) { /* */ }
+  })();
+  </script>
 </head>
 <body>
   ${statusStripMarkup}
@@ -2158,6 +2211,42 @@ function htmlPage(v) {
       <div id="jw-nt-drawer-body"><p class="muted">Select <strong>View</strong> on a row.</p></div>
     </aside>
   </div>
+  <div id="jw-text-scale-float" class="jw-text-scale-float" role="toolbar" aria-label="Text size">
+    <button type="button" id="jw-text-scale-up" title="Larger text" aria-label="Larger text">A+</button>
+    <button type="button" id="jw-text-scale-down" title="Smaller text" aria-label="Smaller text">A\u2212</button>
+  </div>
+  <script>
+  (function(){
+    var KEY = 'jw_dashboard_text_scale_v1';
+    var STEPS = [0.8, 0.85, 0.9, 0.95, 1, 1.05, 1.1, 1.15, 1.2, 1.25, 1.3, 1.35, 1.4];
+    function nearestStep(v) {
+      var best = 0, bestDiff = 999;
+      for (var i = 0; i < STEPS.length; i++) {
+        var d = Math.abs(STEPS[i] - v);
+        if (d < bestDiff) { bestDiff = d; best = i; }
+      }
+      return best;
+    }
+    function applyIdx(i) {
+      var idx = i < 0 ? 0 : i >= STEPS.length ? STEPS.length - 1 : i;
+      var s = STEPS[idx];
+      document.documentElement.style.setProperty('--jw-text-scale', String(s));
+      try { localStorage.setItem(KEY, String(s)); } catch (e) { /* */ }
+      return idx;
+    }
+    var cur = parseFloat(
+      getComputedStyle(document.documentElement).getPropertyValue('--jw-text-scale').trim() || '1'
+    );
+    var idx = nearestStep(isFinite(cur) ? cur : 1);
+    idx = applyIdx(idx);
+    document.getElementById('jw-text-scale-up')?.addEventListener('click', function () {
+      idx = applyIdx(idx + 1);
+    });
+    document.getElementById('jw-text-scale-down')?.addEventListener('click', function () {
+      idx = applyIdx(idx - 1);
+    });
+  })();
+  </script>
   <script>
   (function(){
     function E(s){return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
