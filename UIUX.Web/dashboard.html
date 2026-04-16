@@ -48,13 +48,20 @@
       line-height: 0;
       border-bottom: 1px solid var(--panel-border);
       box-shadow: 0 2px 8px rgba(15, 23, 42, 0.12);
+      /* Letterboxing behind wide art so object-fit:contain bars look intentional */
+      background: #0b1020;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-height: min(36vh, 420px);
     }
     .dash-rv4-kitchen-banner {
-      width: 100%;
-      height: auto;
-      max-height: min(32vh, 360px);
       display: block;
-      object-fit: cover;
+      max-width: 100%;
+      width: auto;
+      height: auto;
+      max-height: min(52vh, 560px);
+      object-fit: contain;
       object-position: center center;
     }
     .dash-rv4-wrap > * {
