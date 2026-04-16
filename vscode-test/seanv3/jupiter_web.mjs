@@ -137,6 +137,189 @@ function truncateMid(s, n = 32) {
   return t.length <= n ? t : `${t.slice(0, n - 1)}…`;
 }
 
+/** Short base58 hint for status strip (no new backend). */
+function shortPubkeyBase58(pk) {
+  if (!pk) return '';
+  const s = String(pk).trim();
+  if (s.length <= 10) return s;
+  return `${s.slice(0, 4)}…${s.slice(-4)}`;
+}
+
+/**
+ * Operator status strip model — shallow UI only; mirrors preflight thresholds where present
+ * (e.g. SQLite market_ticks stale ≥120s in runPreflight path; Hermes wall age for Pyth freshness).
+ * @param {Record<string, unknown>} v View payload (same shape as htmlPage / summary.json)
+ */
+function computeStatusStrip(v) {
+  const w = v.wallet;
+  const op = v.operator || {};
+  const opErr = Boolean(op.error);
+  const pf = v.preflight || {};
+  const checks = pf.checks || [];
+  const hermesChk = checks.find((c) => /hermes|pyth/i.test(String(c?.name || '')));
+  const binPing = checks.find((c) => /binance.*ping/i.test(String(c?.name || '').toLowerCase()));
+  const binKl = checks.find((c) => /binance klines/i.test(String(c?.name || '').toLowerCase()));
+  const o = pf.oracle;
+  const wallAge = pf.wall_age_s;
+
+  let pythLabel = 'Unknown';
+  let pythCls = 'jw-st-muted';
+  if (!hermesChk?.ok || o?.price == null) {
+    pythLabel = 'Down';
+    pythCls = 'jw-st-bad';
+  } else if (wallAge != null && Number.isFinite(Number(wallAge)) && Number(wallAge) > 120) {
+    pythLabel = 'Stale';
+    pythCls = 'jw-st-warn';
+  } else {
+    pythLabel = 'Live';
+    pythCls = 'jw-st-ok';
+  }
+
+  const kl = v.last_kline;
+  let bnLabel = 'Unknown';
+  let bnCls = 'jw-st-muted';
+  if (!binPing?.ok || !binKl?.ok) {
+    bnLabel = 'Down';
+    bnCls = 'jw-st-bad';
+  } else {
+    let ageSec = null;
+    if (kl?.polled_at_utc) {
+      try {
+        const t = new Date(String(kl.polled_at_utc).trim()).getTime();
+        if (!Number.isNaN(t)) ageSec = (Date.now() - t) / 1000;
+      } catch {
+        /* */
+      }
+    }
+    if (ageSec != null && ageSec > 600) {
+      bnLabel = 'Stale';
+      bnCls = 'jw-st-warn';
+    } else {
+      bnLabel = 'Live';
+      bnCls = 'jw-st-ok';
+    }
+  }
+
+  const walletConnected = Boolean(w?.pubkey_base58);
+  const walletMain = walletConnected ? 'Connected' : 'Disconnected';
+  const walletCls = walletConnected ? 'jw-st-ok' : 'jw-st-bad';
+  const walletSub = walletConnected ? shortPubkeyBase58(w.pubkey_base58) : '';
+
+  const readOnly = Boolean(v.read_only_except_policy);
+  const gate = op.next_open_gate || {};
+  let trgLabel = 'Enabled';
+  let trgCls = 'jw-st-ok';
+  if (opErr) {
+    trgLabel = 'Unknown';
+    trgCls = 'jw-st-muted';
+  } else if (readOnly) {
+    trgLabel = 'Read-only';
+    trgCls = 'jw-st-warn';
+  } else if (gate.ok !== true) {
+    trgLabel = 'Blocked';
+    trgCls = 'jw-st-bad';
+  }
+
+  const tm = v.trading_mode || {};
+  const modeLabel = tm.actual_banner ? 'Live' : 'Paper';
+  const modeCls = tm.actual_banner ? 'jw-st-warn' : 'jw-st-ok';
+
+  const jr = tm.jupiter_runtime || {};
+  const policyId = jr.active_policy ? String(jr.active_policy) : '—';
+
+  const pq = op.paper_equity_usd || {};
+  let eqStr = '—';
+  let eqCls = 'jw-st-muted';
+  if (!opErr && pq.equity_usd != null && Number.isFinite(Number(pq.equity_usd))) {
+    eqStr = Number(pq.equity_usd).toFixed(2);
+    eqCls = 'jw-st-ok';
+  }
+
+  const pos = v.position;
+  let posLabel = '—';
+  let posCls = 'jw-st-muted';
+  if (pos && String(pos.side) !== 'flat') {
+    const s = String(pos.side).toLowerCase();
+    if (s === 'long') {
+      posLabel = 'Long';
+      posCls = 'jw-st-warn';
+    } else if (s === 'short') {
+      posLabel = 'Short';
+      posCls = 'jw-st-warn';
+    } else {
+      posLabel = String(pos.side);
+      posCls = 'jw-st-ok';
+    }
+  } else {
+    posLabel = 'Flat';
+    posCls = 'jw-st-ok';
+  }
+
+  let updLabel = '—';
+  let updCls = 'jw-st-muted';
+  if (kl?.polled_at_utc) {
+    try {
+      const t = new Date(String(kl.polled_at_utc).trim()).getTime();
+      if (!Number.isNaN(t)) {
+        const sec = (Date.now() - t) / 1000;
+        if (sec >= 0 && sec < 120) {
+          updLabel = `${Math.round(sec)}s`;
+          updCls = 'jw-st-ok';
+        } else if (sec >= 120 && sec < 900) {
+          updLabel = `${Math.round(sec / 60)}m`;
+          updCls = 'jw-st-warn';
+        } else if (sec >= 900) {
+          updLabel = `${Math.round(sec / 60)}m`;
+          updCls = 'jw-st-bad';
+        }
+      }
+    } catch {
+      /* */
+    }
+  } else if (wallAge != null && Number.isFinite(Number(wallAge))) {
+    updLabel = `Pyth ~${Math.round(Number(wallAge))}s`;
+    updCls = Number(wallAge) > 120 ? 'jw-st-warn' : 'jw-st-ok';
+  }
+
+  return {
+    walletMain,
+    walletSub,
+    walletCls,
+    pythLabel,
+    pythCls,
+    bnLabel,
+    bnCls,
+    trgLabel,
+    trgCls,
+    modeLabel,
+    modeCls,
+    policyId,
+    eqStr,
+    eqCls,
+    posLabel,
+    posCls,
+    updLabel,
+    updCls,
+  };
+}
+
+function statusStripHtml(s) {
+  const wSub =
+    s.walletSub &&
+    `<span class="jw-st-sub" id="jw-st-wallet-sub">${esc(s.walletSub)}</span>`;
+  return `<div id="jw-status-strip" class="jw-status-strip" role="region" aria-label="Operator status">
+    <div class="jw-st-item"><span class="jw-st-k">Wallet</span><span class="jw-st-v ${s.walletCls}" id="jw-st-wallet"><span id="jw-st-wallet-main">${esc(s.walletMain)}</span>${wSub ? ` ${wSub}` : ''}</span></div>
+    <div class="jw-st-item"><span class="jw-st-k">Pyth</span><span class="jw-st-v ${s.pythCls}" id="jw-st-pyth">${esc(s.pythLabel)}</span></div>
+    <div class="jw-st-item"><span class="jw-st-k">Binance</span><span class="jw-st-v ${s.bnCls}" id="jw-st-binance">${esc(s.bnLabel)}</span></div>
+    <div class="jw-st-item"><span class="jw-st-k">Trading</span><span class="jw-st-v ${s.trgCls}" id="jw-st-trading">${esc(s.trgLabel)}</span></div>
+    <div class="jw-st-item"><span class="jw-st-k">Mode</span><span class="jw-st-v ${s.modeCls}" id="jw-st-mode">${esc(s.modeLabel)}</span></div>
+    <div class="jw-st-item"><span class="jw-st-k">Policy</span><span class="jw-st-v jw-st-policy" id="jw-st-policy">${esc(s.policyId)}</span></div>
+    <div class="jw-st-item"><span class="jw-st-k">Equity</span><span class="jw-st-v ${s.eqCls}" id="jw-st-equity">${esc(s.eqStr)}</span></div>
+    <div class="jw-st-item"><span class="jw-st-k">Position</span><span class="jw-st-v ${s.posCls}" id="jw-st-position">${esc(s.posLabel)}</span></div>
+    <div class="jw-st-item"><span class="jw-st-k">Updated</span><span class="jw-st-v ${s.updCls}" id="jw-st-updated">${esc(s.updLabel)}</span></div>
+  </div>`;
+}
+
 function exitReasonFromMeta(metaJson) {
   if (!metaJson) return '—';
   try {
@@ -1236,8 +1419,104 @@ function jwLivePollScript(refreshSec) {
   function isoUtc(s){if(!s)return'\\u2014';try{var d=new Date(String(s).trim().replace('Z','+00:00'));return isNaN(d.getTime())?String(s).slice(0,22):d.toISOString().slice(0,16).replace('T',' ')+' UTC';}catch(e){return String(s).slice(0,22);}}
   function trCls(rc){var x=String(rc||'').toLowerCase();if(x==='win')return'trade-win';if(x==='loss')return'trade-loss';return'trade-flat';}
   function ntCls(rc){var x=String(rc||'').toLowerCase();if(x==='open_blocked'||x==='funding_gate_blocked')return'nt-blocked';if(x==='no_atr'||x==='atr_invalid')return'nt-warn';if(x==='no_entry_signal'||x==='no_candidate_side')return'nt-signal';return'nt-dim';}
+  function setSt(id, text, cls){
+    var el=document.getElementById(id);
+    if(!el)return;
+    el.textContent=text;
+    el.className='jw-st-v '+cls+(id==='jw-st-policy'?' jw-st-policy':'');
+  }
+  /** Mirrors server computeStatusStrip — shallow UI only. */
+  function applyStatusStrip(j){
+    var w=j.wallet||{};
+    var op=j.operator||{};
+    var opErr=!!op.error;
+    var pf=j.preflight||{};
+    var checks=pf.checks||[];
+    var hermesChk=null, binPing=null, binKl=null;
+    for(var i=0;i<checks.length;i++){
+      var c=checks[i], n=String(c&&c.name||'');
+      if(/hermes|pyth/i.test(n))hermesChk=c;
+      if(/binance.*ping/i.test(n.toLowerCase()))binPing=c;
+      if(/binance klines/i.test(n.toLowerCase()))binKl=c;
+    }
+    var o=pf.oracle;
+    var wallAge=pf.wall_age_s;
+    var pythLabel='Unknown', pythCls='jw-st-muted';
+    if(!hermesChk||!hermesChk.ok||!o||o.price==null){pythLabel='Down';pythCls='jw-st-bad';}
+    else if(wallAge!=null&&isFinite(Number(wallAge))&&Number(wallAge)>120){pythLabel='Stale';pythCls='jw-st-warn';}
+    else{pythLabel='Live';pythCls='jw-st-ok';}
+    var kl=j.last_kline;
+    var bnLabel='Unknown', bnCls='jw-st-muted';
+    if(!binPing||!binPing.ok||!binKl||!binKl.ok){bnLabel='Down';bnCls='jw-st-bad';}
+    else{
+      var ageSec=null;
+      if(kl&&kl.polled_at_utc){
+        try{var ts=new Date(String(kl.polled_at_utc).trim()).getTime();if(!isNaN(ts))ageSec=(Date.now()-ts)/1000;}catch(e){}
+      }
+      if(ageSec!=null&&ageSec>600){bnLabel='Stale';bnCls='jw-st-warn';}
+      else{bnLabel='Live';bnCls='jw-st-ok';}
+    }
+    var walletConnected=!!w.pubkey_base58;
+    var wm=document.getElementById('jw-st-wallet-main');
+    if(wm)wm.textContent=walletConnected?'Connected':'Disconnected';
+    var ws=document.getElementById('jw-st-wallet-sub');
+    if(ws){
+      var pk=String(w.pubkey_base58||'').trim();
+      if(pk.length>10)ws.textContent=pk.slice(0,4)+'\\u2026'+pk.slice(-4);
+      else ws.textContent=pk;
+      ws.style.display=pk?'inline':'none';
+    }
+    var wwrap=document.getElementById('jw-st-wallet');
+    if(wwrap)wwrap.className='jw-st-v '+(walletConnected?'jw-st-ok':'jw-st-bad');
+    setSt('jw-st-pyth',pythLabel,pythCls);
+    setSt('jw-st-binance',bnLabel,bnCls);
+    var readOnly=!!j.read_only_except_policy;
+    var gate=op.next_open_gate||{};
+    var trgLabel='Enabled', trgCls='jw-st-ok';
+    if(opErr){trgLabel='Unknown';trgCls='jw-st-muted';}
+    else if(readOnly){trgLabel='Read-only';trgCls='jw-st-warn';}
+    else if(gate.ok!==true){trgLabel='Blocked';trgCls='jw-st-bad';}
+    setSt('jw-st-trading',trgLabel,trgCls);
+    var tm=j.trading_mode||{};
+    var modeLabel=tm.actual_banner?'Live':'Paper';
+    var modeCls=tm.actual_banner?'jw-st-warn':'jw-st-ok';
+    setSt('jw-st-mode',modeLabel,modeCls);
+    var jr=tm.jupiter_runtime||{};
+    var polEl=document.getElementById('jw-st-policy');
+    if(polEl){polEl.textContent=jr.active_policy||'\\u2014';polEl.className='jw-st-v jw-st-policy';}
+    var pq=op.paper_equity_usd||{};
+    var eqStr='\\u2014', eqCls='jw-st-muted';
+    if(!opErr&&pq.equity_usd!=null&&isFinite(Number(pq.equity_usd))){eqStr=Number(pq.equity_usd).toFixed(2);eqCls='jw-st-ok';}
+    setSt('jw-st-equity',eqStr,eqCls);
+    var pos=j.position;
+    var posLabel='\\u2014', posCls='jw-st-muted';
+    if(pos&&String(pos.side)!=='flat'){
+      var sd=String(pos.side).toLowerCase();
+      if(sd==='long'){posLabel='Long';posCls='jw-st-warn';}
+      else if(sd==='short'){posLabel='Short';posCls='jw-st-warn';}
+      else{posLabel=String(pos.side);posCls='jw-st-ok';}
+    }else{posLabel='Flat';posCls='jw-st-ok';}
+    setSt('jw-st-position',posLabel,posCls);
+    var updLabel='\\u2014', updCls='jw-st-muted';
+    if(kl&&kl.polled_at_utc){
+      try{
+        var t0=new Date(String(kl.polled_at_utc).trim()).getTime();
+        if(!isNaN(t0)){
+          var sec=(Date.now()-t0)/1000;
+          if(sec>=0&&sec<120){updLabel=Math.round(sec)+'s';updCls='jw-st-ok';}
+          else if(sec>=120&&sec<900){updLabel=Math.round(sec/60)+'m';updCls='jw-st-warn';}
+          else if(sec>=900){updLabel=Math.round(sec/60)+'m';updCls='jw-st-bad';}
+        }
+      }catch(e){}
+    }else if(wallAge!=null&&isFinite(Number(wallAge))){
+      updLabel='Pyth ~'+Math.round(Number(wallAge))+'s';
+      updCls=Number(wallAge)>120?'jw-st-warn':'jw-st-ok';
+    }
+    setSt('jw-st-updated',updLabel,updCls);
+  }
   function apply(j){
     if(!j||j.error)return;
+    applyStatusStrip(j);
     var tm=j.trading_mode||{}, jr=tm.jupiter_runtime||{};
     var a=document.getElementById('jw-ap-code'); if(a)a.textContent=jr.active_policy||'';
     a=document.getElementById('jw-ap-src'); if(a)a.textContent=jr.source||'';
@@ -1657,6 +1936,8 @@ function htmlPage(v) {
       <p class="warn">POST actions are off until you set <code>JUPITER_OPERATOR_TOKEN</code> on jupiter-web and restart the container.</p>
     </div></section>`;
 
+  const statusStripMarkup = statusStripHtml(computeStatusStrip(v));
+
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -1748,14 +2029,22 @@ function htmlPage(v) {
     .trade-snap-h { font-size: 0.72rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; color: #8b949e; margin: 0.75rem 0 0.35rem 0; }
     pre.trade-detail { margin: 0; max-height: 42vh; overflow: auto; font-size: 0.68rem; line-height: 1.35; white-space: pre-wrap; word-break: break-word; background: #0a0a0b; border: 1px solid #30363d; padding: 0.5rem 0.6rem; border-radius: 2px; }
     #jw-live-strip.jw-pulse { outline: 1px solid rgba(88, 166, 255, 0.25); border-radius: 2px; }
+    .jw-status-strip { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0.35rem 0.9rem; width: 100%; max-width: 120ch; padding: 0.45rem 0.65rem; margin: 0 auto 0.65rem auto; border: 1px solid #30363d; border-radius: 2px; background: #161b22; font-size: 0.7rem; line-height: 1.35; box-sizing: border-box; z-index: 2; position: relative; }
+    .jw-st-item { display: inline-flex; flex-wrap: nowrap; align-items: baseline; gap: 0.35rem; }
+    .jw-st-k { color: #8b949e; font-size: 0.62rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; white-space: nowrap; }
+    .jw-st-v { font-weight: 600; white-space: nowrap; }
+    .jw-st-sub { font-weight: 500; color: #8b949e; font-size: 0.68rem; }
+    .jw-st-policy { color: #79c0ff; }
+    .jw-st-ok { color: #3fb950; }
+    .jw-st-warn { color: #d29922; }
+    .jw-st-bad { color: #f85149; }
+    .jw-st-muted { color: #8b949e; }
   </style>
 </head>
 <body>
+  ${statusStripMarkup}
   <div class="wrap">
     <section class="panel"><h2 class="jw-panel-head"><button type="button" class="jw-panel-toggle" aria-expanded="false" aria-controls="jw-pan-wallet-fund"><span class="jw-caret" aria-hidden="true">▶</span> Wallet &amp; funding</button></h2><div class="jw-panel-body" id="jw-pan-wallet-fund" hidden>${walletFundingBlock}</div></section>
-    <section class="panel"><h2 class="jw-panel-head"><button type="button" class="jw-panel-toggle" aria-expanded="false" aria-controls="jw-pan-wallet-st"><span class="jw-caret" aria-hidden="true">▶</span> Wallet status</button></h2><div class="jw-panel-body" id="jw-pan-wallet-st" hidden>${walletBlock}</div></section>
-    <section class="panel"><h2 class="jw-panel-head"><button type="button" class="jw-panel-toggle" aria-expanded="false" aria-controls="jw-pan-trading"><span class="jw-caret" aria-hidden="true">▶</span> Trading mode</button></h2><div class="jw-panel-body" id="jw-pan-trading" hidden>${tradingBlock}</div></section>
-    <section class="panel"><h2 class="jw-panel-head"><button type="button" class="jw-panel-toggle" aria-expanded="false" aria-controls="jw-pan-live"><span class="jw-caret" aria-hidden="true">▶</span> Live market &amp; gates</button></h2><div class="jw-panel-body" id="jw-pan-live" hidden>${operatorBlock}</div></section>
     <section class="panel"><h2 class="jw-panel-head"><button type="button" class="jw-panel-toggle" aria-expanded="true" aria-controls="jw-pan-trades"><span class="jw-caret" aria-hidden="true">▼</span> Trade window (Sean paper trades)</button></h2><div class="jw-panel-body" id="jw-pan-trades">
       <p class="op-row">
         <label>Jump to trade <select id="jw-trade-jump">${tradeJumpOpts}</select></label>
@@ -1802,6 +2091,9 @@ function htmlPage(v) {
       <p class="muted small">Click <strong>View</strong> for full indicators, gates, and raw diagnostics (loaded from the ledger row, not the summary poll).</p>
       <div class="scroll" id="jw-no-trade-scroll"><table><thead><tr><th>Time (UTC)</th><th>market_event_id</th><th>policy</th><th>reason</th><th></th></tr></thead><tbody id="jw-no-trade-tbody">${noTradeRows}</tbody></table></div>
     </div></section>
+    <section class="panel"><h2 class="jw-panel-head"><button type="button" class="jw-panel-toggle" aria-expanded="false" aria-controls="jw-pan-wallet-st"><span class="jw-caret" aria-hidden="true">▶</span> Wallet status</button></h2><div class="jw-panel-body" id="jw-pan-wallet-st" hidden>${walletBlock}</div></section>
+    <section class="panel"><h2 class="jw-panel-head"><button type="button" class="jw-panel-toggle" aria-expanded="false" aria-controls="jw-pan-trading"><span class="jw-caret" aria-hidden="true">▶</span> Trading mode</button></h2><div class="jw-panel-body" id="jw-pan-trading" hidden>${tradingBlock}</div></section>
+    <section class="panel"><h2 class="jw-panel-head"><button type="button" class="jw-panel-toggle" aria-expanded="false" aria-controls="jw-pan-live"><span class="jw-caret" aria-hidden="true">▶</span> Live market &amp; gates</button></h2><div class="jw-panel-body" id="jw-pan-live" hidden>${operatorBlock}</div></section>
     <section class="panel"><h2 class="jw-panel-head"><button type="button" class="jw-panel-toggle" aria-expanded="false" aria-controls="jw-pan-pos"><span class="jw-caret" aria-hidden="true">▶</span> Position &amp; last kline (Sean DB)</button></h2><div class="jw-panel-body" id="jw-pan-pos" hidden><div id="jw-pos-kl-block">${posBlock}${klBlock}</div></div></section>
     <section class="panel">
       <h2 class="jw-panel-head"><button type="button" class="jw-panel-toggle" aria-expanded="false" aria-controls="jw-pan-overview"><span class="jw-caret" aria-hidden="true">▶</span> Dashboard overview</button></h2>
