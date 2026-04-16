@@ -6,6 +6,7 @@
 # Docker maps: host port 443 -> container port 443 (TLS). Port 80 redirects to HTTPS.
 #
 # Run:  cd UIUX.Web && docker compose up --build
+# API image (policy intake needs node/npx): Dockerfile.api — after changing it run: docker compose build api
 #
 # Clawbot / split-tunnel: Binance REST must use the host routing table (WireGuard to Binance only).
 # Bridge-network containers often see HTTP 451 and stall ``binance_strategy_bars_5m``; the API
@@ -38,6 +39,10 @@ services:
       SOLANA_RPC_URL: ${SOLANA_RPC_URL:-}
       BLACKBOX_LIVE_TRADING_BLOCKED: ${BLACKBOX_LIVE_TRADING_BLOCKED:-1}
       BLACKBOX_EXECUTION_LEDGER_PATH: ${BLACKBOX_EXECUTION_LEDGER_PATH:-}
+      # Kitchen ↔ SeanV3 Jupiter control plane (DV-074/075). Required for assign + runtime GET from the API.
+      # Must match the Jupiter UI host:port you use in the browser (same Sean/jupiter-web process).
+      KITCHEN_JUPITER_CONTROL_BASE: ${KITCHEN_JUPITER_CONTROL_BASE:-}
+      KITCHEN_JUPITER_OPERATOR_TOKEN: ${KITCHEN_JUPITER_OPERATOR_TOKEN:-}
       # Baseline bridge: Sean Jupiter lifecycle only (legacy mechanical writer removed from runtime).
       BASELINE_LEDGER_SIGNAL_MODE: sean_jupiter_v1
       BASELINE_LEGACY_MECHANICAL_ALLOWED: "0"
