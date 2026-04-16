@@ -117,6 +117,7 @@ The items below are **implemented capability** in-repo. They are **not** a subst
 
 | Path | Role |
 |------|------|
+| `renaissance_v4/ACTIVE_DOCKET.md` | BLACKBOX / Jupiter / Kitchen phased priorities (047–053) |
 | `renaissance_v4/WORKBENCH_V1.md` | Product spec + API list |
 | `renaissance_v4/ROBUSTNESS.md` | Robustness runner usage |
 | `docs/validation/` | Directive closure and smoke evidence |
