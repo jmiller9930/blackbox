@@ -5,7 +5,7 @@
  * JUPITER_WEB_READ_ONLY=1 blocks POST /api/operator/*; sole write: POST /api/v1/jupiter/active-policy (Bearer).
  *
  * Mount repo read-only at BLACKBOX_REPO_ROOT for policy registry + execution_ledger parity.
- * Default port 707. Lab: http://clawbot.a51.corp:707/
+ * Default port 707. Lab: http://clawbot.a51.corp:707/ or WAN http://jupv3.greyllc.net:737/ (→ :707)
  */
 import { execSync } from 'child_process';
 import { createHash, timingSafeEqual } from 'node:crypto';
