@@ -88,6 +88,7 @@ class _MockResp:
 
 def test_query_blackbox_runtime_truth_parses_ok(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     _copy_registry(tmp_path)
+    _write_manifest_bb(tmp_path, "bb_sub", H_BB)
     monkeypatch.setenv("KITCHEN_BLACKBOX_CONTROL_BASE", "http://bb.test")
     monkeypatch.setenv("KITCHEN_BLACKBOX_OPERATOR_TOKEN", "tok")
 
@@ -105,6 +106,7 @@ def test_query_blackbox_runtime_truth_parses_ok(tmp_path: Path, monkeypatch: pyt
     assert r.get("ok") is True
     assert r.get("active_policy") == "bb_kitchen_mechanical_v1"
     assert r.get("execution_target") == "blackbox"
+    assert r.get("unknown_runtime_policy") is False
 
 
 def test_assign_blackbox_succeeds_when_runtime_post_and_get_verify(

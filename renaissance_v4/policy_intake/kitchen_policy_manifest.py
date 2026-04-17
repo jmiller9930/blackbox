@@ -69,6 +69,24 @@ def validate_manifest_entries(entries: list[Any]) -> tuple[bool, str | None]:
     return True, None
 
 
+def deployment_ids_for_target(repo: Path, execution_target: str) -> list[str]:
+    """Listed ``deployed_runtime_policy_id`` values for Jupiter or BlackBox (manifest order, unique)."""
+    et = str(execution_target or "").strip().lower()
+    if et not in ("jupiter", "blackbox"):
+        return []
+    m = load_manifest(repo)
+    out: list[str] = []
+    for e in m.get("entries") or []:
+        if not isinstance(e, dict):
+            continue
+        if str(e.get("execution_target") or "").strip().lower() != et:
+            continue
+        pid = str(e.get("deployed_runtime_policy_id") or "").strip()
+        if pid and pid not in out:
+            out.append(pid)
+    return out
+
+
 def find_manifest_entry(
     repo: Path,
     execution_target: str,

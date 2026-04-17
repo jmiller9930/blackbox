@@ -54,6 +54,12 @@ The **engine runs** policies. The **engine is not** the policy. Policy **plugs i
 | **Lifecycle / exits (engine)** | `vscode-test/seanv3/sean_lifecycle.mjs` | Stops, targets, ATR-from-window — not candidate strategy selection. |
 | **Orchestration** | `vscode-test/seanv3/app.mjs` | Schedules `processSeanEngine`; must not import strategy modules. |
 | **HTTP / operator** | `vscode-test/seanv3/jupiter_web.mjs` | Writes `jupiter_active_policy`; validates against deployment manifest. Status strip: **Engine** = execution loop (`BBT_v1` / `SEAN_ENGINE_DISPLAY_ID`), **Deployment** = assigned policy id (manifest), not interchangeable. |
+| **BlackBox control plane** | `renaissance_v4/blackbox_policy_control_plane.py` + `UIUX.Web/api_server.py` | Same model: **allowed** deployment ids = `kitchen_policy_deployment_manifest_v1` entries for `execution_target` **blackbox**; POST requires manifest row; state file holds active id + submission/hash; GET includes `engine_display_id` / `engine_online` (`BLACKBOX_ENGINE_DISPLAY_ID` / `BLACKBOX_ENGINE_SLICE`). |
+
+### BlackBox (Python API)
+
+- **Not** a registry slot switchboard: `kitchen_policy_registry_v1.json` `runtime_policies.blackbox` is **not** the allowlist for POST (manifest is).
+- Optional env: `BLACKBOX_ENGINE_DISPLAY_ID` (default `BBT_v1`), `BLACKBOX_ENGINE_SLICE` (default on).
 | **Quarantined legacy strategies** | `vscode-test/seanv3/legacy_policies/*.mjs` | **Not** part of the production engine path; tests/reference only unless explicitly imported from tests. |
 
 **Deployment binding (repo config):**  

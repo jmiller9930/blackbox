@@ -38,6 +38,7 @@ from renaissance_v4.kitchen_policy_registry import (
 )
 from renaissance_v4.policy_intake.kitchen_policy_manifest import (
     artifact_identity_for_submission,
+    deployment_ids_for_target,
     submission_content_sha256_from_intake,
     validate_kitchen_assignment_against_manifest,
 )
@@ -397,11 +398,11 @@ def query_blackbox_runtime_truth(
     js = r.get("json") or {}
     active = str(js.get("active_policy") or "").strip()
     allowed = js.get("allowed_policies")
-    unknown = False
     try:
-        unknown = bool(active) and not runtime_policy_approved(repo, "blackbox", active)
+        manifest_ids = deployment_ids_for_target(repo, "blackbox")
     except (OSError, ValueError, FileNotFoundError):
-        unknown = True
+        manifest_ids = []
+    unknown = bool(active) and active not in manifest_ids
     return {
         "ok": True,
         "execution_target": "blackbox",
@@ -1112,8 +1113,8 @@ def assign_mechanical_candidate(
                 "ok": False,
                 "error": "blackbox_runtime_policy_set_mismatch",
                 "detail": (
-                    f"Kitchen registry assigns {active_pid!r}, but this BlackBox instance's allowed_policies "
-                    "does not include it. Align kitchen_policy_registry_v1.json runtime_policies.blackbox with the API host."
+                    f"Kitchen assigns deployment id {active_pid!r}, but GET /api/v1/blackbox/policy allowed_policies "
+                    "(from kitchen_policy_deployment_manifest_v1) does not include it."
                 ),
                 "active_runtime_policy_id": active_pid,
                 "blackbox_allowed_policies": allowed_list,
@@ -1147,11 +1148,11 @@ def assign_mechanical_candidate(
                 "expected_active_policy": active_pid,
                 "runtime_active_policy": live,
             }
-        if not runtime_policy_approved(repo, "blackbox", live):
+        if live and live not in deployment_ids_for_target(repo, "blackbox"):
             return {
                 "ok": False,
                 "error": "runtime_reports_unregistered_policy",
-                "detail": "Runtime active policy is not listed in kitchen_policy_registry_v1.",
+                "detail": "Runtime active deployment id is not listed in kitchen_policy_deployment_manifest_v1 (blackbox).",
                 "runtime_active_policy": live,
             }
         js_sub = str(js.get("submission_id") or "").strip()
