@@ -1603,6 +1603,9 @@ function jupiterPolicyOptionLabel(id) {
 
 function htmlJupiterPolicySelectOptions(selectedAp) {
   const ids = loadAllowedDeploymentIdsFromManifest();
+  if (ids.length === 0) {
+    return '<option value="" selected>none</option>';
+  }
   return ids
     .map(
       (id) =>
@@ -1649,9 +1652,16 @@ function htmlPage(v) {
       function jwRebuildPolicySelectFromApi(j){
         var s=document.getElementById('jw-jupiter-policy');
         if(!s||!j)return;
-        var allowed=j.allowed_policies;
-        if(!Array.isArray(allowed)||allowed.length===0)return;
+        var allowed=Array.isArray(j.allowed_policies)?j.allowed_policies:[];
         s.innerHTML='';
+        if(allowed.length===0){
+          var o0=document.createElement('option');
+          o0.value='';
+          o0.textContent='none';
+          o0.selected=true;
+          s.appendChild(o0);
+          return;
+        }
         allowed.forEach(function(id){
           var o=document.createElement('option');
           o.value=id;
@@ -1677,6 +1687,11 @@ function htmlPage(v) {
         }
         var active=String(code.textContent||'').trim();
         var selv=String(sel.value||'').trim();
+        if(!selv){
+          box.classList.add('jw-policy-idle');
+          if(st){ st.textContent='No deployment ids in manifest — dropdown shows none.'; }
+          return;
+        }
         if(active&&selv===active){
           box.classList.add('jw-policy-active');
           if(st){ st.textContent='Deployment is set and active — '+selv+' (SQLite jupiter_active_policy; engine loads evaluator on the next eligible cycle).'; }
@@ -1703,7 +1718,7 @@ function htmlPage(v) {
           return;
         }
         if(!pol){
-          alert('Select a deployment id from the dropdown.');
+          alert('No deployment id selected — if the dropdown shows \u201cnone\u201d, add Jupiter entries to kitchen_policy_deployment_manifest_v1.json (repo) and reload.');
           return;
         }
         if(box)box.removeAttribute('data-policy-error');
