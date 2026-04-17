@@ -335,30 +335,6 @@
       font-weight: 600;
       margin: 0.25rem 0 0;
     }
-    /* DV-077 — Kitchen row vs live runtime vs sync (explicit check-in closes the loop) */
-    .dash-rv4-runtime-policy-summary {
-      margin: 0.35rem 0 0.5rem;
-    }
-    .dash-rv4-runtime-policy-summary .dash-rv4-active-trade-policy-line {
-      font-size: 0.88rem;
-      font-weight: 600;
-      margin: 0.12rem 0;
-      color: var(--text);
-    }
-    .dash-rv4-active-trade-policy-line {
-      font-size: 0.95rem;
-      font-weight: 700;
-      margin: 0.35rem 0 0.5rem;
-      color: var(--text);
-    }
-    .dash-rv4-active-trade-policy-line .dash-rv4-atp-value {
-      font-family: ui-monospace, monospace;
-      color: var(--accent);
-    }
-    .dash-rv4-active-trade-policy-line.is-rv4-drift-warn .dash-rv4-atp-value,
-    .dash-rv4-runtime-policy-summary.is-rv4-drift-warn .dash-rv4-atp-value {
-      color: #b45309;
-    }
     /* DV-077 — green when runtime.active_policy matches row.runtime_policy_id */
     .dash-rv4-lifecycle-running {
       color: #16a34a;
@@ -1961,27 +1937,6 @@
             <option value="blackbox">BlackBox</option>
           </select>
           <p id="rv4-eval-under-line" class="dash-rv4-intake-hint is-ready">Evaluating under: Jupiter</p>
-        </div>
-
-        <!-- DV-077 / runtime check-in: Kitchen row vs live GET are separate; sync_state converges after explicit check-in -->
-        <div
-          id="rv4-runtime-policy-summary"
-          class="dash-rv4-runtime-policy-summary"
-          aria-live="polite"
-          hidden
-        >
-          <p class="dash-rv4-active-trade-policy-line">
-            Kitchen assigned policy:
-            <span id="rv4-kitchen-assigned-policy-value" class="dash-rv4-atp-value">—</span>
-          </p>
-          <p class="dash-rv4-active-trade-policy-line">
-            Live runtime policy:
-            <span id="rv4-live-runtime-policy-value" class="dash-rv4-atp-value">—</span>
-          </p>
-          <p class="dash-rv4-active-trade-policy-line">
-            Sync state:
-            <span id="rv4-sync-state-value" class="dash-rv4-atp-value">—</span>
-          </p>
         </div>
 
         <section class="dash-rv4-section dash-rv4-results dash-rv4-results-primary" aria-labelledby="rv4-results-h">
@@ -4965,54 +4920,7 @@
     }
     return { ok: true, reason: '' };
   }
-  /** DV-077 — Kitchen assigned id vs live runtime GET vs sync_state (do not collapse to one line). */
-  function rv4UpdateActiveTradePolicyLine() {
-    var wrap = $('rv4-runtime-policy-summary');
-    var kEl = $('rv4-kitchen-assigned-policy-value');
-    var liveEl = $('rv4-live-runtime-policy-value');
-    var syncEl = $('rv4-sync-state-value');
-    if (!wrap || !kEl || !liveEl || !syncEl) return;
-    var et = rv4GetExecutionTarget();
-    if (et !== 'jupiter' && et !== 'blackbox') {
-      wrap.hidden = true;
-      return;
-    }
-    wrap.hidden = false;
-    var j = rv4KitchenAssignmentPayload;
-    if (!j) {
-      kEl.textContent = '—';
-      liveEl.textContent = '—';
-      syncEl.textContent = '—';
-      wrap.classList.remove('is-rv4-drift-warn');
-      return;
-    }
-    var rt = j.runtime || {};
-    var drift = j.drift || {};
-    var asg = j.assignment || {};
-    var kitchenId = String(asg.active_runtime_policy_id || '').trim();
-    kEl.textContent = kitchenId || '—';
-    var live =
-      rt && rt.ok && rt.active_policy != null && String(rt.active_policy).trim() !== ''
-        ? String(rt.active_policy).trim()
-        : rt && !rt.ok
-          ? '(runtime unavailable)'
-          : '—';
-    liveEl.textContent = live;
-    var syncRaw = j.sync_state != null && String(j.sync_state).trim() !== '' ? String(j.sync_state).trim() : '';
-    if (!syncRaw && drift.state) {
-      syncRaw =
-        drift.state === 'match'
-          ? 'synced'
-          : drift.state === 'runtime_unreachable'
-            ? 'runtime_unreachable'
-            : 'drift';
-    }
-    syncEl.textContent = syncRaw || '—';
-    var diverged = drift.state && drift.state !== 'match';
-    wrap.classList.toggle('is-rv4-drift-warn', !!diverged || !!(rt && !rt.ok));
-  }
   function rv4UpdateKitchenAssignGlobalStatus() {
-    rv4UpdateActiveTradePolicyLine();
     var el = $('rv4-kitchen-assign-global-status');
     if (!el) return;
     var j = rv4KitchenAssignmentPayload;
