@@ -1,6 +1,6 @@
 {
   "schema": "kitchen_policy_registry_v1",
-  "description": "Canonical runtime policy IDs for Kitchen, Jupiter (SeanV3), and BlackBox. SeanV3 ALLOWED_POLICY_IDS in jupiter_web.mjs should stay aligned with runtime_policies.jupiter. intake_candidate_runtime_map maps intake-only candidate_policy_id strings (e.g. lab fixtures) to a deployable runtime_policies id.",
+  "description": "Canonical runtime policy IDs for Kitchen, Jupiter (SeanV3), and BlackBox. SeanV3 ALLOWED_POLICY_IDS in jupiter_web.mjs should stay aligned with runtime_policies.jupiter. Kitchen assign only selects among shipped runtime policy modules (see renaissance_v4/QUANT_KITCHEN_COMPLETED_CHECKLIST.md) — it does not load arbitrary uploaded .ts into Jupiter. intake_candidate_runtime_map maps lab candidate_policy_id strings to a deployable runtime id for registry/UI eligibility and control-plane tests; that is not a claim that Jupiter executes the uploaded artifact. Prefer mechanical_slot for the real kitchen_mechanical pairing.",
   "intake_candidate_runtime_map": {
     "jupiter": {
       "fixture_minimal_direction_v1": "jup_mc_test"

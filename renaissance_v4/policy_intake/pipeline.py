@@ -53,6 +53,45 @@ def _extract_rv4_policy_indicators_json_from_ts(text: str) -> dict[str, Any] | N
         return None
 
 
+def _extract_operator_declarations_json_from_ts(text: str) -> dict[str, Any] | None:
+    """
+    Parse ``const OPERATOR_DECLARATIONS_JSON = `{ ... }`;`` at top of policy template.
+
+    Expected keys include: output_filename, policy_id, display_name, version, timeframe,
+    author, description, min_bars, indicators (list), gates (list).
+    Indicators + gates are merged into policy_indicators_v1 for harness + canonical.
+    """
+    m = re.search(
+        r"OPERATOR_DECLARATIONS_JSON\s*=\s*`([\s\S]*?)`\s*;",
+        text,
+    )
+    if not m:
+        return None
+    raw = (m.group(1) or "").strip()
+    if not raw:
+        return None
+    try:
+        o = json.loads(raw)
+        return o if isinstance(o, dict) else None
+    except json.JSONDecodeError:
+        return None
+
+
+def _indicators_section_from_operator_declarations(op: dict[str, Any]) -> dict[str, Any] | None:
+    """Build policy_indicators_v1 dict from operator JSON (indicators + gates arrays)."""
+    inds = op.get("indicators")
+    gates = op.get("gates")
+    if inds is None and gates is None:
+        return None
+    dec = list(inds) if isinstance(inds, list) else []
+    g = list(gates) if isinstance(gates, list) else []
+    return {
+        "schema_version": "policy_indicators_v1",
+        "declarations": dec,
+        "gates": g,
+    }
+
+
 def _detect_kind(filename: str) -> str:
     low = filename.lower()
     if low.endswith(".ts"):
@@ -217,10 +256,12 @@ def run_intake_pipeline(
         report["stages"]["stage_3_normalization"] = {"status": "in_progress"}
         try:
             text = raw_path.read_text(encoding="utf-8", errors="replace")
+            op_decl = _extract_operator_declarations_json_from_ts(text)
             pid_m = re.search(r"policy_id\s*[:=]\s*['\"]([^'\"]+)['\"]", text)
             cid_m = re.search(r"CATALOG_ID\s*=\s*['\"]([^'\"]+)['\"]", text)
             inferred_id = (pid_m.group(1) if pid_m else None) or (cid_m.group(1) if cid_m else None)
-            pid = inferred_id or f"intake_candidate_{submission_id[:12]}"
+            op_pid = str(op_decl.get("policy_id") or "").strip() if isinstance(op_decl, dict) else ""
+            pid = op_pid or inferred_id or f"intake_candidate_{submission_id[:12]}"
             loose = {
                 "policy_id": pid,
                 "policy_class": "candidate",
@@ -228,9 +269,17 @@ def run_intake_pipeline(
                 "timeframe": "5m",
                 "signal_type": "other",
             }
-            embedded = _extract_rv4_policy_indicators_json_from_ts(text)
-            if embedded is not None:
-                loose["indicators"] = embedded
+            if isinstance(op_decl, dict):
+                if str(op_decl.get("description") or "").strip():
+                    loose["description"] = str(op_decl["description"]).strip()
+                if str(op_decl.get("timeframe") or "").strip():
+                    loose["timeframe"] = str(op_decl["timeframe"]).strip()
+            embedded_op = _indicators_section_from_operator_declarations(op_decl) if isinstance(op_decl, dict) else None
+            embedded_rv4 = _extract_rv4_policy_indicators_json_from_ts(text)
+            if embedded_op is not None:
+                loose["indicators"] = embedded_op
+            elif embedded_rv4 is not None:
+                loose["indicators"] = embedded_rv4
             canonical = normalize_policy(loose)
             canonical.setdefault("source_submission", {})
             if isinstance(canonical["source_submission"], dict):

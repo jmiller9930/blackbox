@@ -2,7 +2,12 @@
  * Runtime Jupiter policy resolution for SeanV3 — DV-ARCH-JUPITER-POLICY-SWITCH-037.
  * Order: analog_meta.jupiter_active_policy → SEAN_JUPITER_POLICY → default jup_v4.
  * Evaluated fresh each engine cycle (no module-level policy cache).
+ *
+ * Path A: ``renaissance_v4/config/kitchen_policy_deployment_manifest_v1.json`` (BLACKBOX_REPO_ROOT)
+ * binds deployed_runtime_policy_id → submission_id + content_sha256 for GET /api/v1/jupiter/policy.
  */
+import fs from 'node:fs';
+import path from 'node:path';
 import { getMeta } from './paper_analog.mjs';
 import {
   generateSignalFromOhlcV3,
@@ -46,6 +51,49 @@ import { ALLOWED_POLICY_IDS } from './jupiter_registry_allowlist.mjs';
 export { ALLOWED_POLICY_IDS };
 
 export const JUPITER_ACTIVE_POLICY_KEY = 'jupiter_active_policy';
+
+const MANIFEST_SCHEMA = 'kitchen_policy_deployment_manifest_v1';
+
+/**
+ * @returns {{ schema: string, entries: Array<Record<string, unknown>> }}
+ */
+function loadKitchenDeploymentManifest() {
+  const root = (process.env.BLACKBOX_REPO_ROOT || '').trim();
+  if (!root) {
+    return { schema: MANIFEST_SCHEMA, entries: [] };
+  }
+  const p = path.join(root, 'renaissance_v4', 'config', 'kitchen_policy_deployment_manifest_v1.json');
+  try {
+    const raw = JSON.parse(fs.readFileSync(p, 'utf8'));
+    if (raw?.schema === MANIFEST_SCHEMA && Array.isArray(raw.entries)) {
+      return raw;
+    }
+  } catch {
+    /* missing or invalid */
+  }
+  return { schema: MANIFEST_SCHEMA, entries: [] };
+}
+
+/**
+ * @param {string} policyId
+ * @returns {{ submission_id: string, content_sha256: string } | null}
+ */
+export function manifestBindingForJupiterPolicy(policyId) {
+  const pid = String(policyId || '').trim();
+  if (!pid) return null;
+  const m = loadKitchenDeploymentManifest();
+  const e = m.entries.find(
+    (x) =>
+      x &&
+      String(x.execution_target || '').toLowerCase() === 'jupiter' &&
+      String(x.deployed_runtime_policy_id || '').trim() === pid
+  );
+  if (!e) return null;
+  return {
+    submission_id: String(e.submission_id || ''),
+    content_sha256: String(e.content_sha256 || ''),
+  };
+}
 
 /**
  * @param {string | null | undefined} s
@@ -121,6 +169,8 @@ export function resolveJupiterPolicy(db) {
     source = 'default';
   }
 
+  const manifestBinding = manifestBindingForJupiterPolicy(id);
+
   if (id === 'jup_v3') {
     return {
       policyId: 'jup_v3',
@@ -130,6 +180,7 @@ export function resolveJupiterPolicy(db) {
       resolveEntrySide: resolveEntrySideV3,
       engineId: 'sean_jupiter3_engine_v1',
       policyEngineTag: ENGINE_ID_V3,
+      manifestBinding,
     };
   }
   if (id === 'jup_mc_test') {
@@ -141,6 +192,7 @@ export function resolveJupiterPolicy(db) {
       resolveEntrySide: resolveEntrySideMc,
       engineId: 'sean_jupiter_mc_test_engine_v1',
       policyEngineTag: ENGINE_ID_MC,
+      manifestBinding,
     };
   }
   if (id === 'jup_mc2') {
@@ -152,6 +204,7 @@ export function resolveJupiterPolicy(db) {
       resolveEntrySide: resolveEntrySideMc2,
       engineId: 'sean_jupiter_mc2_engine_v1',
       policyEngineTag: ENGINE_ID_MC2,
+      manifestBinding,
     };
   }
   if (id === 'jup_pipeline_proof_v1') {
@@ -163,6 +216,7 @@ export function resolveJupiterPolicy(db) {
       resolveEntrySide: resolveEntrySidePipelineProof,
       engineId: 'sean_jupiter_pipeline_proof_engine_v1',
       policyEngineTag: ENGINE_ID_PIPELINE_PROOF,
+      manifestBinding,
     };
   }
   if (id === 'jup_kitchen_mechanical_v1') {
@@ -174,6 +228,7 @@ export function resolveJupiterPolicy(db) {
       resolveEntrySide: resolveEntrySideKitchenMechanical,
       engineId: 'sean_jupiter_kitchen_mechanical_engine_v1',
       policyEngineTag: ENGINE_ID_KITCHEN_MECHANICAL,
+      manifestBinding,
     };
   }
   return {
@@ -184,5 +239,6 @@ export function resolveJupiterPolicy(db) {
     resolveEntrySide: resolveEntrySideV4,
     engineId: 'sean_jupiter4_engine_v1',
     policyEngineTag: ENGINE_ID_V4,
+    manifestBinding,
   };
 }

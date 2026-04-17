@@ -2545,12 +2545,16 @@ function handleJupiterPolicyGet(res) {
     db = new DatabaseSync(seanPath, { readOnly: true });
     const p = resolveJupiterPolicy(db);
     res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' });
+    const mb = p.manifestBinding;
     res.end(
       JSON.stringify({
         contract: JUPITER_POLICY_OBSERVABILITY_CONTRACT,
         active_policy: p.policyId,
         source: p.source,
         allowed_policies: [...ALLOWED_POLICY_IDS],
+        submission_id: mb && mb.submission_id ? mb.submission_id : null,
+        content_sha256: mb && mb.content_sha256 ? mb.content_sha256 : null,
+        artifact_binding: mb ? 'manifest_v1' : 'legacy_unbound',
         api: {
           sole_write: 'POST /api/v1/jupiter/active-policy',
           sole_write_alias: 'POST /api/v1/jupiter/set-policy',

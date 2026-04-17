@@ -37,6 +37,10 @@ from renaissance_v4.kitchen_policy_registry import (
     load_registry,
     runtime_policy_approved,
 )
+from renaissance_v4.policy_intake.kitchen_policy_manifest import (
+    submission_content_sha256_from_intake,
+    validate_kitchen_assignment_against_manifest,
+)
 from renaissance_v4.policy_intake.storage import read_json, submission_dir
 
 MECHANICAL_CANDIDATE_POLICY_ID = "kitchen_mechanical_always_long_v1"
@@ -274,9 +278,21 @@ def jupiter_get_policy(base: str, token: str) -> dict[str, Any]:
     }
 
 
-def blackbox_post_active_policy(base: str, token: str, policy_id: str) -> dict[str, Any]:
+def blackbox_post_active_policy(
+    base: str,
+    token: str,
+    policy_id: str,
+    *,
+    submission_id: str = "",
+    content_sha256: str = "",
+) -> dict[str, Any]:
     url = base.rstrip("/") + "/api/v1/blackbox/active-policy"
-    payload = json.dumps({"policy": policy_id}).encode("utf-8")
+    body: dict[str, Any] = {"policy": policy_id}
+    if str(submission_id or "").strip():
+        body["submission_id"] = str(submission_id).strip()
+    if str(content_sha256 or "").strip():
+        body["content_sha256"] = str(content_sha256).strip()
+    payload = json.dumps(body).encode("utf-8")
     h = {
         "Content-Type": "application/json",
         "Authorization": f"Bearer {token}",
@@ -343,6 +359,8 @@ def query_jupiter_runtime_truth(
         "ok": True,
         "execution_target": "jupiter",
         "active_policy": active,
+        "submission_id": str(js.get("submission_id") or "").strip(),
+        "content_sha256": str(js.get("content_sha256") or "").strip(),
         "source": js.get("source"),
         "allowed_policies": allowed if isinstance(allowed, list) else [],
         "unknown_runtime_policy": unknown,
@@ -388,6 +406,8 @@ def query_blackbox_runtime_truth(
         "ok": True,
         "execution_target": "blackbox",
         "active_policy": active,
+        "submission_id": str(js.get("submission_id") or "").strip(),
+        "content_sha256": str(js.get("content_sha256") or "").strip(),
         "source": js.get("source"),
         "allowed_policies": allowed if isinstance(allowed, list) else [],
         "unknown_runtime_policy": unknown,
@@ -479,7 +499,30 @@ def drift_status(
             "runtime_active_policy": r_active,
         }
     k_active = str(kitchen_row.get("active_runtime_policy_id") or "").strip()
+    k_hash = str(kitchen_row.get("content_sha256") or "").strip()
+    k_sub = str(kitchen_row.get("submission_id") or "").strip()
+    r_hash = str(runtime_payload.get("content_sha256") or "").strip()
+    r_sub = str(runtime_payload.get("submission_id") or "").strip()
     if k_active and r_active and k_active == r_active:
+        if k_hash:
+            if not r_hash or not r_sub:
+                return {
+                    "state": "artifact_identity_mismatch",
+                    "detail": "Kitchen assignment is manifest-bound but runtime did not report submission_id/content_sha256.",
+                    "runtime_active_policy": r_active,
+                    "kitchen_active_policy_id": k_active,
+                    "kitchen_submission_id": k_sub,
+                    "runtime_submission_id": r_sub,
+                }
+            if k_hash != r_hash or k_sub != r_sub:
+                return {
+                    "state": "artifact_identity_mismatch",
+                    "detail": "Runtime submission_id or content_sha256 does not match Kitchen assignment.",
+                    "runtime_active_policy": r_active,
+                    "kitchen_active_policy_id": k_active,
+                    "kitchen_submission_id": k_sub,
+                    "runtime_submission_id": r_sub,
+                }
         return {"state": "match", "detail": None, "runtime_active_policy": r_active, "kitchen_active_policy_id": k_active}
     return {
         "state": "runtime_diverged",
@@ -899,19 +942,6 @@ def assign_mechanical_candidate(
             "active_runtime_policy_id": active_pid,
         }
 
-    record: dict[str, Any] = {
-        "schema": "kitchen_runtime_assignment_record_v1",
-        "execution_target": et,
-        "submission_id": submission_id,
-        "candidate_policy_id": cid,
-        "approved_runtime_slot_id": slot,
-        "active_runtime_policy_id": active_pid,
-        "assigned_at_utc": _utc_now(),
-        "operator_action": "kitchen_dashboard_assign",
-        "runtime_adapter": adapter,
-    }
-
-    prev_policy_for_ledger = ""
     if et == "jupiter":
         fatal_base = jupiter_control_base_blocks_assignment(http_jupiter_base)
         if fatal_base:
@@ -921,6 +951,37 @@ def assign_mechanical_candidate(
                 "detail": fatal_base[0],
                 "control_plane_warnings": fatal_base,
             }
+
+    content_sha = submission_content_sha256_from_intake(repo, submission_id)
+    ok_m, err_m, det_m = validate_kitchen_assignment_against_manifest(
+        repo, et, submission_id, content_sha, active_pid
+    )
+    if not ok_m:
+        return {
+            "ok": False,
+            "error": err_m,
+            "detail": det_m,
+            "submission_id": submission_id,
+            "candidate_policy_id": cid,
+            "active_runtime_policy_id": active_pid,
+            "execution_target": et,
+        }
+
+    record: dict[str, Any] = {
+        "schema": "kitchen_runtime_assignment_record_v1",
+        "execution_target": et,
+        "submission_id": submission_id,
+        "candidate_policy_id": cid,
+        "approved_runtime_slot_id": slot,
+        "active_runtime_policy_id": active_pid,
+        "content_sha256": content_sha,
+        "assigned_at_utc": _utc_now(),
+        "operator_action": "kitchen_dashboard_assign",
+        "runtime_adapter": adapter,
+    }
+
+    prev_policy_for_ledger = ""
+    if et == "jupiter":
         base = (http_jupiter_base or os.environ.get("KITCHEN_JUPITER_CONTROL_BASE") or "").strip()
         tok = (http_jupiter_token or os.environ.get("KITCHEN_JUPITER_OPERATOR_TOKEN") or "").strip()
         if not base or not tok:
@@ -993,6 +1054,30 @@ def assign_mechanical_candidate(
                 "detail": "Runtime active policy is not listed in kitchen_policy_registry_v1.",
                 "runtime_active_policy": live,
             }
+        js_sub = str(js.get("submission_id") or "").strip()
+        js_hash = str(js.get("content_sha256") or "").strip()
+        if content_sha:
+            if not js_hash or not js_sub:
+                return {
+                    "ok": False,
+                    "error": "runtime_identity_missing",
+                    "detail": (
+                        "GET /api/v1/jupiter/policy must report submission_id and content_sha256 "
+                        "for manifest-bound assignment (BLACKBOX_REPO_ROOT + deployment manifest on Sean host)."
+                    ),
+                    "expected_submission_id": submission_id,
+                    "expected_content_sha256": content_sha,
+                }
+            if js_hash != content_sha or js_sub != submission_id:
+                return {
+                    "ok": False,
+                    "error": "runtime_identity_mismatch",
+                    "detail": "Runtime GET submission_id or content_sha256 does not match Kitchen assignment.",
+                    "expected_submission_id": submission_id,
+                    "expected_content_sha256": content_sha,
+                    "runtime_submission_id": js_sub,
+                    "runtime_content_sha256": js_hash,
+                }
         record["runtime_http_post_ok"] = True
         record["runtime_http_detail"] = str((post.get("json") or {}))[:2000]
         record["runtime_verify"] = {"source": js.get("source"), "allowed_policies": js.get("allowed_policies")}
@@ -1034,7 +1119,9 @@ def assign_mechanical_candidate(
                 "active_runtime_policy_id": active_pid,
                 "blackbox_allowed_policies": allowed_list,
             }
-        post = blackbox_post_active_policy(base, tok, active_pid)
+        post = blackbox_post_active_policy(
+            base, tok, active_pid, submission_id=submission_id, content_sha256=content_sha
+        )
         if not post.get("ok"):
             return {
                 "ok": False,
@@ -1068,6 +1155,30 @@ def assign_mechanical_candidate(
                 "detail": "Runtime active policy is not listed in kitchen_policy_registry_v1.",
                 "runtime_active_policy": live,
             }
+        js_sub = str(js.get("submission_id") or "").strip()
+        js_hash = str(js.get("content_sha256") or "").strip()
+        if content_sha:
+            if not js_hash or not js_sub:
+                return {
+                    "ok": False,
+                    "error": "runtime_identity_missing",
+                    "detail": (
+                        "GET /api/v1/blackbox/policy must report submission_id and content_sha256 "
+                        "for manifest-bound assignment."
+                    ),
+                    "expected_submission_id": submission_id,
+                    "expected_content_sha256": content_sha,
+                }
+            if js_hash != content_sha or js_sub != submission_id:
+                return {
+                    "ok": False,
+                    "error": "runtime_identity_mismatch",
+                    "detail": "Runtime GET submission_id or content_sha256 does not match Kitchen assignment.",
+                    "expected_submission_id": submission_id,
+                    "expected_content_sha256": content_sha,
+                    "runtime_submission_id": js_sub,
+                    "runtime_content_sha256": js_hash,
+                }
         record["runtime_http_post_ok"] = True
         record["runtime_http_detail"] = str((post.get("json") or {}))[:2000]
         record["runtime_verify"] = {"source": js.get("source"), "allowed_policies": js.get("allowed_policies")}

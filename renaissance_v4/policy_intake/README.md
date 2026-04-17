@@ -17,6 +17,30 @@
 
 **Quant Research Kitchen** (`/dashboard.html#/renaissance`) — **Submit Policy for Evaluation** card: file picker + staged status.
 
+## Operator workflow (one script: inputs at top → generated policy `.ts`)
+
+**Human-edited file (only this):**
+
+- **`renaissance_v4/policy_intake/generate_policy.mjs`** — edit the **`OPERATOR_INPUT`** object at the top.
+
+**Defaults:** **`policy_enabled: false`** and **`strategy: "none"`** — nothing is generated until you **turn the policy on** (`policy_enabled: true`) and pick a **strategy** (e.g. `close_vs_previous`). *Nothing on = no policy* (the script exits with an error instead of emitting a file).
+
+**Generate the uploadable policy:**
+
+`node renaissance_v4/policy_intake/generate_policy.mjs`
+
+Writes **`output_filename`** next to the script (e.g. `kitchen_policy_generated.ts`). **Do not edit the generated file by hand** — change `OPERATOR_INPUT` and re-run.
+
+Optional: `node generate_policy.mjs path/to/override.json` merges JSON over `OPERATOR_INPUT` (same keys) — used by CI and optional UI exports.
+
+Smoke-test the generated file:
+
+`node renaissance_v4/policy_intake/run_ts_intake_eval.mjs <absolute-path-to-generated>.ts 800`
+
+Expect one JSON line with `"ok": true` and `signals_total` > 0, then upload that **generated** `.ts` via the API or Kitchen UI.
+
+Legacy uploads may still use hand-written `.ts` with `OPERATOR_DECLARATIONS_JSON` and/or `/* RV4_POLICY_INDICATORS … */`.
+
 ## TypeScript contract (executable path)
 
 Uploaded `.ts` files must **bundle** with `esbuild` (no missing modules). Export:

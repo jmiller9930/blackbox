@@ -21,6 +21,8 @@ from renaissance_v4.kitchen_runtime_assignment import (
 
 REPO = Path(__file__).resolve().parents[1]
 
+H_BB = "c" * 64
+
 
 def _copy_registry(root: Path) -> None:
     dest = root / "renaissance_v4" / "config"
@@ -31,7 +33,24 @@ def _copy_registry(root: Path) -> None:
     )
 
 
-def _write_pass_blackbox(root: Path, sid: str) -> None:
+def _write_manifest_bb(root: Path, sid: str, content_sha256: str) -> None:
+    dest = root / "renaissance_v4" / "config"
+    dest.mkdir(parents=True, exist_ok=True)
+    man = {
+        "schema": "kitchen_policy_deployment_manifest_v1",
+        "entries": [
+            {
+                "execution_target": "blackbox",
+                "deployed_runtime_policy_id": "bb_kitchen_mechanical_v1",
+                "submission_id": sid,
+                "content_sha256": content_sha256,
+            }
+        ],
+    }
+    (dest / "kitchen_policy_deployment_manifest_v1.json").write_text(json.dumps(man), encoding="utf-8")
+
+
+def _write_pass_blackbox(root: Path, sid: str, *, content_sha256: str = H_BB) -> None:
     sub = root / "renaissance_v4" / "state" / "policy_intake_submissions" / sid
     (sub / "report").mkdir(parents=True, exist_ok=True)
     (sub / "canonical").mkdir(parents=True, exist_ok=True)
@@ -41,7 +60,12 @@ def _write_pass_blackbox(root: Path, sid: str) -> None:
         "pass": True,
         "candidate_policy_id": "kitchen_mechanical_always_long_v1",
         "execution_target": "blackbox",
-        "stages": {"stage_1_intake": {"timestamp_utc": "2026-01-01T12:00:00+00:00"}},
+        "stages": {
+            "stage_1_intake": {
+                "timestamp_utc": "2026-01-01T12:00:00+00:00",
+                "content_sha256": content_sha256,
+            }
+        },
     }
     (sub / "report" / "intake_report.json").write_text(json.dumps(rep), encoding="utf-8")
     (sub / "canonical" / "policy_spec_v1.json").write_text("{}", encoding="utf-8")
@@ -72,7 +96,7 @@ def test_query_blackbox_runtime_truth_parses_ok(tmp_path: Path, monkeypatch: pyt
         if "/blackbox/policy" in u:
             return _MockResp(
                 200,
-                b'{"active_policy":"bb_kitchen_mechanical_v1","allowed_policies":["bb_kitchen_mechanical_v1"],"source":"x"}',
+                b'{"active_policy":"bb_kitchen_mechanical_v1","allowed_policies":["bb_kitchen_mechanical_v1"],"source":"x","submission_id":null,"content_sha256":null}',
             )
         raise AssertionError(u)
 
@@ -87,6 +111,7 @@ def test_assign_blackbox_succeeds_when_runtime_post_and_get_verify(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     _copy_registry(tmp_path)
+    _write_manifest_bb(tmp_path, "bb_sub", H_BB)
     monkeypatch.setenv("KITCHEN_BLACKBOX_CONTROL_BASE", "http://bb.test")
     monkeypatch.setenv("KITCHEN_BLACKBOX_OPERATOR_TOKEN", "tok")
     _write_pass_blackbox(tmp_path, "bb_sub")
@@ -99,10 +124,14 @@ def test_assign_blackbox_succeeds_when_runtime_post_and_get_verify(
                 b'{"ok":true,"active_policy":"bb_kitchen_mechanical_v1","contract":"blackbox_active_policy_switch_v1"}',
             )
         if "/blackbox/policy" in u:
-            return _MockResp(
-                200,
-                b'{"active_policy":"bb_kitchen_mechanical_v1","allowed_policies":["bb_kitchen_mechanical_v1"],"source":"blackbox_kitchen_runtime_file"}',
-            )
+            pol = {
+                "active_policy": "bb_kitchen_mechanical_v1",
+                "allowed_policies": ["bb_kitchen_mechanical_v1"],
+                "source": "blackbox_kitchen_runtime_file",
+                "submission_id": "bb_sub",
+                "content_sha256": H_BB,
+            }
+            return _MockResp(200, json.dumps(pol).encode("utf-8"))
         raise AssertionError(u)
 
     monkeypatch.setattr("urllib.request.urlopen", fake_urlopen)
@@ -158,6 +187,7 @@ def test_read_payload_match_blackbox_when_mocked_runtime_agrees(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     _copy_registry(tmp_path)
+    _write_manifest_bb(tmp_path, "bb2", H_BB)
     monkeypatch.setenv("KITCHEN_BLACKBOX_CONTROL_BASE", "http://bb.test")
     monkeypatch.setenv("KITCHEN_BLACKBOX_OPERATOR_TOKEN", "tok")
     _write_pass_blackbox(tmp_path, "bb2")
@@ -167,10 +197,14 @@ def test_read_payload_match_blackbox_when_mocked_runtime_agrees(
         if "blackbox/active-policy" in u:
             return _MockResp(200, b'{"ok":true,"active_policy":"bb_kitchen_mechanical_v1"}')
         if "/blackbox/policy" in u:
-            return _MockResp(
-                200,
-                b'{"active_policy":"bb_kitchen_mechanical_v1","allowed_policies":["bb_kitchen_mechanical_v1"],"source":"t"}',
-            )
+            pol = {
+                "active_policy": "bb_kitchen_mechanical_v1",
+                "allowed_policies": ["bb_kitchen_mechanical_v1"],
+                "source": "t",
+                "submission_id": "bb2",
+                "content_sha256": H_BB,
+            }
+            return _MockResp(200, json.dumps(pol).encode("utf-8"))
         raise AssertionError(u)
 
     monkeypatch.setattr("urllib.request.urlopen", fake_urlopen)

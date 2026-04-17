@@ -2878,9 +2878,11 @@ class Handler(BaseHTTPRequestHandler):
                 return
             body = self._read_json_body() or {}
             pid = str(body.get("policy") or "").strip()
+            sub = str(body.get("submission_id") or "").strip()
+            csha = str(body.get("content_sha256") or "").strip()
             from renaissance_v4.blackbox_policy_control_plane import set_active_policy
 
-            ok, err = set_active_policy(_REPO_ROOT, pid)
+            ok, err = set_active_policy(_REPO_ROOT, pid, submission_id=sub, content_sha256=csha)
             if not ok:
                 self._json(
                     400,
