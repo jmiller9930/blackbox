@@ -119,6 +119,50 @@ def write_store(repo: Path, store: dict[str, Any]) -> None:
     p.write_text(json.dumps(store, indent=2) + "\n", encoding="utf-8")
 
 
+def _env_sanitize_retired_policy_ids_enabled() -> bool:
+    """Default on: remove assignment rows that reference registry-retired ids (e.g. jup_mc_test)."""
+    raw = os.environ.get("KITCHEN_SANITIZE_RETIRED_POLICY_IDS")
+    if raw is None or str(raw).strip() == "":
+        return True
+    return str(raw).strip().lower() not in ("0", "false", "no", "off")
+
+
+def sanitize_assignment_store_retired_policy_ids(repo: Path) -> dict[str, Any]:
+    """
+    Clear ``active_runtime_policy_id`` (and related linkage fields) when the id is **not**
+    in ``kitchen_policy_registry_v1`` ``runtime_policies`` for that target — e.g. after a policy
+    slot is removed from the registry while old state files still reference it.
+
+    Idempotent. Persists to ``kitchen_runtime_assignment.json`` when changes are made.
+    """
+    repo = repo.resolve()
+    store = read_store(repo)
+    changed = False
+    sanitized: list[dict[str, str]] = []
+    abt = store.setdefault("assignments_by_target", {})
+    for et in ("jupiter", "blackbox"):
+        row = abt.get(et)
+        if not isinstance(row, dict):
+            continue
+        pid = str(row.get("active_runtime_policy_id") or "").strip()
+        if not pid:
+            continue
+        if runtime_policy_approved(repo, et, pid):
+            continue
+        sanitized.append({"execution_target": et, "retired_id": pid})
+        row["submission_id"] = ""
+        row["candidate_policy_id"] = ""
+        row["approved_runtime_slot_id"] = ""
+        row["active_runtime_policy_id"] = ""
+        row["operator_action"] = "sanitized_policy_not_in_registry_allowlist"
+        row["sanitized_at_utc"] = _utc_now()
+        row["sanitized_retired_id"] = pid
+        changed = True
+    if changed:
+        write_store(repo, store)
+    return {"ok": True, "changed": changed, "sanitized": sanitized}
+
+
 def get_assignment(repo: Path, execution_target: str | None) -> dict[str, Any] | None:
     et = normalize_execution_target(execution_target)
     st = read_store(repo)
@@ -640,8 +684,18 @@ def build_kitchen_runtime_read_payload(
     Kitchen assignment store is **not** mutated on GET. Successful assignment only follows
     ``assign_mechanical_candidate`` (POST + runtime verify). Drift compares persisted assignment vs
     runtime GET for override/diagnostic display.
+
+    **Exception (migration):** when ``KITCHEN_SANITIZE_RETIRED_POLICY_IDS`` is enabled (default),
+    ``sanitize_assignment_store_retired_policy_ids`` may clear rows that reference policy ids no
+    longer listed in ``kitchen_policy_registry_v1`` (e.g. removed slots like ``jup_mc_test``).
     """
     repo = repo.resolve()
+    if _env_sanitize_retired_policy_ids_enabled():
+        try:
+            sanitize_assignment_store_retired_policy_ids(repo)
+        except (OSError, ValueError, TypeError) as exc:
+            # Registry missing/corrupt should not 500 the dashboard; drift will still show truth.
+            print(f"kitchen_runtime_assignment: sanitize_assignment_store_retired_policy_ids: {exc!r}", flush=True)
     et = normalize_execution_target(execution_target)
     row_live = get_assignment(repo, et)
     reg = load_registry(repo)
