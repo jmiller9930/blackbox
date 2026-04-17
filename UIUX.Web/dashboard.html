@@ -2008,9 +2008,15 @@
           <div class="dash-rv4-panel-body">
         <section class="dash-rv4-section dash-rv4-candidates" aria-labelledby="rv4-cand-h">
           <p class="dash-rv4-intake-hint">
-            <strong>Lifecycle:</strong> Upload Policy → Pass Intake → Candidate Policy → Select Candidate → Compare vs Baseline → Assign later.
-            Passing intake does <strong>not</strong> activate or assign a policy.
+            <strong>Lifecycle:</strong> Upload → Candidate → <strong>Build to runtime</strong> (manifest + evaluator) → <strong>Assign</strong> (explicit) → Jupiter runs it · <strong>Clear</strong> returns standby · Archive only hides the row · Delete removes files.
+            Passing intake does <strong>not</strong> deploy or assign a policy.
           </p>
+          <section class="dash-rv4-section dash-rv4-runtime-panel" aria-labelledby="rv4-runtime-h">
+            <h3 id="rv4-runtime-h" class="dash-rv4-section-title" style="font-size:0.95rem;margin:0 0 0.35rem 0">Live runtime (this execution target)</h3>
+            <p id="rv4-runtime-state-line" class="dash-rv4-msg" style="margin:0" aria-live="polite">Runtime status: —</p>
+            <p id="rv4-runtime-detail-line" class="dash-rv4-intake-hint" style="margin:0.25rem 0 0.35rem"></p>
+            <button type="button" class="secondary" id="rv4-btn-runtime-clear" hidden>Clear runtime (standby)</button>
+          </section>
           <p id="rv4-cand-context" class="dash-rv4-intake-hint is-ready" aria-live="polite">
             Execution Target: — · Compared Against: — · No candidate selected for comparison.
           </p>
@@ -2026,22 +2032,26 @@
             <table class="dash-rv4-table" id="rv4-cand-table" aria-label="Successful intake candidates">
               <thead>
                 <tr>
-                  <th scope="col">Select</th>
+                  <th scope="col">Use for comparison</th>
                   <th scope="col">Candidate ID</th>
                   <th scope="col">Source file</th>
                   <th scope="col">Target</th>
                   <th scope="col">Created (UTC)</th>
                   <th scope="col">Intake</th>
-                  <th scope="col">Actions</th>
+                  <th scope="col">List / archive / delete</th>
+                  <th scope="col">Build to runtime</th>
                   <th scope="col">Assign to runtime</th>
                 </tr>
               </thead>
-              <tbody id="rv4-cand-tbody"><tr><td colspan="8">Loading…</td></tr></tbody>
+              <tbody id="rv4-cand-tbody"><tr><td colspan="9">Loading…</td></tr></tbody>
             </table>
           </div>
-          <p class="dash-rv4-msg" id="rv4-cand-selected-line">No candidate selected — use Select on a row above.</p>
-          <p class="dash-rv4-msg" id="rv4-kitchen-assign-global-status" style="margin-top:0.5rem" aria-live="polite"></p>
-          <p class="dash-rv4-msg" id="rv4-kitchen-ledger-strip" style="margin-top:0.25rem;font-size:0.7rem;color:var(--muted);line-height:1.45" hidden aria-live="polite"></p>
+          <p class="dash-rv4-msg" id="rv4-cand-selected-line">No candidate selected — use “Use for comparison” on a row above.</p>
+          <details id="rv4-kitchen-diagnostics" class="dash-rv4-diagnostics" style="margin-top:0.5rem">
+            <summary class="dash-rv4-intake-hint" style="cursor:pointer">Kitchen diagnostics (advanced)</summary>
+            <p class="dash-rv4-msg" id="rv4-kitchen-assign-global-status" style="margin-top:0.35rem" aria-live="polite"></p>
+            <p class="dash-rv4-msg" id="rv4-kitchen-ledger-strip" style="margin-top:0.25rem;font-size:0.7rem;color:var(--muted);line-height:1.45" hidden aria-live="polite"></p>
+          </details>
         </section>
           </div>
         </details>
@@ -4860,10 +4870,10 @@
     });
     Array.prototype.forEach.call(document.querySelectorAll('button.dash-rv4-cand-sel-btn'), function (b) {
       b.classList.remove('is-active');
-      b.textContent = 'Select';
+      b.textContent = 'Use for comparison';
     });
     var sl = $('rv4-cand-selected-line');
-    if (sl) sl.textContent = 'No candidate selected — use Select on a row above.';
+    if (sl) sl.textContent = 'No candidate selected — use “Use for comparison” on a row above.';
     rv4UpdateCandContextBar();
   }
   var rv4KitchenAssignmentPayload = null;
@@ -4919,6 +4929,55 @@
       };
     }
     return { ok: true, reason: '' };
+  }
+  function rv4UpdateRuntimeStrip() {
+    var el = $('rv4-runtime-state-line');
+    var det = $('rv4-runtime-detail-line');
+    var btn = $('rv4-btn-runtime-clear');
+    if (!el) return;
+    var et = rv4GetExecutionTarget();
+    var j = rv4KitchenAssignmentPayload;
+    if (!j || !j.runtime) {
+      el.textContent = 'Runtime status: — (not loaded)';
+      if (det) det.textContent = '';
+      if (btn) btn.hidden = true;
+      return;
+    }
+    var rt = j.runtime;
+    var raw = rt && rt.raw && typeof rt.raw === 'object' ? rt.raw : {};
+    var rx = String(raw.runtime_execution_state || '').trim();
+    var live = rt.ok ? String(rt.active_policy || '').trim() : '';
+    var label = 'Unknown';
+    if (!rt.ok) {
+      label = 'Down / unreachable';
+    } else if (rx === 'active') {
+      label = 'Active';
+    } else if (rx === 'standby') {
+      label = 'Standby';
+    } else if (rx === 'invalid_policy') {
+      label = 'Invalid policy / loader error';
+    } else if (rx === 'down') {
+      label = 'Down (engine off)';
+    } else if (!live) {
+      label = 'Standby';
+    } else {
+      label = 'Active';
+    }
+    el.textContent =
+      'Runtime status: ' +
+      label +
+      (live ? ' · active deployment id: ' + live : ' · no active deployment id');
+    if (det) {
+      var le = raw.loader_error ? String(raw.loader_error) : '';
+      var ld = raw.loader_detail != null ? String(raw.loader_detail) : '';
+      det.textContent =
+        rx === 'invalid_policy' && (le || ld)
+          ? (le + (ld && le !== ld ? ' — ' + ld : '')).slice(0, 400)
+          : '';
+    }
+    if (btn) {
+      btn.hidden = et !== 'jupiter' || !live;
+    }
   }
   function rv4UpdateKitchenAssignGlobalStatus() {
     var el = $('rv4-kitchen-assign-global-status');
@@ -5008,6 +5067,7 @@
         ledEl.textContent = '';
       }
     }
+    rv4UpdateRuntimeStrip();
   }
   function rv4InitCollapsiblePanels() {
     [
@@ -5035,7 +5095,7 @@
     Array.prototype.forEach.call(document.querySelectorAll('button.dash-rv4-cand-sel-btn'), function (b) {
       var match = b.getAttribute('data-sid') === sid;
       b.classList.toggle('is-active', match);
-      b.textContent = match ? 'Selected' : 'Select';
+      b.textContent = match ? 'In use for comparison' : 'Use for comparison';
     });
     var row = rv4CandidatesCache.filter(function (c) {
       return c.submission_id === sid;
@@ -5043,7 +5103,7 @@
     var sl = $('rv4-cand-selected-line');
     if (sl && row) {
       sl.textContent =
-        'Selected: ' +
+        'Comparison candidate: ' +
         row.candidate_policy_id +
         ' — submission ' +
         row.submission_id +
@@ -5057,7 +5117,7 @@
     if (!tb) return;
     if (!rows || !rows.length) {
       tb.innerHTML =
-        '<tr><td colspan="8">No successful candidates for this execution target yet. Pass intake first.</td></tr>';
+        '<tr><td colspan="9">No successful candidates for this execution target yet. Pass intake first.</td></tr>';
       if (hint) hint.hidden = true;
       rv4ClearCandidateSelection();
       return;
@@ -5102,10 +5162,24 @@
         var actBtn = isArch
           ? '<button type="button" class="dash-nav-linklike rv4-cand-restore" data-sid="' +
             sid +
-            '">Restore</button>'
+            '">Restore</button> ' +
+            '<button type="button" class="dash-nav-linklike rv4-cand-delete" data-sid="' +
+            sid +
+            '" title="Permanently delete this submission">Delete</button>'
           : '<button type="button" class="dash-nav-linklike rv4-cand-archive" data-sid="' +
             sid +
-            '" title="Hide from list (soft archive)">Archive</button>';
+            '" title="Hide from candidate list only — does not change live runtime">Archive</button> ' +
+            '<button type="button" class="dash-nav-linklike rv4-cand-delete" data-sid="' +
+            sid +
+            '" title="Permanently delete this submission">Delete</button>';
+        var built = r.artifact_assignable === true || r.artifact_assignable === 'true';
+        var buildCell = isArch
+          ? '<td class="muted">—</td>'
+          : built
+            ? '<td><span class="dash-rv4-intake-hint" title="Built: manifest + evaluator; assignable">Ready</span></td>'
+            : '<td><button type="button" class="primary dash-rv4-cand-build-btn" data-sid="' +
+              sid +
+              '">Build</button></td>';
         var elig = rv4RowKitchenAssignEligibility(r);
         var asg = rv4KitchenAssignmentPayload && rv4KitchenAssignmentPayload.assignment;
         var assignedHere =
@@ -5121,17 +5195,6 @@
           assignedHere && kRt && kRt.ok && !rowMatchesLiveRuntime;
         /* Allow assign again when store points here but live runtime is on another id (recovery). */
         var canAssign = elig.ok && !assignedShowsAsLive;
-        var dbgLine =
-          'candidate_policy_id: ' +
-          String(r.candidate_policy_id || '—') +
-          ' · deployed_runtime_policy_id: ' +
-          (rpid || '—') +
-          ' · submission_id: ' +
-          String(r.submission_id || '—') +
-          ' · execution_target: ' +
-          String(r.execution_target || '—') +
-          ' · eligible: ' +
-          (elig.ok ? 'yes' : 'no');
         var reasonText = assignedShowsAsLive
           ? 'This row matches live runtime (GET) and is the recorded assignment submission.'
           : assignedRecordButRuntimeElsewhere
@@ -5152,9 +5215,6 @@
         }
         var assignCell =
           '<td class="dash-rv4-cand-assign-cell">' +
-          '<div class="dash-rv4-assign-debug">' +
-          rv4Esc(dbgLine) +
-          '</div>' +
           '<button type="button" class="' +
           assignBtnClass +
           '" data-sid="' +
@@ -5187,7 +5247,7 @@
           '" data-sid="' +
           sid +
           '">' +
-          (sel ? 'Selected' : 'Select') +
+          (sel ? 'In use for comparison' : 'Use for comparison') +
           '</button></td><td>' +
           runDot +
           cid +
@@ -5203,6 +5263,7 @@
           '</td><td>' +
           actBtn +
           '</td>' +
+          buildCell +
           assignCell +
           '</tr>'
         );
@@ -5277,7 +5338,7 @@
       if (rows.length === 1) {
         hint.hidden = false;
         hint.textContent =
-          'One candidate for this target — click Select to confirm it as the candidate under test.';
+          'One candidate for this target — click “Use for comparison” to pick it for baseline comparison.';
       } else {
         hint.hidden = true;
       }
@@ -5321,6 +5382,85 @@
           })
           .catch(function () {
             window.alert('Assign request failed');
+            btn.disabled = false;
+          });
+      });
+    });
+    Array.prototype.forEach.call(tb.querySelectorAll('button.dash-rv4-cand-build-btn'), function (btn) {
+      btn.addEventListener('click', function (ev) {
+        ev.stopPropagation();
+        var sid = btn.getAttribute('data-sid');
+        if (!sid) return;
+        btn.disabled = true;
+        fetch('/api/v1/renaissance/kitchen-promote-runtime', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            submission_id: sid,
+            execution_target: rv4GetExecutionTarget(),
+          }),
+        })
+          .then(function (r) {
+            return r.json().then(function (j) {
+              return { ok: r.ok, j: j };
+            });
+          })
+          .then(function (x) {
+            if (!x.ok || !x.j || !x.j.ok) {
+              window.alert(
+                x.j && (x.j.error || x.j.detail) ? String(x.j.error || x.j.detail) : 'Build failed'
+              );
+              return;
+            }
+            window.alert(
+              'Built. Deployment id: ' +
+                String(x.j.deployed_runtime_policy_id || '') +
+                ' — you can Assign when ready.'
+            );
+            rv4LoadCandidates();
+          })
+          .catch(function () {
+            window.alert('Build request failed');
+          })
+          .finally(function () {
+            btn.disabled = false;
+          });
+      });
+    });
+    Array.prototype.forEach.call(tb.querySelectorAll('button.rv4-cand-delete'), function (btn) {
+      btn.addEventListener('click', function (ev) {
+        ev.stopPropagation();
+        var sid = btn.getAttribute('data-sid');
+        if (!sid) return;
+        if (
+          !window.confirm(
+            'Permanently delete this intake submission and its files? This cannot be undone. If this policy is live on Jupiter, clear runtime first.'
+          )
+        ) {
+          return;
+        }
+        btn.disabled = true;
+        fetch('/api/v1/renaissance/policy-intake/' + encodeURIComponent(sid) + '/delete', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ confirm: true }),
+        })
+          .then(function (r) {
+            return r.json().then(function (j) {
+              return { ok: r.ok, j: j };
+            });
+          })
+          .then(function (x) {
+            if (!x.ok || !x.j || !x.j.ok) {
+              window.alert(x.j && (x.j.error || x.j.detail) ? String(x.j.error || x.j.detail) : 'Delete failed');
+              return;
+            }
+            rv4LoadCandidates();
+          })
+          .catch(function () {
+            window.alert('Delete request failed');
+          })
+          .finally(function () {
             btn.disabled = false;
           });
       });
@@ -5402,7 +5542,7 @@
         rv4RenderInventorySummary(null);
         rv4RenderCandidates([]);
         var tb = $('rv4-cand-tbody');
-        if (tb) tb.innerHTML = '<tr><td colspan="8">Failed to load policy inventory.</td></tr>';
+        if (tb) tb.innerHTML = '<tr><td colspan="9">Failed to load policy inventory.</td></tr>';
       });
   }
   function rv4Refresh() {
@@ -6248,6 +6388,45 @@
     });
   }
   rv4InitCollapsiblePanels();
+  var rv4ClrRt = $('rv4-btn-runtime-clear');
+  if (rv4ClrRt) {
+    rv4ClrRt.addEventListener('click', function () {
+      if (
+        !window.confirm(
+          'Clear live runtime to standby? This sends an empty active policy to Jupiter (explicit standby).'
+        )
+      ) {
+        return;
+      }
+      rv4ClrRt.disabled = true;
+      fetch('/api/v1/renaissance/kitchen-runtime-clear', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ execution_target: rv4GetExecutionTarget() }),
+      })
+        .then(function (r) {
+          return r.json().then(function (j) {
+            return { ok: r.ok, j: j };
+          });
+        })
+        .then(function (x) {
+          if (!x.ok || !x.j || !x.j.ok) {
+            window.alert(
+              x.j && (x.j.error || x.j.detail) ? String(x.j.error || x.j.detail) : 'Clear failed'
+            );
+            return;
+          }
+          window.alert('Runtime cleared to standby.');
+          rv4LoadCandidates();
+        })
+        .catch(function () {
+          window.alert('Clear request failed');
+        })
+        .finally(function () {
+          rv4ClrRt.disabled = false;
+        });
+    });
+  }
   rv4IntakeUpdateGate();
   var rv4ip = $('rv4-btn-ingest-policy');
   if (rv4ip) {

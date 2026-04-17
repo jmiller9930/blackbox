@@ -1649,8 +1649,10 @@ function htmlPage(v) {
     <p class="muted"><strong>Engine</strong> is separate — status strip shows <code>${esc(jupiterEngineDisplayId())}</code> · Online when the execution loop is enabled. Active deployment: <code id="jw-ap-code">${esc(apForCodeDisplay)}</code> · source <code id="jw-ap-src">${esc(src)}</code> · meta <code>${esc(JUPITER_ACTIVE_POLICY_KEY)}</code></p>
     <div id="jw-policy-control" class="jw-policy-box jw-policy-idle">
       <p class="op-row" style="margin-top:0"><label>Deployment id <select id="jw-jupiter-policy" ${postOk ? '' : 'disabled'}>${policyOptionsHtml}</select></label>
-    <button type="button" id="jw-apply-policy" class="fund-btn" ${postOk ? '' : 'disabled'}>Set active deployment</button></p>
+    <button type="button" id="jw-apply-policy" class="fund-btn" ${postOk ? '' : 'disabled'}>Set active deployment</button>
+    <button type="button" id="jw-clear-standby" class="fund-btn" style="margin-left:0.5rem;opacity:0.92" ${postOk ? '' : 'disabled'} title="POST {&quot;policy&quot;:&quot;&quot;} — engine standby">Clear to standby</button></p>
       <p id="jw-policy-status" class="jw-policy-status small"></p>
+      <p id="jw-runtime-exec-state" class="jw-policy-status small" style="margin-top:0.35rem"></p>
       ${
         postOk
           ? ''
@@ -1724,17 +1726,31 @@ function htmlPage(v) {
         }
       }
       window.jwPolicySyncVisual=jwPolicySyncVisual;
+      function jwRuntimeExecStateFromPolicy(j){
+        var el=document.getElementById('jw-runtime-exec-state');
+        if(!el||!j)return;
+        var rx=String(j.runtime_execution_state||'').trim();
+        var lab='Unknown';
+        if(rx==='standby')lab='Standby';
+        else if(rx==='active')lab='Active';
+        else if(rx==='invalid_policy')lab='Invalid policy / loader error';
+        else if(rx==='down')lab='Down (engine off)';
+        var extra='';
+        if(j.loader_error)extra+=' · loader: '+String(j.loader_error);
+        if(j.active_policy)extra+=' · id: '+String(j.active_policy);
+        el.textContent='Engine runtime: '+lab+extra;
+      }
       fetch('/api/v1/jupiter/policy').then(function(r){return r.json();}).then(function(j){
         jwRebuildPolicySelectFromApi(j);
+        jwRuntimeExecStateFromPolicy(j);
         jwPolicySyncVisual();
       }).catch(function(){ jwPolicySyncVisual(); });
       document.getElementById('jw-jupiter-policy')?.addEventListener('change',function(){
         document.getElementById('jw-policy-control')?.removeAttribute('data-policy-error');
         jwPolicySyncVisual();
       });
-      document.getElementById('jw-apply-policy')?.addEventListener('click', async function(){
+      async function jwPostActivePolicy(pol){
         var box=document.getElementById('jw-policy-control');
-        var pol=String((document.getElementById('jw-jupiter-policy')||{}).value||'').trim();
         var tok=String((document.getElementById('jw-op-token')||{}).value||'').trim();
         if(!tok){
           alert('Enter the operator Bearer token in the Operator token panel (must match JUPITER_OPERATOR_TOKEN on the server).');
@@ -1754,6 +1770,15 @@ function htmlPage(v) {
         if(typeof window.jwLiveRefresh==='function')await window.jwLiveRefresh();
         else location.reload();
         jwPolicySyncVisual();
+        fetch('/api/v1/jupiter/policy').then(function(r){return r.json();}).then(function(j){jwRuntimeExecStateFromPolicy(j);}).catch(function(){});
+      }
+      document.getElementById('jw-apply-policy')?.addEventListener('click', async function(){
+        var pol=String((document.getElementById('jw-jupiter-policy')||{}).value||'').trim();
+        await jwPostActivePolicy(pol);
+      });
+      document.getElementById('jw-clear-standby')?.addEventListener('click', async function(){
+        if(!confirm('Clear active deployment and return engine to standby?'))return;
+        await jwPostActivePolicy('');
       });
     })();
     </script>` : '<p class="muted">Set <code>JUPITER_OPERATOR_TOKEN</code> on jupiter-web and restart to enable deployment changes (dropdown lists ids from <code>kitchen_policy_deployment_manifest_v1</code>).</p>'}`;

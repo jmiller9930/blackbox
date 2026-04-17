@@ -242,6 +242,20 @@ def append_manifest_entry(repo: Path, entry: dict[str, Any]) -> None:
     write_manifest(repo, {"schema": MANIFEST_SCHEMA, "entries": entries})
 
 
+def remove_manifest_entries_for_submission(repo: Path, submission_id: str) -> dict[str, Any]:
+    """Drop all manifest rows for ``submission_id`` (used when deleting an intake)."""
+    sid = str(submission_id or "").strip()
+    if not sid:
+        return {"ok": False, "error": "missing_submission_id", "removed": 0}
+    m = load_manifest(repo)
+    entries = [x for x in m.get("entries") or [] if isinstance(x, dict)]
+    before = len(entries)
+    filtered = [e for e in entries if str(e.get("submission_id") or "").strip() != sid]
+    removed = before - len(filtered)
+    write_manifest(repo, {"schema": MANIFEST_SCHEMA, "entries": filtered})
+    return {"ok": True, "removed": removed}
+
+
 def upsert_manifest_entry(repo: Path, entry: dict[str, Any]) -> None:
     """
     Replace any Jupiter/BlackBox row that matches the same ``execution_target`` and either

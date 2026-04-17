@@ -1077,6 +1077,100 @@ def apply_runtime_policy_checkin(
     }
 
 
+def clear_kitchen_runtime_for_target(
+    repo: Path,
+    execution_target: str,
+    *,
+    http_jupiter_base: str | None = None,
+    http_jupiter_token: str | None = None,
+    http_blackbox_base: str | None = None,  # reserved — BlackBox standby is store-only here
+    http_blackbox_token: str | None = None,
+) -> dict[str, Any]:
+    """
+    POST empty policy to Jupiter (standby), verify GET, then clear Kitchen assignment row.
+
+    BlackBox: clears Kitchen assignment only (no HTTP standby in this path).
+    """
+    repo = repo.resolve()
+    try:
+        et = normalize_execution_target(execution_target)
+    except ValueError as e:
+        return {"ok": False, "error": "invalid_execution_target", "detail": str(e)[:500]}
+    if et not in ("jupiter", "blackbox"):
+        return {"ok": False, "error": "unsupported_execution_target", "execution_target": et}
+
+    row_before = get_assignment(repo, et)
+    prev_policy = str((row_before or {}).get("active_runtime_policy_id") or "").strip()
+    prev_sub = str((row_before or {}).get("submission_id") or "").strip()
+
+    if et == "jupiter":
+        base = (http_jupiter_base or os.environ.get("KITCHEN_JUPITER_CONTROL_BASE") or "").strip()
+        tok = (http_jupiter_token or os.environ.get("KITCHEN_JUPITER_OPERATOR_TOKEN") or "").strip()
+        if not base or not tok:
+            return {
+                "ok": False,
+                "error": "jupiter_runtime_not_configured",
+                "detail": "Set KITCHEN_JUPITER_CONTROL_BASE and KITCHEN_JUPITER_OPERATOR_TOKEN on the API host.",
+            }
+        post = jupiter_post_active_policy(base, tok, "")
+        if not post.get("ok"):
+            return {
+                "ok": False,
+                "error": "jupiter_runtime_post_failed",
+                "http_status": post.get("http_status"),
+                "detail": post.get("body_snippet"),
+                "post_json": post.get("json"),
+            }
+        verify = jupiter_get_policy(base, tok)
+        if not verify.get("ok"):
+            return {
+                "ok": False,
+                "error": "jupiter_runtime_readback_failed_after_clear",
+                "http_status": verify.get("http_status"),
+                "detail": verify.get("body_snippet"),
+            }
+        live = str((verify.get("json") or {}).get("active_policy") or "").strip()
+        if live != "":
+            return {
+                "ok": False,
+                "error": "runtime_verify_mismatch",
+                "detail": "Expected standby (empty active_policy) after clear POST.",
+                "runtime_active_policy": live,
+            }
+
+    _ensure_runtime_assignment_row_exists(repo, et)
+    store = read_store(repo)
+    row = store.setdefault("assignments_by_target", {}).get(et)
+    if not isinstance(row, dict):
+        return {"ok": False, "error": "internal", "detail": "assignment row missing", "execution_target": et}
+
+    row["submission_id"] = ""
+    row["candidate_policy_id"] = ""
+    row["approved_runtime_slot_id"] = ""
+    row["active_runtime_policy_id"] = ""
+    row.pop("content_sha256", None)
+    row["operator_action"] = "kitchen_dashboard_clear_runtime"
+    row["cleared_at_utc"] = _utc_now()
+    store.setdefault("assignments_by_target", {})[et] = row
+    write_store(repo, store)
+
+    append_ledger_entry(
+        repo,
+        execution_target=et,
+        previous_policy_id=prev_policy,
+        new_policy_id="",
+        source="kitchen",
+        detail="kitchen_clear_runtime",
+    )
+    return {
+        "ok": True,
+        "schema": "kitchen_clear_runtime_result_v1",
+        "execution_target": et,
+        "cleared_submission_id": prev_sub,
+        "cleared_active_runtime_policy_id": prev_policy,
+    }
+
+
 def assign_mechanical_candidate(
     repo: Path,
     submission_id: str,

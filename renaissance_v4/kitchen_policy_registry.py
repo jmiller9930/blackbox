@@ -43,6 +43,35 @@ def runtime_policy_approved(repo: Path, execution_target: str, runtime_policy_id
     return rid in [str(x) for x in lst]
 
 
+def remove_runtime_policy_from_allowlist(
+    repo: Path, execution_target: str, runtime_policy_id: str
+) -> tuple[bool, str]:
+    """Remove ``runtime_policy_id`` from ``runtime_policies.<execution_target>`` if present."""
+    et = str(execution_target).strip().lower()
+    rid = str(runtime_policy_id).strip()
+    if et not in ("jupiter", "blackbox") or not rid:
+        return False, "invalid_args"
+    try:
+        reg = load_registry(repo)
+    except (FileNotFoundError, ValueError, OSError):
+        return False, "registry_unreadable"
+    allowed = reg.get("runtime_policies")
+    if not isinstance(allowed, dict):
+        return False, "invalid_runtime_policies"
+    lst = allowed.get(et)
+    if not isinstance(lst, list):
+        return False, "invalid_target_list"
+    normalized = [str(x).strip() for x in lst if str(x).strip()]
+    if rid not in normalized:
+        return True, "not_present"
+    kept = sorted([x for x in normalized if x != rid])
+    allowed[et] = kept
+    reg["runtime_policies"] = allowed
+    p = registry_path(repo)
+    p.write_text(json.dumps(reg, indent=2) + "\n", encoding="utf-8")
+    return True, "removed"
+
+
 def ensure_runtime_policy_allowlisted(
     repo: Path, execution_target: str, runtime_policy_id: str
 ) -> tuple[bool, str]:

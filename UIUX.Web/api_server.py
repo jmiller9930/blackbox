@@ -2976,6 +2976,42 @@ class Handler(BaseHTTPRequestHandler):
             r["trace_id"] = trace_id
             self._json(200, r, no_cache=True)
             return
+        if (
+            len(parts) == 6
+            and parts[:4] == ["api", "v1", "renaissance", "policy-intake"]
+            and parts[5] == "delete"
+        ):
+            sid = parts[4]
+            if ".." in sid or not sid:
+                self._json(400, {"ok": False, "error": "invalid_submission_id"}, no_cache=True)
+                return
+            trace_id = str(uuid.uuid4())
+            body = self._read_json_body() or {}
+            if body.get("confirm") is not True:
+                self._json(
+                    400,
+                    {
+                        "ok": False,
+                        "error": "confirmation_required",
+                        "detail": 'Send JSON {"confirm": true} to permanently delete this intake.',
+                        "trace_id": trace_id,
+                    },
+                    no_cache=True,
+                )
+                return
+            try:
+                from renaissance_v4.policy_intake.intake_delete import delete_intake_submission_forever
+
+                r = delete_intake_submission_forever(_REPO_ROOT, sid)
+            except Exception as e:  # noqa: BLE001
+                self._json(500, {"ok": False, "error": str(e)[:500], "trace_id": trace_id}, no_cache=True)
+                return
+            if not r.get("ok"):
+                self._json(400, {**r, "trace_id": trace_id}, no_cache=True)
+                return
+            r["trace_id"] = trace_id
+            self._json(200, r, no_cache=True)
+            return
         if len(parts) == 5 and parts[:2] == ["api", "v1"] and parts[2] == "agents":
             agent_id = parts[3].lower()
             action = parts[4].lower()
@@ -3165,6 +3201,93 @@ class Handler(BaseHTTPRequestHandler):
             self._json(code, r, no_cache=True)
             return
         path_norm = (parsed.path or "").rstrip("/") or "/"
+        if path_norm == "/api/v1/renaissance/kitchen-promote-runtime":
+            trace_id = str(uuid.uuid4())
+            body = self._read_json_body() or {}
+            sid = str(body.get("submission_id") or "").strip()
+            et_raw = str(body.get("execution_target") or "").strip()
+            dep_override = str(body.get("deployed_runtime_policy_id") or "").strip()
+            skip_es = bool(body.get("skip_esbuild"))
+            allowlist = body.get("allowlist_registry")
+            allow_reg = True if allowlist is None else bool(allowlist)
+            if not sid:
+                self._json(
+                    400,
+                    {
+                        "ok": False,
+                        "error": "missing_submission_id",
+                        "trace_id": trace_id,
+                    },
+                    no_cache=True,
+                )
+                return
+            try:
+                from renaissance_v4.policy_intake.promote_runtime import promote_intake_submission_to_runtime
+
+                r = promote_intake_submission_to_runtime(
+                    _REPO_ROOT,
+                    sid,
+                    execution_target=et_raw or None,
+                    deployed_runtime_policy_id=dep_override or None,
+                    allowlist_registry=allow_reg,
+                    skip_esbuild=skip_es,
+                )
+            except ValueError as e:
+                self._json(
+                    400,
+                    {"ok": False, "error": "invalid_execution_target", "detail": str(e)[:500], "trace_id": trace_id},
+                    no_cache=True,
+                )
+                return
+            except Exception as e:  # noqa: BLE001
+                self._json(
+                    500,
+                    {"ok": False, "error": str(e)[:800], "trace_id": trace_id},
+                    no_cache=True,
+                )
+                return
+            r["trace_id"] = trace_id
+            code = 200 if r.get("ok") else 400
+            self._json(code, r, no_cache=True)
+            return
+        if path_norm == "/api/v1/renaissance/kitchen-runtime-clear":
+            trace_id = str(uuid.uuid4())
+            body = self._read_json_body() or {}
+            et_raw = str(body.get("execution_target") or "").strip()
+            if not et_raw:
+                self._json(
+                    400,
+                    {
+                        "ok": False,
+                        "error": "missing_execution_target",
+                        "detail": "JSON body must include execution_target (jupiter | blackbox).",
+                        "trace_id": trace_id,
+                    },
+                    no_cache=True,
+                )
+                return
+            try:
+                from renaissance_v4.kitchen_runtime_assignment import clear_kitchen_runtime_for_target
+
+                r = clear_kitchen_runtime_for_target(_REPO_ROOT, et_raw)
+            except ValueError as e:
+                self._json(
+                    400,
+                    {"ok": False, "error": "invalid_execution_target", "detail": str(e)[:500], "trace_id": trace_id},
+                    no_cache=True,
+                )
+                return
+            except Exception as e:  # noqa: BLE001
+                self._json(
+                    500,
+                    {"ok": False, "error": str(e)[:800], "trace_id": trace_id},
+                    no_cache=True,
+                )
+                return
+            r["trace_id"] = trace_id
+            code = 200 if r.get("ok") else 400
+            self._json(code, r, no_cache=True)
+            return
         if path_norm == "/api/v1/renaissance/kitchen-runtime-assignment":
             trace_id = str(uuid.uuid4())
             body = self._read_json_body() or {}
