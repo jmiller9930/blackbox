@@ -5337,6 +5337,9 @@
       encodeURIComponent(rv4GetExecutionTarget());
     fetch(q, { cache: 'no-store' })
       .then(function (r) {
+        if (!r.ok) {
+          throw new Error('intake_candidates_http_' + r.status);
+        }
         return r.json();
       })
       .then(function (j) {
@@ -5349,6 +5352,9 @@
         }
         rv4CandidatesCache = j.candidates || [];
         return fetch(assignQ, { cache: 'no-store' }).then(function (r2) {
+          if (!r2.ok) {
+            throw new Error('kitchen_runtime_assignment_http_' + r2.status);
+          }
           return r2.json();
         });
       })
@@ -5359,6 +5365,10 @@
         rv4RenderCandidates(rv4CandidatesCache);
       })
       .catch(function () {
+        rv4CandidatesCache = [];
+        rv4KitchenAssignmentPayload = null;
+        rv4UpdateKitchenAssignGlobalStatus();
+        rv4RenderCandidates([]);
         var tb = $('rv4-cand-tbody');
         if (tb) tb.innerHTML = '<tr><td colspan="8">Failed to load candidates.</td></tr>';
       });
