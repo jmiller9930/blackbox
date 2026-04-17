@@ -430,6 +430,47 @@ def drift_status(
     }
 
 
+def jupiter_control_plane_warnings(
+    http_jupiter_base: str | None = None,
+) -> list[str]:
+    """
+    DV-072 — Surface misconfiguration when Kitchen would talk to the wrong HTTP server.
+
+    BlackBox ``api`` often listens on :8080; Sean Jupiter policy API is a different process
+    (typically another port, e.g. 707 on the lab host). Using localhost:8080 for
+    ``KITCHEN_JUPITER_CONTROL_BASE`` points at BlackBox, not Jupiter.
+    """
+    base = (http_jupiter_base or os.environ.get("KITCHEN_JUPITER_CONTROL_BASE") or "").strip().rstrip("/")
+    out: list[str] = []
+    if not base:
+        out.append(
+            "KITCHEN_JUPITER_CONTROL_BASE is unset. Set it to Sean Jupiter's origin, e.g. "
+            "http://clawbot.a51.corp:707 (not BlackBox api :8080)."
+        )
+        return out
+    low = base.lower()
+    if ("127.0.0.1" in low or "localhost" in low) and ":8080" in low:
+        out.append(
+            "KITCHEN_JUPITER_CONTROL_BASE points at localhost:8080 — that is BlackBox api, not Sean Jupiter. "
+            "Use the lab internal Jupiter URL, e.g. http://clawbot.a51.corp:707"
+        )
+    return out
+
+
+def jupiter_control_base_blocks_assignment(http_jupiter_base: str | None = None) -> list[str]:
+    """Non-empty only when assign must fail before HTTP (fatal misconfiguration)."""
+    base = (http_jupiter_base or os.environ.get("KITCHEN_JUPITER_CONTROL_BASE") or "").strip().rstrip("/")
+    if not base:
+        return []
+    low = base.lower()
+    if ("127.0.0.1" in low or "localhost" in low) and ":8080" in low:
+        return [
+            "KITCHEN_JUPITER_CONTROL_BASE points at localhost:8080 — that is BlackBox api, not Sean Jupiter. "
+            "Use e.g. http://clawbot.a51.corp:707"
+        ]
+    return []
+
+
 def maybe_record_external_runtime_change(
     repo: Path,
     execution_target: str,
@@ -517,6 +558,9 @@ def build_kitchen_runtime_read_payload(
     except Exception:
         pass
     ledger_tail = ledger_entries_for_target(repo, et, limit=20)
+    cp_warnings: list[str] = []
+    if et == "jupiter":
+        cp_warnings = jupiter_control_plane_warnings(http_jupiter_base)
     return {
         "schema": "kitchen_runtime_assignment_read_v3",
         "execution_target": et,
@@ -534,6 +578,7 @@ def build_kitchen_runtime_read_payload(
         "lifecycle": lc_sum,
         "ledger_tail": ledger_tail,
         "ledger_note": "Append-only history (Kitchen assigns + external/runtime drift). Rollback must use registry + ledger.",
+        "control_plane_warnings": cp_warnings,
     }
 
 
@@ -607,6 +652,14 @@ def assign_mechanical_candidate(
 
     prev_policy_for_ledger = ""
     if et == "jupiter":
+        fatal_base = jupiter_control_base_blocks_assignment(http_jupiter_base)
+        if fatal_base:
+            return {
+                "ok": False,
+                "error": "jupiter_control_base_misconfigured",
+                "detail": fatal_base[0],
+                "control_plane_warnings": fatal_base,
+            }
         base = (http_jupiter_base or os.environ.get("KITCHEN_JUPITER_CONTROL_BASE") or "").strip()
         tok = (http_jupiter_token or os.environ.get("KITCHEN_JUPITER_OPERATOR_TOKEN") or "").strip()
         if not base or not tok:

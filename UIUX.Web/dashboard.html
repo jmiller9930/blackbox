@@ -4894,6 +4894,10 @@
     var rt = j.runtime;
     var drift = j.drift;
     var parts = [];
+    var cpw = j.control_plane_warnings;
+    if (cpw && cpw.length) {
+      parts.push('CONFIG: ' + cpw.map(function (w) { return String(w); }).join(' '));
+    }
     if (rt && rt.ok && rt.active_policy != null && String(rt.active_policy) !== '') {
       parts.push(
         'Runtime (authoritative): active policy ' +
@@ -4939,7 +4943,9 @@
       }
     }
     el.textContent = parts.join(' ');
-    var warn = drift && drift.state && drift.state !== 'match';
+    var warn =
+      (drift && drift.state && drift.state !== 'match') ||
+      (cpw && cpw.length > 0);
     el.classList.toggle('is-rv4-drift-warn', !!warn);
     var ledEl = $('rv4-kitchen-ledger-strip');
     if (ledEl) {
