@@ -53,7 +53,7 @@ The **engine runs** policies. The **engine is not** the policy. Policy **plugs i
 | **Math shared (non-strategy)** | `vscode-test/seanv3/engine/atr_math.mjs` | ATR helper; not policy semantics. |
 | **Lifecycle / exits (engine)** | `vscode-test/seanv3/sean_lifecycle.mjs` | Stops, targets, ATR-from-window — not candidate strategy selection. |
 | **Orchestration** | `vscode-test/seanv3/app.mjs` | Schedules `processSeanEngine`; must not import strategy modules. |
-| **HTTP / operator** | `vscode-test/seanv3/jupiter_web.mjs` | Writes `jupiter_active_policy`; validates against deployment manifest. |
+| **HTTP / operator** | `vscode-test/seanv3/jupiter_web.mjs` | Writes `jupiter_active_policy`; validates against deployment manifest. Status strip: **Engine** = execution loop (`BBT_v1` / `SEAN_ENGINE_DISPLAY_ID`), **Deployment** = assigned policy id (manifest), not interchangeable. |
 | **Quarantined legacy strategies** | `vscode-test/seanv3/legacy_policies/*.mjs` | **Not** part of the production engine path; tests/reference only unless explicitly imported from tests. |
 
 **Deployment binding (repo config):**  

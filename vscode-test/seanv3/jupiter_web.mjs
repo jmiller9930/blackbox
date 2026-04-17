@@ -41,6 +41,16 @@ const JUPITER_POLICY_OBSERVABILITY_CONTRACT = 'jupiter_policy_observability_v1';
  */
 const JUPITER_ACTIVE_POLICY_SWITCH_CONTRACT = 'jupiter_active_policy_switch_v1';
 
+/** Operator-facing engine label (not policy). Internal runtime id remains sean_artifact_engine_v1 in metadata. */
+function jupiterEngineDisplayId() {
+  return (process.env.SEAN_ENGINE_DISPLAY_ID || 'BBT_v1').trim();
+}
+
+/** Sean execution loop enabled (separate from which deployment id is assigned). */
+function jupiterEngineSliceEnabled() {
+  return !['0', 'false', 'no'].includes(String(process.env.SEAN_ENGINE_SLICE ?? '1').trim().toLowerCase());
+}
+
 function parseSolanaPubkeyBase58(raw) {
   const s = String(raw ?? '').trim();
   if (!s) return null;
@@ -226,8 +236,13 @@ function computeStatusStrip(v) {
   const modeCls = tm.actual_banner ? 'jw-st-warn' : 'jw-st-ok';
 
   const jr = tm.jupiter_runtime || {};
-  /** DV-077: must match GET /api/v1/jupiter/policy active_policy (same resolveJupiterPolicy as handleJupiterPolicyGet). */
-  const policyId = jr.active_policy ? String(jr.active_policy) : '—';
+  /** Deployment id from analog_meta (Kitchen manifest row), not the engine. */
+  const deploymentId = jr.active_policy ? String(jr.active_policy) : '—';
+  /** Treat missing as online (older summary.json) — only explicit false turns engine off. */
+  const engineOn = jr.engine_online !== false;
+  const eid = String(jr.engine_display_id || jupiterEngineDisplayId()).trim();
+  const engineLabel = engineOn ? `${eid} · Online` : `${eid} · Off`;
+  const engineCls = engineOn ? 'jw-st-engine-on' : 'jw-st-muted';
 
   const pq = op.paper_equity_usd || {};
   let eqStr = '—';
@@ -295,7 +310,9 @@ function computeStatusStrip(v) {
     trgCls,
     modeLabel,
     modeCls,
-    policyId,
+    engineLabel,
+    engineCls,
+    deploymentId,
     eqStr,
     eqCls,
     posLabel,
@@ -316,7 +333,8 @@ function statusStripHtml(s, sessionChrome = false) {
     <div class="jw-st-item"><span class="jw-st-k">Binance</span><span class="jw-st-v ${s.bnCls}" id="jw-st-binance">${esc(s.bnLabel)}</span></div>
     <div class="jw-st-item"><span class="jw-st-k">Trading</span><span class="jw-st-v ${s.trgCls}" id="jw-st-trading">${esc(s.trgLabel)}</span></div>
     <div class="jw-st-item"><span class="jw-st-k">Mode</span><span class="jw-st-v ${s.modeCls}" id="jw-st-mode">${esc(s.modeLabel)}</span></div>
-    <div class="jw-st-item"><span class="jw-st-k">Policy</span><span class="jw-st-v jw-st-policy" id="jw-st-policy">${esc(s.policyId)}</span></div>
+    <div class="jw-st-item"><span class="jw-st-k">Engine</span><span class="jw-st-v ${s.engineCls}" id="jw-st-engine">${esc(s.engineLabel)}</span></div>
+    <div class="jw-st-item"><span class="jw-st-k">Deployment</span><span class="jw-st-v jw-st-deployment" id="jw-st-deployment">${esc(s.deploymentId)}</span></div>
     <div class="jw-st-item"><span class="jw-st-k">Equity</span><span class="jw-st-v ${s.eqCls}" id="jw-st-equity">${esc(s.eqStr)}</span></div>
     <div class="jw-st-item"><span class="jw-st-k">Position</span><span class="jw-st-v ${s.posCls}" id="jw-st-position">${esc(s.posLabel)}</span></div>
     <div class="jw-st-item"><span class="jw-st-k">Updated</span><span class="jw-st-v ${s.updCls}" id="jw-st-updated">${esc(s.updLabel)}</span></div>
@@ -1355,13 +1373,23 @@ async function buildFullView() {
     error: null,
   };
 
-  let jupiterRuntime = { active_policy: '', source: 'unset' };
+  let jupiterRuntime = {
+    active_policy: '',
+    source: 'unset',
+    engine_display_id: jupiterEngineDisplayId(),
+    engine_online: jupiterEngineSliceEnabled(),
+  };
   let db;
   try {
     db = new DatabaseSync(seanPath, { readOnly: true });
     Object.assign(base, buildSummary(db));
     const rp = getActiveDeploymentSnapshot(db);
-    jupiterRuntime = { active_policy: rp.policyId, source: rp.source };
+    jupiterRuntime = {
+      active_policy: rp.policyId,
+      source: rp.source,
+      engine_display_id: jupiterEngineDisplayId(),
+      engine_online: jupiterEngineSliceEnabled(),
+    };
   } catch (e) {
     base.error = e instanceof Error ? e.message : String(e);
   } finally {
@@ -1425,7 +1453,7 @@ function jwLivePollScript(refreshSec) {
     var el=document.getElementById(id);
     if(!el)return;
     el.textContent=text;
-    el.className='jw-st-v '+cls+(id==='jw-st-policy'?' jw-st-policy':'');
+    el.className='jw-st-v '+cls+(id==='jw-st-deployment'?' jw-st-deployment':'');
   }
   /** Mirrors server computeStatusStrip — shallow UI only. */
   function applyStatusStrip(j){
@@ -1484,8 +1512,13 @@ function jwLivePollScript(refreshSec) {
     var modeCls=tm.actual_banner?'jw-st-warn':'jw-st-ok';
     setSt('jw-st-mode',modeLabel,modeCls);
     var jr=tm.jupiter_runtime||{};
-    var polEl=document.getElementById('jw-st-policy');
-    if(polEl){polEl.textContent=jr.active_policy||'\\u2014';polEl.className='jw-st-v jw-st-policy';}
+    var engOn=jr.engine_online!==false;
+    var eid=String(jr.engine_display_id||'BBT_v1').trim();
+    var engLabel=engOn?eid+' \\u00b7 Online':eid+' \\u00b7 Off';
+    var engCls=engOn?'jw-st-engine-on':'jw-st-muted';
+    setSt('jw-st-engine',engLabel,engCls);
+    var depEl=document.getElementById('jw-st-deployment');
+    if(depEl){depEl.textContent=jr.active_policy||'\\u2014';depEl.className='jw-st-v jw-st-deployment';}
     var pq=op.paper_equity_usd||{};
     var eqStr='\\u2014', eqCls='jw-st-muted';
     if(!opErr&&pq.equity_usd!=null&&isFinite(Number(pq.equity_usd))){eqStr=Number(pq.equity_usd).toFixed(2);eqCls='jw-st-ok';}
@@ -1563,17 +1596,9 @@ function jwLivePollScript(refreshSec) {
 <\/script>`;
 }
 
-/** Display label for policy id (SSR + client rebuild; ids come from ALLOWED_POLICY_IDS / GET allowed_policies). */
+/** Display label for deployment id — raw id only (Kitchen manifest truth; no legacy marketing names). */
 function jupiterPolicyOptionLabel(id) {
-  const map = {
-    jup_v4: 'JUPv4',
-    jup_v3: 'JUPv3',
-    jup_mc_test: 'JUP-MC-Test',
-    jup_mc2: 'JUP-MC2',
-    jup_pipeline_proof_v1: 'Pipeline proof (training)',
-    jup_kitchen_mechanical_v1: 'Kitchen mechanical (always long)',
-  };
-  return map[id] || id;
+  return String(id || '').trim() || '—';
 }
 
 function htmlJupiterPolicySelectOptions(selectedAp) {
@@ -1605,16 +1630,16 @@ function htmlPage(v) {
     Object.fromEntries(allowed.map((id) => [id, jupiterPolicyOptionLabel(id)]))
   );
   const policySel = `
-    <p><strong>Policy</strong> (runtime — next bar onward; does not close or force-open positions)</p>
-    <p class="muted">Active: <code id="jw-ap-code">${esc(ap)}</code> · source: <code id="jw-ap-src">${esc(src)}</code> · meta key <code>${esc(JUPITER_ACTIVE_POLICY_KEY)}</code></p>
+    <p><strong>Assigned deployment</strong> (policy artifact bound in manifest — applies next bar; does not close or force-open positions)</p>
+    <p class="muted"><strong>Engine</strong> is separate — status strip shows <code>${esc(jupiterEngineDisplayId())}</code> · Online when the execution loop is enabled. Active deployment: <code id="jw-ap-code">${esc(ap)}</code> · source <code id="jw-ap-src">${esc(src)}</code> · meta <code>${esc(JUPITER_ACTIVE_POLICY_KEY)}</code></p>
     <div id="jw-policy-control" class="jw-policy-box jw-policy-idle">
-      <p class="op-row" style="margin-top:0"><label>Runtime policy <select id="jw-jupiter-policy" ${postOk ? '' : 'disabled'}>${policyOptionsHtml}</select></label>
-    <button type="button" id="jw-apply-policy" class="fund-btn" ${postOk ? '' : 'disabled'}>Set active Jupiter policy</button></p>
+      <p class="op-row" style="margin-top:0"><label>Deployment id <select id="jw-jupiter-policy" ${postOk ? '' : 'disabled'}>${policyOptionsHtml}</select></label>
+    <button type="button" id="jw-apply-policy" class="fund-btn" ${postOk ? '' : 'disabled'}>Set active deployment</button></p>
       <p id="jw-policy-status" class="jw-policy-status small"></p>
       ${
         postOk
           ? ''
-          : `<p class="warn" id="jw-policy-token-warn"><strong>Policy switch unavailable</strong> — <code>JUPITER_OPERATOR_TOKEN</code> is not set on this server. Dropdown lists registry ids; enable token and restart to apply.</p>`
+          : `<p class="warn" id="jw-policy-token-warn"><strong>Deployment switch unavailable</strong> — <code>JUPITER_OPERATOR_TOKEN</code> is not set on this server. Dropdown lists manifest deployment ids; enable token and restart to apply.</p>`
       }
     </div>
     ${postOk ? `<p class="muted">Uses Bearer token in <strong>Operator token</strong> panel above. Options stay aligned with <code>GET /api/v1/jupiter/policy</code> · <code>allowed_policies</code>.</p>
@@ -1654,10 +1679,10 @@ function htmlPage(v) {
         var selv=String(sel.value||'').trim();
         if(active&&selv===active){
           box.classList.add('jw-policy-active');
-          if(st){ st.textContent='Policy is set and active — runtime is using '+selv+' (SQLite jupiter_active_policy; engine applies on the next eligible cycle).'; }
+          if(st){ st.textContent='Deployment is set and active — '+selv+' (SQLite jupiter_active_policy; engine loads evaluator on the next eligible cycle).'; }
         }else{
           box.classList.add('jw-policy-idle');
-          if(st){ st.textContent='White: selection not applied or differs from Active above — choose a policy and click Set active Jupiter policy.'; }
+          if(st){ st.textContent='Selection not applied or differs from Active above — choose a deployment id and click Set active deployment.'; }
         }
       }
       window.jwPolicySyncVisual=jwPolicySyncVisual;
@@ -1678,7 +1703,7 @@ function htmlPage(v) {
           return;
         }
         if(!pol){
-          alert('Select a policy from the dropdown.');
+          alert('Select a deployment id from the dropdown.');
           return;
         }
         if(box)box.removeAttribute('data-policy-error');
@@ -1697,11 +1722,11 @@ function htmlPage(v) {
         jwPolicySyncVisual();
       });
     })();
-    </script>` : '<p class="muted">Set <code>JUPITER_OPERATOR_TOKEN</code> on jupiter-web and restart to enable applying policy changes (dropdown above shows allowed ids from the registry).</p>'}`;
+    </script>` : '<p class="muted">Set <code>JUPITER_OPERATOR_TOKEN</code> on jupiter-web and restart to enable deployment changes (dropdown lists ids from <code>kitchen_policy_deployment_manifest_v1</code>).</p>'}`;
   const tradingBlock = actual
     ? `<p class="warn"><strong>ACTUAL</strong> — Live-capital intent. Deploy with PAPER_TRADING=0 when leaving paper; this banner does not change Docker.</p>
       ${policySel}
-      <p class="muted small">This <strong>Policy</strong> selector is the Jupiter/Sean runtime strategy (<code>jupiter_active_policy</code>). It is <em>not</em> the BlackBox <code>policy_registry.json</code> “strategy entry” line (that registry is for other operator tools only).</p>
+      <p class="muted small"><strong>Deployment id</strong> selects which manifest-bound policy artifact runs — not the engine (<code>${esc(jupiterEngineDisplayId())}</code>). Not the BlackBox <code>policy_registry.json</code> strategy line.</p>
       ${
         readOnly
           ? '<p class="muted small">Read-only API: wallet/funding POSTs are off. Other apps may <strong>set active Jupiter policy</strong> via <code>POST /api/v1/jupiter/active-policy</code> (Bearer).</p>'
@@ -1709,7 +1734,7 @@ function htmlPage(v) {
       }`
     : `<p><strong>PAPER</strong> — Simulated ledger (default). SEANV3_TUI_ACTUAL=1 for live-intent banner.</p>
       ${policySel}
-      <p class="muted small">This <strong>Policy</strong> selector is the Jupiter/Sean runtime strategy (<code>jupiter_active_policy</code>). Ignore BlackBox registry “strategy entry” elsewhere — not used here.</p>
+      <p class="muted small"><strong>Deployment id</strong> — manifest-bound artifact only. Ignores BlackBox registry “strategy entry” elsewhere.</p>
       ${
         readOnly
           ? '<p class="muted small">Read-only API: wallet/funding POSTs are off. Other apps may <strong>set active Jupiter policy</strong> via <code>POST /api/v1/jupiter/active-policy</code> (Bearer).</p>'
@@ -1755,7 +1780,7 @@ function htmlPage(v) {
           ? `<p class="ok">Pubkey in DB — <code>${esc(w.pubkey_base58)}</code> · ${esc(v.wallet_status || '—')}</p>`
           : `<p class="warn">No pubkey in DB — use <code>KEYPAIR_PATH</code> on seanv3 or temporarily set <code>JUPITER_WEB_READ_ONLY=0</code> to register via UI.</p>`
       }
-      <p class="muted small"><strong>Set active Jupiter policy (sole write):</strong> <code>POST /api/v1/jupiter/active-policy</code> · <code>Authorization: Bearer &lt;token&gt;</code> · body exactly <code>{"policy":"jup_v4"}</code> (or <code>jup_v3</code>, <code>jup_mc_test</code>, <code>jup_mc2</code>, <code>jup_pipeline_proof_v1</code>, <code>jup_kitchen_mechanical_v1</code>). Alias: <code>/api/v1/jupiter/set-policy</code>.</p>`;
+      <p class="muted small"><strong>Set active deployment (sole write):</strong> <code>POST /api/v1/jupiter/active-policy</code> · <code>Authorization: Bearer &lt;token&gt;</code> · body <code>{"policy":"&lt;deployed_runtime_policy_id&gt;"}</code> where the id is listed under Jupiter in <code>kitchen_policy_deployment_manifest_v1.json</code>. Alias: <code>/api/v1/jupiter/set-policy</code>.</p>`;
     } else {
       walletFundingBlock = `
       <p class="muted"><strong>Paper wallet</strong> — <strong>Equity = bankroll + realized PnL + unrealized</strong> (same numbers the engine uses). Raising “Add paper funds” increases <strong>bankroll</strong> immediately after save + reload. <strong>Chain wallet</strong> switches the gate to cached SOL; live fills still need <code>PAPER_TRADING=0</code> on seanv3 + restart.</p>
@@ -1975,7 +2000,7 @@ function htmlPage(v) {
       <div class="jw-panel-body" id="jw-pan-token" hidden>
       <p class="muted">Same secret as <code>JUPITER_OPERATOR_TOKEN</code> on jupiter-web (see <code>lab_operator_token.env</code> in this stack). ${
         readOnly
-          ? '<strong>Read-only mode:</strong> use Bearer only for <strong>Set active Jupiter policy</strong> below — wallet/funding POSTs are disabled.'
+          ? '<strong>Read-only mode:</strong> use Bearer only for <strong>Set active deployment</strong> below — wallet/funding POSTs are disabled.'
           : 'Used for policy switch, paper wallet, funding mode, and paper stake'
       } — <em>not</em> your Solana wallet.</p>
       <p><label>Bearer <input type="${bearerInputType}" id="jw-op-token" size="44" value="${esc(prefillBearer)}" autocomplete="off" spellcheck="false"/></label></p>
@@ -2127,7 +2152,8 @@ function htmlPage(v) {
     .jw-st-k { color: #8b949e; font-size: 0.62rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; white-space: nowrap; }
     .jw-st-v { font-weight: 600; white-space: nowrap; }
     .jw-st-sub { font-weight: 500; color: #8b949e; font-size: 0.68rem; }
-    .jw-st-policy { color: #79c0ff; }
+    .jw-st-deployment { color: #79c0ff; }
+    .jw-st-engine-on { color: #79c0ff; }
     .jw-st-ok { color: #3fb950; }
     .jw-st-warn { color: #d29922; }
     .jw-st-bad { color: #f85149; }
@@ -2552,6 +2578,8 @@ function handleJupiterPolicyGet(res) {
         contract: JUPITER_POLICY_OBSERVABILITY_CONTRACT,
         active_policy: p.policyId,
         source: p.source,
+        engine_display_id: jupiterEngineDisplayId(),
+        engine_online: jupiterEngineSliceEnabled(),
         allowed_policies: allowed,
         submission_id: mb && mb.submission_id ? mb.submission_id : null,
         content_sha256: mb && mb.content_sha256 ? mb.content_sha256 : null,
