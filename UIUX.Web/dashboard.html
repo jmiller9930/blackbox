@@ -5134,7 +5134,17 @@
         var asg = rv4KitchenAssignmentPayload && rv4KitchenAssignmentPayload.assignment;
         var assignedHere =
           asg && String(asg.submission_id || '') === String(r.submission_id || '');
-        var canAssign = elig.ok && !assignedHere;
+        /* Same truth as green: if live runtime is on another policy id, do not show "Assigned" here. */
+        var rowMatchesLiveRuntime =
+          kRt &&
+          kRt.ok &&
+          rpid !== '' &&
+          String(kRt.active_policy || '') === rpid;
+        var assignedShowsAsLive = assignedHere && rowMatchesLiveRuntime;
+        var assignedRecordButRuntimeElsewhere =
+          assignedHere && kRt && kRt.ok && !rowMatchesLiveRuntime;
+        /* Allow assign again when store points here but live runtime is on another id (recovery). */
+        var canAssign = elig.ok && !assignedShowsAsLive;
         var dbgLine =
           'candidate_policy_id: ' +
           String(r.candidate_policy_id || '—') +
@@ -5144,12 +5154,18 @@
           String(r.execution_target || '—') +
           ' · eligible: ' +
           (mechEligible ? 'yes' : 'no');
-        var reasonText = assignedHere
-          ? 'This submission is already the recorded assignment for this execution target.'
-          : elig.ok
-            ? ''
-            : elig.reason;
-        var btnLabel = assignedHere ? 'Assigned' : 'Assign to runtime';
+        var reasonText = assignedShowsAsLive
+          ? 'This row matches live runtime (GET) and is the recorded assignment submission.'
+          : assignedRecordButRuntimeElsewhere
+            ? 'Kitchen still has this submission on file, but live runtime policy is ' +
+              String(kRt.active_policy || '—') +
+              ' — see Active trade policy above. Assign from the row that matches that id, or change runtime in Jupiter.'
+            : assignedHere
+              ? 'Recorded assignment submission for this target.'
+              : elig.ok
+                ? ''
+                : elig.reason;
+        var btnLabel = assignedShowsAsLive ? 'Assigned' : 'Assign to runtime';
         var assignCell =
           '<td class="dash-rv4-cand-assign-cell">' +
           '<div class="dash-rv4-assign-debug">' +
@@ -5165,7 +5181,7 @@
           (reasonText
             ? '<p class="dash-rv4-assign-reason">' + rv4Esc(reasonText) + '</p>'
             : '') +
-          (assignedHere && asg
+          ((assignedShowsAsLive || assignedRecordButRuntimeElsewhere) && asg
             ? '<p class="dash-rv4-assign-recorded">Assignment on file · store reconciled id ' +
               rv4Esc(String(asg.active_runtime_policy_id || '—')) +
               ' · registry slot ' +
