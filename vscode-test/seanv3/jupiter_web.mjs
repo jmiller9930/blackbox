@@ -2653,10 +2653,48 @@ async function handleJupiterActivePolicyPost(req, res) {
     setMeta(dbw, JUPITER_ACTIVE_POLICY_KEY, nid);
     const after = resolveJupiterPolicy(dbw).policyId;
     console.error(`[jupiter] set active Jupiter policy: ${before} → ${after}`);
-    const hs = await tradeSurfacePolicyKitchenHandshake({
-      beforePolicyId: before,
-      afterPolicyId: after,
-    });
+    const strictKitchenAckRequired = ['1', 'true', 'yes'].includes(
+      String(process.env.JUPITER_REQUIRE_KITCHEN_ACK || '')
+        .trim()
+        .toLowerCase()
+    );
+    let hs;
+    try {
+      /**
+       * DV-077 hardening note:
+       * - The local runtime write has already happened by the time we enter the reciprocal
+       *   Kitchen handshake.
+       * - We therefore treat unexpected handshake exceptions exactly like a failed ack instead
+       *   of letting them fall through to the generic 500 handler below.
+       * - That keeps strict mode honest: if Kitchen cannot be reached or the handshake code blows
+       *   up unexpectedly, we still drive the rollback branch instead of leaving Jupiter changed
+       *   while Kitchen stays behind.
+       */
+      hs = await tradeSurfacePolicyKitchenHandshake({
+        beforePolicyId: before,
+        afterPolicyId: after,
+      });
+    } catch (e) {
+      const detail = `Kitchen check-in raised an unexpected exception: ${
+        e instanceof Error ? e.message : String(e)
+      }`;
+      hs = {
+        /**
+         * Preserve the product contract even if the helper itself misbehaves:
+         * - strict mode => treat this as an unacknowledged change and roll back
+         * - relaxed mode => keep the local runtime change but surface a loud warning
+         *
+         * That mirrors the normal handshake result shape instead of silently upgrading
+         * every exception into a rollback.
+         */
+        strictBlocked: strictKitchenAckRequired,
+        kitchen_checkin: { ok: false, reason: 'unexpected_exception', detail },
+        detail,
+      };
+      if (!strictKitchenAckRequired) {
+        hs.kitchen_checkin_warning = `Kitchen did not acknowledge runtime policy change: ${String(detail).slice(0, 500)}`;
+      }
+    }
     if (hs.strictBlocked) {
       setMeta(dbw, JUPITER_ACTIVE_POLICY_KEY, before);
       const restored = resolveJupiterPolicy(dbw).policyId;

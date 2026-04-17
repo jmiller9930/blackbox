@@ -84,6 +84,45 @@ test('tradeSurfacePolicyKitchenHandshake strict: failed check-in blocks', async 
   assert.strictEqual(r.strictBlocked, true);
 });
 
+test('tradeSurfacePolicyKitchenHandshake strict: transport exception still blocks', async () => {
+  const fetchImpl = async () => {
+    throw new Error('connect ECONNREFUSED 127.0.0.1:8080');
+  };
+  const r = await tradeSurfacePolicyKitchenHandshake({
+    beforePolicyId: 'a',
+    afterPolicyId: 'b',
+    env: {
+      JUPITER_KITCHEN_CHECKIN_BASE: 'https://x',
+      JUPITER_KITCHEN_CHECKIN_TOKEN: 't',
+      JUPITER_REQUIRE_KITCHEN_ACK: '1',
+    },
+    fetchImpl,
+  });
+  assert.strictEqual(r.strictBlocked, true);
+  assert.strictEqual(r.kitchen_checkin.ok, false);
+  assert.match(String(r.detail || ''), /ECONNREFUSED/);
+});
+
+test('tradeSurfacePolicyKitchenHandshake relaxed: transport exception becomes warning', async () => {
+  const fetchImpl = async () => {
+    throw new Error('socket hang up');
+  };
+  const r = await tradeSurfacePolicyKitchenHandshake({
+    beforePolicyId: 'a',
+    afterPolicyId: 'b',
+    env: {
+      JUPITER_KITCHEN_CHECKIN_BASE: 'https://x',
+      JUPITER_KITCHEN_CHECKIN_TOKEN: 't',
+      JUPITER_REQUIRE_KITCHEN_ACK: '',
+    },
+    fetchImpl,
+  });
+  assert.strictEqual(r.strictBlocked, false);
+  assert.strictEqual(r.kitchen_checkin.ok, false);
+  assert.ok(r.kitchen_checkin_warning);
+  assert.match(String(r.kitchen_checkin_warning), /socket hang up/);
+});
+
 test('tradeSurfacePolicyKitchenHandshake strict: missing env blocks', async () => {
   const r = await tradeSurfacePolicyKitchenHandshake({
     beforePolicyId: 'a',
