@@ -103,6 +103,15 @@ Specs parse and normalize to **PolicySpecV1**. Deterministic signal/trade/PnL pr
 - `raw/original_<filename>` — immutable upload
 - `canonical/policy_spec_v1.json` — normalized
 - `report/intake_report.json` — full staged report
+- `artifacts/evaluator.mjs` — **Path A** deployable bundle (esbuild of the uploaded `.ts`); SeanV3 loads this file. Manifest `content_sha256` must match **this file’s** hash (see `canonical_runtime_artifact_sha256` in `kitchen_policy_manifest.py`).
+
+### Path A — promote candidate → deployable + manifest (operator)
+
+After intake **PASS**, build `artifacts/evaluator.mjs`, upsert `kitchen_policy_deployment_manifest_v1.json`, and optionally allowlist the deployment id:
+
+`python3 renaissance_v4/policy_intake/promote_intake_submission_to_jupiter_runtime.py --repo . --submission-id <id> --deployed-runtime-policy-id <jup_…_v1> --allowlist-registry` (or `python3 -m renaissance_v4.policy_intake.promote_intake_submission_to_jupiter_runtime` with the same args)
+
+Low-level manifest append only (no esbuild): `python3 renaissance_v4/policy_intake/register_kitchen_deployment_manifest_entry.py --help`
 
 ## API container runtime (required)
 

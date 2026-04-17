@@ -43,6 +43,39 @@ def runtime_policy_approved(repo: Path, execution_target: str, runtime_policy_id
     return rid in [str(x) for x in lst]
 
 
+def ensure_runtime_policy_allowlisted(
+    repo: Path, execution_target: str, runtime_policy_id: str
+) -> tuple[bool, str]:
+    """
+    Append ``runtime_policy_id`` to ``runtime_policies.<execution_target>`` if missing (sorted list).
+    Returns (True, "appended"|"already_present") or (False, error_code).
+    """
+    et = str(execution_target).strip().lower()
+    rid = str(runtime_policy_id).strip()
+    if et not in ("jupiter", "blackbox") or not rid:
+        return False, "invalid_args"
+    try:
+        reg = load_registry(repo)
+    except (FileNotFoundError, ValueError, OSError):
+        return False, "registry_unreadable"
+    allowed = reg.get("runtime_policies")
+    if not isinstance(allowed, dict):
+        return False, "invalid_runtime_policies"
+    lst = allowed.get(et)
+    if not isinstance(lst, list):
+        return False, "invalid_target_list"
+    normalized = [str(x).strip() for x in lst if str(x).strip()]
+    if rid in normalized:
+        return True, "already_present"
+    normalized.append(rid)
+    normalized.sort()
+    allowed[et] = normalized
+    reg["runtime_policies"] = allowed
+    p = registry_path(repo)
+    p.write_text(json.dumps(reg, indent=2) + "\n", encoding="utf-8")
+    return True, "appended"
+
+
 def mechanical_slot(repo: Path, execution_target: str) -> dict[str, str] | None:
     reg = load_registry(repo)
     ms = reg.get("mechanical_slot") or {}

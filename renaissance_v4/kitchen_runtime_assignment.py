@@ -39,7 +39,7 @@ from renaissance_v4.kitchen_policy_registry import (
 from renaissance_v4.policy_intake.kitchen_policy_manifest import (
     artifact_identity_for_submission,
     deployment_ids_for_target,
-    submission_content_sha256_from_intake,
+    canonical_runtime_artifact_sha256,
     validate_kitchen_assignment_against_manifest,
 )
 from renaissance_v4.policy_intake.storage import read_json, submission_dir
@@ -1127,12 +1127,12 @@ def assign_mechanical_candidate(
                 "control_plane_warnings": fatal_early,
             }
 
-    content_sha = submission_content_sha256_from_intake(repo, submission_id)
+    content_sha = canonical_runtime_artifact_sha256(repo, submission_id)
     if not content_sha:
         return {
             "ok": False,
             "error": "intake_missing_content_sha256",
-            "detail": "Intake report must include stages.stage_1_intake.content_sha256 for artifact-bound assignment.",
+            "detail": "Intake report must include stages.stage_1_intake.content_sha256 for artifact-bound assignment, or artifacts/evaluator.mjs must exist (Path A).",
             "submission_id": submission_id,
         }
 

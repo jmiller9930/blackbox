@@ -10,6 +10,7 @@ GET observability reports the same identity for manifest-bound policies.
 
 from __future__ import annotations
 
+import hashlib
 import json
 from pathlib import Path
 from typing import Any
@@ -159,7 +160,7 @@ def artifact_identity_for_submission(
     sid = str(submission_id or "").strip()
     if not sid:
         return None
-    content_sha = submission_content_sha256_from_intake(repo, sid)
+    content_sha = canonical_runtime_artifact_sha256(repo, sid)
     if not content_sha:
         return None
     m = load_manifest(repo)
@@ -200,6 +201,30 @@ def submission_content_sha256_from_intake(repo: Path, submission_id: str) -> str
     return ""
 
 
+def _sha256_file(path: Path) -> str:
+    h = hashlib.sha256()
+    with path.open("rb") as f:
+        for chunk in iter(lambda: f.read(65536), b""):
+            h.update(chunk)
+    return h.hexdigest()
+
+
+def canonical_runtime_artifact_sha256(repo: Path, submission_id: str) -> str:
+    """
+    Path A identity hash aligned with SeanV3 ``artifact_policy_loader.mjs``:
+
+    When ``artifacts/evaluator.mjs`` exists, return its sha256 (the engine compares the manifest
+    entry to this file). Otherwise fall back to ``stage_1_intake.content_sha256`` (raw upload),
+    e.g. promotion not run yet or hand-authored evaluator-only flows.
+    """
+    from renaissance_v4.policy_intake.storage import submission_dir
+
+    ep = submission_dir(repo, submission_id) / "artifacts" / "evaluator.mjs"
+    if ep.is_file():
+        return _normalize_hex_sha256(_sha256_file(ep))
+    return submission_content_sha256_from_intake(repo, submission_id)
+
+
 def write_manifest(repo: Path, manifest: dict[str, Any]) -> None:
     p = manifest_path(repo)
     p.parent.mkdir(parents=True, exist_ok=True)
@@ -215,3 +240,32 @@ def append_manifest_entry(repo: Path, entry: dict[str, Any]) -> None:
     if not ok:
         raise ValueError(err or "invalid manifest entry")
     write_manifest(repo, {"schema": MANIFEST_SCHEMA, "entries": entries})
+
+
+def upsert_manifest_entry(repo: Path, entry: dict[str, Any]) -> None:
+    """
+    Replace any Jupiter/BlackBox row that matches the same ``execution_target`` and either
+    ``deployed_runtime_policy_id`` or ``submission_id``, then append the new entry.
+    Use when re-promoting the same submission or redeploying the same runtime id.
+    """
+    et = str(entry.get("execution_target") or "").strip().lower()
+    pid = str(entry.get("deployed_runtime_policy_id") or "").strip()
+    sid = str(entry.get("submission_id") or "").strip()
+    m = load_manifest(repo)
+    entries = [x for x in m.get("entries") or [] if isinstance(x, dict)]
+    filtered: list[dict[str, Any]] = []
+    for e in entries:
+        eet = str(e.get("execution_target") or "").strip().lower()
+        if eet != et:
+            filtered.append(e)
+            continue
+        esid = str(e.get("submission_id") or "").strip()
+        epid = str(e.get("deployed_runtime_policy_id") or "").strip()
+        if esid == sid or epid == pid:
+            continue
+        filtered.append(e)
+    filtered.append(entry)
+    ok, err = validate_manifest_entries(filtered)
+    if not ok:
+        raise ValueError(err or "invalid manifest entry")
+    write_manifest(repo, {"schema": MANIFEST_SCHEMA, "entries": filtered})
