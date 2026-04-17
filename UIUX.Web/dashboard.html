@@ -4922,8 +4922,8 @@
       .toLowerCase() === 'pass';
   }
   /**
-   * Eligibility for Kitchen → runtime assign: PASS intake, target match, and a registry-mapped
-   * runtime_policy_id (from API — same inference as kitchen_policy_registry + infer_runtime_policy_id).
+   * Eligibility: PASS intake, target match, and a deployment manifest row (API:
+   * artifact_assignable + runtime_policy_id = deployed_runtime_policy_id). Not registry-slot inference.
    */
   function rv4RowKitchenAssignEligibility(row) {
     if (row.is_active === false) {
@@ -4942,16 +4942,23 @@
     if (!rv4IntakeIsPass(row)) {
       return { ok: false, reason: 'Intake status must be PASS for assignment.' };
     }
-    var rpid = String(row.runtime_policy_id || '').trim();
-    if (!rpid) {
-      return {
-        ok: false,
-        reason:
-          'This candidate_policy_id is not mapped to an approved runtime policy in kitchen_policy_registry_v1 (runtime_policies or mechanical_slot). Add the id to the registry or use a deployable candidate id.',
-      };
-    }
     if (et !== 'jupiter' && et !== 'blackbox') {
       return { ok: false, reason: 'Set execution target to Jupiter or BlackBox (header selector).' };
+    }
+    var hash = String(row.content_sha256 || '').trim();
+    if (hash.length < 64) {
+      return {
+        ok: false,
+        reason: 'Intake is missing content_sha256; re-run intake so raw policy bytes are hashed.',
+      };
+    }
+    var aa = row.artifact_assignable === true || row.artifact_assignable === 'true';
+    var rpid = String(row.runtime_policy_id || '').trim();
+    if (!aa || !rpid) {
+      return {
+        ok: false,
+        reason: 'This policy is not yet built into a deployable runtime artifact.',
+      };
     }
     return { ok: true, reason: '' };
   }
@@ -5206,8 +5213,10 @@
         var dbgLine =
           'candidate_policy_id: ' +
           String(r.candidate_policy_id || '—') +
-          ' · runtime_policy_id: ' +
+          ' · deployed_runtime_policy_id: ' +
           (rpid || '—') +
+          ' · submission_id: ' +
+          String(r.submission_id || '—') +
           ' · execution_target: ' +
           String(r.execution_target || '—') +
           ' · eligible: ' +
@@ -5249,11 +5258,11 @@
             ? '<p class="dash-rv4-assign-reason">' + rv4Esc(reasonText) + '</p>'
             : '') +
           ((assignedShowsAsLive || assignedRecordButRuntimeElsewhere) && asg
-            ? '<p class="dash-rv4-assign-recorded">Assignment on file · Kitchen assigned id ' +
+            ? '<p class="dash-rv4-assign-recorded">Assignment on file · deployed_runtime_policy_id ' +
               rv4Esc(String(asg.active_runtime_policy_id || '—')) +
-              ' · registry slot ' +
-              rv4Esc(String(asg.approved_runtime_slot_id || '—')) +
-              '</p>'
+              ' · content_sha256 ' +
+              rv4Esc(String(asg.content_sha256 || '—').slice(0, 16)) +
+              '…</p>'
             : '') +
           '</td>';
         return (

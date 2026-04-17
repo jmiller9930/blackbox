@@ -16,16 +16,32 @@ from typing import Any
 from renaissance_v4.execution_targets import LABELS, normalize_execution_target
 from renaissance_v4.kitchen_policy_registry import infer_runtime_policy_id_for_candidate
 from renaissance_v4.kitchen_policy_lifecycle import attach_lifecycle_to_candidate_rows, set_retired
+from renaissance_v4.policy_intake.kitchen_policy_manifest import artifact_identity_for_submission
 from renaissance_v4.policy_intake.storage import intake_root, read_json, submission_dir, write_json
 
 
-def _enrich_runtime_policy_id(repo: Path, rows: list[dict[str, Any]]) -> None:
-    """DV-077 — ``runtime_policy_id`` for green indicator vs GET /api/v1/jupiter/policy ``active_policy``."""
+def _enrich_artifact_identity(repo: Path, rows: list[dict[str, Any]]) -> None:
+    """
+    Artifact-bound assignment (Path A): ``runtime_policy_id`` is the manifest
+    ``deployed_runtime_policy_id`` for this submission. No registry-slot inference for
+    assignability — legacy ``infer_runtime_policy_id_for_candidate`` is only exposed as
+    ``legacy_runtime_policy_id`` for diagnostics.
+    """
     for r in rows:
         et = str(r.get("execution_target") or "jupiter").strip().lower()
         cid = str(r.get("candidate_policy_id") or "").strip()
-        rid = infer_runtime_policy_id_for_candidate(repo, et, cid)
-        r["runtime_policy_id"] = rid if rid else ""
+        sid = str(r.get("submission_id") or "").strip()
+        ident = artifact_identity_for_submission(repo, et, sid) if sid else None
+        if ident:
+            r["runtime_policy_id"] = ident["deployed_runtime_policy_id"]
+            r["artifact_assignable"] = True
+            r["artifact_binding"] = "manifest_v1"
+        else:
+            r["runtime_policy_id"] = ""
+            r["artifact_assignable"] = False
+            r["artifact_binding"] = "none"
+        legacy = infer_runtime_policy_id_for_candidate(repo, et, cid)
+        r["legacy_runtime_policy_id"] = legacy if legacy else ""
 
 
 def _parse_created_sort_key(created_utc: str) -> float:
@@ -111,8 +127,10 @@ def list_intake_candidates(
 
         s1 = rep.get("stages", {}).get("stage_1_intake") if isinstance(rep.get("stages"), dict) else {}
         created = ""
+        content_sha256 = ""
         if isinstance(s1, dict):
             created = str(s1.get("timestamp_utc") or "")
+            content_sha256 = str(s1.get("content_sha256") or "").strip()
 
         rows.append(
             {
@@ -122,6 +140,7 @@ def list_intake_candidates(
                 "execution_target": et,
                 "execution_target_label": LABELS.get(et, et),
                 "created_utc": created,
+                "content_sha256": content_sha256,
                 "intake_status": "pass",
                 "is_active": False if active is False else True,
                 "baseline_compare_status": "—",
@@ -135,7 +154,7 @@ def list_intake_candidates(
     for r in rows:
         r["same_policy_submission_count"] = pid_counts[str(r["candidate_policy_id"])]
 
-    _enrich_runtime_policy_id(repo, rows)
+    _enrich_artifact_identity(repo, rows)
 
     if collapse_duplicate_policy_ids and rows:
         seen: set[str] = set()
@@ -157,11 +176,11 @@ def find_best_submission_for_runtime_policy(
     runtime_policy_id: str,
 ) -> dict[str, str] | None:
     """
-    Reverse lookup (DV-070B): newest passing intake whose inferred ``runtime_policy_id`` matches
-    the live runtime policy id for this execution target.
-
-    Scans intake dirs directly (does not call ``list_intake_candidates``) to avoid recursion.
+    Reverse lookup (DV-070B): prefer deployment manifest (submission tied to
+    ``deployed_runtime_policy_id``), else legacy inference from registry maps.
     """
+    from renaissance_v4.policy_intake.kitchen_policy_manifest import load_manifest
+
     repo = repo.resolve()
     et = normalize_execution_target(execution_target)
     rpid = str(runtime_policy_id).strip()
@@ -170,7 +189,47 @@ def find_best_submission_for_runtime_policy(
     root = intake_root(repo)
     if not root.is_dir():
         return None
+    m = load_manifest(repo)
+    manifest_sids: list[str] = []
+    for e in m.get("entries") or []:
+        if not isinstance(e, dict):
+            continue
+        if str(e.get("execution_target") or "").strip().lower() != et:
+            continue
+        if str(e.get("deployed_runtime_policy_id") or "").strip() != rpid:
+            continue
+        sid = str(e.get("submission_id") or "").strip()
+        if sid:
+            manifest_sids.append(sid)
     matches: list[tuple[float, str, str]] = []
+    for sid in manifest_sids:
+        d = root / sid
+        if not d.is_dir():
+            continue
+        rep_path = d / "report" / "intake_report.json"
+        canon_path = d / "canonical" / "policy_spec_v1.json"
+        rep = read_json(rep_path)
+        if not isinstance(rep, dict) or not rep.get("pass"):
+            continue
+        if not canon_path.is_file():
+            continue
+        if rep.get("is_active") is False:
+            continue
+        rep_et = normalize_execution_target(str(rep.get("execution_target") or "jupiter"))
+        if rep_et != et:
+            continue
+        cid = str(rep.get("candidate_policy_id") or "").strip()
+        if not cid:
+            continue
+        s1 = rep.get("stages", {}).get("stage_1_intake") if isinstance(rep.get("stages"), dict) else {}
+        created = str(s1.get("timestamp_utc") or "") if isinstance(s1, dict) else ""
+        ts = _parse_created_sort_key(created)
+        matches.append((ts, sid, cid))
+    if matches:
+        matches.sort(key=lambda x: x[0], reverse=True)
+        best = matches[0]
+        return {"submission_id": best[1], "candidate_policy_id": best[2]}
+    matches = []
     for d in root.iterdir():
         if not d.is_dir():
             continue

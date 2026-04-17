@@ -298,7 +298,7 @@ def test_assign_rejects_without_deployment_manifest_entry(tmp_path: Path, monkey
     _write_pass(tmp_path, "no_manifest_sub")
     r = assign_mechanical_candidate_to_jupiter(tmp_path, "no_manifest_sub")
     assert r.get("ok") is False
-    assert r.get("error") == "artifact_not_in_deployment_manifest"
+    assert r.get("error") == "policy_not_deployed_as_runtime_artifact"
 
 
 def test_assign_rejects_wrong_candidate_id(tmp_path: Path) -> None:
@@ -317,7 +317,7 @@ def test_assign_rejects_wrong_candidate_id(tmp_path: Path) -> None:
     (sub / "canonical" / "policy_spec_v1.json").write_text("{}", encoding="utf-8")
     r = assign_mechanical_candidate_to_jupiter(tmp_path, "x")
     assert r.get("ok") is False
-    assert r.get("error") == "candidate_not_deployable"
+    assert r.get("error") == "intake_missing_content_sha256"
 
 
 def test_assign_blackbox_fails_until_runtime_api(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

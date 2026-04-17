@@ -127,6 +127,45 @@ def validate_kitchen_assignment_against_manifest(
     )
 
 
+def artifact_identity_for_submission(
+    repo: Path, execution_target: str, submission_id: str
+) -> dict[str, Any] | None:
+    """
+    If the deployment manifest ties this passing submission to a built artifact, return
+    ``submission_id``, ``content_sha256``, and ``deployed_runtime_policy_id``.
+    Otherwise None (not yet promoted / not in manifest).
+    """
+    from renaissance_v4.execution_targets import normalize_execution_target
+
+    et = normalize_execution_target(execution_target)
+    sid = str(submission_id or "").strip()
+    if not sid:
+        return None
+    content_sha = submission_content_sha256_from_intake(repo, sid)
+    if not content_sha:
+        return None
+    m = load_manifest(repo)
+    for e in m.get("entries") or []:
+        if not isinstance(e, dict):
+            continue
+        if str(e.get("execution_target") or "").strip().lower() != et:
+            continue
+        if str(e.get("submission_id") or "").strip() != sid:
+            continue
+        eh = _normalize_hex_sha256(str(e.get("content_sha256") or ""))
+        if eh != content_sha:
+            continue
+        pid = str(e.get("deployed_runtime_policy_id") or "").strip()
+        if not pid:
+            continue
+        return {
+            "submission_id": sid,
+            "content_sha256": content_sha,
+            "deployed_runtime_policy_id": pid,
+        }
+    return None
+
+
 def submission_content_sha256_from_intake(repo: Path, submission_id: str) -> str:
     """Return normalized hex sha256 from intake report, or empty string if missing."""
     from renaissance_v4.policy_intake.storage import read_json, submission_dir

@@ -33,11 +33,11 @@ from renaissance_v4.kitchen_policy_ledger import (
 )
 from renaissance_v4.kitchen_policy_registry import (
     approved_mechanical_by_target,
-    infer_runtime_policy_id_for_candidate,
     load_registry,
     runtime_policy_approved,
 )
 from renaissance_v4.policy_intake.kitchen_policy_manifest import (
+    artifact_identity_for_submission,
     submission_content_sha256_from_intake,
     validate_kitchen_assignment_against_manifest,
 )
@@ -874,13 +874,12 @@ def assign_mechanical_candidate(
     http_blackbox_token: str | None = None,
 ) -> dict[str, Any]:
     """
-    Assign a **passing** intake candidate whose ``candidate_policy_id`` maps to an approved runtime
-    policy for the target (``kitchen_policy_registry_v1.json`` via
-    :func:`~renaissance_v4.kitchen_policy_registry.infer_runtime_policy_id_for_candidate`).
-    Includes the governed mechanical slot and any id listed under ``runtime_policies.{jupiter|blackbox}``.
+    Assign a **passing** intake whose deployment manifest ties ``submission_id`` +
+    ``content_sha256`` to a ``deployed_runtime_policy_id`` (Path A). The runtime policy id
+    comes from the manifest only — not from registry-slot / intake_candidate_runtime_map inference.
 
-    **Runtime must accept and read-back must match** (DV-074). Does not write local store unless
-    verification succeeds.
+    ``kitchen_policy_registry_v1`` ``runtime_policies`` still gates whether the engine may load
+    that id (safety allowlist). **Runtime must accept and read-back must match** (DV-074).
     """
     repo = repo.resolve()
     rep_path = submission_dir(repo, submission_id) / "report" / "intake_report.json"
@@ -904,35 +903,46 @@ def assign_mechanical_candidate(
     if et not in ("jupiter", "blackbox"):
         return {"ok": False, "error": "unsupported_execution_target", "execution_target": et}
 
-    mech = mechanical_slot_safe(repo, et)
+    if et == "jupiter":
+        fatal_early = jupiter_control_base_blocks_assignment(http_jupiter_base)
+        if fatal_early:
+            return {
+                "ok": False,
+                "error": "jupiter_control_base_misconfigured",
+                "detail": fatal_early[0],
+                "control_plane_warnings": fatal_early,
+            }
 
-    active_pid = infer_runtime_policy_id_for_candidate(repo, et, cid)
-    if not active_pid:
+    content_sha = submission_content_sha256_from_intake(repo, submission_id)
+    if not content_sha:
         return {
             "ok": False,
-            "error": "candidate_not_deployable",
+            "error": "intake_missing_content_sha256",
+            "detail": "Intake report must include stages.stage_1_intake.content_sha256 for artifact-bound assignment.",
+            "submission_id": submission_id,
+        }
+
+    identity = artifact_identity_for_submission(repo, et, submission_id)
+    if not identity:
+        return {
+            "ok": False,
+            "error": "policy_not_deployed_as_runtime_artifact",
             "detail": (
-                "candidate_policy_id is not mapped to an approved runtime policy for this target in "
-                "renaissance_v4/config/kitchen_policy_registry_v1.json "
-                "(add to runtime_policies or mechanical_slot), or intake id cannot be deployed."
+                "This policy is not yet built into a deployable runtime artifact. "
+                "Complete the build pipeline and register kitchen_policy_deployment_manifest_v1.json."
             ),
             "candidate_policy_id": cid,
             "execution_target": et,
+            "submission_id": submission_id,
         }
 
-    is_mechanical_row = bool(
-        mech and str(mech.get("candidate_policy_id") or "").strip() == cid
+    active_pid = str(identity["deployed_runtime_policy_id"] or "").strip()
+    slot = active_pid
+    adapter = (
+        "seanv3_jupiter_active_policy"
+        if et == "jupiter"
+        else "reserved_blackbox_control_plane"
     )
-    if is_mechanical_row and mech:
-        slot = str(mech.get("approved_runtime_slot_id") or "")
-        adapter = str(mech.get("runtime_adapter") or "")
-    else:
-        slot = active_pid
-        adapter = (
-            "seanv3_jupiter_active_policy"
-            if et == "jupiter"
-            else "reserved_blackbox_control_plane"
-        )
 
     if not runtime_policy_approved(repo, et, active_pid):
         return {
@@ -942,17 +952,6 @@ def assign_mechanical_candidate(
             "active_runtime_policy_id": active_pid,
         }
 
-    if et == "jupiter":
-        fatal_base = jupiter_control_base_blocks_assignment(http_jupiter_base)
-        if fatal_base:
-            return {
-                "ok": False,
-                "error": "jupiter_control_base_misconfigured",
-                "detail": fatal_base[0],
-                "control_plane_warnings": fatal_base,
-            }
-
-    content_sha = submission_content_sha256_from_intake(repo, submission_id)
     ok_m, err_m, det_m = validate_kitchen_assignment_against_manifest(
         repo, et, submission_id, content_sha, active_pid
     )
