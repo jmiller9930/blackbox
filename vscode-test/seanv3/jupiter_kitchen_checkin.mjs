@@ -47,9 +47,7 @@ export async function kitchenRuntimePolicyCheckinHttp(opts) {
   if (!base || !token) {
     return { ok: false, skipped: true, reason: 'missing_base_or_token', httpStatus: 0, body: null };
   }
-  if (!activePolicy) {
-    return { ok: false, skipped: true, reason: 'missing_active_policy', httpStatus: 0, body: null };
-  }
+  // Empty activePolicy is valid: explicit standby / unassign (POST active_policy "").
   if (typeof fetchFn !== 'function') {
     return {
       ok: false,

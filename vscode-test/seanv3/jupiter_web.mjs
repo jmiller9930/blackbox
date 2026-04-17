@@ -2590,51 +2590,79 @@ async function handleJupiterPolicyGet(res) {
     const allowed = loadAllowedDeploymentIdsFromManifest();
     const mb = p.manifestBinding;
     const root = repoRoot();
+    const engineOn = jupiterEngineSliceEnabled();
     let loaderOk = null;
     let loaderError = null;
     let loaderDetail = null;
+    /** @type {'down' | 'standby' | 'active' | 'invalid_policy'} */
+    let runtimeExecutionState = 'standby';
+    if (!engineOn) {
+      runtimeExecutionState = 'down';
+    }
     if (!p.policyId) {
-      loaderOk = false;
-      loaderError = 'no_active_deployment';
-      loaderDetail = 'analog_meta.jupiter_active_policy unset';
+      loaderOk = true;
+      loaderError = null;
+      loaderDetail =
+        p.source === 'runtime_config_standby'
+          ? 'explicit standby (jupiter_active_policy empty)'
+          : 'no jupiter_active_policy row — standby';
+      if (engineOn) {
+        runtimeExecutionState = 'standby';
+      }
     } else if (!root) {
       loaderOk = false;
       loaderError = 'blackbox_repo_root_unset';
       loaderDetail = 'Set BLACKBOX_REPO_ROOT for artifact load probe';
+      if (engineOn) {
+        runtimeExecutionState = 'invalid_policy';
+      }
     } else if (!mb?.submission_id) {
       loaderOk = false;
       loaderError = 'manifest_binding_incomplete';
       loaderDetail = 'Deployment id not found in kitchen_policy_deployment_manifest_v1 for Jupiter';
+      if (engineOn) {
+        runtimeExecutionState = 'invalid_policy';
+      }
     } else {
       const probe = await loadEvaluatorFromManifestBinding(mb, root);
       loaderOk = probe.ok === true;
       if (!probe.ok) {
         loaderError = probe.error ?? 'loader_failed';
         loaderDetail = probe.detail ?? null;
+        if (engineOn) {
+          runtimeExecutionState = 'invalid_policy';
+        }
+      } else if (engineOn) {
+        runtimeExecutionState = 'active';
       }
     }
+    const artifactBinding = mb ? 'manifest_v1' : p.policyId ? 'legacy_unbound' : 'none';
     res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' });
     res.end(
       JSON.stringify({
         contract: JUPITER_POLICY_OBSERVABILITY_CONTRACT,
         active_policy: p.policyId,
         source: p.source,
+        runtime_execution_state: runtimeExecutionState,
         engine_display_id: jupiterEngineDisplayId(),
-        engine_online: jupiterEngineSliceEnabled(),
+        engine_online: engineOn,
         allowed_policies: allowed,
         submission_id: mb && mb.submission_id ? mb.submission_id : null,
         content_sha256: mb && mb.content_sha256 ? mb.content_sha256 : null,
-        artifact_binding: mb ? 'manifest_v1' : 'legacy_unbound',
+        artifact_binding: artifactBinding,
         loader_ok: loaderOk,
         loader_error: loaderError,
         loader_detail: loaderDetail,
         api: {
           sole_write: 'POST /api/v1/jupiter/active-policy',
           sole_write_alias: 'POST /api/v1/jupiter/set-policy',
-          body: { policy: 'deployed_runtime_policy_id from kitchen_policy_deployment_manifest_v1 (Jupiter)' },
+          body: {
+            policy:
+              'deployed_runtime_policy_id from kitchen_policy_deployment_manifest_v1 (Jupiter), or empty string to clear to standby',
+          },
           auth: 'Authorization: Bearer JUPITER_OPERATOR_TOKEN',
           effect:
-            'Writes analog_meta.jupiter_active_policy only; engine loads evaluator.mjs from submission artifacts each cycle. Does not mutate trades, bars, or lifecycle state.',
+            'Writes analog_meta.jupiter_active_policy only (empty string = explicit standby). Engine loads evaluator.mjs from submission artifacts each cycle. Does not mutate trades, bars, or lifecycle state.',
         },
       })
     );
@@ -2711,7 +2739,7 @@ async function handleJupiterActivePolicyPost(req, res) {
     return;
   }
   const nid = String(body.policy).trim();
-  if (!nid || !isDeploymentIdInManifest(nid)) {
+  if (nid !== '' && !isDeploymentIdInManifest(nid)) {
     res.writeHead(400, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' });
     res.end(
       JSON.stringify({
@@ -2726,6 +2754,70 @@ async function handleJupiterActivePolicyPost(req, res) {
   const seanPath = dbPath();
   const dbw = new DatabaseSync(seanPath);
   try {
+    if (nid === '') {
+      const beforeClear = getActiveDeploymentSnapshot(dbw).policyId;
+      setMeta(dbw, JUPITER_ACTIVE_POLICY_KEY, '');
+      const afterClear = getActiveDeploymentSnapshot(dbw).policyId;
+      console.error(`[jupiter] clear active Jupiter policy: ${beforeClear} → (standby)`);
+      const strictKitchenAckRequiredClear = ['1', 'true', 'yes'].includes(
+        String(process.env.JUPITER_REQUIRE_KITCHEN_ACK || '')
+          .trim()
+          .toLowerCase()
+      );
+      let hsClear;
+      try {
+        hsClear = await tradeSurfacePolicyKitchenHandshake({
+          beforePolicyId: beforeClear,
+          afterPolicyId: afterClear,
+        });
+      } catch (e) {
+        const detail = `Kitchen check-in raised an unexpected exception: ${
+          e instanceof Error ? e.message : String(e)
+        }`;
+        hsClear = {
+          strictBlocked: strictKitchenAckRequiredClear,
+          kitchen_checkin: { ok: false, reason: 'unexpected_exception', detail },
+          detail,
+        };
+        if (!strictKitchenAckRequiredClear) {
+          hsClear.kitchen_checkin_warning = `Kitchen did not acknowledge runtime policy clear: ${String(detail).slice(0, 500)}`;
+        }
+      }
+      if (hsClear.strictBlocked) {
+        res.writeHead(502, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' });
+        res.end(
+          JSON.stringify({
+            ok: false,
+            error: 'kitchen_checkin_failed_runtime_standby_retained',
+            contract: JUPITER_ACTIVE_POLICY_SWITCH_CONTRACT,
+            active_policy: '',
+            previous_policy: beforeClear,
+            detail: hsClear.detail || 'Kitchen did not acknowledge runtime policy clear.',
+            kitchen_checkin: hsClear.kitchen_checkin,
+            fail_closed_standby: true,
+          })
+        );
+        return;
+      }
+      const clearPayload = {
+        ok: true,
+        contract: JUPITER_ACTIVE_POLICY_SWITCH_CONTRACT,
+        operation: 'clear_active_jupiter_policy',
+        active_policy: afterClear,
+        previous_policy: beforeClear,
+        source: 'runtime_config_standby',
+        applied_on_next_engine_cycle: true,
+        does_not_mutate: ['trade_history', 'bars', 'lifecycle_bypass', 'arbitrary_strategy_load'],
+        kitchen_checkin: hsClear.kitchen_checkin,
+      };
+      if (hsClear.kitchen_checkin_warning) {
+        clearPayload.kitchen_checkin_warning = hsClear.kitchen_checkin_warning;
+      }
+      res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' });
+      res.end(JSON.stringify(clearPayload));
+      return;
+    }
+
     const before = getActiveDeploymentSnapshot(dbw).policyId;
     setMeta(dbw, JUPITER_ACTIVE_POLICY_KEY, nid);
     const after = getActiveDeploymentSnapshot(dbw).policyId;
@@ -2734,17 +2826,18 @@ async function handleJupiterActivePolicyPost(req, res) {
     if (rr && mbPost?.submission_id) {
       const loadPost = await loadEvaluatorFromManifestBinding(mbPost, rr);
       if (!loadPost.ok) {
-        setMeta(dbw, JUPITER_ACTIVE_POLICY_KEY, before);
+        setMeta(dbw, JUPITER_ACTIVE_POLICY_KEY, '');
         res.writeHead(400, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' });
         res.end(
           JSON.stringify({
             ok: false,
             error: 'policy_artifact_load_failed',
             contract: JUPITER_ACTIVE_POLICY_SWITCH_CONTRACT,
-            message: 'Deployment id is in the manifest but evaluator.mjs could not be loaded or verified.',
+            message:
+              'Deployment id is in the manifest but evaluator.mjs could not be loaded or verified. Runtime cleared to standby (fail closed).',
             loader_error: loadPost.error,
             detail: loadPost.detail ?? null,
-            restored_policy: before,
+            fail_closed_to_standby: true,
           })
         );
         return;

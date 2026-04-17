@@ -242,6 +242,61 @@ test('operator can switch policy when Kitchen acknowledges the runtime change', 
   const policyBody = await policy.json();
   assert.strictEqual(policyBody.active_policy, 'jup_v4');
   assert.strictEqual(policyBody.loader_ok, true);
+  assert.strictEqual(policyBody.runtime_execution_state, 'active');
+});
+
+test('operator can clear to standby with POST {"policy":""}', async (t) => {
+  const flowRepo = createFlowTestRepo();
+  const runtime = createTempRuntimeDb();
+  const kitchen = await startKitchenAckServer(async (req, res) => {
+    if (req.method !== 'POST' || req.url !== '/api/v1/renaissance/runtime-policy-checkin') {
+      res.writeHead(404).end();
+      return;
+    }
+    const chunks = [];
+    for await (const chunk of req) {
+      chunks.push(chunk);
+    }
+    const body = JSON.parse(Buffer.concat(chunks).toString('utf8'));
+    assert.strictEqual(body.execution_target, 'jupiter');
+    assert.strictEqual(body.active_policy, '');
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ ok: true, schema: 'runtime_policy_checkin_result_v1' }));
+  });
+  const app = await startJupiterWeb({
+    sqlitePath: runtime.sqlitePath,
+    kitchenBaseUrl: kitchen.baseUrl,
+    strictAck: true,
+    timeoutMs: 500,
+    blackboxRepoRoot: flowRepo,
+  });
+
+  t.after(async () => {
+    kitchen.server.close();
+    await stopChild(app.child);
+    rmSync(runtime.tempDir, { recursive: true, force: true });
+    rmSync(flowRepo, { recursive: true, force: true });
+  });
+
+  const post = await fetch(`${app.baseUrl}/api/v1/jupiter/active-policy`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${OPERATOR_TOKEN}`,
+    },
+    body: JSON.stringify({ policy: '' }),
+  });
+  assert.strictEqual(post.status, 200);
+  const postBody = await post.json();
+  assert.strictEqual(postBody.ok, true);
+  assert.strictEqual(postBody.operation, 'clear_active_jupiter_policy');
+  assert.strictEqual(postBody.active_policy, '');
+
+  const policy = await fetch(`${app.baseUrl}/api/v1/jupiter/policy`);
+  const policyBody = await policy.json();
+  assert.strictEqual(policyBody.active_policy, '');
+  assert.strictEqual(policyBody.loader_ok, true);
+  assert.strictEqual(policyBody.runtime_execution_state, 'standby');
 });
 
 test('operator strict mode rolls local runtime back if Kitchen hangs after headers', async (t) => {

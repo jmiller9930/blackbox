@@ -15,7 +15,7 @@ import {
   insertBarDecision,
 } from './sean_ledger.mjs';
 import { indicatorValuesFromDiag, gateResultsJson, REASON } from './decision_ledger.mjs';
-import { loadActivePolicyContext } from './jupiter_policy_runtime.mjs';
+import { loadActivePolicyContext, JUPITER_ACTIVE_POLICY_KEY } from './jupiter_policy_runtime.mjs';
 import {
   initialSlTp,
   computePnlUsd,
@@ -97,7 +97,12 @@ function writeFlatBarDecision(db, policy, marketEventId, payload) {
 export async function processSeanEngine(db, { marketEventId, kline }) {
   const policy = await loadActivePolicyContext(db);
   if (!policy.ok) {
-    console.error(`[seanv3] policy: ${policy.error} ${policy.detail || ''}`);
+    if (policy.error !== 'no_active_deployment') {
+      setMeta(db, JUPITER_ACTIVE_POLICY_KEY, '');
+      console.error(`[seanv3] fail-closed to standby: ${policy.error} ${policy.detail || ''}`);
+    } else {
+      console.error(`[seanv3] policy: ${policy.error} ${policy.detail || ''}`);
+    }
     return;
   }
   const minBars = policy.minBars;

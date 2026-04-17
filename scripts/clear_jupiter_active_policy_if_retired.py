@@ -65,9 +65,10 @@ def main() -> int:
                 )
             )
             return 0
+        # Upsert empty string (not DELETE) so Node runtime does not fall back to env-only state.
         conn.execute(
-            "DELETE FROM analog_meta WHERE k = ?",
-            ("jupiter_active_policy",),
+            "INSERT INTO analog_meta (k, v) VALUES (?, ?) ON CONFLICT(k) DO UPDATE SET v = excluded.v",
+            ("jupiter_active_policy", ""),
         )
         conn.commit()
         print(
@@ -76,7 +77,7 @@ def main() -> int:
                     "ok": True,
                     "changed": True,
                     "cleared_policy": cur,
-                    "detail": "removed — not in registry allowlist",
+                    "detail": "set to explicit standby — not in registry allowlist",
                 }
             )
         )

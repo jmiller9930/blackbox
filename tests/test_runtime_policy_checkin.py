@@ -143,6 +143,40 @@ def test_checkin_ledger_entry_runtime_checkin_source(tmp_path: Path, monkeypatch
     assert "runtime_policy_checkin" in str(last.get("detail") or "")
 
 
+def test_checkin_standby_clears_kitchen_when_runtime_empty(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    _copy_registry(tmp_path)
+    _minimal_store(tmp_path, "jup_kitchen_mechanical_v1")
+
+    def fake_query(*_a: object, **_k: object):
+        return {"ok": True, "active_policy": "", "execution_target": "jupiter"}
+
+    monkeypatch.setattr(
+        "renaissance_v4.kitchen_runtime_assignment.query_runtime_truth",
+        fake_query,
+    )
+    r = apply_runtime_policy_checkin(tmp_path, "jupiter", "", change_source="trade_surface_manual")
+    assert r.get("ok") is True
+    assert r.get("reconcile_linkage") == "explicit_standby"
+    row = get_assignment(tmp_path, "jupiter")
+    assert row and row.get("active_runtime_policy_id") == ""
+
+
+def test_checkin_standby_rejects_when_runtime_not_empty(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    _copy_registry(tmp_path)
+    _minimal_store(tmp_path, "jup_kitchen_mechanical_v1")
+
+    def fake_query(*_a: object, **_k: object):
+        return {"ok": True, "active_policy": "jup_v4", "execution_target": "jupiter"}
+
+    monkeypatch.setattr(
+        "renaissance_v4.kitchen_runtime_assignment.query_runtime_truth",
+        fake_query,
+    )
+    r = apply_runtime_policy_checkin(tmp_path, "jupiter", "")
+    assert r.get("ok") is False
+    assert r.get("error") == "runtime_verify_mismatch"
+
+
 def test_checkin_no_change_when_kitchen_already_matches(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     _copy_registry(tmp_path)
     _minimal_store(tmp_path, "jup_v4")

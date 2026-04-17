@@ -6,7 +6,7 @@ import { DatabaseSync } from 'node:sqlite';
 import { join } from 'node:path';
 import os from 'node:os';
 
-import { ensurePaperAnalogSchema, setMeta } from '../paper_analog.mjs';
+import { ensurePaperAnalogSchema, getMeta, setMeta } from '../paper_analog.mjs';
 import { ensureSeanLedgerSchema } from '../sean_ledger.mjs';
 import { processSeanEngine } from '../sean_engine.mjs';
 
@@ -155,6 +155,23 @@ test('NO_TRADE: one decision row after full flat evaluation without open', async
     assert.strictEqual(row.outcome, 'NO_TRADE');
     assert.strictEqual(row.reason_code, 'no_candidate_side');
     assert.strictEqual(row.candidate_side, 'none');
+  } finally {
+    restore();
+    db.close();
+    rmSync(repo, { recursive: true, force: true });
+  }
+});
+
+test('invalid deployment id in meta: fail-closed clears jupiter_active_policy to standby', async () => {
+  const repo = setupRepoWithArtifact();
+  const db = createEngineTestDb();
+  const restore = seedWalletConnected(db, repo);
+  try {
+    setMeta(db, 'jupiter_active_policy', 'not_in_manifest_xyz');
+    const ctx = insertOhlcvSeries(db, seriesFlat(MIN_BARS));
+    await processSeanEngine(db, ctx);
+    assert.strictEqual(countBarDecisions(db), 0);
+    assert.strictEqual(getMeta(db, 'jupiter_active_policy'), '');
   } finally {
     restore();
     db.close();

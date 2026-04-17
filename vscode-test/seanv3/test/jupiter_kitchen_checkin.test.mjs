@@ -44,6 +44,28 @@ test('kitchenRuntimePolicyCheckinHttp POSTs and parses success', async () => {
   assert.ok(String(calls[0].init.headers.Authorization).includes('secret'));
 });
 
+test('kitchenRuntimePolicyCheckinHttp POSTs standby (empty activePolicy)', async () => {
+  const calls = [];
+  const fetchImpl = async (url, init) => {
+    calls.push({ url, init });
+    const body = JSON.parse(String(init.body));
+    assert.strictEqual(body.active_policy, '');
+    return {
+      ok: true,
+      status: 200,
+      json: async () => ({ ok: true, schema: 'runtime_policy_checkin_result_v1' }),
+    };
+  };
+  const r = await kitchenRuntimePolicyCheckinHttp({
+    baseUrl: 'https://bb.example',
+    token: 'secret',
+    activePolicy: '',
+    fetchImpl,
+  });
+  assert.strictEqual(r.ok, true);
+  assert.strictEqual(calls.length, 1);
+});
+
 test('tradeSurfacePolicyKitchenHandshake relaxed: failed check-in keeps warning', async () => {
   const fetchImpl = async () => ({
     ok: false,

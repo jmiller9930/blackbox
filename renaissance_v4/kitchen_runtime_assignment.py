@@ -292,6 +292,38 @@ def _http_json(
         return 0, None, str(e)[:2000]
 
 
+def _env_push_jupiter_clear_on_sanitize() -> bool:
+    """After sanitize removes a retired Jupiter id from Kitchen JSON, POST clear to Jupiter (default on)."""
+    raw = os.environ.get("KITCHEN_PUSH_JUPITER_CLEAR_ON_SANITIZE")
+    if raw is None or str(raw).strip() == "":
+        return True
+    return str(raw).strip().lower() not in ("0", "false", "no", "off")
+
+
+def _maybe_push_jupiter_clear_after_sanitize(repo: Path, sanitize_out: dict[str, Any]) -> None:
+    if not sanitize_out.get("changed"):
+        return
+    sanitized = sanitize_out.get("sanitized") or []
+    if not any(
+        isinstance(s, dict) and str(s.get("execution_target") or "").strip() == "jupiter" for s in sanitized
+    ):
+        return
+    if not _env_push_jupiter_clear_on_sanitize():
+        return
+    base = (os.environ.get("KITCHEN_JUPITER_CONTROL_BASE") or "").strip()
+    tok = (os.environ.get("KITCHEN_JUPITER_OPERATOR_TOKEN") or "").strip()
+    if not base or not tok:
+        print(
+            "kitchen_runtime_assignment: sanitize cleared retired Jupiter id; "
+            "set KITCHEN_JUPITER_CONTROL_BASE and KITCHEN_JUPITER_OPERATOR_TOKEN to POST Jupiter standby",
+            flush=True,
+        )
+        return
+    post = jupiter_post_active_policy(base, tok, "")
+    if not post.get("ok"):
+        print(f"kitchen_runtime_assignment: Jupiter standby POST after sanitize failed: {post!r}", flush=True)
+
+
 def jupiter_post_active_policy(base: str, token: str, policy_id: str) -> dict[str, Any]:
     url = base.rstrip("/") + "/api/v1/jupiter/active-policy"
     payload = json.dumps({"policy": policy_id}).encode("utf-8")
@@ -690,9 +722,11 @@ def build_kitchen_runtime_read_payload(
     longer listed in ``kitchen_policy_registry_v1`` (e.g. removed slots like ``jup_mc_test``).
     """
     repo = repo.resolve()
+    sanitize_out: dict[str, Any] = {"ok": True, "changed": False, "sanitized": []}
     if _env_sanitize_retired_policy_ids_enabled():
         try:
-            sanitize_assignment_store_retired_policy_ids(repo)
+            sanitize_out = sanitize_assignment_store_retired_policy_ids(repo)
+            _maybe_push_jupiter_clear_after_sanitize(repo, sanitize_out)
         except (OSError, ValueError, TypeError) as exc:
             # Registry missing/corrupt should not 500 the dashboard; drift will still show truth.
             print(f"kitchen_runtime_assignment: sanitize_assignment_store_retired_policy_ids: {exc!r}", flush=True)
@@ -775,6 +809,122 @@ def _ensure_runtime_assignment_row_exists(repo: Path, et: str) -> None:
     write_store(repo, store)
 
 
+def _apply_runtime_policy_checkin_standby(
+    repo: Path,
+    et: str,
+    *,
+    change_source: str,
+    verify_runtime: bool,
+    http_jupiter_base: str | None,
+    http_jupiter_token: str | None,
+    http_blackbox_base: str | None,
+    http_blackbox_token: str | None,
+) -> dict[str, Any]:
+    """``reported_active_policy`` empty: runtime must be standby; persist cleared Kitchen assignment."""
+    from renaissance_v4.kitchen_policy_lifecycle import reconcile_with_drift, lifecycle_summary_for_target
+
+    _ensure_runtime_assignment_row_exists(repo, et)
+    row_before = copy.deepcopy(get_assignment(repo, et))
+    rt = query_runtime_truth(
+        repo,
+        et,
+        http_jupiter_base=http_jupiter_base,
+        http_jupiter_token=http_jupiter_token,
+        http_blackbox_base=http_blackbox_base,
+        http_blackbox_token=http_blackbox_token,
+    )
+    if verify_runtime:
+        if not rt.get("ok"):
+            return {
+                "ok": False,
+                "error": "runtime_unreachable",
+                "detail": str(rt.get("detail") or rt.get("error") or "runtime GET failed")[:2000],
+                "execution_target": et,
+                "runtime": rt,
+            }
+        live = str(rt.get("active_policy") or "").strip()
+        if live != "":
+            return {
+                "ok": False,
+                "error": "runtime_verify_mismatch",
+                "detail": "Standby check-in requires live runtime active_policy to be empty.",
+                "execution_target": et,
+                "reported_active_policy": "",
+                "verified_runtime_policy": live,
+                "runtime": rt,
+            }
+
+    k_before = str((row_before or {}).get("active_runtime_policy_id") or "").strip()
+    if not k_before:
+        row_after = get_assignment(repo, et)
+        drift_post = drift_status(repo, et, row_after, rt)
+        try:
+            reconcile_with_drift(repo, et, row_after, drift_post, rt)
+        except Exception:
+            pass
+        lc = lifecycle_summary_for_target(repo, et)
+        return {
+            "ok": True,
+            "schema": "runtime_policy_checkin_result_v1",
+            "execution_target": et,
+            "reported_active_policy": "",
+            "verified_runtime_policy": str(rt.get("active_policy") or "").strip() if rt.get("ok") else "",
+            "before_assignment": row_before,
+            "after_assignment": row_after,
+            "reconcile_linkage": "no_change",
+            "change_source": change_source,
+            "runtime": rt,
+            "lifecycle": lc,
+            "detail": "Kitchen assignment already standby; verified runtime empty.",
+        }
+
+    store = read_store(repo)
+    row = store.get("assignments_by_target", {}).get(et)
+    if not isinstance(row, dict):
+        return {"ok": False, "error": "internal", "detail": "assignment row missing", "execution_target": et}
+
+    row["submission_id"] = ""
+    row["candidate_policy_id"] = ""
+    row["approved_runtime_slot_id"] = ""
+    row["active_runtime_policy_id"] = ""
+    row.pop("runtime_adapter", None)
+    row["operator_action"] = "runtime_policy_checkin_standby"
+    row["reconciled_at_utc"] = _utc_now()
+    row["reconcile_source"] = "runtime_policy_checkin"
+    store.setdefault("assignments_by_target", {})[et] = row
+    write_store(repo, store)
+
+    append_ledger_entry(
+        repo,
+        execution_target=et,
+        previous_policy_id=k_before,
+        new_policy_id="",
+        source="runtime_checkin",
+        detail=f"runtime_policy_checkin:{change_source}:standby",
+    )
+    row_after = get_assignment(repo, et)
+    drift_post = drift_status(repo, et, row_after, rt)
+    try:
+        reconcile_with_drift(repo, et, row_after, drift_post, rt)
+    except Exception:
+        pass
+    lc = lifecycle_summary_for_target(repo, et)
+    return {
+        "ok": True,
+        "schema": "runtime_policy_checkin_result_v1",
+        "execution_target": et,
+        "reported_active_policy": "",
+        "verified_runtime_policy": str(rt.get("active_policy") or "").strip() if rt.get("ok") else "",
+        "before_assignment": row_before,
+        "after_assignment": row_after,
+        "reconcile_linkage": "explicit_standby",
+        "change_source": change_source,
+        "runtime": rt,
+        "lifecycle": lc,
+        "detail": "Kitchen assignment cleared to match verified runtime standby.",
+    }
+
+
 def apply_runtime_policy_checkin(
     repo: Path,
     execution_target: str,
@@ -806,7 +956,16 @@ def apply_runtime_policy_checkin(
 
     rid = str(reported_active_policy or "").strip()
     if not rid:
-        return {"ok": False, "error": "missing_active_policy"}
+        return _apply_runtime_policy_checkin_standby(
+            repo,
+            et,
+            change_source=change_source,
+            verify_runtime=verify_runtime,
+            http_jupiter_base=http_jupiter_base,
+            http_jupiter_token=http_jupiter_token,
+            http_blackbox_base=http_blackbox_base,
+            http_blackbox_token=http_blackbox_token,
+        )
 
     if not runtime_policy_approved(repo, et, rid):
         return {

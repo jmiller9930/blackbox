@@ -9,7 +9,6 @@
  */
 import fs from 'node:fs';
 import path from 'node:path';
-import { getMeta } from './paper_analog.mjs';
 import { loadEvaluatorFromManifestBinding } from './engine/artifact_policy_loader.mjs';
 
 export const JUPITER_ACTIVE_POLICY_KEY = 'jupiter_active_policy';
@@ -87,18 +86,31 @@ export function isDeploymentIdInManifest(raw) {
 }
 
 /**
+ * Explicit execution only: deployment id comes solely from analog_meta.jupiter_active_policy.
+ * No SEAN_JUPITER_POLICY fallback — empty or missing row means standby (engine does not execute a default policy).
+ * @param {import('node:sqlite').DatabaseSync} db
+ */
+export function getJupiterActivePolicyId(db) {
+  const row = db.prepare(`SELECT v FROM analog_meta WHERE k = ?`).get(JUPITER_ACTIVE_POLICY_KEY);
+  if (row === undefined) {
+    return '';
+  }
+  return String(row.v ?? '').trim();
+}
+
+/**
  * Sync snapshot for observability (no dynamic import).
  * @param {import('node:sqlite').DatabaseSync} db
  */
 export function getActiveDeploymentSnapshot(db) {
-  let deploymentId = String(getMeta(db, JUPITER_ACTIVE_POLICY_KEY) || '').trim();
-  if (!deploymentId) {
-    deploymentId = String(process.env.SEAN_JUPITER_POLICY || '').trim();
-  }
+  const row = db.prepare(`SELECT v FROM analog_meta WHERE k = ?`).get(JUPITER_ACTIVE_POLICY_KEY);
+  const deploymentId = getJupiterActivePolicyId(db);
   const manifestBinding = deploymentId ? manifestBindingForJupiterPolicy(deploymentId) : null;
+  const source =
+    row === undefined ? 'unset' : deploymentId ? 'runtime_config' : 'runtime_config_standby';
   return {
     policyId: deploymentId || '',
-    source: deploymentId ? 'runtime_config' : 'unset',
+    source,
     manifestBinding,
   };
 }
@@ -107,12 +119,14 @@ export function getActiveDeploymentSnapshot(db) {
  * @param {import('node:sqlite').DatabaseSync} db
  */
 export async function loadActivePolicyContext(db) {
-  let deploymentId = String(getMeta(db, JUPITER_ACTIVE_POLICY_KEY) || '').trim();
+  const deploymentId = getJupiterActivePolicyId(db);
   if (!deploymentId) {
-    deploymentId = String(process.env.SEAN_JUPITER_POLICY || '').trim();
-  }
-  if (!deploymentId) {
-    return { ok: false, error: 'no_active_deployment', detail: 'Set analog_meta.jupiter_active_policy or SEAN_JUPITER_POLICY to a manifest deployment id.' };
+    return {
+      ok: false,
+      error: 'no_active_deployment',
+      detail:
+        'Standby: no active deployment. Set via POST /api/v1/jupiter/active-policy with a manifest deployment id, or clear with {"policy":""}.',
+    };
   }
   if (!isDeploymentIdInManifest(deploymentId)) {
     return {
