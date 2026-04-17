@@ -1,6 +1,6 @@
 import assert from 'node:assert';
 import { test } from 'node:test';
-import { generateSignalFromOhlcV3, MIN_BARS, resolveEntrySide } from '../jupiter_3_sean_policy.mjs';
+import { generateSignalFromOhlcV3, MIN_BARS, resolveEntrySide } from '../legacy_policies/jupiter_3_sean_policy.mjs';
 import { initialSlTp, computePnlUsd, evaluateExitOhlc } from '../sean_lifecycle.mjs';
 
 test('initialSlTp long places SL below and TP above', () => {

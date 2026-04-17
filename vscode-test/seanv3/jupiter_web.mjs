@@ -19,11 +19,10 @@ import { assertCanOpenPosition, getPaperEquityUsd } from './funding_guards.mjs';
 import { setMeta, upsertPaperWallet } from './paper_analog.mjs';
 import { PublicKey } from '@solana/web3.js';
 import {
-  ALLOWED_POLICY_IDS,
+  loadAllowedDeploymentIdsFromManifest,
   JUPITER_ACTIVE_POLICY_KEY,
-  isPolicyIdInAllowedSwitchSet,
-  normalizePolicyId,
-  resolveJupiterPolicy,
+  isDeploymentIdInManifest,
+  getActiveDeploymentSnapshot,
 } from './jupiter_policy_runtime.mjs';
 import {
   bootstrapJupiterAuthUserIfNeeded,
@@ -37,7 +36,7 @@ import { tradeSurfacePolicyKitchenHandshake } from './jupiter_kitchen_checkin.mj
 /** GET /api/v1/jupiter/policy — observability only. */
 const JUPITER_POLICY_OBSERVABILITY_CONTRACT = 'jupiter_policy_observability_v1';
 /**
- * Sole write: select one of the shipped policy modules (ALLOWED_POLICY_IDS).
+ * Sole write: select a deployment id from kitchen_policy_deployment_manifest_v1 (Jupiter entries).
  * Records analog_meta.jupiter_active_policy; engine applies on next cycle. Does not mutate trades/bars.
  */
 const JUPITER_ACTIVE_POLICY_SWITCH_CONTRACT = 'jupiter_active_policy_switch_v1';
@@ -905,13 +904,12 @@ function buildParityRows(seanDbPath, ledgerPath, maxRows) {
   let alignNote = '';
   try {
     const dba = new DatabaseSync(seanDbPath, { readOnly: true });
-    const alignTarget =
-      normalizePolicyId(process.env.JUPITER_PARITY_ALIGNED_POLICY || 'jup_v4') || 'jup_v4';
-    const active = resolveJupiterPolicy(dba).policyId;
+    const alignTarget = String(process.env.JUPITER_PARITY_ALIGNED_POLICY || '').trim();
+    const active = getActiveDeploymentSnapshot(dba).policyId;
     policyAligned = active === alignTarget;
     alignNote = policyAligned
       ? `aligned policy ${active} (compare vs BlackBox baseline)`
-      : `Jupiter policy ${active} ≠ compare target ${alignTarget} — parity column blank (set JUPITER_PARITY_ALIGNED_POLICY on jupiter-web to match)`;
+      : `Jupiter policy ${active} ≠ compare target ${alignTarget || '(unset)'} — parity column blank (set JUPITER_PARITY_ALIGNED_POLICY on jupiter-web to match)`;
     dba.close();
   } catch {
     policyAligned = true;
@@ -1357,12 +1355,12 @@ async function buildFullView() {
     error: null,
   };
 
-  let jupiterRuntime = { active_policy: 'jup_v4', source: 'default' };
+  let jupiterRuntime = { active_policy: '', source: 'unset' };
   let db;
   try {
     db = new DatabaseSync(seanPath, { readOnly: true });
     Object.assign(base, buildSummary(db));
-    const rp = resolveJupiterPolicy(db);
+    const rp = getActiveDeploymentSnapshot(db);
     jupiterRuntime = { active_policy: rp.policyId, source: rp.source };
   } catch (e) {
     base.error = e instanceof Error ? e.message : String(e);
@@ -1579,7 +1577,8 @@ function jupiterPolicyOptionLabel(id) {
 }
 
 function htmlJupiterPolicySelectOptions(selectedAp) {
-  return [...ALLOWED_POLICY_IDS]
+  const ids = loadAllowedDeploymentIdsFromManifest();
+  return ids
     .map(
       (id) =>
         `<option value="${esc(id)}"${selectedAp === id ? ' selected' : ''}>${esc(jupiterPolicyOptionLabel(id))}</option>`
@@ -1597,12 +1596,13 @@ function htmlPage(v) {
   const tm = v.trading_mode || {};
   const actual = tm.actual_banner;
   const jr = tm.jupiter_runtime || {};
-  const ap = jr.active_policy || 'jup_v4';
+  const allowed = loadAllowedDeploymentIdsFromManifest();
+  const ap = jr.active_policy || allowed[0] || '';
   const src = jr.source || 'default';
   const postOk = Boolean(tm.post_token_configured);
   const policyOptionsHtml = htmlJupiterPolicySelectOptions(ap);
   const policyLabelsJson = JSON.stringify(
-    Object.fromEntries([...ALLOWED_POLICY_IDS].map((id) => [id, jupiterPolicyOptionLabel(id)]))
+    Object.fromEntries(allowed.map((id) => [id, jupiterPolicyOptionLabel(id)]))
   );
   const policySel = `
     <p><strong>Policy</strong> (runtime — next bar onward; does not close or force-open positions)</p>
@@ -2543,7 +2543,8 @@ function handleJupiterPolicyGet(res) {
   let db;
   try {
     db = new DatabaseSync(seanPath, { readOnly: true });
-    const p = resolveJupiterPolicy(db);
+    const p = getActiveDeploymentSnapshot(db);
+    const allowed = loadAllowedDeploymentIdsFromManifest();
     res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' });
     const mb = p.manifestBinding;
     res.end(
@@ -2551,17 +2552,17 @@ function handleJupiterPolicyGet(res) {
         contract: JUPITER_POLICY_OBSERVABILITY_CONTRACT,
         active_policy: p.policyId,
         source: p.source,
-        allowed_policies: [...ALLOWED_POLICY_IDS],
+        allowed_policies: allowed,
         submission_id: mb && mb.submission_id ? mb.submission_id : null,
         content_sha256: mb && mb.content_sha256 ? mb.content_sha256 : null,
         artifact_binding: mb ? 'manifest_v1' : 'legacy_unbound',
         api: {
           sole_write: 'POST /api/v1/jupiter/active-policy',
           sole_write_alias: 'POST /api/v1/jupiter/set-policy',
-          body: { policy: 'jup_v4 | jup_v3 | jup_mc_test | jup_mc2 | jup_pipeline_proof_v1 | jup_kitchen_mechanical_v1' },
+          body: { policy: 'deployed_runtime_policy_id from kitchen_policy_deployment_manifest_v1 (Jupiter)' },
           auth: 'Authorization: Bearer JUPITER_OPERATOR_TOKEN',
           effect:
-            'Writes analog_meta.jupiter_active_policy only; engine reads it each cycle. Does not mutate trades, bars, or lifecycle state.',
+            'Writes analog_meta.jupiter_active_policy only; engine loads evaluator.mjs from submission artifacts each cycle. Does not mutate trades, bars, or lifecycle state.',
         },
       })
     );
@@ -2621,7 +2622,7 @@ async function handleJupiterActivePolicyPost(req, res) {
         message:
           'Only {"policy":"<id>"} is accepted — no extra fields, scripts, or package paths. Approved ids only.',
         allowed_keys: ['policy'],
-        allowed_policies: [...ALLOWED_POLICY_IDS],
+        allowed_policies: loadAllowedDeploymentIdsFromManifest(),
       })
     );
     return;
@@ -2632,20 +2633,20 @@ async function handleJupiterActivePolicyPost(req, res) {
       JSON.stringify({
         error: 'invalid_policy_type',
         message: 'policy must be a string (approved identifier)',
-        allowed_policies: [...ALLOWED_POLICY_IDS],
+        allowed_policies: loadAllowedDeploymentIdsFromManifest(),
       })
     );
     return;
   }
-  const nid = normalizePolicyId(body.policy);
-  if (!nid || !isPolicyIdInAllowedSwitchSet(body.policy)) {
+  const nid = String(body.policy).trim();
+  if (!nid || !isDeploymentIdInManifest(nid)) {
     res.writeHead(400, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' });
     res.end(
       JSON.stringify({
         error: 'policy_not_in_approved_set',
         contract: JUPITER_ACTIVE_POLICY_SWITCH_CONTRACT,
-        message: 'Unknown or unapproved policy identifier — maps only to shipped SeanV3 modules.',
-        allowed_policies: [...ALLOWED_POLICY_IDS],
+        message: 'Unknown deployment id — must exist in kitchen_policy_deployment_manifest_v1 for Jupiter.',
+        allowed_policies: loadAllowedDeploymentIdsFromManifest(),
       })
     );
     return;
@@ -2653,9 +2654,9 @@ async function handleJupiterActivePolicyPost(req, res) {
   const seanPath = dbPath();
   const dbw = new DatabaseSync(seanPath);
   try {
-    const before = resolveJupiterPolicy(dbw).policyId;
+    const before = getActiveDeploymentSnapshot(dbw).policyId;
     setMeta(dbw, JUPITER_ACTIVE_POLICY_KEY, nid);
-    const after = resolveJupiterPolicy(dbw).policyId;
+    const after = getActiveDeploymentSnapshot(dbw).policyId;
     console.error(`[jupiter] set active Jupiter policy: ${before} → ${after}`);
     const strictKitchenAckRequired = ['1', 'true', 'yes'].includes(
       String(process.env.JUPITER_REQUIRE_KITCHEN_ACK || '')
@@ -2701,7 +2702,7 @@ async function handleJupiterActivePolicyPost(req, res) {
     }
     if (hs.strictBlocked) {
       setMeta(dbw, JUPITER_ACTIVE_POLICY_KEY, before);
-      const restored = resolveJupiterPolicy(dbw).policyId;
+      const restored = getActiveDeploymentSnapshot(dbw).policyId;
       if (restored !== before) {
         res.writeHead(500, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' });
         res.end(

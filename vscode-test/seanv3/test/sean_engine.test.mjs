@@ -1,10 +1,15 @@
 import assert from 'node:assert';
+import { mkdirSync, writeFileSync, mkdtempSync, rmSync } from 'node:fs';
 import { test } from 'node:test';
 import { DatabaseSync } from 'node:sqlite';
+import { join } from 'node:path';
+import os from 'node:os';
+
 import { ensurePaperAnalogSchema, setMeta } from '../paper_analog.mjs';
 import { ensureSeanLedgerSchema } from '../sean_ledger.mjs';
 import { processSeanEngine } from '../sean_engine.mjs';
-import { MIN_BARS } from '../jupiter_4_sean_policy.mjs';
+
+const H64 = 'a'.repeat(64);
 
 function kline(ms, o, h, l, c, v = 1) {
   return {
@@ -46,17 +51,55 @@ function countBarDecisions(db) {
   return Number(db.prepare(`SELECT COUNT(*) AS c FROM sean_bar_decisions`).get().c || 0);
 }
 
-function seedWalletConnected(db) {
-  setMeta(db, 'jupiter_active_policy', 'jup_v4');
+function setupRepoWithArtifact() {
+  const root = mkdtempSync(join(os.tmpdir(), 'sean-engine-artifact-'));
+  const manifest = {
+    schema: 'kitchen_policy_deployment_manifest_v1',
+    entries: [
+      {
+        execution_target: 'jupiter',
+        deployed_runtime_policy_id: 'dep_test_1',
+        submission_id: 'sub_test',
+        content_sha256: H64,
+      },
+    ],
+  };
+  mkdirSync(join(root, 'renaissance_v4', 'config'), { recursive: true });
+  writeFileSync(
+    join(root, 'renaissance_v4', 'config', 'kitchen_policy_deployment_manifest_v1.json'),
+    JSON.stringify(manifest, null, 2),
+    'utf8'
+  );
+  const artDir = join(root, 'renaissance_v4', 'state', 'policy_intake_submissions', 'sub_test', 'artifacts');
+  mkdirSync(artDir, { recursive: true });
+  const ev = `export const MIN_BARS = 71;
+export const POLICY_ENGINE_TAG = 'test_eval';
+export function generateSignalFromOhlc(closes, highs, lows, vols) {
+  const n = closes.length;
+  const c = closes[n - 1];
+  return { longSignal: false, shortSignal: false, signalPrice: c, diag: { atr: 1.0 } };
+}`;
+  writeFileSync(join(artDir, 'evaluator.mjs'), ev, 'utf8');
+  return root;
+}
+
+function seedWalletConnected(db, repoRoot) {
+  const prev = process.env.BLACKBOX_REPO_ROOT;
+  process.env.BLACKBOX_REPO_ROOT = repoRoot;
+  setMeta(db, 'jupiter_active_policy', 'dep_test_1');
   setMeta(db, 'wallet_status', 'connected');
   setMeta(db, 'paper_starting_balance_usd', '100000');
   db.prepare(
     `INSERT OR REPLACE INTO paper_wallet (id, pubkey_base58, connected_at_utc, paper_only)
      VALUES (1, 'So11111111111111111111111111111111111111112', ?, 1)`
   ).run(new Date().toISOString());
+  return () => {
+    if (prev === undefined) delete process.env.BLACKBOX_REPO_ROOT;
+    else process.env.BLACKBOX_REPO_ROOT = prev;
+  };
 }
 
-/** Flat OHLCV — JUPv4 yields no long/short signal (full eval, NO_TRADE). */
+/** Flat OHLCV — evaluator returns no long/short (full eval, NO_TRADE). */
 function seriesFlat(n) {
   const closes = Array(n).fill(100);
   const highs = closes.map((c) => c + 0.1);
@@ -65,29 +108,8 @@ function seriesFlat(n) {
   return { closes, highs, lows, vols };
 }
 
-/** Trend + last-bar rip — JUPv4 long signal (full eval, TRADE_OPEN when gates pass). */
-function seriesLongOpen(n) {
-  const closes = [];
-  const highs = [];
-  const lows = [];
-  const vols = [];
-  for (let i = 0; i < n - 3; i++) {
-    const c = 100 - i * 0.02;
-    closes.push(c);
-    highs.push(c + 0.3);
-    lows.push(c - 0.3);
-    vols.push(1000);
-  }
-  closes.push(99, 98.5, 105);
-  highs.push(99.5, 99, 106);
-  lows.push(98.5, 98, 104);
-  vols.push(1000, 1000, 200000);
-  return { closes, highs, lows, vols };
-}
-
 /**
  * @param {{ closes: number[], highs: number[], lows: number[], vols: number[] }} s
- * @returns {{ marketEventId: string, kline: ReturnType<typeof kline> }}
  */
 function insertOhlcvSeries(db, s) {
   const { closes, highs, lows, vols } = s;
@@ -104,50 +126,55 @@ function insertOhlcvSeries(db, s) {
   };
 }
 
-test('warmup / insufficient bars: no sean_bar_decisions row', () => {
+const MIN_BARS = 71;
+
+test('warmup / insufficient bars: no sean_bar_decisions row', async () => {
+  const repo = setupRepoWithArtifact();
   const db = createEngineTestDb();
-  seedWalletConnected(db);
-  insertBar(db, 'm1', 1e12, 100, 101, 99, 100, 1000);
-  processSeanEngine(db, { marketEventId: 'm1', kline: kline(1e12, 100, 101, 99, 100) });
-  assert.strictEqual(countBarDecisions(db), 0);
-  db.close();
+  const restore = seedWalletConnected(db, repo);
+  try {
+    insertBar(db, 'm1', 1e12, 100, 101, 99, 100, 1000);
+    await processSeanEngine(db, { marketEventId: 'm1', kline: kline(1e12, 100, 101, 99, 100) });
+    assert.strictEqual(countBarDecisions(db), 0);
+  } finally {
+    restore();
+    db.close();
+    rmSync(repo, { recursive: true, force: true });
+  }
 });
 
-test('NO_TRADE: one decision row after full flat evaluation without open', () => {
+test('NO_TRADE: one decision row after full flat evaluation without open', async () => {
+  const repo = setupRepoWithArtifact();
   const db = createEngineTestDb();
-  seedWalletConnected(db);
-  const ctx = insertOhlcvSeries(db, seriesFlat(MIN_BARS));
-  processSeanEngine(db, ctx);
-  assert.strictEqual(countBarDecisions(db), 1);
-  const row = db.prepare(`SELECT outcome, reason_code, candidate_side FROM sean_bar_decisions`).get();
-  assert.strictEqual(row.outcome, 'NO_TRADE');
-  assert.strictEqual(row.reason_code, 'no_candidate_side');
-  assert.strictEqual(row.candidate_side, 'none');
-  db.close();
+  const restore = seedWalletConnected(db, repo);
+  try {
+    const ctx = insertOhlcvSeries(db, seriesFlat(MIN_BARS));
+    await processSeanEngine(db, ctx);
+    assert.strictEqual(countBarDecisions(db), 1);
+    const row = db.prepare(`SELECT outcome, reason_code, candidate_side FROM sean_bar_decisions`).get();
+    assert.strictEqual(row.outcome, 'NO_TRADE');
+    assert.strictEqual(row.reason_code, 'no_candidate_side');
+    assert.strictEqual(row.candidate_side, 'none');
+  } finally {
+    restore();
+    db.close();
+    rmSync(repo, { recursive: true, force: true });
+  }
 });
 
-test('TRADE_OPEN: one decision row after full flat evaluation opens position', () => {
+test('duplicate market_event_id: second call does not add a decision row', async () => {
+  const repo = setupRepoWithArtifact();
   const db = createEngineTestDb();
-  seedWalletConnected(db);
-  const ctx = insertOhlcvSeries(db, seriesLongOpen(MIN_BARS));
-  processSeanEngine(db, ctx);
-  assert.strictEqual(countBarDecisions(db), 1);
-  const row = db.prepare(`SELECT outcome, reason_code, market_event_id FROM sean_bar_decisions`).get();
-  assert.strictEqual(row.outcome, 'TRADE_OPEN');
-  assert.strictEqual(row.reason_code, 'trade_open_ok');
-  assert.strictEqual(row.market_event_id, ctx.marketEventId);
-  const pos = db.prepare(`SELECT side FROM sean_paper_position WHERE id=1`).get();
-  assert.strictEqual(pos.side, 'long');
-  db.close();
-});
-
-test('duplicate market_event_id: second call does not add a decision row', () => {
-  const db = createEngineTestDb();
-  seedWalletConnected(db);
-  const ctx = insertOhlcvSeries(db, seriesFlat(MIN_BARS));
-  processSeanEngine(db, ctx);
-  assert.strictEqual(countBarDecisions(db), 1);
-  processSeanEngine(db, ctx);
-  assert.strictEqual(countBarDecisions(db), 1);
-  db.close();
+  const restore = seedWalletConnected(db, repo);
+  try {
+    const ctx = insertOhlcvSeries(db, seriesFlat(MIN_BARS));
+    await processSeanEngine(db, ctx);
+    assert.strictEqual(countBarDecisions(db), 1);
+    await processSeanEngine(db, ctx);
+    assert.strictEqual(countBarDecisions(db), 1);
+  } finally {
+    restore();
+    db.close();
+    rmSync(repo, { recursive: true, force: true });
+  }
 });

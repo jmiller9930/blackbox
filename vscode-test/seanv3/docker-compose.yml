@@ -72,6 +72,8 @@ services:
       - |
           set -e
           cp /repo/vscode-test/seanv3/*.mjs /app/
+          mkdir -p /app/engine
+          cp /repo/vscode-test/seanv3/engine/*.mjs /app/engine/
           cp -r /repo/vscode-test/seanv3/static /app/
           exec node --experimental-sqlite /app/jupiter_web.mjs
     env_file:

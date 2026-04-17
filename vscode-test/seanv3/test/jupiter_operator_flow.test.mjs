@@ -15,7 +15,7 @@
 
 import assert from 'node:assert';
 import { once } from 'node:events';
-import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import http from 'node:http';
 import net from 'node:net';
 import os from 'node:os';
@@ -32,6 +32,38 @@ const PROJECT_DIR = resolve(__dirname, '..');
 const REPO_ROOT = resolve(PROJECT_DIR, '..', '..');
 const OPERATOR_TOKEN = 'operator-secret';
 const KITCHEN_TOKEN = 'kitchen-secret';
+
+/** Minimal manifest so POST policy ids match deployment manifest (engine extraction). */
+function createFlowTestRepo() {
+  const dir = mkdtempSync(join(os.tmpdir(), 'jflow-repo-'));
+  mkdirSync(join(dir, 'renaissance_v4', 'config'), { recursive: true });
+  writeFileSync(
+    join(dir, 'renaissance_v4', 'config', 'kitchen_policy_deployment_manifest_v1.json'),
+    JSON.stringify(
+      {
+        schema: 'kitchen_policy_deployment_manifest_v1',
+        entries: [
+          {
+            execution_target: 'jupiter',
+            deployed_runtime_policy_id: 'jup_v4',
+            submission_id: 'flow_sub_v4',
+            content_sha256: 'a'.repeat(64),
+          },
+          {
+            execution_target: 'jupiter',
+            deployed_runtime_policy_id: 'jup_kitchen_mechanical_v1',
+            submission_id: 'flow_sub_km',
+            content_sha256: 'b'.repeat(64),
+          },
+        ],
+      },
+      null,
+      2
+    ),
+    'utf8'
+  );
+  return dir;
+}
 
 function createTempRuntimeDb() {
   const tempDir = mkdtempSync(join(os.tmpdir(), 'jupiter-operator-flow-'));
@@ -84,14 +116,14 @@ function startKitchenAckServer(handler) {
   });
 }
 
-async function startJupiterWeb({ sqlitePath, kitchenBaseUrl, strictAck, timeoutMs }) {
+async function startJupiterWeb({ sqlitePath, kitchenBaseUrl, strictAck, timeoutMs, blackboxRepoRoot }) {
   const port = await getFreePort();
   const child = spawn(process.execPath, ['--experimental-sqlite', 'jupiter_web.mjs'], {
     cwd: PROJECT_DIR,
     env: {
       ...process.env,
       SQLITE_PATH: sqlitePath,
-      BLACKBOX_REPO_ROOT: REPO_ROOT,
+      BLACKBOX_REPO_ROOT: blackboxRepoRoot || REPO_ROOT,
       JUPITER_AUTH_MODE: 'none',
       JUPITER_WEB_BIND: '127.0.0.1',
       JUPITER_WEB_PORT: String(port),
@@ -133,6 +165,7 @@ async function stopChild(child) {
 }
 
 test('operator can switch policy when Kitchen acknowledges the runtime change', async (t) => {
+  const flowRepo = createFlowTestRepo();
   const runtime = createTempRuntimeDb();
   const kitchen = await startKitchenAckServer(async (req, res) => {
     if (req.method !== 'POST' || req.url !== '/api/v1/renaissance/runtime-policy-checkin') {
@@ -155,12 +188,14 @@ test('operator can switch policy when Kitchen acknowledges the runtime change', 
     kitchenBaseUrl: kitchen.baseUrl,
     strictAck: true,
     timeoutMs: 500,
+    blackboxRepoRoot: flowRepo,
   });
 
   t.after(async () => {
     kitchen.server.close();
     await stopChild(app.child);
     rmSync(runtime.tempDir, { recursive: true, force: true });
+    rmSync(flowRepo, { recursive: true, force: true });
   });
 
   const post = await fetch(`${app.baseUrl}/api/v1/jupiter/active-policy`, {
@@ -183,6 +218,7 @@ test('operator can switch policy when Kitchen acknowledges the runtime change', 
 });
 
 test('operator strict mode rolls local runtime back if Kitchen hangs after headers', async (t) => {
+  const flowRepo = createFlowTestRepo();
   const runtime = createTempRuntimeDb();
   const kitchen = await startKitchenAckServer(async (req, res) => {
     if (req.method !== 'POST' || req.url !== '/api/v1/renaissance/runtime-policy-checkin') {
@@ -200,12 +236,14 @@ test('operator strict mode rolls local runtime back if Kitchen hangs after heade
     kitchenBaseUrl: kitchen.baseUrl,
     strictAck: true,
     timeoutMs: 200,
+    blackboxRepoRoot: flowRepo,
   });
 
   t.after(async () => {
     kitchen.server.close();
     await stopChild(app.child);
     rmSync(runtime.tempDir, { recursive: true, force: true });
+    rmSync(flowRepo, { recursive: true, force: true });
   });
 
   const post = await fetch(`${app.baseUrl}/api/v1/jupiter/active-policy`, {

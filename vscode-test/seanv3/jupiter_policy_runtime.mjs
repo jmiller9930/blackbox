@@ -1,64 +1,29 @@
 /**
- * Runtime Jupiter policy resolution for SeanV3 — DV-ARCH-JUPITER-POLICY-SWITCH-037.
- * Order: analog_meta.jupiter_active_policy → SEAN_JUPITER_POLICY → default jup_v4.
- * Evaluated fresh each engine cycle (no module-level policy cache).
+ * Jupiter deployment identity + artifact loader — no bundled policy modules.
  *
- * Path A: ``renaissance_v4/config/kitchen_policy_deployment_manifest_v1.json`` (BLACKBOX_REPO_ROOT)
- * binds deployed_runtime_policy_id → submission_id + content_sha256 for GET /api/v1/jupiter/policy.
+ * Active key: analog_meta.jupiter_active_policy = deployment id (matches
+ * kitchen_policy_deployment_manifest_v1.entries[].deployed_runtime_policy_id for Jupiter).
+ *
+ * Execution: engine/artifact_policy_loader.mjs loads evaluator.mjs from submission artifacts.
  */
 import fs from 'node:fs';
 import path from 'node:path';
 import { getMeta } from './paper_analog.mjs';
-import {
-  generateSignalFromOhlcV3,
-  resolveEntrySide as resolveEntrySideV3,
-  MIN_BARS as MIN_BARS_V3,
-  ENGINE_ID as ENGINE_ID_V3,
-} from './jupiter_3_sean_policy.mjs';
-import {
-  generateSignalFromOhlcV4,
-  resolveEntrySide as resolveEntrySideV4,
-  MIN_BARS as MIN_BARS_V4,
-  ENGINE_ID as ENGINE_ID_V4,
-} from './jupiter_4_sean_policy.mjs';
-import {
-  generateSignalFromOhlcMcTest,
-  resolveEntrySide as resolveEntrySideMc,
-  MIN_BARS as MIN_BARS_MC,
-  ENGINE_ID as ENGINE_ID_MC,
-} from './jupiter_mc_test_policy.mjs';
-import {
-  generateSignalFromOhlcMc2,
-  resolveEntrySide as resolveEntrySideMc2,
-  MIN_BARS as MIN_BARS_MC2,
-  ENGINE_ID as ENGINE_ID_MC2,
-} from './jupiter_mc2_policy.mjs';
-import {
-  generateSignalFromOhlcPipelineProof,
-  resolveEntrySide as resolveEntrySidePipelineProof,
-  MIN_BARS as MIN_BARS_PIPELINE_PROOF,
-  ENGINE_ID as ENGINE_ID_PIPELINE_PROOF,
-} from './jupiter_pipeline_proof_policy.mjs';
-import {
-  generateSignalFromOhlcKitchenMechanical,
-  resolveEntrySide as resolveEntrySideKitchenMechanical,
-  MIN_BARS as MIN_BARS_KITCHEN_MECHANICAL,
-  ENGINE_ID as ENGINE_ID_KITCHEN_MECHANICAL,
-} from './jupiter_kitchen_mechanical_policy.mjs';
-
-import { ALLOWED_POLICY_IDS } from './jupiter_registry_allowlist.mjs';
-
-export { ALLOWED_POLICY_IDS };
+import { loadEvaluatorFromManifestBinding } from './engine/artifact_policy_loader.mjs';
 
 export const JUPITER_ACTIVE_POLICY_KEY = 'jupiter_active_policy';
 
 const MANIFEST_SCHEMA = 'kitchen_policy_deployment_manifest_v1';
 
+function repoRoot() {
+  return (process.env.BLACKBOX_REPO_ROOT || '').trim();
+}
+
 /**
  * @returns {{ schema: string, entries: Array<Record<string, unknown>> }}
  */
-function loadKitchenDeploymentManifest() {
-  const root = (process.env.BLACKBOX_REPO_ROOT || '').trim();
+export function loadKitchenDeploymentManifest() {
+  const root = repoRoot();
   if (!root) {
     return { schema: MANIFEST_SCHEMA, entries: [] };
   }
@@ -69,17 +34,33 @@ function loadKitchenDeploymentManifest() {
       return raw;
     }
   } catch {
-    /* missing or invalid */
+    /* missing */
   }
   return { schema: MANIFEST_SCHEMA, entries: [] };
 }
 
 /**
- * @param {string} policyId
+ * Deployment ids approved for Jupiter (manifest only — no registry fallback).
+ * @returns {string[]}
+ */
+export function loadAllowedDeploymentIdsFromManifest() {
+  const m = loadKitchenDeploymentManifest();
+  const out = [];
+  for (const e of m.entries || []) {
+    if (!e || typeof e !== 'object') continue;
+    if (String(e.execution_target || '').toLowerCase() !== 'jupiter') continue;
+    const id = String(e.deployed_runtime_policy_id || '').trim();
+    if (id && !out.includes(id)) out.push(id);
+  }
+  return out;
+}
+
+/**
+ * @param {string} deploymentId
  * @returns {{ submission_id: string, content_sha256: string } | null}
  */
-export function manifestBindingForJupiterPolicy(policyId) {
-  const pid = String(policyId || '').trim();
+export function manifestBindingForJupiterPolicy(deploymentId) {
+  const pid = String(deploymentId || '').trim();
   if (!pid) return null;
   const m = loadKitchenDeploymentManifest();
   const e = m.entries.find(
@@ -96,149 +77,73 @@ export function manifestBindingForJupiterPolicy(policyId) {
 }
 
 /**
- * @param {string | null | undefined} s
- * @returns {'jup_v4' | 'jup_v3' | 'jup_mc_test' | 'jup_mc2' | 'jup_pipeline_proof_v1' | 'jup_kitchen_mechanical_v1' | null}
+ * @param {string} raw
  */
-export function normalizePolicyId(s) {
-  const t = String(s ?? '')
-    .trim()
-    .toLowerCase();
-  if (!t) return null;
-  if (t === 'jup_v4' || t === 'jupiter_4' || t === 'v4') return 'jup_v4';
-  if (t === 'jup_v3' || t === 'jupiter_3' || t === 'v3') return 'jup_v3';
-  if (t === 'jup_mc_test' || t === 'jupiter_mc_test' || t === 'mc_test') return 'jup_mc_test';
-  if (t === 'jup_mc2' || t === 'jupiter_mc2' || t === 'mc2') return 'jup_mc2';
-  if (
-    t === 'jup_pipeline_proof_v1' ||
-    t === 'pipeline_proof' ||
-    t === 'pipeline_proof_v1' ||
-    t === 'jupiter_pipeline_proof'
-  ) {
-    return 'jup_pipeline_proof_v1';
-  }
-  if (
-    t === 'jup_kitchen_mechanical_v1' ||
-    t === 'kitchen_mechanical' ||
-    t === 'kitchen_mechanical_always_long'
-  ) {
-    return 'jup_kitchen_mechanical_v1';
-  }
-  return null;
+export function isDeploymentIdInManifest(raw) {
+  const id = String(raw || '').trim();
+  if (!id) return false;
+  return loadAllowedDeploymentIdsFromManifest().includes(id);
 }
 
 /**
- * True if `raw` normalizes to an id present in ``ALLOWED_POLICY_IDS`` (same gate as POST active-policy).
+ * Sync snapshot for observability (no dynamic import).
+ * @param {import('node:sqlite').DatabaseSync} db
  */
-export function isPolicyIdInAllowedSwitchSet(raw) {
-  const nid = normalizePolicyId(raw);
-  if (!nid) return false;
-  return ALLOWED_POLICY_IDS.includes(nid);
+export function getActiveDeploymentSnapshot(db) {
+  let deploymentId = String(getMeta(db, JUPITER_ACTIVE_POLICY_KEY) || '').trim();
+  if (!deploymentId) {
+    deploymentId = String(process.env.SEAN_JUPITER_POLICY || '').trim();
+  }
+  const manifestBinding = deploymentId ? manifestBindingForJupiterPolicy(deploymentId) : null;
+  return {
+    policyId: deploymentId || '',
+    source: deploymentId ? 'runtime_config' : 'unset',
+    manifestBinding,
+  };
 }
 
 /**
  * @param {import('node:sqlite').DatabaseSync} db
- * @returns {{
- *   policyId: 'jup_v4' | 'jup_v3' | 'jup_mc_test' | 'jup_mc2' | 'jup_pipeline_proof_v1' | 'jup_kitchen_mechanical_v1',
- *   source: 'runtime_config' | 'environment' | 'default',
- *   minBars: number,
- *   generateEntrySignal: Function,
- *   resolveEntrySide: (a: boolean, b: boolean) => string | null,
- *   engineId: string,
- *   policyEngineTag: string,
- * }}
  */
-export function resolveJupiterPolicy(db) {
-  let source = /** @type {'runtime_config' | 'environment' | 'default'} */ ('default');
-  let id = normalizePolicyId(getMeta(db, JUPITER_ACTIVE_POLICY_KEY));
-
-  if (id) {
-    source = 'runtime_config';
-  } else {
-    const envId = normalizePolicyId(process.env.SEAN_JUPITER_POLICY);
-    if (envId) {
-      id = envId;
-      source = 'environment';
-    } else {
-      id = 'jup_v4';
-      source = 'default';
-    }
+export async function loadActivePolicyContext(db) {
+  let deploymentId = String(getMeta(db, JUPITER_ACTIVE_POLICY_KEY) || '').trim();
+  if (!deploymentId) {
+    deploymentId = String(process.env.SEAN_JUPITER_POLICY || '').trim();
   }
-
-  if (!ALLOWED_POLICY_IDS.includes(id)) {
-    id = 'jup_v4';
-    source = 'default';
+  if (!deploymentId) {
+    return { ok: false, error: 'no_active_deployment', detail: 'Set analog_meta.jupiter_active_policy or SEAN_JUPITER_POLICY to a manifest deployment id.' };
   }
-
-  const manifestBinding = manifestBindingForJupiterPolicy(id);
-
-  if (id === 'jup_v3') {
+  if (!isDeploymentIdInManifest(deploymentId)) {
     return {
-      policyId: 'jup_v3',
-      source,
-      minBars: MIN_BARS_V3,
-      generateEntrySignal: generateSignalFromOhlcV3,
-      resolveEntrySide: resolveEntrySideV3,
-      engineId: 'sean_jupiter3_engine_v1',
-      policyEngineTag: ENGINE_ID_V3,
-      manifestBinding,
+      ok: false,
+      error: 'deployment_not_in_manifest',
+      detail: `Deployment id ${JSON.stringify(deploymentId)} is not listed in kitchen_policy_deployment_manifest_v1 for Jupiter.`,
+      deploymentId,
     };
   }
-  if (id === 'jup_mc_test') {
-    return {
-      policyId: 'jup_mc_test',
-      source,
-      minBars: MIN_BARS_MC,
-      generateEntrySignal: generateSignalFromOhlcMcTest,
-      resolveEntrySide: resolveEntrySideMc,
-      engineId: 'sean_jupiter_mc_test_engine_v1',
-      policyEngineTag: ENGINE_ID_MC,
-      manifestBinding,
-    };
+  const manifestBinding = manifestBindingForJupiterPolicy(deploymentId);
+  if (!manifestBinding?.submission_id) {
+    return { ok: false, error: 'manifest_binding_incomplete', deploymentId };
   }
-  if (id === 'jup_mc2') {
-    return {
-      policyId: 'jup_mc2',
-      source,
-      minBars: MIN_BARS_MC2,
-      generateEntrySignal: generateSignalFromOhlcMc2,
-      resolveEntrySide: resolveEntrySideMc2,
-      engineId: 'sean_jupiter_mc2_engine_v1',
-      policyEngineTag: ENGINE_ID_MC2,
-      manifestBinding,
-    };
-  }
-  if (id === 'jup_pipeline_proof_v1') {
-    return {
-      policyId: 'jup_pipeline_proof_v1',
-      source,
-      minBars: MIN_BARS_PIPELINE_PROOF,
-      generateEntrySignal: generateSignalFromOhlcPipelineProof,
-      resolveEntrySide: resolveEntrySidePipelineProof,
-      engineId: 'sean_jupiter_pipeline_proof_engine_v1',
-      policyEngineTag: ENGINE_ID_PIPELINE_PROOF,
-      manifestBinding,
-    };
-  }
-  if (id === 'jup_kitchen_mechanical_v1') {
-    return {
-      policyId: 'jup_kitchen_mechanical_v1',
-      source,
-      minBars: MIN_BARS_KITCHEN_MECHANICAL,
-      generateEntrySignal: generateSignalFromOhlcKitchenMechanical,
-      resolveEntrySide: resolveEntrySideKitchenMechanical,
-      engineId: 'sean_jupiter_kitchen_mechanical_engine_v1',
-      policyEngineTag: ENGINE_ID_KITCHEN_MECHANICAL,
-      manifestBinding,
-    };
+  const loaded = await loadEvaluatorFromManifestBinding(manifestBinding, repoRoot());
+  if (!loaded.ok) {
+    return { ...loaded, deploymentId, manifestBinding };
   }
   return {
-    policyId: 'jup_v4',
-    source,
-    minBars: MIN_BARS_V4,
-    generateEntrySignal: generateSignalFromOhlcV4,
-    resolveEntrySide: resolveEntrySideV4,
-    engineId: 'sean_jupiter4_engine_v1',
-    policyEngineTag: ENGINE_ID_V4,
+    ok: true,
+    policyId: deploymentId,
+    source: 'artifact',
+    deploymentId,
     manifestBinding,
+    minBars: loaded.minBars,
+    generateEntrySignal: loaded.generateEntrySignal,
+    resolveEntrySide: loaded.resolveEntrySide,
+    engineId: 'sean_artifact_engine_v1',
+    policyEngineTag: loaded.policyEngineTag,
   };
+}
+
+/** @deprecated Use isDeploymentIdInManifest */
+export function isPolicyIdInAllowedSwitchSet(raw) {
+  return isDeploymentIdInManifest(raw);
 }

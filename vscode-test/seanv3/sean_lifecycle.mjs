@@ -2,7 +2,7 @@
  * Paper lifecycle — SL/TP, breakeven, monotonic trailing (port of jupiter_2_baseline_lifecycle exit mechanics).
  */
 
-import { calculateAtr } from './jupiter_3_sean_policy.mjs';
+import { calculateAtr } from './engine/atr_math.mjs';
 
 export const SL_ATR_MULT = 1.6;
 export const TP_ATR_MULT = 4.0;

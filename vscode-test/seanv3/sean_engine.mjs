@@ -13,7 +13,7 @@ import {
   insertBarDecision,
 } from './sean_ledger.mjs';
 import { indicatorValuesFromDiag, gateResultsJson, REASON } from './decision_ledger.mjs';
-import { resolveJupiterPolicy } from './jupiter_policy_runtime.mjs';
+import { loadActivePolicyContext } from './jupiter_policy_runtime.mjs';
 import {
   initialSlTp,
   computePnlUsd,
@@ -92,8 +92,12 @@ function writeFlatBarDecision(db, policy, marketEventId, payload) {
  * @param {import('node:sqlite').DatabaseSync} db
  * @param {{ marketEventId: string, kline: { openTime?: number, open?: string, high?: string, low?: string, close?: string, volume?: string } }} ctx
  */
-export function processSeanEngine(db, { marketEventId, kline }) {
-  const policy = resolveJupiterPolicy(db);
+export async function processSeanEngine(db, { marketEventId, kline }) {
+  const policy = await loadActivePolicyContext(db);
+  if (!policy.ok) {
+    console.error(`[seanv3] policy: ${policy.error} ${policy.detail || ''}`);
+    return;
+  }
   const minBars = policy.minBars;
 
   const lastMid = getMeta(db, 'sean_engine_last_bar_mid');
@@ -218,7 +222,7 @@ export function processSeanEngine(db, { marketEventId, kline }) {
     return;
   }
 
-  const sig = policy.generateEntrySignal(closes, highs, lows, vols);
+  const sig = await Promise.resolve(policy.generateEntrySignal(closes, highs, lows, vols));
   const diag = sig.diag && typeof sig.diag === 'object' ? sig.diag : {};
   const featuresJson = JSON.stringify(diag);
   const indJson = indicatorValuesFromDiag(sig);

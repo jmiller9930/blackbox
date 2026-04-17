@@ -308,7 +308,7 @@ async function fetchOnce() {
       processPaperAnalog(parityDb, { marketEventId, kline });
       if (seanEngineSliceOn()) {
         try {
-          processSeanEngine(parityDb, { marketEventId, kline });
+          await processSeanEngine(parityDb, { marketEventId, kline });
         } catch (engErr) {
           console.error(`[seanv3] sean_engine failed: ${engErr.message}`);
         }
