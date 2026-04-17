@@ -1,5 +1,7 @@
 /**
- * SeanV3 paper engine: runtime Jupiter policy (DB → env → default) + ATR lifecycle exits.
+ * SeanV3 paper engine — execution layer only (bars, lifecycle, risk gates, ledger).
+ * Policy is loaded via `loadActivePolicyContext` → Kitchen artifact `evaluator.mjs`; do not import quarantined strategy modules (see demarcation doc).
+ * @see docs/architect/engine_policy_demarcation_v1.md
  * DV-ARCH-JUPITER-POLICY-SWITCH-037 — policy evaluated fresh each cycle; entries use active policy;
  * exits use entry-time engine ids from position metadata (lifecycle unchanged by policy switch).
  */

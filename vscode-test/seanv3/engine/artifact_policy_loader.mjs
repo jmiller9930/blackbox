@@ -2,6 +2,8 @@
  * Loader layer — DV-ARCH-ENGINE-EXTRACTION: resolves Kitchen deployment identity to an executable policy.
  * Engine never imports bundled strategy modules; it only receives functions returned here.
  *
+ * @see docs/architect/engine_policy_demarcation_v1.md
+ *
  * Artifact layout (Kitchen / CI):
  *   ${BLACKBOX_REPO_ROOT}/renaissance_v4/state/policy_intake_submissions/<submission_id>/artifacts/evaluator.mjs
  * Optional integrity:

@@ -5,6 +5,7 @@
  * kitchen_policy_deployment_manifest_v1.entries[].deployed_runtime_policy_id for Jupiter).
  *
  * Execution: engine/artifact_policy_loader.mjs loads evaluator.mjs from submission artifacts.
+ * @see docs/architect/engine_policy_demarcation_v1.md
  */
 import fs from 'node:fs';
 import path from 'node:path';

@@ -10,6 +10,8 @@
 
 **Related:** `renaissance_v4/logs/LOG-kitchen-intake-jupiter-runtime-mismatch-failure.md`, `renaissance_v4/logs/RESP-ARCH-policy-runtime-binding-engineering.md`, `renaissance_v4/QUANT_KITCHEN_COMPLETED_CHECKLIST.md`.
 
+**SeanV3 Node (current implementation):** The normative **engine vs policy** boundary, file map, and forbidden patterns are **`docs/architect/engine_policy_demarcation_v1.md`**. Section 3 below still describes historical alias-driven behavior; **the Jupiter “module switchboard” row is superseded** for the Node hot path by manifest + `evaluator.mjs` artifact load (`vscode-test/seanv3/jupiter_policy_runtime.mjs`, `engine/artifact_policy_loader.mjs`).
+
 ---
 
 ## 1. Executive summary

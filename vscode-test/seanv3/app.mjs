@@ -7,7 +7,7 @@
  * - NDJSON: CAPTURE_PATH
  * - SQLite: SQLITE_PATH — sean_binance_kline_poll + Sean ledger (sean_paper_position, sean_paper_trades) + paper_wallet + paper_trade_log
  * - Wallet: KEYPAIR_PATH (optional) — pubkey only in DB; never stores secrets in logs
- * - Paper: no chain txs; stub + analog events; Sean trade engine: sean_ledger + sean_engine (Jupiter_3)
+ * - Paper: no chain txs; stub + analog events; Sean trade engine: sean_ledger + sean_engine (policy via Kitchen artifact — see engine_policy_demarcation_v1.md)
  *
  * Requires: node --experimental-sqlite (Node 22+)
  */

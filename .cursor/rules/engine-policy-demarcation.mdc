@@ -1,0 +1,14 @@
+---
+description: Engine vs policy boundary — SeanV3 / Kitchen artifacts
+alwaysApply: false
+---
+
+# Engine vs policy (normative)
+
+Before changing `vscode-test/seanv3/sean_engine.mjs`, `jupiter_policy_runtime.mjs`, `engine/artifact_policy_loader.mjs`, or `app.mjs`:
+
+1. Read **`docs/architect/engine_policy_demarcation_v1.md`**.
+2. **Do not** add static imports from `vscode-test/seanv3/legacy_policies/` to the engine hot path.
+3. Policy strategy ships as **`evaluator.mjs`** under intake submissions; the engine **loads** it via the manifest binding.
+
+CI guard: `vscode-test/seanv3/test/engine_policy_boundary_guard.test.mjs`.
