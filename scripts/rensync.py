@@ -19,6 +19,7 @@ Environment (optional, same family as ``sync.py`` / ``jupsync.py``):
 
 Usage (from repo root):
   python3 scripts/rensync.py
+  python3 scripts/quant.py            # rensync then jupsync (SeanV3/Jupiter)
   python3 scripts/rensync.py --dry-run
   python3 scripts/rensync.py --skip-push
   python3 scripts/rensync.py --api-only      # restart api only (no full compose build)

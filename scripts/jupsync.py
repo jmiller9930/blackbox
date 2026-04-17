@@ -21,6 +21,7 @@ Environment (optional):
 
 Usage:
   python3 scripts/jupsync.py
+  python3 scripts/quant.py            # rensync (UIUX.Web) then jupsync
   python3 scripts/jupsync.py --dry-run
   python3 scripts/jupsync.py --no-commit          # push/deploy only; do not auto-commit local changes
   python3 scripts/jupsync.py -m "fix login knockout"   # custom auto-commit message when dirty
