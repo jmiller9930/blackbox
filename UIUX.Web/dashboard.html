@@ -1925,6 +1925,17 @@
           <p id="rv4-eval-under-line" class="dash-rv4-intake-hint is-ready">Evaluating under: Jupiter</p>
         </div>
 
+        <!-- DV-077: outside <details> so operators see runtime truth without expanding Candidate Policies -->
+        <p
+          id="rv4-active-trade-policy-line"
+          class="dash-rv4-active-trade-policy-line"
+          aria-live="polite"
+          hidden
+        >
+          Active trade policy:
+          <span id="rv4-active-trade-policy-value" class="dash-rv4-atp-value">—</span>
+        </p>
+
         <section class="dash-rv4-section dash-rv4-results dash-rv4-results-primary" aria-labelledby="rv4-results-h">
           <h3 id="rv4-results-h" class="dash-rv4-section-title">Results — experiment queue (primary workspace)</h3>
           <p class="dash-rv4-intake-hint" style="margin-top:0">Server-side experiments and job status. Collapse other panels below to focus here.</p>
@@ -2005,15 +2016,6 @@
             <label><input type="checkbox" id="rv4-cand-show-archived" /> Show archived policies</label>
             <span class="dash-rv4-intake-hint" style="margin:0">Newest first · duplicate policy IDs collapsed to latest intake</span>
           </div>
-          <p
-            id="rv4-active-trade-policy-line"
-            class="dash-rv4-active-trade-policy-line"
-            aria-live="polite"
-            hidden
-          >
-            Active trade policy:
-            <span id="rv4-active-trade-policy-value" class="dash-rv4-atp-value">—</span>
-          </p>
           <div class="dash-rv4-cand-table-wrap">
             <table class="dash-rv4-table" id="rv4-cand-table" aria-label="Successful intake candidates">
               <thead>
