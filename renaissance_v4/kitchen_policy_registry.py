@@ -101,6 +101,14 @@ def infer_runtime_policy_id_for_candidate(repo: Path, execution_target: str, can
                 base = cid[: -len(suf)]
                 if base in allowed_set:
                     return base
+        # Intake-only ids (fixtures, aliases) → deployable runtime id listed in runtime_policies.
+        imap_root = reg.get("intake_candidate_runtime_map") or {}
+        if isinstance(imap_root, dict):
+            et_map = imap_root.get(et)
+            if isinstance(et_map, dict):
+                mapped = str(et_map.get(cid) or "").strip()
+                if mapped and runtime_policy_approved(repo, et, mapped):
+                    return mapped
         return None
     except (FileNotFoundError, ValueError, OSError):
         return None

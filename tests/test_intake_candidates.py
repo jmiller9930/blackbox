@@ -85,6 +85,16 @@ def test_list_intake_candidates_runtime_policy_id_dv077(tmp_path: Path) -> None:
     assert by_c["jup_mc_test_v1"]["runtime_policy_id"] == "jup_mc_test"
 
 
+def test_list_intake_candidates_fixture_minimal_maps_via_registry(tmp_path: Path) -> None:
+    """Lab fixture candidate_policy_id maps to jup_mc_test via intake_candidate_runtime_map."""
+    _copy_registry(tmp_path)
+    subs = tmp_path / "renaissance_v4" / "state" / "policy_intake_submissions"
+    _write_pass_report(subs / "fx1", pass_ok=True, cid="fixture_minimal_direction_v1")
+    rows = list_intake_candidates(tmp_path, execution_target="jupiter")
+    assert len(rows) == 1
+    assert rows[0]["runtime_policy_id"] == "jup_mc_test"
+
+
 def test_list_intake_candidates_filters_execution_target(tmp_path: Path) -> None:
     root = tmp_path
     subs = root / "renaissance_v4" / "state" / "policy_intake_submissions"

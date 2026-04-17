@@ -1,6 +1,12 @@
 {
   "schema": "kitchen_policy_registry_v1",
-  "description": "Canonical runtime policy IDs for Kitchen, Jupiter (SeanV3), and BlackBox. SeanV3 ALLOWED_POLICY_IDS in jupiter_web.mjs should stay aligned with runtime_policies.jupiter.",
+  "description": "Canonical runtime policy IDs for Kitchen, Jupiter (SeanV3), and BlackBox. SeanV3 ALLOWED_POLICY_IDS in jupiter_web.mjs should stay aligned with runtime_policies.jupiter. intake_candidate_runtime_map maps intake-only candidate_policy_id strings (e.g. lab fixtures) to a deployable runtime_policies id.",
+  "intake_candidate_runtime_map": {
+    "jupiter": {
+      "fixture_minimal_direction_v1": "jup_mc_test"
+    },
+    "blackbox": {}
+  },
   "runtime_policies": {
     "jupiter": [
       "jup_v4",
