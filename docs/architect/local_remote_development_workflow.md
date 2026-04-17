@@ -62,6 +62,20 @@ Use when: you prefer editing on the Mac but **truth** for closure is still **cla
 
 **Rule:** The **canonical lab path** is **`~/blackbox` on `clawbot.a51.corp`** unless stated otherwise. A Mac clone is valid for development; **server** must be updated before claiming server-side verification.
 
+### 4.1 — `scripts/sync.py` (default close-out after Black Box updates)
+
+When work in this repo should be **on `origin`** and **live on the lab host** with **UIUX.Web** (nginx/api/dashboard path) rebuilt and restarted, run from the **repo root**:
+
+```bash
+python3 scripts/sync.py
+```
+
+That script **pushes** the current branch to `origin`, **SSHs** to clawbot, **`git pull`** in `~/blackbox`, then **`docker compose build web`**, **`docker compose up -d`**, and **`docker compose restart api`** under **`UIUX.Web`**. Use **`--dry-run`** to print actions only; **`--skip-push`** if you already pushed and only need remote pull + compose.
+
+Treat this as the **standard post-update step** for Black Box changes that matter on clawbot, unless the user or directive explicitly skips deploy or SSH is unavailable (then say so in the proof gap).
+
+**Not** the same as [`workspace_sync.md`](workspace_sync.md) (OpenClaw identity/skills copies on the gateway). **One-shot** push + Black Box UI stack + SeanV3/Jupiter: see **`python3 scripts/jupsync.py --full-stack`** in `scripts/jupsync.py`.
+
 ---
 
 ## 5. OpenClaw / gateway workspace sync (separate from Git)
@@ -77,6 +91,7 @@ Repo content must still be reflected into OpenClaw workspace paths on the gatewa
 3. **Honor proof requirements:** If the task is phase closure or `execution_context` says clawbot — run the **required commands on clawbot** (via Remote SSH session **or** `ssh ... 'cd ~/blackbox && ...'` as appropriate).
 4. **Do not refuse remote verification** on the grounds that “SSH is forbidden” when the user or the plan **directs** server sync/test. The anti-pattern is **unauthorized** server mutation **without** clarity — not **directed** remote verification.
 5. **Prefer clarity over repeated lectures:** One sentence on mode (local vs Remote SSH) is enough; then execute.
+6. **After substantive Black Box updates** that should reach the lab operator UI / **`UIUX.Web` stack:** run **`python3 scripts/sync.py`** from repo root when you have commit + network + SSH (see §4.1). If deploy is out of scope, state that explicitly.
 
 ---
 
@@ -87,6 +102,7 @@ Repo content must still be reflected into OpenClaw workspace paths on the gatewa
 | [`../runtime/execution_context.md`](../runtime/execution_context.md) | Phase, primary host, **required_execution** |
 | [`global_clawbot_proof_standard.md`](global_clawbot_proof_standard.md) | Mandatory proof package |
 | [`workspace_sync.md`](workspace_sync.md) | Repo → OpenClaw workspace after pull |
+| `scripts/sync.py` | Push + clawbot `git pull` + **UIUX.Web** docker compose (Black Box lab deploy) |
 | [`agent_verification.md`](agent_verification.md) | Milestone / audit records |
 
 ---
