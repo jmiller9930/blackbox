@@ -3,13 +3,9 @@
 !backfill.mjs
 !paper_analog.mjs
 !wallet_connect.mjs
-!jupiter_3_sean_policy.mjs
-!jupiter_4_sean_policy.mjs
-!jupiter_mc_test_policy.mjs
-!jupiter_mc2_policy.mjs
-!jupiter_pipeline_proof_policy.mjs
-!jupiter_kitchen_mechanical_policy.mjs
 !jupiter_policy_runtime.mjs
+!jupiter_registry_allowlist.mjs
+!jupiter_kitchen_checkin.mjs
 !sean_lifecycle.mjs
 !sean_ledger.mjs
 !decision_ledger.mjs
@@ -22,4 +18,5 @@
 !package-lock.json
 !Dockerfile
 !static/
-
+!engine
+!engine/**
