@@ -1,0 +1,5 @@
+{
+  "policy_enabled": true,
+  "strategy": "close_vs_previous",
+  "description": "CI: minimal viable policy for intake test (override default all-off)."
+}

@@ -1,0 +1,135 @@
+# Illustrative operator policy spec — EXAMPLE ONLY.
+# Format is arbitrary: same idea can be JSON, a TS object, DB rows, or a builder UI.
+# Not fully executed by generate_policy.mjs today (rules/risk/confidence engine TBD).
+
+policy_meta:
+  policy_id: "jup_v5_user_policy_001"
+  name: "JUPv5 User-Built Policy"
+  version: "1.0.0"
+  timeframe: "15m"
+  target_systems: ["jupiter", "blackbox"]
+  author: "operator"
+  description: "User-configured policy built from canonical template"
+
+inputs:
+  require_candles: 50
+  current_price: true
+  free_collateral_usd: true
+  current_position: true
+
+indicators:
+  ema_fast:
+    enabled: true
+    kind: ema
+    source: close
+    period: 9
+
+  ema_slow:
+    enabled: true
+    kind: ema
+    source: close
+    period: 21
+
+  rsi_main:
+    enabled: true
+    kind: rsi
+    source: close
+    period: 14
+
+  atr_main:
+    enabled: true
+    kind: atr
+    period: 14
+
+  macd_main:
+    enabled: false
+    kind: macd
+    fast_period: 12
+    slow_period: 26
+    signal_period: 9
+
+  boll_main:
+    enabled: false
+    kind: bollinger_bands
+    source: close
+    period: 20
+    stddev: 2
+
+rules:
+  bias:
+    mode: crossover
+    long_when:
+      left: ema_fast
+      operator: ">"
+      right: ema_slow
+    short_when:
+      left: ema_fast
+      operator: "<"
+      right: ema_slow
+
+  long_entry:
+    all_of:
+      - left: bias
+        operator: "=="
+        right: "long"
+      - left: current.low
+        operator: "<"
+        right: previous.low
+      - left: rsi_main.value
+        operator: ">"
+        right: previous.rsi_main.value
+      - left: rsi_main.value
+        operator: ">="
+        right: 52
+
+  short_entry:
+    all_of:
+      - left: bias
+        operator: "=="
+        right: "short"
+      - left: current.high
+        operator: ">"
+        right: previous.high
+      - left: rsi_main.value
+        operator: "<"
+        right: previous.rsi_main.value
+      - left: rsi_main.value
+        operator: "<="
+        right: 48
+
+risk:
+  min_collateral_usd: 10
+  base_risk_pct: 0.01
+  medium_risk_pct: 0.02
+  max_risk_pct: 0.03
+
+  leverage_map:
+    low_confidence: 10
+    medium_confidence: 20
+    high_confidence: 30
+
+confidence:
+  base_score: 2
+  boosts:
+    - when:
+        left: rsi_main.value
+        operator: ">="
+        right: 52
+      add: 3
+      apply_to: long
+    - when:
+        left: rsi_main.value
+        operator: "<="
+        right: 48
+      add: 3
+      apply_to: short
+
+outputs:
+  expose:
+    - signal
+    - confidence
+    - reason_code
+    - diagnostics
+    - risk_pct
+    - collateral_usd
+    - recommended_leverage

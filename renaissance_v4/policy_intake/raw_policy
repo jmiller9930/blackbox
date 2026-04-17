@@ -1,0 +1,855 @@
+upiter V4 (JUPv4) — Sean’s 15m 2-Candle RSI Divergence Perps Policy (Dynamic TP/SL + Manual Protection)
+
+This module encodes **Sean’s exact** JUPv4 trading policy extracted from the latest TypeScript reference implementation (the full live bot you just pasted).
+
+**What JUPv4 is:**
+- 15-minute timeframe divergence momentum strategy on SOL perpetuals (Jupiter Perps).
+- Maintains EMA9/21 bias state (LONG or SHORT mode).
+- Entry signal = **2-candle RSI divergence** in the direction of the **previous** bias:
+  - Bullish divergence (LONG bias only): current.low < previous.low AND current.rsi > previous.rsi
+  - Bearish divergence (SHORT bias only): current.high > previous.high AND current.rsi < previous.rsi
+- Confidence scoring simplified (bias + RSI threshold only).
+- Dynamic risk allocation (1–3 % of free collateral) drives leverage (10–30×).
+- **Advanced body-based trailing**: initial SL/TP from candle body → dynamic TP (15 s real-time updates clamped to originalCandleTp floor/ceiling) + ratcheting SL (tightens on every new candle, never beyond originalSl floor).
+- Manual position protection: positions adopted from on-chain at startup are marked MANUAL and **never auto-flip** on opposite signals.
+
+**How it differs from previous JUPv4 version:**
+- Divergence: 3-candle swing → strict 2-candle (current vs immediate previous).
+- TP/SL: static ATR → body-based + real-time dynamic TP + ratcheting SL with hard floors.
+- Manual vs bot positions: new isManualPosition flag prevents flips on manual trades.
+- Trade log now records entryType ("bot" or "manual").
+
+**External inputs (required for evaluate_jupiter_v4):**
+- `df`: pandas DataFrame with at least EMA_LONG_PERIOD + 2 rows of **15m** OHLCV (columns: open, high, low, close, volume).
+- `current_price`: latest real-time Pyth price (float).
+- `free_collateral_usd`: available collateral in USD for the intended direction.
+- `current_position` (optional): current on-chain position (1 = long, -1 = short, 0 = flat).
+
+**Paper vs live stance:**
+- Pure signal + diagnostics policy (no I/O, no on-chain calls).
+- Live execution (placePerpOrder, closePositionMarket, dynamic TP updates, ratcheting SL) lives in the TypeScript bot.
+- This Python module is used for Anna training, backtesting, and dashboard signal_mode = "jup_v4".
+
+**Parity note:**
+Python-only policy. All indicator math (EMA, RSI, ATR) and gate logic are reproduced **exactly** from the TS so backtest results match live signals 1:1. Dynamic TP/SL parameters are exposed in diagnostics for executor parity.
+
+**Edge cases documented:**
+- Insufficient bars (< EMA_LONG_PERIOD + 2) → no signal, diagnostics["sufficient_data"] = False.
+- NaN values → gates evaluate to False.
+- Missing volume → ignored (no longer part of signal).
+- Flat market / no divergence → no signal.
+- Tie-break: long and short signals mutually exclusive by bias + divergence direction.
+- Manual positions: documented in diagnostics["is_manual_position"] (executor must respect no-flip rule).
+
+**No silent magic:**
+All body-based TP/SL constants, dynamic update rules, and ratcheting logic are fully documented.
+"""
+
+import pandas as pd
+from typing import Dict, List, Tuple, Any
+
+# ====================== JUPV4 CONSTANTS ======================
+# All constants in one block exactly as requested.
+# Every value includes numeric explanation, rationale, units, and breakage note.
+
+# Risk & Position Sizing (unchanged from latest TS)
+BASE_RISK_PCT: float = 0.010
+"""Base risk as fraction of free collateral.
+Numeric value: 0.010 (1.0%).
+Why: Conservative default in the tightened risk regime.
+Units: ratio (0.0–1.0).
+What breaks if changed: Lower → under-utilized capital; higher → increased drawdown risk."""
+
+MAX_RISK_PCT: float = 0.030
+"""Maximum risk allocation for highest-confidence signals.
+Numeric value: 0.030 (3.0%).
+Why: Rewards strongest divergence setups.
+Units: ratio.
+What breaks if changed: Higher → excessive exposure; lower → missed high-conviction trades."""
+
+MIN_COLLATERAL_USD: float = 10.0
+"""Minimum collateral required before any entry.
+Numeric value: 10.0 USD.
+Why: Jupiter Perps practical minimum.
+Units: USD.
+What breaks if changed: Lower → micro-positions / transaction failures."""
+
+# Body-based TP/SL parameters (exact match to updateBodyBasedTPSL + updateDynamicTp + updateRatchetingSl)
+BODY_TP_MULTIPLIER: float = 4.0
+"""TP distance multiplier relative to effective candle body.
+Numeric value: 4.0.
+Why: Provides 4× reward relative to recent body strength.
+Units: ratio.
+What breaks if changed: Alters reward/risk ratio in live executor."""
+
+MIN_SL_PCT: float = 0.007
+"""Minimum stop-loss distance as % of entry price.
+Numeric value: 0.007 (0.7%).
+Why: Hard floor to avoid being stopped by noise.
+Units: ratio."""
+
+MIN_BODY_PCT_FLOOR: float = 0.0018
+"""Minimum effective body size as % of price (prevents tiny bodies).
+Numeric value: 0.0018 (0.18%).
+Why: Guarantees usable SL/TP distances.
+Units: ratio."""
+
+SPREAD_BUFFER_PCT: float = 0.002
+"""Extra buffer added to initial SL for spread.
+Numeric value: 0.002 (0.2%).
+Why: Prevents immediate stop-out on normal bid/ask spread.
+Units: ratio."""
+
+DYNAMIC_TP_UPDATE_MS: int = 15000
+"""Throttle interval for real-time dynamic TP updates.
+Numeric value: 15000 ms (15 seconds).
+Why: Prevents excessive updates while allowing responsiveness.
+Units: milliseconds.
+What breaks if changed: Live executor throttling behavior."""
+
+# Strategy Parameters
+EMA_SHORT_PERIOD: int = 9
+"""Fast EMA period for bias detection.
+Numeric value: 9 bars.
+Why: Captures short-term momentum shifts.
+Units: bars (15-minute)."""
+
+EMA_LONG_PERIOD: int = 21
+"""Slow EMA period for bias context.
+Numeric value: 21 bars.
+Why: Provides reliable baseline for crossover and bias state.
+Units: bars."""
+
+RSI_PERIOD: int = 14
+"""RSI lookback period.
+Numeric value: 14 bars."""
+
+RSI_LONG_THRESHOLD: float = 52.0
+"""RSI level confirming long bias.
+Numeric value: 52.0.
+Why: Slightly bullish filter.
+Units: RSI points (0–100)."""
+
+RSI_SHORT_THRESHOLD: float = 48.0
+"""RSI level confirming short bias.
+Numeric value: 48.0.
+Why: Slightly bearish filter.
+Units: RSI points."""
+
+ATR_PERIOD: int = 14
+"""ATR lookback period (used only for trade logging / diagnostics).
+Numeric value: 14 bars.
+Why: Retained for ledger consistency.
+Units: bars."""
+
+ROUND_TRIP_FEE_USD: float = 0.22
+"""Estimated round-trip trading fees (for diagnostics / PnL logging only).
+Numeric value: 0.22 USD.
+Why: Conservative estimate used in trade journal.
+Units: USD."""
+
+# ====================== INDICATOR HELPERS (exact match to TS) ======================
+
+def _ema(series: List[float], period: int) -> List[float]:
+    """Exact EMA implementation from TS (initial SMA then exponential smoothing)."""
+    n = len(series)
+    if n < period:
+        return [float('nan')] * n
+    ema_values: List[float] = [float('nan')] * n
+    initial_sum = sum(series[:period])
+    ema_values[period - 1] = initial_sum / period
+    alpha = 2.0 / (period + 1)
+    for i in range(period, n):
+        ema_values[i] = series[i] * alpha + ema_values[i - 1] * (1 - alpha)
+    return ema_values
+
+
+def _rsi(series: List[float], period: int = RSI_PERIOD) -> List[float]:
+    """Exact RSI implementation matching the fixed version in latest TS (index fix + safe avgLoss)."""
+    n = len(series)
+    if n < period + 1:
+        return [float('nan')] * n
+    rsi_values: List[float] = [float('nan')] * n
+    gain = 0.0
+    loss = 0.0
+    for i in range(1, period + 1):
+        delta = series[i] - series[i - 1]
+        if delta > 0:
+            gain += delta
+        else:
+            loss -= delta
+    avg_gain = gain / period
+    avg_loss = max(loss / period, 0.001)
+    rs = float('inf') if avg_loss == 0 else avg_gain / avg_loss
+    rsi_values[period - 1] = 100 - (100 / (1 + rs))
+    for i in range(period, n):
+        delta = series[i] - series[i - 1]
+        current_gain = max(delta, 0.0)
+        current_loss = max(-delta, 0.0)
+        avg_gain = (avg_gain * (period - 1) + current_gain) / period
+        avg_loss = max((avg_loss * (period - 1) + current_loss) / period, 0.001)
+        rs = float('inf') if avg_loss == 0 else avg_gain / avg_loss
+        rsi_values[i] = 100 - (100 / (1 + rs))
+    return rsi_values
+
+
+def _atr(closes: List[float], highs: List[float], lows: List[float], period: int = ATR_PERIOD) -> float:
+    """Exact ATR implementation from TS."""
+    n = len(closes)
+    if n < period + 1:
+        return 0.25
+    tr_sum = 0.0
+    for i in range(1, period + 1):
+        high = highs[n - i]
+        low = lows[n - i]
+        prev_close = closes[n - i - 1]
+        tr1 = high - low
+        tr2 = abs(high - prev_close)
+        tr3 = abs(low - prev_close)
+        tr_sum += max(tr1, tr2, tr3)
+    return tr_sum / period
+
+
+def _calculate_confidence_score(bullish_bias: bool, rsi: float) -> int:
+    """Exact confidence scoring logic from latest TS calculateConfidenceScore."""
+    score = 2
+    if (bullish_bias and rsi >= RSI_LONG_THRESHOLD) or (not bullish_bias and rsi <= RSI_SHORT_THRESHOLD):
+        score += 3
+    return min(10, score)
+
+
+# ====================== PUBLIC GATE & EVALUATOR ======================
+
+def jupiter_v4_gates(df: pd.DataFrame) -> Tuple[bool, bool]:
+    """Raw long/short gate booleans (exact 2-candle divergence logic from TS aggregateCandles).
+
+    Long gate predicate:
+        previous_bias == LONG
+        AND bullish_divergence = (current.low < previous.low) AND (current.rsi > previous.rsi)
+
+    Short gate predicate (symmetric):
+        previous_bias == SHORT AND bearish_divergence.
+
+    previous_bias is computed from EMA9/21 at candle[-2] to avoid look-ahead.
+    Requires at least EMA_LONG_PERIOD + 2 bars.
+    """
+    if len(df) < EMA_LONG_PERIOD + 2:
+        return False, False
+
+    closes = df["close"].tolist()
+    ema9_vals = _ema(closes, EMA_SHORT_PERIOD)
+    ema21_vals = _ema(closes, EMA_LONG_PERIOD)
+    rsi_vals = _rsi(closes, RSI_PERIOD)
+
+    if len(ema9_vals) < 2 or len(ema21_vals) < 2 or len(rsi_vals) < 2:
+        return False, False
+
+    # Previous bias (before current candle)
+    ema9_prev = ema9_vals[-2]
+    ema21_prev = ema21_vals[-2]
+    previous_bias = ema9_prev > ema21_prev   # True = LONG bias
+
+    # 2-candle divergence (exactly as in latest TS)
+    current_candle = df.iloc[-1]
+    previous_candle = df.iloc[-2]
+
+    current_rsi = rsi_vals[-1] if not pd.isna(rsi_vals[-1]) else 50.0
+    prev_rsi = rsi_vals[-2]
+
+    bullish_divergence = (current_candle["low"] < previous_candle["low"]) and (current_rsi > prev_rsi)
+    bearish_divergence = (current_candle["high"] > previous_candle["high"]) and (current_rsi < prev_rsi)
+
+    long_gate = previous_bias and bullish_divergence
+    short_gate = (not previous_bias) and bearish_divergence
+
+    return long_gate, short_gate
+
+
+def evaluate_jupiter_v4(
+    df: pd.DataFrame,
+    current_price: float,
+    free_collateral_usd: float,
+    current_position: int = 0,
+) -> Dict[str, Any]:
+    """Full JUPv4 policy evaluator – returns structured diagnostics dict.
+
+    Args:
+        df (pd.DataFrame): 15m OHLCV historical data.
+        current_price (float): latest Pyth price.
+        free_collateral_usd (float): available collateral (direction-aware).
+        current_position (int): current position for flip awareness.
+
+    Returns:
+        dict with every key documented below.
+
+    Raises:
+        ValueError: if df columns are missing.
+
+    Side effects: None (pure function).
+
+    Diagnostics keys (all explained):
+        - long_gate / short_gate: bool – exact 2-candle divergence predicates.
+        - signal: "long", "short", or None.
+        - confidence_score: int (2 or 5).
+        - risk_pct: float – BASE / 0.020 / MAX.
+        - collateral_usd: float – actual dollars allocated.
+        - recommended_leverage: int – 10/20/30x.
+        - leverage_reason: str.
+        - atr, rsi: raw values.
+        - diagnostics: previous_bias, divergence flags, body-based TP/SL parameters, dynamic/ratcheting rules, manual position flag.
+    """
+    if not {"open", "high", "low", "close", "volume"}.issubset(df.columns):
+        raise ValueError("df must contain OHLCV columns")
+
+    long_gate, short_gate = jupiter_v4_gates(df)
+
+    if len(df) < EMA_LONG_PERIOD + 2:
+        return {
+            "long_gate": False,
+            "short_gate": False,
+            "signal": None,
+            "confidence_score": 0,
+            "risk_pct": 0.0,
+            "collateral_usd": 0.0,
+            "recommended_leverage": 10,
+            "leverage_reason": "insufficient_data",
+            "atr": 0.0,
+            "rsi": 50.0,
+            "diagnostics": {
+                "reason": "insufficient_data",
+                "sufficient_data": False,
+                "previous_bias": None,
+                "bullish_divergence": False,
+                "bearish_divergence": False,
+                "is_manual_position": False,
+            },
+        }
+
+    # Re-compute latest indicators
+    closes = df["close"].tolist()
+    highs = df["high"].tolist()
+    lows = df["low"].tolist()
+    rsi_vals = _rsi(closes, RSI_PERIOD)
+    atr_val = _atr(closes, highs, lows, ATR_PERIOD)
+
+    current_rsi = rsi_vals[-1] if not pd.isna(rsi_vals[-1]) else 50.0
+
+    # Bias for confidence scoring
+    ema9_vals = _ema(closes, EMA_SHORT_PERIOD)
+    bullish_bias = ema9_vals[-1] > _ema(closes, EMA_LONG_PERIOD)[-1] if len(ema9_vals) > 0 else False
+
+    confidence_score = _calculate_confidence_score(bullish_bias, current_rsi)
+
+    # Dynamic sizing (exact match to TS processSignals)
+    risk_pct = BASE_RISK_PCT
+    if confidence_score >= 8:
+        risk_pct = MAX_RISK_PCT
+    elif confidence_score >= 6:
+        risk_pct = 0.020
+
+    collateral_usd = free_collateral_usd * risk_pct
+    if free_collateral_usd < MIN_COLLATERAL_USD:
+        collateral_usd = 0.0
+
+    # Leverage
+    if confidence_score >= 8:
+        leverage = 30
+        lev_reason = "high_confidence_(8-10)"
+    elif confidence_score >= 6:
+        leverage = 20
+        lev_reason = "medium_confidence_(6-7)"
+    else:
+        leverage = 10
+        lev_reason = "low_confidence"
+
+    signal = "long" if long_gate else "short" if short_gate else None
+
+    return {
+        "long_gate": long_gate,
+        "short_gate": short_gate,
+        "signal": signal,
+        "confidence_score": confidence_score,
+        "risk_pct": risk_pct,
+        "collateral_usd": round(collateral_usd, 2),
+        "recommended_leverage": leverage,
+        "leverage_reason": lev_reason,
+        "atr": round(atr_val, 6),
+        "rsi": round(current_rsi, 2),
+        "diagnostics": {
+            "previous_bias": "LONG" if bullish_bias else "SHORT",
+            "bullish_divergence": long_gate,
+            "bearish_divergence": short_gate,
+            "sufficient_data": True,
+            "current_price_used": current_price,
+            "free_collateral_usd": round(free_collateral_usd, 2),
+            "current_position": current_position,
+            "is_manual_position": False,  # policy cannot know; executor sets from on-chain adopt
+            "body_tp_multiplier": BODY_TP_MULTIPLIER,
+            "min_sl_pct": MIN_SL_PCT,
+            "min_body_pct_floor": MIN_BODY_PCT_FLOOR,
+            "spread_buffer_pct": SPREAD_BUFFER_PCT,
+            "dynamic_tp_update_ms": DYNAMIC_TP_UPDATE_MS,
+            "note": "Body-based TP/SL (4× effective body, 0.7% SL floor + spread buffer) + dynamic TP (15s updates clamped to originalCandleTp) + ratcheting SL (candle close) is guidance for live executor only. Manual positions never auto-flip.",
+        },
+    }
+
+
+
+Integration checklist (for Cody / engineering)
+
+    Files to touch:
+        modules/anna_training/jupiter_4_sean_policy.py ← drop the file above
+        modules/anna_training/policy_registry.py – add "jup_v4": evaluate_jupiter_v4 (and import)
+        development_governance.md – record updated policy slot + new constants (dynamic TP/SL, manual protection)
+        dashboard/signal_modes.ts – add "jup_v4" to valid set
+    Ledger signal_mode string: "jup_v4"
+    Dashboard bundle hooks:
+        Map new diagnostics (previous_bias, bullish_divergence, bearish_divergence, body_tp_multiplier, min_sl_pct, dynamic_tp_update_ms, is_manual_position) to UI cards
+        Add JUPv4-specific trade journal fields (leverage_reason, entryType "bot"/"manual", tpSlHistory with dynamic/ratcheting reasons)
+    Bridge / executor wiring:
+        On signal receipt: use recommended_leverage + collateral_usd directly in placePerpOrder
+        Implement full body-based + dynamic TP + ratcheting SL logic (exact match to updateBodyBasedTPSL, updateDynamicTp, updateRatchetingSl) and respect is_manual_position flag (no flip)
+    Test:
+        Run backtest on last 1000 15m candles → verify gates/confidence match live TS bot signals
+        Confirm edge-case handling returns clean diagnostics
+
+
+
+
+
+
+
+  ########## second part ########      
+
+
+
+
+  import { promises as fs } from 'fs';
+import {
+  Connection,
+  Keypair,
+  PublicKey,
+  ComputeBudgetProgram,
+  VersionedTransaction,
+  TransactionMessage,
+  SystemProgram,
+} from '@solana/web3.js';
+import * as anchor from '@coral-xyz/anchor';
+import {
+  getAssociatedTokenAddressSync,
+  createAssociatedTokenAccountIdempotentInstruction,
+  TOKEN_PROGRAM_ID,
+  ASSOCIATED_TOKEN_PROGRAM_ID,
+  NATIVE_MINT,
+  createSyncNativeInstruction,
+} from '@solana/spl-token';
+import { EventSource } from 'eventsource';
+import fetch from 'node-fetch';
+
+// ====================== JUPITER PERPS CONSTANTS ======================
+const PROGRAM_ID = new PublicKey('PERPHjGBqRHArX4DySjwM6UJHiR3sWAatqfdBS2qQJu');
+const POOL = new PublicKey('5BUwFW4nRbftYTDMbgxykoFWqWHPzahFSNAaaaJtVKsq');
+const SOL_CUSTODY = new PublicKey('7xS2gz2bTp3fwCC7knJvUWTEU9Tycczu6VhJYKgi1wdz');
+const USDC_CUSTODY = new PublicKey('G18jKKXQwBbrHeiK3C9MRXhkHsLHf7XgCSisykV46EZa');
+const USDC_MINT = new PublicKey('EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v');
+
+const BASE_RISK_PCT = 0.010;
+const MAX_RISK_PCT = 0.030;
+const MIN_COLLATERAL_USD = 10;
+const SLIPPAGE_PCT = 0.02;
+const CLOSE_SLIPPAGE_PCT = 0.08;
+const SPREAD_BUFFER_PCT = 0.002;
+const CONFIDENCE_THRESHOLD = 0.001;
+
+// STRATEGY CONSTANTS
+const EMA_SHORT_PERIOD = 9;
+const EMA_LONG_PERIOD = 21;
+const RSI_PERIOD = 14;
+const ATR_PERIOD = 14;                    // ← restored (needed for padding + trade log)
+const RSI_LONG_THRESHOLD = 52;
+const RSI_SHORT_THRESHOLD = 48;
+const ROUND_TRIP_FEE_USD = 0.22;
+
+const QUICKNODE_RPC = 'https://cosmological-necessary-night.solana-mainnet.quiknode.pro/3ce4cb4882615016431846577ab1733015d397b7/';
+const PUBLIC_SOLANA_WS = 'wss://api.mainnet-beta.solana.com';
+const KEYPAIR_PATH = 'new-keypair3.json';
+const PYTH_SSE_URL = 'https://hermes.pyth.network/v2/updates/price/stream?ids[]=ef0d8b6fda2ceba41da15d4095d1da392a0d2f8ed0c6c7bc0f4cfac8c280b56d';
+const BINANCE_KLINES_URL = 'https://api.binance.com/api/v3/klines?symbol=SOLUSDT&interval=15m&limit=2';
+
+// ====================== JUPITER IDL ======================
+import { IDL as jupiterPerpsIdl } from './jupiter-perpetuals-idl';
+
+interface Candle {
+  open: number;
+  high: number;
+  low: number;
+  close: number;
+  volume: number;
+}
+
+function generatePositionRequestPda({
+  positionPubkey,
+  requestChange,
+  counter,
+}: {
+  positionPubkey: PublicKey;
+  requestChange: 'increase' | 'decrease';
+  counter?: anchor.BN;
+}) {
+  if (!counter) counter = new anchor.BN(Math.floor(Math.random() * 1_000_000_000));
+  const requestChangeEnum = requestChange === 'increase' ? [1] : [2];
+  const [positionRequest] = PublicKey.findProgramAddressSync(
+    [Buffer.from('position_request'), positionPubkey.toBuffer(), counter.toArrayLike(Buffer, 'le', 8), Buffer.from(requestChangeEnum)],
+    PROGRAM_ID
+  );
+  return { positionRequest, counter };
+}
+
+class JupiterPerpsClient {
+  private program: anchor.Program;
+  private connection: Connection;
+  private wallet: anchor.Wallet;
+  private userPubkey: PublicKey;
+  private longPositionPda?: PublicKey;
+  private shortPositionPda?: PublicKey;
+  private perpetualsPda?: PublicKey;
+  private eventAuthorityPda?: PublicKey;
+  private positionSubscriptions: number[] = [];
+
+  constructor(connection: Connection, wallet: anchor.Wallet) {
+    this.connection = connection;
+    this.wallet = wallet;
+    this.userPubkey = wallet.publicKey;
+    const provider = new anchor.AnchorProvider(connection, wallet, { commitment: 'confirmed' });
+    this.program = new anchor.Program(jupiterPerpsIdl as any, PROGRAM_ID, provider);
+  }
+
+  private computePdas() {
+    if (!this.userPubkey) return;
+    this.longPositionPda = PublicKey.findProgramAddressSync(
+      [Buffer.from('position'), this.userPubkey.toBuffer(), POOL.toBuffer(), SOL_CUSTODY.toBuffer(), SOL_CUSTODY.toBuffer(), Buffer.from([1])],
+      PROGRAM_ID
+    )[0];
+    this.shortPositionPda = PublicKey.findProgramAddressSync(
+      [Buffer.from('position'), this.userPubkey.toBuffer(), POOL.toBuffer(), SOL_CUSTODY.toBuffer(), USDC_CUSTODY.toBuffer(), Buffer.from([2])],
+      PROGRAM_ID
+    )[0];
+    this.perpetualsPda = PublicKey.findProgramAddressSync([Buffer.from('perpetuals')], PROGRAM_ID)[0];
+    this.eventAuthorityPda = PublicKey.findProgramAddressSync([Buffer.from('__event_authority')], PROGRAM_ID)[0];
+    console.info(`✅ Long Position PDA (SOL collateral): ${this.longPositionPda.toBase58()}`);
+    console.info(`✅ Short Position PDA (USDC collateral): ${this.shortPositionPda.toBase58()}`);
+  }
+
+  private getCollateralCustody(direction: 'long' | 'short'): PublicKey {
+    return direction === 'long' ? SOL_CUSTODY : USDC_CUSTODY;
+  }
+
+  private getInputMint(direction: 'long' | 'short'): PublicKey {
+    return direction === 'long' ? NATIVE_MINT : USDC_MINT;
+  }
+
+  private getDesiredMint(direction: 'long' | 'short'): PublicKey {
+    return direction === 'long' ? NATIVE_MINT : USDC_MINT;
+  }
+
+  private getFundingAccount(direction: 'long' | 'short'): PublicKey {
+    return getAssociatedTokenAddressSync(this.getInputMint(direction), this.userPubkey);
+  }
+
+  async getUsdcBalance(): Promise<number> {
+    const ata = getAssociatedTokenAddressSync(USDC_MINT, this.userPubkey);
+    try {
+      const balance = await this.connection.getTokenAccountBalance(ata);
+      return Number(balance.value.amount) / 1_000_000;
+    } catch {
+      return 0;
+    }
+  }
+
+  async getSolBalance(): Promise<number> {
+    const balance = await this.connection.getBalance(this.userPubkey);
+    return balance / 1_000_000_000;
+  }
+
+  async getFreeCollateral(direction: 'long' | 'short', currentPrice: number): Promise<number> {
+    if (direction === 'long') {
+      const sol = await this.getSolBalance();
+      return sol * currentPrice;
+    } else {
+      return await this.getUsdcBalance();
+    }
+  }
+
+  async subscribe(callback: (accountInfo: any) => void) {
+    this.computePdas();
+    if (this.longPositionPda) {
+      const subId = this.connection.onAccountChange(this.longPositionPda, callback, 'confirmed');
+      this.positionSubscriptions.push(subId);
+    }
+    if (this.shortPositionPda) {
+      const subId = this.connection.onAccountChange(this.shortPositionPda, callback, 'confirmed');
+      this.positionSubscriptions.push(subId);
+    }
+    console.info('✅ Real-time Position PDA subscriptions active (LONG + SHORT)');
+  }
+
+  async unsubscribe() {
+    for (const sub of this.positionSubscriptions) await this.connection.removeAccountChangeListener(sub);
+    this.positionSubscriptions = [];
+  }
+
+  async getPerpPosition() {
+    if (!this.longPositionPda || !this.shortPositionPda) this.computePdas();
+    try {
+      const longPos: any = await this.program.account.position.fetch(this.longPositionPda!);
+      if (longPos && longPos.sizeUsd && !longPos.sizeUsd.eq(new anchor.BN(0))) return longPos;
+    } catch {}
+    try {
+      const shortPos: any = await this.program.account.position.fetch(this.shortPositionPda!);
+      if (shortPos && shortPos.sizeUsd && !shortPos.sizeUsd.eq(new anchor.BN(0))) return shortPos;
+    } catch {}
+    return null;
+  }
+
+  async placePerpOrder(params: { direction: 'long' | 'short'; sizeDelta: number; collateralDeltaUsd: number; price: number }) {
+    this.computePdas();
+    const direction = params.direction;
+    const price = params.price;
+    const collateralUsd = params.collateralDeltaUsd;
+    const slippageMultiplier = direction === 'long' ? (1 + SLIPPAGE_PCT) : (1 - SLIPPAGE_PCT);
+    const priceSlippage = new anchor.BN(Math.floor(price * slippageMultiplier * 1_000_000));
+    const positionPda = direction === 'long' ? this.longPositionPda! : this.shortPositionPda!;
+    const { positionRequest, counter } = generatePositionRequestPda({ positionPubkey: positionPda, requestChange: 'increase' });
+    const inputMint = this.getInputMint(direction);
+    const collateralCustody = this.getCollateralCustody(direction);
+    const fundingAccount = this.getFundingAccount(direction);
+    const positionRequestAta = getAssociatedTokenAddressSync(inputMint, positionRequest, true);
+
+    console.info(`🔥 Opening ${direction.toUpperCase()} | Collateral: $${collateralUsd.toFixed(2)}`);
+
+    const preInstructions: any[] = [];
+    let collateralTokenDelta: anchor.BN;
+
+    if (direction === 'long') {
+      collateralTokenDelta = new anchor.BN(Math.floor((collateralUsd / price) * 1_000_000_000));
+      preInstructions.push(createAssociatedTokenAccountIdempotentInstruction(this.userPubkey, fundingAccount, this.userPubkey, NATIVE_MINT));
+      preInstructions.push(SystemProgram.transfer({ fromPubkey: this.userPubkey, toPubkey: fundingAccount, lamports: BigInt(collateralTokenDelta.toString()) }));
+      preInstructions.push(createSyncNativeInstruction(fundingAccount));
+    } else {
+      collateralTokenDelta = new anchor.BN(Math.floor(collateralUsd * 1_000_000));
+    }
+
+    const increaseIx = await this.program.methods
+      .createIncreasePositionMarketRequest({
+        sizeUsdDelta: new anchor.BN(params.sizeDelta),
+        collateralTokenDelta,
+        side: direction === 'long' ? { long: {} } : { short: {} },
+        priceSlippage,
+        jupiterMinimumOut: null,
+        counter,
+      })
+      .accounts({
+        owner: this.userPubkey,
+        fundingAccount,
+        perpetuals: this.perpetualsPda!,
+        pool: POOL,
+        position: positionPda,
+        positionRequest,
+        positionRequestAta,
+        custody: SOL_CUSTODY,
+        collateralCustody,
+        inputMint,
+        referral: null as any,
+        tokenProgram: TOKEN_PROGRAM_ID,
+        associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
+        systemProgram: SystemProgram.programId,
+        eventAuthority: this.eventAuthorityPda!,
+        program: PROGRAM_ID,
+      })
+      .instruction();
+
+    const { blockhash } = await this.connection.getLatestBlockhash('confirmed');
+    const message = new TransactionMessage({
+      payerKey: this.userPubkey,
+      recentBlockhash: blockhash,
+      instructions: [
+        ComputeBudgetProgram.setComputeUnitLimit({ units: 1_400_000 }),
+        ComputeBudgetProgram.setComputeUnitPrice({ microLamports: 100_000 }),
+        ...preInstructions,
+        increaseIx,
+      ],
+    }).compileToV0Message();
+
+    const tx = new VersionedTransaction(message);
+    tx.sign([this.wallet.payer]);
+    const signature = await this.connection.sendTransaction(tx, { skipPreflight: false, maxRetries: 3 });
+    await this.connection.confirmTransaction(signature, 'confirmed');
+    console.info(`✅ ${direction.toUpperCase()} request submitted → ${signature}`);
+    return signature;
+  }
+
+  async closePositionMarket(currentPrice: number) {
+    const position = await this.getPerpPosition();
+    if (!position) return;
+    const direction = (position as any).side?.short ? 'short' : 'long';
+    const positionPda = direction === 'long' ? this.longPositionPda! : this.shortPositionPda!;
+    const { positionRequest, counter } = generatePositionRequestPda({ positionPubkey: positionPda, requestChange: 'decrease' });
+    const desiredMint = this.getDesiredMint(direction);
+    const receivingAccount = getAssociatedTokenAddressSync(desiredMint, this.userPubkey);
+    const positionRequestAta = getAssociatedTokenAddressSync(desiredMint, positionRequest, true);
+    const slippageMultiplier = direction === 'long' ? (1 - CLOSE_SLIPPAGE_PCT) : (1 + CLOSE_SLIPPAGE_PCT);
+    const priceSlippage = new anchor.BN(Math.floor(currentPrice * slippageMultiplier * 1_000_000));
+
+    const decreaseIx = await this.program.methods
+      .createDecreasePositionMarketRequest({
+        collateralUsdDelta: new anchor.BN(0),
+        sizeUsdDelta: new anchor.BN(0),
+        priceSlippage,
+        entirePosition: true,
+        jupiterMinimumOut: null,
+        counter,
+      })
+      .accounts({
+        owner: this.userPubkey,
+        receivingAccount,
+        perpetuals: this.perpetualsPda!,
+        pool: POOL,
+        position: positionPda,
+        positionRequest,
+        positionRequestAta,
+        custody: SOL_CUSTODY,
+        collateralCustody: this.getCollateralCustody(direction),
+        desiredMint,
+        referral: null as any,
+        tokenProgram: TOKEN_PROGRAM_ID,
+        associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
+        systemProgram: SystemProgram.programId,
+        eventAuthority: this.eventAuthorityPda!,
+        program: PROGRAM_ID,
+      })
+      .instruction();
+
+    const { blockhash } = await this.connection.getLatestBlockhash('confirmed');
+    const message = new TransactionMessage({
+      payerKey: this.userPubkey,
+      recentBlockhash: blockhash,
+      instructions: [
+        ComputeBudgetProgram.setComputeUnitLimit({ units: 1_400_000 }),
+        ComputeBudgetProgram.setComputeUnitPrice({ microLamports: 100_000 }),
+        decreaseIx,
+      ],
+    }).compileToV0Message();
+
+    const tx = new VersionedTransaction(message);
+    tx.sign([this.wallet.payer]);
+    const signature = await this.connection.sendTransaction(tx, { skipPreflight: false, maxRetries: 3 });
+    await this.connection.confirmTransaction(signature, 'confirmed');
+    console.info(`✅ CLOSE ${direction.toUpperCase()} request submitted → ${signature}`);
+    return signature;
+  }
+
+  async cancelOrders() { console.info('Jupiter cancelOrders called (placeholder)'); }
+  async cancelOrder(_orderId: string) { console.info('Jupiter cancelOrder called (placeholder)'); }
+}
+
+// ====================== TRADING BOT ======================
+class TradingBot {
+  private jupiterClient: JupiterPerpsClient | null = null;
+  private priceBuffer: { timestamp: Date; price: number }[] = [];
+  private dfCandles: { timestamp: Date; candle: Candle }[] = [];
+  private position: number = 0;
+  private entryPrice: number = 0.0;
+  private trailSl: number = 0.0;
+  private trailTp: number = 0.0;
+  private lastPrice: number | null = null;
+  private pythSse: EventSource | null = null;
+  private pythReconnectAttempts: number = 0;
+  private userPubkey: PublicKey | null = null;
+  private isClosing: boolean = false;
+  private isOpeningPosition: boolean = false;
+  private lastEntryTime: number = 0;
+  private lastLossTime: number = 0;
+  private isManualPosition: boolean = false;
+  private ema9Values: number[] = [];
+  private ema21Values: number[] = [];
+  private avgVolume: number = 0;
+  private lastCandleTimestamp: number = 0;
+  private baseTpDistance: number = 0;        // fixed distance (4x body)
+  private originalCandleTp: number = 0;      // the floor/ceiling that TP can never cross
+  private lastDynamicTpUpdate: number = 0;   // throttle real-time updates to ~15s
+  private originalSl: number = 0;            // absolute floor/ceiling that SL can never cross in the worse direction
+  private longBias: boolean | null = null;
+
+  private currentTrade: any = null;
+  private weeklyLogFile: string = '';
+
+  private getWeeklyLogFilePath(): string {
+    const now = new Date();
+    const day = now.getDay();
+    const diff = now.getDate() - day + (day === 0 ? -6 : 1);
+    const monday = new Date(now.getFullYear(), now.getMonth(), diff);
+    const dateStr = monday.toISOString().slice(0, 10).replace(/-/g, '');
+    return `trades_${dateStr}.json`;
+  }
+
+  private async loadTradesLog(): Promise<any[]> {
+    const filePath = this.getWeeklyLogFilePath();
+    this.weeklyLogFile = filePath;
+    try {
+      const data = await fs.readFile(filePath, 'utf-8');
+      return JSON.parse(data);
+    } catch {
+      return [];
+    }
+  }
+
+  private async saveTradesLog(trades: any[]) {
+    await fs.writeFile(this.weeklyLogFile, JSON.stringify(trades, null, 2));
+  }
+
+  private calculateEstimatedPnL(direction: number, entryPrice: number, exitPrice: number, leverage: number, collateralUsd: number): number {
+    const pct = direction === 1 ? (exitPrice - entryPrice) / entryPrice : (entryPrice - exitPrice) / entryPrice;
+    return pct * leverage * collateralUsd;
+  }
+
+  private async startNewTradeLog(direction: 'long' | 'short', entryPrice: number, leverage: number, leverageReason: string, collateralUsd: number, atr: number, confidenceScore: number, entryType: 'bot' | 'manual' = 'bot') {
+    const trades = await this.loadTradesLog();
+    const closes = this.dfCandles.map(d => d.candle.close);
+    const rsiValues = this.rsi(closes);
+
+    this.currentTrade = {
+      tradeId: Date.now().toString(),
+      entryTime: new Date().toISOString(),
+      direction,
+      entryPrice,
+      leverage,
+      leverageReason,
+      collateralUsd,
+      notionalSizeUsd: collateralUsd * leverage,
+      atrAtEntry: atr,
+      confidenceScore,
+      ema9AtEntry: this.ema9Values[this.ema9Values.length - 1],
+      ema21AtEntry: this.ema21Values[this.ema21Values.length - 1],
+      rsiAtEntry: rsiValues[rsiValues.length - 1] || 50,
+      volumeAtEntry: this.dfCandles[this.dfCandles.length - 1].candle.volume,
+      entryType,                    // ← NEW: "bot" or "manual"
+      tpSlHistory: [],
+      exitTime: null,
+      exitPrice: null,
+      exitTrigger: null,
+      estimatedPnLUsd: null,
+      netPnLAfterFees: null,
+      status: 'open'
+    };
+
+    this.currentTrade.tpSlHistory.push({
+      timestamp: new Date().toISOString(),
+      tp: this.trailTp,
+      sl: this.trailSl,
+      reason: 'initial'
+    });
+
+    trades.push(this.currentTrade);
+    await this.saveTradesLog(trades);
+
+    const typeLabel = entryType === 'manual' ? 'MANUAL' : 'BOT';
