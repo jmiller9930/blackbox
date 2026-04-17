@@ -1604,17 +1604,22 @@ function jupiterPolicyOptionLabel(id) {
   return String(id || '').trim() || '—';
 }
 
-function htmlJupiterPolicySelectOptions(selectedAp) {
+/** @param {string} selectedActiveId — deployment id currently in SQLite (empty = standby). */
+function htmlJupiterPolicySelectOptions(selectedActiveId) {
   const ids = loadAllowedDeploymentIdsFromManifest();
   if (ids.length === 0) {
     return '<option value="" selected>none</option>';
   }
-  return ids
+  const active = String(selectedActiveId || '').trim();
+  const standbySelected = !active;
+  const emptyOpt = `<option value=""${standbySelected ? ' selected' : ''}>Standby (not assigned)</option>`;
+  const rest = ids
     .map(
       (id) =>
-        `<option value="${esc(id)}"${selectedAp === id ? ' selected' : ''}>${esc(jupiterPolicyOptionLabel(id))}</option>`
+        `<option value="${esc(id)}"${active && active === id ? ' selected' : ''}>${esc(jupiterPolicyOptionLabel(id))}</option>`
     )
     .join('');
+  return emptyOpt + rest;
 }
 
 function htmlPage(v) {
@@ -1629,8 +1634,8 @@ function htmlPage(v) {
   const jr = tm.jupiter_runtime || {};
   const allowed = loadAllowedDeploymentIdsFromManifest();
   const activeId = String(jr.active_policy || '').trim();
-  /** Dropdown default when standby: first manifest id (selection intent), not “active runtime”. */
-  const apForSelect = activeId || allowed[0] || '';
+  /** Dropdown mirrors SQLite: empty selection = standby — do not pre-fill first manifest id. */
+  const apForSelect = activeId;
   /** Show em dash in <code> when no deployment — empty <code> looked like a broken placeholder. */
   const apForCodeDisplay = activeId || '\u2014';
   const src = jr.source || 'default';
@@ -1652,7 +1657,7 @@ function htmlPage(v) {
           : `<p class="warn" id="jw-policy-token-warn"><strong>Deployment switch unavailable</strong> — <code>JUPITER_OPERATOR_TOKEN</code> is not set on this server. Dropdown lists manifest deployment ids; enable token and restart to apply.</p>`
       }
     </div>
-    ${postOk ? `<p class="muted">Uses Bearer token in <strong>Operator token</strong> panel above. Options stay aligned with <code>GET /api/v1/jupiter/policy</code> · <code>allowed_policies</code>.</p>
+    ${postOk ? `<p class="muted">Uses Bearer token in <strong>Operator token</strong> panel above. <strong>Standby (not assigned)</strong> = nothing in SQLite; other options are manifest ids you can assign. Aligns with <code>GET /api/v1/jupiter/policy</code> · <code>allowed_policies</code>.</p>
     <script>
     (function(){
       var LABELS=${policyLabelsJson};
@@ -1669,6 +1674,10 @@ function htmlPage(v) {
           s.appendChild(o0);
           return;
         }
+        var oStandby=document.createElement('option');
+        oStandby.value='';
+        oStandby.textContent='Standby (not assigned)';
+        s.appendChild(oStandby);
         allowed.forEach(function(id){
           var o=document.createElement('option');
           o.value=id;
@@ -1677,7 +1686,7 @@ function htmlPage(v) {
         });
         var pick=String(j.active_policy||'').trim();
         if(pick&&allowed.indexOf(pick)>=0)s.value=pick;
-        else s.value=allowed[0];
+        else s.value='';
       }
       function jwPolicySyncVisual(){
         var box=document.getElementById('jw-policy-control');
@@ -1697,7 +1706,9 @@ function htmlPage(v) {
         var selv=String(sel.value||'').trim();
         if(!selv){
           box.classList.add('jw-policy-idle');
-          if(st){ st.textContent='No deployment ids in manifest — dropdown shows none.'; }
+          if(st){
+            st.textContent='Standby — no deployment selected for assign (matches SQLite when empty). Pick an id below to assign, or leave Standby.';
+          }
           return;
         }
         if(active&&selv===active){
@@ -1727,10 +1738,6 @@ function htmlPage(v) {
         var tok=String((document.getElementById('jw-op-token')||{}).value||'').trim();
         if(!tok){
           alert('Enter the operator Bearer token in the Operator token panel (must match JUPITER_OPERATOR_TOKEN on the server).');
-          return;
-        }
-        if(!pol){
-          alert('No deployment id selected — if the dropdown shows \u201cnone\u201d, add Jupiter entries to kitchen_policy_deployment_manifest_v1.json (repo) and reload.');
           return;
         }
         if(box)box.removeAttribute('data-policy-error');
