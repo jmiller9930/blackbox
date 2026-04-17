@@ -445,14 +445,14 @@ def jupiter_control_plane_warnings(
     if not base:
         out.append(
             "KITCHEN_JUPITER_CONTROL_BASE is unset. Set it to the same Jupiter origin the operator "
-            "uses in the browser (e.g. http://upvlt.greyllc.net:707), not BlackBox api :8080."
+            "uses in the browser (scheme + host + port), not BlackBox api :8080."
         )
         return out
     low = base.lower()
     if ("127.0.0.1" in low or "localhost" in low) and ":8080" in low:
         out.append(
             "KITCHEN_JUPITER_CONTROL_BASE points at localhost:8080 — that is BlackBox api, not Sean Jupiter. "
-            "Use the operator Jupiter origin, e.g. http://upvlt.greyllc.net:707"
+            "Use the operator Jupiter origin (same host:port as the Jupiter UI)."
         )
     return out
 
@@ -466,7 +466,7 @@ def jupiter_control_base_blocks_assignment(http_jupiter_base: str | None = None)
     if ("127.0.0.1" in low or "localhost" in low) and ":8080" in low:
         return [
             "KITCHEN_JUPITER_CONTROL_BASE points at localhost:8080 — that is BlackBox api, not Sean Jupiter. "
-            "Use e.g. http://upvlt.greyllc.net:707"
+            "Use the operator Jupiter origin (same host:port as the Jupiter UI)."
         ]
     return []
 

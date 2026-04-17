@@ -23,8 +23,8 @@ def test_warnings_localhost_8080() -> None:
     assert "8080" in w[0] and "BlackBox" in w[0]
 
 
-def test_warnings_ok_for_operator_origin() -> None:
-    w = jupiter_control_plane_warnings("http://upvlt.greyllc.net:707")
+def test_warnings_ok_for_https_operator_origin() -> None:
+    w = jupiter_control_plane_warnings("https://jupiter.example.corp:707")
     assert w == []
 
 
