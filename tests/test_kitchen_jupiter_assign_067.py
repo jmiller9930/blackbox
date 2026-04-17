@@ -232,6 +232,7 @@ def test_read_payload_includes_drift_when_runtime_unconfigured(
     monkeypatch.delenv("KITCHEN_JUPITER_OPERATOR_TOKEN", raising=False)
     p = build_kitchen_runtime_read_payload(tmp_path, "jupiter")
     assert p.get("schema") == "kitchen_runtime_assignment_read_v3"
+    assert p.get("authoritative_active_policy") == ""
     assert p.get("runtime", {}).get("ok") is False
     assert p.get("drift", {}).get("state") == "runtime_unreachable"
 
@@ -259,6 +260,7 @@ def test_read_payload_match_when_mocked_runtime_agrees_with_kitchen(
     assign_mechanical_candidate_to_jupiter(tmp_path, "s2")
     p = build_kitchen_runtime_read_payload(tmp_path, "jupiter")
     assert p.get("drift", {}).get("state") == "match"
+    assert p.get("authoritative_active_policy") == "jup_kitchen_mechanical_v1"
     assert isinstance(p.get("ledger_tail"), list)
 
 

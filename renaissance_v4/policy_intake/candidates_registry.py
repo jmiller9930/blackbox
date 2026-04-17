@@ -14,8 +14,18 @@ from pathlib import Path
 from typing import Any
 
 from renaissance_v4.execution_targets import LABELS, normalize_execution_target
+from renaissance_v4.kitchen_policy_registry import infer_runtime_policy_id_for_candidate
 from renaissance_v4.kitchen_policy_lifecycle import attach_lifecycle_to_candidate_rows, set_retired
 from renaissance_v4.policy_intake.storage import intake_root, read_json, submission_dir, write_json
+
+
+def _enrich_runtime_policy_id(repo: Path, rows: list[dict[str, Any]]) -> None:
+    """DV-077 — ``runtime_policy_id`` for green indicator vs GET /api/v1/jupiter/policy ``active_policy``."""
+    for r in rows:
+        et = str(r.get("execution_target") or "jupiter").strip().lower()
+        cid = str(r.get("candidate_policy_id") or "").strip()
+        rid = infer_runtime_policy_id_for_candidate(repo, et, cid)
+        r["runtime_policy_id"] = rid if rid else ""
 
 
 def _parse_created_sort_key(created_utc: str) -> float:
@@ -124,6 +134,8 @@ def list_intake_candidates(
     pid_counts = Counter(str(r["candidate_policy_id"]) for r in rows)
     for r in rows:
         r["same_policy_submission_count"] = pid_counts[str(r["candidate_policy_id"])]
+
+    _enrich_runtime_policy_id(repo, rows)
 
     if collapse_duplicate_policy_ids and rows:
         seen: set[str] = set()

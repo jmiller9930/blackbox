@@ -335,7 +335,21 @@
       font-weight: 600;
       margin: 0.25rem 0 0;
     }
-    /* DV-069 — runtime-confirmed active policy (read-back), not intent alone */
+    /* DV-077 — single truth line (GET /api/v1/jupiter/policy active_policy) */
+    .dash-rv4-active-trade-policy-line {
+      font-size: 0.95rem;
+      font-weight: 700;
+      margin: 0.35rem 0 0.5rem;
+      color: var(--text);
+    }
+    .dash-rv4-active-trade-policy-line .dash-rv4-atp-value {
+      font-family: ui-monospace, monospace;
+      color: var(--accent);
+    }
+    .dash-rv4-active-trade-policy-line.is-rv4-drift-warn .dash-rv4-atp-value {
+      color: #b45309;
+    }
+    /* DV-077 — green when runtime.active_policy matches row.runtime_policy_id */
     .dash-rv4-lifecycle-running {
       color: #16a34a;
       font-size: 0.75rem;
@@ -1991,6 +2005,15 @@
             <label><input type="checkbox" id="rv4-cand-show-archived" /> Show archived policies</label>
             <span class="dash-rv4-intake-hint" style="margin:0">Newest first · duplicate policy IDs collapsed to latest intake</span>
           </div>
+          <p
+            id="rv4-active-trade-policy-line"
+            class="dash-rv4-active-trade-policy-line"
+            aria-live="polite"
+            hidden
+          >
+            Active trade policy:
+            <span id="rv4-active-trade-policy-value" class="dash-rv4-atp-value">—</span>
+          </p>
           <div class="dash-rv4-cand-table-wrap">
             <table class="dash-rv4-table" id="rv4-cand-table" aria-label="Successful intake candidates">
               <thead>
@@ -4882,12 +4905,45 @@
     }
     return { ok: true, reason: '' };
   }
+  /** DV-077 — sole headline for active policy (GET runtime read-back). */
+  function rv4UpdateActiveTradePolicyLine() {
+    var wrap = $('rv4-active-trade-policy-line');
+    var valEl = $('rv4-active-trade-policy-value');
+    if (!wrap || !valEl) return;
+    var et = rv4GetExecutionTarget();
+    if (et !== 'jupiter' && et !== 'blackbox') {
+      wrap.hidden = true;
+      return;
+    }
+    wrap.hidden = false;
+    var j = rv4KitchenAssignmentPayload;
+    if (!j) {
+      valEl.textContent = '—';
+      wrap.classList.remove('is-rv4-drift-warn');
+      return;
+    }
+    var rt = j.runtime || {};
+    var auth =
+      j.authoritative_active_policy != null && String(j.authoritative_active_policy).trim() !== ''
+        ? String(j.authoritative_active_policy).trim()
+        : rt && rt.ok && rt.active_policy != null && String(rt.active_policy).trim() !== ''
+          ? String(rt.active_policy).trim()
+          : '';
+    if (auth) {
+      valEl.textContent = auth;
+      wrap.classList.remove('is-rv4-drift-warn');
+      return;
+    }
+    valEl.textContent = rt && !rt.ok ? '(runtime unavailable)' : '—';
+    wrap.classList.toggle('is-rv4-drift-warn', !!(rt && !rt.ok));
+  }
   function rv4UpdateKitchenAssignGlobalStatus() {
+    rv4UpdateActiveTradePolicyLine();
     var el = $('rv4-kitchen-assign-global-status');
     if (!el) return;
     var j = rv4KitchenAssignmentPayload;
     if (!j) {
-      el.textContent = 'Kitchen runtime status: not loaded.';
+      el.textContent = 'Kitchen detail: assignment payload not loaded.';
       el.classList.remove('is-rv4-drift-warn');
       return;
     }
@@ -4898,46 +4954,42 @@
     if (cpw && cpw.length) {
       parts.push('CONFIG: ' + cpw.map(function (w) { return String(w); }).join(' '));
     }
-    if (rt && rt.ok && rt.active_policy != null && String(rt.active_policy) !== '') {
-      parts.push(
-        'Runtime (authoritative): active policy ' +
-          String(rt.active_policy) +
-          (rt.source ? ' · source ' + String(rt.source) : '')
-      );
-    } else if (rt && !rt.ok) {
+    if (rt && !rt.ok) {
       parts.push(
         'Runtime query failed: ' +
           String(rt.error || 'unknown') +
           (rt.detail ? ' — ' + String(rt.detail).slice(0, 220) : '')
       );
+    } else if (rt && rt.ok && rt.source) {
+      parts.push('Runtime source: ' + String(rt.source));
     }
     if (j.assignment) {
       var a = j.assignment;
       parts.push(
-        'Kitchen last assigned: policy ' +
-          String(a.active_runtime_policy_id || '—') +
-          ' · slot ' +
+        'Assignment record: submission ' +
+          String(a.submission_id || '—') +
+          ' · registry slot ' +
           String(a.approved_runtime_slot_id || '—') +
-          ' · submission ' +
-          String(a.submission_id || '—')
+          ' · store reconciled id ' +
+          String(a.active_runtime_policy_id || '—')
       );
     } else {
-      parts.push('Kitchen last assigned: (none recorded for this target)');
+      parts.push('Assignment record: (none for this target)');
     }
     if (drift && drift.state) {
       if (drift.state === 'match') {
-        parts.push('Drift: none — Kitchen and runtime agree.');
+        parts.push('Reconcile: store matches runtime GET.');
       } else {
         parts.push(
-          'Drift warning [' +
+          'Reconcile warning [' +
             String(drift.state) +
             ']: ' +
             String(drift.detail || '') +
             (drift.runtime_active_policy != null
-              ? ' · runtime policy ' + String(drift.runtime_active_policy)
+              ? ' · runtime ' + String(drift.runtime_active_policy)
               : '') +
             (drift.kitchen_active_policy_id != null
-              ? ' · kitchen policy ' + String(drift.kitchen_active_policy_id)
+              ? ' · store id ' + String(drift.kitchen_active_policy_id)
               : '')
         );
       }
@@ -5042,20 +5094,17 @@
         var tl = String(r.execution_target_label || r.execution_target || '—').replace(/[<>&]/g, '');
         var cr = String(r.created_utc || '—').replace(/[<>&]/g, '');
         var st = String(r.intake_status || 'pass').replace(/[<>&]/g, '');
-        /* DV-070 — green only when runtime read-back matches this row's assignment (not lifecycle intent alone) */
+        /* DV-077 — green only when runtime.active_policy === row.runtime_policy_id (no lifecycle/assignment) */
         var kPay = rv4KitchenAssignmentPayload || {};
         var kRt = kPay.runtime || {};
-        var kDr = kPay.drift || {};
-        var kAsg = kPay.assignment || null;
+        var rpid = String(r.runtime_policy_id || '').trim();
         var runtimeMatch =
           kRt &&
           kRt.ok &&
-          kDr.state === 'match' &&
-          kAsg &&
-          String(kAsg.submission_id || '') === String(r.submission_id || '') &&
-          String(kRt.active_policy || '') === String(kAsg.active_runtime_policy_id || '');
+          rpid !== '' &&
+          String(kRt.active_policy || '') === rpid;
         var runDot = runtimeMatch
-          ? '<span class="dash-rv4-lifecycle-running" title="Runtime active policy (read-back) matches assignment">&#9679;</span> '
+          ? '<span class="dash-rv4-lifecycle-running" title="Runtime GET active_policy matches this row runtime_policy_id">&#9679;</span> '
           : '';
         var sel = rv4SelectedCandSid === r.submission_id;
         var isArch = r.is_active === false;
@@ -5087,6 +5136,8 @@
         var dbgLine =
           'candidate_policy_id: ' +
           String(r.candidate_policy_id || '—') +
+          ' · runtime_policy_id: ' +
+          (rpid || '—') +
           ' · execution_target: ' +
           String(r.execution_target || '—') +
           ' · eligible: ' +
@@ -5113,9 +5164,9 @@
             ? '<p class="dash-rv4-assign-reason">' + rv4Esc(reasonText) + '</p>'
             : '') +
           (assignedHere && asg
-            ? '<p class="dash-rv4-assign-recorded">Active runtime policy: ' +
+            ? '<p class="dash-rv4-assign-recorded">Assignment on file · store reconciled id ' +
               rv4Esc(String(asg.active_runtime_policy_id || '—')) +
-              ' · slot ' +
+              ' · registry slot ' +
               rv4Esc(String(asg.approved_runtime_slot_id || '—')) +
               '</p>'
             : '') +
@@ -5255,14 +5306,11 @@
               return;
             }
             window.alert(
-              'Kitchen → runtime [' +
-                String(x.j.execution_target || '') +
-                ']: approved slot ' +
-                String(x.j.approved_runtime_slot_id || '') +
-                ' · active policy ' +
+              'Assignment verified. Active trade policy: ' +
                 String(x.j.active_runtime_policy_id || '') +
-                ' · runtime_http_post_ok=' +
-                String(x.j.runtime_http_post_ok)
+                (String(x.j.execution_target || '') === 'blackbox'
+                  ? ' (must match GET /api/v1/blackbox/policy).'
+                  : ' (must match GET /api/v1/jupiter/policy).')
             );
             rv4LoadCandidates();
           })

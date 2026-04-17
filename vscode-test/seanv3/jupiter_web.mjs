@@ -225,6 +225,7 @@ function computeStatusStrip(v) {
   const modeCls = tm.actual_banner ? 'jw-st-warn' : 'jw-st-ok';
 
   const jr = tm.jupiter_runtime || {};
+  /** DV-077: must match GET /api/v1/jupiter/policy active_policy (same resolveJupiterPolicy as handleJupiterPolicyGet). */
   const policyId = jr.active_policy ? String(jr.active_policy) : '—';
 
   const pq = op.paper_equity_usd || {};

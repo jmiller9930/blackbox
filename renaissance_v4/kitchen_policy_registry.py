@@ -67,3 +67,40 @@ def approved_mechanical_by_target(repo: Path) -> dict[str, dict[str, str]]:
                 "runtime_adapter": str(row.get("runtime_adapter") or ""),
             }
     return out
+
+
+def infer_runtime_policy_id_for_candidate(repo: Path, execution_target: str, candidate_policy_id: str) -> str | None:
+    """
+    DV-077 — Map a Kitchen candidate_policy_id to the runtime policy id that row represents on Jupiter/BlackBox.
+
+    Used for UI green indicator: ``runtime.active_policy == row.runtime_policy_id``. Returns None if unknown.
+    """
+    try:
+        et = str(execution_target).strip().lower()
+        if et not in ("jupiter", "blackbox"):
+            return None
+        cid = str(candidate_policy_id).strip()
+        if not cid:
+            return None
+        ms = mechanical_slot(repo, et)
+        if ms and str(ms.get("candidate_policy_id") or "") == cid:
+            rid = str(ms.get("active_runtime_policy_id") or ms.get("approved_runtime_slot_id") or "").strip()
+            return rid or None
+        reg = load_registry(repo)
+        allowed_obj = reg.get("runtime_policies") or {}
+        if not isinstance(allowed_obj, dict):
+            return None
+        lst = allowed_obj.get(et)
+        if not isinstance(lst, list):
+            return None
+        allowed_set = {str(x).strip() for x in lst}
+        if cid in allowed_set:
+            return cid
+        for suf in ("_v1", "_v2", "_v3"):
+            if cid.endswith(suf):
+                base = cid[: -len(suf)]
+                if base in allowed_set:
+                    return base
+        return None
+    except (FileNotFoundError, ValueError, OSError):
+        return None

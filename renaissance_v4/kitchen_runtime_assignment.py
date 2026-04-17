@@ -561,9 +561,13 @@ def build_kitchen_runtime_read_payload(
     cp_warnings: list[str] = []
     if et == "jupiter":
         cp_warnings = jupiter_control_plane_warnings(http_jupiter_base)
+    auth_policy = ""
+    if isinstance(rt, dict) and rt.get("ok"):
+        auth_policy = str(rt.get("active_policy") or "").strip()
     return {
         "schema": "kitchen_runtime_assignment_read_v3",
         "execution_target": et,
+        "authoritative_active_policy": auth_policy,
         "assignment": row,
         "mechanical_candidate_policy_id": MECHANICAL_CANDIDATE_POLICY_ID,
         "policy_registry": {
@@ -698,12 +702,6 @@ def assign_mechanical_candidate(
                 "active_runtime_policy_id": active_pid,
                 "jupiter_allowed_policies": allowed_list,
             }
-        try:
-            from renaissance_v4.kitchen_policy_lifecycle import mark_assignment_requested
-
-            mark_assignment_requested(repo, submission_id, et, intent_runtime_policy_id=active_pid)
-        except Exception:
-            pass
         post = jupiter_post_active_policy(base, tok, active_pid)
         if not post.get("ok"):
             return {
@@ -779,12 +777,6 @@ def assign_mechanical_candidate(
                 "active_runtime_policy_id": active_pid,
                 "blackbox_allowed_policies": allowed_list,
             }
-        try:
-            from renaissance_v4.kitchen_policy_lifecycle import mark_assignment_requested
-
-            mark_assignment_requested(repo, submission_id, et, intent_runtime_policy_id=active_pid)
-        except Exception:
-            pass
         post = blackbox_post_active_policy(base, tok, active_pid)
         if not post.get("ok"):
             return {
