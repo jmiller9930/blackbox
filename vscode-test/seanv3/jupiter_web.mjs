@@ -1555,7 +1555,8 @@ function jwLivePollScript(refreshSec) {
     if(!j||j.error)return;
     applyStatusStrip(j);
     var tm=j.trading_mode||{}, jr=tm.jupiter_runtime||{};
-    var a=document.getElementById('jw-ap-code'); if(a)a.textContent=jr.active_policy||'';
+    var apRaw=String(jr.active_policy||'').trim();
+    var a=document.getElementById('jw-ap-code'); if(a)a.textContent=apRaw||'\u2014';
     a=document.getElementById('jw-ap-src'); if(a)a.textContent=jr.source||'';
     var sel=document.getElementById('jw-jupiter-policy'); if(sel&&jr.active_policy)sel.value=jr.active_policy;
     var op=j.operator||{};
@@ -1627,16 +1628,20 @@ function htmlPage(v) {
   const actual = tm.actual_banner;
   const jr = tm.jupiter_runtime || {};
   const allowed = loadAllowedDeploymentIdsFromManifest();
-  const ap = jr.active_policy || allowed[0] || '';
+  const activeId = String(jr.active_policy || '').trim();
+  /** Dropdown default when standby: first manifest id (selection intent), not “active runtime”. */
+  const apForSelect = activeId || allowed[0] || '';
+  /** Show em dash in <code> when no deployment — empty <code> looked like a broken placeholder. */
+  const apForCodeDisplay = activeId || '\u2014';
   const src = jr.source || 'default';
   const postOk = Boolean(tm.post_token_configured);
-  const policyOptionsHtml = htmlJupiterPolicySelectOptions(ap);
+  const policyOptionsHtml = htmlJupiterPolicySelectOptions(apForSelect);
   const policyLabelsJson = JSON.stringify(
     Object.fromEntries(allowed.map((id) => [id, jupiterPolicyOptionLabel(id)]))
   );
   const policySel = `
     <p><strong>Assigned deployment</strong> (policy artifact bound in manifest — applies next bar; does not close or force-open positions)</p>
-    <p class="muted"><strong>Engine</strong> is separate — status strip shows <code>${esc(jupiterEngineDisplayId())}</code> · Online when the execution loop is enabled. Active deployment: <code id="jw-ap-code">${esc(ap)}</code> · source <code id="jw-ap-src">${esc(src)}</code> · meta <code>${esc(JUPITER_ACTIVE_POLICY_KEY)}</code></p>
+    <p class="muted"><strong>Engine</strong> is separate — status strip shows <code>${esc(jupiterEngineDisplayId())}</code> · Online when the execution loop is enabled. Active deployment: <code id="jw-ap-code">${esc(apForCodeDisplay)}</code> · source <code id="jw-ap-src">${esc(src)}</code> · meta <code>${esc(JUPITER_ACTIVE_POLICY_KEY)}</code></p>
     <div id="jw-policy-control" class="jw-policy-box jw-policy-idle">
       <p class="op-row" style="margin-top:0"><label>Deployment id <select id="jw-jupiter-policy" ${postOk ? '' : 'disabled'}>${policyOptionsHtml}</select></label>
     <button type="button" id="jw-apply-policy" class="fund-btn" ${postOk ? '' : 'disabled'}>Set active deployment</button></p>
@@ -1687,7 +1692,8 @@ function htmlPage(v) {
           if(st){ st.textContent=err; }
           return;
         }
-        var active=String(code.textContent||'').trim();
+        var raw=String(code.textContent||'').trim();
+        var active=(raw==='\u2014'||raw==='')?'':raw;
         var selv=String(sel.value||'').trim();
         if(!selv){
           box.classList.add('jw-policy-idle');
@@ -1699,7 +1705,11 @@ function htmlPage(v) {
           if(st){ st.textContent='Deployment is set and active — '+selv+' (SQLite jupiter_active_policy; engine loads evaluator on the next eligible cycle).'; }
         }else{
           box.classList.add('jw-policy-idle');
-          if(st){ st.textContent='Selection not applied or differs from Active above — choose a deployment id and click Set active deployment.'; }
+          if(st){
+            st.textContent=!active
+              ? 'Standby — no deployment in SQLite (Active above shows \u2014). Choose an id and click Set active deployment to assign.'
+              : 'Selection not applied or differs from Active above — choose a deployment id and click Set active deployment.';
+          }
         }
       }
       window.jwPolicySyncVisual=jwPolicySyncVisual;
