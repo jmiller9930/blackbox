@@ -444,15 +444,15 @@ def jupiter_control_plane_warnings(
     out: list[str] = []
     if not base:
         out.append(
-            "KITCHEN_JUPITER_CONTROL_BASE is unset. Set it to Sean Jupiter's origin, e.g. "
-            "http://clawbot.a51.corp:707 (not BlackBox api :8080)."
+            "KITCHEN_JUPITER_CONTROL_BASE is unset. Set it to the same Jupiter origin the operator "
+            "uses in the browser (e.g. http://upvlt.greyllc.net:707), not BlackBox api :8080."
         )
         return out
     low = base.lower()
     if ("127.0.0.1" in low or "localhost" in low) and ":8080" in low:
         out.append(
             "KITCHEN_JUPITER_CONTROL_BASE points at localhost:8080 — that is BlackBox api, not Sean Jupiter. "
-            "Use the lab internal Jupiter URL, e.g. http://clawbot.a51.corp:707"
+            "Use the operator Jupiter origin, e.g. http://upvlt.greyllc.net:707"
         )
     return out
 
@@ -466,7 +466,7 @@ def jupiter_control_base_blocks_assignment(http_jupiter_base: str | None = None)
     if ("127.0.0.1" in low or "localhost" in low) and ":8080" in low:
         return [
             "KITCHEN_JUPITER_CONTROL_BASE points at localhost:8080 — that is BlackBox api, not Sean Jupiter. "
-            "Use e.g. http://clawbot.a51.corp:707"
+            "Use e.g. http://upvlt.greyllc.net:707"
         ]
     return []
 
