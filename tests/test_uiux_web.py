@@ -25,6 +25,13 @@ def test_api_server_exposes_context_engine_route() -> None:
     assert "/api/v1/context-engine/status" in text
 
 
+def test_api_server_exposes_runtime_policy_checkin_post() -> None:
+    text = (WEB / "api_server.py").read_text(encoding="utf-8")
+    assert "/api/v1/renaissance/runtime-policy-checkin" in text
+    assert "REN_RUNTIME_CHECKIN_TOKEN" in text
+    assert "apply_runtime_policy_checkin" in text
+
+
 @pytest.mark.parametrize(
     "name",
     [
@@ -124,6 +131,15 @@ def test_dashboard_dv074a_ledger_strip_present() -> None:
     text = (WEB / "dashboard.html").read_text(encoding="utf-8")
     assert "rv4-kitchen-ledger-strip" in text
     assert "ledger_tail" in text
+
+
+def test_dashboard_kitchen_runtime_three_line_truth() -> None:
+    """Kitchen assigned vs live runtime vs sync_state — not a single collapsed line."""
+    text = (WEB / "dashboard.html").read_text(encoding="utf-8")
+    assert "rv4-runtime-policy-summary" in text
+    assert "rv4-kitchen-assigned-policy-value" in text
+    assert "rv4-live-runtime-policy-value" in text
+    assert "rv4-sync-state-value" in text
 
 
 def test_dashboard_dv071_paste_reset_after_submit() -> None:

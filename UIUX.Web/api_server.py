@@ -3172,6 +3172,68 @@ class Handler(BaseHTTPRequestHandler):
             code = 200 if r.get("ok") else 400
             self._json(code, r, no_cache=True)
             return
+        if path_norm == "/api/v1/renaissance/runtime-policy-checkin":
+            trace_id = str(uuid.uuid4())
+            exp = (os.environ.get("REN_RUNTIME_CHECKIN_TOKEN") or "").strip()
+            if not exp:
+                self._json(
+                    503,
+                    {
+                        "ok": False,
+                        "error": "runtime_checkin_token_not_configured",
+                        "detail": "Set REN_RUNTIME_CHECKIN_TOKEN on the API host to enable runtime policy check-in.",
+                        "trace_id": trace_id,
+                    },
+                    no_cache=True,
+                )
+                return
+            auth = self.headers.get("Authorization") or ""
+            tok = auth[7:].strip() if auth.startswith("Bearer ") else ""
+            if tok != exp:
+                self._json(
+                    401,
+                    {"ok": False, "error": "unauthorized", "detail": "Bearer token required.", "trace_id": trace_id},
+                    no_cache=True,
+                )
+                return
+            body = self._read_json_body()
+            et_raw = str(body.get("execution_target") or "").strip()
+            ap = str(body.get("active_policy") or "").strip()
+            cs = str(body.get("change_source") or "trade_surface_manual").strip()
+            if not et_raw or not ap:
+                self._json(
+                    400,
+                    {
+                        "ok": False,
+                        "error": "missing_fields",
+                        "detail": "execution_target and active_policy are required.",
+                        "trace_id": trace_id,
+                    },
+                    no_cache=True,
+                )
+                return
+            try:
+                from renaissance_v4.kitchen_runtime_assignment import apply_runtime_policy_checkin
+
+                r = apply_runtime_policy_checkin(_REPO_ROOT, et_raw, ap, change_source=cs)
+            except ValueError as e:
+                self._json(
+                    400,
+                    {"ok": False, "error": "invalid_execution_target", "detail": str(e)[:500], "trace_id": trace_id},
+                    no_cache=True,
+                )
+                return
+            except Exception as e:  # noqa: BLE001
+                self._json(
+                    500,
+                    {"ok": False, "error": str(e)[:800], "trace_id": trace_id},
+                    no_cache=True,
+                )
+                return
+            r["trace_id"] = trace_id
+            code = 200 if r.get("ok") else 400
+            self._json(code, r, no_cache=True)
+            return
         if path_norm == "/api/v1/renaissance/kitchen-assign-jupiter":
             trace_id = str(uuid.uuid4())
             body = self._read_json_body() or {}

@@ -32,6 +32,7 @@ import {
   handleJupiterAuthHttp,
   requireJupiterSession,
 } from './jupiter_web_auth.mjs';
+import { tradeSurfacePolicyKitchenHandshake } from './jupiter_kitchen_checkin.mjs';
 
 /** GET /api/v1/jupiter/policy — observability only. */
 const JUPITER_POLICY_OBSERVABILITY_CONTRACT = 'jupiter_policy_observability_v1';
@@ -2652,19 +2653,55 @@ async function handleJupiterActivePolicyPost(req, res) {
     setMeta(dbw, JUPITER_ACTIVE_POLICY_KEY, nid);
     const after = resolveJupiterPolicy(dbw).policyId;
     console.error(`[jupiter] set active Jupiter policy: ${before} → ${after}`);
+    const hs = await tradeSurfacePolicyKitchenHandshake({
+      beforePolicyId: before,
+      afterPolicyId: after,
+    });
+    if (hs.strictBlocked) {
+      setMeta(dbw, JUPITER_ACTIVE_POLICY_KEY, before);
+      const restored = resolveJupiterPolicy(dbw).policyId;
+      if (restored !== before) {
+        res.writeHead(500, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' });
+        res.end(
+          JSON.stringify({
+            ok: false,
+            error: 'kitchen_checkin_rollback_failed',
+            attempted_policy: after,
+            restored_policy: restored,
+            detail: 'Rollback after failed Kitchen check-in could not restore previous policy.',
+          })
+        );
+        return;
+      }
+      res.writeHead(502, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' });
+      res.end(
+        JSON.stringify({
+          ok: false,
+          error: 'kitchen_checkin_failed_runtime_rolled_back',
+          attempted_policy: after,
+          restored_policy: before,
+          detail: hs.detail || 'Kitchen did not acknowledge runtime policy change.',
+          kitchen_checkin: hs.kitchen_checkin,
+        })
+      );
+      return;
+    }
+    const payload = {
+      ok: true,
+      contract: JUPITER_ACTIVE_POLICY_SWITCH_CONTRACT,
+      operation: 'set_active_jupiter_policy',
+      active_policy: after,
+      previous_policy: before,
+      source: 'runtime_config',
+      applied_on_next_engine_cycle: true,
+      does_not_mutate: ['trade_history', 'bars', 'lifecycle_bypass', 'arbitrary_strategy_load'],
+      kitchen_checkin: hs.kitchen_checkin,
+    };
+    if (hs.kitchen_checkin_warning) {
+      payload.kitchen_checkin_warning = hs.kitchen_checkin_warning;
+    }
     res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' });
-    res.end(
-      JSON.stringify({
-        ok: true,
-        contract: JUPITER_ACTIVE_POLICY_SWITCH_CONTRACT,
-        operation: 'set_active_jupiter_policy',
-        active_policy: after,
-        previous_policy: before,
-        source: 'runtime_config',
-        applied_on_next_engine_cycle: true,
-        does_not_mutate: ['trade_history', 'bars', 'lifecycle_bypass', 'arbitrary_strategy_load'],
-      })
-    );
+    res.end(JSON.stringify(payload));
   } catch (e) {
     res.writeHead(500, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' });
     res.end(JSON.stringify({ error: e instanceof Error ? e.message : String(e) }));

@@ -9,12 +9,13 @@ leaves the store unchanged.
 for drift/ledger/lifecycle and for displaying ``live_runtime_policy`` vs the persisted assignment row.
 It must not silently collapse Kitchen to whatever the target is already running (that was a defect).
 
-Optional ``reconcile_assignment_store_to_runtime_truth`` is for tests/explicit tooling only—not dashboard
-polling.
+Optional ``reconcile_assignment_store_to_runtime_truth`` is for tests, explicit tooling, and
+``apply_runtime_policy_checkin`` (trade-surface handshake)—not for passive GET polling.
 """
 
 from __future__ import annotations
 
+import copy
 import json
 import os
 import urllib.error
@@ -124,13 +125,16 @@ def reconcile_assignment_store_to_runtime_truth(
     execution_target: str,
     runtime_payload: dict[str, Any],
     kitchen_row_before: dict[str, Any] | None,
+    *,
+    ledger_source: str = "reconciliation",
+    ledger_detail: str | None = None,
+    reconcile_source_tag: str = "runtime_get",
 ) -> dict[str, Any] | None:
     """
     Optional store rewrite: collapse persisted Kitchen row toward runtime GET (DV-070B rebind/unlink).
 
-    **Not** called from ``GET …/kitchen-runtime-assignment``. That poll must not overwrite Kitchen
-    assignment intent: Kitchen is the nexus; runtime GET is for verification (assign path) and drift
-    display (read path), not silent collapse on refresh. Callers: tests, explicit sync tooling only.
+    **Not** called from ``GET …/kitchen-runtime-assignment``. Callers: tests, tooling,
+    ``apply_runtime_policy_checkin``.
     """
     from renaissance_v4.policy_intake.candidates_registry import find_best_submission_for_runtime_policy
 
@@ -182,21 +186,24 @@ def reconcile_assignment_store_to_runtime_truth(
         row["reconcile_linkage"] = "external_unlinked"
 
     row["reconciled_at_utc"] = _utc_now()
-    row["reconcile_source"] = "runtime_get"
+    row["reconcile_source"] = reconcile_source_tag
     store.setdefault("assignments_by_target", {})[et] = row
     write_store(repo, store)
 
-    if rebind:
-        detail = "dv070_rebind_to_runtime_read_back" if et == "jupiter" else "dv071_rebind_to_runtime_read_back"
+    if ledger_detail is None:
+        if rebind:
+            detail = "dv070_rebind_to_runtime_read_back" if et == "jupiter" else "dv071_rebind_to_runtime_read_back"
+        else:
+            detail = "dv070_external_unlinked_to_runtime_read_back" if et == "jupiter" else "dv071_external_unlinked_to_runtime_read_back"
     else:
-        detail = "dv070_external_unlinked_to_runtime_read_back" if et == "jupiter" else "dv071_external_unlinked_to_runtime_read_back"
+        detail = ledger_detail
 
     append_ledger_entry(
         repo,
         execution_target=et,
         previous_policy_id=k_active,
         new_policy_id=r_active,
-        source="reconciliation",
+        source=ledger_source,
         detail=detail,
     )
     return row
@@ -642,6 +649,173 @@ def build_kitchen_runtime_read_payload(
         "ledger_tail": ledger_tail,
         "ledger_note": "Append-only history (Kitchen assigns + external/runtime drift). Rollback must use registry + ledger.",
         "control_plane_warnings": cp_warnings,
+        "sync_state": (
+            "synced"
+            if drift.get("state") == "match"
+            else ("runtime_unreachable" if drift.get("state") == "runtime_unreachable" else "drift")
+        ),
+    }
+
+
+def _ensure_runtime_assignment_row_exists(repo: Path, et: str) -> None:
+    """Minimal store row so reconcile / check-in can attach runtime policy ids."""
+    if get_assignment(repo, et):
+        return
+    store = read_store(repo)
+    store.setdefault("assignments_by_target", {})[et] = {
+        "schema": "kitchen_runtime_assignment_record_v1",
+        "execution_target": et,
+        "submission_id": "",
+        "candidate_policy_id": "",
+        "approved_runtime_slot_id": "",
+        "active_runtime_policy_id": "",
+        "assigned_at_utc": _utc_now(),
+        "operator_action": "seed_runtime_checkin",
+        "runtime_adapter": "",
+    }
+    write_store(repo, store)
+
+
+def apply_runtime_policy_checkin(
+    repo: Path,
+    execution_target: str,
+    reported_active_policy: str,
+    *,
+    change_source: str = "trade_surface_manual",
+    verify_runtime: bool = True,
+    http_jupiter_base: str | None = None,
+    http_jupiter_token: str | None = None,
+    http_blackbox_base: str | None = None,
+    http_blackbox_token: str | None = None,
+) -> dict[str, Any]:
+    """
+    Explicit trade-surface → Kitchen handshake: verify live runtime GET matches ``reported_active_policy``,
+    then persist assignment via ``reconcile_assignment_store_to_runtime_truth`` (rebind/unlink).
+
+    Does **not** run on passive browser GET; callers POST ``/api/v1/renaissance/runtime-policy-checkin``.
+    """
+    from renaissance_v4.kitchen_policy_lifecycle import reconcile_with_drift, lifecycle_summary_for_target
+
+    repo = repo.resolve()
+    try:
+        et = normalize_execution_target(execution_target)
+    except ValueError as e:
+        return {"ok": False, "error": "invalid_execution_target", "detail": str(e)[:500]}
+
+    if et not in ("jupiter", "blackbox"):
+        return {"ok": False, "error": "unsupported_execution_target", "execution_target": et}
+
+    rid = str(reported_active_policy or "").strip()
+    if not rid:
+        return {"ok": False, "error": "missing_active_policy"}
+
+    if not runtime_policy_approved(repo, et, rid):
+        return {
+            "ok": False,
+            "error": "policy_not_in_registry",
+            "detail": f"Policy {rid!r} is not approved for {et} in kitchen_policy_registry_v1.",
+            "execution_target": et,
+        }
+
+    _ensure_runtime_assignment_row_exists(repo, et)
+    row_before = copy.deepcopy(get_assignment(repo, et))
+
+    rt = query_runtime_truth(
+        repo,
+        et,
+        http_jupiter_base=http_jupiter_base,
+        http_jupiter_token=http_jupiter_token,
+        http_blackbox_base=http_blackbox_base,
+        http_blackbox_token=http_blackbox_token,
+    )
+
+    if verify_runtime:
+        if not rt.get("ok"):
+            return {
+                "ok": False,
+                "error": "runtime_unreachable",
+                "detail": str(rt.get("detail") or rt.get("error") or "runtime GET failed")[:2000],
+                "execution_target": et,
+                "reported_active_policy": rid,
+                "runtime": rt,
+            }
+        live = str(rt.get("active_policy") or "").strip()
+        if live != rid:
+            return {
+                "ok": False,
+                "error": "runtime_verify_mismatch",
+                "detail": "Live runtime GET active_policy does not match reported_active_policy (check-in is not trusted without verify).",
+                "execution_target": et,
+                "reported_active_policy": rid,
+                "verified_runtime_policy": live,
+                "runtime": rt,
+            }
+
+    k_before = str((row_before or {}).get("active_runtime_policy_id") or "").strip()
+    if k_before == rid:
+        row_after = get_assignment(repo, et)
+        drift_post = drift_status(repo, et, row_after, rt)
+        try:
+            reconcile_with_drift(repo, et, row_after, drift_post, rt)
+        except Exception:
+            pass
+        lc = lifecycle_summary_for_target(repo, et)
+        return {
+            "ok": True,
+            "schema": "runtime_policy_checkin_result_v1",
+            "execution_target": et,
+            "reported_active_policy": rid,
+            "verified_runtime_policy": str(rt.get("active_policy") or "").strip() if rt.get("ok") else "",
+            "before_assignment": row_before,
+            "after_assignment": row_after,
+            "reconcile_linkage": "no_change",
+            "change_source": change_source,
+            "runtime": rt,
+            "lifecycle": lc,
+            "detail": "Kitchen assignment already matched verified runtime; no store mutation.",
+        }
+
+    ldetail = f"runtime_policy_checkin:{change_source}"
+    reconciled = reconcile_assignment_store_to_runtime_truth(
+        repo,
+        et,
+        rt,
+        row_before,
+        ledger_source="runtime_checkin",
+        ledger_detail=ldetail,
+        reconcile_source_tag="runtime_policy_checkin",
+    )
+    if reconciled is None:
+        return {
+            "ok": False,
+            "error": "reconcile_failed",
+            "detail": "reconcile_assignment_store_to_runtime_truth returned no update (unexpected).",
+            "execution_target": et,
+            "runtime": rt,
+        }
+
+    linkage = str(reconciled.get("reconcile_linkage") or "")
+    row_after = get_assignment(repo, et)
+    drift_post = drift_status(repo, et, row_after, rt)
+    try:
+        reconcile_with_drift(repo, et, row_after, drift_post, rt)
+    except Exception:
+        pass
+    lc = lifecycle_summary_for_target(repo, et)
+
+    return {
+        "ok": True,
+        "schema": "runtime_policy_checkin_result_v1",
+        "execution_target": et,
+        "reported_active_policy": rid,
+        "verified_runtime_policy": str(rt.get("active_policy") or "").strip() if rt.get("ok") else "",
+        "before_assignment": row_before,
+        "after_assignment": row_after,
+        "reconcile_linkage": linkage,
+        "change_source": change_source,
+        "runtime": rt,
+        "lifecycle": lc,
+        "detail": "Kitchen assignment updated to match verified runtime (runtime check-in).",
     }
 
 

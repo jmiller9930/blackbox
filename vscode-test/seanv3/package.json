@@ -3,7 +3,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "test": "node --test test/seanv3.test.mjs test/jupiter_policy_switch.test.mjs && node --experimental-sqlite --test test/sean_engine.test.mjs",
+    "test": "node --test test/seanv3.test.mjs test/jupiter_policy_switch.test.mjs test/jupiter_kitchen_checkin.test.mjs && node --experimental-sqlite --test test/sean_engine.test.mjs",
     "report": "node --experimental-sqlite report.mjs",
     "web": "node --experimental-sqlite jupiter_web.mjs",
     "jupiter": "node --experimental-sqlite jupiter_web.mjs"

@@ -2,7 +2,7 @@
 DV-074A — Append-only policy assignment ledger (Kitchen ↔ runtime).
 
 Every forward assign and detected external/runtime drift is recorded with source:
-``kitchen`` | ``external`` | ``reconciliation``.
+``kitchen`` | ``external`` | ``reconciliation`` | ``runtime_checkin`` (explicit trade-surface handshake).
 """
 
 from __future__ import annotations
@@ -64,7 +64,7 @@ def append_ledger_entry(
     detail: str | None = None,
 ) -> dict[str, Any]:
     """
-    Append one ledger row. ``source``: ``kitchen`` | ``external`` | ``reconciliation``.
+    Append one ledger row. ``source``: ``kitchen`` | ``external`` | ``reconciliation`` | ``runtime_checkin``.
     """
     repo = repo.resolve()
     ledger = read_ledger(repo)

@@ -13,7 +13,7 @@ The assignment mechanism is **not** only “Kitchen pushes to the target.” It 
 | Half | Direction | What happens |
 |------|-----------|----------------|
 | **Forward assignment** | Kitchen → execution target | Operator runs the Kitchen assign path; BlackBox **POST**s `active-policy` to the target and **only then** persists assignment + ledger + lifecycle after **GET** read-back matches. |
-| **Reverse assignment** | Trade surface / runtime → Kitchen | No inbound webhook. Poll observes runtime vs persisted Kitchen row: **external** ledger entries, **drift**, **lifecycle** — without mutating the assignment store on GET. |
+| **Reverse assignment** | Trade surface / runtime → Kitchen | Passive poll (**GET** ``…/kitchen-runtime-assignment``) observes runtime vs persisted Kitchen row: **external** ledger entries, **drift**, **lifecycle** — **without** mutating the assignment store on GET. **Explicit** **POST** ``/api/v1/renaissance/runtime-policy-checkin`` (Bearer ``REN_RUNTIME_CHECKIN_TOKEN``) verifies live runtime and then reconciles the assignment store (rebind / unlink) so Kitchen becomes global truth after a trade-surface change. |
 
 Both halves: forward establishes persisted intent; observation records external drift without pretending the store “became” the live policy unless the operator runs assign again successfully.
 
@@ -24,7 +24,7 @@ Two different “truths” exist in the system:
 | **Kitchen record** | What BlackBox persisted after an operator action from the Kitchen flow (`kitchen_runtime_assignment.json`). |
 | **Runtime truth** | What the **execution target** reports as `active_policy` over HTTP (`GET …/policy`). |
 
-**Design rule:** Kitchen **POST + verify** is the only normal writer to the assignment store. Runtime GET on dashboard poll is for **live observation** and **drift**; it does not overwrite the persisted assignment row. External changes surface as drift / lifecycle / ledger, not as a silent “new assigned” story.
+**Design rule:** Kitchen assignment store is updated by (1) forward **assign** path (**POST** … **+** runtime GET verify) and (2) explicit **runtime policy check-in** after a trade-surface change (**POST** ``runtime-policy-checkin`` **+** verify live runtime matches reported policy **+** ``reconcile_assignment_store_to_runtime_truth``). Passive **GET** on the dashboard remains **observational only** — it does **not** overwrite the persisted assignment row. Until check-in or a successful forward assign, external changes surface as drift / lifecycle / ledger.
 
 ---
 
@@ -37,8 +37,8 @@ Two different “truths” exist in the system:
 - **Assignment store** — `renaissance_v4/state/kitchen_runtime_assignment.json` (`kitchen_runtime_assignment_store_v1`).
 - **Lifecycle store** — `renaissance_v4/state/kitchen_policy_lifecycle_v1.json` per `(submission_id, execution_target)` (DV-069).
 - **Ledger** — Append-only history in `kitchen_policy_ledger` (Kitchen assigns + external drift).
-- **Trade surface** — Operator-facing place where active policy can change **without** going through Kitchen (e.g. Jupiter web UI calling Sean’s `POST /api/v1/jupiter/active-policy`). That change is **reverse assignment** material: Kitchen learns it on the next read, not via a separate “assign back” API.
-- **Reverse assignment / external change** — Not a POST from target to Kitchen. `GET …/kitchen-runtime-assignment` **does not** mutate the assignment store to match runtime. It runs runtime GET → `maybe_record_external_runtime_change` (ledger) → `drift_status` (Kitchen row vs live) → `reconcile_with_drift` (lifecycle only). Kitchen assignment intent stays the nexus until a successful **POST** assign path updates it. Optional `reconcile_assignment_store_to_runtime_truth` exists for tests/tooling, not for normal dashboard polling.
+- **Trade surface** — Operator-facing place where active policy can change **without** going through Kitchen (e.g. Jupiter web UI calling Sean’s `POST /api/v1/jupiter/active-policy`). After a local change, Jupiter should **POST** BlackBox ``/api/v1/renaissance/runtime-policy-checkin`` so Kitchen persists the same policy (optional **JUPITER_REQUIRE_KITCHEN_ACK** rolls SQLite back if check-in fails).
+- **Reverse assignment / external change** — Passive ``GET …/kitchen-runtime-assignment`` **does not** mutate the assignment store. It runs runtime GET → `maybe_record_external_runtime_change` (ledger) → `drift_status` → `reconcile_with_drift` (lifecycle only). To **close the loop**, use **POST** ``runtime-policy-checkin`` (or the forward assign path). `reconcile_assignment_store_to_runtime_truth` is used by that check-in and by tests/tooling — **not** by passive dashboard GET polling.
 
 ---
 
@@ -75,8 +75,9 @@ flowchart LR
 
 **API surface (BlackBox `api_server.py`):**
 
-- `GET /api/v1/renaissance/kitchen-runtime-assignment?execution_target=jupiter|blackbox` — Full read payload (assignment, `live_runtime_policy`, drift, lifecycle summary, ledger tail; `authoritative_active_policy` follows Kitchen assignment when present).
+- `GET /api/v1/renaissance/kitchen-runtime-assignment?execution_target=jupiter|blackbox` — Full read payload (assignment, `live_runtime_policy`, drift, `sync_state`, lifecycle summary, ledger tail; **does not** mutate the store).
 - `POST /api/v1/renaissance/kitchen-runtime-assignment` — Body: `submission_id`, `execution_target`; runs `assign_mechanical_candidate`.
+- `POST /api/v1/renaissance/runtime-policy-checkin` — Body: `execution_target`, `active_policy`, optional `change_source`; Bearer `REN_RUNTIME_CHECKIN_TOKEN`. Runs `apply_runtime_policy_checkin` (verify live runtime GET vs `active_policy`, then `reconcile_assignment_store_to_runtime_truth`). **401** if token missing/wrong; **503** if server token not configured.
 - Legacy: `GET …/kitchen-jupiter-assignment` returns **410 Gone**; `POST …/kitchen-assign-jupiter` remains a deprecated alias; prefer `kitchen-runtime-assignment`.
 
 **UI thread:** Dashboard renders **Active trade policy** from the Kitchen assignment row (`assignment.active_runtime_policy_id`) when set; live Jupiter id is in `live_runtime_policy` / `runtime` for drift and green-dot row match.
