@@ -368,7 +368,37 @@
     }
     button.dash-rv4-cand-assign-btn { font-size: 0.72rem; padding: 0.3rem 0.45rem; border-radius: var(--radius-md); border: 1px solid var(--panel-border); background: var(--panel); cursor: pointer; }
     button.dash-rv4-cand-assign-btn.primary { background: var(--accent); color: var(--accent-contrast); border-color: transparent; font-weight: 600; }
-    button.dash-rv4-cand-assign-btn:disabled { opacity: 0.65; cursor: not-allowed; }
+    button.dash-rv4-cand-assign-btn.primary:not(:disabled):hover {
+      filter: brightness(1.08);
+    }
+    button.dash-rv4-cand-assign-btn.primary:not(:disabled):active {
+      background: #2563eb;
+      color: #fff;
+      border-color: #1d4ed8;
+      filter: none;
+    }
+    button.dash-rv4-cand-assign-btn.primary:not(:disabled):focus-visible {
+      outline: 2px solid #3b82f6;
+      outline-offset: 2px;
+    }
+    /* Live-assigned row: kitchen store + runtime GET match — distinct from actionable Assign (primary/black). */
+    button.dash-rv4-cand-assign-btn.is-rv4-assign-live {
+      background: linear-gradient(180deg, #3b82f6 0%, #2563eb 100%);
+      color: #fff;
+      border: 1px solid #1d4ed8;
+      font-weight: 600;
+      cursor: default;
+      box-shadow: none;
+    }
+    button.dash-rv4-cand-assign-btn.is-rv4-assign-live:disabled {
+      opacity: 1;
+      cursor: default;
+    }
+    button.dash-rv4-cand-assign-btn.is-rv4-assign-live:focus-visible {
+      outline: 2px solid #93c5fd;
+      outline-offset: 2px;
+    }
+    button.dash-rv4-cand-assign-btn:disabled:not(.is-rv4-assign-live) { opacity: 0.65; cursor: not-allowed; }
     #rv4-kitchen-assign-global-status.is-rv4-drift-warn {
       color: #b45309;
       font-weight: 700;
@@ -5194,15 +5224,24 @@
                 ? ''
                 : elig.reason;
         var btnLabel = assignedShowsAsLive ? 'Assigned' : 'Assign to runtime';
+        var assignBtnClass = 'dash-rv4-cand-assign-btn';
+        if (assignedShowsAsLive) {
+          assignBtnClass += ' is-rv4-assign-live';
+        } else if (canAssign) {
+          assignBtnClass += ' primary';
+        }
         var assignCell =
           '<td class="dash-rv4-cand-assign-cell">' +
           '<div class="dash-rv4-assign-debug">' +
           rv4Esc(dbgLine) +
           '</div>' +
-          '<button type="button" class="dash-rv4-cand-assign-btn primary" data-sid="' +
+          '<button type="button" class="' +
+          assignBtnClass +
+          '" data-sid="' +
           sid +
           '"' +
           (canAssign ? '' : ' disabled') +
+          (assignedShowsAsLive ? ' title="Live runtime matches this submission — no action needed"' : '') +
           '>' +
           btnLabel +
           '</button>' +
