@@ -122,6 +122,7 @@ def test_dashboard_dv070_kitchen_assign_per_row_and_generalized_endpoint() -> No
     text = (WEB / "dashboard.html").read_text(encoding="utf-8")
     assert "dash-rv4-cand-assign-btn" in text
     assert "Assign to runtime" in text
+    assert "/api/v1/renaissance/kitchen-policy-inventory" in text
     assert "/api/v1/renaissance/kitchen-runtime-assignment" in text
     assert "kitchen-assign-jupiter" not in text
     assert "rv4-btn-kitchen-assign-runtime" not in text

@@ -2433,6 +2433,48 @@ class Handler(BaseHTTPRequestHandler):
                     no_cache=True,
                 )
             return
+        if path == "/api/v1/renaissance/kitchen-policy-inventory":
+            q = parse_qs(parsed.query or "")
+            et_raw = (q.get("execution_target") or [""])[0].strip()
+            inc_arch_raw = (q.get("include_archived") or ["0"])[0].strip().lower()
+            include_archived = inc_arch_raw in ("1", "true", "yes")
+            collapse_raw = (q.get("collapse_duplicates") or ["1"])[0].strip().lower()
+            collapse_duplicates = collapse_raw not in ("0", "false", "no")
+            trace_id = str(uuid.uuid4())
+            try:
+                from renaissance_v4.kitchen_policy_inventory import build_kitchen_policy_inventory_payload
+
+                et = et_raw or "jupiter"
+                payload = build_kitchen_policy_inventory_payload(
+                    _REPO_ROOT,
+                    execution_target=et,
+                    include_archived=include_archived,
+                    collapse_duplicate_policy_ids=collapse_duplicates,
+                )
+                payload["trace_id"] = trace_id
+                self._json(200, payload, no_cache=True)
+            except ValueError as e:
+                self._json(
+                    400,
+                    {
+                        "schema": "renaissance_v4_ui_error_v1",
+                        "error": "invalid_execution_target",
+                        "detail": str(e)[:500],
+                        "trace_id": trace_id,
+                    },
+                    no_cache=True,
+                )
+            except Exception as e:  # noqa: BLE001
+                self._json(
+                    500,
+                    {
+                        "schema": "renaissance_v4_ui_error_v1",
+                        "error": str(e)[:500],
+                        "trace_id": trace_id,
+                    },
+                    no_cache=True,
+                )
+            return
         if path == "/api/v1/renaissance/kitchen-runtime-assignment":
             trace_id = str(uuid.uuid4())
             try:

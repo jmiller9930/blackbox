@@ -73,7 +73,7 @@ def _copy_registry(root: Path) -> None:
 
 
 def test_list_intake_candidates_runtime_policy_id_dv077(tmp_path: Path) -> None:
-    """DV-077 — each row exposes runtime_policy_id for green indicator vs runtime GET."""
+    """DV-077 — legacy map on legacy_runtime_policy_id; runtime_policy_id is manifest-bound only."""
     _copy_registry(tmp_path)
     subs = tmp_path / "renaissance_v4" / "state" / "policy_intake_submissions"
     _write_pass_report(subs / "m1", pass_ok=True, cid="kitchen_mechanical_always_long_v1")
@@ -81,18 +81,21 @@ def test_list_intake_candidates_runtime_policy_id_dv077(tmp_path: Path) -> None:
     rows = list_intake_candidates(tmp_path, execution_target="jupiter")
     assert len(rows) == 2
     by_c = {str(r["candidate_policy_id"]): r for r in rows}
-    assert by_c["kitchen_mechanical_always_long_v1"]["runtime_policy_id"] == "jup_kitchen_mechanical_v1"
-    assert by_c["jup_mc_test_v1"]["runtime_policy_id"] == "jup_mc_test"
+    assert by_c["kitchen_mechanical_always_long_v1"]["runtime_policy_id"] == ""
+    assert by_c["kitchen_mechanical_always_long_v1"]["legacy_runtime_policy_id"] == "jup_kitchen_mechanical_v1"
+    assert by_c["jup_mc_test_v1"]["runtime_policy_id"] == ""
+    assert by_c["jup_mc_test_v1"]["legacy_runtime_policy_id"] == "jup_mc_test"
 
 
 def test_list_intake_candidates_fixture_minimal_maps_via_registry(tmp_path: Path) -> None:
-    """Lab fixture candidate_policy_id maps to jup_mc_test via intake_candidate_runtime_map."""
+    """Lab fixture maps via registry to legacy_runtime_policy_id; assignable id requires manifest."""
     _copy_registry(tmp_path)
     subs = tmp_path / "renaissance_v4" / "state" / "policy_intake_submissions"
     _write_pass_report(subs / "fx1", pass_ok=True, cid="fixture_minimal_direction_v1")
     rows = list_intake_candidates(tmp_path, execution_target="jupiter")
     assert len(rows) == 1
-    assert rows[0]["runtime_policy_id"] == "jup_mc_test"
+    assert rows[0]["runtime_policy_id"] == ""
+    assert rows[0]["legacy_runtime_policy_id"] == "jup_mc_test"
 
 
 def test_list_intake_candidates_filters_execution_target(tmp_path: Path) -> None:

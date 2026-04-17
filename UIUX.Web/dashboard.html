@@ -2061,6 +2061,9 @@
           <p id="rv4-cand-context" class="dash-rv4-intake-hint is-ready" aria-live="polite">
             Execution Target: — · Compared Against: — · No candidate selected for comparison.
           </p>
+          <p id="rv4-inventory-summary" class="dash-rv4-intake-hint" style="margin-top:0.35rem" aria-live="polite" hidden>
+            Policy inventory loads with the same request as the candidate table (registry, manifest, intake, runtime).
+          </p>
           <p id="rv4-cand-single-hint" class="dash-rv4-msg" hidden></p>
           <div class="dash-rv4-cand-toolbar">
             <label><input type="checkbox" id="rv4-cand-show-archived" /> Show archived policies</label>
@@ -4866,6 +4869,8 @@
   var rv4CandidatesCache = [];
   var rv4CandShowArchived = false;
   var rv4SelectedCandSid = null;
+  /** Monotonic guard so overlapping inventory fetches cannot clear rows from a stale response (DV-ARCH-KITCHEN-INVENTORY). */
+  var rv4InventorySeq = 0;
   function rv4ComparedAgainstLabel() {
     return rv4GetExecutionTarget() === 'blackbox' ? 'BlackBox Baseline' : 'Jupiter Baseline';
   }
@@ -5415,54 +5420,83 @@
       });
     });
   }
+  function rv4RenderInventorySummary(inv) {
+    var el = $('rv4-inventory-summary');
+    if (!el) return;
+    if (!inv || inv.schema !== 'kitchen_policy_inventory_v1') {
+      el.hidden = true;
+      el.textContent = '';
+      return;
+    }
+    el.hidden = false;
+    var reg = (inv.registry_allowlist && inv.registry_allowlist.runtime_policy_ids) || [];
+    var leg = (inv.legacy_registry_only && inv.legacy_registry_only.runtime_policy_ids) || [];
+    var man = inv.manifest_entries || [];
+    var cands = inv.candidates || [];
+    var nAsg = (inv.assignable_submission_ids || []).length;
+    var kr = inv.kitchen_runtime || {};
+    var active = kr.authoritative_active_policy != null ? String(kr.authoritative_active_policy) : '—';
+    el.textContent =
+      'Policy inventory (single API): registry allowlist ' +
+      reg.length +
+      ' ids · manifest bindings ' +
+      man.length +
+      ' · intake rows ' +
+      cands.length +
+      ' · manifest-assignable submissions ' +
+      nAsg +
+      ' · active runtime ' +
+      active +
+      ' · registry-only (no manifest row) ' +
+      (leg.length ? leg.join(', ') : '—');
+  }
   function rv4LoadCandidates() {
     var h = (window.location.hash || '').replace(/^#/, '');
     if (h !== '/renaissance' && h !== 'renaissance') return;
+    var seq = ++rv4InventorySeq;
     var q =
-      '/api/v1/renaissance/intake-candidates?execution_target=' +
+      '/api/v1/renaissance/kitchen-policy-inventory?execution_target=' +
       encodeURIComponent(rv4GetExecutionTarget()) +
       '&include_archived=' +
       (rv4CandShowArchived ? '1' : '0') +
       '&collapse_duplicates=1';
-    var assignQ =
-      '/api/v1/renaissance/kitchen-runtime-assignment?execution_target=' +
-      encodeURIComponent(rv4GetExecutionTarget());
     fetch(q, { cache: 'no-store' })
       .then(function (r) {
         if (!r.ok) {
-          throw new Error('intake_candidates_http_' + r.status);
+          throw new Error('kitchen_policy_inventory_http_' + r.status);
         }
         return r.json();
       })
       .then(function (j) {
+        if (seq !== rv4InventorySeq) {
+          return;
+        }
         if (!j || j.error) {
           rv4CandidatesCache = [];
           rv4KitchenAssignmentPayload = null;
           rv4UpdateKitchenAssignGlobalStatus();
+          rv4RenderInventorySummary(null);
           rv4RenderCandidates([]);
-          return undefined;
+          return;
         }
         rv4CandidatesCache = j.candidates || [];
-        return fetch(assignQ, { cache: 'no-store' }).then(function (r2) {
-          if (!r2.ok) {
-            throw new Error('kitchen_runtime_assignment_http_' + r2.status);
-          }
-          return r2.json();
-        });
-      })
-      .then(function (aj) {
-        if (aj === undefined) return;
-        rv4KitchenAssignmentPayload = aj && typeof aj === 'object' ? aj : null;
+        rv4KitchenAssignmentPayload =
+          j.kitchen_runtime && typeof j.kitchen_runtime === 'object' ? j.kitchen_runtime : null;
         rv4UpdateKitchenAssignGlobalStatus();
+        rv4RenderInventorySummary(j);
         rv4RenderCandidates(rv4CandidatesCache);
       })
       .catch(function () {
+        if (seq !== rv4InventorySeq) {
+          return;
+        }
         rv4CandidatesCache = [];
         rv4KitchenAssignmentPayload = null;
         rv4UpdateKitchenAssignGlobalStatus();
+        rv4RenderInventorySummary(null);
         rv4RenderCandidates([]);
         var tb = $('rv4-cand-tbody');
-        if (tb) tb.innerHTML = '<tr><td colspan="8">Failed to load candidates.</td></tr>';
+        if (tb) tb.innerHTML = '<tr><td colspan="8">Failed to load policy inventory.</td></tr>';
       });
   }
   function rv4Refresh() {
@@ -6308,7 +6342,6 @@
     });
   }
   rv4InitCollapsiblePanels();
-  rv4LoadCandidates();
   rv4IntakeUpdateGate();
   var rv4ip = $('rv4-btn-ingest-policy');
   if (rv4ip) {
