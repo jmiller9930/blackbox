@@ -79,6 +79,15 @@ export function normalizePolicyId(s) {
 }
 
 /**
+ * True if `raw` normalizes to an id present in ``ALLOWED_POLICY_IDS`` (same gate as POST active-policy).
+ */
+export function isPolicyIdInAllowedSwitchSet(raw) {
+  const nid = normalizePolicyId(raw);
+  if (!nid) return false;
+  return ALLOWED_POLICY_IDS.includes(nid);
+}
+
+/**
  * @param {import('node:sqlite').DatabaseSync} db
  * @returns {{
  *   policyId: 'jup_v4' | 'jup_v3' | 'jup_mc_test' | 'jup_mc2' | 'jup_pipeline_proof_v1' | 'jup_kitchen_mechanical_v1',

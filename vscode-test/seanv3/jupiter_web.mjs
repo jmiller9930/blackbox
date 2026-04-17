@@ -21,6 +21,7 @@ import { PublicKey } from '@solana/web3.js';
 import {
   ALLOWED_POLICY_IDS,
   JUPITER_ACTIVE_POLICY_KEY,
+  isPolicyIdInAllowedSwitchSet,
   normalizePolicyId,
   resolveJupiterPolicy,
 } from './jupiter_policy_runtime.mjs';
@@ -1563,6 +1564,28 @@ function jwLivePollScript(refreshSec) {
 <\/script>`;
 }
 
+/** Display label for policy id (SSR + client rebuild; ids come from ALLOWED_POLICY_IDS / GET allowed_policies). */
+function jupiterPolicyOptionLabel(id) {
+  const map = {
+    jup_v4: 'JUPv4',
+    jup_v3: 'JUPv3',
+    jup_mc_test: 'JUP-MC-Test',
+    jup_mc2: 'JUP-MC2',
+    jup_pipeline_proof_v1: 'Pipeline proof (training)',
+    jup_kitchen_mechanical_v1: 'Kitchen mechanical (always long)',
+  };
+  return map[id] || id;
+}
+
+function htmlJupiterPolicySelectOptions(selectedAp) {
+  return [...ALLOWED_POLICY_IDS]
+    .map(
+      (id) =>
+        `<option value="${esc(id)}"${selectedAp === id ? ' selected' : ''}>${esc(jupiterPolicyOptionLabel(id))}</option>`
+    )
+    .join('');
+}
+
 function htmlPage(v) {
   const readOnly = Boolean(v.read_only_except_policy);
   const useLivePoll = !['0', 'false', 'no'].includes((process.env.JUPITER_WEB_LIVE_POLL || '1').trim().toLowerCase());
@@ -1576,24 +1599,43 @@ function htmlPage(v) {
   const ap = jr.active_policy || 'jup_v4';
   const src = jr.source || 'default';
   const postOk = Boolean(tm.post_token_configured);
+  const policyOptionsHtml = htmlJupiterPolicySelectOptions(ap);
+  const policyLabelsJson = JSON.stringify(
+    Object.fromEntries([...ALLOWED_POLICY_IDS].map((id) => [id, jupiterPolicyOptionLabel(id)]))
+  );
   const policySel = `
     <p><strong>Policy</strong> (runtime — next bar onward; does not close or force-open positions)</p>
     <p class="muted">Active: <code id="jw-ap-code">${esc(ap)}</code> · source: <code id="jw-ap-src">${esc(src)}</code> · meta key <code>${esc(JUPITER_ACTIVE_POLICY_KEY)}</code></p>
     <div id="jw-policy-control" class="jw-policy-box jw-policy-idle">
-      <p class="op-row" style="margin-top:0"><label>JUPv4 / JUPv3 / JUP-MC-Test / JUP-MC2 <select id="jw-jupiter-policy">
-      <option value="jup_v4" ${ap === 'jup_v4' ? 'selected' : ''}>JUPv4</option>
-      <option value="jup_v3" ${ap === 'jup_v3' ? 'selected' : ''}>JUPv3</option>
-      <option value="jup_mc_test" ${ap === 'jup_mc_test' ? 'selected' : ''}>JUP-MC-Test</option>
-      <option value="jup_mc2" ${ap === 'jup_mc2' ? 'selected' : ''}>JUP-MC2</option>
-      <option value="jup_pipeline_proof_v1" ${ap === 'jup_pipeline_proof_v1' ? 'selected' : ''}>Pipeline proof (training)</option>
-      <option value="jup_kitchen_mechanical_v1" ${ap === 'jup_kitchen_mechanical_v1' ? 'selected' : ''}>Kitchen mechanical (always long)</option>
-    </select></label>
-    <button type="button" id="jw-apply-policy" class="fund-btn">Set active Jupiter policy</button></p>
+      <p class="op-row" style="margin-top:0"><label>Runtime policy <select id="jw-jupiter-policy" ${postOk ? '' : 'disabled'}>${policyOptionsHtml}</select></label>
+    <button type="button" id="jw-apply-policy" class="fund-btn" ${postOk ? '' : 'disabled'}>Set active Jupiter policy</button></p>
       <p id="jw-policy-status" class="jw-policy-status small"></p>
+      ${
+        postOk
+          ? ''
+          : `<p class="warn" id="jw-policy-token-warn"><strong>Policy switch unavailable</strong> — <code>JUPITER_OPERATOR_TOKEN</code> is not set on this server. Dropdown lists registry ids; enable token and restart to apply.</p>`
+      }
     </div>
-    ${postOk ? `<p class="muted">Uses Bearer token in <strong>Operator token</strong> panel above.</p>
+    ${postOk ? `<p class="muted">Uses Bearer token in <strong>Operator token</strong> panel above. Options stay aligned with <code>GET /api/v1/jupiter/policy</code> · <code>allowed_policies</code>.</p>
     <script>
     (function(){
+      var LABELS=${policyLabelsJson};
+      function jwRebuildPolicySelectFromApi(j){
+        var s=document.getElementById('jw-jupiter-policy');
+        if(!s||!j)return;
+        var allowed=j.allowed_policies;
+        if(!Array.isArray(allowed)||allowed.length===0)return;
+        s.innerHTML='';
+        allowed.forEach(function(id){
+          var o=document.createElement('option');
+          o.value=id;
+          o.textContent=LABELS[id]||id;
+          s.appendChild(o);
+        });
+        var pick=String(j.active_policy||'').trim();
+        if(pick&&allowed.indexOf(pick)>=0)s.value=pick;
+        else s.value=allowed[0];
+      }
       function jwPolicySyncVisual(){
         var box=document.getElementById('jw-policy-control');
         var sel=document.getElementById('jw-jupiter-policy');
@@ -1618,9 +1660,8 @@ function htmlPage(v) {
         }
       }
       window.jwPolicySyncVisual=jwPolicySyncVisual;
-      fetch('/api/v1/jupiter/policy').then(r=>r.json()).then(j=>{
-        var s=document.getElementById('jw-jupiter-policy');
-        if(s&&j.active_policy)s.value=j.active_policy;
+      fetch('/api/v1/jupiter/policy').then(function(r){return r.json();}).then(function(j){
+        jwRebuildPolicySelectFromApi(j);
         jwPolicySyncVisual();
       }).catch(function(){ jwPolicySyncVisual(); });
       document.getElementById('jw-jupiter-policy')?.addEventListener('change',function(){
@@ -1629,8 +1670,16 @@ function htmlPage(v) {
       });
       document.getElementById('jw-apply-policy')?.addEventListener('click', async function(){
         var box=document.getElementById('jw-policy-control');
-        var pol=(document.getElementById('jw-jupiter-policy')||{}).value||'jup_v4';
-        var tok=(document.getElementById('jw-op-token')||{}).value||'';
+        var pol=String((document.getElementById('jw-jupiter-policy')||{}).value||'').trim();
+        var tok=String((document.getElementById('jw-op-token')||{}).value||'').trim();
+        if(!tok){
+          alert('Enter the operator Bearer token in the Operator token panel (must match JUPITER_OPERATOR_TOKEN on the server).');
+          return;
+        }
+        if(!pol){
+          alert('Select a policy from the dropdown.');
+          return;
+        }
         if(box)box.removeAttribute('data-policy-error');
         jwPolicySyncVisual();
         var r=await fetch('/api/v1/jupiter/active-policy',{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+tok},body:JSON.stringify({policy:pol})});
@@ -1647,7 +1696,7 @@ function htmlPage(v) {
         jwPolicySyncVisual();
       });
     })();
-    </script>` : '<p class="muted">Set <code>JUPITER_OPERATOR_TOKEN</code> on jupiter-web to enable policy switching.</p>'}`;
+    </script>` : '<p class="muted">Set <code>JUPITER_OPERATOR_TOKEN</code> on jupiter-web and restart to enable applying policy changes (dropdown above shows allowed ids from the registry).</p>'}`;
   const tradingBlock = actual
     ? `<p class="warn"><strong>ACTUAL</strong> — Live-capital intent. Deploy with PAPER_TRADING=0 when leaving paper; this banner does not change Docker.</p>
       ${policySel}
@@ -2584,7 +2633,7 @@ async function handleJupiterActivePolicyPost(req, res) {
     return;
   }
   const nid = normalizePolicyId(body.policy);
-  if (!nid || !ALLOWED_POLICY_IDS.includes(nid)) {
+  if (!nid || !isPolicyIdInAllowedSwitchSet(body.policy)) {
     res.writeHead(400, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' });
     res.end(
       JSON.stringify({
