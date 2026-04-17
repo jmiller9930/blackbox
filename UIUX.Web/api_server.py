@@ -2561,37 +2561,16 @@ class Handler(BaseHTTPRequestHandler):
             return
         if path == "/api/v1/renaissance/kitchen-jupiter-assignment":
             trace_id = str(uuid.uuid4())
-            try:
-                from renaissance_v4.kitchen_runtime_assignment import (
-                    MECHANICAL_CANDIDATE_POLICY_ID,
-                    approved_mechanical_by_target,
-                    get_assignment,
-                )
-
-                jupiter_slot = approved_mechanical_by_target(_REPO_ROOT)["jupiter"]["approved_runtime_slot_id"]
-                a = get_assignment(_REPO_ROOT, "jupiter")
-                self._json(
-                    200,
-                    {
-                        "schema": "kitchen_jupiter_assignment_read_v1",
-                        "assignment": a,
-                        "mechanical_candidate_policy_id": MECHANICAL_CANDIDATE_POLICY_ID,
-                        "jupiter_policy_slot": jupiter_slot,
-                        "note": "Prefer GET /api/v1/renaissance/kitchen-runtime-assignment?execution_target=jupiter (DV-068).",
-                        "trace_id": trace_id,
-                    },
-                    no_cache=True,
-                )
-            except Exception as e:  # noqa: BLE001
-                self._json(
-                    500,
-                    {
-                        "schema": "renaissance_v4_ui_error_v1",
-                        "error": str(e)[:500],
-                        "trace_id": trace_id,
-                    },
-                    no_cache=True,
-                )
+            self._json(
+                410,
+                {
+                    "schema": "renaissance_v4_ui_error_v1",
+                    "error": "endpoint_retired",
+                    "detail": "Use GET /api/v1/renaissance/kitchen-runtime-assignment?execution_target=jupiter (DV-068). This alias was removed.",
+                    "trace_id": trace_id,
+                },
+                no_cache=True,
+            )
             return
         if path.startswith("/api/v1/renaissance/policy-intake/"):
             rest = path[len("/api/v1/renaissance/policy-intake/") :].strip().strip("/")

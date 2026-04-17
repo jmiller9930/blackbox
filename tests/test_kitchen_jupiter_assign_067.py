@@ -231,7 +231,7 @@ def test_read_payload_includes_drift_when_runtime_unconfigured(
     monkeypatch.delenv("KITCHEN_JUPITER_CONTROL_BASE", raising=False)
     monkeypatch.delenv("KITCHEN_JUPITER_OPERATOR_TOKEN", raising=False)
     p = build_kitchen_runtime_read_payload(tmp_path, "jupiter")
-    assert p.get("schema") == "kitchen_runtime_assignment_read_v3"
+    assert p.get("schema") == "kitchen_runtime_assignment_read_v4"
     assert p.get("authoritative_active_policy") == ""
     assert p.get("runtime", {}).get("ok") is False
     assert p.get("drift", {}).get("state") == "runtime_unreachable"

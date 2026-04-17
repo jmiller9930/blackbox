@@ -149,3 +149,59 @@ def list_intake_candidates(
         return attach_lifecycle_to_candidate_rows(repo, collapsed)
 
     return attach_lifecycle_to_candidate_rows(repo, rows)
+
+
+def find_best_submission_for_runtime_policy(
+    repo: Path,
+    execution_target: str,
+    runtime_policy_id: str,
+) -> dict[str, str] | None:
+    """
+    Reverse lookup (DV-070B): newest passing intake whose inferred ``runtime_policy_id`` matches
+    the live runtime policy id for this execution target.
+
+    Scans intake dirs directly (does not call ``list_intake_candidates``) to avoid recursion.
+    """
+    repo = repo.resolve()
+    et = normalize_execution_target(execution_target)
+    rpid = str(runtime_policy_id).strip()
+    if not rpid or et not in ("jupiter", "blackbox"):
+        return None
+    root = intake_root(repo)
+    if not root.is_dir():
+        return None
+    matches: list[tuple[float, str, str]] = []
+    for d in root.iterdir():
+        if not d.is_dir():
+            continue
+        rep_path = d / "report" / "intake_report.json"
+        canon_path = d / "canonical" / "policy_spec_v1.json"
+        rep = read_json(rep_path)
+        if not isinstance(rep, dict) or not rep.get("pass"):
+            continue
+        cid_raw = rep.get("candidate_policy_id")
+        if not cid_raw:
+            continue
+        if not canon_path.is_file():
+            continue
+        if rep.get("is_active") is False:
+            continue
+        rep_et = normalize_execution_target(str(rep.get("execution_target") or "jupiter"))
+        if rep_et != et:
+            continue
+        cid = str(cid_raw).strip()
+        inferred = infer_runtime_policy_id_for_candidate(repo, et, cid)
+        if inferred != rpid:
+            continue
+        sid = str(rep.get("submission_id") or d.name).strip()
+        if not sid:
+            continue
+        s1 = rep.get("stages", {}).get("stage_1_intake") if isinstance(rep.get("stages"), dict) else {}
+        created = str(s1.get("timestamp_utc") or "") if isinstance(s1, dict) else ""
+        ts = _parse_created_sort_key(created)
+        matches.append((ts, sid, cid))
+    if not matches:
+        return None
+    matches.sort(key=lambda x: x[0], reverse=True)
+    best = matches[0]
+    return {"submission_id": best[1], "candidate_policy_id": best[2]}

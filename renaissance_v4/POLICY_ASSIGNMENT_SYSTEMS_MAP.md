@@ -77,7 +77,7 @@ flowchart LR
 
 - `GET /api/v1/renaissance/kitchen-runtime-assignment?execution_target=jupiter|blackbox` — Full read payload (assignment, runtime, drift, lifecycle summary, ledger tail, `authoritative_active_policy`).
 - `POST /api/v1/renaissance/kitchen-runtime-assignment` — Body: `submission_id`, `execution_target`; runs `assign_mechanical_candidate`.
-- Legacy: `GET/POST …/kitchen-jupiter-assignment`, `POST …/kitchen-assign-jupiter` — older aliases; prefer `kitchen-runtime-assignment`.
+- Legacy: `GET …/kitchen-jupiter-assignment` returns **410 Gone**; `POST …/kitchen-assign-jupiter` remains a deprecated alias; prefer `kitchen-runtime-assignment`.
 
 **UI thread:** Dashboard Renaissance / Kitchen blocks fetch the GET endpoint and render **Active trade policy** from `authoritative_active_policy` (runtime) and per-row **`runtime_policy_id`** (from `infer_runtime_policy_id_for_candidate` in DV-077) for the green-dot match.
 

@@ -11,7 +11,7 @@
 | `POST` | `/api/v1/renaissance/kitchen-runtime-assignment` | Body `{"submission_id":"...","execution_target":"jupiter"|"blackbox"}`. Governed mechanical candidate only; approved ids come from `renaissance_v4/config/kitchen_policy_registry_v1.json`. **DV-074:** Jupiter persists only after SeanV3 POST **and** GET verify; no fake success without runtime. GET includes `runtime` + `drift` + `ledger_tail`. **DV-074A:** Append-only ledger `renaissance_v4/state/kitchen_policy_assignment_ledger.json`; forward assigns log `kitchen`; external drift logs `external`. GET `/api/v1/renaissance/kitchen-policy-ledger?execution_target=`. BlackBox assign fails until runtime API is wired. |
 | `GET` | `/api/v1/renaissance/kitchen-runtime-assignment` | Query `execution_target` for one row, or omit for full store. |
 | `POST` | `/api/v1/renaissance/kitchen-assign-jupiter` | **Deprecated alias** — same as runtime-assignment with `execution_target: jupiter`. |
-| `GET` | `/api/v1/renaissance/kitchen-jupiter-assignment` | **Deprecated** — use `kitchen-runtime-assignment?execution_target=jupiter`. |
+| `GET` | `/api/v1/renaissance/kitchen-jupiter-assignment` | **Removed** — returns **410 Gone**; use `kitchen-runtime-assignment?execution_target=jupiter`. |
 
 ## UI
 

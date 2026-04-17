@@ -9,6 +9,7 @@ active policy. Kitchen local store records intent; **runtime GET** is authoritat
 
 from __future__ import annotations
 
+import copy
 import json
 import os
 import urllib.error
@@ -120,10 +121,12 @@ def reconcile_assignment_store_to_runtime_truth(
     kitchen_row_before: dict[str, Any] | None,
 ) -> dict[str, Any] | None:
     """
-    DV-070 — Runtime read-back is authoritative for live policy. If the persisted Kitchen row
-    disagrees with ``active_policy`` from the runtime GET, collapse ``active_runtime_policy_id``
-    to match (ledger records reconciliation; no parallel “Kitchen active” vs runtime).
+    DV-070 / DV-070B — Runtime read-back is authoritative for live policy. If the persisted Kitchen row
+    disagrees with ``active_policy`` from the runtime GET, rewrite the assignment row: reverse-lookup a
+    passing intake candidate for ``r_active`` when possible, or clear candidate linkage when none exists.
     """
+    from renaissance_v4.policy_intake.candidates_registry import find_best_submission_for_runtime_policy
+
     repo = repo.resolve()
     et = normalize_execution_target(execution_target)
     if et not in ("jupiter", "blackbox"):
@@ -142,25 +145,52 @@ def reconcile_assignment_store_to_runtime_truth(
     row = store.get("assignments_by_target", {}).get(et)
     if not isinstance(row, dict):
         return None
-    row["active_runtime_policy_id"] = r_active
-    row["operator_action"] = (
-        "runtime_read_back_reconcile_dv070" if et == "jupiter" else "runtime_read_back_reconcile_dv071"
-    )
+
+    rebind = find_best_submission_for_runtime_policy(repo, et, r_active)
+    if rebind:
+        row["submission_id"] = rebind["submission_id"]
+        row["candidate_policy_id"] = rebind["candidate_policy_id"]
+        row["approved_runtime_slot_id"] = _approved_slot_for_rebind(
+            repo, et, rebind["candidate_policy_id"], r_active
+        )
+        row["active_runtime_policy_id"] = r_active
+        ada = _runtime_adapter_for_rebind(repo, et, rebind["candidate_policy_id"])
+        if ada:
+            row["runtime_adapter"] = ada
+        row["operator_action"] = (
+            "runtime_read_back_reconcile_dv070_rebind" if et == "jupiter" else "runtime_read_back_reconcile_dv071_rebind"
+        )
+        row["reconcile_linkage"] = "candidate_rebound"
+    else:
+        row["submission_id"] = ""
+        row["candidate_policy_id"] = ""
+        row["approved_runtime_slot_id"] = ""
+        row["active_runtime_policy_id"] = r_active
+        row.pop("runtime_adapter", None)
+        row["operator_action"] = (
+            "runtime_read_back_reconcile_dv070_external_unlinked"
+            if et == "jupiter"
+            else "runtime_read_back_reconcile_dv071_external_unlinked"
+        )
+        row["reconcile_linkage"] = "external_unlinked"
+
     row["reconciled_at_utc"] = _utc_now()
     row["reconcile_source"] = "runtime_get"
     store.setdefault("assignments_by_target", {})[et] = row
     write_store(repo, store)
+
+    if rebind:
+        detail = "dv070_rebind_to_runtime_read_back" if et == "jupiter" else "dv071_rebind_to_runtime_read_back"
+    else:
+        detail = "dv070_external_unlinked_to_runtime_read_back" if et == "jupiter" else "dv071_external_unlinked_to_runtime_read_back"
+
     append_ledger_entry(
         repo,
         execution_target=et,
         previous_policy_id=k_active,
         new_policy_id=r_active,
         source="reconciliation",
-        detail=(
-            "dv070_kitchen_collapsed_to_runtime_read_back"
-            if et == "jupiter"
-            else "dv071_kitchen_collapsed_to_runtime_read_back"
-        ),
+        detail=detail,
     )
     return row
 
@@ -387,6 +417,20 @@ def mechanical_slot_safe(repo: Path, et: str) -> dict[str, Any] | None:
     return row if isinstance(row, dict) else None
 
 
+def _approved_slot_for_rebind(repo: Path, et: str, candidate_policy_id: str, r_active: str) -> str:
+    ms = mechanical_slot_safe(repo, et)
+    if ms and str(ms.get("candidate_policy_id") or "").strip() == str(candidate_policy_id).strip():
+        return str(ms.get("approved_runtime_slot_id") or r_active).strip()
+    return str(r_active).strip()
+
+
+def _runtime_adapter_for_rebind(repo: Path, et: str, candidate_policy_id: str) -> str:
+    ms = mechanical_slot_safe(repo, et)
+    if ms and str(ms.get("candidate_policy_id") or "").strip() == str(candidate_policy_id).strip():
+        return str(ms.get("runtime_adapter") or "").strip()
+    return ""
+
+
 def drift_status(
     repo: Path,
     execution_target: str | None,
@@ -535,7 +579,8 @@ def build_kitchen_runtime_read_payload(
     """Merged payload for GET /api/v1/renaissance/kitchen-runtime-assignment."""
     repo = repo.resolve()
     et = normalize_execution_target(execution_target)
-    row = get_assignment(repo, et)
+    row_live = get_assignment(repo, et)
+    row_pre = copy.deepcopy(row_live) if row_live else None
     reg = load_registry(repo)
     rt = query_runtime_truth(
         repo,
@@ -545,15 +590,15 @@ def build_kitchen_runtime_read_payload(
         http_blackbox_base=http_blackbox_base,
         http_blackbox_token=http_blackbox_token,
     )
-    maybe_record_external_runtime_change(repo, et, row, rt)
-    reconcile_assignment_store_to_runtime_truth(repo, et, rt, row)
-    row = get_assignment(repo, et)
-    drift = drift_status(repo, et, row, rt)
+    maybe_record_external_runtime_change(repo, et, row_live, rt)
+    reconcile_assignment_store_to_runtime_truth(repo, et, rt, row_live)
+    row_post = get_assignment(repo, et)
+    drift = drift_status(repo, et, row_pre, rt)
     lc_sum: dict[str, Any] = {"schema": "kitchen_policy_lifecycle_summary_v1", "by_submission_id": {}}
     try:
         from renaissance_v4.kitchen_policy_lifecycle import lifecycle_summary_for_target, reconcile_with_drift
 
-        reconcile_with_drift(repo, et, row, drift, rt)
+        reconcile_with_drift(repo, et, row_pre, drift, rt)
         lc_sum = lifecycle_summary_for_target(repo, et)
     except Exception:
         pass
@@ -565,10 +610,11 @@ def build_kitchen_runtime_read_payload(
     if isinstance(rt, dict) and rt.get("ok"):
         auth_policy = str(rt.get("active_policy") or "").strip()
     return {
-        "schema": "kitchen_runtime_assignment_read_v3",
+        "schema": "kitchen_runtime_assignment_read_v4",
         "execution_target": et,
         "authoritative_active_policy": auth_policy,
-        "assignment": row,
+        "assignment": row_post,
+        "drift_basis": "pre_reconcile_assignment_row",
         "mechanical_candidate_policy_id": MECHANICAL_CANDIDATE_POLICY_ID,
         "policy_registry": {
             "schema": reg.get("schema"),
