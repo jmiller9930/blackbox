@@ -23,7 +23,9 @@ import {
   JUPITER_ACTIVE_POLICY_KEY,
   isDeploymentIdInManifest,
   getActiveDeploymentSnapshot,
+  manifestBindingForJupiterPolicy,
 } from './jupiter_policy_runtime.mjs';
+import { loadEvaluatorFromManifestBinding } from './engine/artifact_policy_loader.mjs';
 import {
   bootstrapJupiterAuthUserIfNeeded,
   ensureJupiterWebAuthSchema,
@@ -2579,15 +2581,39 @@ function readRequestBody(req, limit = 65536) {
  * @param {import('http').ServerResponse} res
  * @param {string} pathname
  */
-function handleJupiterPolicyGet(res) {
+async function handleJupiterPolicyGet(res) {
   const seanPath = dbPath();
   let db;
   try {
     db = new DatabaseSync(seanPath, { readOnly: true });
     const p = getActiveDeploymentSnapshot(db);
     const allowed = loadAllowedDeploymentIdsFromManifest();
-    res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' });
     const mb = p.manifestBinding;
+    const root = repoRoot();
+    let loaderOk = null;
+    let loaderError = null;
+    let loaderDetail = null;
+    if (!p.policyId) {
+      loaderOk = false;
+      loaderError = 'no_active_deployment';
+      loaderDetail = 'analog_meta.jupiter_active_policy unset';
+    } else if (!root) {
+      loaderOk = false;
+      loaderError = 'blackbox_repo_root_unset';
+      loaderDetail = 'Set BLACKBOX_REPO_ROOT for artifact load probe';
+    } else if (!mb?.submission_id) {
+      loaderOk = false;
+      loaderError = 'manifest_binding_incomplete';
+      loaderDetail = 'Deployment id not found in kitchen_policy_deployment_manifest_v1 for Jupiter';
+    } else {
+      const probe = await loadEvaluatorFromManifestBinding(mb, root);
+      loaderOk = probe.ok === true;
+      if (!probe.ok) {
+        loaderError = probe.error ?? 'loader_failed';
+        loaderDetail = probe.detail ?? null;
+      }
+    }
+    res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' });
     res.end(
       JSON.stringify({
         contract: JUPITER_POLICY_OBSERVABILITY_CONTRACT,
@@ -2599,6 +2625,9 @@ function handleJupiterPolicyGet(res) {
         submission_id: mb && mb.submission_id ? mb.submission_id : null,
         content_sha256: mb && mb.content_sha256 ? mb.content_sha256 : null,
         artifact_binding: mb ? 'manifest_v1' : 'legacy_unbound',
+        loader_ok: loaderOk,
+        loader_error: loaderError,
+        loader_detail: loaderDetail,
         api: {
           sole_write: 'POST /api/v1/jupiter/active-policy',
           sole_write_alias: 'POST /api/v1/jupiter/set-policy',
@@ -2700,6 +2729,27 @@ async function handleJupiterActivePolicyPost(req, res) {
     const before = getActiveDeploymentSnapshot(dbw).policyId;
     setMeta(dbw, JUPITER_ACTIVE_POLICY_KEY, nid);
     const after = getActiveDeploymentSnapshot(dbw).policyId;
+    const rr = repoRoot();
+    const mbPost = manifestBindingForJupiterPolicy(nid);
+    if (rr && mbPost?.submission_id) {
+      const loadPost = await loadEvaluatorFromManifestBinding(mbPost, rr);
+      if (!loadPost.ok) {
+        setMeta(dbw, JUPITER_ACTIVE_POLICY_KEY, before);
+        res.writeHead(400, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' });
+        res.end(
+          JSON.stringify({
+            ok: false,
+            error: 'policy_artifact_load_failed',
+            contract: JUPITER_ACTIVE_POLICY_SWITCH_CONTRACT,
+            message: 'Deployment id is in the manifest but evaluator.mjs could not be loaded or verified.',
+            loader_error: loadPost.error,
+            detail: loadPost.detail ?? null,
+            restored_policy: before,
+          })
+        );
+        return;
+      }
+    }
     console.error(`[jupiter] set active Jupiter policy: ${before} → ${after}`);
     const strictKitchenAckRequired = ['1', 'true', 'yes'].includes(
       String(process.env.JUPITER_REQUIRE_KITCHEN_ACK || '')
@@ -3001,7 +3051,7 @@ const server = http.createServer((req, res) => {
     }
 
     if (url.pathname === '/api/v1/jupiter/policy' && req.method === 'GET') {
-      handleJupiterPolicyGet(res);
+      await handleJupiterPolicyGet(res);
       return;
     }
     if (

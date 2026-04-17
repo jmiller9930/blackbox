@@ -1,4 +1,5 @@
 import assert from 'node:assert';
+import { createHash } from 'node:crypto';
 import { mkdirSync, writeFileSync, mkdtempSync, rmSync } from 'node:fs';
 import { test } from 'node:test';
 import { DatabaseSync } from 'node:sqlite';
@@ -8,8 +9,6 @@ import os from 'node:os';
 import { ensurePaperAnalogSchema, setMeta } from '../paper_analog.mjs';
 import { ensureSeanLedgerSchema } from '../sean_ledger.mjs';
 import { processSeanEngine } from '../sean_engine.mjs';
-
-const H64 = 'a'.repeat(64);
 
 function kline(ms, o, h, l, c, v = 1) {
   return {
@@ -53,23 +52,6 @@ function countBarDecisions(db) {
 
 function setupRepoWithArtifact() {
   const root = mkdtempSync(join(os.tmpdir(), 'sean-engine-artifact-'));
-  const manifest = {
-    schema: 'kitchen_policy_deployment_manifest_v1',
-    entries: [
-      {
-        execution_target: 'jupiter',
-        deployed_runtime_policy_id: 'dep_test_1',
-        submission_id: 'sub_test',
-        content_sha256: H64,
-      },
-    ],
-  };
-  mkdirSync(join(root, 'renaissance_v4', 'config'), { recursive: true });
-  writeFileSync(
-    join(root, 'renaissance_v4', 'config', 'kitchen_policy_deployment_manifest_v1.json'),
-    JSON.stringify(manifest, null, 2),
-    'utf8'
-  );
   const artDir = join(root, 'renaissance_v4', 'state', 'policy_intake_submissions', 'sub_test', 'artifacts');
   mkdirSync(artDir, { recursive: true });
   const ev = `export const MIN_BARS = 71;
@@ -80,6 +62,24 @@ export function generateSignalFromOhlc(closes, highs, lows, vols) {
   return { longSignal: false, shortSignal: false, signalPrice: c, diag: { atr: 1.0 } };
 }`;
   writeFileSync(join(artDir, 'evaluator.mjs'), ev, 'utf8');
+  const contentSha = createHash('sha256').update(ev, 'utf8').digest('hex');
+  const manifest = {
+    schema: 'kitchen_policy_deployment_manifest_v1',
+    entries: [
+      {
+        execution_target: 'jupiter',
+        deployed_runtime_policy_id: 'dep_test_1',
+        submission_id: 'sub_test',
+        content_sha256: contentSha,
+      },
+    ],
+  };
+  mkdirSync(join(root, 'renaissance_v4', 'config'), { recursive: true });
+  writeFileSync(
+    join(root, 'renaissance_v4', 'config', 'kitchen_policy_deployment_manifest_v1.json'),
+    JSON.stringify(manifest, null, 2),
+    'utf8'
+  );
   return root;
 }
 

@@ -34,6 +34,15 @@ function sha256File(filePath) {
   return crypto.createHash('sha256').update(buf).digest('hex');
 }
 
+/** Normalize manifest hex: lowercase 64-char sha256 or null if missing/invalid. */
+function normalizedManifestContentSha256(raw) {
+  const s = String(raw ?? '').trim().toLowerCase();
+  if (s.length !== 64 || !/^[0-9a-f]+$/.test(s)) {
+    return null;
+  }
+  return s;
+}
+
 /**
  * @param {{ submission_id: string, content_sha256?: string }} binding
  * @param {string} repoRoot
@@ -56,10 +65,20 @@ export async function loadEvaluatorFromManifestBinding(binding, repoRoot) {
       detail: `Expected Kitchen-built evaluator at ${evaluatorMjs}`,
     };
   }
+  const actual = sha256File(evaluatorMjs);
+  const manifestHex = normalizedManifestContentSha256(binding?.content_sha256);
+  if (manifestHex !== null) {
+    if (actual !== manifestHex) {
+      return {
+        ok: false,
+        error: 'manifest_content_sha256_mismatch',
+        detail: `evaluator.mjs sha256 ${actual} does not match kitchen_policy_deployment_manifest content_sha256 ${manifestHex}`,
+      };
+    }
+  }
   const strict = ['1', 'true', 'yes'].includes(String(process.env.SEAN_REQUIRE_ARTIFACT_SHA256 || '').trim().toLowerCase());
   if (fs.existsSync(evaluatorSha)) {
     const expected = fs.readFileSync(evaluatorSha, 'utf8').trim().split(/\s+/)[0]?.toLowerCase();
-    const actual = sha256File(evaluatorMjs);
     if (expected && expected.length === 64 && expected !== actual) {
       return { ok: false, error: 'artifact_sha256_mismatch', detail: `evaluator.mjs hash ${actual} !== ${evaluatorSha}` };
     }

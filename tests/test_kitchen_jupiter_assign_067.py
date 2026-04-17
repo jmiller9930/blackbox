@@ -170,7 +170,7 @@ def test_assign_jupiter_non_mechanical_candidate_uses_registry_runtime_id(
         [
             {
                 "execution_target": "jupiter",
-                "deployed_runtime_policy_id": "jup_mc_test",
+                "deployed_runtime_policy_id": "jup_v4",
                 "submission_id": "sub_mc_direct",
                 "content_sha256": H_MC,
             }
@@ -178,19 +178,19 @@ def test_assign_jupiter_non_mechanical_candidate_uses_registry_runtime_id(
     )
     monkeypatch.setenv("KITCHEN_JUPITER_CONTROL_BASE", "http://sean.test")
     monkeypatch.setenv("KITCHEN_JUPITER_OPERATOR_TOKEN", "tok")
-    _write_pass(tmp_path, "sub_mc_direct", candidate_policy_id="jup_mc_test", content_sha256=H_MC)
+    _write_pass(tmp_path, "sub_mc_direct", candidate_policy_id="jup_v4", content_sha256=H_MC)
 
     def fake_urlopen(req: object, timeout: float | None = None) -> _MockResp:
         u = getattr(req, "full_url", "")
         if "active-policy" in u:
             return _MockResp(
                 200,
-                b'{"ok":true,"active_policy":"jup_mc_test","contract":"jupiter_active_policy_switch_v1"}',
+                b'{"ok":true,"active_policy":"jup_v4","contract":"jupiter_active_policy_switch_v1"}',
             )
         if "/jupiter/policy" in u:
             pol = {
-                "active_policy": "jup_mc_test",
-                "allowed_policies": ["jup_v4", "jup_mc_test", "jup_kitchen_mechanical_v1"],
+                "active_policy": "jup_v4",
+                "allowed_policies": ["jup_v4", "jup_kitchen_mechanical_v1"],
                 "source": "runtime_config",
                 "submission_id": "sub_mc_direct",
                 "content_sha256": H_MC,
@@ -201,8 +201,8 @@ def test_assign_jupiter_non_mechanical_candidate_uses_registry_runtime_id(
     monkeypatch.setattr("urllib.request.urlopen", fake_urlopen)
     r = assign_mechanical_candidate_to_jupiter(tmp_path, "sub_mc_direct")
     assert r.get("ok") is True
-    assert r.get("active_runtime_policy_id") == "jup_mc_test"
-    assert r.get("candidate_policy_id") == "jup_mc_test"
+    assert r.get("active_runtime_policy_id") == "jup_v4"
+    assert r.get("candidate_policy_id") == "jup_v4"
 
 
 def test_assign_jupiter_post_ok_but_verify_fails_no_persist(
@@ -233,8 +233,8 @@ def test_assign_jupiter_post_ok_but_verify_fails_no_persist(
             policy_n[0] += 1
             if policy_n[0] == 1:
                 pol = {
-                    "active_policy": "jup_mc_test",
-                    "allowed_policies": ["jup_v4", "jup_mc_test", "jup_kitchen_mechanical_v1"],
+                    "active_policy": "jup_v4",
+                    "allowed_policies": ["jup_v4", "jup_kitchen_mechanical_v1"],
                     "submission_id": "subx",
                     "content_sha256": H,
                 }
@@ -276,7 +276,7 @@ def test_assign_fails_when_jupiter_allowed_policies_omit_registry_target(
         if "/jupiter/policy" in u:
             return _MockResp(
                 200,
-                b'{"active_policy":"jup_mc_test","allowed_policies":["jup_v4","jup_mc_test","jup_mc2"]}',
+                b'{"active_policy":"jup_v4","allowed_policies":["jup_v4","jup_mc2"]}',
             )
         raise AssertionError(u)
 

@@ -101,7 +101,7 @@ def test_reconcile_diverged_from_confirmed_is_external_override(tmp_path: Path) 
             "submission_id": "s2",
             "active_runtime_policy_id": "jup_kitchen_mechanical_v1",
         },
-        {"ok": True, "active_policy": "jup_mc_test"},
+        {"ok": True, "active_policy": "jup_v4"},
     )
     assert drift2["state"] == "runtime_diverged"
     reconcile_with_drift(
@@ -113,7 +113,7 @@ def test_reconcile_diverged_from_confirmed_is_external_override(tmp_path: Path) 
             "active_runtime_policy_id": "jup_kitchen_mechanical_v1",
         },
         drift2,
-        {"ok": True, "active_policy": "jup_mc_test"},
+        {"ok": True, "active_policy": "jup_v4"},
     )
     e2 = get_entry(tmp_path, "s2", "jupiter")
     assert e2["state"] == STATE_EXTERNAL_OVERRIDE

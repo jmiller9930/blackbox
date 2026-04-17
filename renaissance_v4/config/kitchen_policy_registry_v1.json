@@ -1,10 +1,11 @@
 {
   "schema": "kitchen_policy_registry_v1",
-  "description": "Canonical runtime policy IDs for Kitchen, Jupiter (SeanV3), and BlackBox. SeanV3 ALLOWED_POLICY_IDS in jupiter_web.mjs should stay aligned with runtime_policies.jupiter. Normal Kitchen assignment uses kitchen_policy_deployment_manifest_v1 (submission_id + content_sha256 → deployed_runtime_policy_id); runtime_policies lists which deployed ids the engine may load (safety allowlist). intake_candidate_runtime_map and mechanical_slot are legacy/diagnostic only — they are not the normal assignability gate for artifact-bound policies.",
+  "description": "Canonical runtime policy IDs for Kitchen, Jupiter (SeanV3), and BlackBox. SeanV3 ALLOWED_POLICY_IDS in jupiter_web.mjs should stay aligned with runtime_policies.jupiter. Normal Kitchen assignment uses kitchen_policy_deployment_manifest_v1 (submission_id + content_sha256 → deployed_runtime_policy_id); runtime_policies lists which deployed ids the engine may load (safety allowlist). Legacy slot jup_mc_test was removed from runtime_policies — use manifest-bound deployment ids only. intake_candidate_runtime_map and mechanical_slot are legacy/diagnostic only — they are not the normal assignability gate for artifact-bound policies.",
   "intake_candidate_runtime_map": {
     "jupiter": {
-      "fixture_minimal_direction_v1": "jup_mc_test",
-      "import_test_v1": "jup_mc_test"
+      "fixture_minimal_direction_v1": "jup_v4",
+      "import_test_v1": "jup_v4",
+      "jup_mc_test_v1": "jup_v4"
     },
     "blackbox": {}
   },
@@ -12,7 +13,6 @@
     "jupiter": [
       "jup_v4",
       "jup_v3",
-      "jup_mc_test",
       "jup_mc2",
       "jup_pipeline_proof_v1",
       "jup_kitchen_mechanical_v1"

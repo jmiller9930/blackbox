@@ -14,6 +14,7 @@
  */
 
 import assert from 'node:assert';
+import { createHash } from 'node:crypto';
 import { once } from 'node:events';
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import http from 'node:http';
@@ -33,10 +34,35 @@ const REPO_ROOT = resolve(PROJECT_DIR, '..', '..');
 const OPERATOR_TOKEN = 'operator-secret';
 const KITCHEN_TOKEN = 'kitchen-secret';
 
-/** Minimal manifest so POST policy ids match deployment manifest (engine extraction). */
+function evaluatorSource(tag) {
+  return `export const MIN_BARS = 2;
+export const POLICY_ENGINE_TAG = '${tag}';
+export function generateSignalFromOhlc() {
+  return { longSignal: false, shortSignal: false, signalPrice: 1, diag: {} };
+}
+`;
+}
+
+/** Writes evaluator.mjs per submission and manifest rows with matching content_sha256 (loader probe). */
 function createFlowTestRepo() {
   const dir = mkdtempSync(join(os.tmpdir(), 'jflow-repo-'));
   mkdirSync(join(dir, 'renaissance_v4', 'config'), { recursive: true });
+  function writeSubmissionArtifact(submissionId, tag) {
+    const src = evaluatorSource(tag);
+    const artDir = join(
+      dir,
+      'renaissance_v4',
+      'state',
+      'policy_intake_submissions',
+      submissionId,
+      'artifacts'
+    );
+    mkdirSync(artDir, { recursive: true });
+    writeFileSync(join(artDir, 'evaluator.mjs'), src, 'utf8');
+    return createHash('sha256').update(src, 'utf8').digest('hex');
+  }
+  const hV4 = writeSubmissionArtifact('flow_sub_v4', 'flow_v4');
+  const hKm = writeSubmissionArtifact('flow_sub_km', 'flow_km');
   writeFileSync(
     join(dir, 'renaissance_v4', 'config', 'kitchen_policy_deployment_manifest_v1.json'),
     JSON.stringify(
@@ -47,13 +73,13 @@ function createFlowTestRepo() {
             execution_target: 'jupiter',
             deployed_runtime_policy_id: 'jup_v4',
             submission_id: 'flow_sub_v4',
-            content_sha256: 'a'.repeat(64),
+            content_sha256: hV4,
           },
           {
             execution_target: 'jupiter',
             deployed_runtime_policy_id: 'jup_kitchen_mechanical_v1',
             submission_id: 'flow_sub_km',
-            content_sha256: 'b'.repeat(64),
+            content_sha256: hKm,
           },
         ],
       },
@@ -215,6 +241,7 @@ test('operator can switch policy when Kitchen acknowledges the runtime change', 
   const policy = await fetch(`${app.baseUrl}/api/v1/jupiter/policy`);
   const policyBody = await policy.json();
   assert.strictEqual(policyBody.active_policy, 'jup_v4');
+  assert.strictEqual(policyBody.loader_ok, true);
 });
 
 test('operator strict mode rolls local runtime back if Kitchen hangs after headers', async (t) => {

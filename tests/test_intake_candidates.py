@@ -84,7 +84,7 @@ def test_list_intake_candidates_runtime_policy_id_dv077(tmp_path: Path) -> None:
     assert by_c["kitchen_mechanical_always_long_v1"]["runtime_policy_id"] == ""
     assert by_c["kitchen_mechanical_always_long_v1"]["legacy_runtime_policy_id"] == "jup_kitchen_mechanical_v1"
     assert by_c["jup_mc_test_v1"]["runtime_policy_id"] == ""
-    assert by_c["jup_mc_test_v1"]["legacy_runtime_policy_id"] == "jup_mc_test"
+    assert by_c["jup_mc_test_v1"]["legacy_runtime_policy_id"] == "jup_v4"
 
 
 def test_list_intake_candidates_fixture_minimal_maps_via_registry(tmp_path: Path) -> None:
@@ -95,7 +95,7 @@ def test_list_intake_candidates_fixture_minimal_maps_via_registry(tmp_path: Path
     rows = list_intake_candidates(tmp_path, execution_target="jupiter")
     assert len(rows) == 1
     assert rows[0]["runtime_policy_id"] == ""
-    assert rows[0]["legacy_runtime_policy_id"] == "jup_mc_test"
+    assert rows[0]["legacy_runtime_policy_id"] == "jup_v4"
 
 
 def test_list_intake_candidates_filters_execution_target(tmp_path: Path) -> None:

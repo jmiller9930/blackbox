@@ -1,6 +1,6 @@
 /**
  * Jupiter MC test / pipeline validation — same OHLC numerics as JUPv4, distinct catalog for auditing.
- * (jup_mc_test slot in runtime policy selector.)
+ * Legacy reference only — `jup_mc_test` was removed from `kitchen_policy_registry_v1.json`; production uses manifest-bound `evaluator.mjs`.
  */
 
 import {

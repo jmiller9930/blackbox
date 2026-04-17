@@ -47,16 +47,16 @@ def _minimal_store(tmp: Path, active: str) -> None:
 def test_reconcile_collapses_kitchen_to_runtime(tmp_path: Path) -> None:
     _copy_registry(tmp_path)
     _minimal_store(tmp_path, "jup_kitchen_mechanical_v1")
-    rt = {"ok": True, "active_policy": "jup_mc_test", "execution_target": "jupiter"}
+    rt = {"ok": True, "active_policy": "jup_v4", "execution_target": "jupiter"}
     row = get_assignment(tmp_path, "jupiter")
     assert row is not None
     out = reconcile_assignment_store_to_runtime_truth(tmp_path, "jupiter", rt, row)
     assert out is not None
-    assert out["active_runtime_policy_id"] == "jup_mc_test"
+    assert out["active_runtime_policy_id"] == "jup_v4"
     assert out.get("reconcile_linkage") == "external_unlinked"
     assert out.get("submission_id") == ""
     row2 = get_assignment(tmp_path, "jupiter")
-    assert row2 and row2["active_runtime_policy_id"] == "jup_mc_test"
+    assert row2 and row2["active_runtime_policy_id"] == "jup_v4"
     assert row2.get("submission_id") == ""
 
 
@@ -78,17 +78,17 @@ def _write_pass_jupiter_candidate(tmp_path: Path, sid: str, candidate_policy_id:
 
 def test_reconcile_rebinds_submission_when_intake_matches_runtime(tmp_path: Path) -> None:
     _copy_registry(tmp_path)
-    _write_pass_jupiter_candidate(tmp_path, "sid_mc", "jup_mc_test")
+    _write_pass_jupiter_candidate(tmp_path, "sid_mc", "jup_v4")
     _minimal_store(tmp_path, "jup_kitchen_mechanical_v1")
-    rt = {"ok": True, "active_policy": "jup_mc_test", "execution_target": "jupiter"}
+    rt = {"ok": True, "active_policy": "jup_v4", "execution_target": "jupiter"}
     row = get_assignment(tmp_path, "jupiter")
     assert row is not None
     out = reconcile_assignment_store_to_runtime_truth(tmp_path, "jupiter", rt, row)
     assert out is not None
     assert out.get("reconcile_linkage") == "candidate_rebound"
     assert out.get("submission_id") == "sid_mc"
-    assert out.get("candidate_policy_id") == "jup_mc_test"
-    assert out["active_runtime_policy_id"] == "jup_mc_test"
+    assert out.get("candidate_policy_id") == "jup_v4"
+    assert out["active_runtime_policy_id"] == "jup_v4"
 
 
 def test_build_payload_drift_visible_without_mutating_store_on_get(
@@ -99,7 +99,7 @@ def test_build_payload_drift_visible_without_mutating_store_on_get(
     _minimal_store(tmp_path, "jup_kitchen_mechanical_v1")
 
     def fake_query(*_a: object, **_k: object):
-        return {"ok": True, "active_policy": "jup_mc_test", "execution_target": "jupiter"}
+        return {"ok": True, "active_policy": "jup_v4", "execution_target": "jupiter"}
 
     monkeypatch.setattr(
         "renaissance_v4.kitchen_runtime_assignment.query_runtime_truth",
@@ -111,7 +111,7 @@ def test_build_payload_drift_visible_without_mutating_store_on_get(
     assert p.get("drift", {}).get("state") == "runtime_diverged"
     assert p.get("drift_basis") == "kitchen_assignment_row_vs_runtime_get"
     assert p.get("assignment", {}).get("active_runtime_policy_id") == "jup_kitchen_mechanical_v1"
-    assert p.get("live_runtime_policy") == "jup_mc_test"
+    assert p.get("live_runtime_policy") == "jup_v4"
     assert p.get("authoritative_active_policy") == "jup_kitchen_mechanical_v1"
     assert p.get("schema") == "kitchen_runtime_assignment_read_v5"
 
@@ -133,7 +133,7 @@ def test_build_payload_lifecycle_external_override_when_pre_row_was_confirmed(
     )
 
     def fake_query(*_a: object, **_k: object):
-        return {"ok": True, "active_policy": "jup_mc_test", "execution_target": "jupiter"}
+        return {"ok": True, "active_policy": "jup_v4", "execution_target": "jupiter"}
 
     monkeypatch.setattr(
         "renaissance_v4.kitchen_runtime_assignment.query_runtime_truth",

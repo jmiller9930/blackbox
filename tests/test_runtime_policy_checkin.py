@@ -63,11 +63,11 @@ def _write_pass_jupiter_candidate(tmp_path: Path, sid: str, candidate_policy_id:
 
 def test_checkin_rebinds_to_matching_candidate_submission(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     _copy_registry(tmp_path)
-    _write_pass_jupiter_candidate(tmp_path, "sid_mc", "jup_mc_test")
+    _write_pass_jupiter_candidate(tmp_path, "sid_mc", "jup_v4")
     _minimal_store(tmp_path, "jup_kitchen_mechanical_v1")
 
     def fake_query(*_a: object, **_k: object):
-        return {"ok": True, "active_policy": "jup_mc_test", "execution_target": "jupiter"}
+        return {"ok": True, "active_policy": "jup_v4", "execution_target": "jupiter"}
 
     monkeypatch.setattr(
         "renaissance_v4.kitchen_runtime_assignment.query_runtime_truth",
@@ -76,14 +76,14 @@ def test_checkin_rebinds_to_matching_candidate_submission(tmp_path: Path, monkey
     r = apply_runtime_policy_checkin(
         tmp_path,
         "jupiter",
-        "jup_mc_test",
+        "jup_v4",
         change_source="trade_surface_manual",
     )
     assert r.get("ok") is True
     assert r.get("reconcile_linkage") == "candidate_rebound"
     row = get_assignment(tmp_path, "jupiter")
     assert row and row.get("submission_id") == "sid_mc"
-    assert row.get("active_runtime_policy_id") == "jup_mc_test"
+    assert row.get("active_runtime_policy_id") == "jup_v4"
     tail = ledger_entries_for_target(tmp_path, "jupiter", limit=5)
     assert any(e.get("source") == "runtime_checkin" for e in tail)
 
@@ -93,18 +93,18 @@ def test_checkin_unlinks_when_approved_runtime_has_no_candidate_row(tmp_path: Pa
     _minimal_store(tmp_path, "jup_kitchen_mechanical_v1")
 
     def fake_query(*_a: object, **_k: object):
-        return {"ok": True, "active_policy": "jup_mc_test", "execution_target": "jupiter"}
+        return {"ok": True, "active_policy": "jup_v4", "execution_target": "jupiter"}
 
     monkeypatch.setattr(
         "renaissance_v4.kitchen_runtime_assignment.query_runtime_truth",
         fake_query,
     )
-    r = apply_runtime_policy_checkin(tmp_path, "jupiter", "jup_mc_test")
+    r = apply_runtime_policy_checkin(tmp_path, "jupiter", "jup_v4")
     assert r.get("ok") is True
     assert r.get("reconcile_linkage") == "external_unlinked"
     row = get_assignment(tmp_path, "jupiter")
     assert row and row.get("submission_id") == ""
-    assert row.get("active_runtime_policy_id") == "jup_mc_test"
+    assert row.get("active_runtime_policy_id") == "jup_v4"
 
 
 def test_checkin_rejects_runtime_verify_mismatch(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -118,7 +118,7 @@ def test_checkin_rejects_runtime_verify_mismatch(tmp_path: Path, monkeypatch: py
         "renaissance_v4.kitchen_runtime_assignment.query_runtime_truth",
         fake_query,
     )
-    r = apply_runtime_policy_checkin(tmp_path, "jupiter", "jup_mc_test")
+    r = apply_runtime_policy_checkin(tmp_path, "jupiter", "jup_mc2")
     assert r.get("ok") is False
     assert r.get("error") == "runtime_verify_mismatch"
 
@@ -128,13 +128,13 @@ def test_checkin_ledger_entry_runtime_checkin_source(tmp_path: Path, monkeypatch
     _minimal_store(tmp_path, "jup_kitchen_mechanical_v1")
 
     def fake_query(*_a: object, **_k: object):
-        return {"ok": True, "active_policy": "jup_mc_test", "execution_target": "jupiter"}
+        return {"ok": True, "active_policy": "jup_v4", "execution_target": "jupiter"}
 
     monkeypatch.setattr(
         "renaissance_v4.kitchen_runtime_assignment.query_runtime_truth",
         fake_query,
     )
-    apply_runtime_policy_checkin(tmp_path, "jupiter", "jup_mc_test", change_source="trade_surface_manual")
+    apply_runtime_policy_checkin(tmp_path, "jupiter", "jup_v4", change_source="trade_surface_manual")
     led = read_ledger(tmp_path)
     entries = [e for e in led.get("entries", []) if e.get("execution_target") == "jupiter"]
     assert entries
@@ -145,17 +145,17 @@ def test_checkin_ledger_entry_runtime_checkin_source(tmp_path: Path, monkeypatch
 
 def test_checkin_no_change_when_kitchen_already_matches(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     _copy_registry(tmp_path)
-    _minimal_store(tmp_path, "jup_mc_test")
+    _minimal_store(tmp_path, "jup_v4")
 
     def fake_query(*_a: object, **_k: object):
-        return {"ok": True, "active_policy": "jup_mc_test", "execution_target": "jupiter"}
+        return {"ok": True, "active_policy": "jup_v4", "execution_target": "jupiter"}
 
     monkeypatch.setattr(
         "renaissance_v4.kitchen_runtime_assignment.query_runtime_truth",
         fake_query,
     )
     before = get_assignment(tmp_path, "jupiter")
-    r = apply_runtime_policy_checkin(tmp_path, "jupiter", "jup_mc_test")
+    r = apply_runtime_policy_checkin(tmp_path, "jupiter", "jup_v4")
     assert r.get("ok") is True
     assert r.get("reconcile_linkage") == "no_change"
     after = get_assignment(tmp_path, "jupiter")
@@ -165,7 +165,7 @@ def test_checkin_no_change_when_kitchen_already_matches(tmp_path: Path, monkeypa
 def test_reconcile_production_checkin_tags_ledger(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     _copy_registry(tmp_path)
     _minimal_store(tmp_path, "jup_kitchen_mechanical_v1")
-    rt = {"ok": True, "active_policy": "jup_mc_test", "execution_target": "jupiter"}
+    rt = {"ok": True, "active_policy": "jup_v4", "execution_target": "jupiter"}
     row = get_assignment(tmp_path, "jupiter")
     out = reconcile_assignment_store_to_runtime_truth(
         tmp_path,
