@@ -1,4 +1,11 @@
 {
   "schema": "kitchen_policy_deployment_manifest_v1",
-  "entries": []
+  "entries": [
+    {
+      "execution_target": "jupiter",
+      "deployed_runtime_policy_id": "jup_clawbot_proof_v1",
+      "submission_id": "clawbot_proof_v1",
+      "content_sha256": "263d5085c1e7573bad496424ec334b98869449dad829c9e7382ed2f58437911f"
+    }
+  ]
 }

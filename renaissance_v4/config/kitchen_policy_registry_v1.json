@@ -15,7 +15,8 @@
       "jup_v3",
       "jup_mc2",
       "jup_pipeline_proof_v1",
-      "jup_kitchen_mechanical_v1"
+      "jup_kitchen_mechanical_v1",
+      "jup_clawbot_proof_v1"
     ],
     "blackbox": [
       "bb_kitchen_mechanical_v1"
