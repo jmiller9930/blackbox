@@ -91,9 +91,10 @@ def test_reconcile_rebinds_submission_when_intake_matches_runtime(tmp_path: Path
     assert out["active_runtime_policy_id"] == "jup_mc_test"
 
 
-def test_build_payload_drift_uses_pre_reconcile_so_divergence_visible(
+def test_build_payload_drift_visible_without_mutating_store_on_get(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    """GET must not collapse Kitchen assignment to live runtime; primary story stays Kitchen intent."""
     _copy_registry(tmp_path)
     _minimal_store(tmp_path, "jup_kitchen_mechanical_v1")
 
@@ -108,15 +109,17 @@ def test_build_payload_drift_uses_pre_reconcile_so_divergence_visible(
     monkeypatch.setenv("KITCHEN_JUPITER_OPERATOR_TOKEN", "t")
     p = build_kitchen_runtime_read_payload(tmp_path, "jupiter")
     assert p.get("drift", {}).get("state") == "runtime_diverged"
-    assert p.get("drift_basis") == "pre_reconcile_assignment_row"
-    assert p.get("assignment", {}).get("active_runtime_policy_id") == "jup_mc_test"
-    assert p.get("schema") == "kitchen_runtime_assignment_read_v4"
+    assert p.get("drift_basis") == "kitchen_assignment_row_vs_runtime_get"
+    assert p.get("assignment", {}).get("active_runtime_policy_id") == "jup_kitchen_mechanical_v1"
+    assert p.get("live_runtime_policy") == "jup_mc_test"
+    assert p.get("authoritative_active_policy") == "jup_kitchen_mechanical_v1"
+    assert p.get("schema") == "kitchen_runtime_assignment_read_v5"
 
 
 def test_build_payload_lifecycle_external_override_when_pre_row_was_confirmed(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """DV-069 — drift/lifecycle use pre-reconcile row so external_override is visible after reconcile."""
+    """DV-069 — drift/lifecycle use persisted assignment row vs runtime (no GET-time store collapse)."""
     _copy_registry(tmp_path)
     _minimal_store(tmp_path, "jup_kitchen_mechanical_v1")
     from renaissance_v4.kitchen_policy_lifecycle import get_entry, mark_assigned_runtime_confirmed

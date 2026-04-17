@@ -13,9 +13,9 @@ The assignment mechanism is **not** only “Kitchen pushes to the target.” It 
 | Half | Direction | What happens |
 |------|-----------|----------------|
 | **Forward assignment** | Kitchen → execution target | Operator runs the Kitchen assign path; BlackBox **POST**s `active-policy` to the target and **only then** persists assignment + ledger + lifecycle after **GET** read-back matches. |
-| **Reverse assignment** | Trade surface / runtime → Kitchen | There is **no** inbound webhook from Jupiter to BlackBox. “Reverse” is implemented as **pull**: the same **GET …/policy** used for truth drives **reconcile** (collapse Kitchen row to runtime when approved), **external** ledger entries, **drift** state, and **lifecycle** updates when runtime diverged from what Kitchen last recorded. |
+| **Reverse assignment** | Trade surface / runtime → Kitchen | No inbound webhook. Poll observes runtime vs persisted Kitchen row: **external** ledger entries, **drift**, **lifecycle** — without mutating the assignment store on GET. |
 
-Both halves are required for a coherent story: forward establishes intent and proof; reverse keeps Kitchen from lying when the world changes outside Kitchen.
+Both halves: forward establishes persisted intent; observation records external drift without pretending the store “became” the live policy unless the operator runs assign again successfully.
 
 Two different “truths” exist in the system:
 
@@ -24,7 +24,7 @@ Two different “truths” exist in the system:
 | **Kitchen record** | What BlackBox persisted after an operator action from the Kitchen flow (`kitchen_runtime_assignment.json`). |
 | **Runtime truth** | What the **execution target** reports as `active_policy` over HTTP (`GET …/policy`). |
 
-**Design rule (DV-074 / DV-070):** Runtime GET is **authoritative** for “what is live.” Kitchen may **push** intent to the target, but if someone changes policy on the trade surface (Jupiter operator UI, another control plane, or misconfigured base URL), the next Kitchen read **reconciles** the local row toward runtime or records **drift**.
+**Design rule:** Kitchen **POST + verify** is the only normal writer to the assignment store. Runtime GET on dashboard poll is for **live observation** and **drift**; it does not overwrite the persisted assignment row. External changes surface as drift / lifecycle / ledger, not as a silent “new assigned” story.
 
 ---
 
@@ -38,7 +38,7 @@ Two different “truths” exist in the system:
 - **Lifecycle store** — `renaissance_v4/state/kitchen_policy_lifecycle_v1.json` per `(submission_id, execution_target)` (DV-069).
 - **Ledger** — Append-only history in `kitchen_policy_ledger` (Kitchen assigns + external drift).
 - **Trade surface** — Operator-facing place where active policy can change **without** going through Kitchen (e.g. Jupiter web UI calling Sean’s `POST /api/v1/jupiter/active-policy`). That change is **reverse assignment** material: Kitchen learns it on the next read, not via a separate “assign back” API.
-- **Reverse assignment** — Not a POST from target to Kitchen; it is the **reconciliation pipeline** on `GET …/renaissance/kitchen-runtime-assignment` (runtime GET → `maybe_record_external_runtime_change` → `reconcile_assignment_store_to_runtime_truth` → `drift_status` → `reconcile_with_drift`). Same endpoint family as forward truth, opposite causal direction.
+- **Reverse assignment / external change** — Not a POST from target to Kitchen. `GET …/kitchen-runtime-assignment` **does not** mutate the assignment store to match runtime. It runs runtime GET → `maybe_record_external_runtime_change` (ledger) → `drift_status` (Kitchen row vs live) → `reconcile_with_drift` (lifecycle only). Kitchen assignment intent stays the nexus until a successful **POST** assign path updates it. Optional `reconcile_assignment_store_to_runtime_truth` exists for tests/tooling, not for normal dashboard polling.
 
 ---
 
@@ -75,36 +75,34 @@ flowchart LR
 
 **API surface (BlackBox `api_server.py`):**
 
-- `GET /api/v1/renaissance/kitchen-runtime-assignment?execution_target=jupiter|blackbox` — Full read payload (assignment, runtime, drift, lifecycle summary, ledger tail, `authoritative_active_policy`).
+- `GET /api/v1/renaissance/kitchen-runtime-assignment?execution_target=jupiter|blackbox` — Full read payload (assignment, `live_runtime_policy`, drift, lifecycle summary, ledger tail; `authoritative_active_policy` follows Kitchen assignment when present).
 - `POST /api/v1/renaissance/kitchen-runtime-assignment` — Body: `submission_id`, `execution_target`; runs `assign_mechanical_candidate`.
 - Legacy: `GET …/kitchen-jupiter-assignment` returns **410 Gone**; `POST …/kitchen-assign-jupiter` remains a deprecated alias; prefer `kitchen-runtime-assignment`.
 
-**UI thread:** Dashboard Renaissance / Kitchen blocks fetch the GET endpoint and render **Active trade policy** from `authoritative_active_policy` (runtime) and per-row **`runtime_policy_id`** (from `infer_runtime_policy_id_for_candidate` in DV-077) for the green-dot match.
+**UI thread:** Dashboard renders **Active trade policy** from the Kitchen assignment row (`assignment.active_runtime_policy_id`) when set; live Jupiter id is in `live_runtime_policy` / `runtime` for drift and green-dot row match.
 
 ---
 
 ## 4. Reverse assignment (trade surface → Kitchen) and backwards compatibility
 
-If the operator (or automation) changes active policy **on the trade surface**, Kitchen does **not** receive a webhook. Instead, **the next GET** from the dashboard/API runs a **pull-and-reconcile** pipeline:
+If the operator (or automation) changes active policy **on the trade surface**, Kitchen does **not** receive a webhook. **The next GET** records drift and lifecycle; it does **not** overwrite Kitchen’s persisted assignment row.
 
 ```mermaid
 flowchart TD
   R[Runtime GET active_policy] --> M{maybe_record_external_runtime_change}
   M --> L[Ledger external entry if drift / unknown]
-  R --> REC[reconcile_assignment_store_to_runtime_truth DV-070]
-  REC --> K[kitchen row active_runtime_policy_id collapsed to runtime if approved]
-  R --> D[drift_status: match / runtime_diverged / ...]
-  D --> LC[reconcile_with_drift → lifecycle: external_override / runtime_diverged / confirmed]
+  R --> D[drift_status: Kitchen row vs runtime]
+  D --> LC[reconcile_with_drift → lifecycle: external_override / ...]
 ```
 
 **Behaviors to remember:**
 
-- **`authoritative_active_policy`** in the GET payload is the runtime’s `active_policy` string when the GET succeeded — use this for “what is live.”
-- **`reconcile_assignment_store_to_runtime_truth`** overwrites persisted `active_runtime_policy_id` when it disagreed with runtime but the runtime policy is still **registry-approved** (DV-070).
-- **`unknown_runtime_policy`** — Runtime reports a policy id **not** in `kitchen_policy_registry_v1.json` (manual change or skew); UI and drift logic treat this distinctly.
+- **`authoritative_active_policy`** — Kitchen-assigned runtime policy id when an assignment row exists; otherwise falls back to live runtime (no assignment yet).
+- **`live_runtime_policy`** — What the trade service reports; compare to assignment for override/drift. Assignment store is updated only via successful **POST** `assign_mechanical_candidate`, not via GET.
+- **`unknown_runtime_policy`** — Runtime reports a policy id **not** in `kitchen_policy_registry_v1.json`; UI and drift treat this distinctly.
 - **External ledger** — `maybe_record_external_runtime_change` dedupes ledger lines when runtime diverged from last Kitchen assignment without a new Kitchen POST.
 
-This is the **backwards compatibility** story: legacy or side-channel policy changes **eventually** show up in Kitchen state **on read**, not by Kitchen initiating a second POST.
+**Optional** `reconcile_assignment_store_to_runtime_truth` (tests / explicit tooling only) may rewrite the store; it is **not** part of normal dashboard polling.
 
 ---
 
@@ -127,9 +125,9 @@ This is the **backwards compatibility** story: legacy or side-channel policy cha
 
 These are **symptoms** seen when wiring the dashboard and lab; they are not an exhaustive root-cause analysis.
 
-1. **Split semantics** — “Assigned” in the UI can mean “operator requested assignment / lifecycle state” while the **green dot** is defined as **`runtime.active_policy === row.runtime_policy_id`** (DV-077). If those two notions are not read from the same payload fields, the UI can look contradictory until clarified in code (e.g. `authoritative_active_policy` for the headline line).
+1. **Headline vs live** — The primary line should track **Kitchen assignment**; the green dot still reflects **live runtime vs row** (DV-077). When those differ, drift styling and status text should say override/drift, not “success” on the wrong id.
 
-2. **Drift is normal** — Any change on the Jupiter trade surface creates **runtime_diverged** until the next successful reconcile or a new Kitchen assign. Operators may interpret drift as a bug rather than expected behavior.
+2. **Drift is normal** — Any change on the Jupiter trade surface creates **runtime_diverged** until a new successful Kitchen assign aligns live with intent. Operators may interpret drift as a bug unless copy is explicit.
 
 3. **Registry vs runtime allow-list** — Assignment fails with `jupiter_runtime_policy_set_mismatch` if Sean’s `allowed_policies` does not include the mechanical slot id even when the repo registry lists it (DV-077). Deploy skew between Sean and BlackBox repo is a **hard** gate.
 

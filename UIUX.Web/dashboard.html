@@ -4907,7 +4907,7 @@
     }
     return { ok: true, reason: '' };
   }
-  /** DV-077 — sole headline for active policy (GET runtime read-back). */
+  /** DV-077 — primary line: Kitchen-assigned policy id (nexus); live runtime is drift/status elsewhere. */
   function rv4UpdateActiveTradePolicyLine() {
     var wrap = $('rv4-active-trade-policy-line');
     var valEl = $('rv4-active-trade-policy-value');
@@ -4925,15 +4925,21 @@
       return;
     }
     var rt = j.runtime || {};
+    var drift = j.drift || {};
+    var asg = j.assignment || {};
+    var kitchenId = String(asg.active_runtime_policy_id || '').trim();
     var auth =
-      j.authoritative_active_policy != null && String(j.authoritative_active_policy).trim() !== ''
-        ? String(j.authoritative_active_policy).trim()
-        : rt && rt.ok && rt.active_policy != null && String(rt.active_policy).trim() !== ''
-          ? String(rt.active_policy).trim()
-          : '';
+      kitchenId !== ''
+        ? kitchenId
+        : j.authoritative_active_policy != null && String(j.authoritative_active_policy).trim() !== ''
+          ? String(j.authoritative_active_policy).trim()
+          : rt && rt.ok && rt.active_policy != null && String(rt.active_policy).trim() !== ''
+            ? String(rt.active_policy).trim()
+            : '';
+    var diverged = drift.state && drift.state !== 'match';
     if (auth) {
       valEl.textContent = auth;
-      wrap.classList.remove('is-rv4-drift-warn');
+      wrap.classList.toggle('is-rv4-drift-warn', !!diverged || !!(rt && !rt.ok));
       return;
     }
     valEl.textContent = rt && !rt.ok ? '(runtime unavailable)' : '—';
@@ -4972,7 +4978,7 @@
           String(a.submission_id || '—') +
           ' · registry slot ' +
           String(a.approved_runtime_slot_id || '—') +
-          ' · store reconciled id ' +
+          ' · Kitchen assigned id ' +
           String(a.active_runtime_policy_id || '—')
       );
     } else {
@@ -4980,18 +4986,20 @@
     }
     if (drift && drift.state) {
       if (drift.state === 'match') {
-        parts.push('Reconcile: store matches runtime GET.');
+        parts.push('Sync: Kitchen assignment matches live runtime GET.');
       } else {
         parts.push(
-          'Reconcile warning [' +
+          'Override / drift [' +
             String(drift.state) +
             ']: ' +
             String(drift.detail || '') +
-            (drift.runtime_active_policy != null
-              ? ' · runtime ' + String(drift.runtime_active_policy)
-              : '') +
+            (j.live_runtime_policy != null && String(j.live_runtime_policy).trim() !== ''
+              ? ' · live runtime ' + String(j.live_runtime_policy).trim()
+              : drift.runtime_active_policy != null
+                ? ' · live runtime ' + String(drift.runtime_active_policy)
+                : '') +
             (drift.kitchen_active_policy_id != null
-              ? ' · store id ' + String(drift.kitchen_active_policy_id)
+              ? ' · Kitchen assignment id ' + String(drift.kitchen_active_policy_id)
               : '')
         );
       }
@@ -5182,7 +5190,7 @@
             ? '<p class="dash-rv4-assign-reason">' + rv4Esc(reasonText) + '</p>'
             : '') +
           ((assignedShowsAsLive || assignedRecordButRuntimeElsewhere) && asg
-            ? '<p class="dash-rv4-assign-recorded">Assignment on file · store reconciled id ' +
+            ? '<p class="dash-rv4-assign-recorded">Assignment on file · Kitchen assigned id ' +
               rv4Esc(String(asg.active_runtime_policy_id || '—')) +
               ' · registry slot ' +
               rv4Esc(String(asg.approved_runtime_slot_id || '—')) +

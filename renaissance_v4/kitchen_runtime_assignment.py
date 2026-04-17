@@ -1,15 +1,20 @@
 """
-DV-068 / DV-074 — Multi-target Kitchen → runtime assignment with runtime as source of truth.
+DV-068 / DV-074 — Multi-target Kitchen → runtime assignment.
 
-Flow: **Kitchen candidate** → **approved runtime slot** → **execution target** → **active runtime policy id**.
+**Nexus rule:** Kitchen assignment intent is persisted only from ``assign_mechanical_candidate`` after
+POST to the trade service and GET read-back verification (DV-074). That path is authoritative: failure
+leaves the store unchanged.
 
-DV-074: Assignment **never** persists unless the runtime accepts the change and a read-back confirms the
-active policy. Kitchen local store records intent; **runtime GET** is authoritative for \"what is running\".
+**GET** ``build_kitchen_runtime_read_payload`` does **not** mutate the assignment store. Runtime GET is
+for drift/ledger/lifecycle and for displaying ``live_runtime_policy`` vs the persisted assignment row.
+It must not silently collapse Kitchen to whatever the target is already running (that was a defect).
+
+Optional ``reconcile_assignment_store_to_runtime_truth`` is for tests/explicit tooling only—not dashboard
+polling.
 """
 
 from __future__ import annotations
 
-import copy
 import json
 import os
 import urllib.error
@@ -121,9 +126,11 @@ def reconcile_assignment_store_to_runtime_truth(
     kitchen_row_before: dict[str, Any] | None,
 ) -> dict[str, Any] | None:
     """
-    DV-070 / DV-070B — Runtime read-back is authoritative for live policy. If the persisted Kitchen row
-    disagrees with ``active_policy`` from the runtime GET, rewrite the assignment row: reverse-lookup a
-    passing intake candidate for ``r_active`` when possible, or clear candidate linkage when none exists.
+    Optional store rewrite: collapse persisted Kitchen row toward runtime GET (DV-070B rebind/unlink).
+
+    **Not** called from ``GET …/kitchen-runtime-assignment``. That poll must not overwrite Kitchen
+    assignment intent: Kitchen is the nexus; runtime GET is for verification (assign path) and drift
+    display (read path), not silent collapse on refresh. Callers: tests, explicit sync tooling only.
     """
     from renaissance_v4.policy_intake.candidates_registry import find_best_submission_for_runtime_policy
 
@@ -576,11 +583,15 @@ def build_kitchen_runtime_read_payload(
     http_blackbox_base: str | None = None,
     http_blackbox_token: str | None = None,
 ) -> dict[str, Any]:
-    """Merged payload for GET /api/v1/renaissance/kitchen-runtime-assignment."""
+    """Merged payload for GET /api/v1/renaissance/kitchen-runtime-assignment.
+
+    Kitchen assignment store is **not** mutated on GET. Successful assignment only follows
+    ``assign_mechanical_candidate`` (POST + runtime verify). Drift compares persisted assignment vs
+    runtime GET for override/diagnostic display.
+    """
     repo = repo.resolve()
     et = normalize_execution_target(execution_target)
     row_live = get_assignment(repo, et)
-    row_pre = copy.deepcopy(row_live) if row_live else None
     reg = load_registry(repo)
     rt = query_runtime_truth(
         repo,
@@ -591,14 +602,12 @@ def build_kitchen_runtime_read_payload(
         http_blackbox_token=http_blackbox_token,
     )
     maybe_record_external_runtime_change(repo, et, row_live, rt)
-    reconcile_assignment_store_to_runtime_truth(repo, et, rt, row_live)
-    row_post = get_assignment(repo, et)
-    drift = drift_status(repo, et, row_pre, rt)
+    drift = drift_status(repo, et, row_live, rt)
     lc_sum: dict[str, Any] = {"schema": "kitchen_policy_lifecycle_summary_v1", "by_submission_id": {}}
     try:
         from renaissance_v4.kitchen_policy_lifecycle import lifecycle_summary_for_target, reconcile_with_drift
 
-        reconcile_with_drift(repo, et, row_pre, drift, rt)
+        reconcile_with_drift(repo, et, row_live, drift, rt)
         lc_sum = lifecycle_summary_for_target(repo, et)
     except Exception:
         pass
@@ -606,15 +615,19 @@ def build_kitchen_runtime_read_payload(
     cp_warnings: list[str] = []
     if et == "jupiter":
         cp_warnings = jupiter_control_plane_warnings(http_jupiter_base)
-    auth_policy = ""
+    live_policy = ""
     if isinstance(rt, dict) and rt.get("ok"):
-        auth_policy = str(rt.get("active_policy") or "").strip()
+        live_policy = str(rt.get("active_policy") or "").strip()
+    k_assigned = str((row_live or {}).get("active_runtime_policy_id") or "").strip()
+    # Primary operator story: Kitchen nexus when a row exists; else fall back to live observation.
+    authoritative_active_policy = k_assigned if k_assigned else live_policy
     return {
-        "schema": "kitchen_runtime_assignment_read_v4",
+        "schema": "kitchen_runtime_assignment_read_v5",
         "execution_target": et,
-        "authoritative_active_policy": auth_policy,
-        "assignment": row_post,
-        "drift_basis": "pre_reconcile_assignment_row",
+        "authoritative_active_policy": authoritative_active_policy,
+        "live_runtime_policy": live_policy,
+        "assignment": row_live,
+        "drift_basis": "kitchen_assignment_row_vs_runtime_get",
         "mechanical_candidate_policy_id": MECHANICAL_CANDIDATE_POLICY_ID,
         "policy_registry": {
             "schema": reg.get("schema"),
