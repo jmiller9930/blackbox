@@ -1,9 +1,9 @@
 """
 DV-068 / DV-074 — Multi-target Kitchen → runtime assignment.
 
-**Nexus rule:** Kitchen assignment intent is persisted only from ``assign_mechanical_candidate`` after
-POST to the trade service and GET read-back verification (DV-074). That path is authoritative: failure
-leaves the store unchanged.
+**Nexus rule:** Kitchen assignment intent is persisted only from ``assign_mechanical_candidate`` (any
+registry-mapped passing intake) after POST to the trade service and GET read-back verification (DV-074).
+That path is authoritative: failure leaves the store unchanged.
 
 **GET** ``build_kitchen_runtime_read_payload`` does **not** mutate the assignment store. Runtime GET is
 for drift/ledger/lifecycle and for displaying ``live_runtime_policy`` vs the persisted assignment row.
@@ -33,6 +33,7 @@ from renaissance_v4.kitchen_policy_ledger import (
 )
 from renaissance_v4.kitchen_policy_registry import (
     approved_mechanical_by_target,
+    infer_runtime_policy_id_for_candidate,
     load_registry,
     runtime_policy_approved,
 )
@@ -830,8 +831,13 @@ def assign_mechanical_candidate(
     http_blackbox_token: str | None = None,
 ) -> dict[str, Any]:
     """
-    Assign passing mechanical intake: **runtime must accept and read-back must match** (DV-074).
-    Does not write local store unless verification succeeds.
+    Assign a **passing** intake candidate whose ``candidate_policy_id`` maps to an approved runtime
+    policy for the target (``kitchen_policy_registry_v1.json`` via
+    :func:`~renaissance_v4.kitchen_policy_registry.infer_runtime_policy_id_for_candidate`).
+    Includes the governed mechanical slot and any id listed under ``runtime_policies.{jupiter|blackbox}``.
+
+    **Runtime must accept and read-back must match** (DV-074). Does not write local store unless
+    verification succeeds.
     """
     repo = repo.resolve()
     rep_path = submission_dir(repo, submission_id) / "report" / "intake_report.json"
@@ -840,13 +846,6 @@ def assign_mechanical_candidate(
         return {"ok": False, "error": "submission_not_passing", "submission_id": submission_id}
 
     cid = str(rep.get("candidate_policy_id") or "").strip()
-    if cid != MECHANICAL_CANDIDATE_POLICY_ID:
-        return {
-            "ok": False,
-            "error": "candidate_not_mechanical_proof_policy",
-            "detail": f"Only candidate_policy_id {MECHANICAL_CANDIDATE_POLICY_ID!r} maps to approved mechanical slots.",
-            "candidate_policy_id": cid,
-        }
 
     rep_et = normalize_execution_target(str(rep.get("execution_target") or "jupiter"))
     et = normalize_execution_target(execution_target) if execution_target is not None else rep_et
@@ -859,13 +858,38 @@ def assign_mechanical_candidate(
             "execution_target_intake": rep_et,
         }
 
-    mech = mechanical_slot_safe(repo, et)
-    if not mech:
+    if et not in ("jupiter", "blackbox"):
         return {"ok": False, "error": "unsupported_execution_target", "execution_target": et}
 
-    slot = mech["approved_runtime_slot_id"]
-    active_pid = mech["active_runtime_policy_id"]
-    adapter = mech.get("runtime_adapter", "")
+    mech = mechanical_slot_safe(repo, et)
+
+    active_pid = infer_runtime_policy_id_for_candidate(repo, et, cid)
+    if not active_pid:
+        return {
+            "ok": False,
+            "error": "candidate_not_deployable",
+            "detail": (
+                "candidate_policy_id is not mapped to an approved runtime policy for this target in "
+                "renaissance_v4/config/kitchen_policy_registry_v1.json "
+                "(add to runtime_policies or mechanical_slot), or intake id cannot be deployed."
+            ),
+            "candidate_policy_id": cid,
+            "execution_target": et,
+        }
+
+    is_mechanical_row = bool(
+        mech and str(mech.get("candidate_policy_id") or "").strip() == cid
+    )
+    if is_mechanical_row and mech:
+        slot = str(mech.get("approved_runtime_slot_id") or "")
+        adapter = str(mech.get("runtime_adapter") or "")
+    else:
+        slot = active_pid
+        adapter = (
+            "seanv3_jupiter_active_policy"
+            if et == "jupiter"
+            else "reserved_blackbox_control_plane"
+        )
 
     if not runtime_policy_approved(repo, et, active_pid):
         return {

@@ -31,7 +31,7 @@ def _copy_registry(root: Path) -> None:
     )
 
 
-def _write_pass(root: Path, sid: str) -> None:
+def _write_pass(root: Path, sid: str, *, candidate_policy_id: str = "kitchen_mechanical_always_long_v1") -> None:
     sub = root / "renaissance_v4" / "state" / "policy_intake_submissions" / sid
     (sub / "report").mkdir(parents=True, exist_ok=True)
     (sub / "canonical").mkdir(parents=True, exist_ok=True)
@@ -39,7 +39,7 @@ def _write_pass(root: Path, sid: str) -> None:
         "schema": "policy_intake_report_v1",
         "submission_id": sid,
         "pass": True,
-        "candidate_policy_id": "kitchen_mechanical_always_long_v1",
+        "candidate_policy_id": candidate_policy_id,
         "execution_target": "jupiter",
         "stages": {"stage_1_intake": {"timestamp_utc": "2026-01-01T12:00:00+00:00"}},
     }
@@ -107,6 +107,36 @@ def test_assign_jupiter_succeeds_when_runtime_post_and_get_verify(
     assert len(led.get("entries") or []) == 1
     assert led["entries"][0]["source"] == "kitchen"
     assert led["entries"][0]["new_policy_id"] == "jup_kitchen_mechanical_v1"
+
+
+def test_assign_jupiter_non_mechanical_candidate_uses_registry_runtime_id(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Any intake whose candidate_policy_id maps to runtime_policies.jupiter may be assigned."""
+    _copy_registry(tmp_path)
+    monkeypatch.setenv("KITCHEN_JUPITER_CONTROL_BASE", "http://sean.test")
+    monkeypatch.setenv("KITCHEN_JUPITER_OPERATOR_TOKEN", "tok")
+    _write_pass(tmp_path, "sub_mc_direct", candidate_policy_id="jup_mc_test")
+
+    def fake_urlopen(req: object, timeout: float | None = None) -> _MockResp:
+        u = getattr(req, "full_url", "")
+        if "active-policy" in u:
+            return _MockResp(
+                200,
+                b'{"ok":true,"active_policy":"jup_mc_test","contract":"jupiter_active_policy_switch_v1"}',
+            )
+        if "/jupiter/policy" in u:
+            return _MockResp(
+                200,
+                b'{"active_policy":"jup_mc_test","allowed_policies":["jup_v4","jup_mc_test","jup_kitchen_mechanical_v1"],"source":"runtime_config"}',
+            )
+        raise AssertionError(u)
+
+    monkeypatch.setattr("urllib.request.urlopen", fake_urlopen)
+    r = assign_mechanical_candidate_to_jupiter(tmp_path, "sub_mc_direct")
+    assert r.get("ok") is True
+    assert r.get("active_runtime_policy_id") == "jup_mc_test"
+    assert r.get("candidate_policy_id") == "jup_mc_test"
 
 
 def test_assign_jupiter_post_ok_but_verify_fails_no_persist(
@@ -182,6 +212,7 @@ def test_assign_rejects_wrong_candidate_id(tmp_path: Path) -> None:
     (sub / "canonical" / "policy_spec_v1.json").write_text("{}", encoding="utf-8")
     r = assign_mechanical_candidate_to_jupiter(tmp_path, "x")
     assert r.get("ok") is False
+    assert r.get("error") == "candidate_not_deployable"
 
 
 def test_assign_blackbox_fails_until_runtime_api(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

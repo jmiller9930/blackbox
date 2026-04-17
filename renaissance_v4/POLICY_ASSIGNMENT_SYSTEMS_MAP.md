@@ -31,7 +31,7 @@ Two different “truths” exist in the system:
 ## 2. Glossary (Lego names)
 
 - **Candidate** — A policy submission that passed intake (`intake_report.json` with `pass: true`, `candidate_policy_id`, etc.). Listed via candidates registry (DV-061).
-- **Mechanical candidate** — The proof policy id `kitchen_mechanical_always_long_v1` mapped in `kitchen_policy_registry_v1.json` under `mechanical_slot.{jupiter|blackbox}` to a fixed **runtime policy id** (e.g. `jup_kitchen_mechanical_v1`). This is the path `assign_mechanical_candidate` implements.
+- **Mechanical candidate** — The proof policy id `kitchen_mechanical_always_long_v1` mapped in `kitchen_policy_registry_v1.json` under `mechanical_slot.{jupiter|blackbox}` to a fixed **runtime policy id** (e.g. `jup_kitchen_mechanical_v1`). **Other** approved runtime ids (listed under `runtime_policies`) may also be assigned when intake `candidate_policy_id` matches that id (see `infer_runtime_policy_id_for_candidate`).
 - **Execution target** — `jupiter` (Sean Jupiter stack) or `blackbox` (reserved BlackBox control plane). Normalized by `renaissance_v4/execution_targets.py`.
 - **Kitchen policy registry** — `renaissance_v4/config/kitchen_policy_registry_v1.json`: allowed runtime policy ids per target + mechanical slot mapping (DV-074).
 - **Assignment store** — `renaissance_v4/state/kitchen_runtime_assignment.json` (`kitchen_runtime_assignment_store_v1`).
@@ -136,7 +136,7 @@ These are **symptoms** seen when wiring the dashboard and lab; they are not an e
 
 5. **Stale deploy** — Dashboard HTML and API code are served from the repo mount; static assets are baked in **web**. Partial updates (pull without rebuild/restart) can make the UI look “wrong” even when `main` is correct.
 
-6. **Mechanical-only assign path** — `assign_mechanical_candidate` is tightly scoped to the mechanical proof policy. Broader “any approved candidate” assignment is a **future** unified flow (see `DV-ARCH-POLICY-LOAD-028` in docs) — the map above is accurate for what is **implemented**, not the full product vision.
+6. **Kitchen assign path** — `assign_mechanical_candidate` assigns any **passing** intake whose `candidate_policy_id` maps to an approved runtime id (`runtime_policies` or `mechanical_slot` in `kitchen_policy_registry_v1.json`). Unmapped ids (e.g. test-only `fixture_*` without a registry entry) cannot be pushed until the policy is listed and the runtime can load it.
 
 ---
 

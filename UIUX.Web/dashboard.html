@@ -4878,7 +4878,6 @@
     if (sl) sl.textContent = 'No candidate selected — use Select on a row above.';
     rv4UpdateCandContextBar();
   }
-  var RV4_MECHANICAL_CANDIDATE_ID = 'kitchen_mechanical_always_long_v1';
   var rv4KitchenAssignmentPayload = null;
   function rv4Esc(s) {
     return String(s)
@@ -4893,8 +4892,8 @@
       .toLowerCase() === 'pass';
   }
   /**
-   * DV-070 — eligibility for governed mechanical assign (per row + current execution target).
-   * Rows are already filtered to the selected target by the API; we still validate policy id + PASS.
+   * Eligibility for Kitchen → runtime assign: PASS intake, target match, and a registry-mapped
+   * runtime_policy_id (from API — same inference as kitchen_policy_registry + infer_runtime_policy_id).
    */
   function rv4RowKitchenAssignEligibility(row) {
     if (row.is_active === false) {
@@ -4913,13 +4912,12 @@
     if (!rv4IntakeIsPass(row)) {
       return { ok: false, reason: 'Intake status must be PASS for assignment.' };
     }
-    if (String(row.candidate_policy_id || '') !== RV4_MECHANICAL_CANDIDATE_ID) {
+    var rpid = String(row.runtime_policy_id || '').trim();
+    if (!rpid) {
       return {
         ok: false,
         reason:
-          'Only governed mechanical candidate id ' +
-          RV4_MECHANICAL_CANDIDATE_ID +
-          ' can use this assign path.',
+          'This candidate_policy_id is not mapped to an approved runtime policy in kitchen_policy_registry_v1 (runtime_policies or mechanical_slot). Add the id to the registry or use a deployable candidate id.',
       };
     }
     if (et !== 'jupiter' && et !== 'blackbox') {
@@ -5160,12 +5158,6 @@
           : '<button type="button" class="dash-nav-linklike rv4-cand-archive" data-sid="' +
             sid +
             '" title="Hide from list (soft archive)">Archive</button>';
-        var etNow = rv4GetExecutionTarget();
-        var mechEligible =
-          rv4IntakeIsPass(r) &&
-          String(r.candidate_policy_id || '') === RV4_MECHANICAL_CANDIDATE_ID &&
-          String(r.execution_target || '').toLowerCase() === etNow &&
-          (etNow === 'jupiter' || etNow === 'blackbox');
         var elig = rv4RowKitchenAssignEligibility(r);
         var asg = rv4KitchenAssignmentPayload && rv4KitchenAssignmentPayload.assignment;
         var assignedHere =
@@ -5189,7 +5181,7 @@
           ' · execution_target: ' +
           String(r.execution_target || '—') +
           ' · eligible: ' +
-          (mechEligible ? 'yes' : 'no');
+          (elig.ok ? 'yes' : 'no');
         var reasonText = assignedShowsAsLive
           ? 'This row matches live runtime (GET) and is the recorded assignment submission.'
           : assignedRecordButRuntimeElsewhere
