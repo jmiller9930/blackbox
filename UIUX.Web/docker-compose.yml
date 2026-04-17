@@ -39,8 +39,7 @@ services:
       SOLANA_RPC_URL: ${SOLANA_RPC_URL:-}
       BLACKBOX_LIVE_TRADING_BLOCKED: ${BLACKBOX_LIVE_TRADING_BLOCKED:-1}
       BLACKBOX_EXECUTION_LEDGER_PATH: ${BLACKBOX_EXECUTION_LEDGER_PATH:-}
-      # Kitchen ↔ SeanV3 Jupiter control plane (DV-074/075). Required for assign + runtime GET from the API.
-      # Must match the Jupiter UI host:port you use in the browser (same Sean/jupiter-web process).
+      # Kitchen ↔ SeanV3 Jupiter (DV-074/075). Prefer internal lab URL for api→Jupiter, e.g. http://clawbot.a51.corp:707
       KITCHEN_JUPITER_CONTROL_BASE: ${KITCHEN_JUPITER_CONTROL_BASE:-}
       KITCHEN_JUPITER_OPERATOR_TOKEN: ${KITCHEN_JUPITER_OPERATOR_TOKEN:-}
       # Kitchen ↔ BlackBox policy control plane (DV-071). Loopback to this api_server when using network_mode: host.
