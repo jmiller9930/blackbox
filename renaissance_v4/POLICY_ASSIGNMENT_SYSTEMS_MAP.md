@@ -1,12 +1,21 @@
 # Policy assignment systems map (Kitchen → runtime → reverse truth)
 
 **Audience:** Architect, runtime ops, dashboard engineering  
-**Scope:** How Quant Research Kitchen policy assignment is **designed** to work, which **Legos** (files, stores, APIs, env) connect, and **where friction shows up today**.  
+**Scope:** How Quant Research Kitchen policy assignment is **designed** to work — **forward assignment** and **reverse assignment** together — which **Legos** (files, stores, APIs, env) connect, and **where friction shows up today**.  
 **Status:** Living document — asks for a consolidated overview at the end.
 
 ---
 
 ## 1. What you are mapping
+
+The assignment mechanism is **not** only “Kitchen pushes to the target.” It is **two coupled halves**:
+
+| Half | Direction | What happens |
+|------|-----------|----------------|
+| **Forward assignment** | Kitchen → execution target | Operator runs the Kitchen assign path; BlackBox **POST**s `active-policy` to the target and **only then** persists assignment + ledger + lifecycle after **GET** read-back matches. |
+| **Reverse assignment** | Trade surface / runtime → Kitchen | There is **no** inbound webhook from Jupiter to BlackBox. “Reverse” is implemented as **pull**: the same **GET …/policy** used for truth drives **reconcile** (collapse Kitchen row to runtime when approved), **external** ledger entries, **drift** state, and **lifecycle** updates when runtime diverged from what Kitchen last recorded. |
+
+Both halves are required for a coherent story: forward establishes intent and proof; reverse keeps Kitchen from lying when the world changes outside Kitchen.
 
 Two different “truths” exist in the system:
 
@@ -28,7 +37,8 @@ Two different “truths” exist in the system:
 - **Assignment store** — `renaissance_v4/state/kitchen_runtime_assignment.json` (`kitchen_runtime_assignment_store_v1`).
 - **Lifecycle store** — `renaissance_v4/state/kitchen_policy_lifecycle_v1.json` per `(submission_id, execution_target)` (DV-069).
 - **Ledger** — Append-only history in `kitchen_policy_ledger` (Kitchen assigns + external drift).
-- **Trade surface** — Operator-facing place where active policy can change **without** going through Kitchen (e.g. Jupiter web UI calling Sean’s `POST /api/v1/jupiter/active-policy`). This triggers the **reverse** flow below.
+- **Trade surface** — Operator-facing place where active policy can change **without** going through Kitchen (e.g. Jupiter web UI calling Sean’s `POST /api/v1/jupiter/active-policy`). That change is **reverse assignment** material: Kitchen learns it on the next read, not via a separate “assign back” API.
+- **Reverse assignment** — Not a POST from target to Kitchen; it is the **reconciliation pipeline** on `GET …/renaissance/kitchen-runtime-assignment` (runtime GET → `maybe_record_external_runtime_change` → `reconcile_assignment_store_to_runtime_truth` → `drift_status` → `reconcile_with_drift`). Same endpoint family as forward truth, opposite causal direction.
 
 ---
 
@@ -73,7 +83,7 @@ flowchart LR
 
 ---
 
-## 4. Reverse flow and “backwards compatibility” (trade surface → Kitchen)
+## 4. Reverse assignment (trade surface → Kitchen) and backwards compatibility
 
 If the operator (or automation) changes active policy **on the trade surface**, Kitchen does **not** receive a webhook. Instead, **the next GET** from the dashboard/API runs a **pull-and-reconcile** pipeline:
 
@@ -135,6 +145,7 @@ These are **symptoms** seen when wiring the dashboard and lab; they are not an e
 
 We need a **single top-level narrative** that answers:
 
+- How **forward assignment** and **reverse assignment** are jointly specified (not “push-only” semantics), including whether any future **push** from target to Kitchen is desired or pull-only is final.
 - Where is the **activation boundary** between “evaluated in Kitchen” and “live on a target,” and how does that interact with **DV-028** (Kitchen-first, no direct load)?
 - For **non-mechanical** policies, what is the **intended** end-state of this same assignment store vs a future unified state machine?
 - Should **trade-surface** changes ever **push** identity back into Kitchen beyond reconcile + ledger (e.g. operator attribution), or is **runtime GET + audit** sufficient?
