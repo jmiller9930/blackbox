@@ -23,6 +23,17 @@ Legacy import: `renaissance_v4.research.pattern_game` re-exports the same API.
 | `agent_artifacts.md` | SRA artifact types (files still live in `state/agent_artifacts/`) |
 | `MANIFEST_REPLAY_INTEGRATION.md` | Manifest-driven replay + SRA API notes |
 
+## Application integration (plug-in)
+
+Host apps import **`PatternGameAgent`** from `renaissance_v4.game_theory` (or `renaissance_v4.game_theory.pattern_game_agent`) — **one facade** for:
+
+- **`list_presets()` / `load_preset(name)`** — JSON batches in `game_theory/examples/` (add files to ship new presets).
+- **`run(...)`** — Referee parallel batch + player-agent markdown + optional Anna (`with_anna`, `anna_context_profile`).
+- **`run_referee_only(...)`** — Referee only, no Anna.
+- **`plugin_info()`** — version/metadata for dashboards.
+
+Point **`repo_root`** at the blackbox checkout; override **`presets_dir`** if your app keeps scenario JSON elsewhere. Swap **manifest paths inside scenarios** (or add presets) to compare strategy manifests and surface candidates for formal **JUP policy packages** — the mechanical gate remains `scripts/validate_policy_package.py` on real packages, not this prototype runner.
+
 ## Code
 
 - `pattern_game.py` — validate manifest → replay → binary WIN/LOSS scorecard
