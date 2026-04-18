@@ -69,10 +69,14 @@ def _worker_run_one(scenario: dict[str, Any]) -> dict[str, Any]:
     """
     sid = scenario.get("scenario_id", "unknown")
     try:
+        mbp = scenario.get("memory_bundle_path")
+        if mbp:
+            mbp = str(Path(mbp).expanduser().resolve())
         out = run_pattern_game(
             scenario["manifest_path"],
             atr_stop_mult=scenario.get("atr_stop_mult"),
             atr_target_mult=scenario.get("atr_target_mult"),
+            memory_bundle_path=mbp,
             emit_baseline_artifacts=bool(scenario.get("emit_baseline_artifacts", False)),
             verbose=False,
         )
@@ -84,6 +88,7 @@ def _worker_run_one(scenario: dict[str, Any]) -> dict[str, Any]:
             "cumulative_pnl": out.get("cumulative_pnl"),
             "dataset_bars": out.get("dataset_bars"),
             "manifest_path": str(scenario.get("manifest_path", "")),
+            "memory_bundle_audit": out.get("memory_bundle_audit"),
         }
         row.update(extract_scenario_echo_fields(scenario))
         return row
@@ -210,6 +215,7 @@ def run_scenarios_parallel(
             atr_stop_mult=atr_s,
             atr_target_mult=atr_t,
             prior_run_id=prior_rid,
+            memory_bundle_audit=row.get("memory_bundle_audit"),
         )
         if mem_p is not None:
             append_run_memory(mem_p, rec)

@@ -19,6 +19,10 @@ from typing import Any
 from renaissance_v4.core.outcome_record import OutcomeRecord
 from renaissance_v4.manifest.validate import load_manifest_file, validate_manifest_against_catalog
 from renaissance_v4.research.replay_runner import run_manifest_replay
+from renaissance_v4.game_theory.memory_bundle import (
+    apply_memory_bundle_to_manifest,
+    memory_bundle_required_and_missing,
+)
 from renaissance_v4.game_theory.run_memory import append_run_memory, build_run_memory_record
 from renaissance_v4.game_theory.run_session_log import default_logs_root, write_run_session_folder
 
@@ -90,16 +94,20 @@ def run_pattern_game(
     *,
     atr_stop_mult: float | None = None,
     atr_target_mult: float | None = None,
+    memory_bundle_path: str | None = None,
     emit_baseline_artifacts: bool = False,
     verbose: bool = True,
 ) -> dict[str, Any]:
     """
-    Load manifest, optionally overlay ATR multiples, validate, run replay, attach binary scorecard.
+    Load manifest, optional **memory bundle** merge, optional ATR overlays, validate, replay.
 
-    Writes a temporary manifest when ATR overrides are used so ``run_manifest_replay`` stays unchanged.
+    Memory bundle (opt-in) merges whitelisted keys into the manifest **before** replay so promoted
+    parameters can affect behavior; see ``memory_bundle.py``. CLI ATR overrides win over bundle.
+    Writes a temp manifest when the effective manifest differs from the file on disk.
     """
     path = Path(manifest_path)
     manifest = load_manifest_file(path)
+    mb_audit = apply_memory_bundle_to_manifest(manifest, memory_bundle_path)
     if atr_stop_mult is not None:
         manifest["atr_stop_mult"] = float(atr_stop_mult)
     if atr_target_mult is not None:
@@ -111,7 +119,8 @@ def run_pattern_game(
 
     tmp_path: str | None = None
     replay_arg: Path | str = path
-    if atr_stop_mult is not None or atr_target_mult is not None:
+    needs_temp = mb_audit is not None or atr_stop_mult is not None or atr_target_mult is not None
+    if needs_temp:
         fd, tmp_path = tempfile.mkstemp(suffix=".json", prefix="pattern_game_")
         try:
             with os.fdopen(fd, "w", encoding="utf-8") as fh:
@@ -138,12 +147,14 @@ def run_pattern_game(
         "starting_equity_usd_spec": PATTERN_GAME_STARTING_EQUITY_USD_SPEC,
         "risk_fraction_per_trade_spec": PATTERN_GAME_RISK_FRACTION_PER_TRADE_SPEC,
         "note": "Equity/risk are spec targets; risk governor still uses tiered notional_fraction.",
+        "memory_bundle_audit": mb_audit,
     }
     return {
         **raw,
         "binary_scorecard": binary,
         "pattern_game_meta": meta,
         "manifest_effective": manifest,
+        "memory_bundle_audit": mb_audit,
     }
 
 
@@ -192,6 +203,12 @@ def main() -> None:
     )
     parser.add_argument("--prior-run-id", type=str, default=None, help="Link to prior run_memory run_id")
     parser.add_argument(
+        "--memory-bundle",
+        type=str,
+        default=None,
+        help="JSON file: promoted parameters merged into manifest before replay (see memory_bundle.py); or PATTERN_GAME_MEMORY_BUNDLE",
+    )
+    parser.add_argument(
         "--require-hypothesis",
         action="store_true",
         help="Exit if hypothesis is empty (or set PATTERN_GAME_REQUIRE_HYPOTHESIS=1)",
@@ -226,10 +243,18 @@ def main() -> None:
     if req and not hyp:
         raise SystemExit("Hypothesis required: pass --hypothesis or set PATTERN_GAME_HYPOTHESIS")
 
+    mb_path = args.memory_bundle or os.environ.get("PATTERN_GAME_MEMORY_BUNDLE", "").strip() or None
+    if memory_bundle_required_and_missing(mb_path):
+        raise SystemExit(
+            "Memory bundle required: set PATTERN_GAME_REQUIRE_MEMORY_BUNDLE=1 and pass "
+            "--memory-bundle or PATTERN_GAME_MEMORY_BUNDLE"
+        )
+
     out = run_pattern_game(
         args.manifest,
         atr_stop_mult=args.atr_stop_mult,
         atr_target_mult=args.atr_target_mult,
+        memory_bundle_path=mb_path,
         emit_baseline_artifacts=args.emit_baseline_artifacts,
         verbose=True,
     )
@@ -254,6 +279,7 @@ def main() -> None:
         prior_run_id=args.prior_run_id,
         atr_stop_mult=args.atr_stop_mult,
         atr_target_mult=args.atr_target_mult,
+        memory_bundle_audit=out.get("memory_bundle_audit"),
     )
 
     mem_arg = args.memory_log

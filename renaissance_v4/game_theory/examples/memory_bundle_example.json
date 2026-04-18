@@ -1,0 +1,9 @@
+{
+  "schema": "pattern_game_memory_bundle_v1",
+  "from_run_id": "paste-prior-run_id-here",
+  "note": "Promoted ATR geometry after review — merge before replay.",
+  "apply": {
+    "atr_stop_mult": 1.78,
+    "atr_target_mult": 3.35
+  }
+}

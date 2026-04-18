@@ -3,8 +3,8 @@ run_memory.py
 
 Append-only JSONL memory for replay runs: hypothesis + indicator context + Referee metrics.
 
-This does not change deterministic scores; it guarantees each run can leave a durable record
-for the next swing (operator, Anna, or a future outer loop).
+Structured records support audit and optional **memory bundles** (see ``memory_bundle.py``) that
+merge whitelisted parameters into the manifest before replay — those merges **do** affect outcomes.
 """
 
 from __future__ import annotations
@@ -19,29 +19,48 @@ from typing import Any
 SCHEMA = "renaissance_v4_run_memory_v1"
 
 
-def build_decision_audit(*, prior_run_id: str | None) -> dict[str, Any]:
+def build_decision_audit(
+    *,
+    prior_run_id: str | None,
+    memory_bundle_audit: dict[str, Any] | None = None,
+) -> dict[str, Any]:
     """
-    Explicit, machine-generated audit: what inputs actually drove execution vs what was metadata only.
+    Explicit audit: what inputs drove execution vs metadata-only links.
 
-    Deterministic replay never loads prior run_memory rows to change trade logic; this block states that.
+    If ``memory_bundle_audit`` is set, parameters from a promoted **memory bundle** were merged into
+    the manifest before replay — that **does** affect behavior for whitelisted keys (e.g. ATR).
     """
     pid = (prior_run_id or "").strip() or None
-    return {
-        "prior_outcomes_or_parameters_loaded_into_replay_engine": False,
+    loaded = memory_bundle_audit is not None
+    out: dict[str, Any] = {
+        "prior_outcomes_or_parameters_loaded_into_replay_engine": loaded,
         "prior_run_id_provided": pid,
-        "human_readable_summary": (
-            "Trade decisions in this run came only from: (1) the manifest JSON on disk, "
-            "(2) optional CLI ATR overrides, (3) bar data read forward in time by the Referee. "
-            "No code path reads run_memory JSONL or prior HUMAN_READABLE logs to alter signals, "
-            "fusion, risk tiers, or execution during the replay."
-        ),
-        "if_prior_run_id_is_set": (
-            f"You supplied prior_run_id={pid!r} as an audit link between experiments. "
-            "That ID is stored for your review and diffing; it was **not** loaded as simulation input."
-        )
-        if pid
-        else "No prior_run_id was supplied; this run is not linked to an earlier run_id in metadata.",
+        "memory_bundle": memory_bundle_audit,
     }
+    if loaded:
+        out["human_readable_summary"] = (
+            "A **memory bundle** was merged into the manifest before replay. "
+            "Keys listed in memory_bundle.keys_applied (e.g. ATR multiples) **changed execution** for this run. "
+            "Signals, fusion math, and risk policy still come from the manifest and engine except for those merged keys."
+        )
+        out["if_prior_run_id_is_set"] = (
+            f"You may also have set prior_run_id={pid!r} for traceability between experiments."
+            if pid
+            else "No prior_run_id; behavioral memory came only from the memory bundle merge."
+        )
+    else:
+        out["human_readable_summary"] = (
+            "Trade decisions came from: (1) manifest JSON on disk, "
+            "(2) optional CLI/scenario ATR overrides (applied after any bundle), "
+            "(3) bar data forward in time. "
+            "No memory bundle was merged. run_memory JSONL / prior session folders are **not** auto-read to alter execution."
+        )
+        out["if_prior_run_id_is_set"] = (
+            f"prior_run_id={pid!r} is metadata for your review only — it was **not** loaded as simulation input."
+            if pid
+            else "No prior_run_id was supplied."
+        )
+    return out
 
 
 def sha256_file(path: Path) -> str:
@@ -88,6 +107,7 @@ def build_run_memory_record(
     atr_stop_mult: float | None = None,
     atr_target_mult: float | None = None,
     parallel_error: str | None = None,
+    memory_bundle_audit: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """One JSON object suitable for a single JSONL line."""
     mp = Path(manifest_path).expanduser().resolve()
@@ -110,7 +130,10 @@ def build_run_memory_record(
         "atr_stop_mult": atr_stop_mult,
         "atr_target_mult": atr_target_mult,
         "referee": json_summary_row,
-        "decision_audit": build_decision_audit(prior_run_id=prior_run_id),
+        "decision_audit": build_decision_audit(
+            prior_run_id=prior_run_id,
+            memory_bundle_audit=memory_bundle_audit,
+        ),
         "post_mortem": {
             "why": None,
             "next_hypothesis": None,

@@ -67,6 +67,7 @@ def validate_scenarios(
         "manifest_path",
         "atr_stop_mult",
         "atr_target_mult",
+        "memory_bundle_path",
         "emit_baseline_artifacts",
         *SCENARIO_ECHO_KEYS,
     }

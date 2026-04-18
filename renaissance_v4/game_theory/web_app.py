@@ -10,7 +10,7 @@ Each completed batch also writes a **unique session folder** under ``renaissance
 ``PATTERN_GAME_NO_SESSION_LOG=1``. The JSON result includes ``session_log_batch_dir`` when present.
 
 No manifest/ATR fields in the UI — policy lives in the JSON (or examples presets). Default 16 workers
-(capped to host). ``POST /api/run`` remains for scripted single-manifest runs.
+(capped to host). ``POST /api/run`` remains for scripted single-manifest runs (optional JSON field ``memory_bundle_path``).
 
   pip install -r renaissance_v4/game_theory/requirements.txt
   PYTHONPATH=. python3 -m renaissance_v4.game_theory.web_app
@@ -185,11 +185,13 @@ def create_app() -> Flask:
         atr_s = data.get("atr_stop_mult")
         atr_t = data.get("atr_target_mult")
         emit = bool(data.get("emit_baseline_artifacts"))
+        mb = (data.get("memory_bundle_path") or "").strip() or None
         try:
             out = run_pattern_game(
                 manifest,
                 atr_stop_mult=float(atr_s) if atr_s not in (None, "") else None,
                 atr_target_mult=float(atr_t) if atr_t not in (None, "") else None,
+                memory_bundle_path=mb,
                 emit_baseline_artifacts=emit,
                 verbose=False,
             )
@@ -203,7 +205,14 @@ def create_app() -> Flask:
                 "ending_equity_usd": start + pnl,
                 "note": "Single manifest replay: cumulative PnL vs spec $1k paper baseline.",
             }
-            return jsonify({"ok": True, "summary": js, "pnl_summary": pnl_summary})
+            return jsonify(
+                {
+                    "ok": True,
+                    "summary": js,
+                    "pnl_summary": pnl_summary,
+                    "memory_bundle_audit": out.get("memory_bundle_audit"),
+                }
+            )
         except Exception as e:
             return jsonify({"ok": False, "error": f"{type(e).__name__}: {e}"}), 400
 
