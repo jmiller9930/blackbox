@@ -5,19 +5,23 @@ The Referee remains deterministic; this layer does **not** change scores. It exi
 (operator-facing text tied to manifest, tier, and outcomes).
 
 **Anna (LLM):** When enabled, reuses the same Ollama stack as Anna — ``scripts/runtime/_ollama.py`` +
-``llm/local_llm_client.ollama_generate``. Anna writes an **operator narrative only** from Referee facts; she does
-not judge WIN/LOSS. Enable with ``PLAYER_AGENT_USE_ANNA=1`` (default: follow ``ANNA_USE_LLM``, same as Telegram Anna).
+``llm/local_llm_client.ollama_generate``. She writes **advisory** text: run summaries from Referee facts, and can
+answer **operator questions** doc-grounded via ``agent_context_bundle`` (game spec, QUANT design, context_memory).
+She does **not** judge WIN/LOSS or change scores. Enable with ``PLAYER_AGENT_USE_ANNA=1`` (default: follow
+``ANNA_USE_LLM``). If ``ANNA_CONTEXT_PROFILE`` is unset/``none``, pattern-game calls default it to ``pattern_game``
+so factual repo docs are loaded. CLI: ``--ask "…"`` for a standalone factual answer (no batch).
 """
 
 from __future__ import annotations
 
 import argparse
+import contextlib
 import json
 import os
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any
+from typing import Any, Iterator
 
 from renaissance_v4.game_theory.memory_paths import default_experience_log_jsonl, default_run_memory_jsonl
 from renaissance_v4.game_theory.parallel_runner import run_scenarios_parallel
@@ -38,6 +42,23 @@ def _runtime_imports() -> tuple[Any, Any]:
     return ollama_base_url, ollama_generate
 
 
+@contextlib.contextmanager
+def _ensure_anna_pattern_game_context() -> Iterator[None]:
+    """If ANNA_CONTEXT_PROFILE is empty/none, load ``pattern_game`` docs for factual answers."""
+    key = "ANNA_CONTEXT_PROFILE"
+    old = os.environ.get(key)
+    v = (old or "").strip().lower()
+    if v in ("", "none", "0", "false", "no"):
+        os.environ[key] = "pattern_game"
+    try:
+        yield
+    finally:
+        if old is None:
+            os.environ.pop(key, None)
+        else:
+            os.environ[key] = old
+
+
 def player_agent_use_anna_llm() -> bool:
     """Respect explicit PLAYER_AGENT_USE_ANNA; else mirror ANNA_USE_LLM (off in CI)."""
     v = os.environ.get("PLAYER_AGENT_USE_ANNA")
@@ -48,28 +69,70 @@ def player_agent_use_anna_llm() -> bool:
 
 def anna_narrate_pattern_report(report_markdown: str, *, timeout: float = 180.0) -> tuple[str | None, str | None]:
     """
-    Anna-style prose from **Referee facts only**. Returns (text, error).
-    Does not change scores; on failure returns (None, error string).
+    Anna-style prose from **Referee facts** + **repo docs** (when context is enabled). Returns (text, error).
 
-    Optional repo context (not training): set ``ANNA_CONTEXT_PROFILE`` to e.g. ``policy`` or
-    ``pattern_game`` so ``scripts/agent_context_bundle.py`` prepends whitelisted docs from git.
+    Uses ``agent_context_bundle`` so indicator/game rules and context-vs-value guidance are available for
+    **factual** explanations. Referee numbers must still come only from the facts block.
     """
     _scripts = str(_REPO_ROOT / "scripts")
     if _scripts not in sys.path:
         sys.path.insert(0, _scripts)
     from agent_context_bundle import build_context_prefix
 
-    prefix = build_context_prefix(_REPO_ROOT)
+    with _ensure_anna_pattern_game_context():
+        prefix = build_context_prefix(_REPO_ROOT)
     ollama_base_url, ollama_generate = _runtime_imports()
     base = ollama_base_url()
     model = os.environ.get("OLLAMA_MODEL", "qwen2.5:7b")
     prompt = (
         prefix
-        + "You are Anna — Trading Analyst (advisory). The block below contains ONLY Referee facts from "
-        "deterministic replays (WIN/LOSS, PnL, trades). Write a short operator summary: what was tested, "
-        "what outcomes suggest, sensible next hypotheses. Rules: do NOT invent numbers or outcomes not "
-        "shown. If the block shows failures, say so. Do not claim execution or live trading.\n\n--- REFEREE FACTS ---\n"
+        + "You are Anna — Trading Analyst (advisory).\n\n"
+        + "**AUTHORITATIVE RULES**\n"
+        + "- **REPOSITORY CONTEXT** (above): use for game rules, indicator *context* (regime/direction/transitions) vs raw values, single-silo scope, and the tide metaphor. Ground explanations there when possible.\n"
+        + "- **REFEREE FACTS** (below): the **only** source for numeric outcomes (wins, losses, PnL, trades, checksums). Never invent or alter those numbers.\n"
+        + "- If something is not in REPOSITORY CONTEXT, say it is not in the checked-in docs and avoid fabricating exchange-specific or broker-specific behavior.\n"
+        + "- Do not claim live execution or production trading.\n\n"
+        + "Write a short operator summary: what was tested, what outcomes suggest, sensible next hypotheses. "
+        + "If the block shows failures, say so.\n\n"
+        + "--- REFEREE FACTS ---\n"
         + report_markdown
+    )
+    res = ollama_generate(prompt, base_url=base, model=model, timeout=timeout)
+    if res.error:
+        return None, res.error
+    return (res.text or None), None
+
+
+def anna_answer_operator_question(question: str, *, timeout: float = 180.0) -> tuple[str | None, str | None]:
+    """
+    Standalone factual / conceptual answer for the operator (e.g. what an indicator *means* in this silo).
+
+    Doc-grounded via ``agent_context_bundle``; does not run the Referee. Returns (text, error).
+    """
+    q = (question or "").strip()
+    if not q:
+        return None, "empty question"
+
+    _scripts = str(_REPO_ROOT / "scripts")
+    if _scripts not in sys.path:
+        sys.path.insert(0, _scripts)
+    from agent_context_bundle import build_context_prefix
+
+    with _ensure_anna_pattern_game_context():
+        prefix = build_context_prefix(_REPO_ROOT)
+    ollama_base_url, ollama_generate = _runtime_imports()
+    base = ollama_base_url()
+    model = os.environ.get("OLLAMA_MODEL", "qwen2.5:7b")
+    prompt = (
+        prefix
+        + "You are Anna — Trading Analyst (advisory). The operator asked a question about indicators, "
+        + "context, or pattern-game rules.\n\n"
+        + "**RULES**\n"
+        + "- Answer from **REPOSITORY CONTEXT** when possible. Prefer definitions and metaphors that appear there (e.g. context around indicators vs raw numbers).\n"
+        + "- If the answer is **not** in context, say clearly that it is not in the checked-in docs and do **not** invent firm-specific or market guarantees.\n"
+        + "- Keep the answer concise and factual. No live-trading or execution claims.\n\n"
+        + "--- OPERATOR QUESTION ---\n"
+        + q
     )
     res = ollama_generate(prompt, base_url=base, model=model, timeout=timeout)
     if res.error:
@@ -310,7 +373,26 @@ def main() -> None:
         default=None,
         help="Base directory for batch session folders (default: game_theory/logs)",
     )
+    p.add_argument(
+        "--ask",
+        type=str,
+        default=None,
+        metavar="QUESTION",
+        help="Ask Anna a doc-grounded question (Ollama); no scenario batch. Sets repo context to pattern_game.",
+    )
     args = p.parse_args()
+
+    if args.ask:
+        if args.scenarios_json:
+            raise SystemExit("Use either --ask or scenarios_json, not both")
+        if args.proposal_only:
+            raise SystemExit("Use either --ask or --proposal-only, not both")
+        os.environ.setdefault("REPO_ROOT", str(_REPO_ROOT.resolve()))
+        text, err = anna_answer_operator_question(args.ask)
+        if err:
+            raise SystemExit(err)
+        print(text or "")
+        return
 
     if args.proposal_only:
         prop = propose_tier1_scenario(args.manifest)

@@ -5,7 +5,8 @@ Experience lives in **git**: policy specs, game specs, and optional extra files.
 whitelisted paths so the LLM sees the same rules operators use, without inventing retention in weights.
 
 Env:
-  ANNA_CONTEXT_PROFILE   — comma-separated: none | pattern_game | policy (default: none)
+  ANNA_CONTEXT_PROFILE   — comma-separated: none | pattern_game | policy (default: none).
+                           **pattern_game** loads game spec, QUANT research design, and ``context_memory.py`` (tide metaphor).
   ANNA_CONTEXT_FILES     — extra repo-relative paths, colon-separated (optional)
   ANNA_CONTEXT_MAX_CHARS — cap total injected text (default 120000)
 """
@@ -16,7 +17,11 @@ import os
 from pathlib import Path
 
 _PROFILE_PATHS: dict[str, tuple[str, ...]] = {
-    "pattern_game": ("renaissance_v4/game_theory/GAME_SPEC_INDICATOR_PATTERN_V1.md",),
+    "pattern_game": (
+        "renaissance_v4/game_theory/GAME_SPEC_INDICATOR_PATTERN_V1.md",
+        "renaissance_v4/game_theory/QUANT_RESEARCH_AGENT_DESIGN.md",
+        "renaissance_v4/game_theory/context_memory.py",
+    ),
     "policy": ("docs/architect/policy_package_standard.md",),
 }
 
