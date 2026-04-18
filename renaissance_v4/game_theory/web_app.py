@@ -686,21 +686,97 @@ PAGE_HTML = """<!DOCTYPE html>
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <title>Pattern game (local)</title>
   <style>
-    :root { font-family: system-ui, sans-serif; background: #0f1419; color: #e7e9ea; }
+    :root {
+      font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+      background: #0a0e12;
+      color: #e7e9ea;
+      --border: #2f3b47;
+      --surface: #12181f;
+      --surface2: #0d1218;
+      --muted: #8b98a5;
+      --accent: #1d9bf0;
+    }
     body {
       max-width: min(1680px, calc(100vw - 32px));
       margin: 16px auto;
-      padding: 0 16px;
+      padding: 0 16px 32px;
       box-sizing: border-box;
+      line-height: 1.45;
     }
+    .page-header { margin-bottom: 20px; padding-bottom: 16px; border-bottom: 1px solid var(--border); }
+    .page-header h1 { margin: 0 0 6px; font-size: 1.35rem; font-weight: 650; letter-spacing: -0.02em; }
+    .page-lead { margin: 0; color: var(--muted); font-size: 0.95rem; max-width: 56ch; }
+    .page-lead strong { color: #e7e9ea; font-weight: 600; }
+    details.help-details {
+      margin-top: 12px; border-radius: 8px; border: 1px solid var(--border);
+      background: var(--surface); padding: 0 12px;
+    }
+    details.help-details summary {
+      cursor: pointer; font-size: 0.82rem; color: var(--accent); font-weight: 600;
+      padding: 10px 0; list-style: none;
+    }
+    details.help-details summary::-webkit-details-marker { display: none; }
+    .help-details-body { font-size: 0.8rem; color: var(--muted); padding: 0 0 12px; }
+    .help-details-body p { margin: 0 0 8px; }
+    .help-details-body p:last-child { margin-bottom: 0; }
+    .panel {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 14px 16px 16px;
+      margin-bottom: 16px;
+    }
+    .panel-title {
+      margin: 0 0 12px;
+      font-size: 0.72rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--muted);
+    }
+    details.inline-details {
+      margin: 6px 0 10px;
+      font-size: 0.78rem;
+      color: var(--muted);
+      border-left: 2px solid #38444d;
+      padding-left: 10px;
+    }
+    details.inline-details summary { cursor: pointer; color: #c4ccd4; font-weight: 500; }
+    details.inline-details[open] summary { margin-bottom: 6px; }
+    .tool-row { display: flex; flex-wrap: wrap; gap: 10px; align-items: flex-end; margin-bottom: 10px; }
+    .tool-row .btn-secondary { margin-top: 0; background: #2f3f4d; font-weight: 500; font-size: 0.85rem; padding: 8px 12px; }
+    .tool-row .btn-chef { margin-top: 0; background: #166a4a; font-weight: 600; font-size: 0.85rem; padding: 8px 12px; }
+    .workers-panel { margin-top: 4px; }
+    .workers-panel label[for="workersRange"] { margin-top: 0; }
+    #workerCpuHint { font-size: 0.72rem; color: #6b7a88; margin: 6px 0 0; line-height: 1.4; }
+    #workerEffectiveLine {
+      margin: 10px 0 0;
+      padding: 10px 12px;
+      border-radius: 8px;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      font-size: 0.82rem;
+      line-height: 1.45;
+      color: #d5dce3;
+    }
+    #workerEffectiveLine strong { color: #e7e9ea; }
+    .run-actions { margin-top: 16px; padding-top: 4px; }
+    #runBtn { width: 100%; max-width: 320px; padding: 12px 20px; font-size: 1rem; border-radius: 10px; }
+    .status-stack { margin-top: 12px; }
     .top-bars {
       display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
-      gap: 12px;
-      margin-bottom: 16px;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 10px;
+      margin-bottom: 18px;
       align-items: stretch;
     }
     .top-bars > * { min-width: 0; }
+    .top-bars .health-bar,
+    .top-bars .pnl-strip,
+    .top-bars .estimate-strip {
+      background: var(--surface);
+      border-color: var(--border);
+    }
     .main-layout {
       display: grid;
       grid-template-columns: minmax(0, 1.2fr) minmax(280px, 0.8fr);
@@ -806,21 +882,23 @@ PAGE_HTML = """<!DOCTYPE html>
     .pnl-fill.down { background: #f4212e; }
     .estimate-strip {
       padding: 10px 12px;
-      margin-bottom: 16px;
+      margin-bottom: 0;
       border-radius: 8px;
-      background: #15202b;
-      border: 1px solid #38444d;
-      font-size: 0.8rem;
-      color: #8b98a5;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      font-size: 0.78rem;
+      color: var(--muted);
       line-height: 1.45;
     }
     .estimate-strip strong { color: #e7e9ea; }
+    #groundhogStrip details { margin-top: 8px; font-size: 0.74rem; color: #6b7a88; }
+    #groundhogStrip summary { cursor: pointer; color: var(--accent); font-weight: 600; }
     .scorecard-panel {
       margin: 0;
       padding: 12px 14px;
-      border-radius: 8px;
-      background: #15202b;
-      border: 1px solid #38444d;
+      border-radius: 10px;
+      background: var(--surface);
+      border: 1px solid var(--border);
       overflow-x: auto;
       max-height: min(70vh, 640px);
       overflow-y: auto;
@@ -845,9 +923,9 @@ PAGE_HTML = """<!DOCTYPE html>
     .policy-outcome-panel {
       margin: 0;
       padding: 12px 14px;
-      border-radius: 8px;
-      background: #15202b;
-      border: 1px solid #38444d;
+      border-radius: 10px;
+      background: var(--surface);
+      border: 1px solid var(--border);
       overflow-x: auto;
       max-height: min(70vh, 640px);
       overflow-y: auto;
@@ -875,7 +953,7 @@ PAGE_HTML = """<!DOCTYPE html>
     input[type=range] { width: 100%; accent-color: #1d9bf0; }
     .batch-concurrency-banner {
       display: none; margin: 10px 0 8px; padding: 10px 12px; border-radius: 8px;
-      background: #15202b; border: 1px solid #38444d; font-size: 0.88rem; line-height: 1.45; color: #e7e9ea;
+      background: var(--surface2); border: 1px solid var(--border); font-size: 0.85rem; line-height: 1.45; color: #e7e9ea;
     }
     .batch-concurrency-banner.visible { display: block; }
     .batch-concurrency-banner strong { color: #1d9bf0; font-weight: 600; }
@@ -922,58 +1000,83 @@ PAGE_HTML = """<!DOCTYPE html>
     <strong>Search space</strong> — loading catalog + bar counts…
   </div>
 
-  <div class="estimate-strip" id="groundhogStrip" aria-live="polite" style="font-size:0.88rem;border-color:#2f4a3a">
+  <div class="estimate-strip" id="groundhogStrip" aria-live="polite" style="font-size:0.82rem;border-color:#2a4a38">
     <strong>Groundhog memory</strong> — <span id="groundhogText">loading…</span>
-    <span class="caps" style="display:block;margin-top:4px">Set <code>PATTERN_GAME_GROUNDHOG_BUNDLE=1</code> on the server to merge <code>game_theory/state/groundhog_memory_bundle.json</code> before replay when a scenario has no <code>memory_bundle_path</code>. POST <code>/api/groundhog-memory</code> to promote ATR from review.</span>
+    <details>
+      <summary>Server env &amp; promotion</summary>
+      <span class="caps" style="display:block;margin-top:6px;line-height:1.45">
+        Set <code>PATTERN_GAME_GROUNDHOG_BUNDLE=1</code> to merge <code>game_theory/state/groundhog_memory_bundle.json</code> when a scenario has no <code>memory_bundle_path</code>. POST <code>/api/groundhog-memory</code> to promote ATR from review.
+      </span>
+    </details>
   </div>
   </div>
 
   <div class="main-layout">
   <div class="col-controls">
-  <h1>Pattern game — local prototype</h1>
-  <p class="caps">Referee-only scores. Run from repo root with <code>PYTHONPATH</code> set.</p>
+  <header class="page-header">
+    <h1>Pattern game</h1>
+    <p class="page-lead">Pick a <strong>preset</strong> or paste <strong>scenario JSON</strong>, then run the batch. Referee scores and paper P&amp;L update below.</p>
+    <details class="help-details">
+      <summary>Setup, PYTHONPATH, and where policy lives</summary>
+      <div class="help-details-body">
+        <p>Run from repo root with <code>PYTHONPATH</code> including the repo. This form does not edit manifests — policy and hypothesis strings live in the JSON.</p>
+        <p>Presets load from <code>game_theory/examples/</code>. After load you can edit the textarea, or ignore the menu and paste only.</p>
+      </div>
+    </details>
+  </header>
 
-  <p class="caps" style="margin-top:16px"><strong>Two options only:</strong> (1) choose a <strong>preset</strong> (pre-filled policy from <code>game_theory/examples/</code>), <strong>or</strong> (2) paste your own scenario JSON in the box. Strategy details and agent story belong in that JSON — not here.</p>
+  <section class="panel" aria-labelledby="batch-heading">
+    <h2 class="panel-title" id="batch-heading">Batch</h2>
+    <label for="presetPick">Preset</label>
+    <select id="presetPick" aria-describedby="presetHelp">
+      <option value="">— Custom JSON only (no preset) —</option>
+    </select>
+    <p class="caps" id="presetHelp" style="margin-top:6px">Preset fills the box below; you can still edit before Run.</p>
 
-  <label for="presetPick">Preset</label>
-  <select id="presetPick" aria-describedby="presetHelp">
-    <option value="">— Paste custom JSON below (no preset) —</option>
-  </select>
-  <p class="caps" id="presetHelp">Selecting a preset fills the textarea. You can edit it afterward. Or ignore the menu and paste only.</p>
+    <label for="scenarios" style="margin-top:14px">Scenario JSON</label>
+    <details class="inline-details">
+      <summary>Validation (hypothesis)</summary>
+      <p style="margin:0;line-height:1.45">Each scenario needs a non-empty <code>agent_explanation.hypothesis</code>. Server override: <code>PATTERN_GAME_REQUIRE_HYPOTHESIS=0</code>.</p>
+    </details>
 
-  <label for="scenarios">Scenario batch (JSON array)</label>
-  <p class="caps" style="margin:4px 0 8px 0">Each scenario needs a non-empty <code>agent_explanation.hypothesis</code> (what you expect this run to prove on this tape). Override: <code>PATTERN_GAME_REQUIRE_HYPOTHESIS=0</code>.</p>
-  <div class="row" style="align-items:center;margin-bottom:8px">
-    <button type="button" id="suggestHuntersBtn" style="margin-top:0;background:#38444d">Suggest next hunters (memory)</button>
-    <span class="caps" id="hunterSuggestHint" style="margin:0;flex:1;min-width:200px"></span>
-  </div>
-  <div class="row" style="align-items:flex-end;margin-bottom:8px;gap:12px">
-    <div style="flex:2;min-width:220px">
-      <label for="chefManifestPath" style="margin:0;font-size:0.85rem">Chef — manifest path (repo-relative)</label>
-      <input type="text" id="chefManifestPath" style="margin-top:4px" value="renaissance_v4/configs/manifests/baseline_v1_recipe.json" spellcheck="false"/>
+    <div class="tool-row">
+      <button type="button" class="btn-secondary" id="suggestHuntersBtn">Suggest hunters</button>
+      <span class="caps" id="hunterSuggestHint" style="margin:0;flex:1;min-width:180px;align-self:center"></span>
     </div>
-    <button type="button" id="chefAtrSweepBtn" style="margin-top:0;background:#1a6b4a">Chef: fill ATR sweep</button>
-    <span class="caps" id="chefHint" style="margin:0;flex:1;min-width:160px"></span>
-  </div>
-  <textarea id="scenarios" spellcheck="false" placeholder='[{"scenario_id":"…","manifest_path":"…","agent_explanation":{"hypothesis":"…"},…}]'></textarea>
-
-  <label for="workersRange">Workers <span id="workersVal" style="color:#e7e9ea;font-weight:600">1</span></label>
-  <input type="range" id="workersRange" min="1" max="64" value="1" step="1" />
-  <p class="caps" id="workerHint"></p>
-  <div class="row">
-    <div>
-      <label><input type="checkbox" id="doLog" checked/> Append results to experience JSONL (default path under repo, or <code>PATTERN_GAME_MEMORY_ROOT</code> for RAM/tmpfs)</label>
+    <div class="tool-row">
+      <div style="flex:2;min-width:200px">
+        <label for="chefManifestPath" style="margin:0;font-size:0.8rem">Chef manifest (repo path)</label>
+        <input type="text" id="chefManifestPath" style="margin-top:4px" value="renaissance_v4/configs/manifests/baseline_v1_recipe.json" spellcheck="false"/>
+      </div>
+      <button type="button" class="btn-chef" id="chefAtrSweepBtn">ATR sweep</button>
+      <span class="caps" id="chefHint" style="margin:0;flex:1;min-width:140px;align-self:center"></span>
     </div>
-  </div>
+    <textarea id="scenarios" spellcheck="false" placeholder='[{"scenario_id":"…","manifest_path":"…","agent_explanation":{"hypothesis":"…"},…}]'></textarea>
+  </section>
 
-  <button type="button" id="runBtn">Run</button>
-  <div id="statusLine" aria-live="polite"></div>
-  <div id="batchConcurrencyBanner" class="batch-concurrency-banner" aria-live="polite"></div>
-  <div id="progressWrap" class="progress-wrap" role="progressbar" aria-label="Batch replay progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
-    <div class="progress-track" id="progressTrack">
-      <div class="progress-fill" id="progressFill" style="width:0%"></div>
+  <section class="panel workers-panel" aria-labelledby="workers-heading">
+    <h2 class="panel-title" id="workers-heading">Parallelism &amp; logging</h2>
+    <label for="workersRange">Worker processes <span id="workersVal" style="color:#e7e9ea;font-weight:600">1</span></label>
+    <input type="range" id="workersRange" min="1" max="64" value="1" step="1" />
+    <p id="workerCpuHint"></p>
+    <div id="workerEffectiveLine" aria-live="polite"></div>
+    <div style="margin-top:14px">
+      <label style="margin:0;font-size:0.85rem"><input type="checkbox" id="doLog" checked/> Append runs to experience JSONL (<code>PATTERN_GAME_MEMORY_ROOT</code> optional)</label>
     </div>
-    <p class="caps" id="progressSub"></p>
+  </section>
+
+  <div class="run-actions">
+    <button type="button" id="runBtn">Run batch</button>
+    <div class="status-stack">
+      <div id="statusLine" aria-live="polite"></div>
+      <div id="batchConcurrencyBanner" class="batch-concurrency-banner" aria-live="polite"></div>
+      <div id="progressWrap" class="progress-wrap" role="progressbar" aria-label="Batch replay progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+        <div class="progress-track" id="progressTrack">
+          <div class="progress-fill" id="progressFill" style="width:0%"></div>
+        </div>
+        <p class="caps" id="progressSub"></p>
+      </div>
+    </div>
   </div>
   </div>
 
@@ -1051,13 +1154,42 @@ PAGE_HTML = """<!DOCTYPE html>
     rangeEl.max = String(hardMax);
     rangeEl.value = String(defaultWorkers);
     workersVal.textContent = rangeEl.value;
-    document.getElementById('workerHint').textContent =
-      'This host: ' + LIMITS.cpu_logical_count + ' logical CPUs · recommended default ' + recommended +
-      ' (one process per CPU for CPU-bound replay) · hard max ' + hardMax +
-      ' (slider top). Pick fewer if you want headroom; never above max. ' + LIMITS.note;
+    document.getElementById('workerCpuHint').textContent =
+      'Host: ' + LIMITS.cpu_logical_count + ' logical CPUs · default slider ' + recommended +
+      ' · max ' + hardMax + '. ' + LIMITS.note;
+
+    function parseScenarioCountFromTextarea() {
+      const ta = document.getElementById('scenarios');
+      if (!ta || !ta.value.trim()) return 0;
+      try {
+        const parsed = JSON.parse(ta.value.trim());
+        const arr = Array.isArray(parsed) ? parsed : (parsed && Array.isArray(parsed.scenarios) ? parsed.scenarios : null);
+        return (arr && arr.length) ? arr.length : 0;
+      } catch (e) { return 0; }
+    }
+    function refreshWorkerEffectiveLine() {
+      const el = document.getElementById('workerEffectiveLine');
+      if (!el) return;
+      const n = parseScenarioCountFromTextarea();
+      const w = parseInt(rangeEl.value, 10) || 1;
+      if (n < 1) {
+        el.innerHTML = '<strong>Effective parallelism</strong> — Load valid JSON above. The run uses <strong>min(scenario count, slider)</strong>.';
+        return;
+      }
+      const eff = Math.min(n, w);
+      let extra = '';
+      if (n === 1) {
+        extra = '<div style="margin-top:8px;color:#c9a227;font-size:0.9em">Single scenario: only one process runs; raising the slider does not speed it up.</div>';
+      }
+      el.innerHTML =
+        '<strong>' + eff + '</strong> parallel process(es) for this batch ' +
+        '(<strong>' + n + '</strong> scenario(s) × slider <strong>' + w + '</strong>, capped at the smaller). ' + extra;
+    }
+
     rangeEl.addEventListener('input', () => {
       workersVal.textContent = rangeEl.value;
       if (typeof refreshSearchSpaceEstimate === 'function') refreshSearchSpaceEstimate();
+      refreshWorkerEffectiveLine();
     });
 
     function escapeHtml(s) {
@@ -1292,8 +1424,8 @@ PAGE_HTML = """<!DOCTYPE html>
       b.classList.add('visible');
       if (mode === 'done') {
         b.innerHTML =
-          '<strong>Batch finished</strong> — <strong>' + t + '</strong> scenario(s) completed · worker cap was <strong>' +
-          w + '</strong> process(es). Result is below.';
+          '<strong>Batch finished</strong> — <strong>' + t + '</strong> scenario(s) completed · parallel processes used: <strong>' +
+          w + '</strong> <span style="color:#8b98a5;font-weight:400">(min of scenario count and slider — one scenario always uses one process)</span>. Result is below.';
         return;
       }
       if (mode === 'error') {
@@ -1307,7 +1439,7 @@ PAGE_HTML = """<!DOCTYPE html>
       }
       b.innerHTML =
         '<strong>Parallelism</strong> — <strong>' + t + '</strong> scenario(s) in this batch · up to <strong>' + w +
-        '</strong> worker process(es) at once (at most <strong>' + eff + '</strong> replays run in parallel until one finishes).' +
+        '</strong> parallel process(es) at once (at most <strong>' + eff + '</strong> replays run in parallel until one finishes).' +
         oneWarn;
     }
 
@@ -1325,6 +1457,7 @@ PAGE_HTML = """<!DOCTYPE html>
             return;
           }
           ta.value = JSON.stringify(j.scenarios, null, 2);
+          refreshWorkerEffectiveLine();
           const w = j.warnings || [];
           const short = w.length ? (w.join(' ')) : ('Ladder round ' + (j.ladder_round != null ? j.ladder_round : '?') +
             ', bias ' + (j.bias || '?') + '. Full rationale in API JSON.');
@@ -1359,6 +1492,7 @@ PAGE_HTML = """<!DOCTYPE html>
             return;
           }
           ta.value = JSON.stringify(j.scenarios, null, 2);
+          refreshWorkerEffectiveLine();
           const w = j.warnings || [];
           const extra = w.length ? (' · ' + w.join(' ')) : '';
           if (hint) hint.textContent = 'Chef: ' + (j.count || (j.scenarios || []).length) +
@@ -1440,7 +1574,7 @@ PAGE_HTML = """<!DOCTYPE html>
         showBatchConcurrencyBanner(total, runWorkersCap, 'run');
         statusLine.textContent =
           'Running — ' + total + ' scenario(s) · up to ' + (runWorkersCap != null ? runWorkersCap : '?') +
-          ' worker process(es) in parallel · updates every 1.5s below.';
+          ' parallel process(es) (min of batch size and slider) · updates every 1.5s below.';
         setProgressUI(0, total, 'Queued — up to ' + (runWorkersCap != null ? runWorkersCap : '?') + ' process(es) · waiting for first replay to finish…');
 
         const pollOnce = async () => {
@@ -1460,7 +1594,7 @@ PAGE_HTML = """<!DOCTYPE html>
             setProgressUI(c, t, sub);
             statusLine.textContent =
               'Running — ' + c + '/' + t + ' scenario(s) finished · up to ' + (wCap != null ? wCap : '?') +
-              ' worker process(es) · ' + elapsedStr + ' elapsed';
+              ' parallel process(es) · ' + elapsedStr + ' elapsed';
             return false;
           }
           if (pj.status === 'error') {
@@ -1481,7 +1615,7 @@ PAGE_HTML = """<!DOCTYPE html>
               const doneN = j.ran != null ? j.ran : tDone;
               const doneW = j.workers_used != null ? j.workers_used : wCap;
               showBatchConcurrencyBanner(doneN, doneW, 'done');
-              setProgressUI(doneN, doneN, 'All ' + doneN + ' scenario(s) finished · worker cap was ' + (doneW != null ? doneW : '?') + ' · ' + elapsedStr);
+              setProgressUI(doneN, doneN, 'All ' + doneN + ' scenario(s) finished · parallel processes used: ' + (doneW != null ? doneW : '?') + ' · ' + elapsedStr);
               if (j.pnl_summary) { updatePnlStrip(j.pnl_summary); }
               const sl = document.getElementById('sessionLogNote');
               if (sl) {
@@ -1492,7 +1626,8 @@ PAGE_HTML = """<!DOCTYPE html>
               await show(null, j, null);
               refreshScorecardHistory();
               statusLine.textContent =
-                'Finished — ' + doneN + ' scenario(s) · worker cap was ' + (doneW != null ? doneW : '?') + ' · see Result below.';
+                'Finished — ' + doneN + ' scenario(s) · parallel processes used: ' + (doneW != null ? doneW : '?') +
+                ' (not the same as the slider when you only have one scenario) · see Result below.';
             } else {
               showBatchConcurrencyBanner(tDone, wCap, 'done');
               setProgressUI(cDone, tDone, 'Batch marked done — full JSON not in this response; see scorecard below.');
@@ -1655,27 +1790,36 @@ PAGE_HTML = """<!DOCTYPE html>
         }
         return Promise.resolve();
       })
-      .then(() => { if (typeof refreshSearchSpaceEstimate === 'function') return refreshSearchSpaceEstimate(); })
+      .then(() => {
+        if (typeof refreshSearchSpaceEstimate === 'function') return refreshSearchSpaceEstimate();
+      })
+      .then(() => { refreshWorkerEffectiveLine(); })
       .catch(() => {});
 
     scenariosEl.addEventListener('input', () => {
       if (typeof refreshSearchSpaceEstimate === 'function') refreshSearchSpaceEstimate();
+      refreshWorkerEffectiveLine();
     });
 
     presetPick.onchange = () => {
       const name = presetPick.value;
       if (!name) {
         if (typeof refreshSearchSpaceEstimate === 'function') refreshSearchSpaceEstimate();
+        refreshWorkerEffectiveLine();
         return;
       }
       loadPreset(name)
-        .then(() => { if (typeof refreshSearchSpaceEstimate === 'function') return refreshSearchSpaceEstimate(); })
+        .then(() => {
+          if (typeof refreshSearchSpaceEstimate === 'function') return refreshSearchSpaceEstimate();
+        })
+        .then(() => { refreshWorkerEffectiveLine(); })
         .catch((e) => {
           document.getElementById('out').innerHTML = '<span class="err">' + String(e) + '</span>';
         });
     };
 
     if (typeof refreshSearchSpaceEstimate === 'function') refreshSearchSpaceEstimate();
+    refreshWorkerEffectiveLine();
     refreshScorecardHistory();
   </script>
 </body>
