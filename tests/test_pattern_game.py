@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from renaissance_v4.core.outcome_record import OutcomeRecord
 from renaissance_v4.manifest.validate import validate_manifest_against_catalog
-from renaissance_v4.research.pattern_game import (
+from renaissance_v4.game_theory.pattern_game import (
     OUTCOME_RULE_V1,
     score_binary_outcomes,
 )

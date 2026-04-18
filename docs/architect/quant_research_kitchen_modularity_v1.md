@@ -70,7 +70,7 @@ python3 -m renaissance_v4.manifest renaissance_v4/configs/manifests/baseline_v1_
 
 ## 5. Code plan — plug-ins enter the engine without rewriting it
 
-1. **Done (v7.2):** [`replay_runner.py`](../../renaissance_v4/research/replay_runner.py) loads **`baseline_v1_recipe.json`** (or `RENAISSANCE_REPLAY_MANIFEST`), validates, then uses **`build_signals_from_manifest`** and **`resolve_*` / `build_execution_manager_from_manifest`** for the full bar loop. **Integration note:** [`MANIFEST_REPLAY_INTEGRATION.md`](../../renaissance_v4/research/MANIFEST_REPLAY_INTEGRATION.md).
+1. **Done (v7.2):** [`replay_runner.py`](../../renaissance_v4/research/replay_runner.py) loads **`baseline_v1_recipe.json`** (or `RENAISSANCE_REPLAY_MANIFEST`), validates, then uses **`build_signals_from_manifest`** and **`resolve_*` / `build_execution_manager_from_manifest`** for the full bar loop. **Integration note:** [`MANIFEST_REPLAY_INTEGRATION.md`](../../renaissance_v4/game_theory/MANIFEST_REPLAY_INTEGRATION.md).
 
 2. **Next:** Robustness runner / workbench jobs — optional manifest path in job payload; validate before subprocess; pass `--manifest` when runner supports it.
 

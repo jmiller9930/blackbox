@@ -82,7 +82,7 @@ The items below are **implemented capability** in-repo. They are **not** a subst
 - [x] **Workbench v1 (dashboard)** — Route `/dashboard.html#/renaissance`, baseline + experiments + exports + approved jobs — see `renaissance_v4/WORKBENCH_V1.md` (“Version 1 scope delivered”).
 - [x] **Workbench APIs** — Documented in `WORKBENCH_V1.md` (`/api/v1/renaissance/*`).
 - [x] **Harness** — `research/robustness_runner.py`: `export-trades`, `baseline-mc`, `compare`, `compare-manifest`, `ingest-policy` (full pipeline per DV-ARCH-POLICY-INGESTION-024-C; see `docs/architect/DV-ARCH-POLICY-LOAD-028_unified_policy_submission.md` §13).
-- [x] **Manifest-driven replay (v7.2)** — `research/replay_runner.py` + `configs/manifests/baseline_v1_recipe.json`; `MANIFEST_REPLAY_INTEGRATION.md`.
+- [x] **Manifest-driven replay (v7.2)** — `research/replay_runner.py` + `configs/manifests/baseline_v1_recipe.json`; `game_theory/MANIFEST_REPLAY_INTEGRATION.md`.
 - [x] **Policy package replay (024-A)** — `research/policy_package_ingest.py`.
 - [x] **SRA plumbing** — `research/sra_foundation.py`, variants/runs, experiment index — see `state/` artifacts and tests under repo `tests/`.
 - [x] **Governance docs** — LOAD-028 (rule documented), INTAKE-021, `blackbox_policy_kitchen_integration_writeup.md`, `policy_package_standard.md`.

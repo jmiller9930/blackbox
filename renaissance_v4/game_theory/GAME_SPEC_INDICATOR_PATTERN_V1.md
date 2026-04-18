@@ -148,7 +148,7 @@ Policy alone cannot stop a bad actor; **implementation** must make cheating **me
 
 ## 13. Mechanical checklist (before first official game run)
 
-- [x] **`outcome_rule_v1`** — Implemented as **`outcome_rule_v1_pnl_strict`** in `renaissance_v4/research/pattern_game.py` (`score_binary_outcomes`: WIN if `pnl > 0`, else LOSS).
+- [x] **`outcome_rule_v1`** — Implemented as **`outcome_rule_v1_pnl_strict`** in `renaissance_v4/game_theory/pattern_game.py` (`score_binary_outcomes`: WIN if `pnl > 0`, else LOSS).
 - [ ] **\$1,000** wired consistently to sizing in the chosen replay path (spec constants in `pattern_game.py`; risk governor still uses tiered `notional_fraction`).
 - [ ] **12 months** (or train/test ranges) defined as **SQL `open_time` bounds** or manifest dates if supported.
 - [ ] **Search vs test** mode (A/B/C) selected and logged.
@@ -156,11 +156,11 @@ Policy alone cannot stop a bad actor; **implementation** must make cheating **me
 - [x] **SL/TP (ATR)** — `ExecutionManager` accepts optional **`atr_stop_mult` / `atr_target_mult`**; manifest keys validated **[0.5, 6.0]**; `build_execution_manager_from_manifest` passes them through.
 - [ ] **ML** (optional): only **after** logs exist; proposals only, never injected scores.
 - [ ] Full bar count verified on the **host** that holds production-scale history (not assumed from a smoke DB).
-- [x] **Official runner** — `python3 -m renaissance_v4.research.pattern_game` (validate → `run_manifest_replay` → binary scorecard; no injected scores).
+- [x] **Official runner** — `python3 -m renaissance_v4.game_theory.pattern_game` (validate → `run_manifest_replay` → binary scorecard; no injected scores).
 
 **Run (repo root, `PYTHONPATH=.`):**
 
-`python3 -m renaissance_v4.research.pattern_game --manifest renaissance_v4/configs/manifests/baseline_v1_recipe.json`
+`python3 -m renaissance_v4.game_theory.pattern_game --manifest renaissance_v4/configs/manifests/baseline_v1_recipe.json`
 
 Optional overrides: `--atr-stop-mult 2.0 --atr-target-mult 3.0`
 
@@ -171,6 +171,7 @@ Optional overrides: `--atr-stop-mult 2.0 --atr-target-mult 3.0`
 - Catalog: `renaissance_v4/registry/catalog_v1.json`
 - Indicators vocabulary: `renaissance_v4/policy_spec/indicators_v1.py`
 - Replay: `renaissance_v4/research/replay_runner.py`
-- Pattern game runner: `renaissance_v4/research/pattern_game.py`
+- Pattern game runner: `renaissance_v4/game_theory/pattern_game.py`
+- Game theory / agent docs folder: `renaissance_v4/game_theory/`
 - Example manifest: `renaissance_v4/configs/manifests/baseline_v1_recipe.json`
 - Execution defaults: `renaissance_v4/core/execution_manager.py`
