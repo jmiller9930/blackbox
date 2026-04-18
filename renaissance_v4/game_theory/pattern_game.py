@@ -19,6 +19,7 @@ from typing import Any
 from renaissance_v4.core.outcome_record import OutcomeRecord
 from renaissance_v4.manifest.validate import load_manifest_file, validate_manifest_against_catalog
 from renaissance_v4.research.replay_runner import run_manifest_replay
+from renaissance_v4.game_theory.groundhog_memory import resolve_memory_bundle_for_scenario
 from renaissance_v4.game_theory.memory_bundle import (
     apply_memory_bundle_to_manifest,
     memory_bundle_required_and_missing,
@@ -108,7 +109,10 @@ def run_pattern_game(
     """
     path = Path(manifest_path)
     manifest = load_manifest_file(path)
-    mb_audit = apply_memory_bundle_to_manifest(manifest, memory_bundle_path)
+    mb_resolved = memory_bundle_path
+    if mb_resolved is None:
+        mb_resolved = resolve_memory_bundle_for_scenario(None, explicit_path=None)
+    mb_audit = apply_memory_bundle_to_manifest(manifest, mb_resolved)
     if atr_stop_mult is not None:
         manifest["atr_stop_mult"] = float(atr_stop_mult)
     if atr_target_mult is not None:

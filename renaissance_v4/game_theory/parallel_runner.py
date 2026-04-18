@@ -17,6 +17,7 @@ from concurrent.futures import ProcessPoolExecutor, as_completed
 from pathlib import Path
 from typing import Any
 
+from renaissance_v4.game_theory.groundhog_memory import resolve_memory_bundle_for_scenario
 from renaissance_v4.game_theory.pattern_game import json_summary, run_pattern_game
 from renaissance_v4.game_theory.run_memory import append_run_memory, build_run_memory_record
 from renaissance_v4.game_theory.memory_paths import (
@@ -81,6 +82,8 @@ def _worker_run_one(scenario: dict[str, Any]) -> dict[str, Any]:
         mbp = scenario.get("memory_bundle_path")
         if mbp:
             mbp = str(Path(mbp).expanduser().resolve())
+        else:
+            mbp = resolve_memory_bundle_for_scenario(scenario, explicit_path=None)
         out = run_pattern_game(
             scenario["manifest_path"],
             atr_stop_mult=scenario.get("atr_stop_mult"),

@@ -50,6 +50,12 @@ from flask import Flask, abort, jsonify, request
 
 _GAME_THEORY = Path(__file__).resolve().parent
 
+from renaissance_v4.game_theory.groundhog_memory import (
+    groundhog_auto_merge_enabled,
+    groundhog_bundle_path,
+    read_groundhog_bundle,
+    write_groundhog_bundle,
+)
 from renaissance_v4.game_theory.batch_scorecard import (
     read_batch_scorecard_recent,
     record_parallel_batch_finished,
@@ -201,6 +207,39 @@ def create_app() -> Flask:
     @app.get("/api/capabilities")
     def capabilities() -> Any:
         return jsonify(get_parallel_limits())
+
+    @app.get("/api/groundhog-memory")
+    def api_groundhog_memory_get() -> Any:
+        """Canonical Groundhog bundle status — same tape, smarter execution when bundle + env enabled."""
+        p = groundhog_bundle_path()
+        return jsonify(
+            {
+                "ok": True,
+                "path": str(p),
+                "env_enabled": groundhog_auto_merge_enabled(),
+                "exists": p.is_file(),
+                "bundle": read_groundhog_bundle(),
+            }
+        )
+
+    @app.post("/api/groundhog-memory")
+    def api_groundhog_memory_post() -> Any:
+        """Write promoted ATR geometry to the canonical bundle (``pattern_game_memory_bundle_v1``)."""
+        data = request.get_json(force=True, silent=True) or {}
+        try:
+            a = float(data["atr_stop_mult"])
+            b = float(data["atr_target_mult"])
+        except (KeyError, TypeError, ValueError):
+            return jsonify({"ok": False, "error": "Need numeric atr_stop_mult and atr_target_mult"}), 400
+        rid = (data.get("from_run_id") or "").strip() or None
+        note = (data.get("note") or "").strip() or None
+        path = write_groundhog_bundle(
+            atr_stop_mult=a,
+            atr_target_mult=b,
+            from_run_id=rid,
+            note=note,
+        )
+        return jsonify({"ok": True, "path": str(path), "bundle": read_groundhog_bundle()})
 
     @app.get("/api/data-health")
     def data_health() -> Any:
@@ -744,6 +783,11 @@ PAGE_HTML = """<!DOCTYPE html>
 
   <div class="estimate-strip" id="searchSpaceStrip" aria-live="polite">
     <strong>Search space</strong> — loading catalog + bar counts…
+  </div>
+
+  <div class="estimate-strip" id="groundhogStrip" aria-live="polite" style="font-size:0.88rem;border-color:#2f4a3a">
+    <strong>Groundhog memory</strong> — <span id="groundhogText">loading…</span>
+    <span class="caps" style="display:block;margin-top:4px">Set <code>PATTERN_GAME_GROUNDHOG_BUNDLE=1</code> on the server to merge <code>game_theory/state/groundhog_memory_bundle.json</code> before replay when a scenario has no <code>memory_bundle_path</code>. POST <code>/api/groundhog-memory</code> to promote ATR from review.</span>
   </div>
 
   <div class="scorecard-panel" id="scorecardPanel">
@@ -1293,6 +1337,29 @@ PAGE_HTML = """<!DOCTYPE html>
     }
     refreshDataHealth();
     setInterval(refreshDataHealth, 45000);
+
+    async function refreshGroundhog() {
+      const el = document.getElementById('groundhogText');
+      if (!el) return;
+      try {
+        const r = await fetch('/api/groundhog-memory');
+        const j = await r.json();
+        if (!r.ok || !j.ok) {
+          el.textContent = 'unavailable';
+          return;
+        }
+        const en = j.env_enabled ? 'merge ON' : 'merge OFF (set PATTERN_GAME_GROUNDHOG_BUNDLE=1)';
+        const ex = j.exists ? 'file exists' : 'no file yet (POST /api/groundhog-memory to promote)';
+        const ap = j.bundle && j.bundle.apply
+          ? ('ATR stop ' + j.bundle.apply.atr_stop_mult + ' / target ' + j.bundle.apply.atr_target_mult)
+          : '—';
+        el.textContent = en + ' · ' + ex + ' · ' + ap;
+      } catch (e) {
+        el.textContent = 'could not load — ' + friendlyFetchError(e);
+      }
+    }
+    refreshGroundhog();
+    setInterval(refreshGroundhog, 60000);
 
     async function refreshSearchSpaceEstimate() {
       const el = document.getElementById('searchSpaceStrip');
