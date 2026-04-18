@@ -169,7 +169,27 @@ Optional overrides: `--atr-stop-mult 2.0 --atr-target-mult 3.0`
 
 ---
 
-## 14. References (repo)
+## 14. Anna perception, memory, and statistical integrity (hard rules)
+
+**Normative copy** lives in code as `renaissance_v4/game_theory/anna_hard_rules.py` (`HARDCODED_ANNA_RULES_MARKDOWN`) and is injected into Anna prompts when the context profile includes **`all`** or token **`hard_rules`** (disable with env `ANNA_HARD_RULES=0`). Summary:
+
+1. **Five-minute (default) visible window** — Advisory Anna receives only a **short OHLCV slice** of recent bars for “market perception,” not the full stored history the Referee replays.
+
+2. **No sensory confusion with outcomes** — The narrative agent **must not** treat **Referee aggregates** (end-of-replay WIN/LOSS, PnL, trade stats) as if they were the same channel as the visible window. Those are **measurement outputs**, not “seeing the test strip” or the full tape.
+
+3. **Memory is not a second tape** — Retrospective and batch scorecard JSONL are **operator memory** for protocol discipline; they do not provide full-bar omniscience.
+
+4. **Determinism** — Same inputs → same replay stats; **learning** requires **varying** controlled inputs and comparing **differences**.
+
+5. **Statistical honesty** — One run is not proof of edge; do not claim significance without a declared comparison protocol; state **N** and what changed.
+
+6. **Numbers** — Only from Referee artifacts; never invented.
+
+7. **Role** — Anna advises; she does not change scores or replay code.
+
+---
+
+## 15. References (repo)
 
 - Catalog: `renaissance_v4/registry/catalog_v1.json`
 - Indicators vocabulary: `renaissance_v4/policy_spec/indicators_v1.py`

@@ -116,6 +116,35 @@ def test_build_context_all_includes_retro_and_scorecard(monkeypatch: pytest.Monk
     assert "j1" in s
 
 
+def test_build_context_hard_rules_when_profile_all(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    retro = tmp_path / "retrospective_log.jsonl"
+    retro.write_text(
+        '{"schema":"pattern_game_retrospective_v1","utc":"2030-01-01T00:00:00Z",'
+        '"what_observed":"seen","what_to_try_next":"try wider"}\n',
+        encoding="utf-8",
+    )
+    sc = tmp_path / "batch_scorecard.jsonl"
+    sc.write_text(
+        '{"schema":"pattern_game_batch_scorecard_v1","job_id":"j1","status":"done",'
+        '"ended_at_utc":"2030-02-01T00:00:00Z","total_scenarios":2,"total_processed":2,'
+        '"ok_count":2,"failed_count":0,"workers_used":2}\n',
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("ANNA_CONTEXT_PROFILE", "all")
+    monkeypatch.setenv("ANNA_VISIBLE_WINDOW", "0")
+    monkeypatch.setattr(
+        "renaissance_v4.game_theory.retrospective_log.default_retrospective_log_jsonl",
+        lambda: retro,
+    )
+    monkeypatch.setattr(
+        "renaissance_v4.game_theory.batch_scorecard.default_batch_scorecard_jsonl",
+        lambda: sc,
+    )
+    s = build_context_prefix(_REPO)
+    assert "ANNA HARD RULES" in s
+    assert "short OHLCV" in s or "OHLCV" in s
+
+
 def test_build_context_visible_window_token(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     monkeypatch.setenv("ANNA_CONTEXT_PROFILE", "visible_window")
     monkeypatch.setenv("ANNA_VISIBLE_WINDOW", "1")

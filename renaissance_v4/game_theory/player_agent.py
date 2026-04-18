@@ -10,8 +10,9 @@ answer **operator questions** doc-grounded via ``agent_context_bundle`` (game sp
 Renaissance V4 ``fusion_engine`` / weights / ``FusionResult`` contract).
 She does **not** judge WIN/LOSS or change scores. Enable with ``PLAYER_AGENT_USE_ANNA=1`` (default: follow
 ``ANNA_USE_LLM``). If ``ANNA_CONTEXT_PROFILE`` is unset/``none``, pattern-game Anna calls default it to **`all`**
-(full designed prefix: pattern_game + policy files, plus retrospective + scorecard JSONL tails — see
-``scripts/agent_context_bundle.py``). For **docs-only** (smaller prompts / tests), set
+(full designed prefix: **hard rules** + optional visible OHLCV window + pattern_game + policy files,
+plus retrospective + scorecard JSONL tails — see ``scripts/agent_context_bundle.py`` and
+``anna_hard_rules.py``). For **docs-only** (smaller prompts / tests), set
 ``ANNA_PATTERN_GAME_CONTEXT_MINIMAL=1`` or set ``ANNA_CONTEXT_PROFILE`` explicitly (e.g. ``pattern_game``).
 CLI: ``--ask "…"`` for a standalone factual answer (no batch).
 """

@@ -27,6 +27,8 @@ Env:
   ANNA_VISIBLE_WINDOW_MINUTES — wall-clock minutes of bars to show (default ``5``).
   ANNA_VISIBLE_WINDOW_SYMBOL — default ``SOLUSDT``.
   ANNA_VISIBLE_WINDOW_TABLE — default ``market_bars_5m``.
+  ANNA_HARD_RULES — ``0`` / ``false`` / ``off`` to **skip** the injected **hard rules** block (perception +
+                           statistics contract). Default: **on** when profile is ``all`` or token ``hard_rules``.
   ANNA_CONTEXT_RETROSPECTIVE — ``1`` to include retrospective even if token omitted (optional).
   ANNA_CONTEXT_SCORECARD — ``1`` to include scorecard even if token omitted (optional).
   ANNA_CONTEXT_RETROSPECTIVE_LIMIT — max retrospective lines (default 15).
@@ -41,6 +43,7 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
+from renaissance_v4.game_theory.anna_hard_rules import format_hard_rules_for_prompt
 from renaissance_v4.game_theory.anna_visible_window import format_visible_window_for_prompt
 from renaissance_v4.game_theory.batch_scorecard import format_batch_scorecard_for_prompt
 from renaissance_v4.game_theory.retrospective_log import format_retrospective_for_prompt
@@ -95,6 +98,7 @@ def build_context_prefix(repo_root: Path | str | None = None) -> str:
         "on",
     )
     profile_wants_visible_window = False
+    profile_wants_hard_rules = False
     parts: list[str] = []
     seen: set[str] = set()
 
@@ -109,6 +113,7 @@ def build_context_prefix(repo_root: Path | str | None = None) -> str:
             want_retrospective = True
             want_scorecard = True
             profile_wants_visible_window = True
+            profile_wants_hard_rules = True
         elif token == "pattern_game":
             keys = ["pattern_game"]
         elif token == "policy":
@@ -121,6 +126,9 @@ def build_context_prefix(repo_root: Path | str | None = None) -> str:
             continue
         elif token == "visible_window":
             profile_wants_visible_window = True
+            continue
+        elif token == "hard_rules":
+            profile_wants_hard_rules = True
             continue
         else:
             continue
@@ -153,6 +161,18 @@ def build_context_prefix(repo_root: Path | str | None = None) -> str:
     explicit_visible_on = vw_env in ("1", "true", "yes", "on")
     want_visible_window = (profile_wants_visible_window or explicit_visible_on) and not explicit_visible_off
 
+    hr_env = os.environ.get("ANNA_HARD_RULES", "").strip().lower()
+    explicit_hard_off = hr_env in ("0", "false", "no", "off")
+    explicit_hard_on = hr_env in ("1", "true", "yes", "on")
+    want_hard_rules = (profile_wants_hard_rules or explicit_hard_on) and not explicit_hard_off
+
+    hard_rules_block = ""
+    if want_hard_rules and remaining > 400:
+        hard_rules_block = format_hard_rules_for_prompt(
+            max_chars=min(12000, max(0, remaining - 500)),
+        )
+        remaining -= len(hard_rules_block)
+
     visible_block = ""
     if want_visible_window and remaining > 400:
         visible_block = format_visible_window_for_prompt(
@@ -177,10 +197,14 @@ def build_context_prefix(repo_root: Path | str | None = None) -> str:
             path=None,
         )
 
-    if not visible_block.strip() and not body.strip() and not retro_block and not scorecard_block:
+    if not hard_rules_block.strip() and not visible_block.strip() and not body.strip() and not retro_block and not scorecard_block:
         return ""
 
     out = ""
+    if hard_rules_block.strip():
+        out += "--- ANNA HARD RULES (non-negotiable; read before reasoning) ---\n\n"
+        out += hard_rules_block
+        out += "\n--- END ANNA HARD RULES ---\n\n"
     if visible_block.strip():
         out += "--- ANNA PERCEPTION (visible market window — not the full tape) ---\n\n"
         out += visible_block
