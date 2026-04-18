@@ -116,6 +116,12 @@ Invalid JSON or missing `manifest_path` fails validation before replay.
 
 ---
 
+## Lab deploy (clawbot)
+
+After you push, run **`python3 scripts/gsync.py`** from repo root. When pulled commits touch **`renaissance_v4/game_theory/`** (or **`scripts/agent_context_bundle.py`**), the remote runs **`scripts/pattern_game_remote_restart.sh`**, which frees port **8765** and starts the Flask UI again. **`--force-restart`** restarts both **UIUX.Web** docker and the pattern-game web even if `git pull` did nothing new. Env: **`GSYNC_PATTERN_GAME_PREFIXES`** to add more path triggers.
+
+---
+
 ## Proof (automated)
 
 Run from repo root with `PYTHONPATH=.`:

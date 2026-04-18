@@ -74,7 +74,7 @@ That script **pushes** the current branch to `origin`, **SSHs** to clawbot, **`g
 
 Treat this as the **standard post-update step** for Black Box changes that matter on clawbot, unless the user or directive explicitly skips deploy or SSH is unavailable (then say so in the proof gap).
 
-**Conditional UI deploy:** **`python3 scripts/gsync.py`** does the same local commit (optional) + push + remote `git pull`, but runs **UIUX.Web** `docker compose` **only if** the pulled commits touch paths under `UIUX.Web/` (see script docstring). Use when most commits are Python/docs and you want to avoid unnecessary rebuilds; use **`sync.py`** when you always need the operator stack restarted.
+**Conditional UI deploy:** **`python3 scripts/gsync.py`** does the same local commit (optional) + push + remote `git pull`, then restarts **only what changed**: **UIUX.Web** `docker compose` when paths under `UIUX.Web/` change, and the **pattern-game Flask** app (port **8765**, via `scripts/pattern_game_remote_restart.sh`) when paths under `renaissance_v4/game_theory/` (or `scripts/agent_context_bundle.py`, configurable) change. **`--force-restart`** runs both even when `git pull` is a no-op. See `scripts/gsync.py` docstring and env `GSYNC_UIUX_PREFIXES` / `GSYNC_PATTERN_GAME_PREFIXES`. Use **`sync.py`** when you always need the operator stack rebuilt regardless of paths.
 
 **Not** the same as [`workspace_sync.md`](workspace_sync.md) (OpenClaw identity/skills copies on the gateway). **One-shot** push + Black Box UI stack + SeanV3/Jupiter: see **`python3 scripts/jupsync.py --full-stack`** in `scripts/jupsync.py`.
 

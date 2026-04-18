@@ -2,26 +2,36 @@
 """
 gsync — git commit (optional), push to origin, pull on lab host, restart **only if needed**.
 
-Compared to ``scripts/sync.py`` (always rebuilds/restarts UIUX.Web on the remote), **gsync** runs
-``docker compose`` under ``UIUX.Web`` only when the commits **just pulled** on the remote touch
-paths under ``UIUX.Web/`` (operator nginx/api/dashboard). Pure Python / docs / ``game_theory/``
-changes skip docker.
+Compared to ``scripts/sync.py`` (always rebuilds/restarts UIUX.Web on the remote), **gsync** runs:
+
+- **UIUX.Web** ``docker compose`` when pulled commits touch paths under ``UIUX.Web/`` (or when
+  ``--force-restart``).
+- **Pattern-game Flask UI** (``python3 -m renaissance_v4.game_theory.web_app`` on port **8765**)
+  when pulled commits touch ``renaissance_v4/game_theory/`` or other configured prefixes (or when
+  ``--force-restart``). Remote helper: ``scripts/pattern_game_remote_restart.sh``.
+
+If the remote repo was **already up to date** (no new commits pulled), gsync exits **unless**
+``--force-restart`` is set — then it still runs the selected restarts so operators do not have to guess.
 
 Process:
   1. If the working tree is dirty and ``--no-commit`` is not set: ``git add -u`` and commit
      (default message is timestamped; override with ``-m``). Untracked files are not staged;
      ``git add`` them first if needed.
   2. ``git push`` current branch to origin (unless already aligned or ``--skip-push``).
-  3. SSH to the lab host: ``git pull``. If nothing new was pulled, **done** (no compose).
-  4. If new commits changed any file under ``UIUX.Web/``, run the same compose steps as
-     ``sync.py`` (``build web``, ``up -d``, ``restart api``). Otherwise print skip message.
+  3. SSH to the lab host: ``git pull``.
+  4. If nothing changed and not ``--force-restart``, **done**.
+  5. Otherwise, for each monitored path group, if commits matched (or ``--force-restart``):
+     run UIUX.Web compose and/or ``pattern_game_remote_restart.sh``.
 
 Environment (optional):
   BLACKBOX_SYNC_SSH / GSYNC_SSH     SSH target (default: jmiller@clawbot.a51.corp)
   BLACKBOX_REMOTE_HOME              Remote repo dir under ~ (default: blackbox)
   BLACKBOX_REMOTE_BRANCH / GSYNC_BRANCH  Branch to pull (default: main)
-  GSYNC_RESTART_PREFIXES            Comma-separated path prefixes that trigger compose
-                                    (default: UIUX.Web/)
+  GSYNC_UIUX_PREFIXES               Comma-separated prefixes that trigger **UIUX.Web** compose.
+                                    Directory prefixes end with ``/`` (default: UIUX.Web/)
+  GSYNC_PATTERN_GAME_PREFIXES       Comma-separated prefixes/files for **pattern-game** web restart.
+                                    Use trailing ``/`` for directories; otherwise exact path
+                                    (default: renaissance_v4/game_theory/,scripts/agent_context_bundle.py)
 
 Usage (repo root):
   python3 scripts/gsync.py
@@ -47,7 +57,17 @@ from datetime import datetime, timezone
 DEFAULT_SSH = os.environ.get("GSYNC_SSH") or os.environ.get("BLACKBOX_SYNC_SSH", "jmiller@clawbot.a51.corp")
 DEFAULT_REMOTE_DIR = os.environ.get("BLACKBOX_REMOTE_HOME", "blackbox")
 DEFAULT_REMOTE_BRANCH = os.environ.get("GSYNC_BRANCH") or os.environ.get("BLACKBOX_REMOTE_BRANCH", "main")
-DEFAULT_PREFIXES = os.environ.get("GSYNC_RESTART_PREFIXES", "UIUX.Web/").strip() or "UIUX.Web/"
+# Back-compat: GSYNC_RESTART_PREFIXES used to mean UIUX.Web only.
+_DEFAULT_UI = os.environ.get("GSYNC_UIUX_PREFIXES") or os.environ.get("GSYNC_RESTART_PREFIXES", "UIUX.Web/")
+DEFAULT_UI_PREFIXES = (_DEFAULT_UI or "UIUX.Web/").strip() or "UIUX.Web/"
+DEFAULT_PATTERN_GAME_PREFIXES = (
+    os.environ.get(
+        "GSYNC_PATTERN_GAME_PREFIXES",
+        "renaissance_v4/game_theory/,scripts/agent_context_bundle.py",
+    )
+    .strip()
+    or "renaissance_v4/game_theory/"
+)
 
 
 def _find_git_root() -> str:
@@ -131,63 +151,95 @@ def _sync_push(repo: str, branch: str, *, dry_run: bool, skip_push: bool) -> Non
     print("Push OK.")
 
 
-def _bash_case_arms_for_prefixes(prefixes: list[str]) -> str:
-    """One `path/*) NEED=1 ;;` line per prefix for `case \"$f\" in`."""
+def _bash_case_arm_line(prefix: str, var: str) -> str:
+    """One ``case`` arm: directory ``foo/`` → ``foo/*)``, else exact file path."""
+    p = prefix.strip()
+    if not p:
+        return ""
+    if p.endswith("/"):
+        return f"      {p.rstrip('/')}/*) {var}=1 ;;"
+    return f"      {p}) {var}=1 ;;"
+
+
+def _bash_case_block(prefixes: list[str], var: str) -> str:
     lines: list[str] = []
     for raw in prefixes:
-        p = raw.strip().rstrip("/")
-        if not p:
-            continue
-        lines.append(f"      {p}/*) NEED=1 ;;")
-    if not lines:
-        lines.append("      *) ;;")
-    return "\n".join(lines)
+        line = _bash_case_arm_line(raw, var)
+        if line:
+            lines.append(line)
+    return "\n".join(lines) if lines else "      *) ;;"
 
 
 def _remote_script(
     remote_dir_name: str,
     pull_branch: str,
     *,
-    prefixes: list[str],
+    ui_prefixes: list[str],
+    pg_prefixes: list[str],
     force_restart: bool,
 ) -> str:
-    arms = _bash_case_arms_for_prefixes(prefixes)
+    ui_arms = _bash_case_block(ui_prefixes, "NEED_UI")
+    pg_arms = _bash_case_block(pg_prefixes, "NEED_PG")
+    force = int(force_restart)
     return f"""set -eu
 cd ~/{remote_dir_name}
 git fetch origin
 OLD=$(git rev-parse HEAD)
 git pull origin {pull_branch}
 NEW=$(git rev-parse HEAD)
+FORCE={force}
+
 if [ "$OLD" = "$NEW" ]; then
-  echo "gsync: remote already up to date (HEAD unchanged); skipping compose."
-  exit 0
-fi
-CHANGED=$(git diff --name-only "$OLD" "$NEW" || true)
-echo "gsync: pulled commits; changed files:"
-echo "$CHANGED" | sed 's/^/  /' || true
-NEED=0
-if [ "{int(force_restart)}" -eq 1 ]; then
-  NEED=1
-  echo "gsync: --force-restart: restarting UIUX.Web compose."
-else
-  while IFS= read -r f; do
-    [ -z "$f" ] && continue
-    case "$f" in
-{arms}
-    esac
-  done <<< "$CHANGED"
-  if [ "$NEED" -eq 1 ]; then
-    echo "gsync: monitored path prefix matched; rebuilding/restarting UIUX.Web compose."
+  if [ "$FORCE" -eq 1 ]; then
+    echo "gsync: remote already at HEAD; --force-restart: UIUX.Web compose + pattern-game web."
+    NEED_UI=1
+    NEED_PG=1
   else
-    echo "gsync: no monitored path prefix in changed files; skipping docker compose."
+    echo "gsync: remote already up to date (HEAD unchanged); nothing to restart."
     exit 0
   fi
+else
+  CHANGED=$(git diff --name-only "$OLD" "$NEW" || true)
+  echo "gsync: pulled commits; changed files:"
+  echo "$CHANGED" | sed 's/^/  /' || true
+  if [ "$FORCE" -eq 1 ]; then
+    echo "gsync: --force-restart: UIUX.Web compose + pattern-game web."
+    NEED_UI=1
+    NEED_PG=1
+  else
+    NEED_UI=0
+    NEED_PG=0
+    while IFS= read -r f; do
+      [ -z "$f" ] && continue
+      case "$f" in
+{ui_arms}
+      esac
+      case "$f" in
+{pg_arms}
+      esac
+    done <<< "$CHANGED"
+  fi
 fi
-cd UIUX.Web
-docker compose build web
-docker compose up -d
-docker compose restart api
-docker compose ps
+
+if [ "${{NEED_UI:-0}}" -eq 0 ] && [ "${{NEED_PG:-0}}" -eq 0 ]; then
+  echo "gsync: no monitored paths in changed files; skipping restarts."
+  exit 0
+fi
+
+if [ "${{NEED_UI:-0}}" -eq 1 ]; then
+  echo "gsync: restarting UIUX.Web (docker compose)…"
+  cd UIUX.Web
+  docker compose build web
+  docker compose up -d
+  docker compose restart api
+  docker compose ps
+  cd ..
+fi
+
+if [ "${{NEED_PG:-0}}" -eq 1 ]; then
+  echo "gsync: restarting pattern-game web (Flask on 8765)…"
+  bash scripts/pattern_game_remote_restart.sh "$HOME/{remote_dir_name}"
+fi
 """
 
 
@@ -196,17 +248,27 @@ def _remote_pull_maybe_compose(
     remote_dir_name: str,
     pull_branch: str,
     *,
-    prefixes: list[str],
+    ui_prefixes: list[str],
+    pg_prefixes: list[str],
     force_restart: bool,
     dry_run: bool,
 ) -> None:
-    body = _remote_script(remote_dir_name, pull_branch, prefixes=prefixes, force_restart=force_restart)
+    body = _remote_script(
+        remote_dir_name,
+        pull_branch,
+        ui_prefixes=ui_prefixes,
+        pg_prefixes=pg_prefixes,
+        force_restart=force_restart,
+    )
     if dry_run:
         print("[dry-run] ssh would run on remote:\n---")
         print(body)
         print("---")
         return
-    print(f"SSH {ssh_target}: git pull + conditional UIUX.Web compose …", flush=True)
+    print(
+        f"SSH {ssh_target}: git pull + conditional UIUX.Web / pattern-game restarts …",
+        flush=True,
+    )
     r = subprocess.run(
         [
             "ssh",
@@ -230,7 +292,7 @@ def _remote_pull_maybe_compose(
 
 def main() -> None:
     ap = argparse.ArgumentParser(
-        description="Commit (optional), push, remote pull, restart UIUX.Web compose only if needed.",
+        description="Commit (optional), push, remote pull, restart UIUX.Web and/or pattern-game web when paths match.",
     )
     ap.add_argument("-m", "--message", default=None, help="Commit message when auto-committing dirty tree")
     ap.add_argument("--no-commit", action="store_true", help="Do not commit; warn if dirty")
@@ -240,7 +302,7 @@ def main() -> None:
     ap.add_argument(
         "--force-restart",
         action="store_true",
-        help="After remote pull, always run UIUX.Web docker compose (ignore path filter)",
+        help="Always run UIUX.Web compose + pattern-game web restart (even if pull is a no-op)",
     )
     ap.add_argument("--ssh", default=DEFAULT_SSH, help="SSH user@host")
     ap.add_argument("--remote-dir", default=DEFAULT_REMOTE_DIR, help="Remote repo directory under ~")
@@ -253,11 +315,16 @@ def main() -> None:
         sys.stderr.write("gsync.py: detached HEAD; checkout a branch before syncing.\n")
         sys.exit(1)
 
-    prefixes = [p.strip() for p in DEFAULT_PREFIXES.split(",") if p.strip()]
-    if not prefixes:
-        prefixes = ["UIUX.Web/"]
+    ui_prefixes = [p.strip() for p in DEFAULT_UI_PREFIXES.split(",") if p.strip()]
+    if not ui_prefixes:
+        ui_prefixes = ["UIUX.Web/"]
+    pg_prefixes = [p.strip() for p in DEFAULT_PATTERN_GAME_PREFIXES.split(",") if p.strip()]
+    if not pg_prefixes:
+        pg_prefixes = ["renaissance_v4/game_theory/"]
 
     print(f"gsync: repo={repo} branch={branch}", flush=True)
+    print(f"gsync: UIUX prefixes: {ui_prefixes!r}", flush=True)
+    print(f"gsync: pattern-game prefixes: {pg_prefixes!r}", flush=True)
     if branch != args.remote_branch:
         print(
             f"Note: local branch is {branch!r}; remote pull uses {args.remote_branch!r}.",
@@ -275,7 +342,8 @@ def main() -> None:
         args.ssh,
         args.remote_dir,
         args.remote_branch,
-        prefixes=prefixes,
+        ui_prefixes=ui_prefixes,
+        pg_prefixes=pg_prefixes,
         force_restart=args.force_restart,
         dry_run=args.dry_run,
     )
