@@ -46,6 +46,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import threading
 import time
 import uuid
@@ -57,7 +58,7 @@ from flask import Flask, Response, abort, jsonify, request
 _GAME_THEORY = Path(__file__).resolve().parent
 
 # Operator-visible web UI bundle version — bump when changing PAGE_HTML (HTML/CSS/JS) so deploys are provable.
-PATTERN_GAME_WEB_UI_VERSION = "2.0.0"
+PATTERN_GAME_WEB_UI_VERSION = "2.1.0"
 
 from renaissance_v4.game_theory.groundhog_memory import (
     groundhog_auto_merge_enabled,
@@ -120,6 +121,14 @@ def _prune_jobs() -> None:
         stale = [k for k, v in _JOBS.items() if now - float(v.get("created", 0)) > _JOB_MAX_AGE_SEC]
         for k in stale:
             del _JOBS[k]
+
+
+def _slug_preset_display_name(name: str) -> str:
+    """Filesystem-safe slug from operator display name (user_*.json stem)."""
+    s = name.strip().lower()
+    s = re.sub(r"[^a-z0-9_-]+", "_", s)
+    s = re.sub(r"_+", "_", s).strip("_")
+    return (s[:72] if s else "preset") or "preset"
 
 
 def _web_ui_require_hypothesis() -> bool:
@@ -301,14 +310,16 @@ def create_app() -> Flask:
     @app.get("/api/scenario-presets")
     def scenario_presets() -> Any:
         ex = _GAME_THEORY / "examples"
-        rows: list[dict[str, str]] = []
+        rows: list[dict[str, Any]] = []
         for p in sorted(ex.glob("*.json")):
-            rows.append(
-                {
-                    "filename": p.name,
-                    "label": p.name.replace("_", " ").replace(".example.json", "").replace(".json", ""),
-                }
-            )
+            fn = p.name
+            if fn.startswith("user_") and fn.endswith(".json"):
+                label = "Uploaded: " + fn[5:-5].replace("_", " ")
+                kind = "user"
+            else:
+                label = fn.replace("_", " ").replace(".example.json", "").replace(".json", "")
+                kind = "builtin"
+            rows.append({"filename": fn, "label": label, "kind": kind})
         return jsonify(rows)
 
     @app.get("/api/scenario-preset")
@@ -321,6 +332,111 @@ def create_app() -> Flask:
             abort(404)
         p = _GAME_THEORY / "examples" / name
         return jsonify({"ok": True, "filename": name, "content": p.read_text(encoding="utf-8")})
+
+    @app.post("/api/scenario-preset-upload")
+    def scenario_preset_upload() -> Any:
+        """
+        Upload a scenario JSON file and save as **user_<slug>.json** under ``game_theory/examples/``.
+
+        **Standard format:** UTF-8 JSON — either a **JSON array** of scenario objects, or
+        ``{\"scenarios\": [ ... ]}``. Same contract as the textarea / ``POST /api/run-parallel``.
+
+        Multipart form: ``file`` (required), ``preset_name`` (required display name for the slug).
+        """
+        if "file" not in request.files:
+            return jsonify({"ok": False, "error": "missing form field: file"}), 400
+        preset_name = (request.form.get("preset_name") or "").strip()
+        if not preset_name:
+            return jsonify({"ok": False, "error": "missing form field: preset_name"}), 400
+        up = request.files["file"]
+        if not up or not up.filename:
+            return jsonify({"ok": False, "error": "empty file upload"}), 400
+        raw = up.read()
+        try:
+            text = raw.decode("utf-8")
+        except UnicodeDecodeError:
+            return jsonify({"ok": False, "error": "file must be UTF-8 encoded text"}), 400
+        try:
+            data = json.loads(text)
+        except json.JSONDecodeError as e:
+            return jsonify({"ok": False, "error": f"invalid JSON: {e}"}), 400
+        if isinstance(data, dict) and "scenarios" in data:
+            scenarios = data["scenarios"]
+        elif isinstance(data, list):
+            scenarios = data
+        else:
+            return jsonify(
+                {
+                    "ok": False,
+                    "error": 'JSON must be a list of scenarios or an object with "scenarios" array',
+                }
+            ), 400
+        if not isinstance(scenarios, list):
+            return jsonify({"ok": False, "error": "scenarios must be a JSON array"}), 400
+        scenarios = [x for x in scenarios if isinstance(x, dict)]
+        if not scenarios:
+            return jsonify({"ok": False, "error": "no scenario objects in list"}), 400
+        ok_val, val_msgs = validate_scenarios(
+            scenarios,
+            require_hypothesis=_web_ui_require_hypothesis(),
+        )
+        if not ok_val:
+            return jsonify(
+                {
+                    "ok": False,
+                    "error": val_msgs[0] if val_msgs else "scenario validation failed",
+                    "messages": val_msgs,
+                }
+            ), 400
+        slug = _slug_preset_display_name(preset_name)
+        filename = f"user_{slug}.json"
+        dest = _GAME_THEORY / "examples" / filename
+        try:
+            dest.parent.mkdir(parents=True, exist_ok=True)
+        except OSError as e:
+            return jsonify({"ok": False, "error": f"cannot create examples directory: {e}"}), 500
+        if dest.is_file():
+            return jsonify(
+                {
+                    "ok": False,
+                    "error": f"Preset file already exists: {filename}. Pick another name or rename/delete the existing preset.",
+                }
+            ), 409
+        try:
+            dest.write_text(
+                json.dumps(scenarios, indent=2, ensure_ascii=False) + "\n",
+                encoding="utf-8",
+            )
+        except OSError as e:
+            return jsonify({"ok": False, "error": f"cannot write preset: {e}"}), 500
+        return jsonify({"ok": True, "filename": filename, "saved_as": str(dest)})
+
+    @app.post("/api/scenario-preset-rename")
+    def scenario_preset_rename() -> Any:
+        """Rename **user_*.json** only. Body JSON: ``old_filename``, ``new_preset_name`` (display name)."""
+        data = request.get_json(force=True, silent=True) or {}
+        old_fn = (data.get("old_filename") or "").strip()
+        new_name = (data.get("new_preset_name") or "").strip()
+        if not old_fn or not new_name:
+            return jsonify({"ok": False, "error": "old_filename and new_preset_name are required"}), 400
+        if Path(old_fn).name != old_fn or not old_fn.startswith("user_") or not old_fn.endswith(".json"):
+            return jsonify({"ok": False, "error": "only user-uploaded presets (user_*.json) can be renamed"}), 400
+        ex = _GAME_THEORY / "examples"
+        old_path = ex / old_fn
+        if not old_path.is_file():
+            return jsonify({"ok": False, "error": "preset not found"}), 404
+        new_slug = _slug_preset_display_name(new_name)
+        new_fn = f"user_{new_slug}.json"
+        new_path = ex / new_fn
+        if new_path.resolve() == old_path.resolve():
+            return jsonify({"ok": True, "filename": old_fn, "message": "name unchanged"})
+        if new_path.is_file():
+            return jsonify({"ok": False, "error": f"target file already exists: {new_fn}"}), 409
+        try:
+            old_path.rename(new_path)
+        except OSError as e:
+            return jsonify({"ok": False, "error": str(e)}), 500
+        return jsonify({"ok": True, "filename": new_fn})
 
     @app.post("/api/run")
     def api_run() -> Any:
@@ -1420,6 +1536,84 @@ PAGE_HTML = """<!DOCTYPE html>
     #moduleBoardList .pg-status-item { cursor: pointer; }
     #moduleBoardList .pg-status-item:hover { filter: brightness(1.03); }
     #moduleBoardList .pg-status-item:focus { outline: 2px solid #2a8fd9; outline-offset: 2px; }
+    .pg-upload-row {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 10px;
+      margin-top: 10px;
+    }
+    .btn-upload {
+      padding: 10px 16px;
+      border-radius: 10px;
+      border: 1px solid var(--pg-line);
+      background: #fff;
+      color: #175cd3;
+      font-weight: 600;
+      font-size: 0.85rem;
+      cursor: pointer;
+    }
+    .btn-upload:hover { background: #f4f8ff; }
+    .btn-upload:disabled { opacity: 0.55; cursor: not-allowed; }
+    .pg-upload-hint { font-size: 0.72rem; color: var(--pg-muted); margin: 0; flex: 1 1 200px; }
+    .pg-spinner {
+      width: 22px;
+      height: 22px;
+      border: 3px solid #d5dce3;
+      border-top-color: #175cd3;
+      border-radius: 50%;
+      animation: pg-spin 0.7s linear infinite;
+      display: none;
+      vertical-align: middle;
+    }
+    .pg-spinner.visible { display: inline-block; }
+    @keyframes pg-spin { to { transform: rotate(360deg); } }
+    .pg-upload-dialog {
+      border: none;
+      border-radius: 16px;
+      padding: 0;
+      max-width: min(480px, 94vw);
+      background: #fffefb;
+      color: #24303d;
+      box-shadow: 0 16px 48px rgba(0, 0, 0, 0.35);
+    }
+    .pg-upload-dialog::backdrop { background: rgba(10, 22, 30, 0.55); }
+    .pg-upload-dialog-inner { padding: 20px 22px 18px; position: relative; }
+    .pg-upload-dialog h2 { margin: 0 0 12px; font-size: 1.05rem; color: #183343; }
+    .pg-upload-dialog label { display: block; font-size: 0.8rem; font-weight: 600; margin-bottom: 6px; color: #485360; }
+    .pg-upload-dialog input[type="text"] {
+      width: 100%;
+      box-sizing: border-box;
+      padding: 10px 12px;
+      border-radius: 10px;
+      border: 1px solid var(--pg-line);
+      font-size: 0.9rem;
+      margin-bottom: 8px;
+    }
+    .pg-upload-steps { font-size: 0.78rem; color: #5a6570; margin: 0 0 14px; line-height: 1.5; }
+    .pg-upload-result {
+      margin-top: 12px;
+      padding: 10px 12px;
+      border-radius: 10px;
+      font-size: 0.82rem;
+      line-height: 1.45;
+      display: none;
+    }
+    .pg-upload-result.visible { display: block; }
+    .pg-upload-result.ok { background: #e8f6ee; border: 1px solid #9dceb7; color: #1a5c38; }
+    .pg-upload-result.err { background: #fdecec; border: 1px solid #e0a0a0; color: #8a2222; }
+    .pg-upload-actions { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-top: 14px; }
+    .btn-rename-preset {
+      font-size: 0.78rem;
+      padding: 8px 12px;
+      border-radius: 8px;
+      border: 1px dashed var(--pg-line);
+      background: transparent;
+      color: #175cd3;
+      cursor: pointer;
+      font-weight: 600;
+    }
+    .btn-rename-preset:disabled { opacity: 0.45; cursor: not-allowed; }
     .policy-outcome-panel .hint { font-size: 0.78rem; color: var(--pg-muted); margin: 0 0 10px 0; line-height: 1.4; }
     .pg-evidence-panel .policy-outcome-panel {
       margin: 0;
@@ -1651,6 +1845,38 @@ PAGE_HTML = """<!DOCTYPE html>
       </div>
     </dialog>
 
+    <dialog id="uploadPresetDialog" class="pg-upload-dialog" aria-labelledby="uploadPresetDialogTitle">
+      <div class="pg-upload-dialog-inner">
+        <h2 id="uploadPresetDialogTitle">Upload scenario preset</h2>
+        <p class="pg-upload-steps">1. Pick a <strong>.json</strong> file · 2. Name your preset · 3. Validate &amp; save (pass/fail shown here)</p>
+        <p id="uploadChosenFileLabel" style="font-size:0.8rem;color:#5a6570;margin:0 0 10px"></p>
+        <label for="uploadPresetNameInput">Preset name</label>
+        <input type="text" id="uploadPresetNameInput" placeholder="e.g. SOL 12m grid" autocomplete="off" />
+        <div class="pg-upload-result" id="uploadPresetResult" role="status" aria-live="polite"></div>
+        <div class="pg-upload-actions">
+          <span class="pg-spinner" id="uploadDialogSpinner" aria-hidden="true"></span>
+          <button type="button" class="btn-chef" id="uploadPresetSubmitBtn">Validate &amp; save</button>
+          <button type="button" class="btn-secondary" id="uploadPresetDoneBtn" style="display:none">Back to controls</button>
+          <button type="button" class="btn-secondary" id="uploadPresetCancelBtn">Cancel</button>
+        </div>
+      </div>
+    </dialog>
+
+    <dialog id="renamePresetDialog" class="pg-upload-dialog" aria-labelledby="renamePresetDialogTitle">
+      <div class="pg-upload-dialog-inner">
+        <h2 id="renamePresetDialogTitle">Rename uploaded preset</h2>
+        <p style="font-size:0.78rem;color:#5a6570;margin:0 0 10px">Only <code>user_*.json</code> uploads can be renamed (new slug from the name below).</p>
+        <label for="renamePresetInput">New preset name</label>
+        <input type="text" id="renamePresetInput" autocomplete="off" />
+        <div class="pg-upload-result" id="renamePresetResult" role="status"></div>
+        <div class="pg-upload-actions">
+          <span class="pg-spinner" id="renameDialogSpinner"></span>
+          <button type="button" class="btn-chef" id="renamePresetSubmitBtn">Rename</button>
+          <button type="button" class="btn-secondary" id="renamePresetCancelBtn">Cancel</button>
+        </div>
+      </div>
+    </dialog>
+
     <section class="pg-row pg-row-main">
       <details class="pg-panel-fold pg-panel-controls" open>
         <summary>
@@ -1683,6 +1909,14 @@ PAGE_HTML = """<!DOCTYPE html>
             <div><label>&nbsp;</label><button type="button" class="btn-chef" style="width:100%;margin-top:0" id="chefAtrSweepBtn">ATR sweep</button></div>
           </div>
           <p class="caps" id="presetHelp">Preset fills the textarea.</p>
+          <input type="file" id="presetFileInput" accept=".json,application/json" style="display:none" aria-hidden="true" />
+          <div class="pg-upload-row">
+            <button type="button" class="btn-upload" id="presetUploadBtn">Upload preset…</button>
+            <button type="button" class="btn-rename-preset" id="presetRenameBtn" disabled title="Only for uploaded presets (user_*.json)">Rename preset…</button>
+            <p class="pg-upload-hint">
+              Standard format: UTF-8 JSON — <strong>array of scenario objects</strong> or <code>{"scenarios":[...]}</code> (same as Run batch). Saved under <code>renaissance_v4/game_theory/examples/user_&lt;slug&gt;.json</code>.
+            </p>
+          </div>
           <span class="caps" id="hunterSuggestHint"></span>
           <div class="tool-row" style="margin-top:8px">
             <div style="flex:1;min-width:200px">
@@ -2671,27 +2905,221 @@ PAGE_HTML = """<!DOCTYPE html>
       if (j.ok) scenariosEl.value = j.content;
     }
 
-    fetch('/api/scenario-presets')
-      .then(r => r.json())
-      .then((rows) => {
-        rows.forEach((row) => {
-          const o = document.createElement('option');
-          o.value = row.filename;
-          o.textContent = row.label || row.filename;
-          presetPick.appendChild(o);
-        });
+    function updateRenameButton() {
+      const btn = document.getElementById('presetRenameBtn');
+      const v = presetPick && presetPick.value;
+      if (btn) btn.disabled = !v || v.indexOf('user_') !== 0;
+    }
+
+    async function populatePresetDropdown(selectFilename) {
+      const r = await fetch('/api/scenario-presets');
+      const rows = await r.json();
+      presetPick.innerHTML = '<option value="">— Custom JSON —</option>';
+      rows.forEach((row) => {
+        const o = document.createElement('option');
+        o.value = row.filename;
+        o.textContent = row.label || row.filename;
+        presetPick.appendChild(o);
+      });
+      if (selectFilename) {
+        const has = Array.from(presetPick.options).some(function (opt) { return opt.value === selectFilename; });
+        if (has) presetPick.value = selectFilename;
+      }
+      updateRenameButton();
+      return rows;
+    }
+
+    let pendingUploadFile = null;
+
+    function resetUploadDialog() {
+      const res = document.getElementById('uploadPresetResult');
+      const sp = document.getElementById('uploadDialogSpinner');
+      const sub = document.getElementById('uploadPresetSubmitBtn');
+      const done = document.getElementById('uploadPresetDoneBtn');
+      const ni = document.getElementById('uploadPresetNameInput');
+      if (res) { res.className = 'pg-upload-result'; res.textContent = ''; res.classList.remove('visible', 'ok', 'err'); }
+      if (sp) sp.classList.remove('visible');
+      if (sub) sub.style.display = '';
+      if (done) done.style.display = 'none';
+      if (ni) ni.value = '';
+      pendingUploadFile = null;
+      var fiClear = document.getElementById('presetFileInput');
+      if (fiClear) fiClear.value = '';
+    }
+
+    const presetUploadBtn = document.getElementById('presetUploadBtn');
+    const presetFileInput = document.getElementById('presetFileInput');
+    const uploadDlg = document.getElementById('uploadPresetDialog');
+    const uploadPresetNameInput = document.getElementById('uploadPresetNameInput');
+    const uploadPresetResult = document.getElementById('uploadPresetResult');
+    const uploadDialogSpinner = document.getElementById('uploadDialogSpinner');
+    const uploadPresetSubmitBtn = document.getElementById('uploadPresetSubmitBtn');
+    const uploadPresetCancelBtn = document.getElementById('uploadPresetCancelBtn');
+    const uploadPresetDoneBtn = document.getElementById('uploadPresetDoneBtn');
+    const uploadChosenFileLabel = document.getElementById('uploadChosenFileLabel');
+
+    if (presetUploadBtn && presetFileInput) {
+      presetUploadBtn.addEventListener('click', function () { presetFileInput.click(); });
+      presetFileInput.addEventListener('change', function () {
+        const f = presetFileInput.files && presetFileInput.files[0];
+        pendingUploadFile = f || null;
+        if (!f) return;
+        if (uploadChosenFileLabel) {
+          uploadChosenFileLabel.textContent = 'Selected file: ' + f.name + ' (' + (f.size / 1024).toFixed(1) + ' KB)';
+        }
+        resetUploadDialog();
+        if (uploadPresetNameInput) uploadPresetNameInput.value = f.name.replace(/\.json$/i, '').replace(/[_-]+/g, ' ');
+        if (uploadPresetResult) { uploadPresetResult.classList.remove('visible', 'ok', 'err'); uploadPresetResult.textContent = ''; }
+        if (uploadDlg && uploadDlg.showModal) uploadDlg.showModal();
+        if (uploadPresetNameInput) uploadPresetNameInput.focus();
+      });
+    }
+
+    if (uploadPresetCancelBtn && uploadDlg) {
+      uploadPresetCancelBtn.addEventListener('click', function () {
+        if (uploadDlg.close) uploadDlg.close();
+        resetUploadDialog();
+      });
+    }
+
+    if (uploadPresetSubmitBtn) {
+      uploadPresetSubmitBtn.addEventListener('click', async function () {
+        if (!pendingUploadFile) {
+          if (uploadPresetResult) {
+            uploadPresetResult.className = 'pg-upload-result visible err';
+            uploadPresetResult.textContent = 'FAIL — choose a .json file first (use Upload preset…).';
+          }
+          return;
+        }
+        const name = (uploadPresetNameInput && uploadPresetNameInput.value) ? uploadPresetNameInput.value.trim() : '';
+        if (!name) {
+          if (uploadPresetResult) {
+            uploadPresetResult.className = 'pg-upload-result visible err';
+            uploadPresetResult.textContent = 'FAIL — enter a preset name.';
+          }
+          return;
+        }
+        if (uploadDialogSpinner) uploadDialogSpinner.classList.add('visible');
+        if (uploadPresetResult) {
+          uploadPresetResult.className = 'pg-upload-result visible';
+          uploadPresetResult.style.background = '#f4f1ea';
+          uploadPresetResult.style.border = '1px solid var(--pg-line)';
+          uploadPresetResult.textContent = 'Validating…';
+        }
+        const fd = new FormData();
+        fd.append('file', pendingUploadFile, pendingUploadFile.name);
+        fd.append('preset_name', name);
+        try {
+          const r = await fetch('/api/scenario-preset-upload', { method: 'POST', body: fd });
+          const j = await r.json();
+          if (uploadDialogSpinner) uploadDialogSpinner.classList.remove('visible');
+          if (j.ok) {
+            if (uploadPresetResult) {
+              uploadPresetResult.className = 'pg-upload-result visible ok';
+              uploadPresetResult.textContent = 'PASS — Saved as ' + j.filename + '. It appears in the Preset menu; textarea updated.';
+            }
+            if (uploadPresetSubmitBtn) uploadPresetSubmitBtn.style.display = 'none';
+            if (uploadPresetDoneBtn) uploadPresetDoneBtn.style.display = '';
+            await populatePresetDropdown(j.filename);
+            await loadPreset(j.filename);
+            if (typeof refreshSearchSpaceEstimate === 'function') refreshSearchSpaceEstimate();
+            refreshWorkerEffectiveLine();
+          } else {
+            if (uploadPresetResult) {
+              uploadPresetResult.className = 'pg-upload-result visible err';
+              uploadPresetResult.textContent = 'FAIL — ' + (j.error || r.status);
+            }
+          }
+        } catch (e) {
+          if (uploadDialogSpinner) uploadDialogSpinner.classList.remove('visible');
+          if (uploadPresetResult) {
+            uploadPresetResult.className = 'pg-upload-result visible err';
+            uploadPresetResult.textContent = 'FAIL — ' + friendlyFetchError(e);
+          }
+        }
+      });
+    }
+
+    if (uploadPresetDoneBtn && uploadDlg) {
+      uploadPresetDoneBtn.addEventListener('click', function () {
+        if (uploadDlg.close) uploadDlg.close();
+        resetUploadDialog();
+      });
+    }
+
+    const renameDlg = document.getElementById('renamePresetDialog');
+    const renamePresetBtn = document.getElementById('presetRenameBtn');
+    const renamePresetInput = document.getElementById('renamePresetInput');
+    const renamePresetResult = document.getElementById('renamePresetResult');
+    const renameDialogSpinner = document.getElementById('renameDialogSpinner');
+    const renamePresetSubmitBtn = document.getElementById('renamePresetSubmitBtn');
+    const renamePresetCancelBtn = document.getElementById('renamePresetCancelBtn');
+
+    if (renamePresetBtn && renameDlg && renameDlg.showModal) {
+      renamePresetBtn.addEventListener('click', function () {
+        const v = presetPick && presetPick.value;
+        if (!v || v.indexOf('user_') !== 0) return;
+        if (renamePresetResult) { renamePresetResult.className = 'pg-upload-result'; renamePresetResult.textContent = ''; }
+        if (renamePresetInput) renamePresetInput.value = v.replace(/^user_/, '').replace(/\.json$/, '').replace(/_/g, ' ');
+        renameDlg.showModal();
+        if (renamePresetInput) renamePresetInput.focus();
+      });
+    }
+    if (renamePresetCancelBtn && renameDlg) {
+      renamePresetCancelBtn.addEventListener('click', function () { if (renameDlg.close) renameDlg.close(); });
+    }
+    if (renamePresetSubmitBtn) {
+      renamePresetSubmitBtn.addEventListener('click', async function () {
+        const oldFn = presetPick && presetPick.value;
+        const newName = (renamePresetInput && renamePresetInput.value) ? renamePresetInput.value.trim() : '';
+        if (!oldFn || !newName) return;
+        if (renameDialogSpinner) renameDialogSpinner.classList.add('visible');
+        try {
+          const r = await fetch('/api/scenario-preset-rename', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ old_filename: oldFn, new_preset_name: newName }),
+          });
+          const j = await r.json();
+          if (renameDialogSpinner) renameDialogSpinner.classList.remove('visible');
+          if (j.ok) {
+            if (renamePresetResult) {
+              renamePresetResult.className = 'pg-upload-result visible ok';
+              renamePresetResult.textContent = 'PASS — Renamed to ' + j.filename;
+            }
+            await populatePresetDropdown(j.filename);
+            await loadPreset(j.filename);
+            if (typeof refreshSearchSpaceEstimate === 'function') refreshSearchSpaceEstimate();
+            refreshWorkerEffectiveLine();
+            setTimeout(function () { if (renameDlg.close) renameDlg.close(); }, 900);
+          } else {
+            if (renamePresetResult) {
+              renamePresetResult.className = 'pg-upload-result visible err';
+              renamePresetResult.textContent = 'FAIL — ' + (j.error || 'rename failed');
+            }
+          }
+        } catch (e) {
+          if (renameDialogSpinner) renameDialogSpinner.classList.remove('visible');
+          if (renamePresetResult) {
+            renamePresetResult.className = 'pg-upload-result visible err';
+            renamePresetResult.textContent = 'FAIL — ' + friendlyFetchError(e);
+          }
+        }
+      });
+    }
+
+    (async function initPresets() {
+      try {
+        const rows = await populatePresetDropdown(null);
         const tier1 = rows.find((x) => x.filename === 'tier1_twelve_month.example.json');
         if (tier1) {
           presetPick.value = tier1.filename;
-          return loadPreset(tier1.filename);
+          await loadPreset(tier1.filename);
         }
-        return Promise.resolve();
-      })
-      .then(() => {
-        if (typeof refreshSearchSpaceEstimate === 'function') return refreshSearchSpaceEstimate();
-      })
-      .then(() => { refreshWorkerEffectiveLine(); })
-      .catch(() => {});
+        if (typeof refreshSearchSpaceEstimate === 'function') await refreshSearchSpaceEstimate();
+        refreshWorkerEffectiveLine();
+      } catch (e) {}
+    })();
 
     scenariosEl.addEventListener('input', () => {
       if (typeof refreshSearchSpaceEstimate === 'function') refreshSearchSpaceEstimate();
@@ -2699,6 +3127,7 @@ PAGE_HTML = """<!DOCTYPE html>
     });
 
     presetPick.onchange = () => {
+      updateRenameButton();
       const name = presetPick.value;
       if (!name) {
         if (typeof refreshSearchSpaceEstimate === 'function') refreshSearchSpaceEstimate();
