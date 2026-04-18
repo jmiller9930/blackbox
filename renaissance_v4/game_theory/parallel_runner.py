@@ -11,6 +11,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+from collections.abc import Callable
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from pathlib import Path
 from typing import Any
@@ -104,6 +105,7 @@ def run_scenarios_parallel(
     *,
     max_workers: int | None = None,
     experience_log_path: Path | str | None = None,
+    progress_callback: Callable[[int, int, dict[str, Any]], None] | None = None,
 ) -> list[dict[str, Any]]:
     """
     Run each scenario in a process pool. Order of results is **completion** order unless you sort by scenario_id.
@@ -114,6 +116,9 @@ def run_scenarios_parallel(
     the Referee does not use them for scoring. See ``scenario_contract.py`` / README.
 
     If ``experience_log_path`` is set, append one JSON line per result (parent process only).
+
+    If ``progress_callback`` is set, it is invoked after each scenario completes as
+    ``(completed_count, total_count, result_row)`` for live progress UIs.
     """
     if not scenarios:
         return []
@@ -121,12 +126,18 @@ def run_scenarios_parallel(
     normalized = [_normalize_scenario(s) for s in scenarios]
 
     workers = clamp_parallel_workers(max_workers, len(normalized))
+    total = len(normalized)
 
     results: list[dict[str, Any]] = []
     with ProcessPoolExecutor(max_workers=workers) as ex:
         futures = {ex.submit(_worker_run_one, s): s for s in normalized}
+        completed = 0
         for fut in as_completed(futures):
-            results.append(fut.result())
+            row = fut.result()
+            results.append(row)
+            completed += 1
+            if progress_callback is not None:
+                progress_callback(completed, total, row)
 
     if experience_log_path is not None:
         p = Path(experience_log_path)

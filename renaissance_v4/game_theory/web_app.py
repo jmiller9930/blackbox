@@ -1,6 +1,10 @@
 """
 Local web UI for pattern game: **preset or paste** scenario JSON, then Run (parallel workers).
 
+Batches use **``POST /api/run-parallel/start``** + polling **``GET /api/run-parallel/status/<job_id>``**
+so the UI shows **per-scenario progress** (determinate bar) instead of a single long blocking request.
+``POST /api/run-parallel`` remains as a blocking API for scripts.
+
 No manifest/ATR fields in the UI — policy lives in the JSON (or examples presets). Default 16 workers
 (capped to host). ``POST /api/run`` remains for scripted single-manifest runs.
 
@@ -13,6 +17,9 @@ Default bind is loopback; use ``--host 0.0.0.0`` for LAN/SSH access (prototype).
 from __future__ import annotations
 
 import json
+import threading
+import time
+import uuid
 from pathlib import Path
 from typing import Any
 
@@ -33,6 +40,72 @@ from renaissance_v4.game_theory.pattern_game import (
 from renaissance_v4.game_theory.scenario_contract import validate_scenarios
 
 _GAME_THEORY = Path(__file__).resolve().parent
+
+_JOBS_LOCK = threading.Lock()
+_JOBS: dict[str, dict[str, Any]] = {}
+_JOB_MAX_AGE_SEC = 7200
+
+
+def _prune_jobs() -> None:
+    now = time.time()
+    with _JOBS_LOCK:
+        stale = [k for k, v in _JOBS.items() if now - float(v.get("created", 0)) > _JOB_MAX_AGE_SEC]
+        for k in stale:
+            del _JOBS[k]
+
+
+def _prepare_parallel_payload(data: dict[str, Any]) -> dict[str, Any]:
+    """Validate POST body for parallel run. Returns ``ok`` + fields or ``ok: False`` + ``error``."""
+    raw = data.get("scenarios_json")
+    if not raw or not isinstance(raw, str):
+        return {"ok": False, "error": "Missing scenarios_json string"}
+    try:
+        scenarios = json.loads(raw)
+        if isinstance(scenarios, dict) and "scenarios" in scenarios:
+            scenarios = scenarios["scenarios"]
+        if not isinstance(scenarios, list):
+            raise ValueError("scenarios must be a JSON array")
+        scenarios = [x for x in scenarios if isinstance(x, dict)]
+    except (json.JSONDecodeError, ValueError) as e:
+        return {"ok": False, "error": str(e)}
+
+    for s in scenarios:
+        if "manifest_path" in s and s["manifest_path"]:
+            s["manifest_path"] = str(Path(s["manifest_path"]).expanduser().resolve())
+
+    if not scenarios:
+        return {"ok": False, "error": "No scenario objects in JSON array"}
+
+    ok_val, val_msgs = validate_scenarios(scenarios)
+    if not ok_val:
+        return {
+            "ok": False,
+            "error": val_msgs[0] if val_msgs else "Invalid scenarios",
+            "scenario_validation": {"ok": False, "messages": val_msgs},
+        }
+
+    max_workers = data.get("max_workers")
+    if max_workers is not None:
+        try:
+            max_workers = int(max_workers)
+        except (TypeError, ValueError):
+            max_workers = None
+
+    log_path = data.get("log_path")
+    if log_path is True or log_path == "1":
+        log_path = _GAME_THEORY / "experience_log.jsonl"
+    elif log_path:
+        log_path = Path(str(log_path))
+    else:
+        log_path = None
+
+    return {
+        "ok": True,
+        "scenarios": scenarios,
+        "max_workers": max_workers,
+        "log_path": log_path,
+        "val_msgs": val_msgs,
+    }
 
 
 def _batch_pnl_summary(results: list[dict[str, Any]]) -> dict[str, Any]:
@@ -130,56 +203,128 @@ def create_app() -> Flask:
         except Exception as e:
             return jsonify({"ok": False, "error": f"{type(e).__name__}: {e}"}), 400
 
+    @app.post("/api/run-parallel/start")
+    def api_parallel_start() -> Any:
+        """Start batch in a background thread; poll with ``GET /api/run-parallel/status/<job_id>``."""
+        data = request.get_json(force=True, silent=True) or {}
+        prep = _prepare_parallel_payload(data)
+        if not prep["ok"]:
+            err_body = {k: v for k, v in prep.items() if k != "ok"}
+            return jsonify(err_body), 400
+        scenarios = prep["scenarios"]
+        max_workers = prep["max_workers"]
+        log_path = prep["log_path"]
+        val_msgs = prep["val_msgs"]
+
+        _prune_jobs()
+        job_id = uuid.uuid4().hex
+        workers_used = clamp_parallel_workers(max_workers, len(scenarios))
+        with _JOBS_LOCK:
+            _JOBS[job_id] = {
+                "status": "running",
+                "created": time.time(),
+                "total": len(scenarios),
+                "completed": 0,
+                "workers_used": workers_used,
+                "last_scenario_id": None,
+                "last_ok": None,
+                "last_message": None,
+                "error": None,
+                "result": None,
+            }
+
+        def run_job() -> None:
+            def cb(completed: int, total: int, row: dict[str, Any]) -> None:
+                sid = row.get("scenario_id", "?")
+                ok = bool(row.get("ok"))
+                msg = f"{sid}: {'ok' if ok else 'failed'}"
+                if not ok and row.get("error"):
+                    msg += f" ({row.get('error')})"
+                with _JOBS_LOCK:
+                    j = _JOBS.get(job_id)
+                    if j:
+                        j["completed"] = completed
+                        j["last_scenario_id"] = sid
+                        j["last_ok"] = ok
+                        j["last_message"] = msg
+
+            try:
+                results = run_scenarios_parallel(
+                    scenarios,
+                    max_workers=max_workers,
+                    experience_log_path=log_path,
+                    progress_callback=cb,
+                )
+                ok_n = sum(1 for r in results if r.get("ok"))
+                payload = {
+                    "ok": True,
+                    "ran": len(results),
+                    "ok_count": ok_n,
+                    "failed_count": len(results) - ok_n,
+                    "results": results,
+                    "pnl_summary": _batch_pnl_summary(results),
+                    "limits_applied": get_parallel_limits(),
+                    "workers_used": workers_used,
+                    "scenario_validation": {"ok": True, "messages": val_msgs},
+                }
+                with _JOBS_LOCK:
+                    j = _JOBS.get(job_id)
+                    if j:
+                        j["status"] = "done"
+                        j["completed"] = len(results)
+                        j["result"] = payload
+            except Exception as e:
+                with _JOBS_LOCK:
+                    j = _JOBS.get(job_id)
+                    if j:
+                        j["status"] = "error"
+                        j["error"] = f"{type(e).__name__}: {e}"
+
+        threading.Thread(target=run_job, daemon=True).start()
+        return jsonify(
+            {
+                "ok": True,
+                "job_id": job_id,
+                "total": len(scenarios),
+                "workers_used": workers_used,
+            }
+        )
+
+    @app.get("/api/run-parallel/status/<job_id>")
+    def api_parallel_status(job_id: str) -> Any:
+        _prune_jobs()
+        with _JOBS_LOCK:
+            j = _JOBS.get(job_id)
+        if not j:
+            return jsonify({"ok": False, "error": "Unknown or expired job_id"}), 404
+        out: dict[str, Any] = {
+            "ok": True,
+            "status": j["status"],
+            "total": j["total"],
+            "completed": j["completed"],
+            "workers_used": j.get("workers_used"),
+            "last_scenario_id": j.get("last_scenario_id"),
+            "last_ok": j.get("last_ok"),
+            "last_message": j.get("last_message"),
+        }
+        if j.get("error"):
+            out["error"] = j["error"]
+        if j["status"] == "done" and j.get("result"):
+            out["result"] = j["result"]
+        return jsonify(out)
+
     @app.post("/api/run-parallel")
     def api_parallel() -> Any:
+        """Blocking batch run (same work as ``/start`` + poll until done). Prefer ``/start`` for the UI."""
         data = request.get_json(force=True, silent=True) or {}
-        raw = data.get("scenarios_json")
-        if not raw or not isinstance(raw, str):
-            return jsonify({"ok": False, "error": "Missing scenarios_json string"}), 400
-        try:
-            scenarios = json.loads(raw)
-            if isinstance(scenarios, dict) and "scenarios" in scenarios:
-                scenarios = scenarios["scenarios"]
-            if not isinstance(scenarios, list):
-                raise ValueError("scenarios must be a JSON array")
-            scenarios = [x for x in scenarios if isinstance(x, dict)]
-        except (json.JSONDecodeError, ValueError) as e:
-            return jsonify({"ok": False, "error": str(e)}), 400
-
-        for s in scenarios:
-            if "manifest_path" in s and s["manifest_path"]:
-                s["manifest_path"] = str(Path(s["manifest_path"]).expanduser().resolve())
-
-        if not scenarios:
-            return jsonify({"ok": False, "error": "No scenario objects in JSON array"}), 400
-
-        ok_val, val_msgs = validate_scenarios(scenarios)
-        if not ok_val:
-            return (
-                jsonify(
-                    {
-                        "ok": False,
-                        "error": val_msgs[0] if val_msgs else "Invalid scenarios",
-                        "scenario_validation": {"ok": False, "messages": val_msgs},
-                    }
-                ),
-                400,
-            )
-
-        max_workers = data.get("max_workers")
-        if max_workers is not None:
-            try:
-                max_workers = int(max_workers)
-            except (TypeError, ValueError):
-                max_workers = None
-
-        log_path = data.get("log_path")
-        if log_path is True or log_path == "1":
-            log_path = _GAME_THEORY / "experience_log.jsonl"
-        elif log_path:
-            log_path = Path(str(log_path))
-        else:
-            log_path = None
+        prep = _prepare_parallel_payload(data)
+        if not prep["ok"]:
+            err_body = {k: v for k, v in prep.items() if k != "ok"}
+            return jsonify(err_body), 400
+        scenarios = prep["scenarios"]
+        max_workers = prep["max_workers"]
+        log_path = prep["log_path"]
+        val_msgs = prep["val_msgs"]
 
         try:
             results = run_scenarios_parallel(
@@ -290,16 +435,14 @@ PAGE_HTML = """<!DOCTYPE html>
     .progress-wrap { display: none; margin: 12px 0 8px; }
     .progress-wrap.active { display: block; }
     .progress-track {
-      height: 8px; border-radius: 4px; background: #38444d; overflow: hidden;
+      height: 10px; border-radius: 5px; background: #38444d; overflow: hidden;
     }
-    .progress-indet {
-      height: 100%; width: 35%; border-radius: 4px; background: #1d9bf0;
-      animation: indet 1.1s ease-in-out infinite;
+    .progress-fill {
+      height: 100%; width: 0%; border-radius: 5px;
+      background: linear-gradient(90deg, #175cd3, #1d9bf0);
+      transition: width 0.35s ease;
     }
-    @keyframes indet {
-      0% { transform: translateX(-100%); }
-      100% { transform: translateX(400%); }
-    }
+    #progressSub { margin-top: 6px; font-size: 0.8rem; color: #8b98a5; }
     #statusLine { min-height: 1.3em; color: #e7e9ea; font-size: 0.9rem; margin-top: 8px; }
   </style>
 </head>
@@ -351,8 +494,11 @@ PAGE_HTML = """<!DOCTYPE html>
 
   <button type="button" id="runBtn">Run</button>
   <div id="statusLine" aria-live="polite"></div>
-  <div id="progressWrap" class="progress-wrap" role="progressbar" aria-label="Run in progress">
-    <div class="progress-track"><div class="progress-indet"></div></div>
+  <div id="progressWrap" class="progress-wrap" role="progressbar" aria-label="Batch replay progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+    <div class="progress-track" id="progressTrack">
+      <div class="progress-fill" id="progressFill" style="width:0%"></div>
+    </div>
+    <p class="caps" id="progressSub"></p>
   </div>
 
   <h2>Result</h2>
@@ -447,13 +593,24 @@ PAGE_HTML = """<!DOCTYPE html>
       return String(e);
     }
 
+    function setProgressUI(completed, total, subtext) {
+      const fill = document.getElementById('progressFill');
+      const sub = document.getElementById('progressSub');
+      const pct = total > 0 ? Math.min(100, Math.round((completed / total) * 100)) : 0;
+      fill.style.width = pct + '%';
+      progressWrap.setAttribute('aria-valuenow', String(pct));
+      if (subtext) sub.textContent = subtext;
+      else sub.textContent = total > 0 ? ('Scenarios ' + completed + ' / ' + total + ' complete (replay is CPU-bound; each bar can take minutes).') : '';
+    }
+
     document.getElementById('runBtn').onclick = async () => {
       const btn = document.getElementById('runBtn');
       btn.disabled = true;
-      statusLine.textContent = 'Running — replay in progress (often several minutes). This bar moves while the request is active.';
+      statusLine.textContent = 'Starting batch…';
+      document.getElementById('progressSub').textContent = '';
+      setProgressUI(0, 0, '');
       progressWrap.classList.add('active');
-      const ac = new AbortController();
-      const tid = setTimeout(() => ac.abort(), RUN_TIMEOUT_MS);
+      const t0 = Date.now();
       try {
         let mw = parseInt(rangeEl.value, 10);
         if (isNaN(mw)) mw = null;
@@ -467,25 +624,69 @@ PAGE_HTML = """<!DOCTYPE html>
           max_workers: mw,
           log_path: document.getElementById('doLog').checked
         };
-        const r = await fetch('/api/run-parallel', {
+        const startR = await fetch('/api/run-parallel/start', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(body),
-          signal: ac.signal
         });
-        const j = await r.json();
-        if (!r.ok) { await show(null, null, j.error || JSON.stringify(j)); statusLine.textContent = 'Finished with error — see Result.'; return; }
-        if (j.pnl_summary) { updatePnlStrip(j.pnl_summary); }
-        await show(null, j, null);
-        statusLine.textContent = 'Finished — see Result below.';
+        const startJ = await startR.json();
+        if (!startR.ok) {
+          await show(null, null, startJ.error || JSON.stringify(startJ));
+          statusLine.textContent = 'Validation failed — see Result.';
+          return;
+        }
+        const jobId = startJ.job_id;
+        const total = startJ.total || 1;
+        statusLine.textContent = 'Running — ' + total + ' scenario(s) · workers ' + (startJ.workers_used || '?') + ' · live progress below.';
+        setProgressUI(0, total, 'Queued — waiting for first replay to finish…');
+
+        const pollOnce = async () => {
+          const pr = await fetch('/api/run-parallel/status/' + jobId);
+          const pj = await pr.json();
+          if (!pr.ok) {
+            throw new Error(pj.error || 'status failed');
+          }
+          const elapsed = Math.floor((Date.now() - t0) / 1000);
+          const elapsedStr = elapsed >= 60 ? (Math.floor(elapsed / 60) + 'm ' + (elapsed % 60) + 's') : (elapsed + 's');
+          if (pj.status === 'running') {
+            const c = pj.completed || 0;
+            const t = pj.total || total;
+            const lm = pj.last_message || '';
+            setProgressUI(c, t, lm + ' · elapsed ' + elapsedStr);
+            statusLine.textContent = 'Running — ' + c + '/' + t + ' done · ' + elapsedStr + ' elapsed';
+            return false;
+          }
+          if (pj.status === 'error') {
+            await show(null, null, pj.error || 'Job failed');
+            statusLine.textContent = 'Failed — see Result.';
+            setProgressUI(pj.completed || 0, pj.total || total, pj.error || '');
+            return true;
+          }
+          if (pj.status === 'done' && pj.result) {
+            const j = pj.result;
+            setProgressUI(j.ran || total, j.ran || total, 'All scenarios finished · ' + elapsedStr);
+            if (j.pnl_summary) { updatePnlStrip(j.pnl_summary); }
+            await show(null, j, null);
+            statusLine.textContent = 'Finished — see Result below.';
+            return true;
+          }
+          return true;
+        };
+
+        const deadline = Date.now() + RUN_TIMEOUT_MS;
+        while (Date.now() < deadline) {
+          const done = await pollOnce();
+          if (done) break;
+          await new Promise((r) => setTimeout(r, 1500));
+        }
+        if (Date.now() >= deadline) {
+          await show(null, null, 'Timed out after ' + (RUN_TIMEOUT_MS / 60000) + ' minutes — job may still be running on the server; open /api/run-parallel/status/<job_id> or check logs.');
+          statusLine.textContent = 'Client timeout — check server or logs.';
+        }
       } catch (e) {
-        const msg = (e && e.name === 'AbortError')
-          ? ('Timed out after ' + (RUN_TIMEOUT_MS / 60000) + ' minutes — run may still be going on the server; refresh or check logs.')
-          : friendlyFetchError(e);
-        await show(null, null, msg);
+        await show(null, null, friendlyFetchError(e));
         statusLine.textContent = 'Stopped or failed — see Result.';
       } finally {
-        clearTimeout(tid);
         progressWrap.classList.remove('active');
         btn.disabled = false;
       }

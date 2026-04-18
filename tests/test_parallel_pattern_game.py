@@ -33,6 +33,25 @@ def test_run_scenarios_parallel_empty() -> None:
     assert run_scenarios_parallel([], max_workers=4) == []
 
 
+def test_run_scenarios_parallel_progress_callback() -> None:
+    m = _manifest()
+    if not m.is_file():
+        pytest.skip("baseline manifest missing")
+    seen: list[tuple[int, int, str]] = []
+
+    def cb(completed: int, total: int, row: dict) -> None:
+        seen.append((completed, total, str(row.get("scenario_id", ""))))
+
+    scenarios = [
+        {"scenario_id": "cb_a", "manifest_path": str(m)},
+        {"scenario_id": "cb_b", "manifest_path": str(m)},
+    ]
+    run_scenarios_parallel(scenarios, max_workers=2, experience_log_path=None, progress_callback=cb)
+    assert len(seen) == 2
+    assert {x[0] for x in seen} == {1, 2}
+    assert seen[0][1] == 2 and seen[1][1] == 2
+
+
 def test_run_scenarios_parallel_echoes_agent_fields() -> None:
     m = _manifest()
     if not m.is_file():

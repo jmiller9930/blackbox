@@ -112,3 +112,5 @@ One screen: **preset** (loads `examples/*.json` into the editor) **or** **paste*
 **Data status strip** at the top: green when SQLite is OK, `market_bars_5m` is present, replay has enough rows, and **SOLUSDT** has a long enough calendar span (~12 months). Otherwise red — see the summary line. Same check: `GET /api/data-health` (`data_health.py`).
 
 **Paper P&amp;L strip:** shows spec **$1,000** baseline, ending equity and green/red delta after each **Run**; horizontal bar is a 0–$2k visual (clamped). Parallel responses include `pnl_summary` (sum of each scenario’s `cumulative_pnl` — independent replays, not one portfolio).
+
+**Run progress:** the UI uses **`POST /api/run-parallel/start`** and polls **`GET /api/run-parallel/status/<job_id>`** so you get a **determinate** bar (scenarios completed / total) and the last finished scenario id — not a single opaque long request. Blocking **`POST /api/run-parallel`** remains for scripts.
