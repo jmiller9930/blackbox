@@ -687,15 +687,62 @@ PAGE_HTML = """<!DOCTYPE html>
   <title>Pattern game (local)</title>
   <style>
     :root { font-family: system-ui, sans-serif; background: #0f1419; color: #e7e9ea; }
-    body { max-width: 1024px; margin: 24px auto; padding: 0 16px; }
+    body {
+      max-width: min(1680px, calc(100vw - 32px));
+      margin: 16px auto;
+      padding: 0 16px;
+      box-sizing: border-box;
+    }
+    .top-bars {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+      gap: 12px;
+      margin-bottom: 16px;
+      align-items: stretch;
+    }
+    .top-bars > * { min-width: 0; }
+    .main-layout {
+      display: grid;
+      grid-template-columns: minmax(0, 1.2fr) minmax(280px, 0.8fr);
+      gap: 20px;
+      align-items: start;
+    }
+    @media (max-width: 1024px) {
+      .main-layout { grid-template-columns: 1fr; }
+    }
+    .col-controls { min-width: 0; }
+    .col-sidebar { min-width: 0; position: sticky; top: 8px; }
+    @media (max-width: 1024px) {
+      .col-sidebar { position: static; }
+    }
+    .results-split {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+      gap: 16px;
+      margin-top: 16px;
+      align-items: start;
+    }
+    @media (max-width: 900px) {
+      .results-split { grid-template-columns: 1fr; }
+    }
+    .results-split:has(#policyOutcomePanel[hidden]) {
+      grid-template-columns: 1fr;
+    }
+    .results-split .result-json-wrap { min-width: 0; }
     h1 { font-size: 1.25rem; font-weight: 600; }
-    h2 { font-size: 1rem; margin-top: 28px; color: #8b98a5; }
+    h2 { font-size: 1rem; margin-top: 0; color: #8b98a5; }
     label { display: block; margin: 10px 0 4px; font-size: 0.85rem; color: #8b98a5; }
     input[type=text], input[type=number], textarea, select {
       width: 100%; box-sizing: border-box; padding: 8px 10px;
       border: 1px solid #38444d; border-radius: 6px; background: #15202b; color: #e7e9ea;
     }
-    textarea { min-height: 140px; font-family: ui-monospace, monospace; font-size: 0.8rem; }
+    textarea {
+      min-height: 160px;
+      max-height: min(48vh, 480px);
+      font-family: ui-monospace, monospace;
+      font-size: 0.8rem;
+      resize: vertical;
+    }
     button {
       margin-top: 12px; padding: 10px 18px; border: 0; border-radius: 8px;
       background: #1d9bf0; color: #fff; font-weight: 600; cursor: pointer;
@@ -706,7 +753,8 @@ PAGE_HTML = """<!DOCTYPE html>
     .caps { font-size: 0.8rem; color: #8b98a5; margin: 8px 0 0; }
     pre {
       background: #15202b; border: 1px solid #38444d; border-radius: 8px;
-      padding: 12px; overflow: auto; font-size: 0.75rem; max-height: 360px;
+      padding: 12px; overflow: auto; font-size: 0.75rem;
+      max-height: min(42vh, 420px);
     }
     .err { color: #f4212e; }
     .health-bar {
@@ -768,12 +816,14 @@ PAGE_HTML = """<!DOCTYPE html>
     }
     .estimate-strip strong { color: #e7e9ea; }
     .scorecard-panel {
-      margin: 0 0 16px 0;
+      margin: 0;
       padding: 12px 14px;
       border-radius: 8px;
       background: #15202b;
       border: 1px solid #38444d;
       overflow-x: auto;
+      max-height: min(70vh, 640px);
+      overflow-y: auto;
     }
     .scorecard-panel h2 { margin-top: 0; }
     .scorecard-panel .last-run {
@@ -793,12 +843,14 @@ PAGE_HTML = """<!DOCTYPE html>
     .st-ok { color: #00ba7c; font-weight: 600; }
     .st-err { color: #f97316; font-weight: 600; }
     .policy-outcome-panel {
-      margin: 0 0 16px 0;
+      margin: 0;
       padding: 12px 14px;
       border-radius: 8px;
       background: #15202b;
       border: 1px solid #38444d;
       overflow-x: auto;
+      max-height: min(70vh, 640px);
+      overflow-y: auto;
     }
     .policy-outcome-panel h2 { margin-top: 0; }
     .policy-outcome-panel .hint { font-size: 0.78rem; color: #8b98a5; margin: 0 0 10px 0; line-height: 1.4; }
@@ -843,6 +895,7 @@ PAGE_HTML = """<!DOCTYPE html>
   </style>
 </head>
 <body>
+  <div class="top-bars">
   <div class="health-bar" id="dataHealthBar" aria-live="polite">
     <span class="status-dot" id="healthDot" title="Data status"></span>
     <span class="health-title">Financial data</span>
@@ -873,30 +926,10 @@ PAGE_HTML = """<!DOCTYPE html>
     <strong>Groundhog memory</strong> — <span id="groundhogText">loading…</span>
     <span class="caps" style="display:block;margin-top:4px">Set <code>PATTERN_GAME_GROUNDHOG_BUNDLE=1</code> on the server to merge <code>game_theory/state/groundhog_memory_bundle.json</code> before replay when a scenario has no <code>memory_bundle_path</code>. POST <code>/api/groundhog-memory</code> to promote ATR from review.</span>
   </div>
-
-  <div class="scorecard-panel" id="scorecardPanel">
-    <h2>Batch run scorecard</h2>
-    <p class="last-run" id="lastBatchRunLine">Last completed batch: — (run a batch to record start/end and totals)</p>
-    <table class="scorecard-table" id="scorecardHistoryTable">
-      <thead>
-        <tr>
-          <th>Started (UTC)</th>
-          <th>Ended (UTC)</th>
-          <th>Duration</th>
-          <th>Processed</th>
-          <th>OK</th>
-          <th>Failed</th>
-          <th title="Scenarios that finished without worker error">Run OK %</th>
-          <th title="Paper session WIN ÷ (WIN+LOSS) for completed replays">Ref WIN %</th>
-          <th>Workers</th>
-          <th>Status</th>
-        </tr>
-      </thead>
-      <tbody id="scorecardHistoryTbody"></tbody>
-    </table>
-    <p class="path-hint" id="scorecardPathHint"></p>
   </div>
 
+  <div class="main-layout">
+  <div class="col-controls">
   <h1>Pattern game — local prototype</h1>
   <p class="caps">Referee-only scores. Run from repo root with <code>PYTHONPATH</code> set.</p>
 
@@ -942,15 +975,40 @@ PAGE_HTML = """<!DOCTYPE html>
     </div>
     <p class="caps" id="progressSub"></p>
   </div>
+  </div>
 
-  <h2>Result</h2>
-  <p class="caps" id="sessionLogNote" style="margin:0 0 8px 0;color:#8b98a5;"></p>
+  <aside class="col-sidebar" aria-label="Batch scorecard">
+  <div class="scorecard-panel" id="scorecardPanel">
+    <h2>Batch run scorecard</h2>
+    <p class="last-run" id="lastBatchRunLine">Last completed batch: — (run a batch to record start/end and totals)</p>
+    <table class="scorecard-table" id="scorecardHistoryTable">
+      <thead>
+        <tr>
+          <th>Started (UTC)</th>
+          <th>Ended (UTC)</th>
+          <th>Duration</th>
+          <th>Processed</th>
+          <th>OK</th>
+          <th>Failed</th>
+          <th title="Scenarios that finished without worker error">Run OK %</th>
+          <th title="Paper session WIN ÷ (WIN+LOSS) for completed replays">Ref WIN %</th>
+          <th>Workers</th>
+          <th>Status</th>
+        </tr>
+      </thead>
+      <tbody id="scorecardHistoryTbody"></tbody>
+    </table>
+    <p class="path-hint" id="scorecardPathHint"></p>
+  </div>
+  </aside>
+  </div>
 
+  <div class="results-split">
   <div class="policy-outcome-panel" id="policyOutcomePanel" hidden>
     <h2>Policy contract &amp; outcomes</h2>
     <p class="hint">
       Effective manifest: signal modules (indicators), fusion, regime — plus session <strong>WIN</strong>/<strong>LOSS</strong> from cumulative paper P&amp;L (&gt;0 vs not).
-      Trade-level win rate is in the next columns. Raw JSON stays below.
+      Trade-level win rate is in the next columns. Raw JSON stays to the right.
     </p>
     <table class="policy-table" id="policyOutcomeTable">
       <thead>
@@ -968,8 +1026,12 @@ PAGE_HTML = """<!DOCTYPE html>
       <tbody id="policyOutcomeTbody"></tbody>
     </table>
   </div>
-
+  <div class="result-json-wrap">
+  <h2>Result</h2>
+  <p class="caps" id="sessionLogNote" style="margin:0 0 8px 0;color:#8b98a5;"></p>
   <pre id="out">(no run yet)</pre>
+  </div>
+  </div>
 
   <script>
     const LIMITS = __LIMITS_JSON__;
