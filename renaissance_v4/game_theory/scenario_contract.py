@@ -1,13 +1,52 @@
 """
-Scenario batch JSON — required shape for parallel_runner / web UI.
+Scenario batch JSON — required shape for ``parallel_runner``, ``pattern_game`` web UI, and paste-in runs.
 
-The Referee uses only manifest_path + optional ATR overrides. Optional *agent* fields are
-echoed in results for training / audit (they do not change deterministic replay scores).
+**Top-level object (one scenario):**
 
-**Pickle / multiprocessing:** Each scenario must be a dict built from JSON-serializable
-values only (``str``, ``int``, ``float``, ``bool``, ``None``, ``list``, ``dict``). Pass
-``list[dict]`` loaded from JSON or built in code — do not put ``Path`` objects or callables
-in scenario dicts (workers pickle these dicts).
+**Required**
+
+- ``manifest_path`` *(str)* — Path to a ``strategy_manifest_v1`` JSON file. Relative paths are
+  resolved from the repo root (or worker cwd). This is the only key the Referee *must* have to
+  load policy for replay.
+
+**Replay inputs (optional; change execution when set)**
+
+- ``atr_stop_mult`` / ``atr_target_mult`` *(float | null)* — Override manifest stop/target ATR
+  multiples for this scenario only (applied after any memory bundle merge in ``pattern_game``).
+- ``memory_bundle_path`` *(str | null)* — Optional path to a **memory bundle** JSON; whitelisted
+  keys are merged into the manifest **before** replay and **do** affect trades.
+- ``emit_baseline_artifacts`` *(bool)* — When true, emit extra baseline artifacts from the runner
+  (see ``run_pattern_game``).
+
+**Audit / trace only (optional; echoed into results and run_memory — do not change Referee math)**
+
+- ``scenario_id`` *(str)* — Label for tables, logs, and batch folders; default ``unknown`` if omitted.
+- ``prior_run_id`` *(str | null)* — Metadata link to a previous run UUID for **human** traceability;
+  **not** loaded as simulation input unless a memory bundle is merged (see ``run_memory.build_decision_audit``).
+- ``tier`` *(str)* — e.g. ``T1``; documentation / UI only.
+- ``evaluation_window`` *(dict)* — Declarative intent (e.g. ``calendar_months``); slicing may be
+  wired later; replay today uses whatever bar range the SQLite DB provides unless the manifest
+  specifies dates.
+- ``game_spec_ref`` *(str)* — Pointer to the game spec doc filename for reviewers.
+- ``training_trace_id`` / ``prior_scenario_id`` *(str)* — Training pipeline correlation IDs.
+
+**``agent_explanation`` *(dict, optional)*** — Story for proctors / Anna; merged into run_memory.
+
+- ``hypothesis`` *(str)* — One testable sentence. **May be required** when
+  ``PATTERN_GAME_REQUIRE_HYPOTHESIS`` or ``validate_scenarios(..., require_hypothesis=True)``.
+- ``why_this_strategy`` *(str)* — Short rationale.
+- ``indicator_values`` *(object)* — Optional numeric snapshot (not a substitute for structured
+  ``indicator_context``).
+- ``learned`` / ``behavior_change`` *(str)* — Memory narrative fields.
+- ``indicator_context`` *(object)* — Structured **context around indicators** (regime, direction,
+  etc.); see ``context_memory.py`` / GAME_SPEC. Passed through to ``run_memory`` when present.
+
+**Normative examples:** ``renaissance_v4/game_theory/examples/tier1_scenario.template.json``,
+``parallel_scenarios.example.json``. **Rules of the game:** ``GAME_SPEC_INDICATOR_PATTERN_V1.md``.
+
+**Pickle / multiprocessing:** Each scenario must be JSON-serializable (``str``, ``int``, ``float``,
+``bool``, ``None``, ``list``, ``dict`` only). Do not embed ``Path`` objects or callables — workers
+pickle scenario dicts.
 """
 
 from __future__ import annotations
@@ -88,12 +127,17 @@ def validate_scenarios(
     require_hypothesis: bool = False,
 ) -> tuple[bool, list[str]]:
     """
-    Return (ok, messages). ``ok`` is False only for blocking errors (empty list, missing manifest_path).
+    Return ``(ok, messages)``. ``ok`` is False only for blocking errors: empty list, or
+    ``manifest_path`` missing / not a string.
 
-    Non-blocking warnings: unknown keys (we only document known keys), missing optional agent fields.
+    **Non-blocking warnings:** undocumented top-level keys (still passed through to the worker;
+    runner may ignore them), missing manifest file when ``check_manifest_exists`` is True.
 
-    When ``require_hypothesis`` is True, each scenario must have ``agent_explanation.hypothesis`` as a
-    non-empty string (testable statement — ties runs together across replays).
+    **Blocking when** ``require_hypothesis`` **is True:** each scenario needs
+    ``agent_explanation.hypothesis`` as a non-empty string (web UI defaults to requiring this
+    unless ``PATTERN_GAME_REQUIRE_HYPOTHESIS`` disables it).
+
+    See the module docstring for the full field list.
     """
     messages: list[str] = []
     if not scenarios:
@@ -106,6 +150,7 @@ def validate_scenarios(
         "atr_target_mult",
         "memory_bundle_path",
         "emit_baseline_artifacts",
+        "prior_run_id",
         *SCENARIO_ECHO_KEYS,
     }
 

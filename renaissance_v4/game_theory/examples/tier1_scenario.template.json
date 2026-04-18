@@ -4,7 +4,7 @@
     "tier": "T1",
     "evaluation_window": {
       "calendar_months": 12,
-      "referee_note": "Intent: contiguous 12 calendar months of SOLUSDT 5m bars per GAME_SPEC. Replay currently uses the DB slice configured by ingest; wire slicing here when supported."
+      "referee_note": "Intent: contiguous 12 calendar months of SOLUSDT 5m bars per GAME_SPEC. Replay currently uses the DB slice configured by ingest; wire slicing here when supported. Required vs optional scenario keys: see renaissance_v4/game_theory/scenario_contract.py module docstring."
     },
     "game_spec_ref": "GAME_SPEC_INDICATOR_PATTERN_V1.md",
     "manifest_path": "renaissance_v4/configs/manifests/baseline_v1_recipe.json",
