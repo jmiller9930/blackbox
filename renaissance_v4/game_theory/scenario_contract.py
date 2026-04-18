@@ -41,8 +41,9 @@ Scenario batch JSON — required shape for ``parallel_runner``, ``pattern_game``
 - ``indicator_context`` *(object)* — Structured **context around indicators** (regime, direction,
   etc.); see ``context_memory.py`` / GAME_SPEC. Passed through to ``run_memory`` when present.
 
-**Normative examples:** ``renaissance_v4/game_theory/examples/tier1_scenario.template.json``,
-``parallel_scenarios.example.json``. **Rules of the game:** ``GAME_SPEC_INDICATOR_PATTERN_V1.md``.
+**Normative examples:** ``tier1_scenario.template.json``, ``parallel_scenarios.example.json``,
+``width_depth_15.example.json`` (15 parallel ATR grid points + one memory-bundle row for depth).
+**Rules of the game:** ``GAME_SPEC_INDICATOR_PATTERN_V1.md``.
 
 **Pickle / multiprocessing:** Each scenario must be JSON-serializable (``str``, ``int``, ``float``,
 ``bool``, ``None``, ``list``, ``dict`` only). Do not embed ``Path`` objects or callables — workers

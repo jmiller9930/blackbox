@@ -1,0 +1,157 @@
+[
+  {
+    "scenario_id": "width_depth_01",
+    "tier": "T1",
+    "game_spec_ref": "GAME_SPEC_INDICATOR_PATTERN_V1.md",
+    "evaluation_window": {
+      "calendar_months": 12,
+      "referee_note": "Width+depth batch: scenarios 01–14 = ATR grid (same manifest, different stop/target). Scenario 15 = depth: memory bundle merge before replay (see memory_bundle_path)."
+    },
+    "manifest_path": "renaissance_v4/configs/manifests/baseline_v1_recipe.json",
+    "atr_stop_mult": 0.8,
+    "atr_target_mult": 2.0,
+    "agent_explanation": {
+      "hypothesis": "Width slot 01: ATR 0.8 / 2.0 — compare cumulative PnL vs other grid points on the same bar history."
+    }
+  },
+  {
+    "scenario_id": "width_depth_02",
+    "tier": "T1",
+    "manifest_path": "renaissance_v4/configs/manifests/baseline_v1_recipe.json",
+    "atr_stop_mult": 0.8,
+    "atr_target_mult": 3.5,
+    "agent_explanation": {
+      "hypothesis": "Width slot 02: ATR 0.8 / 3.5"
+    }
+  },
+  {
+    "scenario_id": "width_depth_03",
+    "tier": "T1",
+    "manifest_path": "renaissance_v4/configs/manifests/baseline_v1_recipe.json",
+    "atr_stop_mult": 1.0,
+    "atr_target_mult": 2.5,
+    "agent_explanation": {
+      "hypothesis": "Width slot 03: ATR 1.0 / 2.5"
+    }
+  },
+  {
+    "scenario_id": "width_depth_04",
+    "tier": "T1",
+    "manifest_path": "renaissance_v4/configs/manifests/baseline_v1_recipe.json",
+    "atr_stop_mult": 1.0,
+    "atr_target_mult": 4.0,
+    "agent_explanation": {
+      "hypothesis": "Width slot 04: ATR 1.0 / 4.0"
+    }
+  },
+  {
+    "scenario_id": "width_depth_05",
+    "tier": "T1",
+    "manifest_path": "renaissance_v4/configs/manifests/baseline_v1_recipe.json",
+    "atr_stop_mult": 1.2,
+    "atr_target_mult": 2.0,
+    "agent_explanation": {
+      "hypothesis": "Width slot 05: ATR 1.2 / 2.0"
+    }
+  },
+  {
+    "scenario_id": "width_depth_06",
+    "tier": "T1",
+    "manifest_path": "renaissance_v4/configs/manifests/baseline_v1_recipe.json",
+    "atr_stop_mult": 1.2,
+    "atr_target_mult": 4.5,
+    "agent_explanation": {
+      "hypothesis": "Width slot 06: ATR 1.2 / 4.5"
+    }
+  },
+  {
+    "scenario_id": "width_depth_07",
+    "tier": "T1",
+    "manifest_path": "renaissance_v4/configs/manifests/baseline_v1_recipe.json",
+    "atr_stop_mult": 1.5,
+    "atr_target_mult": 2.5,
+    "agent_explanation": {
+      "hypothesis": "Width slot 07: ATR 1.5 / 2.5"
+    }
+  },
+  {
+    "scenario_id": "width_depth_08",
+    "tier": "T1",
+    "manifest_path": "renaissance_v4/configs/manifests/baseline_v1_recipe.json",
+    "atr_stop_mult": 1.5,
+    "atr_target_mult": 4.0,
+    "agent_explanation": {
+      "hypothesis": "Width slot 08: ATR 1.5 / 4.0"
+    }
+  },
+  {
+    "scenario_id": "width_depth_09",
+    "tier": "T1",
+    "manifest_path": "renaissance_v4/configs/manifests/baseline_v1_recipe.json",
+    "atr_stop_mult": 1.8,
+    "atr_target_mult": 3.0,
+    "agent_explanation": {
+      "hypothesis": "Width slot 09: ATR 1.8 / 3.0"
+    }
+  },
+  {
+    "scenario_id": "width_depth_10",
+    "tier": "T1",
+    "manifest_path": "renaissance_v4/configs/manifests/baseline_v1_recipe.json",
+    "atr_stop_mult": 1.8,
+    "atr_target_mult": 4.5,
+    "agent_explanation": {
+      "hypothesis": "Width slot 10: ATR 1.8 / 4.5"
+    }
+  },
+  {
+    "scenario_id": "width_depth_11",
+    "tier": "T1",
+    "manifest_path": "renaissance_v4/configs/manifests/baseline_v1_recipe.json",
+    "atr_stop_mult": 2.0,
+    "atr_target_mult": 2.5,
+    "agent_explanation": {
+      "hypothesis": "Width slot 11: ATR 2.0 / 2.5"
+    }
+  },
+  {
+    "scenario_id": "width_depth_12",
+    "tier": "T1",
+    "manifest_path": "renaissance_v4/configs/manifests/baseline_v1_recipe.json",
+    "atr_stop_mult": 2.0,
+    "atr_target_mult": 5.0,
+    "agent_explanation": {
+      "hypothesis": "Width slot 12: ATR 2.0 / 5.0"
+    }
+  },
+  {
+    "scenario_id": "width_depth_13",
+    "tier": "T1",
+    "manifest_path": "renaissance_v4/configs/manifests/baseline_v1_recipe.json",
+    "atr_stop_mult": 2.5,
+    "atr_target_mult": 3.5,
+    "agent_explanation": {
+      "hypothesis": "Width slot 13: ATR 2.5 / 3.5"
+    }
+  },
+  {
+    "scenario_id": "width_depth_14",
+    "tier": "T1",
+    "manifest_path": "renaissance_v4/configs/manifests/baseline_v1_recipe.json",
+    "atr_stop_mult": 3.0,
+    "atr_target_mult": 4.0,
+    "agent_explanation": {
+      "hypothesis": "Width slot 14: ATR 3.0 / 4.0"
+    }
+  },
+  {
+    "scenario_id": "width_depth_15_memory",
+    "tier": "T1",
+    "manifest_path": "renaissance_v4/configs/manifests/baseline_v1_recipe.json",
+    "memory_bundle_path": "renaissance_v4/game_theory/examples/memory_bundle_example.json",
+    "agent_explanation": {
+      "hypothesis": "Depth slot: promoted ATR geometry from memory bundle (apply block) merged before replay — compare vs grid points. Replace bundle file after review with your own promoted values.",
+      "learned": "memory_bundle_example.json ships sample apply { atr_stop_mult, atr_target_mult }; edit from_run_id and apply for real runs."
+    }
+  }
+]
