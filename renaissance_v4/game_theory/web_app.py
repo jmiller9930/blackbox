@@ -698,6 +698,13 @@ PAGE_HTML = """<!DOCTYPE html>
     .signals-cell { font-family: ui-monospace, monospace; font-size: 0.72rem; max-width: 320px; word-break: break-word; }
     input[type=checkbox] { width: auto; }
     input[type=range] { width: 100%; accent-color: #1d9bf0; }
+    .batch-concurrency-banner {
+      display: none; margin: 10px 0 8px; padding: 10px 12px; border-radius: 8px;
+      background: #15202b; border: 1px solid #38444d; font-size: 0.88rem; line-height: 1.45; color: #e7e9ea;
+    }
+    .batch-concurrency-banner.visible { display: block; }
+    .batch-concurrency-banner strong { color: #1d9bf0; font-weight: 600; }
+    .batch-concurrency-banner .warn { color: #ffb020; }
     .progress-wrap { display: none; margin: 12px 0 8px; }
     .progress-wrap.active { display: block; }
     .progress-track {
@@ -790,6 +797,7 @@ PAGE_HTML = """<!DOCTYPE html>
 
   <button type="button" id="runBtn">Run</button>
   <div id="statusLine" aria-live="polite"></div>
+  <div id="batchConcurrencyBanner" class="batch-concurrency-banner" aria-live="polite"></div>
   <div id="progressWrap" class="progress-wrap" role="progressbar" aria-label="Batch replay progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
     <div class="progress-track" id="progressTrack">
       <div class="progress-fill" id="progressFill" style="width:0%"></div>
@@ -1046,6 +1054,47 @@ PAGE_HTML = """<!DOCTYPE html>
       return String(e);
     }
 
+    function clearBatchConcurrencyBanner() {
+      const b = document.getElementById('batchConcurrencyBanner');
+      if (b) {
+        b.innerHTML = '';
+        b.classList.remove('visible');
+      }
+    }
+
+    function showBatchConcurrencyBanner(total, workers, mode) {
+      const b = document.getElementById('batchConcurrencyBanner');
+      if (!b) return;
+      if (mode === 'clear' || total == null || total === 0) {
+        clearBatchConcurrencyBanner();
+        return;
+      }
+      const w = (workers != null && workers !== undefined) ? String(workers) : '?';
+      const t = Math.max(0, parseInt(String(total), 10) || 0);
+      const wn = parseInt(w, 10);
+      const eff = (!Number.isNaN(wn) && wn > 0 && t > 0) ? Math.min(t, wn) : '—';
+      b.classList.add('visible');
+      if (mode === 'done') {
+        b.innerHTML =
+          '<strong>Batch finished</strong> — <strong>' + t + '</strong> scenario(s) completed · worker cap was <strong>' +
+          w + '</strong> process(es). Result is below.';
+        return;
+      }
+      if (mode === 'error') {
+        b.innerHTML = '<strong>Batch stopped</strong> — see Result for details.';
+        return;
+      }
+      let oneWarn = '';
+      if (t === 1) {
+        oneWarn =
+          '<span class="warn"> Only one scenario in the array — one replay at a time. Add more scenarios to the JSON (or use &quot;Suggest next hunters&quot;) to use more cores.</span>';
+      }
+      b.innerHTML =
+        '<strong>Parallelism</strong> — <strong>' + t + '</strong> scenario(s) in this batch · up to <strong>' + w +
+        '</strong> worker process(es) at once (at most <strong>' + eff + '</strong> replays run in parallel until one finishes).' +
+        oneWarn;
+    }
+
     const suggestHuntersBtn = document.getElementById('suggestHuntersBtn');
     if (suggestHuntersBtn) {
       suggestHuntersBtn.onclick = async () => {
@@ -1083,6 +1132,7 @@ PAGE_HTML = """<!DOCTYPE html>
     document.getElementById('runBtn').onclick = async () => {
       const btn = document.getElementById('runBtn');
       btn.disabled = true;
+      clearBatchConcurrencyBanner();
       const sn = document.getElementById('sessionLogNote');
       if (sn) sn.textContent = '';
       statusLine.textContent = 'Starting batch…';
@@ -1090,6 +1140,7 @@ PAGE_HTML = """<!DOCTYPE html>
       setProgressUI(0, 0, '');
       progressWrap.classList.add('active');
       const t0 = Date.now();
+      let runWorkersCap = null;
       try {
         let mw = parseInt(rangeEl.value, 10);
         if (isNaN(mw)) mw = null;
@@ -1116,8 +1167,12 @@ PAGE_HTML = """<!DOCTYPE html>
         }
         const jobId = startJ.job_id;
         const total = startJ.total || 1;
-        statusLine.textContent = 'Running — ' + total + ' scenario(s) · workers ' + (startJ.workers_used || '?') + ' · live progress below.';
-        setProgressUI(0, total, 'Queued — waiting for first replay to finish…');
+        runWorkersCap = startJ.workers_used != null ? startJ.workers_used : null;
+        showBatchConcurrencyBanner(total, runWorkersCap, 'run');
+        statusLine.textContent =
+          'Running — ' + total + ' scenario(s) · up to ' + (runWorkersCap != null ? runWorkersCap : '?') +
+          ' worker process(es) in parallel · updates every 1.5s below.';
+        setProgressUI(0, total, 'Queued — up to ' + (runWorkersCap != null ? runWorkersCap : '?') + ' process(es) · waiting for first replay to finish…');
 
         const pollOnce = async () => {
           const pr = await fetch('/api/run-parallel/status/' + jobId);
@@ -1127,15 +1182,20 @@ PAGE_HTML = """<!DOCTYPE html>
           }
           const elapsed = Math.floor((Date.now() - t0) / 1000);
           const elapsedStr = elapsed >= 60 ? (Math.floor(elapsed / 60) + 'm ' + (elapsed % 60) + 's') : (elapsed + 's');
+          const wCap = pj.workers_used != null ? pj.workers_used : runWorkersCap;
           if (pj.status === 'running') {
             const c = pj.completed || 0;
             const t = pj.total || total;
             const lm = pj.last_message || '';
-            setProgressUI(c, t, lm + ' · elapsed ' + elapsedStr);
-            statusLine.textContent = 'Running — ' + c + '/' + t + ' done · ' + elapsedStr + ' elapsed';
+            const sub = (lm ? (lm + ' · ') : '') + 'up to ' + (wCap != null ? wCap : '?') + ' parallel · ' + elapsedStr;
+            setProgressUI(c, t, sub);
+            statusLine.textContent =
+              'Running — ' + c + '/' + t + ' scenario(s) finished · up to ' + (wCap != null ? wCap : '?') +
+              ' worker process(es) · ' + elapsedStr + ' elapsed';
             return false;
           }
           if (pj.status === 'error') {
+            showBatchConcurrencyBanner(total, wCap, 'error');
             if (pj.batch_timing) updateLastBatchRunLine(pj.batch_timing);
             refreshScorecardHistory();
             await show(null, null, pj.error || 'Job failed');
@@ -1145,7 +1205,10 @@ PAGE_HTML = """<!DOCTYPE html>
           }
           if (pj.status === 'done' && pj.result) {
             const j = pj.result;
-            setProgressUI(j.ran || total, j.ran || total, 'All scenarios finished · ' + elapsedStr);
+            const doneN = j.ran != null ? j.ran : total;
+            const doneW = j.workers_used != null ? j.workers_used : wCap;
+            showBatchConcurrencyBanner(doneN, doneW, 'done');
+            setProgressUI(doneN, doneN, 'All ' + doneN + ' scenario(s) finished · worker cap was ' + (doneW != null ? doneW : '?') + ' · ' + elapsedStr);
             if (j.pnl_summary) { updatePnlStrip(j.pnl_summary); }
             const sl = document.getElementById('sessionLogNote');
             if (sl) {
@@ -1155,7 +1218,8 @@ PAGE_HTML = """<!DOCTYPE html>
             }
             await show(null, j, null);
             refreshScorecardHistory();
-            statusLine.textContent = 'Finished — see Result below.';
+            statusLine.textContent =
+              'Finished — ' + doneN + ' scenario(s) · worker cap was ' + (doneW != null ? doneW : '?') + ' · see Result below.';
             return true;
           }
           return true;
@@ -1172,6 +1236,11 @@ PAGE_HTML = """<!DOCTYPE html>
           statusLine.textContent = 'Client timeout — check server or logs.';
         }
       } catch (e) {
+        if (runWorkersCap != null) {
+          showBatchConcurrencyBanner(1, 1, 'error');
+        } else {
+          clearBatchConcurrencyBanner();
+        }
         await show(null, null, friendlyFetchError(e));
         statusLine.textContent = 'Stopped or failed — see Result.';
       } finally {
