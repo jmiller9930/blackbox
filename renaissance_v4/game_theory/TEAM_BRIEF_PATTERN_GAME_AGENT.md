@@ -27,6 +27,30 @@ If the team needs **formal Jupiter policy packages** (JUP), that path is still *
 
 ---
 
+## Training the **orchestrator agent** (not the LLM)
+
+If you do not care about weight training, “train the agent” still matters as **repeatable improvement of the runner + memory**:
+
+| In place now | What it does |
+|----------------|---------------|
+| **Presets + custom JSON** | Swap scenario batches to explore manifests and story fields. |
+| **Echo fields** | `training_trace_id`, `prior_scenario_id`, `agent_explanation` — audit trail and curriculum hooks. |
+| **JSONL log** | Optional append of **one line per scenario result** for offline analysis. |
+| **Repo context** | `ANNA_CONTEXT_PROFILE` + `agent_context_bundle` — same governance docs every call. |
+| **`PatternGameAgent`** | Single import for host apps; `plugin_info()` for dashboards. |
+
+**Reasonable follow-ons (staged, not all implemented):** retrieval over `experience_log.jsonl` + past reports; ranked “next scenario” suggestions from Referee stats; Foreman-triggered batches; export paths that **hand off** to a human-run `validate_policy_package.py` on a real package folder. Say the word when you want one of these cut as a ticket.
+
+---
+
+## Web UI: financial data status (green / red)
+
+The local Flask UI (`python3 -m renaissance_v4.game_theory.web_app`) shows a **status strip** at the top: green when the **SQLite** DB is readable, **`market_bars_5m`** exists, replay has **enough rows** (same minimum as `replay_runner`), and **SOLUSDT** has at least a **~335-day** calendar span (12-month style check with slack for gaps).
+
+**API:** `GET /api/data-health` — JSON with `overall_ok`, `summary_line`, counts, spans, and `database_path` for operators.
+
+---
+
 ## Plug-in API (for applications)
 
 ```python

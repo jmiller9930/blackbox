@@ -18,6 +18,7 @@ from typing import Any
 
 from flask import Flask, abort, jsonify, request
 
+from renaissance_v4.game_theory.data_health import get_data_health
 from renaissance_v4.game_theory.parallel_runner import (
     clamp_parallel_workers,
     get_parallel_limits,
@@ -40,6 +41,11 @@ def create_app() -> Flask:
     @app.get("/api/capabilities")
     def capabilities() -> Any:
         return jsonify(get_parallel_limits())
+
+    @app.get("/api/data-health")
+    def data_health() -> Any:
+        """SQLite reachable, ``market_bars_5m`` present, replay row count, SOLUSDT ~12mo span."""
+        return jsonify(get_data_health())
 
     @app.get("/api/scenario-presets")
     def scenario_presets() -> Any:
@@ -191,6 +197,19 @@ PAGE_HTML = """<!DOCTYPE html>
       padding: 12px; overflow: auto; font-size: 0.75rem; max-height: 360px;
     }
     .err { color: #f4212e; }
+    .health-bar {
+      display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+      padding: 10px 12px; margin-bottom: 16px; border-radius: 8px;
+      background: #15202b; border: 1px solid #38444d; font-size: 0.85rem;
+    }
+    .health-bar .status-dot {
+      width: 12px; height: 12px; border-radius: 50%; flex-shrink: 0;
+      background: #536471;
+    }
+    .health-bar .status-dot.ok { background: #00ba7c; box-shadow: 0 0 8px rgba(0,186,124,0.45); }
+    .health-bar .status-dot.bad { background: #f4212e; box-shadow: 0 0 8px rgba(244,33,46,0.35); }
+    .health-title { font-weight: 600; color: #e7e9ea; margin-right: 6px; }
+    .health-detail { color: #8b98a5; }
     input[type=checkbox] { width: auto; }
     input[type=range] { width: 100%; accent-color: #1d9bf0; }
     .progress-wrap { display: none; margin: 12px 0 8px; }
@@ -210,6 +229,12 @@ PAGE_HTML = """<!DOCTYPE html>
   </style>
 </head>
 <body>
+  <div class="health-bar" id="dataHealthBar" aria-live="polite">
+    <span class="status-dot" id="healthDot" title="Data status"></span>
+    <span class="health-title">Financial data</span>
+    <span class="health-detail" id="healthText">Checking database…</span>
+  </div>
+
   <h1>Pattern game — local prototype</h1>
   <p class="caps">Referee-only scores. Run from repo root with <code>PYTHONPATH</code> set.</p>
 
@@ -326,6 +351,30 @@ PAGE_HTML = """<!DOCTYPE html>
     };
 
     fetch('/api/capabilities').then(r => r.json()).then(() => {});
+
+    async function refreshDataHealth() {
+      const dot = document.getElementById('healthDot');
+      const text = document.getElementById('healthText');
+      try {
+        const r = await fetch('/api/data-health');
+        const j = await r.json();
+        dot.className = 'status-dot ' + (j.overall_ok ? 'ok' : 'bad');
+        dot.title = j.overall_ok ? 'Data OK' : 'Data issue — see text';
+        if (j.summary_line) {
+          text.textContent = j.summary_line;
+        } else if (j.error) {
+          text.textContent = j.error;
+        } else {
+          text.textContent = 'Unknown status';
+        }
+      } catch (e) {
+        dot.className = 'status-dot bad';
+        dot.title = 'Health request failed';
+        text.textContent = 'Health check failed: ' + friendlyFetchError(e);
+      }
+    }
+    refreshDataHealth();
+    setInterval(refreshDataHealth, 45000);
 
     const presetPick = document.getElementById('presetPick');
     const scenariosEl = document.getElementById('scenarios');
