@@ -57,7 +57,7 @@ from flask import Flask, Response, abort, jsonify, request
 _GAME_THEORY = Path(__file__).resolve().parent
 
 # Operator-visible web UI bundle version — bump when changing PAGE_HTML (HTML/CSS/JS) so deploys are provable.
-PATTERN_GAME_WEB_UI_VERSION = "1.5.0"
+PATTERN_GAME_WEB_UI_VERSION = "1.6.0"
 
 from renaissance_v4.game_theory.groundhog_memory import (
     groundhog_auto_merge_enabled,
@@ -782,7 +782,7 @@ PAGE_HTML = """<!DOCTYPE html>
       line-height: 1.45;
     }
     .pg-shell {
-      max-width: 1680px;
+      max-width: min(1920px, calc(100vw - 16px));
       margin: 0 auto;
       padding: 24px 24px 40px;
     }
@@ -912,8 +912,18 @@ PAGE_HTML = """<!DOCTYPE html>
       gap: 18px;
       margin-bottom: 18px;
     }
-    .pg-row-main { grid-template-columns: repeat(3, minmax(0, 1fr)); align-items: start; }
-    .pg-row-results { grid-template-columns: 1.25fr 0.75fr; align-items: start; }
+    .pg-row-main {
+      grid-template-columns: repeat(5, minmax(0, 1fr));
+      align-items: start;
+    }
+    @media (max-width: 1680px) {
+      .pg-row-main {
+        grid-template-columns: repeat(5, minmax(200px, 1fr));
+        overflow-x: auto;
+        padding-bottom: 6px;
+        -webkit-overflow-scrolling: touch;
+      }
+    }
     .pg-panel {
       background: var(--pg-surface);
       border: 1px solid var(--pg-line);
@@ -925,12 +935,14 @@ PAGE_HTML = """<!DOCTYPE html>
     }
     .pg-panel-controls { min-height: 0; }
     .pg-panel-score .pg-table-scroll,
-    .pg-results-wide .pg-table-scroll {
-      max-height: min(52vh, 560px);
+    .pg-panel-evidence .pg-table-scroll {
+      max-height: min(48vh, 480px);
       overflow: auto;
       border-radius: 12px;
       border: 1px solid var(--pg-line);
     }
+    .pg-panel-evidence .pg-tab-strip { gap: 6px; }
+    .pg-panel-evidence .pg-tab { padding: 8px 10px; font-size: 11px; }
     .pg-panel-header {
       display: flex;
       align-items: flex-start;
@@ -1291,11 +1303,11 @@ PAGE_HTML = """<!DOCTYPE html>
       background: #f8f6f0;
       border: 1px solid var(--pg-line);
       border-radius: 12px;
-      padding: 12px;
+      padding: 10px;
       overflow: auto;
-      font-size: 0.75rem;
+      font-size: 0.7rem;
       font-family: var(--pg-mono);
-      max-height: min(48vh, 520px);
+      max-height: min(40vh, 360px);
       margin: 0;
     }
     .pg-helper {
@@ -1312,8 +1324,7 @@ PAGE_HTML = """<!DOCTYPE html>
     #searchSpaceStrip code { font-size: 0.85em; color: rgba(247, 241, 230, 0.95); }
     @media (max-width: 1220px) {
       .pg-banner-strip { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-      .pg-row-main,
-      .pg-row-results { grid-template-columns: 1fr; }
+      .pg-row-main { grid-template-columns: 1fr; overflow-x: visible; }
     }
     @media (max-width: 760px) {
       .pg-shell { padding: 14px; }
@@ -1327,10 +1338,10 @@ PAGE_HTML = """<!DOCTYPE html>
     <header class="pg-header">
       <div class="pg-title-wrap">
         <div class="pg-eyebrow">Pattern game lab</div>
-        <h1 class="pg-title">Pattern game <em>controls · scorecard · modules</em>
+        <h1 class="pg-title">Pattern game <em>five panels · controls → scorecard → modules → evidence → notes</em>
           <span class="ui-version" title="Bump PATTERN_GAME_WEB_UI_VERSION in web_app.py">v__PATTERN_GAME_WEB_UI_VERSION__</span></h1>
-        <p class="pg-lead">Preset or paste <strong>scenario JSON</strong>, run the batch. Layout matches <code>UIUX.Web/mockups/pattern_game_horizontal_panels_mockup.html</code>.</p>
-        <div class="pg-orientation-note">Banner · 3 columns · evidence row</div>
+        <p class="pg-lead">Preset or paste <strong>scenario JSON</strong>, run the batch. One row: setup, <strong>learning scorecard</strong>, subsystem health, results, layout notes.</p>
+        <div class="pg-orientation-note">Banner · five vertical panels (scroll horizontally on narrow screens)</div>
       </div>
       <div class="pg-banner-strip">
         <div class="pg-banner-stat">
@@ -1444,11 +1455,14 @@ PAGE_HTML = """<!DOCTYPE html>
 
       <article class="pg-panel pg-panel-score">
         <div class="pg-panel-header">
-          <div><h2 class="pg-panel-h">2. Scorecard</h2><p class="pg-panel-sub">Batch history.</p></div>
-          <span class="pg-chip pg-chip-amber">History</span>
+          <div>
+            <h2 class="pg-panel-h">2. Scorecard</h2>
+            <p class="pg-panel-sub">Your visual cue for <strong>better vs worse</strong> across batches: compare Session WIN % and trade win % on newer rows to older ones (human iteration from metrics — not automatic online learning).</p>
+          </div>
+          <span class="pg-chip pg-chip-amber">Learning signal</span>
         </div>
         <div class="scorecard-panel-inner" id="scorecardPanel">
-          <p class="scorecard-legend"><strong>Run OK</strong> · <strong>Session WIN</strong> · <strong>Trade win</strong> — see legend in doc.</p>
+          <p class="scorecard-legend"><strong>Run OK %</strong> — workers finished. <strong>Session WIN %</strong> — paper WIN vs LOSS from cumulative P&amp;L. <strong>Trade win %</strong> — mean per-scenario win rate on the tape. Scan <em>down</em> the table for most recent runs; higher Session WIN + trade win on your latest batches = stronger outcomes for the hypotheses you tested.</p>
           <p class="last-run" id="lastBatchRunLine">Last completed batch: —</p>
           <div class="pg-table-scroll">
             <table class="scorecard-table" id="scorecardHistoryTable">
@@ -1473,12 +1487,10 @@ PAGE_HTML = """<!DOCTYPE html>
         <div class="pg-pill-row"><span class="pg-pill">Green = online</span><span class="pg-pill">Red = offline</span></div>
         <div class="pg-status-list" id="moduleBoardList"><p class="caps" style="margin:0">Loading…</p></div>
       </article>
-    </section>
 
-    <section class="pg-row pg-row-results">
-      <article class="pg-panel pg-results-wide">
+      <article class="pg-panel pg-panel-evidence">
         <div class="pg-panel-header">
-          <div><h2 class="pg-panel-h">4. Results workspace</h2><p class="pg-panel-sub">Outcomes · JSON · session.</p></div>
+          <div><h2 class="pg-panel-h">4. Results workspace</h2><p class="pg-panel-sub">Referee outcomes · raw JSON · session path.</p></div>
           <span class="pg-chip pg-chip-steel">Evidence</span>
         </div>
         <div class="pg-tab-strip" role="tablist">
@@ -1508,10 +1520,10 @@ PAGE_HTML = """<!DOCTYPE html>
 
       <article class="pg-panel pg-panel-notes">
         <div class="pg-panel-header">
-          <div><h2 class="pg-panel-h">5. Layout notes</h2><p class="pg-panel-sub">Mockup reference.</p></div>
+          <div><h2 class="pg-panel-h">5. Layout notes</h2><p class="pg-panel-sub">Operator map.</p></div>
           <span class="pg-chip pg-chip-steel">Notes</span>
         </div>
-        <div class="pg-helper">Column 1 = configure · 2 = scoreboard · 3 = module wall · row 2 = evidence. DEF-001: evaluation-only; no automatic in-loop learning.</div>
+        <div class="pg-helper">Single row: <strong>1</strong> controls · <strong>2</strong> scorecard (better/worse signal) · <strong>3</strong> modules online · <strong>4</strong> evidence · <strong>5</strong> this card. DEF-001: deterministic evaluation only — no automatic in-loop learning from outcomes.</div>
       </article>
     </section>
   </div>
