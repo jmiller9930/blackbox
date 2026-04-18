@@ -27,6 +27,7 @@ Legacy import: `renaissance_v4.research.pattern_game` re-exports the same API.
 
 - `pattern_game.py` — validate manifest → replay → binary WIN/LOSS scorecard
 - `parallel_runner.py` — run **many** scenarios at once with a **process pool** (uses multiple CPU cores; GIL-safe). Appends optional JSONL to `experience_log.jsonl`.
+- **`player_agent.py` — Player (orchestrator) layer:** drafts Tier-1-shaped scenarios with `agent_explanation`, fills missing story fields, runs the same Referee batch, prints a **markdown operator report** (deterministic prose from outcomes — Referee still owns scores). Use when you want the run to *explain itself* without pretending the sim is an LLM. Example: `python3 -m renaissance_v4.game_theory.player_agent --proposal-only` or pass a scenario JSON file to run + report.
 
 ### Parallel batch (maximize compute)
 
