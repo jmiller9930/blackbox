@@ -52,9 +52,12 @@ import uuid
 from pathlib import Path
 from typing import Any
 
-from flask import Flask, abort, jsonify, request
+from flask import Flask, Response, abort, jsonify, request
 
 _GAME_THEORY = Path(__file__).resolve().parent
+
+# Operator-visible web UI bundle version — bump when changing PAGE_HTML (HTML/CSS/JS) so deploys are provable.
+PATTERN_GAME_WEB_UI_VERSION = "1.3.0"
 
 from renaissance_v4.game_theory.groundhog_memory import (
     groundhog_auto_merge_enabled,
@@ -201,22 +204,33 @@ def _batch_pnl_summary(results: list[dict[str, Any]]) -> dict[str, Any]:
     }
 
 
+def _render_page_html() -> str:
+    lim = get_parallel_limits()
+    return (
+        PAGE_HTML.replace("__LIMITS_JSON__", json.dumps(lim))
+        .replace("__STARTING_EQUITY__", str(float(PATTERN_GAME_STARTING_EQUITY_USD_SPEC)))
+        .replace("__PATTERN_GAME_WEB_UI_VERSION__", PATTERN_GAME_WEB_UI_VERSION)
+    )
+
+
 def create_app() -> Flask:
     ensure_memory_root_tree()
     app = Flask(__name__)
 
     @app.get("/")
-    def index() -> str:
-        lim = get_parallel_limits()
-        return (
-            PAGE_HTML.replace("__LIMITS_JSON__", json.dumps(lim)).replace(
-                "__STARTING_EQUITY__", str(float(PATTERN_GAME_STARTING_EQUITY_USD_SPEC))
-            )
-        )
+    def index() -> Response:
+        resp = Response(_render_page_html(), mimetype="text/html; charset=utf-8")
+        resp.headers["X-Pattern-Game-UI-Version"] = PATTERN_GAME_WEB_UI_VERSION
+        return resp
 
     @app.get("/api/capabilities")
     def capabilities() -> Any:
-        return jsonify(get_parallel_limits())
+        return jsonify(
+            {
+                **get_parallel_limits(),
+                "pattern_game_web_ui_version": PATTERN_GAME_WEB_UI_VERSION,
+            }
+        )
 
     @app.get("/api/groundhog-memory")
     def api_groundhog_memory_get() -> Any:
@@ -684,7 +698,7 @@ PAGE_HTML = """<!DOCTYPE html>
 <head>
   <meta charset="utf-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
-  <title>Pattern game (local)</title>
+  <title>Pattern game · UI __PATTERN_GAME_WEB_UI_VERSION__</title>
   <style>
     :root {
       font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
@@ -704,7 +718,19 @@ PAGE_HTML = """<!DOCTYPE html>
       line-height: 1.45;
     }
     .page-header { margin-bottom: 20px; padding-bottom: 16px; border-bottom: 1px solid var(--border); }
-    .page-header h1 { margin: 0 0 6px; font-size: 1.35rem; font-weight: 650; letter-spacing: -0.02em; }
+    .page-header h1 { margin: 0 0 6px; font-size: 1.35rem; font-weight: 650; letter-spacing: -0.02em; display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; }
+    .ui-version {
+      display: inline-block;
+      padding: 3px 10px;
+      font-size: 0.68rem;
+      font-weight: 700;
+      letter-spacing: 0.06em;
+      border-radius: 999px;
+      background: #152535;
+      color: #7ec8f5;
+      border: 1px solid #2a5a82;
+      font-variant-numeric: tabular-nums;
+    }
     .page-lead { margin: 0; color: var(--muted); font-size: 0.95rem; max-width: 56ch; }
     .page-lead strong { color: #e7e9ea; font-weight: 600; }
     details.help-details {
@@ -1025,7 +1051,7 @@ PAGE_HTML = """<!DOCTYPE html>
   <div class="main-layout">
   <div class="col-controls">
   <header class="page-header">
-    <h1>Pattern game</h1>
+    <h1>Pattern game <span class="ui-version" title="Web UI bundle — bump PATTERN_GAME_WEB_UI_VERSION in web_app.py when this page changes">v__PATTERN_GAME_WEB_UI_VERSION__</span></h1>
     <p class="page-lead">Pick a <strong>preset</strong> or paste <strong>scenario JSON</strong>, then run the batch. Referee scores and paper P&amp;L update below.</p>
     <details class="help-details">
       <summary>Setup, PYTHONPATH, and where policy lives</summary>
