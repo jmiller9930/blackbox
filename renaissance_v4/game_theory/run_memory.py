@@ -19,6 +19,120 @@ from typing import Any
 from renaissance_v4.game_theory.context_memory import CONTEXT_SILO_ID, assess_indicator_context
 
 SCHEMA = "renaissance_v4_run_memory_v1"
+OUTCOME_MEASURES_SCHEMA = "outcome_measures_v1"
+
+
+def build_outcome_measures_v1(referee: dict[str, Any] | None) -> dict[str, Any]:
+    """
+    Multi-dimensional outcome view derived from the same Referee row as ``referee`` in run_memory.
+
+    **Binary WIN/LOSS counts** answer one question; **portfolio metrics** (PnL, expectancy, drawdown)
+    answer others. This block makes “was anything good here?” legible without inventing a second source
+    of truth — it only **interprets** fields already on the summary row.
+    """
+    base: dict[str, Any] = {
+        "schema": OUTCOME_MEASURES_SCHEMA,
+        "from_referee_row": bool(referee),
+    }
+    if not referee:
+        base["lenses"] = {}
+        base["positive_signals"] = []
+        base["positive_any"] = False
+        base["note"] = "No referee summary — run failed or summary missing."
+        return base
+
+    r = referee
+    wins = r.get("wins")
+    losses = r.get("losses")
+    trades = r.get("trades")
+    wr = r.get("win_rate")
+    cum = r.get("cumulative_pnl")
+    exp = r.get("expectancy")
+    avg = r.get("average_pnl")
+    mdd = r.get("max_drawdown")
+
+    base["binary_scorecard"] = {
+        k: v
+        for k, v in (("wins", wins), ("losses", losses), ("trades", trades), ("win_rate", wr))
+        if v is not None
+    }
+    base["portfolio"] = {
+        k: v
+        for k, v in (
+            ("cumulative_pnl", cum),
+            ("expectancy", exp),
+            ("average_pnl", avg),
+            ("max_drawdown", mdd),
+        )
+        if v is not None
+    }
+
+    lenses: dict[str, str] = {}
+    signals: list[str] = []
+
+    def _num(x: Any) -> float | None:
+        if isinstance(x, bool):
+            return None
+        if isinstance(x, (int, float)):
+            return float(x)
+        return None
+
+    c = _num(cum)
+    if c is not None:
+        if c > 0:
+            lenses["money"] = "positive"
+            signals.append("cumulative_pnl_positive")
+        elif c == 0:
+            lenses["money"] = "flat"
+            signals.append("cumulative_pnl_non_negative")
+        else:
+            lenses["money"] = "negative"
+
+    e = _num(exp)
+    if e is not None:
+        if e > 0:
+            lenses["edge"] = "positive"
+            signals.append("expectancy_positive")
+        else:
+            lenses["edge"] = "non_positive"
+
+    ap = _num(avg)
+    if ap is not None and ap > 0:
+        signals.append("average_trade_pnl_positive")
+
+    wn = _num(wr)
+    if wn is not None:
+        if wn > 0.5:
+            lenses["win_rate_vs_coinflip"] = "above"
+            signals.append("win_rate_above_half")
+        else:
+            lenses["win_rate_vs_coinflip"] = "at_or_below"
+
+    d = _num(mdd)
+    if d is not None:
+        # Convention: drawdown often stored as negative distance from peak; 0 means no DD in window.
+        if d >= 0.0:
+            lenses["drawdown"] = "none_or_flat"
+            signals.append("no_negative_drawdown_in_metrics")
+        else:
+            lenses["drawdown"] = "experienced_drawdown"
+
+    # De-dupe preserving order
+    seen: set[str] = set()
+    uniq = []
+    for s in signals:
+        if s not in seen:
+            seen.add(s)
+            uniq.append(s)
+
+    base["lenses"] = lenses
+    base["positive_signals"] = uniq
+    base["positive_any"] = len(uniq) > 0
+    base["note"] = (
+        "Lenses interpret the same Referee row — not a second ledger. "
+        "win_rate is binary scorecard; money/edge/drawdown are separate questions."
+    )
+    return base
 
 
 def build_decision_audit(
@@ -134,6 +248,7 @@ def build_run_memory_record(
         "atr_stop_mult": atr_stop_mult,
         "atr_target_mult": atr_target_mult,
         "referee": json_summary_row,
+        "outcome_measures": build_outcome_measures_v1(json_summary_row),
         "decision_audit": build_decision_audit(
             prior_run_id=prior_run_id,
             memory_bundle_audit=memory_bundle_audit,

@@ -170,6 +170,41 @@ def render_human_readable_markdown(record: dict[str, Any]) -> str:
             lines.append("```")
         lines.append("")
 
+    om = record.get("outcome_measures") or {}
+    lines.append("## Outcome lenses (same Referee row — not a second ledger)")
+    lines.append("")
+    lines.append(
+        "Binary **WIN/LOSS** counts are one scorecard. Here we **interpret** the same summary row "
+        "so you can answer: did money improve, was edge positive, was drawdown contained, "
+        "was win rate above a coin flip — **without** mixing in a separate data source."
+    )
+    lines.append("")
+    if not om or not om.get("from_referee_row"):
+        lines.append("*(No outcome measures — referee summary missing or run failed.)*")
+        lines.append("")
+    else:
+        pa = om.get("positive_any")
+        lines.append(
+            f"- **Any positive signal (under these lenses):** **{'Yes' if pa else 'No'}** "
+            f"(see `positive_signals` in `run_record.json`)"
+        )
+        lenses = om.get("lenses") or {}
+        if lenses:
+            lines.append("- **Lenses:**")
+            for k, v in sorted(lenses.items()):
+                lines.append(f"  - `{k}` → **{v}**")
+        ps = om.get("positive_signals") or []
+        if ps:
+            lines.append(f"- **Positive signals:** {', '.join(f'`{s}`' for s in ps)}")
+        note_om = om.get("note")
+        if note_om:
+            lines.append(f"- _{note_om}_")
+        lines.append("")
+        lines.append("```json")
+        lines.append(json.dumps(om, indent=2, ensure_ascii=False))
+        lines.append("```")
+        lines.append("")
+
     lines.append("## Post-mortem (for you or Anna — optional)")
     lines.append("")
     lines.append(f"- **why:** {pm.get('why')!r}")
