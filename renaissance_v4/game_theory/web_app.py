@@ -57,7 +57,7 @@ from flask import Flask, Response, abort, jsonify, request
 _GAME_THEORY = Path(__file__).resolve().parent
 
 # Operator-visible web UI bundle version — bump when changing PAGE_HTML (HTML/CSS/JS) so deploys are provable.
-PATTERN_GAME_WEB_UI_VERSION = "1.6.0"
+PATTERN_GAME_WEB_UI_VERSION = "1.7.0"
 
 from renaissance_v4.game_theory.groundhog_memory import (
     groundhog_auto_merge_enabled,
@@ -804,9 +804,102 @@ PAGE_HTML = """<!DOCTYPE html>
       width: 220px;
       height: 220px;
       border-radius: 50%;
-      background: radial-gradient(circle, rgba(215,181,109,0.28), transparent 65%);
+      background: radial-gradient(circle, rgba(215,181,109,0.22), transparent 65%);
       pointer-events: none;
     }
+    .pg-header-evidence {
+      position: relative;
+      z-index: 2;
+      margin-top: 16px;
+      border: 1px solid rgba(255,255,255,0.12);
+      border-radius: 16px;
+      background: rgba(0,0,0,0.2);
+    }
+    .pg-header-evidence > summary {
+      list-style: none;
+      cursor: pointer;
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 10px 14px;
+      padding: 12px 14px;
+      font-size: 0.95rem;
+      font-weight: 700;
+      color: #f7f1e6;
+    }
+    .pg-header-evidence > summary::-webkit-details-marker { display: none; }
+    .pg-header-evidence > summary::before {
+      content: "▸";
+      display: inline-block;
+      font-size: 0.85rem;
+      opacity: 0.85;
+      transition: transform 0.15s ease;
+    }
+    .pg-header-evidence[open] > summary::before { transform: rotate(90deg); }
+    .pg-header-evidence-hint {
+      flex: 1 1 100%;
+      margin: 0;
+      padding-left: 1.35rem;
+      font-size: 0.8rem;
+      font-weight: 500;
+      color: rgba(247, 241, 230, 0.65);
+    }
+    .pg-header-evidence-inner {
+      padding: 0 14px 14px;
+      border-top: 1px solid rgba(255,255,255,0.08);
+    }
+    .pg-header-evidence .pg-tab-strip { margin-top: 10px; }
+    .pg-header-evidence .pg-tab {
+      background: rgba(255,255,255,0.08);
+      border-color: rgba(255,255,255,0.18);
+      color: rgba(247, 241, 230, 0.9);
+    }
+    .pg-header-evidence .pg-tab.active {
+      background: rgba(255,255,255,0.92);
+      border-color: rgba(255,255,255,0.92);
+      color: #183343;
+    }
+    .pg-header-evidence .pg-pre-json {
+      background: rgba(15, 22, 28, 0.55);
+      border-color: rgba(255,255,255,0.12);
+      color: #e8ecf0;
+    }
+    .pg-header-evidence .policy-outcome-panel .hint { color: rgba(247, 241, 230, 0.7); }
+    .pg-header-evidence .policy-table th { background: rgba(255,255,255,0.1); color: rgba(247, 241, 230, 0.85); }
+    .pg-header-evidence .policy-table td { color: #f0f4f8; border-color: rgba(255,255,255,0.12); }
+    .pg-header-evidence #sessionLogNote { color: rgba(247, 241, 230, 0.75) !important; }
+    details.pg-panel-fold {
+      background: var(--pg-surface);
+      border: 1px solid var(--pg-line);
+      border-radius: var(--pg-radius-xl);
+      box-shadow: var(--pg-shadow);
+      min-width: 0;
+      backdrop-filter: blur(12px);
+    }
+    details.pg-panel-fold > summary {
+      list-style: none;
+      cursor: pointer;
+      padding: 14px 16px;
+      display: flex;
+      flex-wrap: nowrap;
+      align-items: flex-start;
+      gap: 10px;
+      width: 100%;
+      box-sizing: border-box;
+    }
+    details.pg-panel-fold > summary .pg-panel-header { flex: 1; min-width: 0; }
+    details.pg-panel-fold > summary::-webkit-details-marker { display: none; }
+    details.pg-panel-fold > summary::before {
+      content: "▸";
+      flex-shrink: 0;
+      margin-top: 4px;
+      font-size: 0.85rem;
+      color: var(--pg-muted);
+      transition: transform 0.15s ease;
+    }
+    details.pg-panel-fold[open] > summary::before { transform: rotate(90deg); }
+    details.pg-panel-fold .pg-panel-fold-body { padding: 0 16px 16px; }
+    details.pg-panel-fold .pg-panel-header { margin-bottom: 12px; }
     .pg-title-wrap { position: relative; z-index: 1; max-width: 980px; }
     .pg-eyebrow {
       font-size: 12px;
@@ -913,12 +1006,12 @@ PAGE_HTML = """<!DOCTYPE html>
       margin-bottom: 18px;
     }
     .pg-row-main {
-      grid-template-columns: repeat(5, minmax(0, 1fr));
+      grid-template-columns: minmax(240px, 1fr) minmax(380px, 2.4fr) minmax(200px, 1fr);
       align-items: start;
     }
     @media (max-width: 1680px) {
       .pg-row-main {
-        grid-template-columns: repeat(5, minmax(200px, 1fr));
+        grid-template-columns: minmax(200px, 1fr) minmax(320px, 2fr) minmax(180px, 1fr);
         overflow-x: auto;
         padding-bottom: 6px;
         -webkit-overflow-scrolling: touch;
@@ -935,14 +1028,14 @@ PAGE_HTML = """<!DOCTYPE html>
     }
     .pg-panel-controls { min-height: 0; }
     .pg-panel-score .pg-table-scroll,
-    .pg-panel-evidence .pg-table-scroll {
+    .pg-header-evidence .pg-table-scroll {
       max-height: min(48vh, 480px);
       overflow: auto;
       border-radius: 12px;
       border: 1px solid var(--pg-line);
     }
-    .pg-panel-evidence .pg-tab-strip { gap: 6px; }
-    .pg-panel-evidence .pg-tab { padding: 8px 10px; font-size: 11px; }
+    .pg-header-evidence .pg-tab-strip { gap: 6px; flex-wrap: wrap; }
+    .pg-header-evidence .pg-tab { padding: 8px 10px; font-size: 11px; }
     .pg-panel-header {
       display: flex;
       align-items: flex-start;
@@ -1310,16 +1403,6 @@ PAGE_HTML = """<!DOCTYPE html>
       max-height: min(40vh, 360px);
       margin: 0;
     }
-    .pg-helper {
-      margin-top: 4px;
-      padding: 12px;
-      border-radius: 14px;
-      background: linear-gradient(180deg, rgba(47, 127, 121, 0.08) 0%, rgba(47, 127, 121, 0.03) 100%);
-      border: 1px solid rgba(47, 127, 121, 0.12);
-      color: #43625f;
-      font-size: 13px;
-      line-height: 1.5;
-    }
     #searchSpaceStrip strong { color: #f7f1e6; }
     #searchSpaceStrip code { font-size: 0.85em; color: rgba(247, 241, 230, 0.95); }
     @media (max-width: 1220px) {
@@ -1338,10 +1421,10 @@ PAGE_HTML = """<!DOCTYPE html>
     <header class="pg-header">
       <div class="pg-title-wrap">
         <div class="pg-eyebrow">Pattern game lab</div>
-        <h1 class="pg-title">Pattern game <em>five panels · controls → scorecard → modules → evidence → notes</em>
+        <h1 class="pg-title">Pattern game <em>scorecard-first · controls · modules · header evidence</em>
           <span class="ui-version" title="Bump PATTERN_GAME_WEB_UI_VERSION in web_app.py">v__PATTERN_GAME_WEB_UI_VERSION__</span></h1>
-        <p class="pg-lead">Preset or paste <strong>scenario JSON</strong>, run the batch. One row: setup, <strong>learning scorecard</strong>, subsystem health, results, layout notes.</p>
-        <div class="pg-orientation-note">Banner · five vertical panels (scroll horizontally on narrow screens)</div>
+        <p class="pg-lead">Preset or paste <strong>scenario JSON</strong>, run the batch. <strong>Scorecard</strong> is the main view; <strong>Results</strong> (Referee / JSON / session) lives in the header bar below — expand when you need proof.</p>
+        <div class="pg-orientation-note">Twisty on each panel · DEF record: <code>docs/architect/pattern_game_operator_deficiencies_work_record.md</code></div>
       </div>
       <div class="pg-banner-strip">
         <div class="pg-banner-stat">
@@ -1364,17 +1447,52 @@ PAGE_HTML = """<!DOCTYPE html>
           <div class="pg-s" id="bannerRunS">— run a batch —</div>
         </div>
       </div>
+      <details class="pg-header-evidence">
+        <summary>
+          <span class="pg-header-evidence-title">Results workspace</span>
+          <span class="pg-chip pg-chip-steel" style="border-color:rgba(255,255,255,0.25);color:#e8ecf0">Evidence</span>
+          <p class="pg-header-evidence-hint">Last run: Referee outcomes · raw JSON · session folder path — expand to inspect.</p>
+        </summary>
+        <div class="pg-header-evidence-inner">
+          <div class="pg-tab-strip" role="tablist">
+            <button type="button" class="pg-tab active" data-tab="outcomes" role="tab">Referee outcomes</button>
+            <button type="button" class="pg-tab" data-tab="json" role="tab">Raw JSON</button>
+            <button type="button" class="pg-tab" data-tab="session" role="tab">Session log</button>
+          </div>
+          <div id="pgEvidenceOutcomes" class="pg-evidence-panel">
+            <div class="policy-outcome-panel" id="policyOutcomePanel" hidden>
+              <p class="hint">Trade win % per scenario; session from cumulative P&amp;L.</p>
+              <div class="pg-table-scroll">
+                <table class="policy-table" id="policyOutcomeTable">
+                  <thead>
+                    <tr>
+                      <th>Scenario</th><th>Session</th><th>Cum. P&amp;L</th><th>Trade win %</th><th>Trades</th>
+                      <th>Signal modules</th><th>Fusion</th><th>Strategy id</th>
+                    </tr>
+                  </thead>
+                  <tbody id="policyOutcomeTbody"></tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+          <p class="caps" id="sessionLogNote" style="display:none;margin:10px 0 8px"></p>
+          <pre id="out" class="pg-pre-json" style="display:none">(no run yet)</pre>
+        </div>
+      </details>
     </header>
 
     <section class="pg-row pg-row-main">
-      <article class="pg-panel pg-panel-controls">
-        <div class="pg-panel-header">
-          <div>
-            <h2 class="pg-panel-h">1. Game controls</h2>
-            <p class="pg-panel-sub">Batch setup, JSON, workers, run.</p>
+      <details class="pg-panel-fold pg-panel-controls" open>
+        <summary>
+          <div class="pg-panel-header" style="margin:0;flex:1">
+            <div>
+              <h2 class="pg-panel-h">1. Game controls</h2>
+              <p class="pg-panel-sub">Batch setup, JSON, workers, run.</p>
+            </div>
+            <span class="pg-chip pg-chip-teal">Controls</span>
           </div>
-          <span class="pg-chip pg-chip-teal">Controls</span>
-        </div>
+        </summary>
+        <div class="pg-panel-fold-body">
         <div class="def001-science" role="region" aria-label="DEF-001">
           <span class="def001-tag">DEF-001 · SCIENCE / EVALUATION ONLY</span>
           <p style="margin:0">Deterministic replay — no in-band policy training. Record: <code>docs/architect/pattern_game_operator_deficiencies_work_record.md</code></p>
@@ -1451,16 +1569,20 @@ PAGE_HTML = """<!DOCTYPE html>
             </div>
           </div>
         </div>
-      </article>
-
-      <article class="pg-panel pg-panel-score">
-        <div class="pg-panel-header">
-          <div>
-            <h2 class="pg-panel-h">2. Scorecard</h2>
-            <p class="pg-panel-sub">Your visual cue for <strong>better vs worse</strong> across batches: compare Session WIN % and trade win % on newer rows to older ones (human iteration from metrics — not automatic online learning).</p>
-          </div>
-          <span class="pg-chip pg-chip-amber">Learning signal</span>
         </div>
+      </details>
+
+      <details class="pg-panel-fold pg-panel-score" open>
+        <summary>
+          <div class="pg-panel-header" style="margin:0;flex:1">
+            <div>
+              <h2 class="pg-panel-h">2. Scorecard</h2>
+              <p class="pg-panel-sub">Your visual cue for <strong>better vs worse</strong> across batches: compare Session WIN % and trade win % on newer rows to older ones (human iteration from metrics — not automatic online learning).</p>
+            </div>
+            <span class="pg-chip pg-chip-amber">Learning signal</span>
+          </div>
+        </summary>
+        <div class="pg-panel-fold-body">
         <div class="scorecard-panel-inner" id="scorecardPanel">
           <p class="scorecard-legend"><strong>Run OK %</strong> — workers finished. <strong>Session WIN %</strong> — paper WIN vs LOSS from cumulative P&amp;L. <strong>Trade win %</strong> — mean per-scenario win rate on the tape. Scan <em>down</em> the table for most recent runs; higher Session WIN + trade win on your latest batches = stronger outcomes for the hypotheses you tested.</p>
           <p class="last-run" id="lastBatchRunLine">Last completed batch: —</p>
@@ -1477,54 +1599,21 @@ PAGE_HTML = """<!DOCTYPE html>
           </div>
           <p class="path-hint" id="scorecardPathHint"></p>
         </div>
-      </article>
+        </div>
+      </details>
 
-      <article class="pg-panel pg-panel-modules">
-        <div class="pg-panel-header">
-          <div><h2 class="pg-panel-h">3. Modules online</h2><p class="pg-panel-sub">Green = OK · red = off / empty.</p></div>
-          <span class="pg-chip pg-chip-rose">Modules</span>
-        </div>
-        <div class="pg-pill-row"><span class="pg-pill">Green = online</span><span class="pg-pill">Red = offline</span></div>
-        <div class="pg-status-list" id="moduleBoardList"><p class="caps" style="margin:0">Loading…</p></div>
-      </article>
-
-      <article class="pg-panel pg-panel-evidence">
-        <div class="pg-panel-header">
-          <div><h2 class="pg-panel-h">4. Results workspace</h2><p class="pg-panel-sub">Referee outcomes · raw JSON · session path.</p></div>
-          <span class="pg-chip pg-chip-steel">Evidence</span>
-        </div>
-        <div class="pg-tab-strip" role="tablist">
-          <button type="button" class="pg-tab active" data-tab="outcomes" role="tab">Referee outcomes</button>
-          <button type="button" class="pg-tab" data-tab="json" role="tab">Raw JSON</button>
-          <button type="button" class="pg-tab" data-tab="session" role="tab">Session log</button>
-        </div>
-        <div id="pgEvidenceOutcomes" class="pg-evidence-panel">
-          <div class="policy-outcome-panel" id="policyOutcomePanel" hidden>
-            <p class="hint">Trade win % per scenario; session from cumulative P&amp;L.</p>
-            <div class="pg-table-scroll">
-              <table class="policy-table" id="policyOutcomeTable">
-                <thead>
-                  <tr>
-                    <th>Scenario</th><th>Session</th><th>Cum. P&amp;L</th><th>Trade win %</th><th>Trades</th>
-                    <th>Signal modules</th><th>Fusion</th><th>Strategy id</th>
-                  </tr>
-                </thead>
-                <tbody id="policyOutcomeTbody"></tbody>
-              </table>
-            </div>
+      <details class="pg-panel-fold pg-panel-modules">
+        <summary>
+          <div class="pg-panel-header" style="margin:0;flex:1">
+            <div><h2 class="pg-panel-h">3. Modules online</h2><p class="pg-panel-sub">Subsystem health — green / red (collapsed by default).</p></div>
+            <span class="pg-chip pg-chip-rose">Modules</span>
           </div>
+        </summary>
+        <div class="pg-panel-fold-body">
+          <div class="pg-pill-row"><span class="pg-pill">Green = online</span><span class="pg-pill">Red = offline</span></div>
+          <div class="pg-status-list" id="moduleBoardList"><p class="caps" style="margin:0">Loading…</p></div>
         </div>
-        <p class="caps" id="sessionLogNote" style="display:none;margin:0 0 10px"></p>
-        <pre id="out" class="pg-pre-json" style="display:none">(no run yet)</pre>
-      </article>
-
-      <article class="pg-panel pg-panel-notes">
-        <div class="pg-panel-header">
-          <div><h2 class="pg-panel-h">5. Layout notes</h2><p class="pg-panel-sub">Operator map.</p></div>
-          <span class="pg-chip pg-chip-steel">Notes</span>
-        </div>
-        <div class="pg-helper">Single row: <strong>1</strong> controls · <strong>2</strong> scorecard (better/worse signal) · <strong>3</strong> modules online · <strong>4</strong> evidence · <strong>5</strong> this card. DEF-001: deterministic evaluation only — no automatic in-loop learning from outcomes.</div>
-      </article>
+      </details>
     </section>
   </div>
 
@@ -1631,6 +1720,8 @@ PAGE_HTML = """<!DOCTYPE html>
       if (outcomes) outcomes.style.display = (id === 'outcomes') ? '' : 'none';
       if (pre) pre.style.display = (id === 'json') ? 'block' : 'none';
       if (sn) sn.style.display = (id === 'session') ? 'block' : 'none';
+      const hdr = document.querySelector('.pg-header-evidence');
+      if (hdr && (id === 'json' || id === 'session')) hdr.open = true;
     }
     document.querySelectorAll('.pg-tab-strip .pg-tab').forEach((btn) => {
       btn.addEventListener('click', () => setEvidenceTab(btn.getAttribute('data-tab')));
