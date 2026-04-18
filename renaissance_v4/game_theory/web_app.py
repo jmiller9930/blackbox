@@ -1472,23 +1472,34 @@ PAGE_HTML = """<!DOCTYPE html>
             setProgressUI(pj.completed || 0, statusPollTotal(pj, total), pj.error || '');
             return true;
           }
-          if (pj.status === 'done' && pj.result) {
-            const j = pj.result;
-            const doneN = j.ran != null ? j.ran : total;
-            const doneW = j.workers_used != null ? j.workers_used : wCap;
-            showBatchConcurrencyBanner(doneN, doneW, 'done');
-            setProgressUI(doneN, doneN, 'All ' + doneN + ' scenario(s) finished · worker cap was ' + (doneW != null ? doneW : '?') + ' · ' + elapsedStr);
-            if (j.pnl_summary) { updatePnlStrip(j.pnl_summary); }
-            const sl = document.getElementById('sessionLogNote');
-            if (sl) {
-              sl.textContent = j.session_log_batch_dir
-                ? ('Session logs (human-readable): ' + j.session_log_batch_dir)
-                : '';
+          if (pj.status === 'done') {
+            const tDone = statusPollTotal(pj, total);
+            const cDone = (pj.completed != null && pj.completed >= 0) ? pj.completed : tDone;
+            setProgressUI(cDone, tDone, '');
+            if (pj.result) {
+              const j = pj.result;
+              const doneN = j.ran != null ? j.ran : tDone;
+              const doneW = j.workers_used != null ? j.workers_used : wCap;
+              showBatchConcurrencyBanner(doneN, doneW, 'done');
+              setProgressUI(doneN, doneN, 'All ' + doneN + ' scenario(s) finished · worker cap was ' + (doneW != null ? doneW : '?') + ' · ' + elapsedStr);
+              if (j.pnl_summary) { updatePnlStrip(j.pnl_summary); }
+              const sl = document.getElementById('sessionLogNote');
+              if (sl) {
+                sl.textContent = j.session_log_batch_dir
+                  ? ('Session logs (human-readable): ' + j.session_log_batch_dir)
+                  : '';
+              }
+              await show(null, j, null);
+              refreshScorecardHistory();
+              statusLine.textContent =
+                'Finished — ' + doneN + ' scenario(s) · worker cap was ' + (doneW != null ? doneW : '?') + ' · see Result below.';
+            } else {
+              showBatchConcurrencyBanner(tDone, wCap, 'done');
+              setProgressUI(cDone, tDone, 'Batch marked done — full JSON not in this response; see scorecard below.');
+              refreshScorecardHistory();
+              statusLine.textContent =
+                'Finished — ' + cDone + '/' + tDone + ' (details in scorecard; hard-refresh if Result is empty).';
             }
-            await show(null, j, null);
-            refreshScorecardHistory();
-            statusLine.textContent =
-              'Finished — ' + doneN + ' scenario(s) · worker cap was ' + (doneW != null ? doneW : '?') + ' · see Result below.';
             return true;
           }
           return true;
