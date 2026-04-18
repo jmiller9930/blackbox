@@ -30,6 +30,7 @@ from typing import Any, Iterator
 
 from renaissance_v4.game_theory.memory_paths import default_experience_log_jsonl, default_run_memory_jsonl
 from renaissance_v4.game_theory.parallel_runner import run_scenarios_parallel
+from renaissance_v4.game_theory.run_memory import learning_evidence_from_parallel_result_row
 from renaissance_v4.game_theory.scenario_contract import extract_scenario_echo_fields, validate_scenarios
 
 _GAME_THEORY = Path(__file__).resolve().parent
@@ -239,6 +240,16 @@ def markdown_operator_report(results: list[dict[str, Any]]) -> str:
         lines.append("")
         if not r.get("ok"):
             lines.append(f"- **Status:** failed — `{r.get('error', 'unknown')}`")
+            lev = learning_evidence_from_parallel_result_row(r)
+            ol = lev.get("operator_labels") or {}
+            lines.append("")
+            lines.append("### Learning / Memory Evidence (summary)")
+            lines.append("")
+            lines.append(f"- **Training evidence:** {ol.get('training_evidence', '—')}")
+            lines.append(f"- **Memory in use:** {ol.get('memory_in_use', '—')}")
+            lines.append(f"- **Groundhog mode:** {ol.get('groundhog_mode', '—')}")
+            lines.append(f"- **Training claim:** `{lev.get('training_claim', '—')}`")
+            lines.append(f"- **Proof type:** {ol.get('proof_type', '—')}")
             lines.append("")
             continue
         summ = r.get("summary") or {}
@@ -246,6 +257,23 @@ def markdown_operator_report(results: list[dict[str, Any]]) -> str:
         lines.append(f"- **Referee:** wins={b.get('wins')} losses={b.get('losses')} trades={b.get('trades')} "
                        f"win_rate={b.get('win_rate')} pnl={b.get('cumulative_pnl')}")
         lines.append(f"- **Manifest:** `{r.get('manifest_path', '')}`")
+        lev = learning_evidence_from_parallel_result_row(r)
+        ol = lev.get("operator_labels") or {}
+        lines.append("")
+        lines.append("### Learning / Memory Evidence (summary)")
+        lines.append("")
+        lines.append(f"- **Training evidence:** {ol.get('training_evidence', '—')}")
+        lines.append(f"- **Memory in use:** {ol.get('memory_in_use', '—')}")
+        lines.append(f"- **Groundhog mode:** {ol.get('groundhog_mode', '—')}")
+        lines.append(f"- **Learned from:** bundle `{lev.get('learned_from', {}).get('bundle_path') or '—'}`; "
+                       f"bundle `from_run_id` `{lev.get('learned_from', {}).get('bundle_from_run_id') or '—'}`")
+        lines.append(f"- **Changed this run:** {lev.get('behavior_change', '—')}")
+        lines.append(f"- **Context quality:** {ol.get('context_quality', '—')}")
+        lines.append(f"- **Training claim:** `{lev.get('training_claim', '—')}`")
+        lines.append(f"- **Proof type:** {ol.get('proof_type', '—')}")
+        lines.append(f"- **Outcome vs no-memory replay:** {lev.get('outcome_change_visible', 'unknown')} — "
+                       f"{lev.get('outcome_change_note', '')}")
+        lines.append("")
         ae = r.get("agent_explanation")
         if isinstance(ae, dict):
             for key in ("hypothesis", "why_this_strategy", "learned", "behavior_change"):

@@ -107,20 +107,91 @@ def render_human_readable_markdown(record: dict[str, Any]) -> str:
     lines.append("")
     if iq:
         lines.append(
-            f"- **Context quality (this run):** `{lvl}` "
+            f"- **Context quality (raw, this run):** `{lvl}` "
             f"(signal keys matched: {iq.get('matched_signal_keys', [])})"
         )
         if iq.get("warn") and lvl in ("missing", "noise_risk", "thin"):
-            lines.append(f"- **Warning:** Context is thin or absent — review before promoting any “memory.”")
+            lines.append("- **Warning:** Context is thin or absent — review before promoting any “memory.”")
     lines.append("")
 
-    lines.append("## Memory & prior knowledge — did this run “remember” earlier runs?")
+    has_lme = "learning_memory_evidence" in record
+    lme = record.get("learning_memory_evidence") or {}
+    ol = lme.get("operator_labels") or {}
+    lines.append("## Learning / Memory Evidence (operator drill-down)")
+    lines.append("")
+    if not has_lme:
+        lines.append(
+            "*This `run_record` predates the `learning_memory_evidence` field; re-run the scenario with "
+            "a current `game_theory` runner to populate this section.*"
+        )
+        lines.append("")
+    else:
+        lines.append(
+            "Quick answers: **Did training-informed memory influence this run?** "
+            "**What object was used?** **Where did it come from?** **What behavior changed?** "
+            "**Was that visible in the outcome?**"
+        )
+        lines.append("")
+        lines.append("| Question | Answer |")
+        lines.append("|----------|--------|")
+        lines.append(
+            "| Did training-informed memory influence this run? (memory merge) | "
+            f"**{'Yes' if lme.get('memory_applied') else 'No'}** |"
+        )
+        lines.append(
+            "| Training evidence (summary) | "
+            f"**{ol.get('training_evidence', '—')}** (none / partial / confirmed) |"
+        )
+        lines.append(
+            "| Memory in use | "
+            f"**{ol.get('memory_in_use', '—')}** |"
+        )
+        lines.append(
+            "| Groundhog mode (canonical bundle) | "
+            f"**{ol.get('groundhog_mode', '—')}** (active / inactive) |"
+        )
+        lines.append(
+            "| Context quality (operator label) | "
+            f"**{ol.get('context_quality', '—')}** (missing / thin / rich) |"
+        )
+        lines.append(
+            "| Training claim | "
+            f"`{lme.get('training_claim', '—')}` |"
+        )
+        lines.append(
+            "| Proof type | "
+            f"**{ol.get('proof_type', '—')}** |"
+        )
+        lines.append(
+            "| Outcome change visible vs no-memory replay? | "
+            f"**{lme.get('outcome_change_visible', 'unknown')}** |"
+        )
+        lines.append("")
+        lf = lme.get("learned_from") or {}
+        lines.append("- **Learned from:**")
+        lines.append(f"  - Memory bundle path: `{lf.get('bundle_path') or '—'}`")
+        lines.append(f"  - Bundle `from_run_id`: `{lf.get('bundle_from_run_id') or '—'}`")
+        lines.append(f"  - Scenario `prior_run_id` (metadata): `{lf.get('prior_run_id_metadata') or '—'}`")
+        lines.append(f"- **What changed this run:** {lme.get('behavior_change', '—')}")
+        lines.append(f"- **Outcome visibility:** {lme.get('outcome_change_note', '')}")
+        lines.append("")
+        gh_note = lme.get("groundhog_note")
+        if gh_note:
+            lines.append(f"- **Groundhog note:** {gh_note}")
+            lines.append("")
+        abl = lme.get("ablation") or {}
+        lines.append(
+            f"- **Ablation:** {'available' if abl.get('available') else 'not available'} — "
+            f"{abl.get('note', '')}"
+        )
+        lines.append("")
+    lines.append("### Memory & prior knowledge (technical decision audit)")
     lines.append("")
     loaded = da.get("prior_outcomes_or_parameters_loaded_into_replay_engine")
     lines.append(
-        f"- **Did the replay engine load prior run outcomes or parameters to change trades?** "
+        f"- **Parameters merged from a memory bundle before replay (changes trades):** "
         f"**{'Yes' if loaded else 'No'}** "
-        f"(expected: **No** for standard deterministic replay.)"
+        f"(distinct from metadata-only links such as `prior_run_id` on the scenario)."
     )
     pr = da.get("prior_run_id_provided")
     if pr:

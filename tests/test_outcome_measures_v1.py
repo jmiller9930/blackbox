@@ -75,3 +75,27 @@ def test_human_readable_contains_outcome_section() -> None:
     md = render_human_readable_markdown(rec)
     assert "Outcome lenses" in md
     assert "same Referee row" in md
+    assert "Learning / Memory Evidence" in md
+    assert "learning_memory_evidence" in rec
+    assert rec["learning_memory_evidence"]["schema"] == "learning_memory_evidence_v1"
+
+
+def test_learning_memory_evidence_with_bundle_audit() -> None:
+    ref = {"cumulative_pnl": 1.0, "expectancy": 0.5, "win_rate": 0.4, "trades": 10}
+    audit = {
+        "bundle_path": "/tmp/bundle.json",
+        "from_run_id": "prior-uuid",
+        "keys_applied": ["atr_stop_mult", "atr_target_mult"],
+        "apply_snapshot": {"atr_stop_mult": 2.0, "atr_target_mult": 3.0},
+    }
+    rec = build_run_memory_record(
+        source="test",
+        manifest_path="/tmp/nonexistent_manifest_z.json",
+        json_summary_row=ref,
+        memory_bundle_audit=audit,
+        prior_run_id="meta-123",
+    )
+    lme = rec["learning_memory_evidence"]
+    assert lme["memory_applied"] is True
+    assert lme["training_claim"] == "memory_promoted"
+    assert lme["operator_labels"]["proof_type"] == "replay + memory"

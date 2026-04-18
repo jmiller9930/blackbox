@@ -17,9 +17,11 @@ from pathlib import Path
 from typing import Any
 
 from renaissance_v4.game_theory.context_memory import CONTEXT_SILO_ID, assess_indicator_context
+from renaissance_v4.game_theory.groundhog_memory import groundhog_bundle_path
 
 SCHEMA = "renaissance_v4_run_memory_v1"
 OUTCOME_MEASURES_SCHEMA = "outcome_measures_v1"
+LEARNING_MEMORY_EVIDENCE_SCHEMA = "learning_memory_evidence_v1"
 
 
 def build_outcome_measures_v1(referee: dict[str, Any] | None) -> dict[str, Any]:
@@ -133,6 +135,223 @@ def build_outcome_measures_v1(referee: dict[str, Any] | None) -> dict[str, Any]:
         "win_rate is binary scorecard; money/edge/drawdown are separate questions."
     )
     return base
+
+
+def _scenario_has_observation_only_metadata(scenario: dict[str, Any] | None, prior_run_id: str | None) -> bool:
+    """Hypothesis / trace / context without implying a memory bundle was merged."""
+    if prior_run_id and str(prior_run_id).strip():
+        return True
+    if not scenario:
+        return False
+    if scenario.get("training_trace_id") or scenario.get("prior_scenario_id"):
+        return True
+    ae = scenario.get("agent_explanation")
+    if isinstance(ae, dict):
+        if isinstance(ae.get("hypothesis"), str) and ae["hypothesis"].strip():
+            return True
+        ic = ae.get("indicator_context")
+        if isinstance(ic, dict) and ic:
+            return True
+    return False
+
+
+def _groundhog_bundle_path_resolved() -> Path:
+    return groundhog_bundle_path().resolve()
+
+
+def _bundle_is_canonical_groundhog(bundle_path: str | None) -> bool:
+    if not bundle_path:
+        return False
+    try:
+        return Path(bundle_path).resolve() == _groundhog_bundle_path_resolved()
+    except OSError:
+        return False
+
+
+def _context_quality_barney(iq: dict[str, Any] | None) -> str:
+    lvl = (iq or {}).get("level") or "missing"
+    if lvl == "rich":
+        return "rich"
+    if lvl == "missing":
+        return "missing"
+    return "thin"
+
+
+def _behavior_change_sentence(
+    memory_bundle_audit: dict[str, Any] | None,
+    *,
+    atr_stop_mult: float | None,
+    atr_target_mult: float | None,
+) -> str:
+    if not memory_bundle_audit:
+        return (
+            "No memory bundle was merged into the manifest before replay. "
+            "Execution followed the on-disk manifest (plus any scenario ATR overrides listed below)."
+        )
+    snap = memory_bundle_audit.get("apply_snapshot") or {}
+    keys = memory_bundle_audit.get("keys_applied") or []
+    parts = [f"{k}={snap[k]}" for k in keys if k in snap]
+    base = (
+        "Training-informed memory **did** change this run: whitelisted keys from the bundle were merged "
+        "into the manifest before the Referee ran."
+    )
+    if parts:
+        base += " Applied values: " + ", ".join(parts) + "."
+    if atr_stop_mult is not None or atr_target_mult is not None:
+        base += (
+            f" After that merge, scenario-level ATR overrides were applied: "
+            f"atr_stop_mult={atr_stop_mult!r}, atr_target_mult={atr_target_mult!r}."
+        )
+    return base
+
+
+def _outcome_visibility_note(
+    memory_applied: bool,
+    outcome_measures: dict[str, Any] | None,
+    ablation: dict[str, Any] | None,
+) -> tuple[str, str]:
+    """
+    Return (visibility, plain_language_note).
+
+    visibility: unknown | yes | no — only yes/no when ablation supplies a pair.
+    """
+    if ablation and ablation.get("outcome_delta_confirmed") is True:
+        return "yes", str(ablation.get("note") or "Ablation pair confirms an outcome delta with vs without memory.")
+    if ablation and ablation.get("outcome_delta_confirmed") is False:
+        return "no", str(ablation.get("note") or "Ablation pair shows no outcome delta.")
+    if not memory_applied:
+        return "unknown", "No memory merge — outcome reflects manifest-only replay (plus scenario ATR overrides)."
+    pos = bool((outcome_measures or {}).get("positive_any"))
+    lens = "positive_under_lenses" if pos else "not_positive_under_lenses"
+    return (
+        "unknown",
+        "This single replay cannot prove whether memory *changed* the outcome vs a no-memory replay. "
+        f"Under the built-in outcome lenses, positive signals: **{'yes' if pos else 'no'}** ({lens}). "
+        "Run an explicit ablation (same scenario with vs without the bundle) for scientific proof.",
+    )
+
+
+def build_learning_memory_evidence(
+    *,
+    memory_bundle_audit: dict[str, Any] | None,
+    prior_run_id: str | None,
+    indicator_context_quality: dict[str, Any] | None,
+    scenario: dict[str, Any] | None = None,
+    outcome_measures: dict[str, Any] | None = None,
+    atr_stop_mult: float | None = None,
+    atr_target_mult: float | None = None,
+    parallel_error: str | None = None,
+    ablation: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """
+    Operator drill-down: did training-informed memory influence execution, and what proof do we have?
+
+    ``ablation`` (optional, future): e.g. ``{\"outcome_delta_confirmed\": true, \"note\": \"...\"}``
+    when the same scenario was run with and without memory.
+    """
+    audit = memory_bundle_audit
+    memory_applied = audit is not None
+    pid = (prior_run_id or "").strip() or None
+    bundle_from = None
+    if isinstance(audit, dict):
+        br = audit.get("from_run_id")
+        if br is not None and str(br).strip():
+            bundle_from = str(br).strip()
+
+    skip_gh = bool(scenario and scenario.get("skip_groundhog_bundle"))
+    gh_active = _bundle_is_canonical_groundhog((audit or {}).get("bundle_path")) and not skip_gh
+    groundhog_mode = "active" if gh_active else "inactive"
+
+    iq_barney = _context_quality_barney(indicator_context_quality)
+
+    if parallel_error:
+        training_claim = "none"
+        training_evidence = "none"
+    elif ablation and ablation.get("outcome_delta_confirmed") is True:
+        training_claim = "memory_applied_and_outcome_changed"
+        training_evidence = "confirmed"
+    elif memory_applied:
+        training_claim = "memory_promoted" if bundle_from else "memory_applied"
+        training_evidence = "partial"
+    elif _scenario_has_observation_only_metadata(scenario, prior_run_id):
+        training_claim = "observed_only"
+        training_evidence = (
+            "partial"
+            if (indicator_context_quality or {}).get("level")
+            in ("thin", "rich", "noise_risk")
+            else "none"
+        )
+    else:
+        training_claim = "none"
+        training_evidence = "none"
+
+    if training_evidence == "partial" and isinstance(ablation, dict) and ablation.get("outcome_delta_confirmed") is True:
+        training_evidence = "confirmed"
+
+    proof_type = "replay only"
+    if ablation:
+        proof_type = "replay + ablation"
+    elif memory_applied:
+        proof_type = "replay + memory"
+
+    vis, vis_note = _outcome_visibility_note(memory_applied, outcome_measures, ablation)
+
+    learned_from: dict[str, Any] = {
+        "prior_run_id_metadata": pid,
+        "bundle_path": (audit or {}).get("bundle_path"),
+        "bundle_from_run_id": bundle_from,
+        "batch_folder": None,
+    }
+
+    out: dict[str, Any] = {
+        "schema": LEARNING_MEMORY_EVIDENCE_SCHEMA,
+        "memory_applied": memory_applied,
+        "groundhog_mode": groundhog_mode,
+        "groundhog_note": (
+            "Canonical Groundhog bundle path was merged for this replay."
+            if gh_active
+            else (
+                "Groundhog auto-merge was skipped for this scenario."
+                if skip_gh
+                else (
+                    "A memory bundle was merged from a non-canonical path (or Groundhog file was not used)."
+                    if memory_applied
+                    else "No bundle merge — Groundhog file was not in effect for this run."
+                )
+            )
+        ),
+        "learned_from": learned_from,
+        "behavior_change": _behavior_change_sentence(audit, atr_stop_mult=atr_stop_mult, atr_target_mult=atr_target_mult),
+        "context_quality": {
+            "raw_level": (indicator_context_quality or {}).get("level"),
+            "operator_label": iq_barney,
+        },
+        "training_claim": training_claim,
+        "operator_labels": {
+            "training_evidence": training_evidence,
+            "memory_in_use": "yes" if memory_applied else "no",
+            "groundhog_mode": groundhog_mode,
+            "learned_from_prior_run_id": bundle_from or pid,
+            "changed_this_run": _behavior_change_sentence(audit, atr_stop_mult=atr_stop_mult, atr_target_mult=atr_target_mult),
+            "context_quality": iq_barney,
+            "proof_type": proof_type,
+        },
+        "outcome_change_visible": vis,
+        "outcome_change_note": vis_note,
+        "ablation": {
+            "available": bool(ablation),
+            "note": (
+                ablation.get("note")
+                if isinstance(ablation, dict) and ablation.get("note")
+                else "Same scenario was not also run without memory in this batch — no paired ablation proof."
+            ),
+        },
+    }
+    if parallel_error:
+        out["run_error"] = parallel_error
+        out["operator_labels"]["training_evidence"] = "none"
+        out["operator_labels"]["memory_in_use"] = "no"
+    return out
 
 
 def build_decision_audit(
@@ -259,9 +478,54 @@ def build_run_memory_record(
             "note": "Fill after review; optional Anna/human — does not affect Referee.",
         },
     }
+    rec["learning_memory_evidence"] = build_learning_memory_evidence(
+        memory_bundle_audit=memory_bundle_audit,
+        prior_run_id=prior_run_id,
+        indicator_context_quality=rec["indicator_context_quality"],
+        scenario=scenario,
+        outcome_measures=rec["outcome_measures"],
+        atr_stop_mult=atr_stop_mult,
+        atr_target_mult=atr_target_mult,
+        parallel_error=parallel_error,
+    )
     if parallel_error:
         rec["error"] = parallel_error
     return rec
+
+
+def learning_evidence_from_parallel_result_row(row: dict[str, Any]) -> dict[str, Any]:
+    """
+    Build the same ``learning_memory_evidence`` block as ``build_run_memory_record`` from a
+    parallel worker result row (no full run_record required — used for batch markdown summaries).
+    """
+    ae = row.get("agent_explanation")
+    ic = ae.get("indicator_context") if isinstance(ae, dict) else None
+    iq = assess_indicator_context(ic if isinstance(ic, dict) else None)
+    summ = row.get("summary") if row.get("ok") else None
+    om = build_outcome_measures_v1(summ)
+    err = None if row.get("ok") else str(row.get("error", "unknown"))
+    scen = {
+        k: row[k]
+        for k in (
+            "agent_explanation",
+            "prior_run_id",
+            "skip_groundhog_bundle",
+            "memory_bundle_path",
+            "training_trace_id",
+            "prior_scenario_id",
+        )
+        if k in row
+    }
+    return build_learning_memory_evidence(
+        memory_bundle_audit=row.get("memory_bundle_audit"),
+        prior_run_id=row.get("prior_run_id") if row.get("prior_run_id") is not None else None,
+        indicator_context_quality=iq,
+        scenario=scen or None,
+        outcome_measures=om,
+        atr_stop_mult=row.get("atr_stop_mult"),
+        atr_target_mult=row.get("atr_target_mult"),
+        parallel_error=err,
+    )
 
 
 def append_run_memory(path: Path | str, record: dict[str, Any]) -> None:

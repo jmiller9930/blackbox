@@ -104,6 +104,8 @@ def _worker_run_one(scenario: dict[str, Any]) -> dict[str, Any]:
             "dataset_bars": out.get("dataset_bars"),
             "manifest_path": str(scenario.get("manifest_path", "")),
             "memory_bundle_audit": out.get("memory_bundle_audit"),
+            "atr_stop_mult": scenario.get("atr_stop_mult"),
+            "atr_target_mult": scenario.get("atr_target_mult"),
         }
         row.update(extract_scenario_echo_fields(scenario))
         return row
@@ -123,6 +125,8 @@ def _worker_run_one(scenario: dict[str, Any]) -> dict[str, Any]:
             "policy_contract": pc,
             "referee_session": "ERROR",
             "summary": None,
+            "atr_stop_mult": scenario.get("atr_stop_mult"),
+            "atr_target_mult": scenario.get("atr_target_mult"),
         }
         row.update(extract_scenario_echo_fields(scenario))
         return row
