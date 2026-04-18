@@ -120,4 +120,11 @@ def build_execution_manager_from_manifest(
     if not meta:
         raise KeyError(f"execution_template {eid} not in catalog")
     cls = _import_class(str(meta["import_path"]), str(meta["class_name"]))
-    return cls()
+    raw_s = manifest.get("atr_stop_mult")
+    raw_t = manifest.get("atr_target_mult")
+    kwargs: dict[str, float] = {}
+    if raw_s is not None:
+        kwargs["atr_stop_mult"] = float(raw_s)
+    if raw_t is not None:
+        kwargs["atr_target_mult"] = float(raw_t)
+    return cls(**kwargs) if kwargs else cls()

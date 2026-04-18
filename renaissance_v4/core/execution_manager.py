@@ -25,7 +25,14 @@ ATR_TARGET_MULT = 3.35
 
 
 class ExecutionManager:
-    def __init__(self) -> None:
+    def __init__(
+        self,
+        *,
+        atr_stop_mult: float | None = None,
+        atr_target_mult: float | None = None,
+    ) -> None:
+        self.atr_stop_mult = float(ATR_STOP_MULT if atr_stop_mult is None else atr_stop_mult)
+        self.atr_target_mult = float(ATR_TARGET_MULT if atr_target_mult is None else atr_target_mult)
         self.current_trade: TradeState | None = None
         self.cumulative_pnl: float = 0.0
 
@@ -45,12 +52,14 @@ class ExecutionManager:
         entry_regime: str = "unknown",
     ) -> None:
         atr_eff = max(atr, 1e-12)
+        sm = self.atr_stop_mult
+        tm = self.atr_target_mult
         if direction == "long":
-            stop = price - (ATR_STOP_MULT * atr_eff)
-            target = price + (ATR_TARGET_MULT * atr_eff)
+            stop = price - (sm * atr_eff)
+            target = price + (tm * atr_eff)
         else:
-            stop = price + (ATR_STOP_MULT * atr_eff)
-            target = price - (ATR_TARGET_MULT * atr_eff)
+            stop = price + (sm * atr_eff)
+            target = price - (tm * atr_eff)
 
         self.current_trade = TradeState(
             symbol=symbol,

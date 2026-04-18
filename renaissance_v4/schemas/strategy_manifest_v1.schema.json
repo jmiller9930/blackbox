@@ -49,6 +49,23 @@
       "description": "Governed experiment class",
       "examples": ["replay_full_history", "robustness_compare", "baseline_monte_carlo_reference"]
     },
-    "notes": { "type": "string" }
+    "notes": { "type": "string" },
+    "atr_stop_mult": {
+      "type": "number",
+      "minimum": 0.5,
+      "maximum": 6.0,
+      "description": "Optional ATR multiple for stop distance (ExecutionManager pattern game)"
+    },
+    "atr_target_mult": {
+      "type": "number",
+      "minimum": 0.5,
+      "maximum": 6.0,
+      "description": "Optional ATR multiple for take-profit distance (ExecutionManager pattern game)"
+    },
+    "pattern_game_meta": {
+      "type": "object",
+      "additionalProperties": true,
+      "description": "Optional metadata only (starting_equity_usd, risk_fraction) — not consumed by replay unless wired"
+    }
   }
 }

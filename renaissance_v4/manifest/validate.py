@@ -87,6 +87,20 @@ def validate_manifest_against_catalog(
     if et and allowed and et not in allowed:
         errors.append(f"experiment_type not allowed: {et}; allowed={allowed}")
 
+    # Optional pattern-game ATR multiples (ExecutionManager); must stay in a sane band.
+    _MIN_ATR, _MAX_ATR = 0.5, 6.0
+    for key in ("atr_stop_mult", "atr_target_mult"):
+        v = manifest.get(key)
+        if v is None:
+            continue
+        try:
+            f = float(v)
+        except (TypeError, ValueError):
+            errors.append(f"{key} must be numeric")
+            continue
+        if not (_MIN_ATR <= f <= _MAX_ATR):
+            errors.append(f"{key} must be in [{_MIN_ATR}, {_MAX_ATR}], got {f}")
+
     return errors
 
 
