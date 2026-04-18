@@ -22,8 +22,9 @@ Operator **retrospective** (learn / next experiment): ``GET /api/retrospective-l
 distinct parallel scenarios from scorecard + retrospective (see ``hunter_planner.py``); not
 Referee predictions.
 
-No manifest/ATR fields in the UI — policy lives in the JSON (or examples presets). Default 16 workers
-(capped to host). ``POST /api/run`` remains for scripted single-manifest runs (optional JSON field ``memory_bundle_path``).
+No manifest/ATR fields in the UI — policy lives in the JSON (or examples presets). **Workers** slider defaults
+to **logical CPU count** (capped by host hard max, see ``GET /api/capabilities``). ``POST /api/run`` remains for
+scripted single-manifest runs (optional JSON field ``memory_bundle_path``).
 
   pip install -r renaissance_v4/game_theory/requirements.txt
   PYTHONPATH=. python3 -m renaissance_v4.game_theory.web_app
