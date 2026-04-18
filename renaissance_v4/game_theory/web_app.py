@@ -267,6 +267,17 @@ PAGE_HTML = """<!DOCTYPE html>
       pre.textContent = JSON.stringify(data, null, 2);
     }
 
+    function friendlyFetchError(e) {
+      const m = (e && (e.message || String(e))) || '';
+      const isNet =
+        (e && e.name === 'TypeError' && (m.indexOf('NetworkError') >= 0 || m.indexOf('Failed to fetch') >= 0 || m.indexOf('Load failed') >= 0)) ||
+        (e && e.name === 'AbortError');
+      if (isNet && e && e.name !== 'AbortError') {
+        return 'Connection lost while talking to the server. Common causes: the app was restarted or killed mid-run, Wi‑Fi/VPN blip, or the page URL changed. Hard-refresh this page (reload) and click Run again.';
+      }
+      return String(e);
+    }
+
     document.getElementById('runBtn').onclick = async () => {
       const btn = document.getElementById('runBtn');
       btn.disabled = true;
@@ -300,7 +311,7 @@ PAGE_HTML = """<!DOCTYPE html>
       } catch (e) {
         const msg = (e && e.name === 'AbortError')
           ? ('Timed out after ' + (RUN_TIMEOUT_MS / 60000) + ' minutes — run may still be going on the server; refresh or check logs.')
-          : String(e);
+          : friendlyFetchError(e);
         await show(null, null, msg);
         statusLine.textContent = 'Stopped or failed — see Result.';
       } finally {
