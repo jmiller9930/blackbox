@@ -7,6 +7,7 @@
     "training_trace_id": "kitchen_run_2026-04-18_a7f3",
     "prior_scenario_id": "trial_000_baseline",
     "agent_explanation": {
+      "hypothesis": "Mid-range ATR (2.0 / 3.0) beats the prior trial’s tighter geometry on cumulative PnL for the same manifest and history.",
       "why_this_strategy": "Prior fold favored wider stops; testing same signal stack with house ATR band mid-range.",
       "indicator_values": {
         "notes": "Manifest-driven; align with policy_spec indicators if PolicySpec lane is used."

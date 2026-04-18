@@ -24,7 +24,15 @@ def test_run_parallel_start_and_status() -> None:
     app.config["TESTING"] = True
     mp = _manifest_path()
     scenarios_json = json.dumps(
-        [{"scenario_id": "job_test", "manifest_path": mp}],
+        [
+            {
+                "scenario_id": "job_test",
+                "manifest_path": mp,
+                "agent_explanation": {
+                    "hypothesis": "Smoke test: baseline manifest completes one replay on lab data.",
+                },
+            }
+        ],
     )
     client = app.test_client()
     st = client.post(

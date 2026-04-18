@@ -43,6 +43,37 @@ def test_extract_agent_fields_subset() -> None:
     assert d["agent_explanation"]["why_this_strategy"] == "q"
 
 
+def test_validate_scenarios_require_hypothesis_blocks_empty() -> None:
+    root = Path(__file__).resolve().parents[1]
+    mp = root / "renaissance_v4" / "configs" / "manifests" / "baseline_v1_recipe.json"
+    if not mp.is_file():
+        return
+    ok, msgs = validate_scenarios(
+        [{"scenario_id": "x", "manifest_path": str(mp), "agent_explanation": {}}],
+        require_hypothesis=True,
+    )
+    assert ok is False
+    assert any("hypothesis" in m for m in msgs)
+
+
+def test_validate_scenarios_require_hypothesis_accepts_string() -> None:
+    root = Path(__file__).resolve().parents[1]
+    mp = root / "renaissance_v4" / "configs" / "manifests" / "baseline_v1_recipe.json"
+    if not mp.is_file():
+        return
+    ok, msgs = validate_scenarios(
+        [
+            {
+                "scenario_id": "x",
+                "manifest_path": str(mp),
+                "agent_explanation": {"hypothesis": "Expect non-negative cumulative PnL on this window."},
+            }
+        ],
+        require_hypothesis=True,
+    )
+    assert ok is True
+
+
 def test_extract_scenario_echo_includes_tier_fields() -> None:
     d = extract_scenario_echo_fields(
         {

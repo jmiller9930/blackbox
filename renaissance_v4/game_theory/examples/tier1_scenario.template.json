@@ -11,6 +11,7 @@
     "training_trace_id": "",
     "prior_scenario_id": "",
     "agent_explanation": {
+      "hypothesis": "Replace with one testable sentence: what you expect this scenario to prove vs the same bars (e.g. higher cumulative PnL than baseline_default).",
       "why_this_strategy": "",
       "indicator_values": {},
       "learned": "",

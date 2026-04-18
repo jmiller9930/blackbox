@@ -3,6 +3,7 @@
     "scenario_id": "baseline_default",
     "manifest_path": "renaissance_v4/configs/manifests/baseline_v1_recipe.json",
     "agent_explanation": {
+      "hypothesis": "Default recipe ATR geometry matches or beats baseline_default on cumulative PnL for the same bar history.",
       "why_this_strategy": "Reference manifest with default ATR geometry from the recipe.",
       "indicator_values": {},
       "learned": "",
@@ -13,12 +14,18 @@
     "scenario_id": "atr_tight",
     "manifest_path": "renaissance_v4/configs/manifests/baseline_v1_recipe.json",
     "atr_stop_mult": 1.5,
-    "atr_target_mult": 2.5
+    "atr_target_mult": 2.5,
+    "agent_explanation": {
+      "hypothesis": "Tighter ATR multiples (1.5 / 2.5) reduce drawdown vs default without destroying cumulative PnL on this window."
+    }
   },
   {
     "scenario_id": "atr_wide",
     "manifest_path": "renaissance_v4/configs/manifests/baseline_v1_recipe.json",
     "atr_stop_mult": 2.5,
-    "atr_target_mult": 4.0
+    "atr_target_mult": 4.0,
+    "agent_explanation": {
+      "hypothesis": "Wider ATR multiples (2.5 / 4.0) improve net PnL vs atr_tight by letting winners run on this bar history."
+    }
   }
 ]

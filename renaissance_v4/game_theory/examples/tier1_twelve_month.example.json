@@ -10,6 +10,7 @@
     "manifest_path": "renaissance_v4/configs/manifests/baseline_v1_recipe.json",
     "training_trace_id": "tier1_batch_v1",
     "agent_explanation": {
+      "hypothesis": "Full-history baseline v1 stack on ingested SOLUSDT 5m yields positive expectancy vs strict binary trade scorecard under outcome_rule_v1 (testable vs this replay only).",
       "why_this_strategy": "Runnable preset; replace with partner narrative.",
       "indicator_values": {},
       "learned": "",

@@ -21,11 +21,16 @@ No manifest/ATR fields in the UI — policy lives in the JSON (or examples prese
   PYTHONPATH=. python3 -m renaissance_v4.game_theory.web_app
 
 Default bind is loopback; use ``--host 0.0.0.0`` for LAN/SSH access (prototype).
+
+**Hypothesis (default on):** parallel runs validate a non-empty ``agent_explanation.hypothesis`` per
+scenario unless ``PATTERN_GAME_REQUIRE_HYPOTHESIS=0`` (or ``false`` / ``no`` / ``off``). Shipped
+presets include a starter hypothesis string.
 """
 
 from __future__ import annotations
 
 import json
+import os
 import threading
 import time
 import uuid
@@ -78,6 +83,18 @@ def _prune_jobs() -> None:
             del _JOBS[k]
 
 
+def _web_ui_require_hypothesis() -> bool:
+    """
+    Require ``agent_explanation.hypothesis`` on each scenario for POST /api/run-parallel*.
+
+    Default **True**. Disable with ``PATTERN_GAME_REQUIRE_HYPOTHESIS=0`` (or ``false`` / ``no`` / ``off``).
+    """
+    v = os.environ.get("PATTERN_GAME_REQUIRE_HYPOTHESIS", "").strip().lower()
+    if v in ("0", "false", "no", "off"):
+        return False
+    return True
+
+
 def _prepare_parallel_payload(data: dict[str, Any]) -> dict[str, Any]:
     """Validate POST body for parallel run. Returns ``ok`` + fields or ``ok: False`` + ``error``."""
     raw = data.get("scenarios_json")
@@ -100,7 +117,10 @@ def _prepare_parallel_payload(data: dict[str, Any]) -> dict[str, Any]:
     if not scenarios:
         return {"ok": False, "error": "No scenario objects in JSON array"}
 
-    ok_val, val_msgs = validate_scenarios(scenarios)
+    ok_val, val_msgs = validate_scenarios(
+        scenarios,
+        require_hypothesis=_web_ui_require_hypothesis(),
+    )
     if not ok_val:
         return {
             "ok": False,
@@ -260,8 +280,7 @@ def create_app() -> Flask:
         data = request.get_json(force=True, silent=True) or {}
         prep = _prepare_parallel_payload(data)
         if not prep["ok"]:
-            err_body = {k: v for k, v in prep.items() if k != "ok"}
-            return jsonify(err_body), 400
+            return jsonify(dict(prep)), 400
         scenarios = prep["scenarios"]
         max_workers = prep["max_workers"]
         log_path = prep["log_path"]
@@ -407,8 +426,7 @@ def create_app() -> Flask:
         data = request.get_json(force=True, silent=True) or {}
         prep = _prepare_parallel_payload(data)
         if not prep["ok"]:
-            err_body = {k: v for k, v in prep.items() if k != "ok"}
-            return jsonify(err_body), 400
+            return jsonify(dict(prep)), 400
         scenarios = prep["scenarios"]
         max_workers = prep["max_workers"]
         log_path = prep["log_path"]
@@ -709,7 +727,8 @@ PAGE_HTML = """<!DOCTYPE html>
   <p class="caps" id="presetHelp">Selecting a preset fills the textarea. You can edit it afterward. Or ignore the menu and paste only.</p>
 
   <label for="scenarios">Scenario batch (JSON array)</label>
-  <textarea id="scenarios" spellcheck="false" placeholder='[{"scenario_id":"…","manifest_path":"…",…}]'></textarea>
+  <p class="caps" style="margin:4px 0 8px 0">Each scenario needs a non-empty <code>agent_explanation.hypothesis</code> (what you expect this run to prove on this tape). Override: <code>PATTERN_GAME_REQUIRE_HYPOTHESIS=0</code>.</p>
+  <textarea id="scenarios" spellcheck="false" placeholder='[{"scenario_id":"…","manifest_path":"…","agent_explanation":{"hypothesis":"…"},…}]'></textarea>
 
   <label for="workersRange">Workers <span id="workersVal" style="color:#e7e9ea;font-weight:600">1</span></label>
   <input type="range" id="workersRange" min="1" max="64" value="1" step="1" />
