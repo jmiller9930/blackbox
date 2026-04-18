@@ -14,6 +14,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from renaissance_v4.game_theory.context_memory import TIDE_METAPHOR
 from renaissance_v4.game_theory.memory_paths import default_logs_root
 
 _GAME_THEORY = Path(__file__).resolve().parent
@@ -91,6 +92,26 @@ def render_human_readable_markdown(record: dict[str, Any]) -> str:
         lines.append("```")
     else:
         lines.append("*No structured indicator_context was supplied.*")
+    lines.append("")
+    iq = record.get("indicator_context_quality") or {}
+    lvl = iq.get("level", "")
+    lines.append("### Single-silo memory (not the universe)")
+    lines.append("")
+    lines.append(
+        "Retrieval here is **one silo**: pattern-game replay + what you attach — **not** general RAG over "
+        "the world. What must persist is **context around indicators** (regime, direction, transition, "
+        "velocity). Without that, you only store **noise**."
+    )
+    lines.append("")
+    lines.append(f"> {TIDE_METAPHOR}")
+    lines.append("")
+    if iq:
+        lines.append(
+            f"- **Context quality (this run):** `{lvl}` "
+            f"(signal keys matched: {iq.get('matched_signal_keys', [])})"
+        )
+        if iq.get("warn") and lvl in ("missing", "noise_risk", "thin"):
+            lines.append(f"- **Warning:** Context is thin or absent — review before promoting any “memory.”")
     lines.append("")
 
     lines.append("## Memory & prior knowledge — did this run “remember” earlier runs?")

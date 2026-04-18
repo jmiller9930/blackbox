@@ -16,6 +16,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from renaissance_v4.game_theory.context_memory import CONTEXT_SILO_ID, assess_indicator_context
+
 SCHEMA = "renaissance_v4_run_memory_v1"
 
 
@@ -126,6 +128,8 @@ def build_run_memory_record(
         "manifest_sha256": sha256_file(mp) if mp.is_file() else None,
         "hypothesis": bundle["hypothesis"],
         "indicator_context": bundle["indicator_context"],
+        "context_silo": CONTEXT_SILO_ID,
+        "indicator_context_quality": assess_indicator_context(bundle["indicator_context"]),
         "prior_run_id": prior_run_id,
         "atr_stop_mult": atr_stop_mult,
         "atr_target_mult": atr_target_mult,
