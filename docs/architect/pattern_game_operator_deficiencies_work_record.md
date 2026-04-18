@@ -9,15 +9,29 @@
 
 ---
 
-## DEF-001 — Automatic learning from replay outcomes
+## DEF-001 — Surfaced: science / evaluation contract (achievable spec)
+
+**We stick to what the implementation can honestly deliver:** deterministic **measurement** on a fixed tape and manifest, plus **logged metrics** and **operator memory** for the *next* experiment. That is the **science approach** in scope today.
+
+| What we commit to | What we do **not** claim in-band |
+|-------------------|----------------------------------|
+| Same inputs + same code → **reproducible** replay statistics | Automatic **policy learning** (weights, fusion geometry, or strategy parameters updating from batch outcomes inside the Referee loop) |
+| **Referee** applies **fixed rules** from manifest + engine to historical bars | The run **improves itself** because you clicked Run again |
+| **Ledger-style** components may **aggregate outcomes** for analysis; they do **not** self-tune (`LearningLedger` docstring) | “Learning” as **model training** without a separate, explicit product |
+
+**Operator-facing:** The pattern-game web UI includes a **DEF-001** callout linking here. Closing DEF-001 means **language + UI stay aligned** with this table—not shipping an online learner unless a future DEF/spec says so.
+
+---
+
+### DEF-001 — Work record (defect narrative)
 
 | Field | Content |
 |--------|--------|
-| **Engineered purpose** | The Renaissance stack includes a **`LearningLedger`** and research paths to **record trade outcomes** and compute **aggregate metrics** during replay analysis. Parameter governance was intentionally kept **out of band** (manifests, humans, future optimizers). |
-| **Expected operator outcome** | Language such as “learning,” “scorecard,” and “memory” often implies the **system improves its own policy** from batch runs (weights, fusion rules, or strategy parameters update from results). |
-| **Observed now (evidence)** | `LearningLedger` documents that it **does not** tune strategy parameters, fusion weights, or execution geometry (`renaissance_v4/research/learning_ledger.py`). The Referee path is **deterministic replay** with fixed rules from manifest + engine (`renaissance_v4/game_theory/run_session_log.py`). Governance copy states that **“learning” requires changing inputs** and comparing differences, not automatic in-loop updates (`renaissance_v4/game_theory/anna_hard_rules.py`). Pattern-game core does not wire `LearningLedger` as an online learner. |
-| **Requested remediation** | (1) **Rename and signpost** in UI and docs: e.g. “metrics ledger” vs “learning” where it means human iteration only. (2) **Single explicit disclaimer** on the pattern-game page: no in-band parameter learning unless a future feature is toggled on. (3) If product requires **true** learning later, specify a **separate initiative** (optimizer contract, scope, proof) rather than overloading current components. |
-| **Status** | open |
+| **Engineered purpose** | The stack records trade outcomes and **aggregate metrics** where `LearningLedger` and research paths apply; **governance** keeps parameter changes **out of band** (manifests, humans, future optimizers). Referee replay is **deterministic** for auditability. |
+| **Expected operator outcome** | Words like “learning,” “ledger,” and “memory” suggest the **system updates its own policy** from results. |
+| **Observed now (evidence)** | `LearningLedger` **does not** tune parameters (`renaissance_v4/research/learning_ledger.py`). Referee is **deterministic replay** (`renaissance_v4/game_theory/run_session_log.py`). Hard rules: **learning** in the sense of progress requires **changing inputs** and comparing runs (`renaissance_v4/game_theory/anna_hard_rules.py`). Pattern-game core does not implement an **online learner**. |
+| **Requested remediation** | (1) **This document + UI callout** state the science-only contract. (2) Prefer terms like **metrics**, **evaluation**, **iteration memory** where we mean logs and human follow-up. (3) Any future **closed-loop learning** is a **new** spec/DEF with acceptance tests—not a rename of DEF-001. |
+| **Status** | in progress (surfaced in UI + doc; close when copy is stable and agreed) |
 
 ---
 

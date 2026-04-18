@@ -57,7 +57,7 @@ from flask import Flask, Response, abort, jsonify, request
 _GAME_THEORY = Path(__file__).resolve().parent
 
 # Operator-visible web UI bundle version — bump when changing PAGE_HTML (HTML/CSS/JS) so deploys are provable.
-PATTERN_GAME_WEB_UI_VERSION = "1.3.0"
+PATTERN_GAME_WEB_UI_VERSION = "1.4.0"
 
 from renaissance_v4.game_theory.groundhog_memory import (
     groundhog_auto_merge_enabled,
@@ -733,6 +733,26 @@ PAGE_HTML = """<!DOCTYPE html>
     }
     .page-lead { margin: 0; color: var(--muted); font-size: 0.95rem; max-width: 56ch; }
     .page-lead strong { color: #e7e9ea; font-weight: 600; }
+    .def001-science {
+      margin-top: 12px;
+      padding: 12px 14px;
+      border-radius: 8px;
+      border: 1px solid #2a4a60;
+      background: linear-gradient(180deg, #121c24 0%, #0f1419 100%);
+      font-size: 0.82rem;
+      line-height: 1.5;
+      color: #c8d0d8;
+    }
+    .def001-science .def001-tag {
+      display: inline-block;
+      font-size: 0.65rem;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      color: #5eb8e8;
+      margin-bottom: 6px;
+    }
+    .def001-science strong { color: #e7edf2; }
+    .def001-science a { color: #5eb8e8; }
     details.help-details {
       margin-top: 12px; border-radius: 8px; border: 1px solid var(--border);
       background: var(--surface); padding: 0 12px;
@@ -1053,6 +1073,15 @@ PAGE_HTML = """<!DOCTYPE html>
   <header class="page-header">
     <h1>Pattern game <span class="ui-version" title="Web UI bundle — bump PATTERN_GAME_WEB_UI_VERSION in web_app.py when this page changes">v__PATTERN_GAME_WEB_UI_VERSION__</span></h1>
     <p class="page-lead">Pick a <strong>preset</strong> or paste <strong>scenario JSON</strong>, then run the batch. Referee scores and paper P&amp;L update below.</p>
+    <div class="def001-science" role="region" aria-label="DEF-001 Science evaluation contract">
+      <span class="def001-tag">DEF-001 · SCIENCE / EVALUATION ONLY</span>
+      <p style="margin:0">
+        This lab run is <strong>deterministic replay</strong>: fixed manifest + engine rules on historical bars.
+        It <strong>does not</strong> train or auto-tune policy weights from your batch (no in-band “machine learning” from outcomes).
+        We <strong>measure</strong> (P&amp;L, win rates, scorecard) and you <strong>iterate</strong> (hypothesis, manifests, next scenarios).
+        Full work record: <code>docs/architect/pattern_game_operator_deficiencies_work_record.md</code> (DEF-001).
+      </p>
+    </div>
     <details class="help-details">
       <summary>Setup, PYTHONPATH, and where policy lives</summary>
       <div class="help-details-body">
