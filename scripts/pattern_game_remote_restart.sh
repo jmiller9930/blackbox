@@ -8,6 +8,7 @@ REPO="${1:-$HOME/blackbox}"
 REPO="$(cd "$REPO" && pwd)"
 cd "$REPO"
 export PYTHONPATH="$REPO"
+echo "gsync: pattern-game repo HEAD $(git rev-parse --short HEAD 2>/dev/null || echo '?') ($(git log -1 --oneline 2>/dev/null | cut -c1-60 || echo '?'))"
 
 if [ -f "$REPO/.venv_pattern_game/bin/activate" ]; then
   # shellcheck source=/dev/null
