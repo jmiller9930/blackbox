@@ -1129,6 +1129,24 @@ PAGE_HTML = """<!DOCTYPE html>
       else sub.textContent = total > 0 ? ('Scenarios ' + completed + ' / ' + total + ' complete (replay is CPU-bound; each bar can take minutes).') : '';
     }
 
+    /** Prefer API total; never default to 1 (that showed 0/1 for 15-scenario batches if total was missing). */
+    function resolveScenarioBatchTotal(apiTotal, textareaValue) {
+      const n = Number(apiTotal);
+      if (Number.isFinite(n) && n >= 1) return n;
+      try {
+        const raw = JSON.parse(textareaValue);
+        const arr = Array.isArray(raw) ? raw : (raw && Array.isArray(raw.scenarios) ? raw.scenarios : null);
+        if (arr && arr.length >= 1) return arr.length;
+      } catch (e) {}
+      return 1;
+    }
+
+    function statusPollTotal(pj, fallbackTotal) {
+      const n = Number(pj.total);
+      if (Number.isFinite(n) && n >= 1) return n;
+      return fallbackTotal;
+    }
+
     document.getElementById('runBtn').onclick = async () => {
       const btn = document.getElementById('runBtn');
       btn.disabled = true;
@@ -1149,8 +1167,9 @@ PAGE_HTML = """<!DOCTYPE html>
           rangeEl.value = String(mw);
           workersVal.textContent = String(mw);
         }
+        const scenariosTa = document.getElementById('scenarios').value;
         const body = {
-          scenarios_json: document.getElementById('scenarios').value,
+          scenarios_json: scenariosTa,
           max_workers: mw,
           log_path: document.getElementById('doLog').checked
         };
@@ -1166,7 +1185,7 @@ PAGE_HTML = """<!DOCTYPE html>
           return;
         }
         const jobId = startJ.job_id;
-        const total = startJ.total || 1;
+        const total = resolveScenarioBatchTotal(startJ.total, scenariosTa);
         runWorkersCap = startJ.workers_used != null ? startJ.workers_used : null;
         showBatchConcurrencyBanner(total, runWorkersCap, 'run');
         statusLine.textContent =
@@ -1185,7 +1204,7 @@ PAGE_HTML = """<!DOCTYPE html>
           const wCap = pj.workers_used != null ? pj.workers_used : runWorkersCap;
           if (pj.status === 'running') {
             const c = pj.completed || 0;
-            const t = pj.total || total;
+            const t = statusPollTotal(pj, total);
             const lm = pj.last_message || '';
             const sub = (lm ? (lm + ' · ') : '') + 'up to ' + (wCap != null ? wCap : '?') + ' parallel · ' + elapsedStr;
             setProgressUI(c, t, sub);
@@ -1200,7 +1219,7 @@ PAGE_HTML = """<!DOCTYPE html>
             refreshScorecardHistory();
             await show(null, null, pj.error || 'Job failed');
             statusLine.textContent = 'Failed — see Result.';
-            setProgressUI(pj.completed || 0, pj.total || total, pj.error || '');
+            setProgressUI(pj.completed || 0, statusPollTotal(pj, total), pj.error || '');
             return true;
           }
           if (pj.status === 'done' && pj.result) {
