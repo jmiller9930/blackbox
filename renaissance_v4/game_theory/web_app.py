@@ -1,5 +1,8 @@
 """
-Local web UI for pattern game (single run + parallel batch).
+Local web UI for pattern game: **preset or paste** scenario JSON, then Run (parallel workers).
+
+No manifest/ATR fields in the UI — policy lives in the JSON (or examples presets). Default 16 workers
+(capped to host). ``POST /api/run`` remains for scripted single-manifest runs.
 
   pip install -r renaissance_v4/game_theory/requirements.txt
   PYTHONPATH=. python3 -m renaissance_v4.game_theory.web_app
@@ -32,12 +35,7 @@ def create_app() -> Flask:
     @app.get("/")
     def index() -> str:
         lim = get_parallel_limits()
-        default_m = str(_default_manifest_path())
-        return (
-            PAGE_HTML.replace("__LIMITS_JSON__", json.dumps(lim)).replace(
-                "__DEFAULT_MANIFEST__", json.dumps(default_m)
-            )
-        )
+        return PAGE_HTML.replace("__LIMITS_JSON__", json.dumps(lim))
 
     @app.get("/api/capabilities")
     def capabilities() -> Any:
@@ -193,11 +191,6 @@ PAGE_HTML = """<!DOCTYPE html>
       padding: 12px; overflow: auto; font-size: 0.75rem; max-height: 360px;
     }
     .err { color: #f4212e; }
-    .tabs { display: flex; gap: 8px; margin-bottom: 16px; }
-    .tabs button { margin: 0; background: #38444d; }
-    .tabs button.active { background: #1d9bf0; }
-    section.panel { display: none; }
-    section.panel.active { display: block; }
     input[type=checkbox] { width: auto; }
   </style>
 </head>
@@ -205,73 +198,44 @@ PAGE_HTML = """<!DOCTYPE html>
   <h1>Pattern game — local prototype</h1>
   <p class="caps">Referee-only scores. Bind: 127.0.0.1 · <code>PYTHONPATH</code> = repo root</p>
 
-  <div class="tabs">
-    <button type="button" class="active" id="tab1">Single run</button>
-    <button type="button" id="tab2">Parallel batch</button>
+  <p class="caps" style="margin-top:16px"><strong>Two options only:</strong> (1) choose a <strong>preset</strong> (pre-filled policy from <code>game_theory/examples/</code>), <strong>or</strong> (2) paste your own scenario JSON in the box. Strategy details and agent story belong in that JSON — not here.</p>
+
+  <label for="presetPick">Preset</label>
+  <select id="presetPick" aria-describedby="presetHelp">
+    <option value="">— Paste custom JSON below (no preset) —</option>
+  </select>
+  <p class="caps" id="presetHelp">Selecting a preset fills the textarea. You can edit it afterward. Or ignore the menu and paste only.</p>
+
+  <label for="scenarios">Scenario batch (JSON array)</label>
+  <textarea id="scenarios" spellcheck="false" placeholder='[{"scenario_id":"…","manifest_path":"…",…}]'></textarea>
+
+  <label for="workers">Workers</label>
+  <div class="row">
+    <div>
+      <input type="number" id="workers" min="1" value="16"/>
+      <p class="caps" id="workerHint"></p>
+    </div>
+    <div>
+      <label><input type="checkbox" id="doLog" checked/> Append results to <code>game_theory/experience_log.jsonl</code></label>
+    </div>
   </div>
 
-  <section class="panel active" id="panel1">
-    <label>Manifest path</label>
-    <input type="text" id="manifest" />
-    <div class="row">
-      <div><label>ATR stop mult (optional)</label><input type="number" id="atrS" step="0.01" min="0.5" max="6"/></div>
-      <div><label>ATR target mult (optional)</label><input type="number" id="atrT" step="0.01" min="0.5" max="6"/></div>
-    </div>
-    <label><input type="checkbox" id="emitBase"/> Emit baseline artifacts (reports)</label>
-    <button type="button" id="run1">Run</button>
-  </section>
-
-  <section class="panel" id="panel2">
-    <p class="caps"><strong>Either / or:</strong> pick <em>one</em> built-in file from the list (it fills the box), <strong>or</strong> paste your own scenario JSON (e.g. copy <code>examples/tier1_scenario.template.json</code> from the repo and edit). You do not need both. Contract: <code>renaissance_v4/game_theory/README.md</code>. Results include Referee <code>summary</code> plus echoed tier / agent fields (not scored).</p>
-    <label>Built-in preset <span class="caps" style="display:inline;margin:0">(optional)</span></label>
-    <select id="presetPick" aria-describedby="presetHelp">
-      <option value="">— None: I will paste JSON below —</option>
-    </select>
-    <p class="caps" id="presetHelp">Choosing a preset replaces the textarea content. Skip this if you already have JSON.</p>
-    <label>Parallel workers</label>
-    <div class="row">
-      <div>
-        <input type="number" id="workers" min="1" value="1"/>
-        <p class="caps" id="workerHint"></p>
-      </div>
-      <div>
-        <label><input type="checkbox" id="doLog" checked/> Append results to <code>game_theory/experience_log.jsonl</code></label>
-      </div>
-    </div>
-    <label>Scenarios JSON</label>
-    <textarea id="scenarios" spellcheck="false" placeholder='[{"scenario_id":"…","manifest_path":"…",…}]'></textarea>
-    <button type="button" id="run2">Run parallel</button>
-  </section>
+  <button type="button" id="runBtn">Run</button>
 
   <h2>Result</h2>
   <pre id="out">(no run yet)</pre>
 
   <script>
     const LIMITS = __LIMITS_JSON__;
+    const DEFAULT_UI_WORKERS = 16;
 
     document.getElementById('workerHint').textContent =
-      'This machine: ' + LIMITS.cpu_logical_count + ' logical CPUs · recommended ≤ ' +
-      LIMITS.recommended_max_workers + ' workers · hard cap ' + LIMITS.hard_cap_workers +
-      '. ' + LIMITS.note;
+      'Default ' + DEFAULT_UI_WORKERS + ' parallel worker processes (capped to this machine). ' +
+      LIMITS.cpu_logical_count + ' logical CPUs · hard cap ' + LIMITS.hard_cap_workers + '. ' + LIMITS.note;
 
     const wEl = document.getElementById('workers');
     wEl.max = LIMITS.hard_cap_workers;
-    wEl.value = Math.min(LIMITS.recommended_max_workers, LIMITS.hard_cap_workers);
-
-    document.getElementById('manifest').value = __DEFAULT_MANIFEST__;
-
-    document.getElementById('tab1').onclick = () => {
-      document.querySelectorAll('.tabs button').forEach(b => b.classList.remove('active'));
-      document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
-      document.getElementById('tab1').classList.add('active');
-      document.getElementById('panel1').classList.add('active');
-    };
-    document.getElementById('tab2').onclick = () => {
-      document.querySelectorAll('.tabs button').forEach(b => b.classList.remove('active'));
-      document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
-      document.getElementById('tab2').classList.add('active');
-      document.getElementById('panel2').classList.add('active');
-    };
+    wEl.value = Math.min(DEFAULT_UI_WORKERS, LIMITS.hard_cap_workers);
 
     async function show(el, data, err) {
       const pre = document.getElementById('out');
@@ -279,29 +243,8 @@ PAGE_HTML = """<!DOCTYPE html>
       pre.textContent = JSON.stringify(data, null, 2);
     }
 
-    document.getElementById('run1').onclick = async () => {
-      const btn = document.getElementById('run1');
-      btn.disabled = true;
-      try {
-        const body = {
-          manifest_path: document.getElementById('manifest').value || null,
-          atr_stop_mult: document.getElementById('atrS').value || null,
-          atr_target_mult: document.getElementById('atrT').value || null,
-          emit_baseline_artifacts: document.getElementById('emitBase').checked
-        };
-        const r = await fetch('/api/run', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
-        const j = await r.json();
-        if (!r.ok) { await show(null, null, j.error || JSON.stringify(j)); return; }
-        await show(null, j, null);
-      } catch (e) {
-        await show(null, null, String(e));
-      } finally {
-        btn.disabled = false;
-      }
-    };
-
-    document.getElementById('run2').onclick = async () => {
-      const btn = document.getElementById('run2');
+    document.getElementById('runBtn').onclick = async () => {
+      const btn = document.getElementById('runBtn');
       btn.disabled = true;
       try {
         let mw = parseInt(document.getElementById('workers').value, 10);
@@ -329,6 +272,19 @@ PAGE_HTML = """<!DOCTYPE html>
     fetch('/api/capabilities').then(r => r.json()).then(() => {});
 
     const presetPick = document.getElementById('presetPick');
+    const scenariosEl = document.getElementById('scenarios');
+
+    async function loadPreset(name) {
+      if (!name) return;
+      const r = await fetch('/api/scenario-preset?name=' + encodeURIComponent(name));
+      if (!r.ok) {
+        document.getElementById('out').innerHTML = '<span class="err">Preset load failed: ' + r.status + '</span>';
+        return;
+      }
+      const j = await r.json();
+      if (j.ok) scenariosEl.value = j.content;
+    }
+
     fetch('/api/scenario-presets')
       .then(r => r.json())
       .then((rows) => {
@@ -338,22 +294,21 @@ PAGE_HTML = """<!DOCTYPE html>
           o.textContent = row.label || row.filename;
           presetPick.appendChild(o);
         });
+        const tier1 = rows.find((x) => x.filename === 'tier1_twelve_month.example.json');
+        if (tier1) {
+          presetPick.value = tier1.filename;
+          return loadPreset(tier1.filename);
+        }
+        return Promise.resolve();
       })
       .catch(() => {});
-    presetPick.onchange = async () => {
+
+    presetPick.onchange = () => {
       const name = presetPick.value;
       if (!name) return;
-      try {
-        const r = await fetch('/api/scenario-preset?name=' + encodeURIComponent(name));
-        if (!r.ok) {
-          document.getElementById('out').innerHTML = '<span class="err">Preset load failed: ' + r.status + '</span>';
-          return;
-        }
-        const j = await r.json();
-        if (j.ok) document.getElementById('scenarios').value = j.content;
-      } catch (e) {
+      loadPreset(name).catch((e) => {
         document.getElementById('out').innerHTML = '<span class="err">' + String(e) + '</span>';
-      }
+      });
     };
   </script>
 </body>
