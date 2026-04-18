@@ -22,6 +22,11 @@ Operator **retrospective** (learn / next experiment): ``GET /api/retrospective-l
 distinct parallel scenarios from scorecard + retrospective (see ``hunter_planner.py``); not
 Referee predictions.
 
+**Chef (catalog batch builder):** ``GET /api/catalog-batch-meta`` returns defaults (ATR grids, caps).
+``POST /api/catalog-batch-generate`` with ``{"mode":"atr_sweep","manifest_path":"…"}`` builds a
+validator-ready scenario array (same manifest, ATR geometry sweep) for paste or parallel run —
+see ``catalog_batch_builder.py``.
+
 No manifest/ATR fields in the UI — policy lives in the JSON (or examples presets). **Workers** slider defaults
 to **logical CPU count** (capped by host hard max, see ``GET /api/capabilities``). ``POST /api/run`` remains for
 scripted single-manifest runs (optional JSON field ``memory_bundle_path``).
@@ -68,6 +73,10 @@ from renaissance_v4.game_theory.memory_paths import (
     default_experience_log_jsonl,
     default_retrospective_log_jsonl,
     ensure_memory_root_tree,
+)
+from renaissance_v4.game_theory.catalog_batch_builder import (
+    build_atr_sweep_scenarios,
+    catalog_batch_builder_meta,
 )
 from renaissance_v4.game_theory.hunter_planner import build_hunter_suggestion
 from renaissance_v4.game_theory.retrospective_log import append_retrospective, read_retrospective_recent
@@ -592,6 +601,80 @@ def create_app() -> Flask:
             return jsonify(out), 400
         return jsonify(out)
 
+    _REPO_ROOT = Path(__file__).resolve().parent.parent.parent
+
+    @app.get("/api/catalog-batch-meta")
+    def api_catalog_batch_meta() -> Any:
+        """Defaults for Chef ATR sweep (Anna / UI)."""
+        return jsonify({"ok": True, **catalog_batch_builder_meta()})
+
+    @app.post("/api/catalog-batch-generate")
+    def api_catalog_batch_generate() -> Any:
+        """
+        Build parallel-ready scenarios: one manifest, many (stop, target) pairs (capped).
+
+        Body JSON: ``mode`` (only ``atr_sweep``), ``manifest_path`` (optional, repo-relative),
+        ``max_scenarios`` (1–200, default 24), optional ``pairs`` or ``stop_values``/``target_values``.
+        """
+        data = request.get_json(force=True, silent=True) or {}
+        mode = (data.get("mode") or "atr_sweep").strip().lower()
+        if mode != "atr_sweep":
+            return jsonify({"ok": False, "error": f"unsupported mode {mode!r} (only atr_sweep)"}), 400
+
+        mp = (data.get("manifest_path") or "").strip() or "renaissance_v4/configs/manifests/baseline_v1_recipe.json"
+        cand = Path(mp)
+        if not cand.is_absolute():
+            cand = (_REPO_ROOT / mp).resolve()
+        else:
+            cand = cand.resolve()
+        if not cand.is_file():
+            return jsonify({"ok": False, "error": f"manifest not found: {mp}"}), 404
+
+        try:
+            max_n = int(data.get("max_scenarios") or 24)
+        except (TypeError, ValueError):
+            max_n = 24
+        max_n = max(1, min(200, max_n))
+
+        pairs_raw = data.get("pairs")
+        pairs: list[tuple[float, float]] | None = None
+        if pairs_raw is not None:
+            if not isinstance(pairs_raw, list):
+                return jsonify({"ok": False, "error": "pairs must be an array of [stop, target] pairs"}), 400
+            pairs = []
+            for row in pairs_raw:
+                if not isinstance(row, (list, tuple)) or len(row) != 2:
+                    return jsonify({"ok": False, "error": "each pairs entry must be [atr_stop_mult, atr_target_mult]"}), 400
+                try:
+                    pairs.append((float(row[0]), float(row[1])))
+                except (TypeError, ValueError):
+                    return jsonify({"ok": False, "error": "pairs must be numeric [stop, target]"}), 400
+
+        sv_raw = data.get("stop_values")
+        tv_raw = data.get("target_values")
+        if sv_raw is not None and not isinstance(sv_raw, list):
+            return jsonify({"ok": False, "error": "stop_values must be an array of numbers or omitted"}), 400
+        if tv_raw is not None and not isinstance(tv_raw, list):
+            return jsonify({"ok": False, "error": "target_values must be an array of numbers or omitted"}), 400
+        sv = [float(x) for x in sv_raw] if sv_raw else None
+        tv = [float(x) for x in tv_raw] if tv_raw else None
+
+        try:
+            scenarios = build_atr_sweep_scenarios(
+                cand,
+                pairs=pairs if pairs else None,
+                stop_values=sv,
+                target_values=tv,
+                max_scenarios=max_n,
+            )
+        except FileNotFoundError as e:
+            return jsonify({"ok": False, "error": str(e)}), 400
+
+        ok, msgs = validate_scenarios(scenarios, require_hypothesis=_web_ui_require_hypothesis())
+        if not ok:
+            return jsonify({"ok": False, "error": "; ".join(msgs)}), 400
+        return jsonify({"ok": True, "count": len(scenarios), "scenarios": scenarios, "warnings": msgs})
+
     return app
 
 
@@ -827,6 +910,14 @@ PAGE_HTML = """<!DOCTYPE html>
   <div class="row" style="align-items:center;margin-bottom:8px">
     <button type="button" id="suggestHuntersBtn" style="margin-top:0;background:#38444d">Suggest next hunters (memory)</button>
     <span class="caps" id="hunterSuggestHint" style="margin:0;flex:1;min-width:200px"></span>
+  </div>
+  <div class="row" style="align-items:flex-end;margin-bottom:8px;gap:12px">
+    <div style="flex:2;min-width:220px">
+      <label for="chefManifestPath" style="margin:0;font-size:0.85rem">Chef — manifest path (repo-relative)</label>
+      <input type="text" id="chefManifestPath" style="margin-top:4px" value="renaissance_v4/configs/manifests/baseline_v1_recipe.json" spellcheck="false"/>
+    </div>
+    <button type="button" id="chefAtrSweepBtn" style="margin-top:0;background:#1a6b4a">Chef: fill ATR sweep</button>
+    <span class="caps" id="chefHint" style="margin:0;flex:1;min-width:160px"></span>
   </div>
   <textarea id="scenarios" spellcheck="false" placeholder='[{"scenario_id":"…","manifest_path":"…","agent_explanation":{"hypothesis":"…"},…}]'></textarea>
 
@@ -1157,6 +1248,40 @@ PAGE_HTML = """<!DOCTYPE html>
           const short = w.length ? (w.join(' ')) : ('Ladder round ' + (j.ladder_round != null ? j.ladder_round : '?') +
             ', bias ' + (j.bias || '?') + '. Full rationale in API JSON.');
           if (hint) hint.textContent = short;
+        } catch (e) {
+          if (hint) hint.textContent = friendlyFetchError(e);
+        }
+      };
+    }
+
+    const chefAtrSweepBtn = document.getElementById('chefAtrSweepBtn');
+    if (chefAtrSweepBtn) {
+      chefAtrSweepBtn.onclick = async () => {
+        const hint = document.getElementById('chefHint');
+        const ta = document.getElementById('scenarios');
+        const mpEl = document.getElementById('chefManifestPath');
+        const mp = mpEl ? String(mpEl.value || '').trim() : '';
+        if (hint) hint.textContent = 'Building catalog ATR sweep…';
+        try {
+          const r = await fetch('/api/catalog-batch-generate', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              mode: 'atr_sweep',
+              manifest_path: mp,
+              max_scenarios: 24,
+            }),
+          });
+          const j = await r.json();
+          if (!r.ok || !j.ok) {
+            if (hint) hint.textContent = j.error || 'Chef batch failed.';
+            return;
+          }
+          ta.value = JSON.stringify(j.scenarios, null, 2);
+          const w = j.warnings || [];
+          const extra = w.length ? (' · ' + w.join(' ')) : '';
+          if (hint) hint.textContent = 'Chef: ' + (j.count || (j.scenarios || []).length) +
+            ' scenarios (ATR sweep).' + extra;
         } catch (e) {
           if (hint) hint.textContent = friendlyFetchError(e);
         }

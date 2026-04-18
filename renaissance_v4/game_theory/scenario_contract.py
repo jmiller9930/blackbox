@@ -45,6 +45,7 @@ Scenario batch JSON — required shape for ``parallel_runner``, ``pattern_game``
 
 **Normative examples:** ``tier1_scenario.template.json``, ``parallel_scenarios.example.json``,
 ``width_depth_15.example.json`` (15 parallel ATR grid points + one memory-bundle row for depth).
+Programmatic ATR grids: ``catalog_batch_builder.build_atr_sweep_scenarios`` / ``POST /api/catalog-batch-generate``.
 **Rules of the game:** ``GAME_SPEC_INDICATOR_PATTERN_V1.md``.
 
 **Pickle / multiprocessing:** Each scenario must be JSON-serializable (``str``, ``int``, ``float``,
