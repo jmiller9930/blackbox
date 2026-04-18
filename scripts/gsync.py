@@ -31,7 +31,8 @@ Environment (optional):
                                     Directory prefixes end with ``/`` (default: UIUX.Web/)
   GSYNC_PATTERN_GAME_PREFIXES       Comma-separated prefixes/files for **pattern-game** web restart.
                                     Use trailing ``/`` for directories; otherwise exact path
-                                    (default: renaissance_v4/game_theory/,scripts/agent_context_bundle.py)
+                                    (default: renaissance_v4/game_theory/,scripts/agent_context_bundle.py,
+                                    scripts/pattern_game_agent_reflect.py)
 
 Usage (repo root):
   python3 scripts/gsync.py
@@ -63,7 +64,7 @@ DEFAULT_UI_PREFIXES = (_DEFAULT_UI or "UIUX.Web/").strip() or "UIUX.Web/"
 DEFAULT_PATTERN_GAME_PREFIXES = (
     os.environ.get(
         "GSYNC_PATTERN_GAME_PREFIXES",
-        "renaissance_v4/game_theory/,scripts/agent_context_bundle.py",
+        "renaissance_v4/game_theory/,scripts/agent_context_bundle.py,scripts/pattern_game_agent_reflect.py",
     )
     .strip()
     or "renaissance_v4/game_theory/"
