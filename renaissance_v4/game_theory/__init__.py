@@ -17,3 +17,6 @@ __all__ = [
     "run_pattern_game",
     "score_binary_outcomes",
 ]
+
+# Parallel batch: ``from renaissance_v4.game_theory.parallel_runner import run_scenarios_parallel``
+# (not re-exported here — avoids import-order warnings for ``python -m ...parallel_runner``).

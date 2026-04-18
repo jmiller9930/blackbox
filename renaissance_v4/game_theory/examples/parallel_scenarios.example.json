@@ -1,0 +1,18 @@
+[
+  {
+    "scenario_id": "baseline_default",
+    "manifest_path": "renaissance_v4/configs/manifests/baseline_v1_recipe.json"
+  },
+  {
+    "scenario_id": "atr_tight",
+    "manifest_path": "renaissance_v4/configs/manifests/baseline_v1_recipe.json",
+    "atr_stop_mult": 1.5,
+    "atr_target_mult": 2.5
+  },
+  {
+    "scenario_id": "atr_wide",
+    "manifest_path": "renaissance_v4/configs/manifests/baseline_v1_recipe.json",
+    "atr_stop_mult": 2.5,
+    "atr_target_mult": 4.0
+  }
+]

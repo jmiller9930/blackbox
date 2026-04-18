@@ -26,3 +26,17 @@ Legacy import: `renaissance_v4.research.pattern_game` re-exports the same API.
 ## Code
 
 - `pattern_game.py` — validate manifest → replay → binary WIN/LOSS scorecard
+- `parallel_runner.py` — run **many** scenarios at once with a **process pool** (uses multiple CPU cores; GIL-safe). Appends optional JSONL to `experience_log.jsonl`.
+
+### Parallel batch (maximize compute)
+
+From repo root (`PYTHONPATH=.`):
+
+```bash
+python3 -m renaissance_v4.game_theory.parallel_runner \
+  renaissance_v4/game_theory/examples/parallel_scenarios.example.json
+```
+
+`-j N` caps workers; `--log /path/to.jsonl` overrides the experience log path (default: `game_theory/experience_log.jsonl`).
+
+Each line in the JSON file is one scenario object with `manifest_path` and optional `scenario_id`, `atr_stop_mult`, `atr_target_mult`.
