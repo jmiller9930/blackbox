@@ -4,13 +4,17 @@ Player agent (orchestrator) — proposes scenario rows, fills *audit* narrative,
 The Referee remains deterministic; this layer does **not** change scores. It exists so runs **explain themselves**
 (operator-facing text tied to manifest, tier, and outcomes).
 
-Optional future: plug ``narrative_llm_hook`` to rewrite ``agent_explanation`` prose (must still cite Referee facts).
+**Anna (LLM):** When enabled, reuses the same Ollama stack as Anna — ``scripts/runtime/_ollama.py`` +
+``llm/local_llm_client.ollama_generate``. Anna writes an **operator narrative only** from Referee facts; she does
+not judge WIN/LOSS. Enable with ``PLAYER_AGENT_USE_ANNA=1`` (default: follow ``ANNA_USE_LLM``, same as Telegram Anna).
 """
 
 from __future__ import annotations
 
 import argparse
 import json
+import os
+import sys
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -19,6 +23,47 @@ from renaissance_v4.game_theory.parallel_runner import run_scenarios_parallel
 from renaissance_v4.game_theory.scenario_contract import extract_scenario_echo_fields
 
 _GAME_THEORY = Path(__file__).resolve().parent
+_REPO_ROOT = Path(__file__).resolve().parents[2]
+
+
+def _runtime_imports() -> tuple[Any, Any]:
+    """Load Anna's Ollama helpers from ``scripts/runtime`` (same process as Anna)."""
+    rt = str(_REPO_ROOT / "scripts" / "runtime")
+    if rt not in sys.path:
+        sys.path.insert(0, rt)
+    from _ollama import ollama_base_url
+    from llm.local_llm_client import ollama_generate
+
+    return ollama_base_url, ollama_generate
+
+
+def player_agent_use_anna_llm() -> bool:
+    """Respect explicit PLAYER_AGENT_USE_ANNA; else mirror ANNA_USE_LLM (off in CI)."""
+    v = os.environ.get("PLAYER_AGENT_USE_ANNA")
+    if v is not None and str(v).strip() != "":
+        return str(v).strip().lower() not in ("0", "false", "no")
+    return os.environ.get("ANNA_USE_LLM", "1").strip().lower() not in ("0", "false", "no")
+
+
+def anna_narrate_pattern_report(report_markdown: str, *, timeout: float = 180.0) -> tuple[str | None, str | None]:
+    """
+    Anna-style prose from **Referee facts only**. Returns (text, error).
+    Does not change scores; on failure returns (None, error string).
+    """
+    ollama_base_url, ollama_generate = _runtime_imports()
+    base = ollama_base_url()
+    model = os.environ.get("OLLAMA_MODEL", "qwen2.5:7b")
+    prompt = (
+        "You are Anna — Trading Analyst (advisory). The block below contains ONLY Referee facts from "
+        "deterministic replays (WIN/LOSS, PnL, trades). Write a short operator summary: what was tested, "
+        "what outcomes suggest, sensible next hypotheses. Rules: do NOT invent numbers or outcomes not "
+        "shown. If the block shows failures, say so. Do not claim execution or live trading.\n\n--- REFEREE FACTS ---\n"
+        + report_markdown
+    )
+    res = ollama_generate(prompt, base_url=base, model=model, timeout=timeout)
+    if res.error:
+        return None, res.error
+    return (res.text or None), None
 
 
 def propose_tier1_scenario(
@@ -119,9 +164,13 @@ def run_player_batch(
     max_workers: int | None = None,
     experience_log_path: Path | str | None = None,
     fill_missing_explanations: bool = True,
+    with_anna: bool | None = None,
 ) -> dict[str, Any]:
     """
     Run parallel batch; optionally fill missing ``agent_explanation``; return results + markdown report.
+
+    ``with_anna``: ``None`` = use env (``PLAYER_AGENT_USE_ANNA`` / ``ANNA_USE_LLM``); ``True``/``False`` = force.
+    When on, appends Anna's Ollama narrative (same stack as ``scripts/runtime`` Anna) — **advisory text only**.
     """
     if fill_missing_explanations:
         scenarios = ensure_agent_explanations(scenarios)
@@ -130,9 +179,21 @@ def run_player_batch(
         max_workers=max_workers,
         experience_log_path=experience_log_path,
     )
+    md = markdown_operator_report(results)
+    anna_text: str | None = None
+    anna_err: str | None = None
+    do_anna = with_anna if with_anna is not None else player_agent_use_anna_llm()
+    if do_anna:
+        anna_text, anna_err = anna_narrate_pattern_report(md)
+        if anna_text:
+            md += "\n\n## Anna — operator narrative\n" + anna_text + "\n"
+        elif anna_err:
+            md += "\n\n## Anna — LLM unavailable\n`" + anna_err + "`\n"
     return {
         "results": results,
-        "report_markdown": markdown_operator_report(results),
+        "report_markdown": md,
+        "anna_narrative": anna_text,
+        "anna_error": anna_err,
     }
 
 
@@ -161,6 +222,16 @@ def main() -> None:
         default="renaissance_v4/configs/manifests/baseline_v1_recipe.json",
         help="With --proposal-only: manifest path",
     )
+    p.add_argument(
+        "--anna",
+        action="store_true",
+        help="After batch, call Anna (Ollama) for operator narrative from Referee facts",
+    )
+    p.add_argument(
+        "--no-anna",
+        action="store_true",
+        help="Skip Anna narrative even if env would enable it",
+    )
     args = p.parse_args()
 
     if args.proposal_only:
@@ -187,7 +258,20 @@ def main() -> None:
     elif args.log:
         log_path = Path(args.log)
 
-    out = run_player_batch(scenarios, max_workers=args.jobs, experience_log_path=log_path)
+    if args.anna and args.no_anna:
+        raise SystemExit("Use only one of --anna / --no-anna")
+    with_anna: bool | None = None
+    if args.anna:
+        with_anna = True
+    elif args.no_anna:
+        with_anna = False
+
+    out = run_player_batch(
+        scenarios,
+        max_workers=args.jobs,
+        experience_log_path=log_path,
+        with_anna=with_anna,
+    )
     print(out["report_markdown"])
     print()
     print("--- raw JSON summary ---")

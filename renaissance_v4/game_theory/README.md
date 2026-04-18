@@ -29,6 +29,8 @@ Legacy import: `renaissance_v4.research.pattern_game` re-exports the same API.
 - `parallel_runner.py` — run **many** scenarios at once with a **process pool** (uses multiple CPU cores; GIL-safe). Appends optional JSONL to `experience_log.jsonl`.
 - **`player_agent.py` — Player (orchestrator) layer:** drafts Tier-1-shaped scenarios with `agent_explanation`, fills missing story fields, runs the same Referee batch, prints a **markdown operator report** (deterministic prose from outcomes — Referee still owns scores). Use when you want the run to *explain itself* without pretending the sim is an LLM. Example: `python3 -m renaissance_v4.game_theory.player_agent --proposal-only` or pass a scenario JSON file to run + report.
 
+**Anna (Ollama) narrative:** Optional operator prose from the **same** Ollama stack as runtime Anna (`scripts/runtime`). Enable with `PLAYER_AGENT_USE_ANNA=1`, or leave unset to follow `ANNA_USE_LLM` (off in CI). Point the client at your host with `OLLAMA_BASE_URL` and optional `OLLAMA_MODEL`. CLI flags: `--anna` (force on for one run), `--no-anna` (force off). Anna’s text is **advisory only** — she must not invent scores; WIN/LOSS and PnL stay from the Referee report.
+
 ### Parallel batch (maximize compute)
 
 From repo root (`PYTHONPATH=.`):
