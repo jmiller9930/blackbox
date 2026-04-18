@@ -57,7 +57,7 @@ from flask import Flask, Response, abort, jsonify, request
 _GAME_THEORY = Path(__file__).resolve().parent
 
 # Operator-visible web UI bundle version — bump when changing PAGE_HTML (HTML/CSS/JS) so deploys are provable.
-PATTERN_GAME_WEB_UI_VERSION = "1.4.0"
+PATTERN_GAME_WEB_UI_VERSION = "1.5.0"
 
 from renaissance_v4.game_theory.groundhog_memory import (
     groundhog_auto_merge_enabled,
@@ -213,6 +213,47 @@ def _render_page_html() -> str:
     )
 
 
+def _pattern_game_module_board() -> dict[str, Any]:
+    """Operator module wall for UI — matches mockup semantics (green = healthy/expected; red = off or empty)."""
+    dh = get_data_health()
+    ghb = groundhog_bundle_path()
+    gh_env = groundhog_auto_merge_enabled()
+    try:
+        retro = read_retrospective_recent(120, path=default_retrospective_log_jsonl())
+    except OSError:
+        retro = []
+    sc_path = default_batch_scorecard_jsonl()
+    modules: list[dict[str, Any]] = [
+        {"id": "web_ui", "label": "web_app.py", "ok": True, "detail": "Flask UI shell serving this page."},
+        {"id": "data_health", "label": "data_health.py", "ok": bool(dh.get("overall_ok")), "detail": (dh.get("summary_line") or "")[:220]},
+        {"id": "pattern_game", "label": "pattern_game.py Referee", "ok": True, "detail": "Deterministic replay path (fixed rules)."},
+        {"id": "parallel_runner", "label": "parallel_runner.py", "ok": True, "detail": "Parallel batch execution."},
+        {"id": "batch_scorecard", "label": "batch_scorecard.py", "ok": True, "detail": "Log: " + str(sc_path)},
+        {"id": "search_space", "label": "search_space_estimate.py", "ok": True, "detail": "Catalog + bar estimates (API)."},
+        {"id": "catalog_batch", "label": "catalog_batch_builder.py", "ok": True, "detail": "Chef ATR sweep (API)."},
+        {"id": "hunter", "label": "hunter_planner.py", "ok": True, "detail": "Suggest-hunters (API)."},
+        {
+            "id": "groundhog",
+            "label": "groundhog_memory.py",
+            "ok": bool(gh_env and ghb.is_file()),
+            "detail": ("merge ON · bundle" if gh_env and ghb.is_file() else "merge OFF or no bundle — set PATTERN_GAME_GROUNDHOG_BUNDLE=1"),
+        },
+        {
+            "id": "player_agent",
+            "label": "player_agent.py",
+            "ok": False,
+            "detail": "Narrative echo layer — optional; not Referee scoring.",
+        },
+        {
+            "id": "retrospective",
+            "label": "retrospective_log.py",
+            "ok": len(retro) > 0,
+            "detail": (f"{len(retro)} recent lines" if retro else "no entries yet — append via API or workflow"),
+        },
+    ]
+    return {"ok": True, "modules": modules}
+
+
 def create_app() -> Flask:
     ensure_memory_root_tree()
     app = Flask(__name__)
@@ -269,6 +310,11 @@ def create_app() -> Flask:
     def data_health() -> Any:
         """SQLite reachable, ``market_bars_5m`` present, replay row count, SOLUSDT ~12mo span."""
         return jsonify(get_data_health())
+
+    @app.get("/api/module-board")
+    def api_module_board() -> Any:
+        """Subsystem status for pattern-game horizontal-panels layout (mockup-aligned)."""
+        return jsonify(_pattern_game_module_board())
 
     @app.get("/api/search-space-estimate")
     def search_space_estimate() -> Any:
@@ -701,517 +747,776 @@ PAGE_HTML = """<!DOCTYPE html>
   <title>Pattern game · UI __PATTERN_GAME_WEB_UI_VERSION__</title>
   <style>
     :root {
-      font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
-      background: #0a0e12;
-      color: #e7e9ea;
-      --border: #2f3b47;
-      --surface: #12181f;
-      --surface2: #0d1218;
-      --muted: #8b98a5;
-      --accent: #1d9bf0;
+      --pg-bg: #f2efe8;
+      --pg-bg-accent: #e7e1d3;
+      --pg-surface: rgba(255, 252, 246, 0.92);
+      --pg-surface-strong: #fffdf8;
+      --pg-ink: #1d232c;
+      --pg-muted: #66707b;
+      --pg-line: rgba(54, 64, 74, 0.14);
+      --pg-shadow: 0 20px 50px rgba(35, 44, 56, 0.08);
+      --pg-radius-xl: 26px;
+      --pg-radius-lg: 18px;
+      --pg-header-accent: #d7b56d;
+      --pg-teal: #2f7f79;
+      --pg-teal-soft: rgba(47, 127, 121, 0.14);
+      --pg-amber: #b7772c;
+      --pg-amber-soft: rgba(183, 119, 44, 0.14);
+      --pg-rose: #9c544c;
+      --pg-rose-soft: rgba(156, 84, 76, 0.14);
+      --pg-steel: #50647a;
+      --pg-steel-soft: rgba(80, 100, 122, 0.12);
+      --pg-mono: ui-monospace, "SFMono-Regular", Menlo, monospace;
+      --pg-sans: system-ui, -apple-system, "Segoe UI", "Avenir Next", "Helvetica Neue", sans-serif;
+      --pg-accent: #1d6fa5;
+      font-family: var(--pg-sans);
     }
-    body {
-      max-width: min(1680px, calc(100vw - 32px));
-      margin: 16px auto;
-      padding: 0 16px 32px;
-      box-sizing: border-box;
+    * { box-sizing: border-box; }
+    body.pg-theme {
+      margin: 0;
+      color: var(--pg-ink);
+      background:
+        radial-gradient(circle at top left, rgba(255,255,255,0.85), transparent 35%),
+        linear-gradient(180deg, var(--pg-bg) 0%, var(--pg-bg-accent) 100%);
+      min-height: 100vh;
       line-height: 1.45;
     }
-    .page-header { margin-bottom: 20px; padding-bottom: 16px; border-bottom: 1px solid var(--border); }
-    .page-header h1 { margin: 0 0 6px; font-size: 1.35rem; font-weight: 650; letter-spacing: -0.02em; display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; }
+    .pg-shell {
+      max-width: 1680px;
+      margin: 0 auto;
+      padding: 24px 24px 40px;
+    }
+    .pg-header {
+      display: block;
+      padding: 24px 26px 22px;
+      background: linear-gradient(135deg, #14202a 0%, #243341 100%);
+      color: #f7f1e6;
+      border-radius: var(--pg-radius-xl);
+      box-shadow: var(--pg-shadow);
+      margin-bottom: 22px;
+      overflow: hidden;
+      position: relative;
+    }
+    .pg-header::after {
+      content: "";
+      position: absolute;
+      inset: auto -80px -80px auto;
+      width: 220px;
+      height: 220px;
+      border-radius: 50%;
+      background: radial-gradient(circle, rgba(215,181,109,0.28), transparent 65%);
+      pointer-events: none;
+    }
+    .pg-title-wrap { position: relative; z-index: 1; max-width: 980px; }
+    .pg-eyebrow {
+      font-size: 12px;
+      font-weight: 800;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: rgba(247, 241, 230, 0.68);
+    }
+    .pg-title {
+      margin: 8px 0 6px;
+      font-size: clamp(1.5rem, 2.5vw, 2rem);
+      line-height: 1.08;
+      letter-spacing: -0.03em;
+      font-weight: 800;
+    }
+    .pg-title em { font-style: normal; color: var(--pg-header-accent); font-weight: 700; }
+    .pg-lead {
+      margin: 0;
+      max-width: 760px;
+      color: rgba(247, 241, 230, 0.82);
+      font-size: 15px;
+      line-height: 1.5;
+    }
+    .pg-lead strong { color: #fff; font-weight: 600; }
+    .pg-orientation-note {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      margin-top: 12px;
+      padding: 8px 11px;
+      border-radius: 999px;
+      background: rgba(255,255,255,0.08);
+      border: 1px solid rgba(255,255,255,0.1);
+      color: rgba(247, 241, 230, 0.82);
+      font-size: 12px;
+      font-weight: 700;
+    }
     .ui-version {
       display: inline-block;
+      margin-left: 8px;
       padding: 3px 10px;
-      font-size: 0.68rem;
+      font-size: 0.65rem;
       font-weight: 700;
       letter-spacing: 0.06em;
       border-radius: 999px;
-      background: #152535;
-      color: #7ec8f5;
-      border: 1px solid #2a5a82;
+      background: rgba(255,255,255,0.1);
+      color: #a8d4f5;
+      border: 1px solid rgba(168,212,245,0.35);
       font-variant-numeric: tabular-nums;
+      vertical-align: middle;
     }
-    .page-lead { margin: 0; color: var(--muted); font-size: 0.95rem; max-width: 56ch; }
-    .page-lead strong { color: #e7e9ea; font-weight: 600; }
+    .pg-banner-strip {
+      position: relative;
+      z-index: 1;
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 10px;
+      margin-top: 18px;
+      max-width: 1120px;
+    }
+    .pg-banner-stat {
+      border: 1px solid rgba(255,255,255,0.1);
+      border-radius: 16px;
+      padding: 12px 14px;
+      background: rgba(255,255,255,0.06);
+      backdrop-filter: blur(10px);
+      min-height: 78px;
+    }
+    .pg-banner-stat .pg-k {
+      font-size: 11px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: rgba(247, 241, 230, 0.62);
+      font-weight: 800;
+      margin-bottom: 8px;
+    }
+    .pg-banner-stat .pg-v {
+      font-size: 17px;
+      font-weight: 800;
+      line-height: 1.15;
+      margin-bottom: 4px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .pg-banner-stat .pg-s {
+      font-size: 12px;
+      color: rgba(247, 241, 230, 0.72);
+      line-height: 1.35;
+    }
+    .pg-banner-stat .pg-s.pg-s-tall { min-height: 2.8em; }
+    .pg-banner-stat .status-dot {
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+      flex-shrink: 0;
+      background: #6b7a88;
+    }
+    .pg-banner-stat .status-dot.ok { background: #2fa46a; box-shadow: 0 0 8px rgba(47,164,106,0.45); }
+    .pg-banner-stat .status-dot.bad { background: #d15959; box-shadow: 0 0 8px rgba(209,89,89,0.35); }
+    .pg-row {
+      display: grid;
+      gap: 18px;
+      margin-bottom: 18px;
+    }
+    .pg-row-main { grid-template-columns: repeat(3, minmax(0, 1fr)); align-items: start; }
+    .pg-row-results { grid-template-columns: 1.25fr 0.75fr; align-items: start; }
+    .pg-panel {
+      background: var(--pg-surface);
+      border: 1px solid var(--pg-line);
+      border-radius: var(--pg-radius-xl);
+      box-shadow: var(--pg-shadow);
+      padding: 18px 20px 20px;
+      min-width: 0;
+      backdrop-filter: blur(12px);
+    }
+    .pg-panel-controls { min-height: 0; }
+    .pg-panel-score .pg-table-scroll,
+    .pg-results-wide .pg-table-scroll {
+      max-height: min(52vh, 560px);
+      overflow: auto;
+      border-radius: 12px;
+      border: 1px solid var(--pg-line);
+    }
+    .pg-panel-header {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 14px;
+      margin-bottom: 14px;
+    }
+    .pg-panel-h {
+      margin: 0;
+      font-size: 1.15rem;
+      letter-spacing: -0.02em;
+      font-weight: 800;
+      color: var(--pg-ink);
+    }
+    .pg-panel-sub {
+      margin: 6px 0 0;
+      color: var(--pg-muted);
+      font-size: 13px;
+      line-height: 1.45;
+    }
+    .pg-chip {
+      flex-shrink: 0;
+      border-radius: 999px;
+      padding: 7px 10px;
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      font-weight: 800;
+      border: 1px solid transparent;
+    }
+    .pg-chip-teal { background: var(--pg-teal-soft); color: var(--pg-teal); border-color: rgba(47, 127, 121, 0.18); }
+    .pg-chip-amber { background: var(--pg-amber-soft); color: var(--pg-amber); border-color: rgba(183, 119, 44, 0.18); }
+    .pg-chip-rose { background: var(--pg-rose-soft); color: var(--pg-rose); border-color: rgba(156, 84, 76, 0.18); }
+    .pg-chip-steel { background: var(--pg-steel-soft); color: var(--pg-steel); border-color: rgba(80, 100, 122, 0.16); }
     .def001-science {
       margin-top: 12px;
       padding: 12px 14px;
-      border-radius: 8px;
-      border: 1px solid #2a4a60;
-      background: linear-gradient(180deg, #121c24 0%, #0f1419 100%);
+      border-radius: 12px;
+      border: 1px solid rgba(47, 127, 121, 0.25);
+      background: linear-gradient(180deg, rgba(47,127,121,0.08) 0%, rgba(47,127,121,0.03) 100%);
       font-size: 0.82rem;
       line-height: 1.5;
-      color: #c8d0d8;
+      color: #3a4f4c;
     }
     .def001-science .def001-tag {
       display: inline-block;
       font-size: 0.65rem;
       font-weight: 700;
       letter-spacing: 0.08em;
-      color: #5eb8e8;
+      color: var(--pg-teal);
       margin-bottom: 6px;
     }
-    .def001-science strong { color: #e7edf2; }
-    .def001-science a { color: #5eb8e8; }
-    details.help-details {
-      margin-top: 12px; border-radius: 8px; border: 1px solid var(--border);
-      background: var(--surface); padding: 0 12px;
+    .def001-science code { font-size: 0.85em; }
+    details.help-details.pg-help {
+      margin-top: 12px;
+      border-radius: 12px;
+      border: 1px solid var(--pg-line);
+      background: var(--pg-surface-strong);
+      padding: 0 12px;
     }
-    details.help-details summary {
-      cursor: pointer; font-size: 0.82rem; color: var(--accent); font-weight: 600;
-      padding: 10px 0; list-style: none;
+    details.help-details.pg-help summary {
+      cursor: pointer;
+      font-size: 0.82rem;
+      color: var(--pg-accent);
+      font-weight: 600;
+      padding: 10px 0;
+      list-style: none;
     }
     details.help-details summary::-webkit-details-marker { display: none; }
-    .help-details-body { font-size: 0.8rem; color: var(--muted); padding: 0 0 12px; }
+    .help-details-body { font-size: 0.8rem; color: var(--pg-muted); padding: 0 0 12px; }
     .help-details-body p { margin: 0 0 8px; }
-    .help-details-body p:last-child { margin-bottom: 0; }
-    .panel {
-      background: var(--surface);
-      border: 1px solid var(--border);
-      border-radius: 10px;
-      padding: 14px 16px 16px;
-      margin-bottom: 16px;
+    .pg-block {
+      margin-top: 14px;
+      padding: 14px;
+      border-radius: var(--pg-radius-lg);
+      border: 1px dashed rgba(54, 64, 74, 0.2);
+      background: var(--pg-surface-strong);
     }
-    .panel-title {
-      margin: 0 0 12px;
-      font-size: 0.72rem;
-      font-weight: 700;
+    .pg-block-title {
+      font-size: 12px;
       text-transform: uppercase;
-      letter-spacing: 0.06em;
-      color: var(--muted);
+      letter-spacing: 0.08em;
+      color: var(--pg-muted);
+      font-weight: 800;
+      margin-bottom: 10px;
+    }
+    .pg-mini-grid { display: grid; gap: 10px; }
+    .pg-mini-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+    @media (max-width: 900px) {
+      .pg-mini-3 { grid-template-columns: 1fr; }
     }
     details.inline-details {
       margin: 6px 0 10px;
       font-size: 0.78rem;
-      color: var(--muted);
-      border-left: 2px solid #38444d;
+      color: var(--pg-muted);
+      border-left: 2px solid #c5cdd6;
       padding-left: 10px;
     }
-    details.inline-details summary { cursor: pointer; color: #c4ccd4; font-weight: 500; }
-    details.inline-details[open] summary { margin-bottom: 6px; }
+    details.inline-details summary { cursor: pointer; color: #4a5560; font-weight: 500; }
     .tool-row { display: flex; flex-wrap: wrap; gap: 10px; align-items: flex-end; margin-bottom: 10px; }
-    .tool-row .btn-secondary { margin-top: 0; background: #2f3f4d; font-weight: 500; font-size: 0.85rem; padding: 8px 12px; }
-    .tool-row .btn-chef { margin-top: 0; background: #166a4a; font-weight: 600; font-size: 0.85rem; padding: 8px 12px; }
-    .workers-panel { margin-top: 4px; }
-    .workers-panel label[for="workersRange"] { margin-top: 0; }
-    #workerCpuHint { font-size: 0.72rem; color: #6b7a88; margin: 6px 0 0; line-height: 1.4; }
-    #workerEffectiveLine {
-      margin: 10px 0 0;
-      padding: 10px 12px;
-      border-radius: 8px;
-      background: var(--surface2);
-      border: 1px solid var(--border);
-      font-size: 0.82rem;
-      line-height: 1.45;
-      color: #d5dce3;
+    .tool-row .btn-secondary {
+      margin-top: 0;
+      background: #e8edf2;
+      color: #2c3844;
+      font-weight: 600;
+      font-size: 0.85rem;
+      padding: 8px 12px;
+      border: 1px solid var(--pg-line);
     }
-    #workerEffectiveLine strong { color: #e7e9ea; }
-    .run-actions { margin-top: 16px; padding-top: 4px; }
-    #runBtn { width: 100%; max-width: 320px; padding: 12px 20px; font-size: 1rem; border-radius: 10px; }
-    .status-stack { margin-top: 12px; }
-    .top-bars {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-      gap: 10px;
-      margin-bottom: 18px;
-      align-items: stretch;
+    .tool-row .btn-chef {
+      margin-top: 0;
+      background: #2d8a6a;
+      color: #fff;
+      font-weight: 600;
+      font-size: 0.85rem;
+      padding: 8px 12px;
     }
-    .top-bars > * { min-width: 0; }
-    .top-bars .health-bar,
-    .top-bars .pnl-strip,
-    .top-bars .estimate-strip {
-      background: var(--surface);
-      border-color: var(--border);
-    }
-    .main-layout {
-      display: grid;
-      grid-template-columns: minmax(0, 1.2fr) minmax(280px, 0.8fr);
-      gap: 20px;
-      align-items: start;
-    }
-    @media (max-width: 1024px) {
-      .main-layout { grid-template-columns: 1fr; }
-    }
-    .col-controls { min-width: 0; }
-    .col-sidebar { min-width: 0; position: sticky; top: 8px; }
-    @media (max-width: 1024px) {
-      .col-sidebar { position: static; }
-    }
-    .results-split {
-      display: grid;
-      grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-      gap: 16px;
-      margin-top: 16px;
-      align-items: start;
-    }
-    @media (max-width: 900px) {
-      .results-split { grid-template-columns: 1fr; }
-    }
-    .results-split:has(#policyOutcomePanel[hidden]) {
-      grid-template-columns: 1fr;
-    }
-    .results-split .result-json-wrap { min-width: 0; }
-    h1 { font-size: 1.25rem; font-weight: 600; }
-    h2 { font-size: 1rem; margin-top: 0; color: #8b98a5; }
-    label { display: block; margin: 10px 0 4px; font-size: 0.85rem; color: #8b98a5; }
+    label { display: block; margin: 10px 0 4px; font-size: 0.85rem; color: var(--pg-muted); }
     input[type=text], input[type=number], textarea, select {
-      width: 100%; box-sizing: border-box; padding: 8px 10px;
-      border: 1px solid #38444d; border-radius: 6px; background: #15202b; color: #e7e9ea;
+      width: 100%;
+      padding: 8px 10px;
+      border: 1px solid #c5cdd6;
+      border-radius: 8px;
+      background: #fffefb;
+      color: var(--pg-ink);
+      font-size: 0.88rem;
     }
     textarea {
       min-height: 160px;
       max-height: min(48vh, 480px);
-      font-family: ui-monospace, monospace;
+      font-family: var(--pg-mono);
       font-size: 0.8rem;
       resize: vertical;
     }
     button {
-      margin-top: 12px; padding: 10px 18px; border: 0; border-radius: 8px;
-      background: #1d9bf0; color: #fff; font-weight: 600; cursor: pointer;
+      margin-top: 12px;
+      padding: 10px 18px;
+      border: 0;
+      border-radius: 10px;
+      background: var(--pg-accent);
+      color: #fff;
+      font-weight: 600;
+      cursor: pointer;
     }
     button:disabled { opacity: 0.5; cursor: not-allowed; }
-    .row { display: flex; gap: 16px; flex-wrap: wrap; align-items: flex-end; }
-    .row > div { flex: 1; min-width: 120px; }
-    .caps { font-size: 0.8rem; color: #8b98a5; margin: 8px 0 0; }
-    pre {
-      background: #15202b; border: 1px solid #38444d; border-radius: 8px;
-      padding: 12px; overflow: auto; font-size: 0.75rem;
-      max-height: min(42vh, 420px);
+    #runBtn { width: 100%; max-width: 340px; padding: 12px 20px; font-size: 1rem; border-radius: 12px; }
+    .caps { font-size: 0.8rem; color: var(--pg-muted); margin: 8px 0 0; }
+    .run-actions { margin-top: 8px; padding-top: 4px; }
+    .status-stack { margin-top: 12px; }
+    #workerCpuHint { font-size: 0.72rem; color: var(--pg-muted); margin: 6px 0 0; line-height: 1.4; }
+    #workerEffectiveLine {
+      margin: 10px 0 0;
+      padding: 10px 12px;
+      border-radius: 10px;
+      background: #f4f1ea;
+      border: 1px solid var(--pg-line);
+      font-size: 0.82rem;
+      line-height: 1.45;
+      color: #3a4450;
     }
-    .err { color: #f4212e; }
-    .health-bar {
-      display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
-      padding: 10px 12px; margin-bottom: 16px; border-radius: 8px;
-      background: #15202b; border: 1px solid #38444d; font-size: 0.85rem;
-    }
-    .health-bar .status-dot {
-      width: 12px; height: 12px; border-radius: 50%; flex-shrink: 0;
-      background: #536471;
-    }
-    .health-bar .status-dot.ok { background: #00ba7c; box-shadow: 0 0 8px rgba(0,186,124,0.45); }
-    .health-bar .status-dot.bad { background: #f4212e; box-shadow: 0 0 8px rgba(244,33,46,0.35); }
-    .health-title { font-weight: 600; color: #e7e9ea; margin-right: 6px; }
-    .health-detail { color: #8b98a5; }
+    #workerEffectiveLine strong { color: var(--pg-ink); }
     .pnl-strip {
-      padding: 12px 12px; margin-bottom: 16px; border-radius: 8px;
-      background: #15202b; border: 1px solid #38444d; font-size: 0.88rem;
+      padding: 12px;
+      border-radius: 12px;
+      background: #f4f1ea;
+      border: 1px solid var(--pg-line);
+      font-size: 0.88rem;
     }
     .pnl-strip .pnl-row1 {
-      display: flex; flex-wrap: wrap; align-items: baseline; gap: 10px 16px;
+      display: flex;
+      flex-wrap: wrap;
+      align-items: baseline;
+      gap: 10px 16px;
       margin-bottom: 8px;
     }
-    .pnl-strip .pnl-title { font-weight: 600; color: #e7e9ea; }
-    .pnl-strip .pnl-baseline { color: #8b98a5; font-size: 0.8rem; }
-    .pnl-strip .pnl-ending { font-size: 1.15rem; font-weight: 700; font-variant-numeric: tabular-nums; color: #e7e9ea; }
+    .pnl-strip .pnl-baseline { color: var(--pg-muted); font-size: 0.8rem; }
+    .pnl-strip .pnl-ending { font-size: 1.1rem; font-weight: 700; font-variant-numeric: tabular-nums; color: var(--pg-ink); }
     .pnl-strip .pnl-delta { font-weight: 600; font-variant-numeric: tabular-nums; }
-    .pnl-strip .pnl-delta.up { color: #00ba7c; }
-    .pnl-strip .pnl-delta.down { color: #f4212e; }
-    .pnl-strip .pnl-delta.neutral { color: #8b98a5; }
+    .pnl-strip .pnl-delta.up { color: #1f8a54; }
+    .pnl-strip .pnl-delta.down { color: #c43b3b; }
+    .pnl-strip .pnl-delta.neutral { color: var(--pg-muted); }
     .pnl-bar-wrap { position: relative; margin-top: 4px; }
     .pnl-bar-track {
-      height: 10px; border-radius: 5px; background: linear-gradient(90deg, #2a1a1a 0%, #38444d 50%, #1a2a1f 100%);
+      height: 10px;
+      border-radius: 5px;
+      background: linear-gradient(90deg, #ebe4dc 0%, #d8dde3 50%, #ebe4dc 100%);
       position: relative;
     }
     .pnl-bar-ticks {
-      display: flex; justify-content: space-between; font-size: 0.65rem; color: #536471; margin-top: 4px;
+      display: flex;
+      justify-content: space-between;
+      font-size: 0.65rem;
+      color: var(--pg-muted);
+      margin-top: 4px;
     }
     .pnl-marker {
-      position: absolute; top: -3px; width: 4px; height: 16px; margin-left: -2px;
-      border-radius: 2px; background: #e7e9ea; box-shadow: 0 0 6px rgba(231,233,234,0.35);
-      transform: translateX(-50%); left: 50%;
+      position: absolute;
+      top: -3px;
+      width: 4px;
+      height: 16px;
+      margin-left: -2px;
+      border-radius: 2px;
+      background: var(--pg-ink);
+      box-shadow: 0 0 6px rgba(0,0,0,0.12);
+      transform: translateX(-50%);
+      left: 50%;
     }
     .pnl-fill {
-      position: absolute; top: 0; height: 10px; border-radius: 5px; opacity: 0.65;
+      position: absolute;
+      top: 0;
+      height: 10px;
+      border-radius: 5px;
+      opacity: 0.7;
       pointer-events: none;
     }
-    .pnl-fill.up { background: #00ba7c; }
-    .pnl-fill.down { background: #f4212e; }
-    .estimate-strip {
-      padding: 10px 12px;
-      margin-bottom: 0;
-      border-radius: 8px;
-      background: var(--surface);
-      border: 1px solid var(--border);
-      font-size: 0.78rem;
-      color: var(--muted);
-      line-height: 1.45;
-    }
-    .estimate-strip strong { color: #e7e9ea; }
-    #groundhogStrip details { margin-top: 8px; font-size: 0.74rem; color: #6b7a88; }
-    #groundhogStrip summary { cursor: pointer; color: var(--accent); font-weight: 600; }
-    .scorecard-panel {
-      margin: 0;
-      padding: 12px 14px;
-      border-radius: 10px;
-      background: var(--surface);
-      border: 1px solid var(--border);
-      overflow-x: auto;
-      max-height: min(70vh, 640px);
-      overflow-y: auto;
-    }
-    .scorecard-panel h2 { margin-top: 0; }
-    .scorecard-panel .last-run {
-      font-size: 0.85rem;
-      color: #e7e9ea;
-      margin: 0 0 12px 0;
-      line-height: 1.45;
-    }
+    .pnl-fill.up { background: #1f8a54; }
+    .pnl-fill.down { background: #c43b3b; }
     .scorecard-legend {
       font-size: 0.76rem;
-      color: #8b98a5;
-      margin: 0 0 12px 0;
+      color: var(--pg-muted);
+      margin: 0 0 10px 0;
       line-height: 1.5;
       padding: 10px 12px;
-      border-radius: 8px;
-      background: var(--surface2);
-      border: 1px solid var(--border);
+      border-radius: 10px;
+      background: #f4f1ea;
+      border: 1px solid var(--pg-line);
     }
-    .scorecard-legend strong { color: #d5dce3; }
-    .scorecard-panel .path-hint { font-size: 0.72rem; color: #536471; margin: 8px 0 0 0; word-break: break-all; }
-    .scorecard-table { width: 100%; border-collapse: collapse; font-size: 0.75rem; }
+    .scorecard-legend strong { color: #3a4450; }
+    .last-run {
+      font-size: 0.85rem;
+      color: var(--pg-ink);
+      margin: 0 0 10px 0;
+      line-height: 1.45;
+    }
+    .path-hint { font-size: 0.72rem; color: var(--pg-muted); margin: 8px 0 0 0; word-break: break-all; }
+    .scorecard-table { width: 100%; border-collapse: collapse; font-size: 0.72rem; }
     .scorecard-table th, .scorecard-table td {
-      border: 1px solid #38444d;
-      padding: 5px 7px;
+      border: 1px solid #d5dce3;
+      padding: 5px 6px;
       text-align: left;
     }
-    .scorecard-table th { background: #1a2732; color: #8b98a5; white-space: nowrap; }
-    .st-ok { color: #00ba7c; font-weight: 600; }
-    .st-err { color: #f97316; font-weight: 600; }
-    .policy-outcome-panel {
+    .scorecard-table th { background: #eef1f4; color: #5a6570; white-space: nowrap; }
+    .st-ok { color: #1f8a54; font-weight: 600; }
+    .st-err { color: #c65a16; font-weight: 600; }
+    .policy-outcome-panel .hint { font-size: 0.78rem; color: var(--pg-muted); margin: 0 0 10px 0; line-height: 1.4; }
+    .pg-evidence-panel .policy-outcome-panel {
       margin: 0;
-      padding: 12px 14px;
-      border-radius: 10px;
-      background: var(--surface);
-      border: 1px solid var(--border);
-      overflow-x: auto;
-      max-height: min(70vh, 640px);
-      overflow-y: auto;
+      padding: 0;
+      border: 0;
+      background: transparent;
+      box-shadow: none;
+      max-height: none;
+      overflow: visible;
     }
-    .policy-outcome-panel h2 { margin-top: 0; }
-    .policy-outcome-panel .hint { font-size: 0.78rem; color: #8b98a5; margin: 0 0 10px 0; line-height: 1.4; }
     .policy-table {
       width: 100%;
       border-collapse: collapse;
-      font-size: 0.78rem;
+      font-size: 0.76rem;
     }
     .policy-table th, .policy-table td {
-      border: 1px solid #38444d;
-      padding: 6px 8px;
+      border: 1px solid #d5dce3;
+      padding: 6px 7px;
       text-align: left;
       vertical-align: top;
     }
-    .policy-table th { background: #1a2732; color: #8b98a5; font-weight: 600; white-space: nowrap; }
-    .policy-table td { color: #e7e9ea; }
-    .tag-win { color: #00ba7c; font-weight: 700; }
-    .tag-loss { color: #f4212e; font-weight: 700; }
-    .tag-err { color: #f97316; font-weight: 700; }
-    .signals-cell { font-family: ui-monospace, monospace; font-size: 0.72rem; max-width: 320px; word-break: break-word; }
+    .policy-table th { background: #eef1f4; color: #5a6570; font-weight: 600; white-space: nowrap; }
+    .policy-table td { color: var(--pg-ink); }
+    .tag-win { color: #1f8a54; font-weight: 700; }
+    .tag-loss { color: #c43b3b; font-weight: 700; }
+    .tag-err { color: #c65a16; font-weight: 700; }
+    .signals-cell { font-family: var(--pg-mono); font-size: 0.72rem; max-width: 320px; word-break: break-word; }
     input[type=checkbox] { width: auto; }
-    input[type=range] { width: 100%; accent-color: #1d9bf0; }
+    input[type=range] { width: 100%; accent-color: var(--pg-accent); }
     .batch-concurrency-banner {
-      display: none; margin: 10px 0 8px; padding: 10px 12px; border-radius: 8px;
-      background: var(--surface2); border: 1px solid var(--border); font-size: 0.85rem; line-height: 1.45; color: #e7e9ea;
+      display: none;
+      margin: 10px 0 8px;
+      padding: 10px 12px;
+      border-radius: 10px;
+      background: #f4f1ea;
+      border: 1px solid var(--pg-line);
+      font-size: 0.85rem;
+      line-height: 1.45;
+      color: var(--pg-ink);
     }
     .batch-concurrency-banner.visible { display: block; }
-    .batch-concurrency-banner strong { color: #1d9bf0; font-weight: 600; }
-    .batch-concurrency-banner .warn { color: #ffb020; }
+    .batch-concurrency-banner strong { color: var(--pg-accent); font-weight: 600; }
+    .batch-concurrency-banner .warn { color: #b7772c; }
     .progress-wrap { display: none; margin: 12px 0 8px; }
     .progress-wrap.active { display: block; }
     .progress-track {
-      height: 10px; border-radius: 5px; background: #38444d; overflow: hidden;
+      height: 10px;
+      border-radius: 5px;
+      background: #d5dce3;
+      overflow: hidden;
     }
     .progress-fill {
-      height: 100%; width: 0%; border-radius: 5px;
-      background: linear-gradient(90deg, #175cd3, #1d9bf0);
+      height: 100%;
+      width: 0%;
+      border-radius: 5px;
+      background: linear-gradient(90deg, #175cd3, #2a8fd9);
       transition: width 0.35s ease;
     }
-    #progressSub { margin-top: 6px; font-size: 0.8rem; color: #8b98a5; }
-    #statusLine { min-height: 1.3em; color: #e7e9ea; font-size: 0.9rem; margin-top: 8px; }
+    #progressSub { margin-top: 6px; font-size: 0.8rem; color: var(--pg-muted); }
+    #statusLine { min-height: 1.3em; color: var(--pg-ink); font-size: 0.9rem; margin-top: 8px; }
+    .err { color: #c43b3b; }
+    .pg-pill-row { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 10px; }
+    .pg-pill {
+      padding: 8px 10px;
+      border-radius: 999px;
+      border: 1px solid var(--pg-line);
+      background: #fff;
+      font-size: 12px;
+      font-weight: 700;
+      color: #485360;
+    }
+    .pg-status-list { display: grid; gap: 10px; }
+    .pg-status-item {
+      display: grid;
+      grid-template-columns: auto 1fr;
+      gap: 10px 12px;
+      align-items: start;
+      padding: 11px 12px;
+      border-radius: 14px;
+      border: 1px solid var(--pg-line);
+      background: linear-gradient(180deg, #fffdf9 0%, #f7f2e8 100%);
+    }
+    .pg-status-item .status-dot {
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+      margin-top: 4px;
+      flex-shrink: 0;
+    }
+    .pg-status-item .status-dot.ok { background: #2fa46a; box-shadow: 0 0 0 3px rgba(47, 164, 106, 0.14); }
+    .pg-status-item .status-dot.bad { background: #d15959; box-shadow: 0 0 0 3px rgba(209, 89, 89, 0.14); }
+    .pg-status-name { font-size: 13px; font-weight: 800; color: #24303d; margin-bottom: 3px; }
+    .pg-status-meta { font-size: 12px; line-height: 1.45; color: var(--pg-muted); }
+    .pg-tab-strip { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
+    .pg-tab {
+      padding: 10px 12px;
+      border-radius: 12px;
+      border: 1px solid var(--pg-line);
+      font-size: 12px;
+      font-weight: 800;
+      letter-spacing: 0.02em;
+      background: #fffefb;
+      color: #4d5967;
+      margin-top: 0;
+      cursor: pointer;
+    }
+    .pg-tab.active {
+      background: #183343;
+      border-color: #183343;
+      color: #f7f1e6;
+    }
+    .pg-evidence-panel { min-height: 120px; }
+    .pg-pre-json {
+      background: #f8f6f0;
+      border: 1px solid var(--pg-line);
+      border-radius: 12px;
+      padding: 12px;
+      overflow: auto;
+      font-size: 0.75rem;
+      font-family: var(--pg-mono);
+      max-height: min(48vh, 520px);
+      margin: 0;
+    }
+    .pg-helper {
+      margin-top: 4px;
+      padding: 12px;
+      border-radius: 14px;
+      background: linear-gradient(180deg, rgba(47, 127, 121, 0.08) 0%, rgba(47, 127, 121, 0.03) 100%);
+      border: 1px solid rgba(47, 127, 121, 0.12);
+      color: #43625f;
+      font-size: 13px;
+      line-height: 1.5;
+    }
+    #searchSpaceStrip strong { color: #f7f1e6; }
+    #searchSpaceStrip code { font-size: 0.85em; color: rgba(247, 241, 230, 0.95); }
+    @media (max-width: 1220px) {
+      .pg-banner-strip { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .pg-row-main,
+      .pg-row-results { grid-template-columns: 1fr; }
+    }
+    @media (max-width: 760px) {
+      .pg-shell { padding: 14px; }
+      .pg-banner-strip { grid-template-columns: 1fr; }
+    }
+
   </style>
 </head>
-<body>
-  <div class="top-bars">
-  <div class="health-bar" id="dataHealthBar" aria-live="polite">
-    <span class="status-dot" id="healthDot" title="Data status"></span>
-    <span class="health-title">Financial data</span>
-    <span class="health-detail" id="healthText">Checking database…</span>
-  </div>
-
-  <div class="pnl-strip" id="pnlStrip" title="Paper equity vs spec $1k baseline; updates after each batch run.">
-    <div class="pnl-row1">
-      <span class="pnl-title">Paper P&amp;L</span>
-      <span class="pnl-baseline">Baseline <span id="pnlBaselineLabel">$1,000.00</span> (spec)</span>
-      <span class="pnl-ending" id="pnlEnding">$1,000.00</span>
-      <span class="pnl-delta neutral" id="pnlDelta">— run a batch —</span>
-    </div>
-    <div class="pnl-bar-wrap" aria-hidden="true">
-      <div class="pnl-bar-track" id="pnlBarTrack">
-        <div class="pnl-fill" id="pnlFill" style="left:50%;width:0;"></div>
-        <div class="pnl-marker" id="pnlMarker"></div>
+<body class="pg-theme">
+  <div class="pg-shell">
+    <header class="pg-header">
+      <div class="pg-title-wrap">
+        <div class="pg-eyebrow">Pattern game lab</div>
+        <h1 class="pg-title">Pattern game <em>controls · scorecard · modules</em>
+          <span class="ui-version" title="Bump PATTERN_GAME_WEB_UI_VERSION in web_app.py">v__PATTERN_GAME_WEB_UI_VERSION__</span></h1>
+        <p class="pg-lead">Preset or paste <strong>scenario JSON</strong>, run the batch. Layout matches <code>UIUX.Web/mockups/pattern_game_horizontal_panels_mockup.html</code>.</p>
+        <div class="pg-orientation-note">Banner · 3 columns · evidence row</div>
       </div>
-      <div class="pnl-bar-ticks"><span>$0</span><span>$1k</span><span>$2k</span></div>
-    </div>
-  </div>
-
-  <div class="estimate-strip" id="searchSpaceStrip" aria-live="polite">
-    <strong>Search space</strong> — loading catalog + bar counts…
-  </div>
-
-  <div class="estimate-strip" id="groundhogStrip" aria-live="polite" style="font-size:0.82rem;border-color:#2a4a38">
-    <strong>Groundhog memory</strong> — <span id="groundhogText">loading…</span>
-    <details>
-      <summary>Server env &amp; promotion</summary>
-      <span class="caps" style="display:block;margin-top:6px;line-height:1.45">
-        Set <code>PATTERN_GAME_GROUNDHOG_BUNDLE=1</code> to merge <code>game_theory/state/groundhog_memory_bundle.json</code> when a scenario has no <code>memory_bundle_path</code>. POST <code>/api/groundhog-memory</code> to promote ATR from review.
-      </span>
-    </details>
-  </div>
-  </div>
-
-  <div class="main-layout">
-  <div class="col-controls">
-  <header class="page-header">
-    <h1>Pattern game <span class="ui-version" title="Web UI bundle — bump PATTERN_GAME_WEB_UI_VERSION in web_app.py when this page changes">v__PATTERN_GAME_WEB_UI_VERSION__</span></h1>
-    <p class="page-lead">Pick a <strong>preset</strong> or paste <strong>scenario JSON</strong>, then run the batch. Referee scores and paper P&amp;L update below.</p>
-    <div class="def001-science" role="region" aria-label="DEF-001 Science evaluation contract">
-      <span class="def001-tag">DEF-001 · SCIENCE / EVALUATION ONLY</span>
-      <p style="margin:0">
-        This lab run is <strong>deterministic replay</strong>: fixed manifest + engine rules on historical bars.
-        It <strong>does not</strong> train or auto-tune policy weights from your batch (no in-band “machine learning” from outcomes).
-        We <strong>measure</strong> (P&amp;L, win rates, scorecard) and you <strong>iterate</strong> (hypothesis, manifests, next scenarios).
-        Full work record: <code>docs/architect/pattern_game_operator_deficiencies_work_record.md</code> (DEF-001).
-      </p>
-    </div>
-    <details class="help-details">
-      <summary>Setup, PYTHONPATH, and where policy lives</summary>
-      <div class="help-details-body">
-        <p>Run from repo root with <code>PYTHONPATH</code> including the repo. This form does not edit manifests — policy and hypothesis strings live in the JSON.</p>
-        <p>Presets load from <code>game_theory/examples/</code>. After load you can edit the textarea, or ignore the menu and paste only.</p>
-      </div>
-    </details>
-  </header>
-
-  <section class="panel" aria-labelledby="batch-heading">
-    <h2 class="panel-title" id="batch-heading">Batch</h2>
-    <label for="presetPick">Preset</label>
-    <select id="presetPick" aria-describedby="presetHelp">
-      <option value="">— Custom JSON only (no preset) —</option>
-    </select>
-    <p class="caps" id="presetHelp" style="margin-top:6px">Preset fills the box below; you can still edit before Run.</p>
-
-    <label for="scenarios" style="margin-top:14px">Scenario JSON</label>
-    <details class="inline-details">
-      <summary>Validation (hypothesis)</summary>
-      <p style="margin:0;line-height:1.45">Each scenario needs a non-empty <code>agent_explanation.hypothesis</code>. Server override: <code>PATTERN_GAME_REQUIRE_HYPOTHESIS=0</code>.</p>
-    </details>
-
-    <div class="tool-row">
-      <button type="button" class="btn-secondary" id="suggestHuntersBtn"
-        title="Fills the textarea with the next parallel scenarios from batch scorecard + retrospective logs (deterministic ladder — not a live prediction)">Suggest hunters</button>
-      <span class="caps" id="hunterSuggestHint" style="margin:0;flex:1;min-width:180px;align-self:center"></span>
-    </div>
-    <p class="caps" style="margin:0 0 10px;line-height:1.45">Hunter = next batch suggestions from <strong>memory</strong> (scorecard + retrospective JSONL), same logic as the agent context bundle — not Referee output.</p>
-    <div class="tool-row">
-      <div style="flex:2;min-width:200px">
-        <label for="chefManifestPath" style="margin:0;font-size:0.8rem">Chef manifest (repo path)</label>
-        <input type="text" id="chefManifestPath" style="margin-top:4px" value="renaissance_v4/configs/manifests/baseline_v1_recipe.json" spellcheck="false"/>
-      </div>
-      <button type="button" class="btn-chef" id="chefAtrSweepBtn">ATR sweep</button>
-      <span class="caps" id="chefHint" style="margin:0;flex:1;min-width:140px;align-self:center"></span>
-    </div>
-    <textarea id="scenarios" spellcheck="false" placeholder='[{"scenario_id":"…","manifest_path":"…","agent_explanation":{"hypothesis":"…"},…}]'></textarea>
-  </section>
-
-  <section class="panel workers-panel" aria-labelledby="workers-heading">
-    <h2 class="panel-title" id="workers-heading">Parallelism &amp; logging</h2>
-    <label for="workersRange">Worker processes <span id="workersVal" style="color:#e7e9ea;font-weight:600">1</span></label>
-    <input type="range" id="workersRange" min="1" max="64" value="1" step="1" />
-    <p id="workerCpuHint"></p>
-    <div id="workerEffectiveLine" aria-live="polite"></div>
-    <div style="margin-top:14px">
-      <label style="margin:0;font-size:0.85rem"><input type="checkbox" id="doLog" checked/> Append runs to experience JSONL (<code>PATTERN_GAME_MEMORY_ROOT</code> optional)</label>
-    </div>
-  </section>
-
-  <div class="run-actions">
-    <button type="button" id="runBtn">Run batch</button>
-    <div class="status-stack">
-      <div id="statusLine" aria-live="polite"></div>
-      <div id="batchConcurrencyBanner" class="batch-concurrency-banner" aria-live="polite"></div>
-      <div id="progressWrap" class="progress-wrap" role="progressbar" aria-label="Batch replay progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
-        <div class="progress-track" id="progressTrack">
-          <div class="progress-fill" id="progressFill" style="width:0%"></div>
+      <div class="pg-banner-strip">
+        <div class="pg-banner-stat">
+          <div class="pg-k">Financial data</div>
+          <div class="pg-v"><span class="status-dot" id="healthDot"></span> <span id="bannerFinancialV">—</span></div>
+          <div class="pg-s" id="healthText">Checking database…</div>
         </div>
-        <p class="caps" id="progressSub"></p>
+        <div class="pg-banner-stat">
+          <div class="pg-k">Groundhog</div>
+          <div class="pg-v" id="groundhogV">—</div>
+          <div class="pg-s"><span id="groundhogText">loading…</span></div>
+        </div>
+        <div class="pg-banner-stat">
+          <div class="pg-k">Search space</div>
+          <div class="pg-s pg-s-tall" id="searchSpaceStrip" aria-live="polite"><strong>Search space</strong> — loading…</div>
+        </div>
+        <div class="pg-banner-stat">
+          <div class="pg-k">Paper P&amp;L &amp; run</div>
+          <div class="pg-v" id="bannerRunV">Idle</div>
+          <div class="pg-s" id="bannerRunS">— run a batch —</div>
+        </div>
       </div>
-    </div>
-  </div>
+    </header>
+
+    <section class="pg-row pg-row-main">
+      <article class="pg-panel pg-panel-controls">
+        <div class="pg-panel-header">
+          <div>
+            <h2 class="pg-panel-h">1. Game controls</h2>
+            <p class="pg-panel-sub">Batch setup, JSON, workers, run.</p>
+          </div>
+          <span class="pg-chip pg-chip-teal">Controls</span>
+        </div>
+        <div class="def001-science" role="region" aria-label="DEF-001">
+          <span class="def001-tag">DEF-001 · SCIENCE / EVALUATION ONLY</span>
+          <p style="margin:0">Deterministic replay — no in-band policy training. Record: <code>docs/architect/pattern_game_operator_deficiencies_work_record.md</code></p>
+        </div>
+        <details class="help-details pg-help">
+          <summary>Setup, PYTHONPATH, Groundhog</summary>
+          <div class="help-details-body">
+            <p>Run from repo root with <code>PYTHONPATH</code> including the repo. Presets load from <code>game_theory/examples/</code>.</p>
+            <p><code>PATTERN_GAME_GROUNDHOG_BUNDLE=1</code> merges <code>game_theory/state/groundhog_memory_bundle.json</code> when a scenario has no <code>memory_bundle_path</code>. POST <code>/api/groundhog-memory</code> to promote ATR from review.</p>
+          </div>
+        </details>
+
+        <div class="pg-block">
+          <div class="pg-block-title">Scenario setup</div>
+          <div class="pg-mini-grid pg-mini-3">
+            <div><label for="presetPick">Preset</label><select id="presetPick" aria-describedby="presetHelp"><option value="">— Custom JSON —</option></select></div>
+            <div><label>&nbsp;</label><button type="button" class="btn-secondary" style="width:100%;margin-top:0" id="suggestHuntersBtn" title="Scorecard + retrospective">Suggest hunters</button></div>
+            <div><label>&nbsp;</label><button type="button" class="btn-chef" style="width:100%;margin-top:0" id="chefAtrSweepBtn">ATR sweep</button></div>
+          </div>
+          <p class="caps" id="presetHelp">Preset fills the textarea.</p>
+          <span class="caps" id="hunterSuggestHint"></span>
+          <div class="tool-row" style="margin-top:8px">
+            <div style="flex:1;min-width:200px">
+              <label for="chefManifestPath" style="margin:0;font-size:0.8rem">Chef manifest</label>
+              <input type="text" id="chefManifestPath" style="margin-top:4px" value="renaissance_v4/configs/manifests/baseline_v1_recipe.json" spellcheck="false"/>
+            </div>
+            <span class="caps" id="chefHint" style="align-self:flex-end"></span>
+          </div>
+        </div>
+
+        <div class="pg-block">
+          <div class="pg-block-title">Scenario JSON</div>
+          <details class="inline-details"><summary>Validation (hypothesis)</summary>
+            <p style="margin:0">Non-empty <code>agent_explanation.hypothesis</code> unless <code>PATTERN_GAME_REQUIRE_HYPOTHESIS=0</code>.</p>
+          </details>
+          <textarea id="scenarios" spellcheck="false" placeholder='[{"scenario_id":"…","manifest_path":"…",…}]'></textarea>
+        </div>
+
+        <div class="pg-block">
+          <div class="pg-block-title">Parallelism &amp; logging</div>
+          <label for="workersRange">Workers <span id="workersVal" style="font-weight:700">1</span></label>
+          <input type="range" id="workersRange" min="1" max="64" value="1" step="1" />
+          <p id="workerCpuHint"></p>
+          <div id="workerEffectiveLine" aria-live="polite"></div>
+          <label style="margin-top:10px;font-size:0.85rem"><input type="checkbox" id="doLog" checked/> Append to experience JSONL</label>
+        </div>
+
+        <div class="pg-block">
+          <div class="pg-block-title">Paper P&amp;L (batch)</div>
+          <div class="pnl-strip" id="pnlStrip">
+            <div class="pnl-row1">
+              <span class="pnl-baseline">Baseline <span id="pnlBaselineLabel">$1,000.00</span></span>
+              <span class="pnl-ending" id="pnlEnding">$1,000.00</span>
+              <span class="pnl-delta neutral" id="pnlDelta">— run a batch —</span>
+            </div>
+            <div class="pnl-bar-wrap" aria-hidden="true">
+              <div class="pnl-bar-track" id="pnlBarTrack">
+                <div class="pnl-fill" id="pnlFill" style="left:50%;width:0;"></div>
+                <div class="pnl-marker" id="pnlMarker"></div>
+              </div>
+              <div class="pnl-bar-ticks"><span>$0</span><span>$1k</span><span>$2k</span></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="run-actions">
+          <button type="button" id="runBtn">Run batch</button>
+          <div class="status-stack">
+            <div id="statusLine" aria-live="polite"></div>
+            <div id="batchConcurrencyBanner" class="batch-concurrency-banner" aria-live="polite"></div>
+            <div id="progressWrap" class="progress-wrap" role="progressbar" aria-label="Batch replay progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+              <div class="progress-track" id="progressTrack"><div class="progress-fill" id="progressFill" style="width:0%"></div></div>
+              <p class="caps" id="progressSub"></p>
+            </div>
+          </div>
+        </div>
+      </article>
+
+      <article class="pg-panel pg-panel-score">
+        <div class="pg-panel-header">
+          <div><h2 class="pg-panel-h">2. Scorecard</h2><p class="pg-panel-sub">Batch history.</p></div>
+          <span class="pg-chip pg-chip-amber">History</span>
+        </div>
+        <div class="scorecard-panel-inner" id="scorecardPanel">
+          <p class="scorecard-legend"><strong>Run OK</strong> · <strong>Session WIN</strong> · <strong>Trade win</strong> — see legend in doc.</p>
+          <p class="last-run" id="lastBatchRunLine">Last completed batch: —</p>
+          <div class="pg-table-scroll">
+            <table class="scorecard-table" id="scorecardHistoryTable">
+              <thead>
+                <tr>
+                  <th>Started (UTC)</th><th>Ended (UTC)</th><th>Duration</th><th>Processed</th><th>OK</th><th>Failed</th>
+                  <th>Run OK %</th><th>Session WIN %</th><th>Trade win %</th><th>Workers</th><th>Status</th>
+                </tr>
+              </thead>
+              <tbody id="scorecardHistoryTbody"></tbody>
+            </table>
+          </div>
+          <p class="path-hint" id="scorecardPathHint"></p>
+        </div>
+      </article>
+
+      <article class="pg-panel pg-panel-modules">
+        <div class="pg-panel-header">
+          <div><h2 class="pg-panel-h">3. Modules online</h2><p class="pg-panel-sub">Green = OK · red = off / empty.</p></div>
+          <span class="pg-chip pg-chip-rose">Modules</span>
+        </div>
+        <div class="pg-pill-row"><span class="pg-pill">Green = online</span><span class="pg-pill">Red = offline</span></div>
+        <div class="pg-status-list" id="moduleBoardList"><p class="caps" style="margin:0">Loading…</p></div>
+      </article>
+    </section>
+
+    <section class="pg-row pg-row-results">
+      <article class="pg-panel pg-results-wide">
+        <div class="pg-panel-header">
+          <div><h2 class="pg-panel-h">4. Results workspace</h2><p class="pg-panel-sub">Outcomes · JSON · session.</p></div>
+          <span class="pg-chip pg-chip-steel">Evidence</span>
+        </div>
+        <div class="pg-tab-strip" role="tablist">
+          <button type="button" class="pg-tab active" data-tab="outcomes" role="tab">Referee outcomes</button>
+          <button type="button" class="pg-tab" data-tab="json" role="tab">Raw JSON</button>
+          <button type="button" class="pg-tab" data-tab="session" role="tab">Session log</button>
+        </div>
+        <div id="pgEvidenceOutcomes" class="pg-evidence-panel">
+          <div class="policy-outcome-panel" id="policyOutcomePanel" hidden>
+            <p class="hint">Trade win % per scenario; session from cumulative P&amp;L.</p>
+            <div class="pg-table-scroll">
+              <table class="policy-table" id="policyOutcomeTable">
+                <thead>
+                  <tr>
+                    <th>Scenario</th><th>Session</th><th>Cum. P&amp;L</th><th>Trade win %</th><th>Trades</th>
+                    <th>Signal modules</th><th>Fusion</th><th>Strategy id</th>
+                  </tr>
+                </thead>
+                <tbody id="policyOutcomeTbody"></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+        <p class="caps" id="sessionLogNote" style="display:none;margin:0 0 10px"></p>
+        <pre id="out" class="pg-pre-json" style="display:none">(no run yet)</pre>
+      </article>
+
+      <article class="pg-panel pg-panel-notes">
+        <div class="pg-panel-header">
+          <div><h2 class="pg-panel-h">5. Layout notes</h2><p class="pg-panel-sub">Mockup reference.</p></div>
+          <span class="pg-chip pg-chip-steel">Notes</span>
+        </div>
+        <div class="pg-helper">Column 1 = configure · 2 = scoreboard · 3 = module wall · row 2 = evidence. DEF-001: evaluation-only; no automatic in-loop learning.</div>
+      </article>
+    </section>
   </div>
 
-  <aside class="col-sidebar" aria-label="Batch scorecard">
-  <div class="scorecard-panel" id="scorecardPanel">
-    <h2>Batch scorecard</h2>
-    <p class="scorecard-legend">
-      <strong>Three different numbers:</strong>
-      <strong>Run OK</strong> — jobs finished without a worker crash (says nothing about P&amp;L).
-      <strong>Session WIN</strong> — share of scenarios with paper session WIN vs LOSS (cumulative P&amp;L vs baseline).
-      <strong>Trade win</strong> — mean of per-scenario trade win rates (wins÷trades); this is the <strong>~34%</strong>-style column.
-      “Learning” is not a single % — use Session + Trade win + Policy table below after each run.
-    </p>
-    <p class="last-run" id="lastBatchRunLine">Last completed batch: — (run a batch to record start/end and totals)</p>
-    <table class="scorecard-table" id="scorecardHistoryTable">
-      <thead>
-        <tr>
-          <th>Started (UTC)</th>
-          <th>Ended (UTC)</th>
-          <th>Duration</th>
-          <th>Processed</th>
-          <th>OK</th>
-          <th>Failed</th>
-          <th title="Scenarios whose worker finished without exception">Run OK %</th>
-          <th title="Paper session WIN ÷ (WIN+LOSS) across scenarios in this batch">Session WIN %</th>
-          <th title="Mean of per-scenario trade win rates (summary.win_rate); e.g. 34.4%">Trade win %</th>
-          <th>Workers</th>
-          <th>Status</th>
-        </tr>
-      </thead>
-      <tbody id="scorecardHistoryTbody"></tbody>
-    </table>
-    <p class="path-hint" id="scorecardPathHint"></p>
-  </div>
-  </aside>
-  </div>
-
-  <div class="results-split">
-  <div class="policy-outcome-panel" id="policyOutcomePanel" hidden>
-    <h2>Referee outcomes (per scenario)</h2>
-    <p class="hint">
-      After a run, <strong>Trade win %</strong> here is the per-scenario value (e.g. <strong>34.4%</strong>) — winning trades ÷ total trades on the tape.
-      <strong>Session</strong> WIN/LOSS is from cumulative paper P&amp;L vs baseline (one row per scenario). Manifest columns summarize what was replayed. Full JSON is on the right.
-    </p>
-    <table class="policy-table" id="policyOutcomeTable">
-      <thead>
-        <tr>
-          <th>Scenario</th>
-          <th>Session</th>
-          <th>Cum. P&amp;L</th>
-          <th>Trade win %</th>
-          <th>Trades</th>
-          <th>Signal modules</th>
-          <th>Fusion</th>
-          <th>Strategy id</th>
-        </tr>
-      </thead>
-      <tbody id="policyOutcomeTbody"></tbody>
-    </table>
-  </div>
-  <div class="result-json-wrap">
-  <h2>Result</h2>
-  <p class="caps" id="sessionLogNote" style="margin:0 0 8px 0;color:#8b98a5;"></p>
-  <pre id="out">(no run yet)</pre>
-  </div>
-  </div>
-
+  
   <script>
     const LIMITS = __LIMITS_JSON__;
     const STARTING_EQUITY = __STARTING_EQUITY__;
@@ -1274,6 +1579,50 @@ PAGE_HTML = """<!DOCTYPE html>
       d.textContent = String(s);
       return d.innerHTML;
     }
+
+    function setBannerRun(main, sub) {
+      const v = document.getElementById('bannerRunV');
+      const s = document.getElementById('bannerRunS');
+      if (v && main != null) v.textContent = main;
+      if (s && sub != null) s.textContent = sub;
+    }
+    function syncBannerRunFromStatusLine() {
+      const st = document.getElementById('statusLine');
+      const t = (st && st.textContent) ? st.textContent.trim() : '';
+      if (!t) {
+        setBannerRun('Idle', '— run a batch —');
+        return;
+      }
+      if (t.indexOf('Running') === 0 || t.indexOf('Starting') === 0) {
+        setBannerRun('Running', t.length > 140 ? t.slice(0, 137) + '…' : t);
+        return;
+      }
+      if (t.indexOf('Finished') === 0) {
+        setBannerRun('Done', t.length > 140 ? t.slice(0, 137) + '…' : t);
+        return;
+      }
+      if (t.indexOf('Failed') === 0 || t.indexOf('Stopped') === 0 || t.indexOf('Client timeout') === 0) {
+        setBannerRun('Error', t.length > 140 ? t.slice(0, 137) + '…' : t);
+        return;
+      }
+      setBannerRun('Idle', t.length > 140 ? t.slice(0, 137) + '…' : t);
+    }
+    function setEvidenceTab(tab) {
+      const outcomes = document.getElementById('pgEvidenceOutcomes');
+      const pre = document.getElementById('out');
+      const sn = document.getElementById('sessionLogNote');
+      const tabs = document.querySelectorAll('.pg-tab-strip .pg-tab');
+      const id = tab || 'outcomes';
+      tabs.forEach((b) => {
+        b.classList.toggle('active', b.getAttribute('data-tab') === id);
+      });
+      if (outcomes) outcomes.style.display = (id === 'outcomes') ? '' : 'none';
+      if (pre) pre.style.display = (id === 'json') ? 'block' : 'none';
+      if (sn) sn.style.display = (id === 'session') ? 'block' : 'none';
+    }
+    document.querySelectorAll('.pg-tab-strip .pg-tab').forEach((btn) => {
+      btn.addEventListener('click', () => setEvidenceTab(btn.getAttribute('data-tab')));
+    });
 
     function formatUsdPlain(n) {
       const x = Number(n);
@@ -1417,11 +1766,13 @@ PAGE_HTML = """<!DOCTYPE html>
       if (err) {
         pre.innerHTML = '<span class="err">' + err + '</span>';
         renderPolicyOutcomePanel(null);
+        setEvidenceTab('json');
         return;
       }
       pre.textContent = JSON.stringify(data, null, 2);
       renderPolicyOutcomePanel(data);
       if (data && data.batch_timing) updateLastBatchRunLine(data.batch_timing);
+      setEvidenceTab('outcomes');
     }
 
     function formatUsd(n) {
@@ -1742,6 +2093,7 @@ PAGE_HTML = """<!DOCTYPE html>
       } finally {
         progressWrap.classList.remove('active');
         btn.disabled = false;
+        syncBannerRunFromStatusLine();
       }
     };
 
@@ -1750,11 +2102,13 @@ PAGE_HTML = """<!DOCTYPE html>
     async function refreshDataHealth() {
       const dot = document.getElementById('healthDot');
       const text = document.getElementById('healthText');
+      const bannerV = document.getElementById('bannerFinancialV');
       try {
         const r = await fetch('/api/data-health');
         const j = await r.json();
         dot.className = 'status-dot ' + (j.overall_ok ? 'ok' : 'bad');
         dot.title = j.overall_ok ? 'Data OK' : 'Data issue — see text';
+        if (bannerV) bannerV.textContent = j.overall_ok ? 'OK' : 'Issue';
         if (j.summary_line) {
           text.textContent = j.summary_line;
         } else if (j.error) {
@@ -1765,6 +2119,7 @@ PAGE_HTML = """<!DOCTYPE html>
       } catch (e) {
         dot.className = 'status-dot bad';
         dot.title = 'Health request failed';
+        if (bannerV) bannerV.textContent = '—';
         text.textContent = 'Health check failed: ' + friendlyFetchError(e);
       }
     }
@@ -1773,12 +2128,14 @@ PAGE_HTML = """<!DOCTYPE html>
 
     async function refreshGroundhog() {
       const el = document.getElementById('groundhogText');
+      const gv = document.getElementById('groundhogV');
       if (!el) return;
       try {
         const r = await fetch('/api/groundhog-memory');
         const j = await r.json();
         if (!r.ok || !j.ok) {
           el.textContent = 'unavailable';
+          if (gv) gv.textContent = '—';
           return;
         }
         const en = j.env_enabled ? 'merge ON' : 'merge OFF (set PATTERN_GAME_GROUNDHOG_BUNDLE=1)';
@@ -1787,12 +2144,47 @@ PAGE_HTML = """<!DOCTYPE html>
           ? ('ATR stop ' + j.bundle.apply.atr_stop_mult + ' / target ' + j.bundle.apply.atr_target_mult)
           : '—';
         el.textContent = en + ' · ' + ex + ' · ' + ap;
+        if (gv) gv.textContent = j.env_enabled ? 'merge ON' : 'merge OFF';
       } catch (e) {
         el.textContent = 'could not load — ' + friendlyFetchError(e);
+        if (gv) gv.textContent = '—';
       }
     }
     refreshGroundhog();
     setInterval(refreshGroundhog, 60000);
+
+    async function refreshModuleBoard() {
+      const list = document.getElementById('moduleBoardList');
+      if (!list) return;
+      try {
+        const r = await fetch('/api/module-board');
+        const j = await r.json();
+        if (!r.ok || !j.ok) {
+          list.innerHTML = '<p class="caps" style="margin:0">Could not load module board.</p>';
+          return;
+        }
+        const mods = j.modules || [];
+        if (!mods.length) {
+          list.innerHTML = '<p class="caps" style="margin:0">No modules.</p>';
+          return;
+        }
+        list.innerHTML = '';
+        for (const m of mods) {
+          const row = document.createElement('div');
+          row.className = 'pg-status-item';
+          const det = (m.detail != null) ? String(m.detail) : '';
+          row.innerHTML =
+            '<span class="status-dot ' + (m.ok ? 'ok' : 'bad') + '" title="' + escapeHtml(det.slice(0, 500)) + '"></span>' +
+            '<div><div class="pg-status-name">' + escapeHtml(m.label || m.id || '—') + '</div>' +
+            '<div class="pg-status-meta">' + escapeHtml(det.slice(0, 280)) + '</div></div>';
+          list.appendChild(row);
+        }
+      } catch (e) {
+        list.innerHTML = '<p class="caps" style="margin:0">' + escapeHtml(friendlyFetchError(e)) + '</p>';
+      }
+    }
+    refreshModuleBoard();
+    setInterval(refreshModuleBoard, 90000);
 
     async function refreshSearchSpaceEstimate() {
       const el = document.getElementById('searchSpaceStrip');
@@ -1849,6 +2241,7 @@ PAGE_HTML = """<!DOCTYPE html>
       const r = await fetch('/api/scenario-preset?name=' + encodeURIComponent(name));
       if (!r.ok) {
         document.getElementById('out').innerHTML = '<span class="err">Preset load failed: ' + r.status + '</span>';
+        setEvidenceTab('json');
         return;
       }
       const j = await r.json();
@@ -1896,12 +2289,14 @@ PAGE_HTML = """<!DOCTYPE html>
         .then(() => { refreshWorkerEffectiveLine(); })
         .catch((e) => {
           document.getElementById('out').innerHTML = '<span class="err">' + String(e) + '</span>';
+          setEvidenceTab('json');
         });
     };
 
     if (typeof refreshSearchSpaceEstimate === 'function') refreshSearchSpaceEstimate();
     refreshWorkerEffectiveLine();
     refreshScorecardHistory();
+    setEvidenceTab('outcomes');
   </script>
 </body>
 </html>
