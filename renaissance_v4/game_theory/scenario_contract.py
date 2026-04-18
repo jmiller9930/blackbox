@@ -48,11 +48,15 @@ def validate_scenarios(
     *,
     check_manifest_exists: bool = False,
     repo_root: Path | None = None,
+    require_hypothesis: bool = False,
 ) -> tuple[bool, list[str]]:
     """
     Return (ok, messages). ``ok`` is False only for blocking errors (empty list, missing manifest_path).
 
     Non-blocking warnings: unknown keys (we only document known keys), missing optional agent fields.
+
+    When ``require_hypothesis`` is True, each scenario must have ``agent_explanation.hypothesis`` as a
+    non-empty string (testable statement — ties runs together across replays).
     """
     messages: list[str] = []
     if not scenarios:
@@ -85,5 +89,17 @@ def validate_scenarios(
             messages.append(
                 f"scenario[{i}] has undocumented keys (ignored by runner): {sorted(extra)}"
             )
+
+        if require_hypothesis:
+            ae = s.get("agent_explanation")
+            hyp_ok = False
+            if isinstance(ae, dict):
+                h = ae.get("hypothesis")
+                hyp_ok = isinstance(h, str) and bool(h.strip())
+            if not hyp_ok:
+                return False, [
+                    f"scenario[{i}] missing non-empty agent_explanation.hypothesis "
+                    f"(PATTERN_GAME_REQUIRE_HYPOTHESIS or require_hypothesis=True)"
+                ]
 
     return True, messages

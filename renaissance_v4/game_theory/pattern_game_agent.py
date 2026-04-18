@@ -130,6 +130,7 @@ class PatternGameAgent:
         *,
         max_workers: int | None = None,
         experience_log_path: Path | str | bool | None = None,
+        run_memory_log_path: Path | str | bool | None = None,
     ) -> list[dict[str, Any]]:
         """Parallel Referee batch — no player-agent markdown, no Anna."""
         scenarios = self.normalize_manifest_paths(scenarios)
@@ -141,10 +142,16 @@ class PatternGameAgent:
             log_path = _GAME_THEORY / "experience_log.jsonl"
         elif experience_log_path:
             log_path = Path(str(experience_log_path))
+        rmem_path: Path | None = None
+        if run_memory_log_path is True or run_memory_log_path == "1" or run_memory_log_path == "default":
+            rmem_path = _GAME_THEORY / "run_memory.jsonl"
+        elif run_memory_log_path:
+            rmem_path = Path(str(run_memory_log_path))
         return run_scenarios_parallel(
             scenarios,
             max_workers=max_workers,
             experience_log_path=log_path,
+            run_memory_log_path=rmem_path,
         )
 
     def run(
@@ -153,6 +160,7 @@ class PatternGameAgent:
         *,
         max_workers: int | None = None,
         experience_log_path: Path | str | bool | None = None,
+        run_memory_log_path: Path | str | bool | None = None,
         fill_missing_explanations: bool = True,
         with_anna: bool | None = None,
         anna_context_profile: str | None = None,
@@ -172,6 +180,14 @@ class PatternGameAgent:
             log_path = _GAME_THEORY / "experience_log.jsonl"
         elif experience_log_path:
             log_path = Path(str(experience_log_path))
+        rmem_arg: Path | str | bool | None = run_memory_log_path
+        if rmem_arg is None and os.environ.get("RUN_MEMORY_LOG"):
+            rmem_arg = os.environ.get("RUN_MEMORY_LOG")
+        rmem_out: Path | str | None = None
+        if rmem_arg is True or rmem_arg == "1" or rmem_arg == "default":
+            rmem_out = _GAME_THEORY / "run_memory.jsonl"
+        elif rmem_arg:
+            rmem_out = Path(str(rmem_arg))
 
         # REPO_ROOT: so ``agent_context_bundle`` resolves docs when the host process cwd is not the repo.
         env_updates: dict[str, str | None] = {"REPO_ROOT": str(self.repo_root)}
@@ -182,6 +198,7 @@ class PatternGameAgent:
                 scenarios,
                 max_workers=max_workers,
                 experience_log_path=log_path,
+                run_memory_log_path=rmem_out,
                 fill_missing_explanations=fill_missing_explanations,
                 with_anna=with_anna,
             )
@@ -192,6 +209,7 @@ class PatternGameAgent:
         *,
         max_workers: int | None = None,
         experience_log_path: Path | str | bool | None = None,
+        run_memory_log_path: Path | str | bool | None = None,
         fill_missing_explanations: bool = True,
         with_anna: bool | None = None,
         anna_context_profile: str | None = None,
@@ -202,6 +220,7 @@ class PatternGameAgent:
             scenarios,
             max_workers=max_workers,
             experience_log_path=experience_log_path,
+            run_memory_log_path=run_memory_log_path,
             fill_missing_explanations=fill_missing_explanations,
             with_anna=with_anna,
             anna_context_profile=anna_context_profile,

@@ -20,7 +20,7 @@ from pathlib import Path
 from typing import Any
 
 from renaissance_v4.game_theory.parallel_runner import run_scenarios_parallel
-from renaissance_v4.game_theory.scenario_contract import extract_scenario_echo_fields
+from renaissance_v4.game_theory.scenario_contract import extract_scenario_echo_fields, validate_scenarios
 
 _GAME_THEORY = Path(__file__).resolve().parent
 _REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -105,6 +105,8 @@ def propose_tier1_scenario(
                 if note
                 else "Tier-1 candidate: manifest defines entries/exits; Referee replays stored bars forward."
             ),
+            "hypothesis": note if note else "",
+            "indicator_context": {},
             "indicator_values": {},
             "learned": "(pending — compare to other trials in this trace)",
             "behavior_change": "(pending — link prior_scenario_id when curating)",
@@ -115,6 +117,7 @@ def propose_tier1_scenario(
 def ensure_agent_explanations(scenarios: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """Ensure each scenario has an ``agent_explanation`` block (template if missing)."""
     out: list[dict[str, Any]] = []
+    defaults = ("hypothesis", "indicator_context", "indicator_values", "learned", "behavior_change")
     for s in scenarios:
         n = dict(s)
         if not n.get("agent_explanation"):
@@ -124,10 +127,20 @@ def ensure_agent_explanations(scenarios: list[dict[str, Any]]) -> list[dict[str,
                     f"Scenario {sid!r}: Referee will run one deterministic replay for manifest_path; "
                     "scores come only from replay outcomes."
                 ),
+                "hypothesis": "",
+                "indicator_context": {},
                 "indicator_values": {},
                 "learned": "",
                 "behavior_change": "",
             }
+        else:
+            ae = dict(n["agent_explanation"]) if isinstance(n["agent_explanation"], dict) else {}
+            for key in defaults:
+                if key == "indicator_context" and key not in ae:
+                    ae[key] = {}
+                elif key != "indicator_context" and key not in ae:
+                    ae[key] = ""
+            n["agent_explanation"] = ae
         out.append(n)
     return out
 
@@ -155,9 +168,12 @@ def markdown_operator_report(results: list[dict[str, Any]]) -> str:
         lines.append(f"- **Manifest:** `{r.get('manifest_path', '')}`")
         ae = r.get("agent_explanation")
         if isinstance(ae, dict):
-            for key in ("why_this_strategy", "learned", "behavior_change"):
+            for key in ("hypothesis", "why_this_strategy", "learned", "behavior_change"):
                 if ae.get(key):
                     lines.append(f"- **{key}:** {ae[key]}")
+            ic = ae.get("indicator_context")
+            if isinstance(ic, dict) and ic:
+                lines.append(f"- **indicator_context:** `{json.dumps(ic, ensure_ascii=False)}`")
         echo = extract_scenario_echo_fields(r)
         if echo.get("training_trace_id"):
             lines.append(f"- **training_trace_id:** `{echo['training_trace_id']}`")
@@ -168,11 +184,28 @@ def markdown_operator_report(results: list[dict[str, Any]]) -> str:
     return "\n".join(lines)
 
 
+def _resolve_run_memory_log_path(
+    explicit: Path | str | None,
+) -> Path | None:
+    if explicit is not None:
+        s = str(explicit).strip()
+        if not s:
+            return None
+        if s in ("default", "1"):
+            return _GAME_THEORY / "run_memory.jsonl"
+        return Path(s).expanduser()
+    env = os.environ.get("RUN_MEMORY_LOG")
+    if not env or not str(env).strip():
+        return None
+    return _resolve_run_memory_log_path(env)
+
+
 def run_player_batch(
     scenarios: list[dict[str, Any]],
     *,
     max_workers: int | None = None,
     experience_log_path: Path | str | None = None,
+    run_memory_log_path: Path | str | None = None,
     fill_missing_explanations: bool = True,
     with_anna: bool | None = None,
 ) -> dict[str, Any]:
@@ -184,10 +217,21 @@ def run_player_batch(
     """
     if fill_missing_explanations:
         scenarios = ensure_agent_explanations(scenarios)
+    req_hyp = os.environ.get("PATTERN_GAME_REQUIRE_HYPOTHESIS", "").strip().lower() in (
+        "1",
+        "true",
+        "yes",
+    )
+    if req_hyp:
+        ok, msgs = validate_scenarios(scenarios, require_hypothesis=True)
+        if not ok:
+            raise ValueError(msgs[0] if msgs else "scenario validation failed")
+    rmem = _resolve_run_memory_log_path(run_memory_log_path)
     results = run_scenarios_parallel(
         scenarios,
         max_workers=max_workers,
         experience_log_path=experience_log_path,
+        run_memory_log_path=rmem,
     )
     md = markdown_operator_report(results)
     anna_text: str | None = None
@@ -220,6 +264,14 @@ def main() -> None:
         type=str,
         default=None,
         help="Append JSONL (use 'default' for game_theory/experience_log.jsonl)",
+    )
+    p.add_argument(
+        "--run-memory",
+        type=str,
+        default=None,
+        nargs="?",
+        const="default",
+        help="Append structured run_memory JSONL (default path: game_theory/run_memory.jsonl); or set RUN_MEMORY_LOG",
     )
     p.add_argument(
         "--proposal-only",
@@ -268,6 +320,8 @@ def main() -> None:
     elif args.log:
         log_path = Path(args.log)
 
+    run_mem: Path | str | None = args.run_memory
+
     if args.anna and args.no_anna:
         raise SystemExit("Use only one of --anna / --no-anna")
     with_anna: bool | None = None
@@ -280,6 +334,7 @@ def main() -> None:
         scenarios,
         max_workers=args.jobs,
         experience_log_path=log_path,
+        run_memory_log_path=run_mem,
         with_anna=with_anna,
     )
     print(out["report_markdown"])

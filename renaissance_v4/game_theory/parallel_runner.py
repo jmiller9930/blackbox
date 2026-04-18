@@ -17,6 +17,7 @@ from pathlib import Path
 from typing import Any
 
 from renaissance_v4.game_theory.pattern_game import json_summary, run_pattern_game
+from renaissance_v4.game_theory.run_memory import append_run_memory, build_run_memory_record
 from renaissance_v4.game_theory.scenario_contract import extract_scenario_echo_fields
 
 DEFAULT_WORKERS = max(1, (os.cpu_count() or 4))
@@ -105,6 +106,7 @@ def run_scenarios_parallel(
     *,
     max_workers: int | None = None,
     experience_log_path: Path | str | None = None,
+    run_memory_log_path: Path | str | None = None,
     progress_callback: Callable[[int, int, dict[str, Any]], None] | None = None,
 ) -> list[dict[str, Any]]:
     """
@@ -116,6 +118,9 @@ def run_scenarios_parallel(
     the Referee does not use them for scoring. See ``scenario_contract.py`` / README.
 
     If ``experience_log_path`` is set, append one JSON line per result (parent process only).
+
+    If ``run_memory_log_path`` is set, append one structured :mod:`run_memory` JSONL line per
+    result (hypothesis + indicator_context + referee summary — durable audit trail).
 
     If ``progress_callback`` is set, it is invoked after each scenario completes as
     ``(completed_count, total_count, result_row)`` for live progress UIs.
@@ -145,6 +150,44 @@ def run_scenarios_parallel(
         with p.open("a", encoding="utf-8") as fh:
             for row in results:
                 fh.write(json.dumps(row, ensure_ascii=False) + "\n")
+
+    if run_memory_log_path is not None:
+        by_sid = {str(s.get("scenario_id", "")): s for s in normalized}
+        mem_p = Path(run_memory_log_path)
+        mem_p.parent.mkdir(parents=True, exist_ok=True)
+        for row in results:
+            sid = str(row.get("scenario_id", ""))
+            scen = by_sid.get(sid)
+            mp = str(row.get("manifest_path") or (scen or {}).get("manifest_path", ""))
+            summ = row.get("summary") if row.get("ok") else None
+            err = None if row.get("ok") else str(row.get("error", "unknown"))
+            atr_s = None
+            atr_t = None
+            if scen:
+                atr_s = scen.get("atr_stop_mult")
+                atr_t = scen.get("atr_target_mult")
+                if isinstance(atr_s, (int, float)):
+                    atr_s = float(atr_s)
+                else:
+                    atr_s = None
+                if isinstance(atr_t, (int, float)):
+                    atr_t = float(atr_t)
+                else:
+                    atr_t = None
+            prior_rid = None
+            if scen and scen.get("prior_run_id") is not None:
+                prior_rid = str(scen["prior_run_id"])
+            rec = build_run_memory_record(
+                source="parallel_scenarios",
+                manifest_path=mp,
+                json_summary_row=summ,
+                scenario=scen,
+                parallel_error=err,
+                atr_stop_mult=atr_s,
+                atr_target_mult=atr_t,
+                prior_run_id=prior_rid,
+            )
+            append_run_memory(mem_p, rec)
 
     return results
 
@@ -181,6 +224,14 @@ def main() -> None:
         default=None,
         help="Append JSONL results to this path (default: game_theory/experience_log.jsonl)",
     )
+    parser.add_argument(
+        "--run-memory-log",
+        type=str,
+        nargs="?",
+        const="default",
+        default=None,
+        help="Also append structured run_memory JSONL (default: game_theory/run_memory.jsonl)",
+    )
     args = parser.parse_args()
     scenarios_path = Path(args.scenarios_json)
     scenarios = _load_scenarios_from_json(scenarios_path)
@@ -189,10 +240,19 @@ def main() -> None:
     if log_path is None:
         log_path = Path(__file__).resolve().parent / "experience_log.jsonl"
 
+    rmem: Path | None = None
+    if args.run_memory_log is not None:
+        rmem = (
+            Path(__file__).resolve().parent / "run_memory.jsonl"
+            if args.run_memory_log in ("default", "1")
+            else Path(args.run_memory_log).expanduser()
+        )
+
     results = run_scenarios_parallel(
         scenarios,
         max_workers=args.jobs,
         experience_log_path=log_path,
+        run_memory_log_path=rmem,
     )
     ok = sum(1 for r in results if r.get("ok"))
     print(json.dumps({"ran": len(results), "ok": ok, "failed": len(results) - ok, "results": results}, indent=2))

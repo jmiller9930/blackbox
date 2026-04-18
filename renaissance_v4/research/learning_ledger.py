@@ -23,6 +23,10 @@ from renaissance_v4.core.performance_metrics import compute_summary_metrics
 class LearningLedger:
     """
     In-memory outcome ledger for replay-time learning analysis.
+
+    Records outcomes and aggregate metrics only; it does not tune strategy parameters,
+    fusion weights, or execution geometry. Governed parameter changes are out-of-band
+    (human/architect iteration, manifests, or a future explicit optimizer).
     """
 
     def __init__(self) -> None:
