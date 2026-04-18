@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import os
+
 import renaissance_v4.game_theory.player_agent as player_agent_mod
 from renaissance_v4.game_theory.player_agent import (
     ensure_agent_explanations,
@@ -71,6 +73,20 @@ def test_run_player_batch_with_anna_appends_narrative(monkeypatch) -> None:
     assert out["anna_narrative"] == "Test narrative only."
     assert "Anna — operator narrative" in out["report_markdown"]
     assert "Test narrative only." in out["report_markdown"]
+
+
+def test_ensure_anna_pattern_game_context_defaults_to_all(monkeypatch) -> None:
+    monkeypatch.delenv("ANNA_CONTEXT_PROFILE", raising=False)
+    monkeypatch.delenv("ANNA_PATTERN_GAME_CONTEXT_MINIMAL", raising=False)
+    with player_agent_mod._ensure_anna_pattern_game_context():
+        assert os.environ.get("ANNA_CONTEXT_PROFILE") == "all"
+
+
+def test_ensure_anna_pattern_game_context_minimal_uses_pattern_game(monkeypatch) -> None:
+    monkeypatch.delenv("ANNA_CONTEXT_PROFILE", raising=False)
+    monkeypatch.setenv("ANNA_PATTERN_GAME_CONTEXT_MINIMAL", "1")
+    with player_agent_mod._ensure_anna_pattern_game_context():
+        assert os.environ.get("ANNA_CONTEXT_PROFILE") == "pattern_game"
 
 
 def test_run_player_batch_no_anna_skips_llm(monkeypatch) -> None:

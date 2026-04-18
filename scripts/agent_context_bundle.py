@@ -6,7 +6,10 @@ and optional extra files. This module loads whitelisted paths so the LLM sees th
 without inventing retention in weights.
 
 Env:
-  ANNA_CONTEXT_PROFILE   — comma-separated tokens (default: none).
+  ANNA_CONTEXT_PROFILE   — comma-separated tokens (default when **this module** is called alone: none).
+                           **Pattern-game Anna** (``renaissance_v4/game_theory/player_agent.py``) sets the profile
+                           to **all** before calling ``build_context_prefix`` when the env profile is unset, so
+                           narration and ``--ask`` get the full designed prefix unless you override.
                            **both** = checked-in docs only: pattern_game + policy files.
                            **all** = same docs **plus** retrospective + scorecard blocks (full available prefix;
                            larger prompts). For manual mixes use: pattern_game | policy | retrospective | scorecard.

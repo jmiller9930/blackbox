@@ -179,7 +179,8 @@ class PatternGameAgent:
         Full player-agent run: Referee batch + markdown + optional Anna.
 
         ``anna_context_profile`` sets ``ANNA_CONTEXT_PROFILE`` only for the duration of this call
-        (e.g. ``policy,pattern_game``). Does not fine-tune any model.
+        (e.g. ``policy,pattern_game``). If ``None``, ``player_agent`` uses its default (**full** prefix
+        ``all`` when the env profile is unset — see ``ANNA_PATTERN_GAME_CONTEXT_MINIMAL``). Does not fine-tune any model.
         """
         scenarios = self.normalize_manifest_paths(scenarios)
         ok, msgs = self.validate(scenarios)

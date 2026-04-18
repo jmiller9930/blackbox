@@ -9,9 +9,11 @@ The Referee remains deterministic; this layer does **not** change scores. It exi
 answer **operator questions** doc-grounded via ``agent_context_bundle`` (game spec, QUANT design, context_memory,
 Renaissance V4 ``fusion_engine`` / weights / ``FusionResult`` contract).
 She does **not** judge WIN/LOSS or change scores. Enable with ``PLAYER_AGENT_USE_ANNA=1`` (default: follow
-``ANNA_USE_LLM``). If ``ANNA_CONTEXT_PROFILE`` is unset/``none``, pattern-game calls default it to ``pattern_game``
-so factual repo docs are loaded. To use **every** static + log block the bundle supports in one shot, set
-``ANNA_CONTEXT_PROFILE=all`` (see ``scripts/agent_context_bundle.py`` — larger prompts). CLI: ``--ask "…"`` for a standalone factual answer (no batch).
+``ANNA_USE_LLM``). If ``ANNA_CONTEXT_PROFILE`` is unset/``none``, pattern-game Anna calls default it to **`all`**
+(full designed prefix: pattern_game + policy files, plus retrospective + scorecard JSONL tails — see
+``scripts/agent_context_bundle.py``). For **docs-only** (smaller prompts / tests), set
+``ANNA_PATTERN_GAME_CONTEXT_MINIMAL=1`` or set ``ANNA_CONTEXT_PROFILE`` explicitly (e.g. ``pattern_game``).
+CLI: ``--ask "…"`` for a standalone factual answer (no batch).
 """
 
 from __future__ import annotations
@@ -44,14 +46,22 @@ def _runtime_imports() -> tuple[Any, Any]:
     return ollama_base_url, ollama_generate
 
 
+def _default_pattern_game_context_profile() -> str:
+    """Full bundle by default; opt out with ``ANNA_PATTERN_GAME_CONTEXT_MINIMAL=1``."""
+    v = os.environ.get("ANNA_PATTERN_GAME_CONTEXT_MINIMAL", "").strip().lower()
+    if v in ("1", "true", "yes", "on"):
+        return "pattern_game"
+    return "all"
+
+
 @contextlib.contextmanager
 def _ensure_anna_pattern_game_context() -> Iterator[None]:
-    """If ANNA_CONTEXT_PROFILE is empty/none, load ``pattern_game`` docs for factual answers."""
+    """If ``ANNA_CONTEXT_PROFILE`` is empty/none, apply full pattern-game prefix (``all`` unless minimal)."""
     key = "ANNA_CONTEXT_PROFILE"
     old = os.environ.get(key)
     v = (old or "").strip().lower()
     if v in ("", "none", "0", "false", "no"):
-        os.environ[key] = "pattern_game"
+        os.environ[key] = _default_pattern_game_context_profile()
     try:
         yield
     finally:
@@ -380,7 +390,7 @@ def main() -> None:
         type=str,
         default=None,
         metavar="QUESTION",
-        help="Ask Anna a doc-grounded question (Ollama); no scenario batch. Sets repo context to pattern_game.",
+        help="Ask Anna a doc-grounded question (Ollama); no scenario batch. Uses full pattern-game context prefix unless env overrides (see ANNA_CONTEXT_PROFILE / ANNA_PATTERN_GAME_CONTEXT_MINIMAL).",
     )
     args = p.parse_args()
 

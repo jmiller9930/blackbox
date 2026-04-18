@@ -55,18 +55,18 @@ If you do not care about weight training, “train the agent” still matters as
 
 **Reasonable follow-ons (staged, not all implemented):** retrieval over `experience_log.jsonl` + past reports; ranked “next scenario” suggestions from Referee stats; Foreman-triggered batches; export paths that **hand off** to a human-run `validate_policy_package.py` on a real package folder. Say the word when you want one of these cut as a ticket.
 
-### Checklist — use **everything already wired** (no new stack)
+### Checklist — pattern-game Anna **defaults to the full prefix** (no new stack)
 
-Before asking for more tools, enable the full **pattern-game Anna prefix** when running `player_agent` / Ollama narration (`anna_narrate_pattern_report`, `anna_answer_operator_question`):
+`player_agent` narration (`anna_narrate_pattern_report`, `anna_answer_operator_question`) **always** applies a full context prefix when `ANNA_CONTEXT_PROFILE` is unset/none: **`all`** (pattern_game + policy files + retrospective + scorecard tails). Not a “maybe” — that is the default.
 
 | Goal | What to set |
 |------|-------------|
-| All checked-in docs + both memory logs in one prefix | `ANNA_CONTEXT_PROFILE=all` (loads pattern_game + policy files, **and** retrospective + scorecard blocks; **larger** prompts). |
-| Same docs as today, no logs | `ANNA_CONTEXT_PROFILE=both` (pattern_game + policy only). |
-| À la carte | e.g. `pattern_game,retrospective,scorecard` or env toggles `ANNA_CONTEXT_RETROSPECTIVE=1` / `ANNA_CONTEXT_SCORECARD=1`. |
-| Repo root for paths | `REPO_ROOT` or run from repo root so JSONL paths resolve. |
+| **Default (full designed bundle)** | Nothing — or explicitly `ANNA_CONTEXT_PROFILE=all`. |
+| Docs only (smaller prompts, CI, token budget) | `ANNA_PATTERN_GAME_CONTEXT_MINIMAL=1` → defaults to `pattern_game` only when profile would otherwise be empty. |
+| Override any time | Set `ANNA_CONTEXT_PROFILE` explicitly (e.g. `both`, `pattern_game`, or a custom comma list). |
+| Repo-relative reads | `player_agent` passes repo root into `build_context_prefix`; set `REPO_ROOT` for other tools. |
 
-**Footgun fixed:** `all` used to mean “doc profiles only” and **skipped** retrospective/scorecard; it now includes those blocks so one token matches “max prefix.”
+**Note:** `all` = pattern_game + policy **files** plus retrospective + scorecard **blocks** (see `scripts/agent_context_bundle.py`).
 
 **Separate path:** `scripts/runtime/anna_analyst_v1.py` (Telegram, etc.) uses **engine context bundles** (`ANNA_CONTEXT_BUNDLE_PATH` / ledger JSON), **not** `agent_context_bundle` unless your dispatcher merges it. Pattern-game narration uses **`player_agent` + `scripts/agent_context_bundle.py`** — different integration surface.
 
