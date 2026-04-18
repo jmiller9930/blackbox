@@ -7,7 +7,7 @@ No manifest/ATR fields in the UI — policy lives in the JSON (or examples prese
   pip install -r renaissance_v4/game_theory/requirements.txt
   PYTHONPATH=. python3 -m renaissance_v4.game_theory.web_app
 
-Binds 127.0.0.1 only (prototype).
+Default bind is loopback; use ``--host 0.0.0.0`` for LAN/SSH access (prototype).
 """
 
 from __future__ import annotations
@@ -192,11 +192,26 @@ PAGE_HTML = """<!DOCTYPE html>
     }
     .err { color: #f4212e; }
     input[type=checkbox] { width: auto; }
+    input[type=range] { width: 100%; accent-color: #1d9bf0; }
+    .progress-wrap { display: none; margin: 12px 0 8px; }
+    .progress-wrap.active { display: block; }
+    .progress-track {
+      height: 8px; border-radius: 4px; background: #38444d; overflow: hidden;
+    }
+    .progress-indet {
+      height: 100%; width: 35%; border-radius: 4px; background: #1d9bf0;
+      animation: indet 1.1s ease-in-out infinite;
+    }
+    @keyframes indet {
+      0% { transform: translateX(-100%); }
+      100% { transform: translateX(400%); }
+    }
+    #statusLine { min-height: 1.3em; color: #e7e9ea; font-size: 0.9rem; margin-top: 8px; }
   </style>
 </head>
 <body>
   <h1>Pattern game — local prototype</h1>
-  <p class="caps">Referee-only scores. Bind: 127.0.0.1 · <code>PYTHONPATH</code> = repo root</p>
+  <p class="caps">Referee-only scores. Run from repo root with <code>PYTHONPATH</code> set.</p>
 
   <p class="caps" style="margin-top:16px"><strong>Two options only:</strong> (1) choose a <strong>preset</strong> (pre-filled policy from <code>game_theory/examples/</code>), <strong>or</strong> (2) paste your own scenario JSON in the box. Strategy details and agent story belong in that JSON — not here.</p>
 
@@ -209,18 +224,20 @@ PAGE_HTML = """<!DOCTYPE html>
   <label for="scenarios">Scenario batch (JSON array)</label>
   <textarea id="scenarios" spellcheck="false" placeholder='[{"scenario_id":"…","manifest_path":"…",…}]'></textarea>
 
-  <label for="workers">Workers</label>
+  <label for="workersRange">Workers <span id="workersVal" style="color:#e7e9ea;font-weight:600">1</span></label>
+  <input type="range" id="workersRange" min="1" max="64" value="1" step="1" />
+  <p class="caps" id="workerHint"></p>
   <div class="row">
-    <div>
-      <input type="number" id="workers" min="1" value="16"/>
-      <p class="caps" id="workerHint"></p>
-    </div>
     <div>
       <label><input type="checkbox" id="doLog" checked/> Append results to <code>game_theory/experience_log.jsonl</code></label>
     </div>
   </div>
 
   <button type="button" id="runBtn">Run</button>
+  <div id="statusLine" aria-live="polite"></div>
+  <div id="progressWrap" class="progress-wrap" role="progressbar" aria-label="Run in progress">
+    <div class="progress-track"><div class="progress-indet"></div></div>
+  </div>
 
   <h2>Result</h2>
   <pre id="out">(no run yet)</pre>
@@ -228,14 +245,21 @@ PAGE_HTML = """<!DOCTYPE html>
   <script>
     const LIMITS = __LIMITS_JSON__;
     const DEFAULT_UI_WORKERS = 16;
+    const RUN_TIMEOUT_MS = 7200000;
 
+    const rangeEl = document.getElementById('workersRange');
+    const workersVal = document.getElementById('workersVal');
+    const statusLine = document.getElementById('statusLine');
+    const progressWrap = document.getElementById('progressWrap');
+
+    rangeEl.min = '1';
+    rangeEl.max = String(LIMITS.hard_cap_workers);
+    rangeEl.value = String(Math.min(DEFAULT_UI_WORKERS, LIMITS.hard_cap_workers));
+    workersVal.textContent = rangeEl.value;
     document.getElementById('workerHint').textContent =
-      'Default ' + DEFAULT_UI_WORKERS + ' parallel worker processes (capped to this machine). ' +
-      LIMITS.cpu_logical_count + ' logical CPUs · hard cap ' + LIMITS.hard_cap_workers + '. ' + LIMITS.note;
-
-    const wEl = document.getElementById('workers');
-    wEl.max = LIMITS.hard_cap_workers;
-    wEl.value = Math.min(DEFAULT_UI_WORKERS, LIMITS.hard_cap_workers);
+      'This host: ' + LIMITS.cpu_logical_count + ' logical CPUs · max workers ' + LIMITS.hard_cap_workers +
+      ' (slider). On a 16-core box you can use up to that cap; this server may be smaller — that is the machine limit, not a bug. ' + LIMITS.note;
+    rangeEl.addEventListener('input', () => { workersVal.textContent = rangeEl.value; });
 
     async function show(el, data, err) {
       const pre = document.getElementById('out');
@@ -246,25 +270,42 @@ PAGE_HTML = """<!DOCTYPE html>
     document.getElementById('runBtn').onclick = async () => {
       const btn = document.getElementById('runBtn');
       btn.disabled = true;
+      statusLine.textContent = 'Running — replay in progress (often several minutes). This bar moves while the request is active.';
+      progressWrap.classList.add('active');
+      const ac = new AbortController();
+      const tid = setTimeout(() => ac.abort(), RUN_TIMEOUT_MS);
       try {
-        let mw = parseInt(document.getElementById('workers').value, 10);
+        let mw = parseInt(rangeEl.value, 10);
         if (isNaN(mw)) mw = null;
         if (mw !== null) {
           mw = Math.max(1, Math.min(mw, LIMITS.hard_cap_workers));
-          document.getElementById('workers').value = mw;
+          rangeEl.value = String(mw);
+          workersVal.textContent = String(mw);
         }
         const body = {
           scenarios_json: document.getElementById('scenarios').value,
           max_workers: mw,
           log_path: document.getElementById('doLog').checked
         };
-        const r = await fetch('/api/run-parallel', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+        const r = await fetch('/api/run-parallel', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body),
+          signal: ac.signal
+        });
         const j = await r.json();
-        if (!r.ok) { await show(null, null, j.error || JSON.stringify(j)); return; }
+        if (!r.ok) { await show(null, null, j.error || JSON.stringify(j)); statusLine.textContent = 'Finished with error — see Result.'; return; }
         await show(null, j, null);
+        statusLine.textContent = 'Finished — see Result below.';
       } catch (e) {
-        await show(null, null, String(e));
+        const msg = (e && e.name === 'AbortError')
+          ? ('Timed out after ' + (RUN_TIMEOUT_MS / 60000) + ' minutes — run may still be going on the server; refresh or check logs.')
+          : String(e);
+        await show(null, null, msg);
+        statusLine.textContent = 'Stopped or failed — see Result.';
       } finally {
+        clearTimeout(tid);
+        progressWrap.classList.remove('active');
         btn.disabled = false;
       }
     };
