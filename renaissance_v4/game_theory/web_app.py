@@ -244,7 +244,6 @@ PAGE_HTML = """<!DOCTYPE html>
 
   <script>
     const LIMITS = __LIMITS_JSON__;
-    const DEFAULT_UI_WORKERS = 16;
     const RUN_TIMEOUT_MS = 7200000;
 
     const rangeEl = document.getElementById('workersRange');
@@ -252,13 +251,18 @@ PAGE_HTML = """<!DOCTYPE html>
     const statusLine = document.getElementById('statusLine');
     const progressWrap = document.getElementById('progressWrap');
 
+    const hardMax = LIMITS.hard_cap_workers;
+    const recommended = LIMITS.recommended_max_workers;
+    const defaultWorkers = Math.max(1, Math.min(recommended, hardMax));
+
     rangeEl.min = '1';
-    rangeEl.max = String(LIMITS.hard_cap_workers);
-    rangeEl.value = String(Math.min(DEFAULT_UI_WORKERS, LIMITS.hard_cap_workers));
+    rangeEl.max = String(hardMax);
+    rangeEl.value = String(defaultWorkers);
     workersVal.textContent = rangeEl.value;
     document.getElementById('workerHint').textContent =
-      'This host: ' + LIMITS.cpu_logical_count + ' logical CPUs · max workers ' + LIMITS.hard_cap_workers +
-      ' (slider). On a 16-core box you can use up to that cap; this server may be smaller — that is the machine limit, not a bug. ' + LIMITS.note;
+      'This host: ' + LIMITS.cpu_logical_count + ' logical CPUs · recommended default ' + recommended +
+      ' (one process per CPU for CPU-bound replay) · hard max ' + hardMax +
+      ' (slider top). Pick fewer if you want headroom; never above max. ' + LIMITS.note;
     rangeEl.addEventListener('input', () => { workersVal.textContent = rangeEl.value; });
 
     async function show(el, data, err) {
