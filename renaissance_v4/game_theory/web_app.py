@@ -11,6 +11,9 @@ instant I/O). Folders look like ``batch_<UTC>_<id>/`` with ``BATCH_README.md`` a
 ``HUMAN_READABLE.md``, unless ``PATTERN_GAME_NO_SESSION_LOG=1``. The JSON result includes
 ``session_log_batch_dir`` when present.
 
+Parallel batches append one line per run to ``batch_scorecard.jsonl`` (UTC start/end, duration,
+counts) and expose ``batch_timing`` on the API; see ``GET /api/batch-scorecard``.
+
 No manifest/ATR fields in the UI — policy lives in the JSON (or examples presets). Default 16 workers
 (capped to host). ``POST /api/run`` remains for scripted single-manifest runs (optional JSON field ``memory_bundle_path``).
 
@@ -33,9 +36,18 @@ from flask import Flask, abort, jsonify, request
 
 _GAME_THEORY = Path(__file__).resolve().parent
 
+from renaissance_v4.game_theory.batch_scorecard import (
+    read_batch_scorecard_recent,
+    record_parallel_batch_finished,
+    utc_timestamp_iso,
+)
 from renaissance_v4.game_theory.data_health import get_data_health
 from renaissance_v4.game_theory.search_space_estimate import build_search_space_estimate
-from renaissance_v4.game_theory.memory_paths import default_experience_log_jsonl, ensure_memory_root_tree
+from renaissance_v4.game_theory.memory_paths import (
+    default_batch_scorecard_jsonl,
+    default_experience_log_jsonl,
+    ensure_memory_root_tree,
+)
 from renaissance_v4.game_theory.parallel_runner import (
     clamp_parallel_workers,
     get_parallel_limits,
@@ -270,10 +282,13 @@ def create_app() -> Flask:
                 "last_message": None,
                 "error": None,
                 "result": None,
+                "batch_timing": None,
             }
 
         def run_job() -> None:
             session_batch_dir: list[str | None] = [None]
+            started_iso = utc_timestamp_iso()
+            start_unix = time.time()
 
             def on_session_batch(p: Path) -> None:
                 session_batch_dir[0] = str(p.resolve())
@@ -301,8 +316,19 @@ def create_app() -> Flask:
                     on_session_log_batch=on_session_batch,
                 )
                 ok_n = sum(1 for r in results if r.get("ok"))
+                timing = record_parallel_batch_finished(
+                    job_id=job_id,
+                    started_at_utc=started_iso,
+                    start_unix=start_unix,
+                    total_scenarios=len(scenarios),
+                    workers_used=workers_used,
+                    results=results,
+                    session_log_batch_dir=session_batch_dir[0],
+                    error=None,
+                )
                 payload = {
                     "ok": True,
+                    "job_id": job_id,
                     "ran": len(results),
                     "ok_count": ok_n,
                     "failed_count": len(results) - ok_n,
@@ -312,6 +338,7 @@ def create_app() -> Flask:
                     "workers_used": workers_used,
                     "scenario_validation": {"ok": True, "messages": val_msgs},
                     "session_log_batch_dir": session_batch_dir[0],
+                    "batch_timing": timing,
                 }
                 with _JOBS_LOCK:
                     j = _JOBS.get(job_id)
@@ -319,12 +346,25 @@ def create_app() -> Flask:
                         j["status"] = "done"
                         j["completed"] = len(results)
                         j["result"] = payload
+                        j["batch_timing"] = timing
             except Exception as e:
+                err_s = f"{type(e).__name__}: {e}"
+                timing = record_parallel_batch_finished(
+                    job_id=job_id,
+                    started_at_utc=started_iso,
+                    start_unix=start_unix,
+                    total_scenarios=len(scenarios),
+                    workers_used=workers_used,
+                    results=None,
+                    session_log_batch_dir=None,
+                    error=err_s,
+                )
                 with _JOBS_LOCK:
                     j = _JOBS.get(job_id)
                     if j:
                         j["status"] = "error"
-                        j["error"] = f"{type(e).__name__}: {e}"
+                        j["error"] = err_s
+                        j["batch_timing"] = timing
 
         threading.Thread(target=run_job, daemon=True).start()
         return jsonify(
@@ -355,6 +395,8 @@ def create_app() -> Flask:
         }
         if j.get("error"):
             out["error"] = j["error"]
+        if j.get("batch_timing") is not None:
+            out["batch_timing"] = j["batch_timing"]
         if j["status"] == "done" and j.get("result"):
             out["result"] = j["result"]
         return jsonify(out)
@@ -372,6 +414,10 @@ def create_app() -> Flask:
         log_path = prep["log_path"]
         val_msgs = prep["val_msgs"]
 
+        job_id = uuid.uuid4().hex
+        started_iso = utc_timestamp_iso()
+        start_unix = time.time()
+        workers_used = clamp_parallel_workers(max_workers, len(scenarios))
         try:
             session_batch_dir: list[str | None] = [None]
 
@@ -385,10 +431,20 @@ def create_app() -> Flask:
                 on_session_log_batch=on_session_batch,
             )
             ok_n = sum(1 for r in results if r.get("ok"))
-            workers_used = clamp_parallel_workers(max_workers, len(scenarios))
+            timing = record_parallel_batch_finished(
+                job_id=job_id,
+                started_at_utc=started_iso,
+                start_unix=start_unix,
+                total_scenarios=len(scenarios),
+                workers_used=workers_used,
+                results=results,
+                session_log_batch_dir=session_batch_dir[0],
+                error=None,
+            )
             return jsonify(
                 {
                     "ok": True,
+                    "job_id": job_id,
                     "ran": len(results),
                     "ok_count": ok_n,
                     "failed_count": len(results) - ok_n,
@@ -398,10 +454,41 @@ def create_app() -> Flask:
                     "workers_used": workers_used,
                     "scenario_validation": {"ok": True, "messages": val_msgs},
                     "session_log_batch_dir": session_batch_dir[0],
+                    "batch_timing": timing,
                 }
             )
         except Exception as e:
-            return jsonify({"ok": False, "error": f"{type(e).__name__}: {e}"}), 400
+            err_s = f"{type(e).__name__}: {e}"
+            timing = record_parallel_batch_finished(
+                job_id=job_id,
+                started_at_utc=started_iso,
+                start_unix=start_unix,
+                total_scenarios=len(scenarios),
+                workers_used=workers_used,
+                results=None,
+                session_log_batch_dir=None,
+                error=err_s,
+            )
+            return jsonify({"ok": False, "error": err_s, "job_id": job_id, "batch_timing": timing}), 400
+
+    @app.get("/api/batch-scorecard")
+    def api_batch_scorecard() -> Any:
+        """Recent batch timing lines from ``batch_scorecard.jsonl`` (newest first)."""
+        try:
+            limit = int(request.args.get("limit") or 25)
+        except (TypeError, ValueError):
+            limit = 25
+        limit = max(1, min(200, limit))
+        p = default_batch_scorecard_jsonl()
+        rows = read_batch_scorecard_recent(limit, path=p)
+        return jsonify(
+            {
+                "ok": True,
+                "path": str(p.resolve()),
+                "limit": limit,
+                "entries": rows,
+            }
+        )
 
     return app
 
@@ -494,6 +581,31 @@ PAGE_HTML = """<!DOCTYPE html>
       line-height: 1.45;
     }
     .estimate-strip strong { color: #e7e9ea; }
+    .scorecard-panel {
+      margin: 0 0 16px 0;
+      padding: 12px 14px;
+      border-radius: 8px;
+      background: #15202b;
+      border: 1px solid #38444d;
+      overflow-x: auto;
+    }
+    .scorecard-panel h2 { margin-top: 0; }
+    .scorecard-panel .last-run {
+      font-size: 0.85rem;
+      color: #e7e9ea;
+      margin: 0 0 12px 0;
+      line-height: 1.45;
+    }
+    .scorecard-panel .path-hint { font-size: 0.72rem; color: #536471; margin: 8px 0 0 0; word-break: break-all; }
+    .scorecard-table { width: 100%; border-collapse: collapse; font-size: 0.75rem; }
+    .scorecard-table th, .scorecard-table td {
+      border: 1px solid #38444d;
+      padding: 5px 7px;
+      text-align: left;
+    }
+    .scorecard-table th { background: #1a2732; color: #8b98a5; white-space: nowrap; }
+    .st-ok { color: #00ba7c; font-weight: 600; }
+    .st-err { color: #f97316; font-weight: 600; }
     .policy-outcome-panel {
       margin: 0 0 16px 0;
       padding: 12px 14px;
@@ -562,6 +674,27 @@ PAGE_HTML = """<!DOCTYPE html>
 
   <div class="estimate-strip" id="searchSpaceStrip" aria-live="polite">
     <strong>Search space</strong> — loading catalog + bar counts…
+  </div>
+
+  <div class="scorecard-panel" id="scorecardPanel">
+    <h2>Batch run scorecard</h2>
+    <p class="last-run" id="lastBatchRunLine">Last completed batch: — (run a batch to record start/end and totals)</p>
+    <table class="scorecard-table" id="scorecardHistoryTable">
+      <thead>
+        <tr>
+          <th>Started (UTC)</th>
+          <th>Ended (UTC)</th>
+          <th>Duration</th>
+          <th>Processed</th>
+          <th>OK</th>
+          <th>Failed</th>
+          <th>Workers</th>
+          <th>Status</th>
+        </tr>
+      </thead>
+      <tbody id="scorecardHistoryTbody"></tbody>
+    </table>
+    <p class="path-hint" id="scorecardPathHint"></p>
   </div>
 
   <h1>Pattern game — local prototype</h1>
@@ -665,6 +798,70 @@ PAGE_HTML = """<!DOCTYPE html>
       return (x < 0 ? '−' : '') + '$' + abs.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
     }
 
+    function formatDurationSec(s) {
+      const n = Number(s);
+      if (Number.isNaN(n)) return '—';
+      if (n < 60) return n.toFixed(1) + 's';
+      const m = Math.floor(n / 60);
+      const sec = n - m * 60;
+      return m + 'm ' + sec.toFixed(0) + 's';
+    }
+
+    function updateLastBatchRunLine(bt) {
+      const el = document.getElementById('lastBatchRunLine');
+      if (!el || !bt) return;
+      const proc = (bt.total_processed != null) ? bt.total_processed : '—';
+      const tot = (bt.total_scenarios != null) ? bt.total_scenarios : '—';
+      el.textContent = 'Last completed batch: start ' + (bt.started_at_utc || '—') +
+        ' → end ' + (bt.ended_at_utc || '—') + ' · duration ' + formatDurationSec(bt.duration_sec) +
+        ' · processed ' + proc + ' / planned ' + tot;
+    }
+
+    async function refreshScorecardHistory() {
+      const tbody = document.getElementById('scorecardHistoryTbody');
+      const hint = document.getElementById('scorecardPathHint');
+      if (!tbody) return;
+      tbody.innerHTML = '';
+      try {
+        const r = await fetch('/api/batch-scorecard?limit=15');
+        const j = await r.json();
+        if (!r.ok) {
+          if (hint) hint.textContent = 'Could not load scorecard history.';
+          return;
+        }
+        if (hint && j.path) {
+          hint.textContent = 'Persisted at: ' + j.path + ' (append-only JSONL; set PATTERN_GAME_MEMORY_ROOT for tmpfs)';
+        }
+        const rows = j.entries || [];
+        if (!rows.length) {
+          const tr = document.createElement('tr');
+          tr.innerHTML = '<td colspan="8" style="color:#8b98a5">No batches logged yet.</td>';
+          tbody.appendChild(tr);
+          return;
+        }
+        for (const e of rows) {
+          const tr = document.createElement('tr');
+          const st = e.status === 'done'
+            ? '<span class="st-ok">done</span>'
+            : '<span class="st-err">' + escapeHtml(e.status || '—') + '</span>';
+          const proc = (e.total_processed != null) ? e.total_processed : '—';
+          const dur = (e.duration_sec != null) ? formatDurationSec(e.duration_sec) : '—';
+          tr.innerHTML =
+            '<td>' + escapeHtml(e.started_at_utc || '—') + '</td>' +
+            '<td>' + escapeHtml(e.ended_at_utc || '—') + '</td>' +
+            '<td>' + escapeHtml(dur) + '</td>' +
+            '<td>' + escapeHtml(String(proc)) + '</td>' +
+            '<td>' + escapeHtml(e.ok_count != null ? String(e.ok_count) : '—') + '</td>' +
+            '<td>' + escapeHtml(e.failed_count != null ? String(e.failed_count) : '—') + '</td>' +
+            '<td>' + escapeHtml(e.workers_used != null ? String(e.workers_used) : '—') + '</td>' +
+            '<td>' + st + '</td>';
+          tbody.appendChild(tr);
+        }
+      } catch (err) {
+        if (hint) hint.textContent = 'Scorecard history: ' + friendlyFetchError(err);
+      }
+    }
+
     function renderPolicyOutcomePanel(data) {
       const panel = document.getElementById('policyOutcomePanel');
       const tbody = document.getElementById('policyOutcomeTbody');
@@ -719,6 +916,7 @@ PAGE_HTML = """<!DOCTYPE html>
       }
       pre.textContent = JSON.stringify(data, null, 2);
       renderPolicyOutcomePanel(data);
+      if (data && data.batch_timing) updateLastBatchRunLine(data.batch_timing);
     }
 
     function formatUsd(n) {
@@ -846,6 +1044,8 @@ PAGE_HTML = """<!DOCTYPE html>
             return false;
           }
           if (pj.status === 'error') {
+            if (pj.batch_timing) updateLastBatchRunLine(pj.batch_timing);
+            refreshScorecardHistory();
             await show(null, null, pj.error || 'Job failed');
             statusLine.textContent = 'Failed — see Result.';
             setProgressUI(pj.completed || 0, pj.total || total, pj.error || '');
@@ -862,6 +1062,7 @@ PAGE_HTML = """<!DOCTYPE html>
                 : '';
             }
             await show(null, j, null);
+            refreshScorecardHistory();
             statusLine.textContent = 'Finished — see Result below.';
             return true;
           }
@@ -1011,6 +1212,7 @@ PAGE_HTML = """<!DOCTYPE html>
     };
 
     if (typeof refreshSearchSpaceEstimate === 'function') refreshSearchSpaceEstimate();
+    refreshScorecardHistory();
   </script>
 </body>
 </html>

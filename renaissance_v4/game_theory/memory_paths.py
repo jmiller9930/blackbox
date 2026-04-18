@@ -17,6 +17,7 @@ Layout under the root (created on demand)::
     {MEMORY_ROOT}/logs/              # session + batch folders
     {MEMORY_ROOT}/run_memory.jsonl
     {MEMORY_ROOT}/experience_log.jsonl
+    {MEMORY_ROOT}/batch_scorecard.jsonl   # batch run timing + totals (web UI + scripts)
 """
 
 from __future__ import annotations
@@ -52,6 +53,14 @@ def default_experience_log_jsonl() -> Path:
     if mr:
         return mr / "experience_log.jsonl"
     return _GAME_THEORY / "experience_log.jsonl"
+
+
+def default_batch_scorecard_jsonl() -> Path:
+    """Append-only batch timing scorecard (parallel runs: start/end, counts)."""
+    mr = memory_root()
+    if mr:
+        return mr / "batch_scorecard.jsonl"
+    return _GAME_THEORY / "batch_scorecard.jsonl"
 
 
 def ensure_memory_root_tree() -> None:
