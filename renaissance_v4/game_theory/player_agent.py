@@ -10,7 +10,8 @@ answer **operator questions** doc-grounded via ``agent_context_bundle`` (game sp
 Renaissance V4 ``fusion_engine`` / weights / ``FusionResult`` contract).
 She does **not** judge WIN/LOSS or change scores. Enable with ``PLAYER_AGENT_USE_ANNA=1`` (default: follow
 ``ANNA_USE_LLM``). If ``ANNA_CONTEXT_PROFILE`` is unset/``none``, pattern-game calls default it to ``pattern_game``
-so factual repo docs are loaded. CLI: ``--ask "…"`` for a standalone factual answer (no batch).
+so factual repo docs are loaded. To use **every** static + log block the bundle supports in one shot, set
+``ANNA_CONTEXT_PROFILE=all`` (see ``scripts/agent_context_bundle.py`` — larger prompts). CLI: ``--ask "…"`` for a standalone factual answer (no batch).
 """
 
 from __future__ import annotations

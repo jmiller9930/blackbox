@@ -48,11 +48,27 @@ If you do not care about weight training, “train the agent” still matters as
 | **Repo context** | `ANNA_CONTEXT_PROFILE` + `agent_context_bundle` — same governance docs every call. |
 | **Search-space estimate** | `renaissance_v4/game_theory/search_space_estimate.py` (and `GET /api/search-space-estimate` on the local web UI) — counts catalog signals (upper bound **2^M − 1** non-empty subsets), `market_bars_5m` rows, and `ceil(batch_size / workers)` parallel rounds plus coarse `scenarios × bars`. |
 | **Policy table (local UI)** | After a batch, the web UI shows **Policy contract & outcomes**: effective `signal_modules`, fusion, strategy id, **session WIN/LOSS** (cumulative P&amp;L sign), plus trade win % and trade count. Same fields are on each parallel result as `policy_contract` and `referee_session`. |
-| **Batch scorecard** | Each parallel batch appends one line to `batch_scorecard.jsonl` (under `PATTERN_GAME_MEMORY_ROOT` when set): UTC **start/end**, **duration**, **total_processed**, OK/failed counts, workers, status. API: `GET /api/batch-scorecard`; responses include **`batch_timing`**. Local UI shows history table + last-run line. |
+| **Batch scorecard** | Each parallel batch appends one line to `batch_scorecard.jsonl` (under `PATTERN_GAME_MEMORY_ROOT` when set): UTC **start/end**, **duration**, **total_processed**, OK/failed counts, workers, status. API: `GET /api/batch-scorecard`; responses include **`batch_timing`**. Local UI shows history table + last-run line. Injected into Anna prompts via **`scorecard`** token or `ANNA_CONTEXT_SCORECARD=1` (see `scripts/agent_context_bundle.py`). |
 | **Retrospective log** | Append-only `retrospective_log.jsonl`: **what you observed** + **what to try next** (not Referee scores). CLI: `python3 -m renaissance_v4.game_theory.retrospective_log --observed "…" --next "…"`. API: `GET /api/retrospective-log`, `POST /api/retrospective-append`. Anna: add **`retrospective`** to `ANNA_CONTEXT_PROFILE` (e.g. `pattern_game,retrospective`) or `ANNA_CONTEXT_RETROSPECTIVE=1` so the next prompt includes recent lines — **reread between runs** to steer hypotheses, not to “raise” win rate by magic. |
+| **Reflect bundle (script)** | `python3 scripts/pattern_game_agent_reflect.py` (or `--prompt`) combines scorecard + hunter suggestion into one markdown/JSON blob for review or paste; **`--submit`** starts a parallel batch only with explicit env (`ANNA_PATTERN_GAME_SUBMIT=1`, `PATTERN_GAME_BASE_URL`). Not auto-injected into every prompt (avoid context bloat). |
 | **`PatternGameAgent`** | Single import for host apps; `plugin_info()` for dashboards. |
 
 **Reasonable follow-ons (staged, not all implemented):** retrieval over `experience_log.jsonl` + past reports; ranked “next scenario” suggestions from Referee stats; Foreman-triggered batches; export paths that **hand off** to a human-run `validate_policy_package.py` on a real package folder. Say the word when you want one of these cut as a ticket.
+
+### Checklist — use **everything already wired** (no new stack)
+
+Before asking for more tools, enable the full **pattern-game Anna prefix** when running `player_agent` / Ollama narration (`anna_narrate_pattern_report`, `anna_answer_operator_question`):
+
+| Goal | What to set |
+|------|-------------|
+| All checked-in docs + both memory logs in one prefix | `ANNA_CONTEXT_PROFILE=all` (loads pattern_game + policy files, **and** retrospective + scorecard blocks; **larger** prompts). |
+| Same docs as today, no logs | `ANNA_CONTEXT_PROFILE=both` (pattern_game + policy only). |
+| À la carte | e.g. `pattern_game,retrospective,scorecard` or env toggles `ANNA_CONTEXT_RETROSPECTIVE=1` / `ANNA_CONTEXT_SCORECARD=1`. |
+| Repo root for paths | `REPO_ROOT` or run from repo root so JSONL paths resolve. |
+
+**Footgun fixed:** `all` used to mean “doc profiles only” and **skipped** retrospective/scorecard; it now includes those blocks so one token matches “max prefix.”
+
+**Separate path:** `scripts/runtime/anna_analyst_v1.py` (Telegram, etc.) uses **engine context bundles** (`ANNA_CONTEXT_BUNDLE_PATH` / ledger JSON), **not** `agent_context_bundle` unless your dispatcher merges it. Pattern-game narration uses **`player_agent` + `scripts/agent_context_bundle.py`** — different integration surface.
 
 ---
 

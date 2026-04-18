@@ -6,7 +6,10 @@ and optional extra files. This module loads whitelisted paths so the LLM sees th
 without inventing retention in weights.
 
 Env:
-  ANNA_CONTEXT_PROFILE   — comma-separated: none | pattern_game | policy | retrospective | scorecard (default: none).
+  ANNA_CONTEXT_PROFILE   — comma-separated tokens (default: none).
+                           **both** = checked-in docs only: pattern_game + policy files.
+                           **all** = same docs **plus** retrospective + scorecard blocks (full available prefix;
+                           larger prompts). For manual mixes use: pattern_game | policy | retrospective | scorecard.
                            **pattern_game** loads game spec, QUANT research design, ``context_memory.py`` (tide metaphor),
                            and **Renaissance V4 fusion** (``fusion_engine.py``, ``signal_weights.py``, ``fusion_result.py``).
                            **policy** loads ``policy_package_standard.md``.
@@ -86,8 +89,12 @@ def build_context_prefix(repo_root: Path | str | None = None) -> str:
         token = token.strip()
         if not token or token == "none":
             continue
-        if token in ("both", "all"):
+        if token == "both":
             keys = list(_PROFILE_PATHS.keys())
+        elif token == "all":
+            keys = list(_PROFILE_PATHS.keys())
+            want_retrospective = True
+            want_scorecard = True
         elif token == "pattern_game":
             keys = ["pattern_game"]
         elif token == "policy":
