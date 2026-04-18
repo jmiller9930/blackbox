@@ -13,8 +13,9 @@ Compared to ``scripts/sync.py`` (always rebuilds/restarts UIUX.Web on the remote
 **Single-command pattern-game deploy (recommended):** ``./scripts/deploy_pattern_game.sh`` or
 ``./scripts/sync_pattern_game.sh`` or ``python3 scripts/gsync.py --pattern-game``
 
-That mode: stages **new files under** ``renaissance_v4/game_theory/`` (plain ``git add -u`` misses
-untracked files), commits if needed, pushes your current branch, SSH ``git pull`` on the **same**
+That mode: runs ``git add`` on the ``renaissance_v4/game_theory`` tree (and a few script paths) so
+new tracked **and** untracked files there are included — **remove or move scratch files** you do not
+want committed before running. Then commits if needed, pushes your current branch, SSH ``git pull`` on the **same**
 branch, and **always** restarts the Flask process so the live port matches disk. It does **not**
 run UIUX.Web docker.
 
