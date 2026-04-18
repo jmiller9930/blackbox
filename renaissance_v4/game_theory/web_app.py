@@ -18,6 +18,10 @@ Operator **retrospective** (learn / next experiment): ``GET /api/retrospective-l
 ``POST /api/retrospective-append`` — persists to ``retrospective_log.jsonl`` (see
 ``renaissance_v4/game_theory/retrospective_log.py``).
 
+**Hunter planner (memory-aware batch suggestions):** ``GET /api/suggest-hunters`` returns
+distinct parallel scenarios from scorecard + retrospective (see ``hunter_planner.py``); not
+Referee predictions.
+
 No manifest/ATR fields in the UI — policy lives in the JSON (or examples presets). Default 16 workers
 (capped to host). ``POST /api/run`` remains for scripted single-manifest runs (optional JSON field ``memory_bundle_path``).
 
@@ -58,6 +62,7 @@ from renaissance_v4.game_theory.memory_paths import (
     default_retrospective_log_jsonl,
     ensure_memory_root_tree,
 )
+from renaissance_v4.game_theory.hunter_planner import build_hunter_suggestion
 from renaissance_v4.game_theory.retrospective_log import append_retrospective, read_retrospective_recent
 from renaissance_v4.game_theory.parallel_runner import (
     clamp_parallel_workers,
@@ -539,6 +544,14 @@ def create_app() -> Flask:
         p = append_retrospective(what_observed=obs, what_to_try_next=nxt, run_ref=rr, source=src)
         return jsonify({"ok": True, "path": str(p)})
 
+    @app.get("/api/suggest-hunters")
+    def api_suggest_hunters() -> Any:
+        """Return memory-aware parallel scenario JSON (scorecard + retrospective); deterministic ladder."""
+        out = build_hunter_suggestion()
+        if not out.get("ok"):
+            return jsonify(out), 400
+        return jsonify(out)
+
     return app
 
 
@@ -759,6 +772,10 @@ PAGE_HTML = """<!DOCTYPE html>
 
   <label for="scenarios">Scenario batch (JSON array)</label>
   <p class="caps" style="margin:4px 0 8px 0">Each scenario needs a non-empty <code>agent_explanation.hypothesis</code> (what you expect this run to prove on this tape). Override: <code>PATTERN_GAME_REQUIRE_HYPOTHESIS=0</code>.</p>
+  <div class="row" style="align-items:center;margin-bottom:8px">
+    <button type="button" id="suggestHuntersBtn" style="margin-top:0;background:#38444d">Suggest next hunters (memory)</button>
+    <span class="caps" id="hunterSuggestHint" style="margin:0;flex:1;min-width:200px"></span>
+  </div>
   <textarea id="scenarios" spellcheck="false" placeholder='[{"scenario_id":"…","manifest_path":"…","agent_explanation":{"hypothesis":"…"},…}]'></textarea>
 
   <label for="workersRange">Workers <span id="workersVal" style="color:#e7e9ea;font-weight:600">1</span></label>
@@ -1026,6 +1043,30 @@ PAGE_HTML = """<!DOCTYPE html>
         return 'Connection lost while talking to the server. Common causes: the app was restarted or killed mid-run, Wi‑Fi/VPN blip, or the page URL changed. Hard-refresh this page (reload) and click Run again.';
       }
       return String(e);
+    }
+
+    const suggestHuntersBtn = document.getElementById('suggestHuntersBtn');
+    if (suggestHuntersBtn) {
+      suggestHuntersBtn.onclick = async () => {
+        const hint = document.getElementById('hunterSuggestHint');
+        const ta = document.getElementById('scenarios');
+        if (hint) hint.textContent = 'Loading memory-aware suggestion…';
+        try {
+          const r = await fetch('/api/suggest-hunters');
+          const j = await r.json();
+          if (!r.ok || !j.ok) {
+            if (hint) hint.textContent = j.error || 'Suggestion failed.';
+            return;
+          }
+          ta.value = JSON.stringify(j.scenarios, null, 2);
+          const w = j.warnings || [];
+          const short = w.length ? (w.join(' ')) : ('Ladder round ' + (j.ladder_round != null ? j.ladder_round : '?') +
+            ', bias ' + (j.bias || '?') + '. Full rationale in API JSON.');
+          if (hint) hint.textContent = short;
+        } catch (e) {
+          if (hint) hint.textContent = friendlyFetchError(e);
+        }
+      };
     }
 
     function setProgressUI(completed, total, subtext) {
