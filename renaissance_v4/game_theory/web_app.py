@@ -12,7 +12,7 @@ instant I/O). Folders look like ``batch_<UTC>_<id>/`` with ``BATCH_README.md`` a
 ``session_log_batch_dir`` when present.
 
 Parallel batches append one line per run to ``batch_scorecard.jsonl`` (UTC start/end, duration,
-counts, **run_ok_pct**, **referee_win_pct**) and expose ``batch_timing`` on the API; see
+counts, **run_ok_pct**, **referee_win_pct**, **avg_trade_win_pct**) and expose ``batch_timing`` on the API; see
 ``GET /api/batch-scorecard``.
 
 Operator **retrospective** (learn / next experiment): ``GET /api/retrospective-log``,
@@ -910,6 +910,17 @@ PAGE_HTML = """<!DOCTYPE html>
       margin: 0 0 12px 0;
       line-height: 1.45;
     }
+    .scorecard-legend {
+      font-size: 0.76rem;
+      color: #8b98a5;
+      margin: 0 0 12px 0;
+      line-height: 1.5;
+      padding: 10px 12px;
+      border-radius: 8px;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+    }
+    .scorecard-legend strong { color: #d5dce3; }
     .scorecard-panel .path-hint { font-size: 0.72rem; color: #536471; margin: 8px 0 0 0; word-break: break-all; }
     .scorecard-table { width: 100%; border-collapse: collapse; font-size: 0.75rem; }
     .scorecard-table th, .scorecard-table td {
@@ -1040,9 +1051,11 @@ PAGE_HTML = """<!DOCTYPE html>
     </details>
 
     <div class="tool-row">
-      <button type="button" class="btn-secondary" id="suggestHuntersBtn">Suggest hunters</button>
+      <button type="button" class="btn-secondary" id="suggestHuntersBtn"
+        title="Fills the textarea with the next parallel scenarios from batch scorecard + retrospective logs (deterministic ladder — not a live prediction)">Suggest hunters</button>
       <span class="caps" id="hunterSuggestHint" style="margin:0;flex:1;min-width:180px;align-self:center"></span>
     </div>
+    <p class="caps" style="margin:0 0 10px;line-height:1.45">Hunter = next batch suggestions from <strong>memory</strong> (scorecard + retrospective JSONL), same logic as the agent context bundle — not Referee output.</p>
     <div class="tool-row">
       <div style="flex:2;min-width:200px">
         <label for="chefManifestPath" style="margin:0;font-size:0.8rem">Chef manifest (repo path)</label>
@@ -1082,7 +1095,14 @@ PAGE_HTML = """<!DOCTYPE html>
 
   <aside class="col-sidebar" aria-label="Batch scorecard">
   <div class="scorecard-panel" id="scorecardPanel">
-    <h2>Batch run scorecard</h2>
+    <h2>Batch scorecard</h2>
+    <p class="scorecard-legend">
+      <strong>Three different numbers:</strong>
+      <strong>Run OK</strong> — jobs finished without a worker crash (says nothing about P&amp;L).
+      <strong>Session WIN</strong> — share of scenarios with paper session WIN vs LOSS (cumulative P&amp;L vs baseline).
+      <strong>Trade win</strong> — mean of per-scenario trade win rates (wins÷trades); this is the <strong>~34%</strong>-style column.
+      “Learning” is not a single % — use Session + Trade win + Policy table below after each run.
+    </p>
     <p class="last-run" id="lastBatchRunLine">Last completed batch: — (run a batch to record start/end and totals)</p>
     <table class="scorecard-table" id="scorecardHistoryTable">
       <thead>
@@ -1093,8 +1113,9 @@ PAGE_HTML = """<!DOCTYPE html>
           <th>Processed</th>
           <th>OK</th>
           <th>Failed</th>
-          <th title="Scenarios that finished without worker error">Run OK %</th>
-          <th title="Paper session WIN ÷ (WIN+LOSS) for completed replays">Ref WIN %</th>
+          <th title="Scenarios whose worker finished without exception">Run OK %</th>
+          <th title="Paper session WIN ÷ (WIN+LOSS) across scenarios in this batch">Session WIN %</th>
+          <th title="Mean of per-scenario trade win rates (summary.win_rate); e.g. 34.4%">Trade win %</th>
           <th>Workers</th>
           <th>Status</th>
         </tr>
@@ -1108,10 +1129,10 @@ PAGE_HTML = """<!DOCTYPE html>
 
   <div class="results-split">
   <div class="policy-outcome-panel" id="policyOutcomePanel" hidden>
-    <h2>Policy contract &amp; outcomes</h2>
+    <h2>Referee outcomes (per scenario)</h2>
     <p class="hint">
-      Effective manifest: signal modules (indicators), fusion, regime — plus session <strong>WIN</strong>/<strong>LOSS</strong> from cumulative paper P&amp;L (&gt;0 vs not).
-      Trade-level win rate is in the next columns. Raw JSON stays to the right.
+      After a run, <strong>Trade win %</strong> here is the per-scenario value (e.g. <strong>34.4%</strong>) — winning trades ÷ total trades on the tape.
+      <strong>Session</strong> WIN/LOSS is from cumulative paper P&amp;L vs baseline (one row per scenario). Manifest columns summarize what was replayed. Full JSON is on the right.
     </p>
     <table class="policy-table" id="policyOutcomeTable">
       <thead>
@@ -1222,12 +1243,16 @@ PAGE_HTML = """<!DOCTYPE html>
       const tot = (bt.total_scenarios != null) ? bt.total_scenarios : '—';
       const ro = bt.run_ok_pct;
       const rw = bt.referee_win_pct;
+      const atw = bt.avg_trade_win_pct;
       let pctBit = '';
       if (ro != null && ro !== undefined && !Number.isNaN(Number(ro))) {
         pctBit += ' · run OK ' + (Math.round(Number(ro) * 10) / 10).toFixed(1) + '%';
       }
       if (rw != null && rw !== undefined && !Number.isNaN(Number(rw))) {
-        pctBit += ' · Ref WIN ' + (Math.round(Number(rw) * 10) / 10).toFixed(1) + '%';
+        pctBit += ' · session WIN ' + (Math.round(Number(rw) * 10) / 10).toFixed(1) + '%';
+      }
+      if (atw != null && atw !== undefined && !Number.isNaN(Number(atw))) {
+        pctBit += ' · trade win (mean) ' + (Math.round(Number(atw) * 10) / 10).toFixed(1) + '%';
       }
       el.textContent = 'Last completed batch: start ' + (bt.started_at_utc || '—') +
         ' → end ' + (bt.ended_at_utc || '—') + ' · duration ' + formatDurationSec(bt.duration_sec) +
@@ -1252,7 +1277,7 @@ PAGE_HTML = """<!DOCTYPE html>
         const rows = j.entries || [];
         if (!rows.length) {
           const tr = document.createElement('tr');
-          tr.innerHTML = '<td colspan="10" style="color:#8b98a5">No batches logged yet.</td>';
+          tr.innerHTML = '<td colspan="11" style="color:#8b98a5">No batches logged yet.</td>';
           tbody.appendChild(tr);
           return;
         }
@@ -1277,6 +1302,7 @@ PAGE_HTML = """<!DOCTYPE html>
             '<td>' + escapeHtml(e.failed_count != null ? String(e.failed_count) : '—') + '</td>' +
             '<td>' + escapeHtml(pctCell(e.run_ok_pct)) + '</td>' +
             '<td>' + escapeHtml(pctCell(e.referee_win_pct)) + '</td>' +
+            '<td>' + escapeHtml(pctCell(e.avg_trade_win_pct)) + '</td>' +
             '<td>' + escapeHtml(e.workers_used != null ? String(e.workers_used) : '—') + '</td>' +
             '<td>' + st + '</td>';
           tbody.appendChild(tr);

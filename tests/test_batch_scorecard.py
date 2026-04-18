@@ -44,6 +44,8 @@ def test_record_success_and_read_roundtrip(tmp_path: Path, monkeypatch: pytest.M
     assert rows[0]["status"] == "done"
     assert rows[0]["run_ok_pct"] == 50.0
     assert rows[0]["referee_win_pct"] == 100.0
+    assert rows[0].get("avg_trade_win_pct") is None
+    assert rows[0].get("trade_win_rate_n") == 0
 
 
 def test_compute_batch_score_percentages_win_loss() -> None:
@@ -58,6 +60,19 @@ def test_compute_batch_score_percentages_win_loss() -> None:
     assert p["referee_win_pct"] == 50.0
     assert p["referee_wins"] == 1
     assert p["referee_losses"] == 1
+    assert p["avg_trade_win_pct"] is None
+    assert p["trade_win_rate_n"] == 0
+
+
+def test_compute_batch_score_percentages_avg_trade_win() -> None:
+    p = compute_batch_score_percentages(
+        [
+            {"ok": True, "referee_session": "WIN", "summary": {"win_rate": 0.344}},
+            {"ok": True, "referee_session": "WIN", "summary": {"win_rate": 0.5}},
+        ]
+    )
+    assert p["avg_trade_win_pct"] == 42.2  # mean of 34.4% and 50%
+    assert p["trade_win_rate_n"] == 2
 
 
 def test_record_error_line(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -81,6 +96,7 @@ def test_record_error_line(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> N
     assert rows[0]["total_processed"] == 0
     assert rows[0]["run_ok_pct"] == 0.0
     assert rows[0]["referee_win_pct"] is None
+    assert rows[0].get("avg_trade_win_pct") is None
 
 
 def test_format_batch_scorecard_for_prompt(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

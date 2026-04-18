@@ -5,6 +5,9 @@ and **percentage scores**.
 - **run_ok_pct** — share of scenarios whose worker finished without exception (``ok`` true).
 - **referee_win_pct** — share of **WIN** vs (WIN+LOSS) among completed replays (paper session;
   excludes ERROR rows from denominator).
+- **avg_trade_win_pct** — mean of per-scenario **trade** win rates (``summary.win_rate`` as
+  winning trades ÷ total trades), across scenarios that returned a rate; **not** the same as
+  session WIN or run_ok (see web UI legend).
 
 Persists to ``batch_scorecard.jsonl`` (under ``PATTERN_GAME_MEMORY_ROOT`` when set). Safe for
 operators to tail or ship to analysis; one JSON object per line.
@@ -30,6 +33,7 @@ def compute_batch_score_percentages(results: list[dict[str, Any]] | None) -> dic
     Aggregates for one parallel batch.
 
     ``referee_win_pct`` is None when no scenario returned WIN or LOSS (e.g. all failed before replay).
+    ``avg_trade_win_pct`` is None when no completed scenario had ``summary.win_rate``.
     """
     if not results:
         return {
@@ -37,6 +41,8 @@ def compute_batch_score_percentages(results: list[dict[str, Any]] | None) -> dic
             "referee_win_pct": None,
             "referee_wins": 0,
             "referee_losses": 0,
+            "avg_trade_win_pct": None,
+            "trade_win_rate_n": 0,
         }
     n = len(results)
     ok_n = sum(1 for r in results if r.get("ok"))
@@ -53,11 +59,29 @@ def compute_batch_score_percentages(results: list[dict[str, Any]] | None) -> dic
             losses += 1
     judged = wins + losses
     referee_win_pct = round(100.0 * wins / judged, 1) if judged else None
+    tw_vals: list[float] = []
+    for r in results:
+        if not r.get("ok"):
+            continue
+        summ = r.get("summary")
+        if not isinstance(summ, dict):
+            continue
+        wr = summ.get("win_rate")
+        if wr is None:
+            continue
+        try:
+            tw_vals.append(float(wr))
+        except (TypeError, ValueError):
+            continue
+    trade_win_rate_n = len(tw_vals)
+    avg_trade_win_pct = round(100.0 * (sum(tw_vals) / trade_win_rate_n), 1) if tw_vals else None
     return {
         "run_ok_pct": run_ok_pct,
         "referee_win_pct": referee_win_pct,
         "referee_wins": wins,
         "referee_losses": losses,
+        "avg_trade_win_pct": avg_trade_win_pct,
+        "trade_win_rate_n": trade_win_rate_n,
     }
 
 
@@ -139,13 +163,16 @@ def format_batch_scorecard_for_prompt(
             err_s = f"\n   - error: {es[:480]}{'…' if len(es) > 480 else ''}"
         ro = r.get("run_ok_pct")
         rw = r.get("referee_win_pct")
+        atw = r.get("avg_trade_win_pct")
         pct_s = ""
-        if ro is not None or rw is not None:
+        if ro is not None or rw is not None or atw is not None:
             parts = []
             if ro is not None:
                 parts.append(f"run_ok={ro}%")
             if rw is not None:
-                parts.append(f"ref_WIN={rw}%")
+                parts.append(f"session_WIN={rw}%")
+            if atw is not None:
+                parts.append(f"avg_trade_win={atw}%")
             pct_s = " · " + " · ".join(parts)
         lines_out.append(
             f"{i}. **{ts}** · status={st} · job_id={job_s}\n"
@@ -214,6 +241,8 @@ def record_parallel_batch_finished(
             "referee_win_pct": None,
             "referee_wins": 0,
             "referee_losses": 0,
+            "avg_trade_win_pct": None,
+            "trade_win_rate_n": 0,
         }
         record = {
             "schema": SCHEMA_V1,
