@@ -57,7 +57,7 @@ from flask import Flask, Response, abort, jsonify, request
 _GAME_THEORY = Path(__file__).resolve().parent
 
 # Operator-visible web UI bundle version — bump when changing PAGE_HTML (HTML/CSS/JS) so deploys are provable.
-PATTERN_GAME_WEB_UI_VERSION = "1.7.0"
+PATTERN_GAME_WEB_UI_VERSION = "1.8.0"
 
 from renaissance_v4.game_theory.groundhog_memory import (
     groundhog_auto_merge_enabled,
@@ -807,15 +807,28 @@ PAGE_HTML = """<!DOCTYPE html>
       background: radial-gradient(circle, rgba(215,181,109,0.22), transparent 65%);
       pointer-events: none;
     }
-    .pg-header-evidence {
+    .pg-header-drawers {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+      margin-top: 16px;
       position: relative;
       z-index: 2;
-      margin-top: 16px;
+    }
+    @media (max-width: 960px) {
+      .pg-header-drawers { grid-template-columns: 1fr; }
+    }
+    .pg-header-evidence,
+    .pg-header-modules {
+      position: relative;
+      z-index: 2;
+      margin-top: 0;
       border: 1px solid rgba(255,255,255,0.12);
       border-radius: 16px;
       background: rgba(0,0,0,0.2);
     }
-    .pg-header-evidence > summary {
+    .pg-header-evidence > summary,
+    .pg-header-modules > summary {
       list-style: none;
       cursor: pointer;
       display: flex;
@@ -827,15 +840,18 @@ PAGE_HTML = """<!DOCTYPE html>
       font-weight: 700;
       color: #f7f1e6;
     }
-    .pg-header-evidence > summary::-webkit-details-marker { display: none; }
-    .pg-header-evidence > summary::before {
+    .pg-header-evidence > summary::-webkit-details-marker,
+    .pg-header-modules > summary::-webkit-details-marker { display: none; }
+    .pg-header-evidence > summary::before,
+    .pg-header-modules > summary::before {
       content: "▸";
       display: inline-block;
       font-size: 0.85rem;
       opacity: 0.85;
       transition: transform 0.15s ease;
     }
-    .pg-header-evidence[open] > summary::before { transform: rotate(90deg); }
+    .pg-header-evidence[open] > summary::before,
+    .pg-header-modules[open] > summary::before { transform: rotate(90deg); }
     .pg-header-evidence-hint {
       flex: 1 1 100%;
       margin: 0;
@@ -844,10 +860,22 @@ PAGE_HTML = """<!DOCTYPE html>
       font-weight: 500;
       color: rgba(247, 241, 230, 0.65);
     }
-    .pg-header-evidence-inner {
+    .pg-header-drawer-inner {
       padding: 0 14px 14px;
       border-top: 1px solid rgba(255,255,255,0.08);
     }
+    .pg-header-modules .pg-pill-row { margin-top: 4px; }
+    .pg-header-modules .pg-pill {
+      background: rgba(255,255,255,0.08);
+      border-color: rgba(255,255,255,0.15);
+      color: rgba(247, 241, 230, 0.88);
+    }
+    .pg-header-modules .pg-status-item {
+      background: rgba(255,255,255,0.06);
+      border-color: rgba(255,255,255,0.1);
+    }
+    .pg-header-modules .pg-status-name { color: #f0f4f8; }
+    .pg-header-modules .pg-status-meta { color: rgba(247, 241, 230, 0.72); }
     .pg-header-evidence .pg-tab-strip { margin-top: 10px; }
     .pg-header-evidence .pg-tab {
       background: rgba(255,255,255,0.08);
@@ -955,10 +983,10 @@ PAGE_HTML = """<!DOCTYPE html>
       position: relative;
       z-index: 1;
       display: grid;
-      grid-template-columns: repeat(4, minmax(0, 1fr));
+      grid-template-columns: repeat(5, minmax(0, 1fr));
       gap: 10px;
       margin-top: 18px;
-      max-width: 1120px;
+      max-width: min(1600px, 100%);
     }
     .pg-banner-stat {
       border: 1px solid rgba(255,255,255,0.1);
@@ -1006,12 +1034,12 @@ PAGE_HTML = """<!DOCTYPE html>
       margin-bottom: 18px;
     }
     .pg-row-main {
-      grid-template-columns: minmax(240px, 1fr) minmax(380px, 2.4fr) minmax(200px, 1fr);
+      grid-template-columns: minmax(280px, 1fr) minmax(420px, 2.6fr);
       align-items: start;
     }
     @media (max-width: 1680px) {
       .pg-row-main {
-        grid-template-columns: minmax(200px, 1fr) minmax(320px, 2fr) minmax(180px, 1fr);
+        grid-template-columns: minmax(240px, 1fr) minmax(360px, 2.4fr);
         overflow-x: auto;
         padding-bottom: 6px;
         -webkit-overflow-scrolling: touch;
@@ -1406,8 +1434,11 @@ PAGE_HTML = """<!DOCTYPE html>
     #searchSpaceStrip strong { color: #f7f1e6; }
     #searchSpaceStrip code { font-size: 0.85em; color: rgba(247, 241, 230, 0.95); }
     @media (max-width: 1220px) {
-      .pg-banner-strip { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .pg-banner-strip { grid-template-columns: repeat(3, minmax(0, 1fr)); }
       .pg-row-main { grid-template-columns: 1fr; overflow-x: visible; }
+    }
+    @media (max-width: 640px) {
+      .pg-banner-strip { grid-template-columns: 1fr; }
     }
     @media (max-width: 760px) {
       .pg-shell { padding: 14px; }
@@ -1421,9 +1452,9 @@ PAGE_HTML = """<!DOCTYPE html>
     <header class="pg-header">
       <div class="pg-title-wrap">
         <div class="pg-eyebrow">Pattern game lab</div>
-        <h1 class="pg-title">Pattern game <em>scorecard-first · controls · modules · header evidence</em>
+        <h1 class="pg-title">Pattern game <em>scorecard-first · five status tiles · header results &amp; modules</em>
           <span class="ui-version" title="Bump PATTERN_GAME_WEB_UI_VERSION in web_app.py">v__PATTERN_GAME_WEB_UI_VERSION__</span></h1>
-        <p class="pg-lead">Preset or paste <strong>scenario JSON</strong>, run the batch. <strong>Scorecard</strong> is the main view; <strong>Results</strong> (Referee / JSON / session) lives in the header bar below — expand when you need proof.</p>
+        <p class="pg-lead">Preset or paste <strong>scenario JSON</strong>, run the batch. <strong>Scorecard</strong> is the main view. <strong>Five status tiles</strong> below include <strong>Modules</strong> (quick OK count). <strong>Results</strong> and <strong>Modules</strong> drawers sit side by side — expand to inspect.</p>
         <div class="pg-orientation-note">Twisty on each panel · DEF record: <code>docs/architect/pattern_game_operator_deficiencies_work_record.md</code></div>
       </div>
       <div class="pg-banner-strip">
@@ -1446,14 +1477,20 @@ PAGE_HTML = """<!DOCTYPE html>
           <div class="pg-v" id="bannerRunV">Idle</div>
           <div class="pg-s" id="bannerRunS">— run a batch —</div>
         </div>
+        <div class="pg-banner-stat" title="Subsystem health from /api/module-board — expand Modules drawer below for the full list">
+          <div class="pg-k">Modules</div>
+          <div class="pg-v"><span class="status-dot" id="moduleBannerDot"></span> <span id="bannerModulesV">—</span></div>
+          <div class="pg-s" id="bannerModulesS">Loading subsystem list…</div>
+        </div>
       </div>
+      <div class="pg-header-drawers">
       <details class="pg-header-evidence">
         <summary>
           <span class="pg-header-evidence-title">Results workspace</span>
           <span class="pg-chip pg-chip-steel" style="border-color:rgba(255,255,255,0.25);color:#e8ecf0">Evidence</span>
           <p class="pg-header-evidence-hint">Last run: Referee outcomes · raw JSON · session folder path — expand to inspect.</p>
         </summary>
-        <div class="pg-header-evidence-inner">
+        <div class="pg-header-drawer-inner">
           <div class="pg-tab-strip" role="tablist">
             <button type="button" class="pg-tab active" data-tab="outcomes" role="tab">Referee outcomes</button>
             <button type="button" class="pg-tab" data-tab="json" role="tab">Raw JSON</button>
@@ -1479,6 +1516,18 @@ PAGE_HTML = """<!DOCTYPE html>
           <pre id="out" class="pg-pre-json" style="display:none">(no run yet)</pre>
         </div>
       </details>
+      <details class="pg-header-modules">
+        <summary>
+          <span class="pg-header-evidence-title">Modules online</span>
+          <span class="pg-chip pg-chip-rose" style="border-color:rgba(255,255,255,0.25);color:#f5d0cc">Health</span>
+          <p class="pg-header-evidence-hint">Green / red — wiring check only (not enable/disable). Expand for the full list.</p>
+        </summary>
+        <div class="pg-header-drawer-inner">
+          <div class="pg-pill-row"><span class="pg-pill">Green = OK</span><span class="pg-pill">Red = issue</span></div>
+          <div class="pg-status-list" id="moduleBoardList"><p class="caps" style="margin:0;color:rgba(247,241,230,0.75)">Loading…</p></div>
+        </div>
+      </details>
+      </div>
     </header>
 
     <section class="pg-row pg-row-main">
@@ -1599,19 +1648,6 @@ PAGE_HTML = """<!DOCTYPE html>
           </div>
           <p class="path-hint" id="scorecardPathHint"></p>
         </div>
-        </div>
-      </details>
-
-      <details class="pg-panel-fold pg-panel-modules">
-        <summary>
-          <div class="pg-panel-header" style="margin:0;flex:1">
-            <div><h2 class="pg-panel-h">3. Modules online</h2><p class="pg-panel-sub">Subsystem health — green / red (collapsed by default).</p></div>
-            <span class="pg-chip pg-chip-rose">Modules</span>
-          </div>
-        </summary>
-        <div class="pg-panel-fold-body">
-          <div class="pg-pill-row"><span class="pg-pill">Green = online</span><span class="pg-pill">Red = offline</span></div>
-          <div class="pg-status-list" id="moduleBoardList"><p class="caps" style="margin:0">Loading…</p></div>
         </div>
       </details>
     </section>
@@ -2258,21 +2294,39 @@ PAGE_HTML = """<!DOCTYPE html>
 
     async function refreshModuleBoard() {
       const list = document.getElementById('moduleBoardList');
+      const dot = document.getElementById('moduleBannerDot');
+      const bv = document.getElementById('bannerModulesV');
+      const bs = document.getElementById('bannerModulesS');
+      function setModuleBanner(okCount, total, sub) {
+        if (bv) bv.textContent = (total > 0) ? (okCount + '/' + total + ' OK') : '—';
+        if (bs) bs.textContent = sub || '';
+        if (dot) {
+          if (!total) dot.className = 'status-dot';
+          else if (okCount === total) dot.className = 'status-dot ok';
+          else if (okCount === 0) dot.className = 'status-dot bad';
+          else dot.className = 'status-dot bad';
+        }
+      }
       if (!list) return;
       try {
         const r = await fetch('/api/module-board');
         const j = await r.json();
+        const errStyle = 'margin:0;color:rgba(247,241,230,0.75)';
         if (!r.ok || !j.ok) {
-          list.innerHTML = '<p class="caps" style="margin:0">Could not load module board.</p>';
+          list.innerHTML = '<p class="caps" style="' + errStyle + '">Could not load module board.</p>';
+          setModuleBanner(0, 0, 'Module API unavailable');
           return;
         }
         const mods = j.modules || [];
         if (!mods.length) {
-          list.innerHTML = '<p class="caps" style="margin:0">No modules.</p>';
+          list.innerHTML = '<p class="caps" style="' + errStyle + '">No modules.</p>';
+          setModuleBanner(0, 0, 'No rows');
           return;
         }
         list.innerHTML = '';
+        let okCount = 0;
         for (const m of mods) {
+          if (m.ok) okCount++;
           const row = document.createElement('div');
           row.className = 'pg-status-item';
           const det = (m.detail != null) ? String(m.detail) : '';
@@ -2282,8 +2336,15 @@ PAGE_HTML = """<!DOCTYPE html>
             '<div class="pg-status-meta">' + escapeHtml(det.slice(0, 280)) + '</div></div>';
           list.appendChild(row);
         }
+        const bad = mods.length - okCount;
+        const sub = (bad === 0)
+          ? 'All subsystems report OK'
+          : (okCount + ' OK · ' + bad + ' need attention');
+        setModuleBanner(okCount, mods.length, sub);
       } catch (e) {
-        list.innerHTML = '<p class="caps" style="margin:0">' + escapeHtml(friendlyFetchError(e)) + '</p>';
+        list.innerHTML = '<p class="caps" style="margin:0;color:rgba(247,241,230,0.75)">' + escapeHtml(friendlyFetchError(e)) + '</p>';
+        setModuleBanner(0, 0, 'Fetch failed');
+        if (dot) dot.className = 'status-dot bad';
       }
     }
     refreshModuleBoard();
