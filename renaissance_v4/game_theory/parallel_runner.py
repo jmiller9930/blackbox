@@ -11,6 +11,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import sys
 from collections.abc import Callable
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from pathlib import Path
@@ -18,6 +19,11 @@ from typing import Any
 
 from renaissance_v4.game_theory.pattern_game import json_summary, run_pattern_game
 from renaissance_v4.game_theory.run_memory import append_run_memory, build_run_memory_record
+from renaissance_v4.game_theory.run_session_log import (
+    allocate_unique_run_directory,
+    default_logs_root,
+    write_batch_index_and_scenario_logs,
+)
 from renaissance_v4.game_theory.scenario_contract import extract_scenario_echo_fields
 
 DEFAULT_WORKERS = max(1, (os.cpu_count() or 4))
@@ -107,6 +113,8 @@ def run_scenarios_parallel(
     max_workers: int | None = None,
     experience_log_path: Path | str | None = None,
     run_memory_log_path: Path | str | None = None,
+    write_session_logs: bool = True,
+    session_logs_base: Path | str | None = None,
     progress_callback: Callable[[int, int, dict[str, Any]], None] | None = None,
 ) -> list[dict[str, Any]]:
     """
@@ -121,6 +129,10 @@ def run_scenarios_parallel(
 
     If ``run_memory_log_path`` is set, append one structured :mod:`run_memory` JSONL line per
     result (hypothesis + indicator_context + referee summary — durable audit trail).
+
+    If ``write_session_logs`` is True (default), create ``logs/batch_<UTC>_<id>/`` with one subfolder
+    per scenario containing ``HUMAN_READABLE.md`` and ``run_record.json``. Disable with
+    ``write_session_logs=False`` or env ``PATTERN_GAME_NO_SESSION_LOG=1``.
 
     If ``progress_callback`` is set, it is invoked after each scenario completes as
     ``(completed_count, total_count, result_row)`` for live progress UIs.
@@ -151,43 +163,64 @@ def run_scenarios_parallel(
             for row in results:
                 fh.write(json.dumps(row, ensure_ascii=False) + "\n")
 
-    if run_memory_log_path is not None:
-        by_sid = {str(s.get("scenario_id", "")): s for s in normalized}
-        mem_p = Path(run_memory_log_path)
+    by_sid = {str(s.get("scenario_id", "")): s for s in normalized}
+    mem_p = Path(run_memory_log_path) if run_memory_log_path is not None else None
+    if mem_p is not None:
         mem_p.parent.mkdir(parents=True, exist_ok=True)
-        for row in results:
-            sid = str(row.get("scenario_id", ""))
-            scen = by_sid.get(sid)
-            mp = str(row.get("manifest_path") or (scen or {}).get("manifest_path", ""))
-            summ = row.get("summary") if row.get("ok") else None
-            err = None if row.get("ok") else str(row.get("error", "unknown"))
-            atr_s = None
-            atr_t = None
-            if scen:
-                atr_s = scen.get("atr_stop_mult")
-                atr_t = scen.get("atr_target_mult")
-                if isinstance(atr_s, (int, float)):
-                    atr_s = float(atr_s)
-                else:
-                    atr_s = None
-                if isinstance(atr_t, (int, float)):
-                    atr_t = float(atr_t)
-                else:
-                    atr_t = None
-            prior_rid = None
-            if scen and scen.get("prior_run_id") is not None:
-                prior_rid = str(scen["prior_run_id"])
-            rec = build_run_memory_record(
-                source="parallel_scenarios",
-                manifest_path=mp,
-                json_summary_row=summ,
-                scenario=scen,
-                parallel_error=err,
-                atr_stop_mult=atr_s,
-                atr_target_mult=atr_t,
-                prior_run_id=prior_rid,
-            )
+
+    session_ok = write_session_logs and os.environ.get("PATTERN_GAME_NO_SESSION_LOG", "").strip().lower() not in (
+        "1",
+        "true",
+        "yes",
+    )
+    session_records: list[tuple[str, dict[str, Any]]] = []
+
+    for row in results:
+        sid = str(row.get("scenario_id", "")) or "unknown"
+        scen = by_sid.get(str(row.get("scenario_id", "")))
+        mp = str(row.get("manifest_path") or (scen or {}).get("manifest_path", ""))
+        summ = row.get("summary") if row.get("ok") else None
+        err = None if row.get("ok") else str(row.get("error", "unknown"))
+        atr_s = None
+        atr_t = None
+        if scen:
+            atr_s = scen.get("atr_stop_mult")
+            atr_t = scen.get("atr_target_mult")
+            if isinstance(atr_s, (int, float)):
+                atr_s = float(atr_s)
+            else:
+                atr_s = None
+            if isinstance(atr_t, (int, float)):
+                atr_t = float(atr_t)
+            else:
+                atr_t = None
+        prior_rid = None
+        if scen and scen.get("prior_run_id") is not None:
+            prior_rid = str(scen["prior_run_id"])
+        rec = build_run_memory_record(
+            source="parallel_scenarios",
+            manifest_path=mp,
+            json_summary_row=summ,
+            scenario=scen,
+            parallel_error=err,
+            atr_stop_mult=atr_s,
+            atr_target_mult=atr_t,
+            prior_run_id=prior_rid,
+        )
+        if mem_p is not None:
             append_run_memory(mem_p, rec)
+        if session_ok:
+            session_records.append((sid, rec))
+
+    if session_ok and session_records:
+        root_raw = session_logs_base or os.environ.get("PATTERN_GAME_SESSION_LOGS_ROOT")
+        log_root = Path(root_raw).expanduser() if root_raw else default_logs_root()
+        batch_dir = allocate_unique_run_directory(logs_root=log_root, prefix="batch")
+        write_batch_index_and_scenario_logs(batch_dir, session_records)
+        print(
+            f"[session_log] batch folder={batch_dir} ({len(session_records)} scenarios — see BATCH_README.md)",
+            file=sys.stderr,
+        )
 
     return results
 
@@ -232,6 +265,17 @@ def main() -> None:
         default=None,
         help="Also append structured run_memory JSONL (default: game_theory/run_memory.jsonl)",
     )
+    parser.add_argument(
+        "--no-session-log",
+        action="store_true",
+        help="Skip logs/batch_<UTC>_<id>/ human-readable folders (default: session logs ON)",
+    )
+    parser.add_argument(
+        "--session-logs-root",
+        type=str,
+        default=None,
+        help="Base directory for batch session folders (default: game_theory/logs)",
+    )
     args = parser.parse_args()
     scenarios_path = Path(args.scenarios_json)
     scenarios = _load_scenarios_from_json(scenarios_path)
@@ -248,11 +292,14 @@ def main() -> None:
             else Path(args.run_memory_log).expanduser()
         )
 
+    sl_root = Path(args.session_logs_root).expanduser() if args.session_logs_root else None
     results = run_scenarios_parallel(
         scenarios,
         max_workers=args.jobs,
         experience_log_path=log_path,
         run_memory_log_path=rmem,
+        write_session_logs=not args.no_session_log,
+        session_logs_base=sl_root,
     )
     ok = sum(1 for r in results if r.get("ok"))
     print(json.dumps({"ran": len(results), "ok": ok, "failed": len(results) - ok, "results": results}, indent=2))

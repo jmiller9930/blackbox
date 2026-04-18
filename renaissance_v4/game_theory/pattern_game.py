@@ -20,6 +20,7 @@ from renaissance_v4.core.outcome_record import OutcomeRecord
 from renaissance_v4.manifest.validate import load_manifest_file, validate_manifest_against_catalog
 from renaissance_v4.research.replay_runner import run_manifest_replay
 from renaissance_v4.game_theory.run_memory import append_run_memory, build_run_memory_record
+from renaissance_v4.game_theory.run_session_log import default_logs_root, write_run_session_folder
 
 # Frozen label rule (breakeven counts as LOSS).
 OUTCOME_RULE_V1 = "outcome_rule_v1_pnl_strict"
@@ -195,6 +196,17 @@ def main() -> None:
         action="store_true",
         help="Exit if hypothesis is empty (or set PATTERN_GAME_REQUIRE_HYPOTHESIS=1)",
     )
+    parser.add_argument(
+        "--no-session-log",
+        action="store_true",
+        help="Skip creating logs/run_<UTC>_<id>/ with HUMAN_READABLE.md (default: session log ON)",
+    )
+    parser.add_argument(
+        "--session-logs-root",
+        type=str,
+        default=None,
+        help="Directory for session folders (default: game_theory/logs; or PATTERN_GAME_SESSION_LOGS_ROOT)",
+    )
     args = parser.parse_args()
     hyp = (args.hypothesis or os.environ.get("PATTERN_GAME_HYPOTHESIS") or "").strip()
     ctx: dict[str, Any] | None = None
@@ -224,30 +236,45 @@ def main() -> None:
     summ = json_summary(out)
     print(json.dumps(summ, indent=2))
 
+    scenario_echo = None
+    if hyp or ctx:
+        scenario_echo = {
+            "agent_explanation": {
+                "hypothesis": hyp,
+                "indicator_context": ctx or {},
+            }
+        }
+    rec = build_run_memory_record(
+        source="pattern_game_cli",
+        manifest_path=args.manifest,
+        json_summary_row=summ,
+        scenario=scenario_echo,
+        hypothesis_cli=hyp if hyp else None,
+        indicator_context=ctx,
+        prior_run_id=args.prior_run_id,
+        atr_stop_mult=args.atr_stop_mult,
+        atr_target_mult=args.atr_target_mult,
+    )
+
     mem_arg = args.memory_log
     if mem_arg is not None:
         mem_path = _default_run_memory_path() if mem_arg in ("default", "1") else Path(mem_arg).expanduser()
-        scenario_echo = None
-        if hyp or ctx:
-            scenario_echo = {
-                "agent_explanation": {
-                    "hypothesis": hyp,
-                    "indicator_context": ctx or {},
-                }
-            }
-        rec = build_run_memory_record(
-            source="pattern_game_cli",
-            manifest_path=args.manifest,
-            json_summary_row=summ,
-            scenario=scenario_echo,
-            hypothesis_cli=hyp if hyp else None,
-            indicator_context=ctx,
-            prior_run_id=args.prior_run_id,
-            atr_stop_mult=args.atr_stop_mult,
-            atr_target_mult=args.atr_target_mult,
-        )
         append_run_memory(mem_path, rec)
         print(f"[run_memory] appended run_id={rec['run_id']} → {mem_path}", file=sys.stderr)
+
+    session_on = not args.no_session_log and os.environ.get("PATTERN_GAME_NO_SESSION_LOG", "").strip().lower() not in (
+        "1",
+        "true",
+        "yes",
+    )
+    if session_on:
+        root = args.session_logs_root or os.environ.get("PATTERN_GAME_SESSION_LOGS_ROOT")
+        log_root = Path(root).expanduser() if root else default_logs_root()
+        session_dir = write_run_session_folder(rec, logs_root=log_root)
+        print(
+            f"[session_log] run_id={rec['run_id']} → folder={session_dir} (open HUMAN_READABLE.md)",
+            file=sys.stderr,
+        )
 
 
 if __name__ == "__main__":

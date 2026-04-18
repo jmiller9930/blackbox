@@ -206,6 +206,8 @@ def run_player_batch(
     max_workers: int | None = None,
     experience_log_path: Path | str | None = None,
     run_memory_log_path: Path | str | None = None,
+    write_session_logs: bool = True,
+    session_logs_base: Path | str | None = None,
     fill_missing_explanations: bool = True,
     with_anna: bool | None = None,
 ) -> dict[str, Any]:
@@ -232,6 +234,8 @@ def run_player_batch(
         max_workers=max_workers,
         experience_log_path=experience_log_path,
         run_memory_log_path=rmem,
+        write_session_logs=write_session_logs,
+        session_logs_base=session_logs_base,
     )
     md = markdown_operator_report(results)
     anna_text: str | None = None
@@ -294,6 +298,17 @@ def main() -> None:
         action="store_true",
         help="Skip Anna narrative even if env would enable it",
     )
+    p.add_argument(
+        "--no-session-log",
+        action="store_true",
+        help="Skip logs/batch_<UTC>_<id>/ per-scenario HUMAN_READABLE.md (default: session logs ON)",
+    )
+    p.add_argument(
+        "--session-logs-root",
+        type=str,
+        default=None,
+        help="Base directory for batch session folders (default: game_theory/logs)",
+    )
     args = p.parse_args()
 
     if args.proposal_only:
@@ -330,11 +345,14 @@ def main() -> None:
     elif args.no_anna:
         with_anna = False
 
+    sl_root = Path(args.session_logs_root).expanduser() if args.session_logs_root else None
     out = run_player_batch(
         scenarios,
         max_workers=args.jobs,
         experience_log_path=log_path,
         run_memory_log_path=run_mem,
+        write_session_logs=not args.no_session_log,
+        session_logs_base=sl_root,
         with_anna=with_anna,
     )
     print(out["report_markdown"])

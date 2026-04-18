@@ -131,6 +131,8 @@ class PatternGameAgent:
         max_workers: int | None = None,
         experience_log_path: Path | str | bool | None = None,
         run_memory_log_path: Path | str | bool | None = None,
+        write_session_logs: bool = True,
+        session_logs_base: Path | str | None = None,
     ) -> list[dict[str, Any]]:
         """Parallel Referee batch — no player-agent markdown, no Anna."""
         scenarios = self.normalize_manifest_paths(scenarios)
@@ -147,11 +149,16 @@ class PatternGameAgent:
             rmem_path = _GAME_THEORY / "run_memory.jsonl"
         elif run_memory_log_path:
             rmem_path = Path(str(run_memory_log_path))
+        sbase = session_logs_base
+        if sbase is None and os.environ.get("PATTERN_GAME_SESSION_LOGS_ROOT"):
+            sbase = os.environ.get("PATTERN_GAME_SESSION_LOGS_ROOT")
         return run_scenarios_parallel(
             scenarios,
             max_workers=max_workers,
             experience_log_path=log_path,
             run_memory_log_path=rmem_path,
+            write_session_logs=write_session_logs,
+            session_logs_base=sbase,
         )
 
     def run(
@@ -161,6 +168,8 @@ class PatternGameAgent:
         max_workers: int | None = None,
         experience_log_path: Path | str | bool | None = None,
         run_memory_log_path: Path | str | bool | None = None,
+        write_session_logs: bool = True,
+        session_logs_base: Path | str | None = None,
         fill_missing_explanations: bool = True,
         with_anna: bool | None = None,
         anna_context_profile: str | None = None,
@@ -193,12 +202,17 @@ class PatternGameAgent:
         env_updates: dict[str, str | None] = {"REPO_ROOT": str(self.repo_root)}
         if anna_context_profile is not None:
             env_updates["ANNA_CONTEXT_PROFILE"] = anna_context_profile if anna_context_profile else None
+        sbase = session_logs_base
+        if sbase is None and os.environ.get("PATTERN_GAME_SESSION_LOGS_ROOT"):
+            sbase = os.environ.get("PATTERN_GAME_SESSION_LOGS_ROOT")
         with _optional_env(env_updates):
             return run_player_batch(
                 scenarios,
                 max_workers=max_workers,
                 experience_log_path=log_path,
                 run_memory_log_path=rmem_out,
+                write_session_logs=write_session_logs,
+                session_logs_base=sbase,
                 fill_missing_explanations=fill_missing_explanations,
                 with_anna=with_anna,
             )
@@ -210,6 +224,8 @@ class PatternGameAgent:
         max_workers: int | None = None,
         experience_log_path: Path | str | bool | None = None,
         run_memory_log_path: Path | str | bool | None = None,
+        write_session_logs: bool = True,
+        session_logs_base: Path | str | None = None,
         fill_missing_explanations: bool = True,
         with_anna: bool | None = None,
         anna_context_profile: str | None = None,
@@ -221,6 +237,8 @@ class PatternGameAgent:
             max_workers=max_workers,
             experience_log_path=experience_log_path,
             run_memory_log_path=run_memory_log_path,
+            write_session_logs=write_session_logs,
+            session_logs_base=session_logs_base,
             fill_missing_explanations=fill_missing_explanations,
             with_anna=with_anna,
             anna_context_profile=anna_context_profile,

@@ -19,6 +19,31 @@ from typing import Any
 SCHEMA = "renaissance_v4_run_memory_v1"
 
 
+def build_decision_audit(*, prior_run_id: str | None) -> dict[str, Any]:
+    """
+    Explicit, machine-generated audit: what inputs actually drove execution vs what was metadata only.
+
+    Deterministic replay never loads prior run_memory rows to change trade logic; this block states that.
+    """
+    pid = (prior_run_id or "").strip() or None
+    return {
+        "prior_outcomes_or_parameters_loaded_into_replay_engine": False,
+        "prior_run_id_provided": pid,
+        "human_readable_summary": (
+            "Trade decisions in this run came only from: (1) the manifest JSON on disk, "
+            "(2) optional CLI ATR overrides, (3) bar data read forward in time by the Referee. "
+            "No code path reads run_memory JSONL or prior HUMAN_READABLE logs to alter signals, "
+            "fusion, risk tiers, or execution during the replay."
+        ),
+        "if_prior_run_id_is_set": (
+            f"You supplied prior_run_id={pid!r} as an audit link between experiments. "
+            "That ID is stored for your review and diffing; it was **not** loaded as simulation input."
+        )
+        if pid
+        else "No prior_run_id was supplied; this run is not linked to an earlier run_id in metadata.",
+    }
+
+
 def sha256_file(path: Path) -> str:
     h = hashlib.sha256()
     with path.open("rb") as f:
@@ -85,6 +110,7 @@ def build_run_memory_record(
         "atr_stop_mult": atr_stop_mult,
         "atr_target_mult": atr_target_mult,
         "referee": json_summary_row,
+        "decision_audit": build_decision_audit(prior_run_id=prior_run_id),
         "post_mortem": {
             "why": None,
             "next_hypothesis": None,

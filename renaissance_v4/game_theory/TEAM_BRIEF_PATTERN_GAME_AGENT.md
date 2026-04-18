@@ -38,7 +38,8 @@ If you do not care about weight training, “train the agent” still matters as
 | **Presets + custom JSON** | Swap scenario batches to explore manifests and story fields. |
 | **Echo fields** | `training_trace_id`, `prior_scenario_id`, `agent_explanation` — audit trail and curriculum hooks. |
 | **JSONL log** | Optional append of **one line per scenario result** for offline analysis. |
-| **`run_memory.jsonl`** | Structured **append-only** lines: hypothesis + `indicator_context` + manifest hash + Referee metrics + `post_mortem` placeholders (`run_memory.py`). Pattern game: `--memory-log default`; batch: `--run-memory` or `RUN_MEMORY_LOG`. Not gradient learning — **durable audit + curriculum hooks**. |
+| **`run_memory.jsonl`** | Structured **append-only** lines: hypothesis + `indicator_context` + manifest hash + Referee metrics + `decision_audit` + `post_mortem` placeholders (`run_memory.py`). Pattern game: `--memory-log default`; batch: `--run-memory` or `RUN_MEMORY_LOG`. Not gradient learning — **durable audit + curriculum hooks**. |
+| **`logs/` session folders** | Every pattern-game run (default): `logs/run_<UTC>_<id>/HUMAN_READABLE.md` + `run_record.json` + `SESSION.txt`. Parallel batches: `logs/batch_<UTC>_<id>/BATCH_README.md` + one subfolder per scenario. Disable: `--no-session-log` or `PATTERN_GAME_NO_SESSION_LOG=1`. Base path: `PATTERN_GAME_SESSION_LOGS_ROOT` or `--session-logs-root`. |
 | **Hypothesis gate** | `PATTERN_GAME_REQUIRE_HYPOTHESIS=1` or `validate_scenarios(..., require_hypothesis=True)` — blocks scenarios with empty `agent_explanation.hypothesis`. |
 | **Repo context** | `ANNA_CONTEXT_PROFILE` + `agent_context_bundle` — same governance docs every call. |
 | **`PatternGameAgent`** | Single import for host apps; `plugin_info()` for dashboards. |
