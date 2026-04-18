@@ -18,6 +18,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from renaissance_v4.game_theory.memory_paths import default_experience_log_jsonl, default_run_memory_jsonl
 from renaissance_v4.game_theory.parallel_runner import run_scenarios_parallel
 from renaissance_v4.game_theory.player_agent import run_player_batch
 from renaissance_v4.game_theory.scenario_contract import validate_scenarios
@@ -141,12 +142,12 @@ class PatternGameAgent:
             raise ValueError(msgs[0] if msgs else "Invalid scenarios")
         log_path: Path | None = None
         if experience_log_path is True or experience_log_path == "1" or experience_log_path == "default":
-            log_path = _GAME_THEORY / "experience_log.jsonl"
+            log_path = default_experience_log_jsonl()
         elif experience_log_path:
             log_path = Path(str(experience_log_path))
         rmem_path: Path | None = None
         if run_memory_log_path is True or run_memory_log_path == "1" or run_memory_log_path == "default":
-            rmem_path = _GAME_THEORY / "run_memory.jsonl"
+            rmem_path = default_run_memory_jsonl()
         elif run_memory_log_path:
             rmem_path = Path(str(run_memory_log_path))
         sbase = session_logs_base
@@ -186,7 +187,7 @@ class PatternGameAgent:
             raise ValueError(msgs[0] if msgs else "Invalid scenarios")
         log_path: Path | None = None
         if experience_log_path is True or experience_log_path == "1" or experience_log_path == "default":
-            log_path = _GAME_THEORY / "experience_log.jsonl"
+            log_path = default_experience_log_jsonl()
         elif experience_log_path:
             log_path = Path(str(experience_log_path))
         rmem_arg: Path | str | bool | None = run_memory_log_path
@@ -194,7 +195,7 @@ class PatternGameAgent:
             rmem_arg = os.environ.get("RUN_MEMORY_LOG")
         rmem_out: Path | str | None = None
         if rmem_arg is True or rmem_arg == "1" or rmem_arg == "default":
-            rmem_out = _GAME_THEORY / "run_memory.jsonl"
+            rmem_out = default_run_memory_jsonl()
         elif rmem_arg:
             rmem_out = Path(str(rmem_arg))
 

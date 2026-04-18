@@ -1,0 +1,61 @@
+"""
+memory_paths.py — where pattern-game **memory I/O** lives on disk.
+
+Set **PATTERN_GAME_MEMORY_ROOT** to a directory on a **RAM-backed filesystem** (tmpfs, ramdisk)
+when you want append/read latency minimal for logs and JSONL queues. The tree is still
+**files on a filesystem** — permanence is whatever that mount provides (tmpfs clears on reboot
+unless you mirror/sync elsewhere).
+
+Typical Linux::
+
+    sudo mkdir -p /mnt/pattern_mem
+    sudo mount -t tmpfs -o size=512M tmpfs /mnt/pattern_mem
+    export PATTERN_GAME_MEMORY_ROOT=/mnt/pattern_mem
+
+Layout under the root (created on demand)::
+
+    {MEMORY_ROOT}/logs/              # session + batch folders
+    {MEMORY_ROOT}/run_memory.jsonl
+    {MEMORY_ROOT}/experience_log.jsonl
+"""
+
+from __future__ import annotations
+
+import os
+from pathlib import Path
+
+_GAME_THEORY = Path(__file__).resolve().parent
+
+
+def memory_root() -> Path | None:
+    """If ``PATTERN_GAME_MEMORY_ROOT`` is set, all default memory paths use this prefix."""
+    v = os.environ.get("PATTERN_GAME_MEMORY_ROOT", "").strip()
+    return Path(v).expanduser() if v else None
+
+
+def default_logs_root() -> Path:
+    mr = memory_root()
+    if mr:
+        return mr / "logs"
+    return _GAME_THEORY / "logs"
+
+
+def default_run_memory_jsonl() -> Path:
+    mr = memory_root()
+    if mr:
+        return mr / "run_memory.jsonl"
+    return _GAME_THEORY / "run_memory.jsonl"
+
+
+def default_experience_log_jsonl() -> Path:
+    mr = memory_root()
+    if mr:
+        return mr / "experience_log.jsonl"
+    return _GAME_THEORY / "experience_log.jsonl"
+
+
+def ensure_memory_root_tree() -> None:
+    """Create ``logs`` under memory root when ``PATTERN_GAME_MEMORY_ROOT`` is set (idempotent)."""
+    mr = memory_root()
+    if mr:
+        (mr / "logs").mkdir(parents=True, exist_ok=True)

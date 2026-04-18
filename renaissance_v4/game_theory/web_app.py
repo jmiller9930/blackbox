@@ -5,9 +5,11 @@ Batches use **``POST /api/run-parallel/start``** + polling **``GET /api/run-para
 so the UI shows **per-scenario progress** (determinate bar) instead of a single long blocking request.
 ``POST /api/run-parallel`` remains as a blocking API for scripts.
 
-Each completed batch also writes a **unique session folder** under ``renaissance_v4/game_theory/logs/``
-(``batch_<UTC>_<id>/`` with ``BATCH_README.md`` and per-scenario ``HUMAN_READABLE.md``), unless
-``PATTERN_GAME_NO_SESSION_LOG=1``. The JSON result includes ``session_log_batch_dir`` when present.
+Each completed batch also writes a **unique session folder** under the logs directory (default:
+``renaissance_v4/game_theory/logs/``, or ``$PATTERN_GAME_MEMORY_ROOT/logs`` on a tmpfs/ramdisk for
+instant I/O). Folders look like ``batch_<UTC>_<id>/`` with ``BATCH_README.md`` and per-scenario
+``HUMAN_READABLE.md``, unless ``PATTERN_GAME_NO_SESSION_LOG=1``. The JSON result includes
+``session_log_batch_dir`` when present.
 
 No manifest/ATR fields in the UI — policy lives in the JSON (or examples presets). Default 16 workers
 (capped to host). ``POST /api/run`` remains for scripted single-manifest runs (optional JSON field ``memory_bundle_path``).
@@ -32,6 +34,7 @@ from flask import Flask, abort, jsonify, request
 _GAME_THEORY = Path(__file__).resolve().parent
 
 from renaissance_v4.game_theory.data_health import get_data_health
+from renaissance_v4.game_theory.memory_paths import default_experience_log_jsonl, ensure_memory_root_tree
 from renaissance_v4.game_theory.parallel_runner import (
     clamp_parallel_workers,
     get_parallel_limits,
@@ -97,7 +100,7 @@ def _prepare_parallel_payload(data: dict[str, Any]) -> dict[str, Any]:
 
     log_path = data.get("log_path")
     if log_path is True or log_path == "1":
-        log_path = _GAME_THEORY / "experience_log.jsonl"
+        log_path = default_experience_log_jsonl()
     elif log_path:
         log_path = Path(str(log_path))
     else:
@@ -134,6 +137,7 @@ def _batch_pnl_summary(results: list[dict[str, Any]]) -> dict[str, Any]:
 
 
 def create_app() -> Flask:
+    ensure_memory_root_tree()
     app = Flask(__name__)
 
     @app.get("/")
@@ -515,7 +519,7 @@ PAGE_HTML = """<!DOCTYPE html>
   <p class="caps" id="workerHint"></p>
   <div class="row">
     <div>
-      <label><input type="checkbox" id="doLog" checked/> Append results to <code>game_theory/experience_log.jsonl</code></label>
+      <label><input type="checkbox" id="doLog" checked/> Append results to experience JSONL (default path under repo, or <code>PATTERN_GAME_MEMORY_ROOT</code> for RAM/tmpfs)</label>
     </div>
   </div>
 

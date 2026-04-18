@@ -24,7 +24,8 @@ from renaissance_v4.game_theory.memory_bundle import (
     memory_bundle_required_and_missing,
 )
 from renaissance_v4.game_theory.run_memory import append_run_memory, build_run_memory_record
-from renaissance_v4.game_theory.run_session_log import default_logs_root, write_run_session_folder
+from renaissance_v4.game_theory.memory_paths import default_logs_root, default_run_memory_jsonl
+from renaissance_v4.game_theory.run_session_log import write_run_session_folder
 
 # Frozen label rule (breakeven counts as LOSS).
 OUTCOME_RULE_V1 = "outcome_rule_v1_pnl_strict"
@@ -159,7 +160,7 @@ def run_pattern_game(
 
 
 def _default_run_memory_path() -> Path:
-    return Path(__file__).resolve().parent / "run_memory.jsonl"
+    return default_run_memory_jsonl()
 
 
 def main() -> None:

@@ -19,6 +19,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from renaissance_v4.game_theory.memory_paths import default_experience_log_jsonl, default_run_memory_jsonl
 from renaissance_v4.game_theory.parallel_runner import run_scenarios_parallel
 from renaissance_v4.game_theory.scenario_contract import extract_scenario_echo_fields, validate_scenarios
 
@@ -192,7 +193,7 @@ def _resolve_run_memory_log_path(
         if not s:
             return None
         if s in ("default", "1"):
-            return _GAME_THEORY / "run_memory.jsonl"
+            return default_run_memory_jsonl()
         return Path(s).expanduser()
     env = os.environ.get("RUN_MEMORY_LOG")
     if not env or not str(env).strip():
@@ -331,7 +332,7 @@ def main() -> None:
 
     log_path: Path | None = None
     if args.log == "1" or args.log == "default":
-        log_path = _GAME_THEORY / "experience_log.jsonl"
+        log_path = default_experience_log_jsonl()
     elif args.log:
         log_path = Path(args.log)
 

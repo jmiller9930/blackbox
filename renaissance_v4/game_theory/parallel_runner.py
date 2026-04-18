@@ -19,9 +19,13 @@ from typing import Any
 
 from renaissance_v4.game_theory.pattern_game import json_summary, run_pattern_game
 from renaissance_v4.game_theory.run_memory import append_run_memory, build_run_memory_record
+from renaissance_v4.game_theory.memory_paths import (
+    default_experience_log_jsonl,
+    default_logs_root,
+    default_run_memory_jsonl,
+)
 from renaissance_v4.game_theory.run_session_log import (
     allocate_unique_run_directory,
-    default_logs_root,
     write_batch_index_and_scenario_logs,
 )
 from renaissance_v4.game_theory.scenario_contract import extract_scenario_echo_fields
@@ -294,12 +298,12 @@ def main() -> None:
 
     log_path = args.log
     if log_path is None:
-        log_path = Path(__file__).resolve().parent / "experience_log.jsonl"
+        log_path = default_experience_log_jsonl()
 
     rmem: Path | None = None
     if args.run_memory_log is not None:
         rmem = (
-            Path(__file__).resolve().parent / "run_memory.jsonl"
+            default_run_memory_jsonl()
             if args.run_memory_log in ("default", "1")
             else Path(args.run_memory_log).expanduser()
         )

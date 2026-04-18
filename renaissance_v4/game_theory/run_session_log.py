@@ -14,12 +14,9 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from renaissance_v4.game_theory.memory_paths import default_logs_root
+
 _GAME_THEORY = Path(__file__).resolve().parent
-DEFAULT_LOGS_ROOT = _GAME_THEORY / "logs"
-
-
-def default_logs_root() -> Path:
-    return DEFAULT_LOGS_ROOT
 
 
 def allocate_unique_run_directory(
@@ -28,7 +25,7 @@ def allocate_unique_run_directory(
     prefix: str = "run",
 ) -> Path:
     """Create ``logs_root / f\"{prefix}_<UTC>_<8 hex>\"`` and return it."""
-    base = logs_root if logs_root is not None else DEFAULT_LOGS_ROOT
+    base = logs_root if logs_root is not None else default_logs_root()
     ts = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
     short = uuid.uuid4().hex[:8]
     d = Path(base) / f"{prefix}_{ts}_{short}"
