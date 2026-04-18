@@ -43,6 +43,43 @@ def extract_agent_fields(scenario: dict[str, Any]) -> dict[str, Any]:
     return extract_scenario_echo_fields(scenario)
 
 
+def extract_policy_contract_summary(manifest: dict[str, Any] | None) -> dict[str, Any]:
+    """
+    Compact slice of the effective strategy manifest for operator UIs (signals, fusion, regime).
+
+    Intended for tables — not a full manifest dump.
+    """
+    if not manifest:
+        return {}
+    return {
+        "strategy_id": manifest.get("strategy_id"),
+        "symbol": manifest.get("symbol"),
+        "timeframe": manifest.get("timeframe"),
+        "signal_modules": list(manifest.get("signal_modules") or []),
+        "regime_module": manifest.get("regime_module"),
+        "risk_model": manifest.get("risk_model"),
+        "fusion_module": manifest.get("fusion_module"),
+        "execution_template": manifest.get("execution_template"),
+    }
+
+
+def referee_session_outcome(ok: bool, summary: dict[str, Any] | None) -> str:
+    """
+    Session-level paper label for one replay: **WIN** if cumulative PnL is strictly positive,
+    **LOSS** otherwise; **ERROR** if the run failed.
+    """
+    if not ok:
+        return "ERROR"
+    if not summary:
+        return "LOSS"
+    cp = summary.get("cumulative_pnl")
+    try:
+        v = float(cp) if cp is not None else 0.0
+    except (TypeError, ValueError):
+        v = 0.0
+    return "WIN" if v > 0.0 else "LOSS"
+
+
 def validate_scenarios(
     scenarios: list[dict[str, Any]],
     *,

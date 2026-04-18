@@ -28,7 +28,12 @@ from renaissance_v4.game_theory.run_session_log import (
     allocate_unique_run_directory,
     write_batch_index_and_scenario_logs,
 )
-from renaissance_v4.game_theory.scenario_contract import extract_scenario_echo_fields
+from renaissance_v4.game_theory.scenario_contract import (
+    extract_policy_contract_summary,
+    extract_scenario_echo_fields,
+    referee_session_outcome,
+)
+from renaissance_v4.manifest.validate import load_manifest_file
 
 DEFAULT_WORKERS = max(1, (os.cpu_count() or 4))
 
@@ -84,10 +89,13 @@ def _worker_run_one(scenario: dict[str, Any]) -> dict[str, Any]:
             emit_baseline_artifacts=bool(scenario.get("emit_baseline_artifacts", False)),
             verbose=False,
         )
+        summ = json_summary(out)
         row: dict[str, Any] = {
             "ok": True,
             "scenario_id": sid,
-            "summary": json_summary(out),
+            "summary": summ,
+            "policy_contract": extract_policy_contract_summary(out.get("manifest_effective")),
+            "referee_session": referee_session_outcome(True, summ),
             "validation_checksum": out.get("validation_checksum"),
             "cumulative_pnl": out.get("cumulative_pnl"),
             "dataset_bars": out.get("dataset_bars"),
@@ -97,11 +105,21 @@ def _worker_run_one(scenario: dict[str, Any]) -> dict[str, Any]:
         row.update(extract_scenario_echo_fields(scenario))
         return row
     except Exception as e:
+        pc: dict[str, Any] = {}
+        try:
+            mp = scenario.get("manifest_path")
+            if mp and Path(mp).expanduser().is_file():
+                pc = extract_policy_contract_summary(load_manifest_file(Path(mp).expanduser()))
+        except Exception:
+            pc = {}
         row = {
             "ok": False,
             "scenario_id": sid,
             "error": f"{type(e).__name__}: {e}",
             "manifest_path": str(scenario.get("manifest_path", "")),
+            "policy_contract": pc,
+            "referee_session": "ERROR",
+            "summary": None,
         }
         row.update(extract_scenario_echo_fields(scenario))
         return row

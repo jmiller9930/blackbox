@@ -14,7 +14,15 @@ def test_scenario_presets_and_load() -> None:
     assert isinstance(data, list)
     assert any(row.get("filename", "").endswith(".json") for row in data)
 
-    name = next(row["filename"] for row in data if row["filename"].endswith(".json"))
+    preferred = next(
+        (row["filename"] for row in data if row.get("filename") == "tier1_twelve_month.example.json"),
+        None,
+    )
+    name = preferred or next(
+        row["filename"]
+        for row in data
+        if row["filename"].endswith(".json") and "memory_bundle" not in row["filename"].lower()
+    )
     r2 = c.get("/api/scenario-preset?name=" + name)
     assert r2.status_code == 200
     body = r2.get_json()

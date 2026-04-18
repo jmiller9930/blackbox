@@ -47,7 +47,11 @@ from renaissance_v4.game_theory.pattern_game import (
     json_summary,
     run_pattern_game,
 )
-from renaissance_v4.game_theory.scenario_contract import validate_scenarios
+from renaissance_v4.game_theory.scenario_contract import (
+    extract_policy_contract_summary,
+    referee_session_outcome,
+    validate_scenarios,
+)
 
 _JOBS_LOCK = threading.Lock()
 _JOBS: dict[str, dict[str, Any]] = {}
@@ -229,6 +233,8 @@ def create_app() -> Flask:
                 {
                     "ok": True,
                     "summary": js,
+                    "policy_contract": extract_policy_contract_summary(out.get("manifest_effective")),
+                    "referee_session": referee_session_outcome(True, js),
                     "pnl_summary": pnl_summary,
                     "memory_bundle_audit": out.get("memory_bundle_audit"),
                 }
@@ -408,7 +414,7 @@ PAGE_HTML = """<!DOCTYPE html>
   <title>Pattern game (local)</title>
   <style>
     :root { font-family: system-ui, sans-serif; background: #0f1419; color: #e7e9ea; }
-    body { max-width: 880px; margin: 24px auto; padding: 0 16px; }
+    body { max-width: 1024px; margin: 24px auto; padding: 0 16px; }
     h1 { font-size: 1.25rem; font-weight: 600; }
     h2 { font-size: 1rem; margin-top: 28px; color: #8b98a5; }
     label { display: block; margin: 10px 0 4px; font-size: 0.85rem; color: #8b98a5; }
@@ -488,6 +494,33 @@ PAGE_HTML = """<!DOCTYPE html>
       line-height: 1.45;
     }
     .estimate-strip strong { color: #e7e9ea; }
+    .policy-outcome-panel {
+      margin: 0 0 16px 0;
+      padding: 12px 14px;
+      border-radius: 8px;
+      background: #15202b;
+      border: 1px solid #38444d;
+      overflow-x: auto;
+    }
+    .policy-outcome-panel h2 { margin-top: 0; }
+    .policy-outcome-panel .hint { font-size: 0.78rem; color: #8b98a5; margin: 0 0 10px 0; line-height: 1.4; }
+    .policy-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.78rem;
+    }
+    .policy-table th, .policy-table td {
+      border: 1px solid #38444d;
+      padding: 6px 8px;
+      text-align: left;
+      vertical-align: top;
+    }
+    .policy-table th { background: #1a2732; color: #8b98a5; font-weight: 600; white-space: nowrap; }
+    .policy-table td { color: #e7e9ea; }
+    .tag-win { color: #00ba7c; font-weight: 700; }
+    .tag-loss { color: #f4212e; font-weight: 700; }
+    .tag-err { color: #f97316; font-weight: 700; }
+    .signals-cell { font-family: ui-monospace, monospace; font-size: 0.72rem; max-width: 320px; word-break: break-word; }
     input[type=checkbox] { width: auto; }
     input[type=range] { width: 100%; accent-color: #1d9bf0; }
     .progress-wrap { display: none; margin: 12px 0 8px; }
@@ -565,6 +598,30 @@ PAGE_HTML = """<!DOCTYPE html>
 
   <h2>Result</h2>
   <p class="caps" id="sessionLogNote" style="margin:0 0 8px 0;color:#8b98a5;"></p>
+
+  <div class="policy-outcome-panel" id="policyOutcomePanel" hidden>
+    <h2>Policy contract &amp; outcomes</h2>
+    <p class="hint">
+      Effective manifest: signal modules (indicators), fusion, regime — plus session <strong>WIN</strong>/<strong>LOSS</strong> from cumulative paper P&amp;L (&gt;0 vs not).
+      Trade-level win rate is in the next columns. Raw JSON stays below.
+    </p>
+    <table class="policy-table" id="policyOutcomeTable">
+      <thead>
+        <tr>
+          <th>Scenario</th>
+          <th>Session</th>
+          <th>Cum. P&amp;L</th>
+          <th>Trade win %</th>
+          <th>Trades</th>
+          <th>Signal modules</th>
+          <th>Fusion</th>
+          <th>Strategy id</th>
+        </tr>
+      </thead>
+      <tbody id="policyOutcomeTbody"></tbody>
+    </table>
+  </div>
+
   <pre id="out">(no run yet)</pre>
 
   <script>
@@ -594,10 +651,74 @@ PAGE_HTML = """<!DOCTYPE html>
       if (typeof refreshSearchSpaceEstimate === 'function') refreshSearchSpaceEstimate();
     });
 
+    function escapeHtml(s) {
+      if (s == null) return '';
+      const d = document.createElement('div');
+      d.textContent = String(s);
+      return d.innerHTML;
+    }
+
+    function formatUsdPlain(n) {
+      const x = Number(n);
+      if (Number.isNaN(x)) return '—';
+      const abs = Math.abs(x);
+      return (x < 0 ? '−' : '') + '$' + abs.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    }
+
+    function renderPolicyOutcomePanel(data) {
+      const panel = document.getElementById('policyOutcomePanel');
+      const tbody = document.getElementById('policyOutcomeTbody');
+      if (!panel || !tbody) return;
+      tbody.innerHTML = '';
+      let rows = [];
+      if (data && Array.isArray(data.results)) {
+        rows = data.results;
+      }
+      if (!rows.length) {
+        panel.hidden = true;
+        return;
+      }
+      panel.hidden = false;
+      for (const r of rows) {
+        const pc = r.policy_contract || {};
+        const summ = r.summary || {};
+        const sigs = (pc.signal_modules && pc.signal_modules.length) ? pc.signal_modules.join(', ') : '—';
+        const wr = (summ.win_rate != null && summ.win_rate !== undefined)
+          ? (Math.round(Number(summ.win_rate) * 1000) / 10 + '%')
+          : '—';
+        const trades = (summ.trades != null && summ.trades !== undefined) ? String(summ.trades) : '—';
+        const pnl = summ.cumulative_pnl;
+        let outc = r.referee_session;
+        if (!outc) {
+          outc = r.ok ? 'LOSS' : 'ERROR';
+        }
+        const tagClass = outc === 'WIN' ? 'tag-win' : (outc === 'LOSS' ? 'tag-loss' : 'tag-err');
+        const sid = r.scenario_id != null ? String(r.scenario_id) : ('—');
+        const strat = pc.strategy_id ? String(pc.strategy_id) : '—';
+        const fus = pc.fusion_module ? String(pc.fusion_module) : '—';
+        const tr = document.createElement('tr');
+        tr.innerHTML =
+          '<td>' + escapeHtml(sid) + '</td>' +
+          '<td><span class="' + tagClass + '">' + escapeHtml(outc) + '</span></td>' +
+          '<td>' + escapeHtml(formatUsdPlain(pnl)) + '</td>' +
+          '<td>' + escapeHtml(wr) + '</td>' +
+          '<td>' + escapeHtml(trades) + '</td>' +
+          '<td class="signals-cell">' + escapeHtml(sigs) + '</td>' +
+          '<td>' + escapeHtml(fus) + '</td>' +
+          '<td>' + escapeHtml(strat.length > 56 ? strat.slice(0, 54) + '…' : strat) + '</td>';
+        tbody.appendChild(tr);
+      }
+    }
+
     async function show(el, data, err) {
       const pre = document.getElementById('out');
-      if (err) { pre.innerHTML = '<span class="err">' + err + '</span>'; return; }
+      if (err) {
+        pre.innerHTML = '<span class="err">' + err + '</span>';
+        renderPolicyOutcomePanel(null);
+        return;
+      }
       pre.textContent = JSON.stringify(data, null, 2);
+      renderPolicyOutcomePanel(data);
     }
 
     function formatUsd(n) {
