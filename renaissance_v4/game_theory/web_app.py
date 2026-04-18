@@ -222,11 +222,12 @@ PAGE_HTML = """<!DOCTYPE html>
   </section>
 
   <section class="panel" id="panel2">
-    <p class="caps">Paste a JSON array of scenarios, or load a preset. Contract: <code>renaissance_v4/game_theory/README.md</code> (Scenario JSON contract). Each result row includes Referee <code>summary</code> plus optional <code>agent_explanation</code> (not scored).</p>
-    <label>Load preset into editor</label>
-    <select id="presetPick">
-      <option value="">— Custom (paste below) —</option>
+    <p class="caps"><strong>Either / or:</strong> pick <em>one</em> built-in file from the list (it fills the box), <strong>or</strong> paste your own scenario JSON (e.g. copy <code>examples/tier1_scenario.template.json</code> from the repo and edit). You do not need both. Contract: <code>renaissance_v4/game_theory/README.md</code>. Results include Referee <code>summary</code> plus echoed tier / agent fields (not scored).</p>
+    <label>Built-in preset <span class="caps" style="display:inline;margin:0">(optional)</span></label>
+    <select id="presetPick" aria-describedby="presetHelp">
+      <option value="">— None: I will paste JSON below —</option>
     </select>
+    <p class="caps" id="presetHelp">Choosing a preset replaces the textarea content. Skip this if you already have JSON.</p>
     <label>Parallel workers</label>
     <div class="row">
       <div>
@@ -238,7 +239,7 @@ PAGE_HTML = """<!DOCTYPE html>
       </div>
     </div>
     <label>Scenarios JSON</label>
-    <textarea id="scenarios" spellcheck="false"></textarea>
+    <textarea id="scenarios" spellcheck="false" placeholder='[{"scenario_id":"…","manifest_path":"…",…}]'></textarea>
     <button type="button" id="run2">Run parallel</button>
   </section>
 

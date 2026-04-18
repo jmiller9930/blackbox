@@ -89,6 +89,6 @@ Other examples: `parallel_scenarios.example.json`, `parallel_scenarios_with_agen
 - **Template:** JSON array of objects — copy `tier1_scenario.template.json`, edit `scenario_id` and `agent_explanation`, keep `tier` / `evaluation_window` unless the run definition changes.
 - **Pickle / multiprocessing:** Build scenarios as **`list[dict]`** with **JSON types only** (`str`, `int`, `float`, `bool`, `null`, `list`, `dict`). Do **not** put `Path`, classes, or callables in scenario dicts; workers **pickle** each dict. Typical pattern: `scenarios = json.loads(path.read_text())` then `run_scenarios_parallel(scenarios, ...)`.
 
-### Web UI presets
+### Web UI (parallel batch)
 
-The local Flask UI can **load** any `*.json` file from `game_theory/examples/` via the preset dropdown so you do not have to paste JSON by hand.
+**Either / or:** use the **preset dropdown** to load one built-in `examples/*.json` into the editor, **or** paste scenario JSON you prepared elsewhere (e.g. from `tier1_scenario.template.json`). Only one source is required — the dropdown simply **fills** the text area when chosen; you can ignore it if you already have JSON.
