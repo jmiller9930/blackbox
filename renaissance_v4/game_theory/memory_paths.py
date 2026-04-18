@@ -18,6 +18,7 @@ Layout under the root (created on demand)::
     {MEMORY_ROOT}/run_memory.jsonl
     {MEMORY_ROOT}/experience_log.jsonl
     {MEMORY_ROOT}/batch_scorecard.jsonl   # batch run timing + totals (web UI + scripts)
+    {MEMORY_ROOT}/retrospective_log.jsonl # operator/agent “what we learned / try next” (not Referee scores)
 """
 
 from __future__ import annotations
@@ -61,6 +62,14 @@ def default_batch_scorecard_jsonl() -> Path:
     if mr:
         return mr / "batch_scorecard.jsonl"
     return _GAME_THEORY / "batch_scorecard.jsonl"
+
+
+def default_retrospective_log_jsonl() -> Path:
+    """Append-only retrospective lines (hypothesis follow-ups, what to try next)."""
+    mr = memory_root()
+    if mr:
+        return mr / "retrospective_log.jsonl"
+    return _GAME_THEORY / "retrospective_log.jsonl"
 
 
 def ensure_memory_root_tree() -> None:

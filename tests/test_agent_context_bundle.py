@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import pytest
@@ -35,3 +36,27 @@ def test_build_context_includes_policy_standard(monkeypatch: pytest.MonkeyPatch)
     s = build_context_prefix(_REPO)
     assert "policy_package_standard" in s
     assert "REPOSITORY CONTEXT" in s
+
+
+def test_build_context_retrospective_appends_block(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    log = tmp_path / "retrospective_log.jsonl"
+    log.write_text(
+        json.dumps(
+            {
+                "schema": "pattern_game_retrospective_v1",
+                "utc": "2030-06-01T12:00:00Z",
+                "what_observed": "Baseline run finished.",
+                "what_to_try_next": "Compare ATR grid next batch.",
+            }
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("ANNA_CONTEXT_PROFILE", "retrospective")
+    monkeypatch.setattr(
+        "renaissance_v4.game_theory.retrospective_log.default_retrospective_log_jsonl",
+        lambda: log,
+    )
+    s = build_context_prefix(_REPO)
+    assert "RETROSPECTIVE LOG" in s
+    assert "Compare ATR grid" in s

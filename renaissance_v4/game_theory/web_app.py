@@ -14,6 +14,10 @@ instant I/O). Folders look like ``batch_<UTC>_<id>/`` with ``BATCH_README.md`` a
 Parallel batches append one line per run to ``batch_scorecard.jsonl`` (UTC start/end, duration,
 counts) and expose ``batch_timing`` on the API; see ``GET /api/batch-scorecard``.
 
+Operator **retrospective** (learn / next experiment): ``GET /api/retrospective-log``,
+``POST /api/retrospective-append`` — persists to ``retrospective_log.jsonl`` (see
+``renaissance_v4/game_theory/retrospective_log.py``).
+
 No manifest/ATR fields in the UI — policy lives in the JSON (or examples presets). Default 16 workers
 (capped to host). ``POST /api/run`` remains for scripted single-manifest runs (optional JSON field ``memory_bundle_path``).
 
@@ -51,8 +55,10 @@ from renaissance_v4.game_theory.search_space_estimate import build_search_space_
 from renaissance_v4.game_theory.memory_paths import (
     default_batch_scorecard_jsonl,
     default_experience_log_jsonl,
+    default_retrospective_log_jsonl,
     ensure_memory_root_tree,
 )
+from renaissance_v4.game_theory.retrospective_log import append_retrospective, read_retrospective_recent
 from renaissance_v4.game_theory.parallel_runner import (
     clamp_parallel_workers,
     get_parallel_limits,
@@ -507,6 +513,31 @@ def create_app() -> Flask:
                 "entries": rows,
             }
         )
+
+    @app.get("/api/retrospective-log")
+    def api_retrospective_log() -> Any:
+        """Recent ``retrospective_log.jsonl`` lines (newest first)."""
+        try:
+            limit = int(request.args.get("limit") or 25)
+        except (TypeError, ValueError):
+            limit = 25
+        limit = max(1, min(200, limit))
+        p = default_retrospective_log_jsonl()
+        rows = read_retrospective_recent(limit, path=p)
+        return jsonify({"ok": True, "path": str(p.resolve()), "limit": limit, "entries": rows})
+
+    @app.post("/api/retrospective-append")
+    def api_retrospective_append() -> Any:
+        """Append one retrospective line (what you saw / try next). Local prototype — no auth."""
+        data = request.get_json(force=True, silent=True) or {}
+        obs = (data.get("what_observed") or data.get("observed") or "").strip()
+        nxt = (data.get("what_to_try_next") or data.get("try_next") or "").strip()
+        if not obs or not nxt:
+            return jsonify({"ok": False, "error": "what_observed and what_to_try_next are required strings"}), 400
+        rr = (data.get("run_ref") or data.get("job_id") or "").strip() or None
+        src = (data.get("source") or "web_ui").strip() or "web_ui"
+        p = append_retrospective(what_observed=obs, what_to_try_next=nxt, run_ref=rr, source=src)
+        return jsonify({"ok": True, "path": str(p)})
 
     return app
 

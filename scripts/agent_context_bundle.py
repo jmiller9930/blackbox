@@ -6,9 +6,11 @@ and optional extra files. This module loads whitelisted paths so the LLM sees th
 without inventing retention in weights.
 
 Env:
-  ANNA_CONTEXT_PROFILE   — comma-separated: none | pattern_game | policy (default: none).
+  ANNA_CONTEXT_PROFILE   — comma-separated: none | pattern_game | policy | retrospective (default: none).
                            **pattern_game** loads game spec, QUANT research design, ``context_memory.py`` (tide metaphor),
                            and **Renaissance V4 fusion** (``fusion_engine.py``, ``signal_weights.py``, ``fusion_result.py``).
+                           **retrospective** appends recent ``retrospective_log.jsonl`` (what you observed / try next).
+  ANNA_CONTEXT_RETROSPECTIVE — ``1`` to include retrospective even if token omitted (optional).
   ANNA_CONTEXT_FILES     — extra repo-relative paths, colon-separated (optional)
   ANNA_CONTEXT_MAX_CHARS — cap total injected text (default 120000)
 """
@@ -17,6 +19,8 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
+
+from renaissance_v4.game_theory.retrospective_log import format_retrospective_for_prompt
 
 _PROFILE_PATHS: dict[str, tuple[str, ...]] = {
     "pattern_game": (
@@ -55,6 +59,12 @@ def build_context_prefix(repo_root: Path | str | None = None) -> str:
         return ""
 
     max_chars = int(os.environ.get("ANNA_CONTEXT_MAX_CHARS", "120000"))
+    want_retrospective = os.environ.get("ANNA_CONTEXT_RETROSPECTIVE", "").strip().lower() in (
+        "1",
+        "true",
+        "yes",
+        "on",
+    )
     parts: list[str] = []
     seen: set[str] = set()
 
@@ -68,6 +78,9 @@ def build_context_prefix(repo_root: Path | str | None = None) -> str:
             keys = ["pattern_game"]
         elif token == "policy":
             keys = ["policy"]
+        elif token == "retrospective":
+            want_retrospective = True
+            continue
         else:
             continue
         for k in keys:
@@ -89,15 +102,28 @@ def build_context_prefix(repo_root: Path | str | None = None) -> str:
         if remaining <= 0:
             break
 
-    if not parts:
+    body = "".join(parts)
+    retro_limit = int(os.environ.get("ANNA_CONTEXT_RETROSPECTIVE_LIMIT", "15"))
+    retro_block = ""
+    if want_retrospective and remaining > 200:
+        retro_block = format_retrospective_for_prompt(
+            limit=retro_limit,
+            max_chars=max(0, remaining - 400),
+            path=None,
+        )
+
+    if not body.strip() and not retro_block:
         return ""
 
-    body = "".join(parts)
-    return (
-        "--- REPOSITORY CONTEXT (authoritative docs; do not invent requirements not shown here) ---\n\n"
-        + body
-        + "--- END REPOSITORY CONTEXT ---\n\n"
-    )
+    out = "--- REPOSITORY CONTEXT (authoritative docs; do not invent requirements not shown here) ---\n\n"
+    if body.strip():
+        out += body
+    if retro_block:
+        out += "\n--- RETROSPECTIVE LOG (prior runs — not Referee scores; use to suggest next experiments) ---\n\n"
+        out += retro_block
+        out += "\n"
+    out += "--- END REPOSITORY CONTEXT ---\n\n"
+    return out
 
 
 def main() -> None:
