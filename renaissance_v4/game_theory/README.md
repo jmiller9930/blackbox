@@ -110,3 +110,5 @@ Other examples: `parallel_scenarios.example.json`, `parallel_scenarios_with_agen
 One screen: **preset** (loads `examples/*.json` into the editor) **or** **paste** your own JSON — that is the whole control surface. **Workers** slider: top end is the host **hard cap** from `get_parallel_limits()`; **default** starts at **recommended** (usually logical CPU count). Tier 1 example preset auto-loads when available. No separate “single run” or ATR fields in the UI.
 
 **Data status strip** at the top: green when SQLite is OK, `market_bars_5m` is present, replay has enough rows, and **SOLUSDT** has a long enough calendar span (~12 months). Otherwise red — see the summary line. Same check: `GET /api/data-health` (`data_health.py`).
+
+**Paper P&amp;L strip:** shows spec **$1,000** baseline, ending equity and green/red delta after each **Run**; horizontal bar is a 0–$2k visual (clamped). Parallel responses include `pnl_summary` (sum of each scenario’s `cumulative_pnl` — independent replays, not one portfolio).
