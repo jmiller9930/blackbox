@@ -57,7 +57,7 @@ from flask import Flask, Response, abort, jsonify, request
 _GAME_THEORY = Path(__file__).resolve().parent
 
 # Operator-visible web UI bundle version — bump when changing PAGE_HTML (HTML/CSS/JS) so deploys are provable.
-PATTERN_GAME_WEB_UI_VERSION = "1.9.0"
+PATTERN_GAME_WEB_UI_VERSION = "2.0.0"
 
 from renaissance_v4.game_theory.groundhog_memory import (
     groundhog_auto_merge_enabled,
@@ -100,6 +100,7 @@ from renaissance_v4.game_theory.scenario_contract import (
     referee_session_outcome,
     validate_scenarios,
 )
+from renaissance_v4.game_theory.module_board import compute_pattern_game_module_board
 from renaissance_v4.game_theory.scorecard_drill import (
     batch_detail_csv_rows,
     build_scenario_list_for_batch,
@@ -220,47 +221,6 @@ def _render_page_html() -> str:
     )
 
 
-def _pattern_game_module_board() -> dict[str, Any]:
-    """Operator module wall for UI — matches mockup semantics (green = healthy/expected; red = off or empty)."""
-    dh = get_data_health()
-    ghb = groundhog_bundle_path()
-    gh_env = groundhog_auto_merge_enabled()
-    try:
-        retro = read_retrospective_recent(120, path=default_retrospective_log_jsonl())
-    except OSError:
-        retro = []
-    sc_path = default_batch_scorecard_jsonl()
-    modules: list[dict[str, Any]] = [
-        {"id": "web_ui", "label": "web_app.py", "ok": True, "detail": "Flask UI shell serving this page."},
-        {"id": "data_health", "label": "data_health.py", "ok": bool(dh.get("overall_ok")), "detail": (dh.get("summary_line") or "")[:220]},
-        {"id": "pattern_game", "label": "pattern_game.py Referee", "ok": True, "detail": "Deterministic replay path (fixed rules)."},
-        {"id": "parallel_runner", "label": "parallel_runner.py", "ok": True, "detail": "Parallel batch execution."},
-        {"id": "batch_scorecard", "label": "batch_scorecard.py", "ok": True, "detail": "Log: " + str(sc_path)},
-        {"id": "search_space", "label": "search_space_estimate.py", "ok": True, "detail": "Catalog + bar estimates (API)."},
-        {"id": "catalog_batch", "label": "catalog_batch_builder.py", "ok": True, "detail": "Chef ATR sweep (API)."},
-        {"id": "hunter", "label": "hunter_planner.py", "ok": True, "detail": "Suggest-hunters (API)."},
-        {
-            "id": "groundhog",
-            "label": "groundhog_memory.py",
-            "ok": bool(gh_env and ghb.is_file()),
-            "detail": ("merge ON · bundle" if gh_env and ghb.is_file() else "merge OFF or no bundle — set PATTERN_GAME_GROUNDHOG_BUNDLE=1"),
-        },
-        {
-            "id": "player_agent",
-            "label": "player_agent.py",
-            "ok": False,
-            "detail": "Narrative echo layer — optional; not Referee scoring.",
-        },
-        {
-            "id": "retrospective",
-            "label": "retrospective_log.py",
-            "ok": len(retro) > 0,
-            "detail": (f"{len(retro)} recent lines" if retro else "no entries yet — append via API or workflow"),
-        },
-    ]
-    return {"ok": True, "modules": modules}
-
-
 def create_app() -> Flask:
     ensure_memory_root_tree()
     app = Flask(__name__)
@@ -320,8 +280,8 @@ def create_app() -> Flask:
 
     @app.get("/api/module-board")
     def api_module_board() -> Any:
-        """Subsystem status for pattern-game horizontal-panels layout (mockup-aligned)."""
-        return jsonify(_pattern_game_module_board())
+        """Subsystem wiring truth (DEF-001): each row green/red + modal copy from ``module_board``."""
+        return jsonify(compute_pattern_game_module_board())
 
     @app.get("/api/search-space-estimate")
     def search_space_estimate() -> Any:
@@ -1441,6 +1401,25 @@ PAGE_HTML = """<!DOCTYPE html>
     .mem-no { background: #f0e8e8; color: #8a3a3a; }
     .gh-on { background: #e8f0fe; color: #175cd3; }
     .gh-off { background: #f4f1ea; color: #6a6570; }
+    .pg-module-dialog {
+      border: none;
+      border-radius: 16px;
+      padding: 0;
+      max-width: min(540px, 94vw);
+      background: #fffefb;
+      color: #24303d;
+      box-shadow: 0 16px 48px rgba(0, 0, 0, 0.35);
+    }
+    .pg-module-dialog::backdrop { background: rgba(10, 22, 30, 0.55); }
+    .pg-module-dialog-inner { padding: 20px 44px 18px 22px; position: relative; }
+    .pg-module-dialog-h2 { margin: 0 0 8px; font-size: 1.15rem; color: #183343; }
+    .pg-module-role { margin: 0 0 12px; font-size: 0.78rem; color: #5a6570; font-weight: 600; }
+    .pg-module-body { margin: 0; white-space: pre-wrap; font-family: var(--pg-mono); font-size: 0.78rem; line-height: 1.5; color: #3a4450; max-height: min(52vh, 420px); overflow: auto; }
+    .pg-module-dialog-close { position: absolute; top: 8px; right: 10px; border: 0; background: transparent; font-size: 1.5rem; line-height: 1; cursor: pointer; color: #6a7580; padding: 4px 8px; border-radius: 8px; }
+    .pg-module-dialog-close:hover { background: #f0f4f8; color: #183343; }
+    #moduleBoardList .pg-status-item { cursor: pointer; }
+    #moduleBoardList .pg-status-item:hover { filter: brightness(1.03); }
+    #moduleBoardList .pg-status-item:focus { outline: 2px solid #2a8fd9; outline-offset: 2px; }
     .policy-outcome-panel .hint { font-size: 0.78rem; color: var(--pg-muted); margin: 0 0 10px 0; line-height: 1.4; }
     .pg-evidence-panel .policy-outcome-panel {
       margin: 0;
@@ -1653,15 +1632,24 @@ PAGE_HTML = """<!DOCTYPE html>
         <summary>
           <span class="pg-header-evidence-title">Modules online</span>
           <span class="pg-chip pg-chip-rose" style="border-color:rgba(255,255,255,0.25);color:#f5d0cc">Health</span>
-          <p class="pg-header-evidence-hint">Green / red — wiring check only (not enable/disable). Expand for the full list.</p>
+          <p class="pg-header-evidence-hint">Each dot = a real wiring check (not decoration). Groundhog green = behavioral bundle <strong>armed</strong>. Click any row for what it does (DEF-001).</p>
         </summary>
         <div class="pg-header-drawer-inner">
-          <div class="pg-pill-row"><span class="pg-pill">Green = OK</span><span class="pg-pill">Red = issue</span></div>
+          <div class="pg-pill-row"><span class="pg-pill">Green = check passed</span><span class="pg-pill">Red = not wired / not armed</span></div>
           <div class="pg-status-list" id="moduleBoardList"><p class="caps" style="margin:0;color:rgba(247,241,230,0.75)">Loading…</p></div>
         </div>
       </details>
       </div>
     </header>
+
+    <dialog id="moduleDetailDialog" class="pg-module-dialog" aria-labelledby="moduleModalTitle">
+      <div class="pg-module-dialog-inner">
+        <button type="button" class="pg-module-dialog-close" id="moduleModalClose" aria-label="Close">×</button>
+        <h2 id="moduleModalTitle" class="pg-module-dialog-h2"></h2>
+        <p id="moduleModalRole" class="pg-module-role"></p>
+        <pre id="moduleModalBody" class="pg-module-body"></pre>
+      </div>
+    </dialog>
 
     <section class="pg-row pg-row-main">
       <details class="pg-panel-fold pg-panel-controls" open>
@@ -1677,7 +1665,7 @@ PAGE_HTML = """<!DOCTYPE html>
         <div class="pg-panel-fold-body">
         <div class="def001-science" role="region" aria-label="DEF-001">
           <span class="def001-tag">DEF-001 · SCIENCE / EVALUATION ONLY</span>
-          <p style="margin:0">Deterministic replay — no in-band policy training. Record: <code>docs/architect/pattern_game_operator_deficiencies_work_record.md</code></p>
+          <p style="margin:0">Same inputs + same code → reproducible Referee stats. <strong>No</strong> automatic policy training in the replay loop. “Memory” in logs is evidence or promoted bundle — not silent learning. Full contract: <code>docs/architect/pattern_game_operator_deficiencies_work_record.md</code> (DEF-001).</p>
         </div>
         <details class="help-details pg-help">
           <summary>Setup, PYTHONPATH, Groundhog</summary>
@@ -2521,18 +2509,51 @@ PAGE_HTML = """<!DOCTYPE html>
     refreshGroundhog();
     setInterval(refreshGroundhog, 60000);
 
+    function openModuleModal(m) {
+      const d = document.getElementById('moduleDetailDialog');
+      const t = document.getElementById('moduleModalTitle');
+      const rr = document.getElementById('moduleModalRole');
+      const b = document.getElementById('moduleModalBody');
+      if (!d || !t || !b) return;
+      t.textContent = m.title || m.label || m.id || 'Module';
+      const roleMap = {
+        ui: 'UI shell',
+        core_replay: 'Core replay (Referee path)',
+        evidence: 'Evidence / audit (does not change next run by itself)',
+        behavioral_memory: 'Behavioral memory (promoted bundle may merge into manifest)',
+        interpretation: 'Interpretation / notes',
+        ops_suggestion: 'Suggestion / planning (not Referee truth)',
+        narrative: 'Narrative / reporting (not Referee scoring)',
+      };
+      const rn = m.role ? (roleMap[m.role] || m.role) : '';
+      if (rr) rr.textContent = rn ? ('Category: ' + rn) : '';
+      b.textContent = (m.body != null && String(m.body).trim()) ? String(m.body) : String(m.detail || '');
+      if (d.showModal) d.showModal();
+    }
+    (function wireModuleModalClose() {
+      const d = document.getElementById('moduleDetailDialog');
+      const c = document.getElementById('moduleModalClose');
+      if (c && d) {
+        c.addEventListener('click', function () { if (d.close) d.close(); });
+      }
+      if (d) {
+        d.addEventListener('click', function (ev) {
+          if (ev.target === d && d.close) d.close();
+        });
+      }
+    })();
+
     async function refreshModuleBoard() {
       const list = document.getElementById('moduleBoardList');
       const dot = document.getElementById('moduleBannerDot');
       const bv = document.getElementById('bannerModulesV');
       const bs = document.getElementById('bannerModulesS');
       function setModuleBanner(okCount, total, sub) {
-        if (bv) bv.textContent = (total > 0) ? (okCount + '/' + total + ' OK') : '—';
+        if (bv) bv.textContent = (total > 0) ? (okCount + '/' + total + ' passed') : '—';
         if (bs) bs.textContent = sub || '';
         if (dot) {
           if (!total) dot.className = 'status-dot';
           else if (okCount === total) dot.className = 'status-dot ok';
-          else if (okCount === 0) dot.className = 'status-dot bad';
           else dot.className = 'status-dot bad';
         }
       }
@@ -2558,17 +2579,26 @@ PAGE_HTML = """<!DOCTYPE html>
           if (m.ok) okCount++;
           const row = document.createElement('div');
           row.className = 'pg-status-item';
+          row.setAttribute('role', 'button');
+          row.setAttribute('tabindex', '0');
           const det = (m.detail != null) ? String(m.detail) : '';
           row.innerHTML =
             '<span class="status-dot ' + (m.ok ? 'ok' : 'bad') + '" title="' + escapeHtml(det.slice(0, 500)) + '"></span>' +
             '<div><div class="pg-status-name">' + escapeHtml(m.label || m.id || '—') + '</div>' +
             '<div class="pg-status-meta">' + escapeHtml(det.slice(0, 280)) + '</div></div>';
+          row.addEventListener('click', function () { openModuleModal(m); });
+          row.addEventListener('keydown', function (ev) {
+            if (ev.key === 'Enter' || ev.key === ' ') {
+              ev.preventDefault();
+              openModuleModal(m);
+            }
+          });
           list.appendChild(row);
         }
         const bad = mods.length - okCount;
         const sub = (bad === 0)
-          ? 'All subsystems report OK'
-          : (okCount + ' OK · ' + bad + ' need attention');
+          ? 'All wiring checks passed'
+          : (okCount + ' passed · ' + bad + ' not wired / not armed');
         setModuleBanner(okCount, mods.length, sub);
       } catch (e) {
         list.innerHTML = '<p class="caps" style="margin:0;color:rgba(247,241,230,0.75)">' + escapeHtml(friendlyFetchError(e)) + '</p>';

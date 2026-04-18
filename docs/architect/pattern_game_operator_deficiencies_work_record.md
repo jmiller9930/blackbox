@@ -31,7 +31,7 @@
 | **Expected operator outcome** | Words like “learning,” “ledger,” and “memory” suggest the **system updates its own policy** from results. |
 | **Observed now (evidence)** | `LearningLedger` **does not** tune parameters (`renaissance_v4/research/learning_ledger.py`). Referee is **deterministic replay** (`renaissance_v4/game_theory/run_session_log.py`). Hard rules: **learning** in the sense of progress requires **changing inputs** and comparing runs (`renaissance_v4/game_theory/anna_hard_rules.py`). Pattern-game core does not implement an **online learner**. |
 | **Requested remediation** | (1) **This document + UI callout** state the science-only contract. (2) Prefer terms like **metrics**, **evaluation**, **iteration memory** where we mean logs and human follow-up. (3) Any future **closed-loop learning** is a **new** spec/DEF with acceptance tests—not a rename of DEF-001. |
-| **Status** | in progress (surfaced in UI + doc; close when copy is stable and agreed) |
+| **Status** | **done** (2026-04-18) — DEF-001 callout + contract copy in `renaissance_v4/game_theory/web_app.py`; module board **v2.0.0** uses **truthful** green/red wiring checks + per-module modal (Groundhog green = merge ON + bundle on disk = behavioral path **armed**); tests: `tests/test_module_board.py`. |
 
 ---
 
