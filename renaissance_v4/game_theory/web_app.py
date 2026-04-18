@@ -12,7 +12,8 @@ instant I/O). Folders look like ``batch_<UTC>_<id>/`` with ``BATCH_README.md`` a
 ``session_log_batch_dir`` when present.
 
 Parallel batches append one line per run to ``batch_scorecard.jsonl`` (UTC start/end, duration,
-counts) and expose ``batch_timing`` on the API; see ``GET /api/batch-scorecard``.
+counts, **run_ok_pct**, **referee_win_pct**) and expose ``batch_timing`` on the API; see
+``GET /api/batch-scorecard``.
 
 Operator **retrospective** (learn / next experiment): ``GET /api/retrospective-log``,
 ``POST /api/retrospective-append`` — persists to ``retrospective_log.jsonl`` (see
@@ -885,6 +886,8 @@ PAGE_HTML = """<!DOCTYPE html>
           <th>Processed</th>
           <th>OK</th>
           <th>Failed</th>
+          <th title="Scenarios that finished without worker error">Run OK %</th>
+          <th title="Paper session WIN ÷ (WIN+LOSS) for completed replays">Ref WIN %</th>
           <th>Workers</th>
           <th>Status</th>
         </tr>
@@ -1023,9 +1026,18 @@ PAGE_HTML = """<!DOCTYPE html>
       if (!el || !bt) return;
       const proc = (bt.total_processed != null) ? bt.total_processed : '—';
       const tot = (bt.total_scenarios != null) ? bt.total_scenarios : '—';
+      const ro = bt.run_ok_pct;
+      const rw = bt.referee_win_pct;
+      let pctBit = '';
+      if (ro != null && ro !== undefined && !Number.isNaN(Number(ro))) {
+        pctBit += ' · run OK ' + (Math.round(Number(ro) * 10) / 10).toFixed(1) + '%';
+      }
+      if (rw != null && rw !== undefined && !Number.isNaN(Number(rw))) {
+        pctBit += ' · Ref WIN ' + (Math.round(Number(rw) * 10) / 10).toFixed(1) + '%';
+      }
       el.textContent = 'Last completed batch: start ' + (bt.started_at_utc || '—') +
         ' → end ' + (bt.ended_at_utc || '—') + ' · duration ' + formatDurationSec(bt.duration_sec) +
-        ' · processed ' + proc + ' / planned ' + tot;
+        ' · processed ' + proc + ' / planned ' + tot + pctBit;
     }
 
     async function refreshScorecardHistory() {
@@ -1046,7 +1058,7 @@ PAGE_HTML = """<!DOCTYPE html>
         const rows = j.entries || [];
         if (!rows.length) {
           const tr = document.createElement('tr');
-          tr.innerHTML = '<td colspan="8" style="color:#8b98a5">No batches logged yet.</td>';
+          tr.innerHTML = '<td colspan="10" style="color:#8b98a5">No batches logged yet.</td>';
           tbody.appendChild(tr);
           return;
         }
@@ -1057,6 +1069,11 @@ PAGE_HTML = """<!DOCTYPE html>
             : '<span class="st-err">' + escapeHtml(e.status || '—') + '</span>';
           const proc = (e.total_processed != null) ? e.total_processed : '—';
           const dur = (e.duration_sec != null) ? formatDurationSec(e.duration_sec) : '—';
+          function pctCell(v) {
+            if (v == null || v === undefined || Number.isNaN(Number(v))) return '—';
+            const n = Number(v);
+            return (Math.round(n * 10) / 10).toFixed(1) + '%';
+          }
           tr.innerHTML =
             '<td>' + escapeHtml(e.started_at_utc || '—') + '</td>' +
             '<td>' + escapeHtml(e.ended_at_utc || '—') + '</td>' +
@@ -1064,6 +1081,8 @@ PAGE_HTML = """<!DOCTYPE html>
             '<td>' + escapeHtml(String(proc)) + '</td>' +
             '<td>' + escapeHtml(e.ok_count != null ? String(e.ok_count) : '—') + '</td>' +
             '<td>' + escapeHtml(e.failed_count != null ? String(e.failed_count) : '—') + '</td>' +
+            '<td>' + escapeHtml(pctCell(e.run_ok_pct)) + '</td>' +
+            '<td>' + escapeHtml(pctCell(e.referee_win_pct)) + '</td>' +
             '<td>' + escapeHtml(e.workers_used != null ? String(e.workers_used) : '—') + '</td>' +
             '<td>' + st + '</td>';
           tbody.appendChild(tr);

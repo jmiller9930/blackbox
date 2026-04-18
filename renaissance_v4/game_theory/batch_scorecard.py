@@ -1,5 +1,10 @@
 """
-Append-only **batch scorecard** for parallel pattern-game runs: UTC start/end, duration, totals.
+Append-only **batch scorecard** for parallel pattern-game runs: UTC start/end, duration, totals,
+and **percentage scores**.
+
+- **run_ok_pct** — share of scenarios whose worker finished without exception (``ok`` true).
+- **referee_win_pct** — share of **WIN** vs (WIN+LOSS) among completed replays (paper session;
+  excludes ERROR rows from denominator).
 
 Persists to ``batch_scorecard.jsonl`` (under ``PATTERN_GAME_MEMORY_ROOT`` when set). Safe for
 operators to tail or ship to analysis; one JSON object per line.
@@ -18,6 +23,42 @@ from renaissance_v4.game_theory.memory_paths import default_batch_scorecard_json
 
 _APPEND_LOCK = threading.Lock()
 SCHEMA_V1 = "pattern_game_batch_scorecard_v1"
+
+
+def compute_batch_score_percentages(results: list[dict[str, Any]] | None) -> dict[str, Any]:
+    """
+    Aggregates for one parallel batch.
+
+    ``referee_win_pct`` is None when no scenario returned WIN or LOSS (e.g. all failed before replay).
+    """
+    if not results:
+        return {
+            "run_ok_pct": None,
+            "referee_win_pct": None,
+            "referee_wins": 0,
+            "referee_losses": 0,
+        }
+    n = len(results)
+    ok_n = sum(1 for r in results if r.get("ok"))
+    run_ok_pct = round(100.0 * ok_n / n, 1) if n else None
+    wins = 0
+    losses = 0
+    for r in results:
+        if not r.get("ok"):
+            continue
+        rs = r.get("referee_session")
+        if rs == "WIN":
+            wins += 1
+        elif rs == "LOSS":
+            losses += 1
+    judged = wins + losses
+    referee_win_pct = round(100.0 * wins / judged, 1) if judged else None
+    return {
+        "run_ok_pct": run_ok_pct,
+        "referee_win_pct": referee_win_pct,
+        "referee_wins": wins,
+        "referee_losses": losses,
+    }
 
 
 def utc_timestamp_iso() -> str:
@@ -96,10 +137,20 @@ def format_batch_scorecard_for_prompt(
         if err:
             es = str(err).replace("\n", " ")
             err_s = f"\n   - error: {es[:480]}{'…' if len(es) > 480 else ''}"
+        ro = r.get("run_ok_pct")
+        rw = r.get("referee_win_pct")
+        pct_s = ""
+        if ro is not None or rw is not None:
+            parts = []
+            if ro is not None:
+                parts.append(f"run_ok={ro}%")
+            if rw is not None:
+                parts.append(f"ref_WIN={rw}%")
+            pct_s = " · " + " · ".join(parts)
         lines_out.append(
             f"{i}. **{ts}** · status={st} · job_id={job_s}\n"
             f"   - processed {r.get('total_processed')}/{r.get('total_scenarios')} scenarios · "
-            f"ok={r.get('ok_count')} failed={r.get('failed_count')} · workers={r.get('workers_used')} · "
+            f"ok={r.get('ok_count')} failed={r.get('failed_count')}{pct_s} · workers={r.get('workers_used')} · "
             f"duration_sec={r.get('duration_sec')}{err_s}\n"
         )
     body = "".join(lines_out)
@@ -158,7 +209,13 @@ def record_parallel_batch_finished(
     )
 
     if error:
-        record: dict[str, Any] = {
+        pct_fields: dict[str, Any] = {
+            "run_ok_pct": 0.0,
+            "referee_win_pct": None,
+            "referee_wins": 0,
+            "referee_losses": 0,
+        }
+        record = {
             "schema": SCHEMA_V1,
             "job_id": job_id,
             "source": source,
@@ -173,10 +230,12 @@ def record_parallel_batch_finished(
             "workers_used": workers_used,
             "status": "error",
             "error": error[:4000],
+            **pct_fields,
         }
     else:
         res = results or []
         ok_n = sum(1 for r in res if r.get("ok"))
+        pct_fields = compute_batch_score_percentages(res)
         record = {
             "schema": SCHEMA_V1,
             "job_id": job_id,
@@ -191,7 +250,8 @@ def record_parallel_batch_finished(
             "workers_used": workers_used,
             "status": "done",
             "session_log_batch_dir": session_log_batch_dir,
+            **pct_fields,
         }
 
     append_batch_scorecard_line(record, path=path)
-    return timing
+    return {**timing, **pct_fields}
