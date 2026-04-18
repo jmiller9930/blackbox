@@ -24,10 +24,36 @@ from renaissance_v4.game_theory.parallel_runner import (
     get_parallel_limits,
     run_scenarios_parallel,
 )
-from renaissance_v4.game_theory.pattern_game import _default_manifest_path, json_summary, run_pattern_game
+from renaissance_v4.game_theory.pattern_game import (
+    PATTERN_GAME_STARTING_EQUITY_USD_SPEC,
+    _default_manifest_path,
+    json_summary,
+    run_pattern_game,
+)
 from renaissance_v4.game_theory.scenario_contract import validate_scenarios
 
 _GAME_THEORY = Path(__file__).resolve().parent
+
+
+def _batch_pnl_summary(results: list[dict[str, Any]]) -> dict[str, Any]:
+    """Sum Referee ``cumulative_pnl`` across successful scenarios (independent replays, not one portfolio)."""
+    start = float(PATTERN_GAME_STARTING_EQUITY_USD_SPEC)
+    total = 0.0
+    for r in results:
+        if not r.get("ok"):
+            continue
+        p = r.get("cumulative_pnl")
+        if isinstance(p, (int, float)):
+            total += float(p)
+    return {
+        "starting_equity_usd": start,
+        "batch_total_pnl_usd": total,
+        "ending_equity_usd": start + total,
+        "note": (
+            "Paper baseline is the spec $1k starting equity per replay. "
+            "A multi-scenario batch sums each scenario’s cumulative PnL (separate runs)."
+        ),
+    }
 
 
 def create_app() -> Flask:
@@ -36,7 +62,11 @@ def create_app() -> Flask:
     @app.get("/")
     def index() -> str:
         lim = get_parallel_limits()
-        return PAGE_HTML.replace("__LIMITS_JSON__", json.dumps(lim))
+        return (
+            PAGE_HTML.replace("__LIMITS_JSON__", json.dumps(lim)).replace(
+                "__STARTING_EQUITY__", str(float(PATTERN_GAME_STARTING_EQUITY_USD_SPEC))
+            )
+        )
 
     @app.get("/api/capabilities")
     def capabilities() -> Any:
@@ -86,7 +116,17 @@ def create_app() -> Flask:
                 emit_baseline_artifacts=emit,
                 verbose=False,
             )
-            return jsonify({"ok": True, "summary": json_summary(out)})
+            js = json_summary(out)
+            cpn = out.get("cumulative_pnl")
+            pnl = float(cpn) if isinstance(cpn, (int, float)) else 0.0
+            start = float(PATTERN_GAME_STARTING_EQUITY_USD_SPEC)
+            pnl_summary = {
+                "starting_equity_usd": start,
+                "batch_total_pnl_usd": pnl,
+                "ending_equity_usd": start + pnl,
+                "note": "Single manifest replay: cumulative PnL vs spec $1k paper baseline.",
+            }
+            return jsonify({"ok": True, "summary": js, "pnl_summary": pnl_summary})
         except Exception as e:
             return jsonify({"ok": False, "error": f"{type(e).__name__}: {e}"}), 400
 
@@ -156,6 +196,7 @@ def create_app() -> Flask:
                     "ok_count": ok_n,
                     "failed_count": len(results) - ok_n,
                     "results": results,
+                    "pnl_summary": _batch_pnl_summary(results),
                     "limits_applied": get_parallel_limits(),
                     "workers_used": workers_used,
                     "scenario_validation": {"ok": True, "messages": val_msgs},
@@ -210,6 +251,40 @@ PAGE_HTML = """<!DOCTYPE html>
     .health-bar .status-dot.bad { background: #f4212e; box-shadow: 0 0 8px rgba(244,33,46,0.35); }
     .health-title { font-weight: 600; color: #e7e9ea; margin-right: 6px; }
     .health-detail { color: #8b98a5; }
+    .pnl-strip {
+      padding: 12px 12px; margin-bottom: 16px; border-radius: 8px;
+      background: #15202b; border: 1px solid #38444d; font-size: 0.88rem;
+    }
+    .pnl-strip .pnl-row1 {
+      display: flex; flex-wrap: wrap; align-items: baseline; gap: 10px 16px;
+      margin-bottom: 8px;
+    }
+    .pnl-strip .pnl-title { font-weight: 600; color: #e7e9ea; }
+    .pnl-strip .pnl-baseline { color: #8b98a5; font-size: 0.8rem; }
+    .pnl-strip .pnl-ending { font-size: 1.15rem; font-weight: 700; font-variant-numeric: tabular-nums; color: #e7e9ea; }
+    .pnl-strip .pnl-delta { font-weight: 600; font-variant-numeric: tabular-nums; }
+    .pnl-strip .pnl-delta.up { color: #00ba7c; }
+    .pnl-strip .pnl-delta.down { color: #f4212e; }
+    .pnl-strip .pnl-delta.neutral { color: #8b98a5; }
+    .pnl-bar-wrap { position: relative; margin-top: 4px; }
+    .pnl-bar-track {
+      height: 10px; border-radius: 5px; background: linear-gradient(90deg, #2a1a1a 0%, #38444d 50%, #1a2a1f 100%);
+      position: relative;
+    }
+    .pnl-bar-ticks {
+      display: flex; justify-content: space-between; font-size: 0.65rem; color: #536471; margin-top: 4px;
+    }
+    .pnl-marker {
+      position: absolute; top: -3px; width: 4px; height: 16px; margin-left: -2px;
+      border-radius: 2px; background: #e7e9ea; box-shadow: 0 0 6px rgba(231,233,234,0.35);
+      transform: translateX(-50%); left: 50%;
+    }
+    .pnl-fill {
+      position: absolute; top: 0; height: 10px; border-radius: 5px; opacity: 0.65;
+      pointer-events: none;
+    }
+    .pnl-fill.up { background: #00ba7c; }
+    .pnl-fill.down { background: #f4212e; }
     input[type=checkbox] { width: auto; }
     input[type=range] { width: 100%; accent-color: #1d9bf0; }
     .progress-wrap { display: none; margin: 12px 0 8px; }
@@ -233,6 +308,22 @@ PAGE_HTML = """<!DOCTYPE html>
     <span class="status-dot" id="healthDot" title="Data status"></span>
     <span class="health-title">Financial data</span>
     <span class="health-detail" id="healthText">Checking database…</span>
+  </div>
+
+  <div class="pnl-strip" id="pnlStrip" title="Paper equity vs spec $1k baseline; updates after each batch run.">
+    <div class="pnl-row1">
+      <span class="pnl-title">Paper P&amp;L</span>
+      <span class="pnl-baseline">Baseline <span id="pnlBaselineLabel">$1,000.00</span> (spec)</span>
+      <span class="pnl-ending" id="pnlEnding">$1,000.00</span>
+      <span class="pnl-delta neutral" id="pnlDelta">— run a batch —</span>
+    </div>
+    <div class="pnl-bar-wrap" aria-hidden="true">
+      <div class="pnl-bar-track" id="pnlBarTrack">
+        <div class="pnl-fill" id="pnlFill" style="left:50%;width:0;"></div>
+        <div class="pnl-marker" id="pnlMarker"></div>
+      </div>
+      <div class="pnl-bar-ticks"><span>$0</span><span>$1k</span><span>$2k</span></div>
+    </div>
   </div>
 
   <h1>Pattern game — local prototype</h1>
@@ -269,6 +360,7 @@ PAGE_HTML = """<!DOCTYPE html>
 
   <script>
     const LIMITS = __LIMITS_JSON__;
+    const STARTING_EQUITY = __STARTING_EQUITY__;
     const RUN_TIMEOUT_MS = 7200000;
 
     const rangeEl = document.getElementById('workersRange');
@@ -295,6 +387,54 @@ PAGE_HTML = """<!DOCTYPE html>
       if (err) { pre.innerHTML = '<span class="err">' + err + '</span>'; return; }
       pre.textContent = JSON.stringify(data, null, 2);
     }
+
+    function formatUsd(n) {
+      const x = Number(n);
+      if (Number.isNaN(x)) return '$—';
+      const abs = Math.abs(x);
+      const s = (x < 0 ? '-' : '') + '$' + abs.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+      return s;
+    }
+
+    function updatePnlStrip(pnl) {
+      if (!pnl || typeof pnl.ending_equity_usd !== 'number') return;
+      const end = pnl.ending_equity_usd;
+      const delta = pnl.batch_total_pnl_usd;
+      document.getElementById('pnlEnding').textContent = formatUsd(end);
+      const dEl = document.getElementById('pnlDelta');
+      if (Math.abs(delta) < 1e-9) {
+        dEl.textContent = '$0.00 vs baseline';
+        dEl.className = 'pnl-delta neutral';
+      } else {
+        dEl.textContent = (delta >= 0 ? '+' : '−') + formatUsd(Math.abs(delta)) + ' vs baseline';
+        dEl.className = 'pnl-delta ' + (delta >= 0 ? 'up' : 'down');
+      }
+      const lo = 0, hi = 2000;
+      const pct = Math.max(0, Math.min(100, ((end - lo) / (hi - lo)) * 100));
+      const m = document.getElementById('pnlMarker');
+      m.style.left = pct + '%';
+      const baselinePct = ((STARTING_EQUITY - lo) / (hi - lo)) * 100;
+      const fill = document.getElementById('pnlFill');
+      const left = Math.min(baselinePct, pct);
+      const width = Math.abs(pct - baselinePct);
+      fill.style.left = left + '%';
+      fill.style.width = width + '%';
+      fill.className = 'pnl-fill ' + (end >= STARTING_EQUITY ? 'up' : 'down');
+      document.getElementById('pnlStrip').title = (pnl.note || '') + ' Ending equity shown on 0–$2k track (clamp).';
+    }
+
+    function resetPnlStrip() {
+      document.getElementById('pnlEnding').textContent = formatUsd(STARTING_EQUITY);
+      document.getElementById('pnlDelta').textContent = '— run a batch —';
+      document.getElementById('pnlDelta').className = 'pnl-delta neutral';
+      document.getElementById('pnlMarker').style.left = Math.max(0, Math.min(100, (STARTING_EQUITY / 2000) * 100)) + '%';
+      const f = document.getElementById('pnlFill');
+      f.style.left = '50%';
+      f.style.width = '0';
+      f.className = 'pnl-fill up';
+    }
+    document.getElementById('pnlBaselineLabel').textContent = formatUsd(STARTING_EQUITY);
+    resetPnlStrip();
 
     function friendlyFetchError(e) {
       const m = (e && (e.message || String(e))) || '';
@@ -335,6 +475,7 @@ PAGE_HTML = """<!DOCTYPE html>
         });
         const j = await r.json();
         if (!r.ok) { await show(null, null, j.error || JSON.stringify(j)); statusLine.textContent = 'Finished with error — see Result.'; return; }
+        if (j.pnl_summary) { updatePnlStrip(j.pnl_summary); }
         await show(null, j, null);
         statusLine.textContent = 'Finished — see Result below.';
       } catch (e) {
