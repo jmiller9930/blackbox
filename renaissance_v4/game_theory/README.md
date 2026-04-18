@@ -60,17 +60,34 @@ Each **element** of the JSON array is one scenario object with `manifest_path` a
 | `atr_target_mult` | number | Override take-profit as ATR multiple. |
 | `emit_baseline_artifacts` | boolean | Emit extra replay reports when true. |
 
-### Optional (agent / training — **echoed in results, not scored**)
+### Optional (agent / tier / window — **echoed in results, not scored**)
 
 These are **whitelisted** and copied into each parallel result (and JSONL log lines) for operators and downstream ML:
 
 | Field | Type | Meaning |
 |-------|------|--------|
-| `agent_explanation` | object (recommended) or string | **Why** this candidate was proposed, **which values** / knobs matter, **what was learned** from prior trials, and **how behavior changed** vs a prior scenario. Suggested object keys: `why_this_strategy`, `indicator_values`, `learned`, `behavior_change` (all freeform). |
+| `tier` | string | Game tier label, e.g. **`T1`**. Same engine; payload differs by tier in later phases. |
+| `evaluation_window` | object | Declarative evaluation intent. For the standard **12‑month** run use e.g. `{ "calendar_months": 12 }` plus any notes. **Referee note:** replay today still uses the bar range available in SQLite until optional date/window slicing is implemented; this field is still **required contract** for comparisons and audit. |
+| `game_spec_ref` | string | Which written spec this row follows (e.g. `GAME_SPEC_INDICATOR_PATTERN_V1.md`). |
+| `agent_explanation` | object (recommended) or string | Partner- or agent-authored **story**: why this candidate, which values, what was learned, behavior vs prior. Suggested keys: `why_this_strategy`, `indicator_values`, `learned`, `behavior_change`. |
 | `training_trace_id` | string | Idempotency / grouping id for a training or search batch. |
 | `prior_scenario_id` | string | Link to the previous scenario in a curriculum or chain. |
 
-**Rules:** The Referee **does not** parse `agent_explanation` for WIN/LOSS. Undocumented top-level keys are **ignored** by the runner (you may get a validation **warning** in the API). For a filled-in example see `examples/parallel_scenarios_with_agent_trace.example.json`.
+**Rules:** The Referee **does not** use these fields for WIN/LOSS. Undocumented top-level keys are **ignored** by the runner (you may get a validation **warning** in the API).
+
+### Tier 1 + twelve months (shared default)
+
+For **everyone running the same T1 / 12‑month contract**, start from:
+
+- **`examples/tier1_twelve_month.example.json`** — runnable preset with `tier: "T1"` and `evaluation_window.calendar_months: 12`.
+- **`examples/tier1_scenario.template.json`** — same shape with empty `agent_explanation` strings for a partner to fill in (copy to a new file or paste in the web UI).
+
+Other examples: `parallel_scenarios.example.json`, `parallel_scenarios_with_agent_trace.example.json`.
+
+### Templates & pickle-friendly lists
+
+- **Template:** JSON array of objects — copy `tier1_scenario.template.json`, edit `scenario_id` and `agent_explanation`, keep `tier` / `evaluation_window` unless the run definition changes.
+- **Pickle / multiprocessing:** Build scenarios as **`list[dict]`** with **JSON types only** (`str`, `int`, `float`, `bool`, `null`, `list`, `dict`). Do **not** put `Path`, classes, or callables in scenario dicts; workers **pickle** each dict. Typical pattern: `scenarios = json.loads(path.read_text())` then `run_scenarios_parallel(scenarios, ...)`.
 
 ### Web UI presets
 

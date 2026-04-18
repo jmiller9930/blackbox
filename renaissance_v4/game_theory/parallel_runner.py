@@ -16,7 +16,7 @@ from pathlib import Path
 from typing import Any
 
 from renaissance_v4.game_theory.pattern_game import json_summary, run_pattern_game
-from renaissance_v4.game_theory.scenario_contract import extract_agent_fields
+from renaissance_v4.game_theory.scenario_contract import extract_scenario_echo_fields
 
 DEFAULT_WORKERS = max(1, (os.cpu_count() or 4))
 
@@ -77,7 +77,7 @@ def _worker_run_one(scenario: dict[str, Any]) -> dict[str, Any]:
             "dataset_bars": out.get("dataset_bars"),
             "manifest_path": str(scenario.get("manifest_path", "")),
         }
-        row.update(extract_agent_fields(scenario))
+        row.update(extract_scenario_echo_fields(scenario))
         return row
     except Exception as e:
         row = {
@@ -86,7 +86,7 @@ def _worker_run_one(scenario: dict[str, Any]) -> dict[str, Any]:
             "error": f"{type(e).__name__}: {e}",
             "manifest_path": str(scenario.get("manifest_path", "")),
         }
-        row.update(extract_agent_fields(scenario))
+        row.update(extract_scenario_echo_fields(scenario))
         return row
 
 
@@ -109,9 +109,9 @@ def run_scenarios_parallel(
     Run each scenario in a process pool. Order of results is **completion** order unless you sort by scenario_id.
 
     Each scenario dict should include ``manifest_path`` and optional ``scenario_id``, ``atr_stop_mult``,
-    ``atr_target_mult``, ``emit_baseline_artifacts``. Optional **agent / training** fields
-    (``agent_explanation``, ``training_trace_id``, ``prior_scenario_id``) are echoed in each result
-    for audit; the Referee does not use them for scoring. See ``scenario_contract.py`` / README.
+    ``atr_target_mult``, ``emit_baseline_artifacts``. Optional **echo** fields (tier,
+    ``evaluation_window``, ``agent_explanation``, ids, etc.) are copied into each result for audit;
+    the Referee does not use them for scoring. See ``scenario_contract.py`` / README.
 
     If ``experience_log_path`` is set, append one JSON line per result (parent process only).
     """

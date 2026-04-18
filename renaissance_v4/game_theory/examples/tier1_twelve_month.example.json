@@ -1,0 +1,19 @@
+[
+  {
+    "scenario_id": "tier1_twelve_month_default",
+    "tier": "T1",
+    "evaluation_window": {
+      "calendar_months": 12,
+      "referee_note": "Declarative T1 / 12-month contract; full replay uses current SQLite bar range until optional date slicing lands."
+    },
+    "game_spec_ref": "GAME_SPEC_INDICATOR_PATTERN_V1.md",
+    "manifest_path": "renaissance_v4/configs/manifests/baseline_v1_recipe.json",
+    "training_trace_id": "tier1_batch_v1",
+    "agent_explanation": {
+      "why_this_strategy": "Runnable preset; replace with partner narrative.",
+      "indicator_values": {},
+      "learned": "",
+      "behavior_change": ""
+    }
+  }
+]

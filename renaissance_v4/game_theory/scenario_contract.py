@@ -3,6 +3,11 @@ Scenario batch JSON — required shape for parallel_runner / web UI.
 
 The Referee uses only manifest_path + optional ATR overrides. Optional *agent* fields are
 echoed in results for training / audit (they do not change deterministic replay scores).
+
+**Pickle / multiprocessing:** Each scenario must be a dict built from JSON-serializable
+values only (``str``, ``int``, ``float``, ``bool``, ``None``, ``list``, ``dict``). Pass
+``list[dict]`` loaded from JSON or built in code — do not put ``Path`` objects or callables
+in scenario dicts (workers pickle these dicts).
 """
 
 from __future__ import annotations
@@ -10,21 +15,32 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-# Keys copied from each scenario dict into worker results (for ML / operator trace).
-AGENT_ECHO_KEYS: tuple[str, ...] = (
+# Keys copied from each scenario dict into worker results (audit trail; not used for scoring).
+SCENARIO_ECHO_KEYS: tuple[str, ...] = (
     "agent_explanation",
     "training_trace_id",
     "prior_scenario_id",
+    "tier",
+    "evaluation_window",
+    "game_spec_ref",
 )
 
+# Backward-compatible name
+AGENT_ECHO_KEYS = SCENARIO_ECHO_KEYS
 
-def extract_agent_fields(scenario: dict[str, Any]) -> dict[str, Any]:
-    """Return whitelisted agent/training metadata for JSON-safe echo in results."""
+
+def extract_scenario_echo_fields(scenario: dict[str, Any]) -> dict[str, Any]:
+    """Return whitelisted metadata for JSON-safe echo in parallel results."""
     out: dict[str, Any] = {}
-    for k in AGENT_ECHO_KEYS:
+    for k in SCENARIO_ECHO_KEYS:
         if k in scenario and scenario[k] is not None:
             out[k] = scenario[k]
     return out
+
+
+def extract_agent_fields(scenario: dict[str, Any]) -> dict[str, Any]:
+    """Alias for :func:`extract_scenario_echo_fields`."""
+    return extract_scenario_echo_fields(scenario)
 
 
 def validate_scenarios(
@@ -48,7 +64,7 @@ def validate_scenarios(
         "atr_stop_mult",
         "atr_target_mult",
         "emit_baseline_artifacts",
-        *AGENT_ECHO_KEYS,
+        *SCENARIO_ECHO_KEYS,
     }
 
     for i, s in enumerate(scenarios):

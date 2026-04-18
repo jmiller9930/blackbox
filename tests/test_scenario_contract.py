@@ -4,7 +4,11 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from renaissance_v4.game_theory.scenario_contract import extract_agent_fields, validate_scenarios
+from renaissance_v4.game_theory.scenario_contract import (
+    extract_agent_fields,
+    extract_scenario_echo_fields,
+    validate_scenarios,
+)
 
 
 def test_validate_scenarios_requires_manifest_path() -> None:
@@ -37,3 +41,16 @@ def test_extract_agent_fields_subset() -> None:
     assert "noise" not in d
     assert d["training_trace_id"] == "t"
     assert d["agent_explanation"]["why_this_strategy"] == "q"
+
+
+def test_extract_scenario_echo_includes_tier_fields() -> None:
+    d = extract_scenario_echo_fields(
+        {
+            "manifest_path": "/m",
+            "tier": "T1",
+            "evaluation_window": {"calendar_months": 12},
+            "game_spec_ref": "GAME_SPEC_INDICATOR_PATTERN_V1.md",
+        }
+    )
+    assert d["tier"] == "T1"
+    assert d["evaluation_window"]["calendar_months"] == 12
