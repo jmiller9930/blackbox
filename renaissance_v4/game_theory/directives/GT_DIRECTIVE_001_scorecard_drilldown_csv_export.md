@@ -291,3 +291,35 @@ Notify the engineer to re-read:
 - [GT_DIRECTIVE_001_scorecard_drilldown_csv_export.md](/Users/bigmac/Documents/code_projects/blackbox/renaissance_v4/game_theory/directives/GT_DIRECTIVE_001_scorecard_drilldown_csv_export.md)
 
 The directive file now contains the architect rejection and rework requirements.
+
+---
+
+## Engineer update (2026-04-18 — implementation pass, operator-authorized)
+
+**Status:** implemented for operator review (pending architect acceptance).
+
+### Work performed
+
+- **Scorecard row drill-down:** Rows are clickable; selection loads **`GET /api/batch-detail?job_id=`** and renders batch metadata + scenario table below the scorecard.
+- **Batch detail:** Shows `job_id`, UTC start/end, duration, processed/ok/failed, workers, status, `session_log_batch_dir`, link to batch CSV.
+- **Scenario listing:** Parsed from **`BATCH_README.md`** under the batch folder, or inferred from subfolders containing **`run_record.json`**.
+- **Human + JSON access:** **`GET /api/batch-scenario-file?job_id=&scenario_id=&kind=human|json`** serves artifact files only under the resolved batch directory (path traversal blocked).
+- **CSV:** **`GET /api/batch-scorecard.csv`**, **`GET /api/batch-detail.csv?job_id=`** with required columns per directive.
+- **Memory / Groundhog:** Scenario table shows **memory applied** (yes/no) and **Groundhog** active/inactive from **`learning_memory_evidence`** in each **`run_record.json`** (artifact-backed).
+
+### Files changed (under `renaissance_v4/game_theory` only)
+
+- `scorecard_drill.py` — new: resolve job, parse batch folder, CSV builders, safe file read.
+- `web_app.py` — UI v**1.9.0**: routes above, scorecard toolbar + Job ID column + drill panel + JS.
+
+### Proof produced (local)
+
+- `python3 -m py_compile renaissance_v4/game_theory/scorecard_drill.py renaissance_v4/game_theory/web_app.py` — OK.
+- Operator: hard-refresh pattern-game page → version **v1.9.0** → download scorecard CSV → click scorecard row → see batch panel → open HUMAN / JSON links → download batch CSV.
+
+### Remaining gaps
+
+- **`docs/architect/pattern_game_operator_deficiencies_work_record.md`** was **not** edited (operator constraint: changes only inside `game_theory/`). Operator may paste a dated **DEF / GT_001** subsection there when allowed.
+- Trade-level attempt ledger beyond scenario **`run_record`** / Referee summary is **not** claimed; directive scientific rule respected.
+
+**Requesting architect acceptance** (when workflow resumes).

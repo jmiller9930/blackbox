@@ -57,7 +57,7 @@ from flask import Flask, Response, abort, jsonify, request
 _GAME_THEORY = Path(__file__).resolve().parent
 
 # Operator-visible web UI bundle version — bump when changing PAGE_HTML (HTML/CSS/JS) so deploys are provable.
-PATTERN_GAME_WEB_UI_VERSION = "1.8.0"
+PATTERN_GAME_WEB_UI_VERSION = "1.9.0"
 
 from renaissance_v4.game_theory.groundhog_memory import (
     groundhog_auto_merge_enabled,
@@ -99,6 +99,13 @@ from renaissance_v4.game_theory.scenario_contract import (
     extract_policy_contract_summary,
     referee_session_outcome,
     validate_scenarios,
+)
+from renaissance_v4.game_theory.scorecard_drill import (
+    batch_detail_csv_rows,
+    build_scenario_list_for_batch,
+    find_scorecard_entry_by_job_id,
+    read_scenario_artifact,
+    scorecard_history_csv,
 )
 
 _JOBS_LOCK = threading.Lock()
@@ -628,6 +635,79 @@ def create_app() -> Flask:
                 "entries": rows,
             }
         )
+
+    @app.get("/api/batch-scorecard.csv")
+    def api_batch_scorecard_csv() -> Any:
+        """CSV export of recent batch scorecard rows (same columns as GT_DIRECTIVE_001)."""
+        try:
+            limit = int(request.args.get("limit") or 25)
+        except (TypeError, ValueError):
+            limit = 25
+        limit = max(1, min(200, limit))
+        p = default_batch_scorecard_jsonl()
+        rows = read_batch_scorecard_recent(limit, path=p)
+        body = scorecard_history_csv(rows)
+        return Response(
+            body,
+            mimetype="text/csv; charset=utf-8",
+            headers={
+                "Content-Disposition": 'attachment; filename="pattern_game_batch_scorecard_history.csv"'
+            },
+        )
+
+    @app.get("/api/batch-detail")
+    def api_batch_detail() -> Any:
+        """Drill-down: scorecard line + scenario list from session batch folder."""
+        job_id = (request.args.get("job_id") or "").strip()
+        if not job_id:
+            return jsonify({"ok": False, "error": "job_id query parameter required"}), 400
+        entry = find_scorecard_entry_by_job_id(job_id)
+        if not entry:
+            return jsonify({"ok": False, "error": f"job_id not found in scorecard log: {job_id!r}"}), 404
+        _bd, scenarios, s_err = build_scenario_list_for_batch(job_id, entry.get("session_log_batch_dir"))
+        return jsonify(
+            {
+                "ok": True,
+                "scorecard": entry,
+                "batch_dir": str(_bd.resolve()) if _bd and _bd.is_dir() else None,
+                "scenarios": scenarios,
+                "scenario_list_error": s_err,
+            }
+        )
+
+    @app.get("/api/batch-detail.csv")
+    def api_batch_detail_csv() -> Any:
+        job_id = (request.args.get("job_id") or "").strip()
+        if not job_id:
+            return jsonify({"ok": False, "error": "job_id query parameter required"}), 400
+        entry = find_scorecard_entry_by_job_id(job_id)
+        if not entry:
+            return jsonify({"ok": False, "error": f"job_id not found: {job_id!r}"}), 404
+        _bd, scenarios, _err = build_scenario_list_for_batch(job_id, entry.get("session_log_batch_dir"))
+        body = batch_detail_csv_rows(job_id, scenarios)
+        safe = job_id.replace("/", "_")[:48]
+        return Response(
+            body,
+            mimetype="text/csv; charset=utf-8",
+            headers={
+                "Content-Disposition": f'attachment; filename="pattern_game_batch_{safe}_scenarios.csv"'
+            },
+        )
+
+    @app.get("/api/batch-scenario-file")
+    def api_batch_scenario_file() -> Any:
+        """Artifact-backed HUMAN_READABLE.md or run_record.json for one scenario in a batch."""
+        job_id = (request.args.get("job_id") or "").strip()
+        scenario_id = (request.args.get("scenario_id") or "").strip()
+        kind = (request.args.get("kind") or "human").strip().lower()
+        if kind not in ("human", "json"):
+            return jsonify({"ok": False, "error": "kind must be human or json"}), 400
+        if not job_id or not scenario_id:
+            return jsonify({"ok": False, "error": "job_id and scenario_id required"}), 400
+        data, ct, err = read_scenario_artifact(job_id, scenario_id, "human" if kind == "human" else "json")
+        if err or data is None:
+            return jsonify({"ok": False, "error": err or "not found"}), 404
+        return Response(data, mimetype=ct or "application/octet-stream")
 
     @app.get("/api/retrospective-log")
     def api_retrospective_log() -> Any:
@@ -1308,6 +1388,59 @@ PAGE_HTML = """<!DOCTYPE html>
     .scorecard-table th { background: #eef1f4; color: #5a6570; white-space: nowrap; }
     .st-ok { color: #1f8a54; font-weight: 600; }
     .st-err { color: #c65a16; font-weight: 600; }
+    .scorecard-toolbar {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px 14px;
+      align-items: center;
+      margin: 0 0 10px 0;
+    }
+    .scorecard-toolbar a {
+      font-size: 0.78rem;
+      padding: 8px 12px;
+      border-radius: 8px;
+      border: 1px solid var(--pg-line);
+      background: #fff;
+      color: var(--pg-accent);
+      text-decoration: none;
+      font-weight: 600;
+    }
+    .scorecard-toolbar a:hover { background: #f4f8ff; }
+    tr.scorecard-row { cursor: pointer; }
+    tr.scorecard-row:hover { background: #f0f4f8; }
+    tr.scorecard-row.selected { background: #e8f0fe; }
+    .batch-drill-panel {
+      margin-top: 12px;
+      padding: 12px;
+      border-radius: 12px;
+      border: 1px solid var(--pg-line);
+      background: #faf8f5;
+      font-size: 0.78rem;
+      display: none;
+    }
+    .batch-drill-panel.visible { display: block; }
+    .batch-drill-panel h3 { margin: 0 0 8px 0; font-size: 0.95rem; color: var(--pg-ink); }
+    .batch-drill-meta { margin: 0 0 10px 0; line-height: 1.5; word-break: break-all; }
+    .drill-scenario-table { width: 100%; border-collapse: collapse; font-size: 0.72rem; margin-top: 8px; }
+    .drill-scenario-table th, .drill-scenario-table td {
+      border: 1px solid #d5dce3;
+      padding: 5px 6px;
+      text-align: left;
+      vertical-align: top;
+    }
+    .drill-scenario-table th { background: #eef1f4; color: #5a6570; }
+    .mem-pill {
+      display: inline-block;
+      padding: 2px 7px;
+      border-radius: 4px;
+      font-size: 0.68rem;
+      font-weight: 700;
+      white-space: nowrap;
+    }
+    .mem-yes { background: #e3f4ea; color: #1f6a44; }
+    .mem-no { background: #f0e8e8; color: #8a3a3a; }
+    .gh-on { background: #e8f0fe; color: #175cd3; }
+    .gh-off { background: #f4f1ea; color: #6a6570; }
     .policy-outcome-panel .hint { font-size: 0.78rem; color: var(--pg-muted); margin: 0 0 10px 0; line-height: 1.4; }
     .pg-evidence-panel .policy-outcome-panel {
       margin: 0;
@@ -1635,10 +1768,15 @@ PAGE_HTML = """<!DOCTYPE html>
         <div class="scorecard-panel-inner" id="scorecardPanel">
           <p class="scorecard-legend"><strong>Run OK %</strong> — workers finished. <strong>Session WIN %</strong> — paper WIN vs LOSS from cumulative P&amp;L. <strong>Trade win %</strong> — mean per-scenario win rate on the tape. Scan <em>down</em> the table for most recent runs; higher Session WIN + trade win on your latest batches = stronger outcomes for the hypotheses you tested.</p>
           <p class="last-run" id="lastBatchRunLine">Last completed batch: —</p>
+          <div class="scorecard-toolbar">
+            <a id="scorecardCsvLink" href="/api/batch-scorecard.csv?limit=50">Download scorecard history (CSV)</a>
+            <span style="font-size:0.72rem;color:var(--pg-muted)">Click a row to open batch detail, scenarios, and per-scenario report links (GT_DIRECTIVE_001).</span>
+          </div>
           <div class="pg-table-scroll">
             <table class="scorecard-table" id="scorecardHistoryTable">
               <thead>
                 <tr>
+                  <th>Job ID</th>
                   <th>Started (UTC)</th><th>Ended (UTC)</th><th>Duration</th><th>Processed</th><th>OK</th><th>Failed</th>
                   <th>Run OK %</th><th>Session WIN %</th><th>Trade win %</th><th>Workers</th><th>Status</th>
                 </tr>
@@ -1646,6 +1784,7 @@ PAGE_HTML = """<!DOCTYPE html>
               <tbody id="scorecardHistoryTbody"></tbody>
             </table>
           </div>
+          <div id="batchDrillPanel" class="batch-drill-panel" aria-live="polite"></div>
           <p class="path-hint" id="scorecardPathHint"></p>
         </div>
         </div>
@@ -1802,9 +1941,81 @@ PAGE_HTML = """<!DOCTYPE html>
         ' · processed ' + proc + ' / planned ' + tot + pctBit;
     }
 
+    let selectedScorecardJobId = null;
+
+    function fileLink(jobId, scenarioId, kind) {
+      const q = 'job_id=' + encodeURIComponent(jobId) + '&scenario_id=' + encodeURIComponent(scenarioId) + '&kind=' + encodeURIComponent(kind);
+      return '/api/batch-scenario-file?' + q;
+    }
+
+    async function loadBatchDrill(jobId) {
+      const panel = document.getElementById('batchDrillPanel');
+      if (!panel) return;
+      panel.classList.add('visible');
+      panel.innerHTML = '<p>Loading batch…</p>';
+      try {
+        const r = await fetch('/api/batch-detail?job_id=' + encodeURIComponent(jobId));
+        const j = await r.json();
+        if (!r.ok || !j.ok) {
+          panel.innerHTML = '<p class="err">' + escapeHtml(j.error || 'Failed to load batch') + '</p>';
+          return;
+        }
+        const sc = j.scorecard || {};
+        const csvHref = '/api/batch-detail.csv?job_id=' + encodeURIComponent(jobId);
+        let meta = '<h3>Batch detail</h3><div class="batch-drill-meta">';
+        meta += '<strong>job_id</strong> <code>' + escapeHtml(String(sc.job_id || '')) + '</code><br/>';
+        meta += '<strong>started</strong> ' + escapeHtml(String(sc.started_at_utc || '—')) +
+          ' → <strong>ended</strong> ' + escapeHtml(String(sc.ended_at_utc || '—')) +
+          ' · <strong>duration</strong> ' + escapeHtml(formatDurationSec(sc.duration_sec)) + '<br/>';
+        meta += '<strong>scenarios</strong> ' + escapeHtml(String(sc.total_processed != null ? sc.total_processed : '—')) +
+          ' / ' + escapeHtml(String(sc.total_scenarios != null ? sc.total_scenarios : '—')) +
+          ' · <strong>ok</strong> ' + escapeHtml(String(sc.ok_count != null ? sc.ok_count : '—')) +
+          ' · <strong>failed</strong> ' + escapeHtml(String(sc.failed_count != null ? sc.failed_count : '—')) +
+          ' · <strong>workers</strong> ' + escapeHtml(String(sc.workers_used != null ? sc.workers_used : '—')) +
+          ' · <strong>status</strong> ' + escapeHtml(String(sc.status || '—')) + '<br/>';
+        meta += '<strong>session_log_batch_dir</strong> ' + escapeHtml(String(sc.session_log_batch_dir || '(none)')) + '<br/>';
+        meta += '<a href="' + csvHref + '">Download this batch (CSV, scenarios)</a>';
+        meta += '</div>';
+        if (j.scenario_list_error) {
+          meta += '<p style="color:#b7772c">' + escapeHtml(j.scenario_list_error) + '</p>';
+        }
+        const scenarios = j.scenarios || [];
+        if (!scenarios.length) {
+          panel.innerHTML = meta + '<p>No scenario rows (session logs missing or empty folder).</p>';
+          return;
+        }
+        let tbl = '<table class="drill-scenario-table"><thead><tr>' +
+          '<th>scenario</th><th>session</th><th>memory</th><th>Groundhog</th><th>reports</th>' +
+          '</tr></thead><tbody>';
+        for (const s of scenarios) {
+          const sid = String(s.scenario_id != null ? s.scenario_id : '');
+          const mem = s.memory_applied
+            ? '<span class="mem-pill mem-yes">yes</span>'
+            : '<span class="mem-pill mem-no">no</span>';
+          const gh = (s.groundhog_mode === 'active')
+            ? '<span class="mem-pill gh-on">active</span>'
+            : '<span class="mem-pill gh-off">inactive</span>';
+          const rs = s.referee_session != null ? String(s.referee_session) : '—';
+          tbl += '<tr><td><code>' + escapeHtml(sid) + '</code></td>' +
+            '<td>' + escapeHtml(rs) + '</td>' +
+            '<td>' + mem + '</td>' +
+            '<td>' + gh + '</td>' +
+            '<td>' +
+            '<a href="' + fileLink(jobId, sid, 'human') + '" target="_blank" rel="noopener">HUMAN</a> · ' +
+            '<a href="' + fileLink(jobId, sid, 'json') + '" target="_blank" rel="noopener">JSON</a>' +
+            '</td></tr>';
+        }
+        tbl += '</tbody></table>';
+        panel.innerHTML = meta + tbl;
+      } catch (err) {
+        panel.innerHTML = '<p class="err">' + escapeHtml(friendlyFetchError(err)) + '</p>';
+      }
+    }
+
     async function refreshScorecardHistory() {
       const tbody = document.getElementById('scorecardHistoryTbody');
       const hint = document.getElementById('scorecardPathHint');
+      const csvLink = document.getElementById('scorecardCsvLink');
       if (!tbody) return;
       tbody.innerHTML = '';
       try {
@@ -1817,15 +2028,24 @@ PAGE_HTML = """<!DOCTYPE html>
         if (hint && j.path) {
           hint.textContent = 'Persisted at: ' + j.path + ' (append-only JSONL; set PATTERN_GAME_MEMORY_ROOT for tmpfs)';
         }
+        if (csvLink) {
+          csvLink.href = '/api/batch-scorecard.csv?limit=50';
+        }
         const rows = j.entries || [];
         if (!rows.length) {
           const tr = document.createElement('tr');
-          tr.innerHTML = '<td colspan="11" style="color:#8b98a5">No batches logged yet.</td>';
+          tr.innerHTML = '<td colspan="12" style="color:#8b98a5">No batches logged yet.</td>';
           tbody.appendChild(tr);
           return;
         }
         for (const e of rows) {
           const tr = document.createElement('tr');
+          tr.className = 'scorecard-row';
+          const jid = (e.job_id != null && e.job_id !== undefined) ? String(e.job_id) : '';
+          tr.setAttribute('data-job-id', jid);
+          if (selectedScorecardJobId && jid === selectedScorecardJobId) {
+            tr.classList.add('selected');
+          }
           const st = e.status === 'done'
             ? '<span class="st-ok">done</span>'
             : '<span class="st-err">' + escapeHtml(e.status || '—') + '</span>';
@@ -1837,6 +2057,7 @@ PAGE_HTML = """<!DOCTYPE html>
             return (Math.round(n * 10) / 10).toFixed(1) + '%';
           }
           tr.innerHTML =
+            '<td title="' + escapeHtml(jid) + '"><code style="font-size:0.68rem">' + escapeHtml(jid ? (jid.length > 20 ? jid.slice(0, 18) + '…' : jid) : '—') + '</code></td>' +
             '<td>' + escapeHtml(e.started_at_utc || '—') + '</td>' +
             '<td>' + escapeHtml(e.ended_at_utc || '—') + '</td>' +
             '<td>' + escapeHtml(dur) + '</td>' +
@@ -1848,6 +2069,14 @@ PAGE_HTML = """<!DOCTYPE html>
             '<td>' + escapeHtml(pctCell(e.avg_trade_win_pct)) + '</td>' +
             '<td>' + escapeHtml(e.workers_used != null ? String(e.workers_used) : '—') + '</td>' +
             '<td>' + st + '</td>';
+          tr.addEventListener('click', () => {
+            document.querySelectorAll('#scorecardHistoryTbody tr.scorecard-row').forEach(function (x) {
+              x.classList.remove('selected');
+            });
+            tr.classList.add('selected');
+            selectedScorecardJobId = jid;
+            if (jid) loadBatchDrill(jid);
+          });
           tbody.appendChild(tr);
         }
       } catch (err) {
