@@ -39,4 +39,39 @@ python3 -m renaissance_v4.game_theory.parallel_runner \
 
 `-j N` caps workers; `--log /path/to.jsonl` overrides the experience log path (default: `game_theory/experience_log.jsonl`).
 
-Each line in the JSON file is one scenario object with `manifest_path` and optional `scenario_id`, `atr_stop_mult`, `atr_target_mult`.
+Each **element** of the JSON array is one scenario object with `manifest_path` and optional `scenario_id`, `atr_stop_mult`, `atr_target_mult`.
+
+## Scenario JSON contract (parallel batch)
+
+**Purpose:** One **JSON array** of scenario **objects**. The **Referee** reads only what it needs to replay; optional fields carry **agent / ML / curriculum** metadata so every run can answer: *what was tried, why, which values, what changed vs last time* — without affecting deterministic scores.
+
+### Required
+
+| Field | Type | Meaning |
+|-------|------|--------|
+| `manifest_path` | string | Path to a validated strategy manifest (resolved from repo root when using `PYTHONPATH=.`). |
+
+### Optional (replay)
+
+| Field | Type | Meaning |
+|-------|------|--------|
+| `scenario_id` | string | Stable label for this row (defaults to `unknown` in results). |
+| `atr_stop_mult` | number | Override stop distance as ATR multiple (game runner). |
+| `atr_target_mult` | number | Override take-profit as ATR multiple. |
+| `emit_baseline_artifacts` | boolean | Emit extra replay reports when true. |
+
+### Optional (agent / training — **echoed in results, not scored**)
+
+These are **whitelisted** and copied into each parallel result (and JSONL log lines) for operators and downstream ML:
+
+| Field | Type | Meaning |
+|-------|------|--------|
+| `agent_explanation` | object (recommended) or string | **Why** this candidate was proposed, **which values** / knobs matter, **what was learned** from prior trials, and **how behavior changed** vs a prior scenario. Suggested object keys: `why_this_strategy`, `indicator_values`, `learned`, `behavior_change` (all freeform). |
+| `training_trace_id` | string | Idempotency / grouping id for a training or search batch. |
+| `prior_scenario_id` | string | Link to the previous scenario in a curriculum or chain. |
+
+**Rules:** The Referee **does not** parse `agent_explanation` for WIN/LOSS. Undocumented top-level keys are **ignored** by the runner (you may get a validation **warning** in the API). For a filled-in example see `examples/parallel_scenarios_with_agent_trace.example.json`.
+
+### Web UI presets
+
+The local Flask UI can **load** any `*.json` file from `game_theory/examples/` via the preset dropdown so you do not have to paste JSON by hand.

@@ -80,6 +80,7 @@ Whipsaw can be **mitigated**, not eliminated, without sometimes missing real mov
 
 - **After** the Referee produces **logs** (candidates, WIN/LOSS, traces), ML may **rank** candidates, **cluster** losses, or **propose** the next manifest—**never** as a substitute for replay scores.
 - **Scores** remain **only** from Referee outputs. ML “memory” of past trials is **proposal policy**, not ground truth; mitigate **search overfitting** to one window with **max trials**, and later **held-out** data when you claim OOS performance.
+- **Batch scenario JSON** (parallel runs) may attach **`agent_explanation`** (and related ids) per scenario. The Referee **ignores** these for scoring; they are **echoed** next to replay summaries for audit and training traces. See `game_theory/README.md` (Scenario JSON contract).
 
 ---
 

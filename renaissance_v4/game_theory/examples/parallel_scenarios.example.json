@@ -1,7 +1,13 @@
 [
   {
     "scenario_id": "baseline_default",
-    "manifest_path": "renaissance_v4/configs/manifests/baseline_v1_recipe.json"
+    "manifest_path": "renaissance_v4/configs/manifests/baseline_v1_recipe.json",
+    "agent_explanation": {
+      "why_this_strategy": "Reference manifest with default ATR geometry from the recipe.",
+      "indicator_values": {},
+      "learned": "",
+      "behavior_change": ""
+    }
   },
   {
     "scenario_id": "atr_tight",

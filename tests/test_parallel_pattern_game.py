@@ -31,3 +31,30 @@ def test_run_scenarios_parallel_two_workers() -> None:
 
 def test_run_scenarios_parallel_empty() -> None:
     assert run_scenarios_parallel([], max_workers=4) == []
+
+
+def test_run_scenarios_parallel_echoes_agent_fields() -> None:
+    m = _manifest()
+    if not m.is_file():
+        pytest.skip("baseline manifest missing")
+    scenarios = [
+        {
+            "scenario_id": "with_agent",
+            "manifest_path": str(m),
+            "agent_explanation": {
+                "why_this_strategy": "unit_test",
+                "indicator_values": {"k": 1},
+                "learned": "prior",
+                "behavior_change": "nudge_stop",
+            },
+            "training_trace_id": "trace-1",
+            "prior_scenario_id": "prev-0",
+        }
+    ]
+    results = run_scenarios_parallel(scenarios, max_workers=1, experience_log_path=None)
+    assert len(results) == 1
+    r = results[0]
+    assert r.get("ok") is True
+    assert r.get("training_trace_id") == "trace-1"
+    assert r.get("prior_scenario_id") == "prev-0"
+    assert r.get("agent_explanation", {}).get("why_this_strategy") == "unit_test"

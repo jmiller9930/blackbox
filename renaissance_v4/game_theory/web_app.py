@@ -13,7 +13,7 @@ import json
 from pathlib import Path
 from typing import Any
 
-from flask import Flask, jsonify, request
+from flask import Flask, abort, jsonify, request
 
 from renaissance_v4.game_theory.parallel_runner import (
     clamp_parallel_workers,
@@ -21,6 +21,7 @@ from renaissance_v4.game_theory.parallel_runner import (
     run_scenarios_parallel,
 )
 from renaissance_v4.game_theory.pattern_game import _default_manifest_path, json_summary, run_pattern_game
+from renaissance_v4.game_theory.scenario_contract import validate_scenarios
 
 _GAME_THEORY = Path(__file__).resolve().parent
 
@@ -41,6 +42,30 @@ def create_app() -> Flask:
     @app.get("/api/capabilities")
     def capabilities() -> Any:
         return jsonify(get_parallel_limits())
+
+    @app.get("/api/scenario-presets")
+    def scenario_presets() -> Any:
+        ex = _GAME_THEORY / "examples"
+        rows: list[dict[str, str]] = []
+        for p in sorted(ex.glob("*.json")):
+            rows.append(
+                {
+                    "filename": p.name,
+                    "label": p.name.replace("_", " ").replace(".example.json", "").replace(".json", ""),
+                }
+            )
+        return jsonify(rows)
+
+    @app.get("/api/scenario-preset")
+    def scenario_preset() -> Any:
+        name = (request.args.get("name") or "").strip()
+        if not name or Path(name).name != name:
+            abort(400)
+        allowed = {p.name for p in (_GAME_THEORY / "examples").glob("*.json")}
+        if name not in allowed:
+            abort(404)
+        p = _GAME_THEORY / "examples" / name
+        return jsonify({"ok": True, "filename": name, "content": p.read_text(encoding="utf-8")})
 
     @app.post("/api/run")
     def api_run() -> Any:
@@ -81,6 +106,22 @@ def create_app() -> Flask:
             if "manifest_path" in s and s["manifest_path"]:
                 s["manifest_path"] = str(Path(s["manifest_path"]).expanduser().resolve())
 
+        if not scenarios:
+            return jsonify({"ok": False, "error": "No scenario objects in JSON array"}), 400
+
+        ok_val, val_msgs = validate_scenarios(scenarios)
+        if not ok_val:
+            return (
+                jsonify(
+                    {
+                        "ok": False,
+                        "error": val_msgs[0] if val_msgs else "Invalid scenarios",
+                        "scenario_validation": {"ok": False, "messages": val_msgs},
+                    }
+                ),
+                400,
+            )
+
         max_workers = data.get("max_workers")
         if max_workers is not None:
             try:
@@ -113,6 +154,7 @@ def create_app() -> Flask:
                     "results": results,
                     "limits_applied": get_parallel_limits(),
                     "workers_used": workers_used,
+                    "scenario_validation": {"ok": True, "messages": val_msgs},
                 }
             )
         except Exception as e:
@@ -133,7 +175,7 @@ PAGE_HTML = """<!DOCTYPE html>
     h1 { font-size: 1.25rem; font-weight: 600; }
     h2 { font-size: 1rem; margin-top: 28px; color: #8b98a5; }
     label { display: block; margin: 10px 0 4px; font-size: 0.85rem; color: #8b98a5; }
-    input[type=text], input[type=number], textarea {
+    input[type=text], input[type=number], textarea, select {
       width: 100%; box-sizing: border-box; padding: 8px 10px;
       border: 1px solid #38444d; border-radius: 6px; background: #15202b; color: #e7e9ea;
     }
@@ -180,7 +222,11 @@ PAGE_HTML = """<!DOCTYPE html>
   </section>
 
   <section class="panel" id="panel2">
-    <p class="caps">Paste a JSON array of scenarios (see <code>examples/parallel_scenarios.example.json</code>).</p>
+    <p class="caps">Paste a JSON array of scenarios, or load a preset. Contract: <code>renaissance_v4/game_theory/README.md</code> (Scenario JSON contract). Each result row includes Referee <code>summary</code> plus optional <code>agent_explanation</code> (not scored).</p>
+    <label>Load preset into editor</label>
+    <select id="presetPick">
+      <option value="">— Custom (paste below) —</option>
+    </select>
     <label>Parallel workers</label>
     <div class="row">
       <div>
@@ -280,6 +326,34 @@ PAGE_HTML = """<!DOCTYPE html>
     };
 
     fetch('/api/capabilities').then(r => r.json()).then(() => {});
+
+    const presetPick = document.getElementById('presetPick');
+    fetch('/api/scenario-presets')
+      .then(r => r.json())
+      .then((rows) => {
+        rows.forEach((row) => {
+          const o = document.createElement('option');
+          o.value = row.filename;
+          o.textContent = row.label || row.filename;
+          presetPick.appendChild(o);
+        });
+      })
+      .catch(() => {});
+    presetPick.onchange = async () => {
+      const name = presetPick.value;
+      if (!name) return;
+      try {
+        const r = await fetch('/api/scenario-preset?name=' + encodeURIComponent(name));
+        if (!r.ok) {
+          document.getElementById('out').innerHTML = '<span class="err">Preset load failed: ' + r.status + '</span>';
+          return;
+        }
+        const j = await r.json();
+        if (j.ok) document.getElementById('scenarios').value = j.content;
+      } catch (e) {
+        document.getElementById('out').innerHTML = '<span class="err">' + String(e) + '</span>';
+      }
+    };
   </script>
 </body>
 </html>
