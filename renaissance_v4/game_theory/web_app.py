@@ -34,6 +34,7 @@ from flask import Flask, abort, jsonify, request
 _GAME_THEORY = Path(__file__).resolve().parent
 
 from renaissance_v4.game_theory.data_health import get_data_health
+from renaissance_v4.game_theory.search_space_estimate import build_search_space_estimate
 from renaissance_v4.game_theory.memory_paths import default_experience_log_jsonl, ensure_memory_root_tree
 from renaissance_v4.game_theory.parallel_runner import (
     clamp_parallel_workers,
@@ -157,6 +158,21 @@ def create_app() -> Flask:
     def data_health() -> Any:
         """SQLite reachable, ``market_bars_5m`` present, replay row count, SOLUSDT ~12mo span."""
         return jsonify(get_data_health())
+
+    @app.get("/api/search-space-estimate")
+    def search_space_estimate() -> Any:
+        """Finite catalog counts, bar rows, optional batch/worker parallel rounds (see ``search_space_estimate``)."""
+        bs = request.args.get("batch_size")
+        w = request.args.get("workers")
+        try:
+            batch_size = int(bs) if bs not in (None, "") else None
+        except ValueError:
+            batch_size = None
+        try:
+            workers = int(w) if w not in (None, "") else None
+        except ValueError:
+            workers = None
+        return jsonify(build_search_space_estimate(batch_size=batch_size, workers=workers))
 
     @app.get("/api/scenario-presets")
     def scenario_presets() -> Any:
@@ -461,6 +477,17 @@ PAGE_HTML = """<!DOCTYPE html>
     }
     .pnl-fill.up { background: #00ba7c; }
     .pnl-fill.down { background: #f4212e; }
+    .estimate-strip {
+      padding: 10px 12px;
+      margin-bottom: 16px;
+      border-radius: 8px;
+      background: #15202b;
+      border: 1px solid #38444d;
+      font-size: 0.8rem;
+      color: #8b98a5;
+      line-height: 1.45;
+    }
+    .estimate-strip strong { color: #e7e9ea; }
     input[type=checkbox] { width: auto; }
     input[type=range] { width: 100%; accent-color: #1d9bf0; }
     .progress-wrap { display: none; margin: 12px 0 8px; }
@@ -498,6 +525,10 @@ PAGE_HTML = """<!DOCTYPE html>
       </div>
       <div class="pnl-bar-ticks"><span>$0</span><span>$1k</span><span>$2k</span></div>
     </div>
+  </div>
+
+  <div class="estimate-strip" id="searchSpaceStrip" aria-live="polite">
+    <strong>Search space</strong> — loading catalog + bar counts…
   </div>
 
   <h1>Pattern game — local prototype</h1>
@@ -558,7 +589,10 @@ PAGE_HTML = """<!DOCTYPE html>
       'This host: ' + LIMITS.cpu_logical_count + ' logical CPUs · recommended default ' + recommended +
       ' (one process per CPU for CPU-bound replay) · hard max ' + hardMax +
       ' (slider top). Pick fewer if you want headroom; never above max. ' + LIMITS.note;
-    rangeEl.addEventListener('input', () => { workersVal.textContent = rangeEl.value; });
+    rangeEl.addEventListener('input', () => {
+      workersVal.textContent = rangeEl.value;
+      if (typeof refreshSearchSpaceEstimate === 'function') refreshSearchSpaceEstimate();
+    });
 
     async function show(el, data, err) {
       const pre = document.getElementById('out');
@@ -758,6 +792,53 @@ PAGE_HTML = """<!DOCTYPE html>
     refreshDataHealth();
     setInterval(refreshDataHealth, 45000);
 
+    async function refreshSearchSpaceEstimate() {
+      const el = document.getElementById('searchSpaceStrip');
+      if (!el) return;
+      try {
+        const w = parseInt(rangeEl.value, 10) || 1;
+        let batchN = 0;
+        try {
+          const raw = (scenariosEl && scenariosEl.value) ? scenariosEl.value.trim() : '';
+          if (raw) {
+            const parsed = JSON.parse(raw);
+            const arr = Array.isArray(parsed) ? parsed : (parsed.scenarios || []);
+            if (Array.isArray(arr)) batchN = arr.length;
+          }
+        } catch (e) { batchN = 0; }
+        const q = batchN > 0
+          ? ('?batch_size=' + encodeURIComponent(batchN) + '&workers=' + encodeURIComponent(w))
+          : ('?workers=' + encodeURIComponent(w));
+        const r = await fetch('/api/search-space-estimate' + q);
+        const j = await r.json();
+        const m = j.catalog && j.catalog.signals_count;
+        const sub = j.combinatorics && j.combinatorics.non_empty_signal_subsets_upper_bound;
+        const bars = j.dataset && j.dataset.market_bars_5m_count;
+        const rounds = j.workload_hints && j.workload_hints.parallel_rounds_ceil_batch_over_workers;
+        const br = j.bar_replay_units;
+        let line = '<strong>Search space</strong> — ';
+        if (m != null && sub != null) {
+          line += m + ' catalog signals → up to <strong>' + sub + '</strong> non-empty signal subsets (2^' + m + '−1; validation may disallow some). ';
+        }
+        if (bars != null) {
+          line += '<strong>' + bars.toLocaleString() + '</strong> rows in <code>market_bars_5m</code>. ';
+        } else if (j.dataset && j.dataset.error) {
+          line += 'Bars: unavailable (' + String(j.dataset.error).slice(0, 120) + '). ';
+        }
+        if (batchN > 0 && rounds != null) {
+          line += 'Your textarea: <strong>' + batchN + '</strong> scenarios, <strong>' + w + '</strong> workers → ~<strong>' + rounds + '</strong> parallel round(s). ';
+        } else {
+          line += 'Paste scenarios to see batch rounds; workers use slider (' + w + '). ';
+        }
+        if (br != null && batchN > 0) {
+          line += 'Coarse bar steps ≈ ' + br.toLocaleString() + ' (scenarios×bars).';
+        }
+        el.innerHTML = line;
+      } catch (e) {
+        el.innerHTML = '<strong>Search space</strong> — could not load estimate. ' + friendlyFetchError(e);
+      }
+    }
+
     const presetPick = document.getElementById('presetPick');
     const scenariosEl = document.getElementById('scenarios');
 
@@ -788,15 +869,27 @@ PAGE_HTML = """<!DOCTYPE html>
         }
         return Promise.resolve();
       })
+      .then(() => { if (typeof refreshSearchSpaceEstimate === 'function') return refreshSearchSpaceEstimate(); })
       .catch(() => {});
+
+    scenariosEl.addEventListener('input', () => {
+      if (typeof refreshSearchSpaceEstimate === 'function') refreshSearchSpaceEstimate();
+    });
 
     presetPick.onchange = () => {
       const name = presetPick.value;
-      if (!name) return;
-      loadPreset(name).catch((e) => {
-        document.getElementById('out').innerHTML = '<span class="err">' + String(e) + '</span>';
-      });
+      if (!name) {
+        if (typeof refreshSearchSpaceEstimate === 'function') refreshSearchSpaceEstimate();
+        return;
+      }
+      loadPreset(name)
+        .then(() => { if (typeof refreshSearchSpaceEstimate === 'function') return refreshSearchSpaceEstimate(); })
+        .catch((e) => {
+          document.getElementById('out').innerHTML = '<span class="err">' + String(e) + '</span>';
+        });
     };
+
+    if (typeof refreshSearchSpaceEstimate === 'function') refreshSearchSpaceEstimate();
   </script>
 </body>
 </html>
