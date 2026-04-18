@@ -116,6 +116,7 @@ def run_scenarios_parallel(
     write_session_logs: bool = True,
     session_logs_base: Path | str | None = None,
     progress_callback: Callable[[int, int, dict[str, Any]], None] | None = None,
+    on_session_log_batch: Callable[[Path], None] | None = None,
 ) -> list[dict[str, Any]]:
     """
     Run each scenario in a process pool. Order of results is **completion** order unless you sort by scenario_id.
@@ -136,6 +137,9 @@ def run_scenarios_parallel(
 
     If ``progress_callback`` is set, it is invoked after each scenario completes as
     ``(completed_count, total_count, result_row)`` for live progress UIs.
+
+    If session logs are written and ``on_session_log_batch`` is set, it is called once with the
+    ``batch_*`` directory path (for UIs and APIs).
     """
     if not scenarios:
         return []
@@ -221,6 +225,8 @@ def run_scenarios_parallel(
             f"[session_log] batch folder={batch_dir} ({len(session_records)} scenarios — see BATCH_README.md)",
             file=sys.stderr,
         )
+        if on_session_log_batch is not None:
+            on_session_log_batch(batch_dir)
 
     return results
 

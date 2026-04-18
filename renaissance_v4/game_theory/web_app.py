@@ -5,6 +5,10 @@ Batches use **``POST /api/run-parallel/start``** + polling **``GET /api/run-para
 so the UI shows **per-scenario progress** (determinate bar) instead of a single long blocking request.
 ``POST /api/run-parallel`` remains as a blocking API for scripts.
 
+Each completed batch also writes a **unique session folder** under ``renaissance_v4/game_theory/logs/``
+(``batch_<UTC>_<id>/`` with ``BATCH_README.md`` and per-scenario ``HUMAN_READABLE.md``), unless
+``PATTERN_GAME_NO_SESSION_LOG=1``. The JSON result includes ``session_log_batch_dir`` when present.
+
 No manifest/ATR fields in the UI — policy lives in the JSON (or examples presets). Default 16 workers
 (capped to host). ``POST /api/run`` remains for scripted single-manifest runs.
 
@@ -25,6 +29,8 @@ from typing import Any
 
 from flask import Flask, abort, jsonify, request
 
+_GAME_THEORY = Path(__file__).resolve().parent
+
 from renaissance_v4.game_theory.data_health import get_data_health
 from renaissance_v4.game_theory.parallel_runner import (
     clamp_parallel_workers,
@@ -38,8 +44,6 @@ from renaissance_v4.game_theory.pattern_game import (
     run_pattern_game,
 )
 from renaissance_v4.game_theory.scenario_contract import validate_scenarios
-
-_GAME_THEORY = Path(__file__).resolve().parent
 
 _JOBS_LOCK = threading.Lock()
 _JOBS: dict[str, dict[str, Any]] = {}
@@ -234,6 +238,11 @@ def create_app() -> Flask:
             }
 
         def run_job() -> None:
+            session_batch_dir: list[str | None] = [None]
+
+            def on_session_batch(p: Path) -> None:
+                session_batch_dir[0] = str(p.resolve())
+
             def cb(completed: int, total: int, row: dict[str, Any]) -> None:
                 sid = row.get("scenario_id", "?")
                 ok = bool(row.get("ok"))
@@ -254,6 +263,7 @@ def create_app() -> Flask:
                     max_workers=max_workers,
                     experience_log_path=log_path,
                     progress_callback=cb,
+                    on_session_log_batch=on_session_batch,
                 )
                 ok_n = sum(1 for r in results if r.get("ok"))
                 payload = {
@@ -266,6 +276,7 @@ def create_app() -> Flask:
                     "limits_applied": get_parallel_limits(),
                     "workers_used": workers_used,
                     "scenario_validation": {"ok": True, "messages": val_msgs},
+                    "session_log_batch_dir": session_batch_dir[0],
                 }
                 with _JOBS_LOCK:
                     j = _JOBS.get(job_id)
@@ -327,10 +338,16 @@ def create_app() -> Flask:
         val_msgs = prep["val_msgs"]
 
         try:
+            session_batch_dir: list[str | None] = [None]
+
+            def on_session_batch(p: Path) -> None:
+                session_batch_dir[0] = str(p.resolve())
+
             results = run_scenarios_parallel(
                 scenarios,
                 max_workers=max_workers,
                 experience_log_path=log_path,
+                on_session_log_batch=on_session_batch,
             )
             ok_n = sum(1 for r in results if r.get("ok"))
             workers_used = clamp_parallel_workers(max_workers, len(scenarios))
@@ -345,6 +362,7 @@ def create_app() -> Flask:
                     "limits_applied": get_parallel_limits(),
                     "workers_used": workers_used,
                     "scenario_validation": {"ok": True, "messages": val_msgs},
+                    "session_log_batch_dir": session_batch_dir[0],
                 }
             )
         except Exception as e:
@@ -502,6 +520,7 @@ PAGE_HTML = """<!DOCTYPE html>
   </div>
 
   <h2>Result</h2>
+  <p class="caps" id="sessionLogNote" style="margin:0 0 8px 0;color:#8b98a5;"></p>
   <pre id="out">(no run yet)</pre>
 
   <script>
@@ -606,6 +625,8 @@ PAGE_HTML = """<!DOCTYPE html>
     document.getElementById('runBtn').onclick = async () => {
       const btn = document.getElementById('runBtn');
       btn.disabled = true;
+      const sn = document.getElementById('sessionLogNote');
+      if (sn) sn.textContent = '';
       statusLine.textContent = 'Starting batch…';
       document.getElementById('progressSub').textContent = '';
       setProgressUI(0, 0, '');
@@ -666,6 +687,12 @@ PAGE_HTML = """<!DOCTYPE html>
             const j = pj.result;
             setProgressUI(j.ran || total, j.ran || total, 'All scenarios finished · ' + elapsedStr);
             if (j.pnl_summary) { updatePnlStrip(j.pnl_summary); }
+            const sl = document.getElementById('sessionLogNote');
+            if (sl) {
+              sl.textContent = j.session_log_batch_dir
+                ? ('Session logs (human-readable): ' + j.session_log_batch_dir)
+                : '';
+            }
             await show(null, j, null);
             statusLine.textContent = 'Finished — see Result below.';
             return true;
