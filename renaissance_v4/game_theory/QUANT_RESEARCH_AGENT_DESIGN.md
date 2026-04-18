@@ -2,7 +2,7 @@
 
 **Purpose:** Single place for *why* this stack exists: **pattern → policy → replay validation**, not “make money in one run.” Aligns with `GAME_SPEC_INDICATOR_PATTERN_V1.md` (Referee = truth; LLM = reasoning only).
 
-**Status:** Normative design. **Not all layers are implemented** — see **§14 Repo alignment** at the end.
+**Status:** Normative design. **Not all layers are implemented** — see **§15 Repo alignment** at the end.
 
 ---
 
@@ -186,7 +186,45 @@ It **is** a **structured market research system** aimed at discovering which **i
 
 ---
 
-## 14. Repo alignment (honest snapshot)
+## 14. Why value-only patterns are brittle (RSI example)
+
+**Raw value alone is weak:** `RSI = 55` tells you almost nothing.
+
+**Same number, three different meanings** (abbreviated):
+
+| Scenario | Idea |
+|----------|------|
+| **A — Momentum building** | RSI *rising* into 55, crossed up through 50, ATR *expanding*, price above long EMA, breakout structure, volume up → continuation energy. |
+| **B — Momentum fading** | RSI *falling* to 55 from overbought, ATR *contracting*, price below EMA, failed breakout → trap / reversal risk. |
+| **C — Chop** | RSI *flat*, no crosses, low ATR, range structure, neutral volume → **no signal**; the 55 is noise. |
+
+**Core insight:** identical `RSI = 55`; **interpretation** depends on **direction, transition, volatility regime, trend alignment, structure, flow**.
+
+**What the system must eventually store (per bar or per decision), not just the scalar:**
+
+- Value, **direction** (rising / falling / flat), **delta** from prior  
+- **Position** vs key levels (e.g. vs 50, bands)  
+- **Recent transitions** (crosses, acceleration, deceleration)  
+- **Volatility state** (expanding / contracting / low)  
+- **Trend alignment** (e.g. vs EMA)  
+- **Market structure** (range, breakout, pullback, continuation, reversal attempt)  
+
+**General rule for any indicator:**
+
+| Dimension | Question |
+|-----------|------------|
+| Value | What is it now? |
+| Direction | What is it doing? |
+| Velocity | How fast is it changing? |
+| Position | Where vs important levels? |
+| Transition | What just changed? |
+| Environment | What kind of market (regime / structure)? |
+
+**Principle:** the number is a coordinate; **context** is what turns it into a **pattern** you can search and replay under the Referee.
+
+---
+
+## 15. Repo alignment (honest snapshot)
 
 | Topic | In repo today |
 |-------|----------------|
