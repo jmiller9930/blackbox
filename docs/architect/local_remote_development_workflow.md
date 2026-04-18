@@ -74,6 +74,8 @@ That script **pushes** the current branch to `origin`, **SSHs** to clawbot, **`g
 
 Treat this as the **standard post-update step** for Black Box changes that matter on clawbot, unless the user or directive explicitly skips deploy or SSH is unavailable (then say so in the proof gap).
 
+**Conditional UI deploy:** **`python3 scripts/gsync.py`** does the same local commit (optional) + push + remote `git pull`, but runs **UIUX.Web** `docker compose` **only if** the pulled commits touch paths under `UIUX.Web/` (see script docstring). Use when most commits are Python/docs and you want to avoid unnecessary rebuilds; use **`sync.py`** when you always need the operator stack restarted.
+
 **Not** the same as [`workspace_sync.md`](workspace_sync.md) (OpenClaw identity/skills copies on the gateway). **One-shot** push + Black Box UI stack + SeanV3/Jupiter: see **`python3 scripts/jupsync.py --full-stack`** in `scripts/jupsync.py`.
 
 ---
