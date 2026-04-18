@@ -1,0 +1,2 @@
+# Optional — local web UI for pattern game (`web_app.py`)
+flask>=3.0,<4

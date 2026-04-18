@@ -19,6 +19,40 @@ from renaissance_v4.game_theory.pattern_game import json_summary, run_pattern_ga
 
 DEFAULT_WORKERS = max(1, (os.cpu_count() or 4))
 
+# Hard cap: avoid fork/memory storms; soft recommendation = logical CPUs (CPU-bound replay).
+_MAX_PARALLEL_ABS = 64
+
+
+def get_parallel_limits() -> dict[str, Any]:
+    """
+    Exposed for UI / API: recommended and maximum parallel workers for this host.
+
+    Uses **processes** (not OS threads); each scenario runs a replay in a worker process.
+    """
+    cpu = os.cpu_count() or 4
+    hard = min(_MAX_PARALLEL_ABS, max(1, cpu * 2))
+    return {
+        "cpu_logical_count": cpu,
+        "recommended_max_workers": cpu,
+        "hard_cap_workers": hard,
+        "note": "Workers are processes, not Python threads; past ~CPU count yields diminishing returns for CPU-bound replay.",
+    }
+
+
+def clamp_parallel_workers(requested: int | None, num_scenarios: int) -> int:
+    """Clamp user-requested worker count to [1, hard_cap, num_scenarios]."""
+    if num_scenarios < 1:
+        return 1
+    limits = get_parallel_limits()
+    hard = int(limits["hard_cap_workers"])
+    if requested is None:
+        return max(1, min(DEFAULT_WORKERS, num_scenarios, hard))
+    try:
+        w = int(requested)
+    except (TypeError, ValueError):
+        w = DEFAULT_WORKERS
+    return max(1, min(w, num_scenarios, hard))
+
 
 def _worker_run_one(scenario: dict[str, Any]) -> dict[str, Any]:
     """
@@ -79,8 +113,7 @@ def run_scenarios_parallel(
 
     normalized = [_normalize_scenario(s) for s in scenarios]
 
-    workers = max_workers if max_workers is not None else DEFAULT_WORKERS
-    workers = max(1, min(workers, len(normalized)))
+    workers = clamp_parallel_workers(max_workers, len(normalized))
 
     results: list[dict[str, Any]] = []
     with ProcessPoolExecutor(max_workers=workers) as ex:
