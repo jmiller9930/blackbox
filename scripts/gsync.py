@@ -10,13 +10,18 @@ Compared to ``scripts/sync.py`` (always rebuilds/restarts UIUX.Web on the remote
   when pulled commits touch ``renaissance_v4/game_theory/`` or other configured prefixes (or when
   ``--force-restart``). Remote helper: ``scripts/pattern_game_remote_restart.sh``.
 
-**Single-command pattern-game testing (recommended):** ``./scripts/sync_pattern_game.sh`` or
-``python3 scripts/gsync.py --pattern-game``
+**Single-command pattern-game deploy (recommended):** ``./scripts/deploy_pattern_game.sh`` or
+``./scripts/sync_pattern_game.sh`` or ``python3 scripts/gsync.py --pattern-game``
 
 That mode: stages **new files under** ``renaissance_v4/game_theory/`` (plain ``git add -u`` misses
 untracked files), commits if needed, pushes your current branch, SSH ``git pull`` on the **same**
 branch, and **always** restarts the Flask process so the live port matches disk. It does **not**
 run UIUX.Web docker.
+
+After a successful run, **verification is mandatory (exit non-zero on failure)** unless
+``--no-verify``: (1) remote ``~/blackbox`` ``HEAD`` must equal ``origin/<branch>`` on this clone;
+(2) ``curl`` to ``http://127.0.0.1:8765/`` on the lab host must return ``X-Pattern-Game-UI-Version``
+(retries briefly so Flask can bind). Use ``--no-verify`` only for broken labs or debugging.
 
 If the remote repo was **already up to date** (no new commits pulled), default gsync exits **unless**
 ``--force-restart`` is set — then it still runs the selected restarts so operators do not have to guess.
@@ -43,8 +48,10 @@ Environment (optional):
                                     scripts/pattern_game_agent_reflect.py)
 
 Usage (repo root):
-  ./scripts/sync_pattern_game.sh               # same as --pattern-game (reload Flask for UI testing)
-  python3 scripts/gsync.py --pattern-game       # commit+push+pull+restart pattern-game only (no UIUX docker)
+  ./scripts/deploy_pattern_game.sh              # canonical name — full E2E + verify (same as below)
+  ./scripts/sync_pattern_game.sh               # alias — same as --pattern-game
+  python3 scripts/gsync.py --pattern-game       # commit+push+pull+restart+verify pattern-game (no UIUX docker)
+  python3 scripts/gsync.py --pattern-game --no-verify   # skip HEAD/HTTP checks (emergency only)
   python3 scripts/gsync.py
   python3 scripts/gsync.py -m "describe change"
   python3 scripts/gsync.py --dry-run
@@ -85,6 +92,7 @@ PATTERN_GAME_STAGING_PATHS = (
     "renaissance_v4/game_theory",
     "scripts/pattern_game_remote_restart.sh",
     "scripts/sync_pattern_game.sh",
+    "scripts/deploy_pattern_game.sh",
     "scripts/gsync.py",
 )
 
@@ -130,14 +138,20 @@ def _verify_remote_matches_pushed_branch(
     branch: str,
     ssh_target: str,
     remote_dir_name: str,
-) -> None:
+    *,
+    strict: bool,
+) -> bool:
     """After SSH pull, confirm lab ``HEAD`` matches ``origin/<branch>`` on this clone."""
     try:
         _run(["git", "fetch", "origin"], cwd=repo)
         want = _run(["git", "rev-parse", f"origin/{branch}"], cwd=repo).stdout.strip()
     except subprocess.CalledProcessError as e:
-        print(f"gsync: could not verify (local fetch/rev-parse failed): {e}", file=sys.stderr)
-        return
+        msg = f"gsync: could not verify (local fetch/rev-parse failed): {e}"
+        if strict:
+            print(msg, file=sys.stderr)
+            return False
+        print(msg, file=sys.stderr)
+        return True
     try:
         got = _run(
             [
@@ -153,16 +167,60 @@ def _verify_remote_matches_pushed_branch(
             cwd=repo,
         ).stdout.strip()
     except subprocess.CalledProcessError as e:
-        print(f"gsync: could not verify (ssh rev-parse failed): {e}", file=sys.stderr)
-        return
+        msg = f"gsync: could not verify (ssh rev-parse failed): {e}"
+        if strict:
+            print(msg, file=sys.stderr)
+            return False
+        print(msg, file=sys.stderr)
+        return True
     if want != got:
         print(
-            f"gsync: WARNING: remote ~/{remote_dir_name} HEAD {got[:12]}… != "
+            f"gsync: {'FATAL' if strict else 'WARNING'}: remote ~/{remote_dir_name} HEAD {got[:12]}… != "
             f"your origin/{branch} {want[:12]}… (wrong branch on server, partial pull, or push did not run).",
             file=sys.stderr,
         )
-    else:
-        print(f"gsync: OK — remote HEAD matches origin/{branch} ({want[:12]}…).", flush=True)
+        return False
+    print(f"gsync: OK — remote HEAD matches origin/{branch} ({want[:12]}…).", flush=True)
+    return True
+
+
+def _verify_pattern_game_http_header(ssh_target: str, *, dry_run: bool) -> bool:
+    """On the lab host, GET / on port 8765 and require ``X-Pattern-Game-UI-Version`` (Flask is up)."""
+    if dry_run:
+        print("[dry-run] would verify pattern-game HTTP header on remote :8765", flush=True)
+        return True
+    # Retry in remote shell: Flask may need a moment after nohup.
+    remote_cmd = (
+        "for i in 1 2 3 4 5 6 7 8; do "
+        "if curl -sfI http://127.0.0.1:8765/ 2>/dev/null | grep -qi '^X-Pattern-Game-UI-Version:'; "
+        "then exit 0; fi; sleep 1; done; exit 1"
+    )
+    try:
+        r = subprocess.run(
+            [
+                "ssh",
+                "-T",
+                "-o",
+                "BatchMode=yes",
+                "-o",
+                "ConnectTimeout=30",
+                ssh_target,
+                remote_cmd,
+            ],
+            check=False,
+        )
+        if r.returncode == 0:
+            print("gsync: OK — pattern-game Flask responds with X-Pattern-Game-UI-Version on :8765.", flush=True)
+            return True
+        print(
+            "gsync: FATAL: pattern-game HTTP check failed (no X-Pattern-Game-UI-Version on http://127.0.0.1:8765/). "
+            "Is Flask running? See /tmp/pattern_game_web.log on the lab host.",
+            file=sys.stderr,
+        )
+        return False
+    except OSError as e:
+        print(f"gsync: FATAL: SSH HTTP check failed: {e}", file=sys.stderr)
+        return False
 
 
 def _auto_commit(
@@ -424,9 +482,16 @@ def main() -> None:
     ap.add_argument(
         "--pattern-game",
         action="store_true",
-        help="Pattern-game test loop: stage game_theory paths (incl. untracked), commit+push, "
+        help="Pattern-game deploy loop: stage game_theory paths (incl. untracked), commit+push, "
         "remote pull, always restart Flask on 8765 — no UIUX docker. Requires local branch = "
-        "--remote-branch (default main).",
+        "--remote-branch (default main). After restart, verify remote HEAD vs origin and HTTP "
+        "header (unless --no-verify).",
+    )
+    ap.add_argument(
+        "--no-verify",
+        action="store_true",
+        help="With --pattern-game: skip remote HEAD vs origin check and Flask HTTP header check "
+        "(use only when the lab is broken or for debugging).",
     )
     ap.add_argument("--ssh", default=DEFAULT_SSH, help="SSH user@host")
     ap.add_argument("--remote-dir", default=DEFAULT_REMOTE_DIR, help="Remote repo directory under ~")
@@ -490,8 +555,22 @@ def main() -> None:
             args.remote_branch,
             dry_run=args.dry_run,
         )
-        if not args.dry_run:
-            _verify_remote_matches_pushed_branch(repo, branch, args.ssh, args.remote_dir)
+        if args.dry_run:
+            print(
+                "[dry-run] would verify: remote HEAD == origin/%s and curl X-Pattern-Game-UI-Version on :8765"
+                % (args.remote_branch,),
+                flush=True,
+            )
+            return
+        if args.no_verify:
+            print("gsync: --no-verify: skipping remote HEAD and HTTP checks.", flush=True)
+            return
+        if not _verify_remote_matches_pushed_branch(
+            repo, branch, args.ssh, args.remote_dir, strict=True
+        ):
+            sys.exit(1)
+        if not _verify_pattern_game_http_header(args.ssh, dry_run=False):
+            sys.exit(1)
         return
 
     _remote_pull_maybe_compose(

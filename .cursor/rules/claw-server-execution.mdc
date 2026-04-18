@@ -16,3 +16,5 @@ When the workspace is **Remote SSH** to `~/blackbox` on clawbot, run commands an
 When the workspace is **local**, implement in the clone; **sync and verify on clawbot** per the workflow doc and user/plan direction.
 
 **Black Box deploy loop:** After updates that should be on the lab host with **UIUX.Web** restarted, run **`python3 scripts/sync.py`** from repo root (push → remote `git pull` → compose). See **`docs/architect/local_remote_development_workflow.md`** §4.1. Not a substitute for OpenClaw **`workspace_sync.md`** steps when agents/skills/registry changed.
+
+**Pattern-game Flask UI (port 8765):** After changing **`renaissance_v4/game_theory/`** (especially `web_app.py`), agents must run **`./scripts/deploy_pattern_game.sh`** from repo root (or **`python3 scripts/gsync.py --pattern-game`**) so the lab pulls, restarts Flask, and **verification fails the command** if the remote tree or HTTP header does not match. Pushing to `origin` alone is **not** lab deploy. Use **`--no-verify`** only for broken labs.

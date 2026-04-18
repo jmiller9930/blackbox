@@ -76,6 +76,8 @@ Treat this as the **standard post-update step** for Black Box changes that matte
 
 **Conditional UI deploy:** **`python3 scripts/gsync.py`** does the same local commit (optional) + push + remote `git pull`, then restarts **only what changed**: **UIUX.Web** `docker compose` when paths under `UIUX.Web/` change, and the **pattern-game Flask** app (port **8765**, via `scripts/pattern_game_remote_restart.sh`) when paths under `renaissance_v4/game_theory/` (or `scripts/agent_context_bundle.py`, configurable) change. **`--force-restart`** runs both even when `git pull` is a no-op. See `scripts/gsync.py` docstring and env `GSYNC_UIUX_PREFIXES` / `GSYNC_PATTERN_GAME_PREFIXES`. Use **`sync.py`** when you always need the operator stack rebuilt regardless of paths.
 
+**Pattern-game only (always pull + restart + verify):** **`./scripts/deploy_pattern_game.sh`** (same as **`python3 scripts/gsync.py --pattern-game`**) stages game_theory paths, pushes, pulls on the lab, restarts Flask, then **fails with exit code 1** if the remote repo HEAD does not match `origin` or the UI does not return **`X-Pattern-Game-UI-Version`** on port **8765** (unless **`--no-verify`**). Prefer this when iterating on the pattern-game web UI so “pushed” cannot be mistaken for “live on clawbot.”
+
 **Not** the same as [`workspace_sync.md`](workspace_sync.md) (OpenClaw identity/skills copies on the gateway). **One-shot** push + Black Box UI stack + SeanV3/Jupiter: see **`python3 scripts/jupsync.py --full-stack`** in `scripts/jupsync.py`.
 
 ---
