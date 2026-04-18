@@ -31,6 +31,8 @@ Legacy import: `renaissance_v4.research.pattern_game` re-exports the same API.
 
 **Anna (Ollama) narrative:** Optional operator prose from the **same** Ollama stack as runtime Anna (`scripts/runtime`). Enable with `PLAYER_AGENT_USE_ANNA=1`, or leave unset to follow `ANNA_USE_LLM` (off in CI). Point the client at your host with `OLLAMA_BASE_URL` and optional `OLLAMA_MODEL`. CLI flags: `--anna` (force on for one run), `--no-anna` (force off). Anna’s text is **advisory only** — she must not invent scores; WIN/LOSS and PnL stay from the Referee report.
 
+**Repo context (experience in git, not weights):** Set `ANNA_CONTEXT_PROFILE` to `pattern_game`, `policy`, or both (`policy,pattern_game`) to prepend whitelisted docs from the repo via `scripts/agent_context_bundle.py`. Optional: `ANNA_CONTEXT_FILES` (colon-separated repo-relative paths), `ANNA_CONTEXT_MAX_CHARS`. Default profile is `none` — no extra tokens until you opt in.
+
 ### Parallel batch (maximize compute)
 
 From repo root (`PYTHONPATH=.`):

@@ -49,12 +49,22 @@ def anna_narrate_pattern_report(report_markdown: str, *, timeout: float = 180.0)
     """
     Anna-style prose from **Referee facts only**. Returns (text, error).
     Does not change scores; on failure returns (None, error string).
+
+    Optional repo context (not training): set ``ANNA_CONTEXT_PROFILE`` to e.g. ``policy`` or
+    ``pattern_game`` so ``scripts/agent_context_bundle.py`` prepends whitelisted docs from git.
     """
+    _scripts = str(_REPO_ROOT / "scripts")
+    if _scripts not in sys.path:
+        sys.path.insert(0, _scripts)
+    from agent_context_bundle import build_context_prefix
+
+    prefix = build_context_prefix(_REPO_ROOT)
     ollama_base_url, ollama_generate = _runtime_imports()
     base = ollama_base_url()
     model = os.environ.get("OLLAMA_MODEL", "qwen2.5:7b")
     prompt = (
-        "You are Anna — Trading Analyst (advisory). The block below contains ONLY Referee facts from "
+        prefix
+        + "You are Anna — Trading Analyst (advisory). The block below contains ONLY Referee facts from "
         "deterministic replays (WIN/LOSS, PnL, trades). Write a short operator summary: what was tested, "
         "what outcomes suggest, sensible next hypotheses. Rules: do NOT invent numbers or outcomes not "
         "shown. If the block shows failures, say so. Do not claim execution or live trading.\n\n--- REFEREE FACTS ---\n"
