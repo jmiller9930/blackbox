@@ -10,13 +10,21 @@ Compared to ``scripts/sync.py`` (always rebuilds/restarts UIUX.Web on the remote
   when pulled commits touch ``renaissance_v4/game_theory/`` or other configured prefixes (or when
   ``--force-restart``). Remote helper: ``scripts/pattern_game_remote_restart.sh``.
 
-If the remote repo was **already up to date** (no new commits pulled), gsync exits **unless**
+**Single-command pattern-game testing (recommended):** ``./scripts/sync_pattern_game.sh`` or
+``python3 scripts/gsync.py --pattern-game``
+
+That mode: stages **new files under** ``renaissance_v4/game_theory/`` (plain ``git add -u`` misses
+untracked files), commits if needed, pushes your current branch, SSH ``git pull`` on the **same**
+branch, and **always** restarts the Flask process so the live port matches disk. It does **not**
+run UIUX.Web docker.
+
+If the remote repo was **already up to date** (no new commits pulled), default gsync exits **unless**
 ``--force-restart`` is set — then it still runs the selected restarts so operators do not have to guess.
 
-Process:
+Process (default mode):
   1. If the working tree is dirty and ``--no-commit`` is not set: ``git add -u`` and commit
-     (default message is timestamped; override with ``-m``). Untracked files are not staged;
-     ``git add`` them first if needed.
+     (default message is timestamped; override with ``-m``). Untracked files are not staged unless
+     you use ``--pattern-game`` (see above) or ``git add`` paths yourself.
   2. ``git push`` current branch to origin (unless already aligned or ``--skip-push``).
   3. SSH to the lab host: ``git pull``.
   4. If nothing changed and not ``--force-restart``, **done**.
@@ -35,11 +43,13 @@ Environment (optional):
                                     scripts/pattern_game_agent_reflect.py)
 
 Usage (repo root):
+  ./scripts/sync_pattern_game.sh               # same as --pattern-game (reload Flask for UI testing)
+  python3 scripts/gsync.py --pattern-game       # commit+push+pull+restart pattern-game only (no UIUX docker)
   python3 scripts/gsync.py
   python3 scripts/gsync.py -m "describe change"
   python3 scripts/gsync.py --dry-run
   python3 scripts/gsync.py --no-commit          # push + remote pull; no local commit
-  python3 scripts/gsync.py --skip-push          # commit only; then remote pull + conditional restart
+  python3 scripts/gsync.py --skip-push            # commit only; then remote pull + conditional restart
   python3 scripts/gsync.py --force-restart      # always run UIUX.Web compose after remote pull
   python3 scripts/gsync.py --no-remote          # commit + push only (no SSH)
 
@@ -70,6 +80,14 @@ DEFAULT_PATTERN_GAME_PREFIXES = (
     or "renaissance_v4/game_theory/"
 )
 
+# Staged before commit in --pattern-game mode so new files under game_theory are not skipped (git add -u alone does not add untracked files).
+PATTERN_GAME_STAGING_PATHS = (
+    "renaissance_v4/game_theory",
+    "scripts/pattern_game_remote_restart.sh",
+    "scripts/sync_pattern_game.sh",
+    "scripts/gsync.py",
+)
+
 
 def _find_git_root() -> str:
     cur = os.path.dirname(os.path.abspath(__file__))
@@ -93,6 +111,58 @@ def _branch(repo: str) -> str:
 
 def _working_tree_dirty(repo: str) -> bool:
     return bool(_run(["git", "status", "--porcelain"], cwd=repo).stdout.strip())
+
+
+def _stage_pattern_game_paths(repo: str, *, dry_run: bool) -> None:
+    """``git add`` paths that include untracked files under game_theory (not covered by ``git add -u``)."""
+    for rel in PATTERN_GAME_STAGING_PATHS:
+        p = os.path.join(repo, rel)
+        if not os.path.exists(p):
+            continue
+        if dry_run:
+            print(f"[dry-run] git add {rel!r}", flush=True)
+        else:
+            subprocess.run(["git", "add", "--", rel], cwd=repo, check=False)
+
+
+def _verify_remote_matches_pushed_branch(
+    repo: str,
+    branch: str,
+    ssh_target: str,
+    remote_dir_name: str,
+) -> None:
+    """After SSH pull, confirm lab ``HEAD`` matches ``origin/<branch>`` on this clone."""
+    try:
+        _run(["git", "fetch", "origin"], cwd=repo)
+        want = _run(["git", "rev-parse", f"origin/{branch}"], cwd=repo).stdout.strip()
+    except subprocess.CalledProcessError as e:
+        print(f"gsync: could not verify (local fetch/rev-parse failed): {e}", file=sys.stderr)
+        return
+    try:
+        got = _run(
+            [
+                "ssh",
+                "-T",
+                "-o",
+                "BatchMode=yes",
+                "-o",
+                "ConnectTimeout=30",
+                ssh_target,
+                f"cd ~/{remote_dir_name} && git rev-parse HEAD",
+            ],
+            cwd=repo,
+        ).stdout.strip()
+    except subprocess.CalledProcessError as e:
+        print(f"gsync: could not verify (ssh rev-parse failed): {e}", file=sys.stderr)
+        return
+    if want != got:
+        print(
+            f"gsync: WARNING: remote ~/{remote_dir_name} HEAD {got[:12]}… != "
+            f"your origin/{branch} {want[:12]}… (wrong branch on server, partial pull, or push did not run).",
+            file=sys.stderr,
+        )
+    else:
+        print(f"gsync: OK — remote HEAD matches origin/{branch} ({want[:12]}…).", flush=True)
 
 
 def _auto_commit(
@@ -244,6 +314,17 @@ fi
 """
 
 
+def _remote_script_pattern_game_only(remote_dir_name: str, pull_branch: str) -> str:
+    """Pull on lab host and always restart pattern-game Flask (no docker / UIUX)."""
+    return f"""set -eu
+cd ~/{remote_dir_name}
+git fetch origin
+git pull origin {pull_branch}
+echo "gsync: remote $(hostname -f 2>/dev/null || hostname) now at $(git rev-parse --short HEAD) — $(git log -1 --oneline)"
+bash scripts/pattern_game_remote_restart.sh "$HOME/{remote_dir_name}"
+"""
+
+
 def _remote_pull_maybe_compose(
     ssh_target: str,
     remote_dir_name: str,
@@ -291,6 +372,41 @@ def _remote_pull_maybe_compose(
         sys.exit(r.returncode)
 
 
+def _remote_pull_pattern_game_only(
+    ssh_target: str,
+    remote_dir_name: str,
+    pull_branch: str,
+    *,
+    dry_run: bool,
+) -> None:
+    body = _remote_script_pattern_game_only(remote_dir_name, pull_branch)
+    if dry_run:
+        print("[dry-run] ssh would run on remote (pattern-game only):\n---")
+        print(body)
+        print("---")
+        return
+    print(f"SSH {ssh_target}: git pull + pattern-game restart (always) …", flush=True)
+    r = subprocess.run(
+        [
+            "ssh",
+            "-T",
+            "-o",
+            "BatchMode=yes",
+            "-o",
+            "ConnectTimeout=30",
+            ssh_target,
+            "bash",
+            "--noprofile",
+            "--norc",
+            "-s",
+        ],
+        input=body,
+        text=True,
+    )
+    if r.returncode != 0:
+        sys.exit(r.returncode)
+
+
 def main() -> None:
     ap = argparse.ArgumentParser(
         description="Commit (optional), push, remote pull, restart UIUX.Web and/or pattern-game web when paths match.",
@@ -304,6 +420,13 @@ def main() -> None:
         "--force-restart",
         action="store_true",
         help="Always run UIUX.Web compose + pattern-game web restart (even if pull is a no-op)",
+    )
+    ap.add_argument(
+        "--pattern-game",
+        action="store_true",
+        help="Pattern-game test loop: stage game_theory paths (incl. untracked), commit+push, "
+        "remote pull, always restart Flask on 8765 — no UIUX docker. Requires local branch = "
+        "--remote-branch (default main).",
     )
     ap.add_argument("--ssh", default=DEFAULT_SSH, help="SSH user@host")
     ap.add_argument("--remote-dir", default=DEFAULT_REMOTE_DIR, help="Remote repo directory under ~")
@@ -332,11 +455,43 @@ def main() -> None:
             file=sys.stderr,
         )
 
+    if args.pattern_game:
+        if branch != args.remote_branch:
+            sys.stderr.write(
+                f"gsync: --pattern-game: checkout {args.remote_branch!r} and merge your work, or pass "
+                f"--remote-branch {branch!r} so pull matches what you push.\n",
+            )
+            sys.exit(1)
+        if args.skip_push:
+            sys.stderr.write("gsync: --pattern-game cannot be used with --skip-push.\n")
+            sys.exit(1)
+        if args.no_remote:
+            sys.stderr.write("gsync: --pattern-game requires remote SSH (remove --no-remote).\n")
+            sys.exit(1)
+        if args.no_commit and _working_tree_dirty(repo):
+            sys.stderr.write(
+                "gsync: --pattern-game with --no-commit: you have local changes that are NOT on origin. "
+                "Commit them first or run without --no-commit.\n",
+            )
+            sys.exit(1)
+        _stage_pattern_game_paths(repo, dry_run=args.dry_run)
+
     _auto_commit(repo, dry_run=args.dry_run, no_commit=args.no_commit, message=args.message)
     _sync_push(repo, branch, dry_run=args.dry_run, skip_push=args.skip_push)
 
     if args.no_remote:
         print("gsync: --no-remote set; skipping SSH.")
+        return
+
+    if args.pattern_game:
+        _remote_pull_pattern_game_only(
+            args.ssh,
+            args.remote_dir,
+            args.remote_branch,
+            dry_run=args.dry_run,
+        )
+        if not args.dry_run:
+            _verify_remote_matches_pushed_branch(repo, branch, args.ssh, args.remote_dir)
         return
 
     _remote_pull_maybe_compose(
