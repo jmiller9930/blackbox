@@ -19,6 +19,14 @@ Env:
                            **retrospective** appends recent ``retrospective_log.jsonl`` (what you observed / try next).
                            **scorecard** appends recent ``batch_scorecard.jsonl`` (parallel batch timing, ok/fail counts, workers —
                            read-only facts; does not run replays or change strategy).
+                           **visible_window** (or profile **all**) prepends a **short OHLCV slice** of the latest bars
+                           (default **5 minutes** of ``market_bars_5m`` for SOLUSDT) plus an explicit **visibility contract**:
+                           the model does not see the full year(s) of tape; retrospective + scorecard are memory.
+  ANNA_VISIBLE_WINDOW — ``1`` to force-include the window; ``0`` / ``false`` / ``off`` to **disable** even when
+                           profile is ``all``.
+  ANNA_VISIBLE_WINDOW_MINUTES — wall-clock minutes of bars to show (default ``5``).
+  ANNA_VISIBLE_WINDOW_SYMBOL — default ``SOLUSDT``.
+  ANNA_VISIBLE_WINDOW_TABLE — default ``market_bars_5m``.
   ANNA_CONTEXT_RETROSPECTIVE — ``1`` to include retrospective even if token omitted (optional).
   ANNA_CONTEXT_SCORECARD — ``1`` to include scorecard even if token omitted (optional).
   ANNA_CONTEXT_RETROSPECTIVE_LIMIT — max retrospective lines (default 15).
@@ -33,6 +41,7 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
+from renaissance_v4.game_theory.anna_visible_window import format_visible_window_for_prompt
 from renaissance_v4.game_theory.batch_scorecard import format_batch_scorecard_for_prompt
 from renaissance_v4.game_theory.retrospective_log import format_retrospective_for_prompt
 
@@ -85,6 +94,7 @@ def build_context_prefix(repo_root: Path | str | None = None) -> str:
         "yes",
         "on",
     )
+    profile_wants_visible_window = False
     parts: list[str] = []
     seen: set[str] = set()
 
@@ -98,6 +108,7 @@ def build_context_prefix(repo_root: Path | str | None = None) -> str:
             keys = list(_PROFILE_PATHS.keys())
             want_retrospective = True
             want_scorecard = True
+            profile_wants_visible_window = True
         elif token == "pattern_game":
             keys = ["pattern_game"]
         elif token == "policy":
@@ -107,6 +118,9 @@ def build_context_prefix(repo_root: Path | str | None = None) -> str:
             continue
         elif token == "scorecard":
             want_scorecard = True
+            continue
+        elif token == "visible_window":
+            profile_wants_visible_window = True
             continue
         else:
             continue
@@ -134,6 +148,18 @@ def build_context_prefix(repo_root: Path | str | None = None) -> str:
     scorecard_limit = int(os.environ.get("ANNA_CONTEXT_SCORECARD_LIMIT", "15"))
     scorecard_max = int(os.environ.get("ANNA_CONTEXT_SCORECARD_MAX_CHARS", "8000"))
 
+    vw_env = os.environ.get("ANNA_VISIBLE_WINDOW", "").strip().lower()
+    explicit_visible_off = vw_env in ("0", "false", "no", "off")
+    explicit_visible_on = vw_env in ("1", "true", "yes", "on")
+    want_visible_window = (profile_wants_visible_window or explicit_visible_on) and not explicit_visible_off
+
+    visible_block = ""
+    if want_visible_window and remaining > 400:
+        visible_block = format_visible_window_for_prompt(
+            max_chars=min(8000, max(0, remaining - 400)),
+        )
+        remaining -= len(visible_block)
+
     retro_block = ""
     if want_retrospective and remaining > 200:
         retro_block = format_retrospective_for_prompt(
@@ -151,10 +177,16 @@ def build_context_prefix(repo_root: Path | str | None = None) -> str:
             path=None,
         )
 
-    if not body.strip() and not retro_block and not scorecard_block:
+    if not visible_block.strip() and not body.strip() and not retro_block and not scorecard_block:
         return ""
 
-    out = "--- REPOSITORY CONTEXT (authoritative docs; do not invent requirements not shown here) ---\n\n"
+    out = ""
+    if visible_block.strip():
+        out += "--- ANNA PERCEPTION (visible market window — not the full tape) ---\n\n"
+        out += visible_block
+        out += "\n--- END ANNA PERCEPTION ---\n\n"
+
+    out += "--- REPOSITORY CONTEXT (authoritative docs; do not invent requirements not shown here) ---\n\n"
     if body.strip():
         out += body
     if retro_block:

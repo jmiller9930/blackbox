@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import sqlite3
 from pathlib import Path
 
 import pytest
@@ -97,6 +98,7 @@ def test_build_context_all_includes_retro_and_scorecard(monkeypatch: pytest.Monk
         encoding="utf-8",
     )
     monkeypatch.setenv("ANNA_CONTEXT_PROFILE", "all")
+    monkeypatch.setenv("ANNA_VISIBLE_WINDOW", "0")
     monkeypatch.setattr(
         "renaissance_v4.game_theory.retrospective_log.default_retrospective_log_jsonl",
         lambda: retro,
@@ -112,6 +114,28 @@ def test_build_context_all_includes_retro_and_scorecard(monkeypatch: pytest.Monk
     assert "try wider" in s
     assert "BATCH SCORECARD" in s
     assert "j1" in s
+
+
+def test_build_context_visible_window_token(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    monkeypatch.setenv("ANNA_CONTEXT_PROFILE", "visible_window")
+    monkeypatch.setenv("ANNA_VISIBLE_WINDOW", "1")
+    p = tmp_path / "db.sqlite3"
+    with sqlite3.connect(p) as conn:
+        conn.execute(
+            """CREATE TABLE market_bars_5m (
+                symbol TEXT, open_time INTEGER, open REAL, high REAL, low REAL, close REAL, volume REAL
+            )"""
+        )
+        conn.execute(
+            "INSERT INTO market_bars_5m VALUES (?,?,?,?,?,?,?)",
+            ("SOLUSDT", 1_700_000_000_000, 100.0, 101.0, 99.0, 100.5, 1234.0),
+        )
+        conn.commit()
+    monkeypatch.setattr("renaissance_v4.utils.db.DB_PATH", p)
+    s = build_context_prefix(_REPO)
+    assert "ANNA PERCEPTION" in s
+    assert "Visibility contract" in s
+    assert "100.5" in s
 
 
 def test_build_context_pattern_game_and_scorecard(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
