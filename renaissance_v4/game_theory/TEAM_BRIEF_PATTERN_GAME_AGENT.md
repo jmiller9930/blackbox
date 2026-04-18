@@ -2,6 +2,8 @@
 
 **Repo:** `renaissance_v4/game_theory/` · **Plug-in type:** `PatternGameAgent` (`from renaissance_v4.game_theory import PatternGameAgent`)
 
+**Why we’re here (pattern discovery, indicator context):** **`QUANT_RESEARCH_AGENT_DESIGN.md`**.
+
 This note is what operators and integrators can forward as-is: what runs, what does **not** run, and how to kick off jobs.
 
 ---

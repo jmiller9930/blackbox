@@ -10,6 +10,8 @@
 
 Run an **empirical pattern game**: the **Player** proposes strategies built only from the **frozen indicator vocabulary** and **Renaissance catalog**; the **Referee** replays history and scores **binary WIN/LOSS** per closed trade. **Wins and losses are both data.** Primary interest is **repeatable pattern structure**, not a dollar-narrative optimization—though **starting capital** is fixed so sizing and feasibility are real.
 
+**Research intent (pattern discovery, indicator context):** The product goal is to find **repeatable pattern → policy** matches validated by replay, not to celebrate one-run PnL. Indicators must eventually be interpreted with **dynamic context** (direction, transition, structure), not raw values alone — see **`QUANT_RESEARCH_AGENT_DESIGN.md`**.
+
 ---
 
 ## 2. Roles
