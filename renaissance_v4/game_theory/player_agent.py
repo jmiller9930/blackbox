@@ -6,7 +6,8 @@ The Referee remains deterministic; this layer does **not** change scores. It exi
 
 **Anna (LLM):** When enabled, reuses the same Ollama stack as Anna — ``scripts/runtime/_ollama.py`` +
 ``llm/local_llm_client.ollama_generate``. She writes **advisory** text: run summaries from Referee facts, and can
-answer **operator questions** doc-grounded via ``agent_context_bundle`` (game spec, QUANT design, context_memory).
+answer **operator questions** doc-grounded via ``agent_context_bundle`` (game spec, QUANT design, context_memory,
+Renaissance V4 ``fusion_engine`` / weights / ``FusionResult`` contract).
 She does **not** judge WIN/LOSS or change scores. Enable with ``PLAYER_AGENT_USE_ANNA=1`` (default: follow
 ``ANNA_USE_LLM``). If ``ANNA_CONTEXT_PROFILE`` is unset/``none``, pattern-game calls default it to ``pattern_game``
 so factual repo docs are loaded. CLI: ``--ask "…"`` for a standalone factual answer (no batch).

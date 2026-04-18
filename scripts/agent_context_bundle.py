@@ -1,12 +1,14 @@
 """
 Optional **repository context** prepended to Anna (Ollama) prompts — not model training.
 
-Experience lives in **git**: policy specs, game specs, and optional extra files. This module loads
-whitelisted paths so the LLM sees the same rules operators use, without inventing retention in weights.
+Experience lives in **git**: policy specs, game specs, Renaissance V4 fusion math (checked-in source),
+and optional extra files. This module loads whitelisted paths so the LLM sees the same rules operators use,
+without inventing retention in weights.
 
 Env:
   ANNA_CONTEXT_PROFILE   — comma-separated: none | pattern_game | policy (default: none).
-                           **pattern_game** loads game spec, QUANT research design, and ``context_memory.py`` (tide metaphor).
+                           **pattern_game** loads game spec, QUANT research design, ``context_memory.py`` (tide metaphor),
+                           and **Renaissance V4 fusion** (``fusion_engine.py``, ``signal_weights.py``, ``fusion_result.py``).
   ANNA_CONTEXT_FILES     — extra repo-relative paths, colon-separated (optional)
   ANNA_CONTEXT_MAX_CHARS — cap total injected text (default 120000)
 """
@@ -21,6 +23,9 @@ _PROFILE_PATHS: dict[str, tuple[str, ...]] = {
         "renaissance_v4/game_theory/GAME_SPEC_INDICATOR_PATTERN_V1.md",
         "renaissance_v4/game_theory/QUANT_RESEARCH_AGENT_DESIGN.md",
         "renaissance_v4/game_theory/context_memory.py",
+        "renaissance_v4/core/fusion_result.py",
+        "renaissance_v4/core/signal_weights.py",
+        "renaissance_v4/core/fusion_engine.py",
     ),
     "policy": ("docs/architect/policy_package_standard.md",),
 }

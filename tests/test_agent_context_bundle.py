@@ -25,6 +25,8 @@ def test_build_context_includes_pattern_game_spec(monkeypatch: pytest.MonkeyPatc
     monkeypatch.setenv("ANNA_CONTEXT_PROFILE", "pattern_game")
     s = build_context_prefix(_REPO)
     assert "GAME_SPEC_INDICATOR_PATTERN_V1" in s
+    assert "fusion_engine.py" in s
+    assert "fuse_signal_results" in s
     assert "REPOSITORY CONTEXT" in s
 
 
