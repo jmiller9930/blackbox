@@ -6,11 +6,18 @@ and optional extra files. This module loads whitelisted paths so the LLM sees th
 without inventing retention in weights.
 
 Env:
-  ANNA_CONTEXT_PROFILE   — comma-separated: none | pattern_game | policy | retrospective (default: none).
+  ANNA_CONTEXT_PROFILE   — comma-separated: none | pattern_game | policy | retrospective | scorecard (default: none).
                            **pattern_game** loads game spec, QUANT research design, ``context_memory.py`` (tide metaphor),
                            and **Renaissance V4 fusion** (``fusion_engine.py``, ``signal_weights.py``, ``fusion_result.py``).
+                           **policy** loads ``policy_package_standard.md``.
                            **retrospective** appends recent ``retrospective_log.jsonl`` (what you observed / try next).
+                           **scorecard** appends recent ``batch_scorecard.jsonl`` (parallel batch timing, ok/fail counts, workers —
+                           read-only facts; does not run replays or change strategy).
   ANNA_CONTEXT_RETROSPECTIVE — ``1`` to include retrospective even if token omitted (optional).
+  ANNA_CONTEXT_SCORECARD — ``1`` to include scorecard even if token omitted (optional).
+  ANNA_CONTEXT_RETROSPECTIVE_LIMIT — max retrospective lines (default 15).
+  ANNA_CONTEXT_SCORECARD_LIMIT — max scorecard lines (default 15).
+  ANNA_CONTEXT_SCORECARD_MAX_CHARS — max chars for scorecard block (default 8000).
   ANNA_CONTEXT_FILES     — extra repo-relative paths, colon-separated (optional)
   ANNA_CONTEXT_MAX_CHARS — cap total injected text (default 120000)
 """
@@ -20,6 +27,7 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
+from renaissance_v4.game_theory.batch_scorecard import format_batch_scorecard_for_prompt
 from renaissance_v4.game_theory.retrospective_log import format_retrospective_for_prompt
 
 _PROFILE_PATHS: dict[str, tuple[str, ...]] = {
@@ -65,6 +73,12 @@ def build_context_prefix(repo_root: Path | str | None = None) -> str:
         "yes",
         "on",
     )
+    want_scorecard = os.environ.get("ANNA_CONTEXT_SCORECARD", "").strip().lower() in (
+        "1",
+        "true",
+        "yes",
+        "on",
+    )
     parts: list[str] = []
     seen: set[str] = set()
 
@@ -80,6 +94,9 @@ def build_context_prefix(repo_root: Path | str | None = None) -> str:
             keys = ["policy"]
         elif token == "retrospective":
             want_retrospective = True
+            continue
+        elif token == "scorecard":
+            want_scorecard = True
             continue
         else:
             continue
@@ -104,6 +121,9 @@ def build_context_prefix(repo_root: Path | str | None = None) -> str:
 
     body = "".join(parts)
     retro_limit = int(os.environ.get("ANNA_CONTEXT_RETROSPECTIVE_LIMIT", "15"))
+    scorecard_limit = int(os.environ.get("ANNA_CONTEXT_SCORECARD_LIMIT", "15"))
+    scorecard_max = int(os.environ.get("ANNA_CONTEXT_SCORECARD_MAX_CHARS", "8000"))
+
     retro_block = ""
     if want_retrospective and remaining > 200:
         retro_block = format_retrospective_for_prompt(
@@ -111,16 +131,29 @@ def build_context_prefix(repo_root: Path | str | None = None) -> str:
             max_chars=max(0, remaining - 400),
             path=None,
         )
+        remaining -= len(retro_block)
 
-    if not body.strip() and not retro_block:
+    scorecard_block = ""
+    if want_scorecard and remaining > 200:
+        scorecard_block = format_batch_scorecard_for_prompt(
+            limit=scorecard_limit,
+            max_chars=min(scorecard_max, max(0, remaining - 400)),
+            path=None,
+        )
+
+    if not body.strip() and not retro_block and not scorecard_block:
         return ""
 
     out = "--- REPOSITORY CONTEXT (authoritative docs; do not invent requirements not shown here) ---\n\n"
     if body.strip():
         out += body
     if retro_block:
-        out += "\n--- RETROSPECTIVE LOG (prior runs — not Referee scores; use to suggest next experiments) ---\n\n"
+        out += "\n--- RETROSPECTIVE LOG (prior runs — operator notes; not Referee trade scores) ---\n\n"
         out += retro_block
+        out += "\n"
+    if scorecard_block:
+        out += "\n--- BATCH SCORECARD (recent parallel batches — timing and counts from JSONL; read-only) ---\n\n"
+        out += scorecard_block
         out += "\n"
     out += "--- END REPOSITORY CONTEXT ---\n\n"
     return out
@@ -133,7 +166,7 @@ def main() -> None:
     ap.add_argument(
         "--profile",
         default=os.environ.get("ANNA_CONTEXT_PROFILE", "none"),
-        help="Same as ANNA_CONTEXT_PROFILE, e.g. policy,pattern_game",
+        help="Same as ANNA_CONTEXT_PROFILE, e.g. policy,pattern_game,scorecard",
     )
     ap.add_argument("--repo", type=Path, default=None, help="Repo root (default: cwd)")
     args = ap.parse_args()

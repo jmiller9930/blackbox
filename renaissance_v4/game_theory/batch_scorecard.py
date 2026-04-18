@@ -67,6 +67,47 @@ def read_batch_scorecard_recent(
     return out
 
 
+def format_batch_scorecard_for_prompt(
+    *,
+    limit: int = 15,
+    max_chars: int = 12000,
+    path: Path | None = None,
+) -> str:
+    """
+    Markdown block for Anna context injection: recent parallel batch lines (timing, counts, workers).
+
+    These are **operational** facts from ``batch_scorecard.jsonl``, not per-trade Referee outcomes.
+    Empty string if no file or no rows.
+    """
+    rows = read_batch_scorecard_recent(limit, path=path)
+    if not rows:
+        return ""
+    lines_out: list[str] = [
+        "### Pattern game batch scorecard (recent parallel runs — timing and counts only)\n",
+        "Referee trade/session metrics live in replay results JSON, not this log.\n\n",
+    ]
+    for i, r in enumerate(rows, 1):
+        ts = r.get("ended_at_utc") or r.get("started_at_utc") or "?"
+        st = r.get("status") or "?"
+        job = r.get("job_id") or "?"
+        job_s = job if len(str(job)) <= 16 else (str(job)[:14] + "…")
+        err = r.get("error")
+        err_s = ""
+        if err:
+            es = str(err).replace("\n", " ")
+            err_s = f"\n   - error: {es[:480]}{'…' if len(es) > 480 else ''}"
+        lines_out.append(
+            f"{i}. **{ts}** · status={st} · job_id={job_s}\n"
+            f"   - processed {r.get('total_processed')}/{r.get('total_scenarios')} scenarios · "
+            f"ok={r.get('ok_count')} failed={r.get('failed_count')} · workers={r.get('workers_used')} · "
+            f"duration_sec={r.get('duration_sec')}{err_s}\n"
+        )
+    body = "".join(lines_out)
+    if len(body) > max_chars:
+        body = body[: max_chars - 24] + "\n… [truncated]\n"
+    return body
+
+
 def build_batch_timing_payload(
     *,
     started_at_utc: str,

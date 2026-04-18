@@ -7,6 +7,7 @@ from pathlib import Path
 import pytest
 
 from renaissance_v4.game_theory.batch_scorecard import (
+    format_batch_scorecard_for_prompt,
     read_batch_scorecard_recent,
     record_parallel_batch_finished,
 )
@@ -54,3 +55,24 @@ def test_record_error_line(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> N
     rows = read_batch_scorecard_recent(5, path=p)
     assert rows[0]["status"] == "error"
     assert rows[0]["total_processed"] == 0
+
+
+def test_format_batch_scorecard_for_prompt(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    p = tmp_path / "batch_scorecard.jsonl"
+    monkeypatch.setattr("renaissance_v4.game_theory.batch_scorecard.time.time", lambda: 200.0)
+    record_parallel_batch_finished(
+        job_id="job99",
+        started_at_utc="2030-03-01T10:00:00Z",
+        start_unix=100.0,
+        total_scenarios=4,
+        workers_used=4,
+        results=[{"ok": True}],
+        session_log_batch_dir=None,
+        error=None,
+        path=p,
+    )
+    s = format_batch_scorecard_for_prompt(limit=5, max_chars=8000, path=p)
+    assert "Pattern game batch scorecard" in s
+    assert "job99" in s
+    assert "ok=1" in s
+    assert "workers=4" in s
