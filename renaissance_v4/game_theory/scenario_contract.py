@@ -74,6 +74,8 @@ SCENARIO_ECHO_KEYS: tuple[str, ...] = (
     "tier",
     "evaluation_window",
     "game_spec_ref",
+    "operator_recipe_id",
+    "operator_recipe_label",
 )
 
 # Backward-compatible name
@@ -164,6 +166,8 @@ def validate_scenarios(
         "emit_baseline_artifacts",
         "prior_run_id",
         "skip_groundhog_bundle",
+        "operator_recipe_id",
+        "operator_recipe_label",
         *SCENARIO_ECHO_KEYS,
     }
 

@@ -80,6 +80,10 @@ from renaissance_v4.research.determinism import deterministic_decision_id, valid
 from renaissance_v4.research.execution_learning_bridge import record_closed_trade_to_ledger
 from renaissance_v4.research.learning_ledger import LearningLedger
 from renaissance_v4.research.signal_scorecard import build_signal_scorecards
+from renaissance_v4.game_theory.evaluation_window_runtime import (
+    parse_bar_open_time_unix,
+    slice_rows_for_calendar_months,
+)
 from renaissance_v4.utils.db import get_connection
 
 MIN_ROWS_REQUIRED = 50
@@ -127,6 +131,7 @@ def run_manifest_replay(
     *,
     emit_baseline_artifacts: bool = True,
     verbose: bool = True,
+    bar_window_calendar_months: int | None = None,
     decision_context_recall_enabled: bool = False,
     decision_context_recall_apply_bias: bool = False,
     decision_context_recall_apply_signal_bias_v2: bool = False,
@@ -142,6 +147,10 @@ def run_manifest_replay(
 
     When ``emit_baseline_artifacts`` is False (experiment / multi-strategy runs), baseline markdown and
     full outcome exports are skipped so baseline reference files are not overwritten.
+
+    When ``bar_window_calendar_months`` is a positive integer, replay uses only the last ~N calendar
+    months of bars (approximate day cutoff from the last bar). When ``None`` or non-positive, the
+    full ``market_bars_5m`` series is used.
 
     When ``decision_context_recall_enabled`` is True, each decision may include structured recall from
     ``context_signature_memory`` JSONL (see :mod:`renaissance_v4.game_theory.decision_context_recall`).
@@ -163,9 +172,30 @@ def run_manifest_replay(
         """
     ).fetchall()
 
+    n_full = len(rows)
+    replay_data_audit: dict[str, Any]
+    if bar_window_calendar_months is not None and int(bar_window_calendar_months) > 0:
+        rows, replay_data_audit = slice_rows_for_calendar_months(
+            list(rows),
+            int(bar_window_calendar_months),
+            min_rows_required=MIN_ROWS_REQUIRED,
+        )
+        replay_data_audit["dataset_bars_before_window"] = n_full
+    else:
+        replay_data_audit = {
+            "schema": "pattern_game_bar_window_v1",
+            "dataset_bars_before_window": n_full,
+            "dataset_bars_after_window": n_full,
+            "bar_window_calendar_months_requested": None,
+            "slicing_applied": False,
+            "bar_window_open_time_start": parse_bar_open_time_unix(rows[0]) if rows else None,
+            "bar_window_open_time_end": parse_bar_open_time_unix(rows[-1]) if rows else None,
+            "note": "Full dataset — no calendar-month window slice.",
+        }
+
     dataset_bars = len(rows)
     if verbose:
-        print(f"[replay] Loaded {dataset_bars} bars")
+        print(f"[replay] Loaded {dataset_bars} bars (full DB had {n_full})")
 
     if dataset_bars < MIN_ROWS_REQUIRED:
         raise RuntimeError(
@@ -752,6 +782,7 @@ def run_manifest_replay(
     if decision_context_recall_enabled:
         out["decision_context_recall_stats"] = dcr_stats
         out["decision_context_recall_samples"] = dcr_samples
+    out["replay_data_audit"] = replay_data_audit
     return out
 
 

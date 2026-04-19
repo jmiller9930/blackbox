@@ -430,6 +430,22 @@ def extract_hypothesis_bundle(
     return {"hypothesis": hyp or None, "indicator_context": ctx or None}
 
 
+def build_operator_run_audit(
+    scenario: dict[str, Any] | None,
+    json_summary_row: dict[str, Any] | None,
+) -> dict[str, Any]:
+    """Structured audit: recipe, window intent, and replay bar proof (parallel or single)."""
+    scen = scenario or {}
+    summ = json_summary_row if isinstance(json_summary_row, dict) else None
+    return {
+        "operator_recipe_id": scen.get("operator_recipe_id"),
+        "operator_recipe_label": scen.get("operator_recipe_label"),
+        "evaluation_window": scen.get("evaluation_window"),
+        "manifest_path": scen.get("manifest_path"),
+        "replay_data_audit": summ.get("replay_data_audit") if summ else None,
+    }
+
+
 def build_run_memory_record(
     *,
     source: str,
@@ -443,6 +459,7 @@ def build_run_memory_record(
     atr_target_mult: float | None = None,
     parallel_error: str | None = None,
     memory_bundle_audit: dict[str, Any] | None = None,
+    operator_run_audit: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """One JSON object suitable for a single JSONL line."""
     mp = Path(manifest_path).expanduser().resolve()
@@ -488,6 +505,8 @@ def build_run_memory_record(
         atr_target_mult=atr_target_mult,
         parallel_error=parallel_error,
     )
+    if operator_run_audit:
+        rec["operator_run_audit"] = operator_run_audit
     if parallel_error:
         rec["error"] = parallel_error
     return rec
@@ -513,6 +532,9 @@ def learning_evidence_from_parallel_result_row(row: dict[str, Any]) -> dict[str,
             "memory_bundle_path",
             "training_trace_id",
             "prior_scenario_id",
+            "operator_recipe_id",
+            "operator_recipe_label",
+            "evaluation_window",
         )
         if k in row
     }

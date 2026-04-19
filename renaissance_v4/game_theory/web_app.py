@@ -1,5 +1,8 @@
 """
-Local web UI for pattern game: **preset or paste** scenario JSON, then Run (parallel workers).
+Local web UI for pattern game: **curated operator recipes** + **evaluation window**, or **Custom JSON**,
+then Run (parallel workers). Recipes are defined in ``operator_recipes.py`` (not a glob of every file
+in ``examples/``). The evaluation window (12 / 18 / 24 / custom months) is merged into each scenario
+and drives **replay bar slicing** in ``run_manifest_replay`` (see ``replay_data_audit`` on results).
 
 Batches use **``POST /api/run-parallel/start``** + polling **``GET /api/run-parallel/status/<job_id>``**
 so the UI shows **per-scenario progress** (determinate bar) instead of a single long blocking request.
@@ -28,7 +31,10 @@ Referee predictions.
 validator-ready scenario array (same manifest, ATR geometry sweep) for paste or parallel run —
 see ``catalog_batch_builder.py``.
 
-No manifest/ATR fields in the UI — policy lives in the JSON (or examples presets). **Workers** slider defaults
+**API:** ``GET /api/operator-recipes``, ``GET /api/operator-recipe-preview`` — curated playbooks.
+**Advanced:** ``GET /api/scenario-presets`` lists raw ``examples/*.json`` for templates and debugging.
+
+No manifest/ATR fields in the main controls — policy lives in the recipe / JSON. **Workers** slider defaults
 to **logical CPU count** (capped by host hard max, see ``GET /api/capabilities``). ``POST /api/run`` remains for
 scripted single-manifest runs (optional JSON field ``memory_bundle_path``).
 
@@ -58,7 +64,7 @@ from flask import Flask, Response, abort, jsonify, request
 _GAME_THEORY = Path(__file__).resolve().parent
 
 # Operator-visible web UI bundle version — bump when changing PAGE_HTML (HTML/CSS/JS) so deploys are provable.
-PATTERN_GAME_WEB_UI_VERSION = "2.1.2"
+PATTERN_GAME_WEB_UI_VERSION = "2.2.0"
 
 from renaissance_v4.game_theory.groundhog_memory import (
     groundhog_auto_merge_enabled,
@@ -85,6 +91,16 @@ from renaissance_v4.game_theory.catalog_batch_builder import (
 )
 from renaissance_v4.game_theory.hunter_planner import build_hunter_suggestion
 from renaissance_v4.game_theory.retrospective_log import append_retrospective, read_retrospective_recent
+from renaissance_v4.game_theory.evaluation_window_runtime import (
+    annotate_scenarios_with_window_and_recipe,
+    resolve_ui_evaluation_window,
+)
+from renaissance_v4.game_theory.operator_recipes import (
+    build_scenarios_for_recipe,
+    default_recipe_id,
+    operator_recipe_catalog,
+    recipe_meta_by_id,
+)
 from renaissance_v4.game_theory.parallel_runner import (
     clamp_parallel_workers,
     get_parallel_limits,
@@ -145,25 +161,64 @@ def _web_ui_require_hypothesis() -> bool:
 
 def _prepare_parallel_payload(data: dict[str, Any]) -> dict[str, Any]:
     """Validate POST body for parallel run. Returns ``ok`` + fields or ``ok: False`` + ``error``."""
-    raw = data.get("scenarios_json")
-    if not raw or not isinstance(raw, str):
-        return {"ok": False, "error": "Missing scenarios_json string"}
+    recipe_id_in = (data.get("operator_recipe_id") or "").strip() or "custom"
+    window_mode = (data.get("evaluation_window_mode") or "12").strip().lower()
+    custom_m = data.get("evaluation_window_custom_months")
+
     try:
-        scenarios = json.loads(raw)
-        if isinstance(scenarios, dict) and "scenarios" in scenarios:
-            scenarios = scenarios["scenarios"]
-        if not isinstance(scenarios, list):
-            raise ValueError("scenarios must be a JSON array")
-        scenarios = [x for x in scenarios if isinstance(x, dict)]
-    except (json.JSONDecodeError, ValueError) as e:
+        resolved = resolve_ui_evaluation_window(window_mode, custom_m)
+    except ValueError as e:
         return {"ok": False, "error": str(e)}
+
+    scenarios: list[dict[str, Any]] = []
+    recipe_default_months = 12
+    recipe_label = "Custom JSON"
+
+    if recipe_id_in != "custom":
+        meta = recipe_meta_by_id(recipe_id_in)
+        if not meta:
+            return {"ok": False, "error": f"Unknown operator_recipe_id: {recipe_id_in!r}"}
+        try:
+            scenarios = build_scenarios_for_recipe(recipe_id_in)
+        except (FileNotFoundError, ValueError) as e:
+            return {"ok": False, "error": str(e)}
+        recipe_default_months = int(meta["default_evaluation_window_months"])
+        recipe_label = str(meta["operator_label"])
+    else:
+        raw = data.get("scenarios_json")
+        if not raw or not isinstance(raw, str):
+            return {"ok": False, "error": "Missing scenarios_json string (Custom JSON mode)"}
+        try:
+            scenarios = json.loads(raw)
+            if isinstance(scenarios, dict) and "scenarios" in scenarios:
+                scenarios = scenarios["scenarios"]
+            if not isinstance(scenarios, list):
+                raise ValueError("scenarios must be a JSON array")
+            scenarios = [x for x in scenarios if isinstance(x, dict)]
+        except (json.JSONDecodeError, ValueError) as e:
+            return {"ok": False, "error": str(e)}
+        if scenarios:
+            ew0 = scenarios[0].get("evaluation_window")
+            if isinstance(ew0, dict) and ew0.get("calendar_months") is not None:
+                try:
+                    recipe_default_months = int(ew0["calendar_months"])
+                except (TypeError, ValueError):
+                    recipe_default_months = 12
+
+    if not scenarios:
+        return {"ok": False, "error": "No scenario objects in JSON array"}
+
+    annotate_scenarios_with_window_and_recipe(
+        scenarios,
+        recipe_id=recipe_id_in,
+        recipe_label=recipe_label,
+        recipe_default_calendar_months=recipe_default_months,
+        resolved=resolved,
+    )
 
     for s in scenarios:
         if "manifest_path" in s and s["manifest_path"]:
             s["manifest_path"] = str(Path(s["manifest_path"]).expanduser().resolve())
-
-    if not scenarios:
-        return {"ok": False, "error": "No scenario objects in JSON array"}
 
     ok_val, val_msgs = validate_scenarios(
         scenarios,
@@ -191,12 +246,27 @@ def _prepare_parallel_payload(data: dict[str, Any]) -> dict[str, Any]:
     else:
         log_path = None
 
+    ew0 = scenarios[0].get("evaluation_window") if scenarios else {}
+    operator_batch_audit: dict[str, Any] = {
+        "operator_recipe_id": recipe_id_in,
+        "operator_recipe_label": recipe_label,
+        "evaluation_window_mode": resolved["evaluation_window_mode"],
+        "evaluation_window_effective_calendar_months": int(resolved["effective_calendar_months"]),
+        "recipe_default_calendar_months": recipe_default_months,
+        "window_overrode_recipe_default": bool(
+            isinstance(ew0, dict) and ew0.get("window_overrode_recipe_default")
+        ),
+        "manifest_path_primary": scenarios[0].get("manifest_path") if scenarios else None,
+    }
+
     return {
         "ok": True,
         "scenarios": scenarios,
         "max_workers": max_workers,
         "log_path": log_path,
         "val_msgs": val_msgs,
+        "operator_batch_audit": operator_batch_audit,
+        "evaluation_window_resolved": resolved,
     }
 
 
@@ -307,8 +377,61 @@ def create_app() -> Flask:
             workers = None
         return jsonify(build_search_space_estimate(batch_size=batch_size, workers=workers))
 
+    @app.get("/api/operator-recipes")
+    def api_operator_recipes() -> Any:
+        """Curated operator playbooks (main UI). Not a directory glob."""
+        return jsonify(
+            {
+                "ok": True,
+                "recipes": operator_recipe_catalog(),
+                "default_recipe_id": default_recipe_id(),
+            }
+        )
+
+    @app.get("/api/operator-recipe-preview")
+    def api_operator_recipe_preview() -> Any:
+        """Return validated scenario JSON for a curated recipe + evaluation window (fills the textarea)."""
+        recipe_id = (request.args.get("recipe_id") or default_recipe_id()).strip()
+        window_mode = (request.args.get("evaluation_window_mode") or "12").strip().lower()
+        cs = request.args.get("evaluation_window_custom_months")
+        custom_m: int | None = None
+        if cs not in (None, ""):
+            try:
+                custom_m = int(cs)
+            except ValueError:
+                return jsonify({"ok": False, "error": "evaluation_window_custom_months must be an integer"}), 400
+        prep = _prepare_parallel_payload(
+            {
+                "operator_recipe_id": recipe_id,
+                "evaluation_window_mode": window_mode,
+                "evaluation_window_custom_months": custom_m,
+                "scenarios_json": "[]",
+            }
+        )
+        if not prep["ok"]:
+            if recipe_id == "custom":
+                return jsonify(
+                    {
+                        "ok": False,
+                        "error": "Recipe 'custom' is filled from the textarea — no server preview.",
+                    }
+                ), 400
+            return jsonify(dict(prep)), 400
+        return jsonify(
+            {
+                "ok": True,
+                "operator_batch_audit": prep["operator_batch_audit"],
+                "scenarios_json": json.dumps(prep["scenarios"], indent=2, ensure_ascii=False) + "\n",
+            }
+        )
+
     @app.get("/api/scenario-presets")
     def scenario_presets() -> Any:
+        """
+        **Advanced / examples:** raw ``*.json`` files under ``game_theory/examples/``.
+
+        The main operator dropdown uses :func:`api_operator_recipes` instead of this glob.
+        """
         ex = _GAME_THEORY / "examples"
         rows: list[dict[str, Any]] = []
         for p in sorted(ex.glob("*.json")):
@@ -490,6 +613,7 @@ def create_app() -> Flask:
         max_workers = prep["max_workers"]
         log_path = prep["log_path"]
         val_msgs = prep["val_msgs"]
+        operator_batch_audit = prep["operator_batch_audit"]
 
         _prune_jobs()
         job_id = uuid.uuid4().hex
@@ -549,6 +673,7 @@ def create_app() -> Flask:
                     results=results,
                     session_log_batch_dir=session_batch_dir[0],
                     error=None,
+                    operator_batch_audit=operator_batch_audit,
                 )
                 payload = {
                     "ok": True,
@@ -563,6 +688,7 @@ def create_app() -> Flask:
                     "scenario_validation": {"ok": True, "messages": val_msgs},
                     "session_log_batch_dir": session_batch_dir[0],
                     "batch_timing": timing,
+                    "operator_batch_audit": operator_batch_audit,
                 }
                 with _JOBS_LOCK:
                     j = _JOBS.get(job_id)
@@ -582,6 +708,7 @@ def create_app() -> Flask:
                     results=None,
                     session_log_batch_dir=None,
                     error=err_s,
+                    operator_batch_audit=operator_batch_audit,
                 )
                 with _JOBS_LOCK:
                     j = _JOBS.get(job_id)
@@ -636,6 +763,7 @@ def create_app() -> Flask:
         max_workers = prep["max_workers"]
         log_path = prep["log_path"]
         val_msgs = prep["val_msgs"]
+        operator_batch_audit = prep["operator_batch_audit"]
 
         job_id = uuid.uuid4().hex
         started_iso = utc_timestamp_iso()
@@ -663,6 +791,7 @@ def create_app() -> Flask:
                 results=results,
                 session_log_batch_dir=session_batch_dir[0],
                 error=None,
+                operator_batch_audit=operator_batch_audit,
             )
             return jsonify(
                 {
@@ -678,6 +807,7 @@ def create_app() -> Flask:
                     "scenario_validation": {"ok": True, "messages": val_msgs},
                     "session_log_batch_dir": session_batch_dir[0],
                     "batch_timing": timing,
+                    "operator_batch_audit": operator_batch_audit,
                 }
             )
         except Exception as e:
@@ -691,6 +821,7 @@ def create_app() -> Flask:
                 results=None,
                 session_log_batch_dir=None,
                 error=err_s,
+                operator_batch_audit=operator_batch_audit,
             )
             return jsonify({"ok": False, "error": err_s, "job_id": job_id, "batch_timing": timing}), 400
 
@@ -1905,11 +2036,31 @@ PAGE_HTML = """<!DOCTYPE html>
         <div class="pg-block">
           <div class="pg-block-title">Scenario setup</div>
           <div class="pg-mini-grid pg-mini-3">
-            <div><label for="presetPick">Preset</label><select id="presetPick" aria-describedby="presetHelp"><option value="">— Custom JSON —</option></select></div>
-            <div><label>&nbsp;</label><button type="button" class="btn-secondary" style="width:100%;margin-top:0" id="suggestHuntersBtn" title="Scorecard + retrospective">Suggest hunters</button></div>
-            <div><label>&nbsp;</label><button type="button" class="btn-chef" style="width:100%;margin-top:0" id="chefAtrSweepBtn">ATR sweep</button></div>
+            <div><label for="operatorRecipePick">Recipe</label><select id="operatorRecipePick" aria-describedby="presetHelp">
+              <option value="pattern_learning">Pattern Learning Run</option>
+              <option value="reference_comparison">Reference Comparison Run</option>
+              <option value="custom">Custom JSON</option>
+            </select></div>
+            <div><label for="evaluationWindowPick">Evaluation window</label><select id="evaluationWindowPick" aria-describedby="presetHelp">
+              <option value="12">12 months</option>
+              <option value="18">18 months</option>
+              <option value="24">24 months</option>
+              <option value="custom">Custom…</option>
+            </select></div>
+            <div id="customMonthsWrap" style="display:none"><label for="evaluationWindowCustomMonths">Months</label><input type="number" id="evaluationWindowCustomMonths" min="1" max="600" value="36" style="width:100%;margin-top:4px"/></div>
           </div>
-          <p class="caps" id="presetHelp">Preset fills the textarea.</p>
+          <p class="caps" id="presetHelp">Recipe chooses the experiment; evaluation window chooses how much historical tape is replayed (last N months, approximate). Both are echoed in results and scorecard.</p>
+          <details class="help-details pg-help" style="margin-top:8px">
+            <summary>Advanced — example files &amp; uploads</summary>
+            <div class="help-details-body">
+              <div class="pg-mini-grid pg-mini-3" style="margin-top:8px">
+                <div><label for="examplesFilePick">Load example file</label><select id="examplesFilePick"><option value="">— pick file —</option></select></div>
+                <div><label>&nbsp;</label><button type="button" class="btn-secondary" style="width:100%;margin-top:0" id="suggestHuntersBtn" title="Scorecard + retrospective">Suggest hunters</button></div>
+                <div><label>&nbsp;</label><button type="button" class="btn-chef" style="width:100%;margin-top:0" id="chefAtrSweepBtn">ATR sweep</button></div>
+              </div>
+              <p class="caps">Example files are for templates, sweeps, and debugging — not the main operator menu. Switch <strong>Recipe</strong> to <em>Custom JSON</em> after loading if you want to run ad hoc JSON.</p>
+            </div>
+          </details>
           <input type="file" id="presetFileInput" accept=".json,application/json" style="display:none" aria-hidden="true" />
           <div class="pg-upload-row">
             <button type="button" class="btn-upload" id="presetUploadBtn">Upload preset…</button>
@@ -2575,10 +2726,20 @@ PAGE_HTML = """<!DOCTYPE html>
           workersVal.textContent = String(mw);
         }
         const scenariosTa = document.getElementById('scenarios').value;
+        const wm = document.getElementById('evaluationWindowPick') ? document.getElementById('evaluationWindowPick').value : '12';
+        let customM = null;
+        if (wm === 'custom') {
+          const cEl = document.getElementById('evaluationWindowCustomMonths');
+          customM = cEl ? parseInt(cEl.value, 10) : null;
+          if (!customM || customM < 1) customM = 36;
+        }
         const body = {
           scenarios_json: scenariosTa,
           max_workers: mw,
-          log_path: document.getElementById('doLog').checked
+          log_path: document.getElementById('doLog').checked,
+          operator_recipe_id: document.getElementById('operatorRecipePick') ? document.getElementById('operatorRecipePick').value : 'custom',
+          evaluation_window_mode: wm,
+          evaluation_window_custom_months: customM
         };
         const startR = await fetch('/api/run-parallel/start', {
           method: 'POST',
@@ -2891,40 +3052,81 @@ PAGE_HTML = """<!DOCTYPE html>
       }
     }
 
-    const presetPick = document.getElementById('presetPick');
+    const operatorRecipePick = document.getElementById('operatorRecipePick');
+    const evaluationWindowPick = document.getElementById('evaluationWindowPick');
+    const evaluationWindowCustomMonths = document.getElementById('evaluationWindowCustomMonths');
+    const customMonthsWrap = document.getElementById('customMonthsWrap');
+    const examplesFilePick = document.getElementById('examplesFilePick');
     const scenariosEl = document.getElementById('scenarios');
 
-    async function loadPreset(name) {
+    function syncCustomMonthsVisibility() {
+      if (!customMonthsWrap || !evaluationWindowPick) return;
+      customMonthsWrap.style.display = evaluationWindowPick.value === 'custom' ? '' : 'none';
+    }
+
+    async function refreshOperatorRecipePreview() {
+      if (!operatorRecipePick || !evaluationWindowPick || !scenariosEl) return;
+      const rid = operatorRecipePick.value;
+      if (rid === 'custom') return;
+      const wm = evaluationWindowPick.value;
+      let url = '/api/operator-recipe-preview?recipe_id=' + encodeURIComponent(rid) +
+        '&evaluation_window_mode=' + encodeURIComponent(wm);
+      if (wm === 'custom') {
+        const cm = evaluationWindowCustomMonths ? parseInt(evaluationWindowCustomMonths.value, 10) : 36;
+        url += '&evaluation_window_custom_months=' + encodeURIComponent(String(cm && cm > 0 ? cm : 36));
+      }
+      try {
+        const r = await fetch(url);
+        const j = await r.json();
+        if (!r.ok || !j.ok) {
+          document.getElementById('out').innerHTML = '<span class="err">Recipe preview: ' + escapeHtml(j.error || r.status) + '</span>';
+          setEvidenceTab('json');
+          return;
+        }
+        scenariosEl.value = j.scenarios_json || '';
+        if (typeof refreshSearchSpaceEstimate === 'function') refreshSearchSpaceEstimate();
+        refreshWorkerEffectiveLine();
+      } catch (e) {
+        document.getElementById('out').innerHTML = '<span class="err">' + escapeHtml(friendlyFetchError(e)) + '</span>';
+        setEvidenceTab('json');
+      }
+    }
+
+    async function loadExamplesFile(name) {
       if (!name) return;
       const r = await fetch('/api/scenario-preset?name=' + encodeURIComponent(name));
       if (!r.ok) {
-        document.getElementById('out').innerHTML = '<span class="err">Preset load failed: ' + r.status + '</span>';
+        document.getElementById('out').innerHTML = '<span class="err">Example file load failed: ' + r.status + '</span>';
         setEvidenceTab('json');
         return;
       }
       const j = await r.json();
-      if (j.ok) scenariosEl.value = j.content;
+      if (j.ok) {
+        scenariosEl.value = j.content;
+        if (operatorRecipePick) operatorRecipePick.value = 'custom';
+      }
     }
 
     function updateRenameButton() {
       const btn = document.getElementById('presetRenameBtn');
-      const v = presetPick && presetPick.value;
+      const v = examplesFilePick && examplesFilePick.value;
       if (btn) btn.disabled = !v || v.indexOf('user_') !== 0;
     }
 
-    async function populatePresetDropdown(selectFilename) {
+    async function populateExamplesFileDropdown(selectFilename) {
       const r = await fetch('/api/scenario-presets');
       const rows = await r.json();
-      presetPick.innerHTML = '<option value="">— Custom JSON —</option>';
+      if (!examplesFilePick) return rows;
+      examplesFilePick.innerHTML = '<option value="">— pick file —</option>';
       rows.forEach((row) => {
         const o = document.createElement('option');
         o.value = row.filename;
         o.textContent = row.label || row.filename;
-        presetPick.appendChild(o);
+        examplesFilePick.appendChild(o);
       });
       if (selectFilename) {
-        const has = Array.from(presetPick.options).some(function (opt) { return opt.value === selectFilename; });
-        if (has) presetPick.value = selectFilename;
+        const has = Array.from(examplesFilePick.options).some(function (opt) { return opt.value === selectFilename; });
+        if (has) examplesFilePick.value = selectFilename;
       }
       updateRenameButton();
       return rows;
@@ -3021,8 +3223,8 @@ PAGE_HTML = """<!DOCTYPE html>
             }
             if (uploadPresetSubmitBtn) uploadPresetSubmitBtn.style.display = 'none';
             if (uploadPresetDoneBtn) uploadPresetDoneBtn.style.display = '';
-            await populatePresetDropdown(j.filename);
-            await loadPreset(j.filename);
+            await populateExamplesFileDropdown(j.filename);
+            await loadExamplesFile(j.filename);
             if (typeof refreshSearchSpaceEstimate === 'function') refreshSearchSpaceEstimate();
             refreshWorkerEffectiveLine();
           } else {
@@ -3058,7 +3260,7 @@ PAGE_HTML = """<!DOCTYPE html>
 
     if (renamePresetBtn && renameDlg && renameDlg.showModal) {
       renamePresetBtn.addEventListener('click', function () {
-        const v = presetPick && presetPick.value;
+        const v = examplesFilePick && examplesFilePick.value;
         if (!v || v.indexOf('user_') !== 0) return;
         if (renamePresetResult) { renamePresetResult.className = 'pg-upload-result'; renamePresetResult.textContent = ''; }
         if (renamePresetInput) renamePresetInput.value = v.replace(/^user_/, '').replace(/\.json$/, '').replace(/_/g, ' ');
@@ -3071,7 +3273,7 @@ PAGE_HTML = """<!DOCTYPE html>
     }
     if (renamePresetSubmitBtn) {
       renamePresetSubmitBtn.addEventListener('click', async function () {
-        const oldFn = presetPick && presetPick.value;
+        const oldFn = examplesFilePick && examplesFilePick.value;
         const newName = (renamePresetInput && renamePresetInput.value) ? renamePresetInput.value.trim() : '';
         if (!oldFn || !newName) return;
         if (renameDialogSpinner) renameDialogSpinner.classList.add('visible');
@@ -3088,8 +3290,8 @@ PAGE_HTML = """<!DOCTYPE html>
               renamePresetResult.className = 'pg-upload-result visible ok';
               renamePresetResult.textContent = 'PASS — Renamed to ' + j.filename;
             }
-            await populatePresetDropdown(j.filename);
-            await loadPreset(j.filename);
+            await populateExamplesFileDropdown(j.filename);
+            await loadExamplesFile(j.filename);
             if (typeof refreshSearchSpaceEstimate === 'function') refreshSearchSpaceEstimate();
             refreshWorkerEffectiveLine();
             setTimeout(function () { if (renameDlg.close) renameDlg.close(); }, 900);
@@ -3109,42 +3311,51 @@ PAGE_HTML = """<!DOCTYPE html>
       });
     }
 
-    (async function initPresets() {
+    (async function initOperatorUi() {
       try {
-        const rows = await populatePresetDropdown(null);
-        const tier1 = rows.find((x) => x.filename === 'tier1_twelve_month.example.json');
-        if (tier1) {
-          presetPick.value = tier1.filename;
-          await loadPreset(tier1.filename);
-        }
+        await populateExamplesFileDropdown(null);
+        if (operatorRecipePick) operatorRecipePick.value = 'pattern_learning';
+        syncCustomMonthsVisibility();
+        await refreshOperatorRecipePreview();
         if (typeof refreshSearchSpaceEstimate === 'function') await refreshSearchSpaceEstimate();
         refreshWorkerEffectiveLine();
       } catch (e) {}
     })();
+
+    if (evaluationWindowPick) evaluationWindowPick.addEventListener('change', function () {
+      syncCustomMonthsVisibility();
+      refreshOperatorRecipePreview();
+    });
+    if (evaluationWindowCustomMonths) evaluationWindowCustomMonths.addEventListener('change', function () {
+      if (evaluationWindowPick && evaluationWindowPick.value === 'custom') refreshOperatorRecipePreview();
+    });
+    if (operatorRecipePick) operatorRecipePick.addEventListener('change', function () {
+      refreshOperatorRecipePreview();
+    });
 
     scenariosEl.addEventListener('input', () => {
       if (typeof refreshSearchSpaceEstimate === 'function') refreshSearchSpaceEstimate();
       refreshWorkerEffectiveLine();
     });
 
-    presetPick.onchange = () => {
+    if (examplesFilePick) examplesFilePick.addEventListener('change', function () {
       updateRenameButton();
-      const name = presetPick.value;
+      const name = examplesFilePick.value;
       if (!name) {
         if (typeof refreshSearchSpaceEstimate === 'function') refreshSearchSpaceEstimate();
         refreshWorkerEffectiveLine();
         return;
       }
-      loadPreset(name)
-        .then(() => {
+      loadExamplesFile(name)
+        .then(function () {
           if (typeof refreshSearchSpaceEstimate === 'function') return refreshSearchSpaceEstimate();
         })
-        .then(() => { refreshWorkerEffectiveLine(); })
-        .catch((e) => {
+        .then(function () { refreshWorkerEffectiveLine(); })
+        .catch(function (e) {
           document.getElementById('out').innerHTML = '<span class="err">' + String(e) + '</span>';
           setEvidenceTab('json');
         });
-    };
+    });
 
     if (typeof refreshSearchSpaceEstimate === 'function') refreshSearchSpaceEstimate();
     refreshWorkerEffectiveLine();

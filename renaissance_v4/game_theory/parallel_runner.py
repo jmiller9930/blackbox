@@ -19,7 +19,11 @@ from typing import Any
 
 from renaissance_v4.game_theory.groundhog_memory import resolve_memory_bundle_for_scenario
 from renaissance_v4.game_theory.pattern_game import json_summary, run_pattern_game
-from renaissance_v4.game_theory.run_memory import append_run_memory, build_run_memory_record
+from renaissance_v4.game_theory.run_memory import (
+    append_run_memory,
+    build_operator_run_audit,
+    build_run_memory_record,
+)
 from renaissance_v4.game_theory.memory_paths import (
     default_experience_log_jsonl,
     default_logs_root,
@@ -29,6 +33,7 @@ from renaissance_v4.game_theory.run_session_log import (
     allocate_unique_run_directory,
     write_batch_index_and_scenario_logs,
 )
+from renaissance_v4.game_theory.evaluation_window_runtime import extract_calendar_months_for_replay
 from renaissance_v4.game_theory.scenario_contract import (
     extract_policy_contract_summary,
     extract_scenario_echo_fields,
@@ -84,6 +89,7 @@ def _worker_run_one(scenario: dict[str, Any]) -> dict[str, Any]:
             mbp = str(Path(mbp).expanduser().resolve())
         else:
             mbp = resolve_memory_bundle_for_scenario(scenario, explicit_path=None)
+        bar_m = extract_calendar_months_for_replay(scenario)
         out = run_pattern_game(
             scenario["manifest_path"],
             atr_stop_mult=scenario.get("atr_stop_mult"),
@@ -92,6 +98,7 @@ def _worker_run_one(scenario: dict[str, Any]) -> dict[str, Any]:
             use_groundhog_auto_resolve=False,
             emit_baseline_artifacts=bool(scenario.get("emit_baseline_artifacts", False)),
             verbose=False,
+            bar_window_calendar_months=bar_m,
         )
         summ = json_summary(out)
         row: dict[str, Any] = {
@@ -106,6 +113,7 @@ def _worker_run_one(scenario: dict[str, Any]) -> dict[str, Any]:
             "manifest_path": str(scenario.get("manifest_path", "")),
             "memory_bundle_audit": out.get("memory_bundle_audit"),
             "memory_bundle_proof": out.get("memory_bundle_proof"),
+            "replay_data_audit": out.get("replay_data_audit"),
             "atr_stop_mult": scenario.get("atr_stop_mult"),
             "atr_target_mult": scenario.get("atr_target_mult"),
         }
@@ -247,6 +255,7 @@ def run_scenarios_parallel(
             atr_target_mult=atr_t,
             prior_run_id=prior_rid,
             memory_bundle_audit=row.get("memory_bundle_audit"),
+            operator_run_audit=build_operator_run_audit(scen, summ),
         )
         if mem_p is not None:
             append_run_memory(mem_p, rec)

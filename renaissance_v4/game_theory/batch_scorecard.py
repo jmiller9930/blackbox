@@ -218,6 +218,7 @@ def record_parallel_batch_finished(
     error: str | None,
     source: str = "pattern_game_web_ui",
     path: Path | None = None,
+    operator_batch_audit: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """
     Append one scorecard line and return ``batch_timing`` for API payloads.
@@ -261,6 +262,8 @@ def record_parallel_batch_finished(
             "error": error[:4000],
             **pct_fields,
         }
+        if operator_batch_audit:
+            record["operator_batch_audit"] = operator_batch_audit
     else:
         res = results or []
         ok_n = sum(1 for r in res if r.get("ok"))
@@ -281,6 +284,8 @@ def record_parallel_batch_finished(
             "session_log_batch_dir": session_log_batch_dir,
             **pct_fields,
         }
+        if operator_batch_audit:
+            record["operator_batch_audit"] = operator_batch_audit
 
     append_batch_scorecard_line(record, path=path)
     return {**timing, **pct_fields}

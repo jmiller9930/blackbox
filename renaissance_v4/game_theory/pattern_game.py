@@ -80,6 +80,7 @@ def json_summary(out: dict[str, Any]) -> dict[str, Any]:
         "manifest_path": out.get("manifest_path"),
         "summary": out.get("summary"),
         "pattern_game_meta": out.get("pattern_game_meta"),
+        "replay_data_audit": out.get("replay_data_audit"),
     }
     if sm:
         row["expectancy"] = round(float(sm.get("expectancy", 0.0)), 6)
@@ -101,6 +102,7 @@ def run_pattern_game(
     use_groundhog_auto_resolve: bool = True,
     emit_baseline_artifacts: bool = False,
     verbose: bool = True,
+    bar_window_calendar_months: int | None = None,
 ) -> dict[str, Any]:
     """
     Load manifest, optional **memory bundle** merge, optional ATR overlays, validate, replay.
@@ -156,6 +158,7 @@ def run_pattern_game(
             replay_arg,
             emit_baseline_artifacts=emit_baseline_artifacts,
             verbose=verbose,
+            bar_window_calendar_months=bar_window_calendar_months,
         )
     finally:
         if tmp_path and os.path.isfile(tmp_path):
