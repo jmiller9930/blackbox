@@ -175,7 +175,7 @@ def format_batch_scorecard_for_prompt(
     if not rows:
         return ""
     lines_out: list[str] = [
-        "### Pattern game batch scorecard (recent parallel runs — timing and counts only)\n",
+        "### Pattern Machine learning batch scorecard (recent parallel runs — timing and counts only)\n",
         "Referee trade/session metrics live in replay results JSON, not this log.\n\n",
     ]
     for i, r in enumerate(rows, 1):

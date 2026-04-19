@@ -114,7 +114,7 @@ def test_format_batch_scorecard_for_prompt(tmp_path: Path, monkeypatch: pytest.M
         path=p,
     )
     s = format_batch_scorecard_for_prompt(limit=5, max_chars=8000, path=p)
-    assert "Pattern game batch scorecard" in s
+    assert "Pattern Machine learning batch scorecard" in s
     assert "job99" in s
     assert "ok=1" in s
     assert "run_ok=" in s and "%" in s

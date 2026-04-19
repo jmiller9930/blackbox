@@ -1,5 +1,5 @@
 """
-Local web UI for pattern game: **curated operator recipes** + **evaluation window**, or **Custom JSON**,
+Local web UI for **Pattern Machine learning**: **curated operator recipes** + **evaluation window**, or **Custom JSON**,
 then Run (parallel workers). Recipes are defined in ``operator_recipes.py`` (not a glob of every file
 in ``examples/``). The evaluation window (12 / 18 / 24 / custom months) is merged into each scenario
 and drives **replay bar slicing** in ``run_manifest_replay`` (see ``replay_data_audit`` on results).
@@ -62,12 +62,14 @@ import uuid
 from pathlib import Path
 from typing import Any
 
-from flask import Flask, Response, abort, jsonify, request
+from flask import Flask, Response, abort, jsonify, request, send_file
 
 _GAME_THEORY = Path(__file__).resolve().parent
+_RV4_ROOT = _GAME_THEORY.parent
+_PATTERN_BANNER_PATH = _RV4_ROOT / "assets" / "pattern.jpg"
 
 # Operator-visible web UI bundle version — bump when changing PAGE_HTML (HTML/CSS/JS) so deploys are provable.
-PATTERN_GAME_WEB_UI_VERSION = "2.6.1"
+PATTERN_GAME_WEB_UI_VERSION = "2.7.0"
 
 from renaissance_v4.game_theory.groundhog_memory import (
     groundhog_auto_merge_enabled,
@@ -475,6 +477,13 @@ def create_app() -> Flask:
         resp = Response(_render_page_html(), mimetype="text/html; charset=utf-8")
         resp.headers["X-Pattern-Game-UI-Version"] = PATTERN_GAME_WEB_UI_VERSION
         return resp
+
+    @app.get("/assets/pattern-banner.jpg")
+    def pattern_banner_jpg() -> Response:
+        """Top-of-page banner image (``renaissance_v4/assets/pattern.jpg``)."""
+        if not _PATTERN_BANNER_PATH.is_file():
+            abort(404)
+        return send_file(_PATTERN_BANNER_PATH, mimetype="image/jpeg")
 
     @app.get("/api/capabilities")
     def capabilities() -> Any:
@@ -1304,7 +1313,7 @@ PAGE_HTML = """<!DOCTYPE html>
 <head>
   <meta charset="utf-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
-  <title>Pattern game · UI __PATTERN_GAME_WEB_UI_VERSION__</title>
+  <title>Pattern Machine learning · UI __PATTERN_GAME_WEB_UI_VERSION__</title>
   <style>
     :root {
       --pg-bg: #f2efe8;
@@ -1347,8 +1356,9 @@ PAGE_HTML = """<!DOCTYPE html>
       padding: 24px 24px 40px;
     }
     .pg-header {
-      display: block;
-      padding: 24px 26px 22px;
+      display: flex;
+      flex-direction: column;
+      padding: 0;
       background: linear-gradient(135deg, #14202a 0%, #243341 100%);
       color: #f7f1e6;
       border-radius: var(--pg-radius-xl);
@@ -1356,6 +1366,21 @@ PAGE_HTML = """<!DOCTYPE html>
       margin-bottom: 22px;
       overflow: hidden;
       position: relative;
+    }
+    .pg-header-banner {
+      display: block;
+      width: 100%;
+      height: auto;
+      max-height: min(260px, 38vw);
+      object-fit: cover;
+      object-position: center 35%;
+      margin: 0;
+      flex: 0 0 auto;
+    }
+    .pg-header-content {
+      padding: 22px 26px 22px;
+      position: relative;
+      z-index: 1;
     }
     .pg-header::after {
       content: "";
@@ -2445,11 +2470,13 @@ PAGE_HTML = """<!DOCTYPE html>
 <body class="pg-theme">
   <div class="pg-shell">
     <header class="pg-header">
+      <img class="pg-header-banner" src="/assets/pattern-banner.jpg" width="1600" height="400" alt="Pattern Machine learning" decoding="async" fetchpriority="high"/>
+      <div class="pg-header-content">
       <div class="pg-title-wrap">
-        <div class="pg-eyebrow">Pattern game lab</div>
-        <h1 class="pg-title">Pattern game <em>controls · live telemetry · scorecard · five status tiles · header results &amp; modules</em>
+        <div class="pg-eyebrow">Pattern Machine learning</div>
+        <h1 class="pg-title">Pattern Machine learning
           <span class="ui-version" title="Bump PATTERN_GAME_WEB_UI_VERSION in web_app.py">v__PATTERN_GAME_WEB_UI_VERSION__</span></h1>
-        <p class="pg-lead">Pick a <strong>pattern</strong> and <strong>evaluation window</strong>, then <strong>Run</strong> — the lab builds scenarios for curated modes. <strong>Live run telemetry</strong> (right, during a batch) is the primary runtime readout; <strong>Scorecard</strong> sits below it for batch history. <strong>Five status tiles</strong> include <strong>Modules</strong>. Custom JSON lives under <em>Advanced</em> only.</p>
+        <p class="pg-lead">Pick a <strong>pattern</strong> and <strong>evaluation window</strong>, then <strong>Run</strong> — curated modes build ready-to-run scenarios. <strong>Live telemetry</strong> (during a batch) is the primary readout; <strong>Scorecard</strong> below tracks batch history. Status tiles include <strong>Modules</strong>. Custom JSON is under <em>Advanced</em> only.</p>
         <div class="pg-orientation-note">Twisty on each panel · DEF record: <code>docs/architect/pattern_game_operator_deficiencies_work_record.md</code></div>
       </div>
       <div class="pg-banner-strip">
@@ -2523,6 +2550,7 @@ PAGE_HTML = """<!DOCTYPE html>
         </div>
       </details>
       </div>
+      </div>
     </header>
 
     <dialog id="moduleDetailDialog" class="pg-module-dialog" aria-labelledby="moduleModalTitle">
@@ -2572,7 +2600,7 @@ PAGE_HTML = """<!DOCTYPE html>
         <summary>
           <div class="pg-panel-header" style="margin:0;flex:1">
             <div>
-              <h2 class="pg-panel-h">1. Game controls</h2>
+              <h2 class="pg-panel-h">1. Run controls</h2>
               <p class="pg-panel-sub">Structured controls, run summary, workers.</p>
             </div>
             <span class="pg-chip pg-chip-teal">Controls</span>
@@ -3558,7 +3586,7 @@ PAGE_HTML = """<!DOCTYPE html>
       const hdr = document.querySelector('.pg-header-evidence');
       if (hdr) hdr.open = true;
       if (!pre) {
-        console.error('pattern game UI: missing #out element');
+        console.error('Pattern Machine learning UI: missing #out element');
         return;
       }
       if (err) {
@@ -3573,7 +3601,7 @@ PAGE_HTML = """<!DOCTYPE html>
       setEvidenceTab('outcomes');
     }
 
-    function openGameControlsPanel() {
+    function openRunControlsPanel() {
       const p = document.querySelector('details.pg-panel-controls');
       if (p) p.open = true;
     }
@@ -3803,7 +3831,7 @@ PAGE_HTML = """<!DOCTYPE html>
       const btn = document.getElementById('runBtn');
       setRunFeedbackToast('');
       setOpButtonBusy(btn, true, 'Running…', true);
-      openGameControlsPanel();
+      openRunControlsPanel();
       clearBatchConcurrencyBanner();
       hideLiveTelemetryPanel();
       const sn = document.getElementById('sessionLogNote');
@@ -4814,7 +4842,7 @@ PAGE_HTML = """<!DOCTYPE html>
 def main() -> None:
     import argparse
 
-    p = argparse.ArgumentParser(description="Pattern game local web UI")
+    p = argparse.ArgumentParser(description="Pattern Machine learning local web UI")
     p.add_argument("--host", default="127.0.0.1")
     p.add_argument("--port", type=int, default=8765)
     args = p.parse_args()
