@@ -16,12 +16,15 @@ Change History:
 
 from __future__ import annotations
 
+from typing import Any
+
 from renaissance_v4.core.feature_set import FeatureSet
 from renaissance_v4.core.market_state import MarketState
 from renaissance_v4.signals.base_signal import BaseSignal
 from renaissance_v4.signals.signal_result import SignalResult
 
 MIN_CONFIDENCE = 0.52
+DEFAULT_VOLATILITY_CEILING = 0.02
 
 
 class PullbackContinuationSignal(BaseSignal):
@@ -30,6 +33,16 @@ class PullbackContinuationSignal(BaseSignal):
     """
 
     signal_name = "pullback_continuation"
+
+    def __init__(self) -> None:
+        self._min_confidence: float | None = None
+        self._volatility_ceiling: float | None = None
+
+    def configure_from_manifest(self, manifest: dict[str, Any]) -> None:
+        if "pullback_continuation_min_confidence" in manifest:
+            self._min_confidence = float(manifest["pullback_continuation_min_confidence"])
+        if "pullback_continuation_volatility_threshold" in manifest:
+            self._volatility_ceiling = float(manifest["pullback_continuation_volatility_threshold"])
 
     def evaluate(self, state: MarketState, features: FeatureSet, regime: str) -> SignalResult:
         direction = "neutral"
@@ -41,7 +54,12 @@ class PullbackContinuationSignal(BaseSignal):
         suppression_reason = ""
 
         pulled_back = features.candle_body < max(features.candle_range * 0.60, 1e-9)
-        not_explosive = features.volatility_20 < 0.02
+        vol_cap = (
+            self._volatility_ceiling
+            if self._volatility_ceiling is not None
+            else DEFAULT_VOLATILITY_CEILING
+        )
+        not_explosive = features.volatility_20 < vol_cap
 
         if regime == "trend_up":
             regime_fit = 0.90
@@ -62,7 +80,8 @@ class PullbackContinuationSignal(BaseSignal):
             if not suppression_reason:
                 suppression_reason = "pullback_conditions_not_met"
         else:
-            active = confidence >= MIN_CONFIDENCE
+            floor = self._min_confidence if self._min_confidence is not None else MIN_CONFIDENCE
+            active = confidence >= floor
             if not active:
                 suppression_reason = "confidence_below_floor"
 

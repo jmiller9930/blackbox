@@ -16,12 +16,15 @@ Change History:
 
 from __future__ import annotations
 
+from typing import Any
+
 from renaissance_v4.core.feature_set import FeatureSet
 from renaissance_v4.core.market_state import MarketState
 from renaissance_v4.signals.base_signal import BaseSignal
 from renaissance_v4.signals.signal_result import SignalResult
 
 MIN_CONFIDENCE = 0.53
+DEFAULT_STRETCH_THRESHOLD = 0.003
 
 
 class MeanReversionFadeSignal(BaseSignal):
@@ -30,6 +33,16 @@ class MeanReversionFadeSignal(BaseSignal):
     """
 
     signal_name = "mean_reversion_fade"
+
+    def __init__(self) -> None:
+        self._min_confidence: float | None = None
+        self._stretch_threshold: float | None = None
+
+    def configure_from_manifest(self, manifest: dict[str, Any]) -> None:
+        if "mean_reversion_fade_min_confidence" in manifest:
+            self._min_confidence = float(manifest["mean_reversion_fade_min_confidence"])
+        if "mean_reversion_fade_stretch_threshold" in manifest:
+            self._stretch_threshold = float(manifest["mean_reversion_fade_stretch_threshold"])
 
     def evaluate(self, state: MarketState, features: FeatureSet, regime: str) -> SignalResult:
         direction = "neutral"
@@ -45,14 +58,19 @@ class MeanReversionFadeSignal(BaseSignal):
             deviation_from_mean = (features.close_price - features.avg_close_20) / features.avg_close_20
 
         range_like_regime = regime in {"range", "volatility_compression"}
+        stretch = (
+            self._stretch_threshold
+            if self._stretch_threshold is not None
+            else DEFAULT_STRETCH_THRESHOLD
+        )
 
         if range_like_regime:
             regime_fit = 0.90
-            if deviation_from_mean > 0.003 and features.one_bar_return >= 0:
+            if deviation_from_mean > stretch and features.one_bar_return >= 0:
                 direction = "short"
                 confidence = min(1.0, 0.45 + abs(deviation_from_mean) * 40)
                 expected_edge = min(1.0, abs(deviation_from_mean) * 10)
-            elif deviation_from_mean < -0.003 and features.one_bar_return <= 0:
+            elif deviation_from_mean < -stretch and features.one_bar_return <= 0:
                 direction = "long"
                 confidence = min(1.0, 0.45 + abs(deviation_from_mean) * 40)
                 expected_edge = min(1.0, abs(deviation_from_mean) * 10)
@@ -62,7 +80,8 @@ class MeanReversionFadeSignal(BaseSignal):
             suppression_reason = f"regime_mismatch:{regime}"
 
         if direction != "neutral":
-            active = confidence >= MIN_CONFIDENCE
+            floor = self._min_confidence if self._min_confidence is not None else MIN_CONFIDENCE
+            active = confidence >= floor
             if not active:
                 suppression_reason = "confidence_below_floor"
 

@@ -10,8 +10,10 @@ from __future__ import annotations
 import importlib
 from typing import Any, Callable
 
+from renaissance_v4.core.fusion_engine import fuse_signal_results
 from renaissance_v4.registry.load import load_catalog
 from renaissance_v4.signals.base_signal import BaseSignal
+from renaissance_v4.signals.signal_result import SignalResult
 
 
 def _import_class(import_path: str, class_name: str) -> type:
@@ -44,8 +46,11 @@ def build_signals_from_manifest(
         catalog = load_catalog(default_catalog_path())
 
     by_id = {s["id"]: s for s in catalog.get("signals") or [] if isinstance(s, dict) and s.get("id")}
+    disabled = set(manifest.get("disabled_signal_modules") or [])
     out: list[BaseSignal] = []
     for sid in manifest.get("signal_modules") or []:
+        if sid in disabled:
+            continue
         meta = by_id.get(sid)
         if not meta:
             raise KeyError(f"signal {sid} not in catalog")
@@ -53,6 +58,7 @@ def build_signals_from_manifest(
         inst = cls()
         if not isinstance(inst, BaseSignal):
             raise TypeError(f"{sid} does not inherit BaseSignal")
+        inst.configure_from_manifest(manifest)
         out.append(inst)
     return out
 
@@ -66,7 +72,22 @@ def resolve_fusion(manifest: dict[str, Any], *, catalog: dict[str, Any] | None =
     meta = next((f for f in catalog.get("fusion_engines") or [] if f.get("id") == fid), None)
     if not meta:
         raise KeyError(f"fusion {fid} not in catalog")
-    return _import_callable(str(meta["import_path"]), str(meta["callable"]))
+    import_path = str(meta["import_path"])
+    callable_name = str(meta["callable"])
+    # Baseline catalog uses fuse_signal_results; pass manifest overrides for thresholds.
+    if import_path == "renaissance_v4.core.fusion_engine" and callable_name == "fuse_signal_results":
+
+        def fusion_fn(signal_results: list[SignalResult]) -> Any:
+            return fuse_signal_results(
+                signal_results,
+                min_fusion_score=manifest.get("fusion_min_score"),
+                max_conflict_score=manifest.get("fusion_max_conflict_score"),
+                overlap_penalty_per_extra_signal=manifest.get("fusion_overlap_penalty_per_extra_signal"),
+            )
+
+        return fusion_fn
+
+    return _import_callable(import_path, callable_name)
 
 
 def resolve_regime_fn(manifest: dict[str, Any], *, catalog: dict[str, Any] | None = None) -> Callable[..., Any]:

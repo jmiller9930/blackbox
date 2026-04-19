@@ -16,6 +16,8 @@ Change History:
 
 from __future__ import annotations
 
+from typing import Any
+
 from renaissance_v4.core.feature_set import FeatureSet
 from renaissance_v4.core.market_state import MarketState
 from renaissance_v4.signals.base_signal import BaseSignal
@@ -30,6 +32,13 @@ class BreakoutExpansionSignal(BaseSignal):
     """
 
     signal_name = "breakout_expansion"
+
+    def __init__(self) -> None:
+        self._min_confidence: float | None = None
+
+    def configure_from_manifest(self, manifest: dict[str, Any]) -> None:
+        if "breakout_expansion_min_confidence" in manifest:
+            self._min_confidence = float(manifest["breakout_expansion_min_confidence"])
 
     def evaluate(self, state: MarketState, features: FeatureSet, regime: str) -> SignalResult:
         direction = "neutral"
@@ -59,7 +68,8 @@ class BreakoutExpansionSignal(BaseSignal):
             suppression_reason = f"regime_mismatch:{regime}"
 
         if direction != "neutral":
-            active = confidence >= MIN_CONFIDENCE
+            floor = self._min_confidence if self._min_confidence is not None else MIN_CONFIDENCE
+            active = confidence >= floor
             if not active:
                 suppression_reason = "confidence_below_floor"
 

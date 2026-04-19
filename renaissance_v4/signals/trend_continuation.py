@@ -16,6 +16,8 @@ Change History:
 
 from __future__ import annotations
 
+from typing import Any
+
 from renaissance_v4.core.feature_set import FeatureSet
 from renaissance_v4.core.market_state import MarketState
 from renaissance_v4.signals.base_signal import BaseSignal
@@ -31,6 +33,16 @@ class TrendContinuationSignal(BaseSignal):
     """
 
     signal_name = "trend_continuation"
+
+    def __init__(self) -> None:
+        self._min_confidence: float | None = None
+        self._min_regime_fit: float | None = None
+
+    def configure_from_manifest(self, manifest: dict[str, Any]) -> None:
+        if "trend_continuation_min_confidence" in manifest:
+            self._min_confidence = float(manifest["trend_continuation_min_confidence"])
+        if "trend_continuation_min_regime_fit" in manifest:
+            self._min_regime_fit = float(manifest["trend_continuation_min_regime_fit"])
 
     def evaluate(self, state: MarketState, features: FeatureSet, regime: str) -> SignalResult:
         direction = "neutral"
@@ -60,7 +72,9 @@ class TrendContinuationSignal(BaseSignal):
             if not suppression_reason:
                 suppression_reason = "trend_conditions_not_met"
         else:
-            active = regime_fit >= MIN_REGIME_FIT and confidence >= MIN_CONFIDENCE
+            need_r = self._min_regime_fit if self._min_regime_fit is not None else MIN_REGIME_FIT
+            need_c = self._min_confidence if self._min_confidence is not None else MIN_CONFIDENCE
+            active = regime_fit >= need_r and confidence >= need_c
             if not active:
                 suppression_reason = "confidence_or_regime_fit_below_floor"
 

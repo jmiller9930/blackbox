@@ -76,11 +76,27 @@ def _signal_bucket(signal_name: str) -> str:
     return "other"
 
 
-def fuse_signal_results(signal_results: list[SignalResult]) -> FusionResult:
+def fuse_signal_results(
+    signal_results: list[SignalResult],
+    *,
+    min_fusion_score: float | None = None,
+    max_conflict_score: float | None = None,
+    overlap_penalty_per_extra_signal: float | None = None,
+) -> FusionResult:
     """
     Fuse active signal results into one directional output.
     Prefers no_trade whenever evidence is weak, conflicted, or overly redundant.
+
+    Optional overrides (from manifest / memory bundle) default to module constants when None.
     """
+    min_fs = MIN_FUSION_SCORE if min_fusion_score is None else float(min_fusion_score)
+    max_cf = MAX_CONFLICT_SCORE if max_conflict_score is None else float(max_conflict_score)
+    pen = (
+        OVERLAP_PENALTY_PER_EXTRA_SIGNAL
+        if overlap_penalty_per_extra_signal is None
+        else float(overlap_penalty_per_extra_signal)
+    )
+
     long_score = 0.0
     short_score = 0.0
     contributing_signals: list[str] = []
@@ -111,7 +127,7 @@ def fuse_signal_results(signal_results: list[SignalResult]) -> FusionResult:
     for bucket_name, count in bucket_counts.items():
         if count > MAX_OVERLAP_BUCKET_COUNT:
             extra = count - MAX_OVERLAP_BUCKET_COUNT
-            penalty = extra * OVERLAP_PENALTY_PER_EXTRA_SIGNAL
+            penalty = extra * pen
             overlap_penalty += penalty
             print(
                 f"[fusion_engine] Overlap penalty applied bucket={bucket_name} "
@@ -126,9 +142,9 @@ def fuse_signal_results(signal_results: list[SignalResult]) -> FusionResult:
 
     if gross_score == 0:
         direction = "no_trade"
-    elif conflict_score > MAX_CONFLICT_SCORE:
+    elif conflict_score > max_cf:
         direction = "no_trade"
-    elif fusion_score >= MIN_FUSION_SCORE:
+    elif fusion_score >= min_fs:
         direction = "long" if long_score > short_score else "short"
         threshold_passed = True
     else:
@@ -146,8 +162,8 @@ def fuse_signal_results(signal_results: list[SignalResult]) -> FusionResult:
         contributing_signals=contributing_signals,
         suppressed_signals=suppressed_signals,
         debug_trace={
-            "min_fusion_score": MIN_FUSION_SCORE,
-            "max_conflict_score": MAX_CONFLICT_SCORE,
+            "min_fusion_score": min_fs,
+            "max_conflict_score": max_cf,
             "bucket_counts": dict(bucket_counts),
         },
     )
