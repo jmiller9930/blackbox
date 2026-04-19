@@ -67,7 +67,7 @@ from flask import Flask, Response, abort, jsonify, request
 _GAME_THEORY = Path(__file__).resolve().parent
 
 # Operator-visible web UI bundle version — bump when changing PAGE_HTML (HTML/CSS/JS) so deploys are provable.
-PATTERN_GAME_WEB_UI_VERSION = "2.5.2"
+PATTERN_GAME_WEB_UI_VERSION = "2.5.3"
 
 from renaissance_v4.game_theory.groundhog_memory import (
     groundhog_auto_merge_enabled,
@@ -186,6 +186,23 @@ def _prepare_parallel_payload(data: dict[str, Any]) -> dict[str, Any]:
         resolved = resolve_ui_evaluation_window(window_mode, custom_m)
     except ValueError as e:
         return {"ok": False, "error": str(e)}
+
+    health = get_data_health()
+    cap = health.get("max_evaluation_window_calendar_months")
+    req_m = int(resolved["effective_calendar_months"])
+    if isinstance(cap, int) and cap > 0 and req_m > cap:
+        span_d = health.get("replay_tape_span_days_approx") or health.get("all_bars_span_days")
+        span_bit = f"~{round(float(span_d))}d of 5m bars" if isinstance(span_d, (int, float)) else "available 5m bars"
+        return {
+            "ok": False,
+            "error": (
+                f"Evaluation window ({req_m} mo) exceeds replay tape length "
+                f"(max ~{cap} mo from {span_bit}). "
+                "Pick a shorter window or ingest more history."
+            ),
+            "max_evaluation_window_calendar_months": cap,
+            "evaluation_window_requested_months": req_m,
+        }
 
     scenarios: list[dict[str, Any]] = []
     recipe_default_months = 12
@@ -362,10 +379,13 @@ def create_app() -> Flask:
 
     @app.get("/api/capabilities")
     def capabilities() -> Any:
+        h = get_data_health()
         return jsonify(
             {
                 **get_parallel_limits(),
                 "pattern_game_web_ui_version": PATTERN_GAME_WEB_UI_VERSION,
+                "max_evaluation_window_calendar_months": h.get("max_evaluation_window_calendar_months"),
+                "replay_tape_span_days_approx": h.get("replay_tape_span_days_approx"),
             }
         )
 
@@ -2319,7 +2339,7 @@ PAGE_HTML = """<!DOCTYPE html>
             <select id="policyPick" aria-label="Policy manifest"></select>
           </div>
           <p class="pg-policy-line" id="policyReadonly" style="display:none" role="status">Policy: —</p>
-          <p class="caps" id="presetHelp">The server builds scenarios for curated recipes — no JSON required. Evaluation window controls how much tape is replayed (approximate months from the end of the series).</p>
+          <p class="caps" id="presetHelp">The server builds scenarios for curated recipes — no JSON required. Evaluation window controls how much tape is replayed (approximate months from the end of the series). Presets longer than your <code>market_bars_5m</code> span are disabled automatically (see Data health).</p>
           <div class="pg-run-config" id="runConfigPanel" role="region" aria-label="Run configuration">
             <div class="pg-block-title" style="margin-top:0">Run configuration</div>
             <dl class="pg-run-config-dl" id="runConfigDl">
@@ -3598,7 +3618,59 @@ PAGE_HTML = """<!DOCTYPE html>
       }
     };
 
-    fetch('/api/capabilities').then(r => r.json()).then(() => {});
+    function applyEvaluationWindowCapFromPayload(h) {
+      const maxM = h && typeof h.max_evaluation_window_calendar_months === 'number' ? h.max_evaluation_window_calendar_months : null;
+      const ew = document.getElementById('evaluationWindowPick');
+      if (!ew) return;
+      if (maxM == null || maxM < 1) {
+        Array.from(ew.options).forEach(function (opt) { opt.disabled = false; });
+        ew.title = '';
+        const cm0 = document.getElementById('evaluationWindowCustomMonths');
+        if (cm0) cm0.removeAttribute('max');
+        return;
+      }
+      const spanD = h && h.replay_tape_span_days_approx;
+      const spanStr = (typeof spanD === 'number' && !Number.isNaN(spanD)) ? ('~' + Math.round(spanD) + 'd tape → max ' + maxM + ' mo') : ('max ' + maxM + ' mo (data limit)');
+      Array.from(ew.options).forEach(function (opt) {
+        const v = opt.value;
+        if (v === 'custom') {
+          opt.disabled = false;
+          return;
+        }
+        const mo = parseInt(v, 10);
+        opt.disabled = !Number.isFinite(mo) || mo > maxM;
+      });
+      ew.title = spanStr;
+      const cm = document.getElementById('evaluationWindowCustomMonths');
+      if (cm) {
+        cm.max = String(maxM);
+        if (!cm.min) cm.min = '1';
+      }
+      const cur = ew.value;
+      if (cur !== 'custom') {
+        const mo = parseInt(cur, 10);
+        if (Number.isFinite(mo) && mo > maxM) {
+          let pick = 'custom';
+          if (maxM >= 24) pick = '24';
+          else if (maxM >= 18) pick = '18';
+          else if (maxM >= 12) pick = '12';
+          ew.value = pick;
+          if (pick === 'custom' && cm) cm.value = String(maxM);
+          if (typeof syncCustomMonthsVisibility === 'function') syncCustomMonthsVisibility();
+          if (typeof refreshStructuredMetadata === 'function') void refreshStructuredMetadata();
+        }
+      } else if (cm) {
+        const c = parseInt(cm.value, 10);
+        if (Number.isFinite(c) && c > maxM) {
+          cm.value = String(maxM);
+          if (typeof refreshStructuredMetadata === 'function') void refreshStructuredMetadata();
+        }
+      }
+    }
+
+    fetch('/api/capabilities').then(function (r) { return r.json(); }).then(function (c) {
+      applyEvaluationWindowCapFromPayload(c);
+    }).catch(function () {});
 
     async function refreshDataHealth() {
       const dot = document.getElementById('healthDot');
@@ -3617,6 +3689,7 @@ PAGE_HTML = """<!DOCTYPE html>
         } else {
           text.textContent = 'Unknown status';
         }
+        applyEvaluationWindowCapFromPayload(j);
       } catch (e) {
         dot.className = 'status-dot bad';
         dot.title = 'Health request failed';
@@ -4212,6 +4285,14 @@ PAGE_HTML = """<!DOCTYPE html>
     });
     if (evaluationWindowCustomMonths) evaluationWindowCustomMonths.addEventListener('change', function () {
       refreshStructuredMetadata();
+    });
+    if (evaluationWindowCustomMonths) evaluationWindowCustomMonths.addEventListener('input', function () {
+      const cm = evaluationWindowCustomMonths;
+      const maxS = cm.getAttribute('max');
+      if (!maxS) return;
+      const mx = parseInt(maxS, 10);
+      const v = parseInt(cm.value, 10);
+      if (Number.isFinite(mx) && Number.isFinite(v) && v > mx) cm.value = String(mx);
     });
     if (operatorRecipePick) operatorRecipePick.addEventListener('change', function () {
       refreshStructuredMetadata();

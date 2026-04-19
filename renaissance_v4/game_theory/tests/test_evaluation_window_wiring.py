@@ -15,6 +15,18 @@ from renaissance_v4.game_theory.operator_recipes import (
 from renaissance_v4.game_theory.web_app import _prepare_parallel_payload
 
 
+@pytest.fixture(autouse=True)
+def _generous_tape_cap(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Real lab DB spans vary; these wiring tests assume enough tape for 12/24 mo windows."""
+    monkeypatch.setattr(
+        "renaissance_v4.game_theory.web_app.get_data_health",
+        lambda: {
+            "max_evaluation_window_calendar_months": 600,
+            "replay_tape_span_days_approx": 20000.0,
+        },
+    )
+
+
 def test_resolve_ui_window_modes() -> None:
     r12 = resolve_ui_evaluation_window("12", None)
     assert r12["effective_calendar_months"] == 12

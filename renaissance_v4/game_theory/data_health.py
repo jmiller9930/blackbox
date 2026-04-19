@@ -8,6 +8,7 @@ in ``market_bars_5m`` (see ``replay_runner``). We report both **all-bars** (repl
 
 from __future__ import annotations
 
+import math
 import sqlite3
 from typing import Any
 
@@ -18,6 +19,22 @@ from renaissance_v4.utils.db import DB_PATH
 TWELVE_MONTH_SPAN_MIN_DAYS = 335
 
 MS_PER_DAY = 86400 * 1000
+
+# Same scale as ``evaluation_window_runtime.slice_rows_for_calendar_months`` (approx. Gregorian month).
+_CALENDAR_MONTH_APPROX_DAYS = 30.4375
+
+
+def max_evaluation_window_calendar_months_from_span_days(span_days: float | None) -> int | None:
+    """
+    Upper bound for operator ``calendar_months`` given tape length (replay loads **all** rows in
+    ``market_bars_5m`` ordered by ``open_time`` — same span as this MIN/MAX).
+
+    Uses ``ceil(span_days / month)`` so a ~365-day tape allows 12 months (not 11 from floor).
+    """
+    if span_days is None or span_days <= 0:
+        return None
+    m = int(math.ceil(span_days / _CALENDAR_MONTH_APPROX_DAYS))
+    return max(1, min(600, m))
 
 
 def _span_days(min_ms: int | None, max_ms: int | None) -> float | None:
@@ -47,6 +64,8 @@ def get_data_health() -> dict[str, Any]:
         "replay_min_rows": MIN_ROWS_REQUIRED,
         "replay_rows_ok": False,
         "twelve_month_window_ok": False,
+        "replay_tape_span_days_approx": None,
+        "max_evaluation_window_calendar_months": None,
         "error": None,
         "summary_line": "",
     }
@@ -89,6 +108,9 @@ def get_data_health() -> dict[str, Any]:
     out["solusdt_bar_count"] = c_sol
     out["all_bars_span_days"] = _span_days(all_row["tmin"], all_row["tmax"])
     out["solusdt_span_days"] = _span_days(sol_row["tmin"], sol_row["tmax"])
+    span_all = out["all_bars_span_days"]
+    out["replay_tape_span_days_approx"] = span_all
+    out["max_evaluation_window_calendar_months"] = max_evaluation_window_calendar_months_from_span_days(span_all)
 
     out["replay_rows_ok"] = c_all >= MIN_ROWS_REQUIRED
     sd = out["solusdt_span_days"]
