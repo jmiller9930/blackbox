@@ -67,7 +67,7 @@ from flask import Flask, Response, abort, jsonify, request
 _GAME_THEORY = Path(__file__).resolve().parent
 
 # Operator-visible web UI bundle version — bump when changing PAGE_HTML (HTML/CSS/JS) so deploys are provable.
-PATTERN_GAME_WEB_UI_VERSION = "2.5.4"
+PATTERN_GAME_WEB_UI_VERSION = "2.5.5"
 
 from renaissance_v4.game_theory.groundhog_memory import (
     groundhog_auto_merge_enabled,
@@ -154,6 +154,55 @@ def _prune_jobs() -> None:
         stale = [k for k, v in _JOBS.items() if now - float(v.get("created", 0)) > _JOB_MAX_AGE_SEC]
         for k in stale:
             del _JOBS[k]
+
+
+def _merge_scorecard_with_inflight(
+    file_rows: list[dict[str, Any]],
+    *,
+    limit: int,
+) -> tuple[list[dict[str, Any]], int]:
+    """
+    Prepend **running** parallel jobs so operators see **start time** before JSONL append.
+
+    Completed batches appear only from ``batch_scorecard.jsonl`` (one line at end of run).
+    """
+    _prune_jobs()
+    inflight: list[tuple[float, dict[str, Any]]] = []
+    with _JOBS_LOCK:
+        for jid, v in list(_JOBS.items()):
+            if v.get("status") != "running":
+                continue
+            started = str(v.get("started_at_utc") or "").strip()
+            if not started:
+                started = utc_timestamp_iso()
+            total = int(v.get("total") or 0)
+            total = max(1, total)
+            completed = int(v.get("completed") or 0)
+            entry: dict[str, Any] = {
+                "schema": "pattern_game_batch_scorecard_v1",
+                "job_id": jid,
+                "source": "pattern_game_web_ui_inflight",
+                "started_at_utc": started,
+                "ended_at_utc": None,
+                "duration_sec": None,
+                "total_scenarios": total,
+                "total_processed": completed,
+                "ok_count": None,
+                "failed_count": None,
+                "workers_used": v.get("workers_used"),
+                "status": "running",
+                "scorecard_inflight": True,
+                "session_log_batch_dir": None,
+            }
+            inflight.append((float(v.get("created") or 0), entry))
+    inflight.sort(key=lambda x: x[0], reverse=True)
+    inflight_rows = [e for _, e in inflight]
+    file_ids = {str(r.get("job_id") or "") for r in file_rows}
+    inflight_rows = [e for e in inflight_rows if str(e.get("job_id") or "") not in file_ids]
+    n_inflight = len(inflight_rows)
+    rest = max(0, limit - n_inflight)
+    merged = inflight_rows + file_rows[:rest]
+    return merged, n_inflight
 
 
 def _slug_preset_display_name(name: str) -> str:
@@ -700,10 +749,12 @@ def create_app() -> Flask:
         telem_dir = default_telemetry_dir()
         clear_job_telemetry_files(job_id, base=telem_dir)
         telemetry_ctx = _telemetry_context_for_parallel_job(operator_batch_audit)
+        started_iso = utc_timestamp_iso()
         with _JOBS_LOCK:
             _JOBS[job_id] = {
                 "status": "running",
                 "created": time.time(),
+                "started_at_utc": started_iso,
                 "total": len(scenarios),
                 "completed": 0,
                 "workers_used": workers_used,
@@ -719,7 +770,6 @@ def create_app() -> Flask:
 
         def run_job() -> None:
             session_batch_dir: list[str | None] = [None]
-            started_iso = utc_timestamp_iso()
             start_unix = time.time()
 
             def on_session_batch(p: Path) -> None:
@@ -839,6 +889,8 @@ def create_app() -> Flask:
             "last_ok": j.get("last_ok"),
             "last_message": j.get("last_message"),
         }
+        if j.get("started_at_utc"):
+            out["started_at_utc"] = j["started_at_utc"]
         if j.get("telemetry_context_echo") is not None:
             out["telemetry_context_echo"] = j["telemetry_context_echo"]
         td = j.get("telemetry_dir")
@@ -948,7 +1000,7 @@ def create_app() -> Flask:
 
     @app.get("/api/batch-scorecard")
     def api_batch_scorecard() -> Any:
-        """Recent batch timing lines from ``batch_scorecard.jsonl`` (newest first)."""
+        """Recent batch timing lines from ``batch_scorecard.jsonl`` (newest first), plus in-flight runs."""
         try:
             limit = int(request.args.get("limit") or 25)
         except (TypeError, ValueError):
@@ -956,12 +1008,14 @@ def create_app() -> Flask:
         limit = max(1, min(200, limit))
         p = default_batch_scorecard_jsonl()
         rows = read_batch_scorecard_recent(limit, path=p)
+        merged, inflight_n = _merge_scorecard_with_inflight(rows, limit=limit)
         return jsonify(
             {
                 "ok": True,
                 "path": str(p.resolve()),
                 "limit": limit,
-                "entries": rows,
+                "entries": merged,
+                "inflight_batches": inflight_n,
             }
         )
 
@@ -975,7 +1029,8 @@ def create_app() -> Flask:
         limit = max(1, min(200, limit))
         p = default_batch_scorecard_jsonl()
         rows = read_batch_scorecard_recent(limit, path=p)
-        body = scorecard_history_csv(rows)
+        merged, _inflight_n = _merge_scorecard_with_inflight(rows, limit=limit)
+        body = scorecard_history_csv(merged)
         return Response(
             body,
             mimetype="text/csv; charset=utf-8",
@@ -1907,6 +1962,25 @@ PAGE_HTML = """<!DOCTYPE html>
     .scorecard-table th { background: #eef1f4; color: #5a6570; white-space: nowrap; }
     .st-ok { color: #1f8a54; font-weight: 600; }
     .st-err { color: #c65a16; font-weight: 600; }
+    .st-running { color: #175cd3; font-weight: 700; }
+    .run-feedback-toast {
+      margin-top: 10px;
+      padding: 10px 14px;
+      border-radius: 10px;
+      border: 1px solid #2a8fd9;
+      background: #e8f4fc;
+      font-size: 0.88rem;
+      color: #183343;
+      font-weight: 600;
+      line-height: 1.45;
+    }
+    .run-feedback-toast[hidden] { display: none !important; }
+    .scorecard-click-hint {
+      margin: 6px 0 0;
+      font-size: 0.78rem;
+      color: #175cd3;
+      line-height: 1.4;
+    }
     .scorecard-toolbar {
       display: flex;
       flex-wrap: wrap;
@@ -1957,6 +2031,8 @@ PAGE_HTML = """<!DOCTYPE html>
     tr.scorecard-row { cursor: pointer; }
     tr.scorecard-row:hover { background: #f0f4f8; }
     tr.scorecard-row.selected { background: #e8f0fe; }
+    tr.scorecard-row.scorecard-row-inflight { background: #f5f9ff; }
+    tr.scorecard-row.scorecard-row-inflight:hover { background: #eaf2fc; }
     .batch-drill-panel {
       margin-top: 12px;
       padding: 12px;
@@ -2507,6 +2583,7 @@ PAGE_HTML = """<!DOCTYPE html>
               <div class="progress-track" id="progressTrack"><div class="progress-fill" id="progressFill" style="width:0%"></div></div>
               <p class="caps" id="progressSub"></p>
             </div>
+            <div id="runFeedbackToast" class="run-feedback-toast" role="status" aria-live="polite" hidden></div>
           </div>
         </div>
         </div>
@@ -2529,7 +2606,7 @@ PAGE_HTML = """<!DOCTYPE html>
         </summary>
         <div class="pg-panel-fold-body">
         <div class="scorecard-panel-inner" id="scorecardPanel">
-          <p class="scorecard-legend"><strong>Run OK %</strong> — workers finished. <strong>Session WIN %</strong> — referee WIN vs LOSS among judged sessions only; <strong>n sess</strong> is that denominator (never infer from a bare percentage). <strong>Trade win %</strong> — batch mean when trades exist (with trade count). <strong>Learning</strong> — <code>execution_only</code> vs <code>learning_active</code> from replay counters (candidate search, memory records loaded, recall matches, signal bias). <strong>Work</strong> — decision windows, bars, and candidate-stack replays. Scan <em>down</em> for newest batches. <strong>Scorecard file</strong> (<code>batch_scorecard.jsonl</code>) is batch audit for this table and hunter suggestions; replay does <em>not</em> read it to apply memory or recall. <strong>Clear Card</strong> truncates that log only. <strong>Reset Learning State</strong> is separate and destructive (engine files — see confirmation).</p>
+          <p class="scorecard-legend"><strong>Run OK %</strong> — workers finished. <strong>Session WIN %</strong> — referee WIN vs LOSS among judged sessions only; <strong>n sess</strong> is that denominator (never infer from a bare percentage). <strong>Trade win %</strong> — batch mean when trades exist (with trade count). <strong>Learning</strong> — <code>execution_only</code> vs <code>learning_active</code> from replay counters (candidate search, memory records loaded, recall matches, signal bias). <strong>Work</strong> — decision windows, bars, and candidate-stack replays. Scan <em>down</em> for newest batches. <strong>In-flight</strong> — a batch that is <strong>running</strong> now appears at the <strong>top</strong> with <strong>Start</strong> time and live progress counts; the JSONL line is written when the batch finishes. <strong>Scorecard file</strong> (<code>batch_scorecard.jsonl</code>) is batch audit for this table and hunter suggestions; replay does <em>not</em> read it to apply memory or recall. <strong>Clear Card</strong> truncates that log only. <strong>Reset Learning State</strong> is separate and destructive (engine files — see confirmation).</p>
           <p class="last-run" id="lastBatchRunLine">Last completed batch: —</p>
           <div id="scorecardLearningSummary" class="scorecard-learning-summary exec-only" aria-live="polite" hidden>
             <p class="sls-title">Latest batch — learning summary</p>
@@ -2586,6 +2663,7 @@ PAGE_HTML = """<!DOCTYPE html>
             </table>
           </div>
           <div id="batchDrillPanel" class="batch-drill-panel" aria-live="polite"></div>
+          <p id="scorecardClickHint" class="scorecard-click-hint" role="status" aria-live="polite" style="display:none"></p>
           <p class="path-hint" id="scorecardPathHint"></p>
         </div>
         </div>
@@ -2854,7 +2932,28 @@ PAGE_HTML = """<!DOCTYPE html>
         setBannerRun('Error', t.length > 140 ? t.slice(0, 137) + '…' : t);
         return;
       }
+      if (t.indexOf('Validation failed') === 0 || t.indexOf('Start request failed') === 0 ||
+          t.indexOf('Set custom months') === 0 || t.indexOf('Missing JSON') === 0 ||
+          t.indexOf('JSON parse failed') === 0) {
+        setBannerRun('Error', t.length > 140 ? t.slice(0, 137) + '…' : t);
+        return;
+      }
       setBannerRun('Idle', t.length > 140 ? t.slice(0, 137) + '…' : t);
+    }
+    function updateRunStatusLine(msg) {
+      if (statusLine) statusLine.textContent = msg;
+      syncBannerRunFromStatusLine();
+    }
+    function setRunFeedbackToast(msg) {
+      const el = document.getElementById('runFeedbackToast');
+      if (!el) return;
+      if (!msg) {
+        el.hidden = true;
+        el.textContent = '';
+        return;
+      }
+      el.hidden = false;
+      el.textContent = msg;
     }
     function setEvidenceTab(tab) {
       const outcomes = document.getElementById('pgEvidenceOutcomes');
@@ -3092,9 +3191,14 @@ PAGE_HTML = """<!DOCTYPE html>
     async function refreshScorecardHistory() {
       const tbody = document.getElementById('scorecardHistoryTbody');
       const hint = document.getElementById('scorecardPathHint');
+      const clickHint = document.getElementById('scorecardClickHint');
       const csvLink = document.getElementById('scorecardCsvLink');
       if (!tbody) return;
       tbody.innerHTML = '';
+      if (clickHint) {
+        clickHint.style.display = 'none';
+        clickHint.textContent = '';
+      }
       try {
         const r = await fetch('/api/batch-scorecard?limit=15');
         const j = await r.json();
@@ -3103,7 +3207,12 @@ PAGE_HTML = """<!DOCTYPE html>
           return;
         }
         if (hint && j.path) {
-          hint.textContent = 'Persisted at: ' + j.path + ' (append-only JSONL; set PATTERN_GAME_MEMORY_ROOT for tmpfs)';
+          let line = 'Persisted at: ' + j.path + ' (append-only JSONL; set PATTERN_GAME_MEMORY_ROOT for tmpfs)';
+          const inf = j.inflight_batches;
+          if (typeof inf === 'number' && inf > 0) {
+            line += ' · ' + inf + ' batch(es) in progress at top (live from server; not yet in JSONL).';
+          }
+          hint.textContent = line;
         }
         if (csvLink) {
           csvLink.href = '/api/batch-scorecard.csv?limit=50';
@@ -3121,16 +3230,19 @@ PAGE_HTML = """<!DOCTYPE html>
           return;
         }
         for (const e of rows) {
+          const inflightRow = !!(e.scorecard_inflight || e.status === 'running');
           const tr = document.createElement('tr');
-          tr.className = 'scorecard-row';
+          tr.className = 'scorecard-row' + (inflightRow ? ' scorecard-row-inflight' : '');
           const jid = (e.job_id != null && e.job_id !== undefined) ? String(e.job_id) : '';
           tr.setAttribute('data-job-id', jid);
           if (selectedScorecardJobId && jid === selectedScorecardJobId) {
             tr.classList.add('selected');
           }
-          const st = e.status === 'done'
-            ? '<span class="st-ok">done</span>'
-            : '<span class="st-err">' + escapeHtml(e.status || '—') + '</span>';
+          const st = inflightRow
+            ? '<span class="st-running" title="Still running — JSONL line appears when the batch completes">running</span>'
+            : (e.status === 'done'
+              ? '<span class="st-ok">done</span>'
+              : '<span class="st-err">' + escapeHtml(e.status || '—') + '</span>');
           const dur = (e.duration_sec != null) ? formatDurationSec(e.duration_sec) : '—';
           const memY = (e.memory_used === true || e.memory_used === 'yes' || e.memory_used === 1);
           const memCell = (e.memory_used != null && e.memory_used !== '')
@@ -3171,6 +3283,14 @@ PAGE_HTML = """<!DOCTYPE html>
             '<td>' + escapeHtml(e.workers_used != null ? String(e.workers_used) : '—') + '</td>' +
             '<td>' + st + '</td>';
           tr.addEventListener('click', () => {
+            if (inflightRow) {
+              const ch = document.getElementById('scorecardClickHint');
+              if (ch) {
+                ch.style.display = 'block';
+                ch.textContent = 'This batch is still running — start time and progress counts update here. Batch detail opens after the run finishes (row is then read from batch_scorecard.jsonl).';
+              }
+              return;
+            }
             document.querySelectorAll('#scorecardHistoryTbody tr.scorecard-row').forEach(function (x) {
               x.classList.remove('selected');
             });
@@ -3534,13 +3654,14 @@ PAGE_HTML = """<!DOCTYPE html>
 
     document.getElementById('runBtn').onclick = async () => {
       const btn = document.getElementById('runBtn');
+      setRunFeedbackToast('');
       setOpButtonBusy(btn, true, 'Running…', true);
       openGameControlsPanel();
       clearBatchConcurrencyBanner();
       hideLiveTelemetryPanel();
       const sn = document.getElementById('sessionLogNote');
       if (sn) sn.textContent = '';
-      statusLine.textContent = 'Starting batch…';
+      updateRunStatusLine('Starting batch…');
       scrollRunStatusIntoView();
       document.getElementById('progressSub').textContent = '';
       setProgressUI(0, 0, '');
@@ -3564,14 +3685,14 @@ PAGE_HTML = """<!DOCTYPE html>
           customM = cEl ? parseInt(cEl.value, 10) : null;
           if (!customM || customM < 1) {
             await show(null, null, 'Evaluation window is Custom — enter a valid number of months (1–600).');
-            statusLine.textContent = 'Set custom months before run.';
+            updateRunStatusLine('Set custom months before run.');
             return;
           }
         }
         if (recipeId === 'custom') {
           if (!scenariosTa || !scenariosTa.trim()) {
             await show(null, null, 'Recipe is Custom — paste valid scenario JSON under Advanced → Custom scenario.');
-            statusLine.textContent = 'Missing JSON for Custom recipe.';
+            updateRunStatusLine('Missing JSON for Custom recipe.');
             return;
           }
           try {
@@ -3580,7 +3701,7 @@ PAGE_HTML = """<!DOCTYPE html>
             if (!arr || arr.length < 1) throw new Error('need a non-empty scenario array');
           } catch (ve) {
             await show(null, null, 'Invalid JSON: ' + String(ve && ve.message ? ve.message : ve));
-            statusLine.textContent = 'JSON parse failed.';
+            updateRunStatusLine('JSON parse failed.');
             return;
           }
         }
@@ -3608,12 +3729,12 @@ PAGE_HTML = """<!DOCTYPE html>
             null,
             'Server returned non-JSON from /api/run-parallel/start (HTTP ' + startR.status + '): ' + String(pe && pe.message ? pe.message : pe) + ' — body: ' + (startRaw || '').slice(0, 1200)
           );
-          statusLine.textContent = 'Start request failed — see Result (Results workspace).';
+          updateRunStatusLine('Start request failed — see Result (Results workspace).');
           return;
         }
         if (!startR.ok) {
           await show(null, null, startJ.error || JSON.stringify(startJ));
-          statusLine.textContent = 'Validation failed — see Result.';
+          updateRunStatusLine('Validation failed — see Result.');
           return;
         }
         const jobId = startJ.job_id;
@@ -3626,10 +3747,18 @@ PAGE_HTML = """<!DOCTYPE html>
           ltp.textContent = 'Live telemetry — waiting for worker snapshots…';
         }
         showBatchConcurrencyBanner(total, runWorkersCap, 'run');
-        statusLine.textContent =
+        updateRunStatusLine(
           'Running — ' + total + ' scenario(s) · up to ' + (runWorkersCap != null ? runWorkersCap : '?') +
-          ' parallel process(es) (min of batch size and slider) · updates every 1.5s below.';
+          ' parallel process(es) (min of batch size and slider) · updates every 1.5s below.'
+        );
         setProgressUI(0, total, 'Queued — up to ' + (runWorkersCap != null ? runWorkersCap : '?') + ' process(es) · waiting for first replay to finish…');
+        void refreshScorecardHistory();
+        setRunFeedbackToast(
+          'Batch started — job ' + jobId + ' · ' + total + ' scenario(s). Header shows Running; scorecard adds an in-flight row with start time (refreshes while this page polls).'
+        );
+        const scorePanel = document.querySelector('details.pg-panel-score');
+        if (scorePanel) scorePanel.open = true;
+        scrollRunStatusIntoView();
 
         const pollOnce = async () => {
           const pr = await fetch('/api/run-parallel/status/' + jobId);
@@ -3655,14 +3784,16 @@ PAGE_HTML = """<!DOCTYPE html>
             const lm = pj.last_message || '';
             const sub = (lm ? (lm + ' · ') : '') + 'up to ' + (wCap != null ? wCap : '?') + ' parallel · ' + elapsedStr;
             setProgressUI(c, t, sub);
-            statusLine.textContent =
+            updateRunStatusLine(
               'Running — ' + c + '/' + t + ' scenario(s) finished · up to ' + (wCap != null ? wCap : '?') +
-              ' parallel process(es) · ' + elapsedStr + ' elapsed';
+              ' parallel process(es) · ' + elapsedStr + ' elapsed'
+            );
             renderLiveTelemetryPanel(pj, {
               elapsedSec: elapsed,
               recipeLabel: recipeLabelFromDom(),
               windowLabel: evaluationWindowLabelFromDom(),
             });
+            void refreshScorecardHistory();
             return false;
           }
           if (pj.status === 'error') {
@@ -3671,7 +3802,8 @@ PAGE_HTML = """<!DOCTYPE html>
             if (pj.batch_timing) updateLastBatchRunLine(pj.batch_timing);
             refreshScorecardHistory();
             await show(null, null, pj.error || 'Job failed');
-            statusLine.textContent = 'Failed — see Result.';
+            updateRunStatusLine('Failed — see Result.');
+            setRunFeedbackToast('Batch failed — see Results workspace (Raw JSON) for the error.');
             setProgressUI(pj.completed || 0, statusPollTotal(pj, total), pj.error || '');
             return true;
           }
@@ -3695,15 +3827,19 @@ PAGE_HTML = """<!DOCTYPE html>
               }
               await show(null, j, null);
               refreshScorecardHistory();
-              statusLine.textContent =
+              updateRunStatusLine(
                 'Finished — ' + doneN + ' scenario(s) · parallel processes used: ' + (doneW != null ? doneW : '?') +
-                ' (not the same as the slider when you only have one scenario) · see Result below.';
+                ' (not the same as the slider when you only have one scenario) · see Result below.'
+              );
+              setRunFeedbackToast('Batch finished — see scorecard for timing and Results workspace for JSON.');
             } else {
               showBatchConcurrencyBanner(tDone, wCap, 'done');
               setProgressUI(cDone, tDone, 'Batch marked done — full JSON not in this response; see scorecard below.');
               refreshScorecardHistory();
-              statusLine.textContent =
-                'Finished — ' + cDone + '/' + tDone + ' (details in scorecard; hard-refresh if Result is empty).';
+              updateRunStatusLine(
+                'Finished — ' + cDone + '/' + tDone + ' (details in scorecard; hard-refresh if Result is empty).'
+              );
+              setRunFeedbackToast('Batch finished — see scorecard.');
             }
             return true;
           }
@@ -3719,7 +3855,7 @@ PAGE_HTML = """<!DOCTYPE html>
         }
         if (Date.now() >= deadline) {
           await show(null, null, 'Timed out after ' + (RUN_TIMEOUT_MS / 60000) + ' minutes — job may still be running on the server; open /api/run-parallel/status/<job_id> or check logs.');
-          statusLine.textContent = 'Client timeout — check server or logs.';
+          updateRunStatusLine('Client timeout — check server or logs.');
         }
       } catch (e) {
         if (runWorkersCap != null) {
@@ -3728,7 +3864,7 @@ PAGE_HTML = """<!DOCTYPE html>
           clearBatchConcurrencyBanner();
         }
         await show(null, null, friendlyFetchError(e));
-        statusLine.textContent = 'Stopped or failed — see Result.';
+        updateRunStatusLine('Stopped or failed — see Result.');
       } finally {
         hideLiveTelemetryPanel();
         progressWrap.classList.remove('active');
