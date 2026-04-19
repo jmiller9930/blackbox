@@ -16,6 +16,11 @@ _GAME_THEORY = Path(__file__).resolve().parent
 _PATTERN_LEARNING_FILE = "tier1_twelve_month.example.json"
 _REFERENCE_COMPARISON_FILE = "parallel_scenarios.example.json"
 
+# Default bounded behavior space for baseline v1 (manifest remains execution source).
+_DEFAULT_POLICY_FRAMEWORK_PATH = (
+    "renaissance_v4/configs/manifests/baseline_v1_policy_framework.json"
+)
+
 _GOAL_V2_PATTERN_OUTCOME_QUALITY: dict[str, Any] = {
     "goal_name": "pattern_outcome_quality",
     "objective_type": "outcome_quality",
@@ -60,6 +65,7 @@ def policy_catalog() -> list[dict[str, Any]]:
         {
             "policy_id": "baseline_v1_recipe",
             "manifest_path": "renaissance_v4/configs/manifests/baseline_v1_recipe.json",
+            "policy_framework_path": _DEFAULT_POLICY_FRAMEWORK_PATH,
             "display_label": "baseline_v1_recipe (default)",
         },
     ]
@@ -84,6 +90,7 @@ def operator_recipe_catalog() -> list[dict[str, Any]]:
             "comparison_mode": False,
             "default_evaluation_window_months": 12,
             "manifest_path": "renaissance_v4/configs/manifests/baseline_v1_recipe.json",
+            "policy_framework_path": _DEFAULT_POLICY_FRAMEWORK_PATH,
             "goal_v2": _GOAL_V2_PATTERN_OUTCOME_QUALITY,
             "goal_summary": {
                 "title": "Pattern Outcome Quality",
@@ -104,6 +111,7 @@ def operator_recipe_catalog() -> list[dict[str, Any]]:
             "comparison_mode": True,
             "default_evaluation_window_months": 12,
             "manifest_path": "renaissance_v4/configs/manifests/baseline_v1_recipe.json",
+            "policy_framework_path": _DEFAULT_POLICY_FRAMEWORK_PATH,
             "goal_v2": None,
             "goal_summary": {
                 "title": "Reference comparison",
@@ -139,6 +147,11 @@ def build_scenarios_for_recipe(recipe_id: str) -> list[dict[str, Any]]:
 
     scenarios = _load_scenario_list(path)
     out: list[dict[str, Any]] = [copy_scenario(s) for s in scenarios]
+
+    pfw = meta.get("policy_framework_path")
+    if isinstance(pfw, str) and pfw.strip():
+        for s in out:
+            s["policy_framework_path"] = pfw.strip()
 
     if recipe_id == "pattern_learning":
         for s in out:

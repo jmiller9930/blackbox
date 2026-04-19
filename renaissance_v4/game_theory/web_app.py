@@ -113,6 +113,7 @@ from renaissance_v4.game_theory.pattern_game import (
     json_summary,
     run_pattern_game,
 )
+from renaissance_v4.game_theory.policy_framework import attach_policy_framework_audits
 from renaissance_v4.game_theory.scenario_contract import (
     extract_policy_contract_summary,
     referee_session_outcome,
@@ -221,6 +222,14 @@ def _prepare_parallel_payload(data: dict[str, Any]) -> dict[str, Any]:
         if "manifest_path" in s and s["manifest_path"]:
             s["manifest_path"] = str(Path(s["manifest_path"]).expanduser().resolve())
 
+    fw_ok, fw_msgs = attach_policy_framework_audits(scenarios)
+    if not fw_ok:
+        return {
+            "ok": False,
+            "error": fw_msgs[0] if fw_msgs else "Policy framework attach failed",
+            "scenario_validation": {"ok": False, "messages": fw_msgs},
+        }
+
     ok_val, val_msgs = validate_scenarios(
         scenarios,
         require_hypothesis=_web_ui_require_hypothesis(),
@@ -231,6 +240,8 @@ def _prepare_parallel_payload(data: dict[str, Any]) -> dict[str, Any]:
             "error": val_msgs[0] if val_msgs else "Invalid scenarios",
             "scenario_validation": {"ok": False, "messages": val_msgs},
         }
+
+    val_msgs = list(val_msgs) + list(fw_msgs)
 
     max_workers = data.get("max_workers")
     if max_workers is not None:
@@ -258,6 +269,8 @@ def _prepare_parallel_payload(data: dict[str, Any]) -> dict[str, Any]:
             isinstance(ew0, dict) and ew0.get("window_overrode_recipe_default")
         ),
         "manifest_path_primary": scenarios[0].get("manifest_path") if scenarios else None,
+        "policy_framework_path": scenarios[0].get("policy_framework_path") if scenarios else None,
+        "policy_framework_audit": scenarios[0].get("policy_framework_audit") if scenarios else None,
     }
 
     return {

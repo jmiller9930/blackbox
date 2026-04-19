@@ -442,6 +442,8 @@ def build_operator_run_audit(
         "operator_recipe_label": scen.get("operator_recipe_label"),
         "evaluation_window": scen.get("evaluation_window"),
         "manifest_path": scen.get("manifest_path"),
+        "policy_framework_path": scen.get("policy_framework_path"),
+        "policy_framework_audit": scen.get("policy_framework_audit"),
         "replay_data_audit": summ.get("replay_data_audit") if summ else None,
     }
 
@@ -535,6 +537,8 @@ def learning_evidence_from_parallel_result_row(row: dict[str, Any]) -> dict[str,
             "operator_recipe_id",
             "operator_recipe_label",
             "evaluation_window",
+            "policy_framework_path",
+            "policy_framework_audit",
         )
         if k in row
     }

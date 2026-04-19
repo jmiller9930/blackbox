@@ -36,6 +36,12 @@ Scenario batch JSON — required shape for ``parallel_runner``, ``pattern_game``
   ``pattern_outcome_quality`` with ``primary_metric`` / secondary metrics). Does not change
   engine math; surfaced in operator harness / audit. See ``pattern_outcome_quality_v1.DEFAULT_GOAL_V2_PATTERN_OUTCOME_QUALITY``.
 
+- ``policy_framework_path`` *(str, optional)* — Repo-relative path to ``policy_framework_v1`` JSON.
+  When present, prep validates the file and sets ``policy_framework_audit`` on the scenario.
+
+- ``policy_framework_audit`` *(dict, optional)* — Framework id/version/path/sha256/tunable-surface
+  summary; audit-only (see ``policy_framework.attach_policy_framework_audits``).
+
 **``agent_explanation`` *(dict, optional)*** — Story for proctors / Anna; merged into run_memory.
 
 - ``hypothesis`` *(str)* — One testable sentence. **May be required** when
@@ -76,6 +82,8 @@ SCENARIO_ECHO_KEYS: tuple[str, ...] = (
     "game_spec_ref",
     "operator_recipe_id",
     "operator_recipe_label",
+    "policy_framework_path",
+    "policy_framework_audit",
 )
 
 # Backward-compatible name

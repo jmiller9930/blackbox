@@ -101,6 +101,9 @@ def _worker_run_one(scenario: dict[str, Any]) -> dict[str, Any]:
             bar_window_calendar_months=bar_m,
         )
         summ = json_summary(out)
+        pfa = scenario.get("policy_framework_audit")
+        if isinstance(pfa, dict) and pfa:
+            summ = {**summ, "policy_framework_audit": pfa}
         row: dict[str, Any] = {
             "ok": True,
             "scenario_id": sid,

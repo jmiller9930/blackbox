@@ -13,9 +13,15 @@ from pathlib import Path
 from typing import Any
 
 from renaissance_v4.game_theory.context_candidate_search import run_context_candidate_search_v1
+from renaissance_v4.game_theory.hunter_planner import resolve_repo_root
 from renaissance_v4.game_theory.memory_bundle import BUNDLE_APPLY_WHITELIST
 from renaissance_v4.game_theory.pattern_outcome_quality_v1 import (
     DEFAULT_GOAL_V2_PATTERN_OUTCOME_QUALITY,
+)
+from renaissance_v4.game_theory.policy_framework import (
+    build_policy_framework_audit,
+    load_policy_framework,
+    validate_policy_framework_v1,
 )
 
 OPERATOR_TEST_HARNESS_SCHEMA = "operator_test_harness_v1"
@@ -133,6 +139,7 @@ def run_operator_test_harness_v1(
     decision_context_recall_drill_trade_entry_max: int = 5,
     repo_root_for_git: Path | None = None,
     goal_v2: dict[str, Any] | None = None,
+    policy_framework_path: Path | str | None = None,
 ) -> dict[str, Any]:
     """
     Run control replay (with drill-down caps) embedded in candidate search, emit one harness dict.
@@ -151,6 +158,20 @@ def run_operator_test_harness_v1(
     ).hexdigest()[:16]
 
     goal_effective = goal_v2 if goal_v2 is not None else dict(DEFAULT_GOAL_V2_PATTERN_OUTCOME_QUALITY)
+
+    root = resolve_repo_root(repo_root_for_git)
+    policy_fw_audit: dict[str, Any] | None = None
+    if policy_framework_path:
+        pfw = Path(policy_framework_path).expanduser()
+        if not pfw.is_absolute():
+            pfw = (root / str(policy_framework_path)).resolve()
+        else:
+            pfw = pfw.resolve()
+        doc = load_policy_framework(pfw)
+        ok_fw, fw_errs = validate_policy_framework_v1(doc, repo_root=root)
+        if not ok_fw:
+            raise ValueError("policy_framework invalid: " + "; ".join(fw_errs))
+        policy_fw_audit = build_policy_framework_audit(doc, pfw, repo_root=root)
 
     search_out = run_context_candidate_search_v1(
         mp,
@@ -248,6 +269,7 @@ def run_operator_test_harness_v1(
             "context_signature_v1": proof.get("source_context_signature_v1"),
             "search_batch_id": proof.get("search_batch_id"),
             "git_revision": _git_revision(repo_root_for_git),
+            "policy_framework_audit": policy_fw_audit,
             "flags": {
                 "decision_context_recall_enabled": decision_context_recall_enabled,
                 "decision_context_recall_apply_bias": decision_context_recall_apply_bias,

@@ -1,0 +1,110 @@
+{
+  "schema": "policy_framework_v1",
+  "framework_id": "baseline_v1_policy_framework",
+  "framework_version": "1.0.0",
+  "display_name": "Baseline v1 — bounded exploration for pattern outcome quality",
+  "documentation": "Defines the constrained behavior space for learning. It does not prescribe winning patterns. Execution still uses execution_manifest_path (catalog-backed manifest).",
+  "execution_manifest_path": "renaissance_v4/configs/manifests/baseline_v1_recipe.json",
+  "learning_goal_alignment": {
+    "operator_goal_model": "pattern_outcome_quality",
+    "emphasis": [
+      "expectancy_per_trade",
+      "avg_win_size",
+      "avg_loss_size",
+      "win_loss_size_ratio",
+      "exit_efficiency"
+    ],
+    "non_goals": [
+      "raw_pnl_maximization",
+      "raw_win_count_maximization"
+    ],
+    "design_intent": "Support tuning and memory-driven adaptation that improve trade outcome quality within the framework — not unrestricted strategy search."
+  },
+  "context_model": {
+    "regime_families": [
+      "trend_up",
+      "trend_down",
+      "range",
+      "volatility_compression",
+      "volatility_expansion"
+    ],
+    "fusion_state": {
+      "conflict": "High vs low conflict score across fused signals (bounded fusion thresholds in manifest / memory bundle).",
+      "directional_alignment": "Aligned vs countertrend directional bars (pattern_context_v1 aggregates)."
+    },
+    "volatility_buckets": ["compressed", "neutral", "expanding"],
+    "notes": "Agent observes regime + fusion context produced by the engine; no hidden parallel world state."
+  },
+  "signal_families": [
+    {
+      "id": "trend_continuation",
+      "catalog_module": "trend_continuation",
+      "role": "Trend-following continuation signals within catalog parameters."
+    },
+    {
+      "id": "pullback_continuation",
+      "catalog_module": "pullback_continuation",
+      "role": "Pullback entry in trend context."
+    },
+    {
+      "id": "breakout_expansion",
+      "catalog_module": "breakout_expansion",
+      "role": "Volatility expansion / breakout participation."
+    },
+    {
+      "id": "mean_reversion_fade",
+      "catalog_module": "mean_reversion_fade",
+      "role": "Mean-reversion / fade lane."
+    }
+  ],
+  "allowed_adaptations": {
+    "categories": [
+      "fusion_threshold_tuning",
+      "signal_confidence_threshold_tuning",
+      "signal_family_favoring_or_suppression",
+      "module_disablement_within_catalog",
+      "execution_geometry_atr_tuning"
+    ],
+    "tunable_surface": {
+      "identifier": "baseline_v1_tunable_surface_v1",
+      "summary": "Keys whitelisted for memory-bundle merge, plus per-scenario ATR overrides; bounded DCR v2 multipliers in code constants.",
+      "memory_bundle_apply_keys": [
+        "atr_stop_mult",
+        "atr_target_mult",
+        "fusion_min_score",
+        "fusion_max_conflict_score",
+        "fusion_overlap_penalty_per_extra_signal",
+        "mean_reversion_fade_min_confidence",
+        "mean_reversion_fade_stretch_threshold",
+        "trend_continuation_min_confidence",
+        "trend_continuation_min_regime_fit",
+        "pullback_continuation_min_confidence",
+        "pullback_continuation_volatility_threshold",
+        "breakout_expansion_min_confidence",
+        "disabled_signal_modules"
+      ],
+      "scenario_level_keys": ["atr_stop_mult", "atr_target_mult"],
+      "decision_context_recall": {
+        "note": "Optional replay-time recall + bounded fusion/signal bias (renaissance_v4.game_theory.decision_context_recall). Tuning is via memory matches and manifest-scoped bias — not free-form policy swap.",
+        "bounded_constants_reference": "decision_context_recall.DCR_V2_MULT_SOFT_MIN / DCR_V2_MULT_SOFT_MAX and rule thresholds"
+      },
+      "batch_and_search": {
+        "hunter_planner": "Suggests distinct parallel scenarios from scorecard + retrospective (no Referee oracle).",
+        "catalog_batch_builder": "ATR sweep batches share one manifest; geometry only within declared grids.",
+        "optimizer_note": "Any automated search must respect catalog modules and whitelisted apply keys only."
+      }
+    }
+  },
+  "non_tunable_constraints": [
+    "No arbitrary new indicators outside catalog + PolicySpec where applicable.",
+    "No free-form execution semantics bypassing ExecutionManager / manifest execution_template.",
+    "No bypass of manifest + framework layer for production replay paths.",
+    "No hidden policy switching: strategy_id and modules must remain catalog-validated.",
+    "No additional signal modules beyond those declared on the execution manifest unless manifest is formally replaced."
+  ],
+  "agent_visibility": {
+    "market_data": "Historical OHLCV bars provided by replay (e.g. market_bars_5m) within evaluation window slicing.",
+    "structured_context": "Regime, fusion, risk, and pattern_context_v1 aggregates echoed per run — not raw future peeking.",
+    "memory_channels": "Promoted memory bundles (whitelisted keys), Groundhog bundle when armed, context-signature memory for DCR when enabled."
+  }
+}
