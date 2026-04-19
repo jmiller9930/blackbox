@@ -9,6 +9,7 @@ from __future__ import annotations
 import hashlib
 import json
 import subprocess
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
@@ -131,6 +132,7 @@ def run_operator_test_harness_v1(
     memory_prior_apply: dict[str, Any] | None = None,
     source_run_id: str = "operator_harness_v1",
     bar_window_calendar_months: int | None = None,
+    live_telemetry_callback: Callable[[dict[str, Any]], None] | None = None,
     decision_context_recall_enabled: bool = True,
     decision_context_recall_apply_bias: bool = True,
     decision_context_recall_apply_signal_bias_v2: bool = False,
@@ -184,6 +186,7 @@ def run_operator_test_harness_v1(
         source_run_id=source_run_id,
         parent_reference_id="operator_harness_control",
         bar_window_calendar_months=bar_window_calendar_months,
+        live_telemetry_callback=live_telemetry_callback,
         decision_context_recall_enabled=decision_context_recall_enabled,
         decision_context_recall_apply_bias=decision_context_recall_apply_bias,
         decision_context_recall_apply_signal_bias_v2=decision_context_recall_apply_signal_bias_v2,

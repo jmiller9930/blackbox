@@ -14,7 +14,7 @@ import json
 import os
 import tempfile
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 from renaissance_v4.core.fusion_engine import (
     MAX_CONFLICT_SCORE,
@@ -406,6 +406,7 @@ def _replay_with_apply_dict(
     apply_block: dict[str, Any],
     *,
     bar_window_calendar_months: int | None = None,
+    live_telemetry_callback: Callable[[dict[str, Any]], None] | None = None,
     decision_context_recall_enabled: bool = False,
     decision_context_recall_apply_bias: bool = False,
     decision_context_recall_apply_signal_bias_v2: bool = False,
@@ -436,6 +437,7 @@ def _replay_with_apply_dict(
             emit_baseline_artifacts=False,
             verbose=False,
             bar_window_calendar_months=bar_window_calendar_months,
+            live_telemetry_callback=live_telemetry_callback,
             decision_context_recall_enabled=decision_context_recall_enabled,
             decision_context_recall_apply_bias=decision_context_recall_apply_bias,
             decision_context_recall_apply_signal_bias_v2=decision_context_recall_apply_signal_bias_v2,
@@ -474,6 +476,7 @@ def run_context_candidate_search_v1(
     parent_reference_id: str = "manifest_baseline",
     manifest_signal_modules: list[str] | None = None,
     bar_window_calendar_months: int | None = None,
+    live_telemetry_callback: Callable[[dict[str, Any]], None] | None = None,
     decision_context_recall_enabled: bool = False,
     decision_context_recall_apply_bias: bool = False,
     decision_context_recall_apply_signal_bias_v2: bool = False,
@@ -516,6 +519,21 @@ def run_context_candidate_search_v1(
         manifest_signal_modules=list(manifest_signal_modules),
     )
 
+    phase_extras: dict[str, Any] = {
+        "candidate_search_active": True,
+        "candidate_phase": "control",
+        "candidate_index": 0,
+        "candidates_total": len(candidates) + 1,
+        "candidates_tested_so_far": 0,
+    }
+    cb_merged: Callable[[dict[str, Any]], None] | None = None
+    if live_telemetry_callback is not None:
+
+        def _merge_cb(snap: dict[str, Any]) -> None:
+            live_telemetry_callback({**snap, **phase_extras})
+
+        cb_merged = _merge_cb
+
     batch_inputs = json.dumps(
         {
             "control": control,
@@ -528,10 +546,16 @@ def run_context_candidate_search_v1(
     )
     search_batch_id = hashlib.sha256(batch_inputs.encode("utf-8")).hexdigest()[:24]
 
+    phase_extras.update(
+        candidate_phase="control",
+        candidate_index=0,
+        candidates_tested_so_far=0,
+    )
     control_replay = _replay_with_apply_dict(
         resolved_path,
         control,
         bar_window_calendar_months=bar_window_calendar_months,
+        live_telemetry_callback=cb_merged,
         decision_context_recall_enabled=decision_context_recall_enabled,
         decision_context_recall_apply_bias=decision_context_recall_apply_bias,
         decision_context_recall_apply_signal_bias_v2=decision_context_recall_apply_signal_bias_v2,
@@ -545,12 +569,18 @@ def run_context_candidate_search_v1(
     coq = control_metrics.get("outcome_quality_v1") or {}
 
     summaries: list[dict[str, Any]] = []
-    for c in candidates:
+    for ci, c in enumerate(candidates, start=1):
         rid = str(c["candidate_id"])
+        phase_extras.update(
+            candidate_phase=f"candidate_{ci}",
+            candidate_index=ci,
+            candidates_tested_so_far=ci,
+        )
         raw = _replay_with_apply_dict(
             resolved_path,
             c["apply_effective"],
             bar_window_calendar_months=bar_window_calendar_months,
+            live_telemetry_callback=cb_merged,
             decision_context_recall_enabled=decision_context_recall_enabled,
             decision_context_recall_apply_bias=decision_context_recall_apply_bias,
             decision_context_recall_apply_signal_bias_v2=decision_context_recall_apply_signal_bias_v2,

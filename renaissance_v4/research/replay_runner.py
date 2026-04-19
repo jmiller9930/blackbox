@@ -31,6 +31,7 @@ from __future__ import annotations
 import argparse
 import os
 from collections import Counter
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
@@ -141,6 +142,7 @@ def run_manifest_replay(
     decision_context_recall_drill_matched_max: int = 0,
     decision_context_recall_drill_bias_max: int = 0,
     decision_context_recall_drill_trade_entry_max: int = 0,
+    live_telemetry_callback: Callable[[dict[str, Any]], None] | None = None,
 ) -> dict[str, Any]:
     """
     Execute one full deterministic replay using the manifest resolution rules in ``load_replay_manifest``.
@@ -651,6 +653,26 @@ def run_manifest_replay(
         assert decision.timestamp == state.timestamp
 
         processed += 1
+
+        if live_telemetry_callback is not None:
+            live_telemetry_callback(
+                {
+                    "decision_windows_processed": processed,
+                    "bars_processed": processed,
+                    "dataset_bars": dataset_bars,
+                    "trades_closed_so_far": len(ledger.outcomes),
+                    "entries_attempted_so_far": int(entries_attempted),
+                    "closes_recorded_so_far": int(closes_recorded),
+                    "recall_match_windows_so_far": int(
+                        dcr_stats.get("decisions_with_positive_match_count") or 0
+                    ),
+                    "recall_bias_applied_so_far": int(dcr_stats.get("decisions_with_bias_applied") or 0),
+                    "signal_bias_applied_so_far": int(
+                        dcr_stats.get("decisions_with_signal_bias_applied") or 0
+                    ),
+                    "recall_match_records_so_far": int(recall_match_records_total),
+                }
+            )
 
         if verbose and processed % 5000 == 0:
             print(

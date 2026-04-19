@@ -5,7 +5,8 @@ in ``examples/``). The evaluation window (12 / 18 / 24 / custom months) is merge
 and drives **replay bar slicing** in ``run_manifest_replay`` (see ``replay_data_audit`` on results).
 
 Batches use **``POST /api/run-parallel/start``** + polling **``GET /api/run-parallel/status/<job_id>``**
-so the UI shows **per-scenario progress** (determinate bar) instead of a single long blocking request.
+(or **``GET /api/run-status/<job_id>``**, same payload) so the UI shows **per-scenario progress** plus
+**live telemetry** (decision windows, trades, candidate phase) from worker-written JSON snapshots.
 ``POST /api/run-parallel`` remains as a blocking API for scripts.
 
 Each completed batch also writes a **unique session folder** under the logs directory (default:
@@ -64,7 +65,7 @@ from flask import Flask, Response, abort, jsonify, request
 _GAME_THEORY = Path(__file__).resolve().parent
 
 # Operator-visible web UI bundle version — bump when changing PAGE_HTML (HTML/CSS/JS) so deploys are provable.
-PATTERN_GAME_WEB_UI_VERSION = "2.4.1"
+PATTERN_GAME_WEB_UI_VERSION = "2.5.0"
 
 from renaissance_v4.game_theory.groundhog_memory import (
     groundhog_auto_merge_enabled,
@@ -91,6 +92,11 @@ from renaissance_v4.game_theory.catalog_batch_builder import (
 )
 from renaissance_v4.game_theory.hunter_planner import build_hunter_suggestion
 from renaissance_v4.game_theory.retrospective_log import append_retrospective, read_retrospective_recent
+from renaissance_v4.game_theory.live_telemetry_v1 import (
+    clear_job_telemetry_files,
+    default_telemetry_dir,
+    read_job_telemetry_v1,
+)
 from renaissance_v4.game_theory.evaluation_window_runtime import (
     annotate_scenarios_with_window_and_recipe,
     resolve_ui_evaluation_window,
@@ -103,6 +109,7 @@ from renaissance_v4.game_theory.operator_recipes import (
     recipe_meta_by_id,
 )
 from renaissance_v4.game_theory.parallel_runner import (
+    REFERENCE_COMPARISON_RECIPE_ID,
     clamp_parallel_workers,
     get_parallel_limits,
     run_scenarios_parallel,
@@ -282,6 +289,27 @@ def _prepare_parallel_payload(data: dict[str, Any]) -> dict[str, Any]:
         "val_msgs": val_msgs,
         "operator_batch_audit": operator_batch_audit,
         "evaluation_window_resolved": resolved,
+    }
+
+
+def _telemetry_context_for_parallel_job(operator_batch_audit: dict[str, Any]) -> dict[str, Any]:
+    """Static fields merged into per-worker telemetry files (plus live counters from replay)."""
+    rid = str(operator_batch_audit.get("operator_recipe_id") or "").strip()
+    pfa = operator_batch_audit.get("policy_framework_audit")
+    fw_id = pfa.get("framework_id") if isinstance(pfa, dict) else None
+    return {
+        "operator_recipe_id": rid or None,
+        "operator_recipe_label": operator_batch_audit.get("operator_recipe_label"),
+        "policy_framework_id": fw_id,
+        "evaluation_window_calendar_months": operator_batch_audit.get(
+            "evaluation_window_effective_calendar_months"
+        ),
+        "learning_path_mode": (
+            "operator_harness_candidate_search"
+            if rid == REFERENCE_COMPARISON_RECIPE_ID
+            else "baseline_replay_only"
+        ),
+        "candidate_search_active": rid == REFERENCE_COMPARISON_RECIPE_ID,
     }
 
 
@@ -642,6 +670,9 @@ def create_app() -> Flask:
         _prune_jobs()
         job_id = uuid.uuid4().hex
         workers_used = clamp_parallel_workers(max_workers, len(scenarios))
+        telem_dir = default_telemetry_dir()
+        clear_job_telemetry_files(job_id, base=telem_dir)
+        telemetry_ctx = _telemetry_context_for_parallel_job(operator_batch_audit)
         with _JOBS_LOCK:
             _JOBS[job_id] = {
                 "status": "running",
@@ -655,6 +686,8 @@ def create_app() -> Flask:
                 "error": None,
                 "result": None,
                 "batch_timing": None,
+                "telemetry_dir": str(telem_dir),
+                "telemetry_context_echo": telemetry_ctx,
             }
 
         def run_job() -> None:
@@ -686,6 +719,9 @@ def create_app() -> Flask:
                     experience_log_path=log_path,
                     progress_callback=cb,
                     on_session_log_batch=on_session_batch,
+                    telemetry_job_id=job_id,
+                    telemetry_dir=telem_dir,
+                    telemetry_context=telemetry_ctx,
                 )
                 validate_reference_comparison_batch_results(
                     results, operator_recipe_id=operator_batch_audit.get("operator_recipe_id")
@@ -759,6 +795,7 @@ def create_app() -> Flask:
         )
 
     @app.get("/api/run-parallel/status/<job_id>")
+    @app.get("/api/run-status/<job_id>")
     def api_parallel_status(job_id: str) -> Any:
         _prune_jobs()
         with _JOBS_LOCK:
@@ -775,6 +812,19 @@ def create_app() -> Flask:
             "last_ok": j.get("last_ok"),
             "last_message": j.get("last_message"),
         }
+        if j.get("telemetry_context_echo") is not None:
+            out["telemetry_context_echo"] = j["telemetry_context_echo"]
+        td = j.get("telemetry_dir")
+        if td:
+            try:
+                out["telemetry"] = read_job_telemetry_v1(job_id, base=Path(td))
+            except OSError:
+                out["telemetry"] = {
+                    "schema": "pattern_game_live_telemetry_v1",
+                    "job_id": job_id,
+                    "scenarios": [],
+                    "read_at_unix": time.time(),
+                }
         if j.get("error"):
             out["error"] = j["error"]
         if j.get("batch_timing") is not None:
@@ -800,6 +850,9 @@ def create_app() -> Flask:
         started_iso = utc_timestamp_iso()
         start_unix = time.time()
         workers_used = clamp_parallel_workers(max_workers, len(scenarios))
+        telem_dir = default_telemetry_dir()
+        clear_job_telemetry_files(job_id, base=telem_dir)
+        telemetry_ctx = _telemetry_context_for_parallel_job(operator_batch_audit)
         try:
             session_batch_dir: list[str | None] = [None]
 
@@ -811,6 +864,9 @@ def create_app() -> Flask:
                 max_workers=max_workers,
                 experience_log_path=log_path,
                 on_session_log_batch=on_session_batch,
+                telemetry_job_id=job_id,
+                telemetry_dir=telem_dir,
+                telemetry_context=telemetry_ctx,
             )
             validate_reference_comparison_batch_results(
                 results, operator_recipe_id=operator_batch_audit.get("operator_recipe_id")
@@ -1908,6 +1964,32 @@ PAGE_HTML = """<!DOCTYPE html>
       transition: width 0.35s ease;
     }
     #progressSub { margin-top: 6px; font-size: 0.8rem; color: var(--pg-muted); }
+    .live-telemetry-wrap {
+      margin: 10px 0 14px;
+      padding: 10px 12px;
+      border-radius: 10px;
+      border: 1px solid var(--pg-line);
+      background: #0f1419;
+      color: #e6edf3;
+    }
+    .live-telemetry-wrap[hidden] { display: none !important; }
+    .live-telemetry-title {
+      margin: 0 0 8px;
+      font-size: 0.72rem;
+      font-weight: 700;
+      color: #8b98a5;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+    .live-telemetry-panel {
+      margin: 0;
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      font-size: 0.74rem;
+      line-height: 1.5;
+      white-space: pre-wrap;
+      max-height: 260px;
+      overflow: auto;
+    }
     #statusLine { min-height: 1.3em; color: var(--pg-ink); font-size: 0.9rem; margin-top: 8px; }
     .err { color: #c43b3b; }
     .pg-pill-row { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 10px; }
@@ -2249,6 +2331,11 @@ PAGE_HTML = """<!DOCTYPE html>
         </div>
       </details>
 
+      <div id="liveTelemetryWrap" class="live-telemetry-wrap" hidden>
+        <p class="live-telemetry-title">Live run telemetry</p>
+        <pre id="liveTelemetryPanel" class="live-telemetry-panel" aria-live="polite"></pre>
+      </div>
+
       <details class="pg-panel-fold pg-panel-score" open>
         <summary>
           <div class="pg-panel-header" style="margin:0;flex:1">
@@ -2393,6 +2480,139 @@ PAGE_HTML = """<!DOCTYPE html>
       const d = document.createElement('div');
       d.textContent = String(s);
       return d.innerHTML;
+    }
+
+    function recipeLabelFromDom() {
+      const rp = document.getElementById('operatorRecipePick');
+      if (!rp || !rp.options) return '—';
+      const o = rp.options[rp.selectedIndex];
+      return (o && o.text) ? String(o.text).trim() : String(rp.value || '—');
+    }
+    function evaluationWindowLabelFromDom() {
+      const w = document.getElementById('evaluationWindowPick');
+      if (!w) return '—';
+      if (w.value === 'custom') {
+        const c = document.getElementById('evaluationWindowCustomMonths');
+        const n = c ? parseInt(c.value, 10) : NaN;
+        return (n > 0) ? (String(n) + ' months (custom)') : 'custom';
+      }
+      return String(w.value) + ' months';
+    }
+    function fmtTelemetryHMS(sec) {
+      const s = Math.max(0, Math.floor(Number(sec) || 0));
+      const h = Math.floor(s / 3600);
+      const m = Math.floor((s % 3600) / 60);
+      const rs = s % 60;
+      if (h > 0) {
+        return h + ':' + String(m).padStart(2, '0') + ':' + String(rs).padStart(2, '0');
+      }
+      return String(m).padStart(2, '0') + ':' + String(rs).padStart(2, '0');
+    }
+    function renderLiveTelemetryPanel(pj, opts) {
+      const wrap = document.getElementById('liveTelemetryWrap');
+      const el = document.getElementById('liveTelemetryPanel');
+      if (!wrap || !el) return;
+      if (!pj || pj.status !== 'running') {
+        wrap.hidden = true;
+        return;
+      }
+      wrap.hidden = false;
+      const echo = pj.telemetry_context_echo || {};
+      const telem = pj.telemetry || {};
+      const rows = Array.isArray(telem.scenarios) ? telem.scenarios.slice() : [];
+      const completed = pj.completed != null ? pj.completed : 0;
+      const total = pj.total != null ? pj.total : 0;
+      const elapsed = opts && opts.elapsedSec != null ? opts.elapsedSec : 0;
+      const lm = pj.last_message || '';
+      const recipe =
+        echo.operator_recipe_label || echo.operator_recipe_id || (opts && opts.recipeLabel) || '—';
+      const fw =
+        echo.policy_framework_id != null && String(echo.policy_framework_id) !== ''
+          ? String(echo.policy_framework_id)
+          : '—';
+      const winM = echo.evaluation_window_calendar_months;
+      const winStr =
+        winM != null ? String(winM) + ' months' : ((opts && opts.windowLabel) ? opts.windowLabel : '—');
+      let hot = null;
+      if (rows.length) {
+        rows.sort(
+          (a, b) => (Number(b.decision_windows_processed) || 0) - (Number(a.decision_windows_processed) || 0)
+        );
+        hot = rows[0];
+      }
+      const lines = [];
+      lines.push('Run: ' + recipe);
+      lines.push('Framework: ' + fw);
+      lines.push('Window: ' + winStr);
+      lines.push('');
+      lines.push(
+        'Batch: ' + completed + ' / ' + total + ' scenario(s) finished (parallel)' +
+        (lm ? (' · last: ' + lm) : '')
+      );
+      if (hot) {
+        const si = hot.scenario_index;
+        const st = hot.scenario_total;
+        const sid = hot.scenario_id || '—';
+        lines.push(
+          'Busiest worker — scenario slot ' + (si != null ? si : '?') + '/' + (st != null ? st : '?') +
+            ' — ' + sid
+        );
+        const csa = hot.candidate_search_active === true || echo.candidate_search_active === true;
+        if (!csa) {
+          lines.push('Candidate phase: baseline only (no multi-replay candidate search)');
+        } else {
+          const phase = hot.candidate_phase || '—';
+          const ci = hot.candidate_index;
+          const ct = hot.candidates_total;
+          const cpart =
+            ci != null && ct != null
+              ? 'current index ' + ci + ' / ' + ct
+              : ci != null
+                ? 'index ' + ci
+                : '';
+          lines.push('Candidate phase: ' + phase + (cpart ? ' (' + cpart + ')' : ''));
+        }
+        const dw = Number(hot.decision_windows_processed || 0);
+        const dset = hot.dataset_bars;
+        const dwTot = dset != null ? Number(dset) : null;
+        lines.push(
+          'Decision windows: ' + dw.toLocaleString() +
+            (dwTot != null ? ' / ' + dwTot.toLocaleString() + ' (bars in slice)' : '') +
+            ' · bars processed: ' +
+            (hot.bars_processed != null ? Number(hot.bars_processed).toLocaleString() : String(dw))
+        );
+        lines.push(
+          'Trades (closed): ' + (hot.trades_closed_so_far != null ? hot.trades_closed_so_far : '0') +
+            ' · entry attempts: ' + (hot.entries_attempted_so_far != null ? hot.entries_attempted_so_far : '0')
+        );
+        lines.push('');
+        lines.push(
+          'Candidates tested (search progress): ' +
+            (hot.candidates_tested_so_far != null ? hot.candidates_tested_so_far : '0') +
+            (hot.candidates_total != null ? ' / ' + hot.candidates_total : '')
+        );
+        lines.push('Recall match windows: ' + (hot.recall_match_windows_so_far != null ? hot.recall_match_windows_so_far : '0'));
+        lines.push('Signal bias applications: ' + (hot.signal_bias_applied_so_far != null ? hot.signal_bias_applied_so_far : '0'));
+        lines.push('');
+        const rate = elapsed > 0.5 ? (dw / elapsed).toFixed(2) : null;
+        lines.push(
+          'Elapsed: ' + fmtTelemetryHMS(elapsed) +
+            (rate != null ? ' · ~' + rate + ' decision windows/s (busiest worker)' : '')
+        );
+      } else {
+        lines.push('');
+        lines.push('Workers starting — counters appear when the first decision windows are processed.');
+        lines.push('Elapsed: ' + fmtTelemetryHMS(elapsed));
+      }
+      if (rows.length > 1) {
+        lines.push('');
+        lines.push('(' + rows.length + ' telemetry file(s); busiest worker shown by decision window count.)');
+      }
+      el.textContent = lines.join('\n');
+    }
+    function hideLiveTelemetryPanel() {
+      const wrap = document.getElementById('liveTelemetryWrap');
+      if (wrap) wrap.hidden = true;
     }
 
     function setBannerRun(main, sub) {
@@ -3002,6 +3222,7 @@ PAGE_HTML = """<!DOCTYPE html>
       const btn = document.getElementById('runBtn');
       btn.disabled = true;
       clearBatchConcurrencyBanner();
+      hideLiveTelemetryPanel();
       const sn = document.getElementById('sessionLogNote');
       if (sn) sn.textContent = '';
       statusLine.textContent = 'Starting batch…';
@@ -3072,6 +3293,12 @@ PAGE_HTML = """<!DOCTYPE html>
         const jobId = startJ.job_id;
         const total = resolveScenarioBatchTotal(startJ.total, scenariosTa);
         runWorkersCap = startJ.workers_used != null ? startJ.workers_used : null;
+        const ltw = document.getElementById('liveTelemetryWrap');
+        const ltp = document.getElementById('liveTelemetryPanel');
+        if (ltw && ltp) {
+          ltw.hidden = false;
+          ltp.textContent = 'Live telemetry — waiting for worker snapshots…';
+        }
         showBatchConcurrencyBanner(total, runWorkersCap, 'run');
         statusLine.textContent =
           'Running — ' + total + ' scenario(s) · up to ' + (runWorkersCap != null ? runWorkersCap : '?') +
@@ -3096,9 +3323,15 @@ PAGE_HTML = """<!DOCTYPE html>
             statusLine.textContent =
               'Running — ' + c + '/' + t + ' scenario(s) finished · up to ' + (wCap != null ? wCap : '?') +
               ' parallel process(es) · ' + elapsedStr + ' elapsed';
+            renderLiveTelemetryPanel(pj, {
+              elapsedSec: elapsed,
+              recipeLabel: recipeLabelFromDom(),
+              windowLabel: evaluationWindowLabelFromDom(),
+            });
             return false;
           }
           if (pj.status === 'error') {
+            hideLiveTelemetryPanel();
             showBatchConcurrencyBanner(total, wCap, 'error');
             if (pj.batch_timing) updateLastBatchRunLine(pj.batch_timing);
             refreshScorecardHistory();
@@ -3108,6 +3341,7 @@ PAGE_HTML = """<!DOCTYPE html>
             return true;
           }
           if (pj.status === 'done') {
+            hideLiveTelemetryPanel();
             const tDone = statusPollTotal(pj, total);
             const cDone = (pj.completed != null && pj.completed >= 0) ? pj.completed : tDone;
             setProgressUI(cDone, tDone, '');
@@ -3160,6 +3394,7 @@ PAGE_HTML = """<!DOCTYPE html>
         await show(null, null, friendlyFetchError(e));
         statusLine.textContent = 'Stopped or failed — see Result.';
       } finally {
+        hideLiveTelemetryPanel();
         progressWrap.classList.remove('active');
         btn.disabled = false;
         syncBannerRunFromStatusLine();

@@ -50,8 +50,23 @@ def test_run_parallel_start_and_status() -> None:
         r = client.get(f"/api/run-parallel/status/{job_id}")
         assert r.status_code == 200
         j = r.get_json()
+        assert "telemetry_context_echo" in j
+        assert j["telemetry_context_echo"].get("learning_path_mode") == "baseline_replay_only"
+        assert j["telemetry_context_echo"].get("candidate_search_active") is False
+        ra = client.get(f"/api/run-status/{job_id}")
+        assert ra.status_code == 200
+        ja = ra.get_json()
+        assert ja.get("status") == j.get("status")
+        assert ja.get("telemetry_context_echo", {}).get("learning_path_mode") == "baseline_replay_only"
+        assert "telemetry" in j and j["telemetry"].get("schema") == "pattern_game_live_telemetry_v1"
         if j.get("status") == "done":
             assert j.get("result", {}).get("ok") is True
+            telem = j.get("telemetry") or {}
+            scenarios = telem.get("scenarios") or []
+            assert isinstance(scenarios, list)
+            if scenarios:
+                snap = scenarios[0]
+                assert int(snap.get("decision_windows_processed") or 0) >= 0
             return
         if j.get("status") == "error":
             raise AssertionError(j.get("error"))

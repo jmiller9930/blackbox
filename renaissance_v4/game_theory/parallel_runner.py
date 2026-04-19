@@ -41,6 +41,10 @@ from renaissance_v4.game_theory.run_session_log import (
     write_batch_index_and_scenario_logs,
 )
 from renaissance_v4.game_theory.evaluation_window_runtime import extract_calendar_months_for_replay
+from renaissance_v4.game_theory.live_telemetry_v1 import (
+    build_live_telemetry_callback,
+    telemetry_file_path,
+)
 from renaissance_v4.game_theory.scenario_contract import (
     extract_policy_contract_summary,
     extract_scenario_echo_fields,
@@ -135,6 +139,12 @@ def _worker_run_one(scenario: dict[str, Any]) -> dict[str, Any]:
         bar_m = extract_calendar_months_for_replay(scenario)
         recipe_id = str(scenario.get("operator_recipe_id") or "").strip()
         hres: dict[str, Any] | None = None
+        tm = scenario.get("_live_telemetry_meta_v1")
+        live_cb = (
+            build_live_telemetry_callback(tm)
+            if isinstance(tm, dict) and tm.get("file_path")
+            else None
+        )
 
         if recipe_id == REFERENCE_COMPARISON_RECIPE_ID:
             prep = prepare_effective_manifest_for_replay(
@@ -153,6 +163,7 @@ def _worker_run_one(scenario: dict[str, Any]) -> dict[str, Any]:
                     repo_root_for_git=resolve_repo_root(),
                     goal_v2=scenario.get("goal_v2") if isinstance(scenario.get("goal_v2"), dict) else None,
                     bar_window_calendar_months=bar_m,
+                    live_telemetry_callback=live_cb,
                 )
             finally:
                 prep.cleanup()
@@ -189,6 +200,7 @@ def _worker_run_one(scenario: dict[str, Any]) -> dict[str, Any]:
                 emit_baseline_artifacts=bool(scenario.get("emit_baseline_artifacts", False)),
                 verbose=False,
                 bar_window_calendar_months=bar_m,
+                live_telemetry_callback=live_cb,
             )
         summ = json_summary(out, scenario=scenario)
         pfa = scenario.get("policy_framework_audit")
@@ -259,6 +271,9 @@ def run_scenarios_parallel(
     session_logs_base: Path | str | None = None,
     progress_callback: Callable[[int, int, dict[str, Any]], None] | None = None,
     on_session_log_batch: Callable[[Path], None] | None = None,
+    telemetry_job_id: str | None = None,
+    telemetry_dir: Path | str | None = None,
+    telemetry_context: dict[str, Any] | None = None,
 ) -> list[dict[str, Any]]:
     """
     Run each scenario in a process pool. Order of results is **completion** order unless you sort by scenario_id.
@@ -280,6 +295,11 @@ def run_scenarios_parallel(
     If ``progress_callback`` is set, it is invoked after each scenario completes as
     ``(completed_count, total_count, result_row)`` for live progress UIs.
 
+    When ``telemetry_job_id`` and ``telemetry_dir`` are set, each scenario gets
+    ``_live_telemetry_meta_v1`` so workers can write live JSON snapshots (see
+    :mod:`renaissance_v4.game_theory.live_telemetry_v1`). ``telemetry_context`` is merged into
+    that metadata (recipe id, framework id, evaluation window, learning path mode).
+
     If session logs are written and ``on_session_log_batch`` is set, it is called once with the
     ``batch_*`` directory path (for UIs and APIs).
     """
@@ -287,6 +307,23 @@ def run_scenarios_parallel(
         return []
 
     normalized = [_normalize_scenario(s) for s in scenarios]
+
+    if telemetry_job_id and telemetry_dir:
+        tdir = Path(str(telemetry_dir)).expanduser().resolve()
+        tdir.mkdir(parents=True, exist_ok=True)
+        ctx = dict(telemetry_context or {})
+        for i, s in enumerate(normalized):
+            sid = str(s.get("scenario_id") or f"row_{i}")
+            path = telemetry_file_path(telemetry_job_id, sid, base=tdir)
+            meta: dict[str, Any] = {
+                "file_path": str(path),
+                "job_id": telemetry_job_id,
+                "scenario_id": sid,
+                "scenario_index": i + 1,
+                "scenario_total": len(normalized),
+                **ctx,
+            }
+            s["_live_telemetry_meta_v1"] = meta
 
     workers = clamp_parallel_workers(max_workers, len(normalized))
     total = len(normalized)

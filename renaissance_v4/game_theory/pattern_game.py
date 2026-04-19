@@ -193,6 +193,7 @@ def run_pattern_game(
     emit_baseline_artifacts: bool = False,
     verbose: bool = True,
     bar_window_calendar_months: int | None = None,
+    live_telemetry_callback: Callable[[dict[str, Any]], None] | None = None,
 ) -> dict[str, Any]:
     """
     Load manifest, optional **memory bundle** merge, optional ATR overlays, validate, replay.
@@ -217,6 +218,7 @@ def run_pattern_game(
             emit_baseline_artifacts=emit_baseline_artifacts,
             verbose=verbose,
             bar_window_calendar_months=bar_window_calendar_months,
+            live_telemetry_callback=live_telemetry_callback,
         )
     finally:
         prep.cleanup()
