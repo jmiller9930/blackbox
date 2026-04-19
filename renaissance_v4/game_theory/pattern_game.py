@@ -22,6 +22,7 @@ from renaissance_v4.research.replay_runner import run_manifest_replay
 from renaissance_v4.game_theory.groundhog_memory import resolve_memory_bundle_for_scenario
 from renaissance_v4.game_theory.memory_bundle import (
     apply_memory_bundle_to_manifest,
+    build_memory_bundle_proof,
     memory_bundle_required_and_missing,
 )
 from renaissance_v4.game_theory.run_memory import append_run_memory, build_run_memory_record
@@ -97,6 +98,7 @@ def run_pattern_game(
     atr_stop_mult: float | None = None,
     atr_target_mult: float | None = None,
     memory_bundle_path: str | None = None,
+    use_groundhog_auto_resolve: bool = True,
     emit_baseline_artifacts: bool = False,
     verbose: bool = True,
 ) -> dict[str, Any]:
@@ -106,17 +108,30 @@ def run_pattern_game(
     Memory bundle (opt-in) merges whitelisted keys into the manifest **before** replay so promoted
     parameters can affect behavior; see ``memory_bundle.py``. CLI ATR overrides win over bundle.
     Writes a temp manifest when the effective manifest differs from the file on disk.
+
+    When ``use_groundhog_auto_resolve`` is False and ``memory_bundle_path`` is None, the canonical
+    Groundhog bundle is not resolved (control runs for E2E proof).
     """
     path = Path(manifest_path)
     manifest = load_manifest_file(path)
-    mb_resolved = memory_bundle_path
-    if mb_resolved is None:
+    manifest_atr_on_disk = {k: manifest.get(k) for k in ("atr_stop_mult", "atr_target_mult")}
+
+    mb_resolved: str | Path | None = memory_bundle_path
+    if mb_resolved is None and use_groundhog_auto_resolve:
         mb_resolved = resolve_memory_bundle_for_scenario(None, explicit_path=None)
+    mb_path_for_proof: str | None = None
+    if mb_resolved:
+        ms = str(mb_resolved).strip()
+        if ms:
+            mb_path_for_proof = str(Path(ms).expanduser().resolve())
+
     mb_audit = apply_memory_bundle_to_manifest(manifest, mb_resolved)
+    manifest_atr_after_bundle_merge = {k: manifest.get(k) for k in ("atr_stop_mult", "atr_target_mult")}
     if atr_stop_mult is not None:
         manifest["atr_stop_mult"] = float(atr_stop_mult)
     if atr_target_mult is not None:
         manifest["atr_target_mult"] = float(atr_target_mult)
+    manifest_atr_effective = {k: manifest.get(k) for k in ("atr_stop_mult", "atr_target_mult")}
 
     errs = validate_manifest_against_catalog(manifest)
     if errs:
@@ -148,11 +163,30 @@ def run_pattern_game(
 
     outcomes: list[OutcomeRecord] = list(raw.get("outcomes") or [])
     binary = score_binary_outcomes(outcomes)
+    proof_core = build_memory_bundle_proof(
+        resolved_bundle_path=mb_path_for_proof,
+        apply_audit=mb_audit,
+    )
+    memory_bundle_proof = {
+        **proof_core,
+        "manifest_atr_on_disk": manifest_atr_on_disk,
+        "manifest_atr_after_bundle_merge": manifest_atr_after_bundle_merge,
+        "manifest_atr_effective": manifest_atr_effective,
+        "replay_manifest_source": "temp_effective_json" if needs_temp else "disk_manifest_file",
+        "run_manifest_replay_module": "renaissance_v4.research.replay_runner",
+        "run_manifest_replay_function": "run_manifest_replay",
+        "execution_pipeline_note": (
+            "Signals/regime/fusion/risk/execution managers are built from the effective manifest dict "
+            "inside run_manifest_replay via renaissance_v4.manifest.runtime (build_signals_from_manifest, "
+            "build_execution_manager_from_manifest, etc.)."
+        ),
+    }
     meta = {
         "starting_equity_usd_spec": PATTERN_GAME_STARTING_EQUITY_USD_SPEC,
         "risk_fraction_per_trade_spec": PATTERN_GAME_RISK_FRACTION_PER_TRADE_SPEC,
         "note": "Equity/risk are spec targets; risk governor still uses tiered notional_fraction.",
         "memory_bundle_audit": mb_audit,
+        "memory_bundle_proof": memory_bundle_proof,
     }
     return {
         **raw,
@@ -160,6 +194,7 @@ def run_pattern_game(
         "pattern_game_meta": meta,
         "manifest_effective": manifest,
         "memory_bundle_audit": mb_audit,
+        "memory_bundle_proof": memory_bundle_proof,
     }
 
 

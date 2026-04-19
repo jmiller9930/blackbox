@@ -89,6 +89,7 @@ def _worker_run_one(scenario: dict[str, Any]) -> dict[str, Any]:
             atr_stop_mult=scenario.get("atr_stop_mult"),
             atr_target_mult=scenario.get("atr_target_mult"),
             memory_bundle_path=mbp,
+            use_groundhog_auto_resolve=False,
             emit_baseline_artifacts=bool(scenario.get("emit_baseline_artifacts", False)),
             verbose=False,
         )
@@ -104,6 +105,7 @@ def _worker_run_one(scenario: dict[str, Any]) -> dict[str, Any]:
             "dataset_bars": out.get("dataset_bars"),
             "manifest_path": str(scenario.get("manifest_path", "")),
             "memory_bundle_audit": out.get("memory_bundle_audit"),
+            "memory_bundle_proof": out.get("memory_bundle_proof"),
             "atr_stop_mult": scenario.get("atr_stop_mult"),
             "atr_target_mult": scenario.get("atr_target_mult"),
         }

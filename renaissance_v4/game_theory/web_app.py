@@ -58,7 +58,7 @@ from flask import Flask, Response, abort, jsonify, request
 _GAME_THEORY = Path(__file__).resolve().parent
 
 # Operator-visible web UI bundle version — bump when changing PAGE_HTML (HTML/CSS/JS) so deploys are provable.
-PATTERN_GAME_WEB_UI_VERSION = "2.1.0"
+PATTERN_GAME_WEB_UI_VERSION = "2.1.1"
 
 from renaissance_v4.game_theory.groundhog_memory import (
     groundhog_auto_merge_enabled,
@@ -473,6 +473,7 @@ def create_app() -> Flask:
                     "referee_session": referee_session_outcome(True, js),
                     "pnl_summary": pnl_summary,
                     "memory_bundle_audit": out.get("memory_bundle_audit"),
+                    "memory_bundle_proof": out.get("memory_bundle_proof"),
                 }
             )
         except Exception as e:

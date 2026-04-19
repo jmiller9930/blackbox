@@ -10,6 +10,7 @@ This is **opt-in**: no bundle path → no merge → behavior unchanged vs plain 
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -19,6 +20,47 @@ MEMORY_BUNDLE_SCHEMA = "pattern_game_memory_bundle_v1"
 
 # Only whitelisted manifest keys may be applied from memory (extend with governance review).
 ALLOWED_APPLY_KEYS: frozenset[str] = frozenset({"atr_stop_mult", "atr_target_mult"})
+
+
+def sha256_file(path: Path | str) -> str:
+    """SHA-256 hex digest of file bytes (for operator audit)."""
+    p = Path(path).expanduser().resolve()
+    h = hashlib.sha256()
+    with p.open("rb") as fh:
+        for chunk in iter(lambda: fh.read(65536), b""):
+            h.update(chunk)
+    return h.hexdigest()
+
+
+def build_memory_bundle_proof(
+    *,
+    resolved_bundle_path: str | None,
+    apply_audit: dict[str, Any] | None,
+) -> dict[str, Any]:
+    """
+    Flattened audit for runs and APIs: loaded vs applied vs hash.
+
+    * ``memory_bundle_loaded`` — a bundle file path was resolved **and** the file exists on disk.
+    * ``memory_bundle_applied`` — at least one whitelisted key was merged into the manifest.
+    """
+    path_s = (resolved_bundle_path or "").strip() or None
+    loaded = False
+    digest: str | None = None
+    if path_s:
+        p = Path(path_s).expanduser().resolve()
+        if p.is_file():
+            loaded = True
+            digest = sha256_file(p)
+    applied = apply_audit is not None
+    keys = list((apply_audit or {}).get("keys_applied") or [])
+    return {
+        "memory_bundle_path": path_s,
+        "memory_bundle_hash": digest,
+        "memory_bundle_loaded": loaded,
+        "memory_bundle_applied": applied,
+        "memory_keys_applied": keys,
+        "memory_bundle_apply_audit": apply_audit,
+    }
 
 
 def load_memory_bundle(path: Path | str) -> dict[str, Any]:
