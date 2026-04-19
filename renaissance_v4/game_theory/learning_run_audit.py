@@ -455,6 +455,7 @@ def compute_scorecard_learning_rollups_v1(
             "winner_vs_control": None,
             "evaluation_window": None,
             "replay_data_audit": None,
+            "context_memory_operator_summary_v1": None,
         }
         return {
             "learning_audit_v1": la,
@@ -480,10 +481,15 @@ def compute_scorecard_learning_rollups_v1(
             "win_loss_size_ratio": None,
             "work_units_v1": f"0 scenarios with audits (ok rows={n_ok}, total rows={n_scen})",
             "operator_learning_table_summary_v1": [
+                "Memory Mode: —",
+                "Memory Saved This Run: NO",
+                "Memory Loaded: NO",
+                "Recall Matches: 0",
+                "Bias Applied (fusion): 0",
                 "Learning Status: EXECUTION ONLY (no tuning engaged)",
                 "Decision Windows: 0",
                 "Candidates Tested: 0",
-                "Recall Matches: 0",
+                "Recall Matches (replay audit): 0",
                 "Signal Adjustments: 0",
                 "Winner: —",
             ],
@@ -567,6 +573,20 @@ def compute_scorecard_learning_rollups_v1(
                 replay_audit = rda
                 break
 
+    panels: list[dict[str, Any]] = []
+    for r in results or []:
+        if not r.get("ok"):
+            continue
+        pnl = r.get("context_memory_operator_panel_v1")
+        if isinstance(pnl, dict) and pnl.get("schema") == "context_memory_operator_panel_v1":
+            panels.append(pnl)
+    ctx_saved = sum(1 for p in panels if bool(p.get("memory_saved_this_run")))
+    ctx_loaded_any = any(bool(p.get("memory_loaded")) for p in panels)
+    ctx_mode_label = str(panels[0].get("memory_mode") or "—") if panels else "—"
+    ctx_rm_panel = sum(_int(p.get("recall_matches"), 0) for p in panels)
+    ctx_ba_panel = sum(_int(p.get("bias_applied"), 0) for p in panels)
+    ctx_narrative = str(panels[0].get("narrative") or "").strip() if panels else ""
+
     recall_stats = {
         "attempts": recall_att,
         "matches": recall_mat,
@@ -576,6 +596,15 @@ def compute_scorecard_learning_rollups_v1(
     signal_bias_stats = {
         "applied_count": sig_bias,
         "suppressed_modules_count": sup_mod,
+    }
+
+    ctx_summary = {
+        "memory_mode_label": ctx_mode_label,
+        "memory_saved_scenarios": ctx_saved,
+        "memory_loaded_any": ctx_loaded_any,
+        "recall_matches_panel_sum": ctx_rm_panel,
+        "bias_applied_panel_sum": ctx_ba_panel,
+        "narrative_sample": ctx_narrative or None,
     }
 
     la = {
@@ -590,6 +619,7 @@ def compute_scorecard_learning_rollups_v1(
         "winner_vs_control": winner_struct,
         "evaluation_window": eval_win,
         "replay_data_audit": replay_audit,
+        "context_memory_operator_summary_v1": ctx_summary,
     }
 
     exp_m = _mean_metric("expectancy_per_trade")
@@ -621,12 +651,23 @@ def compute_scorecard_learning_rollups_v1(
     cand_rep = learning_batch_candidate_replays(audits)
 
     lines = [
-        f"Learning Status: {'ACTIVE' if learning_active else 'EXECUTION ONLY (no tuning engaged)'}",
-        f"Decision Windows: {sum_dw:,}",
-        f"Candidates Tested: {cand_total}",
-        f"Recall Matches: {recall_mat:,}",
-        f"Signal Adjustments: {sig_bias:,}",
+        f"Memory Mode: {ctx_mode_label}",
+        f"Memory Saved This Run: {'YES' if ctx_saved > 0 else 'NO'}",
+        f"Memory Loaded: {'YES' if ctx_loaded_any or mem_recs > 0 else 'NO'}",
+        f"Recall Matches: {recall_mat:,} (panel rows: {ctx_rm_panel:,})",
+        f"Bias Applied (fusion): {recall_bias:,} (panel rows: {ctx_ba_panel:,})",
     ]
+    if ctx_narrative:
+        lines.append(f"Memory narrative: {ctx_narrative}")
+    lines.extend(
+        [
+            f"Learning Status: {'ACTIVE' if learning_active else 'EXECUTION ONLY (no tuning engaged)'}",
+            f"Decision Windows: {sum_dw:,}",
+            f"Candidates Tested: {cand_total}",
+            f"Recall Matches (replay audit): {recall_mat:,}",
+            f"Signal Adjustments: {sig_bias:,}",
+        ]
+    )
     if sel:
         lines.append(f"Winner: {sel}" + (f" ({winner_delta})" if winner_delta else ""))
     else:
@@ -663,6 +704,9 @@ def compute_scorecard_learning_rollups_v1(
         "win_loss_size_ratio": wlr_m,
         "work_units_v1": work_units,
         "operator_learning_table_summary_v1": lines,
+        "context_memory_saved_scenarios": ctx_saved,
+        "context_memory_loaded_any": ctx_loaded_any or (mem_recs > 0),
+        "context_memory_mode_label": ctx_mode_label,
     }
     return flat
 

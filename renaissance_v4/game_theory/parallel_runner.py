@@ -161,6 +161,10 @@ def _worker_run_one(scenario: dict[str, Any]) -> dict[str, Any]:
                 memory_bundle_path=mbp,
                 use_groundhog_auto_resolve=False,
             )
+            cmem = str(scenario.get("context_signature_memory_mode") or "").strip().lower()
+            if cmem not in ("off", "read", "read_write"):
+                cmem = "read_write"
+            mem_jsonl = scenario.get("context_signature_memory_path")
             try:
                 hres = run_operator_test_harness_v1(
                     prep.replay_path,
@@ -171,6 +175,9 @@ def _worker_run_one(scenario: dict[str, Any]) -> dict[str, Any]:
                     goal_v2=scenario.get("goal_v2") if isinstance(scenario.get("goal_v2"), dict) else None,
                     bar_window_calendar_months=bar_m,
                     live_telemetry_callback=live_cb,
+                    context_signature_memory_mode=cmem,
+                    context_signature_memory_path=mem_jsonl,
+                    decision_context_recall_memory_path=mem_jsonl,
                 )
             finally:
                 prep.cleanup()
@@ -185,9 +192,11 @@ def _worker_run_one(scenario: dict[str, Any]) -> dict[str, Any]:
                     f"context-conditioned candidate search with candidates > 0 (got candidate_count={cand_n})"
                 )
 
+            panel = (hres.get("operator_test_harness_v1") or {}).get("context_memory_operator_panel_v1")
             pgm: dict[str, Any] = {
                 "operator_test_harness_v1": hres.get("operator_test_harness_v1"),
                 "operator_learning_harness_path_v1": True,
+                "context_memory_operator_panel_v1": panel if isinstance(panel, dict) else None,
             }
             if recipe_id == REFERENCE_COMPARISON_RECIPE_ID:
                 pgm["reference_comparison_learning_path_v1"] = True
@@ -237,6 +246,9 @@ def _worker_run_one(scenario: dict[str, Any]) -> dict[str, Any]:
         }
         if hres is not None:
             row["operator_test_harness_v1"] = hres.get("operator_test_harness_v1")
+            hp = (hres.get("operator_test_harness_v1") or {}).get("context_memory_operator_panel_v1")
+            if isinstance(hp, dict):
+                row["context_memory_operator_panel_v1"] = hp
         row.update(extract_scenario_echo_fields(scenario))
         return row
     except Exception as e:

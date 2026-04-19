@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import uuid
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -246,8 +247,32 @@ def append_context_memory_record(
 
     p = Path(memory_path or _DEFAULT_MEMORY_PATH).expanduser().resolve()
     p.parent.mkdir(parents=True, exist_ok=True)
-    with p.open("a", encoding="utf-8") as fh:
-        fh.write(json.dumps(record, ensure_ascii=False, separators=(",", ":")) + "\n")
+    line = json.dumps(record, ensure_ascii=False, separators=(",", ":")) + "\n"
+    flags = os.O_APPEND | os.O_CREAT | os.O_WRONLY
+    fd = os.open(str(p), flags, 0o644)
+    flock = None
+    try:
+        try:
+            import fcntl
+
+            flock = fcntl
+        except ImportError:
+            pass
+        if flock is not None:
+            try:
+                flock.flock(fd, flock.LOCK_EX)
+            except OSError:
+                flock = None
+        try:
+            os.write(fd, line.encode("utf-8"))
+        finally:
+            if flock is not None:
+                try:
+                    flock.flock(fd, flock.LOCK_UN)
+                except OSError:
+                    pass
+    finally:
+        os.close(fd)
     return record
 
 

@@ -84,6 +84,8 @@ SCENARIO_ECHO_KEYS: tuple[str, ...] = (
     "game_spec_ref",
     "operator_recipe_id",
     "operator_recipe_label",
+    "context_signature_memory_mode",
+    "context_signature_memory_path",
     "policy_framework_path",
     "policy_framework_audit",
 )

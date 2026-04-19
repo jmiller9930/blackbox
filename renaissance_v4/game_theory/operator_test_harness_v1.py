@@ -14,6 +14,9 @@ from pathlib import Path
 from typing import Any
 
 from renaissance_v4.game_theory.context_candidate_search import run_context_candidate_search_v1
+from renaissance_v4.game_theory.context_memory_operator import (
+    maybe_persist_harness_winner_context_memory_v1,
+)
 from renaissance_v4.game_theory.hunter_planner import resolve_repo_root
 from renaissance_v4.game_theory.memory_bundle import BUNDLE_APPLY_WHITELIST
 from renaissance_v4.game_theory.pattern_outcome_quality_v1 import (
@@ -133,6 +136,8 @@ def run_operator_test_harness_v1(
     source_run_id: str = "operator_harness_v1",
     bar_window_calendar_months: int | None = None,
     live_telemetry_callback: Callable[[dict[str, Any]], None] | None = None,
+    context_signature_memory_mode: str = "read_write",
+    context_signature_memory_path: Path | str | None = None,
     decision_context_recall_enabled: bool = True,
     decision_context_recall_apply_bias: bool = True,
     decision_context_recall_apply_signal_bias_v2: bool = False,
@@ -163,6 +168,15 @@ def run_operator_test_harness_v1(
 
     goal_effective = goal_v2 if goal_v2 is not None else dict(DEFAULT_GOAL_V2_PATTERN_OUTCOME_QUALITY)
 
+    mem_mode = (context_signature_memory_mode or "read_write").strip().lower()
+    if mem_mode not in ("off", "read", "read_write"):
+        mem_mode = "read_write"
+    mem_store_path = context_signature_memory_path or decision_context_recall_memory_path
+    if mem_mode == "off":
+        decision_context_recall_enabled = False
+        decision_context_recall_apply_bias = False
+        decision_context_recall_apply_signal_bias_v2 = False
+
     root = resolve_repo_root(repo_root_for_git)
     policy_fw_audit: dict[str, Any] | None = None
     if policy_framework_path:
@@ -190,7 +204,7 @@ def run_operator_test_harness_v1(
         decision_context_recall_enabled=decision_context_recall_enabled,
         decision_context_recall_apply_bias=decision_context_recall_apply_bias,
         decision_context_recall_apply_signal_bias_v2=decision_context_recall_apply_signal_bias_v2,
-        decision_context_recall_memory_path=decision_context_recall_memory_path,
+        decision_context_recall_memory_path=mem_store_path,
         decision_context_recall_max_samples=decision_context_recall_max_samples,
         decision_context_recall_drill_matched_max=decision_context_recall_drill_matched_max,
         decision_context_recall_drill_bias_max=decision_context_recall_drill_bias_max,
@@ -280,6 +294,7 @@ def run_operator_test_harness_v1(
                 "decision_context_recall_enabled": decision_context_recall_enabled,
                 "decision_context_recall_apply_bias": decision_context_recall_apply_bias,
                 "decision_context_recall_apply_signal_bias_v2": decision_context_recall_apply_signal_bias_v2,
+                "context_signature_memory_mode": mem_mode,
             },
         },
         "control_replay_validation_checksum": control_replay.get("validation_checksum"),
@@ -299,6 +314,21 @@ def run_operator_test_harness_v1(
     harness_la = build_per_scenario_learning_run_audit_v1(harness_audit_src, scenario={})
     harness["learning_run_audit_v1"] = harness_la
     harness["operator_learning_status_line_v1"] = harness_la.get("operator_learning_status_line_v1")
+
+    wm_proof = proof.get("winner_metrics") if isinstance(proof.get("winner_metrics"), dict) else None
+    panel = maybe_persist_harness_winner_context_memory_v1(
+        context_signature_memory_mode=mem_mode,
+        learning_run_classification=str(harness_la.get("run_classification_v1") or ""),
+        selected_candidate_id=str(selected) if selected else None,
+        control_replay=control_replay,
+        winner_apply_effective=winner_apply_eff,
+        winner_metrics=wm_proof,
+        test_run_id=rid,
+        manifest_path=mp,
+        proof_reason_codes=list(proof.get("reason_codes") or []),
+        memory_path=mem_store_path,
+    )
+    harness["context_memory_operator_panel_v1"] = panel
     return {
         "operator_test_harness_v1": harness,
         "context_candidate_search_raw": search_out,

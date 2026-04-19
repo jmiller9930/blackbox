@@ -343,6 +343,13 @@ def _prepare_parallel_payload(data: dict[str, Any]) -> dict[str, Any]:
         log_path = None
 
     ew0 = scenarios[0].get("evaluation_window") if scenarios else {}
+    cmem_in = str(data.get("context_signature_memory_mode") or "").strip().lower()
+    if cmem_in and cmem_in not in ("off", "read", "read_write"):
+        return {
+            "ok": False,
+            "error": f"Invalid context_signature_memory_mode (use off, read, read_write): {data.get('context_signature_memory_mode')!r}",
+        }
+
     operator_batch_audit: dict[str, Any] = {
         "operator_recipe_id": recipe_id_in,
         "operator_recipe_label": recipe_label,
@@ -356,7 +363,12 @@ def _prepare_parallel_payload(data: dict[str, Any]) -> dict[str, Any]:
         "manifest_path_primary": scenarios[0].get("manifest_path") if scenarios else None,
         "policy_framework_path": scenarios[0].get("policy_framework_path") if scenarios else None,
         "policy_framework_audit": scenarios[0].get("policy_framework_audit") if scenarios else None,
+        "context_signature_memory_mode": cmem_in or None,
     }
+
+    if cmem_in in ("off", "read", "read_write"):
+        for s in scenarios:
+            s["context_signature_memory_mode"] = cmem_in
 
     return {
         "ok": True,
@@ -420,6 +432,7 @@ def _telemetry_context_for_parallel_job(operator_batch_audit: dict[str, Any]) ->
             "operator_harness_candidate_search" if harness else "baseline_replay_only"
         ),
         "candidate_search_active": harness,
+        "context_signature_memory_mode": operator_batch_audit.get("context_signature_memory_mode"),
     }
 
 
@@ -2593,6 +2606,11 @@ PAGE_HTML = """<!DOCTYPE html>
               <option value="custom">Custom…</option>
             </select></div>
             <div id="customMonthsWrap" style="display:none"><label for="evaluationWindowCustomMonths">Months</label><input type="number" id="evaluationWindowCustomMonths" min="1" max="600" value="36" style="width:100%;margin-top:4px"/></div>
+            <div><label for="contextSignatureMemoryModePick">Context memory</label><select id="contextSignatureMemoryModePick" title="Winner → JSONL store; next run reads for DCR (no Groundhog)">
+              <option value="read_write" selected>READ+WRITE (default)</option>
+              <option value="read">READ only</option>
+              <option value="off">OFF</option>
+            </select></div>
           </div>
           <div id="policyMultiWrap" style="display:none;margin-top:10px">
             <label for="policyPick">Policy / manifest</label>
@@ -2717,8 +2735,8 @@ PAGE_HTML = """<!DOCTYPE html>
           <p class="scorecard-legend"><strong>Run OK %</strong> — workers finished. <strong>Session WIN %</strong> — referee WIN vs LOSS among judged sessions only; <strong>n sess</strong> is that denominator (never infer from a bare percentage). <strong>Trade win %</strong> — batch mean when trades exist (with trade count). <strong>Learning</strong> — <code>execution_only</code> vs <code>learning_active</code> from replay counters (candidate search, memory records loaded, recall matches, signal bias). <strong>Work</strong> — decision windows, bars, and candidate-stack replays. Scan <em>down</em> for newest batches. <strong>In-flight</strong> — a batch that is <strong>running</strong> now appears at the <strong>top</strong> with <strong>Start</strong> time and live progress counts; the JSONL line is written when the batch finishes. <strong>Scorecard file</strong> (<code>batch_scorecard.jsonl</code>) is batch audit for this table and hunter suggestions; replay does <em>not</em> read it to apply memory or recall. <strong>Clear Card</strong> truncates that log only. <strong>Reset Learning State</strong> is separate and destructive (engine files — see confirmation).</p>
           <p class="last-run" id="lastBatchRunLine">Last completed batch: —</p>
           <div id="scorecardLearningSummary" class="scorecard-learning-summary exec-only" aria-live="polite" hidden>
-            <p class="sls-title">Latest batch — learning summary</p>
-            <p class="sls-line" id="scorecardLearningSummaryBody">—</p>
+            <p class="sls-title">Latest batch — learning &amp; contextual memory</p>
+            <div id="scorecardLearningSummaryBody" class="sls-body"></div>
           </div>
           <div class="scorecard-toolbar">
             <a id="scorecardCsvLink" href="/api/batch-scorecard.csv?limit=50">Download scorecard history (CSV)</a>
@@ -3836,13 +3854,16 @@ PAGE_HTML = """<!DOCTYPE html>
           }
         }
         const doLogEl = document.getElementById('doLog');
+        const cmemEl = document.getElementById('contextSignatureMemoryModePick');
+        const cmem = cmemEl && cmemEl.value ? String(cmemEl.value) : 'read_write';
         const body = {
           scenarios_json: recipeId === 'custom' ? scenariosTa : '[]',
           max_workers: mw,
           log_path: !!(doLogEl && doLogEl.checked),
           operator_recipe_id: recipeId,
           evaluation_window_mode: wm,
-          evaluation_window_custom_months: customM
+          evaluation_window_custom_months: customM,
+          context_signature_memory_mode: cmem
         };
         const startR = await fetch('/api/run-parallel/start', {
           method: 'POST',
