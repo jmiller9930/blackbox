@@ -22,8 +22,10 @@ Exit 5 when run1 had no winner (nothing to prove on run 2). Exit 1 when run2 loa
 from __future__ import annotations
 
 import argparse
+import contextlib
 import json
 import os
+import sqlite3
 import sys
 import tempfile
 from pathlib import Path
@@ -37,7 +39,7 @@ os.environ.setdefault("PATTERN_GAME_GROUNDHOG_BUNDLE", "0")
 from renaissance_v4.game_theory.context_signature_memory import default_memory_path  # noqa: E402
 from renaissance_v4.game_theory.operator_test_harness_v1 import run_operator_test_harness_v1  # noqa: E402
 from renaissance_v4.game_theory.pattern_game import prepare_effective_manifest_for_replay  # noqa: E402
-from renaissance_v4.utils.db import DB_PATH, get_connection  # noqa: E402
+from renaissance_v4.utils.db import DB_PATH  # noqa: E402
 
 
 def _jsonl_line_count(p: Path) -> int:
@@ -49,6 +51,19 @@ def _jsonl_line_count(p: Path) -> int:
     return sum(1 for line in text.splitlines() if line.strip())
 
 
+@contextlib.contextmanager
+def _mute_replay_stdout():
+    """Per-bar replay prints millions of lines on full tape; discard during harness only."""
+    saved = sys.stdout
+    dev = open(os.devnull, "w", encoding="utf-8")
+    sys.stdout = dev
+    try:
+        yield
+    finally:
+        sys.stdout = saved
+        dev.close()
+
+
 def _print_tape_preflight() -> int:
     """Return market_bars_5m row count; print DB path and scale hint."""
     path = DB_PATH.resolve()
@@ -57,7 +72,7 @@ def _print_tape_preflight() -> int:
     if not path.is_file():
         print("ERROR: database file missing — cannot replay.")
         return -1
-    conn = get_connection()
+    conn = sqlite3.connect(str(path))
     try:
         n = int(conn.execute("select count(*) from market_bars_5m").fetchone()[0])
     finally:
@@ -82,6 +97,11 @@ def main() -> int:
         action="store_true",
         help="Require run1 learning_engaged + memory_saved + run2 loaded/match/bias all > 0.",
     )
+    ap.add_argument(
+        "--verbose-replay",
+        action="store_true",
+        help="Stream per-bar replay logs to stdout (default: muted for full-tape runs).",
+    )
     args = ap.parse_args()
 
     bars = _print_tape_preflight()
@@ -101,6 +121,8 @@ def main() -> int:
         mem = tmp / "context_signature_memory.jsonl"
         before = mem.read_text(encoding="utf-8") if mem.is_file() else ""
 
+    quiet_harness = not args.verbose_replay
+
     def run_once(label: str, mode: str) -> dict:
         prep = prepare_effective_manifest_for_replay(
             manifest,
@@ -109,15 +131,17 @@ def main() -> int:
             memory_bundle_path=None,
             use_groundhog_auto_resolve=False,
         )
+        ctx = _mute_replay_stdout() if quiet_harness else contextlib.nullcontext()
         try:
-            out = run_operator_test_harness_v1(
-                prep.replay_path,
-                test_run_id=f"proof_{label}",
-                source_preset_or_manifest=str(manifest),
-                context_signature_memory_mode=mode,
-                context_signature_memory_path=mem,
-                decision_context_recall_memory_path=mem,
-            )
+            with ctx:
+                out = run_operator_test_harness_v1(
+                    prep.replay_path,
+                    test_run_id=f"proof_{label}",
+                    source_preset_or_manifest=str(manifest),
+                    context_signature_memory_mode=mode,
+                    context_signature_memory_path=mem,
+                    decision_context_recall_memory_path=mem,
+                )
         finally:
             prep.cleanup()
         return out
