@@ -402,6 +402,10 @@ def _replay_with_apply_dict(
     decision_context_recall_apply_bias: bool = False,
     decision_context_recall_apply_signal_bias_v2: bool = False,
     decision_context_recall_memory_path: Path | str | None = None,
+    decision_context_recall_max_samples: int = 24,
+    decision_context_recall_drill_matched_max: int = 0,
+    decision_context_recall_drill_bias_max: int = 0,
+    decision_context_recall_drill_trade_entry_max: int = 0,
 ) -> dict[str, Any]:
     from renaissance_v4.research.replay_runner import run_manifest_replay
 
@@ -427,6 +431,10 @@ def _replay_with_apply_dict(
             decision_context_recall_apply_bias=decision_context_recall_apply_bias,
             decision_context_recall_apply_signal_bias_v2=decision_context_recall_apply_signal_bias_v2,
             decision_context_recall_memory_path=decision_context_recall_memory_path,
+            decision_context_recall_max_samples=decision_context_recall_max_samples,
+            decision_context_recall_drill_matched_max=decision_context_recall_drill_matched_max,
+            decision_context_recall_drill_bias_max=decision_context_recall_drill_bias_max,
+            decision_context_recall_drill_trade_entry_max=decision_context_recall_drill_trade_entry_max,
         )
     finally:
         if os.path.isfile(tmp):
@@ -460,6 +468,10 @@ def run_context_candidate_search_v1(
     decision_context_recall_apply_bias: bool = False,
     decision_context_recall_apply_signal_bias_v2: bool = False,
     decision_context_recall_memory_path: Path | str | None = None,
+    decision_context_recall_max_samples: int = 24,
+    decision_context_recall_drill_matched_max: int = 0,
+    decision_context_recall_drill_bias_max: int = 0,
+    decision_context_recall_drill_trade_entry_max: int = 0,
 ) -> dict[str, Any]:
     """
     Replay control + each candidate under identical replay settings; return proof package + raw replays.
@@ -511,6 +523,10 @@ def run_context_candidate_search_v1(
         decision_context_recall_apply_bias=decision_context_recall_apply_bias,
         decision_context_recall_apply_signal_bias_v2=decision_context_recall_apply_signal_bias_v2,
         decision_context_recall_memory_path=decision_context_recall_memory_path,
+        decision_context_recall_max_samples=decision_context_recall_max_samples,
+        decision_context_recall_drill_matched_max=decision_context_recall_drill_matched_max,
+        decision_context_recall_drill_bias_max=decision_context_recall_drill_bias_max,
+        decision_context_recall_drill_trade_entry_max=decision_context_recall_drill_trade_entry_max,
     )
     control_metrics = extract_comparison_metrics(control_replay)
 
@@ -524,6 +540,10 @@ def run_context_candidate_search_v1(
             decision_context_recall_apply_bias=decision_context_recall_apply_bias,
             decision_context_recall_apply_signal_bias_v2=decision_context_recall_apply_signal_bias_v2,
             decision_context_recall_memory_path=decision_context_recall_memory_path,
+            decision_context_recall_max_samples=decision_context_recall_max_samples,
+            decision_context_recall_drill_matched_max=decision_context_recall_drill_matched_max,
+            decision_context_recall_drill_bias_max=decision_context_recall_drill_bias_max,
+            decision_context_recall_drill_trade_entry_max=decision_context_recall_drill_trade_entry_max,
         )
         m = extract_comparison_metrics(raw)
         diff = apply_diff_audit(control, c["apply_effective"])
@@ -548,6 +568,15 @@ def run_context_candidate_search_v1(
         )
 
     ranking_order, selected_id, reason_codes = rank_all_v1("control", control_metrics, summaries)
+
+    winner_metrics: dict[str, Any] | None = None
+    winner_vs_control: dict[str, Any] | None = None
+    if selected_id:
+        for s in summaries:
+            if s["candidate_id"] == selected_id:
+                winner_metrics = dict(s["metrics"])
+                winner_vs_control = dict(s["vs_control"])
+                break
 
     op_parts = [
         f"batch={search_batch_id}",
@@ -575,6 +604,8 @@ def run_context_candidate_search_v1(
         "candidate_summaries": summaries,
         "ranking_order": ranking_order,
         "selected_candidate_id": selected_id,
+        "winner_metrics": winner_metrics,
+        "winner_vs_control": winner_vs_control,
         "reason_codes": reason_codes,
         "operator_summary": " ".join(op_parts),
     }

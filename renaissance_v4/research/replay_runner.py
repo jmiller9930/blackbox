@@ -23,6 +23,7 @@ Change History:
 - v7.3 `run_manifest_replay()` for programmatic / experiment flows; optional `--manifest` CLI (no env required).
 - v7.4 Optional Decision Context Recall v1 (per-bar structured recall + bounded fusion bias; opt-in kwargs).
 - v7.5 Decision Context Recall v2: bounded per-signal contribution multipliers + optional memory-driven module suppression (opt-in).
+- v7.6 ``replay_attempt_aggregates_v1`` + optional DCR drill-down sample rings (operator harness).
 """
 
 from __future__ import annotations
@@ -132,6 +133,9 @@ def run_manifest_replay(
     decision_context_recall_memory_path: Path | str | None = None,
     decision_context_recall_match_params: SignatureMatchParamsV1 | None = None,
     decision_context_recall_max_samples: int = 24,
+    decision_context_recall_drill_matched_max: int = 0,
+    decision_context_recall_drill_bias_max: int = 0,
+    decision_context_recall_drill_trade_entry_max: int = 0,
 ) -> dict[str, Any]:
     """
     Execute one full deterministic replay using the manifest resolution rules in ``load_replay_manifest``.
@@ -146,6 +150,9 @@ def run_manifest_replay(
 
     Optional ``decision_context_recall_apply_signal_bias_v2`` applies bounded per-signal contribution
     multipliers and optional intersection-based module suppression from memory (still manifest-scoped).
+
+    When drill-down maxima are > 0, the replay keeps the **last** N windows matching each category
+    (matched memory, fusion/signal bias applied, trade opened) for operator harness inspection.
     """
     connection = get_connection()
     rows = connection.execute(
@@ -188,6 +195,15 @@ def run_manifest_replay(
     dcr_match_params = decision_context_recall_match_params or SignatureMatchParamsV1()
     memory_records_cache: list[dict[str, Any]] | None = None
     dcr_samples: list[dict[str, Any]] = []
+    recall_match_records_total = 0
+    recall_no_effect_windows = 0
+    recall_skipped_unsupported_total = 0
+    dcr_drill_matched: list[dict[str, Any]] = []
+    dcr_drill_bias: list[dict[str, Any]] = []
+    dcr_drill_trade_entries: list[dict[str, Any]] = []
+    dm_max = int(decision_context_recall_drill_matched_max)
+    db_max = int(decision_context_recall_drill_bias_max)
+    dt_max = int(decision_context_recall_drill_trade_entry_max)
     dcr_stats: dict[str, Any] = {
         "decision_context_recall_enabled": decision_context_recall_enabled,
         "decision_context_recall_apply_bias": decision_context_recall_apply_bias,
@@ -340,6 +356,8 @@ def run_manifest_replay(
                 dcr_codes.append("DCR_V1_SKIPPED_UNSUPPORTED_FUSION_ENGINE")
 
         attempted = bool(decision_context_recall_enabled and recall_fusion_ok)
+        if decision_context_recall_enabled and not recall_fusion_ok:
+            recall_skipped_unsupported_total += 1
         signal_bias_v2_trace = bool(
             attempted and decision_context_recall_apply_signal_bias_v2
         )
@@ -365,6 +383,44 @@ def run_manifest_replay(
             decision_context_favored_signal_families=sig_favored,
             memory_justification_signal_bias=mem_just_sig,
         )
+        if attempted:
+            recall_match_records_total += len(matches)
+            effective_recall = bias_applied or (signal_bias_v2_trace and sig_bias_applied)
+            if not effective_recall:
+                recall_no_effect_windows += 1
+            if matches and dm_max > 0:
+                dcr_drill_matched.append(
+                    {
+                        "timestamp": state.timestamp,
+                        "decision_context_signature_key_current": sig_key,
+                        "context_memory_match_count_for_decision": len(matches),
+                        "best_context_match_id": best_id,
+                        "decision_context_recall_bias_applied": bias_applied,
+                        "decision_context_signal_bias_applied": sig_bias_applied
+                        if signal_bias_v2_trace
+                        else False,
+                    }
+                )
+                dcr_drill_matched = dcr_drill_matched[-dm_max:]
+            if (
+                (bias_applied or (signal_bias_v2_trace and sig_bias_applied))
+                and db_max > 0
+            ):
+                dcr_drill_bias.append(
+                    {
+                        "timestamp": state.timestamp,
+                        "decision_context_signature_key_current": sig_key,
+                        "decision_context_recall_bias_applied": bias_applied,
+                        "decision_context_recall_bias_diff": bias_diff,
+                        "decision_context_signal_bias_applied": sig_bias_applied
+                        if signal_bias_v2_trace
+                        else False,
+                        "decision_context_signal_bias_diff": sig_bias_diff
+                        if signal_bias_v2_trace
+                        else [],
+                    }
+                )
+                dcr_drill_bias = dcr_drill_bias[-db_max:]
         if decision_context_recall_enabled:
             dcr_stats["decisions_observed"] += 1
             if attempted:
@@ -487,6 +543,22 @@ def run_manifest_replay(
             )
             opened_this_bar = True
             entries_attempted += 1
+            if dt_max > 0:
+                dcr_drill_trade_entries.append(
+                    {
+                        "timestamp": state.timestamp,
+                        "direction": fusion_result.direction,
+                        "decision_context_signature_key_current": sig_key,
+                        "decision_context_recall_bias_applied": bias_applied,
+                        "decision_context_signal_bias_applied": sig_bias_applied
+                        if signal_bias_v2_trace
+                        else False,
+                        "context_memory_match_count_for_decision": len(matches)
+                        if attempted
+                        else 0,
+                    }
+                )
+                dcr_drill_trade_entries = dcr_drill_trade_entries[-dt_max:]
 
         position_open_after = (
             exec_manager.current_trade is not None and exec_manager.current_trade.open
@@ -638,6 +710,11 @@ def run_manifest_replay(
         },
     }
 
+    ra = dcr_stats if decision_context_recall_enabled else {}
+    recall_attempts = int(ra.get("recall_attempted") or 0)
+    recall_rate = (
+        (recall_attempts / float(processed)) if processed and decision_context_recall_enabled else 0.0
+    )
     out: dict[str, Any] = {
         "manifest": manifest,
         "manifest_path": str(resolved_manifest_path),
@@ -649,6 +726,28 @@ def run_manifest_replay(
         "cumulative_pnl": exec_manager.cumulative_pnl,
         "sanity": sanity,
         "pattern_context_v1": pattern_context_v1,
+        "replay_attempt_aggregates_v1": {
+            "bars_processed": int(processed),
+            "decision_windows_total": int(processed),
+            "recall_attempts_total": recall_attempts,
+            "recall_match_windows_total": int(ra.get("decisions_with_positive_match_count") or 0),
+            "recall_match_records_total": int(recall_match_records_total),
+            "recall_bias_applied_total": int(ra.get("decisions_with_bias_applied") or 0),
+            "recall_signal_bias_applied_total": int(ra.get("decisions_with_signal_bias_applied") or 0),
+            "recall_no_effect_windows_total": int(recall_no_effect_windows),
+            "recall_skipped_unsupported_fusion_total": int(recall_skipped_unsupported_total),
+            "recall_utilization_rate": round(recall_rate, 8),
+            "actionable_signal_windows_total": int(fusion_directional_bars),
+            "no_trade_windows_total": int(fusion_no_trade_bars),
+            "trade_entries_total": int(entries_attempted),
+            "trade_exits_total": int(closes_recorded),
+            "risk_blocked_bars_total": int(risk_blocked_bars),
+        },
+        "decision_context_recall_drill_down_v1": {
+            "matched_samples": list(dcr_drill_matched),
+            "bias_applied_samples": list(dcr_drill_bias),
+            "trade_entry_samples": list(dcr_drill_trade_entries),
+        },
     }
     if decision_context_recall_enabled:
         out["decision_context_recall_stats"] = dcr_stats
