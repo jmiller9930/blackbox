@@ -244,6 +244,7 @@ def run_manifest_replay(
         "decisions_with_positive_match_count": 0,
         "decisions_with_bias_applied": 0,
         "decisions_with_signal_bias_applied": 0,
+        "suppressed_module_slots_total": 0,
     }
 
     fusion_no_trade_bars = 0
@@ -462,6 +463,10 @@ def run_manifest_replay(
                 dcr_stats["decisions_with_bias_applied"] += 1
             if signal_bias_v2_trace and sig_bias_applied:
                 dcr_stats["decisions_with_signal_bias_applied"] += 1
+            if signal_bias_v2_trace and sig_suppressed:
+                dcr_stats["suppressed_module_slots_total"] = int(
+                    dcr_stats.get("suppressed_module_slots_total", 0)
+                ) + len(sig_suppressed)
             if len(dcr_samples) < int(decision_context_recall_max_samples):
                 dcr_samples.append(recall_block)
 
@@ -741,7 +746,7 @@ def run_manifest_replay(
         },
     }
 
-    ra = dcr_stats if decision_context_recall_enabled else {}
+    ra = dict(dcr_stats) if decision_context_recall_enabled else {}
     recall_attempts = int(ra.get("recall_attempted") or 0)
     recall_rate = (
         (recall_attempts / float(processed)) if processed and decision_context_recall_enabled else 0.0
@@ -773,6 +778,8 @@ def run_manifest_replay(
             "trade_entries_total": int(entries_attempted),
             "trade_exits_total": int(closes_recorded),
             "risk_blocked_bars_total": int(risk_blocked_bars),
+            "suppressed_module_slots_total": int(ra.get("suppressed_module_slots_total") or 0),
+            "memory_records_loaded_count": int(ra.get("memory_records_loaded_count") or 0),
         },
         "decision_context_recall_drill_down_v1": {
             "matched_samples": list(dcr_drill_matched),

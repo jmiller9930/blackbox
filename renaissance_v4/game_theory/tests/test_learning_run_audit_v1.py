@@ -10,6 +10,7 @@ from renaissance_v4.game_theory.batch_scorecard import record_parallel_batch_fin
 from renaissance_v4.game_theory.learning_run_audit import (
     aggregate_batch_learning_run_audit_v1,
     build_per_scenario_learning_run_audit_v1,
+    compute_scorecard_learning_rollups_v1,
 )
 
 
@@ -121,3 +122,41 @@ def test_record_parallel_batch_finished_includes_learning_block() -> None:
     assert timing.get("batch_run_classification_v1") == "execution_only"
     assert timing.get("learning_batch_audit_v1", {}).get("schema") == "learning_batch_audit_v1"
     assert timing.get("batch_depth_v1", {}).get("replay_decision_windows_sum") == 100
+    assert timing.get("learning_status") == "execution_only"
+    assert timing.get("learning_audit_v1", {}).get("schema") == "learning_audit_v1"
+
+
+def test_scorecard_rollup_learning_active_and_winner_delta() -> None:
+    wvc = {"expectancy_delta": 0.01, "outcome_quality_v1": {"expectancy_per_trade_delta": 0.02}}
+    audit = {
+        "decision_windows_total": 50,
+        "bars_processed": 500,
+        "trades_count": 3,
+        "expectancy_per_trade": 0.1,
+        "exit_efficiency": 0.2,
+        "win_loss_size_ratio": 1.1,
+        "recall_attempts_total": 1,
+        "recall_match_windows_total": 2,
+        "recall_bias_applied_total": 0,
+        "recall_signal_bias_applied_total": 0,
+        "memory_records_loaded_count": 0,
+        "suppressed_modules_count": 0,
+        "trade_entries_total": 3,
+        "trade_exits_total": 3,
+        "groundhog_operator_lane_v1": "inactive",
+        "context_candidate_search_block_v1": {
+            "context_candidate_search_ran": True,
+            "candidate_count": 4,
+            "selected_candidate_id": "relax_fusion_min",
+            "winner_vs_control": wvc,
+            "winner_vs_control_delta_summary": "ΔE/trade 0.02",
+        },
+    }
+    flat = compute_scorecard_learning_rollups_v1(
+        [{"ok": True, "learning_run_audit_v1": audit}],
+        operator_batch_audit=None,
+    )
+    assert flat["learning_status"] == "learning_active"
+    assert flat["candidate_count"] == 4
+    assert flat["winner_vs_control_delta"] == "ΔE/trade 0.02"
+    assert flat["learning_audit_v1"]["winner_vs_control"] == wvc

@@ -69,12 +69,14 @@ def json_summary(out: dict[str, Any], scenario: dict[str, Any] | None = None) ->
     b = out.get("binary_scorecard") or {}
     sm = out.get("summary") if isinstance(out.get("summary"), dict) else {}
     # Referee binary card is win/loss counts; portfolio economics live in ``summary`` (ledger metrics).
+    trades_card = int(b.get("trades") or 0)
+    wr_val = round(float(b.get("win_rate", 0.0)), 6) if trades_card > 0 else None
     row: dict[str, Any] = {
         "outcome_rule_version": b.get("outcome_rule_version"),
         "wins": b.get("wins"),
         "losses": b.get("losses"),
         "trades": b.get("trades"),
-        "win_rate": round(float(b.get("win_rate", 0.0)), 6),
+        "win_rate": wr_val,
         "validation_checksum": out.get("validation_checksum"),
         "cumulative_pnl": out.get("cumulative_pnl"),
         "dataset_bars": out.get("dataset_bars"),

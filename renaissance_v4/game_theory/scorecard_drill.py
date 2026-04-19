@@ -237,18 +237,57 @@ _SCORECARD_CSV_FIELDS = [
     "duration_sec",
     "total_scenarios",
     "total_processed",
+    "work_units_v1",
+    "learning_status",
+    "decision_windows_total",
+    "bars_processed",
+    "candidate_count",
+    "selected_candidate_id",
+    "winner_vs_control_delta",
+    "memory_used",
+    "memory_records_loaded",
+    "groundhog_status",
+    "recall_attempts",
+    "recall_matches",
+    "recall_bias_applied",
+    "signal_bias_applied_count",
+    "suppressed_modules_count",
+    "trade_entries_total",
+    "trade_exits_total",
+    "batch_trades_count",
+    "batch_trade_win_pct",
+    "batch_trade_win_rate_n",
+    "avg_trade_win_pct",
+    "trade_win_rate_n",
+    "expectancy_per_trade",
+    "exit_efficiency",
+    "win_loss_size_ratio",
+    "batch_sessions_judged",
+    "referee_win_pct",
+    "run_ok_pct",
     "ok_count",
     "failed_count",
-    "run_ok_pct",
-    "referee_win_pct",
-    "avg_trade_win_pct",
     "workers_used",
     "status",
     "session_log_batch_dir",
     "batch_run_classification_v1",
     "replay_decision_windows_sum",
     "operator_learning_status_line_v1",
+    "learning_audit_v1",
 ]
+
+
+def _scorecard_csv_value(field: str, v: Any) -> str:
+    if v is None:
+        return ""
+    if field == "memory_used":
+        if isinstance(v, bool):
+            return "yes" if v else "no"
+        s = str(v).strip().lower()
+        return "yes" if s in ("1", "true", "yes") else "no"
+    if isinstance(v, (dict, list)):
+        return json.dumps(v, ensure_ascii=False)
+    return str(v)
 
 
 def scorecard_history_csv(entries: list[dict[str, Any]]) -> str:
@@ -256,7 +295,7 @@ def scorecard_history_csv(entries: list[dict[str, Any]]) -> str:
     w = csv.DictWriter(buf, fieldnames=_SCORECARD_CSV_FIELDS, extrasaction="ignore")
     w.writeheader()
     for e in entries:
-        row = {k: e.get(k) for k in _SCORECARD_CSV_FIELDS}
+        row = {k: _scorecard_csv_value(k, e.get(k)) for k in _SCORECARD_CSV_FIELDS}
         w.writerow(row)
     return buf.getvalue()
 

@@ -22,7 +22,10 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from renaissance_v4.game_theory.learning_run_audit import aggregate_batch_learning_run_audit_v1
+from renaissance_v4.game_theory.learning_run_audit import (
+    aggregate_batch_learning_run_audit_v1,
+    compute_scorecard_learning_rollups_v1,
+)
 from renaissance_v4.game_theory.memory_paths import default_batch_scorecard_jsonl
 
 _APPEND_LOCK = threading.Lock()
@@ -66,6 +69,13 @@ def compute_batch_score_percentages(results: list[dict[str, Any]] | None) -> dic
             continue
         summ = r.get("summary")
         if not isinstance(summ, dict):
+            continue
+        tr = summ.get("trades")
+        try:
+            tr_n = int(tr) if tr is not None else 0
+        except (TypeError, ValueError):
+            tr_n = 0
+        if tr_n <= 0:
             continue
         wr = summ.get("win_rate")
         if wr is None:
@@ -282,6 +292,13 @@ def record_parallel_batch_finished(
         ok_n = sum(1 for r in res if r.get("ok"))
         pct_fields = compute_batch_score_percentages(res)
         learning_batch = aggregate_batch_learning_run_audit_v1(res)
+        oba_m = dict(operator_batch_audit or {})
+        if not oba_m.get("replay_data_audit"):
+            for r in res:
+                if r.get("ok") and r.get("replay_data_audit") is not None:
+                    oba_m["replay_data_audit"] = r.get("replay_data_audit")
+                    break
+        scorecard_learning = compute_scorecard_learning_rollups_v1(res, operator_batch_audit=oba_m)
         batch_depth = {
             "parallel_scenarios_completed": len(res),
             "replay_bars_processed_sum": learning_batch.get("replay_bars_processed_sum"),
@@ -315,6 +332,16 @@ def record_parallel_batch_finished(
             "replay_decision_windows_sum": learning_batch.get("replay_decision_windows_sum"),
             **pct_fields,
         }
+        record.update(
+            {k: v for k, v in scorecard_learning.items() if k != "operator_learning_table_summary_v1"}
+        )
+        record["operator_learning_table_summary_v1"] = scorecard_learning.get(
+            "operator_learning_table_summary_v1"
+        )
+        if pct_fields.get("referee_wins") is not None or pct_fields.get("referee_losses") is not None:
+            record["batch_sessions_judged"] = int(pct_fields.get("referee_wins") or 0) + int(
+                pct_fields.get("referee_losses") or 0
+            )
         if operator_batch_audit:
             record["operator_batch_audit"] = operator_batch_audit
 
@@ -325,4 +352,32 @@ def record_parallel_batch_finished(
         out["batch_depth_v1"] = record.get("batch_depth_v1")
         out["batch_run_classification_v1"] = learning_batch.get("batch_run_classification_v1")
         out["operator_learning_status_line_v1"] = learning_batch.get("operator_learning_status_line_v1")
+        scl = {k: v for k, v in record.items() if k != "operator_learning_table_summary_v1"}
+        for k, v in scl.items():
+            if k in (
+                "schema",
+                "job_id",
+                "source",
+                "started_at_utc",
+                "ended_at_utc",
+                "duration_sec",
+                "total_scenarios",
+                "total_processed",
+                "ok_count",
+                "failed_count",
+                "workers_used",
+                "status",
+                "session_log_batch_dir",
+                "error",
+                "note",
+                "learning_batch_audit_v1",
+                "batch_depth_v1",
+                "operator_batch_audit",
+            ):
+                continue
+            if v is not None:
+                out[k] = v
+        ots = record.get("operator_learning_table_summary_v1")
+        if ots is not None:
+            out["operator_learning_table_summary_v1"] = ots
     return out

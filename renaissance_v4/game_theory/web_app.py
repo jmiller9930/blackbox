@@ -64,7 +64,7 @@ from flask import Flask, Response, abort, jsonify, request
 _GAME_THEORY = Path(__file__).resolve().parent
 
 # Operator-visible web UI bundle version — bump when changing PAGE_HTML (HTML/CSS/JS) so deploys are provable.
-PATTERN_GAME_WEB_UI_VERSION = "2.3.0"
+PATTERN_GAME_WEB_UI_VERSION = "2.4.0"
 
 from renaissance_v4.game_theory.groundhog_memory import (
     groundhog_auto_merge_enabled,
@@ -1651,6 +1651,37 @@ PAGE_HTML = """<!DOCTYPE html>
       margin: 0 0 10px 0;
       line-height: 1.45;
     }
+    .scorecard-learning-summary {
+      font-size: 0.78rem;
+      line-height: 1.5;
+      color: var(--pg-ink);
+      background: #f6f9fc;
+      border: 1px solid var(--pg-line);
+      border-radius: 10px;
+      padding: 10px 12px;
+      margin: 0 0 10px 0;
+    }
+    .scorecard-learning-summary .sls-line { margin: 0; }
+    .scorecard-learning-summary .sls-title { font-weight: 700; color: #2d6a4f; margin-bottom: 4px; }
+    .scorecard-learning-summary.exec-only .sls-title { color: #6c757d; }
+    .scorecard-table-wrap-wide { overflow-x: auto; max-width: 100%; }
+    .scorecard-table.scorecard-table-learning th,
+    .scorecard-table.scorecard-table-learning td {
+      font-size: 0.62rem;
+      padding: 4px 4px;
+      white-space: nowrap;
+    }
+    .chip-learn-yes { color: #1f6a45; font-weight: 700; }
+    .chip-learn-no { color: #6c757d; font-weight: 600; }
+    .drill-pre {
+      max-height: 280px;
+      overflow: auto;
+      font-size: 0.72rem;
+      background: #fff;
+      border: 1px solid #d5dce3;
+      border-radius: 8px;
+      padding: 8px;
+    }
     .path-hint { font-size: 0.72rem; color: var(--pg-muted); margin: 8px 0 0 0; word-break: break-all; }
     .scorecard-table { width: 100%; border-collapse: collapse; font-size: 0.72rem; }
     .scorecard-table th, .scorecard-table td {
@@ -2223,19 +2254,53 @@ PAGE_HTML = """<!DOCTYPE html>
         </summary>
         <div class="pg-panel-fold-body">
         <div class="scorecard-panel-inner" id="scorecardPanel">
-          <p class="scorecard-legend"><strong>Run OK %</strong> — workers finished. <strong>Session WIN %</strong> — paper WIN vs LOSS from cumulative P&amp;L. <strong>Trade win %</strong> — mean per-scenario win rate on the tape. Scan <em>down</em> the table for most recent runs; higher Session WIN + trade win on your latest batches = stronger outcomes for the hypotheses you tested.</p>
+          <p class="scorecard-legend"><strong>Run OK %</strong> — workers finished. <strong>Session WIN %</strong> — referee WIN vs LOSS among judged sessions only; <strong>n sess</strong> is that denominator (never infer from a bare percentage). <strong>Trade win %</strong> — batch mean when trades exist (with trade count). <strong>Learning</strong> — <code>execution_only</code> vs <code>learning_active</code> from replay counters (candidate search, memory records loaded, recall matches, signal bias). <strong>Work</strong> — decision windows, bars, and candidate-stack replays. Scan <em>down</em> for newest batches.</p>
           <p class="last-run" id="lastBatchRunLine">Last completed batch: —</p>
+          <div id="scorecardLearningSummary" class="scorecard-learning-summary exec-only" aria-live="polite" hidden>
+            <p class="sls-title">Latest batch — learning summary</p>
+            <p class="sls-line" id="scorecardLearningSummaryBody">—</p>
+          </div>
           <div class="scorecard-toolbar">
             <a id="scorecardCsvLink" href="/api/batch-scorecard.csv?limit=50">Download scorecard history (CSV)</a>
             <span style="font-size:0.72rem;color:var(--pg-muted)">Click a row to open batch detail, scenarios, and per-scenario report links (GT_DIRECTIVE_001).</span>
           </div>
-          <div class="pg-table-scroll">
-            <table class="scorecard-table" id="scorecardHistoryTable">
+          <div class="pg-table-scroll scorecard-table-wrap-wide">
+            <table class="scorecard-table scorecard-table-learning" id="scorecardHistoryTable">
               <thead>
                 <tr>
-                  <th>Job ID</th>
-                  <th>Started (UTC)</th><th>Ended (UTC)</th><th>Duration</th><th>Processed</th><th>OK</th><th>Failed</th>
-                  <th>Run OK %</th><th>Session WIN %</th><th>Trade win %</th><th>Workers</th><th>Status</th>
+                  <th title="job_id">Job</th>
+                  <th title="started_at_utc">Start</th>
+                  <th title="ended_at_utc">End</th>
+                  <th title="duration_sec">Dur</th>
+                  <th title="work_units_v1 — decision windows, bars, candidate-stack replays">Work</th>
+                  <th title="learning_status">Learn</th>
+                  <th title="decision_windows_total">DW</th>
+                  <th title="bars_processed">Bars</th>
+                  <th title="candidate_count">Cand</th>
+                  <th title="selected_candidate_id">Sel</th>
+                  <th title="winner_vs_control_delta">WΔ</th>
+                  <th title="memory_used">Mem</th>
+                  <th title="memory_records_loaded">MRec</th>
+                  <th title="groundhog_status">GH</th>
+                  <th title="recall_attempts">RAtt</th>
+                  <th title="recall_matches">RMt</th>
+                  <th title="recall_bias_applied">RBias</th>
+                  <th title="signal_bias_applied_count">SBc</th>
+                  <th title="suppressed_modules_count">Sup</th>
+                  <th title="trade_entries_total">TIn</th>
+                  <th title="trade_exits_total">TOut</th>
+                  <th title="batch_trade_win_pct / avg_trade_win_pct when trades exist">TW%</th>
+                  <th title="batch_trades_count">#Tr</th>
+                  <th title="expectancy_per_trade (mean scenarios with trades)">E/tr</th>
+                  <th title="exit_efficiency">Xeff</th>
+                  <th title="win_loss_size_ratio">WLR</th>
+                  <th title="referee_win_pct">SWin%</th>
+                  <th title="batch_sessions_judged">#Sess</th>
+                  <th title="run_ok_pct">RunOK%</th>
+                  <th title="ok_count">OK</th>
+                  <th title="failed_count">Fail</th>
+                  <th title="workers_used">Wkr</th>
+                  <th title="status">St</th>
                 </tr>
               </thead>
               <tbody id="scorecardHistoryTbody"></tbody>
@@ -2385,6 +2450,82 @@ PAGE_HTML = """<!DOCTYPE html>
       return m + 'm ' + sec.toFixed(0) + 's';
     }
 
+    function fmtIntCommas(v) {
+      if (v == null || v === '') return '—';
+      const n = Number(v);
+      if (!Number.isFinite(n)) return '—';
+      return n.toLocaleString();
+    }
+
+    function fmtFloatShort(v, digits) {
+      const n = Number(v);
+      if (!Number.isFinite(n)) return '—';
+      const d = (digits != null && digits !== undefined) ? digits : 4;
+      return n.toFixed(d);
+    }
+
+    function pctDisplay(v) {
+      if (v == null || v === undefined || Number.isNaN(Number(v))) return '—';
+      const n = Number(v);
+      return (Math.round(n * 10) / 10).toFixed(1) + '%';
+    }
+
+    function tradeWinDisplay(e) {
+      const bt = e.batch_trades_count;
+      const btN = bt != null ? Number(bt) : 0;
+      const pct = (btN > 0 && e.batch_trade_win_pct != null && e.batch_trade_win_pct !== undefined)
+        ? e.batch_trade_win_pct
+        : e.avg_trade_win_pct;
+      const nTr = btN > 0 ? btN : (e.trade_win_rate_n != null ? Number(e.trade_win_rate_n) : 0);
+      const p = pctDisplay(pct);
+      if (nTr > 0 && p !== '—') {
+        return p + ' <span style="color:#6c757d">(' + nTr + ')</span>';
+      }
+      return p;
+    }
+
+    function learningStatusChip(ls) {
+      const s = (ls != null && ls !== undefined) ? String(ls) : '';
+      if (s === 'learning_active') {
+        return '<span class="chip-learn-yes" title="learning_active">ACTIVE</span>';
+      }
+      if (s === 'execution_only') {
+        return '<span class="chip-learn-no" title="execution_only">exec</span>';
+      }
+      return '<span class="chip-learn-no">—</span>';
+    }
+
+    function workUnitsCell(e) {
+      const w = e.work_units_v1;
+      if (w != null && String(w).trim()) {
+        const t = String(w);
+        return escapeHtml(t.length > 72 ? t.slice(0, 70) + '…' : t);
+      }
+      const proc = e.total_processed;
+      const tot = e.total_scenarios;
+      if (proc != null || tot != null) {
+        return escapeHtml(String(proc != null ? proc : '—') + ' / ' + String(tot != null ? tot : '—') + ' scen');
+      }
+      return '—';
+    }
+
+    function updateScorecardLearningSummaryFromRow(row) {
+      const wrap = document.getElementById('scorecardLearningSummary');
+      const body = document.getElementById('scorecardLearningSummaryBody');
+      if (!wrap || !body) return;
+      const lines = row && row.operator_learning_table_summary_v1;
+      if (!row || !Array.isArray(lines) || !lines.length) {
+        wrap.hidden = true;
+        return;
+      }
+      wrap.hidden = false;
+      const active = row.learning_status === 'learning_active';
+      wrap.classList.toggle('exec-only', !active);
+      body.innerHTML = lines.map(function (ln) {
+        return '<p class="sls-line">' + escapeHtml(String(ln)) + '</p>';
+      }).join('');
+    }
+
     function updateLastBatchRunLine(bt) {
       const el = document.getElementById('lastBatchRunLine');
       if (!el || !bt) return;
@@ -2400,12 +2541,25 @@ PAGE_HTML = """<!DOCTYPE html>
       if (rw != null && rw !== undefined && !Number.isNaN(Number(rw))) {
         pctBit += ' · session WIN ' + (Math.round(Number(rw) * 10) / 10).toFixed(1) + '%';
       }
-      if (atw != null && atw !== undefined && !Number.isNaN(Number(atw))) {
-        pctBit += ' · trade win (mean) ' + (Math.round(Number(atw) * 10) / 10).toFixed(1) + '%';
+      const btc = bt.batch_trades_count;
+      if (btc != null && Number(btc) > 0 && bt.batch_trade_win_pct != null) {
+        pctBit += ' · trade win (batch) ' + pctDisplay(bt.batch_trade_win_pct) + ' on ' + btc + ' trades';
+      } else if (atw != null && atw !== undefined && !Number.isNaN(Number(atw))) {
+        pctBit += ' · trade win (mean) ' + pctDisplay(atw) +
+          (bt.trade_win_rate_n != null ? ' (n=' + bt.trade_win_rate_n + ' scen)' : '');
+      }
+      const bmj = bt.batch_sessions_judged;
+      if (bmj != null && Number(bmj) > 0 && rw != null) {
+        pctBit += ' · sessions judged ' + bmj;
+      }
+      const ls0 = bt.operator_learning_table_summary_v1;
+      let learn0 = '';
+      if (Array.isArray(ls0) && ls0.length) {
+        learn0 = ' · ' + ls0[0];
       }
       el.textContent = 'Last completed batch: start ' + (bt.started_at_utc || '—') +
         ' → end ' + (bt.ended_at_utc || '—') + ' · duration ' + formatDurationSec(bt.duration_sec) +
-        ' · processed ' + proc + ' / planned ' + tot + pctBit;
+        ' · rows ' + proc + ' / planned ' + tot + pctBit + learn0;
     }
 
     let selectedScorecardJobId = null;
@@ -2443,6 +2597,21 @@ PAGE_HTML = """<!DOCTYPE html>
         meta += '<strong>session_log_batch_dir</strong> ' + escapeHtml(String(sc.session_log_batch_dir || '(none)')) + '<br/>';
         meta += '<a href="' + csvHref + '">Download this batch (CSV, scenarios)</a>';
         meta += '</div>';
+        const la = sc.learning_audit_v1;
+        if (la && typeof la === 'object') {
+          meta += '<h4>learning_audit_v1</h4><pre class="drill-pre">' +
+            escapeHtml(JSON.stringify(la, null, 2)) + '</pre>';
+        }
+        const oba = sc.operator_batch_audit;
+        if (oba && typeof oba === 'object' && Object.keys(oba).length) {
+          meta += '<h4>operator_batch_audit</h4><pre class="drill-pre">' +
+            escapeHtml(JSON.stringify(oba, null, 2)) + '</pre>';
+        }
+        const lba = sc.learning_batch_audit_v1;
+        if (lba && typeof lba === 'object') {
+          meta += '<h4>learning_batch_audit_v1</h4><pre class="drill-pre">' +
+            escapeHtml(JSON.stringify(lba, null, 2)) + '</pre>';
+        }
         if (j.scenario_list_error) {
           meta += '<p style="color:#b7772c">' + escapeHtml(j.scenario_list_error) + '</p>';
         }
@@ -2499,9 +2668,14 @@ PAGE_HTML = """<!DOCTYPE html>
           csvLink.href = '/api/batch-scorecard.csv?limit=50';
         }
         const rows = j.entries || [];
+        if (rows.length) {
+          updateScorecardLearningSummaryFromRow(rows[0]);
+        } else {
+          updateScorecardLearningSummaryFromRow(null);
+        }
         if (!rows.length) {
           const tr = document.createElement('tr');
-          tr.innerHTML = '<td colspan="12" style="color:#8b98a5">No batches logged yet.</td>';
+          tr.innerHTML = '<td colspan="33" style="color:#8b98a5">No batches logged yet.</td>';
           tbody.appendChild(tr);
           return;
         }
@@ -2516,24 +2690,43 @@ PAGE_HTML = """<!DOCTYPE html>
           const st = e.status === 'done'
             ? '<span class="st-ok">done</span>'
             : '<span class="st-err">' + escapeHtml(e.status || '—') + '</span>';
-          const proc = (e.total_processed != null) ? e.total_processed : '—';
           const dur = (e.duration_sec != null) ? formatDurationSec(e.duration_sec) : '—';
-          function pctCell(v) {
-            if (v == null || v === undefined || Number.isNaN(Number(v))) return '—';
-            const n = Number(v);
-            return (Math.round(n * 10) / 10).toFixed(1) + '%';
-          }
+          const memY = (e.memory_used === true || e.memory_used === 'yes' || e.memory_used === 1);
+          const memCell = (e.memory_used != null && e.memory_used !== '')
+            ? (memY ? '<span title="memory_used">Y</span>' : '<span title="memory_used">N</span>')
+            : '—';
           tr.innerHTML =
-            '<td title="' + escapeHtml(jid) + '"><code style="font-size:0.68rem">' + escapeHtml(jid ? (jid.length > 20 ? jid.slice(0, 18) + '…' : jid) : '—') + '</code></td>' +
+            '<td title="' + escapeHtml(jid) + '"><code style="font-size:0.68rem">' + escapeHtml(jid ? (jid.length > 14 ? jid.slice(0, 12) + '…' : jid) : '—') + '</code></td>' +
             '<td>' + escapeHtml(e.started_at_utc || '—') + '</td>' +
             '<td>' + escapeHtml(e.ended_at_utc || '—') + '</td>' +
             '<td>' + escapeHtml(dur) + '</td>' +
-            '<td>' + escapeHtml(String(proc)) + '</td>' +
+            '<td title="' + escapeHtml(e.work_units_v1 != null ? String(e.work_units_v1) : '') + '">' + workUnitsCell(e) + '</td>' +
+            '<td>' + learningStatusChip(e.learning_status) + '</td>' +
+            '<td>' + escapeHtml(fmtIntCommas(e.decision_windows_total)) + '</td>' +
+            '<td>' + escapeHtml(fmtIntCommas(e.bars_processed)) + '</td>' +
+            '<td>' + escapeHtml(fmtIntCommas(e.candidate_count)) + '</td>' +
+            '<td>' + escapeHtml(e.selected_candidate_id != null ? String(e.selected_candidate_id) : '—') + '</td>' +
+            '<td>' + escapeHtml(e.winner_vs_control_delta != null ? String(e.winner_vs_control_delta) : '—') + '</td>' +
+            '<td>' + memCell + '</td>' +
+            '<td>' + escapeHtml(fmtIntCommas(e.memory_records_loaded)) + '</td>' +
+            '<td>' + escapeHtml(e.groundhog_status != null ? String(e.groundhog_status) : '—') + '</td>' +
+            '<td>' + escapeHtml(fmtIntCommas(e.recall_attempts)) + '</td>' +
+            '<td>' + escapeHtml(fmtIntCommas(e.recall_matches)) + '</td>' +
+            '<td>' + escapeHtml(fmtIntCommas(e.recall_bias_applied)) + '</td>' +
+            '<td>' + escapeHtml(fmtIntCommas(e.signal_bias_applied_count)) + '</td>' +
+            '<td>' + escapeHtml(fmtIntCommas(e.suppressed_modules_count)) + '</td>' +
+            '<td>' + escapeHtml(fmtIntCommas(e.trade_entries_total)) + '</td>' +
+            '<td>' + escapeHtml(fmtIntCommas(e.trade_exits_total)) + '</td>' +
+            '<td>' + tradeWinDisplay(e) + '</td>' +
+            '<td>' + escapeHtml(fmtIntCommas(e.batch_trades_count)) + '</td>' +
+            '<td>' + escapeHtml(fmtFloatShort(e.expectancy_per_trade, 4)) + '</td>' +
+            '<td>' + escapeHtml(fmtFloatShort(e.exit_efficiency, 4)) + '</td>' +
+            '<td>' + escapeHtml(fmtFloatShort(e.win_loss_size_ratio, 4)) + '</td>' +
+            '<td title="referee session WIN % (denominator = #Sess)">' + escapeHtml(pctDisplay(e.referee_win_pct)) + '</td>' +
+            '<td>' + escapeHtml(fmtIntCommas(e.batch_sessions_judged)) + '</td>' +
+            '<td>' + escapeHtml(pctDisplay(e.run_ok_pct)) + '</td>' +
             '<td>' + escapeHtml(e.ok_count != null ? String(e.ok_count) : '—') + '</td>' +
             '<td>' + escapeHtml(e.failed_count != null ? String(e.failed_count) : '—') + '</td>' +
-            '<td>' + escapeHtml(pctCell(e.run_ok_pct)) + '</td>' +
-            '<td>' + escapeHtml(pctCell(e.referee_win_pct)) + '</td>' +
-            '<td>' + escapeHtml(pctCell(e.avg_trade_win_pct)) + '</td>' +
             '<td>' + escapeHtml(e.workers_used != null ? String(e.workers_used) : '—') + '</td>' +
             '<td>' + st + '</td>';
           tr.addEventListener('click', () => {
