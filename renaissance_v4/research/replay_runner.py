@@ -21,6 +21,7 @@ Change History:
 - v7.1 Baseline v1: deterministic IDs, single execution→learning bridge, baseline report + checksum.
 - v7.2 Authoritative replay driven by baseline strategy manifest (`configs/manifests/baseline_v1_recipe.json`).
 - v7.3 `run_manifest_replay()` for programmatic / experiment flows; optional `--manifest` CLI (no env required).
+- v7.4 Optional Decision Context Recall v1 (per-bar structured recall + bounded fusion bias; opt-in kwargs).
 """
 
 from __future__ import annotations
@@ -35,7 +36,12 @@ from renaissance_v4.core.decision_contract import DecisionContract
 from renaissance_v4.core.market_state_builder import build_market_state
 from renaissance_v4.core.outcome_record import OutcomeRecord
 from renaissance_v4.core.performance_metrics import compute_excursion_mae_mfe
-from renaissance_v4.core.fusion_engine import MAX_CONFLICT_SCORE, signal_family_bucket
+from renaissance_v4.core.fusion_engine import (
+    MAX_CONFLICT_SCORE,
+    MIN_FUSION_SCORE,
+    fuse_signal_results,
+    signal_family_bucket,
+)
 from renaissance_v4.core.pnl import compute_pnl
 from renaissance_v4.core.regime_classifier import (
     VOLATILITY_COMPRESSION_THRESHOLD,
@@ -49,7 +55,23 @@ from renaissance_v4.manifest.runtime import (
     resolve_regime_fn,
     resolve_risk_fn,
 )
+from renaissance_v4.game_theory.decision_context_recall import (
+    build_causal_partial_pattern_context_v1,
+    build_decision_recall_trace_v1,
+    compute_decision_fusion_bias,
+    derive_decision_context_signature_for_matching,
+    fusion_engine_supports_decision_recall,
+)
+from renaissance_v4.game_theory.context_signature_memory import (
+    SignatureMatchParamsV1,
+    canonical_signature_key,
+    find_matching_records_v1,
+    read_context_memory_records,
+    select_best_outcome_record,
+)
 from renaissance_v4.manifest.validate import load_manifest_file, validate_manifest_against_catalog
+from renaissance_v4.registry import default_catalog_path
+from renaissance_v4.registry.load import load_catalog
 from renaissance_v4.research.baseline_report import maybe_export_outcomes_full, write_baseline_report
 from renaissance_v4.research.determinism import deterministic_decision_id, validation_checksum
 from renaissance_v4.research.execution_learning_bridge import record_closed_trade_to_ledger
@@ -102,12 +124,22 @@ def run_manifest_replay(
     *,
     emit_baseline_artifacts: bool = True,
     verbose: bool = True,
+    decision_context_recall_enabled: bool = False,
+    decision_context_recall_apply_bias: bool = False,
+    decision_context_recall_memory_path: Path | str | None = None,
+    decision_context_recall_match_params: SignatureMatchParamsV1 | None = None,
+    decision_context_recall_max_samples: int = 24,
 ) -> dict[str, Any]:
     """
     Execute one full deterministic replay using the manifest resolution rules in ``load_replay_manifest``.
 
     When ``emit_baseline_artifacts`` is False (experiment / multi-strategy runs), baseline markdown and
     full outcome exports are skipped so baseline reference files are not overwritten.
+
+    When ``decision_context_recall_enabled`` is True, each decision may include structured recall from
+    ``context_signature_memory`` JSONL (see :mod:`renaissance_v4.game_theory.decision_context_recall`).
+    Optional ``decision_context_recall_apply_bias`` nudges fusion thresholds toward matching memory
+    (bounded; ``fuse_signal_results`` manifests only).
     """
     connection = get_connection()
     rows = connection.execute(
@@ -143,6 +175,23 @@ def run_manifest_replay(
     ledger = LearningLedger()
     processed = 0
 
+    catalog = load_catalog(default_catalog_path())
+    recall_fusion_ok = bool(
+        decision_context_recall_enabled and fusion_engine_supports_decision_recall(manifest, catalog)
+    )
+    dcr_match_params = decision_context_recall_match_params or SignatureMatchParamsV1()
+    memory_records_cache: list[dict[str, Any]] | None = None
+    dcr_samples: list[dict[str, Any]] = []
+    dcr_stats: dict[str, Any] = {
+        "decision_context_recall_enabled": decision_context_recall_enabled,
+        "decision_context_recall_apply_bias": decision_context_recall_apply_bias,
+        "fusion_override_supported": recall_fusion_ok,
+        "decisions_observed": 0,
+        "recall_attempted": 0,
+        "decisions_with_positive_match_count": 0,
+        "decisions_with_bias_applied": 0,
+    }
+
     fusion_no_trade_bars = 0
     fusion_directional_bars = 0
     risk_blocked_bars = 0
@@ -168,7 +217,115 @@ def run_manifest_replay(
             result = signal.evaluate(state, features, regime)
             signal_results.append(result)
 
-        fusion_result = fusion_fn(signal_results)
+        reg_b = regime_bar_counts.copy()
+        vol_b = volatility_bucket_counts.copy()
+        fdir_b = fusion_direction_counts.copy()
+        hc_b = high_conflict_bars
+        al_b = aligned_directional_bars
+        ct_b = countertrend_directional_bars
+
+        partial_pc: dict[str, Any] | None = None
+        sig_current: dict[str, Any] | None = None
+        sig_key: str | None = None
+        matches: list[dict[str, Any]] = []
+        match_summaries: list[dict[str, Any]] = []
+        best_id: str | None = None
+        best_summary: dict[str, Any] | None = None
+        bias_applied = False
+        bias_diff: list[dict[str, Any]] = []
+        dcr_codes: list[str] = []
+
+        if decision_context_recall_enabled and recall_fusion_ok:
+            if memory_records_cache is None:
+                memory_records_cache = read_context_memory_records(decision_context_recall_memory_path)
+            partial_pc = build_causal_partial_pattern_context_v1(
+                regime_bar_counts_before=reg_b,
+                volatility_bucket_counts_before=vol_b,
+                fusion_direction_counts_before=fdir_b,
+                high_conflict_bars_before=hc_b,
+                aligned_directional_bars_before=al_b,
+                countertrend_directional_bars_before=ct_b,
+                current_regime=regime,
+                vol20=float(features.volatility_20),
+            )
+            sig_current = derive_decision_context_signature_for_matching(partial_pc)
+            sig_key = canonical_signature_key(sig_current)
+            matches = find_matching_records_v1(
+                sig_current,
+                memory_records_cache,
+                params=dcr_match_params,
+            )
+            match_summaries = [
+                {
+                    "record_id": m.get("record_id"),
+                    "signature_key": m.get("signature_key"),
+                    "source_run_id": m.get("source_run_id"),
+                }
+                for m in matches
+            ]
+            best = select_best_outcome_record(matches) if matches else None
+            if best is not None:
+                best_id = str(best.get("record_id", ""))
+                eff = best.get("effective_apply") if isinstance(best.get("effective_apply"), dict) else {}
+                best_summary = {
+                    "record_id": best_id,
+                    "outcome_summary": best.get("outcome_summary"),
+                    "effective_apply_keys": sorted(eff.keys()),
+                }
+            base_min = float(
+                manifest.get("fusion_min_score") if manifest.get("fusion_min_score") is not None else MIN_FUSION_SCORE
+            )
+            base_mc = float(
+                manifest.get("fusion_max_conflict_score")
+                if manifest.get("fusion_max_conflict_score") is not None
+                else MAX_CONFLICT_SCORE
+            )
+            fusion_min_u, fusion_mc_u, bias_diff, bias_codes, _bid = compute_decision_fusion_bias(
+                matches,
+                base_fusion_min=base_min,
+                base_fusion_max_conflict=base_mc,
+                apply_bias=decision_context_recall_apply_bias,
+            )
+            dcr_codes.extend(bias_codes)
+            bias_applied = len(bias_diff) > 0
+            fusion_result = fuse_signal_results(
+                signal_results,
+                min_fusion_score=fusion_min_u,
+                max_conflict_score=fusion_mc_u,
+                overlap_penalty_per_extra_signal=manifest.get("fusion_overlap_penalty_per_extra_signal"),
+            )
+        else:
+            fusion_result = fusion_fn(signal_results)
+            if decision_context_recall_enabled and not recall_fusion_ok:
+                dcr_codes.append("DCR_V1_SKIPPED_UNSUPPORTED_FUSION_ENGINE")
+
+        attempted = bool(decision_context_recall_enabled and recall_fusion_ok)
+        recall_block = build_decision_recall_trace_v1(
+            enabled=decision_context_recall_enabled,
+            attempted=attempted,
+            partial_pc=partial_pc,
+            signature=sig_current,
+            signature_key=sig_key,
+            matches=matches,
+            match_summaries=match_summaries,
+            best_id=best_id,
+            best_summary=best_summary,
+            bias_applied=bias_applied,
+            bias_diff=bias_diff,
+            reason_codes=dcr_codes
+            + (["DCR_V1_NO_MATCHING_SIGNATURES"] if attempted and not matches else []),
+        )
+        if decision_context_recall_enabled:
+            dcr_stats["decisions_observed"] += 1
+            if attempted:
+                dcr_stats["recall_attempted"] += 1
+            if matches:
+                dcr_stats["decisions_with_positive_match_count"] += 1
+            if bias_applied:
+                dcr_stats["decisions_with_bias_applied"] += 1
+            if len(dcr_samples) < int(decision_context_recall_max_samples):
+                dcr_samples.append(recall_block)
+
         active_signal_names = [r.signal_name for r in signal_results if r.active]
 
         regime_bar_counts[regime] += 1
@@ -296,6 +453,7 @@ def run_manifest_replay(
             execution_allowed=risk_decision.allowed,
             reason_trace={
                 "phase": "phase_7_learning_foundation",
+                "decision_context_recall": recall_block,
                 "regime": regime,
                 "fusion": {
                     "direction": fusion_result.direction,
@@ -427,7 +585,7 @@ def run_manifest_replay(
         },
     }
 
-    return {
+    out: dict[str, Any] = {
         "manifest": manifest,
         "manifest_path": str(resolved_manifest_path),
         "dataset_bars": dataset_bars,
@@ -439,6 +597,10 @@ def run_manifest_replay(
         "sanity": sanity,
         "pattern_context_v1": pattern_context_v1,
     }
+    if decision_context_recall_enabled:
+        out["decision_context_recall_stats"] = dcr_stats
+        out["decision_context_recall_samples"] = dcr_samples
+    return out
 
 
 def main() -> None:
