@@ -462,6 +462,7 @@ def build_run_memory_record(
     parallel_error: str | None = None,
     memory_bundle_audit: dict[str, Any] | None = None,
     operator_run_audit: dict[str, Any] | None = None,
+    learning_run_audit_v1: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """One JSON object suitable for a single JSONL line."""
     mp = Path(manifest_path).expanduser().resolve()
@@ -509,6 +510,8 @@ def build_run_memory_record(
     )
     if operator_run_audit:
         rec["operator_run_audit"] = operator_run_audit
+    if learning_run_audit_v1:
+        rec["learning_run_audit_v1"] = learning_run_audit_v1
     if parallel_error:
         rec["error"] = parallel_error
     return rec

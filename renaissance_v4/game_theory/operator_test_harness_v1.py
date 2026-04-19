@@ -18,6 +18,7 @@ from renaissance_v4.game_theory.memory_bundle import BUNDLE_APPLY_WHITELIST
 from renaissance_v4.game_theory.pattern_outcome_quality_v1 import (
     DEFAULT_GOAL_V2_PATTERN_OUTCOME_QUALITY,
 )
+from renaissance_v4.game_theory.learning_run_audit import build_per_scenario_learning_run_audit_v1
 from renaissance_v4.game_theory.policy_framework import (
     build_policy_framework_audit,
     load_policy_framework,
@@ -289,6 +290,10 @@ def run_operator_test_harness_v1(
         "operator_summary_block_v1": summary_block,
         "operator_summary_text_v1": " | ".join(f"{k}={v}" for k, v in sorted(summary_block.items())),
     }
+    harness_audit_src = {**control_replay, "context_candidate_search_proof": proof}
+    harness_la = build_per_scenario_learning_run_audit_v1(harness_audit_src, scenario={})
+    harness["learning_run_audit_v1"] = harness_la
+    harness["operator_learning_status_line_v1"] = harness_la.get("operator_learning_status_line_v1")
     return {
         "operator_test_harness_v1": harness,
         "context_candidate_search_raw": search_out,

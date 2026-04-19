@@ -585,6 +585,11 @@ def create_app() -> Flask:
         atr_t = data.get("atr_target_mult")
         emit = bool(data.get("emit_baseline_artifacts"))
         mb = (data.get("memory_bundle_path") or "").strip() or None
+        scen_echo: dict[str, Any] = {}
+        if mb:
+            scen_echo["memory_bundle_path"] = mb
+        if data.get("skip_groundhog_bundle") is not None:
+            scen_echo["skip_groundhog_bundle"] = bool(data.get("skip_groundhog_bundle"))
         try:
             out = run_pattern_game(
                 manifest,
@@ -594,7 +599,7 @@ def create_app() -> Flask:
                 emit_baseline_artifacts=emit,
                 verbose=False,
             )
-            js = json_summary(out)
+            js = json_summary(out, scenario=scen_echo or None)
             cpn = out.get("cumulative_pnl")
             pnl = float(cpn) if isinstance(cpn, (int, float)) else 0.0
             start = float(PATTERN_GAME_STARTING_EQUITY_USD_SPEC)
@@ -608,6 +613,8 @@ def create_app() -> Flask:
                 {
                     "ok": True,
                     "summary": js,
+                    "learning_run_audit_v1": js.get("learning_run_audit_v1"),
+                    "operator_learning_status_line_v1": js.get("operator_learning_status_line_v1"),
                     "policy_contract": extract_policy_contract_summary(out.get("manifest_effective")),
                     "referee_session": referee_session_outcome(True, js),
                     "pnl_summary": pnl_summary,
@@ -705,6 +712,10 @@ def create_app() -> Flask:
                     "session_log_batch_dir": session_batch_dir[0],
                     "batch_timing": timing,
                     "operator_batch_audit": operator_batch_audit,
+                    "learning_batch_audit_v1": timing.get("learning_batch_audit_v1"),
+                    "batch_depth_v1": timing.get("batch_depth_v1"),
+                    "batch_run_classification_v1": timing.get("batch_run_classification_v1"),
+                    "operator_learning_status_line_v1": timing.get("operator_learning_status_line_v1"),
                 }
                 with _JOBS_LOCK:
                     j = _JOBS.get(job_id)
@@ -824,6 +835,10 @@ def create_app() -> Flask:
                     "session_log_batch_dir": session_batch_dir[0],
                     "batch_timing": timing,
                     "operator_batch_audit": operator_batch_audit,
+                    "learning_batch_audit_v1": timing.get("learning_batch_audit_v1"),
+                    "batch_depth_v1": timing.get("batch_depth_v1"),
+                    "batch_run_classification_v1": timing.get("batch_run_classification_v1"),
+                    "operator_learning_status_line_v1": timing.get("operator_learning_status_line_v1"),
                 }
             )
         except Exception as e:

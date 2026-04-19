@@ -245,6 +245,9 @@ _SCORECARD_CSV_FIELDS = [
     "workers_used",
     "status",
     "session_log_batch_dir",
+    "batch_run_classification_v1",
+    "replay_decision_windows_sum",
+    "operator_learning_status_line_v1",
 ]
 
 

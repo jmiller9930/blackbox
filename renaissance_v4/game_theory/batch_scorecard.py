@@ -22,6 +22,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from renaissance_v4.game_theory.learning_run_audit import aggregate_batch_learning_run_audit_v1
 from renaissance_v4.game_theory.memory_paths import default_batch_scorecard_jsonl
 
 _APPEND_LOCK = threading.Lock()
@@ -174,11 +175,20 @@ def format_batch_scorecard_for_prompt(
             if atw is not None:
                 parts.append(f"avg_trade_win={atw}%")
             pct_s = " · " + " · ".join(parts)
+        cls = r.get("batch_run_classification_v1")
+        cls_s = f" · learning_batch={cls}" if cls else ""
+        rsum = r.get("replay_decision_windows_sum")
+        depth_s = f" · replay_decision_windows_sum={rsum}" if rsum is not None else ""
+        ol = r.get("operator_learning_status_line_v1")
+        learn_s = ""
+        if isinstance(ol, str) and ol.strip():
+            ls = ol.strip().replace("\n", " ")
+            learn_s = f"\n   - learning: {ls[:420]}{'…' if len(ls) > 420 else ''}"
         lines_out.append(
             f"{i}. **{ts}** · status={st} · job_id={job_s}\n"
-            f"   - processed {r.get('total_processed')}/{r.get('total_scenarios')} scenarios · "
+            f"   - processed {r.get('total_processed')}/{r.get('total_scenarios')} scenario rows · "
             f"ok={r.get('ok_count')} failed={r.get('failed_count')}{pct_s} · workers={r.get('workers_used')} · "
-            f"duration_sec={r.get('duration_sec')}{err_s}\n"
+            f"duration_sec={r.get('duration_sec')}{cls_s}{depth_s}{err_s}{learn_s}\n"
         )
     body = "".join(lines_out)
     if len(body) > max_chars:
@@ -227,14 +237,17 @@ def record_parallel_batch_finished(
     """
     end_unix = time.time()
     ended_at_utc = utc_timestamp_iso()
+    n_result_rows = len(results or [])
     timing = build_batch_timing_payload(
         started_at_utc=started_at_utc,
         ended_at_utc=ended_at_utc,
         start_unix=start_unix,
         end_unix=end_unix,
         total_scenarios=total_scenarios,
-        processed_count=len(results or []),
+        processed_count=n_result_rows,
     )
+
+    learning_batch: dict[str, Any] | None = None
 
     if error:
         pct_fields: dict[str, Any] = {
@@ -268,6 +281,19 @@ def record_parallel_batch_finished(
         res = results or []
         ok_n = sum(1 for r in res if r.get("ok"))
         pct_fields = compute_batch_score_percentages(res)
+        learning_batch = aggregate_batch_learning_run_audit_v1(res)
+        batch_depth = {
+            "parallel_scenarios_completed": len(res),
+            "replay_bars_processed_sum": learning_batch.get("replay_bars_processed_sum"),
+            "replay_decision_windows_sum": learning_batch.get("replay_decision_windows_sum"),
+            "context_candidate_replays_sum": learning_batch.get("context_candidate_replays_sum"),
+            "total_processed_is_scenario_rows": len(res),
+            "note": (
+                "total_processed counts one worker result row per scenario submitted to the pool "
+                "(not inner-bar steps). replay_*_sum aggregates replay depth across successful rows; "
+                "context_candidate_replays_sum counts control+candidate replays when candidate search ran."
+            ),
+        }
         record = {
             "schema": SCHEMA_V1,
             "job_id": job_id,
@@ -282,10 +308,21 @@ def record_parallel_batch_finished(
             "workers_used": workers_used,
             "status": "done",
             "session_log_batch_dir": session_log_batch_dir,
+            "learning_batch_audit_v1": learning_batch,
+            "batch_depth_v1": batch_depth,
+            "batch_run_classification_v1": learning_batch.get("batch_run_classification_v1"),
+            "operator_learning_status_line_v1": learning_batch.get("operator_learning_status_line_v1"),
+            "replay_decision_windows_sum": learning_batch.get("replay_decision_windows_sum"),
             **pct_fields,
         }
         if operator_batch_audit:
             record["operator_batch_audit"] = operator_batch_audit
 
     append_batch_scorecard_line(record, path=path)
-    return {**timing, **pct_fields}
+    out = {**timing, **pct_fields}
+    if learning_batch is not None:
+        out["learning_batch_audit_v1"] = learning_batch
+        out["batch_depth_v1"] = record.get("batch_depth_v1")
+        out["batch_run_classification_v1"] = learning_batch.get("batch_run_classification_v1")
+        out["operator_learning_status_line_v1"] = learning_batch.get("operator_learning_status_line_v1")
+    return out

@@ -100,10 +100,11 @@ def _worker_run_one(scenario: dict[str, Any]) -> dict[str, Any]:
             verbose=False,
             bar_window_calendar_months=bar_m,
         )
-        summ = json_summary(out)
+        summ = json_summary(out, scenario=scenario)
         pfa = scenario.get("policy_framework_audit")
         if isinstance(pfa, dict) and pfa:
             summ = {**summ, "policy_framework_audit": pfa}
+        learn = summ.get("learning_run_audit_v1")
         row: dict[str, Any] = {
             "ok": True,
             "scenario_id": sid,
@@ -119,6 +120,8 @@ def _worker_run_one(scenario: dict[str, Any]) -> dict[str, Any]:
             "replay_data_audit": out.get("replay_data_audit"),
             "atr_stop_mult": scenario.get("atr_stop_mult"),
             "atr_target_mult": scenario.get("atr_target_mult"),
+            "learning_run_audit_v1": learn,
+            "operator_learning_status_line_v1": summ.get("operator_learning_status_line_v1"),
         }
         row.update(extract_scenario_echo_fields(scenario))
         return row
@@ -259,6 +262,9 @@ def run_scenarios_parallel(
             prior_run_id=prior_rid,
             memory_bundle_audit=row.get("memory_bundle_audit"),
             operator_run_audit=build_operator_run_audit(scen, summ),
+            learning_run_audit_v1=row.get("learning_run_audit_v1")
+            if isinstance(row.get("learning_run_audit_v1"), dict)
+            else None,
         )
         if mem_p is not None:
             append_run_memory(mem_p, rec)

@@ -25,6 +25,7 @@ from renaissance_v4.game_theory.memory_bundle import (
     build_memory_bundle_proof,
     memory_bundle_required_and_missing,
 )
+from renaissance_v4.game_theory.learning_run_audit import build_per_scenario_learning_run_audit_v1
 from renaissance_v4.game_theory.run_memory import append_run_memory, build_run_memory_record
 from renaissance_v4.game_theory.memory_paths import default_logs_root, default_run_memory_jsonl
 from renaissance_v4.game_theory.run_session_log import write_run_session_folder
@@ -63,7 +64,7 @@ def score_binary_outcomes(outcomes: list[OutcomeRecord]) -> dict[str, Any]:
     }
 
 
-def json_summary(out: dict[str, Any]) -> dict[str, Any]:
+def json_summary(out: dict[str, Any], scenario: dict[str, Any] | None = None) -> dict[str, Any]:
     """JSON-serializable summary for CLI / web UI (no raw OutcomeRecord list)."""
     b = out.get("binary_scorecard") or {}
     sm = out.get("summary") if isinstance(out.get("summary"), dict) else {}
@@ -90,6 +91,9 @@ def json_summary(out: dict[str, Any]) -> dict[str, Any]:
             "win_rate is the binary Referee scorecard; expectancy/average_pnl/max_drawdown "
             "are portfolio metrics from the same run — do not judge economics from win_rate alone."
         )
+    learn = build_per_scenario_learning_run_audit_v1(out, scenario)
+    row["learning_run_audit_v1"] = learn
+    row["operator_learning_status_line_v1"] = learn.get("operator_learning_status_line_v1")
     return row
 
 

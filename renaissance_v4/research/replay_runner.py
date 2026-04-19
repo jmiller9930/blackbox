@@ -300,6 +300,7 @@ def run_manifest_replay(
         if decision_context_recall_enabled and recall_fusion_ok:
             if memory_records_cache is None:
                 memory_records_cache = read_context_memory_records(decision_context_recall_memory_path)
+                dcr_stats["memory_records_loaded_count"] = len(memory_records_cache)
             partial_pc = build_causal_partial_pattern_context_v1(
                 regime_bar_counts_before=reg_b,
                 volatility_bucket_counts_before=vol_b,
