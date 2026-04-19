@@ -69,7 +69,7 @@ _RV4_ROOT = _GAME_THEORY.parent
 _PATTERN_BANNER_PATH = _RV4_ROOT / "assets" / "pattern.png"
 
 # Operator-visible web UI bundle version — bump when changing PAGE_HTML (HTML/CSS/JS) so deploys are provable.
-PATTERN_GAME_WEB_UI_VERSION = "2.7.1"
+PATTERN_GAME_WEB_UI_VERSION = "2.7.2"
 
 from renaissance_v4.game_theory.groundhog_memory import (
     groundhog_auto_merge_enabled,
@@ -1373,21 +1373,38 @@ PAGE_HTML = """<!DOCTYPE html>
       margin-bottom: 22px;
       overflow: hidden;
       position: relative;
+      isolation: isolate;
     }
+    /* Full-bleed banner: image fills the entire header; copy and cards sit above via scrim. */
     .pg-header-banner {
-      display: block;
+      position: absolute;
+      inset: 0;
       width: 100%;
-      height: auto;
-      max-height: min(260px, 38vw);
+      height: 100%;
+      margin: 0;
+      display: block;
       object-fit: cover;
       object-position: center 35%;
-      margin: 0;
-      flex: 0 0 auto;
+      z-index: 0;
+      pointer-events: none;
+    }
+    .pg-header::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      z-index: 1;
+      pointer-events: none;
+      background: linear-gradient(
+        180deg,
+        rgba(8, 12, 18, 0.35) 0%,
+        rgba(8, 12, 18, 0.55) 38%,
+        rgba(8, 12, 18, 0.78) 100%
+      );
     }
     .pg-header-content {
       padding: 22px 26px 22px;
       position: relative;
-      z-index: 1;
+      z-index: 2;
     }
     .pg-header::after {
       content: "";
@@ -1396,6 +1413,7 @@ PAGE_HTML = """<!DOCTYPE html>
       width: 220px;
       height: 220px;
       border-radius: 50%;
+      z-index: 1;
       background: radial-gradient(circle, rgba(215,181,109,0.22), transparent 65%);
       pointer-events: none;
     }
@@ -1405,7 +1423,6 @@ PAGE_HTML = """<!DOCTYPE html>
       gap: 12px;
       margin-top: 16px;
       position: relative;
-      z-index: 2;
     }
     @media (max-width: 960px) {
       .pg-header-drawers { grid-template-columns: 1fr; }
@@ -1413,7 +1430,6 @@ PAGE_HTML = """<!DOCTYPE html>
     .pg-header-evidence,
     .pg-header-modules {
       position: relative;
-      z-index: 2;
       margin-top: 0;
       border: 1px solid rgba(255,255,255,0.12);
       border-radius: 16px;
