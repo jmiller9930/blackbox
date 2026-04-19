@@ -64,7 +64,7 @@ from flask import Flask, Response, abort, jsonify, request
 _GAME_THEORY = Path(__file__).resolve().parent
 
 # Operator-visible web UI bundle version — bump when changing PAGE_HTML (HTML/CSS/JS) so deploys are provable.
-PATTERN_GAME_WEB_UI_VERSION = "2.2.0"
+PATTERN_GAME_WEB_UI_VERSION = "2.3.0"
 
 from renaissance_v4.game_theory.groundhog_memory import (
     groundhog_auto_merge_enabled,
@@ -99,6 +99,7 @@ from renaissance_v4.game_theory.operator_recipes import (
     build_scenarios_for_recipe,
     default_recipe_id,
     operator_recipe_catalog,
+    policy_catalog,
     recipe_meta_by_id,
 )
 from renaissance_v4.game_theory.parallel_runner import (
@@ -384,6 +385,7 @@ def create_app() -> Flask:
             {
                 "ok": True,
                 "recipes": operator_recipe_catalog(),
+                "policy_catalog": policy_catalog(),
                 "default_recipe_id": default_recipe_id(),
             }
         )
@@ -421,6 +423,7 @@ def create_app() -> Flask:
             {
                 "ok": True,
                 "operator_batch_audit": prep["operator_batch_audit"],
+                "scenario_count": len(prep["scenarios"]),
                 "scenarios_json": json.dumps(prep["scenarios"], indent=2, ensure_ascii=False) + "\n",
             }
         )
@@ -1438,6 +1441,40 @@ PAGE_HTML = """<!DOCTYPE html>
       font-weight: 800;
       margin-bottom: 10px;
     }
+    .pg-run-config {
+      margin-top: 12px;
+      padding: 12px 12px 10px;
+      border-radius: var(--pg-radius-lg);
+      border: 1px solid rgba(45, 138, 106, 0.35);
+      background: rgba(45, 138, 106, 0.06);
+    }
+    .pg-run-config-dl {
+      display: grid;
+      grid-template-columns: minmax(0, 7rem) 1fr;
+      gap: 4px 12px;
+      font-size: 0.85rem;
+      margin: 0;
+    }
+    .pg-run-config-dl dt {
+      margin: 0;
+      color: var(--pg-muted);
+      font-weight: 600;
+    }
+    .pg-run-config-dl dd { margin: 0; color: var(--pg-ink); }
+    .pg-goal-readonly {
+      margin-top: 12px;
+      padding: 10px 12px;
+      border-radius: 10px;
+      border: 1px solid #c5cdd6;
+      background: #fafbfc;
+    }
+    .pg-goal-line { margin: 0 0 6px; font-size: 0.84rem; line-height: 1.45; color: var(--pg-ink); }
+    .pg-policy-line { margin: 8px 0 0; font-size: 0.88rem; color: var(--pg-ink); }
+    textarea#scenarios:disabled {
+      opacity: 0.55;
+      cursor: not-allowed;
+      background: #eceff2;
+    }
     .pg-mini-grid { display: grid; gap: 10px; }
     .pg-mini-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
     @media (max-width: 900px) {
@@ -1892,7 +1929,7 @@ PAGE_HTML = """<!DOCTYPE html>
         <div class="pg-eyebrow">Pattern game lab</div>
         <h1 class="pg-title">Pattern game <em>scorecard-first · five status tiles · header results &amp; modules</em>
           <span class="ui-version" title="Bump PATTERN_GAME_WEB_UI_VERSION in web_app.py">v__PATTERN_GAME_WEB_UI_VERSION__</span></h1>
-        <p class="pg-lead">Preset or paste <strong>scenario JSON</strong>, run the batch. <strong>Scorecard</strong> is the main view. <strong>Five status tiles</strong> below include <strong>Modules</strong> (quick OK count). <strong>Results</strong> and <strong>Modules</strong> drawers sit side by side — expand to inspect.</p>
+        <p class="pg-lead">Pick <strong>recipe</strong> and <strong>evaluation window</strong>, then <strong>Run</strong> — the lab builds scenarios for you. <strong>Scorecard</strong> is the main view. <strong>Five status tiles</strong> include <strong>Modules</strong>. Custom JSON lives under <em>Advanced</em> only.</p>
         <div class="pg-orientation-note">Twisty on each panel · DEF record: <code>docs/architect/pattern_game_operator_deficiencies_work_record.md</code></div>
       </div>
       <div class="pg-banner-strip">
@@ -2015,7 +2052,7 @@ PAGE_HTML = """<!DOCTYPE html>
           <div class="pg-panel-header" style="margin:0;flex:1">
             <div>
               <h2 class="pg-panel-h">1. Game controls</h2>
-              <p class="pg-panel-sub">Batch setup, JSON, workers, run.</p>
+              <p class="pg-panel-sub">Structured controls, run summary, workers.</p>
             </div>
             <span class="pg-chip pg-chip-teal">Controls</span>
           </div>
@@ -2028,18 +2065,18 @@ PAGE_HTML = """<!DOCTYPE html>
         <details class="help-details pg-help">
           <summary>Setup, PYTHONPATH, Groundhog</summary>
           <div class="help-details-body">
-            <p>Run from repo root with <code>PYTHONPATH</code> including the repo. Presets load from <code>game_theory/examples/</code>.</p>
+            <p>Run from repo root with <code>PYTHONPATH</code> including the repo. Example files load from <code>game_theory/examples/</code> (Advanced only).</p>
             <p><code>PATTERN_GAME_GROUNDHOG_BUNDLE=1</code> merges <code>game_theory/state/groundhog_memory_bundle.json</code> when a scenario has no <code>memory_bundle_path</code>. POST <code>/api/groundhog-memory</code> to promote ATR from review.</p>
           </div>
         </details>
 
         <div class="pg-block">
-          <div class="pg-block-title">Scenario setup</div>
+          <div class="pg-block-title">Run setup</div>
           <div class="pg-mini-grid pg-mini-3">
             <div><label for="operatorRecipePick">Recipe</label><select id="operatorRecipePick" aria-describedby="presetHelp">
               <option value="pattern_learning">Pattern Learning Run</option>
               <option value="reference_comparison">Reference Comparison Run</option>
-              <option value="custom">Custom JSON</option>
+              <option value="custom">Custom</option>
             </select></div>
             <div><label for="evaluationWindowPick">Evaluation window</label><select id="evaluationWindowPick" aria-describedby="presetHelp">
               <option value="12">12 months</option>
@@ -2049,42 +2086,60 @@ PAGE_HTML = """<!DOCTYPE html>
             </select></div>
             <div id="customMonthsWrap" style="display:none"><label for="evaluationWindowCustomMonths">Months</label><input type="number" id="evaluationWindowCustomMonths" min="1" max="600" value="36" style="width:100%;margin-top:4px"/></div>
           </div>
-          <p class="caps" id="presetHelp">Recipe chooses the experiment; evaluation window chooses how much historical tape is replayed (last N months, approximate). Both are echoed in results and scorecard.</p>
-          <details class="help-details pg-help" style="margin-top:8px">
-            <summary>Advanced — example files &amp; uploads</summary>
+          <div id="policyMultiWrap" style="display:none;margin-top:10px">
+            <label for="policyPick">Policy / manifest</label>
+            <select id="policyPick" aria-label="Policy manifest"></select>
+          </div>
+          <p class="pg-policy-line" id="policyReadonly" style="display:none" role="status">Policy: —</p>
+          <p class="caps" id="presetHelp">The server builds scenarios for curated recipes — no JSON required. Evaluation window controls how much tape is replayed (approximate months from the end of the series).</p>
+          <div class="pg-run-config" id="runConfigPanel" role="region" aria-label="Run configuration">
+            <div class="pg-block-title" style="margin-top:0">Run configuration</div>
+            <dl class="pg-run-config-dl" id="runConfigDl">
+              <dt>Recipe</dt><dd id="runConfigRecipe">—</dd>
+              <dt>Policy</dt><dd id="runConfigPolicy">—</dd>
+              <dt>Evaluation window</dt><dd id="runConfigWindow">—</dd>
+              <dt>Goal</dt><dd id="runConfigGoalSummary">—</dd>
+            </dl>
+          </div>
+          <div class="pg-goal-readonly" id="goalReadonlyPanel" aria-live="polite">
+            <div class="pg-block-title" style="margin-top:0;margin-bottom:8px">Goal (read-only)</div>
+            <p id="goalReadonlyTitle" class="pg-goal-line"></p>
+            <p id="goalReadonlyMetrics" class="pg-goal-line"></p>
+            <p id="goalReadonlyConstraints" class="pg-goal-line caps"></p>
+            <p id="goalReadonlyNote" class="pg-goal-line caps" style="margin-bottom:0"></p>
+          </div>
+          <details class="help-details pg-help" style="margin-top:12px" id="advancedOperatorPanel">
+            <summary>Advanced — examples, uploads &amp; custom JSON</summary>
             <div class="help-details-body">
               <div class="pg-mini-grid pg-mini-3" style="margin-top:8px">
                 <div><label for="examplesFilePick">Load example file</label><select id="examplesFilePick"><option value="">— pick file —</option></select></div>
                 <div><label>&nbsp;</label><button type="button" class="btn-secondary" style="width:100%;margin-top:0" id="suggestHuntersBtn" title="Scorecard + retrospective">Suggest hunters</button></div>
                 <div><label>&nbsp;</label><button type="button" class="btn-chef" style="width:100%;margin-top:0" id="chefAtrSweepBtn">ATR sweep</button></div>
               </div>
-              <p class="caps">Example files are for templates, sweeps, and debugging — not the main operator menu. Switch <strong>Recipe</strong> to <em>Custom JSON</em> after loading if you want to run ad hoc JSON.</p>
+              <span class="caps" id="hunterSuggestHint"></span>
+              <div class="tool-row" style="margin-top:8px">
+                <div style="flex:1;min-width:200px">
+                  <label for="chefManifestPath" style="margin:0;font-size:0.8rem">Chef manifest</label>
+                  <input type="text" id="chefManifestPath" style="margin-top:4px" value="renaissance_v4/configs/manifests/baseline_v1_recipe.json" spellcheck="false"/>
+                </div>
+                <span class="caps" id="chefHint" style="align-self:flex-end"></span>
+              </div>
+              <input type="file" id="presetFileInput" accept=".json,application/json" style="display:none" aria-hidden="true" />
+              <div class="pg-upload-row">
+                <button type="button" class="btn-upload" id="presetUploadBtn">Upload scenario JSON…</button>
+                <button type="button" class="btn-rename-preset" id="presetRenameBtn" disabled title="Only for uploaded presets (user_*.json)">Rename preset…</button>
+              </div>
+              <p class="pg-upload-hint">Uploads validate against the scenario contract and appear in the example list. For a normal run, use <strong>Recipe</strong> above — not this file list.</p>
+              <details class="inline-details" style="margin-top:12px;border-left-color:#2d8a6a" id="advancedJsonDetails">
+                <summary>Custom scenario (JSON)</summary>
+                <p class="caps" id="structuredJsonHint" style="margin:6px 0 8px">This field is <strong>disabled</strong> for curated recipes — the server injects manifest, window, and goal.</p>
+                <details class="inline-details"><summary>Validation (hypothesis)</summary>
+                  <p style="margin:0">Non-empty <code>agent_explanation.hypothesis</code> per scenario unless <code>PATTERN_GAME_REQUIRE_HYPOTHESIS=0</code>.</p>
+                </details>
+                <textarea id="scenarios" spellcheck="false" placeholder="Used only when Recipe = Custom. Array of scenario objects or {&quot;scenarios&quot;:[…]}."></textarea>
+              </details>
             </div>
           </details>
-          <input type="file" id="presetFileInput" accept=".json,application/json" style="display:none" aria-hidden="true" />
-          <div class="pg-upload-row">
-            <button type="button" class="btn-upload" id="presetUploadBtn">Upload preset…</button>
-            <button type="button" class="btn-rename-preset" id="presetRenameBtn" disabled title="Only for uploaded presets (user_*.json)">Rename preset…</button>
-            <p class="pg-upload-hint">
-              Standard format: UTF-8 JSON — <strong>array of scenario objects</strong> or <code>{"scenarios":[...]}</code> (same as Run batch). Saved under <code>renaissance_v4/game_theory/examples/user_&lt;slug&gt;.json</code>.
-            </p>
-          </div>
-          <span class="caps" id="hunterSuggestHint"></span>
-          <div class="tool-row" style="margin-top:8px">
-            <div style="flex:1;min-width:200px">
-              <label for="chefManifestPath" style="margin:0;font-size:0.8rem">Chef manifest</label>
-              <input type="text" id="chefManifestPath" style="margin-top:4px" value="renaissance_v4/configs/manifests/baseline_v1_recipe.json" spellcheck="false"/>
-            </div>
-            <span class="caps" id="chefHint" style="align-self:flex-end"></span>
-          </div>
-        </div>
-
-        <div class="pg-block">
-          <div class="pg-block-title">Scenario JSON</div>
-          <details class="inline-details"><summary>Validation (hypothesis)</summary>
-            <p style="margin:0">Non-empty <code>agent_explanation.hypothesis</code> unless <code>PATTERN_GAME_REQUIRE_HYPOTHESIS=0</code>.</p>
-          </details>
-          <textarea id="scenarios" spellcheck="false" placeholder='[{"scenario_id":"…","manifest_path":"…",…}]'></textarea>
         </div>
 
         <div class="pg-block">
@@ -2198,13 +2253,23 @@ PAGE_HTML = """<!DOCTYPE html>
         return (arr && arr.length) ? arr.length : 0;
       } catch (e) { return 0; }
     }
+    /** Curated recipes: scenario count from server preview (textarea may be empty/disabled). */
+    let STRUCTURED_SCENARIO_COUNT = 1;
+    function getEffectiveScenarioCount() {
+      const rp = document.getElementById('operatorRecipePick');
+      const rid = rp && rp.value;
+      if (rid && rid !== 'custom') {
+        return STRUCTURED_SCENARIO_COUNT > 0 ? STRUCTURED_SCENARIO_COUNT : 1;
+      }
+      return parseScenarioCountFromTextarea();
+    }
     function refreshWorkerEffectiveLine() {
       const el = document.getElementById('workerEffectiveLine');
       if (!el) return;
-      const n = parseScenarioCountFromTextarea();
+      const n = getEffectiveScenarioCount();
       const w = parseInt(rangeEl.value, 10) || 1;
       if (n < 1) {
-        el.innerHTML = '<strong>Effective parallelism</strong> — Load valid JSON above. The run uses <strong>min(scenario count, slider)</strong>.';
+        el.innerHTML = '<strong>Effective parallelism</strong> — For <em>Custom</em>, paste valid JSON in Advanced. The run uses <strong>min(scenario count, slider)</strong>.';
         return;
       }
       const eff = Math.min(n, w);
@@ -2725,19 +2790,43 @@ PAGE_HTML = """<!DOCTYPE html>
           rangeEl.value = String(mw);
           workersVal.textContent = String(mw);
         }
-        const scenariosTa = document.getElementById('scenarios').value;
+        const recipeId = document.getElementById('operatorRecipePick') ? document.getElementById('operatorRecipePick').value : 'custom';
+        const scenariosTa = document.getElementById('scenarios') ? document.getElementById('scenarios').value : '';
         const wm = document.getElementById('evaluationWindowPick') ? document.getElementById('evaluationWindowPick').value : '12';
         let customM = null;
         if (wm === 'custom') {
           const cEl = document.getElementById('evaluationWindowCustomMonths');
           customM = cEl ? parseInt(cEl.value, 10) : null;
-          if (!customM || customM < 1) customM = 36;
+          if (!customM || customM < 1) {
+            await show(null, null, 'Evaluation window is Custom — enter a valid number of months (1–600).');
+            statusLine.textContent = 'Set custom months before run.';
+            btn.disabled = false;
+            return;
+          }
+        }
+        if (recipeId === 'custom') {
+          if (!scenariosTa || !scenariosTa.trim()) {
+            await show(null, null, 'Recipe is Custom — paste valid scenario JSON under Advanced → Custom scenario.');
+            statusLine.textContent = 'Missing JSON for Custom recipe.';
+            btn.disabled = false;
+            return;
+          }
+          try {
+            const p = JSON.parse(scenariosTa.trim());
+            const arr = Array.isArray(p) ? p : (p && Array.isArray(p.scenarios) ? p.scenarios : null);
+            if (!arr || arr.length < 1) throw new Error('need a non-empty scenario array');
+          } catch (ve) {
+            await show(null, null, 'Invalid JSON: ' + String(ve && ve.message ? ve.message : ve));
+            statusLine.textContent = 'JSON parse failed.';
+            btn.disabled = false;
+            return;
+          }
         }
         const body = {
-          scenarios_json: scenariosTa,
+          scenarios_json: recipeId === 'custom' ? scenariosTa : '[]',
           max_workers: mw,
           log_path: document.getElementById('doLog').checked,
-          operator_recipe_id: document.getElementById('operatorRecipePick') ? document.getElementById('operatorRecipePick').value : 'custom',
+          operator_recipe_id: recipeId,
           evaluation_window_mode: wm,
           evaluation_window_custom_months: customM
         };
@@ -3010,15 +3099,7 @@ PAGE_HTML = """<!DOCTYPE html>
       if (!el) return;
       try {
         const w = parseInt(rangeEl.value, 10) || 1;
-        let batchN = 0;
-        try {
-          const raw = (scenariosEl && scenariosEl.value) ? scenariosEl.value.trim() : '';
-          if (raw) {
-            const parsed = JSON.parse(raw);
-            const arr = Array.isArray(parsed) ? parsed : (parsed.scenarios || []);
-            if (Array.isArray(arr)) batchN = arr.length;
-          }
-        } catch (e) { batchN = 0; }
+        const batchN = getEffectiveScenarioCount();
         const q = batchN > 0
           ? ('?batch_size=' + encodeURIComponent(batchN) + '&workers=' + encodeURIComponent(w))
           : ('?workers=' + encodeURIComponent(w));
@@ -3039,9 +3120,9 @@ PAGE_HTML = """<!DOCTYPE html>
           line += 'Bars: unavailable (' + String(j.dataset.error).slice(0, 120) + '). ';
         }
         if (batchN > 0 && rounds != null) {
-          line += 'Your textarea: <strong>' + batchN + '</strong> scenarios, <strong>' + w + '</strong> workers → ~<strong>' + rounds + '</strong> parallel round(s). ';
+          line += 'This batch: <strong>' + batchN + '</strong> scenario(s), <strong>' + w + '</strong> workers → ~<strong>' + rounds + '</strong> parallel round(s). ';
         } else {
-          line += 'Paste scenarios to see batch rounds; workers use slider (' + w + '). ';
+          line += 'Pick a recipe (or Custom JSON) to see batch rounds; workers use slider (' + w + '). ';
         }
         if (br != null && batchN > 0) {
           line += 'Coarse bar steps ≈ ' + br.toLocaleString() + ' (scenarios×bars).';
@@ -3058,16 +3139,137 @@ PAGE_HTML = """<!DOCTYPE html>
     const customMonthsWrap = document.getElementById('customMonthsWrap');
     const examplesFilePick = document.getElementById('examplesFilePick');
     const scenariosEl = document.getElementById('scenarios');
+    let PG_OPERATOR_RECIPES = [];
+    let PG_POLICY_CATALOG = [];
+
+    function recipeMeta(rid) {
+      return PG_OPERATOR_RECIPES.find(function (x) { return x.recipe_id === rid; }) || null;
+    }
 
     function syncCustomMonthsVisibility() {
       if (!customMonthsWrap || !evaluationWindowPick) return;
       customMonthsWrap.style.display = evaluationWindowPick.value === 'custom' ? '' : 'none';
     }
 
-    async function refreshOperatorRecipePreview() {
-      if (!operatorRecipePick || !evaluationWindowPick || !scenariosEl) return;
+    function evaluationWindowLabel() {
+      if (!evaluationWindowPick) return '—';
+      const wm = evaluationWindowPick.value;
+      if (wm === 'custom') {
+        const cm = evaluationWindowCustomMonths ? parseInt(evaluationWindowCustomMonths.value, 10) : 0;
+        return (cm && cm > 0) ? (String(cm) + ' months (custom)') : 'Custom months (set value)';
+      }
+      return wm + ' months';
+    }
+
+    function syncPolicyPickUi() {
+      const multi = document.getElementById('policyMultiWrap');
+      const ro = document.getElementById('policyReadonly');
+      const pick = document.getElementById('policyPick');
+      if (!multi || !ro || !pick) return;
+      if (!PG_POLICY_CATALOG.length) {
+        multi.style.display = 'none';
+        ro.style.display = 'none';
+        return;
+      }
+      if (PG_POLICY_CATALOG.length === 1) {
+        multi.style.display = 'none';
+        ro.style.display = 'block';
+        ro.textContent = 'Policy: ' + (PG_POLICY_CATALOG[0].display_label || PG_POLICY_CATALOG[0].manifest_path);
+      } else {
+        ro.style.display = 'none';
+        multi.style.display = 'block';
+        pick.innerHTML = '';
+        PG_POLICY_CATALOG.forEach(function (p) {
+          const o = document.createElement('option');
+          o.value = p.manifest_path;
+          o.textContent = p.display_label || p.policy_id;
+          pick.appendChild(o);
+        });
+      }
+    }
+
+    function policyLineForRunConfig() {
+      if (PG_POLICY_CATALOG.length === 1) {
+        return PG_POLICY_CATALOG[0].display_label || PG_POLICY_CATALOG[0].manifest_path;
+      }
+      const pick = document.getElementById('policyPick');
+      const sel = pick && pick.selectedOptions && pick.selectedOptions[0];
+      return sel ? sel.textContent : '—';
+    }
+
+    function updateRunConfigurationPanel() {
+      const rr = document.getElementById('runConfigRecipe');
+      const rp = document.getElementById('runConfigPolicy');
+      const rw = document.getElementById('runConfigWindow');
+      const rg = document.getElementById('runConfigGoalSummary');
+      const rid = operatorRecipePick && operatorRecipePick.value;
+      if (rr) rr.textContent = (operatorRecipePick && operatorRecipePick.selectedOptions[0])
+        ? operatorRecipePick.selectedOptions[0].textContent : '—';
+      if (rp) rp.textContent = policyLineForRunConfig();
+      if (rw) rw.textContent = evaluationWindowLabel();
+      if (!rg) return;
+      if (!rid || rid === 'custom') {
+        rg.textContent = 'Defined in your JSON (Advanced).';
+      } else {
+        const m = recipeMeta(rid);
+        const gs = m && m.goal_summary;
+        rg.textContent = gs && gs.title ? gs.title : '—';
+      }
+      const gTitle = document.getElementById('goalReadonlyTitle');
+      const gMet = document.getElementById('goalReadonlyMetrics');
+      const gCon = document.getElementById('goalReadonlyConstraints');
+      const gNote = document.getElementById('goalReadonlyNote');
+      if (rid === 'custom') {
+        if (gTitle) gTitle.textContent = 'Custom scenario';
+        if (gMet) gMet.textContent = 'Goal, manifest, and window must appear in your JSON (or rely on server merge for evaluation window from the control above).';
+        if (gCon) gCon.textContent = '';
+        if (gNote) gNote.textContent = 'Open Advanced → Custom scenario (JSON) to edit.';
+      } else {
+        const m = recipeMeta(rid);
+        const gs = m && m.goal_summary;
+        if (gTitle) gTitle.textContent = gs && gs.title ? gs.title : '—';
+        if (gMet) gMet.textContent = (gs && gs.primary_metric)
+          ? ('Primary metric: ' + gs.primary_metric + (gs.goal_name && gs.goal_name !== '—' ? ' · Goal id: ' + gs.goal_name : ''))
+          : '';
+        if (gCon) gCon.textContent = (gs && gs.constraints_line) ? ('Constraints: ' + gs.constraints_line) : '';
+        if (gNote) gNote.textContent = (gs && gs.note) ? gs.note : '';
+      }
+    }
+
+    function applyRecipeModeToTextarea() {
+      const rid = operatorRecipePick && operatorRecipePick.value;
+      const isCustom = rid === 'custom';
+      const hint = document.getElementById('structuredJsonHint');
+      const ad = document.getElementById('advancedJsonDetails');
+      if (scenariosEl) {
+        scenariosEl.disabled = !isCustom;
+        scenariosEl.title = isCustom ? 'Edit scenario JSON for this run' : 'Disabled — server builds scenarios for curated recipes.';
+      }
+      if (hint) {
+        hint.textContent = isCustom
+          ? 'Edit JSON below. It is validated on Run (same contract as before).'
+          : 'Disabled for curated recipes — server injects manifest, evaluation window, goal, and recipe metadata.';
+      }
+      if (!isCustom && scenariosEl) {
+        scenariosEl.value = '';
+      }
+      if (isCustom && ad && !ad.open) {
+        /* optional: leave collapsed; user opens Advanced */
+      }
+    }
+
+    async function refreshStructuredMetadata() {
+      if (!operatorRecipePick || !evaluationWindowPick) return;
       const rid = operatorRecipePick.value;
-      if (rid === 'custom') return;
+      syncCustomMonthsVisibility();
+      applyRecipeModeToTextarea();
+      updateRunConfigurationPanel();
+      if (rid === 'custom') {
+        STRUCTURED_SCENARIO_COUNT = 1;
+        if (typeof refreshSearchSpaceEstimate === 'function') refreshSearchSpaceEstimate();
+        refreshWorkerEffectiveLine();
+        return;
+      }
       const wm = evaluationWindowPick.value;
       let url = '/api/operator-recipe-preview?recipe_id=' + encodeURIComponent(rid) +
         '&evaluation_window_mode=' + encodeURIComponent(wm);
@@ -3079,17 +3281,29 @@ PAGE_HTML = """<!DOCTYPE html>
         const r = await fetch(url);
         const j = await r.json();
         if (!r.ok || !j.ok) {
-          document.getElementById('out').innerHTML = '<span class="err">Recipe preview: ' + escapeHtml(j.error || r.status) + '</span>';
+          document.getElementById('out').innerHTML = '<span class="err">Run setup: ' + escapeHtml(j.error || r.status) + '</span>';
           setEvidenceTab('json');
           return;
         }
-        scenariosEl.value = j.scenarios_json || '';
+        STRUCTURED_SCENARIO_COUNT = typeof j.scenario_count === 'number' && j.scenario_count > 0 ? j.scenario_count : 1;
         if (typeof refreshSearchSpaceEstimate === 'function') refreshSearchSpaceEstimate();
         refreshWorkerEffectiveLine();
       } catch (e) {
         document.getElementById('out').innerHTML = '<span class="err">' + escapeHtml(friendlyFetchError(e)) + '</span>';
         setEvidenceTab('json');
       }
+    }
+
+    async function loadOperatorRecipesApi() {
+      try {
+        const r = await fetch('/api/operator-recipes');
+        const j = await r.json();
+        if (!r.ok || !j.ok) return;
+        PG_OPERATOR_RECIPES = j.recipes || [];
+        PG_POLICY_CATALOG = j.policy_catalog || [];
+        syncPolicyPickUi();
+        updateRunConfigurationPanel();
+      } catch (e) { /* non-fatal */ }
     }
 
     async function loadExamplesFile(name) {
@@ -3104,6 +3318,14 @@ PAGE_HTML = """<!DOCTYPE html>
       if (j.ok) {
         scenariosEl.value = j.content;
         if (operatorRecipePick) operatorRecipePick.value = 'custom';
+        applyRecipeModeToTextarea();
+        updateRunConfigurationPanel();
+        const ad = document.getElementById('advancedJsonDetails');
+        const outer = document.getElementById('advancedOperatorPanel');
+        if (outer && outer.open === false) outer.open = true;
+        if (ad) ad.open = true;
+        if (typeof refreshSearchSpaceEstimate === 'function') refreshSearchSpaceEstimate();
+        refreshWorkerEffectiveLine();
       }
     }
 
@@ -3219,7 +3441,7 @@ PAGE_HTML = """<!DOCTYPE html>
           if (j.ok) {
             if (uploadPresetResult) {
               uploadPresetResult.className = 'pg-upload-result visible ok';
-              uploadPresetResult.textContent = 'PASS — Saved as ' + j.filename + '. It appears in the Preset menu; textarea updated.';
+              uploadPresetResult.textContent = 'PASS — Saved as ' + j.filename + '. Appears under Advanced → Load example file; switch Recipe to Custom to run.';
             }
             if (uploadPresetSubmitBtn) uploadPresetSubmitBtn.style.display = 'none';
             if (uploadPresetDoneBtn) uploadPresetDoneBtn.style.display = '';
@@ -3313,10 +3535,12 @@ PAGE_HTML = """<!DOCTYPE html>
 
     (async function initOperatorUi() {
       try {
+        await loadOperatorRecipesApi();
         await populateExamplesFileDropdown(null);
         if (operatorRecipePick) operatorRecipePick.value = 'pattern_learning';
         syncCustomMonthsVisibility();
-        await refreshOperatorRecipePreview();
+        applyRecipeModeToTextarea();
+        await refreshStructuredMetadata();
         if (typeof refreshSearchSpaceEstimate === 'function') await refreshSearchSpaceEstimate();
         refreshWorkerEffectiveLine();
       } catch (e) {}
@@ -3324,13 +3548,13 @@ PAGE_HTML = """<!DOCTYPE html>
 
     if (evaluationWindowPick) evaluationWindowPick.addEventListener('change', function () {
       syncCustomMonthsVisibility();
-      refreshOperatorRecipePreview();
+      refreshStructuredMetadata();
     });
     if (evaluationWindowCustomMonths) evaluationWindowCustomMonths.addEventListener('change', function () {
-      if (evaluationWindowPick && evaluationWindowPick.value === 'custom') refreshOperatorRecipePreview();
+      refreshStructuredMetadata();
     });
     if (operatorRecipePick) operatorRecipePick.addEventListener('change', function () {
-      refreshOperatorRecipePreview();
+      refreshStructuredMetadata();
     });
 
     scenariosEl.addEventListener('input', () => {

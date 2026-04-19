@@ -50,12 +50,29 @@ def _load_scenario_list(path: Path) -> list[dict[str, Any]]:
     raise ValueError(f"Expected scenario array in {path}")
 
 
+def policy_catalog() -> list[dict[str, Any]]:
+    """
+    Selectable policies / manifests for the operator UI.
+
+    When only one entry exists, the UI may show it read-only. Multiple entries enable a dropdown.
+    """
+    return [
+        {
+            "policy_id": "baseline_v1_recipe",
+            "manifest_path": "renaissance_v4/configs/manifests/baseline_v1_recipe.json",
+            "display_label": "baseline_v1_recipe (default)",
+        },
+    ]
+
+
 def operator_recipe_catalog() -> list[dict[str, Any]]:
     """
     Static metadata for ``GET /api/operator-recipes``.
 
     ``default_evaluation_window_months`` — used only for override bookkeeping in the UI merge;
     the operator **always** selects a window mode explicitly (default 12 in the UI).
+
+    ``goal_summary`` — operator-facing read-only lines (no need to edit JSON).
     """
     return [
         {
@@ -68,6 +85,14 @@ def operator_recipe_catalog() -> list[dict[str, Any]]:
             "default_evaluation_window_months": 12,
             "manifest_path": "renaissance_v4/configs/manifests/baseline_v1_recipe.json",
             "goal_v2": _GOAL_V2_PATTERN_OUTCOME_QUALITY,
+            "goal_summary": {
+                "title": "Pattern Outcome Quality",
+                "goal_name": "pattern_outcome_quality",
+                "primary_metric": "expectancy_per_trade",
+                "constraints_line": "Minimum 5 trades; max drawdown threshold unset.",
+                "note": "Optimizes outcome-quality metrics — not a fixed PnL or win-rate target.",
+            },
+            "scenario_count": 1,
             "source_file": _PATTERN_LEARNING_FILE,
         },
         {
@@ -80,6 +105,14 @@ def operator_recipe_catalog() -> list[dict[str, Any]]:
             "default_evaluation_window_months": 12,
             "manifest_path": "renaissance_v4/configs/manifests/baseline_v1_recipe.json",
             "goal_v2": None,
+            "goal_summary": {
+                "title": "Reference comparison",
+                "goal_name": "—",
+                "primary_metric": "—",
+                "constraints_line": "Three scenarios: default vs tighter vs wider ATR (same manifest).",
+                "note": "No goal_v2 block — session economics and Referee scorecard only.",
+            },
+            "scenario_count": 3,
             "source_file": _REFERENCE_COMPARISON_FILE,
         },
     ]
