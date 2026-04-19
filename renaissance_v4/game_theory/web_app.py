@@ -67,7 +67,7 @@ from flask import Flask, Response, abort, jsonify, request
 _GAME_THEORY = Path(__file__).resolve().parent
 
 # Operator-visible web UI bundle version — bump when changing PAGE_HTML (HTML/CSS/JS) so deploys are provable.
-PATTERN_GAME_WEB_UI_VERSION = "2.5.1"
+PATTERN_GAME_WEB_UI_VERSION = "2.5.2"
 
 from renaissance_v4.game_theory.groundhog_memory import (
     groundhog_auto_merge_enabled,
@@ -2739,7 +2739,7 @@ PAGE_HTML = """<!DOCTYPE html>
       if (pre) pre.style.display = (id === 'json') ? 'block' : 'none';
       if (sn) sn.style.display = (id === 'session') ? 'block' : 'none';
       const hdr = document.querySelector('.pg-header-evidence');
-      if (hdr && (id === 'json' || id === 'session')) hdr.open = true;
+      if (hdr && (id === 'json' || id === 'session' || id === 'outcomes')) hdr.open = true;
     }
     document.querySelectorAll('.pg-tab-strip .pg-tab').forEach((btn) => {
       btn.addEventListener('click', () => setEvidenceTab(btn.getAttribute('data-tab')));
@@ -3172,8 +3172,14 @@ PAGE_HTML = """<!DOCTYPE html>
 
     async function show(el, data, err) {
       const pre = document.getElementById('out');
+      const hdr = document.querySelector('.pg-header-evidence');
+      if (hdr) hdr.open = true;
+      if (!pre) {
+        console.error('pattern game UI: missing #out element');
+        return;
+      }
       if (err) {
-        pre.innerHTML = '<span class="err">' + err + '</span>';
+        pre.innerHTML = '<span class="err">' + escapeHtml(String(err)) + '</span>';
         renderPolicyOutcomePanel(null);
         setEvidenceTab('json');
         return;
@@ -3182,6 +3188,17 @@ PAGE_HTML = """<!DOCTYPE html>
       renderPolicyOutcomePanel(data);
       if (data && data.batch_timing) updateLastBatchRunLine(data.batch_timing);
       setEvidenceTab('outcomes');
+    }
+
+    function openGameControlsPanel() {
+      const p = document.querySelector('details.pg-panel-controls');
+      if (p) p.open = true;
+    }
+    function scrollRunStatusIntoView() {
+      const el = document.getElementById('statusLine') || document.getElementById('progressWrap');
+      if (el && typeof el.scrollIntoView === 'function') {
+        el.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      }
     }
 
     function formatUsd(n) {
@@ -3347,6 +3364,7 @@ PAGE_HTML = """<!DOCTYPE html>
     function setProgressUI(completed, total, subtext) {
       const fill = document.getElementById('progressFill');
       const sub = document.getElementById('progressSub');
+      if (!fill || !sub || !progressWrap) return;
       const pct = total > 0 ? Math.min(100, Math.round((completed / total) * 100)) : 0;
       fill.style.width = pct + '%';
       progressWrap.setAttribute('aria-valuenow', String(pct));
@@ -3375,11 +3393,13 @@ PAGE_HTML = """<!DOCTYPE html>
     document.getElementById('runBtn').onclick = async () => {
       const btn = document.getElementById('runBtn');
       btn.disabled = true;
+      openGameControlsPanel();
       clearBatchConcurrencyBanner();
       hideLiveTelemetryPanel();
       const sn = document.getElementById('sessionLogNote');
       if (sn) sn.textContent = '';
       statusLine.textContent = 'Starting batch…';
+      scrollRunStatusIntoView();
       document.getElementById('progressSub').textContent = '';
       setProgressUI(0, 0, '');
       progressWrap.classList.add('active');
@@ -3425,10 +3445,11 @@ PAGE_HTML = """<!DOCTYPE html>
             return;
           }
         }
+        const doLogEl = document.getElementById('doLog');
         const body = {
           scenarios_json: recipeId === 'custom' ? scenariosTa : '[]',
           max_workers: mw,
-          log_path: document.getElementById('doLog').checked,
+          log_path: !!(doLogEl && doLogEl.checked),
           operator_recipe_id: recipeId,
           evaluation_window_mode: wm,
           evaluation_window_custom_months: customM
@@ -3438,7 +3459,19 @@ PAGE_HTML = """<!DOCTYPE html>
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(body),
         });
-        const startJ = await startR.json();
+        const startRaw = await startR.text();
+        let startJ;
+        try {
+          startJ = startRaw ? JSON.parse(startRaw) : {};
+        } catch (pe) {
+          await show(
+            null,
+            null,
+            'Server returned non-JSON from /api/run-parallel/start (HTTP ' + startR.status + '): ' + String(pe && pe.message ? pe.message : pe) + ' — body: ' + (startRaw || '').slice(0, 1200)
+          );
+          statusLine.textContent = 'Start request failed — see Result (Results workspace).';
+          return;
+        }
         if (!startR.ok) {
           await show(null, null, startJ.error || JSON.stringify(startJ));
           statusLine.textContent = 'Validation failed — see Result.';
@@ -3461,7 +3494,16 @@ PAGE_HTML = """<!DOCTYPE html>
 
         const pollOnce = async () => {
           const pr = await fetch('/api/run-parallel/status/' + jobId);
-          const pj = await pr.json();
+          const prText = await pr.text();
+          let pj;
+          try {
+            pj = prText ? JSON.parse(prText) : {};
+          } catch (e) {
+            throw new Error(
+              'Status poll returned non-JSON (HTTP ' + pr.status + '): ' + String(e && e.message ? e.message : e) +
+                ' — ' + (prText || '').slice(0, 500)
+            );
+          }
           if (!pr.ok) {
             throw new Error(pj.error || 'status failed');
           }
@@ -3526,7 +3568,8 @@ PAGE_HTML = """<!DOCTYPE html>
             }
             return true;
           }
-          return true;
+          /* Missing or unknown status: keep polling (treating as non-terminal avoids silent no-op). */
+          return false;
         };
 
         const deadline = Date.now() + RUN_TIMEOUT_MS;
