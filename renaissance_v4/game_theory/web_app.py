@@ -67,7 +67,7 @@ from flask import Flask, Response, abort, jsonify, request
 _GAME_THEORY = Path(__file__).resolve().parent
 
 # Operator-visible web UI bundle version — bump when changing PAGE_HTML (HTML/CSS/JS) so deploys are provable.
-PATTERN_GAME_WEB_UI_VERSION = "2.5.3"
+PATTERN_GAME_WEB_UI_VERSION = "2.5.4"
 
 from renaissance_v4.game_theory.groundhog_memory import (
     groundhog_auto_merge_enabled,
@@ -1696,6 +1696,87 @@ PAGE_HTML = """<!DOCTYPE html>
       cursor: pointer;
     }
     button:disabled { opacity: 0.5; cursor: not-allowed; }
+    /* Operator primary actions — instant press/hover, async busy, clear disabled (DEF-001 UX). */
+    button.pg-op-btn {
+      transition: background-color 0.09s ease, color 0.09s ease, transform 0.09s ease, box-shadow 0.09s ease,
+        filter 0.09s ease, opacity 0.12s ease, border-color 0.09s ease;
+      user-select: none;
+    }
+    button.pg-op-btn:hover:not(:disabled):not(.is-running) {
+      filter: brightness(1.05);
+      box-shadow: 0 1px 0 rgba(255, 255, 255, 0.2) inset, 0 2px 12px rgba(23, 92, 211, 0.12);
+    }
+    button.pg-op-btn:active:not(:disabled):not(.is-running) {
+      transform: scale(0.98);
+      box-shadow: inset 0 2px 6px rgba(0, 0, 0, 0.16);
+      filter: brightness(0.94);
+    }
+    button.pg-op-btn:disabled:not(.is-running) {
+      opacity: 0.48;
+      cursor: not-allowed;
+      transform: none;
+      filter: none;
+      box-shadow: none;
+    }
+    button.pg-op-btn.is-running:disabled {
+      opacity: 0.9;
+      cursor: wait;
+      pointer-events: none;
+      transform: none;
+      filter: none;
+    }
+    button.pg-op-btn .pg-op-btn__inner {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+    }
+    button.pg-op-btn .pg-op-btn__spinner {
+      width: 14px;
+      height: 14px;
+      border: 2px solid rgba(0, 0, 0, 0.12);
+      border-top-color: rgba(0, 0, 0, 0.5);
+      border-radius: 50%;
+      flex-shrink: 0;
+      animation: pg-spin 0.7s linear infinite;
+    }
+    #runBtn.pg-op-btn .pg-op-btn__spinner,
+    .btn-chef.pg-op-btn .pg-op-btn__spinner {
+      border-color: rgba(255, 255, 255, 0.35);
+      border-top-color: #fff;
+    }
+    #runBtn.pg-op-btn.is-running:disabled {
+      background: #2d5a8c;
+      color: #fff;
+    }
+    .btn-scorecard-clear.pg-op-btn.is-running:disabled {
+      background: #e4edf8;
+      color: #2d4a6f;
+    }
+    .btn-learning-reset-danger.pg-op-btn.is-running:disabled {
+      background: #edd4d4;
+      color: #8a2a2a;
+    }
+    .tool-row .btn-secondary.pg-op-btn.is-running:disabled {
+      background: #d8e0e8;
+      color: #24303d;
+    }
+    .tool-row .btn-chef.pg-op-btn.is-running:disabled {
+      background: #246b52;
+      color: #fff;
+    }
+    .btn-chef.pg-op-btn.is-running:disabled {
+      background: #246b52;
+      color: #fff;
+    }
+    .btn-upload.pg-op-btn.is-running:disabled {
+      background: #eef3fa;
+      color: #3a5a8a;
+    }
+    .btn-rename-preset.pg-op-btn.is-running:disabled {
+      background: #eef2f6;
+      color: #3a5068;
+    }
     #runBtn { width: 100%; max-width: 340px; padding: 12px 20px; font-size: 1rem; border-radius: 12px; }
     .caps { font-size: 0.8rem; color: var(--pg-muted); margin: 8px 0 0; }
     .run-actions { margin-top: 8px; padding-top: 4px; }
@@ -2272,7 +2353,7 @@ PAGE_HTML = """<!DOCTYPE html>
         <div class="pg-upload-result" id="uploadPresetResult" role="status" aria-live="polite"></div>
         <div class="pg-upload-actions">
           <span class="pg-spinner" id="uploadDialogSpinner" aria-hidden="true"></span>
-          <button type="button" class="btn-chef" id="uploadPresetSubmitBtn">Validate &amp; save</button>
+          <button type="button" class="btn-chef pg-op-btn" id="uploadPresetSubmitBtn" data-label-idle="Validate &amp; save">Validate &amp; save</button>
           <button type="button" class="btn-secondary" id="uploadPresetDoneBtn" style="display:none">Back to controls</button>
           <button type="button" class="btn-secondary" id="uploadPresetCancelBtn">Cancel</button>
         </div>
@@ -2288,7 +2369,7 @@ PAGE_HTML = """<!DOCTYPE html>
         <div class="pg-upload-result" id="renamePresetResult" role="status"></div>
         <div class="pg-upload-actions">
           <span class="pg-spinner" id="renameDialogSpinner"></span>
-          <button type="button" class="btn-chef" id="renamePresetSubmitBtn">Rename</button>
+          <button type="button" class="btn-chef pg-op-btn" id="renamePresetSubmitBtn" data-label-idle="Rename">Rename</button>
           <button type="button" class="btn-secondary" id="renamePresetCancelBtn">Cancel</button>
         </div>
       </div>
@@ -2361,8 +2442,8 @@ PAGE_HTML = """<!DOCTYPE html>
             <div class="help-details-body">
               <div class="pg-mini-grid pg-mini-3" style="margin-top:8px">
                 <div><label for="examplesFilePick">Load example file</label><select id="examplesFilePick"><option value="">— pick file —</option></select></div>
-                <div><label>&nbsp;</label><button type="button" class="btn-secondary" style="width:100%;margin-top:0" id="suggestHuntersBtn" title="Scorecard + retrospective">Suggest hunters</button></div>
-                <div><label>&nbsp;</label><button type="button" class="btn-chef" style="width:100%;margin-top:0" id="chefAtrSweepBtn">ATR sweep</button></div>
+                <div><label>&nbsp;</label><button type="button" class="btn-secondary pg-op-btn" style="width:100%;margin-top:0" id="suggestHuntersBtn" title="Scorecard + retrospective" data-label-idle="Suggest hunters">Suggest hunters</button></div>
+                <div><label>&nbsp;</label><button type="button" class="btn-chef pg-op-btn" style="width:100%;margin-top:0" id="chefAtrSweepBtn" data-label-idle="ATR sweep">ATR sweep</button></div>
               </div>
               <span class="caps" id="hunterSuggestHint"></span>
               <div class="tool-row" style="margin-top:8px">
@@ -2374,8 +2455,8 @@ PAGE_HTML = """<!DOCTYPE html>
               </div>
               <input type="file" id="presetFileInput" accept=".json,application/json" style="display:none" aria-hidden="true" />
               <div class="pg-upload-row">
-                <button type="button" class="btn-upload" id="presetUploadBtn">Upload scenario JSON…</button>
-                <button type="button" class="btn-rename-preset" id="presetRenameBtn" disabled title="Only for uploaded presets (user_*.json)">Rename preset…</button>
+                <button type="button" class="btn-upload pg-op-btn" id="presetUploadBtn" data-label-idle="Upload scenario JSON…">Upload scenario JSON…</button>
+                <button type="button" class="btn-rename-preset pg-op-btn" id="presetRenameBtn" disabled title="Only for uploaded presets (user_*.json)" data-label-idle="Rename preset…">Rename preset…</button>
               </div>
               <p class="pg-upload-hint">Uploads validate against the scenario contract and appear in the example list. For a normal run, use <strong>Recipe</strong> above — not this file list.</p>
               <details class="inline-details" style="margin-top:12px;border-left-color:#2d8a6a" id="advancedJsonDetails">
@@ -2418,7 +2499,7 @@ PAGE_HTML = """<!DOCTYPE html>
         </div>
 
         <div class="run-actions">
-          <button type="button" id="runBtn">Run batch</button>
+          <button type="button" id="runBtn" class="pg-op-btn pg-op-btn--run" data-label-idle="Run batch">Run batch</button>
           <div class="status-stack">
             <div id="statusLine" aria-live="polite"></div>
             <div id="batchConcurrencyBanner" class="batch-concurrency-banner" aria-live="polite"></div>
@@ -2457,8 +2538,8 @@ PAGE_HTML = """<!DOCTYPE html>
           <div class="scorecard-toolbar">
             <a id="scorecardCsvLink" href="/api/batch-scorecard.csv?limit=50">Download scorecard history (CSV)</a>
             <div class="scorecard-toolbar-actions">
-              <button type="button" class="btn-scorecard-clear" id="clearScorecardBtn">Clear Card — Run New Experiment</button>
-              <button type="button" class="btn-learning-reset-danger" id="resetLearningStateBtn">Reset Learning State</button>
+              <button type="button" class="btn-scorecard-clear pg-op-btn" id="clearScorecardBtn" data-label-idle="Clear Card — Run New Experiment">Clear Card — Run New Experiment</button>
+              <button type="button" class="btn-learning-reset-danger pg-op-btn" id="resetLearningStateBtn" data-label-idle="Reset Learning State">Reset Learning State</button>
             </div>
             <span style="font-size:0.72rem;color:var(--pg-muted)">Click a row to open batch detail, scenarios, and per-scenario report links (GT_DIRECTIVE_001).</span>
           </div>
@@ -2584,6 +2665,35 @@ PAGE_HTML = """<!DOCTYPE html>
       const d = document.createElement('div');
       d.textContent = String(s);
       return d.innerHTML;
+    }
+
+    /** Async operator actions: disabled + spinner + label until cleared (instant feedback before network returns). */
+    function setOpButtonBusy(btn, busy, busyLabel, useSpinner) {
+      if (!btn) return;
+      if (busy) {
+        if (!btn.getAttribute('data-label-idle')) {
+          var idle0 = (btn.textContent || '').trim();
+          if (idle0) btn.setAttribute('data-label-idle', idle0);
+        }
+        btn.disabled = true;
+        btn.classList.add('is-running');
+        btn.setAttribute('aria-busy', 'true');
+        var label = busyLabel || 'Working…';
+        if (useSpinner) {
+          btn.innerHTML =
+            '<span class="pg-op-btn__inner"><span class="pg-op-btn__spinner" aria-hidden="true"></span><span class="pg-op-btn__label">' +
+            escapeHtml(label) +
+            '</span></span>';
+        } else {
+          btn.textContent = label;
+        }
+      } else {
+        btn.classList.remove('is-running');
+        btn.removeAttribute('aria-busy');
+        var idl = btn.getAttribute('data-label-idle');
+        btn.textContent = idl != null ? idl : '';
+        btn.disabled = false;
+      }
     }
 
     function recipeLabelFromDom() {
@@ -3084,6 +3194,7 @@ PAGE_HTML = """<!DOCTYPE html>
         )) {
           return;
         }
+        setOpButtonBusy(clearScorecardBtn, true, 'Clearing…', true);
         try {
           const r = await fetch('/api/batch-scorecard/clear', {
             method: 'POST',
@@ -3106,6 +3217,8 @@ PAGE_HTML = """<!DOCTYPE html>
           await refreshScorecardHistory();
         } catch (e) {
           await show(null, null, friendlyFetchError(e));
+        } finally {
+          setOpButtonBusy(clearScorecardBtn, false);
         }
       };
     }
@@ -3126,6 +3239,7 @@ PAGE_HTML = """<!DOCTYPE html>
           if (typed !== null) window.alert('Confirmation mismatch — nothing was changed.');
           return;
         }
+        setOpButtonBusy(resetLearningStateBtn, true, 'Resetting…', true);
         try {
           const r = await fetch('/api/pattern-game/reset-learning', {
             method: 'POST',
@@ -3141,6 +3255,8 @@ PAGE_HTML = """<!DOCTYPE html>
           if (typeof refreshGroundhog === 'function') refreshGroundhog();
         } catch (e) {
           await show(null, null, friendlyFetchError(e));
+        } finally {
+          setOpButtonBusy(resetLearningStateBtn, false);
         }
       };
     }
@@ -3327,6 +3443,7 @@ PAGE_HTML = """<!DOCTYPE html>
         const hint = document.getElementById('hunterSuggestHint');
         const ta = document.getElementById('scenarios');
         if (hint) hint.textContent = 'Loading memory-aware suggestion…';
+        setOpButtonBusy(suggestHuntersBtn, true, 'Working…', true);
         try {
           const r = await fetch('/api/suggest-hunters');
           const j = await r.json();
@@ -3342,6 +3459,8 @@ PAGE_HTML = """<!DOCTYPE html>
           if (hint) hint.textContent = short;
         } catch (e) {
           if (hint) hint.textContent = friendlyFetchError(e);
+        } finally {
+          setOpButtonBusy(suggestHuntersBtn, false);
         }
       };
     }
@@ -3354,6 +3473,7 @@ PAGE_HTML = """<!DOCTYPE html>
         const mpEl = document.getElementById('chefManifestPath');
         const mp = mpEl ? String(mpEl.value || '').trim() : '';
         if (hint) hint.textContent = 'Building catalog ATR sweep…';
+        setOpButtonBusy(chefAtrSweepBtn, true, 'Building…', true);
         try {
           const r = await fetch('/api/catalog-batch-generate', {
             method: 'POST',
@@ -3377,6 +3497,8 @@ PAGE_HTML = """<!DOCTYPE html>
             ' scenarios (ATR sweep).' + extra;
         } catch (e) {
           if (hint) hint.textContent = friendlyFetchError(e);
+        } finally {
+          setOpButtonBusy(chefAtrSweepBtn, false);
         }
       };
     }
@@ -3412,7 +3534,7 @@ PAGE_HTML = """<!DOCTYPE html>
 
     document.getElementById('runBtn').onclick = async () => {
       const btn = document.getElementById('runBtn');
-      btn.disabled = true;
+      setOpButtonBusy(btn, true, 'Running…', true);
       openGameControlsPanel();
       clearBatchConcurrencyBanner();
       hideLiveTelemetryPanel();
@@ -3443,7 +3565,6 @@ PAGE_HTML = """<!DOCTYPE html>
           if (!customM || customM < 1) {
             await show(null, null, 'Evaluation window is Custom — enter a valid number of months (1–600).');
             statusLine.textContent = 'Set custom months before run.';
-            btn.disabled = false;
             return;
           }
         }
@@ -3451,7 +3572,6 @@ PAGE_HTML = """<!DOCTYPE html>
           if (!scenariosTa || !scenariosTa.trim()) {
             await show(null, null, 'Recipe is Custom — paste valid scenario JSON under Advanced → Custom scenario.');
             statusLine.textContent = 'Missing JSON for Custom recipe.';
-            btn.disabled = false;
             return;
           }
           try {
@@ -3461,7 +3581,6 @@ PAGE_HTML = """<!DOCTYPE html>
           } catch (ve) {
             await show(null, null, 'Invalid JSON: ' + String(ve && ve.message ? ve.message : ve));
             statusLine.textContent = 'JSON parse failed.';
-            btn.disabled = false;
             return;
           }
         }
@@ -3613,7 +3732,7 @@ PAGE_HTML = """<!DOCTYPE html>
       } finally {
         hideLiveTelemetryPanel();
         progressWrap.classList.remove('active');
-        btn.disabled = false;
+        setOpButtonBusy(btn, false);
         syncBannerRunFromStatusLine();
       }
     };
@@ -4097,7 +4216,10 @@ PAGE_HTML = """<!DOCTYPE html>
       const ni = document.getElementById('uploadPresetNameInput');
       if (res) { res.className = 'pg-upload-result'; res.textContent = ''; res.classList.remove('visible', 'ok', 'err'); }
       if (sp) sp.classList.remove('visible');
-      if (sub) sub.style.display = '';
+      if (sub) {
+        sub.style.display = '';
+        setOpButtonBusy(sub, false);
+      }
       if (done) done.style.display = 'none';
       if (ni) ni.value = '';
       pendingUploadFile = null;
@@ -4164,13 +4286,13 @@ PAGE_HTML = """<!DOCTYPE html>
           uploadPresetResult.style.border = '1px solid var(--pg-line)';
           uploadPresetResult.textContent = 'Validating…';
         }
+        setOpButtonBusy(uploadPresetSubmitBtn, true, 'Saving…', true);
         const fd = new FormData();
         fd.append('file', pendingUploadFile, pendingUploadFile.name);
         fd.append('preset_name', name);
         try {
           const r = await fetch('/api/scenario-preset-upload', { method: 'POST', body: fd });
           const j = await r.json();
-          if (uploadDialogSpinner) uploadDialogSpinner.classList.remove('visible');
           if (j.ok) {
             if (uploadPresetResult) {
               uploadPresetResult.className = 'pg-upload-result visible ok';
@@ -4189,11 +4311,13 @@ PAGE_HTML = """<!DOCTYPE html>
             }
           }
         } catch (e) {
-          if (uploadDialogSpinner) uploadDialogSpinner.classList.remove('visible');
           if (uploadPresetResult) {
             uploadPresetResult.className = 'pg-upload-result visible err';
             uploadPresetResult.textContent = 'FAIL — ' + friendlyFetchError(e);
           }
+        } finally {
+          if (uploadDialogSpinner) uploadDialogSpinner.classList.remove('visible');
+          setOpButtonBusy(uploadPresetSubmitBtn, false);
         }
       });
     }
@@ -4232,6 +4356,7 @@ PAGE_HTML = """<!DOCTYPE html>
         const newName = (renamePresetInput && renamePresetInput.value) ? renamePresetInput.value.trim() : '';
         if (!oldFn || !newName) return;
         if (renameDialogSpinner) renameDialogSpinner.classList.add('visible');
+        setOpButtonBusy(renamePresetSubmitBtn, true, 'Renaming…', true);
         try {
           const r = await fetch('/api/scenario-preset-rename', {
             method: 'POST',
@@ -4239,7 +4364,6 @@ PAGE_HTML = """<!DOCTYPE html>
             body: JSON.stringify({ old_filename: oldFn, new_preset_name: newName }),
           });
           const j = await r.json();
-          if (renameDialogSpinner) renameDialogSpinner.classList.remove('visible');
           if (j.ok) {
             if (renamePresetResult) {
               renamePresetResult.className = 'pg-upload-result visible ok';
@@ -4257,11 +4381,13 @@ PAGE_HTML = """<!DOCTYPE html>
             }
           }
         } catch (e) {
-          if (renameDialogSpinner) renameDialogSpinner.classList.remove('visible');
           if (renamePresetResult) {
             renamePresetResult.className = 'pg-upload-result visible err';
             renamePresetResult.textContent = 'FAIL — ' + friendlyFetchError(e);
           }
+        } finally {
+          if (renameDialogSpinner) renameDialogSpinner.classList.remove('visible');
+          setOpButtonBusy(renamePresetSubmitBtn, false);
         }
       });
     }
