@@ -72,7 +72,7 @@ _PATTERN_BANNER_PATH = _RV4_ROOT / "assets" / "pattern.png"
 _PATTERN_BANNER_WEBP_PATH = _RV4_ROOT / "assets" / "pattern.webp"
 
 # Operator-visible web UI bundle version — bump when changing PAGE_HTML (HTML/CSS/JS) so deploys are provable.
-PATTERN_GAME_WEB_UI_VERSION = "2.8.0"
+PATTERN_GAME_WEB_UI_VERSION = "2.8.1"
 
 from renaissance_v4.game_theory.groundhog_memory import (
     groundhog_auto_merge_enabled,
@@ -1649,33 +1649,79 @@ PAGE_HTML = """<!DOCTYPE html>
       margin-bottom: 18px;
     }
     .pg-row-main {
-      /* Desktop: left = controls only; right = telemetry (top) + scorecard (bottom). */
-      grid-template-columns: minmax(300px, 400px) minmax(0, 1fr);
-      align-items: start;
+      /* Wireframe: narrow Controls sidebar | main = Terminal (top) + Scorecard (bottom). */
+      grid-template-columns: minmax(220px, 280px) minmax(0, 1fr);
+      align-items: stretch;
+      gap: 20px;
+      min-height: calc(100vh - 200px);
     }
     .pg-operator-col {
       min-width: 0;
+      display: flex;
+      flex-direction: column;
+      min-height: 0;
+      border-right: 1px solid var(--pg-line);
+      padding-right: 4px;
+    }
+    details.pg-panel-controls.pg-panel-fold {
+      flex: 1 1 auto;
+      min-height: 0;
+      display: flex;
+      flex-direction: column;
+    }
+    details.pg-panel-controls.pg-panel-fold > summary {
+      flex-shrink: 0;
+    }
+    details.pg-panel-controls.pg-panel-fold > .pg-panel-fold-body.pg-panel-controls-body {
+      flex: 1 1 auto;
+      min-height: 0;
+      display: flex;
+      flex-direction: column;
+      overflow-y: auto;
+      padding-top: 4px;
     }
     .pg-runtime-stack {
       display: flex;
       flex-direction: column;
-      gap: 14px;
+      gap: 12px;
       min-width: 0;
-      min-height: min(72vh, 720px);
+      flex: 1 1 auto;
+      min-height: calc(100vh - 200px);
     }
     .pg-telemetry-dock {
       position: sticky;
       top: 8px;
       z-index: 8;
       flex: 0 0 auto;
-      max-height: min(48vh, 480px);
+      max-height: min(42vh, 520px);
+      min-height: 10rem;
       display: flex;
       flex-direction: column;
+    }
+    details.pg-panel-fold.pg-panel-score.pg-scorecard-dock {
+      flex: 1 1 auto;
+      min-height: 0;
+      display: flex;
+      flex-direction: column;
+    }
+    details.pg-panel-fold.pg-panel-score.pg-scorecard-dock > summary {
+      flex-shrink: 0;
+    }
+    details.pg-panel-fold.pg-panel-score.pg-scorecard-dock > .pg-panel-fold-body {
+      flex: 1 1 auto;
+      min-height: 0;
+      overflow-y: auto;
+      overflow-x: hidden;
+      display: flex;
+      flex-direction: column;
+    }
+    details.pg-panel-fold.pg-panel-score.pg-scorecard-dock .scorecard-panel-inner {
+      flex: 1 1 auto;
       min-height: 0;
     }
     @media (max-width: 1680px) {
       .pg-row-main {
-        grid-template-columns: minmax(260px, 360px) minmax(0, 1fr);
+        grid-template-columns: minmax(200px, 260px) minmax(0, 1fr);
         overflow-x: auto;
         padding-bottom: 6px;
         -webkit-overflow-scrolling: touch;
@@ -1692,8 +1738,7 @@ PAGE_HTML = """<!DOCTYPE html>
     }
     .pg-panel-controls { min-height: 0; }
     .pg-panel-controls-body {
-      max-height: min(48vh, 520px);
-      overflow-y: auto;
+      max-height: none;
       overflow-x: hidden;
       padding-right: 6px;
       scrollbar-gutter: stable;
@@ -1996,7 +2041,26 @@ PAGE_HTML = """<!DOCTYPE html>
     }
     #runBtn { width: 100%; max-width: 340px; padding: 12px 20px; font-size: 1rem; border-radius: 12px; }
     .caps { font-size: 0.8rem; color: var(--pg-muted); margin: 8px 0 0; }
-    .run-actions { margin-top: 8px; padding-top: 4px; }
+    .run-actions {
+      margin-top: 8px;
+      padding: 10px 0 8px;
+      position: sticky;
+      bottom: 0;
+      z-index: 6;
+      background: linear-gradient(180deg, rgba(255, 252, 246, 0) 0%, rgba(255, 253, 248, 0.88) 28%, var(--pg-surface-strong) 55%);
+      border-top: 1px solid rgba(54, 64, 74, 0.12);
+    }
+    .pg-sr-only {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      padding: 0;
+      margin: -1px;
+      overflow: hidden;
+      clip: rect(0, 0, 0, 0);
+      white-space: nowrap;
+      border: 0;
+    }
     .status-stack { margin-top: 12px; }
     #workerCpuHint { font-size: 0.72rem; color: var(--pg-muted); margin: 6px 0 0; line-height: 1.4; }
     #workerEffectiveLine {
@@ -2574,7 +2638,8 @@ PAGE_HTML = """<!DOCTYPE html>
     @media (max-width: 1220px) {
       .pg-banner-strip { grid-template-columns: repeat(3, minmax(0, 1fr)); }
       /* Narrow: controls, then telemetry, then scorecard (single column). */
-      .pg-row-main { grid-template-columns: 1fr; overflow-x: visible; }
+      .pg-row-main { grid-template-columns: 1fr; overflow-x: visible; min-height: 0; }
+      .pg-operator-col { border-right: none; padding-right: 0; }
     }
     @media (max-width: 640px) {
       .pg-banner-strip { grid-template-columns: 1fr; }
@@ -2721,10 +2786,9 @@ PAGE_HTML = """<!DOCTYPE html>
         <summary>
           <div class="pg-panel-header" style="margin:0;flex:1">
             <div>
-              <h2 class="pg-panel-h">1. Run controls</h2>
-              <p class="pg-panel-sub">Pattern · policy · window · memory · workers · run</p>
+              <h2 class="pg-panel-h">Controls</h2>
+              <p class="pg-panel-sub">Pattern, policy, window, memory, workers, run</p>
             </div>
-            <span class="pg-chip pg-chip-teal">Controls</span>
           </div>
         </summary>
         <div class="pg-panel-fold-body pg-panel-controls-body">
@@ -2796,7 +2860,7 @@ PAGE_HTML = """<!DOCTYPE html>
         </div>
 
         <details class="pg-pattern-info-fold" id="patternInfoFold">
-          <summary>Read before run (optional) — pattern info, docs &amp; goal</summary>
+          <summary>Pattern Info (optional)</summary>
           <div class="pg-pattern-info-body">
             <div class="def001-science" role="region" aria-label="DEF-001">
               <span class="def001-tag">DEF-001 · SCIENCE / EVALUATION ONLY</span>
@@ -2870,7 +2934,7 @@ PAGE_HTML = """<!DOCTYPE html>
       <div class="pg-runtime-stack">
       <div class="pg-telemetry-dock">
       <div id="liveTelemetryWrap" class="live-telemetry-wrap">
-        <p class="live-telemetry-title">Live telemetry &amp; contextual memory</p>
+        <p class="live-telemetry-title">Terminal <span class="pg-sr-only">— live telemetry and contextual memory</span></p>
         <div id="memoryStatusCard" class="memory-status-card" aria-live="polite">
           <p id="memoryStatusNarrative" class="memory-status-narrative"></p>
           <dl>
@@ -2887,14 +2951,14 @@ PAGE_HTML = """<!DOCTYPE html>
       </div>
       </div>
 
-      <details class="pg-panel-fold pg-panel-score" open>
+      <details class="pg-panel-fold pg-panel-score pg-scorecard-dock" open>
         <summary>
           <div class="pg-panel-header" style="margin:0;flex:1">
             <div>
-              <h2 class="pg-panel-h">2. Scorecard</h2>
-              <p class="pg-panel-sub">Your visual cue for <strong>better vs worse</strong> across batches: compare Session WIN % and trade win % on newer rows to older ones (human iteration from metrics — not automatic online learning).</p>
+              <h2 class="pg-panel-h">Score card</h2>
+              <p class="pg-panel-sub">Batch history — Session WIN %, trade win %, learning counters</p>
             </div>
-            <span class="pg-chip pg-chip-amber">Learning signal</span>
+            <span class="pg-chip pg-chip-amber">Results</span>
           </div>
         </summary>
         <div class="pg-panel-fold-body">
@@ -3136,10 +3200,16 @@ PAGE_HTML = """<!DOCTYPE html>
         if (mBias) mBias.textContent = fmtIntCommas(panel.bias_applied != null ? panel.bias_applied : panel.recall_bias_applied_total);
         return;
       }
-      if (running && hot) {
-        const rm = hot.recall_match_windows_so_far != null ? Number(hot.recall_match_windows_so_far) : 0;
-        const rb = hot.recall_bias_applied_so_far != null ? Number(hot.recall_bias_applied_so_far) : 0;
-        const rrec = hot.recall_match_records_so_far != null ? Number(hot.recall_match_records_so_far) : 0;
+      const hotObj = hot && typeof hot === 'object' ? hot : null;
+      const hasHotNums = !!hotObj && (
+        hotObj.recall_match_windows_so_far != null ||
+        hotObj.recall_bias_applied_so_far != null ||
+        hotObj.recall_match_records_so_far != null
+      );
+      if (running && hasHotNums) {
+        const rm = hotObj.recall_match_windows_so_far != null ? Number(hotObj.recall_match_windows_so_far) : 0;
+        const rb = hotObj.recall_bias_applied_so_far != null ? Number(hotObj.recall_bias_applied_so_far) : 0;
+        const rrec = hotObj.recall_match_records_so_far != null ? Number(hotObj.recall_match_records_so_far) : 0;
         if (narr) {
           narr.textContent =
             rm > 0 || rb > 0
@@ -3151,6 +3221,13 @@ PAGE_HTML = """<!DOCTYPE html>
         if (mRec) mRec.textContent = fmtIntCommas(rrec);
         if (mMatch) mMatch.textContent = fmtIntCommas(rm);
         if (mBias) mBias.textContent = fmtIntCommas(rb);
+      } else if (running) {
+        if (narr) narr.textContent = 'Batch starting — memory stats will fill in as workers report progress.';
+        if (mSaved) mSaved.textContent = '—';
+        if (mLoaded) mLoaded.textContent = '—';
+        if (mRec) mRec.textContent = '0';
+        if (mMatch) mMatch.textContent = '0';
+        if (mBias) mBias.textContent = '0';
       } else if (!running) {
         if (narr) narr.textContent = 'Idle — start a batch to see contextual memory status for that run.';
         if (mSaved) mSaved.textContent = '—';
@@ -4138,7 +4215,7 @@ PAGE_HTML = """<!DOCTYPE html>
       setOpButtonBusy(btn, true, 'Running…', true);
       openRunControlsPanel();
       clearBatchConcurrencyBanner();
-      hideLiveTelemetryPanel();
+      resetTelemetryRollingLogForNewRun();
       const sn = document.getElementById('sessionLogNote');
       if (sn) sn.textContent = '';
       updateRunStatusLine('Starting batch…');
@@ -4149,6 +4226,7 @@ PAGE_HTML = """<!DOCTYPE html>
       document.body.classList.add('pg-run-active');
       const t0 = Date.now();
       let runWorkersCap = null;
+      let jobId = null;
       try {
         let mw = parseInt(rangeEl.value, 10);
         if (isNaN(mw)) mw = null;
@@ -4167,6 +4245,7 @@ PAGE_HTML = """<!DOCTYPE html>
           if (!customM || customM < 1) {
             await show(null, null, 'Evaluation window is Custom — enter a valid number of months (1–600).');
             updateRunStatusLine('Set custom months before run.');
+            hideLiveTelemetryPanel();
             return;
           }
         }
@@ -4174,6 +4253,7 @@ PAGE_HTML = """<!DOCTYPE html>
           if (!scenariosTa || !scenariosTa.trim()) {
             await show(null, null, 'Pattern is Custom — paste valid scenario JSON under Advanced → Custom scenario.');
             updateRunStatusLine('Missing JSON for Custom pattern.');
+            hideLiveTelemetryPanel();
             return;
           }
           try {
@@ -4183,12 +4263,19 @@ PAGE_HTML = """<!DOCTYPE html>
           } catch (ve) {
             await show(null, null, 'Invalid JSON: ' + String(ve && ve.message ? ve.message : ve));
             updateRunStatusLine('JSON parse failed.');
+            hideLiveTelemetryPanel();
             return;
           }
         }
         const doLogEl = document.getElementById('doLog');
         const cmemEl = document.getElementById('contextSignatureMemoryModePick');
         const cmem = cmemEl && cmemEl.value ? String(cmemEl.value) : 'read_write';
+        const ltpPrep = document.getElementById('liveTelemetryPanel');
+        if (ltpPrep) {
+          ltpPrep.textContent = 'Live telemetry — preparing batch…';
+          _lastTelemetryDetailText = ltpPrep.textContent;
+        }
+        updateMemoryStatusCardFromPanel(null, { context_signature_memory_mode: cmem }, null, true);
         const body = {
           scenarios_json: recipeId === 'custom' ? scenariosTa : '[]',
           max_workers: mw,
@@ -4214,14 +4301,16 @@ PAGE_HTML = """<!DOCTYPE html>
             'Server returned non-JSON from /api/run-parallel/start (HTTP ' + startR.status + '): ' + String(pe && pe.message ? pe.message : pe) + ' — body: ' + (startRaw || '').slice(0, 1200)
           );
           updateRunStatusLine('Start request failed — see Result (Results workspace).');
+          hideLiveTelemetryPanel();
           return;
         }
         if (!startR.ok) {
           await show(null, null, friendlyParallelBackendError(startJ.error || JSON.stringify(startJ)));
           updateRunStatusLine('Validation failed — see Result.');
+          hideLiveTelemetryPanel();
           return;
         }
-        const jobId = startJ.job_id;
+        jobId = startJ.job_id;
         const total = resolveScenarioBatchTotal(startJ.total, scenariosTa);
         runWorkersCap = startJ.workers_used != null ? startJ.workers_used : null;
         const ltp = document.getElementById('liveTelemetryPanel');
@@ -4365,6 +4454,9 @@ PAGE_HTML = """<!DOCTYPE html>
           updateRunStatusLine('Client timeout — check server or logs.');
         }
       } catch (e) {
+        if (!jobId) {
+          hideLiveTelemetryPanel();
+        }
         if (runWorkersCap != null) {
           showBatchConcurrencyBanner(1, 1, 'error');
         } else {
