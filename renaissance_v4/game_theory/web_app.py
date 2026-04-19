@@ -66,10 +66,10 @@ from flask import Flask, Response, abort, jsonify, request, send_file
 
 _GAME_THEORY = Path(__file__).resolve().parent
 _RV4_ROOT = _GAME_THEORY.parent
-_PATTERN_BANNER_PATH = _RV4_ROOT / "assets" / "pattern.jpg"
+_PATTERN_BANNER_PATH = _RV4_ROOT / "assets" / "pattern.png"
 
 # Operator-visible web UI bundle version — bump when changing PAGE_HTML (HTML/CSS/JS) so deploys are provable.
-PATTERN_GAME_WEB_UI_VERSION = "2.7.0"
+PATTERN_GAME_WEB_UI_VERSION = "2.7.1"
 
 from renaissance_v4.game_theory.groundhog_memory import (
     groundhog_auto_merge_enabled,
@@ -478,12 +478,19 @@ def create_app() -> Flask:
         resp.headers["X-Pattern-Game-UI-Version"] = PATTERN_GAME_WEB_UI_VERSION
         return resp
 
-    @app.get("/assets/pattern-banner.jpg")
-    def pattern_banner_jpg() -> Response:
-        """Top-of-page banner image (``renaissance_v4/assets/pattern.jpg``)."""
+    @app.get("/assets/pattern-banner.png")
+    def pattern_banner_png() -> Response:
+        """Top-of-page banner image (``renaissance_v4/assets/pattern.png``)."""
         if not _PATTERN_BANNER_PATH.is_file():
             abort(404)
-        return send_file(_PATTERN_BANNER_PATH, mimetype="image/jpeg")
+        return send_file(_PATTERN_BANNER_PATH, mimetype="image/png")
+
+    @app.get("/assets/pattern-banner.jpg")
+    def pattern_banner_jpg_legacy() -> Response:
+        """Legacy URL — serves the same PNG asset."""
+        if not _PATTERN_BANNER_PATH.is_file():
+            abort(404)
+        return send_file(_PATTERN_BANNER_PATH, mimetype="image/png")
 
     @app.get("/api/capabilities")
     def capabilities() -> Any:
@@ -1514,15 +1521,8 @@ PAGE_HTML = """<!DOCTYPE html>
     details.pg-panel-fold .pg-panel-fold-body { padding: 0 16px 16px; }
     details.pg-panel-fold .pg-panel-header { margin-bottom: 12px; }
     .pg-title-wrap { position: relative; z-index: 1; max-width: 980px; }
-    .pg-eyebrow {
-      font-size: 12px;
-      font-weight: 800;
-      letter-spacing: 0.12em;
-      text-transform: uppercase;
-      color: rgba(247, 241, 230, 0.68);
-    }
     .pg-title {
-      margin: 8px 0 6px;
+      margin: 0 0 8px;
       font-size: clamp(1.5rem, 2.5vw, 2rem);
       line-height: 1.08;
       letter-spacing: -0.03em;
@@ -2470,14 +2470,13 @@ PAGE_HTML = """<!DOCTYPE html>
 <body class="pg-theme">
   <div class="pg-shell">
     <header class="pg-header">
-      <img class="pg-header-banner" src="/assets/pattern-banner.jpg" width="1600" height="400" alt="Pattern Machine learning" decoding="async" fetchpriority="high"/>
+      <img class="pg-header-banner" src="/assets/pattern-banner.png" width="1600" height="400" alt="" decoding="async" fetchpriority="high"/>
       <div class="pg-header-content">
       <div class="pg-title-wrap">
-        <div class="pg-eyebrow">Pattern Machine learning</div>
         <h1 class="pg-title">Pattern Machine learning
           <span class="ui-version" title="Bump PATTERN_GAME_WEB_UI_VERSION in web_app.py">v__PATTERN_GAME_WEB_UI_VERSION__</span></h1>
-        <p class="pg-lead">Pick a <strong>pattern</strong> and <strong>evaluation window</strong>, then <strong>Run</strong> — curated modes build ready-to-run scenarios. <strong>Live telemetry</strong> (during a batch) is the primary readout; <strong>Scorecard</strong> below tracks batch history. Status tiles include <strong>Modules</strong>. Custom JSON is under <em>Advanced</em> only.</p>
-        <div class="pg-orientation-note">Twisty on each panel · DEF record: <code>docs/architect/pattern_game_operator_deficiencies_work_record.md</code></div>
+        <p class="pg-lead">Pick pattern and window, then <strong>Run</strong>. Telemetry during the batch; scorecard for history. Custom scenarios: <em>Advanced</em>.</p>
+        <div class="pg-orientation-note">Expand panel summaries as needed · DEF-001: <code>docs/architect/pattern_game_operator_deficiencies_work_record.md</code></div>
       </div>
       <div class="pg-banner-strip">
         <div class="pg-banner-stat">
