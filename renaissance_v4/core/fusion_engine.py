@@ -76,6 +76,11 @@ def _signal_bucket(signal_name: str) -> str:
     return "other"
 
 
+def signal_family_bucket(signal_name: str) -> str:
+    """Stable public name for the same family grouping used in fusion overlap logic."""
+    return _signal_bucket(signal_name)
+
+
 def fuse_signal_results(
     signal_results: list[SignalResult],
     *,

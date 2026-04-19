@@ -1,11 +1,15 @@
 """
-Bundle Optimizer v1 — deterministic, rule-based proposals for the next run's memory bundle.
+Bundle Optimizer v1/v2 — deterministic, rule-based proposals for the next run's memory bundle.
 
 Reads **structured** metrics only (no narrative, no LLM). Emits a schema-valid
 ``pattern_game_memory_bundle_v1`` document with **whitelisted** ``apply`` keys and a
 parallel **optimizer proof** record for audit.
 
-See :func:`optimize_bundle_v1` and :func:`extract_metrics_from_pattern_game_run`.
+v2 adds :func:`optimize_bundle_v2`, which layers **pattern-context** rules on top of v1
+when ``pattern_context_v1`` is present on the run (from replay: ``pattern_context_v1``).
+
+See :func:`optimize_bundle_v1`, :func:`optimize_bundle_v2`, and
+:func:`extract_metrics_from_pattern_game_run`.
 """
 
 from __future__ import annotations
@@ -51,7 +55,7 @@ def extract_metrics_from_pattern_game_run(run: dict[str, Any]) -> dict[str, Any]
         raise BundleOptimizerError("run.scorecards must be a dict or omitted")
 
     rid = str(run.get("source_run_id") or run.get("validation_checksum") or "")[:32] or "unknown"
-    return {
+    out: dict[str, Any] = {
         "source_run_id": rid,
         "total_trades": int(summary.get("total_trades") or 0),
         "max_drawdown": float(summary.get("max_drawdown") or 0.0),
@@ -67,6 +71,14 @@ def extract_metrics_from_pattern_game_run(run: dict[str, Any]) -> dict[str, Any]
         "scorecards": sc if isinstance(sc, dict) else {},
         "memory_bundle_proof": run.get("memory_bundle_proof") if isinstance(run.get("memory_bundle_proof"), dict) else None,
     }
+    pc = run.get("pattern_context_v1")
+    if pc is not None:
+        if not isinstance(pc, dict):
+            raise BundleOptimizerError("run.pattern_context_v1 must be a dict or omitted")
+        if pc.get("schema") != "pattern_context_v1":
+            raise BundleOptimizerError("run.pattern_context_v1.schema must be 'pattern_context_v1'")
+        out["pattern_context_v1"] = pc
+    return out
 
 
 def _effective_fusion_min(prior_apply: dict[str, Any] | None) -> float:
@@ -253,6 +265,229 @@ def optimize_bundle_v1(
         )
 
     return bundle_doc, proof
+
+
+def _merge_apply(prior: dict[str, Any] | None, delta: dict[str, Any]) -> dict[str, Any]:
+    out = dict(prior or {})
+    out.update(delta)
+    return out
+
+
+def _effective_fusion_max_conflict(prior_apply: dict[str, Any] | None) -> float:
+    if prior_apply and prior_apply.get("fusion_max_conflict_score") is not None:
+        return float(prior_apply["fusion_max_conflict_score"])
+    return _DEFAULT_FUSION_MAX_CONFLICT
+
+
+def _apply_pattern_rules_v2(
+    metrics: dict[str, Any],
+    effective_apply: dict[str, Any],
+    *,
+    manifest_signal_modules: list[str] | None,
+) -> tuple[dict[str, Any], list[dict[str, Any]], list[dict[str, Any]], dict[str, Any], list[str]]:
+    """
+    Deterministic pattern-context layer. Returns
+    ``(pattern_apply_delta, pattern_apply_diff, pattern_rules_triggered, pattern_context_used, pattern_reason_codes)``.
+    """
+    pc = metrics.get("pattern_context_v1")
+    mods = list(manifest_signal_modules or [])
+    pattern_apply: dict[str, Any] = {}
+    apply_diff: list[dict[str, Any]] = []
+    triggered: list[dict[str, Any]] = []
+    reason_codes: list[str] = []
+
+    if not isinstance(pc, dict) or pc.get("schema") != "pattern_context_v1":
+        return (
+            {},
+            [],
+            [],
+            {"pattern_context_available": False},
+            [],
+        )
+
+    bars = int(pc.get("bars_processed") or 0)
+    tags = pc.get("structure_tag_shares") if isinstance(pc.get("structure_tag_shares"), dict) else {}
+    range_like = float(tags.get("range_like") or 0.0)
+    vol_c = float(tags.get("vol_compressed") or 0.0)
+    brk_like = float(tags.get("breakout_like") or 0.0)
+    vol_ex = float(tags.get("vol_expanding") or 0.0)
+    hc = int(pc.get("high_conflict_bars") or 0)
+    hc_share = float(hc) / float(bars) if bars else 0.0
+    ct = int(pc.get("countertrend_directional_bars") or 0)
+    al = int(pc.get("aligned_directional_bars") or 0)
+
+    closes = int(metrics["closes_recorded"])
+    total_trades = int(metrics["total_trades"])
+    win_rate = float(metrics.get("win_rate") or 0.0)
+    fn = int(metrics.get("fusion_no_trade_bars") or 0)
+
+    context_used: dict[str, Any] = {
+        "bars_processed": bars,
+        "structure_tag_shares": {
+            "range_like": range_like,
+            "vol_compressed": vol_c,
+            "breakout_like": brk_like,
+            "vol_expanding": vol_ex,
+        },
+        "high_conflict_share": round(hc_share, 6),
+        "countertrend_directional_bars": ct,
+        "aligned_directional_bars": al,
+    }
+
+    def _rec(key: str, new_val: Any, reason_code: str, old_val: Any | None) -> None:
+        pattern_apply[key] = new_val
+        apply_diff.append(
+            {"key": key, "old": old_val, "new": new_val, "reason_code": reason_code, "layer": "pattern_v2"}
+        )
+        triggered.append(
+            {"reason_code": reason_code, "key": key, "old": old_val, "new": new_val, "layer": "pattern_v2"}
+        )
+        reason_codes.append(reason_code)
+
+    # P2: No completed trades while range-like + compressed-vol structure dominates — extra MR stretch only.
+    if (
+        closes == 0
+        and total_trades == 0
+        and bars >= 50
+        and range_like >= 0.40
+        and vol_c >= 0.30
+        and "mean_reversion_fade" in mods
+    ):
+        old_st = effective_apply.get("mean_reversion_fade_stretch_threshold")
+        base_st = float(old_st) if old_st is not None else _DEFAULT_STRETCH
+        new_st = max(0.0005, round(base_st * 0.94, 6))
+        if new_st != base_st:
+            _rec(
+                "mean_reversion_fade_stretch_threshold",
+                new_st,
+                "P2_LOWVOL_RANGE_EXTRA_RELAX_MR_STRETCH",
+                base_st,
+            )
+
+    # P2: High conflict share with poor win rate — tighten conflict cap.
+    if total_trades >= 3 and win_rate < 0.40 and hc_share >= 0.22:
+        old_mc = effective_apply.get("fusion_max_conflict_score")
+        base_mc = float(old_mc) if old_mc is not None else _effective_fusion_max_conflict(effective_apply)
+        new_mc = max(0.12, round(base_mc - 0.04, 4))
+        if new_mc != base_mc:
+            _rec("fusion_max_conflict_score", new_mc, "P2_HIGH_CONFLICT_SHARE_TIGHTEN_CONFLICT_CAP", base_mc)
+
+    # P2: Directional decisions skew countertrend vs trend alignment — tighten fusion floor.
+    ct_skew = (al > 0 and ct > al * 1.25) or (al == 0 and ct >= 8)
+    if total_trades >= 2 and win_rate < 0.45 and ct_skew:
+        eff_f = _effective_fusion_min(effective_apply)
+        new_f = min(0.52, round(eff_f + 0.025, 4))
+        if new_f != eff_f:
+            _rec("fusion_min_score", new_f, "P2_COUNTERTREND_DOMINANT_TIGHTEN_FUSION_MIN", eff_f)
+
+    # P2: Breakout hypothesis underperforms in expansion-heavy structure — disable module if safe.
+    sc = metrics.get("scorecards") or {}
+    br = sc.get("breakout_expansion") if isinstance(sc.get("breakout_expansion"), dict) else {}
+    br_tt = int(br.get("total_trades") or 0)
+    br_ex = float(br.get("expectancy") or 0.0)
+    if (
+        "breakout_expansion" in mods
+        and br_tt >= 2
+        and br_ex < -0.15
+        and (brk_like >= 0.20 or vol_ex >= 0.26)
+    ):
+        already = list(effective_apply.get("disabled_signal_modules") or [])
+        if "breakout_expansion" not in already:
+            merged = sorted(set(already) | {"breakout_expansion"})
+            remaining = [m for m in mods if m not in merged]
+            if len(remaining) >= 1:
+                _rec(
+                    "disabled_signal_modules",
+                    merged,
+                    "P2_BREAKOUT_UNDERPERF_EXPANSION_CONTEXT_DISABLE",
+                    already if already else None,
+                )
+
+    return pattern_apply, apply_diff, triggered, context_used, reason_codes
+
+
+def optimize_bundle_v2(
+    metrics: dict[str, Any],
+    *,
+    prior_apply: dict[str, Any] | None = None,
+    manifest_signal_modules: list[str] | None = None,
+    optimizer_run_id: str | None = None,
+    source_artifact_paths: list[str] | None = None,
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    """
+    Run v1 rules, then deterministic pattern-context rules (v2) on merged effective apply.
+
+    Requires the same ``metrics`` keys as v1. Optional ``pattern_context_v1`` on ``metrics`` enables
+    pattern rules; if absent, behavior matches v1 (pattern proof fields show no context).
+    """
+    bundle_v1, proof_v1 = optimize_bundle_v1(
+        metrics,
+        prior_apply=prior_apply,
+        manifest_signal_modules=manifest_signal_modules,
+        optimizer_run_id=optimizer_run_id,
+        source_artifact_paths=source_artifact_paths,
+    )
+    opt_id = str(proof_v1["optimizer_run_id"])
+    v1_apply = dict(bundle_v1.get("apply") or {})
+    effective = _merge_apply(prior_apply, v1_apply)
+
+    p_apply, p_diff, p_trig, p_used, p_codes = _apply_pattern_rules_v2(
+        metrics,
+        effective,
+        manifest_signal_modules=manifest_signal_modules,
+    )
+
+    final_apply = {**v1_apply, **p_apply}
+
+    bundle_doc: dict[str, Any] = {
+        **bundle_v1,
+        "apply": final_apply,
+        "note": f"bundle_optimizer_v2 run={opt_id} v1+pattern deterministic rules; not learning.",
+    }
+
+    v1_codes = list(proof_v1.get("reason_codes") or [])
+    combined_codes = v1_codes + p_codes
+    combined_diff = list(proof_v1.get("apply_diff") or []) + p_diff
+    combined_trig = list(proof_v1.get("triggered_rules") or []) + p_trig
+
+    proof_v2: dict[str, Any] = {
+        "schema": "bundle_optimizer_proof_v2",
+        "optimizer_run_id": opt_id,
+        "source_run_id": metrics["source_run_id"],
+        "source_artifact_paths": list(source_artifact_paths or []),
+        "v1_proof": proof_v1,
+        "pattern_context_used": p_used,
+        "pattern_rules_triggered": p_trig,
+        "pattern_reason_codes": p_codes,
+        "pattern_apply_diff": p_diff,
+        "source_metrics_used": {
+            k: metrics[k]
+            for k in sorted(metrics.keys())
+            if k not in ("scorecards", "pattern_context_v1")
+        },
+        "pattern_context_v1_summary": {
+            "schema": (metrics.get("pattern_context_v1") or {}).get("schema"),
+            "bars_processed": (metrics.get("pattern_context_v1") or {}).get("bars_processed"),
+            "dominant_regime": (metrics.get("pattern_context_v1") or {}).get("dominant_regime"),
+            "dominant_volatility_bucket": (metrics.get("pattern_context_v1") or {}).get(
+                "dominant_volatility_bucket"
+            ),
+        }
+        if metrics.get("pattern_context_v1")
+        else None,
+        "source_scorecard_keys": sorted((metrics.get("scorecards") or {}).keys()),
+        "triggered_rules": combined_trig,
+        "apply_diff": combined_diff,
+        "reason_codes": combined_codes,
+        "bundle_output_apply": final_apply,
+        "no_changes": len(final_apply) == 0,
+    }
+    if len(final_apply) == 0:
+        proof_v2["no_changes_reason"] = proof_v1.get(
+            "no_changes_reason",
+            "V2_NO_APPLY — v1 and pattern produced empty apply.",
+        )
+    return bundle_doc, proof_v2
 
 
 def write_bundle_and_proof(

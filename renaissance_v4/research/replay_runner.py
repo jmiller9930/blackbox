@@ -27,6 +27,7 @@ from __future__ import annotations
 
 import argparse
 import os
+from collections import Counter
 from pathlib import Path
 from typing import Any
 
@@ -34,7 +35,12 @@ from renaissance_v4.core.decision_contract import DecisionContract
 from renaissance_v4.core.market_state_builder import build_market_state
 from renaissance_v4.core.outcome_record import OutcomeRecord
 from renaissance_v4.core.performance_metrics import compute_excursion_mae_mfe
+from renaissance_v4.core.fusion_engine import MAX_CONFLICT_SCORE, signal_family_bucket
 from renaissance_v4.core.pnl import compute_pnl
+from renaissance_v4.core.regime_classifier import (
+    VOLATILITY_COMPRESSION_THRESHOLD,
+    VOLATILITY_EXPANSION_THRESHOLD,
+)
 from renaissance_v4.manifest.runtime import (
     build_execution_manager_from_manifest,
     build_signals_from_manifest,
@@ -143,6 +149,14 @@ def run_manifest_replay(
     entries_attempted = 0
     closes_recorded = 0
 
+    regime_bar_counts: Counter[str] = Counter()
+    fusion_direction_counts: Counter[str] = Counter()
+    volatility_bucket_counts: Counter[str] = Counter()
+    signal_family_active_bar_counts: Counter[str] = Counter()
+    high_conflict_bars = 0
+    aligned_directional_bars = 0
+    countertrend_directional_bars = 0
+
     for index in range(MIN_ROWS_REQUIRED, len(rows) + 1):
         window = rows[:index]
         state = build_market_state(window)
@@ -156,6 +170,31 @@ def run_manifest_replay(
 
         fusion_result = fusion_fn(signal_results)
         active_signal_names = [r.signal_name for r in signal_results if r.active]
+
+        regime_bar_counts[regime] += 1
+        fusion_direction_counts[fusion_result.direction] += 1
+
+        vol20 = float(features.volatility_20)
+        if vol20 <= VOLATILITY_COMPRESSION_THRESHOLD:
+            volatility_bucket_counts["compressed"] += 1
+        elif vol20 >= VOLATILITY_EXPANSION_THRESHOLD:
+            volatility_bucket_counts["expanding"] += 1
+        else:
+            volatility_bucket_counts["neutral"] += 1
+
+        if fusion_result.conflict_score >= MAX_CONFLICT_SCORE * 0.85:
+            high_conflict_bars += 1
+
+        if fusion_result.direction == "long" and regime == "trend_down":
+            countertrend_directional_bars += 1
+        elif fusion_result.direction == "short" and regime == "trend_up":
+            countertrend_directional_bars += 1
+        elif fusion_result.direction in {"long", "short"} and regime in {"trend_up", "trend_down"}:
+            aligned_directional_bars += 1
+
+        for r in signal_results:
+            if r.active:
+                signal_family_active_bar_counts[signal_family_bucket(r.signal_name)] += 1
 
         if fusion_result.direction == "no_trade":
             fusion_no_trade_bars += 1
@@ -343,6 +382,51 @@ def run_manifest_replay(
         print("[replay] Phase 7 replay completed successfully")
 
     outcomes: list[OutcomeRecord] = list(ledger.outcomes)
+
+    def _dominant(c: Counter[str]) -> str | None:
+        if not c:
+            return None
+        return sorted(c.items(), key=lambda kv: (-kv[1], kv[0]))[0][0]
+
+    rc = dict(regime_bar_counts)
+    bp = float(processed) if processed else 1.0
+    range_like = int(rc.get("range", 0)) + int(rc.get("volatility_compression", 0))
+    trend_like = int(rc.get("trend_up", 0)) + int(rc.get("trend_down", 0))
+    breakout_like = int(rc.get("volatility_expansion", 0))
+
+    pattern_context_v1: dict[str, Any] = {
+        "schema": "pattern_context_v1",
+        "bars_processed": processed,
+        "regime_bar_counts": {k: int(regime_bar_counts[k]) for k in sorted(regime_bar_counts)},
+        "fusion_direction_counts": {
+            k: int(fusion_direction_counts[k]) for k in sorted(fusion_direction_counts)
+        },
+        "volatility_bucket_counts": {
+            k: int(volatility_bucket_counts[k]) for k in sorted(volatility_bucket_counts)
+        },
+        "signal_family_active_bar_counts": {
+            k: int(signal_family_active_bar_counts[k]) for k in sorted(signal_family_active_bar_counts)
+        },
+        "high_conflict_bars": int(high_conflict_bars),
+        "aligned_directional_bars": int(aligned_directional_bars),
+        "countertrend_directional_bars": int(countertrend_directional_bars),
+        "dominant_regime": _dominant(regime_bar_counts),
+        "dominant_volatility_bucket": _dominant(volatility_bucket_counts),
+        "structure_tag_shares": {
+            "range_like": round(range_like / bp, 6),
+            "trend_like": round(trend_like / bp, 6),
+            "breakout_like": round(breakout_like / bp, 6),
+            "vol_compressed": round(
+                float(volatility_bucket_counts.get("compressed", 0)) / bp,
+                6,
+            ),
+            "vol_expanding": round(
+                float(volatility_bucket_counts.get("expanding", 0)) / bp,
+                6,
+            ),
+        },
+    }
+
     return {
         "manifest": manifest,
         "manifest_path": str(resolved_manifest_path),
@@ -353,6 +437,7 @@ def run_manifest_replay(
         "scorecards": scorecards,
         "cumulative_pnl": exec_manager.cumulative_pnl,
         "sanity": sanity,
+        "pattern_context_v1": pattern_context_v1,
     }
 
 
