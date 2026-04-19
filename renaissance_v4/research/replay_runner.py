@@ -22,6 +22,7 @@ Change History:
 - v7.2 Authoritative replay driven by baseline strategy manifest (`configs/manifests/baseline_v1_recipe.json`).
 - v7.3 `run_manifest_replay()` for programmatic / experiment flows; optional `--manifest` CLI (no env required).
 - v7.4 Optional Decision Context Recall v1 (per-bar structured recall + bounded fusion bias; opt-in kwargs).
+- v7.5 Decision Context Recall v2: bounded per-signal contribution multipliers + optional memory-driven module suppression (opt-in).
 """
 
 from __future__ import annotations
@@ -59,6 +60,7 @@ from renaissance_v4.game_theory.decision_context_recall import (
     build_causal_partial_pattern_context_v1,
     build_decision_recall_trace_v1,
     compute_decision_fusion_bias,
+    compute_decision_signal_module_bias_v2,
     derive_decision_context_signature_for_matching,
     fusion_engine_supports_decision_recall,
 )
@@ -126,6 +128,7 @@ def run_manifest_replay(
     verbose: bool = True,
     decision_context_recall_enabled: bool = False,
     decision_context_recall_apply_bias: bool = False,
+    decision_context_recall_apply_signal_bias_v2: bool = False,
     decision_context_recall_memory_path: Path | str | None = None,
     decision_context_recall_match_params: SignatureMatchParamsV1 | None = None,
     decision_context_recall_max_samples: int = 24,
@@ -140,6 +143,9 @@ def run_manifest_replay(
     ``context_signature_memory`` JSONL (see :mod:`renaissance_v4.game_theory.decision_context_recall`).
     Optional ``decision_context_recall_apply_bias`` nudges fusion thresholds toward matching memory
     (bounded; ``fuse_signal_results`` manifests only).
+
+    Optional ``decision_context_recall_apply_signal_bias_v2`` applies bounded per-signal contribution
+    multipliers and optional intersection-based module suppression from memory (still manifest-scoped).
     """
     connection = get_connection()
     rows = connection.execute(
@@ -185,11 +191,13 @@ def run_manifest_replay(
     dcr_stats: dict[str, Any] = {
         "decision_context_recall_enabled": decision_context_recall_enabled,
         "decision_context_recall_apply_bias": decision_context_recall_apply_bias,
+        "decision_context_recall_apply_signal_bias_v2": decision_context_recall_apply_signal_bias_v2,
         "fusion_override_supported": recall_fusion_ok,
         "decisions_observed": 0,
         "recall_attempted": 0,
         "decisions_with_positive_match_count": 0,
         "decisions_with_bias_applied": 0,
+        "decisions_with_signal_bias_applied": 0,
     }
 
     fusion_no_trade_bars = 0
@@ -234,6 +242,14 @@ def run_manifest_replay(
         bias_applied = False
         bias_diff: list[dict[str, Any]] = []
         dcr_codes: list[str] = []
+
+        sig_bias_applied = False
+        sig_bias_diff: list[dict[str, Any]] = []
+        sig_suppressed: list[str] = []
+        sig_favored: list[dict[str, Any]] = []
+        sig_reason_codes: list[str] = []
+        mem_just_sig: list[dict[str, Any]] = []
+        pcm: dict[str, float] | None = None
 
         if decision_context_recall_enabled and recall_fusion_ok:
             if memory_records_cache is None:
@@ -288,11 +304,35 @@ def run_manifest_replay(
             )
             dcr_codes.extend(bias_codes)
             bias_applied = len(bias_diff) > 0
+
+            disabled_m = set(manifest.get("disabled_signal_modules") or [])
+            manifest_signal_modules = [
+                s for s in (manifest.get("signal_modules") or []) if s not in disabled_m
+            ]
+            if decision_context_recall_apply_signal_bias_v2:
+                (
+                    _per_mult,
+                    sig_bias_applied,
+                    sig_bias_diff,
+                    sig_suppressed,
+                    sig_favored,
+                    sig_reason_codes,
+                    mem_just_sig,
+                ) = compute_decision_signal_module_bias_v2(
+                    signature=sig_current,
+                    matches=matches,
+                    manifest_signal_modules=manifest_signal_modules,
+                    apply_signal_bias=True,
+                )
+                if sig_bias_applied:
+                    pcm = _per_mult
+
             fusion_result = fuse_signal_results(
                 signal_results,
                 min_fusion_score=fusion_min_u,
                 max_conflict_score=fusion_mc_u,
                 overlap_penalty_per_extra_signal=manifest.get("fusion_overlap_penalty_per_extra_signal"),
+                per_signal_contribution_multiplier=pcm,
             )
         else:
             fusion_result = fusion_fn(signal_results)
@@ -300,6 +340,9 @@ def run_manifest_replay(
                 dcr_codes.append("DCR_V1_SKIPPED_UNSUPPORTED_FUSION_ENGINE")
 
         attempted = bool(decision_context_recall_enabled and recall_fusion_ok)
+        signal_bias_v2_trace = bool(
+            attempted and decision_context_recall_apply_signal_bias_v2
+        )
         recall_block = build_decision_recall_trace_v1(
             enabled=decision_context_recall_enabled,
             attempted=attempted,
@@ -314,6 +357,13 @@ def run_manifest_replay(
             bias_diff=bias_diff,
             reason_codes=dcr_codes
             + (["DCR_V1_NO_MATCHING_SIGNATURES"] if attempted and not matches else []),
+            signal_bias_v2_enabled=signal_bias_v2_trace,
+            decision_context_signal_bias_applied=sig_bias_applied,
+            decision_context_signal_bias_diff=sig_bias_diff,
+            decision_context_signal_reason_codes=sig_reason_codes,
+            decision_context_suppressed_modules=sig_suppressed,
+            decision_context_favored_signal_families=sig_favored,
+            memory_justification_signal_bias=mem_just_sig,
         )
         if decision_context_recall_enabled:
             dcr_stats["decisions_observed"] += 1
@@ -323,6 +373,8 @@ def run_manifest_replay(
                 dcr_stats["decisions_with_positive_match_count"] += 1
             if bias_applied:
                 dcr_stats["decisions_with_bias_applied"] += 1
+            if signal_bias_v2_trace and sig_bias_applied:
+                dcr_stats["decisions_with_signal_bias_applied"] += 1
             if len(dcr_samples) < int(decision_context_recall_max_samples):
                 dcr_samples.append(recall_block)
 
@@ -463,6 +515,7 @@ def run_manifest_replay(
                     "conflict_score": fusion_result.conflict_score,
                     "overlap_penalty": fusion_result.overlap_penalty,
                     "threshold_passed": fusion_result.threshold_passed,
+                    "per_signal_contribution_multiplier": dict(pcm) if pcm is not None else {},
                 },
                 "risk": {
                     "allowed": risk_decision.allowed,

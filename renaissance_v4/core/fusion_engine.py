@@ -81,18 +81,28 @@ def signal_family_bucket(signal_name: str) -> str:
     return _signal_bucket(signal_name)
 
 
+def _clamp_recall_multiplier(m: float) -> float:
+    """Bounded decision-time recall multiplier on directional contribution (deterministic cap)."""
+    return max(0.0, min(1.12, float(m)))
+
+
 def fuse_signal_results(
     signal_results: list[SignalResult],
     *,
     min_fusion_score: float | None = None,
     max_conflict_score: float | None = None,
     overlap_penalty_per_extra_signal: float | None = None,
+    per_signal_contribution_multiplier: dict[str, float] | None = None,
 ) -> FusionResult:
     """
     Fuse active signal results into one directional output.
     Prefers no_trade whenever evidence is weak, conflicted, or overly redundant.
 
     Optional overrides (from manifest / memory bundle) default to module constants when None.
+
+    ``per_signal_contribution_multiplier`` — optional catalog signal_name → multiplier applied to
+    each active signal's directional contribution after the base weight × geometric-mean term.
+    Keys not present default to 1.0; each value is clamped to [0.0, 1.12] (0 = suppress).
     """
     min_fs = MIN_FUSION_SCORE if min_fusion_score is None else float(min_fusion_score)
     max_cf = MAX_CONFLICT_SCORE if max_conflict_score is None else float(max_conflict_score)
@@ -108,9 +118,13 @@ def fuse_signal_results(
     suppressed_signals: list[str] = []
     active_buckets: list[str] = []
 
+    mult_map = per_signal_contribution_multiplier or {}
+
     for result in signal_results:
         if result.active and result.direction in {"long", "short"}:
             contribution = _directional_contribution(result)
+            rm = _clamp_recall_multiplier(mult_map.get(result.signal_name, 1.0))
+            contribution *= rm
             contributing_signals.append(f"{result.signal_name}:{result.direction}:{contribution:.4f}")
             active_buckets.append(_signal_bucket(result.signal_name))
 

@@ -12,7 +12,11 @@ from __future__ import annotations
 from collections import Counter
 from typing import Any
 
-from renaissance_v4.core.fusion_engine import MAX_CONFLICT_SCORE, MIN_FUSION_SCORE
+from renaissance_v4.core.fusion_engine import (
+    MAX_CONFLICT_SCORE,
+    MIN_FUSION_SCORE,
+    signal_family_bucket,
+)
 from renaissance_v4.core.regime_classifier import (
     VOLATILITY_COMPRESSION_THRESHOLD,
     VOLATILITY_EXPANSION_THRESHOLD,
@@ -28,7 +32,17 @@ from renaissance_v4.game_theory.context_signature_memory import (
 )
 
 DECISION_CONTEXT_RECALL_SCHEMA = "decision_context_recall_v1"
+DECISION_CONTEXT_RECALL_SCHEMA_V2 = "decision_context_recall_v2"
 DECISION_FUSION_BIAS_MAX_STEP = 0.01
+
+# Bounded contribution multipliers (applied in fusion after base directional contribution).
+DCR_V2_MULT_SOFT_MIN = 0.75
+DCR_V2_MULT_SOFT_MAX = 1.08
+DCR_V2_RULE_VOL_COMPRESS_THRESHOLD = 0.28
+DCR_V2_RULE_RANGE_LIKE_THRESHOLD = 0.35
+DCR_V2_RULE_TREND_EXPANSION_MR = (0.22, 0.12)  # trend_like_share, vol_expanding_share
+DCR_V2_RULE_HIGH_CONFLICT_THRESHOLD = 0.20
+DCR_V2_RULE_ALIGNED_TREND = (0.06, 0.18)  # aligned_directional_share, trend_like_share
 
 
 def _dominant_counter(c: Counter[str]) -> str | None:
@@ -195,6 +209,167 @@ def compute_decision_fusion_bias(
     return out_min, out_mc, diff, codes, best_id
 
 
+def _clamp_soft_multiplier(x: float) -> float:
+    return max(DCR_V2_MULT_SOFT_MIN, min(DCR_V2_MULT_SOFT_MAX, float(x)))
+
+
+def compute_decision_signal_module_bias_v2(
+    *,
+    signature: dict[str, Any] | None,
+    matches: list[dict[str, Any]],
+    manifest_signal_modules: list[str],
+    apply_signal_bias: bool,
+) -> tuple[
+    dict[str, float],
+    bool,
+    list[dict[str, Any]],
+    list[str],
+    list[dict[str, Any]],
+    list[str],
+    list[dict[str, Any]],
+]:
+    """
+    Deterministic, bounded per-signal contribution multipliers from (1) current context signature
+    numeric fields and (2) intersection of ``disabled_signal_modules`` across matching memory records.
+
+    Returns
+    -------
+    per_signal_mult
+        Catalog signal id → multiplier (1.0 = no change).
+    signal_bias_applied
+        True if any multiplier differs from 1.0.
+    signal_bias_diff
+        Audit rows for each change.
+    suppressed_modules
+        Modules with multiplier 0.0.
+    favored_signal_families
+        Entries for modules that received a boost (factor > 1.0 before soft clamp).
+    signal_reason_codes
+        Machine reason codes for signal/module layer.
+    memory_justification_rows
+        Which record ids justified intersection-based suppressions.
+    """
+    diff: list[dict[str, Any]] = []
+    signal_reason_codes: list[str] = []
+    mem_just: list[dict[str, Any]] = []
+    favored: list[dict[str, Any]] = []
+    suppressed: list[str] = []
+
+    mods = sorted(set(manifest_signal_modules))
+    mult: dict[str, float] = {m: 1.0 for m in mods}
+    if not apply_signal_bias:
+        return mult, False, [], [], [], [], []
+
+    if not isinstance(signature, dict) or signature.get("schema") != "context_signature_v1":
+        signal_reason_codes.append("DCR_V2_SKIPPED_INVALID_SIGNATURE")
+        return mult, False, [], [], [], signal_reason_codes, []
+
+    vc = float(signature.get("vol_compressed_share") or 0.0)
+    rl = float(signature.get("range_like_share") or 0.0)
+    tl = float(signature.get("trend_like_share") or 0.0)
+    ve = float(signature.get("vol_expanding_share") or 0.0)
+    hc = float(signature.get("high_conflict_share") or 0.0)
+    al = float(signature.get("aligned_directional_share") or 0.0)
+
+    def _mul_signal(sid: str, factor: float, reason: str) -> None:
+        if sid not in mult:
+            return
+        old = mult[sid]
+        mult[sid] = old * factor
+        diff.append(
+            {
+                "signal_module": sid,
+                "family": signal_family_bucket(sid),
+                "old_multiplier": old,
+                "new_multiplier": mult[sid],
+                "factor_applied": factor,
+                "reason_code": reason,
+                "from_record_ids": [],
+            }
+        )
+        signal_reason_codes.append(reason)
+
+    if vc >= DCR_V2_RULE_VOL_COMPRESS_THRESHOLD and "breakout_expansion" in mult:
+        _mul_signal("breakout_expansion", 0.88, "DCR_V2_RULE_VOL_COMPRESS_DEEMPH_BREAKOUT")
+    if rl >= DCR_V2_RULE_RANGE_LIKE_THRESHOLD and "breakout_expansion" in mult:
+        _mul_signal("breakout_expansion", 0.90, "DCR_V2_RULE_RANGE_LIKE_DEEMPH_BREAKOUT")
+    tl_th, ve_th = DCR_V2_RULE_TREND_EXPANSION_MR
+    if tl >= tl_th and ve >= ve_th and "mean_reversion_fade" in mult:
+        _mul_signal("mean_reversion_fade", 0.88, "DCR_V2_RULE_TREND_EXPANSION_DEEMPH_MR")
+    if hc >= DCR_V2_RULE_HIGH_CONFLICT_THRESHOLD and "breakout_expansion" in mult:
+        _mul_signal("breakout_expansion", 0.85, "DCR_V2_RULE_HIGH_CONFLICT_DEEMPH_BREAKOUT")
+    al_th, ttr_th = DCR_V2_RULE_ALIGNED_TREND
+    if al >= al_th and tl >= ttr_th:
+        for sid in ("trend_continuation", "pullback_continuation"):
+            if sid in mult:
+                old = mult[sid]
+                mult[sid] = old * 1.04
+                diff.append(
+                    {
+                        "signal_module": sid,
+                        "family": signal_family_bucket(sid),
+                        "old_multiplier": old,
+                        "new_multiplier": mult[sid],
+                        "factor_applied": 1.04,
+                        "reason_code": "DCR_V2_RULE_ALIGNED_TREND_FAVOR_CONTINUATION",
+                        "from_record_ids": [],
+                    }
+                )
+                signal_reason_codes.append("DCR_V2_RULE_ALIGNED_TREND_FAVOR_CONTINUATION")
+                favored.append(
+                    {
+                        "signal_family": signal_family_bucket(sid),
+                        "signal_module": sid,
+                        "factor": 1.04,
+                        "reason_code": "DCR_V2_RULE_ALIGNED_TREND_FAVOR_CONTINUATION",
+                    }
+                )
+
+    for sid in mult:
+        if mult[sid] > 0:
+            mult[sid] = _clamp_soft_multiplier(mult[sid])
+
+    # Memory: intersection of disabled modules across all matching records (deterministic).
+    if matches:
+        dis_sets: list[set[str]] = []
+        for rec in matches:
+            eff = rec.get("effective_apply") if isinstance(rec.get("effective_apply"), dict) else {}
+            d = eff.get("disabled_signal_modules")
+            if isinstance(d, list) and d:
+                dis_sets.append(set(str(x) for x in d))
+        if dis_sets:
+            inter = set.intersection(*dis_sets)
+            for mod in sorted(inter):
+                if mod not in mult:
+                    continue
+                remaining = [m for m in mods if m != mod and mult.get(m, 1.0) > 1e-12]
+                if not remaining:
+                    signal_reason_codes.append("DCR_V2_SKIP_SUPPRESS_ALL_PATHS")
+                    continue
+                old = mult[mod]
+                mult[mod] = 0.0
+                rids = sorted(str(rec.get("record_id", "")) for rec in matches)
+                diff.append(
+                    {
+                        "signal_module": mod,
+                        "family": signal_family_bucket(mod),
+                        "old_multiplier": old,
+                        "new_multiplier": 0.0,
+                        "factor_applied": 0.0,
+                        "reason_code": "DCR_V2_MEMORY_INTERSECTION_DISABLE",
+                        "from_record_ids": rids,
+                    }
+                )
+                suppressed.append(mod)
+                signal_reason_codes.append("DCR_V2_MEMORY_INTERSECTION_DISABLE")
+                mem_just.append(
+                    {"signal_module": mod, "from_record_ids": rids, "reason": "intersection_disabled_modules"}
+                )
+
+    applied = any(abs(mult.get(m, 1.0) - 1.0) > 1e-12 for m in mods)
+    return mult, applied, diff, suppressed, favored, signal_reason_codes, mem_just
+
+
 def fusion_engine_supports_decision_recall(manifest: dict[str, Any], catalog: dict[str, Any]) -> bool:
     """True when manifest fusion resolves to :func:`fuse_signal_results` (threshold overrides supported)."""
     fid = manifest.get("fusion_module")
@@ -220,12 +395,21 @@ def build_decision_recall_trace_v1(
     bias_applied: bool,
     bias_diff: list[dict[str, Any]],
     reason_codes: list[str],
+    signal_bias_v2_enabled: bool = False,
+    decision_context_signal_bias_applied: bool = False,
+    decision_context_signal_bias_diff: list[dict[str, Any]] | None = None,
+    decision_context_signal_reason_codes: list[str] | None = None,
+    decision_context_suppressed_modules: list[str] | None = None,
+    decision_context_favored_signal_families: list[dict[str, Any]] | None = None,
+    memory_justification_signal_bias: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
-    """Structured recall block for ``DecisionContract.reason_trace``."""
+    """Structured recall block for ``DecisionContract.reason_trace`` (v1 fusion + optional v2 signal/module)."""
     nmatch = len(matches)
-    return {
-        "schema": DECISION_CONTEXT_RECALL_SCHEMA,
-        "version": 1,
+    schema_id = DECISION_CONTEXT_RECALL_SCHEMA_V2 if signal_bias_v2_enabled else DECISION_CONTEXT_RECALL_SCHEMA
+    ver = 2 if signal_bias_v2_enabled else 1
+    out: dict[str, Any] = {
+        "schema": schema_id,
+        "version": ver,
         "decision_context_recall_enabled": enabled,
         "decision_context_recall_attempted": attempted,
         "decision_context_recall_match_count": nmatch,
@@ -240,14 +424,24 @@ def build_decision_recall_trace_v1(
         "decision_context_recall_bias_diff": bias_diff,
         "decision_context_recall_reason_codes": reason_codes,
     }
+    if signal_bias_v2_enabled:
+        out["decision_context_signal_bias_applied"] = decision_context_signal_bias_applied
+        out["decision_context_signal_bias_diff"] = list(decision_context_signal_bias_diff or [])
+        out["decision_context_signal_reason_codes"] = list(decision_context_signal_reason_codes or [])
+        out["decision_context_suppressed_modules"] = list(decision_context_suppressed_modules or [])
+        out["decision_context_favored_signal_families"] = list(decision_context_favored_signal_families or [])
+        out["memory_justification_signal_bias"] = list(memory_justification_signal_bias or [])
+    return out
 
 
 __all__ = [
     "DECISION_CONTEXT_RECALL_SCHEMA",
+    "DECISION_CONTEXT_RECALL_SCHEMA_V2",
     "DECISION_FUSION_BIAS_MAX_STEP",
     "build_causal_partial_pattern_context_v1",
     "build_decision_recall_trace_v1",
     "compute_decision_fusion_bias",
+    "compute_decision_signal_module_bias_v2",
     "derive_decision_context_signature_for_matching",
     "fusion_engine_supports_decision_recall",
     "read_context_memory_records",

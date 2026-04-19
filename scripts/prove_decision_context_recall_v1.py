@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 """
-Decision Context Recall v1 — proof:
+Decision Context Recall — proof (v1 fusion bias + v2 signal/module bias):
 
-  1) Append at least one context memory record (prior context).
-  2) Run manifest replay with decision_context_recall_enabled (and optional bias).
-  3) Emit stats, sample recall blocks, and checksum.
+  1) Append context memory records (contrasting families + optional intersection-disable pair).
+  2) Run manifest replay with recall enabled and optional v2 signal bias.
+  3) Emit stats, sample recall blocks (including v2 proof keys when enabled), and checksum.
 
   Requires market_bars_5m data (same as replay). If unavailable, exits with a clear error.
 
@@ -72,7 +72,7 @@ def main() -> int:
         memory_path=mem,
         record_id="dcr_proof_seed_range",
     )
-    # Second record: typical lab replay is volatility_compression + compressed vol — improves match odds.
+    # Second record: contrasting volatility_compression + compressed vol — different family.
     append_context_memory_record(
         pattern_context_v1={
             "schema": "pattern_context_v1",
@@ -107,6 +107,47 @@ def main() -> int:
         memory_path=mem,
         record_id="dcr_proof_seed_vol",
     )
+    # Pair with identical pattern context so both can match the same bar: intersection
+    # of disabled_signal_modules across matches (both list mean_reversion_fade).
+    same_as_range = _sample_pattern_context()
+    append_context_memory_record(
+        pattern_context_v1=same_as_range,
+        source_run_id="prior_range_neutral_dup_intersection_a",
+        source_artifact_paths=[str(manifest_path.resolve())],
+        effective_apply={
+            "fusion_min_score": 0.31,
+            "disabled_signal_modules": ["mean_reversion_fade"],
+        },
+        outcome_summary={
+            "expectancy": 0.25,
+            "max_drawdown": 15.0,
+            "win_rate": 0.48,
+            "total_trades": 20,
+            "cumulative_pnl": 2.0,
+        },
+        optimizer_reason_codes=["PROOF_SEED_INTERSECTION_A"],
+        memory_path=mem,
+        record_id="dcr_proof_seed_range_inter_a",
+    )
+    append_context_memory_record(
+        pattern_context_v1=same_as_range,
+        source_run_id="prior_range_neutral_dup_intersection_b",
+        source_artifact_paths=[str(manifest_path.resolve())],
+        effective_apply={
+            "fusion_min_score": 0.315,
+            "disabled_signal_modules": ["mean_reversion_fade"],
+        },
+        outcome_summary={
+            "expectancy": 0.26,
+            "max_drawdown": 14.0,
+            "win_rate": 0.49,
+            "total_trades": 21,
+            "cumulative_pnl": 2.1,
+        },
+        optimizer_reason_codes=["PROOF_SEED_INTERSECTION_B"],
+        memory_path=mem,
+        record_id="dcr_proof_seed_range_inter_b",
+    )
 
     try:
         raw = run_manifest_replay(
@@ -115,6 +156,7 @@ def main() -> int:
             verbose=False,
             decision_context_recall_enabled=True,
             decision_context_recall_apply_bias=True,
+            decision_context_recall_apply_signal_bias_v2=True,
             decision_context_recall_memory_path=mem,
             decision_context_recall_max_samples=5,
         )
@@ -122,13 +164,20 @@ def main() -> int:
         print(json.dumps({"ok": False, "error": str(e), "hint": "Requires SQLite market_bars_5m with >= 50 rows"}, indent=2))
         return 1
 
+    samples = raw.get("decision_context_recall_samples") or []
+    v2_samples = [s for s in samples if s.get("schema") == "decision_context_recall_v2"]
+
     report = {
-        "directive": "prove_decision_context_recall_v1",
+        "directive": "prove_decision_context_recall_v1_v2",
         "ok": True,
         "memory_path": str(mem),
         "validation_checksum": raw.get("validation_checksum"),
         "decision_context_recall_stats": raw.get("decision_context_recall_stats"),
-        "decision_context_recall_samples": raw.get("decision_context_recall_samples"),
+        "decision_context_recall_samples": samples,
+        "notes": {
+            "v2_schema_samples_in_batch": len(v2_samples),
+            "first_sample_keys": sorted(samples[0].keys()) if samples else [],
+        },
     }
     print(json.dumps(report, indent=2, default=str))
     return 0
