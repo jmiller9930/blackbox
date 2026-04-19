@@ -6,9 +6,11 @@ Requires SQLite ``market_bars_5m`` (same as pattern game). Default: isolated tem
 
   PYTHONPATH=. python3 scripts/prove_context_memory_loop_two_run.py
   PYTHONPATH=. python3 scripts/prove_context_memory_loop_two_run.py --canonical-memory --directive-proof
+  PYTHONPATH=. python3 scripts/prove_context_memory_loop_two_run.py --canonical-memory --directive-proof --bar-window-calendar-months 12
 
 ``--canonical-memory`` truncates ``context_signature_memory.jsonl`` (canonical store) before run 1.
 ``--directive-proof`` enforces architect acceptance: run1 learning + save + run2 load + match + bias.
+``--bar-window-calendar-months N`` optional replay slice (pattern-game UI equivalent); use when full series yields no strict winner.
 
 Run 1 must select a strict winner over control or nothing is written (``selected_candidate_id``).
 On short or degenerate tapes that often yields no write — use full history / a tape where
@@ -102,11 +104,21 @@ def main() -> int:
         action="store_true",
         help="Stream per-bar replay logs to stdout (default: muted for full-tape runs).",
     )
+    ap.add_argument(
+        "--bar-window-calendar-months",
+        type=int,
+        default=None,
+        metavar="N",
+        help="Optional replay slice: last N calendar months of bars (None = full series).",
+    )
     args = ap.parse_args()
 
     bars = _print_tape_preflight()
     if bars < 0:
         return 6
+    bw = args.bar_window_calendar_months
+    if bw is not None and int(bw) > 0:
+        print("bar_window_calendar_months (replay slice):", int(bw))
 
     manifest = _REPO / "renaissance_v4" / "configs" / "manifests" / "baseline_v1_recipe.json"
     tmp: Path | None = None
@@ -141,6 +153,7 @@ def main() -> int:
                     context_signature_memory_mode=mode,
                     context_signature_memory_path=mem,
                     decision_context_recall_memory_path=mem,
+                    bar_window_calendar_months=bw if bw is not None and int(bw) > 0 else None,
                 )
         finally:
             prep.cleanup()
