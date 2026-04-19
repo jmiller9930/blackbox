@@ -1,4 +1,4 @@
-Manifest personal{
+{
   "schema": "renaissance_v4_plugin_catalog_v1",
   "catalog_version": "1.0.0",
   "description": "Authoritative registry of plug-in modules for Quant Research Kitchen V1. New modules are added here and implemented in code — not by editing replay_runner ad hoc.",
