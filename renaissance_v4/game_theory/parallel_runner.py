@@ -59,6 +59,11 @@ DEFAULT_WORKERS = max(1, (os.cpu_count() or 4))
 _MAX_PARALLEL_ABS = 64
 
 REFERENCE_COMPARISON_RECIPE_ID = "reference_comparison"
+PATTERN_LEARNING_RECIPE_ID = "pattern_learning"
+# Operator recipes that run ``run_operator_test_harness_v1`` (control + bounded candidates), not plain ``run_pattern_game``.
+OPERATOR_LEARNING_HARNESS_RECIPE_IDS: frozenset[str] = frozenset(
+    {REFERENCE_COMPARISON_RECIPE_ID, PATTERN_LEARNING_RECIPE_ID}
+)
 
 
 def validate_reference_comparison_batch_results(
@@ -67,12 +72,13 @@ def validate_reference_comparison_batch_results(
     operator_recipe_id: str | None,
 ) -> None:
     """
-    Defense-in-depth: **Reference Comparison Run** must produce candidate search with candidates.
+    Defense-in-depth: **Pattern Learning Run** and **Reference Comparison Run** must produce
+    candidate search with candidates (operator harness path).
 
     Workers should already raise ``candidate_search_not_executed`` when ``candidate_count`` is 0;
     this batch guard catches wiring regressions.
     """
-    if (operator_recipe_id or "").strip() != REFERENCE_COMPARISON_RECIPE_ID:
+    if (operator_recipe_id or "").strip() not in OPERATOR_LEARNING_HARNESS_RECIPE_IDS:
         return
     problems: list[str] = []
     for r in results:
@@ -92,7 +98,7 @@ def validate_reference_comparison_batch_results(
             )
     if problems:
         tail = f" (+{len(problems) - 12} more)" if len(problems) > 12 else ""
-        raise RuntimeError("reference_comparison_invalid: " + " | ".join(problems[:12]) + tail)
+        raise RuntimeError("learning_harness_invalid: " + " | ".join(problems[:12]) + tail)
 
 
 def get_parallel_limits() -> dict[str, Any]:
@@ -147,7 +153,7 @@ def _worker_run_one(scenario: dict[str, Any]) -> dict[str, Any]:
             else None
         )
 
-        if recipe_id == REFERENCE_COMPARISON_RECIPE_ID:
+        if recipe_id in OPERATOR_LEARNING_HARNESS_RECIPE_IDS:
             prep = prepare_effective_manifest_for_replay(
                 scenario["manifest_path"],
                 atr_stop_mult=scenario.get("atr_stop_mult"),
@@ -175,19 +181,22 @@ def _worker_run_one(scenario: dict[str, Any]) -> dict[str, Any]:
             cand_n = int(proof.get("candidate_count") or 0)
             if cand_n <= 0:
                 raise RuntimeError(
-                    "candidate_search_not_executed: Reference Comparison Run requires "
+                    "candidate_search_not_executed: operator learning harness requires "
                     f"context-conditioned candidate search with candidates > 0 (got candidate_count={cand_n})"
                 )
 
+            pgm: dict[str, Any] = {
+                "operator_test_harness_v1": hres.get("operator_test_harness_v1"),
+                "operator_learning_harness_path_v1": True,
+            }
+            if recipe_id == REFERENCE_COMPARISON_RECIPE_ID:
+                pgm["reference_comparison_learning_path_v1"] = True
             out = {
                 **control_replay,
                 "context_candidate_search_proof": proof,
                 "manifest_effective": control_replay.get("manifest"),
                 "binary_scorecard": score_binary_outcomes(list(control_replay.get("outcomes") or [])),
-                "pattern_game_meta": {
-                    "operator_test_harness_v1": hres.get("operator_test_harness_v1"),
-                    "reference_comparison_learning_path_v1": True,
-                },
+                "pattern_game_meta": pgm,
                 "memory_bundle_proof": None,
                 "memory_bundle_audit": prep.memory_bundle_audit,
             }

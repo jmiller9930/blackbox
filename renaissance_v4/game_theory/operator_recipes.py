@@ -99,7 +99,10 @@ def operator_recipe_catalog() -> list[dict[str, Any]]:
                 "goal_name": "pattern_outcome_quality",
                 "primary_metric": "expectancy_per_trade",
                 "constraints_line": "Minimum 5 trades; max drawdown threshold unset.",
-                "note": "Optimizes outcome-quality metrics — not a fixed PnL or win-rate target.",
+                "note": (
+                    "Runs operator_test_harness_v1: bounded candidate search vs control on the baseline "
+                    "manifest inside the policy framework tunable surface; scorecard Cand/Learn reflect harness output."
+                ),
             },
             "scenario_count": 1,
             "source_file": _PATTERN_LEARNING_FILE,

@@ -67,7 +67,7 @@ from flask import Flask, Response, abort, jsonify, request
 _GAME_THEORY = Path(__file__).resolve().parent
 
 # Operator-visible web UI bundle version — bump when changing PAGE_HTML (HTML/CSS/JS) so deploys are provable.
-PATTERN_GAME_WEB_UI_VERSION = "2.5.8"
+PATTERN_GAME_WEB_UI_VERSION = "2.5.9"
 
 from renaissance_v4.game_theory.groundhog_memory import (
     groundhog_auto_merge_enabled,
@@ -117,7 +117,7 @@ from renaissance_v4.game_theory.operator_recipes import (
     recipe_meta_by_id,
 )
 from renaissance_v4.game_theory.parallel_runner import (
-    REFERENCE_COMPARISON_RECIPE_ID,
+    OPERATOR_LEARNING_HARNESS_RECIPE_IDS,
     clamp_parallel_workers,
     get_parallel_limits,
     run_scenarios_parallel,
@@ -408,6 +408,7 @@ def _telemetry_context_for_parallel_job(operator_batch_audit: dict[str, Any]) ->
     rid = str(operator_batch_audit.get("operator_recipe_id") or "").strip()
     pfa = operator_batch_audit.get("policy_framework_audit")
     fw_id = pfa.get("framework_id") if isinstance(pfa, dict) else None
+    harness = rid in OPERATOR_LEARNING_HARNESS_RECIPE_IDS
     return {
         "operator_recipe_id": rid or None,
         "operator_recipe_label": operator_batch_audit.get("operator_recipe_label"),
@@ -416,11 +417,9 @@ def _telemetry_context_for_parallel_job(operator_batch_audit: dict[str, Any]) ->
             "evaluation_window_effective_calendar_months"
         ),
         "learning_path_mode": (
-            "operator_harness_candidate_search"
-            if rid == REFERENCE_COMPARISON_RECIPE_ID
-            else "baseline_replay_only"
+            "operator_harness_candidate_search" if harness else "baseline_replay_only"
         ),
-        "candidate_search_active": rid == REFERENCE_COMPARISON_RECIPE_ID,
+        "candidate_search_active": harness,
     }
 
 
