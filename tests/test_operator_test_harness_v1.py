@@ -62,6 +62,12 @@ def test_operator_summary_block_strings() -> None:
         winner_vs_control=None,
         winner_apply_diff=None,
         groundhog_commit_candidate=False,
+        control_outcome_quality_v1={
+            "expectancy_per_trade": 0.01,
+            "exit_efficiency": 0.5,
+            "win_loss_size_ratio": 1.2,
+        },
+        winner_outcome_quality_delta_v1=None,
     )
     assert blk["groundhog_update_recommended"] == "no"
     assert blk["total_decision_attempts"] == "1000"
@@ -76,7 +82,17 @@ def test_harness_completeness_mocked() -> None:
         "source_context_signature_v1": {"schema": "context_signature_v1"},
         "candidate_count": 1,
         "control_apply": {},
-        "control_metrics": {"trade_count": 0, "expectancy": 0.0, "max_drawdown": 0.0, "pnl": 0.0},
+        "control_metrics": {
+            "trade_count": 0,
+            "expectancy": 0.0,
+            "max_drawdown": 0.0,
+            "pnl": 0.0,
+            "outcome_quality_v1": {
+                "expectancy_per_trade": 0.0,
+                "exit_efficiency": 0.0,
+                "win_loss_size_ratio": None,
+            },
+        },
         "candidate_summaries": [],
         "ranking_order": ["control"],
         "selected_candidate_id": None,
@@ -107,6 +123,7 @@ def test_harness_completeness_mocked() -> None:
             decision_context_recall_enabled=True,
         )
     h = out["operator_test_harness_v1"]
+    assert h.get("goal_v2", {}).get("goal_name") == "pattern_outcome_quality"
     assert h["schema"] == OPERATOR_TEST_HARNESS_SCHEMA
     assert "reproducibility_v1" in h
     assert "context_candidate_search_proof" in h

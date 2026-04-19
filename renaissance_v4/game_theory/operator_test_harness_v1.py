@@ -14,6 +14,9 @@ from typing import Any
 
 from renaissance_v4.game_theory.context_candidate_search import run_context_candidate_search_v1
 from renaissance_v4.game_theory.memory_bundle import BUNDLE_APPLY_WHITELIST
+from renaissance_v4.game_theory.pattern_outcome_quality_v1 import (
+    DEFAULT_GOAL_V2_PATTERN_OUTCOME_QUALITY,
+)
 
 OPERATOR_TEST_HARNESS_SCHEMA = "operator_test_harness_v1"
 
@@ -83,11 +86,15 @@ def build_operator_summary_block_v1(
     winner_vs_control: dict[str, Any] | None,
     winner_apply_diff: list[dict[str, Any]] | None,
     groundhog_commit_candidate: bool,
+    control_outcome_quality_v1: dict[str, Any] | None,
+    winner_outcome_quality_delta_v1: dict[str, Any] | None,
 ) -> dict[str, str]:
     """Human-readable lines derived only from structured inputs (no LLM)."""
     sel = selected_candidate_id or "none"
     ev_d = winner_vs_control.get("expectancy_delta") if winner_vs_control else None
     dd_d = winner_vs_control.get("max_drawdown_delta") if winner_vs_control else None
+    coq = control_outcome_quality_v1 or {}
+    woq = winner_outcome_quality_delta_v1 or {}
     return {
         "context_family": str(context_family or "unknown"),
         "total_decision_attempts": str(int(decision_windows_total)),
@@ -97,6 +104,11 @@ def build_operator_summary_block_v1(
         "key_parameter_changes": _fmt_apply_diff_for_summary(winner_apply_diff),
         "expectancy_delta_vs_control": "n/a" if ev_d is None else str(ev_d),
         "max_drawdown_delta_vs_control": "n/a" if dd_d is None else str(dd_d),
+        "expectancy_per_trade_control": str(coq.get("expectancy_per_trade", "n/a")),
+        "exit_efficiency_control": str(coq.get("exit_efficiency", "n/a")),
+        "win_loss_size_ratio_control": str(coq.get("win_loss_size_ratio", "n/a")),
+        "expectancy_per_trade_delta_vs_control": str(woq.get("expectancy_per_trade_delta", "n/a")),
+        "exit_efficiency_delta_vs_control": str(woq.get("exit_efficiency_delta", "n/a")),
         "groundhog_update_recommended": "yes" if groundhog_commit_candidate else "no",
     }
 
@@ -120,6 +132,7 @@ def run_operator_test_harness_v1(
     decision_context_recall_drill_bias_max: int = 8,
     decision_context_recall_drill_trade_entry_max: int = 5,
     repo_root_for_git: Path | None = None,
+    goal_v2: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """
     Run control replay (with drill-down caps) embedded in candidate search, emit one harness dict.
@@ -137,6 +150,8 @@ def run_operator_test_harness_v1(
         ).encode("utf-8")
     ).hexdigest()[:16]
 
+    goal_effective = goal_v2 if goal_v2 is not None else dict(DEFAULT_GOAL_V2_PATTERN_OUTCOME_QUALITY)
+
     search_out = run_context_candidate_search_v1(
         mp,
         control_apply=control_apply,
@@ -153,6 +168,7 @@ def run_operator_test_harness_v1(
         decision_context_recall_drill_matched_max=decision_context_recall_drill_matched_max,
         decision_context_recall_drill_bias_max=decision_context_recall_drill_bias_max,
         decision_context_recall_drill_trade_entry_max=decision_context_recall_drill_trade_entry_max,
+        goal_v2=goal_effective,
     )
     proof = search_out["context_candidate_search_proof"]
     control_replay = search_out["control_replay"]
@@ -162,11 +178,13 @@ def run_operator_test_harness_v1(
     selected = proof.get("selected_candidate_id")
     winner_apply_diff: list[dict[str, Any]] | None = None
     winner_apply_eff: dict[str, Any] | None = None
+    winner_oq_delta: dict[str, Any] | None = None
     if selected:
         for row in proof.get("candidate_summaries") or []:
             if row.get("candidate_id") == selected:
                 winner_apply_diff = list(row.get("apply_diff_from_control") or [])
                 winner_apply_eff = dict(row.get("apply_effective_snapshot") or {})
+                winner_oq_delta = dict(row.get("vs_control_outcome_quality_v1") or {})
                 break
 
     gh = build_groundhog_commit_block_v1(
@@ -175,15 +193,20 @@ def run_operator_test_harness_v1(
         search_reason_codes=list(proof.get("reason_codes") or []),
     )
 
+    cm = proof.get("control_metrics") if isinstance(proof.get("control_metrics"), dict) else {}
+    coq_ctrl = cm.get("outcome_quality_v1") if isinstance(cm.get("outcome_quality_v1"), dict) else {}
+
     summary_block = build_operator_summary_block_v1(
         context_family=proof.get("source_context_family"),
         decision_windows_total=int(agg.get("decision_windows_total") or 0),
         recall_utilization_rate=float(agg.get("recall_utilization_rate") or 0.0),
-        trade_count=int((proof.get("control_metrics") or {}).get("trade_count") or 0),
+        trade_count=int(cm.get("trade_count") or 0),
         selected_candidate_id=str(selected) if selected else None,
         winner_vs_control=proof.get("winner_vs_control") if isinstance(proof.get("winner_vs_control"), dict) else None,
         winner_apply_diff=winner_apply_diff,
         groundhog_commit_candidate=bool(gh["groundhog_commit_candidate"]),
+        control_outcome_quality_v1=coq_ctrl,
+        winner_outcome_quality_delta_v1=winner_oq_delta,
     )
 
     recall_block = {
@@ -201,9 +224,24 @@ def run_operator_test_harness_v1(
         "decision_context_recall_stats": dcr_stats,
     }
 
+    cons = goal_effective.get("constraints") or {}
+    min_tc = cons.get("minimum_trade_count")
+    max_dd_thr = cons.get("maximum_drawdown_threshold")
+    cm_dd = float(cm.get("max_drawdown") or 0.0)
+    tc = int(cm.get("trade_count") or 0)
+    goal_constraints_check_v1 = {
+        "minimum_trade_count_met": True if min_tc is None else (tc >= int(min_tc)),
+        "maximum_drawdown_threshold_met": True
+        if max_dd_thr is None
+        else (cm_dd <= float(max_dd_thr) + 1e-12),
+        "minimum_trade_count_required": min_tc,
+        "maximum_drawdown_threshold": max_dd_thr,
+    }
+
     harness: dict[str, Any] = {
         "schema": OPERATOR_TEST_HARNESS_SCHEMA,
         "version": 1,
+        "goal_v2": goal_effective,
         "test_run_id": rid,
         "reproducibility_v1": {
             "source_preset_or_manifest": preset,
@@ -222,6 +260,9 @@ def run_operator_test_harness_v1(
         or {},
         "context_recall_utilization_v1": recall_block,
         "context_candidate_search_proof": proof,
+        "control_outcome_quality_v1": coq_ctrl,
+        "winner_outcome_quality_delta_v1": winner_oq_delta,
+        "goal_constraints_check_v1": goal_constraints_check_v1,
         "groundhog_commit_recommendation_v1": gh,
         "operator_summary_block_v1": summary_block,
         "operator_summary_text_v1": " | ".join(f"{k}={v}" for k, v in sorted(summary_block.items())),
@@ -234,6 +275,7 @@ def run_operator_test_harness_v1(
 
 __all__ = [
     "OPERATOR_TEST_HARNESS_SCHEMA",
+    "DEFAULT_GOAL_V2_PATTERN_OUTCOME_QUALITY",
     "build_groundhog_commit_block_v1",
     "build_operator_summary_block_v1",
     "run_operator_test_harness_v1",

@@ -30,6 +30,10 @@ from renaissance_v4.game_theory.memory_bundle import (
     BUNDLE_APPLY_WHITELIST,
     apply_memory_bundle_to_manifest,
 )
+from renaissance_v4.game_theory.pattern_outcome_quality_v1 import (
+    compute_pattern_outcome_quality_v1,
+    diff_outcome_quality_v1,
+)
 from renaissance_v4.manifest.validate import load_manifest_file, validate_manifest_against_catalog
 
 CONTEXT_CANDIDATE_SEARCH_PROOF_SCHEMA = "context_candidate_search_proof_v1"
@@ -323,7 +327,7 @@ def generate_candidates_v1(
 
 
 def extract_comparison_metrics(replay_result: dict[str, Any]) -> dict[str, Any]:
-    """Normalize replay output for ranking / proof."""
+    """Normalize replay output for ranking / proof (includes pattern outcome quality from outcomes)."""
     sm = replay_result.get("summary") if isinstance(replay_result.get("summary"), dict) else {}
     sanity = replay_result.get("sanity") if isinstance(replay_result.get("sanity"), dict) else {}
     sc = replay_result.get("scorecards") if isinstance(replay_result.get("scorecards"), dict) else {}
@@ -337,6 +341,8 @@ def extract_comparison_metrics(replay_result: dict[str, Any]) -> dict[str, Any]:
             continue
         if ex < 0.0:
             neg_exp_signals += 1
+    outcomes = list(replay_result.get("outcomes") or [])
+    outcome_quality_v1 = compute_pattern_outcome_quality_v1(outcomes)
     return {
         "pnl": float(replay_result.get("cumulative_pnl") or 0.0),
         "trade_count": int(sm.get("total_trades") or 0),
@@ -346,6 +352,7 @@ def extract_comparison_metrics(replay_result: dict[str, Any]) -> dict[str, Any]:
         "closes_recorded": int(sanity.get("closes_recorded") or 0),
         "entries_attempted": int(sanity.get("entries_attempted") or 0),
         "signal_scorecards_negative_expectancy_count": neg_exp_signals,
+        "outcome_quality_v1": outcome_quality_v1,
     }
 
 
@@ -472,11 +479,13 @@ def run_context_candidate_search_v1(
     decision_context_recall_drill_matched_max: int = 0,
     decision_context_recall_drill_bias_max: int = 0,
     decision_context_recall_drill_trade_entry_max: int = 0,
+    goal_v2: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """
     Replay control + each candidate under identical replay settings; return proof package + raw replays.
 
     Requires the same SQLite ``market_bars_5m`` dataset as :func:`run_manifest_replay`.
+    Optional ``goal_v2`` is echoed in the proof for operator alignment (does not change ranking).
     """
     mp = Path(manifest_path)
     resolved_path = mp.resolve()
@@ -529,6 +538,7 @@ def run_context_candidate_search_v1(
         decision_context_recall_drill_trade_entry_max=decision_context_recall_drill_trade_entry_max,
     )
     control_metrics = extract_comparison_metrics(control_replay)
+    coq = control_metrics.get("outcome_quality_v1") or {}
 
     summaries: list[dict[str, Any]] = []
     for c in candidates:
@@ -546,7 +556,9 @@ def run_context_candidate_search_v1(
             decision_context_recall_drill_trade_entry_max=decision_context_recall_drill_trade_entry_max,
         )
         m = extract_comparison_metrics(raw)
+        moq = m.get("outcome_quality_v1") or {}
         diff = apply_diff_audit(control, c["apply_effective"])
+        oq_diff = diff_outcome_quality_v1(coq, moq) if coq and moq else {}
         summaries.append(
             {
                 "candidate_id": rid,
@@ -562,6 +574,7 @@ def run_context_candidate_search_v1(
                     "pnl_delta": _round6(m["pnl"] - control_metrics["pnl"]),
                     "trade_count_delta": int(m["trade_count"] - control_metrics["trade_count"]),
                 },
+                "vs_control_outcome_quality_v1": oq_diff,
                 "replay_validation_checksum": raw.get("validation_checksum"),
                 "decision_context_recall_stats": raw.get("decision_context_recall_stats"),
             }
@@ -575,7 +588,10 @@ def run_context_candidate_search_v1(
         for s in summaries:
             if s["candidate_id"] == selected_id:
                 winner_metrics = dict(s["metrics"])
-                winner_vs_control = dict(s["vs_control"])
+                winner_vs_control = {
+                    **dict(s["vs_control"]),
+                    "outcome_quality_v1": dict(s.get("vs_control_outcome_quality_v1") or {}),
+                }
                 break
 
     op_parts = [
@@ -608,6 +624,7 @@ def run_context_candidate_search_v1(
         "winner_vs_control": winner_vs_control,
         "reason_codes": reason_codes,
         "operator_summary": " ".join(op_parts),
+        "goal_v2": goal_v2,
     }
     return {
         "context_candidate_search_proof": proof,

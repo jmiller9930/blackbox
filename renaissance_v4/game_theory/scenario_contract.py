@@ -32,6 +32,10 @@ Scenario batch JSON — required shape for ``parallel_runner``, ``pattern_game``
 - ``game_spec_ref`` *(str)* — Pointer to the game spec doc filename for reviewers.
 - ``training_trace_id`` / ``prior_scenario_id`` *(str)* — Training pipeline correlation IDs.
 
+**``goal_v2`` *(dict, optional)*** — Declares evaluation intent for the pattern system (e.g.
+  ``pattern_outcome_quality`` with ``primary_metric`` / secondary metrics). Does not change
+  engine math; surfaced in operator harness / audit. See ``pattern_outcome_quality_v1.DEFAULT_GOAL_V2_PATTERN_OUTCOME_QUALITY``.
+
 **``agent_explanation`` *(dict, optional)*** — Story for proctors / Anna; merged into run_memory.
 
 - ``hypothesis`` *(str)* — One testable sentence. **May be required** when
@@ -60,6 +64,7 @@ from typing import Any
 
 # Keys copied from each scenario dict into worker results (audit trail; not used for scoring).
 SCENARIO_ECHO_KEYS: tuple[str, ...] = (
+    "goal_v2",
     "agent_explanation",
     "training_trace_id",
     "prior_scenario_id",

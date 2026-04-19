@@ -1,0 +1,25 @@
+{
+  "preset_id": "operator_harness_pattern_outcome_quality_v1",
+  "description": "Operator harness preset: evaluation objective is pattern outcome quality (not raw PnL or win-rate targets).",
+  "goal_v2": {
+    "goal_name": "pattern_outcome_quality",
+    "objective_type": "outcome_quality",
+    "primary_metric": "expectancy_per_trade",
+    "secondary_metrics": [
+      "avg_win_size",
+      "avg_loss_size",
+      "win_loss_size_ratio",
+      "exit_efficiency"
+    ],
+    "constraints": {
+      "minimum_trade_count": 5,
+      "maximum_drawdown_threshold": null
+    },
+    "notes": {
+      "intent_plain": "The agent should improve pattern recognition such that it captures more of winning moves and reduces the magnitude of losses through better entry and exit behavior.",
+      "machine_eval": "Optimize outcome quality metrics derived from pattern-aware behavior; do not target a fixed PnL or win rate.",
+      "emphasis": "Pattern recognition quality over raw profit; capturing more of moves and cutting losses early."
+    }
+  },
+  "manifest_path": "renaissance_v4/configs/manifests/baseline_v1_recipe.json"
+}

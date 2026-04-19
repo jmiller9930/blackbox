@@ -24,6 +24,14 @@ if str(_REPO) not in sys.path:
 
 os.environ.setdefault("PATTERN_GAME_GROUNDHOG_BUNDLE", "0")
 
+_PRESET_PATH = (
+    _REPO
+    / "renaissance_v4"
+    / "game_theory"
+    / "examples"
+    / "operator_harness_preset_pattern_outcome_quality_v1.json"
+)
+
 from renaissance_v4.game_theory.context_signature_memory import append_context_memory_record  # noqa: E402
 from renaissance_v4.game_theory.operator_test_harness_v1 import run_operator_test_harness_v1  # noqa: E402
 
@@ -65,6 +73,9 @@ def main() -> int:
         record_id="oth_proof_record_1",
     )
 
+    preset_doc = json.loads(_PRESET_PATH.read_text(encoding="utf-8"))
+    goal_v2 = preset_doc.get("goal_v2")
+
     context_signature_v1 = {
         "schema": "context_signature_v1",
         "version": 1,
@@ -84,7 +95,7 @@ def main() -> int:
         out = run_operator_test_harness_v1(
             manifest_path,
             test_run_id="prove_operator_test_harness_v1",
-            source_preset_or_manifest=str(manifest_path),
+            source_preset_or_manifest=str(_PRESET_PATH),
             control_apply={},
             context_signature_v1=context_signature_v1,
             memory_prior_apply={"fusion_min_score": 0.33, "fusion_max_conflict_score": 0.42},
@@ -93,6 +104,7 @@ def main() -> int:
             decision_context_recall_apply_bias=True,
             decision_context_recall_apply_signal_bias_v2=True,
             decision_context_recall_memory_path=mem,
+            goal_v2=goal_v2,
         )
     except (RuntimeError, FileNotFoundError, ValueError) as e:
         print(json.dumps({"ok": False, "error": str(e)}, indent=2))

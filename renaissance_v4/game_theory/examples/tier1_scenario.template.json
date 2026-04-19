@@ -1,5 +1,24 @@
 [
   {
+    "goal_v2": {
+      "goal_name": "pattern_outcome_quality",
+      "objective_type": "outcome_quality",
+      "primary_metric": "expectancy_per_trade",
+      "secondary_metrics": [
+        "avg_win_size",
+        "avg_loss_size",
+        "win_loss_size_ratio",
+        "exit_efficiency"
+      ],
+      "constraints": {
+        "minimum_trade_count": 5,
+        "maximum_drawdown_threshold": null
+      },
+      "notes": {
+        "intent_plain": "Improve pattern recognition so trade outcomes are higher quality (better wins, smaller losses, better timing) — not maximizing raw win count or a fixed PnL.",
+        "emphasis": "Outcome quality from pattern-aware behavior; engine stays neutral."
+      }
+    },
     "scenario_id": "tier1_partner_replace_this_id",
     "tier": "T1",
     "evaluation_window": {
@@ -11,7 +30,7 @@
     "training_trace_id": "",
     "prior_scenario_id": "",
     "agent_explanation": {
-      "hypothesis": "Replace with one testable sentence: what you expect this scenario to prove vs the same bars (e.g. higher cumulative PnL than baseline_default).",
+      "hypothesis": "Replace with one testable sentence about pattern outcome quality vs baseline on the same bars (e.g. better expectancy per trade, exit efficiency, or loss control — not a fixed PnL or win-rate target).",
       "why_this_strategy": "",
       "indicator_values": {},
       "learned": "",
