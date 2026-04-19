@@ -67,7 +67,7 @@ from flask import Flask, Response, abort, jsonify, request
 _GAME_THEORY = Path(__file__).resolve().parent
 
 # Operator-visible web UI bundle version — bump when changing PAGE_HTML (HTML/CSS/JS) so deploys are provable.
-PATTERN_GAME_WEB_UI_VERSION = "2.5.9"
+PATTERN_GAME_WEB_UI_VERSION = "2.6.0"
 
 from renaissance_v4.game_theory.groundhog_memory import (
     groundhog_auto_merge_enabled,
@@ -1581,12 +1581,22 @@ PAGE_HTML = """<!DOCTYPE html>
       margin-bottom: 18px;
     }
     .pg-row-main {
-      grid-template-columns: minmax(280px, 1fr) minmax(420px, 2.6fr);
+      /* Desktop: left = controls only; right = telemetry (top) + scorecard (bottom). */
+      grid-template-columns: minmax(300px, 400px) minmax(0, 1fr);
       align-items: start;
+    }
+    .pg-operator-col {
+      min-width: 0;
+    }
+    .pg-runtime-stack {
+      display: flex;
+      flex-direction: column;
+      gap: 18px;
+      min-width: 0;
     }
     @media (max-width: 1680px) {
       .pg-row-main {
-        grid-template-columns: minmax(240px, 1fr) minmax(360px, 2.4fr);
+        grid-template-columns: minmax(260px, 360px) minmax(0, 1fr);
         overflow-x: auto;
         padding-bottom: 6px;
         -webkit-overflow-scrolling: touch;
@@ -2261,12 +2271,21 @@ PAGE_HTML = """<!DOCTYPE html>
     }
     #progressSub { margin-top: 6px; font-size: 0.8rem; color: var(--pg-muted); }
     .live-telemetry-wrap {
-      margin: 10px 0 14px;
-      padding: 10px 12px;
-      border-radius: 10px;
+      margin: 0;
+      padding: 12px 14px;
+      border-radius: var(--pg-radius-lg);
       border: 1px solid var(--pg-line);
       background: #0f1419;
       color: #e6edf3;
+      box-shadow: var(--pg-shadow);
+      flex: 0 0 auto;
+    }
+    body.pg-run-active .live-telemetry-wrap:not([hidden]) {
+      border-color: rgba(42, 143, 217, 0.55);
+      box-shadow: 0 0 0 2px rgba(42, 143, 217, 0.28), var(--pg-shadow);
+    }
+    body.pg-run-active .pg-runtime-stack .pg-panel-score {
+      opacity: 0.94;
     }
     .live-telemetry-wrap[hidden] { display: none !important; }
     .live-telemetry-title {
@@ -2280,11 +2299,18 @@ PAGE_HTML = """<!DOCTYPE html>
     .live-telemetry-panel {
       margin: 0;
       font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-      font-size: 0.74rem;
+      font-size: 0.76rem;
       line-height: 1.5;
       white-space: pre-wrap;
-      max-height: 260px;
+      max-height: min(38vh, 360px);
       overflow: auto;
+    }
+    body.pg-run-active .pg-runtime-stack .live-telemetry-panel {
+      max-height: min(52vh, 560px);
+    }
+    .pg-runtime-stack .pg-panel-score {
+      flex: 1 1 auto;
+      min-height: 0;
     }
     #statusLine { min-height: 1.3em; color: var(--pg-ink); font-size: 0.9rem; margin-top: 8px; }
     .err { color: #c43b3b; }
@@ -2354,6 +2380,7 @@ PAGE_HTML = """<!DOCTYPE html>
     #searchSpaceStrip code { font-size: 0.85em; color: rgba(247, 241, 230, 0.95); }
     @media (max-width: 1220px) {
       .pg-banner-strip { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+      /* Narrow: controls, then telemetry, then scorecard (single column). */
       .pg-row-main { grid-template-columns: 1fr; overflow-x: visible; }
     }
     @media (max-width: 640px) {
@@ -2371,9 +2398,9 @@ PAGE_HTML = """<!DOCTYPE html>
     <header class="pg-header">
       <div class="pg-title-wrap">
         <div class="pg-eyebrow">Pattern game lab</div>
-        <h1 class="pg-title">Pattern game <em>scorecard-first · five status tiles · header results &amp; modules</em>
+        <h1 class="pg-title">Pattern game <em>controls · live telemetry · scorecard · five status tiles · header results &amp; modules</em>
           <span class="ui-version" title="Bump PATTERN_GAME_WEB_UI_VERSION in web_app.py">v__PATTERN_GAME_WEB_UI_VERSION__</span></h1>
-        <p class="pg-lead">Pick <strong>recipe</strong> and <strong>evaluation window</strong>, then <strong>Run</strong> — the lab builds scenarios for you. <strong>Scorecard</strong> is the main view. <strong>Five status tiles</strong> include <strong>Modules</strong>. Custom JSON lives under <em>Advanced</em> only.</p>
+        <p class="pg-lead">Pick <strong>recipe</strong> and <strong>evaluation window</strong>, then <strong>Run</strong> — the lab builds scenarios for you. <strong>Live run telemetry</strong> (right, during a batch) is the primary runtime readout; <strong>Scorecard</strong> sits below it for batch history. <strong>Five status tiles</strong> include <strong>Modules</strong>. Custom JSON lives under <em>Advanced</em> only.</p>
         <div class="pg-orientation-note">Twisty on each panel · DEF record: <code>docs/architect/pattern_game_operator_deficiencies_work_record.md</code></div>
       </div>
       <div class="pg-banner-strip">
@@ -2491,6 +2518,7 @@ PAGE_HTML = """<!DOCTYPE html>
     </dialog>
 
     <section class="pg-row pg-row-main">
+      <div class="pg-operator-col">
       <details class="pg-panel-fold pg-panel-controls" open>
         <summary>
           <div class="pg-panel-header" style="margin:0;flex:1">
@@ -2627,7 +2655,9 @@ PAGE_HTML = """<!DOCTYPE html>
         </div>
         </div>
       </details>
+      </div>
 
+      <div class="pg-runtime-stack">
       <div id="liveTelemetryWrap" class="live-telemetry-wrap" hidden>
         <p class="live-telemetry-title">Live run telemetry</p>
         <pre id="liveTelemetryPanel" class="live-telemetry-panel" aria-live="polite"></pre>
@@ -2707,6 +2737,7 @@ PAGE_HTML = """<!DOCTYPE html>
         </div>
         </div>
       </details>
+      </div>
     </section>
   </div>
 
@@ -3725,6 +3756,7 @@ PAGE_HTML = """<!DOCTYPE html>
       document.getElementById('progressSub').textContent = '';
       setProgressUI(0, 0, '');
       progressWrap.classList.add('active');
+      document.body.classList.add('pg-run-active');
       const t0 = Date.now();
       let runWorkersCap = null;
       try {
@@ -3804,6 +3836,9 @@ PAGE_HTML = """<!DOCTYPE html>
         if (ltw && ltp) {
           ltw.hidden = false;
           ltp.textContent = 'Live telemetry — waiting for worker snapshots…';
+          try {
+            ltw.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+          } catch (e) {}
         }
         showBatchConcurrencyBanner(total, runWorkersCap, 'run');
         updateRunStatusLine(
@@ -3927,6 +3962,7 @@ PAGE_HTML = """<!DOCTYPE html>
       } finally {
         hideLiveTelemetryPanel();
         progressWrap.classList.remove('active');
+        document.body.classList.remove('pg-run-active');
         setOpButtonBusy(btn, false);
         syncBannerRunFromStatusLine();
       }
