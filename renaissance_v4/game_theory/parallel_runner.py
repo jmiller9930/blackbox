@@ -305,7 +305,10 @@ def run_scenarios_parallel(
     ``batch_*`` directory path (for UIs and APIs).
     """
     if not scenarios:
-        return []
+        raise ValueError(
+            "run_scenarios_parallel: scenarios list is empty — refusing a no-op batch "
+            "(callers must validate before submit; web UI uses _prepare_parallel_payload)."
+        )
 
     normalized = [_normalize_scenario(s) for s in scenarios]
 

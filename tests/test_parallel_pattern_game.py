@@ -29,8 +29,9 @@ def test_run_scenarios_parallel_two_workers() -> None:
         assert r.get("summary") is not None
 
 
-def test_run_scenarios_parallel_empty() -> None:
-    assert run_scenarios_parallel([], max_workers=4) == []
+def test_run_scenarios_parallel_empty_raises() -> None:
+    with pytest.raises(ValueError, match="scenarios list is empty"):
+        run_scenarios_parallel([], max_workers=4)
 
 
 def test_run_scenarios_parallel_progress_callback() -> None:

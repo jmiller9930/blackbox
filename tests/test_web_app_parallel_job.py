@@ -74,6 +74,27 @@ def test_run_parallel_start_and_status() -> None:
     raise AssertionError("job did not finish in time")
 
 
+def test_run_parallel_start_rejects_empty_custom_scenarios() -> None:
+    app = create_app()
+    app.config["TESTING"] = True
+    client = app.test_client()
+    r = client.post(
+        "/api/run-parallel/start",
+        data=json.dumps(
+            {
+                "operator_recipe_id": "custom",
+                "scenarios_json": "[]",
+                "max_workers": 1,
+            }
+        ),
+        content_type="application/json",
+    )
+    assert r.status_code == 400
+    j = r.get_json()
+    assert j.get("ok") is False
+    assert "No runnable scenarios" in (j.get("error") or "")
+
+
 def test_run_parallel_start_returns_correct_total_for_multi_scenario() -> None:
     app = create_app()
     app.config["TESTING"] = True

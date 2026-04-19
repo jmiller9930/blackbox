@@ -67,7 +67,7 @@ from flask import Flask, Response, abort, jsonify, request
 _GAME_THEORY = Path(__file__).resolve().parent
 
 # Operator-visible web UI bundle version — bump when changing PAGE_HTML (HTML/CSS/JS) so deploys are provable.
-PATTERN_GAME_WEB_UI_VERSION = "2.5.6"
+PATTERN_GAME_WEB_UI_VERSION = "2.5.8"
 
 from renaissance_v4.game_theory.groundhog_memory import (
     groundhog_auto_merge_enabled,
@@ -97,6 +97,7 @@ from renaissance_v4.game_theory.catalog_batch_builder import (
     build_atr_sweep_scenarios,
     catalog_batch_builder_meta,
 )
+from renaissance_v4.game_theory.learning_run_audit import aggregate_batch_learning_run_audit_v1
 from renaissance_v4.game_theory.hunter_planner import build_hunter_suggestion
 from renaissance_v4.game_theory.retrospective_log import append_retrospective, read_retrospective_recent
 from renaissance_v4.game_theory.live_telemetry_v1 import (
@@ -286,7 +287,10 @@ def _prepare_parallel_payload(data: dict[str, Any]) -> dict[str, Any]:
                     recipe_default_months = 12
 
     if not scenarios:
-        return {"ok": False, "error": "No scenario objects in JSON array"}
+        return {
+            "ok": False,
+            "error": "No runnable scenarios (empty list after parse/build). Choose a recipe with scenarios or paste Custom JSON.",
+        }
 
     annotate_scenarios_with_window_and_recipe(
         scenarios,
@@ -363,6 +367,40 @@ def _prepare_parallel_payload(data: dict[str, Any]) -> dict[str, Any]:
         "operator_batch_audit": operator_batch_audit,
         "evaluation_window_resolved": resolved,
     }
+
+
+def _guard_parallel_batch_not_noop(
+    scenarios: list[dict[str, Any]],
+    results: list[dict[str, Any]],
+) -> None:
+    """
+    Fail closed when the pool returns nothing or successful rows report zero replay depth.
+
+    A batch with zero decision windows and zero bars on **ok** rows is not a completed replay —
+    it is surfaced as ``RuntimeError`` so the job records ``error`` and does not masquerade as done.
+    """
+    if not scenarios:
+        raise RuntimeError(
+            "internal_empty_scenarios: parallel job had an empty scenario list "
+            "(this should have been rejected by _prepare_parallel_payload)."
+        )
+    if not results:
+        raise RuntimeError(
+            "parallel_batch_empty_results: worker pool returned zero result rows "
+            f"(submitted {len(scenarios)} scenario(s)) — no-op batch."
+        )
+    ok_rows = [r for r in results if r.get("ok")]
+    if not ok_rows:
+        return
+    agg = aggregate_batch_learning_run_audit_v1(results)
+    dw = int(agg.get("replay_decision_windows_sum") or 0)
+    bars = int(agg.get("replay_bars_processed_sum") or 0)
+    if dw <= 0 and bars <= 0:
+        raise RuntimeError(
+            "replay_noop_batch: successful scenario rows report zero decision windows and zero bars processed "
+            f"(submitted={len(scenarios)}, result_rows={len(results)}, ok_rows={len(ok_rows)}). "
+            "Replay did not consume tape — check market_bars_5m, manifest paths, and evaluation window."
+        )
 
 
 def _telemetry_context_for_parallel_job(operator_batch_audit: dict[str, Any]) -> dict[str, Any]:
@@ -803,6 +841,7 @@ def create_app() -> Flask:
                 validate_reference_comparison_batch_results(
                     results, operator_recipe_id=operator_batch_audit.get("operator_recipe_id")
                 )
+                _guard_parallel_batch_not_noop(scenarios, results)
                 ok_n = sum(1 for r in results if r.get("ok"))
                 timing = record_parallel_batch_finished(
                     job_id=job_id,
@@ -950,6 +989,7 @@ def create_app() -> Flask:
             validate_reference_comparison_batch_results(
                 results, operator_recipe_id=operator_batch_audit.get("operator_recipe_id")
             )
+            _guard_parallel_batch_not_noop(scenarios, results)
             ok_n = sum(1 for r in results if r.get("ok"))
             timing = record_parallel_batch_finished(
                 job_id=job_id,
@@ -3652,6 +3692,26 @@ PAGE_HTML = """<!DOCTYPE html>
       return fallbackTotal;
     }
 
+    function friendlyParallelBackendError(msg) {
+      const m = String(msg != null ? msg : '');
+      if (
+        m.indexOf('No runnable scenarios') !== -1 ||
+        m.indexOf('Missing scenarios_json') !== -1 ||
+        m.indexOf('Invalid scenarios') !== -1 ||
+        m.toLowerCase().indexOf('scenario_validation') !== -1
+      ) {
+        return 'No valid scenarios to run — ' + m;
+      }
+      if (
+        m.indexOf('replay_noop_batch') !== -1 ||
+        m.indexOf('parallel_batch_empty_results') !== -1 ||
+        m.indexOf('internal_empty_scenarios') !== -1
+      ) {
+        return 'Run did not execute replay (no-op batch) — classified as failure, not success. ' + m;
+      }
+      return m;
+    }
+
     document.getElementById('runBtn').onclick = async () => {
       const btn = document.getElementById('runBtn');
       setRunFeedbackToast('');
@@ -3733,7 +3793,7 @@ PAGE_HTML = """<!DOCTYPE html>
           return;
         }
         if (!startR.ok) {
-          await show(null, null, startJ.error || JSON.stringify(startJ));
+          await show(null, null, friendlyParallelBackendError(startJ.error || JSON.stringify(startJ)));
           updateRunStatusLine('Validation failed — see Result.');
           return;
         }
@@ -3801,7 +3861,7 @@ PAGE_HTML = """<!DOCTYPE html>
             showBatchConcurrencyBanner(total, wCap, 'error');
             if (pj.batch_timing) updateLastBatchRunLine(pj.batch_timing);
             refreshScorecardHistory();
-            await show(null, null, pj.error || 'Job failed');
+            await show(null, null, friendlyParallelBackendError(pj.error || 'Job failed'));
             updateRunStatusLine('Failed — see Result.');
             setRunFeedbackToast('Batch failed — see Results workspace (Raw JSON) for the error.');
             setProgressUI(pj.completed || 0, statusPollTotal(pj, total), pj.error || '');
