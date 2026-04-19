@@ -2,6 +2,25 @@
 """
 gsync — git commit (optional), push to origin, pull on lab host, restart **only if needed**.
 
+**Operator prompt — what this script is for (lab deploy loop)**
+
+1. **Commit code locally** (when the working tree is dirty and you did not pass ``--no-commit``):
+   default mode stages **tracked** changes only (``git add -u``). Untracked files are **not**
+   committed unless you stage them first (``git add …``) or use ``--pattern-game`` (which runs
+   ``git add`` on the pattern-game tree and listed scripts). To commit **everything** including
+   untracked files in one shot, pass ``--add-all`` (runs ``git add -A``; review ``git status`` first).
+2. **Push to origin, then update the remote clone** — ``git push`` your current branch, then SSH
+   ``git pull`` on the lab host under ``~/BLACKBOX_REMOTE_HOME`` (default ``~/blackbox``). This is
+   how code gets **onto** the server (push + remote pull, not “pull to remote” in the sense of
+   pulling from the server to your laptop).
+3. **Restart services on the lab host** when pulled commits touch monitored paths (or use
+   ``--force-restart``): **UIUX.Web** docker (``web`` build, ``up -d``, ``api`` restart) and/or
+   **pattern-game Flask** on port **8765** via ``scripts/pattern_game_remote_restart.sh``.
+   ``--pattern-game``: always restarts Flask after pull; does **not** run UIUX docker.
+
+If any step does not match what you need, use the flags below or ``scripts/sync.py`` for
+unconditional UIUX.Web deploy.
+
 Compared to ``scripts/sync.py`` (always rebuilds/restarts UIUX.Web on the remote), **gsync** runs:
 
 - **UIUX.Web** ``docker compose`` when pulled commits touch paths under ``UIUX.Web/`` (or when
@@ -55,6 +74,7 @@ Usage (repo root):
   python3 scripts/gsync.py --pattern-game --no-verify   # skip HEAD/HTTP checks (emergency only)
   python3 scripts/gsync.py
   python3 scripts/gsync.py -m "describe change"
+  python3 scripts/gsync.py --add-all -m "ship all local files including untracked"
   python3 scripts/gsync.py --dry-run
   python3 scripts/gsync.py --no-commit          # push + remote pull; no local commit
   python3 scripts/gsync.py --skip-push            # commit only; then remote pull + conditional restart
@@ -63,6 +83,16 @@ Usage (repo root):
 
 For Jupiter/SeanV3 stack use ``scripts/jupsync.py``. For unconditional UIUX.Web deploy use
 ``scripts/sync.py``.
+
+**Quick checklist**
+
+| Step | Default ``gsync`` | ``--pattern-game`` |
+|------|--------------------|--------------------|
+| Local commit if dirty | ``git add -u`` + commit (or ``--add-all`` → ``git add -A``) | Stages game_theory + scripts, then commit |
+| Push to ``origin`` | Yes (unless ``--skip-push``) | Yes |
+| Remote ``git pull`` | Yes (unless ``--no-remote``) | Yes |
+| Restart Flask (8765) | If paths match or ``--force-restart`` | **Always** after pull |
+| Restart UIUX.Web docker | If ``UIUX.Web/`` changed or ``--force-restart`` | No |
 """
 
 from __future__ import annotations
@@ -230,6 +260,7 @@ def _auto_commit(
     dry_run: bool,
     no_commit: bool,
     message: str | None,
+    add_all: bool,
 ) -> None:
     if no_commit:
         if _working_tree_dirty(repo):
@@ -243,11 +274,15 @@ def _auto_commit(
         return
     default_msg = f"gsync auto-commit {datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')}"
     msg = (message or default_msg).strip() or default_msg
+    add_cmd = "git add -A" if add_all else "git add -u"
     if dry_run:
-        print(f"[dry-run] git add -u && git commit -m {msg!r}")
+        print(f"[dry-run] {add_cmd} && git commit -m {msg!r}")
         return
-    print("Working tree dirty — staging tracked changes (git add -u) and committing …", flush=True)
-    subprocess.run(["git", "add", "-u"], cwd=repo, check=True)
+    print(
+        f"Working tree dirty — staging ({add_cmd}) and committing …",
+        flush=True,
+    )
+    subprocess.run(["git", "add", "-A"] if add_all else ["git", "add", "-u"], cwd=repo, check=True)
     staged = subprocess.run(["git", "diff", "--cached", "--quiet"], cwd=repo)
     if staged.returncode == 0:
         print("Nothing left to commit after staging (e.g. only untracked files changed).", file=sys.stderr)
@@ -469,8 +504,22 @@ def _remote_pull_pattern_game_only(
 def main() -> None:
     ap = argparse.ArgumentParser(
         description="Commit (optional), push, remote pull, restart UIUX.Web and/or pattern-game web when paths match.",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""Lab deploy loop (this script):
+  1) Commit locally if dirty (git add -u by default; --add-all uses git add -A; or use --pattern-game).
+  2) git push origin <branch>, then SSH: git pull on ~/BLACKBOX_REMOTE_HOME (default ~/blackbox).
+  3) Restart Flask pattern-game (8765) and/or UIUX.Web docker when changed files match prefixes,
+     or pass --force-restart to always restart both.
+  Pattern-game only:  ./scripts/deploy_pattern_game.sh  or  python3 scripts/gsync.py --pattern-game
+  Full UIUX always:     python3 scripts/sync.py
+""",
     )
     ap.add_argument("-m", "--message", default=None, help="Commit message when auto-committing dirty tree")
+    ap.add_argument(
+        "--add-all",
+        action="store_true",
+        help="When committing: run `git add -A` instead of `git add -u` (includes untracked files; review git status first).",
+    )
     ap.add_argument("--no-commit", action="store_true", help="Do not commit; warn if dirty")
     ap.add_argument("--dry-run", action="store_true", help="Print actions only")
     ap.add_argument("--skip-push", action="store_true", help="Skip git push; still SSH if not --no-remote")
@@ -542,7 +591,13 @@ def main() -> None:
             sys.exit(1)
         _stage_pattern_game_paths(repo, dry_run=args.dry_run)
 
-    _auto_commit(repo, dry_run=args.dry_run, no_commit=args.no_commit, message=args.message)
+    _auto_commit(
+        repo,
+        dry_run=args.dry_run,
+        no_commit=args.no_commit,
+        message=args.message,
+        add_all=args.add_all,
+    )
     _sync_push(repo, branch, dry_run=args.dry_run, skip_push=args.skip_push)
 
     if args.no_remote:
