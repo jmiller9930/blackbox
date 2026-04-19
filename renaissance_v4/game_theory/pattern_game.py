@@ -13,8 +13,9 @@ import json
 import os
 import sys
 import tempfile
+from collections.abc import Callable
 from pathlib import Path
-from typing import Any
+from typing import Any, NamedTuple
 
 from renaissance_v4.core.outcome_record import OutcomeRecord
 from renaissance_v4.manifest.validate import load_manifest_file, validate_manifest_against_catalog
@@ -99,26 +100,32 @@ def json_summary(out: dict[str, Any], scenario: dict[str, Any] | None = None) ->
     return row
 
 
-def run_pattern_game(
+class PreparedReplayManifest(NamedTuple):
+    """Effective manifest path for ``run_manifest_replay`` / candidate search (temp JSON when needed)."""
+
+    replay_path: Path
+    cleanup: Callable[[], None]
+    manifest_effective: dict[str, Any]
+    memory_bundle_audit: dict[str, Any] | None
+    mb_path_for_proof: str | None
+    manifest_atr_on_disk: dict[str, Any]
+    manifest_atr_after_bundle_merge: dict[str, Any]
+    manifest_atr_effective: dict[str, Any]
+
+
+def prepare_effective_manifest_for_replay(
     manifest_path: Path | str,
     *,
     atr_stop_mult: float | None = None,
     atr_target_mult: float | None = None,
     memory_bundle_path: str | None = None,
     use_groundhog_auto_resolve: bool = True,
-    emit_baseline_artifacts: bool = False,
-    verbose: bool = True,
-    bar_window_calendar_months: int | None = None,
-) -> dict[str, Any]:
+) -> PreparedReplayManifest:
     """
-    Load manifest, optional **memory bundle** merge, optional ATR overlays, validate, replay.
+    Load + validate manifest with the same bundle/ATR rules as :func:`run_pattern_game`, without replay.
 
-    Memory bundle (opt-in) merges whitelisted keys into the manifest **before** replay so promoted
-    parameters can affect behavior; see ``memory_bundle.py``. CLI ATR overrides win over bundle.
-    Writes a temp manifest when the effective manifest differs from the file on disk.
-
-    When ``use_groundhog_auto_resolve`` is False and ``memory_bundle_path`` is None, the canonical
-    Groundhog bundle is not resolved (control runs for E2E proof).
+    Caller must invoke ``cleanup()`` after replay (or candidate search) finishes when a temp file
+    was used.
     """
     path = Path(manifest_path)
     manifest = load_manifest_file(path)
@@ -146,41 +153,90 @@ def run_pattern_game(
         raise RuntimeError("[pattern_game] manifest validation failed: " + "; ".join(errs))
 
     tmp_path: str | None = None
-    replay_arg: Path | str = path
     needs_temp = mb_audit is not None or atr_stop_mult is not None or atr_target_mult is not None
     if needs_temp:
         fd, tmp_path = tempfile.mkstemp(suffix=".json", prefix="pattern_game_")
         try:
             with os.fdopen(fd, "w", encoding="utf-8") as fh:
                 json.dump(manifest, fh, indent=2)
-            replay_arg = tmp_path
         except Exception:
             if tmp_path and os.path.isfile(tmp_path):
                 os.unlink(tmp_path)
             raise
+        replay_path = Path(tmp_path)
+    else:
+        replay_path = path.resolve()
 
+    def cleanup() -> None:
+        if tmp_path and os.path.isfile(tmp_path):
+            os.unlink(tmp_path)
+
+    return PreparedReplayManifest(
+        replay_path=replay_path,
+        cleanup=cleanup,
+        manifest_effective=manifest,
+        memory_bundle_audit=mb_audit,
+        mb_path_for_proof=mb_path_for_proof,
+        manifest_atr_on_disk=manifest_atr_on_disk,
+        manifest_atr_after_bundle_merge=manifest_atr_after_bundle_merge,
+        manifest_atr_effective=manifest_atr_effective,
+    )
+
+
+def run_pattern_game(
+    manifest_path: Path | str,
+    *,
+    atr_stop_mult: float | None = None,
+    atr_target_mult: float | None = None,
+    memory_bundle_path: str | None = None,
+    use_groundhog_auto_resolve: bool = True,
+    emit_baseline_artifacts: bool = False,
+    verbose: bool = True,
+    bar_window_calendar_months: int | None = None,
+) -> dict[str, Any]:
+    """
+    Load manifest, optional **memory bundle** merge, optional ATR overlays, validate, replay.
+
+    Memory bundle (opt-in) merges whitelisted keys into the manifest **before** replay so promoted
+    parameters can affect behavior; see ``memory_bundle.py``. CLI ATR overrides win over bundle.
+    Writes a temp manifest when the effective manifest differs from the file on disk.
+
+    When ``use_groundhog_auto_resolve`` is False and ``memory_bundle_path`` is None, the canonical
+    Groundhog bundle is not resolved (control runs for E2E proof).
+    """
+    prep = prepare_effective_manifest_for_replay(
+        manifest_path,
+        atr_stop_mult=atr_stop_mult,
+        atr_target_mult=atr_target_mult,
+        memory_bundle_path=memory_bundle_path,
+        use_groundhog_auto_resolve=use_groundhog_auto_resolve,
+    )
     try:
         raw = run_manifest_replay(
-            replay_arg,
+            prep.replay_path,
             emit_baseline_artifacts=emit_baseline_artifacts,
             verbose=verbose,
             bar_window_calendar_months=bar_window_calendar_months,
         )
     finally:
-        if tmp_path and os.path.isfile(tmp_path):
-            os.unlink(tmp_path)
+        prep.cleanup()
 
     outcomes: list[OutcomeRecord] = list(raw.get("outcomes") or [])
     binary = score_binary_outcomes(outcomes)
     proof_core = build_memory_bundle_proof(
-        resolved_bundle_path=mb_path_for_proof,
-        apply_audit=mb_audit,
+        resolved_bundle_path=prep.mb_path_for_proof,
+        apply_audit=prep.memory_bundle_audit,
+    )
+    needs_temp = (
+        prep.memory_bundle_audit is not None
+        or atr_stop_mult is not None
+        or atr_target_mult is not None
     )
     memory_bundle_proof = {
         **proof_core,
-        "manifest_atr_on_disk": manifest_atr_on_disk,
-        "manifest_atr_after_bundle_merge": manifest_atr_after_bundle_merge,
-        "manifest_atr_effective": manifest_atr_effective,
+        "manifest_atr_on_disk": prep.manifest_atr_on_disk,
+        "manifest_atr_after_bundle_merge": prep.manifest_atr_after_bundle_merge,
+        "manifest_atr_effective": prep.manifest_atr_effective,
         "replay_manifest_source": "temp_effective_json" if needs_temp else "disk_manifest_file",
         "run_manifest_replay_module": "renaissance_v4.research.replay_runner",
         "run_manifest_replay_function": "run_manifest_replay",
@@ -194,15 +250,15 @@ def run_pattern_game(
         "starting_equity_usd_spec": PATTERN_GAME_STARTING_EQUITY_USD_SPEC,
         "risk_fraction_per_trade_spec": PATTERN_GAME_RISK_FRACTION_PER_TRADE_SPEC,
         "note": "Equity/risk are spec targets; risk governor still uses tiered notional_fraction.",
-        "memory_bundle_audit": mb_audit,
+        "memory_bundle_audit": prep.memory_bundle_audit,
         "memory_bundle_proof": memory_bundle_proof,
     }
     return {
         **raw,
         "binary_scorecard": binary,
         "pattern_game_meta": meta,
-        "manifest_effective": manifest,
-        "memory_bundle_audit": mb_audit,
+        "manifest_effective": prep.manifest_effective,
+        "memory_bundle_audit": prep.memory_bundle_audit,
         "memory_bundle_proof": memory_bundle_proof,
     }
 

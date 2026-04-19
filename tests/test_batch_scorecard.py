@@ -67,8 +67,8 @@ def test_compute_batch_score_percentages_win_loss() -> None:
 def test_compute_batch_score_percentages_avg_trade_win() -> None:
     p = compute_batch_score_percentages(
         [
-            {"ok": True, "referee_session": "WIN", "summary": {"win_rate": 0.344}},
-            {"ok": True, "referee_session": "WIN", "summary": {"win_rate": 0.5}},
+            {"ok": True, "referee_session": "WIN", "summary": {"win_rate": 0.344, "trades": 5}},
+            {"ok": True, "referee_session": "WIN", "summary": {"win_rate": 0.5, "trades": 3}},
         ]
     )
     assert p["avg_trade_win_pct"] == 42.2  # mean of 34.4% and 50%

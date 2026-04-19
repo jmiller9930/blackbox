@@ -18,7 +18,14 @@ from pathlib import Path
 from typing import Any
 
 from renaissance_v4.game_theory.groundhog_memory import resolve_memory_bundle_for_scenario
-from renaissance_v4.game_theory.pattern_game import json_summary, run_pattern_game
+from renaissance_v4.game_theory.hunter_planner import resolve_repo_root
+from renaissance_v4.game_theory.operator_test_harness_v1 import run_operator_test_harness_v1
+from renaissance_v4.game_theory.pattern_game import (
+    json_summary,
+    prepare_effective_manifest_for_replay,
+    run_pattern_game,
+    score_binary_outcomes,
+)
 from renaissance_v4.game_theory.run_memory import (
     append_run_memory,
     build_operator_run_audit,
@@ -45,6 +52,42 @@ DEFAULT_WORKERS = max(1, (os.cpu_count() or 4))
 
 # Hard cap: avoid fork/memory storms; soft recommendation = logical CPUs (CPU-bound replay).
 _MAX_PARALLEL_ABS = 64
+
+REFERENCE_COMPARISON_RECIPE_ID = "reference_comparison"
+
+
+def validate_reference_comparison_batch_results(
+    results: list[dict[str, Any]],
+    *,
+    operator_recipe_id: str | None,
+) -> None:
+    """
+    Defense-in-depth: **Reference Comparison Run** must produce candidate search with candidates.
+
+    Workers should already raise ``candidate_search_not_executed`` when ``candidate_count`` is 0;
+    this batch guard catches wiring regressions.
+    """
+    if (operator_recipe_id or "").strip() != REFERENCE_COMPARISON_RECIPE_ID:
+        return
+    problems: list[str] = []
+    for r in results:
+        if not r.get("ok"):
+            continue
+        la = r.get("learning_run_audit_v1")
+        sid = str(r.get("scenario_id") or "?")
+        if not isinstance(la, dict):
+            problems.append(f"{sid}: missing learning_run_audit_v1")
+            continue
+        blk = la.get("context_candidate_search_block_v1") or {}
+        cand = int(blk.get("candidate_count") or 0)
+        ran = bool(blk.get("context_candidate_search_ran"))
+        if not ran or cand <= 0:
+            problems.append(
+                f"{sid}: candidate_search_not_executed (ran={ran}, candidate_count={cand})"
+            )
+    if problems:
+        tail = f" (+{len(problems) - 12} more)" if len(problems) > 12 else ""
+        raise RuntimeError("reference_comparison_invalid: " + " | ".join(problems[:12]) + tail)
 
 
 def get_parallel_limits() -> dict[str, Any]:
@@ -90,16 +133,63 @@ def _worker_run_one(scenario: dict[str, Any]) -> dict[str, Any]:
         else:
             mbp = resolve_memory_bundle_for_scenario(scenario, explicit_path=None)
         bar_m = extract_calendar_months_for_replay(scenario)
-        out = run_pattern_game(
-            scenario["manifest_path"],
-            atr_stop_mult=scenario.get("atr_stop_mult"),
-            atr_target_mult=scenario.get("atr_target_mult"),
-            memory_bundle_path=mbp,
-            use_groundhog_auto_resolve=False,
-            emit_baseline_artifacts=bool(scenario.get("emit_baseline_artifacts", False)),
-            verbose=False,
-            bar_window_calendar_months=bar_m,
-        )
+        recipe_id = str(scenario.get("operator_recipe_id") or "").strip()
+        hres: dict[str, Any] | None = None
+
+        if recipe_id == REFERENCE_COMPARISON_RECIPE_ID:
+            prep = prepare_effective_manifest_for_replay(
+                scenario["manifest_path"],
+                atr_stop_mult=scenario.get("atr_stop_mult"),
+                atr_target_mult=scenario.get("atr_target_mult"),
+                memory_bundle_path=mbp,
+                use_groundhog_auto_resolve=False,
+            )
+            try:
+                hres = run_operator_test_harness_v1(
+                    prep.replay_path,
+                    test_run_id=str(sid),
+                    source_preset_or_manifest=str(scenario.get("manifest_path") or ""),
+                    policy_framework_path=scenario.get("policy_framework_path"),
+                    repo_root_for_git=resolve_repo_root(),
+                    goal_v2=scenario.get("goal_v2") if isinstance(scenario.get("goal_v2"), dict) else None,
+                    bar_window_calendar_months=bar_m,
+                )
+            finally:
+                prep.cleanup()
+
+            search_raw = hres["context_candidate_search_raw"]
+            proof = search_raw["context_candidate_search_proof"]
+            control_replay = search_raw["control_replay"]
+            cand_n = int(proof.get("candidate_count") or 0)
+            if cand_n <= 0:
+                raise RuntimeError(
+                    "candidate_search_not_executed: Reference Comparison Run requires "
+                    f"context-conditioned candidate search with candidates > 0 (got candidate_count={cand_n})"
+                )
+
+            out = {
+                **control_replay,
+                "context_candidate_search_proof": proof,
+                "manifest_effective": control_replay.get("manifest"),
+                "binary_scorecard": score_binary_outcomes(list(control_replay.get("outcomes") or [])),
+                "pattern_game_meta": {
+                    "operator_test_harness_v1": hres.get("operator_test_harness_v1"),
+                    "reference_comparison_learning_path_v1": True,
+                },
+                "memory_bundle_proof": None,
+                "memory_bundle_audit": prep.memory_bundle_audit,
+            }
+        else:
+            out = run_pattern_game(
+                scenario["manifest_path"],
+                atr_stop_mult=scenario.get("atr_stop_mult"),
+                atr_target_mult=scenario.get("atr_target_mult"),
+                memory_bundle_path=mbp,
+                use_groundhog_auto_resolve=False,
+                emit_baseline_artifacts=bool(scenario.get("emit_baseline_artifacts", False)),
+                verbose=False,
+                bar_window_calendar_months=bar_m,
+            )
         summ = json_summary(out, scenario=scenario)
         pfa = scenario.get("policy_framework_audit")
         if isinstance(pfa, dict) and pfa:
@@ -123,6 +213,8 @@ def _worker_run_one(scenario: dict[str, Any]) -> dict[str, Any]:
             "learning_run_audit_v1": learn,
             "operator_learning_status_line_v1": summ.get("operator_learning_status_line_v1"),
         }
+        if hres is not None:
+            row["operator_test_harness_v1"] = hres.get("operator_test_harness_v1")
         row.update(extract_scenario_echo_fields(scenario))
         return row
     except Exception as e:

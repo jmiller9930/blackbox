@@ -64,7 +64,7 @@ from flask import Flask, Response, abort, jsonify, request
 _GAME_THEORY = Path(__file__).resolve().parent
 
 # Operator-visible web UI bundle version — bump when changing PAGE_HTML (HTML/CSS/JS) so deploys are provable.
-PATTERN_GAME_WEB_UI_VERSION = "2.4.0"
+PATTERN_GAME_WEB_UI_VERSION = "2.4.1"
 
 from renaissance_v4.game_theory.groundhog_memory import (
     groundhog_auto_merge_enabled,
@@ -106,6 +106,7 @@ from renaissance_v4.game_theory.parallel_runner import (
     clamp_parallel_workers,
     get_parallel_limits,
     run_scenarios_parallel,
+    validate_reference_comparison_batch_results,
 )
 from renaissance_v4.game_theory.pattern_game import (
     PATTERN_GAME_STARTING_EQUITY_USD_SPEC,
@@ -686,6 +687,9 @@ def create_app() -> Flask:
                     progress_callback=cb,
                     on_session_log_batch=on_session_batch,
                 )
+                validate_reference_comparison_batch_results(
+                    results, operator_recipe_id=operator_batch_audit.get("operator_recipe_id")
+                )
                 ok_n = sum(1 for r in results if r.get("ok"))
                 timing = record_parallel_batch_finished(
                     job_id=job_id,
@@ -807,6 +811,9 @@ def create_app() -> Flask:
                 max_workers=max_workers,
                 experience_log_path=log_path,
                 on_session_log_batch=on_session_batch,
+            )
+            validate_reference_comparison_batch_results(
+                results, operator_recipe_id=operator_batch_audit.get("operator_recipe_id")
             )
             ok_n = sum(1 for r in results if r.get("ok"))
             timing = record_parallel_batch_finished(

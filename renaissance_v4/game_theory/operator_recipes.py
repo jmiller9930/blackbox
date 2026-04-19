@@ -118,7 +118,10 @@ def operator_recipe_catalog() -> list[dict[str, Any]]:
                 "goal_name": "—",
                 "primary_metric": "—",
                 "constraints_line": "Three scenarios: default vs tighter vs wider ATR (same manifest).",
-                "note": "No goal_v2 block — session economics and Referee scorecard only.",
+                "note": (
+                    "Parallel workers run operator_test_harness_v1 (context-conditioned candidate search "
+                    "with control + candidates). Scorecard Cand/Learn reflect that path; zero candidates fails the run."
+                ),
             },
             "scenario_count": 3,
             "source_file": _REFERENCE_COMPARISON_FILE,
