@@ -17,7 +17,9 @@ instant I/O). Folders look like ``batch_<UTC>_<id>/`` with ``BATCH_README.md`` a
 
 Parallel batches append one line per run to ``batch_scorecard.jsonl`` (UTC start/end, duration,
 counts, **run_ok_pct**, **referee_win_pct**, **avg_trade_win_pct**) and expose ``batch_timing`` on the API; see
-``GET /api/batch-scorecard``.
+``GET /api/batch-scorecard``. Operators may truncate that log with
+``POST /api/batch-scorecard/clear`` (does not touch engine memory files). Destructive engine reset:
+``POST /api/pattern-game/reset-learning`` with typed confirm phrase (see UI).
 
 Operator **retrospective** (learn / next experiment): ``GET /api/retrospective-log``,
 ``POST /api/retrospective-append`` — persists to ``retrospective_log.jsonl`` (see
@@ -65,7 +67,7 @@ from flask import Flask, Response, abort, jsonify, request
 _GAME_THEORY = Path(__file__).resolve().parent
 
 # Operator-visible web UI bundle version — bump when changing PAGE_HTML (HTML/CSS/JS) so deploys are provable.
-PATTERN_GAME_WEB_UI_VERSION = "2.5.0"
+PATTERN_GAME_WEB_UI_VERSION = "2.5.1"
 
 from renaissance_v4.game_theory.groundhog_memory import (
     groundhog_auto_merge_enabled,
@@ -76,7 +78,12 @@ from renaissance_v4.game_theory.groundhog_memory import (
 from renaissance_v4.game_theory.batch_scorecard import (
     read_batch_scorecard_recent,
     record_parallel_batch_finished,
+    truncate_batch_scorecard_jsonl,
     utc_timestamp_iso,
+)
+from renaissance_v4.game_theory.pattern_game_operator_reset import (
+    RESET_PATTERN_GAME_LEARNING_CONFIRM,
+    reset_pattern_game_engine_learning_state_v1,
 )
 from renaissance_v4.game_theory.data_health import get_data_health
 from renaissance_v4.game_theory.search_space_estimate import build_search_space_estimate
@@ -957,6 +964,50 @@ def create_app() -> Flask:
             },
         )
 
+    @app.post("/api/batch-scorecard/clear")
+    def api_batch_scorecard_clear() -> Any:
+        """
+        Truncate ``batch_scorecard.jsonl`` only (batch audit / UI / hunter rotation input).
+
+        Does **not** modify experience log, run memory, Groundhog bundle, context signature memory,
+        retrospective, or session batch folders on disk.
+        """
+        data = request.get_json(force=True, silent=True) or {}
+        if not data.get("confirm"):
+            return jsonify({"ok": False, "error": 'Request JSON must include "confirm": true'}), 400
+        p = truncate_batch_scorecard_jsonl()
+        return jsonify(
+            {
+                "ok": True,
+                "path": str(p),
+                "note": (
+                    "Truncated batch scorecard file only. Engine learning files "
+                    "(bundles, recall memory JSONL, experience/run logs) were not modified."
+                ),
+            }
+        )
+
+    @app.post("/api/pattern-game/reset-learning")
+    def api_pattern_game_reset_learning() -> Any:
+        """
+        Destructive: truncate experience + run memory JSONL, context-signature memory, delete Groundhog bundle.
+
+        Does **not** truncate ``batch_scorecard.jsonl`` or ``retrospective_log.jsonl``.
+        """
+        data = request.get_json(force=True, silent=True) or {}
+        c = data.get("confirm")
+        if not isinstance(c, str):
+            return jsonify(
+                {
+                    "ok": False,
+                    "error": f'confirm must be the exact string {RESET_PATTERN_GAME_LEARNING_CONFIRM!r}',
+                }
+            ), 400
+        out = reset_pattern_game_engine_learning_state_v1(confirm=c.strip())
+        if not out.get("ok") and not out.get("cleared"):
+            return jsonify(out), 400
+        return jsonify(out), (200 if out.get("ok") else 500)
+
     @app.get("/api/batch-detail")
     def api_batch_detail() -> Any:
         """Drill-down: scorecard line + scenario list from session batch folder."""
@@ -1773,6 +1824,35 @@ PAGE_HTML = """<!DOCTYPE html>
       font-weight: 600;
     }
     .scorecard-toolbar a:hover { background: #f4f8ff; }
+    .scorecard-toolbar-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      align-items: center;
+      margin: 8px 0 4px;
+    }
+    .btn-scorecard-clear {
+      font-size: 0.78rem;
+      padding: 6px 12px;
+      border-radius: 8px;
+      border: 1px solid var(--pg-line);
+      background: #fff;
+      color: #2d4a6f;
+      cursor: pointer;
+      font-weight: 600;
+    }
+    .btn-scorecard-clear:hover { background: #f0f6ff; }
+    .btn-learning-reset-danger {
+      font-size: 0.78rem;
+      padding: 6px 12px;
+      border-radius: 8px;
+      border: 1px solid #c43b3b;
+      background: #fff5f5;
+      color: #a32b2b;
+      cursor: pointer;
+      font-weight: 600;
+    }
+    .btn-learning-reset-danger:hover { background: #ffe8e8; }
     tr.scorecard-row { cursor: pointer; }
     tr.scorecard-row:hover { background: #f0f4f8; }
     tr.scorecard-row.selected { background: #e8f0fe; }
@@ -2348,7 +2428,7 @@ PAGE_HTML = """<!DOCTYPE html>
         </summary>
         <div class="pg-panel-fold-body">
         <div class="scorecard-panel-inner" id="scorecardPanel">
-          <p class="scorecard-legend"><strong>Run OK %</strong> — workers finished. <strong>Session WIN %</strong> — referee WIN vs LOSS among judged sessions only; <strong>n sess</strong> is that denominator (never infer from a bare percentage). <strong>Trade win %</strong> — batch mean when trades exist (with trade count). <strong>Learning</strong> — <code>execution_only</code> vs <code>learning_active</code> from replay counters (candidate search, memory records loaded, recall matches, signal bias). <strong>Work</strong> — decision windows, bars, and candidate-stack replays. Scan <em>down</em> for newest batches.</p>
+          <p class="scorecard-legend"><strong>Run OK %</strong> — workers finished. <strong>Session WIN %</strong> — referee WIN vs LOSS among judged sessions only; <strong>n sess</strong> is that denominator (never infer from a bare percentage). <strong>Trade win %</strong> — batch mean when trades exist (with trade count). <strong>Learning</strong> — <code>execution_only</code> vs <code>learning_active</code> from replay counters (candidate search, memory records loaded, recall matches, signal bias). <strong>Work</strong> — decision windows, bars, and candidate-stack replays. Scan <em>down</em> for newest batches. <strong>Scorecard file</strong> (<code>batch_scorecard.jsonl</code>) is batch audit for this table and hunter suggestions; replay does <em>not</em> read it to apply memory or recall. <strong>Clear Card</strong> truncates that log only. <strong>Reset Learning State</strong> is separate and destructive (engine files — see confirmation).</p>
           <p class="last-run" id="lastBatchRunLine">Last completed batch: —</p>
           <div id="scorecardLearningSummary" class="scorecard-learning-summary exec-only" aria-live="polite" hidden>
             <p class="sls-title">Latest batch — learning summary</p>
@@ -2356,6 +2436,10 @@ PAGE_HTML = """<!DOCTYPE html>
           </div>
           <div class="scorecard-toolbar">
             <a id="scorecardCsvLink" href="/api/batch-scorecard.csv?limit=50">Download scorecard history (CSV)</a>
+            <div class="scorecard-toolbar-actions">
+              <button type="button" class="btn-scorecard-clear" id="clearScorecardBtn">Clear Card — Run New Experiment</button>
+              <button type="button" class="btn-learning-reset-danger" id="resetLearningStateBtn">Reset Learning State</button>
+            </div>
             <span style="font-size:0.72rem;color:var(--pg-muted)">Click a row to open batch detail, scenarios, and per-scenario report links (GT_DIRECTIVE_001).</span>
           </div>
           <div class="pg-table-scroll scorecard-table-wrap-wide">
@@ -2969,6 +3053,76 @@ PAGE_HTML = """<!DOCTYPE html>
       } catch (err) {
         if (hint) hint.textContent = 'Scorecard history: ' + friendlyFetchError(err);
       }
+    }
+
+    const RESET_LEARNING_CONFIRM_PHRASE = 'RESET_PATTERN_GAME_LEARNING';
+    const clearScorecardBtn = document.getElementById('clearScorecardBtn');
+    if (clearScorecardBtn) {
+      clearScorecardBtn.onclick = async () => {
+        if (!window.confirm(
+          'Clear scorecard and start a new experiment?\nLearning state will be preserved.'
+        )) {
+          return;
+        }
+        try {
+          const r = await fetch('/api/batch-scorecard/clear', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ confirm: true }),
+          });
+          const j = await r.json();
+          if (!r.ok || !j.ok) {
+            await show(null, null, j.error || ('Clear failed: ' + r.status));
+            return;
+          }
+          selectedScorecardJobId = null;
+          const drill = document.getElementById('batchDrillPanel');
+          if (drill) drill.innerHTML = '';
+          updateScorecardLearningSummaryFromRow(null);
+          const lr = document.getElementById('lastBatchRunLine');
+          if (lr) {
+            lr.textContent = 'Last completed batch: — (scorecard file cleared; engine memory and bundles unchanged)';
+          }
+          await refreshScorecardHistory();
+        } catch (e) {
+          await show(null, null, friendlyFetchError(e));
+        }
+      };
+    }
+    const resetLearningStateBtn = document.getElementById('resetLearningStateBtn');
+    if (resetLearningStateBtn) {
+      resetLearningStateBtn.onclick = async () => {
+        if (!window.confirm(
+          'DANGER: Reset Learning State will truncate the experience log and run memory JSONL, ' +
+            'truncate context signature memory (recall / signature store), and delete the Groundhog bundle file if present.\n\n' +
+            'It does NOT clear the scorecard table file or retrospective notes.\n\nContinue?'
+        )) {
+          return;
+        }
+        const typed = window.prompt(
+          'Type the confirmation phrase exactly (case-sensitive):\n' + RESET_LEARNING_CONFIRM_PHRASE
+        );
+        if (typed !== RESET_LEARNING_CONFIRM_PHRASE) {
+          if (typed !== null) window.alert('Confirmation mismatch — nothing was changed.');
+          return;
+        }
+        try {
+          const r = await fetch('/api/pattern-game/reset-learning', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ confirm: RESET_LEARNING_CONFIRM_PHRASE }),
+          });
+          const j = await r.json();
+          if (!r.ok || !j.ok) {
+            await show(null, null, j.error || JSON.stringify(j.errors || j));
+            return;
+          }
+          await show(null, j, null);
+          if (typeof refreshGroundhog === 'function') refreshGroundhog();
+        } catch (e) {
+          await show(null, null, friendlyFetchError(e));
+        }
+      };
     }
 
     function renderPolicyOutcomePanel(data) {

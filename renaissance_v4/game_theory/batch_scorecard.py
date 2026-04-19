@@ -116,6 +116,22 @@ def append_batch_scorecard_line(
     return p.resolve()
 
 
+def truncate_batch_scorecard_jsonl(*, path: Path | None = None) -> Path:
+    """
+    Truncate the scorecard JSONL to empty (all batch rows removed).
+
+    **Scope:** only this file (default ``batch_scorecard.jsonl`` under memory root).
+    Replay learning, Groundhog bundles, context-signature memory, experience/run logs,
+    and retrospective are separate paths and are **not** modified here.
+    """
+    p = (path or default_batch_scorecard_jsonl()).expanduser().resolve()
+    p.parent.mkdir(parents=True, exist_ok=True)
+    tmp = p.with_suffix(p.suffix + ".tmp_trunc")
+    tmp.write_text("", encoding="utf-8")
+    tmp.replace(p)
+    return p.resolve()
+
+
 def read_batch_scorecard_recent(
     limit: int = 30,
     *,
