@@ -67,7 +67,7 @@ from flask import Flask, Response, abort, jsonify, request
 _GAME_THEORY = Path(__file__).resolve().parent
 
 # Operator-visible web UI bundle version — bump when changing PAGE_HTML (HTML/CSS/JS) so deploys are provable.
-PATTERN_GAME_WEB_UI_VERSION = "2.5.5"
+PATTERN_GAME_WEB_UI_VERSION = "2.5.6"
 
 from renaissance_v4.game_theory.groundhog_memory import (
     groundhog_auto_merge_enabled,
@@ -131,6 +131,7 @@ from renaissance_v4.game_theory.pattern_game import (
 from renaissance_v4.game_theory.policy_framework import attach_policy_framework_audits
 from renaissance_v4.game_theory.scenario_contract import (
     extract_policy_contract_summary,
+    resolve_scenario_manifest_path,
     referee_session_outcome,
     validate_scenarios,
 )
@@ -239,19 +240,15 @@ def _prepare_parallel_payload(data: dict[str, Any]) -> dict[str, Any]:
     health = get_data_health()
     cap = health.get("max_evaluation_window_calendar_months")
     req_m = int(resolved["effective_calendar_months"])
+    cap_warning: str | None = None
     if isinstance(cap, int) and cap > 0 and req_m > cap:
         span_d = health.get("replay_tape_span_days_approx") or health.get("all_bars_span_days")
         span_bit = f"~{round(float(span_d))}d of 5m bars" if isinstance(span_d, (int, float)) else "available 5m bars"
-        return {
-            "ok": False,
-            "error": (
-                f"Evaluation window ({req_m} mo) exceeds replay tape length "
-                f"(max ~{cap} mo from {span_bit}). "
-                "Pick a shorter window or ingest more history."
-            ),
-            "max_evaluation_window_calendar_months": cap,
-            "evaluation_window_requested_months": req_m,
-        }
+        cap_warning = (
+            f"Evaluation window ({req_m} mo) exceeds replay tape length "
+            f"(max ~{cap} mo from {span_bit}). "
+            "Replay will proceed on the available tape and the final replay_data_audit will show the actual span."
+        )
 
     scenarios: list[dict[str, Any]] = []
     recipe_default_months = 12
@@ -301,7 +298,7 @@ def _prepare_parallel_payload(data: dict[str, Any]) -> dict[str, Any]:
 
     for s in scenarios:
         if "manifest_path" in s and s["manifest_path"]:
-            s["manifest_path"] = str(Path(s["manifest_path"]).expanduser().resolve())
+            s["manifest_path"] = str(resolve_scenario_manifest_path(s["manifest_path"]))
 
     fw_ok, fw_msgs = attach_policy_framework_audits(scenarios)
     if not fw_ok:
@@ -323,6 +320,8 @@ def _prepare_parallel_payload(data: dict[str, Any]) -> dict[str, Any]:
         }
 
     val_msgs = list(val_msgs) + list(fw_msgs)
+    if cap_warning:
+        val_msgs.append(cap_warning)
 
     max_workers = data.get("max_workers")
     if max_workers is not None:
@@ -345,6 +344,7 @@ def _prepare_parallel_payload(data: dict[str, Any]) -> dict[str, Any]:
         "operator_recipe_label": recipe_label,
         "evaluation_window_mode": resolved["evaluation_window_mode"],
         "evaluation_window_effective_calendar_months": int(resolved["effective_calendar_months"]),
+        "evaluation_window_cap_warning": cap_warning,
         "recipe_default_calendar_months": recipe_default_months,
         "window_overrode_recipe_default": bool(
             isinstance(ew0, dict) and ew0.get("window_overrode_recipe_default")
@@ -2900,7 +2900,7 @@ PAGE_HTML = """<!DOCTYPE html>
         lines.push('');
         lines.push('(' + rows.length + ' telemetry file(s); busiest worker shown by decision window count.)');
       }
-      el.textContent = lines.join('\n');
+      el.textContent = lines.join('\\n');
     }
     function hideLiveTelemetryPanel() {
       const wrap = document.getElementById('liveTelemetryWrap');
@@ -3310,7 +3310,7 @@ PAGE_HTML = """<!DOCTYPE html>
     if (clearScorecardBtn) {
       clearScorecardBtn.onclick = async () => {
         if (!window.confirm(
-          'Clear scorecard and start a new experiment?\nLearning state will be preserved.'
+          'Clear scorecard and start a new experiment?\\nLearning state will be preserved.'
         )) {
           return;
         }
@@ -3347,13 +3347,13 @@ PAGE_HTML = """<!DOCTYPE html>
       resetLearningStateBtn.onclick = async () => {
         if (!window.confirm(
           'DANGER: Reset Learning State will truncate the experience log and run memory JSONL, ' +
-            'truncate context signature memory (recall / signature store), and delete the Groundhog bundle file if present.\n\n' +
-            'It does NOT clear the scorecard table file or retrospective notes.\n\nContinue?'
+            'truncate context signature memory (recall / signature store), and delete the Groundhog bundle file if present.\\n\\n' +
+            'It does NOT clear the scorecard table file or retrospective notes.\\n\\nContinue?'
         )) {
           return;
         }
         const typed = window.prompt(
-          'Type the confirmation phrase exactly (case-sensitive):\n' + RESET_LEARNING_CONFIRM_PHRASE
+          'Type the confirmation phrase exactly (case-sensitive):\\n' + RESET_LEARNING_CONFIRM_PHRASE
         );
         if (typed !== RESET_LEARNING_CONFIRM_PHRASE) {
           if (typed !== null) window.alert('Confirmation mismatch — nothing was changed.');
@@ -4384,7 +4384,7 @@ PAGE_HTML = """<!DOCTYPE html>
           uploadChosenFileLabel.textContent = 'Selected file: ' + f.name + ' (' + (f.size / 1024).toFixed(1) + ' KB)';
         }
         resetUploadDialog();
-        if (uploadPresetNameInput) uploadPresetNameInput.value = f.name.replace(/\.json$/i, '').replace(/[_-]+/g, ' ');
+        if (uploadPresetNameInput) uploadPresetNameInput.value = f.name.replace(/\\.json$/i, '').replace(/[_-]+/g, ' ');
         if (uploadPresetResult) { uploadPresetResult.classList.remove('visible', 'ok', 'err'); uploadPresetResult.textContent = ''; }
         if (uploadDlg && uploadDlg.showModal) uploadDlg.showModal();
         if (uploadPresetNameInput) uploadPresetNameInput.focus();
@@ -4478,7 +4478,7 @@ PAGE_HTML = """<!DOCTYPE html>
         const v = examplesFilePick && examplesFilePick.value;
         if (!v || v.indexOf('user_') !== 0) return;
         if (renamePresetResult) { renamePresetResult.className = 'pg-upload-result'; renamePresetResult.textContent = ''; }
-        if (renamePresetInput) renamePresetInput.value = v.replace(/^user_/, '').replace(/\.json$/, '').replace(/_/g, ' ');
+        if (renamePresetInput) renamePresetInput.value = v.replace(/^user_/, '').replace(/\\.json$/, '').replace(/_/g, ' ');
         renameDlg.showModal();
         if (renamePresetInput) renamePresetInput.focus();
       });
