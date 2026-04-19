@@ -45,6 +45,19 @@ def test_recipe_meta_includes_policy_framework_path() -> None:
     assert meta.get("policy_framework_path") == DEFAULT_BASELINE_POLICY_FRAMEWORK_REL
 
 
+def test_operator_mode_cards_for_curated_patterns() -> None:
+    for rid in ("pattern_learning", "reference_comparison"):
+        meta = recipe_meta_by_id(rid)
+        assert meta is not None
+        card = meta.get("operator_mode_card_v1")
+        assert isinstance(card, dict)
+        sections = card.get("sections")
+        assert isinstance(sections, list) and len(sections) >= 6
+        for row in sections:
+            assert isinstance(row.get("k"), str) and row["k"].strip()
+            assert isinstance(row.get("v"), str) and row["v"].strip()
+
+
 def test_build_scenarios_attaches_policy_framework_path() -> None:
     scenarios = build_scenarios_for_recipe("pattern_learning")
     assert len(scenarios) == 1

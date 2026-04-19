@@ -104,6 +104,62 @@ def operator_recipe_catalog() -> list[dict[str, Any]]:
                     "manifest inside the policy framework tunable surface; scorecard Cand/Learn reflect harness output."
                 ),
             },
+            "operator_mode_card_v1": {
+                "sections": [
+                    {
+                        "k": "What it does",
+                        "v": (
+                            "Runs one curated scenario on the standard baseline manifest. The lab replays a "
+                            "control execution and several candidate variants drawn only from the "
+                            "allowed tunable surface in your policy framework, then scores them against an "
+                            "outcome-quality goal for this window of bars."
+                        ),
+                    },
+                    {
+                        "k": "Candidates",
+                        "v": (
+                            "Yes — inside this run only. Candidates are generated and compared here; "
+                            "you do not paste them by hand for this mode."
+                        ),
+                    },
+                    {
+                        "k": "Prior memory",
+                        "v": (
+                            "Only if configured. The bundled example scenario does not attach a memory file. "
+                            "Memory applies if you set memory_bundle_path in Advanced JSON, or if Groundhog "
+                            "auto-merge is enabled and the canonical bundle file exists on this host."
+                        ),
+                    },
+                    {
+                        "k": "Writes new memory",
+                        "v": (
+                            "Not automatically. A normal batch does not silently update Groundhog bundles "
+                            "or promote parameters. Optional experience logging is audit trail only."
+                        ),
+                    },
+                    {
+                        "k": "Winner",
+                        "v": (
+                            "Yes (harness). The search picks a best candidate vs control or records that "
+                            "none beat control — see scorecard learning columns (Cand, Sel, Learn)."
+                        ),
+                    },
+                    {
+                        "k": "Carries forward",
+                        "v": (
+                            "Nothing automatic after Run. To persist parameter changes you use explicit "
+                            "operator flows (for example Groundhog promote), not the batch alone."
+                        ),
+                    },
+                    {
+                        "k": "Use this when",
+                        "v": (
+                            "You want a single, goal-guided comparison of bounded variants on the default "
+                            "stack for the chosen evaluation window."
+                        ),
+                    },
+                ],
+            },
             "scenario_count": 1,
             "source_file": _PATTERN_LEARNING_FILE,
         },
@@ -127,6 +183,59 @@ def operator_recipe_catalog() -> list[dict[str, Any]]:
                     "Parallel workers run operator_test_harness_v1 (context-conditioned candidate search "
                     "with control + candidates). Scorecard Cand/Learn reflect that path; zero candidates fails the run."
                 ),
+            },
+            "operator_mode_card_v1": {
+                "sections": [
+                    {
+                        "k": "What it does",
+                        "v": (
+                            "Runs three scenarios in parallel: default ATR geometry, tighter stops and targets, "
+                            "and wider stops and targets on the same baseline manifest. Each scenario runs the "
+                            "full harness (control plus bounded candidates), so you compare both risk shape and "
+                            "search outcome across presets in one batch."
+                        ),
+                    },
+                    {
+                        "k": "Candidates",
+                        "v": (
+                            "Yes — per scenario, this run only. Every worker path does candidate search; "
+                            "this is not baseline-only replay."
+                        ),
+                    },
+                    {
+                        "k": "Prior memory",
+                        "v": (
+                            "Only if configured (memory path on a scenario, or Groundhog auto-merge on with a "
+                            "bundle file). The reference example scenarios do not ship a memory file."
+                        ),
+                    },
+                    {
+                        "k": "Writes new memory",
+                        "v": (
+                            "Not automatically. Same as Pattern Learning: optional experience log; no silent "
+                            "bundle promotion from Run alone."
+                        ),
+                    },
+                    {
+                        "k": "Winner",
+                        "v": (
+                            "Yes (per scenario harness). Each row can show its own candidate outcome vs control."
+                        ),
+                    },
+                    {
+                        "k": "Carries forward",
+                        "v": (
+                            "Nothing automatic. Use explicit promote or export steps if you want persistence."
+                        ),
+                    },
+                    {
+                        "k": "Use this when",
+                        "v": (
+                            "You want a side-by-side stress test of default versus tighter versus wider risk "
+                            "geometry under the same evaluation window."
+                        ),
+                    },
+                ],
             },
             "scenario_count": 3,
             "source_file": _REFERENCE_COMPARISON_FILE,

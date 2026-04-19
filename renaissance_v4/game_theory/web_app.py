@@ -67,7 +67,7 @@ from flask import Flask, Response, abort, jsonify, request
 _GAME_THEORY = Path(__file__).resolve().parent
 
 # Operator-visible web UI bundle version — bump when changing PAGE_HTML (HTML/CSS/JS) so deploys are provable.
-PATTERN_GAME_WEB_UI_VERSION = "2.6.0"
+PATTERN_GAME_WEB_UI_VERSION = "2.6.1"
 
 from renaissance_v4.game_theory.groundhog_memory import (
     groundhog_auto_merge_enabled,
@@ -289,7 +289,7 @@ def _prepare_parallel_payload(data: dict[str, Any]) -> dict[str, Any]:
     if not scenarios:
         return {
             "ok": False,
-            "error": "No runnable scenarios (empty list after parse/build). Choose a recipe with scenarios or paste Custom JSON.",
+            "error": "No runnable scenarios (empty list after parse/build). Choose a pattern with scenarios or paste Custom JSON.",
         }
 
     annotate_scenarios_with_window_and_recipe(
@@ -570,7 +570,7 @@ def create_app() -> Flask:
                 return jsonify(
                     {
                         "ok": False,
-                        "error": "Recipe 'custom' is filled from the textarea — no server preview.",
+                        "error": "Pattern 'custom' is filled from the textarea — no server preview.",
                     }
                 ), 400
             return jsonify(dict(prep)), 400
@@ -2312,6 +2312,42 @@ PAGE_HTML = """<!DOCTYPE html>
       flex: 1 1 auto;
       min-height: 0;
     }
+    .pg-pattern-mode-explanation {
+      margin-top: 14px;
+      padding: 12px 14px;
+      border-radius: 12px;
+      border: 1px solid rgba(47, 127, 121, 0.28);
+      background: linear-gradient(180deg, rgba(47, 127, 121, 0.08) 0%, rgba(255, 252, 246, 0.95) 100%);
+      font-size: 0.82rem;
+      line-height: 1.5;
+      color: #2a3540;
+    }
+    .pg-pattern-mode-explanation .pg-pattern-mode-h {
+      margin: 0 0 10px;
+      font-size: 0.88rem;
+      font-weight: 800;
+      color: #1d4d48;
+      letter-spacing: -0.01em;
+    }
+    .pg-pattern-mode-dl {
+      margin: 0;
+      display: grid;
+      gap: 10px 0;
+    }
+    .pg-pattern-mode-dl dt {
+      margin: 0;
+      font-size: 0.68rem;
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--pg-teal);
+    }
+    .pg-pattern-mode-dl dd {
+      margin: 2px 0 0;
+      padding: 0;
+      font-size: 0.82rem;
+      color: #2f3842;
+    }
     #statusLine { min-height: 1.3em; color: var(--pg-ink); font-size: 0.9rem; margin-top: 8px; }
     .err { color: #c43b3b; }
     .pg-pill-row { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 10px; }
@@ -2400,7 +2436,7 @@ PAGE_HTML = """<!DOCTYPE html>
         <div class="pg-eyebrow">Pattern game lab</div>
         <h1 class="pg-title">Pattern game <em>controls · live telemetry · scorecard · five status tiles · header results &amp; modules</em>
           <span class="ui-version" title="Bump PATTERN_GAME_WEB_UI_VERSION in web_app.py">v__PATTERN_GAME_WEB_UI_VERSION__</span></h1>
-        <p class="pg-lead">Pick <strong>recipe</strong> and <strong>evaluation window</strong>, then <strong>Run</strong> — the lab builds scenarios for you. <strong>Live run telemetry</strong> (right, during a batch) is the primary runtime readout; <strong>Scorecard</strong> sits below it for batch history. <strong>Five status tiles</strong> include <strong>Modules</strong>. Custom JSON lives under <em>Advanced</em> only.</p>
+        <p class="pg-lead">Pick a <strong>pattern</strong> and <strong>evaluation window</strong>, then <strong>Run</strong> — the lab builds scenarios for curated modes. <strong>Live run telemetry</strong> (right, during a batch) is the primary runtime readout; <strong>Scorecard</strong> sits below it for batch history. <strong>Five status tiles</strong> include <strong>Modules</strong>. Custom JSON lives under <em>Advanced</em> only.</p>
         <div class="pg-orientation-note">Twisty on each panel · DEF record: <code>docs/architect/pattern_game_operator_deficiencies_work_record.md</code></div>
       </div>
       <div class="pg-banner-strip">
@@ -2545,7 +2581,7 @@ PAGE_HTML = """<!DOCTYPE html>
         <div class="pg-block">
           <div class="pg-block-title">Run setup</div>
           <div class="pg-mini-grid pg-mini-3">
-            <div><label for="operatorRecipePick">Recipe</label><select id="operatorRecipePick" aria-describedby="presetHelp">
+            <div><label for="operatorRecipePick">Pattern</label><select id="operatorRecipePick" aria-describedby="presetHelp patternModeExplanation">
               <option value="pattern_learning">Pattern Learning Run</option>
               <option value="reference_comparison">Reference Comparison Run</option>
               <option value="custom">Custom</option>
@@ -2563,11 +2599,14 @@ PAGE_HTML = """<!DOCTYPE html>
             <select id="policyPick" aria-label="Policy manifest"></select>
           </div>
           <p class="pg-policy-line" id="policyReadonly" style="display:none" role="status">Policy: —</p>
-          <p class="caps" id="presetHelp">The server builds scenarios for curated recipes — no JSON required. Evaluation window controls how much tape is replayed (approximate months from the end of the series). Presets longer than your <code>market_bars_5m</code> span are disabled automatically (see Data health).</p>
+          <p class="caps" id="presetHelp">The server builds scenarios for curated patterns — no JSON required. Evaluation window controls how much tape is replayed (approximate months from the end of the series). Presets longer than your <code>market_bars_5m</code> span are disabled automatically (see Data health).</p>
+          <div id="patternModeExplanation" class="pg-pattern-mode-explanation" role="region" aria-label="What the selected pattern does">
+            <div id="patternModeExplanationBody">Loading…</div>
+          </div>
           <div class="pg-run-config" id="runConfigPanel" role="region" aria-label="Run configuration">
             <div class="pg-block-title" style="margin-top:0">Run configuration</div>
             <dl class="pg-run-config-dl" id="runConfigDl">
-              <dt>Recipe</dt><dd id="runConfigRecipe">—</dd>
+              <dt>Pattern</dt><dd id="runConfigPattern">—</dd>
               <dt>Policy</dt><dd id="runConfigPolicy">—</dd>
               <dt>Evaluation window</dt><dd id="runConfigWindow">—</dd>
               <dt>Goal</dt><dd id="runConfigGoalSummary">—</dd>
@@ -2601,14 +2640,14 @@ PAGE_HTML = """<!DOCTYPE html>
                 <button type="button" class="btn-upload pg-op-btn" id="presetUploadBtn" data-label-idle="Upload scenario JSON…">Upload scenario JSON…</button>
                 <button type="button" class="btn-rename-preset pg-op-btn" id="presetRenameBtn" disabled title="Only for uploaded presets (user_*.json)" data-label-idle="Rename preset…">Rename preset…</button>
               </div>
-              <p class="pg-upload-hint">Uploads validate against the scenario contract and appear in the example list. For a normal run, use <strong>Recipe</strong> above — not this file list.</p>
+              <p class="pg-upload-hint">Uploads validate against the scenario contract and appear in the example list. For a normal run, use <strong>Pattern</strong> above — not this file list.</p>
               <details class="inline-details" style="margin-top:12px;border-left-color:#2d8a6a" id="advancedJsonDetails">
                 <summary>Custom scenario (JSON)</summary>
-                <p class="caps" id="structuredJsonHint" style="margin:6px 0 8px">This field is <strong>disabled</strong> for curated recipes — the server injects manifest, window, and goal.</p>
+                <p class="caps" id="structuredJsonHint" style="margin:6px 0 8px">This field is <strong>disabled</strong> for curated patterns — the server injects manifest, window, and goal.</p>
                 <details class="inline-details"><summary>Validation (hypothesis)</summary>
                   <p style="margin:0">Non-empty <code>agent_explanation.hypothesis</code> per scenario unless <code>PATTERN_GAME_REQUIRE_HYPOTHESIS=0</code>.</p>
                 </details>
-                <textarea id="scenarios" spellcheck="false" placeholder="Used only when Recipe = Custom. Array of scenario objects or {&quot;scenarios&quot;:[…]}."></textarea>
+                <textarea id="scenarios" spellcheck="false" placeholder="Used only when Pattern = Custom. Array of scenario objects or {&quot;scenarios&quot;:[…]}."></textarea>
               </details>
             </div>
           </details>
@@ -2773,7 +2812,7 @@ PAGE_HTML = """<!DOCTYPE html>
         return (arr && arr.length) ? arr.length : 0;
       } catch (e) { return 0; }
     }
-    /** Curated recipes: scenario count from server preview (textarea may be empty/disabled). */
+    /** Curated patterns: scenario count from server preview (textarea may be empty/disabled). */
     let STRUCTURED_SCENARIO_COUNT = 1;
     function getEffectiveScenarioCount() {
       const rp = document.getElementById('operatorRecipePick');
@@ -3782,8 +3821,8 @@ PAGE_HTML = """<!DOCTYPE html>
         }
         if (recipeId === 'custom') {
           if (!scenariosTa || !scenariosTa.trim()) {
-            await show(null, null, 'Recipe is Custom — paste valid scenario JSON under Advanced → Custom scenario.');
-            updateRunStatusLine('Missing JSON for Custom recipe.');
+            await show(null, null, 'Pattern is Custom — paste valid scenario JSON under Advanced → Custom scenario.');
+            updateRunStatusLine('Missing JSON for Custom pattern.');
             return;
           }
           try {
@@ -4205,7 +4244,7 @@ PAGE_HTML = """<!DOCTYPE html>
         if (batchN > 0 && rounds != null) {
           line += 'This batch: <strong>' + batchN + '</strong> scenario(s), <strong>' + w + '</strong> workers → ~<strong>' + rounds + '</strong> parallel round(s). ';
         } else {
-          line += 'Pick a recipe (or Custom JSON) to see batch rounds; workers use slider (' + w + '). ';
+          line += 'Pick a pattern (or Custom JSON) to see batch rounds; workers use slider (' + w + '). ';
         }
         if (br != null && batchN > 0) {
           line += 'Coarse bar steps ≈ ' + br.toLocaleString() + ' (scenarios×bars).';
@@ -4227,6 +4266,67 @@ PAGE_HTML = """<!DOCTYPE html>
 
     function recipeMeta(rid) {
       return PG_OPERATOR_RECIPES.find(function (x) { return x.recipe_id === rid; }) || null;
+    }
+
+    const CUSTOM_MODE_CARD = {
+      sections: [
+        {
+          k: 'What it does',
+          v: 'You define every scenario in JSON under Advanced. Each scenario runs one standard replay on historical bars using the manifest and fields you supply.',
+        },
+        {
+          k: 'Candidates',
+          v: 'No — this path does not run the operator harness. There is no built-in control-plus-candidate search here. Use Pattern Learning or Reference Comparison if you need that.',
+        },
+        {
+          k: 'Prior memory',
+          v: 'Only if your JSON sets memory_bundle_path, or Groundhog auto-merge is on and the bundle file exists. Otherwise replays use manifest defaults only.',
+        },
+        {
+          k: 'Writes new memory',
+          v: 'Not automatically. Optional experience log lines are audit only. Run does not promote parameters into Groundhog or change bundles by itself.',
+        },
+        {
+          k: 'Winner',
+          v: 'No harness winner. You still get Referee outcome and PnL per scenario row on the scorecard.',
+        },
+        {
+          k: 'Carries forward',
+          v: 'Nothing automatic. Persistence requires explicit operator actions (for example Groundhog promote), not Run alone.',
+        },
+        {
+          k: 'Use this when',
+          v: 'Imports, uploads, one-off experiments, or anything not covered by the two curated patterns.',
+        },
+      ],
+    };
+
+    function renderPatternModeExplanation() {
+      const host = document.getElementById('patternModeExplanationBody');
+      if (!host) return;
+      const rid = operatorRecipePick && operatorRecipePick.value;
+      let card = null;
+      if (rid === 'custom') {
+        card = CUSTOM_MODE_CARD;
+      } else {
+        const m = recipeMeta(rid);
+        card = m && m.operator_mode_card_v1;
+      }
+      if (!card || !card.sections || !card.sections.length) {
+        if (rid && rid !== 'custom' && (!PG_OPERATOR_RECIPES || !PG_OPERATOR_RECIPES.length)) {
+          host.textContent = 'Loading pattern details…';
+        } else {
+          host.textContent = '';
+        }
+        return;
+      }
+      let h = '<h3 class="pg-pattern-mode-h">This pattern (read before Run)</h3><dl class="pg-pattern-mode-dl">';
+      for (let i = 0; i < card.sections.length; i++) {
+        const s = card.sections[i];
+        h += '<dt>' + escapeHtml(s.k) + '</dt><dd>' + escapeHtml(s.v) + '</dd>';
+      }
+      h += '</dl>';
+      host.innerHTML = h;
     }
 
     function syncCustomMonthsVisibility() {
@@ -4281,7 +4381,7 @@ PAGE_HTML = """<!DOCTYPE html>
     }
 
     function updateRunConfigurationPanel() {
-      const rr = document.getElementById('runConfigRecipe');
+      const rr = document.getElementById('runConfigPattern');
       const rp = document.getElementById('runConfigPolicy');
       const rw = document.getElementById('runConfigWindow');
       const rg = document.getElementById('runConfigGoalSummary');
@@ -4317,6 +4417,7 @@ PAGE_HTML = """<!DOCTYPE html>
         if (gCon) gCon.textContent = (gs && gs.constraints_line) ? ('Constraints: ' + gs.constraints_line) : '';
         if (gNote) gNote.textContent = (gs && gs.note) ? gs.note : '';
       }
+      renderPatternModeExplanation();
     }
 
     function applyRecipeModeToTextarea() {
@@ -4326,12 +4427,12 @@ PAGE_HTML = """<!DOCTYPE html>
       const ad = document.getElementById('advancedJsonDetails');
       if (scenariosEl) {
         scenariosEl.disabled = !isCustom;
-        scenariosEl.title = isCustom ? 'Edit scenario JSON for this run' : 'Disabled — server builds scenarios for curated recipes.';
+        scenariosEl.title = isCustom ? 'Edit scenario JSON for this run' : 'Disabled — server builds scenarios for curated patterns.';
       }
       if (hint) {
         hint.textContent = isCustom
           ? 'Edit JSON below. It is validated on Run (same contract as before).'
-          : 'Disabled for curated recipes — server injects manifest, evaluation window, goal, and recipe metadata.';
+          : 'Disabled for curated patterns — server injects manifest, evaluation window, goal, and pattern metadata.';
       }
       if (!isCustom && scenariosEl) {
         scenariosEl.value = '';
@@ -4527,7 +4628,7 @@ PAGE_HTML = """<!DOCTYPE html>
           if (j.ok) {
             if (uploadPresetResult) {
               uploadPresetResult.className = 'pg-upload-result visible ok';
-              uploadPresetResult.textContent = 'PASS — Saved as ' + j.filename + '. Appears under Advanced → Load example file; switch Recipe to Custom to run.';
+              uploadPresetResult.textContent = 'PASS — Saved as ' + j.filename + '. Appears under Advanced → Load example file; switch Pattern to Custom to run.';
             }
             if (uploadPresetSubmitBtn) uploadPresetSubmitBtn.style.display = 'none';
             if (uploadPresetDoneBtn) uploadPresetDoneBtn.style.display = '';
