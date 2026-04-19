@@ -2,21 +2,26 @@
 """
 Two-run proof: harness winner → contextual JSONL → next harness reads / matches / bias counters.
 
-Requires SQLite ``market_bars_5m`` (same as pattern game). Uses an isolated temp JSONL path.
+Requires SQLite ``market_bars_5m`` (same as pattern game). Default: isolated temp JSONL.
 
   PYTHONPATH=. python3 scripts/prove_context_memory_loop_two_run.py
+  PYTHONPATH=. python3 scripts/prove_context_memory_loop_two_run.py --canonical-memory --directive-proof
+
+``--canonical-memory`` truncates ``context_signature_memory.jsonl`` (canonical store) before run 1.
+``--directive-proof`` enforces architect acceptance: run1 learning + save + run2 load + match + bias.
 
 Run 1 must select a strict winner over control or nothing is written (``selected_candidate_id``).
 On short or degenerate tapes that often yields no write — use full history / a tape where
 candidate search beats control, or rely on ``tests/test_context_memory_winner_persist.py`` for
 deterministic persist proof.
 
-Exit 0 when run2 shows ``memory_records_loaded_count > 0`` after run1 wrote at least one line.
+Exit 0 when run2 meets success criteria (see ``--directive-proof``).
 Exit 5 when run1 had no winner (nothing to prove on run 2). Exit 1 when run2 load still empty.
 """
 
 from __future__ import annotations
 
+import argparse
 import json
 import os
 import sys
@@ -29,17 +34,72 @@ if str(_REPO) not in sys.path:
 
 os.environ.setdefault("PATTERN_GAME_GROUNDHOG_BUNDLE", "0")
 
+from renaissance_v4.game_theory.context_signature_memory import default_memory_path  # noqa: E402
 from renaissance_v4.game_theory.operator_test_harness_v1 import run_operator_test_harness_v1  # noqa: E402
 from renaissance_v4.game_theory.pattern_game import prepare_effective_manifest_for_replay  # noqa: E402
+from renaissance_v4.utils.db import DB_PATH, get_connection  # noqa: E402
+
+
+def _jsonl_line_count(p: Path) -> int:
+    if not p.is_file():
+        return 0
+    text = p.read_text(encoding="utf-8")
+    if not text.strip():
+        return 0
+    return sum(1 for line in text.splitlines() if line.strip())
+
+
+def _print_tape_preflight() -> int:
+    """Return market_bars_5m row count; print DB path and scale hint."""
+    path = DB_PATH.resolve()
+    print("=== Proof environment (tape) ===")
+    print("sqlite_path:", path)
+    if not path.is_file():
+        print("ERROR: database file missing — cannot replay.")
+        return -1
+    conn = get_connection()
+    try:
+        n = int(conn.execute("select count(*) from market_bars_5m").fetchone()[0])
+    finally:
+        conn.close()
+    print("market_bars_5m count:", n)
+    print(
+        "scale_note: decision windows are driven by replay bar iteration (warmup may skip some); "
+        "larger bar counts increase odds a candidate strictly beats control for the harness goal."
+    )
+    return n
 
 
 def main() -> int:
-    tmp = Path(tempfile.mkdtemp(prefix="ctx_mem_loop_"))
-    mem = tmp / "context_signature_memory.jsonl"
+    ap = argparse.ArgumentParser(description=__doc__)
+    ap.add_argument(
+        "--canonical-memory",
+        action="store_true",
+        help="Use canonical context_signature_memory.jsonl (truncated empty before run 1).",
+    )
+    ap.add_argument(
+        "--directive-proof",
+        action="store_true",
+        help="Require run1 learning_engaged + memory_saved + run2 loaded/match/bias all > 0.",
+    )
+    args = ap.parse_args()
+
+    bars = _print_tape_preflight()
+    if bars < 0:
+        return 6
+
     manifest = _REPO / "renaissance_v4" / "configs" / "manifests" / "baseline_v1_recipe.json"
-    before = ""
-    if mem.is_file():
-        before = mem.read_text(encoding="utf-8")
+    tmp: Path | None = None
+    if args.canonical_memory:
+        mem = default_memory_path().resolve()
+        mem.parent.mkdir(parents=True, exist_ok=True)
+        mem.write_text("", encoding="utf-8")
+        before = ""
+        print("canonical_memory_path (cleared):", mem)
+    else:
+        tmp = Path(tempfile.mkdtemp(prefix="ctx_mem_loop_"))
+        mem = tmp / "context_signature_memory.jsonl"
+        before = mem.read_text(encoding="utf-8") if mem.is_file() else ""
 
     def run_once(label: str, mode: str) -> dict:
         prep = prepare_effective_manifest_for_replay(
@@ -74,13 +134,30 @@ def main() -> int:
     sel = proof.get("selected_candidate_id")
     print("selected_candidate_id:", sel)
     print("panel:", json.dumps(p1, indent=2, sort_keys=True))
+    la1 = h1.get("learning_run_audit_v1") or {}
+    cls1 = str(la1.get("run_classification_v1") or "")
+    dw1 = int((h1.get("replay_attempt_aggregates_v1") or {}).get("decision_windows_total") or 0)
+    print("run_classification_v1:", cls1)
+    print("decision_windows_total (run1 control):", dw1)
     after_r1 = mem.read_text(encoding="utf-8") if mem.is_file() else ""
+    lines_r1 = _jsonl_line_count(mem)
     if not sel:
         print(
             "\nNo winner on run 1 — no JSONL write (expected on some tapes). "
             "Exit 5. For CI-grade proof see tests/test_context_memory_winner_persist.py."
         )
         return 5
+    if args.directive_proof:
+        if cls1 != "learning_engaged":
+            print("FAIL directive: run1 run_classification_v1 must be learning_engaged, got:", cls1)
+            return 7
+        if not p1.get("memory_saved_this_run"):
+            print("FAIL directive: run1 memory_saved_this_run must be true")
+            return 8
+        if lines_r1 < 1:
+            print("FAIL directive: JSONL must have >=1 line after run1, got", lines_r1)
+            return 9
+    print("jsonl_line_count_after_run1:", lines_r1)
     print("--- JSONL after run1 (tail) ---")
     print(after_r1[-2000:] if len(after_r1) > 2000 else after_r1)
 
@@ -117,10 +194,18 @@ def main() -> int:
             "If run 1 had a winner, check ``canonical_memory_path`` in the panel vs run 2."
         )
         return 1
-    if matches <= 0:
-        print("NOTE: no signature match windows on this tape (still loaded store).")
-    if bias <= 0:
-        print("NOTE: zero fusion bias applications (matches may be empty or priors did not nudge thresholds).")
+    if args.directive_proof:
+        if matches <= 0:
+            print("FAIL directive: recall_match_windows_total must be > 0, got", matches)
+            return 10
+        if bias <= 0:
+            print("FAIL directive: recall_bias_applied_total must be > 0, got", bias)
+            return 11
+    else:
+        if matches <= 0:
+            print("NOTE: no signature match windows on this tape (still loaded store).")
+        if bias <= 0:
+            print("NOTE: zero fusion bias applications (matches may be empty or priors did not nudge thresholds).")
     print("OK: two-run contextual memory loop exercised; see panel narratives and JSONL diff above.")
     return 0
 
