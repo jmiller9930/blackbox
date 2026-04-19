@@ -72,7 +72,7 @@ _PATTERN_BANNER_PATH = _RV4_ROOT / "assets" / "pattern.png"
 _PATTERN_BANNER_WEBP_PATH = _RV4_ROOT / "assets" / "pattern.webp"
 
 # Operator-visible web UI bundle version — bump when changing PAGE_HTML (HTML/CSS/JS) so deploys are provable.
-PATTERN_GAME_WEB_UI_VERSION = "2.7.3"
+PATTERN_GAME_WEB_UI_VERSION = "2.8.0"
 
 from renaissance_v4.game_theory.groundhog_memory import (
     groundhog_auto_merge_enabled,
@@ -1659,8 +1659,19 @@ PAGE_HTML = """<!DOCTYPE html>
     .pg-runtime-stack {
       display: flex;
       flex-direction: column;
-      gap: 18px;
+      gap: 14px;
       min-width: 0;
+      min-height: min(72vh, 720px);
+    }
+    .pg-telemetry-dock {
+      position: sticky;
+      top: 8px;
+      z-index: 8;
+      flex: 0 0 auto;
+      max-height: min(48vh, 480px);
+      display: flex;
+      flex-direction: column;
+      min-height: 0;
     }
     @media (max-width: 1680px) {
       .pg-row-main {
@@ -1680,6 +1691,40 @@ PAGE_HTML = """<!DOCTYPE html>
       backdrop-filter: blur(12px);
     }
     .pg-panel-controls { min-height: 0; }
+    .pg-panel-controls-body {
+      max-height: min(48vh, 520px);
+      overflow-y: auto;
+      overflow-x: hidden;
+      padding-right: 6px;
+      scrollbar-gutter: stable;
+    }
+    .pg-controls-core {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+    details.pg-pattern-info-fold {
+      margin-top: 4px;
+      border: 1px solid var(--pg-line);
+      border-radius: 14px;
+      background: var(--pg-surface-strong);
+      padding: 0 12px 4px;
+    }
+    details.pg-pattern-info-fold > summary {
+      cursor: pointer;
+      font-size: 0.82rem;
+      font-weight: 800;
+      color: var(--pg-accent);
+      padding: 10px 0;
+      list-style: none;
+    }
+    details.pg-pattern-info-fold > summary::-webkit-details-marker { display: none; }
+    details.pg-pattern-info-fold .pg-pattern-info-body {
+      padding: 0 0 12px;
+      border-top: 1px dashed rgba(54, 64, 74, 0.18);
+      margin-top: 4px;
+      padding-top: 12px;
+    }
     .pg-panel-score .pg-table-scroll,
     .pg-header-evidence .pg-table-scroll {
       max-height: min(48vh, 480px);
@@ -2346,16 +2391,19 @@ PAGE_HTML = """<!DOCTYPE html>
       background: #0f1419;
       color: #e6edf3;
       box-shadow: var(--pg-shadow);
-      flex: 0 0 auto;
+      flex: 1 1 auto;
+      min-height: 0;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
     }
-    body.pg-run-active .live-telemetry-wrap:not([hidden]) {
+    body.pg-run-active .live-telemetry-wrap {
       border-color: rgba(42, 143, 217, 0.55);
       box-shadow: 0 0 0 2px rgba(42, 143, 217, 0.28), var(--pg-shadow);
     }
     body.pg-run-active .pg-runtime-stack .pg-panel-score {
       opacity: 0.94;
     }
-    .live-telemetry-wrap[hidden] { display: none !important; }
     .live-telemetry-title {
       margin: 0 0 8px;
       font-size: 0.72rem;
@@ -2364,17 +2412,58 @@ PAGE_HTML = """<!DOCTYPE html>
       text-transform: uppercase;
       letter-spacing: 0.04em;
     }
+    .memory-status-card {
+      font-size: 0.78rem;
+      line-height: 1.45;
+      background: rgba(255, 255, 255, 0.06);
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      border-radius: 10px;
+      padding: 10px 12px;
+      flex: 0 0 auto;
+    }
+    .memory-status-narrative {
+      margin: 0 0 8px;
+      font-size: 0.8rem;
+      font-style: italic;
+      color: #c5d0db;
+      line-height: 1.4;
+    }
+    .memory-status-card dl {
+      margin: 0;
+      display: grid;
+      grid-template-columns: minmax(0, 11rem) 1fr;
+      gap: 4px 10px;
+    }
+    .memory-status-card dt { color: #8b98a5; font-weight: 700; }
+    .memory-status-card dd { margin: 0; color: #e6edf3; font-weight: 600; }
+    .telemetry-rolling-log {
+      flex: 0 0 auto;
+      max-height: 7.5rem;
+      overflow-y: auto;
+      font-family: var(--pg-mono);
+      font-size: 0.7rem;
+      line-height: 1.4;
+      color: #9aa7b4;
+      border-top: 1px solid rgba(255, 255, 255, 0.1);
+      padding-top: 6px;
+    }
+    .telemetry-rolling-log .telemetry-tick {
+      margin: 0 0 4px;
+      padding-bottom: 3px;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
     .live-telemetry-panel {
       margin: 0;
       font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-      font-size: 0.76rem;
-      line-height: 1.5;
+      font-size: 0.74rem;
+      line-height: 1.45;
       white-space: pre-wrap;
-      max-height: min(38vh, 360px);
+      flex: 1 1 auto;
+      min-height: 6rem;
+      max-height: 12rem;
       overflow: auto;
-    }
-    body.pg-run-active .pg-runtime-stack .live-telemetry-panel {
-      max-height: min(52vh, 560px);
     }
     .pg-runtime-stack .pg-panel-score {
       flex: 1 1 auto;
@@ -2633,26 +2722,13 @@ PAGE_HTML = """<!DOCTYPE html>
           <div class="pg-panel-header" style="margin:0;flex:1">
             <div>
               <h2 class="pg-panel-h">1. Run controls</h2>
-              <p class="pg-panel-sub">Structured controls, run summary, workers.</p>
+              <p class="pg-panel-sub">Pattern · policy · window · memory · workers · run</p>
             </div>
             <span class="pg-chip pg-chip-teal">Controls</span>
           </div>
         </summary>
-        <div class="pg-panel-fold-body">
-        <div class="def001-science" role="region" aria-label="DEF-001">
-          <span class="def001-tag">DEF-001 · SCIENCE / EVALUATION ONLY</span>
-          <p style="margin:0">Same inputs + same code → reproducible Referee stats. <strong>No</strong> automatic policy training in the replay loop. “Memory” in logs is evidence or promoted bundle — not silent learning. Full contract: <code>docs/architect/pattern_game_operator_deficiencies_work_record.md</code> (DEF-001).</p>
-        </div>
-        <details class="help-details pg-help">
-          <summary>Setup, PYTHONPATH, Groundhog</summary>
-          <div class="help-details-body">
-            <p>Run from repo root with <code>PYTHONPATH</code> including the repo. Example files load from <code>game_theory/examples/</code> (Advanced only).</p>
-            <p><code>PATTERN_GAME_GROUNDHOG_BUNDLE=1</code> merges <code>game_theory/state/groundhog_memory_bundle.json</code> when a scenario has no <code>memory_bundle_path</code>. POST <code>/api/groundhog-memory</code> to promote ATR from review.</p>
-          </div>
-        </details>
-
-        <div class="pg-block">
-          <div class="pg-block-title">Run setup</div>
+        <div class="pg-panel-fold-body pg-panel-controls-body">
+        <div class="pg-controls-core">
           <div class="pg-mini-grid pg-mini-3">
             <div><label for="operatorRecipePick">Pattern</label><select id="operatorRecipePick" aria-describedby="presetHelp patternModeExplanation">
               <option value="pattern_learning">Pattern Learning Run</option>
@@ -2677,107 +2753,138 @@ PAGE_HTML = """<!DOCTYPE html>
             <select id="policyPick" aria-label="Policy manifest"></select>
           </div>
           <p class="pg-policy-line" id="policyReadonly" style="display:none" role="status">Policy: —</p>
-          <p class="caps" id="presetHelp">The server builds scenarios for curated patterns — no JSON required. Evaluation window controls how much tape is replayed (approximate months from the end of the series). Presets longer than your <code>market_bars_5m</code> span are disabled automatically (see Data health).</p>
-          <div id="patternModeExplanation" class="pg-pattern-mode-explanation" role="region" aria-label="What the selected pattern does">
-            <div id="patternModeExplanationBody">Loading…</div>
+
+          <div class="pg-block" style="margin-top:0">
+            <div class="pg-block-title">Workers &amp; logging</div>
+            <label for="workersRange">Workers <span id="workersVal" style="font-weight:700">1</span></label>
+            <input type="range" id="workersRange" min="1" max="64" value="1" step="1" />
+            <p id="workerCpuHint" style="margin:4px 0 0;font-size:0.8rem"></p>
+            <div id="workerEffectiveLine" aria-live="polite" style="font-size:0.8rem"></div>
+            <label style="margin-top:8px;font-size:0.85rem;display:block"><input type="checkbox" id="doLog" checked/> Append to experience JSONL</label>
           </div>
-          <div class="pg-run-config" id="runConfigPanel" role="region" aria-label="Run configuration">
-            <div class="pg-block-title" style="margin-top:0">Run configuration</div>
-            <dl class="pg-run-config-dl" id="runConfigDl">
-              <dt>Pattern</dt><dd id="runConfigPattern">—</dd>
-              <dt>Policy</dt><dd id="runConfigPolicy">—</dd>
-              <dt>Evaluation window</dt><dd id="runConfigWindow">—</dd>
-              <dt>Goal</dt><dd id="runConfigGoalSummary">—</dd>
-            </dl>
-          </div>
-          <div class="pg-goal-readonly" id="goalReadonlyPanel" aria-live="polite">
-            <div class="pg-block-title" style="margin-top:0;margin-bottom:8px">Goal (read-only)</div>
-            <p id="goalReadonlyTitle" class="pg-goal-line"></p>
-            <p id="goalReadonlyMetrics" class="pg-goal-line"></p>
-            <p id="goalReadonlyConstraints" class="pg-goal-line caps"></p>
-            <p id="goalReadonlyNote" class="pg-goal-line caps" style="margin-bottom:0"></p>
-          </div>
-          <details class="help-details pg-help" style="margin-top:12px" id="advancedOperatorPanel">
-            <summary>Advanced — examples, uploads &amp; custom JSON</summary>
-            <div class="help-details-body">
-              <div class="pg-mini-grid pg-mini-3" style="margin-top:8px">
-                <div><label for="examplesFilePick">Load example file</label><select id="examplesFilePick"><option value="">— pick file —</option></select></div>
-                <div><label>&nbsp;</label><button type="button" class="btn-secondary pg-op-btn" style="width:100%;margin-top:0" id="suggestHuntersBtn" title="Scorecard + retrospective" data-label-idle="Suggest hunters">Suggest hunters</button></div>
-                <div><label>&nbsp;</label><button type="button" class="btn-chef pg-op-btn" style="width:100%;margin-top:0" id="chefAtrSweepBtn" data-label-idle="ATR sweep">ATR sweep</button></div>
+
+          <div class="pg-block" style="margin-top:0;padding-top:12px">
+            <div class="pg-block-title">Paper P&amp;L (batch)</div>
+            <div class="pnl-strip" id="pnlStrip">
+              <div class="pnl-row1">
+                <span class="pnl-baseline">Baseline <span id="pnlBaselineLabel">$1,000.00</span></span>
+                <span class="pnl-ending" id="pnlEnding">$1,000.00</span>
+                <span class="pnl-delta neutral" id="pnlDelta">— run a batch —</span>
               </div>
-              <span class="caps" id="hunterSuggestHint"></span>
-              <div class="tool-row" style="margin-top:8px">
-                <div style="flex:1;min-width:200px">
-                  <label for="chefManifestPath" style="margin:0;font-size:0.8rem">Chef manifest</label>
-                  <input type="text" id="chefManifestPath" style="margin-top:4px" value="renaissance_v4/configs/manifests/baseline_v1_recipe.json" spellcheck="false"/>
+              <div class="pnl-bar-wrap" aria-hidden="true">
+                <div class="pnl-bar-track" id="pnlBarTrack">
+                  <div class="pnl-fill" id="pnlFill" style="left:50%;width:0;"></div>
+                  <div class="pnl-marker" id="pnlMarker"></div>
                 </div>
-                <span class="caps" id="chefHint" style="align-self:flex-end"></span>
+                <div class="pnl-bar-ticks"><span>$0</span><span>$1k</span><span>$2k</span></div>
               </div>
-              <input type="file" id="presetFileInput" accept=".json,application/json" style="display:none" aria-hidden="true" />
-              <div class="pg-upload-row">
-                <button type="button" class="btn-upload pg-op-btn" id="presetUploadBtn" data-label-idle="Upload scenario JSON…">Upload scenario JSON…</button>
-                <button type="button" class="btn-rename-preset pg-op-btn" id="presetRenameBtn" disabled title="Only for uploaded presets (user_*.json)" data-label-idle="Rename preset…">Rename preset…</button>
+            </div>
+          </div>
+
+          <div class="run-actions">
+            <button type="button" id="runBtn" class="pg-op-btn pg-op-btn--run" data-label-idle="Run batch">Run batch</button>
+            <div class="status-stack">
+              <div id="statusLine" aria-live="polite"></div>
+              <div id="batchConcurrencyBanner" class="batch-concurrency-banner" aria-live="polite"></div>
+              <div id="progressWrap" class="progress-wrap" role="progressbar" aria-label="Batch replay progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+                <div class="progress-track" id="progressTrack"><div class="progress-fill" id="progressFill" style="width:0%"></div></div>
+                <p class="caps" id="progressSub"></p>
               </div>
-              <p class="pg-upload-hint">Uploads validate against the scenario contract and appear in the example list. For a normal run, use <strong>Pattern</strong> above — not this file list.</p>
-              <details class="inline-details" style="margin-top:12px;border-left-color:#2d8a6a" id="advancedJsonDetails">
-                <summary>Custom scenario (JSON)</summary>
-                <p class="caps" id="structuredJsonHint" style="margin:6px 0 8px">This field is <strong>disabled</strong> for curated patterns — the server injects manifest, window, and goal.</p>
-                <details class="inline-details"><summary>Validation (hypothesis)</summary>
-                  <p style="margin:0">Non-empty <code>agent_explanation.hypothesis</code> per scenario unless <code>PATTERN_GAME_REQUIRE_HYPOTHESIS=0</code>.</p>
+              <div id="runFeedbackToast" class="run-feedback-toast" role="status" aria-live="polite" hidden></div>
+            </div>
+          </div>
+        </div>
+
+        <details class="pg-pattern-info-fold" id="patternInfoFold">
+          <summary>Read before run (optional) — pattern info, docs &amp; goal</summary>
+          <div class="pg-pattern-info-body">
+            <div class="def001-science" role="region" aria-label="DEF-001">
+              <span class="def001-tag">DEF-001 · SCIENCE / EVALUATION ONLY</span>
+              <p style="margin:0">Same inputs + same code → reproducible Referee stats. <strong>No</strong> automatic policy training in the replay loop. “Memory” in logs is evidence or promoted bundle — not silent learning. Full contract: <code>docs/architect/pattern_game_operator_deficiencies_work_record.md</code> (DEF-001).</p>
+            </div>
+            <details class="help-details pg-help">
+              <summary>Setup, PYTHONPATH, Groundhog</summary>
+              <div class="help-details-body">
+                <p>Run from repo root with <code>PYTHONPATH</code> including the repo. Example files load from <code>game_theory/examples/</code> (Advanced only).</p>
+                <p><code>PATTERN_GAME_GROUNDHOG_BUNDLE=1</code> merges <code>game_theory/state/groundhog_memory_bundle.json</code> when a scenario has no <code>memory_bundle_path</code>. POST <code>/api/groundhog-memory</code> to promote ATR from review.</p>
+              </div>
+            </details>
+            <p class="caps" id="presetHelp">The server builds scenarios for curated patterns — no JSON required. Evaluation window controls how much tape is replayed (approximate months from the end of the series). Presets longer than your <code>market_bars_5m</code> span are disabled automatically (see Data health).</p>
+            <div id="patternModeExplanation" class="pg-pattern-mode-explanation" role="region" aria-label="What the selected pattern does">
+              <div id="patternModeExplanationBody">Loading…</div>
+            </div>
+            <div class="pg-run-config" id="runConfigPanel" role="region" aria-label="Run configuration">
+              <div class="pg-block-title" style="margin-top:0">Run configuration</div>
+              <dl class="pg-run-config-dl" id="runConfigDl">
+                <dt>Pattern</dt><dd id="runConfigPattern">—</dd>
+                <dt>Policy</dt><dd id="runConfigPolicy">—</dd>
+                <dt>Evaluation window</dt><dd id="runConfigWindow">—</dd>
+                <dt>Goal</dt><dd id="runConfigGoalSummary">—</dd>
+              </dl>
+            </div>
+            <div class="pg-goal-readonly" id="goalReadonlyPanel" aria-live="polite">
+              <div class="pg-block-title" style="margin-top:0;margin-bottom:8px">Goal (read-only)</div>
+              <p id="goalReadonlyTitle" class="pg-goal-line"></p>
+              <p id="goalReadonlyMetrics" class="pg-goal-line"></p>
+              <p id="goalReadonlyConstraints" class="pg-goal-line caps"></p>
+              <p id="goalReadonlyNote" class="pg-goal-line caps" style="margin-bottom:0"></p>
+            </div>
+            <details class="help-details pg-help" style="margin-top:12px" id="advancedOperatorPanel">
+              <summary>Advanced — examples, uploads &amp; custom JSON</summary>
+              <div class="help-details-body">
+                <div class="pg-mini-grid pg-mini-3" style="margin-top:8px">
+                  <div><label for="examplesFilePick">Load example file</label><select id="examplesFilePick"><option value="">— pick file —</option></select></div>
+                  <div><label>&nbsp;</label><button type="button" class="btn-secondary pg-op-btn" style="width:100%;margin-top:0" id="suggestHuntersBtn" title="Scorecard + retrospective" data-label-idle="Suggest hunters">Suggest hunters</button></div>
+                  <div><label>&nbsp;</label><button type="button" class="btn-chef pg-op-btn" style="width:100%;margin-top:0" id="chefAtrSweepBtn" data-label-idle="ATR sweep">ATR sweep</button></div>
+                </div>
+                <span class="caps" id="hunterSuggestHint"></span>
+                <div class="tool-row" style="margin-top:8px">
+                  <div style="flex:1;min-width:200px">
+                    <label for="chefManifestPath" style="margin:0;font-size:0.8rem">Chef manifest</label>
+                    <input type="text" id="chefManifestPath" style="margin-top:4px" value="renaissance_v4/configs/manifests/baseline_v1_recipe.json" spellcheck="false"/>
+                  </div>
+                  <span class="caps" id="chefHint" style="align-self:flex-end"></span>
+                </div>
+                <input type="file" id="presetFileInput" accept=".json,application/json" style="display:none" aria-hidden="true" />
+                <div class="pg-upload-row">
+                  <button type="button" class="btn-upload pg-op-btn" id="presetUploadBtn" data-label-idle="Upload scenario JSON…">Upload scenario JSON…</button>
+                  <button type="button" class="btn-rename-preset pg-op-btn" id="presetRenameBtn" disabled title="Only for uploaded presets (user_*.json)" data-label-idle="Rename preset…">Rename preset…</button>
+                </div>
+                <p class="pg-upload-hint">Uploads validate against the scenario contract and appear in the example list. For a normal run, use <strong>Pattern</strong> above — not this file list.</p>
+                <details class="inline-details" style="margin-top:12px;border-left-color:#2d8a6a" id="advancedJsonDetails">
+                  <summary>Custom scenario (JSON)</summary>
+                  <p class="caps" id="structuredJsonHint" style="margin:6px 0 8px">This field is <strong>disabled</strong> for curated patterns — the server injects manifest, window, and goal.</p>
+                  <details class="inline-details"><summary>Validation (hypothesis)</summary>
+                    <p style="margin:0">Non-empty <code>agent_explanation.hypothesis</code> per scenario unless <code>PATTERN_GAME_REQUIRE_HYPOTHESIS=0</code>.</p>
+                  </details>
+                  <textarea id="scenarios" spellcheck="false" placeholder="Used only when Pattern = Custom. Array of scenario objects or {&quot;scenarios&quot;:[…]}."></textarea>
                 </details>
-                <textarea id="scenarios" spellcheck="false" placeholder="Used only when Pattern = Custom. Array of scenario objects or {&quot;scenarios&quot;:[…]}."></textarea>
-              </details>
-            </div>
-          </details>
-        </div>
-
-        <div class="pg-block">
-          <div class="pg-block-title">Parallelism &amp; logging</div>
-          <label for="workersRange">Workers <span id="workersVal" style="font-weight:700">1</span></label>
-          <input type="range" id="workersRange" min="1" max="64" value="1" step="1" />
-          <p id="workerCpuHint"></p>
-          <div id="workerEffectiveLine" aria-live="polite"></div>
-          <label style="margin-top:10px;font-size:0.85rem"><input type="checkbox" id="doLog" checked/> Append to experience JSONL</label>
-        </div>
-
-        <div class="pg-block">
-          <div class="pg-block-title">Paper P&amp;L (batch)</div>
-          <div class="pnl-strip" id="pnlStrip">
-            <div class="pnl-row1">
-              <span class="pnl-baseline">Baseline <span id="pnlBaselineLabel">$1,000.00</span></span>
-              <span class="pnl-ending" id="pnlEnding">$1,000.00</span>
-              <span class="pnl-delta neutral" id="pnlDelta">— run a batch —</span>
-            </div>
-            <div class="pnl-bar-wrap" aria-hidden="true">
-              <div class="pnl-bar-track" id="pnlBarTrack">
-                <div class="pnl-fill" id="pnlFill" style="left:50%;width:0;"></div>
-                <div class="pnl-marker" id="pnlMarker"></div>
               </div>
-              <div class="pnl-bar-ticks"><span>$0</span><span>$1k</span><span>$2k</span></div>
-            </div>
+            </details>
           </div>
-        </div>
-
-        <div class="run-actions">
-          <button type="button" id="runBtn" class="pg-op-btn pg-op-btn--run" data-label-idle="Run batch">Run batch</button>
-          <div class="status-stack">
-            <div id="statusLine" aria-live="polite"></div>
-            <div id="batchConcurrencyBanner" class="batch-concurrency-banner" aria-live="polite"></div>
-            <div id="progressWrap" class="progress-wrap" role="progressbar" aria-label="Batch replay progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
-              <div class="progress-track" id="progressTrack"><div class="progress-fill" id="progressFill" style="width:0%"></div></div>
-              <p class="caps" id="progressSub"></p>
-            </div>
-            <div id="runFeedbackToast" class="run-feedback-toast" role="status" aria-live="polite" hidden></div>
-          </div>
-        </div>
+        </details>
         </div>
       </details>
       </div>
 
       <div class="pg-runtime-stack">
-      <div id="liveTelemetryWrap" class="live-telemetry-wrap" hidden>
-        <p class="live-telemetry-title">Live run telemetry</p>
-        <pre id="liveTelemetryPanel" class="live-telemetry-panel" aria-live="polite"></pre>
+      <div class="pg-telemetry-dock">
+      <div id="liveTelemetryWrap" class="live-telemetry-wrap">
+        <p class="live-telemetry-title">Live telemetry &amp; contextual memory</p>
+        <div id="memoryStatusCard" class="memory-status-card" aria-live="polite">
+          <p id="memoryStatusNarrative" class="memory-status-narrative"></p>
+          <dl>
+            <dt>Memory mode</dt><dd id="memStMode">—</dd>
+            <dt>Memory saved this run</dt><dd id="memStSaved">—</dd>
+            <dt>Memory loaded</dt><dd id="memStLoaded">—</dd>
+            <dt>Records loaded</dt><dd id="memStRec">—</dd>
+            <dt>Recall matches</dt><dd id="memStMatch">—</dd>
+            <dt>Bias applied</dt><dd id="memStBias">—</dd>
+          </dl>
+        </div>
+        <div id="telemetryRollingLog" class="telemetry-rolling-log" aria-live="polite"></div>
+        <pre id="liveTelemetryPanel" class="live-telemetry-panel">Idle — no batch running. Live counters stream here when you click Run.</pre>
+      </div>
       </div>
 
       <details class="pg-panel-fold pg-panel-score" open>
@@ -2987,22 +3094,132 @@ PAGE_HTML = """<!DOCTYPE html>
       }
       return String(m).padStart(2, '0') + ':' + String(rs).padStart(2, '0');
     }
-    function renderLiveTelemetryPanel(pj, opts) {
-      const wrap = document.getElementById('liveTelemetryWrap');
-      const el = document.getElementById('liveTelemetryPanel');
-      if (!wrap || !el) return;
-      if (!pj || pj.status !== 'running') {
-        wrap.hidden = true;
+
+    let _lastTelemetryDetailText = '';
+    let _lastTelemetryStreamKey = '';
+
+    function _memoryModeLabelFromEcho(modeRaw) {
+      const m = String(modeRaw || '').trim().toLowerCase();
+      if (m === 'off') return 'OFF';
+      if (m === 'read') return 'READ';
+      if (m === 'read_write') return 'READ+WRITE';
+      return '—';
+    }
+
+    function _yn(v) {
+      if (v === true || v === 1 || v === '1' || v === 'yes' || v === 'Y' || v === 'YES') return 'YES';
+      if (v === false || v === 0 || v === '0' || v === 'no' || v === 'N' || v === 'NO') return 'NO';
+      return '—';
+    }
+
+    function updateMemoryStatusCardFromPanel(panel, echo, hot, running) {
+      const narr = document.getElementById('memoryStatusNarrative');
+      const mMode = document.getElementById('memStMode');
+      const mSaved = document.getElementById('memStSaved');
+      const mLoaded = document.getElementById('memStLoaded');
+      const mRec = document.getElementById('memStRec');
+      const mMatch = document.getElementById('memStMatch');
+      const mBias = document.getElementById('memStBias');
+      const pick = document.getElementById('contextSignatureMemoryModePick');
+      const domMode = pick && pick.value ? String(pick.value) : '';
+      if (mMode) {
+        mMode.textContent = echo && echo.context_signature_memory_mode != null
+          ? _memoryModeLabelFromEcho(echo.context_signature_memory_mode)
+          : _memoryModeLabelFromEcho(domMode);
+      }
+      if (panel && typeof panel === 'object') {
+        if (narr) narr.textContent = String(panel.narrative || '').trim() || (running ? 'Run in progress — memory counters update live from the busiest worker.' : '');
+        if (mSaved) mSaved.textContent = _yn(panel.memory_saved_this_run);
+        if (mLoaded) mLoaded.textContent = _yn(panel.memory_loaded);
+        if (mRec) mRec.textContent = fmtIntCommas(panel.memory_records_loaded_count);
+        if (mMatch) mMatch.textContent = fmtIntCommas(panel.recall_matches != null ? panel.recall_matches : panel.recall_match_windows_total);
+        if (mBias) mBias.textContent = fmtIntCommas(panel.bias_applied != null ? panel.bias_applied : panel.recall_bias_applied_total);
         return;
       }
-      wrap.hidden = false;
-      const echo = pj.telemetry_context_echo || {};
-      const telem = pj.telemetry || {};
+      if (running && hot) {
+        const rm = hot.recall_match_windows_so_far != null ? Number(hot.recall_match_windows_so_far) : 0;
+        const rb = hot.recall_bias_applied_so_far != null ? Number(hot.recall_bias_applied_so_far) : 0;
+        const rrec = hot.recall_match_records_so_far != null ? Number(hot.recall_match_records_so_far) : 0;
+        if (narr) {
+          narr.textContent =
+            rm > 0 || rb > 0
+              ? 'Prior contextual memory is influencing this replay where signatures match (live counters).'
+              : 'Replay is running — memory recall counts appear when the replay starts matching stored signatures.';
+        }
+        if (mSaved) mSaved.textContent = '—';
+        if (mLoaded) mLoaded.textContent = rm > 0 || rb > 0 ? 'YES' : 'NO';
+        if (mRec) mRec.textContent = fmtIntCommas(rrec);
+        if (mMatch) mMatch.textContent = fmtIntCommas(rm);
+        if (mBias) mBias.textContent = fmtIntCommas(rb);
+      } else if (!running) {
+        if (narr) narr.textContent = 'Idle — start a batch to see contextual memory status for that run.';
+        if (mSaved) mSaved.textContent = '—';
+        if (mLoaded) mLoaded.textContent = '—';
+        if (mRec) mRec.textContent = '—';
+        if (mMatch) mMatch.textContent = '—';
+        if (mBias) mBias.textContent = '—';
+      }
+    }
+
+    function aggregateContextMemoryPanelFromResults(results) {
+      if (!Array.isArray(results) || !results.length) return null;
+      let merged = null;
+      for (const row of results) {
+        if (!row || !row.ok) continue;
+        const p = row.context_memory_operator_panel_v1;
+        if (!p || typeof p !== 'object') continue;
+        if (!merged) {
+          merged = { ...p };
+          continue;
+        }
+        merged.memory_saved_this_run = !!(merged.memory_saved_this_run || p.memory_saved_this_run);
+        merged.memory_loaded = !!(merged.memory_loaded || p.memory_loaded);
+        merged.memory_records_loaded_count = Math.max(
+          Number(merged.memory_records_loaded_count) || 0,
+          Number(p.memory_records_loaded_count) || 0
+        );
+        merged.recall_matches =
+          (Number(merged.recall_matches) || 0) + (Number(p.recall_matches) || 0);
+        merged.bias_applied =
+          (Number(merged.bias_applied) || 0) + (Number(p.bias_applied) || 0);
+        if (!merged.narrative && p.narrative) merged.narrative = p.narrative;
+      }
+      if (merged && !merged.narrative) {
+        merged.narrative =
+          (merged.memory_saved_this_run ? 'At least one scenario saved a winning pattern to contextual memory. ' : '') +
+          (merged.memory_loaded ? 'Prior memory was read and applied where conditions matched.' : '');
+      }
+      return merged;
+    }
+
+    function updateMemoryStatusFromBatchResultPayload(payload) {
+      const echo = (payload && payload.operator_batch_audit) || {};
+      const results = payload && payload.results;
+      const panel = aggregateContextMemoryPanelFromResults(results);
+      updateMemoryStatusCardFromPanel(panel, echo, null, false);
+    }
+
+    function renderLiveTelemetryPanel(pj, opts) {
+      const el = document.getElementById('liveTelemetryPanel');
+      const roll = document.getElementById('telemetryRollingLog');
+      if (!el) return;
+      const echo = (pj && pj.telemetry_context_echo) || {};
+      const telem = (pj && pj.telemetry) || {};
       const rows = Array.isArray(telem.scenarios) ? telem.scenarios.slice() : [];
-      const completed = pj.completed != null ? pj.completed : 0;
-      const total = pj.total != null ? pj.total : 0;
+      const completed = pj && pj.completed != null ? pj.completed : 0;
+      const total = pj && pj.total != null ? pj.total : 0;
       const elapsed = opts && opts.elapsedSec != null ? opts.elapsedSec : 0;
-      const lm = pj.last_message || '';
+      const lm = (pj && pj.last_message) || '';
+      const running = pj && pj.status === 'running';
+      let hot = null;
+      if (rows.length) {
+        rows.sort(
+          (a, b) => (Number(b.decision_windows_processed) || 0) - (Number(a.decision_windows_processed) || 0)
+        );
+        hot = rows[0];
+      }
+      updateMemoryStatusCardFromPanel(null, echo, hot, running);
+
       const recipe =
         echo.operator_recipe_label || echo.operator_recipe_id || (opts && opts.recipeLabel) || '—';
       const fw =
@@ -3012,86 +3229,139 @@ PAGE_HTML = """<!DOCTYPE html>
       const winM = echo.evaluation_window_calendar_months;
       const winStr =
         winM != null ? String(winM) + ' months' : ((opts && opts.windowLabel) ? opts.windowLabel : '—');
-      let hot = null;
-      if (rows.length) {
-        rows.sort(
-          (a, b) => (Number(b.decision_windows_processed) || 0) - (Number(a.decision_windows_processed) || 0)
-        );
-        hot = rows[0];
-      }
       const lines = [];
-      lines.push('Run: ' + recipe);
-      lines.push('Framework: ' + fw);
-      lines.push('Window: ' + winStr);
-      lines.push('');
-      lines.push(
-        'Batch: ' + completed + ' / ' + total + ' scenario(s) finished (parallel)' +
-        (lm ? (' · last: ' + lm) : '')
-      );
-      if (hot) {
-        const si = hot.scenario_index;
-        const st = hot.scenario_total;
-        const sid = hot.scenario_id || '—';
+      if (running) {
+        lines.push('Run: ' + recipe);
+        lines.push('Framework: ' + fw);
+        lines.push('Window: ' + winStr);
+        lines.push('');
         lines.push(
-          'Busiest worker — scenario slot ' + (si != null ? si : '?') + '/' + (st != null ? st : '?') +
-            ' — ' + sid
+          'Batch: ' + completed + ' / ' + total + ' scenario(s) finished (parallel)' +
+          (lm ? (' · last: ' + lm) : '')
         );
-        const csa = hot.candidate_search_active === true || echo.candidate_search_active === true;
-        if (!csa) {
-          lines.push('Candidate phase: baseline only (no multi-replay candidate search)');
+        if (hot) {
+          const si = hot.scenario_index;
+          const st = hot.scenario_total;
+          const sid = hot.scenario_id || '—';
+          lines.push(
+            'Busiest worker — scenario slot ' + (si != null ? si : '?') + '/' + (st != null ? st : '?') +
+              ' — ' + sid
+          );
+          const csa = hot.candidate_search_active === true || echo.candidate_search_active === true;
+          if (!csa) {
+            lines.push('Candidate phase: baseline only (no multi-replay candidate search)');
+          } else {
+            const phase = hot.candidate_phase || '—';
+            const ci = hot.candidate_index;
+            const ct = hot.candidates_total;
+            const cpart =
+              ci != null && ct != null
+                ? 'current index ' + ci + ' / ' + ct
+                : ci != null
+                  ? 'index ' + ci
+                  : '';
+            lines.push('Candidate phase: ' + phase + (cpart ? ' (' + cpart + ')' : ''));
+          }
+          const dw = Number(hot.decision_windows_processed || 0);
+          const dset = hot.dataset_bars;
+          const dwTot = dset != null ? Number(dset) : null;
+          lines.push(
+            'Decision windows: ' + dw.toLocaleString() +
+              (dwTot != null ? ' / ' + dwTot.toLocaleString() + ' (bars in slice)' : '') +
+              ' · bars processed: ' +
+              (hot.bars_processed != null ? Number(hot.bars_processed).toLocaleString() : String(dw))
+          );
+          lines.push(
+            'Trades (closed): ' + (hot.trades_closed_so_far != null ? hot.trades_closed_so_far : '0') +
+              ' · entry attempts: ' + (hot.entries_attempted_so_far != null ? hot.entries_attempted_so_far : '0')
+          );
+          lines.push('');
+          lines.push(
+            'Candidates tested (search progress): ' +
+              (hot.candidates_tested_so_far != null ? hot.candidates_tested_so_far : '0') +
+              (hot.candidates_total != null ? ' / ' + hot.candidates_total : '')
+          );
+          lines.push('Recall match windows: ' + (hot.recall_match_windows_so_far != null ? hot.recall_match_windows_so_far : '0'));
+          lines.push('Signal bias applications: ' + (hot.signal_bias_applied_so_far != null ? hot.signal_bias_applied_so_far : '0'));
+          lines.push('');
+          const rate = elapsed > 0.5 ? (dw / elapsed).toFixed(2) : null;
+          lines.push(
+            'Elapsed: ' + fmtTelemetryHMS(elapsed) +
+              (rate != null ? ' · ~' + rate + ' decision windows/s (busiest worker)' : '')
+          );
         } else {
-          const phase = hot.candidate_phase || '—';
-          const ci = hot.candidate_index;
-          const ct = hot.candidates_total;
-          const cpart =
-            ci != null && ct != null
-              ? 'current index ' + ci + ' / ' + ct
-              : ci != null
-                ? 'index ' + ci
-                : '';
-          lines.push('Candidate phase: ' + phase + (cpart ? ' (' + cpart + ')' : ''));
+          lines.push('');
+          lines.push('Workers starting — counters appear when the first decision windows are processed.');
+          lines.push('Elapsed: ' + fmtTelemetryHMS(elapsed));
         }
-        const dw = Number(hot.decision_windows_processed || 0);
-        const dset = hot.dataset_bars;
-        const dwTot = dset != null ? Number(dset) : null;
-        lines.push(
-          'Decision windows: ' + dw.toLocaleString() +
-            (dwTot != null ? ' / ' + dwTot.toLocaleString() + ' (bars in slice)' : '') +
-            ' · bars processed: ' +
-            (hot.bars_processed != null ? Number(hot.bars_processed).toLocaleString() : String(dw))
-        );
-        lines.push(
-          'Trades (closed): ' + (hot.trades_closed_so_far != null ? hot.trades_closed_so_far : '0') +
-            ' · entry attempts: ' + (hot.entries_attempted_so_far != null ? hot.entries_attempted_so_far : '0')
-        );
-        lines.push('');
-        lines.push(
-          'Candidates tested (search progress): ' +
-            (hot.candidates_tested_so_far != null ? hot.candidates_tested_so_far : '0') +
-            (hot.candidates_total != null ? ' / ' + hot.candidates_total : '')
-        );
-        lines.push('Recall match windows: ' + (hot.recall_match_windows_so_far != null ? hot.recall_match_windows_so_far : '0'));
-        lines.push('Signal bias applications: ' + (hot.signal_bias_applied_so_far != null ? hot.signal_bias_applied_so_far : '0'));
-        lines.push('');
-        const rate = elapsed > 0.5 ? (dw / elapsed).toFixed(2) : null;
-        lines.push(
-          'Elapsed: ' + fmtTelemetryHMS(elapsed) +
-            (rate != null ? ' · ~' + rate + ' decision windows/s (busiest worker)' : '')
-        );
+        if (rows.length > 1) {
+          lines.push('');
+          lines.push('(' + rows.length + ' telemetry file(s); busiest worker shown by decision window count.)');
+        }
       } else {
-        lines.push('');
-        lines.push('Workers starting — counters appear when the first decision windows are processed.');
-        lines.push('Elapsed: ' + fmtTelemetryHMS(elapsed));
+        lines.push('No active batch job in this browser session (or job already finished).');
+        lines.push('Last snapshot area below stays for the previous run until a new one starts.');
       }
-      if (rows.length > 1) {
-        lines.push('');
-        lines.push('(' + rows.length + ' telemetry file(s); busiest worker shown by decision window count.)');
+      const detailText = lines.join('\\n');
+      if (detailText !== _lastTelemetryDetailText) {
+        el.textContent = detailText;
+        _lastTelemetryDetailText = detailText;
       }
-      el.textContent = lines.join('\\n');
+      const dwKey = hot ? String(hot.decision_windows_processed || 0) : '0';
+      const streamKey =
+        (running ? 'run' : 'idle') +
+        '|' +
+        String(completed) +
+        '|' +
+        String(total) +
+        '|' +
+        dwKey +
+        '|' +
+        String(hot && hot.recall_match_windows_so_far != null ? hot.recall_match_windows_so_far : '') +
+        '|' +
+        String(hot && hot.candidate_phase != null ? hot.candidate_phase : '');
+      if (running && streamKey !== _lastTelemetryStreamKey && roll) {
+        _lastTelemetryStreamKey = streamKey;
+        const tick = document.createElement('div');
+        tick.className = 'telemetry-tick';
+        const ts = new Date().toISOString().slice(11, 19);
+        tick.textContent =
+          '[' +
+          ts +
+          '] dw=' +
+          dwKey +
+          ' recall_win=' +
+          (hot && hot.recall_match_windows_so_far != null ? hot.recall_match_windows_so_far : '0') +
+          ' bias=' +
+          (hot && hot.recall_bias_applied_so_far != null ? hot.recall_bias_applied_so_far : '0') +
+          ' batch ' +
+          completed +
+          '/' +
+          total;
+        roll.appendChild(tick);
+        while (roll.children.length > 100) {
+          roll.removeChild(roll.firstChild);
+        }
+        roll.scrollTop = roll.scrollHeight;
+      }
     }
+
+    function resetTelemetryRollingLogForNewRun() {
+      const roll = document.getElementById('telemetryRollingLog');
+      if (roll) roll.innerHTML = '';
+      _lastTelemetryStreamKey = '';
+      _lastTelemetryDetailText = '';
+    }
+
     function hideLiveTelemetryPanel() {
-      const wrap = document.getElementById('liveTelemetryWrap');
-      if (wrap) wrap.hidden = true;
+      const el = document.getElementById('liveTelemetryPanel');
+      if (el) {
+        el.textContent = 'Idle — no batch running. Live counters stream here when you click Run.';
+        _lastTelemetryDetailText = el.textContent;
+      }
+      resetTelemetryRollingLogForNewRun();
+      const echo = {};
+      updateMemoryStatusCardFromPanel(null, echo, null, false);
     }
 
     function setBannerRun(main, sub) {
@@ -3630,6 +3900,9 @@ PAGE_HTML = """<!DOCTYPE html>
       pre.textContent = JSON.stringify(data, null, 2);
       renderPolicyOutcomePanel(data);
       if (data && data.batch_timing) updateLastBatchRunLine(data.batch_timing);
+      if (data && Array.isArray(data.results)) {
+        updateMemoryStatusFromBatchResultPayload(data);
+      }
       setEvidenceTab('outcomes');
     }
 
@@ -3951,14 +4224,10 @@ PAGE_HTML = """<!DOCTYPE html>
         const jobId = startJ.job_id;
         const total = resolveScenarioBatchTotal(startJ.total, scenariosTa);
         runWorkersCap = startJ.workers_used != null ? startJ.workers_used : null;
-        const ltw = document.getElementById('liveTelemetryWrap');
         const ltp = document.getElementById('liveTelemetryPanel');
-        if (ltw && ltp) {
-          ltw.hidden = false;
+        if (ltp) {
           ltp.textContent = 'Live telemetry — waiting for worker snapshots…';
-          try {
-            ltw.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
-          } catch (e) {}
+          _lastTelemetryDetailText = ltp.textContent;
         }
         showBatchConcurrencyBanner(total, runWorkersCap, 'run');
         updateRunStatusLine(
@@ -4011,7 +4280,14 @@ PAGE_HTML = """<!DOCTYPE html>
             return false;
           }
           if (pj.status === 'error') {
-            hideLiveTelemetryPanel();
+            const rollE = document.getElementById('telemetryRollingLog');
+            if (rollE) {
+              const t = document.createElement('div');
+              t.className = 'telemetry-tick';
+              t.textContent = '[' + new Date().toISOString().slice(11, 19) + '] Batch error: ' + String(pj.error || 'unknown');
+              rollE.appendChild(t);
+            }
+            updateMemoryStatusCardFromPanel(null, pj.telemetry_context_echo || {}, null, false);
             showBatchConcurrencyBanner(total, wCap, 'error');
             if (pj.batch_timing) updateLastBatchRunLine(pj.batch_timing);
             refreshScorecardHistory();
@@ -4022,7 +4298,24 @@ PAGE_HTML = """<!DOCTYPE html>
             return true;
           }
           if (pj.status === 'done') {
-            hideLiveTelemetryPanel();
+            if (pj.result) {
+              updateMemoryStatusFromBatchResultPayload(pj.result);
+            }
+            const rollD = document.getElementById('telemetryRollingLog');
+            if (rollD) {
+              const t = document.createElement('div');
+              t.className = 'telemetry-tick';
+              t.textContent = '[' + new Date().toISOString().slice(11, 19) + '] Batch finished — final memory row above.';
+              rollD.appendChild(t);
+              while (rollD.children.length > 100) {
+                rollD.removeChild(rollD.firstChild);
+              }
+            }
+            const ltpDone = document.getElementById('liveTelemetryPanel');
+            if (ltpDone && ltpDone.textContent) {
+              ltpDone.textContent = ltpDone.textContent + '\\n\\n--- Batch finished ---';
+              _lastTelemetryDetailText = ltpDone.textContent;
+            }
             const tDone = statusPollTotal(pj, total);
             const cDone = (pj.completed != null && pj.completed >= 0) ? pj.completed : tDone;
             setProgressUI(cDone, tDone, '');
@@ -4080,7 +4373,6 @@ PAGE_HTML = """<!DOCTYPE html>
         await show(null, null, friendlyFetchError(e));
         updateRunStatusLine('Stopped or failed — see Result.');
       } finally {
-        hideLiveTelemetryPanel();
         progressWrap.classList.remove('active');
         document.body.classList.remove('pg-run-active');
         setOpButtonBusy(btn, false);
@@ -4817,6 +5109,13 @@ PAGE_HTML = """<!DOCTYPE html>
         refreshWorkerEffectiveLine();
       } catch (e) {}
     })();
+
+    const contextSignatureMemoryModePickEl = document.getElementById('contextSignatureMemoryModePick');
+    if (contextSignatureMemoryModePickEl) {
+      contextSignatureMemoryModePickEl.addEventListener('change', function () {
+        updateMemoryStatusCardFromPanel(null, {}, null, false);
+      });
+    }
 
     if (evaluationWindowPick) evaluationWindowPick.addEventListener('change', function () {
       syncCustomMonthsVisibility();
