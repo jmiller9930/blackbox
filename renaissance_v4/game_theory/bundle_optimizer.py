@@ -1,5 +1,5 @@
 """
-Bundle Optimizer v1/v2 — deterministic, rule-based proposals for the next run's memory bundle.
+Bundle Optimizer v1 / v2 / v3 — deterministic, rule-based proposals for the next run's memory bundle.
 
 Reads **structured** metrics only (no narrative, no LLM). Emits a schema-valid
 ``pattern_game_memory_bundle_v1`` document with **whitelisted** ``apply`` keys and a
@@ -8,7 +8,10 @@ parallel **optimizer proof** record for audit.
 v2 adds :func:`optimize_bundle_v2`, which layers **pattern-context** rules on top of v1
 when ``pattern_context_v1`` is present on the run (from replay: ``pattern_context_v1``).
 
-See :func:`optimize_bundle_v1`, :func:`optimize_bundle_v2`, and
+v3 adds :func:`optimize_bundle_v3`, which may bias the v2 proposal using append-only
+:mod:`renaissance_v4.game_theory.context_signature_memory` (deterministic signature match + outcome gates).
+
+See :func:`optimize_bundle_v1`, :func:`optimize_bundle_v2`, :func:`optimize_bundle_v3`, and
 :func:`extract_metrics_from_pattern_game_run`.
 """
 
@@ -23,6 +26,17 @@ from renaissance_v4.core.fusion_engine import (
     MAX_CONFLICT_SCORE,
     MIN_FUSION_SCORE,
     OVERLAP_PENALTY_PER_EXTRA_SIGNAL,
+)
+from renaissance_v4.game_theory.context_signature_memory import (
+    ContextSignatureMemoryError,
+    SignatureMatchParamsV1,
+    apply_context_memory_bias_v1,
+    canonical_signature_key,
+    default_memory_path,
+    derive_context_signature_v1,
+    eligible_bias_records,
+    find_matching_records_v1,
+    read_context_memory_records,
 )
 from renaissance_v4.game_theory.memory_bundle import MEMORY_BUNDLE_SCHEMA, load_memory_bundle
 
@@ -488,6 +502,144 @@ def optimize_bundle_v2(
             "V2_NO_APPLY — v1 and pattern produced empty apply.",
         )
     return bundle_doc, proof_v2
+
+
+def optimize_bundle_v3(
+    metrics: dict[str, Any],
+    *,
+    prior_apply: dict[str, Any] | None = None,
+    manifest_signal_modules: list[str] | None = None,
+    optimizer_run_id: str | None = None,
+    source_artifact_paths: list[str] | None = None,
+    context_memory_path: Path | str | None = None,
+    signature_match_params: SignatureMatchParamsV1 | None = None,
+    skip_context_memory_bias: bool = False,
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    """
+    Run v2, then optionally apply Context Signature Memory v1 bias from the JSONL store.
+
+    * ``context_memory_path`` — append-only JSONL (default: ``state/context_signature_memory.jsonl`` package path).
+    * ``skip_context_memory_bias`` — force v2-only output (proof records skip reason).
+    """
+    bundle_v2, proof_v2 = optimize_bundle_v2(
+        metrics,
+        prior_apply=prior_apply,
+        manifest_signal_modules=manifest_signal_modules,
+        optimizer_run_id=optimizer_run_id,
+        source_artifact_paths=source_artifact_paths,
+    )
+    opt_id = str(proof_v2["optimizer_run_id"])
+    v2_apply = dict(bundle_v2.get("apply") or {})
+
+    cm_reason_codes: list[str] = []
+    bias_diff: list[dict[str, Any]] = []
+    sig_current: dict[str, Any] | None = None
+    matches_out: list[dict[str, Any]] = []
+    match_count = 0
+    bias_applied = False
+    mem_delta: dict[str, Any] = {}
+    mem_path = Path(context_memory_path).expanduser().resolve() if context_memory_path else default_memory_path()
+
+    if skip_context_memory_bias:
+        cm_reason_codes.append("CM3_SKIPPED_FLAG_SKIP_CONTEXT_MEMORY_BIAS")
+    else:
+        pc = metrics.get("pattern_context_v1")
+        if not isinstance(pc, dict) or pc.get("schema") != "pattern_context_v1":
+            cm_reason_codes.append("CM3_SKIPPED_NO_PATTERN_CONTEXT_V1")
+        else:
+            try:
+                sig_current = derive_context_signature_v1(pc)
+            except ContextSignatureMemoryError as e:
+                raise BundleOptimizerError(str(e)) from e
+            try:
+                records = read_context_memory_records(mem_path)
+            except ContextSignatureMemoryError as e:
+                raise BundleOptimizerError(str(e)) from e
+            params = signature_match_params or SignatureMatchParamsV1()
+            matches = find_matching_records_v1(sig_current, records, params=params)
+            match_count = len(matches)
+            for rec in matches:
+                matches_out.append(
+                    {
+                        "record_id": rec.get("record_id"),
+                        "signature_key": rec.get("signature_key"),
+                        "source_run_id": rec.get("source_run_id"),
+                        "outcome_summary": rec.get("outcome_summary"),
+                    }
+                )
+            if match_count == 0:
+                cm_reason_codes.append("CM3_NO_MATCHING_SIGNATURES_IN_STORE")
+            else:
+                current_outcome = {
+                    "expectancy": float(metrics.get("expectancy") or 0.0),
+                    "max_drawdown": float(metrics.get("max_drawdown") or 0.0),
+                    "win_rate": float(metrics.get("win_rate") or 0.0),
+                    "total_trades": int(metrics.get("total_trades") or 0),
+                    "cumulative_pnl": float(metrics.get("cumulative_pnl") or 0.0),
+                }
+                try:
+                    eligible = eligible_bias_records(matches, current_outcome)
+                except ContextSignatureMemoryError as e:
+                    raise BundleOptimizerError(str(e)) from e
+                if not eligible:
+                    cm_reason_codes.append(
+                        "CM3_MATCHES_FOUND_NO_STRICT_OUTCOME_BENEFIT — "
+                        "no prior record has strictly higher expectancy and strictly lower max_drawdown than this run.",
+                    )
+                else:
+                    mem_delta, mem_diff, bcodes = apply_context_memory_bias_v1(
+                        v2_apply,
+                        eligible_records=eligible,
+                        manifest_signal_modules=manifest_signal_modules,
+                    )
+                    cm_reason_codes.extend(bcodes)
+                    bias_diff = list(mem_diff)
+                    if mem_delta:
+                        bias_applied = True
+                    else:
+                        cm_reason_codes.append(
+                            "CM3_ELIGIBLE_BUT_NO_BIAS_DELTA — v2 apply already at or within step of prior targets.",
+                        )
+
+    final_apply = {**v2_apply, **mem_delta}
+
+    bundle_doc = {
+        **bundle_v2,
+        "apply": final_apply,
+        "note": (
+            f"bundle_optimizer_v3 run={opt_id} v2 + context signature memory bias; not learning."
+        ),
+    }
+
+    sig_key: str | None = canonical_signature_key(sig_current) if sig_current is not None else None
+
+    proof_v3: dict[str, Any] = {
+        "schema": "bundle_optimizer_proof_v3",
+        "optimizer_run_id": opt_id,
+        "source_run_id": metrics["source_run_id"],
+        "source_artifact_paths": list(source_artifact_paths or []),
+        "v2_proof": proof_v2,
+        "context_memory_path_resolved": str(mem_path),
+        "context_signature_current": sig_current,
+        "context_signature_key_current": sig_key,
+        "context_memory_matches": matches_out,
+        "context_memory_match_count": match_count,
+        "context_memory_bias_applied": bias_applied,
+        "context_memory_bias_diff": bias_diff,
+        "context_memory_reason_codes": cm_reason_codes,
+        "triggered_rules": list(proof_v2.get("triggered_rules") or []),
+        "apply_diff": list(proof_v2.get("apply_diff") or []),
+        "reason_codes": list(proof_v2.get("reason_codes") or []),
+        "bundle_output_apply": final_apply,
+        "no_changes": len(final_apply) == 0,
+    }
+    if len(final_apply) == 0:
+        proof_v3["no_changes_reason"] = proof_v2.get(
+            "no_changes_reason",
+            "V3_NO_APPLY — v2 and context memory produced empty apply.",
+        )
+
+    return bundle_doc, proof_v3
 
 
 def write_bundle_and_proof(
