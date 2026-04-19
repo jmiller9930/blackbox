@@ -11,6 +11,8 @@ Context Signature Memory v1 — proof script:
 
 from __future__ import annotations
 
+import contextlib
+import io
 import json
 import os
 import sys
@@ -33,6 +35,7 @@ from renaissance_v4.game_theory.context_signature_memory import (  # noqa: E402
     derive_context_signature_v1,
     read_context_memory_records,
 )
+from renaissance_v4.game_theory.pattern_game import run_pattern_game  # noqa: E402
 
 
 def _pc_a() -> dict:
@@ -151,6 +154,30 @@ def main() -> int:
 
     store_count = len(read_context_memory_records(mem))
 
+    manifest = _REPO / "renaissance_v4" / "configs" / "manifests" / "baseline_v1_recipe.json"
+    run2_block: dict = {"attempted": True}
+    try:
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            run2 = run_pattern_game(
+                manifest,
+                memory_bundle_path=str(bundle_path.resolve()),
+                use_groundhog_auto_resolve=False,
+                emit_baseline_artifacts=False,
+                verbose=False,
+            )
+        run2_block = {
+            "ok": True,
+            "validation_checksum": run2.get("validation_checksum"),
+            "summary": run2.get("summary"),
+            "sanity": run2.get("sanity"),
+            "cumulative_pnl": run2.get("cumulative_pnl"),
+            "pattern_context_v1": run2.get("pattern_context_v1"),
+            "trade_count": len(run2.get("outcomes") or []),
+        }
+    except Exception as exc:
+        run2_block = {"ok": False, "error": str(exc)}
+
     report = {
         "directive": "prove_context_signature_memory_v1",
         "memory_store_path": str(mem),
@@ -166,6 +193,7 @@ def main() -> int:
             "context_memory_reason_codes": proof_out.get("context_memory_reason_codes"),
         },
         "generated_bundle_apply": bundle.get("apply"),
+        "run2_with_generated_bundle": run2_block,
         "paths": {"bundle_path": str(bundle_path), "proof_path": str(proof_path), "tmpdir": str(tmp)},
     }
     print(json.dumps(report, indent=2, default=str))
