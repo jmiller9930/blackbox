@@ -68,6 +68,8 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
+_DEFAULT_REPO_ROOT = Path(__file__).resolve().parents[2]
+
 # Keys copied from each scenario dict into worker results (audit trail; not used for scoring).
 SCENARIO_ECHO_KEYS: tuple[str, ...] = (
     "goal_v2",
@@ -88,6 +90,24 @@ SCENARIO_ECHO_KEYS: tuple[str, ...] = (
 
 # Backward-compatible name
 AGENT_ECHO_KEYS = SCENARIO_ECHO_KEYS
+
+
+def resolve_scenario_manifest_path(
+    manifest_path: str | Path,
+    *,
+    repo_root: Path | None = None,
+) -> Path:
+    """
+    Resolve a scenario ``manifest_path`` against the repo root when it is relative.
+
+    The game-theory examples and curated recipes intentionally store repo-relative manifest paths so
+    they stay portable across hosts; callers should not depend on the current working directory.
+    """
+    p = Path(str(manifest_path)).expanduser()
+    if p.is_absolute():
+        return p.resolve()
+    root = (repo_root or _DEFAULT_REPO_ROOT).expanduser().resolve()
+    return (root / p).resolve()
 
 
 def extract_scenario_echo_fields(scenario: dict[str, Any]) -> dict[str, Any]:
@@ -184,11 +204,7 @@ def validate_scenarios(
         if not mp or not isinstance(mp, str):
             return False, [f"scenario[{i}] missing or invalid manifest_path (required string)"]
         if check_manifest_exists and repo_root is not None:
-            p = Path(mp).expanduser()
-            if not p.is_absolute():
-                p = (repo_root / p).resolve()
-            else:
-                p = p.resolve()
+            p = resolve_scenario_manifest_path(mp, repo_root=repo_root)
             if not p.is_file():
                 messages.append(f"warning: scenario[{i}] manifest not found: {p}")
 

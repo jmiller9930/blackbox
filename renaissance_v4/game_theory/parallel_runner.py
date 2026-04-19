@@ -47,6 +47,7 @@ from renaissance_v4.game_theory.live_telemetry_v1 import (
 )
 from renaissance_v4.game_theory.scenario_contract import (
     extract_policy_contract_summary,
+    resolve_scenario_manifest_path,
     extract_scenario_echo_fields,
     referee_session_outcome,
 )
@@ -257,7 +258,7 @@ def _normalize_scenario(s: dict[str, Any]) -> dict[str, Any]:
     n = dict(s)
     mp = n.get("manifest_path")
     if mp:
-        n["manifest_path"] = str(Path(mp).expanduser().resolve())
+        n["manifest_path"] = str(resolve_scenario_manifest_path(mp))
     return n
 
 

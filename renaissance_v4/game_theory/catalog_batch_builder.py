@@ -14,6 +14,8 @@ import itertools
 from pathlib import Path
 from typing import Any
 
+from renaissance_v4.game_theory.scenario_contract import resolve_scenario_manifest_path
+
 # Sane defaults — same band as manifest validator [0.5, 6.0].
 _DEFAULT_STOPS: tuple[float, ...] = (0.8, 1.0, 1.2, 1.5, 1.8, 2.0, 2.5, 3.0)
 _DEFAULT_TARGETS: tuple[float, ...] = (2.0, 2.5, 3.0, 3.5, 4.0, 4.5, 5.0)
@@ -54,7 +56,7 @@ def build_atr_sweep_scenarios(
     Provide either ``pairs`` **or** Cartesian product of ``stop_values`` × ``target_values``
     (clamped to [0.5, 6.0]), truncated to ``max_scenarios``.
     """
-    resolved_mp = Path(manifest_path).expanduser().resolve()
+    resolved_mp = resolve_scenario_manifest_path(manifest_path)
     if not resolved_mp.is_file():
         raise FileNotFoundError(f"manifest not found: {manifest_path}")
     manifest_str = _manifest_display_path(resolved_mp)

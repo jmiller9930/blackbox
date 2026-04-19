@@ -21,7 +21,10 @@ from typing import Any
 from renaissance_v4.game_theory.memory_paths import default_experience_log_jsonl, default_run_memory_jsonl
 from renaissance_v4.game_theory.parallel_runner import run_scenarios_parallel
 from renaissance_v4.game_theory.player_agent import run_player_batch
-from renaissance_v4.game_theory.scenario_contract import validate_scenarios
+from renaissance_v4.game_theory.scenario_contract import (
+    resolve_scenario_manifest_path,
+    validate_scenarios,
+)
 
 _GAME_THEORY = Path(__file__).resolve().parent
 _DEFAULT_REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -118,7 +121,7 @@ class PatternGameAgent:
             n = dict(s)
             mp = n.get("manifest_path")
             if mp:
-                n["manifest_path"] = str(Path(str(mp)).expanduser().resolve())
+                n["manifest_path"] = str(resolve_scenario_manifest_path(mp, repo_root=self.repo_root))
             out.append(n)
         return out
 

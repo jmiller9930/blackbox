@@ -10,6 +10,8 @@ import json
 from pathlib import Path
 from typing import Any
 
+from renaissance_v4.game_theory.scenario_contract import resolve_scenario_manifest_path
+
 _GAME_THEORY = Path(__file__).resolve().parent
 
 # Source files (scenario batches only — not templates or memory-bundle artifacts).
@@ -150,6 +152,11 @@ def build_scenarios_for_recipe(recipe_id: str) -> list[dict[str, Any]]:
 
     scenarios = _load_scenario_list(path)
     out: list[dict[str, Any]] = [copy_scenario(s) for s in scenarios]
+
+    for s in out:
+        mp = s.get("manifest_path")
+        if isinstance(mp, str) and mp.strip():
+            s["manifest_path"] = str(resolve_scenario_manifest_path(mp))
 
     pfw = meta.get("policy_framework_path")
     if isinstance(pfw, str) and pfw.strip():
