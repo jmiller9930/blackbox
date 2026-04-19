@@ -67,9 +67,12 @@ from flask import Flask, Response, abort, jsonify, request, send_file
 _GAME_THEORY = Path(__file__).resolve().parent
 _RV4_ROOT = _GAME_THEORY.parent
 _PATTERN_BANNER_PATH = _RV4_ROOT / "assets" / "pattern.png"
+# Lossy WebP (~4× smaller than PNG); regenerate when pattern.png changes:
+#   cwebp -q 83 renaissance_v4/assets/pattern.png -o renaissance_v4/assets/pattern.webp
+_PATTERN_BANNER_WEBP_PATH = _RV4_ROOT / "assets" / "pattern.webp"
 
 # Operator-visible web UI bundle version — bump when changing PAGE_HTML (HTML/CSS/JS) so deploys are provable.
-PATTERN_GAME_WEB_UI_VERSION = "2.7.2"
+PATTERN_GAME_WEB_UI_VERSION = "2.7.3"
 
 from renaissance_v4.game_theory.groundhog_memory import (
     groundhog_auto_merge_enabled,
@@ -484,6 +487,13 @@ def create_app() -> Flask:
         if not _PATTERN_BANNER_PATH.is_file():
             abort(404)
         return send_file(_PATTERN_BANNER_PATH, mimetype="image/png")
+
+    @app.get("/assets/pattern-banner.webp")
+    def pattern_banner_webp() -> Response:
+        """Lightweight WebP for the same art (see ``_PATTERN_BANNER_WEBP_PATH``)."""
+        if not _PATTERN_BANNER_WEBP_PATH.is_file():
+            abort(404)
+        return send_file(_PATTERN_BANNER_WEBP_PATH, mimetype="image/webp")
 
     @app.get("/assets/pattern-banner.jpg")
     def pattern_banner_jpg_legacy() -> Response:
@@ -1321,6 +1331,7 @@ PAGE_HTML = """<!DOCTYPE html>
   <meta charset="utf-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <title>Pattern Machine learning · UI __PATTERN_GAME_WEB_UI_VERSION__</title>
+  <link rel="preload" href="/assets/pattern-banner.webp" as="image" type="image/webp"/>
   <style>
     :root {
       --pg-bg: #f2efe8;
@@ -1374,6 +1385,9 @@ PAGE_HTML = """<!DOCTYPE html>
       overflow: hidden;
       position: relative;
       isolation: isolate;
+    }
+    .pg-header > picture {
+      display: contents;
     }
     /* Full-bleed banner: image fills the entire header; copy and cards sit above via scrim. */
     .pg-header-banner {
@@ -2486,7 +2500,10 @@ PAGE_HTML = """<!DOCTYPE html>
 <body class="pg-theme">
   <div class="pg-shell">
     <header class="pg-header">
-      <img class="pg-header-banner" src="/assets/pattern-banner.png" width="1600" height="400" alt="" decoding="async" fetchpriority="high"/>
+      <picture>
+        <source srcset="/assets/pattern-banner.webp" type="image/webp"/>
+        <img class="pg-header-banner" src="/assets/pattern-banner.png" width="1536" height="421" alt="" decoding="async" fetchpriority="high"/>
+      </picture>
       <div class="pg-header-content">
       <div class="pg-title-wrap">
         <h1 class="pg-title">Pattern Machine learning
