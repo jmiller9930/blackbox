@@ -114,3 +114,5 @@ One screen: **preset** (loads `examples/*.json` into the editor) **or** **paste*
 **Paper P&amp;L strip:** shows spec **$1,000** baseline, ending equity and green/red delta after each **Run**; horizontal bar is a 0–$2k visual (clamped). Parallel responses include `pnl_summary` (sum of each scenario’s `cumulative_pnl` — independent replays, not one portfolio).
 
 **Run progress:** the UI uses **`POST /api/run-parallel/start`** and polls **`GET /api/run-parallel/status/<job_id>`** so you get a **determinate** bar (scenarios completed / total) and the last finished scenario id — not a single opaque long request. Blocking **`POST /api/run-parallel`** remains for scripts.
+
+**Scorecard history** is append-only **`batch_scorecard.jsonl`** on the **same machine as Flask** (see the path hint under the table). Clearing a file only on your laptop does not change what the lab UI shows. To truncate the scorecard on the default lab host from your Mac: **`./scripts/clear_pattern_game_scorecard_remote.sh`** (uses `GSYNC_SSH` / `BLACKBOX_REMOTE_HOME` like `gsync.py`).
