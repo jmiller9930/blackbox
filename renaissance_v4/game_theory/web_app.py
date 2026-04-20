@@ -73,7 +73,7 @@ _PATTERN_BANNER_PATH = _RV4_ROOT / "assets" / "pattern.png"
 _PATTERN_BANNER_WEBP_PATH = _RV4_ROOT / "assets" / "pattern.webp"
 
 # Operator-visible web UI bundle version — bump when changing PAGE_HTML (HTML/CSS/JS) so deploys are provable.
-PATTERN_GAME_WEB_UI_VERSION = "2.8.3"
+PATTERN_GAME_WEB_UI_VERSION = "2.8.4"
 
 from renaissance_v4.game_theory.groundhog_memory import (
     groundhog_auto_merge_enabled,
@@ -1782,6 +1782,16 @@ PAGE_HTML = """<!DOCTYPE html>
       flex-direction: column;
       gap: 12px;
     }
+    .pg-custom-route-hint {
+      margin: 0;
+      padding: 8px 10px;
+      font-size: 0.82rem;
+      line-height: 1.4;
+      background: rgba(45, 138, 106, 0.14);
+      border: 1px solid rgba(45, 138, 106, 0.4);
+      border-radius: 8px;
+      color: var(--pg-ink, #1a2e28);
+    }
     details.pg-pattern-info-fold {
       margin-top: 4px;
       border: 1px solid var(--pg-line);
@@ -2697,7 +2707,7 @@ PAGE_HTML = """<!DOCTYPE html>
       <div class="pg-title-wrap">
         <h1 class="pg-title">Pattern Machine learning
           <span class="ui-version" title="Bump PATTERN_GAME_WEB_UI_VERSION in web_app.py">v__PATTERN_GAME_WEB_UI_VERSION__</span></h1>
-        <p class="pg-lead">Pick pattern and window, then <strong>Run</strong>. Telemetry during the batch; scorecard for history. Custom scenarios: <em>Advanced</em>.</p>
+        <p class="pg-lead">Pick pattern and window, then <strong>Run</strong>. Telemetry during the batch; scorecard for history. <strong>Custom</strong> scenarios: set Pattern to <strong>Custom</strong> — the JSON editor opens under Controls (Pattern Info → Advanced).</p>
         <div class="pg-orientation-note">Expand panel summaries as needed · DEF-001: <code>docs/architect/pattern_game_operator_deficiencies_work_record.md</code></div>
       </div>
       <div class="pg-banner-strip">
@@ -2832,7 +2842,7 @@ PAGE_HTML = """<!DOCTYPE html>
             <div><label for="operatorRecipePick">Pattern</label><select id="operatorRecipePick" aria-describedby="presetHelp patternModeExplanation">
               <option value="pattern_learning">Pattern Machine Learning (PML)</option>
               <option value="reference_comparison">Reference Comparison Run</option>
-              <option value="custom">Custom</option>
+              <option value="custom">Custom (scenario JSON)</option>
             </select></div>
             <div><label for="evaluationWindowPick">Evaluation window</label><select id="evaluationWindowPick" aria-describedby="presetHelp">
               <option value="12">12 months</option>
@@ -2847,6 +2857,9 @@ PAGE_HTML = """<!DOCTYPE html>
               <option value="off">OFF</option>
             </select></div>
           </div>
+          <p id="customScenarioRouteHint" class="pg-custom-route-hint" hidden>
+            <strong>Custom pattern:</strong> your scenario batch is the JSON box under <strong>Pattern Info (optional)</strong> below → <strong>Advanced</strong> → <strong>Custom scenario (JSON)</strong>. Those sections open automatically when you pick Custom; scroll down if you do not see the box yet.
+          </p>
           <div id="policyMultiWrap" style="display:none;margin-top:10px">
             <label for="policyPick">Policy / manifest</label>
             <select id="policyPick" aria-label="Policy manifest"></select>
@@ -4935,11 +4948,25 @@ PAGE_HTML = """<!DOCTYPE html>
           ? 'Edit JSON below. It is validated on Run (same contract as before).'
           : 'Disabled for curated patterns — server injects manifest, evaluation window, goal, and pattern metadata.';
       }
+      const routeHint = document.getElementById('customScenarioRouteHint');
+      if (routeHint) routeHint.hidden = !isCustom;
+      if (isCustom) {
+        const pif = document.getElementById('patternInfoFold');
+        const aop = document.getElementById('advancedOperatorPanel');
+        const ajd = document.getElementById('advancedJsonDetails');
+        if (pif) pif.open = true;
+        if (aop) aop.open = true;
+        if (ajd) ajd.open = true;
+        if (scenariosEl) {
+          requestAnimationFrame(function () {
+            try {
+              scenariosEl.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+            } catch (e) { /* ignore */ }
+          });
+        }
+      }
       if (!isCustom && scenariosEl) {
         scenariosEl.value = '';
-      }
-      if (isCustom && ad && !ad.open) {
-        /* optional: leave collapsed; user opens Advanced */
       }
     }
 
