@@ -31,6 +31,16 @@ from renaissance_v4.game_theory.student_proctor.student_context_builder_v1 impor
     fetch_bars_causal_up_to,
     validate_student_decision_packet_v1,
 )
+from renaissance_v4.game_theory.student_proctor.student_learning_store_v1 import (
+    append_student_learning_record_v1,
+    build_student_learning_record_v1_from_reveal,
+    default_student_learning_store_path_v1,
+    get_student_learning_record_by_id,
+    list_student_learning_records_by_graded_unit_id,
+    list_student_learning_records_by_run_id,
+    list_student_learning_records_by_signature_key,
+    load_student_learning_records_v1,
+)
 
 __all__ = [
     "CONTRACT_VERSION_STUDENT_PROCTOR_V1",
@@ -56,4 +66,12 @@ __all__ = [
     "build_student_decision_packet_v1",
     "fetch_bars_causal_up_to",
     "validate_student_decision_packet_v1",
+    "append_student_learning_record_v1",
+    "build_student_learning_record_v1_from_reveal",
+    "default_student_learning_store_path_v1",
+    "get_student_learning_record_by_id",
+    "list_student_learning_records_by_graded_unit_id",
+    "list_student_learning_records_by_run_id",
+    "list_student_learning_records_by_signature_key",
+    "load_student_learning_records_v1",
 ]
