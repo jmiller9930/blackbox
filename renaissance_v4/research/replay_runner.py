@@ -8,7 +8,7 @@ Usage:
 Run after Phases 1 through 7 are installed to validate the full pipeline including learning ledger and scorecards.
 
 Version:
-v7.3
+v7.7
 
 Change History:
 - v1.0 Initial Phase 1 replay shell.
@@ -24,13 +24,15 @@ Change History:
 - v7.4 Optional Decision Context Recall v1 (per-bar structured recall + bounded fusion bias; opt-in kwargs).
 - v7.5 Decision Context Recall v2: bounded per-signal contribution multipliers + optional memory-driven module suppression (opt-in).
 - v7.6 ``replay_attempt_aggregates_v1`` + optional DCR drill-down sample rings (operator harness).
+- v7.7 ``signal_behavior_proof_v1``: per-signal bar counters, suppression histograms, fusion-vs-risk sanity,
+  closed-trade attribution tallies, and capped raw trade-entry rows (for operator evidence exports).
 """
 
 from __future__ import annotations
 
 import argparse
 import os
-from collections import Counter
+from collections import Counter, defaultdict
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any
@@ -263,6 +265,15 @@ def run_manifest_replay(
     aligned_directional_bars = 0
     countertrend_directional_bars = 0
 
+    SIGNAL_TRACE_MAX = int(os.environ.get("PATTERN_GAME_SIGNAL_TRACE_MAX", "40"))
+    signal_active_bar_counts: Counter[str] = Counter()
+    signal_directional_active_bar_counts: Counter[str] = Counter()
+    signal_suppression_hists: defaultdict[str, Counter[str]] = defaultdict(Counter)
+    trade_entry_signal_proof_samples: list[dict[str, Any]] = []
+    fusion_rejected_bars_with_directional_signal = 0
+    directional_signal_instances_total = 0
+    inactive_suppression_events_total = 0
+
     for index in range(MIN_ROWS_REQUIRED, len(rows) + 1):
         window = rows[:index]
         state = build_market_state(window)
@@ -273,6 +284,21 @@ def run_manifest_replay(
         for signal in signals:
             result = signal.evaluate(state, features, regime)
             signal_results.append(result)
+
+        for r in signal_results:
+            if r.active:
+                signal_active_bar_counts[r.signal_name] += 1
+            if r.active and r.direction in {"long", "short"}:
+                signal_directional_active_bar_counts[r.signal_name] += 1
+            if not r.active and r.suppression_reason:
+                signal_suppression_hists[r.signal_name][str(r.suppression_reason)] += 1
+
+        directional_signal_instances_total += sum(
+            1 for r in signal_results if r.active and r.direction in {"long", "short"}
+        )
+        inactive_suppression_events_total += sum(
+            1 for r in signal_results if (not r.active) and r.suppression_reason
+        )
 
         reg_b = regime_bar_counts.copy()
         vol_b = volatility_bucket_counts.copy()
@@ -504,6 +530,12 @@ def run_manifest_replay(
         else:
             fusion_directional_bars += 1
 
+        has_directional_signal = any(
+            r.active and r.direction in {"long", "short"} for r in signal_results
+        )
+        if has_directional_signal and fusion_result.direction == "no_trade":
+            fusion_rejected_bars_with_directional_signal += 1
+
         drawdown_proxy = 0.0
 
         risk_decision = risk_fn(
@@ -581,6 +613,46 @@ def run_manifest_replay(
             )
             opened_this_bar = True
             entries_attempted += 1
+            if len(trade_entry_signal_proof_samples) < SIGNAL_TRACE_MAX:
+                trade_entry_signal_proof_samples.append(
+                    {
+                        "bar_index_1based": index,
+                        "timestamp": state.timestamp,
+                        "entry_close": state.current_close,
+                        "fusion_direction": fusion_result.direction,
+                        "fusion_threshold_passed": fusion_result.threshold_passed,
+                        "fusion_scores": {
+                            "long_score": fusion_result.long_score,
+                            "short_score": fusion_result.short_score,
+                            "gross_score": fusion_result.gross_score,
+                            "fusion_score": fusion_result.fusion_score,
+                            "conflict_score": fusion_result.conflict_score,
+                            "overlap_penalty": fusion_result.overlap_penalty,
+                        },
+                        "fusion_contributing_signals": list(fusion_result.contributing_signals),
+                        "fusion_suppressed_signals": list(fusion_result.suppressed_signals),
+                        "active_signal_names_copied_to_trade": list(active_signal_names),
+                        "risk": {
+                            "allowed": risk_decision.allowed,
+                            "veto_reasons": list(risk_decision.veto_reasons),
+                        },
+                        "atr_proxy_14_at_entry": float(features.atr_proxy_14),
+                        "signal_rows": [
+                            {
+                                "signal_name": r.signal_name,
+                                "active": r.active,
+                                "direction": r.direction,
+                                "confidence": r.confidence,
+                                "expected_edge": r.expected_edge,
+                                "regime_fit": r.regime_fit,
+                                "stability_score": r.stability_score,
+                                "suppression_reason": r.suppression_reason,
+                                "evidence_trace": dict(r.evidence_trace),
+                            }
+                            for r in signal_results
+                        ],
+                    }
+                )
             if dt_max > 0:
                 dcr_drill_trade_entries.append(
                     {
@@ -688,6 +760,122 @@ def run_manifest_replay(
     summary = ledger.summary()
     scorecards = build_signal_scorecards(ledger.outcomes)
 
+    outcomes: list[OutcomeRecord] = list(ledger.outcomes)
+    disabled_m_final = set(manifest.get("disabled_signal_modules") or [])
+    declared_modules = [str(x) for x in (manifest.get("signal_modules") or []) if str(x) not in disabled_m_final]
+    trade_by_signal = Counter()
+    for o in outcomes:
+        for nm in o.contributing_signals or []:
+            trade_by_signal[str(nm)] += 1
+    evaluated_per_signal = {str(s.signal_name): int(processed) for s in signals}
+    dead_signal_rows: list[dict[str, Any]] = []
+    for name in declared_modules:
+        tc = int(trade_by_signal.get(name, 0))
+        dir_bars = int(signal_directional_active_bar_counts.get(name, 0))
+        active_bars = int(signal_active_bar_counts.get(name, 0))
+        if tc == 0:
+            if dir_bars == 0 and active_bars == 0:
+                reason = "never_active_any_bar_in_replay_window"
+            elif dir_bars == 0:
+                reason = "was_active_but_never_directional_long_short"
+            else:
+                reason = (
+                    "had_directional_active_bars_but_zero_closed_trade_attribution "
+                    "(see attribution_semantics — fusion may still block entries after this bar)"
+                )
+            dead_signal_rows.append(
+                {
+                    "signal": name,
+                    "closed_trade_attribution_count": 0,
+                    "directional_active_bars": dir_bars,
+                    "active_any_bar": active_bars,
+                    "analysis": reason,
+                }
+            )
+
+    def _dominant_trade(c: Counter[str]) -> str | None:
+        if not c:
+            return None
+        return sorted(c.items(), key=lambda kv: (-kv[1], kv[0]))[0][0]
+
+    scorecard_trade_totals = {
+        k: int(v.get("total_trades", 0) or 0) for k, v in (scorecards or {}).items() if isinstance(v, dict)
+    }
+    _directive_signal_names = (
+        "trend_continuation",
+        "pullback_continuation",
+        "breakout_continuation",
+        "mean_reversion_fade",
+    )
+    directive_per_signal_evaluated_vs_trades_v1 = {
+        nm: {
+            "evaluated_bars_signal_module_ran": int(processed),
+            "active_any_direction_bars": int(signal_active_bar_counts.get(nm, 0)),
+            "directional_active_bars": int(signal_directional_active_bar_counts.get(nm, 0)),
+            "closed_trade_attribution_count": int(trade_by_signal.get(nm, 0)),
+        }
+        for nm in _directive_signal_names
+    }
+    signal_behavior_proof_v1: dict[str, Any] = {
+        "schema": "signal_behavior_proof_v1",
+        "manifest_signal_modules_declared": declared_modules,
+        "manifest_disabled_signal_modules": sorted(str(x) for x in disabled_m_final),
+        "per_signal_evaluated_bars_total": evaluated_per_signal,
+        "per_signal_active_bars_total": dict(sorted(signal_active_bar_counts.items())),
+        "per_signal_directional_active_bars_total": dict(sorted(signal_directional_active_bar_counts.items())),
+        "per_signal_closed_trade_attribution_count": dict(sorted(trade_by_signal.items())),
+        "ledger_scorecard_total_trades_by_signal": scorecard_trade_totals,
+        "dominant_closed_trade_attributing_signal": _dominant_trade(trade_by_signal),
+        "attribution_semantics": (
+            "per_signal_closed_trade_attribution_count counts each OutcomeRecord.contributing_signals entry "
+            "(replay_runner copies all signal_names with active=True on the **entry bar** into the trade; "
+            "it is NOT the fusion-only short list). Fusion picks direction; see fusion_contributing_signals "
+            "inside trade_entry_raw_samples."
+        ),
+        "fusion_bars": {
+            "fusion_no_trade_bars": int(fusion_no_trade_bars),
+            "fusion_directional_output_bars": int(fusion_directional_bars),
+            "bars_with_directional_signal_but_fusion_no_trade": int(
+                fusion_rejected_bars_with_directional_signal
+            ),
+            "risk_blocked_bars": int(risk_blocked_bars),
+            "trade_entries_attempted": int(entries_attempted),
+            "trade_exits_recorded": int(closes_recorded),
+        },
+        "fusion_signal_level_rollup_v1": {
+            "bars_processed_after_warmup": int(processed),
+            "directional_signal_instances_total_across_bars": int(directional_signal_instances_total),
+            "inactive_with_suppression_reason_events_total": int(inactive_suppression_events_total),
+            "fusion_emitted_long_short_bars": int(fusion_directional_bars),
+            "fusion_emitted_no_trade_bars": int(fusion_no_trade_bars),
+            "bars_fusion_no_trade_while_any_signal_directional": int(
+                fusion_rejected_bars_with_directional_signal
+            ),
+            "trade_open_events_total": int(entries_attempted),
+            "closed_trades_recorded_total": int(closes_recorded),
+        },
+        "directive_per_signal_evaluated_vs_trades_v1": directive_per_signal_evaluated_vs_trades_v1,
+        "suppression_reason_histograms_top": {
+            k: dict(v.most_common(20)) for k, v in sorted(signal_suppression_hists.items())
+        },
+        "dead_signals_zero_closed_trade_attribution": dead_signal_rows,
+        "trade_entry_raw_samples": trade_entry_signal_proof_samples,
+        "trade_entry_raw_samples_max": SIGNAL_TRACE_MAX,
+        "atr_usage_code_references_v1": {
+            "feature_atr_proxy_14": "renaissance_v4/core/feature_engine.py → FeatureSet.atr_proxy_14",
+            "execution_stop_target": (
+                "renaissance_v4/research/replay_runner.py passes features.atr_proxy_14 into "
+                "ExecutionManager.open_trade; renaissance_v4/core/execution_manager.py sets stop_loss / "
+                "take_profit from atr × atr_stop_mult / atr_target_mult (manifest or defaults)."
+            ),
+            "signals_use_atr_proxy_14": False,
+            "signals_note": (
+                "Signal modules in renaissance_v4/signals/*.py use FeatureSet fields such as volatility_20; "
+                "they do not reference atr_proxy_14 (repo grep)."
+            ),
+        },
+    }
+
     vchk = validation_checksum(
         summary,
         exec_manager.cumulative_pnl,
@@ -721,8 +909,6 @@ def run_manifest_replay(
         print(f"[replay] Final summary metrics: {summary}")
         print(f"[replay] Final signal scorecards: {scorecards}")
         print("[replay] Phase 7 replay completed successfully")
-
-    outcomes: list[OutcomeRecord] = list(ledger.outcomes)
 
     def _dominant(c: Counter[str]) -> str | None:
         if not c:
@@ -808,6 +994,7 @@ def run_manifest_replay(
             "bias_applied_samples": list(dcr_drill_bias),
             "trade_entry_samples": list(dcr_drill_trade_entries),
         },
+        "signal_behavior_proof_v1": signal_behavior_proof_v1,
     }
     if decision_context_recall_enabled:
         out["decision_context_recall_stats"] = dcr_stats

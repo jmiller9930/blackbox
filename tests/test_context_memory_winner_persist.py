@@ -43,6 +43,8 @@ def test_persist_appends_jsonl_when_winner_and_read_write(tmp_path: Path) -> Non
         pytest.skip(str(e))
     pc = raw.get("pattern_context_v1")
     assert isinstance(pc, dict) and pc.get("schema") == "pattern_context_v1"
+    sb = raw.get("signal_behavior_proof_v1")
+    assert isinstance(sb, dict) and sb.get("schema") == "signal_behavior_proof_v1"
 
     mem = tmp_path / "ctx.jsonl"
     fake_proof = {
@@ -139,6 +141,7 @@ def test_read_mode_skips_append(tmp_path: Path) -> None:
     except (RuntimeError, FileNotFoundError) as e:
         pytest.skip(str(e))
     pc = raw["pattern_context_v1"]
+    assert isinstance(raw.get("signal_behavior_proof_v1"), dict)
     fake_proof = {
         "schema": "context_candidate_search_proof_v1",
         "search_batch_id": "b2",

@@ -97,6 +97,9 @@ def json_summary(out: dict[str, Any], scenario: dict[str, Any] | None = None) ->
     learn = build_per_scenario_learning_run_audit_v1(out, scenario)
     row["learning_run_audit_v1"] = learn
     row["operator_learning_status_line_v1"] = learn.get("operator_learning_status_line_v1")
+    sb = out.get("signal_behavior_proof_v1")
+    if isinstance(sb, dict):
+        row["signal_behavior_proof_v1"] = sb
     return row
 
 
