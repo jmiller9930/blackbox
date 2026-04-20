@@ -223,7 +223,7 @@ Read **from top (goal) downward** to “today”; implementation reads the **sam
 | **Replay-only features** (`FeatureSet`, fusion signals, engine `pattern_context_v1`) | **Parallel path** | `replay_runner`, `signals/*` — **not** automatically the same object the stub Student consumes; **merge is intentional future work** |
 | **Pattern tags on output** | **Stub** | `shadow_student_v1` emits `pattern_recipe_ids` etc. from packet **without** full fusion feed |
 
-**Conclusion:** The **non-negotiable** “no market context, no trade” is **satisfied at minimum** by **bars**; the **full** product picture in the reference doc requires **additional wiring** before policies can depend on pre-computed indicator labels without re-deriving from bars.
+**Conclusion:** The **non-negotiable** “no market context, no trade” is **satisfied at minimum** by **bars**; the **full** product picture in the reference doc requires **additional wiring** before policies can depend on pre-computed indicator labels without re-deriving from bars. Operator batch results include **`wiring_honesty_annotation_v1`** (**D7**) so “full context” claims stay aligned with what is actually attached.
 
 ---
 
@@ -283,6 +283,7 @@ Read **from top (goal) downward** to “today”; implementation reads the **sam
 *Closeout:* **§F**.
 
 **D7 — Wiring honesty.** Marketing, UI copy, and **directive closeout** MUST NOT claim “full trading context” (indicators, regime panels, etc.) on the **Student** path until those fields are **actually attached** to the legal pre-reveal bundle and tested. The **diagram** in `ARCHITECTURE_PLAN_STUDENT_PROCTOR_PML.md` §3 is **aspirational** for indicator/pattern pipes; **as-built** Student context is **`bars` + optional retrieval** until extended (see **§C.1** above).  
+*Proof tests:* `renaissance_v4/game_theory/tests/test_directive_d7_wiring_honesty_v1.py`; operator audit **`wiring_honesty_annotation_v1`** (`full_structured_trading_context_baseline_claim_supported_v1` stays **false** until product opts in).  
 *Closeout:* **§F**.
 
 **D8 — Memory semantics honesty.** Do **not** describe Student memory as **“the same pattern again”** unless matching logic proves **similarity** under a defined metric. **As-built** Student retrieval v1 is **exact key** (`student_entry_v1:{symbol}:{entry_time}`) — see **§C.2**. Broader **approximation** retrieval is **design intent** and **partially** reflected in **engine** `context_signature_memory`; **align** Student store matching when the architect approves **v2** semantics.  
@@ -360,3 +361,4 @@ Run **after** code and tests for the directive milestone; **before** calling the
 | 1.10 | 2026-04-20 | **D5** closure: Referee immutability proof tests (`test_directive_d5_referee_immutability_v1`). |
 | 1.11 | 2026-04-20 | **§E.1** talking points (deferred): multi-timeframe bars + placeholder row. |
 | 1.12 | 2026-04-20 | **D6** closure: **§C.3** phased honesty; ``phased_honesty_annotation_v1`` on seam audit; proof tests. |
+| 1.13 | 2026-04-20 | **D7** closure: ``wiring_honesty_annotation_v1`` on seam audit; proof tests. |

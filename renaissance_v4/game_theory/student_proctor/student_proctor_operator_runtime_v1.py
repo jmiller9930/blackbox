@@ -28,6 +28,7 @@ from renaissance_v4.game_theory.student_proctor.cross_run_retrieval_v1 import (
 )
 from renaissance_v4.game_theory.student_proctor.contracts_v1 import (
     FIELD_RETRIEVED_STUDENT_EXPERIENCE_V1,
+    FIELD_STUDENT_CONTEXT_ANNEX_V1,
 )
 from renaissance_v4.game_theory.student_proctor.student_learning_store_v1 import (
     append_student_learning_record_v1,
@@ -39,6 +40,52 @@ from renaissance_v4.utils.db import DB_PATH
 _NS_RECORD = uuid.UUID("6ba7b810-9dad-11d1-80b4-00c04fd430c8")
 
 SCHEMA_PHASED_HONESTY_ANNOTATION_V1 = "phased_honesty_annotation_v1"
+SCHEMA_WIRING_HONESTY_ANNOTATION_V1 = "wiring_honesty_annotation_v1"
+
+
+def _wiring_honesty_annotation_v1(
+    *,
+    seam_attempted: bool,
+    trades_seen: int,
+    first_packet_annex_present: bool | None,
+    retrieval_matches_total: int,
+) -> dict[str, Any]:
+    """
+    Directive **D7** — do not claim “full trading context” on the Student path until attached + tested.
+
+    The default operator seam builds packets via **cross-run retrieval** only; rich **TRADING_CONTEXT**
+    buckets require an explicit, validated ``student_context_annex_v1`` (and tests), not marketing copy.
+    """
+    if not seam_attempted:
+        return {
+            "schema": SCHEMA_WIRING_HONESTY_ANNOTATION_V1,
+            "directive": "D7",
+            "as_built_student_pre_reveal_wiring_v1": None,
+            "student_context_annex_v1_present_on_first_packet": None,
+            "retrieved_student_experience_non_empty": None,
+            "full_structured_trading_context_baseline_claim_supported_v1": None,
+            "note": "Student loop seam not executed — wiring annotation N/A.",
+        }
+    rex_nonempty = int(retrieval_matches_total) > 0
+    ab = (
+        "causal OHLCV bars through decision time; optional retrieved_student_experience_v1; "
+        "optional versioned student_context_annex_v1 for price/structure/indicator/time buckets."
+    )
+    return {
+        "schema": SCHEMA_WIRING_HONESTY_ANNOTATION_V1,
+        "directive": "D7",
+        "as_built_student_pre_reveal_wiring_v1": ab,
+        "student_context_annex_v1_present_on_first_packet": first_packet_annex_present,
+        "retrieved_student_experience_non_empty": rex_nonempty if trades_seen > 0 else None,
+        # False until annex buckets are product-filled **and** release/tests claim support (D7 gate).
+        "full_structured_trading_context_baseline_claim_supported_v1": False,
+        "note": (
+            "Default seam uses bars + retrieval only; do not market ‘full indicator/regime context’ on the "
+            "Student path without a validated student_context_annex_v1 (see TRADING_CONTEXT_REFERENCE_V1, §C.1)."
+            if trades_seen > 0
+            else "No trades processed — wiring flags partially N/A."
+        ),
+    }
 
 
 def _phased_honesty_annotation_v1(
@@ -128,6 +175,12 @@ def student_loop_seam_after_parallel_batch_v1(
             "phased_honesty_annotation_v1": _phased_honesty_annotation_v1(
                 seam_attempted=False, student_emit_occurred=False
             ),
+            "wiring_honesty_annotation_v1": _wiring_honesty_annotation_v1(
+                seam_attempted=False,
+                trades_seen=0,
+                first_packet_annex_present=None,
+                retrieval_matches_total=0,
+            ),
         }
 
     db = Path(str(db_path)) if db_path else DB_PATH
@@ -139,6 +192,7 @@ def student_loop_seam_after_parallel_batch_v1(
     retrieval_matches_total = 0
     primary_trade_shadow_student_v1: dict[str, Any] | None = None
     primary_student_output_v1: dict[str, Any] | None = None
+    first_packet_annex_present: bool | None = None
 
     for row in results:
         if not row.get("ok"):
@@ -170,6 +224,10 @@ def student_loop_seam_after_parallel_batch_v1(
                 if perr or pkt is None:
                     errors.append(f"{sid} trade={o.trade_id}: packet {perr!r}")
                     continue
+                if first_packet_annex_present is None:
+                    first_packet_annex_present = isinstance(
+                        pkt.get(FIELD_STUDENT_CONTEXT_ANNEX_V1), dict
+                    )
                 rx = pkt.get(FIELD_RETRIEVED_STUDENT_EXPERIENCE_V1)
                 n_rx = len(rx) if isinstance(rx, list) else 0
                 retrieval_matches_total += n_rx
@@ -250,10 +308,17 @@ def student_loop_seam_after_parallel_batch_v1(
             student_emit_occurred=student_emit_occurred,
             trades_seen=trades_seen,
         ),
+        "wiring_honesty_annotation_v1": _wiring_honesty_annotation_v1(
+            seam_attempted=True,
+            trades_seen=trades_seen,
+            first_packet_annex_present=first_packet_annex_present,
+            retrieval_matches_total=retrieval_matches_total,
+        ),
     }
 
 
 __all__ = [
     "SCHEMA_PHASED_HONESTY_ANNOTATION_V1",
+    "SCHEMA_WIRING_HONESTY_ANNOTATION_V1",
     "student_loop_seam_after_parallel_batch_v1",
 ]
