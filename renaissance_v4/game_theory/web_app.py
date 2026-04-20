@@ -19,8 +19,9 @@ is set). Folders look like ``batch_<UTC>_<id>/`` with ``BATCH_README.md`` and pe
 Parallel batches append one line per run to ``batch_scorecard.jsonl`` (UTC start/end, duration,
 counts, **run_ok_pct**, **referee_win_pct**, **avg_trade_win_pct**) and expose ``batch_timing`` on the API; see
 ``GET /api/batch-scorecard``. Operators may truncate that log with
-``POST /api/batch-scorecard/clear`` (does not touch engine memory files). Destructive engine reset:
-``POST /api/pattern-game/reset-learning`` with typed confirm phrase (see UI).
+``POST /api/batch-scorecard/clear`` (does not touch engine memory or Student Proctor store). Destructive engine reset:
+``POST /api/pattern-game/reset-learning`` with typed confirm phrase (see UI). Student Proctor store:
+``GET /api/student-proctor/learning-store``, ``POST /api/student-proctor/learning-store/clear`` (separate confirm).
 
 **Barney summary** (post-run formatter): ``POST /api/barney-summary`` with ``{"job_id": "…"}`` — structured
 run facts only. **Ask DATA** (bounded self-explainer): ``POST /api/ask-data`` with ``question`` and optional
@@ -96,6 +97,11 @@ from renaissance_v4.game_theory.batch_scorecard import (
 from renaissance_v4.game_theory.pattern_game_operator_reset import (
     RESET_PATTERN_GAME_LEARNING_CONFIRM,
     reset_pattern_game_engine_learning_state_v1,
+)
+from renaissance_v4.game_theory.student_proctor.student_learning_operator_v1 import (
+    RESET_STUDENT_PROCTOR_LEARNING_STORE_CONFIRM,
+    clear_student_learning_store_v1,
+    student_learning_store_status_v1,
 )
 from renaissance_v4.game_theory.data_health import get_data_health
 from renaissance_v4.game_theory.search_space_estimate import build_search_space_estimate
@@ -1298,20 +1304,27 @@ def create_app() -> Flask:
         Truncate ``batch_scorecard.jsonl`` only (batch audit / UI / hunter rotation input).
 
         Does **not** modify experience log, run memory, Groundhog bundle, context signature memory,
-        retrospective, or session batch folders on disk.
+        the Student Proctor learning store JSONL, retrospective, or session batch folders on disk.
         """
         data = request.get_json(force=True, silent=True) or {}
         if not data.get("confirm"):
             return jsonify({"ok": False, "error": 'Request JSON must include "confirm": true'}), 400
         p = truncate_batch_scorecard_jsonl()
+        st = student_learning_store_status_v1()
         return jsonify(
             {
                 "ok": True,
                 "path": str(p),
                 "note": (
                     "Truncated batch scorecard file only. Engine learning files "
-                    "(bundles, recall memory JSONL, experience/run logs) were not modified."
+                    "(bundles, recall memory JSONL, experience/run logs) and the Student Proctor "
+                    "learning store were not modified."
                 ),
+                "student_proctor_learning_store_unchanged": True,
+                "student_proctor_learning_store": {
+                    "path": st.get("path"),
+                    "line_count": st.get("line_count"),
+                },
             }
         )
 
@@ -1320,7 +1333,8 @@ def create_app() -> Flask:
         """
         Destructive: truncate experience + run memory JSONL, context-signature memory, delete Groundhog bundle.
 
-        Does **not** truncate ``batch_scorecard.jsonl`` or ``retrospective_log.jsonl``.
+        Does **not** truncate ``batch_scorecard.jsonl``, ``retrospective_log.jsonl``, or the Student Proctor
+        learning store (use ``POST /api/student-proctor/learning-store/clear``).
         """
         data = request.get_json(force=True, silent=True) or {}
         c = data.get("confirm")
@@ -1334,7 +1348,38 @@ def create_app() -> Flask:
         out = reset_pattern_game_engine_learning_state_v1(confirm=c.strip())
         if not out.get("ok") and not out.get("cleared"):
             return jsonify(out), 400
-        return jsonify(out), (200 if out.get("ok") else 500)
+        st = student_learning_store_status_v1()
+        out2 = dict(out)
+        out2["student_proctor_learning_store_unchanged"] = True
+        out2["student_proctor_learning_store"] = {"path": st.get("path"), "line_count": st.get("line_count")}
+        return jsonify(out2), (200 if out.get("ok") else 500)
+
+    @app.get("/api/student-proctor/learning-store")
+    def api_student_proctor_learning_store_get() -> Any:
+        """Read-only Student Learning Store metadata (Directive 08 — distinct from scorecard / engine memory)."""
+        return jsonify(student_learning_store_status_v1())
+
+    @app.post("/api/student-proctor/learning-store/clear")
+    def api_student_proctor_learning_store_clear() -> Any:
+        """
+        Truncate the Student Proctor learning JSONL only (explicit typed confirm).
+
+        Does **not** modify ``batch_scorecard.jsonl`` or engine learning files.
+        """
+        data = request.get_json(force=True, silent=True) or {}
+        c = data.get("confirm")
+        if not isinstance(c, str):
+            return jsonify(
+                {
+                    "ok": False,
+                    "error": (
+                        "confirm must be the exact string "
+                        f"{RESET_STUDENT_PROCTOR_LEARNING_STORE_CONFIRM!r}"
+                    ),
+                }
+            ), 400
+        out = clear_student_learning_store_v1(confirm=c.strip())
+        return jsonify(out), (200 if out.get("ok") else 400)
 
     @app.get("/api/batch-detail")
     def api_batch_detail() -> Any:
@@ -3332,6 +3377,13 @@ PAGE_HTML = """<!DOCTYPE html>
             </div>
             <span style="font-size:0.72rem;color:var(--pg-muted)">Click a row to open batch detail, scenarios, and per-scenario report links (GT_DIRECTIVE_001).</span>
           </div>
+          <div class="pg-student-proctor-truth" style="margin:10px 0;padding:8px 10px;background:rgba(0,0,0,0.09);border-radius:6px;font-size:0.78rem;line-height:1.35">
+            <strong>Student Proctor learning store</strong> — separate file from the scorecard log and from &ldquo;Reset Learning State&rdquo; (engine memory / bundles / recall JSONL).
+            <span id="studentProctorStoreLine" aria-live="polite">Loading…</span>
+            <div style="margin-top:6px">
+              <button type="button" class="btn-secondary pg-op-btn" id="clearStudentProctorStoreBtn" data-label-idle="Clear Student Proctor store…">Clear Student Proctor store…</button>
+            </div>
+          </div>
           <div class="pg-table-scroll scorecard-table-wrap-wide">
             <table class="scorecard-table scorecard-table-learning" id="scorecardHistoryTable">
               <thead>
@@ -4416,7 +4468,8 @@ PAGE_HTML = """<!DOCTYPE html>
     if (clearScorecardBtn) {
       clearScorecardBtn.onclick = async () => {
         if (!window.confirm(
-          'Clear scorecard and start a new experiment?\\nLearning state will be preserved.'
+          'Clear the scorecard log (batch_scorecard.jsonl) only?\\n\\n' +
+            'Engine memory, bundles, and the Student Proctor learning store are not cleared.'
         )) {
           return;
         }
@@ -4440,8 +4493,9 @@ PAGE_HTML = """<!DOCTYPE html>
           updateMemoryContextImpactFromScorecardRow(null);
           const lr = document.getElementById('lastBatchRunLine');
           if (lr) {
-            lr.textContent = 'Last completed batch: — (scorecard file cleared; engine memory and bundles unchanged)';
+            lr.textContent = 'Last completed batch: — (scorecard file cleared; engine memory, bundles, and Student Proctor store unchanged)';
           }
+          if (typeof refreshStudentProctorStoreLine === 'function') void refreshStudentProctorStoreLine();
           await refreshScorecardHistory();
         } catch (e) {
           await show(null, null, friendlyFetchError(e));
@@ -4456,7 +4510,7 @@ PAGE_HTML = """<!DOCTYPE html>
         if (!window.confirm(
           'DANGER: Reset Learning State will truncate the experience log and run memory JSONL, ' +
             'truncate context signature memory (recall / signature store), and delete the Groundhog bundle file if present.\\n\\n' +
-            'It does NOT clear the scorecard table file or retrospective notes.\\n\\nContinue?'
+            'It does NOT clear the scorecard table file, retrospective notes, or the Student Proctor learning store.\\n\\nContinue?'
         )) {
           return;
         }
@@ -4481,10 +4535,66 @@ PAGE_HTML = """<!DOCTYPE html>
           }
           await show(null, j, null);
           if (typeof refreshGroundhog === 'function') refreshGroundhog();
+          if (typeof refreshStudentProctorStoreLine === 'function') void refreshStudentProctorStoreLine();
         } catch (e) {
           await show(null, null, friendlyFetchError(e));
         } finally {
           setOpButtonBusy(resetLearningStateBtn, false);
+        }
+      };
+    }
+
+    const RESET_STUDENT_PROCTOR_CONFIRM = 'RESET_STUDENT_PROCTOR_LEARNING_STORE';
+    async function refreshStudentProctorStoreLine() {
+      const el = document.getElementById('studentProctorStoreLine');
+      if (!el) return;
+      try {
+        const r = await fetch('/api/student-proctor/learning-store');
+        const j = await r.json();
+        if (!r.ok || !j.ok) {
+          el.textContent = 'Could not read store status.';
+          return;
+        }
+        const lines = (j.line_count !== undefined) ? j.line_count : '—';
+        el.textContent = ' Path: ' + (j.path || '—') + ' — lines: ' + lines + '.';
+      } catch (e) {
+        el.textContent = ' Store status error: ' + friendlyFetchError(e);
+      }
+    }
+    const clearStudentProctorStoreBtn = document.getElementById('clearStudentProctorStoreBtn');
+    if (clearStudentProctorStoreBtn) {
+      clearStudentProctorStoreBtn.onclick = async () => {
+        if (!window.confirm(
+          'Truncate ONLY the Student Proctor learning store (cross-run JSONL)?\\n\\n' +
+            'Scorecard history and engine learning files will not be changed.'
+        )) {
+          return;
+        }
+        const typed = window.prompt(
+          'Type the confirmation phrase exactly (case-sensitive):\\n' + RESET_STUDENT_PROCTOR_CONFIRM
+        );
+        if (typed !== RESET_STUDENT_PROCTOR_CONFIRM) {
+          if (typed !== null) window.alert('Confirmation mismatch — nothing was changed.');
+          return;
+        }
+        setOpButtonBusy(clearStudentProctorStoreBtn, true, 'Clearing…', true);
+        try {
+          const r = await fetch('/api/student-proctor/learning-store/clear', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ confirm: RESET_STUDENT_PROCTOR_CONFIRM }),
+          });
+          const j = await r.json();
+          if (!r.ok || !j.ok) {
+            await show(null, null, j.error || JSON.stringify(j));
+            return;
+          }
+          await show(null, j, null);
+          void refreshStudentProctorStoreLine();
+        } catch (e) {
+          await show(null, null, friendlyFetchError(e));
+        } finally {
+          setOpButtonBusy(clearStudentProctorStoreBtn, false);
         }
       };
     }
@@ -6019,6 +6129,7 @@ PAGE_HTML = """<!DOCTYPE html>
         }
       });
     }
+    void refreshStudentProctorStoreLine();
     refreshScorecardHistory();
     setEvidenceTab('outcomes');
   </script>

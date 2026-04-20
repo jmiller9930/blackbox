@@ -3,6 +3,10 @@ Operator-initiated **engine learning reset** (destructive, explicit confirm only
 
 Separate from ``batch_scorecard.jsonl`` truncation: scorecard is batch audit / UI history;
 this module clears canonical files that replay and candidate search actually read.
+
+**Not cleared here:** the PML **Student Proctor** append-only store
+(``<runtime>/student_learning/student_learning_records_v1.jsonl``). That file has its own
+operator action (Directive 08) so score/engine resets never silently wipe Student-side records.
 """
 
 from __future__ import annotations
@@ -22,7 +26,8 @@ def reset_pattern_game_engine_learning_state_v1(*, confirm: str) -> dict[str, An
     """
     Truncate experience + run memory JSONL, truncate context-signature memory, delete Groundhog bundle.
 
-    Does **not** touch ``batch_scorecard.jsonl`` or ``retrospective_log.jsonl``.
+    Does **not** touch ``batch_scorecard.jsonl``, ``retrospective_log.jsonl``, or the Student Proctor
+    learning store JSONL (Student-side cross-run evidence).
     """
     if confirm != RESET_PATTERN_GAME_LEARNING_CONFIRM:
         return {
