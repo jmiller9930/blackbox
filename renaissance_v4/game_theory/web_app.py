@@ -22,6 +22,11 @@ counts, **run_ok_pct**, **referee_win_pct**, **avg_trade_win_pct**) and expose `
 ``POST /api/batch-scorecard/clear`` (does not touch engine memory files). Destructive engine reset:
 ``POST /api/pattern-game/reset-learning`` with typed confirm phrase (see UI).
 
+**Barney summary** (post-run formatter): ``POST /api/barney-summary`` with ``{"job_id": "…"}`` — structured
+run facts only. **Ask DATA** (bounded self-explainer): ``POST /api/ask-data`` with ``question`` and optional
+``job_id`` / ``ui_context`` — answers only from bundled PML knowledge + run/scorecard facts (same Ollama stack
+as Barney when enabled; see ``ASK_DATA_USE_LLM`` / ``BARNEY_USE_LLM`` / ``ANNA_USE_LLM``).
+
 Operator **retrospective** (learn / next experiment): ``GET /api/retrospective-log``,
 ``POST /api/retrospective-append`` — persists to ``retrospective_log.jsonl`` (see
 ``renaissance_v4/game_theory/retrospective_log.py``).
@@ -67,13 +72,14 @@ from flask import Flask, Response, abort, jsonify, request, send_file
 
 _GAME_THEORY = Path(__file__).resolve().parent
 _RV4_ROOT = _GAME_THEORY.parent
+_BLACKBOX_REPO_ROOT = _RV4_ROOT.parent
 _PATTERN_BANNER_PATH = _RV4_ROOT / "assets" / "pattern.png"
 # Lossy WebP (~4× smaller than PNG); regenerate when pattern.png changes:
 #   cwebp -q 83 renaissance_v4/assets/pattern.png -o renaissance_v4/assets/pattern.webp
 _PATTERN_BANNER_WEBP_PATH = _RV4_ROOT / "assets" / "pattern.webp"
 
 # Operator-visible web UI bundle version — bump when changing PAGE_HTML (HTML/CSS/JS) so deploys are provable.
-PATTERN_GAME_WEB_UI_VERSION = "2.10.0"
+PATTERN_GAME_WEB_UI_VERSION = "2.11.0"
 
 from renaissance_v4.game_theory.groundhog_memory import (
     groundhog_auto_merge_enabled,
@@ -145,6 +151,12 @@ from renaissance_v4.game_theory.pattern_game import (
     run_pattern_game,
 )
 from renaissance_v4.game_theory.policy_framework import attach_policy_framework_audits
+from renaissance_v4.game_theory.ask_data_explainer import (
+    ask_data_answer,
+    build_ask_data_bundle_v1,
+    sanitize_ui_context,
+    scorecard_snapshot_for_ask,
+)
 from renaissance_v4.game_theory.barney_summary import (
     barney_summarize_job_facts,
     build_barney_facts_from_job_state,
@@ -1072,6 +1084,77 @@ def create_app() -> Flask:
         out = barney_summarize_job_facts(facts)
         return jsonify({"ok": True, "facts": facts, **out})
 
+    @app.post("/api/ask-data")
+    def api_ask_data() -> Any:
+        """
+        Ask DATA — bounded self-explainer (PML + run facts). Body JSON::
+
+            {
+              "question": "...",
+              "job_id": "<hex optional>",
+              "ui_context": { ... optional, server-sanitized keys only }
+            }
+        """
+        data = request.get_json(force=True, silent=True) or {}
+        question = str(data.get("question") or "").strip()
+        if not question:
+            return jsonify({"ok": False, "error": "question is required"}), 400
+        if len(question) > 6000:
+            return jsonify({"ok": False, "error": "question too long (max 6000 characters)"}), 400
+        jid = str(data.get("job_id") or "").strip() or None
+        ui_ctx = sanitize_ui_context(data.get("ui_context"))
+
+        barney_facts: dict[str, Any] | None = None
+        score_snap: dict[str, Any] | None = None
+        job_res = "no_job"
+
+        if jid:
+            j: dict[str, Any] | None = None
+            with _JOBS_LOCK:
+                j = _JOBS.get(jid)
+            if j:
+                st = str(j.get("status") or "")
+                if st in ("done", "error"):
+                    res = j.get("result") if isinstance(j.get("result"), dict) else None
+                    bt = j.get("batch_timing") if isinstance(j.get("batch_timing"), dict) else None
+                    echo = j.get("telemetry_context_echo") if isinstance(j.get("telemetry_context_echo"), dict) else None
+                    barney_facts = build_barney_facts_from_job_state(
+                        status=st,
+                        error_message=j.get("error"),
+                        parallel_result=res,
+                        batch_timing=bt,
+                        telemetry_echo=echo,
+                    )
+                    job_res = "live_job_terminal"
+                elif st == "running":
+                    return jsonify(
+                        {
+                            "ok": False,
+                            "error": "job is still running — Ask DATA run facts are available after the batch completes",
+                        }
+                    ), 400
+                else:
+                    job_res = f"job_status:{st}"
+            entry = find_scorecard_entry_by_job_id(jid)
+            sc = scorecard_snapshot_for_ask(entry)
+            if sc:
+                score_snap = sc
+                if barney_facts is None:
+                    job_res = "scorecard_only"
+            elif not j:
+                job_res = "job_unknown"
+
+        op_state = operator_strategy_public_state(_BLACKBOX_REPO_ROOT)
+        bundle = build_ask_data_bundle_v1(
+            barney_facts=barney_facts,
+            scorecard_snapshot=score_snap,
+            ui_context=ui_ctx,
+            operator_strategy_state=op_state,
+            job_resolution=job_res,
+        )
+        out = ask_data_answer(question, bundle)
+        return jsonify({"ok": out.get("ok", False), "bundle_meta": {"job_resolution": job_res, "job_id": jid}, **out})
+
     @app.post("/api/run-parallel")
     def api_parallel() -> Any:
         """Blocking batch run (same work as ``/start`` + poll until done). Prefer ``/start`` for the UI."""
@@ -1864,13 +1947,63 @@ PAGE_HTML = """<!DOCTYPE html>
     }
     .pg-scorecard-lower {
       flex: 1 1 50%;
-      min-height: 140px;
-      max-height: min(38vh, 480px);
-      overflow: auto;
+      min-height: 200px;
+      max-height: min(42vh, 560px);
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      gap: 0;
       border-top: 2px solid var(--pg-line);
-      padding-top: 10px;
+      padding-top: 0;
       background: var(--pg-surface-strong);
       border-radius: 0 0 12px 12px;
+    }
+    .pg-barney-subsection {
+      flex: 1 1 48%;
+      min-height: 72px;
+      overflow: auto;
+      padding: 10px 12px 8px;
+      border-bottom: 1px solid var(--pg-line);
+    }
+    .pg-askdata-subsection {
+      flex: 1 1 52%;
+      min-height: 120px;
+      overflow: auto;
+      padding: 10px 12px 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .pg-askdata-input {
+      width: 100%;
+      min-height: 3.25rem;
+      max-height: 6rem;
+      resize: vertical;
+      font-size: 0.86rem;
+      line-height: 1.35;
+      padding: 8px 10px;
+      border-radius: 8px;
+      border: 1px solid var(--pg-line);
+      font-family: inherit;
+      box-sizing: border-box;
+    }
+    .pg-askdata-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      align-items: center;
+    }
+    .pg-askdata-status {
+      font-size: 0.78rem;
+      color: var(--pg-muted);
+      margin: 0;
+      min-height: 1.1em;
+    }
+    .pg-askdata-response {
+      flex: 1 1 auto;
+      min-height: 4rem;
+      max-height: min(22vh, 240px);
+      overflow: auto;
     }
     .pg-barney-title {
       font-weight: 800;
@@ -3227,13 +3360,31 @@ PAGE_HTML = """<!DOCTYPE html>
           <p id="scorecardClickHint" class="scorecard-click-hint" role="status" aria-live="polite" style="display:none"></p>
           <p class="path-hint" id="scorecardPathHint"></p>
           </div>
-          <div class="pg-scorecard-lower" id="scorecardBarneyLower" aria-label="Barney summary">
-            <div class="pg-barney-title">Barney summary</div>
-            <p class="caps" style="font-size:0.74rem;margin:0 0 8px;line-height:1.35;color:var(--pg-muted)">
-              Plain-English recap built only from run facts (local LLM formats text; it does not invent scores).
-              If Ollama is off, a built-in fallback is used.
-            </p>
-            <pre id="barneySummaryBody" class="pg-barney-body">—</pre>
+          <div class="pg-scorecard-lower" id="scorecardLowerSplit" aria-label="Summary and Ask DATA">
+            <div class="pg-barney-subsection" id="barneySubsection">
+              <div class="pg-barney-title">Barney summary</div>
+              <p class="caps" style="font-size:0.74rem;margin:0 0 8px;line-height:1.35;color:var(--pg-muted)">
+                Plain-English recap built only from run facts (local LLM formats text; it does not invent scores).
+                If Ollama is off, a built-in fallback is used.
+              </p>
+              <pre id="barneySummaryBody" class="pg-barney-body">—</pre>
+            </div>
+            <div class="pg-askdata-subsection" id="askDataSubsection" aria-label="Ask DATA">
+              <div class="pg-barney-title">Ask DATA</div>
+              <p class="caps" style="font-size:0.74rem;margin:0;line-height:1.35;color:var(--pg-muted)">
+                Questions about <strong>this app</strong>, your controls, memory, and the current or selected run — not general chat.
+                Answers use only bundled run/UI facts (local LLM formats; say &quot;not in run data&quot; when missing).
+              </p>
+              <textarea id="askDataInput" class="pg-askdata-input" rows="2" maxlength="6000"
+                placeholder="e.g. What does memory mode do? Why did this run fail? What does the Sel column mean?"
+                autocomplete="off" aria-label="Ask DATA question"></textarea>
+              <div class="pg-askdata-actions">
+                <button type="button" class="btn-chef pg-op-btn" id="askDataSendBtn" data-label-idle="Send">Send</button>
+                <button type="button" class="btn-secondary pg-op-btn" id="askDataClearBtn" data-label-idle="Clear">Clear</button>
+              </div>
+              <p class="pg-askdata-status" id="askDataStatus" aria-live="polite"></p>
+              <pre id="askDataResponse" class="pg-barney-body pg-askdata-response" aria-live="polite">—</pre>
+            </div>
           </div>
         </div>
         </div>
@@ -3247,6 +3398,7 @@ PAGE_HTML = """<!DOCTYPE html>
     const LIMITS = __LIMITS_JSON__;
     const STARTING_EQUITY = __STARTING_EQUITY__;
     const RUN_TIMEOUT_MS = 7200000;
+    const PATTERN_GAME_UI_VERSION_STR = '__PATTERN_GAME_WEB_UI_VERSION__';
 
     const rangeEl = document.getElementById('workersRange');
     const workersVal = document.getElementById('workersVal');
@@ -3850,6 +4002,100 @@ PAGE_HTML = """<!DOCTYPE html>
     }
 
     let selectedScorecardJobId = null;
+    /** Last terminal parallel job from this page session (for Ask DATA when no row selected). */
+    let askDataLastRunJobId = null;
+
+    function askDataPreferredJobId() {
+      if (selectedScorecardJobId && String(selectedScorecardJobId).trim()) {
+        return String(selectedScorecardJobId).trim();
+      }
+      if (askDataLastRunJobId && String(askDataLastRunJobId).trim()) {
+        return String(askDataLastRunJobId).trim();
+      }
+      return '';
+    }
+
+    function buildAskDataUiContext() {
+      const recipeEl = document.getElementById('operatorRecipePick');
+      const rid = recipeEl ? String(recipeEl.value || '').trim() : '';
+      const wm = document.getElementById('evaluationWindowPick');
+      const wmv = wm ? String(wm.value || '').trim() : '';
+      let customM = null;
+      if (wmv === 'custom') {
+        const cEl = document.getElementById('evaluationWindowCustomMonths');
+        const n = cEl ? parseInt(cEl.value, 10) : NaN;
+        if (n > 0) customM = n;
+      }
+      const memEl = document.getElementById('contextSignatureMemoryModePick');
+      const useUp = document.getElementById('useOperatorUploadedStrategy');
+      let scenariosSource = 'recipe';
+      if (rid === 'custom') {
+        scenariosSource = 'custom_textarea';
+      } else if (useUp && useUp.checked) {
+        scenariosSource = 'operator_upload';
+      }
+      return {
+        operator_recipe_id: rid || undefined,
+        evaluation_window_mode: wmv || undefined,
+        evaluation_window_custom_months: customM != null ? customM : undefined,
+        context_signature_memory_mode: memEl ? String(memEl.value || '').trim() : undefined,
+        use_operator_uploaded_strategy: !!(useUp && useUp.checked),
+        scenarios_source: scenariosSource,
+        recipe_label: recipeLabelFromDom(),
+        pattern_game_web_ui_version: PATTERN_GAME_UI_VERSION_STR,
+      };
+    }
+
+    async function sendAskData() {
+      const inp = document.getElementById('askDataInput');
+      const out = document.getElementById('askDataResponse');
+      const st = document.getElementById('askDataStatus');
+      const btn = document.getElementById('askDataSendBtn');
+      if (!inp || !out) return;
+      const q = String(inp.value || '').trim();
+      if (!q) {
+        if (st) st.textContent = 'Type a question first.';
+        return;
+      }
+      if (st) st.textContent = 'Loading…';
+      out.textContent = '';
+      setOpButtonBusy(btn, true, 'Sending…', true);
+      try {
+        const jid = askDataPreferredJobId();
+        const r = await fetch('/api/ask-data', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            question: q,
+            job_id: jid || undefined,
+            ui_context: buildAskDataUiContext(),
+          }),
+        });
+        const j = await r.json();
+        if (!r.ok || !j.ok) {
+          out.textContent = 'Ask DATA: ' + (j.error || ('HTTP ' + r.status));
+          if (st) st.textContent = '';
+          return;
+        }
+        out.textContent = (j.text || '').trim() || '—';
+        const src = j.answer_source ? (' · source: ' + j.answer_source) : '';
+        if (st) st.textContent = (j.bundle_meta && j.bundle_meta.job_resolution ? ('Context: ' + j.bundle_meta.job_resolution) : '') + src;
+      } catch (e) {
+        out.textContent = 'Ask DATA failed: ' + friendlyFetchError(e);
+        if (st) st.textContent = '';
+      } finally {
+        setOpButtonBusy(btn, false);
+      }
+    }
+
+    function clearAskDataUi() {
+      const inp = document.getElementById('askDataInput');
+      const out = document.getElementById('askDataResponse');
+      const st = document.getElementById('askDataStatus');
+      if (inp) inp.value = '';
+      if (out) out.textContent = '—';
+      if (st) st.textContent = '';
+    }
 
     function fileLink(jobId, scenarioId, kind) {
       const q = 'job_id=' + encodeURIComponent(jobId) + '&scenario_id=' + encodeURIComponent(scenarioId) + '&kind=' + encodeURIComponent(kind);
@@ -4074,6 +4320,7 @@ PAGE_HTML = """<!DOCTYPE html>
             return;
           }
           selectedScorecardJobId = null;
+          askDataLastRunJobId = null;
           const drill = document.getElementById('batchDrillPanel');
           if (drill) drill.innerHTML = '';
           updateScorecardLearningSummaryFromRow(null);
@@ -4617,6 +4864,7 @@ PAGE_HTML = """<!DOCTYPE html>
             showBatchConcurrencyBanner(total, wCap, 'error');
             if (pj.batch_timing) updateLastBatchRunLine(pj.batch_timing);
             refreshScorecardHistory();
+            askDataLastRunJobId = jobId;
             void fetchBarneySummary(jobId);
             await show(null, null, friendlyParallelBackendError(pj.error || 'Job failed'));
             updateRunStatusLine('Failed — see Result.');
@@ -4661,6 +4909,7 @@ PAGE_HTML = """<!DOCTYPE html>
               }
               await show(null, j, null);
               refreshScorecardHistory();
+              askDataLastRunJobId = jobId;
               void fetchBarneySummary(jobId);
               updateRunStatusLine(
                 'Finished — ' + doneN + ' scenario(s) · parallel processes used: ' + (doneW != null ? doneW : '?') +
@@ -4671,6 +4920,7 @@ PAGE_HTML = """<!DOCTYPE html>
               showBatchConcurrencyBanner(tDone, wCap, 'done');
               setProgressUI(cDone, tDone, 'Batch marked done — full JSON not in this response; see scorecard below.');
               refreshScorecardHistory();
+              askDataLastRunJobId = jobId;
               void fetchBarneySummary(jobId);
               updateRunStatusLine(
                 'Finished — ' + cDone + '/' + tDone + ' (details in scorecard; hard-refresh if Result is empty).'
@@ -5638,6 +5888,23 @@ PAGE_HTML = """<!DOCTYPE html>
 
     if (typeof refreshSearchSpaceEstimate === 'function') refreshSearchSpaceEstimate();
     refreshWorkerEffectiveLine();
+    const askDataSendBtn = document.getElementById('askDataSendBtn');
+    const askDataClearBtn = document.getElementById('askDataClearBtn');
+    const askDataInputEl = document.getElementById('askDataInput');
+    if (askDataSendBtn) {
+      askDataSendBtn.addEventListener('click', function () { void sendAskData(); });
+    }
+    if (askDataClearBtn) {
+      askDataClearBtn.addEventListener('click', function () { clearAskDataUi(); });
+    }
+    if (askDataInputEl) {
+      askDataInputEl.addEventListener('keydown', function (ev) {
+        if (ev.key === 'Enter' && (ev.ctrlKey || ev.metaKey)) {
+          ev.preventDefault();
+          void sendAskData();
+        }
+      });
+    }
     refreshScorecardHistory();
     setEvidenceTab('outcomes');
   </script>
