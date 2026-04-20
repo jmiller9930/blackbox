@@ -85,7 +85,7 @@ def operator_recipe_catalog() -> list[dict[str, Any]]:
     return [
         {
             "recipe_id": "pattern_learning",
-            "operator_label": "Pattern Learning Run",
+            "operator_label": "Pattern Machine Learning (PML)",
             "operator_visible": True,
             "category": "primary",
             "experiment_type": "single_run",
@@ -105,57 +105,82 @@ def operator_recipe_catalog() -> list[dict[str, Any]]:
                 ),
             },
             "operator_mode_card_v1": {
+                "title": "Pattern Machine Learning (PML)",
                 "sections": [
                     {
-                        "k": "What it does",
+                        "k": "What this does",
                         "v": (
-                            "Runs one curated scenario on the standard baseline manifest. The lab replays a "
-                            "control execution and several candidate variants drawn only from the "
-                            "allowed tunable surface in your policy framework, then scores them against an "
-                            "outcome-quality goal for this window of bars."
+                            "This run is trying to find a better version of your strategy.\n\n"
+                            "It does this by:\n\n"
+                            "* running the baseline strategy\n"
+                            "* trying many small variations\n"
+                            "* checking if anything performs better"
                         ),
                     },
                     {
-                        "k": "Candidates",
+                        "k": "What happens during the run",
                         "v": (
-                            "Yes — inside this run only. Candidates are generated and compared here; "
-                            "you do not paste them by hand for this mode."
+                            "For each scenario:\n\n"
+                            "* the system runs the baseline (control)\n"
+                            "* then it tests multiple variations (candidates)\n"
+                            "* it compares results\n"
+                            "* if something is better, it becomes the winner"
                         ),
                     },
                     {
-                        "k": "Prior memory",
+                        "k": "What you get",
                         "v": (
-                            "Only if configured. The bundled example scenario does not attach a memory file. "
-                            "Memory applies if you set memory_bundle_path in Advanced JSON, or if Groundhog "
-                            "auto-merge is enabled and the canonical bundle file exists on this host."
+                            "At the end, you'll see:\n\n"
+                            "* whether a better version was found\n"
+                            "* which variation won\n"
+                            "* how much better it performed"
                         ),
                     },
                     {
-                        "k": "Writes new memory",
+                        "k": "Memory (this is the important part)",
                         "v": (
-                            "Not automatically. A normal batch does not silently update Groundhog bundles "
-                            "or promote parameters. Optional experience logging is audit trail only."
+                            "This is where learning actually happens.\n\n"
+                            "If Learning Mode = READ+WRITE:\n\n"
+                            "* the system saves the winner\n"
+                            "* future runs can use that knowledge\n\n"
+                            "If READ only:\n\n"
+                            "* it uses past learning\n"
+                            "* but does not learn anything new\n\n"
+                            "If OFF:\n\n"
+                            "* no memory is used\n"
+                            "* every run starts from scratch"
                         ),
                     },
                     {
-                        "k": "Winner",
+                        "k": 'What "learning" actually means here',
                         "v": (
-                            "Yes (harness). The search picks a best candidate vs control or records that "
-                            "none beat control — see scorecard learning columns (Cand, Sel, Learn)."
+                            "* the system remembers what worked before\n"
+                            "* when it sees a similar situation again\n"
+                            "* it can bias decisions toward that winner\n\n"
+                            "Think:\n"
+                            '"I\'ve seen this before — do more of what worked"'
                         ),
                     },
                     {
-                        "k": "Carries forward",
+                        "k": "What it does NOT do",
                         "v": (
-                            "Nothing automatic after Run. To persist parameter changes you use explicit "
-                            "operator flows (for example Groundhog promote), not the batch alone."
+                            "* it does NOT automatically change your live strategy\n"
+                            "* it does NOT persist anything unless learning is ON\n"
+                            "* it does NOT guarantee a winner every run"
                         ),
                     },
                     {
-                        "k": "Use this when",
+                        "k": "When to use this",
                         "v": (
-                            "You want a single, goal-guided comparison of bounded variants on the default "
-                            "stack for the chosen evaluation window."
+                            'Use this when you want to answer:\n\n'
+                            '"Can the system find a better version of this strategy?"'
+                        ),
+                    },
+                    {
+                        "k": "One-line summary",
+                        "v": (
+                            "This run searches for better strategy variations and, if learning is ON, "
+                            "remembers what works so future runs can improve."
                         ),
                     },
                 ],
@@ -185,54 +210,64 @@ def operator_recipe_catalog() -> list[dict[str, Any]]:
                 ),
             },
             "operator_mode_card_v1": {
+                "title": "Reference Comparison Run",
                 "sections": [
                     {
-                        "k": "What it does",
+                        "k": "What this does",
                         "v": (
-                            "Runs three scenarios in parallel: default ATR geometry, tighter stops and targets, "
-                            "and wider stops and targets on the same baseline manifest. Each scenario runs the "
-                            "full harness (control plus bounded candidates), so you compare both risk shape and "
-                            "search outcome across presets in one batch."
+                            "This run tests three versions of the same strategy at the same time:\n\n"
+                            "* Default settings\n"
+                            "* Tighter risk (smaller stops and targets)\n"
+                            "* Wider risk (larger stops and targets)\n\n"
+                            "All three are run on the same data so you can see which one performs better."
                         ),
                     },
                     {
-                        "k": "Candidates",
+                        "k": "What happens during the run",
                         "v": (
-                            "Yes — per scenario, this run only. Every worker path does candidate search; "
-                            "this is not baseline-only replay."
+                            "For each version:\n\n"
+                            "* the system runs the baseline strategy\n"
+                            "* then it tries small variations (candidates)\n"
+                            "* it checks if any variation beats the baseline"
                         ),
                     },
                     {
-                        "k": "Prior memory",
+                        "k": "What you get",
                         "v": (
-                            "Only if configured (memory path on a scenario, or Groundhog auto-merge on with a "
-                            "bundle file). The reference example scenarios do not ship a memory file."
+                            "At the end, you'll see:\n\n"
+                            "* which version performed best\n"
+                            "* whether any improvement was found\n"
+                            "* a winner if something beat the baseline"
                         ),
                     },
                     {
-                        "k": "Writes new memory",
+                        "k": "Important things to know",
                         "v": (
-                            "Not automatically. Same as Pattern Learning: optional experience log; no silent "
-                            "bundle promotion from Run alone."
+                            "* each version is tested independently\n"
+                            "* this is a comparison, not a replacement\n"
+                            "* nothing is saved automatically"
                         ),
                     },
                     {
-                        "k": "Winner",
+                        "k": "Memory (learning)",
                         "v": (
-                            "Yes (per scenario harness). Each row can show its own candidate outcome vs control."
+                            "* memory is only used if you turn it on\n"
+                            "* if a winner is found, it can be saved\n"
+                            "* nothing is carried forward unless you explicitly keep it"
                         ),
                     },
                     {
-                        "k": "Carries forward",
+                        "k": "When to use this",
                         "v": (
-                            "Nothing automatic. Use explicit promote or export steps if you want persistence."
+                            'Use this run when you want to answer:\n\n'
+                            '"Do tighter trades, wider trades, or default settings work best right now?"'
                         ),
                     },
                     {
-                        "k": "Use this when",
+                        "k": "One-line summary",
                         "v": (
-                            "You want a side-by-side stress test of default versus tighter versus wider risk "
-                            "geometry under the same evaluation window."
+                            "This run compares tight vs normal vs wide risk settings and tells you which one "
+                            "performs best — nothing changes unless you choose to keep it."
                         ),
                     },
                 ],

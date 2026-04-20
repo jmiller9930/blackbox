@@ -73,7 +73,7 @@ _PATTERN_BANNER_PATH = _RV4_ROOT / "assets" / "pattern.png"
 _PATTERN_BANNER_WEBP_PATH = _RV4_ROOT / "assets" / "pattern.webp"
 
 # Operator-visible web UI bundle version — bump when changing PAGE_HTML (HTML/CSS/JS) so deploys are provable.
-PATTERN_GAME_WEB_UI_VERSION = "2.8.2"
+PATTERN_GAME_WEB_UI_VERSION = "2.8.3"
 
 from renaissance_v4.game_theory.groundhog_memory import (
     groundhog_auto_merge_enabled,
@@ -2602,6 +2602,7 @@ PAGE_HTML = """<!DOCTYPE html>
       padding: 0;
       font-size: 0.82rem;
       color: #2f3842;
+      white-space: pre-line;
     }
     #statusLine { min-height: 1.3em; color: var(--pg-ink); font-size: 0.9rem; margin-top: 8px; }
     .err { color: #c43b3b; }
@@ -2829,7 +2830,7 @@ PAGE_HTML = """<!DOCTYPE html>
         <div class="pg-controls-core">
           <div class="pg-mini-grid pg-mini-3">
             <div><label for="operatorRecipePick">Pattern</label><select id="operatorRecipePick" aria-describedby="presetHelp patternModeExplanation">
-              <option value="pattern_learning">Pattern Learning Run</option>
+              <option value="pattern_learning">Pattern Machine Learning (PML)</option>
               <option value="reference_comparison">Reference Comparison Run</option>
               <option value="custom">Custom</option>
             </select></div>
@@ -4775,7 +4776,7 @@ PAGE_HTML = """<!DOCTYPE html>
         },
         {
           k: 'Candidates',
-          v: 'No — this path does not run the operator harness. There is no built-in control-plus-candidate search here. Use Pattern Learning or Reference Comparison if you need that.',
+          v: 'No — this path does not run the operator harness. There is no built-in control-plus-candidate search here. Use Pattern Machine Learning (PML) or Reference Comparison if you need that.',
         },
         {
           k: 'Prior memory',
@@ -4819,7 +4820,8 @@ PAGE_HTML = """<!DOCTYPE html>
         }
         return;
       }
-      let h = '<h3 class="pg-pattern-mode-h">This pattern (read before Run)</h3><dl class="pg-pattern-mode-dl">';
+      const cardTitle = (card && card.title) ? String(card.title) : 'This pattern (read before Run)';
+      let h = '<h3 class="pg-pattern-mode-h">' + escapeHtml(cardTitle) + '</h3><dl class="pg-pattern-mode-dl">';
       for (let i = 0; i < card.sections.length; i++) {
         const s = card.sections[i];
         h += '<dt>' + escapeHtml(s.k) + '</dt><dd>' + escapeHtml(s.v) + '</dd>';
