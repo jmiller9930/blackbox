@@ -41,6 +41,39 @@ _NS_RECORD = uuid.UUID("6ba7b810-9dad-11d1-80b4-00c04fd430c8")
 
 SCHEMA_PHASED_HONESTY_ANNOTATION_V1 = "phased_honesty_annotation_v1"
 SCHEMA_WIRING_HONESTY_ANNOTATION_V1 = "wiring_honesty_annotation_v1"
+SCHEMA_MEMORY_SEMANTICS_ANNOTATION_V1 = "memory_semantics_annotation_v1"
+
+
+def _memory_semantics_annotation_v1(*, seam_attempted: bool) -> dict[str, Any]:
+    """
+    Directive **D8** — Student store retrieval is **exact-key**, not approximate pattern matching.
+
+    Do not market “the same pattern came back” from Student memory; v1 matches
+    ``student_entry_v1:{symbol}:{entry_time}`` on the learning store only (see **§C.2**).
+    """
+    if not seam_attempted:
+        return {
+            "schema": SCHEMA_MEMORY_SEMANTICS_ANNOTATION_V1,
+            "directive": "D8",
+            "student_retrieval_match_mode_v1": None,
+            "same_chart_pattern_repeat_claim_supported_v1": None,
+            "approximate_similarity_matching_student_store_v1": None,
+            "retrieval_signature_key_format_v1": None,
+            "note": "Student loop seam not executed — memory semantics annotation N/A.",
+        }
+    return {
+        "schema": SCHEMA_MEMORY_SEMANTICS_ANNOTATION_V1,
+        "directive": "D8",
+        "student_retrieval_match_mode_v1": "exact_signature_key",
+        "same_chart_pattern_repeat_claim_supported_v1": False,
+        "approximate_similarity_matching_student_store_v1": False,
+        "retrieval_signature_key_format_v1": "student_entry_v1:{symbol}:{entry_time}",
+        "note": (
+            "Learning rows match by exact context_signature_v1.signature_key only — not feature-space "
+            "similarity. Do not claim ‘the same pattern again’ from Student v1 retrieval; see ARCHITECTURE "
+            "§C.2. Engine context_signature_memory is a separate approximate path."
+        ),
+    }
 
 
 def _wiring_honesty_annotation_v1(
@@ -137,7 +170,7 @@ def _env_seam_enabled() -> bool:
 
 
 def _signature_key_for_trade(o: OutcomeRecord) -> str:
-    """v1 match key: symbol + entry bar time (retrieval groups similar entry context)."""
+    """v1 **exact** lookup key for the learning store (`context_signature_v1.signature_key`)."""
     return f"student_entry_v1:{o.symbol}:{o.entry_time}"
 
 
@@ -181,6 +214,7 @@ def student_loop_seam_after_parallel_batch_v1(
                 first_packet_annex_present=None,
                 retrieval_matches_total=0,
             ),
+            "memory_semantics_annotation_v1": _memory_semantics_annotation_v1(seam_attempted=False),
         }
 
     db = Path(str(db_path)) if db_path else DB_PATH
@@ -314,10 +348,12 @@ def student_loop_seam_after_parallel_batch_v1(
             first_packet_annex_present=first_packet_annex_present,
             retrieval_matches_total=retrieval_matches_total,
         ),
+        "memory_semantics_annotation_v1": _memory_semantics_annotation_v1(seam_attempted=True),
     }
 
 
 __all__ = [
+    "SCHEMA_MEMORY_SEMANTICS_ANNOTATION_V1",
     "SCHEMA_PHASED_HONESTY_ANNOTATION_V1",
     "SCHEMA_WIRING_HONESTY_ANNOTATION_V1",
     "student_loop_seam_after_parallel_batch_v1",

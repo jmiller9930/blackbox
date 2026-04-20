@@ -240,7 +240,7 @@ Read **from top (goal) downward** to “today”; implementation reads the **sam
 
 **Roadmap (not optional forever if memory is central):** Version **`student_retrieval_v2`** (or extend matching API): **match** learning rows by **bounded distance** on signed features / regime labels / retrieval ranking — reusing patterns from **`context_signature_memory`** where appropriate and **keeping** pre-reveal safety.
 
-**D8** below locks **honesty** so docs/UI do not promise “the pattern came back” when the code only does **exact** key match.
+**D8** below locks **honesty** so docs/UI do not promise “the pattern came back” when the code only does **exact** key match. Operator batch audit includes **`memory_semantics_annotation_v1`** (**D8** proof).
 
 ---
 
@@ -287,6 +287,7 @@ Read **from top (goal) downward** to “today”; implementation reads the **sam
 *Closeout:* **§F**.
 
 **D8 — Memory semantics honesty.** Do **not** describe Student memory as **“the same pattern again”** unless matching logic proves **similarity** under a defined metric. **As-built** Student retrieval v1 is **exact key** (`student_entry_v1:{symbol}:{entry_time}`) — see **§C.2**. Broader **approximation** retrieval is **design intent** and **partially** reflected in **engine** `context_signature_memory`; **align** Student store matching when the architect approves **v2** semantics.  
+*Proof tests:* `renaissance_v4/game_theory/tests/test_directive_d8_memory_semantics_honesty_v1.py`; operator audit **`memory_semantics_annotation_v1`**.  
 *Closeout:* **§F**.
 
 **D9 — Deliverable vocabulary.** “**Trade**” and “**learned behavior**” in release notes, UI, and **directive closeout** MUST match **§0.2** and **§0.3**. Do not ship narrative that redefines **trade** as Referee fills or **learn** as metrics without a **baseline**.  
@@ -362,3 +363,4 @@ Run **after** code and tests for the directive milestone; **before** calling the
 | 1.11 | 2026-04-20 | **§E.1** talking points (deferred): multi-timeframe bars + placeholder row. |
 | 1.12 | 2026-04-20 | **D6** closure: **§C.3** phased honesty; ``phased_honesty_annotation_v1`` on seam audit; proof tests. |
 | 1.13 | 2026-04-20 | **D7** closure: ``wiring_honesty_annotation_v1`` on seam audit; proof tests. |
+| 1.14 | 2026-04-20 | **D8** closure: ``memory_semantics_annotation_v1`` on seam audit; proof tests. |
