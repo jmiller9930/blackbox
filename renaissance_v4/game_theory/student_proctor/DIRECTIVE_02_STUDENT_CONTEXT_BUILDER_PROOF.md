@@ -38,4 +38,17 @@ Coverage:
 
 ## Operational closeout
 
-*(Fill after push / SSH pull / Flask restart — same discipline as Directive 01.)*
+**Commit (Directive 02 implementation):** `f25c43086c839ab39ffc31680cc784fa68a4b870` (`f25c4308` on `main`)
+
+**git push (local → `origin/main`):**
+
+```text
+To https://github.com/jmiller9930/blackbox.git
+   964f73f..f25c430  main -> main
+```
+
+**Target server:** `jmiller@clawbot.a51.corp` — `~/blackbox`
+
+- **`git pull`:** fast-forward to **`f25c4308`** — HEAD matches pushed commit.  
+- **Flask restart:** `bash scripts/pattern_game_remote_restart.sh` — new PID **985625** (session log line).  
+- **Health:** `curl http://127.0.0.1:8765/` → **HTTP 200**.
