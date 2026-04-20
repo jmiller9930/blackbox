@@ -38,6 +38,51 @@ from renaissance_v4.utils.db import DB_PATH
 
 _NS_RECORD = uuid.UUID("6ba7b810-9dad-11d1-80b4-00c04fd430c8")
 
+SCHEMA_PHASED_HONESTY_ANNOTATION_V1 = "phased_honesty_annotation_v1"
+
+
+def _phased_honesty_annotation_v1(
+    *,
+    seam_attempted: bool,
+    student_emit_occurred: bool,
+    trades_seen: int = 0,
+) -> dict[str, Any]:
+    """
+    Directive **D6** — process-order honesty for telemetry / API consumers.
+
+    The parallel batch supplies ``replay_outcomes_json`` **before** the Student seam runs; therefore
+    **strict** “exam blind” ordering (Student commits with **no** ``OutcomeRecord`` in the pipeline)
+    is **not** satisfied when this seam executes — even though the **pre-reveal packet** remains
+    causal (bars through entry only).
+    """
+    if not seam_attempted:
+        return {
+            "schema": SCHEMA_PHASED_HONESTY_ANNOTATION_V1,
+            "directive": "D6",
+            "strict_exam_blind_process_order": None,
+            "replay_outcomes_supplied_before_shadow_emit": None,
+            "pre_reveal_student_inputs_are_causal_only": None,
+            "student_shadow_emit_occurred": None,
+            "note": "Student loop seam not executed (disabled).",
+        }
+    outcomes_before_emit = trades_seen > 0
+    return {
+        "schema": SCHEMA_PHASED_HONESTY_ANNOTATION_V1,
+        "directive": "D6",
+        "strict_exam_blind_process_order": False if outcomes_before_emit else None,
+        "replay_outcomes_supplied_before_shadow_emit": True if outcomes_before_emit else None,
+        "pre_reveal_student_inputs_are_causal_only": True if outcomes_before_emit else None,
+        "student_shadow_emit_occurred": bool(student_emit_occurred),
+        "trades_seen_by_seam": int(trades_seen),
+        "note": (
+            "When trades are processed, replay outcomes are read from batch results before shadow_student_v1 emit; "
+            "decision packet still uses causal bars at entry_time only (no current-trade outcome in packet). "
+            "Do not claim strict exam-blind process order for this pipeline until job order changes."
+            if outcomes_before_emit
+            else "No trades processed by seam in this invocation — phased-honesty flags N/A beyond causal-packet design."
+        ),
+    }
+
 
 def _env_seam_enabled() -> bool:
     v = (os.environ.get("PATTERN_GAME_STUDENT_LOOP_SEAM") or "1").strip().lower()
@@ -80,6 +125,9 @@ def student_loop_seam_after_parallel_batch_v1(
             "student_retrieval_matches": 0,
             "student_output_fingerprint": None,
             "shadow_student_enabled": False,
+            "phased_honesty_annotation_v1": _phased_honesty_annotation_v1(
+                seam_attempted=False, student_emit_occurred=False
+            ),
         }
 
     db = Path(str(db_path)) if db_path else DB_PATH
@@ -183,6 +231,7 @@ def student_loop_seam_after_parallel_batch_v1(
     if primary_student_output_v1 is not None:
         out_fp = _student_output_fingerprint_v1(primary_student_output_v1)
 
+    student_emit_occurred = primary_student_output_v1 is not None
     return {
         "schema": "student_loop_seam_audit_v1",
         "run_id": run_id,
@@ -196,9 +245,15 @@ def student_loop_seam_after_parallel_batch_v1(
         "primary_trade_shadow_student_v1": primary_trade_shadow_student_v1,
         "errors": errors,
         "soft_fail": bool(errors and appended == 0 and trades_seen > 0),
+        "phased_honesty_annotation_v1": _phased_honesty_annotation_v1(
+            seam_attempted=True,
+            student_emit_occurred=student_emit_occurred,
+            trades_seen=trades_seen,
+        ),
     }
 
 
 __all__ = [
+    "SCHEMA_PHASED_HONESTY_ANNOTATION_V1",
     "student_loop_seam_after_parallel_batch_v1",
 ]

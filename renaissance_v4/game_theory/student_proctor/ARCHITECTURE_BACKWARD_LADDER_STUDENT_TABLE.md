@@ -244,6 +244,19 @@ Read **from top (goal) downward** to “today”; implementation reads the **sam
 
 ---
 
+## C.3) Phased honesty — process order vs causal packet (**D6**)
+
+**Two different questions:**
+
+| Question | **As-built operator seam** | **Causal pre-reveal packet** |
+|----------|---------------------------|--------------------------------|
+| Does the **job** run the Student shadow **before** any ``OutcomeRecord`` exists in the batch result row? | **No.** Pattern-game flow calls ``run_scenarios_parallel`` first; ``student_loop_seam_after_parallel_batch_v1`` runs **after** ``replay_outcomes_json`` is available. | N/A |
+| Does the **decision packet** smuggle the current trade’s PnL / exit? | N/A | **No** — ``bars_inclusive_up_to_t`` + optional retrieval only; **D2** forbids outcome keys pre-reveal. |
+
+**Marketing / training claims:** Do **not** describe this pipeline as **strict “exam blind”** in the **process** sense (Student code path runs after outcomes are in the batch structure) until job order changes. You **may** honestly say the **packet** is **causal at entry** and **reveal** grades afterward. The ``student_loop_seam_audit_v1`` payload includes **`phased_honesty_annotation_v1`** (Directive **06** tests) so API/ops can surface the distinction.
+
+---
+
 ## D) Directives (normative; map to implementation)
 
 **D1 — Student-first product.** UX and APIs **default** to the **Student** lane; Referee output is **context for grading**, not the main training story (`STUDENT_FIRST_PERSON_TRADEPATH.md`).  
@@ -266,6 +279,7 @@ Read **from top (goal) downward** to “today”; implementation reads the **sam
 *Closeout:* **§F**.
 
 **D6 — Phased honesty.** Until process order places the Student **strictly before** `OutcomeRecord` is available, document **seam ordering** as a known limitation; **do not** claim “exam blind” without that gate.  
+*Proof tests:* `renaissance_v4/game_theory/tests/test_directive_d6_phased_honesty_v1.py`; operator audit **`phased_honesty_annotation_v1`**; see **§C.3**.  
 *Closeout:* **§F**.
 
 **D7 — Wiring honesty.** Marketing, UI copy, and **directive closeout** MUST NOT claim “full trading context” (indicators, regime panels, etc.) on the **Student** path until those fields are **actually attached** to the legal pre-reveal bundle and tested. The **diagram** in `ARCHITECTURE_PLAN_STUDENT_PROCTOR_PML.md` §3 is **aspirational** for indicator/pattern pipes; **as-built** Student context is **`bars` + optional retrieval** until extended (see **§C.1** above).  
@@ -345,3 +359,4 @@ Run **after** code and tests for the directive milestone; **before** calling the
 | 1.9 | 2026-04-20 | **D4** closure: memory delta proof tests (`test_directive_d4_memory_must_matter_v1`). |
 | 1.10 | 2026-04-20 | **D5** closure: Referee immutability proof tests (`test_directive_d5_referee_immutability_v1`). |
 | 1.11 | 2026-04-20 | **§E.1** talking points (deferred): multi-timeframe bars + placeholder row. |
+| 1.12 | 2026-04-20 | **D6** closure: **§C.3** phased honesty; ``phased_honesty_annotation_v1`` on seam audit; proof tests. |
