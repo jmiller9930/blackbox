@@ -34,7 +34,7 @@ Read this guide in order.
 | 5. How The User Participates | Explain what the operator does and does not do | Planned |
 | 6. What Results The User Should See | Explain outputs, metrics, and expected artifacts | Planned |
 | 7. Subsystems And How They Fit Together | Explain modules and their interactions | Planned |
-| 8. Control Surface Guide | Map UI buttons, choices, and knobs to the lifecycle | Planned |
+| 8. Control Surface Guide | Map UI buttons, choices, and knobs to the lifecycle; includes **Upload Strategy** (§8.2) | In progress |
 | 9. Reading Results And Choosing Next Steps | Explain how to use results to continue, compare, or reset | Planned |
 | 10. Glossary | Define terms used in this folder | Planned |
 
@@ -215,6 +215,7 @@ This section will explain the operator role in plain language. It will cover:
 - what the user is expected to decide,
 - what the user is not expected to micromanage,
 - how recipes, scenarios, and windows relate to the user,
+- how to introduce a **test strategy manifest** without editing shipped baseline JSON (see **§8.2 Upload Strategy** in the web UI and `STRATEGY_IDEA_FORMAT.md`),
 - how the user reviews runs and chooses next steps.
 
 ## 6. What Results The User Should See
@@ -240,15 +241,63 @@ This section will explain the major subsystems and their relationships. It will 
 
 ## 8. Control Surface Guide
 
-This section will map the lifecycle to the actual operator controls. It will cover:
+This section maps the lifecycle to the actual operator controls in the pattern-game web UI.
 
-- recipe selection,
-- evaluation window,
-- custom scenario JSON,
-- workers,
-- run controls,
-- scorecard actions,
-- learning reset and carry-forward related controls.
+### 8.1 Core controls (planned detail)
+
+The guide will expand on:
+
+- **Pattern** (operator recipe / run template): PML, Reference Comparison, or Custom scenario JSON.
+- **Evaluation window** and **context memory** mode.
+- **Policy** line when a single catalog policy is active (execution manifest id).
+- **Workers**, **Run batch**, **Score card**, and learning-related actions.
+
+### 8.2 Upload Strategy (operator strategy idea → manifest → run)
+
+**Update (UI v2.9.0+):** The Controls panel includes a clearly labeled **Upload Strategy** block. This is **not** the same as choosing a **Pattern**; it is how you introduce a **new strategy manifest candidate** for testing without hand-editing files under `renaissance_v4/configs/manifests/`.
+
+**What you upload**
+
+- A **UTF-8 text file** in the strict **`strategy_idea_v1`** format (first content line must be exactly `strategy_idea_v1`, then `key: value` lines only; unknown keys are rejected).
+- **Normative spec (read this before uploading):** in-repo copy `renaissance_v4/game_theory/STRATEGY_IDEA_FORMAT.md`, also served by the web app at **`/strategy-idea-format`**.
+- The format is intentionally **not** free-form English: the server does not silently interpret prose or invent catalog modules.
+
+**What happens when you upload**
+
+1. **Upload** — file is received (size-capped; UTF-8 only).
+2. **Parse** — strict line parse; any bad key or missing required field fails with a readable error.
+3. **Convert** — build a candidate **`strategy_manifest_v1`** JSON object.
+4. **Validate** — run **`validate_manifest_against_catalog`** (same gate as repo manifests). Unsupported `signal_modules` ids or other unknown registry ids **fail** with explicit messages (no silent fallback).
+5. **Load** — on success, the source text and generated manifest are written under the repo, and **`active.json`** points at the manifest to use for the next run when enabled.
+
+**Where files go (repo-relative, disclosed in UI)**
+
+| Role | Path |
+|------|------|
+| Uploaded source | `runtime/operator_strategy_uploads/sources/` |
+| Generated manifest | `runtime/operator_strategy_uploads/manifests/` |
+| Active pointer | `runtime/operator_strategy_uploads/active.json` |
+
+These paths do **not** overwrite **`baseline_v1_recipe.json`** or other shipped baseline assets.
+
+**Operator feedback (no guessing)**
+
+- The UI shows staged status (upload → parse → convert → validate → load) and a checklist: uploaded / validated / loaded / strategy id / name / manifest path / ready to run.
+- **GET `/api/operator-strategy-upload/state`** returns the same snapshot for tooling.
+- **Clear loaded strategy** calls **`POST /api/operator-strategy-upload/clear`** (clears the active pointer; it does not delete historical source/manifest files).
+
+**Running against your upload**
+
+- Leave **“Use uploaded strategy for the next run”** checked (default when you want the override). The next **Run batch** applies the active uploaded manifest to **every scenario row** in that batch (curated Pattern or Custom JSON), then runs the Referee as usual.
+- Uncheck it to run only what each scenario / recipe already specifies (baseline paths).
+
+**Pattern recommendation**
+
+- After a successful upload, the API returns a **recommended Pattern** (e.g. PML for bounded improvement search, or Reference Comparison when the idea name suggests geometry comparison). The UI may auto-select that Pattern when it matches a dropdown option.
+
+**Important limit**
+
+- You can only reference **catalog ids that already exist** in `renaissance_v4/registry/catalog_v1.json`. Introducing **new** signal modules or engine logic still requires engineering (code + catalog), then your idea file can reference the new ids.
 
 ## 9. Reading Results And Choosing Next Steps
 
