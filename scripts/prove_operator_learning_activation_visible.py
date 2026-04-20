@@ -10,6 +10,7 @@ Run from repo root (requires SQLite market_bars_5m like other replays):
 
 from __future__ import annotations
 
+import argparse
 import json
 import sys
 from pathlib import Path
@@ -24,9 +25,19 @@ from renaissance_v4.game_theory.operator_recipes import build_scenarios_for_reci
 from renaissance_v4.game_theory.operator_test_harness_v1 import run_operator_test_harness_v1  # noqa: E402
 from renaissance_v4.game_theory.parallel_runner import run_scenarios_parallel  # noqa: E402
 from renaissance_v4.game_theory.policy_framework import attach_policy_framework_audits  # noqa: E402
+from renaissance_v4.game_theory.pml_proof_stdio import (  # noqa: E402
+    add_proof_stdio_flags,
+    begin_pml_proof_stdio,
+    raw_stdout_selected,
+)
 
 
 def main() -> int:
+    ap = argparse.ArgumentParser(description=__doc__)
+    add_proof_stdio_flags(ap)
+    args = ap.parse_args()
+    begin_pml_proof_stdio("prove_operator_learning_activation_visible", raw_stdout=raw_stdout_selected(args))
+
     root = resolve_repo_root(_REPO)
     manifest = root / "renaissance_v4/configs/manifests/baseline_v1_recipe.json"
     if not manifest.is_file():

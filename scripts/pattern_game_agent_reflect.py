@@ -29,6 +29,12 @@ if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 
 from renaissance_v4.game_theory.agent_reflect_bundle import build_agent_reflect_bundle  # noqa: E402
+from renaissance_v4.game_theory.pml_proof_stdio import (  # noqa: E402
+    add_proof_stdio_flags,
+    begin_pml_proof_stdio,
+    proof_json_out,
+    raw_stdout_selected,
+)
 
 
 def _maybe_post_parallel(base_url: str, bundle: dict[str, Any], max_workers: int | None) -> dict[str, Any]:
@@ -67,11 +73,27 @@ def main() -> int:
         help="POST /api/run-parallel/start using hunter scenarios (requires ANNA_PATTERN_GAME_SUBMIT=1 and PATTERN_GAME_BASE_URL)",
     )
     ap.add_argument("--workers", type=int, default=None, help="max_workers for submit (optional)")
+    add_proof_stdio_flags(ap)
     args = ap.parse_args()
+    begin_pml_proof_stdio("pattern_game_agent_reflect", raw_stdout=raw_stdout_selected(args))
 
     bundle = build_agent_reflect_bundle(repo_root=args.repo)
+    raw = raw_stdout_selected(args)
     if args.prompt:
-        print(bundle.get("prompt_block", ""), end="")
+        if raw:
+            print(bundle.get("prompt_block", ""), end="")
+        else:
+            from renaissance_v4.game_theory.pml_runtime_layout import proof_rotating_log_path
+
+            pb = str(bundle.get("prompt_block", "") or "")
+            cap = 6 * 1024 * 1024
+            b = pb.encode("utf-8")
+            if len(b) > cap:
+                pb = b[:cap].decode("utf-8", errors="replace") + "\n[truncated]\n"
+            p = proof_rotating_log_path("pattern_game_agent_reflect_prompt")
+            p.parent.mkdir(parents=True, exist_ok=True)
+            p.write_text(pb, encoding="utf-8")
+            proof_json_out({"ok": True, "prompt_saved_to": str(p), "chars": len(pb)})
         return 0
 
     if args.submit:
@@ -86,10 +108,10 @@ def main() -> int:
             print("Refusing submit: PATTERN_GAME_BASE_URL is empty.", file=sys.stderr)
             return 2
         out = _maybe_post_parallel(base, bundle, args.workers)
-        print(json.dumps(out, indent=2, ensure_ascii=False))
+        proof_json_out(out)
         return 0 if out.get("ok") else 1
 
-    print(json.dumps(bundle, indent=2, ensure_ascii=False))
+    proof_json_out(bundle)
     return 0
 
 

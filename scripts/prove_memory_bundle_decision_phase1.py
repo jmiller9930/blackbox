@@ -13,6 +13,7 @@ Outputs JSON: effective manifest diff, memory_bundle_proof buckets, outcomes, sa
 
 from __future__ import annotations
 
+import argparse
 import contextlib
 import io
 import json
@@ -29,6 +30,12 @@ os.environ.setdefault("PATTERN_GAME_GROUNDHOG_BUNDLE", "0")
 
 from renaissance_v4.game_theory.memory_bundle import MEMORY_BUNDLE_SCHEMA  # noqa: E402
 from renaissance_v4.game_theory.pattern_game import run_pattern_game  # noqa: E402
+from renaissance_v4.game_theory.pml_proof_stdio import (  # noqa: E402
+    add_proof_stdio_flags,
+    begin_pml_proof_stdio,
+    proof_json_out,
+    raw_stdout_selected,
+)
 
 
 def _subset(m: dict, keys: list[str]) -> dict:
@@ -36,6 +43,11 @@ def _subset(m: dict, keys: list[str]) -> dict:
 
 
 def main() -> int:
+    ap = argparse.ArgumentParser(description=__doc__)
+    add_proof_stdio_flags(ap)
+    args = ap.parse_args()
+    begin_pml_proof_stdio("prove_memory_bundle_decision_phase1", raw_stdout=raw_stdout_selected(args))
+
     manifest = _REPO / "renaissance_v4" / "configs" / "manifests" / "baseline_v1_recipe.json"
     fd, bundle_path = tempfile.mkstemp(suffix=".json", prefix="phase1_bundle_")
     os.close(fd)
@@ -136,7 +148,7 @@ def main() -> int:
         },
     }
 
-    print(json.dumps(report, indent=2, default=str))
+    proof_json_out(report)
     bp.unlink(missing_ok=True)
     return 0
 

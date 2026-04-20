@@ -123,6 +123,8 @@ PATTERN_GAME_STAGING_PATHS = (
     "renaissance_v4/game_theory",
     "runtime",
     "scripts/pattern_game_remote_restart.sh",
+    "scripts/pattern_game_agent_reflect.py",
+    "scripts/agent_context_bundle.py",
     "scripts/sync_pattern_game.sh",
     "scripts/deploy_pattern_game.sh",
     "scripts/gsync.py",

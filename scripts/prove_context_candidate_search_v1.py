@@ -13,6 +13,7 @@ Context-Conditioned Candidate Search v1 — operator proof:
 
 from __future__ import annotations
 
+import argparse
 import json
 import os
 import sys
@@ -27,9 +28,20 @@ os.environ.setdefault("PATTERN_GAME_GROUNDHOG_BUNDLE", "0")
 from renaissance_v4.game_theory.context_candidate_search import (  # noqa: E402
     run_context_candidate_search_v1,
 )
+from renaissance_v4.game_theory.pml_proof_stdio import (  # noqa: E402
+    add_proof_stdio_flags,
+    begin_pml_proof_stdio,
+    proof_json_out,
+    raw_stdout_selected,
+)
 
 
 def main() -> int:
+    ap = argparse.ArgumentParser(description=__doc__)
+    add_proof_stdio_flags(ap)
+    args = ap.parse_args()
+    begin_pml_proof_stdio("prove_context_candidate_search_v1", raw_stdout=raw_stdout_selected(args))
+
     manifest_path = _REPO / "renaissance_v4" / "configs" / "manifests" / "baseline_v1_recipe.json"
     # Seeded signature: compressed + range-like shares → compressed_range family.
     context_signature_v1 = {
@@ -60,7 +72,7 @@ def main() -> int:
             parent_reference_id="prove_manifest_baseline",
         )
     except (RuntimeError, FileNotFoundError, ValueError) as e:
-        print(json.dumps({"ok": False, "error": str(e)}, indent=2))
+        proof_json_out({"ok": False, "error": str(e)})
         return 1
 
     proof = out["context_candidate_search_proof"]
@@ -72,7 +84,7 @@ def main() -> int:
         "operator_summary": proof.get("operator_summary"),
         "ranking_order": proof.get("ranking_order"),
     }
-    print(json.dumps(report, indent=2, default=str))
+    proof_json_out(report)
     return 0
 
 

@@ -13,6 +13,10 @@ live telemetry snapshots; those belong under this runtime tree (or the explicit 
 
 **Sizing note:** replay DB and contextual memory JSONL stay under ``renaissance_v4/data/`` and
 ``renaissance_v4/game_theory/state/`` — unchanged by this module.
+
+**Proof / RCA scripts:** use ``pml_proof_stdio`` (``add_proof_stdio_flags``, ``begin_pml_proof_stdio``,
+``proof_json_out``) so default output is **not** unbounded console or ``/tmp`` — see
+``renaissance_v4/game_theory/pml_proof_stdio.py``.
 """
 
 from __future__ import annotations
@@ -185,14 +189,23 @@ def configure_web_server_file_logging() -> None:
     _logging_configured = True
 
 
+def sanitize_proof_stem(stem: str) -> str:
+    s = "".join(c if c.isalnum() or c in "._-" else "_" for c in stem)[:80]
+    return s or "proof"
+
+
+def proof_rotating_log_path(stem: str) -> Path:
+    """Path for the rotating proof log file (``runtime/proofs/<stem>.log``)."""
+    ensure_pml_runtime_dirs()
+    return pml_runtime_proofs_dir() / f"{sanitize_proof_stem(stem)}.log"
+
+
 def open_proof_rotating_log(stem: str) -> logging.Handler:
     """
     Proof / RCA capture: 200 MiB max, one backup. Attach to a logger, e.g.
     ``logging.getLogger("pml_proof").addHandler(open_proof_rotating_log("ctx_proof"))``.
     """
-    ensure_pml_runtime_dirs()
-    safe = "".join(c if c.isalnum() or c in "._-" else "_" for c in stem)[:80] or "proof"
-    path = pml_runtime_proofs_dir() / f"{safe}.log"
+    path = proof_rotating_log_path(stem)
     return logging.handlers.RotatingFileHandler(
         str(path),
         maxBytes=_PROOF_LOG_MAX_BYTES,

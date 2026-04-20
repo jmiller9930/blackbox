@@ -14,6 +14,7 @@ Outputs raw JSON with diffs — no narrative summary.
 
 from __future__ import annotations
 
+import argparse
 import contextlib
 import io
 import json
@@ -31,6 +32,12 @@ os.environ.setdefault("PATTERN_GAME_GROUNDHOG_BUNDLE", "0")
 
 from renaissance_v4.game_theory.memory_bundle import MEMORY_BUNDLE_SCHEMA  # noqa: E402
 from renaissance_v4.game_theory.pattern_game import run_pattern_game  # noqa: E402
+from renaissance_v4.game_theory.pml_proof_stdio import (  # noqa: E402
+    add_proof_stdio_flags,
+    begin_pml_proof_stdio,
+    proof_json_out,
+    raw_stdout_selected,
+)
 
 
 def _git_rev() -> str:
@@ -65,9 +72,14 @@ def _outcome_block(raw: dict) -> dict:
 
 
 def main() -> int:
+    ap = argparse.ArgumentParser(description=__doc__)
+    add_proof_stdio_flags(ap)
+    args = ap.parse_args()
+    begin_pml_proof_stdio("prove_memory_bundle_e2e", raw_stdout=raw_stdout_selected(args))
+
     manifest = _REPO / "renaissance_v4" / "configs" / "manifests" / "baseline_v1_recipe.json"
     if not manifest.is_file():
-        print(json.dumps({"error": f"manifest not found: {manifest}"}, indent=2))
+        proof_json_out({"error": f"manifest not found: {manifest}"})
         return 1
 
     fd, bundle_path = tempfile.mkstemp(suffix=".json", prefix="proof_bundle_")
@@ -170,7 +182,7 @@ def main() -> int:
         },
     }
 
-    print(json.dumps(report, indent=2, default=str))
+    proof_json_out(report)
 
     bundle_p.unlink(missing_ok=True)
     return 0

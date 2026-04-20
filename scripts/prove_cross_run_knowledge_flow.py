@@ -17,6 +17,7 @@ stderr: replay noise may appear unless redirected.
 
 from __future__ import annotations
 
+import argparse
 import contextlib
 import io
 import json
@@ -40,6 +41,12 @@ from renaissance_v4.game_theory.memory_paths import (  # noqa: E402
 )
 from renaissance_v4.game_theory.parallel_runner import run_scenarios_parallel  # noqa: E402
 from renaissance_v4.game_theory.pattern_game import run_pattern_game  # noqa: E402
+from renaissance_v4.game_theory.pml_proof_stdio import (  # noqa: E402
+    add_proof_stdio_flags,
+    begin_pml_proof_stdio,
+    proof_json_out,
+    raw_stdout_selected,
+)
 
 
 def _file_evidence(path: Path, *, jsonl_first_line: bool = False) -> dict[str, Any]:
@@ -85,9 +92,14 @@ def _quiet_run_parallel(scenarios: list[dict], *, mem_root: Path) -> list[dict]:
 
 
 def main() -> int:
+    ap = argparse.ArgumentParser(description=__doc__)
+    add_proof_stdio_flags(ap)
+    args = ap.parse_args()
+    begin_pml_proof_stdio("prove_cross_run_knowledge_flow", raw_stdout=raw_stdout_selected(args))
+
     manifest = _REPO / "renaissance_v4" / "configs" / "manifests" / "baseline_v1_recipe.json"
     if not manifest.is_file():
-        print(json.dumps({"error": f"manifest not found: {manifest}"}))
+        proof_json_out({"error": f"manifest not found: {manifest}"})
         return 1
 
     scenario = {
@@ -194,7 +206,7 @@ def main() -> int:
         ),
     }
 
-    print(json.dumps(report, indent=2, default=str))
+    proof_json_out(report)
     return 0
 
 

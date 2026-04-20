@@ -11,6 +11,7 @@ Context Signature Memory v1 — proof script:
 
 from __future__ import annotations
 
+import argparse
 import contextlib
 import io
 import json
@@ -36,6 +37,12 @@ from renaissance_v4.game_theory.context_signature_memory import (  # noqa: E402
     read_context_memory_records,
 )
 from renaissance_v4.game_theory.pattern_game import run_pattern_game  # noqa: E402
+from renaissance_v4.game_theory.pml_proof_stdio import (  # noqa: E402
+    add_proof_stdio_flags,
+    begin_pml_proof_stdio,
+    proof_json_out,
+    raw_stdout_selected,
+)
 
 
 def _pc_a() -> dict:
@@ -72,6 +79,11 @@ def _pc_b() -> dict:
 
 
 def main() -> int:
+    ap = argparse.ArgumentParser(description=__doc__)
+    add_proof_stdio_flags(ap)
+    args = ap.parse_args()
+    begin_pml_proof_stdio("prove_context_signature_memory_v1", raw_stdout=raw_stdout_selected(args))
+
     tmp = Path(tempfile.mkdtemp(prefix="ctx_sig_mem_proof_"))
     mem = tmp / "context_signature_memory.jsonl"
     bundle_path = tmp / "bundle_v3.json"
@@ -196,7 +208,7 @@ def main() -> int:
         "run2_with_generated_bundle": run2_block,
         "paths": {"bundle_path": str(bundle_path), "proof_path": str(proof_path), "tmpdir": str(tmp)},
     }
-    print(json.dumps(report, indent=2, default=str))
+    proof_json_out(report)
     return 0
 
 

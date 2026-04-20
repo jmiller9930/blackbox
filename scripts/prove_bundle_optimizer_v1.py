@@ -12,6 +12,7 @@ Bundle Optimizer v1 — end-to-end proof:
 
 from __future__ import annotations
 
+import argparse
 import contextlib
 import io
 import json
@@ -33,9 +34,20 @@ from renaissance_v4.game_theory.bundle_optimizer import (  # noqa: E402
 )
 from renaissance_v4.game_theory.pattern_game import run_pattern_game  # noqa: E402
 from renaissance_v4.manifest.validate import load_manifest_file  # noqa: E402
+from renaissance_v4.game_theory.pml_proof_stdio import (  # noqa: E402
+    add_proof_stdio_flags,
+    begin_pml_proof_stdio,
+    proof_json_out,
+    raw_stdout_selected,
+)
 
 
 def main() -> int:
+    ap = argparse.ArgumentParser(description=__doc__)
+    add_proof_stdio_flags(ap)
+    args = ap.parse_args()
+    begin_pml_proof_stdio("prove_bundle_optimizer_v1", raw_stdout=raw_stdout_selected(args))
+
     manifest_path = _REPO / "renaissance_v4" / "configs" / "manifests" / "baseline_v1_recipe.json"
     manifest = load_manifest_file(manifest_path)
     mods = list(manifest.get("signal_modules") or [])
@@ -114,7 +126,7 @@ def main() -> int:
             "proof_path": str(proof_path),
         },
     }
-    print(json.dumps(report, indent=2, default=str))
+    proof_json_out(report)
     return 0
 
 

@@ -12,6 +12,7 @@ Operator Test Harness v1 — end-to-end structured artifact:
 
 from __future__ import annotations
 
+import argparse
 import json
 import os
 import sys
@@ -34,9 +35,20 @@ _PRESET_PATH = (
 
 from renaissance_v4.game_theory.context_signature_memory import append_context_memory_record  # noqa: E402
 from renaissance_v4.game_theory.operator_test_harness_v1 import run_operator_test_harness_v1  # noqa: E402
+from renaissance_v4.game_theory.pml_proof_stdio import (  # noqa: E402
+    add_proof_stdio_flags,
+    begin_pml_proof_stdio,
+    proof_json_out,
+    raw_stdout_selected,
+)
 
 
 def main() -> int:
+    ap = argparse.ArgumentParser(description=__doc__)
+    add_proof_stdio_flags(ap)
+    args = ap.parse_args()
+    begin_pml_proof_stdio("prove_operator_test_harness_v1", raw_stdout=raw_stdout_selected(args))
+
     tmp = Path(tempfile.mkdtemp(prefix="oth_proof_"))
     mem = tmp / "context_signature_memory.jsonl"
     manifest_path = _REPO / "renaissance_v4" / "configs" / "manifests" / "baseline_v1_recipe.json"
@@ -107,11 +119,11 @@ def main() -> int:
             goal_v2=goal_v2,
         )
     except (RuntimeError, FileNotFoundError, ValueError) as e:
-        print(json.dumps({"ok": False, "error": str(e)}, indent=2))
+        proof_json_out({"ok": False, "error": str(e)})
         return 1
 
     harness = out["operator_test_harness_v1"]
-    print(json.dumps({"ok": True, "operator_test_harness_v1": harness}, indent=2, default=str))
+    proof_json_out({"ok": True, "operator_test_harness_v1": harness})
     return 0
 
 

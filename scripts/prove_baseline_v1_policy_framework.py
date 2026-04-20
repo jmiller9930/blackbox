@@ -9,6 +9,7 @@ Run from repo root:
 
 from __future__ import annotations
 
+import argparse
 import json
 import sys
 from pathlib import Path
@@ -28,9 +29,19 @@ from renaissance_v4.game_theory.policy_framework import (  # noqa: E402
 )
 from renaissance_v4.game_theory.hunter_planner import resolve_repo_root  # noqa: E402
 from renaissance_v4.game_theory.run_memory import build_operator_run_audit  # noqa: E402
+from renaissance_v4.game_theory.pml_proof_stdio import (  # noqa: E402
+    add_proof_stdio_flags,
+    begin_pml_proof_stdio,
+    raw_stdout_selected,
+)
 
 
 def main() -> int:
+    ap = argparse.ArgumentParser(description=__doc__)
+    add_proof_stdio_flags(ap)
+    args = ap.parse_args()
+    begin_pml_proof_stdio("prove_baseline_v1_policy_framework", raw_stdout=raw_stdout_selected(args))
+
     root = resolve_repo_root(_REPO)
     meta = recipe_meta_by_id("pattern_learning")
     assert meta is not None

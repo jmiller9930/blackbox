@@ -13,6 +13,7 @@ Decision Context Recall — proof (v1 fusion bias + v2 signal/module bias):
 
 from __future__ import annotations
 
+import argparse
 import json
 import os
 import sys
@@ -27,6 +28,12 @@ os.environ.setdefault("PATTERN_GAME_GROUNDHOG_BUNDLE", "0")
 
 from renaissance_v4.game_theory.context_signature_memory import append_context_memory_record  # noqa: E402
 from renaissance_v4.research.replay_runner import run_manifest_replay  # noqa: E402
+from renaissance_v4.game_theory.pml_proof_stdio import (  # noqa: E402
+    add_proof_stdio_flags,
+    begin_pml_proof_stdio,
+    proof_json_out,
+    raw_stdout_selected,
+)
 
 
 def _sample_pattern_context() -> dict:
@@ -49,6 +56,11 @@ def _sample_pattern_context() -> dict:
 
 
 def main() -> int:
+    ap = argparse.ArgumentParser(description=__doc__)
+    add_proof_stdio_flags(ap)
+    args = ap.parse_args()
+    begin_pml_proof_stdio("prove_decision_context_recall_v1", raw_stdout=raw_stdout_selected(args))
+
     tmp = Path(tempfile.mkdtemp(prefix="dcr_proof_"))
     mem = tmp / "context_signature_memory.jsonl"
     manifest_path = _REPO / "renaissance_v4" / "configs" / "manifests" / "baseline_v1_recipe.json"
@@ -161,7 +173,9 @@ def main() -> int:
             decision_context_recall_max_samples=5,
         )
     except RuntimeError as e:
-        print(json.dumps({"ok": False, "error": str(e), "hint": "Requires SQLite market_bars_5m with >= 50 rows"}, indent=2))
+        proof_json_out(
+            {"ok": False, "error": str(e), "hint": "Requires SQLite market_bars_5m with >= 50 rows"}
+        )
         return 1
 
     samples = raw.get("decision_context_recall_samples") or []
@@ -179,7 +193,7 @@ def main() -> int:
             "first_sample_keys": sorted(samples[0].keys()) if samples else [],
         },
     }
-    print(json.dumps(report, indent=2, default=str))
+    proof_json_out(report)
     return 0
 
 

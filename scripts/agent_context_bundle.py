@@ -228,6 +228,14 @@ def build_context_prefix(repo_root: Path | str | None = None) -> str:
 def main() -> None:
     import argparse
 
+    from renaissance_v4.game_theory.pml_proof_stdio import (
+        add_proof_stdio_flags,
+        begin_pml_proof_stdio,
+        proof_console,
+        raw_stdout_selected,
+    )
+    from renaissance_v4.game_theory.pml_runtime_layout import proof_rotating_log_path
+
     ap = argparse.ArgumentParser(description="Print Anna context bundle to stdout (for piping into prompts).")
     ap.add_argument(
         "--profile",
@@ -235,10 +243,25 @@ def main() -> None:
         help="Same as ANNA_CONTEXT_PROFILE, e.g. policy,pattern_game,scorecard",
     )
     ap.add_argument("--repo", type=Path, default=None, help="Repo root (default: cwd)")
+    add_proof_stdio_flags(ap)
     args = ap.parse_args()
+    begin_pml_proof_stdio("agent_context_bundle", raw_stdout=raw_stdout_selected(args))
+
     os.environ["ANNA_CONTEXT_PROFILE"] = args.profile
     text = build_context_prefix(args.repo or Path.cwd())
-    print(text, end="")
+    raw = raw_stdout_selected(args)
+    if raw:
+        print(text, end="")
+        return
+    # Default: bounded on-disk prompt (not /tmp); cap single blob to avoid accidental huge pastes.
+    cap = 6 * 1024 * 1024
+    enc = text.encode("utf-8")
+    if len(enc) > cap:
+        text = enc[:cap].decode("utf-8", errors="replace") + "\n\n[truncated to 6 MiB for proof log safety]\n"
+    outp = proof_rotating_log_path("agent_context_bundle_prompt")
+    outp.parent.mkdir(parents=True, exist_ok=True)
+    outp.write_text(text, encoding="utf-8")
+    proof_console(f"[pml_proof] agent_context_bundle: wrote {len(text)} chars to {outp} (use --raw-stdout for stdout)")
 
 
 if __name__ == "__main__":

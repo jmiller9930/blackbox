@@ -24,7 +24,6 @@ Exit 5 when run1 had no winner (nothing to prove on run 2). Exit 1 when run2 loa
 from __future__ import annotations
 
 import argparse
-import contextlib
 import json
 import os
 import sqlite3
@@ -41,6 +40,12 @@ os.environ.setdefault("PATTERN_GAME_GROUNDHOG_BUNDLE", "0")
 from renaissance_v4.game_theory.context_signature_memory import default_memory_path  # noqa: E402
 from renaissance_v4.game_theory.operator_test_harness_v1 import run_operator_test_harness_v1  # noqa: E402
 from renaissance_v4.game_theory.pattern_game import prepare_effective_manifest_for_replay  # noqa: E402
+from renaissance_v4.game_theory.pml_proof_stdio import (  # noqa: E402
+    add_proof_stdio_flags,
+    begin_pml_proof_stdio,
+    raw_stdout_selected,
+    replay_stdout_muted,
+)
 from renaissance_v4.utils.db import DB_PATH  # noqa: E402
 
 
@@ -51,19 +56,6 @@ def _jsonl_line_count(p: Path) -> int:
     if not text.strip():
         return 0
     return sum(1 for line in text.splitlines() if line.strip())
-
-
-@contextlib.contextmanager
-def _mute_replay_stdout():
-    """Per-bar replay prints millions of lines on full tape; discard during harness only."""
-    saved = sys.stdout
-    dev = open(os.devnull, "w", encoding="utf-8")
-    sys.stdout = dev
-    try:
-        yield
-    finally:
-        sys.stdout = saved
-        dev.close()
 
 
 def _print_tape_preflight() -> int:
@@ -111,7 +103,9 @@ def main() -> int:
         metavar="N",
         help="Optional replay slice: last N calendar months of bars (None = full series).",
     )
+    add_proof_stdio_flags(ap)
     args = ap.parse_args()
+    begin_pml_proof_stdio("prove_context_memory_loop_two_run", raw_stdout=raw_stdout_selected(args))
 
     bars = _print_tape_preflight()
     if bars < 0:
@@ -133,8 +127,6 @@ def main() -> int:
         mem = tmp / "context_signature_memory.jsonl"
         before = mem.read_text(encoding="utf-8") if mem.is_file() else ""
 
-    quiet_harness = not args.verbose_replay
-
     def run_once(label: str, mode: str) -> dict:
         prep = prepare_effective_manifest_for_replay(
             manifest,
@@ -143,7 +135,8 @@ def main() -> int:
             memory_bundle_path=None,
             use_groundhog_auto_resolve=False,
         )
-        ctx = _mute_replay_stdout() if quiet_harness else contextlib.nullcontext()
+        raw_console = bool(args.verbose_replay or raw_stdout_selected(args))
+        ctx = replay_stdout_muted(raw_stdout=raw_console)
         try:
             with ctx:
                 out = run_operator_test_harness_v1(
