@@ -6,8 +6,10 @@
 - `CONTEXT_LOG_PML_SYSTEM_AMENDMENT.md` — canonical product story + gap detail  
 - `E2E_ROADMAP_STUDENT_PROCTOR_PML.md` — **binding** delivery bar **v2.1** (**SR-1–SR-5**, proof bundle, AC-1b)  
 - **§11+** (this file) — **Directive Plan** — governing execution order (Directives 01–08), proof/acceptance/closeout  
+- `student_proctor/ARCHITECTURE_BACKWARD_LADDER_STUDENT_TABLE.md` — backward ladder, **normative directives** (D1–D7), **§C.1 as-built vs target context wiring**  
+- `student_proctor/TRADING_CONTEXT_REFERENCE_V1.md` — taxonomy + full indicator lexicon for future **`student_decision_packet`** extensions  
 
-**Version:** 1.1 — architecture plan + directive execution plan
+**Version:** 1.2 — companion pointers + Student context **as-built** note (see §4 table)
 
 ---
 
@@ -86,6 +88,8 @@ After a graded unit, a **reveal** compares belief vs truth; **learning records**
 
 **Key boundary:** **Referee** and **Student** do **not** share **pre-reveal** truth channels. **Reveal** is the **only** sanctioned merge point for Referee facts into the Student’s graded episode.
 
+**Implementation note (Student context):** The diagram shows indicators / `pattern_context` feeding the Student context builder. **Today**, the **legal** Student packet is **bars + optional retrieval**; additional indicator or regime fields require a **versioned** extension and tests — see `student_proctor/ARCHITECTURE_BACKWARD_LADDER_STUDENT_TABLE.md` §C.1.
+
 ---
 
 ## 4. Component responsibilities
@@ -94,7 +98,7 @@ After a graded unit, a **reveal** compares belief vs truth; **learning records**
 |-----------|------|----------------|
 | **Replay runner** (`replay_runner` / manifest replay) | Deterministic path, `OutcomeRecord` stream, optional `pattern_context_v1`, DCR hooks | Student prose, LLM calls inside hot path (unless architect approves deferred batching strategy) |
 | **Outcome / quality** (`pattern_outcome_quality_v1`, ledger) | Graded scalars from closed trades | Student interpretation |
-| **Student context builder** (new or split module) | Assemble **legal** bundle at *t*: bars ≤ *t*, context, memory **without** leak | Referee outcomes pre-reveal |
+| **Student context builder** (`student_context_builder_v1`, `cross_run_retrieval_v1`) | **As implemented:** **`student_decision_packet_v1`** = causal **`bars_inclusive_up_to_t`** + optional **`retrieved_student_experience_v1`**, validated **`validate_pre_reveal_bundle_v1`**. **Target:** structured price/structure/indicator/time blobs per `TRADING_CONTEXT_REFERENCE_V1.md` — **not** yet on the packet; replay `FeatureSet` / policy `indicator_engine` / engine `pattern_context_v1` remain **parallel** until merged by explicit contract revision. | Referee outcomes pre-reveal; claiming full indicator panels on Student path before wiring (**see backward ladder D7**) |
 | **Student agent interface** | Produce `student_output_v1` given bundle | Trades |
 | **Reveal & grading** | Join Student output + Referee row + quality slice; emit `reveal_v1` | Changing Referee numbers |
 | **Student learning store** | Persist `student_learning_record_v1`; retrieval API for next run | Fusion math |
