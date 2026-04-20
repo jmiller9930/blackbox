@@ -102,6 +102,10 @@ def shadow_stub_student_outputs_for_outcomes(
     For each closed trade (graded unit), build a causal packet at **entry** time and emit stub output.
 
     **Offline / analytic:** does not affect replay. ``decision_time_ms`` defaults to ``entry_time``.
+
+    Every appended output is checked with ``validate_student_output_v1`` **again** after emit (batch
+    schema gate) so invalid dicts cannot be appended even if emit regresses.
+
     Returns ``(outputs, errors)`` — if any step fails, ``errors`` is non-empty (outputs may be partial).
     """
     errs_out: list[str] = []
@@ -124,6 +128,12 @@ def shadow_stub_student_outputs_for_outcomes(
         so, e2 = emit_shadow_stub_student_output_v1(pkt, graded_unit_id=o.trade_id, decision_at_ms=_time(o))
         if e2 or so is None:
             errs_out.append(f"{o.trade_id}: output {'; '.join(e2)}")
+            continue
+        batch_gate = validate_student_output_v1(so)
+        if batch_gate:
+            errs_out.append(
+                f"{o.trade_id}: post_emit_schema_gate {'; '.join(batch_gate)}"
+            )
             continue
         outputs.append(so)
 
