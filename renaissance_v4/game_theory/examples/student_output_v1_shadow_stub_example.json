@@ -1,0 +1,15 @@
+{
+  "schema": "student_output_v1",
+  "contract_version": 1,
+  "graded_unit_type": "closed_trade",
+  "graded_unit_id": "demo_trade",
+  "decision_at_ms": 8000000,
+  "act": true,
+  "direction": "flat",
+  "pattern_recipe_ids": [
+    "shadow_stub_v1"
+  ],
+  "confidence_01": 0.55,
+  "reasoning_text": "shadow_stub_v1: causal OHLCV delta only (Directive 03).",
+  "student_decision_ref": "bca7a6d2-f8a8-5d70-b95a-e9881f516ed1"
+}
