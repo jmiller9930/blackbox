@@ -118,6 +118,12 @@ def test_record_parallel_batch_finished_includes_learning_block() -> None:
             error=None,
             path=tpath,
             operator_batch_audit={"context_signature_memory_mode": "off"},
+            student_seam_observability_v1={
+                "student_learning_rows_appended": 2,
+                "student_retrieval_matches": 5,
+                "student_output_fingerprint": "ab" * 32,
+                "shadow_student_enabled": True,
+            },
         )
     finally:
         tpath.unlink(missing_ok=True)
@@ -131,6 +137,10 @@ def test_record_parallel_batch_finished_includes_learning_block() -> None:
     assert mci.get("schema") == "memory_context_impact_audit_v1"
     assert mci.get("memory_impact_yes_no") == "NO"
     assert timing.get("job_id") == "testjob_learning_audit"
+    assert timing.get("student_learning_rows_appended") == 2
+    assert timing.get("student_retrieval_matches") == 5
+    assert timing.get("student_output_fingerprint") == "ab" * 32
+    assert timing.get("shadow_student_enabled") is True
 
 
 def test_build_memory_context_impact_yes_from_counters() -> None:

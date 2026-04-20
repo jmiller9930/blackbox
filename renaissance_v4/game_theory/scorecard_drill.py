@@ -274,6 +274,10 @@ _SCORECARD_CSV_FIELDS = [
     "replay_decision_windows_sum",
     "operator_learning_status_line_v1",
     "learning_audit_v1",
+    "student_learning_rows_appended",
+    "student_retrieval_matches",
+    "student_output_fingerprint",
+    "shadow_student_enabled",
 ]
 
 

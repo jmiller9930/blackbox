@@ -80,7 +80,7 @@ _PATTERN_BANNER_PATH = _RV4_ROOT / "assets" / "pattern.png"
 _PATTERN_BANNER_WEBP_PATH = _RV4_ROOT / "assets" / "pattern.webp"
 
 # Operator-visible web UI bundle version — bump when changing PAGE_HTML (HTML/CSS/JS) so deploys are provable.
-PATTERN_GAME_WEB_UI_VERSION = "2.12.0"
+PATTERN_GAME_WEB_UI_VERSION = "2.13.0"
 
 from renaissance_v4.game_theory.groundhog_memory import (
     groundhog_auto_merge_enabled,
@@ -102,6 +102,9 @@ from renaissance_v4.game_theory.student_proctor.student_learning_operator_v1 imp
     RESET_STUDENT_PROCTOR_LEARNING_STORE_CONFIRM,
     clear_student_learning_store_v1,
     student_learning_store_status_v1,
+)
+from renaissance_v4.game_theory.student_proctor.student_proctor_operator_runtime_v1 import (
+    student_loop_seam_after_parallel_batch_v1,
 )
 from renaissance_v4.game_theory.data_health import get_data_health
 from renaissance_v4.game_theory.search_space_estimate import build_search_space_estimate
@@ -402,8 +405,10 @@ def _prepare_parallel_payload(data: dict[str, Any]) -> dict[str, Any]:
         log_path = None
 
     ew0 = scenarios[0].get("evaluation_window") if scenarios else {}
-    cmem_in = str(data.get("context_signature_memory_mode") or "").strip().lower()
-    if cmem_in and cmem_in not in ("off", "read", "read_write"):
+    # Product default: Decision Context Recall is always on for operator batches (READ+WRITE).
+    # UI no longer exposes a toggle; API may still send read/off for rare tooling compatibility.
+    cmem_in = str(data.get("context_signature_memory_mode") or "read_write").strip().lower()
+    if cmem_in not in ("off", "read", "read_write"):
         return {
             "ok": False,
             "error": f"Invalid context_signature_memory_mode (use off, read, read_write): {data.get('context_signature_memory_mode')!r}",
@@ -945,6 +950,12 @@ def create_app() -> Flask:
                 )
                 _guard_parallel_batch_not_noop(scenarios, results)
                 ok_n = sum(1 for r in results if r.get("ok"))
+                op_rid = str(operator_batch_audit.get("operator_recipe_id") or "").strip() or None
+                seam_audit = student_loop_seam_after_parallel_batch_v1(
+                    results=results,
+                    run_id=job_id,
+                    strategy_id=op_rid,
+                )
                 timing = record_parallel_batch_finished(
                     job_id=job_id,
                     started_at_utc=started_iso,
@@ -955,6 +966,7 @@ def create_app() -> Flask:
                     session_log_batch_dir=session_batch_dir[0],
                     error=None,
                     operator_batch_audit=operator_batch_audit,
+                    student_seam_observability_v1=seam_audit,
                 )
                 payload = {
                     "ok": True,
@@ -974,6 +986,13 @@ def create_app() -> Flask:
                     "batch_depth_v1": timing.get("batch_depth_v1"),
                     "batch_run_classification_v1": timing.get("batch_run_classification_v1"),
                     "operator_learning_status_line_v1": timing.get("operator_learning_status_line_v1"),
+                    "student_loop_directive_09_v1": seam_audit,
+                    "student_learning_rows_appended": int(
+                        seam_audit.get("student_learning_rows_appended") or 0
+                    ),
+                    "student_retrieval_matches": int(seam_audit.get("student_retrieval_matches") or 0),
+                    "student_output_fingerprint": seam_audit.get("student_output_fingerprint"),
+                    "shadow_student_enabled": bool(seam_audit.get("shadow_student_enabled")),
                 }
                 with _JOBS_LOCK:
                     j = _JOBS.get(job_id)
@@ -1204,6 +1223,12 @@ def create_app() -> Flask:
             )
             _guard_parallel_batch_not_noop(scenarios, results)
             ok_n = sum(1 for r in results if r.get("ok"))
+            op_rid_block = str(operator_batch_audit.get("operator_recipe_id") or "").strip() or None
+            seam_blocking = student_loop_seam_after_parallel_batch_v1(
+                results=results,
+                run_id=job_id,
+                strategy_id=op_rid_block,
+            )
             timing = record_parallel_batch_finished(
                 job_id=job_id,
                 started_at_utc=started_iso,
@@ -1214,6 +1239,7 @@ def create_app() -> Flask:
                 session_log_batch_dir=session_batch_dir[0],
                 error=None,
                 operator_batch_audit=operator_batch_audit,
+                student_seam_observability_v1=seam_blocking,
             )
             ok_body: dict[str, Any] = {
                 "ok": True,
@@ -1233,6 +1259,13 @@ def create_app() -> Flask:
                 "batch_depth_v1": timing.get("batch_depth_v1"),
                 "batch_run_classification_v1": timing.get("batch_run_classification_v1"),
                 "operator_learning_status_line_v1": timing.get("operator_learning_status_line_v1"),
+                "student_loop_directive_09_v1": seam_blocking,
+                "student_learning_rows_appended": int(
+                    seam_blocking.get("student_learning_rows_appended") or 0
+                ),
+                "student_retrieval_matches": int(seam_blocking.get("student_retrieval_matches") or 0),
+                "student_output_fingerprint": seam_blocking.get("student_output_fingerprint"),
+                "shadow_student_enabled": bool(seam_blocking.get("shadow_student_enabled")),
             }
             if disk_warn_msgs:
                 ok_body["operator_disk_warnings"] = disk_warn_msgs
@@ -1942,6 +1975,31 @@ PAGE_HTML = """<!DOCTYPE html>
       min-width: 0;
       flex: 1 1 auto;
       min-height: calc(100vh - 200px);
+    }
+    .pg-student-triangle-dock { flex: 0 0 auto; }
+    .pg-student-triangle-body {
+      font-size: 0.88rem;
+      line-height: 1.48;
+      color: var(--pg-ink);
+    }
+    .pg-student-triangle-body .pg-student-tri-dl {
+      margin: 0;
+      display: grid;
+      grid-template-columns: minmax(0, 12rem) 1fr;
+      gap: 6px 14px;
+    }
+    .pg-student-triangle-body .pg-student-tri-dl dt {
+      margin: 0;
+      color: var(--pg-muted);
+      font-weight: 700;
+      font-size: 0.78rem;
+    }
+    .pg-student-triangle-body .pg-student-tri-dl dd { margin: 0; }
+    .pg-student-triangle-body .pg-student-tri-note {
+      margin: 10px 0 0;
+      font-size: 0.78rem;
+      color: var(--pg-muted);
+      line-height: 1.42;
     }
     .pg-telemetry-dock {
       position: sticky;
@@ -3033,7 +3091,7 @@ PAGE_HTML = """<!DOCTYPE html>
       <div class="pg-title-wrap">
         <h1 class="pg-title">Pattern Machine learning
           <span class="ui-version" title="Bump PATTERN_GAME_WEB_UI_VERSION in web_app.py">v__PATTERN_GAME_WEB_UI_VERSION__</span></h1>
-        <p class="pg-lead">Pick pattern and window, then <strong>Run</strong>. Telemetry during the batch; scorecard for history. <strong>Custom</strong> scenarios: set Pattern to <strong>Custom</strong> — the JSON editor opens under Controls (Pattern Info → Advanced).</p>
+        <p class="pg-lead">Pick pattern and window, then <strong>Run</strong>. <strong>Student → learning → outcome</strong> in the main column when a batch completes; live engine telemetry under that; scorecard for batch history. <strong>Custom</strong> scenarios: set Pattern to <strong>Custom</strong> — JSON under Controls (Pattern Info → Advanced).</p>
         <div class="pg-orientation-note">Expand panel summaries as needed · DEF-001: <code>docs/architect/pattern_game_operator_deficiencies_work_record.md</code></div>
       </div>
       <div class="pg-banner-strip">
@@ -3177,11 +3235,10 @@ PAGE_HTML = """<!DOCTYPE html>
               <option value="custom">Custom…</option>
             </select></div>
             <div id="customMonthsWrap" style="display:none"><label for="evaluationWindowCustomMonths">Months</label><input type="number" id="evaluationWindowCustomMonths" min="1" max="600" value="36" style="width:100%;margin-top:4px"/></div>
-            <div><label for="contextSignatureMemoryModePick">Context memory</label><select id="contextSignatureMemoryModePick" title="Winner → JSONL store; next run reads for DCR (no Groundhog)">
-              <option value="read_write" selected>READ+WRITE (default)</option>
-              <option value="read">READ only</option>
-              <option value="off">OFF</option>
-            </select></div>
+            <div class="context-memory-baked-in" title="Decision Context Recall is always enabled for operator runs">
+              <span class="caps">Context memory</span>
+              <span class="caps" style="margin-left:8px;color:var(--pg-muted)">Always on — READ+WRITE (recall + write winners to JSONL)</span>
+            </div>
           </div>
           <p id="customScenarioRouteHint" class="pg-custom-route-hint" hidden>
             <strong>Custom pattern:</strong> your scenario batch is the JSON box under <strong>Pattern Info (optional)</strong> below → <strong>Advanced</strong> → <strong>Custom scenario (JSON)</strong>. Those sections open automatically when you pick Custom; scroll down if you do not see the box yet.
@@ -3326,9 +3383,25 @@ PAGE_HTML = """<!DOCTYPE html>
       </div>
 
       <div class="pg-runtime-stack">
+      <details class="pg-panel-fold pg-student-triangle-dock" open>
+        <summary>
+          <div class="pg-panel-header" style="margin:0;flex:1">
+            <div>
+              <h2 class="pg-panel-h">Student → learning → outcome</h2>
+              <p class="pg-panel-sub">Student seam (belief, stored rows, retrieval priors) — not engine DCR recall; see Terminal below for that.</p>
+            </div>
+            <span class="pg-chip pg-chip-teal">Primary</span>
+          </div>
+        </summary>
+        <div class="pg-panel-fold-body">
+          <div id="studentTriangleBody" class="pg-student-triangle-body" aria-live="polite">
+            <p class="caps" style="margin:0">No batch yet — run a parallel batch to see the Student learning summary here.</p>
+          </div>
+        </div>
+      </details>
       <div class="pg-telemetry-dock">
       <div id="liveTelemetryWrap" class="live-telemetry-wrap">
-        <p class="live-telemetry-title">Terminal <span class="pg-sr-only">— live telemetry and contextual memory</span></p>
+        <p class="live-telemetry-title">Terminal <span class="pg-sr-only">— live telemetry and engine contextual memory (DCR-style)</span></p>
         <div id="memoryStatusCard" class="memory-status-card" aria-live="polite">
           <p id="memoryStatusNarrative" class="memory-status-narrative"></p>
           <dl>
@@ -3469,6 +3542,8 @@ PAGE_HTML = """<!DOCTYPE html>
     const STARTING_EQUITY = __STARTING_EQUITY__;
     const RUN_TIMEOUT_MS = 7200000;
     const PATTERN_GAME_UI_VERSION_STR = '__PATTERN_GAME_WEB_UI_VERSION__';
+    /** Product default: Decision Context Recall (context signature memory) is always READ+WRITE — not operator-toggleable in this UI. */
+    const CONTEXT_SIGNATURE_MEMORY_MODE_PRODUCT = 'read_write';
 
     const rangeEl = document.getElementById('workersRange');
     const workersVal = document.getElementById('workersVal');
@@ -3619,12 +3694,10 @@ PAGE_HTML = """<!DOCTYPE html>
       const mRec = document.getElementById('memStRec');
       const mMatch = document.getElementById('memStMatch');
       const mBias = document.getElementById('memStBias');
-      const pick = document.getElementById('contextSignatureMemoryModePick');
-      const domMode = pick && pick.value ? String(pick.value) : '';
       if (mMode) {
         mMode.textContent = echo && echo.context_signature_memory_mode != null
           ? _memoryModeLabelFromEcho(echo.context_signature_memory_mode)
-          : _memoryModeLabelFromEcho(domMode);
+          : _memoryModeLabelFromEcho(CONTEXT_SIGNATURE_MEMORY_MODE_PRODUCT);
       }
       if (panel && typeof panel === 'object') {
         if (narr) narr.textContent = String(panel.narrative || '').trim() || (running ? 'Run in progress — memory counters update live from the busiest worker.' : '');
@@ -3709,6 +3782,92 @@ PAGE_HTML = """<!DOCTYPE html>
       const results = payload && payload.results;
       const panel = aggregateContextMemoryPanelFromResults(results);
       updateMemoryStatusCardFromPanel(panel, echo, null, false);
+    }
+
+    function resetStudentTriangleStarting() {
+      const body = document.getElementById('studentTriangleBody');
+      if (!body) return;
+      body.innerHTML =
+        '<p class="caps" style="margin:0">Batch running — <strong>Student → learning → outcome</strong> fills in here when the batch completes.</p>';
+      const d = document.querySelector('details.pg-student-triangle-dock');
+      if (d) d.open = true;
+    }
+    function renderStudentTriangleBatchFailed(msg) {
+      const body = document.getElementById('studentTriangleBody');
+      if (!body) return;
+      body.innerHTML =
+        '<p class="caps" style="margin:0;color:#a32b2b">Batch did not complete successfully — Student seam summary not updated. ' +
+        escapeHtml(String(msg != null ? msg : '').slice(0, 400)) +
+        (String(msg || '').length > 400 ? '…' : '') +
+        '</p>';
+    }
+    function renderStudentTriangleFromBatchResult(data) {
+      const body = document.getElementById('studentTriangleBody');
+      if (!body || !data || typeof data !== 'object') return;
+      const seam = data.student_loop_directive_09_v1;
+      const rowsTop = data.student_learning_rows_appended;
+      if (seam && seam.skipped) {
+        body.innerHTML =
+          '<p class="caps" style="margin:0">Student seam <strong>skipped</strong>: ' +
+          escapeHtml(String((seam.reason != null && seam.reason !== '') ? seam.reason : '—')) +
+          '</p>';
+        return;
+      }
+      if (!seam || typeof seam !== 'object') {
+        body.innerHTML =
+          '<p class="caps" style="margin:0">No <code>student_loop_directive_09_v1</code> in this result — refresh after upgrading the server.</p>';
+        return;
+      }
+      const nApp = (rowsTop != null && rowsTop !== '') ? rowsTop : seam.student_learning_rows_appended;
+      const tc = seam.trades_considered != null ? seam.trades_considered : '—';
+      const store = seam.student_learning_store_path ? String(seam.student_learning_store_path) : '—';
+      const storeShort = store.length > 72 ? ('…' + store.slice(-68)) : store;
+      const pri = seam.primary_trade_shadow_student_v1;
+      let priHtml = '';
+      if (pri && typeof pri === 'object') {
+        const ids = pri.pattern_recipe_ids;
+        const idsStr = Array.isArray(ids) ? ids.join(', ') : (ids != null ? String(ids) : '—');
+        priHtml =
+          '<h3 style="margin:14px 0 6px;font-size:0.82rem;font-weight:800;color:var(--pg-teal);letter-spacing:0.04em;text-transform:uppercase">First closed trade (shadow Student)</h3>' +
+          '<dl class="pg-student-tri-dl">' +
+          '<dt>Scenario / trade</dt><dd><code style="font-size:0.78rem">' + escapeHtml(String(pri.scenario_id || '—')) + '</code> · <code style="font-size:0.78rem">' + escapeHtml(String(pri.trade_id || '—')) + '</code></dd>' +
+          '<dt>Retrieval slices matched</dt><dd>' + escapeHtml(String(pri.retrieval_slice_count != null ? pri.retrieval_slice_count : '—')) +
+            ' <span style="color:#5c6b7a;font-weight:500">(prior Student rows retrieved for this context)</span></dd>' +
+          '<dt>Student decision ref</dt><dd><code style="font-size:0.78rem">' + escapeHtml(String(pri.student_decision_ref || '—')) + '</code></dd>' +
+          '<dt>Pattern recipe ids</dt><dd style="word-break:break-word">' + escapeHtml(idsStr) + '</dd>' +
+          '<dt>Confidence (0–1)</dt><dd>' + escapeHtml(String(pri.confidence_01 != null ? pri.confidence_01 : '—')) + '</dd>' +
+          '</dl>';
+      } else {
+        priHtml =
+          '<p class="caps" style="margin:10px 0 0">' +
+          'No shadow Student row for a first trade (no closed trades in replay, or seam empty for this batch).</p>';
+      }
+      let errHtml = '';
+      const errs = seam.errors;
+      if (Array.isArray(errs) && errs.length) {
+        const show = errs.slice(0, 6);
+        errHtml =
+          '<p class="pg-student-tri-note"><strong>Seam notes</strong> (' + errs.length + '): ' +
+          show.map(function (x) { return escapeHtml(String(x)); }).join(' · ') +
+          (errs.length > 6 ? ' …' : '') +
+          '</p>';
+      }
+      body.innerHTML =
+        '<dl class="pg-student-tri-dl">' +
+        '<dt>Learning rows written</dt><dd><strong>' + escapeHtml(String(nApp != null ? nApp : '—')) + '</strong> appended to the Student store</dd>' +
+        '<dt>Closed trades considered</dt><dd>' + escapeHtml(String(tc)) + '</dd>' +
+        '<dt>Store path</dt><dd title="' + escapeHtml(store) + '"><code style="font-size:0.76rem;word-break:break-all">' + escapeHtml(storeShort) + '</code></dd>' +
+        '</dl>' +
+        priHtml +
+        errHtml +
+        '<p class="pg-student-tri-note">Referee outcomes and fusion detail: <strong>Results workspace</strong> (header) and <strong>Score card</strong> below. <strong>Clear Card</strong> does not clear the Student store — use Clear Student Proctor store in the scorecard block.</p>';
+      const dock = document.querySelector('details.pg-student-triangle-dock');
+      if (dock) {
+        dock.open = true;
+        try {
+          dock.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        } catch (e) { /* ignore */ }
+      }
     }
 
     function renderLiveTelemetryPanel(pj, opts) {
@@ -4126,15 +4285,15 @@ PAGE_HTML = """<!DOCTYPE html>
           const dpnl = pnlSum - (typeof b.pnl === 'number' ? b.pnl : 0);
           const chg = (dt !== 0 || Math.abs(dpnl) > 1e-9 || chkJoin !== (b.checksums || ''));
           tradeChanged = chg ? 'YES' : 'NO';
-          tradeDetail = 'Δ trades ' + dt + ', Δ combined PnL ' + dpnl + ' vs browser-stored memory-OFF baseline (same fingerprint).';
+          tradeDetail = 'Δ trades ' + dt + ', Δ combined PnL ' + dpnl + ' vs browser-stored baseline (same fingerprint).';
         } else {
-          tradeDetail = 'No memory-OFF baseline for this fingerprint in this browser session yet — run once with context memory mode OFF, then compare.';
+          tradeDetail = 'No baseline for this fingerprint in this browser session yet — run once with the same recipe/window, then compare the next run.';
         }
       } else if (cmem === 'read' || cmem === 'read_write') {
         tradeChanged = 'N/A';
         tradeDetail = 'Audit counters show no bundle merge and no fusion/signal recall bias — deterministic.';
       } else {
-        tradeDetail = 'No recall bias in audit; use a memory-OFF run to populate the baseline strip for trade-set deltas.';
+        tradeDetail = 'No recall bias in audit; when a baseline exists for this fingerprint, trade-set deltas use it.';
       }
 
       const ns = function (n) { return (n != null && n !== '') ? String(n) : '0'; };
@@ -4180,7 +4339,6 @@ PAGE_HTML = """<!DOCTYPE html>
         const n = cEl ? parseInt(cEl.value, 10) : NaN;
         if (n > 0) customM = n;
       }
-      const memEl = document.getElementById('contextSignatureMemoryModePick');
       const useUp = document.getElementById('useOperatorUploadedStrategy');
       let scenariosSource = 'recipe';
       if (rid === 'custom') {
@@ -4192,7 +4350,7 @@ PAGE_HTML = """<!DOCTYPE html>
         operator_recipe_id: rid || undefined,
         evaluation_window_mode: wmv || undefined,
         evaluation_window_custom_months: customM != null ? customM : undefined,
-        context_signature_memory_mode: memEl ? String(memEl.value || '').trim() : undefined,
+        context_signature_memory_mode: CONTEXT_SIGNATURE_MEMORY_MODE_PRODUCT,
         use_operator_uploaded_strategy: !!(useUp && useUp.checked),
         scenarios_source: scenariosSource,
         recipe_label: recipeLabelFromDom(),
@@ -4664,6 +4822,9 @@ PAGE_HTML = """<!DOCTYPE html>
       if (data && Array.isArray(data.results)) {
         updateMemoryStatusFromBatchResultPayload(data);
       }
+      if (data && typeof data === 'object') {
+        renderStudentTriangleFromBatchResult(data);
+      }
       setEvidenceTab('outcomes');
     }
 
@@ -4973,8 +5134,7 @@ PAGE_HTML = """<!DOCTYPE html>
           }
         }
         const doLogEl = document.getElementById('doLog');
-        const cmemEl = document.getElementById('contextSignatureMemoryModePick');
-        const cmem = cmemEl && cmemEl.value ? String(cmemEl.value) : 'read_write';
+        const cmem = CONTEXT_SIGNATURE_MEMORY_MODE_PRODUCT;
         const ltpPrep = document.getElementById('liveTelemetryPanel');
         if (ltpPrep) {
           ltpPrep.textContent = 'Live telemetry — preparing batch…';
@@ -5019,6 +5179,7 @@ PAGE_HTML = """<!DOCTYPE html>
           return;
         }
         jobId = startJ.job_id;
+        resetStudentTriangleStarting();
         const total = resolveScenarioBatchTotal(startJ.total, scenariosTa);
         runWorkersCap = startJ.workers_used != null ? startJ.workers_used : null;
         const ltp = document.getElementById('liveTelemetryPanel');
@@ -5091,6 +5252,7 @@ PAGE_HTML = """<!DOCTYPE html>
             askDataLastRunJobId = jobId;
             void fetchBarneySummary(jobId);
             await show(null, null, friendlyParallelBackendError(pj.error || 'Job failed'));
+            renderStudentTriangleBatchFailed(pj.error || 'Job failed');
             updateRunStatusLine('Failed — see Result.');
             setRunFeedbackToast('Batch failed — see Results workspace (Raw JSON) for the error.');
             setProgressUI(pj.completed || 0, statusPollTotal(pj, total), pj.error || '');
@@ -5165,6 +5327,7 @@ PAGE_HTML = """<!DOCTYPE html>
         }
         if (Date.now() >= deadline) {
           await show(null, null, 'Timed out after ' + (RUN_TIMEOUT_MS / 60000) + ' minutes — job may still be running on the server; open /api/run-parallel/status/<job_id> or check logs.');
+          renderStudentTriangleBatchFailed('Client timeout — job may still be running on the server.');
           updateRunStatusLine('Client timeout — check server or logs.');
         }
       } catch (e) {
@@ -5177,6 +5340,9 @@ PAGE_HTML = """<!DOCTYPE html>
           clearBatchConcurrencyBanner();
         }
         await show(null, null, friendlyFetchError(e));
+        if (jobId) {
+          renderStudentTriangleBatchFailed(friendlyFetchError(e));
+        }
         updateRunStatusLine('Stopped or failed — see Result.');
       } finally {
         progressWrap.classList.remove('active');
@@ -6057,13 +6223,6 @@ PAGE_HTML = """<!DOCTYPE html>
           });
         } catch (e) {}
         await refreshStrategyUploadState();
-      });
-    }
-
-    const contextSignatureMemoryModePickEl = document.getElementById('contextSignatureMemoryModePick');
-    if (contextSignatureMemoryModePickEl) {
-      contextSignatureMemoryModePickEl.addEventListener('change', function () {
-        updateMemoryStatusCardFromPanel(null, {}, null, false);
       });
     }
 

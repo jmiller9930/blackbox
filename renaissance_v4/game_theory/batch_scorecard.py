@@ -256,6 +256,7 @@ def record_parallel_batch_finished(
     source: str = "pattern_game_web_ui",
     path: Path | None = None,
     operator_batch_audit: dict[str, Any] | None = None,
+    student_seam_observability_v1: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """
     Append one scorecard line and return ``batch_timing`` for API payloads.
@@ -363,6 +364,15 @@ def record_parallel_batch_finished(
         if operator_batch_audit:
             record["operator_batch_audit"] = operator_batch_audit
         record["memory_context_impact_audit_v1"] = mem_impact
+        seam_obs = student_seam_observability_v1 or {}
+        for fld in (
+            "student_learning_rows_appended",
+            "student_retrieval_matches",
+            "student_output_fingerprint",
+            "shadow_student_enabled",
+        ):
+            if fld in seam_obs:
+                record[fld] = seam_obs[fld]
 
     append_batch_scorecard_line(record, path=path)
     out = {**timing, **pct_fields}
