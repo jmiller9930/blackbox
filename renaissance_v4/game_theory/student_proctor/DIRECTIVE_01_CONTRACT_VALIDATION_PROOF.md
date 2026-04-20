@@ -53,4 +53,25 @@ Invalid cases are **not** “empty dict” acceptance tests — they are documen
 
 ---
 
+## 4. Operational closeout (Directive 01) — *completed*
+
+**git push (local → `origin/main`):**
+
+```text
+To https://github.com/jmiller9930/blackbox.git
+   658a318..50d1a69  main -> main
+```
+
+**Target server:** `jmiller@clawbot.a51.corp` — `~/blackbox`
+
+**`git pull` result:** fast-forward `7a1abe8d..50d1a691` on `main`; **`HEAD` = `50d1a6910690d926cf1b6146ed611f7797cf2654`** (matches pushed commit). `git merge-base --is-ancestor 50d1a69 HEAD` → **YES**.
+
+**Flask pattern-game web restart:** `bash scripts/pattern_game_remote_restart.sh`
+
+- Script output: web started **PID 984898**; log `~/blackbox/runtime/logs/pattern_game_web.log`
+- **Health:** `curl http://127.0.0.1:8765/` → **HTTP 200**
+- **Process:** `python3 -m renaissance_v4.game_theory.web_app --host 0.0.0.0 --port 8765` (PID 984898)
+
+---
+
 *Engineering — submit test output + this file as Directive 01 contract validation proof.*
