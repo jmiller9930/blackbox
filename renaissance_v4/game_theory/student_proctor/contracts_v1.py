@@ -27,6 +27,17 @@ SCHEMA_STUDENT_LEARNING_RECORD_V1 = "student_learning_record_v1"
 SCHEMA_STUDENT_RETRIEVAL_SLICE_V1 = "student_retrieval_slice_v1"
 FIELD_RETRIEVED_STUDENT_EXPERIENCE_V1 = "retrieved_student_experience_v1"
 
+# Directive 03 — optional structured trading-context buckets (target shape from
+# ``TRADING_CONTEXT_REFERENCE_V1``). Emitted only as a **versioned annex** checked here + pre-reveal.
+TRADING_CONTEXT_BUCKET_KEYS_V1: frozenset[str] = frozenset(
+    {"price_context", "structure_context", "indicator_context", "time_context"}
+)
+SCHEMA_STUDENT_CONTEXT_ANNEX_V1 = "student_context_annex_v1"
+FIELD_STUDENT_CONTEXT_ANNEX_V1 = "student_context_annex_v1"
+_STUDENT_CONTEXT_ANNEX_TOP_LEVEL_KEYS_V1: frozenset[str] = frozenset(
+    {"schema", "contract_version", *TRADING_CONTEXT_BUCKET_KEYS_V1}
+)
+
 _DIRECTIONS = frozenset({"long", "short", "flat"})
 
 # Keys that must **not** appear anywhere in a **pre-reveal** decision packet (leakage prevention v1).
@@ -84,6 +95,31 @@ def _collect_string_keys(obj: Any, prefix: str = "") -> list[tuple[str, str]]:
         for i, v in enumerate(obj):
             out.extend(_collect_string_keys(v, f"{prefix}[{i}]"))
     return out
+
+
+def validate_student_context_annex_v1(doc: Any) -> list[str]:
+    """
+    Validate optional **versioned** ``student_context_annex_v1`` — structured buckets only,
+    no forbidden outcome keys (recursive pre-reveal scan).
+    """
+    errs: list[str] = []
+    if not isinstance(doc, dict):
+        return _err("student_context_annex_v1 must be a dict")
+    extra = set(doc.keys()) - _STUDENT_CONTEXT_ANNEX_TOP_LEVEL_KEYS_V1
+    if extra:
+        errs.append(f"student_context_annex_v1 unknown keys: {sorted(extra)!r}")
+    if doc.get("schema") != SCHEMA_STUDENT_CONTEXT_ANNEX_V1:
+        errs.append(f"schema must be {SCHEMA_STUDENT_CONTEXT_ANNEX_V1!r}")
+    if doc.get("contract_version") != CONTRACT_VERSION_STUDENT_PROCTOR_V1:
+        errs.append(f"contract_version must be {CONTRACT_VERSION_STUDENT_PROCTOR_V1}")
+    for bk in TRADING_CONTEXT_BUCKET_KEYS_V1:
+        v = doc.get(bk)
+        if v is None:
+            continue
+        if not isinstance(v, dict):
+            errs.append(f"{bk} must be a dict or null/absent")
+    errs.extend(validate_pre_reveal_bundle_v1(doc))
+    return errs
 
 
 def validate_pre_reveal_bundle_v1(bundle: Any) -> list[str]:
@@ -220,6 +256,18 @@ def legal_example_student_output_v1() -> dict[str, Any]:
         "confidence_01": 0.65,
         "reasoning_text": "Hypothesis: continuation in line with cookbook.",
         "student_decision_ref": "550e8400-e29b-41d4-a716-446655440000",
+    }
+
+
+def legal_example_student_context_annex_v1() -> dict[str, Any]:
+    """Minimal valid ``student_context_annex_v1`` for tests (causal labels only)."""
+    return {
+        "schema": SCHEMA_STUDENT_CONTEXT_ANNEX_V1,
+        "contract_version": CONTRACT_VERSION_STUDENT_PROCTOR_V1,
+        "price_context": {"window_label": "inside_prior_range", "last_print_vs_mid": "near_mid"},
+        "structure_context": {"market_state": "trend_up", "pullback_state": "none"},
+        "indicator_context": {"vwap_relation": "above_vwap", "momentum_state": "neutral"},
+        "time_context": {"session_segment": "regular", "minutes_to_session_end": 120},
     }
 
 

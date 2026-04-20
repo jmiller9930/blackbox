@@ -212,14 +212,14 @@ Read **from top (goal) downward** to “today”; implementation reads the **sam
 
 ## C.1) Context wiring status (what is actually connected today)
 
-**Answer in one line:** **Partially.** Causal **market** context and **memory** context are wired into the **Student** pre-reveal path; **structured** price / structure / indicator / time buckets from `TRADING_CONTEXT_REFERENCE_V1.md` are **not** yet first-class fields on `student_decision_packet_v1`.
+**Answer in one line:** **Partially.** Causal **market** context and **memory** context are wired into the **Student** pre-reveal path; **structured** price / structure / indicator / time buckets from `TRADING_CONTEXT_REFERENCE_V1.md` have a **versioned optional annex** (`student_context_annex_v1` on the packet, validated by `validate_student_context_annex_v1`) but are **not** yet **filled by default** builders from OHLCV.
 
 | Layer | Wired for Student pre-reveal? | Where |
 |-------|-------------------------------|--------|
 | **Causal OHLCV (tape up to *t*)** | **Yes** | `student_context_builder_v1.build_student_decision_packet_v1` → `bars_inclusive_up_to_t` |
 | **Cross-run memory** | **Yes** | `cross_run_retrieval_v1.build_student_decision_packet_v1_with_cross_run_retrieval` → `retrieved_student_experience_v1` (match on `student_entry_v1:{symbol}:{entry_time}`) |
 | **Leakage guard** | **Yes** | `validate_pre_reveal_bundle_v1` on built packets |
-| **Rich `price_context` / `structure_context` / `indicator_context` / `time_context` JSON** | **No** (target shape only) | Not emitted on `student_decision_packet_v1`; must be added via **versioned** projection (`feature_engine` / `indicator_engine` / session clock) when implemented |
+| **Rich `price_context` / `structure_context` / `indicator_context` / `time_context` JSON** | **Annex contract only** (optional) | Valid **shape** via `student_context_annex_v1`; **default** packet builder still **does not** populate buckets — future **projection** (`feature_engine` / `indicator_engine` / session clock) attaches a legal annex when implemented |
 | **Replay-only features** (`FeatureSet`, fusion signals, engine `pattern_context_v1`) | **Parallel path** | `replay_runner`, `signals/*` — **not** automatically the same object the stub Student consumes; **merge is intentional future work** |
 | **Pattern tags on output** | **Stub** | `shadow_student_v1` emits `pattern_recipe_ids` etc. from packet **without** full fusion feed |
 
@@ -253,7 +253,8 @@ Read **from top (goal) downward** to “today”; implementation reads the **sam
 *Proof tests:* `renaissance_v4/game_theory/tests/test_directive_d2_pre_reveal_legality_v1.py`.  
 *Closeout:* **§F**.
 
-**D3 — Context plurality (minimum vs target).** A Student decision MUST draw from **at least** causal **`bars_inclusive_up_to_t`** (implemented). SHOULD incorporate **`retrieved_student_experience_v1`** when the learning store has matches (implemented). SHOULD evolve toward structured **`price_context` / `structure_context` / `indicator_context` / `time_context`** per `TRADING_CONTEXT_REFERENCE_V1.md` **only** when emitted on a **versioned** packet or annex passing **`validate_pre_reveal_bundle_v1`**. MAY use **pattern/cookbook** tags via **`pattern_recipe_ids`** / `reasoning_text` on **`student_output_v1`** (stub today).  
+**D3 — Context plurality (minimum vs target).** A Student decision MUST draw from **at least** causal **`bars_inclusive_up_to_t`** (implemented). SHOULD incorporate **`retrieved_student_experience_v1`** when the learning store has matches (implemented). SHOULD evolve toward structured **`price_context` / `structure_context` / `indicator_context` / `time_context`** per `TRADING_CONTEXT_REFERENCE_V1.md` **only** when emitted on a **versioned** annex (**`student_context_annex_v1`** on the decision packet; **`validate_student_context_annex_v1`** + **`validate_pre_reveal_bundle_v1`**). MAY use **pattern/cookbook** tags via **`pattern_recipe_ids`** / `reasoning_text` on **`student_output_v1`** (stub today).  
+*Proof tests:* `renaissance_v4/game_theory/tests/test_directive_d3_context_plurality_v1.py`.  
 *Closeout:* **§F**.
 
 **D4 — Memory must matter.** When retrieval is enabled and matches exist, **telemetry or tests** MUST show **deltas** vs no-retrieval (policy output or downstream metric)—otherwise “memory” is unproven.  
@@ -327,3 +328,4 @@ Run **after** code and tests for the directive milestone; **before** calling the
 | 1.5 | 2026-04-20 | §C.2 approximation vs exact Student retrieval; directive **D8**; checklist memory wording. |
 | 1.6 | 2026-04-20 | **§0** project goals + binding definitions of **trade** (0.2) and **learned behavior** (0.3); P0 aligned; **D9**; checklist §0 metrics. |
 | 1.7 | 2026-04-20 | **§F** directive closeout (git commit, pull, push, Flask restart, Docker); *Closeout: §F* on D1–D9; checklist item. |
+| 1.8 | 2026-04-20 | **D3** closure: **`student_context_annex_v1`**, proof tests module. |

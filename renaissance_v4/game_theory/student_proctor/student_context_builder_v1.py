@@ -16,8 +16,10 @@ from typing import Any
 from renaissance_v4.game_theory.student_proctor.contracts_v1 import (
     CONTRACT_VERSION_STUDENT_PROCTOR_V1,
     FIELD_RETRIEVED_STUDENT_EXPERIENCE_V1,
+    FIELD_STUDENT_CONTEXT_ANNEX_V1,
     SCHEMA_STUDENT_RETRIEVAL_SLICE_V1,
     validate_pre_reveal_bundle_v1,
+    validate_student_context_annex_v1,
 )
 
 SCHEMA_STUDENT_DECISION_PACKET_V1 = "student_decision_packet_v1"
@@ -156,5 +158,29 @@ def validate_student_decision_packet_v1(packet: Any) -> list[str]:
                         f"{FIELD_RETRIEVED_STUDENT_EXPERIENCE_V1}[{i}].contract_version invalid"
                     )
 
+    annex = packet.get(FIELD_STUDENT_CONTEXT_ANNEX_V1)
+    if annex is not None:
+        errs.extend(validate_student_context_annex_v1(annex))
+
     errs.extend(validate_pre_reveal_bundle_v1(packet))
     return errs
+
+
+def attach_student_context_annex_v1(
+    packet: dict[str, Any],
+    annex: dict[str, Any],
+) -> tuple[dict[str, Any] | None, str | None]:
+    """
+    Attach a **versioned** context annex to a legal decision packet and re-validate.
+
+    Rich-indicator builders may produce ``student_context_annex_v1`` offline; production paths
+    attach only what passes ``validate_student_context_annex_v1`` and full packet validation.
+    """
+    aerr = validate_student_context_annex_v1(annex)
+    if aerr:
+        return None, "student_context_annex_v1 invalid: " + "; ".join(aerr)
+    out = {**packet, FIELD_STUDENT_CONTEXT_ANNEX_V1: annex}
+    perr = validate_student_decision_packet_v1(out)
+    if perr:
+        return None, "packet with annex invalid: " + "; ".join(perr)
+    return out, None

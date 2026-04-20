@@ -21,7 +21,7 @@ Your structured example maps to **layers** everyone can name:
 | `time_context` | Session clock segment | Wall-clock + session definition, no outcomes |
 | `memory_context` | Retrieval count + **prior-revealed** summaries / bias | Must not inject **current** `pnl` / outcome |
 
-**Today’s minimal Student packet** (`student_decision_packet_v1`) carries **OHLCV only** plus optional **`retrieved_student_experience_v1`** — see `student_context_builder_v1.py`, `cross_run_retrieval_v1.py`. Rich buckets below are the **target contract** for builders that **freeze** the same causal rules.
+**Today’s minimal Student packet** (`student_decision_packet_v1`) carries **OHLCV only** plus optional **`retrieved_student_experience_v1`** — see `student_context_builder_v1.py`, `cross_run_retrieval_v1.py`. Optional **versioned** **`student_context_annex_v1`** (field **`student_context_annex_v1`** on the packet) holds **`price_context` / `structure_context` / `indicator_context` / `time_context`** when a builder is ready — validated by **`validate_student_context_annex_v1`** in `contracts_v1.py`. Rich buckets in the table below remain the **target contract** for builders that **freeze** the same causal rules.
 
 ---
 
@@ -137,3 +137,4 @@ Any string key in `PRE_REVEAL_FORBIDDEN_KEYS_V1`, future bars, or **this** grade
 | 1.1 | 2026-04-20 | Purpose: pointer to **§C.1** (target vs as-built wiring). |
 | 1.2 | 2026-04-20 | Wiring note: pointer to backward ladder **§C.2** (approximation vs exact retrieval). |
 | 1.3 | 2026-04-20 | Companion: **§0** binding **trade** / **learned behavior** definitions. |
+| 1.4 | 2026-04-20 | D3: **`student_context_annex_v1`** + `validate_student_context_annex_v1` pointer. |
