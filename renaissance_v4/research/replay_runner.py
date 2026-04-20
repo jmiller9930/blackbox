@@ -60,21 +60,6 @@ from renaissance_v4.manifest.runtime import (
     resolve_regime_fn,
     resolve_risk_fn,
 )
-from renaissance_v4.game_theory.decision_context_recall import (
-    build_causal_partial_pattern_context_v1,
-    build_decision_recall_trace_v1,
-    compute_decision_fusion_bias,
-    compute_decision_signal_module_bias_v2,
-    derive_decision_context_signature_for_matching,
-    fusion_engine_supports_decision_recall,
-)
-from renaissance_v4.game_theory.context_signature_memory import (
-    SignatureMatchParamsV1,
-    canonical_signature_key,
-    find_matching_records_v1,
-    read_context_memory_records,
-    select_best_outcome_record,
-)
 from renaissance_v4.manifest.validate import load_manifest_file, validate_manifest_against_catalog
 from renaissance_v4.registry import default_catalog_path
 from renaissance_v4.registry.load import load_catalog
@@ -139,7 +124,7 @@ def run_manifest_replay(
     decision_context_recall_apply_bias: bool = False,
     decision_context_recall_apply_signal_bias_v2: bool = False,
     decision_context_recall_memory_path: Path | str | None = None,
-    decision_context_recall_match_params: SignatureMatchParamsV1 | None = None,
+    decision_context_recall_match_params: Any = None,
     decision_context_recall_max_samples: int = 24,
     decision_context_recall_drill_matched_max: int = 0,
     decision_context_recall_drill_bias_max: int = 0,
@@ -212,6 +197,24 @@ def run_manifest_replay(
             f"[replay] manifest strategy_id={manifest.get('strategy_id')} "
             f"baseline_tag={manifest.get('baseline_tag')} path={resolved_manifest_path}"
         )
+
+    # Lazy-import DCR + context memory so ``import renaissance_v4.research.replay_runner`` does not
+    # execute ``renaissance_v4.game_theory.__init__`` (which imports pattern_game → replay_runner).
+    from renaissance_v4.game_theory.context_signature_memory import (
+        SignatureMatchParamsV1,
+        canonical_signature_key,
+        find_matching_records_v1,
+        read_context_memory_records,
+        select_best_outcome_record,
+    )
+    from renaissance_v4.game_theory.decision_context_recall import (
+        build_causal_partial_pattern_context_v1,
+        build_decision_recall_trace_v1,
+        compute_decision_fusion_bias,
+        compute_decision_signal_module_bias_v2,
+        derive_decision_context_signature_for_matching,
+        fusion_engine_supports_decision_recall,
+    )
 
     signals = build_signals_from_manifest(manifest)
     factor_fn = resolve_factor_fn(manifest)

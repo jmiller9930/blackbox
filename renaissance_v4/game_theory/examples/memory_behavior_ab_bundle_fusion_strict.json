@@ -1,0 +1,8 @@
+{
+  "schema": "pattern_game_memory_bundle_v1",
+  "from_run_id": "memory_behavior_ab_mandate",
+  "note": "Stricter fusion_min_score vs catalog default (0.35) for controlled A/B — expect fewer long/short fusion bars and different trade set on the same tape.",
+  "apply": {
+    "fusion_min_score": 0.58
+  }
+}
