@@ -1,0 +1,24 @@
+{
+  "directive": "01_contract_freeze",
+  "graded_unit_v1": "closed_trade",
+  "artifacts": {
+    "student_output_v1": {
+      "schema": "student_output_v1",
+      "contract_version": 1,
+      "graded_unit_type": "closed_trade",
+      "graded_unit_id": "trade_example_001",
+      "decision_at_ms": 1700000000000,
+      "act": true,
+      "direction": "long",
+      "pattern_recipe_ids": ["trend_continuation"],
+      "confidence_01": 0.65,
+      "reasoning_text": "Hypothesis: continuation in line with cookbook.",
+      "student_decision_ref": "550e8400-e29b-41d4-a716-446655440000"
+    },
+    "illegal_pre_reveal_snippet": {
+      "_comment": "must be rejected — contains forbidden key pnl",
+      "context": "simulated_price_action",
+      "pnl": 1.0
+    }
+  }
+}
