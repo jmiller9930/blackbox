@@ -291,6 +291,7 @@ Read **from top (goal) downward** to “today”; implementation reads the **sam
 *Closeout:* **§F**.
 
 **D9 — Deliverable vocabulary.** “**Trade**” and “**learned behavior**” in release notes, UI, and **directive closeout** MUST match **§0.2** and **§0.3**. Do not ship narrative that redefines **trade** as Referee fills or **learn** as metrics without a **baseline**.  
+*Proof tests:* `renaissance_v4/game_theory/tests/test_directive_d9_deliverable_vocabulary_v1.py`; operator audit **`deliverable_vocabulary_annotation_v1`**.  
 *Closeout:* **§F**.
 
 **Rule:** A directive is **not** accepted as **done** until **§F** has been executed for that slice of work (agent / operator checklist).
@@ -364,3 +365,4 @@ Run **after** code and tests for the directive milestone; **before** calling the
 | 1.12 | 2026-04-20 | **D6** closure: **§C.3** phased honesty; ``phased_honesty_annotation_v1`` on seam audit; proof tests. |
 | 1.13 | 2026-04-20 | **D7** closure: ``wiring_honesty_annotation_v1`` on seam audit; proof tests. |
 | 1.14 | 2026-04-20 | **D8** closure: ``memory_semantics_annotation_v1`` on seam audit; proof tests. |
+| 1.15 | 2026-04-20 | **D9** closure: ``deliverable_vocabulary_annotation_v1`` on seam audit; proof tests. |

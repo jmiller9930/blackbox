@@ -42,6 +42,39 @@ _NS_RECORD = uuid.UUID("6ba7b810-9dad-11d1-80b4-00c04fd430c8")
 SCHEMA_PHASED_HONESTY_ANNOTATION_V1 = "phased_honesty_annotation_v1"
 SCHEMA_WIRING_HONESTY_ANNOTATION_V1 = "wiring_honesty_annotation_v1"
 SCHEMA_MEMORY_SEMANTICS_ANNOTATION_V1 = "memory_semantics_annotation_v1"
+SCHEMA_DELIVERABLE_VOCABULARY_ANNOTATION_V1 = "deliverable_vocabulary_annotation_v1"
+
+
+def _deliverable_vocabulary_annotation_v1(*, seam_attempted: bool) -> dict[str, Any]:
+    """
+    Directive **D9** — **trade** and **learned behavior** align with **§0.2** / **§0.3**.
+
+    Referee execution / PnL alone are not the Student **trade** definition; raw metrics without a
+    baseline are not **learned behavior** by themselves.
+    """
+    if not seam_attempted:
+        return {
+            "schema": SCHEMA_DELIVERABLE_VOCABULARY_ANNOTATION_V1,
+            "directive": "D9",
+            "trade_is_contract_student_output_pre_reveal_v1": None,
+            "referee_fill_not_trade_definition_v1": None,
+            "learned_behavior_requires_baseline_v1": None,
+            "authoritative_doc_anchor_v1": None,
+            "note": "Student loop seam not executed — D9 vocabulary annotation N/A.",
+        }
+    return {
+        "schema": SCHEMA_DELIVERABLE_VOCABULARY_ANNOTATION_V1,
+        "directive": "D9",
+        "trade_is_contract_student_output_pre_reveal_v1": True,
+        "referee_fill_not_trade_definition_v1": True,
+        "learned_behavior_requires_baseline_v1": True,
+        "authoritative_doc_anchor_v1": "ARCHITECTURE_BACKWARD_LADDER_STUDENT_TABLE.md §0.2 §0.3",
+        "note": (
+            "Per §0.2, the tradable deliverable is contract-valid student_output_v1 from legal pre-reveal "
+            "context — not Referee fills alone. Per §0.3, learned behavior requires a pre-registered "
+            "positive vs a declared baseline — not a lone metric."
+        ),
+    }
 
 
 def _memory_semantics_annotation_v1(*, seam_attempted: bool) -> dict[str, Any]:
@@ -215,6 +248,9 @@ def student_loop_seam_after_parallel_batch_v1(
                 retrieval_matches_total=0,
             ),
             "memory_semantics_annotation_v1": _memory_semantics_annotation_v1(seam_attempted=False),
+            "deliverable_vocabulary_annotation_v1": _deliverable_vocabulary_annotation_v1(
+                seam_attempted=False
+            ),
         }
 
     db = Path(str(db_path)) if db_path else DB_PATH
@@ -349,10 +385,12 @@ def student_loop_seam_after_parallel_batch_v1(
             retrieval_matches_total=retrieval_matches_total,
         ),
         "memory_semantics_annotation_v1": _memory_semantics_annotation_v1(seam_attempted=True),
+        "deliverable_vocabulary_annotation_v1": _deliverable_vocabulary_annotation_v1(seam_attempted=True),
     }
 
 
 __all__ = [
+    "SCHEMA_DELIVERABLE_VOCABULARY_ANNOTATION_V1",
     "SCHEMA_MEMORY_SEMANTICS_ANNOTATION_V1",
     "SCHEMA_PHASED_HONESTY_ANNOTATION_V1",
     "SCHEMA_WIRING_HONESTY_ANNOTATION_V1",
