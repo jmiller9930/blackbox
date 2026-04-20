@@ -295,6 +295,17 @@ Read **from top (goal) downward** to “today”; implementation reads the **sam
 
 ---
 
+### E.1) Talking points (return to — not committed scope)
+
+Short list for **architecture / product** discussion. Items here are **not** “done” until promoted into **§C.1**, a **directive**, or an implementation plan.
+
+| # | Topic | Notes |
+|---|--------|--------|
+| 1 | **Bar timeframe options (15m / 30m vs 5m)** | The codebase is **5m-shaped** today (`market_bars_5m`, replay, Student packet builder, ingest, pattern-game allowlists). Supporting **15m** and **30m** is a **bounded extension**—new tables or a unified bar table + **explicit** timeframe, **one** canonical series per run, and **aligned** `entry_time` / retrieval keys so replay, Student, and memory do not disagree. Does **not** invalidate pre-reveal or Referee contracts **if** causal rules and keying stay disciplined. |
+| 2 | *Reserved* | Add the next deferred topic here when ready. |
+
+---
+
 ## F) Directive closeout — git, remote sync, Flask & Docker (mandatory for implementers / agents)
 
 Run **after** code and tests for the directive milestone; **before** calling the directive **closed**.
@@ -333,3 +344,4 @@ Run **after** code and tests for the directive milestone; **before** calling the
 | 1.8 | 2026-04-20 | **D3** closure: **`student_context_annex_v1`**, proof tests module. |
 | 1.9 | 2026-04-20 | **D4** closure: memory delta proof tests (`test_directive_d4_memory_must_matter_v1`). |
 | 1.10 | 2026-04-20 | **D5** closure: Referee immutability proof tests (`test_directive_d5_referee_immutability_v1`). |
+| 1.11 | 2026-04-20 | **§E.1** talking points (deferred): multi-timeframe bars + placeholder row. |
