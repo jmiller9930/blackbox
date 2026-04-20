@@ -57,7 +57,9 @@ def emit_shadow_stub_student_output_v1(
     - ``direction`` from last vs previous close; null if fewer than two bars.
     - If ``retrieved_student_experience_v1`` is a **non-empty** list (Directive 06/07), the stub
       adds a second recipe id, raises ``confidence_01`` slightly, and folds retrieval count into
-      ``student_decision_ref`` — **observable** cross-run behavior without execution authority.
+      ``student_decision_ref`` — **observable** cross-run behavior without execution authority
+      (Directive **04** requires tests proving this delta vs bars-only; see
+      ``test_directive_d4_memory_must_matter_v1``).
 
     Returns ``(output, [])`` on success, or ``(None, errors)`` when validation fails.
     """

@@ -258,6 +258,7 @@ Read **from top (goal) downward** to “today”; implementation reads the **sam
 *Closeout:* **§F**.
 
 **D4 — Memory must matter.** When retrieval is enabled and matches exist, **telemetry or tests** MUST show **deltas** vs no-retrieval (policy output or downstream metric)—otherwise “memory” is unproven.  
+*Proof tests:* `renaissance_v4/game_theory/tests/test_directive_d4_memory_must_matter_v1.py` (shadow **confidence** / **pattern_recipe_ids** / **refs** / **reasoning** vs bars-only; zero-match control; operator **primary_trade** retrieval count).  
 *Closeout:* **§F**.
 
 **D5 — Referee immutability.** Students MUST NOT authorize ledger writes or change Referee numbers; **`reveal_v1`** compares and persists **Student** learning artifacts only within **`student_learning_record_v1`** rules (`ARCHITECTURE_PLAN` §2.1).  
@@ -329,3 +330,4 @@ Run **after** code and tests for the directive milestone; **before** calling the
 | 1.6 | 2026-04-20 | **§0** project goals + binding definitions of **trade** (0.2) and **learned behavior** (0.3); P0 aligned; **D9**; checklist §0 metrics. |
 | 1.7 | 2026-04-20 | **§F** directive closeout (git commit, pull, push, Flask restart, Docker); *Closeout: §F* on D1–D9; checklist item. |
 | 1.8 | 2026-04-20 | **D3** closure: **`student_context_annex_v1`**, proof tests module. |
+| 1.9 | 2026-04-20 | **D4** closure: memory delta proof tests (`test_directive_d4_memory_must_matter_v1`). |
