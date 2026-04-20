@@ -262,6 +262,7 @@ Read **from top (goal) downward** to “today”; implementation reads the **sam
 *Closeout:* **§F**.
 
 **D5 — Referee immutability.** Students MUST NOT authorize ledger writes or change Referee numbers; **`reveal_v1`** compares and persists **Student** learning artifacts only within **`student_learning_record_v1`** rules (`ARCHITECTURE_PLAN` §2.1).  
+*Proof tests:* `renaissance_v4/game_theory/tests/test_directive_d5_referee_immutability_v1.py` (``referee_truth_v1`` = outcome projection; Student fields do not override Referee; learning **subset** traces **reveal**; smuggled ``referee_truth`` on student output rejected).  
 *Closeout:* **§F**.
 
 **D6 — Phased honesty.** Until process order places the Student **strictly before** `OutcomeRecord` is available, document **seam ordering** as a known limitation; **do not** claim “exam blind” without that gate.  
@@ -331,3 +332,4 @@ Run **after** code and tests for the directive milestone; **before** calling the
 | 1.7 | 2026-04-20 | **§F** directive closeout (git commit, pull, push, Flask restart, Docker); *Closeout: §F* on D1–D9; checklist item. |
 | 1.8 | 2026-04-20 | **D3** closure: **`student_context_annex_v1`**, proof tests module. |
 | 1.9 | 2026-04-20 | **D4** closure: memory delta proof tests (`test_directive_d4_memory_must_matter_v1`). |
+| 1.10 | 2026-04-20 | **D5** closure: Referee immutability proof tests (`test_directive_d5_referee_immutability_v1`). |

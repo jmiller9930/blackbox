@@ -3,6 +3,8 @@ Directive 04 — ``reveal_v1`` join layer.
 
 Sanctioned post-decision join of a validated ``student_output_v1`` snapshot and Referee truth
 (:class:`OutcomeRecord` → ``referee_truth_v1``). Does not mutate Referee data or replay outcomes.
+``referee_truth_v1`` is projected only from :class:`OutcomeRecord` (Directive **05** proof:
+``test_directive_d5_referee_immutability_v1``).
 
 **Not** an execution path: no orders, fusion, or manifest side effects.
 """
