@@ -15,6 +15,8 @@ from typing import Any
 
 from renaissance_v4.game_theory.student_proctor.contracts_v1 import (
     CONTRACT_VERSION_STUDENT_PROCTOR_V1,
+    FIELD_RETRIEVED_STUDENT_EXPERIENCE_V1,
+    SCHEMA_STUDENT_RETRIEVAL_SLICE_V1,
     validate_pre_reveal_bundle_v1,
 )
 
@@ -135,5 +137,24 @@ def validate_student_decision_packet_v1(packet: Any) -> list[str]:
             ot = row.get("open_time")
             if t_cut is not None and isinstance(ot, int) and ot > t_cut:
                 errs.append(f"causal violation: bars[{i}].open_time > decision_open_time_ms")
+
+    raws = packet.get(FIELD_RETRIEVED_STUDENT_EXPERIENCE_V1)
+    if raws is not None:
+        if not isinstance(raws, list):
+            errs.append(f"{FIELD_RETRIEVED_STUDENT_EXPERIENCE_V1} must be a list or absent")
+        else:
+            for i, sl in enumerate(raws):
+                if not isinstance(sl, dict):
+                    errs.append(f"{FIELD_RETRIEVED_STUDENT_EXPERIENCE_V1}[{i}] must be dict")
+                    continue
+                if sl.get("schema") != SCHEMA_STUDENT_RETRIEVAL_SLICE_V1:
+                    errs.append(
+                        f"{FIELD_RETRIEVED_STUDENT_EXPERIENCE_V1}[{i}].schema must be {SCHEMA_STUDENT_RETRIEVAL_SLICE_V1!r}"
+                    )
+                if sl.get("contract_version") != CONTRACT_VERSION_STUDENT_PROCTOR_V1:
+                    errs.append(
+                        f"{FIELD_RETRIEVED_STUDENT_EXPERIENCE_V1}[{i}].contract_version invalid"
+                    )
+
     errs.extend(validate_pre_reveal_bundle_v1(packet))
     return errs

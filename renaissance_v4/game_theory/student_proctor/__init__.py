@@ -2,11 +2,13 @@
 
 from renaissance_v4.game_theory.student_proctor.contracts_v1 import (
     CONTRACT_VERSION_STUDENT_PROCTOR_V1,
+    FIELD_RETRIEVED_STUDENT_EXPERIENCE_V1,
     GRADED_UNIT_TYPE_V1,
     PRE_REVEAL_FORBIDDEN_KEYS_V1,
     SCHEMA_REVEAL_V1,
     SCHEMA_STUDENT_LEARNING_RECORD_V1,
     SCHEMA_STUDENT_OUTPUT_V1,
+    SCHEMA_STUDENT_RETRIEVAL_SLICE_V1,
     illegal_pre_reveal_bundle_example_v1,
     legal_example_reveal_v1,
     legal_example_student_learning_record_v1,
@@ -15,6 +17,10 @@ from renaissance_v4.game_theory.student_proctor.contracts_v1 import (
     validate_reveal_v1,
     validate_student_learning_record_v1,
     validate_student_output_v1,
+)
+from renaissance_v4.game_theory.student_proctor.cross_run_retrieval_v1 import (
+    build_student_decision_packet_v1_with_cross_run_retrieval,
+    project_student_learning_record_to_retrieval_slice_v1,
 )
 from renaissance_v4.game_theory.student_proctor.reveal_layer_v1 import (
     build_comparison_v1,
@@ -45,8 +51,10 @@ from renaissance_v4.game_theory.student_proctor.student_learning_store_v1 import
 __all__ = [
     "CONTRACT_VERSION_STUDENT_PROCTOR_V1",
     "GRADED_UNIT_TYPE_V1",
+    "FIELD_RETRIEVED_STUDENT_EXPERIENCE_V1",
     "PRE_REVEAL_FORBIDDEN_KEYS_V1",
     "SCHEMA_REVEAL_V1",
+    "SCHEMA_STUDENT_RETRIEVAL_SLICE_V1",
     "SCHEMA_STUDENT_LEARNING_RECORD_V1",
     "SCHEMA_STUDENT_OUTPUT_V1",
     "illegal_pre_reveal_bundle_example_v1",
@@ -57,6 +65,8 @@ __all__ = [
     "validate_reveal_v1",
     "validate_student_learning_record_v1",
     "validate_student_output_v1",
+    "build_student_decision_packet_v1_with_cross_run_retrieval",
+    "project_student_learning_record_to_retrieval_slice_v1",
     "build_comparison_v1",
     "build_reveal_v1_from_outcome_and_student",
     "outcome_record_to_referee_truth_v1",

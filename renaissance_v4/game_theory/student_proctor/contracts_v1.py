@@ -23,6 +23,9 @@ GRADED_UNIT_TYPE_V1 = "closed_trade"
 SCHEMA_STUDENT_OUTPUT_V1 = "student_output_v1"
 SCHEMA_REVEAL_V1 = "reveal_v1"
 SCHEMA_STUDENT_LEARNING_RECORD_V1 = "student_learning_record_v1"
+# Pre-reveal-safe slice embedded in ``student_decision_packet_v1`` (Directive 06).
+SCHEMA_STUDENT_RETRIEVAL_SLICE_V1 = "student_retrieval_slice_v1"
+FIELD_RETRIEVED_STUDENT_EXPERIENCE_V1 = "retrieved_student_experience_v1"
 
 _DIRECTIONS = frozenset({"long", "short", "flat"})
 
