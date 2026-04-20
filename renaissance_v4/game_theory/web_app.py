@@ -9,9 +9,10 @@ Batches use **``POST /api/run-parallel/start``** + polling **``GET /api/run-para
 **live telemetry** (decision windows, trades, candidate phase) from worker-written JSON snapshots.
 ``POST /api/run-parallel`` remains as a blocking API for scripts.
 
-Each completed batch also writes a **unique session folder** under the logs directory (default:
-``renaissance_v4/game_theory/logs/``, or ``$PATTERN_GAME_MEMORY_ROOT/logs`` on a tmpfs/ramdisk for
-instant I/O). Folders look like ``batch_<UTC>_<id>/`` with ``BATCH_README.md`` and per-scenario
+Each completed batch also writes a **unique session folder** under the batch logs directory
+(default: ``<repo>/runtime/batches/`` via ``PATTERN_GAME_SESSION_LOGS_ROOT``, or
+``renaissance_v4/game_theory/logs/`` if unset; or ``$PATTERN_GAME_MEMORY_ROOT/logs`` when that env
+is set). Folders look like ``batch_<UTC>_<id>/`` with ``BATCH_README.md`` and per-scenario
 ``HUMAN_READABLE.md``, unless ``PATTERN_GAME_NO_SESSION_LOG=1``. The JSON result includes
 ``session_log_batch_dir`` when present.
 
@@ -72,7 +73,7 @@ _PATTERN_BANNER_PATH = _RV4_ROOT / "assets" / "pattern.png"
 _PATTERN_BANNER_WEBP_PATH = _RV4_ROOT / "assets" / "pattern.webp"
 
 # Operator-visible web UI bundle version — bump when changing PAGE_HTML (HTML/CSS/JS) so deploys are provable.
-PATTERN_GAME_WEB_UI_VERSION = "2.8.1"
+PATTERN_GAME_WEB_UI_VERSION = "2.8.2"
 
 from renaissance_v4.game_theory.groundhog_memory import (
     groundhog_auto_merge_enabled,
@@ -97,6 +98,15 @@ from renaissance_v4.game_theory.memory_paths import (
     default_experience_log_jsonl,
     default_retrospective_log_jsonl,
     ensure_memory_root_tree,
+)
+from renaissance_v4.game_theory.pml_runtime_layout import (
+    apply_main_process_runtime_env_defaults,
+    check_disk_before_run,
+    configure_web_server_file_logging,
+    describe_pml_runtime_for_startup,
+    ensure_pml_runtime_dirs,
+    prune_pml_runtime_batch_dirs,
+    runtime_status_snapshot,
 )
 from renaissance_v4.game_theory.catalog_batch_builder import (
     build_atr_sweep_scenarios,
@@ -472,6 +482,8 @@ def _render_page_html() -> str:
 
 
 def create_app() -> Flask:
+    apply_main_process_runtime_env_defaults()
+    ensure_pml_runtime_dirs()
     ensure_memory_root_tree()
     app = Flask(__name__)
 
@@ -511,6 +523,7 @@ def create_app() -> Flask:
                 "pattern_game_web_ui_version": PATTERN_GAME_WEB_UI_VERSION,
                 "max_evaluation_window_calendar_months": h.get("max_evaluation_window_calendar_months"),
                 "replay_tape_span_days_approx": h.get("replay_tape_span_days_approx"),
+                **runtime_status_snapshot(),
             }
         )
 
@@ -761,6 +774,9 @@ def create_app() -> Flask:
     @app.post("/api/run")
     def api_run() -> Any:
         data = request.get_json(force=True, silent=True) or {}
+        _allow, _disk_warn, disk_block = check_disk_before_run()
+        if disk_block:
+            return jsonify({"ok": False, "error": disk_block}), 503
         manifest = (data.get("manifest_path") or str(_default_manifest_path())).strip()
         atr_s = data.get("atr_stop_mult")
         atr_t = data.get("atr_target_mult")
@@ -813,6 +829,9 @@ def create_app() -> Flask:
         prep = _prepare_parallel_payload(data)
         if not prep["ok"]:
             return jsonify(dict(prep)), 400
+        _allow, disk_warn_msgs, disk_block = check_disk_before_run()
+        if disk_block:
+            return jsonify({"ok": False, "error": disk_block}), 503
         scenarios = prep["scenarios"]
         max_workers = prep["max_workers"]
         log_path = prep["log_path"]
@@ -937,16 +956,22 @@ def create_app() -> Flask:
                         j["status"] = "error"
                         j["error"] = err_s
                         j["batch_timing"] = timing
+            finally:
+                try:
+                    prune_pml_runtime_batch_dirs()
+                except Exception:
+                    pass
 
         threading.Thread(target=run_job, daemon=True).start()
-        return jsonify(
-            {
-                "ok": True,
-                "job_id": job_id,
-                "total": len(scenarios),
-                "workers_used": workers_used,
-            }
-        )
+        start_body: dict[str, Any] = {
+            "ok": True,
+            "job_id": job_id,
+            "total": len(scenarios),
+            "workers_used": workers_used,
+        }
+        if disk_warn_msgs:
+            start_body["operator_disk_warnings"] = disk_warn_msgs
+        return jsonify(start_body)
 
     @app.get("/api/run-parallel/status/<job_id>")
     @app.get("/api/run-status/<job_id>")
@@ -996,6 +1021,9 @@ def create_app() -> Flask:
         prep = _prepare_parallel_payload(data)
         if not prep["ok"]:
             return jsonify(dict(prep)), 400
+        _allow, disk_warn_msgs, disk_block = check_disk_before_run()
+        if disk_block:
+            return jsonify({"ok": False, "error": disk_block}), 503
         scenarios = prep["scenarios"]
         max_workers = prep["max_workers"]
         log_path = prep["log_path"]
@@ -1040,27 +1068,28 @@ def create_app() -> Flask:
                 error=None,
                 operator_batch_audit=operator_batch_audit,
             )
-            return jsonify(
-                {
-                    "ok": True,
-                    "job_id": job_id,
-                    "ran": len(results),
-                    "ok_count": ok_n,
-                    "failed_count": len(results) - ok_n,
-                    "results": results,
-                    "pnl_summary": _batch_pnl_summary(results),
-                    "limits_applied": get_parallel_limits(),
-                    "workers_used": workers_used,
-                    "scenario_validation": {"ok": True, "messages": val_msgs},
-                    "session_log_batch_dir": session_batch_dir[0],
-                    "batch_timing": timing,
-                    "operator_batch_audit": operator_batch_audit,
-                    "learning_batch_audit_v1": timing.get("learning_batch_audit_v1"),
-                    "batch_depth_v1": timing.get("batch_depth_v1"),
-                    "batch_run_classification_v1": timing.get("batch_run_classification_v1"),
-                    "operator_learning_status_line_v1": timing.get("operator_learning_status_line_v1"),
-                }
-            )
+            ok_body: dict[str, Any] = {
+                "ok": True,
+                "job_id": job_id,
+                "ran": len(results),
+                "ok_count": ok_n,
+                "failed_count": len(results) - ok_n,
+                "results": results,
+                "pnl_summary": _batch_pnl_summary(results),
+                "limits_applied": get_parallel_limits(),
+                "workers_used": workers_used,
+                "scenario_validation": {"ok": True, "messages": val_msgs},
+                "session_log_batch_dir": session_batch_dir[0],
+                "batch_timing": timing,
+                "operator_batch_audit": operator_batch_audit,
+                "learning_batch_audit_v1": timing.get("learning_batch_audit_v1"),
+                "batch_depth_v1": timing.get("batch_depth_v1"),
+                "batch_run_classification_v1": timing.get("batch_run_classification_v1"),
+                "operator_learning_status_line_v1": timing.get("operator_learning_status_line_v1"),
+            }
+            if disk_warn_msgs:
+                ok_body["operator_disk_warnings"] = disk_warn_msgs
+            return jsonify(ok_body)
         except Exception as e:
             err_s = f"{type(e).__name__}: {e}"
             timing = record_parallel_batch_finished(
@@ -1075,6 +1104,11 @@ def create_app() -> Flask:
                 operator_batch_audit=operator_batch_audit,
             )
             return jsonify({"ok": False, "error": err_s, "job_id": job_id, "batch_timing": timing}), 400
+        finally:
+            try:
+                prune_pml_runtime_batch_dirs()
+            except Exception:
+                pass
 
     @app.get("/api/batch-scorecard")
     def api_batch_scorecard() -> Any:
@@ -5265,10 +5299,15 @@ PAGE_HTML = """<!DOCTYPE html>
 def main() -> None:
     import argparse
 
+    apply_main_process_runtime_env_defaults()
+    ensure_pml_runtime_dirs()
+    print(describe_pml_runtime_for_startup(), flush=True)
+
     p = argparse.ArgumentParser(description="Pattern Machine learning local web UI")
     p.add_argument("--host", default="127.0.0.1")
     p.add_argument("--port", type=int, default=8765)
     args = p.parse_args()
+    configure_web_server_file_logging()
     app = create_app()
     print(f"[web_app] Open http://{args.host}:{args.port}/  (PYTHONPATH must include repo root)")
     app.run(host=args.host, port=args.port, debug=False, threaded=True)

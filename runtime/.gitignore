@@ -1,0 +1,7 @@
+# PML operational output (see renaissance_v4/game_theory/pml_runtime_layout.py).
+logs/**
+!logs/.gitkeep
+proofs/**
+!proofs/.gitkeep
+batches/**
+!batches/.gitkeep

@@ -121,6 +121,7 @@ DEFAULT_PATTERN_GAME_PREFIXES = (
 # Staged before commit in --pattern-game mode so new files under game_theory are not skipped (git add -u alone does not add untracked files).
 PATTERN_GAME_STAGING_PATHS = (
     "renaissance_v4/game_theory",
+    "runtime",
     "scripts/pattern_game_remote_restart.sh",
     "scripts/sync_pattern_game.sh",
     "scripts/deploy_pattern_game.sh",
@@ -245,7 +246,7 @@ def _verify_pattern_game_http_header(ssh_target: str, *, dry_run: bool) -> bool:
             return True
         print(
             "gsync: FATAL: pattern-game HTTP check failed (no X-Pattern-Game-UI-Version on http://127.0.0.1:8765/). "
-            "Is Flask running? See /tmp/pattern_game_web.log on the lab host.",
+            "Is Flask running? See runtime/logs/pattern_game_web.log under the repo (or $BLACKBOX_PML_RUNTIME_ROOT/logs/).",
             file=sys.stderr,
         )
         return False

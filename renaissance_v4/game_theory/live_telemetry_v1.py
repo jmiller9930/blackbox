@@ -1,8 +1,9 @@
 """
 Live run telemetry v1 — worker processes write JSON snapshots; the Flask UI polls and aggregates.
 
-Uses atomic replace writes under ``PATTERN_GAME_TELEMETRY_DIR`` (default: system temp
-``pattern_game_telemetry/``). One file per scenario: ``{job_id}__{scenario_slug}.json``.
+Uses atomic replace writes under ``PATTERN_GAME_TELEMETRY_DIR`` (default: under
+``BLACKBOX_PML_RUNTIME_ROOT/logs/pattern_game_telemetry/``, never ``/tmp``). One file per
+scenario: ``{job_id}__{scenario_slug}.json``.
 """
 
 from __future__ import annotations
@@ -10,7 +11,6 @@ from __future__ import annotations
 import json
 import os
 import re
-import tempfile
 import time
 from collections.abc import Callable
 from pathlib import Path
@@ -24,7 +24,9 @@ def default_telemetry_dir() -> Path:
     root = os.environ.get("PATTERN_GAME_TELEMETRY_DIR", "").strip()
     if root:
         return Path(root).expanduser().resolve()
-    return Path(tempfile.gettempdir()) / "pattern_game_telemetry"
+    from renaissance_v4.game_theory.pml_runtime_layout import telemetry_snapshots_dir
+
+    return telemetry_snapshots_dir()
 
 
 def scenario_slug(scenario_id: str) -> str:
