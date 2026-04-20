@@ -73,7 +73,7 @@ _PATTERN_BANNER_PATH = _RV4_ROOT / "assets" / "pattern.png"
 _PATTERN_BANNER_WEBP_PATH = _RV4_ROOT / "assets" / "pattern.webp"
 
 # Operator-visible web UI bundle version — bump when changing PAGE_HTML (HTML/CSS/JS) so deploys are provable.
-PATTERN_GAME_WEB_UI_VERSION = "2.9.0"
+PATTERN_GAME_WEB_UI_VERSION = "2.10.0"
 
 from renaissance_v4.game_theory.groundhog_memory import (
     groundhog_auto_merge_enabled,
@@ -145,6 +145,10 @@ from renaissance_v4.game_theory.pattern_game import (
     run_pattern_game,
 )
 from renaissance_v4.game_theory.policy_framework import attach_policy_framework_audits
+from renaissance_v4.game_theory.barney_summary import (
+    barney_summarize_job_facts,
+    build_barney_facts_from_job_state,
+)
 from renaissance_v4.game_theory.operator_strategy_upload import (
     active_manifest_repo_relative,
     clear_active_operator_strategy,
@@ -1037,6 +1041,37 @@ def create_app() -> Flask:
             out["result"] = j["result"]
         return jsonify(out)
 
+    @app.post("/api/barney-summary")
+    def api_barney_summary() -> Any:
+        """
+        Barney summary — plain-English recap from structured facts for a **completed** parallel job.
+
+        Body JSON: ``{"job_id": "<hex>"}`` (in-memory job on this Flask host).
+        """
+        data = request.get_json(force=True, silent=True) or {}
+        jid = str(data.get("job_id") or "").strip()
+        if not jid:
+            return jsonify({"ok": False, "error": "job_id is required"}), 400
+        with _JOBS_LOCK:
+            j = _JOBS.get(jid)
+        if not j:
+            return jsonify({"ok": False, "error": "job not found or expired — run finished too long ago"}), 404
+        st = str(j.get("status") or "")
+        if st not in ("done", "error"):
+            return jsonify({"ok": False, "error": f"job is still {st!r}; wait for completion"}), 400
+        res = j.get("result") if isinstance(j.get("result"), dict) else None
+        bt = j.get("batch_timing") if isinstance(j.get("batch_timing"), dict) else None
+        echo = j.get("telemetry_context_echo") if isinstance(j.get("telemetry_context_echo"), dict) else None
+        facts = build_barney_facts_from_job_state(
+            status=st,
+            error_message=j.get("error"),
+            parallel_result=res,
+            batch_timing=bt,
+            telemetry_echo=echo,
+        )
+        out = barney_summarize_job_facts(facts)
+        return jsonify({"ok": True, "facts": facts, **out})
+
     @app.post("/api/run-parallel")
     def api_parallel() -> Any:
         """Blocking batch run (same work as ``/start`` + poll until done). Prefer ``/start`` for the UI."""
@@ -1810,6 +1845,45 @@ PAGE_HTML = """<!DOCTYPE html>
     details.pg-panel-fold.pg-panel-score.pg-scorecard-dock .scorecard-panel-inner {
       flex: 1 1 auto;
       min-height: 0;
+    }
+    .pg-scorecard-split {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      min-height: min(70vh, 720px);
+    }
+    .pg-scorecard-upper {
+      flex: 1 1 50%;
+      min-height: 0;
+      overflow: auto;
+      display: flex;
+      flex-direction: column;
+    }
+    .pg-scorecard-upper .pg-table-scroll {
+      max-height: min(36vh, 420px);
+    }
+    .pg-scorecard-lower {
+      flex: 1 1 50%;
+      min-height: 140px;
+      max-height: min(38vh, 480px);
+      overflow: auto;
+      border-top: 2px solid var(--pg-line);
+      padding-top: 10px;
+      background: var(--pg-surface-strong);
+      border-radius: 0 0 12px 12px;
+    }
+    .pg-barney-title {
+      font-weight: 800;
+      margin: 0 0 4px;
+      font-size: 0.92rem;
+      color: var(--pg-accent);
+    }
+    .pg-barney-body {
+      font-size: 0.88rem;
+      line-height: 1.45;
+      white-space: pre-wrap;
+      color: var(--pg-ink);
+      margin: 0;
     }
     @media (max-width: 1680px) {
       .pg-row-main {
@@ -3091,7 +3165,8 @@ PAGE_HTML = """<!DOCTYPE html>
           </div>
         </summary>
         <div class="pg-panel-fold-body">
-        <div class="scorecard-panel-inner" id="scorecardPanel">
+        <div class="scorecard-panel-inner pg-scorecard-split" id="scorecardPanel">
+          <div class="pg-scorecard-upper" id="scorecardUpper">
           <p class="scorecard-legend"><strong>Run OK %</strong> — workers finished. <strong>Session WIN %</strong> — referee WIN vs LOSS among judged sessions only; <strong>n sess</strong> is that denominator (never infer from a bare percentage). <strong>Trade win %</strong> — batch mean when trades exist (with trade count). <strong>Learning</strong> — <code>execution_only</code> vs <code>learning_active</code> from replay counters (candidate search, memory records loaded, recall matches, signal bias). <strong>Work</strong> — decision windows, bars, and candidate-stack replays. Scan <em>down</em> for newest batches. <strong>In-flight</strong> — a batch that is <strong>running</strong> now appears at the <strong>top</strong> with <strong>Start</strong> time and live progress counts; the JSONL line is written when the batch finishes. <strong>Scorecard file</strong> (<code>batch_scorecard.jsonl</code>) is batch audit for this table and hunter suggestions; replay does <em>not</em> read it to apply memory or recall. <strong>Clear Card</strong> truncates that log only. <strong>Reset Learning State</strong> is separate and destructive (engine files — see confirmation).</p>
           <p class="last-run" id="lastBatchRunLine">Last completed batch: —</p>
           <div id="scorecardLearningSummary" class="scorecard-learning-summary exec-only" aria-live="polite" hidden>
@@ -3151,6 +3226,15 @@ PAGE_HTML = """<!DOCTYPE html>
           <div id="batchDrillPanel" class="batch-drill-panel" aria-live="polite"></div>
           <p id="scorecardClickHint" class="scorecard-click-hint" role="status" aria-live="polite" style="display:none"></p>
           <p class="path-hint" id="scorecardPathHint"></p>
+          </div>
+          <div class="pg-scorecard-lower" id="scorecardBarneyLower" aria-label="Barney summary">
+            <div class="pg-barney-title">Barney summary</div>
+            <p class="caps" style="font-size:0.74rem;margin:0 0 8px;line-height:1.35;color:var(--pg-muted)">
+              Plain-English recap built only from run facts (local LLM formats text; it does not invent scores).
+              If Ollama is off, a built-in fallback is used.
+            </p>
+            <pre id="barneySummaryBody" class="pg-barney-body">—</pre>
+          </div>
         </div>
         </div>
       </details>
@@ -4318,6 +4402,27 @@ PAGE_HTML = """<!DOCTYPE html>
       return fallbackTotal;
     }
 
+    async function fetchBarneySummary(jobId) {
+      const el = document.getElementById('barneySummaryBody');
+      if (!el || !jobId) return;
+      el.textContent = 'Loading Barney summary…';
+      try {
+        const r = await fetch('/api/barney-summary', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ job_id: jobId }),
+        });
+        const j = await r.json();
+        if (!r.ok || !j.ok) {
+          el.textContent = 'Barney summary unavailable: ' + (j.error || String(r.status));
+          return;
+        }
+        el.textContent = (j.text || '').trim() || '—';
+      } catch (e) {
+        el.textContent = 'Barney summary failed: ' + friendlyFetchError(e);
+      }
+    }
+
     function friendlyParallelBackendError(msg) {
       const m = String(msg != null ? msg : '');
       if (
@@ -4512,6 +4617,7 @@ PAGE_HTML = """<!DOCTYPE html>
             showBatchConcurrencyBanner(total, wCap, 'error');
             if (pj.batch_timing) updateLastBatchRunLine(pj.batch_timing);
             refreshScorecardHistory();
+            void fetchBarneySummary(jobId);
             await show(null, null, friendlyParallelBackendError(pj.error || 'Job failed'));
             updateRunStatusLine('Failed — see Result.');
             setRunFeedbackToast('Batch failed — see Results workspace (Raw JSON) for the error.');
@@ -4555,6 +4661,7 @@ PAGE_HTML = """<!DOCTYPE html>
               }
               await show(null, j, null);
               refreshScorecardHistory();
+              void fetchBarneySummary(jobId);
               updateRunStatusLine(
                 'Finished — ' + doneN + ' scenario(s) · parallel processes used: ' + (doneW != null ? doneW : '?') +
                 ' (not the same as the slider when you only have one scenario) · see Result below.'
@@ -4564,6 +4671,7 @@ PAGE_HTML = """<!DOCTYPE html>
               showBatchConcurrencyBanner(tDone, wCap, 'done');
               setProgressUI(cDone, tDone, 'Batch marked done — full JSON not in this response; see scorecard below.');
               refreshScorecardHistory();
+              void fetchBarneySummary(jobId);
               updateRunStatusLine(
                 'Finished — ' + cDone + '/' + tDone + ' (details in scorecard; hard-refresh if Result is empty).'
               );
