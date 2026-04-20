@@ -197,6 +197,8 @@ def run_pattern_game(
     verbose: bool = True,
     bar_window_calendar_months: int | None = None,
     live_telemetry_callback: Callable[[dict[str, Any]], None] | None = None,
+    context_signature_memory_mode: str | None = None,
+    context_signature_memory_path: Path | str | None = None,
 ) -> dict[str, Any]:
     """
     Load manifest, optional **memory bundle** merge, optional ATR overlays, validate, replay.
@@ -207,6 +209,10 @@ def run_pattern_game(
 
     When ``use_groundhog_auto_resolve`` is False and ``memory_bundle_path`` is None, the canonical
     Groundhog bundle is not resolved (control runs for E2E proof).
+
+    When ``context_signature_memory_mode`` is ``read`` or ``read_write``, Decision Context Recall
+    is enabled for ``run_manifest_replay`` (same defaults as the operator harness when mode is not
+    ``off``). Path defaults to ``context_signature_memory.default_memory_path`` when omitted.
     """
     prep = prepare_effective_manifest_for_replay(
         manifest_path,
@@ -215,6 +221,25 @@ def run_pattern_game(
         memory_bundle_path=memory_bundle_path,
         use_groundhog_auto_resolve=use_groundhog_auto_resolve,
     )
+    cmem = (context_signature_memory_mode or "off").strip().lower()
+    if cmem not in ("off", "read", "read_write"):
+        cmem = "off"
+    mem_jsonl = context_signature_memory_path
+    if cmem == "off":
+        dcr_on = False
+        dcr_bias = False
+        dcr_sig_v2 = False
+        mem_jsonl_eff: Path | str | None = None
+    else:
+        dcr_on = True
+        dcr_bias = True
+        dcr_sig_v2 = False
+        if mem_jsonl is None:
+            from renaissance_v4.game_theory.context_signature_memory import default_memory_path
+
+            mem_jsonl_eff = default_memory_path()
+        else:
+            mem_jsonl_eff = mem_jsonl
     try:
         raw = run_manifest_replay(
             prep.replay_path,
@@ -222,6 +247,10 @@ def run_pattern_game(
             verbose=verbose,
             bar_window_calendar_months=bar_window_calendar_months,
             live_telemetry_callback=live_telemetry_callback,
+            decision_context_recall_enabled=dcr_on,
+            decision_context_recall_apply_bias=dcr_bias,
+            decision_context_recall_apply_signal_bias_v2=dcr_sig_v2,
+            decision_context_recall_memory_path=mem_jsonl_eff,
         )
     finally:
         prep.cleanup()

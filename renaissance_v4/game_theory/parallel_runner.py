@@ -210,6 +210,10 @@ def _worker_run_one(scenario: dict[str, Any]) -> dict[str, Any]:
                 "memory_bundle_audit": prep.memory_bundle_audit,
             }
         else:
+            cmem = str(scenario.get("context_signature_memory_mode") or "").strip().lower()
+            if cmem not in ("off", "read", "read_write"):
+                cmem = "off"
+            mem_jsonl = scenario.get("context_signature_memory_path")
             out = run_pattern_game(
                 scenario["manifest_path"],
                 atr_stop_mult=scenario.get("atr_stop_mult"),
@@ -220,6 +224,8 @@ def _worker_run_one(scenario: dict[str, Any]) -> dict[str, Any]:
                 verbose=False,
                 bar_window_calendar_months=bar_m,
                 live_telemetry_callback=live_cb,
+                context_signature_memory_mode=cmem,
+                context_signature_memory_path=mem_jsonl,
             )
         summ = json_summary(out, scenario=scenario)
         pfa = scenario.get("policy_framework_audit")

@@ -26,9 +26,11 @@ Scenario batch JSON — required shape for ``parallel_runner``, ``pattern_game``
 - ``skip_groundhog_bundle`` *(bool)* — If true, do not apply the canonical Groundhog bundle when
   ``PATTERN_GAME_GROUNDHOG_BUNDLE=1`` (see ``groundhog_memory.py``).
 - ``tier`` *(str)* — e.g. ``T1``; documentation / UI only.
-- ``evaluation_window`` *(dict)* — Declarative intent (e.g. ``calendar_months``); slicing may be
-  wired later; replay today uses whatever bar range the SQLite DB provides unless the manifest
-  specifies dates.
+- ``evaluation_window`` *(dict)* — Declarative intent (e.g. ``calendar_months``); replay slices the
+  last N months when ``calendar_months`` is passed through ``run_manifest_replay``.
+- ``context_signature_memory_mode`` / ``context_signature_memory_path`` — When ``mode`` is
+  ``read`` or ``read_write``, catalog parallel workers enable Decision Context Recall on replay
+  (defaults match the operator harness when mode is not ``off``).
 - ``game_spec_ref`` *(str)* — Pointer to the game spec doc filename for reviewers.
 - ``training_trace_id`` / ``prior_scenario_id`` *(str)* — Training pipeline correlation IDs.
 
