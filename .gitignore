@@ -95,3 +95,9 @@ external/
 # Operator TLS material for UIUX.Web (fullchain.pem / privkey.pem); keep ssl/.gitkeep only
 UIUX.Web/ssl/*.pem
 UIUX.Web/ssl/*.key
+
+# SR-1 / student-loop local scratch DBs (repo root experiments)
+_tmp*.sqlite3
+
+# Student Proctor default learning JSONL (host-local; override via PATTERN_GAME_STUDENT_LEARNING_STORE)
+runtime/student_learning/
