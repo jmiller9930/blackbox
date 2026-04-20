@@ -1,0 +1,47 @@
+{
+  "schema": "sr5_scorecard_excerpt_v1",
+  "git_commit_sha": "000a96ff8f64d3bebd90abfe258e1fdb6778408c",
+  "sr_primary_fields": {
+    "run_A": {
+      "student_output_fingerprint": "b57650d863a94f5bc568622d85338da5a6fe1c8ceda707c785ba2b95d7296a41",
+      "pattern_recipe_ids": [
+        "shadow_stub_v1"
+      ],
+      "confidence_01": 0.55,
+      "student_decision_ref": "bcff5985-bac0-5ce9-901e-ae14634b1a9c"
+    },
+    "run_B": {
+      "student_output_fingerprint": "f2a181a41bbe39b146695c265f965d0295842cc12cc7be35ac1e19387df6cfae",
+      "pattern_recipe_ids": [
+        "shadow_stub_v1",
+        "cross_run_retrieval_informed_v1"
+      ],
+      "confidence_01": 0.6000000000000001,
+      "student_decision_ref": "e7885f87-ca90-5f19-aeea-267611a123e7"
+    },
+    "run_C": {
+      "student_output_fingerprint": "b57650d863a94f5bc568622d85338da5a6fe1c8ceda707c785ba2b95d7296a41",
+      "pattern_recipe_ids": [
+        "shadow_stub_v1"
+      ],
+      "confidence_01": 0.55,
+      "student_decision_ref": "bcff5985-bac0-5ce9-901e-ae14634b1a9c"
+    }
+  },
+  "student_retrieval_matches": {
+    "run_A": 0,
+    "run_B": 31,
+    "run_C": 0
+  },
+  "student_learning_rows_appended": {
+    "run_A": 31,
+    "run_B": 31,
+    "run_C": 31
+  },
+  "gates": {
+    "sr1_replay_outcomes": true,
+    "sr2_cross_run_difference": true,
+    "sr3_reset_matches_run_a": true
+  },
+  "errors": []
+}

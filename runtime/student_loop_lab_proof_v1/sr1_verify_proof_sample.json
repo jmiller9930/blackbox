@@ -1,0 +1,8 @@
+{
+  "schema": "sr1_verify_proof_v1",
+  "renaissance_v4_db_path": "runtime/student_loop_lab_proof_v1/sr1_deterministic.sqlite3",
+  "manifest_path": "renaissance_v4/configs/manifests/sr1_deterministic_trade_proof_v1.json",
+  "replay_outcomes_json_length": 31,
+  "summary_trades": 31,
+  "ok": true
+}

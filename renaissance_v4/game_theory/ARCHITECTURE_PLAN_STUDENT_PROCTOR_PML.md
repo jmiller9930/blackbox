@@ -4,6 +4,7 @@
 **Purpose:** Align on **high-level** structure, boundaries, and phased delivery before detailed design and implementation.  
 **Companion docs:**
 - `CONTEXT_LOG_PML_SYSTEM_AMENDMENT.md` — canonical product story + gap detail  
+- `E2E_ROADMAP_STUDENT_PROCTOR_PML.md` — **binding** delivery bar **v2.1** (**SR-1–SR-5**, proof bundle, AC-1b)  
 - **§11+** (this file) — **Directive Plan** — governing execution order (Directives 01–08), proof/acceptance/closeout  
 
 **Version:** 1.1 — architecture plan + directive execution plan

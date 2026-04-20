@@ -80,7 +80,7 @@ _PATTERN_BANNER_PATH = _RV4_ROOT / "assets" / "pattern.png"
 _PATTERN_BANNER_WEBP_PATH = _RV4_ROOT / "assets" / "pattern.webp"
 
 # Operator-visible web UI bundle version — bump when changing PAGE_HTML (HTML/CSS/JS) so deploys are provable.
-PATTERN_GAME_WEB_UI_VERSION = "2.13.0"
+PATTERN_GAME_WEB_UI_VERSION = "2.14.1"
 
 from renaissance_v4.game_theory.groundhog_memory import (
     groundhog_auto_merge_enabled,
@@ -2001,6 +2001,33 @@ PAGE_HTML = """<!DOCTYPE html>
       color: var(--pg-muted);
       line-height: 1.42;
     }
+    /* SR-4 / AC-3: long seam text scrolls inside the panel so the Student header stays above the fold. */
+    details.pg-student-triangle-dock {
+      scroll-margin-top: 12px;
+      position: relative;
+      z-index: 1;
+    }
+    details.pg-student-triangle-dock .pg-student-triangle-body {
+      max-height: min(38vh, 380px);
+      overflow-y: auto;
+      overflow-x: hidden;
+      padding-right: 4px;
+      scrollbar-gutter: stable;
+    }
+    .pg-secondary-surface-label {
+      display: inline-block;
+      margin-left: 6px;
+      padding: 2px 8px;
+      font-size: 0.65rem;
+      font-weight: 800;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      border-radius: 999px;
+      background: rgba(80, 100, 122, 0.14);
+      color: var(--pg-steel);
+      border: 1px solid rgba(80, 100, 122, 0.22);
+      vertical-align: middle;
+    }
     .pg-telemetry-dock {
       position: sticky;
       top: 8px;
@@ -3388,7 +3415,7 @@ PAGE_HTML = """<!DOCTYPE html>
           <div class="pg-panel-header" style="margin:0;flex:1">
             <div>
               <h2 class="pg-panel-h">Student → learning → outcome</h2>
-              <p class="pg-panel-sub">Student seam (belief, stored rows, retrieval priors) — not engine DCR recall; see Terminal below for that.</p>
+              <p class="pg-panel-sub">Primary surface — Student seam (belief, stored rows, retrieval). Not engine DCR; Terminal below is engine replay + contextual recall.</p>
             </div>
             <span class="pg-chip pg-chip-teal">Primary</span>
           </div>
@@ -3401,7 +3428,9 @@ PAGE_HTML = """<!DOCTYPE html>
       </details>
       <div class="pg-telemetry-dock">
       <div id="liveTelemetryWrap" class="live-telemetry-wrap">
-        <p class="live-telemetry-title">Terminal <span class="pg-sr-only">— live telemetry and engine contextual memory (DCR-style)</span></p>
+        <p class="live-telemetry-title">Terminal <span class="pg-secondary-surface-label">Secondary</span>
+          <span class="pg-sr-only">Live engine replay telemetry and Decision Context Recall (DCR) counters — not the Student learning store.</span>
+          <span aria-hidden="true" style="display:block;margin-top:4px;font-size:0.72rem;font-weight:600;color:#9aa7b4;text-transform:none;letter-spacing:0">Engine replay + DCR-style memory (below Student)</span></p>
         <div id="memoryStatusCard" class="memory-status-card" aria-live="polite">
           <p id="memoryStatusNarrative" class="memory-status-narrative"></p>
           <dl>
@@ -3423,7 +3452,7 @@ PAGE_HTML = """<!DOCTYPE html>
           <div class="pg-panel-header" style="margin:0;flex:1">
             <div>
               <h2 class="pg-panel-h">Score card</h2>
-              <p class="pg-panel-sub">Batch history — Session WIN %, trade win %, learning counters</p>
+              <p class="pg-panel-sub">Secondary — batch history (append-only scorecard log). Student learning store is separate — see Student panel + truth line below.</p>
             </div>
             <span class="pg-chip pg-chip-amber">Results</span>
           </div>
@@ -3431,10 +3460,10 @@ PAGE_HTML = """<!DOCTYPE html>
         <div class="pg-panel-fold-body">
         <div class="scorecard-panel-inner pg-scorecard-split" id="scorecardPanel">
           <div class="pg-scorecard-upper" id="scorecardUpper">
-          <p class="scorecard-legend"><strong>Run OK %</strong> — workers finished. <strong>Session WIN %</strong> — referee WIN vs LOSS among judged sessions only; <strong>n sess</strong> is that denominator (never infer from a bare percentage). <strong>Trade win %</strong> — batch mean when trades exist (with trade count). <strong>Learning</strong> — <code>execution_only</code> vs <code>learning_active</code> from replay counters (candidate search, memory records loaded, recall matches, signal bias). <strong>Memory / Context Impact</strong> — YES/NO from <code>learning_run_audit_v1</code> only (bundle merged or recall bias/signal-bias counters &gt; 0); not inferred from &ldquo;memory loaded&rdquo; or learning lane. <strong>Work</strong> — decision windows, bars, and candidate-stack replays. Scan <em>down</em> for newest batches. <strong>In-flight</strong> — a batch that is <strong>running</strong> now appears at the <strong>top</strong> with <strong>Start</strong> time and live progress counts; the JSONL line is written when the batch finishes. <strong>Scorecard file</strong> (<code>batch_scorecard.jsonl</code>) is batch audit for this table and hunter suggestions; replay does <em>not</em> read it to apply memory or recall. <strong>Clear Card</strong> truncates that log only. <strong>Reset Learning State</strong> is separate and destructive (engine files — see confirmation).</p>
+          <p class="scorecard-legend"><strong>Run OK %</strong> — workers finished. <strong>Session WIN %</strong> — referee WIN vs LOSS among judged sessions only; <strong>n sess</strong> is that denominator (never infer from a bare percentage). <strong>Trade win %</strong> — batch mean when trades exist (with trade count). <strong>Learning (replay lane)</strong> — <code>execution_only</code> vs <code>learning_active</code> from replay counters (candidate search, memory records loaded, recall matches, signal bias); not Student Proctor learning. <strong>Memory / Context Impact</strong> — YES/NO from <code>learning_run_audit_v1</code> only (bundle merged or recall bias/signal-bias counters &gt; 0); not inferred from &ldquo;memory loaded&rdquo; or learning lane. <strong>Work</strong> — decision windows, bars, and candidate-stack replays. Scan <em>down</em> for newest batches. <strong>In-flight</strong> — a batch that is <strong>running</strong> now appears at the <strong>top</strong> with <strong>Start</strong> time and live progress counts; the JSONL line is written when the batch finishes. <strong>Scorecard file</strong> (<code>batch_scorecard.jsonl</code>) is batch audit for this table and hunter suggestions; replay does <em>not</em> read it to apply memory or recall. <strong>Clear Card</strong> truncates that log only. <strong>Reset Learning State</strong> is separate and destructive (engine files — see confirmation).</p>
           <p class="last-run" id="lastBatchRunLine">Last completed batch: —</p>
           <div id="scorecardLearningSummary" class="scorecard-learning-summary exec-only" aria-live="polite" hidden>
-            <p class="sls-title">Latest batch — learning &amp; contextual memory</p>
+            <p class="sls-title">Latest batch — harness learning lane &amp; contextual memory <span style="font-weight:600;color:var(--pg-muted)">(engine / DCR; not the Student Proctor store)</span></p>
             <div id="scorecardLearningSummaryBody" class="sls-body"></div>
           </div>
           <div id="memoryContextImpactPanel" class="memory-context-impact-panel" aria-live="polite" hidden>
@@ -3445,8 +3474,8 @@ PAGE_HTML = """<!DOCTYPE html>
           <div class="scorecard-toolbar">
             <a id="scorecardCsvLink" href="/api/batch-scorecard.csv?limit=50">Download scorecard history (CSV)</a>
             <div class="scorecard-toolbar-actions">
-              <button type="button" class="btn-scorecard-clear pg-op-btn" id="clearScorecardBtn" data-label-idle="Clear Card — Run New Experiment">Clear Card — Run New Experiment</button>
-              <button type="button" class="btn-learning-reset-danger pg-op-btn" id="resetLearningStateBtn" data-label-idle="Reset Learning State">Reset Learning State</button>
+              <button type="button" class="btn-scorecard-clear pg-op-btn" id="clearScorecardBtn" data-label-idle="Clear Card — Run New Experiment" title="Truncates batch_scorecard.jsonl (table history) only. Does not clear engine memory, bundles, or the Student Proctor learning store.">Clear Card — Run New Experiment</button>
+              <button type="button" class="btn-learning-reset-danger pg-op-btn" id="resetLearningStateBtn" data-label-idle="Reset Learning State" title="Destructive: engine experience logs, signature/DCR recall store, Groundhog bundle. Does not clear the scorecard file, retrospective log, or Student Proctor learning store.">Reset Learning State</button>
             </div>
             <span style="font-size:0.72rem;color:var(--pg-muted)">Click a row to open batch detail, scenarios, and per-scenario report links (GT_DIRECTIVE_001).</span>
           </div>
@@ -3454,7 +3483,7 @@ PAGE_HTML = """<!DOCTYPE html>
             <strong>Student Proctor learning store</strong> — separate file from the scorecard log and from &ldquo;Reset Learning State&rdquo; (engine memory / bundles / recall JSONL).
             <span id="studentProctorStoreLine" aria-live="polite">Loading…</span>
             <div style="margin-top:6px">
-              <button type="button" class="btn-secondary pg-op-btn" id="clearStudentProctorStoreBtn" data-label-idle="Clear Student Proctor store…">Clear Student Proctor store…</button>
+              <button type="button" class="btn-secondary pg-op-btn" id="clearStudentProctorStoreBtn" data-label-idle="Clear Student Proctor store…" title="Truncates the Student Proctor append-only JSONL only. Does not clear scorecard history or engine learning files.">Clear Student Proctor store…</button>
             </div>
           </div>
           <div class="pg-table-scroll scorecard-table-wrap-wide">

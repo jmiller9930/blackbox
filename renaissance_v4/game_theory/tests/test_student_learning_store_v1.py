@@ -5,6 +5,7 @@ Directive 05 — Student learning store: append, retrieve, schema, isolation.
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
 
 import pytest
@@ -150,6 +151,22 @@ def test_malformed_jsonl_line_skipped_on_load(tmp_path: Path) -> None:
     assert len(loaded) == 1
 
 
+def _imports_student_learning_store_module(py_source: str) -> bool:
+    """
+    True when the file imports the ``student_learning_store_v1`` **module**.
+
+    Ignores identifiers that merely contain the substring (e.g. ``clear_student_learning_store_v1``).
+    """
+    if re.search(
+        r"(?:^|\n)\s*from\s+renaissance_v4\.game_theory\.student_proctor\.student_learning_store_v1\s+import",
+        py_source,
+    ):
+        return True
+    if re.search(r"(?:^|\n)\s*from\s+\.student_learning_store_v1\s+import", py_source):
+        return True
+    return False
+
+
 def test_execution_stack_does_not_import_learning_store() -> None:
     root = Path(__file__).resolve().parents[2]
     for rel in (
@@ -161,10 +178,10 @@ def test_execution_stack_does_not_import_learning_store() -> None:
         if rel.is_dir():
             for py in rel.rglob("*.py"):
                 t = py.read_text(encoding="utf-8")
-                assert "student_learning_store_v1" not in t, py
+                assert not _imports_student_learning_store_module(t), py
         else:
             t = rel.read_text(encoding="utf-8")
-            assert "student_learning_store_v1" not in t
+            assert not _imports_student_learning_store_module(t), rel
 
 
 def test_default_store_path_is_under_runtime() -> None:

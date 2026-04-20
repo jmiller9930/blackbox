@@ -8,6 +8,7 @@ Persists ``student_learning_record_v1`` rows for later retrieval without an LLM.
 from __future__ import annotations
 
 import json
+import os
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
@@ -28,7 +29,15 @@ def default_student_learning_store_path_v1() -> Path:
     Default JSONL path: ``<pml_runtime_root>/student_learning/student_learning_records_v1.jsonl``.
 
     ``pml_runtime_root`` follows ``BLACKBOX_PML_RUNTIME_ROOT`` or ``<repo>/runtime``.
+
+    **Override (lab / CI):** set ``PATTERN_GAME_STUDENT_LEARNING_STORE`` to an absolute or repo-relative
+    path for ``*.jsonl`` — used by the operator seam, ``clear_student_learning_store_v1``, and status APIs.
     """
+    override = (os.environ.get("PATTERN_GAME_STUDENT_LEARNING_STORE") or "").strip()
+    if override:
+        p = Path(override).expanduser().resolve()
+        p.parent.mkdir(parents=True, exist_ok=True)
+        return p
     p = pml_runtime_root() / "student_learning"
     p.mkdir(parents=True, exist_ok=True)
     return p / "student_learning_records_v1.jsonl"

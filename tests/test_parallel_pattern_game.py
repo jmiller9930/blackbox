@@ -27,6 +27,7 @@ def test_run_scenarios_parallel_two_workers() -> None:
     for r in results:
         assert r.get("ok") is True
         assert r.get("summary") is not None
+        assert isinstance(r.get("replay_outcomes_json"), list)
 
 
 def test_run_scenarios_parallel_empty_raises() -> None:

@@ -1,0 +1,44 @@
+{
+  "schema": "step3_operator_path_proof_v1",
+  "path": "POST /api/run-parallel (blocking) + POST /api/student-proctor/learning-store/clear",
+  "renaissance_v4_db_path": "/Users/bigmac/Documents/code_projects/blackbox/runtime/student_loop_lab_proof_v1/sr1_deterministic.sqlite3",
+  "pattern_game_student_learning_store": "/Users/bigmac/Documents/code_projects/blackbox/runtime/student_loop_lab_proof_v1/step3_operator_path_proof/student_learning_store_step3.jsonl",
+  "primary_fields": {
+    "run_A": {
+      "student_output_fingerprint": "b57650d863a94f5bc568622d85338da5a6fe1c8ceda707c785ba2b95d7296a41",
+      "pattern_recipe_ids": [
+        "shadow_stub_v1"
+      ],
+      "confidence_01": 0.55,
+      "student_decision_ref": "bcff5985-bac0-5ce9-901e-ae14634b1a9c"
+    },
+    "run_B": {
+      "student_output_fingerprint": "f2a181a41bbe39b146695c265f965d0295842cc12cc7be35ac1e19387df6cfae",
+      "pattern_recipe_ids": [
+        "shadow_stub_v1",
+        "cross_run_retrieval_informed_v1"
+      ],
+      "confidence_01": 0.6000000000000001,
+      "student_decision_ref": "e7885f87-ca90-5f19-aeea-267611a123e7"
+    },
+    "run_C": {
+      "student_output_fingerprint": "b57650d863a94f5bc568622d85338da5a6fe1c8ceda707c785ba2b95d7296a41",
+      "pattern_recipe_ids": [
+        "shadow_stub_v1"
+      ],
+      "confidence_01": 0.55,
+      "student_decision_ref": "bcff5985-bac0-5ce9-901e-ae14634b1a9c"
+    }
+  },
+  "student_retrieval_matches": {
+    "run_A": 0,
+    "run_B": 31
+  },
+  "gates": {
+    "sr2_cross_run_difference": true,
+    "sr3_reset_matches_run_a": true,
+    "ac2_observability_keys": true
+  },
+  "ok": true,
+  "errors": []
+}

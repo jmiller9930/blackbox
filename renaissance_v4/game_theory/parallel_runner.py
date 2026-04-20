@@ -17,6 +17,7 @@ from concurrent.futures import ProcessPoolExecutor, as_completed
 from pathlib import Path
 from typing import Any
 
+from renaissance_v4.core.outcome_record import OutcomeRecord, outcome_record_to_jsonable
 from renaissance_v4.game_theory.groundhog_memory import resolve_memory_bundle_for_scenario
 from renaissance_v4.game_theory.hunter_planner import resolve_repo_root
 from renaissance_v4.game_theory.operator_test_harness_v1 import run_operator_test_harness_v1
@@ -115,6 +116,21 @@ def get_parallel_limits() -> dict[str, Any]:
         "hard_cap_workers": hard,
         "note": "Workers are processes, not Python threads; past ~CPU count yields diminishing returns for CPU-bound replay.",
     }
+
+
+def _replay_outcomes_json_from_out(out: dict[str, Any]) -> list[dict[str, Any]]:
+    """
+    Serialize Referee ``outcomes`` for the Student post-batch seam
+    (:func:`renaissance_v4.game_theory.student_proctor.student_proctor_operator_runtime_v1.student_loop_seam_after_parallel_batch_v1`).
+    """
+    raw = out.get("outcomes") or []
+    out_j: list[dict[str, Any]] = []
+    for item in raw:
+        if isinstance(item, OutcomeRecord):
+            out_j.append(outcome_record_to_jsonable(item))
+        elif isinstance(item, dict):
+            out_j.append(item)
+    return out_j
 
 
 def clamp_parallel_workers(requested: int | None, num_scenarios: int) -> int:
@@ -232,10 +248,12 @@ def _worker_run_one(scenario: dict[str, Any]) -> dict[str, Any]:
         if isinstance(pfa, dict) and pfa:
             summ = {**summ, "policy_framework_audit": pfa}
         learn = summ.get("learning_run_audit_v1")
+        replay_outcomes_json = _replay_outcomes_json_from_out(out)
         row: dict[str, Any] = {
             "ok": True,
             "scenario_id": sid,
             "summary": summ,
+            "replay_outcomes_json": replay_outcomes_json,
             "policy_contract": extract_policy_contract_summary(out.get("manifest_effective")),
             "referee_session": referee_session_outcome(True, summ),
             "validation_checksum": out.get("validation_checksum"),
@@ -310,6 +328,8 @@ def run_scenarios_parallel(
     ``atr_target_mult``, ``emit_baseline_artifacts``. Optional **echo** fields (tier,
     ``evaluation_window``, ``agent_explanation``, ids, etc.) are copied into each result for audit;
     the Referee does not use them for scoring. See ``scenario_contract.py`` / README.
+    Successful rows include ``replay_outcomes_json`` (``OutcomeRecord`` JSON for each closed trade)
+    for the Student post-batch seam.
 
     If ``experience_log_path`` is set, append one JSON line per result (parent process only).
 

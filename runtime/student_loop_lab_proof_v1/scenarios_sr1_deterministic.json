@@ -1,0 +1,13 @@
+[
+  {
+    "scenario_id": "sr1_deterministic_sol",
+    "manifest_path": "renaissance_v4/configs/manifests/sr1_deterministic_trade_proof_v1.json",
+    "evaluation_window": {
+      "calendar_months": 12,
+      "referee_note": "SR-1: window merged by evaluation_window_runtime; fixture DB is short (~28d of 5m bars) — slice still fills min rows."
+    },
+    "agent_explanation": {
+      "hypothesis": "SR-1 deterministic proof — one command, no manual tuning."
+    }
+  }
+]
