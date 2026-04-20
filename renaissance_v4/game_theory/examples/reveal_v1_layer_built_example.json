@@ -1,0 +1,39 @@
+{
+  "schema": "reveal_v1",
+  "contract_version": 1,
+  "graded_unit_id": "reveal_example_trade",
+  "student_output": {
+    "schema": "student_output_v1",
+    "contract_version": 1,
+    "graded_unit_type": "closed_trade",
+    "graded_unit_id": "reveal_example_trade",
+    "decision_at_ms": 1700000000000,
+    "act": true,
+    "direction": "long",
+    "pattern_recipe_ids": [
+      "shadow_stub_v1"
+    ],
+    "confidence_01": 0.55,
+    "reasoning_text": "directive 04 example",
+    "student_decision_ref": "550e8400-e29b-41d4-a716-446655440000"
+  },
+  "referee_truth_v1": {
+    "trade_id": "reveal_example_trade",
+    "symbol": "SOLUSDT",
+    "direction": "long",
+    "pnl": 4.2,
+    "mfe": 1.0,
+    "mae": 0.1,
+    "exit_reason": "demo",
+    "entry_time_ms": 1700000000000,
+    "exit_time_ms": 1700000300000,
+    "entry_price": 100.0,
+    "exit_price": 101.0
+  },
+  "comparison_v1": {
+    "schema": "reveal_comparison_v1",
+    "direction_match": true,
+    "referee_pnl_positive": true
+  },
+  "revealed_at_utc": "2026-04-20T20:00:00Z"
+}

@@ -16,6 +16,11 @@ from renaissance_v4.game_theory.student_proctor.contracts_v1 import (
     validate_student_learning_record_v1,
     validate_student_output_v1,
 )
+from renaissance_v4.game_theory.student_proctor.reveal_layer_v1 import (
+    build_comparison_v1,
+    build_reveal_v1_from_outcome_and_student,
+    outcome_record_to_referee_truth_v1,
+)
 from renaissance_v4.game_theory.student_proctor.shadow_student_v1 import (
     emit_shadow_stub_student_output_v1,
     shadow_stub_student_outputs_for_outcomes,
@@ -42,6 +47,9 @@ __all__ = [
     "validate_reveal_v1",
     "validate_student_learning_record_v1",
     "validate_student_output_v1",
+    "build_comparison_v1",
+    "build_reveal_v1_from_outcome_and_student",
+    "outcome_record_to_referee_truth_v1",
     "emit_shadow_stub_student_output_v1",
     "shadow_stub_student_outputs_for_outcomes",
     "SCHEMA_STUDENT_DECISION_PACKET_V1",
