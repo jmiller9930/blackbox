@@ -7,6 +7,7 @@ recall/bias counts, optional candidate-search outcome, and outcome-quality econo
 
 from __future__ import annotations
 
+import hashlib
 from pathlib import Path
 from typing import Any
 
@@ -711,9 +712,114 @@ def compute_scorecard_learning_rollups_v1(
     return flat
 
 
+def build_memory_context_impact_audit_v1(
+    results: list[dict[str, Any]],
+    *,
+    operator_batch_audit: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """
+    Batch-level truth for whether memory / context recall changed decisions (UI + scorecard).
+
+    Derives YES/NO from ``learning_run_audit_v1`` counters on each successful scenario row —
+    not from ``learning_status`` or ``memory_records_loaded`` alone.
+    """
+    oba = dict(operator_batch_audit or {})
+    sum_match = 0
+    sum_bias = 0
+    sum_sig = 0
+    any_bundle = False
+    keys_union: list[str] = []
+    trades_sum = 0
+    entries_sum = 0
+    pnl_sum = 0.0
+    checksums: list[str] = []
+
+    def _la_from_row(r: dict[str, Any]) -> dict[str, Any]:
+        a = r.get("learning_run_audit_v1")
+        if isinstance(a, dict):
+            return a
+        summ = r.get("summary") if isinstance(r.get("summary"), dict) else {}
+        a2 = summ.get("learning_run_audit_v1")
+        return a2 if isinstance(a2, dict) else {}
+
+    ok_rows = [r for r in (results or []) if r.get("ok")]
+    for r in ok_rows:
+        la = _la_from_row(r)
+        summ = r.get("summary") if isinstance(r.get("summary"), dict) else {}
+        sum_match += _int(la.get("recall_match_windows_total"), 0)
+        sum_bias += _int(la.get("recall_bias_applied_total"), 0)
+        sum_sig += _int(la.get("recall_signal_bias_applied_total"), 0)
+        if bool(la.get("memory_bundle_applied")):
+            any_bundle = True
+        for k in la.get("memory_keys_applied") or []:
+            ks = str(k)
+            if ks and ks not in keys_union:
+                keys_union.append(ks)
+        trades_sum += _int(la.get("trades_count"), 0)
+        if not trades_sum and summ.get("trades") is not None:
+            trades_sum += _int(summ.get("trades"), 0)
+        entries_sum += _int(la.get("trade_entries_total"), 0)
+        cp = summ.get("cumulative_pnl")
+        if isinstance(cp, (int, float)):
+            pnl_sum += float(cp)
+        cs = summ.get("validation_checksum")
+        if cs:
+            checksums.append(str(cs))
+
+    mem_yes = bool(any_bundle or sum_bias > 0 or sum_sig > 0)
+    cmem = str(oba.get("context_signature_memory_mode") or "").strip().lower()
+
+    fp_parts = [
+        str(oba.get("operator_recipe_id") or ""),
+        str(oba.get("evaluation_window_effective_calendar_months") or ""),
+        str(oba.get("manifest_path_primary") or ""),
+        str(oba.get("policy_framework_path") or ""),
+    ]
+    for r in sorted(ok_rows, key=lambda x: str(x.get("scenario_id") or "")):
+        fp_parts.append(str(r.get("scenario_id") or ""))
+        mp = r.get("manifest_path")
+        if mp:
+            fp_parts.append(str(mp))
+    fp = hashlib.sha256("\n".join(fp_parts).encode("utf-8")).hexdigest()[:40]
+
+    if mem_yes:
+        barney = (
+            f"Memory matched prior context on {sum_match} windows, applied fusion bias {sum_bias} times, "
+            f"changed the trade set (Δ trades), and altered outcome (Δ PnL)."
+        )
+    elif cmem in ("read", "read_write"):
+        barney = "Memory was enabled but had zero impact; this run is deterministic."
+    else:
+        barney = "No memory bundle merge and no recall bias on this run (deterministic)."
+
+    return {
+        "schema": "memory_context_impact_audit_v1",
+        "memory_impact_yes_no": "YES" if mem_yes else "NO",
+        "memory_bundle_applied_any": any_bundle,
+        "memory_keys_applied_union": keys_union,
+        "recall_match_windows_total_sum": sum_match,
+        "recall_bias_applied_total_sum": sum_bias,
+        "recall_signal_bias_applied_total_sum": sum_sig,
+        "trades_count_sum_ok_scenarios": trades_sum,
+        "trade_entries_total_sum_ok_scenarios": entries_sum,
+        "cumulative_pnl_sum_ok_scenarios": round(pnl_sum, 10),
+        "validation_checksums_ok_scenarios": checksums,
+        "run_config_fingerprint_sha256_40": fp,
+        "context_signature_memory_mode_echo": cmem or None,
+        "trade_set_changed_vs_memory_off_baseline": None,
+        "trade_set_baseline_note_v1": (
+            "Compare this row to a prior batch with the same fingerprint "
+            "(run_config_fingerprint_sha256_40) and memory_impact_yes_no NO in the scorecard, "
+            "or use the UI baseline strip after a memory-OFF run."
+        ),
+        "barney_operator_truth_line_v1": barney,
+    }
+
+
 __all__ = [
     "SCHEMA",
     "aggregate_batch_learning_run_audit_v1",
+    "build_memory_context_impact_audit_v1",
     "build_operator_learning_status_line_v1",
     "build_per_scenario_learning_run_audit_v1",
     "compute_scorecard_learning_rollups_v1",

@@ -38,6 +38,23 @@ def test_scorecard_snapshot_whitelist() -> None:
     assert "huge_blob" not in snap
 
 
+def test_scorecard_snapshot_includes_memory_context_audit() -> None:
+    entry = {
+        "job_id": "j1",
+        "memory_context_impact_audit_v1": {
+            "schema": "memory_context_impact_audit_v1",
+            "memory_impact_yes_no": "YES",
+            "barney_operator_truth_line_v1": (
+                "Memory matched prior context on 1 windows, applied fusion bias 1 times, "
+                "changed the trade set (Δ trades), and altered outcome (Δ PnL)."
+            ),
+        },
+    }
+    snap = scorecard_snapshot_for_ask(entry)
+    assert snap is not None
+    assert snap.get("memory_context_impact_audit_v1", {}).get("memory_impact_yes_no") == "YES"
+
+
 def test_looks_off_topic() -> None:
     assert looks_off_topic("What is the weather in Paris?") is True
     assert looks_off_topic("What does memory mode do in this UI?") is False
@@ -81,5 +98,29 @@ def test_run_facts_fallback(monkeypatch) -> None:
     out = ask_data_answer("Why did this run fail?", bundle)
     assert out["ok"] is True
     assert "disk full" in out["text"].lower() or "failed" in out["text"].lower()
+    assert out["answer_source"] == "run_facts"
+    monkeypatch.delenv("ASK_DATA_USE_LLM", raising=False)
+
+
+def test_fallback_memory_impact_from_scorecard(monkeypatch) -> None:
+    monkeypatch.setenv("ASK_DATA_USE_LLM", "0")
+    bundle = build_ask_data_bundle_v1(
+        barney_facts=None,
+        scorecard_snapshot={
+            "schema": "pml_scorecard_snapshot_v1",
+            "job_id": "x",
+            "memory_context_impact_audit_v1": {
+                "barney_operator_truth_line_v1": (
+                    "Memory was enabled but had zero impact; this run is deterministic."
+                ),
+            },
+        },
+        ui_context={},
+        operator_strategy_state=None,
+        job_resolution="scorecard_only",
+    )
+    out = ask_data_answer("Did memory impact this run?", bundle)
+    assert out["ok"] is True
+    assert "deterministic" in out["text"].lower()
     assert out["answer_source"] == "run_facts"
     monkeypatch.delenv("ASK_DATA_USE_LLM", raising=False)

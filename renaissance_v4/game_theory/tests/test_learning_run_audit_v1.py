@@ -9,6 +9,7 @@ from pathlib import Path
 from renaissance_v4.game_theory.batch_scorecard import record_parallel_batch_finished
 from renaissance_v4.game_theory.learning_run_audit import (
     aggregate_batch_learning_run_audit_v1,
+    build_memory_context_impact_audit_v1,
     build_per_scenario_learning_run_audit_v1,
     compute_scorecard_learning_rollups_v1,
 )
@@ -116,6 +117,7 @@ def test_record_parallel_batch_finished_includes_learning_block() -> None:
             session_log_batch_dir=None,
             error=None,
             path=tpath,
+            operator_batch_audit={"context_signature_memory_mode": "off"},
         )
     finally:
         tpath.unlink(missing_ok=True)
@@ -124,6 +126,60 @@ def test_record_parallel_batch_finished_includes_learning_block() -> None:
     assert timing.get("batch_depth_v1", {}).get("replay_decision_windows_sum") == 100
     assert timing.get("learning_status") == "execution_only"
     assert timing.get("learning_audit_v1", {}).get("schema") == "learning_audit_v1"
+    mci = timing.get("memory_context_impact_audit_v1")
+    assert isinstance(mci, dict)
+    assert mci.get("schema") == "memory_context_impact_audit_v1"
+    assert mci.get("memory_impact_yes_no") == "NO"
+    assert timing.get("job_id") == "testjob_learning_audit"
+
+
+def test_build_memory_context_impact_yes_from_counters() -> None:
+    results = [
+        {
+            "ok": True,
+            "summary": {
+                "cumulative_pnl": 1.5,
+                "validation_checksum": "chk-a",
+                "learning_run_audit_v1": {
+                    "memory_bundle_applied": False,
+                    "memory_keys_applied": [],
+                    "recall_match_windows_total": 3,
+                    "recall_bias_applied_total": 2,
+                    "recall_signal_bias_applied_total": 0,
+                    "trades_count": 1,
+                },
+            },
+        }
+    ]
+    m = build_memory_context_impact_audit_v1(
+        results, operator_batch_audit={"context_signature_memory_mode": "read_write"}
+    )
+    assert m["memory_impact_yes_no"] == "YES"
+    assert m["recall_match_windows_total_sum"] == 3
+    assert m["recall_bias_applied_total_sum"] == 2
+    assert "Memory matched prior context" in m["barney_operator_truth_line_v1"]
+
+
+def test_build_memory_context_impact_read_write_zero_is_no() -> None:
+    results = [
+        {
+            "ok": True,
+            "summary": {
+                "learning_run_audit_v1": {
+                    "memory_bundle_applied": False,
+                    "recall_match_windows_total": 0,
+                    "recall_bias_applied_total": 0,
+                    "recall_signal_bias_applied_total": 0,
+                    "trades_count": 0,
+                },
+            },
+        }
+    ]
+    m = build_memory_context_impact_audit_v1(
+        results, operator_batch_audit={"context_signature_memory_mode": "read_write"}
+    )
+    assert m["memory_impact_yes_no"] == "NO"
+    assert "zero impact" in m["barney_operator_truth_line_v1"]
 
 
 def test_scorecard_rollup_learning_active_and_winner_delta() -> None:

@@ -79,7 +79,7 @@ _PATTERN_BANNER_PATH = _RV4_ROOT / "assets" / "pattern.png"
 _PATTERN_BANNER_WEBP_PATH = _RV4_ROOT / "assets" / "pattern.webp"
 
 # Operator-visible web UI bundle version — bump when changing PAGE_HTML (HTML/CSS/JS) so deploys are provable.
-PATTERN_GAME_WEB_UI_VERSION = "2.11.0"
+PATTERN_GAME_WEB_UI_VERSION = "2.12.0"
 
 from renaissance_v4.game_theory.groundhog_memory import (
     groundhog_auto_merge_enabled,
@@ -2472,6 +2472,19 @@ PAGE_HTML = """<!DOCTYPE html>
     .scorecard-learning-summary .sls-line { margin: 0; }
     .scorecard-learning-summary .sls-title { font-weight: 700; color: #2d6a4f; margin-bottom: 4px; }
     .scorecard-learning-summary.exec-only .sls-title { color: #6c757d; }
+    .memory-context-impact-panel {
+      margin-top: 10px;
+      padding: 10px 12px;
+      border: 1px solid #c5d4e0;
+      border-radius: 8px;
+      background: #f8fbfd;
+    }
+    .memory-context-impact-panel .sls-title { font-weight: 700; color: #1b4965; margin-bottom: 6px; }
+    .memory-context-impact-panel .mci-grid { display: grid; grid-template-columns: 12rem 1fr; gap: 4px 12px; font-size: 0.82rem; }
+    .memory-context-impact-panel .mci-k { color: #5c6b7a; }
+    .memory-context-impact-panel .mci-yes { color: #1b7f4b; font-weight: 700; }
+    .memory-context-impact-panel .mci-no { color: #6c757d; font-weight: 700; }
+    .memory-context-impact-panel .mci-barney { margin-top: 8px; font-size: 0.78rem; color: #4a5568; line-height: 1.4; }
     .scorecard-table-wrap-wide { overflow-x: auto; max-width: 100%; }
     .scorecard-table.scorecard-table-learning th,
     .scorecard-table.scorecard-table-learning td {
@@ -3300,11 +3313,16 @@ PAGE_HTML = """<!DOCTYPE html>
         <div class="pg-panel-fold-body">
         <div class="scorecard-panel-inner pg-scorecard-split" id="scorecardPanel">
           <div class="pg-scorecard-upper" id="scorecardUpper">
-          <p class="scorecard-legend"><strong>Run OK %</strong> — workers finished. <strong>Session WIN %</strong> — referee WIN vs LOSS among judged sessions only; <strong>n sess</strong> is that denominator (never infer from a bare percentage). <strong>Trade win %</strong> — batch mean when trades exist (with trade count). <strong>Learning</strong> — <code>execution_only</code> vs <code>learning_active</code> from replay counters (candidate search, memory records loaded, recall matches, signal bias). <strong>Work</strong> — decision windows, bars, and candidate-stack replays. Scan <em>down</em> for newest batches. <strong>In-flight</strong> — a batch that is <strong>running</strong> now appears at the <strong>top</strong> with <strong>Start</strong> time and live progress counts; the JSONL line is written when the batch finishes. <strong>Scorecard file</strong> (<code>batch_scorecard.jsonl</code>) is batch audit for this table and hunter suggestions; replay does <em>not</em> read it to apply memory or recall. <strong>Clear Card</strong> truncates that log only. <strong>Reset Learning State</strong> is separate and destructive (engine files — see confirmation).</p>
+          <p class="scorecard-legend"><strong>Run OK %</strong> — workers finished. <strong>Session WIN %</strong> — referee WIN vs LOSS among judged sessions only; <strong>n sess</strong> is that denominator (never infer from a bare percentage). <strong>Trade win %</strong> — batch mean when trades exist (with trade count). <strong>Learning</strong> — <code>execution_only</code> vs <code>learning_active</code> from replay counters (candidate search, memory records loaded, recall matches, signal bias). <strong>Memory / Context Impact</strong> — YES/NO from <code>learning_run_audit_v1</code> only (bundle merged or recall bias/signal-bias counters &gt; 0); not inferred from &ldquo;memory loaded&rdquo; or learning lane. <strong>Work</strong> — decision windows, bars, and candidate-stack replays. Scan <em>down</em> for newest batches. <strong>In-flight</strong> — a batch that is <strong>running</strong> now appears at the <strong>top</strong> with <strong>Start</strong> time and live progress counts; the JSONL line is written when the batch finishes. <strong>Scorecard file</strong> (<code>batch_scorecard.jsonl</code>) is batch audit for this table and hunter suggestions; replay does <em>not</em> read it to apply memory or recall. <strong>Clear Card</strong> truncates that log only. <strong>Reset Learning State</strong> is separate and destructive (engine files — see confirmation).</p>
           <p class="last-run" id="lastBatchRunLine">Last completed batch: —</p>
           <div id="scorecardLearningSummary" class="scorecard-learning-summary exec-only" aria-live="polite" hidden>
             <p class="sls-title">Latest batch — learning &amp; contextual memory</p>
             <div id="scorecardLearningSummaryBody" class="sls-body"></div>
+          </div>
+          <div id="memoryContextImpactPanel" class="memory-context-impact-panel" aria-live="polite" hidden>
+            <p class="sls-title">Memory / Context Impact</p>
+            <div id="memoryContextImpactBody" class="mci-grid"></div>
+            <p class="mci-barney" id="memoryContextBarneyLine"></p>
           </div>
           <div class="scorecard-toolbar">
             <a id="scorecardCsvLink" href="/api/batch-scorecard.csv?limit=50">Download scorecard history (CSV)</a>
@@ -3999,11 +4017,95 @@ PAGE_HTML = """<!DOCTYPE html>
       el.textContent = 'Last completed batch: start ' + (bt.started_at_utc || '—') +
         ' → end ' + (bt.ended_at_utc || '—') + ' · duration ' + formatDurationSec(bt.duration_sec) +
         ' · rows ' + proc + ' / planned ' + tot + pctBit + learn0;
+      updateMemoryContextImpactFromScorecardRow({
+        job_id: (bt && bt.job_id != null) ? bt.job_id : null,
+        memory_context_impact_audit_v1: bt ? bt.memory_context_impact_audit_v1 : null,
+      });
     }
 
     let selectedScorecardJobId = null;
     /** Last terminal parallel job from this page session (for Ask DATA when no row selected). */
     let askDataLastRunJobId = null;
+    /** Latest rows from GET /api/batch-scorecard (newest first) — for scorecard row click handlers. */
+    let __scorecardEntriesCache = [];
+    const PML_MEM_BASELINE_SS = 'pml_memory_off_baseline_v1';
+
+    function readMemoryOffBaselineMap() {
+      try { return JSON.parse(sessionStorage.getItem(PML_MEM_BASELINE_SS) || '{}'); } catch (_e) { return {}; }
+    }
+    function writeMemoryOffBaselineMap(m) {
+      try { sessionStorage.setItem(PML_MEM_BASELINE_SS, JSON.stringify(m)); } catch (_e) { /* ignore */ }
+    }
+
+    function updateMemoryContextImpactFromScorecardRow(row) {
+      const wrap = document.getElementById('memoryContextImpactPanel');
+      const body = document.getElementById('memoryContextImpactBody');
+      const barneyEl = document.getElementById('memoryContextBarneyLine');
+      if (!wrap || !body) return;
+      const mca = row && row.memory_context_impact_audit_v1;
+      if (!mca || typeof mca !== 'object') {
+        wrap.hidden = true;
+        body.innerHTML = '';
+        if (barneyEl) barneyEl.textContent = '';
+        return;
+      }
+      wrap.hidden = false;
+      const yes = String(mca.memory_impact_yes_no || 'NO').toUpperCase() === 'YES';
+      const cmem = String(mca.context_signature_memory_mode_echo || '').toLowerCase();
+      const fp = String(mca.run_config_fingerprint_sha256_40 || '');
+      const map = readMemoryOffBaselineMap();
+      const tradesSum = (mca.trades_count_sum_ok_scenarios != null) ? Number(mca.trades_count_sum_ok_scenarios) : 0;
+      const pnlSum = (mca.cumulative_pnl_sum_ok_scenarios != null) ? Number(mca.cumulative_pnl_sum_ok_scenarios) : 0;
+      const chkJoin = Array.isArray(mca.validation_checksums_ok_scenarios) ? mca.validation_checksums_ok_scenarios.join('|') : '';
+
+      if (!yes && (!cmem || cmem === 'off')) {
+        if (fp) {
+          map[fp] = { trades: tradesSum, pnl: pnlSum, checksums: chkJoin, job_id: row.job_id };
+          writeMemoryOffBaselineMap(map);
+        }
+      }
+
+      let tradeChanged = '—';
+      let tradeDetail = '';
+      if (yes) {
+        const b = fp ? map[fp] : null;
+        if (b && typeof b.trades === 'number') {
+          const dt = tradesSum - b.trades;
+          const dpnl = pnlSum - (typeof b.pnl === 'number' ? b.pnl : 0);
+          const chg = (dt !== 0 || Math.abs(dpnl) > 1e-9 || chkJoin !== (b.checksums || ''));
+          tradeChanged = chg ? 'YES' : 'NO';
+          tradeDetail = 'Δ trades ' + dt + ', Δ combined PnL ' + dpnl + ' vs browser-stored memory-OFF baseline (same fingerprint).';
+        } else {
+          tradeDetail = 'No memory-OFF baseline for this fingerprint in this browser session yet — run once with context memory mode OFF, then compare.';
+        }
+      } else if (cmem === 'read' || cmem === 'read_write') {
+        tradeChanged = 'N/A';
+        tradeDetail = 'Audit counters show no bundle merge and no fusion/signal recall bias — deterministic.';
+      } else {
+        tradeDetail = 'No recall bias in audit; use a memory-OFF run to populate the baseline strip for trade-set deltas.';
+      }
+
+      const ns = function (n) { return (n != null && n !== '') ? String(n) : '0'; };
+      const bun = mca.memory_bundle_applied_any ? 'true' : 'false';
+      const keys = (Array.isArray(mca.memory_keys_applied_union) && mca.memory_keys_applied_union.length)
+        ? mca.memory_keys_applied_union.join(', ')
+        : '—';
+      const ynClass = yes ? 'mci-yes' : 'mci-no';
+      const ynTxt = yes ? 'YES' : 'NO';
+      body.innerHTML =
+        '<span class="mci-k">Memory Impact</span><span class="' + ynClass + '">' + escapeHtml(ynTxt) + '</span>' +
+        '<span class="mci-k">Memory bundle applied (any)</span><span>' + escapeHtml(bun) + '</span>' +
+        '<span class="mci-k">Recall matches (windows, sum)</span><span>' + escapeHtml(ns(mca.recall_match_windows_total_sum)) + '</span>' +
+        '<span class="mci-k">Bias applied (fusion, sum)</span><span>' + escapeHtml(ns(mca.recall_bias_applied_total_sum)) + '</span>' +
+        '<span class="mci-k">Signal bias applied (sum)</span><span>' + escapeHtml(ns(mca.recall_signal_bias_applied_total_sum)) + '</span>' +
+        '<span class="mci-k">Memory keys (union)</span><span>' + escapeHtml(keys) + '</span>' +
+        '<span class="mci-k">Trade set changed vs baseline</span><span>' + escapeHtml(tradeChanged) +
+        (tradeDetail ? '<br/><span style="font-weight:400;color:#5c6b7a">' + escapeHtml(tradeDetail) + '</span>' : '') + '</span>' +
+        '<span class="mci-k">Config fingerprint (baseline key)</span><span><code style="font-size:0.7rem">' + escapeHtml(fp || '—') + '</code></span>';
+      if (barneyEl) {
+        barneyEl.textContent = String(mca.barney_operator_truth_line_v1 || '');
+      }
+    }
 
     function askDataPreferredJobId() {
       if (selectedScorecardJobId && String(selectedScorecardJobId).trim()) {
@@ -4145,6 +4247,11 @@ PAGE_HTML = """<!DOCTYPE html>
           meta += '<h4>learning_batch_audit_v1</h4><pre class="drill-pre">' +
             escapeHtml(JSON.stringify(lba, null, 2)) + '</pre>';
         }
+        const mci = sc.memory_context_impact_audit_v1;
+        if (mci && typeof mci === 'object') {
+          meta += '<h4>memory_context_impact_audit_v1</h4><pre class="drill-pre">' +
+            escapeHtml(JSON.stringify(mci, null, 2)) + '</pre>';
+        }
         if (j.scenario_list_error) {
           meta += '<p style="color:#b7772c">' + escapeHtml(j.scenario_list_error) + '</p>';
         }
@@ -4211,10 +4318,13 @@ PAGE_HTML = """<!DOCTYPE html>
           csvLink.href = '/api/batch-scorecard.csv?limit=50';
         }
         const rows = j.entries || [];
+        __scorecardEntriesCache = Array.isArray(rows) ? rows.slice() : [];
         if (rows.length) {
           updateScorecardLearningSummaryFromRow(rows[0]);
+          updateMemoryContextImpactFromScorecardRow(rows[0]);
         } else {
           updateScorecardLearningSummaryFromRow(null);
+          updateMemoryContextImpactFromScorecardRow(null);
         }
         if (!rows.length) {
           const tr = document.createElement('tr');
@@ -4289,6 +4399,9 @@ PAGE_HTML = """<!DOCTYPE html>
             });
             tr.classList.add('selected');
             selectedScorecardJobId = jid;
+            const pick = (__scorecardEntriesCache || []).find(function (x) { return String(x.job_id || '') === jid; });
+            updateScorecardLearningSummaryFromRow(pick || null);
+            updateMemoryContextImpactFromScorecardRow(pick || null);
             if (jid) loadBatchDrill(jid);
           });
           tbody.appendChild(tr);
@@ -4324,6 +4437,7 @@ PAGE_HTML = """<!DOCTYPE html>
           const drill = document.getElementById('batchDrillPanel');
           if (drill) drill.innerHTML = '';
           updateScorecardLearningSummaryFromRow(null);
+          updateMemoryContextImpactFromScorecardRow(null);
           const lr = document.getElementById('lastBatchRunLine');
           if (lr) {
             lr.textContent = 'Last completed batch: — (scorecard file cleared; engine memory and bundles unchanged)';

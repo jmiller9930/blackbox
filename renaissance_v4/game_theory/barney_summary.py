@@ -140,6 +140,14 @@ def build_barney_facts_from_job_state(
 
     ev_m = oba.get("evaluation_window_effective_calendar_months")
 
+    mca: dict[str, Any] = {}
+    if isinstance(bt.get("memory_context_impact_audit_v1"), dict):
+        mca = dict(bt["memory_context_impact_audit_v1"])
+    if not mca and isinstance(parallel_result, dict):
+        prm = parallel_result.get("memory_context_impact_audit_v1")
+        if isinstance(prm, dict):
+            mca = dict(prm)
+
     facts: dict[str, Any] = {
         "schema": "barney_facts_v1",
         "run_status": status,
@@ -170,6 +178,9 @@ def build_barney_facts_from_job_state(
         "bias_applied": bias_applied,
         "groundhog_status": bt.get("groundhog_status"),
         "policy_framework_id": bt.get("policy_framework_id") or learn.get("policy_framework_id"),
+        "memory_impact_yes_no": mca.get("memory_impact_yes_no"),
+        "memory_operator_truth_line_v1": mca.get("barney_operator_truth_line_v1"),
+        "memory_context_impact_audit_v1": mca if mca else None,
     }
     return facts
 
@@ -199,6 +210,10 @@ def render_barney_fallback_text(facts: dict[str, Any]) -> str:
     lines.append(f"Evaluation window setting: {ev_s}.")
     rt = facts.get("run_type") or "Unknown (not in run data)"
     lines.append(f"Run classification: {rt}.")
+
+    truth = facts.get("memory_operator_truth_line_v1")
+    if truth:
+        lines.append("Memory / context impact (from learning_run_audit_v1 counters): " + str(truth))
 
     ok = facts.get("scenarios_ok")
     fail = facts.get("scenarios_failed")
@@ -275,6 +290,8 @@ def barney_format_with_llm(facts: dict[str, Any], *, timeout: float = 120.0) -> 
         "if error_message is null, say no error text was recorded.\n"
         "- If no_winner is true, say clearly that no candidate beat the baseline and no improvement was found.\n"
         "- Explain memory_mode, memory_saved, memory_loaded, recall_matches, bias_applied only as stated.\n"
+        "- If memory_operator_truth_line_v1 is non-null, quote it verbatim as the authoritative memory/context impact line; "
+        "do not contradict memory_impact_yes_no.\n"
         "- If learning_lane is learning_active vs execution_only, say which in plain English.\n"
         "- End with a short 'Suggested next step:' line using only conservative, non-guaranteed advice.\n\n"
         "--- FACTS JSON ---\n"

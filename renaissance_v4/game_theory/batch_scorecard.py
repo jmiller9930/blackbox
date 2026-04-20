@@ -24,6 +24,7 @@ from typing import Any
 
 from renaissance_v4.game_theory.learning_run_audit import (
     aggregate_batch_learning_run_audit_v1,
+    build_memory_context_impact_audit_v1,
     compute_scorecard_learning_rollups_v1,
 )
 from renaissance_v4.game_theory.memory_paths import default_batch_scorecard_jsonl
@@ -315,6 +316,7 @@ def record_parallel_batch_finished(
                     oba_m["replay_data_audit"] = r.get("replay_data_audit")
                     break
         scorecard_learning = compute_scorecard_learning_rollups_v1(res, operator_batch_audit=oba_m)
+        mem_impact = build_memory_context_impact_audit_v1(res, operator_batch_audit=oba_m)
         batch_depth = {
             "parallel_scenarios_completed": len(res),
             "replay_bars_processed_sum": learning_batch.get("replay_bars_processed_sum"),
@@ -360,9 +362,11 @@ def record_parallel_batch_finished(
             )
         if operator_batch_audit:
             record["operator_batch_audit"] = operator_batch_audit
+        record["memory_context_impact_audit_v1"] = mem_impact
 
     append_batch_scorecard_line(record, path=path)
     out = {**timing, **pct_fields}
+    out["job_id"] = job_id
     if learning_batch is not None:
         out["learning_batch_audit_v1"] = learning_batch
         out["batch_depth_v1"] = record.get("batch_depth_v1")

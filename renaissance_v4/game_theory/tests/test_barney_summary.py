@@ -88,3 +88,34 @@ def test_summarize_fallback_when_llm_off(monkeypatch) -> None:
     assert out["source"] == "fallback"
     assert "no candidate" in out["text"].lower() or "winner" in out["text"].lower()
     monkeypatch.delenv("BARNEY_USE_LLM", raising=False)
+
+
+def test_barney_facts_and_fallback_include_memory_truth_line() -> None:
+    facts = build_barney_facts_from_job_state(
+        status="done",
+        error_message=None,
+        parallel_result={
+            "ran": 1,
+            "ok_count": 1,
+            "failed_count": 0,
+            "operator_batch_audit": {"operator_recipe_id": "pattern_learning"},
+            "pnl_summary": {"starting_equity_usd": 1000.0, "batch_total_pnl_usd": 0.0, "ending_equity_usd": 1000.0},
+            "results": [{"ok": True, "policy_contract": {"strategy_id": "x"}}],
+        },
+        batch_timing={
+            "learning_status": "execution_only",
+            "candidate_count": 0,
+            "memory_context_impact_audit_v1": {
+                "memory_impact_yes_no": "NO",
+                "barney_operator_truth_line_v1": (
+                    "Memory was enabled but had zero impact; this run is deterministic."
+                ),
+            },
+        },
+        telemetry_echo=None,
+    )
+    assert facts.get("memory_impact_yes_no") == "NO"
+    assert "deterministic" in (facts.get("memory_operator_truth_line_v1") or "")
+    txt = render_barney_fallback_text(facts)
+    assert "Memory / context impact" in txt
+    assert "zero impact" in txt.lower()

@@ -44,6 +44,7 @@ _SCORECARD_SNAPSHOT_KEYS: tuple[str, ...] = (
     "session_log_batch_dir",
     "operator_recipe_id",
     "operator_recipe_label",
+    "memory_context_impact_audit_v1",
 )
 
 _UI_CONTEXT_ALLOWED: frozenset[str] = frozenset(
@@ -204,6 +205,25 @@ def _fallback_answer_from_bundle(question: str, bundle: dict[str, Any]) -> tuple
         return (str(static.get("pattern_vs_framework_vs_manifest") or ""), "app_knowledge")
     if "memory" in qlow and ("mode" in qlow or "using" in qlow):
         return (str(static.get("memory_modes") or ""), "app_knowledge")
+    if snap and isinstance(snap, dict):
+        mca = snap.get("memory_context_impact_audit_v1")
+        if isinstance(mca, dict) and mca.get("barney_operator_truth_line_v1"):
+            if "memory" in qlow and (
+                "impact" in qlow
+                or "deterministic" in qlow
+                or "recall" in qlow
+                or "bias" in qlow
+                or "context" in qlow
+            ):
+                return (str(mca["barney_operator_truth_line_v1"]), "run_facts")
+    if facts and isinstance(facts, dict) and facts.get("memory_operator_truth_line_v1"):
+        if "memory" in qlow and (
+            "impact" in qlow
+            or "deterministic" in qlow
+            or "recall" in qlow
+            or "bias" in qlow
+        ):
+            return (str(facts["memory_operator_truth_line_v1"]), "run_facts")
     if "scenario" in qlow and ("where" in qlow or "come from" in qlow or "hidden" in qlow or "custom" in qlow):
         return (str(static.get("scenarios_sources") or ""), "app_knowledge")
     if facts and isinstance(facts, dict):
