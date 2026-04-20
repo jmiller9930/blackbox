@@ -1,5 +1,8 @@
 # Directive 02 — Student Context Builder (engineering proof)
 
+**Architect acceptance addendum (field list, causal semantics, recursive leak):**  
+`student_proctor/DIRECTIVE_02_ACCEPTANCE_SUPPLEMENT.md`
+
 ## Objective met
 
 - **`student_decision_packet_v1`** — versioned envelope + `bars_inclusive_up_to_t` (causal OHLCV only).

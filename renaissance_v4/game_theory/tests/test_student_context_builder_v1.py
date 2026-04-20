@@ -4,6 +4,7 @@ Directive 02 — Student context builder: causal packets, multi-timestep, no-lea
 
 from __future__ import annotations
 
+import json
 import sqlite3
 from pathlib import Path
 
@@ -143,6 +144,34 @@ def _all_keys_flat(obj: object, prefix: str = "") -> set[str]:
     return keys
 
 
+def test_real_db_example_json_validates_and_matches_builder() -> None:
+    """
+    Acceptance: committed ``student_decision_packet_v1_real_db_example.json`` matches
+    ``build_student_decision_packet_v1`` for the same db path and decision time.
+    """
+    from renaissance_v4.utils.db import DB_PATH
+
+    example = (
+        Path(__file__).resolve().parents[1]
+        / "examples"
+        / "student_decision_packet_v1_real_db_example.json"
+    )
+    if not DB_PATH.is_file() or not example.is_file():
+        pytest.skip("real DB or example JSON missing")
+
+    meta = json.loads(example.read_text(encoding="utf-8"))
+    decision_ms = int(meta["decision_open_time_ms"])
+    pkt, err = build_student_decision_packet_v1(
+        db_path=DB_PATH,
+        symbol="SOLUSDT",
+        decision_open_time_ms=decision_ms,
+        max_bars_in_packet=500,
+    )
+    assert err is None and pkt is not None
+    assert validate_student_decision_packet_v1(pkt) == []
+    assert pkt == meta["packet"]
+
+
 def test_empty_db_returns_error_not_crash(tmp_path: Path) -> None:
     empty = tmp_path / "empty.sqlite3"
     empty.write_bytes(b"")
@@ -151,3 +180,56 @@ def test_empty_db_returns_error_not_crash(tmp_path: Path) -> None:
         db_path=empty, symbol="X", decision_open_time_ms=1, max_bars_in_packet=10
     )
     assert err is not None or rows == []
+
+
+def _valid_packet_from_fixture(synthetic_db: Path) -> dict:
+    pkt, err = build_student_decision_packet_v1(
+        db_path=synthetic_db, symbol="TESTUSDT", decision_open_time_ms=5_000_000
+    )
+    assert err is None and pkt is not None
+    return pkt
+
+
+def test_recursive_forbidden_key_anywhere_in_tree_rejected(synthetic_db: Path) -> None:
+    """
+    Directive 02 acceptance: forbidden **key names** (see ``PRE_REVEAL_FORBIDDEN_KEYS_V1``)
+    are rejected when inserted at **nested** paths on a **built** packet clone.
+    """
+    from renaissance_v4.game_theory.student_proctor.contracts_v1 import validate_pre_reveal_bundle_v1
+
+    base = _valid_packet_from_fixture(synthetic_db)
+
+    def deep_pnl(q: dict) -> None:
+        q.setdefault("a", {}).setdefault("b", {})["pnl"] = 1.0
+
+    def bar_nested_mfe(q: dict) -> None:
+        q["bars_inclusive_up_to_t"][0].setdefault("layer", {})["mfe"] = 1.0
+
+    def list_wins(q: dict) -> None:
+        q.setdefault("h", [{}])[0]["wins"] = 1
+
+    def root_ref(q: dict) -> None:
+        q["referee_truth"] = {"k": 1}
+
+    def triple_chk(q: dict) -> None:
+        q["m"] = {"m2": {"m3": {"validation_checksum": "x"}}}
+
+    cases: list[tuple[str, dict]] = [
+        ("deep_nested_pnl", _attach(base, deep_pnl)),
+        ("bar_row_nested_mfe", _attach(base, bar_nested_mfe)),
+        ("list_index_wins", _attach(base, list_wins)),
+        ("root_referee_truth", _attach(base, root_ref)),
+        ("triple_nest_checksum", _attach(base, triple_chk)),
+    ]
+
+    for name, poisoned in cases:
+        assert validate_pre_reveal_bundle_v1(poisoned), f"pre_reveal must fail: {name}"
+        assert validate_student_decision_packet_v1(poisoned), f"packet_validator must fail: {name}"
+
+
+def _attach(base: dict, fn: object) -> dict:
+    from copy import deepcopy
+
+    q = deepcopy(base)
+    fn(q)
+    return q
