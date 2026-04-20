@@ -84,4 +84,16 @@ Each case: **non-empty** errors from `validate_pre_reveal_bundle_v1` **and** fro
 PYTHONPATH=. python3 -m pytest renaissance_v4/game_theory/tests/test_student_context_builder_v1.py -v
 ```
 
+---
+
+## 5. Operational closeout (supplement push)
+
+| Step | Result |
+|------|--------|
+| **Commit** | `4bb41e25f464746c1813237adbfaa153e7bcc095` |
+| **git push** | `a09ac6b..4bb41e2` → `origin/main` |
+| **Server** `jmiller@clawbot.a51.corp` `~/blackbox` | **Fast-forward** to `4bb41e25`; `HEAD` matches |
+| **Flask restart** | `pattern_game_remote_restart.sh` — PID **986939** (session after supplement pull) |
+| **Health** | `curl http://127.0.0.1:8765/` → **200** |
+
 *End — Directive 02 acceptance supplement.*
