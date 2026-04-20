@@ -2,4 +2,7 @@ experience_log.jsonl
 run_memory.jsonl
 batch_scorecard.jsonl
 retrospective_log.jsonl
+# DCR engine memory (Decision Context Recall) — append-only at runtime; do not commit contents.
+context_signature_memory.jsonl
+context_signature_memory.jsonl.pre_proof_bak
 logs/
