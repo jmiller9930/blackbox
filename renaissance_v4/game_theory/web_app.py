@@ -73,7 +73,7 @@ _PATTERN_BANNER_PATH = _RV4_ROOT / "assets" / "pattern.png"
 _PATTERN_BANNER_WEBP_PATH = _RV4_ROOT / "assets" / "pattern.webp"
 
 # Operator-visible web UI bundle version — bump when changing PAGE_HTML (HTML/CSS/JS) so deploys are provable.
-PATTERN_GAME_WEB_UI_VERSION = "2.8.4"
+PATTERN_GAME_WEB_UI_VERSION = "2.9.0"
 
 from renaissance_v4.game_theory.groundhog_memory import (
     groundhog_auto_merge_enabled,
@@ -145,6 +145,13 @@ from renaissance_v4.game_theory.pattern_game import (
     run_pattern_game,
 )
 from renaissance_v4.game_theory.policy_framework import attach_policy_framework_audits
+from renaissance_v4.game_theory.operator_strategy_upload import (
+    active_manifest_repo_relative,
+    clear_active_operator_strategy,
+    default_repo_root as operator_upload_repo_root,
+    process_strategy_idea_upload,
+    public_state as operator_strategy_public_state,
+)
 from renaissance_v4.game_theory.scenario_contract import (
     extract_policy_contract_summary,
     resolve_scenario_manifest_path,
@@ -315,6 +322,21 @@ def _prepare_parallel_payload(data: dict[str, Any]) -> dict[str, Any]:
         resolved=resolved,
     )
 
+    _root_for_upload = operator_upload_repo_root()
+    use_up = data.get("use_operator_uploaded_strategy")
+    apply_uploaded = True
+    if use_up is False or (isinstance(use_up, str) and use_up.strip().lower() in ("0", "false", "no", "off")):
+        apply_uploaded = False
+    operator_upload_manifest_repo_relative: str | None = None
+    if apply_uploaded:
+        amp = active_manifest_repo_relative(_root_for_upload)
+        if amp:
+            pabs = (_root_for_upload / amp).resolve()
+            if pabs.is_file():
+                operator_upload_manifest_repo_relative = amp.replace("\\", "/")
+                for s in scenarios:
+                    s["manifest_path"] = operator_upload_manifest_repo_relative
+
     for s in scenarios:
         if "manifest_path" in s and s["manifest_path"]:
             s["manifest_path"] = str(resolve_scenario_manifest_path(s["manifest_path"]))
@@ -379,6 +401,7 @@ def _prepare_parallel_payload(data: dict[str, Any]) -> dict[str, Any]:
         "policy_framework_path": scenarios[0].get("policy_framework_path") if scenarios else None,
         "policy_framework_audit": scenarios[0].get("policy_framework_audit") if scenarios else None,
         "context_signature_memory_mode": cmem_in or None,
+        "operator_upload_manifest_repo_relative": operator_upload_manifest_repo_relative,
     }
 
     if cmem_in in ("off", "read", "read_write"):
@@ -1284,6 +1307,41 @@ def create_app() -> Flask:
 
     _REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 
+    @app.get("/strategy-idea-format")
+    def strategy_idea_format_doc() -> Any:
+        """Plain-language spec for operator strategy idea uploads (UTF-8 text)."""
+        p = _GAME_THEORY / "STRATEGY_IDEA_FORMAT.md"
+        if not p.is_file():
+            abort(404)
+        return Response(
+            p.read_text(encoding="utf-8"),
+            mimetype="text/markdown; charset=utf-8",
+            headers={"Content-Disposition": 'inline; filename="STRATEGY_IDEA_FORMAT.md"'},
+        )
+
+    @app.get("/api/operator-strategy-upload/state")
+    def api_operator_strategy_upload_state() -> Any:
+        return jsonify({"ok": True, **operator_strategy_public_state(_REPO_ROOT)})
+
+    @app.post("/api/operator-strategy-upload")
+    def api_operator_strategy_upload() -> Any:
+        """Multipart: ``file`` (UTF-8 text, strategy_idea_v1). Parses, converts, validates, saves."""
+        if "file" not in request.files:
+            return jsonify({"ok": False, "error": "missing form field: file"}), 400
+        up = request.files["file"]
+        if not up or not up.filename:
+            return jsonify({"ok": False, "error": "empty file upload"}), 400
+        raw = up.read()
+        res = process_strategy_idea_upload(raw, up.filename or "strategy.txt", repo_root=_REPO_ROOT)
+        body = {"ok": res.ok, **res.to_api_dict()}
+        return jsonify(body), (200 if res.ok else 400)
+
+    @app.post("/api/operator-strategy-upload/clear")
+    def api_operator_strategy_upload_clear() -> Any:
+        """Remove active uploaded strategy pointer (does not delete saved manifest/source files)."""
+        clear_active_operator_strategy(_REPO_ROOT)
+        return jsonify({"ok": True, **operator_strategy_public_state(_REPO_ROOT)})
+
     @app.get("/api/catalog-batch-meta")
     def api_catalog_batch_meta() -> Any:
         """Defaults for Chef ATR sweep (Anna / UI)."""
@@ -1792,6 +1850,9 @@ PAGE_HTML = """<!DOCTYPE html>
       border-radius: 8px;
       color: var(--pg-ink, #1a2e28);
     }
+    .strategy-upload-checklist li.su-ok { color: #156b45; }
+    .strategy-upload-checklist li.su-fail { color: #8b2c2c; }
+    .strategy-upload-checklist li.su-warn { color: #5a4a12; }
     details.pg-pattern-info-fold {
       margin-top: 4px;
       border: 1px solid var(--pg-line);
@@ -2865,6 +2926,26 @@ PAGE_HTML = """<!DOCTYPE html>
             <select id="policyPick" aria-label="Policy manifest"></select>
           </div>
           <p class="pg-policy-line" id="policyReadonly" style="display:none" role="status">Policy: —</p>
+
+          <div class="pg-block pg-strategy-upload" style="margin-top:10px;border-top:1px solid var(--pg-line);padding-top:12px">
+            <div class="pg-block-title">Upload Strategy</div>
+            <p class="caps" style="margin:0 0 8px;font-size:0.8rem;line-height:1.35">
+              Upload a <strong>strategy idea</strong> for testing (not the Pattern menu). Required format: <code>strategy_idea_v1</code> UTF-8 text.
+              <a href="/strategy-idea-format" target="_blank" rel="noopener">Format specification</a>
+              · Files saved under <code>runtime/operator_strategy_uploads/</code> (sources + generated manifests; never overwrites shipped baseline JSON).
+            </p>
+            <input type="file" id="strategyIdeaFileInput" accept=".txt,text/plain" style="display:none" aria-hidden="true" />
+            <div class="pg-upload-row" style="margin-bottom:8px">
+              <button type="button" class="btn-chef pg-op-btn" id="strategyUploadPickBtn" data-label-idle="Choose strategy file…">Choose strategy file…</button>
+              <button type="button" class="btn-secondary pg-op-btn" id="strategyUploadClearBtn">Clear loaded strategy</button>
+            </div>
+            <div id="strategyUploadStageLine" class="caps" style="font-size:0.78rem;color:#3d4a52;margin:0 0 6px" aria-live="polite"></div>
+            <ul id="strategyUploadChecklist" class="strategy-upload-checklist" style="margin:0;padding-left:1.15rem;font-size:0.82rem;line-height:1.45"></ul>
+            <label style="margin-top:10px;font-size:0.85rem;display:block">
+              <input type="checkbox" id="useOperatorUploadedStrategy" checked/>
+              Use uploaded strategy for the next run (applies manifest to every scenario row when a load is active)
+            </label>
+          </div>
 
           <div class="pg-block" style="margin-top:0">
             <div class="pg-block-title">Workers &amp; logging</div>
@@ -4324,6 +4405,8 @@ PAGE_HTML = """<!DOCTYPE html>
           _lastTelemetryDetailText = ltpPrep.textContent;
         }
         updateMemoryStatusCardFromPanel(null, { context_signature_memory_mode: cmem }, null, true);
+        const useUpEl = document.getElementById('useOperatorUploadedStrategy');
+        const useUploaded = !!(useUpEl && useUpEl.checked);
         const body = {
           scenarios_json: recipeId === 'custom' ? scenariosTa : '[]',
           max_workers: mw,
@@ -4331,7 +4414,8 @@ PAGE_HTML = """<!DOCTYPE html>
           operator_recipe_id: recipeId,
           evaluation_window_mode: wm,
           evaluation_window_custom_months: customM,
-          context_signature_memory_mode: cmem
+          context_signature_memory_mode: cmem,
+          use_operator_uploaded_strategy: useUploaded,
         };
         const startR = await fetch('/api/run-parallel/start', {
           method: 'POST',
@@ -5015,7 +5099,108 @@ PAGE_HTML = """<!DOCTYPE html>
         PG_POLICY_CATALOG = j.policy_catalog || [];
         syncPolicyPickUi();
         updateRunConfigurationPanel();
+        if (typeof refreshStrategyUploadState === 'function') await refreshStrategyUploadState();
       } catch (e) { /* non-fatal */ }
+    }
+
+    async function refreshStrategyUploadState() {
+      const stage = document.getElementById('strategyUploadStageLine');
+      const ul = document.getElementById('strategyUploadChecklist');
+      if (!ul) return;
+      try {
+        const r = await fetch('/api/operator-strategy-upload/state');
+        const st = await r.json();
+        if (!st.ok) throw new Error(st.error || 'state');
+        const items = [];
+        const yn = function (b) { return b ? 'YES' : 'NO'; };
+        if (st.has_active_upload) {
+          if (stage) stage.textContent = 'Active operator strategy is loaded — use the checkbox below to apply it on the next run.';
+          items.push({ cls: 'su-ok', t: 'Strategy uploaded: ' + yn(st.strategy_uploaded) });
+          items.push({ cls: 'su-ok', t: 'Strategy validated: ' + yn(st.strategy_validated) });
+          items.push({ cls: 'su-ok', t: 'Strategy loaded: ' + yn(st.strategy_loaded) });
+          items.push({
+            cls: 'su-ok',
+            t:
+              'Loaded strategy — id: ' +
+              escapeHtml(String(st.strategy_id || '—')) +
+              ' · name: ' +
+              escapeHtml(String(st.strategy_name || '—')),
+          });
+          items.push({ cls: 'su-ok', t: 'Manifest path: ' + escapeHtml(String(st.manifest_repo_relative || '—')) });
+          items.push({ cls: 'su-ok', t: 'Ready to run: ' + yn(st.ready_to_run) + ' (with “Use uploaded strategy” checked)' });
+          if (st.pattern_recommendation) {
+            const pr = st.pattern_recommendation;
+            items.push({
+              cls: 'su-warn',
+              t:
+                'Recommended Pattern: ' +
+                escapeHtml(String(pr.label || pr.primary_recipe_id || '')) +
+                ' — ' +
+                escapeHtml(String(pr.reason || '')),
+            });
+          }
+        } else {
+          if (stage) stage.textContent = 'No operator-uploaded strategy is active — runs use each scenario’s manifest (curated recipes default to baseline).';
+          items.push({ cls: 'su-warn', t: 'Strategy uploaded (active): NO' });
+          items.push({
+            cls: 'su-warn',
+            t: 'Built-in default manifest: ' + escapeHtml(String(st.default_baseline_manifest || '')),
+          });
+        }
+        ul.innerHTML = items
+          .map(function (it) {
+            return '<li class="' + it.cls + '">' + it.t + '</li>';
+          })
+          .join('');
+      } catch (e) {
+        if (stage) stage.textContent = 'Could not read strategy upload state.';
+        ul.innerHTML = '<li class="su-fail">' + escapeHtml(String(e && e.message ? e.message : e)) + '</li>';
+      }
+    }
+
+    async function postStrategyIdeaUpload(file) {
+      if (!file) return;
+      const stage = document.getElementById('strategyUploadStageLine');
+      const ul = document.getElementById('strategyUploadChecklist');
+      if (stage) stage.textContent = 'Uploading → validating → converting → loading…';
+      if (ul) ul.innerHTML = '<li class="su-warn">Processing…</li>';
+      const fd = new FormData();
+      fd.append('file', file, file.name);
+      try {
+        const r = await fetch('/api/operator-strategy-upload', { method: 'POST', body: fd });
+        const j = await r.json();
+        if (ul && j.stages && j.stages.length) {
+          ul.innerHTML = j.stages
+            .map(function (s) {
+              const ok = s.ok ? 'su-ok' : 'su-fail';
+              return '<li class="' + ok + '">' + escapeHtml(s.name) + ': ' + escapeHtml(s.detail || '') + '</li>';
+            })
+            .join('');
+        }
+        if (!r.ok || !j.ok) {
+          if (stage) stage.textContent = 'Upload finished with failure — see checklist and errors below.';
+          if (ul && j.errors && j.errors.length) {
+            j.errors.forEach(function (err) {
+              ul.insertAdjacentHTML('beforeend', '<li class="su-fail">' + escapeHtml(String(err)) + '</li>');
+            });
+          }
+          await show(null, null, String(j.error || (j.errors && j.errors[0]) || 'Strategy upload failed'));
+        } else {
+          if (stage) stage.textContent = 'Success — strategy is loaded. Review recommendation, then Run.';
+          if (j.pattern_recommendation && document.getElementById('operatorRecipePick')) {
+            const pid = j.pattern_recommendation.primary_recipe_id;
+            const sel = document.getElementById('operatorRecipePick');
+            if (pid && sel && Array.from(sel.options).some(function (o) { return o.value === pid; })) {
+              sel.value = pid;
+              refreshStructuredMetadata();
+            }
+          }
+        }
+      } catch (e) {
+        if (stage) stage.textContent = 'Network or server error during upload.';
+        if (ul) ul.innerHTML = '<li class="su-fail">' + escapeHtml(String(e && e.message ? e.message : e)) + '</li>';
+      }
+      await refreshStrategyUploadState();
     }
 
     async function loadExamplesFile(name) {
@@ -5264,6 +5449,34 @@ PAGE_HTML = """<!DOCTYPE html>
         refreshWorkerEffectiveLine();
       } catch (e) {}
     })();
+
+    const strategyIdeaFileInput = document.getElementById('strategyIdeaFileInput');
+    const strategyUploadPickBtn = document.getElementById('strategyUploadPickBtn');
+    if (strategyUploadPickBtn && strategyIdeaFileInput) {
+      strategyUploadPickBtn.addEventListener('click', function () {
+        strategyIdeaFileInput.click();
+      });
+    }
+    if (strategyIdeaFileInput) {
+      strategyIdeaFileInput.addEventListener('change', function () {
+        const f = strategyIdeaFileInput.files && strategyIdeaFileInput.files[0];
+        strategyIdeaFileInput.value = '';
+        if (f) postStrategyIdeaUpload(f);
+      });
+    }
+    const strategyUploadClearBtn = document.getElementById('strategyUploadClearBtn');
+    if (strategyUploadClearBtn) {
+      strategyUploadClearBtn.addEventListener('click', async function () {
+        try {
+          await fetch('/api/operator-strategy-upload/clear', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: '{}',
+          });
+        } catch (e) {}
+        await refreshStrategyUploadState();
+      });
+    }
 
     const contextSignatureMemoryModePickEl = document.getElementById('contextSignatureMemoryModePick');
     if (contextSignatureMemoryModePickEl) {

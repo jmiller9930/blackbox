@@ -5,3 +5,9 @@ proofs/**
 !proofs/.gitkeep
 batches/**
 !batches/.gitkeep
+# Operator strategy uploads (generated; keep folder layout only)
+operator_strategy_uploads/sources/*
+!operator_strategy_uploads/sources/.gitkeep
+operator_strategy_uploads/manifests/*
+!operator_strategy_uploads/manifests/.gitkeep
+operator_strategy_uploads/active.json
