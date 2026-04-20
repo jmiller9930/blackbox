@@ -15,6 +15,7 @@ from typing import Any, Callable, Sequence
 from renaissance_v4.core.outcome_record import OutcomeRecord
 from renaissance_v4.game_theory.student_proctor.contracts_v1 import (
     CONTRACT_VERSION_STUDENT_PROCTOR_V1,
+    FIELD_RETRIEVED_STUDENT_EXPERIENCE_V1,
     GRADED_UNIT_TYPE_V1,
     SCHEMA_STUDENT_OUTPUT_V1,
     validate_student_output_v1,
@@ -54,7 +55,9 @@ def emit_shadow_stub_student_output_v1(
 
     - ``act`` is true when there are at least two bars in the packet (enough for a delta).
     - ``direction`` from last vs previous close; null if fewer than two bars.
-    - ``student_decision_ref``: UUIDv5 over (graded_unit_id, decision_at_ms).
+    - If ``retrieved_student_experience_v1`` is a **non-empty** list (Directive 06/07), the stub
+      adds a second recipe id, raises ``confidence_01`` slightly, and folds retrieval count into
+      ``student_decision_ref`` — **observable** cross-run behavior without execution authority.
 
     Returns ``(output, [])`` on success, or ``(None, errors)`` when validation fails.
     """
@@ -69,9 +72,26 @@ def emit_shadow_stub_student_output_v1(
 
     direction = _direction_from_bars(bars)
     act = len(bars) >= 2
+    rx = packet.get(FIELD_RETRIEVED_STUDENT_EXPERIENCE_V1)
+    n_rx = len(rx) if isinstance(rx, list) else 0
+    informed = n_rx > 0
+
     conf = 0.55 if act else 0.0
+    if informed and act:
+        conf = min(1.0, 0.55 + 0.05 * min(n_rx, 9))
+
+    pr_ids: list[str] = ["shadow_stub_v1"]
+    if informed:
+        pr_ids.append("cross_run_retrieval_informed_v1")
+
     ref_seed = f"shadow_stub_v1:{graded_unit_id}:{t}"
+    if informed:
+        ref_seed += f":retrieval_{n_rx}"
     decision_ref = str(uuid.uuid5(_SHADOW_UUID_NS, ref_seed))
+
+    reasoning = "shadow_stub_v1: causal OHLCV delta only (Directive 03)."
+    if informed:
+        reasoning += f" retrieval_slices={n_rx} (cross-run informed; Directive 07)."
 
     out: dict[str, Any] = {
         "schema": SCHEMA_STUDENT_OUTPUT_V1,
@@ -81,9 +101,9 @@ def emit_shadow_stub_student_output_v1(
         "decision_at_ms": int(t),
         "act": act,
         "direction": direction,
-        "pattern_recipe_ids": ["shadow_stub_v1"],
+        "pattern_recipe_ids": pr_ids,
         "confidence_01": conf,
-        "reasoning_text": "shadow_stub_v1: causal OHLCV delta only (Directive 03).",
+        "reasoning_text": reasoning,
         "student_decision_ref": decision_ref,
     }
     errs = validate_student_output_v1(out)
