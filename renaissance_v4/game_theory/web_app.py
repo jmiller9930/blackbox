@@ -23,7 +23,7 @@ counts, **run_ok_pct**, **referee_win_pct**, **avg_trade_win_pct**) and expose `
 ``POST /api/pattern-game/reset-learning`` with typed confirm phrase (see UI). Student Proctor store:
 ``GET /api/student-proctor/learning-store``, ``POST /api/student-proctor/learning-store/clear`` (separate confirm).
 
-**Barney summary** (post-run formatter): ``POST /api/barney-summary`` with ``{"job_id": "…"}`` — structured
+**System Dialogue** (post-run formatter; ``/api/barney-summary``): ``POST /api/barney-summary`` with ``{"job_id": "…"}`` — structured
 run facts only. **Ask DATA** (bounded self-explainer): ``POST /api/ask-data`` with ``question`` and optional
 ``job_id`` / ``ui_context`` — answers only from bundled PML knowledge + run/scorecard facts (same Ollama stack
 as Barney when enabled; see ``ASK_DATA_USE_LLM`` / ``BARNEY_USE_LLM`` / ``ANNA_USE_LLM``).
@@ -82,7 +82,7 @@ _PATTERN_BANNER_WEBP_PATH = _RV4_ROOT / "assets" / "pattern.webp"
 _PATTERN_GAME_BANNER_BOOT_JS = _GAME_THEORY / "static" / "pattern_game_banner_boot.js"
 
 # Operator-visible web UI bundle version — bump when changing PAGE_HTML (HTML/CSS/JS) so deploys are provable.
-PATTERN_GAME_WEB_UI_VERSION = "2.19.4"
+PATTERN_GAME_WEB_UI_VERSION = "2.19.5"
 
 from renaissance_v4.game_theory.groundhog_memory import (
     groundhog_auto_merge_enabled,
@@ -1090,7 +1090,7 @@ def create_app() -> Flask:
     @app.post("/api/barney-summary")
     def api_barney_summary() -> Any:
         """
-        Barney summary — plain-English recap from structured facts for a **completed** parallel job.
+        System Dialogue — plain-English recap from structured facts for a **completed** parallel job.
 
         Body JSON: ``{"job_id": "<hex>"}`` (in-memory job on this Flask host).
         """
@@ -2645,13 +2645,15 @@ PAGE_HTML = """<!DOCTYPE html>
       font-size: 12px;
       margin-top: 4px;
     }
-    /* Ask (questions) left, Barney summary / thread responses right; right column is wider */
+    /* Ask (questions) left, System Dialogue + thread responses right; right column is wider */
     .pg-barney-ask-unified .pg-barney-ask-grid {
       display: grid;
       grid-template-columns: minmax(0, 1fr) minmax(0, 2fr);
       gap: 0;
       align-items: stretch;
       min-height: 0;
+      height: min(44vh, 480px);
+      max-height: min(44vh, 480px);
       border: 1px solid rgba(54, 64, 74, 0.35);
       border-radius: 12px;
       overflow: hidden;
@@ -2684,6 +2686,12 @@ PAGE_HTML = """<!DOCTYPE html>
       min-height: min(52vh, 560px);
       max-height: min(70vh, 720px);
     }
+    .pg-barney-ask-unified .pg-barney-ask-col--barney .pg-barney-body {
+      flex: 1 1 0;
+      min-height: 0;
+      max-height: none;
+      overflow: auto;
+    }
     .pg-barney-ask-col--ask {
       display: flex;
       flex-direction: column;
@@ -2691,10 +2699,25 @@ PAGE_HTML = """<!DOCTYPE html>
       min-width: 0;
       padding: 10px 12px 12px;
     }
-    .pg-barney-ask-col--ask .pg-askdata-thread {
+    .pg-barney-ask-unified .pg-askdata-input {
+      flex: 1 1 auto;
+      min-height: 3.5rem;
+      max-height: none;
+      resize: vertical;
+      width: 100%;
+      box-sizing: border-box;
+    }
+    .pg-barney-ask-col--barney .pg-askdata-thread {
       flex: 1 1 auto;
       min-height: min(18vh, 200px);
       max-height: min(26vh, 280px);
+      overflow: auto;
+    }
+    .pg-barney-ask-unified .pg-barney-ask-col--barney .pg-askdata-thread {
+      flex: 1 1 0;
+      min-height: 0;
+      max-height: none;
+      overflow: auto;
     }
     .pg-custom-route-hint {
       margin: 0;
@@ -4073,8 +4096,8 @@ PAGE_HTML = """<!DOCTYPE html>
         <summary>
           <div class="pg-panel-header" style="margin:0;flex:1">
             <div>
-              <h2 class="pg-panel-h">Ask DATA + Barney summary</h2>
-              <p class="pg-panel-sub">Questions on the left — responses (thread + run recap) on the right</p>
+              <h2 class="pg-panel-h">Ask DATA + System Dialogue</h2>
+              <p class="pg-panel-sub">Questions on the left — responses and System Dialogue on the right</p>
             </div>
             <span class="pg-chip pg-chip-teal">Unified</span>
           </div>
@@ -4092,10 +4115,10 @@ PAGE_HTML = """<!DOCTYPE html>
               </div>
               <p class="pg-askdata-status" id="askDataStatus" aria-live="polite" style="margin:0;font-size:0.78rem"></p>
             </div>
-            <div class="pg-barney-ask-col pg-barney-ask-col--barney" aria-label="Responses and summary">
+            <div class="pg-barney-ask-col pg-barney-ask-col--barney" aria-label="Responses and System Dialogue">
               <p class="pg-barney-title" style="margin:0 0 6px">Responses</p>
               <div id="askDataThread" class="pg-askdata-thread" aria-live="polite" role="log"></div>
-              <p class="pg-barney-title" style="margin:10px 0 6px">Barney summary (LLM)</p>
+              <p class="pg-barney-title" style="margin:10px 0 6px">System Dialogue (LLM)</p>
               <pre id="barneySummaryBody" class="pg-barney-body" style="margin:0;overflow:auto">—</pre>
             </div>
           </div>
@@ -5925,7 +5948,7 @@ PAGE_HTML = """<!DOCTYPE html>
     async function fetchBarneySummary(jobId) {
       const el = document.getElementById('barneySummaryBody');
       if (!el || !jobId) return;
-      el.textContent = 'Loading Barney summary…';
+        el.textContent = 'Loading System Dialogue…';
       try {
         const r = await fetch('/api/barney-summary', {
           method: 'POST',
@@ -5934,12 +5957,12 @@ PAGE_HTML = """<!DOCTYPE html>
         });
         const j = await r.json();
         if (!r.ok || !j.ok) {
-          el.textContent = 'Barney summary unavailable: ' + (j.error || String(r.status));
+          el.textContent = 'System Dialogue unavailable: ' + (j.error || String(r.status));
           return;
         }
         el.textContent = (j.text || '').trim() || '—';
       } catch (e) {
-        el.textContent = 'Barney summary failed: ' + friendlyFetchError(e);
+        el.textContent = 'System Dialogue failed: ' + friendlyFetchError(e);
       }
     }
 
