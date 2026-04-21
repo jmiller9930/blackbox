@@ -80,7 +80,7 @@ _PATTERN_BANNER_PATH = _RV4_ROOT / "assets" / "pattern.png"
 _PATTERN_BANNER_WEBP_PATH = _RV4_ROOT / "assets" / "pattern.webp"
 
 # Operator-visible web UI bundle version — bump when changing PAGE_HTML (HTML/CSS/JS) so deploys are provable.
-PATTERN_GAME_WEB_UI_VERSION = "2.18.3"
+PATTERN_GAME_WEB_UI_VERSION = "2.18.6"
 
 from renaissance_v4.game_theory.groundhog_memory import (
     groundhog_auto_merge_enabled,
@@ -1707,6 +1707,11 @@ PAGE_HTML = """<!DOCTYPE html>
       padding: 22px 26px 22px;
       position: relative;
       z-index: 2;
+      display: flex;
+      flex-direction: column;
+      align-items: stretch;
+      width: 100%;
+      box-sizing: border-box;
     }
     .pg-header::after {
       content: "";
@@ -1839,36 +1844,50 @@ PAGE_HTML = """<!DOCTYPE html>
     details.pg-panel-fold[open] > summary::before { transform: rotate(90deg); }
     details.pg-panel-fold .pg-panel-fold-body { padding: 0 16px 16px; }
     details.pg-panel-fold .pg-panel-header { margin-bottom: 12px; }
-    .pg-title-wrap { position: relative; z-index: 1; max-width: 980px; }
+    .pg-title-wrap { position: relative; z-index: 1; width: 100%; max-width: 100%; }
+    .pg-header-title-row {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px 16px;
+      margin: 0 0 6px;
+    }
+    .pg-header-title-row .pg-title { margin: 0; flex: 1 1 auto; min-width: 0; }
+    .pg-howto-btn {
+      flex: 0 0 auto;
+      padding: 8px 14px;
+      border-radius: 999px;
+      border: 1px solid rgba(255, 255, 255, 0.22);
+      background: rgba(255, 255, 255, 0.1);
+      color: #f7f1e6;
+      font-size: 0.82rem;
+      font-weight: 700;
+      cursor: pointer;
+      letter-spacing: 0.02em;
+    }
+    .pg-howto-btn:hover { background: rgba(255, 255, 255, 0.16); border-color: rgba(255, 255, 255, 0.35); }
+    .pg-howto-btn:focus-visible { outline: 2px solid rgba(168, 212, 245, 0.8); outline-offset: 2px; }
+    .pg-lead-short {
+      margin: 0;
+      color: rgba(247, 241, 230, 0.78);
+      font-size: 0.92rem;
+      line-height: 1.4;
+      max-width: min(720px, 100%);
+    }
+    .pg-lead-short strong { color: #fff; font-weight: 600; }
+    .pg-howto-dialog.pg-module-dialog { max-width: min(560px, 94vw); }
+    .pg-howto-body { font-size: 0.88rem; line-height: 1.5; color: #3a4450; }
+    .pg-howto-body p { margin: 0 0 12px; }
+    .pg-howto-body p:last-child { margin-bottom: 0; }
+    .pg-howto-body code { font-size: 0.85em; }
     .pg-title {
-      margin: 0 0 8px;
       font-size: clamp(1.5rem, 2.5vw, 2rem);
       line-height: 1.08;
       letter-spacing: -0.03em;
       font-weight: 800;
     }
     .pg-title em { font-style: normal; color: var(--pg-header-accent); font-weight: 700; }
-    .pg-lead {
-      margin: 0;
-      max-width: 760px;
-      color: rgba(247, 241, 230, 0.82);
-      font-size: 15px;
-      line-height: 1.5;
-    }
-    .pg-lead strong { color: #fff; font-weight: 600; }
-    .pg-orientation-note {
-      display: inline-flex;
-      align-items: center;
-      gap: 8px;
-      margin-top: 12px;
-      padding: 8px 11px;
-      border-radius: 999px;
-      background: rgba(255,255,255,0.08);
-      border: 1px solid rgba(255,255,255,0.1);
-      color: rgba(247, 241, 230, 0.82);
-      font-size: 12px;
-      font-weight: 700;
-    }
     .ui-version {
       display: inline-block;
       margin-left: 8px;
@@ -1883,14 +1902,17 @@ PAGE_HTML = """<!DOCTYPE html>
       font-variant-numeric: tabular-nums;
       vertical-align: middle;
     }
+    /* Full width under header scrim so banner row aligns with main grid below (no right-side dead strip). */
     .pg-banner-strip {
       position: relative;
       z-index: 1;
       display: grid;
       grid-template-columns: repeat(5, minmax(0, 1fr));
-      gap: 8px;
+      gap: 10px;
       margin-top: 12px;
-      max-width: min(1600px, 100%);
+      width: 100%;
+      max-width: 100%;
+      box-sizing: border-box;
     }
     .pg-banner-stat {
       border: 1px solid rgba(255,255,255,0.1);
@@ -1997,6 +2019,14 @@ PAGE_HTML = """<!DOCTYPE html>
       align-items: stretch;
       gap: 20px;
       min-height: calc(100vh - 200px);
+      width: 100%;
+    }
+    .pg-main-col {
+      min-width: 0;
+      width: 100%;
+      display: flex;
+      flex-direction: column;
+      flex: 1 1 auto;
     }
     .pg-operator-col {
       min-width: 0;
@@ -2028,6 +2058,7 @@ PAGE_HTML = """<!DOCTYPE html>
       flex-direction: column;
       gap: 12px;
       min-width: 0;
+      width: 100%;
       flex: 1 1 auto;
       min-height: 0;
     }
@@ -2045,7 +2076,9 @@ PAGE_HTML = """<!DOCTYPE html>
       flex-direction: column;
       max-height: var(--pg-focus-dock-h);
       width: 100%;
+      min-width: 0;
       align-self: stretch;
+      box-sizing: border-box;
     }
     .pg-focus-dock[data-pg-focus-mode="overview"] { height: var(--pg-focus-dock-h); }
     .pg-focus-dock[data-pg-focus-mode]:not([data-pg-focus-mode="overview"]) {
@@ -2061,8 +2094,13 @@ PAGE_HTML = """<!DOCTYPE html>
       padding: 10px;
       flex: 1 1 auto;
       min-height: 0;
+      min-width: 0;
+      width: 100%;
+      box-sizing: border-box;
       background: #0a0e12;
     }
+    .pg-focus-overview > .pg-focus-quick-h { min-width: 0; }
+    .pg-focus-overview > .pg-focus-tile { min-width: 0; }
     .pg-focus-quick-h {
       grid-column: 1 / -1;
       margin: 0 0 2px;
@@ -2086,6 +2124,7 @@ PAGE_HTML = """<!DOCTYPE html>
       display: flex;
       flex-direction: column;
       gap: 6px;
+      min-width: 0;
       min-height: 0;
       transition: border-color 0.15s, box-shadow 0.15s, background 0.15s;
       font: inherit;
@@ -2123,6 +2162,7 @@ PAGE_HTML = """<!DOCTYPE html>
       background: #121820;
       flex: 0 0 auto;
     }
+    /* Subtitle only — avoids repeating the same word as the quick-view tile label ("Terminal" twice). */
     .pg-focus-expanded-title { font-size: 0.72rem; font-weight: 800; letter-spacing: 0.06em; text-transform: uppercase; color: #9aa7b4; }
     .pg-focus-back-btn {
       font-size: 0.75rem;
@@ -2556,22 +2596,39 @@ PAGE_HTML = """<!DOCTYPE html>
       font-size: 12px;
       margin-top: 4px;
     }
-    /* Unified Barney (wide) + Ask DATA (narrow), Barney column ~2× chat height */
+    /* Ask (questions) left, Barney summary / thread responses right; right column is wider */
     .pg-barney-ask-unified .pg-barney-ask-grid {
       display: grid;
-      grid-template-columns: minmax(0, 2fr) minmax(0, 1fr);
-      gap: 14px;
+      grid-template-columns: minmax(0, 1fr) minmax(0, 2fr);
+      gap: 0;
       align-items: stretch;
       min-height: 0;
+      border: 1px solid rgba(54, 64, 74, 0.35);
+      border-radius: 12px;
+      overflow: hidden;
+      background: rgba(255, 255, 255, 0.02);
+    }
+    .pg-barney-ask-unified .pg-barney-ask-col--ask {
+      border-right: 1px solid rgba(54, 64, 74, 0.45);
+      box-shadow: inset -1px 0 0 rgba(255, 255, 255, 0.04);
     }
     @media (max-width: 900px) {
-      .pg-barney-ask-unified .pg-barney-ask-grid { grid-template-columns: 1fr; }
+      .pg-barney-ask-unified .pg-barney-ask-grid {
+        grid-template-columns: 1fr;
+        border-radius: 12px;
+      }
+      .pg-barney-ask-unified .pg-barney-ask-col--ask {
+        border-right: none;
+        border-bottom: 1px solid rgba(54, 64, 74, 0.45);
+        box-shadow: inset 0 -1px 0 rgba(255, 255, 255, 0.04);
+      }
     }
     .pg-barney-ask-col--barney {
       display: flex;
       flex-direction: column;
       min-height: 0;
       min-width: 0;
+      padding: 10px 12px 12px;
     }
     .pg-barney-ask-col--barney .pg-barney-body {
       flex: 1 1 auto;
@@ -2583,6 +2640,7 @@ PAGE_HTML = """<!DOCTYPE html>
       flex-direction: column;
       min-height: 0;
       min-width: 0;
+      padding: 10px 12px 12px;
     }
     .pg-barney-ask-col--ask .pg-askdata-thread {
       flex: 1 1 auto;
@@ -3489,10 +3547,12 @@ PAGE_HTML = """<!DOCTYPE html>
       </picture>
       <div class="pg-header-content">
       <div class="pg-title-wrap">
-        <h1 class="pg-title">Pattern Machine learning
-          <span class="ui-version" title="Bump PATTERN_GAME_WEB_UI_VERSION in web_app.py">v__PATTERN_GAME_WEB_UI_VERSION__</span></h1>
-        <p class="pg-lead">Pick pattern and window, then <strong>Run</strong>. <strong>Terminal</strong> first while running; <strong>Student → learning → outcome</strong> is the primary inspection surface when done; <strong>Score card</strong> stays collapsed (plumbing / Referee history) until you expand it. <strong>Custom</strong> scenarios: Pattern <strong>Custom</strong> — JSON under Controls (Pattern Info → Advanced).</p>
-        <div class="pg-orientation-note">Expand panel summaries as needed · DEF-001: <code>docs/architect/pattern_game_operator_deficiencies_work_record.md</code></div>
+        <div class="pg-header-title-row">
+          <h1 class="pg-title">Pattern Machine learning
+            <span class="ui-version" title="Bump PATTERN_GAME_WEB_UI_VERSION in web_app.py">v__PATTERN_GAME_WEB_UI_VERSION__</span></h1>
+          <button type="button" class="pg-howto-btn" id="pgHowToOpenBtn" aria-haspopup="dialog" aria-controls="pgHowToDialog">How to use</button>
+        </div>
+        <p class="pg-lead-short">Choose pattern, evaluation window, then <strong>Run batch</strong>. Status cards above update live.</p>
       </div>
       <div class="pg-banner-strip">
         <div class="pg-banner-stat">
@@ -3530,6 +3590,19 @@ PAGE_HTML = """<!DOCTYPE html>
       </div>
       </div>
     </header>
+
+    <dialog id="pgHowToDialog" class="pg-module-dialog pg-howto-dialog" aria-labelledby="pgHowToTitle">
+      <div class="pg-module-dialog-inner">
+        <button type="button" class="pg-module-dialog-close" id="pgHowToClose" aria-label="Close">×</button>
+        <h2 id="pgHowToTitle" class="pg-module-dialog-h2">How to use this UI</h2>
+        <div class="pg-howto-body">
+          <p>Pick <strong>Pattern</strong> and <strong>Evaluation window</strong> under <strong>Controls</strong>, then <strong>Run batch</strong>. While a batch runs, open <strong>Quick view → Terminal</strong> (expanded) for live telemetry. When the batch finishes, <strong>Student → learning → outcome</strong> is the primary inspection surface.</p>
+          <p><strong>Scorecard</strong> and raw evidence stay under <strong>Quick view → Results</strong> until you need history or JSON.</p>
+          <p><strong>Custom</strong> scenarios: set Pattern to <strong>Custom</strong> and paste JSON under <strong>Controls → Advanced → Custom scenario</strong> (Pattern Info).</p>
+          <p>Expand panel summaries as needed. Operator contract and known gaps: DEF-001 in <code>docs/architect/pattern_game_operator_deficiencies_work_record.md</code>.</p>
+        </div>
+      </div>
+    </dialog>
 
     <dialog id="moduleDetailDialog" class="pg-module-dialog" aria-labelledby="moduleModalTitle">
       <div class="pg-module-dialog-inner">
@@ -3738,6 +3811,7 @@ PAGE_HTML = """<!DOCTYPE html>
       </details>
       </div>
 
+      <div class="pg-main-col">
       <div class="pg-runtime-stack">
       <div class="pg-focus-dock" id="pgFocusDock" data-pg-focus-mode="overview" aria-label="Quick view — Terminal, Results, Modules (click a tile to expand full width)">
         <div class="pg-focus-overview" id="pgFocusOverview">
@@ -3764,7 +3838,7 @@ PAGE_HTML = """<!DOCTYPE html>
         <div class="pg-focus-expanded" id="pgFocusExpanded" hidden>
           <div class="pg-focus-expanded-head">
             <button type="button" class="pg-focus-back-btn" id="pgFocusBackBtn" aria-label="Back to overview">← Overview</button>
-            <span class="pg-focus-expanded-title" id="pgFocusExpandedTitle">Terminal</span>
+            <span class="pg-focus-expanded-title" id="pgFocusExpandedTitle">Expanded view</span>
           </div>
           <div class="pg-focus-expanded-body">
             <div id="pgFocusPaneTerminal" class="pg-focus-pane">
@@ -3928,7 +4002,7 @@ PAGE_HTML = """<!DOCTYPE html>
           <div class="pg-panel-header" style="margin:0;flex:1">
             <div>
               <h2 class="pg-panel-h">Student → learning → outcome</h2>
-              <p class="pg-panel-sub">Primary inspection surface after run — Student seam (belief, stored rows, retrieval). Use the triptych above to open Terminal, Results, or Modules full width.</p>
+              <p class="pg-panel-sub">Primary inspection surface after run — Student seam (belief, stored rows, retrieval). Use <strong>Quick view</strong> above to expand Terminal, Results, or Modules.</p>
             </div>
             <span class="pg-chip pg-chip-teal">Primary</span>
           </div>
@@ -3944,29 +4018,30 @@ PAGE_HTML = """<!DOCTYPE html>
         <summary>
           <div class="pg-panel-header" style="margin:0;flex:1">
             <div>
-              <h2 class="pg-panel-h">Barney summary + Ask DATA</h2>
-              <p class="pg-panel-sub">Run-facts recap (Barney) and threaded Q&amp;A — conversation column is larger</p>
+              <h2 class="pg-panel-h">Ask DATA + Barney summary</h2>
+              <p class="pg-panel-sub">Questions on the left — responses (thread + run recap) on the right</p>
             </div>
             <span class="pg-chip pg-chip-teal">Unified</span>
           </div>
         </summary>
         <div class="pg-panel-fold-body" style="min-height:0">
           <div class="pg-barney-ask-grid">
-            <div class="pg-barney-ask-col pg-barney-ask-col--barney">
-              <p class="pg-barney-title" style="margin:0 0 6px">Barney summary (LLM)</p>
-              <pre id="barneySummaryBody" class="pg-barney-body" style="margin:0;overflow:auto">—</pre>
-            </div>
-            <div class="pg-barney-ask-col pg-barney-ask-col--ask">
+            <div class="pg-barney-ask-col pg-barney-ask-col--ask" aria-label="Ask questions">
               <p class="pg-barney-title" style="margin:0 0 6px">Ask DATA</p>
-              <div id="askDataThread" class="pg-askdata-thread" aria-live="polite" role="log"></div>
-              <textarea id="askDataInput" class="pg-askdata-input" rows="2" maxlength="6000"
-                placeholder="Ask about this app or the selected run…"
+              <textarea id="askDataInput" class="pg-askdata-input" rows="3" maxlength="6000"
+                placeholder="Type a question (Ctrl/Cmd+Enter to send)…"
                 autocomplete="off" aria-label="Ask DATA question"></textarea>
               <div class="pg-askdata-actions">
                 <button type="button" class="btn-chef pg-op-btn" id="askDataSendBtn" data-label-idle="Send">Send</button>
                 <button type="button" class="btn-secondary pg-op-btn" id="askDataClearBtn" data-label-idle="Clear thread">Clear thread</button>
               </div>
               <p class="pg-askdata-status" id="askDataStatus" aria-live="polite" style="margin:0;font-size:0.78rem"></p>
+            </div>
+            <div class="pg-barney-ask-col pg-barney-ask-col--barney" aria-label="Responses and summary">
+              <p class="pg-barney-title" style="margin:0 0 6px">Responses</p>
+              <div id="askDataThread" class="pg-askdata-thread" aria-live="polite" role="log"></div>
+              <p class="pg-barney-title" style="margin:10px 0 6px">Barney summary (LLM)</p>
+              <pre id="barneySummaryBody" class="pg-barney-body" style="margin:0;overflow:auto">—</pre>
             </div>
           </div>
         </div>
@@ -3989,6 +4064,7 @@ PAGE_HTML = """<!DOCTYPE html>
           <pre class="pg-module-body" style="max-height:40vh;overflow:auto;font-size:0.78rem">Placeholder — no server route yet.</pre>
         </div>
       </dialog>
+      </div>
       </div>
     </section>
   </div>
@@ -4539,7 +4615,12 @@ PAGE_HTML = """<!DOCTYPE html>
       const pm = document.getElementById('pgFocusPaneModules');
       const title = document.getElementById('pgFocusExpandedTitle');
       if (!dock || !ov || !ex || !pt || !pr || !pm) return;
-      const labels = { terminal: 'Terminal', results: 'Results', modules: 'Modules' };
+      /* Detail labels differ from tile labels — avoids echoing "Terminal" twice next to the Live output heading. */
+      const labels = {
+        terminal: 'Tape & memory detail',
+        results: 'Referee evidence',
+        modules: 'Wiring audit',
+      };
       if (!labels[mode]) return;
       dock.setAttribute('data-pg-focus-mode', mode);
       document.body.setAttribute('data-pg-focus-expanded', '1');
@@ -6158,11 +6239,14 @@ PAGE_HTML = """<!DOCTYPE html>
       const dot = document.getElementById('healthDot');
       const text = document.getElementById('healthText');
       const bannerV = document.getElementById('bannerFinancialV');
+      if (!text) return;
       try {
         const r = await fetch('/api/data-health');
         const j = await r.json();
-        dot.className = 'status-dot ' + (j.overall_ok ? 'ok' : 'bad');
-        dot.title = j.overall_ok ? 'Data OK' : 'Data issue — see text';
+        if (dot) {
+          dot.className = 'status-dot ' + (j.overall_ok ? 'ok' : 'bad');
+          dot.title = j.overall_ok ? 'Data OK' : 'Data issue — see text';
+        }
         if (bannerV) bannerV.textContent = j.overall_ok ? 'OK' : 'Issue';
         if (j.summary_line) {
           text.textContent = j.summary_line;
@@ -6173,8 +6257,10 @@ PAGE_HTML = """<!DOCTYPE html>
         }
         applyEvaluationWindowCapFromPayload(j);
       } catch (e) {
-        dot.className = 'status-dot bad';
-        dot.title = 'Health request failed';
+        if (dot) {
+          dot.className = 'status-dot bad';
+          dot.title = 'Health request failed';
+        }
         if (bannerV) bannerV.textContent = '—';
         text.textContent = 'Health check failed: ' + friendlyFetchError(e);
       }
@@ -6233,6 +6319,23 @@ PAGE_HTML = """<!DOCTYPE html>
     (function wireModuleModalClose() {
       const d = document.getElementById('moduleDetailDialog');
       const c = document.getElementById('moduleModalClose');
+      if (c && d) {
+        c.addEventListener('click', function () { if (d.close) d.close(); });
+      }
+      if (d) {
+        d.addEventListener('click', function (ev) {
+          if (ev.target === d && d.close) d.close();
+        });
+      }
+    })();
+
+    (function wireHowToDialog() {
+      const d = document.getElementById('pgHowToDialog');
+      const o = document.getElementById('pgHowToOpenBtn');
+      const c = document.getElementById('pgHowToClose');
+      if (o && d && d.showModal) {
+        o.addEventListener('click', function () { d.showModal(); });
+      }
       if (c && d) {
         c.addEventListener('click', function () { if (d.close) d.close(); });
       }
@@ -6716,6 +6819,7 @@ PAGE_HTML = """<!DOCTYPE html>
       }
       const j = await r.json();
       if (j.ok) {
+        if (!scenariosEl) return;
         scenariosEl.value = j.content;
         if (operatorRecipePick) operatorRecipePick.value = 'custom';
         applyRecipeModeToTextarea();
@@ -6950,7 +7054,9 @@ PAGE_HTML = """<!DOCTYPE html>
         await refreshStructuredMetadata();
         if (typeof refreshSearchSpaceEstimate === 'function') await refreshSearchSpaceEstimate();
         refreshWorkerEffectiveLine();
-      } catch (e) {}
+      } catch (e) {
+        console.error('initOperatorUi failed:', e);
+      }
     })();
 
     const strategyIdeaFileInput = document.getElementById('strategyIdeaFileInput');
@@ -7000,10 +7106,12 @@ PAGE_HTML = """<!DOCTYPE html>
       refreshStructuredMetadata();
     });
 
-    scenariosEl.addEventListener('input', () => {
-      if (typeof refreshSearchSpaceEstimate === 'function') refreshSearchSpaceEstimate();
-      refreshWorkerEffectiveLine();
-    });
+    if (scenariosEl) {
+      scenariosEl.addEventListener('input', () => {
+        if (typeof refreshSearchSpaceEstimate === 'function') refreshSearchSpaceEstimate();
+        refreshWorkerEffectiveLine();
+      });
+    }
 
     if (examplesFilePick) examplesFilePick.addEventListener('change', function () {
       updateRenameButton();
