@@ -80,7 +80,7 @@ _PATTERN_BANNER_PATH = _RV4_ROOT / "assets" / "pattern.png"
 _PATTERN_BANNER_WEBP_PATH = _RV4_ROOT / "assets" / "pattern.webp"
 
 # Operator-visible web UI bundle version — bump when changing PAGE_HTML (HTML/CSS/JS) so deploys are provable.
-PATTERN_GAME_WEB_UI_VERSION = "2.17.1"
+PATTERN_GAME_WEB_UI_VERSION = "2.18.0"
 
 from renaissance_v4.game_theory.groundhog_memory import (
     groundhog_auto_merge_enabled,
@@ -1806,9 +1806,10 @@ PAGE_HTML = """<!DOCTYPE html>
     .pg-header-evidence .policy-table th { background: rgba(255,255,255,0.1); color: rgba(247, 241, 230, 0.85); }
     .pg-header-evidence .policy-table td { color: #f0f4f8; border-color: rgba(255,255,255,0.12); }
     .pg-header-evidence #sessionLogNote { color: rgba(247, 241, 230, 0.75) !important; }
+    /* D10.3 — structural panel outline (mandatory hierarchy) */
     details.pg-panel-fold {
       background: var(--pg-surface);
-      border: 1px solid var(--pg-line);
+      border: 1px solid #1e3a5f;
       border-radius: var(--pg-radius-xl);
       box-shadow: var(--pg-shadow);
       min-width: 0;
@@ -1887,17 +1888,17 @@ PAGE_HTML = """<!DOCTYPE html>
       z-index: 1;
       display: grid;
       grid-template-columns: repeat(6, minmax(0, 1fr));
-      gap: 10px;
-      margin-top: 18px;
+      gap: 8px;
+      margin-top: 12px;
       max-width: min(1600px, 100%);
     }
     .pg-banner-stat {
       border: 1px solid rgba(255,255,255,0.1);
-      border-radius: 16px;
-      padding: 12px 14px;
+      border-radius: 14px;
+      padding: 10px 12px;
       background: rgba(255,255,255,0.06);
       backdrop-filter: blur(10px);
-      min-height: 78px;
+      min-height: 64px;
     }
     .pg-banner-stat .pg-k {
       font-size: 11px;
@@ -1931,7 +1932,7 @@ PAGE_HTML = """<!DOCTYPE html>
     }
     .pg-banner-stat .status-dot.ok { background: #2fa46a; box-shadow: 0 0 8px rgba(47,164,106,0.45); }
     .pg-banner-stat .status-dot.bad { background: #d15959; box-shadow: 0 0 8px rgba(209,89,89,0.35); }
-    /* D10.1 — compact Paper P&L in banner (no controls; summary only) */
+    /* D10.1 — compact Paper P&L in banner strip (with other status cards; not in sidebar Controls) */
     .pg-banner-stat.pg-banner-stat--pnl {
       cursor: default;
     }
@@ -2010,7 +2011,7 @@ PAGE_HTML = """<!DOCTYPE html>
     /* D10.2 — focus-driven triptych */
     .pg-focus-dock {
       --pg-focus-dock-h: min(320px, 36vh);
-      border: 1px solid var(--pg-line);
+      border: 1px solid #1e3a5f;
       border-radius: var(--pg-radius-lg);
       background: var(--pg-surface);
       overflow: hidden;
@@ -2130,9 +2131,9 @@ PAGE_HTML = """<!DOCTYPE html>
       vertical-align: middle;
     }
     .pg-telemetry-dock {
-      position: sticky;
-      top: 8px;
-      z-index: 8;
+      position: relative;
+      top: auto;
+      z-index: auto;
       flex: 0 0 auto;
       max-height: min(44vh, 540px);
       min-height: 10rem;
@@ -2191,8 +2192,14 @@ PAGE_HTML = """<!DOCTYPE html>
     }
     .pg-terminal-compact-summary dt { color: #8b98a5; font-weight: 700; }
     .pg-terminal-compact-summary dd { margin: 0; word-break: break-word; }
+    .pg-evidence-scorecard-pane {
+      margin-top: 8px;
+      max-height: min(58vh, 560px);
+      overflow: auto;
+      padding-right: 2px;
+    }
     .pg-learning-events-strip {
-      border: 1px solid var(--pg-line);
+      border: 1px solid #1e3a5f;
       border-radius: var(--pg-radius-lg);
       background: var(--pg-surface-strong);
       padding: 10px 14px 12px;
@@ -2340,7 +2347,7 @@ PAGE_HTML = """<!DOCTYPE html>
     }
     .pg-panel {
       background: var(--pg-surface);
-      border: 1px solid var(--pg-line);
+      border: 1px solid #1e3a5f;
       border-radius: var(--pg-radius-xl);
       box-shadow: var(--pg-shadow);
       padding: 18px 20px 20px;
@@ -2358,6 +2365,103 @@ PAGE_HTML = """<!DOCTYPE html>
       display: flex;
       flex-direction: column;
       gap: 12px;
+    }
+    /* D10.3 — minimal control strip (aligned rows) */
+    .pg-controls-minimal {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      margin-bottom: 4px;
+    }
+    .pg-controls-min-grid {
+      display: grid;
+      grid-template-columns: minmax(7.5rem, 38%) 1fr;
+      gap: 8px 12px;
+      align-items: center;
+    }
+    .pg-controls-min-grid label {
+      font-size: 0.82rem;
+      font-weight: 700;
+      color: var(--pg-muted);
+      margin: 0;
+      justify-self: start;
+      text-align: left;
+    }
+    .pg-controls-min-grid select,
+    .pg-controls-min-grid input[type="number"] {
+      justify-self: stretch;
+      width: 100%;
+      max-width: 100%;
+      box-sizing: border-box;
+    }
+    .pg-controls-min-grid .pg-controls-span-2 {
+      grid-column: 1 / -1;
+    }
+    .pg-controls-run-row {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .pg-controls-run-row .pg-op-btn--run { width: 100%; }
+    details.pg-controls-advanced {
+      margin-top: 10px;
+      border: 1px dashed rgba(30, 58, 95, 0.35);
+      border-radius: 12px;
+      padding: 0 10px 8px;
+      background: rgba(30, 58, 95, 0.04);
+    }
+    details.pg-controls-advanced > summary {
+      cursor: pointer;
+      font-size: 0.78rem;
+      font-weight: 800;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      color: var(--pg-accent);
+      padding: 10px 4px;
+      list-style: none;
+    }
+    details.pg-controls-advanced > summary::-webkit-details-marker { display: none; }
+    .pg-askdata-thread {
+      flex: 1 1 auto;
+      min-height: 140px;
+      max-height: min(42vh, 420px);
+      overflow-y: auto;
+      padding: 8px 10px;
+      border-radius: 10px;
+      background: rgba(0, 0, 0, 0.06);
+      border: 1px solid var(--pg-line);
+      font-size: 0.84rem;
+      line-height: 1.45;
+    }
+    .pg-ask-msg {
+      margin: 0 0 10px;
+      padding: 8px 10px;
+      border-radius: 8px;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+    .pg-ask-msg-user {
+      background: rgba(45, 138, 106, 0.12);
+      border: 1px solid rgba(45, 138, 106, 0.35);
+      margin-left: 12px;
+    }
+    .pg-ask-msg-assistant {
+      background: rgba(30, 58, 95, 0.08);
+      border: 1px solid rgba(30, 58, 95, 0.25);
+      margin-right: 12px;
+    }
+    .pg-ask-msg-role {
+      font-size: 0.65rem;
+      font-weight: 800;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      color: var(--pg-muted);
+      margin-bottom: 4px;
+    }
+    details.pg-panel-fold.pg-barney-dock > summary .pg-panel-sub,
+    details.pg-panel-fold.pg-askdata-dock > summary .pg-panel-sub {
+      font-size: 12px;
+      margin-top: 4px;
     }
     .pg-custom-route-hint {
       margin: 0;
@@ -2668,10 +2772,6 @@ PAGE_HTML = """<!DOCTYPE html>
     .run-actions {
       margin-top: 8px;
       padding: 10px 0 8px;
-      position: sticky;
-      bottom: 0;
-      z-index: 6;
-      background: linear-gradient(180deg, rgba(255, 252, 246, 0) 0%, rgba(255, 253, 248, 0.88) 28%, var(--pg-surface-strong) 55%);
       border-top: 1px solid rgba(54, 64, 74, 0.12);
     }
     .pg-sr-only {
@@ -3272,6 +3372,14 @@ PAGE_HTML = """<!DOCTYPE html>
           <div class="pg-v"><span class="status-dot" id="healthDot"></span> <span id="bannerFinancialV">—</span></div>
           <div class="pg-s" id="healthText">Checking database…</div>
         </div>
+        <div class="pg-banner-stat pg-banner-stat--pnl" id="bannerPnlCard" title="Referee paper P&amp;L for the last completed batch (sum of scenario cumulative P&amp;L vs $1k baseline each).">
+          <div class="pg-k">P&amp;L</div>
+          <div class="pg-v" id="bannerPnlV"><span class="banner-pnl-amt neutral" id="bannerPnlAmt">—</span></div>
+          <div class="pg-s" id="bannerPnlS">vs $1k</div>
+          <div class="pg-banner-pnl-micro" aria-hidden="true" title="Ending equity on 0–$2k scale (clamp)">
+            <div class="pg-banner-pnl-micro-fill up" id="bannerPnlMicroFill" style="left:50%;width:0%;"></div>
+          </div>
+        </div>
         <div class="pg-banner-stat">
           <div class="pg-k">Groundhog</div>
           <div class="pg-v" id="groundhogV">—</div>
@@ -3280,14 +3388,6 @@ PAGE_HTML = """<!DOCTYPE html>
         <div class="pg-banner-stat">
           <div class="pg-k">Search space</div>
           <div class="pg-s pg-s-tall" id="searchSpaceStrip" aria-live="polite"><strong>Search space</strong> — loading…</div>
-        </div>
-        <div class="pg-banner-stat pg-banner-stat--pnl" id="bannerPnlCard" title="Referee paper P&amp;L for the last completed batch (sum of scenario cumulative P&amp;L vs $1k baseline each).">
-          <div class="pg-k">P&amp;L</div>
-          <div class="pg-v" id="bannerPnlV"><span class="banner-pnl-amt neutral" id="bannerPnlAmt">—</span></div>
-          <div class="pg-s" id="bannerPnlS">vs $1k</div>
-          <div class="pg-banner-pnl-micro" aria-hidden="true" title="Ending equity on 0–$2k scale (clamp)">
-            <div class="pg-banner-pnl-micro-fill up" id="bannerPnlMicroFill" style="left:50%;width:0%;"></div>
-          </div>
         </div>
         <div class="pg-banner-stat" title="Current batch / status line">
           <div class="pg-k">Run</div>
@@ -3351,32 +3451,43 @@ PAGE_HTML = """<!DOCTYPE html>
           <div class="pg-panel-header" style="margin:0;flex:1">
             <div>
               <h2 class="pg-panel-h">Controls</h2>
-              <p class="pg-panel-sub">Pattern, policy, window, memory, workers, run</p>
+              <p class="pg-panel-sub">Pattern · evaluation window · Run</p>
             </div>
           </div>
         </summary>
         <div class="pg-panel-fold-body pg-panel-controls-body">
-        <div class="pg-controls-core">
-          <div class="pg-mini-grid pg-mini-3">
-            <div><label for="operatorRecipePick">Pattern</label><select id="operatorRecipePick" aria-describedby="presetHelp patternModeExplanation">
+        <div class="pg-controls-minimal">
+          <div class="pg-controls-min-grid">
+            <label for="operatorRecipePick">Pattern</label>
+            <select id="operatorRecipePick" aria-describedby="presetHelp patternModeExplanation">
               <option value="pattern_learning">Pattern Machine Learning (PML)</option>
               <option value="reference_comparison">Reference Comparison Run</option>
               <option value="custom">Custom (scenario JSON)</option>
-            </select></div>
-            <div><label for="evaluationWindowPick">Evaluation window</label><select id="evaluationWindowPick" aria-describedby="presetHelp">
+            </select>
+            <label for="evaluationWindowPick">Evaluation window</label>
+            <select id="evaluationWindowPick" aria-describedby="presetHelp">
               <option value="12">12 months</option>
               <option value="18">18 months</option>
               <option value="24">24 months</option>
               <option value="custom">Custom…</option>
-            </select></div>
-            <div id="customMonthsWrap" style="display:none"><label for="evaluationWindowCustomMonths">Months</label><input type="number" id="evaluationWindowCustomMonths" min="1" max="600" value="36" style="width:100%;margin-top:4px"/></div>
-            <div class="context-memory-baked-in" title="Decision Context Recall is always enabled for operator runs">
-              <span class="caps">Context memory</span>
-              <span class="caps" style="margin-left:8px;color:var(--pg-muted)">Always on — READ+WRITE (recall + write winners to JSONL)</span>
+            </select>
+            <div id="customMonthsWrap" class="pg-controls-span-2" style="display:none">
+              <div class="pg-controls-min-grid" style="grid-template-columns:minmax(7.5rem,38%) 1fr">
+                <label for="evaluationWindowCustomMonths">Months</label>
+                <input type="number" id="evaluationWindowCustomMonths" min="1" max="600" value="36"/>
+              </div>
             </div>
           </div>
+          <div class="pg-controls-run-row">
+            <button type="button" id="runBtn" class="pg-op-btn pg-op-btn--run" data-label-idle="Run batch">Run batch</button>
+          </div>
+        </div>
+
+        <details class="pg-controls-advanced" open>
+          <summary>Advanced · policy · workers · progress · JSON</summary>
+          <div class="pg-controls-core">
           <p id="customScenarioRouteHint" class="pg-custom-route-hint" hidden>
-            <strong>Custom pattern:</strong> your scenario batch is the JSON box under <strong>Pattern Info (optional)</strong> below → <strong>Advanced</strong> → <strong>Custom scenario (JSON)</strong>. Those sections open automatically when you pick Custom; scroll down if you do not see the box yet.
+            <strong>Custom:</strong> JSON under <strong>Pattern Info → Advanced → Custom scenario</strong>.
           </p>
           <div id="policyMultiWrap" style="display:none;margin-top:10px">
             <label for="policyPick">Policy / manifest</label>
@@ -3414,7 +3525,6 @@ PAGE_HTML = """<!DOCTYPE html>
           </div>
 
           <div class="run-actions">
-            <button type="button" id="runBtn" class="pg-op-btn pg-op-btn--run" data-label-idle="Run batch">Run batch</button>
             <div class="status-stack">
               <div id="statusLine" aria-live="polite"></div>
               <div id="batchConcurrencyBanner" class="batch-concurrency-banner" aria-live="polite"></div>
@@ -3425,7 +3535,6 @@ PAGE_HTML = """<!DOCTYPE html>
               <div id="runFeedbackToast" class="run-feedback-toast" role="status" aria-live="polite" hidden></div>
             </div>
           </div>
-        </div>
 
         <details class="pg-pattern-info-fold" id="patternInfoFold">
           <summary>Pattern Info (optional)</summary>
@@ -3496,6 +3605,8 @@ PAGE_HTML = """<!DOCTYPE html>
           </div>
         </details>
         </div>
+        </details>
+        </div>
       </details>
       </div>
 
@@ -3558,6 +3669,8 @@ PAGE_HTML = """<!DOCTYPE html>
             <dt>Window</dt><dd id="tcsWindow">—</dd>
             <dt>DW (hot)</dt><dd id="tcsDw">—</dd>
             <dt>Elapsed</dt><dd id="tcsElapsed">—</dd>
+            <dt>Last P&amp;L</dt><dd id="tcsLastPnl">—</dd>
+            <dt>Last TW%</dt><dd id="tcsLastTw">—</dd>
           </dl>
         </aside>
         </div>
@@ -3571,6 +3684,7 @@ PAGE_HTML = """<!DOCTYPE html>
                   <button type="button" class="pg-tab active" data-tab="outcomes" role="tab">Referee outcomes</button>
                   <button type="button" class="pg-tab" data-tab="json" role="tab">Raw JSON</button>
                   <button type="button" class="pg-tab" data-tab="session" role="tab">Session log</button>
+                  <button type="button" class="pg-tab" data-tab="scorecard" role="tab">Scorecard</button>
                 </div>
                 <div id="pgEvidenceOutcomes" class="pg-evidence-panel">
                   <div class="policy-outcome-panel" id="policyOutcomePanel" hidden>
@@ -3590,6 +3704,86 @@ PAGE_HTML = """<!DOCTYPE html>
                 </div>
                 <p class="caps" id="sessionLogNote" style="display:none;margin:10px 0 8px"></p>
                 <pre id="out" class="pg-pre-json" style="display:none">(no run yet)</pre>
+                <div id="pgEvidenceScorecard" class="pg-evidence-scorecard-pane" style="display:none" data-pg-evidence-tab="scorecard">
+                  <div class="scorecard-panel-inner pg-scorecard-split" id="scorecardPanel">
+                    <div class="pg-scorecard-upper" id="scorecardUpper">
+                      <details class="pg-scorecard-legend-fold">
+                        <summary class="pg-scorecard-legend-summary">What these columns mean (legend)</summary>
+                        <p class="scorecard-legend"><strong>Run OK %</strong> — workers finished. <strong>Session WIN %</strong> — referee WIN vs LOSS among judged sessions only; <strong>n sess</strong> is that denominator (never infer from a bare percentage). <strong>Trade win %</strong> — batch mean when trades exist (with trade count). <strong>Learning (replay lane)</strong> — <code>execution_only</code> vs <code>learning_active</code> from replay counters (candidate search, memory records loaded, recall matches, signal bias); not Student Proctor learning. <strong>Memory / Context Impact</strong> — YES/NO from <code>learning_run_audit_v1</code> only (bundle merged or recall bias/signal-bias counters &gt; 0); not inferred from &ldquo;memory loaded&rdquo; or learning lane. <strong>Work</strong> — decision windows, bars, and candidate-stack replays. Scan <em>down</em> for newest batches.           <strong>In-flight</strong> — a batch that is <strong>running</strong> now appears at the <strong>top</strong> with <strong>Start</strong> time and live progress counts; the JSONL line is written when the batch finishes. <strong>Scorecard file</strong> (<code>batch_scorecard.jsonl</code>) is batch audit for this table and hunter suggestions; replay does <em>not</em> read it to apply memory or recall. <strong>Clear Card</strong> truncates that log only. <strong>Reset Learning State</strong> is separate and destructive (engine files — see confirmation).</p>
+                      </details>
+                      <p class="last-run" id="lastBatchRunLine">Last completed batch: —</p>
+                      <div id="scorecardLearningSummary" class="scorecard-learning-summary exec-only" aria-live="polite" hidden>
+                        <p class="sls-title">Latest batch — harness learning lane &amp; contextual memory <span style="font-weight:600;color:var(--pg-muted)">(engine / DCR; not the Student Proctor store)</span></p>
+                        <div id="scorecardLearningSummaryBody" class="sls-body"></div>
+                      </div>
+                      <div id="memoryContextImpactPanel" class="memory-context-impact-panel" aria-live="polite" hidden>
+                        <p class="sls-title">Memory / Context Impact</p>
+                        <div id="memoryContextImpactBody" class="mci-grid"></div>
+                        <p class="mci-barney" id="memoryContextBarneyLine"></p>
+                      </div>
+                      <div class="scorecard-toolbar">
+                        <a id="scorecardCsvLink" href="/api/batch-scorecard.csv?limit=50">Download scorecard history (CSV)</a>
+                        <div class="scorecard-toolbar-actions">
+                          <button type="button" class="btn-scorecard-clear pg-op-btn" id="clearScorecardBtn" data-label-idle="Clear Card — Run New Experiment" title="Truncates batch_scorecard.jsonl (table history) only. Does not clear engine memory, bundles, or the Student Proctor learning store.">Clear Card — Run New Experiment</button>
+                          <button type="button" class="btn-learning-reset-danger pg-op-btn" id="resetLearningStateBtn" data-label-idle="Reset Learning State" title="Destructive: engine experience logs, signature/DCR recall store, Groundhog bundle. Does not clear the scorecard file, retrospective log, or Student Proctor learning store.">Reset Learning State</button>
+                        </div>
+                        <span style="font-size:0.72rem;color:var(--pg-muted)">Click a row to open batch detail, scenarios, and per-scenario report links (GT_DIRECTIVE_001).</span>
+                      </div>
+                      <div class="pg-student-proctor-truth" style="margin:10px 0;padding:8px 10px;background:rgba(0,0,0,0.09);border-radius:6px;font-size:0.78rem;line-height:1.35">
+                        <strong>Student Proctor learning store</strong> — separate file from the scorecard log and from &ldquo;Reset Learning State&rdquo; (engine memory / bundles / recall JSONL).
+                        <span id="studentProctorStoreLine" aria-live="polite">Loading…</span>
+                        <div style="margin-top:6px">
+                          <button type="button" class="btn-secondary pg-op-btn" id="clearStudentProctorStoreBtn" data-label-idle="Clear Student Proctor store…" title="Truncates the Student Proctor append-only JSONL only. Does not clear scorecard history or engine learning files.">Clear Student Proctor store…</button>
+                        </div>
+                      </div>
+                      <div class="pg-table-scroll scorecard-table-wrap-wide">
+                        <table class="scorecard-table scorecard-table-learning" id="scorecardHistoryTable">
+                          <thead>
+                            <tr>
+                              <th title="job_id">Job</th>
+                              <th title="started_at_utc">Start</th>
+                              <th title="ended_at_utc">End</th>
+                              <th title="duration_sec">Dur</th>
+                              <th title="work_units_v1 — decision windows, bars, candidate-stack replays">Work</th>
+                              <th title="learning_status">Learn</th>
+                              <th title="decision_windows_total">DW</th>
+                              <th title="bars_processed">Bars</th>
+                              <th title="candidate_count">Cand</th>
+                              <th title="selected_candidate_id">Sel</th>
+                              <th title="winner_vs_control_delta">WΔ</th>
+                              <th title="memory_used">Mem</th>
+                              <th title="memory_records_loaded">MRec</th>
+                              <th title="groundhog_status">GH</th>
+                              <th title="recall_attempts">RAtt</th>
+                              <th title="recall_matches">RMt</th>
+                              <th title="recall_bias_applied">RBias</th>
+                              <th title="signal_bias_applied_count">SBc</th>
+                              <th title="suppressed_modules_count">Sup</th>
+                              <th title="trade_entries_total">TIn</th>
+                              <th title="trade_exits_total">TOut</th>
+                              <th title="batch_trade_win_pct / avg_trade_win_pct when trades exist">TW%</th>
+                              <th title="batch_trades_count">#Tr</th>
+                              <th title="expectancy_per_trade (mean scenarios with trades)">E/tr</th>
+                              <th title="exit_efficiency">Xeff</th>
+                              <th title="win_loss_size_ratio">WLR</th>
+                              <th title="referee_win_pct">SWin%</th>
+                              <th title="batch_sessions_judged">#Sess</th>
+                              <th title="run_ok_pct">RunOK%</th>
+                              <th title="ok_count">OK</th>
+                              <th title="failed_count">Fail</th>
+                              <th title="workers_used">Wkr</th>
+                              <th title="status">St</th>
+                            </tr>
+                          </thead>
+                          <tbody id="scorecardHistoryTbody"></tbody>
+                        </table>
+                      </div>
+                      <div id="batchDrillPanel" class="batch-drill-panel" aria-live="polite"></div>
+                      <p id="scorecardClickHint" class="scorecard-click-hint" role="status" aria-live="polite" style="display:none"></p>
+                      <p class="path-hint" id="scorecardPathHint"></p>
+                    </div>
+                  </div>
+                </div>
               </div>
             </div>
             <div id="pgFocusPaneModules" class="pg-focus-pane pg-focus-pane--modules" hidden>
@@ -3617,6 +3811,44 @@ PAGE_HTML = """<!DOCTYPE html>
         </div>
       </details>
 
+      <details class="pg-panel-fold pg-barney-dock">
+        <summary>
+          <div class="pg-panel-header" style="margin:0;flex:1">
+            <div>
+              <h2 class="pg-panel-h">Barney summary (LLM)</h2>
+              <p class="pg-panel-sub">Run-facts recap · expand after a batch</p>
+            </div>
+            <span class="pg-chip pg-chip-steel">LLM</span>
+          </div>
+        </summary>
+        <div class="pg-panel-fold-body">
+          <pre id="barneySummaryBody" class="pg-barney-body" style="margin:0;max-height:min(36vh,400px);overflow:auto">—</pre>
+        </div>
+      </details>
+
+      <details class="pg-panel-fold pg-askdata-dock" open>
+        <summary>
+          <div class="pg-panel-header" style="margin:0;flex:1">
+            <div>
+              <h2 class="pg-panel-h">Ask DATA</h2>
+              <p class="pg-panel-sub">Threaded Q&amp;A from run facts only</p>
+            </div>
+            <span class="pg-chip pg-chip-teal">Chat</span>
+          </div>
+        </summary>
+        <div class="pg-panel-fold-body" style="display:flex;flex-direction:column;gap:10px;min-height:0">
+          <div id="askDataThread" class="pg-askdata-thread" aria-live="polite" role="log"></div>
+          <textarea id="askDataInput" class="pg-askdata-input" rows="2" maxlength="6000"
+            placeholder="Ask about this app or the selected run…"
+            autocomplete="off" aria-label="Ask DATA question"></textarea>
+          <div class="pg-askdata-actions">
+            <button type="button" class="btn-chef pg-op-btn" id="askDataSendBtn" data-label-idle="Send">Send</button>
+            <button type="button" class="btn-secondary pg-op-btn" id="askDataClearBtn" data-label-idle="Clear thread">Clear thread</button>
+          </div>
+          <p class="pg-askdata-status" id="askDataStatus" aria-live="polite" style="margin:0;font-size:0.78rem"></p>
+        </div>
+      </details>
+
       <section class="pg-learning-events-strip" id="pgLearningEventsStrip" aria-label="Learning events at a glance" hidden>
         <h3 class="pg-learning-events-h">Latest run — learning at a glance</h3>
         <ul class="pg-learning-events-ul" id="pgLearningEventsUl"></ul>
@@ -3634,127 +3866,6 @@ PAGE_HTML = """<!DOCTYPE html>
           <pre class="pg-module-body" style="max-height:40vh;overflow:auto;font-size:0.78rem">Placeholder — no server route yet.</pre>
         </div>
       </dialog>
-
-      <details class="pg-panel-fold pg-panel-score pg-scorecard-dock">
-        <summary>
-          <div class="pg-panel-header" style="margin:0;flex:1">
-            <div>
-              <h2 class="pg-panel-h">Score card</h2>
-              <p class="pg-panel-sub">Collapsed by default — Referee / plumbing / batch history. Expand when debugging runs. Student store is separate — see Student panel.</p>
-            </div>
-            <span class="pg-chip pg-chip-amber">Plumbing</span>
-          </div>
-        </summary>
-        <div class="pg-panel-fold-body">
-        <div class="scorecard-panel-inner pg-scorecard-split" id="scorecardPanel">
-          <div class="pg-scorecard-upper" id="scorecardUpper">
-          <details class="pg-scorecard-legend-fold">
-            <summary class="pg-scorecard-legend-summary">What these columns mean (legend)</summary>
-            <p class="scorecard-legend"><strong>Run OK %</strong> — workers finished. <strong>Session WIN %</strong> — referee WIN vs LOSS among judged sessions only; <strong>n sess</strong> is that denominator (never infer from a bare percentage). <strong>Trade win %</strong> — batch mean when trades exist (with trade count). <strong>Learning (replay lane)</strong> — <code>execution_only</code> vs <code>learning_active</code> from replay counters (candidate search, memory records loaded, recall matches, signal bias); not Student Proctor learning. <strong>Memory / Context Impact</strong> — YES/NO from <code>learning_run_audit_v1</code> only (bundle merged or recall bias/signal-bias counters &gt; 0); not inferred from &ldquo;memory loaded&rdquo; or learning lane. <strong>Work</strong> — decision windows, bars, and candidate-stack replays. Scan <em>down</em> for newest batches.           <strong>In-flight</strong> — a batch that is <strong>running</strong> now appears at the <strong>top</strong> with <strong>Start</strong> time and live progress counts; the JSONL line is written when the batch finishes. <strong>Scorecard file</strong> (<code>batch_scorecard.jsonl</code>) is batch audit for this table and hunter suggestions; replay does <em>not</em> read it to apply memory or recall. <strong>Clear Card</strong> truncates that log only. <strong>Reset Learning State</strong> is separate and destructive (engine files — see confirmation).</p>
-          </details>
-          <p class="last-run" id="lastBatchRunLine">Last completed batch: —</p>
-          <div id="scorecardLearningSummary" class="scorecard-learning-summary exec-only" aria-live="polite" hidden>
-            <p class="sls-title">Latest batch — harness learning lane &amp; contextual memory <span style="font-weight:600;color:var(--pg-muted)">(engine / DCR; not the Student Proctor store)</span></p>
-            <div id="scorecardLearningSummaryBody" class="sls-body"></div>
-          </div>
-          <div id="memoryContextImpactPanel" class="memory-context-impact-panel" aria-live="polite" hidden>
-            <p class="sls-title">Memory / Context Impact</p>
-            <div id="memoryContextImpactBody" class="mci-grid"></div>
-            <p class="mci-barney" id="memoryContextBarneyLine"></p>
-          </div>
-          <div class="scorecard-toolbar">
-            <a id="scorecardCsvLink" href="/api/batch-scorecard.csv?limit=50">Download scorecard history (CSV)</a>
-            <div class="scorecard-toolbar-actions">
-              <button type="button" class="btn-scorecard-clear pg-op-btn" id="clearScorecardBtn" data-label-idle="Clear Card — Run New Experiment" title="Truncates batch_scorecard.jsonl (table history) only. Does not clear engine memory, bundles, or the Student Proctor learning store.">Clear Card — Run New Experiment</button>
-              <button type="button" class="btn-learning-reset-danger pg-op-btn" id="resetLearningStateBtn" data-label-idle="Reset Learning State" title="Destructive: engine experience logs, signature/DCR recall store, Groundhog bundle. Does not clear the scorecard file, retrospective log, or Student Proctor learning store.">Reset Learning State</button>
-            </div>
-            <span style="font-size:0.72rem;color:var(--pg-muted)">Click a row to open batch detail, scenarios, and per-scenario report links (GT_DIRECTIVE_001).</span>
-          </div>
-          <div class="pg-student-proctor-truth" style="margin:10px 0;padding:8px 10px;background:rgba(0,0,0,0.09);border-radius:6px;font-size:0.78rem;line-height:1.35">
-            <strong>Student Proctor learning store</strong> — separate file from the scorecard log and from &ldquo;Reset Learning State&rdquo; (engine memory / bundles / recall JSONL).
-            <span id="studentProctorStoreLine" aria-live="polite">Loading…</span>
-            <div style="margin-top:6px">
-              <button type="button" class="btn-secondary pg-op-btn" id="clearStudentProctorStoreBtn" data-label-idle="Clear Student Proctor store…" title="Truncates the Student Proctor append-only JSONL only. Does not clear scorecard history or engine learning files.">Clear Student Proctor store…</button>
-            </div>
-          </div>
-          <div class="pg-table-scroll scorecard-table-wrap-wide">
-            <table class="scorecard-table scorecard-table-learning" id="scorecardHistoryTable">
-              <thead>
-                <tr>
-                  <th title="job_id">Job</th>
-                  <th title="started_at_utc">Start</th>
-                  <th title="ended_at_utc">End</th>
-                  <th title="duration_sec">Dur</th>
-                  <th title="work_units_v1 — decision windows, bars, candidate-stack replays">Work</th>
-                  <th title="learning_status">Learn</th>
-                  <th title="decision_windows_total">DW</th>
-                  <th title="bars_processed">Bars</th>
-                  <th title="candidate_count">Cand</th>
-                  <th title="selected_candidate_id">Sel</th>
-                  <th title="winner_vs_control_delta">WΔ</th>
-                  <th title="memory_used">Mem</th>
-                  <th title="memory_records_loaded">MRec</th>
-                  <th title="groundhog_status">GH</th>
-                  <th title="recall_attempts">RAtt</th>
-                  <th title="recall_matches">RMt</th>
-                  <th title="recall_bias_applied">RBias</th>
-                  <th title="signal_bias_applied_count">SBc</th>
-                  <th title="suppressed_modules_count">Sup</th>
-                  <th title="trade_entries_total">TIn</th>
-                  <th title="trade_exits_total">TOut</th>
-                  <th title="batch_trade_win_pct / avg_trade_win_pct when trades exist">TW%</th>
-                  <th title="batch_trades_count">#Tr</th>
-                  <th title="expectancy_per_trade (mean scenarios with trades)">E/tr</th>
-                  <th title="exit_efficiency">Xeff</th>
-                  <th title="win_loss_size_ratio">WLR</th>
-                  <th title="referee_win_pct">SWin%</th>
-                  <th title="batch_sessions_judged">#Sess</th>
-                  <th title="run_ok_pct">RunOK%</th>
-                  <th title="ok_count">OK</th>
-                  <th title="failed_count">Fail</th>
-                  <th title="workers_used">Wkr</th>
-                  <th title="status">St</th>
-                </tr>
-              </thead>
-              <tbody id="scorecardHistoryTbody"></tbody>
-            </table>
-          </div>
-          <div id="batchDrillPanel" class="batch-drill-panel" aria-live="polite"></div>
-          <p id="scorecardClickHint" class="scorecard-click-hint" role="status" aria-live="polite" style="display:none"></p>
-          <p class="path-hint" id="scorecardPathHint"></p>
-          </div>
-          <details class="pg-scorecard-secondary-details" id="scorecardBarneyAskDetails">
-            <summary>Barney summary &amp; Ask DATA (expand)</summary>
-          <div class="pg-scorecard-lower" id="scorecardLowerSplit" aria-label="Summary and Ask DATA">
-            <div class="pg-barney-subsection" id="barneySubsection">
-              <div class="pg-barney-title">Barney summary</div>
-              <p class="caps" style="font-size:0.74rem;margin:0 0 8px;line-height:1.35;color:var(--pg-muted)">
-                Plain-English recap built only from run facts (local LLM formats text; it does not invent scores).
-                If Ollama is off, a built-in fallback is used.
-              </p>
-              <pre id="barneySummaryBody" class="pg-barney-body">—</pre>
-            </div>
-            <div class="pg-askdata-subsection" id="askDataSubsection" aria-label="Ask DATA">
-              <div class="pg-barney-title">Ask DATA</div>
-              <p class="caps" style="font-size:0.74rem;margin:0;line-height:1.35;color:var(--pg-muted)">
-                Questions about <strong>this app</strong>, your controls, memory, and the current or selected run — not general chat.
-                Answers use only bundled run/UI facts (local LLM formats; say &quot;not in run data&quot; when missing).
-              </p>
-              <textarea id="askDataInput" class="pg-askdata-input" rows="2" maxlength="6000"
-                placeholder="e.g. What does memory mode do? Why did this run fail? What does the Sel column mean?"
-                autocomplete="off" aria-label="Ask DATA question"></textarea>
-              <div class="pg-askdata-actions">
-                <button type="button" class="btn-chef pg-op-btn" id="askDataSendBtn" data-label-idle="Send">Send</button>
-                <button type="button" class="btn-secondary pg-op-btn" id="askDataClearBtn" data-label-idle="Clear">Clear</button>
-              </div>
-              <p class="pg-askdata-status" id="askDataStatus" aria-live="polite"></p>
-              <pre id="askDataResponse" class="pg-barney-body pg-askdata-response" aria-live="polite">—</pre>
-            </div>
-          </div>
-          </details>
-        </div>
-        </div>
-      </details>
       </div>
     </section>
   </div>
@@ -4420,6 +4531,7 @@ PAGE_HTML = """<!DOCTYPE html>
       const outcomes = document.getElementById('pgEvidenceOutcomes');
       const pre = document.getElementById('out');
       const sn = document.getElementById('sessionLogNote');
+      const sc = document.getElementById('pgEvidenceScorecard');
       const tabs = document.querySelectorAll('.pg-tab-strip .pg-tab');
       const id = tab || 'outcomes';
       tabs.forEach((b) => {
@@ -4428,6 +4540,7 @@ PAGE_HTML = """<!DOCTYPE html>
       if (outcomes) outcomes.style.display = (id === 'outcomes') ? '' : 'none';
       if (pre) pre.style.display = (id === 'json') ? 'block' : 'none';
       if (sn) sn.style.display = (id === 'session') ? 'block' : 'none';
+      if (sc) sc.style.display = (id === 'scorecard') ? 'block' : 'none';
     }
     document.querySelectorAll('.pg-tab-strip .pg-tab').forEach((btn) => {
       btn.addEventListener('click', () => setEvidenceTab(btn.getAttribute('data-tab')));
@@ -4703,19 +4816,35 @@ PAGE_HTML = """<!DOCTYPE html>
       };
     }
 
+    function appendAskDataBubble(role, text) {
+      const thread = document.getElementById('askDataThread');
+      if (!thread) return;
+      const wrap = document.createElement('div');
+      wrap.className = 'pg-ask-msg ' + (role === 'user' ? 'pg-ask-msg-user' : 'pg-ask-msg-assistant');
+      const lab = document.createElement('div');
+      lab.className = 'pg-ask-msg-role';
+      lab.textContent = role === 'user' ? 'You' : 'System';
+      const body = document.createElement('div');
+      body.textContent = text;
+      wrap.appendChild(lab);
+      wrap.appendChild(body);
+      thread.appendChild(wrap);
+      thread.scrollTop = thread.scrollHeight;
+    }
+
     async function sendAskData() {
       const inp = document.getElementById('askDataInput');
-      const out = document.getElementById('askDataResponse');
       const st = document.getElementById('askDataStatus');
       const btn = document.getElementById('askDataSendBtn');
-      if (!inp || !out) return;
+      if (!inp) return;
       const q = String(inp.value || '').trim();
       if (!q) {
         if (st) st.textContent = 'Type a question first.';
         return;
       }
+      appendAskDataBubble('user', q);
+      inp.value = '';
       if (st) st.textContent = 'Loading…';
-      out.textContent = '';
       setOpButtonBusy(btn, true, 'Sending…', true);
       try {
         const jid = askDataPreferredJobId();
@@ -4730,15 +4859,16 @@ PAGE_HTML = """<!DOCTYPE html>
         });
         const j = await r.json();
         if (!r.ok || !j.ok) {
-          out.textContent = 'Ask DATA: ' + (j.error || ('HTTP ' + r.status));
+          appendAskDataBubble('assistant', 'Ask DATA: ' + (j.error || ('HTTP ' + r.status)));
           if (st) st.textContent = '';
           return;
         }
-        out.textContent = (j.text || '').trim() || '—';
+        const reply = (j.text || '').trim() || '—';
+        appendAskDataBubble('assistant', reply);
         const src = j.answer_source ? (' · source: ' + j.answer_source) : '';
         if (st) st.textContent = (j.bundle_meta && j.bundle_meta.job_resolution ? ('Context: ' + j.bundle_meta.job_resolution) : '') + src;
       } catch (e) {
-        out.textContent = 'Ask DATA failed: ' + friendlyFetchError(e);
+        appendAskDataBubble('assistant', 'Ask DATA failed: ' + friendlyFetchError(e));
         if (st) st.textContent = '';
       } finally {
         setOpButtonBusy(btn, false);
@@ -4747,10 +4877,10 @@ PAGE_HTML = """<!DOCTYPE html>
 
     function clearAskDataUi() {
       const inp = document.getElementById('askDataInput');
-      const out = document.getElementById('askDataResponse');
       const st = document.getElementById('askDataStatus');
+      const thread = document.getElementById('askDataThread');
       if (inp) inp.value = '';
-      if (out) out.textContent = '—';
+      if (thread) thread.innerHTML = '';
       if (st) st.textContent = '';
     }
 
@@ -5177,11 +5307,15 @@ PAGE_HTML = """<!DOCTYPE html>
       const pnlEl = document.getElementById('focusTileResultsPnl');
       const twEl = document.getElementById('focusTileResultsTw');
       const trEl = document.getElementById('focusTileResultsTr');
+      const tcsPnl = document.getElementById('tcsLastPnl');
+      const tcsTw = document.getElementById('tcsLastTw');
       if (!pnlEl || !twEl || !trEl) return;
       if (!data || typeof data !== 'object' || !data.pnl_summary) {
         pnlEl.textContent = 'P&L —';
         twEl.textContent = 'Trade win —';
         trEl.textContent = '—';
+        if (tcsPnl) tcsPnl.textContent = '—';
+        if (tcsTw) tcsTw.textContent = '—';
         return;
       }
       const p = data.pnl_summary;
@@ -5201,6 +5335,13 @@ PAGE_HTML = """<!DOCTYPE html>
         }
       }
       trEl.textContent = trn != null && trn !== '' ? '#' + String(trn) : '—';
+      if (tcsPnl) {
+        if (Math.abs(d) < 1e-9) tcsPnl.textContent = '$0.00';
+        else tcsPnl.textContent = (d >= 0 ? '+' : '−') + formatUsdPlain(Math.abs(d));
+      }
+      if (tcsTw) {
+        tcsTw.textContent = tw != null && tw !== '' ? Number(tw).toFixed(1) + '%' : '—';
+      }
     }
 
     function openRunControlsPanel() {
