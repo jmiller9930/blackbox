@@ -1,7 +1,7 @@
 # Architecture — backward ladder: Student at the table (non-negotiable end state → today)
 
 **Audience:** Architect, engineering, operators.  
-**Companion:** `ARCHITECTURE_PLAN_STUDENT_PROCTOR_PML.md`, `E2E_ROADMAP_STUDENT_PROCTOR_PML.md`, `STUDENT_FIRST_PERSON_TRADEPATH.md`, `TRADING_CONTEXT_REFERENCE_V1.md` (indicator lexicon + codebase map).  
+**Companion:** `ARCHITECTURE_PLAN_STUDENT_PROCTOR_PML.md`, `E2E_ROADMAP_STUDENT_PROCTOR_PML.md`, `STUDENT_FIRST_PERSON_TRADEPATH.md`, `TRADING_CONTEXT_REFERENCE_V1.md` (indicator lexicon + codebase map; **§9** Groundhog module row = merge env + bundle on disk).  
 **Purpose:** One **backward** chain from **declared goal** to **current codebase**, with **directives** and **context taxonomy** (including **examples**). Revise **in place**; append **revision history** at the bottom.
 
 ---
@@ -396,3 +396,4 @@ Do **not** prove learning from **one giant summary block**. Separate **plumbing 
 | 1.17 | 2026-04-20 | **§H** engineering directive: operator UI levels (control / terminal+Student / drilldown), three-layer proof of learning (event list → compare → forensic card), carousel on **decision events**, Student-first; scorecard/terminal secondary. |
 | 1.18 | 2026-04-20 | **§H initial UI pass** in ``web_app.py`` (v2.15.0): Terminal first + compact run summary column; Student → learning strip; scorecard **collapsed** by default (legend + Barney/Ask nested); forensic drill **dialog** placeholder; learning-at-a-glance list from last batch. |
 | 1.19 | 2026-04-20 | **D10.1** — Paper P&amp;L (batch) moved to top banner as compact **P&amp;L** card (+Δ / vs $1k + micro bar); **Run** split to its own card; removed duplicate P&amp;L block from control column (``web_app.py`` v2.16.0). |
+| 1.20 | 2026-04-21 | Companion line: **TRADING_CONTEXT_REFERENCE_V1 §9** (Groundhog module green = two subsystems armed). |

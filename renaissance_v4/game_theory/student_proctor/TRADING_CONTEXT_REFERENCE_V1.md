@@ -1,6 +1,6 @@
 # Trading context reference (v1) — codebase map + indicator lexicon + research alignment
 
-**Purpose:** Single **reference** for what “context” means in product JSON (your example shape), **every** indicator kind the repo admits in policy vocabulary (whether a given deployment uses it or not), and where it is implemented. Use this when filling `price_context`, `structure_context`, `pattern_context`, `indicator_context`, `time_context`, and `memory_context`.
+**Purpose:** Single **reference** for what “context” means in product JSON (your example shape), **every** indicator kind the repo admits in policy vocabulary (whether a given deployment uses it or not), and where it is implemented. Use this when filling `price_context`, `structure_context`, `pattern_context`, `indicator_context`, `time_context`, and `memory_context`. **§9** documents the Pattern Machine **Groundhog** module row (green = merge env + bundle on disk).
 
 **Wiring:** Rich buckets here are **target** semantics. **As-built Student pre-reveal path** = causal **`bars_inclusive_up_to_t`** + optional **`retrieved_student_experience_v1`** only — see `ARCHITECTURE_BACKWARD_LADDER_STUDENT_TABLE.md` **§C.1**. **Memory = approximation in principle**; **exact-key** retrieval v1 vs **tolerance** engine memory — see **§C.2** in the same file.
 
@@ -129,7 +129,26 @@ Any string key in `PRE_REVEAL_FORBIDDEN_KEYS_V1`, future bars, or **this** grade
 
 ---
 
-## 9. Revision history
+## 9. Groundhog — Pattern Machine **module row** (operator truth)
+
+**Where:** `renaissance_v4/game_theory/module_board.py` (`id`: `groundhog`).
+
+**Green (armed) iff both are true:**
+
+| # | Condition | Meaning |
+|---|-----------|---------|
+| 1 | `PATTERN_GAME_GROUNDHOG_BUNDLE` is enabled (`1` / `true` / `yes` / `on`) | Auto-merge path is allowed at process level (`groundhog_auto_merge_enabled()`). |
+| 2 | Canonical bundle file exists on disk | `renaissance_v4/game_theory/state/groundhog_memory_bundle.json` (`groundhog_bundle_path()`). |
+
+Implementation: `gh_ok = bool(gh_env and ghb.is_file())`. **Red** = merge off **or** file missing — no silent “half on.”
+
+**Scope:** This row proves **wiring + file presence** for the **pre-replay manifest merge** path (`groundhog_memory.py` / `memory_bundle.py`). It is **not** the Student learning store and **not** Decision Context Recall JSONL — those remain separate engine/Student paths (see **§7**). Product direction may **converge** naming later; today’s code keeps distinct stores.
+
+**Banner strip** (`GET /api/groundhog-memory`) echoes merge + file + `apply` ATR summary for quick status; **module modal** carries DEF-001 copy.
+
+---
+
+## 10. Revision history
 
 | Version | Date | Notes |
 |---------|------|--------|
@@ -138,3 +157,4 @@ Any string key in `PRE_REVEAL_FORBIDDEN_KEYS_V1`, future bars, or **this** grade
 | 1.2 | 2026-04-20 | Wiring note: pointer to backward ladder **§C.2** (approximation vs exact retrieval). |
 | 1.3 | 2026-04-20 | Companion: **§0** binding **trade** / **learned behavior** definitions. |
 | 1.4 | 2026-04-20 | D3: **`student_context_annex_v1`** + `validate_student_context_annex_v1` pointer. |
+| 1.5 | 2026-04-21 | **§9** Groundhog module row: green iff merge env + bundle file (`module_board.py`); scope vs §7 stores. |

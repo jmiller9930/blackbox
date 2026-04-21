@@ -82,7 +82,7 @@ _PATTERN_BANNER_WEBP_PATH = _RV4_ROOT / "assets" / "pattern.webp"
 _PATTERN_GAME_BANNER_BOOT_JS = _GAME_THEORY / "static" / "pattern_game_banner_boot.js"
 
 # Operator-visible web UI bundle version — bump when changing PAGE_HTML (HTML/CSS/JS) so deploys are provable.
-PATTERN_GAME_WEB_UI_VERSION = "2.19.0"
+PATTERN_GAME_WEB_UI_VERSION = "2.19.1"
 
 from renaissance_v4.game_theory.groundhog_memory import (
     groundhog_auto_merge_enabled,
@@ -3768,7 +3768,8 @@ PAGE_HTML = """<!DOCTYPE html>
               <summary>Setup, PYTHONPATH, Groundhog</summary>
               <div class="help-details-body">
                 <p>Run from repo root with <code>PYTHONPATH</code> including the repo. Example files load from <code>game_theory/examples/</code> (Advanced only).</p>
-                <p><code>PATTERN_GAME_GROUNDHOG_BUNDLE=1</code> merges <code>game_theory/state/groundhog_memory_bundle.json</code> when a scenario has no <code>memory_bundle_path</code>. POST <code>/api/groundhog-memory</code> to promote ATR from review.</p>
+                <p><code>PATTERN_GAME_GROUNDHOG_BUNDLE=1</code> merges <code>game_theory/state/groundhog_memory_bundle.json</code> when a scenario has no <code>memory_bundle_path</code>. POST <code>/api/groundhog-memory</code> with <code>atr_stop_mult</code> and <code>atr_target_mult</code> to write the canonical bundle.</p>
+                <p><strong>Modules row</strong> — Groundhog is <strong>green</strong> only when <em>both</em> merge is enabled and that bundle file exists. Otherwise red (see <code>TRADING_CONTEXT_REFERENCE_V1.md</code> §9).</p>
               </div>
             </details>
             <p class="caps" id="presetHelp">The server builds scenarios for curated patterns — no JSON required. Evaluation window controls how much tape is replayed (approximate months from the end of the series). Presets longer than your <code>market_bars_5m</code> span are disabled automatically (see Data health).</p>
