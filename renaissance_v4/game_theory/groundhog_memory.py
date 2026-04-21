@@ -112,10 +112,9 @@ def groundhog_wiring_signal() -> tuple[Literal["green", "yellow", "red"], str]:
     Tri-state wiring for the module board:
 
     - **green** — merge ON and the canonical file exists with a valid promoted ``apply`` block.
-    - **yellow** — merge OFF (idle), or merge ON with a file that exists but is not yet a full
-      promoted bundle (wrong schema or empty / incomplete ``apply``).
-    - **red** — merge ON and the bundle file is **missing**, or **read/parse fails**, or JSON is
-      not an object (container broken).
+    - **yellow** — merge OFF (idle), merge ON but bundle file not created yet, or merge ON with a
+      file that is not yet a full promoted bundle (wrong schema or empty / incomplete ``apply``).
+    - **red** — **read/parse fails**, or JSON is not an object (broken file).
     """
     env = groundhog_auto_merge_enabled()
     p = groundhog_bundle_path()
@@ -128,8 +127,8 @@ def groundhog_wiring_signal() -> tuple[Literal["green", "yellow", "red"], str]:
 
     if not p.is_file():
         return (
-            "red",
-            f"Merge ON but canonical bundle is missing — expected file at {p}. POST /api/groundhog-memory to create it.",
+            "yellow",
+            f"Merge ON — no bundle file yet at {p}. POST /api/groundhog-memory to promote (idle, not a read fault).",
         )
 
     try:

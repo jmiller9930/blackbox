@@ -92,12 +92,12 @@ def test_groundhog_wiring_signal_merge_off_is_yellow(
     assert "merge" in detail.lower()
 
 
-def test_groundhog_wiring_signal_merge_on_missing_is_red(gh_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_groundhog_wiring_signal_merge_on_missing_is_yellow(gh_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("PATTERN_GAME_GROUNDHOG_BUNDLE", "1")
     assert not gh_path.is_file()
     sig, detail = gm.groundhog_wiring_signal()
-    assert sig == "red"
-    assert "missing" in detail.lower()
+    assert sig == "yellow"
+    assert "bundle" in detail.lower()
 
 
 def test_groundhog_wiring_signal_green_when_promoted(

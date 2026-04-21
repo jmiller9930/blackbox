@@ -82,7 +82,7 @@ _PATTERN_BANNER_WEBP_PATH = _RV4_ROOT / "assets" / "pattern.webp"
 _PATTERN_GAME_BANNER_BOOT_JS = _GAME_THEORY / "static" / "pattern_game_banner_boot.js"
 
 # Operator-visible web UI bundle version — bump when changing PAGE_HTML (HTML/CSS/JS) so deploys are provable.
-PATTERN_GAME_WEB_UI_VERSION = "2.19.10"
+PATTERN_GAME_WEB_UI_VERSION = "2.19.12"
 
 from renaissance_v4.game_theory.groundhog_memory import (
     groundhog_auto_merge_enabled,
@@ -2337,7 +2337,7 @@ PAGE_HTML = """<!DOCTYPE html>
       position: relative;
       z-index: 1;
     }
-    details.pg-student-triangle-dock > .pg-panel-fold-body {
+    details.pg-student-triangle-dock > .pg-panel-fold-body.pg-student-triangle-fold-body {
       height: 60vh;
       min-height: 14rem;
       max-height: 88vh;
@@ -3881,7 +3881,7 @@ PAGE_HTML = """<!DOCTYPE html>
               <div class="help-details-body">
                 <p>Run from repo root with <code>PYTHONPATH</code> including the repo. Example files load from <code>game_theory/examples/</code> (Advanced only).</p>
                 <p><code>PATTERN_GAME_GROUNDHOG_BUNDLE=1</code> merges <code>game_theory/state/groundhog_memory_bundle.json</code> when a scenario has no <code>memory_bundle_path</code>. POST <code>/api/groundhog-memory</code> with <code>atr_stop_mult</code> and <code>atr_target_mult</code> to write the canonical bundle.</p>
-                <p><strong>Modules row / banner</strong> — Groundhog uses green / amber / red: <strong>Ready</strong> when merge is on and the bundle has promoted ATR values; <strong>Off</strong> or <strong>Wait</strong> when idle or not yet promoted; <strong>Fault</strong> when merge is on but the file is missing or unreadable. Hover the Groundhog banner tile for the full line.</p>
+                <p><strong>Modules row / banner</strong> — Groundhog uses green / amber / red: <strong>Ready</strong> when merge is on and the bundle has promoted ATR values; <strong>Off</strong> or <strong>Wait</strong> when merge is off, or merge is on but the bundle file is not created yet / not fully promoted; <strong>Fault</strong> when a bundle file is present but unreadable or invalid JSON. Hover the Groundhog banner tile for the full line.</p>
               </div>
             </details>
             <p class="caps" id="presetHelp">The server builds scenarios for curated patterns — no JSON required. Evaluation window controls how much tape is replayed (approximate months from the end of the series). Presets longer than your <code>market_bars_5m</code> span are disabled automatically (see Data health).</p>
@@ -4128,24 +4128,24 @@ PAGE_HTML = """<!DOCTYPE html>
               </div>
             </div>
             <div id="pgFocusPaneModules" class="pg-focus-pane pg-focus-pane--modules" hidden>
-              <div class="pg-pill-row"><span class="pg-pill">Green = check passed</span><span class="pg-pill">Red = not wired / not armed</span></div>
+              <div class="pg-pill-row"><span class="pg-pill">Green = passed</span><span class="pg-pill">Amber = idle / waiting</span><span class="pg-pill">Red = fault</span></div>
               <div class="pg-status-list" id="moduleBoardList"><p class="caps pg-module-board-msg">Loading…</p></div>
             </div>
           </div>
         </div>
       </div>
 
-      <details class="pg-panel-fold pg-student-triangle-dock">
+      <details class="pg-panel-fold pg-student-triangle-dock" id="pgStudentTriangleDock">
         <summary>
           <div class="pg-panel-header" style="margin:0;flex:1">
             <div>
               <h2 class="pg-panel-h">Student → learning → outcome</h2>
-              <p class="pg-panel-sub">Primary inspection surface after run — Student seam (belief, stored rows, retrieval). Use <strong>Quick view</strong> above to expand Terminal, Results, or Modules.</p>
+              <p class="pg-panel-sub">Primary inspection surface after run — Student seam (belief, stored rows, retrieval). Drag the <strong>bottom edge</strong> of the panel below to resize; height and open/closed state are remembered in this browser.</p>
             </div>
             <span class="pg-chip pg-chip-teal">Primary</span>
           </div>
         </summary>
-        <div class="pg-panel-fold-body">
+        <div id="studentTriangleFoldBody" class="pg-panel-fold-body pg-student-triangle-fold-body" title="Drag the bottom-right corner or bottom edge to resize. Size and open/closed state are saved in this browser (localStorage).">
           <div id="studentTriangleBody" class="pg-student-triangle-body" aria-live="polite">
             <p class="caps" style="margin:0">No batch yet — run a parallel batch to see the Student learning summary here.</p>
           </div>
@@ -4740,7 +4740,7 @@ PAGE_HTML = """<!DOCTYPE html>
       const fl = document.getElementById('focusTileTerminalLine');
       if (fs && st) fs.textContent = (st.textContent || '—').trim() || '—';
       if (fl && ln) {
-        const lines = (ln.textContent || '').trim().split('\\n').filter(Boolean);
+        const lines = (ln.textContent || '').trim().split('\n').filter(Boolean);
         const t = lines.length ? lines.slice(0, 4).join(' ') : '—';
         fl.textContent = t;
       }
@@ -6678,6 +6678,87 @@ PAGE_HTML = """<!DOCTYPE html>
     }
     refreshModuleBoard();
     setInterval(refreshModuleBoard, 90000);
+
+    (function wireStudentTrianglePersist() {
+      try {
+        const LS_H = 'patternGame.studentTriangle.foldBodyHeightPx';
+        const LS_OPEN = 'patternGame.studentTriangle.detailsOpen';
+        const details = document.getElementById('pgStudentTriangleDock');
+        const body = document.getElementById('studentTriangleFoldBody');
+        if (!details || !body) return;
+        function clampHeightPx(h) {
+          const minPx = 224;
+          const maxPx = Math.max(minPx + 40, Math.floor(window.innerHeight * 0.88));
+          let n = Math.round(Number(h));
+          if (!Number.isFinite(n)) return null;
+          return Math.max(minPx, Math.min(maxPx, n));
+        }
+        function applySavedHeight() {
+          try {
+            const raw = localStorage.getItem(LS_H);
+            if (raw == null || raw === '') return;
+            const yn = parseInt(raw, 10);
+            const c = clampHeightPx(yn);
+            if (c != null) body.style.height = c + 'px';
+          } catch (_e) { /* ignore */ }
+        }
+        function persistHeightPx(h) {
+          const c = clampHeightPx(h);
+          if (c == null) return;
+          try {
+            localStorage.setItem(LS_H, String(c));
+          } catch (_e) { /* ignore */ }
+        }
+        function persistOpen() {
+          try {
+            localStorage.setItem(LS_OPEN, details.open ? '1' : '0');
+          } catch (_e) { /* ignore */ }
+        }
+        try {
+          const o = localStorage.getItem(LS_OPEN);
+          if (o === '1') details.open = true;
+          else if (o === '0') details.open = false;
+        } catch (_e) { /* ignore */ }
+        requestAnimationFrame(function () { applySavedHeight(); });
+        let baselineH = -1;
+        let persistEnabled = false;
+        setTimeout(function () {
+          if (details.open) baselineH = body.offsetHeight;
+          persistEnabled = true;
+        }, 650);
+        window.addEventListener('resize', function () {
+          if (!details.open) return;
+          var cur = body.offsetHeight;
+          var c = clampHeightPx(cur);
+          if (c != null && cur > c) {
+            body.style.height = c + 'px';
+            persistHeightPx(c);
+          }
+        }, { passive: true });
+        if (typeof ResizeObserver === 'function') {
+          let roTimer = null;
+          var ro = new ResizeObserver(function () {
+            if (!persistEnabled || !details.open) return;
+            var h = body.offsetHeight;
+            if (h < 8) return;
+            if (baselineH >= 0 && Math.abs(h - baselineH) < 3) return;
+            baselineH = h;
+            clearTimeout(roTimer);
+            roTimer = setTimeout(function () {
+              persistHeightPx(h);
+            }, 200);
+          });
+          ro.observe(body);
+        }
+        details.addEventListener('toggle', function () {
+          persistOpen();
+          if (details.open) {
+            baselineH = body.offsetHeight;
+          }
+        });
+      } catch (_e) { /* persist must never break the rest of the page */
+      }
+    })();
 
     async function refreshSearchSpaceEstimate() {
       const el = document.getElementById('searchSpaceStrip');

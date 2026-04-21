@@ -242,8 +242,8 @@ def compute_pattern_game_module_board() -> dict[str, Any]:
             "body": (
                 "The **only** default path that merges whitelisted parameters into the manifest before replay.\n"
                 "**Green** — merge ON and the canonical file has promoted ``atr_stop_mult`` / ``atr_target_mult``.\n"
-                "**Yellow** — merge OFF (idle), or merge ON but still waiting for a full promoted bundle (or wrong schema).\n"
-                "**Red** (fault) — merge ON but the bundle file is missing, unreadable, or not parseable JSON.\n"
+                "**Yellow** — merge OFF (idle), merge ON before the bundle file exists, or file not yet fully promoted (or wrong schema).\n"
+                "**Red** (fault) — bundle file exists but is unreadable, not parseable JSON, or not a JSON object.\n"
                 f"Bundle path: {ghb}"
             ),
         }
@@ -304,6 +304,6 @@ def compute_pattern_game_module_board() -> dict[str, Any]:
         "modules": modules,
         "def001_note": (
             "Green/red/yellow (Groundhog) = wiring truth; Groundhog green = promoted bundle ready; "
-            "yellow = idle or waiting; red = merge on but missing/broken container."
+            "yellow = idle / waiting for bundle or promote; red = bundle present but broken on disk."
         ),
     }
