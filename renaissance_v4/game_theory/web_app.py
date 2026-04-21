@@ -80,7 +80,7 @@ _PATTERN_BANNER_PATH = _RV4_ROOT / "assets" / "pattern.png"
 _PATTERN_BANNER_WEBP_PATH = _RV4_ROOT / "assets" / "pattern.webp"
 
 # Operator-visible web UI bundle version — bump when changing PAGE_HTML (HTML/CSS/JS) so deploys are provable.
-PATTERN_GAME_WEB_UI_VERSION = "2.15.0"
+PATTERN_GAME_WEB_UI_VERSION = "2.17.1"
 
 from renaissance_v4.game_theory.groundhog_memory import (
     groundhog_auto_merge_enabled,
@@ -1886,7 +1886,7 @@ PAGE_HTML = """<!DOCTYPE html>
       position: relative;
       z-index: 1;
       display: grid;
-      grid-template-columns: repeat(5, minmax(0, 1fr));
+      grid-template-columns: repeat(6, minmax(0, 1fr));
       gap: 10px;
       margin-top: 18px;
       max-width: min(1600px, 100%);
@@ -1931,6 +1931,36 @@ PAGE_HTML = """<!DOCTYPE html>
     }
     .pg-banner-stat .status-dot.ok { background: #2fa46a; box-shadow: 0 0 8px rgba(47,164,106,0.45); }
     .pg-banner-stat .status-dot.bad { background: #d15959; box-shadow: 0 0 8px rgba(209,89,89,0.35); }
+    /* D10.1 — compact Paper P&L in banner (no controls; summary only) */
+    .pg-banner-stat.pg-banner-stat--pnl {
+      cursor: default;
+    }
+    .pg-banner-stat.pg-banner-stat--pnl .banner-pnl-amt {
+      font-variant-numeric: tabular-nums;
+    }
+    .pg-banner-stat.pg-banner-stat--pnl .banner-pnl-amt.up { color: #7fd9a8; }
+    .pg-banner-stat.pg-banner-stat--pnl .banner-pnl-amt.down { color: #f0a8a8; }
+    .pg-banner-stat.pg-banner-stat--pnl .banner-pnl-amt.neutral { color: rgba(247, 241, 230, 0.85); }
+    .pg-banner-pnl-micro {
+      margin-top: 6px;
+      height: 4px;
+      border-radius: 2px;
+      background: rgba(255, 255, 255, 0.12);
+      position: relative;
+      overflow: hidden;
+    }
+    .pg-banner-pnl-micro .pg-banner-pnl-micro-fill {
+      position: absolute;
+      left: 0;
+      top: 0;
+      height: 100%;
+      border-radius: 2px;
+      opacity: 0.85;
+      pointer-events: none;
+      transition: width 0.2s ease, left 0.2s ease;
+    }
+    .pg-banner-pnl-micro .pg-banner-pnl-micro-fill.up { background: #2fa46a; }
+    .pg-banner-pnl-micro .pg-banner-pnl-micro-fill.down { background: #d15959; }
     .pg-row {
       display: grid;
       gap: 18px;
@@ -1974,9 +2004,80 @@ PAGE_HTML = """<!DOCTYPE html>
       gap: 12px;
       min-width: 0;
       flex: 1 1 auto;
-      min-height: calc(100vh - 200px);
+      min-height: 0;
     }
     .pg-student-triangle-dock { flex: 0 0 auto; }
+    /* D10.2 — focus-driven triptych */
+    .pg-focus-dock {
+      --pg-focus-dock-h: min(320px, 36vh);
+      border: 1px solid var(--pg-line);
+      border-radius: var(--pg-radius-lg);
+      background: var(--pg-surface);
+      overflow: hidden;
+      flex: 0 0 auto;
+      min-height: 0;
+      display: flex;
+      flex-direction: column;
+      max-height: var(--pg-focus-dock-h);
+    }
+    .pg-focus-dock[data-pg-focus-mode="overview"] { height: var(--pg-focus-dock-h); }
+    .pg-focus-dock[data-pg-focus-mode]:not([data-pg-focus-mode="overview"]) {
+      height: min(70vh, 640px); max-height: min(70vh, 640px);
+    }
+    .pg-focus-overview {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 8px;
+      padding: 10px;
+      flex: 1 1 auto;
+      min-height: 0;
+    }
+    .pg-focus-tile {
+      appearance: none;
+      border: 1px solid var(--pg-line);
+      border-radius: 12px;
+      background: #f8f6f2;
+      padding: 10px 10px 8px;
+      text-align: left;
+      cursor: pointer;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      min-height: 0;
+      transition: border-color 0.15s, box-shadow 0.15s;
+      font: inherit;
+    }
+    .pg-focus-tile:hover { border-color: var(--pg-accent); box-shadow: 0 0 0 1px rgba(45, 138, 106, 0.2); }
+    .pg-focus-tile:focus-visible { outline: 2px solid var(--pg-accent); outline-offset: 2px; }
+    .pg-focus-tile-k { font-size: 0.65rem; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase; color: var(--pg-muted); margin: 0; }
+    .pg-focus-tile-body { font-size: 0.78rem; line-height: 1.38; color: var(--pg-ink); overflow: hidden; }
+    .pg-focus-tile-hint { font-size: 0.68rem; color: var(--pg-muted); margin: 0; }
+    .pg-focus-expanded { display: flex; flex-direction: column; flex: 1 1 auto; min-height: 0; }
+    .pg-focus-expanded-head {
+      display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-bottom: 1px solid var(--pg-line);
+      background: #f0ebe3; flex: 0 0 auto;
+    }
+    .pg-focus-expanded-title { font-size: 0.72rem; font-weight: 800; letter-spacing: 0.06em; text-transform: uppercase; color: var(--pg-muted); }
+    .pg-focus-back-btn { font-size: 0.75rem; padding: 6px 10px; border-radius: 8px; border: 1px solid var(--pg-line); background: #fff; cursor: pointer; font-weight: 600; }
+    .pg-focus-back-btn:hover { background: #f4f1ea; }
+    .pg-focus-expanded-body { flex: 1 1 auto; min-height: 0; overflow: hidden; position: relative; }
+    .pg-focus-pane { position: absolute; inset: 0; overflow: auto; padding: 10px 12px 12px; -webkit-overflow-scrolling: touch; }
+    .pg-focus-pane-inner--dark { background: #0f1419; color: #e6edf3; border-radius: 8px; padding: 10px; }
+    body[data-pg-focus-expanded="1"] .pg-focus-dock { box-shadow: 0 0 0 2px rgba(45, 138, 106, 0.2); }
+    .pg-focus-pane--results {
+      background: linear-gradient(180deg, #1a2330 0%, #152028 100%);
+      color: #f0f4f8;
+    }
+    .pg-focus-pane--results .pg-tab-strip { margin-top: 4px; }
+    .pg-focus-pane--results .pg-tab {
+      padding: 8px 10px; font-size: 11px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.12);
+      background: rgba(0,0,0,0.2); color: rgba(247,241,230,0.9); cursor: pointer;
+    }
+    .pg-focus-pane--results .pg-tab.active { background: rgba(255,255,255,0.12); border-color: rgba(255,255,255,0.25); color: #fff; }
+    .pg-focus-pane--results .policy-table th { background: rgba(255,255,255,0.1); color: rgba(247,241,230,0.95); }
+    .pg-focus-pane--results .policy-table td { color: #f0f4f8; border-color: rgba(255,255,255,0.12); }
+    .pg-focus-pane--results .pg-pre-json { background: rgba(0,0,0,0.25); color: #e8ecf0; border: 1px solid rgba(255,255,255,0.1); border-radius: 8px; padding: 10px; }
+    .pg-focus-pane--results .hint { color: rgba(247,241,230,0.7); }
     .pg-student-triangle-body {
       font-size: 0.88rem;
       line-height: 1.48;
@@ -2597,62 +2698,6 @@ PAGE_HTML = """<!DOCTYPE html>
       color: #3a4450;
     }
     #workerEffectiveLine strong { color: var(--pg-ink); }
-    .pnl-strip {
-      padding: 12px;
-      border-radius: 12px;
-      background: #f4f1ea;
-      border: 1px solid var(--pg-line);
-      font-size: 0.88rem;
-    }
-    .pnl-strip .pnl-row1 {
-      display: flex;
-      flex-wrap: wrap;
-      align-items: baseline;
-      gap: 10px 16px;
-      margin-bottom: 8px;
-    }
-    .pnl-strip .pnl-baseline { color: var(--pg-muted); font-size: 0.8rem; }
-    .pnl-strip .pnl-ending { font-size: 1.1rem; font-weight: 700; font-variant-numeric: tabular-nums; color: var(--pg-ink); }
-    .pnl-strip .pnl-delta { font-weight: 600; font-variant-numeric: tabular-nums; }
-    .pnl-strip .pnl-delta.up { color: #1f8a54; }
-    .pnl-strip .pnl-delta.down { color: #c43b3b; }
-    .pnl-strip .pnl-delta.neutral { color: var(--pg-muted); }
-    .pnl-bar-wrap { position: relative; margin-top: 4px; }
-    .pnl-bar-track {
-      height: 10px;
-      border-radius: 5px;
-      background: linear-gradient(90deg, #ebe4dc 0%, #d8dde3 50%, #ebe4dc 100%);
-      position: relative;
-    }
-    .pnl-bar-ticks {
-      display: flex;
-      justify-content: space-between;
-      font-size: 0.65rem;
-      color: var(--pg-muted);
-      margin-top: 4px;
-    }
-    .pnl-marker {
-      position: absolute;
-      top: -3px;
-      width: 4px;
-      height: 16px;
-      margin-left: -2px;
-      border-radius: 2px;
-      background: var(--pg-ink);
-      box-shadow: 0 0 6px rgba(0,0,0,0.12);
-      transform: translateX(-50%);
-      left: 50%;
-    }
-    .pnl-fill {
-      position: absolute;
-      top: 0;
-      height: 10px;
-      border-radius: 5px;
-      opacity: 0.7;
-      pointer-events: none;
-    }
-    .pnl-fill.up { background: #1f8a54; }
-    .pnl-fill.down { background: #c43b3b; }
     .scorecard-legend {
       font-size: 0.76rem;
       color: var(--pg-muted);
@@ -3236,61 +3281,24 @@ PAGE_HTML = """<!DOCTYPE html>
           <div class="pg-k">Search space</div>
           <div class="pg-s pg-s-tall" id="searchSpaceStrip" aria-live="polite"><strong>Search space</strong> — loading…</div>
         </div>
-        <div class="pg-banner-stat">
-          <div class="pg-k">Paper P&amp;L &amp; run</div>
+        <div class="pg-banner-stat pg-banner-stat--pnl" id="bannerPnlCard" title="Referee paper P&amp;L for the last completed batch (sum of scenario cumulative P&amp;L vs $1k baseline each).">
+          <div class="pg-k">P&amp;L</div>
+          <div class="pg-v" id="bannerPnlV"><span class="banner-pnl-amt neutral" id="bannerPnlAmt">—</span></div>
+          <div class="pg-s" id="bannerPnlS">vs $1k</div>
+          <div class="pg-banner-pnl-micro" aria-hidden="true" title="Ending equity on 0–$2k scale (clamp)">
+            <div class="pg-banner-pnl-micro-fill up" id="bannerPnlMicroFill" style="left:50%;width:0%;"></div>
+          </div>
+        </div>
+        <div class="pg-banner-stat" title="Current batch / status line">
+          <div class="pg-k">Run</div>
           <div class="pg-v" id="bannerRunV">Idle</div>
           <div class="pg-s" id="bannerRunS">— run a batch —</div>
         </div>
-        <div class="pg-banner-stat" title="Subsystem health from /api/module-board — expand Modules drawer below for the full list">
+        <div class="pg-banner-stat" title="Subsystem health — open Modules in the focus dock (below) for details">
           <div class="pg-k">Modules</div>
           <div class="pg-v"><span class="status-dot" id="moduleBannerDot"></span> <span id="bannerModulesV">—</span></div>
           <div class="pg-s" id="bannerModulesS">Loading subsystem list…</div>
         </div>
-      </div>
-      <div class="pg-header-drawers">
-      <details class="pg-header-evidence">
-        <summary>
-          <span class="pg-header-evidence-title">Results workspace</span>
-          <span class="pg-chip pg-chip-steel" style="border-color:rgba(255,255,255,0.25);color:#e8ecf0">Evidence</span>
-          <p class="pg-header-evidence-hint">Last run: Referee outcomes · raw JSON · session folder path — expand to inspect.</p>
-        </summary>
-        <div class="pg-header-drawer-inner">
-          <div class="pg-tab-strip" role="tablist">
-            <button type="button" class="pg-tab active" data-tab="outcomes" role="tab">Referee outcomes</button>
-            <button type="button" class="pg-tab" data-tab="json" role="tab">Raw JSON</button>
-            <button type="button" class="pg-tab" data-tab="session" role="tab">Session log</button>
-          </div>
-          <div id="pgEvidenceOutcomes" class="pg-evidence-panel">
-            <div class="policy-outcome-panel" id="policyOutcomePanel" hidden>
-              <p class="hint">Trade win % per scenario; session from cumulative P&amp;L.</p>
-              <div class="pg-table-scroll">
-                <table class="policy-table" id="policyOutcomeTable">
-                  <thead>
-                    <tr>
-                      <th>Scenario</th><th>Session</th><th>Cum. P&amp;L</th><th>Trade win %</th><th>Trades</th>
-                      <th>Signal modules</th><th>Fusion</th><th>Strategy id</th>
-                    </tr>
-                  </thead>
-                  <tbody id="policyOutcomeTbody"></tbody>
-                </table>
-              </div>
-            </div>
-          </div>
-          <p class="caps" id="sessionLogNote" style="display:none;margin:10px 0 8px"></p>
-          <pre id="out" class="pg-pre-json" style="display:none">(no run yet)</pre>
-        </div>
-      </details>
-      <details class="pg-header-modules">
-        <summary>
-          <span class="pg-header-evidence-title">Modules online</span>
-          <span class="pg-chip pg-chip-rose" style="border-color:rgba(255,255,255,0.25);color:#f5d0cc">Health</span>
-          <p class="pg-header-evidence-hint">Each dot = a real wiring check (not decoration). Groundhog green = behavioral bundle <strong>armed</strong>. Click any row for what it does (DEF-001).</p>
-        </summary>
-        <div class="pg-header-drawer-inner">
-          <div class="pg-pill-row"><span class="pg-pill">Green = check passed</span><span class="pg-pill">Red = not wired / not armed</span></div>
-          <div class="pg-status-list" id="moduleBoardList"><p class="caps" style="margin:0;color:rgba(247,241,230,0.75)">Loading…</p></div>
-        </div>
-      </details>
       </div>
       </div>
     </header>
@@ -3405,24 +3413,6 @@ PAGE_HTML = """<!DOCTYPE html>
             <label style="margin-top:8px;font-size:0.85rem;display:block"><input type="checkbox" id="doLog" checked/> Append to experience JSONL</label>
           </div>
 
-          <div class="pg-block" style="margin-top:0;padding-top:12px">
-            <div class="pg-block-title">Paper P&amp;L (batch)</div>
-            <div class="pnl-strip" id="pnlStrip">
-              <div class="pnl-row1">
-                <span class="pnl-baseline">Baseline <span id="pnlBaselineLabel">$1,000.00</span></span>
-                <span class="pnl-ending" id="pnlEnding">$1,000.00</span>
-                <span class="pnl-delta neutral" id="pnlDelta">— run a batch —</span>
-              </div>
-              <div class="pnl-bar-wrap" aria-hidden="true">
-                <div class="pnl-bar-track" id="pnlBarTrack">
-                  <div class="pnl-fill" id="pnlFill" style="left:50%;width:0;"></div>
-                  <div class="pnl-marker" id="pnlMarker"></div>
-                </div>
-                <div class="pnl-bar-ticks"><span>$0</span><span>$1k</span><span>$2k</span></div>
-              </div>
-            </div>
-          </div>
-
           <div class="run-actions">
             <button type="button" id="runBtn" class="pg-op-btn pg-op-btn--run" data-label-idle="Run batch">Run batch</button>
             <div class="status-stack">
@@ -3510,11 +3500,40 @@ PAGE_HTML = """<!DOCTYPE html>
       </div>
 
       <div class="pg-runtime-stack">
-      <div class="pg-telemetry-dock">
+      <div class="pg-focus-dock" id="pgFocusDock" data-pg-focus-mode="overview">
+        <div class="pg-focus-overview" id="pgFocusOverview">
+          <button type="button" class="pg-focus-tile" id="pgFocusTileTerminal" data-pg-focus-tile="terminal" title="Open Terminal (full)">
+            <p class="pg-focus-tile-k">Terminal</p>
+            <div class="pg-focus-tile-body" id="focusTileTerminalBody"><strong id="focusTileTerminalStatus">Idle</strong><br/><span id="focusTileTerminalLine">No batch running.</span></div>
+            <p class="pg-focus-tile-hint">Engine + DCR · click to expand</p>
+          </button>
+          <button type="button" class="pg-focus-tile" id="pgFocusTileResults" data-pg-focus-tile="results" title="Open Results workspace (full)">
+            <p class="pg-focus-tile-k">Results</p>
+            <div class="pg-focus-tile-body" id="focusTileResultsBody">
+              <span id="focusTileResultsPnl">P&amp;L —</span><br/>
+              <span id="focusTileResultsTw">Trade win —</span> · <span id="focusTileResultsTr">Trades —</span>
+            </div>
+            <p class="pg-focus-tile-hint">Referee outcomes · JSON · session</p>
+          </button>
+          <button type="button" class="pg-focus-tile" id="pgFocusTileModules" data-pg-focus-tile="modules" title="Open Modules board (full)">
+            <p class="pg-focus-tile-k">Modules</p>
+            <div class="pg-focus-tile-body" id="focusTileModulesBody"><strong id="focusTileModulesSt">—</strong><br/><span id="focusTileModulesLine">Loading…</span></div>
+            <p class="pg-focus-tile-hint">Wiring health · click to expand</p>
+          </button>
+        </div>
+        <div class="pg-focus-expanded" id="pgFocusExpanded" hidden>
+          <div class="pg-focus-expanded-head">
+            <button type="button" class="pg-focus-back-btn" id="pgFocusBackBtn" aria-label="Back to overview">← Overview</button>
+            <span class="pg-focus-expanded-title" id="pgFocusExpandedTitle">Terminal</span>
+          </div>
+          <div class="pg-focus-expanded-body">
+            <div id="pgFocusPaneTerminal" class="pg-focus-pane">
+              <div class="pg-focus-pane-inner--dark">
+              <div class="pg-telemetry-dock" style="position:static;max-height:none;top:0">
       <div id="liveTelemetryWrap" class="live-telemetry-wrap">
         <p class="live-telemetry-title">Terminal <span class="pg-secondary-surface-label">While running</span>
           <span class="pg-sr-only">Live engine replay telemetry and Decision Context Recall (DCR) counters — not the Student learning store.</span>
-          <span aria-hidden="true" style="display:block;margin-top:4px;font-size:0.72rem;font-weight:600;color:#9aa7b4;text-transform:none;letter-spacing:0">Engine replay + DCR — primary focus until the run completes</span></p>
+          <span aria-hidden="true" style="display:block;margin-top:4px;font-size:0.72rem;font-weight:600;color:#9aa7b4;text-transform:none;letter-spacing:0">Engine replay + DCR</span></p>
         <div class="pg-terminal-split">
         <div class="pg-terminal-split-left">
         <div id="memoryStatusCard" class="memory-status-card" aria-live="polite">
@@ -3543,6 +3562,42 @@ PAGE_HTML = """<!DOCTYPE html>
         </aside>
         </div>
       </div>
+              </div>
+              </div>
+            </div>
+            <div id="pgFocusPaneResults" class="pg-focus-pane pg-focus-pane--results" hidden>
+              <div class="pg-header-drawer-inner" style="background:transparent;padding:0">
+                <div class="pg-tab-strip" role="tablist">
+                  <button type="button" class="pg-tab active" data-tab="outcomes" role="tab">Referee outcomes</button>
+                  <button type="button" class="pg-tab" data-tab="json" role="tab">Raw JSON</button>
+                  <button type="button" class="pg-tab" data-tab="session" role="tab">Session log</button>
+                </div>
+                <div id="pgEvidenceOutcomes" class="pg-evidence-panel">
+                  <div class="policy-outcome-panel" id="policyOutcomePanel" hidden>
+                    <p class="hint">Trade win % per scenario; session from cumulative P&amp;L.</p>
+                    <div class="pg-table-scroll">
+                      <table class="policy-table" id="policyOutcomeTable">
+                        <thead>
+                          <tr>
+                            <th>Scenario</th><th>Session</th><th>Cum. P&amp;L</th><th>Trade win %</th><th>Trades</th>
+                            <th>Signal modules</th><th>Fusion</th><th>Strategy id</th>
+                          </tr>
+                        </thead>
+                        <tbody id="policyOutcomeTbody"></tbody>
+                      </table>
+                    </div>
+                  </div>
+                </div>
+                <p class="caps" id="sessionLogNote" style="display:none;margin:10px 0 8px"></p>
+                <pre id="out" class="pg-pre-json" style="display:none">(no run yet)</pre>
+              </div>
+            </div>
+            <div id="pgFocusPaneModules" class="pg-focus-pane pg-focus-pane--modules" hidden>
+              <div class="pg-pill-row"><span class="pg-pill">Green = check passed</span><span class="pg-pill">Red = not wired / not armed</span></div>
+              <div class="pg-status-list" id="moduleBoardList"><p class="caps" style="margin:0;color:var(--pg-muted)">Loading…</p></div>
+            </div>
+          </div>
+        </div>
       </div>
 
       <details class="pg-panel-fold pg-student-triangle-dock" open>
@@ -3550,7 +3605,7 @@ PAGE_HTML = """<!DOCTYPE html>
           <div class="pg-panel-header" style="margin:0;flex:1">
             <div>
               <h2 class="pg-panel-h">Student → learning → outcome</h2>
-              <p class="pg-panel-sub">Primary inspection surface after run — Student seam (belief, stored rows, retrieval). Terminal above is engine replay + DCR, not the Student store.</p>
+              <p class="pg-panel-sub">Primary inspection surface after run — Student seam (belief, stored rows, retrieval). Focus dock above: Terminal / Results / Modules — expand for detail.</p>
             </div>
             <span class="pg-chip pg-chip-teal">Primary</span>
           </div>
@@ -4032,7 +4087,7 @@ PAGE_HTML = """<!DOCTYPE html>
         '</dl>' +
         priHtml +
         errHtml +
-        '<p class="pg-student-tri-note">Referee outcomes: <strong>Results workspace</strong> (header). Plumbing history: expand <strong>Score card</strong>. <strong>Clear Card</strong> does not clear the Student store — use Clear Student Proctor store there.</p>';
+        '<p class="pg-student-tri-note">Referee outcomes: <strong>Results</strong> panel in the focus dock (expand tile above). Plumbing history: expand <strong>Score card</strong>. <strong>Clear Card</strong> does not clear the Student store — use Clear Student Proctor store there.</p>';
       updateLearningEventsStripFromBatch(data, seam);
       const dock = document.querySelector('details.pg-student-triangle-dock');
       if (dock) {
@@ -4221,6 +4276,53 @@ PAGE_HTML = """<!DOCTYPE html>
       updateTerminalCompactSummary(
         pj, running, completed, total, elapsed, hot, winStr, lm, echo, recipe
       );
+      updateFocusTerminalOverviewTile();
+    }
+
+    function updateFocusTerminalOverviewTile() {
+      const st = document.getElementById('tcsStatus');
+      const ln = document.getElementById('liveTelemetryPanel');
+      const fs = document.getElementById('focusTileTerminalStatus');
+      const fl = document.getElementById('focusTileTerminalLine');
+      if (fs && st) fs.textContent = (st.textContent || '—').trim() || '—';
+      if (fl && ln) {
+        const lines = (ln.textContent || '').trim().split('\n');
+        let t = lines[0] || '—';
+        if (t.length > 80) t = t.slice(0, 77) + '…';
+        fl.textContent = t;
+      }
+    }
+
+    function pgFocusEnterPanel(mode) {
+      const dock = document.getElementById('pgFocusDock');
+      const ov = document.getElementById('pgFocusOverview');
+      const ex = document.getElementById('pgFocusExpanded');
+      const pt = document.getElementById('pgFocusPaneTerminal');
+      const pr = document.getElementById('pgFocusPaneResults');
+      const pm = document.getElementById('pgFocusPaneModules');
+      const title = document.getElementById('pgFocusExpandedTitle');
+      if (!dock || !ov || !ex || !pt || !pr || !pm) return;
+      const labels = { terminal: 'Terminal', results: 'Results', modules: 'Modules' };
+      if (!labels[mode]) return;
+      dock.setAttribute('data-pg-focus-mode', mode);
+      document.body.setAttribute('data-pg-focus-expanded', '1');
+      ov.hidden = true;
+      ex.hidden = false;
+      if (title) title.textContent = labels[mode];
+      pt.hidden = mode !== 'terminal';
+      pr.hidden = mode !== 'results';
+      pm.hidden = mode !== 'modules';
+    }
+
+    function pgFocusBackToOverview() {
+      const dock = document.getElementById('pgFocusDock');
+      const ov = document.getElementById('pgFocusOverview');
+      const ex = document.getElementById('pgFocusExpanded');
+      if (!dock || !ov || !ex) return;
+      dock.setAttribute('data-pg-focus-mode', 'overview');
+      document.body.removeAttribute('data-pg-focus-expanded');
+      ov.hidden = false;
+      ex.hidden = true;
     }
 
     function updateTerminalCompactSummary(pj, running, completed, total, elapsed, hot, winStr, lm, echo, recipe) {
@@ -4263,6 +4365,7 @@ PAGE_HTML = """<!DOCTYPE html>
       const echo = {};
       updateMemoryStatusCardFromPanel(null, echo, null, false);
       updateTerminalCompactSummary({ status: 'idle' }, false, 0, 0, 0, null, '—', '', {}, '—');
+      updateFocusTerminalOverviewTile();
     }
 
     function setBannerRun(main, sub) {
@@ -4325,12 +4428,24 @@ PAGE_HTML = """<!DOCTYPE html>
       if (outcomes) outcomes.style.display = (id === 'outcomes') ? '' : 'none';
       if (pre) pre.style.display = (id === 'json') ? 'block' : 'none';
       if (sn) sn.style.display = (id === 'session') ? 'block' : 'none';
-      const hdr = document.querySelector('.pg-header-evidence');
-      if (hdr && (id === 'json' || id === 'session' || id === 'outcomes')) hdr.open = true;
     }
     document.querySelectorAll('.pg-tab-strip .pg-tab').forEach((btn) => {
       btn.addEventListener('click', () => setEvidenceTab(btn.getAttribute('data-tab')));
     });
+
+    (function wirePgFocusDock() {
+      const back = document.getElementById('pgFocusBackBtn');
+      if (back) back.addEventListener('click', function () { pgFocusBackToOverview(); });
+      [
+        ['pgFocusTileTerminal', 'terminal'],
+        ['pgFocusTileResults', 'results'],
+        ['pgFocusTileModules', 'modules'],
+      ].forEach(function (pair) {
+        const el = document.getElementById(pair[0]);
+        if (el) el.addEventListener('click', function () { pgFocusEnterPanel(pair[1]); });
+      });
+      updateFocusTerminalOverviewTile();
+    })();
 
     function formatUsdPlain(n) {
       const x = Number(n);
@@ -5034,8 +5149,7 @@ PAGE_HTML = """<!DOCTYPE html>
 
     async function show(el, data, err) {
       const pre = document.getElementById('out');
-      const hdr = document.querySelector('.pg-header-evidence');
-      if (hdr) hdr.open = true;
+      if (typeof pgFocusEnterPanel === 'function') pgFocusEnterPanel('results');
       if (!pre) {
         console.error('Pattern Machine learning UI: missing #out element');
         return;
@@ -5055,7 +5169,38 @@ PAGE_HTML = """<!DOCTYPE html>
       if (data && typeof data === 'object') {
         renderStudentTriangleFromBatchResult(data);
       }
+      updateFocusResultsTileFromPayload(data);
       setEvidenceTab('outcomes');
+    }
+
+    function updateFocusResultsTileFromPayload(data) {
+      const pnlEl = document.getElementById('focusTileResultsPnl');
+      const twEl = document.getElementById('focusTileResultsTw');
+      const trEl = document.getElementById('focusTileResultsTr');
+      if (!pnlEl || !twEl || !trEl) return;
+      if (!data || typeof data !== 'object' || !data.pnl_summary) {
+        pnlEl.textContent = 'P&L —';
+        twEl.textContent = 'Trade win —';
+        trEl.textContent = '—';
+        return;
+      }
+      const p = data.pnl_summary;
+      const d = Number(p.batch_total_pnl_usd);
+      if (Math.abs(d) < 1e-9) pnlEl.textContent = 'P&L $0.00';
+      else pnlEl.textContent = 'P&L ' + (d >= 0 ? '+' : '−') + formatUsdPlain(Math.abs(d));
+      const bt = data.batch_timing && typeof data.batch_timing === 'object' ? data.batch_timing : {};
+      let tw = bt.batch_trade_win_pct;
+      if (tw == null) tw = bt.avg_trade_win_pct;
+      twEl.textContent = tw != null && tw !== '' ? 'TW ' + Number(tw).toFixed(1) + '%' : 'TW —';
+      let trn = bt.batch_trades_count;
+      if (trn == null && Array.isArray(data.results)) {
+        trn = 0;
+        for (const r of data.results) {
+          const s = r && r.summary && typeof r.summary.trades === 'number' ? r.summary.trades : null;
+          if (s != null) trn += s;
+        }
+      }
+      trEl.textContent = trn != null && trn !== '' ? '#' + String(trn) : '—';
     }
 
     function openRunControlsPanel() {
@@ -5081,40 +5226,60 @@ PAGE_HTML = """<!DOCTYPE html>
       if (!pnl || typeof pnl.ending_equity_usd !== 'number') return;
       const end = pnl.ending_equity_usd;
       const delta = pnl.batch_total_pnl_usd;
-      document.getElementById('pnlEnding').textContent = formatUsd(end);
-      const dEl = document.getElementById('pnlDelta');
-      if (Math.abs(delta) < 1e-9) {
-        dEl.textContent = '$0.00 vs baseline';
-        dEl.className = 'pnl-delta neutral';
-      } else {
-        dEl.textContent = (delta >= 0 ? '+' : '−') + formatUsd(Math.abs(delta)) + ' vs baseline';
-        dEl.className = 'pnl-delta ' + (delta >= 0 ? 'up' : 'down');
+      const amt = document.getElementById('bannerPnlAmt');
+      if (amt) {
+        if (Math.abs(delta) < 1e-9) {
+          amt.textContent = '$0.00';
+          amt.className = 'banner-pnl-amt neutral';
+        } else {
+          const sign = delta >= 0 ? '+' : '−';
+          amt.textContent = sign + formatUsd(Math.abs(delta));
+          amt.className = 'banner-pnl-amt ' + (delta >= 0 ? 'up' : 'down');
+        }
       }
-      const lo = 0, hi = 2000;
-      const pct = Math.max(0, Math.min(100, ((end - lo) / (hi - lo)) * 100));
-      const m = document.getElementById('pnlMarker');
-      m.style.left = pct + '%';
+      const sub = document.getElementById('bannerPnlS');
+      if (sub) sub.textContent = 'vs $1k';
+      const lo = 0;
+      const hi = 2000;
+      const pctEnd = Math.max(0, Math.min(100, ((end - lo) / (hi - lo)) * 100));
       const baselinePct = ((STARTING_EQUITY - lo) / (hi - lo)) * 100;
-      const fill = document.getElementById('pnlFill');
-      const left = Math.min(baselinePct, pct);
-      const width = Math.abs(pct - baselinePct);
-      fill.style.left = left + '%';
-      fill.style.width = width + '%';
-      fill.className = 'pnl-fill ' + (end >= STARTING_EQUITY ? 'up' : 'down');
-      document.getElementById('pnlStrip').title = (pnl.note || '') + ' Ending equity shown on 0–$2k track (clamp).';
+      const fill = document.getElementById('bannerPnlMicroFill');
+      if (fill) {
+        const left = Math.min(baselinePct, pctEnd);
+        const width = Math.abs(pctEnd - baselinePct);
+        fill.style.left = left + '%';
+        fill.style.width = Math.max(width, 0.5) + '%';
+        fill.className = 'pg-banner-pnl-micro-fill ' + (end >= STARTING_EQUITY ? 'up' : 'down');
+      }
+      const card = document.getElementById('bannerPnlCard');
+      if (card) {
+        const base = (pnl.note || '').trim();
+        card.title =
+          (base ? base + ' ' : '') +
+          'Batch Δ P&amp;L vs baseline; micro bar = baseline→ending on $0–$2k clamp.';
+      }
     }
 
     function resetPnlStrip() {
-      document.getElementById('pnlEnding').textContent = formatUsd(STARTING_EQUITY);
-      document.getElementById('pnlDelta').textContent = '— run a batch —';
-      document.getElementById('pnlDelta').className = 'pnl-delta neutral';
-      document.getElementById('pnlMarker').style.left = Math.max(0, Math.min(100, (STARTING_EQUITY / 2000) * 100)) + '%';
-      const f = document.getElementById('pnlFill');
-      f.style.left = '50%';
-      f.style.width = '0';
-      f.className = 'pnl-fill up';
+      const amt = document.getElementById('bannerPnlAmt');
+      if (amt) {
+        amt.textContent = '—';
+        amt.className = 'banner-pnl-amt neutral';
+      }
+      const sub = document.getElementById('bannerPnlS');
+      if (sub) sub.textContent = 'vs $1k';
+      const fill = document.getElementById('bannerPnlMicroFill');
+      if (fill) {
+        fill.style.left = '50%';
+        fill.style.width = '0';
+        fill.className = 'pg-banner-pnl-micro-fill up';
+      }
+      const card = document.getElementById('bannerPnlCard');
+      if (card) {
+        card.title =
+          'Referee paper P&amp;L for the last completed batch (sum of scenario cumulative P&amp;L vs $1k baseline each).';
+      }
     }
-    document.getElementById('pnlBaselineLabel').textContent = formatUsd(STARTING_EQUITY);
     resetPnlStrip();
 
     function friendlyFetchError(e) {
@@ -5418,7 +5583,7 @@ PAGE_HTML = """<!DOCTYPE html>
             null,
             'Server returned non-JSON from /api/run-parallel/start (HTTP ' + startR.status + '): ' + String(pe && pe.message ? pe.message : pe) + ' — body: ' + (startRaw || '').slice(0, 1200)
           );
-          updateRunStatusLine('Start request failed — see Result (Results workspace).');
+          updateRunStatusLine('Start request failed — see Result (Results panel in the focus dock).');
           hideLiveTelemetryPanel();
           return;
         }
@@ -5504,7 +5669,7 @@ PAGE_HTML = """<!DOCTYPE html>
             await show(null, null, friendlyParallelBackendError(pj.error || 'Job failed'));
             renderStudentTriangleBatchFailed(pj.error || 'Job failed');
             updateRunStatusLine('Failed — see Result.');
-            setRunFeedbackToast('Batch failed — see Results workspace (Raw JSON) for the error.');
+            setRunFeedbackToast('Batch failed — open Results (focus dock) → Raw JSON tab for the error.');
             setProgressUI(pj.completed || 0, statusPollTotal(pj, total), pj.error || '');
             return true;
           }
@@ -5536,7 +5701,10 @@ PAGE_HTML = """<!DOCTYPE html>
               const doneW = j.workers_used != null ? j.workers_used : wCap;
               showBatchConcurrencyBanner(doneN, doneW, 'done');
               setProgressUI(doneN, doneN, 'All ' + doneN + ' scenario(s) finished · parallel processes used: ' + (doneW != null ? doneW : '?') + ' · ' + elapsedStr);
-              if (j.pnl_summary) { updatePnlStrip(j.pnl_summary); }
+              if (j.pnl_summary) {
+                updatePnlStrip(j.pnl_summary);
+                updateFocusResultsTileFromPayload(j);
+              }
               const sl = document.getElementById('sessionLogNote');
               if (sl) {
                 sl.textContent = j.session_log_batch_dir
@@ -5551,7 +5719,7 @@ PAGE_HTML = """<!DOCTYPE html>
                 'Finished — ' + doneN + ' scenario(s) · parallel processes used: ' + (doneW != null ? doneW : '?') +
                 ' (not the same as the slider when you only have one scenario) · see Result below.'
               );
-              setRunFeedbackToast('Batch finished — see scorecard for timing and Results workspace for JSON.');
+              setRunFeedbackToast('Batch finished — see scorecard for timing; open Results in the focus dock for JSON.');
             } else {
               showBatchConcurrencyBanner(tDone, wCap, 'done');
               setProgressUI(cDone, tDone, 'Batch marked done — full JSON not in this response; see scorecard below.');
@@ -5758,6 +5926,10 @@ PAGE_HTML = """<!DOCTYPE html>
           else if (okCount === total) dot.className = 'status-dot ok';
           else dot.className = 'status-dot bad';
         }
+        const fSt = document.getElementById('focusTileModulesSt');
+        const fLn = document.getElementById('focusTileModulesLine');
+        if (fSt) fSt.textContent = (total > 0) ? (okCount + '/' + total) : '—';
+        if (fLn) fLn.textContent = sub || '';
       }
       if (!list) return;
       try {
@@ -6076,6 +6248,7 @@ PAGE_HTML = """<!DOCTYPE html>
         const j = await r.json();
         if (!r.ok || !j.ok) {
           document.getElementById('out').innerHTML = '<span class="err">Run setup: ' + escapeHtml(j.error || r.status) + '</span>';
+          pgFocusEnterPanel('results');
           setEvidenceTab('json');
           return;
         }
@@ -6084,6 +6257,7 @@ PAGE_HTML = """<!DOCTYPE html>
         refreshWorkerEffectiveLine();
       } catch (e) {
         document.getElementById('out').innerHTML = '<span class="err">' + escapeHtml(friendlyFetchError(e)) + '</span>';
+        pgFocusEnterPanel('results');
         setEvidenceTab('json');
       }
     }
@@ -6206,6 +6380,7 @@ PAGE_HTML = """<!DOCTYPE html>
       const r = await fetch('/api/scenario-preset?name=' + encodeURIComponent(name));
       if (!r.ok) {
         document.getElementById('out').innerHTML = '<span class="err">Example file load failed: ' + r.status + '</span>';
+        pgFocusEnterPanel('results');
         setEvidenceTab('json');
         return;
       }
@@ -6515,6 +6690,7 @@ PAGE_HTML = """<!DOCTYPE html>
         .then(function () { refreshWorkerEffectiveLine(); })
         .catch(function (e) {
           document.getElementById('out').innerHTML = '<span class="err">' + String(e) + '</span>';
+          pgFocusEnterPanel('results');
           setEvidenceTab('json');
         });
     });
