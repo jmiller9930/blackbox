@@ -82,7 +82,7 @@ _PATTERN_BANNER_WEBP_PATH = _RV4_ROOT / "assets" / "pattern.webp"
 _PATTERN_GAME_BANNER_BOOT_JS = _GAME_THEORY / "static" / "pattern_game_banner_boot.js"
 
 # Operator-visible web UI bundle version — bump when changing PAGE_HTML (HTML/CSS/JS) so deploys are provable.
-PATTERN_GAME_WEB_UI_VERSION = "2.19.2"
+PATTERN_GAME_WEB_UI_VERSION = "2.19.3"
 
 from renaissance_v4.game_theory.groundhog_memory import (
     groundhog_auto_merge_enabled,
@@ -2083,19 +2083,31 @@ PAGE_HTML = """<!DOCTYPE html>
       min-height: 0;
       display: flex;
       flex-direction: column;
-      max-height: var(--pg-focus-dock-h);
       width: 100%;
       min-width: 0;
       align-self: stretch;
       box-sizing: border-box;
     }
-    .pg-focus-dock { height: var(--pg-focus-dock-h); }
+    /* Overview: shrink-wrap to tile row height — avoid a fixed band height + grid row stretch (was leaving a huge empty void). */
+    .pg-focus-dock[data-pg-focus-mode="overview"] {
+      height: auto;
+      max-height: none;
+      align-items: stretch;
+    }
+    /* Expanded: fixed band height so absolute panes and terminal scroll resolve. */
+    .pg-focus-dock[data-pg-focus-mode]:not([data-pg-focus-mode="overview"]) {
+      height: var(--pg-focus-dock-h);
+      max-height: var(--pg-focus-dock-h);
+      flex: 0 0 var(--pg-focus-dock-h);
+    }
     .pg-focus-overview {
       display: grid;
       grid-template-columns: repeat(3, minmax(0, 1fr));
       gap: 8px;
       padding: 10px;
-      flex: 1 1 auto;
+      flex: 0 0 auto;
+      align-content: start;
+      justify-items: stretch;
       min-height: 0;
       min-width: 0;
       width: 100%;
@@ -2158,6 +2170,7 @@ PAGE_HTML = """<!DOCTYPE html>
       flex: 1 1 auto;
       min-height: 0;
     }
+    .pg-focus-overview .pg-focus-tile-body { flex: 0 1 auto; }
     .pg-focus-tile-hint { font-size: 0.72rem; color: #7d8a98; margin: 0; line-height: 1.35; }
     /* [hidden] must win over .pg-focus-expanded display — otherwise expanded stays on-screen and blocks tile clicks. */
     .pg-focus-overview[hidden],
@@ -2170,6 +2183,7 @@ PAGE_HTML = """<!DOCTYPE html>
       flex: 1 1 auto;
       min-height: 0;
       min-width: 0;
+      width: 100%;
     }
     .pg-focus-expanded-head {
       display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-bottom: 1px solid rgba(255,255,255,0.1);
@@ -4806,36 +4820,36 @@ PAGE_HTML = """<!DOCTYPE html>
     });
 
     (function wirePgFocusDock() {
-      const back = document.getElementById('pgFocusBackBtn');
-      if (back) back.addEventListener('click', function () { pgFocusBackToOverview(); });
-      function wireExpandedTab(btnId, mode) {
-        const el = document.getElementById(btnId);
-        if (!el) return;
-        el.addEventListener('click', function (ev) {
+      const dock = document.getElementById('pgFocusDock');
+      /* One delegated handler on the dock so clicks on inner spans/strong still open the panel (nearest .closest). */
+      if (dock) {
+        dock.addEventListener('click', function (ev) {
+          const back = ev.target && ev.target.closest ? ev.target.closest('#pgFocusBackBtn') : null;
+          if (back && dock.contains(back)) {
+            ev.preventDefault();
+            pgFocusBackToOverview();
+            return;
+          }
+          const tab = ev.target && ev.target.closest ? ev.target.closest('[data-pg-focus-tab]') : null;
+          if (tab && dock.contains(tab)) {
+            ev.preventDefault();
+            const mode = tab.getAttribute('data-pg-focus-tab');
+            if (!mode || typeof pgFocusEnterPanel !== 'function') return;
+            const cur = dock.getAttribute('data-pg-focus-mode') || 'overview';
+            if (cur === mode) { pgFocusBackToOverview(); return; }
+            pgFocusEnterPanel(mode);
+            return;
+          }
+          const tile = ev.target && ev.target.closest ? ev.target.closest('[data-pg-focus-tile]') : null;
+          if (!tile || !dock.contains(tile)) return;
           ev.preventDefault();
-          const dock = document.getElementById('pgFocusDock');
-          const cur = dock ? dock.getAttribute('data-pg-focus-mode') : 'overview';
+          const mode = tile.getAttribute('data-pg-focus-tile');
+          if (!mode || typeof pgFocusEnterPanel !== 'function') return;
+          const cur = dock.getAttribute('data-pg-focus-mode') || 'overview';
           if (cur === mode) { pgFocusBackToOverview(); return; }
-          if (typeof pgFocusEnterPanel === 'function') pgFocusEnterPanel(mode);
+          pgFocusEnterPanel(mode);
         });
       }
-      function wireTile(btnId, mode) {
-        const el = document.getElementById(btnId);
-        if (!el) return;
-        el.addEventListener('click', function (ev) {
-          ev.preventDefault();
-          const dock = document.getElementById('pgFocusDock');
-          const cur = dock ? dock.getAttribute('data-pg-focus-mode') : 'overview';
-          if (cur === mode) { pgFocusBackToOverview(); return; }
-          if (typeof pgFocusEnterPanel === 'function') pgFocusEnterPanel(mode);
-        });
-      }
-      wireTile('pgFocusTileTerminal', 'terminal');
-      wireTile('pgFocusTileResults', 'results');
-      wireTile('pgFocusTileModules', 'modules');
-      wireExpandedTab('pgFocusTabTerminal', 'terminal');
-      wireExpandedTab('pgFocusTabResults', 'results');
-      wireExpandedTab('pgFocusTabModules', 'modules');
       updateFocusTerminalOverviewTile();
     })();
 
