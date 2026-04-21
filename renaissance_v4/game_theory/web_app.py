@@ -80,7 +80,7 @@ _PATTERN_BANNER_PATH = _RV4_ROOT / "assets" / "pattern.png"
 _PATTERN_BANNER_WEBP_PATH = _RV4_ROOT / "assets" / "pattern.webp"
 
 # Operator-visible web UI bundle version — bump when changing PAGE_HTML (HTML/CSS/JS) so deploys are provable.
-PATTERN_GAME_WEB_UI_VERSION = "2.18.1"
+PATTERN_GAME_WEB_UI_VERSION = "2.18.3"
 
 from renaissance_v4.game_theory.groundhog_memory import (
     groundhog_auto_merge_enabled,
@@ -1901,15 +1901,15 @@ PAGE_HTML = """<!DOCTYPE html>
       min-height: 64px;
     }
     .pg-banner-stat .pg-k {
-      font-size: 11px;
+      font-size: 0.82rem;
       letter-spacing: 0.08em;
       text-transform: uppercase;
-      color: rgba(247, 241, 230, 0.62);
+      color: rgba(247, 241, 230, 0.7);
       font-weight: 800;
       margin-bottom: 8px;
     }
     .pg-banner-stat .pg-v {
-      font-size: 17px;
+      font-size: 1.35rem;
       font-weight: 800;
       line-height: 1.15;
       margin-bottom: 4px;
@@ -1918,8 +1918,8 @@ PAGE_HTML = """<!DOCTYPE html>
       gap: 8px;
     }
     .pg-banner-stat .pg-s {
-      font-size: 12px;
-      color: rgba(247, 241, 230, 0.72);
+      font-size: 0.98rem;
+      color: rgba(247, 241, 230, 0.85);
       line-height: 1.35;
     }
     .pg-banner-stat .pg-s.pg-s-tall { min-height: 2.8em; }
@@ -1938,7 +1938,31 @@ PAGE_HTML = """<!DOCTYPE html>
     }
     .pg-banner-stat.pg-banner-stat--pnl .banner-pnl-amt {
       font-variant-numeric: tabular-nums;
+      font-size: 1.55rem;
+      letter-spacing: -0.02em;
     }
+    .pg-banner-stat.pg-banner-stat--pnl .pg-s#bannerPnlS {
+      font-size: 1.05rem;
+      font-weight: 700;
+    }
+    .pg-banner-pnl-baseline-row {
+      margin-top: 8px;
+      font-size: 0.92rem;
+      font-weight: 700;
+      color: rgba(247, 241, 230, 0.88);
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 8px;
+    }
+    .pg-banner-pnl-baseline-row label { display: flex; align-items: center; gap: 8px; flex: 1 1 auto; min-width: 0; }
+    #paperBaselineSlider {
+      flex: 1 1 120px;
+      min-width: 100px;
+      max-width: 220px;
+      accent-color: #5ab88a;
+    }
+    #paperBaselineLabel { font-variant-numeric: tabular-nums; white-space: nowrap; }
     .pg-banner-stat.pg-banner-stat--pnl .banner-pnl-amt.up { color: #7fd9a8; }
     .pg-banner-stat.pg-banner-stat--pnl .banner-pnl-amt.down { color: #f0a8a8; }
     .pg-banner-stat.pg-banner-stat--pnl .banner-pnl-amt.neutral { color: rgba(247, 241, 230, 0.85); }
@@ -2039,7 +2063,19 @@ PAGE_HTML = """<!DOCTYPE html>
       min-height: 0;
       background: #0a0e12;
     }
+    .pg-focus-quick-h {
+      grid-column: 1 / -1;
+      margin: 0 0 2px;
+      padding: 0 2px;
+      font-size: 0.72rem;
+      font-weight: 800;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: #6b7a88;
+    }
     .pg-focus-tile {
+      position: relative;
+      z-index: 2;
       appearance: none;
       border: 1px solid rgba(255, 255, 255, 0.12);
       border-radius: 10px;
@@ -2062,7 +2098,7 @@ PAGE_HTML = """<!DOCTYPE html>
     }
     .pg-focus-tile:focus-visible { outline: 2px solid #3dd68c; outline-offset: 2px; }
     .pg-focus-tile-k {
-      font-size: 0.65rem;
+      font-size: 0.72rem;
       font-weight: 800;
       letter-spacing: 0.08em;
       text-transform: uppercase;
@@ -2070,7 +2106,7 @@ PAGE_HTML = """<!DOCTYPE html>
       margin: 0;
     }
     .pg-focus-tile-body {
-      font-size: 0.76rem;
+      font-size: 0.88rem;
       line-height: 1.4;
       color: #e6edf3;
       overflow: hidden;
@@ -2080,7 +2116,7 @@ PAGE_HTML = """<!DOCTYPE html>
       flex: 1 1 auto;
       min-height: 0;
     }
-    .pg-focus-tile-hint { font-size: 0.65rem; color: #7d8a98; margin: 0; line-height: 1.35; }
+    .pg-focus-tile-hint { font-size: 0.72rem; color: #7d8a98; margin: 0; line-height: 1.35; }
     .pg-focus-expanded { display: flex; flex-direction: column; flex: 1 1 auto; min-height: 0; min-width: 0; }
     .pg-focus-expanded-head {
       display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-bottom: 1px solid rgba(255,255,255,0.1);
@@ -2515,9 +2551,43 @@ PAGE_HTML = """<!DOCTYPE html>
       margin-bottom: 4px;
     }
     details.pg-panel-fold.pg-barney-dock > summary .pg-panel-sub,
-    details.pg-panel-fold.pg-askdata-dock > summary .pg-panel-sub {
+    details.pg-panel-fold.pg-askdata-dock > summary .pg-panel-sub,
+    details.pg-panel-fold.pg-barney-ask-unified > summary .pg-panel-sub {
       font-size: 12px;
       margin-top: 4px;
+    }
+    /* Unified Barney (wide) + Ask DATA (narrow), Barney column ~2× chat height */
+    .pg-barney-ask-unified .pg-barney-ask-grid {
+      display: grid;
+      grid-template-columns: minmax(0, 2fr) minmax(0, 1fr);
+      gap: 14px;
+      align-items: stretch;
+      min-height: 0;
+    }
+    @media (max-width: 900px) {
+      .pg-barney-ask-unified .pg-barney-ask-grid { grid-template-columns: 1fr; }
+    }
+    .pg-barney-ask-col--barney {
+      display: flex;
+      flex-direction: column;
+      min-height: 0;
+      min-width: 0;
+    }
+    .pg-barney-ask-col--barney .pg-barney-body {
+      flex: 1 1 auto;
+      min-height: min(52vh, 560px);
+      max-height: min(70vh, 720px);
+    }
+    .pg-barney-ask-col--ask {
+      display: flex;
+      flex-direction: column;
+      min-height: 0;
+      min-width: 0;
+    }
+    .pg-barney-ask-col--ask .pg-askdata-thread {
+      flex: 1 1 auto;
+      min-height: min(18vh, 200px);
+      max-height: min(26vh, 280px);
     }
     .pg-custom-route-hint {
       margin: 0;
@@ -3221,6 +3291,8 @@ PAGE_HTML = """<!DOCTYPE html>
       border-color: rgba(42, 143, 217, 0.55);
       box-shadow: 0 0 0 2px rgba(42, 143, 217, 0.28), var(--pg-shadow);
     }
+    /* Only show “While running” during an active batch — avoids duplicate/confusing Terminal chrome when idle */
+    body:not(.pg-run-active) .telemetry-run-only { display: none !important; }
     body.pg-run-active .pg-runtime-stack .pg-panel-score {
       opacity: 0.94;
     }
@@ -3428,12 +3500,17 @@ PAGE_HTML = """<!DOCTYPE html>
           <div class="pg-v"><span class="status-dot" id="healthDot"></span> <span id="bannerFinancialV">—</span></div>
           <div class="pg-s" id="healthText">Checking database…</div>
         </div>
-        <div class="pg-banner-stat pg-banner-stat--pnl" id="bannerPnlCard" title="Referee paper P&amp;L for the last completed batch (sum of scenario cumulative P&amp;L vs $1k baseline each).">
+        <div class="pg-banner-stat pg-banner-stat--pnl" id="bannerPnlCard" title="Referee batch ΔP&amp;L vs paper baseline. Slider adjusts display scale only (server uses spec baseline for Referee math).">
           <div class="pg-k">P&amp;L</div>
           <div class="pg-v" id="bannerPnlV"><span class="banner-pnl-amt neutral" id="bannerPnlAmt">—</span></div>
           <div class="pg-s" id="bannerPnlS">vs $1k</div>
-          <div class="pg-banner-pnl-micro" aria-hidden="true" title="Ending equity on 0–$2k scale (clamp)">
+          <div class="pg-banner-pnl-micro" aria-hidden="true" title="Baseline → ending (scale follows slider)">
             <div class="pg-banner-pnl-micro-fill up" id="bannerPnlMicroFill" style="left:50%;width:0%;"></div>
+          </div>
+          <div class="pg-banner-pnl-baseline-row" title="Display-only paper baseline for the banner strip. Does not change server Referee config.">
+            <label for="paperBaselineSlider">Paper baseline</label>
+            <input type="range" id="paperBaselineSlider" min="500" max="10000" step="100" value="1000" />
+            <span id="paperBaselineLabel">$1,000</span>
           </div>
         </div>
         <div class="pg-banner-stat">
@@ -3662,14 +3739,15 @@ PAGE_HTML = """<!DOCTYPE html>
       </div>
 
       <div class="pg-runtime-stack">
-      <div class="pg-focus-dock" id="pgFocusDock" data-pg-focus-mode="overview">
+      <div class="pg-focus-dock" id="pgFocusDock" data-pg-focus-mode="overview" aria-label="Quick view — Terminal, Results, Modules (click a tile to expand full width)">
         <div class="pg-focus-overview" id="pgFocusOverview">
-          <button type="button" class="pg-focus-tile" id="pgFocusTileTerminal" data-pg-focus-tile="terminal" title="Open Terminal (full)">
+          <p class="pg-focus-quick-h">Quick view</p>
+          <button type="button" class="pg-focus-tile" id="pgFocusTileTerminal" data-pg-focus-tile="terminal" title="Expand Terminal">
             <p class="pg-focus-tile-k">Terminal</p>
             <div class="pg-focus-tile-body" id="focusTileTerminalBody"><strong id="focusTileTerminalStatus">Idle</strong><br/><span id="focusTileTerminalLine">No batch running.</span></div>
             <p class="pg-focus-tile-hint">Engine + DCR · click to expand</p>
           </button>
-          <button type="button" class="pg-focus-tile" id="pgFocusTileResults" data-pg-focus-tile="results" title="Open Results workspace (full)">
+          <button type="button" class="pg-focus-tile" id="pgFocusTileResults" data-pg-focus-tile="results" title="Expand Results">
             <p class="pg-focus-tile-k">Results</p>
             <div class="pg-focus-tile-body" id="focusTileResultsBody">
               <span id="focusTileResultsPnl">P&amp;L —</span><br/>
@@ -3677,7 +3755,7 @@ PAGE_HTML = """<!DOCTYPE html>
             </div>
             <p class="pg-focus-tile-hint">Referee outcomes · JSON · session</p>
           </button>
-          <button type="button" class="pg-focus-tile" id="pgFocusTileModules" data-pg-focus-tile="modules" title="Open Modules board (full)">
+          <button type="button" class="pg-focus-tile" id="pgFocusTileModules" data-pg-focus-tile="modules" title="Expand Modules">
             <p class="pg-focus-tile-k">Modules</p>
             <div class="pg-focus-tile-body" id="focusTileModulesBody"><strong id="focusTileModulesSt">—</strong><br/><span id="focusTileModulesLine">Loading…</span></div>
             <p class="pg-focus-tile-hint">Wiring health · click to expand</p>
@@ -3693,9 +3771,9 @@ PAGE_HTML = """<!DOCTYPE html>
               <div class="pg-focus-pane-inner--dark">
               <div class="pg-telemetry-dock" style="position:static;max-height:none;top:0">
       <div id="liveTelemetryWrap" class="live-telemetry-wrap">
-        <p class="live-telemetry-title">Terminal <span class="pg-secondary-surface-label">While running</span>
+        <p class="live-telemetry-title">Live output <span class="pg-secondary-surface-label telemetry-run-only">While running</span>
           <span class="pg-sr-only">Live engine replay telemetry and Decision Context Recall (DCR) counters — not the Student learning store.</span>
-          <span aria-hidden="true" style="display:block;margin-top:4px;font-size:0.72rem;font-weight:600;color:#9aa7b4;text-transform:none;letter-spacing:0">Engine replay + DCR</span></p>
+          <span aria-hidden="true" style="display:block;margin-top:6px;font-size:0.78rem;font-weight:600;color:#9aa7b4;text-transform:none;letter-spacing:0">Engine replay + DCR</span></p>
         <div class="pg-terminal-split">
         <div class="pg-terminal-split-left">
         <div id="memoryStatusCard" class="memory-status-card" aria-live="polite">
@@ -3862,41 +3940,35 @@ PAGE_HTML = """<!DOCTYPE html>
         </div>
       </details>
 
-      <details class="pg-panel-fold pg-barney-dock">
+      <details class="pg-panel-fold pg-barney-ask-unified" id="pgBarneyAskUnified" open>
         <summary>
           <div class="pg-panel-header" style="margin:0;flex:1">
             <div>
-              <h2 class="pg-panel-h">Barney summary (LLM)</h2>
-              <p class="pg-panel-sub">Run-facts recap · expand after a batch</p>
+              <h2 class="pg-panel-h">Barney summary + Ask DATA</h2>
+              <p class="pg-panel-sub">Run-facts recap (Barney) and threaded Q&amp;A — conversation column is larger</p>
             </div>
-            <span class="pg-chip pg-chip-steel">LLM</span>
+            <span class="pg-chip pg-chip-teal">Unified</span>
           </div>
         </summary>
-        <div class="pg-panel-fold-body">
-          <pre id="barneySummaryBody" class="pg-barney-body" style="margin:0;max-height:min(36vh,400px);overflow:auto">—</pre>
-        </div>
-      </details>
-
-      <details class="pg-panel-fold pg-askdata-dock" open>
-        <summary>
-          <div class="pg-panel-header" style="margin:0;flex:1">
-            <div>
-              <h2 class="pg-panel-h">Ask DATA</h2>
-              <p class="pg-panel-sub">Threaded Q&amp;A from run facts only</p>
+        <div class="pg-panel-fold-body" style="min-height:0">
+          <div class="pg-barney-ask-grid">
+            <div class="pg-barney-ask-col pg-barney-ask-col--barney">
+              <p class="pg-barney-title" style="margin:0 0 6px">Barney summary (LLM)</p>
+              <pre id="barneySummaryBody" class="pg-barney-body" style="margin:0;overflow:auto">—</pre>
             </div>
-            <span class="pg-chip pg-chip-teal">Chat</span>
+            <div class="pg-barney-ask-col pg-barney-ask-col--ask">
+              <p class="pg-barney-title" style="margin:0 0 6px">Ask DATA</p>
+              <div id="askDataThread" class="pg-askdata-thread" aria-live="polite" role="log"></div>
+              <textarea id="askDataInput" class="pg-askdata-input" rows="2" maxlength="6000"
+                placeholder="Ask about this app or the selected run…"
+                autocomplete="off" aria-label="Ask DATA question"></textarea>
+              <div class="pg-askdata-actions">
+                <button type="button" class="btn-chef pg-op-btn" id="askDataSendBtn" data-label-idle="Send">Send</button>
+                <button type="button" class="btn-secondary pg-op-btn" id="askDataClearBtn" data-label-idle="Clear thread">Clear thread</button>
+              </div>
+              <p class="pg-askdata-status" id="askDataStatus" aria-live="polite" style="margin:0;font-size:0.78rem"></p>
+            </div>
           </div>
-        </summary>
-        <div class="pg-panel-fold-body" style="display:flex;flex-direction:column;gap:10px;min-height:0">
-          <div id="askDataThread" class="pg-askdata-thread" aria-live="polite" role="log"></div>
-          <textarea id="askDataInput" class="pg-askdata-input" rows="2" maxlength="6000"
-            placeholder="Ask about this app or the selected run…"
-            autocomplete="off" aria-label="Ask DATA question"></textarea>
-          <div class="pg-askdata-actions">
-            <button type="button" class="btn-chef pg-op-btn" id="askDataSendBtn" data-label-idle="Send">Send</button>
-            <button type="button" class="btn-secondary pg-op-btn" id="askDataClearBtn" data-label-idle="Clear thread">Clear thread</button>
-          </div>
-          <p class="pg-askdata-status" id="askDataStatus" aria-live="polite" style="margin:0;font-size:0.78rem"></p>
         </div>
       </details>
 
@@ -3934,18 +4006,28 @@ PAGE_HTML = """<!DOCTYPE html>
     const workersVal = document.getElementById('workersVal');
     const statusLine = document.getElementById('statusLine');
     const progressWrap = document.getElementById('progressWrap');
+    const workerCpuHint = document.getElementById('workerCpuHint');
 
     const hardMax = LIMITS.hard_cap_workers;
     const recommended = LIMITS.recommended_max_workers;
     const defaultWorkers = Math.max(1, Math.min(recommended, hardMax));
 
-    rangeEl.min = '1';
-    rangeEl.max = String(hardMax);
-    rangeEl.value = String(defaultWorkers);
-    workersVal.textContent = rangeEl.value;
-    document.getElementById('workerCpuHint').textContent =
-      'Host: ' + LIMITS.cpu_logical_count + ' logical CPUs · default slider ' + recommended +
-      ' · max ' + hardMax + '. ' + LIMITS.note;
+    if (rangeEl && workersVal) {
+      rangeEl.min = '1';
+      rangeEl.max = String(hardMax);
+      rangeEl.value = String(defaultWorkers);
+      workersVal.textContent = rangeEl.value;
+      rangeEl.addEventListener('input', () => {
+        workersVal.textContent = rangeEl.value;
+        if (typeof refreshSearchSpaceEstimate === 'function') refreshSearchSpaceEstimate();
+        refreshWorkerEffectiveLine();
+      });
+    }
+    if (workerCpuHint) {
+      workerCpuHint.textContent =
+        'Host: ' + LIMITS.cpu_logical_count + ' logical CPUs · default slider ' + recommended +
+        ' · max ' + hardMax + '. ' + LIMITS.note;
+    }
 
     function parseScenarioCountFromTextarea() {
       const ta = document.getElementById('scenarios');
@@ -3970,7 +4052,7 @@ PAGE_HTML = """<!DOCTYPE html>
       const el = document.getElementById('workerEffectiveLine');
       if (!el) return;
       const n = getEffectiveScenarioCount();
-      const w = parseInt(rangeEl.value, 10) || 1;
+      const w = rangeEl ? (parseInt(rangeEl.value, 10) || 1) : 1;
       if (n < 1) {
         el.innerHTML = '<strong>Effective parallelism</strong> — For <em>Custom</em>, paste valid JSON in Advanced. The run uses <strong>min(scenario count, slider)</strong>.';
         return;
@@ -3984,12 +4066,6 @@ PAGE_HTML = """<!DOCTYPE html>
         '<strong>' + eff + '</strong> parallel process(es) for this batch ' +
         '(<strong>' + n + '</strong> scenario(s) × slider <strong>' + w + '</strong>, capped at the smaller). ' + extra;
     }
-
-    rangeEl.addEventListener('input', () => {
-      workersVal.textContent = rangeEl.value;
-      if (typeof refreshSearchSpaceEstimate === 'function') refreshSearchSpaceEstimate();
-      refreshWorkerEffectiveLine();
-    });
 
     function escapeHtml(s) {
       if (s == null) return '';
@@ -4602,14 +4678,15 @@ PAGE_HTML = """<!DOCTYPE html>
     (function wirePgFocusDock() {
       const back = document.getElementById('pgFocusBackBtn');
       if (back) back.addEventListener('click', function () { pgFocusBackToOverview(); });
-      [
-        ['pgFocusTileTerminal', 'terminal'],
-        ['pgFocusTileResults', 'results'],
-        ['pgFocusTileModules', 'modules'],
-      ].forEach(function (pair) {
-        const el = document.getElementById(pair[0]);
-        if (el) el.addEventListener('click', function () { pgFocusEnterPanel(pair[1]); });
-      });
+      const ov = document.getElementById('pgFocusOverview');
+      if (ov) {
+        ov.addEventListener('click', function (ev) {
+          const t = ev.target && ev.target.closest ? ev.target.closest('[data-pg-focus-tile]') : null;
+          if (!t) return;
+          const mode = t.getAttribute('data-pg-focus-tile');
+          if (mode && typeof pgFocusEnterPanel === 'function') pgFocusEnterPanel(mode);
+        });
+      }
       updateFocusTerminalOverviewTile();
     })();
 
@@ -5416,8 +5493,40 @@ PAGE_HTML = """<!DOCTYPE html>
       return s;
     }
 
+    const PG_PAPER_BASELINE_LS = 'pattern_game_paper_baseline_usd_v1';
+    let _lastPnlStripPayload = null;
+
+    function getPaperBaselineUsd() {
+      const el = document.getElementById('paperBaselineSlider');
+      const v = el ? parseInt(el.value, 10) : NaN;
+      if (Number.isFinite(v) && v >= 500 && v <= 10000) return v;
+      return 1000;
+    }
+
+    function formatVsBaselinePhrase(usd) {
+      const x = Number(usd);
+      if (!Number.isFinite(x) || x <= 0) return 'vs —';
+      if (x >= 1000) {
+        const k = x / 1000;
+        const s = (Math.round(k * 10) / 10).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 1 });
+        return 'vs $' + s + 'k';
+      }
+      return 'vs $' + Math.round(x).toLocaleString();
+    }
+
+    function syncPaperBaselineLabel() {
+      const lab = document.getElementById('paperBaselineLabel');
+      if (lab) lab.textContent = '$' + getPaperBaselineUsd().toLocaleString();
+    }
+
+    function refreshPnlBannerDisplay() {
+      if (_lastPnlStripPayload) updatePnlStrip(_lastPnlStripPayload);
+      else resetPnlStrip();
+    }
+
     function updatePnlStrip(pnl) {
       if (!pnl || typeof pnl.ending_equity_usd !== 'number') return;
+      _lastPnlStripPayload = pnl;
       const end = pnl.ending_equity_usd;
       const delta = pnl.batch_total_pnl_usd;
       const amt = document.getElementById('bannerPnlAmt');
@@ -5431,37 +5540,42 @@ PAGE_HTML = """<!DOCTYPE html>
           amt.className = 'banner-pnl-amt ' + (delta >= 0 ? 'up' : 'down');
         }
       }
+      const baseDisplay = getPaperBaselineUsd();
       const sub = document.getElementById('bannerPnlS');
-      if (sub) sub.textContent = 'vs $1k';
+      if (sub) sub.textContent = formatVsBaselinePhrase(baseDisplay);
       const lo = 0;
-      const hi = 2000;
-      const pctEnd = Math.max(0, Math.min(100, ((end - lo) / (hi - lo)) * 100));
-      const baselinePct = ((STARTING_EQUITY - lo) / (hi - lo)) * 100;
+      const hi = Math.max(2000, baseDisplay * 2);
+      const endClamped = Math.max(lo, Math.min(end, hi));
+      const pctEnd = (endClamped / hi) * 100;
+      const baselinePct = (baseDisplay / hi) * 100;
       const fill = document.getElementById('bannerPnlMicroFill');
       if (fill) {
         const left = Math.min(baselinePct, pctEnd);
         const width = Math.abs(pctEnd - baselinePct);
         fill.style.left = left + '%';
         fill.style.width = Math.max(width, 0.5) + '%';
-        fill.className = 'pg-banner-pnl-micro-fill ' + (end >= STARTING_EQUITY ? 'up' : 'down');
+        fill.className = 'pg-banner-pnl-micro-fill ' + (end >= baseDisplay ? 'up' : 'down');
       }
       const card = document.getElementById('bannerPnlCard');
       if (card) {
-        const base = (pnl.note || '').trim();
+        const note = (pnl.note || '').trim();
         card.title =
-          (base ? base + ' ' : '') +
-          'Batch Δ P&amp;L vs baseline; micro bar = baseline→ending on $0–$2k clamp.';
+          (note ? note + ' ' : '') +
+          'Batch Δ P&amp;L vs paper baseline (' + formatUsdPlain(baseDisplay) + '). Micro bar: $0–$' +
+          Math.round(hi).toLocaleString() + ' (display scale; slider adjusts baseline only).';
       }
     }
 
     function resetPnlStrip() {
+      _lastPnlStripPayload = null;
       const amt = document.getElementById('bannerPnlAmt');
       if (amt) {
         amt.textContent = '—';
         amt.className = 'banner-pnl-amt neutral';
       }
+      const baseDisplay = getPaperBaselineUsd();
       const sub = document.getElementById('bannerPnlS');
-      if (sub) sub.textContent = 'vs $1k';
+      if (sub) sub.textContent = formatVsBaselinePhrase(baseDisplay);
       const fill = document.getElementById('bannerPnlMicroFill');
       if (fill) {
         fill.style.left = '50%';
@@ -5471,9 +5585,31 @@ PAGE_HTML = """<!DOCTYPE html>
       const card = document.getElementById('bannerPnlCard');
       if (card) {
         card.title =
-          'Referee paper P&amp;L for the last completed batch (sum of scenario cumulative P&amp;L vs $1k baseline each).';
+          'Referee paper P&amp;L for the last completed batch. Set paper baseline with the slider (display scale for Δ vs baseline).';
       }
     }
+
+    function initPaperBaselineSlider() {
+      const s = document.getElementById('paperBaselineSlider');
+      if (!s) return;
+      try {
+        const raw = localStorage.getItem(PG_PAPER_BASELINE_LS);
+        if (raw) {
+          const n = parseInt(raw, 10);
+          if (Number.isFinite(n) && n >= 500 && n <= 10000) s.value = String(n);
+        }
+      } catch (e) {}
+      syncPaperBaselineLabel();
+      s.addEventListener('input', function () {
+        try {
+          localStorage.setItem(PG_PAPER_BASELINE_LS, String(getPaperBaselineUsd()));
+        } catch (e2) {}
+        syncPaperBaselineLabel();
+        refreshPnlBannerDisplay();
+      });
+    }
+
+    initPaperBaselineSlider();
     resetPnlStrip();
 
     function friendlyFetchError(e) {
@@ -5703,9 +5839,9 @@ PAGE_HTML = """<!DOCTYPE html>
       let runWorkersCap = null;
       let jobId = null;
       try {
-        let mw = parseInt(rangeEl.value, 10);
+        let mw = rangeEl ? parseInt(rangeEl.value, 10) : NaN;
         if (isNaN(mw)) mw = null;
-        if (mw !== null) {
+        if (mw !== null && rangeEl && workersVal) {
           mw = Math.max(1, Math.min(mw, LIMITS.hard_cap_workers));
           rangeEl.value = String(mw);
           workersVal.textContent = String(mw);
@@ -6181,7 +6317,7 @@ PAGE_HTML = """<!DOCTYPE html>
       const el = document.getElementById('searchSpaceStrip');
       if (!el) return;
       try {
-        const w = parseInt(rangeEl.value, 10) || 1;
+        const w = rangeEl ? (parseInt(rangeEl.value, 10) || 1) : 1;
         const batchN = getEffectiveScenarioCount();
         const q = batchN > 0
           ? ('?batch_size=' + encodeURIComponent(batchN) + '&workers=' + encodeURIComponent(w))
