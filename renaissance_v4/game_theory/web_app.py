@@ -23,6 +23,9 @@ counts, **run_ok_pct**, **referee_win_pct**, **avg_trade_win_pct**) and expose `
 ``POST /api/pattern-game/reset-learning`` with typed confirm phrase (see UI). Student Proctor store:
 ``GET /api/student-proctor/learning-store``, ``POST /api/student-proctor/learning-store/clear`` (separate confirm).
 
+**D11 Student panel (run → decisions → deep dive):** ``GET /api/student-panel/runs``,
+``GET /api/student-panel/run/<job_id>/decisions``, ``GET /api/student-panel/decision?job_id=&decision_id=``.
+
 **System Dialogue** (post-run formatter; ``/api/barney-summary``): ``POST /api/barney-summary`` with ``{"job_id": "…"}`` — structured
 run facts only. **Ask DATA** (bounded self-explainer): ``POST /api/ask-data`` with ``question`` and optional
 ``job_id`` / ``ui_context`` — answers only from bundled PML knowledge + run/scorecard facts
@@ -82,7 +85,7 @@ _PATTERN_BANNER_WEBP_PATH = _RV4_ROOT / "assets" / "pattern.webp"
 _PATTERN_GAME_BANNER_BOOT_JS = _GAME_THEORY / "static" / "pattern_game_banner_boot.js"
 
 # Operator-visible web UI bundle version — bump when changing PAGE_HTML (HTML/CSS/JS) so deploys are provable.
-PATTERN_GAME_WEB_UI_VERSION = "2.19.16"
+PATTERN_GAME_WEB_UI_VERSION = "2.19.17"
 
 from renaissance_v4.game_theory.groundhog_memory import (
     groundhog_auto_merge_enabled,
@@ -108,6 +111,11 @@ from renaissance_v4.game_theory.student_proctor.student_learning_operator_v1 imp
 )
 from renaissance_v4.game_theory.student_proctor.student_proctor_operator_runtime_v1 import (
     student_loop_seam_after_parallel_batch_v1,
+)
+from renaissance_v4.game_theory.student_panel_d11 import (
+    build_d11_decision_strip_payload_v1,
+    build_student_decision_record_v1,
+    fetch_d11_run_rows_v1,
 )
 from renaissance_v4.game_theory.data_health import get_data_health
 from renaissance_v4.game_theory.search_space_estimate import build_search_space_estimate
@@ -1407,6 +1415,33 @@ def create_app() -> Flask:
         out2["student_proctor_learning_store"] = {"path": st.get("path"), "line_count": st.get("line_count")}
         return jsonify(out2), (200 if out.get("ok") else 500)
 
+    @app.get("/api/student-panel/runs")
+    def api_student_panel_runs_d11() -> Any:
+        """D11 — run rows (learning signal) from recent ``batch_scorecard.jsonl`` lines."""
+        try:
+            limit = int(request.args.get("limit") or 50)
+        except (TypeError, ValueError):
+            limit = 50
+        rows = fetch_d11_run_rows_v1(limit=limit)
+        return jsonify({"ok": True, "schema": "student_panel_d11_runs_v1", "runs": rows})
+
+    @app.get("/api/student-panel/run/<job_id>/decisions")
+    def api_student_panel_decisions_d11(job_id: str) -> Any:
+        """D11 — horizontal strip payload: one slice per scenario in the batch folder."""
+        return jsonify(build_d11_decision_strip_payload_v1(job_id.strip()))
+
+    @app.get("/api/student-panel/decision")
+    def api_student_panel_decision_detail_d11() -> Any:
+        """D11 — single-decision structured record (``job_id`` + ``decision_id`` query params)."""
+        jid = (request.args.get("job_id") or "").strip()
+        did = (request.args.get("decision_id") or "").strip()
+        if not jid or not did:
+            return jsonify({"ok": False, "error": "job_id and decision_id query parameters required"}), 400
+        rec = build_student_decision_record_v1(jid, did)
+        if not rec:
+            return jsonify({"ok": False, "error": "decision not found"}), 404
+        return jsonify({"ok": True, "record": rec})
+
     @app.get("/api/student-proctor/learning-store")
     def api_student_proctor_learning_store_get() -> Any:
         """Read-only Student Learning Store metadata (Directive 08 — distinct from scorecard / engine memory)."""
@@ -2333,6 +2368,85 @@ PAGE_HTML = """<!DOCTYPE html>
       color: var(--pg-muted);
       line-height: 1.42;
     }
+    /* D11 — decision audit panel (one level visible at a time) */
+    .pg-student-d11 { min-height: 8rem; }
+    .pg-student-d11-nav {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 8px 12px;
+      margin: 0 0 10px;
+      padding-bottom: 8px;
+      border-bottom: 1px solid rgba(255,255,255,0.10);
+    }
+    .pg-student-d11-nav button {
+      font-size: 0.78rem;
+      padding: 4px 10px;
+      border-radius: 6px;
+      border: 1px solid rgba(255,255,255,0.14);
+      background: rgba(0,0,0,0.12);
+      color: var(--pg-ink);
+      cursor: pointer;
+    }
+    .pg-student-d11-nav button:hover { border-color: rgba(30, 214, 170, 0.45); }
+    .pg-student-d11-legend {
+      font-size: 0.72rem;
+      color: var(--pg-muted);
+      margin: 0 0 8px;
+      line-height: 1.35;
+    }
+    .pg-student-d11-table-wrap { overflow: auto; max-width: 100%; }
+    .pg-student-d11-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.74rem;
+    }
+    .pg-student-d11-table th,
+    .pg-student-d11-table td {
+      text-align: left;
+      padding: 6px 8px;
+      border-bottom: 1px solid rgba(255,255,255,0.08);
+      vertical-align: top;
+      white-space: nowrap;
+    }
+    .pg-student-d11-table th { color: var(--pg-muted); font-weight: 700; font-size: 0.70rem; }
+    .pg-student-d11-table tr[data-run-row]:hover { background: rgba(30, 214, 170, 0.06); }
+    .pg-student-d11-table tr[data-run-row] { cursor: pointer; }
+    .pg-student-d11-strip {
+      display: flex;
+      gap: 10px;
+      overflow-x: auto;
+      overflow-y: hidden;
+      padding: 8px 4px 12px;
+      min-height: 120px;
+      max-height: 140px;
+      scroll-snap-type: x mandatory;
+      scrollbar-gutter: stable;
+    }
+    .pg-student-d11-slice {
+      flex: 0 0 auto;
+      width: 148px;
+      scroll-snap-align: start;
+      border: 1px solid rgba(255,255,255,0.12);
+      border-radius: 8px;
+      padding: 8px 10px;
+      background: rgba(0,0,0,0.10);
+      font-size: 0.72rem;
+      line-height: 1.35;
+      cursor: pointer;
+    }
+    .pg-student-d11-slice:hover { border-color: rgba(30, 214, 170, 0.35); }
+    .pg-student-d11-slice--WIN { border-left: 3px solid #2ea043; }
+    .pg-student-d11-slice--LOSS { border-left: 3px solid #da5555; }
+    .pg-student-d11-slice--NO_TRADE { border-left: 3px solid #7a8794; }
+    .pg-student-d11-deep ul {
+      margin: 0;
+      padding-left: 1.1rem;
+      font-size: 0.80rem;
+      line-height: 1.4;
+    }
+    .pg-student-d11-deep li { margin: 0 0 4px; }
+    .pg-student-d11-deep .pg-student-d11-k { color: var(--pg-muted); font-weight: 700; font-size: 0.72rem; }
     /* SR-4 / AC-3: long seam scrolls inside the fold body; default band ≈60% viewport, drag lower-right to resize. */
     details.pg-student-triangle-dock {
       scroll-margin-top: 12px;
@@ -4142,14 +4256,18 @@ PAGE_HTML = """<!DOCTYPE html>
           <div class="pg-panel-header" style="margin:0;flex:1">
             <div>
               <h2 class="pg-panel-h">Student → learning → outcome</h2>
-              <p class="pg-panel-sub">Primary inspection surface after run — Student seam (belief, stored rows, retrieval). Drag the <strong>bottom edge</strong> of the panel below to resize; height and open/closed state are remembered in this browser.</p>
+              <p class="pg-panel-sub">Decision audit (D11): <strong>Runs</strong> → <strong>decisions</strong> → <strong>deep dive</strong> — learning signal at row level; no mixed levels. After a batch, latest seam still updates the learning strip. Drag the <strong>bottom edge</strong> to resize; height and open state are remembered.</p>
             </div>
             <span class="pg-chip pg-chip-teal">Primary</span>
           </div>
         </summary>
         <div id="studentTriangleFoldBody" class="pg-panel-fold-body pg-student-triangle-fold-body" title="Drag the bottom-right corner or bottom edge to resize. Size and open/closed state are saved in this browser (localStorage).">
           <div id="studentTriangleBody" class="pg-student-triangle-body" aria-live="polite">
-            <p class="caps" style="margin:0">No batch yet — run a parallel batch to see the Student learning summary here.</p>
+            <div id="pgStudentPanelD11" class="pg-student-d11"></div>
+            <div id="pgStudentSeamLegacy" class="pg-student-seam-legacy" style="margin-top:12px;padding-top:12px;border-top:1px solid rgba(255,255,255,0.10)">
+              <p class="pg-student-d11-legend" style="margin-top:0"><strong>Latest batch — seam</strong> (Directive 09)</p>
+              <div id="pgStudentSeamLegacyInner" class="caps" style="margin:0">No batch yet — run a parallel batch.</div>
+            </div>
           </div>
         </div>
       </details>
@@ -4463,11 +4581,317 @@ PAGE_HTML = """<!DOCTYPE html>
       updateMemoryStatusCardFromPanel(panel, echo, null, false);
     }
 
+    /** D11 — strict run / decision / deep-dive (replaces panel content per level; seam strip on L1 only). */
+    const studentPanelD11 = { level: 1, selectedRunId: null, selectedDecisionId: null };
+
+    function studentPanelD11SeamEl() {
+      return document.getElementById('pgStudentSeamLegacy');
+    }
+    function studentPanelD11RootEl() {
+      return document.getElementById('pgStudentPanelD11');
+    }
+    function studentPanelD11SetSeamVisible(show) {
+      const el = studentPanelD11SeamEl();
+      if (el) el.hidden = !show;
+    }
+
+    function fmtD11MaybeNum(v, d) {
+      if (v == null || v === '') return '—';
+      const n = Number(v);
+      if (Number.isNaN(n)) return escapeHtml(String(v));
+      return escapeHtml(n.toFixed(d != null ? d : 2));
+    }
+
+    function renderStudentPanelD11Nav() {
+      const r = studentPanelD11RootEl();
+      if (!r) return '';
+      let html = '<div class="pg-student-d11-nav" id="pgStudentD11Nav">';
+      if (studentPanelD11.level === 2 || studentPanelD11.level === 3) {
+        html +=
+          '<button type="button" id="pgStudentD11BackRuns">← Run table</button>';
+      }
+      if (studentPanelD11.level === 3) {
+        html +=
+          '<button type="button" id="pgStudentD11BackStrip">← Decision strip</button>';
+      }
+      html += '</div>';
+      return html;
+    }
+
+    function wireStudentPanelD11Nav() {
+      const b1 = document.getElementById('pgStudentD11BackRuns');
+      const b2 = document.getElementById('pgStudentD11BackStrip');
+      if (b1) b1.onclick = function () { void studentPanelD11GotoLevel1(); };
+      if (b2)
+        b2.onclick = function () {
+          if (studentPanelD11.selectedRunId) void studentPanelD11GotoLevel2(studentPanelD11.selectedRunId);
+        };
+    }
+
+    async function studentPanelD11GotoLevel1() {
+      studentPanelD11.level = 1;
+      studentPanelD11.selectedRunId = null;
+      studentPanelD11.selectedDecisionId = null;
+      studentPanelD11SetSeamVisible(true);
+      await refreshStudentPanelD11();
+    }
+
+    async function studentPanelD11GotoLevel2(runId) {
+      studentPanelD11.level = 2;
+      studentPanelD11.selectedRunId = runId;
+      studentPanelD11.selectedDecisionId = null;
+      studentPanelD11SetSeamVisible(false);
+      const root = studentPanelD11RootEl();
+      if (!root) return;
+      root.innerHTML =
+        '<p class="caps" style="margin:0">Loading decisions…</p>';
+      let j = null;
+      try {
+        const r = await fetch('/api/student-panel/run/' + encodeURIComponent(runId) + '/decisions');
+        j = await r.json();
+      } catch (e) {
+        root.innerHTML =
+          renderStudentPanelD11Nav() +
+          '<p class="caps" style="margin:0;color:#a32b2b">Failed to load decisions: ' +
+          escapeHtml(String(e)) +
+          '</p>';
+        wireStudentPanelD11Nav();
+        return;
+      }
+      if (!j || !j.ok) {
+        root.innerHTML =
+          renderStudentPanelD11Nav() +
+          '<p class="caps" style="margin:0;color:#a32b2b">' +
+          escapeHtml((j && j.error) || 'decisions unavailable') +
+          '</p>';
+        wireStudentPanelD11Nav();
+        return;
+      }
+      const slices = Array.isArray(j.slices) ? j.slices : [];
+      let body = renderStudentPanelD11Nav() + '<p class="pg-student-d11-legend">Run <code>' + escapeHtml(runId) + '</code> — click a decision to inspect.</p>';
+      if (j.scenario_list_error) {
+        body +=
+          '<p class="caps" style="margin:0 0 8px;font-size:0.75rem;color:#a32b2b">' +
+          escapeHtml(String(j.scenario_list_error)) +
+          '</p>';
+      }
+      body += '<div class="pg-student-d11-strip">';
+      if (!slices.length) {
+        body += '<span class="caps" style="align-self:center">No scenario rows for this run (batch folder missing or empty).</span>';
+      }
+      for (let i = 0; i < slices.length; i++) {
+        const s = slices[i] || {};
+        const did = s.decision_id != null ? String(s.decision_id) : 'd' + i;
+        const res = String(s.result || '—');
+        const cls = 'pg-student-d11-slice pg-student-d11-slice--' + res.replace(/[^A-Z_]/g, '_');
+        body +=
+          '<div class="' +
+          cls +
+          '" role="button" tabindex="0" data-did="' +
+          escapeHtml(did) +
+          '" data-run="' +
+          escapeHtml(runId) +
+          '">' +
+          '<div class="pg-student-d11-k">' +
+          escapeHtml(did) +
+          '</div>' +
+          '<div>' +
+          res +
+          ' · ' +
+          escapeHtml(String(s.direction || '—')) +
+          '</div>' +
+          '<div style="margin-top:4px;color:var(--pg-muted)">GH ' +
+          escapeHtml(String(s.groundhog_usage || '—')) +
+          '</div>' +
+          '<div>Δ ' +
+          escapeHtml(String(s.decision_changed_flag || '—')) +
+          '</div>' +
+          '</div>';
+      }
+      body += '</div>';
+      root.innerHTML = body;
+      wireStudentPanelD11Nav();
+      const nodes = root.querySelectorAll('.pg-student-d11-slice[data-did]');
+      nodes.forEach(function (node) {
+        function go() {
+          const rid = node.getAttribute('data-run');
+          const did = node.getAttribute('data-did');
+          if (rid && did) void studentPanelD11GotoLevel3(rid, did);
+        }
+        node.addEventListener('click', go);
+        node.addEventListener('keydown', function (ev) {
+          if (ev.key === 'Enter' || ev.key === ' ') {
+            ev.preventDefault();
+            go();
+          }
+        });
+      });
+    }
+
+    async function studentPanelD11GotoLevel3(runId, decisionId) {
+      studentPanelD11.level = 3;
+      studentPanelD11.selectedRunId = runId;
+      studentPanelD11.selectedDecisionId = decisionId;
+      studentPanelD11SetSeamVisible(false);
+      const root = studentPanelD11RootEl();
+      if (!root) return;
+      root.innerHTML = '<p class="caps" style="margin:0">Loading decision…</p>';
+      let j = null;
+      try {
+        const u =
+          '/api/student-panel/decision?job_id=' +
+          encodeURIComponent(runId) +
+          '&decision_id=' +
+          encodeURIComponent(decisionId);
+        const r = await fetch(u);
+        j = await r.json();
+      } catch (e) {
+        root.innerHTML =
+          renderStudentPanelD11Nav() +
+          '<p class="caps" style="margin:0;color:#a32b2b">Load failed: ' +
+          escapeHtml(String(e)) +
+          '</p>';
+        wireStudentPanelD11Nav();
+        return;
+      }
+      if (!j || !j.ok || !j.record) {
+        root.innerHTML =
+          renderStudentPanelD11Nav() +
+          '<p class="caps" style="margin:0;color:#a32b2b">' +
+          escapeHtml((j && j.error) || 'record unavailable') +
+          '</p>';
+        wireStudentPanelD11Nav();
+        return;
+      }
+      const rec = j.record;
+      const dec = rec.decision || {};
+      const ctx = rec.context || {};
+      const gh = rec.groundhog || {};
+      const bc = rec.baseline_comparison || {};
+      const rf = rec.referee || {};
+      const pe = rec.pattern_evaluation || {};
+      const lines = [];
+      lines.push('<div class="pg-student-d11-deep">');
+      lines.push(renderStudentPanelD11Nav());
+      lines.push('<p class="pg-student-d11-legend">Decision audit — bullets only</p>');
+      lines.push('<ul>');
+      lines.push('<li><span class="pg-student-d11-k">decision_time</span> ' + escapeHtml(String(rec.decision_time || '—')) + '</li>');
+      lines.push('<li><span class="pg-student-d11-k">run_id</span> ' + escapeHtml(String(rec.run_id || '—')) + '</li>');
+      lines.push('<li><span class="pg-student-d11-k">decision_id</span> ' + escapeHtml(String(rec.decision_id || '—')) + '</li>');
+      lines.push('<li><span class="pg-student-d11-k">action / direction / confidence</span> ' +
+        escapeHtml(String(dec.action || '—')) +
+        ' · ' +
+        escapeHtml(String(dec.direction || '—')) +
+        ' · conf ' +
+        escapeHtml(dec.confidence != null ? String(dec.confidence) : '—') +
+        '</li>');
+      lines.push('<li><span class="pg-student-d11-k">context</span> price ' +
+        fmtD11MaybeNum(ctx.price, 4) +
+        ' · indicators ' +
+        escapeHtml(String(ctx.indicators != null ? ctx.indicators : '—')) +
+        ' · structure ' +
+        escapeHtml(ctx.structure != null ? String(ctx.structure) : '—') +
+        '</li>');
+      const pats = pe.patterns_tested;
+      lines.push('<li><span class="pg-student-d11-k">patterns</span> ' +
+        (Array.isArray(pats) && pats.length ? escapeHtml(pats.join(', ')) : escapeHtml(String(pe.note || '—'))) +
+        '</li>');
+      lines.push('<li><span class="pg-student-d11-k">groundhog</span> used ' +
+        escapeHtml(String(gh.used || '—')) +
+        ' · retrieval ' +
+        escapeHtml(gh.retrieval_count != null ? String(gh.retrieval_count) : '—') +
+        ' · ' +
+        escapeHtml(String(gh.summary_of_influence || '—')) +
+        '</li>');
+      lines.push('<li><span class="pg-student-d11-k">baseline vs current</span> ' +
+        escapeHtml(String(bc.baseline_decision || '—')) +
+        ' → ' +
+        escapeHtml(String(bc.current_decision || '—')) +
+        ' · changed ' +
+        escapeHtml(String(bc.changed || '—')) +
+        '</li>');
+      lines.push('<li><span class="pg-student-d11-k">referee</span> trades ' +
+        escapeHtml(rf.actual_trade != null ? String(rf.actual_trade) : '—') +
+        ' · outcome ' +
+        escapeHtml(String(rf.outcome || '—')) +
+        ' · pnl ' +
+        fmtD11MaybeNum(rf.pnl, 4) +
+        '</li>');
+      const gaps = rec.data_gaps;
+      if (Array.isArray(gaps) && gaps.length) {
+        lines.push('<li><span class="pg-student-d11-k">data_gaps</span> ' + escapeHtml(gaps.join(', ')) + '</li>');
+      }
+      lines.push('</ul></div>');
+      root.innerHTML = lines.join('');
+      wireStudentPanelD11Nav();
+    }
+
+    async function refreshStudentPanelD11() {
+      const root = studentPanelD11RootEl();
+      if (!root) return;
+      if (studentPanelD11.level !== 1) return;
+      root.innerHTML = '<p class="caps" style="margin:0">Loading runs…</p>';
+      let j = null;
+      try {
+        const r = await fetch('/api/student-panel/runs?limit=50');
+        j = await r.json();
+      } catch (e) {
+        root.innerHTML =
+          '<p class="caps" style="margin:0;color:#a32b2b">Failed to load runs: ' + escapeHtml(String(e)) + '</p>';
+        return;
+      }
+      if (!j || !j.ok || !Array.isArray(j.runs)) {
+        root.innerHTML =
+          '<p class="caps" style="margin:0;color:#a32b2b">Run list unavailable.</p>';
+        return;
+      }
+      const rows = j.runs;
+      let h =
+        renderStudentPanelD11Nav() +
+        '<p class="pg-student-d11-legend">Level 1 — learning signal per batch run (newest at top). Click a row for decisions.</p>' +
+        '<div class="pg-student-d11-table-wrap"><table class="pg-student-d11-table"><thead><tr>' +
+        '<th>run_id</th><th>time</th><th>pattern</th><th>window</th><th>#tr</th><th>win%</th><th>E/tr</th>' +
+        '<th>behΔ</th><th>outΔ</th><th>GH</th>' +
+        '</tr></thead><tbody>';
+      for (let i = 0; i < rows.length; i++) {
+        const row = rows[i] || {};
+        const rid = row.run_id != null ? String(row.run_id) : '';
+        h += '<tr data-run-row data-run-id="' + escapeHtml(rid) + '">';
+        h += '<td title="' + escapeHtml(rid) + '"><code style="font-size:0.7rem">' + escapeHtml(rid.length > 14 ? rid.slice(0, 12) + '…' : rid) + '</code></td>';
+        h += '<td>' + escapeHtml(String(row.timestamp || '—')) + '</td>';
+        h += '<td>' + escapeHtml(String(row.pattern || '—')) + '</td>';
+        h += '<td>' + escapeHtml(String(row.evaluation_window || '—')) + '</td>';
+        h += '<td>' + escapeHtml(row.total_trades != null ? String(row.total_trades) : '—') + '</td>';
+        h += '<td>' + (row.win_rate_percent != null ? fmtD11MaybeNum(row.win_rate_percent, 1) : '—') + '</td>';
+        h += '<td>' + (row.expectancy_per_trade != null ? fmtD11MaybeNum(row.expectancy_per_trade, 4) : '—') + '</td>';
+        h += '<td>' + escapeHtml(String(row.behavior_changed || '—')) + '</td>';
+        h += '<td>' + escapeHtml(String(row.outcome_improved || '—')) + '</td>';
+        h += '<td>' + escapeHtml(String(row.groundhog_state || '—')) + '</td>';
+        h += '</tr>';
+      }
+      h += '</tbody></table></div>';
+      if (!rows.length) {
+        h =
+          renderStudentPanelD11Nav() +
+          '<p class="caps" style="margin:0">No scorecard runs yet — run a parallel batch.</p>';
+      }
+      root.innerHTML = h;
+      wireStudentPanelD11Nav();
+      const trs = root.querySelectorAll('tr[data-run-row][data-run-id]');
+      trs.forEach(function (tr) {
+        tr.addEventListener('click', function () {
+          const id = tr.getAttribute('data-run-id');
+          if (id) void studentPanelD11GotoLevel2(id);
+        });
+      });
+    }
+
     function resetStudentTriangleStarting() {
-      const body = document.getElementById('studentTriangleBody');
-      if (!body) return;
-      body.innerHTML =
-        '<p class="caps" style="margin:0">Batch running — <strong>Student → learning → outcome</strong> fills in here when the batch completes.</p>';
+      const seam = document.getElementById('pgStudentSeamLegacyInner');
+      if (seam) {
+        seam.innerHTML =
+          'Batch running — <strong>seam</strong> and <strong>run table</strong> update when the batch completes.';
+      }
       const d = document.querySelector('details.pg-student-triangle-dock');
       if (d) d.open = true;
       const strip = document.getElementById('pgLearningEventsStrip');
@@ -4476,29 +4900,33 @@ PAGE_HTML = """<!DOCTYPE html>
       if (btn) btn.hidden = true;
     }
     function renderStudentTriangleBatchFailed(msg) {
-      const body = document.getElementById('studentTriangleBody');
-      if (!body) return;
-      body.innerHTML =
-        '<p class="caps" style="margin:0;color:#a32b2b">Batch did not complete successfully — Student seam summary not updated. ' +
-        escapeHtml(String(msg != null ? msg : '').slice(0, 400)) +
-        (String(msg || '').length > 400 ? '…' : '') +
-        '</p>';
+      const seam = document.getElementById('pgStudentSeamLegacyInner');
+      if (seam) {
+        seam.innerHTML =
+          '<span style="color:#a32b2b">Batch did not complete — seam not updated. ' +
+          escapeHtml(String(msg != null ? msg : '').slice(0, 400)) +
+          (String(msg || '').length > 400 ? '…' : '') +
+          '</span>';
+      }
+      void refreshStudentPanelD11();
     }
     function renderStudentTriangleFromBatchResult(data) {
-      const body = document.getElementById('studentTriangleBody');
-      if (!body || !data || typeof data !== 'object') return;
+      const seamBox = document.getElementById('pgStudentSeamLegacyInner');
+      if (!seamBox || !data || typeof data !== 'object') return;
       const seam = data.student_loop_directive_09_v1;
       const rowsTop = data.student_learning_rows_appended;
       if (seam && seam.skipped) {
-        body.innerHTML =
+        seamBox.innerHTML =
           '<p class="caps" style="margin:0">Student seam <strong>skipped</strong>: ' +
           escapeHtml(String((seam.reason != null && seam.reason !== '') ? seam.reason : '—')) +
           '</p>';
+        void refreshStudentPanelD11();
         return;
       }
       if (!seam || typeof seam !== 'object') {
-        body.innerHTML =
+        seamBox.innerHTML =
           '<p class="caps" style="margin:0">No <code>student_loop_directive_09_v1</code> in this result — refresh after upgrading the server.</p>';
+        void refreshStudentPanelD11();
         return;
       }
       const nApp = (rowsTop != null && rowsTop !== '') ? rowsTop : seam.student_learning_rows_appended;
@@ -4535,7 +4963,7 @@ PAGE_HTML = """<!DOCTYPE html>
           (errs.length > 6 ? ' …' : '') +
           '</p>';
       }
-      body.innerHTML =
+      seamBox.innerHTML =
         '<dl class="pg-student-tri-dl">' +
         '<dt>Learning rows written</dt><dd><strong>' + escapeHtml(String(nApp != null ? nApp : '—')) + '</strong> appended to the Student store</dd>' +
         '<dt>Closed trades considered</dt><dd>' + escapeHtml(String(tc)) + '</dd>' +
@@ -4544,6 +4972,9 @@ PAGE_HTML = """<!DOCTYPE html>
         priHtml +
         errHtml +
         '<p class="pg-student-tri-note">Referee outcomes: <strong>Results</strong> panel in the focus dock (expand tile above). Plumbing history: expand <strong>Score card</strong>. <strong>Clear Card</strong> does not clear the Student store — use Clear Student Proctor store there.</p>';
+      studentPanelD11.level = 1;
+      studentPanelD11.selectedDecisionId = null;
+      void refreshStudentPanelD11();
       updateLearningEventsStripFromBatch(data, seam);
       const dock = document.querySelector('details.pg-student-triangle-dock');
       if (dock) {
@@ -7503,6 +7934,7 @@ PAGE_HTML = """<!DOCTYPE html>
       });
     }
     void refreshStudentProctorStoreLine();
+    void refreshStudentPanelD11();
     refreshScorecardHistory();
     setEvidenceTab('outcomes');
   </script>
