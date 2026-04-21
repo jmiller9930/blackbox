@@ -1,0 +1,61 @@
+{
+  "schema": "student_panel_run_row_v2",
+  "run_id": "d14_gc_fixture_job",
+  "timestamp": "2026-04-21T23:00:22Z",
+  "pattern": "—",
+  "evaluation_window": "—",
+  "total_trades": 0,
+  "harness_baseline_trade_win_percent": null,
+  "expectancy_per_trade": null,
+  "harness_behavior_changed": "NO",
+  "student_handoff_active": "NO",
+  "behavior_changed": "NO",
+  "evidence": {
+    "referee": {
+      "total_trades": 0,
+      "trade_win_percent": null,
+      "expectancy_per_trade": null
+    },
+    "harness": {
+      "behavior_changed": "NO",
+      "memory_impact_yes_no": null,
+      "recall_matches": 0,
+      "recall_bias_applied": 0,
+      "signal_bias_applied_count": 0
+    },
+    "student_handoff": {
+      "active": "NO",
+      "rows_appended": 0,
+      "retrieval_matches": 0,
+      "output_fingerprint_tail": null
+    }
+  },
+  "outcome_improved": "N/A",
+  "groundhog_state": "N/A",
+  "run_progress": null,
+  "is_inflight": false,
+  "data_gaps": [
+    "missing_expectancy_inputs"
+  ],
+  "status": "done",
+  "fingerprint": null,
+  "baseline_run_id": null,
+  "timestamp_start": "2026-04-21T23:00:22Z",
+  "d14_run_row_v1": {
+    "run_id": "d14_gc_fixture_job",
+    "timestamp_start": "2026-04-21T23:00:22Z",
+    "pattern": "—",
+    "evaluation_window": "—",
+    "total_trade_opportunities": 0,
+    "win_count": 0,
+    "loss_count": 0,
+    "win_rate_percent": null,
+    "avg_win_pnl": null,
+    "avg_loss_pnl": null,
+    "expectancy_per_trade": null,
+    "behavior_changed_flag": false,
+    "outcome_improved_flag": null,
+    "groundhog_state": "COLD",
+    "aggregate_source": "batch_parallel_results_v1"
+  }
+}

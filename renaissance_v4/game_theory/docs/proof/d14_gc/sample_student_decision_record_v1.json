@@ -1,0 +1,7 @@
+{
+  "note": "No trade_id in carousel for this fixture batch — replay_outcomes_json is empty (see batch_parallel_results_v1.json). Re-run export after a batch with ≥1 closed trade.",
+  "job_id": "d14_gc_fixture_job",
+  "proof_fixture": true,
+  "fixture_batch_dir": "/Users/bigmac/Documents/code_projects/blackbox/renaissance_v4/game_theory/docs/proof/d14_gc/fixture_batch",
+  "sqlite_sol_usdt_bars": "Developer DB (renaissance_v4.sqlite3) currently ships ~60 SOLUSDT bars; baseline replay often yields zero closed trades, so replay_outcomes_json may be empty. A full student_decision_record_v1 sample with real trade_id requires a dataset/manifest run where the Referee closes ≥1 trade."
+}

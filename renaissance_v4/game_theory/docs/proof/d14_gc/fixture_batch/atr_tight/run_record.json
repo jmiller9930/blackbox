@@ -1,0 +1,388 @@
+{
+  "schema": "renaissance_v4_run_memory_v1",
+  "run_id": "cc4d2088-75a2-4fff-98b8-5f5c07974d5a",
+  "utc": "2026-04-21T23:00:22.873945+00:00",
+  "source": "parallel_scenarios",
+  "manifest_path": "/Users/bigmac/Documents/code_projects/blackbox/renaissance_v4/configs/manifests/baseline_v1_recipe.json",
+  "manifest_sha256": "224fd8f625fae7bd4008274fbcf4597140f8757fdce25e565132c73a9b21e5d2",
+  "hypothesis": "Tighter ATR multiples (1.5 / 2.5) reduce drawdown vs default without destroying cumulative PnL on this window.",
+  "indicator_context": null,
+  "context_silo": "renaissance_v4_pattern_game_v1",
+  "indicator_context_quality": {
+    "level": "missing",
+    "silo": "renaissance_v4_pattern_game_v1",
+    "matched_signal_keys": [],
+    "warn": "**Tide check:** Six feet of water does not tell you if the tide is **coming in or going out**. An indicator **value** without **context** (regime, direction, transition, velocity) is **noise** — not memory worth promoting. This silo stores **context around indicators**, not the universe."
+  },
+  "prior_run_id": null,
+  "atr_stop_mult": 1.5,
+  "atr_target_mult": 2.5,
+  "referee": {
+    "outcome_rule_version": "outcome_rule_v1_pnl_strict",
+    "wins": 0,
+    "losses": 0,
+    "trades": 0,
+    "win_rate": null,
+    "validation_checksum": "9012edeac8f3cafad6dc30152ef8fd6a0d8765162d2360e615ec25db0675f817",
+    "cumulative_pnl": 0.0,
+    "dataset_bars": 60,
+    "manifest_path": "/private/var/folders/9n/d3sv355n7t7_1chrh51tvn700000gn/T/pattern_game_upan8xe1.json",
+    "summary": {
+      "total_trades": 0,
+      "wins": 0,
+      "losses": 0,
+      "win_rate": 0.0,
+      "gross_pnl": 0.0,
+      "net_pnl": 0.0,
+      "average_pnl": 0.0,
+      "expectancy": 0.0,
+      "max_drawdown": 0.0,
+      "avg_mae": 0.0,
+      "avg_mfe": 0.0
+    },
+    "pattern_game_meta": {
+      "starting_equity_usd_spec": 1000.0,
+      "risk_fraction_per_trade_spec": 0.02,
+      "note": "Equity/risk are spec targets; risk governor still uses tiered notional_fraction.",
+      "memory_bundle_audit": null,
+      "memory_bundle_proof": {
+        "memory_bundle_path": null,
+        "memory_bundle_hash": null,
+        "memory_bundle_loaded": false,
+        "memory_bundle_applied": false,
+        "memory_keys_applied": [],
+        "memory_bundle_apply_audit": null,
+        "execution_keys_applied": [],
+        "signal_keys_applied": [],
+        "fusion_keys_applied": [],
+        "policy_keys_applied": [],
+        "manifest_atr_on_disk": {
+          "atr_stop_mult": null,
+          "atr_target_mult": null
+        },
+        "manifest_atr_after_bundle_merge": {
+          "atr_stop_mult": null,
+          "atr_target_mult": null
+        },
+        "manifest_atr_effective": {
+          "atr_stop_mult": 1.5,
+          "atr_target_mult": 2.5
+        },
+        "replay_manifest_source": "temp_effective_json",
+        "run_manifest_replay_module": "renaissance_v4.research.replay_runner",
+        "run_manifest_replay_function": "run_manifest_replay",
+        "execution_pipeline_note": "Signals/regime/fusion/risk/execution managers are built from the effective manifest dict inside run_manifest_replay via renaissance_v4.manifest.runtime (build_signals_from_manifest, build_execution_manager_from_manifest, etc.)."
+      }
+    },
+    "replay_data_audit": {
+      "schema": "pattern_game_bar_window_v1",
+      "dataset_bars_before_window": 60,
+      "dataset_bars_after_window": 60,
+      "bar_window_calendar_months_requested": null,
+      "slicing_applied": false,
+      "bar_window_open_time_start": 1700000000,
+      "bar_window_open_time_end": 1700017700,
+      "note": "Full dataset — no calendar-month window slice."
+    },
+    "expectancy": 0.0,
+    "average_pnl": 0.0,
+    "max_drawdown": 0.0,
+    "note": "win_rate is the binary Referee scorecard; expectancy/average_pnl/max_drawdown are portfolio metrics from the same run — do not judge economics from win_rate alone.",
+    "learning_run_audit_v1": {
+      "schema": "learning_run_audit_v1",
+      "run_classification_v1": "execution_only",
+      "learning_engaged_v1": false,
+      "learning_mechanisms_observed_v1": [],
+      "bars_processed": 11,
+      "decision_windows_total": 11,
+      "trade_entries_total": 0,
+      "trade_exits_total": 0,
+      "trade_win_rate": null,
+      "expectancy_per_trade": 0.0,
+      "exit_efficiency": 0.0,
+      "win_loss_size_ratio": null,
+      "trades_count": 0,
+      "memory_used_v1": false,
+      "memory_bundle_loaded": false,
+      "memory_bundle_applied": false,
+      "memory_bundle_path_resolved": null,
+      "memory_keys_applied": [],
+      "memory_operator_note_v1": "No memory bundle path resolved for this replay — execution-only with respect to promoted memory.",
+      "groundhog_operator_note_v1": "Groundhog: PATTERN_GAME_GROUNDHOG_BUNDLE off — expected for runs that do not auto-load canonical bundle.",
+      "memory_records_loaded_count": 0,
+      "groundhog_operator_lane_v1": "inactive",
+      "groundhog_auto_merge_env_enabled": false,
+      "recall_attempts_total": 0,
+      "recall_match_windows_total": 0,
+      "recall_match_records_total": 0,
+      "recall_bias_applied_total": 0,
+      "recall_signal_bias_applied_total": 0,
+      "suppressed_modules_count": 0,
+      "decision_context_recall_enabled": false,
+      "context_candidate_search_block_v1": {
+        "context_candidate_search_ran": false,
+        "candidate_count": 0,
+        "control_vs_candidate_comparison": "not_applicable",
+        "selected_candidate_id": null,
+        "none_beat_control": null,
+        "reason_codes_sample": [],
+        "winner_vs_control": null,
+        "winner_vs_control_delta_summary": null
+      },
+      "policy_framework_audit": null,
+      "operator_learning_status_line_v1": "classification=execution_only; decision_windows=11; candidate_search=not_run (parallel replay path — no multi-replay search in this worker); recall_matches=0; bias_applied_fusion=0 signal=0; memory_merged=no; verdict=execution_only — replayed policy on tape; no memory merge, recall match, bias application, or candidate search in this run."
+    },
+    "operator_learning_status_line_v1": "classification=execution_only; decision_windows=11; candidate_search=not_run (parallel replay path — no multi-replay search in this worker); recall_matches=0; bias_applied_fusion=0 signal=0; memory_merged=no; verdict=execution_only — replayed policy on tape; no memory merge, recall match, bias application, or candidate search in this run.",
+    "signal_behavior_proof_v1": {
+      "schema": "signal_behavior_proof_v1",
+      "manifest_signal_modules_declared": [
+        "trend_continuation",
+        "pullback_continuation",
+        "breakout_expansion",
+        "mean_reversion_fade"
+      ],
+      "manifest_disabled_signal_modules": [],
+      "per_signal_evaluated_bars_total": {
+        "trend_continuation": 11,
+        "pullback_continuation": 11,
+        "breakout_expansion": 11,
+        "mean_reversion_fade": 11
+      },
+      "per_signal_active_bars_total": {},
+      "per_signal_directional_active_bars_total": {},
+      "per_signal_closed_trade_attribution_count": {},
+      "ledger_scorecard_total_trades_by_signal": {},
+      "dominant_closed_trade_attributing_signal": null,
+      "attribution_semantics": "per_signal_closed_trade_attribution_count counts each OutcomeRecord.contributing_signals entry (replay_runner copies all signal_names with active=True on the **entry bar** into the trade; it is NOT the fusion-only short list). Fusion picks direction; see fusion_contributing_signals inside trade_entry_raw_samples.",
+      "fusion_bars": {
+        "fusion_no_trade_bars": 11,
+        "fusion_directional_output_bars": 0,
+        "bars_with_directional_signal_but_fusion_no_trade": 0,
+        "risk_blocked_bars": 11,
+        "trade_entries_attempted": 0,
+        "trade_exits_recorded": 0
+      },
+      "fusion_signal_level_rollup_v1": {
+        "bars_processed_after_warmup": 11,
+        "directional_signal_instances_total_across_bars": 0,
+        "inactive_with_suppression_reason_events_total": 44,
+        "fusion_emitted_long_short_bars": 0,
+        "fusion_emitted_no_trade_bars": 11,
+        "bars_fusion_no_trade_while_any_signal_directional": 0,
+        "trade_open_events_total": 0,
+        "closed_trades_recorded_total": 0
+      },
+      "directive_per_signal_evaluated_vs_trades_v1": {
+        "trend_continuation": {
+          "evaluated_bars_signal_module_ran": 11,
+          "active_any_direction_bars": 0,
+          "directional_active_bars": 0,
+          "closed_trade_attribution_count": 0
+        },
+        "pullback_continuation": {
+          "evaluated_bars_signal_module_ran": 11,
+          "active_any_direction_bars": 0,
+          "directional_active_bars": 0,
+          "closed_trade_attribution_count": 0
+        },
+        "breakout_continuation": {
+          "evaluated_bars_signal_module_ran": 11,
+          "active_any_direction_bars": 0,
+          "directional_active_bars": 0,
+          "closed_trade_attribution_count": 0
+        },
+        "mean_reversion_fade": {
+          "evaluated_bars_signal_module_ran": 11,
+          "active_any_direction_bars": 0,
+          "directional_active_bars": 0,
+          "closed_trade_attribution_count": 0
+        }
+      },
+      "suppression_reason_histograms_top": {
+        "breakout_expansion": {
+          "regime_mismatch:volatility_compression": 11
+        },
+        "mean_reversion_fade": {
+          "stretch_threshold_not_met": 11
+        },
+        "pullback_continuation": {
+          "regime_mismatch:volatility_compression": 11
+        },
+        "trend_continuation": {
+          "regime_mismatch:volatility_compression": 11
+        }
+      },
+      "dead_signals_zero_closed_trade_attribution": [
+        {
+          "signal": "trend_continuation",
+          "closed_trade_attribution_count": 0,
+          "directional_active_bars": 0,
+          "active_any_bar": 0,
+          "analysis": "never_active_any_bar_in_replay_window"
+        },
+        {
+          "signal": "pullback_continuation",
+          "closed_trade_attribution_count": 0,
+          "directional_active_bars": 0,
+          "active_any_bar": 0,
+          "analysis": "never_active_any_bar_in_replay_window"
+        },
+        {
+          "signal": "breakout_expansion",
+          "closed_trade_attribution_count": 0,
+          "directional_active_bars": 0,
+          "active_any_bar": 0,
+          "analysis": "never_active_any_bar_in_replay_window"
+        },
+        {
+          "signal": "mean_reversion_fade",
+          "closed_trade_attribution_count": 0,
+          "directional_active_bars": 0,
+          "active_any_bar": 0,
+          "analysis": "never_active_any_bar_in_replay_window"
+        }
+      ],
+      "trade_entry_raw_samples": [],
+      "trade_entry_raw_samples_max": 40,
+      "atr_usage_code_references_v1": {
+        "feature_atr_proxy_14": "renaissance_v4/core/feature_engine.py → FeatureSet.atr_proxy_14",
+        "execution_stop_target": "renaissance_v4/research/replay_runner.py passes features.atr_proxy_14 into ExecutionManager.open_trade; renaissance_v4/core/execution_manager.py sets stop_loss / take_profit from atr × atr_stop_mult / atr_target_mult (manifest or defaults).",
+        "signals_use_atr_proxy_14": false,
+        "signals_note": "Signal modules in renaissance_v4/signals/*.py use FeatureSet fields such as volatility_20; they do not reference atr_proxy_14 (repo grep)."
+      }
+    }
+  },
+  "outcome_measures": {
+    "schema": "outcome_measures_v1",
+    "from_referee_row": true,
+    "binary_scorecard": {
+      "wins": 0,
+      "losses": 0,
+      "trades": 0
+    },
+    "portfolio": {
+      "cumulative_pnl": 0.0,
+      "expectancy": 0.0,
+      "average_pnl": 0.0,
+      "max_drawdown": 0.0
+    },
+    "lenses": {
+      "money": "flat",
+      "edge": "non_positive",
+      "drawdown": "none_or_flat"
+    },
+    "positive_signals": [
+      "cumulative_pnl_non_negative",
+      "no_negative_drawdown_in_metrics"
+    ],
+    "positive_any": true,
+    "note": "Lenses interpret the same Referee row — not a second ledger. win_rate is binary scorecard; money/edge/drawdown are separate questions."
+  },
+  "decision_audit": {
+    "prior_outcomes_or_parameters_loaded_into_replay_engine": false,
+    "prior_run_id_provided": null,
+    "memory_bundle": null,
+    "human_readable_summary": "Trade decisions came from: (1) manifest JSON on disk, (2) optional CLI/scenario ATR overrides (applied after any bundle), (3) bar data forward in time. No memory bundle was merged. run_memory JSONL / prior session folders are **not** auto-read to alter execution.",
+    "if_prior_run_id_is_set": "No prior_run_id was supplied."
+  },
+  "post_mortem": {
+    "why": null,
+    "next_hypothesis": null,
+    "note": "Fill after review; optional Anna/human — does not affect Referee."
+  },
+  "learning_memory_evidence": {
+    "schema": "learning_memory_evidence_v1",
+    "memory_applied": false,
+    "groundhog_mode": "inactive",
+    "groundhog_note": "No bundle merge — Groundhog file was not in effect for this run.",
+    "learned_from": {
+      "prior_run_id_metadata": null,
+      "bundle_path": null,
+      "bundle_from_run_id": null,
+      "batch_folder": null
+    },
+    "behavior_change": "No memory bundle was merged into the manifest before replay. Execution followed the on-disk manifest (plus any scenario ATR overrides listed below).",
+    "context_quality": {
+      "raw_level": "missing",
+      "operator_label": "missing"
+    },
+    "training_claim": "observed_only",
+    "operator_labels": {
+      "training_evidence": "none",
+      "memory_in_use": "no",
+      "groundhog_mode": "inactive",
+      "learned_from_prior_run_id": null,
+      "changed_this_run": "No memory bundle was merged into the manifest before replay. Execution followed the on-disk manifest (plus any scenario ATR overrides listed below).",
+      "context_quality": "missing",
+      "proof_type": "replay only"
+    },
+    "outcome_change_visible": "unknown",
+    "outcome_change_note": "No memory merge — outcome reflects manifest-only replay (plus scenario ATR overrides).",
+    "ablation": {
+      "available": false,
+      "note": "Same scenario was not also run without memory in this batch — no paired ablation proof."
+    }
+  },
+  "operator_run_audit": {
+    "operator_recipe_id": null,
+    "operator_recipe_label": null,
+    "evaluation_window": null,
+    "manifest_path": "/Users/bigmac/Documents/code_projects/blackbox/renaissance_v4/configs/manifests/baseline_v1_recipe.json",
+    "policy_framework_path": null,
+    "policy_framework_audit": null,
+    "replay_data_audit": {
+      "schema": "pattern_game_bar_window_v1",
+      "dataset_bars_before_window": 60,
+      "dataset_bars_after_window": 60,
+      "bar_window_calendar_months_requested": null,
+      "slicing_applied": false,
+      "bar_window_open_time_start": 1700000000,
+      "bar_window_open_time_end": 1700017700,
+      "note": "Full dataset — no calendar-month window slice."
+    }
+  },
+  "learning_run_audit_v1": {
+    "schema": "learning_run_audit_v1",
+    "run_classification_v1": "execution_only",
+    "learning_engaged_v1": false,
+    "learning_mechanisms_observed_v1": [],
+    "bars_processed": 11,
+    "decision_windows_total": 11,
+    "trade_entries_total": 0,
+    "trade_exits_total": 0,
+    "trade_win_rate": null,
+    "expectancy_per_trade": 0.0,
+    "exit_efficiency": 0.0,
+    "win_loss_size_ratio": null,
+    "trades_count": 0,
+    "memory_used_v1": false,
+    "memory_bundle_loaded": false,
+    "memory_bundle_applied": false,
+    "memory_bundle_path_resolved": null,
+    "memory_keys_applied": [],
+    "memory_operator_note_v1": "No memory bundle path resolved for this replay — execution-only with respect to promoted memory.",
+    "groundhog_operator_note_v1": "Groundhog: PATTERN_GAME_GROUNDHOG_BUNDLE off — expected for runs that do not auto-load canonical bundle.",
+    "memory_records_loaded_count": 0,
+    "groundhog_operator_lane_v1": "inactive",
+    "groundhog_auto_merge_env_enabled": false,
+    "recall_attempts_total": 0,
+    "recall_match_windows_total": 0,
+    "recall_match_records_total": 0,
+    "recall_bias_applied_total": 0,
+    "recall_signal_bias_applied_total": 0,
+    "suppressed_modules_count": 0,
+    "decision_context_recall_enabled": false,
+    "context_candidate_search_block_v1": {
+      "context_candidate_search_ran": false,
+      "candidate_count": 0,
+      "control_vs_candidate_comparison": "not_applicable",
+      "selected_candidate_id": null,
+      "none_beat_control": null,
+      "reason_codes_sample": [],
+      "winner_vs_control": null,
+      "winner_vs_control_delta_summary": null
+    },
+    "policy_framework_audit": null,
+    "operator_learning_status_line_v1": "classification=execution_only; decision_windows=11; candidate_search=not_run (parallel replay path — no multi-replay search in this worker); recall_matches=0; bias_applied_fusion=0 signal=0; memory_merged=no; verdict=execution_only — replayed policy on tape; no memory merge, recall match, bias application, or candidate search in this run."
+  }
+}

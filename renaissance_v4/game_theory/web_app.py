@@ -85,7 +85,7 @@ _PATTERN_BANNER_WEBP_PATH = _RV4_ROOT / "assets" / "pattern.webp"
 _PATTERN_GAME_BANNER_BOOT_JS = _GAME_THEORY / "static" / "pattern_game_banner_boot.js"
 
 # Operator-visible web UI bundle version — bump when changing PAGE_HTML (HTML/CSS/JS) so deploys are provable.
-PATTERN_GAME_WEB_UI_VERSION = "2.19.26"
+PATTERN_GAME_WEB_UI_VERSION = "2.19.27"
 
 from renaissance_v4.game_theory.groundhog_memory import (
     groundhog_auto_merge_enabled,
@@ -2527,6 +2527,19 @@ PAGE_HTML = """<!DOCTYPE html>
       background: rgba(30, 214, 170, 0.1);
     }
     .pg-student-d11-table tr[data-run-row] { cursor: pointer; }
+    .pg-student-d11-row-del {
+      min-width: 28px;
+      padding: 2px 6px;
+      font-size: 1rem;
+      line-height: 1;
+      border-radius: 6px;
+      border: 1px solid rgba(163, 43, 43, 0.45);
+      background: rgba(163, 43, 43, 0.12);
+      color: var(--pg-ink);
+      cursor: pointer;
+    }
+    .pg-student-d11-row-del:hover:not(:disabled) { border-color: #a32b2b; background: rgba(163, 43, 43, 0.22); }
+    .pg-student-d11-row-del:disabled { opacity: 0.35; cursor: not-allowed; }
     /* D13 — single horizontal run summary band (no vertical expansion for core cues) */
     .pg-student-d13-run-summary {
       display: flex;
@@ -2667,7 +2680,6 @@ PAGE_HTML = """<!DOCTYPE html>
       flex-direction: column;
       padding-right: 4px;
     }
-    #pgStudentHandoffStrip { flex-shrink: 0; }
     .pg-secondary-surface-label {
       display: inline-block;
       margin-left: 6px;
@@ -4456,7 +4468,7 @@ PAGE_HTML = """<!DOCTYPE html>
           <div class="pg-panel-header" style="margin:0;flex:1">
             <div>
               <h2 class="pg-panel-h">Student → learning → outcome</h2>
-              <p class="pg-panel-sub">D11 — <strong>batch-level</strong> effectiveness in the run table (not a Student-only score); <strong>scenario slices</strong> in batch order (carousel); <strong>scenario forensic</strong> view at the third level. Chrome stays pinned; only the body scrolls. One level fills the panel at a time. <strong>Latest batch — handoff</strong> (below) is Directive 09. Resize the fold from the bottom edge; state is remembered.</p>
+              <p class="pg-panel-sub"><strong>Operator panel (D14):</strong> Level 1 = run table only. Level 2 = one selected run — run summary band + trade carousel only. Level 3 = one trade deep dive only. Resize the fold from the bottom edge; state is remembered.</p>
             </div>
             <span class="pg-chip pg-chip-teal">Primary</span>
           </div>
@@ -4464,11 +4476,31 @@ PAGE_HTML = """<!DOCTYPE html>
         <div id="studentTriangleFoldBody" class="pg-panel-fold-body pg-student-triangle-fold-body" title="Drag the bottom-right corner or bottom edge to resize. Size and open/closed state are saved in this browser (localStorage).">
           <div id="studentTriangleBody" class="pg-student-triangle-body" aria-live="polite">
             <div id="pgStudentPanelD11" class="pg-student-d11"></div>
-            <div id="pgStudentHandoffStrip" class="pg-student-handoff-strip" style="margin-top:12px;padding-top:12px;border-top:1px solid rgba(255,255,255,0.10)">
-              <p class="pg-student-d11-legend" style="margin-top:0"><strong>Latest batch — handoff</strong> (Directive 09)</p>
-              <div id="pgStudentHandoffStripInner" class="caps" style="margin:0">No batch yet — run a parallel batch.</div>
-            </div>
           </div>
+        </div>
+      </details>
+
+      <details class="pg-panel-fold pg-dev-student-seam-dock" id="pgDevStudentBatchPlumbing" style="margin-top:12px">
+        <summary>
+          <div class="pg-panel-header" style="margin:0;flex:1">
+            <div>
+              <h2 class="pg-panel-h" style="font-size:1rem">Developer — batch seam &amp; plumbing</h2>
+              <p class="pg-panel-sub">Not part of the three-level Student operator panel. Expand for Directive 09 handoff detail, store path, and learning-at-a-glance (debug).</p>
+            </div>
+            <span class="pg-chip" style="opacity:0.75">Debug</span>
+          </div>
+        </summary>
+        <div class="pg-panel-fold-body" style="padding:12px 14px">
+          <p class="pg-student-d11-legend" style="margin-top:0">Latest batch — seam (Directive 09) · not operator Student panel content</p>
+          <div id="pgDevStudentSeamInner" class="caps" style="margin:0 0 12px">No batch yet — run a parallel batch.</div>
+      <section class="pg-learning-events-strip" id="pgLearningEventsStrip" aria-label="Learning events at a glance (developer)" hidden>
+        <h3 class="pg-learning-events-h">Latest run — learning at a glance</h3>
+        <ul class="pg-learning-events-ul" id="pgLearningEventsUl"></ul>
+        <p class="pg-learning-events-note">Developer overview — not Level 1–3 Student panel.</p>
+        <div style="margin-top:8px">
+          <button type="button" class="btn-secondary pg-op-btn" id="pgForensicOpenBtn" hidden>Open forensic drill (placeholder)</button>
+        </div>
+      </section>
         </div>
       </details>
 
@@ -4504,15 +4536,6 @@ PAGE_HTML = """<!DOCTYPE html>
           </div>
         </div>
       </details>
-
-      <section class="pg-learning-events-strip" id="pgLearningEventsStrip" aria-label="Learning events at a glance" hidden>
-        <h3 class="pg-learning-events-h">Latest run — learning at a glance</h3>
-        <ul class="pg-learning-events-ul" id="pgLearningEventsUl"></ul>
-        <p class="pg-learning-events-note">Overview only — proves plumbing + deltas worth drilling; full baseline vs memory compare and per-decision math are §H forensic drill (next).</p>
-        <div style="margin-top:8px">
-          <button type="button" class="btn-secondary pg-op-btn" id="pgForensicOpenBtn" hidden>Open forensic drill (placeholder)</button>
-        </div>
-      </section>
 
       <dialog id="pgForensicDrillDialog" class="pg-forensic-dialog">
         <div class="pg-forensic-dialog-inner">
@@ -4800,15 +4823,15 @@ PAGE_HTML = """<!DOCTYPE html>
       firstSliceDecisionId: null,
     };
 
+    /** Seam / handoff lives in developer-only panel (#pgDevStudentSeamInner), not in L1–L3 body. */
     function studentPanelD11HandoffEl() {
-      return document.getElementById('pgStudentHandoffStrip');
+      return null;
     }
     function studentPanelD11RootEl() {
       return document.getElementById('pgStudentPanelD11');
     }
-    function studentPanelD11SetHandoffVisible(show) {
-      const el = studentPanelD11HandoffEl();
-      if (el) el.hidden = !show;
+    function studentPanelD11SetHandoffVisible(_show) {
+      /* D14.GC.1 — operator Student panel has no handoff strip; seam is in #pgDevStudentSeamInner only. */
     }
 
     function fmtD11MaybeNum(v, d) {
@@ -5460,7 +5483,7 @@ PAGE_HTML = """<!DOCTYPE html>
       }
       const rows = j.runs;
       let scroll =
-        '<p class="pg-student-d11-legend" style="margin-top:0"><strong>Batch-level run view</strong> — Referee rollups + harness/handoff signals. Click a row to open the run summary + trade carousel for that run (trade-grain).</p>' +
+        '<p class="pg-student-d11-legend" style="margin-top:0"><strong>Level 1 — run table only</strong> — Referee rollups and harness signals. Click a row (not ×) to open Level 2. <strong>×</strong> removes this line from scorecard only; Groundhog unchanged.</p>' +
         '<div class="pg-student-d11-table-wrap"><table class="pg-student-d11-table"><thead><tr>' +
         '<th>run_id</th><th>time</th><th>pattern</th><th>window</th><th>#tr</th>' +
         '<th title="Referee — replay trade win % (batch rollup)">BL %</th>' +
@@ -5469,6 +5492,7 @@ PAGE_HTML = """<!DOCTYPE html>
         '<th title="Student handoff">SH</th>' +
         '<th title="Expectancy vs prior same-config batch">outΔ</th>' +
         '<th title="Groundhog tier">GH</th>' +
+        '<th title="Remove run from scorecard only (D14)"> </th>' +
         '</tr></thead><tbody>';
       for (let i = 0; i < rows.length; i++) {
         const row = rows[i] || {};
@@ -5498,6 +5522,14 @@ PAGE_HTML = """<!DOCTYPE html>
         scroll += '<td>' + escapeHtml(String(shCol)) + '</td>';
         scroll += '<td>' + escapeHtml(String(row.outcome_improved || '—')) + '</td>';
         scroll += '<td>' + escapeHtml(String(row.groundhog_state || '—')) + '</td>';
+        scroll +=
+          '<td>' +
+          (infl
+            ? '<button type="button" class="pg-student-d11-row-del" disabled title="Cannot delete until batch completes">×</button>'
+            : '<button type="button" class="pg-student-d11-row-del" data-run-id="' +
+              escapeHtml(rid) +
+              '" title="Remove run from scorecard only (Groundhog unchanged)">×</button>') +
+          '</td>';
         scroll += '</tr>';
       }
       scroll += '</tbody></table></div>';
@@ -5508,7 +5540,8 @@ PAGE_HTML = """<!DOCTYPE html>
       studentPanelD11WireChrome();
       const trs = root.querySelectorAll('tr[data-run-row]');
       trs.forEach(function (tr) {
-        tr.addEventListener('click', function () {
+        tr.addEventListener('click', function (ev) {
+          if (ev && ev.target && ev.target.closest && ev.target.closest('.pg-student-d11-row-del')) return;
           const id = tr.getAttribute('data-run-id');
           if (id) {
             studentPanelD11.lastVisitedRunId = id;
@@ -5516,10 +5549,47 @@ PAGE_HTML = """<!DOCTYPE html>
           }
         });
       });
+      root.querySelectorAll('.pg-student-d11-row-del').forEach(function (btn) {
+        btn.addEventListener('click', function (ev) {
+          ev.preventDefault();
+          ev.stopPropagation();
+          if (btn.disabled) return;
+          const rid = btn.getAttribute('data-run-id');
+          if (!rid) return;
+          if (
+            !confirm(
+              'Remove this run from scorecard history only?\\n\\nGroundhog bundles and engine learning are NOT changed.\\n\\nConfirm to delete.'
+            )
+          ) {
+            return;
+          }
+          btn.disabled = true;
+          fetch('/api/batch-scorecard/run/' + encodeURIComponent(rid), {
+            method: 'DELETE',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ confirm: true }),
+          })
+            .then(function (r) {
+              return r.json();
+            })
+            .then(function (out) {
+              if (!out || !out.ok) {
+                alert((out && out.error) || 'Delete failed');
+                btn.disabled = false;
+                return;
+              }
+              void refreshStudentPanelD11();
+            })
+            .catch(function () {
+              alert('Delete failed (network)');
+              btn.disabled = false;
+            });
+        });
+      });
     }
 
     function resetStudentTriangleStarting() {
-      const ho = document.getElementById('pgStudentHandoffStripInner');
+      const ho = document.getElementById('pgDevStudentSeamInner');
       if (ho) {
         ho.innerHTML =
           'Batch running — <strong>handoff</strong> (Referee → Student store) and <strong>run table</strong> update when the batch completes.';
@@ -5532,7 +5602,7 @@ PAGE_HTML = """<!DOCTYPE html>
       if (btn) btn.hidden = true;
     }
     function renderStudentTriangleBatchFailed(msg) {
-      const ho = document.getElementById('pgStudentHandoffStripInner');
+      const ho = document.getElementById('pgDevStudentSeamInner');
       if (ho) {
         ho.innerHTML =
           '<span style="color:#a32b2b">Batch did not complete — handoff not updated. ' +
@@ -5543,7 +5613,7 @@ PAGE_HTML = """<!DOCTYPE html>
       void refreshStudentPanelD11();
     }
     function renderStudentTriangleFromBatchResult(data) {
-      const hoBox = document.getElementById('pgStudentHandoffStripInner');
+      const hoBox = document.getElementById('pgDevStudentSeamInner');
       if (!hoBox || !data || typeof data !== 'object') return;
       const handoff = data.student_loop_directive_09_v1;
       const rowsTop = data.student_learning_rows_appended;

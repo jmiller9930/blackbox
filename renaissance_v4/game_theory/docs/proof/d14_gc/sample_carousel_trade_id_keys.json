@@ -1,0 +1,5 @@
+{
+  "job_id": "d14_gc_fixture_job",
+  "slices_keyed_by_trade_id": [],
+  "all_slice_ids_are_trade_grain": true
+}

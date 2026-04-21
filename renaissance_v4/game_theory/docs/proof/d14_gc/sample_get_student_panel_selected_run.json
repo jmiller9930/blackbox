@@ -1,0 +1,29 @@
+{
+  "ok": true,
+  "schema": "student_panel_d13_selected_run_v1",
+  "run_id": "d14_gc_fixture_job",
+  "run_summary": {
+    "run_id": "d14_gc_fixture_job",
+    "pattern": "—",
+    "evaluation_window": "—",
+    "total_trade_opportunities": 0,
+    "win_count": 0,
+    "loss_count": 0,
+    "win_rate_percent": null,
+    "avg_win_pnl": null,
+    "avg_loss_pnl": null,
+    "expectancy_per_trade": null,
+    "behavior_changed_flag": false,
+    "outcome_improved_flag": null,
+    "groundhog_state": "COLD",
+    "context_used_flag": false,
+    "memory_used_flag": false,
+    "panel_run_row_schema": "student_panel_run_row_v2"
+  },
+  "slices": [],
+  "slice_ordering": "trade_opportunities_batch_parallel_order",
+  "grain": "trade_id",
+  "scenario_list_error": null,
+  "data_gaps": [],
+  "note": "Carousel and deep dive use trade_id / graded_unit_id. scenario_id is batch grouping only — never the carousel slice identity."
+}
