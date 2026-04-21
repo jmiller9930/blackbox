@@ -82,7 +82,7 @@ _PATTERN_BANNER_WEBP_PATH = _RV4_ROOT / "assets" / "pattern.webp"
 _PATTERN_GAME_BANNER_BOOT_JS = _GAME_THEORY / "static" / "pattern_game_banner_boot.js"
 
 # Operator-visible web UI bundle version — bump when changing PAGE_HTML (HTML/CSS/JS) so deploys are provable.
-PATTERN_GAME_WEB_UI_VERSION = "2.19.7"
+PATTERN_GAME_WEB_UI_VERSION = "2.19.8"
 
 from renaissance_v4.game_theory.groundhog_memory import (
     groundhog_auto_merge_enabled,
@@ -4775,6 +4775,23 @@ PAGE_HTML = """<!DOCTYPE html>
       ex.hidden = true;
     }
 
+    /** True if click target is real UI in an expanded Quick View pane (do not collapse). */
+    function pgFocusClickKeepsExpanded(target) {
+      if (!target || !target.closest) return true;
+      return !!target.closest(
+        'button, a, textarea, input, select, option, label, summary, ' +
+        '[data-pg-focus-tab], [data-pg-focus-tile], [contenteditable], ' +
+        'pre, code, table, thead, tbody, tr, td, th, caption, canvas, svg, ' +
+        '.pg-tab, .pg-tab-strip, .pg-status-item, .pg-pill-row, .pg-pill, ' +
+        '.live-telemetry-wrap, .live-telemetry-panel, .telemetry-rolling-log, ' +
+        '.memory-status-card, .pg-terminal-compact-summary, .pg-terminal-split, .pg-terminal-split-left, ' +
+        '.pg-header-drawer-inner, .pg-evidence-panel, .pg-table-scroll, ' +
+        '.policy-table, .policy-outcome-panel, .scorecard-table-learning, ' +
+        '.pg-scorecard-split, .pg-evidence-scorecard-pane, .batch-drill-panel, ' +
+        '.inline-details, details, dl, dt, dd'
+      );
+    }
+
     function updateTerminalCompactSummary(pj, running, completed, total, elapsed, hot, winStr, lm, echo, recipe) {
       const st = document.getElementById('tcsStatus');
       const bat = document.getElementById('tcsBatch');
@@ -4890,6 +4907,26 @@ PAGE_HTML = """<!DOCTYPE html>
       /* One delegated handler on the dock so clicks on inner spans/strong still open the panel (nearest .closest). */
       if (dock) {
         dock.addEventListener('click', function (ev) {
+          const mode0 = dock.getAttribute('data-pg-focus-mode') || 'overview';
+          const ex0 = document.getElementById('pgFocusExpanded');
+          const t0 = ev.target;
+          if (mode0 !== 'overview' && ex0 && !ex0.hidden && t0 && t0.closest) {
+            if (t0.closest('#pgFocusOverview')) {
+              /* ignore — overview is hidden */
+            } else if (t0.closest('.pg-focus-expanded-body')) {
+              if (!pgFocusClickKeepsExpanded(t0)) {
+                ev.preventDefault();
+                pgFocusBackToOverview();
+                return;
+              }
+            } else if (t0.closest('.pg-focus-expanded-head')) {
+              if (!t0.closest('button') && !t0.closest('[data-pg-focus-tab]')) {
+                ev.preventDefault();
+                pgFocusBackToOverview();
+                return;
+              }
+            }
+          }
           const back = ev.target && ev.target.closest ? ev.target.closest('#pgFocusBackBtn') : null;
           if (back && dock.contains(back)) {
             ev.preventDefault();
