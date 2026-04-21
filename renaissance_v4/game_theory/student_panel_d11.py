@@ -18,10 +18,14 @@ from renaissance_v4.game_theory.scorecard_drill import (
     find_scorecard_entry_by_job_id,
     load_run_record,
 )
+from renaissance_v4.game_theory.student_proctor.student_learning_store_v1 import (
+    default_student_learning_store_path_v1,
+    list_student_learning_records_by_run_id,
+)
 
-SCHEMA_RUN_ROW = "student_panel_run_row_v1"
+SCHEMA_RUN_ROW = "student_panel_run_row_v2"
 SCHEMA_DECISION_SLICE = "student_panel_decision_slice_v1"
-SCHEMA_DECISION_RECORD = "student_decision_record_v1"
+SCHEMA_DECISION_RECORD = "student_decision_record_v2"
 
 
 def _float(v: Any, default: float | None = None) -> float | None:
@@ -115,7 +119,10 @@ def _groundhog_active_for_d11(row: dict[str, Any]) -> bool:
     return bool(gh_lane or recall > 0 or stud_ret > 0 or mem_yes)
 
 
-def _behavior_changed(row: dict[str, Any]) -> str:
+def _harness_behavior_changed(row: dict[str, Any]) -> str:
+    """
+    Replay/harness path only (memory bundle, recall, bias) — **not** Student store writes.
+    """
     mci = row.get("memory_context_impact_audit_v1")
     if isinstance(mci, dict) and mci.get("memory_impact_yes_no") == "YES":
         return "YES"
@@ -125,7 +132,23 @@ def _behavior_changed(row: dict[str, Any]) -> str:
         return "YES"
     if _int(row.get("signal_bias_applied_count"), 0) > 0:
         return "YES"
+    return "NO"
+
+
+def _student_handoff_signal(row: dict[str, Any]) -> str:
+    """Directive 09 / Student store: YES if rows were appended or retrieval matched."""
     if _int(row.get("student_learning_rows_appended"), 0) > 0:
+        return "YES"
+    if _int(row.get("student_retrieval_matches"), 0) > 0:
+        return "YES"
+    return "NO"
+
+
+def _behavior_changed_legacy_union(row: dict[str, Any]) -> str:
+    """Deprecated single flag = YES if either harness or Student handoff fired (compat only)."""
+    if _harness_behavior_changed(row) == "YES":
+        return "YES"
+    if _student_handoff_signal(row) == "YES":
         return "YES"
     return "NO"
 
@@ -150,6 +173,53 @@ def _expectancy_per_trade_for_row(row: dict[str, Any]) -> tuple[float | None, st
         e2 = wr * wlr - lr * 1.0
         return round(e2, 6), "scaled_from_batch_trade_win_pct_and_wlr"
     return None, "missing_expectancy_inputs"
+
+
+def _fp_tail(v: Any, n: int = 12) -> str | None:
+    s = str(v or "").strip()
+    if not s:
+        return None
+    return s[-n:] if len(s) >= n else s
+
+
+def _build_evidence_v1(row: dict[str, Any]) -> dict[str, Any]:
+    """Nested evidence for control — Referee vs harness vs Student handoff (no merged semantics)."""
+    exp, _exp_gap = _expectancy_per_trade_for_row(row)
+    btc = _int(row.get("batch_trades_count"), 0)
+    btw = row.get("batch_trade_win_pct")
+    if btw is None:
+        btw = row.get("avg_trade_win_pct")
+    wr = None
+    try:
+        wr = float(btw) if btw is not None else None
+    except (TypeError, ValueError):
+        pass
+    hb = _harness_behavior_changed(row)
+    sh = _student_handoff_signal(row)
+    rows_n = _int(row.get("student_learning_rows_appended"), 0)
+    retr_n = _int(row.get("student_retrieval_matches"), 0)
+    mci = row.get("memory_context_impact_audit_v1")
+    mem_imp = mci.get("memory_impact_yes_no") if isinstance(mci, dict) else None
+    return {
+        "referee": {
+            "total_trades": btc,
+            "trade_win_percent": wr,
+            "expectancy_per_trade": exp,
+        },
+        "harness": {
+            "behavior_changed": hb,
+            "memory_impact_yes_no": mem_imp,
+            "recall_matches": _int(row.get("recall_matches"), 0),
+            "recall_bias_applied": _int(row.get("recall_bias_applied"), 0),
+            "signal_bias_applied_count": _int(row.get("signal_bias_applied_count"), 0),
+        },
+        "student_handoff": {
+            "active": sh,
+            "rows_appended": rows_n,
+            "retrieval_matches": retr_n,
+            "output_fingerprint_tail": _fp_tail(row.get("student_output_fingerprint")),
+        },
+    }
 
 
 def _groundhog_state_d11(
@@ -231,7 +301,10 @@ def build_d11_run_rows_v1(
                 "total_trades": None,
                 "harness_baseline_trade_win_percent": None,
                 "expectancy_per_trade": None,
+                "harness_behavior_changed": "—",
+                "student_handoff_active": "—",
                 "behavior_changed": "—",
+                "evidence": None,
                 "outcome_improved": "—",
                 "groundhog_state": "RUNNING",
                 "run_progress": (
@@ -261,7 +334,9 @@ def build_d11_run_rows_v1(
         except (TypeError, ValueError):
             win_rate_p = None
 
-        beh = _behavior_changed(r)
+        harness_beh = _harness_behavior_changed(r)
+        stud_hand = _student_handoff_signal(r)
+        legacy_beh = _behavior_changed_legacy_union(r)
         outcome_imp: str
         if prev_same is None:
             outcome_imp = "N/A"
@@ -283,7 +358,7 @@ def build_d11_run_rows_v1(
             is_running=False,
             is_first_in_fingerprint_chain=first_in_chain,
             gh_active=gh_active,
-            behavior=beh,
+            behavior=harness_beh,
             outcome=outcome_imp,
         )
 
@@ -296,7 +371,10 @@ def build_d11_run_rows_v1(
             "total_trades": btc,
             "harness_baseline_trade_win_percent": win_rate_p,
             "expectancy_per_trade": exp,
-            "behavior_changed": beh,
+            "harness_behavior_changed": harness_beh,
+            "student_handoff_active": stud_hand,
+            "behavior_changed": legacy_beh,
+            "evidence": _build_evidence_v1(r),
             "outcome_improved": outcome_imp,
             "groundhog_state": ghs,
             "run_progress": None,
@@ -420,6 +498,32 @@ def build_student_decision_record_v1(
     ol = target.get("operator_labels")
     direction = _ref_direction_from_labels(ol if isinstance(ol, dict) else None)
 
+    rr_dict = rr if isinstance(rr, dict) else {}
+    la = rr_dict.get("learning_run_audit_v1")
+    if not isinstance(la, dict):
+        la = None
+
+    sl_count = 0
+    sl_sample: list[str] = []
+    store_path_s = ""
+    try:
+        store_p = default_student_learning_store_path_v1()
+        store_path_s = str(store_p)
+        sl_rows = list_student_learning_records_by_run_id(store_p, job_id)
+        sl_count = len(sl_rows)
+        for doc in sl_rows[:5]:
+            rid = doc.get("record_id") if isinstance(doc, dict) else None
+            if isinstance(rid, str) and rid.strip():
+                sl_sample.append(rid.strip())
+    except OSError:
+        pass
+
+    gaps = [
+        "confidence_not_in_run_record",
+        "baseline_decision_not_wired",
+        "pattern_evaluation_stub",
+    ]
+
     rec: dict[str, Any] = {
         "schema": SCHEMA_DECISION_RECORD,
         "decision_time": str((rr or {}).get("utc") or target.get("run_id") or ""),
@@ -454,11 +558,13 @@ def build_student_decision_record_v1(
             "outcome": str(target.get("referee_session") or "N/A"),
             "pnl": ref.get("cumulative_pnl"),
         },
-        "data_gaps": [
-            "confidence_not_in_run_record",
-            "baseline_decision_not_wired",
-            "pattern_evaluation_stub",
-        ],
+        "learning_run_audit_v1": la,
+        "student_learning_store": {
+            "path": store_path_s,
+            "records_for_run_count": sl_count,
+            "record_id_sample": sl_sample,
+        },
+        "data_gaps": gaps,
     }
     return rec
 

@@ -85,7 +85,7 @@ _PATTERN_BANNER_WEBP_PATH = _RV4_ROOT / "assets" / "pattern.webp"
 _PATTERN_GAME_BANNER_BOOT_JS = _GAME_THEORY / "static" / "pattern_game_banner_boot.js"
 
 # Operator-visible web UI bundle version — bump when changing PAGE_HTML (HTML/CSS/JS) so deploys are provable.
-PATTERN_GAME_WEB_UI_VERSION = "2.19.20"
+PATTERN_GAME_WEB_UI_VERSION = "2.19.21"
 
 from renaissance_v4.game_theory.groundhog_memory import (
     groundhog_auto_merge_enabled,
@@ -1430,7 +1430,7 @@ def create_app() -> Flask:
         return jsonify(
             {
                 "ok": True,
-                "schema": "student_panel_d11_runs_v1",
+                "schema": "student_panel_d11_runs_v2",
                 "runs": rows,
                 "inflight_batches": inflight_n,
             }
@@ -4837,6 +4837,27 @@ PAGE_HTML = """<!DOCTYPE html>
         ' · pnl ' +
         fmtD11MaybeNum(rf.pnl, 4) +
         '</li>');
+      const la = rec.learning_run_audit_v1;
+      if (la && typeof la === 'object') {
+        const status =
+          typeof la.operator_learning_status_line_v1 === 'string'
+            ? la.operator_learning_status_line_v1
+            : JSON.stringify(la).slice(0, 500);
+        lines.push(
+          '<li><span class="pg-student-d11-k">learning_run_audit_v1 (harness)</span> ' + escapeHtml(status) + '</li>'
+        );
+      }
+      const sls = rec.student_learning_store;
+      if (sls && typeof sls === 'object') {
+        lines.push(
+          '<li><span class="pg-student-d11-k">student_learning_store</span> count ' +
+            escapeHtml(sls.records_for_run_count != null ? String(sls.records_for_run_count) : '—') +
+            (Array.isArray(sls.record_id_sample) && sls.record_id_sample.length
+              ? ' · ids ' + escapeHtml(sls.record_id_sample.join(', '))
+              : '') +
+            '</li>'
+        );
+      }
       const gaps = rec.data_gaps;
       if (Array.isArray(gaps) && gaps.length) {
         lines.push('<li><span class="pg-student-d11-k">data_gaps</span> ' + escapeHtml(gaps.join(', ')) + '</li>');
@@ -4869,13 +4890,15 @@ PAGE_HTML = """<!DOCTYPE html>
       let h =
         renderStudentPanelD11Nav() +
         '<p class="pg-student-d11-legend"><strong>Referee side (this table):</strong> BL % and E/tr are replay rollups for that batch — the rules-of-the-game outcome reference. ' +
-        '<strong>Harness Δ columns:</strong> behΔ / outΔ / GH summarize memory and prior-run pairing in the same config (not Student&rsquo;s scorecard until drilldown is wired to Student vs Referee per unit). ' +
-        '<strong>GH</strong>: N/A = first batch in that config chain; RUNNING = workers still executing.</p>' +
+        '<strong>HB</strong> = harness replay path (memory / recall / bias counters). ' +
+        '<strong>SH</strong> = Student handoff (Directive 09 store rows or retrieval matches). ' +
+        '<strong>outΔ</strong> / <strong>GH</strong>: expectancy delta vs prior same-config batch and Groundhog tier (first in chain N/A unless RUNNING). Drilldown pulls <code>learning_run_audit_v1</code> + learning store by run.</p>' +
         '<div class="pg-student-d11-table-wrap"><table class="pg-student-d11-table"><thead><tr>' +
         '<th>run_id</th><th>time</th><th>pattern</th><th>window</th><th>#tr</th>' +
         '<th title="Referee — replay trade win % (batch rollup)">BL %</th>' +
         '<th title="Referee — expectancy per trade (batch rollup)">E/tr</th>' +
-        '<th title="Harness — behavior moved vs memory-off baseline (audit counters)">behΔ</th>' +
+        '<th title="Harness — replay path moved (memory / recall / bias); not Student store">HB</th>' +
+        '<th title="Student handoff — rows appended or retrieval matched (Directive 09)">SH</th>' +
         '<th title="Harness — expectancy vs prior same-config batch">outΔ</th>' +
         '<th title="Harness — Groundhog / memory lane tier vs prior run in same config">GH</th>' +
         '</tr></thead><tbody>';
@@ -4901,7 +4924,10 @@ PAGE_HTML = """<!DOCTYPE html>
             : row.win_rate_percent;
         h += '<td>' + (bl != null ? fmtD11MaybeNum(bl, 1) : '—') + '</td>';
         h += '<td>' + (row.expectancy_per_trade != null ? fmtD11MaybeNum(row.expectancy_per_trade, 4) : '—') + '</td>';
-        h += '<td>' + escapeHtml(String(row.behavior_changed || '—')) + '</td>';
+        const hbCol = row.harness_behavior_changed != null ? row.harness_behavior_changed : row.behavior_changed;
+        const shCol = row.student_handoff_active != null ? row.student_handoff_active : '—';
+        h += '<td>' + escapeHtml(String(hbCol != null ? hbCol : '—')) + '</td>';
+        h += '<td>' + escapeHtml(String(shCol)) + '</td>';
         h += '<td>' + escapeHtml(String(row.outcome_improved || '—')) + '</td>';
         h += '<td>' + escapeHtml(String(row.groundhog_state || '—')) + '</td>';
         h += '</tr>';
