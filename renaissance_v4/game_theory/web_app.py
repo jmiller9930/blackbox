@@ -85,7 +85,7 @@ _PATTERN_BANNER_WEBP_PATH = _RV4_ROOT / "assets" / "pattern.webp"
 _PATTERN_GAME_BANNER_BOOT_JS = _GAME_THEORY / "static" / "pattern_game_banner_boot.js"
 
 # Operator-visible web UI bundle version — bump when changing PAGE_HTML (HTML/CSS/JS) so deploys are provable.
-PATTERN_GAME_WEB_UI_VERSION = "2.19.17"
+PATTERN_GAME_WEB_UI_VERSION = "2.19.18"
 
 from renaissance_v4.game_theory.groundhog_memory import (
     groundhog_auto_merge_enabled,
@@ -114,8 +114,8 @@ from renaissance_v4.game_theory.student_proctor.student_proctor_operator_runtime
 )
 from renaissance_v4.game_theory.student_panel_d11 import (
     build_d11_decision_strip_payload_v1,
+    build_d11_run_rows_v1,
     build_student_decision_record_v1,
-    fetch_d11_run_rows_v1,
 )
 from renaissance_v4.game_theory.data_health import get_data_health
 from renaissance_v4.game_theory.search_space_estimate import build_search_space_estimate
@@ -1417,13 +1417,24 @@ def create_app() -> Flask:
 
     @app.get("/api/student-panel/runs")
     def api_student_panel_runs_d11() -> Any:
-        """D11 — run rows (learning signal) from recent ``batch_scorecard.jsonl`` lines."""
+        """D11 — run rows from scorecard file + in-memory **running** jobs (same merge as batch-scorecard)."""
         try:
             limit = int(request.args.get("limit") or 50)
         except (TypeError, ValueError):
             limit = 50
-        rows = fetch_d11_run_rows_v1(limit=limit)
-        return jsonify({"ok": True, "schema": "student_panel_d11_runs_v1", "runs": rows})
+        limit = max(1, min(200, limit))
+        p = default_batch_scorecard_jsonl()
+        file_rows = read_batch_scorecard_recent(limit, path=p)
+        merged, inflight_n = _merge_scorecard_with_inflight(file_rows, limit=limit)
+        rows = build_d11_run_rows_v1(merged)
+        return jsonify(
+            {
+                "ok": True,
+                "schema": "student_panel_d11_runs_v1",
+                "runs": rows,
+                "inflight_batches": inflight_n,
+            }
+        )
 
     @app.get("/api/student-panel/run/<job_id>/decisions")
     def api_student_panel_decisions_d11(job_id: str) -> Any:
@@ -4335,6 +4346,15 @@ PAGE_HTML = """<!DOCTYPE html>
     const STARTING_EQUITY = __STARTING_EQUITY__;
     const RUN_TIMEOUT_MS = 7200000;
     const PATTERN_GAME_UI_VERSION_STR = '__PATTERN_GAME_WEB_UI_VERSION__';
+    /** Persisted while a parallel batch is in flight so refresh restores running state until completion. */
+    const PG_PARALLEL_INFLIGHT_JOB_LS = 'patternGame.parallelInflightJobId';
+
+    function pgSetInflightJobId(jid) {
+      try {
+        if (jid) localStorage.setItem(PG_PARALLEL_INFLIGHT_JOB_LS, String(jid));
+        else localStorage.removeItem(PG_PARALLEL_INFLIGHT_JOB_LS);
+      } catch (e) { /* ignore quota / private mode */ }
+    }
     /** Product default: Decision Context Recall (context signature memory) is always READ+WRITE — not operator-toggleable in this UI. */
     const CONTEXT_SIGNATURE_MEMORY_MODE_PRODUCT = 'read_write';
 
@@ -4848,21 +4868,35 @@ PAGE_HTML = """<!DOCTYPE html>
       const rows = j.runs;
       let h =
         renderStudentPanelD11Nav() +
-        '<p class="pg-student-d11-legend">Level 1 — learning signal per batch run (newest at top). Click a row for decisions.</p>' +
+        '<p class="pg-student-d11-legend">Level 1 — harness <strong>baseline</strong> (BL %) is replay trade win % for that batch (rules-only reference; Student should tie or beat on a fair comparison). ' +
+        'First row in a config chain: <strong>GH</strong> = N/A (no prior paired run). GH = RUNNING while the batch is in flight.</p>' +
         '<div class="pg-student-d11-table-wrap"><table class="pg-student-d11-table"><thead><tr>' +
-        '<th>run_id</th><th>time</th><th>pattern</th><th>window</th><th>#tr</th><th>win%</th><th>E/tr</th>' +
-        '<th>behΔ</th><th>outΔ</th><th>GH</th>' +
+        '<th>run_id</th><th>time</th><th>pattern</th><th>window</th><th>#tr</th>' +
+        '<th title="Harness baseline — replay trade win % (same rules; compare Student fairly)">BL %</th>' +
+        '<th title="Harness rollup expectancy / trade">E/tr</th>' +
+        '<th>behΔ</th><th>outΔ</th><th title="Groundhog / memory lane vs prior run in same config chain">GH</th>' +
         '</tr></thead><tbody>';
       for (let i = 0; i < rows.length; i++) {
         const row = rows[i] || {};
         const rid = row.run_id != null ? String(row.run_id) : '';
-        h += '<tr data-run-row data-run-id="' + escapeHtml(rid) + '">';
+        const infl = row.is_inflight === true || row.status === 'running';
+        const trCls = infl ? ' data-run-inflight="1" style="opacity:0.92"' : '';
+        h += '<tr' + trCls + (infl ? '' : ' data-run-row') + ' data-run-id="' + escapeHtml(rid) + '">';
         h += '<td title="' + escapeHtml(rid) + '"><code style="font-size:0.7rem">' + escapeHtml(rid.length > 14 ? rid.slice(0, 12) + '…' : rid) + '</code></td>';
         h += '<td>' + escapeHtml(String(row.timestamp || '—')) + '</td>';
         h += '<td>' + escapeHtml(String(row.pattern || '—')) + '</td>';
         h += '<td>' + escapeHtml(String(row.evaluation_window || '—')) + '</td>';
-        h += '<td>' + escapeHtml(row.total_trades != null ? String(row.total_trades) : '—') + '</td>';
-        h += '<td>' + (row.win_rate_percent != null ? fmtD11MaybeNum(row.win_rate_percent, 1) : '—') + '</td>';
+        h +=
+          '<td>' +
+          (row.run_progress
+            ? escapeHtml(String(row.run_progress))
+            : escapeHtml(row.total_trades != null ? String(row.total_trades) : '—')) +
+          '</td>';
+        const bl =
+          row.harness_baseline_trade_win_percent != null
+            ? row.harness_baseline_trade_win_percent
+            : row.win_rate_percent;
+        h += '<td>' + (bl != null ? fmtD11MaybeNum(bl, 1) : '—') + '</td>';
         h += '<td>' + (row.expectancy_per_trade != null ? fmtD11MaybeNum(row.expectancy_per_trade, 4) : '—') + '</td>';
         h += '<td>' + escapeHtml(String(row.behavior_changed || '—')) + '</td>';
         h += '<td>' + escapeHtml(String(row.outcome_improved || '—')) + '</td>';
@@ -4877,9 +4911,10 @@ PAGE_HTML = """<!DOCTYPE html>
       }
       root.innerHTML = h;
       wireStudentPanelD11Nav();
-      const trs = root.querySelectorAll('tr[data-run-row][data-run-id]');
+      const trs = root.querySelectorAll('tr[data-run-id]');
       trs.forEach(function (tr) {
         tr.addEventListener('click', function () {
+          if (tr.getAttribute('data-run-inflight') === '1') return;
           const id = tr.getAttribute('data-run-id');
           if (id) void studentPanelD11GotoLevel2(id);
         });
@@ -6647,6 +6682,7 @@ PAGE_HTML = """<!DOCTYPE html>
           return;
         }
         jobId = startJ.job_id;
+        pgSetInflightJobId(jobId);
         resetStudentTriangleStarting();
         const total = resolveScenarioBatchTotal(startJ.total, scenariosTa);
         runWorkersCap = startJ.workers_used != null ? startJ.workers_used : null;
@@ -6703,9 +6739,11 @@ PAGE_HTML = """<!DOCTYPE html>
               windowLabel: evaluationWindowLabelFromDom(),
             });
             void refreshScorecardHistory();
+            void refreshStudentPanelD11();
             return false;
           }
           if (pj.status === 'error') {
+            pgSetInflightJobId(null);
             const rollE = document.getElementById('telemetryRollingLog');
             if (rollE) {
               const t = document.createElement('div');
@@ -6727,6 +6765,7 @@ PAGE_HTML = """<!DOCTYPE html>
             return true;
           }
           if (pj.status === 'done') {
+            pgSetInflightJobId(null);
             if (pj.result) {
               updateMemoryStatusFromBatchResultPayload(pj.result);
             }
@@ -6797,6 +6836,7 @@ PAGE_HTML = """<!DOCTYPE html>
           await new Promise((r) => setTimeout(r, 1500));
         }
         if (Date.now() >= deadline) {
+          pgSetInflightJobId(null);
           await show(null, null, 'Timed out after ' + (RUN_TIMEOUT_MS / 60000) + ' minutes — job may still be running on the server; open /api/run-parallel/status/<job_id> or check logs.');
           renderStudentTriangleBatchFailed('Client timeout — job may still be running on the server.');
           updateRunStatusLine('Client timeout — check server or logs.');
@@ -6812,6 +6852,7 @@ PAGE_HTML = """<!DOCTYPE html>
         }
         await show(null, null, friendlyFetchError(e));
         if (jobId) {
+          pgSetInflightJobId(null);
           renderStudentTriangleBatchFailed(friendlyFetchError(e));
         }
         updateRunStatusLine('Stopped or failed — see Result.');
@@ -7933,7 +7974,104 @@ PAGE_HTML = """<!DOCTYPE html>
         }
       });
     }
+    async function resumeParallelJobFromStorageIfAny() {
+      let jid = null;
+      try {
+        jid = localStorage.getItem(PG_PARALLEL_INFLIGHT_JOB_LS);
+      } catch (e) {
+        return;
+      }
+      if (!jid || !/^[a-f0-9]{32}$/i.test(String(jid).trim())) return;
+      jid = String(jid).trim();
+      let pj0 = null;
+      try {
+        const pr = await fetch('/api/run-parallel/status/' + encodeURIComponent(jid));
+        pj0 = await pr.json();
+        if (!pr.ok) {
+          pgSetInflightJobId(null);
+          return;
+        }
+      } catch (e) {
+        return;
+      }
+      if (pj0.status === 'running') {
+        document.body.classList.add('pg-run-active');
+        resetStudentTriangleStarting();
+        void refreshStudentPanelD11();
+        updateRunStatusLine('Resuming — batch still running (page was refreshed)…');
+        const deadline = Date.now() + RUN_TIMEOUT_MS;
+        while (Date.now() < deadline) {
+          let pj = null;
+          try {
+            const pr2 = await fetch('/api/run-parallel/status/' + encodeURIComponent(jid));
+            pj = await pr2.json();
+            if (!pr2.ok) break;
+          } catch (e) {
+            break;
+          }
+          if (pj.status === 'error') {
+            pgSetInflightJobId(null);
+            document.body.classList.remove('pg-run-active');
+            renderStudentTriangleBatchFailed(pj.error || 'Job failed');
+            if (pj.batch_timing) updateLastBatchRunLine(pj.batch_timing);
+            await show(null, null, friendlyParallelBackendError(pj.error || 'Job failed'));
+            void refreshStudentPanelD11();
+            refreshScorecardHistory();
+            return;
+          }
+          if (pj.status === 'done') {
+            pgSetInflightJobId(null);
+            document.body.classList.remove('pg-run-active');
+            if (pj.result) {
+              updateMemoryStatusFromBatchResultPayload(pj.result);
+              await show(null, pj.result, null);
+            }
+            refreshScorecardHistory();
+            askDataLastRunJobId = jid;
+            void fetchBarneySummary(jid);
+            void refreshStudentPanelD11();
+            updateRunStatusLine('Finished — batch completed (restored after refresh).');
+            return;
+          }
+          void refreshStudentPanelD11();
+          refreshScorecardHistory();
+          await new Promise(function (r) {
+            setTimeout(r, 1500);
+          });
+        }
+        pgSetInflightJobId(null);
+        document.body.classList.remove('pg-run-active');
+        await show(
+          null,
+          null,
+          'Timed out while resuming — job may still run on server; open /api/run-parallel/status/' + jid
+        );
+        renderStudentTriangleBatchFailed('Resume timeout — job may still be running on the server.');
+        void refreshStudentPanelD11();
+        return;
+      }
+      if (pj0.status === 'done') {
+        pgSetInflightJobId(null);
+        if (pj0.result) {
+          updateMemoryStatusFromBatchResultPayload(pj0.result);
+          await show(null, pj0.result, null);
+        }
+        void refreshStudentPanelD11();
+        refreshScorecardHistory();
+        return;
+      }
+      if (pj0.status === 'error') {
+        pgSetInflightJobId(null);
+        renderStudentTriangleBatchFailed(pj0.error || 'Job failed');
+        await show(null, null, friendlyParallelBackendError(pj0.error || 'Job failed'));
+        void refreshStudentPanelD11();
+        return;
+      }
+      pgSetInflightJobId(null);
+    }
+
     void refreshStudentProctorStoreLine();
+    void resumeParallelJobFromStorageIfAny();
     void refreshStudentPanelD11();
     refreshScorecardHistory();
     setEvidenceTab('outcomes');

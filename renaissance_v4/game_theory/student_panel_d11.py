@@ -170,6 +170,24 @@ def _groundhog_state_d11(
     return "ACTIVE"
 
 
+def _groundhog_state_for_row(
+    *,
+    is_running: bool,
+    is_first_in_fingerprint_chain: bool,
+    gh_active: bool,
+    behavior: str,
+    outcome: str,
+) -> str:
+    """First run in a fingerprint chain has no prior paired batch — Groundhog/learning delta is N/A."""
+    if is_running:
+        return "RUNNING"
+    if is_first_in_fingerprint_chain:
+        return "N/A"
+    return _groundhog_state_d11(
+        gh_active=gh_active, behavior=behavior, outcome=outcome
+    )
+
+
 def build_d11_run_rows_v1(
     entries_newest_first: list[dict[str, Any]],
 ) -> list[dict[str, Any]]:
@@ -183,6 +201,8 @@ def build_d11_run_rows_v1(
     chronological = list(reversed(entries_newest_first))
     by_fp: dict[str, list[dict[str, Any]]] = {}
     for r in chronological:
+        if str(r.get("status") or "") == "running" or r.get("scorecard_inflight"):
+            continue
         fp = _fingerprint_from_scorecard_line(r) or "__no_fp__"
         by_fp.setdefault(fp, []).append(r)
 
@@ -198,6 +218,33 @@ def build_d11_run_rows_v1(
 
         job_id = str(r.get("job_id") or "")
         st = str(r.get("status") or "")
+        is_running = st == "running" or bool(r.get("scorecard_inflight"))
+
+        if is_running:
+            row_obj: dict[str, Any] = {
+                "schema": SCHEMA_RUN_ROW,
+                "run_id": job_id,
+                "timestamp": _started_ts(r),
+                "pattern": _pattern_label(r),
+                "evaluation_window": _evaluation_window_label(r),
+                "total_trades": None,
+                "harness_baseline_trade_win_percent": None,
+                "expectancy_per_trade": None,
+                "behavior_changed": "—",
+                "outcome_improved": "—",
+                "groundhog_state": "RUNNING",
+                "run_progress": (
+                    f"{_int(r.get('total_processed'), 0)}/{_int(r.get('total_scenarios'), 0)}"
+                ),
+                "is_inflight": True,
+                "data_gaps": [],
+                "status": "running",
+                "fingerprint": _fingerprint_from_scorecard_line(r),
+                "baseline_run_id": None,
+            }
+            out.append(row_obj)
+            continue
+
         if st == "error":
             exp, exp_gap = None, "batch_status_error"
         else:
@@ -230,25 +277,29 @@ def build_d11_run_rows_v1(
                 outcome_imp = "NO"
 
         gh_active = _groundhog_active_for_d11(r)
-
-        ghs = _groundhog_state_d11(
+        first_in_chain = prev_same is None
+        ghs = _groundhog_state_for_row(
+            is_running=False,
+            is_first_in_fingerprint_chain=first_in_chain,
             gh_active=gh_active,
             behavior=beh,
             outcome=outcome_imp,
         )
 
-        row_obj: dict[str, Any] = {
+        row_obj = {
             "schema": SCHEMA_RUN_ROW,
             "run_id": job_id,
             "timestamp": _started_ts(r),
             "pattern": _pattern_label(r),
             "evaluation_window": _evaluation_window_label(r),
             "total_trades": btc,
-            "win_rate_percent": win_rate_p,
+            "harness_baseline_trade_win_percent": win_rate_p,
             "expectancy_per_trade": exp,
             "behavior_changed": beh,
             "outcome_improved": outcome_imp,
             "groundhog_state": ghs,
+            "run_progress": None,
+            "is_inflight": False,
             "data_gaps": [x for x in [exp_gap] if x],
             "status": st,
             "fingerprint": _fingerprint_from_scorecard_line(r),
@@ -260,9 +311,9 @@ def build_d11_run_rows_v1(
 
 
 def fetch_d11_run_rows_v1(*, limit: int = 50) -> list[dict[str, Any]]:
+    """File-only rows (no in-memory inflight merge). Prefer ``api_student_panel_runs`` merge on server."""
     lim = max(1, min(200, limit))
     raw = read_batch_scorecard_recent(lim, path=default_batch_scorecard_jsonl())
-    # drop synthetic inflight placeholders if present
     clean = [x for x in raw if not str(x.get("_inflight", "")).lower() == "true"]
     return build_d11_run_rows_v1(clean)
 
