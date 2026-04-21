@@ -83,6 +83,61 @@ def test_env_off_no_merge(gh_path: Path, monkeypatch: pytest.MonkeyPatch) -> Non
     assert out is None
 
 
+def test_groundhog_wiring_signal_merge_off_is_yellow(
+    gh_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.delenv("PATTERN_GAME_GROUNDHOG_BUNDLE", raising=False)
+    sig, detail = gm.groundhog_wiring_signal()
+    assert sig == "yellow"
+    assert "merge" in detail.lower()
+
+
+def test_groundhog_wiring_signal_merge_on_missing_is_red(gh_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("PATTERN_GAME_GROUNDHOG_BUNDLE", "1")
+    assert not gh_path.is_file()
+    sig, detail = gm.groundhog_wiring_signal()
+    assert sig == "red"
+    assert "missing" in detail.lower()
+
+
+def test_groundhog_wiring_signal_green_when_promoted(
+    gh_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("PATTERN_GAME_GROUNDHOG_BUNDLE", "1")
+    gh_path.write_text(
+        json.dumps(
+            {
+                "schema": gm.MEMORY_BUNDLE_SCHEMA,
+                "apply": {"atr_stop_mult": 1.0, "atr_target_mult": 2.0},
+            }
+        ),
+        encoding="utf-8",
+    )
+    sig, detail = gm.groundhog_wiring_signal()
+    assert sig == "green"
+    assert "promoted" in detail.lower()
+
+
+def test_groundhog_wiring_signal_yellow_when_apply_empty(gh_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("PATTERN_GAME_GROUNDHOG_BUNDLE", "1")
+    gh_path.write_text(
+        json.dumps(
+            {"schema": gm.MEMORY_BUNDLE_SCHEMA, "apply": {}},
+        ),
+        encoding="utf-8",
+    )
+    sig, _detail = gm.groundhog_wiring_signal()
+    assert sig == "yellow"
+
+
+def test_groundhog_wiring_signal_red_on_bad_json(gh_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("PATTERN_GAME_GROUNDHOG_BUNDLE", "1")
+    gh_path.write_text("{not json", encoding="utf-8")
+    sig, detail = gm.groundhog_wiring_signal()
+    assert sig == "red"
+    assert "json" in detail.lower()
+
+
 def test_write_roundtrip(gh_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("PATTERN_GAME_GROUNDHOG_BUNDLE", "1")
     p = gm.write_groundhog_bundle(

@@ -30,4 +30,5 @@ def test_groundhog_ok_matches_env_and_file() -> None:
     mods = {m["id"]: m for m in out["modules"]}
     gh = mods["groundhog"]
     assert gh["role"] == "behavioral_memory"
+    assert gh.get("signal") in ("green", "yellow", "red")
     assert "bundle" in (gh["body"] or "").lower() or "Groundhog" in (gh["title"] or "")

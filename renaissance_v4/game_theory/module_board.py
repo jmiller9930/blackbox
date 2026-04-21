@@ -42,8 +42,8 @@ def compute_pattern_game_module_board() -> dict[str, Any]:
     """
     from renaissance_v4.game_theory.data_health import get_data_health
     from renaissance_v4.game_theory.groundhog_memory import (
-        groundhog_auto_merge_enabled,
         groundhog_bundle_path,
+        groundhog_wiring_signal,
     )
     from renaissance_v4.game_theory.memory_paths import (
         default_batch_scorecard_jsonl,
@@ -53,7 +53,6 @@ def compute_pattern_game_module_board() -> dict[str, Any]:
 
     dh = get_data_health()
     ghb = groundhog_bundle_path()
-    gh_env = groundhog_auto_merge_enabled()
     sc_path = default_batch_scorecard_jsonl()
     rm_path = default_run_memory_jsonl()
     retro_path = default_retrospective_log_jsonl()
@@ -229,23 +228,22 @@ def compute_pattern_game_module_board() -> dict[str, Any]:
         }
     )
 
-    gh_ok = bool(gh_env and ghb.is_file())
+    gh_signal, gh_detail = groundhog_wiring_signal()
+    gh_ok = gh_signal != "red"
     modules.append(
         {
             "id": "groundhog",
             "label": "groundhog_memory.py",
             "role": "behavioral_memory",
             "ok": gh_ok,
-            "detail": (
-                "Behavioral memory **armed**: merge ON + bundle on disk."
-                if gh_ok
-                else "Not armed: need PATTERN_GAME_GROUNDHOG_BUNDLE=1 and groundhog_memory_bundle.json"
-            ),
+            "signal": gh_signal,
+            "detail": gh_detail[:220],
             "title": "Groundhog (promoted bundle → next run)",
             "body": (
                 "The **only** default path that merges whitelisted parameters into the manifest before replay.\n"
-                "Green = env merge **on** **and** canonical bundle file exists — the next eligible run can apply it.\n"
-                "Red = merge off or no file — **no** promoted ATR from Groundhog (DEF-001: not ‘learning’, it is explicit promotion).\n"
+                "**Green** — merge ON and the canonical file has promoted ``atr_stop_mult`` / ``atr_target_mult``.\n"
+                "**Yellow** — merge OFF (idle), or merge ON but still waiting for a full promoted bundle (or wrong schema).\n"
+                "**Red** (fault) — merge ON but the bundle file is missing, unreadable, or not parseable JSON.\n"
                 f"Bundle path: {ghb}"
             ),
         }
@@ -301,4 +299,11 @@ def compute_pattern_game_module_board() -> dict[str, Any]:
         }
     )
 
-    return {"ok": True, "modules": modules, "def001_note": "Green/red = wiring truth for this host; Groundhog green = behavioral bundle path armed."}
+    return {
+        "ok": True,
+        "modules": modules,
+        "def001_note": (
+            "Green/red/yellow (Groundhog) = wiring truth; Groundhog green = promoted bundle ready; "
+            "yellow = idle or waiting; red = merge on but missing/broken container."
+        ),
+    }

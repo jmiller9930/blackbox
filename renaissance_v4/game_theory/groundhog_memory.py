@@ -21,9 +21,10 @@ Disable per scenario with ``"skip_groundhog_bundle": true`` in the scenario dict
 from __future__ import annotations
 
 import json
+import math
 import os
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 from renaissance_v4.game_theory.memory_bundle import MEMORY_BUNDLE_SCHEMA
 
@@ -91,3 +92,70 @@ def read_groundhog_bundle() -> dict[str, Any] | None:
     if not p.is_file():
         return None
     return json.loads(p.read_text(encoding="utf-8"))
+
+
+def _groundhog_apply_has_promoted_atr(doc: dict[str, Any]) -> bool:
+    """True when ``apply`` carries finite ATR multipliers (canonical promoted bundle)."""
+    app = doc.get("apply")
+    if not isinstance(app, dict):
+        return False
+    try:
+        s = float(app.get("atr_stop_mult", float("nan")))
+        t = float(app.get("atr_target_mult", float("nan")))
+    except (TypeError, ValueError):
+        return False
+    return math.isfinite(s) and math.isfinite(t)
+
+
+def groundhog_wiring_signal() -> tuple[Literal["green", "yellow", "red"], str]:
+    """
+    Tri-state wiring for the module board:
+
+    - **green** — merge ON and the canonical file exists with a valid promoted ``apply`` block.
+    - **yellow** — merge OFF (idle), or merge ON with a file that exists but is not yet a full
+      promoted bundle (wrong schema or empty / incomplete ``apply``).
+    - **red** — merge ON and the bundle file is **missing**, or **read/parse fails**, or JSON is
+      not an object (container broken).
+    """
+    env = groundhog_auto_merge_enabled()
+    p = groundhog_bundle_path()
+
+    if not env:
+        return (
+            "yellow",
+            "Merge OFF — set PATTERN_GAME_GROUNDHOG_BUNDLE=1 to arm Groundhog. Idle, not a fault.",
+        )
+
+    if not p.is_file():
+        return (
+            "red",
+            f"Merge ON but canonical bundle is missing — expected file at {p}. POST /api/groundhog-memory to create it.",
+        )
+
+    try:
+        raw = p.read_text(encoding="utf-8")
+        doc = json.loads(raw)
+    except OSError as e:
+        return "red", f"Cannot read bundle file: {e}"[:220]
+    except json.JSONDecodeError as e:
+        return "red", f"Bundle is not valid JSON: {e}"[:220]
+
+    if not isinstance(doc, dict):
+        return "red", "Bundle JSON is not an object — container is unusable."
+
+    if doc.get("schema") != MEMORY_BUNDLE_SCHEMA:
+        return (
+            "yellow",
+            "File exists but schema is not pattern_game_memory_bundle_v1 — republish via POST /api/groundhog-memory.",
+        )
+
+    if not _groundhog_apply_has_promoted_atr(doc):
+        return (
+            "yellow",
+            "Merge ON and file exists — waiting for promoted atr_stop_mult / atr_target_mult in apply (POST promote).",
+        )
+
+    return (
+        "green",
+        "Behavioral memory armed: merge ON + canonical bundle has promoted ATR multipliers.",
+    )

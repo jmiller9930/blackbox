@@ -40,6 +40,21 @@
 
   var gt = document.getElementById('groundhogText');
   var gv = document.getElementById('groundhogV');
+  var ghTile = document.getElementById('groundhogBannerTile');
+  function ghHeadline(j) {
+    var sig = j.wiring_signal;
+    if (sig === 'green') return 'Ready';
+    if (sig === 'yellow') return j.env_enabled ? 'Wait' : 'Off';
+    if (sig === 'red') return 'Fault';
+    return j.env_enabled ? 'Wait' : 'Off';
+  }
+  function ghTileClass(sig) {
+    if (!ghTile) return;
+    ghTile.classList.remove('gh-sig-green', 'gh-sig-yellow', 'gh-sig-red');
+    if (sig === 'green') ghTile.classList.add('gh-sig-green');
+    else if (sig === 'yellow') ghTile.classList.add('gh-sig-yellow');
+    else if (sig === 'red') ghTile.classList.add('gh-sig-red');
+  }
   fetch('/api/groundhog-memory')
     .then(function (r) {
       return r.json();
@@ -47,22 +62,33 @@
     .then(function (j) {
       if (!gt) return;
       if (!j || !j.ok) {
-        gt.textContent = 'unavailable';
+        gt.textContent = '—';
         if (gv) gv.textContent = '—';
+        ghTileClass('red');
+        if (ghTile) ghTile.title = 'Groundhog status unavailable';
         return;
       }
-      var en = j.env_enabled ? 'merge ON' : 'merge OFF (set PATTERN_GAME_GROUNDHOG_BUNDLE=1)';
-      var ex = j.exists ? 'file exists' : 'no file yet (POST /api/groundhog-memory to promote)';
+      var sig = j.wiring_signal || 'yellow';
+      ghTileClass(sig);
+      if (gv) gv.textContent = ghHeadline(j);
       var ap =
         j.bundle && j.bundle.apply
-          ? 'ATR stop ' + j.bundle.apply.atr_stop_mult + ' / target ' + j.bundle.apply.atr_target_mult
+          ? String(j.bundle.apply.atr_stop_mult) + ' / ' + String(j.bundle.apply.atr_target_mult)
           : '—';
-      gt.textContent = en + ' · ' + ex + ' · ' + ap;
-      if (gv) gv.textContent = j.env_enabled ? 'merge ON' : 'merge OFF';
+      gt.textContent = sig === 'green' && ap !== '—' ? ap : '—';
+      if (ghTile) {
+        var tip = (j.wiring_detail || '') + '\n\n' + 'Canonical: ' + (j.path || '—');
+        if (j.env_enabled !== undefined) {
+          tip += '\nMerge env: ' + (j.env_enabled ? 'on' : 'off');
+        }
+        ghTile.title = tip.trim();
+      }
     })
     .catch(function (e) {
-      if (gt) gt.textContent = 'could not load — ' + (e && e.message ? e.message : String(e));
+      if (gt) gt.textContent = '—';
       if (gv) gv.textContent = '—';
+      ghTileClass('red');
+      if (ghTile) ghTile.title = e && e.message ? e.message : String(e);
     });
 
   var ss = document.getElementById('searchSpaceStrip');

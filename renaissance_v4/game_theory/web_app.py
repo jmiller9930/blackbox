@@ -82,11 +82,12 @@ _PATTERN_BANNER_WEBP_PATH = _RV4_ROOT / "assets" / "pattern.webp"
 _PATTERN_GAME_BANNER_BOOT_JS = _GAME_THEORY / "static" / "pattern_game_banner_boot.js"
 
 # Operator-visible web UI bundle version — bump when changing PAGE_HTML (HTML/CSS/JS) so deploys are provable.
-PATTERN_GAME_WEB_UI_VERSION = "2.19.8"
+PATTERN_GAME_WEB_UI_VERSION = "2.19.10"
 
 from renaissance_v4.game_theory.groundhog_memory import (
     groundhog_auto_merge_enabled,
     groundhog_bundle_path,
+    groundhog_wiring_signal,
     read_groundhog_bundle,
     write_groundhog_bundle,
 )
@@ -590,13 +591,23 @@ def create_app() -> Flask:
     def api_groundhog_memory_get() -> Any:
         """Canonical Groundhog bundle status — same tape, smarter execution when bundle + env enabled."""
         p = groundhog_bundle_path()
+        wiring_signal, wiring_detail = groundhog_wiring_signal()
+        bundle: dict[str, Any] | None = None
+        if p.is_file():
+            try:
+                raw = read_groundhog_bundle()
+                bundle = raw if isinstance(raw, dict) else None
+            except (OSError, UnicodeDecodeError, json.JSONDecodeError, TypeError):
+                bundle = None
         return jsonify(
             {
                 "ok": True,
                 "path": str(p),
                 "env_enabled": groundhog_auto_merge_enabled(),
                 "exists": p.is_file(),
-                "bundle": read_groundhog_bundle(),
+                "wiring_signal": wiring_signal,
+                "wiring_detail": wiring_detail,
+                "bundle": bundle,
             }
         )
 
@@ -626,7 +637,7 @@ def create_app() -> Flask:
 
     @app.get("/api/module-board")
     def api_module_board() -> Any:
-        """Subsystem wiring truth (DEF-001): each row green/red + modal copy from ``module_board``."""
+        """Subsystem wiring truth (DEF-001): each row green/red (or yellow for Groundhog) + modal copy."""
         return jsonify(compute_pattern_game_module_board())
 
     @app.get("/api/search-space-estimate")
@@ -1962,7 +1973,12 @@ PAGE_HTML = """<!DOCTYPE html>
       background: #6b7a88;
     }
     .pg-banner-stat .status-dot.ok { background: #2fa46a; box-shadow: 0 0 8px rgba(47,164,106,0.45); }
+    .pg-banner-stat .status-dot.warn { background: #b7772c; box-shadow: 0 0 8px rgba(183,119,44,0.35); }
     .pg-banner-stat .status-dot.bad { background: #d15959; box-shadow: 0 0 8px rgba(209,89,89,0.35); }
+    #groundhogBannerTile { cursor: help; }
+    #groundhogBannerTile.gh-sig-green .pg-v { color: #2fa46a; }
+    #groundhogBannerTile.gh-sig-yellow .pg-v { color: #b7772c; }
+    #groundhogBannerTile.gh-sig-red .pg-v { color: #d15959; }
     /* D10.1 — compact Paper P&L in banner strip (with other status cards; not in sidebar Controls) */
     .pg-banner-stat.pg-banner-stat--pnl {
       cursor: default;
@@ -3602,6 +3618,7 @@ PAGE_HTML = """<!DOCTYPE html>
       flex-shrink: 0;
     }
     .pg-status-item .status-dot.ok { background: #2fa46a; box-shadow: 0 0 0 3px rgba(47, 164, 106, 0.14); }
+    .pg-status-item .status-dot.warn { background: #b7772c; box-shadow: 0 0 0 3px rgba(183, 119, 44, 0.14); }
     .pg-status-item .status-dot.bad { background: #d15959; box-shadow: 0 0 0 3px rgba(209, 89, 89, 0.14); }
     .pg-status-name { font-size: 13px; font-weight: 800; color: #24303d; margin-bottom: 3px; }
     .pg-status-meta { font-size: 12px; line-height: 1.45; color: var(--pg-muted); }
@@ -3688,10 +3705,10 @@ PAGE_HTML = """<!DOCTYPE html>
             <span id="paperBaselineLabel">$1,000</span>
           </div>
         </div>
-        <div class="pg-banner-stat">
+        <div class="pg-banner-stat pg-banner-stat--groundhog" id="groundhogBannerTile" title="">
           <div class="pg-k">Groundhog</div>
           <div class="pg-v" id="groundhogV">—</div>
-          <div class="pg-s"><span id="groundhogText">loading…</span></div>
+          <div class="pg-s"><span id="groundhogText">—</span></div>
         </div>
         <div class="pg-banner-stat">
           <div class="pg-k">Search space</div>
@@ -3864,7 +3881,7 @@ PAGE_HTML = """<!DOCTYPE html>
               <div class="help-details-body">
                 <p>Run from repo root with <code>PYTHONPATH</code> including the repo. Example files load from <code>game_theory/examples/</code> (Advanced only).</p>
                 <p><code>PATTERN_GAME_GROUNDHOG_BUNDLE=1</code> merges <code>game_theory/state/groundhog_memory_bundle.json</code> when a scenario has no <code>memory_bundle_path</code>. POST <code>/api/groundhog-memory</code> with <code>atr_stop_mult</code> and <code>atr_target_mult</code> to write the canonical bundle.</p>
-                <p><strong>Modules row</strong> — Groundhog is <strong>green</strong> only when <em>both</em> merge is enabled and that bundle file exists. Otherwise red (see <code>TRADING_CONTEXT_REFERENCE_V1.md</code> §9).</p>
+                <p><strong>Modules row / banner</strong> — Groundhog uses green / amber / red: <strong>Ready</strong> when merge is on and the bundle has promoted ATR values; <strong>Off</strong> or <strong>Wait</strong> when idle or not yet promoted; <strong>Fault</strong> when merge is on but the file is missing or unreadable. Hover the Groundhog banner tile for the full line.</p>
               </div>
             </details>
             <p class="caps" id="presetHelp">The server builds scenarios for curated patterns — no JSON required. Evaluation window controls how much tape is replayed (approximate months from the end of the series). Presets longer than your <code>market_bars_5m</code> span are disabled automatically (see Data health).</p>
@@ -6461,28 +6478,54 @@ PAGE_HTML = """<!DOCTYPE html>
     refreshDataHealth();
     setInterval(refreshDataHealth, 45000);
 
+    function groundhogBannerHeadline(j) {
+      var sig = j.wiring_signal;
+      if (sig === 'green') return 'Ready';
+      if (sig === 'yellow') return j.env_enabled ? 'Wait' : 'Off';
+      if (sig === 'red') return 'Fault';
+      return j.env_enabled ? 'Wait' : 'Off';
+    }
+    function refreshGroundhogTileClass(tile, sig) {
+      if (!tile) return;
+      tile.classList.remove('gh-sig-green', 'gh-sig-yellow', 'gh-sig-red');
+      if (sig === 'green') tile.classList.add('gh-sig-green');
+      else if (sig === 'yellow') tile.classList.add('gh-sig-yellow');
+      else if (sig === 'red') tile.classList.add('gh-sig-red');
+    }
     async function refreshGroundhog() {
       const el = document.getElementById('groundhogText');
       const gv = document.getElementById('groundhogV');
+      const tile = document.getElementById('groundhogBannerTile');
       if (!el) return;
       try {
         const r = await fetch('/api/groundhog-memory');
         const j = await r.json();
         if (!r.ok || !j.ok) {
-          el.textContent = 'unavailable';
+          el.textContent = '—';
           if (gv) gv.textContent = '—';
+          refreshGroundhogTileClass(tile, 'red');
+          if (tile) tile.title = 'Groundhog status unavailable';
           return;
         }
-        const en = j.env_enabled ? 'merge ON' : 'merge OFF (set PATTERN_GAME_GROUNDHOG_BUNDLE=1)';
-        const ex = j.exists ? 'file exists' : 'no file yet (POST /api/groundhog-memory to promote)';
-        const ap = j.bundle && j.bundle.apply
-          ? ('ATR stop ' + j.bundle.apply.atr_stop_mult + ' / target ' + j.bundle.apply.atr_target_mult)
+        const sig = j.wiring_signal || 'yellow';
+        refreshGroundhogTileClass(tile, sig);
+        if (gv) gv.textContent = groundhogBannerHeadline(j);
+        var ap = j.bundle && j.bundle.apply
+          ? (String(j.bundle.apply.atr_stop_mult) + ' / ' + String(j.bundle.apply.atr_target_mult))
           : '—';
-        el.textContent = en + ' · ' + ex + ' · ' + ap;
-        if (gv) gv.textContent = j.env_enabled ? 'merge ON' : 'merge OFF';
+        el.textContent = (sig === 'green' && ap !== '—') ? ap : '—';
+        if (tile) {
+          var tip = (j.wiring_detail || '') + '\n\n' + 'Canonical: ' + (j.path || '—');
+          if (j.env_enabled !== undefined) {
+            tip += '\nMerge env: ' + (j.env_enabled ? 'on' : 'off');
+          }
+          tile.title = tip.trim();
+        }
       } catch (e) {
-        el.textContent = 'could not load — ' + friendlyFetchError(e);
+        el.textContent = '—';
         if (gv) gv.textContent = '—';
+        refreshGroundhogTileClass(tile, 'red');
+        if (tile) tile.title = friendlyFetchError(e);
       }
     }
     refreshGroundhog();
@@ -6551,13 +6594,21 @@ PAGE_HTML = """<!DOCTYPE html>
       const dot = document.getElementById('moduleBannerDot');
       const bv = document.getElementById('bannerModulesV');
       const bs = document.getElementById('bannerModulesS');
-      function setModuleBanner(okCount, total, sub) {
+      function moduleRowSignal(m) {
+        if (m.signal === 'green' || m.signal === 'yellow' || m.signal === 'red') return m.signal;
+        return m.ok ? 'green' : 'red';
+      }
+      function signalToDotClass(sig) {
+        if (sig === 'green') return 'ok';
+        if (sig === 'yellow') return 'warn';
+        return 'bad';
+      }
+      function setModuleBanner(okCount, total, sub, bannerDotClass) {
         if (bv) bv.textContent = (total > 0) ? (okCount + '/' + total + ' passed') : '—';
         if (bs) bs.textContent = sub || '';
         if (dot) {
           if (!total) dot.className = 'status-dot';
-          else if (okCount === total) dot.className = 'status-dot ok';
-          else dot.className = 'status-dot bad';
+          else dot.className = 'status-dot ' + (bannerDotClass || (okCount === total ? 'ok' : 'bad'));
         }
         const fSt = document.getElementById('focusTileModulesSt');
         const fLn = document.getElementById('focusTileModulesLine');
@@ -6571,26 +6622,32 @@ PAGE_HTML = """<!DOCTYPE html>
         const errHtml = '<p class="caps pg-module-board-msg">Could not load module board.</p>';
         if (!r.ok || !j.ok) {
           list.innerHTML = errHtml;
-          setModuleBanner(0, 0, 'Module API unavailable');
+          setModuleBanner(0, 0, 'Module API unavailable', '');
           return;
         }
         const mods = j.modules || [];
         if (!mods.length) {
           list.innerHTML = '<p class="caps pg-module-board-msg">No modules.</p>';
-          setModuleBanner(0, 0, 'No rows');
+          setModuleBanner(0, 0, 'No rows', '');
           return;
         }
         list.innerHTML = '';
         let okCount = 0;
+        let anyRed = false;
+        let anyWarn = false;
         for (const m of mods) {
-          if (m.ok) okCount++;
+          const sig = moduleRowSignal(m);
+          if (sig !== 'red') okCount++;
+          if (sig === 'red') anyRed = true;
+          else if (sig === 'yellow') anyWarn = true;
           const row = document.createElement('div');
           row.className = 'pg-status-item';
           row.setAttribute('role', 'button');
           row.setAttribute('tabindex', '0');
           const det = (m.detail != null) ? String(m.detail) : '';
+          const dotCls = signalToDotClass(sig);
           row.innerHTML =
-            '<span class="status-dot ' + (m.ok ? 'ok' : 'bad') + '" title="' + escapeHtml(det.slice(0, 500)) + '"></span>' +
+            '<span class="status-dot ' + dotCls + '" title="' + escapeHtml(det.slice(0, 500)) + '"></span>' +
             '<div><div class="pg-status-name">' + escapeHtml(m.label || m.id || '—') + '</div>' +
             '<div class="pg-status-meta">' + escapeHtml(det.slice(0, 280)) + '</div></div>';
           row.addEventListener('click', function () { openModuleModal(m); });
@@ -6602,14 +6659,20 @@ PAGE_HTML = """<!DOCTYPE html>
           });
           list.appendChild(row);
         }
-        const bad = mods.length - okCount;
-        const sub = (bad === 0)
-          ? 'All wiring checks passed'
-          : (okCount + ' passed · ' + bad + ' not wired / not armed');
-        setModuleBanner(okCount, mods.length, sub);
+        let bannerCls = 'ok';
+        if (anyRed) bannerCls = 'bad';
+        else if (anyWarn) bannerCls = 'warn';
+        let sub = 'All wiring checks passed';
+        if (anyRed) {
+          const faults = mods.length - okCount;
+          sub = okCount + ' ok · ' + faults + ' fault(s)';
+        } else if (anyWarn) {
+          sub = 'No faults · amber = idle/waiting (see Groundhog)';
+        }
+        setModuleBanner(okCount, mods.length, sub, bannerCls);
       } catch (e) {
         list.innerHTML = '<p class="caps pg-module-board-msg">' + escapeHtml(friendlyFetchError(e)) + '</p>';
-        setModuleBanner(0, 0, 'Fetch failed');
+        setModuleBanner(0, 0, 'Fetch failed', 'bad');
         if (dot) dot.className = 'status-dot bad';
       }
     }
