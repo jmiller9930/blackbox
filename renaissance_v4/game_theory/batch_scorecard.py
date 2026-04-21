@@ -117,6 +117,48 @@ def append_batch_scorecard_line(
     return p.resolve()
 
 
+def remove_batch_scorecard_line_by_job_id(
+    job_id: str,
+    *,
+    path: Path | None = None,
+) -> dict[str, Any]:
+    """
+    Remove **all** JSONL lines whose ``job_id`` matches (append-only file may duplicate job_id).
+
+    Returns ``{"ok": True, "removed": n, "path": ...}``. Does **not** touch Groundhog bundles,
+    engine learning, or Student Proctor store (D14-6 run-history only).
+    """
+    jid = str(job_id).strip()
+    if not jid:
+        return {"ok": False, "error": "job_id required", "removed": 0}
+    p = (path or default_batch_scorecard_jsonl()).expanduser().resolve()
+    if not p.is_file():
+        return {"ok": True, "removed": 0, "path": str(p), "note": "file missing"}
+    raw = p.read_text(encoding="utf-8", errors="replace")
+    if not raw.strip():
+        return {"ok": True, "removed": 0, "path": str(p)}
+    lines_kept: list[str] = []
+    removed = 0
+    for line in raw.splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            obj = json.loads(line)
+        except json.JSONDecodeError:
+            lines_kept.append(line)
+            continue
+        if str(obj.get("job_id", "")) == jid:
+            removed += 1
+            continue
+        lines_kept.append(line)
+    tmp = p.with_suffix(p.suffix + ".tmp_filter")
+    tmp.write_text("\n".join(lines_kept) + ("\n" if lines_kept else ""), encoding="utf-8")
+    with _APPEND_LOCK:
+        tmp.replace(p)
+    return {"ok": True, "removed": removed, "path": str(p.resolve())}
+
+
 def truncate_batch_scorecard_jsonl(*, path: Path | None = None) -> Path:
     """
     Truncate the scorecard JSONL to empty (all batch rows removed).

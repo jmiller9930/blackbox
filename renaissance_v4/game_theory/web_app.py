@@ -85,7 +85,7 @@ _PATTERN_BANNER_WEBP_PATH = _RV4_ROOT / "assets" / "pattern.webp"
 _PATTERN_GAME_BANNER_BOOT_JS = _GAME_THEORY / "static" / "pattern_game_banner_boot.js"
 
 # Operator-visible web UI bundle version — bump when changing PAGE_HTML (HTML/CSS/JS) so deploys are provable.
-PATTERN_GAME_WEB_UI_VERSION = "2.19.25"
+PATTERN_GAME_WEB_UI_VERSION = "2.19.26"
 
 from renaissance_v4.game_theory.groundhog_memory import (
     groundhog_auto_merge_enabled,
@@ -97,6 +97,7 @@ from renaissance_v4.game_theory.groundhog_memory import (
 from renaissance_v4.game_theory.batch_scorecard import (
     read_batch_scorecard_recent,
     record_parallel_batch_finished,
+    remove_batch_scorecard_line_by_job_id,
     truncate_batch_scorecard_jsonl,
     utc_timestamp_iso,
 )
@@ -117,6 +118,7 @@ from renaissance_v4.game_theory.student_panel_d13 import (
     build_d13_selected_run_payload_v1,
     build_student_decision_record_v1,
 )
+from renaissance_v4.game_theory.student_panel_d14 import enrich_student_panel_run_rows_d14
 from renaissance_v4.game_theory.data_health import get_data_health
 from renaissance_v4.game_theory.search_space_estimate import build_search_space_estimate
 from renaissance_v4.game_theory.memory_paths import (
@@ -1389,6 +1391,26 @@ def create_app() -> Flask:
             }
         )
 
+    @app.delete("/api/batch-scorecard/run/<job_id>")
+    def api_batch_scorecard_delete_run(job_id: str) -> Any:
+        """
+        D14-6 — remove scorecard line(s) for one ``job_id`` only. Does **not** modify Groundhog bundles
+        or engine learning (use ``POST /api/pattern-game/reset-learning`` separately).
+        """
+        data = request.get_json(force=True, silent=True) or {}
+        if not data.get("confirm"):
+            return jsonify({"ok": False, "error": 'Request JSON must include "confirm": true'}), 400
+        out = remove_batch_scorecard_line_by_job_id(job_id.strip())
+        st = student_learning_store_status_v1()
+        out2 = dict(out)
+        out2["groundhog_unchanged"] = True
+        out2["student_proctor_learning_store_unchanged"] = True
+        out2["student_proctor_learning_store"] = {
+            "path": st.get("path"),
+            "line_count": st.get("line_count"),
+        }
+        return jsonify(out2), (200 if out.get("ok") else 400)
+
     @app.post("/api/pattern-game/reset-learning")
     def api_pattern_game_reset_learning() -> Any:
         """
@@ -1426,11 +1448,11 @@ def create_app() -> Flask:
         p = default_batch_scorecard_jsonl()
         file_rows = read_batch_scorecard_recent(limit, path=p)
         merged, inflight_n = _merge_scorecard_with_inflight(file_rows, limit=limit)
-        rows = build_d11_run_rows_v1(merged)
+        rows = enrich_student_panel_run_rows_d14(build_d11_run_rows_v1(merged))
         return jsonify(
             {
                 "ok": True,
-                "schema": "student_panel_d13_runs_v1",
+                "schema": "student_panel_d14_runs_v1",
                 "runs": rows,
                 "inflight_batches": inflight_n,
             }
@@ -5103,9 +5125,10 @@ PAGE_HTML = """<!DOCTYPE html>
               : 'd' + i;
         const res = String(s.result || '—');
         const cls = 'pg-student-d11-slice pg-student-d11-slice--' + res.replace(/[^A-Z_]/g, '_');
+        const confRaw = s.student_confidence_01 != null ? s.student_confidence_01 : s.confidence;
         const confDisp =
-          s.confidence !== undefined && s.confidence !== null && s.confidence !== ''
-            ? escapeHtml(String(s.confidence))
+          confRaw !== undefined && confRaw !== null && confRaw !== ''
+            ? escapeHtml(String(confRaw))
             : '<span style="opacity:0.85">data_gap</span>';
         const dch =
           s.decision_changed_flag === undefined || s.decision_changed_flag === null
@@ -5240,6 +5263,7 @@ PAGE_HTML = """<!DOCTYPE html>
       const gh = rec.groundhog || {};
       const bc = rec.baseline_comparison || {};
       const rt = rec.referee_truth || {};
+      const sr = rec.structured_reasoning_v1 || {};
       const lines = [];
       lines.push('<div class="pg-student-d11-deep">');
       lines.push(
@@ -5249,6 +5273,11 @@ PAGE_HTML = """<!DOCTYPE html>
           '</code>. Student fields from Student store when present; Referee from OutcomeRecord; missing fields stay <span style="opacity:0.85">data_gap</span>.</p>'
       );
       lines.push('<ul>');
+      const flat = rec.schema === 'student_decision_record_v1' && rec.student_direction !== undefined;
+      const sDir = flat ? rec.student_direction : sd.student_direction;
+      const sConf = flat ? rec.student_confidence_01 : sd.student_confidence_01;
+      const sAct = flat ? rec.student_action : sd.student_action;
+      const tsU = flat ? rec.timestamp_utc : rec.timestamp;
       lines.push(
         '<li><span class="pg-student-d11-k">trade_id / run_id / scenario_id</span> ' +
           escapeHtml(String(rec.trade_id || '—')) +
@@ -5259,65 +5288,121 @@ PAGE_HTML = """<!DOCTYPE html>
           '</li>'
       );
       lines.push(
-        '<li><span class="pg-student-d11-k">timestamp · symbol</span> ' +
-          escapeHtml(String(rec.timestamp || '—')) +
+        '<li><span class="pg-student-d11-k">timestamp_utc · symbol · timeframe</span> ' +
+          escapeHtml(String(tsU != null ? tsU : '—')) +
           ' · ' +
-          escapeHtml(String(rec.symbol || '—')) +
-          '</li>'
-      );
-      lines.push(
-        '<li><span class="pg-student-d11-k">student direction · confidence_01</span> ' +
-          escapeHtml(String(sd.student_direction != null ? sd.student_direction : '—')) +
+          escapeHtml(String(rec.symbol != null ? rec.symbol : '—')) +
           ' · ' +
-          escapeHtml(String(sd.student_confidence_01 != null ? sd.student_confidence_01 : '—')) +
+          escapeHtml(String(rec.timeframe != null ? rec.timeframe : '—')) +
           '</li>'
       );
       lines.push(
-        '<li><span class="pg-student-d11-k">context (decision-time causal — gaps if not in export)</span> OHLC ' +
-          escapeHtml(String(ctx.ohlc != null ? ctx.ohlc : '—')) +
-          ' · EMA ' +
-          escapeHtml(String(ctx.ema != null ? ctx.ema : '—')) +
-          ' · RSI ' +
-          escapeHtml(String(ctx.rsi != null ? ctx.rsi : '—')) +
-          ' · ATR ' +
-          escapeHtml(String(ctx.atr != null ? ctx.atr : '—')) +
-          ' · vol ' +
-          escapeHtml(String(ctx.volume != null ? ctx.volume : '—')) +
-          ' · trend ' +
-          escapeHtml(String(ctx.trend_state != null ? ctx.trend_state : '—')) +
-          ' · volReg ' +
-          escapeHtml(String(ctx.volatility_regime != null ? ctx.volatility_regime : '—')) +
-          ' · struct ' +
-          escapeHtml(String(ctx.structure_state != null ? ctx.structure_state : '—')) +
+        '<li><span class="pg-student-d11-k">student_action · direction · confidence_01</span> ' +
+          escapeHtml(String(sAct != null ? sAct : '—')) +
+          ' · ' +
+          escapeHtml(String(sDir != null ? sDir : '—')) +
+          ' · ' +
+          escapeHtml(String(sConf != null ? sConf : '—')) +
           '</li>'
       );
       lines.push(
-        '<li><span class="pg-student-d11-k">groundhog</span> ctx_used ' +
-          escapeHtml(String(gh.context_used_flag != null ? gh.context_used_flag : '—')) +
-          ' · mem_used ' +
-          escapeHtml(String(gh.memory_used_flag != null ? gh.memory_used_flag : '—')) +
+        '<li><span class="pg-student-d11-k">OHLC · ema_fast/slow · rsi_14 · atr_14 · vol · regimes</span> ' +
+          (flat
+            ? 'O ' +
+              fmtD11MaybeNum(rec.price_open, 4) +
+              ' H ' +
+              fmtD11MaybeNum(rec.price_high, 4) +
+              ' L ' +
+              fmtD11MaybeNum(rec.price_low, 4) +
+              ' C ' +
+              fmtD11MaybeNum(rec.price_close, 4) +
+              ' · ema ' +
+              escapeHtml(String(rec.ema_fast != null ? rec.ema_fast : '—')) +
+              '/' +
+              escapeHtml(String(rec.ema_slow != null ? rec.ema_slow : '—')) +
+              ' · rsi ' +
+              escapeHtml(String(rec.rsi_14 != null ? rec.rsi_14 : '—')) +
+              ' · atr ' +
+              escapeHtml(String(rec.atr_14 != null ? rec.atr_14 : '—')) +
+              ' · vol ' +
+              escapeHtml(String(rec.volume != null ? rec.volume : '—')) +
+              ' · trend ' +
+              escapeHtml(String(rec.trend_state != null ? rec.trend_state : '—')) +
+              ' · ' +
+              escapeHtml(String(rec.volatility_regime != null ? rec.volatility_regime : '—')) +
+              ' · ' +
+              escapeHtml(String(rec.structure_state != null ? rec.structure_state : '—'))
+            : 'OHLC ' +
+              escapeHtml(String(ctx.ohlc != null ? ctx.ohlc : '—')) +
+              ' · EMA ' +
+              escapeHtml(String(ctx.ema != null ? ctx.ema : '—')) +
+              ' · RSI ' +
+              escapeHtml(String(ctx.rsi != null ? ctx.rsi : '—')) +
+              ' · ATR ' +
+              escapeHtml(String(ctx.atr != null ? ctx.atr : '—')) +
+              ' · vol ' +
+              escapeHtml(String(ctx.volume != null ? ctx.volume : '—')) +
+              ' · trend ' +
+              escapeHtml(String(ctx.trend_state != null ? ctx.trend_state : '—')) +
+              ' · volReg ' +
+              escapeHtml(String(ctx.volatility_regime != null ? ctx.volatility_regime : '—')) +
+              ' · struct ' +
+              escapeHtml(String(ctx.structure_state != null ? ctx.structure_state : '—'))) +
+          '</li>'
+      );
+      lines.push(
+        '<li><span class="pg-student-d11-k">groundhog</span> used ' +
+          escapeHtml(String((flat ? rec.groundhog_used_flag : gh.used) != null ? String(flat ? rec.groundhog_used_flag : gh.used) : '—')) +
+          ' · ctx ' +
+          escapeHtml(String((flat ? rec.context_used_flag : gh.context_used_flag) != null ? String(flat ? rec.context_used_flag : gh.context_used_flag) : '—')) +
+          ' · mem ' +
+          escapeHtml(String((flat ? rec.memory_used_flag : gh.memory_used_flag) != null ? String(flat ? rec.memory_used_flag : gh.memory_used_flag) : '—')) +
           ' · retrieval_count ' +
-          escapeHtml(String(gh.retrieval_count != null ? gh.retrieval_count : '—')) +
+          escapeHtml(String((flat ? rec.retrieval_count : gh.retrieval_count) != null ? String(flat ? rec.retrieval_count : gh.retrieval_count) : '—')) +
+          ' · sig_key ' +
+          escapeHtml(String(flat ? (rec.retrieval_signature_key != null ? rec.retrieval_signature_key : '—') : '—')) +
           ' · ' +
-          escapeHtml(String(gh.influence_summary != null ? gh.influence_summary : '—')) +
+          escapeHtml(String((flat ? rec.influence_summary : gh.influence_summary) != null ? String(flat ? rec.influence_summary : gh.influence_summary) : '—')) +
           '</li>'
       );
       lines.push(
-        '<li><span class="pg-student-d11-k">baseline</span> dir ' +
-          escapeHtml(String(bc.baseline_direction != null ? bc.baseline_direction : '—')) +
+        '<li><span class="pg-student-d11-k">baseline</span> action ' +
+          escapeHtml(String(flat ? (rec.baseline_action != null ? rec.baseline_action : '—') : '—')) +
+          ' · dir ' +
+          escapeHtml(String((flat ? rec.baseline_direction : bc.baseline_direction) != null ? String(flat ? rec.baseline_direction : bc.baseline_direction) : '—')) +
           ' · conf ' +
-          escapeHtml(String(bc.baseline_confidence != null ? bc.baseline_confidence : '—')) +
+          escapeHtml(String((flat ? rec.baseline_confidence_01 : bc.baseline_confidence) != null ? String(flat ? rec.baseline_confidence_01 : bc.baseline_confidence) : '—')) +
           ' · decision_changed ' +
-          escapeHtml(String(bc.decision_changed_flag != null ? bc.decision_changed_flag : '—')) +
+          escapeHtml(String((flat ? rec.decision_changed_flag : bc.decision_changed_flag) != null ? String(flat ? rec.decision_changed_flag : bc.decision_changed_flag) : '—')) +
           '</li>'
       );
       lines.push(
-        '<li><span class="pg-student-d11-k">referee truth</span> direction ' +
-          escapeHtml(String(rt.referee_direction != null ? rt.referee_direction : '—')) +
+        '<li><span class="pg-student-d11-k">pattern / rules</span> sel ' +
+          escapeHtml(String(flat ? (rec.pattern_selected != null ? rec.pattern_selected : '—') : '—')) +
+          ' · eval ' +
+          escapeHtml(String(flat ? (rec.patterns_evaluated != null ? rec.patterns_evaluated : '—') : '—')) +
+          ' · summary ' +
+          escapeHtml(String(flat ? (rec.pattern_pass_fail_summary != null ? rec.pattern_pass_fail_summary : '—') : '—')) +
+          '</li>'
+      );
+      lines.push(
+        '<li><span class="pg-student-d11-k">structured_reasoning_v1</span> ' +
+          escapeHtml(JSON.stringify(sr && typeof sr === 'object' ? sr : {})) +
+          '</li>'
+      );
+      lines.push(
+        '<li><span class="pg-student-d11-k">referee truth</span> actual_trade ' +
+          escapeHtml(String(flat ? (rec.referee_actual_trade != null ? rec.referee_actual_trade : '—') : '—')) +
+          ' · direction ' +
+          escapeHtml(String((flat ? rec.referee_direction : rt.referee_direction) != null ? String(flat ? rec.referee_direction : rt.referee_direction) : '—')) +
           ' · outcome ' +
-          escapeHtml(String(rt.outcome != null ? rt.outcome : '—')) +
+          escapeHtml(String((flat ? rec.referee_outcome : rt.outcome) != null ? String(flat ? rec.referee_outcome : rt.outcome) : '—')) +
           ' · pnl ' +
-          fmtD11MaybeNum(rt.pnl, 4) +
+          fmtD11MaybeNum(flat ? rec.referee_pnl : rt.pnl, 4) +
+          ' · is_win/is_loss ' +
+          escapeHtml(String(flat ? rec.is_win : '')) +
+          '/' +
+          escapeHtml(String(flat ? rec.is_loss : '')) +
           '</li>'
       );
       const gaps = rec.data_gaps;

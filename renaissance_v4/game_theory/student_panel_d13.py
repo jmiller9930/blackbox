@@ -16,7 +16,6 @@ from renaissance_v4.game_theory.scorecard_drill import (
     build_scenario_list_for_batch,
     find_scorecard_entry_by_job_id,
     load_batch_parallel_results_v1,
-    load_run_record,
 )
 from renaissance_v4.game_theory.student_panel_d11 import (
     SCHEMA_RUN_ROW,
@@ -44,13 +43,6 @@ def _bool_from_yes(s: Any) -> bool | None:
     if t in ("NO", "FALSE", "0"):
         return False
     return None
-
-
-def _float(v: Any, default: float | None = None) -> float | None:
-    try:
-        return float(v)
-    except (TypeError, ValueError):
-        return default
 
 
 def _int(v: Any, default: int = 0) -> int:
@@ -146,24 +138,6 @@ def _trade_opportunities_from_payload(
     return out
 
 
-def _groundhog_state_d13(
-    *,
-    retrieval_positive: bool,
-    behavior_changed: bool,
-    outcome_improved: bool | None,
-) -> str:
-    """Directive D13 §1.1 Groundhog classification (four states)."""
-    if not retrieval_positive:
-        return "COLD"
-    if behavior_changed and outcome_improved is True:
-        return "STRONG"
-    if behavior_changed and outcome_improved is False:
-        return "WEAK"
-    if behavior_changed:
-        return "ACTIVE"
-    return "ACTIVE"
-
-
 def _entry_retrieval_positive(entry: dict[str, Any]) -> bool:
     recall = _int(entry.get("recall_matches"), 0)
     stud = _int(entry.get("student_retrieval_matches"), 0)
@@ -232,6 +206,11 @@ def build_d13_selected_run_payload_v1(job_id: str) -> dict[str, Any]:
     When ``batch_parallel_results_v1.json`` is missing (older batches), carousel may be empty;
     ``data_gaps`` explains the gap.
     """
+    from renaissance_v4.game_theory.student_panel_d14 import (  # noqa: PLC0415 — avoid circular import
+        groundhog_state_d14,
+        trade_outcome_timestamp_utc,
+    )
+
     jid = job_id.strip()
     entry = find_scorecard_entry_by_job_id(jid)
     if not entry:
@@ -252,7 +231,7 @@ def build_d13_selected_run_payload_v1(job_id: str) -> dict[str, Any]:
 
     panel_row = _panel_run_row_for_job(jid)
     entry_for_flags = entry
-    retrieval_pos = _entry_retrieval_positive(entry_for_flags)
+    gh_lane = _groundhog_active_for_d11(entry_for_flags)
     beh_bool = _behavior_changed_bool_for_d13(panel_row, entry_for_flags)
     oib = _outcome_improved_bool(panel_row)
 
@@ -273,11 +252,12 @@ def build_d13_selected_run_payload_v1(job_id: str) -> dict[str, Any]:
     if n > 0 and avg_win is not None and avg_loss is not None:
         exp = round((wc / n) * avg_win - (lc / n) * abs(avg_loss), 6)
 
-    gh_state = _groundhog_state_d13(
-        retrieval_positive=retrieval_pos,
+    gh_state = groundhog_state_d14(
+        groundhog_active=gh_lane,
         behavior_changed=beh_bool,
         outcome_improved=oib,
     )
+    retrieval_pos = _entry_retrieval_positive(entry_for_flags)
     ctx_used = retrieval_pos or bool(_int(entry.get("recall_matches"), 0) or _int(entry.get("student_retrieval_matches"), 0))
     mem_used = bool(_int(entry.get("student_learning_rows_appended"), 0) or _int(entry.get("recall_matches"), 0))
 
@@ -289,8 +269,7 @@ def build_d13_selected_run_payload_v1(job_id: str) -> dict[str, Any]:
         oj = t["outcome_json"]
         flat = t["scenario_flat"]
         scen_n = int(t.get("scenario_trade_count") or 0)
-        et = _int(oj.get("entry_time"), 0)
-        ts_iso = f"entry_time_ms={et}" if et else "data_gap"
+        ts_utc = trade_outcome_timestamp_utc(oj)
 
         sl_list = list_student_learning_records_by_graded_unit_id(store_p, tid)
         sl = sl_list[-1] if sl_list else None
@@ -310,17 +289,23 @@ def build_d13_selected_run_payload_v1(job_id: str) -> dict[str, Any]:
         # Baseline-not-wired in v1 — do not infer Δ vs Referee as "baseline".
         dcf: Any = "data_gap"
 
+        ref_out = "WIN" if t["result"] == "WIN" else "LOSS"
         slices.append(
             {
                 "schema": SCHEMA_CAROUSEL_SLICE,
                 "trade_id": tid,
                 "graded_unit_id": tid,
-                "timestamp": ts_iso,
+                "timestamp_utc": ts_utc,
+                "timestamp": ts_utc,
+                "student_direction": dir_disp,
+                "student_confidence_01": conf,
+                "referee_outcome": ref_out,
+                "groundhog_usage_label": ghu,
+                "decision_changed_flag": dcf,
                 "direction": dir_disp,
                 "confidence": conf,
-                "result": t["result"],
+                "result": ref_out,
                 "groundhog_usage": ghu,
-                "decision_changed_flag": dcf,
                 "order_index": i,
             }
         )
@@ -362,154 +347,10 @@ def build_d13_selected_run_payload_v1(job_id: str) -> dict[str, Any]:
 
 
 def build_student_decision_record_v1(job_id: str, trade_id: str) -> dict[str, Any] | None:
-    """
-    One trade opportunity: Student vs Referee vs baseline vs context (honest ``data_gap``).
-    """
-    jid = job_id.strip()
-    tid = trade_id.strip()
-    if not jid or not tid:
-        return None
-    entry = find_scorecard_entry_by_job_id(jid)
-    if not entry:
-        return None
-    batch_dir_s = entry.get("session_log_batch_dir")
-    batch_dir, scenarios, _err = build_scenario_list_for_batch(jid, batch_dir_s if isinstance(batch_dir_s, str) else None)
-    if not batch_dir or not batch_dir.is_dir():
-        return None
+    """Delegates to :mod:`student_panel_d14` (canonical D14 flat contract)."""
+    from renaissance_v4.game_theory import student_panel_d14 as _d14  # noqa: PLC0415
 
-    payload = load_batch_parallel_results_v1(batch_dir)
-    if not payload:
-        return {
-            "schema": SCHEMA_DECISION_RECORD,
-            "ok": False,
-            "error": "batch_parallel_results_v1_missing",
-            "run_id": jid,
-            "trade_id": tid,
-            "data_gaps": ["batch_parallel_results_v1_missing"],
-        }
-
-    target_oj: dict[str, Any] | None = None
-    scenario_id = ""
-    for row in _ordered_parallel_rows(payload):
-        if not row.get("ok"):
-            continue
-        for oj in row.get("replay_outcomes_json") or []:
-            if isinstance(oj, dict) and str(oj.get("trade_id") or "").strip() == tid:
-                target_oj = oj
-                scenario_id = str(row.get("scenario_id") or "")
-                break
-        if target_oj is not None:
-            break
-
-    if not target_oj:
-        return None
-
-    for s in scenarios:
-        if str(s.get("scenario_id") or "") == scenario_id:
-            folder = str(s.get("folder") or "")
-            break
-
-    rr = load_run_record(batch_dir, folder) if folder else None
-    rr = rr if isinstance(rr, dict) else {}
-
-    store_p = default_student_learning_store_path_v1()
-    sl_list = list_student_learning_records_by_graded_unit_id(store_p, tid)
-    sl = sl_list[-1] if sl_list else None
-    so = (sl.get("student_output") if isinstance(sl, dict) else None) or {}
-    if not isinstance(so, dict):
-        so = {}
-
-    meta = target_oj.get("metadata") if isinstance(target_oj.get("metadata"), dict) else {}
-
-    gaps: list[str] = []
-
-    student_direction = so.get("direction") if so.get("direction") else "data_gap"
-    student_conf = so.get("confidence_01")
-    if student_conf is None:
-        student_conf = "data_gap"
-        gaps.append("student_confidence_01_missing")
-
-    ohlc = meta.get("ohlc")
-    if ohlc is None:
-        ohlc = "data_gap"
-        gaps.append("context_ohlc_not_in_outcome_metadata")
-
-    def _m(key: str) -> Any:
-        v = meta.get(key)
-        return v if v is not None else "data_gap"
-
-    ctx_block = {
-        "ohlc": ohlc,
-        "ema": _m("ema"),
-        "rsi": _m("rsi"),
-        "atr": _m("atr"),
-        "volume": _m("volume"),
-        "trend_state": _m("trend_state"),
-        "volatility_regime": _m("volatility_regime"),
-        "structure_state": _m("structure_state"),
-    }
-    if any(v == "data_gap" for k, v in ctx_block.items() if k in ("ema", "rsi", "atr", "volume")):
-        gaps.append("indicator_context_partial_or_missing_in_trade_metadata")
-
-    ret_count = None
-    if isinstance(sl, dict):
-        ctx_sig = sl.get("context_signature_v1")
-        ret_count = 1 if isinstance(ctx_sig, dict) and ctx_sig.get("signature_key") else 0
-    else:
-        ret_count = "data_gap"
-        gaps.append("student_store_record_missing_for_trade")
-
-    influence = "data_gap"
-    if isinstance(sl, dict) and sl.get("record_id"):
-        influence = f"student_learning_record_v1 record_id={sl.get('record_id')}"
-
-    ctx_f = bool(sl) if sl else "data_gap"
-    mem_f = bool(sl and sl.get("context_signature_v1")) if sl else "data_gap"
-
-    ref_dir = str(target_oj.get("direction") or "")
-
-    baseline_direction = "data_gap"
-    baseline_confidence = "data_gap"
-    decision_changed: Any = "data_gap"
-    pnl = _float(target_oj.get("pnl"))
-    outcome = "WIN" if pnl is not None and pnl > 0 else "LOSS"
-
-    et = _int(target_oj.get("entry_time"), 0)
-    ts_disp = str(et) if et else "data_gap"
-
-    return {
-        "schema": SCHEMA_DECISION_RECORD,
-        "trade_id": tid,
-        "graded_unit_id": tid,
-        "run_id": jid,
-        "scenario_id": scenario_id,
-        "timestamp": ts_disp,
-        "symbol": str(target_oj.get("symbol") or "data_gap"),
-        "student_decision": {
-            "student_direction": student_direction,
-            "student_confidence_01": student_conf,
-        },
-        "context": ctx_block,
-        "groundhog": {
-            "context_used_flag": ctx_f,
-            "memory_used_flag": mem_f,
-            "retrieval_count": ret_count,
-            "influence_summary": influence,
-        },
-        "baseline_comparison": {
-            "baseline_direction": baseline_direction,
-            "baseline_confidence": baseline_confidence,
-            "decision_changed_flag": decision_changed,
-        },
-        "referee_truth": {
-            "referee_direction": ref_dir or "data_gap",
-            "outcome": outcome,
-            "pnl": pnl if pnl is not None else "data_gap",
-        },
-        "learning_memory_evidence_note": rr.get("learning_memory_evidence"),
-        "run_record_present": bool(rr),
-        "data_gaps": gaps,
-    }
+    return _d14.build_student_decision_record_v1(job_id, trade_id)
 
 
 __all__ = [
