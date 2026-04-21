@@ -82,7 +82,7 @@ _PATTERN_BANNER_WEBP_PATH = _RV4_ROOT / "assets" / "pattern.webp"
 _PATTERN_GAME_BANNER_BOOT_JS = _GAME_THEORY / "static" / "pattern_game_banner_boot.js"
 
 # Operator-visible web UI bundle version — bump when changing PAGE_HTML (HTML/CSS/JS) so deploys are provable.
-PATTERN_GAME_WEB_UI_VERSION = "2.19.6"
+PATTERN_GAME_WEB_UI_VERSION = "2.19.7"
 
 from renaissance_v4.game_theory.groundhog_memory import (
     groundhog_auto_merge_enabled,
@@ -2315,18 +2315,26 @@ PAGE_HTML = """<!DOCTYPE html>
       color: var(--pg-muted);
       line-height: 1.42;
     }
-    /* SR-4 / AC-3: long seam text scrolls inside the panel so the Student header stays above the fold. */
+    /* SR-4 / AC-3: long seam scrolls inside the fold body; default band ≈60% viewport, drag lower-right to resize. */
     details.pg-student-triangle-dock {
       scroll-margin-top: 12px;
       position: relative;
       z-index: 1;
     }
-    details.pg-student-triangle-dock .pg-student-triangle-body {
-      max-height: min(38vh, 380px);
-      overflow-y: auto;
+    details.pg-student-triangle-dock > .pg-panel-fold-body {
+      height: 60vh;
+      min-height: 14rem;
+      max-height: 88vh;
+      resize: vertical;
+      overflow: auto;
       overflow-x: hidden;
-      padding-right: 4px;
+      box-sizing: border-box;
       scrollbar-gutter: stable;
+    }
+    details.pg-student-triangle-dock .pg-student-triangle-body {
+      max-height: none;
+      overflow: visible;
+      padding-right: 4px;
     }
     .pg-secondary-surface-label {
       display: inline-block;
@@ -2718,10 +2726,12 @@ PAGE_HTML = """<!DOCTYPE html>
       max-height: min(70vh, 720px);
     }
     .pg-barney-ask-unified .pg-barney-ask-col--barney .pg-barney-body {
-      flex: 1 1 0;
-      min-height: 0;
+      flex: 1 1 40%;
+      min-height: 4rem;
       max-height: none;
       overflow: auto;
+      resize: vertical;
+      box-sizing: border-box;
     }
     .pg-barney-ask-col--ask {
       display: flex;
@@ -2745,10 +2755,12 @@ PAGE_HTML = """<!DOCTYPE html>
       overflow: auto;
     }
     .pg-barney-ask-unified .pg-barney-ask-col--barney .pg-askdata-thread {
-      flex: 1 1 0;
-      min-height: 0;
+      flex: 1 1 35%;
+      min-height: 4.5rem;
       max-height: none;
       overflow: auto;
+      resize: vertical;
+      box-sizing: border-box;
     }
     .pg-custom-route-hint {
       margin: 0;
@@ -4106,7 +4118,7 @@ PAGE_HTML = """<!DOCTYPE html>
         </div>
       </div>
 
-      <details class="pg-panel-fold pg-student-triangle-dock" open>
+      <details class="pg-panel-fold pg-student-triangle-dock">
         <summary>
           <div class="pg-panel-header" style="margin:0;flex:1">
             <div>
