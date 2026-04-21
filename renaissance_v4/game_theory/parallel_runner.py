@@ -12,6 +12,7 @@ import argparse
 import json
 import os
 import sys
+from datetime import datetime, timezone
 from collections.abc import Callable
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from pathlib import Path
@@ -337,7 +338,8 @@ def run_scenarios_parallel(
     result (hypothesis + indicator_context + referee summary — durable audit trail).
 
     If ``write_session_logs`` is True (default), create ``logs/batch_<UTC>_<id>/`` with one subfolder
-    per scenario containing ``HUMAN_READABLE.md`` and ``run_record.json``. Disable with
+    per scenario containing ``HUMAN_READABLE.md`` and ``run_record.json``, plus **batch_parallel_results_v1.json**
+    (full worker rows including ``replay_outcomes_json``) for D13 Student panel trade enumeration. Disable with
     ``write_session_logs=False`` or env ``PATTERN_GAME_NO_SESSION_LOG=1``.
 
     If ``progress_callback`` is set, it is invoked after each scenario completes as
@@ -456,6 +458,18 @@ def run_scenarios_parallel(
         log_root = Path(root_raw).expanduser() if root_raw else default_logs_root()
         batch_dir = allocate_unique_run_directory(logs_root=log_root, prefix="batch")
         write_batch_index_and_scenario_logs(batch_dir, session_records)
+        bp_payload: dict[str, Any] = {
+            "schema": "batch_parallel_results_v1",
+            "written_at_utc": datetime.now(timezone.utc).isoformat(),
+            "scenario_order": [
+                str(s.get("scenario_id") or f"row_{i}") for i, s in enumerate(normalized)
+            ],
+            "results": results,
+        }
+        (batch_dir / "batch_parallel_results_v1.json").write_text(
+            json.dumps(bp_payload, indent=2, ensure_ascii=False, default=str) + "\n",
+            encoding="utf-8",
+        )
         print(
             f"[session_log] batch folder={batch_dir} ({len(session_records)} scenarios — see BATCH_README.md)",
             file=sys.stderr,

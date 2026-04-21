@@ -115,6 +115,23 @@ def discover_scenarios_fallback(batch_dir: Path) -> list[dict[str, Any]]:
     return out
 
 
+def load_batch_parallel_results_v1(batch_dir: Path | str) -> dict[str, Any] | None:
+    """
+    Load ``batch_parallel_results_v1.json`` written alongside ``BATCH_README.md`` when parallel
+    batches complete with session logging (see :mod:`renaissance_v4.game_theory.parallel_runner`).
+    """
+    p = Path(batch_dir).expanduser().resolve() / "batch_parallel_results_v1.json"
+    if not p.is_file():
+        return None
+    try:
+        raw = json.loads(p.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError):
+        return None
+    if not isinstance(raw, dict) or raw.get("schema") != "batch_parallel_results_v1":
+        return None
+    return raw
+
+
 def load_run_record(batch_dir: Path, folder_name: str) -> dict[str, Any] | None:
     sub = _safe_child_dir(batch_dir, folder_name)
     if sub is None:
