@@ -33,3 +33,20 @@ Do this **before** you end the turn, say “done,” or tell the operator to pul
 ## UI / operator surface (additional bar)
 
 **Push alone is not operator-visible completion** for **`UIUX.Web/`** changes. After push, **clawbot** must be **pulled**, **`web` image rebuilt**, stack **restarted**, and **verified** per [`clawbot-ui-deployment-complete.mdc`](clawbot-ui-deployment-complete.mdc). Do **not** call UI work “done” without that proof package.
+
+## Pattern Machine learning (Flask `:8765`) — additional bar (automatic)
+
+**Problem:** The operator (or you) should **never** have to remind the agent to “commit, push, pull on the lab host, and restart.” **`git push` alone does not restart Flask** on clawbot.
+
+**Scope:** Any substantive change under **`renaissance_v4/game_theory/`** (including **`web_app.py`**, **`static/`**, operator APIs) or other paths that **`scripts/gsync.py`** maps to **pattern-game** restart — i.e. anything that affects the Pattern Machine learning UI or its Flask process.
+
+**Default before you end the turn** (unless the user explicitly asked for **local-only** or **no remote**):
+
+1. **`git commit`** + **`git push origin`** (current branch) per sections above.
+2. **Remote deploy + restart:** from repo root, run  
+   **`python3 scripts/gsync.py --no-commit --force-restart`**  
+   so **clawbot**’s **`~/blackbox`** **pulls** and **UIUX.Web docker + pattern-game Flask (8765)** restart as configured. Use **`--pattern-game`** when the documented pattern-game-only path is intentionally required; otherwise **`--force-restart`** is acceptable to guarantee Flask picks up `web_app` / static assets.
+
+3. **Say what ran** — state that **push succeeded** and **gsync completed** (or paste the **remote `HEAD`** / PID line from gsync output). If SSH/network fails, give the **local commit hash** and the **error** — do **not** imply the lab is current.
+
+**Proof:** “Deployed for Pattern UI” means **`git push`** succeeded **and** **gsync SSH pull + restart** succeeded (or you documented why it could not run).
