@@ -85,7 +85,7 @@ _PATTERN_BANNER_WEBP_PATH = _RV4_ROOT / "assets" / "pattern.webp"
 _PATTERN_GAME_BANNER_BOOT_JS = _GAME_THEORY / "static" / "pattern_game_banner_boot.js"
 
 # Operator-visible web UI bundle version — bump when changing PAGE_HTML (HTML/CSS/JS) so deploys are provable.
-PATTERN_GAME_WEB_UI_VERSION = "2.19.19"
+PATTERN_GAME_WEB_UI_VERSION = "2.19.20"
 
 from renaissance_v4.game_theory.groundhog_memory import (
     groundhog_auto_merge_enabled,
@@ -2458,7 +2458,7 @@ PAGE_HTML = """<!DOCTYPE html>
     }
     .pg-student-d11-deep li { margin: 0 0 4px; }
     .pg-student-d11-deep .pg-student-d11-k { color: var(--pg-muted); font-weight: 700; font-size: 0.72rem; }
-    /* SR-4 / AC-3: long seam scrolls inside the fold body; default band ≈60% viewport, drag lower-right to resize. */
+    /* SR-4 / AC-3: long Student panel body scrolls inside the fold; default band ≈60% viewport, drag lower-right to resize. */
     details.pg-student-triangle-dock {
       scroll-margin-top: 12px;
       position: relative;
@@ -4267,7 +4267,7 @@ PAGE_HTML = """<!DOCTYPE html>
           <div class="pg-panel-header" style="margin:0;flex:1">
             <div>
               <h2 class="pg-panel-h">Student → learning → outcome</h2>
-              <p class="pg-panel-sub">D11 — <strong>Referee</strong> indexes each batch in the run list; <strong>Student</strong> drilldown (decisions → deep) is for belief vs Referee truth. One level at a time. <strong>Latest batch — seam</strong> (below) is Directive 09 (Student store rows). Drag the <strong>bottom edge</strong> to resize; height and open state are remembered.</p>
+              <p class="pg-panel-sub">D11 — <strong>Referee</strong> indexes each batch in the run list; <strong>Student</strong> drilldown (decisions → deep) is for belief vs Referee truth. One level at a time. <strong>Latest batch — handoff</strong> (below) is Directive 09: Referee results → Student store. Drag the <strong>bottom edge</strong> to resize; height and open state are remembered.</p>
             </div>
             <span class="pg-chip pg-chip-teal">Primary</span>
           </div>
@@ -4275,9 +4275,9 @@ PAGE_HTML = """<!DOCTYPE html>
         <div id="studentTriangleFoldBody" class="pg-panel-fold-body pg-student-triangle-fold-body" title="Drag the bottom-right corner or bottom edge to resize. Size and open/closed state are saved in this browser (localStorage).">
           <div id="studentTriangleBody" class="pg-student-triangle-body" aria-live="polite">
             <div id="pgStudentPanelD11" class="pg-student-d11"></div>
-            <div id="pgStudentSeamLegacy" class="pg-student-seam-legacy" style="margin-top:12px;padding-top:12px;border-top:1px solid rgba(255,255,255,0.10)">
-              <p class="pg-student-d11-legend" style="margin-top:0"><strong>Latest batch — seam</strong> (Directive 09)</p>
-              <div id="pgStudentSeamLegacyInner" class="caps" style="margin:0">No batch yet — run a parallel batch.</div>
+            <div id="pgStudentHandoffStrip" class="pg-student-handoff-strip" style="margin-top:12px;padding-top:12px;border-top:1px solid rgba(255,255,255,0.10)">
+              <p class="pg-student-d11-legend" style="margin-top:0"><strong>Latest batch — handoff</strong> (Directive 09)</p>
+              <div id="pgStudentHandoffStripInner" class="caps" style="margin:0">No batch yet — run a parallel batch.</div>
             </div>
           </div>
         </div>
@@ -4601,17 +4601,17 @@ PAGE_HTML = """<!DOCTYPE html>
       updateMemoryStatusCardFromPanel(panel, echo, null, false);
     }
 
-    /** D11 — strict run / decision / deep-dive (replaces panel content per level; seam strip on L1 only). */
+    /** D11 — strict run / decision / deep-dive (replaces panel content per level; handoff strip on L1 only). */
     const studentPanelD11 = { level: 1, selectedRunId: null, selectedDecisionId: null };
 
-    function studentPanelD11SeamEl() {
-      return document.getElementById('pgStudentSeamLegacy');
+    function studentPanelD11HandoffEl() {
+      return document.getElementById('pgStudentHandoffStrip');
     }
     function studentPanelD11RootEl() {
       return document.getElementById('pgStudentPanelD11');
     }
-    function studentPanelD11SetSeamVisible(show) {
-      const el = studentPanelD11SeamEl();
+    function studentPanelD11SetHandoffVisible(show) {
+      const el = studentPanelD11HandoffEl();
       if (el) el.hidden = !show;
     }
 
@@ -4652,7 +4652,7 @@ PAGE_HTML = """<!DOCTYPE html>
       studentPanelD11.level = 1;
       studentPanelD11.selectedRunId = null;
       studentPanelD11.selectedDecisionId = null;
-      studentPanelD11SetSeamVisible(true);
+      studentPanelD11SetHandoffVisible(true);
       await refreshStudentPanelD11();
     }
 
@@ -4660,7 +4660,7 @@ PAGE_HTML = """<!DOCTYPE html>
       studentPanelD11.level = 2;
       studentPanelD11.selectedRunId = runId;
       studentPanelD11.selectedDecisionId = null;
-      studentPanelD11SetSeamVisible(false);
+      studentPanelD11SetHandoffVisible(false);
       const root = studentPanelD11RootEl();
       if (!root) return;
       root.innerHTML =
@@ -4752,7 +4752,7 @@ PAGE_HTML = """<!DOCTYPE html>
       studentPanelD11.level = 3;
       studentPanelD11.selectedRunId = runId;
       studentPanelD11.selectedDecisionId = decisionId;
-      studentPanelD11SetSeamVisible(false);
+      studentPanelD11SetHandoffVisible(false);
       const root = studentPanelD11RootEl();
       if (!root) return;
       root.innerHTML = '<p class="caps" style="margin:0">Loading decision…</p>';
@@ -4925,10 +4925,10 @@ PAGE_HTML = """<!DOCTYPE html>
     }
 
     function resetStudentTriangleStarting() {
-      const seam = document.getElementById('pgStudentSeamLegacyInner');
-      if (seam) {
-        seam.innerHTML =
-          'Batch running — <strong>seam</strong> and <strong>run table</strong> update when the batch completes.';
+      const ho = document.getElementById('pgStudentHandoffStripInner');
+      if (ho) {
+        ho.innerHTML =
+          'Batch running — <strong>handoff</strong> (Referee → Student store) and <strong>run table</strong> update when the batch completes.';
       }
       const d = document.querySelector('details.pg-student-triangle-dock');
       if (d) d.open = true;
@@ -4938,10 +4938,10 @@ PAGE_HTML = """<!DOCTYPE html>
       if (btn) btn.hidden = true;
     }
     function renderStudentTriangleBatchFailed(msg) {
-      const seam = document.getElementById('pgStudentSeamLegacyInner');
-      if (seam) {
-        seam.innerHTML =
-          '<span style="color:#a32b2b">Batch did not complete — seam not updated. ' +
+      const ho = document.getElementById('pgStudentHandoffStripInner');
+      if (ho) {
+        ho.innerHTML =
+          '<span style="color:#a32b2b">Batch did not complete — handoff not updated. ' +
           escapeHtml(String(msg != null ? msg : '').slice(0, 400)) +
           (String(msg || '').length > 400 ? '…' : '') +
           '</span>';
@@ -4949,29 +4949,29 @@ PAGE_HTML = """<!DOCTYPE html>
       void refreshStudentPanelD11();
     }
     function renderStudentTriangleFromBatchResult(data) {
-      const seamBox = document.getElementById('pgStudentSeamLegacyInner');
-      if (!seamBox || !data || typeof data !== 'object') return;
-      const seam = data.student_loop_directive_09_v1;
+      const hoBox = document.getElementById('pgStudentHandoffStripInner');
+      if (!hoBox || !data || typeof data !== 'object') return;
+      const handoff = data.student_loop_directive_09_v1;
       const rowsTop = data.student_learning_rows_appended;
-      if (seam && seam.skipped) {
-        seamBox.innerHTML =
-          '<p class="caps" style="margin:0">Student seam <strong>skipped</strong>: ' +
-          escapeHtml(String((seam.reason != null && seam.reason !== '') ? seam.reason : '—')) +
+      if (handoff && handoff.skipped) {
+        hoBox.innerHTML =
+          '<p class="caps" style="margin:0">Student handoff <strong>skipped</strong>: ' +
+          escapeHtml(String((handoff.reason != null && handoff.reason !== '') ? handoff.reason : '—')) +
           '</p>';
         void refreshStudentPanelD11();
         return;
       }
-      if (!seam || typeof seam !== 'object') {
-        seamBox.innerHTML =
+      if (!handoff || typeof handoff !== 'object') {
+        hoBox.innerHTML =
           '<p class="caps" style="margin:0">No <code>student_loop_directive_09_v1</code> in this result — refresh after upgrading the server.</p>';
         void refreshStudentPanelD11();
         return;
       }
-      const nApp = (rowsTop != null && rowsTop !== '') ? rowsTop : seam.student_learning_rows_appended;
-      const tc = seam.trades_considered != null ? seam.trades_considered : '—';
-      const store = seam.student_learning_store_path ? String(seam.student_learning_store_path) : '—';
+      const nApp = (rowsTop != null && rowsTop !== '') ? rowsTop : handoff.student_learning_rows_appended;
+      const tc = handoff.trades_considered != null ? handoff.trades_considered : '—';
+      const store = handoff.student_learning_store_path ? String(handoff.student_learning_store_path) : '—';
       const storeShort = store.length > 72 ? ('…' + store.slice(-68)) : store;
-      const pri = seam.primary_trade_shadow_student_v1;
+      const pri = handoff.primary_trade_shadow_student_v1;
       let priHtml = '';
       if (pri && typeof pri === 'object') {
         const ids = pri.pattern_recipe_ids;
@@ -4989,19 +4989,19 @@ PAGE_HTML = """<!DOCTYPE html>
       } else {
         priHtml =
           '<p class="caps" style="margin:10px 0 0">' +
-          'No shadow Student row for a first trade (no closed trades in replay, or seam empty for this batch).</p>';
+          'No shadow Student row for a first trade (no closed trades in replay, or handoff empty for this batch).</p>';
       }
       let errHtml = '';
-      const errs = seam.errors;
+      const errs = handoff.errors;
       if (Array.isArray(errs) && errs.length) {
         const show = errs.slice(0, 6);
         errHtml =
-          '<p class="pg-student-tri-note"><strong>Seam notes</strong> (' + errs.length + '): ' +
+          '<p class="pg-student-tri-note"><strong>Handoff notes</strong> (' + errs.length + '): ' +
           show.map(function (x) { return escapeHtml(String(x)); }).join(' · ') +
           (errs.length > 6 ? ' …' : '') +
           '</p>';
       }
-      seamBox.innerHTML =
+      hoBox.innerHTML =
         '<dl class="pg-student-tri-dl">' +
         '<dt>Learning rows written</dt><dd><strong>' + escapeHtml(String(nApp != null ? nApp : '—')) + '</strong> appended to the Student store</dd>' +
         '<dt>Closed trades considered</dt><dd>' + escapeHtml(String(tc)) + '</dd>' +
@@ -5013,7 +5013,7 @@ PAGE_HTML = """<!DOCTYPE html>
       studentPanelD11.level = 1;
       studentPanelD11.selectedDecisionId = null;
       void refreshStudentPanelD11();
-      updateLearningEventsStripFromBatch(data, seam);
+      updateLearningEventsStripFromBatch(data, handoff);
       const dock = document.querySelector('details.pg-student-triangle-dock');
       if (dock) {
         dock.open = true;
@@ -5023,19 +5023,19 @@ PAGE_HTML = """<!DOCTYPE html>
       }
     }
 
-    function updateLearningEventsStripFromBatch(data, seam) {
+    function updateLearningEventsStripFromBatch(data, handoff) {
       const strip = document.getElementById('pgLearningEventsStrip');
       const ul = document.getElementById('pgLearningEventsUl');
       const btn = document.getElementById('pgForensicOpenBtn');
       if (!strip || !ul) return;
-      if (!data || !seam || seam.skipped) {
+      if (!data || !handoff || handoff.skipped) {
         strip.hidden = true;
         if (btn) btn.hidden = true;
         return;
       }
-      const nApp = data.student_learning_rows_appended != null ? data.student_learning_rows_appended : seam.student_learning_rows_appended;
-      const retr = data.student_retrieval_matches != null ? data.student_retrieval_matches : seam.student_retrieval_matches;
-      const tc = seam.trades_considered != null ? seam.trades_considered : '—';
+      const nApp = data.student_learning_rows_appended != null ? data.student_learning_rows_appended : handoff.student_learning_rows_appended;
+      const retr = data.student_retrieval_matches != null ? data.student_retrieval_matches : handoff.student_retrieval_matches;
+      const tc = handoff.trades_considered != null ? handoff.trades_considered : '—';
       const mci = data.batch_timing && data.batch_timing.memory_context_impact_audit_v1;
       const impact =
         mci && typeof mci.memory_impact_yes_no === 'string' ? mci.memory_impact_yes_no : '—';
