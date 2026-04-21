@@ -85,7 +85,7 @@ _PATTERN_BANNER_WEBP_PATH = _RV4_ROOT / "assets" / "pattern.webp"
 _PATTERN_GAME_BANNER_BOOT_JS = _GAME_THEORY / "static" / "pattern_game_banner_boot.js"
 
 # Operator-visible web UI bundle version — bump when changing PAGE_HTML (HTML/CSS/JS) so deploys are provable.
-PATTERN_GAME_WEB_UI_VERSION = "2.19.22"
+PATTERN_GAME_WEB_UI_VERSION = "2.19.23"
 
 from renaissance_v4.game_theory.groundhog_memory import (
     groundhog_auto_merge_enabled,
@@ -2419,6 +2419,35 @@ PAGE_HTML = """<!DOCTYPE html>
       gap: 8px 12px;
       margin: 0;
     }
+    .pg-student-d11-carets {
+      display: inline-flex;
+      align-items: center;
+      gap: 3px;
+      margin-right: 4px;
+    }
+    .pg-student-d11-caret {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 26px;
+      height: 26px;
+      padding: 0;
+      border-radius: 999px;
+      border: 1px solid rgba(255,255,255,0.16);
+      background: rgba(100, 155, 220, 0.12);
+      color: var(--pg-ink);
+      font-size: 1rem;
+      line-height: 1;
+      cursor: pointer;
+    }
+    .pg-student-d11-caret:hover:not(:disabled) {
+      border-color: rgba(30, 214, 170, 0.45);
+      background: rgba(100, 155, 220, 0.2);
+    }
+    .pg-student-d11-caret:disabled {
+      opacity: 0.32;
+      cursor: not-allowed;
+    }
     .pg-student-d11-nav button {
       font-size: 0.78rem;
       padding: 4px 10px;
@@ -2458,7 +2487,18 @@ PAGE_HTML = """<!DOCTYPE html>
       white-space: nowrap;
     }
     .pg-student-d11-table th { color: var(--pg-muted); font-weight: 700; font-size: 0.70rem; }
-    .pg-student-d11-table tr[data-run-row]:hover { background: rgba(30, 214, 170, 0.06); }
+    .pg-student-d11-table tbody tr:nth-child(even) td {
+      background: rgba(120, 175, 235, 0.075);
+    }
+    .pg-student-d11-table tbody tr[data-run-inflight] td {
+      background: rgba(70, 78, 95, 0.42);
+    }
+    .pg-student-d11-table tbody tr[data-run-row]:nth-child(odd):hover td {
+      background: rgba(30, 214, 170, 0.08);
+    }
+    .pg-student-d11-table tbody tr[data-run-row]:nth-child(even):hover td {
+      background: rgba(30, 214, 170, 0.1);
+    }
     .pg-student-d11-table tr[data-run-row] { cursor: pointer; }
     .pg-student-d11-carousel-wrap {
       display: flex;
@@ -4700,7 +4740,14 @@ PAGE_HTML = """<!DOCTYPE html>
     }
 
     /** D11 — contractual: one level replaces the panel; pinned chrome; scroll body only. */
-    const studentPanelD11 = { level: 1, selectedRunId: null, selectedDecisionId: null, sliceCount: 0 };
+    const studentPanelD11 = {
+      level: 1,
+      selectedRunId: null,
+      selectedDecisionId: null,
+      sliceCount: 0,
+      lastVisitedRunId: null,
+      firstSliceDecisionId: null,
+    };
 
     function studentPanelD11HandoffEl() {
       return document.getElementById('pgStudentHandoffStrip');
@@ -4747,7 +4794,12 @@ PAGE_HTML = """<!DOCTYPE html>
         }
       }
       bc += '</nav>';
-      let nav = '<div class="pg-student-d11-nav" id="pgStudentD11Nav">';
+      let nav =
+        '<div class="pg-student-d11-nav" id="pgStudentD11Nav">' +
+        '<span class="pg-student-d11-carets" role="group" aria-label="Step between views">' +
+        '<button type="button" class="pg-student-d11-caret" id="pgStudentD11StepPrev" title="Back one view" aria-label="Back one view">‹</button>' +
+        '<button type="button" class="pg-student-d11-caret" id="pgStudentD11StepNext" title="Forward one view" aria-label="Forward one view">›</button>' +
+        '</span>';
       if (showNav && (level === 2 || level === 3)) {
         nav += '<button type="button" id="pgStudentD11BackRuns">← Run table</button>';
       }
@@ -4767,6 +4819,60 @@ PAGE_HTML = """<!DOCTYPE html>
         b2.onclick = function () {
           if (studentPanelD11.selectedRunId) void studentPanelD11GotoLevel2(studentPanelD11.selectedRunId);
         };
+    }
+
+    function studentPanelD11SliceIdFromSlice(s, idx) {
+      const x = s || {};
+      return x.decision_id != null ? String(x.decision_id) : 'd' + idx;
+    }
+
+    function studentPanelD11WireStep() {
+      const prev = document.getElementById('pgStudentD11StepPrev');
+      const next = document.getElementById('pgStudentD11StepNext');
+      if (!prev || !next) return;
+      const lv = studentPanelD11.level;
+      if (lv === 1) {
+        prev.disabled = true;
+        next.disabled = !studentPanelD11.lastVisitedRunId;
+        prev.onclick = function () {};
+        next.onclick = function () {
+          if (studentPanelD11.lastVisitedRunId)
+            void studentPanelD11GotoLevel2(studentPanelD11.lastVisitedRunId);
+        };
+        return;
+      }
+      if (lv === 2) {
+        prev.disabled = false;
+        const canNext = !!(
+          studentPanelD11.firstSliceDecisionId &&
+          studentPanelD11.selectedRunId &&
+          studentPanelD11.sliceCount > 0
+        );
+        next.disabled = !canNext;
+        prev.onclick = function () { void studentPanelD11GotoLevel1(); };
+        next.onclick = function () {
+          if (canNext)
+            void studentPanelD11GotoLevel3(
+              studentPanelD11.selectedRunId,
+              studentPanelD11.firstSliceDecisionId
+            );
+        };
+        return;
+      }
+      if (lv === 3) {
+        prev.disabled = false;
+        next.disabled = true;
+        prev.onclick = function () {
+          if (studentPanelD11.selectedRunId)
+            void studentPanelD11GotoLevel2(studentPanelD11.selectedRunId);
+        };
+        next.onclick = function () {};
+      }
+    }
+
+    function studentPanelD11WireChrome() {
+      wireStudentPanelD11Nav();
+      studentPanelD11WireStep();
     }
 
     function studentPanelD11CarouselUpdateMeta() {
@@ -4829,6 +4935,7 @@ PAGE_HTML = """<!DOCTYPE html>
       studentPanelD11.selectedRunId = null;
       studentPanelD11.selectedDecisionId = null;
       studentPanelD11.sliceCount = 0;
+      studentPanelD11.firstSliceDecisionId = null;
       studentPanelD11SetHandoffVisible(true);
       await refreshStudentPanelD11();
     }
@@ -4836,7 +4943,9 @@ PAGE_HTML = """<!DOCTYPE html>
     async function studentPanelD11GotoLevel2(runId) {
       studentPanelD11.level = 2;
       studentPanelD11.selectedRunId = runId;
+      studentPanelD11.lastVisitedRunId = runId;
       studentPanelD11.selectedDecisionId = null;
+      studentPanelD11.firstSliceDecisionId = null;
       studentPanelD11SetHandoffVisible(false);
       const root = studentPanelD11RootEl();
       if (!root) return;
@@ -4845,7 +4954,7 @@ PAGE_HTML = """<!DOCTYPE html>
         '<p class="caps" style="margin:0">Loading scenario slices…</p>'
       );
       root.innerHTML = loading;
-      wireStudentPanelD11Nav();
+      studentPanelD11WireChrome();
       let j = null;
       try {
         const r = await fetch('/api/student-panel/run/' + encodeURIComponent(runId) + '/decisions');
@@ -4855,7 +4964,7 @@ PAGE_HTML = """<!DOCTYPE html>
           renderStudentPanelD11Chrome(2, ['<strong>Run table</strong>', '<strong>Run</strong> ' + escapeHtml(studentPanelD11ShortRunId(runId))], true),
           '<p class="caps" style="margin:0;color:#a32b2b">Failed to load slices: ' + escapeHtml(String(e)) + '</p>'
         );
-        wireStudentPanelD11Nav();
+        studentPanelD11WireChrome();
         return;
       }
       if (!j || !j.ok) {
@@ -4865,11 +4974,13 @@ PAGE_HTML = """<!DOCTYPE html>
             escapeHtml((j && j.error) || 'slices unavailable') +
             '</p>'
         );
-        wireStudentPanelD11Nav();
+        studentPanelD11WireChrome();
         return;
       }
       const slices = Array.isArray(j.slices) ? j.slices : [];
       studentPanelD11.sliceCount = slices.length;
+      studentPanelD11.firstSliceDecisionId =
+        slices.length > 0 ? studentPanelD11SliceIdFromSlice(slices[0], 0) : null;
       const ordNote =
         j.slice_ordering_note != null
           ? escapeHtml(String(j.slice_ordering_note))
@@ -4885,6 +4996,7 @@ PAGE_HTML = """<!DOCTYPE html>
           '</p>';
       }
       if (!slices.length) {
+        studentPanelD11.firstSliceDecisionId = null;
         scroll +=
           '<p class="caps" style="margin:0">No scenario rows for this run (batch folder missing or empty).</p>';
         root.innerHTML = studentPanelD11Layout(
@@ -4895,7 +5007,7 @@ PAGE_HTML = """<!DOCTYPE html>
           ),
           scroll
         );
-        wireStudentPanelD11Nav();
+        studentPanelD11WireChrome();
         return;
       }
       scroll += '<div class="pg-student-d11-carousel-wrap">';
@@ -4957,7 +5069,7 @@ PAGE_HTML = """<!DOCTYPE html>
         true
       );
       root.innerHTML = studentPanelD11Layout(chrome, scroll);
-      wireStudentPanelD11Nav();
+      studentPanelD11WireChrome();
       wireStudentPanelD11Carousel();
       const nodes = root.querySelectorAll('.pg-student-d11-slice[data-did]');
       nodes.forEach(function (node) {
@@ -4991,7 +5103,7 @@ PAGE_HTML = """<!DOCTYPE html>
         ),
         '<p class="caps" style="margin:0">Loading scenario view…</p>'
       );
-      wireStudentPanelD11Nav();
+      studentPanelD11WireChrome();
       let j = null;
       try {
         const u =
@@ -5010,7 +5122,7 @@ PAGE_HTML = """<!DOCTYPE html>
           ),
           '<p class="caps" style="margin:0;color:#a32b2b">Load failed: ' + escapeHtml(String(e)) + '</p>'
         );
-        wireStudentPanelD11Nav();
+        studentPanelD11WireChrome();
         return;
       }
       if (!j || !j.ok || !j.record) {
@@ -5022,7 +5134,7 @@ PAGE_HTML = """<!DOCTYPE html>
           ),
           '<p class="caps" style="margin:0;color:#a32b2b">' + escapeHtml((j && j.error) || 'record unavailable') + '</p>'
         );
-        wireStudentPanelD11Nav();
+        studentPanelD11WireChrome();
         return;
       }
       const rec = j.record;
@@ -5131,7 +5243,7 @@ PAGE_HTML = """<!DOCTYPE html>
         ),
         inner
       );
-      wireStudentPanelD11Nav();
+      studentPanelD11WireChrome();
     }
 
     async function refreshStudentPanelD11() {
@@ -5152,6 +5264,7 @@ PAGE_HTML = """<!DOCTYPE html>
           chrome1,
           '<p class="caps" style="margin:0;color:#a32b2b">Failed to load runs: ' + escapeHtml(String(e)) + '</p>'
         );
+        studentPanelD11WireChrome();
         return;
       }
       if (!j || !j.ok || !Array.isArray(j.runs)) {
@@ -5159,6 +5272,7 @@ PAGE_HTML = """<!DOCTYPE html>
           chrome1,
           '<p class="caps" style="margin:0;color:#a32b2b">Run list unavailable.</p>'
         );
+        studentPanelD11WireChrome();
         return;
       }
       const rows = j.runs;
@@ -5208,11 +5322,15 @@ PAGE_HTML = """<!DOCTYPE html>
         scroll = '<p class="caps" style="margin:0">No scorecard runs yet — run a parallel batch.</p>';
       }
       root.innerHTML = studentPanelD11Layout(chrome1, scroll);
+      studentPanelD11WireChrome();
       const trs = root.querySelectorAll('tr[data-run-row]');
       trs.forEach(function (tr) {
         tr.addEventListener('click', function () {
           const id = tr.getAttribute('data-run-id');
-          if (id) void studentPanelD11GotoLevel2(id);
+          if (id) {
+            studentPanelD11.lastVisitedRunId = id;
+            void studentPanelD11GotoLevel2(id);
+          }
         });
       });
     }
