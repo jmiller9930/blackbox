@@ -82,7 +82,7 @@ _PATTERN_BANNER_WEBP_PATH = _RV4_ROOT / "assets" / "pattern.webp"
 _PATTERN_GAME_BANNER_BOOT_JS = _GAME_THEORY / "static" / "pattern_game_banner_boot.js"
 
 # Operator-visible web UI bundle version — bump when changing PAGE_HTML (HTML/CSS/JS) so deploys are provable.
-PATTERN_GAME_WEB_UI_VERSION = "2.19.1"
+PATTERN_GAME_WEB_UI_VERSION = "2.19.2"
 
 from renaissance_v4.game_theory.groundhog_memory import (
     groundhog_auto_merge_enabled,
@@ -2089,13 +2089,7 @@ PAGE_HTML = """<!DOCTYPE html>
       align-self: stretch;
       box-sizing: border-box;
     }
-    .pg-focus-dock[data-pg-focus-mode="overview"] { height: var(--pg-focus-dock-h); }
-    .pg-focus-dock[data-pg-focus-mode]:not([data-pg-focus-mode="overview"]) {
-      flex: 1 1 auto;
-      min-height: min(72vh, 840px);
-      height: min(72vh, 840px);
-      max-height: min(85vh, 920px);
-    }
+    .pg-focus-dock { height: var(--pg-focus-dock-h); }
     .pg-focus-overview {
       display: grid;
       grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -2181,6 +2175,27 @@ PAGE_HTML = """<!DOCTYPE html>
       display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-bottom: 1px solid rgba(255,255,255,0.1);
       background: #121820;
       flex: 0 0 auto;
+    }
+    .pg-focus-expanded-tabs { display: flex; align-items: center; gap: 6px; flex: 1 1 auto; min-width: 0; }
+    .pg-focus-expanded-tab {
+      appearance: none;
+      border: 1px solid rgba(255,255,255,0.14);
+      background: rgba(0,0,0,0.15);
+      color: rgba(230, 237, 243, 0.9);
+      padding: 6px 10px;
+      border-radius: 999px;
+      cursor: pointer;
+      font: inherit;
+      font-size: 0.78rem;
+      font-weight: 700;
+      line-height: 1;
+      white-space: nowrap;
+    }
+    .pg-focus-expanded-tab:hover { background: rgba(255,255,255,0.08); }
+    .pg-focus-expanded-tab.is-active {
+      background: rgba(45, 164, 120, 0.18);
+      border-color: rgba(45, 164, 120, 0.55);
+      color: #e6edf3;
     }
     /* Subtitle only — avoids repeating the same word as the quick-view tile label ("Terminal" twice). */
     .pg-focus-expanded-title { font-size: 0.72rem; font-weight: 800; letter-spacing: 0.06em; text-transform: uppercase; color: #9aa7b4; }
@@ -3858,7 +3873,12 @@ PAGE_HTML = """<!DOCTYPE html>
         </div>
         <div class="pg-focus-expanded" id="pgFocusExpanded" hidden>
           <div class="pg-focus-expanded-head">
-            <button type="button" class="pg-focus-back-btn" id="pgFocusBackBtn" aria-label="Back to overview">← Overview</button>
+            <button type="button" class="pg-focus-back-btn" id="pgFocusBackBtn" aria-label="Back to overview">All</button>
+            <div class="pg-focus-expanded-tabs" role="tablist" aria-label="Quick view panels">
+              <button type="button" class="pg-focus-expanded-tab" id="pgFocusTabTerminal" data-pg-focus-tab="terminal" role="tab" aria-controls="pgFocusPaneTerminal">Terminal</button>
+              <button type="button" class="pg-focus-expanded-tab" id="pgFocusTabResults" data-pg-focus-tab="results" role="tab" aria-controls="pgFocusPaneResults">Results</button>
+              <button type="button" class="pg-focus-expanded-tab" id="pgFocusTabModules" data-pg-focus-tab="modules" role="tab" aria-controls="pgFocusPaneModules">Modules</button>
+            </div>
             <span class="pg-focus-expanded-title" id="pgFocusExpandedTitle">Expanded view</span>
           </div>
           <div class="pg-focus-expanded-body">
@@ -4637,6 +4657,9 @@ PAGE_HTML = """<!DOCTYPE html>
       const pr = document.getElementById('pgFocusPaneResults');
       const pm = document.getElementById('pgFocusPaneModules');
       const title = document.getElementById('pgFocusExpandedTitle');
+      const tTerm = document.getElementById('pgFocusTabTerminal');
+      const tRes = document.getElementById('pgFocusTabResults');
+      const tMod = document.getElementById('pgFocusTabModules');
       if (!dock || !ov || !ex || !pt || !pr || !pm) return;
       /* Detail labels differ from tile labels — avoids echoing "Terminal" twice next to the Live output heading. */
       const labels = {
@@ -4650,6 +4673,9 @@ PAGE_HTML = """<!DOCTYPE html>
       ov.hidden = true;
       ex.hidden = false;
       if (title) title.textContent = labels[mode];
+      if (tTerm) { tTerm.classList.toggle('is-active', mode === 'terminal'); tTerm.setAttribute('aria-selected', mode === 'terminal' ? 'true' : 'false'); }
+      if (tRes) { tRes.classList.toggle('is-active', mode === 'results'); tRes.setAttribute('aria-selected', mode === 'results' ? 'true' : 'false'); }
+      if (tMod) { tMod.classList.toggle('is-active', mode === 'modules'); tMod.setAttribute('aria-selected', mode === 'modules' ? 'true' : 'false'); }
       pt.hidden = mode !== 'terminal';
       pr.hidden = mode !== 'results';
       pm.hidden = mode !== 'modules';
@@ -4782,17 +4808,34 @@ PAGE_HTML = """<!DOCTYPE html>
     (function wirePgFocusDock() {
       const back = document.getElementById('pgFocusBackBtn');
       if (back) back.addEventListener('click', function () { pgFocusBackToOverview(); });
+      function wireExpandedTab(btnId, mode) {
+        const el = document.getElementById(btnId);
+        if (!el) return;
+        el.addEventListener('click', function (ev) {
+          ev.preventDefault();
+          const dock = document.getElementById('pgFocusDock');
+          const cur = dock ? dock.getAttribute('data-pg-focus-mode') : 'overview';
+          if (cur === mode) { pgFocusBackToOverview(); return; }
+          if (typeof pgFocusEnterPanel === 'function') pgFocusEnterPanel(mode);
+        });
+      }
       function wireTile(btnId, mode) {
         const el = document.getElementById(btnId);
         if (!el) return;
         el.addEventListener('click', function (ev) {
           ev.preventDefault();
+          const dock = document.getElementById('pgFocusDock');
+          const cur = dock ? dock.getAttribute('data-pg-focus-mode') : 'overview';
+          if (cur === mode) { pgFocusBackToOverview(); return; }
           if (typeof pgFocusEnterPanel === 'function') pgFocusEnterPanel(mode);
         });
       }
       wireTile('pgFocusTileTerminal', 'terminal');
       wireTile('pgFocusTileResults', 'results');
       wireTile('pgFocusTileModules', 'modules');
+      wireExpandedTab('pgFocusTabTerminal', 'terminal');
+      wireExpandedTab('pgFocusTabResults', 'results');
+      wireExpandedTab('pgFocusTabModules', 'modules');
       updateFocusTerminalOverviewTile();
     })();
 
