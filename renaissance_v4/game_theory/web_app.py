@@ -78,9 +78,11 @@ _PATTERN_BANNER_PATH = _RV4_ROOT / "assets" / "pattern.png"
 # Lossy WebP (~4× smaller than PNG); regenerate when pattern.png changes:
 #   cwebp -q 83 renaissance_v4/assets/pattern.png -o renaissance_v4/assets/pattern.webp
 _PATTERN_BANNER_WEBP_PATH = _RV4_ROOT / "assets" / "pattern.webp"
+# External banner bootstrap (CSP-safe: ``script-src 'self'`` allows same-origin .js when inline is blocked).
+_PATTERN_GAME_BANNER_BOOT_JS = _GAME_THEORY / "static" / "pattern_game_banner_boot.js"
 
 # Operator-visible web UI bundle version — bump when changing PAGE_HTML (HTML/CSS/JS) so deploys are provable.
-PATTERN_GAME_WEB_UI_VERSION = "2.18.8"
+PATTERN_GAME_WEB_UI_VERSION = "2.18.9"
 
 from renaissance_v4.game_theory.groundhog_memory import (
     groundhog_auto_merge_enabled,
@@ -563,6 +565,13 @@ def create_app() -> Flask:
         if not _PATTERN_BANNER_PATH.is_file():
             abort(404)
         return send_file(_PATTERN_BANNER_PATH, mimetype="image/png")
+
+    @app.get("/assets/pattern-game-banner-boot.js")
+    def pattern_game_banner_boot_js() -> Response:
+        """Banner API bootstrap loaded before the large inline script (strict CSP compatibility)."""
+        if not _PATTERN_GAME_BANNER_BOOT_JS.is_file():
+            abort(404)
+        return send_file(_PATTERN_GAME_BANNER_BOOT_JS, mimetype="application/javascript; charset=utf-8")
 
     @app.get("/api/capabilities")
     def capabilities() -> Any:
@@ -4070,185 +4079,9 @@ PAGE_HTML = """<!DOCTYPE html>
   </div>
 
   
+  <!-- External file: strict CSP often allows same-origin scripts while blocking inline ``<script>`` body. -->
+  <script src="/assets/pattern-game-banner-boot.js?v=__PATTERN_GAME_WEB_UI_VERSION__"></script>
   <script>
-    /** Fires first: banner strip + module list must update even if later inline script throws before ``refreshDataHealth``. */
-    (function pgBannerApiBootstrap() {
-      function esc(s) {
-        const d = document.createElement('div');
-        d.textContent = String(s);
-        return d.innerHTML;
-      }
-
-      const ht = document.getElementById('healthText');
-      const hd = document.getElementById('healthDot');
-      const bf = document.getElementById('bannerFinancialV');
-      fetch('/api/data-health')
-        .then(function (r) {
-          return r.json();
-        })
-        .then(function (j) {
-          if (!ht) return;
-          try {
-            if (hd) {
-              hd.className = 'status-dot ' + (j && j.overall_ok ? 'ok' : 'bad');
-              hd.title = j && j.overall_ok ? 'Data OK' : 'Data issue — see text';
-            }
-            if (bf) bf.textContent = j && j.overall_ok ? 'OK' : 'Issue';
-            if (j && j.summary_line) ht.textContent = j.summary_line;
-            else if (j && j.error) ht.textContent = j.error;
-            else ht.textContent = j ? 'Unknown status' : 'No data';
-          } catch (_e) { /* ignore */ }
-        })
-        .catch(function (e) {
-          if (ht) ht.textContent = 'Health check failed: ' + (e && e.message ? e.message : String(e));
-          if (hd) {
-            hd.className = 'status-dot bad';
-            hd.title = 'Health request failed';
-          }
-          if (bf) bf.textContent = '—';
-        });
-
-      var gt = document.getElementById('groundhogText');
-      var gv = document.getElementById('groundhogV');
-      fetch('/api/groundhog-memory')
-        .then(function (r) {
-          return r.json();
-        })
-        .then(function (j) {
-          if (!gt) return;
-          if (!j || !j.ok) {
-            gt.textContent = 'unavailable';
-            if (gv) gv.textContent = '—';
-            return;
-          }
-          var en = j.env_enabled ? 'merge ON' : 'merge OFF (set PATTERN_GAME_GROUNDHOG_BUNDLE=1)';
-          var ex = j.exists ? 'file exists' : 'no file yet (POST /api/groundhog-memory to promote)';
-          var ap =
-            j.bundle && j.bundle.apply
-              ? 'ATR stop ' + j.bundle.apply.atr_stop_mult + ' / target ' + j.bundle.apply.atr_target_mult
-              : '—';
-          gt.textContent = en + ' · ' + ex + ' · ' + ap;
-          if (gv) gv.textContent = j.env_enabled ? 'merge ON' : 'merge OFF';
-        })
-        .catch(function (e) {
-          if (gt) gt.textContent = 'could not load — ' + (e && e.message ? e.message : String(e));
-          if (gv) gv.textContent = '—';
-        });
-
-      var ss = document.getElementById('searchSpaceStrip');
-      if (ss) {
-        fetch('/api/search-space-estimate?workers=1')
-          .then(function (r) {
-            return r.json();
-          })
-          .then(function (j) {
-            var m = j.catalog && j.catalog.signals_count;
-            var subU = j.combinatorics && j.combinatorics.non_empty_signal_subsets_upper_bound;
-            var bars = j.dataset && j.dataset.market_bars_5m_count;
-            var line = '<strong>Search space</strong> — ';
-            if (m != null && subU != null) {
-              line +=
-                m +
-                ' catalog signals → up to <strong>' +
-                subU +
-                '</strong> non-empty signal subsets (2^' +
-                m +
-                '−1; validation may disallow some). ';
-            }
-            if (bars != null) {
-              line += '<strong>' + bars.toLocaleString() + '</strong> rows in <code>market_bars_5m</code>. ';
-            } else if (j.dataset && j.dataset.error) {
-              line += 'Bars: unavailable (' + String(j.dataset.error).slice(0, 120) + '). ';
-            }
-            line += 'Pick a pattern (or Custom JSON) to see batch rounds; workers use slider (1). ';
-            ss.innerHTML = line;
-          })
-          .catch(function (e) {
-            ss.innerHTML =
-              '<strong>Search space</strong> — could not load estimate. ' + (e && e.message ? e.message : String(e));
-          });
-      }
-
-      var list = document.getElementById('moduleBoardList');
-      var md = document.getElementById('moduleBannerDot');
-      var bmv = document.getElementById('bannerModulesV');
-      var bms = document.getElementById('bannerModulesS');
-      var fSt = document.getElementById('focusTileModulesSt');
-      var fLn = document.getElementById('focusTileModulesLine');
-
-      function setModuleBannerEarly(okCount, total, sub) {
-        if (bmv && bms) {
-          bmv.textContent = total > 0 ? okCount + '/' + total + ' passed' : '—';
-          bms.textContent = sub || '';
-        }
-        if (md) {
-          if (!total) md.className = 'status-dot';
-          else if (okCount === total) md.className = 'status-dot ok';
-          else md.className = 'status-dot bad';
-        }
-        if (fSt) fSt.textContent = total > 0 ? okCount + '/' + total : '—';
-        if (fLn) fLn.textContent = sub || '';
-      }
-
-      if (list) {
-        fetch('/api/module-board')
-          .then(function (r) {
-            return r.json();
-          })
-          .then(function (j) {
-            if (!j || !j.ok) {
-              list.innerHTML = '<p class="caps pg-module-board-msg">Could not load module board.</p>';
-              setModuleBannerEarly(0, 0, 'Module API unavailable');
-              return;
-            }
-            var mods = j.modules || [];
-            if (!mods.length) {
-              list.innerHTML = '<p class="caps pg-module-board-msg">No modules.</p>';
-              setModuleBannerEarly(0, 0, 'No rows');
-              return;
-            }
-            var okCount = 0;
-            for (var mi = 0; mi < mods.length; mi++) {
-              if (mods[mi].ok) okCount++;
-            }
-            var bad = mods.length - okCount;
-            var sub =
-              bad === 0
-                ? 'All wiring checks passed'
-                : okCount + ' passed · ' + bad + ' not wired / not armed';
-            setModuleBannerEarly(okCount, mods.length, sub);
-            list.innerHTML = '';
-            for (var i = 0; i < mods.length; i++) {
-              var m = mods[i];
-              var row = document.createElement('div');
-              row.className = 'pg-status-item';
-              row.setAttribute('role', 'button');
-              row.setAttribute('tabindex', '0');
-              var det = m.detail != null ? String(m.detail) : '';
-              row.innerHTML =
-                '<span class="status-dot ' +
-                (m.ok ? 'ok' : 'bad') +
-                '" title="' +
-                esc(det.slice(0, 500)) +
-                '"></span>' +
-                '<div><div class="pg-status-name">' +
-                esc(m.label || m.id || '—') +
-                '</div>' +
-                '<div class="pg-status-meta">' +
-                esc(det.slice(0, 280)) +
-                '</div></div>';
-              list.appendChild(row);
-            }
-          })
-          .catch(function (e) {
-            list.innerHTML =
-              '<p class="caps pg-module-board-msg">' + esc(String(e && e.message ? e.message : e)) + '</p>';
-            setModuleBannerEarly(0, 0, 'Fetch failed');
-            if (md) md.className = 'status-dot bad';
-          });
-      }
-    })();
-
     const LIMITS = __LIMITS_JSON__;
     const STARTING_EQUITY = __STARTING_EQUITY__;
     const RUN_TIMEOUT_MS = 7200000;
