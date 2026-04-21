@@ -301,7 +301,7 @@ Read **from top (goal) downward** to “today”; implementation reads the **sam
 ## E) Alignment checklist (this round)
 
 - [ ] **§0 binding definitions** agreed and **metrics for 0.3** (match / no-match / baselines) **pre-registered** — **D9**.
-- [ ] **Table metaphor enforced in UI:** Student lane visible as **primary**.
+- [ ] **Table metaphor enforced in UI:** Student lane visible as **primary** — see **§H** (layout + proof-of-learning surfaces).
 - [ ] **Trade intent** path clear: **`student_output_v1`** complete per contract; roadmap for **`trade_intent_v1`** if needed.
 - [ ] **Memory:** retrieval wired (**done in code**); **ablation** story (on/off) **proven in tests/telemetry**.
 - [ ] **Rich context:** versioned projection attaches **`price_context` / `structure_context` / `indicator_context` / `time_context`** (per `TRADING_CONTEXT_REFERENCE_V1.md`) **or** explicit **not-yet** in release notes — **D7**.
@@ -318,7 +318,7 @@ Short list for **architecture / product** discussion. Items here are **not** “
 
 | # | Topic | Notes |
 |---|--------|--------|
-| 1 | **Bar timeframe options (15m / 30m vs 5m)** | The codebase is **5m-shaped** today (`market_bars_5m`, replay, Student packet builder, ingest, pattern-game allowlists). Supporting **15m** and **30m** is a **bounded extension**—new tables or a unified bar table + **explicit** timeframe, **one** canonical series per run, and **aligned** `entry_time` / retrieval keys so replay, Student, and memory do not disagree. Does **not** invalidate pre-reveal or Referee contracts **if** causal rules and keying stay disciplined. |
+| 1 | **Bar timeframe ladder (5m / 15m / 1h / 4h)** | The codebase is **5m-shaped** today (`market_bars_5m`, replay, Student packet builder, ingest, pattern-game allowlists). Product talking point for multi-timeframe is **5m, 15m, 1h, 4h** (not 30m). Supporting **15m / 1h / 4h** alongside **5m** is a **bounded extension**—new tables or a unified bar table + **explicit** timeframe, **one** canonical series per run, and **aligned** `entry_time` / retrieval keys so replay, Student, and memory do not disagree. Does **not** invalidate pre-reveal or Referee contracts **if** causal rules and keying stay disciplined. |
 | 2 | *Reserved* | Add the next deferred topic here when ready. |
 
 ---
@@ -346,6 +346,32 @@ Run **after** code and tests for the directive milestone; **before** calling the
 
 ---
 
+## H) Operator UI structure & proof of learning — **engineering directive**
+
+**Intent:** **Plumbing (the road) is not learning (the cart).** The UI must **surface what the Student learned** — attributable change vs baseline — **without** burying the operator in scorecard aggregates or raw logs. Progressive disclosure: **overview → zoom/filter → details on demand** (information-seeking pattern). XAI practice: **feature lists alone are insufficient**; use **hybrid** explanation — **audit math**, **concise rule/path summary**, **retrieved prior cases**; treat **confidence** as calibrated, not trust-building decoration.
+
+### H.1) Three-level layout (fix structure first)
+
+| Level | Role | Rules |
+|-------|------|--------|
+| **1 — Control + run** | Left / control column = **true control panel** | Only **run inputs + trigger**. Long copy, architecture notes, operator essays → **tooltips**, **help link**, or **slide-out**. Reduce cognitive load and mis-clicks. |
+| **2 — Live execution + compact summary** | Middle stack while running | **Terminal first** during run (visible activity), but **constrained**: **left** = activity stream, **right** = **compact summary**; **max height**, **internal scroll**, must not eat the page. **When the run completes**, visual handoff: **Student panel directly below Terminal** becomes the **primary inspection surface**. |
+| **3 — Drilldown, not dump** | Secondary material | **Scorecard**, **modules / system health**, **Results workspace**, **Ask DATA** must **not** own prime vertical space: **scorecard + subsections collapsed by default**; **system health** → **top-right status** or **slide-out**; **Ask DATA** → **real chat pane**. Any **learning event** or **Student row** opens a **dedicated subpage or slide-out forensic view** — **no** wall of JSON on the main canvas. |
+
+**Main page does only four things well:** (1) run setup, (2) run execution, (3) **compact list of learning events**, (4) **click into one event**. Everything else = **drilldown**.
+
+### H.2) Three layers for proving learning (research-aligned)
+
+Do **not** prove learning from **one giant summary block**. Separate **plumbing telemetry** from **attributable behavioral change**.
+
+1. **Event list (overview)** — Surface **learning events**, not raw plumbing. Each row answers: **how many decisions changed**, whether **retrieval** was used, and **better / worse / only different** vs a **declared baseline**. No raw JSON walls, no oversized scorecard, no unbounded log text.
+2. **Event compare (drilldown)** — Selecting an event opens **subpage or slide-out**. Compare the **same decision row** in **two or three states**: **baseline / no memory**, **with memory**, optionally **post-reset** (reversibility). If the operator cannot compare **same decision** under baseline vs retrieval, they see **activity**, not **learning**. **Carousel/slider** is appropriate: **one decision per card**, consistent field placement, left/right step — **decision events**, not “trades only”; **filters**: win / loss / **no-trade** / all (include abstentions and missed opportunities).
+3. **Forensic decision card (details)** — Fixed structure inside drilldown: **Referee on top, Student on bottom**, **same timestamp / x-axis** so both panes are **one moment, two perspectives**. **Referee:** market state + **realized outcome**. **Student:** context seen, **memory slices retrieved**, **pattern/rule path**, **confidence**, **delta vs baseline**. Hybrid: raw math for audit + short rule path + exemplar/prior cases (example-based explanation where useful).
+
+**Plain build target for engineering:** **Student-first forensic workflow** — **(a)** compact learning-event list on main page, **(b)** dedicated drilldown for selected event, **(c)** synchronized **Referee-over-Student** decision card with **slider across decision events**. **Scorecard and Terminal** = **supporting context only**, **not** primary proof of learning.
+
+---
+
 ## G) Revision history
 
 | Version | Date | Notes |
@@ -366,3 +392,6 @@ Run **after** code and tests for the directive milestone; **before** calling the
 | 1.13 | 2026-04-20 | **D7** closure: ``wiring_honesty_annotation_v1`` on seam audit; proof tests. |
 | 1.14 | 2026-04-20 | **D8** closure: ``memory_semantics_annotation_v1`` on seam audit; proof tests. |
 | 1.15 | 2026-04-20 | **D9** closure: ``deliverable_vocabulary_annotation_v1`` on seam audit; proof tests. |
+| 1.16 | 2026-04-20 | **§E.1** talking point #1: timeframe ladder **5m, 15m, 1h, 4h** (replaces 5m / 15m / 30m). |
+| 1.17 | 2026-04-20 | **§H** engineering directive: operator UI levels (control / terminal+Student / drilldown), three-layer proof of learning (event list → compare → forensic card), carousel on **decision events**, Student-first; scorecard/terminal secondary. |
+| 1.18 | 2026-04-20 | **§H initial UI pass** in ``web_app.py`` (v2.15.0): Terminal first + compact run summary column; Student → learning strip; scorecard **collapsed** by default (legend + Barney/Ask nested); forensic drill **dialog** placeholder; learning-at-a-glance list from last batch. |

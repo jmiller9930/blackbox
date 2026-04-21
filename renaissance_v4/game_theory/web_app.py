@@ -80,7 +80,7 @@ _PATTERN_BANNER_PATH = _RV4_ROOT / "assets" / "pattern.png"
 _PATTERN_BANNER_WEBP_PATH = _RV4_ROOT / "assets" / "pattern.webp"
 
 # Operator-visible web UI bundle version — bump when changing PAGE_HTML (HTML/CSS/JS) so deploys are provable.
-PATTERN_GAME_WEB_UI_VERSION = "2.14.1"
+PATTERN_GAME_WEB_UI_VERSION = "2.15.0"
 
 from renaissance_v4.game_theory.groundhog_memory import (
     groundhog_auto_merge_enabled,
@@ -2033,10 +2033,91 @@ PAGE_HTML = """<!DOCTYPE html>
       top: 8px;
       z-index: 8;
       flex: 0 0 auto;
-      max-height: min(42vh, 520px);
+      max-height: min(44vh, 540px);
       min-height: 10rem;
       display: flex;
       flex-direction: column;
+    }
+    /* §H: Terminal = activity left + compact summary right; capped height, internal scroll */
+    .pg-terminal-split {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) minmax(160px, 220px);
+      gap: 10px;
+      align-items: stretch;
+      max-height: min(40vh, 500px);
+      min-height: 0;
+    }
+    @media (max-width: 1100px) {
+      .pg-terminal-split {
+        grid-template-columns: 1fr;
+        max-height: min(50vh, 620px);
+      }
+      .pg-terminal-compact-summary {
+        max-height: 8rem;
+      }
+    }
+    .pg-terminal-split-left {
+      display: flex;
+      flex-direction: column;
+      min-height: 0;
+      min-width: 0;
+      overflow: hidden;
+    }
+    .pg-terminal-compact-summary {
+      font-size: 0.72rem;
+      line-height: 1.4;
+      color: #c5d0db;
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      border-radius: 10px;
+      padding: 8px 10px;
+      overflow-y: auto;
+      max-height: 100%;
+    }
+    .pg-terminal-compact-summary .pg-tcs-title {
+      margin: 0 0 6px;
+      font-size: 0.68rem;
+      font-weight: 800;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      color: #8b98a5;
+    }
+    .pg-terminal-compact-summary dl {
+      margin: 0;
+      display: grid;
+      grid-template-columns: minmax(0, 5.2rem) 1fr;
+      gap: 3px 6px;
+    }
+    .pg-terminal-compact-summary dt { color: #8b98a5; font-weight: 700; }
+    .pg-terminal-compact-summary dd { margin: 0; word-break: break-word; }
+    .pg-learning-events-strip {
+      border: 1px solid var(--pg-line);
+      border-radius: var(--pg-radius-lg);
+      background: var(--pg-surface-strong);
+      padding: 10px 14px 12px;
+      margin-top: 10px;
+    }
+    .pg-learning-events-strip[hidden] { display: none !important; }
+    .pg-learning-events-h {
+      margin: 0 0 8px;
+      font-size: 0.82rem;
+      font-weight: 800;
+      color: var(--pg-teal);
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+    }
+    .pg-learning-events-ul {
+      margin: 0;
+      padding-left: 1.1rem;
+      font-size: 0.82rem;
+      line-height: 1.45;
+      color: var(--pg-ink);
+    }
+    .pg-learning-events-note {
+      margin: 8px 0 0;
+      font-size: 0.72rem;
+      color: var(--pg-muted);
+      line-height: 1.35;
     }
     details.pg-panel-fold.pg-panel-score.pg-scorecard-dock {
       flex: 1 1 auto;
@@ -2762,6 +2843,25 @@ PAGE_HTML = """<!DOCTYPE html>
     .pg-module-body { margin: 0; white-space: pre-wrap; font-family: var(--pg-mono); font-size: 0.78rem; line-height: 1.5; color: #3a4450; max-height: min(52vh, 420px); overflow: auto; }
     .pg-module-dialog-close { position: absolute; top: 8px; right: 10px; border: 0; background: transparent; font-size: 1.5rem; line-height: 1; cursor: pointer; color: #6a7580; padding: 4px 8px; border-radius: 8px; }
     .pg-module-dialog-close:hover { background: #f0f4f8; color: #183343; }
+    .pg-forensic-dialog,
+    dialog.pg-forensic-dialog {
+      max-width: min(640px, 96vw);
+      border: 1px solid var(--pg-line);
+      border-radius: var(--pg-radius-xl);
+      padding: 0;
+      box-shadow: var(--pg-shadow);
+    }
+    .pg-forensic-dialog::backdrop { background: rgba(10, 22, 30, 0.55); }
+    .pg-scorecard-legend-fold {
+      margin-bottom: 8px;
+      border: 1px dashed var(--pg-line);
+      border-radius: 8px;
+      padding: 4px 8px;
+      background: rgba(0, 0, 0, 0.03);
+    }
+    .pg-scorecard-legend-summary { cursor: pointer; font-size: 0.78rem; font-weight: 700; color: var(--pg-muted); }
+    .pg-scorecard-secondary-details { margin-top: 10px; border-top: 1px solid var(--pg-line); padding-top: 6px; }
+    .pg-scorecard-secondary-details > summary { cursor: pointer; font-weight: 700; font-size: 0.82rem; color: var(--pg-accent); }
     #moduleBoardList .pg-status-item { cursor: pointer; }
     #moduleBoardList .pg-status-item:hover { filter: brightness(1.03); }
     #moduleBoardList .pg-status-item:focus { outline: 2px solid #2a8fd9; outline-offset: 2px; }
@@ -3118,7 +3218,7 @@ PAGE_HTML = """<!DOCTYPE html>
       <div class="pg-title-wrap">
         <h1 class="pg-title">Pattern Machine learning
           <span class="ui-version" title="Bump PATTERN_GAME_WEB_UI_VERSION in web_app.py">v__PATTERN_GAME_WEB_UI_VERSION__</span></h1>
-        <p class="pg-lead">Pick pattern and window, then <strong>Run</strong>. <strong>Student → learning → outcome</strong> in the main column when a batch completes; live engine telemetry under that; scorecard for batch history. <strong>Custom</strong> scenarios: set Pattern to <strong>Custom</strong> — JSON under Controls (Pattern Info → Advanced).</p>
+        <p class="pg-lead">Pick pattern and window, then <strong>Run</strong>. <strong>Terminal</strong> first while running; <strong>Student → learning → outcome</strong> is the primary inspection surface when done; <strong>Score card</strong> stays collapsed (plumbing / Referee history) until you expand it. <strong>Custom</strong> scenarios: Pattern <strong>Custom</strong> — JSON under Controls (Pattern Info → Advanced).</p>
         <div class="pg-orientation-note">Expand panel summaries as needed · DEF-001: <code>docs/architect/pattern_game_operator_deficiencies_work_record.md</code></div>
       </div>
       <div class="pg-banner-strip">
@@ -3410,27 +3510,13 @@ PAGE_HTML = """<!DOCTYPE html>
       </div>
 
       <div class="pg-runtime-stack">
-      <details class="pg-panel-fold pg-student-triangle-dock" open>
-        <summary>
-          <div class="pg-panel-header" style="margin:0;flex:1">
-            <div>
-              <h2 class="pg-panel-h">Student → learning → outcome</h2>
-              <p class="pg-panel-sub">Primary surface — Student seam (belief, stored rows, retrieval). Not engine DCR; Terminal below is engine replay + contextual recall.</p>
-            </div>
-            <span class="pg-chip pg-chip-teal">Primary</span>
-          </div>
-        </summary>
-        <div class="pg-panel-fold-body">
-          <div id="studentTriangleBody" class="pg-student-triangle-body" aria-live="polite">
-            <p class="caps" style="margin:0">No batch yet — run a parallel batch to see the Student learning summary here.</p>
-          </div>
-        </div>
-      </details>
       <div class="pg-telemetry-dock">
       <div id="liveTelemetryWrap" class="live-telemetry-wrap">
-        <p class="live-telemetry-title">Terminal <span class="pg-secondary-surface-label">Secondary</span>
+        <p class="live-telemetry-title">Terminal <span class="pg-secondary-surface-label">While running</span>
           <span class="pg-sr-only">Live engine replay telemetry and Decision Context Recall (DCR) counters — not the Student learning store.</span>
-          <span aria-hidden="true" style="display:block;margin-top:4px;font-size:0.72rem;font-weight:600;color:#9aa7b4;text-transform:none;letter-spacing:0">Engine replay + DCR-style memory (below Student)</span></p>
+          <span aria-hidden="true" style="display:block;margin-top:4px;font-size:0.72rem;font-weight:600;color:#9aa7b4;text-transform:none;letter-spacing:0">Engine replay + DCR — primary focus until the run completes</span></p>
+        <div class="pg-terminal-split">
+        <div class="pg-terminal-split-left">
         <div id="memoryStatusCard" class="memory-status-card" aria-live="polite">
           <p id="memoryStatusNarrative" class="memory-status-narrative"></p>
           <dl>
@@ -3444,23 +3530,73 @@ PAGE_HTML = """<!DOCTYPE html>
         </div>
         <div id="telemetryRollingLog" class="telemetry-rolling-log" aria-live="polite"></div>
         <pre id="liveTelemetryPanel" class="live-telemetry-panel">Idle — no batch running. Live counters stream here when you click Run.</pre>
+        </div>
+        <aside class="pg-terminal-compact-summary" id="terminalCompactSummary" aria-live="polite">
+          <div class="pg-tcs-title">Run summary</div>
+          <dl>
+            <dt>Status</dt><dd id="tcsStatus">Idle</dd>
+            <dt>Batch</dt><dd id="tcsBatch">—</dd>
+            <dt>Window</dt><dd id="tcsWindow">—</dd>
+            <dt>DW (hot)</dt><dd id="tcsDw">—</dd>
+            <dt>Elapsed</dt><dd id="tcsElapsed">—</dd>
+          </dl>
+        </aside>
+        </div>
       </div>
       </div>
 
-      <details class="pg-panel-fold pg-panel-score pg-scorecard-dock" open>
+      <details class="pg-panel-fold pg-student-triangle-dock" open>
+        <summary>
+          <div class="pg-panel-header" style="margin:0;flex:1">
+            <div>
+              <h2 class="pg-panel-h">Student → learning → outcome</h2>
+              <p class="pg-panel-sub">Primary inspection surface after run — Student seam (belief, stored rows, retrieval). Terminal above is engine replay + DCR, not the Student store.</p>
+            </div>
+            <span class="pg-chip pg-chip-teal">Primary</span>
+          </div>
+        </summary>
+        <div class="pg-panel-fold-body">
+          <div id="studentTriangleBody" class="pg-student-triangle-body" aria-live="polite">
+            <p class="caps" style="margin:0">No batch yet — run a parallel batch to see the Student learning summary here.</p>
+          </div>
+        </div>
+      </details>
+
+      <section class="pg-learning-events-strip" id="pgLearningEventsStrip" aria-label="Learning events at a glance" hidden>
+        <h3 class="pg-learning-events-h">Latest run — learning at a glance</h3>
+        <ul class="pg-learning-events-ul" id="pgLearningEventsUl"></ul>
+        <p class="pg-learning-events-note">Overview only — proves plumbing + deltas worth drilling; full baseline vs memory compare and per-decision math are §H forensic drill (next).</p>
+        <div style="margin-top:8px">
+          <button type="button" class="btn-secondary pg-op-btn" id="pgForensicOpenBtn" hidden>Open forensic drill (placeholder)</button>
+        </div>
+      </section>
+
+      <dialog id="pgForensicDrillDialog" class="pg-forensic-dialog">
+        <div class="pg-forensic-dialog-inner">
+          <button type="button" class="pg-module-dialog-close" id="pgForensicDrillClose" aria-label="Close">×</button>
+          <h2 class="pg-module-dialog-h2">Forensic drill</h2>
+          <p class="caps" style="margin:0 0 10px;font-size:0.82rem;line-height:1.45;color:var(--pg-muted)">§H target: baseline vs with-memory on the <strong>same</strong> decision row; Referee-over-Student card; synchronized timestamps. Wire API + payload in a follow-on.</p>
+          <pre class="pg-module-body" style="max-height:40vh;overflow:auto;font-size:0.78rem">Placeholder — no server route yet.</pre>
+        </div>
+      </dialog>
+
+      <details class="pg-panel-fold pg-panel-score pg-scorecard-dock">
         <summary>
           <div class="pg-panel-header" style="margin:0;flex:1">
             <div>
               <h2 class="pg-panel-h">Score card</h2>
-              <p class="pg-panel-sub">Secondary — batch history (append-only scorecard log). Student learning store is separate — see Student panel + truth line below.</p>
+              <p class="pg-panel-sub">Collapsed by default — Referee / plumbing / batch history. Expand when debugging runs. Student store is separate — see Student panel.</p>
             </div>
-            <span class="pg-chip pg-chip-amber">Results</span>
+            <span class="pg-chip pg-chip-amber">Plumbing</span>
           </div>
         </summary>
         <div class="pg-panel-fold-body">
         <div class="scorecard-panel-inner pg-scorecard-split" id="scorecardPanel">
           <div class="pg-scorecard-upper" id="scorecardUpper">
-          <p class="scorecard-legend"><strong>Run OK %</strong> — workers finished. <strong>Session WIN %</strong> — referee WIN vs LOSS among judged sessions only; <strong>n sess</strong> is that denominator (never infer from a bare percentage). <strong>Trade win %</strong> — batch mean when trades exist (with trade count). <strong>Learning (replay lane)</strong> — <code>execution_only</code> vs <code>learning_active</code> from replay counters (candidate search, memory records loaded, recall matches, signal bias); not Student Proctor learning. <strong>Memory / Context Impact</strong> — YES/NO from <code>learning_run_audit_v1</code> only (bundle merged or recall bias/signal-bias counters &gt; 0); not inferred from &ldquo;memory loaded&rdquo; or learning lane. <strong>Work</strong> — decision windows, bars, and candidate-stack replays. Scan <em>down</em> for newest batches. <strong>In-flight</strong> — a batch that is <strong>running</strong> now appears at the <strong>top</strong> with <strong>Start</strong> time and live progress counts; the JSONL line is written when the batch finishes. <strong>Scorecard file</strong> (<code>batch_scorecard.jsonl</code>) is batch audit for this table and hunter suggestions; replay does <em>not</em> read it to apply memory or recall. <strong>Clear Card</strong> truncates that log only. <strong>Reset Learning State</strong> is separate and destructive (engine files — see confirmation).</p>
+          <details class="pg-scorecard-legend-fold">
+            <summary class="pg-scorecard-legend-summary">What these columns mean (legend)</summary>
+            <p class="scorecard-legend"><strong>Run OK %</strong> — workers finished. <strong>Session WIN %</strong> — referee WIN vs LOSS among judged sessions only; <strong>n sess</strong> is that denominator (never infer from a bare percentage). <strong>Trade win %</strong> — batch mean when trades exist (with trade count). <strong>Learning (replay lane)</strong> — <code>execution_only</code> vs <code>learning_active</code> from replay counters (candidate search, memory records loaded, recall matches, signal bias); not Student Proctor learning. <strong>Memory / Context Impact</strong> — YES/NO from <code>learning_run_audit_v1</code> only (bundle merged or recall bias/signal-bias counters &gt; 0); not inferred from &ldquo;memory loaded&rdquo; or learning lane. <strong>Work</strong> — decision windows, bars, and candidate-stack replays. Scan <em>down</em> for newest batches.           <strong>In-flight</strong> — a batch that is <strong>running</strong> now appears at the <strong>top</strong> with <strong>Start</strong> time and live progress counts; the JSONL line is written when the batch finishes. <strong>Scorecard file</strong> (<code>batch_scorecard.jsonl</code>) is batch audit for this table and hunter suggestions; replay does <em>not</em> read it to apply memory or recall. <strong>Clear Card</strong> truncates that log only. <strong>Reset Learning State</strong> is separate and destructive (engine files — see confirmation).</p>
+          </details>
           <p class="last-run" id="lastBatchRunLine">Last completed batch: —</p>
           <div id="scorecardLearningSummary" class="scorecard-learning-summary exec-only" aria-live="polite" hidden>
             <p class="sls-title">Latest batch — harness learning lane &amp; contextual memory <span style="font-weight:600;color:var(--pg-muted)">(engine / DCR; not the Student Proctor store)</span></p>
@@ -3532,6 +3668,8 @@ PAGE_HTML = """<!DOCTYPE html>
           <p id="scorecardClickHint" class="scorecard-click-hint" role="status" aria-live="polite" style="display:none"></p>
           <p class="path-hint" id="scorecardPathHint"></p>
           </div>
+          <details class="pg-scorecard-secondary-details" id="scorecardBarneyAskDetails">
+            <summary>Barney summary &amp; Ask DATA (expand)</summary>
           <div class="pg-scorecard-lower" id="scorecardLowerSplit" aria-label="Summary and Ask DATA">
             <div class="pg-barney-subsection" id="barneySubsection">
               <div class="pg-barney-title">Barney summary</div>
@@ -3558,6 +3696,7 @@ PAGE_HTML = """<!DOCTYPE html>
               <pre id="askDataResponse" class="pg-barney-body pg-askdata-response" aria-live="polite">—</pre>
             </div>
           </div>
+          </details>
         </div>
         </div>
       </details>
@@ -3820,6 +3959,10 @@ PAGE_HTML = """<!DOCTYPE html>
         '<p class="caps" style="margin:0">Batch running — <strong>Student → learning → outcome</strong> fills in here when the batch completes.</p>';
       const d = document.querySelector('details.pg-student-triangle-dock');
       if (d) d.open = true;
+      const strip = document.getElementById('pgLearningEventsStrip');
+      const btn = document.getElementById('pgForensicOpenBtn');
+      if (strip) strip.hidden = true;
+      if (btn) btn.hidden = true;
     }
     function renderStudentTriangleBatchFailed(msg) {
       const body = document.getElementById('studentTriangleBody');
@@ -3889,7 +4032,8 @@ PAGE_HTML = """<!DOCTYPE html>
         '</dl>' +
         priHtml +
         errHtml +
-        '<p class="pg-student-tri-note">Referee outcomes and fusion detail: <strong>Results workspace</strong> (header) and <strong>Score card</strong> below. <strong>Clear Card</strong> does not clear the Student store — use Clear Student Proctor store in the scorecard block.</p>';
+        '<p class="pg-student-tri-note">Referee outcomes: <strong>Results workspace</strong> (header). Plumbing history: expand <strong>Score card</strong>. <strong>Clear Card</strong> does not clear the Student store — use Clear Student Proctor store there.</p>';
+      updateLearningEventsStripFromBatch(data, seam);
       const dock = document.querySelector('details.pg-student-triangle-dock');
       if (dock) {
         dock.open = true;
@@ -3897,6 +4041,36 @@ PAGE_HTML = """<!DOCTYPE html>
           dock.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
         } catch (e) { /* ignore */ }
       }
+    }
+
+    function updateLearningEventsStripFromBatch(data, seam) {
+      const strip = document.getElementById('pgLearningEventsStrip');
+      const ul = document.getElementById('pgLearningEventsUl');
+      const btn = document.getElementById('pgForensicOpenBtn');
+      if (!strip || !ul) return;
+      if (!data || !seam || seam.skipped) {
+        strip.hidden = true;
+        if (btn) btn.hidden = true;
+        return;
+      }
+      const nApp = data.student_learning_rows_appended != null ? data.student_learning_rows_appended : seam.student_learning_rows_appended;
+      const retr = data.student_retrieval_matches != null ? data.student_retrieval_matches : seam.student_retrieval_matches;
+      const tc = seam.trades_considered != null ? seam.trades_considered : '—';
+      const mci = data.batch_timing && data.batch_timing.memory_context_impact_audit_v1;
+      const impact =
+        mci && typeof mci.memory_impact_yes_no === 'string' ? mci.memory_impact_yes_no : '—';
+      ul.innerHTML = '';
+      function li(t) {
+        const n = document.createElement('li');
+        n.textContent = t;
+        ul.appendChild(n);
+      }
+      li('Learning rows appended: ' + (nApp != null ? String(nApp) : '—'));
+      li('Retrieval matches (run): ' + (retr != null ? String(retr) : '—'));
+      li('Closed trades considered: ' + String(tc));
+      li('Memory / context impact (harness audit): ' + impact);
+      strip.hidden = false;
+      if (btn) btn.hidden = false;
     }
 
     function renderLiveTelemetryPanel(pj, opts) {
@@ -4044,6 +4218,32 @@ PAGE_HTML = """<!DOCTYPE html>
         }
         roll.scrollTop = roll.scrollHeight;
       }
+      updateTerminalCompactSummary(
+        pj, running, completed, total, elapsed, hot, winStr, lm, echo, recipe
+      );
+    }
+
+    function updateTerminalCompactSummary(pj, running, completed, total, elapsed, hot, winStr, lm, echo, recipe) {
+      const st = document.getElementById('tcsStatus');
+      const bat = document.getElementById('tcsBatch');
+      const win = document.getElementById('tcsWindow');
+      const dwEl = document.getElementById('tcsDw');
+      const elp = document.getElementById('tcsElapsed');
+      if (!st || !bat || !win || !dwEl || !elp) return;
+      const status = running ? 'Running' : pj && pj.status === 'done' ? 'Done' : 'Idle';
+      st.textContent = status;
+      bat.textContent =
+        total > 0 ? completed + ' / ' + total + ' scenarios' : (pj && pj.status ? String(pj.status) : '—');
+      win.textContent = winStr || '—';
+      if (hot && running) {
+        const dw = Number(hot.decision_windows_processed || 0);
+        dwEl.textContent = dw.toLocaleString() + (lm ? ' · ' + String(lm).slice(0, 40) : '');
+      } else if (!running && echo && echo.evaluation_window_calendar_months != null) {
+        dwEl.textContent = '—';
+      } else {
+        dwEl.textContent = hot ? Number(hot.decision_windows_processed || 0).toLocaleString() : '—';
+      }
+      elp.textContent = elapsed > 0 ? fmtTelemetryHMS(elapsed) : '—';
     }
 
     function resetTelemetryRollingLogForNewRun() {
@@ -4062,6 +4262,7 @@ PAGE_HTML = """<!DOCTYPE html>
       resetTelemetryRollingLogForNewRun();
       const echo = {};
       updateMemoryStatusCardFromPanel(null, echo, null, false);
+      updateTerminalCompactSummary({ status: 'idle' }, false, 0, 0, 0, null, '—', '', {}, '—');
     }
 
     function setBannerRun(main, sub) {
@@ -5083,6 +5284,26 @@ PAGE_HTML = """<!DOCTYPE html>
         el.textContent = 'Barney summary failed: ' + friendlyFetchError(e);
       }
     }
+
+    (function wireForensicDrillDialog() {
+      const dlg = document.getElementById('pgForensicDrillDialog');
+      const openB = document.getElementById('pgForensicOpenBtn');
+      const closeB = document.getElementById('pgForensicDrillClose');
+      if (openB && dlg) {
+        openB.addEventListener('click', function () {
+          try {
+            dlg.showModal();
+          } catch (e) { /* ignore */ }
+        });
+      }
+      if (closeB && dlg) {
+        closeB.addEventListener('click', function () {
+          try {
+            dlg.close();
+          } catch (e) { /* ignore */ }
+        });
+      }
+    })();
 
     function friendlyParallelBackendError(msg) {
       const m = String(msg != null ? msg : '');
