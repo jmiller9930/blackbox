@@ -80,7 +80,7 @@ _PATTERN_BANNER_PATH = _RV4_ROOT / "assets" / "pattern.png"
 _PATTERN_BANNER_WEBP_PATH = _RV4_ROOT / "assets" / "pattern.webp"
 
 # Operator-visible web UI bundle version — bump when changing PAGE_HTML (HTML/CSS/JS) so deploys are provable.
-PATTERN_GAME_WEB_UI_VERSION = "2.18.0"
+PATTERN_GAME_WEB_UI_VERSION = "2.18.1"
 
 from renaissance_v4.game_theory.groundhog_memory import (
     groundhog_auto_merge_enabled,
@@ -1887,7 +1887,7 @@ PAGE_HTML = """<!DOCTYPE html>
       position: relative;
       z-index: 1;
       display: grid;
-      grid-template-columns: repeat(6, minmax(0, 1fr));
+      grid-template-columns: repeat(5, minmax(0, 1fr));
       gap: 8px;
       margin-top: 12px;
       max-width: min(1600px, 100%);
@@ -2008,22 +2008,27 @@ PAGE_HTML = """<!DOCTYPE html>
       min-height: 0;
     }
     .pg-student-triangle-dock { flex: 0 0 auto; }
-    /* D10.2 — focus-driven triptych */
+    /* D10.2 — focus-driven triptych (terminal-dark overview tiles + full-width expand) */
     .pg-focus-dock {
       --pg-focus-dock-h: min(320px, 36vh);
-      border: 1px solid #1e3a5f;
+      border: 1px solid rgba(100, 140, 180, 0.35);
       border-radius: var(--pg-radius-lg);
-      background: var(--pg-surface);
+      background: #0a0e12;
       overflow: hidden;
       flex: 0 0 auto;
       min-height: 0;
       display: flex;
       flex-direction: column;
       max-height: var(--pg-focus-dock-h);
+      width: 100%;
+      align-self: stretch;
     }
     .pg-focus-dock[data-pg-focus-mode="overview"] { height: var(--pg-focus-dock-h); }
     .pg-focus-dock[data-pg-focus-mode]:not([data-pg-focus-mode="overview"]) {
-      height: min(70vh, 640px); max-height: min(70vh, 640px);
+      flex: 1 1 auto;
+      min-height: min(72vh, 840px);
+      height: min(72vh, 840px);
+      max-height: min(85vh, 920px);
     }
     .pg-focus-overview {
       display: grid;
@@ -2032,12 +2037,13 @@ PAGE_HTML = """<!DOCTYPE html>
       padding: 10px;
       flex: 1 1 auto;
       min-height: 0;
+      background: #0a0e12;
     }
     .pg-focus-tile {
       appearance: none;
-      border: 1px solid var(--pg-line);
-      border-radius: 12px;
-      background: #f8f6f2;
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      border-radius: 10px;
+      background: linear-gradient(180deg, #151b22 0%, #0f1419 100%);
       padding: 10px 10px 8px;
       text-align: left;
       cursor: pointer;
@@ -2045,26 +2051,58 @@ PAGE_HTML = """<!DOCTYPE html>
       flex-direction: column;
       gap: 6px;
       min-height: 0;
-      transition: border-color 0.15s, box-shadow 0.15s;
+      transition: border-color 0.15s, box-shadow 0.15s, background 0.15s;
       font: inherit;
+      color: #e6edf3;
     }
-    .pg-focus-tile:hover { border-color: var(--pg-accent); box-shadow: 0 0 0 1px rgba(45, 138, 106, 0.2); }
-    .pg-focus-tile:focus-visible { outline: 2px solid var(--pg-accent); outline-offset: 2px; }
-    .pg-focus-tile-k { font-size: 0.65rem; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase; color: var(--pg-muted); margin: 0; }
-    .pg-focus-tile-body { font-size: 0.78rem; line-height: 1.38; color: var(--pg-ink); overflow: hidden; }
-    .pg-focus-tile-hint { font-size: 0.68rem; color: var(--pg-muted); margin: 0; }
-    .pg-focus-expanded { display: flex; flex-direction: column; flex: 1 1 auto; min-height: 0; }
+    .pg-focus-tile:hover {
+      border-color: rgba(45, 138, 106, 0.55);
+      box-shadow: 0 0 0 1px rgba(45, 138, 106, 0.25);
+      background: linear-gradient(180deg, #1a222c 0%, #121820 100%);
+    }
+    .pg-focus-tile:focus-visible { outline: 2px solid #3dd68c; outline-offset: 2px; }
+    .pg-focus-tile-k {
+      font-size: 0.65rem;
+      font-weight: 800;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: #8b98a5;
+      margin: 0;
+    }
+    .pg-focus-tile-body {
+      font-size: 0.76rem;
+      line-height: 1.4;
+      color: #e6edf3;
+      overflow: hidden;
+      overflow-wrap: anywhere;
+      word-break: break-word;
+      white-space: normal;
+      flex: 1 1 auto;
+      min-height: 0;
+    }
+    .pg-focus-tile-hint { font-size: 0.65rem; color: #7d8a98; margin: 0; line-height: 1.35; }
+    .pg-focus-expanded { display: flex; flex-direction: column; flex: 1 1 auto; min-height: 0; min-width: 0; }
     .pg-focus-expanded-head {
-      display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-bottom: 1px solid var(--pg-line);
-      background: #f0ebe3; flex: 0 0 auto;
+      display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-bottom: 1px solid rgba(255,255,255,0.1);
+      background: #121820;
+      flex: 0 0 auto;
     }
-    .pg-focus-expanded-title { font-size: 0.72rem; font-weight: 800; letter-spacing: 0.06em; text-transform: uppercase; color: var(--pg-muted); }
-    .pg-focus-back-btn { font-size: 0.75rem; padding: 6px 10px; border-radius: 8px; border: 1px solid var(--pg-line); background: #fff; cursor: pointer; font-weight: 600; }
-    .pg-focus-back-btn:hover { background: #f4f1ea; }
+    .pg-focus-expanded-title { font-size: 0.72rem; font-weight: 800; letter-spacing: 0.06em; text-transform: uppercase; color: #9aa7b4; }
+    .pg-focus-back-btn {
+      font-size: 0.75rem;
+      padding: 6px 10px;
+      border-radius: 8px;
+      border: 1px solid rgba(255,255,255,0.18);
+      background: #1c2530;
+      color: #e6edf3;
+      cursor: pointer;
+      font-weight: 600;
+    }
+    .pg-focus-back-btn:hover { background: #243040; }
     .pg-focus-expanded-body { flex: 1 1 auto; min-height: 0; overflow: hidden; position: relative; }
     .pg-focus-pane { position: absolute; inset: 0; overflow: auto; padding: 10px 12px 12px; -webkit-overflow-scrolling: touch; }
     .pg-focus-pane-inner--dark { background: #0f1419; color: #e6edf3; border-radius: 8px; padding: 10px; }
-    body[data-pg-focus-expanded="1"] .pg-focus-dock { box-shadow: 0 0 0 2px rgba(45, 138, 106, 0.2); }
+    body[data-pg-focus-expanded="1"] .pg-focus-dock { box-shadow: 0 0 0 2px rgba(45, 164, 120, 0.35); }
     .pg-focus-pane--results {
       background: linear-gradient(180deg, #1a2330 0%, #152028 100%);
       color: #f0f4f8;
@@ -2079,6 +2117,24 @@ PAGE_HTML = """<!DOCTYPE html>
     .pg-focus-pane--results .policy-table td { color: #f0f4f8; border-color: rgba(255,255,255,0.12); }
     .pg-focus-pane--results .pg-pre-json { background: rgba(0,0,0,0.25); color: #e8ecf0; border: 1px solid rgba(255,255,255,0.1); border-radius: 8px; padding: 10px; }
     .pg-focus-pane--results .hint { color: rgba(247,241,230,0.7); }
+    /* Modules pane — same dark shell as terminal; list rows readable on charcoal */
+    .pg-focus-pane--modules {
+      background: linear-gradient(180deg, #121820 0%, #0d1218 100%);
+      color: #e6edf3;
+    }
+    .pg-focus-pane--modules .pg-pill-row { margin-bottom: 8px; }
+    .pg-focus-pane--modules .pg-pill {
+      background: rgba(255, 255, 255, 0.08);
+      border-color: rgba(255, 255, 255, 0.14);
+      color: #c5d0db;
+    }
+    .pg-focus-pane--modules .pg-status-item {
+      background: rgba(255, 255, 255, 0.05);
+      border-color: rgba(255, 255, 255, 0.12);
+    }
+    .pg-focus-pane--modules .pg-status-name { color: #f0f4f8; }
+    .pg-focus-pane--modules .pg-status-meta { color: rgba(230, 237, 243, 0.78); }
+    .pg-focus-pane--modules .pg-module-board-msg { color: rgba(230, 237, 243, 0.82); margin: 0; font-size: 0.82rem; }
     .pg-student-triangle-body {
       font-size: 0.88rem;
       line-height: 1.48;
@@ -3394,11 +3450,6 @@ PAGE_HTML = """<!DOCTYPE html>
           <div class="pg-v" id="bannerRunV">Idle</div>
           <div class="pg-s" id="bannerRunS">— run a batch —</div>
         </div>
-        <div class="pg-banner-stat" title="Subsystem health — open Modules in the focus dock (below) for details">
-          <div class="pg-k">Modules</div>
-          <div class="pg-v"><span class="status-dot" id="moduleBannerDot"></span> <span id="bannerModulesV">—</span></div>
-          <div class="pg-s" id="bannerModulesS">Loading subsystem list…</div>
-        </div>
       </div>
       </div>
     </header>
@@ -3788,7 +3839,7 @@ PAGE_HTML = """<!DOCTYPE html>
             </div>
             <div id="pgFocusPaneModules" class="pg-focus-pane pg-focus-pane--modules" hidden>
               <div class="pg-pill-row"><span class="pg-pill">Green = check passed</span><span class="pg-pill">Red = not wired / not armed</span></div>
-              <div class="pg-status-list" id="moduleBoardList"><p class="caps" style="margin:0;color:var(--pg-muted)">Loading…</p></div>
+              <div class="pg-status-list" id="moduleBoardList"><p class="caps pg-module-board-msg">Loading…</p></div>
             </div>
           </div>
         </div>
@@ -3799,7 +3850,7 @@ PAGE_HTML = """<!DOCTYPE html>
           <div class="pg-panel-header" style="margin:0;flex:1">
             <div>
               <h2 class="pg-panel-h">Student → learning → outcome</h2>
-              <p class="pg-panel-sub">Primary inspection surface after run — Student seam (belief, stored rows, retrieval). Focus dock above: Terminal / Results / Modules — expand for detail.</p>
+              <p class="pg-panel-sub">Primary inspection surface after run — Student seam (belief, stored rows, retrieval). Use the triptych above to open Terminal, Results, or Modules full width.</p>
             </div>
             <span class="pg-chip pg-chip-teal">Primary</span>
           </div>
@@ -4397,9 +4448,8 @@ PAGE_HTML = """<!DOCTYPE html>
       const fl = document.getElementById('focusTileTerminalLine');
       if (fs && st) fs.textContent = (st.textContent || '—').trim() || '—';
       if (fl && ln) {
-        const lines = (ln.textContent || '').trim().split('\n');
-        let t = lines[0] || '—';
-        if (t.length > 80) t = t.slice(0, 77) + '…';
+        const lines = (ln.textContent || '').trim().split('\n').filter(Boolean);
+        const t = lines.length ? lines.slice(0, 4).join(' ') : '—';
         fl.textContent = t;
       }
     }
@@ -4423,6 +4473,9 @@ PAGE_HTML = """<!DOCTYPE html>
       pt.hidden = mode !== 'terminal';
       pr.hidden = mode !== 'results';
       pm.hidden = mode !== 'modules';
+      if (mode === 'modules' && typeof refreshModuleBoard === 'function') {
+        void refreshModuleBoard();
+      }
     }
 
     function pgFocusBackToOverview() {
@@ -6076,15 +6129,15 @@ PAGE_HTML = """<!DOCTYPE html>
       try {
         const r = await fetch('/api/module-board');
         const j = await r.json();
-        const errStyle = 'margin:0;color:rgba(247,241,230,0.75)';
+        const errHtml = '<p class="caps pg-module-board-msg">Could not load module board.</p>';
         if (!r.ok || !j.ok) {
-          list.innerHTML = '<p class="caps" style="' + errStyle + '">Could not load module board.</p>';
+          list.innerHTML = errHtml;
           setModuleBanner(0, 0, 'Module API unavailable');
           return;
         }
         const mods = j.modules || [];
         if (!mods.length) {
-          list.innerHTML = '<p class="caps" style="' + errStyle + '">No modules.</p>';
+          list.innerHTML = '<p class="caps pg-module-board-msg">No modules.</p>';
           setModuleBanner(0, 0, 'No rows');
           return;
         }
@@ -6116,7 +6169,7 @@ PAGE_HTML = """<!DOCTYPE html>
           : (okCount + ' passed · ' + bad + ' not wired / not armed');
         setModuleBanner(okCount, mods.length, sub);
       } catch (e) {
-        list.innerHTML = '<p class="caps" style="margin:0;color:rgba(247,241,230,0.75)">' + escapeHtml(friendlyFetchError(e)) + '</p>';
+        list.innerHTML = '<p class="caps pg-module-board-msg">' + escapeHtml(friendlyFetchError(e)) + '</p>';
         setModuleBanner(0, 0, 'Fetch failed');
         if (dot) dot.className = 'status-dot bad';
       }
