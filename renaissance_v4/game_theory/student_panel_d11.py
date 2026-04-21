@@ -1,8 +1,9 @@
 """
-D11 — Student panel API helpers: strict run / decision / deep-dive shapes (learning signal contract).
+D11 — Student panel API: run index (Referee replay rollups + harness deltas) and drilldown payloads.
 
-Builds operator-facing rows from ``batch_scorecard.jsonl`` plus on-disk batch scenario folders.
-Where baseline pairing or per-decision truth is unavailable, fields are explicit nulls and ``data_gaps``.
+Rows are built from ``batch_scorecard.jsonl`` (and in-flight jobs on the server). Referee facts live
+in the scorecard; Student-specific truth per decision is deep-dive when present. Missing wiring is
+``data_gaps``, not mixed into Referee columns.
 """
 
 from __future__ import annotations

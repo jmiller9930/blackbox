@@ -85,7 +85,7 @@ _PATTERN_BANNER_WEBP_PATH = _RV4_ROOT / "assets" / "pattern.webp"
 _PATTERN_GAME_BANNER_BOOT_JS = _GAME_THEORY / "static" / "pattern_game_banner_boot.js"
 
 # Operator-visible web UI bundle version — bump when changing PAGE_HTML (HTML/CSS/JS) so deploys are provable.
-PATTERN_GAME_WEB_UI_VERSION = "2.19.18"
+PATTERN_GAME_WEB_UI_VERSION = "2.19.19"
 
 from renaissance_v4.game_theory.groundhog_memory import (
     groundhog_auto_merge_enabled,
@@ -4267,7 +4267,7 @@ PAGE_HTML = """<!DOCTYPE html>
           <div class="pg-panel-header" style="margin:0;flex:1">
             <div>
               <h2 class="pg-panel-h">Student → learning → outcome</h2>
-              <p class="pg-panel-sub">Decision audit (D11): <strong>Runs</strong> → <strong>decisions</strong> → <strong>deep dive</strong> — learning signal at row level; no mixed levels. After a batch, latest seam still updates the learning strip. Drag the <strong>bottom edge</strong> to resize; height and open state are remembered.</p>
+              <p class="pg-panel-sub">D11 — <strong>Referee</strong> indexes each batch in the run list; <strong>Student</strong> drilldown (decisions → deep) is for belief vs Referee truth. One level at a time. <strong>Latest batch — seam</strong> (below) is Directive 09 (Student store rows). Drag the <strong>bottom edge</strong> to resize; height and open state are remembered.</p>
             </div>
             <span class="pg-chip pg-chip-teal">Primary</span>
           </div>
@@ -4868,13 +4868,16 @@ PAGE_HTML = """<!DOCTYPE html>
       const rows = j.runs;
       let h =
         renderStudentPanelD11Nav() +
-        '<p class="pg-student-d11-legend">Level 1 — harness <strong>baseline</strong> (BL %) is replay trade win % for that batch (rules-only reference; Student should tie or beat on a fair comparison). ' +
-        'First row in a config chain: <strong>GH</strong> = N/A (no prior paired run). GH = RUNNING while the batch is in flight.</p>' +
+        '<p class="pg-student-d11-legend"><strong>Referee side (this table):</strong> BL % and E/tr are replay rollups for that batch — the rules-of-the-game outcome reference. ' +
+        '<strong>Harness Δ columns:</strong> behΔ / outΔ / GH summarize memory and prior-run pairing in the same config (not Student&rsquo;s scorecard until drilldown is wired to Student vs Referee per unit). ' +
+        '<strong>GH</strong>: N/A = first batch in that config chain; RUNNING = workers still executing.</p>' +
         '<div class="pg-student-d11-table-wrap"><table class="pg-student-d11-table"><thead><tr>' +
         '<th>run_id</th><th>time</th><th>pattern</th><th>window</th><th>#tr</th>' +
-        '<th title="Harness baseline — replay trade win % (same rules; compare Student fairly)">BL %</th>' +
-        '<th title="Harness rollup expectancy / trade">E/tr</th>' +
-        '<th>behΔ</th><th>outΔ</th><th title="Groundhog / memory lane vs prior run in same config chain">GH</th>' +
+        '<th title="Referee — replay trade win % (batch rollup)">BL %</th>' +
+        '<th title="Referee — expectancy per trade (batch rollup)">E/tr</th>' +
+        '<th title="Harness — behavior moved vs memory-off baseline (audit counters)">behΔ</th>' +
+        '<th title="Harness — expectancy vs prior same-config batch">outΔ</th>' +
+        '<th title="Harness — Groundhog / memory lane tier vs prior run in same config">GH</th>' +
         '</tr></thead><tbody>';
       for (let i = 0; i < rows.length; i++) {
         const row = rows[i] || {};
