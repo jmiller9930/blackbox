@@ -82,7 +82,7 @@ _PATTERN_BANNER_WEBP_PATH = _RV4_ROOT / "assets" / "pattern.webp"
 _PATTERN_GAME_BANNER_BOOT_JS = _GAME_THEORY / "static" / "pattern_game_banner_boot.js"
 
 # Operator-visible web UI bundle version — bump when changing PAGE_HTML (HTML/CSS/JS) so deploys are provable.
-PATTERN_GAME_WEB_UI_VERSION = "2.19.12"
+PATTERN_GAME_WEB_UI_VERSION = "2.19.13"
 
 from renaissance_v4.game_theory.groundhog_memory import (
     groundhog_auto_merge_enabled,
@@ -2091,6 +2091,8 @@ PAGE_HTML = """<!DOCTYPE html>
     /* D10.2 — focus-driven triptych (terminal-dark overview tiles + full-width expand) */
     .pg-focus-dock {
       --pg-focus-dock-h: min(320px, 36vh);
+      position: relative;
+      z-index: 3;
       border: 1px solid rgba(100, 140, 180, 0.35);
       border-radius: var(--pg-radius-lg);
       background: #0a0e12;
@@ -2276,37 +2278,21 @@ PAGE_HTML = """<!DOCTYPE html>
     .pg-focus-pane--modules .pg-status-name { color: #f0f4f8; }
     .pg-focus-pane--modules .pg-status-meta { color: rgba(230, 237, 243, 0.78); }
     .pg-focus-pane--modules .pg-module-board-msg { color: rgba(230, 237, 243, 0.82); margin: 0; font-size: 0.82rem; }
-    /* Quick View → Modules: dense chip row (dot + label); full line shows in modal on click */
+    /* Quick View → Modules: full-width rows (dot + label + detail); click row → modal */
     .pg-focus-pane--modules #moduleBoardList.pg-status-list {
-      display: flex;
-      flex-wrap: wrap;
-      align-content: flex-start;
-      align-items: flex-start;
-      gap: 8px 10px;
+      display: grid;
+      gap: 10px;
     }
     .pg-focus-pane--modules #moduleBoardList .pg-status-item {
-      display: inline-flex;
-      flex-direction: row;
-      align-items: center;
-      gap: 8px;
-      width: auto;
-      max-width: min(100%, 22rem);
-      margin: 0;
-      padding: 5px 10px 5px 8px;
-      border-radius: 999px;
-      grid-template-columns: unset;
+      display: grid;
+      grid-template-columns: auto 1fr;
+      align-items: start;
+      width: 100%;
+      max-width: none;
+      border-radius: 14px;
+      padding: 11px 12px;
     }
-    .pg-focus-pane--modules #moduleBoardList .pg-status-item .status-dot { margin-top: 0; }
-    .pg-focus-pane--modules #moduleBoardList .pg-status-meta { display: none; }
-    .pg-focus-pane--modules #moduleBoardList .pg-status-item > div { min-width: 0; flex: 1 1 auto; }
-    .pg-focus-pane--modules #moduleBoardList .pg-status-name {
-      font-size: 0.82rem;
-      font-weight: 700;
-      margin: 0;
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
-    }
+    .pg-focus-pane--modules #moduleBoardList .pg-status-meta { display: block; }
     .pg-student-triangle-body {
       font-size: 0.88rem;
       line-height: 1.48;
@@ -2335,7 +2321,7 @@ PAGE_HTML = """<!DOCTYPE html>
     details.pg-student-triangle-dock {
       scroll-margin-top: 12px;
       position: relative;
-      z-index: 1;
+      z-index: 0;
     }
     details.pg-student-triangle-dock > .pg-panel-fold-body.pg-student-triangle-fold-body {
       height: 60vh;
