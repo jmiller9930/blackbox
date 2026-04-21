@@ -85,7 +85,7 @@ _PATTERN_BANNER_WEBP_PATH = _RV4_ROOT / "assets" / "pattern.webp"
 _PATTERN_GAME_BANNER_BOOT_JS = _GAME_THEORY / "static" / "pattern_game_banner_boot.js"
 
 # Operator-visible web UI bundle version — bump when changing PAGE_HTML (HTML/CSS/JS) so deploys are provable.
-PATTERN_GAME_WEB_UI_VERSION = "2.19.21"
+PATTERN_GAME_WEB_UI_VERSION = "2.19.22"
 
 from renaissance_v4.game_theory.groundhog_memory import (
     groundhog_auto_merge_enabled,
@@ -2379,16 +2379,45 @@ PAGE_HTML = """<!DOCTYPE html>
       color: var(--pg-muted);
       line-height: 1.42;
     }
-    /* D11 — decision audit panel (one level visible at a time) */
-    .pg-student-d11 { min-height: 8rem; }
+    /* D11 — contractual: one level visible; chrome pinned; body scrolls */
+    .pg-student-d11 {
+      flex: 1;
+      min-height: 10rem;
+      display: flex;
+      flex-direction: column;
+      min-height: 0;
+      overflow: hidden;
+    }
+    .pg-student-d11-layout {
+      display: flex;
+      flex-direction: column;
+      flex: 1;
+      min-height: 0;
+      overflow: hidden;
+    }
+    .pg-student-d11-chrome {
+      flex-shrink: 0;
+      position: sticky;
+      top: 0;
+      z-index: 3;
+      background: linear-gradient(180deg, rgba(22,27,34,0.98) 0%, rgba(22,27,34,0.96) 100%);
+      border-bottom: 1px solid rgba(255,255,255,0.10);
+      padding: 0 0 8px;
+      margin: 0 0 0;
+    }
+    .pg-student-d11-bc {
+      font-size: 0.72rem;
+      color: var(--pg-muted);
+      margin: 0 0 6px;
+      line-height: 1.35;
+    }
+    .pg-student-d11-bc strong { color: var(--pg-ink); font-weight: 600; }
     .pg-student-d11-nav {
       display: flex;
       flex-wrap: wrap;
       align-items: center;
       gap: 8px 12px;
-      margin: 0 0 10px;
-      padding-bottom: 8px;
-      border-bottom: 1px solid rgba(255,255,255,0.10);
+      margin: 0;
     }
     .pg-student-d11-nav button {
       font-size: 0.78rem;
@@ -2400,6 +2429,14 @@ PAGE_HTML = """<!DOCTYPE html>
       cursor: pointer;
     }
     .pg-student-d11-nav button:hover { border-color: rgba(30, 214, 170, 0.45); }
+    .pg-student-d11-scroll {
+      flex: 1;
+      min-height: 0;
+      overflow-y: auto;
+      overflow-x: hidden;
+      scrollbar-gutter: stable;
+      padding-right: 2px;
+    }
     .pg-student-d11-legend {
       font-size: 0.72rem;
       color: var(--pg-muted);
@@ -2423,21 +2460,69 @@ PAGE_HTML = """<!DOCTYPE html>
     .pg-student-d11-table th { color: var(--pg-muted); font-weight: 700; font-size: 0.70rem; }
     .pg-student-d11-table tr[data-run-row]:hover { background: rgba(30, 214, 170, 0.06); }
     .pg-student-d11-table tr[data-run-row] { cursor: pointer; }
-    .pg-student-d11-strip {
+    .pg-student-d11-carousel-wrap {
       display: flex;
-      gap: 10px;
+      flex-direction: column;
+      gap: 8px;
+      margin: 0 0 8px;
+    }
+    .pg-student-d11-carousel-row {
+      display: flex;
+      flex-direction: row;
+      align-items: stretch;
+      gap: 6px;
+      min-height: 132px;
+    }
+    .pg-student-d11-carousel-btn {
+      flex: 0 0 auto;
+      align-self: center;
+      width: 32px;
+      min-height: 48px;
+      padding: 2px 4px;
+      border-radius: 6px;
+      border: 1px solid rgba(255,255,255,0.14);
+      background: rgba(0,0,0,0.18);
+      color: var(--pg-ink);
+      font-size: 1rem;
+      cursor: pointer;
+      line-height: 1;
+    }
+    .pg-student-d11-carousel-btn:hover:not(:disabled) { border-color: rgba(30, 214, 170, 0.45); }
+    .pg-student-d11-carousel-btn:disabled {
+      opacity: 0.35;
+      cursor: not-allowed;
+    }
+    .pg-student-d11-carousel-viewport {
+      flex: 1;
+      min-width: 0;
       overflow-x: auto;
       overflow-y: hidden;
-      padding: 8px 4px 12px;
-      min-height: 120px;
-      max-height: 140px;
       scroll-snap-type: x mandatory;
+      scroll-behavior: smooth;
+      padding: 8px 0 12px;
       scrollbar-gutter: stable;
     }
+    .pg-student-d11-strip {
+      display: flex;
+      gap: 12px;
+      padding: 0 28vw;
+      min-height: 120px;
+    }
+    .pg-student-d11-strip--carousel {
+      scroll-snap-type: x mandatory;
+    }
+    .pg-student-d11-carousel-meta {
+      font-size: 0.70rem;
+      color: var(--pg-muted);
+      text-align: center;
+      margin: 0 0 4px;
+      line-height: 1.35;
+    }
     .pg-student-d11-slice {
-      flex: 0 0 auto;
-      width: 148px;
-      scroll-snap-align: start;
+      flex: 0 0 70%;
+      max-width: 220px;
+      min-width: 148px;
+      scroll-snap-align: center;
       border: 1px solid rgba(255,255,255,0.12);
       border-radius: 8px;
       padding: 8px 10px;
@@ -2445,6 +2530,11 @@ PAGE_HTML = """<!DOCTYPE html>
       font-size: 0.72rem;
       line-height: 1.35;
       cursor: pointer;
+      box-sizing: border-box;
+    }
+    .pg-student-d11-slice--focused {
+      border-color: rgba(30, 214, 170, 0.45);
+      box-shadow: 0 0 0 1px rgba(30, 214, 170, 0.12);
     }
     .pg-student-d11-slice:hover { border-color: rgba(30, 214, 170, 0.35); }
     .pg-student-d11-slice--WIN { border-left: 3px solid #2ea043; }
@@ -2469,16 +2559,24 @@ PAGE_HTML = """<!DOCTYPE html>
       min-height: 14rem;
       max-height: 88vh;
       resize: vertical;
-      overflow: auto;
+      overflow: hidden;
       overflow-x: hidden;
       box-sizing: border-box;
       scrollbar-gutter: stable;
+      display: flex;
+      flex-direction: column;
+      min-height: 0;
     }
     details.pg-student-triangle-dock .pg-student-triangle-body {
       max-height: none;
-      overflow: visible;
+      flex: 1;
+      min-height: 0;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
       padding-right: 4px;
     }
+    #pgStudentHandoffStrip { flex-shrink: 0; }
     .pg-secondary-surface-label {
       display: inline-block;
       margin-left: 6px;
@@ -4267,7 +4365,7 @@ PAGE_HTML = """<!DOCTYPE html>
           <div class="pg-panel-header" style="margin:0;flex:1">
             <div>
               <h2 class="pg-panel-h">Student → learning → outcome</h2>
-              <p class="pg-panel-sub">D11 — <strong>Referee</strong> indexes each batch in the run list; <strong>Student</strong> drilldown (decisions → deep) is for belief vs Referee truth. One level at a time. <strong>Latest batch — handoff</strong> (below) is Directive 09: Referee results → Student store. Drag the <strong>bottom edge</strong> to resize; height and open state are remembered.</p>
+              <p class="pg-panel-sub">D11 — <strong>batch-level</strong> effectiveness in the run table (not a Student-only score); <strong>scenario slices</strong> in batch order (carousel); <strong>scenario forensic</strong> view at the third level. Chrome stays pinned; only the body scrolls. One level fills the panel at a time. <strong>Latest batch — handoff</strong> (below) is Directive 09. Resize the fold from the bottom edge; state is remembered.</p>
             </div>
             <span class="pg-chip pg-chip-teal">Primary</span>
           </div>
@@ -4601,8 +4699,8 @@ PAGE_HTML = """<!DOCTYPE html>
       updateMemoryStatusCardFromPanel(panel, echo, null, false);
     }
 
-    /** D11 — strict run / decision / deep-dive (replaces panel content per level; handoff strip on L1 only). */
-    const studentPanelD11 = { level: 1, selectedRunId: null, selectedDecisionId: null };
+    /** D11 — contractual: one level replaces the panel; pinned chrome; scroll body only. */
+    const studentPanelD11 = { level: 1, selectedRunId: null, selectedDecisionId: null, sliceCount: 0 };
 
     function studentPanelD11HandoffEl() {
       return document.getElementById('pgStudentHandoffStrip');
@@ -4622,20 +4720,43 @@ PAGE_HTML = """<!DOCTYPE html>
       return escapeHtml(n.toFixed(d != null ? d : 2));
     }
 
-    function renderStudentPanelD11Nav() {
-      const r = studentPanelD11RootEl();
-      if (!r) return '';
-      let html = '<div class="pg-student-d11-nav" id="pgStudentD11Nav">';
-      if (studentPanelD11.level === 2 || studentPanelD11.level === 3) {
-        html +=
-          '<button type="button" id="pgStudentD11BackRuns">← Run table</button>';
+    function studentPanelD11ShortRunId(rid) {
+      const s = rid != null ? String(rid) : '';
+      return s.length > 18 ? s.slice(0, 16) + '…' : s;
+    }
+
+    function studentPanelD11Layout(chromeHtml, scrollHtml) {
+      return (
+        '<div class="pg-student-d11-layout">' +
+        '<div class="pg-student-d11-chrome" id="pgStudentD11Chrome">' +
+        chromeHtml +
+        '</div>' +
+        '<div class="pg-student-d11-scroll" id="pgStudentD11Scroll">' +
+        scrollHtml +
+        '</div>' +
+        '</div>'
+      );
+    }
+
+    function renderStudentPanelD11Chrome(level, bcParts, showNav) {
+      let bc = '<nav class="pg-student-d11-bc" aria-label="D11 location">';
+      if (Array.isArray(bcParts) && bcParts.length) {
+        for (var i = 0; i < bcParts.length; i++) {
+          if (i) bc += ' <span style="opacity:0.55">›</span> ';
+          bc += bcParts[i];
+        }
       }
-      if (studentPanelD11.level === 3) {
-        html +=
-          '<button type="button" id="pgStudentD11BackStrip">← Decision strip</button>';
+      bc += '</nav>';
+      let nav = '<div class="pg-student-d11-nav" id="pgStudentD11Nav">';
+      if (showNav && (level === 2 || level === 3)) {
+        nav += '<button type="button" id="pgStudentD11BackRuns">← Run table</button>';
       }
-      html += '</div>';
-      return html;
+      if (showNav && level === 3) {
+        nav +=
+          '<button type="button" id="pgStudentD11BackStrip">← Scenario carousel</button>';
+      }
+      nav += '</div>';
+      return bc + nav;
     }
 
     function wireStudentPanelD11Nav() {
@@ -4648,10 +4769,66 @@ PAGE_HTML = """<!DOCTYPE html>
         };
     }
 
+    function studentPanelD11CarouselUpdateMeta() {
+      const vp = document.getElementById('pgStudentD11CarouselViewport');
+      const meta = document.getElementById('pgStudentD11CarMeta');
+      const prev = document.getElementById('pgStudentD11CarPrev');
+      const next = document.getElementById('pgStudentD11CarNext');
+      if (!vp || !meta) return;
+      const track = vp.querySelector('.pg-student-d11-strip');
+      if (!track) return;
+      const slices = track.querySelectorAll('.pg-student-d11-slice[data-didx]');
+      const n = slices.length;
+      if (!n) {
+        meta.textContent = '';
+        return;
+      }
+      const w = slices[0].offsetWidth + 12;
+      const idx = Math.min(n - 1, Math.max(0, Math.round(vp.scrollLeft / Math.max(1, w))));
+      meta.textContent = 'Slice ' + (idx + 1) + ' of ' + n + ' · scenario order = batch order (not exam sequence)';
+      slices.forEach(function (el, i) {
+        el.classList.toggle('pg-student-d11-slice--focused', i === idx);
+      });
+      if (prev) prev.disabled = idx <= 0;
+      if (next) next.disabled = idx >= n - 1;
+    }
+
+    function wireStudentPanelD11Carousel() {
+      const vp = document.getElementById('pgStudentD11CarouselViewport');
+      const prev = document.getElementById('pgStudentD11CarPrev');
+      const next = document.getElementById('pgStudentD11CarNext');
+      if (!vp || !prev || !next) return;
+      const step = function (dir) {
+        const track = vp.querySelector('.pg-student-d11-strip');
+        if (!track) return;
+        const slices = track.querySelectorAll('.pg-student-d11-slice[data-didx]');
+        if (!slices.length) return;
+        const w = slices[0].offsetWidth + 12;
+        const cur = Math.min(
+          slices.length - 1,
+          Math.max(0, Math.round(vp.scrollLeft / Math.max(1, w)))
+        );
+        const nxt = Math.min(slices.length - 1, Math.max(0, cur + dir));
+        slices[nxt].scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' });
+        window.setTimeout(studentPanelD11CarouselUpdateMeta, 380);
+      };
+      prev.onclick = function () { step(-1); };
+      next.onclick = function () { step(1); };
+      vp.addEventListener('scroll', function () {
+        window.requestAnimationFrame(studentPanelD11CarouselUpdateMeta);
+      });
+      window.setTimeout(function () {
+        const first = vp.querySelector('.pg-student-d11-slice');
+        if (first) first.scrollIntoView({ inline: 'center', block: 'nearest' });
+        studentPanelD11CarouselUpdateMeta();
+      }, 80);
+    }
+
     async function studentPanelD11GotoLevel1() {
       studentPanelD11.level = 1;
       studentPanelD11.selectedRunId = null;
       studentPanelD11.selectedDecisionId = null;
+      studentPanelD11.sliceCount = 0;
       studentPanelD11SetHandoffVisible(true);
       await refreshStudentPanelD11();
     }
@@ -4663,51 +4840,90 @@ PAGE_HTML = """<!DOCTYPE html>
       studentPanelD11SetHandoffVisible(false);
       const root = studentPanelD11RootEl();
       if (!root) return;
-      root.innerHTML =
-        '<p class="caps" style="margin:0">Loading decisions…</p>';
+      const loading = studentPanelD11Layout(
+        renderStudentPanelD11Chrome(2, ['<strong>Run table</strong>', 'Loading…'], true),
+        '<p class="caps" style="margin:0">Loading scenario slices…</p>'
+      );
+      root.innerHTML = loading;
+      wireStudentPanelD11Nav();
       let j = null;
       try {
         const r = await fetch('/api/student-panel/run/' + encodeURIComponent(runId) + '/decisions');
         j = await r.json();
       } catch (e) {
-        root.innerHTML =
-          renderStudentPanelD11Nav() +
-          '<p class="caps" style="margin:0;color:#a32b2b">Failed to load decisions: ' +
-          escapeHtml(String(e)) +
-          '</p>';
+        root.innerHTML = studentPanelD11Layout(
+          renderStudentPanelD11Chrome(2, ['<strong>Run table</strong>', '<strong>Run</strong> ' + escapeHtml(studentPanelD11ShortRunId(runId))], true),
+          '<p class="caps" style="margin:0;color:#a32b2b">Failed to load slices: ' + escapeHtml(String(e)) + '</p>'
+        );
         wireStudentPanelD11Nav();
         return;
       }
       if (!j || !j.ok) {
-        root.innerHTML =
-          renderStudentPanelD11Nav() +
+        root.innerHTML = studentPanelD11Layout(
+          renderStudentPanelD11Chrome(2, ['<strong>Run table</strong>', '<strong>Run</strong> ' + escapeHtml(studentPanelD11ShortRunId(runId))], true),
           '<p class="caps" style="margin:0;color:#a32b2b">' +
-          escapeHtml((j && j.error) || 'decisions unavailable') +
-          '</p>';
+            escapeHtml((j && j.error) || 'slices unavailable') +
+            '</p>'
+        );
         wireStudentPanelD11Nav();
         return;
       }
       const slices = Array.isArray(j.slices) ? j.slices : [];
-      let body = renderStudentPanelD11Nav() + '<p class="pg-student-d11-legend">Run <code>' + escapeHtml(runId) + '</code> — click a decision to inspect.</p>';
+      studentPanelD11.sliceCount = slices.length;
+      const ordNote =
+        j.slice_ordering_note != null
+          ? escapeHtml(String(j.slice_ordering_note))
+          : 'Slices follow batch table order — not a canonical exam sequence or guaranteed trade timeline.';
+      let scroll =
+        '<p class="pg-student-d11-legend" style="margin-top:0"><strong>Scenario carousel</strong> — one scenario per slice (batch unit of work). ' +
+        ordNote +
+        '</p>';
       if (j.scenario_list_error) {
-        body +=
+        scroll +=
           '<p class="caps" style="margin:0 0 8px;font-size:0.75rem;color:#a32b2b">' +
           escapeHtml(String(j.scenario_list_error)) +
           '</p>';
       }
-      body += '<div class="pg-student-d11-strip">';
       if (!slices.length) {
-        body += '<span class="caps" style="align-self:center">No scenario rows for this run (batch folder missing or empty).</span>';
+        scroll +=
+          '<p class="caps" style="margin:0">No scenario rows for this run (batch folder missing or empty).</p>';
+        root.innerHTML = studentPanelD11Layout(
+          renderStudentPanelD11Chrome(
+            2,
+            ['<strong>Run table</strong>', '<strong>Run</strong> ' + escapeHtml(studentPanelD11ShortRunId(runId))],
+            true
+          ),
+          scroll
+        );
+        wireStudentPanelD11Nav();
+        return;
       }
+      scroll += '<div class="pg-student-d11-carousel-wrap">';
+      scroll += '<p class="pg-student-d11-carousel-meta" id="pgStudentD11CarMeta"></p>';
+      scroll += '<div class="pg-student-d11-carousel-row">';
+      scroll +=
+        '<button type="button" class="pg-student-d11-carousel-btn" id="pgStudentD11CarPrev" aria-label="Previous slice">◀</button>';
+      scroll += '<div class="pg-student-d11-carousel-viewport" id="pgStudentD11CarouselViewport">';
+      scroll += '<div class="pg-student-d11-strip pg-student-d11-strip--carousel">';
       for (let i = 0; i < slices.length; i++) {
         const s = slices[i] || {};
         const did = s.decision_id != null ? String(s.decision_id) : 'd' + i;
         const res = String(s.result || '—');
         const cls = 'pg-student-d11-slice pg-student-d11-slice--' + res.replace(/[^A-Z_]/g, '_');
-        body +=
+        const confDisp =
+          s.confidence != null && s.confidence !== ''
+            ? escapeHtml(String(s.confidence))
+            : '<span style="opacity:0.85">data_gap:not_exported</span>';
+        const dch =
+          s.decision_changed_gap === 'not_wired' || s.decision_changed_flag == null
+            ? '<span style="opacity:0.85">data_gap:not_wired</span>'
+            : escapeHtml(String(s.decision_changed_flag));
+        scroll +=
           '<div class="' +
           cls +
-          '" role="button" tabindex="0" data-did="' +
+          '" role="button" tabindex="0" data-didx="' +
+          i +
+          '" data-did="' +
           escapeHtml(did) +
           '" data-run="' +
           escapeHtml(runId) +
@@ -4720,17 +4936,29 @@ PAGE_HTML = """<!DOCTYPE html>
           ' · ' +
           escapeHtml(String(s.direction || '—')) +
           '</div>' +
+          '<div style="margin-top:4px">conf ' +
+          confDisp +
+          '</div>' +
           '<div style="margin-top:4px;color:var(--pg-muted)">GH ' +
           escapeHtml(String(s.groundhog_usage || '—')) +
           '</div>' +
-          '<div>Δ ' +
-          escapeHtml(String(s.decision_changed_flag || '—')) +
+          '<div style="margin-top:4px">Δ change ' +
+          dch +
           '</div>' +
           '</div>';
       }
-      body += '</div>';
-      root.innerHTML = body;
+      scroll += '</div></div>';
+      scroll +=
+        '<button type="button" class="pg-student-d11-carousel-btn" id="pgStudentD11CarNext" aria-label="Next slice">▶</button>';
+      scroll += '</div></div>';
+      const chrome = renderStudentPanelD11Chrome(
+        2,
+        ['<strong>Run table</strong>', '<strong>Run</strong> ' + escapeHtml(studentPanelD11ShortRunId(runId))],
+        true
+      );
+      root.innerHTML = studentPanelD11Layout(chrome, scroll);
       wireStudentPanelD11Nav();
+      wireStudentPanelD11Carousel();
       const nodes = root.querySelectorAll('.pg-student-d11-slice[data-did]');
       nodes.forEach(function (node) {
         function go() {
@@ -4755,7 +4983,15 @@ PAGE_HTML = """<!DOCTYPE html>
       studentPanelD11SetHandoffVisible(false);
       const root = studentPanelD11RootEl();
       if (!root) return;
-      root.innerHTML = '<p class="caps" style="margin:0">Loading decision…</p>';
+      root.innerHTML = studentPanelD11Layout(
+        renderStudentPanelD11Chrome(
+          3,
+          ['<strong>Run table</strong>', '<strong>Run</strong> ' + escapeHtml(studentPanelD11ShortRunId(runId)), '<strong>Slice</strong> ' + escapeHtml(decisionId)],
+          true
+        ),
+        '<p class="caps" style="margin:0">Loading scenario view…</p>'
+      );
+      wireStudentPanelD11Nav();
       let j = null;
       try {
         const u =
@@ -4766,20 +5002,26 @@ PAGE_HTML = """<!DOCTYPE html>
         const r = await fetch(u);
         j = await r.json();
       } catch (e) {
-        root.innerHTML =
-          renderStudentPanelD11Nav() +
-          '<p class="caps" style="margin:0;color:#a32b2b">Load failed: ' +
-          escapeHtml(String(e)) +
-          '</p>';
+        root.innerHTML = studentPanelD11Layout(
+          renderStudentPanelD11Chrome(
+            3,
+            ['<strong>Run table</strong>', '<strong>Run</strong> ' + escapeHtml(studentPanelD11ShortRunId(runId)), '<strong>Slice</strong> ' + escapeHtml(decisionId)],
+            true
+          ),
+          '<p class="caps" style="margin:0;color:#a32b2b">Load failed: ' + escapeHtml(String(e)) + '</p>'
+        );
         wireStudentPanelD11Nav();
         return;
       }
       if (!j || !j.ok || !j.record) {
-        root.innerHTML =
-          renderStudentPanelD11Nav() +
-          '<p class="caps" style="margin:0;color:#a32b2b">' +
-          escapeHtml((j && j.error) || 'record unavailable') +
-          '</p>';
+        root.innerHTML = studentPanelD11Layout(
+          renderStudentPanelD11Chrome(
+            3,
+            ['<strong>Run table</strong>', '<strong>Run</strong> ' + escapeHtml(studentPanelD11ShortRunId(runId)), '<strong>Slice</strong> ' + escapeHtml(decisionId)],
+            true
+          ),
+          '<p class="caps" style="margin:0;color:#a32b2b">' + escapeHtml((j && j.error) || 'record unavailable') + '</p>'
+        );
         wireStudentPanelD11Nav();
         return;
       }
@@ -4790,20 +5032,24 @@ PAGE_HTML = """<!DOCTYPE html>
       const bc = rec.baseline_comparison || {};
       const rf = rec.referee || {};
       const pe = rec.pattern_evaluation || {};
+      const scope = rec.evidence_scope_v1;
       const lines = [];
       lines.push('<div class="pg-student-d11-deep">');
-      lines.push(renderStudentPanelD11Nav());
-      lines.push('<p class="pg-student-d11-legend">Decision audit — bullets only</p>');
+      lines.push(
+        '<p class="pg-student-d11-legend" style="margin-top:0"><strong>Scenario forensic view</strong> — ' +
+          'scenario folder run_record + referee; not guaranteed per-decision unless the backend exports it. ' +
+          'Run-scoped fields are labeled below.</p>'
+      );
       lines.push('<ul>');
       lines.push('<li><span class="pg-student-d11-k">decision_time</span> ' + escapeHtml(String(rec.decision_time || '—')) + '</li>');
       lines.push('<li><span class="pg-student-d11-k">run_id</span> ' + escapeHtml(String(rec.run_id || '—')) + '</li>');
-      lines.push('<li><span class="pg-student-d11-k">decision_id</span> ' + escapeHtml(String(rec.decision_id || '—')) + '</li>');
+      lines.push('<li><span class="pg-student-d11-k">decision_id (scenario)</span> ' + escapeHtml(String(rec.decision_id || '—')) + '</li>');
       lines.push('<li><span class="pg-student-d11-k">action / direction / confidence</span> ' +
         escapeHtml(String(dec.action || '—')) +
         ' · ' +
         escapeHtml(String(dec.direction || '—')) +
         ' · conf ' +
-        escapeHtml(dec.confidence != null ? String(dec.confidence) : '—') +
+        (dec.confidence != null ? escapeHtml(String(dec.confidence)) : '<span style="opacity:0.85">data_gap:not_in_run_record</span>') +
         '</li>');
       lines.push('<li><span class="pg-student-d11-k">context</span> price ' +
         fmtD11MaybeNum(ctx.price, 4) +
@@ -4813,9 +5059,11 @@ PAGE_HTML = """<!DOCTYPE html>
         escapeHtml(ctx.structure != null ? String(ctx.structure) : '—') +
         '</li>');
       const pats = pe.patterns_tested;
-      lines.push('<li><span class="pg-student-d11-k">patterns</span> ' +
-        (Array.isArray(pats) && pats.length ? escapeHtml(pats.join(', ')) : escapeHtml(String(pe.note || '—'))) +
-        '</li>');
+      const patLine =
+        Array.isArray(pats) && pats.length
+          ? escapeHtml(pats.join(', '))
+          : '<span style="opacity:0.85">not_exported</span> · ' + escapeHtml(String(pe.note || '—'));
+      lines.push('<li><span class="pg-student-d11-k">pattern_evaluation</span> ' + patLine + '</li>');
       lines.push('<li><span class="pg-student-d11-k">groundhog</span> used ' +
         escapeHtml(String(gh.used || '—')) +
         ' · retrieval ' +
@@ -4828,9 +5076,11 @@ PAGE_HTML = """<!DOCTYPE html>
         ' → ' +
         escapeHtml(String(bc.current_decision || '—')) +
         ' · changed ' +
-        escapeHtml(String(bc.changed || '—')) +
+        (String(bc.changed || '') === '—'
+          ? '<span style="opacity:0.85">data_gap:not_wired</span>'
+          : escapeHtml(String(bc.changed || '—'))) +
         '</li>');
-      lines.push('<li><span class="pg-student-d11-k">referee</span> trades ' +
+      lines.push('<li><span class="pg-student-d11-k">referee (scenario)</span> trades ' +
         escapeHtml(rf.actual_trade != null ? String(rf.actual_trade) : '—') +
         ' · outcome ' +
         escapeHtml(String(rf.outcome || '—')) +
@@ -4844,18 +5094,27 @@ PAGE_HTML = """<!DOCTYPE html>
             ? la.operator_learning_status_line_v1
             : JSON.stringify(la).slice(0, 500);
         lines.push(
-          '<li><span class="pg-student-d11-k">learning_run_audit_v1 (harness)</span> ' + escapeHtml(status) + '</li>'
+          '<li><span class="pg-student-d11-k">learning_run_audit_v1 (scenario when present)</span> ' + escapeHtml(status) + '</li>'
         );
+      } else {
+        lines.push('<li><span class="pg-student-d11-k">learning_run_audit_v1</span> <span style="opacity:0.85">not present on run_record</span></li>');
       }
       const sls = rec.student_learning_store;
       if (sls && typeof sls === 'object') {
         lines.push(
-          '<li><span class="pg-student-d11-k">student_learning_store</span> count ' +
+          '<li><span class="pg-student-d11-k">student_learning_store (run-scoped — not slice evidence)</span> records ' +
             escapeHtml(sls.records_for_run_count != null ? String(sls.records_for_run_count) : '—') +
             (Array.isArray(sls.record_id_sample) && sls.record_id_sample.length
-              ? ' · ids ' + escapeHtml(sls.record_id_sample.join(', '))
+              ? ' · sample ids ' + escapeHtml(sls.record_id_sample.join(', '))
               : '') +
-            '</li>'
+            '. Same count applies to every slice in this run until per-slice linkage exists.</li>'
+        );
+      }
+      if (scope && typeof scope === 'object') {
+        lines.push(
+          '<li><span class="pg-student-d11-k">evidence_scope_v1</span> <code style="font-size:0.72rem">' +
+            escapeHtml(JSON.stringify(scope)) +
+            '</code></li>'
         );
       }
       const gaps = rec.data_gaps;
@@ -4863,7 +5122,15 @@ PAGE_HTML = """<!DOCTYPE html>
         lines.push('<li><span class="pg-student-d11-k">data_gaps</span> ' + escapeHtml(gaps.join(', ')) + '</li>');
       }
       lines.push('</ul></div>');
-      root.innerHTML = lines.join('');
+      const inner = lines.join('');
+      root.innerHTML = studentPanelD11Layout(
+        renderStudentPanelD11Chrome(
+          3,
+          ['<strong>Run table</strong>', '<strong>Run</strong> ' + escapeHtml(studentPanelD11ShortRunId(runId)), '<strong>Slice</strong> ' + escapeHtml(decisionId)],
+          true
+        ),
+        inner
+      );
       wireStudentPanelD11Nav();
     }
 
@@ -4871,48 +5138,52 @@ PAGE_HTML = """<!DOCTYPE html>
       const root = studentPanelD11RootEl();
       if (!root) return;
       if (studentPanelD11.level !== 1) return;
-      root.innerHTML = '<p class="caps" style="margin:0">Loading runs…</p>';
+      const chrome1 = renderStudentPanelD11Chrome(1, ['<strong>Run table</strong>'], false);
+      root.innerHTML = studentPanelD11Layout(
+        chrome1,
+        '<p class="caps" style="margin:0">Loading runs…</p>'
+      );
       let j = null;
       try {
         const r = await fetch('/api/student-panel/runs?limit=50');
         j = await r.json();
       } catch (e) {
-        root.innerHTML =
-          '<p class="caps" style="margin:0;color:#a32b2b">Failed to load runs: ' + escapeHtml(String(e)) + '</p>';
+        root.innerHTML = studentPanelD11Layout(
+          chrome1,
+          '<p class="caps" style="margin:0;color:#a32b2b">Failed to load runs: ' + escapeHtml(String(e)) + '</p>'
+        );
         return;
       }
       if (!j || !j.ok || !Array.isArray(j.runs)) {
-        root.innerHTML =
-          '<p class="caps" style="margin:0;color:#a32b2b">Run list unavailable.</p>';
+        root.innerHTML = studentPanelD11Layout(
+          chrome1,
+          '<p class="caps" style="margin:0;color:#a32b2b">Run list unavailable.</p>'
+        );
         return;
       }
       const rows = j.runs;
-      let h =
-        renderStudentPanelD11Nav() +
-        '<p class="pg-student-d11-legend"><strong>Referee side (this table):</strong> BL % and E/tr are replay rollups for that batch — the rules-of-the-game outcome reference. ' +
-        '<strong>HB</strong> = harness replay path (memory / recall / bias counters). ' +
-        '<strong>SH</strong> = Student handoff (Directive 09 store rows or retrieval matches). ' +
-        '<strong>outΔ</strong> / <strong>GH</strong>: expectancy delta vs prior same-config batch and Groundhog tier (first in chain N/A unless RUNNING). Drilldown pulls <code>learning_run_audit_v1</code> + learning store by run.</p>' +
+      let scroll =
+        '<p class="pg-student-d11-legend" style="margin-top:0"><strong>Batch-level run view</strong> — Referee rollups + harness/handoff signals; not per-decision learning proof, not Student-only scoring. Click a row to open the scenario carousel for that run.</p>' +
         '<div class="pg-student-d11-table-wrap"><table class="pg-student-d11-table"><thead><tr>' +
         '<th>run_id</th><th>time</th><th>pattern</th><th>window</th><th>#tr</th>' +
         '<th title="Referee — replay trade win % (batch rollup)">BL %</th>' +
         '<th title="Referee — expectancy per trade (batch rollup)">E/tr</th>' +
-        '<th title="Harness — replay path moved (memory / recall / bias); not Student store">HB</th>' +
-        '<th title="Student handoff — rows appended or retrieval matched (Directive 09)">SH</th>' +
-        '<th title="Harness — expectancy vs prior same-config batch">outΔ</th>' +
-        '<th title="Harness — Groundhog / memory lane tier vs prior run in same config">GH</th>' +
+        '<th title="Harness replay path">HB</th>' +
+        '<th title="Student handoff">SH</th>' +
+        '<th title="Expectancy vs prior same-config batch">outΔ</th>' +
+        '<th title="Groundhog tier">GH</th>' +
         '</tr></thead><tbody>';
       for (let i = 0; i < rows.length; i++) {
         const row = rows[i] || {};
         const rid = row.run_id != null ? String(row.run_id) : '';
         const infl = row.is_inflight === true || row.status === 'running';
         const trCls = infl ? ' data-run-inflight="1" style="opacity:0.92"' : '';
-        h += '<tr' + trCls + (infl ? '' : ' data-run-row') + ' data-run-id="' + escapeHtml(rid) + '">';
-        h += '<td title="' + escapeHtml(rid) + '"><code style="font-size:0.7rem">' + escapeHtml(rid.length > 14 ? rid.slice(0, 12) + '…' : rid) + '</code></td>';
-        h += '<td>' + escapeHtml(String(row.timestamp || '—')) + '</td>';
-        h += '<td>' + escapeHtml(String(row.pattern || '—')) + '</td>';
-        h += '<td>' + escapeHtml(String(row.evaluation_window || '—')) + '</td>';
-        h +=
+        scroll += '<tr' + trCls + (infl ? '' : ' data-run-row') + ' data-run-id="' + escapeHtml(rid) + '">';
+        scroll += '<td title="' + escapeHtml(rid) + '"><code style="font-size:0.7rem">' + escapeHtml(rid.length > 14 ? rid.slice(0, 12) + '…' : rid) + '</code></td>';
+        scroll += '<td>' + escapeHtml(String(row.timestamp || '—')) + '</td>';
+        scroll += '<td>' + escapeHtml(String(row.pattern || '—')) + '</td>';
+        scroll += '<td>' + escapeHtml(String(row.evaluation_window || '—')) + '</td>';
+        scroll +=
           '<td>' +
           (row.run_progress
             ? escapeHtml(String(row.run_progress))
@@ -4922,28 +5193,24 @@ PAGE_HTML = """<!DOCTYPE html>
           row.harness_baseline_trade_win_percent != null
             ? row.harness_baseline_trade_win_percent
             : row.win_rate_percent;
-        h += '<td>' + (bl != null ? fmtD11MaybeNum(bl, 1) : '—') + '</td>';
-        h += '<td>' + (row.expectancy_per_trade != null ? fmtD11MaybeNum(row.expectancy_per_trade, 4) : '—') + '</td>';
+        scroll += '<td>' + (bl != null ? fmtD11MaybeNum(bl, 1) : '—') + '</td>';
+        scroll += '<td>' + (row.expectancy_per_trade != null ? fmtD11MaybeNum(row.expectancy_per_trade, 4) : '—') + '</td>';
         const hbCol = row.harness_behavior_changed != null ? row.harness_behavior_changed : row.behavior_changed;
         const shCol = row.student_handoff_active != null ? row.student_handoff_active : '—';
-        h += '<td>' + escapeHtml(String(hbCol != null ? hbCol : '—')) + '</td>';
-        h += '<td>' + escapeHtml(String(shCol)) + '</td>';
-        h += '<td>' + escapeHtml(String(row.outcome_improved || '—')) + '</td>';
-        h += '<td>' + escapeHtml(String(row.groundhog_state || '—')) + '</td>';
-        h += '</tr>';
+        scroll += '<td>' + escapeHtml(String(hbCol != null ? hbCol : '—')) + '</td>';
+        scroll += '<td>' + escapeHtml(String(shCol)) + '</td>';
+        scroll += '<td>' + escapeHtml(String(row.outcome_improved || '—')) + '</td>';
+        scroll += '<td>' + escapeHtml(String(row.groundhog_state || '—')) + '</td>';
+        scroll += '</tr>';
       }
-      h += '</tbody></table></div>';
+      scroll += '</tbody></table></div>';
       if (!rows.length) {
-        h =
-          renderStudentPanelD11Nav() +
-          '<p class="caps" style="margin:0">No scorecard runs yet — run a parallel batch.</p>';
+        scroll = '<p class="caps" style="margin:0">No scorecard runs yet — run a parallel batch.</p>';
       }
-      root.innerHTML = h;
-      wireStudentPanelD11Nav();
-      const trs = root.querySelectorAll('tr[data-run-id]');
+      root.innerHTML = studentPanelD11Layout(chrome1, scroll);
+      const trs = root.querySelectorAll('tr[data-run-row]');
       trs.forEach(function (tr) {
         tr.addEventListener('click', function () {
-          if (tr.getAttribute('data-run-inflight') === '1') return;
           const id = tr.getAttribute('data-run-id');
           if (id) void studentPanelD11GotoLevel2(id);
         });

@@ -25,7 +25,7 @@ from renaissance_v4.game_theory.student_proctor.student_learning_store_v1 import
 
 SCHEMA_RUN_ROW = "student_panel_run_row_v2"
 SCHEMA_DECISION_SLICE = "student_panel_decision_slice_v1"
-SCHEMA_DECISION_RECORD = "student_decision_record_v2"
+SCHEMA_DECISION_RECORD = "student_decision_record_v3"
 
 
 def _float(v: Any, default: float | None = None) -> float | None:
@@ -440,8 +440,10 @@ def _slice_from_flat_scenario(flat: dict[str, Any]) -> dict[str, Any]:
         "result": result,
         "direction": direction,
         "confidence": None,
+        "confidence_gap": "not_exported",
         "groundhog_usage": ghu,
-        "decision_changed_flag": "—",
+        "decision_changed_flag": None,
+        "decision_changed_gap": "not_wired",
     }
 
 
@@ -455,9 +457,17 @@ def build_d11_decision_strip_payload_v1(job_id: str) -> dict[str, Any]:
         "ok": True,
         "run_id": job_id,
         "scenario_list_error": err,
+        "slice_ordering": "scenario_slices_in_batch_order",
+        "slice_ordering_note": (
+            "Slices follow batch README / folder discovery order — not a canonical exam sequence "
+            "or guaranteed trade-by-trade timeline unless the batch manifest enforces it."
+        ),
         "slices": slices,
         "data_gaps": (
-            ["decision_changed_flag_not_wired"]
+            [
+                "decision_changed_flag_not_wired",
+                "confidence_not_exported_per_slice",
+            ]
             if slices
             else ["no_scenario_rows"]
         ),
@@ -542,6 +552,7 @@ def build_student_decision_record_v1(
         "pattern_evaluation": {
             "patterns_tested": [],
             "note": "Per-decision pattern checklist not exported in run_record v1 — use HUMAN_READABLE.md / harness.",
+            "export_status": "not_exported",
         },
         "groundhog": {
             "used": "YES" if target.get("memory_applied") else "NO",
@@ -563,6 +574,15 @@ def build_student_decision_record_v1(
             "path": store_path_s,
             "records_for_run_count": sl_count,
             "record_id_sample": sl_sample,
+            "scope": "run_scoped",
+        },
+        "evidence_scope_v1": {
+            "referee_and_run_record": "scenario_folder",
+            "learning_run_audit_v1": "scenario_when_present_on_run_record",
+            "student_learning_store": "run_scoped_not_slice_scoped",
+            "baseline_comparison": "not_fully_implemented",
+            "pattern_evaluation": "not_exported",
+            "decision_change_attribution": "not_fully_implemented",
         },
         "data_gaps": gaps,
     }
