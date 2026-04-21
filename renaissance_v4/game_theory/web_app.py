@@ -25,8 +25,8 @@ counts, **run_ok_pct**, **referee_win_pct**, **avg_trade_win_pct**) and expose `
 
 **System Dialogue** (post-run formatter; ``/api/barney-summary``): ``POST /api/barney-summary`` with ``{"job_id": "…"}`` — structured
 run facts only. **Ask DATA** (bounded self-explainer): ``POST /api/ask-data`` with ``question`` and optional
-``job_id`` / ``ui_context`` — answers only from bundled PML knowledge + run/scorecard facts (same Ollama stack
-as Barney when enabled; see ``ASK_DATA_USE_LLM`` / ``BARNEY_USE_LLM`` / ``ANNA_USE_LLM``).
+``job_id`` / ``ui_context`` — answers only from bundled PML knowledge + run/scorecard facts
+(same Ollama stack as System Dialogue when enabled; see ``ASK_DATA_USE_LLM`` / ``BARNEY_USE_LLM`` / ``ANNA_USE_LLM``).
 
 Operator **retrospective** (learn / next experiment): ``GET /api/retrospective-log``,
 ``POST /api/retrospective-append`` — persists to ``retrospective_log.jsonl`` (see
