@@ -80,7 +80,7 @@ _PATTERN_BANNER_PATH = _RV4_ROOT / "assets" / "pattern.png"
 _PATTERN_BANNER_WEBP_PATH = _RV4_ROOT / "assets" / "pattern.webp"
 
 # Operator-visible web UI bundle version — bump when changing PAGE_HTML (HTML/CSS/JS) so deploys are provable.
-PATTERN_GAME_WEB_UI_VERSION = "2.18.6"
+PATTERN_GAME_WEB_UI_VERSION = "2.18.7"
 
 from renaissance_v4.game_theory.groundhog_memory import (
     groundhog_auto_merge_enabled,
@@ -5901,7 +5901,13 @@ PAGE_HTML = """<!DOCTYPE html>
       return m;
     }
 
-    document.getElementById('runBtn').onclick = async () => {
+    (function wireRunBatchButton() {
+      const runBtn = document.getElementById('runBtn');
+      if (!runBtn) {
+        console.error('Pattern Machine learning UI: #runBtn missing — Run wiring skipped; check HTML structure.');
+        return;
+      }
+      runBtn.onclick = async () => {
       const btn = document.getElementById('runBtn');
       setRunFeedbackToast('');
       setOpButtonBusy(btn, true, 'Running…', true);
@@ -5912,9 +5918,10 @@ PAGE_HTML = """<!DOCTYPE html>
       if (sn) sn.textContent = '';
       updateRunStatusLine('Starting batch…');
       scrollRunStatusIntoView();
-      document.getElementById('progressSub').textContent = '';
+      const psEl = document.getElementById('progressSub');
+      if (psEl) psEl.textContent = '';
       setProgressUI(0, 0, '');
-      progressWrap.classList.add('active');
+      if (progressWrap) progressWrap.classList.add('active');
       document.body.classList.add('pg-run-active');
       const t0 = Date.now();
       let runWorkersCap = null;
@@ -6174,12 +6181,13 @@ PAGE_HTML = """<!DOCTYPE html>
         }
         updateRunStatusLine('Stopped or failed — see Result.');
       } finally {
-        progressWrap.classList.remove('active');
+        if (progressWrap) progressWrap.classList.remove('active');
         document.body.classList.remove('pg-run-active');
         setOpButtonBusy(btn, false);
         syncBannerRunFromStatusLine();
       }
     };
+    })();
 
     function applyEvaluationWindowCapFromPayload(h) {
       const maxM = h && typeof h.max_evaluation_window_calendar_months === 'number' ? h.max_evaluation_window_calendar_months : null;
