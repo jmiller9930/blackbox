@@ -31,6 +31,8 @@ export BLACKBOX_PML_RUNTIME_ROOT="$RUNTIME_ROOT"
 export PATTERN_GAME_WEB_LOG_FILE="$RUNTIME_ROOT/logs/pattern_game_web.log"
 export PATTERN_GAME_TELEMETRY_DIR="$RUNTIME_ROOT/logs/pattern_game_telemetry"
 export PATTERN_GAME_SESSION_LOGS_ROOT="$RUNTIME_ROOT/batches"
+# Merge canonical Groundhog bundle into manifests when the file exists (override in shell if needed).
+export PATTERN_GAME_GROUNDHOG_BUNDLE="${PATTERN_GAME_GROUNDHOG_BUNDLE:-1}"
 echo "gsync: PML runtime root (explicit): $RUNTIME_ROOT (Flask log rotates in-process: max 100MB x 5)"
 
 # Do not shell-redirect stdout/stderr to /tmp — RotatingFileHandler in web_app consumes logs.

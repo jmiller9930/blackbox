@@ -82,7 +82,7 @@ _PATTERN_BANNER_WEBP_PATH = _RV4_ROOT / "assets" / "pattern.webp"
 _PATTERN_GAME_BANNER_BOOT_JS = _GAME_THEORY / "static" / "pattern_game_banner_boot.js"
 
 # Operator-visible web UI bundle version — bump when changing PAGE_HTML (HTML/CSS/JS) so deploys are provable.
-PATTERN_GAME_WEB_UI_VERSION = "2.18.9"
+PATTERN_GAME_WEB_UI_VERSION = "2.19.0"
 
 from renaissance_v4.game_theory.groundhog_memory import (
     groundhog_auto_merge_enabled,
@@ -2165,7 +2165,18 @@ PAGE_HTML = """<!DOCTYPE html>
       min-height: 0;
     }
     .pg-focus-tile-hint { font-size: 0.72rem; color: #7d8a98; margin: 0; line-height: 1.35; }
-    .pg-focus-expanded { display: flex; flex-direction: column; flex: 1 1 auto; min-height: 0; min-width: 0; }
+    /* [hidden] must win over .pg-focus-expanded display — otherwise expanded stays on-screen and blocks tile clicks. */
+    .pg-focus-overview[hidden],
+    .pg-focus-expanded[hidden] {
+      display: none !important;
+    }
+    .pg-focus-expanded:not([hidden]) {
+      display: flex;
+      flex-direction: column;
+      flex: 1 1 auto;
+      min-height: 0;
+      min-width: 0;
+    }
     .pg-focus-expanded-head {
       display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-bottom: 1px solid rgba(255,255,255,0.1);
       background: #121820;
@@ -4770,15 +4781,17 @@ PAGE_HTML = """<!DOCTYPE html>
     (function wirePgFocusDock() {
       const back = document.getElementById('pgFocusBackBtn');
       if (back) back.addEventListener('click', function () { pgFocusBackToOverview(); });
-      const ov = document.getElementById('pgFocusOverview');
-      if (ov) {
-        ov.addEventListener('click', function (ev) {
-          const t = ev.target && ev.target.closest ? ev.target.closest('[data-pg-focus-tile]') : null;
-          if (!t) return;
-          const mode = t.getAttribute('data-pg-focus-tile');
-          if (mode && typeof pgFocusEnterPanel === 'function') pgFocusEnterPanel(mode);
+      function wireTile(btnId, mode) {
+        const el = document.getElementById(btnId);
+        if (!el) return;
+        el.addEventListener('click', function (ev) {
+          ev.preventDefault();
+          if (typeof pgFocusEnterPanel === 'function') pgFocusEnterPanel(mode);
         });
       }
+      wireTile('pgFocusTileTerminal', 'terminal');
+      wireTile('pgFocusTileResults', 'results');
+      wireTile('pgFocusTileModules', 'modules');
       updateFocusTerminalOverviewTile();
     })();
 

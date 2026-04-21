@@ -270,3 +270,5 @@ def apply_main_process_runtime_env_defaults() -> None:
     os.environ.setdefault("PATTERN_GAME_WEB_LOG_FILE", str(rt / "logs" / "pattern_game_web.log"))
     os.environ.setdefault("PATTERN_GAME_TELEMETRY_DIR", str(rt / "logs" / "pattern_game_telemetry"))
     os.environ.setdefault("PATTERN_GAME_SESSION_LOGS_ROOT", str(rt / "batches"))
+    # Groundhog: auto-merge canonical bundle when present (see ``groundhog_memory.py``). Override with 0/false in shell if needed.
+    os.environ.setdefault("PATTERN_GAME_GROUNDHOG_BUNDLE", "1")
