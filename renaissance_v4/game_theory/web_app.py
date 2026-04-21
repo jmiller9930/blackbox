@@ -82,7 +82,7 @@ _PATTERN_BANNER_WEBP_PATH = _RV4_ROOT / "assets" / "pattern.webp"
 _PATTERN_GAME_BANNER_BOOT_JS = _GAME_THEORY / "static" / "pattern_game_banner_boot.js"
 
 # Operator-visible web UI bundle version — bump when changing PAGE_HTML (HTML/CSS/JS) so deploys are provable.
-PATTERN_GAME_WEB_UI_VERSION = "2.19.3"
+PATTERN_GAME_WEB_UI_VERSION = "2.19.4"
 
 from renaissance_v4.game_theory.groundhog_memory import (
     groundhog_auto_merge_enabled,
@@ -4657,7 +4657,7 @@ PAGE_HTML = """<!DOCTYPE html>
       const fl = document.getElementById('focusTileTerminalLine');
       if (fs && st) fs.textContent = (st.textContent || '—').trim() || '—';
       if (fl && ln) {
-        const lines = (ln.textContent || '').trim().split('\n').filter(Boolean);
+        const lines = (ln.textContent || '').trim().split('\\n').filter(Boolean);
         const t = lines.length ? lines.slice(0, 4).join(' ') : '—';
         fl.textContent = t;
       }
