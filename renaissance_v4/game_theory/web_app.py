@@ -82,7 +82,7 @@ _PATTERN_BANNER_WEBP_PATH = _RV4_ROOT / "assets" / "pattern.webp"
 _PATTERN_GAME_BANNER_BOOT_JS = _GAME_THEORY / "static" / "pattern_game_banner_boot.js"
 
 # Operator-visible web UI bundle version — bump when changing PAGE_HTML (HTML/CSS/JS) so deploys are provable.
-PATTERN_GAME_WEB_UI_VERSION = "2.19.5"
+PATTERN_GAME_WEB_UI_VERSION = "2.19.6"
 
 from renaissance_v4.game_theory.groundhog_memory import (
     groundhog_auto_merge_enabled,
@@ -2260,6 +2260,37 @@ PAGE_HTML = """<!DOCTYPE html>
     .pg-focus-pane--modules .pg-status-name { color: #f0f4f8; }
     .pg-focus-pane--modules .pg-status-meta { color: rgba(230, 237, 243, 0.78); }
     .pg-focus-pane--modules .pg-module-board-msg { color: rgba(230, 237, 243, 0.82); margin: 0; font-size: 0.82rem; }
+    /* Quick View → Modules: dense chip row (dot + label); full line shows in modal on click */
+    .pg-focus-pane--modules #moduleBoardList.pg-status-list {
+      display: flex;
+      flex-wrap: wrap;
+      align-content: flex-start;
+      align-items: flex-start;
+      gap: 8px 10px;
+    }
+    .pg-focus-pane--modules #moduleBoardList .pg-status-item {
+      display: inline-flex;
+      flex-direction: row;
+      align-items: center;
+      gap: 8px;
+      width: auto;
+      max-width: min(100%, 22rem);
+      margin: 0;
+      padding: 5px 10px 5px 8px;
+      border-radius: 999px;
+      grid-template-columns: unset;
+    }
+    .pg-focus-pane--modules #moduleBoardList .pg-status-item .status-dot { margin-top: 0; }
+    .pg-focus-pane--modules #moduleBoardList .pg-status-meta { display: none; }
+    .pg-focus-pane--modules #moduleBoardList .pg-status-item > div { min-width: 0; flex: 1 1 auto; }
+    .pg-focus-pane--modules #moduleBoardList .pg-status-name {
+      font-size: 0.82rem;
+      font-weight: 700;
+      margin: 0;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
     .pg-student-triangle-body {
       font-size: 0.88rem;
       line-height: 1.48;
@@ -3910,11 +3941,11 @@ PAGE_HTML = """<!DOCTYPE html>
         </div>
         <div class="pg-focus-expanded" id="pgFocusExpanded" hidden>
           <div class="pg-focus-expanded-head">
-            <button type="button" class="pg-focus-back-btn" id="pgFocusBackBtn" aria-label="Back to overview">All</button>
-            <div class="pg-focus-expanded-tabs" role="tablist" aria-label="Quick view panels">
-              <button type="button" class="pg-focus-expanded-tab" id="pgFocusTabTerminal" data-pg-focus-tab="terminal" role="tab" aria-controls="pgFocusPaneTerminal">Terminal</button>
-              <button type="button" class="pg-focus-expanded-tab" id="pgFocusTabResults" data-pg-focus-tab="results" role="tab" aria-controls="pgFocusPaneResults">Results</button>
-              <button type="button" class="pg-focus-expanded-tab" id="pgFocusTabModules" data-pg-focus-tab="modules" role="tab" aria-controls="pgFocusPaneModules">Modules</button>
+            <button type="button" class="pg-focus-back-btn" id="pgFocusBackBtn" aria-label="Back to Quick view tiles" title="Return to the three tiles (Terminal · Results · Modules)">Quick view</button>
+            <div class="pg-focus-expanded-tabs" role="tablist" aria-label="Switch panel or click the active tab again to return to Quick view">
+              <button type="button" class="pg-focus-expanded-tab" id="pgFocusTabTerminal" data-pg-focus-tab="terminal" role="tab" aria-controls="pgFocusPaneTerminal" title="Terminal (tap again when highlighted to return to Quick view)">Terminal</button>
+              <button type="button" class="pg-focus-expanded-tab" id="pgFocusTabResults" data-pg-focus-tab="results" role="tab" aria-controls="pgFocusPaneResults" title="Results (tap again when highlighted to return to Quick view)">Results</button>
+              <button type="button" class="pg-focus-expanded-tab" id="pgFocusTabModules" data-pg-focus-tab="modules" role="tab" aria-controls="pgFocusPaneModules" title="Modules (tap again when highlighted to return to Quick view)">Modules</button>
             </div>
             <span class="pg-focus-expanded-title" id="pgFocusExpandedTitle">Expanded view</span>
           </div>
@@ -6432,8 +6463,15 @@ PAGE_HTML = """<!DOCTYPE html>
     (function wireModuleModalClose() {
       const d = document.getElementById('moduleDetailDialog');
       const c = document.getElementById('moduleModalClose');
+      const inner = d ? d.querySelector('.pg-module-dialog-inner') : null;
       if (c && d) {
-        c.addEventListener('click', function () { if (d.close) d.close(); });
+        c.addEventListener('click', function (ev) {
+          ev.stopPropagation();
+          if (d.close) d.close();
+        });
+      }
+      if (inner && d && d.close) {
+        inner.addEventListener('click', function () { d.close(); });
       }
       if (d) {
         d.addEventListener('click', function (ev) {
