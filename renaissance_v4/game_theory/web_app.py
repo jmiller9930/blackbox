@@ -85,7 +85,7 @@ _PATTERN_BANNER_WEBP_PATH = _RV4_ROOT / "assets" / "pattern.webp"
 _PATTERN_GAME_BANNER_BOOT_JS = _GAME_THEORY / "static" / "pattern_game_banner_boot.js"
 
 # Operator-visible web UI bundle version — bump when changing PAGE_HTML (HTML/CSS/JS) so deploys are provable.
-PATTERN_GAME_WEB_UI_VERSION = "2.19.23"
+PATTERN_GAME_WEB_UI_VERSION = "2.19.24"
 
 from renaissance_v4.game_theory.groundhog_memory import (
     groundhog_auto_merge_enabled,
@@ -2395,21 +2395,22 @@ PAGE_HTML = """<!DOCTYPE html>
       min-height: 0;
       overflow: hidden;
     }
+    /* Pinned chrome: match light Pattern Machine surface — not a dark “fat strip” on cream UI */
     .pg-student-d11-chrome {
       flex-shrink: 0;
       position: sticky;
       top: 0;
       z-index: 3;
-      background: linear-gradient(180deg, rgba(22,27,34,0.98) 0%, rgba(22,27,34,0.96) 100%);
-      border-bottom: 1px solid rgba(255,255,255,0.10);
-      padding: 0 0 8px;
+      background: linear-gradient(180deg, var(--pg-surface-strong) 0%, var(--pg-surface) 100%);
+      border-bottom: 1px solid var(--pg-line);
+      padding: 6px 4px 8px;
       margin: 0 0 0;
     }
     .pg-student-d11-bc {
-      font-size: 0.72rem;
+      font-size: 0.75rem;
       color: var(--pg-muted);
       margin: 0 0 6px;
-      line-height: 1.35;
+      line-height: 1.4;
     }
     .pg-student-d11-bc strong { color: var(--pg-ink); font-weight: 600; }
     .pg-student-d11-nav {
@@ -2433,16 +2434,16 @@ PAGE_HTML = """<!DOCTYPE html>
       height: 26px;
       padding: 0;
       border-radius: 999px;
-      border: 1px solid rgba(255,255,255,0.16);
-      background: rgba(100, 155, 220, 0.12);
+      border: 1px solid var(--pg-line);
+      background: var(--pg-teal-soft);
       color: var(--pg-ink);
       font-size: 1rem;
       line-height: 1;
       cursor: pointer;
     }
     .pg-student-d11-caret:hover:not(:disabled) {
-      border-color: rgba(30, 214, 170, 0.45);
-      background: rgba(100, 155, 220, 0.2);
+      border-color: rgba(47, 127, 121, 0.45);
+      background: rgba(47, 127, 121, 0.18);
     }
     .pg-student-d11-caret:disabled {
       opacity: 0.32;
@@ -2452,12 +2453,12 @@ PAGE_HTML = """<!DOCTYPE html>
       font-size: 0.78rem;
       padding: 4px 10px;
       border-radius: 6px;
-      border: 1px solid rgba(255,255,255,0.14);
-      background: rgba(0,0,0,0.12);
+      border: 1px solid var(--pg-line);
+      background: rgba(255, 255, 255, 0.75);
       color: var(--pg-ink);
       cursor: pointer;
     }
-    .pg-student-d11-nav button:hover { border-color: rgba(30, 214, 170, 0.45); }
+    .pg-student-d11-nav button:hover { border-color: rgba(47, 127, 121, 0.45); }
     .pg-student-d11-scroll {
       flex: 1;
       min-height: 0;
