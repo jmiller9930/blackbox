@@ -6,7 +6,8 @@
 **CC:** Product, Referee, UI, Operator  
 **Scope:** `renaissance_v4/game_theory` only
 
-**Predecessor:** `GT_DIRECTIVE_004_deliberation_capture_v1.md` (**§11.2 — CLOSED**).
+**Predecessor:** `GT_DIRECTIVE_004_deliberation_capture_v1.md` (**§11.2 — CLOSED**).  
+**Successor:** `GT_DIRECTIVE_006_downstream_frame_generator_v1.md` (**§11.4 — active**).
 
 ## Canonical workflow record
 
@@ -52,7 +53,11 @@ Engineer must list remaining gaps (persistence, pack registry, UI) under **Engin
 
 ## Engineer update
 
-**Status:** implementation + proof landed — **Requesting architect acceptance**
+**Status:** **CLOSED** — **GT_DIRECTIVE_005 §11.3** accepted (2026-04-22). Do **not** reopen unless a **regression** is found. Next slice: **§11.4** → **`GT_DIRECTIVE_006_downstream_frame_generator_v1.md`**.
+
+**Clarification — “app down” vs Student panel 200**
+
+The **42-pass** proof used Flask **`create_app().test_client()`** (in-process WSGI). That **does not** bind `127.0.0.1:8765`; it exercises the same route handlers as production. **`curl http://127.0.0.1:8765/...`** returned **000** locally because **no** Flask process was listening on that port on the dev machine — **not** a contradiction with **200** from the test client. **Remote** pattern-game was restarted via **`gsync`** (HEAD **65bfd6b1**). **Future closeout:** when local `curl` is meaningless, attach a **remote HTTP proof** artifact (captured status + URL) in `docs/proof/…` so the operator chain is explicit (per Architect note).
 
 **Summary**
 
@@ -65,7 +70,7 @@ Engineer must list remaining gaps (persistence, pack registry, UI) under **Engin
 **Proof**
 
 - `python3 -m pytest tests/test_exam_decision_frame_schema_v1.py tests/test_exam_deliberation_capture_v1.py tests/test_exam_state_machine_v1.py` — **42 passed**.
-- Student panel route smoke (Flask test client): `GET /api/student-panel/runs` → **200** (proves app still healthy after exam routes).
+- Student panel route smoke (**Flask test client**, not bound TCP): `GET /api/student-panel/runs` → **200** (proves route handlers healthy after exam routes).
 
 **HTTP (documented)**
 
@@ -78,15 +83,36 @@ Engineer must list remaining gaps (persistence, pack registry, UI) under **Engin
 
 - Durable DB; pack-fed **opening_snapshot** OHLCV/indicators (stub zeros today); **§11.4** real downstream payloads; `decision_frame_id` global index for O(1) lookup.
 
-**Requesting architect acceptance**
+**Architect acceptance received** — directive **§11.3** record complete.
 
 ---
 
 ## Architect review
 
-**Status:** pending architect review
+**Status:** **Accepted — CLOSED** (2026-04-22)
 
-Architect will append one of:
+**Architect Acceptance — §11.3**
 
-- `Accepted`
-- `Rejected — rework required`
+Decision frame schema implementation satisfies the requirements of §11.3.
+
+* exam_unit is implemented as the parent container  
+* ordered decision_frame[] are implemented as child records  
+* decision_frame_id values are stable and explicit  
+* frame ordering and parent linkage are validated  
+* frame 0 is anchored to opening snapshot stub, deliberation read-through, and Decision A stub  
+* NO_TRADE units resolve to exactly one frame  
+* ENTER units currently resolve to one opening frame, with downstream generation deferred to §11.4  
+* immutable timeline commit behavior is enforced  
+* fetch-by-unit and fetch-by-frame APIs are implemented  
+* golden fixture, operator proof artifact, and automated tests are present  
+* no scope creep into grading, UI splice, or downstream frame generation occurred  
+
+**Directive GT_DIRECTIVE_005 §11.3 is accepted.**
+
+**Directive status:** **CLOSED.** Do not reopen unless a regression is found.
+
+**Next engineering slice:** **§11.4 — Downstream Frame Generator** → **`GT_DIRECTIVE_006_downstream_frame_generator_v1.md`**.
+
+---
+
+**HTTP proof note (closeout discipline):** Local `curl` to `127.0.0.1:8765` may be empty when no listener is bound; in-process **test_client** smoke plus **remote `gsync` restart** satisfied this closeout. Prefer a **captured remote HTTP proof** snippet in `docs/proof/…` for future directives when local TCP is not part of the proof chain.
