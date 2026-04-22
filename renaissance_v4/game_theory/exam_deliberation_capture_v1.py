@@ -7,7 +7,6 @@ and in-memory attachment for **decision frame index 0** (dev; not durable persis
 
 from __future__ import annotations
 
-import re
 import threading
 from typing import Any, Literal
 
@@ -35,6 +34,10 @@ class PackDeliberationPolicyV1(BaseModel):
 
     k_min: int = Field(default=3, ge=1, le=12)
     data_gap_allowed_paths: list[str] = Field(default_factory=list)
+    allow_no_trade_primary: bool = Field(
+        default=True,
+        description="If false, H4 primary_selection may not be NO_TRADE (pack disallows that outcome).",
+    )
 
 
 class DataGapEntryV1(BaseModel):
@@ -144,11 +147,34 @@ def assert_non_placeholder_deliberation_v1(payload: ExamDeliberationPayloadV1) -
             raise ValueError("placeholder_text_forbidden:too_short")
 
 
+def validate_h4_primary_selection_integrity_v1(
+    payload: ExamDeliberationPayloadV1,
+    policy: PackDeliberationPolicyV1,
+) -> None:
+    """
+    H4 ``primary_selection`` must reference a declared ``hypothesis_id``, or ``NO_TRADE`` when the pack allows it.
+
+    Also rejects duplicate ``hypothesis_id`` rows (ambiguous winner reference).
+    """
+    ids_list = [h.hypothesis_id for h in payload.hypotheses]
+    if len(ids_list) != len(frozenset(ids_list)):
+        raise ValueError("duplicate_hypothesis_id")
+    uid_set = frozenset(ids_list)
+    ps = payload.h4.primary_selection
+    if ps == "NO_TRADE":
+        if not policy.allow_no_trade_primary:
+            raise ValueError("no_trade_primary_not_allowed_by_pack")
+        return
+    if ps not in uid_set:
+        raise ValueError("h4.primary_selection_must_reference_declared_hypothesis")
+
+
 def validate_deliberation_against_policy_v1(
     payload: ExamDeliberationPayloadV1,
     policy: PackDeliberationPolicyV1,
 ) -> None:
-    """``data_gap`` only on paths the pack explicitly allows; hypothesis count ≥ ``k_min``."""
+    """Hypothesis count, H4 selection integrity, ``data_gap`` allowlist."""
+    validate_h4_primary_selection_integrity_v1(payload, policy)
     if len(payload.hypotheses) < policy.k_min:
         raise ValueError(f"hypothesis_count_below_k_min:{len(payload.hypotheses)}<{policy.k_min}")
     allowed = frozenset(policy.data_gap_allowed_paths)
@@ -198,7 +224,13 @@ def deliberation_http_route_matrix_v1() -> list[dict[str, Any]]:
             "errors": [
                 {"status": 400, "when": "malformed JSON or envelope validation failure"},
                 {"status": 404, "when": "exam_unit_id not found"},
-                {"status": 422, "when": "semantic failure: policy, placeholder, unsupported schema_version"},
+                {
+                    "status": 422,
+                    "when": (
+                        "semantic failure: policy, placeholder, unsupported schema_version, "
+                        "H4 primary_selection integrity (unknown hypothesis id, duplicate ids, NO_TRADE disallowed)"
+                    ),
+                },
             ],
         },
         {
@@ -226,4 +258,5 @@ __all__ = [
     "put_frame0_deliberation_v1",
     "reset_exam_deliberations_for_tests_v1",
     "validate_deliberation_against_policy_v1",
+    "validate_h4_primary_selection_integrity_v1",
 ]

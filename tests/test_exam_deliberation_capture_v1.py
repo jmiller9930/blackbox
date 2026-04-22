@@ -19,6 +19,7 @@ from renaissance_v4.game_theory.exam_deliberation_capture_v1 import (
     parse_submit_envelope_v1,
     reset_exam_deliberations_for_tests_v1,
     validate_deliberation_against_policy_v1,
+    validate_h4_primary_selection_integrity_v1,
 )
 from renaissance_v4.game_theory.exam_state_machine_v1 import create_exam_unit_v1, reset_exam_units_for_tests_v1
 from renaissance_v4.game_theory.web_app import create_app
@@ -122,6 +123,36 @@ def test_data_gap_rejected_when_pack_disallows_path() -> None:
         validate_deliberation_against_policy_v1(p, pol)
 
 
+def test_duplicate_hypothesis_ids_rejected_for_h4_integrity() -> None:
+    raw = _delib_dict_from_fixture(exam_unit_id="unit_one")
+    raw["hypotheses"] = [dict(raw["hypotheses"][0]), dict(raw["hypotheses"][1]), dict(raw["hypotheses"][2])]
+    raw["hypotheses"][1]["hypothesis_id"] = "H1"
+    raw["hypotheses"][1]["market_interpretation"] = (
+        raw["hypotheses"][1]["market_interpretation"] + " Second row shares H1 id for integrity regression."
+    )
+    raw["h4"]["primary_selection"] = "H1"
+    raw["h4"]["comparative_evaluation"] = (
+        raw["h4"]["comparative_evaluation"] + " Primary ties to H1 while duplicate ids remain invalid."
+    )
+    p = ExamDeliberationPayloadV1.model_validate(raw)
+    pol = PackDeliberationPolicyV1(k_min=3)
+    with pytest.raises(ValueError, match="duplicate_hypothesis_id"):
+        validate_h4_primary_selection_integrity_v1(p, pol)
+
+
+def test_no_trade_primary_rejected_when_pack_disallows() -> None:
+    raw = _delib_dict_from_fixture(exam_unit_id="unit_one")
+    raw["h4"]["primary_selection"] = "NO_TRADE"
+    raw["h4"]["comparative_evaluation"] = (
+        raw["h4"]["comparative_evaluation"] + " Pack forbids NO_TRADE primary; this row exercises that gate."
+    )
+    p = ExamDeliberationPayloadV1.model_validate(raw)
+    assert p.h4.primary_selection == "NO_TRADE"
+    pol = PackDeliberationPolicyV1(k_min=3, allow_no_trade_primary=False)
+    with pytest.raises(ValueError, match="no_trade_primary_not_allowed_by_pack"):
+        validate_h4_primary_selection_integrity_v1(p, pol)
+
+
 def test_data_gap_allowed_only_when_pack_lists_path() -> None:
     raw = _delib_dict_from_fixture(exam_unit_id="unit_one")
     raw["data_gaps"] = [
@@ -206,6 +237,30 @@ def test_http_put_422_exam_unit_id_mismatch() -> None:
     }
     pr = c.put(f"/api/v1/exam/units/{uid}/frames/0/deliberation", json=body)
     assert pr.status_code == 422
+
+
+def test_http_put_422_no_trade_primary_disallowed_by_pack() -> None:
+    reset_exam_units_for_tests_v1()
+    reset_exam_deliberations_for_tests_v1()
+    app = create_app()
+    c = app.test_client()
+    cr = c.post("/api/v1/exam/units", json={})
+    uid = json.loads(cr.data)["exam_unit_id"]
+    d = _delib_dict_from_fixture(exam_unit_id=uid)
+    d["h4"]["primary_selection"] = "NO_TRADE"
+    d["h4"]["comparative_evaluation"] = (
+        d["h4"]["comparative_evaluation"] + " Exercise NO_TRADE primary with pack flag false."
+    )
+    pr = c.put(
+        f"/api/v1/exam/units/{uid}/frames/0/deliberation",
+        json={
+            "pack_deliberation_policy": {"k_min": 3, "allow_no_trade_primary": False},
+            "deliberation": d,
+        },
+    )
+    assert pr.status_code == 422
+    err = json.loads(pr.data).get("error", "")
+    assert "no_trade_primary_not_allowed_by_pack" in err
 
 
 def test_http_put_422_placeholder_body() -> None:

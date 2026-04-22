@@ -51,15 +51,15 @@ Engineer must list any remaining gaps (persistence, auth, UI polish) under **Eng
 
 ## Engineer update
 
-**Status:** implementation + proof landed — **Requesting architect acceptance**
+**Status:** **§11.2 accepted** — contingency integrity + audit note landed (2026-04-22)
 
 **Work performed**
 
-- **`exam_deliberation_capture_v1.py`** — Pydantic **§11.2** contract: H1–H3 rows (`market_interpretation`, `indicator_support`, `resulting_action`, `falsification_condition`), H4 (`comparative_evaluation`, `primary_selection`, `bounded_reasoning`), version gate (`schema_version` ∈ **1.0.0**), JSON key **`schema`** = `exam_deliberation`, pack envelope `pack_deliberation_policy` (`k_min`, `data_gap_allowed_paths`), **`data_gaps`** only on allowed paths, **`assert_non_placeholder_deliberation_v1`**, in-memory **frame 0** store + `deliberation_http_route_matrix_v1()`.
+- **`exam_deliberation_capture_v1.py`** — Pydantic **§11.2** contract: H1–H3 rows (`market_interpretation`, `indicator_support`, `resulting_action`, `falsification_condition`), H4 (`comparative_evaluation`, `primary_selection`, `bounded_reasoning`), version gate (`schema_version` ∈ **1.0.0**), JSON key **`schema`** = `exam_deliberation`, pack envelope `pack_deliberation_policy` (`k_min`, `data_gap_allowed_paths`, **`allow_no_trade_primary`**), **`data_gaps`** only on allowed paths, **`validate_h4_primary_selection_integrity_v1`** (duplicate hypothesis ids; `NO_TRADE` primary pack-gated), **`assert_non_placeholder_deliberation_v1`**, in-memory **frame 0** store + `deliberation_http_route_matrix_v1()`.
 - **`schemas/exam_deliberation_payload_v1.schema.json`** — generated JSON Schema artifact (`$id` + **required** includes `schema`, `schema_version`, `exam_unit_id`, `hypotheses`, `h4`).
 - **Fixtures / proof:** `docs/proof/exam_v1/fixture_exam_deliberation_valid_k3_v1.json` (K=3, full H4), `docs/proof/exam_v1/operator_proof_frame0_deliberation_dev_v1.json` (dev GET shape + paths).
-- **`web_app.py`** — `PUT` / `GET` **`/api/v1/exam/units/<exam_unit_id>/frames/0/deliberation`**; **200** success, **400** envelope JSON/Pydantic errors, **404** unknown unit / no deliberation, **422** `exam_unit_id` mismatch vs path, policy / placeholder / semantic errors; docstring + **`PATTERN_GAME_WEB_UI_VERSION`** → **2.19.33**.
-- **Tests:** `tests/test_exam_deliberation_capture_v1.py` — fixture round-trip, schema file checks, malformed + bad version, `k_min`, `data_gap` allow/deny, **placeholder regression**, exporter dict, HTTP matrix, full PUT/GET 200, 404/422/400 cases, pure store round-trip.
+- **`web_app.py`** — `PUT` / `GET` **`/api/v1/exam/units/<exam_unit_id>/frames/0/deliberation`**; **200** success, **400** envelope JSON/Pydantic errors, **404** unknown unit / no deliberation, **422** `exam_unit_id` mismatch vs path, policy / placeholder / H4 integrity / semantic errors; docstring + **`PATTERN_GAME_WEB_UI_VERSION`** → **2.19.34**.
+- **Tests:** `tests/test_exam_deliberation_capture_v1.py` — fixture round-trip, schema file checks, malformed + bad version, `k_min`, `data_gap` allow/deny, **H4 integrity** (duplicate ids, `NO_TRADE` disallowed by pack), **placeholder regression**, exporter dict, HTTP matrix, full PUT/GET 200, 404/422/400 cases, pure store round-trip.
 
 **HTTP route matrix (this slice)**
 
@@ -70,7 +70,7 @@ Engineer must list any remaining gaps (persistence, auth, UI polish) under **Eng
 
 **Proof produced**
 
-- `python3 -m pytest tests/test_exam_deliberation_capture_v1.py tests/test_exam_state_machine_v1.py` — **25 passed** (8 state machine + 17 deliberation).
+- `python3 -m pytest tests/test_exam_deliberation_capture_v1.py tests/test_exam_state_machine_v1.py` — **28 passed** (8 state machine + 20 deliberation).
 - Commit + push + **`python3 scripts/gsync.py --no-commit --force-restart`** (pattern-game) after merge.
 
 **Remaining gaps (explicitly out of §11.2 scope)**
@@ -82,15 +82,40 @@ Engineer must list any remaining gaps (persistence, auth, UI polish) under **Eng
 - Implements **§11.2** “H1–H4 exporter (non-placeholder); schema versioned” and **§1** learning model deliberation / H4 bullets as **typed fields**, not parallel-runner traces.
 - **§11.1** untouched (ordering / invalidation).
 
-**Requesting architect acceptance**
+**Post-review contingency (2026-04-22)** — **H4 primary_selection integrity**: `validate_h4_primary_selection_integrity_v1` (duplicate `hypothesis_id`, declared-id match, pack `allow_no_trade_primary` for `NO_TRADE`); negative tests + HTTP **422**; `PATTERN_GAME_WEB_UI_VERSION` **2.19.34**.
+
+**Requesting architect acceptance** — satisfied by decision below.
+
+---
+
+## Architectural constraints (audit — documentation)
+
+**`pack_deliberation_policy` on submit (temporary):** The server currently accepts `pack_deliberation_policy` from the client request body for development. **This is not the long-term audit posture.** In future slices, **`pack_deliberation_policy` MUST be derived from authoritative `exam_pack_id` + pack version** (pack registry / signed config) and **MUST NOT remain client-controlled at submit time**. Engineering and Product should treat today’s behavior as **dev-only** until that migration lands.
 
 ---
 
 ## Architect review
 
-**Status:** pending architect review
+**Status:** Accepted (contingency requirements addressed in repo)
 
-Architect will append one of:
+Architect Acceptance — §11.2
 
-- `Accepted`
-- `Rejected — rework required`
+Deliberation capture implementation satisfies §11.2 requirements.
+
+* H1–H3 hypotheses are explicitly structured with required fields
+* H4 comparative evaluation and primary selection are captured
+* Schema is versioned and enforced at the API boundary
+* Placeholder-only payloads are rejected by validation
+* data_gap handling is pack-gated and explicit
+* Frame 0 deliberation is accessible via HTTP routes
+* Fixture and automated tests validate behavior and regressions
+* No scope creep into downstream frames, grading, or UI
+
+Follow-ups:
+
+* Enforce H4 primary_selection integrity against hypothesis IDs
+* Document that pack_deliberation_policy must be derived from exam_pack in future slices
+
+Directive GT_DIRECTIVE_004 §11.2 is accepted.
+
+**Engineering note:** The two follow-ups above are implemented / recorded as: **(1)** `validate_h4_primary_selection_integrity_v1` + tests; **(2)** **Architectural constraints (audit)** subsection in this file.
