@@ -41,6 +41,8 @@ see ``trade_strategy_post_cert_stub_v1.py`` and ``docs/STUDENT_PATH_EXAM_HIGH_LE
 
 **Exam grading (GT_DIRECTIVE_007 / §11.5):** ``GET /api/v1/exam/units/<exam_unit_id>/grade`` (**200** E/P/pass when unit is sealed, timeline + deliberation exist, and pack grading config is registered; **404** unknown unit; **409** incomplete; **422** bad pack reference / malformed economic inputs; **500** missing pack grading config). Dev: ``POST /api/v1/exam/packs/<exam_pack_id>/grading-config`` registers pack constants. See ``exam_grading_service_v1.py``.
 
+**Exam UI splice (§11.7 / §12):** Inside the **Student → learning → outcome** fold, **Exam timeline** loads ``GET /api/v1/exam/units/<exam_unit_id>/decision-frames`` and renders an ordered frame carousel; each card calls ``GET /api/v1/exam/frames/<decision_frame_id>`` for JSON drill-down (dev operator path).
+
 **System Dialogue** (post-run formatter; ``/api/barney-summary``): ``POST /api/barney-summary`` with ``{"job_id": "…"}`` — structured
 run facts only. **Ask DATA** (bounded self-explainer): ``POST /api/ask-data`` with ``question`` and optional
 ``job_id`` / ``ui_context`` — answers only from bundled PML knowledge + run/scorecard facts
@@ -101,7 +103,7 @@ _PATTERN_BANNER_WEBP_PATH = _RV4_ROOT / "assets" / "pattern.webp"
 _PATTERN_GAME_BANNER_BOOT_JS = _GAME_THEORY / "static" / "pattern_game_banner_boot.js"
 
 # Operator-visible web UI bundle version — bump when changing PAGE_HTML (HTML/CSS/JS) so deploys are provable.
-PATTERN_GAME_WEB_UI_VERSION = "2.19.38"
+PATTERN_GAME_WEB_UI_VERSION = "2.19.39"
 
 from renaissance_v4.game_theory.groundhog_memory import (
     groundhog_auto_merge_enabled,
@@ -2993,6 +2995,42 @@ PAGE_HTML = """<!DOCTYPE html>
     }
     .pg-student-d11-deep li { margin: 0 0 4px; }
     .pg-student-d11-deep .pg-student-d11-k { color: var(--pg-muted); font-weight: 700; font-size: 0.72rem; }
+    /* §11.7 / §12 — exam decision_frame timeline splice (Student fold) */
+    .pg-exam-ui-splice {
+      margin-top: 12px;
+      padding-top: 8px;
+      border-top: 1px solid rgba(127, 140, 153, 0.28);
+    }
+    .pg-exam-ui-splice-h {
+      font-size: 0.92rem;
+      margin: 0 0 4px;
+      font-weight: 700;
+    }
+    .pg-exam-drill-host {
+      margin-top: 10px;
+      padding: 8px 10px;
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      border-radius: 8px;
+      background: rgba(0, 0, 0, 0.12);
+      max-height: 42vh;
+      overflow: auto;
+    }
+    .pg-exam-drill-h {
+      margin: 4px 0 6px;
+      font-size: 0.82rem;
+      font-weight: 700;
+    }
+    .pg-exam-drill-pre {
+      margin: 0;
+      font-size: 0.66rem;
+      line-height: 1.35;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+    .pg-exam-frame-card:focus {
+      outline: 2px solid rgba(30, 214, 170, 0.45);
+      outline-offset: 2px;
+    }
     /* SR-4 / AC-3: long Student panel body scrolls inside the fold; default band ≈60% viewport, drag lower-right to resize. */
     details.pg-student-triangle-dock {
       scroll-margin-top: 12px;
@@ -4817,6 +4855,28 @@ PAGE_HTML = """<!DOCTYPE html>
         <div id="studentTriangleFoldBody" class="pg-panel-fold-body pg-student-triangle-fold-body" title="Drag the bottom-right corner or bottom edge to resize. Size and open/closed state are saved in this browser (localStorage).">
           <div id="studentTriangleBody" class="pg-student-triangle-body" aria-live="polite">
             <div id="pgStudentPanelD11" class="pg-student-d11"></div>
+            <div id="pgExamUiSplice" class="pg-exam-ui-splice" aria-label="Exam decision frame timeline §11.7">
+              <h3 class="pg-exam-ui-splice-h">Exam timeline (§11.7 / §12)</h3>
+              <p class="caps" style="margin:0 0 8px;font-size:0.78rem;line-height:1.45">
+                Committed <code>decision_frames</code> for an <code>exam_unit_id</code> (same APIs as dev). Card 0 = opening / Decision A slice; cards 1+ = downstream when <strong>ENTER</strong>.
+              </p>
+              <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:6px">
+                <label class="pg-sr-only" for="pgExamUnitIdInput">Exam unit id</label>
+                <input
+                  id="pgExamUnitIdInput"
+                  type="text"
+                  class="pg-urlbox"
+                  style="min-width:12rem;flex:1;max-width:28rem"
+                  placeholder="exam_unit_id"
+                  autocomplete="off"
+                />
+                <button type="button" class="btn-chef pg-op-btn" id="pgExamTimelineLoadBtn">Load frames</button>
+                <button type="button" class="btn-secondary pg-op-btn" id="pgExamTimelineClearBtn">Clear</button>
+              </div>
+              <p class="pg-exam-ui-status" id="pgExamUiStatus" aria-live="polite" style="margin:0 0 6px;font-size:0.78rem"></p>
+              <div id="pgExamCarouselHost"></div>
+              <div id="pgExamDrillHost" class="pg-exam-drill-host" hidden></div>
+            </div>
           </div>
         </div>
       </details>
@@ -5191,6 +5251,126 @@ PAGE_HTML = """<!DOCTYPE html>
         }
         return { ok: false, error: String(e) };
       }
+    }
+
+    /** §11.7 / §12 — exam_unit decision_frame carousel + drill-down (uses exam v1 GET APIs). */
+    function wireExamUiSpliceV1() {
+      const inp = document.getElementById('pgExamUnitIdInput');
+      const btn = document.getElementById('pgExamTimelineLoadBtn');
+      const clr = document.getElementById('pgExamTimelineClearBtn');
+      const host = document.getElementById('pgExamCarouselHost');
+      const drill = document.getElementById('pgExamDrillHost');
+      const st = document.getElementById('pgExamUiStatus');
+      if (!inp || !btn || !host || !st || !drill) return;
+
+      function setStatus(msg, isErr) {
+        st.textContent = msg || '';
+        st.style.color = isErr ? '#da5555' : 'inherit';
+      }
+
+      async function loadExamDrill(fid) {
+        if (!fid) return;
+        setStatus('Loading frame drill-down…', false);
+        drill.hidden = true;
+        drill.innerHTML = '';
+        const url = '/api/v1/exam/frames/' + encodeURIComponent(fid);
+        const rj = await pgStudentPanelJsonGet(url);
+        if (!rj || !rj.ok) {
+          setStatus('Drill-down failed: ' + (rj && rj.error ? rj.error : 'unknown'), true);
+          return;
+        }
+        drill.hidden = false;
+        drill.innerHTML =
+          '<h4 class="pg-exam-drill-h">decision_frame_id <code>' +
+          escapeHtml(String(rj.decision_frame_id || fid)) +
+          '</code></h4><pre class="pg-exam-drill-pre">' +
+          escapeHtml(JSON.stringify(rj, null, 2)) +
+          '</pre>';
+        setStatus('Drill-down loaded for ' + fid + '.', false);
+      }
+
+      if (clr) {
+        clr.onclick = function () {
+          inp.value = '';
+          host.innerHTML = '';
+          drill.hidden = true;
+          drill.innerHTML = '';
+          setStatus('', false);
+        };
+      }
+
+      btn.onclick = async function () {
+        const uid = (inp.value || '').trim();
+        if (!uid) {
+          setStatus('Enter exam_unit_id.', true);
+          return;
+        }
+        setStatus('Loading decision-frames…', false);
+        host.innerHTML = '';
+        drill.hidden = true;
+        drill.innerHTML = '';
+        const url = '/api/v1/exam/units/' + encodeURIComponent(uid) + '/decision-frames';
+        const j = await pgStudentPanelJsonGet(url);
+        if (!j || !j.ok) {
+          setStatus('Could not load timeline: ' + (j && j.error ? j.error : 'unknown'), true);
+          return;
+        }
+        const frames = Array.isArray(j.decision_frames) ? j.decision_frames : [];
+        if (!frames.length) {
+          setStatus('Timeline has zero frames.', true);
+          return;
+        }
+        var inner =
+          '<div class="pg-student-d11-carousel-wrap"><p class="pg-student-d11-carousel-meta">Exam decision frames (ordered) — click a card for full JSON drill-down.</p>';
+        inner +=
+          '<div class="pg-student-d11-carousel-row"><div class="pg-student-d11-carousel-viewport"><div class="pg-student-d11-strip pg-student-d11-strip--carousel">';
+        for (var i = 0; i < frames.length; i++) {
+          var fr = frames[i] || {};
+          var fid = fr.decision_frame_id != null ? String(fr.decision_frame_id) : '';
+          var ftype = fr.frame_type != null ? String(fr.frame_type) : '';
+          var fi = fr.frame_index != null ? String(fr.frame_index) : '';
+          var ts = fr.timestamp != null ? String(fr.timestamp) : '—';
+          inner +=
+            '<div class="pg-student-d11-slice pg-exam-frame-card" role="button" tabindex="0" data-exam-df-id="' +
+            escapeHtml(fid) +
+            '">';
+          inner +=
+            '<div><strong>Frame</strong> ' +
+            escapeHtml(fi) +
+            ' · <span class="pg-secondary-surface-label">' +
+            escapeHtml(ftype) +
+            '</span></div>';
+          inner +=
+            '<div style="margin-top:6px;font-size:0.68rem;opacity:0.88;word-break:break-all">' +
+            escapeHtml(ts) +
+            '</div>';
+          var ps = fr.payload && fr.payload.price_snapshot;
+          if (ps && ps.close != null)
+            inner += '<div style="margin-top:4px">close ' + escapeHtml(String(ps.close)) + '</div>';
+          var del = fr.payload && fr.payload.deliberation;
+          var h4ps = del && del.h4 && del.h4.primary_selection;
+          if (h4ps) inner += '<div style="margin-top:4px">H4 sel. ' + escapeHtml(String(h4ps)) + '</div>';
+          inner += '</div>';
+        }
+        inner += '</div></div></div></div>';
+        host.innerHTML = inner;
+        setStatus(String(frames.length) + ' frame(s).', false);
+        var cards = host.querySelectorAll('[data-exam-df-id]');
+        for (var c = 0; c < cards.length; c++) {
+          (function (el) {
+            var fidLocal = el.getAttribute('data-exam-df-id');
+            el.onclick = function () {
+              void loadExamDrill(fidLocal);
+            };
+            el.onkeydown = function (ev) {
+              if (ev.key === 'Enter' || ev.key === ' ') {
+                ev.preventDefault();
+                void loadExamDrill(fidLocal);
+              }
+            };
+          })(cards[c]);
+        }
+      };
     }
 
     /** D11 — contractual: one level replaces the panel; pinned chrome; scroll body only. */
@@ -9118,6 +9298,7 @@ PAGE_HTML = """<!DOCTYPE html>
 
     void refreshStudentProctorStoreLine();
     void resumeParallelJobFromStorageIfAny();
+    wireExamUiSpliceV1();
     void refreshStudentPanelD11();
     refreshScorecardHistory();
     setEvidenceTab('outcomes');
