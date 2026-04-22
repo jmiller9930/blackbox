@@ -46,27 +46,27 @@ If gaps remain (persistence, auth, durable store), list under **Engineer update 
 
 ## Engineer update
 
-**Status:** initial implementation landed (pending architect acceptance)
+**Status:** CLOSED — architect accepted §11.1 (2026-04-22)
 
 **Work performed:**
 
 - Added `renaissance_v4/game_theory/exam_state_machine_v1.py` — in-memory `ExamUnitState`, forward-only transitions, `INVALID` on violation.
 - Added `POST/GET /api/v1/exam/units` and `POST /api/v1/exam/units/<id>/transition` in `web_app.py`; module docstring + `PATTERN_GAME_WEB_UI_VERSION` bump.
-- Tests: `tests/test_exam_state_machine_v1.py` (pure + API smoke + golden replay).
-- Fixture: `docs/proof/exam_v1/golden_exam_unit_transition_trace_valid_v1.json`.
+- Tests: `tests/test_exam_state_machine_v1.py` (pure + API smoke + golden replay + pre-seal leakage + API parity).
+- Fixtures / proof: `docs/proof/exam_v1/golden_exam_unit_transition_trace_valid_v1.json`, `docs/proof/exam_v1/operator_proof_invalid_transition_409_downstream_before_seal_v1.json`.
 
-**Files changed:** (see commit)
+**Files changed:** (see commits on `main`, including leakage + operator proof)
 
-**Proof produced:** pytest `tests/test_exam_state_machine_v1.py` green.
+**Proof produced:** pytest `tests/test_exam_state_machine_v1.py` green; commit, push, remote restart verified.
 
-**Remaining gaps:** no durable store; no auth; process-local memory only; no UI splice; deliberation payloads not yet attached to frames (Directive **11.2**).
+**Remaining gaps (out of §11.1 scope):** no durable store; no auth; process-local memory only; no UI splice — follow **GT_DIRECTIVE_004** for **§11.2** deliberation capture.
 
-**Requesting architect acceptance**
+**Architect acceptance received** — directive **§11.1** record complete.
 
 ---
 
 ## Architect review
 
-**Status:** pending architect review
+**Status:** Accepted — **Directive GT_DIRECTIVE_003 §11.1 CLOSED** (2026-04-22)
 
-Architect will append `Accepted` or `Rejected — rework required` here.
+Architect reviewed final submission: leakage test (`test_no_downstream_data_before_seal`), operator proof artifact under `docs/proof/exam_v1/`, tests, commit/push/restart. **§11.1** is fully compliant with `STUDENT_PATH_EXAM_HIGH_LEVEL_ARCHITECTURE_v1.md`. Engineering proceeds to **§11.2** under **`GT_DIRECTIVE_004_deliberation_capture_v1.md`**.
