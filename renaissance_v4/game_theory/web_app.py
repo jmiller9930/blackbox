@@ -41,7 +41,7 @@ see ``trade_strategy_post_cert_stub_v1.py`` and ``docs/STUDENT_PATH_EXAM_HIGH_LE
 
 **Exam grading (GT_DIRECTIVE_007 / §11.5):** ``GET /api/v1/exam/units/<exam_unit_id>/grade`` (**200** E/P/pass when unit is sealed, timeline + deliberation exist, and pack grading config is registered; **404** unknown unit; **409** incomplete; **422** bad pack reference / malformed economic inputs; **500** missing pack grading config). Dev: ``POST /api/v1/exam/packs/<exam_pack_id>/grading-config`` registers pack constants. See ``exam_grading_service_v1.py``.
 
-**Exam UI splice (GT_DIRECTIVE_008 / §11.7 / §12):** Inside the **Student → learning → outcome** fold, **Exam timeline** loads ``GET /api/v1/exam/units/<exam_unit_id>/decision-frames`` and renders an ordered frame carousel; each card calls ``GET /api/v1/exam/frames/<decision_frame_id>`` for JSON drill-down (dev operator path). Closure: ``directives/GT_DIRECTIVE_008_exam_ui_splice_v1.md``.
+**Exam decision-frame APIs (GT_DIRECTIVE_008 / §11.7 / §12):** ``GET /api/v1/exam/units/<exam_unit_id>/decision-frames`` and ``GET /api/v1/exam/frames/<decision_frame_id>`` remain available for tools and dev callers; the Pattern Machine **operator page** no longer embeds the exam-timeline carousel in the Student fold (dashboard space). Closure: ``directives/GT_DIRECTIVE_008_exam_ui_splice_v1.md``.
 
 **System Dialogue** (post-run formatter; ``/api/barney-summary``): ``POST /api/barney-summary`` with ``{"job_id": "…"}`` — structured
 run facts only. **Ask DATA** (bounded self-explainer): ``POST /api/ask-data`` with ``question`` and optional
@@ -103,7 +103,7 @@ _PATTERN_BANNER_WEBP_PATH = _RV4_ROOT / "assets" / "pattern.webp"
 _PATTERN_GAME_BANNER_BOOT_JS = _GAME_THEORY / "static" / "pattern_game_banner_boot.js"
 
 # Operator-visible web UI bundle version — bump when changing PAGE_HTML (HTML/CSS/JS) so deploys are provable.
-PATTERN_GAME_WEB_UI_VERSION = "2.19.43"
+PATTERN_GAME_WEB_UI_VERSION = "2.19.44"
 
 from renaissance_v4.game_theory.context_signature_memory import truncate_context_signature_memory_store
 from renaissance_v4.game_theory.groundhog_memory import (
@@ -3057,42 +3057,6 @@ PAGE_HTML = """<!DOCTYPE html>
     }
     .pg-student-d11-deep li { margin: 0 0 4px; }
     .pg-student-d11-deep .pg-student-d11-k { color: var(--pg-muted); font-weight: 700; font-size: 0.72rem; }
-    /* §11.7 / §12 — exam decision_frame timeline splice (Student fold) */
-    .pg-exam-ui-splice {
-      margin-top: 12px;
-      padding-top: 8px;
-      border-top: 1px solid rgba(127, 140, 153, 0.28);
-    }
-    .pg-exam-ui-splice-h {
-      font-size: 0.92rem;
-      margin: 0 0 4px;
-      font-weight: 700;
-    }
-    .pg-exam-drill-host {
-      margin-top: 10px;
-      padding: 8px 10px;
-      border: 1px solid rgba(255, 255, 255, 0.1);
-      border-radius: 8px;
-      background: rgba(0, 0, 0, 0.12);
-      max-height: 42vh;
-      overflow: auto;
-    }
-    .pg-exam-drill-h {
-      margin: 4px 0 6px;
-      font-size: 0.82rem;
-      font-weight: 700;
-    }
-    .pg-exam-drill-pre {
-      margin: 0;
-      font-size: 0.66rem;
-      line-height: 1.35;
-      white-space: pre-wrap;
-      word-break: break-word;
-    }
-    .pg-exam-frame-card:focus {
-      outline: 2px solid rgba(30, 214, 170, 0.45);
-      outline-offset: 2px;
-    }
     /* SR-4 / AC-3: long Student panel body scrolls inside the fold; default band ≈60% viewport, drag lower-right to resize. */
     details.pg-student-triangle-dock {
       scroll-margin-top: 12px;
@@ -4453,7 +4417,7 @@ PAGE_HTML = """<!DOCTYPE html>
             <span class="ui-version" title="Bump PATTERN_GAME_WEB_UI_VERSION in web_app.py">v__PATTERN_GAME_WEB_UI_VERSION__</span></h1>
           <button type="button" class="pg-howto-btn" id="pgHowToOpenBtn" aria-haspopup="dialog" aria-controls="pgHowToDialog">How to use</button>
         </div>
-        <p class="pg-lead-short">Choose pattern, evaluation window, then <strong>Run batch</strong>. Status cards above update live.</p>
+        <p class="pg-lead-short">Choose pattern, evaluation window, then <strong>Run exam</strong>. Status cards above update live.</p>
       </div>
       <div class="pg-banner-strip">
         <div class="pg-banner-stat">
@@ -4486,7 +4450,7 @@ PAGE_HTML = """<!DOCTYPE html>
         <div class="pg-banner-stat" title="Current batch / status line">
           <div class="pg-k">Run</div>
           <div class="pg-v" id="bannerRunV">Idle</div>
-          <div class="pg-s" id="bannerRunS">— run a batch —</div>
+          <div class="pg-s" id="bannerRunS">— run an exam —</div>
         </div>
       </div>
       </div>
@@ -4497,7 +4461,7 @@ PAGE_HTML = """<!DOCTYPE html>
         <button type="button" class="pg-module-dialog-close" id="pgHowToClose" aria-label="Close">×</button>
         <h2 id="pgHowToTitle" class="pg-module-dialog-h2">How to use this UI</h2>
         <div class="pg-howto-body">
-          <p>Pick <strong>Pattern</strong> and <strong>Evaluation window</strong> under <strong>Controls</strong>, then <strong>Run batch</strong>. While a batch runs, open <strong>Quick view → Terminal</strong> (expanded) for live telemetry. When the batch finishes, <strong>Student → learning → outcome</strong> is the primary inspection surface.</p>
+          <p>Pick <strong>Pattern</strong> and <strong>Evaluation window</strong> under <strong>Controls</strong>, then <strong>Run exam</strong>. While an exam runs, open <strong>Quick view → Terminal</strong> (expanded) for live telemetry. When it finishes, <strong>Student → learning → outcome</strong> is the primary inspection surface.</p>
           <p><strong>Scorecard</strong> and raw evidence stay under <strong>Quick view → Results</strong> until you need history or JSON.</p>
           <p><strong>Custom</strong> scenarios: set Pattern to <strong>Custom</strong> and paste JSON under <strong>Controls → Advanced → Custom scenario</strong> (Pattern Info).</p>
           <p>Expand panel summaries as needed. Operator contract and known gaps: DEF-001 in <code>docs/architect/pattern_game_operator_deficiencies_work_record.md</code>.</p>
@@ -4581,7 +4545,7 @@ PAGE_HTML = """<!DOCTYPE html>
             </div>
           </div>
           <div class="pg-controls-run-row">
-            <button type="button" id="runBtn" class="pg-op-btn pg-op-btn--run" data-label-idle="Run batch">Run batch</button>
+            <button type="button" id="runBtn" class="pg-op-btn pg-op-btn--run" data-label-idle="Run exam">Run exam</button>
           </div>
         </div>
 
@@ -4769,7 +4733,7 @@ PAGE_HTML = """<!DOCTYPE html>
           </dl>
         </div>
         <div id="telemetryRollingLog" class="telemetry-rolling-log" aria-live="polite"></div>
-        <pre id="liveTelemetryPanel" class="live-telemetry-panel">Idle — no batch running. Live counters stream here when you click Run.</pre>
+        <pre id="liveTelemetryPanel" class="live-telemetry-panel">Idle — no exam running. Live counters stream here when you click Run exam.</pre>
         </div>
         <aside class="pg-terminal-compact-summary" id="terminalCompactSummary" aria-live="polite">
           <div class="pg-tcs-title">Run summary</div>
@@ -4821,7 +4785,7 @@ PAGE_HTML = """<!DOCTYPE html>
                         <summary class="pg-scorecard-legend-summary">What these columns mean (legend)</summary>
                         <p class="scorecard-legend"><strong>Run OK %</strong> — workers finished. <strong>Session WIN %</strong> — referee WIN vs LOSS among judged sessions only; <strong>n sess</strong> is that denominator (never infer from a bare percentage). <strong>Trade win %</strong> — batch mean when trades exist (with trade count). <strong>Learning (replay lane)</strong> — <code>execution_only</code> vs <code>learning_active</code> from replay counters (candidate search, memory records loaded, recall matches, signal bias); not Student Proctor learning. <strong>Memory / Context Impact</strong> — YES/NO from <code>learning_run_audit_v1</code> only (bundle merged or recall bias/signal-bias counters &gt; 0); not inferred from &ldquo;memory loaded&rdquo; or learning lane. <strong>Work</strong> — decision windows, bars, and candidate-stack replays. Scan <em>down</em> for newest batches.           <strong>In-flight</strong> — a batch that is <strong>running</strong> now appears at the <strong>top</strong> with <strong>Start</strong> time and live progress counts; the JSONL line is written when the batch finishes. <strong>Scorecard file</strong> (<code>batch_scorecard.jsonl</code>) is batch audit for this table and hunter suggestions; replay does <em>not</em> read it to apply memory or recall. <strong>Clear Card</strong> truncates that log only. <strong>Clear Groundhog container</strong> deletes only the promoted bundle file; <strong>Clear context signature memory</strong> truncates only the DCR/signature recall JSONL. <strong>Reset Learning State</strong> clears those plus experience and run memory (typed confirmation).</p>
                       </details>
-                      <p class="last-run" id="lastBatchRunLine">Last completed batch: —</p>
+                      <p class="last-run" id="lastBatchRunLine">Last completed exam: —</p>
                       <div id="scorecardLearningSummary" class="scorecard-learning-summary exec-only" aria-live="polite" hidden>
                         <p class="sls-title">Latest batch — harness learning lane &amp; contextual memory <span style="font-weight:600;color:var(--pg-muted)">(engine / DCR; not the Student Proctor store)</span></p>
                         <div id="scorecardLearningSummaryBody" class="sls-body"></div>
@@ -4911,7 +4875,7 @@ PAGE_HTML = """<!DOCTYPE html>
           <div class="pg-panel-header" style="margin:0;flex:1">
             <div>
               <h2 class="pg-panel-h">Student → learning → outcome</h2>
-              <p class="pg-panel-sub"><strong>Operator panel (D14):</strong> Level 1 = run table only. Level 2 = one selected run — run summary band + trade carousel only. Level 3 = one trade deep dive only. Resize the fold from the bottom edge; state is remembered.</p>
+              <p class="pg-panel-sub"><strong>Operator panel (D14):</strong> Level 1 = exam list only. Level 2 = one selected exam — run summary band + trade carousel only. Level 3 = one trade deep dive only. Resize the fold from the bottom edge; state is remembered.</p>
             </div>
             <span class="pg-chip pg-chip-teal">Primary</span>
           </div>
@@ -4919,28 +4883,6 @@ PAGE_HTML = """<!DOCTYPE html>
         <div id="studentTriangleFoldBody" class="pg-panel-fold-body pg-student-triangle-fold-body" title="Drag the bottom-right corner or bottom edge to resize. Size and open/closed state are saved in this browser (localStorage).">
           <div id="studentTriangleBody" class="pg-student-triangle-body" aria-live="polite">
             <div id="pgStudentPanelD11" class="pg-student-d11"></div>
-            <div id="pgExamUiSplice" class="pg-exam-ui-splice" aria-label="Exam decision frame timeline §11.7">
-              <h3 class="pg-exam-ui-splice-h">Exam timeline (§11.7 / §12)</h3>
-              <p class="caps" style="margin:0 0 8px;font-size:0.78rem;line-height:1.45">
-                Committed <code>decision_frames</code> for an <code>exam_unit_id</code> (same APIs as dev). Card 0 = opening / Decision A slice; cards 1+ = downstream when <strong>ENTER</strong>.
-              </p>
-              <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:6px">
-                <label class="pg-sr-only" for="pgExamUnitIdInput">Exam unit id</label>
-                <input
-                  id="pgExamUnitIdInput"
-                  type="text"
-                  class="pg-urlbox"
-                  style="min-width:12rem;flex:1;max-width:28rem"
-                  placeholder="exam_unit_id"
-                  autocomplete="off"
-                />
-                <button type="button" class="btn-chef pg-op-btn" id="pgExamTimelineLoadBtn">Load frames</button>
-                <button type="button" class="btn-secondary pg-op-btn" id="pgExamTimelineClearBtn">Clear</button>
-              </div>
-              <p class="pg-exam-ui-status" id="pgExamUiStatus" aria-live="polite" style="margin:0 0 6px;font-size:0.78rem"></p>
-              <div id="pgExamCarouselHost"></div>
-              <div id="pgExamDrillHost" class="pg-exam-drill-host" hidden></div>
-            </div>
           </div>
         </div>
       </details>
@@ -4957,7 +4899,7 @@ PAGE_HTML = """<!DOCTYPE html>
         </summary>
         <div class="pg-panel-fold-body" style="padding:12px 14px">
           <p class="pg-student-d11-legend" style="margin-top:0">Latest batch — seam (Directive 09) · not operator Student panel content</p>
-          <div id="pgDevStudentSeamInner" class="caps" style="margin:0 0 12px">No batch yet — run a parallel batch.</div>
+          <div id="pgDevStudentSeamInner" class="caps" style="margin:0 0 12px">No exam yet — click Run exam in Controls.</div>
       <section class="pg-learning-events-strip" id="pgLearningEventsStrip" aria-label="Learning events at a glance (developer)" hidden>
         <h3 class="pg-learning-events-h">Latest run — learning at a glance</h3>
         <ul class="pg-learning-events-ul" id="pgLearningEventsUl"></ul>
@@ -5317,126 +5259,6 @@ PAGE_HTML = """<!DOCTYPE html>
       }
     }
 
-    /** §11.7 / §12 — exam_unit decision_frame carousel + drill-down (uses exam v1 GET APIs). */
-    function wireExamUiSpliceV1() {
-      const inp = document.getElementById('pgExamUnitIdInput');
-      const btn = document.getElementById('pgExamTimelineLoadBtn');
-      const clr = document.getElementById('pgExamTimelineClearBtn');
-      const host = document.getElementById('pgExamCarouselHost');
-      const drill = document.getElementById('pgExamDrillHost');
-      const st = document.getElementById('pgExamUiStatus');
-      if (!inp || !btn || !host || !st || !drill) return;
-
-      function setStatus(msg, isErr) {
-        st.textContent = msg || '';
-        st.style.color = isErr ? '#da5555' : 'inherit';
-      }
-
-      async function loadExamDrill(fid) {
-        if (!fid) return;
-        setStatus('Loading frame drill-down…', false);
-        drill.hidden = true;
-        drill.innerHTML = '';
-        const url = '/api/v1/exam/frames/' + encodeURIComponent(fid);
-        const rj = await pgStudentPanelJsonGet(url);
-        if (!rj || !rj.ok) {
-          setStatus('Drill-down failed: ' + (rj && rj.error ? rj.error : 'unknown'), true);
-          return;
-        }
-        drill.hidden = false;
-        drill.innerHTML =
-          '<h4 class="pg-exam-drill-h">decision_frame_id <code>' +
-          escapeHtml(String(rj.decision_frame_id || fid)) +
-          '</code></h4><pre class="pg-exam-drill-pre">' +
-          escapeHtml(JSON.stringify(rj, null, 2)) +
-          '</pre>';
-        setStatus('Drill-down loaded for ' + fid + '.', false);
-      }
-
-      if (clr) {
-        clr.onclick = function () {
-          inp.value = '';
-          host.innerHTML = '';
-          drill.hidden = true;
-          drill.innerHTML = '';
-          setStatus('', false);
-        };
-      }
-
-      btn.onclick = async function () {
-        const uid = (inp.value || '').trim();
-        if (!uid) {
-          setStatus('Enter exam_unit_id.', true);
-          return;
-        }
-        setStatus('Loading decision-frames…', false);
-        host.innerHTML = '';
-        drill.hidden = true;
-        drill.innerHTML = '';
-        const url = '/api/v1/exam/units/' + encodeURIComponent(uid) + '/decision-frames';
-        const j = await pgStudentPanelJsonGet(url);
-        if (!j || !j.ok) {
-          setStatus('Could not load timeline: ' + (j && j.error ? j.error : 'unknown'), true);
-          return;
-        }
-        const frames = Array.isArray(j.decision_frames) ? j.decision_frames : [];
-        if (!frames.length) {
-          setStatus('Timeline has zero frames.', true);
-          return;
-        }
-        var inner =
-          '<div class="pg-student-d11-carousel-wrap"><p class="pg-student-d11-carousel-meta">Exam decision frames (ordered) — click a card for full JSON drill-down.</p>';
-        inner +=
-          '<div class="pg-student-d11-carousel-row"><div class="pg-student-d11-carousel-viewport"><div class="pg-student-d11-strip pg-student-d11-strip--carousel">';
-        for (var i = 0; i < frames.length; i++) {
-          var fr = frames[i] || {};
-          var fid = fr.decision_frame_id != null ? String(fr.decision_frame_id) : '';
-          var ftype = fr.frame_type != null ? String(fr.frame_type) : '';
-          var fi = fr.frame_index != null ? String(fr.frame_index) : '';
-          var ts = fr.timestamp != null ? String(fr.timestamp) : '—';
-          inner +=
-            '<div class="pg-student-d11-slice pg-exam-frame-card" role="button" tabindex="0" data-exam-df-id="' +
-            escapeHtml(fid) +
-            '">';
-          inner +=
-            '<div><strong>Frame</strong> ' +
-            escapeHtml(fi) +
-            ' · <span class="pg-secondary-surface-label">' +
-            escapeHtml(ftype) +
-            '</span></div>';
-          inner +=
-            '<div style="margin-top:6px;font-size:0.68rem;opacity:0.88;word-break:break-all">' +
-            escapeHtml(ts) +
-            '</div>';
-          var ps = fr.payload && fr.payload.price_snapshot;
-          if (ps && ps.close != null)
-            inner += '<div style="margin-top:4px">close ' + escapeHtml(String(ps.close)) + '</div>';
-          var del = fr.payload && fr.payload.deliberation;
-          var h4ps = del && del.h4 && del.h4.primary_selection;
-          if (h4ps) inner += '<div style="margin-top:4px">H4 sel. ' + escapeHtml(String(h4ps)) + '</div>';
-          inner += '</div>';
-        }
-        inner += '</div></div></div></div>';
-        host.innerHTML = inner;
-        setStatus(String(frames.length) + ' frame(s).', false);
-        var cards = host.querySelectorAll('[data-exam-df-id]');
-        for (var c = 0; c < cards.length; c++) {
-          (function (el) {
-            var fidLocal = el.getAttribute('data-exam-df-id');
-            el.onclick = function () {
-              void loadExamDrill(fidLocal);
-            };
-            el.onkeydown = function (ev) {
-              if (ev.key === 'Enter' || ev.key === ' ') {
-                ev.preventDefault();
-                void loadExamDrill(fidLocal);
-              }
-            };
-          })(cards[c]);
-        }
-      };
-    }
-
     /** D11 — contractual: one level replaces the panel; pinned chrome; scroll body only. */
     const studentPanelD11 = {
       level: 1,
@@ -5499,7 +5321,7 @@ PAGE_HTML = """<!DOCTYPE html>
         '<button type="button" class="pg-student-d11-caret" id="pgStudentD11StepNext" title="Forward one view" aria-label="Forward one view">›</button>' +
         '</span>';
       if (showNav && (level === 2 || level === 3)) {
-        nav += '<button type="button" id="pgStudentD11BackRuns">← Run table</button>';
+        nav += '<button type="button" id="pgStudentD11BackRuns">← Exam list</button>';
       }
       if (showNav && level === 3) {
         nav +=
@@ -5686,7 +5508,7 @@ PAGE_HTML = """<!DOCTYPE html>
       const root = studentPanelD11RootEl();
       if (!root) return;
       const loading = studentPanelD11Layout(
-        renderStudentPanelD11Chrome(2, ['<strong>Run table</strong>', 'Loading…'], true),
+        renderStudentPanelD11Chrome(2, ['<strong>Exam list</strong>', 'Loading…'], true),
         '<p class="caps" style="margin:0">Loading run summary and trades…</p>'
       );
       root.innerHTML = loading;
@@ -5698,7 +5520,7 @@ PAGE_HTML = """<!DOCTYPE html>
         );
       } catch (e) {
         root.innerHTML = studentPanelD11Layout(
-          renderStudentPanelD11Chrome(2, ['<strong>Run table</strong>', '<strong>Run</strong> ' + escapeHtml(studentPanelD11ShortRunId(runId))], true),
+          renderStudentPanelD11Chrome(2, ['<strong>Exam list</strong>', '<strong>Run</strong> ' + escapeHtml(studentPanelD11ShortRunId(runId))], true),
           '<p class="caps" style="margin:0;color:#a32b2b">Failed to load run: ' + escapeHtml(String(e)) + '</p>'
         );
         studentPanelD11WireChrome();
@@ -5706,7 +5528,7 @@ PAGE_HTML = """<!DOCTYPE html>
       }
       if (!j || !j.ok) {
         root.innerHTML = studentPanelD11Layout(
-          renderStudentPanelD11Chrome(2, ['<strong>Run table</strong>', '<strong>Run</strong> ' + escapeHtml(studentPanelD11ShortRunId(runId))], true),
+          renderStudentPanelD11Chrome(2, ['<strong>Exam list</strong>', '<strong>Run</strong> ' + escapeHtml(studentPanelD11ShortRunId(runId))], true),
           '<p class="caps" style="margin:0;color:#a32b2b">' +
             escapeHtml((j && j.error) || 'run payload unavailable') +
             '</p>'
@@ -5748,7 +5570,7 @@ PAGE_HTML = """<!DOCTYPE html>
         root.innerHTML = studentPanelD11Layout(
           renderStudentPanelD11Chrome(
             2,
-            ['<strong>Run table</strong>', '<strong>Run</strong> ' + escapeHtml(studentPanelD11ShortRunId(runId))],
+            ['<strong>Exam list</strong>', '<strong>Run</strong> ' + escapeHtml(studentPanelD11ShortRunId(runId))],
             true
           ),
           scroll
@@ -5820,7 +5642,7 @@ PAGE_HTML = """<!DOCTYPE html>
       scroll += '</div></div>';
       const chrome = renderStudentPanelD11Chrome(
         2,
-        ['<strong>Run table</strong>', '<strong>Run</strong> ' + escapeHtml(studentPanelD11ShortRunId(runId))],
+        ['<strong>Exam list</strong>', '<strong>Run</strong> ' + escapeHtml(studentPanelD11ShortRunId(runId))],
         true
       );
       root.innerHTML = studentPanelD11Layout(chrome, scroll);
@@ -5855,7 +5677,7 @@ PAGE_HTML = """<!DOCTYPE html>
         renderStudentPanelD11Chrome(
           3,
           [
-            '<strong>Run table</strong>',
+            '<strong>Exam list</strong>',
             '<strong>Run</strong> ' + escapeHtml(studentPanelD11ShortRunId(runId)),
             '<strong>Trade</strong> ' + escapeHtml(tidDisp),
           ],
@@ -5877,7 +5699,7 @@ PAGE_HTML = """<!DOCTYPE html>
           renderStudentPanelD11Chrome(
             3,
             [
-              '<strong>Run table</strong>',
+              '<strong>Exam list</strong>',
               '<strong>Run</strong> ' + escapeHtml(studentPanelD11ShortRunId(runId)),
               '<strong>Trade</strong> ' + escapeHtml(tidDisp),
             ],
@@ -5893,7 +5715,7 @@ PAGE_HTML = """<!DOCTYPE html>
           renderStudentPanelD11Chrome(
             3,
             [
-              '<strong>Run table</strong>',
+              '<strong>Exam list</strong>',
               '<strong>Run</strong> ' + escapeHtml(studentPanelD11ShortRunId(runId)),
               '<strong>Trade</strong> ' + escapeHtml(tidDisp),
             ],
@@ -6065,7 +5887,7 @@ PAGE_HTML = """<!DOCTYPE html>
         renderStudentPanelD11Chrome(
           3,
           [
-            '<strong>Run table</strong>',
+            '<strong>Exam list</strong>',
             '<strong>Run</strong> ' + escapeHtml(studentPanelD11ShortRunId(runId)),
             '<strong>Trade</strong> ' + escapeHtml(tidDisp),
           ],
@@ -6080,7 +5902,7 @@ PAGE_HTML = """<!DOCTYPE html>
       const root = studentPanelD11RootEl();
       if (!root) return;
       if (studentPanelD11.level !== 1) return;
-      const chrome1 = renderStudentPanelD11Chrome(1, ['<strong>Run table</strong>'], false);
+      const chrome1 = renderStudentPanelD11Chrome(1, ['<strong>Exam list</strong>'], false);
       root.innerHTML = studentPanelD11Layout(
         chrome1,
         '<p class="caps" style="margin:0">Loading runs…</p>'
@@ -6106,7 +5928,7 @@ PAGE_HTML = """<!DOCTYPE html>
       }
       const rows = j.runs;
       let scroll =
-        '<p class="pg-student-d11-legend" style="margin-top:0"><strong>Level 1 — run table only</strong> — Referee rollups and harness signals. Click a row (not ×) to open Level 2. <strong>×</strong> removes this line from scorecard only; Groundhog unchanged. <strong>Sys BL %</strong> = first same-fingerprint run&rsquo;s batch trade win (anchor). <strong>Run TW %</strong> = this run. <strong>&gt;BL</strong> = YES only if Run TW strictly beats Sys BL (not the anchor row).</p>' +
+        '<p class="pg-student-d11-legend" style="margin-top:0"><strong>Level 1 — exam list</strong> — Each row is one exam attempt (<code>student_panel_run_row_v2</code> + <code>d14_run_row_v1</code>). Referee rollups and harness signals. Click a row (not ×) for Level 2. <strong>×</strong> removes this scorecard line only. <strong>Sys BL %</strong> = system baseline trade win % (oldest same-fingerprint anchor). <strong>Run TW %</strong> = this exam&rsquo;s trade win %. <strong>&gt;BL</strong> = strict beat vs Sys BL (not on anchor). API: <code>GET /api/student-panel/runs</code> includes <code>l1_columns_v1</code> field semantics.</p>' +
         '<div class="pg-student-d11-table-wrap"><table class="pg-student-d11-table"><thead><tr>' +
         '<th>run_id</th><th>time</th><th>pattern</th><th>window</th><th>#tr</th>' +
         '<th title="System baseline — batch trade win % of the oldest run in this fingerprint chain (same recipe/window anchor)">Sys BL %</th>' +
@@ -6156,7 +5978,7 @@ PAGE_HTML = """<!DOCTYPE html>
         scroll +=
           '<td>' +
           (infl
-            ? '<button type="button" class="pg-student-d11-row-del" disabled title="Cannot delete until batch completes">×</button>'
+            ? '<button type="button" class="pg-student-d11-row-del" disabled title="Cannot delete until this exam completes">×</button>'
             : '<button type="button" class="pg-student-d11-row-del" data-run-id="' +
               escapeHtml(rid) +
               '" title="Remove run from scorecard only (Groundhog unchanged)">×</button>') +
@@ -6165,7 +5987,7 @@ PAGE_HTML = """<!DOCTYPE html>
       }
       scroll += '</tbody></table></div>';
       if (!rows.length) {
-        scroll = '<p class="caps" style="margin:0">No scorecard runs yet — run a parallel batch.</p>';
+        scroll = '<p class="caps" style="margin:0">No exams in scorecard yet — click <strong>Run exam</strong> in Controls.</p>';
       }
       root.innerHTML = studentPanelD11Layout(chrome1, scroll);
       studentPanelD11WireChrome();
@@ -6223,7 +6045,7 @@ PAGE_HTML = """<!DOCTYPE html>
       const ho = document.getElementById('pgDevStudentSeamInner');
       if (ho) {
         ho.innerHTML =
-          'Batch running — <strong>handoff</strong> (Referee → Student store) and <strong>run table</strong> update when the batch completes.';
+          'Exam running — <strong>handoff</strong> (Referee → Student store) and <strong>exam list</strong> update when the exam completes.';
       }
       const d = document.querySelector('details.pg-student-triangle-dock');
       if (d) d.open = true;
@@ -6236,7 +6058,7 @@ PAGE_HTML = """<!DOCTYPE html>
       const ho = document.getElementById('pgDevStudentSeamInner');
       if (ho) {
         ho.innerHTML =
-          '<span style="color:#a32b2b">Batch did not complete — handoff not updated. ' +
+          '<span style="color:#a32b2b">Exam did not complete — handoff not updated. ' +
           escapeHtml(String(msg != null ? msg : '').slice(0, 400)) +
           (String(msg || '').length > 400 ? '…' : '') +
           '</span>';
@@ -6608,7 +6430,7 @@ PAGE_HTML = """<!DOCTYPE html>
     function hideLiveTelemetryPanel() {
       const el = document.getElementById('liveTelemetryPanel');
       if (el) {
-        el.textContent = 'Idle — no batch running. Live counters stream here when you click Run.';
+        el.textContent = 'Idle — no exam running. Live counters stream here when you click Run exam.';
         _lastTelemetryDetailText = el.textContent;
       }
       resetTelemetryRollingLogForNewRun();
@@ -6628,7 +6450,7 @@ PAGE_HTML = """<!DOCTYPE html>
       const st = document.getElementById('statusLine');
       const t = (st && st.textContent) ? st.textContent.trim() : '';
       if (!t) {
-        setBannerRun('Idle', '— run a batch —');
+        setBannerRun('Idle', '— run an exam —');
         return;
       }
       if (t.indexOf('Running') === 0 || t.indexOf('Starting') === 0) {
@@ -6862,7 +6684,7 @@ PAGE_HTML = """<!DOCTYPE html>
       if (Array.isArray(ls0) && ls0.length) {
         learn0 = ' · ' + ls0[0];
       }
-      el.textContent = 'Last completed batch: start ' + (bt.started_at_utc || '—') +
+      el.textContent = 'Last completed exam: start ' + (bt.started_at_utc || '—') +
         ' → end ' + (bt.ended_at_utc || '—') + ' · duration ' + formatDurationSec(bt.duration_sec) +
         ' · rows ' + proc + ' / planned ' + tot + pctBit + learn0;
       updateMemoryContextImpactFromScorecardRow({
@@ -7305,7 +7127,7 @@ PAGE_HTML = """<!DOCTYPE html>
           updateMemoryContextImpactFromScorecardRow(null);
           const lr = document.getElementById('lastBatchRunLine');
           if (lr) {
-            lr.textContent = 'Last completed batch: — (scorecard file cleared; engine memory, bundles, and Student Proctor store unchanged)';
+            lr.textContent = 'Last completed exam: — (scorecard file cleared; engine memory, bundles, and Student Proctor store unchanged)';
           }
           if (typeof refreshStudentProctorStoreLine === 'function') void refreshStudentProctorStoreLine();
           await refreshScorecardHistory();
@@ -7724,7 +7546,7 @@ PAGE_HTML = """<!DOCTYPE html>
         (e && e.name === 'TypeError' && (m.indexOf('NetworkError') >= 0 || m.indexOf('Failed to fetch') >= 0 || m.indexOf('Load failed') >= 0)) ||
         (e && e.name === 'AbortError');
       if (isNet && e && e.name !== 'AbortError') {
-        return 'Connection lost while talking to the server. Common causes: the app was restarted or killed mid-run, Wi‑Fi/VPN blip, or the page URL changed. Hard-refresh this page (reload) and click Run again.';
+        return 'Connection lost while talking to the server. Common causes: the app was restarted or killed mid-run, Wi‑Fi/VPN blip, or the page URL changed. Hard-refresh this page (reload) and click Run exam again.';
       }
       return String(e);
     }
@@ -7935,13 +7757,13 @@ PAGE_HTML = """<!DOCTYPE html>
       runBtn.onclick = async () => {
       const btn = document.getElementById('runBtn');
       setRunFeedbackToast('');
-      setOpButtonBusy(btn, true, 'Running…', true);
+      setOpButtonBusy(btn, true, 'Running exam…', true);
       openRunControlsPanel();
       clearBatchConcurrencyBanner();
       resetTelemetryRollingLogForNewRun();
       const sn = document.getElementById('sessionLogNote');
       if (sn) sn.textContent = '';
-      updateRunStatusLine('Starting batch…');
+      updateRunStatusLine('Starting exam…');
       scrollRunStatusIntoView();
       const psEl = document.getElementById('progressSub');
       if (psEl) psEl.textContent = '';
@@ -7995,7 +7817,7 @@ PAGE_HTML = """<!DOCTYPE html>
         const cmem = CONTEXT_SIGNATURE_MEMORY_MODE_PRODUCT;
         const ltpPrep = document.getElementById('liveTelemetryPanel');
         if (ltpPrep) {
-          ltpPrep.textContent = 'Live telemetry — preparing batch…';
+          ltpPrep.textContent = 'Live telemetry — preparing exam…';
           _lastTelemetryDetailText = ltpPrep.textContent;
         }
         updateMemoryStatusCardFromPanel(null, { context_signature_memory_mode: cmem }, null, true);
@@ -9427,7 +9249,6 @@ PAGE_HTML = """<!DOCTYPE html>
 
     void refreshStudentProctorStoreLine();
     void resumeParallelJobFromStorageIfAny();
-    wireExamUiSpliceV1();
     void refreshStudentPanelD11();
     refreshScorecardHistory();
     setEvidenceTab('outcomes');
