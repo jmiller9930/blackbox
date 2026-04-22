@@ -19,6 +19,47 @@ SCHEMA = "trade_strategy_v1_dev_stub"
 EXPORT_SCHEMA = "trade_strategy_export_v1_dev_stub"
 
 
+def trade_strategy_api_contract_v1() -> dict[str, Any]:
+    """
+    Machine-readable surface for **external systems** (integration tests, partner services).
+
+    Stable entry: prefer ``/api/v1/trade-strategy``; unversioned ``/api/trade-strategy`` remains as alias.
+    """
+    base = "/api/v1/trade-strategy"
+    legacy = "/api/trade-strategy"
+    return {
+        "schema": "trade_strategy_api_contract_v1_dev_stub",
+        "stub": True,
+        "title": "Trade strategy API (post-certification, DEV)",
+        "base_paths": [base, legacy],
+        "authentication": "not_implemented — wire API key or mTLS before production.",
+        "cors": "not_enabled — server-to-server or same-origin; add CORS policy if browser clients need it.",
+        "endpoints": [
+            {"method": "GET", "path": f"{base}", "legacy_path": legacy, "summary": "List strategies"},
+            {"method": "GET", "path": f"{base}/{{strategy_id}}", "legacy_path": f"{legacy}/{{strategy_id}}", "summary": "Get one strategy document"},
+            {
+                "method": "GET",
+                "path": f"{base}/{{strategy_id}}/export",
+                "legacy_path": f"{legacy}/{{strategy_id}}/export",
+                "summary": "Download portable JSON attachment",
+            },
+            {"method": "POST", "path": base, "legacy_path": legacy, "summary": "Create / upload (stub echoes body keys)"},
+            {
+                "method": "PATCH",
+                "path": f"{base}/{{strategy_id}}",
+                "legacy_path": f"{legacy}/{{strategy_id}}",
+                "summary": "Propose update (stub echoes body keys)",
+            },
+            {
+                "method": "GET",
+                "path": f"{base}/contract",
+                "legacy_path": f"{legacy}/contract",
+                "summary": "This contract document",
+            },
+        ],
+    }
+
+
 def _export_filename_slug(strategy_id: str) -> str:
     s = (strategy_id or "strategy").strip() or "strategy"
     s = re.sub(r"[^a-zA-Z0-9_.-]+", "_", s)[:80]
@@ -115,4 +156,5 @@ __all__ = [
     "stub_trade_strategy_get_v1",
     "stub_trade_strategy_list_v1",
     "stub_trade_strategy_update_v1",
+    "trade_strategy_api_contract_v1",
 ]

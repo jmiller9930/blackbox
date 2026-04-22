@@ -1,6 +1,6 @@
 # High-level architecture — learning, exam, certification, engineering, UI splice
 
-**Status:** v1.6 — **`trade_strategy` export** (`GET …/export` attachment JSON) on top of §17 stub.
+**Status:** v1.7 — **`/api/v1/trade-strategy`** versioned mirror + **`/contract`** for external system integration.
 
 ---
 
@@ -620,17 +620,22 @@ curl -s -o /dev/null -w "%{http_code}\n" "http://127.0.0.1:<PORT>/api/student-pa
 
 ### 17.1 DEV stub (current)
 
+**External systems:** Prefer **`/api/v1/trade-strategy`** as the **stable** base path; **`/api/trade-strategy`** remains an **alias**. Discover methods via **`GET /api/v1/trade-strategy/contract`** (JSON: paths, methods, auth/CORS notes). **Authentication is not implemented** in the stub — callers must sit behind your gateway or add auth before production.
+
 | Route | Role |
 |-------|------|
-| `GET /api/trade-strategy` | List placeholder strategies (`stub: true`). |
-| `GET /api/trade-strategy/<strategy_id>/export` | **Download** portable JSON (`Content-Disposition: attachment`; filename `trade_strategy_<slug>_export.json`). |
-| `GET /api/trade-strategy/<strategy_id>` | Return shell document for one id. |
-| `POST /api/trade-strategy` | Accept JSON body; **echo keys only** — **no persistence**. |
-| `PATCH /api/trade-strategy/<strategy_id>` | Accept update body; **echo keys only** — **no merge**. |
+| `GET /api/v1/trade-strategy/contract` | Integration contract (`trade_strategy_api_contract_v1_dev_stub`). |
+| `GET /api/v1/trade-strategy` | List placeholder strategies (`stub: true`). |
+| `GET /api/v1/trade-strategy/<strategy_id>/export` | **Download** portable JSON (`Content-Disposition: attachment`; filename `trade_strategy_<slug>_export.json`). |
+| `GET /api/v1/trade-strategy/<strategy_id>` | Return shell document for one id. |
+| `POST /api/v1/trade-strategy` | Accept JSON body; **echo keys only** — **no persistence**. |
+| `PATCH /api/v1/trade-strategy/<strategy_id>` | Accept update body; **echo keys only** — **no merge**. |
+
+Same paths under **`/api/trade-strategy/...`** (alias).
 
 **Code:** `renaissance_v4/game_theory/trade_strategy_post_cert_stub_v1.py`  
 **Tests:** `tests/test_web_app_trade_strategy_stub_v1.py`  
-**Schema strings:** `trade_strategy_v1_dev_stub` (API envelope) · `trade_strategy_export_v1_dev_stub` (**file export** document)
+**Schema strings:** `trade_strategy_v1_dev_stub` (API envelope) · `trade_strategy_export_v1_dev_stub` (**file export** document) · `trade_strategy_api_contract_v1_dev_stub` (**contract**)
 
 ### 17.2 Next implementation (not stub)
 
@@ -641,7 +646,7 @@ curl -s -o /dev/null -w "%{http_code}\n" "http://127.0.0.1:<PORT>/api/student-pa
 
 ### 17.3 Proof + closeout (when replacing stub)
 
-When a slice replaces stub behavior, apply **§16** (proof first, then commit / push / restart / verify). Minimum HTTP proof includes the **list / get / export / post / patch** routes above returning **documented** non-stub codes and bodies (export must return **attachment** when product requires download).
+When a slice replaces stub behavior, apply **§16** (proof first, then commit / push / restart / verify). Minimum HTTP proof includes **contract + list + get + export + post + patch** on **`/api/v1/trade-strategy`** (and optionally alias paths) returning **documented** non-stub codes and bodies (export must return **attachment** when product requires download).
 
 ---
 
@@ -656,3 +661,4 @@ When a slice replaces stub behavior, apply **§16** (proof first, then commit / 
 | v1.4 | **Baseline strategy** terminology + cross-ref to `MANIFEST_REPLAY_INTEGRATION.md`; legacy filename `baseline_v1_recipe.json` documented. |
 | v1.5 | §17 post-cert **`trade_strategy`**: DEV stub module + Flask routes + tests; `PATTERN_GAME_WEB_UI_VERSION` bump in `web_app.py`. |
 | v1.6 | **`GET /api/trade-strategy/<id>/export`** — downloadable JSON attachment; `EXPORT_SCHEMA` + tests. |
+| v1.7 | **`/api/v1/trade-strategy`** mirrored routes + **`/contract`** for external callers; `trade_strategy_api_contract_v1()`. |

@@ -26,8 +26,8 @@ counts, **run_ok_pct**, **referee_win_pct**, **avg_trade_win_pct**) and expose `
 **D13 Student panel (run → run summary + trade carousel → trade deep dive):** ``GET /api/student-panel/runs``,
 ``GET /api/student-panel/run/<job_id>/decisions``, ``GET /api/student-panel/decision?job_id=&trade_id=`` (``decision_id`` accepted as alias for migration).
 
-**Post-certification ``trade_strategy`` (DEV STUB):** ``GET /api/trade-strategy``, ``GET /api/trade-strategy/<strategy_id>/export`` (download JSON),
-``GET /api/trade-strategy/<strategy_id>``, ``POST /api/trade-strategy``, ``PATCH /api/trade-strategy/<strategy_id>`` — placeholder payloads until persistence + execution;
+**Post-certification ``trade_strategy`` (DEV STUB):** Same routes under **``/api/v1/trade-strategy``** (stable for external callers) and **``/api/trade-strategy``** (alias).
+``GET …/contract`` returns integration metadata. Methods: list, ``<id>/export`` (download JSON), get one, POST, PATCH — placeholder payloads until persistence + execution;
 see ``trade_strategy_post_cert_stub_v1.py`` and ``docs/STUDENT_PATH_EXAM_HIGH_LEVEL_ARCHITECTURE_v1.md`` §17.
 
 **System Dialogue** (post-run formatter; ``/api/barney-summary``): ``POST /api/barney-summary`` with ``{"job_id": "…"}`` — structured
@@ -89,7 +89,7 @@ _PATTERN_BANNER_WEBP_PATH = _RV4_ROOT / "assets" / "pattern.webp"
 _PATTERN_GAME_BANNER_BOOT_JS = _GAME_THEORY / "static" / "pattern_game_banner_boot.js"
 
 # Operator-visible web UI bundle version — bump when changing PAGE_HTML (HTML/CSS/JS) so deploys are provable.
-PATTERN_GAME_WEB_UI_VERSION = "2.19.30"
+PATTERN_GAME_WEB_UI_VERSION = "2.19.31"
 
 from renaissance_v4.game_theory.groundhog_memory import (
     groundhog_auto_merge_enabled,
@@ -129,6 +129,7 @@ from renaissance_v4.game_theory.trade_strategy_post_cert_stub_v1 import (
     stub_trade_strategy_get_v1,
     stub_trade_strategy_list_v1,
     stub_trade_strategy_update_v1,
+    trade_strategy_api_contract_v1,
 )
 from renaissance_v4.game_theory.data_health import get_data_health
 from renaissance_v4.game_theory.search_space_estimate import build_search_space_estimate
@@ -1490,12 +1491,20 @@ def create_app() -> Flask:
             return jsonify({"ok": False, "record": rec}), 200
         return jsonify({"ok": True, "record": rec})
 
+    @app.get("/api/trade-strategy/contract")
+    @app.get("/api/v1/trade-strategy/contract")
+    def api_trade_strategy_contract_stub_v1() -> Any:
+        """DEV STUB — machine-readable API surface for external systems (integration discovery)."""
+        return jsonify(trade_strategy_api_contract_v1())
+
     @app.get("/api/trade-strategy")
+    @app.get("/api/v1/trade-strategy")
     def api_trade_strategy_list_stub_v1() -> Any:
         """DEV STUB — list post-certification trade_strategy placeholders (see §17 exam architecture doc)."""
         return jsonify(stub_trade_strategy_list_v1())
 
     @app.get("/api/trade-strategy/<strategy_id>/export")
+    @app.get("/api/v1/trade-strategy/<strategy_id>/export")
     def api_trade_strategy_export_stub_v1(strategy_id: str) -> Any:
         """DEV STUB — download portable ``trade_strategy`` JSON (attachment)."""
         doc = stub_trade_strategy_export_document_v1(strategy_id)
@@ -1512,17 +1521,20 @@ def create_app() -> Flask:
         )
 
     @app.get("/api/trade-strategy/<strategy_id>")
+    @app.get("/api/v1/trade-strategy/<strategy_id>")
     def api_trade_strategy_get_stub_v1(strategy_id: str) -> Any:
         """DEV STUB — fetch one trade_strategy document shell (not persisted)."""
         return jsonify(stub_trade_strategy_get_v1(strategy_id))
 
     @app.post("/api/trade-strategy")
+    @app.post("/api/v1/trade-strategy")
     def api_trade_strategy_create_stub_v1() -> Any:
         """DEV STUB — accept upload body; echo keys only (no store)."""
         data = request.get_json(force=True, silent=True) or {}
         return jsonify(stub_trade_strategy_create_v1(data if isinstance(data, dict) else {}))
 
     @app.patch("/api/trade-strategy/<strategy_id>")
+    @app.patch("/api/v1/trade-strategy/<strategy_id>")
     def api_trade_strategy_patch_stub_v1(strategy_id: str) -> Any:
         """DEV STUB — accept update body; echo keys only (no merge)."""
         data = request.get_json(force=True, silent=True) or {}

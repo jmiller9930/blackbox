@@ -17,6 +17,20 @@ def test_trade_strategy_stub_get_list() -> None:
     assert data.get("stub") is True
     assert data.get("schema") == "trade_strategy_v1_dev_stub"
 
+    r2 = c.get("/api/v1/trade-strategy")
+    assert r2.status_code == 200
+    assert json.loads(r2.data).get("schema") == "trade_strategy_v1_dev_stub"
+
+
+def test_trade_strategy_stub_contract() -> None:
+    app = create_app()
+    c = app.test_client()
+    r = c.get("/api/v1/trade-strategy/contract")
+    assert r.status_code == 200
+    data = json.loads(r.data)
+    assert data.get("schema") == "trade_strategy_api_contract_v1_dev_stub"
+    assert "/api/v1/trade-strategy" in (data.get("base_paths") or [])
+
 
 def test_trade_strategy_stub_get_one() -> None:
     app = create_app()
@@ -38,6 +52,10 @@ def test_trade_strategy_stub_export_download() -> None:
     assert data.get("schema") == "trade_strategy_export_v1_dev_stub"
     assert data.get("strategy_id") == "stub_post_cert_default"
     assert "strategy_document" in data
+
+    r2 = c.get("/api/v1/trade-strategy/stub_post_cert_default/export")
+    assert r2.status_code == 200
+    assert json.loads(r2.data.decode("utf-8")).get("schema") == "trade_strategy_export_v1_dev_stub"
 
 
 def test_trade_strategy_stub_post_patch() -> None:
