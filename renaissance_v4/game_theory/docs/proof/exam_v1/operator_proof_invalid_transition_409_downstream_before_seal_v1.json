@@ -1,0 +1,26 @@
+{
+  "schema": "exam_v1_operator_proof_invalid_transition_409_v1",
+  "title": "GT_DIRECTIVE_003 §11.1 — invalid transition operator proof (HTTP 409)",
+  "scenario": "POST downstream_released while unit is at h4_complete (Decision A not sealed). Expect 409 and unit invalid.",
+  "request": {
+    "method": "POST",
+    "path_template": "/api/v1/exam/units/{exam_unit_id}/transition",
+    "json_body": {
+      "event": "downstream_released",
+      "payload": {}
+    },
+    "prerequisite_transitions": [
+      {"event": "open_window_shown", "payload": {}},
+      {"event": "hypotheses_h1_h3_recorded", "payload": {}},
+      {"event": "h4_completed", "payload": {}}
+    ]
+  },
+  "response": {
+    "http_status": 409,
+    "json_body": {
+      "ok": false,
+      "error": "forbidden_transition_downstream_before_seal_a",
+      "phase": "invalid"
+    }
+  }
+}
