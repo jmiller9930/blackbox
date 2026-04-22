@@ -36,6 +36,9 @@ see ``trade_strategy_post_cert_stub_v1.py`` and ``docs/STUDENT_PATH_EXAM_HIGH_LE
 **Exam deliberation frame 0 (GT_DIRECTIVE_004 / §11.2):** ``PUT /api/v1/exam/units/<exam_unit_id>/frames/0/deliberation`` (valid body **200**, bad envelope **400**, policy/placeholder **422**, unknown unit **404**),
 ``GET …/frames/0/deliberation`` (**200** when set, **404** when missing). Schema: ``schemas/exam_deliberation_payload_v1.schema.json``; see ``exam_deliberation_capture_v1.py`` and ``directives/GT_DIRECTIVE_004_deliberation_capture_v1.md``.
 
+**Exam decision frames (GT_DIRECTIVE_005 / §11.3):** ``GET /api/v1/exam/units/<exam_unit_id>/decision-frames`` (**200** committed timeline after Decision A seal, **404** unknown unit or timeline not committed),
+``GET /api/v1/exam/frames/<decision_frame_id>`` (**200** single frame, **404** not found). Frame ids use ``{exam_unit_id}__df{n}`` (URL-safe). Timeline commits on successful ``decision_a_sealed`` transition; deliberation read-through from §11.2 store (no duplicate storage). See ``exam_decision_frame_schema_v1.py`` and ``directives/GT_DIRECTIVE_005_decision_frame_schema_v1.md``.
+
 **System Dialogue** (post-run formatter; ``/api/barney-summary``): ``POST /api/barney-summary`` with ``{"job_id": "…"}`` — structured
 run facts only. **Ask DATA** (bounded self-explainer): ``POST /api/ask-data`` with ``question`` and optional
 ``job_id`` / ``ui_context`` — answers only from bundled PML knowledge + run/scorecard facts
@@ -96,7 +99,7 @@ _PATTERN_BANNER_WEBP_PATH = _RV4_ROOT / "assets" / "pattern.webp"
 _PATTERN_GAME_BANNER_BOOT_JS = _GAME_THEORY / "static" / "pattern_game_banner_boot.js"
 
 # Operator-visible web UI bundle version — bump when changing PAGE_HTML (HTML/CSS/JS) so deploys are provable.
-PATTERN_GAME_WEB_UI_VERSION = "2.19.34"
+PATTERN_GAME_WEB_UI_VERSION = "2.19.35"
 
 from renaissance_v4.game_theory.groundhog_memory import (
     groundhog_auto_merge_enabled,
@@ -130,6 +133,15 @@ from renaissance_v4.game_theory.student_panel_d13 import (
     build_student_decision_record_v1,
 )
 from renaissance_v4.game_theory.student_panel_d14 import enrich_student_panel_run_rows_d14
+from renaissance_v4.game_theory.exam_decision_frame_schema_v1 import (
+    ExamUnitTimelineDocumentV1,
+    build_timeline_document_enter_single_frame_v1,
+    build_timeline_document_no_trade_single_frame_v1,
+    commit_timeline_immutable_v1,
+    find_frame_in_committed_timelines_v1,
+    get_committed_timeline_v1,
+    timeline_to_public_response_v1,
+)
 from renaissance_v4.game_theory.exam_deliberation_capture_v1 import (
     assert_non_placeholder_deliberation_v1,
     deliberation_payload_to_export_dict_v1,
@@ -139,6 +151,7 @@ from renaissance_v4.game_theory.exam_deliberation_capture_v1 import (
     validate_deliberation_against_policy_v1,
 )
 from renaissance_v4.game_theory.exam_state_machine_v1 import (
+    ExamPhase,
     apply_exam_unit_transition_v1,
     create_exam_unit_v1,
     exam_unit_to_public_dict,
@@ -1602,6 +1615,29 @@ def create_app() -> Flask:
         u2 = get_exam_unit_v1(exam_unit_id.strip())
         if u2 is None:
             return jsonify(out), 500
+        if u2.phase == ExamPhase.DECISION_A_SEALED and u2.enter is not None:
+            try:
+                delib = get_frame0_deliberation_v1(exam_unit_id.strip())
+                ts_stub = "2026-04-21T15:00:00Z"
+                if u2.enter is True:
+                    doc = build_timeline_document_enter_single_frame_v1(
+                        exam_unit_id=u2.exam_unit_id,
+                        exam_pack_id=u2.exam_pack_id,
+                        exam_pack_version=u2.exam_pack_version,
+                        deliberation_export=delib,
+                        bar_close_timestamp_iso=ts_stub,
+                    )
+                else:
+                    doc = build_timeline_document_no_trade_single_frame_v1(
+                        exam_unit_id=u2.exam_unit_id,
+                        exam_pack_id=u2.exam_pack_id,
+                        exam_pack_version=u2.exam_pack_version,
+                        deliberation_export=delib,
+                        bar_close_timestamp_iso=ts_stub,
+                    )
+                commit_timeline_immutable_v1(doc)
+            except ValueError:
+                pass
         return jsonify({"ok": True, **exam_unit_to_public_dict(u2)})
 
     @app.put("/api/v1/exam/units/<exam_unit_id>/frames/0/deliberation")
@@ -1653,6 +1689,26 @@ def create_app() -> Flask:
                 "deliberation": d,
             }
         ), 200
+
+    @app.get("/api/v1/exam/units/<exam_unit_id>/decision-frames")
+    def api_exam_unit_decision_frames_get_v1(exam_unit_id: str) -> Any:
+        """GT_DIRECTIVE_005 — committed parent + ordered ``decision_frames`` (§11.3)."""
+        uid = exam_unit_id.strip()
+        if get_exam_unit_v1(uid) is None:
+            return jsonify({"ok": False, "error": "exam_unit_not_found"}), 404
+        raw = get_committed_timeline_v1(uid)
+        if raw is None:
+            return jsonify({"ok": False, "error": "timeline_not_committed"}), 404
+        doc = ExamUnitTimelineDocumentV1.model_validate(raw)
+        return jsonify(timeline_to_public_response_v1(doc)), 200
+
+    @app.get("/api/v1/exam/frames/<decision_frame_id>")
+    def api_exam_decision_frame_get_v1(decision_frame_id: str) -> Any:
+        """GT_DIRECTIVE_005 — fetch one ``decision_frame`` by stable id (§11.3)."""
+        fr = find_frame_in_committed_timelines_v1(decision_frame_id.strip())
+        if fr is None:
+            return jsonify({"ok": False, "error": "decision_frame_not_found"}), 404
+        return jsonify({"ok": True, **fr}), 200
 
     @app.get("/api/student-proctor/learning-store")
     def api_student_proctor_learning_store_get() -> Any:

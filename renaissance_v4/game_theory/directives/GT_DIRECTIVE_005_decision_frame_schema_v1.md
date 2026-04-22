@@ -52,15 +52,33 @@ Engineer must list remaining gaps (persistence, pack registry, UI) under **Engin
 
 ## Engineer update
 
-**Status:** pending engineer response
+**Status:** implementation + proof landed — **Requesting architect acceptance**
 
-Engineer must append:
+**Summary**
 
-- summary of work performed
-- files changed
-- proof produced
-- remaining gaps
-- explicit line: `Requesting architect acceptance`
+- **`exam_decision_frame_schema_v1.py`** — Pydantic **exam_unit_timeline**: parent `exam_unit_id` / pack echo + ordered **`decision_frames`**; child **`DecisionFrameV1`** (`decision_frame_id` canonical `{exam_unit_id}__df{n}` URL-safe, `frame_index`, bar-close **`timestamp`**, `frame_type` `opening`|`downstream`, **`payload`** with `opening_snapshot`, read-through **`deliberation`** dict, **`decision_a`**, `downstream_reserved` placeholder only). Validators: dense 0-based indices, unique ids, parent linkage, **NO_TRADE → exactly 1** opening frame, **ENTER → 1 frame** (runtime seal) or **2 frames** in golden dev fixture. **`commit_timeline_immutable_v1`** (no overwrite). **No** frame PATCH APIs.
+- **`web_app.py`** — On successful **`decision_a_sealed`**, commit timeline (**read-through** deliberation from §11.2 store; **ENTER** single opening frame, **NO_TRADE** single frame). **`GET /api/v1/exam/units/<exam_unit_id>/decision-frames`** (**200** / **404** `exam_unit_not_found` / `timeline_not_committed`). **`GET /api/v1/exam/frames/<decision_frame_id>`** (**200** / **404**). **`PATTERN_GAME_WEB_UI_VERSION`** **2.19.35**; module docstring HTTP proof.
+- **Golden fixture:** `docs/proof/exam_v1/golden_exam_unit_timeline_two_frames_enter_v1.json` (parent + **2** frames — downstream placeholder; tests round-trip + ENTER=2 rules).
+- **Operator proof:** `docs/proof/exam_v1/operator_proof_exam_unit_decision_frames_get_v1.json`.
+- **Tests:** `tests/test_exam_decision_frame_schema_v1.py` (golden, NO_TRADE/ENTER counts, ids, commit immutability, negatives, HTTP integration); §11.1/§11.2 tests reset timelines in setup.
+
+**Proof**
+
+- `python3 -m pytest tests/test_exam_decision_frame_schema_v1.py tests/test_exam_deliberation_capture_v1.py tests/test_exam_state_machine_v1.py` — **42 passed**.
+- Student panel route smoke (Flask test client): `GET /api/student-panel/runs` → **200** (proves app still healthy after exam routes).
+
+**HTTP (documented)**
+
+| Route | 200 | 404 |
+|-------|-----|-----|
+| `GET /api/v1/exam/units/<exam_unit_id>/decision-frames` | committed timeline | unknown unit; timeline not committed |
+| `GET /api/v1/exam/frames/<decision_frame_id>` | one frame | not found |
+
+**Remaining gaps**
+
+- Durable DB; pack-fed **opening_snapshot** OHLCV/indicators (stub zeros today); **§11.4** real downstream payloads; `decision_frame_id` global index for O(1) lookup.
+
+**Requesting architect acceptance**
 
 ---
 

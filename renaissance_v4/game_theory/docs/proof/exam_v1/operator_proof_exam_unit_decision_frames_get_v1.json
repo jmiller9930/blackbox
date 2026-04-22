@@ -1,0 +1,43 @@
+{
+  "schema": "exam_v1_operator_proof_decision_frames_get_v1",
+  "title": "GT_DIRECTIVE_005 §11.3 — GET exam unit decision frames (ordered timeline)",
+  "prerequisites": [
+    "POST /api/v1/exam/units",
+    "Phase A transitions through h4_completed",
+    "PUT /api/v1/exam/units/{id}/frames/0/deliberation with valid §11.2 envelope",
+    "POST …/transition decision_a_sealed (commits immutable timeline)"
+  ],
+  "example_request": "GET /api/v1/exam/units/{exam_unit_id}/decision-frames",
+  "example_response_http_status": 200,
+  "example_response_body_shape": {
+    "ok": true,
+    "schema": "exam_unit_timeline",
+    "schema_version": "1.0.0",
+    "exam_unit_id": "<uuid>",
+    "exam_pack_id": "pack_x",
+    "exam_pack_version": "1",
+    "decision_frames": [
+      {
+        "decision_frame_id": "<uuid>__df0",
+        "exam_unit_id": "<uuid>",
+        "frame_index": 0,
+        "timestamp": "2026-04-21T15:00:00Z",
+        "frame_type": "opening",
+        "payload": {
+          "opening_snapshot": { "ohlcv": { "open": 0, "high": 0, "low": 0, "close": 0, "volume": 0 }, "indicators": {}, "context": {}, "data_gaps": [] },
+          "deliberation": { "schema": "exam_deliberation", "schema_version": "1.0.0", "hypotheses": [], "h4": {} },
+          "decision_a": { "enter": false, "schema": "decision_a_sealed_stub_v1" },
+          "downstream_reserved": null
+        }
+      }
+    ]
+  },
+  "single_frame_fetch": {
+    "request": "GET /api/v1/exam/frames/{decision_frame_id}",
+    "note": "decision_frame_id is URL-safe (uses __df not # fragment)."
+  },
+  "errors": {
+    "timeline_not_committed": { "http": 404, "when": "GET decision-frames before decision_a_sealed" },
+    "decision_frame_not_found": { "http": 404, "when": "unknown decision_frame_id" }
+  }
+}

@@ -21,6 +21,7 @@ from renaissance_v4.game_theory.exam_deliberation_capture_v1 import (
     validate_deliberation_against_policy_v1,
     validate_h4_primary_selection_integrity_v1,
 )
+from renaissance_v4.game_theory.exam_decision_frame_schema_v1 import reset_exam_timelines_for_tests_v1
 from renaissance_v4.game_theory.exam_state_machine_v1 import create_exam_unit_v1, reset_exam_units_for_tests_v1
 from renaissance_v4.game_theory.web_app import create_app
 
@@ -46,11 +47,13 @@ _SCHEMA = (
 def setup_function() -> None:
     reset_exam_units_for_tests_v1()
     reset_exam_deliberations_for_tests_v1()
+    reset_exam_timelines_for_tests_v1()
 
 
 def teardown_function() -> None:
     reset_exam_units_for_tests_v1()
     reset_exam_deliberations_for_tests_v1()
+    reset_exam_timelines_for_tests_v1()
 
 
 def _delib_dict_from_fixture(*, exam_unit_id: str) -> dict:
