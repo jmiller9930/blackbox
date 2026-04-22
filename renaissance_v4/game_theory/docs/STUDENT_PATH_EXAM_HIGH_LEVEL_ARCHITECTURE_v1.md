@@ -1,6 +1,6 @@
 # High-level architecture — learning, exam, certification, engineering, UI splice
 
-**Status:** v1.2 — adds mandatory **delivery closeout** (commit / push / restart / verify) per engineering directive and UI splice.
+**Status:** v1.3 — adds **non-negotiable proof** before every **Delivery closeout**; **§16.0** canonical proof bar.
 
 ---
 
@@ -276,11 +276,21 @@ It does **NOT** mean:
 - UI shell (L1 / L2 / L3)  
 - indicator vocabulary  
 
-### Must be built (each slice ends with **Delivery closeout** below)
+### Must be built (each slice ends with **Proof** then **Delivery closeout**)
+
+**Rule:** No directive is **complete** until **Proof (non-negotiable)** is satisfied **and** **Delivery closeout** has run. See **§16.0** for the global proof bar.
 
 #### 11.1 Exam state machine
 
 Enforce **§3** ordering; invalidate unit on violation.
+
+#### Proof (non-negotiable) — 11.1
+
+- **Automated tests:** state machine transitions — **valid** sequences reach sealed-A gate; **invalid** order (e.g. downstream before seal, or post-window data before A) **MUST** mark unit **invalid** or reject API with documented status.  
+- **Negative tests:** at least **one** test per **forbidden transition** named in **§3**.  
+- **Trace / fixture:** committed **sample** (JSON event log or golden transcript) showing a **full valid** Phase A→B order for one `exam_unit_id`.  
+- **Operator evidence:** short **checklist** or **screenshot** of UI/API behavior on violation path (attach in PR or `docs/proof/…`).  
+- **HTTP proof:** `curl` **200** on unchanged health routes + **documented** status codes on new exam routes (table in PR body).
 
 #### Delivery closeout (11.1 — mandatory)
 
@@ -304,6 +314,15 @@ git push origin main
 
 **H1–H4** exporter (non-placeholder); schema versioned.
 
+#### Proof (non-negotiable) — 11.2
+
+- **Automated tests:** exporter populates **all** required H fields; **no** silent empty strings where schema requires content; **`data_gap`** only where pack explicitly allows omission.  
+- **Schema proof:** versioned schema artifact + validation test (JSON Schema / pydantic / equivalent) rejecting malformed payloads.  
+- **Fixture:** checked-in **sample** `exam_deliberation` (or chosen schema name) with **≥ K** hypotheses + **H4** selection block — referenced by tests.  
+- **Regression:** test that **placeholder-only** export path **cannot** ship as “done” (assert non-placeholder invariants for this directive’s scope).  
+- **Operator evidence:** diff or excerpt showing **real** deliberation record attached to frame 0 in dev.  
+- **HTTP proof:** any new **submit deliberation** route returns **200** on valid body, **4xx** on invalid — documented in PR.
+
 #### Delivery closeout (11.2 — mandatory)
 
 ```bash
@@ -321,6 +340,15 @@ git push origin main
 #### 11.3 Decision Frame schema
 
 Parent unit + ordered frames (**§2**).
+
+#### Proof (non-negotiable) — 11.3
+
+- **Automated tests:** round-trip **serialize / parse** `exam_unit` + ordered `decision_frame[]`; ordering stable; **`decision_frame_id`** uniqueness within unit.  
+- **Keying tests:** frame 0 vs 1…n linkage per **§2**; ENTER vs NO_TRADE frame count rules.  
+- **Fixture:** minimal **golden JSON** (parent + 2 frames) in repo under `tests/` or `docs/proof/…` consumed by tests.  
+- **Contract:** documented field list matches **§4** / **§8** references (`exam_pack_id` echo on unit, etc.).  
+- **Operator evidence:** sample GET (or export) showing nested frames in correct order.  
+- **HTTP proof:** fetch-by-unit and fetch-by-frame routes **200** with golden shape (or **404** documented for missing).
 
 #### Delivery closeout (11.3 — mandatory)
 
@@ -340,6 +368,15 @@ git push origin main
 
 Timeline per **§7**.
 
+#### Proof (non-negotiable) — 11.4
+
+- **Automated tests:** one test per **termination mode** in **§7** (fixed `D`, until invalidation, volatility/regime cap) — expected **frame count** or **stop index** on golden strip.  
+- **Golden replay:** small **known** OHLC strip where termination outcome is **deterministic**; tests assert slice boundaries **no lookahead** relative to seal time.  
+- **Leakage test:** generator **MUST NOT** emit downstream fields into frame 0 payload before seal in API responses (assert on response JSON paths).  
+- **Fixture:** committed **input strip + expected frames[]** for at least one mode.  
+- **Operator evidence:** timeline dump or UI showing **n** cards matching expected **n**.  
+- **HTTP proof:** frame list endpoint **200**; response matches test golden (hash or snapshot in CI).
+
 #### Delivery closeout (11.4 — mandatory)
 
 ```bash
@@ -357,6 +394,15 @@ git push origin main
 #### 11.5 Grading service
 
 **E** + **P** from pack constants.
+
+#### Proof (non-negotiable) — 11.5
+
+- **Automated tests:** golden **inputs → (E, P, PASS)** for at least: **bare PASS**, **bare FAIL on E**, **bare FAIL on P**, **boundary at `p_min` and economic thresholds**.  
+- **Pack binding:** tests load a **pinned `exam_pack` version** and assert scores change when thresholds change (no hard-coded magic numbers in service without pack).  
+- **Audit fields:** every grade output includes **`exam_pack_id`**, **`version`**, and **`exam_unit_id`** (or documented equivalent).  
+- **Fixture:** small batch of units with known outcomes in `tests/` or `docs/proof/…`.  
+- **Operator evidence:** exported grade JSON for one run pasted in PR or proof folder.  
+- **HTTP proof:** grade endpoint **200** on completed unit; **409/422** (or chosen) on incomplete unit — documented.
 
 #### Delivery closeout (11.5 — mandatory)
 
@@ -376,6 +422,15 @@ git push origin main
 
 Submit A / deliberation; fetch frames; fetch grades; pack metadata.
 
+#### Proof (non-negotiable) — 11.6
+
+- **Automated tests:** **every** new route — success body shape, auth (if any), **4xx** on malformed IDs / ordering violations.  
+- **Contract table:** PR **MUST** include a **route matrix** (method, path, success code, error codes).  
+- **Integration test:** one **happy path** E2E (or in-process Flask client) covering **submit → seal → fetch frames → grade** with golden assertions.  
+- **Sample payloads:** request + response JSON pairs checked in under `tests/` or `docs/proof/…`.  
+- **Operator evidence:** `curl` transcript or HTTP client export in PR.  
+- **HTTP proof:** all listed routes return documented codes; **no undocumented 500** on golden inputs.
+
 #### Delivery closeout (11.6 — mandatory)
 
 ```bash
@@ -393,6 +448,14 @@ git push origin main
 #### 11.7 UI splice (engineering slice)
 
 Map frames → carousel; frame → drill-down (**§12**). *(May ship in same PR as 11.6 or immediately after; still requires its own closeout when merged.)*
+
+#### Proof (non-negotiable) — 11.7
+
+- **Automated tests:** minimum **one** UI- or DOM-level test **or** strict snapshot test on rendered HTML/JSON bridge **if** framework supports it; else **documented manual script** with **signed-off** operator checklist (not preferred — default expectation is **automated** where feasible).  
+- **Visual proof:** **screenshot** of L2 carousel showing **≥2** frames in order + **one** drill-down panel for a selected `decision_frame_id` (paths in `docs/proof/…` or PR).  
+- **Smoke:** L1 → L2 → click frame → drill loads **without console error** on golden `exam_unit`.  
+- **Data binding proof:** network tab or logged fetch shows **correct** `decision_frame_id` per card (screenshot or HAR excerpt in PR).  
+- **HTTP proof:** underlying API calls return **200** for the same actions the UI performs.
 
 #### Delivery closeout (11.7 — mandatory)
 
@@ -424,6 +487,16 @@ Reuse existing UI shell.
 ### Drill-down:
 
 - full **decision_frame** detail view (handle = `decision_frame_id`)
+
+#### Proof (non-negotiable) — §12 (product UI acceptance)
+
+*(If merged with **§11.7**, duplicate proof is **not** required — extend **11.7** proof to cover §12 acceptance criteria; otherwise this block is **mandatory** standalone.)*
+
+- **Acceptance checklist:** Card 0 shows **Decision A + deliberation summary**; cards 1+ show **downstream** only when unit is ENTER; **NO_TRADE** shows **no false downstream cards** (automated or manual with sign-off).  
+- **Visual proof:** **screenshots** for **three** states — ENTER multi-card, NO_TRADE single-card, **error/empty** state with honest messaging.  
+- **Navigation proof:** recorded flow or test — L1 select run → L2 → drill → back without broken state.  
+- **Regression:** existing Student panel routes (`/api/student-panel/runs`, etc.) still **200** after change.  
+- **HTTP proof:** same as **11.7** plus any **new** static or API assets load **200**.
 
 #### Delivery closeout (§12 UI splice — mandatory when this slice ships)
 
@@ -480,7 +553,25 @@ This system is a **proctored decision-training and validation engine** that teac
 
 ## 16. Operational closeout — canonical template (all **Delivery closeout** blocks)
 
-**Rule:** Any directive in **§11** or **§12** that ships implementation **MUST** end with a **Delivery closeout**: full **local commit**, **remote sync**, **restart all web services** used for game-theory / Student panel testing, and **HTTP verification**.
+### 16.0 Proof (non-negotiable) — prerequisite to **Delivery closeout**
+
+**Rule:** **Delivery closeout MUST NOT** be executed until the directive’s **Proof (non-negotiable)** subsection (above) is **fully satisfied**. Waivers require **written** product/architect approval recorded in the PR.
+
+**Global minimum bar (every directive):**
+
+| Proof class | Requirement |
+|-------------|-------------|
+| **Automated** | New or updated **tests** merged with the code; CI **green** on the integration branch used for `git push`. |
+| **Data** | At least **one** checked-in **fixture or golden JSON** (where the directive emits structured data) **or** an explicit **`data_gap`** policy only if the directive is *honestly* not data-producing — exam directives **MUST** produce fixtures. |
+| **Leakage / safety** | Where ordering or information boundaries apply (**§3**, **§13**), **negative** automated tests **MUST** exist before closeout. |
+| **Operator-visible** | **Screenshot** **or** **short screen recording** **or** CI artifact link attached to the PR — **not** optional for UI-touching directives. |
+| **HTTP** | Documented **`curl` / client** proof of **200** (and expected **4xx**) on affected routes. |
+
+Directive-specific rows in **§11.1–§11.7** and **§12** **add to** this table; they do **not** replace it.
+
+---
+
+**Rule:** Any directive in **§11** or **§12** that ships implementation **MUST** end with **Proof** then **Delivery closeout**: full **local commit**, **remote sync**, **restart all web services** used for game-theory / Student panel testing, and **HTTP verification**.
 
 ### 16.1 Git (local + remote)
 
@@ -526,3 +617,4 @@ curl -s -o /dev/null -w "%{http_code}\n" "http://127.0.0.1:<PORT>/api/student-pa
 | v1.0 | User draft (scope, learning, frames, flow, keying, NO_TRADE, grading, engineering, UI, risks). |
 | v1.1 | H1–H4 in Phase A; `exam_unit` vs atomic `decision_frame`; exam pack table; NO_TRADE “missed opportunity” guard; win-rate pairing note; `parallel_runner` vs deliberation in risks; PASS/E copy tied to pack. |
 | v1.2 | §11 split into 11.1–11.7 with per-directive **Delivery closeout** (commit, pull, push, restart, verify); §12 closeout; **§16** canonical template. |
+| v1.3 | **Proof (non-negotiable)** before every **Delivery closeout** (§11.1–§11.7, §12); **§16.0** global proof prerequisite; closeout gated on proof. |
