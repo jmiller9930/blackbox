@@ -199,6 +199,36 @@ def _direction_from_student_output(so: dict[str, Any] | None) -> Any:
     return d
 
 
+def _normalized_position_side(v: Any) -> str | None:
+    """Map replay / student direction tokens to ``long`` | ``short`` for comparison."""
+    if v is None or v == "data_gap":
+        return None
+    t = str(v).strip().lower()
+    if not t or t == "data_gap":
+        return None
+    if t in ("long", "buy", "b"):
+        return "long"
+    if t in ("short", "sell", "s"):
+        return "short"
+    return None
+
+
+def _student_referee_direction_align_v1(*, student_from_store: Any, referee_direction: Any) -> bool | str:
+    """
+    **GT_DIRECTIVE_009a** — Student **store** direction vs Referee ``outcome_json.direction`` only.
+
+    ``True`` / ``False`` when both sides normalize; ``data_gap`` if the Student row
+    is missing, referee direction is missing/non-normalizable, or tokens are unknown.
+    """
+    if student_from_store == "data_gap" or student_from_store is None or str(student_from_store).strip() == "":
+        return "data_gap"
+    sd = _normalized_position_side(student_from_store)
+    rd = _normalized_position_side(referee_direction)
+    if sd is None or rd is None:
+        return "data_gap"
+    return sd == rd
+
+
 def build_d13_selected_run_payload_v1(job_id: str) -> dict[str, Any]:
     """
     L2 payload: one **run_summary** row object + **slices** (carousel) keyed by ``trade_id``.
@@ -278,6 +308,8 @@ def build_d13_selected_run_payload_v1(job_id: str) -> dict[str, Any]:
         if gid:
             by_graded_unit.setdefault(gid, []).append(d)
 
+    align_evaluable = 0
+    align_matches = 0
     slices: list[dict[str, Any]] = []
     for i, t in enumerate(opportunities):
         tid = t["trade_id"]
@@ -304,6 +336,18 @@ def build_d13_selected_run_payload_v1(job_id: str) -> dict[str, Any]:
         # Baseline-not-wired in v1 — do not infer Δ vs Referee as "baseline".
         dcf: Any = "data_gap"
 
+        ref_dir_raw = oj.get("direction")
+        ref_dir_disp: str = str(ref_dir_raw).strip() if ref_dir_raw not in (None, "") else "data_gap"
+        align = _student_referee_direction_align_v1(
+            student_from_store=sdir,
+            referee_direction=ref_dir_raw,
+        )
+        if align is True:
+            align_evaluable += 1
+            align_matches += 1
+        elif align is False:
+            align_evaluable += 1
+
         ref_out = "WIN" if t["result"] == "WIN" else "LOSS"
         slices.append(
             {
@@ -315,6 +359,8 @@ def build_d13_selected_run_payload_v1(job_id: str) -> dict[str, Any]:
                 "student_direction": dir_disp,
                 "student_confidence_01": conf,
                 "referee_outcome": ref_out,
+                "referee_direction": ref_dir_disp,
+                "student_referee_direction_align": align,
                 "groundhog_usage_label": ghu,
                 "decision_changed_flag": dcf,
                 "direction": dir_disp,
@@ -342,6 +388,11 @@ def build_d13_selected_run_payload_v1(job_id: str) -> dict[str, Any]:
         "context_used_flag": ctx_used,
         "memory_used_flag": mem_used,
         "panel_run_row_schema": SCHEMA_RUN_ROW,
+        "student_referee_direction_align_evaluable_trades": align_evaluable,
+        "student_referee_direction_align_matches": align_matches,
+        "student_referee_direction_align_rate_percent": (
+            round(100.0 * align_matches / align_evaluable, 4) if align_evaluable > 0 else None
+        ),
     }
 
     return {

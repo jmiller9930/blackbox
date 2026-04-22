@@ -18,7 +18,10 @@
     "groundhog_state": "COLD",
     "context_used_flag": false,
     "memory_used_flag": false,
-    "panel_run_row_schema": "student_panel_run_row_v2"
+    "panel_run_row_schema": "student_panel_run_row_v2",
+    "student_referee_direction_align_evaluable_trades": 0,
+    "student_referee_direction_align_matches": 0,
+    "student_referee_direction_align_rate_percent": null
   },
   "slices": [],
   "slice_ordering": "trade_opportunities_entry_time_asc",

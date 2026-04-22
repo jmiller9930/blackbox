@@ -21,3 +21,5 @@ Legend: **Student** = Proctor learning store / `student_output_v1`; **Referee** 
 | `pattern_*` | **gap** until per-trade pattern export |
 | `referee_*`, `is_win`, `is_loss` | Referee outcome only |
 | `structured_reasoning_v1` | **gap** until D14-5 export path exists |
+
+**L2 carousel slice (`student_panel_trade_slice_v1`, `student_panel_d13.py`):** In addition to the table above at L3 grain, L2 tiles include **`referee_direction`** (from `replay_outcomes_json.direction`), **`student_referee_direction_align`** (`True` / `False` / `data_gap` — compares **Student store** `student_output.direction` to referee direction only), and run-level rollups `student_referee_direction_align_*` on **`run_summary`** (**GT_DIRECTIVE_009a**, **§18.4** of `STUDENT_PATH_EXAM_HIGH_LEVEL_ARCHITECTURE_v1.md`).

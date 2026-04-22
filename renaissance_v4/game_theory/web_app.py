@@ -103,7 +103,7 @@ _PATTERN_BANNER_WEBP_PATH = _RV4_ROOT / "assets" / "pattern.webp"
 _PATTERN_GAME_BANNER_BOOT_JS = _GAME_THEORY / "static" / "pattern_game_banner_boot.js"
 
 # Operator-visible web UI bundle version — bump when changing PAGE_HTML (HTML/CSS/JS) so deploys are provable.
-PATTERN_GAME_WEB_UI_VERSION = "2.19.47"
+PATTERN_GAME_WEB_UI_VERSION = "2.19.48"
 
 from renaissance_v4.game_theory.context_signature_memory import truncate_context_signature_memory_store
 from renaissance_v4.game_theory.groundhog_memory import (
@@ -3077,7 +3077,12 @@ PAGE_HTML = """<!DOCTYPE html>
     .pg-student-d11-slice-outcome {
       font-size: 0.88rem;
       font-weight: 600;
+      margin-bottom: 6px;
+    }
+    .pg-student-d11-slice-align {
+      font-size: 0.74rem;
       margin-bottom: 8px;
+      color: var(--pg-ink);
     }
     .pg-student-d11-slice-conf,
     .pg-student-d11-slice-gh,
@@ -3093,7 +3098,8 @@ PAGE_HTML = """<!DOCTYPE html>
       margin-top: auto;
       padding-top: 8px;
       border-top: 1px solid rgba(127, 140, 153, 0.22);
-      font-size: 0.72rem;
+      font-size: 0.70rem;
+      color: var(--pg-muted);
     }
     .pg-student-d11-slice--focused {
       border-color: rgba(30, 214, 170, 0.45);
@@ -5421,6 +5427,16 @@ PAGE_HTML = """<!DOCTYPE html>
         cell('win_count', rs.win_count),
         cell('loss_count', rs.loss_count),
         cell('win_rate_%', rs.win_rate_percent),
+        cell(
+          'dir_align',
+          (function () {
+            var ev = rs.student_referee_direction_align_evaluable_trades;
+            if (ev == null || !Number(ev) || Number(ev) <= 0) return '—';
+            var m = rs.student_referee_direction_align_matches;
+            var pct = rs.student_referee_direction_align_rate_percent;
+            return String(m) + '/' + String(ev) + ' (' + String(pct) + '%)';
+          })()
+        ),
         cell('avg_win_pnl', rs.avg_win_pnl),
         cell('avg_loss_pnl', rs.avg_loss_pnl),
         cell('expectancy/tr', rs.expectancy_per_trade),
@@ -5659,10 +5675,8 @@ PAGE_HTML = """<!DOCTYPE html>
         } else {
           confDisp = '<span style="opacity:0.85">data_gap</span>';
         }
-        const dch =
-          s.decision_changed_flag === undefined || s.decision_changed_flag === null
-            ? '<span style="opacity:0.85">data_gap</span>'
-            : escapeHtml(String(s.decision_changed_flag));
+        var aln = s.student_referee_direction_align;
+        var alignShort = aln === true ? 'YES' : aln === false ? 'NO' : '—';
         scroll +=
           '<div class="' +
           cls +
@@ -5684,15 +5698,17 @@ PAGE_HTML = """<!DOCTYPE html>
           ' · ' +
           escapeHtml(String(s.direction || '—')) +
           '</div>' +
+          '<div class="pg-student-d11-slice-align" title="Store student_output.direction vs replay outcome_json.direction; — = not comparable">' +
+          'Student↔Referee dir ' +
+          escapeHtml(alignShort) +
+          '</div>' +
           '<div class="pg-student-d11-slice-conf">conf ' +
           confDisp +
           '</div>' +
           '<div class="pg-student-d11-slice-gh">GH ' +
           escapeHtml(String(s.groundhog_usage || '—')) +
           '</div>' +
-          '<div class="pg-student-d11-slice-delta">Δ change ' +
-          dch +
-          '</div>' +
+          '<div class="pg-student-d11-slice-delta">vs baseline: not wired (per-trade export pending)</div>' +
           '</div>';
       }
       scroll += '</div></div>';

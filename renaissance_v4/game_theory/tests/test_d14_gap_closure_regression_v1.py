@@ -173,6 +173,65 @@ def test_d13_selected_run_slices_sorted_by_entry_time_asc() -> None:
     assert slices[1].get("order_index") == 1
 
 
+def test_d13_gt009a_student_referee_direction_align_and_run_rollups() -> None:
+    """GT_DIRECTIVE_009a — L2 slices expose store-vs-referee direction align; run_summary rolls up rate."""
+    from renaissance_v4.game_theory.student_panel_d13 import build_d13_selected_run_payload_v1
+
+    payload = {
+        "schema": "batch_parallel_results_v1",
+        "scenario_order": ["s1"],
+        "results": [
+            {
+                "ok": True,
+                "scenario_id": "s1",
+                "replay_outcomes_json": [
+                    {"trade_id": "t1", "pnl": -1.0, "entry_time": 100, "direction": "long"},
+                    {"trade_id": "t2", "pnl": 1.0, "entry_time": 200, "direction": "long"},
+                ],
+            }
+        ],
+    }
+    sl_rows = [
+        {"graded_unit_id": "t1", "student_output": {"direction": "short", "confidence_01": 0.9}},
+        {"graded_unit_id": "t2", "student_output": {"direction": "long", "confidence_01": 0.85}},
+    ]
+    entry = {"job_id": "d13_align_job", "session_log_batch_dir": "/tmp"}
+    scenarios = [{"scenario_id": "s1", "folder": "f1"}]
+    with (
+        patch(
+            "renaissance_v4.game_theory.student_panel_d13.find_scorecard_entry_by_job_id",
+            return_value=entry,
+        ),
+        patch(
+            "renaissance_v4.game_theory.student_panel_d13.build_scenario_list_for_batch",
+            return_value=(Path("/tmp"), scenarios, None),
+        ),
+        patch(
+            "renaissance_v4.game_theory.student_panel_d13.load_batch_parallel_results_v1",
+            return_value=payload,
+        ),
+        patch(
+            "renaissance_v4.game_theory.student_panel_d13._panel_run_row_for_job",
+            return_value=None,
+        ),
+        patch(
+            "renaissance_v4.game_theory.student_panel_d13.load_student_learning_records_v1",
+            return_value=sl_rows,
+        ),
+    ):
+        out = build_d13_selected_run_payload_v1("d13_align_job")
+    rs = out.get("run_summary") or {}
+    assert rs.get("student_referee_direction_align_evaluable_trades") == 2
+    assert rs.get("student_referee_direction_align_matches") == 1
+    assert rs.get("student_referee_direction_align_rate_percent") == 50.0
+    slices = out.get("slices") or []
+    assert len(slices) == 2
+    assert slices[0].get("trade_id") == "t1"
+    assert slices[0].get("student_referee_direction_align") is False
+    assert slices[0].get("referee_direction") == "long"
+    assert slices[1].get("student_referee_direction_align") is True
+
+
 def test_build_student_decision_record_structured_reasoning_fields_are_data_gap() -> None:
     """GC.4 — structured_reasoning_v1 placeholders remain explicit data_gap until exporters exist."""
     from renaissance_v4.game_theory.student_panel_d14 import build_student_decision_record_v1

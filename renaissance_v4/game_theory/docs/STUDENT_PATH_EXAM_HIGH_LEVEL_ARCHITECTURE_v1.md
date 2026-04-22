@@ -1,6 +1,6 @@
 # High-level architecture — learning, exam, certification, engineering, UI splice
 
-**Status:** v1.10 — **§18** operator drill-down contract (L1/L2/**trade set**), **GT_DIRECTIVE_009** delivery closeout; §2 v1.8 snapshot / immutability / time anchor unchanged.
+**Status:** v1.11 — **§18.4** first child directive shipped (**GT_DIRECTIVE_009a**); §18 / §2 unchanged otherwise.
 
 ---
 
@@ -744,6 +744,16 @@ Work these as **separate directives**; each ends with **§16.0 Proof** and **§1
 
 **Canonical bash** for git steps remains **§16.1**; restart narrative **§16.2**; curl examples **§16.3**. **§18.3** adds **non-optional** remote push + **gsync**/stack restart for operator-visible Student work.
 
+### 18.4 Implemented child directives (tracking)
+
+Work **§18.2** as a sequence of small shippables; each row satisfies **§18.3** when it touches code.
+
+| Id | Scope | Status | Notes |
+|----|--------|--------|-------|
+| **GT_DIRECTIVE_009a** | L2 **Student↔Referee direction coupling** (no baseline): per-slice `student_referee_direction_align`, `referee_direction`; `run_summary` rollups `student_referee_direction_align_*`; L2 tiles show align + honest “vs baseline: not wired”; summary band **`dir_align`** cell. | **Shipped** | Code: `student_panel_d13.py`, `web_app.py` (`PATTERN_GAME_WEB_UI_VERSION`), tests `test_d14_gap_closure_regression_v1.py`; proof sample JSON updated. |
+| *TBD* | L2 tile: symbol / stake fields from outcome metadata when present | Planned | Depends on exporter / `outcome_json` shape. |
+| *TBD* | L3: mirror new slice keys where applicable | Planned | Extend `student_decision_record_v1` only when L3 contract should echo L2. |
+
 ---
 
 ## Revision history
@@ -761,3 +771,4 @@ Work these as **separate directives**; each ends with **§16.0 Proof** and **§1
 | v1.8 | **§2 micro-patch:** opening snapshot contents (OHLCV + pack indicators + pack context); **Decision Frame immutability**; **time anchor** = bar **close** unless pack overrides; **§8** exam pack rows for snapshot + anchor. |
 | v1.9 | **§11.7 / §12** exam UI splice: canonical closure in **`GT_DIRECTIVE_008_exam_ui_splice_v1.md`** (timeline + drill-down + tests + deploy). |
 | v1.10 | **§18** operator drill-down contract: L1/L2/L3 goals, **trade set** vocabulary, L2 vs L3 recommendations, **GT_DIRECTIVE_009** mandatory closeout (doc + proof + local commit + **remote push** + **`PATTERN_GAME_WEB_UI_VERSION`** when UI embedded + **restart Flask/gsync** + HTTP verify); **§0** progressive-disclosure note; **§16.2** cross-ref to §18.3. |
+| v1.11 | **§18.4** tracking table; **GT_DIRECTIVE_009a** — L2 direction align + run rollups + UI (`dir_align`, demoted baseline copy). |
