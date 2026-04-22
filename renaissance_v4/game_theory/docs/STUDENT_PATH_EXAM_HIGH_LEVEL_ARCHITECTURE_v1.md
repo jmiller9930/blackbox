@@ -1,6 +1,6 @@
 # High-level architecture — learning, exam, certification, engineering, UI splice
 
-**Status:** v1.8 — opening snapshot contract, **Decision Frame immutability**, **bar-close time anchor** (§2 micro-patch).
+**Status:** v1.10 — **§18** operator drill-down contract (L1/L2/**trade set**), **GT_DIRECTIVE_009** delivery closeout; §2 v1.8 snapshot / immutability / time anchor unchanged.
 
 ---
 
@@ -16,6 +16,8 @@ The **Student panel UI refactor is complete for its role**:
 - honest `data_gap`
 
 This is the **execution truth layer (Referee-facing receipt system)**.
+
+**Progressive disclosure (active):** The **shell** routes (L1/L2/L3) are shipped; **what each level proves** (full **trade set** story on L2, field-complete L3) is governed by **§18** and advanced directive-by-directive with **GT_DIRECTIVE_009** closeout so operators always see fresh code and honest gaps.
 
 **Active workstream:**  
 Define and implement the **exam system (moment truth layer)**:
@@ -626,6 +628,8 @@ Restart **every** process the team uses to manually test the Student panel and e
 
 There is no single PID in this doc; operators **MUST** restart whatever matches their environment so **no stale code** serves requests.
 
+**Student panel drill-down work:** Any directive under **§18** (or touching L2/L3 payloads for **Student → learning → outcome**) **MUST** also satisfy **§18.3 — GT_DIRECTIVE_009** in addition to this subsection — including **remote `git push` success** and **lab `gsync` / UIUX stack restart** when the operator tests through the deployed Pattern + UI path (not local-only).
+
 ### 16.3 Verify (testing)
 
 After restart, confirm **HTTP 200** on at least:
@@ -679,6 +683,69 @@ When a slice replaces stub behavior, apply **§16** (proof first, then commit / 
 
 ---
 
+## 18. Operator Student panel — drill-down contract (L1 / L2 / L3)
+
+**Purpose:** Lock vocabulary and **delivery discipline** so the operator can **trace the entire Student decision process** from a run-wide hint down to per-field evidence, without mistaking **Referee win %** for **learning**, and without hiding missing exports.
+
+### 18.0 Goal (product)
+
+| Level | Operator question | What “good” looks like |
+|-------|-------------------|-------------------------|
+| **L1 — Exam list** | *Did this exam use learning mechanics? Did process or economic outcome move vs the prior comparable exam?* | One **quick visual row**: harness / memory / behavior deltas, run trade outcome rollups, **cross-run** improvement signal where defined — **not** a single dominant “beat baseline %” story unless the pack makes that primary. |
+| **L2 — One exam, trade sets** | *For this run, for **each trade set**, what was the **environment at entry**, what did the Student **commit** (action / side / confidence — operator “stake”), what **knobs** (context / memory / Groundhog) were active, and **how did the set close** (Referee WIN/LOSS, PnL)?* | Run summary band + **carousel of trade sets** (ordered, chronological per published `slice_ordering`). Each tile is **one closed opportunity** (`trade_id` / `graded_unit_id`), not an arbitrary blob. |
+| **L3 — Deep dive** | *Show me **every field** behind the tile I clicked, and say clearly what we do not have.* | **`student_decision_record_v1`** (or successor schema): exhaustive breakdown, **`data_gap`** + **`data_gaps[]`** reason codes — **never** invent cross-domain fills. |
+
+### 18.1 Vocabulary — **trade set**
+
+A **trade set** is one **evaluated opportunity**: **decision-time context** (what was knowable) + **Student commitment** (when present in store) + **path to close** + **Referee execution truth** (outcome, PnL). Default: **one** `trade_id` = **one** set (no silent roll-up of many unrelated fills).
+
+**Mapping to exam architecture:** When **Decision Frames** (**§2**) ship into the UI, each **trade set** tile SHOULD link to **frame 0** (and downstream frames) for that unit; until then, L2 remains **trade-grain** from parallel replay receipts — the **contract** in this section still applies to **what we show** and **how we label unknowns**.
+
+### 18.2 Recommendations — what L2 vs L3 SHOULD show (engineering targets)
+
+Work these as **separate directives**; each ends with **§16.0 Proof** and **§18.3 GT_DIRECTIVE_009** closeout.
+
+**L2 tile / slice (summary — “at a glance” for one trade set)**
+
+- **Identity:** `trade_id`, timestamp (entry / bar anchor per pack), symbol.  
+- **Student (store):** action, direction, `confidence_01` — or explicit **`data_gap`** if no row.  
+- **Referee:** WIN/LOSS (from PnL sign or published rule), PnL, direction / `actual_trade` when present.  
+- **Coupling (no baseline required):** e.g. direction agreement / tension (derived) — **recommended** as primary “did the model line up with reality?” hint.  
+- **Harness:** Groundhog / context / memory flags (from store + scenario flat as today).  
+- **Unknowns:** one line of **`data_gaps`** or reason codes — not a wall of `data_gap` without explanation.  
+- **Demote:** “vs baseline” / `decision_changed_flag` **until** a real per-trade baseline export exists; until then label **“not wired”** or omit from the primary row (honest **`data_gap`** in API is OK if copy explains it).
+
+**L3 panel (exhaustive — “every detail behind the L2 tile”)**
+
+- **Same IDs** as L2 selection (`run_id`, `trade_id`, `scenario_id`).  
+- **Full field list** per `student_decision_record_v1` (see `D14_student_decision_record_v1_field_sources.md`): OHLC, indicators, regimes, pattern, baseline comparison, structured reasoning — each either **sourced** or **`data_gap`** with a **stable reason** in **`data_gaps`**.  
+- **No duplicate conceptual objects** — L3 is **expansion**, not a different grain.
+
+### 18.3 Directive — **GT_DIRECTIVE_009** — Student panel drill-down / payload / UI
+
+**Applies to:** Any PR that changes **Student → learning → outcome** behavior: `student_panel_d13`, `student_panel_d14`, `student_panel_d11`, embedded Student panel **HTML/CSS/JS** in `web_app.py`, or API routes consumed by L1/L2/L3.
+
+**Mandatory sequence (do not skip; do not “done” without remote proof):**
+
+1. **Documentation** — If operator-visible semantics or API fields change, update **§18** (this section) and/or **`D14_student_decision_record_v1_field_sources.md`** in the **same PR** as the code (hotfix-only exception needs architect note in PR).  
+2. **Proof — §16.0** — Tests, fixtures or explicit gap policy, operator evidence for UI, HTTP proof on touched routes.  
+3. **Local git** — `git status` → `git add` (**only** files for this directive) → `git commit` with a **complete-sentence** message (include **`GT_DIRECTIVE_009`** or child directive id in the message body if nested).  
+4. **Remote git** — `git pull origin <BRANCH>` → **`git push origin <BRANCH>` until success** — remote is not updated until push completes (repo rule).  
+5. **UI bundle version** — If `renaissance_v4/game_theory/web_app.py` embedded Pattern/Student markup or script changes, bump **`PATTERN_GAME_WEB_UI_VERSION`** in that same commit.  
+6. **Restart services** — Restart **all** processes that serve the operator path under test:  
+   - **Flask `web_app`** (Pattern game + Student APIs; lab often **`:8765`**).  
+   - **Operator lab:** **`gsync`** (or equivalent) so **UIUX / Pattern** stack reloads — **push alone does not restart Flask** on the lab host.  
+   - Local Docker/Compose if that is how you test — same rule: **no stale process**.  
+7. **Verify (minimum HTTP)** — after restart:  
+   - `GET /api/student-panel/runs` → **200**  
+   - `GET /api/student-panel/run/<job_id>/decisions` → **200** when L2 payload changed  
+   - L3 route used by the panel for `student_decision_record_v1` → **200** when L3 changed  
+8. **PR record** — Paste **commit hash**, **services restarted**, and **verification** (curl exit/http_code or screenshot).
+
+**Canonical bash** for git steps remains **§16.1**; restart narrative **§16.2**; curl examples **§16.3**. **§18.3** adds **non-optional** remote push + **gsync**/stack restart for operator-visible Student work.
+
+---
+
 ## Revision history
 
 | Version | Summary |
@@ -693,3 +760,4 @@ When a slice replaces stub behavior, apply **§16** (proof first, then commit / 
 | v1.7 | **`/api/v1/trade-strategy`** mirrored routes + **`/contract`** for external callers; `trade_strategy_api_contract_v1()`. |
 | v1.8 | **§2 micro-patch:** opening snapshot contents (OHLCV + pack indicators + pack context); **Decision Frame immutability**; **time anchor** = bar **close** unless pack overrides; **§8** exam pack rows for snapshot + anchor. |
 | v1.9 | **§11.7 / §12** exam UI splice: canonical closure in **`GT_DIRECTIVE_008_exam_ui_splice_v1.md`** (timeline + drill-down + tests + deploy). |
+| v1.10 | **§18** operator drill-down contract: L1/L2/L3 goals, **trade set** vocabulary, L2 vs L3 recommendations, **GT_DIRECTIVE_009** mandatory closeout (doc + proof + local commit + **remote push** + **`PATTERN_GAME_WEB_UI_VERSION`** when UI embedded + **restart Flask/gsync** + HTTP verify); **§0** progressive-disclosure note; **§16.2** cross-ref to §18.3. |
