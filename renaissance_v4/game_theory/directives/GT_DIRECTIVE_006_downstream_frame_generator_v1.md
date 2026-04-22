@@ -51,15 +51,26 @@ Engineer must list remaining gaps under **Engineer update → remaining gaps**; 
 
 ## Engineer update
 
-**Status:** pending engineer response
+**Status:** implementation complete (2026-04-21)
 
-Engineer must append:
+**Summary:** Implemented §11.4 downstream frame generation after `decision_a_sealed` for **ENTER** only: frames **1..n** append after frame **0**, bar-close timestamps, one termination mode per unit (`fixed_bars` default **D=5**, `until_invalidation`, `volatility_regime_cap`), strict no-lookahead (each bar parsed only when emitted). **NO_TRADE** still commits a single opening frame. Added dev `POST /api/v1/exam/units/<id>/ohlc-strip` for strip + optional termination; default synthetic strip when unset.
 
-- summary of work performed
-- files changed
-- proof produced
-- remaining gaps
-- explicit line: `Requesting architect acceptance`
+**Files changed:**
+
+- `renaissance_v4/game_theory/exam_downstream_frame_generator_v1.py` — generator, dev stores, synthetic strip
+- `renaissance_v4/game_theory/exam_decision_frame_schema_v1.py` — `price_snapshot` / `downstream_context` on payload, ENTER validation (1 + n downstream), `build_complete_enter_timeline_v1`, recursion fix on NO_TRADE builder, timeline reset clears downstream stores
+- `renaissance_v4/game_theory/web_app.py` — seal hook uses `build_complete_enter_timeline_v1`, new POST route, UI version bump
+- `renaissance_v4/game_theory/docs/proof/exam_v1/fixture_exam_downstream_ohlc_strip_v1.json` — deterministic OHLC strip + documented expectations
+- `renaissance_v4/game_theory/docs/proof/exam_v1/golden_exam_unit_timeline_two_frames_enter_v1.json` — downstream row uses real `price_snapshot`
+- `docs/proof/exam_v1/operator_proof_downstream_gt006_v1.json` — operator-facing proof excerpt
+- `tests/test_exam_downstream_frame_generator_v1.py` — termination modes, NO_TRADE, ordering, no-lookahead, HTTP
+- `tests/test_exam_decision_frame_schema_v1.py` — ENTER rule updates
+
+**Proof produced:** Automated tests above; fixture + golden; operator JSON under `docs/proof/exam_v1/`; `GET …/decision-frames` returns ordered frames including downstream after ENTER seal.
+
+**Remaining gaps:** Pack registry still absent (dev POST / defaults only); no remote `curl` artifact checked in from production host.
+
+Requesting architect acceptance
 
 ---
 

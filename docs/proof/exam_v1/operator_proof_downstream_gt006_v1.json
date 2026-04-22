@@ -1,0 +1,32 @@
+{
+  "directive": "GT_DIRECTIVE_006",
+  "section": "11.4",
+  "title": "Downstream frame generator — operator proof",
+  "summary": "After Decision A seal with ENTER, the committed timeline contains frame 0 (opening) plus ordered downstream frames 1..n. Termination follows exactly one mode per unit (fixed bar count, until invalidation, or volatility cap). Frame 0 is never rewritten; downstream payloads carry only that bar's OHLCV plus pack context from the same row.",
+  "example_http": {
+    "method": "GET",
+    "path": "/api/v1/exam/units/{exam_unit_id}/decision-frames",
+    "expect_after_enter_seal": "200 JSON with decision_frames[0].frame_type=opening and decision_frames[k].frame_type=downstream for k>=1, strict frame_index 0..n"
+  },
+  "fixture_reference": "renaissance_v4/game_theory/docs/proof/exam_v1/fixture_exam_downstream_ohlc_strip_v1.json",
+  "deterministic_modes": [
+    {
+      "mode": "fixed_bars",
+      "D": 3,
+      "downstream_frames": 3,
+      "ordering": "frame_index equals strip bar index for downstream rows"
+    },
+    {
+      "mode": "until_invalidation",
+      "downstream_frames": 4,
+      "stop": "invalidation_triggers_on_close on strip[4]"
+    },
+    {
+      "mode": "volatility_regime_cap",
+      "range_threshold": 0.5,
+      "max_bars": 20,
+      "downstream_frames": 5,
+      "stop": "(high-low)/close >= threshold on strip[5] after emitting that bar"
+    }
+  ]
+}

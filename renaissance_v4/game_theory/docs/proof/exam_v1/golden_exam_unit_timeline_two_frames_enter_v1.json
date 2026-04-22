@@ -30,7 +30,9 @@
           }
         },
         "decision_a": { "enter": true, "schema": "decision_a_sealed_stub_v1" },
-        "downstream_reserved": null
+        "downstream_reserved": null,
+        "price_snapshot": null,
+        "downstream_context": {}
       }
     },
     {
@@ -43,10 +45,15 @@
         "opening_snapshot": null,
         "deliberation": null,
         "decision_a": null,
-        "downstream_reserved": {
-          "schema": "downstream_reserved_v1",
-          "note": "Simulated future §11.4 slice — not generated moment truth."
-        }
+        "downstream_reserved": null,
+        "price_snapshot": {
+          "open": 100.0,
+          "high": 101.0,
+          "low": 99.5,
+          "close": 100.5,
+          "volume": 500.0
+        },
+        "downstream_context": { "bar_label": "first_downstream" }
       }
     }
   ]

@@ -36,8 +36,8 @@ see ``trade_strategy_post_cert_stub_v1.py`` and ``docs/STUDENT_PATH_EXAM_HIGH_LE
 **Exam deliberation frame 0 (GT_DIRECTIVE_004 / §11.2):** ``PUT /api/v1/exam/units/<exam_unit_id>/frames/0/deliberation`` (valid body **200**, bad envelope **400**, policy/placeholder **422**, unknown unit **404**),
 ``GET …/frames/0/deliberation`` (**200** when set, **404** when missing). Schema: ``schemas/exam_deliberation_payload_v1.schema.json``; see ``exam_deliberation_capture_v1.py`` and ``directives/GT_DIRECTIVE_004_deliberation_capture_v1.md``.
 
-**Exam decision frames (GT_DIRECTIVE_005 / §11.3):** ``GET /api/v1/exam/units/<exam_unit_id>/decision-frames`` (**200** committed timeline after Decision A seal, **404** unknown unit or timeline not committed),
-``GET /api/v1/exam/frames/<decision_frame_id>`` (**200** single frame, **404** not found). Frame ids use ``{exam_unit_id}__df{n}`` (URL-safe). Timeline commits on successful ``decision_a_sealed`` transition; deliberation read-through from §11.2 store (no duplicate storage). See ``exam_decision_frame_schema_v1.py`` and ``directives/GT_DIRECTIVE_005_decision_frame_schema_v1.md``.
+**Exam decision frames (GT_DIRECTIVE_005 / §11.3; GT_DIRECTIVE_006 / §11.4):** ``GET /api/v1/exam/units/<exam_unit_id>/decision-frames`` (**200** committed timeline after Decision A seal, **404** unknown unit or timeline not committed),
+``GET /api/v1/exam/frames/<decision_frame_id>`` (**200** single frame, **404** not found). **ENTER** timelines append downstream frames per §11.4 (``POST …/ohlc-strip`` optional before seal; else deterministic synthetic strip). Frame ids use ``{exam_unit_id}__df{n}`` (URL-safe). Timeline commits on successful ``decision_a_sealed`` transition; deliberation read-through from §11.2 store (no duplicate storage). See ``exam_decision_frame_schema_v1.py``, ``exam_downstream_frame_generator_v1.py``, and ``directives/GT_DIRECTIVE_005_decision_frame_schema_v1.md``.
 
 **System Dialogue** (post-run formatter; ``/api/barney-summary``): ``POST /api/barney-summary`` with ``{"job_id": "…"}`` — structured
 run facts only. **Ask DATA** (bounded self-explainer): ``POST /api/ask-data`` with ``question`` and optional
@@ -99,7 +99,7 @@ _PATTERN_BANNER_WEBP_PATH = _RV4_ROOT / "assets" / "pattern.webp"
 _PATTERN_GAME_BANNER_BOOT_JS = _GAME_THEORY / "static" / "pattern_game_banner_boot.js"
 
 # Operator-visible web UI bundle version — bump when changing PAGE_HTML (HTML/CSS/JS) so deploys are provable.
-PATTERN_GAME_WEB_UI_VERSION = "2.19.35"
+PATTERN_GAME_WEB_UI_VERSION = "2.19.36"
 
 from renaissance_v4.game_theory.groundhog_memory import (
     groundhog_auto_merge_enabled,
@@ -135,12 +135,20 @@ from renaissance_v4.game_theory.student_panel_d13 import (
 from renaissance_v4.game_theory.student_panel_d14 import enrich_student_panel_run_rows_d14
 from renaissance_v4.game_theory.exam_decision_frame_schema_v1 import (
     ExamUnitTimelineDocumentV1,
-    build_timeline_document_enter_single_frame_v1,
+    build_complete_enter_timeline_v1,
     build_timeline_document_no_trade_single_frame_v1,
     commit_timeline_immutable_v1,
     find_frame_in_committed_timelines_v1,
     get_committed_timeline_v1,
     timeline_to_public_response_v1,
+)
+from renaissance_v4.game_theory.exam_downstream_frame_generator_v1 import (
+    DownstreamTerminationPolicyV1,
+    default_synthetic_ohlc_strip_v1,
+    get_exam_downstream_termination_v1,
+    get_exam_ohlc_strip_v1,
+    set_exam_downstream_termination_v1,
+    set_exam_ohlc_strip_v1,
 )
 from renaissance_v4.game_theory.exam_deliberation_capture_v1 import (
     assert_non_placeholder_deliberation_v1,
@@ -1619,17 +1627,23 @@ def create_app() -> Flask:
             try:
                 delib = get_frame0_deliberation_v1(exam_unit_id.strip())
                 ts_stub = "2026-04-21T15:00:00Z"
+                uid_seal = u2.exam_unit_id
                 if u2.enter is True:
-                    doc = build_timeline_document_enter_single_frame_v1(
-                        exam_unit_id=u2.exam_unit_id,
+                    strip = get_exam_ohlc_strip_v1(uid_seal) or default_synthetic_ohlc_strip_v1()
+                    pol = get_exam_downstream_termination_v1(uid_seal)
+                    f0_ts = str(strip[0].get("bar_close") or ts_stub).strip() or ts_stub
+                    doc = build_complete_enter_timeline_v1(
+                        exam_unit_id=uid_seal,
                         exam_pack_id=u2.exam_pack_id,
                         exam_pack_version=u2.exam_pack_version,
                         deliberation_export=delib,
-                        bar_close_timestamp_iso=ts_stub,
+                        frame0_bar_close_iso=f0_ts,
+                        strip=strip,
+                        policy=pol,
                     )
                 else:
                     doc = build_timeline_document_no_trade_single_frame_v1(
-                        exam_unit_id=u2.exam_unit_id,
+                        exam_unit_id=uid_seal,
                         exam_pack_id=u2.exam_pack_id,
                         exam_pack_version=u2.exam_pack_version,
                         deliberation_export=delib,
@@ -1639,6 +1653,29 @@ def create_app() -> Flask:
             except ValueError:
                 pass
         return jsonify({"ok": True, **exam_unit_to_public_dict(u2)})
+
+    @app.post("/api/v1/exam/units/<exam_unit_id>/ohlc-strip")
+    def api_exam_ohlc_strip_post_v1(exam_unit_id: str) -> Any:
+        """GT_DIRECTIVE_006 — dev: attach OHLC replay strip + optional downstream termination before Decision A seal."""
+        uid = exam_unit_id.strip()
+        if get_exam_unit_v1(uid) is None:
+            return jsonify({"ok": False, "error": "exam_unit_not_found"}), 404
+        raw = request.get_json(force=True, silent=True)
+        if not isinstance(raw, dict):
+            return jsonify({"ok": False, "error": "json_object_required"}), 400
+        bars = raw.get("bars")
+        if not isinstance(bars, list):
+            return jsonify({"ok": False, "error": "bars_required_array"}), 400
+        pol_raw = raw.get("downstream_termination")
+        try:
+            set_exam_ohlc_strip_v1(uid, bars)
+            if pol_raw is not None:
+                if not isinstance(pol_raw, dict):
+                    return jsonify({"ok": False, "error": "downstream_termination_must_be_object"}), 400
+                set_exam_downstream_termination_v1(uid, DownstreamTerminationPolicyV1.model_validate(pol_raw))
+        except ValueError as err:
+            return jsonify({"ok": False, "error": str(err)}), 400
+        return jsonify({"ok": True, "exam_unit_id": uid, "bars_count": len(bars)}), 200
 
     @app.put("/api/v1/exam/units/<exam_unit_id>/frames/0/deliberation")
     def api_exam_frame0_deliberation_put_v1(exam_unit_id: str) -> Any:

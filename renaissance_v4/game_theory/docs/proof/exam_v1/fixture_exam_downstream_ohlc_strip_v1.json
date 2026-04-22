@@ -1,0 +1,96 @@
+{
+  "schema": "exam_downstream_ohlc_fixture_v1",
+  "bars": [
+    {
+      "bar_close": "2026-04-21T12:00:00Z",
+      "open": 100.0,
+      "high": 101.5,
+      "low": 99.25,
+      "close": 100.75,
+      "volume": 1200.0,
+      "invalidation_triggers_on_close": false,
+      "context": { "i": 0 }
+    },
+    {
+      "bar_close": "2026-04-21T12:05:00Z",
+      "open": 100.0,
+      "high": 101.0,
+      "low": 99.5,
+      "close": 100.5,
+      "volume": 500.0,
+      "invalidation_triggers_on_close": false,
+      "context": { "bar_label": "first_downstream" }
+    },
+    {
+      "bar_close": "2026-04-21T12:10:00Z",
+      "open": 100.5,
+      "high": 102.0,
+      "low": 100.0,
+      "close": 101.25,
+      "volume": 510.0,
+      "invalidation_triggers_on_close": false,
+      "context": { "i": 2 }
+    },
+    {
+      "bar_close": "2026-04-21T12:15:00Z",
+      "open": 101.25,
+      "high": 103.0,
+      "low": 101.0,
+      "close": 102.0,
+      "volume": 520.0,
+      "invalidation_triggers_on_close": false,
+      "context": { "i": 3 }
+    },
+    {
+      "bar_close": "2026-04-21T12:20:00Z",
+      "open": 102.0,
+      "high": 105.0,
+      "low": 101.5,
+      "close": 103.0,
+      "volume": 530.0,
+      "invalidation_triggers_on_close": true,
+      "context": { "i": 4, "invalidation": true }
+    },
+    {
+      "bar_close": "2026-04-21T12:25:00Z",
+      "open": 100.0,
+      "high": 160.0,
+      "low": 100.0,
+      "close": 100.0,
+      "volume": 100.0,
+      "invalidation_triggers_on_close": false,
+      "context": { "volatility_spike": true }
+    },
+    {
+      "bar_close": "2026-04-21T12:30:00Z",
+      "open": 100.0,
+      "high": 100.5,
+      "low": 99.5,
+      "close": 100.1,
+      "volume": 100.0,
+      "invalidation_triggers_on_close": false,
+      "context": { "i": 6 }
+    },
+    {
+      "bar_close": "2026-04-21T12:35:00Z",
+      "open": 100.0,
+      "high": 100.2,
+      "low": 99.9,
+      "close": 100.05,
+      "volume": 100.0,
+      "invalidation_triggers_on_close": false,
+      "context": { "future_trap_close": 999.0 }
+    }
+  ],
+  "expectations": {
+    "fixed_bars_D3": { "downstream_frame_count": 3, "last_downstream_close": 102.0 },
+    "until_invalidation": { "downstream_frame_count": 4, "last_bar_close": "2026-04-21T12:20:00Z" },
+    "volatility_on_fixture_bar_index_5": {
+      "mode": "volatility_regime_cap",
+      "range_threshold": 0.5,
+      "max_bars": 20,
+      "downstream_frame_count": 5,
+      "last_trigger_bar_close": "2026-04-21T12:25:00Z"
+    }
+  }
+}

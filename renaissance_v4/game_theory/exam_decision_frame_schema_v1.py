@@ -3,7 +3,8 @@ Exam decision frame schema — **GT_DIRECTIVE_005** / architecture **§11.3**, *
 
 Parent ``exam_unit`` + ordered ``decision_frame[]`` contract, stable IDs, ordering rules,
 read-through **deliberation** (§11.2 store — not duplicated), immutable timeline **commit**
-after Decision A seal (dev in-memory). No downstream generator (§11.4), no grading.
+after Decision A seal (dev in-memory). **§11.4** downstream frames appended for **ENTER** via
+``exam_downstream_frame_generator_v1`` (no grading).
 """
 
 from __future__ import annotations
@@ -58,7 +59,15 @@ class DecisionFramePayloadV1(BaseModel):
     )
     downstream_reserved: dict[str, Any] | None = Field(
         default=None,
-        description="Placeholder slot for §11.4; do not use for moment truth in this slice.",
+        description="Optional placeholder; real downstream uses ``price_snapshot`` + ``downstream_context``.",
+    )
+    price_snapshot: OhlcvV1 | None = Field(
+        default=None,
+        description="Downstream bar OHLCV only (one bar per frame; no lookahead).",
+    )
+    downstream_context: dict[str, Any] = Field(
+        default_factory=dict,
+        description="Pack-allowed context for that bar (keys only from that bar row).",
     )
 
 
@@ -142,7 +151,7 @@ def validate_decision_frames_structure_v1(doc: ExamUnitTimelineDocumentV1) -> No
 
 
 def validate_decision_frames_enter_rules_v1(doc: ExamUnitTimelineDocumentV1, *, enter: bool) -> None:
-    """NO_TRADE → exactly one opening frame; ENTER → one frame in this slice (future §11.4 may add more)."""
+    """NO_TRADE → exactly one opening frame; ENTER → frame 0 opening + zero or more ``downstream`` frames."""
     validate_decision_frames_structure_v1(doc)
     n = len(doc.decision_frames)
     if not enter:
@@ -151,12 +160,15 @@ def validate_decision_frames_enter_rules_v1(doc: ExamUnitTimelineDocumentV1, *, 
         if doc.decision_frames[0].frame_type != "opening":
             raise ValueError("no_trade_single_frame_must_be_opening")
     else:
-        if n < 1 or n > 2:
-            raise ValueError("enter_requires_one_or_two_frames_in_dev")
+        if n < 1:
+            raise ValueError("enter_requires_frame_0")
         if doc.decision_frames[0].frame_type != "opening":
             raise ValueError("frame_0_must_be_opening")
-        if n == 2 and doc.decision_frames[1].frame_type != "downstream":
-            raise ValueError("second_frame_must_be_downstream_placeholder")
+        for f in doc.decision_frames[1:]:
+            if f.frame_type != "downstream":
+                raise ValueError("enter_downstream_frames_must_have_type_downstream")
+            if f.payload.price_snapshot is None:
+                raise ValueError("enter_downstream_requires_price_snapshot")
 
 
 _TIMELINE_COMMITTED: dict[str, dict[str, Any]] = {}
@@ -188,46 +200,73 @@ def build_timeline_document_for_seal_v1(
     deliberation_export: dict[str, Any] | None,
     bar_close_timestamp_iso: str,
 ) -> ExamUnitTimelineDocumentV1:
-    """Build frame 0 (+ optional downstream placeholder for ENTER dev) at Decision A seal."""
+    """Legacy helper: NO_TRADE → single frame; ENTER → frame 0 only (use ``build_complete_enter_timeline_v1`` for downstream)."""
+    if enter:
+        return build_timeline_document_enter_single_frame_v1(
+            exam_unit_id=exam_unit_id,
+            exam_pack_id=exam_pack_id,
+            exam_pack_version=exam_pack_version,
+            deliberation_export=deliberation_export,
+            bar_close_timestamp_iso=bar_close_timestamp_iso,
+        )
+    return build_timeline_document_no_trade_single_frame_v1(
+        exam_unit_id=exam_unit_id,
+        exam_pack_id=exam_pack_id,
+        exam_pack_version=exam_pack_version,
+        deliberation_export=deliberation_export,
+        bar_close_timestamp_iso=bar_close_timestamp_iso,
+    )
+
+
+def build_complete_enter_timeline_v1(
+    *,
+    exam_unit_id: str,
+    exam_pack_id: str | None,
+    exam_pack_version: str | None,
+    deliberation_export: dict[str, Any] | None,
+    frame0_bar_close_iso: str,
+    strip: list[dict[str, Any]],
+    policy: Any,
+) -> ExamUnitTimelineDocumentV1:
+    """ENTER: frame 0 + downstream frames 1..n per §11.4 (single atomic document for immutable commit)."""
+    from renaissance_v4.game_theory.exam_downstream_frame_generator_v1 import (
+        DownstreamTerminationPolicyV1,
+        generate_downstream_frames_after_seal_v1,
+    )
+
+    pol = (
+        policy
+        if isinstance(policy, DownstreamTerminationPolicyV1)
+        else DownstreamTerminationPolicyV1.model_validate(policy)
+    )
     uid = exam_unit_id.strip()
     p0 = DecisionFramePayloadV1(
         opening_snapshot=default_opening_snapshot_stub_v1(),
         deliberation=dict(deliberation_export) if deliberation_export else None,
-        decision_a={"enter": enter, "schema": "decision_a_sealed_stub_v1"},
+        decision_a={"enter": True, "schema": "decision_a_sealed_stub_v1"},
     )
     f0 = DecisionFrameV1(
         decision_frame_id=decision_frame_id_v1(uid, 0),
         exam_unit_id=uid,
         frame_index=0,
-        timestamp=bar_close_timestamp_iso,
+        timestamp=frame0_bar_close_iso,
         frame_type="opening",
         payload=p0,
     )
-    frames: list[DecisionFrameV1] = [f0]
-    if enter:
-        p1 = DecisionFramePayloadV1(
-            opening_snapshot=None,
-            deliberation=None,
-            decision_a=None,
-            downstream_reserved={"schema": "downstream_reserved_v1", "note": "§11.4 generator not implemented"},
-        )
-        frames.append(
-            DecisionFrameV1(
-                decision_frame_id=decision_frame_id_v1(uid, 1),
-                exam_unit_id=uid,
-                frame_index=1,
-                timestamp=bar_close_timestamp_iso,
-                frame_type="downstream",
-                payload=p1,
-            )
-        )
+    downstream = generate_downstream_frames_after_seal_v1(
+        exam_unit_id=uid,
+        strip=strip,
+        policy=pol,
+        decision_a_sealed=True,
+        enter=True,
+    )
     doc = ExamUnitTimelineDocumentV1(
         exam_unit_id=uid,
         exam_pack_id=exam_pack_id,
         exam_pack_version=exam_pack_version,
-        decision_frames=frames,
+        decision_frames=[f0, *downstream],
     )
-    validate_decision_frames_enter_rules_v1(doc, enter=enter)
+    validate_decision_frames_enter_rules_v1(doc, enter=True)
     return doc
 
 
@@ -240,14 +279,28 @@ def build_timeline_document_no_trade_single_frame_v1(
     bar_close_timestamp_iso: str,
 ) -> ExamUnitTimelineDocumentV1:
     """NO_TRADE: exactly one opening frame."""
-    return build_timeline_document_for_seal_v1(
-        exam_unit_id=exam_unit_id,
+    uid = exam_unit_id.strip()
+    p0 = DecisionFramePayloadV1(
+        opening_snapshot=default_opening_snapshot_stub_v1(),
+        deliberation=dict(deliberation_export) if deliberation_export else None,
+        decision_a={"enter": False, "schema": "decision_a_sealed_stub_v1"},
+    )
+    f0 = DecisionFrameV1(
+        decision_frame_id=decision_frame_id_v1(uid, 0),
+        exam_unit_id=uid,
+        frame_index=0,
+        timestamp=bar_close_timestamp_iso,
+        frame_type="opening",
+        payload=p0,
+    )
+    doc = ExamUnitTimelineDocumentV1(
+        exam_unit_id=uid,
         exam_pack_id=exam_pack_id,
         exam_pack_version=exam_pack_version,
-        enter=False,
-        deliberation_export=deliberation_export,
-        bar_close_timestamp_iso=bar_close_timestamp_iso,
+        decision_frames=[f0],
     )
+    validate_decision_frames_enter_rules_v1(doc, enter=False)
+    return doc
 
 
 def build_timeline_document_enter_single_frame_v1(
@@ -258,7 +311,7 @@ def build_timeline_document_enter_single_frame_v1(
     deliberation_export: dict[str, Any] | None,
     bar_close_timestamp_iso: str,
 ) -> ExamUnitTimelineDocumentV1:
-    """ENTER: single opening frame only (current product rule; no downstream row)."""
+    """ENTER: opening frame only (no downstream; use ``build_complete_enter_timeline_v1`` for §11.4)."""
     uid = exam_unit_id.strip()
     p0 = DecisionFramePayloadV1(
         opening_snapshot=default_opening_snapshot_stub_v1(),
@@ -311,12 +364,26 @@ def decision_frames_http_doc_v1() -> list[dict[str, Any]]:
             "success": 200,
             "errors": [{"status": 404, "when": "unknown decision_frame_id"}],
         },
+        {
+            "method": "POST",
+            "path": "/api/v1/exam/units/{exam_unit_id}/ohlc-strip",
+            "success": 200,
+            "notes": "GT_DIRECTIVE_006 — optional ``bars[]`` + ``downstream_termination`` before seal (dev).",
+        },
     ]
 
 
 def reset_exam_timelines_for_tests_v1() -> None:
     with _LOCK:
         _TIMELINE_COMMITTED.clear()
+    try:
+        from renaissance_v4.game_theory.exam_downstream_frame_generator_v1 import (
+            reset_exam_downstream_dev_stores_for_tests_v1,
+        )
+
+        reset_exam_downstream_dev_stores_for_tests_v1()
+    except ImportError:
+        pass
 
 
 def find_frame_in_committed_timelines_v1(decision_frame_id: str) -> dict[str, Any] | None:
@@ -343,6 +410,7 @@ __all__ = [
     "OhlcvV1",
     "TIMELINE_SCHEMA",
     "TIMELINE_SCHEMA_VERSION",
+    "build_complete_enter_timeline_v1",
     "build_timeline_document_enter_single_frame_v1",
     "build_timeline_document_for_seal_v1",
     "build_timeline_document_no_trade_single_frame_v1",

@@ -11,8 +11,8 @@ from renaissance_v4.game_theory.exam_decision_frame_schema_v1 import (
     DecisionFramePayloadV1,
     DecisionFrameV1,
     ExamUnitTimelineDocumentV1,
+    OhlcvV1,
     build_timeline_document_enter_single_frame_v1,
-    build_timeline_document_for_seal_v1,
     build_timeline_document_no_trade_single_frame_v1,
     commit_timeline_immutable_v1,
     decision_frame_id_v1,
@@ -198,37 +198,66 @@ def test_parent_linkage_mismatch_rejected() -> None:
 
 
 def test_no_trade_two_frames_rejected() -> None:
-    d = build_timeline_document_for_seal_v1(
-        exam_unit_id="unit_nt_two",
+    uid = "unit_nt_two"
+    ts = "2026-04-21T12:00:00Z"
+    p0 = DecisionFramePayloadV1()
+    p1 = DecisionFramePayloadV1(
+        price_snapshot=OhlcvV1(open=1.0, high=1.0, low=1.0, close=1.0, volume=1.0),
+    )
+    doc = ExamUnitTimelineDocumentV1(
+        exam_unit_id=uid,
         exam_pack_id="p",
         exam_pack_version="1",
-        enter=True,
-        deliberation_export=None,
-        bar_close_timestamp_iso="2026-04-21T12:00:00Z",
+        decision_frames=[
+            DecisionFrameV1(
+                decision_frame_id=decision_frame_id_v1(uid, 0),
+                exam_unit_id=uid,
+                frame_index=0,
+                timestamp=ts,
+                frame_type="opening",
+                payload=p0,
+            ),
+            DecisionFrameV1(
+                decision_frame_id=decision_frame_id_v1(uid, 1),
+                exam_unit_id=uid,
+                frame_index=1,
+                timestamp=ts,
+                frame_type="downstream",
+                payload=p1,
+            ),
+        ],
     )
-    assert len(d.decision_frames) == 2
+    assert len(doc.decision_frames) == 2
     with pytest.raises(ValueError, match="no_trade_requires_exactly_one_frame"):
-        validate_decision_frames_enter_rules_v1(d, enter=False)
+        validate_decision_frames_enter_rules_v1(doc, enter=False)
 
 
-def test_enter_three_frames_rejected() -> None:
-    uid = "unit_three"
+def test_enter_second_frame_must_be_downstream() -> None:
+    uid = "unit_enter_bad_mid"
     ts = "2026-04-21T12:00:00Z"
     p = DecisionFramePayloadV1()
-    frames = []
-    for i in range(3):
-        frames.append(
+    doc = ExamUnitTimelineDocumentV1(
+        exam_unit_id=uid,
+        decision_frames=[
             DecisionFrameV1(
-                decision_frame_id=decision_frame_id_v1(uid, i),
+                decision_frame_id=decision_frame_id_v1(uid, 0),
                 exam_unit_id=uid,
-                frame_index=i,
+                frame_index=0,
                 timestamp=ts,
-                frame_type="opening" if i == 0 else "downstream",
+                frame_type="opening",
                 payload=p,
-            )
-        )
-    doc = ExamUnitTimelineDocumentV1(exam_unit_id=uid, decision_frames=frames)
-    with pytest.raises(ValueError, match="enter_requires_one_or_two_frames_in_dev"):
+            ),
+            DecisionFrameV1(
+                decision_frame_id=decision_frame_id_v1(uid, 1),
+                exam_unit_id=uid,
+                frame_index=1,
+                timestamp=ts,
+                frame_type="opening",
+                payload=p,
+            ),
+        ],
+    )
+    with pytest.raises(ValueError, match="enter_downstream_frames_must_have_type_downstream"):
         validate_decision_frames_enter_rules_v1(doc, enter=True)
 
 
