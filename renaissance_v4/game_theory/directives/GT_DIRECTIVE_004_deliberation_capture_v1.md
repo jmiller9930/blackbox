@@ -6,7 +6,8 @@
 **CC:** Product, Referee, UI, Operator  
 **Scope:** `renaissance_v4/game_theory` only
 
-**Predecessor:** `GT_DIRECTIVE_003_exam_state_machine_v1.md` (**§11.1 — CLOSED**).
+**Predecessor:** `GT_DIRECTIVE_003_exam_state_machine_v1.md` (**§11.1 — CLOSED**).  
+**Successor:** `GT_DIRECTIVE_005_decision_frame_schema_v1.md` (**§11.3 — active**).
 
 ## Canonical workflow record
 
@@ -51,7 +52,7 @@ Engineer must list any remaining gaps (persistence, auth, UI polish) under **Eng
 
 ## Engineer update
 
-**Status:** **§11.2 accepted** — contingency integrity + audit note landed (2026-04-22)
+**Status:** **CLOSED** — **GT_DIRECTIVE_004 §11.2** fully accepted (2026-04-22). Do **not** reopen unless a **regression** is found. Next slice: **§11.3** → **`GT_DIRECTIVE_005_decision_frame_schema_v1.md`**.
 
 **Work performed**
 
@@ -65,7 +66,7 @@ Engineer must list any remaining gaps (persistence, auth, UI polish) under **Eng
 
 | Method | Path | Success | Errors |
 |--------|------|---------|--------|
-| `PUT` | `/api/v1/exam/units/{exam_unit_id}/frames/0/deliberation` | **200** | **400** envelope validation, **404** unknown `exam_unit_id`, **422** deliberation `exam_unit_id` ≠ path, policy / placeholder |
+| `PUT` | `/api/v1/exam/units/{exam_unit_id}/frames/0/deliberation` | **200** | **400** envelope validation, **404** unknown `exam_unit_id`, **422** deliberation `exam_unit_id` ≠ path, policy / placeholder / **H4 integrity** |
 | `GET` | `/api/v1/exam/units/{exam_unit_id}/frames/0/deliberation` | **200** | **404** unknown unit or deliberation not stored |
 
 **Proof produced**
@@ -82,9 +83,7 @@ Engineer must list any remaining gaps (persistence, auth, UI polish) under **Eng
 - Implements **§11.2** “H1–H4 exporter (non-placeholder); schema versioned” and **§1** learning model deliberation / H4 bullets as **typed fields**, not parallel-runner traces.
 - **§11.1** untouched (ordering / invalidation).
 
-**Post-review contingency (2026-04-22)** — **H4 primary_selection integrity**: `validate_h4_primary_selection_integrity_v1` (duplicate `hypothesis_id`, declared-id match, pack `allow_no_trade_primary` for `NO_TRADE`); negative tests + HTTP **422**; `PATTERN_GAME_WEB_UI_VERSION` **2.19.34**.
-
-**Requesting architect acceptance** — satisfied by decision below.
+**Final verification (2026-04-22)** — **H4 primary_selection integrity**: `validate_h4_primary_selection_integrity_v1` (duplicate `hypothesis_id`, declared-id match, pack `allow_no_trade_primary` for `NO_TRADE`); negative tests + HTTP **422**; `PATTERN_GAME_WEB_UI_VERSION` **2.19.34**.
 
 ---
 
@@ -96,26 +95,28 @@ Engineer must list any remaining gaps (persistence, auth, UI polish) under **Eng
 
 ## Architect review
 
-**Status:** Accepted (contingency requirements addressed in repo)
+**Status:** **Accepted — CLOSED** (2026-04-22)
 
-Architect Acceptance — §11.2
+**Architect Acceptance Confirmed — GT_DIRECTIVE_004 (§11.2) CLOSED**
 
-Deliberation capture implementation satisfies §11.2 requirements.
+Verified: H4 primary selection integrity enforced centrally; duplicate hypothesis IDs rejected; `primary_selection` must match a declared `hypothesis_id` unless `NO_TRADE`; `NO_TRADE` primary pack-gated via `allow_no_trade_primary`; HTTP **422** for integrity failures; negative tests (duplicate ids, disallowed NO_TRADE primary, HTTP 422); **`tests/test_exam_deliberation_capture_v1.py`** + **`tests/test_exam_state_machine_v1.py`** — **28 passed**; audit note recorded for future **pack_deliberation_policy** sourcing from **exam_pack_id** + version (not client-controlled long term); deploy + remote restart successful; **§11.3** not started without authorization.
 
-* H1–H3 hypotheses are explicitly structured with required fields
-* H4 comparative evaluation and primary selection are captured
-* Schema is versioned and enforced at the API boundary
-* Placeholder-only payloads are rejected by validation
-* data_gap handling is pack-gated and explicit
-* Frame 0 deliberation is accessible via HTTP routes
-* Fixture and automated tests validate behavior and regressions
-* No scope creep into downstream frames, grading, or UI
+**Acceptance statement — architecture contract satisfied**
 
-Follow-ups:
+* H1–H4 are explicitly structured and validated  
+* Schema is versioned and enforced  
+* Placeholder-only payloads are blocked  
+* H4 selection integrity is enforced  
+* `data_gap` remains pack-gated  
+* Frame 0 deliberation is available over HTTP  
+* Fixture and regression tests are in place  
+* Audit constraint on pack-policy sourcing is documented  
+* Deployment is complete  
 
-* Enforce H4 primary_selection integrity against hypothesis IDs
-* Document that pack_deliberation_policy must be derived from exam_pack in future slices
+**Directive status:** **GT_DIRECTIVE_004 §11.2 is CLOSED.** Do not reopen unless a regression is found.
 
-Directive GT_DIRECTIVE_004 §11.2 is accepted.
+**Next engineering slice:** **§11.3 — Decision Frame Schema** → **`GT_DIRECTIVE_005_decision_frame_schema_v1.md`**.
 
-**Engineering note:** The two follow-ups above are implemented / recorded as: **(1)** `validate_h4_primary_selection_integrity_v1` + tests; **(2)** **Architectural constraints (audit)** subsection in this file.
+---
+
+*Original acceptance record (subset):* Deliberation capture implementation satisfied §11.2 requirements (H1–H3 fields, H4 capture, schema at API boundary, placeholder rejection, pack-gated `data_gap`, frame 0 HTTP, fixtures/tests, no downstream/grading/UI scope creep). Contingency follow-ups **(1)** H4 integrity **`validate_h4_primary_selection_integrity_v1`** + tests **(2)** pack policy audit note — **done** (see **Architectural constraints** above).

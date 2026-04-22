@@ -24,7 +24,7 @@ Directive files should use stable ids such as:
 
 - `GT_DIRECTIVE_001_*`
 - `GT_DIRECTIVE_002_*`
-- `GT_DIRECTIVE_003_*` … `GT_DIRECTIVE_004_*` (see files in this folder)
+- `GT_DIRECTIVE_003_*` … `GT_DIRECTIVE_005_*` (see files in this folder)
 
 ## Required sections in each directive
 
