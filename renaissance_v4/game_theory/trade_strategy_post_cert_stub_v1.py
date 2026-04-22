@@ -11,9 +11,18 @@ before persistence, validation, and execution are implemented.
 
 from __future__ import annotations
 
+import re
+from datetime import datetime, timezone
 from typing import Any
 
 SCHEMA = "trade_strategy_v1_dev_stub"
+EXPORT_SCHEMA = "trade_strategy_export_v1_dev_stub"
+
+
+def _export_filename_slug(strategy_id: str) -> str:
+    s = (strategy_id or "strategy").strip() or "strategy"
+    s = re.sub(r"[^a-zA-Z0-9_.-]+", "_", s)[:80]
+    return s or "strategy"
 
 
 def stub_trade_strategy_list_v1() -> dict[str, Any]:
@@ -75,9 +84,34 @@ def stub_trade_strategy_update_v1(strategy_id: str, body: dict[str, Any] | None)
     }
 
 
+def stub_trade_strategy_export_document_v1(strategy_id: str) -> dict[str, Any]:
+    """
+    Portable JSON document for **file export** (operator / auditor handoff).
+
+    When persistence exists, this shape should mirror the stored canonical record
+    (version, certification link, body, hashes).
+    """
+    sid = strategy_id.strip() or "stub_post_cert_default"
+    inner = stub_trade_strategy_get_v1(sid)
+    return {
+        "schema": EXPORT_SCHEMA,
+        "stub": True,
+        "strategy_id": sid,
+        "exported_at_utc": datetime.now(tz=timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "export_filename_slug": _export_filename_slug(sid),
+        "strategy_document": {
+            "title": inner.get("title"),
+            "body": inner.get("body"),
+        },
+        "note": "DEV export — replace with signed persisted document + optional content hash.",
+    }
+
+
 __all__ = [
+    "EXPORT_SCHEMA",
     "SCHEMA",
     "stub_trade_strategy_create_v1",
+    "stub_trade_strategy_export_document_v1",
     "stub_trade_strategy_get_v1",
     "stub_trade_strategy_list_v1",
     "stub_trade_strategy_update_v1",

@@ -1,6 +1,6 @@
 # High-level architecture — learning, exam, certification, engineering, UI splice
 
-**Status:** v1.5 — post-certification **`trade_strategy`** DEV stub (§17) + Flask routes + module `trade_strategy_post_cert_stub_v1.py`.
+**Status:** v1.6 — **`trade_strategy` export** (`GET …/export` attachment JSON) on top of §17 stub.
 
 ---
 
@@ -623,13 +623,14 @@ curl -s -o /dev/null -w "%{http_code}\n" "http://127.0.0.1:<PORT>/api/student-pa
 | Route | Role |
 |-------|------|
 | `GET /api/trade-strategy` | List placeholder strategies (`stub: true`). |
+| `GET /api/trade-strategy/<strategy_id>/export` | **Download** portable JSON (`Content-Disposition: attachment`; filename `trade_strategy_<slug>_export.json`). |
 | `GET /api/trade-strategy/<strategy_id>` | Return shell document for one id. |
 | `POST /api/trade-strategy` | Accept JSON body; **echo keys only** — **no persistence**. |
 | `PATCH /api/trade-strategy/<strategy_id>` | Accept update body; **echo keys only** — **no merge**. |
 
 **Code:** `renaissance_v4/game_theory/trade_strategy_post_cert_stub_v1.py`  
 **Tests:** `tests/test_web_app_trade_strategy_stub_v1.py`  
-**Schema string:** `trade_strategy_v1_dev_stub`
+**Schema strings:** `trade_strategy_v1_dev_stub` (API envelope) · `trade_strategy_export_v1_dev_stub` (**file export** document)
 
 ### 17.2 Next implementation (not stub)
 
@@ -640,7 +641,7 @@ curl -s -o /dev/null -w "%{http_code}\n" "http://127.0.0.1:<PORT>/api/student-pa
 
 ### 17.3 Proof + closeout (when replacing stub)
 
-When a slice replaces stub behavior, apply **§16** (proof first, then commit / push / restart / verify). Minimum HTTP proof includes the four routes above returning **documented** non-stub codes and bodies.
+When a slice replaces stub behavior, apply **§16** (proof first, then commit / push / restart / verify). Minimum HTTP proof includes the **list / get / export / post / patch** routes above returning **documented** non-stub codes and bodies (export must return **attachment** when product requires download).
 
 ---
 
@@ -654,3 +655,4 @@ When a slice replaces stub behavior, apply **§16** (proof first, then commit / 
 | v1.3 | **Proof (non-negotiable)** before every **Delivery closeout** (§11.1–§11.7, §12); **§16.0** global proof prerequisite; closeout gated on proof. |
 | v1.4 | **Baseline strategy** terminology + cross-ref to `MANIFEST_REPLAY_INTEGRATION.md`; legacy filename `baseline_v1_recipe.json` documented. |
 | v1.5 | §17 post-cert **`trade_strategy`**: DEV stub module + Flask routes + tests; `PATTERN_GAME_WEB_UI_VERSION` bump in `web_app.py`. |
+| v1.6 | **`GET /api/trade-strategy/<id>/export`** — downloadable JSON attachment; `EXPORT_SCHEMA` + tests. |

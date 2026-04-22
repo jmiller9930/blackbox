@@ -27,6 +27,19 @@ def test_trade_strategy_stub_get_one() -> None:
     assert data.get("strategy_id") == "stub_post_cert_default"
 
 
+def test_trade_strategy_stub_export_download() -> None:
+    app = create_app()
+    c = app.test_client()
+    r = c.get("/api/trade-strategy/stub_post_cert_default/export")
+    assert r.status_code == 200
+    assert "attachment" in (r.headers.get("Content-Disposition") or "").lower()
+    assert "trade_strategy_" in (r.headers.get("Content-Disposition") or "")
+    data = json.loads(r.data.decode("utf-8"))
+    assert data.get("schema") == "trade_strategy_export_v1_dev_stub"
+    assert data.get("strategy_id") == "stub_post_cert_default"
+    assert "strategy_document" in data
+
+
 def test_trade_strategy_stub_post_patch() -> None:
     app = create_app()
     c = app.test_client()
