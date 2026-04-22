@@ -96,6 +96,56 @@ def write_groundhog_bundle(
     return p
 
 
+def promote_groundhog_bundle_from_parallel_scenarios_v1(
+    scenarios: list[dict[str, Any]],
+    *,
+    from_run_id: str,
+) -> dict[str, Any]:
+    """
+    After a **successful** parallel batch, persist the canonical Groundhog bundle from the batch's
+    ATR parameters so the operator banner can show **Ready** without a separate POST.
+
+    Skips when ``PATTERN_GAME_GROUNDHOG_BUNDLE`` opts out. Walks ``scenarios`` in order and uses the
+    first finite ``atr_stop_mult`` / ``atr_target_mult`` pair on a row that does not set
+    ``skip_groundhog_bundle``.
+
+    Returns ``{"ok": True, "action": "written"|"skipped_env_opt_out"|"skipped_no_atr_pair", ...}``.
+    """
+    if not groundhog_auto_merge_enabled():
+        return {"ok": True, "action": "skipped_env_opt_out"}
+    rid = (from_run_id or "").strip()
+    for s in scenarios:
+        if not isinstance(s, dict):
+            continue
+        if s.get("skip_groundhog_bundle"):
+            continue
+        raw_s = s.get("atr_stop_mult")
+        raw_t = s.get("atr_target_mult")
+        if raw_s is None or raw_t is None:
+            continue
+        try:
+            a_s = float(raw_s)
+            a_t = float(raw_t)
+        except (TypeError, ValueError):
+            continue
+        if not (math.isfinite(a_s) and math.isfinite(a_t)):
+            continue
+        p = write_groundhog_bundle(
+            atr_stop_mult=a_s,
+            atr_target_mult=a_t,
+            from_run_id=rid or None,
+            note="Auto-promoted from completed parallel batch (first scenario ATR pair).",
+        )
+        return {
+            "ok": True,
+            "action": "written",
+            "path": str(p),
+            "atr_stop_mult": a_s,
+            "atr_target_mult": a_t,
+        }
+    return {"ok": True, "action": "skipped_no_atr_pair"}
+
+
 def clear_groundhog_bundle_file() -> dict[str, Any]:
     """
     Delete the canonical Groundhog bundle file if it exists.
@@ -155,7 +205,8 @@ def groundhog_wiring_signal() -> tuple[Literal["green", "yellow", "red"], str]:
     if not p.is_file():
         return (
             "yellow",
-            f"Canonical Groundhog container not created yet at {p}. POST /api/groundhog-memory to promote (idle).",
+            f"Canonical Groundhog container not created yet at {p}. "
+            "A successful parallel batch auto-writes ATR from the first scenario, or POST /api/groundhog-memory.",
         )
 
     try:
@@ -178,7 +229,8 @@ def groundhog_wiring_signal() -> tuple[Literal["green", "yellow", "red"], str]:
     if not _groundhog_apply_has_promoted_atr(doc):
         return (
             "yellow",
-            "Container on disk — waiting for promoted atr_stop_mult / atr_target_mult in apply (POST promote).",
+            "Container on disk — waiting for finite atr_stop_mult / atr_target_mult in apply "
+            "(POST /api/groundhog-memory or complete a successful batch).",
         )
 
     return (

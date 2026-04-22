@@ -103,7 +103,7 @@ _PATTERN_BANNER_WEBP_PATH = _RV4_ROOT / "assets" / "pattern.webp"
 _PATTERN_GAME_BANNER_BOOT_JS = _GAME_THEORY / "static" / "pattern_game_banner_boot.js"
 
 # Operator-visible web UI bundle version — bump when changing PAGE_HTML (HTML/CSS/JS) so deploys are provable.
-PATTERN_GAME_WEB_UI_VERSION = "2.19.42"
+PATTERN_GAME_WEB_UI_VERSION = "2.19.43"
 
 from renaissance_v4.game_theory.context_signature_memory import truncate_context_signature_memory_store
 from renaissance_v4.game_theory.groundhog_memory import (
@@ -111,6 +111,7 @@ from renaissance_v4.game_theory.groundhog_memory import (
     groundhog_auto_merge_enabled,
     groundhog_bundle_path,
     groundhog_wiring_signal,
+    promote_groundhog_bundle_from_parallel_scenarios_v1,
     read_groundhog_bundle,
     write_groundhog_bundle,
 )
@@ -1083,6 +1084,9 @@ def create_app() -> Flask:
                     results, operator_recipe_id=operator_batch_audit.get("operator_recipe_id")
                 )
                 _guard_parallel_batch_not_noop(scenarios, results)
+                gh_promo = promote_groundhog_bundle_from_parallel_scenarios_v1(
+                    scenarios, from_run_id=job_id
+                )
                 ok_n = sum(1 for r in results if r.get("ok"))
                 op_rid = str(operator_batch_audit.get("operator_recipe_id") or "").strip() or None
                 seam_audit = student_loop_seam_after_parallel_batch_v1(
@@ -1127,6 +1131,7 @@ def create_app() -> Flask:
                     "student_retrieval_matches": int(seam_audit.get("student_retrieval_matches") or 0),
                     "student_output_fingerprint": seam_audit.get("student_output_fingerprint"),
                     "shadow_student_enabled": bool(seam_audit.get("shadow_student_enabled")),
+                    "groundhog_auto_promote_v1": gh_promo,
                 }
                 with _JOBS_LOCK:
                     j = _JOBS.get(job_id)
@@ -1356,6 +1361,9 @@ def create_app() -> Flask:
                 results, operator_recipe_id=operator_batch_audit.get("operator_recipe_id")
             )
             _guard_parallel_batch_not_noop(scenarios, results)
+            gh_promo_block = promote_groundhog_bundle_from_parallel_scenarios_v1(
+                scenarios, from_run_id=job_id
+            )
             ok_n = sum(1 for r in results if r.get("ok"))
             op_rid_block = str(operator_batch_audit.get("operator_recipe_id") or "").strip() or None
             seam_blocking = student_loop_seam_after_parallel_batch_v1(
@@ -1400,6 +1408,7 @@ def create_app() -> Flask:
                 "student_retrieval_matches": int(seam_blocking.get("student_retrieval_matches") or 0),
                 "student_output_fingerprint": seam_blocking.get("student_output_fingerprint"),
                 "shadow_student_enabled": bool(seam_blocking.get("shadow_student_enabled")),
+                "groundhog_auto_promote_v1": gh_promo_block,
             }
             if disk_warn_msgs:
                 ok_body["operator_disk_warnings"] = disk_warn_msgs
@@ -4641,7 +4650,7 @@ PAGE_HTML = """<!DOCTYPE html>
               <div class="help-details-body">
                 <p>Run from repo root with <code>PYTHONPATH</code> including the repo. Example files load from <code>game_theory/examples/</code> (Advanced only).</p>
                 <p>The canonical Groundhog container (<code>game_theory/state/groundhog_memory_bundle.json</code>) is merged before replay when it exists and the scenario has no <code>memory_bundle_path</code> — <strong>auto-merge is on by default</strong>. Set <code>PATTERN_GAME_GROUNDHOG_BUNDLE=0</code> to opt out for tests or isolation. POST <code>/api/groundhog-memory</code> with <code>atr_stop_mult</code> and <code>atr_target_mult</code> to write the canonical bundle. POST <code>/api/groundhog-memory/clear</code> with <code>{"confirm": true}</code> deletes only that file (same as the scorecard toolbar &ldquo;Clear Groundhog container&rdquo; button). POST <code>/api/context-signature-memory/clear</code> with <code>{"confirm": true}</code> truncates only <code>game_theory/state/context_signature_memory.jsonl</code>.</p>
-                <p><strong>Modules row / banner</strong> — Groundhog uses green / amber / red: <strong>Ready</strong> when auto-merge is allowed and the container has promoted ATR values; <strong>Wait</strong> when the file is missing or not yet promoted; <strong>Opt-out</strong> when <code>PATTERN_GAME_GROUNDHOG_BUNDLE=0</code>; <strong>Fault</strong> when the file is unreadable or invalid JSON. Hover the Groundhog banner tile for the full line.</p>
+                <p><strong>Modules row / banner</strong> — Groundhog uses green / amber / red: <strong>Ready</strong> when auto-merge is allowed and the container has promoted ATR values (after a successful batch, or manual POST); <strong>Wait</strong> when the file is missing or apply block incomplete; <strong>Opt-out</strong> when <code>PATTERN_GAME_GROUNDHOG_BUNDLE=0</code>; <strong>Fault</strong> when the file is unreadable or invalid JSON. Hover the Groundhog banner tile for the full line.</p>
               </div>
             </details>
             <p class="caps" id="presetHelp">The server builds scenarios for curated patterns — no JSON required. Evaluation window controls how much tape is replayed (approximate months from the end of the series). Presets longer than your <code>market_bars_5m</code> span are disabled automatically (see Data health).</p>
