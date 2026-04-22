@@ -30,6 +30,9 @@ counts, **run_ok_pct**, **referee_win_pct**, **avg_trade_win_pct**) and expose `
 ``GET …/contract`` returns integration metadata. Methods: list, ``<id>/export`` (download JSON), get one, POST, PATCH — placeholder payloads until persistence + execution;
 see ``trade_strategy_post_cert_stub_v1.py`` and ``docs/STUDENT_PATH_EXAM_HIGH_LEVEL_ARCHITECTURE_v1.md`` §17.
 
+**Exam unit state machine (GT_DIRECTIVE_003 / §11.1):** ``POST /api/v1/exam/units``, ``GET /api/v1/exam/units/<exam_unit_id>``,
+``POST /api/v1/exam/units/<exam_unit_id>/transition`` — in-process dev store; see ``exam_state_machine_v1.py`` and ``directives/GT_DIRECTIVE_003_exam_state_machine_v1.md``.
+
 **System Dialogue** (post-run formatter; ``/api/barney-summary``): ``POST /api/barney-summary`` with ``{"job_id": "…"}`` — structured
 run facts only. **Ask DATA** (bounded self-explainer): ``POST /api/ask-data`` with ``question`` and optional
 ``job_id`` / ``ui_context`` — answers only from bundled PML knowledge + run/scorecard facts
@@ -89,7 +92,7 @@ _PATTERN_BANNER_WEBP_PATH = _RV4_ROOT / "assets" / "pattern.webp"
 _PATTERN_GAME_BANNER_BOOT_JS = _GAME_THEORY / "static" / "pattern_game_banner_boot.js"
 
 # Operator-visible web UI bundle version — bump when changing PAGE_HTML (HTML/CSS/JS) so deploys are provable.
-PATTERN_GAME_WEB_UI_VERSION = "2.19.31"
+PATTERN_GAME_WEB_UI_VERSION = "2.19.32"
 
 from renaissance_v4.game_theory.groundhog_memory import (
     groundhog_auto_merge_enabled,
@@ -123,6 +126,12 @@ from renaissance_v4.game_theory.student_panel_d13 import (
     build_student_decision_record_v1,
 )
 from renaissance_v4.game_theory.student_panel_d14 import enrich_student_panel_run_rows_d14
+from renaissance_v4.game_theory.exam_state_machine_v1 import (
+    apply_exam_unit_transition_v1,
+    create_exam_unit_v1,
+    exam_unit_to_public_dict,
+    get_exam_unit_v1,
+)
 from renaissance_v4.game_theory.trade_strategy_post_cert_stub_v1 import (
     stub_trade_strategy_create_v1,
     stub_trade_strategy_export_document_v1,
@@ -1539,6 +1548,49 @@ def create_app() -> Flask:
         """DEV STUB — accept update body; echo keys only (no merge)."""
         data = request.get_json(force=True, silent=True) or {}
         return jsonify(stub_trade_strategy_update_v1(strategy_id, data if isinstance(data, dict) else {}))
+
+    @app.post("/api/v1/exam/units")
+    def api_exam_units_create_v1() -> Any:
+        """GT_DIRECTIVE_003 — create exam unit (in-memory dev store; §11.1)."""
+        data = request.get_json(force=True, silent=True) or {}
+        pack = data.get("exam_pack_id")
+        ver = data.get("exam_pack_version")
+        eid = data.get("exam_unit_id")
+        try:
+            u = create_exam_unit_v1(
+                exam_pack_id=str(pack) if pack is not None else None,
+                exam_pack_version=str(ver) if ver is not None else None,
+                exam_unit_id=str(eid).strip() if isinstance(eid, str) and eid.strip() else None,
+            )
+        except ValueError as err:
+            return jsonify({"ok": False, "error": str(err)}), 400
+        return jsonify({"ok": True, **exam_unit_to_public_dict(u)}), 201
+
+    @app.get("/api/v1/exam/units/<exam_unit_id>")
+    def api_exam_units_get_v1(exam_unit_id: str) -> Any:
+        """GT_DIRECTIVE_003 — fetch exam unit state."""
+        u = get_exam_unit_v1(exam_unit_id)
+        if u is None:
+            return jsonify({"ok": False, "error": "exam_unit_not_found"}), 404
+        return jsonify({"ok": True, **exam_unit_to_public_dict(u)})
+
+    @app.post("/api/v1/exam/units/<exam_unit_id>/transition")
+    def api_exam_units_transition_v1(exam_unit_id: str) -> Any:
+        """GT_DIRECTIVE_003 — apply one lifecycle event (409 on illegal transition or unknown event)."""
+        data = request.get_json(force=True, silent=True) or {}
+        ev = data.get("event")
+        if not isinstance(ev, str) or not ev.strip():
+            return jsonify({"ok": False, "error": "event_required_string"}), 400
+        payload = data.get("payload") if isinstance(data.get("payload"), dict) else {}
+        out = apply_exam_unit_transition_v1(exam_unit_id.strip(), ev.strip(), payload)
+        if out.get("error") == "exam_unit_not_found":
+            return jsonify(out), 404
+        if not out.get("ok"):
+            return jsonify(out), 409
+        u2 = get_exam_unit_v1(exam_unit_id.strip())
+        if u2 is None:
+            return jsonify(out), 500
+        return jsonify({"ok": True, **exam_unit_to_public_dict(u2)})
 
     @app.get("/api/student-proctor/learning-store")
     def api_student_proctor_learning_store_get() -> Any:

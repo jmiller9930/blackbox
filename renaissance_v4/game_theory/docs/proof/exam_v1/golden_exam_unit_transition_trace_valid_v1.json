@@ -1,0 +1,14 @@
+{
+  "schema": "golden_exam_unit_transition_trace_v1",
+  "exam_unit_id": "golden_exam_unit_fixture_v1",
+  "expected_final_phase": "complete",
+  "steps": [
+    { "event": "open_window_shown", "payload": {} },
+    { "event": "hypotheses_h1_h3_recorded", "payload": {} },
+    { "event": "h4_completed", "payload": {} },
+    { "event": "decision_a_sealed", "payload": { "enter": true } },
+    { "event": "downstream_released", "payload": {} },
+    { "event": "decision_b_complete", "payload": {} },
+    { "event": "complete_unit", "payload": {} }
+  ]
+}
