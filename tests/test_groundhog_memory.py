@@ -142,3 +142,14 @@ def test_write_roundtrip(gh_path: Path, monkeypatch: pytest.MonkeyPatch) -> None
     raw = json.loads(gh_path.read_text(encoding="utf-8"))
     assert raw["apply"]["atr_stop_mult"] == 2.0
     assert raw["from_run_id"] == "run-abc"
+
+
+def test_clear_groundhog_bundle_file_deleted_then_absent(gh_path: Path) -> None:
+    gh_path.write_text("{}", encoding="utf-8")
+    r1 = gm.clear_groundhog_bundle_file()
+    assert r1["ok"] is True
+    assert r1["action"] == "deleted"
+    assert not gh_path.is_file()
+    r2 = gm.clear_groundhog_bundle_file()
+    assert r2["ok"] is True
+    assert r2["action"] == "absent_skipped"

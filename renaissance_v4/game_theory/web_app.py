@@ -103,9 +103,11 @@ _PATTERN_BANNER_WEBP_PATH = _RV4_ROOT / "assets" / "pattern.webp"
 _PATTERN_GAME_BANNER_BOOT_JS = _GAME_THEORY / "static" / "pattern_game_banner_boot.js"
 
 # Operator-visible web UI bundle version — bump when changing PAGE_HTML (HTML/CSS/JS) so deploys are provable.
-PATTERN_GAME_WEB_UI_VERSION = "2.19.40"
+PATTERN_GAME_WEB_UI_VERSION = "2.19.41"
 
+from renaissance_v4.game_theory.context_signature_memory import truncate_context_signature_memory_store
 from renaissance_v4.game_theory.groundhog_memory import (
+    clear_groundhog_bundle_file,
     groundhog_auto_merge_enabled,
     groundhog_bundle_path,
     groundhog_wiring_signal,
@@ -703,6 +705,44 @@ def create_app() -> Flask:
             note=note,
         )
         return jsonify({"ok": True, "path": str(path), "bundle": read_groundhog_bundle()})
+
+    @app.post("/api/groundhog-memory/clear")
+    def api_groundhog_memory_clear() -> Any:
+        """Delete only the canonical Groundhog bundle file (promoted container start-over)."""
+        data = request.get_json(force=True, silent=True) or {}
+        if not data.get("confirm"):
+            return jsonify({"ok": False, "error": 'Request JSON must include "confirm": true'}), 400
+        out = clear_groundhog_bundle_file()
+        st = student_learning_store_status_v1()
+        body: dict[str, Any] = {
+            **out,
+            "student_proctor_learning_store_unchanged": True,
+            "student_proctor_learning_store": {"path": st.get("path"), "line_count": st.get("line_count")},
+            "note": (
+                "Removed canonical Groundhog bundle only when it existed. "
+                "Experience log, run memory, context signature memory, and batch scorecard were not modified."
+            ),
+        }
+        return jsonify(body), (200 if out.get("ok") else 500)
+
+    @app.post("/api/context-signature-memory/clear")
+    def api_context_signature_memory_clear() -> Any:
+        """Truncate only the context signature / DCR recall JSONL (granular parity with Groundhog clear)."""
+        data = request.get_json(force=True, silent=True) or {}
+        if not data.get("confirm"):
+            return jsonify({"ok": False, "error": 'Request JSON must include "confirm": true'}), 400
+        out = truncate_context_signature_memory_store()
+        st = student_learning_store_status_v1()
+        body = {
+            **out,
+            "student_proctor_learning_store_unchanged": True,
+            "student_proctor_learning_store": {"path": st.get("path"), "line_count": st.get("line_count")},
+            "note": (
+                "Truncated context signature memory JSONL only. "
+                "Groundhog bundle, experience/run logs, and batch scorecard were not modified."
+            ),
+        }
+        return jsonify(body), (200 if out.get("ok") else 500)
 
     @app.get("/api/data-health")
     def data_health() -> Any:
@@ -4587,7 +4627,7 @@ PAGE_HTML = """<!DOCTYPE html>
               <summary>Setup, PYTHONPATH, Groundhog</summary>
               <div class="help-details-body">
                 <p>Run from repo root with <code>PYTHONPATH</code> including the repo. Example files load from <code>game_theory/examples/</code> (Advanced only).</p>
-                <p>The canonical Groundhog container (<code>game_theory/state/groundhog_memory_bundle.json</code>) is merged before replay when it exists and the scenario has no <code>memory_bundle_path</code> — <strong>auto-merge is on by default</strong>. Set <code>PATTERN_GAME_GROUNDHOG_BUNDLE=0</code> to opt out for tests or isolation. POST <code>/api/groundhog-memory</code> with <code>atr_stop_mult</code> and <code>atr_target_mult</code> to write the canonical bundle.</p>
+                <p>The canonical Groundhog container (<code>game_theory/state/groundhog_memory_bundle.json</code>) is merged before replay when it exists and the scenario has no <code>memory_bundle_path</code> — <strong>auto-merge is on by default</strong>. Set <code>PATTERN_GAME_GROUNDHOG_BUNDLE=0</code> to opt out for tests or isolation. POST <code>/api/groundhog-memory</code> with <code>atr_stop_mult</code> and <code>atr_target_mult</code> to write the canonical bundle. POST <code>/api/groundhog-memory/clear</code> with <code>{"confirm": true}</code> deletes only that file (same as the scorecard toolbar &ldquo;Clear Groundhog container&rdquo; button). POST <code>/api/context-signature-memory/clear</code> with <code>{"confirm": true}</code> truncates only <code>game_theory/state/context_signature_memory.jsonl</code>.</p>
                 <p><strong>Modules row / banner</strong> — Groundhog uses green / amber / red: <strong>Ready</strong> when auto-merge is allowed and the container has promoted ATR values; <strong>Wait</strong> when the file is missing or not yet promoted; <strong>Opt-out</strong> when <code>PATTERN_GAME_GROUNDHOG_BUNDLE=0</code>; <strong>Fault</strong> when the file is unreadable or invalid JSON. Hover the Groundhog banner tile for the full line.</p>
               </div>
             </details>
@@ -4757,7 +4797,7 @@ PAGE_HTML = """<!DOCTYPE html>
                     <div class="pg-scorecard-upper" id="scorecardUpper">
                       <details class="pg-scorecard-legend-fold">
                         <summary class="pg-scorecard-legend-summary">What these columns mean (legend)</summary>
-                        <p class="scorecard-legend"><strong>Run OK %</strong> — workers finished. <strong>Session WIN %</strong> — referee WIN vs LOSS among judged sessions only; <strong>n sess</strong> is that denominator (never infer from a bare percentage). <strong>Trade win %</strong> — batch mean when trades exist (with trade count). <strong>Learning (replay lane)</strong> — <code>execution_only</code> vs <code>learning_active</code> from replay counters (candidate search, memory records loaded, recall matches, signal bias); not Student Proctor learning. <strong>Memory / Context Impact</strong> — YES/NO from <code>learning_run_audit_v1</code> only (bundle merged or recall bias/signal-bias counters &gt; 0); not inferred from &ldquo;memory loaded&rdquo; or learning lane. <strong>Work</strong> — decision windows, bars, and candidate-stack replays. Scan <em>down</em> for newest batches.           <strong>In-flight</strong> — a batch that is <strong>running</strong> now appears at the <strong>top</strong> with <strong>Start</strong> time and live progress counts; the JSONL line is written when the batch finishes. <strong>Scorecard file</strong> (<code>batch_scorecard.jsonl</code>) is batch audit for this table and hunter suggestions; replay does <em>not</em> read it to apply memory or recall. <strong>Clear Card</strong> truncates that log only. <strong>Reset Learning State</strong> is separate and destructive (engine files — see confirmation).</p>
+                        <p class="scorecard-legend"><strong>Run OK %</strong> — workers finished. <strong>Session WIN %</strong> — referee WIN vs LOSS among judged sessions only; <strong>n sess</strong> is that denominator (never infer from a bare percentage). <strong>Trade win %</strong> — batch mean when trades exist (with trade count). <strong>Learning (replay lane)</strong> — <code>execution_only</code> vs <code>learning_active</code> from replay counters (candidate search, memory records loaded, recall matches, signal bias); not Student Proctor learning. <strong>Memory / Context Impact</strong> — YES/NO from <code>learning_run_audit_v1</code> only (bundle merged or recall bias/signal-bias counters &gt; 0); not inferred from &ldquo;memory loaded&rdquo; or learning lane. <strong>Work</strong> — decision windows, bars, and candidate-stack replays. Scan <em>down</em> for newest batches.           <strong>In-flight</strong> — a batch that is <strong>running</strong> now appears at the <strong>top</strong> with <strong>Start</strong> time and live progress counts; the JSONL line is written when the batch finishes. <strong>Scorecard file</strong> (<code>batch_scorecard.jsonl</code>) is batch audit for this table and hunter suggestions; replay does <em>not</em> read it to apply memory or recall. <strong>Clear Card</strong> truncates that log only. <strong>Clear Groundhog container</strong> deletes only the promoted bundle file; <strong>Clear context signature memory</strong> truncates only the DCR/signature recall JSONL. <strong>Reset Learning State</strong> clears those plus experience and run memory (typed confirmation).</p>
                       </details>
                       <p class="last-run" id="lastBatchRunLine">Last completed batch: —</p>
                       <div id="scorecardLearningSummary" class="scorecard-learning-summary exec-only" aria-live="polite" hidden>
@@ -4773,6 +4813,8 @@ PAGE_HTML = """<!DOCTYPE html>
                         <a id="scorecardCsvLink" href="/api/batch-scorecard.csv?limit=50">Download scorecard history (CSV)</a>
                         <div class="scorecard-toolbar-actions">
                           <button type="button" class="btn-scorecard-clear pg-op-btn" id="clearScorecardBtn" data-label-idle="Clear Card — Run New Experiment" title="Truncates batch_scorecard.jsonl (table history) only. Does not clear engine memory, bundles, or the Student Proctor learning store.">Clear Card — Run New Experiment</button>
+                          <button type="button" class="btn-secondary pg-op-btn" id="clearGroundhogBundleBtn" data-label-idle="Clear Groundhog container…" title="Deletes game_theory/state/groundhog_memory_bundle.json if present. Does not clear scorecard rows, experience log, run memory, or context signature memory.">Clear Groundhog container…</button>
+                          <button type="button" class="btn-secondary pg-op-btn" id="clearContextSignatureMemoryBtn" data-label-idle="Clear context signature memory…" title="Truncates game_theory/state/context_signature_memory.jsonl. Does not delete the Groundhog file or scorecard history.">Clear context signature memory…</button>
                           <button type="button" class="btn-learning-reset-danger pg-op-btn" id="resetLearningStateBtn" data-label-idle="Reset Learning State" title="Destructive: engine experience logs, signature/DCR recall store, Groundhog bundle. Does not clear the scorecard file, retrospective log, or Student Proctor learning store.">Reset Learning State</button>
                         </div>
                         <span style="font-size:0.72rem;color:var(--pg-muted)">Click a row to open batch detail, scenarios, and per-scenario report links (GT_DIRECTIVE_001).</span>
@@ -7241,6 +7283,63 @@ PAGE_HTML = """<!DOCTYPE html>
           await show(null, null, friendlyFetchError(e));
         } finally {
           setOpButtonBusy(clearScorecardBtn, false);
+        }
+      };
+    }
+    const clearGroundhogBundleBtn = document.getElementById('clearGroundhogBundleBtn');
+    if (clearGroundhogBundleBtn) {
+      clearGroundhogBundleBtn.onclick = async () => {
+        if (!window.confirm(
+          'Delete the canonical Groundhog bundle file (promoted ATR container) if it exists?\\n\\n' +
+            'Scorecard rows, experience log, run memory, and context signature memory are not changed.'
+        )) {
+          return;
+        }
+        setOpButtonBusy(clearGroundhogBundleBtn, true, 'Clearing…', true);
+        try {
+          const r = await fetch('/api/groundhog-memory/clear', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ confirm: true }),
+          });
+          const j = await r.json();
+          if (!r.ok || !j.ok) {
+            await show(null, null, j.error || ('Clear failed: ' + r.status));
+            return;
+          }
+          if (typeof refreshGroundhog === 'function') refreshGroundhog();
+        } catch (e) {
+          await show(null, null, friendlyFetchError(e));
+        } finally {
+          setOpButtonBusy(clearGroundhogBundleBtn, false);
+        }
+      };
+    }
+    const clearContextSignatureMemoryBtn = document.getElementById('clearContextSignatureMemoryBtn');
+    if (clearContextSignatureMemoryBtn) {
+      clearContextSignatureMemoryBtn.onclick = async () => {
+        if (!window.confirm(
+          'Truncate context signature memory (DCR / recall JSONL) to empty?\\n\\n' +
+            'Groundhog bundle, scorecard history, experience log, and run memory are not changed.'
+        )) {
+          return;
+        }
+        setOpButtonBusy(clearContextSignatureMemoryBtn, true, 'Clearing…', true);
+        try {
+          const r = await fetch('/api/context-signature-memory/clear', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ confirm: true }),
+          });
+          const j = await r.json();
+          if (!r.ok || !j.ok) {
+            await show(null, null, j.error || ('Clear failed: ' + r.status));
+            return;
+          }
+        } catch (e) {
+          await show(null, null, friendlyFetchError(e));
+        } finally {
+          setOpButtonBusy(clearContextSignatureMemoryBtn, false);
         }
       };
     }

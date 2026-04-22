@@ -96,6 +96,24 @@ def write_groundhog_bundle(
     return p
 
 
+def clear_groundhog_bundle_file() -> dict[str, Any]:
+    """
+    Delete the canonical Groundhog bundle file if it exists.
+
+    Used by the Pattern UI (granular clear) and by the full engine learning reset.
+    Does not change experience log, run memory, or context signature memory.
+    """
+    p = groundhog_bundle_path()
+    try:
+        pr = p.expanduser().resolve()
+        if pr.is_file():
+            pr.unlink()
+            return {"ok": True, "path": str(pr), "action": "deleted"}
+        return {"ok": True, "path": str(pr), "action": "absent_skipped"}
+    except OSError as e:
+        return {"ok": False, "path": str(p), "action": "error", "error": f"{type(e).__name__}: {e}"}
+
+
 def read_groundhog_bundle() -> dict[str, Any] | None:
     p = groundhog_bundle_path()
     if not p.is_file():

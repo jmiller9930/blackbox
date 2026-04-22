@@ -437,5 +437,22 @@ def apply_context_memory_bias_v1(
     return delta, diff, reason_codes
 
 
+def truncate_context_signature_memory_store() -> dict[str, Any]:
+    """
+    Truncate the default context-signature / DCR recall JSONL to empty.
+
+    Used by the Pattern UI (granular clear) and by the full engine learning reset.
+    Does not delete the Groundhog bundle or experience / run memory logs.
+    """
+    p = default_memory_path()
+    try:
+        pr = p.expanduser().resolve()
+        pr.parent.mkdir(parents=True, exist_ok=True)
+        pr.write_text("", encoding="utf-8")
+        return {"ok": True, "path": str(pr), "action": "truncated"}
+    except OSError as e:
+        return {"ok": False, "path": str(p), "action": "error", "error": f"{type(e).__name__}: {e}"}
+
+
 def default_memory_path() -> Path:
     return _DEFAULT_MEMORY_PATH

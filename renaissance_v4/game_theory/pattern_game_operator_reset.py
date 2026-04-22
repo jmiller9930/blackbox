@@ -14,8 +14,8 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from renaissance_v4.game_theory.context_signature_memory import default_memory_path
-from renaissance_v4.game_theory.groundhog_memory import groundhog_bundle_path
+from renaissance_v4.game_theory.context_signature_memory import truncate_context_signature_memory_store
+from renaissance_v4.game_theory.groundhog_memory import clear_groundhog_bundle_file
 from renaissance_v4.game_theory.memory_paths import default_experience_log_jsonl, default_run_memory_jsonl
 
 # POST body must match exactly (UI prompts the operator to type this).
@@ -47,21 +47,28 @@ def reset_pattern_game_engine_learning_state_v1(*, confirm: str) -> dict[str, An
         except OSError as e:
             errors.append({"kind": kind, "path": str(p), "error": f"{type(e).__name__}: {e}"})
 
-    def _unlink_if_file(p: Path, kind: str) -> None:
-        try:
-            pr = p.expanduser().resolve()
-            if pr.is_file():
-                pr.unlink()
-                cleared.append({"kind": kind, "path": str(pr), "action": "deleted"})
-            else:
-                cleared.append({"kind": kind, "path": str(pr), "action": "absent_skipped"})
-        except OSError as e:
-            errors.append({"kind": kind, "path": str(p), "error": f"{type(e).__name__}: {e}"})
+    def _record_store_result(res: dict[str, Any], kind: str) -> None:
+        if res.get("ok"):
+            cleared.append(
+                {
+                    "kind": kind,
+                    "path": str(res.get("path", "")),
+                    "action": str(res.get("action", "ok")),
+                }
+            )
+        else:
+            errors.append(
+                {
+                    "kind": kind,
+                    "path": str(res.get("path", "")),
+                    "error": str(res.get("error", "unknown_error")),
+                }
+            )
 
     _truncate(default_experience_log_jsonl(), "experience_log")
     _truncate(default_run_memory_jsonl(), "run_memory")
-    _truncate(default_memory_path(), "context_signature_memory")
-    _unlink_if_file(groundhog_bundle_path(), "groundhog_bundle")
+    _record_store_result(truncate_context_signature_memory_store(), "context_signature_memory")
+    _record_store_result(clear_groundhog_bundle_file(), "groundhog_bundle")
 
     return {"ok": len(errors) == 0, "cleared": cleared, "errors": errors}
 

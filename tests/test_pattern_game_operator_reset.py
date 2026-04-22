@@ -52,11 +52,11 @@ def test_reset_learning_truncates_and_unlinks(
         lambda: rm,
     )
     monkeypatch.setattr(
-        "renaissance_v4.game_theory.pattern_game_operator_reset.default_memory_path",
+        "renaissance_v4.game_theory.context_signature_memory.default_memory_path",
         lambda: sig,
     )
     monkeypatch.setattr(
-        "renaissance_v4.game_theory.pattern_game_operator_reset.groundhog_bundle_path",
+        "renaissance_v4.game_theory.groundhog_memory.groundhog_bundle_path",
         lambda: gh,
     )
     out = reset_pattern_game_engine_learning_state_v1(confirm=RESET_PATTERN_GAME_LEARNING_CONFIRM)
@@ -96,11 +96,11 @@ def test_api_reset_learning_requires_exact_phrase(monkeypatch: pytest.MonkeyPatc
         lambda: tmp_path / "r.jsonl",
     )
     monkeypatch.setattr(
-        "renaissance_v4.game_theory.pattern_game_operator_reset.default_memory_path",
+        "renaissance_v4.game_theory.context_signature_memory.default_memory_path",
         lambda: tmp_path / "s.jsonl",
     )
     monkeypatch.setattr(
-        "renaissance_v4.game_theory.pattern_game_operator_reset.groundhog_bundle_path",
+        "renaissance_v4.game_theory.groundhog_memory.groundhog_bundle_path",
         lambda: tmp_path / "g.json",
     )
     app = create_app()
@@ -113,3 +113,57 @@ def test_api_reset_learning_requires_exact_phrase(monkeypatch: pytest.MonkeyPatc
     )
     assert r.status_code == 400
     assert "x" in exp.read_text()
+
+
+def test_truncate_context_signature_memory_store(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    from renaissance_v4.game_theory.context_signature_memory import truncate_context_signature_memory_store
+
+    p = tmp_path / "context_signature_memory.jsonl"
+    p.write_text('{"a": 1}\n', encoding="utf-8")
+    monkeypatch.setattr("renaissance_v4.game_theory.context_signature_memory.default_memory_path", lambda: p)
+    out = truncate_context_signature_memory_store()
+    assert out["ok"] is True
+    assert out["action"] == "truncated"
+    assert p.read_text() == ""
+
+
+def test_api_groundhog_memory_clear(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    gh = tmp_path / "groundhog_memory_bundle.json"
+    gh.write_text('{"schema": "pattern_game_memory_bundle_v1"}', encoding="utf-8")
+    monkeypatch.setattr("renaissance_v4.game_theory.groundhog_memory.groundhog_bundle_path", lambda: gh)
+    app = create_app()
+    app.config["TESTING"] = True
+    c = app.test_client()
+    r = c.post("/api/groundhog-memory/clear", data=json.dumps({}), content_type="application/json")
+    assert r.status_code == 400
+    r2 = c.post(
+        "/api/groundhog-memory/clear",
+        data=json.dumps({"confirm": True}),
+        content_type="application/json",
+    )
+    assert r2.status_code == 200
+    j = r2.get_json()
+    assert j["ok"] is True
+    assert j["action"] == "deleted"
+    assert not gh.is_file()
+
+
+def test_api_context_signature_memory_clear(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    sig = tmp_path / "context_signature_memory.jsonl"
+    sig.write_text('{"line": 1}\n', encoding="utf-8")
+    monkeypatch.setattr("renaissance_v4.game_theory.context_signature_memory.default_memory_path", lambda: sig)
+    app = create_app()
+    app.config["TESTING"] = True
+    c = app.test_client()
+    r = c.post("/api/context-signature-memory/clear", data=json.dumps({}), content_type="application/json")
+    assert r.status_code == 400
+    r2 = c.post(
+        "/api/context-signature-memory/clear",
+        data=json.dumps({"confirm": True}),
+        content_type="application/json",
+    )
+    assert r2.status_code == 200
+    j = r2.get_json()
+    assert j["ok"] is True
+    assert j["action"] == "truncated"
+    assert sig.read_text() == ""
