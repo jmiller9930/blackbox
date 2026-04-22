@@ -103,7 +103,7 @@ _PATTERN_BANNER_WEBP_PATH = _RV4_ROOT / "assets" / "pattern.webp"
 _PATTERN_GAME_BANNER_BOOT_JS = _GAME_THEORY / "static" / "pattern_game_banner_boot.js"
 
 # Operator-visible web UI bundle version — bump when changing PAGE_HTML (HTML/CSS/JS) so deploys are provable.
-PATTERN_GAME_WEB_UI_VERSION = "2.19.46"
+PATTERN_GAME_WEB_UI_VERSION = "2.19.47"
 
 from renaissance_v4.game_theory.context_signature_memory import truncate_context_signature_memory_store
 from renaissance_v4.game_theory.groundhog_memory import (
@@ -2945,29 +2945,40 @@ PAGE_HTML = """<!DOCTYPE html>
     }
     .pg-student-d11-row-del:hover:not(:disabled) { border-color: #a32b2b; background: rgba(163, 43, 43, 0.22); }
     .pg-student-d11-row-del:disabled { opacity: 0.35; cursor: not-allowed; }
-    /* D13 — single horizontal run summary band (no vertical expansion for core cues) */
+    /* D13 — single horizontal run summary band; zebra cells for scanability */
     .pg-student-d13-run-summary {
       display: flex;
       flex-wrap: nowrap;
-      align-items: center;
-      gap: 10px 14px;
+      align-items: stretch;
+      gap: 6px 8px;
       overflow-x: auto;
-      max-height: 3.6rem;
-      margin: 0 0 10px;
-      padding: 6px 4px 10px;
+      margin: 0 0 12px;
+      padding: 8px 4px 10px;
       border-bottom: 1px solid rgba(127, 140, 153, 0.28);
-      font-size: 0.66rem;
-      line-height: 1.3;
+      font-size: 0.68rem;
+      line-height: 1.35;
       scrollbar-gutter: stable;
     }
     .pg-student-d13-run-summary .pg-student-d13-rs-cell {
       flex: 0 0 auto;
       white-space: nowrap;
+      padding: 8px 12px;
+      border-radius: 6px;
+      display: inline-flex;
+      align-items: center;
+    }
+    .pg-student-d13-run-summary .pg-student-d13-rs-cell:nth-child(odd) {
+      background: rgba(255, 255, 255, 0.95);
+      box-shadow: inset 0 0 0 1px rgba(127, 140, 153, 0.12);
+    }
+    .pg-student-d13-run-summary .pg-student-d13-rs-cell:nth-child(even) {
+      background: rgba(186, 214, 242, 0.5);
+      box-shadow: inset 0 0 0 1px rgba(100, 140, 180, 0.15);
     }
     .pg-student-d13-run-summary .pg-student-d13-rs-k {
       color: var(--pg-muted);
       font-weight: 700;
-      margin-right: 2px;
+      margin-right: 4px;
     }
     .pg-student-d11-carousel-wrap {
       display: flex;
@@ -2979,8 +2990,8 @@ PAGE_HTML = """<!DOCTYPE html>
       display: flex;
       flex-direction: row;
       align-items: stretch;
-      gap: 6px;
-      min-height: 132px;
+      gap: 8px;
+      min-height: 220px;
     }
     .pg-student-d11-carousel-btn {
       flex: 0 0 auto;
@@ -3013,9 +3024,10 @@ PAGE_HTML = """<!DOCTYPE html>
     }
     .pg-student-d11-strip {
       display: flex;
-      gap: 12px;
+      gap: 16px;
       padding: 0 12px;
-      min-height: 120px;
+      min-height: 200px;
+      align-items: stretch;
     }
     .pg-student-d11-strip--carousel {
       scroll-snap-type: x mandatory;
@@ -3028,27 +3040,69 @@ PAGE_HTML = """<!DOCTYPE html>
       line-height: 1.35;
     }
     .pg-student-d11-slice {
-      flex: 0 0 70%;
-      max-width: 220px;
-      min-width: 148px;
+      /* ~3× prior mini-tile width: one readable card per viewport band */
+      flex: 0 0 clamp(240px, 46vw, 400px);
+      width: clamp(240px, 46vw, 400px);
+      max-width: 400px;
+      min-width: 240px;
       scroll-snap-align: start;
       border: 1px solid rgba(255,255,255,0.12);
-      border-radius: 8px;
-      padding: 8px 10px;
+      border-radius: 10px;
+      padding: 12px 14px;
       background: rgba(0,0,0,0.10);
-      font-size: 0.72rem;
-      line-height: 1.35;
+      font-size: 0.8rem;
+      line-height: 1.45;
       cursor: pointer;
       box-sizing: border-box;
+      display: flex;
+      flex-direction: column;
+      justify-content: flex-start;
+      gap: 0;
+    }
+    .pg-student-d11-slice-id {
+      font-size: 0.68rem;
+      font-weight: 600;
+      word-break: break-all;
+      line-height: 1.3;
+      margin-bottom: 8px;
+      color: var(--pg-ink);
+    }
+    .pg-student-d11-slice-ts {
+      font-size: 0.72rem;
+      text-transform: uppercase;
+      letter-spacing: 0.02em;
+      opacity: 0.88;
+      margin-bottom: 10px;
+    }
+    .pg-student-d11-slice-outcome {
+      font-size: 0.88rem;
+      font-weight: 600;
+      margin-bottom: 8px;
+    }
+    .pg-student-d11-slice-conf,
+    .pg-student-d11-slice-gh,
+    .pg-student-d11-slice-delta {
+      font-size: 0.76rem;
+      margin-top: 6px;
+      color: var(--pg-ink);
+    }
+    .pg-student-d11-slice-gh {
+      color: var(--pg-muted);
+    }
+    .pg-student-d11-slice-delta {
+      margin-top: auto;
+      padding-top: 8px;
+      border-top: 1px solid rgba(127, 140, 153, 0.22);
+      font-size: 0.72rem;
     }
     .pg-student-d11-slice--focused {
       border-color: rgba(30, 214, 170, 0.45);
       box-shadow: 0 0 0 1px rgba(30, 214, 170, 0.12);
     }
     .pg-student-d11-slice:hover { border-color: rgba(30, 214, 170, 0.35); }
-    .pg-student-d11-slice--WIN { border-left: 3px solid #2ea043; }
-    .pg-student-d11-slice--LOSS { border-left: 3px solid #da5555; }
-    .pg-student-d11-slice--NO_TRADE { border-left: 3px solid #7a8794; }
+    .pg-student-d11-slice--WIN { border-left: 5px solid #2ea043; }
+    .pg-student-d11-slice--LOSS { border-left: 5px solid #da5555; }
+    .pg-student-d11-slice--NO_TRADE { border-left: 5px solid #7a8794; }
     .pg-student-d11-deep ul {
       margin: 0;
       padding-left: 1.1rem;
@@ -5596,10 +5650,15 @@ PAGE_HTML = """<!DOCTYPE html>
         const res = String(s.result || '—');
         const cls = 'pg-student-d11-slice pg-student-d11-slice--' + res.replace(/[^A-Z_]/g, '_');
         const confRaw = s.student_confidence_01 != null ? s.student_confidence_01 : s.confidence;
-        const confDisp =
-          confRaw !== undefined && confRaw !== null && confRaw !== ''
-            ? escapeHtml(String(confRaw))
-            : '<span style="opacity:0.85">data_gap</span>';
+        var confDisp;
+        if (confRaw !== undefined && confRaw !== null && confRaw !== '') {
+          var confNum = Number(confRaw);
+          confDisp = Number.isFinite(confNum)
+            ? escapeHtml(confNum.toFixed(4))
+            : escapeHtml(String(confRaw));
+        } else {
+          confDisp = '<span style="opacity:0.85">data_gap</span>';
+        }
         const dch =
           s.decision_changed_flag === undefined || s.decision_changed_flag === null
             ? '<span style="opacity:0.85">data_gap</span>'
@@ -5613,25 +5672,25 @@ PAGE_HTML = """<!DOCTYPE html>
           escapeHtml(did) +
           '" data-run="' +
           escapeHtml(runId) +
-          '">' +
-          '<div class="pg-student-d11-k">' +
+          '" title="Trade deep dive (L3)">' +
+          '<div class="pg-student-d11-slice-id">' +
           escapeHtml(did) +
           '</div>' +
-          '<div class="caps" style="font-size:0.65rem;opacity:0.85">' +
-          escapeHtml(String(s.timestamp || '')) +
+          '<div class="pg-student-d11-slice-ts caps">' +
+          escapeHtml(String(s.timestamp || '—')) +
           '</div>' +
-          '<div>' +
-          res +
+          '<div class="pg-student-d11-slice-outcome">' +
+          escapeHtml(res) +
           ' · ' +
           escapeHtml(String(s.direction || '—')) +
           '</div>' +
-          '<div style="margin-top:4px">conf ' +
+          '<div class="pg-student-d11-slice-conf">conf ' +
           confDisp +
           '</div>' +
-          '<div style="margin-top:4px;color:var(--pg-muted)">GH ' +
+          '<div class="pg-student-d11-slice-gh">GH ' +
           escapeHtml(String(s.groundhog_usage || '—')) +
           '</div>' +
-          '<div style="margin-top:4px">Δ change ' +
+          '<div class="pg-student-d11-slice-delta">Δ change ' +
           dch +
           '</div>' +
           '</div>';
