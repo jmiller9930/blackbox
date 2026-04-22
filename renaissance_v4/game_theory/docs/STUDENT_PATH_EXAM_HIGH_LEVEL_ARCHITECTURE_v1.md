@@ -1,6 +1,6 @@
 # High-level architecture — learning, exam, certification, engineering, UI splice
 
-**Status:** v1.4 — **Proof (§16.0)** + per-directive proof blocks (v1.3) + **baseline strategy** glossary and doc terminology (legacy manifest filename unchanged).
+**Status:** v1.5 — post-certification **`trade_strategy`** DEV stub (§17) + Flask routes + module `trade_strategy_post_cert_stub_v1.py`.
 
 ---
 
@@ -612,6 +612,38 @@ curl -s -o /dev/null -w "%{http_code}\n" "http://127.0.0.1:<PORT>/api/student-pa
 
 ---
 
+## 17. Post-certification — `trade_strategy` (second tier; **DEV STUB** shipped)
+
+**Intent (product):** After **certification**, the operator may **load** a **`trade_strategy`** artifact from the UI (versioned document: rules, indicator plan, risk envelope, deployment mode). The **Student** then **operates** on that strategy (paper / live **TBD**) and may **propose updates** when a **better** variant is justified — **human approval** and **diff/audit** TBD.
+
+**Separation:** This is **not** the **baseline strategy** manifest that **runs replay** for the Referee tape. It is the **Student-owned / operator-uploaded deployable package** (per earlier vocabulary: “strategy = ship story”).
+
+### 17.1 DEV stub (current)
+
+| Route | Role |
+|-------|------|
+| `GET /api/trade-strategy` | List placeholder strategies (`stub: true`). |
+| `GET /api/trade-strategy/<strategy_id>` | Return shell document for one id. |
+| `POST /api/trade-strategy` | Accept JSON body; **echo keys only** — **no persistence**. |
+| `PATCH /api/trade-strategy/<strategy_id>` | Accept update body; **echo keys only** — **no merge**. |
+
+**Code:** `renaissance_v4/game_theory/trade_strategy_post_cert_stub_v1.py`  
+**Tests:** `tests/test_web_app_trade_strategy_stub_v1.py`  
+**Schema string:** `trade_strategy_v1_dev_stub`
+
+### 17.2 Next implementation (not stub)
+
+- Persistence (versioned store), auth, **link** `strategy_id` ↔ certification record.  
+- Validation: catalog-bound or declared custom with **computable** indicator proofs.  
+- Execution: **paper** lane first; **live** behind explicit gate.  
+- Update loop: **diff**, **approval**, **immutable history**.
+
+### 17.3 Proof + closeout (when replacing stub)
+
+When a slice replaces stub behavior, apply **§16** (proof first, then commit / push / restart / verify). Minimum HTTP proof includes the four routes above returning **documented** non-stub codes and bodies.
+
+---
+
 ## Revision history
 
 | Version | Summary |
@@ -621,3 +653,4 @@ curl -s -o /dev/null -w "%{http_code}\n" "http://127.0.0.1:<PORT>/api/student-pa
 | v1.2 | §11 split into 11.1–11.7 with per-directive **Delivery closeout** (commit, pull, push, restart, verify); §12 closeout; **§16** canonical template. |
 | v1.3 | **Proof (non-negotiable)** before every **Delivery closeout** (§11.1–§11.7, §12); **§16.0** global proof prerequisite; closeout gated on proof. |
 | v1.4 | **Baseline strategy** terminology + cross-ref to `MANIFEST_REPLAY_INTEGRATION.md`; legacy filename `baseline_v1_recipe.json` documented. |
+| v1.5 | §17 post-cert **`trade_strategy`**: DEV stub module + Flask routes + tests; `PATTERN_GAME_WEB_UI_VERSION` bump in `web_app.py`. |

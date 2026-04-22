@@ -26,6 +26,10 @@ counts, **run_ok_pct**, **referee_win_pct**, **avg_trade_win_pct**) and expose `
 **D13 Student panel (run → run summary + trade carousel → trade deep dive):** ``GET /api/student-panel/runs``,
 ``GET /api/student-panel/run/<job_id>/decisions``, ``GET /api/student-panel/decision?job_id=&trade_id=`` (``decision_id`` accepted as alias for migration).
 
+**Post-certification ``trade_strategy`` (DEV STUB):** ``GET /api/trade-strategy``, ``GET /api/trade-strategy/<strategy_id>``,
+``POST /api/trade-strategy``, ``PATCH /api/trade-strategy/<strategy_id>`` — placeholder payloads until persistence + execution;
+see ``trade_strategy_post_cert_stub_v1.py`` and ``docs/STUDENT_PATH_EXAM_HIGH_LEVEL_ARCHITECTURE_v1.md`` §17.
+
 **System Dialogue** (post-run formatter; ``/api/barney-summary``): ``POST /api/barney-summary`` with ``{"job_id": "…"}`` — structured
 run facts only. **Ask DATA** (bounded self-explainer): ``POST /api/ask-data`` with ``question`` and optional
 ``job_id`` / ``ui_context`` — answers only from bundled PML knowledge + run/scorecard facts
@@ -85,7 +89,7 @@ _PATTERN_BANNER_WEBP_PATH = _RV4_ROOT / "assets" / "pattern.webp"
 _PATTERN_GAME_BANNER_BOOT_JS = _GAME_THEORY / "static" / "pattern_game_banner_boot.js"
 
 # Operator-visible web UI bundle version — bump when changing PAGE_HTML (HTML/CSS/JS) so deploys are provable.
-PATTERN_GAME_WEB_UI_VERSION = "2.19.28"
+PATTERN_GAME_WEB_UI_VERSION = "2.19.29"
 
 from renaissance_v4.game_theory.groundhog_memory import (
     groundhog_auto_merge_enabled,
@@ -119,6 +123,12 @@ from renaissance_v4.game_theory.student_panel_d13 import (
     build_student_decision_record_v1,
 )
 from renaissance_v4.game_theory.student_panel_d14 import enrich_student_panel_run_rows_d14
+from renaissance_v4.game_theory.trade_strategy_post_cert_stub_v1 import (
+    stub_trade_strategy_create_v1,
+    stub_trade_strategy_get_v1,
+    stub_trade_strategy_list_v1,
+    stub_trade_strategy_update_v1,
+)
 from renaissance_v4.game_theory.data_health import get_data_health
 from renaissance_v4.game_theory.search_space_estimate import build_search_space_estimate
 from renaissance_v4.game_theory.memory_paths import (
@@ -1478,6 +1488,28 @@ def create_app() -> Flask:
         if isinstance(rec, dict) and rec.get("ok") is False:
             return jsonify({"ok": False, "record": rec}), 200
         return jsonify({"ok": True, "record": rec})
+
+    @app.get("/api/trade-strategy")
+    def api_trade_strategy_list_stub_v1() -> Any:
+        """DEV STUB — list post-certification trade_strategy placeholders (see §17 exam architecture doc)."""
+        return jsonify(stub_trade_strategy_list_v1())
+
+    @app.get("/api/trade-strategy/<strategy_id>")
+    def api_trade_strategy_get_stub_v1(strategy_id: str) -> Any:
+        """DEV STUB — fetch one trade_strategy document shell (not persisted)."""
+        return jsonify(stub_trade_strategy_get_v1(strategy_id))
+
+    @app.post("/api/trade-strategy")
+    def api_trade_strategy_create_stub_v1() -> Any:
+        """DEV STUB — accept upload body; echo keys only (no store)."""
+        data = request.get_json(force=True, silent=True) or {}
+        return jsonify(stub_trade_strategy_create_v1(data if isinstance(data, dict) else {}))
+
+    @app.patch("/api/trade-strategy/<strategy_id>")
+    def api_trade_strategy_patch_stub_v1(strategy_id: str) -> Any:
+        """DEV STUB — accept update body; echo keys only (no merge)."""
+        data = request.get_json(force=True, silent=True) or {}
+        return jsonify(stub_trade_strategy_update_v1(strategy_id, data if isinstance(data, dict) else {}))
 
     @app.get("/api/student-proctor/learning-store")
     def api_student_proctor_learning_store_get() -> Any:
