@@ -111,4 +111,4 @@ Downstream frame generator implementation satisfies the requirements of §11.4.
 
 ## Next step (engineering)
 
-**Active slice:** §11.5 — **Grading Service** (per `STUDENT_PATH_EXAM_HIGH_LEVEL_ARCHITECTURE_v1.md`).
+**§11.5 — Grading Service:** see **`GT_DIRECTIVE_007_grading_service_v1.md`** (issued 2026-04-22).

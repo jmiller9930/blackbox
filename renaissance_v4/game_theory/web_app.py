@@ -39,6 +39,8 @@ see ``trade_strategy_post_cert_stub_v1.py`` and ``docs/STUDENT_PATH_EXAM_HIGH_LE
 **Exam decision frames (GT_DIRECTIVE_005 / §11.3; GT_DIRECTIVE_006 / §11.4):** ``GET /api/v1/exam/units/<exam_unit_id>/decision-frames`` (**200** committed timeline after Decision A seal, **404** unknown unit or timeline not committed),
 ``GET /api/v1/exam/frames/<decision_frame_id>`` (**200** single frame, **404** not found). **ENTER** timelines append downstream frames per §11.4 (``POST …/ohlc-strip`` optional before seal; else deterministic synthetic strip). Frame ids use ``{exam_unit_id}__df{n}`` (URL-safe). Timeline commits on successful ``decision_a_sealed`` transition; deliberation read-through from §11.2 store (no duplicate storage). See ``exam_decision_frame_schema_v1.py``, ``exam_downstream_frame_generator_v1.py``, and ``directives/GT_DIRECTIVE_005_decision_frame_schema_v1.md``.
 
+**Exam grading (GT_DIRECTIVE_007 / §11.5):** ``GET /api/v1/exam/units/<exam_unit_id>/grade`` (**200** E/P/pass when unit is sealed, timeline + deliberation exist, and pack grading config is registered; **404** unknown unit; **409** incomplete; **422** bad pack reference / malformed economic inputs; **500** missing pack grading config). Dev: ``POST /api/v1/exam/packs/<exam_pack_id>/grading-config`` registers pack constants. See ``exam_grading_service_v1.py``.
+
 **System Dialogue** (post-run formatter; ``/api/barney-summary``): ``POST /api/barney-summary`` with ``{"job_id": "…"}`` — structured
 run facts only. **Ask DATA** (bounded self-explainer): ``POST /api/ask-data`` with ``question`` and optional
 ``job_id`` / ``ui_context`` — answers only from bundled PML knowledge + run/scorecard facts
@@ -99,7 +101,7 @@ _PATTERN_BANNER_WEBP_PATH = _RV4_ROOT / "assets" / "pattern.webp"
 _PATTERN_GAME_BANNER_BOOT_JS = _GAME_THEORY / "static" / "pattern_game_banner_boot.js"
 
 # Operator-visible web UI bundle version — bump when changing PAGE_HTML (HTML/CSS/JS) so deploys are provable.
-PATTERN_GAME_WEB_UI_VERSION = "2.19.37"
+PATTERN_GAME_WEB_UI_VERSION = "2.19.38"
 
 from renaissance_v4.game_theory.groundhog_memory import (
     groundhog_auto_merge_enabled,
@@ -150,6 +152,11 @@ from renaissance_v4.game_theory.exam_downstream_frame_generator_v1 import (
     get_exam_ohlc_strip_v1,
     set_exam_downstream_termination_v1,
     set_exam_ohlc_strip_v1,
+)
+from renaissance_v4.game_theory.exam_grading_service_v1 import (
+    compute_exam_grade_v1,
+    get_exam_pack_grading_config_v1,
+    register_exam_pack_grading_config_v1,
 )
 from renaissance_v4.game_theory.exam_deliberation_capture_v1 import (
     assert_non_placeholder_deliberation_v1,
@@ -1753,6 +1760,65 @@ def create_app() -> Flask:
             body = append_local_time_to_decision_frame_dict_v1(body, tz)
             body["local_time_tz"] = tz
         return jsonify({"ok": True, **body}), 200
+
+    @app.post("/api/v1/exam/packs/<exam_pack_id>/grading-config")
+    def api_exam_pack_grading_config_post_v1(exam_pack_id: str) -> Any:
+        """GT_DIRECTIVE_007 — dev: register ``ExamPackGradingConfigV1`` JSON keyed by pack id + version."""
+        pid = exam_pack_id.strip()
+        raw = request.get_json(force=True, silent=True)
+        if not isinstance(raw, dict):
+            return jsonify({"ok": False, "error": "json_object_required"}), 400
+        ver = raw.get("exam_pack_version")
+        grading = raw.get("grading")
+        if not isinstance(ver, str) or not ver.strip():
+            return jsonify({"ok": False, "error": "exam_pack_version_required_string"}), 400
+        if not isinstance(grading, dict):
+            return jsonify({"ok": False, "error": "grading_object_required"}), 400
+        try:
+            register_exam_pack_grading_config_v1(pid, ver.strip(), grading)
+        except ValueError as err:
+            return jsonify({"ok": False, "error": str(err)}), 400
+        return jsonify({"ok": True, "exam_pack_id": pid, "exam_pack_version": ver.strip()}), 200
+
+    @app.get("/api/v1/exam/units/<exam_unit_id>/grade")
+    def api_exam_unit_grade_get_v1(exam_unit_id: str) -> Any:
+        """GT_DIRECTIVE_007 — E, P, pass from pack config + committed timeline + deliberation."""
+        uid = exam_unit_id.strip()
+        u = get_exam_unit_v1(uid)
+        if u is None:
+            return jsonify({"ok": False, "error": "exam_unit_not_found"}), 404
+        if u.phase == ExamPhase.INVALID:
+            return jsonify({"ok": False, "error": "exam_unit_invalid"}), 422
+        raw_t = get_committed_timeline_v1(uid)
+        delib = get_frame0_deliberation_v1(uid)
+        if raw_t is None or delib is None:
+            return jsonify({"ok": False, "error": "exam_unit_incomplete_for_grading"}), 409
+        if u.exam_pack_id is None or not str(u.exam_pack_id).strip():
+            return jsonify({"ok": False, "error": "missing_exam_pack_id"}), 422
+        if u.exam_pack_version is None or not str(u.exam_pack_version).strip():
+            return jsonify({"ok": False, "error": "missing_exam_pack_version"}), 422
+        cfg = get_exam_pack_grading_config_v1(u.exam_pack_id, u.exam_pack_version)
+        if cfg is None:
+            return jsonify({"ok": False, "error": "exam_pack_grading_config_missing"}), 500
+        try:
+            out = compute_exam_grade_v1(
+                exam_unit_id=uid,
+                exam_phase=u.phase,
+                enter=u.enter,
+                exam_pack_id=u.exam_pack_id,
+                exam_pack_version=u.exam_pack_version,
+                timeline_committed=raw_t,
+                deliberation_export=delib,
+                pack_config=cfg,
+            )
+            return jsonify(out), 200
+        except ValueError as err:
+            msg = str(err)
+            if msg.startswith("missing_") or "incomplete" in msg or "requires_enter" in msg:
+                return jsonify({"ok": False, "error": msg}), 422
+            if msg.startswith("missing_economic") or msg.startswith("economic_") or "context" in msg:
+                return jsonify({"ok": False, "error": msg}), 422
+            return jsonify({"ok": False, "error": msg}), 422
 
     @app.get("/api/student-proctor/learning-store")
     def api_student_proctor_learning_store_get() -> Any:

@@ -1,0 +1,37 @@
+{
+  "schema": "exam_grading_fixture_v1",
+  "pack_grading_expectancy_v1": {
+    "economic": {
+      "mode": "expectancy",
+      "min_expectancy": 0.05,
+      "realized_expectancy_context_key": "realized_expectancy"
+    },
+    "p_min": 0.5
+  },
+  "pack_grading_expectancy_strict_v1": {
+    "economic": {
+      "mode": "expectancy",
+      "min_expectancy": 0.5,
+      "realized_expectancy_context_key": "realized_expectancy"
+    },
+    "p_min": 0.5
+  },
+  "pack_grading_no_trade_v1": {
+    "economic": { "mode": "no_trade_neutral", "neutral_economic_result": 1.0, "e_passes": true },
+    "p_min": 0.4
+  },
+  "pack_grading_pf_dd_v1": {
+    "economic": {
+      "mode": "profit_factor_drawdown",
+      "min_profit_factor": 1.2,
+      "max_drawdown": 0.2,
+      "profit_factor_context_key": "profit_factor",
+      "max_drawdown_context_key": "max_drawdown"
+    },
+    "p_min": 0.5
+  },
+  "expected": {
+    "expectancy_pass_when_realized_0_2": { "e_passes": true },
+    "expectancy_fail_when_min_0_5_and_realized_0_2": { "e_passes": false }
+  }
+}
