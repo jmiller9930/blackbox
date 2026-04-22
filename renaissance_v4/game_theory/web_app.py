@@ -1561,14 +1561,14 @@ def create_app() -> Flask:
                 "inflight_batches": inflight_n,
                 "l1_columns_v1": {
                     "harness_baseline_trade_win_percent": (
-                        "Sys BL % — batch trade win %% of the oldest completed run in the same "
+                        "Sys BL % — batch trade win % of the oldest completed run in the same "
                         "run_config fingerprint chain (anchor for this recipe/window)."
                     ),
                     "run_trade_win_percent": (
-                        "Run TW % — this scorecard line's Referee batch rollup trade win %%."
+                        "Run TW % — this scorecard line's Referee batch rollup trade win %."
                     ),
                     "beats_system_baseline_trade_win": (
-                        ">BL — YES if this row is not the anchor and Run TW %% > Sys BL %%; "
+                        ">BL — YES if this row is not the anchor and Run TW % > Sys BL %; "
                         "NO if Run TW < Sys BL; = if tie; — on anchor row or missing inputs."
                     ),
                 },
