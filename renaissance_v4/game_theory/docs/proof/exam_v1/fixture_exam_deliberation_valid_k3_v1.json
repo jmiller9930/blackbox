@@ -1,0 +1,36 @@
+{
+  "schema": "exam_deliberation",
+  "schema_version": "1.0.0",
+  "exam_unit_id": "fixture_exam_unit_delib_k3_v1",
+  "exam_pack_id": "pack_fixture_delib",
+  "exam_pack_version": "1.0.0",
+  "hypotheses": [
+    {
+      "hypothesis_id": "H1",
+      "market_interpretation": "Price compressed under prior swing high with rising relative volume; interpretation treats this as accumulation into resistance rather than clean breakout.",
+      "indicator_support": "EMA20 slope flattened while RSI held above 45 on pullbacks; ATR contracted into the fifth bar of the opening window.",
+      "resulting_action": "ENTER_LONG",
+      "falsification_condition": "Invalidated if the next bar closes below the opening window low with expanded volume versus the prior three bars."
+    },
+    {
+      "hypothesis_id": "H2",
+      "market_interpretation": "Range-bound mean reversion: upper edge of the window aligns with prior session value area high; fade strength into that edge.",
+      "indicator_support": "Bollinger bandwidth narrowed; MACD histogram peaked without new price highs on the third bar of the window.",
+      "resulting_action": "ENTER_SHORT",
+      "falsification_condition": "Invalidated if price accepts above the value area high for two consecutive closes inside the opening window."
+    },
+    {
+      "hypothesis_id": "H3",
+      "market_interpretation": "No asymmetric edge: liquidity is thin and candle overlaps dominate; risk of false breaks dominates reward.",
+      "indicator_support": "Volume z-score stayed within normal band; no single indicator cluster supports directional commitment.",
+      "resulting_action": "NO_TRADE",
+      "falsification_condition": "Would reconsider only if a decisive imbalance print appears with hold above resistance for the remainder of the window."
+    }
+  ],
+  "h4": {
+    "comparative_evaluation": "H1 relies on breakout quality but the window shows repeated upper wicks without follow-through. H2 is coherent with indicator divergence at the edge but conflicts with higher timeframe bias not shown here. H3 is the only arm that explicitly matches the flat volume and lack of expansion.",
+    "primary_selection": "H3",
+    "bounded_reasoning": "Selecting H3 because risk clarity is highest: the falsification condition is observable within the window and does not require downstream information. H1 and H2 both require price acceptance tests that are not yet satisfied at window end."
+  },
+  "data_gaps": []
+}

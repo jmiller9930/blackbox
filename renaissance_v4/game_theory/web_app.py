@@ -33,6 +33,9 @@ see ``trade_strategy_post_cert_stub_v1.py`` and ``docs/STUDENT_PATH_EXAM_HIGH_LE
 **Exam unit state machine (GT_DIRECTIVE_003 / §11.1):** ``POST /api/v1/exam/units``, ``GET /api/v1/exam/units/<exam_unit_id>``,
 ``POST /api/v1/exam/units/<exam_unit_id>/transition`` — in-process dev store; see ``exam_state_machine_v1.py`` and ``directives/GT_DIRECTIVE_003_exam_state_machine_v1.md``.
 
+**Exam deliberation frame 0 (GT_DIRECTIVE_004 / §11.2):** ``PUT /api/v1/exam/units/<exam_unit_id>/frames/0/deliberation`` (valid body **200**, bad envelope **400**, policy/placeholder **422**, unknown unit **404**),
+``GET …/frames/0/deliberation`` (**200** when set, **404** when missing). Schema: ``schemas/exam_deliberation_payload_v1.schema.json``; see ``exam_deliberation_capture_v1.py`` and ``directives/GT_DIRECTIVE_004_deliberation_capture_v1.md``.
+
 **System Dialogue** (post-run formatter; ``/api/barney-summary``): ``POST /api/barney-summary`` with ``{"job_id": "…"}`` — structured
 run facts only. **Ask DATA** (bounded self-explainer): ``POST /api/ask-data`` with ``question`` and optional
 ``job_id`` / ``ui_context`` — answers only from bundled PML knowledge + run/scorecard facts
@@ -80,6 +83,7 @@ from pathlib import Path
 from typing import Any
 
 from flask import Flask, Response, abort, jsonify, request, send_file
+from pydantic import ValidationError
 
 _GAME_THEORY = Path(__file__).resolve().parent
 _RV4_ROOT = _GAME_THEORY.parent
@@ -92,7 +96,7 @@ _PATTERN_BANNER_WEBP_PATH = _RV4_ROOT / "assets" / "pattern.webp"
 _PATTERN_GAME_BANNER_BOOT_JS = _GAME_THEORY / "static" / "pattern_game_banner_boot.js"
 
 # Operator-visible web UI bundle version — bump when changing PAGE_HTML (HTML/CSS/JS) so deploys are provable.
-PATTERN_GAME_WEB_UI_VERSION = "2.19.32"
+PATTERN_GAME_WEB_UI_VERSION = "2.19.33"
 
 from renaissance_v4.game_theory.groundhog_memory import (
     groundhog_auto_merge_enabled,
@@ -126,6 +130,14 @@ from renaissance_v4.game_theory.student_panel_d13 import (
     build_student_decision_record_v1,
 )
 from renaissance_v4.game_theory.student_panel_d14 import enrich_student_panel_run_rows_d14
+from renaissance_v4.game_theory.exam_deliberation_capture_v1 import (
+    assert_non_placeholder_deliberation_v1,
+    deliberation_payload_to_export_dict_v1,
+    get_frame0_deliberation_v1,
+    parse_submit_envelope_v1,
+    put_frame0_deliberation_v1,
+    validate_deliberation_against_policy_v1,
+)
 from renaissance_v4.game_theory.exam_state_machine_v1 import (
     apply_exam_unit_transition_v1,
     create_exam_unit_v1,
@@ -1591,6 +1603,56 @@ def create_app() -> Flask:
         if u2 is None:
             return jsonify(out), 500
         return jsonify({"ok": True, **exam_unit_to_public_dict(u2)})
+
+    @app.put("/api/v1/exam/units/<exam_unit_id>/frames/0/deliberation")
+    def api_exam_frame0_deliberation_put_v1(exam_unit_id: str) -> Any:
+        """GT_DIRECTIVE_004 — attach validated H1–H4 deliberation to decision frame index 0 (dev store)."""
+        uid = exam_unit_id.strip()
+        if get_exam_unit_v1(uid) is None:
+            return jsonify({"ok": False, "error": "exam_unit_not_found"}), 404
+        raw = request.get_json(force=True, silent=True)
+        if not isinstance(raw, dict):
+            return jsonify({"ok": False, "error": "json_object_required"}), 400
+        try:
+            env = parse_submit_envelope_v1(raw)
+        except ValidationError as err:
+            return jsonify({"ok": False, "error": "envelope_validation_failed", "detail": err.errors()}), 400
+        delib = env.deliberation
+        if delib.exam_unit_id.strip() != uid:
+            return jsonify({"ok": False, "error": "deliberation.exam_unit_id_mismatch"}), 422
+        try:
+            validate_deliberation_against_policy_v1(delib, env.pack_deliberation_policy)
+            assert_non_placeholder_deliberation_v1(delib)
+        except ValueError as err:
+            return jsonify({"ok": False, "error": str(err)}), 422
+        export_d = deliberation_payload_to_export_dict_v1(delib)
+        put_frame0_deliberation_v1(uid, export_d)
+        return jsonify(
+            {
+                "ok": True,
+                "exam_unit_id": uid,
+                "decision_frame_index": 0,
+                "deliberation": export_d,
+            }
+        ), 200
+
+    @app.get("/api/v1/exam/units/<exam_unit_id>/frames/0/deliberation")
+    def api_exam_frame0_deliberation_get_v1(exam_unit_id: str) -> Any:
+        """GT_DIRECTIVE_004 — fetch deliberation attached to frame 0."""
+        uid = exam_unit_id.strip()
+        if get_exam_unit_v1(uid) is None:
+            return jsonify({"ok": False, "error": "exam_unit_not_found"}), 404
+        d = get_frame0_deliberation_v1(uid)
+        if d is None:
+            return jsonify({"ok": False, "error": "frame0_deliberation_not_found"}), 404
+        return jsonify(
+            {
+                "ok": True,
+                "exam_unit_id": uid,
+                "decision_frame_index": 0,
+                "deliberation": d,
+            }
+        ), 200
 
     @app.get("/api/student-proctor/learning-store")
     def api_student_proctor_learning_store_get() -> Any:

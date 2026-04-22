@@ -51,15 +51,38 @@ Engineer must list any remaining gaps (persistence, auth, UI polish) under **Eng
 
 ## Engineer update
 
-**Status:** pending engineer response
+**Status:** implementation + proof landed — **Requesting architect acceptance**
 
-Engineer must append:
+**Work performed**
 
-- summary of work performed
-- files changed
-- proof produced
-- remaining gaps
-- explicit line: `Requesting architect acceptance`
+- **`exam_deliberation_capture_v1.py`** — Pydantic **§11.2** contract: H1–H3 rows (`market_interpretation`, `indicator_support`, `resulting_action`, `falsification_condition`), H4 (`comparative_evaluation`, `primary_selection`, `bounded_reasoning`), version gate (`schema_version` ∈ **1.0.0**), JSON key **`schema`** = `exam_deliberation`, pack envelope `pack_deliberation_policy` (`k_min`, `data_gap_allowed_paths`), **`data_gaps`** only on allowed paths, **`assert_non_placeholder_deliberation_v1`**, in-memory **frame 0** store + `deliberation_http_route_matrix_v1()`.
+- **`schemas/exam_deliberation_payload_v1.schema.json`** — generated JSON Schema artifact (`$id` + **required** includes `schema`, `schema_version`, `exam_unit_id`, `hypotheses`, `h4`).
+- **Fixtures / proof:** `docs/proof/exam_v1/fixture_exam_deliberation_valid_k3_v1.json` (K=3, full H4), `docs/proof/exam_v1/operator_proof_frame0_deliberation_dev_v1.json` (dev GET shape + paths).
+- **`web_app.py`** — `PUT` / `GET` **`/api/v1/exam/units/<exam_unit_id>/frames/0/deliberation`**; **200** success, **400** envelope JSON/Pydantic errors, **404** unknown unit / no deliberation, **422** `exam_unit_id` mismatch vs path, policy / placeholder / semantic errors; docstring + **`PATTERN_GAME_WEB_UI_VERSION`** → **2.19.33**.
+- **Tests:** `tests/test_exam_deliberation_capture_v1.py` — fixture round-trip, schema file checks, malformed + bad version, `k_min`, `data_gap` allow/deny, **placeholder regression**, exporter dict, HTTP matrix, full PUT/GET 200, 404/422/400 cases, pure store round-trip.
+
+**HTTP route matrix (this slice)**
+
+| Method | Path | Success | Errors |
+|--------|------|---------|--------|
+| `PUT` | `/api/v1/exam/units/{exam_unit_id}/frames/0/deliberation` | **200** | **400** envelope validation, **404** unknown `exam_unit_id`, **422** deliberation `exam_unit_id` ≠ path, policy / placeholder |
+| `GET` | `/api/v1/exam/units/{exam_unit_id}/frames/0/deliberation` | **200** | **404** unknown unit or deliberation not stored |
+
+**Proof produced**
+
+- `python3 -m pytest tests/test_exam_deliberation_capture_v1.py tests/test_exam_state_machine_v1.py` — **25 passed** (8 state machine + 17 deliberation).
+- Commit + push + **`python3 scripts/gsync.py --no-commit --force-restart`** (pattern-game) after merge.
+
+**Remaining gaps (explicitly out of §11.2 scope)**
+
+- No durable DB; no auth; pack policy still **submitted with body** until a pack registry exists; **§11.3** decision_frame parent/child not implemented; **§11.4** downstream generator not built; **UI splice** not done.
+
+**Alignment with architecture**
+
+- Implements **§11.2** “H1–H4 exporter (non-placeholder); schema versioned” and **§1** learning model deliberation / H4 bullets as **typed fields**, not parallel-runner traces.
+- **§11.1** untouched (ordering / invalidation).
+
+**Requesting architect acceptance**
 
 ---
 

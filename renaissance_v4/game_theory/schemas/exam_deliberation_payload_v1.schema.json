@@ -1,0 +1,182 @@
+{
+  "$defs": {
+    "DataGapEntryV1": {
+      "additionalProperties": false,
+      "properties": {
+        "path": {
+          "maxLength": 512,
+          "minLength": 1,
+          "title": "Path",
+          "type": "string"
+        },
+        "reason": {
+          "maxLength": 2048,
+          "minLength": 8,
+          "title": "Reason",
+          "type": "string"
+        }
+      },
+      "required": [
+        "path",
+        "reason"
+      ],
+      "title": "DataGapEntryV1",
+      "type": "object"
+    },
+    "H4DeliberationV1": {
+      "additionalProperties": false,
+      "description": "Comparative evaluation + selection + bounded reasoning (\u00a71.2 / \u00a711.2).",
+      "properties": {
+        "comparative_evaluation": {
+          "maxLength": 12000,
+          "minLength": 40,
+          "title": "Comparative Evaluation",
+          "type": "string"
+        },
+        "primary_selection": {
+          "description": "Hypothesis id (e.g. H2) or NO_TRADE when no arm wins on merit.",
+          "pattern": "^(H[1-9][0-9]*|NO_TRADE)$",
+          "title": "Primary Selection",
+          "type": "string"
+        },
+        "bounded_reasoning": {
+          "maxLength": 12000,
+          "minLength": 40,
+          "title": "Bounded Reasoning",
+          "type": "string"
+        }
+      },
+      "required": [
+        "comparative_evaluation",
+        "primary_selection",
+        "bounded_reasoning"
+      ],
+      "title": "H4DeliberationV1",
+      "type": "object"
+    },
+    "HypothesisDeliberationV1": {
+      "additionalProperties": false,
+      "description": "H1\u2013H3 (or H1..HK) \u2014 one row per hypothesis before H4.",
+      "properties": {
+        "hypothesis_id": {
+          "pattern": "^H[1-9][0-9]*$",
+          "title": "Hypothesis Id",
+          "type": "string"
+        },
+        "market_interpretation": {
+          "maxLength": 8000,
+          "minLength": 20,
+          "title": "Market Interpretation",
+          "type": "string"
+        },
+        "indicator_support": {
+          "maxLength": 8000,
+          "minLength": 20,
+          "title": "Indicator Support",
+          "type": "string"
+        },
+        "resulting_action": {
+          "enum": [
+            "ENTER_LONG",
+            "ENTER_SHORT",
+            "NO_TRADE"
+          ],
+          "title": "Resulting Action",
+          "type": "string"
+        },
+        "falsification_condition": {
+          "maxLength": 8000,
+          "minLength": 20,
+          "title": "Falsification Condition",
+          "type": "string"
+        }
+      },
+      "required": [
+        "hypothesis_id",
+        "market_interpretation",
+        "indicator_support",
+        "resulting_action",
+        "falsification_condition"
+      ],
+      "title": "HypothesisDeliberationV1",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "description": "Exported deliberation artifact (frame 0 moment truth \u2014 deliberation slice only).\n\nJSON uses key ``schema`` (``exam_deliberation``); ``schema_version`` gates compatibility.",
+  "properties": {
+    "schema": {
+      "const": "exam_deliberation",
+      "default": "exam_deliberation",
+      "title": "Schema",
+      "type": "string"
+    },
+    "schema_version": {
+      "maxLength": 32,
+      "minLength": 1,
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "exam_unit_id": {
+      "maxLength": 128,
+      "minLength": 4,
+      "title": "Exam Unit Id",
+      "type": "string"
+    },
+    "exam_pack_id": {
+      "anyOf": [
+        {
+          "maxLength": 256,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Exam Pack Id"
+    },
+    "exam_pack_version": {
+      "anyOf": [
+        {
+          "maxLength": 64,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Exam Pack Version"
+    },
+    "hypotheses": {
+      "items": {
+        "$ref": "#/$defs/HypothesisDeliberationV1"
+      },
+      "maxItems": 12,
+      "minItems": 1,
+      "title": "Hypotheses",
+      "type": "array"
+    },
+    "h4": {
+      "$ref": "#/$defs/H4DeliberationV1"
+    },
+    "data_gaps": {
+      "items": {
+        "$ref": "#/$defs/DataGapEntryV1"
+      },
+      "title": "Data Gaps",
+      "type": "array"
+    }
+  },
+  "required": [
+    "schema",
+    "schema_version",
+    "exam_unit_id",
+    "hypotheses",
+    "h4"
+  ],
+  "title": "exam_deliberation_payload_v1",
+  "type": "object",
+  "$id": "https://blackbox.local/schemas/exam_deliberation_payload_v1.schema.json"
+}

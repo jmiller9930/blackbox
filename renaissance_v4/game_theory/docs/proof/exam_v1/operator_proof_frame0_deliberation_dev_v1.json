@@ -1,0 +1,52 @@
+{
+  "schema": "exam_v1_operator_proof_frame0_deliberation_dev_v1",
+  "title": "GT_DIRECTIVE_004 §11.2 — frame 0 deliberation attached (development)",
+  "description": "After PUT …/frames/0/deliberation with a valid envelope, GET returns the same deliberation object under decision_frame_index 0.",
+  "fixture_source": "renaissance_v4/game_theory/docs/proof/exam_v1/fixture_exam_deliberation_valid_k3_v1.json",
+  "example_get_response_shape": {
+    "ok": true,
+    "exam_unit_id": "<matches_created_unit>",
+    "decision_frame_index": 0,
+    "deliberation": {
+      "schema": "exam_deliberation",
+      "schema_version": "1.0.0",
+      "exam_unit_id": "<matches_created_unit>",
+      "exam_pack_id": "p",
+      "exam_pack_version": "1",
+      "hypotheses": [
+        {
+          "hypothesis_id": "H1",
+          "market_interpretation": "(non-placeholder text ≥ min length — see fixture file)",
+          "indicator_support": "(…)",
+          "resulting_action": "ENTER_LONG",
+          "falsification_condition": "(…)"
+        },
+        {
+          "hypothesis_id": "H2",
+          "market_interpretation": "(…)",
+          "indicator_support": "(…)",
+          "resulting_action": "ENTER_SHORT",
+          "falsification_condition": "(…)"
+        },
+        {
+          "hypothesis_id": "H3",
+          "market_interpretation": "(…)",
+          "indicator_support": "(…)",
+          "resulting_action": "NO_TRADE",
+          "falsification_condition": "(…)"
+        }
+      ],
+      "h4": {
+        "comparative_evaluation": "(…)",
+        "primary_selection": "H3",
+        "bounded_reasoning": "(…)"
+      },
+      "data_gaps": []
+    }
+  },
+  "http": {
+    "put": "PUT /api/v1/exam/units/{exam_unit_id}/frames/0/deliberation",
+    "get": "GET /api/v1/exam/units/{exam_unit_id}/frames/0/deliberation",
+    "success_status": 200
+  }
+}
