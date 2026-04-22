@@ -85,7 +85,7 @@ _PATTERN_BANNER_WEBP_PATH = _RV4_ROOT / "assets" / "pattern.webp"
 _PATTERN_GAME_BANNER_BOOT_JS = _GAME_THEORY / "static" / "pattern_game_banner_boot.js"
 
 # Operator-visible web UI bundle version — bump when changing PAGE_HTML (HTML/CSS/JS) so deploys are provable.
-PATTERN_GAME_WEB_UI_VERSION = "2.19.27"
+PATTERN_GAME_WEB_UI_VERSION = "2.19.28"
 
 from renaissance_v4.game_theory.groundhog_memory import (
     groundhog_auto_merge_enabled,
@@ -4813,6 +4813,45 @@ PAGE_HTML = """<!DOCTYPE html>
       updateMemoryStatusCardFromPanel(panel, echo, null, false);
     }
 
+    /** GET JSON for Student panel APIs — timeout + non-JSON / HTTP errors (avoids stuck “Loading…”). */
+    async function pgStudentPanelJsonGet(url) {
+      const ctrl = new AbortController();
+      const tid = window.setTimeout(function () {
+        ctrl.abort();
+      }, 45000);
+      try {
+        const r = await fetch(url, { signal: ctrl.signal, cache: 'no-store' });
+        window.clearTimeout(tid);
+        const raw = await r.text();
+        var j;
+        try {
+          j = JSON.parse(raw);
+        } catch (parseErr) {
+          return {
+            ok: false,
+            error:
+              'Expected JSON from server; got HTTP ' +
+              r.status +
+              ' — ' +
+              String(raw || '').slice(0, 180),
+          };
+        }
+        if (!r.ok) {
+          return {
+            ok: false,
+            error: (j && j.error) || 'HTTP ' + r.status,
+          };
+        }
+        return j;
+      } catch (e) {
+        window.clearTimeout(tid);
+        if (e && e.name === 'AbortError') {
+          return { ok: false, error: 'Request timed out after 45s — check Network tab and Flask on :8765.' };
+        }
+        return { ok: false, error: String(e) };
+      }
+    }
+
     /** D11 — contractual: one level replaces the panel; pinned chrome; scroll body only. */
     const studentPanelD11 = {
       level: 1,
@@ -5069,8 +5108,9 @@ PAGE_HTML = """<!DOCTYPE html>
       studentPanelD11WireChrome();
       let j = null;
       try {
-        const r = await fetch('/api/student-panel/run/' + encodeURIComponent(runId) + '/decisions');
-        j = await r.json();
+        j = await pgStudentPanelJsonGet(
+          '/api/student-panel/run/' + encodeURIComponent(runId) + '/decisions'
+        );
       } catch (e) {
         root.innerHTML = studentPanelD11Layout(
           renderStudentPanelD11Chrome(2, ['<strong>Run table</strong>', '<strong>Run</strong> ' + escapeHtml(studentPanelD11ShortRunId(runId))], true),
@@ -5119,7 +5159,7 @@ PAGE_HTML = """<!DOCTYPE html>
       if (!slices.length) {
         studentPanelD11.firstSliceDecisionId = null;
         scroll +=
-          '<p class="caps" style="margin:0">No trades enumerated for this run. Re-run the batch with session logs so <code>batch_parallel_results_v1.json</code> is written, or confirm the replay produced closed trades.</p>';
+          '<p class="caps" style="margin:0">No trade carousel slices for this run — <code>replay_outcomes_json</code> was empty (replay closed zero trades on this bar window), or <code>batch_parallel_results_v1.json</code> is missing for this job. If the UI was stuck on “Loading…”, hard-refresh after deploy and check the browser <strong>Network</strong> tab for <code>GET /api/student-panel/run/&lt;job_id&gt;/decisions</code>.</p>';
         root.innerHTML = studentPanelD11Layout(
           renderStudentPanelD11Chrome(
             2,
@@ -5246,8 +5286,7 @@ PAGE_HTML = """<!DOCTYPE html>
           encodeURIComponent(runId) +
           '&trade_id=' +
           encodeURIComponent(tradeId);
-        const r = await fetch(u);
-        j = await r.json();
+        j = await pgStudentPanelJsonGet(u);
       } catch (e) {
         root.innerHTML = studentPanelD11Layout(
           renderStudentPanelD11Chrome(
@@ -5463,8 +5502,7 @@ PAGE_HTML = """<!DOCTYPE html>
       );
       let j = null;
       try {
-        const r = await fetch('/api/student-panel/runs?limit=50');
-        j = await r.json();
+        j = await pgStudentPanelJsonGet('/api/student-panel/runs?limit=50');
       } catch (e) {
         root.innerHTML = studentPanelD11Layout(
           chrome1,
