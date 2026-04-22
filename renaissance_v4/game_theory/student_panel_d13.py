@@ -229,6 +229,14 @@ def build_d13_selected_run_payload_v1(job_id: str) -> dict[str, Any]:
     if payload:
         opportunities = _trade_opportunities_from_payload(payload, flat_by_sid)
 
+    def _opp_entry_time_ms(opp: dict[str, Any]) -> int:
+        oj = opp.get("outcome_json")
+        if not isinstance(oj, dict):
+            return 0
+        return _int(oj.get("entry_time"), 0)
+
+    opportunities.sort(key=_opp_entry_time_ms)
+
     panel_row = _panel_run_row_for_job(jid)
     entry_for_flags = entry
     gh_lane = _groundhog_active_for_d11(entry_for_flags)
@@ -342,7 +350,7 @@ def build_d13_selected_run_payload_v1(job_id: str) -> dict[str, Any]:
         "run_id": jid,
         "run_summary": run_summary,
         "slices": slices,
-        "slice_ordering": "trade_opportunities_batch_parallel_order",
+        "slice_ordering": "trade_opportunities_entry_time_asc",
         "grain": "trade_id",
         "scenario_list_error": scen_err,
         "data_gaps": gaps,

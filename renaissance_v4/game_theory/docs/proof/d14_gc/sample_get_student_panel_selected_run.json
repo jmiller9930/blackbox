@@ -21,7 +21,7 @@
     "panel_run_row_schema": "student_panel_run_row_v2"
   },
   "slices": [],
-  "slice_ordering": "trade_opportunities_batch_parallel_order",
+  "slice_ordering": "trade_opportunities_entry_time_asc",
   "grain": "trade_id",
   "scenario_list_error": null,
   "data_gaps": [],
