@@ -1,6 +1,6 @@
 # High-level architecture — learning, exam, certification, engineering, UI splice
 
-**Status:** v1.3 — adds **non-negotiable proof** before every **Delivery closeout**; **§16.0** canonical proof bar.
+**Status:** v1.4 — **Proof (§16.0)** + per-directive proof blocks (v1.3) + **baseline strategy** glossary and doc terminology (legacy manifest filename unchanged).
 
 ---
 
@@ -27,6 +27,8 @@ Define and implement the **exam system (moment truth layer)**:
 - grading  
 
 Then **splice those artifacts into the existing UI** (carousel becomes a **timeline of moments**).
+
+**Glossary — baseline strategy:** Product term for the **default manifest-backed trading approach** on replay (signals + fusion + risk + execution). The shipped file is still named `baseline_v1_recipe.json` for path compatibility; see **`MANIFEST_REPLAY_INTEGRATION.md` § Terminology**.
 
 ---
 
@@ -618,3 +620,4 @@ curl -s -o /dev/null -w "%{http_code}\n" "http://127.0.0.1:<PORT>/api/student-pa
 | v1.1 | H1–H4 in Phase A; `exam_unit` vs atomic `decision_frame`; exam pack table; NO_TRADE “missed opportunity” guard; win-rate pairing note; `parallel_runner` vs deliberation in risks; PASS/E copy tied to pack. |
 | v1.2 | §11 split into 11.1–11.7 with per-directive **Delivery closeout** (commit, pull, push, restart, verify); §12 closeout; **§16** canonical template. |
 | v1.3 | **Proof (non-negotiable)** before every **Delivery closeout** (§11.1–§11.7, §12); **§16.0** global proof prerequisite; closeout gated on proof. |
+| v1.4 | **Baseline strategy** terminology + cross-ref to `MANIFEST_REPLAY_INTEGRATION.md`; legacy filename `baseline_v1_recipe.json` documented. |

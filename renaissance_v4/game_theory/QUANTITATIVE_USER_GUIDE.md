@@ -278,7 +278,7 @@ The guide will expand on:
 | Generated manifest | `runtime/operator_strategy_uploads/manifests/` |
 | Active pointer | `runtime/operator_strategy_uploads/active.json` |
 
-These paths do **not** overwrite **`baseline_v1_recipe.json`** or other shipped baseline assets.
+These paths do **not** overwrite the default **baseline strategy** file **`baseline_v1_recipe.json`** (legacy filename) or other shipped baseline assets.
 
 **Operator feedback (no guessing)**
 

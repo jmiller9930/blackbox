@@ -2,6 +2,11 @@
 
 **Purpose:** Deliverable for **manifest-driven baseline path** (directive: bridge architecture to reality without changing validated behavior).
 
+### Terminology
+
+- **Baseline strategy** — the **default trading approach** encoded as a validated manifest (signals, fusion, risk, execution wiring). This is what runs on the tape when no other manifest is selected.  
+- **On-disk name:** `renaissance_v4/configs/manifests/baseline_v1_recipe.json` — **filename kept** for backward compatibility with runners, tests, and env overrides; **“recipe” in the path is legacy.** New docs and UI copy **SHOULD** say **baseline strategy** and may cite this file in parentheses.
+
 ---
 
 ## 1. Which engine path was rewired
@@ -9,7 +14,7 @@
 | Component | Change |
 |-----------|--------|
 | **`renaissance_v4/research/replay_runner.py`** | The **authoritative deterministic replay** (`main()` loop) no longer constructs a hardcoded signal list or direct imports of `build_feature_set`, `classify_regime`, `fuse_signal_results`, `evaluate_risk`, `ExecutionManager`. |
-| **Manifest** | Default: **`renaissance_v4/configs/manifests/baseline_v1_recipe.json`**. Override: env **`RENAISSANCE_REPLAY_MANIFEST`** (path to another validated manifest). |
+| **Manifest (baseline strategy)** | Default file: **`renaissance_v4/configs/manifests/baseline_v1_recipe.json`**. Override: env **`RENAISSANCE_REPLAY_MANIFEST`** (path to another validated manifest). |
 | **Resolution** | **`renaissance_v4/manifest/runtime.py`**: `build_signals_from_manifest`, `resolve_factor_fn`, `resolve_regime_fn`, `resolve_fusion`, `resolve_risk_fn`, `build_execution_manager_from_manifest`. |
 | **Validation** | **`load_manifest_file` + `validate_manifest_against_catalog`** before replay starts. |
 
@@ -17,9 +22,9 @@
 
 ---
 
-## 2. Baseline manifest used
+## 2. Baseline strategy (default manifest)
 
-- **File:** `renaissance_v4/configs/manifests/baseline_v1_recipe.json`
+- **File (legacy filename):** `renaissance_v4/configs/manifests/baseline_v1_recipe.json`
 - **strategy_id:** `renaissance_baseline_v1_stack`
 - **Signal module ids (order):** `trend_continuation`, `pullback_continuation`, `breakout_expansion`, `mean_reversion_fade` — same order and classes as the previous hardcoded list.
 - **Pipeline ids:** `feature_set_v1`, `regime_v1_default`, `fusion_geometric_v1`, `risk_governor_v1_default`, `execution_manager_v1_default` — resolve to the **same** Python callables/classes as before.

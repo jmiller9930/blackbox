@@ -8,7 +8,7 @@ From repo root with `PYTHONPATH=.`:
 
 ```bash
 python3 -m renaissance_v4.game_theory.pattern_game \
-  --manifest renaissance_v4/configs/manifests/baseline_v1_recipe.json
+  --manifest renaissance_v4/configs/manifests/baseline_v1_recipe.json   # default baseline strategy (legacy filename)
 ```
 
 Optional: `--atr-stop-mult 2.0 --atr-target-mult 3.0`  
@@ -32,7 +32,7 @@ Host apps import **`PatternGameAgent`** from `renaissance_v4.game_theory` (or `r
 - **`run_referee_only(...)`** — Referee only, no Anna.
 - **`plugin_info()`** — version/metadata for dashboards.
 
-Point **`repo_root`** at the blackbox checkout; override **`presets_dir`** if your app keeps scenario JSON elsewhere. Swap **manifest paths inside scenarios** (or add presets) to compare strategy manifests and surface candidates for formal **JUP policy packages** — the mechanical gate remains `scripts/validate_policy_package.py` on real packages, not this prototype runner.
+Point **`repo_root`** at the blackbox checkout; override **`presets_dir`** if your app keeps scenario JSON elsewhere. Swap **manifest paths inside scenarios** (or add presets) to compare **baseline strategy** / other **strategy manifests** and surface candidates for formal **JUP policy packages** — the mechanical gate remains `scripts/validate_policy_package.py` on real packages, not this prototype runner.
 
 ## Code
 

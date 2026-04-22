@@ -163,7 +163,7 @@ Policy alone cannot stop a bad actor; **implementation** must make cheating **me
 
 **Run (repo root, `PYTHONPATH=.`):**
 
-`python3 -m renaissance_v4.game_theory.pattern_game --manifest renaissance_v4/configs/manifests/baseline_v1_recipe.json`
+`python3 -m renaissance_v4.game_theory.pattern_game --manifest renaissance_v4/configs/manifests/baseline_v1_recipe.json`  *(default **baseline strategy**; legacy filename)*
 
 Optional overrides: `--atr-stop-mult 2.0 --atr-target-mult 3.0`
 
@@ -196,5 +196,5 @@ Optional overrides: `--atr-stop-mult 2.0 --atr-target-mult 3.0`
 - Replay: `renaissance_v4/research/replay_runner.py`
 - Pattern game runner: `renaissance_v4/game_theory/pattern_game.py`
 - Game theory / agent docs folder: `renaissance_v4/game_theory/`
-- Example manifest: `renaissance_v4/configs/manifests/baseline_v1_recipe.json`
+- Example manifest (default baseline strategy): `renaissance_v4/configs/manifests/baseline_v1_recipe.json`
 - Execution defaults: `renaissance_v4/core/execution_manager.py`

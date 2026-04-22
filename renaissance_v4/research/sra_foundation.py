@@ -214,7 +214,7 @@ def generate_manifest_from_hypothesis(
     """
     Map a hypothesis record to a ``strategy_manifest_v1`` dict.
 
-    Merges ``parameters`` onto the locked baseline recipe template (deterministic for identical inputs).
+    Merges ``parameters`` onto the locked **baseline strategy** manifest template (deterministic for identical inputs).
     Validates against the plugin catalog.
     """
     hid = str(hypothesis.get("hypothesis_id") or "").strip()
