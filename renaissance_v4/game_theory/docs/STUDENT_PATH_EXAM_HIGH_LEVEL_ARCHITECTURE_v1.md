@@ -1,6 +1,6 @@
 # High-level architecture — learning, exam, certification, engineering, UI splice
 
-**Status:** v1.7 — **`/api/v1/trade-strategy`** versioned mirror + **`/contract`** for external system integration.
+**Status:** v1.8 — opening snapshot contract, **Decision Frame immutability**, **bar-close time anchor** (§2 micro-patch).
 
 ---
 
@@ -104,6 +104,29 @@ An **exam unit** **SHALL** contain an **ordered list** of `decision_frame` recor
 
 A **trade record** (`trade_id` / execution truth) **MAY** link to the **exam unit** or to **frame 0** when a replayed position exists; it **MUST NOT** be confused with moment truth payload (see **§5**).
 
+### Opening window snapshot (frame 0 — required contents) — v1.8
+
+The **opening window snapshot** embedded in **frame 0** **SHALL** include **all** of:
+
+1. **OHLCV** for the window (open, high, low, close, volume — as defined by the pack’s bar resolution).  
+2. **All indicators** the **exam pack** publishes for **Decision A** (enumerated keys / definitions; anything not published **MUST** appear as explicit `data_gap` or omitted per pack policy — not silently invented).  
+3. **All context fields** the **exam pack** publishes for **Decision A** (regime labels, structure tags, or other allowed context objects — same honesty rule as indicators).
+
+**Exam pack obligation:** The pack **MUST** enumerate or reference the **indicator set** and **context field set** for the opening snapshot (see **§8**).
+
+### Decision Frame immutability — v1.8
+
+**Decision Frames** **SHALL** be **immutable** once **written** to persistence (or emitted as a sealed exam artifact).
+
+- They **MUST NOT** be **recomputed**, **mutated**, or **in-place edited** after write — **no** “fixup” passes that change historical meaning.  
+- **Correction path:** only a **versioned re-run** that produces **new** `decision_frame_id` values **or** a **new** `exam_unit_id` (with audit trail linking superseded units). **Patches** to prior frames for “convenience” are **prohibited**.
+
+### Time anchor (frame timestamps) — v1.8
+
+Unless the **exam pack** explicitly states otherwise, **frame timestamps** **SHALL** be anchored to the **closing time** of the **market bar** that bounds that frame (for a single-bar opening window: that bar’s **close** timestamp in the pack’s declared timezone / UTC rule).
+
+Downstream frames **SHALL** use the same anchor convention per pack (typically each downstream bar’s **close**).
+
 ---
 
 ## 3. Exam structure (contractual flow)
@@ -111,7 +134,7 @@ A **trade record** (`trade_id` / execution truth) **MAY** link to the **exam uni
 ### Phase A — Opening (Decision A)
 
 **Student sees:**  
-Only data up to the **end of the opening window** (v1 default: **one 5m bar** unless the exam pack states otherwise).
+Only data up to the **end of the opening window** (v1 default: **one 5m bar** unless the exam pack states otherwise), assembled as the **opening window snapshot** (**§2** — OHLCV + pack-published indicators + pack-published Decision A context).
 
 **Student MUST:**
 
@@ -212,6 +235,9 @@ Each **exam pack** **SHALL** publish (at minimum):
 | `exam_pack_id` + `version` | Audit and drift control |
 | `K` | Minimum hypotheses (H1–H3 count) |
 | `opening_window` | e.g. one 5m bar |
+| **Opening snapshot — indicators** | Enumerated **indicator** keys (or manifest refs) **included** in frame 0 for Decision A |
+| **Opening snapshot — context** | Enumerated **context** fields **included** in frame 0 for Decision A |
+| **Frame time anchor** | Default: **bar close**; override only if pack states another anchor (e.g. open) |
 | Termination mode + `D` / thresholds | §7 |
 | Economic gates | `ε` expectancy and/or `φ` profit factor + `δ` drawdown cap (as chosen) |
 | `p_min` | Minimum process score for PASS |
@@ -523,6 +549,7 @@ git push origin main
 - **PnL-only grading** → promotes luck; **P** dimension is mandatory for v1 PASS.  
 - **No hypothesis / H4 enforcement** → destroys reasoning contract.  
 - **`parallel_runner` / parallel batch** — **MUST NOT** be treated as satisfying **H1–H4 deliberation** unless an **exam mode** explicitly defines that equivalence; they are **different mechanisms** (throughput vs pre-commitment cognitive trace).  
+- **Mutable frames** — in-place edits to persisted **Decision Frames** destroy auditability; **§2 immutability** is a **hard** contract.  
 
 ---
 
@@ -662,3 +689,4 @@ When a slice replaces stub behavior, apply **§16** (proof first, then commit / 
 | v1.5 | §17 post-cert **`trade_strategy`**: DEV stub module + Flask routes + tests; `PATTERN_GAME_WEB_UI_VERSION` bump in `web_app.py`. |
 | v1.6 | **`GET /api/trade-strategy/<id>/export`** — downloadable JSON attachment; `EXPORT_SCHEMA` + tests. |
 | v1.7 | **`/api/v1/trade-strategy`** mirrored routes + **`/contract`** for external callers; `trade_strategy_api_contract_v1()`. |
+| v1.8 | **§2 micro-patch:** opening snapshot contents (OHLCV + pack indicators + pack context); **Decision Frame immutability**; **time anchor** = bar **close** unless pack overrides; **§8** exam pack rows for snapshot + anchor. |
