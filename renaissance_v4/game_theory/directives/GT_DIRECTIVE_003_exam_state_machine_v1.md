@@ -59,7 +59,7 @@ If gaps remain (persistence, auth, durable store), list under **Engineer update 
 
 **Proof produced:** pytest `tests/test_exam_state_machine_v1.py` green; commit, push, remote restart verified.
 
-**Remaining gaps (out of §11.1 scope):** no durable store; no auth; process-local memory only; no UI splice — follow **GT_DIRECTIVE_004** for **§11.2** deliberation capture.
+**Remaining gaps (out of §11.1 scope):** no durable store; no auth; process-local memory only. **§11.7 / §12 UI splice** is **closed** under **`GT_DIRECTIVE_008_exam_ui_splice_v1.md`**. Historical **§11.2** work: **GT_DIRECTIVE_004**.
 
 **Architect acceptance received** — directive **§11.1** record complete.
 

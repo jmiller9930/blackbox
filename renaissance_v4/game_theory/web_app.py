@@ -41,7 +41,7 @@ see ``trade_strategy_post_cert_stub_v1.py`` and ``docs/STUDENT_PATH_EXAM_HIGH_LE
 
 **Exam grading (GT_DIRECTIVE_007 / §11.5):** ``GET /api/v1/exam/units/<exam_unit_id>/grade`` (**200** E/P/pass when unit is sealed, timeline + deliberation exist, and pack grading config is registered; **404** unknown unit; **409** incomplete; **422** bad pack reference / malformed economic inputs; **500** missing pack grading config). Dev: ``POST /api/v1/exam/packs/<exam_pack_id>/grading-config`` registers pack constants. See ``exam_grading_service_v1.py``.
 
-**Exam UI splice (§11.7 / §12):** Inside the **Student → learning → outcome** fold, **Exam timeline** loads ``GET /api/v1/exam/units/<exam_unit_id>/decision-frames`` and renders an ordered frame carousel; each card calls ``GET /api/v1/exam/frames/<decision_frame_id>`` for JSON drill-down (dev operator path).
+**Exam UI splice (GT_DIRECTIVE_008 / §11.7 / §12):** Inside the **Student → learning → outcome** fold, **Exam timeline** loads ``GET /api/v1/exam/units/<exam_unit_id>/decision-frames`` and renders an ordered frame carousel; each card calls ``GET /api/v1/exam/frames/<decision_frame_id>`` for JSON drill-down (dev operator path). Closure: ``directives/GT_DIRECTIVE_008_exam_ui_splice_v1.md``.
 
 **System Dialogue** (post-run formatter; ``/api/barney-summary``): ``POST /api/barney-summary`` with ``{"job_id": "…"}`` — structured
 run facts only. **Ask DATA** (bounded self-explainer): ``POST /api/ask-data`` with ``question`` and optional

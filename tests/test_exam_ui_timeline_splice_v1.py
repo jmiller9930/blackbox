@@ -11,6 +11,7 @@ def test_index_html_contains_exam_timeline_splice_shell() -> None:
     assert r.status_code == 200
     body = r.data
     assert b"pgExamUiSplice" in body
+    assert b"pgExamDrillHost" in body
     assert b"wireExamUiSpliceV1" in body
     assert b"/api/v1/exam/units/" in body
     assert b"decision-frames" in body

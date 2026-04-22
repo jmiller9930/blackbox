@@ -75,6 +75,6 @@ Grading service implementation satisfies the requirements of §11.5.
 
 ## Next step (engineering)
 
-**§11.7 / §12 — UI splice (shipped 2026-04-22):** Pattern Machine **Student → learning → outcome** fold now includes **Exam timeline** — carousel from `GET /api/v1/exam/units/<exam_unit_id>/decision-frames`, card click → `GET /api/v1/exam/frames/<decision_frame_id>` JSON drill-down (`web_app.py`, `PATTERN_GAME_WEB_UI_VERSION`). Remaining optional proof: operator screenshots / HAR per architecture §11.7 when requested.
+**§11.7 / §12 — UI splice (CLOSED):** **`GT_DIRECTIVE_008_exam_ui_splice_v1.md`** — architect accepted (2026-04-21). Optional later proof: operator screenshots / HAR per architecture §11.7 when requested.
 
 **Following backlog:** §11.6 **API layer** route matrix + one E2E `submit → seal → frames → grade` if any contract gaps remain; later **centralized pack registry** to replace dev `POST …/grading-config`.

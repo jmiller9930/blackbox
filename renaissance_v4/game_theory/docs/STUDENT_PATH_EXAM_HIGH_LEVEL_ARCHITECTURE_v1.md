@@ -477,6 +477,8 @@ git push origin main
 
 Map frames → carousel; frame → drill-down (**§12**). *(May ship in same PR as 11.6 or immediately after; still requires its own closeout when merged.)*
 
+**Directive record (closed):** `renaissance_v4/game_theory/directives/GT_DIRECTIVE_008_exam_ui_splice_v1.md` — **§11.7 / §12 CLOSED** (architect acceptance 2026-04-21).
+
 #### Proof (non-negotiable) — 11.7
 
 - **Automated tests:** minimum **one** UI- or DOM-level test **or** strict snapshot test on rendered HTML/JSON bridge **if** framework supports it; else **documented manual script** with **signed-off** operator checklist (not preferred — default expectation is **automated** where feasible).  
@@ -690,3 +692,4 @@ When a slice replaces stub behavior, apply **§16** (proof first, then commit / 
 | v1.6 | **`GET /api/trade-strategy/<id>/export`** — downloadable JSON attachment; `EXPORT_SCHEMA` + tests. |
 | v1.7 | **`/api/v1/trade-strategy`** mirrored routes + **`/contract`** for external callers; `trade_strategy_api_contract_v1()`. |
 | v1.8 | **§2 micro-patch:** opening snapshot contents (OHLCV + pack indicators + pack context); **Decision Frame immutability**; **time anchor** = bar **close** unless pack overrides; **§8** exam pack rows for snapshot + anchor. |
+| v1.9 | **§11.7 / §12** exam UI splice: canonical closure in **`GT_DIRECTIVE_008_exam_ui_splice_v1.md`** (timeline + drill-down + tests + deploy). |
