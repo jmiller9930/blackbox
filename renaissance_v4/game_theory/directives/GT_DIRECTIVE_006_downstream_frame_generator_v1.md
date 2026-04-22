@@ -51,7 +51,7 @@ Engineer must list remaining gaps under **Engineer update → remaining gaps**; 
 
 ## Engineer update
 
-**Status:** implementation complete (2026-04-21)
+**Status:** implementation complete (2026-04-21); **§11.4 CLOSED** — architect accepted (2026-04-22).
 
 **Summary:** Implemented §11.4 downstream frame generation after `decision_a_sealed` for **ENTER** only: frames **1..n** append after frame **0**, bar-close timestamps, one termination mode per unit (`fixed_bars` default **D=5**, `until_invalidation`, `volatility_regime_cap`), strict no-lookahead (each bar parsed only when emitted). **NO_TRADE** still commits a single opening frame. Added dev `POST /api/v1/exam/units/<id>/ohlc-strip` for strip + optional termination; default synthetic strip when unset.
 
@@ -70,15 +70,45 @@ Engineer must list remaining gaps under **Engineer update → remaining gaps**; 
 
 **Remaining gaps:** Pack registry still absent (dev POST / defaults only); no remote `curl` artifact checked in from production host.
 
-Requesting architect acceptance
+Requesting architect acceptance — **superseded:** architect acceptance recorded below (2026-04-22).
 
 ---
 
 ## Architect review
 
-**Status:** pending architect review
+**Status:** **CLOSED** — §11.4 accepted (2026-04-22)
 
-Architect will append one of:
+**Context:** Review of the §11.4 implementation summary, proof artifacts, test coverage, and deploy status.
 
-- `Accepted`
-- `Rejected — rework required`
+**Decision:** GT_DIRECTIVE_006 §11.4 is **ACCEPTED**.
+
+**Verified:** Downstream frame generator is implemented within intended scope. After `decision_a_sealed`: **ENTER** → frame 0 plus downstream 1..n; **NO_TRADE** → single opening frame, no downstream. Termination via policy model: `fixed_bars` (default D=5), `until_invalidation`, `volatility_regime_cap` (threshold or `max_bars`). Frame model: `frame_type="downstream"`, bar-close timestamps, minimal payload (`price_snapshot` + downstream context), frame 0 unchanged. No-lookahead: sequential bar access, no full-strip pre-parse. Integration: extended §11.3 structure, additive seal wiring, synthetic strip fallback for dev. Proof: dedicated tests, updated decision-frame tests, fixture + operator proof, HTTP coverage, commit/push/gsync; acceptance baseline `main` included **5106bfaf** (downstream slice); follow-on courtesy commits may advance `main` without reopening §11.4.
+
+**Architect note:** Lack of direct remote `curl` from review environment is not a blocker — automated HTTP tests and successful remote restart suffice. For future slices, continue saving one operator-visible remote HTTP proof artifact when direct live `curl` is not available from the current environment.
+
+### Architect Acceptance — §11.4
+
+Downstream frame generator implementation satisfies the requirements of §11.4.
+
+* ENTER units generate downstream frames after Decision A seal
+* NO_TRADE units correctly remain single-frame timelines
+* downstream frames are ordered and appended after frame 0
+* frame timestamps are anchored to bar close
+* termination modes are implemented for fixed bars, until invalidation, and volatility/regime cap
+* no-lookahead behavior is enforced through sequential bar access
+* downstream payloads remain within scope and do not introduce grading or execution semantics
+* fixture, operator proof artifact, and automated tests are present
+* HTTP behavior for downstream frame retrieval is covered
+* implementation was committed, pushed, and deployed without reopening prior directives
+
+**Directive GT_DIRECTIVE_006 §11.4 is accepted.**
+
+**GT_DIRECTIVE_006 §11.4 is now CLOSED.**
+
+**One-line summary:** The exam timeline now extends beyond the initial decision and can represent what happens afterward without leaking the future.
+
+---
+
+## Next step (engineering)
+
+**Active slice:** §11.5 — **Grading Service** (per `STUDENT_PATH_EXAM_HIGH_LEVEL_ARCHITECTURE_v1.md`).
