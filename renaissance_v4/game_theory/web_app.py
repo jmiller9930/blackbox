@@ -103,7 +103,7 @@ _PATTERN_BANNER_WEBP_PATH = _RV4_ROOT / "assets" / "pattern.webp"
 _PATTERN_GAME_BANNER_BOOT_JS = _GAME_THEORY / "static" / "pattern_game_banner_boot.js"
 
 # Operator-visible web UI bundle version — bump when changing PAGE_HTML (HTML/CSS/JS) so deploys are provable.
-PATTERN_GAME_WEB_UI_VERSION = "2.19.39"
+PATTERN_GAME_WEB_UI_VERSION = "2.19.40"
 
 from renaissance_v4.game_theory.groundhog_memory import (
     groundhog_auto_merge_enabled,
@@ -4587,8 +4587,8 @@ PAGE_HTML = """<!DOCTYPE html>
               <summary>Setup, PYTHONPATH, Groundhog</summary>
               <div class="help-details-body">
                 <p>Run from repo root with <code>PYTHONPATH</code> including the repo. Example files load from <code>game_theory/examples/</code> (Advanced only).</p>
-                <p><code>PATTERN_GAME_GROUNDHOG_BUNDLE=1</code> merges <code>game_theory/state/groundhog_memory_bundle.json</code> when a scenario has no <code>memory_bundle_path</code>. POST <code>/api/groundhog-memory</code> with <code>atr_stop_mult</code> and <code>atr_target_mult</code> to write the canonical bundle.</p>
-                <p><strong>Modules row / banner</strong> — Groundhog uses green / amber / red: <strong>Ready</strong> when merge is on and the bundle has promoted ATR values; <strong>Off</strong> or <strong>Wait</strong> when merge is off, or merge is on but the bundle file is not created yet / not fully promoted; <strong>Fault</strong> when a bundle file is present but unreadable or invalid JSON. Hover the Groundhog banner tile for the full line.</p>
+                <p>The canonical Groundhog container (<code>game_theory/state/groundhog_memory_bundle.json</code>) is merged before replay when it exists and the scenario has no <code>memory_bundle_path</code> — <strong>auto-merge is on by default</strong>. Set <code>PATTERN_GAME_GROUNDHOG_BUNDLE=0</code> to opt out for tests or isolation. POST <code>/api/groundhog-memory</code> with <code>atr_stop_mult</code> and <code>atr_target_mult</code> to write the canonical bundle.</p>
+                <p><strong>Modules row / banner</strong> — Groundhog uses green / amber / red: <strong>Ready</strong> when auto-merge is allowed and the container has promoted ATR values; <strong>Wait</strong> when the file is missing or not yet promoted; <strong>Opt-out</strong> when <code>PATTERN_GAME_GROUNDHOG_BUNDLE=0</code>; <strong>Fault</strong> when the file is unreadable or invalid JSON. Hover the Groundhog banner tile for the full line.</p>
               </div>
             </details>
             <p class="caps" id="presetHelp">The server builds scenarios for curated patterns — no JSON required. Evaluation window controls how much tape is replayed (approximate months from the end of the series). Presets longer than your <code>market_bars_5m</code> span are disabled automatically (see Data health).</p>
@@ -8181,9 +8181,9 @@ PAGE_HTML = """<!DOCTYPE html>
     function groundhogBannerHeadline(j) {
       var sig = j.wiring_signal;
       if (sig === 'green') return 'Ready';
-      if (sig === 'yellow') return j.env_enabled ? 'Wait' : 'Off';
+      if (sig === 'yellow') return j.env_enabled ? 'Wait' : 'Opt-out';
       if (sig === 'red') return 'Fault';
-      return j.env_enabled ? 'Wait' : 'Off';
+      return j.env_enabled ? 'Wait' : 'Opt-out';
     }
     function refreshGroundhogTileClass(tile, sig) {
       if (!tile) return;
@@ -8217,7 +8217,7 @@ PAGE_HTML = """<!DOCTYPE html>
         if (tile) {
           var tip = (j.wiring_detail || '') + '\\n\\n' + 'Canonical: ' + (j.path || '—');
           if (j.env_enabled !== undefined) {
-            tip += '\\nMerge env: ' + (j.env_enabled ? 'on' : 'off');
+            tip += '\\nAuto-merge: ' + (j.env_enabled ? 'active (default)' : 'opt-out (PATTERN_GAME_GROUNDHOG_BUNDLE=0)');
           }
           tile.title = tip.trim();
         }

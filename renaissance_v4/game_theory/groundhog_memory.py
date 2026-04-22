@@ -9,11 +9,11 @@ This module defines a **canonical bundle path** and helpers so promoted paramete
 
 - **Write** ``groundhog_memory_bundle.json`` (schema ``pattern_game_memory_bundle_v1``).
 - **Resolve** bundle path for a run: explicit ``memory_bundle_path`` on the scenario wins;
-  else, when enabled, use the canonical file if it exists.
+  else use the **canonical container** (``groundhog_memory_bundle.json``) whenever it exists.
 
-Enable auto-merge with::
+**Auto-merge is ON by default** (no operator “arm” step). Opt out only with::
 
-    export PATTERN_GAME_GROUNDHOG_BUNDLE=1
+    export PATTERN_GAME_GROUNDHOG_BUNDLE=0
 
 Disable per scenario with ``"skip_groundhog_bundle": true`` in the scenario dict.
 """
@@ -38,8 +38,16 @@ def groundhog_bundle_path() -> Path:
 
 
 def groundhog_auto_merge_enabled() -> bool:
+    """
+    Canonical Groundhog container merge is **active by default**.
+
+    Set ``PATTERN_GAME_GROUNDHOG_BUNDLE`` to ``0`` / ``false`` / ``no`` / ``off`` to disable
+    auto-resolve for tests or emergency isolation.
+    """
     v = os.environ.get("PATTERN_GAME_GROUNDHOG_BUNDLE", "").strip().lower()
-    return v in ("1", "true", "yes", "on")
+    if v in ("0", "false", "no", "off"):
+        return False
+    return True
 
 
 def resolve_memory_bundle_for_scenario(
@@ -51,7 +59,8 @@ def resolve_memory_bundle_for_scenario(
     Return the memory bundle path to pass to ``apply_memory_bundle_to_manifest``.
 
     Precedence: explicit ``memory_bundle_path`` on scenario (or caller) **unless**
-    ``skip_groundhog_bundle`` is truthy; else canonical Groundhog file when env enabled and file exists.
+    ``skip_groundhog_bundle`` is truthy; else canonical Groundhog file when auto-merge is not
+    explicitly disabled and the file exists.
     """
     if scenario and scenario.get("skip_groundhog_bundle"):
         return explicit_path
@@ -77,7 +86,7 @@ def write_groundhog_bundle(
         "schema": MEMORY_BUNDLE_SCHEMA,
         "from_run_id": from_run_id or "",
         "note": note
-        or "Groundhog memory — merged before replay when PATTERN_GAME_GROUNDHOG_BUNDLE=1.",
+        or "Groundhog memory — canonical container merged before replay when present (auto-merge on by default).",
         "apply": {
             "atr_stop_mult": float(atr_stop_mult),
             "atr_target_mult": float(atr_target_mult),
@@ -111,9 +120,9 @@ def groundhog_wiring_signal() -> tuple[Literal["green", "yellow", "red"], str]:
     """
     Tri-state wiring for the module board:
 
-    - **green** — merge ON and the canonical file exists with a valid promoted ``apply`` block.
-    - **yellow** — merge OFF (idle), merge ON but bundle file not created yet, or merge ON with a
-      file that is not yet a full promoted bundle (wrong schema or empty / incomplete ``apply``).
+    - **green** — auto-merge active and the canonical file exists with a valid promoted ``apply`` block.
+    - **yellow** — auto-merge **opt-out** (``PATTERN_GAME_GROUNDHOG_BUNDLE=0``), or active but bundle
+      file not created yet, or file not yet a full promoted bundle (wrong schema or empty ``apply``).
     - **red** — **read/parse fails**, or JSON is not an object (broken file).
     """
     env = groundhog_auto_merge_enabled()
@@ -122,13 +131,13 @@ def groundhog_wiring_signal() -> tuple[Literal["green", "yellow", "red"], str]:
     if not env:
         return (
             "yellow",
-            "Merge OFF — set PATTERN_GAME_GROUNDHOG_BUNDLE=1 to arm Groundhog. Idle, not a fault.",
+            "Groundhog auto-merge **opt-out** (PATTERN_GAME_GROUNDHOG_BUNDLE=0) — canonical container not merged.",
         )
 
     if not p.is_file():
         return (
             "yellow",
-            f"Merge ON — no bundle file yet at {p}. POST /api/groundhog-memory to promote (idle, not a read fault).",
+            f"Canonical Groundhog container not created yet at {p}. POST /api/groundhog-memory to promote (idle).",
         )
 
     try:
@@ -145,16 +154,16 @@ def groundhog_wiring_signal() -> tuple[Literal["green", "yellow", "red"], str]:
     if doc.get("schema") != MEMORY_BUNDLE_SCHEMA:
         return (
             "yellow",
-            "File exists but schema is not pattern_game_memory_bundle_v1 — republish via POST /api/groundhog-memory.",
+            "Container exists but schema is not pattern_game_memory_bundle_v1 — republish via POST /api/groundhog-memory.",
         )
 
     if not _groundhog_apply_has_promoted_atr(doc):
         return (
             "yellow",
-            "Merge ON and file exists — waiting for promoted atr_stop_mult / atr_target_mult in apply (POST promote).",
+            "Container on disk — waiting for promoted atr_stop_mult / atr_target_mult in apply (POST promote).",
         )
 
     return (
         "green",
-        "Behavioral memory armed: merge ON + canonical bundle has promoted ATR multipliers.",
+        "Groundhog ready: canonical container has promoted ATR multipliers (auto-merge active).",
     )

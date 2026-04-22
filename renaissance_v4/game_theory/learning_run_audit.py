@@ -68,8 +68,8 @@ def _groundhog_lane(
     Canonical Groundhog path only (explicit ``memory_bundle_path`` → lane **inactive** here).
 
     * **committed** — auto-merge used the canonical file and merged whitelisted keys.
-    * **candidate_only** — env on but missing file, or file read without apply.
-    * **inactive** — env off, skipped, or operator supplied an explicit bundle path.
+    * **candidate_only** — auto-merge allowed but missing file, or file read without apply.
+    * **inactive** — auto-merge opt-out (``PATTERN_GAME_GROUNDHOG_BUNDLE=0``), skipped, or an explicit bundle path on the scenario.
     """
     skip = bool(scenario.get("skip_groundhog_bundle"))
     env = groundhog_auto_merge_enabled()
@@ -96,7 +96,10 @@ def _groundhog_lane(
     if skip:
         return "inactive", "Groundhog: skip_groundhog_bundle=true — canonical auto-merge suppressed."
     if not env:
-        return "inactive", "Groundhog: PATTERN_GAME_GROUNDHOG_BUNDLE off — expected for runs that do not auto-load canonical bundle."
+        return (
+            "inactive",
+            "Groundhog: PATTERN_GAME_GROUNDHOG_BUNDLE=0 — canonical auto-merge explicitly disabled for this process.",
+        )
     if not canon_exists:
         return (
             "candidate_only",
@@ -111,7 +114,7 @@ def _groundhog_lane(
         )
     return (
         "candidate_only",
-        "Groundhog: env on and file may exist, but this replay did not apply the canonical bundle.",
+        "Groundhog: auto-merge allowed and file may exist, but this replay did not apply the canonical bundle.",
     )
 
 

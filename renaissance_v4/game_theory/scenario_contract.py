@@ -23,8 +23,8 @@ Scenario batch JSON — required shape for ``parallel_runner``, ``pattern_game``
 - ``scenario_id`` *(str)* — Label for tables, logs, and batch folders; default ``unknown`` if omitted.
 - ``prior_run_id`` *(str | null)* — Metadata link to a previous run UUID for **human** traceability;
   **not** loaded as simulation input unless a memory bundle is merged (see ``run_memory.build_decision_audit``).
-- ``skip_groundhog_bundle`` *(bool)* — If true, do not apply the canonical Groundhog bundle when
-  ``PATTERN_GAME_GROUNDHOG_BUNDLE=1`` (see ``groundhog_memory.py``).
+- ``skip_groundhog_bundle`` *(bool)* — If true, do not apply the canonical Groundhog container when
+  auto-merge would otherwise resolve it (see ``groundhog_memory.py``; default is merge-on, ``PATTERN_GAME_GROUNDHOG_BUNDLE=0`` opts out).
 - ``tier`` *(str)* — e.g. ``T1``; documentation / UI only.
 - ``evaluation_window`` *(dict)* — Declarative intent (e.g. ``calendar_months``); replay slices the
   last N months when ``calendar_months`` is passed through ``run_manifest_replay``.

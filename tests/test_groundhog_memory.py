@@ -18,7 +18,6 @@ def gh_path(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
 
 
 def test_resolve_explicit_wins(gh_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("PATTERN_GAME_GROUNDHOG_BUNDLE", "1")
     gh_path.write_text(
         json.dumps(
             {
@@ -36,7 +35,6 @@ def test_resolve_explicit_wins(gh_path: Path, monkeypatch: pytest.MonkeyPatch) -
 
 
 def test_skip_groundhog(gh_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("PATTERN_GAME_GROUNDHOG_BUNDLE", "1")
     gh_path.write_text(
         json.dumps(
             {
@@ -54,7 +52,6 @@ def test_skip_groundhog(gh_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 def test_env_merge_when_file_exists(gh_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("PATTERN_GAME_GROUNDHOG_BUNDLE", "1")
     gh_path.write_text(
         json.dumps(
             {
@@ -69,7 +66,7 @@ def test_env_merge_when_file_exists(gh_path: Path, monkeypatch: pytest.MonkeyPat
 
 
 def test_env_off_no_merge(gh_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.delenv("PATTERN_GAME_GROUNDHOG_BUNDLE", raising=False)
+    monkeypatch.setenv("PATTERN_GAME_GROUNDHOG_BUNDLE", "0")
     gh_path.write_text(
         json.dumps(
             {
@@ -86,14 +83,13 @@ def test_env_off_no_merge(gh_path: Path, monkeypatch: pytest.MonkeyPatch) -> Non
 def test_groundhog_wiring_signal_merge_off_is_yellow(
     gh_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.delenv("PATTERN_GAME_GROUNDHOG_BUNDLE", raising=False)
+    monkeypatch.setenv("PATTERN_GAME_GROUNDHOG_BUNDLE", "0")
     sig, detail = gm.groundhog_wiring_signal()
     assert sig == "yellow"
-    assert "merge" in detail.lower()
+    assert "opt-out" in detail.lower() or "bundle=0" in detail.lower()
 
 
 def test_groundhog_wiring_signal_merge_on_missing_is_yellow(gh_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("PATTERN_GAME_GROUNDHOG_BUNDLE", "1")
     assert not gh_path.is_file()
     sig, detail = gm.groundhog_wiring_signal()
     assert sig == "yellow"
@@ -103,7 +99,6 @@ def test_groundhog_wiring_signal_merge_on_missing_is_yellow(gh_path: Path, monke
 def test_groundhog_wiring_signal_green_when_promoted(
     gh_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.setenv("PATTERN_GAME_GROUNDHOG_BUNDLE", "1")
     gh_path.write_text(
         json.dumps(
             {
@@ -119,7 +114,6 @@ def test_groundhog_wiring_signal_green_when_promoted(
 
 
 def test_groundhog_wiring_signal_yellow_when_apply_empty(gh_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("PATTERN_GAME_GROUNDHOG_BUNDLE", "1")
     gh_path.write_text(
         json.dumps(
             {"schema": gm.MEMORY_BUNDLE_SCHEMA, "apply": {}},
@@ -131,7 +125,6 @@ def test_groundhog_wiring_signal_yellow_when_apply_empty(gh_path: Path, monkeypa
 
 
 def test_groundhog_wiring_signal_red_on_bad_json(gh_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("PATTERN_GAME_GROUNDHOG_BUNDLE", "1")
     gh_path.write_text("{not json", encoding="utf-8")
     sig, detail = gm.groundhog_wiring_signal()
     assert sig == "red"
@@ -139,7 +132,6 @@ def test_groundhog_wiring_signal_red_on_bad_json(gh_path: Path, monkeypatch: pyt
 
 
 def test_write_roundtrip(gh_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("PATTERN_GAME_GROUNDHOG_BUNDLE", "1")
     p = gm.write_groundhog_bundle(
         atr_stop_mult=2.0,
         atr_target_mult=4.0,

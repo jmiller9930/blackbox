@@ -241,9 +241,9 @@ def compute_pattern_game_module_board() -> dict[str, Any]:
             "title": "Groundhog (promoted bundle → next run)",
             "body": (
                 "The **only** default path that merges whitelisted parameters into the manifest before replay.\n"
-                "**Green** — merge ON and the canonical file has promoted ``atr_stop_mult`` / ``atr_target_mult``.\n"
-                "**Yellow** — merge OFF (idle), merge ON before the bundle file exists, or file not yet fully promoted (or wrong schema).\n"
-                "**Red** (fault) — bundle file exists but is unreadable, not parseable JSON, or not a JSON object.\n"
+                "**Green** — auto-merge active (default) and the canonical container has promoted ``atr_stop_mult`` / ``atr_target_mult``.\n"
+                "**Yellow** — auto-merge opt-out (``PATTERN_GAME_GROUNDHOG_BUNDLE=0``), container not created yet, not yet promoted, or wrong schema.\n"
+                "**Red** (fault) — container file is unreadable, not parseable JSON, or not a JSON object.\n"
                 f"Bundle path: {ghb}"
             ),
         }

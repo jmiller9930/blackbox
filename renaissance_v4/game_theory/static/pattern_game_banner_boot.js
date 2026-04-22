@@ -44,9 +44,9 @@
   function ghHeadline(j) {
     var sig = j.wiring_signal;
     if (sig === 'green') return 'Ready';
-    if (sig === 'yellow') return j.env_enabled ? 'Wait' : 'Off';
+    if (sig === 'yellow') return j.env_enabled ? 'Wait' : 'Opt-out';
     if (sig === 'red') return 'Fault';
-    return j.env_enabled ? 'Wait' : 'Off';
+    return j.env_enabled ? 'Wait' : 'Opt-out';
   }
   function ghTileClass(sig) {
     if (!ghTile) return;
@@ -79,7 +79,7 @@
       if (ghTile) {
         var tip = (j.wiring_detail || '') + '\n\n' + 'Canonical: ' + (j.path || '—');
         if (j.env_enabled !== undefined) {
-          tip += '\nMerge env: ' + (j.env_enabled ? 'on' : 'off');
+          tip += '\nAuto-merge: ' + (j.env_enabled ? 'active (default)' : 'opt-out (PATTERN_GAME_GROUNDHOG_BUNDLE=0)');
         }
         ghTile.title = tip.trim();
       }

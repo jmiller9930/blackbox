@@ -133,14 +133,14 @@ Any string key in `PRE_REVEAL_FORBIDDEN_KEYS_V1`, future bars, or **this** grade
 
 **Where:** `renaissance_v4/game_theory/module_board.py` (`id`: `groundhog`).
 
-**Green (armed) iff both are true:**
+**Green (ready)** when the wiring signal is **green** (`groundhog_wiring_signal()`): auto-merge is not opted out, the canonical container exists, schema matches, and `apply` has finite promoted ATR multipliers.
 
 | # | Condition | Meaning |
 |---|-----------|---------|
-| 1 | `PATTERN_GAME_GROUNDHOG_BUNDLE` is enabled (`1` / `true` / `yes` / `on`) | Auto-merge path is allowed at process level (`groundhog_auto_merge_enabled()`). |
-| 2 | Canonical bundle file exists on disk | `renaissance_v4/game_theory/state/groundhog_memory_bundle.json` (`groundhog_bundle_path()`). |
+| 1 | Auto-merge not opted out | `groundhog_auto_merge_enabled()` is false only when `PATTERN_GAME_GROUNDHOG_BUNDLE` is `0` / `false` / `no` / `off`; unset or any other value means merge-on (default). |
+| 2 | Canonical container on disk | `renaissance_v4/game_theory/state/groundhog_memory_bundle.json` (`groundhog_bundle_path()`). |
 
-Implementation: `gh_ok = bool(gh_env and ghb.is_file())`. **Red** = merge off **or** file missing — no silent “half on.”
+Implementation: module row uses `groundhog_wiring_signal()` — **green** = ready; **yellow** = opt-out, missing file, or not promoted; **red** = read/parse fault.
 
 **Scope:** This row proves **wiring + file presence** for the **pre-replay manifest merge** path (`groundhog_memory.py` / `memory_bundle.py`). It is **not** the Student learning store and **not** Decision Context Recall JSONL — those remain separate engine/Student paths (see **§7**). Product direction may **converge** naming later; today’s code keeps distinct stores.
 
