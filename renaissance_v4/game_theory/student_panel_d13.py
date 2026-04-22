@@ -26,7 +26,7 @@ from renaissance_v4.game_theory.student_panel_d11 import (
 )
 from renaissance_v4.game_theory.student_proctor.student_learning_store_v1 import (
     default_student_learning_store_path_v1,
-    list_student_learning_records_by_graded_unit_id,
+    load_student_learning_records_v1,
 )
 
 SCHEMA_SELECTED_RUN = "student_panel_d13_selected_run_v1"
@@ -262,6 +262,13 @@ def build_d13_selected_run_payload_v1(job_id: str) -> dict[str, Any]:
     mem_used = bool(_int(entry.get("student_learning_rows_appended"), 0) or _int(entry.get("recall_matches"), 0))
 
     store_p = default_student_learning_store_path_v1()
+    # One JSONL scan for the whole carousel — ``list_student_learning_records_by_graded_unit_id``
+    # reloads the entire store per trade and times out the L2 HTTP handler on ~hundreds of trades.
+    by_graded_unit: dict[str, list[dict[str, Any]]] = {}
+    for d in load_student_learning_records_v1(store_p):
+        gid = str(d.get("graded_unit_id", "")).strip()
+        if gid:
+            by_graded_unit.setdefault(gid, []).append(d)
 
     slices: list[dict[str, Any]] = []
     for i, t in enumerate(opportunities):
@@ -271,7 +278,7 @@ def build_d13_selected_run_payload_v1(job_id: str) -> dict[str, Any]:
         scen_n = int(t.get("scenario_trade_count") or 0)
         ts_utc = trade_outcome_timestamp_utc(oj)
 
-        sl_list = list_student_learning_records_by_graded_unit_id(store_p, tid)
+        sl_list = by_graded_unit.get(tid, [])
         sl = sl_list[-1] if sl_list else None
         so = (sl.get("student_output") if isinstance(sl, dict) else None) or None
         conf = _confidence_from_student_output(so if isinstance(so, dict) else None)

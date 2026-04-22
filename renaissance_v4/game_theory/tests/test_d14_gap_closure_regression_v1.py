@@ -101,7 +101,7 @@ def test_d13_selected_run_slices_keyed_by_trade_id_from_batch() -> None:
             return_value=None,
         ),
         patch(
-            "renaissance_v4.game_theory.student_panel_d13.list_student_learning_records_by_graded_unit_id",
+            "renaissance_v4.game_theory.student_panel_d13.load_student_learning_records_v1",
             return_value=[],
         ),
     ):
