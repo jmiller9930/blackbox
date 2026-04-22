@@ -153,6 +153,19 @@ def _behavior_changed_legacy_union(row: dict[str, Any]) -> str:
     return "NO"
 
 
+def _batch_trade_win_pct_from_line(row: dict[str, Any] | None) -> float | None:
+    """Referee batch rollup trade win % (0–100) from one scorecard line."""
+    if not row:
+        return None
+    btw = row.get("batch_trade_win_pct")
+    if btw is None:
+        btw = row.get("avg_trade_win_pct")
+    try:
+        return float(btw) if btw is not None else None
+    except (TypeError, ValueError):
+        return None
+
+
 def _expectancy_per_trade_for_row(row: dict[str, Any]) -> tuple[float | None, str | None]:
     """
     Prefer batch rollup expectancy; optional formula cross-check when batch trade stats exist.
@@ -265,7 +278,10 @@ def build_d11_run_rows_v1(
     """
     One row per scorecard line (learning run). ``entries_newest_first`` same order as ``read_batch_scorecard_recent``.
 
-    Baseline: previous chronologically in the same fingerprint group (optional).
+    **System baseline trade win %:** the **first (oldest) completed run** in the same
+    ``run_config_fingerprint`` chain — frozen anchor for that recipe/window. **Run trade win %** is
+    this line's batch rollup. ``beats_system_baseline_trade_win`` is YES/NO when this row is not
+    the anchor and both percents exist (strict ``run > baseline``).
     """
     if not entries_newest_first:
         return []
@@ -300,6 +316,8 @@ def build_d11_run_rows_v1(
                 "evaluation_window": _evaluation_window_label(r),
                 "total_trades": None,
                 "harness_baseline_trade_win_percent": None,
+                "run_trade_win_percent": None,
+                "beats_system_baseline_trade_win": "—",
                 "expectancy_per_trade": None,
                 "harness_behavior_changed": "—",
                 "student_handoff_active": "—",
@@ -325,14 +343,19 @@ def build_d11_run_rows_v1(
             exp, exp_gap = _expectancy_per_trade_for_row(r)
 
         btc = _int(r.get("batch_trades_count"), 0)
-        btw = r.get("batch_trade_win_pct")
-        if btw is None:
-            btw = r.get("avg_trade_win_pct")
-        win_rate_p: float | None
-        try:
-            win_rate_p = float(btw) if btw is not None else None
-        except (TypeError, ValueError):
-            win_rate_p = None
+        win_rate_p = _batch_trade_win_pct_from_line(r)
+        anchor_r = chain[0] if chain else None
+        baseline_p = _batch_trade_win_pct_from_line(anchor_r)
+        is_anchor = bool(chain) and anchor_r is r
+        beats_bl: str
+        if is_anchor or baseline_p is None or win_rate_p is None:
+            beats_bl = "—"
+        elif win_rate_p > baseline_p + 1e-9:
+            beats_bl = "YES"
+        elif win_rate_p < baseline_p - 1e-9:
+            beats_bl = "NO"
+        else:
+            beats_bl = "="
 
         harness_beh = _harness_behavior_changed(r)
         stud_hand = _student_handoff_signal(r)
@@ -369,7 +392,10 @@ def build_d11_run_rows_v1(
             "pattern": _pattern_label(r),
             "evaluation_window": _evaluation_window_label(r),
             "total_trades": btc,
-            "harness_baseline_trade_win_percent": win_rate_p,
+            # Fingerprint anchor (oldest run in same config) — system BL% for "beat baseline" story.
+            "harness_baseline_trade_win_percent": baseline_p,
+            "run_trade_win_percent": win_rate_p,
+            "beats_system_baseline_trade_win": beats_bl,
             "expectancy_per_trade": exp,
             "harness_behavior_changed": harness_beh,
             "student_handoff_active": stud_hand,

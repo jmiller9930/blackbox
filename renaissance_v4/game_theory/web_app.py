@@ -103,7 +103,7 @@ _PATTERN_BANNER_WEBP_PATH = _RV4_ROOT / "assets" / "pattern.webp"
 _PATTERN_GAME_BANNER_BOOT_JS = _GAME_THEORY / "static" / "pattern_game_banner_boot.js"
 
 # Operator-visible web UI bundle version — bump when changing PAGE_HTML (HTML/CSS/JS) so deploys are provable.
-PATTERN_GAME_WEB_UI_VERSION = "2.19.41"
+PATTERN_GAME_WEB_UI_VERSION = "2.19.42"
 
 from renaissance_v4.game_theory.context_signature_memory import truncate_context_signature_memory_store
 from renaissance_v4.game_theory.groundhog_memory import (
@@ -1559,6 +1559,19 @@ def create_app() -> Flask:
                 "schema": "student_panel_d14_runs_v1",
                 "runs": rows,
                 "inflight_batches": inflight_n,
+                "l1_columns_v1": {
+                    "harness_baseline_trade_win_percent": (
+                        "Sys BL % — batch trade win %% of the oldest completed run in the same "
+                        "run_config fingerprint chain (anchor for this recipe/window)."
+                    ),
+                    "run_trade_win_percent": (
+                        "Run TW % — this scorecard line's Referee batch rollup trade win %%."
+                    ),
+                    "beats_system_baseline_trade_win": (
+                        ">BL — YES if this row is not the anchor and Run TW %% > Sys BL %%; "
+                        "NO if Run TW < Sys BL; = if tie; — on anchor row or missing inputs."
+                    ),
+                },
             }
         )
 
@@ -6084,10 +6097,12 @@ PAGE_HTML = """<!DOCTYPE html>
       }
       const rows = j.runs;
       let scroll =
-        '<p class="pg-student-d11-legend" style="margin-top:0"><strong>Level 1 — run table only</strong> — Referee rollups and harness signals. Click a row (not ×) to open Level 2. <strong>×</strong> removes this line from scorecard only; Groundhog unchanged.</p>' +
+        '<p class="pg-student-d11-legend" style="margin-top:0"><strong>Level 1 — run table only</strong> — Referee rollups and harness signals. Click a row (not ×) to open Level 2. <strong>×</strong> removes this line from scorecard only; Groundhog unchanged. <strong>Sys BL %</strong> = first same-fingerprint run&rsquo;s batch trade win (anchor). <strong>Run TW %</strong> = this run. <strong>&gt;BL</strong> = YES only if Run TW strictly beats Sys BL (not the anchor row).</p>' +
         '<div class="pg-student-d11-table-wrap"><table class="pg-student-d11-table"><thead><tr>' +
         '<th>run_id</th><th>time</th><th>pattern</th><th>window</th><th>#tr</th>' +
-        '<th title="Referee — replay trade win % (batch rollup)">BL %</th>' +
+        '<th title="System baseline — batch trade win % of the oldest run in this fingerprint chain (same recipe/window anchor)">Sys BL %</th>' +
+        '<th title="This run — Referee batch rollup trade win %">Run TW %</th>' +
+        '<th title="Strictly beat system baseline? (not shown for anchor row)">&gt;BL</th>' +
         '<th title="Referee — expectancy per trade (batch rollup)">E/tr</th>' +
         '<th title="Harness replay path">HB</th>' +
         '<th title="Student handoff">SH</th>' +
@@ -6111,11 +6126,17 @@ PAGE_HTML = """<!DOCTYPE html>
             ? escapeHtml(String(row.run_progress))
             : escapeHtml(row.total_trades != null ? String(row.total_trades) : '—')) +
           '</td>';
-        const bl =
-          row.harness_baseline_trade_win_percent != null
-            ? row.harness_baseline_trade_win_percent
-            : row.win_rate_percent;
-        scroll += '<td>' + (bl != null ? fmtD11MaybeNum(bl, 1) : '—') + '</td>';
+        const sysBl = row.harness_baseline_trade_win_percent;
+        const runTw =
+          row.run_trade_win_percent != null ? row.run_trade_win_percent : row.win_rate_percent;
+        scroll += '<td>' + (sysBl != null ? fmtD11MaybeNum(sysBl, 1) : '—') + '</td>';
+        scroll += '<td>' + (runTw != null ? fmtD11MaybeNum(runTw, 1) : '—') + '</td>';
+        scroll +=
+          '<td>' +
+          escapeHtml(
+            row.beats_system_baseline_trade_win != null ? String(row.beats_system_baseline_trade_win) : '—'
+          ) +
+          '</td>';
         scroll += '<td>' + (row.expectancy_per_trade != null ? fmtD11MaybeNum(row.expectancy_per_trade, 4) : '—') + '</td>';
         const hbCol = row.harness_behavior_changed != null ? row.harness_behavior_changed : row.behavior_changed;
         const shCol = row.student_handoff_active != null ? row.student_handoff_active : '—';

@@ -6,6 +6,8 @@
   "evaluation_window": "—",
   "total_trades": 0,
   "harness_baseline_trade_win_percent": null,
+  "run_trade_win_percent": null,
+  "beats_system_baseline_trade_win": "—",
   "expectancy_per_trade": null,
   "harness_behavior_changed": "NO",
   "student_handoff_active": "NO",
