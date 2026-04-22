@@ -12,6 +12,7 @@ from renaissance_v4.game_theory.exam_decision_frame_schema_v1 import (
     DecisionFrameV1,
     ExamUnitTimelineDocumentV1,
     OhlcvV1,
+    append_local_time_to_decision_frame_dict_v1,
     build_timeline_document_enter_single_frame_v1,
     build_timeline_document_no_trade_single_frame_v1,
     commit_timeline_immutable_v1,
@@ -19,6 +20,7 @@ from renaissance_v4.game_theory.exam_decision_frame_schema_v1 import (
     find_frame_in_committed_timelines_v1,
     parse_decision_frame_id_v1,
     reset_exam_timelines_for_tests_v1,
+    timeline_to_public_response_v1,
     validate_decision_frames_enter_rules_v1,
     validate_decision_frames_structure_v1,
 )
@@ -299,6 +301,54 @@ def test_http_get_decision_frames_404_before_seal() -> None:
     uid = json.loads(cr.data)["exam_unit_id"]
     gf = c.get(f"/api/v1/exam/units/{uid}/decision-frames")
     assert gf.status_code == 404
+
+
+def test_timeline_public_response_local_tz_courtesy() -> None:
+    doc = build_timeline_document_no_trade_single_frame_v1(
+        exam_unit_id="unit_loc",
+        exam_pack_id="p",
+        exam_pack_version="1",
+        deliberation_export=None,
+        bar_close_timestamp_iso="2026-04-21T12:00:00Z",
+    )
+    r = timeline_to_public_response_v1(doc, local_tz="America/New_York")
+    assert r["local_time_tz"] == "America/New_York"
+    disp = r["decision_frames"][0]["timestamp_local_display"]
+    assert isinstance(disp, str)
+    assert "2026-04-21 08:00:00" in disp
+    assert r["decision_frames"][0]["timestamp"] == "2026-04-21T12:00:00Z"
+
+
+def test_append_local_time_unknown_timezone() -> None:
+    fr = append_local_time_to_decision_frame_dict_v1(
+        {"decision_frame_id": "x__df0", "timestamp": "2026-04-21T12:00:00Z"},
+        "Not_A_Real_Zone_Xyz",
+    )
+    assert fr.get("timestamp_local_error") == "unknown_timezone"
+
+
+def test_http_decision_frames_with_tz_query() -> None:
+    app = create_app()
+    c = app.test_client()
+    cr = c.post("/api/v1/exam/units", json={"exam_pack_id": "pack_x", "exam_pack_version": "1"})
+    uid = json.loads(cr.data)["exam_unit_id"]
+    for ev, pl in [
+        ("open_window_shown", {}),
+        ("hypotheses_h1_h3_recorded", {}),
+        ("h4_completed", {}),
+    ]:
+        assert c.post(f"/api/v1/exam/units/{uid}/transition", json={"event": ev, "payload": pl}).status_code == 200
+    pr = c.put(f"/api/v1/exam/units/{uid}/frames/0/deliberation", json=_minimal_deliberation_body(uid))
+    assert pr.status_code == 200
+    assert c.post(
+        f"/api/v1/exam/units/{uid}/transition",
+        json={"event": "decision_a_sealed", "payload": {"enter": False}},
+    ).status_code == 200
+    gf = c.get(f"/api/v1/exam/units/{uid}/decision-frames?tz=America/New_York")
+    assert gf.status_code == 200
+    gdata = json.loads(gf.data)
+    assert gdata.get("local_time_tz") == "America/New_York"
+    assert "timestamp_local_display" in gdata["decision_frames"][0]
 
 
 def test_http_get_frame_404_unknown() -> None:

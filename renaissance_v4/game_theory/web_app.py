@@ -99,7 +99,7 @@ _PATTERN_BANNER_WEBP_PATH = _RV4_ROOT / "assets" / "pattern.webp"
 _PATTERN_GAME_BANNER_BOOT_JS = _GAME_THEORY / "static" / "pattern_game_banner_boot.js"
 
 # Operator-visible web UI bundle version — bump when changing PAGE_HTML (HTML/CSS/JS) so deploys are provable.
-PATTERN_GAME_WEB_UI_VERSION = "2.19.36"
+PATTERN_GAME_WEB_UI_VERSION = "2.19.37"
 
 from renaissance_v4.game_theory.groundhog_memory import (
     groundhog_auto_merge_enabled,
@@ -135,6 +135,7 @@ from renaissance_v4.game_theory.student_panel_d13 import (
 from renaissance_v4.game_theory.student_panel_d14 import enrich_student_panel_run_rows_d14
 from renaissance_v4.game_theory.exam_decision_frame_schema_v1 import (
     ExamUnitTimelineDocumentV1,
+    append_local_time_to_decision_frame_dict_v1,
     build_complete_enter_timeline_v1,
     build_timeline_document_no_trade_single_frame_v1,
     commit_timeline_immutable_v1,
@@ -1729,7 +1730,7 @@ def create_app() -> Flask:
 
     @app.get("/api/v1/exam/units/<exam_unit_id>/decision-frames")
     def api_exam_unit_decision_frames_get_v1(exam_unit_id: str) -> Any:
-        """GT_DIRECTIVE_005 — committed parent + ordered ``decision_frames`` (§11.3)."""
+        """GT_DIRECTIVE_005 — committed parent + ordered ``decision_frames`` (§11.3). Optional ``?tz=IANA`` or ``X-Time-Zone`` for local display strings (UTC ``timestamp`` unchanged)."""
         uid = exam_unit_id.strip()
         if get_exam_unit_v1(uid) is None:
             return jsonify({"ok": False, "error": "exam_unit_not_found"}), 404
@@ -1737,15 +1738,21 @@ def create_app() -> Flask:
         if raw is None:
             return jsonify({"ok": False, "error": "timeline_not_committed"}), 404
         doc = ExamUnitTimelineDocumentV1.model_validate(raw)
-        return jsonify(timeline_to_public_response_v1(doc)), 200
+        tz = (request.args.get("tz") or request.headers.get("X-Time-Zone") or "").strip()
+        return jsonify(timeline_to_public_response_v1(doc, local_tz=tz or None)), 200
 
     @app.get("/api/v1/exam/frames/<decision_frame_id>")
     def api_exam_decision_frame_get_v1(decision_frame_id: str) -> Any:
-        """GT_DIRECTIVE_005 — fetch one ``decision_frame`` by stable id (§11.3)."""
+        """GT_DIRECTIVE_005 — fetch one ``decision_frame`` by stable id (§11.3). Optional ``?tz=`` / ``X-Time-Zone`` for ``timestamp_local_display``."""
         fr = find_frame_in_committed_timelines_v1(decision_frame_id.strip())
         if fr is None:
             return jsonify({"ok": False, "error": "decision_frame_not_found"}), 404
-        return jsonify({"ok": True, **fr}), 200
+        tz = (request.args.get("tz") or request.headers.get("X-Time-Zone") or "").strip()
+        body = dict(fr)
+        if tz:
+            body = append_local_time_to_decision_frame_dict_v1(body, tz)
+            body["local_time_tz"] = tz
+        return jsonify({"ok": True, **body}), 200
 
     @app.get("/api/student-proctor/learning-store")
     def api_student_proctor_learning_store_get() -> Any:

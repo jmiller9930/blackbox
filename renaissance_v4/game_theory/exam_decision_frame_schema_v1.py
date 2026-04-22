@@ -4,13 +4,16 @@ Exam decision frame schema — **GT_DIRECTIVE_005** / architecture **§11.3**, *
 Parent ``exam_unit`` + ordered ``decision_frame[]`` contract, stable IDs, ordering rules,
 read-through **deliberation** (§11.2 store — not duplicated), immutable timeline **commit**
 after Decision A seal (dev in-memory). **§11.4** downstream frames appended for **ENTER** via
-``exam_downstream_frame_generator_v1`` (no grading).
+``exam_downstream_frame_generator_v1`` (no grading). HTTP responses may add **display-only** local
+times when ``?tz=IANA`` or ``X-Time-Zone`` is set; ``timestamp`` remains UTC.
 """
 
 from __future__ import annotations
 
 import threading
+from datetime import datetime, timezone
 from typing import Any, Literal
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from pydantic import AliasChoices, BaseModel, ConfigDict, Field
 
@@ -336,18 +339,80 @@ def build_timeline_document_enter_single_frame_v1(
     return doc
 
 
-def timeline_to_public_response_v1(doc: ExamUnitTimelineDocumentV1) -> dict[str, Any]:
-    """HTTP envelope for GET …/decision-frames."""
+def _parse_bar_close_timestamp_utc_v1(ts: str) -> datetime:
+    """Parse ISO bar-close strings; ``Z`` = UTC; naive strings treated as UTC."""
+    s = ts.strip()
+    if s.endswith("Z"):
+        s = s[:-1] + "+00:00"
+    dt = datetime.fromisoformat(s)
+    if dt.tzinfo is None:
+        return dt.replace(tzinfo=timezone.utc)
+    return dt.astimezone(timezone.utc)
+
+
+def append_local_time_to_decision_frame_dict_v1(fr: dict[str, Any], local_tz: str) -> dict[str, Any]:
+    """
+    Courtesy fields for humans: ``timestamp`` stays canonical UTC; add local clock in ``local_tz`` (IANA).
+
+    On failure, sets ``timestamp_local_error`` and leaves ``timestamp`` unchanged.
+    """
+    out = dict(fr)
+    tz = local_tz.strip()
+    if not tz:
+        return out
+    try:
+        zi = ZoneInfo(tz)
+    except ZoneInfoNotFoundError:
+        out["timestamp_local_error"] = "unknown_timezone"
+        out["timestamp_local_requested"] = tz
+        return out
+    raw_ts = out.get("timestamp")
+    if not isinstance(raw_ts, str) or not raw_ts.strip():
+        out["timestamp_local_error"] = "missing_timestamp"
+        out["timestamp_local_iana"] = tz
+        return out
+    try:
+        utc = _parse_bar_close_timestamp_utc_v1(raw_ts)
+        loc = utc.astimezone(zi)
+        abbr = (loc.tzname() or "").strip()
+        disp = loc.strftime("%Y-%m-%d %H:%M:%S")
+        if abbr:
+            disp = f"{disp} {abbr}"
+        else:
+            off = loc.strftime("%z")
+            if off:
+                disp = f"{disp} (UTC{off[:3]}:{off[3:]})"
+        out["timestamp_local_display"] = disp
+        out["timestamp_local_iana"] = tz
+    except (TypeError, ValueError, OSError):
+        out["timestamp_local_error"] = "unparseable_timestamp"
+        out["timestamp_local_iana"] = tz
+    return out
+
+
+def timeline_to_public_response_v1(
+    doc: ExamUnitTimelineDocumentV1,
+    *,
+    local_tz: str | None = None,
+) -> dict[str, Any]:
+    """HTTP envelope for GET …/decision-frames. Optional ``local_tz`` (IANA) adds display-only local timestamps."""
     d = doc.model_dump(mode="json", by_alias=True)
-    return {
+    frames: list[dict[str, Any]] = [dict(x) for x in d["decision_frames"]]
+    tz = (local_tz or "").strip()
+    if tz:
+        frames = [append_local_time_to_decision_frame_dict_v1(f, tz) for f in frames]
+    out: dict[str, Any] = {
         "ok": True,
         "schema": d.get("schema", TIMELINE_SCHEMA),
         "schema_version": d.get("schema_version", TIMELINE_SCHEMA_VERSION),
         "exam_unit_id": d["exam_unit_id"],
         "exam_pack_id": d.get("exam_pack_id"),
         "exam_pack_version": d.get("exam_pack_version"),
-        "decision_frames": d["decision_frames"],
+        "decision_frames": frames,
     }
+    if tz:
+        out["local_time_tz"] = tz
+    return out
 
 
 def decision_frames_http_doc_v1() -> list[dict[str, Any]]:
@@ -356,12 +421,14 @@ def decision_frames_http_doc_v1() -> list[dict[str, Any]]:
             "method": "GET",
             "path": "/api/v1/exam/units/{exam_unit_id}/decision-frames",
             "success": 200,
+            "query": [{"name": "tz", "optional": True, "description": "IANA zone (e.g. America/New_York) for timestamp_local_display on each frame"}],
             "errors": [{"status": 404, "when": "exam_unit_not_found or timeline_not_committed_yet"}],
         },
         {
             "method": "GET",
             "path": "/api/v1/exam/frames/{decision_frame_id}",
             "success": 200,
+            "query": [{"name": "tz", "optional": True, "description": "IANA zone for timestamp_local_display"}],
             "errors": [{"status": 404, "when": "unknown decision_frame_id"}],
         },
         {
@@ -402,6 +469,7 @@ def find_frame_in_committed_timelines_v1(decision_frame_id: str) -> dict[str, An
 
 
 __all__ = [
+    "append_local_time_to_decision_frame_dict_v1",
     "DecisionFramePayloadV1",
     "DecisionFrameV1",
     "ExamUnitTimelineDocumentV1",
