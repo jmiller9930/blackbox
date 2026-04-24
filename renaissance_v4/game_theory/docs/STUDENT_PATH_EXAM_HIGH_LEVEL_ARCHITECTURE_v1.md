@@ -1,6 +1,6 @@
 # High-level architecture — learning, exam, certification, engineering, UI splice
 
-**Status:** v1.20 — **GT_DIRECTIVE_016** L1 road API (`GET /api/student-panel/l1-road`). **§18.4** — **015** Accepted v1 / CLOSED; **018** v1. **§1.2** good learning loop. **009a** shipped.
+**Status:** v1.21 — **§18.1a** Student panel **operator dictionary** (repo + `/docs/student-panel-dictionary`). **§18.4** — **016** road API, **015** CLOSED, **018** v1. **§1.2** good learning loop. **009a** shipped.
 
 ---
 
@@ -740,6 +740,10 @@ A **trade set** is one **evaluated opportunity**: **decision-time context** (wha
 
 **Mapping to exam architecture:** When **Decision Frames** (**§2**) ship into the UI, each **trade set** tile SHOULD link to **frame 0** (and downstream frames) for that unit; until then, L2 remains **trade-grain** from parallel replay receipts — the **contract** in this section still applies to **what we show** and **how we label unknowns**.
 
+### 18.1a Student panel operator dictionary
+
+**Canonical doc:** `renaissance_v4/game_theory/docs/STUDENT_PANEL_DICTIONARY_v1.md` — tables for **L1 / L2 / L3**, scorecard column shorthand (**Sys BL %**, **Run TW %**, **>BL**, harness vs Student handoff, **Groundhog state**), **brain profiles** and **`exam_run_contract_v1`**, **L1 road** (`GET /api/student-panel/l1-road`: bands, `pass_rate_percent`, E/P proxies, `legend`), L2 **direction align**, memory/context/LLM roles, and **`data_gap`**. **UI:** Pattern Machine page → **Student → learning → outcome** fold → link **Student panel dictionary** (also under Level 1 legend: **Dictionary**). **Same content in-browser:** `GET /docs/student-panel-dictionary` on the Flask host (e.g. `http://127.0.0.1:8765/docs/student-panel-dictionary`).
+
 ### 18.1b L1 road aggregation (**GT_DIRECTIVE_016**)
 
 **Route:** `GET /api/student-panel/l1-road` — returns `student_panel_l1_road_v1` with **`groups`** (keyed by `fingerprint_sha256_40` + `student_brain_profile_v1` + `llm_model`), **`legend`** (profile / band / metric semantics — **not** UI-hardcoded), and honest **`data_gaps`**. Implementation: **`student_panel_l1_road_v1`** — **one** scorecard JSONL read (no per-row learning-store scan). **E** = mean `expectancy_per_trade`; **P** = mean optional `student_l1_process_score_v1` when present on lines; **A \| B** = improved vs not vs same-fingerprint **baseline** anchor (oldest `baseline_no_memory_no_llm` row). Proof: `docs/proof/exam_v1/GT_DIRECTIVE_016_operator_proof_l1_road_v1.md`. Further L1 **row** band UI + scorecard-line denorm remains on the **016** directive until closed.
@@ -781,6 +785,7 @@ Work these as **separate directives**; each ends with **§16.0 Proof** and **§1
    - Local Docker/Compose if that is how you test — same rule: **no stale process**.  
 7. **Verify (minimum HTTP)** — after restart:  
    - `GET /api/student-panel/runs` → **200**  
+   - `GET /docs/student-panel-dictionary` → **200** when operator glossary or route changed  
    - `GET /api/student-panel/l1-road` → **200** when **GT_DIRECTIVE_016** L1 road payload changed  
    - `GET /api/student-panel/run/<job_id>/decisions` → **200** when L2 payload changed  
    - L3 route used by the panel for `student_decision_record_v1` → **200** when L3 changed  
@@ -829,3 +834,4 @@ Work **§18.2** as a sequence of small shippables; each row satisfies **§18.3**
 | v1.18 | **§1.2** — compressed canonical **good learning loop** (memory / context / LLM roles, E+P measurement, what improves vs not); cross-refs **015** / **018**. |
 | v1.19 | **GT_DIRECTIVE_015** — Architect **Accepted v1 / CLOSED**; §18.4 row + deferred list; **GT_DIRECTIVE_016** unblocked. |
 | v1.20 | **GT_DIRECTIVE_016** — `GET /api/student-panel/l1-road`, `student_panel_l1_road_v1`, tests + fixture + operator proof; **§18.1b** + §18.3 verify + §18.4 row. |
+| v1.21 | **§18.1a** — `STUDENT_PANEL_DICTIONARY_v1.md` + Flask **`GET /docs/student-panel-dictionary`**; Student fold + L1 legend links in `web_app.py`. |

@@ -156,6 +156,16 @@ def test_get_l1_road_http_200(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -
     assert body.get("legend", {}).get("brain_profiles")
 
 
+def test_get_docs_student_panel_dictionary_200() -> None:
+    app = create_app()
+    app.config["TESTING"] = True
+    with app.test_client() as c:
+        r = c.get("/docs/student-panel-dictionary")
+    assert r.status_code == 200
+    assert b"Student panel dictionary" in r.data
+    assert b"Sys BL %" in r.data or b"Sys BL" in r.data
+
+
 def test_fixture_file_loads_for_read_order_helper(tmp_path: Path) -> None:
     sc = tmp_path / "batch_scorecard.jsonl"
     lines = _load_fixture_lines()

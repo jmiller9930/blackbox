@@ -81,6 +81,7 @@ presets include a starter hypothesis string.
 
 from __future__ import annotations
 
+import html
 import json
 import os
 import re
@@ -104,7 +105,7 @@ _PATTERN_BANNER_WEBP_PATH = _RV4_ROOT / "assets" / "pattern.webp"
 _PATTERN_GAME_BANNER_BOOT_JS = _GAME_THEORY / "static" / "pattern_game_banner_boot.js"
 
 # Operator-visible web UI bundle version — bump when changing PAGE_HTML (HTML/CSS/JS) so deploys are provable.
-PATTERN_GAME_WEB_UI_VERSION = "2.19.52"
+PATTERN_GAME_WEB_UI_VERSION = "2.19.53"
 
 from renaissance_v4.game_theory.context_signature_memory import truncate_context_signature_memory_store
 from renaissance_v4.game_theory.groundhog_memory import (
@@ -1683,6 +1684,39 @@ def create_app() -> Flask:
     def api_student_panel_l1_road_v1() -> Any:
         """GT_DIRECTIVE_016 — L1 road: fingerprint × brain profile × llm_model aggregates; A/B vs baseline anchor."""
         return jsonify(build_l1_road_payload_v1())
+
+    @app.get("/docs/student-panel-dictionary")
+    def docs_student_panel_dictionary_v1() -> Any:
+        """Operator glossary: L1/L2/L3, brain profiles, L1 road, scorecard columns — same content as repo markdown."""
+        p = _GAME_THEORY / "docs" / "STUDENT_PANEL_DICTIONARY_v1.md"
+        if not p.is_file():
+            abort(404)
+        raw = p.read_text(encoding="utf-8")
+        body = html.escape(raw)
+        page = (
+            "<!DOCTYPE html>\n<html lang=\"en\"><head><meta charset=\"utf-8\">"
+            '<meta name="viewport" content="width=device-width, initial-scale=1">\n'
+            "<title>Student panel dictionary</title>\n"
+            "<style>\n"
+            "body { font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; margin: 0; "
+            "background: #0f1419; color: #e6edf3; }\n"
+            "main { max-width: 52rem; margin: 0 auto; padding: 1.25rem 1rem 2.5rem; }\n"
+            "h1 { font-size: 1.2rem; margin: 0 0 0.5rem; font-weight: 650; }\n"
+            "p.hint { font-size: 0.84rem; color: #8b949e; margin: 0 0 1rem; line-height: 1.45; }\n"
+            "pre.glossary { white-space: pre-wrap; word-break: break-word; font-size: 0.8rem; "
+            "line-height: 1.48; background: #161b22; padding: 1rem 1.1rem; border-radius: 8px; "
+            "border: 1px solid #30363d; margin: 0; }\n"
+            "a.back { color: #58a6ff; font-size: 0.9rem; }\n"
+            "</style></head><body><main>\n"
+            "<h1>Student panel dictionary (v1)</h1>\n"
+            "<p class=\"hint\">Canonical source in repo: "
+            "<code>renaissance_v4/game_theory/docs/STUDENT_PANEL_DICTIONARY_v1.md</code>. "
+            "Use your browser <strong>Back</strong> to return to Pattern Machine learning.</p>\n"
+            f"<pre class=\"glossary\">{body}</pre>\n"
+            '<p style="margin-top:1.25rem"><a class="back" href="/">← Pattern Machine learning</a></p>\n'
+            "</main></body></html>"
+        )
+        return Response(page, mimetype="text/html; charset=utf-8")
 
     @app.get("/api/student-panel/run/<job_id>/decisions")
     def api_student_panel_decisions_d11(job_id: str) -> Any:
@@ -5064,7 +5098,7 @@ PAGE_HTML = """<!DOCTYPE html>
           <div class="pg-panel-header" style="margin:0;flex:1">
             <div>
               <h2 class="pg-panel-h">Student → learning → outcome</h2>
-              <p class="pg-panel-sub"><strong>Operator panel (D14):</strong> Level 1 = exam list only. Level 2 = one selected exam — run summary band + trade carousel only. Level 3 = one trade deep dive only. Resize the fold from the bottom edge; state is remembered.</p>
+              <p class="pg-panel-sub"><strong>Operator panel (D14):</strong> Level 1 = exam list only. Level 2 = one selected exam — run summary band + trade carousel only. Level 3 = one trade deep dive only. Resize the fold from the bottom edge; state is remembered. <a href="/docs/student-panel-dictionary" target="_blank" rel="noopener noreferrer">Student panel dictionary</a> — terms for columns, profiles, L1 road, and APIs.</p>
             </div>
             <span class="pg-chip pg-chip-teal">Primary</span>
           </div>
@@ -6132,7 +6166,7 @@ PAGE_HTML = """<!DOCTYPE html>
       }
       const rows = j.runs;
       let scroll =
-        '<p class="pg-student-d11-legend" style="margin-top:0"><strong>Level 1 — exam list</strong> — Each row is one exam attempt (<code>student_panel_run_row_v2</code> + <code>d14_run_row_v1</code>). Referee rollups and harness signals. Click a row (not ×) for Level 2. <strong>×</strong> removes this scorecard line only. <strong>Sys BL %</strong> = system baseline trade win % (oldest same-fingerprint anchor). <strong>Run TW %</strong> = this exam&rsquo;s trade win %. <strong>&gt;BL</strong> = strict beat vs Sys BL (not on anchor). API: <code>GET /api/student-panel/runs</code> includes <code>l1_columns_v1</code> field semantics.</p>' +
+        '<p class="pg-student-d11-legend" style="margin-top:0"><strong>Level 1 — exam list</strong> — Each row is one exam attempt (<code>student_panel_run_row_v2</code> + <code>d14_run_row_v1</code>). Referee rollups and harness signals. Click a row (not ×) for Level 2. <strong>×</strong> removes this scorecard line only. <strong>Sys BL %</strong> = system baseline trade win % (oldest same-fingerprint anchor). <strong>Run TW %</strong> = this exam&rsquo;s trade win %. <strong>&gt;BL</strong> = strict beat vs Sys BL (not on anchor). API: <code>GET /api/student-panel/runs</code> includes <code>l1_columns_v1</code> field semantics. <a href="/docs/student-panel-dictionary" target="_blank" rel="noopener noreferrer">Dictionary</a> · <a href="/api/student-panel/l1-road" target="_blank" rel="noopener noreferrer">L1 road JSON</a></p>' +
         '<div class="pg-student-d11-table-wrap"><table class="pg-student-d11-table"><thead><tr>' +
         '<th>run_id</th><th>time</th><th>pattern</th><th>window</th><th>#tr</th>' +
         '<th title="System baseline — batch trade win % of the oldest run in this fingerprint chain (same recipe/window anchor)">Sys BL %</th>' +
