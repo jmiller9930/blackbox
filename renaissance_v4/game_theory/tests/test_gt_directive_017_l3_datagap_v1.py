@@ -13,11 +13,13 @@ from renaissance_v4.game_theory.exam_run_contract_v1 import (
 from renaissance_v4.game_theory.student_panel_l3_datagap_matrix_v1 import (
     SCHEMA_STUDENT_PANEL_L3_RESPONSE_V1,
     SEVERITY_CRITICAL,
+    SEVERITY_INFO,
     SEVERITY_WARNING,
     _L3_FLAG_EXPECT_DELIBERATION,
     _L3_FLAG_EXPECT_DOWNSTREAM,
     _L3_FLAG_EXPECT_GRADING,
     _L3_FLAG_EXPECT_PROCESS_SCORE,
+    _L3_FLAG_UI_REFERENCES_THESIS,
     build_student_panel_l3_payload_v1,
     derive_l3_validation_data_gaps_v1,
 )
@@ -100,6 +102,22 @@ def test_llm_rejection_gap_producer_reason() -> None:
     row = next(x for x in g if x.get("reason") == "llm_student_output_rejected_pre_seal_v1")
     assert row.get("producer") == "student_llm"
     assert row.get("severity") == SEVERITY_WARNING
+
+
+def test_non_llm_thesis_ui_reference_emits_info_gaps() -> None:
+    rec = {
+        "schema": "student_decision_record_v1",
+        "student_confidence_band": "data_gap",
+        "student_action_v1": "data_gap",
+        "data_gaps": [],
+    }
+    entry = {
+        "student_brain_profile_v1": "memory_context_stub_student",
+        _L3_FLAG_UI_REFERENCES_THESIS: True,
+    }
+    g = derive_l3_validation_data_gaps_v1(rec=rec, entry=entry, replay_outcome=None)
+    assert g and all(x.get("severity") == SEVERITY_INFO for x in g)
+    assert all(x.get("reason") == "non_llm_thesis_field_ui_reference_data_gap_v1" for x in g)
 
 
 def test_llm_thesis_store_missing_critical_gap() -> None:
