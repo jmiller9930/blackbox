@@ -1,6 +1,6 @@
 # High-level architecture — learning, exam, certification, engineering, UI splice
 
-**Status:** v1.17 — **§18.4** — **GT_DIRECTIVE_018** v1 (**retrieval cap** env, **newest-first** slices, **`learning_loop_governance_v1`** seam audit). **GT_DIRECTIVE_015** brain profiles unchanged. **GT_DIRECTIVE_009a** remains shipped.
+**Status:** v1.18 — **§1.2** canonical **good learning loop** (compressed product definition). **§18.4** — **GT_DIRECTIVE_018** v1 (retrieval governance). **GT_DIRECTIVE_015** brain profiles. **GT_DIRECTIVE_009a** shipped.
 
 ---
 
@@ -97,6 +97,31 @@ Three concerns must stay separate in design and in grading attribution:
 **Intended relationship (feed chain):** memory (store) → **retrieval** → context bundle → **reasoner** (stub or LLM) → **`student_output_v1`** → commitment → **graded** outcome → **written back** into memory-capable stores for **later** retrieval. The LLM does **not** replace memory or context; it replaces only the **mechanical** quality of the reasoning step.
 
 **Product guardrails:** Success for LLM integration is **measurable under referee grading** (E+P and pack rules), not “better vibes” or claimed alpha. Treating the LLM as if it **learns over time** by itself, skipping memory, or calling “everything in the prompt” memory without distinguishing **store vs retrieved slice** are recurring failure modes — avoid them in UI copy and in telemetry.
+
+### 1.2 Canonical learning loop — what “learning” means here (strip the plumbing)
+
+**Not learning:** model weights updating; the LLM “getting smarter” on its own.
+
+**Learning (one line):** the **feedback loop** where **past graded decisions** are **reused** to inform **future reasoning** under the **same legal constraints** (pre-reveal bundle, Referee authority).
+
+**Loop (targets for product + engineering):**
+
+1. **Run exam** — Student sees **context** (OHLC, indicators, **retrieved memory** when enabled); **reasons** (stub or LLM per **GT_DIRECTIVE_015** brain profile); **commits** Decision A (`student_output_v1` / exam framing above).  
+2. **Reality** — downstream frames / replay show **what happened** (outcomes, path).  
+3. **Referee** — grades **E** (economic) and **P** (process) per pack rules; Student does **not** self-grade.  
+4. **Store** — **what worked / failed** and alignment to Student claims (reveal → **`student_learning_record_v1`**; H1–H4 vs outcome is **exam narrative + store shape** over time — not every field is enforced in every v1 code path).  
+5. **Next run** — **memory** retrieved into the packet; **context** carries **relevant** slices; **LLM** (if profile includes it) **refines interpretation** of that package — it **does not** learn independently; it only sees what retrieval + prompt allow.  
+6. **Improvement** — **measurable** via **E + P** and decision-quality signals (e.g. NO_TRADE when appropriate, fewer bad ENTERs, stronger invalidation), not narrative length.
+
+**Where it happens:** **Memory** = durable mechanism (store + retrieval). **Context** = delivery (bounded, legal packet). **LLM** = refinement engine on the bundle — **not** a second trader and **not** a self-updating brain.
+
+**Differentiator vs typical systems:** we **train decision quality** (was reasoning valid? did it follow rules? did it work?) — **not** price prediction, raw signal optimization, or parameter tweeting as the success definition.
+
+**What can improve over time (when the loop is healthy):** fewer bad ENTERs, more correct **NO_TRADE**, better **H4**-style elimination discipline, tighter invalidation, **higher P**, eventually **better E**.
+
+**What does *not* improve automatically:** the frozen **LLM model**, indicator **math**, or **market behavior** — only **Student decision behavior** under grading.
+
+**Stronger learning (optional later):** RAG over exam units, success-weighted memory, promotion of validated patterns, fine-tuning on deliberation artifacts — **not required** for the core loop to exist; **GT_DIRECTIVE_018** covers **v1 retrieval governance** (caps, newest-first, seam audit); bad-loop risks and further gates stay on the **018** roadmap until implemented or deferred in writing.
 
 ---
 
@@ -796,3 +821,4 @@ Work **§18.2** as a sequence of small shippables; each row satisfies **§18.3**
 | v1.15 | **§1.1** / **§18.4** — **GT_DIRECTIVE_015**: Ollama-backed LLM modes + UI exam contract + HTTP proof; metadata-only skip-cold; directive remains **OPEN** for E/P comparison + physical cold skip. |
 | v1.16 | **GT_DIRECTIVE_015** rework — **Student brain profiles** + **`student_llm_v1`** metadata (model secondary to profile); **§1.1** LLM row aligned; legacy API strings normalize. |
 | v1.17 | **GT_DIRECTIVE_018** — programmatic retrieval governance (env cap, newest-first, seam audit blob); **§18.4** row. |
+| v1.18 | **§1.2** — compressed canonical **good learning loop** (memory / context / LLM roles, E+P measurement, what improves vs not); cross-refs **015** / **018**. |
