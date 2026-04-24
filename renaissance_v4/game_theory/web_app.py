@@ -24,6 +24,7 @@ counts, **run_ok_pct**, **referee_win_pct**, **avg_trade_win_pct**) and expose `
 ``GET /api/student-proctor/learning-store``, ``POST /api/student-proctor/learning-store/clear`` (separate confirm).
 
 **D13 Student panel (run → run summary + trade carousel → trade deep dive):** ``GET /api/student-panel/runs``,
+``GET /api/student-panel/l1-road`` (**GT_DIRECTIVE_016** — brain-profile road, single-pass scorecard aggregation),
 ``GET /api/student-panel/run/<job_id>/decisions``, ``GET /api/student-panel/decision?job_id=&trade_id=`` (``decision_id`` accepted as alias for migration).
 
 **Post-certification ``trade_strategy`` (DEV STUB):** Same routes under **``/api/v1/trade-strategy``** (stable for external callers) and **``/api/trade-strategy``** (alias).
@@ -103,7 +104,7 @@ _PATTERN_BANNER_WEBP_PATH = _RV4_ROOT / "assets" / "pattern.webp"
 _PATTERN_GAME_BANNER_BOOT_JS = _GAME_THEORY / "static" / "pattern_game_banner_boot.js"
 
 # Operator-visible web UI bundle version — bump when changing PAGE_HTML (HTML/CSS/JS) so deploys are provable.
-PATTERN_GAME_WEB_UI_VERSION = "2.19.51"
+PATTERN_GAME_WEB_UI_VERSION = "2.19.52"
 
 from renaissance_v4.game_theory.context_signature_memory import truncate_context_signature_memory_store
 from renaissance_v4.game_theory.groundhog_memory import (
@@ -145,6 +146,7 @@ from renaissance_v4.game_theory.student_panel_d13 import (
     build_student_decision_record_v1,
 )
 from renaissance_v4.game_theory.student_panel_d14 import enrich_student_panel_run_rows_d14
+from renaissance_v4.game_theory.student_panel_l1_road_v1 import build_l1_road_payload_v1
 from renaissance_v4.game_theory.exam_decision_frame_schema_v1 import (
     ExamUnitTimelineDocumentV1,
     append_local_time_to_decision_frame_dict_v1,
@@ -1676,6 +1678,11 @@ def create_app() -> Flask:
                 },
             }
         )
+
+    @app.get("/api/student-panel/l1-road")
+    def api_student_panel_l1_road_v1() -> Any:
+        """GT_DIRECTIVE_016 — L1 road: fingerprint × brain profile × llm_model aggregates; A/B vs baseline anchor."""
+        return jsonify(build_l1_road_payload_v1())
 
     @app.get("/api/student-panel/run/<job_id>/decisions")
     def api_student_panel_decisions_d11(job_id: str) -> Any:

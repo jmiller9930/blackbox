@@ -1,0 +1,131 @@
+{
+  "ok": true,
+  "schema": "student_panel_l1_road_v1",
+  "groups": [
+    {
+      "schema": "student_panel_l1_road_group_v1",
+      "group_key": {
+        "fingerprint_sha256_40": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "student_brain_profile_v1": "baseline_no_memory_no_llm",
+        "llm_model": null
+      },
+      "run_count": 1,
+      "job_ids_sample": [
+        "fixture_gt016_fpA_baseline_001"
+      ],
+      "pass_rate_percent": 40.0,
+      "avg_e_expectancy_per_trade": 0.1,
+      "avg_p_process_score": 0.5,
+      "band": "baseline_ruler",
+      "process_leg": "n_a",
+      "anchor_job_id": "fixture_gt016_fpA_baseline_001",
+      "anchor_expectancy_per_trade": 0.1,
+      "anchor_process_score": 0.5,
+      "data_gaps": []
+    },
+    {
+      "schema": "student_panel_l1_road_group_v1",
+      "group_key": {
+        "fingerprint_sha256_40": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "student_brain_profile_v1": "memory_context_llm_student",
+        "llm_model": "deepseek-r1:14b"
+      },
+      "run_count": 1,
+      "job_ids_sample": [
+        "fixture_gt016_fpA_deepseek_004"
+      ],
+      "pass_rate_percent": 70.0,
+      "avg_e_expectancy_per_trade": 0.25,
+      "avg_p_process_score": 0.65,
+      "band": "A",
+      "process_leg": "compared",
+      "anchor_job_id": "fixture_gt016_fpA_baseline_001",
+      "anchor_expectancy_per_trade": 0.1,
+      "anchor_process_score": 0.5,
+      "data_gaps": []
+    },
+    {
+      "schema": "student_panel_l1_road_group_v1",
+      "group_key": {
+        "fingerprint_sha256_40": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "student_brain_profile_v1": "memory_context_llm_student",
+        "llm_model": "qwen2.5:7b"
+      },
+      "run_count": 1,
+      "job_ids_sample": [
+        "fixture_gt016_fpA_qwen_003"
+      ],
+      "pass_rate_percent": 45.0,
+      "avg_e_expectancy_per_trade": 0.05,
+      "avg_p_process_score": 0.4,
+      "band": "B",
+      "process_leg": "compared",
+      "anchor_job_id": "fixture_gt016_fpA_baseline_001",
+      "anchor_expectancy_per_trade": 0.1,
+      "anchor_process_score": 0.5,
+      "data_gaps": []
+    },
+    {
+      "schema": "student_panel_l1_road_group_v1",
+      "group_key": {
+        "fingerprint_sha256_40": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "student_brain_profile_v1": "memory_context_student",
+        "llm_model": null
+      },
+      "run_count": 1,
+      "job_ids_sample": [
+        "fixture_gt016_fpA_memory_002"
+      ],
+      "pass_rate_percent": 55.0,
+      "avg_e_expectancy_per_trade": 0.2,
+      "avg_p_process_score": 0.6,
+      "band": "A",
+      "process_leg": "compared",
+      "anchor_job_id": "fixture_gt016_fpA_baseline_001",
+      "anchor_expectancy_per_trade": 0.1,
+      "anchor_process_score": 0.5,
+      "data_gaps": []
+    },
+    {
+      "schema": "student_panel_l1_road_group_v1",
+      "group_key": {
+        "fingerprint_sha256_40": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "student_brain_profile_v1": "memory_context_student",
+        "llm_model": null
+      },
+      "run_count": 1,
+      "job_ids_sample": [
+        "fixture_gt016_fpB_memory_only_005"
+      ],
+      "pass_rate_percent": 60.0,
+      "avg_e_expectancy_per_trade": 0.3,
+      "avg_p_process_score": 0.55,
+      "band": "data_gap",
+      "process_leg": "data_gap",
+      "anchor_job_id": null,
+      "anchor_expectancy_per_trade": null,
+      "anchor_process_score": null,
+      "data_gaps": [
+        "no_baseline_anchor_in_fingerprint_v1"
+      ]
+    }
+  ],
+  "legend": {
+    "schema": "student_panel_l1_road_legend_v1",
+    "brain_profiles": {
+      "baseline_no_memory_no_llm": "Cold system path: no cross-run Student memory emphasis; no Student LLM component.",
+      "memory_context_student": "Memory + context plumbing with stub / deterministic Student emitter (no Ollama).",
+      "memory_context_llm_student": "Memory + context + governed LLM component (Ollama when configured). ``llm_model`` tags the model under this profile."
+    },
+    "band_a": "Band **A** \u2014 improved vs the **same-fingerprint** baseline anchor: group mean **E** (``expectancy_per_trade``) strictly greater than anchor **E**, and when **P** is available on both sides, group mean **P** (``student_l1_process_score_v1``) \u2265 anchor **P** (within float tolerance).",
+    "band_b": "Band **B** \u2014 not improved or degraded vs that anchor under the same rules, or E-only tie when P is unavailable.",
+    "band_baseline_ruler": "Rows whose brain profile is the baseline ruler for the fingerprint \u2014 not scored A vs B against themselves.",
+    "pass_rate_percent": "Mean of ``referee_win_pct`` over runs in the group where that field is non-null. This is **session** Referee win rate as recorded on the scorecard line, not an invented pass bit.",
+    "avg_e_expectancy_per_trade": "Mean of ``expectancy_per_trade`` on scorecard lines in the group. This is the batch economic rollup already persisted \u2014 **not** exam-pack timeline E unless a future denorm adds that explicitly.",
+    "avg_p_process_score": "Mean of optional ``student_l1_process_score_v1`` (0..1) when present on lines in the group; else null with ``process_leg: data_gap`` for A/B when P cannot be compared.",
+    "fingerprint": "``run_config_fingerprint_sha256_40`` from ``memory_context_impact_audit_v1``, else a deterministic 40-char hash from ``operator_batch_audit`` recipe/window/manifest keys \u2014 same as Student panel L1 anchor logic.",
+    "llm_model": "Ollama model tag (e.g. ``qwen2.5:7b``, ``deepseek-r1:14b``) for ``memory_context_llm_student`` only; null for other profiles."
+  },
+  "data_gaps": [],
+  "note": "Aggregated in one scorecard read; keyed by fingerprint + brain profile + llm_model. A/B vs oldest baseline row in the same fingerprint only."
+}

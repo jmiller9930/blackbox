@@ -1,0 +1,69 @@
+[
+  {
+    "schema": "pattern_game_batch_scorecard_v1",
+    "job_id": "fixture_gt016_fpA_baseline_001",
+    "status": "done",
+    "started_at_utc": "2026-04-20T10:00:00Z",
+    "memory_context_impact_audit_v1": {
+      "run_config_fingerprint_sha256_40": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    },
+    "student_brain_profile_v1": "baseline_no_memory_no_llm",
+    "expectancy_per_trade": 0.1,
+    "referee_win_pct": 40.0,
+    "student_l1_process_score_v1": 0.5
+  },
+  {
+    "schema": "pattern_game_batch_scorecard_v1",
+    "job_id": "fixture_gt016_fpA_memory_002",
+    "status": "done",
+    "started_at_utc": "2026-04-20T11:00:00Z",
+    "memory_context_impact_audit_v1": {
+      "run_config_fingerprint_sha256_40": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    },
+    "student_brain_profile_v1": "memory_context_student",
+    "expectancy_per_trade": 0.2,
+    "referee_win_pct": 55.0,
+    "student_l1_process_score_v1": 0.6
+  },
+  {
+    "schema": "pattern_game_batch_scorecard_v1",
+    "job_id": "fixture_gt016_fpA_qwen_003",
+    "status": "done",
+    "started_at_utc": "2026-04-20T12:00:00Z",
+    "memory_context_impact_audit_v1": {
+      "run_config_fingerprint_sha256_40": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    },
+    "student_brain_profile_v1": "memory_context_llm_student",
+    "llm_model": "qwen2.5:7b",
+    "expectancy_per_trade": 0.05,
+    "referee_win_pct": 45.0,
+    "student_l1_process_score_v1": 0.4
+  },
+  {
+    "schema": "pattern_game_batch_scorecard_v1",
+    "job_id": "fixture_gt016_fpA_deepseek_004",
+    "status": "done",
+    "started_at_utc": "2026-04-20T13:00:00Z",
+    "memory_context_impact_audit_v1": {
+      "run_config_fingerprint_sha256_40": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    },
+    "student_brain_profile_v1": "memory_context_llm_student",
+    "llm_model": "deepseek-r1:14b",
+    "expectancy_per_trade": 0.25,
+    "referee_win_pct": 70.0,
+    "student_l1_process_score_v1": 0.65
+  },
+  {
+    "schema": "pattern_game_batch_scorecard_v1",
+    "job_id": "fixture_gt016_fpB_memory_only_005",
+    "status": "done",
+    "started_at_utc": "2026-04-21T09:00:00Z",
+    "memory_context_impact_audit_v1": {
+      "run_config_fingerprint_sha256_40": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+    },
+    "student_brain_profile_v1": "memory_context_student",
+    "expectancy_per_trade": 0.3,
+    "referee_win_pct": 60.0,
+    "student_l1_process_score_v1": 0.55
+  }
+]
