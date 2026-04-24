@@ -118,7 +118,7 @@ _PATTERN_BANNER_WEBP_PATH = _RV4_ROOT / "assets" / "pattern.webp"
 _PATTERN_GAME_BANNER_BOOT_JS = _GAME_THEORY / "static" / "pattern_game_banner_boot.js"
 
 # Operator-visible web UI bundle version — bump when changing PAGE_HTML (HTML/CSS/JS) so deploys are provable.
-PATTERN_GAME_WEB_UI_VERSION = "2.19.66"
+PATTERN_GAME_WEB_UI_VERSION = "2.19.67"
 
 from renaissance_v4.game_theory.context_signature_memory import truncate_context_signature_memory_store
 from renaissance_v4.game_theory.groundhog_memory import (
@@ -5401,6 +5401,7 @@ PAGE_HTML = """<!DOCTYPE html>
             <div class="pg-barney-ask-col pg-barney-ask-col--ask" aria-label="Ask questions">
               <p class="pg-barney-title" style="margin:0 0 6px">Ask DATA</p>
               <p class="pg-askdata-invite">
+                <strong>Ask me anything in natural language</strong> — controls, runs, memory, the Student path, or how this UI fits together.
                 Tap a <strong>starter</strong> to send it immediately, or type your own question below.
                 Ask DATA only uses this app’s glossary, run/scorecard facts, and operator context — not the open web.
               </p>
@@ -5418,8 +5419,8 @@ PAGE_HTML = """<!DOCTYPE html>
                 <button type="button" class="pg-askdata-chip" data-ask="What does data_gap mean?">What is data_gap?</button>
               </div>
               <textarea id="askDataInput" class="pg-askdata-input" rows="3" maxlength="6000"
-                placeholder="Or type your own question (Ctrl/Cmd+Enter to send)…"
-                autocomplete="off" aria-label="Ask DATA question"></textarea>
+                placeholder="Ask anything in plain language… (Ctrl/Cmd+Enter to send)"
+                autocomplete="off" aria-label="Ask DATA — natural language question"></textarea>
               <div class="pg-askdata-actions">
                 <button type="button" class="btn-chef pg-op-btn" id="askDataSendBtn" data-label-idle="Send">Send</button>
                 <button type="button" class="btn-secondary pg-op-btn" id="askDataClearBtn" data-label-idle="Clear thread">Clear thread</button>
