@@ -1,0 +1,44 @@
+---
+description: Improve Data and operators via curated dictionaries, bundles, and contracts—not comment floods or drifting prose docs.
+globs: "**/ask_data_system_dictionary*.py,**/docs/**/*.md,renaissance_v4/game_theory/docs/**/*.md,renaissance_v4/game_theory/**/*dictionary*,scripts/agent_context_bundle.py,**/AGENTS.md"
+alwaysApply: false
+---
+
+# Documentation standard — data accuracy (curation over noise)
+
+**Goal:** higher signal for Data and humans by maintaining **truth-aligned knowledge surfaces**, not by adding comments across the codebase “for Data.”
+
+## Preferred surfaces (update these first)
+
+- **System dictionary** — e.g. `renaissance_v4/game_theory/ask_data_system_dictionary_v1.py` and any field/schema dictionaries Data or Ask DATA reads.
+- **Static knowledge bundles** — agent / operator context bundles (e.g. `scripts/agent_context_bundle.py` and related pack boundaries).
+- **Operator-facing architecture** — sections operators and tools actually use (e.g. game_theory `docs/*ARCHITECTURE*`, student panel dictionary routes).
+- **Public API docs** — route and payload contracts that match runtime (`web_app` route docstrings, OpenAPI or inline JSON shapes where maintained).
+- **Risky workflow notes** — destructive, ordering, or seam-sensitive flows (short, accurate, near the workflow entry or in the doc above).
+- **Shared invariants** — single place for “must never” / “always list” rules Data must not contradict.
+- **Field dictionaries** — name → meaning, units, null vs `data_gap`, producer.
+- **Bundle boundaries** — what is in / out of this build; honest “not in this build” when something is unavailable.
+
+## Avoid
+
+- Line-by-line or per-function comments whose only purpose is “explaining the code to Data.”
+- Low-signal boilerplate (“returns a dict”) and **obvious** code narration.
+- Duplicating implementation detail in prose that will **drift** from behavior.
+- New markdown files for every conversation unless the user asked for a doc.
+
+## When feedback shows confusion — fix the highest-signal source
+
+| Symptom | Prefer |
+|--------|--------|
+| Misunderstood **field** | Dictionary / field contract |
+| Misunderstood **workflow** | Operator architecture section or risky-workflow note |
+| Cannot tell **present vs missing** | `data_gap` / bundle boundary explanation |
+| **Invents** unavailable behavior | Document honest boundary: “not in this build” |
+
+## Code comments (narrow exception)
+
+Comments are appropriate when the code is **public API**, **risky**, **operator-facing**, or **enforces an invariant** that humans and tools must share—and a one-line pointer to the canonical doc is better than duplicating paragraphs.
+
+## One-line default
+
+**Curate the knowledge Data reads (dictionary, bundle, contracts, architecture)—do not flood the repo with low-value comments.**
