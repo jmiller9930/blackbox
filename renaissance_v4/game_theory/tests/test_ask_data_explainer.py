@@ -46,6 +46,51 @@ def test_scorecard_snapshot_whitelist() -> None:
     assert "huge_blob" not in snap
 
 
+def test_build_bundle_includes_data_health_evaluation_wiring() -> None:
+    bundle = build_ask_data_bundle_v1(
+        barney_facts=None,
+        scorecard_snapshot=None,
+        ui_context={"evaluation_window_mode": "18"},
+        operator_strategy_state=None,
+        job_resolution="no_job",
+    )
+    dh = bundle.get("data_health_snapshot")
+    assert isinstance(dh, dict)
+    assert dh.get("schema") == "ask_data_data_health_snapshot_v1"
+    assert "database_path" in dh
+    assert "all_bars_count" in dh
+    ew = bundle.get("evaluation_window_resolved")
+    assert isinstance(ew, dict)
+    assert ew.get("effective_calendar_months") == 18
+    wb = bundle.get("wiring_module_board")
+    assert isinstance(wb, dict)
+    assert wb.get("schema") == "ask_data_wiring_module_board_v1"
+    assert isinstance(wb.get("modules"), list)
+    assert any(m.get("id") == "web_ui" for m in wb["modules"] if isinstance(m, dict))
+
+
+def test_fallback_data_health_and_evaluation_window(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("ASK_DATA_USE_LLM", "0")
+    bundle = build_ask_data_bundle_v1(
+        barney_facts=None,
+        scorecard_snapshot=None,
+        ui_context={"evaluation_window_mode": "12"},
+        operator_strategy_state=None,
+        job_resolution="no_job",
+    )
+    out_db = ask_data_answer("How much data is in the SQLite database?", bundle)
+    assert out_db["ok"] is True
+    assert out_db["answer_source"] == "data_health"
+    out_win = ask_data_answer("What time window are we operating under?", bundle)
+    assert out_win["ok"] is True
+    assert out_win["answer_source"] == "evaluation_window"
+    assert "calendar month" in out_win["text"].lower()
+    out_wire = ask_data_answer("How is the code wired together for replay?", bundle)
+    assert out_wire["ok"] is True
+    assert out_wire["answer_source"] == "wiring"
+    assert "web_app.py" in out_wire["text"].lower() or "parallel_runner" in out_wire["text"].lower()
+
+
 def test_scorecard_snapshot_includes_memory_context_audit() -> None:
     entry = {
         "job_id": "j1",

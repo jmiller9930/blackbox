@@ -138,6 +138,14 @@ def pml_static_knowledge_v1() -> dict[str, Any]:
             "Operator controls: pattern, evaluation window, workers slider, memory mode, custom JSON, "
             "uploaded strategy toggle, run/reset actions. Engineering controls build/version and host paths."
         ),
+        "evaluation_window_vs_bar_cadence_v1": (
+            "**Two different “windows”:** (1) **Evaluation window** in the UI — modes `12`, `18`, `24`, or `custom` — "
+            "means **approximately that many calendar months** of historical tape counted backward from the **last bar** "
+            "in the loaded dataset (see `evaluation_window_resolved` in the bundle when present). "
+            "(2) **Bar interval** — each row in SQLite table `market_bars_5m` is one **5-minute** OHLC candle. "
+            "So “12” is **not** “12 minutes” or “5 minutes”; it is **~12 calendar months** of 5m bars for replay slicing "
+            "unless the bundle’s `data_health_snapshot` shows a shorter tape or clamping in run audit."
+        ),
         "ask_data_upload_paste_conversation_v1": (
             "**Strategy / manifest — conversational help in Ask DATA:** If the bundle does not contain the file body, "
             "reply in a **short, human turn**: invite the operator to **paste** manifest JSON, the failing slice, or the validation error **into this Ask DATA box** on the next message "
@@ -222,6 +230,86 @@ def _fallback_answer_from_bundle(question: str, bundle: dict[str, Any]) -> tuple
     static = bundle.get("static_knowledge") or {}
     facts = bundle.get("barney_facts")
     snap = bundle.get("scorecard_snapshot")
+    dh = bundle.get("data_health_snapshot")
+    if isinstance(dh, dict) and any(
+        x in qlow
+        for x in (
+            "sql",
+            "sqlite",
+            "database",
+            "how much data",
+            "db size",
+            "rows in",
+            "bar row",
+            "market_bars",
+        )
+    ):
+        parts: list[str] = []
+        if dh.get("summary_line"):
+            parts.append(str(dh["summary_line"]))
+        if dh.get("all_bars_count") is not None:
+            parts.append(f"All symbols: {dh.get('all_bars_count')} rows in `market_bars_5m`.")
+        if dh.get("solusdt_bar_count") is not None:
+            parts.append(f"{dh.get('replay_symbol', 'SOLUSDT')}: {dh.get('solusdt_bar_count')} rows.")
+        sz = dh.get("database_file_size_bytes")
+        if isinstance(sz, int):
+            parts.append(f"SQLite file size on disk: {sz} bytes (`database_path` in bundle).")
+        elif dh.get("database_path"):
+            parts.append(f"SQLite path: {dh.get('database_path')}.")
+        if dh.get("bar_interval"):
+            parts.append(str(dh["bar_interval"]))
+        if parts:
+            return (" ".join(parts), "data_health")
+    ew = bundle.get("evaluation_window_resolved")
+    if isinstance(ew, dict) and not ew.get("resolve_error") and any(
+        x in qlow
+        for x in (
+            "evaluation window",
+            "time window",
+            "how many month",
+            "operating under",
+            "calendar month",
+            "window mode",
+        )
+    ):
+        mode = ew.get("evaluation_window_mode", "?")
+        em = ew.get("effective_calendar_months")
+        cadence = static.get("evaluation_window_vs_bar_cadence_v1") or ""
+        if em is not None:
+            head = (
+                f"From your current Controls: `evaluation_window_mode` is {mode!r}, so replay uses the last "
+                f"**~{em} calendar months** of available bars (counted from the last bar), **not** a five-minute wall-clock window. "
+            )
+            tail = f"\n\n{cadence}" if cadence else ""
+            return (head + tail, "evaluation_window")
+    wb = bundle.get("wiring_module_board")
+    if isinstance(wb, dict) and wb.get("modules") and any(
+        x in qlow
+        for x in (
+            "wired",
+            "how is the code",
+            "how the code",
+            "module board",
+            "subsystems",
+            " wiring",
+            "wiring ",
+            "def-001",
+            "def001",
+        )
+    ):
+        lines: list[str] = []
+        for m in wb["modules"][:14]:
+            if not isinstance(m, dict):
+                continue
+            lab = str(m.get("label") or m.get("id") or "?")
+            ok = "OK" if m.get("ok") else "not OK"
+            det = str(m.get("detail") or "")[:220]
+            lines.append(f"- **{lab}** ({ok}): {det}")
+        note = str(wb.get("def001_note") or "").strip()
+        body = "\n".join(lines) if lines else "(no module rows)"
+        if note:
+            body = body + "\n\n" + note
+        return (body, "wiring")
     if "what does pml" in qlow or "what is pml" in qlow or "what does pattern machine" in qlow:
         return (str(static.get("what_is_pml") or ""), "app_knowledge")
     if "pattern" in qlow and "manifest" in qlow:
@@ -353,6 +441,93 @@ def _fallback_answer_from_bundle(question: str, bundle: dict[str, Any]) -> tuple
     )
 
 
+def snapshot_data_health_for_ask_v1() -> dict[str, Any]:
+    """Live SQLite / bar-table facts for Ask DATA (same source as ``/api/data-health``)."""
+    from pathlib import Path
+
+    from renaissance_v4.game_theory.data_health import get_data_health
+
+    h = get_data_health()
+    path = Path(str(h.get("database_path") or ""))
+    size_b: int | None = None
+    if path.is_file():
+        try:
+            size_b = int(path.stat().st_size)
+        except OSError:
+            size_b = None
+    return {
+        "schema": "ask_data_data_health_snapshot_v1",
+        "bar_interval": "Each replay bar row is one 5-minute OHLC interval (SQLite table `market_bars_5m`).",
+        "database_path": h.get("database_path"),
+        "database_file_exists": h.get("database_file_exists"),
+        "database_file_size_bytes": size_b,
+        "overall_ok": h.get("overall_ok"),
+        "database_open_ok": h.get("database_open_ok"),
+        "table_market_bars_ok": h.get("table_market_bars_ok"),
+        "replay_symbol": h.get("replay_symbol"),
+        "all_bars_count": h.get("all_bars_count"),
+        "solusdt_bar_count": h.get("solusdt_bar_count"),
+        "all_bars_span_days": h.get("all_bars_span_days"),
+        "solusdt_span_days": h.get("solusdt_span_days"),
+        "replay_min_rows": h.get("replay_min_rows"),
+        "replay_rows_ok": h.get("replay_rows_ok"),
+        "max_evaluation_window_calendar_months": h.get("max_evaluation_window_calendar_months"),
+        "twelve_month_window_ok": h.get("twelve_month_window_ok"),
+        "summary_line": h.get("summary_line"),
+        "error": h.get("error"),
+    }
+
+
+def evaluation_window_snapshot_for_ask_v1(ui_context: dict[str, Any]) -> dict[str, Any]:
+    """Resolve UI evaluation window mode to integer calendar months (same rules as Run prep)."""
+    from renaissance_v4.game_theory.evaluation_window_runtime import resolve_ui_evaluation_window
+
+    mode = str((ui_context or {}).get("evaluation_window_mode") or "12").strip().lower()
+    custom = (ui_context or {}).get("evaluation_window_custom_months")
+    try:
+        r = resolve_ui_evaluation_window(mode, custom)
+        return {"schema": "ask_data_evaluation_window_resolved_v1", **r}
+    except ValueError as e:
+        return {
+            "schema": "ask_data_evaluation_window_resolved_v1",
+            "evaluation_window_mode": mode,
+            "resolve_error": str(e),
+        }
+
+
+def wiring_module_board_compact_for_ask_v1() -> dict[str, Any]:
+    """DEF-001 module board rows (compact) — how major subsystems are wired, not run outcomes."""
+    try:
+        from renaissance_v4.game_theory.module_board import compute_pattern_game_module_board
+
+        board = compute_pattern_game_module_board()
+        rows = board.get("modules") if isinstance(board, dict) else []
+        compact: list[dict[str, Any]] = []
+        for m in rows or []:
+            if not isinstance(m, dict):
+                continue
+            compact.append(
+                {
+                    "id": m.get("id"),
+                    "label": m.get("label"),
+                    "title": m.get("title"),
+                    "ok": bool(m.get("ok")),
+                    "detail": str(m.get("detail") or "")[:300],
+                }
+            )
+        return {
+            "schema": "ask_data_wiring_module_board_v1",
+            "def001_note": (board.get("def001_note") if isinstance(board, dict) else "") or "",
+            "modules": compact,
+        }
+    except Exception as e:
+        return {
+            "schema": "ask_data_wiring_module_board_v1",
+            "error": f"{type(e).__name__}: {e}"[:500],
+            "modules": [],
+        }
+
+
 def build_ask_data_bundle_v1(
     *,
     barney_facts: dict[str, Any] | None,
@@ -372,6 +547,9 @@ def build_ask_data_bundle_v1(
         "scorecard_snapshot": scorecard_snapshot,
         "ui_context": ui_context,
         "operator_strategy_upload_state": operator_strategy_state,
+        "data_health_snapshot": snapshot_data_health_for_ask_v1(),
+        "evaluation_window_resolved": evaluation_window_snapshot_for_ask_v1(ui_context),
+        "wiring_module_board": wiring_module_board_compact_for_ask_v1(),
     }
 
 
@@ -395,6 +573,9 @@ def ask_data_format_with_llm(
         "RULES (hard):\n"
         "- Answer ONLY using: (1) the JSON bundle sections `static_knowledge`, `system_dictionary`, `barney_facts`, "
         "`scorecard_snapshot`, `ui_context`, `operator_strategy_upload_state`, `job_resolution`, "
+        "`data_health_snapshot` (live SQLite / bar counts / DB path / on-disk size when readable), "
+        "`evaluation_window_resolved` (UI mode → **calendar months** for replay slice), "
+        "`wiring_module_board` (subsystem wiring truth / DEF-001 — not Referee scores), "
         "and `operator_feedback_signals` (prior operator ratings for **similar** questions — aggregate telemetry, "
         "not run truth). "
         "Do NOT use outside knowledge, the internet, or guesses.\n"
@@ -413,9 +594,11 @@ def ask_data_format_with_llm(
         "- If the question is general trivia or unrelated to this application, refuse in one short paragraph "
         "(same idea as static_knowledge.refusal_policy).\n"
         "- At the end, add a single line starting with **Sources used:** listing only from: "
-        "`run_facts` | `scorecard` | `ui` | `static` | `dictionary` | `upload` | `refused` | `operator_signals` — comma-separated, "
+        "`run_facts` | `scorecard` | `ui` | `static` | `dictionary` | `upload` | `data_health` | "
+        "`evaluation_window` | `wiring` | `refused` | `operator_signals` — comma-separated, "
         "reflecting what you actually relied on (`dictionary` = `system_dictionary` topics; "
-        "`operator_signals` = `operator_feedback_signals` rollup).\n\n"
+        "`operator_signals` = `operator_feedback_signals` rollup; `data_health` = `data_health_snapshot`; "
+        "`evaluation_window` = `evaluation_window_resolved`; `wiring` = `wiring_module_board`).\n\n"
         f"OPERATOR QUESTION:\n{question.strip()}\n\n"
         "--- BUNDLE JSON ---\n"
         + payload
