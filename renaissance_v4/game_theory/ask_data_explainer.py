@@ -113,6 +113,13 @@ def pml_static_knowledge_v1() -> dict[str, Any]:
             "on the tape, or **DW / decision-window counts** from your last batch?” — not a long questionnaire. "
             "Ask DATA does **not** change Controls; the operator must adjust the UI. Use `operator_surface_catalog` for control names, DOM ids, and limits."
         ),
+        "operator_reports_and_downloads_v1": (
+            "**Reports vs Ask DATA:** Chat replies here are **read-only explanations**. **Generated files** (CSV, NDJSON, JSON reports) "
+            "come from **documented HTTP routes** listed under `operator_surface_catalog.downloadable_artifacts` — use those URLs "
+            "in the browser or wire them as download buttons in the UI. Ask DATA should **name the correct route + query** "
+            "(e.g. `/api/batch-detail.csv?job_id=…`) and say whether the response is an **attachment** or JSON; it does **not** "
+            "create binary attachments inside the chat. New report types ship as **routes first**, then add one row to that list so operators stay aligned."
+        ),
         "pattern_vs_framework_vs_manifest": (
             "**Pattern** (operator recipe) chooses which curated playbook or Custom JSON drives the batch. "
             "**Policy framework** (when used by a scenario) attaches governance/audit metadata for replay. "
@@ -394,6 +401,34 @@ def _fallback_answer_from_bundle(question: str, bundle: dict[str, Any]) -> tuple
             body = body + "\n\n" + note
         return (body, "wiring")
     osc = bundle.get("operator_surface_catalog")
+    if isinstance(osc, dict) and any(
+        x in qlow
+        for x in (
+            "download",
+            "export",
+            "csv",
+            "attachment",
+            "ndjson",
+            "report file",
+            "generated report",
+            "make available",
+            "click to download",
+        )
+    ):
+        arts = osc.get("downloadable_artifacts") or []
+        intro = (static.get("operator_reports_and_downloads_v1") or "").strip()
+        lines = [intro] if intro else []
+        lines.append("**Routes that return files or large JSON (open in browser or use curl):**")
+        for a in arts[:14]:
+            if not isinstance(a, dict):
+                continue
+            q = a.get("query_params") or a.get("body") or ""
+            att = "attachment" if a.get("attachment") else "JSON body"
+            lines.append(f"- **{a.get('method')}** `{a.get('path')}` — {q} ({att})")
+        lines.append(
+            "**Which one do you want?** Say e.g. “scorecard CSV”, “batch CSV for job …”, or “training export download=1”."
+        )
+        return ("\n\n".join(lines), "operator_surface")
     if isinstance(osc, dict) and any(
         x in qlow
         for x in (
@@ -698,6 +733,8 @@ def ask_data_format_with_llm(
         "- **Bundle philosophy:** The entire JSON is the contract. Walkthroughs in `static_knowledge` (submission paths, paste hints) are **examples** "
         "for matching questions — not a stricter truth than `data_health_snapshot`, `wiring_module_board`, run/scorecard facts, or `system_dictionary`. "
         "Prefer the most **specific factual** sections for architecture, data volume, wiring, and run truth; use leading questions only when a checklist truly helps.\n"
+        "- **Reports / exports / downloads:** Use `operator_surface_catalog.downloadable_artifacts` plus `static_knowledge.operator_reports_and_downloads_v1`. "
+        "Give the **exact path and query** the operator should open (or REST client). Do **not** claim Ask DATA generated a file; point to **GET/POST** routes that return attachments or JSON.\n"
         "- **Overloaded “window” / 5m / trade phrasing:** If the question could mean **calendar evaluation months**, **5-minute bar resolution**, "
         "**decision-window (DW) replay counts**, and/or **exam pack bar counts**, do **not** answer with only one. "
         "Follow `static_knowledge.operator_time_window_disambiguation_v1`: give **short labeled bullets** for each meaning the bundle supports; "

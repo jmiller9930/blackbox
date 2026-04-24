@@ -58,6 +58,21 @@ def test_operator_surface_catalog_and_ui_context_contract_match() -> None:
     assert cat.get("evaluation_window", {}).get("dom_id") == "evaluationWindowPick"
 
 
+def test_fallback_download_artifacts_routes(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("ASK_DATA_USE_LLM", "0")
+    bundle = build_ask_data_bundle_v1(
+        barney_facts=None,
+        scorecard_snapshot=None,
+        ui_context={},
+        operator_strategy_state=None,
+        job_resolution="no_job",
+    )
+    out = ask_data_answer("How do I download a CSV report of the scorecard?", bundle)
+    assert out["ok"] is True
+    assert out["answer_source"] == "operator_surface"
+    assert "/api/batch-scorecard.csv" in out["text"]
+
+
 def test_build_bundle_includes_operator_surface_catalog() -> None:
     bundle = build_ask_data_bundle_v1(
         barney_facts=None,
@@ -69,6 +84,8 @@ def test_build_bundle_includes_operator_surface_catalog() -> None:
     osc = bundle.get("operator_surface_catalog")
     assert isinstance(osc, dict)
     assert osc.get("schema") == "operator_surface_catalog_v1"
+    arts = osc.get("downloadable_artifacts") or []
+    assert any(a.get("path") == "/api/batch-scorecard.csv" for a in arts if isinstance(a, dict))
 
 
 def test_build_bundle_includes_data_health_evaluation_wiring() -> None:

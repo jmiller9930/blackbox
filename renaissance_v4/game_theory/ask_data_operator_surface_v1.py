@@ -8,6 +8,76 @@ from __future__ import annotations
 
 from typing import Any
 
+def downloadable_operator_artifacts_v1() -> list[dict[str, Any]]:
+    """
+    Operator-facing **download / export** routes (Pattern Game Flask).
+
+    Keep in sync with ``web_app.py``; Ask DATA uses this to point operators at real clicks or URLs
+    instead of inventing files.
+    """
+    return [
+        {
+            "id": "batch_scorecard_history_csv",
+            "method": "GET",
+            "path": "/api/batch-scorecard.csv",
+            "query_params": "limit (optional, e.g. 50)",
+            "attachment": True,
+            "mime": "text/csv",
+            "ui_anchor": "Download scorecard history (CSV) — `scorecardCsvLink` on operator page when rendered",
+        },
+        {
+            "id": "batch_detail_scenarios_csv",
+            "method": "GET",
+            "path": "/api/batch-detail.csv",
+            "query_params": "job_id=<parallel_job_id> (required)",
+            "attachment": True,
+            "mime": "text/csv",
+            "ui_anchor": "Per-batch drill UI may append “Download this batch (CSV)” when a row is selected",
+        },
+        {
+            "id": "training_dataset_ndjson",
+            "method": "GET",
+            "path": "/api/training/export",
+            "query_params": "download=1 for attachment; preview=N (default 5) for JSON preview body",
+            "attachment_query": "download=1",
+            "mime": "application/x-ndjson",
+            "directive": "GT_DIRECTIVE_022",
+        },
+        {
+            "id": "training_dataset_materialize",
+            "method": "POST",
+            "path": "/api/training/export/materialize",
+            "body": "JSON with typed confirm phrase (see API) — writes default training_dataset_v1.jsonl path in response",
+            "attachment": False,
+            "directive": "GT_DIRECTIVE_022",
+        },
+        {
+            "id": "learning_effectiveness_report_json",
+            "method": "GET",
+            "path": "/api/training/learning-effectiveness",
+            "query_params": "summary=1 for smaller JSON",
+            "attachment": False,
+            "directive": "GT_DIRECTIVE_023",
+        },
+        {
+            "id": "learning_effectiveness_materialize",
+            "method": "POST",
+            "path": "/api/training/learning-effectiveness/materialize",
+            "body": "JSON with typed confirm — writes learning_effectiveness_report_v1.json",
+            "attachment": False,
+            "directive": "GT_DIRECTIVE_023",
+        },
+        {
+            "id": "trade_strategy_json_export",
+            "method": "GET",
+            "path": "/api/v1/trade-strategy/<strategy_id>/export",
+            "query_params": "strategy_id in path",
+            "attachment": True,
+            "note": "DEV stub — portable trade_strategy JSON when implemented",
+        },
+    ]
+
+
 ASK_DATA_UI_CONTEXT_ALLOWED: frozenset[str] = frozenset(
     {
         "operator_recipe_id",
@@ -97,4 +167,5 @@ def build_operator_surface_catalog_for_ask_v1() -> dict[str, Any]:
             "row_interval": "5m_ohlc",
             "detail": "See `data_health_snapshot` in the Ask DATA bundle for counts and spans.",
         },
+        "downloadable_artifacts": downloadable_operator_artifacts_v1(),
     }
