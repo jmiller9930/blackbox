@@ -118,7 +118,7 @@ _PATTERN_BANNER_WEBP_PATH = _RV4_ROOT / "assets" / "pattern.webp"
 _PATTERN_GAME_BANNER_BOOT_JS = _GAME_THEORY / "static" / "pattern_game_banner_boot.js"
 
 # Operator-visible web UI bundle version — bump when changing PAGE_HTML (HTML/CSS/JS) so deploys are provable.
-PATTERN_GAME_WEB_UI_VERSION = "2.19.62"
+PATTERN_GAME_WEB_UI_VERSION = "2.19.63"
 
 from renaissance_v4.game_theory.context_signature_memory import truncate_context_signature_memory_store
 from renaissance_v4.game_theory.groundhog_memory import (
@@ -3606,6 +3606,47 @@ PAGE_HTML = """<!DOCTYPE html>
       font-family: inherit;
       box-sizing: border-box;
     }
+    .pg-askdata-invite {
+      margin: 0 0 6px;
+      font-size: 0.78rem;
+      line-height: 1.4;
+      color: var(--pg-muted);
+    }
+    .pg-askdata-starters {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 6px 8px;
+      margin: 0 0 10px;
+      padding: 0 0 8px;
+      border-bottom: 1px dashed rgba(54, 64, 74, 0.3);
+    }
+    .pg-askdata-starters-label {
+      width: 100%;
+      font-size: 0.68rem;
+      font-weight: 800;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+      color: var(--pg-accent);
+      margin: 0 0 2px;
+    }
+    button.pg-askdata-chip {
+      font: inherit;
+      font-size: 0.76rem;
+      padding: 5px 11px;
+      border-radius: 999px;
+      border: 1px solid rgba(30, 58, 95, 0.38);
+      background: rgba(30, 58, 95, 0.07);
+      color: var(--pg-ink);
+      cursor: pointer;
+      line-height: 1.25;
+      text-align: left;
+    }
+    button.pg-askdata-chip:hover {
+      border-color: var(--pg-accent);
+      color: var(--pg-accent);
+      background: rgba(30, 58, 95, 0.12);
+    }
     .pg-askdata-actions {
       display: flex;
       flex-wrap: wrap;
@@ -5332,8 +5373,24 @@ PAGE_HTML = """<!DOCTYPE html>
           <div class="pg-barney-ask-grid">
             <div class="pg-barney-ask-col pg-barney-ask-col--ask" aria-label="Ask questions">
               <p class="pg-barney-title" style="margin:0 0 6px">Ask DATA</p>
+              <p class="pg-askdata-invite">
+                Tap a <strong>starter</strong> to send it immediately, or type your own question below.
+                Ask DATA only uses this app’s glossary, run/scorecard facts, and operator context — not the open web.
+              </p>
+              <div class="pg-askdata-starters" role="group" aria-label="Suggested Ask DATA questions">
+                <span class="pg-askdata-starters-label">Try asking</span>
+                <button type="button" class="pg-askdata-chip" data-ask="What is PML?">What is PML?</button>
+                <button type="button" class="pg-askdata-chip" data-ask="What is the difference between pattern, policy framework, and manifest?">Pattern vs policy vs manifest</button>
+                <button type="button" class="pg-askdata-chip" data-ask="What does Ask DATA do versus the Student path?">Ask DATA vs Student</button>
+                <button type="button" class="pg-askdata-chip" data-ask="How do student levels 1, 2, and 3 relate?">Student L1 / L2 / L3</button>
+                <button type="button" class="pg-askdata-chip" data-ask="How does the Student learn from a run?">How does the Student learn?</button>
+                <button type="button" class="pg-askdata-chip" data-ask="What can I control on this screen before I run a batch?">What can I do here?</button>
+                <button type="button" class="pg-askdata-chip" data-ask="Where do scenarios come from?">Where do scenarios come from?</button>
+                <button type="button" class="pg-askdata-chip" data-ask="What does data_gap mean?">What is data_gap?</button>
+                <button type="button" class="pg-askdata-chip" data-ask="How is Ollama routing set up for Ask DATA?">Ollama routing</button>
+              </div>
               <textarea id="askDataInput" class="pg-askdata-input" rows="3" maxlength="6000"
-                placeholder="Type a question (Ctrl/Cmd+Enter to send)…"
+                placeholder="Or type your own question (Ctrl/Cmd+Enter to send)…"
                 autocomplete="off" aria-label="Ask DATA question"></textarea>
               <div class="pg-askdata-actions">
                 <button type="button" class="btn-chef pg-op-btn" id="askDataSendBtn" data-label-idle="Send">Send</button>
@@ -10056,6 +10113,22 @@ PAGE_HTML = """<!DOCTYPE html>
         }
       });
     }
+    (function wireAskDataStarterChips() {
+      const col = document.querySelector('.pg-barney-ask-col--ask');
+      const inp = document.getElementById('askDataInput');
+      if (!col || !inp) return;
+      col.addEventListener('click', function (ev) {
+        const t = ev.target;
+        if (!t || !t.closest) return;
+        const chip = t.closest('button.pg-askdata-chip[data-ask]');
+        if (!chip || !col.contains(chip)) return;
+        const q = chip.getAttribute('data-ask');
+        if (!q) return;
+        ev.preventDefault();
+        inp.value = q;
+        void sendAskData();
+      });
+    })();
     async function resumeParallelJobFromStorageIfAny() {
       let jid = null;
       try {
