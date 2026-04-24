@@ -30,6 +30,7 @@ counts, **run_ok_pct**, **referee_win_pct**, **avg_trade_win_pct**) and expose `
 ``GET /api/student-panel/run/<job_id>/learning`` (**GT_DIRECTIVE_018** — memory promotion / retrieval eligibility),
 ``GET /api/student-panel/decision?job_id=&trade_id=`` (``decision_id`` accepted as alias for migration).
 ``GET /api/training/export`` (**GT_DIRECTIVE_022** — promoted-only training export preview / download); ``POST /api/training/export/materialize`` (typed confirm writes ``training_dataset_v1.jsonl``).
+``GET /api/training/learning-effectiveness`` (**GT_DIRECTIVE_023** — read-only effectiveness audit JSON); ``POST /api/training/learning-effectiveness/materialize`` (typed confirm writes ``learning_effectiveness_report_v1.json``).
 
 **Post-certification ``trade_strategy`` (DEV STUB):** Same routes under **``/api/v1/trade-strategy``** (stable for external callers) and **``/api/trade-strategy``** (alias).
 ``GET …/contract`` returns integration metadata. Methods: list, ``<id>/export`` (download JSON), get one, POST, PATCH — placeholder payloads until persistence + execution;
@@ -119,7 +120,7 @@ _PATTERN_BANNER_WEBP_PATH = _RV4_ROOT / "assets" / "pattern.webp"
 _PATTERN_GAME_BANNER_BOOT_JS = _GAME_THEORY / "static" / "pattern_game_banner_boot.js"
 
 # Operator-visible web UI bundle version — bump when changing PAGE_HTML (HTML/CSS/JS) so deploys are provable.
-PATTERN_GAME_WEB_UI_VERSION = "2.19.74"
+PATTERN_GAME_WEB_UI_VERSION = "2.19.75"
 
 from renaissance_v4.game_theory.context_signature_memory import truncate_context_signature_memory_store
 from renaissance_v4.game_theory.groundhog_memory import (
@@ -172,6 +173,13 @@ from renaissance_v4.game_theory.student_proctor.training_export_v1 import (
     default_training_dataset_jsonl_path_v1,
     iter_training_record_lines_v1,
     materialize_training_dataset_v1,
+)
+from renaissance_v4.game_theory.student_proctor.learning_effectiveness_report_v1 import (
+    MATERIALIZE_LEARNING_EFFECTIVENESS_CONFIRM_V1,
+    build_learning_effectiveness_report_v1,
+    default_learning_effectiveness_report_path_v1,
+    materialize_learning_effectiveness_report_v1,
+    summarize_learning_effectiveness_report_v1,
 )
 from renaissance_v4.game_theory.exam_decision_frame_schema_v1 import (
     ExamUnitTimelineDocumentV1,
@@ -2253,6 +2261,35 @@ def create_app() -> Flask:
             store_path=store_path,
             scorecard_path=None,
             output_path=default_training_dataset_jsonl_path_v1(),
+            confirm=str(data.get("confirm") or ""),
+        )
+        return jsonify(out), (200 if out.get("ok") else 400)
+
+    @app.get("/api/training/learning-effectiveness")
+    def api_training_learning_effectiveness_v1() -> Any:
+        """
+        GT_DIRECTIVE_023 — Read-only learning effectiveness report (scorecard + learning store).
+
+        Query ``summary=1`` returns the same metrics without per-run ``runs_ordered_v1`` arrays.
+        """
+        st = student_learning_store_status_v1()
+        store_path = Path(str(st["path"]))
+        rep = build_learning_effectiveness_report_v1(store_path=store_path, scorecard_path=None)
+        summ = str(request.args.get("summary") or "").strip().lower()
+        if summ in ("1", "true", "yes"):
+            return jsonify({"ok": True, **summarize_learning_effectiveness_report_v1(rep)}), 200
+        return jsonify({"ok": True, **rep}), 200
+
+    @app.post("/api/training/learning-effectiveness/materialize")
+    def api_training_learning_effectiveness_materialize_v1() -> Any:
+        """Persist ``learning_effectiveness_report_v1.json`` (typed confirm; GT_DIRECTIVE_023)."""
+        data = request.get_json(force=True, silent=True) or {}
+        st = student_learning_store_status_v1()
+        store_path = Path(str(st["path"]))
+        out = materialize_learning_effectiveness_report_v1(
+            scorecard_path=None,
+            store_path=store_path,
+            output_path=default_learning_effectiveness_report_path_v1(),
             confirm=str(data.get("confirm") or ""),
         )
         return jsonify(out), (200 if out.get("ok") else 400)
