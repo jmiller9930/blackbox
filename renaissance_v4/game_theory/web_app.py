@@ -118,7 +118,7 @@ _PATTERN_BANNER_WEBP_PATH = _RV4_ROOT / "assets" / "pattern.webp"
 _PATTERN_GAME_BANNER_BOOT_JS = _GAME_THEORY / "static" / "pattern_game_banner_boot.js"
 
 # Operator-visible web UI bundle version — bump when changing PAGE_HTML (HTML/CSS/JS) so deploys are provable.
-PATTERN_GAME_WEB_UI_VERSION = "2.19.61"
+PATTERN_GAME_WEB_UI_VERSION = "2.19.62"
 
 from renaissance_v4.game_theory.context_signature_memory import truncate_context_signature_memory_store
 from renaissance_v4.game_theory.groundhog_memory import (
@@ -3799,15 +3799,16 @@ PAGE_HTML = """<!DOCTYPE html>
       font-size: 12px;
       margin-top: 4px;
     }
-    /* Ask (questions) left, System Dialogue + thread responses right; right column is wider */
+    /* Ask (questions) left, Ask DATA thread + batch recap right; right column is wider.
+       No CSS resize handles here — fixed grid + flex + resize:vertical fights the layout and the grip misleads operators. */
     .pg-barney-ask-unified .pg-barney-ask-grid {
       display: grid;
       grid-template-columns: minmax(0, 1fr) minmax(0, 2fr);
       gap: 0;
       align-items: stretch;
-      min-height: 0;
-      height: min(44vh, 480px);
-      max-height: min(44vh, 480px);
+      min-height: min(36vh, 360px);
+      height: min(48vh, 520px);
+      max-height: min(56vh, 600px);
       border: 1px solid rgba(54, 64, 74, 0.35);
       border-radius: 12px;
       overflow: hidden;
@@ -3841,11 +3842,10 @@ PAGE_HTML = """<!DOCTYPE html>
       max-height: min(70vh, 720px);
     }
     .pg-barney-ask-unified .pg-barney-ask-col--barney .pg-barney-body {
-      flex: 1 1 40%;
-      min-height: 4rem;
+      flex: 1 1 0;
+      min-height: 72px;
       max-height: none;
       overflow: auto;
-      resize: vertical;
       box-sizing: border-box;
     }
     .pg-barney-ask-col--ask {
@@ -3870,12 +3870,18 @@ PAGE_HTML = """<!DOCTYPE html>
       overflow: auto;
     }
     .pg-barney-ask-unified .pg-barney-ask-col--barney .pg-askdata-thread {
-      flex: 1 1 35%;
-      min-height: 4.5rem;
+      flex: 1 1 0;
+      min-height: 100px;
       max-height: none;
       overflow: auto;
-      resize: vertical;
       box-sizing: border-box;
+    }
+    .pg-barney-ask-unified .pg-barney-recap-hint {
+      margin: 0 0 6px;
+      font-size: 0.72rem;
+      line-height: 1.35;
+      color: var(--pg-muted);
+      font-weight: 500;
     }
     .pg-custom-route-hint {
       margin: 0;
@@ -5317,7 +5323,7 @@ PAGE_HTML = """<!DOCTYPE html>
           <div class="pg-panel-header" style="margin:0;flex:1">
             <div>
               <h2 class="pg-panel-h">Ask DATA + System Dialogue</h2>
-              <p class="pg-panel-sub">Questions on the left — responses and System Dialogue on the right</p>
+              <p class="pg-panel-sub">Ask DATA Q&amp;A on the left — Ask DATA thread and last-run batch recap on the right</p>
             </div>
             <span class="pg-chip pg-chip-teal">Unified</span>
           </div>
@@ -5335,10 +5341,14 @@ PAGE_HTML = """<!DOCTYPE html>
               </div>
               <p class="pg-askdata-status" id="askDataStatus" aria-live="polite" style="margin:0;font-size:0.78rem"></p>
             </div>
-            <div class="pg-barney-ask-col pg-barney-ask-col--barney" aria-label="Responses and System Dialogue">
-              <p class="pg-barney-title" style="margin:0 0 6px">Responses</p>
+            <div class="pg-barney-ask-col pg-barney-ask-col--barney" aria-label="Ask DATA replies and batch recap">
+              <p class="pg-barney-title" style="margin:0 0 6px">Ask DATA — replies</p>
               <div id="askDataThread" class="pg-askdata-thread" aria-live="polite" role="log"></div>
-              <p class="pg-barney-title" style="margin:10px 0 6px">System Dialogue (LLM)</p>
+              <p class="pg-barney-title" style="margin:10px 0 4px">Last run — batch recap (Barney)</p>
+              <p class="pg-barney-recap-hint">
+                Plain-English summary of the <strong>most recent finished</strong> parallel job (<code>/api/barney-summary</code>).
+                Stays “—” until a batch completes here or after refresh, or if the formatter is off.
+              </p>
               <pre id="barneySummaryBody" class="pg-barney-body" style="margin:0;overflow:auto">—</pre>
             </div>
           </div>
@@ -8537,7 +8547,7 @@ PAGE_HTML = """<!DOCTYPE html>
     async function fetchBarneySummary(jobId) {
       const el = document.getElementById('barneySummaryBody');
       if (!el || !jobId) return;
-        el.textContent = 'Loading System Dialogue…';
+        el.textContent = 'Loading batch recap…';
       try {
         const r = await fetch('/api/barney-summary', {
           method: 'POST',
@@ -8546,12 +8556,12 @@ PAGE_HTML = """<!DOCTYPE html>
         });
         const j = await r.json();
         if (!r.ok || !j.ok) {
-          el.textContent = 'System Dialogue unavailable: ' + (j.error || String(r.status));
+          el.textContent = 'Batch recap unavailable: ' + (j.error || String(r.status));
           return;
         }
         el.textContent = (j.text || '').trim() || '—';
       } catch (e) {
-        el.textContent = 'System Dialogue failed: ' + friendlyFetchError(e);
+        el.textContent = 'Batch recap failed: ' + friendlyFetchError(e);
       }
     }
 
