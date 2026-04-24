@@ -55,7 +55,16 @@
     "retrieved_context_ids": [],
     "skip_cold_baseline": true,
     "skip_reason": "prior_anchor_job_id=fixture_gt015_cold_baseline_001",
-    "student_llm_contract_note_v1": "llm_mode_declared_student_stub_until_ollama_wired",
+    "student_llm_execution_v1": {
+      "schema": "student_llm_execution_v1",
+      "student_reasoning_mode_echo": "llm_assisted_anna_qwen",
+      "model_resolved": "qwen2.5:7b",
+      "base_url_resolved": "http://127.0.0.1:11434",
+      "ollama_any_attempt": true,
+      "ollama_trades_attempted": 3,
+      "ollama_trades_succeeded": 3,
+      "prompt_version_resolved": "student_llm_prompt_v0.1"
+    },
     "memory_context_impact_audit_v1": {
       "schema": "memory_context_impact_audit_v1",
       "run_config_fingerprint_sha256_40": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
@@ -75,7 +84,16 @@
     "retrieved_context_ids": [],
     "skip_cold_baseline": true,
     "skip_reason": "prior_anchor_job_id=fixture_gt015_cold_baseline_001",
-    "student_llm_contract_note_v1": "llm_mode_declared_student_stub_until_ollama_wired",
+    "student_llm_execution_v1": {
+      "schema": "student_llm_execution_v1",
+      "student_reasoning_mode_echo": "llm_assisted_anna_deepseek_r1_14b",
+      "model_resolved": "deepseek-r1:14b",
+      "base_url_resolved": "http://172.20.2.230:11434",
+      "ollama_any_attempt": true,
+      "ollama_trades_attempted": 3,
+      "ollama_trades_succeeded": 3,
+      "prompt_version_resolved": "student_llm_prompt_v0.1"
+    },
     "memory_context_impact_audit_v1": {
       "schema": "memory_context_impact_audit_v1",
       "run_config_fingerprint_sha256_40": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",

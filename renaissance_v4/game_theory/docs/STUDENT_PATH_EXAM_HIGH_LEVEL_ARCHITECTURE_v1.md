@@ -1,6 +1,6 @@
 # High-level architecture — learning, exam, certification, engineering, UI splice
 
-**Status:** v1.11 — **§18.4** first child directive shipped (**GT_DIRECTIVE_009a**); §18 / §2 unchanged otherwise.
+**Status:** v1.15 — **§1.1** LLM row updated for Ollama-backed Student seam in **`llm_assisted_*`** modes; **§18.4** **GT_DIRECTIVE_015** marked active/partial (open until E/P comparison + physical cold skip policy). **GT_DIRECTIVE_009a** remains shipped.
 
 ---
 
@@ -83,6 +83,20 @@ Learning is defined as **operator-grade decision competence**, not rule memoriza
    - MUST NOT override Referee truth  
 
 **Note:** **H1–H3** = hypothesis generation; **H4** = comparative evaluation and **primary selection** (or explicit none-merit ENTER). **Phase A (§3) requires the full H1–H4 sequence.**
+
+### 1.1 Memory, context, and LLM — distinct roles (not interchangeable)
+
+Three concerns must stay separate in design and in grading attribution:
+
+| Concern | Role | In code / contracts today |
+|--------|------|---------------------------|
+| **Memory** | What the system **learns across runs** (outcomes, retrievable experience slices, append-only learning rows). It does not act alone; it is **retrieved** and merged only through **legal** pre-reveal paths. | Cross-run retrieval → `retrieved_student_experience_v1` on the decision packet (`cross_run_retrieval_v1`); post-reveal **`student_learning_record_v1`** / reveal join (`contracts_v1`). |
+| **Context** | What the Student **may condition on at decision time**: causal market state (e.g. bars), pack-published indicators/labels when present, and **prior-revealed** memory **slices** surfaced for *this* run. Situational bundle — **not** the same thing as the long-term store. | **`student_decision_packet_v1`** + `validate_pre_reveal_bundle_v1` (forbidden outcome keys); optional **`student_context_annex_v1`** (shape validated; default builders may not fill all buckets yet — see `student_proctor/ARCHITECTURE_BACKWARD_LADDER_STUDENT_TABLE.md` **C.1**). |
+| **LLM** | **How** the Student produces structured reasoning (hypotheses, comparison, invalidation narrative) **from** the context bundle — bounded prompts, **no** self-grading, **no** implicit cross-run learning inside the model weights. | **`repeat_anna_memory_context`:** deterministic **`shadow_student_v1`** stub (no Ollama). **`llm_assisted_anna_qwen`** / **`llm_assisted_anna_deepseek_r1_14b`:** Student seam calls Ollama **`/api/chat`** with run-scoped model + base URL; scorecard carries `student_llm_execution_v1`, `llm_model`, `prompt_version` per **GT_DIRECTIVE_015** §15.5. |
+
+**Intended relationship (feed chain):** memory (store) → **retrieval** → context bundle → **reasoner** (stub or LLM) → **`student_output_v1`** → commitment → **graded** outcome → **written back** into memory-capable stores for **later** retrieval. The LLM does **not** replace memory or context; it replaces only the **mechanical** quality of the reasoning step.
+
+**Product guardrails:** Success for LLM integration is **measurable under referee grading** (E+P and pack rules), not “better vibes” or claimed alpha. Treating the LLM as if it **learns over time** by itself, skipping memory, or calling “everything in the prompt” memory without distinguishing **store vs retrieved slice** are recurring failure modes — avoid them in UI copy and in telemetry.
 
 ---
 
@@ -751,6 +765,9 @@ Work **§18.2** as a sequence of small shippables; each row satisfies **§18.3**
 | Id | Scope | Status | Notes |
 |----|--------|--------|-------|
 | **GT_DIRECTIVE_009a** | L2 **Student↔Referee direction coupling** (no baseline): per-slice `student_referee_direction_align`, `referee_direction`; `run_summary` rollups `student_referee_direction_align_*`; L2 tiles show align + honest “vs baseline: not wired”; summary band **`dir_align`** cell. | **Shipped** | Code: `student_panel_d13.py`, `web_app.py` (`PATTERN_GAME_WEB_UI_VERSION`), tests `test_d14_gap_closure_regression_v1.py`; proof sample JSON updated. |
+| **GT_DIRECTIVE_015** | **Run exam engine contract:** cold **system** baseline vs **Anna repeat sit**; **metadata** skip-cold when anchor exists (Referee replay **not** skipped in v1); scorecard/API honesty; **Student reasoning mode (LLM) contract** — declared modes + UI **`exam_run_contract_v1`** every run; Ollama on Student seam for **`llm_assisted_*`**; per-run persistence; no silent global Qwen→DeepSeek swap; E/P comparison surface still **outstanding**. | **Active — partial (OPEN)** | Canonical: `directives/GT_DIRECTIVE_015_run_exam_baseline_skip_contract_v1.md`. |
+| **GT_DIRECTIVE_016** | **L1 road data:** visual **A \| B** bands (system vs Anna); denormalize Anna rollups + flags at batch finish; legend defines every symbol; no full-store scan per `/runs` row. | **Planned** | Canonical: `directives/GT_DIRECTIVE_016_l1_road_data_system_student_split_v1.md`. |
+| **GT_DIRECTIVE_017** | **L3 `data_gap` closure:** gap register matrix (code → producer → acceptance); shrink happy-path `data_gaps[]`; wire exports instead of guessing; couples to L1 strong claims per directive text. | **Planned** | Canonical: `directives/GT_DIRECTIVE_017_student_l3_datagap_closure_matrix_v1.md`. |
 | *TBD* | L2 tile: symbol / stake fields from outcome metadata when present | Planned | Depends on exporter / `outcome_json` shape. |
 | *TBD* | L3: mirror new slice keys where applicable | Planned | Extend `student_decision_record_v1` only when L3 contract should echo L2. |
 
@@ -772,3 +789,7 @@ Work **§18.2** as a sequence of small shippables; each row satisfies **§18.3**
 | v1.9 | **§11.7 / §12** exam UI splice: canonical closure in **`GT_DIRECTIVE_008_exam_ui_splice_v1.md`** (timeline + drill-down + tests + deploy). |
 | v1.10 | **§18** operator drill-down contract: L1/L2/L3 goals, **trade set** vocabulary, L2 vs L3 recommendations, **GT_DIRECTIVE_009** mandatory closeout (doc + proof + local commit + **remote push** + **`PATTERN_GAME_WEB_UI_VERSION`** when UI embedded + **restart Flask/gsync** + HTTP verify); **§0** progressive-disclosure note; **§16.2** cross-ref to §18.3. |
 | v1.11 | **§18.4** tracking table; **GT_DIRECTIVE_009a** — L2 direction align + run rollups + UI (`dir_align`, demoted baseline copy). |
+| v1.12 | **§18.4** — register **GT_DIRECTIVE_015** (run exam baseline vs repeat-sit), **GT_DIRECTIVE_016** (L1 A\|B road data + denorm), **GT_DIRECTIVE_017** (L3 `data_gap` closure matrix); canonical specs under `directives/GT_DIRECTIVE_015_*.md` … `017_*.md`. |
+| v1.13 | **GT_DIRECTIVE_015** — **§15.5–15.6** declared Student reasoning modes, per-run LLM metadata, repeat-across-modes + score comparison rules; **§18.4** row text aligned. |
+| v1.14 | **§1.1** — memory vs context vs LLM (distinct roles, feed chain, grading success criterion); pointers to `shadow_student_v1`, packet + retrieval contracts, **GT_DIRECTIVE_015** modes. |
+| v1.15 | **§1.1** / **§18.4** — **GT_DIRECTIVE_015**: Ollama-backed LLM modes + UI exam contract + HTTP proof; metadata-only skip-cold; directive remains **OPEN** for E/P comparison + physical cold skip. |

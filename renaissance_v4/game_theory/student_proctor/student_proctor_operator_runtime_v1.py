@@ -20,8 +20,18 @@ from renaissance_v4.core.outcome_record import OutcomeRecord, outcome_record_fro
 from renaissance_v4.game_theory.student_proctor.reveal_layer_v1 import (
     build_reveal_v1_from_outcome_and_student,
 )
+from renaissance_v4.game_theory.exam_run_contract_v1 import (
+    STUDENT_REASONING_MODE_LLM_DEEPSEEK_V1,
+    STUDENT_REASONING_MODE_LLM_QWEN_V1,
+    normalize_student_reasoning_mode_v1,
+    resolved_llm_model_and_url_for_student_mode_v1,
+)
 from renaissance_v4.game_theory.student_proctor.shadow_student_v1 import (
     emit_shadow_stub_student_output_v1,
+)
+from renaissance_v4.game_theory.student_proctor.student_ollama_student_output_v1 import (
+    _student_llm_max_trades_v1,
+    emit_student_output_via_ollama_v1,
 )
 from renaissance_v4.game_theory.student_proctor.cross_run_retrieval_v1 import (
     build_student_decision_packet_v1_with_cross_run_retrieval,
@@ -223,6 +233,7 @@ def student_loop_seam_after_parallel_batch_v1(
     db_path: Path | str | None = None,
     store_path: Path | str | None = None,
     strategy_id: str | None = None,
+    exam_run_contract_request_v1: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """
     For each successful scenario row with ``replay_outcomes_json``, process each trade.
@@ -264,6 +275,19 @@ def student_loop_seam_after_parallel_batch_v1(
     primary_student_output_v1: dict[str, Any] | None = None
     first_packet_annex_present: bool | None = None
 
+    ex_req = exam_run_contract_request_v1 if isinstance(exam_run_contract_request_v1, dict) else None
+    mode = normalize_student_reasoning_mode_v1(str((ex_req or {}).get("student_reasoning_mode") or ""))
+    pv = str((ex_req or {}).get("prompt_version") or "shadow_student_stub_v1").strip()[:256]
+    use_llm = mode in (STUDENT_REASONING_MODE_LLM_QWEN_V1, STUDENT_REASONING_MODE_LLM_DEEPSEEK_V1)
+    llm_cap = _student_llm_max_trades_v1()
+    llm_model_resolved: str | None = None
+    base_url_resolved: str | None = None
+    if use_llm:
+        llm_model_resolved, base_url_resolved = resolved_llm_model_and_url_for_student_mode_v1(mode)
+    ollama_attempts = 0
+    ollama_ok = 0
+    llm_trade_i = 0
+
     for row in results:
         if not row.get("ok"):
             continue
@@ -301,11 +325,51 @@ def student_loop_seam_after_parallel_batch_v1(
                 rx = pkt.get(FIELD_RETRIEVED_STUDENT_EXPERIENCE_V1)
                 n_rx = len(rx) if isinstance(rx, list) else 0
                 retrieval_matches_total += n_rx
-                so, soe = emit_shadow_stub_student_output_v1(
-                    pkt,
-                    graded_unit_id=o.trade_id,
-                    decision_at_ms=int(o.entry_time),
-                )
+                so: dict[str, Any] | None = None
+                soe: list[str] = []
+                if use_llm and llm_model_resolved and base_url_resolved:
+                    over_cap = llm_cap is not None and llm_trade_i >= llm_cap
+                    if over_cap:
+                        so, soe = emit_shadow_stub_student_output_v1(
+                            pkt,
+                            graded_unit_id=o.trade_id,
+                            decision_at_ms=int(o.entry_time),
+                        )
+                        errors.append(
+                            f"{sid} trade={o.trade_id}: llm_trade_cap_exceeded (cap={llm_cap}) — stub Student used"
+                        )
+                    else:
+                        ollama_attempts += 1
+                        llm_trade_i += 1
+                        so, soe = emit_student_output_via_ollama_v1(
+                            pkt,
+                            graded_unit_id=o.trade_id,
+                            decision_at_ms=int(o.entry_time),
+                            llm_model=llm_model_resolved,
+                            ollama_base_url=base_url_resolved,
+                            prompt_version=pv,
+                        )
+                        if soe or so is None:
+                            errors.append(f"{sid} trade={o.trade_id}: ollama_student {'; '.join(soe)}")
+                            so, soe = emit_shadow_stub_student_output_v1(
+                                pkt,
+                                graded_unit_id=o.trade_id,
+                                decision_at_ms=int(o.entry_time),
+                            )
+                            if soe or so is None:
+                                errors.append(
+                                    f"{sid} trade={o.trade_id}: student_output_fallback_stub "
+                                    f"{'; '.join(soe)}"
+                                )
+                                continue
+                        else:
+                            ollama_ok += 1
+                else:
+                    so, soe = emit_shadow_stub_student_output_v1(
+                        pkt,
+                        graded_unit_id=o.trade_id,
+                        decision_at_ms=int(o.entry_time),
+                    )
                 if soe or so is None:
                     errors.append(f"{sid} trade={o.trade_id}: student_output {'; '.join(soe)}")
                     continue
@@ -360,7 +424,7 @@ def student_loop_seam_after_parallel_batch_v1(
         out_fp = _student_output_fingerprint_v1(primary_student_output_v1)
 
     student_emit_occurred = primary_student_output_v1 is not None
-    return {
+    out_audit: dict[str, Any] = {
         "schema": "student_loop_seam_audit_v1",
         "run_id": run_id,
         "student_learning_store_path": str(store.resolve()),
@@ -387,6 +451,19 @@ def student_loop_seam_after_parallel_batch_v1(
         "memory_semantics_annotation_v1": _memory_semantics_annotation_v1(seam_attempted=True),
         "deliverable_vocabulary_annotation_v1": _deliverable_vocabulary_annotation_v1(seam_attempted=True),
     }
+    if ex_req is not None:
+        out_audit["student_llm_execution_v1"] = {
+            "schema": "student_llm_execution_v1",
+            "student_reasoning_mode_echo": mode,
+            "prompt_version_resolved": pv if use_llm else None,
+            "model_resolved": llm_model_resolved,
+            "base_url_resolved": base_url_resolved,
+            "ollama_any_attempt": ollama_attempts > 0,
+            "ollama_trades_attempted": ollama_attempts,
+            "ollama_trades_succeeded": ollama_ok,
+            "llm_trade_cap": llm_cap,
+        }
+    return out_audit
 
 
 __all__ = [

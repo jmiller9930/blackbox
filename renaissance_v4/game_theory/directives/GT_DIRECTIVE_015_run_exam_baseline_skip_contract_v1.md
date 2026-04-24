@@ -1,7 +1,7 @@
 # GT_DIRECTIVE_015 — Run exam: baseline vs repeat-sit engine contract
 
 **Date:** 2026-04-24  
-**Status:** **ACTIVE** — engineering implementation in progress (v1 persistence + API validation landed; full two-phase cold skip of Referee replay is **not** claimed until explicitly shipped).  
+**Status:** **ACTIVE — OPEN** — run-contract foundation **accepted**; directive stays open until E/P comparison surface ships or is explicitly deferred, and **physical** cold Referee skip (if ever) is a separate slice. **LLM seam + UI `exam_run_contract_v1` + HTTP proof** are implemented in code; operators should verify on live Ollama hosts.  
 **From:** Architect (via operator product lock)  
 **To:** Engineer  
 **CC:** Operator, Product, Referee, UI  
@@ -84,8 +84,8 @@ Implement at least these **distinct** modes (exact spelling for persistence and 
 |---------------------------|------------------------------------|-------------------------|-----------------------------|
 | `cold_baseline` | Always (system path). No Student LLM. | N/A | N/A |
 | `repeat_anna_memory_context` (alias `memory_context_only`) | Student path: **stub / deterministic** emitters only (Directive 03 style). **No** Ollama call for Student output in v1. | N/A | N/A |
-| `llm_assisted_anna_qwen` (alias `llm_qwen2_5_7b`) | N/A | Declared **`qwen2.5:7b`** on run-scoped Ollama base URL (**stub note** until seam calls Ollama). | N/A |
-| `llm_assisted_anna_deepseek_r1_14b` (alias `llm_deepseek_r1_14b`) | N/A | N/A | Declared **`deepseek-r1:14b`** (**stub note** until seam wired). |
+| `llm_assisted_anna_qwen` (alias `llm_qwen2_5_7b`) | N/A | Declared **`qwen2.5:7b`** — Student seam calls Ollama **`/api/chat`** with run-scoped model + base URL. | N/A |
+| `llm_assisted_anna_deepseek_r1_14b` (alias `llm_deepseek_r1_14b`) | N/A | N/A | Declared **`deepseek-r1:14b`** — same seam path as Qwen with distinct model tag. |
 
 **Adding `llm_deepseek_r1_32b` (or others)** is allowed later as **new enum values**, never as an undeclared override.
 
@@ -149,11 +149,17 @@ Append to any project deficiencies log: **“GT_DIRECTIVE_015 — baseline skip 
 
 - Added `renaissance_v4/game_theory/exam_run_contract_v1.py` — mode normalization/validation, fingerprint **preview** (matches `memory_context_impact_audit_v1` recipe), prior-anchor lookup, `build_exam_run_line_meta_v1` for scorecard fields including **`skip_cold_baseline` / `skip_reason`** (auditable “anchor existed” semantics; **full Referee cold-phase skip** remains future work).
 - `batch_scorecard.record_parallel_batch_finished` accepts **`exam_run_line_meta_v1`** and merges onto the scorecard line.
-- `web_app` — `_prepare_parallel_payload` parses **`exam_run_contract_v1`** (or flat keys); **400** on unknown mode or invalid Ollama URL for LLM modes; merges request into `operator_batch_audit`; async `/api/run-parallel/start` and blocking `/api/run-parallel` attach metadata on success and error paths. **`PATTERN_GAME_WEB_UI_VERSION` → 2.19.49**.
-- Tests: `renaissance_v4/game_theory/tests/test_gt_directive_015_exam_run_contract_v1.py`.
+- `web_app` — `_prepare_parallel_payload` parses **`exam_run_contract_v1`** (or flat keys); **400** on unknown mode or invalid Ollama URL for LLM modes; merges request into `operator_batch_audit`; async `/api/run-parallel/start` and blocking `/api/run-parallel` attach metadata on success and error paths. Controls + Run exam send **`exam_run_contract_v1`** every time; **`PATTERN_GAME_WEB_UI_VERSION` → 2.19.50**.
+- Tests: `renaissance_v4/game_theory/tests/test_gt_directive_015_exam_run_contract_v1.py`, `test_gt_directive_015_http_parallel_exam_contract_v1.py`.
 - Fixture + operator proof: `tests/fixtures/gt_directive_015_scorecard_fixture_lines.json`, `docs/proof/exam_v1/GT_DIRECTIVE_015_operator_proof_run_lanes_v1.md`.
 
-**Remaining gaps:** UI control to send `exam_run_contract_v1` per run; wire Student seam to Ollama with **run-scoped** `llm_model` (no env global); automated HTTP integration test against Flask app; E/P comparison report endpoint; full **two-phase** “do not rerun Referee cold parallel” engine behavior when anchor exists.
+**Work performed (LLM seam + UI + HTTP proof slice, 2026-04-24):**
+
+- Student seam: `student_ollama_student_output_v1.py` + `student_proctor_operator_runtime_v1.py` — Ollama **`/api/chat`** for **`llm_assisted_anna_qwen`** / **`llm_assisted_anna_deepseek_r1_14b`** with run-scoped model and base URL; **`student_llm_execution_v1`** merged into scorecard line meta.
+- HTTP tests: `renaissance_v4/game_theory/tests/test_gt_directive_015_http_parallel_exam_contract_v1.py` (blocking `/api/run-parallel` + async `/api/run-parallel/start` with scorecard capture).
+- `web_app._exam_run_line_meta_for_parallel_job_v1` — `build_memory_context_impact_audit_v1` called with **`operator_batch_audit=`** keyword (signature fix).
+
+**Remaining gaps (explicit):** E/P **comparison surface** (report/UI) not built; **physical** Referee cold skip still not implemented — metadata only.
 
 **Shipped this slice:** `git push origin main` completed; `python3 scripts/gsync.py --no-commit --force-restart` completed (pattern-game Flask + UIUX per operator stack).
 
@@ -163,4 +169,10 @@ Append to any project deficiencies log: **“GT_DIRECTIVE_015 — baseline skip 
 
 ## Architect review
 
-**Status:** pending architect review
+**Status (2026-04-24):** **PARTIAL ACCEPTANCE — directive OPEN.**
+
+**Accepted:** canonical run modes; Qwen and DeepSeek lanes; invalid LLM config rejected; scorecard metadata; skip-cold **audit** fields; no silent model swap; fixture + operator proof; Student seam calls Ollama for declared LLM modes; UI sends **`exam_run_contract_v1`** on every Run exam; HTTP test for **`/api/run-parallel/start`** + scorecard readback path.
+
+**Not closed:** E/P comparison surface; physical cold skip of Referee work (must remain clearly **not** implemented while metadata-only skip exists).
+
+**Do not start GT_DIRECTIVE_016** until 015 is closed per architect or directive is formally amended.

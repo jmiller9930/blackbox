@@ -38,4 +38,6 @@ All rows share `memory_context_impact_audit_v1.run_config_fingerprint_sha256_40`
 
 ## Honesty note (v1 engine)
 
-`student_llm_contract_note_v1` may be set to `llm_mode_declared_student_stub_until_ollama_wired` until the Student seam calls Ollama per run-scoped model — **declared** mode and **`llm_model`** must still match the operator selection (no silent global swap).
+**Physical** skip of Referee cold replay when an anchor exists is **not** implemented in v1 — parallel replay always runs. `skip_cold_baseline` / `skip_reason` are **metadata** for whether a prior comparable anchor existed on the scorecard (comparison validity), not a runtime “skipped work” flag.
+
+For LLM-assisted modes, **`student_llm_execution_v1`** on the scorecard line records Ollama attempts and resolved **`model_resolved`** / **`base_url_resolved`** / **`prompt_version_resolved`** — **declared** `student_reasoning_mode` and **`llm_model`** must match what the operator selected (no silent global swap).

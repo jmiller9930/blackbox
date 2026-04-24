@@ -103,7 +103,7 @@ _PATTERN_BANNER_WEBP_PATH = _RV4_ROOT / "assets" / "pattern.webp"
 _PATTERN_GAME_BANNER_BOOT_JS = _GAME_THEORY / "static" / "pattern_game_banner_boot.js"
 
 # Operator-visible web UI bundle version — bump when changing PAGE_HTML (HTML/CSS/JS) so deploys are provable.
-PATTERN_GAME_WEB_UI_VERSION = "2.19.49"
+PATTERN_GAME_WEB_UI_VERSION = "2.19.50"
 
 from renaissance_v4.game_theory.context_signature_memory import truncate_context_signature_memory_store
 from renaissance_v4.game_theory.groundhog_memory import (
@@ -556,7 +556,9 @@ def _exam_run_line_meta_for_parallel_job_v1(
     """GT_DIRECTIVE_015 — scorecard line fields for run mode, skip-cold audit, LLM binding."""
     oba_m = dict(operator_batch_audit or {})
     if results and not error:
-        mem = build_memory_context_impact_audit_v1(results, oba_m)
+        mem = build_memory_context_impact_audit_v1(
+            results, operator_batch_audit=oba_m
+        )
         fp = str(mem.get("run_config_fingerprint_sha256_40") or "").strip() or None
     else:
         fp = (fingerprint_preview or "").strip() or None
@@ -567,6 +569,7 @@ def _exam_run_line_meta_for_parallel_job_v1(
         job_id=job_id,
         student_seam_observability_v1=seam_audit,
         batch_status="error" if error else "done",
+        seam_audit=seam_audit,
     )
 
 
@@ -1139,6 +1142,7 @@ def create_app() -> Flask:
                     results=results,
                     run_id=job_id,
                     strategy_id=op_rid,
+                    exam_run_contract_request_v1=exam_req if isinstance(exam_req, dict) else None,
                 )
                 exam_line = _exam_run_line_meta_for_parallel_job_v1(
                     exam_req=exam_req if isinstance(exam_req, dict) else None,
@@ -1438,6 +1442,7 @@ def create_app() -> Flask:
                 results=results,
                 run_id=job_id,
                 strategy_id=op_rid_block,
+                exam_run_contract_request_v1=exam_req_block if isinstance(exam_req_block, dict) else None,
             )
             exam_line_block = _exam_run_line_meta_for_parallel_job_v1(
                 exam_req=exam_req_block if isinstance(exam_req_block, dict) else None,
@@ -4691,6 +4696,26 @@ PAGE_HTML = """<!DOCTYPE html>
                 <input type="number" id="evaluationWindowCustomMonths" min="1" max="600" value="36"/>
               </div>
             </div>
+            <div class="pg-controls-span-2" style="margin-top:8px;padding-top:10px;border-top:1px solid var(--pg-line)">
+              <div class="pg-controls-min-grid" style="grid-template-columns:minmax(9.5rem,36%) 1fr;align-items:start">
+                <label for="examStudentReasoningModePick">Student reasoning</label>
+                <select id="examStudentReasoningModePick" aria-describedby="examContractHelp">
+                  <option value="repeat_anna_memory_context">Repeat Anna (memory / context, no LLM)</option>
+                  <option value="cold_baseline">Cold baseline</option>
+                  <option value="llm_assisted_anna_qwen">LLM-assisted Anna (Qwen 2.5 7B)</option>
+                  <option value="llm_assisted_anna_deepseek_r1_14b">LLM-assisted Anna (DeepSeek R1 14B)</option>
+                </select>
+                <div class="pg-controls-span-2" style="margin-top:8px">
+                  <label style="display:flex;align-items:flex-start;gap:8px;font-size:0.82rem;line-height:1.38;cursor:pointer;margin:0">
+                    <input type="checkbox" id="examSkipColdBaselineIfAnchor" style="margin-top:3px;flex-shrink:0"/>
+                    <span>Record skip-cold-baseline when a prior scorecard row matches this run’s fingerprint (<strong>metadata only</strong> — Referee still runs the full parallel replay).</span>
+                  </label>
+                </div>
+                <label for="examPromptVersion" style="margin-top:8px">Prompt version</label>
+                <input type="text" id="examPromptVersion" maxlength="256" autocomplete="off" placeholder="pattern_game_web_ui_v__PATTERN_GAME_WEB_UI_VERSION__" style="width:100%;max-width:100%"/>
+              </div>
+              <p id="examContractHelp" class="caps" style="margin:8px 0 0;font-size:0.72rem;line-height:1.42;color:#5a6570">Every <strong>Run exam</strong> sends <code>exam_run_contract_v1</code> (plus <code>retrieved_context_ids: []</code> until wired). LLM-assisted modes call Ollama on the Student seam after replay.</p>
+            </div>
           </div>
           <div class="pg-controls-run-row">
             <button type="button" id="runBtn" class="pg-op-btn pg-op-btn--run" data-label-idle="Run exam">Run exam</button>
@@ -7891,6 +7916,25 @@ PAGE_HTML = """<!DOCTYPE html>
       }
     })();
 
+    function buildExamRunContractV1ForStart() {
+      const modeEl = document.getElementById('examStudentReasoningModePick');
+      const skipEl = document.getElementById('examSkipColdBaselineIfAnchor');
+      const pvEl = document.getElementById('examPromptVersion');
+      const mode =
+        modeEl && modeEl.value ? String(modeEl.value).trim() : 'repeat_anna_memory_context';
+      const skipCold = !!(skipEl && skipEl.checked);
+      const pv =
+        pvEl && pvEl.value.trim()
+          ? pvEl.value.trim()
+          : 'pattern_game_web_ui_v' + PATTERN_GAME_UI_VERSION_STR;
+      return {
+        student_reasoning_mode: mode,
+        skip_cold_baseline_if_anchor: skipCold,
+        prompt_version: pv,
+        retrieved_context_ids: [],
+      };
+    }
+
     function friendlyParallelBackendError(msg) {
       const m = String(msg != null ? msg : '');
       if (
@@ -7995,6 +8039,7 @@ PAGE_HTML = """<!DOCTYPE html>
           evaluation_window_custom_months: customM,
           context_signature_memory_mode: cmem,
           use_operator_uploaded_strategy: useUploaded,
+          exam_run_contract_v1: buildExamRunContractV1ForStart(),
         };
         const startR = await fetch('/api/run-parallel/start', {
           method: 'POST',

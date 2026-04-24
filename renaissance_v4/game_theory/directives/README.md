@@ -25,6 +25,7 @@ Directive files should use stable ids such as:
 - `GT_DIRECTIVE_001_*`
 - `GT_DIRECTIVE_002_*`
 - `GT_DIRECTIVE_003_*` … `GT_DIRECTIVE_008_*` (see files in this folder)
+- **`GT_DIRECTIVE_015_*` … `GT_DIRECTIVE_017_*`** — Student / run exam contract stack (**015:** baseline skip + **declared Student LLM modes** / per-run persistence; **016** L1 A\|B road data; **017** L3 `data_gap` closure); tracked in `docs/STUDENT_PATH_EXAM_HIGH_LEVEL_ARCHITECTURE_v1.md` **§18.4**.
 
 ## Required sections in each directive
 

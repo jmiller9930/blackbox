@@ -62,6 +62,14 @@ def default_ollama_base_url_v1() -> str:
     return (os.environ.get("OLLAMA_BASE_URL") or "http://127.0.0.1:11434").strip().rstrip("/")
 
 
+def resolved_llm_model_and_url_for_student_mode_v1(mode: str) -> tuple[str | None, str]:
+    """Declared Ollama model tag + base URL for LLM-assisted modes; ``(None, url)`` otherwise."""
+    m = normalize_student_reasoning_mode_v1(mode)
+    if m not in _LLM_BINDING_V1:
+        return None, default_ollama_base_url_v1()
+    return str(_LLM_BINDING_V1[m]["llm_model"]), default_ollama_base_url_v1()
+
+
 def normalize_student_reasoning_mode_v1(raw: str | None) -> str:
     """Return canonical mode id; default matches historical “Anna repeat + Student seam” runs."""
     s = (raw or "").strip()
@@ -215,6 +223,7 @@ def build_exam_run_line_meta_v1(
     job_id: str,
     student_seam_observability_v1: dict[str, Any] | None,
     batch_status: str,
+    seam_audit: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """
     Fields merged onto ``pattern_game_batch_scorecard_v1`` (top-level) for GT_DIRECTIVE_015.
@@ -231,12 +240,7 @@ def build_exam_run_line_meta_v1(
     if mode in _LLM_BINDING_V1:
         llm_used = bool(_LLM_BINDING_V1[mode]["llm_used"])
         llm_model = str(_LLM_BINDING_V1[mode]["llm_model"])
-    # Student path today is stub unless LLM mode selected (explicit contract for future wire-up).
     shadow_on = bool(seam.get("shadow_student_enabled"))
-    if mode in (STUDENT_REASONING_MODE_LLM_QWEN_V1, STUDENT_REASONING_MODE_LLM_DEEPSEEK_V1):
-        llm_note = "llm_mode_declared_student_stub_until_ollama_wired"
-    else:
-        llm_note = None
 
     ollama_url = default_ollama_base_url_v1() if llm_used else None
 
@@ -290,11 +294,22 @@ def build_exam_run_line_meta_v1(
             mode == STUDENT_REASONING_MODE_COLD_BASELINE_V1 and batch_status == "done"
         ),
     }
-    if llm_note:
-        line["student_llm_contract_note_v1"] = llm_note
     if shadow_on is not None:
         line["shadow_student_enabled_echo_v1"] = shadow_on
     _ = job_id  # reserved for future self-exclusion in anchor scan
+
+    sa = seam_audit if isinstance(seam_audit, dict) else {}
+    lx = sa.get("student_llm_execution_v1")
+    if isinstance(lx, dict) and lx.get("schema") == "student_llm_execution_v1":
+        line["student_llm_execution_v1"] = lx
+        if lx.get("ollama_any_attempt") is True:
+            line["llm_used"] = True
+        if isinstance(lx.get("model_resolved"), str) and lx["model_resolved"].strip():
+            line["llm_model"] = lx["model_resolved"].strip()
+        if isinstance(lx.get("base_url_resolved"), str) and lx["base_url_resolved"].strip():
+            line["ollama_base_url"] = lx["base_url_resolved"].strip()
+        if isinstance(lx.get("prompt_version_resolved"), str) and lx["prompt_version_resolved"].strip():
+            line["prompt_version"] = lx["prompt_version_resolved"].strip()[:256]
     return line
 
 
@@ -310,5 +325,6 @@ __all__ = [
     "normalize_student_reasoning_mode_v1",
     "parse_exam_run_contract_request_v1",
     "preview_run_config_fingerprint_sha256_40_v1",
+    "resolved_llm_model_and_url_for_student_mode_v1",
     "validate_student_reasoning_mode_v1",
 ]
