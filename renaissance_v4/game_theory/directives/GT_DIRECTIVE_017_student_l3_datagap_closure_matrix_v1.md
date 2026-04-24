@@ -8,13 +8,13 @@
 
 ## PRECONDITION — Student directional thesis (LLM profile) **CLOSED**
 
-**Do not start §17.1 matrix work** until engineering has shipped and verified the **§1.0 thesis enforcement** precondition (operator memo 2026-04-24):
+Engineering **shipped** the **§1.0.2 thesis enforcement** precondition (operator memo 2026-04-24; commit message `fix(student): enforce directional thesis for LLM profile (precondition for GT_DIRECTIVE_017)`):
 
 - ``memory_context_llm_student`` → ``student_output_v1`` **must** include thesis fields or **reject** before seal (no silent stub fallback).
 - Thesis fields **persist** on learning rows and are **exposed on L3** payloads (``student_panel_d14``).
 - Tests + proof: ``tests/test_student_output_thesis_extension_v1.py``, ``tests/test_student_ollama_thesis_enforcement_v1.py``, ``docs/proof/exam_v1/STUDENT_DIRECTIONAL_THESIS_LLM_PRECONDITION_v1.md``.
 
-Canonical product mapping: **`STUDENT_PATH_EXAM_HIGH_LEVEL_ARCHITECTURE_v1.md` §1.0 / §1.0.1**.
+Canonical product mapping: **`STUDENT_PATH_EXAM_HIGH_LEVEL_ARCHITECTURE_v1.md` §1.0 / §1.0.1 / §1.0.2**. **§17.1 matrix work may proceed** after operator/architect sign-off on lab verification.
 
 ## Canonical workflow record
 
