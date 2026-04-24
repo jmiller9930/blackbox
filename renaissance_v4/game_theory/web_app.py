@@ -118,7 +118,7 @@ _PATTERN_BANNER_WEBP_PATH = _RV4_ROOT / "assets" / "pattern.webp"
 _PATTERN_GAME_BANNER_BOOT_JS = _GAME_THEORY / "static" / "pattern_game_banner_boot.js"
 
 # Operator-visible web UI bundle version — bump when changing PAGE_HTML (HTML/CSS/JS) so deploys are provable.
-PATTERN_GAME_WEB_UI_VERSION = "2.19.63"
+PATTERN_GAME_WEB_UI_VERSION = "2.19.65"
 
 from renaissance_v4.game_theory.context_signature_memory import truncate_context_signature_memory_store
 from renaissance_v4.game_theory.groundhog_memory import (
@@ -3159,17 +3159,6 @@ PAGE_HTML = """<!DOCTYPE html>
       margin: 0 0 8px;
       line-height: 1.35;
     }
-    .pg-student-l1-road-legend-api {
-      font-size: 0.72rem;
-      color: var(--pg-muted);
-      line-height: 1.4;
-      margin: 10px 0 0;
-      padding: 8px 10px;
-      border: 1px solid rgba(48, 54, 61, 0.55);
-      border-radius: 8px;
-      background: rgba(22, 27, 34, 0.45);
-    }
-    .pg-student-l1-road-legend-api ul { margin: 4px 0 0; padding-left: 1.1rem; }
     .pg-student-d11-table-wrap { overflow: auto; max-width: 100%; }
     .pg-student-d11-table {
       width: 100%;
@@ -3910,12 +3899,50 @@ PAGE_HTML = """<!DOCTYPE html>
       max-height: min(26vh, 280px);
       overflow: auto;
     }
-    .pg-barney-ask-unified .pg-barney-ask-col--barney .pg-askdata-thread {
-      flex: 1 1 0;
-      min-height: 100px;
+    .pg-barney-ask-unified .pg-askdata-reply-shell {
+      display: flex;
+      flex-direction: column;
+      flex: 1 1 48%;
+      min-height: 140px;
+      min-width: 0;
+      overflow: hidden;
+      box-sizing: border-box;
+    }
+    .pg-barney-ask-unified .pg-askdata-reply-shell.pg-askdata-reply-shell--sized {
+      flex: 0 0 auto;
+    }
+    .pg-barney-ask-unified .pg-askdata-reply-shell .pg-askdata-thread {
+      flex: 1 1 auto;
+      min-height: 72px;
       max-height: none;
       overflow: auto;
       box-sizing: border-box;
+    }
+    .pg-askdata-reply-drag {
+      flex: 0 0 10px;
+      height: 10px;
+      margin: 2px -4px 0;
+      cursor: row-resize;
+      border-radius: 4px;
+      background: rgba(54, 64, 74, 0.18);
+      border: 1px solid rgba(54, 64, 74, 0.35);
+      box-sizing: border-box;
+    }
+    .pg-askdata-reply-drag:hover {
+      background: rgba(30, 58, 95, 0.16);
+      border-color: var(--pg-accent);
+    }
+    .pg-barney-ask-unified .pg-askdata-recap-block {
+      flex: 1 1 auto;
+      min-height: 100px;
+      min-width: 0;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+    .pg-barney-ask-unified .pg-askdata-recap-block .pg-barney-body {
+      flex: 1 1 auto;
+      min-height: 48px;
     }
     .pg-barney-ask-unified .pg-barney-recap-hint {
       margin: 0 0 6px;
@@ -5399,14 +5426,26 @@ PAGE_HTML = """<!DOCTYPE html>
               <p class="pg-askdata-status" id="askDataStatus" aria-live="polite" style="margin:0;font-size:0.78rem"></p>
             </div>
             <div class="pg-barney-ask-col pg-barney-ask-col--barney" aria-label="Ask DATA replies and batch recap">
-              <p class="pg-barney-title" style="margin:0 0 6px">Ask DATA — replies</p>
-              <div id="askDataThread" class="pg-askdata-thread" aria-live="polite" role="log"></div>
-              <p class="pg-barney-title" style="margin:10px 0 4px">Last run — batch recap (Barney)</p>
-              <p class="pg-barney-recap-hint">
-                Plain-English summary of the <strong>most recent finished</strong> parallel job (<code>/api/barney-summary</code>).
-                Stays “—” until a batch completes here or after refresh, or if the formatter is off.
-              </p>
-              <pre id="barneySummaryBody" class="pg-barney-body" style="margin:0;overflow:auto">—</pre>
+              <div id="pgAskDataReplyShell" class="pg-askdata-reply-shell">
+                <p class="pg-barney-title" style="margin:0 0 6px">Ask DATA — replies</p>
+                <div id="askDataThread" class="pg-askdata-thread" aria-live="polite" role="log"></div>
+                <div
+                  id="pgAskDataReplyDrag"
+                  class="pg-askdata-reply-drag"
+                  role="separator"
+                  aria-orientation="horizontal"
+                  aria-label="Drag to resize Ask DATA replies. Height is saved in this browser."
+                  title="Drag to resize replies · height saved in this browser (localStorage)"
+                ></div>
+              </div>
+              <div class="pg-askdata-recap-block">
+                <p class="pg-barney-title" style="margin:10px 0 4px">Last run — batch recap (Barney)</p>
+                <p class="pg-barney-recap-hint">
+                  Plain-English summary of the <strong>most recent finished</strong> parallel job (<code>/api/barney-summary</code>).
+                  Stays “—” until a batch completes here or after refresh, or if the formatter is off.
+                </p>
+                <pre id="barneySummaryBody" class="pg-barney-body" style="margin:0;overflow:auto">—</pre>
+              </div>
             </div>
           </div>
         </div>
@@ -6525,124 +6564,120 @@ PAGE_HTML = """<!DOCTYPE html>
       return m[rid] || null;
     }
 
-    function renderL1RoadLegendFromApi(legend) {
-      if (!legend || typeof legend !== 'object') return '';
-      let h =
-        '<div class="pg-student-l1-road-legend-api" aria-label="L1 road legend from API"><strong title="L1: level-1 Student panel — fingerprint-group aggregates vs baseline">L1 road legend</strong> (from <code title="JSON field name on the API response">l1_road_v1.legend</code>)';
+    /** Full API legend line for a road band code (hover on Road cells / headers). */
+    function l1RoadBandLegendTitle(legend, bandRaw) {
+      if (!legend || bandRaw == null || bandRaw === '') return '';
+      const b = String(bandRaw).trim().toLowerCase().replace(/\s+/g, '_');
+      if (b === 'a') return typeof legend.band_a === 'string' ? legend.band_a : '';
+      if (b === 'b') return typeof legend.band_b === 'string' ? legend.band_b : '';
+      if (b === 'baseline_ruler') return typeof legend.band_baseline_ruler === 'string' ? legend.band_baseline_ruler : '';
+      if (b === 'data_gap') return 'Road merge reported data_gap for this job (see Road gaps column).';
+      return '';
+    }
+
+    /** API brain_profiles blurb for hover on profile symbology. */
+    function l1BrainProfileLegendTitle(legend, profileId) {
+      if (!legend || profileId == null) return '';
       const bp = legend.brain_profiles;
-      if (bp && typeof bp === 'object') {
-        h += '<ul>';
-        for (const k of Object.keys(bp)) {
-          h += '<li><code>' + escapeHtml(k) + '</code> — ' + escapeHtml(String(bp[k])) + '</li>';
-        }
-        h += '</ul>';
-      }
-      const keys = [
-        'band_a',
-        'band_b',
-        'band_baseline_ruler',
-        'pass_rate_percent',
-        'avg_e_expectancy_per_trade',
-        'avg_p_process_score',
-        'fingerprint',
-        'llm_model',
-        'group_avg_exam_e_score_v1',
-        'group_avg_exam_p_score_v1',
-        'group_exam_graded_run_count_v1',
-        'group_exam_pass_count_v1',
-        'road_exam_ep_per_job_v1',
-      ];
-      const LEGEND_KEY_TIP = {
-        band_a:
-          'Band A: improved vs same-fingerprint baseline — group mean E higher, and P at least as high when both sides have P.',
-        band_b:
-          'Band B: not improved vs baseline under the same rules, or E-only comparison when P is missing.',
-        band_baseline_ruler: 'Baseline ruler: cold baseline profile row — not scored A vs B against itself.',
-        pass_rate_percent:
-          'Pass rate percent: mean referee session win percent across runs in the group (not an exam pass bit).',
-        avg_e_expectancy_per_trade:
-          'Avg E: mean economic scalar per line — exam E when present, else batch expectancy per trade.',
-        avg_p_process_score:
-          'Avg P: mean process score per line — exam P when present, else optional process proxy.',
-        fingerprint:
-          'Fingerprint: 40-char hash of run config — groups runs that share the same recipe and window.',
-        llm_model: 'LLM model: Ollama model tag when the brain profile is the governed LLM student path.',
-        group_avg_exam_e_score_v1:
-          'Mean exam E only on lines that carry exam_e_score_v1 (explicit exam economic grades).',
-        group_avg_exam_p_score_v1:
-          'Mean exam P only on lines that carry exam_p_score_v1 (explicit exam process scores).',
-        group_exam_graded_run_count_v1: 'How many runs in the group have exam economic grade on the scorecard.',
-        group_exam_pass_count_v1: 'How many runs in the group have exam_pass_v1 true.',
-        road_exam_ep_per_job_v1:
-          'Per job_id, road merge exposes exam_e_score_v1, exam_p_score_v1, exam_pass_v1 and L1 value sources.',
-      };
-      for (let ki = 0; ki < keys.length; ki++) {
-        const kk = keys[ki];
-        const v = legend[kk];
-        if (typeof v === 'string' && v) {
-          const kt = LEGEND_KEY_TIP[kk] || 'Legend key: ' + kk;
-          h +=
-            '<p style="margin:6px 0 0"><strong title="' +
-            escapeHtml(kt) +
-            '">' +
-            escapeHtml(kk) +
-            '</strong> — ' +
-            escapeHtml(v) +
-            '</p>';
-        }
-      }
-      h += '</div>';
-      return h;
+      if (!bp || typeof bp !== 'object') return '';
+      const s = bp[String(profileId).trim()];
+      return typeof s === 'string' ? s : '';
     }
 
     function renderL1RoadGroupsPreviewFromApi(ov) {
       const groups = (ov && ov.groups) || [];
       if (!Array.isArray(groups) || !groups.length) return '';
+      const legend = (ov && ov.legend) || {};
       let h =
         '<div class="pg-student-l1-groups-preview"><p class="caps" style="margin:10px 0 4px;font-size:0.75rem">' +
         '<strong title="E/P: same exam-pack scalars used for Road band A/B (GT_DIRECTIVE_020)">L1 road — by fingerprint</strong> ' +
-        '(compare baseline vs memory vs LLM within the same config hash)</p>';
+        '(compare baseline vs memory vs LLM within the same config hash — hover column headers and cells for definitions from <code>l1_road_v1.legend</code>)</p>';
       h += '<table class="pg-student-d11-table"><thead><tr>';
+      const tipFp =
+        typeof legend.fingerprint === 'string' && legend.fingerprint
+          ? legend.fingerprint
+          : 'Fingerprint: 40-char same recipe/window hash';
+      const tipE =
+        typeof legend.avg_e_expectancy_per_trade === 'string' && legend.avg_e_expectancy_per_trade
+          ? legend.avg_e_expectancy_per_trade
+          : 'E: group mean economic scalar per line (exam E when present, else batch proxy — same as band logic)';
+      const tipP =
+        typeof legend.avg_p_process_score === 'string' && legend.avg_p_process_score
+          ? legend.avg_p_process_score
+          : 'P: group mean process per line (exam P when present, else proxy)';
+      const tipExamE =
+        typeof legend.group_avg_exam_e_score_v1 === 'string' && legend.group_avg_exam_e_score_v1
+          ? legend.group_avg_exam_e_score_v1
+          : 'Mean of exam_e_score_v1 on graded lines only';
+      const tipExamP =
+        typeof legend.group_avg_exam_p_score_v1 === 'string' && legend.group_avg_exam_p_score_v1
+          ? legend.group_avg_exam_p_score_v1
+          : 'Mean of exam_p_score_v1 on graded lines only';
+      const tipLlm =
+        typeof legend.llm_model === 'string' && legend.llm_model
+          ? legend.llm_model
+          : 'LLM: model tag when profile is memory_context_llm_student';
       h +=
-        '<th title="Fingerprint: 40-char same recipe/window hash">fp</th>' +
-        '<th title="Brain profile: cold baseline vs memory student vs LLM student">profile</th>' +
-        '<th title="LLM: model tag when profile is memory_context_llm_student">LLM</th>' +
+        '<th title="' + escapeHtml(tipFp) + '">fp</th>' +
+        '<th title="Brain profile — hover each cell for the API legend blurb">profile</th>' +
+        '<th title="' + escapeHtml(tipLlm) + '">LLM</th>' +
         '<th title="Number of runs in this bucket">n</th>' +
-        '<th title="E: group mean economic scalar per line (exam E when present, else batch proxy — same as band logic)">avg E</th>' +
-        '<th title="P: group mean process per line (exam P when present, else proxy)">avg P</th>' +
-        '<th title="Mean of exam_e_score_v1 on graded lines only">avg exam E</th>' +
-        '<th title="Mean of exam_p_score_v1 on graded lines only">avg exam P</th>' +
-        '<th title="Road band vs baseline anchor for this bucket">band</th>' +
+        '<th title="' + escapeHtml(tipE) + '">avg E</th>' +
+        '<th title="' + escapeHtml(tipP) + '">avg P</th>' +
+        '<th title="' + escapeHtml(tipExamE) + '">avg exam E</th>' +
+        '<th title="' + escapeHtml(tipExamP) + '">avg exam P</th>' +
+        '<th title="Road band — hover cell for full Band A / B / baseline_ruler text from API">band</th>' +
         '</tr></thead><tbody>';
       for (let gi = 0; gi < groups.length; gi++) {
         const g = groups[gi] || {};
         const gk = g.group_key || {};
         const fp = String(gk.fingerprint_sha256_40 || '');
         const fpDisp = fp.length > 10 ? fp.slice(0, 8) + '…' : fp;
+        const prof = String(gk.student_brain_profile_v1 || '');
+        const profTip = l1BrainProfileLegendTitle(legend, prof) || 'student_brain_profile_v1';
+        const bandVal = g.band != null ? String(g.band) : '';
+        const bandTip = l1RoadBandLegendTitle(legend, bandVal) || bandVal || 'Road band for this group';
         h += '<tr>';
         h += '<td title="' + escapeHtml(fp) + '">' + escapeHtml(fpDisp) + '</td>';
-        h += '<td>' + escapeHtml(String(gk.student_brain_profile_v1 || '—')) + '</td>';
-        h += '<td>' + escapeHtml(String(gk.llm_model != null ? gk.llm_model : '—')) + '</td>';
+        h += '<td title="' + escapeHtml(profTip) + '">' + escapeHtml(prof || '—') + '</td>';
+        h +=
+          '<td title="' +
+          escapeHtml(
+            gk.llm_model != null && String(gk.llm_model).trim()
+              ? tipLlm + ' — tag: ' + String(gk.llm_model)
+              : tipLlm
+          ) +
+          '">' +
+          escapeHtml(String(gk.llm_model != null ? gk.llm_model : '—')) +
+          '</td>';
         h += '<td>' + escapeHtml(String(g.run_count != null ? g.run_count : '—')) + '</td>';
         h +=
-          '<td>' +
+          '<td title="' +
+          escapeHtml(tipE) +
+          '">' +
           (g.avg_e_expectancy_per_trade != null
             ? fmtD11MaybeNum(g.avg_e_expectancy_per_trade, 4)
             : '—') +
           '</td>';
         h +=
-          '<td>' +
+          '<td title="' +
+          escapeHtml(tipP) +
+          '">' +
           (g.avg_p_process_score != null ? fmtD11MaybeNum(g.avg_p_process_score, 4) : '—') +
           '</td>';
         h +=
-          '<td>' +
+          '<td title="' +
+          escapeHtml(tipExamE) +
+          '">' +
           (g.group_avg_exam_e_score_v1 != null ? fmtD11MaybeNum(g.group_avg_exam_e_score_v1, 4) : '—') +
           '</td>';
         h +=
-          '<td>' +
+          '<td title="' +
+          escapeHtml(tipExamP) +
+          '">' +
           (g.group_avg_exam_p_score_v1 != null ? fmtD11MaybeNum(g.group_avg_exam_p_score_v1, 4) : '—') +
           '</td>';
-        h += '<td>' + escapeHtml(String(g.band != null ? g.band : '—')) + '</td>';
+        h += '<td title="' + escapeHtml(bandTip) + '">' + escapeHtml(bandVal || '—') + '</td>';
         h += '</tr>';
       }
       h += '</tbody></table></div>';
@@ -6684,7 +6719,7 @@ PAGE_HTML = """<!DOCTYPE html>
         (leg.band_a ? String(leg.band_a).slice(0, 220) : '') +
         (leg.band_b ? ' | ' + String(leg.band_b).slice(0, 160) : '');
       let scroll =
-        '<p class="pg-student-d11-legend" style="margin-top:0"><strong title="Level 1 (L1): list of exam runs from the scorecard">Level 1 — exam list</strong> — Each row is one exam attempt (<code title="API schema name for one run row">student_panel_run_row_v2</code> + <code title="D14 aggregate block on the same response">d14_run_row_v1</code>). Referee rollups and harness signals. Click a row (not ×) for Level 2. <strong title="Remove this scorecard line only">×</strong> removes this scorecard line only. <strong title="Sys BL: system baseline trade win percent — oldest same-fingerprint anchor">Sys BL %</strong> = system baseline trade win % (oldest same-fingerprint anchor). <strong title="Run TW: this run trade win percent from the Referee batch">Run TW %</strong> = this exam&rsquo;s trade win %. <strong title="Greater than baseline: strict beat vs Sys BL; not on anchor row">&gt;BL</strong> = strict beat vs Sys BL (not on anchor). <strong title="L1 road: fingerprint-group band vs baseline">Road</strong> / <strong title="Anchor: baseline ruler vs compare row role">Anchor</strong> / <strong title="Road gaps: merge-time data gap codes">Road gaps</strong> come from <code title="Embedded L1 road payload on this API response">l1_road_v1</code> on this response (same aggregation as <code>GET /api/student-panel/l1-road</code>). <a href="/docs/student-panel-dictionary" target="_blank" rel="noopener noreferrer">Dictionary</a> · <a href="/api/student-panel/l1-road" target="_blank" rel="noopener noreferrer">L1 road JSON</a></p>' +
+        '<p class="pg-student-d11-legend" style="margin-top:0"><strong title="Level 1 (L1): list of exam runs from the scorecard">Level 1 — exam list</strong> — Each row is one exam attempt (<code title="API schema name for one run row">student_panel_run_row_v2</code> + <code title="D14 aggregate block on the same response">d14_run_row_v1</code>). Referee rollups and harness signals. Click a row (not ×) for Level 2. <strong title="Remove this scorecard line only">×</strong> removes this scorecard line only. <strong title="Sys BL: system baseline trade win percent — oldest same-fingerprint anchor">Sys BL %</strong> = system baseline trade win % (oldest same-fingerprint anchor). <strong title="Run TW: this run trade win percent from the Referee batch">Run TW %</strong> = this exam&rsquo;s trade win %. <strong title="Greater than baseline: strict beat vs Sys BL; not on anchor row">&gt;BL</strong> = strict beat vs Sys BL (not on anchor). <strong title="L1 road: fingerprint-group band vs baseline">Road</strong> / <strong title="Anchor: baseline ruler vs compare row role">Anchor</strong> / <strong title="Road gaps: merge-time data gap codes">Road gaps</strong> come from <code title="Embedded L1 road payload on this API response">l1_road_v1</code> on this response (same aggregation as <code>GET /api/student-panel/l1-road</code>). Full <code>l1_road_v1.legend</code> copy is in native browser tooltips (<code>title</code>) on column headers and on Profile / LLM / Road cells and the fingerprint table — not a separate on-page legend block. <a href="/docs/student-panel-dictionary" target="_blank" rel="noopener noreferrer">Dictionary</a> · <a href="/api/student-panel/l1-road" target="_blank" rel="noopener noreferrer">L1 road JSON</a></p>' +
         '<div class="pg-student-d11-table-wrap"><table class="pg-student-d11-table"><thead><tr>' +
         '<th title="Run id: unique parallel batch job identifier">run_id</th>' +
         '<th title="UTC timestamp for this scorecard row">time</th>' +
@@ -6700,8 +6735,18 @@ PAGE_HTML = """<!DOCTYPE html>
         '<th title="exam_pass_v1 — PASS or FAIL from exam grading when present"><span title="PASS: exam-pack pass bit">PASS</span></th>' +
         '<th title="l1_e_value_source_v1 — which scalar feeds L1 for E (exam vs proxy)"><span title="E value source for L1">E src</span></th>' +
         '<th title="l1_p_value_source_v1 — which scalar feeds L1 for P"><span title="P value source for L1">P src</span></th>' +
-        '<th title="Profile: student_brain_profile_v1 for this job from the L1 road merge">Profile</th>' +
-        '<th title="LLM: large language model tag when profile is memory_context_llm_student">LLM</th>' +
+        '<th title="' +
+        escapeHtml(
+          'Profile: student_brain_profile_v1 from L1 road merge — row cells include l1_road_v1.legend.brain_profiles text'
+        ) +
+        '">Profile</th>' +
+        '<th title="' +
+        escapeHtml(
+          (typeof leg.llm_model === 'string' && leg.llm_model
+            ? leg.llm_model + ' '
+            : '') + 'LLM model tag when profile is memory_context_llm_student'
+        ) +
+        '">LLM</th>' +
         '<th title="' +
         escapeHtml(roadBandTitle || 'Road band vs same-fingerprint baseline (A / B / baseline_ruler / data_gap)') +
         '">Road</th>' +
@@ -6775,16 +6820,37 @@ PAGE_HTML = """<!DOCTYPE html>
             infl || row.l1_p_value_source_v1 == null ? '—' : String(row.l1_p_value_source_v1)
           ) +
           '</td>';
+        const prof0 = rv ? String(rv.student_brain_profile_v1 || '') : '';
+        const profBlurb = prof0 ? l1BrainProfileLegendTitle(leg, prof0) : '';
+        const profHover =
+          (rv ? 'L1 road merge — ' : '') +
+          (profBlurb || (rv ? 'student_brain_profile_v1 from scorecard merge' : ''));
         scroll +=
-          '<td title="L1 road merge">' +
+          '<td title="' +
+          escapeHtml(profHover) +
+          '">' +
           (rv ? escapeHtml(String(rv.student_brain_profile_v1 || '—')) : '—') +
           '</td>';
+        const lm = rv && rv.llm_model != null ? String(rv.llm_model).trim() : '';
+        const llmLegend = typeof leg.llm_model === 'string' ? leg.llm_model : '';
+        const llmHover = (
+          rv && lm ? llmLegend + (llmLegend ? ' — ' : '') + 'Model tag: ' + lm : llmLegend || 'L1 road merge'
+        ).trim();
         scroll +=
-          '<td title="L1 road merge">' +
+          '<td title="' +
+          escapeHtml(llmHover || 'LLM model when profile uses Ollama') +
+          '">' +
           (rv && rv.llm_model ? escapeHtml(String(rv.llm_model)) : '—') +
           '</td>';
+        const band0 = rv ? String(rv.band || '') : '';
+        const bandLeg = l1RoadBandLegendTitle(leg, band0);
+        const roadHover = (
+          (rv ? 'L1 road band vs fingerprint baseline. ' : '') + (bandLeg || (band0 ? 'Code: ' + band0 : ''))
+        ).trim();
         scroll +=
-          '<td title="L1 road band (group vs fingerprint baseline)">' +
+          '<td title="' +
+          escapeHtml(roadHover) +
+          '">' +
           (rv ? escapeHtml(String(rv.band || '—')) : '—') +
           '</td>';
         let anchorCell = '—';
@@ -6844,12 +6910,10 @@ PAGE_HTML = """<!DOCTYPE html>
         scroll += '</tr>';
       }
       scroll += '</tbody></table></div>';
-      scroll += renderL1RoadLegendFromApi(leg);
       scroll += renderL1RoadGroupsPreviewFromApi(ov);
       if (!rows.length) {
         scroll =
           '<p class="caps" style="margin:0">No exams in scorecard yet — click <strong>Run exam</strong> in Controls.</p>' +
-          renderL1RoadLegendFromApi(leg) +
           renderL1RoadGroupsPreviewFromApi(ov);
       }
       root.innerHTML = studentPanelD11Layout(chrome1, scroll);
@@ -10128,6 +10192,104 @@ PAGE_HTML = """<!DOCTYPE html>
         inp.value = q;
         void sendAskData();
       });
+    })();
+
+    (function wireAskDataReplyShellDrag() {
+      const LS_H = 'patternGame.askDataReplyShellHeightPx';
+      const shell = document.getElementById('pgAskDataReplyShell');
+      const drag = document.getElementById('pgAskDataReplyDrag');
+      const grid = document.querySelector('.pg-barney-ask-unified .pg-barney-ask-grid');
+      const details = document.getElementById('pgBarneyAskUnified');
+      if (!shell || !drag || !grid) return;
+
+      function maxShellPx() {
+        try {
+          const gr = grid.getBoundingClientRect();
+          if (gr.height < 100) return 560;
+          const recapMin = 120;
+          const pad = 36;
+          return Math.max(200, Math.floor(gr.height - recapMin - pad));
+        } catch (_e) {
+          return 520;
+        }
+      }
+
+      function clampPx(h) {
+        const minPx = 140;
+        const maxPx = maxShellPx();
+        let n = Math.round(Number(h));
+        if (!Number.isFinite(n)) return null;
+        return Math.max(minPx, Math.min(maxPx, n));
+      }
+
+      function applySavedHeight() {
+        try {
+          const raw = localStorage.getItem(LS_H);
+          if (raw == null || raw === '') return;
+          const y = parseInt(raw, 10);
+          const c = clampPx(y);
+          if (c == null) return;
+          shell.classList.add('pg-askdata-reply-shell--sized');
+          shell.style.height = c + 'px';
+        } catch (_e) { /* ignore */ }
+      }
+
+      function persistHeightPx(h) {
+        const c = clampPx(h);
+        if (c == null) return;
+        try {
+          localStorage.setItem(LS_H, String(c));
+        } catch (_e) { /* ignore */ }
+      }
+
+      requestAnimationFrame(function () {
+        applySavedHeight();
+      });
+
+      drag.addEventListener('mousedown', function (ev) {
+        if (ev.button !== 0) return;
+        ev.preventDefault();
+        shell.classList.add('pg-askdata-reply-shell--sized');
+        const startY = ev.clientY;
+        const startH = shell.getBoundingClientRect().height;
+        document.body.style.cursor = 'row-resize';
+        document.body.style.userSelect = 'none';
+
+        function onMove(e) {
+          const dy = e.clientY - startY;
+          const nh = clampPx(startH + dy);
+          if (nh != null) shell.style.height = nh + 'px';
+        }
+        function onUp() {
+          document.removeEventListener('mousemove', onMove);
+          document.removeEventListener('mouseup', onUp);
+          document.body.style.cursor = '';
+          document.body.style.userSelect = '';
+          persistHeightPx(shell.getBoundingClientRect().height);
+        }
+        document.addEventListener('mousemove', onMove);
+        document.addEventListener('mouseup', onUp);
+      });
+
+      window.addEventListener(
+        'resize',
+        function () {
+          if (!details || !details.open) return;
+          const cur = shell.getBoundingClientRect().height;
+          const c = clampPx(cur);
+          if (c != null && cur > c) {
+            shell.style.height = c + 'px';
+            persistHeightPx(c);
+          }
+        },
+        { passive: true }
+      );
+
+      if (details) {
+        details.addEventListener('toggle', function () {
+          if (details.open) requestAnimationFrame(applySavedHeight);
+        });
+      }
     })();
     async function resumeParallelJobFromStorageIfAny() {
       let jid = null;
