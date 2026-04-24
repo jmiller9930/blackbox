@@ -27,6 +27,7 @@ counts, **run_ok_pct**, **referee_win_pct**, **avg_trade_win_pct**) and expose `
 (includes embedded ``l1_road_v1`` overlay for L1 road columns + API legend),
 ``GET /api/student-panel/l1-road`` (**GT_DIRECTIVE_016** — full road payload, same aggregation),
 ``GET /api/student-panel/run/<job_id>/decisions``, ``GET /api/student-panel/run/<job_id>/l3?trade_id=`` (**GT_DIRECTIVE_017** — L3 envelope + structured ``data_gaps[]``),
+``GET /api/student-panel/run/<job_id>/learning`` (**GT_DIRECTIVE_018** — memory promotion / retrieval eligibility),
 ``GET /api/student-panel/decision?job_id=&trade_id=`` (``decision_id`` accepted as alias for migration).
 
 **Post-certification ``trade_strategy`` (DEV STUB):** Same routes under **``/api/v1/trade-strategy``** (stable for external callers) and **``/api/trade-strategy``** (alias).
@@ -111,7 +112,7 @@ _PATTERN_BANNER_WEBP_PATH = _RV4_ROOT / "assets" / "pattern.webp"
 _PATTERN_GAME_BANNER_BOOT_JS = _GAME_THEORY / "static" / "pattern_game_banner_boot.js"
 
 # Operator-visible web UI bundle version — bump when changing PAGE_HTML (HTML/CSS/JS) so deploys are provable.
-PATTERN_GAME_WEB_UI_VERSION = "2.19.56"
+PATTERN_GAME_WEB_UI_VERSION = "2.19.57"
 
 from renaissance_v4.game_theory.context_signature_memory import truncate_context_signature_memory_store
 from renaissance_v4.game_theory.groundhog_memory import (
@@ -155,6 +156,9 @@ from renaissance_v4.game_theory.student_panel_d13 import (
 from renaissance_v4.game_theory.student_panel_d14 import enrich_student_panel_run_rows_d14
 from renaissance_v4.game_theory.student_panel_l1_road_v1 import build_l1_road_payload_v1
 from renaissance_v4.game_theory.student_panel_l3_datagap_matrix_v1 import build_student_panel_l3_payload_v1
+from renaissance_v4.game_theory.student_proctor.learning_memory_promotion_v1 import (
+    build_student_panel_run_learning_payload_v1,
+)
 from renaissance_v4.game_theory.exam_decision_frame_schema_v1 import (
     ExamUnitTimelineDocumentV1,
     append_local_time_to_decision_frame_dict_v1,
@@ -1752,6 +1756,11 @@ def create_app() -> Flask:
         tid = (request.args.get("trade_id") or request.args.get("decision_id") or "").strip()
         payload = build_student_panel_l3_payload_v1(job_id.strip(), tid)
         return jsonify(payload), 200
+
+    @app.get("/api/student-panel/run/<job_id>/learning")
+    def api_student_panel_run_learning_gt018(job_id: str) -> Any:
+        """GT_DIRECTIVE_018 — run-level learning governance, store presence, retrieval eligibility."""
+        return jsonify(build_student_panel_run_learning_payload_v1(job_id.strip())), 200
 
     @app.get("/api/student-panel/decision")
     def api_student_panel_decision_detail_d11() -> Any:

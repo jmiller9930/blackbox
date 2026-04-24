@@ -32,8 +32,15 @@ from renaissance_v4.game_theory.student_proctor.student_ollama_student_output_v1
     _student_llm_max_trades_v1,
     emit_student_output_via_ollama_v1,
 )
+from renaissance_v4.game_theory.scorecard_drill import find_scorecard_entry_by_job_id
+from renaissance_v4.game_theory.student_panel_l3_datagap_matrix_v1 import build_student_panel_l3_payload_v1
 from renaissance_v4.game_theory.student_proctor.cross_run_retrieval_v1 import (
     build_student_decision_packet_v1_with_cross_run_retrieval,
+)
+from renaissance_v4.game_theory.student_proctor.learning_memory_promotion_v1 import (
+    GOVERNANCE_REJECT,
+    build_memory_promotion_context_v1,
+    classify_trade_memory_promotion_v1,
 )
 from renaissance_v4.game_theory.student_proctor.student_learning_loop_governance_v1 import (
     learning_loop_governance_audit_v1,
@@ -42,6 +49,7 @@ from renaissance_v4.game_theory.student_proctor.student_learning_loop_governance
 from renaissance_v4.game_theory.student_proctor.contracts_v1 import (
     FIELD_RETRIEVED_STUDENT_EXPERIENCE_V1,
     FIELD_STUDENT_CONTEXT_ANNEX_V1,
+    validate_student_learning_record_v1,
 )
 from renaissance_v4.game_theory.student_proctor.student_learning_store_v1 import (
     append_student_learning_record_v1,
@@ -270,9 +278,11 @@ def student_loop_seam_after_parallel_batch_v1(
 
     db = Path(str(db_path)) if db_path else DB_PATH
     store = Path(str(store_path)) if store_path else default_student_learning_store_path_v1()
+    scorecard_entry_effective = find_scorecard_entry_by_job_id(str(run_id).strip())
 
     errors: list[str] = []
     appended = 0
+    memory_promotion_batch_trades_v1: list[dict[str, Any]] = []
     trades_seen = 0
     retrieval_matches_total = 0
     primary_trade_shadow_student_v1: dict[str, Any] | None = None
@@ -405,9 +415,37 @@ def student_loop_seam_after_parallel_batch_v1(
                 if lre or lr is None:
                     errors.append(f"{sid} trade={o.trade_id}: learning_row {'; '.join(lre)}")
                     continue
+                l3 = build_student_panel_l3_payload_v1(str(run_id).strip(), str(o.trade_id))
+                _mem_dec, _mem_rc, gov = classify_trade_memory_promotion_v1(
+                    l3_payload=l3, scorecard_entry=scorecard_entry_effective
+                )
+                lr["learning_governance_v1"] = gov
+                lr["memory_promotion_context_v1"] = build_memory_promotion_context_v1(
+                    scorecard_entry=scorecard_entry_effective,
+                    student_output=so,
+                    trade_id=str(o.trade_id),
+                )
+                post_gov_errs = validate_student_learning_record_v1(lr)
+                if post_gov_errs:
+                    errors.append(
+                        f"{sid} trade={o.trade_id}: learning_record_post_governance_invalid: "
+                        f"{'; '.join(post_gov_errs)}"
+                    )
+                    continue
+                if str(gov.get("decision") or "") == GOVERNANCE_REJECT:
+                    errors.append(
+                        f"{sid} trade={o.trade_id}: memory_promotion_reject: {gov.get('reason_codes')}"
+                    )
+                    memory_promotion_batch_trades_v1.append(
+                        {"trade_id": str(o.trade_id), "learning_governance_v1": gov, "stored": False}
+                    )
+                    continue
                 try:
                     append_student_learning_record_v1(store, lr)
                     appended += 1
+                    memory_promotion_batch_trades_v1.append(
+                        {"trade_id": str(o.trade_id), "learning_governance_v1": gov, "stored": True}
+                    )
                 except ValueError as ve:
                     if "record_id already present" in str(ve):
                         errors.append(
@@ -472,6 +510,10 @@ def student_loop_seam_after_parallel_batch_v1(
     out_audit["learning_loop_governance_v1"] = learning_loop_governance_audit_v1(
         max_retrieval_slices_resolved=resolved_max_retrieval_slices_v1(None),
     )
+    out_audit["memory_promotion_batch_v1"] = {
+        "schema": "memory_promotion_batch_v1",
+        "per_trade": memory_promotion_batch_trades_v1,
+    }
     return out_audit
 
 

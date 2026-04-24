@@ -1,7 +1,7 @@
 # GT_DIRECTIVE_018 — Student learning loop **governance** (good loop vs bad loop)
 
 **Date:** 2026-04-24  
-**Status:** **ACTIVE — v1 slice SHIPPED** (retrieval bounds + order + seam audit); **OPEN** for memory quality filters, deliberation artifacts, P strictness, and operator metrics until accepted or deferred.  
+**Status:** **ACTIVE** — v1 retrieval slice **SHIPPED**; **v2 memory promotion slice SHIPPED** (promote/hold/reject, store gate, retrieval eligibility, run learning API + proof). **OPEN** for deliberation artifacts, richer relevance scoring, and operator metrics until accepted or deferred.  
 **From:** Architect / operator product lock  
 **To:** Engineer  
 **CC:** Product, Referee, UI  
@@ -75,6 +75,15 @@ Track **“GT_DIRECTIVE_018 — learning loop governance”** until **Accepted**
 - `cross_run_retrieval_v1.py` — env-resolved cap, **newest-first** slice order, `max_retrieval_slices` default `None`.  
 - `student_proctor_operator_runtime_v1.py` — `learning_loop_governance_v1` on seam audit.  
 - Tests: `tests/test_student_learning_loop_governance_v1.py`; `test_cross_run_retrieval_v1` order assertion updated.
+
+**2026-04-24 — v2 memory promotion (GT_018 build)**
+
+- `student_proctor/learning_memory_promotion_v1.py` — L3+scorecard classifier; `build_student_panel_run_learning_payload_v1`.  
+- Seam — `memory_promotion_batch_v1`; append only when decision ≠ `reject`; `learning_governance_v1` + `memory_promotion_context_v1` on rows.  
+- `student_learning_store_v1.py` — `retrieval_eligible_only` on signature listing (default **true**).  
+- `GET /api/student-panel/run/<job_id>/learning` — operator run payload.  
+- Proof: `docs/proof/exam_v1/GT_DIRECTIVE_018_learning_governance_v1.md`.  
+- Tests: `tests/test_gt_directive_018_learning_memory_promotion_v1.py`.
 
 **Remaining:** future slices listed above.
 

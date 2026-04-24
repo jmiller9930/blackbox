@@ -145,16 +145,31 @@ def list_student_learning_records_by_run_id(
 def list_student_learning_records_by_signature_key(
     store_path: Path | str,
     signature_key: str,
+    *,
+    retrieval_eligible_only: bool = True,
 ) -> list[dict[str, Any]]:
-    """Match ``context_signature_v1["signature_key"]`` when present."""
+    """
+    Match ``context_signature_v1["signature_key"]`` when present.
+
+    When ``retrieval_eligible_only`` is True (default, **GT_DIRECTIVE_018**), rows with
+    ``learning_governance_v1.decision`` in ``hold`` / ``reject`` are excluded from retrieval
+    (legacy rows without governance remain eligible).
+    """
+    from renaissance_v4.game_theory.student_proctor.learning_memory_promotion_v1 import (
+        memory_retrieval_eligible_v1,
+    )
+
     sk = signature_key.strip()
     out: list[dict[str, Any]] = []
     for d in load_student_learning_records_v1(store_path):
         ctx = d.get("context_signature_v1")
         if not isinstance(ctx, dict):
             continue
-        if str(ctx.get("signature_key", "")).strip() == sk:
-            out.append(d)
+        if str(ctx.get("signature_key", "")).strip() != sk:
+            continue
+        if retrieval_eligible_only and not memory_retrieval_eligible_v1(d):
+            continue
+        out.append(d)
     return out
 
 

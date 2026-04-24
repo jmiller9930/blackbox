@@ -353,6 +353,23 @@ def validate_student_learning_record_v1(doc: Any) -> list[str]:
         errs.append("referee_outcome_subset must be a dict")
     if not isinstance(doc.get("alignment_flags_v1"), dict):
         errs.append("alignment_flags_v1 must be a dict")
+    lg = doc.get("learning_governance_v1")
+    if lg is not None:
+        if not isinstance(lg, dict):
+            errs.append("learning_governance_v1 must be a dict when present")
+        else:
+            if lg.get("schema") != "learning_governance_v1":
+                errs.append("learning_governance_v1.schema must be 'learning_governance_v1'")
+            if str(lg.get("decision") or "") not in ("promote", "hold", "reject"):
+                errs.append("learning_governance_v1.decision must be promote|hold|reject")
+            if not isinstance(lg.get("reason_codes"), list):
+                errs.append("learning_governance_v1.reason_codes must be a list")
+            if not isinstance(lg.get("source_job_id"), str) or not str(lg.get("source_job_id")).strip():
+                errs.append("learning_governance_v1.source_job_id required")
+            if lg.get("fingerprint") is not None and not isinstance(lg.get("fingerprint"), str):
+                errs.append("learning_governance_v1.fingerprint must be a string or null")
+            if not isinstance(lg.get("timestamp_utc"), str) or not str(lg.get("timestamp_utc")).strip():
+                errs.append("learning_governance_v1.timestamp_utc required")
     return errs
 
 
