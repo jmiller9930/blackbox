@@ -1,7 +1,7 @@
 # GT_DIRECTIVE_015 — Run exam: Student **brain profile** contract + baseline audit
 
 **Date:** 2026-04-24 (amended 2026-04-24 — brain profile v2)  
-**Status:** **ACTIVE — OPEN** — brain profile + nested LLM metadata **shipped** in `exam_run_contract_v1` / scorecard / UI; **refine-then-seal** LLM stages and **physical** cold Referee skip remain future slices. E/P comparison surface still outstanding unless deferred in writing.  
+**Status:** **Accepted v1 — CLOSED** (Architect decision 2026-04-24). v1 scope delivered: `exam_run_contract_v1`, `student_brain_profile_v1`, nested `student_llm_v1`, legacy normalization, UI/API persistence, scorecard truth fields, Ollama-gated Student runtime, honest metadata-only skip-cold, tests, fixtures, operator proof. **Deferred items do not block GT_DIRECTIVE_016** (listed under Architect review).  
 **From:** Architect (via operator product lock)  
 **To:** Engineer  
 **CC:** Operator, Product, Referee, UI  
@@ -105,7 +105,7 @@ Non-Student callers may use repo defaults; **Student** Ollama calls use run cont
 
 ## Deficiencies log update
 
-Track: **“GT_DIRECTIVE_015 — Student brain profile + exam contract”** until **Accepted** or deferred in writing.
+**GT_DIRECTIVE_015 — Student brain profile + exam contract:** **Accepted v1 — CLOSED** (2026-04-24). No further tracking on this directive for v1 scope.
 
 ---
 
@@ -117,12 +117,26 @@ Track: **“GT_DIRECTIVE_015 — Student brain profile + exam contract”** unti
 - `student_proctor_operator_runtime_v1.py` — gates Ollama on `memory_context_llm_student`; seam audit adds `student_brain_profile_echo_v1`, `student_llm_v1_echo`.  
 - `web_app.py` — Controls: profile picker + Ollama model sub-picker; `buildExamRunContractV1ForStart()` sends full contract; **PATTERN_GAME_WEB_UI_VERSION** bumped.  
 - Tests + fixture + operator proof text updated.  
-- **Not done here:** multi-artifact refine-then-seal pipeline; additional `llm_role` behaviors beyond default.
+- **Deferred (architect acceptance 2026-04-24):** E/P comparison surface; physical cold Referee skip; refine-then-seal multi-artifact LLM pipeline; additional `llm_role` behaviors beyond default single-shot — see Architect review.
 
 ---
 
 ## Architect review
 
-**Status:** **OPEN** — accept **brain profile** semantics as the direction of travel; close when E/P comparison surface + any mandated cold-skip **physical** behavior are shipped or explicitly deferred by amendment.
+### Architect Acceptance — GT_DIRECTIVE_015 v1
 
-**Do not start GT_DIRECTIVE_016** until this directive is closed or amended regarding 016 start gate.
+**GT_DIRECTIVE_015 v1 is accepted** for the corrected scope: Student brain profile contract, LLM-as-brain-component semantics, UI/API contract persistence, scorecard truth fields, Ollama-gated execution, tests, fixtures, and operator proof.
+
+**The directive is closed for v1.**
+
+The following items are **explicitly deferred** and **must not block GT_DIRECTIVE_016**:
+
+- E/P comparison surface  
+- physical cold Referee skip  
+- refine-then-seal LLM pipeline  
+- expanded `llm_role` behavior  
+- learning-loop governance outside this directive (remains **GT_DIRECTIVE_018**)
+
+**One-line summary:** Close 015 v1 as the Student brain profile and LLM contract; defer comparison UI and physical cold skip instead of holding the directive open.
+
+**Status:** **Accepted v1 — CLOSED** (2026-04-24).

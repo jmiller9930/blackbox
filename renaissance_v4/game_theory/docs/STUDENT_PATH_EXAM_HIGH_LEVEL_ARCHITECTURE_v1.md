@@ -1,6 +1,6 @@
 # High-level architecture — learning, exam, certification, engineering, UI splice
 
-**Status:** v1.18 — **§1.2** canonical **good learning loop** (compressed product definition). **§18.4** — **GT_DIRECTIVE_018** v1 (retrieval governance). **GT_DIRECTIVE_015** brain profiles. **GT_DIRECTIVE_009a** shipped.
+**Status:** v1.19 — **§18.4** — **GT_DIRECTIVE_015** **Accepted v1 / CLOSED** (deferred: E/P UI, physical cold skip, refine-then-seal, expanded `llm_role`; **016** unblocked). **§1.2** good learning loop. **GT_DIRECTIVE_018** v1 (retrieval governance). **GT_DIRECTIVE_009a** shipped.
 
 ---
 
@@ -790,7 +790,7 @@ Work **§18.2** as a sequence of small shippables; each row satisfies **§18.3**
 | Id | Scope | Status | Notes |
 |----|--------|--------|-------|
 | **GT_DIRECTIVE_009a** | L2 **Student↔Referee direction coupling** (no baseline): per-slice `student_referee_direction_align`, `referee_direction`; `run_summary` rollups `student_referee_direction_align_*`; L2 tiles show align + honest “vs baseline: not wired”; summary band **`dir_align`** cell. | **Shipped** | Code: `student_panel_d13.py`, `web_app.py` (`PATTERN_GAME_WEB_UI_VERSION`), tests `test_d14_gap_closure_regression_v1.py`; proof sample JSON updated. |
-| **GT_DIRECTIVE_015** | **Run exam + Student brain profile contract:** three profiles (`baseline_no_memory_no_llm`, `memory_context_student`, `memory_context_llm_student`); nested **`student_llm_v1`** for model/provider/role; legacy lane **inputs** still normalize; memory → context → optional LLM → sealed output → Referee; **metadata** skip-cold only; refine-then-seal multi-artifact LLM path **future**; E/P surface **outstanding**. | **Active — partial (OPEN)** | Canonical: `directives/GT_DIRECTIVE_015_run_exam_baseline_skip_contract_v1.md`. |
+| **GT_DIRECTIVE_015** | **Run exam + Student brain profile contract:** three profiles; nested **`student_llm_v1`**; legacy **inputs** normalize; memory → context → optional LLM → sealed output → Referee; **metadata-only** skip-cold (honest label; not physical Referee skip). **Deferred (do not block 016):** E/P comparison surface (product / likely **016** or dedicated directive); physical cold Referee skip; refine-then-seal LLM pipeline; expanded **`llm_role`** beyond single-shot; learning-loop governance stays **018**. | **Accepted v1 / CLOSED** | `directives/GT_DIRECTIVE_015_run_exam_baseline_skip_contract_v1.md`. |
 | **GT_DIRECTIVE_016** | **L1 road data:** visual **A \| B** bands (system vs Anna); denormalize Anna rollups + flags at batch finish; legend defines every symbol; no full-store scan per `/runs` row. | **Planned** | Canonical: `directives/GT_DIRECTIVE_016_l1_road_data_system_student_split_v1.md`. |
 | **GT_DIRECTIVE_017** | **L3 `data_gap` closure:** gap register matrix (code → producer → acceptance); shrink happy-path `data_gaps[]`; wire exports instead of guessing; couples to L1 strong claims per directive text. | **Planned** | Canonical: `directives/GT_DIRECTIVE_017_student_l3_datagap_closure_matrix_v1.md`. |
 | **GT_DIRECTIVE_018** | **Learning loop governance:** v1 **programmatic** — `PATTERN_GAME_STUDENT_MAX_RETRIEVAL_SLICES` (default 8, max 128), **newest-first** retrieval slice order, `learning_loop_governance_v1` on Student seam audit. **Future:** memory quality filters, H1–H4 / NO_TRADE contracts, strict P metrics, anti–bad-loop dashboards. | **Active — v1 shipped, OPEN** | `directives/GT_DIRECTIVE_018_student_learning_loop_governance_v1.md`; code `student_learning_loop_governance_v1.py`, `cross_run_retrieval_v1.py`. |
@@ -822,3 +822,4 @@ Work **§18.2** as a sequence of small shippables; each row satisfies **§18.3**
 | v1.16 | **GT_DIRECTIVE_015** rework — **Student brain profiles** + **`student_llm_v1`** metadata (model secondary to profile); **§1.1** LLM row aligned; legacy API strings normalize. |
 | v1.17 | **GT_DIRECTIVE_018** — programmatic retrieval governance (env cap, newest-first, seam audit blob); **§18.4** row. |
 | v1.18 | **§1.2** — compressed canonical **good learning loop** (memory / context / LLM roles, E+P measurement, what improves vs not); cross-refs **015** / **018**. |
+| v1.19 | **GT_DIRECTIVE_015** — Architect **Accepted v1 / CLOSED**; §18.4 row + deferred list; **GT_DIRECTIVE_016** unblocked. |
