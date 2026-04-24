@@ -62,7 +62,10 @@ def system_dictionary_context_v1() -> dict[str, Any]:
                 "or **Custom** for JSON from the textarea. **Policy framework** is scenario metadata for governance/audit when the manifest provides it — "
                 "not a separate “load framework file” button in this UI. **Templates / presets:** built-in scenarios come from `game_theory/examples` "
                 "when not Custom; the **Custom JSON** textarea is the batch body when Pattern is Custom; **Scenario presets** in Advanced lists raw example files. "
-                "**Uploaded strategy:** turn on **use operator uploaded strategy**, pass manifest validation, then run — scenarios resolve from that manifest when enabled."
+                "**Uploaded strategy:** turn on **use_operator_uploaded_strategy** in UI context, pass manifest validation in Controls, then run — scenarios resolve from that manifest when enabled. "
+                "**Paste in Ask DATA (conversation):** paste manifest JSON, scenario snippets, or validator errors **into this same question box** for read-only checks and suggested wording. "
+                "Ask DATA should **ask for one missing artifact at a time** when the bundle has no file body. "
+                "**Honesty:** Ask DATA does **not** perform the Controls file upload, attach binaries, or start runs — **binding submit** stays in the operator UI + Run."
             ),
             "student_learning_persistence_code": (
                 "**Student learning (what the stack persists):** the **Student / Proctor** path grades exam-style replays and writes **versioned** rows "
@@ -73,6 +76,7 @@ def system_dictionary_context_v1() -> dict[str, Any]:
         },
         "how_to_use": (
             "Ask in plain English about controls, columns, memory, runs, or how L1/L2/L3 relate. "
+            "For **uploads / manifests**, paste text in this box — Ask DATA can review and say what is still required; it does not replace the Controls upload button. "
             "For **deep diagnostic reasoning**, prefix with `[debug]` or `[escalation]`. "
             "For **structured / API / schema** style questions, ask explicitly (e.g. JSON validation, routes) — the router may select a stronger model. "
             "After each reply, use **Helpful / Not helpful** (``POST /api/ask-data/feedback``) so repeat questions can surface prior operator signals in "

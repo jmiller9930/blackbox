@@ -138,6 +138,13 @@ def pml_static_knowledge_v1() -> dict[str, Any]:
             "Operator controls: pattern, evaluation window, workers slider, memory mode, custom JSON, "
             "uploaded strategy toggle, run/reset actions. Engineering controls build/version and host paths."
         ),
+        "ask_data_upload_paste_conversation_v1": (
+            "**Strategy / manifest — conversational help in Ask DATA:** If the bundle does not contain the file body, "
+            "reply in a **short, human turn**: invite the operator to **paste** manifest JSON, the failing slice, or the validation error **into this Ask DATA box** on the next message "
+            "so you can reformat, list missing keys, and sanity-check — all **read-only**. "
+            "Ask **one** concrete question at a time (e.g. “Paste the top-level keys of your manifest” or “Paste the last validator line”). "
+            "**Do not** imply you can click Upload for them or persist files; **binding** upload + Run stays in **Controls** with `use_operator_uploaded_strategy` and `operator_strategy_upload_state` in the bundle when present."
+        ),
         "refusal_policy": (
             "If the question is general trivia, unrelated life advice, or open internet facts, refuse in one short "
             "paragraph and say you only explain this Pattern Game UI, its runs, and controls."
@@ -260,6 +267,21 @@ def _fallback_answer_from_bundle(question: str, bundle: dict[str, Any]) -> tuple
         )
     sdict = bundle.get("system_dictionary") or {}
     topics = sdict.get("topics") if isinstance(sdict, dict) else {}
+    upaste = static.get("ask_data_upload_paste_conversation_v1")
+    if isinstance(upaste, str) and upaste.strip():
+        if ("strateg" in qlow or "manifest" in qlow) and any(
+            x in qlow
+            for x in (
+                "paste",
+                "format",
+                "conversation",
+                "this box",
+                "what should i paste",
+                "what do i send",
+                "share it back",
+            )
+        ):
+            return (str(upaste), "app_knowledge")
     if isinstance(topics, dict):
         fw_hit = (
             "framework" in qlow
@@ -357,6 +379,10 @@ def ask_data_format_with_llm(
         "**not implemented in this build** — pick the best fit.\n"
         "- Do NOT invent controls, columns, memory behavior, strategy logic, or file paths.\n"
         "- Plain English first; short by default; add technical detail only if the question asks for it.\n"
+        "- For **uploaded strategy / manifest / paste-formatting**: prefer a **conversational** reply. If file contents are **not** in the bundle, "
+        "end with **one** clear ask (e.g. paste manifest JSON or the validation error here). Never claim you can perform the Controls upload or start a run; "
+        "separate **review in chat** from **binding submit in the operator UI**. Follow `static_knowledge.ask_data_upload_paste_conversation_v1` and "
+        "`system_dictionary.topics.operator_framework_scenarios_templates`.\n"
         "- If the question is general trivia or unrelated to this application, refuse in one short paragraph "
         "(same idea as static_knowledge.refusal_policy).\n"
         "- At the end, add a single line starting with **Sources used:** listing only from: "
