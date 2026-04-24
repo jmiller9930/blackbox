@@ -118,7 +118,7 @@ _PATTERN_BANNER_WEBP_PATH = _RV4_ROOT / "assets" / "pattern.webp"
 _PATTERN_GAME_BANNER_BOOT_JS = _GAME_THEORY / "static" / "pattern_game_banner_boot.js"
 
 # Operator-visible web UI bundle version — bump when changing PAGE_HTML (HTML/CSS/JS) so deploys are provable.
-PATTERN_GAME_WEB_UI_VERSION = "2.19.59"
+PATTERN_GAME_WEB_UI_VERSION = "2.19.60"
 
 from renaissance_v4.game_theory.context_signature_memory import truncate_context_signature_memory_store
 from renaissance_v4.game_theory.groundhog_memory import (
@@ -5063,8 +5063,8 @@ PAGE_HTML = """<!DOCTYPE html>
           <button type="button" class="pg-focus-tile" id="pgFocusTileResults" data-pg-focus-tile="results" title="Expand Results">
             <p class="pg-focus-tile-k">Results</p>
             <div class="pg-focus-tile-body" id="focusTileResultsBody">
-              <span id="focusTileResultsPnl">P&amp;L —</span><br/>
-              <span id="focusTileResultsTw">Trade win —</span> · <span id="focusTileResultsTr">Trades —</span>
+              <span id="focusTileResultsPnl" title="P&amp;L: cumulative profit and loss (paper) for the last completed batch">P&amp;L —</span><br/>
+              <span id="focusTileResultsTw" title="Trade win rate: winning trades divided by trades with a result">Trade win —</span> · <span id="focusTileResultsTr" title="Trades: count of trades in the batch rollup">Trades —</span>
             </div>
             <p class="pg-focus-tile-hint">Referee outcomes · JSON · session</p>
           </button>
@@ -5097,12 +5097,12 @@ PAGE_HTML = """<!DOCTYPE html>
         <div id="memoryStatusCard" class="memory-status-card" aria-live="polite">
           <p id="memoryStatusNarrative" class="memory-status-narrative"></p>
           <dl>
-            <dt>Memory mode</dt><dd id="memStMode">—</dd>
-            <dt>Memory saved this run</dt><dd id="memStSaved">—</dd>
-            <dt>Memory loaded</dt><dd id="memStLoaded">—</dd>
-            <dt>Records loaded</dt><dd id="memStRec">—</dd>
-            <dt>Recall matches</dt><dd id="memStMatch">—</dd>
-            <dt>Bias applied</dt><dd id="memStBias">—</dd>
+            <dt title="DCR read/write mode for context signature memory">Memory mode</dt><dd id="memStMode">—</dd>
+            <dt title="New or updated memory rows written this batch">Memory saved this run</dt><dd id="memStSaved">—</dd>
+            <dt title="Whether the engine loaded a memory bundle for replay">Memory loaded</dt><dd id="memStLoaded">—</dd>
+            <dt title="Count of learning records pulled into the run">Records loaded</dt><dd id="memStRec">—</dd>
+            <dt title="Signature matches from Decision Context Recall">Recall matches</dt><dd id="memStMatch">—</dd>
+            <dt title="Times recall or signal bias altered candidate ranking">Bias applied</dt><dd id="memStBias">—</dd>
           </dl>
         </div>
         <div id="telemetryRollingLog" class="telemetry-rolling-log" aria-live="polite"></div>
@@ -5111,13 +5111,13 @@ PAGE_HTML = """<!DOCTYPE html>
         <aside class="pg-terminal-compact-summary" id="terminalCompactSummary" aria-live="polite">
           <div class="pg-tcs-title">Run summary</div>
           <dl>
-            <dt>Status</dt><dd id="tcsStatus">Idle</dd>
-            <dt>Batch</dt><dd id="tcsBatch">—</dd>
-            <dt>Window</dt><dd id="tcsWindow">—</dd>
-            <dt>DW (hot)</dt><dd id="tcsDw">—</dd>
-            <dt>Elapsed</dt><dd id="tcsElapsed">—</dd>
-            <dt>Last P&amp;L</dt><dd id="tcsLastPnl">—</dd>
-            <dt>Last TW%</dt><dd id="tcsLastTw">—</dd>
+            <dt title="Parallel batch lifecycle: idle, running, or finished">Status</dt><dd id="tcsStatus">Idle</dd>
+            <dt title="Current or last parallel job identifier">Batch</dt><dd id="tcsBatch">—</dd>
+            <dt title="Evaluation calendar window (months) for this batch">Window</dt><dd id="tcsWindow">—</dd>
+            <dt title="DW: decision windows processed in the latest hot telemetry sample">DW (hot)</dt><dd id="tcsDw">—</dd>
+            <dt title="Wall-clock time since this batch started">Elapsed</dt><dd id="tcsElapsed">—</dd>
+            <dt title="P&amp;L: profit and loss — most recent scenario cumulative paper result">Last P&amp;L</dt><dd id="tcsLastPnl">—</dd>
+            <dt title="TW%: trade win percent — winning trades divided by trades with a result, last completed scenario">Last TW%</dt><dd id="tcsLastTw">—</dd>
           </dl>
         </aside>
         </div>
@@ -5140,8 +5140,14 @@ PAGE_HTML = """<!DOCTYPE html>
                       <table class="policy-table" id="policyOutcomeTable">
                         <thead>
                           <tr>
-                            <th>Scenario</th><th>Session</th><th>Cum. P&amp;L</th><th>Trade win %</th><th>Trades</th>
-                            <th>Signal modules</th><th>Fusion</th><th>Strategy id</th>
+                            <th title="Scenario preset identifier for this row">Scenario</th>
+                            <th title="Referee session outcome: WIN, LOSS, or other judged state">Session</th>
+                            <th title="Cumulative profit and loss (paper money) for this scenario in the batch">Cum. P&amp;L</th>
+                            <th title="Share of winning trades among trades taken in this scenario">Trade win %</th>
+                            <th title="Count of trades executed in this scenario">Trades</th>
+                            <th title="Signal engine modules that contributed to this scenario">Signal modules</th>
+                            <th title="How candidate signals were fused into one decision">Fusion</th>
+                            <th title="Internal strategy or ruleset identifier">Strategy id</th>
                           </tr>
                         </thead>
                         <tbody id="policyOutcomeTbody"></tbody>
@@ -5189,39 +5195,39 @@ PAGE_HTML = """<!DOCTYPE html>
                         <table class="scorecard-table scorecard-table-learning" id="scorecardHistoryTable">
                           <thead>
                             <tr>
-                              <th title="job_id">Job</th>
-                              <th title="started_at_utc">Start</th>
-                              <th title="ended_at_utc">End</th>
-                              <th title="duration_sec">Dur</th>
-                              <th title="work_units_v1 — decision windows, bars, candidate-stack replays">Work</th>
-                              <th title="learning_status">Learn</th>
-                              <th title="decision_windows_total">DW</th>
-                              <th title="bars_processed">Bars</th>
-                              <th title="candidate_count">Cand</th>
-                              <th title="selected_candidate_id">Sel</th>
-                              <th title="winner_vs_control_delta">WΔ</th>
-                              <th title="memory_used">Mem</th>
-                              <th title="memory_records_loaded">MRec</th>
-                              <th title="groundhog_status">GH</th>
-                              <th title="recall_attempts">RAtt</th>
-                              <th title="recall_matches">RMt</th>
-                              <th title="recall_bias_applied">RBias</th>
-                              <th title="signal_bias_applied_count">SBc</th>
-                              <th title="suppressed_modules_count">Sup</th>
-                              <th title="trade_entries_total">TIn</th>
-                              <th title="trade_exits_total">TOut</th>
-                              <th title="batch_trade_win_pct / avg_trade_win_pct when trades exist">TW%</th>
-                              <th title="batch_trades_count">#Tr</th>
-                              <th title="expectancy_per_trade (mean scenarios with trades)">E/tr</th>
-                              <th title="exit_efficiency">Xeff</th>
-                              <th title="win_loss_size_ratio">WLR</th>
-                              <th title="referee_win_pct">SWin%</th>
-                              <th title="batch_sessions_judged">#Sess</th>
-                              <th title="run_ok_pct">RunOK%</th>
-                              <th title="ok_count">OK</th>
-                              <th title="failed_count">Fail</th>
-                              <th title="workers_used">Wkr</th>
-                              <th title="status">St</th>
+                              <th title="Job: unique parallel batch id (job_id)">Job</th>
+                              <th title="UTC time the batch started">Start</th>
+                              <th title="UTC time the batch finished">End</th>
+                              <th title="Dur: wall-clock duration of the batch in seconds">Dur</th>
+                              <th title="Work units: decision windows, price bars processed, and candidate-stack replays (engine load)">Work</th>
+                              <th title="Learning lane: execution_only vs learning_active from replay counters">Learn</th>
+                              <th title="DW: total decision windows evaluated in this batch">DW</th>
+                              <th title="Bars: OHLC bars processed across scenarios">Bars</th>
+                              <th title="Cand: pattern candidates evaluated">Cand</th>
+                              <th title="Sel: selected candidate id after search">Sel</th>
+                              <th title="WΔ: winner vs control delta (search quality signal)">WΔ</th>
+                              <th title="Mem: whether memory bundle was used this batch">Mem</th>
+                              <th title="MRec: memory records loaded from store">MRec</th>
+                              <th title="GH: Groundhog promoted-memory bundle status">GH</th>
+                              <th title="RAtt: Decision Context Recall lookup attempts">RAtt</th>
+                              <th title="RMt: recall signature matches">RMt</th>
+                              <th title="RBias: times recall bias was applied to candidates">RBias</th>
+                              <th title="SBc: signal-bias applications count">SBc</th>
+                              <th title="Sup: modules suppressed by policy">Sup</th>
+                              <th title="TIn: trade entries opened">TIn</th>
+                              <th title="TOut: trade exits closed">TOut</th>
+                              <th title="TW%: batch trade win percent — wins divided by trades with a result">TW%</th>
+                              <th title="#Tr: number of trades in the batch rollup">#Tr</th>
+                              <th title="E/tr: economic expectancy per trade (batch); exam-pack exam E when denormalized on the line">E/tr</th>
+                              <th title="Xeff: exit efficiency score">Xeff</th>
+                              <th title="WLR: average win size divided by average loss size">WLR</th>
+                              <th title="SWin%: session win percent — referee WIN vs LOSS among judged sessions only">SWin%</th>
+                              <th title="#Sess: number of scenarios judged WIN or LOSS">#Sess</th>
+                              <th title="RunOK%: percent of workers that finished without exception">RunOK%</th>
+                              <th title="OK: count of scenarios completed OK">OK</th>
+                              <th title="Fail: count of scenarios that failed">Fail</th>
+                              <th title="Wkr: parallel workers used">Wkr</th>
+                              <th title="St: batch status (running, done, error)">St</th>
                             </tr>
                           </thead>
                           <tbody id="scorecardHistoryTbody"></tbody>
@@ -5722,10 +5728,33 @@ PAGE_HTML = """<!DOCTYPE html>
 
     function renderD13RunSummaryBand(rs) {
       if (!rs || typeof rs !== 'object') return '';
+      var RS_TIP = {
+        run_id: 'Run id: unique job identifier for this exam batch.',
+        pattern: 'Pattern: operator recipe / policy label.',
+        evaluation_window: 'Evaluation window: calendar months of data in this batch.',
+        total_trade_opportunities: 'Trade opportunities: scenarios where a trade could occur.',
+        win_count: 'Win count: trades closed favorable.',
+        loss_count: 'Loss count: trades closed unfavorable.',
+        'win_rate_%': 'Win rate percent: wins divided by wins plus losses.',
+        dir_align:
+          'Dir align: Student thesis direction vs Referee replay direction — fraction shown when evaluable.',
+        avg_win_pnl: 'Avg win PnL: mean profit on winning trades (paper).',
+        avg_loss_pnl: 'Avg loss PnL: mean loss on losing trades (paper; usually negative).',
+        'expectancy/tr':
+          'Expectancy per trade: edge per trade from batch math; exam-pack E when denormalized on scorecard.',
+        'behavior_Δ': 'Behavior changed: YES/NO if harness or Student handoff signals changed vs prior.',
+        'outcome_Δ': 'Outcome improved: YES/NO if L1 economic scalar improved vs prior same-fingerprint run.',
+        GH: 'GH: Groundhog memory tier / harness state for this run.',
+        ctx: 'Ctx: context bundle used flag from run summary.',
+        mem: 'Mem: memory bundle used flag from run summary.',
+      };
       function cell(k, v) {
         var disp = v == null || v === '' ? '—' : String(v);
+        var tip = RS_TIP[k] || 'Field: ' + k;
         return (
-          '<span class="pg-student-d13-rs-cell"><span class="pg-student-d13-rs-k">' +
+          '<span class="pg-student-d13-rs-cell" title="' +
+          escapeHtml(tip) +
+          '"><span class="pg-student-d13-rs-k">' +
           escapeHtml(k) +
           '</span>' +
           escapeHtml(disp) +
@@ -5999,7 +6028,7 @@ PAGE_HTML = """<!DOCTYPE html>
           escapeHtml(did) +
           '" data-run="' +
           escapeHtml(runId) +
-          '" title="Trade deep dive (L3)">' +
+          '" title="Open Level 3 trade deep dive (L3): decision record, replay subset, and structured data gaps">' +
           '<div class="pg-student-d11-slice-id">' +
           escapeHtml(did) +
           '</div>' +
@@ -6015,10 +6044,12 @@ PAGE_HTML = """<!DOCTYPE html>
           'Student↔Referee dir ' +
           escapeHtml(alignShort) +
           '</div>' +
-          '<div class="pg-student-d11-slice-conf">conf ' +
+          '<div class="pg-student-d11-slice-conf" title="conf: Student confidence (0–1) from sealed output; data_gap when missing">' +
+          'conf ' +
           confDisp +
           '</div>' +
-          '<div class="pg-student-d11-slice-gh">GH ' +
+          '<div class="pg-student-d11-slice-gh" title="GH: Groundhog memory usage label for this trade slice">' +
+          'GH ' +
           escapeHtml(String(s.groundhog_usage || '—')) +
           '</div>' +
           '<div class="pg-student-d11-slice-delta">vs baseline: not wired (per-trade export pending)</div>' +
@@ -6057,31 +6088,45 @@ PAGE_HTML = """<!DOCTYPE html>
       var arr = Array.isArray(dgMatrix) ? dgMatrix : [];
       if (!arr.length) {
         return (
-          '<li><span class="pg-student-d11-k">data_gaps[]</span> <em>(empty — GT_DIRECTIVE_017 matrix)</em></li>'
+          '<li><span class="pg-student-d11-k" title="L3: level-3 trade deep dive — structured missing-data matrix">data_gaps[]</span> <em>(empty — GT_DIRECTIVE_017 matrix)</em></li>'
         );
       }
       var parts = [
-        '<li style="list-style:none;margin:0 0 6px 0"><span class="pg-student-d11-k">data_gaps[]</span> ' +
-          '(GT_DIRECTIVE_017 — producer / severity / stage)</li>',
+        '<li style="list-style:none;margin:0 0 6px 0"><span class="pg-student-d11-k" title="L3: level-3 trade deep dive — structured missing-data matrix">data_gaps[]</span> ' +
+          '(<span title="GT_DIRECTIVE_017: each row names the producer subsystem, severity, and pipeline stage">GT_DIRECTIVE_017</span> — ' +
+          '<span title="Producer: subsystem that should have written this field">producer</span> / ' +
+          '<span title="Severity: critical = blocks truth; warning = investigate; info = context">severity</span> / ' +
+          '<span title="Expected stage: where in the pipeline this field should have been produced">stage</span>)</li>',
       ];
       for (var gi = 0; gi < arr.length; gi++) {
         var g = arr[gi] || {};
         var sev = String(g.severity || '—');
         var sevColor = sev === 'critical' ? '#f85149' : sev === 'warning' ? '#d29922' : '#8b949e';
+        var sevTip =
+          sev === 'critical'
+            ? 'Critical: missing or inconsistent data blocks operator truth for this slice.'
+            : sev === 'warning'
+              ? 'Warning: investigate before trusting this part of the record.'
+              : 'Info: context or optional field gap.';
+        var prodTip = 'Producer: subsystem responsible for this field (' + String(g.producer || '—') + ').';
         parts.push(
           '<li style="list-style:none;margin:4px 0;padding:0"><div style="margin:0;padding:6px 8px;background:#161b22;border-radius:6px;border:1px solid #30363d;font-size:0.72rem;line-height:1.35">' +
             '<div><strong style="color:' +
             sevColor +
+            '" title="' +
+            escapeHtml(sevTip) +
             '">' +
             escapeHtml(sev) +
-            '</strong> · <span style="color:#58a6ff">' +
+            '</strong> · <span style="color:#58a6ff" title="' +
+            escapeHtml(prodTip) +
+            '">' +
             escapeHtml(String(g.producer || '—')) +
-            '</span> · <code>' +
+            '</span> · <code title="Field name in the API or scorecard this gap refers to">' +
             escapeHtml(String(g.field_name || '—')) +
             '</code></div>' +
-            '<div style="margin-top:3px;opacity:0.92">reason <code>' +
+            '<div style="margin-top:3px;opacity:0.92"><span title="Stable machine reason code for this gap">reason</span> <code>' +
             escapeHtml(String(g.reason || '—')) +
-            '</code> · expected_stage ' +
+            '</code> · <span title="Pipeline stage where the field should exist">expected_stage</span> ' +
             escapeHtml(String(g.expected_stage || '—')) +
             '</div></div></li>'
         );
@@ -6201,7 +6246,7 @@ PAGE_HTML = """<!DOCTYPE html>
           '</li>'
       );
       lines.push(
-        '<li><span class="pg-student-d11-k">OHLC · ema_fast/slow · rsi_14 · atr_14 · vol · regimes</span> ' +
+        '<li><span class="pg-student-d11-k" title="OHLC: open/high/low/close. EMA/RSI/ATR: indicators. vol: volume. regimes: trend and volatility labels.">OHLC · ema_fast/slow · rsi_14 · atr_14 · vol · regimes</span> ' +
           (flat
             ? 'O ' +
               fmtD11MaybeNum(rec.price_open, 4) +
@@ -6329,7 +6374,7 @@ PAGE_HTML = """<!DOCTYPE html>
     function renderL1RoadLegendFromApi(legend) {
       if (!legend || typeof legend !== 'object') return '';
       let h =
-        '<div class="pg-student-l1-road-legend-api" aria-label="L1 road legend from API"><strong>L1 road legend</strong> (from <code>l1_road_v1.legend</code>)';
+        '<div class="pg-student-l1-road-legend-api" aria-label="L1 road legend from API"><strong title="L1: level-1 Student panel — fingerprint-group aggregates vs baseline">L1 road legend</strong> (from <code title="JSON field name on the API response">l1_road_v1.legend</code>)';
       const bp = legend.brain_profiles;
       if (bp && typeof bp === 'object') {
         h += '<ul>';
@@ -6348,11 +6393,36 @@ PAGE_HTML = """<!DOCTYPE html>
         'fingerprint',
         'llm_model',
       ];
+      const LEGEND_KEY_TIP = {
+        band_a:
+          'Band A: improved vs same-fingerprint baseline — group mean E higher, and P at least as high when both sides have P.',
+        band_b:
+          'Band B: not improved vs baseline under the same rules, or E-only comparison when P is missing.',
+        band_baseline_ruler: 'Baseline ruler: cold baseline profile row — not scored A vs B against itself.',
+        pass_rate_percent:
+          'Pass rate percent: mean referee session win percent across runs in the group (not an exam pass bit).',
+        avg_e_expectancy_per_trade:
+          'Avg E: mean economic scalar per line — exam E when present, else batch expectancy per trade.',
+        avg_p_process_score:
+          'Avg P: mean process score per line — exam P when present, else optional process proxy.',
+        fingerprint:
+          'Fingerprint: 40-char hash of run config — groups runs that share the same recipe and window.',
+        llm_model: 'LLM model: Ollama model tag when the brain profile is the governed LLM student path.',
+      };
       for (let ki = 0; ki < keys.length; ki++) {
         const kk = keys[ki];
         const v = legend[kk];
-        if (typeof v === 'string' && v)
-          h += '<p style="margin:6px 0 0"><strong>' + escapeHtml(kk) + '</strong> — ' + escapeHtml(v) + '</p>';
+        if (typeof v === 'string' && v) {
+          const kt = LEGEND_KEY_TIP[kk] || 'Legend key: ' + kk;
+          h +=
+            '<p style="margin:6px 0 0"><strong title="' +
+            escapeHtml(kt) +
+            '">' +
+            escapeHtml(kk) +
+            '</strong> — ' +
+            escapeHtml(v) +
+            '</p>';
+        }
       }
       h += '</div>';
       return h;
@@ -6393,26 +6463,30 @@ PAGE_HTML = """<!DOCTYPE html>
         (leg.band_a ? String(leg.band_a).slice(0, 220) : '') +
         (leg.band_b ? ' | ' + String(leg.band_b).slice(0, 160) : '');
       let scroll =
-        '<p class="pg-student-d11-legend" style="margin-top:0"><strong>Level 1 — exam list</strong> — Each row is one exam attempt (<code>student_panel_run_row_v2</code> + <code>d14_run_row_v1</code>). Referee rollups and harness signals. Click a row (not ×) for Level 2. <strong>×</strong> removes this scorecard line only. <strong>Sys BL %</strong> = system baseline trade win % (oldest same-fingerprint anchor). <strong>Run TW %</strong> = this exam&rsquo;s trade win %. <strong>&gt;BL</strong> = strict beat vs Sys BL (not on anchor). <strong>Road</strong> / <strong>Anchor</strong> / <strong>Road gaps</strong> come from <code>l1_road_v1</code> on this response (same aggregation as <code>GET /api/student-panel/l1-road</code>). <a href="/docs/student-panel-dictionary" target="_blank" rel="noopener noreferrer">Dictionary</a> · <a href="/api/student-panel/l1-road" target="_blank" rel="noopener noreferrer">L1 road JSON</a></p>' +
+        '<p class="pg-student-d11-legend" style="margin-top:0"><strong title="Level 1 (L1): list of exam runs from the scorecard">Level 1 — exam list</strong> — Each row is one exam attempt (<code title="API schema name for one run row">student_panel_run_row_v2</code> + <code title="D14 aggregate block on the same response">d14_run_row_v1</code>). Referee rollups and harness signals. Click a row (not ×) for Level 2. <strong title="Remove this scorecard line only">×</strong> removes this scorecard line only. <strong title="Sys BL: system baseline trade win percent — oldest same-fingerprint anchor">Sys BL %</strong> = system baseline trade win % (oldest same-fingerprint anchor). <strong title="Run TW: this run trade win percent from the Referee batch">Run TW %</strong> = this exam&rsquo;s trade win %. <strong title="Greater than baseline: strict beat vs Sys BL; not on anchor row">&gt;BL</strong> = strict beat vs Sys BL (not on anchor). <strong title="L1 road: fingerprint-group band vs baseline">Road</strong> / <strong title="Anchor: baseline ruler vs compare row role">Anchor</strong> / <strong title="Road gaps: merge-time data gap codes">Road gaps</strong> come from <code title="Embedded L1 road payload on this API response">l1_road_v1</code> on this response (same aggregation as <code>GET /api/student-panel/l1-road</code>). <a href="/docs/student-panel-dictionary" target="_blank" rel="noopener noreferrer">Dictionary</a> · <a href="/api/student-panel/l1-road" target="_blank" rel="noopener noreferrer">L1 road JSON</a></p>' +
         '<div class="pg-student-d11-table-wrap"><table class="pg-student-d11-table"><thead><tr>' +
-        '<th>run_id</th><th>time</th><th>pattern</th><th>window</th><th>#tr</th>' +
-        '<th title="System baseline — batch trade win % of the oldest run in this fingerprint chain (same recipe/window anchor)">Sys BL %</th>' +
-        '<th title="This run — Referee batch rollup trade win %">Run TW %</th>' +
-        '<th title="Strictly beat system baseline? (not shown for anchor row)">&gt;BL</th>' +
-        '<th title="Referee — expectancy per trade (batch rollup)">E/tr</th>' +
-        '<th title="student_brain_profile_v1 for this job_id from L1 road merge">Profile</th>' +
-        '<th title="llm_model when profile is memory_context_llm_student">LLM</th>' +
+        '<th title="Run id: unique parallel batch job identifier">run_id</th>' +
+        '<th title="UTC timestamp for this scorecard row">time</th>' +
+        '<th title="Pattern: operator recipe or policy label">pattern</th>' +
+        '<th title="Window: evaluation calendar span (e.g. months of data)">window</th>' +
+        '<th title="#tr: trade count for this run, or progress numerator/denominator while running">#tr</th>' +
+        '<th title="Sys BL %: system baseline — batch trade win percent of the oldest completed run in this fingerprint chain (same recipe and window anchor)">Sys BL %</th>' +
+        '<th title="Run TW %: this run’s Referee batch rollup trade win percent (wins divided by trades with a result)">Run TW %</th>' +
+        '<th title="&gt;BL: strictly beat system baseline trade win percent? Not shown on the anchor row. YES / NO / = / —">&gt;BL</th>' +
+        '<th title="E/tr: economic scalar shown on the row — exam-pack exam E when present on scorecard, else batch expectancy per trade">E/tr</th>' +
+        '<th title="Profile: student_brain_profile_v1 for this job from the L1 road merge">Profile</th>' +
+        '<th title="LLM: large language model tag when profile is memory_context_llm_student">LLM</th>' +
         '<th title="' +
         escapeHtml(roadBandTitle || 'Road band vs same-fingerprint baseline (A / B / baseline_ruler / data_gap)') +
         '">Road</th>' +
         '<th title="' +
         escapeHtml(String(leg.band_baseline_ruler || 'Baseline anchor role vs compare')) +
         '">Anchor</th>' +
-        '<th title="group_data_gaps from road merge; P-compare when process leg is data_gap">Road gaps</th>' +
-        '<th title="Harness replay path">HB</th>' +
-        '<th title="Student handoff">SH</th>' +
-        '<th title="Expectancy vs prior same-config batch">outΔ</th>' +
-        '<th title="Groundhog tier">GH</th>' +
+        '<th title="Road gaps: L1 road merge group_data_gaps; includes process_score_compare:data_gap when process (P) cannot be compared">Road gaps</th>' +
+        '<th title="HB: harness behavior changed — YES if memory impact, recall, or signal bias changed replay path">HB</th>' +
+        '<th title="SH: student handoff — YES if learning rows were appended or retrieval matched this run">SH</th>' +
+        '<th title="outΔ: outcome improved — YES/NO if L1 economic scalar (exam E or batch expectancy) vs prior same-fingerprint run">outΔ</th>' +
+        '<th title="GH: Groundhog state — memory / recall tier label for attribution">GH</th>' +
         '<th title="Remove run from scorecard only (D14)"> </th>' +
         '</tr></thead><tbody>';
       for (let i = 0; i < rows.length; i++) {
@@ -6442,7 +6516,10 @@ PAGE_HTML = """<!DOCTYPE html>
             row.beats_system_baseline_trade_win != null ? String(row.beats_system_baseline_trade_win) : '—'
           ) +
           '</td>';
-        scroll += '<td>' + (row.expectancy_per_trade != null ? fmtD11MaybeNum(row.expectancy_per_trade, 4) : '—') + '</td>';
+        scroll +=
+          '<td title="Shown value is API expectancy_per_trade; exam E when present is merged into L1 road, not always duplicated in this cell">' +
+          (row.expectancy_per_trade != null ? fmtD11MaybeNum(row.expectancy_per_trade, 4) : '—') +
+          '</td>';
         const rv = infl ? null : l1RoadRowMeta(rid, ov);
         scroll +=
           '<td title="L1 road merge">' +
@@ -6486,10 +6563,22 @@ PAGE_HTML = """<!DOCTYPE html>
           '</td>';
         const hbCol = row.harness_behavior_changed != null ? row.harness_behavior_changed : row.behavior_changed;
         const shCol = row.student_handoff_active != null ? row.student_handoff_active : '—';
-        scroll += '<td>' + escapeHtml(String(hbCol != null ? hbCol : '—')) + '</td>';
-        scroll += '<td>' + escapeHtml(String(shCol)) + '</td>';
-        scroll += '<td>' + escapeHtml(String(row.outcome_improved || '—')) + '</td>';
-        scroll += '<td>' + escapeHtml(String(row.groundhog_state || '—')) + '</td>';
+        scroll +=
+          '<td title="Harness behavior changed: memory bundle, recall, or signal bias altered replay vs cold path">' +
+          escapeHtml(String(hbCol != null ? hbCol : '—')) +
+          '</td>';
+        scroll +=
+          '<td title="Student handoff: learning store rows appended or retrieval matched during this run">' +
+          escapeHtml(String(shCol)) +
+          '</td>';
+        scroll +=
+          '<td title="Outcome improved: L1 economic scalar vs previous completed run in same fingerprint">' +
+          escapeHtml(String(row.outcome_improved || '—')) +
+          '</td>';
+        scroll +=
+          '<td title="Groundhog: promoted memory / harness tier for this run">' +
+          escapeHtml(String(row.groundhog_state || '—')) +
+          '</td>';
         scroll +=
           '<td>' +
           (infl
@@ -7512,7 +7601,11 @@ PAGE_HTML = """<!DOCTYPE html>
           return;
         }
         let tbl = '<table class="drill-scenario-table"><thead><tr>' +
-          '<th>scenario</th><th>session</th><th>memory</th><th>Groundhog</th><th>reports</th>' +
+          '<th title="Scenario id within this batch">scenario</th>' +
+          '<th title="Referee session: WIN, LOSS, or other judged outcome">session</th>' +
+          '<th title="Memory applied: whether engine memory influenced this scenario">memory</th>' +
+          '<th title="Groundhog: promoted-memory bundle active or inactive">Groundhog</th>' +
+          '<th title="Report links: HUMAN readable log vs machine JSON">reports</th>' +
           '</tr></thead><tbody>';
         for (const s of scenarios) {
           const sid = String(s.scenario_id != null ? s.scenario_id : '');

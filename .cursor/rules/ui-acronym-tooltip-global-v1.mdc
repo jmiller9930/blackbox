@@ -1,0 +1,24 @@
+---
+description: Operator-visible acronyms and symbols must ship with hover/tap explanations (Pattern Machine + web UI).
+globs: "**/web_app.py,**/renaissance_v4/game_theory/**/*.html,UIUX.Web/**/*.{html,tsx,jsx,vue,css}"
+alwaysApply: false
+---
+
+# Global UI standard — acronym and symbol tooltips
+
+Any **acronym, abbreviation, shorthand column header, ticker symbol, badge, or non-obvious icon** shown to operators must include **plain-language explanation** without opening external docs.
+
+## Implementation (HTML / server-rendered UI)
+
+- Prefer native **`title="…"`** on the element (or nearest interactive wrapper) so desktop **hover** and mobile **long-press** surface the text.
+- For icon-only controls, also set **`aria-label`** (and keep `title` aligned with it).
+- Tooltip text: **one short sentence**; expand acronyms on first use in that sentence (e.g. “TW%: trade win percent — …”).
+- If a label cannot be explained clearly in one short tooltip, **rename the visible label** instead of relying on jargon.
+
+## Change-set rule
+
+Introducing a **new** acronym, shortened header, or symbolic badge **in the same change set** must add the tooltip (or inline help). Reviews should block unexplained shorthand.
+
+## Reference
+
+Pattern Machine: `renaissance_v4/game_theory/web_app.py` (Student L1–L3, scorecard, telemetry). Extend the same pattern to `UIUX.Web/` and other operator surfaces touched by the task.
