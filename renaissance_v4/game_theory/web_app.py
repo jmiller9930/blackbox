@@ -30,7 +30,7 @@ counts, **run_ok_pct**, **referee_win_pct**, **avg_trade_win_pct**) and expose `
 ``GET /api/student-panel/l1-road`` (**GT_DIRECTIVE_016** — full road payload, same aggregation),
 ``GET /api/student-panel/run/<job_id>/decisions``, ``GET /api/student-panel/run/<job_id>/l3?trade_id=`` (**GT_DIRECTIVE_017** — L3 envelope + structured ``data_gaps[]``),
 ``GET /api/student-panel/run/<job_id>/learning`` (**GT_DIRECTIVE_018** — memory promotion / retrieval eligibility),
-``GET /api/student-panel/run/<job_id>/learning-loop-trace`` — LangGraph-style **learning loop trace** JSON (nodes, edges, blunt health banner); operator page ``GET /learning-loop-trace?job_id=…``,
+``GET /api/student-panel/run/<job_id>/learning-loop-trace`` — LangGraph-style **learning loop trace** JSON (nodes, edges, blunt health banner); **debug** fingerprint compare + breakpoints: ``GET /api/debug/learning-loop/trace/<job_id>`` and ``GET /debug/learning-loop?job_id=…`` (legacy ``GET /learning-loop-trace`` redirects there),
 ``GET /api/training-exam-audit/<job_id>`` — deterministic ``training_exam_audit_v1`` for one scorecard line (learning vs harness vs missing seam; rebuilds from fields if older lines lack the block),
 ``GET /api/student-panel/decision?job_id=&trade_id=`` (``decision_id`` accepted as alias for migration).
 ``GET /api/training/export`` (**GT_DIRECTIVE_022** — promoted-only training export preview / download); ``POST /api/training/export/materialize`` (typed confirm writes ``training_dataset_v1.jsonl``).
@@ -168,6 +168,10 @@ from renaissance_v4.game_theory.student_panel_d13 import (
 from renaissance_v4.game_theory.scorecard_drill import find_scorecard_entry_by_job_id
 from renaissance_v4.game_theory.student_panel_d14 import enrich_student_panel_run_rows_d14
 from renaissance_v4.game_theory.training_exam_audit_v1 import build_training_exam_audit_v1
+from renaissance_v4.game_theory.debug_learning_loop_trace_v1 import (
+    build_debug_learning_loop_trace_v1,
+    read_debug_learning_loop_page_html_v1,
+)
 from renaissance_v4.game_theory.learning_loop_trace_v1 import (
     build_learning_loop_trace_v1,
     read_learning_loop_trace_page_html_v1,
@@ -2000,10 +2004,31 @@ def create_app() -> Flask:
         """Learning Loop Trace — graph-shaped JSON for operator engine-health (Student path)."""
         return jsonify(build_learning_loop_trace_v1(job_id.strip())), 200
 
+    @app.get("/api/debug/learning-loop/trace/<job_id>")
+    def api_debug_learning_loop_trace_v1(job_id: str) -> Any:
+        """Debug learning loop trace — graph + breakpoints + fingerprint profile compare."""
+        return jsonify(build_debug_learning_loop_trace_v1(job_id.strip())), 200
+
+    @app.get("/debug/learning-loop")
+    def page_debug_learning_loop_trace_v1() -> Any:
+        """Operator debug page: LangGraph-style trace + A/B/C profile compare (loads debug trace API)."""
+        return Response(read_debug_learning_loop_page_html_v1(), mimetype="text/html; charset=utf-8")
+
     @app.get("/learning-loop-trace")
-    def page_learning_loop_trace_v1() -> Any:
-        """Standalone visual trace page (loads JSON from learning-loop-trace API)."""
-        return Response(read_learning_loop_trace_page_html_v1(), mimetype="text/html; charset=utf-8")
+    def page_learning_loop_trace_legacy_redirect_v1() -> Any:
+        """Legacy URL — redirect to ``/debug/learning-loop`` preserving ``job_id`` / ``trade_id``."""
+        from flask import redirect
+
+        jid = (request.args.get("job_id") or "").strip()
+        tid = (request.args.get("trade_id") or "").strip()
+        q = "/debug/learning-loop"
+        if jid:
+            q += "?job_id=" + jid
+            if tid:
+                q += "&trade_id=" + tid
+        elif tid:
+            q += "?trade_id=" + tid
+        return redirect(q)
 
     @app.get("/api/training-exam-audit/<job_id>")
     def api_training_exam_audit_v1(job_id: str) -> Any:
@@ -6178,7 +6203,7 @@ PAGE_HTML = """<!DOCTYPE html>
           '<button type="button" id="pgStudentD11BackStrip">← Trade carousel</button>';
       }
       if (traceRid) {
-        var traceUrl = '/learning-loop-trace?job_id=' + encodeURIComponent(traceRid);
+        var traceUrl = '/debug/learning-loop?job_id=' + encodeURIComponent(traceRid);
         if (level === 3 && studentPanelD11 && studentPanelD11.selectedDecisionId) {
           traceUrl +=
             '&trade_id=' + encodeURIComponent(String(studentPanelD11.selectedDecisionId));

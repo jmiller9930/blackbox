@@ -2,7 +2,7 @@
 Learning Loop Trace — LangGraph-style **structured** execution graph for the Student path.
 
 Operator payload: ``build_learning_loop_trace_v1(job_id)`` → nodes + edges + blunt health banner.
-Plain HTML visualization lives in ``web_app`` route ``GET /learning-loop-trace``.
+Operator HTML: ``GET /debug/learning-loop`` (legacy ``GET /learning-loop-trace`` redirects there).
 """
 
 from __future__ import annotations
@@ -184,6 +184,18 @@ def _flow_from_status(up: NodeStatus, down: NodeStatus) -> tuple[EdgeFlow, str]:
     if up == "partial" or down == "partial":
         return "ok", "Data flowed with partial / weak signals (see node summaries)."
     return "ok", "Scorecard and batch fields consistent with data reaching the next stage."
+
+
+def rebuild_linear_edges_v1(nodes: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Rebuild ``edges_v1`` after inserting or reordering nodes (same rules as initial trace)."""
+    edges: list[dict[str, Any]] = []
+    order = [str(n.get("id") or "") for n in nodes if n.get("id")]
+    for i in range(len(order) - 1):
+        a = nodes[i]["node_status_v1"]
+        b = nodes[i + 1]["node_status_v1"]
+        fl, det = _flow_from_status(a, b)  # type: ignore[arg-type]
+        edges.append(_edge(order[i], order[i + 1], fl, det))
+    return edges
 
 
 def build_learning_loop_trace_v1(job_id: str) -> dict[str, Any]:
@@ -537,14 +549,7 @@ def build_learning_loop_trace_v1(job_id: str) -> dict[str, Any]:
         )
     )
 
-    # --- edges (linear chain in declaration order) ---
-    edges: list[dict[str, Any]] = []
-    order = [n["id"] for n in nodes]
-    for i in range(len(order) - 1):
-        a = nodes[i]["node_status_v1"]
-        b = nodes[i + 1]["node_status_v1"]
-        fl, det = _flow_from_status(a, b)  # type: ignore[arg-type]
-        edges.append(_edge(order[i], order[i + 1], fl, det))
+    edges = rebuild_linear_edges_v1(nodes)
 
     # --- top banner from training audit (single source of truth for "did store learn?") ---
     if tea_verdict == "STUDENT_LANE_NOT_CONFIGURED_OR_OFF":
@@ -592,4 +597,9 @@ def read_learning_loop_trace_page_html_v1() -> str:
     return p.read_text(encoding="utf-8")
 
 
-__all__ = ["SCHEMA", "build_learning_loop_trace_v1", "read_learning_loop_trace_page_html_v1"]
+__all__ = [
+    "SCHEMA",
+    "build_learning_loop_trace_v1",
+    "read_learning_loop_trace_page_html_v1",
+    "rebuild_linear_edges_v1",
+]

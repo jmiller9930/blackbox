@@ -38,12 +38,33 @@ def test_api_learning_loop_trace_route() -> None:
     assert body.get("schema") == "learning_loop_trace_v1"
 
 
-def test_page_learning_loop_trace_route() -> None:
+def test_page_learning_loop_trace_legacy_redirects_to_debug() -> None:
     app = create_app()
     with app.test_client() as c:
-        r = c.get("/learning-loop-trace")
+        r = c.get("/learning-loop-trace?job_id=j1&trade_id=t1", follow_redirects=False)
+    assert r.status_code == 302
+    loc = r.headers.get("Location") or ""
+    assert loc == "/debug/learning-loop?job_id=j1&trade_id=t1"
+
+
+def test_page_debug_learning_loop_route() -> None:
+    app = create_app()
+    with app.test_client() as c:
+        r = c.get("/debug/learning-loop")
     assert r.status_code == 200
-    assert b"Learning Loop Trace" in r.data
+    assert b"Learning Loop (Debug)" in r.data
+
+
+def test_api_debug_learning_loop_trace_unknown_job() -> None:
+    app = create_app()
+    with app.test_client() as c:
+        r = c.get("/api/debug/learning-loop/trace/__no_such_job_xyz__")
+    assert r.status_code == 200
+    body = r.get_json()
+    assert body is not None
+    assert body.get("schema") == "debug_learning_loop_trace_v1"
+    assert body.get("ok") is False
+    assert isinstance(body.get("trace_v1"), dict)
 
 
 def test_trace_minimal_scorecard(monkeypatch) -> None:
