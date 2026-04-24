@@ -52,16 +52,6 @@ _THESIS_MAX_INDICATORS = 32
 _THESIS_MAX_INDICATOR_LEN = 128
 _THESIS_MAX_CONTEXT_FIT_LEN = 128
 _THESIS_MAX_INVALIDATION_LEN = 4000
-OPTIONAL_THESIS_FIELD_NAMES_V1: frozenset[str] = frozenset(
-    {
-        "confidence_band",
-        "supporting_indicators",
-        "conflicting_indicators",
-        "context_fit",
-        "invalidation_text",
-        "student_action_v1",
-    }
-)
 
 # Keys that must **not** appear anywhere in a **pre-reveal** decision packet (leakage prevention v1).
 # Conservative list — refine per architect if false positives appear in real packets.
