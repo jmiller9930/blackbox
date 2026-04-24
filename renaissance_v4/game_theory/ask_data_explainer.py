@@ -19,6 +19,11 @@ import sys
 from pathlib import Path
 from typing import Any
 
+from renaissance_v4.game_theory.ask_data_operator_surface_v1 import (
+    ASK_DATA_UI_CONTEXT_ALLOWED as _UI_CONTEXT_ALLOWED,
+    build_operator_surface_catalog_for_ask_v1,
+)
+
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 
 # Whitelist keys from scorecard JSONL / batch-detail scorecard (no raw scenario bodies).
@@ -52,19 +57,6 @@ _SCORECARD_SNAPSHOT_KEYS: tuple[str, ...] = (
     "memory_context_impact_audit_v1",
     "replay_decision_windows_sum",
     "replay_bars_processed_sum",
-)
-
-_UI_CONTEXT_ALLOWED: frozenset[str] = frozenset(
-    {
-        "operator_recipe_id",
-        "evaluation_window_mode",
-        "evaluation_window_custom_months",
-        "context_signature_memory_mode",
-        "use_operator_uploaded_strategy",
-        "scenarios_source",
-        "recipe_label",
-        "pattern_game_web_ui_version",
-    }
 )
 
 _OFF_TOPIC_REGEX = re.compile(
@@ -113,6 +105,13 @@ def pml_static_knowledge_v1() -> dict[str, Any]:
             "Curated walkthroughs (e.g. three submission paths, paste-and-review hints) are **reusable patterns** when "
             "the operator’s question matches; they are **not** an exhaustive product spec. If a walkthrough and a factual "
             "section disagree, **follow the factual section** and say what is still unknown."
+        ),
+        "ask_data_clarifying_question_v1": (
+            "**Leading the operator when intent is unclear:** After you explain what the bundle supports, if the question "
+            "could still mean more than one thing (or you need them to pick a scope), end with **exactly one** short, "
+            "answerable question — e.g. “Do you mean the **calendar evaluation window** in Controls, **5-minute bar rows** "
+            "on the tape, or **DW / decision-window counts** from your last batch?” — not a long questionnaire. "
+            "Ask DATA does **not** change Controls; the operator must adjust the UI. Use `operator_surface_catalog` for control names, DOM ids, and limits."
         ),
         "pattern_vs_framework_vs_manifest": (
             "**Pattern** (operator recipe) chooses which curated playbook or Custom JSON drives the batch. "
@@ -341,8 +340,8 @@ def _fallback_answer_from_bundle(question: str, bundle: dict[str, Any]) -> tuple
                 "(engine step counts — not “5 minutes” each and not the same as the calendar evaluation window)."
             )
         parts_ms.append(
-            "**Multiple readings can apply** — if you meant only one of these, say which: calendar months in Controls, "
-            "5m bar size, DW totals for a run, or exam pack bar count."
+            "**Follow-up (pick one):** Reply with **1** for the **calendar evaluation window** in Controls, **2** for **5-minute bar rows** "
+            "on the SQLite tape, or **3** for **DW / decision-window replay depth** for a batch (include `job_id` in Ask DATA if you mean a specific row)."
         )
         return ("\n\n".join(parts_ms), "static+data_health+evaluation_window")
     if isinstance(ew, dict) and not ew.get("resolve_error") and any(
@@ -394,6 +393,32 @@ def _fallback_answer_from_bundle(question: str, bundle: dict[str, Any]) -> tuple
         if note:
             body = body + "\n\n" + note
         return (body, "wiring")
+    osc = bundle.get("operator_surface_catalog")
+    if isinstance(osc, dict) and any(
+        x in qlow
+        for x in (
+            "what controls",
+            "which controls",
+            "controls in",
+            "settings in",
+            "dom id",
+            "ui_context keys",
+            "configurable",
+        )
+    ):
+        keys = osc.get("ask_data_ui_context_keys") or []
+        lim = osc.get("parallel_limits") or {}
+        plist = osc.get("pattern_select", {}).get("options") or []
+        psum = ", ".join(f"{p.get('recipe_id')}" for p in plist[:8] if isinstance(p, dict)) or "(see catalog)"
+        return (
+            "Primary controls are described in the bundle section **`operator_surface_catalog`** (data-generated from "
+            f"code — DOM ids, evaluation-window options, worker limits, pattern list). "
+            f"**`ui_context`** echoes only these keys to Ask DATA: {', '.join(keys)}. "
+            f"Worker limits on this host: hard_cap={lim.get('hard_cap_workers')}, recommended={lim.get('recommended_max_workers')}. "
+            f"Visible pattern recipe_ids include: {psum}. Ask DATA cannot change Controls — adjust the UI, then ask again. "
+            "**Which control do you want detail on** (e.g. evaluation window, workers, or upload toggle)?",
+            "operator_surface",
+        )
     if "what does pml" in qlow or "what is pml" in qlow or "what does pattern machine" in qlow:
         return (str(static.get("what_is_pml") or ""), "app_knowledge")
     if "pattern" in qlow and "manifest" in qlow:
@@ -634,6 +659,7 @@ def build_ask_data_bundle_v1(
         "data_health_snapshot": snapshot_data_health_for_ask_v1(),
         "evaluation_window_resolved": evaluation_window_snapshot_for_ask_v1(ui_context),
         "wiring_module_board": wiring_module_board_compact_for_ask_v1(),
+        "operator_surface_catalog": build_operator_surface_catalog_for_ask_v1(),
     }
 
 
@@ -660,6 +686,7 @@ def ask_data_format_with_llm(
         "`data_health_snapshot` (live SQLite / bar counts / DB path / on-disk size when readable), "
         "`evaluation_window_resolved` (UI mode → **calendar months** for replay slice), "
         "`wiring_module_board` (subsystem wiring truth / DEF-001 — not Referee scores), "
+        "`operator_surface_catalog` (data-generated list of primary controls, limits, DOM ids, and which fields echo in `ui_context`), "
         "and `operator_feedback_signals` (prior operator ratings for **similar** questions — aggregate telemetry, "
         "not run truth). "
         "Do NOT use outside knowledge, the internet, or guesses.\n"
@@ -675,7 +702,8 @@ def ask_data_format_with_llm(
         "**decision-window (DW) replay counts**, and/or **exam pack bar counts**, do **not** answer with only one. "
         "Follow `static_knowledge.operator_time_window_disambiguation_v1`: give **short labeled bullets** for each meaning the bundle supports; "
         "state explicitly when **multiple correct readings** apply. Use `evaluation_window_resolved`, `data_health_snapshot`, "
-        "and `scorecard_snapshot.replay_decision_windows_sum` when present.\n"
+        "and `scorecard_snapshot.replay_decision_windows_sum` when present. Then end with **one** clarifying question "
+        "(see `static_knowledge.ask_data_clarifying_question_v1`) so the operator’s next message can lock which reading they care about.\n"
         "- For **uploaded strategy / manifest / paste-formatting**: prefer a **conversational** reply. If file contents are **not** in the bundle, "
         "end with **one** clear ask (e.g. paste manifest JSON or the validation error here). Never claim you can perform the Controls upload or start a run; "
         "separate **review in chat** from **binding submit in the operator UI**. Follow `static_knowledge.ask_data_upload_paste_conversation_v1` and "
@@ -688,10 +716,11 @@ def ask_data_format_with_llm(
         "(same idea as static_knowledge.refusal_policy).\n"
         "- At the end, add a single line starting with **Sources used:** listing only from: "
         "`run_facts` | `scorecard` | `ui` | `static` | `dictionary` | `upload` | `data_health` | "
-        "`evaluation_window` | `wiring` | `refused` | `operator_signals` — comma-separated, "
+        "`evaluation_window` | `wiring` | `operator_surface` | `refused` | `operator_signals` — comma-separated, "
         "reflecting what you actually relied on (`dictionary` = `system_dictionary` topics; "
         "`operator_signals` = `operator_feedback_signals` rollup; `data_health` = `data_health_snapshot`; "
-        "`evaluation_window` = `evaluation_window_resolved`; `wiring` = `wiring_module_board`).\n\n"
+        "`evaluation_window` = `evaluation_window_resolved`; `wiring` = `wiring_module_board`; "
+        "`operator_surface` = `operator_surface_catalog`).\n\n"
         f"OPERATOR QUESTION:\n{question.strip()}\n\n"
         "--- BUNDLE JSON ---\n"
         + payload

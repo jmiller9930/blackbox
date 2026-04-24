@@ -12,6 +12,10 @@ from renaissance_v4.game_theory.ask_data_explainer import (
     sanitize_ui_context,
     scorecard_snapshot_for_ask,
 )
+from renaissance_v4.game_theory.ask_data_operator_surface_v1 import (
+    ASK_DATA_UI_CONTEXT_ALLOWED,
+    build_operator_surface_catalog_for_ask_v1,
+)
 
 
 @pytest.fixture(autouse=True)
@@ -44,6 +48,27 @@ def test_scorecard_snapshot_whitelist() -> None:
     assert snap is not None
     assert snap.get("job_id") == "abc"
     assert "huge_blob" not in snap
+
+
+def test_operator_surface_catalog_and_ui_context_contract_match() -> None:
+    cat = build_operator_surface_catalog_for_ask_v1()
+    assert cat.get("schema") == "operator_surface_catalog_v1"
+    assert frozenset(cat.get("ask_data_ui_context_keys") or []) == ASK_DATA_UI_CONTEXT_ALLOWED
+    assert cat.get("parallel_limits", {}).get("hard_cap_workers") is not None
+    assert cat.get("evaluation_window", {}).get("dom_id") == "evaluationWindowPick"
+
+
+def test_build_bundle_includes_operator_surface_catalog() -> None:
+    bundle = build_ask_data_bundle_v1(
+        barney_facts=None,
+        scorecard_snapshot=None,
+        ui_context={},
+        operator_strategy_state=None,
+        job_resolution="no_job",
+    )
+    osc = bundle.get("operator_surface_catalog")
+    assert isinstance(osc, dict)
+    assert osc.get("schema") == "operator_surface_catalog_v1"
 
 
 def test_build_bundle_includes_data_health_evaluation_wiring() -> None:
@@ -93,6 +118,7 @@ def test_fallback_multisense_5m_trade_window(monkeypatch: pytest.MonkeyPatch) ->
     assert "calendar" in low or "12" in out["text"]
     assert "5-minute" in low or "5m" in low or "market_bars" in low
     assert "decision window" in low or "4200" in out["text"]
+    assert "follow-up" in low
 
 
 def test_fallback_data_health_and_evaluation_window(monkeypatch: pytest.MonkeyPatch) -> None:

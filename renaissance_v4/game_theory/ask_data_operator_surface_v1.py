@@ -1,0 +1,100 @@
+"""
+Operator-facing **surface catalog** for Ask DATA — generated from code + limits, not hand-edited HTML.
+
+Single source for ``sanitize_ui_context`` allowed keys and for ``operator_surface_catalog`` in the bundle.
+"""
+
+from __future__ import annotations
+
+from typing import Any
+
+ASK_DATA_UI_CONTEXT_ALLOWED: frozenset[str] = frozenset(
+    {
+        "operator_recipe_id",
+        "evaluation_window_mode",
+        "evaluation_window_custom_months",
+        "context_signature_memory_mode",
+        "use_operator_uploaded_strategy",
+        "scenarios_source",
+        "recipe_label",
+        "pattern_game_web_ui_version",
+    }
+)
+
+
+def build_operator_surface_catalog_for_ask_v1() -> dict[str, Any]:
+    """
+    Machine-readable catalog of primary controls and limits.
+
+    Extend here when new operator controls are added so Ask DATA stays aligned without scraping HTML.
+    """
+    from renaissance_v4.game_theory.operator_recipes import operator_recipe_catalog
+    from renaissance_v4.game_theory.parallel_runner import get_parallel_limits
+
+    lim = get_parallel_limits()
+    recipes = operator_recipe_catalog()
+    pattern_rows: list[dict[str, Any]] = []
+    for r in recipes:
+        if not isinstance(r, dict):
+            continue
+        if not r.get("operator_visible", True):
+            continue
+        pattern_rows.append(
+            {
+                "recipe_id": r.get("recipe_id"),
+                "operator_label": r.get("operator_label"),
+                "category": r.get("category"),
+                "default_evaluation_window_months": r.get("default_evaluation_window_months"),
+            }
+        )
+
+    return {
+        "schema": "operator_surface_catalog_v1",
+        "note": (
+            "Controls are configured in the **operator UI** (Flask page). This object is **read-only** telemetry "
+            "for Ask DATA — it does not change settings. Operators change values in Controls / Advanced; "
+            "`ui_context` on each Ask DATA request echoes a **sanitized subset** (see `ask_data_ui_context_keys`)."
+        ),
+        "ask_data_ui_context_keys": sorted(ASK_DATA_UI_CONTEXT_ALLOWED),
+        "parallel_limits": dict(lim),
+        "evaluation_window": {
+            "dom_id": "evaluationWindowPick",
+            "options": [
+                {"value": "12", "meaning": "approx_last_12_calendar_months_of_tape"},
+                {"value": "18", "meaning": "approx_last_18_calendar_months_of_tape"},
+                {"value": "24", "meaning": "approx_last_24_calendar_months_of_tape"},
+                {"value": "custom", "meaning": "use_evaluationWindowCustomMonths_integer"},
+            ],
+            "custom_months_input": {"dom_id": "evaluationWindowCustomMonths", "min": 1, "max": 600},
+        },
+        "pattern_select": {
+            "dom_id": "operatorRecipePick",
+            "options": pattern_rows,
+            "custom_json_note": "When Pattern is `custom`, scenarios come from the Custom scenario JSON path in Advanced.",
+        },
+        "workers": {
+            "dom_id": "workersRange",
+            "display_dom_id": "workersVal",
+            "min": 1,
+            "max_effective": "min(hard_cap_workers, scenario_count) at run time — see parallel_limits",
+            "limits": {k: lim.get(k) for k in ("cpu_logical_count", "recommended_max_workers", "hard_cap_workers")},
+        },
+        "strategy_upload": {
+            "toggle_dom_id": "useOperatorUploadedStrategy",
+            "api_echo": "use_operator_uploaded_strategy + scenarios_source in ui_context",
+            "operator_strategy_upload_state": "Separate bundle section — validation/path state from server.",
+        },
+        "exam_controls_primary": {
+            "student_brain_profile_dom_id": "examStudentReasoningModePick",
+            "ollama_model_dom_id": "examLlmModelPick",
+            "skip_cold_baseline_dom_id": "examSkipColdBaselineIfAnchor",
+            "prompt_version_dom_id": "examPromptVersion",
+            "run_button_dom_id": "runBtn",
+            "note": "Exam contract fields are sent on Run exam; not all are echoed in Ask DATA ui_context today.",
+        },
+        "bar_tape": {
+            "sqlite_table": "market_bars_5m",
+            "row_interval": "5m_ohlc",
+            "detail": "See `data_health_snapshot` in the Ask DATA bundle for counts and spans.",
+        },
+    }
