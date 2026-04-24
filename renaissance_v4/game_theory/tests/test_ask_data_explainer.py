@@ -69,6 +69,32 @@ def test_build_bundle_includes_data_health_evaluation_wiring() -> None:
     assert any(m.get("id") == "web_ui" for m in wb["modules"] if isinstance(m, dict))
 
 
+def test_fallback_multisense_5m_trade_window(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Ambiguous “window” + 5m / trade → calendar slice + bar cadence (+ DW if scorecard has sum)."""
+    monkeypatch.setenv("ASK_DATA_USE_LLM", "0")
+    bundle = build_ask_data_bundle_v1(
+        barney_facts=None,
+        scorecard_snapshot={
+            "schema": "pml_scorecard_snapshot_v1",
+            "job_id": "j1",
+            "replay_decision_windows_sum": 4200,
+        },
+        ui_context={"evaluation_window_mode": "12"},
+        operator_strategy_state=None,
+        job_resolution="scorecard_only",
+    )
+    out = ask_data_answer(
+        "What 5m trade window are we operating under right now?",
+        bundle,
+    )
+    assert out["ok"] is True
+    assert out["answer_source"] == "static+data_health+evaluation_window"
+    low = out["text"].lower()
+    assert "calendar" in low or "12" in out["text"]
+    assert "5-minute" in low or "5m" in low or "market_bars" in low
+    assert "decision window" in low or "4200" in out["text"]
+
+
 def test_fallback_data_health_and_evaluation_window(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("ASK_DATA_USE_LLM", "0")
     bundle = build_ask_data_bundle_v1(

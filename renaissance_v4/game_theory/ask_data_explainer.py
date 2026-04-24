@@ -50,6 +50,8 @@ _SCORECARD_SNAPSHOT_KEYS: tuple[str, ...] = (
     "operator_recipe_id",
     "operator_recipe_label",
     "memory_context_impact_audit_v1",
+    "replay_decision_windows_sum",
+    "replay_bars_processed_sum",
 )
 
 _UI_CONTEXT_ALLOWED: frozenset[str] = frozenset(
@@ -154,6 +156,19 @@ def pml_static_knowledge_v1() -> dict[str, Any]:
             "So “12” is **not** “12 minutes” or “5 minutes”; it is **~12 calendar months** of 5m bars for replay slicing "
             "unless the bundle’s `data_health_snapshot` shows a shorter tape or clamping in run audit."
         ),
+        "operator_time_window_disambiguation_v1": (
+            "**“Window” is overloaded** — more than one answer can be correct; separate them for the operator:\n"
+            "(1) **Evaluation / calendar window** (Controls) — last **N approximate calendar months** of tape from the **last bar**; "
+            "see `evaluation_window_resolved` and `ui_context.evaluation_window_mode`.\n"
+            "(2) **5m bar resolution** — each replay row is a **five-minute** OHLC candle in `market_bars_5m`; "
+            "see `data_health_snapshot.bar_interval` and row counts.\n"
+            "(3) **Decision windows (DW)** — **replay engine step counters** during a batch (scorecard / telemetry “Work” / DW); "
+            "not calendar months and not “five minutes of clock time” per count; see `replay_decision_windows_sum` on the scorecard snapshot when present.\n"
+            "(4) **Exam / Student “N bars”** — some packs use a **fixed count of five-minute bars** for termination or context; "
+            "that is **pack-specific** and only answer numerically if exam/run facts are in the bundle.\n"
+            "If the question mixes these (e.g. “5m trade window” + “operating under”), give **each applicable reading** in short labeled bullets; "
+            "say explicitly that **multiple readings apply** when they do."
+        ),
         "ask_data_upload_paste_conversation_v1": (
             "**Strategy / manifest — conversational help in Ask DATA:** If the bundle does not contain the file body, "
             "reply in a **short, human turn**: invite the operator to **paste** manifest JSON, the failing slice, or the validation error **into this Ask DATA box** on the next message "
@@ -215,6 +230,44 @@ def sanitize_ui_context(raw: Any) -> dict[str, Any]:
     return out
 
 
+def _operator_window_question_needs_multisense(qlow: str) -> bool:
+    """
+    True when the operator probably means more than one “window” (calendar slice vs 5m bars vs DW).
+
+    Used so Ask DATA does not answer **only** evaluation_window_resolved when they also invoked 5m / trade / bar language.
+    """
+    scope = any(
+        x in qlow
+        for x in (
+            "window",
+            "operating",
+            "time frame",
+            "timeframe",
+            "under ",
+            "which window",
+            "what window",
+        )
+    )
+    bar_or_dw = any(
+        x in qlow
+        for x in (
+            "5m",
+            "5 m",
+            "five-minute",
+            "five minute",
+            "trade window",
+            "bar interval",
+            "ohlc",
+            "market_bars",
+            "decision window",
+            " dw",
+            "replay depth",
+            "telemetry",
+        )
+    )
+    return scope and bar_or_dw
+
+
 def looks_off_topic(question: str) -> bool:
     q = (question or "").strip()
     if len(q) < 2:
@@ -269,6 +322,29 @@ def _fallback_answer_from_bundle(question: str, bundle: dict[str, Any]) -> tuple
         if parts:
             return (" ".join(parts), "data_health")
     ew = bundle.get("evaluation_window_resolved")
+    if _operator_window_question_needs_multisense(qlow) and isinstance(dh, dict):
+        parts_ms: list[str] = []
+        dis = static.get("operator_time_window_disambiguation_v1")
+        if dis:
+            parts_ms.append(str(dis))
+        if isinstance(ew, dict) and not ew.get("resolve_error") and ew.get("effective_calendar_months") is not None:
+            parts_ms.append(
+                f"**Controls — evaluation (calendar) window:** mode {ew.get('evaluation_window_mode')!r} → "
+                f"**~{ew.get('effective_calendar_months')} calendar months** of tape from the last bar."
+            )
+        bi = dh.get("bar_interval") or "Replay uses SQLite table `market_bars_5m`: one row per **5-minute** OHLC bar."
+        parts_ms.append(f"**Tape — bar resolution:** {bi} Summary: {dh.get('summary_line') or 'see `data_health_snapshot`.'}")
+        if isinstance(snap, dict) and snap.get("replay_decision_windows_sum") is not None:
+            parts_ms.append(
+                "**Replay work — decision windows (DW):** for the selected scorecard job, "
+                f"`replay_decision_windows_sum` is **{snap.get('replay_decision_windows_sum')}** "
+                "(engine step counts — not “5 minutes” each and not the same as the calendar evaluation window)."
+            )
+        parts_ms.append(
+            "**Multiple readings can apply** — if you meant only one of these, say which: calendar months in Controls, "
+            "5m bar size, DW totals for a run, or exam pack bar count."
+        )
+        return ("\n\n".join(parts_ms), "static+data_health+evaluation_window")
     if isinstance(ew, dict) and not ew.get("resolve_error") and any(
         x in qlow
         for x in (
@@ -595,6 +671,11 @@ def ask_data_format_with_llm(
         "- **Bundle philosophy:** The entire JSON is the contract. Walkthroughs in `static_knowledge` (submission paths, paste hints) are **examples** "
         "for matching questions — not a stricter truth than `data_health_snapshot`, `wiring_module_board`, run/scorecard facts, or `system_dictionary`. "
         "Prefer the most **specific factual** sections for architecture, data volume, wiring, and run truth; use leading questions only when a checklist truly helps.\n"
+        "- **Overloaded “window” / 5m / trade phrasing:** If the question could mean **calendar evaluation months**, **5-minute bar resolution**, "
+        "**decision-window (DW) replay counts**, and/or **exam pack bar counts**, do **not** answer with only one. "
+        "Follow `static_knowledge.operator_time_window_disambiguation_v1`: give **short labeled bullets** for each meaning the bundle supports; "
+        "state explicitly when **multiple correct readings** apply. Use `evaluation_window_resolved`, `data_health_snapshot`, "
+        "and `scorecard_snapshot.replay_decision_windows_sum` when present.\n"
         "- For **uploaded strategy / manifest / paste-formatting**: prefer a **conversational** reply. If file contents are **not** in the bundle, "
         "end with **one** clear ask (e.g. paste manifest JSON or the validation error here). Never claim you can perform the Controls upload or start a run; "
         "separate **review in chat** from **binding submit in the operator UI**. Follow `static_knowledge.ask_data_upload_paste_conversation_v1` and "
