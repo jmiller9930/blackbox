@@ -1,7 +1,10 @@
 """
-GT_DIRECTIVE_015 — Student seam calls Ollama with **run-scoped** model (Qwen vs DeepSeek).
+GT_DIRECTIVE_015 — Student **memory_context_llm_student** profile: Ollama with **run-scoped**
+``student_llm_v1`` (provider, model, role). Model tag is **metadata** under the brain profile, not a
+separate top-level “lane.”
 
 Bounded JSON-only completion over ``/api/chat``; parsed output must pass ``validate_student_output_v1``.
+(Future: refine-then-seal / H1–H4 deliberation roles — v1 default role is single-shot output.)
 """
 
 from __future__ import annotations

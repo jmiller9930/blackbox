@@ -103,7 +103,7 @@ _PATTERN_BANNER_WEBP_PATH = _RV4_ROOT / "assets" / "pattern.webp"
 _PATTERN_GAME_BANNER_BOOT_JS = _GAME_THEORY / "static" / "pattern_game_banner_boot.js"
 
 # Operator-visible web UI bundle version — bump when changing PAGE_HTML (HTML/CSS/JS) so deploys are provable.
-PATTERN_GAME_WEB_UI_VERSION = "2.19.50"
+PATTERN_GAME_WEB_UI_VERSION = "2.19.51"
 
 from renaissance_v4.game_theory.context_signature_memory import truncate_context_signature_memory_store
 from renaissance_v4.game_theory.groundhog_memory import (
@@ -4698,13 +4698,22 @@ PAGE_HTML = """<!DOCTYPE html>
             </div>
             <div class="pg-controls-span-2" style="margin-top:8px;padding-top:10px;border-top:1px solid var(--pg-line)">
               <div class="pg-controls-min-grid" style="grid-template-columns:minmax(9.5rem,36%) 1fr;align-items:start">
-                <label for="examStudentReasoningModePick">Student reasoning</label>
+                <label for="examStudentReasoningModePick">Student brain profile (GT-015)</label>
                 <select id="examStudentReasoningModePick" aria-describedby="examContractHelp">
-                  <option value="repeat_anna_memory_context">Repeat Anna (memory / context, no LLM)</option>
-                  <option value="cold_baseline">Cold baseline</option>
-                  <option value="llm_assisted_anna_qwen">LLM-assisted Anna (Qwen 2.5 7B)</option>
-                  <option value="llm_assisted_anna_deepseek_r1_14b">LLM-assisted Anna (DeepSeek R1 14B)</option>
+                  <option value="memory_context_student" selected>Memory + context — stub Student (no LLM)</option>
+                  <option value="baseline_no_memory_no_llm">Baseline — no memory / no LLM (system cold path)</option>
+                  <option value="memory_context_llm_student">Memory + context + LLM component (Ollama)</option>
                 </select>
+                <div id="examLlmModelWrap" class="pg-controls-span-2" style="margin-top:8px;display:none">
+                  <div class="pg-controls-min-grid" style="grid-template-columns:minmax(10rem,38%) 1fr;align-items:center">
+                    <label for="examLlmModelPick">Ollama model</label>
+                    <select id="examLlmModelPick" aria-label="Ollama model for Student LLM profile">
+                      <option value="qwen2.5:7b">qwen2.5:7b</option>
+                      <option value="deepseek-r1:14b">deepseek-r1:14b</option>
+                    </select>
+                  </div>
+                  <p class="caps" style="margin:6px 0 0;font-size:0.72rem;color:#5a6570">Model choice is <strong>metadata</strong> under the LLM profile (secondary to whether memory + context + governed LLM improve under the Referee).</p>
+                </div>
                 <div class="pg-controls-span-2" style="margin-top:8px">
                   <label style="display:flex;align-items:flex-start;gap:8px;font-size:0.82rem;line-height:1.38;cursor:pointer;margin:0">
                     <input type="checkbox" id="examSkipColdBaselineIfAnchor" style="margin-top:3px;flex-shrink:0"/>
@@ -4714,7 +4723,7 @@ PAGE_HTML = """<!DOCTYPE html>
                 <label for="examPromptVersion" style="margin-top:8px">Prompt version</label>
                 <input type="text" id="examPromptVersion" maxlength="256" autocomplete="off" placeholder="pattern_game_web_ui_v__PATTERN_GAME_WEB_UI_VERSION__" style="width:100%;max-width:100%"/>
               </div>
-              <p id="examContractHelp" class="caps" style="margin:8px 0 0;font-size:0.72rem;line-height:1.42;color:#5a6570">Every <strong>Run exam</strong> sends <code>exam_run_contract_v1</code> (plus <code>retrieved_context_ids: []</code> until wired). LLM-assisted modes call Ollama on the Student seam after replay.</p>
+              <p id="examContractHelp" class="caps" style="margin:8px 0 0;font-size:0.72rem;line-height:1.42;color:#5a6570">Every <strong>Run exam</strong> sends <code>exam_run_contract_v1</code> with <code>student_brain_profile_v1</code> and optional <code>student_llm_v1</code> (plus <code>retrieved_context_ids: []</code> until wired). Legacy lane strings are still accepted by the API. Ollama runs only for the LLM profile after replay.</p>
             </div>
           </div>
           <div class="pg-controls-run-row">
@@ -7917,23 +7926,51 @@ PAGE_HTML = """<!DOCTYPE html>
     })();
 
     function buildExamRunContractV1ForStart() {
-      const modeEl = document.getElementById('examStudentReasoningModePick');
+      const profEl = document.getElementById('examStudentReasoningModePick');
       const skipEl = document.getElementById('examSkipColdBaselineIfAnchor');
       const pvEl = document.getElementById('examPromptVersion');
-      const mode =
-        modeEl && modeEl.value ? String(modeEl.value).trim() : 'repeat_anna_memory_context';
+      const llmModelEl = document.getElementById('examLlmModelPick');
+      const PROFILE_LLM = 'memory_context_llm_student';
+      const profile =
+        profEl && profEl.value ? String(profEl.value).trim() : 'memory_context_student';
       const skipCold = !!(skipEl && skipEl.checked);
       const pv =
         pvEl && pvEl.value.trim()
           ? pvEl.value.trim()
           : 'pattern_game_web_ui_v' + PATTERN_GAME_UI_VERSION_STR;
-      return {
-        student_reasoning_mode: mode,
+      const out = {
+        student_brain_profile_v1: profile,
+        student_reasoning_mode: profile,
         skip_cold_baseline_if_anchor: skipCold,
         prompt_version: pv,
         retrieved_context_ids: [],
       };
+      if (profile === PROFILE_LLM) {
+        const model =
+          llmModelEl && llmModelEl.value ? String(llmModelEl.value).trim() : 'qwen2.5:7b';
+        out.student_llm_v1 = {
+          llm_provider: 'ollama',
+          llm_model: model,
+          llm_role: 'single_shot_student_output_v1',
+        };
+      } else {
+        out.student_llm_v1 = {};
+      }
+      return out;
     }
+
+    (function wireExamBrainProfileUi() {
+      const pick = document.getElementById('examStudentReasoningModePick');
+      const wrap = document.getElementById('examLlmModelWrap');
+      function syncExamLlmWrap() {
+        if (!wrap || !pick) return;
+        wrap.style.display = pick.value === 'memory_context_llm_student' ? 'block' : 'none';
+      }
+      if (pick) {
+        pick.addEventListener('change', syncExamLlmWrap);
+        syncExamLlmWrap();
+      }
+    })();
 
     function friendlyParallelBackendError(msg) {
       const m = String(msg != null ? msg : '');

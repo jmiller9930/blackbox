@@ -9,7 +9,10 @@ from unittest.mock import patch
 
 import pytest
 
-from renaissance_v4.game_theory.exam_run_contract_v1 import STUDENT_REASONING_MODE_LLM_QWEN_V1
+from renaissance_v4.game_theory.exam_run_contract_v1 import (
+    STUDENT_BRAIN_PROFILE_MEMORY_CONTEXT_LLM_STUDENT_V1,
+    STUDENT_REASONING_MODE_LLM_QWEN_V1,
+)
 from renaissance_v4.game_theory.web_app import create_app
 
 
@@ -86,7 +89,8 @@ def test_post_run_parallel_blocking_writes_lane_metadata(
         "shadow_student_enabled": False,
         "student_llm_execution_v1": {
             "schema": "student_llm_execution_v1",
-            "student_reasoning_mode_echo": STUDENT_REASONING_MODE_LLM_QWEN_V1,
+            "student_brain_profile_echo_v1": STUDENT_BRAIN_PROFILE_MEMORY_CONTEXT_LLM_STUDENT_V1,
+            "student_reasoning_mode_echo": STUDENT_BRAIN_PROFILE_MEMORY_CONTEXT_LLM_STUDENT_V1,
             "model_resolved": "qwen2.5:7b",
             "base_url_resolved": "http://127.0.0.1:11434",
             "ollama_any_attempt": True,
@@ -131,7 +135,8 @@ def test_post_run_parallel_blocking_writes_lane_metadata(
     assert r.status_code == 200, r.get_data(as_text=True)
     body = r.get_json()
     assert body.get("ok") is True
-    assert last_meta.get("student_reasoning_mode") == STUDENT_REASONING_MODE_LLM_QWEN_V1
+    assert last_meta.get("student_brain_profile_v1") == STUDENT_BRAIN_PROFILE_MEMORY_CONTEXT_LLM_STUDENT_V1
+    assert last_meta.get("student_reasoning_mode") == STUDENT_BRAIN_PROFILE_MEMORY_CONTEXT_LLM_STUDENT_V1
     assert last_meta.get("llm_model") == "qwen2.5:7b"
     assert last_meta.get("student_llm_execution_v1", {}).get("ollama_trades_succeeded") == 1
 
@@ -170,7 +175,8 @@ def test_post_run_parallel_start_returns_200_with_exam_contract(
         "shadow_student_enabled": True,
         "student_llm_execution_v1": {
             "schema": "student_llm_execution_v1",
-            "student_reasoning_mode_echo": STUDENT_REASONING_MODE_LLM_QWEN_V1,
+            "student_brain_profile_echo_v1": STUDENT_BRAIN_PROFILE_MEMORY_CONTEXT_LLM_STUDENT_V1,
+            "student_reasoning_mode_echo": STUDENT_BRAIN_PROFILE_MEMORY_CONTEXT_LLM_STUDENT_V1,
             "model_resolved": "qwen2.5:7b",
             "base_url_resolved": "http://127.0.0.1:11434",
             "ollama_any_attempt": True,
@@ -223,4 +229,5 @@ def test_post_run_parallel_start_returns_200_with_exam_contract(
     assert pr.status_code == 200
     pj = pr.get_json()
     assert pj.get("status") == "done"
-    assert last_meta.get("student_reasoning_mode") == STUDENT_REASONING_MODE_LLM_QWEN_V1
+    assert last_meta.get("student_brain_profile_v1") == STUDENT_BRAIN_PROFILE_MEMORY_CONTEXT_LLM_STUDENT_V1
+    assert last_meta.get("student_reasoning_mode") == STUDENT_BRAIN_PROFILE_MEMORY_CONTEXT_LLM_STUDENT_V1

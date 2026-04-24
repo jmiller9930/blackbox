@@ -1,9 +1,16 @@
 """
-GT_DIRECTIVE_015 — exam run contract: reasoning modes, scorecard metadata, skip-cold audit.
+GT_DIRECTIVE_015 — exam run contract: **Student brain profile**, nested LLM metadata, scorecard fields.
+
+**Student brain profile** (primary): ``baseline_no_memory_no_llm`` | ``memory_context_student`` |
+``memory_context_llm_student``. Legacy ``student_reasoning_mode`` **input** strings (cold baseline,
+repeat Anna, Qwen/DeepSeek lane labels) are still accepted and normalized to a profile.
+
+**LLM** is metadata under the ``memory_context_llm_student`` profile: ``student_llm_v1`` with
+``llm_provider``, ``llm_model``, ``llm_role``. Model choice is **secondary** to the profile
+(primary question: does memory + context + governed LLM reasoning improve under the Referee?).
 
 Parallel replay **still executes** for every batch in v1; ``skip_cold_baseline`` records whether a
-**prior comparable baseline** existed (apples-to-apples comparison validity), not a physical skip
-of the Referee engine (two-phase cold vs Anna split is future work).
+**prior comparable baseline** existed (comparison validity), not a physical skip of Referee work.
 """
 
 from __future__ import annotations
@@ -15,46 +22,70 @@ from typing import Any
 
 from renaissance_v4.game_theory.batch_scorecard import read_batch_scorecard_recent
 
-# Canonical modes (engineering brief + legacy aliases in normalize).
-STUDENT_REASONING_MODE_COLD_BASELINE_V1 = "cold_baseline"
-STUDENT_REASONING_MODE_REPEAT_ANNA_V1 = "repeat_anna_memory_context"
-STUDENT_REASONING_MODE_LLM_QWEN_V1 = "llm_assisted_anna_qwen"
-STUDENT_REASONING_MODE_LLM_DEEPSEEK_V1 = "llm_assisted_anna_deepseek_r1_14b"
+# --- Canonical Student brain profiles (GT_DIRECTIVE_015 v2) ---
 
-CANONICAL_STUDENT_REASONING_MODES_V1: frozenset[str] = frozenset(
+STUDENT_BRAIN_PROFILE_BASELINE_NO_MEMORY_NO_LLM_V1 = "baseline_no_memory_no_llm"
+STUDENT_BRAIN_PROFILE_MEMORY_CONTEXT_STUDENT_V1 = "memory_context_student"
+STUDENT_BRAIN_PROFILE_MEMORY_CONTEXT_LLM_STUDENT_V1 = "memory_context_llm_student"
+
+CANONICAL_STUDENT_BRAIN_PROFILES_V1: frozenset[str] = frozenset(
     {
-        STUDENT_REASONING_MODE_COLD_BASELINE_V1,
-        STUDENT_REASONING_MODE_REPEAT_ANNA_V1,
-        STUDENT_REASONING_MODE_LLM_QWEN_V1,
-        STUDENT_REASONING_MODE_LLM_DEEPSEEK_V1,
+        STUDENT_BRAIN_PROFILE_BASELINE_NO_MEMORY_NO_LLM_V1,
+        STUDENT_BRAIN_PROFILE_MEMORY_CONTEXT_STUDENT_V1,
+        STUDENT_BRAIN_PROFILE_MEMORY_CONTEXT_LLM_STUDENT_V1,
     }
 )
 
-# Includes legacy input tokens accepted by ``normalize_student_reasoning_mode_v1``.
+# Legacy **input** tokens (UI/API/scripts). Normalize maps these → brain profile.
+LEGACY_STUDENT_REASONING_INPUT_COLD_BASELINE_V1 = "cold_baseline"
+LEGACY_STUDENT_REASONING_INPUT_REPEAT_ANNA_V1 = "repeat_anna_memory_context"
+LEGACY_STUDENT_REASONING_INPUT_MEMORY_CONTEXT_ONLY_V1 = "memory_context_only"
+LEGACY_STUDENT_REASONING_INPUT_LLM_QWEN_V1 = "llm_assisted_anna_qwen"
+LEGACY_STUDENT_REASONING_INPUT_LLM_QWEN_ALIAS_V1 = "llm_qwen2_5_7b"
+LEGACY_STUDENT_REASONING_INPUT_LLM_DEEPSEEK_V1 = "llm_assisted_anna_deepseek_r1_14b"
+LEGACY_STUDENT_REASONING_INPUT_LLM_DEEPSEEK_ALIAS_V1 = "llm_deepseek_r1_14b"
+
+LEGACY_STUDENT_REASONING_INPUTS_V1: frozenset[str] = frozenset(
+    {
+        LEGACY_STUDENT_REASONING_INPUT_COLD_BASELINE_V1,
+        LEGACY_STUDENT_REASONING_INPUT_REPEAT_ANNA_V1,
+        LEGACY_STUDENT_REASONING_INPUT_MEMORY_CONTEXT_ONLY_V1,
+        LEGACY_STUDENT_REASONING_INPUT_LLM_QWEN_V1,
+        LEGACY_STUDENT_REASONING_INPUT_LLM_QWEN_ALIAS_V1,
+        LEGACY_STUDENT_REASONING_INPUT_LLM_DEEPSEEK_V1,
+        LEGACY_STUDENT_REASONING_INPUT_LLM_DEEPSEEK_ALIAS_V1,
+    }
+)
+
+# Back-compat names for imports (values are legacy **inputs**, not persisted profile ids).
+STUDENT_REASONING_MODE_COLD_BASELINE_V1 = LEGACY_STUDENT_REASONING_INPUT_COLD_BASELINE_V1
+STUDENT_REASONING_MODE_REPEAT_ANNA_V1 = LEGACY_STUDENT_REASONING_INPUT_REPEAT_ANNA_V1
+STUDENT_REASONING_MODE_LLM_QWEN_V1 = LEGACY_STUDENT_REASONING_INPUT_LLM_QWEN_V1
+STUDENT_REASONING_MODE_LLM_DEEPSEEK_V1 = LEGACY_STUDENT_REASONING_INPUT_LLM_DEEPSEEK_V1
+
 STUDENT_REASONING_MODES_V1: frozenset[str] = frozenset(
-    CANONICAL_STUDENT_REASONING_MODES_V1
-    | {
-        "memory_context_only",
-        "llm_qwen2_5_7b",
-        "llm_deepseek_r1_14b",
-    }
+    CANONICAL_STUDENT_BRAIN_PROFILES_V1 | LEGACY_STUDENT_REASONING_INPUTS_V1
 )
 
-_MODE_ALIASES_V1: dict[str, str] = {
-    "memory_context_only": STUDENT_REASONING_MODE_REPEAT_ANNA_V1,
-    "llm_qwen2_5_7b": STUDENT_REASONING_MODE_LLM_QWEN_V1,
-    "llm_deepseek_r1_14b": STUDENT_REASONING_MODE_LLM_DEEPSEEK_V1,
+_LEGACY_INPUT_TO_PROFILE_V1: dict[str, str] = {
+    LEGACY_STUDENT_REASONING_INPUT_COLD_BASELINE_V1: STUDENT_BRAIN_PROFILE_BASELINE_NO_MEMORY_NO_LLM_V1,
+    LEGACY_STUDENT_REASONING_INPUT_REPEAT_ANNA_V1: STUDENT_BRAIN_PROFILE_MEMORY_CONTEXT_STUDENT_V1,
+    LEGACY_STUDENT_REASONING_INPUT_MEMORY_CONTEXT_ONLY_V1: STUDENT_BRAIN_PROFILE_MEMORY_CONTEXT_STUDENT_V1,
+    LEGACY_STUDENT_REASONING_INPUT_LLM_QWEN_V1: STUDENT_BRAIN_PROFILE_MEMORY_CONTEXT_LLM_STUDENT_V1,
+    LEGACY_STUDENT_REASONING_INPUT_LLM_QWEN_ALIAS_V1: STUDENT_BRAIN_PROFILE_MEMORY_CONTEXT_LLM_STUDENT_V1,
+    LEGACY_STUDENT_REASONING_INPUT_LLM_DEEPSEEK_V1: STUDENT_BRAIN_PROFILE_MEMORY_CONTEXT_LLM_STUDENT_V1,
+    LEGACY_STUDENT_REASONING_INPUT_LLM_DEEPSEEK_ALIAS_V1: STUDENT_BRAIN_PROFILE_MEMORY_CONTEXT_LLM_STUDENT_V1,
 }
 
-_LLM_BINDING_V1: dict[str, dict[str, Any]] = {
-    STUDENT_REASONING_MODE_LLM_QWEN_V1: {
-        "llm_used": True,
-        "llm_model": "qwen2.5:7b",
-    },
-    STUDENT_REASONING_MODE_LLM_DEEPSEEK_V1: {
-        "llm_used": True,
-        "llm_model": "deepseek-r1:14b",
-    },
+_DEFAULT_LLM_ROLE_V1 = "single_shot_student_output_v1"
+_DEFAULT_LLM_PROVIDER_V1 = "ollama"
+_DEFAULT_LLM_MODEL_WHEN_OMITTED_V1 = "qwen2.5:7b"
+
+_LLM_HINT_FROM_LEGACY_INPUT_V1: dict[str, str] = {
+    LEGACY_STUDENT_REASONING_INPUT_LLM_QWEN_V1: "qwen2.5:7b",
+    LEGACY_STUDENT_REASONING_INPUT_LLM_QWEN_ALIAS_V1: "qwen2.5:7b",
+    LEGACY_STUDENT_REASONING_INPUT_LLM_DEEPSEEK_V1: "deepseek-r1:14b",
+    LEGACY_STUDENT_REASONING_INPUT_LLM_DEEPSEEK_ALIAS_V1: "deepseek-r1:14b",
 }
 
 
@@ -62,42 +93,111 @@ def default_ollama_base_url_v1() -> str:
     return (os.environ.get("OLLAMA_BASE_URL") or "http://127.0.0.1:11434").strip().rstrip("/")
 
 
-def resolved_llm_model_and_url_for_student_mode_v1(mode: str) -> tuple[str | None, str]:
-    """Declared Ollama model tag + base URL for LLM-assisted modes; ``(None, url)`` otherwise."""
-    m = normalize_student_reasoning_mode_v1(mode)
-    if m not in _LLM_BINDING_V1:
-        return None, default_ollama_base_url_v1()
-    return str(_LLM_BINDING_V1[m]["llm_model"]), default_ollama_base_url_v1()
-
-
 def normalize_student_reasoning_mode_v1(raw: str | None) -> str:
-    """Return canonical mode id; default matches historical “Anna repeat + Student seam” runs."""
+    """
+    Return canonical **Student brain profile** id.
+
+    Legacy ``student_reasoning_mode`` **lane** strings (Qwen vs DeepSeek labels) still map here;
+    use ``student_llm_v1.llm_model`` (and scorecard ``llm_model``) for model-level attribution.
+    """
     s = (raw or "").strip()
     if not s:
-        return STUDENT_REASONING_MODE_REPEAT_ANNA_V1
-    if s in _MODE_ALIASES_V1:
-        return _MODE_ALIASES_V1[s]
-    if s in CANONICAL_STUDENT_REASONING_MODES_V1:
+        return STUDENT_BRAIN_PROFILE_MEMORY_CONTEXT_STUDENT_V1
+    if s in CANONICAL_STUDENT_BRAIN_PROFILES_V1:
         return s
-    return s  # unknown token — ``validate`` rejects unless added to aliases
+    if s in _LEGACY_INPUT_TO_PROFILE_V1:
+        return _LEGACY_INPUT_TO_PROFILE_V1[s]
+    return s
 
 
 def validate_student_reasoning_mode_v1(mode: str | None) -> str | None:
-    """Return error message if mode is unknown (after normalization)."""
-    m = normalize_student_reasoning_mode_v1(mode if isinstance(mode, str) else None)
-    if m not in CANONICAL_STUDENT_REASONING_MODES_V1:
-        return f"unknown student_reasoning_mode: {mode!r}"
-    return None
+    """Return error message if input is unknown (legacy lane string or brain profile)."""
+    s = (mode or "").strip()
+    if not s:
+        return None
+    if s in CANONICAL_STUDENT_BRAIN_PROFILES_V1 or s in LEGACY_STUDENT_REASONING_INPUTS_V1:
+        return None
+    return f"unknown student_reasoning_mode or student_brain_profile_v1: {mode!r}"
+
+
+def _infer_llm_model_from_legacy_reasoning_input_v1(raw: str | None) -> str | None:
+    s = (raw or "").strip()
+    return _LLM_HINT_FROM_LEGACY_INPUT_V1.get(s)
+
+
+def _normalize_student_llm_block_v1(
+    block: dict[str, Any],
+    *,
+    profile: str,
+    legacy_reasoning_input: str | None,
+) -> tuple[dict[str, Any] | None, str | None]:
+    """Returns ``(student_llm_v1_dict, error)``."""
+    if profile != STUDENT_BRAIN_PROFILE_MEMORY_CONTEXT_LLM_STUDENT_V1:
+        return {}, None
+    raw = block.get("student_llm_v1")
+    slm: dict[str, Any] = dict(raw) if isinstance(raw, dict) else {}
+    model = str(slm.get("llm_model") or "").strip()
+    if not model:
+        hint = _infer_llm_model_from_legacy_reasoning_input_v1(legacy_reasoning_input)
+        if hint:
+            model = hint
+        else:
+            model = _DEFAULT_LLM_MODEL_WHEN_OMITTED_V1
+    if len(model) > 128:
+        return None, "llm_model too long"
+    provider = str(slm.get("llm_provider") or _DEFAULT_LLM_PROVIDER_V1).strip().lower() or _DEFAULT_LLM_PROVIDER_V1
+    if provider != "ollama":
+        return None, "llm_provider must be ollama in v1"
+    role = str(slm.get("llm_role") or _DEFAULT_LLM_ROLE_V1).strip() or _DEFAULT_LLM_ROLE_V1
+    if len(role) > 128:
+        return None, "llm_role too long"
+    return {
+        "schema": "student_llm_v1",
+        "llm_provider": provider,
+        "llm_model": model,
+        "llm_role": role,
+    }, None
+
+
+def resolved_llm_for_exam_contract_v1(req: dict[str, Any] | None) -> tuple[str | None, str, dict[str, Any]]:
+    """
+    For ``memory_context_llm_student``: Ollama model tag, base URL, and normalized ``student_llm_v1`` echo.
+    Otherwise: ``(None, default_url, {})``.
+    """
+    r = dict(req or {})
+    prof = normalize_student_reasoning_mode_v1(
+        str(r.get("student_brain_profile_v1") or r.get("student_reasoning_mode") or "")
+    )
+    if prof != STUDENT_BRAIN_PROFILE_MEMORY_CONTEXT_LLM_STUDENT_V1:
+        return None, default_ollama_base_url_v1(), {}
+    slm = r.get("student_llm_v1")
+    if not isinstance(slm, dict):
+        slm = {}
+    model = str(slm.get("llm_model") or "").strip() or _DEFAULT_LLM_MODEL_WHEN_OMITTED_V1
+    out_slm = {
+        "schema": "student_llm_v1",
+        "llm_provider": str(slm.get("llm_provider") or _DEFAULT_LLM_PROVIDER_V1).strip().lower()
+        or _DEFAULT_LLM_PROVIDER_V1,
+        "llm_model": model,
+        "llm_role": str(slm.get("llm_role") or _DEFAULT_LLM_ROLE_V1).strip() or _DEFAULT_LLM_ROLE_V1,
+    }
+    return model, default_ollama_base_url_v1(), out_slm
+
+
+def resolved_llm_model_and_url_for_student_mode_v1(mode: str) -> tuple[str | None, str]:
+    """Backward-compat shim: treat legacy **lane** string as hint for model under LLM profile."""
+    m = normalize_student_reasoning_mode_v1(mode)
+    if m != STUDENT_BRAIN_PROFILE_MEMORY_CONTEXT_LLM_STUDENT_V1:
+        return None, default_ollama_base_url_v1()
+    hint = _infer_llm_model_from_legacy_reasoning_input_v1(mode)
+    model = hint or _DEFAULT_LLM_MODEL_WHEN_OMITTED_V1
+    return model, default_ollama_base_url_v1()
 
 
 def preview_run_config_fingerprint_sha256_40_v1(
     scenarios: list[dict[str, Any]],
     operator_batch_audit: dict[str, Any],
 ) -> str:
-    """
-    Same recipe as ``build_memory_context_impact_audit_v1`` fingerprint (ok_rows ordering),
-    using submitted scenarios so the UI can detect anchors **before** workers return.
-    """
     oba = operator_batch_audit or {}
     ok_rows = [x for x in scenarios if isinstance(x, dict)]
     fp_parts = [
@@ -120,11 +220,6 @@ def find_prior_baseline_job_id_for_fingerprint_v1(
     scorecard_path: Path | None = None,
     limit: int = 800,
 ) -> str | None:
-    """
-    Oldest completed scorecard line with the same fingerprint (Sys BL anchor semantics).
-
-    ``student_reasoning_mode`` absent on legacy rows counts as a baseline-capable anchor.
-    """
     if not fp:
         return None
     rows = read_batch_scorecard_recent(limit, path=scorecard_path)
@@ -155,18 +250,20 @@ def _memory_context_used_flag_v1(operator_batch_audit: dict[str, Any] | None) ->
 
 def parse_exam_run_contract_request_v1(data: dict[str, Any]) -> tuple[dict[str, Any] | None, str | None]:
     """
-    Parse optional ``exam_run_contract_v1`` (or flat keys) from POST /api/run-parallel body.
-
-    Returns ``(request_dict, error)``.
+    Parse ``exam_run_contract_v1`` (or flat keys). Primary: ``student_brain_profile_v1``;
+    ``student_reasoning_mode`` is accepted as legacy **or** mirror of profile.
     """
     src = data.get("exam_run_contract_v1")
     if isinstance(src, dict):
         block = dict(src)
     else:
         block = {}
-    # Flat overrides (convenience for scripts)
+    if data.get("student_brain_profile_v1") is not None:
+        block["student_brain_profile_v1"] = data.get("student_brain_profile_v1")
     if data.get("student_reasoning_mode") is not None:
         block["student_reasoning_mode"] = data.get("student_reasoning_mode")
+    if data.get("student_llm_v1") is not None:
+        block["student_llm_v1"] = data.get("student_llm_v1")
     if data.get("skip_cold_baseline_if_anchor") is not None:
         block["skip_cold_baseline_if_anchor"] = data.get("skip_cold_baseline_if_anchor")
     if data.get("prompt_version") is not None:
@@ -174,11 +271,21 @@ def parse_exam_run_contract_request_v1(data: dict[str, Any]) -> tuple[dict[str, 
     if data.get("retrieved_context_ids") is not None:
         block["retrieved_context_ids"] = data.get("retrieved_context_ids")
 
-    mode_raw = block.get("student_reasoning_mode")
-    err = validate_student_reasoning_mode_v1(mode_raw if isinstance(mode_raw, str) else None)
+    raw_profile = block.get("student_brain_profile_v1")
+    raw_mode = block.get("student_reasoning_mode")
+    pick = raw_profile if isinstance(raw_profile, str) and raw_profile.strip() else raw_mode
+    err = validate_student_reasoning_mode_v1(pick if isinstance(pick, str) else None)
     if err:
         return None, err
-    mode = normalize_student_reasoning_mode_v1(mode_raw if isinstance(mode_raw, str) else None)
+    profile = normalize_student_reasoning_mode_v1(pick if isinstance(pick, str) else None)
+    legacy_input = (
+        str(raw_mode).strip()
+        if isinstance(raw_mode, str) and raw_mode.strip() in LEGACY_STUDENT_REASONING_INPUTS_V1
+        else None
+    )
+    slm, slm_err = _normalize_student_llm_block_v1(block, profile=profile, legacy_reasoning_input=legacy_input)
+    if slm_err:
+        return None, slm_err
 
     skip_req = block.get("skip_cold_baseline_if_anchor")
     if isinstance(skip_req, str):
@@ -199,15 +306,17 @@ def parse_exam_run_contract_request_v1(data: dict[str, Any]) -> tuple[dict[str, 
     else:
         return None, "retrieved_context_ids must be a list of strings when set"
 
-    if mode in (STUDENT_REASONING_MODE_LLM_QWEN_V1, STUDENT_REASONING_MODE_LLM_DEEPSEEK_V1):
+    if profile == STUDENT_BRAIN_PROFILE_MEMORY_CONTEXT_LLM_STUDENT_V1:
         base = default_ollama_base_url_v1()
         if not base or not (base.startswith("http://") or base.startswith("https://")):
             return None, "ollama_base_url_invalid_or_unset_for_llm_assisted_mode"
 
-    out = {
+    out: dict[str, Any] = {
         "schema": "exam_run_contract_request_v1",
         "contract_version": 1,
-        "student_reasoning_mode": mode,
+        "student_brain_profile_v1": profile,
+        "student_reasoning_mode": profile,
+        "student_llm_v1": slm,
         "skip_cold_baseline_if_anchor": skip_req,
         "prompt_version": pv,
         "retrieved_context_ids": rcids_out,
@@ -225,37 +334,29 @@ def build_exam_run_line_meta_v1(
     batch_status: str,
     seam_audit: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    """
-    Fields merged onto ``pattern_game_batch_scorecard_v1`` (top-level) for GT_DIRECTIVE_015.
-
-    ``fingerprint_sha256_40`` should be post-run MCI fingerprint when available; else preview.
-    """
     req = request or {}
-    mode = normalize_student_reasoning_mode_v1(str(req.get("student_reasoning_mode") or ""))
+    profile = normalize_student_reasoning_mode_v1(
+        str(req.get("student_brain_profile_v1") or req.get("student_reasoning_mode") or "")
+    )
     seam = student_seam_observability_v1 or {}
     oba = operator_batch_audit or {}
 
-    llm_used = False
-    llm_model: str | None = None
-    if mode in _LLM_BINDING_V1:
-        llm_used = bool(_LLM_BINDING_V1[mode]["llm_used"])
-        llm_model = str(_LLM_BINDING_V1[mode]["llm_model"])
-    shadow_on = bool(seam.get("shadow_student_enabled"))
-
+    llm_used = profile == STUDENT_BRAIN_PROFILE_MEMORY_CONTEXT_LLM_STUDENT_V1
+    slm_req = req.get("student_llm_v1") if isinstance(req.get("student_llm_v1"), dict) else {}
+    llm_model: str | None = str(slm_req.get("llm_model") or "").strip() or None if llm_used else None
     ollama_url = default_ollama_base_url_v1() if llm_used else None
 
     fp = (fingerprint_sha256_40 or "").strip()
     anchor = find_prior_baseline_job_id_for_fingerprint_v1(fp) if fp else None
-    # This job is not on disk yet; anchor may equal a prior run only.
     skip_req = bool(req.get("skip_cold_baseline_if_anchor"))
     skip_applicable = (
         skip_req
-        and mode != STUDENT_REASONING_MODE_COLD_BASELINE_V1
+        and profile != STUDENT_BRAIN_PROFILE_BASELINE_NO_MEMORY_NO_LLM_V1
         and fp
         and anchor is not None
         and batch_status == "done"
     )
-    if mode == STUDENT_REASONING_MODE_COLD_BASELINE_V1:
+    if profile == STUDENT_BRAIN_PROFILE_BASELINE_NO_MEMORY_NO_LLM_V1:
         skip_cold = False
         skip_reason = "mode_is_cold_baseline"
     elif not skip_req:
@@ -279,7 +380,8 @@ def build_exam_run_line_meta_v1(
         mem_ctx = True
 
     line: dict[str, Any] = {
-        "student_reasoning_mode": mode,
+        "student_brain_profile_v1": profile,
+        "student_reasoning_mode": profile,
         "llm_used": llm_used,
         "llm_model": llm_model,
         "ollama_base_url": ollama_url,
@@ -291,12 +393,15 @@ def build_exam_run_line_meta_v1(
         "cold_baseline_anchor_job_id_v1": anchor,
         "run_config_fingerprint_sha256_40_echo_v1": fp or None,
         "system_baseline_captured_v1": bool(
-            mode == STUDENT_REASONING_MODE_COLD_BASELINE_V1 and batch_status == "done"
+            profile == STUDENT_BRAIN_PROFILE_BASELINE_NO_MEMORY_NO_LLM_V1 and batch_status == "done"
         ),
     }
+    if llm_used and isinstance(req.get("student_llm_v1"), dict):
+        line["student_llm_v1"] = dict(req["student_llm_v1"])
+    shadow_on = bool(seam.get("shadow_student_enabled"))
     if shadow_on is not None:
         line["shadow_student_enabled_echo_v1"] = shadow_on
-    _ = job_id  # reserved for future self-exclusion in anchor scan
+    _ = job_id
 
     sa = seam_audit if isinstance(seam_audit, dict) else {}
     lx = sa.get("student_llm_execution_v1")
@@ -310,6 +415,9 @@ def build_exam_run_line_meta_v1(
             line["ollama_base_url"] = lx["base_url_resolved"].strip()
         if isinstance(lx.get("prompt_version_resolved"), str) and lx["prompt_version_resolved"].strip():
             line["prompt_version"] = lx["prompt_version_resolved"].strip()[:256]
+        if isinstance(lx.get("student_brain_profile_echo_v1"), str) and lx["student_brain_profile_echo_v1"].strip():
+            line["student_brain_profile_v1"] = lx["student_brain_profile_echo_v1"].strip()
+            line["student_reasoning_mode"] = line["student_brain_profile_v1"]
     return line
 
 
@@ -319,12 +427,18 @@ __all__ = [
     "STUDENT_REASONING_MODE_REPEAT_ANNA_V1",
     "STUDENT_REASONING_MODE_LLM_QWEN_V1",
     "STUDENT_REASONING_MODE_LLM_DEEPSEEK_V1",
+    "STUDENT_BRAIN_PROFILE_BASELINE_NO_MEMORY_NO_LLM_V1",
+    "STUDENT_BRAIN_PROFILE_MEMORY_CONTEXT_STUDENT_V1",
+    "STUDENT_BRAIN_PROFILE_MEMORY_CONTEXT_LLM_STUDENT_V1",
+    "CANONICAL_STUDENT_BRAIN_PROFILES_V1",
+    "LEGACY_STUDENT_REASONING_INPUTS_V1",
     "build_exam_run_line_meta_v1",
     "default_ollama_base_url_v1",
     "find_prior_baseline_job_id_for_fingerprint_v1",
     "normalize_student_reasoning_mode_v1",
     "parse_exam_run_contract_request_v1",
     "preview_run_config_fingerprint_sha256_40_v1",
+    "resolved_llm_for_exam_contract_v1",
     "resolved_llm_model_and_url_for_student_mode_v1",
     "validate_student_reasoning_mode_v1",
 ]

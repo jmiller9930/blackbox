@@ -1,178 +1,126 @@
-# GT_DIRECTIVE_015 — Run exam: baseline vs repeat-sit engine contract
+# GT_DIRECTIVE_015 — Run exam: Student **brain profile** contract + baseline audit
 
-**Date:** 2026-04-24  
-**Status:** **ACTIVE — OPEN** — run-contract foundation **accepted**; directive stays open until E/P comparison surface ships or is explicitly deferred, and **physical** cold Referee skip (if ever) is a separate slice. **LLM seam + UI `exam_run_contract_v1` + HTTP proof** are implemented in code; operators should verify on live Ollama hosts.  
+**Date:** 2026-04-24 (amended 2026-04-24 — brain profile v2)  
+**Status:** **ACTIVE — OPEN** — brain profile + nested LLM metadata **shipped** in `exam_run_contract_v1` / scorecard / UI; **refine-then-seal** LLM stages and **physical** cold Referee skip remain future slices. E/P comparison surface still outstanding unless deferred in writing.  
 **From:** Architect (via operator product lock)  
 **To:** Engineer  
 **CC:** Operator, Product, Referee, UI  
-**Scope:** `renaissance_v4/game_theory` — parallel batch entrypoint (`web_app.py` `POST /api/run-parallel/start`, blocking `/api/run-parallel`), `parallel_runner.py`, `batch_scorecard.py`, operator batch audit / fingerprinting, **Student seam / reasoning emitters** (stub vs Ollama-backed paths), and **persisted exam-run metadata** so grading can attribute outcomes to mode.
+**Scope:** `renaissance_v4/game_theory` — parallel batch (`web_app.py` `POST /api/run-parallel/start`, blocking `/api/run-parallel`), `batch_scorecard.py`, **Student seam** (memory → context packet → optional governed LLM → sealed `student_output_v1`), **persisted exam truth** for Referee attribution.
 
-### Active engineering brief (canonical mode names)
+---
 
-At minimum, **`student_reasoning_mode`** must be one of:
+## Product frame (non-negotiable semantics)
 
-- `cold_baseline`
-- `repeat_anna_memory_context` (legacy API alias: `memory_context_only`)
-- `llm_assisted_anna_qwen` (legacy: `llm_qwen2_5_7b`)
-- `llm_assisted_anna_deepseek_r1_14b` (legacy: `llm_deepseek_r1_14b`)
+| Layer | Role |
+|--------|------|
+| **Memory** | What the Student **learned before** — retrieved into the decision packet through legal paths. |
+| **Context** | What the Student **sees now** — bars, indicators, annex, **retrieved memory slices**. |
+| **LLM** | A **governed reasoning component** inside the Student brain: refine hypotheses, critique interpretation, surface contradictions, improve deliberation — **not** “another Student” competing with the Student. **v1** still uses a bounded **single-shot** completion to `student_output_v1` (`llm_role` = `single_shot_student_output_v1`); multi-stage refine-then-seal is explicitly **future work**. |
+| **Referee** | **Proof layer** — grades outcomes; LLM never self-grades. |
+| **Learning writeback** | After reveal, outcomes feed memory-capable stores. |
 
-**Persisted** (scorecard line, merged at batch finish): `student_reasoning_mode`, `llm_used`, `llm_model`, `ollama_base_url`, `prompt_version`, `memory_context_used`, `retrieved_context_ids`, `skip_cold_baseline`, `skip_reason`, plus `cold_baseline_anchor_job_id_v1`, `run_config_fingerprint_sha256_40_echo_v1`, `system_baseline_captured_v1` where applicable.
+**Primary question:** Does the Student improve under the Referee with **memory + context +** (when enabled) **LLM-assisted reasoning**?  
+**Secondary question:** Which **model tag** under `student_llm_v1` works better — **metadata**, not a separate top-level “lane.”
 
-**Operator proof artifact:** `docs/proof/exam_v1/GT_DIRECTIVE_015_operator_proof_run_lanes_v1.md`  
+---
+
+## Active engineering brief
+
+### 15.0 Student brain profile (`student_brain_profile_v1`)
+
+Canonical values (persisted on scorecard + echoed in `student_reasoning_mode` for one-key compatibility):
+
+| Profile | Meaning |
+|---------|---------|
+| `baseline_no_memory_no_llm` | System cold path; no cross-run memory emphasis; **no** Student LLM. (Legacy input: `cold_baseline`.) |
+| `memory_context_student` | Memory + context plumbing; **stub** Student emitter (no Ollama). (Legacy: `repeat_anna_memory_context`, `memory_context_only`.) |
+| `memory_context_llm_student` | Memory + context + **LLM component**; Ollama when configured. (Legacy lane strings `llm_assisted_anna_qwen`, `llm_qwen2_5_7b`, `llm_assisted_anna_deepseek_r1_14b`, `llm_deepseek_r1_14b` **normalize** to this profile; **model** comes from `student_llm_v1` or legacy inference.) |
+
+### 15.0.1 Nested LLM metadata (`student_llm_v1`)
+
+When profile is `memory_context_llm_student`, request (and scorecard echo) **must** carry:
+
+| Field | v1 |
+|--------|-----|
+| `llm_provider` | `ollama` only in v1. |
+| `llm_model` | Ollama tag, e.g. `qwen2.5:7b`, `deepseek-r1:14b`. |
+| `llm_role` | Default `single_shot_student_output_v1` (future: `hypothesis_reasoner`, `critic`, etc.). |
+
+**No silent global swap:** run-scoped `llm_model` + `OLLAMA_BASE_URL` for this request; never assume env default implies Student traffic.
+
+### 15.0.2 Persisted scorecard / operator truth
+
+Merge at batch finish (plus `student_llm_execution_v1` from seam when present):
+
+- `student_brain_profile_v1`, `student_reasoning_mode` (mirror of profile for legacy readers)  
+- `student_llm_v1` (when LLM profile)  
+- `llm_used`, `llm_model`, `ollama_base_url`, `prompt_version`, `memory_context_used`, `retrieved_context_ids`  
+- `skip_cold_baseline`, `skip_reason`, `cold_baseline_anchor_job_id_v1`, `run_config_fingerprint_sha256_40_echo_v1`, `system_baseline_captured_v1`  
+
+**Physical** skip of Referee cold replay is **not** v1 — parallel replay always runs. Skip-cold fields are **metadata** (prior anchor existed for comparison validity).
+
+**Code:** `exam_run_contract_v1.py`, `batch_scorecard.record_parallel_batch_finished(..., exam_run_line_meta_v1=...)`, `web_app._exam_run_line_meta_for_parallel_job_v1`, `student_proctor_operator_runtime_v1.py`.  
 **Fixture:** `tests/fixtures/gt_directive_015_scorecard_fixture_lines.json`  
-**Code:** `exam_run_contract_v1.py`, `batch_scorecard.record_parallel_batch_finished(..., exam_run_line_meta_v1=...)`, `web_app._exam_run_line_meta_for_parallel_job_v1`.
+**Proof:** `docs/proof/exam_v1/GT_DIRECTIVE_015_operator_proof_run_lanes_v1.md` (filename historical; content describes **profiles**).
 
-## Canonical workflow record
+---
 
-This file is the canonical record for this directive.
-
-Workflow:
-
-1. Architect issues directive here.
-2. Engineer reads and performs work.
-3. Engineer appends response below.
-4. Operator notifies Architect to review this folder.
-5. Architect appends acceptance or rework below.
-
-## Fault
-
-**Today:** One **Run exam** always runs **one** full parallel replay with the UI’s memory mode, then the Student seam post-pass. There is **no** first-class separation between **(A) cold system baseline** and **(B) Anna repeat sit**; operators pay full replay cost every time and cannot rely on the product rule: *baseline anchor exists → do not rerun cold system*.
-
-**Also today:** **DeepSeek** (or any Ollama model) is **not** wired as a **declared Student reasoning mode** on the exam path. There is **no** persisted **`student_reasoning_mode`** / **`llm_model`** on the exam unit or scorecard line, so **E/P (or pack PASS)** cannot be **attributed** to “Qwen vs DeepSeek vs stub” — and changing `OLLAMA_MODEL` would risk a **silent global** swap, which is **forbidden** by this directive.
-
-## Directive
-
-Implement and document the **run contract** below. Exact mechanics (single job with two internal phases vs two scorecard lines) are for engineering, but **semantics** are fixed.
+## Exam identity, cold baseline, scorecard honesty
 
 ### 15.1 Exam identity (anchor key)
 
-Treat **one exam identity** as unchanged when **all** of the following are unchanged:
+Unchanged: framework + policy (recipe, window, manifest fingerprint) + pattern identity. Fingerprint recipe matches `memory_context_impact_audit_v1`.
 
-- **Baseline framework** (policy framework / fusion contract identity as recorded on the batch line).
-- **Baseline policy** (operator recipe + evaluation window effective months + primary manifest fingerprint as already used for `run_config_fingerprint` / operator batch audit).
-- **Pattern** (graded template / scenario pack identity — **not** cosmetic labels alone).
+### 15.2–15.3 Cold system replay (engine intent)
 
-When **any** of the three changes, the prior **system baseline anchor** is **invalid** for comparisons until a **new** cold system sit completes.
-
-### 15.2 When the cold **system** replay must run
-
-The engine **must** run the **cold system** path (context-signature memory **off** for that path unless architect explicitly documents an exception) when:
-
-1. **No** completed scorecard row exists for this exam identity with `status: done` and a valid **system baseline captured** flag (engineer to define the exact field name on `pattern_game_batch_scorecard_v1`); **or**
-2. The operator or system invalidates the anchor (policy/framework/pattern change per §15.1; optional: architect-approved **data refresh** invalidation).
-
-### 15.3 When the cold system replay **must not** run
-
-If a **valid system baseline anchor** already exists for this exam identity, **Run exam** for a **repeat Anna sit** **must not** rerun the full cold parallel batch **unless** the operator explicitly chooses **“Re-baseline”** (separate control or confirm dialog — product decision in implementation).
-
-Repeat sits run the **Anna / memory-context** configuration only (per operator settings), then Student seam and scorecard updates as today — **and** the operator-selected **`student_reasoning_mode`** (§15.5) must be applied **for that run only**.
+Product rules for **when** cold must / must not run remain as before; **implementation** of physical skip is **future**. v1 records audit metadata only.
 
 ### 15.4 Scorecard / API honesty
 
-- Persist enough on the scorecard line to answer: **was cold system run for this line?** (boolean + optional link to cold `job_id` if split IDs).
-- **Never** imply `Run TW %` is “Anna” when it is system rollup; reserve Anna metrics for **GT_DIRECTIVE_016**.
+- Do not imply Anna rollup where the line is system baseline.  
+- Reserve richer Anna vs system **road** presentation for **GT_DIRECTIVE_016** when shipped.
 
-### 15.5 Student reasoning mode (LLM) contract — **non-negotiable**
+### 15.5 E/P comparison (primary vs secondary)
 
-**Principle:** **DeepSeek must not silently replace Qwen** (or any default) **globally**. Each exam run **declares** its mode; defaults in env/docs are **only** fallbacks when the UI/API does not send a mode.
-
-#### 15.5.1 Declared modes (canonical string IDs)
-
-Implement at least these **distinct** modes (exact spelling for persistence and APIs):
-
-| `student_reasoning_mode` | When the Student uses **no** LLM | When it uses **Qwen** | When it uses **DeepSeek** |
-|---------------------------|------------------------------------|-------------------------|-----------------------------|
-| `cold_baseline` | Always (system path). No Student LLM. | N/A | N/A |
-| `repeat_anna_memory_context` (alias `memory_context_only`) | Student path: **stub / deterministic** emitters only (Directive 03 style). **No** Ollama call for Student output in v1. | N/A | N/A |
-| `llm_assisted_anna_qwen` (alias `llm_qwen2_5_7b`) | N/A | Declared **`qwen2.5:7b`** — Student seam calls Ollama **`/api/chat`** with run-scoped model + base URL. | N/A |
-| `llm_assisted_anna_deepseek_r1_14b` (alias `llm_deepseek_r1_14b`) | N/A | N/A | Declared **`deepseek-r1:14b`** — same seam path as Qwen with distinct model tag. |
-
-**Adding `llm_deepseek_r1_32b` (or others)** is allowed later as **new enum values**, never as an undeclared override.
-
-#### 15.5.2 When each mode applies
-
-- **`cold_baseline`:** only the **system** replay arm (§15.2); **no** Student LLM.
-- **`repeat_anna_memory_context`** (alias **`memory_context_only`**): repeat Anna sit **with** memory/context plumbing **on**, **no** LLM in the Student emitter (v1 stub).
-- **`llm_assisted_anna_qwen` / `llm_assisted_anna_deepseek_r1_14b`** (legacy ids still accepted): repeat sits where the operator **explicitly** selects that **Student** LLM mode; **same** exam identity + tape comparison rules as §15.1 for cross-mode scoring.
-
-#### 15.5.3 Persistence on the exam unit / scorecard (every run)
-
-Each completed run **must** persist (scorecard line, `operator_batch_audit`, or a dedicated `student_exam_run_meta_v1` blob — **one** canonical place, documented in the PR):
-
-| Field | Purpose |
-|--------|---------|
-| `student_reasoning_mode` | One of the declared IDs above. |
-| `llm_used` | Boolean: **any** Ollama call made for **Student** reasoning this run. |
-| `llm_model` | Ollama model tag actually used for Student (e.g. `qwen2.5:7b`, `deepseek-r1:14b`), or `null` if none. |
-| `ollama_base_url` | Resolved base URL for that run (e.g. `http://172.20.2.230:11434`). |
-| `prompt_version` | Version string / hash of the **bounded** Student prompt template (so grading comparisons are apples-to-apples). |
-| `memory_context_used` | Honest summary flag(s) for whether memory/context paths were active (align with **GT_DIRECTIVE_016** `Mem`/`Ctx` semantics when merged). |
-
-**DeepSeek installed** on the lab host is **not sufficient** — **`llm_model` + `student_reasoning_mode`** must match what ran.
-
-#### 15.5.4 Repeating the **same** exam across modes
-
-- **Same exam identity** = §15.1 fingerprint unchanged.
-- **Different** `student_reasoning_mode` = **different** scorecard row / `job_id`, same anchor `Sys BL` reference for comparison.
-- **Ordering:** document whether operators must run **baseline first** once per identity; repeat sits may cycle `repeat_anna_memory_context` → `llm_assisted_anna_qwen` → `llm_assisted_anna_deepseek_r1_14b` for **value tests**.
-
-#### 15.5.5 How scores are compared (E + P / pack grading)
-
-- **Referee / pack grading** remains the **only** authority for **E/P** (or PASS/E); the LLM **never** self-grades.
-- Comparisons are **only** valid when **`prompt_version`** and **exam identity** are documented as comparable, or comparison is explicitly labeled **“prompt drift allowed.”**
-- **Hypothesis:** `llm_assisted_anna_deepseek_r1_14b` improves **E/P** vs `repeat_anna_memory_context` and vs `llm_assisted_anna_qwen` — **prove** with persisted fields + aggregate reports; **no** claim without data.
+- Referee remains sole authority for E/P.  
+- **Primary** comparison: same exam identity, different **brain profile** (e.g. `memory_context_student` vs `memory_context_llm_student`) with fixed `prompt_version` where possible.  
+- **Secondary**: different `llm_model` under the **same** LLM profile — attribute via `student_llm_v1` + `llm_model` on the line.
 
 ### 15.6 Global defaults vs run override
 
-- Repo defaults (`OLLAMA_MODEL`, `OLLAMA_BASE_URL`) may remain **qwen** for **Ask DATA / Barney** and other non-Student callers.
-- **Student** path **must** pass **run-scoped** model selection into the Ollama client for that request — **never** assume “install DeepSeek ⇒ all Student traffic is DeepSeek.”
+Non-Student callers may use repo defaults; **Student** Ollama calls use run contract + `student_llm_v1`.
+
+---
 
 ## Proof required
 
-1. **Tests** — Unit/integration proving: first sit for fingerprint runs cold path; second sit skips cold when anchor present; invalidation on fingerprint change runs cold again.
-2. **Tests — LLM mode** — At least three fixtures: `memory_context_only` (no Ollama mock called), `llm_qwen2_5_7b`, `llm_deepseek_r1_14b` assert **mocked** Ollama receives the **correct** `model` in the JSON body; assert scorecard line persists §15.5.3 fields.
-3. **HTTP** — `POST /api/run-parallel/start` + poll until `done`; scorecard row shows correct flags for A/B scenarios **and** `student_reasoning_mode` / `llm_model`.
-4. **Doc** — Same PR updates **§18.4** in `docs/STUDENT_PATH_EXAM_HIGH_LEVEL_ARCHITECTURE_v1.md` with **GT_DIRECTIVE_015** row + status; add operator legend for modes.
-5. **Closeout** — Satisfy **§18.3 GT_DIRECTIVE_009** sequence when Student panel / `web_app.py` UI strings change (`PATTERN_GAME_WEB_UI_VERSION`, push, gsync, verify).
+1. **Tests** — Normalize legacy inputs → profiles; parse validates LLM profile + Ollama URL; scorecard merge includes `student_brain_profile_v1` + `student_llm_v1`.  
+2. **HTTP** — `POST /api/run-parallel` and `/api/run-parallel/start` with `exam_run_contract_v1`; scorecard readback shows profile + `llm_model`.  
+3. **Doc** — `STUDENT_PATH_EXAM_HIGH_LEVEL_ARCHITECTURE_v1.md` §1.1 + §18.4 aligned.  
+4. **Closeout** — `PATTERN_GAME_WEB_UI_VERSION` bump when embedded UI changes; push + gsync per operator stack.
+
+---
 
 ## Deficiencies log update
 
-Append to any project deficiencies log: **“GT_DIRECTIVE_015 — baseline skip contract”** with status until **Accepted**.
+Track: **“GT_DIRECTIVE_015 — Student brain profile + exam contract”** until **Accepted** or deferred in writing.
 
 ---
 
 ## Engineer update
 
-**Status:** in progress (2026-04-24)
+**2026-04-24 — Brain profile v2 (rework of prior lane-centric wording):**
 
-**Work performed (v1 slice):**
-
-- Added `renaissance_v4/game_theory/exam_run_contract_v1.py` — mode normalization/validation, fingerprint **preview** (matches `memory_context_impact_audit_v1` recipe), prior-anchor lookup, `build_exam_run_line_meta_v1` for scorecard fields including **`skip_cold_baseline` / `skip_reason`** (auditable “anchor existed” semantics; **full Referee cold-phase skip** remains future work).
-- `batch_scorecard.record_parallel_batch_finished` accepts **`exam_run_line_meta_v1`** and merges onto the scorecard line.
-- `web_app` — `_prepare_parallel_payload` parses **`exam_run_contract_v1`** (or flat keys); **400** on unknown mode or invalid Ollama URL for LLM modes; merges request into `operator_batch_audit`; async `/api/run-parallel/start` and blocking `/api/run-parallel` attach metadata on success and error paths. Controls + Run exam send **`exam_run_contract_v1`** every time; **`PATTERN_GAME_WEB_UI_VERSION` → 2.19.50**.
-- Tests: `renaissance_v4/game_theory/tests/test_gt_directive_015_exam_run_contract_v1.py`, `test_gt_directive_015_http_parallel_exam_contract_v1.py`.
-- Fixture + operator proof: `tests/fixtures/gt_directive_015_scorecard_fixture_lines.json`, `docs/proof/exam_v1/GT_DIRECTIVE_015_operator_proof_run_lanes_v1.md`.
-
-**Work performed (LLM seam + UI + HTTP proof slice, 2026-04-24):**
-
-- Student seam: `student_ollama_student_output_v1.py` + `student_proctor_operator_runtime_v1.py` — Ollama **`/api/chat`** for **`llm_assisted_anna_qwen`** / **`llm_assisted_anna_deepseek_r1_14b`** with run-scoped model and base URL; **`student_llm_execution_v1`** merged into scorecard line meta.
-- HTTP tests: `renaissance_v4/game_theory/tests/test_gt_directive_015_http_parallel_exam_contract_v1.py` (blocking `/api/run-parallel` + async `/api/run-parallel/start` with scorecard capture).
-- `web_app._exam_run_line_meta_for_parallel_job_v1` — `build_memory_context_impact_audit_v1` called with **`operator_batch_audit=`** keyword (signature fix).
-
-**Remaining gaps (explicit):** E/P **comparison surface** (report/UI) not built; **physical** Referee cold skip still not implemented — metadata only.
-
-**Shipped this slice:** `git push origin main` completed; `python3 scripts/gsync.py --no-commit --force-restart` completed (pattern-game Flask + UIUX per operator stack).
-
-**Request:** Architect acceptance when the above gaps are closed or explicitly deferred with directive amendment.
+- `exam_run_contract_v1.py` — three **canonical brain profiles**; legacy `student_reasoning_mode` **inputs** still accepted; `student_brain_profile_v1` + `student_llm_v1` on parse output; `build_exam_run_line_meta_v1` persists profile + LLM block; `resolved_llm_for_exam_contract_v1` for seam.  
+- `student_proctor_operator_runtime_v1.py` — gates Ollama on `memory_context_llm_student`; seam audit adds `student_brain_profile_echo_v1`, `student_llm_v1_echo`.  
+- `web_app.py` — Controls: profile picker + Ollama model sub-picker; `buildExamRunContractV1ForStart()` sends full contract; **PATTERN_GAME_WEB_UI_VERSION** bumped.  
+- Tests + fixture + operator proof text updated.  
+- **Not done here:** multi-artifact refine-then-seal pipeline; additional `llm_role` behaviors beyond default.
 
 ---
 
 ## Architect review
 
-**Status (2026-04-24):** **PARTIAL ACCEPTANCE — directive OPEN.**
+**Status:** **OPEN** — accept **brain profile** semantics as the direction of travel; close when E/P comparison surface + any mandated cold-skip **physical** behavior are shipped or explicitly deferred by amendment.
 
-**Accepted:** canonical run modes; Qwen and DeepSeek lanes; invalid LLM config rejected; scorecard metadata; skip-cold **audit** fields; no silent model swap; fixture + operator proof; Student seam calls Ollama for declared LLM modes; UI sends **`exam_run_contract_v1`** on every Run exam; HTTP test for **`/api/run-parallel/start`** + scorecard readback path.
-
-**Not closed:** E/P comparison surface; physical cold skip of Referee work (must remain clearly **not** implemented while metadata-only skip exists).
-
-**Do not start GT_DIRECTIVE_016** until 015 is closed per architect or directive is formally amended.
+**Do not start GT_DIRECTIVE_016** until this directive is closed or amended regarding 016 start gate.

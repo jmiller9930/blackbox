@@ -1,4 +1,4 @@
-"""GT_DIRECTIVE_015 — exam run contract: modes, fingerprint preview, skip-cold metadata."""
+"""GT_DIRECTIVE_015 — exam run contract: brain profiles, legacy inputs, fingerprint, skip-cold."""
 
 from __future__ import annotations
 
@@ -9,9 +9,11 @@ import pytest
 
 from renaissance_v4.game_theory.batch_scorecard import append_batch_scorecard_line, record_parallel_batch_finished
 from renaissance_v4.game_theory.exam_run_contract_v1 import (
-    STUDENT_REASONING_MODE_COLD_BASELINE_V1,
-    STUDENT_REASONING_MODE_LLM_DEEPSEEK_V1,
-    STUDENT_REASONING_MODE_LLM_QWEN_V1,
+    LEGACY_STUDENT_REASONING_INPUT_LLM_QWEN_V1,
+    LEGACY_STUDENT_REASONING_INPUT_MEMORY_CONTEXT_ONLY_V1,
+    STUDENT_BRAIN_PROFILE_BASELINE_NO_MEMORY_NO_LLM_V1,
+    STUDENT_BRAIN_PROFILE_MEMORY_CONTEXT_LLM_STUDENT_V1,
+    STUDENT_BRAIN_PROFILE_MEMORY_CONTEXT_STUDENT_V1,
     STUDENT_REASONING_MODE_REPEAT_ANNA_V1,
     build_exam_run_line_meta_v1,
     find_prior_baseline_job_id_for_fingerprint_v1,
@@ -28,32 +30,59 @@ _FIXTURE = (
 )
 
 
-def test_normalize_legacy_aliases() -> None:
-    assert normalize_student_reasoning_mode_v1("memory_context_only") == STUDENT_REASONING_MODE_REPEAT_ANNA_V1
-    assert normalize_student_reasoning_mode_v1("llm_qwen2_5_7b") == STUDENT_REASONING_MODE_LLM_QWEN_V1
-    assert normalize_student_reasoning_mode_v1("llm_deepseek_r1_14b") == STUDENT_REASONING_MODE_LLM_DEEPSEEK_V1
+def test_normalize_legacy_inputs_map_to_brain_profiles() -> None:
+    assert (
+        normalize_student_reasoning_mode_v1(LEGACY_STUDENT_REASONING_INPUT_MEMORY_CONTEXT_ONLY_V1)
+        == STUDENT_BRAIN_PROFILE_MEMORY_CONTEXT_STUDENT_V1
+    )
+    assert (
+        normalize_student_reasoning_mode_v1("llm_qwen2_5_7b")
+        == STUDENT_BRAIN_PROFILE_MEMORY_CONTEXT_LLM_STUDENT_V1
+    )
+    assert (
+        normalize_student_reasoning_mode_v1("llm_deepseek_r1_14b")
+        == STUDENT_BRAIN_PROFILE_MEMORY_CONTEXT_LLM_STUDENT_V1
+    )
 
 
 def test_validate_rejects_unknown_mode() -> None:
     assert validate_student_reasoning_mode_v1("not_a_mode") is not None
 
 
-def test_parse_llm_requires_http_base(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_parse_llm_profile_requires_http_base(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("OLLAMA_BASE_URL", "ftp://invalid.example/no-http")
     out, err = parse_exam_run_contract_request_v1(
-        {"exam_run_contract_v1": {"student_reasoning_mode": STUDENT_REASONING_MODE_LLM_QWEN_V1}}
+        {
+            "exam_run_contract_v1": {
+                "student_brain_profile_v1": STUDENT_BRAIN_PROFILE_MEMORY_CONTEXT_LLM_STUDENT_V1,
+                "student_llm_v1": {"llm_model": "qwen2.5:7b"},
+            }
+        }
     )
     assert out is None and err == "ollama_base_url_invalid_or_unset_for_llm_assisted_mode"
 
 
-def test_fixture_has_five_distinct_lanes() -> None:
+def test_parse_legacy_llm_lane_infers_model(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("OLLAMA_BASE_URL", raising=False)
+    out, err = parse_exam_run_contract_request_v1(
+        {
+            "exam_run_contract_v1": {
+                "student_reasoning_mode": LEGACY_STUDENT_REASONING_INPUT_LLM_QWEN_V1,
+            }
+        }
+    )
+    assert err is None and out is not None
+    assert out["student_brain_profile_v1"] == STUDENT_BRAIN_PROFILE_MEMORY_CONTEXT_LLM_STUDENT_V1
+    assert out["student_llm_v1"].get("llm_model") == "qwen2.5:7b"
+
+
+def test_fixture_rows_use_brain_profiles() -> None:
     rows = json.loads(_FIXTURE.read_text(encoding="utf-8"))
     assert len(rows) == 5
-    modes = {r["student_reasoning_mode"] for r in rows}
-    assert STUDENT_REASONING_MODE_COLD_BASELINE_V1 in modes
-    assert STUDENT_REASONING_MODE_REPEAT_ANNA_V1 in modes
-    assert STUDENT_REASONING_MODE_LLM_QWEN_V1 in modes
-    assert STUDENT_REASONING_MODE_LLM_DEEPSEEK_V1 in modes
+    profiles = {r.get("student_brain_profile_v1") or r.get("student_reasoning_mode") for r in rows}
+    assert STUDENT_BRAIN_PROFILE_BASELINE_NO_MEMORY_NO_LLM_V1 in profiles
+    assert STUDENT_BRAIN_PROFILE_MEMORY_CONTEXT_STUDENT_V1 in profiles
+    assert STUDENT_BRAIN_PROFILE_MEMORY_CONTEXT_LLM_STUDENT_V1 in profiles
 
 
 def test_find_prior_anchor_on_temp_scorecard(tmp_path: Path) -> None:
@@ -80,6 +109,7 @@ def test_record_parallel_merges_exam_line_meta(tmp_path: Path) -> None:
         }
     )
     assert req is not None
+    assert req["student_brain_profile_v1"] == STUDENT_BRAIN_PROFILE_MEMORY_CONTEXT_STUDENT_V1
     meta = build_exam_run_line_meta_v1(
         request=req,
         operator_batch_audit={"context_signature_memory_mode": "read_write"},
@@ -114,7 +144,8 @@ def test_record_parallel_merges_exam_line_meta(tmp_path: Path) -> None:
         },
         exam_run_line_meta_v1=meta,
     )
-    assert timing.get("student_reasoning_mode") == STUDENT_REASONING_MODE_REPEAT_ANNA_V1
+    assert timing.get("student_brain_profile_v1") == STUDENT_BRAIN_PROFILE_MEMORY_CONTEXT_STUDENT_V1
+    assert timing.get("student_reasoning_mode") == STUDENT_BRAIN_PROFILE_MEMORY_CONTEXT_STUDENT_V1
     assert timing.get("llm_used") is False
 
 

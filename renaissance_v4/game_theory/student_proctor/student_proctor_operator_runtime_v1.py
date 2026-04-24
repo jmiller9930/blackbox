@@ -21,10 +21,9 @@ from renaissance_v4.game_theory.student_proctor.reveal_layer_v1 import (
     build_reveal_v1_from_outcome_and_student,
 )
 from renaissance_v4.game_theory.exam_run_contract_v1 import (
-    STUDENT_REASONING_MODE_LLM_DEEPSEEK_V1,
-    STUDENT_REASONING_MODE_LLM_QWEN_V1,
+    STUDENT_BRAIN_PROFILE_MEMORY_CONTEXT_LLM_STUDENT_V1,
     normalize_student_reasoning_mode_v1,
-    resolved_llm_model_and_url_for_student_mode_v1,
+    resolved_llm_for_exam_contract_v1,
 )
 from renaissance_v4.game_theory.student_proctor.shadow_student_v1 import (
     emit_shadow_stub_student_output_v1,
@@ -276,14 +275,17 @@ def student_loop_seam_after_parallel_batch_v1(
     first_packet_annex_present: bool | None = None
 
     ex_req = exam_run_contract_request_v1 if isinstance(exam_run_contract_request_v1, dict) else None
-    mode = normalize_student_reasoning_mode_v1(str((ex_req or {}).get("student_reasoning_mode") or ""))
+    profile = normalize_student_reasoning_mode_v1(
+        str((ex_req or {}).get("student_brain_profile_v1") or (ex_req or {}).get("student_reasoning_mode") or "")
+    )
     pv = str((ex_req or {}).get("prompt_version") or "shadow_student_stub_v1").strip()[:256]
-    use_llm = mode in (STUDENT_REASONING_MODE_LLM_QWEN_V1, STUDENT_REASONING_MODE_LLM_DEEPSEEK_V1)
+    use_llm = profile == STUDENT_BRAIN_PROFILE_MEMORY_CONTEXT_LLM_STUDENT_V1
     llm_cap = _student_llm_max_trades_v1()
     llm_model_resolved: str | None = None
     base_url_resolved: str | None = None
-    if use_llm:
-        llm_model_resolved, base_url_resolved = resolved_llm_model_and_url_for_student_mode_v1(mode)
+    llm_meta_echo: dict[str, Any] = {}
+    if use_llm and ex_req:
+        llm_model_resolved, base_url_resolved, llm_meta_echo = resolved_llm_for_exam_contract_v1(ex_req)
     ollama_attempts = 0
     ollama_ok = 0
     llm_trade_i = 0
@@ -454,7 +456,9 @@ def student_loop_seam_after_parallel_batch_v1(
     if ex_req is not None:
         out_audit["student_llm_execution_v1"] = {
             "schema": "student_llm_execution_v1",
-            "student_reasoning_mode_echo": mode,
+            "student_brain_profile_echo_v1": profile,
+            "student_reasoning_mode_echo": profile,
+            "student_llm_v1_echo": llm_meta_echo if use_llm else None,
             "prompt_version_resolved": pv if use_llm else None,
             "model_resolved": llm_model_resolved,
             "base_url_resolved": base_url_resolved,
