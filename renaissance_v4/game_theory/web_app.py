@@ -26,7 +26,8 @@ counts, **run_ok_pct**, **referee_win_pct**, **avg_trade_win_pct**) and expose `
 **D13 Student panel (run → run summary + trade carousel → trade deep dive):** ``GET /api/student-panel/runs``
 (includes embedded ``l1_road_v1`` overlay for L1 road columns + API legend),
 ``GET /api/student-panel/l1-road`` (**GT_DIRECTIVE_016** — full road payload, same aggregation),
-``GET /api/student-panel/run/<job_id>/decisions``, ``GET /api/student-panel/decision?job_id=&trade_id=`` (``decision_id`` accepted as alias for migration).
+``GET /api/student-panel/run/<job_id>/decisions``, ``GET /api/student-panel/run/<job_id>/l3?trade_id=`` (**GT_DIRECTIVE_017** — L3 envelope + structured ``data_gaps[]``),
+``GET /api/student-panel/decision?job_id=&trade_id=`` (``decision_id`` accepted as alias for migration).
 
 **Post-certification ``trade_strategy`` (DEV STUB):** Same routes under **``/api/v1/trade-strategy``** (stable for external callers) and **``/api/trade-strategy``** (alias).
 ``GET …/contract`` returns integration metadata. Methods: list, ``<id>/export`` (download JSON), get one, POST, PATCH — placeholder payloads until persistence + execution;
@@ -106,7 +107,7 @@ _PATTERN_BANNER_WEBP_PATH = _RV4_ROOT / "assets" / "pattern.webp"
 _PATTERN_GAME_BANNER_BOOT_JS = _GAME_THEORY / "static" / "pattern_game_banner_boot.js"
 
 # Operator-visible web UI bundle version — bump when changing PAGE_HTML (HTML/CSS/JS) so deploys are provable.
-PATTERN_GAME_WEB_UI_VERSION = "2.19.54"
+PATTERN_GAME_WEB_UI_VERSION = "2.19.55"
 
 from renaissance_v4.game_theory.context_signature_memory import truncate_context_signature_memory_store
 from renaissance_v4.game_theory.groundhog_memory import (
@@ -149,6 +150,7 @@ from renaissance_v4.game_theory.student_panel_d13 import (
 )
 from renaissance_v4.game_theory.student_panel_d14 import enrich_student_panel_run_rows_d14
 from renaissance_v4.game_theory.student_panel_l1_road_v1 import build_l1_road_payload_v1
+from renaissance_v4.game_theory.student_panel_l3_datagap_matrix_v1 import build_student_panel_l3_payload_v1
 from renaissance_v4.game_theory.exam_decision_frame_schema_v1 import (
     ExamUnitTimelineDocumentV1,
     append_local_time_to_decision_frame_dict_v1,
@@ -1732,6 +1734,13 @@ def create_app() -> Flask:
     def api_student_panel_decisions_d11(job_id: str) -> Any:
         """D13 — selected run: mandatory run summary band + one carousel slice per ``trade_id``."""
         return jsonify(build_d13_selected_run_payload_v1(job_id.strip()))
+
+    @app.get("/api/student-panel/run/<job_id>/l3")
+    def api_student_panel_l3_gt017(job_id: str) -> Any:
+        """GT_DIRECTIVE_017 — L3 payload: decision record, replay/scorecard subsets, L1 linkage, structured ``data_gaps[]``."""
+        tid = (request.args.get("trade_id") or request.args.get("decision_id") or "").strip()
+        payload = build_student_panel_l3_payload_v1(job_id.strip(), tid)
+        return jsonify(payload), 200
 
     @app.get("/api/student-panel/decision")
     def api_student_panel_decision_detail_d11() -> Any:
@@ -5924,6 +5933,42 @@ PAGE_HTML = """<!DOCTYPE html>
       });
     }
 
+    function renderL3DataGapMatrixHtml(dgMatrix) {
+      var arr = Array.isArray(dgMatrix) ? dgMatrix : [];
+      if (!arr.length) {
+        return (
+          '<li><span class="pg-student-d11-k">data_gaps[]</span> <em>(empty — GT_DIRECTIVE_017 matrix)</em></li>'
+        );
+      }
+      var parts = [
+        '<li style="list-style:none;margin:0 0 6px 0"><span class="pg-student-d11-k">data_gaps[]</span> ' +
+          '(GT_DIRECTIVE_017 — producer / severity / stage)</li>',
+      ];
+      for (var gi = 0; gi < arr.length; gi++) {
+        var g = arr[gi] || {};
+        var sev = String(g.severity || '—');
+        var sevColor = sev === 'critical' ? '#f85149' : sev === 'warning' ? '#d29922' : '#8b949e';
+        parts.push(
+          '<li style="list-style:none;margin:4px 0;padding:0"><div style="margin:0;padding:6px 8px;background:#161b22;border-radius:6px;border:1px solid #30363d;font-size:0.72rem;line-height:1.35">' +
+            '<div><strong style="color:' +
+            sevColor +
+            '">' +
+            escapeHtml(sev) +
+            '</strong> · <span style="color:#58a6ff">' +
+            escapeHtml(String(g.producer || '—')) +
+            '</span> · <code>' +
+            escapeHtml(String(g.field_name || '—')) +
+            '</code></div>' +
+            '<div style="margin-top:3px;opacity:0.92">reason <code>' +
+            escapeHtml(String(g.reason || '—')) +
+            '</code> · expected_stage ' +
+            escapeHtml(String(g.expected_stage || '—')) +
+            '</div></div></li>'
+        );
+      }
+      return parts.join('');
+    }
+
     async function studentPanelD11GotoLevel3(runId, tradeId) {
       studentPanelD11.level = 3;
       studentPanelD11.selectedRunId = runId;
@@ -5942,17 +5987,17 @@ PAGE_HTML = """<!DOCTYPE html>
           ],
           true
         ),
-        '<p class="caps" style="margin:0">Loading <code>student_decision_record_v1</code>…</p>'
+        '<p class="caps" style="margin:0">Loading L3 (<code>student_panel_l3_response_v1</code>)…</p>'
       );
       studentPanelD11WireChrome();
-      let j = null;
+      let l3 = null;
       try {
         const u =
-          '/api/student-panel/decision?job_id=' +
+          '/api/student-panel/run/' +
           encodeURIComponent(runId) +
-          '&trade_id=' +
+          '/l3?trade_id=' +
           encodeURIComponent(tradeId);
-        j = await pgStudentPanelJsonGet(u);
+        l3 = await pgStudentPanelJsonGet(u);
       } catch (e) {
         root.innerHTML = studentPanelD11Layout(
           renderStudentPanelD11Chrome(
@@ -5969,7 +6014,7 @@ PAGE_HTML = """<!DOCTYPE html>
         studentPanelD11WireChrome();
         return;
       }
-      if (!j || j.record == null) {
+      if (!l3 || l3.decision_record_v1 == null) {
         root.innerHTML = studentPanelD11Layout(
           renderStudentPanelD11Chrome(
             3,
@@ -5980,12 +6025,14 @@ PAGE_HTML = """<!DOCTYPE html>
             ],
             true
           ),
-          '<p class="caps" style="margin:0;color:#a32b2b">' + escapeHtml((j && j.error) || 'record unavailable') + '</p>'
+          '<p class="caps" style="margin:0;color:#a32b2b">' +
+            escapeHtml((l3 && l3.error) || 'record unavailable') +
+            '</p>'
         );
         studentPanelD11WireChrome();
         return;
       }
-      const rec = j.record;
+      const rec = l3.decision_record_v1;
       const sd = rec.student_decision || {};
       const ctx = rec.context || {};
       const gh = rec.groundhog || {};
@@ -6133,10 +6180,7 @@ PAGE_HTML = """<!DOCTYPE html>
           escapeHtml(String(flat ? rec.is_loss : '')) +
           '</li>'
       );
-      const gaps = rec.data_gaps;
-      if (Array.isArray(gaps) && gaps.length) {
-        lines.push('<li><span class="pg-student-d11-k">data_gaps</span> ' + escapeHtml(gaps.join(', ')) + '</li>');
-      }
+      lines.push(renderL3DataGapMatrixHtml(l3.data_gaps));
       if (rec.error) {
         lines.push('<li><span class="pg-student-d11-k">error</span> ' + escapeHtml(String(rec.error)) + '</li>');
       }

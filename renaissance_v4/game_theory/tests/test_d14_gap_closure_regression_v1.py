@@ -296,7 +296,10 @@ def test_build_student_decision_record_structured_reasoning_fields_are_data_gap(
     ):
         assert sr.get(k) == "data_gap"
     gaps = rec.get("data_gaps") or []
-    assert "structured_reasoning_export_not_wired" in gaps
+    # GT_DIRECTIVE_017: placeholder export codes removed from D14 string list; fields remain ``data_gap``.
+    assert "structured_reasoning_export_not_wired" not in gaps
+    assert "per_trade_baseline_not_exported" not in gaps
+    assert "pattern_eval_per_trade_not_exported" not in gaps
 
 
 @pytest.fixture

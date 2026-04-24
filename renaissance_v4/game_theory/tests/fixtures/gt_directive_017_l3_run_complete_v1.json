@@ -1,0 +1,12 @@
+{
+  "schema": "gt_directive_017_l3_fixture_complete_v1",
+  "description": "Happy-path L3: D14 legacy data_gaps empty; scorecard has no l3_expect_* flags; optional baseline anchor satisfied.",
+  "job_id": "gt017_fixture_complete_job",
+  "trade_id": "gt017_fixture_trade_1",
+  "scorecard_line": {
+    "job_id": "gt017_fixture_complete_job",
+    "student_brain_profile_v1": "memory_context_stub_student",
+    "memory_context_impact_audit_v1": {"run_config_fingerprint_sha256_40": ""},
+    "skip_cold_baseline": true
+  }
+}

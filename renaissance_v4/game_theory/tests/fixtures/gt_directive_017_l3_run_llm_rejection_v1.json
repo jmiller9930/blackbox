@@ -1,0 +1,12 @@
+{
+  "schema": "gt_directive_017_l3_fixture_llm_rejection_v1",
+  "description": "LLM profile batch with seam rejections and no learning row for the trade — L3 surfaces llm_student_output_rejected_pre_seal_v1.",
+  "job_id": "gt017_fixture_llm_reject_job",
+  "trade_id": "gt017_fixture_trade_reject",
+  "scorecard_line": {
+    "job_id": "gt017_fixture_llm_reject_job",
+    "student_brain_profile_v1": "memory_context_llm_student",
+    "student_llm_v1": {"llm_model": "qwen2.5:7b"},
+    "llm_student_output_rejections_v1": 2
+  }
+}

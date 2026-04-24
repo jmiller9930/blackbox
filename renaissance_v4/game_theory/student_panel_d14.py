@@ -383,14 +383,6 @@ def build_student_decision_record_v1(job_id: str, trade_id: str) -> dict[str, An
     if timeframe_val == _dg():
         gaps.append("timeframe_not_exported")
 
-    gaps.append("structured_reasoning_export_not_wired")
-    gaps.extend(
-        [
-            "per_trade_baseline_not_exported",
-            "pattern_eval_per_trade_not_exported",
-        ]
-    )
-
     ema_f = meta.get("ema_fast") if "ema_fast" in meta else meta.get("ema")
     ema_s = meta.get("ema_slow")
     rsi_v = meta.get("rsi_14") if "rsi_14" in meta else meta.get("rsi")
