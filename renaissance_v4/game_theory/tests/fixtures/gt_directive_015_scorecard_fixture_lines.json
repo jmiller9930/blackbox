@@ -1,0 +1,99 @@
+[
+  {
+    "schema": "pattern_game_batch_scorecard_v1",
+    "job_id": "fixture_gt015_cold_baseline_001",
+    "status": "done",
+    "started_at_utc": "2026-04-24T10:00:00Z",
+    "ended_at_utc": "2026-04-24T10:05:00Z",
+    "student_reasoning_mode": "cold_baseline",
+    "llm_used": false,
+    "llm_model": null,
+    "ollama_base_url": null,
+    "prompt_version": "shadow_student_stub_v1",
+    "memory_context_used": false,
+    "retrieved_context_ids": [],
+    "skip_cold_baseline": false,
+    "skip_reason": "mode_is_cold_baseline",
+    "memory_context_impact_audit_v1": {
+      "schema": "memory_context_impact_audit_v1",
+      "run_config_fingerprint_sha256_40": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "memory_impact_yes_no": "NO"
+    }
+  },
+  {
+    "schema": "pattern_game_batch_scorecard_v1",
+    "job_id": "fixture_gt015_repeat_anna_002",
+    "status": "done",
+    "started_at_utc": "2026-04-24T11:00:00Z",
+    "ended_at_utc": "2026-04-24T11:05:00Z",
+    "student_reasoning_mode": "repeat_anna_memory_context",
+    "llm_used": false,
+    "llm_model": null,
+    "ollama_base_url": null,
+    "prompt_version": "shadow_student_stub_v1",
+    "memory_context_used": true,
+    "retrieved_context_ids": ["ctx_slice_demo_1"],
+    "skip_cold_baseline": true,
+    "skip_reason": "prior_anchor_job_id=fixture_gt015_cold_baseline_001",
+    "cold_baseline_anchor_job_id_v1": "fixture_gt015_cold_baseline_001",
+    "memory_context_impact_audit_v1": {
+      "schema": "memory_context_impact_audit_v1",
+      "run_config_fingerprint_sha256_40": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "memory_impact_yes_no": "YES"
+    }
+  },
+  {
+    "schema": "pattern_game_batch_scorecard_v1",
+    "job_id": "fixture_gt015_llm_qwen_003",
+    "status": "done",
+    "student_reasoning_mode": "llm_assisted_anna_qwen",
+    "llm_used": true,
+    "llm_model": "qwen2.5:7b",
+    "ollama_base_url": "http://127.0.0.1:11434",
+    "prompt_version": "student_llm_prompt_v0.1",
+    "memory_context_used": true,
+    "retrieved_context_ids": [],
+    "skip_cold_baseline": true,
+    "skip_reason": "prior_anchor_job_id=fixture_gt015_cold_baseline_001",
+    "student_llm_contract_note_v1": "llm_mode_declared_student_stub_until_ollama_wired",
+    "memory_context_impact_audit_v1": {
+      "schema": "memory_context_impact_audit_v1",
+      "run_config_fingerprint_sha256_40": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "memory_impact_yes_no": "YES"
+    }
+  },
+  {
+    "schema": "pattern_game_batch_scorecard_v1",
+    "job_id": "fixture_gt015_llm_deepseek_004",
+    "status": "done",
+    "student_reasoning_mode": "llm_assisted_anna_deepseek_r1_14b",
+    "llm_used": true,
+    "llm_model": "deepseek-r1:14b",
+    "ollama_base_url": "http://172.20.2.230:11434",
+    "prompt_version": "student_llm_prompt_v0.1",
+    "memory_context_used": true,
+    "retrieved_context_ids": [],
+    "skip_cold_baseline": true,
+    "skip_reason": "prior_anchor_job_id=fixture_gt015_cold_baseline_001",
+    "student_llm_contract_note_v1": "llm_mode_declared_student_stub_until_ollama_wired",
+    "memory_context_impact_audit_v1": {
+      "schema": "memory_context_impact_audit_v1",
+      "run_config_fingerprint_sha256_40": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "memory_impact_yes_no": "YES"
+    }
+  },
+  {
+    "schema": "pattern_game_batch_scorecard_v1",
+    "job_id": "fixture_gt015_skip_cold_proof_005",
+    "status": "done",
+    "student_reasoning_mode": "repeat_anna_memory_context",
+    "llm_used": false,
+    "skip_cold_baseline": true,
+    "skip_reason": "prior_anchor_job_id=fixture_gt015_cold_baseline_001",
+    "memory_context_impact_audit_v1": {
+      "schema": "memory_context_impact_audit_v1",
+      "run_config_fingerprint_sha256_40": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "memory_impact_yes_no": "NO"
+    }
+  }
+]

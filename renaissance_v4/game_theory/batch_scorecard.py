@@ -299,6 +299,7 @@ def record_parallel_batch_finished(
     path: Path | None = None,
     operator_batch_audit: dict[str, Any] | None = None,
     student_seam_observability_v1: dict[str, Any] | None = None,
+    exam_run_line_meta_v1: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """
     Append one scorecard line and return ``batch_timing`` for API payloads.
@@ -347,6 +348,10 @@ def record_parallel_batch_finished(
         }
         if operator_batch_audit:
             record["operator_batch_audit"] = operator_batch_audit
+        if exam_run_line_meta_v1:
+            for k, v in exam_run_line_meta_v1.items():
+                if v is not None:
+                    record[k] = v
     else:
         res = results or []
         ok_n = sum(1 for r in res if r.get("ok"))
@@ -406,6 +411,10 @@ def record_parallel_batch_finished(
         if operator_batch_audit:
             record["operator_batch_audit"] = operator_batch_audit
         record["memory_context_impact_audit_v1"] = mem_impact
+        if exam_run_line_meta_v1:
+            for k, v in exam_run_line_meta_v1.items():
+                if v is not None:
+                    record[k] = v
         seam_obs = student_seam_observability_v1 or {}
         for fld in (
             "student_learning_rows_appended",

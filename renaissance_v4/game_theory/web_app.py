@@ -103,7 +103,7 @@ _PATTERN_BANNER_WEBP_PATH = _RV4_ROOT / "assets" / "pattern.webp"
 _PATTERN_GAME_BANNER_BOOT_JS = _GAME_THEORY / "static" / "pattern_game_banner_boot.js"
 
 # Operator-visible web UI bundle version — bump when changing PAGE_HTML (HTML/CSS/JS) so deploys are provable.
-PATTERN_GAME_WEB_UI_VERSION = "2.19.48"
+PATTERN_GAME_WEB_UI_VERSION = "2.19.49"
 
 from renaissance_v4.game_theory.context_signature_memory import truncate_context_signature_memory_store
 from renaissance_v4.game_theory.groundhog_memory import (
@@ -121,6 +121,11 @@ from renaissance_v4.game_theory.batch_scorecard import (
     remove_batch_scorecard_line_by_job_id,
     truncate_batch_scorecard_jsonl,
     utc_timestamp_iso,
+)
+from renaissance_v4.game_theory.exam_run_contract_v1 import (
+    build_exam_run_line_meta_v1,
+    parse_exam_run_contract_request_v1,
+    preview_run_config_fingerprint_sha256_40_v1,
 )
 from renaissance_v4.game_theory.pattern_game_operator_reset import (
     RESET_PATTERN_GAME_LEARNING_CONFIRM,
@@ -207,7 +212,10 @@ from renaissance_v4.game_theory.catalog_batch_builder import (
     build_atr_sweep_scenarios,
     catalog_batch_builder_meta,
 )
-from renaissance_v4.game_theory.learning_run_audit import aggregate_batch_learning_run_audit_v1
+from renaissance_v4.game_theory.learning_run_audit import (
+    aggregate_batch_learning_run_audit_v1,
+    build_memory_context_impact_audit_v1,
+)
 from renaissance_v4.game_theory.hunter_planner import build_hunter_suggestion
 from renaissance_v4.game_theory.retrospective_log import append_retrospective, read_retrospective_recent
 from renaissance_v4.game_theory.live_telemetry_v1 import (
@@ -515,6 +523,13 @@ def _prepare_parallel_payload(data: dict[str, Any]) -> dict[str, Any]:
         for s in scenarios:
             s["context_signature_memory_mode"] = cmem_in
 
+    ex_req, ex_err = parse_exam_run_contract_request_v1(data)
+    if ex_err:
+        return {"ok": False, "error": ex_err}
+    fp_prev = preview_run_config_fingerprint_sha256_40_v1(scenarios, operator_batch_audit)
+    operator_batch_audit["exam_run_contract_request_v1"] = ex_req
+    operator_batch_audit["exam_run_fingerprint_preview_sha256_40_v1"] = fp_prev
+
     return {
         "ok": True,
         "scenarios": scenarios,
@@ -523,7 +538,36 @@ def _prepare_parallel_payload(data: dict[str, Any]) -> dict[str, Any]:
         "val_msgs": val_msgs,
         "operator_batch_audit": operator_batch_audit,
         "evaluation_window_resolved": resolved,
+        "exam_run_contract_request_v1": ex_req,
+        "exam_run_fingerprint_preview_v1": fp_prev,
     }
+
+
+def _exam_run_line_meta_for_parallel_job_v1(
+    *,
+    exam_req: dict[str, Any] | None,
+    fingerprint_preview: str | None,
+    operator_batch_audit: dict[str, Any] | None,
+    results: list[dict[str, Any]] | None,
+    job_id: str,
+    seam_audit: dict[str, Any] | None,
+    error: str | None,
+) -> dict[str, Any]:
+    """GT_DIRECTIVE_015 — scorecard line fields for run mode, skip-cold audit, LLM binding."""
+    oba_m = dict(operator_batch_audit or {})
+    if results and not error:
+        mem = build_memory_context_impact_audit_v1(results, oba_m)
+        fp = str(mem.get("run_config_fingerprint_sha256_40") or "").strip() or None
+    else:
+        fp = (fingerprint_preview or "").strip() or None
+    return build_exam_run_line_meta_v1(
+        request=exam_req,
+        operator_batch_audit=operator_batch_audit,
+        fingerprint_sha256_40=fp,
+        job_id=job_id,
+        student_seam_observability_v1=seam_audit,
+        batch_status="error" if error else "done",
+    )
 
 
 def _guard_parallel_batch_not_noop(
@@ -1022,6 +1066,8 @@ def create_app() -> Flask:
         log_path = prep["log_path"]
         val_msgs = prep["val_msgs"]
         operator_batch_audit = prep["operator_batch_audit"]
+        exam_req = prep.get("exam_run_contract_request_v1")
+        fp_prev = prep.get("exam_run_fingerprint_preview_v1")
 
         _prune_jobs()
         job_id = uuid.uuid4().hex
@@ -1094,6 +1140,15 @@ def create_app() -> Flask:
                     run_id=job_id,
                     strategy_id=op_rid,
                 )
+                exam_line = _exam_run_line_meta_for_parallel_job_v1(
+                    exam_req=exam_req if isinstance(exam_req, dict) else None,
+                    fingerprint_preview=fp_prev if isinstance(fp_prev, str) else None,
+                    operator_batch_audit=operator_batch_audit,
+                    results=results,
+                    job_id=job_id,
+                    seam_audit=seam_audit,
+                    error=None,
+                )
                 timing = record_parallel_batch_finished(
                     job_id=job_id,
                     started_at_utc=started_iso,
@@ -1105,6 +1160,7 @@ def create_app() -> Flask:
                     error=None,
                     operator_batch_audit=operator_batch_audit,
                     student_seam_observability_v1=seam_audit,
+                    exam_run_line_meta_v1=exam_line,
                 )
                 payload = {
                     "ok": True,
@@ -1142,6 +1198,15 @@ def create_app() -> Flask:
                         j["batch_timing"] = timing
             except Exception as e:
                 err_s = f"{type(e).__name__}: {e}"
+                exam_line_err = _exam_run_line_meta_for_parallel_job_v1(
+                    exam_req=exam_req if isinstance(exam_req, dict) else None,
+                    fingerprint_preview=fp_prev if isinstance(fp_prev, str) else None,
+                    operator_batch_audit=operator_batch_audit,
+                    results=None,
+                    job_id=job_id,
+                    seam_audit=None,
+                    error=err_s,
+                )
                 timing = record_parallel_batch_finished(
                     job_id=job_id,
                     started_at_utc=started_iso,
@@ -1152,6 +1217,7 @@ def create_app() -> Flask:
                     session_log_batch_dir=None,
                     error=err_s,
                     operator_batch_audit=operator_batch_audit,
+                    exam_run_line_meta_v1=exam_line_err,
                 )
                 with _JOBS_LOCK:
                     j = _JOBS.get(job_id)
@@ -1334,6 +1400,8 @@ def create_app() -> Flask:
         log_path = prep["log_path"]
         val_msgs = prep["val_msgs"]
         operator_batch_audit = prep["operator_batch_audit"]
+        exam_req_block = prep.get("exam_run_contract_request_v1")
+        fp_prev_block = prep.get("exam_run_fingerprint_preview_v1")
 
         job_id = uuid.uuid4().hex
         started_iso = utc_timestamp_iso()
@@ -1371,6 +1439,15 @@ def create_app() -> Flask:
                 run_id=job_id,
                 strategy_id=op_rid_block,
             )
+            exam_line_block = _exam_run_line_meta_for_parallel_job_v1(
+                exam_req=exam_req_block if isinstance(exam_req_block, dict) else None,
+                fingerprint_preview=fp_prev_block if isinstance(fp_prev_block, str) else None,
+                operator_batch_audit=operator_batch_audit,
+                results=results,
+                job_id=job_id,
+                seam_audit=seam_blocking,
+                error=None,
+            )
             timing = record_parallel_batch_finished(
                 job_id=job_id,
                 started_at_utc=started_iso,
@@ -1382,6 +1459,7 @@ def create_app() -> Flask:
                 error=None,
                 operator_batch_audit=operator_batch_audit,
                 student_seam_observability_v1=seam_blocking,
+                exam_run_line_meta_v1=exam_line_block,
             )
             ok_body: dict[str, Any] = {
                 "ok": True,
@@ -1415,6 +1493,15 @@ def create_app() -> Flask:
             return jsonify(ok_body)
         except Exception as e:
             err_s = f"{type(e).__name__}: {e}"
+            exam_line_block_err = _exam_run_line_meta_for_parallel_job_v1(
+                exam_req=exam_req_block if isinstance(exam_req_block, dict) else None,
+                fingerprint_preview=fp_prev_block if isinstance(fp_prev_block, str) else None,
+                operator_batch_audit=operator_batch_audit,
+                results=None,
+                job_id=job_id,
+                seam_audit=None,
+                error=err_s,
+            )
             timing = record_parallel_batch_finished(
                 job_id=job_id,
                 started_at_utc=started_iso,
@@ -1425,6 +1512,7 @@ def create_app() -> Flask:
                 session_log_batch_dir=None,
                 error=err_s,
                 operator_batch_audit=operator_batch_audit,
+                exam_run_line_meta_v1=exam_line_block_err,
             )
             return jsonify({"ok": False, "error": err_s, "job_id": job_id, "batch_timing": timing}), 400
         finally:
