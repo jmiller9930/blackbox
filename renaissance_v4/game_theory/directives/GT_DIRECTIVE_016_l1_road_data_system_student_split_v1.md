@@ -1,11 +1,11 @@
 # GT_DIRECTIVE_016 — L1 road data: system vs Anna band + denormalized rollups
 
-**Date:** 2026-04-24 (amended 2026-04-24 — **L1 road API + L1 row UI merge** shipped)  
-**Status:** **ACTIVE — PARTIAL ACCEPTANCE** — backend + **Level 1 table** wired to **`l1_road_v1`** on `GET /api/student-panel/runs` (Profile, LLM, Road band, Anchor role, Road gaps + API-driven legend block). **OPEN** until scorecard-line denorm (§16.2 Anna align / mem-ctx flags) ships **or** is **deferred in writing**; **GT_DIRECTIVE_017** blocked until 016 closed or 016 UI remainder explicitly deferred.  
+**Date:** 2026-04-24 (amended 2026-04-24 — **L1 road API + L1 row UI merge** shipped; **v1 CLOSED** same day)  
+**Status:** **Accepted v1 / CLOSED** — L1 road visible and usable: **`GET /api/student-panel/l1-road`**, **`l1_road_v1`** on **`GET /api/student-panel/runs`**, Level 1 columns + **API-driven legend**, tests + operator proof. **Remaining scope** from original §16.1/§16.2 text is **not undefined**; it is **transferred** to the **Deferred work register** below (named follow-ons). **GT_DIRECTIVE_017** is **unblocked**.  
 **From:** Architect (via operator product lock)  
 **To:** Engineer  
 **CC:** Operator, Product, Referee, UI  
-**Scope:** `renaissance_v4/game_theory` — `student_panel_l1_road_v1.py` (`road_by_job_id_v1`, `member_job_ids`), `web_app.py` (`GET /api/student-panel/l1-road`, **`l1_road_v1` overlay on** `GET /api/student-panel/runs`, L1 table columns + legend from API); tests/fixtures/proof; remaining: `batch_scorecard.py` denorm per §16.2; optional **A \| B** visual band chrome (§16.1 two-band layout) unless deferred.
+**Scope (016 v1 shipped):** `renaissance_v4/game_theory` — `student_panel_l1_road_v1.py` (`road_by_job_id_v1`, `member_job_ids`), `web_app.py` (`GET /api/student-panel/l1-road`, **`l1_road_v1` overlay on** `GET /api/student-panel/runs`, L1 table columns + legend from API); tests/fixtures/proof. **Follow-on:** `batch_scorecard.py` denorm + §16.1 dual-band → **016R1**; exam-pack E/P surfacing → **019** (see Deferred work register).
 
 ## Canonical workflow record
 
@@ -65,6 +65,22 @@ At **`record_parallel_batch_finished`** (or immediately after parallel completio
 
 Log **GT_DIRECTIVE_016** until **Accepted**.
 
+**Accepted v1 — 2026-04-24** — see Architect review (CLOSED + deferred register).
+
+---
+
+## Deferred work register (post-016 v1; no undefined gaps)
+
+Original directive §16.1–§16.2 items **not** shipped in 016 v1 are **explicitly owned** by these follow-ons (identifiers reserved until architect files them):
+
+| Gap | Named follow-on | Notes |
+|-----|-----------------|-------|
+| Scorecard-line denorm at parallel finish (Anna align %, mem/ctx flags, retrieval counts, `Fx` rule, §16.2) | **`GT_DIRECTIVE_016R1`** (reserved) — *file to be issued* | Performance contract unchanged: **no** per-row learning-store scan on `GET …/runs`. |
+| Formal **A \| B** dual-band row chrome vs current single-table columns (§16.1) | **`GT_DIRECTIVE_016R1`** (same or split **016R2** at architect discretion) | UI polish; semantics already honest via Road / Anchor / gaps. |
+| Exam-pack **E** / **P** on scorecard + L1 vs scorecard **expectancy** + optional **P** field | **`GT_DIRECTIVE_019`** (reserved) — *or product exam grading directive* | **015** already defers refine-then-seal / full pack parity on the parallel path; this is **persistence + surfacing**, not 016 regression. |
+
+**Coupling:** **GT_DIRECTIVE_017** §17.x cross-ref on **L1 `Fx`** remains: strong **Fx** claims require L3 gap closure on architect-defined sample trades — implement when **016R1** defines `fx_loose_learning_flag` persistence.
+
 ---
 
 ## Engineer update
@@ -87,8 +103,8 @@ Log **GT_DIRECTIVE_016** until **Accepted**.
 
 **Accepted:** `student_panel_l1_road_v1.py`; single-pass scorecard-only aggregation; grouping by fingerprint + brain profile + LLM model; Qwen vs DeepSeek split; baseline-anchored A/B per fingerprint; no cross-fingerprint mixing; no learning-store scans; honest `data_gaps` for missing baseline / process score; server-driven `legend`; `GET /api/student-panel/l1-road` **200**; fixture, operator proof, tests; commit / push / gsync; **`road_by_job_id_v1`**; **`l1_road_v1`** on **`GET /api/student-panel/runs`**; **Level 1 UI** shows profile, LLM (when applicable), band, anchor role, road gaps, and **legend text from API** (not copy-pasted definitions in JS).
 
-**Still OPEN (directive not closed):** scorecard-line denorm for intended road display (§16.2); **P** remains optional field; **E** remains scorecard expectancy (not exam-pack grade E); optional two-band **A \| B** chrome per §16.1 until shipped or **deferred in writing**. **Do not start GT_DIRECTIVE_017** until this closure or explicit deferral of the remainder.
+**Deferred (written — not OPEN):** scorecard-line denorm (§16.2); **P** optional until denorm; **E** = scorecard expectancy until exam-pack surfacing (**019** or successor); §16.1 dual-band chrome — see **Deferred work register** above. **GT_DIRECTIVE_017** may proceed.
 
-**One-line summary:** The L1 road data exists and is truthful **and** is wired into the visible L1 table via **`l1_road_v1`**; remaining 016 scope is denorm + formal band layout or written deferral.
+**One-line summary (closure):** **016 v1** delivers truthful L1 road data **and** embeds it in the Level 1 table with **server-driven legend**; all former “OPEN” gaps are **named** to **016R1** / **019** (reserved).
 
-**Status:** **PARTIAL ACCEPTANCE — OPEN**
+**Status:** **Accepted v1 / CLOSED** (2026-04-24)

@@ -36,3 +36,7 @@ Expect **200**; `GET …/l1-road` → `schema` = `student_panel_l1_road_v1` (inc
 - **E** = mean of persisted `expectancy_per_trade` (batch economic rollup).  
 - **P** = mean of optional `student_l1_process_score_v1` when present; otherwise `avg_p_process_score` null and `process_leg: data_gap` for E-only A/B.  
 - **No cross-fingerprint mixing:** each `fingerprint_sha256_40` bucket has its own baseline anchor.
+
+## Directive closeout
+
+**GT_DIRECTIVE_016** is **Accepted v1 / CLOSED** (2026-04-24). Remaining §16.1/§16.2 and exam-pack **E/P** surfacing work is **named** in the directive file (**Deferred work register**: reserved **`GT_DIRECTIVE_016R1`**, **`GT_DIRECTIVE_019`**). **GT_DIRECTIVE_017** is **not** gated on 016 completion.
