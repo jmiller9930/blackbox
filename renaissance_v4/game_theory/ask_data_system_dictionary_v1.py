@@ -73,9 +73,17 @@ def system_dictionary_context_v1() -> dict[str, Any]:
                 "The **Referee** batch does not “learn” online; improvement comes from **comparing runs** and promoted bundles per governance. "
                 "Ask DATA does not mutate stores; use the Student panel + scorecard + architecture doc for the full seam."
             ),
+            "submission_paths_walk_template_strategy_framework": (
+                "**Submitting a batch — three paths:** **A)** built-in **pattern/recipe** (not Custom) from examples; **B)** **uploaded strategy** manifest with "
+                "`use_operator_uploaded_strategy` + validated `operator_strategy_upload_state`; **C)** **Custom JSON** scenarios (and policy/framework metadata on scenarios/manifests). "
+                "Ask DATA should **only** walk the paths the operator needs, using **leading questions** one at a time. Full checklist: "
+                "`static_knowledge.ask_data_submit_three_paths_walkthrough_v1`."
+            ),
         },
         "how_to_use": (
             "Ask in plain English about controls, columns, memory, runs, or how L1/L2/L3 relate. "
+            "To **submit** a recipe run, uploaded strategy, or Custom/framework-heavy batch, Ask DATA can walk you via **leading questions** (see "
+            "`static_knowledge.ask_data_submit_three_paths_walkthrough_v1`) — it still cannot Run or Upload for you. "
             "For **uploads / manifests**, paste text in this box — Ask DATA can review and say what is still required; it does not replace the Controls upload button. "
             "For **deep diagnostic reasoning**, prefix with `[debug]` or `[escalation]`. "
             "For **structured / API / schema** style questions, ask explicitly (e.g. JSON validation, routes) — the router may select a stronger model. "

@@ -145,6 +145,18 @@ def pml_static_knowledge_v1() -> dict[str, Any]:
             "Ask **one** concrete question at a time (e.g. “Paste the top-level keys of your manifest” or “Paste the last validator line”). "
             "**Do not** imply you can click Upload for them or persist files; **binding** upload + Run stays in **Controls** with `use_operator_uploaded_strategy` and `operator_strategy_upload_state` in the bundle when present."
         ),
+        "ask_data_submit_three_paths_walkthrough_v1": (
+            "**Three ways to get scenarios into a batch — walk operators with leading questions (one per reply).** "
+            "If intent is unclear, **first** ask: “Which path — **A** built-in pattern/recipe, **B** uploaded strategy manifest, or **C** Custom JSON / policy-heavy scenario?” "
+            "**Path A — Pattern / built-in “template” (curated recipe, not Custom):** Required before Run: Pattern **not** set to Custom; pick **operator recipe**; set **evaluation window**; "
+            "`context_signature_memory_mode` as intended; **workers**; confirm scenarios resolve from **examples** (see `static_knowledge.scenarios_sources`). "
+            "Leading Q examples: “Is Pattern set to a named recipe (not Custom)?” then “Which evaluation window?” then “Ready to hit Run?” "
+            "**Path B — Operator-uploaded strategy:** Required: enable **`use_operator_uploaded_strategy`** in UI context; a **validated** manifest via Controls upload (see `operator_strategy_upload_state` in the bundle for errors/labels). "
+            "Leading Q: “Are you binding an uploaded manifest for this batch?” then “Does upload state show valid?” then “Paste validator output here if not.” "
+            "**Path C — Custom JSON / framework wording:** Pattern **Custom**; paste **scenario array** (or object the UI expects) in the **Custom JSON** path; **policy framework** is governance metadata carried on scenarios/manifests — not a separate mystery upload in this UI. "
+            "Leading Q: “Do you need Custom JSON in the textarea?” vs “Are you asking about policy framework labels on scenarios?” "
+            "**Cross-cutting honesty:** Ask DATA does **not** Run or Upload; it only explains and asks. **Run** is always the operator button after Controls are satisfied."
+        ),
         "refusal_policy": (
             "If the question is general trivia, unrelated life advice, or open internet facts, refuse in one short "
             "paragraph and say you only explain this Pattern Game UI, its runs, and controls."
@@ -265,6 +277,18 @@ def _fallback_answer_from_bundle(question: str, bundle: dict[str, Any]) -> tuple
             + " If you need one cell, click the row and read batch detail.",
             "app_knowledge",
         )
+    walk = static.get("ask_data_submit_three_paths_walkthrough_v1")
+    if isinstance(walk, str) and walk.strip():
+        walk_hit = (
+            ("all three" in qlow)
+            or ("walk me" in qlow)
+            or (
+                any(x in qlow for x in ("submit", "walk", "guide", "through", "require", "required", "leading", "step by step"))
+                and any(x in qlow for x in ("template", "strateg", "framework", "pattern", "manifest", "upload", "custom", "recipe"))
+            )
+        )
+        if walk_hit:
+            return (str(walk), "app_knowledge")
     sdict = bundle.get("system_dictionary") or {}
     topics = sdict.get("topics") if isinstance(sdict, dict) else {}
     upaste = static.get("ask_data_upload_paste_conversation_v1")
@@ -383,6 +407,9 @@ def ask_data_format_with_llm(
         "end with **one** clear ask (e.g. paste manifest JSON or the validation error here). Never claim you can perform the Controls upload or start a run; "
         "separate **review in chat** from **binding submit in the operator UI**. Follow `static_knowledge.ask_data_upload_paste_conversation_v1` and "
         "`system_dictionary.topics.operator_framework_scenarios_templates`.\n"
+        "- For **submitting** a **pattern/recipe run**, an **uploaded strategy**, or **Custom / framework-heavy** scenarios: follow "
+        "`static_knowledge.ask_data_submit_three_paths_walkthrough_v1` and `system_dictionary.topics.submission_paths_walk_template_strategy_framework`. "
+        "Use **leading questions**; only cover paths **A/B/C** the operator needs; **one** deciding or checklist question per reply until they confirm ready for Run.\n"
         "- If the question is general trivia or unrelated to this application, refuse in one short paragraph "
         "(same idea as static_knowledge.refusal_policy).\n"
         "- At the end, add a single line starting with **Sources used:** listing only from: "
