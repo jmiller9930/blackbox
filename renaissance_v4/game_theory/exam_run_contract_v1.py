@@ -90,7 +90,10 @@ _LLM_HINT_FROM_LEGACY_INPUT_V1: dict[str, str] = {
 
 
 def default_ollama_base_url_v1() -> str:
-    return (os.environ.get("OLLAMA_BASE_URL") or "http://127.0.0.1:11434").strip().rstrip("/")
+    """Student parallel LLM — same routing chain as PML lightweight (``172.20.2.230`` lab default)."""
+    from renaissance_v4.game_theory.ollama_role_routing_v1 import student_ollama_base_url_v1
+
+    return student_ollama_base_url_v1()
 
 
 def normalize_student_reasoning_mode_v1(raw: str | None) -> str:

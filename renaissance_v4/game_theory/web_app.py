@@ -49,7 +49,11 @@ see ``trade_strategy_post_cert_stub_v1.py`` and ``docs/STUDENT_PATH_EXAM_HIGH_LE
 **System Dialogue** (post-run formatter; ``/api/barney-summary``): ``POST /api/barney-summary`` with ``{"job_id": "…"}`` — structured
 run facts only. **Ask DATA** (bounded self-explainer): ``POST /api/ask-data`` with ``question`` and optional
 ``job_id`` / ``ui_context`` — answers only from bundled PML knowledge + run/scorecard facts
-(same Ollama stack as System Dialogue when enabled; see ``ASK_DATA_USE_LLM`` / ``BARNEY_USE_LLM`` / ``ANNA_USE_LLM``).
+(when LLM enabled: **role-routed** — Barney + Ask DATA use **PML lightweight** host/model; see
+``renaissance_v4/game_theory/ollama_role_routing_v1.py`` and ``GET /api/operator/ollama-role-routing``).
+Env: ``ASK_DATA_USE_LLM``, ``BARNEY_USE_LLM``, ``ANNA_USE_LLM``, ``PML_LIGHTWEIGHT_OLLAMA_*``, ``SYSTEM_AGENT_OLLAMA_*``, ``DEEPSEEK_ESCALATION_OLLAMA_*``, ``STUDENT_OLLAMA_BASE_URL``.
+
+**Operator Ollama role routing (read-only snapshot):** ``GET /api/operator/ollama-role-routing`` — JSON snapshot of resolved bases/models per role (no secrets). **System Agent** tooling must use ``system_agent_ollama_v1`` + **tool layers** only; models never execute mutations directly.
 
 Operator **retrospective** (learn / next experiment): ``GET /api/retrospective-log``,
 ``POST /api/retrospective-append`` — persists to ``retrospective_log.jsonl`` (see
@@ -107,7 +111,7 @@ _PATTERN_BANNER_WEBP_PATH = _RV4_ROOT / "assets" / "pattern.webp"
 _PATTERN_GAME_BANNER_BOOT_JS = _GAME_THEORY / "static" / "pattern_game_banner_boot.js"
 
 # Operator-visible web UI bundle version — bump when changing PAGE_HTML (HTML/CSS/JS) so deploys are provable.
-PATTERN_GAME_WEB_UI_VERSION = "2.19.55"
+PATTERN_GAME_WEB_UI_VERSION = "2.19.56"
 
 from renaissance_v4.game_theory.context_signature_memory import truncate_context_signature_memory_store
 from renaissance_v4.game_theory.groundhog_memory import (
@@ -1394,6 +1398,13 @@ def create_app() -> Flask:
         )
         out = ask_data_answer(question, bundle)
         return jsonify({"ok": out.get("ok", False), "bundle_meta": {"job_resolution": job_res, "job_id": jid}, **out})
+
+    @app.get("/api/operator/ollama-role-routing")
+    def api_operator_ollama_role_routing() -> Any:
+        """Resolved Ollama bases/models per operator role (lab defaults overridable via env)."""
+        from renaissance_v4.game_theory.ollama_role_routing_v1 import ollama_role_routing_snapshot_v1
+
+        return jsonify(ollama_role_routing_snapshot_v1())
 
     @app.post("/api/run-parallel")
     def api_parallel() -> Any:

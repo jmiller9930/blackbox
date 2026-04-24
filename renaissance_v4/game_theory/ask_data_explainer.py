@@ -72,14 +72,13 @@ _OFF_TOPIC_REGEX = re.compile(
 )
 
 
-def _runtime_imports() -> tuple[Any, Any]:
+def _runtime_imports() -> Any:
     rt = str(_REPO_ROOT / "scripts" / "runtime")
     if rt not in sys.path:
         sys.path.insert(0, rt)
-    from _ollama import ollama_base_url
     from llm.local_llm_client import ollama_generate
 
-    return ollama_base_url, ollama_generate
+    return ollama_generate
 
 
 def ask_data_use_llm() -> bool:
@@ -283,9 +282,14 @@ def build_ask_data_bundle_v1(
 
 
 def ask_data_format_with_llm(bundle: dict[str, Any], question: str, *, timeout: float = 120.0) -> tuple[str, str | None]:
-    ollama_base_url, ollama_generate = _runtime_imports()
-    base = ollama_base_url()
-    model = os.environ.get("OLLAMA_MODEL", "qwen2.5:7b")
+    from renaissance_v4.game_theory.ollama_role_routing_v1 import (
+        pml_lightweight_ollama_base_url,
+        pml_lightweight_ollama_model,
+    )
+
+    ollama_generate = _runtime_imports()
+    base = pml_lightweight_ollama_base_url()
+    model = pml_lightweight_ollama_model()
     payload = json.dumps(bundle, indent=2, ensure_ascii=False)
     prompt = (
         "You are **Ask DATA** — a Pattern Machine Learning (PML) **self-explainer** for operators.\n\n"

@@ -215,6 +215,18 @@ export OLLAMA_MODEL="${OLLAMA_MODEL:-qwen2.5:7b}"
 python3 scripts/runtime/cody_plan_workflow.py "Your engineering request here"
 ```
 
+### Ollama role routing (Pattern / Barney / Ask DATA / Student / System Agent)
+
+Canonical module: `renaissance_v4/game_theory/ollama_role_routing_v1.py`. Flask exposes **`GET /api/operator/ollama-role-routing`** (resolved snapshot).
+
+| Env | Role |
+|-----|------|
+| `PML_LIGHTWEIGHT_OLLAMA_BASE_URL` / `PML_LIGHTWEIGHT_OLLAMA_MODEL` | **Barney** + **Ask DATA** (defaults: `http://172.20.2.230:11434`, `qwen2.5:7b`). Model also reads `OLLAMA_MODEL` if lightweight model unset. |
+| `OLLAMA_BASE_URL` | Used for **lightweight** base when `PML_LIGHTWEIGHT_OLLAMA_BASE_URL` unset (shared host). Legacy **`_ollama.ollama_base_url()`** unchanged (Anna / scripts). |
+| `STUDENT_OLLAMA_BASE_URL` | **Student** parallel LLM base (then `PML_LIGHTWEIGHT_*`, then `OLLAMA_BASE_URL`; default host `172.20.2.230`). Model tag still from exam contract. |
+| `SYSTEM_AGENT_OLLAMA_BASE_URL` / `SYSTEM_AGENT_OLLAMA_MODEL` / `SYSTEM_AGENT_OLLAMA_MODEL_FALLBACK` | **Operator System Agent** (defaults: `http://172.20.1.66:11434`, `qwen3-coder:30b`, fallback `qwen2.5-coder:7b`). **Propose-only** — use `system_agent_ollama_v1` behind tool APIs. |
+| `DEEPSEEK_ESCALATION_OLLAMA_*` | **Escalation / debug** only (`deepseek-r1:14b` on lightweight host by default). |
+
 Task `description` is JSON with `schema_version`, normalized fields, `parse_method` (`json` | `headings` | `fallback`), and `raw_model_output`.
 
 ## Shared docs foreman
