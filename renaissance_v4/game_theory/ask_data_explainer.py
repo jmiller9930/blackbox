@@ -261,6 +261,27 @@ def _fallback_answer_from_bundle(question: str, bundle: dict[str, Any]) -> tuple
     sdict = bundle.get("system_dictionary") or {}
     topics = sdict.get("topics") if isinstance(sdict, dict) else {}
     if isinstance(topics, dict):
+        fw_hit = (
+            "framework" in qlow
+            or ("pattern" in qlow and any(x in qlow for x in ("chang", "switch", "select", "pick", "choose")))
+            or ("strateg" in qlow and any(x in qlow for x in ("load", "upload", "manifest")))
+            or "uploaded strategy" in qlow
+            or ("template" in qlow and "load" in qlow)
+            or "custom json" in qlow
+            or ("preset" in qlow and "scenario" in qlow)
+            or ("how do i load" in qlow and any(x in qlow for x in ("scenario", "template", "strateg")))
+        )
+        if fw_hit:
+            t = topics.get("operator_framework_scenarios_templates")
+            if t:
+                return (str(t), "system_dictionary")
+        stu_learn_hit = ("student" in qlow or "proctor" in qlow) and any(
+            x in qlow for x in ("learn", "persist", "learning store", "saved to", "what does the code")
+        )
+        if stu_learn_hit:
+            t = topics.get("student_learning_persistence_code")
+            if t:
+                return (str(t), "system_dictionary")
         if any(x in qlow for x in ("level 1", "level 2", "level 3", "l1 ", "l2 ", "l3 ", "exam list", "carousel")):
             t = topics.get("student_fold_levels")
             if t:

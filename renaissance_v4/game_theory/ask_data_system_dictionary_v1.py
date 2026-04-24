@@ -57,6 +57,19 @@ def system_dictionary_context_v1() -> dict[str, Any]:
                 "batch proxies so operators are never confused. `exam_pass_v1` is the pack pass bit. When grading is missing but "
                 "expected, L3 emits a **critical** `exam_grading_missing_for_scored_run_v1` gap."
             ),
+            "operator_framework_scenarios_templates": (
+                "**Framework / pattern:** use the **Pattern** (operator recipe) control — it selects which curated playbook runs, "
+                "or **Custom** for JSON from the textarea. **Policy framework** is scenario metadata for governance/audit when the manifest provides it — "
+                "not a separate “load framework file” button in this UI. **Templates / presets:** built-in scenarios come from `game_theory/examples` "
+                "when not Custom; the **Custom JSON** textarea is the batch body when Pattern is Custom; **Scenario presets** in Advanced lists raw example files. "
+                "**Uploaded strategy:** turn on **use operator uploaded strategy**, pass manifest validation, then run — scenarios resolve from that manifest when enabled."
+            ),
+            "student_learning_persistence_code": (
+                "**Student learning (what the stack persists):** the **Student / Proctor** path grades exam-style replays and writes **versioned** rows "
+                "(e.g. `student_output_v1`, learning-store JSONL) for retrieval on later units — contracts live under `student_proctor/` and GT directives. "
+                "The **Referee** batch does not “learn” online; improvement comes from **comparing runs** and promoted bundles per governance. "
+                "Ask DATA does not mutate stores; use the Student panel + scorecard + architecture doc for the full seam."
+            ),
         },
         "how_to_use": (
             "Ask in plain English about controls, columns, memory, runs, or how L1/L2/L3 relate. "

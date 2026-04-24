@@ -118,7 +118,7 @@ _PATTERN_BANNER_WEBP_PATH = _RV4_ROOT / "assets" / "pattern.webp"
 _PATTERN_GAME_BANNER_BOOT_JS = _GAME_THEORY / "static" / "pattern_game_banner_boot.js"
 
 # Operator-visible web UI bundle version — bump when changing PAGE_HTML (HTML/CSS/JS) so deploys are provable.
-PATTERN_GAME_WEB_UI_VERSION = "2.19.65"
+PATTERN_GAME_WEB_UI_VERSION = "2.19.66"
 
 from renaissance_v4.game_theory.context_signature_memory import truncate_context_signature_memory_store
 from renaissance_v4.game_theory.groundhog_memory import (
@@ -5406,15 +5406,16 @@ PAGE_HTML = """<!DOCTYPE html>
               </p>
               <div class="pg-askdata-starters" role="group" aria-label="Suggested Ask DATA questions">
                 <span class="pg-askdata-starters-label">Try asking</span>
+                <button type="button" class="pg-askdata-chip" data-ask="How do I change the pattern or operator framework in this UI?">Change framework / pattern</button>
+                <button type="button" class="pg-askdata-chip" data-ask="How do I load an operator-uploaded strategy manifest?">Load uploaded strategy</button>
+                <button type="button" class="pg-askdata-chip" data-ask="How do I load scenarios from a built-in template, preset file, or Custom JSON?">Load template / scenarios</button>
+                <button type="button" class="pg-askdata-chip" data-ask="How does the Student path learn from a run and what does the code persist to the learning store?">How Student learns (code)</button>
                 <button type="button" class="pg-askdata-chip" data-ask="What is PML?">What is PML?</button>
                 <button type="button" class="pg-askdata-chip" data-ask="What is the difference between pattern, policy framework, and manifest?">Pattern vs policy vs manifest</button>
-                <button type="button" class="pg-askdata-chip" data-ask="What does Ask DATA do versus the Student path?">Ask DATA vs Student</button>
-                <button type="button" class="pg-askdata-chip" data-ask="How do student levels 1, 2, and 3 relate?">Student L1 / L2 / L3</button>
-                <button type="button" class="pg-askdata-chip" data-ask="How does the Student learn from a run?">How does the Student learn?</button>
-                <button type="button" class="pg-askdata-chip" data-ask="What can I control on this screen before I run a batch?">What can I do here?</button>
                 <button type="button" class="pg-askdata-chip" data-ask="Where do scenarios come from?">Where do scenarios come from?</button>
+                <button type="button" class="pg-askdata-chip" data-ask="What can I control on this screen before I run a batch?">What can I do here?</button>
+                <button type="button" class="pg-askdata-chip" data-ask="How do student levels 1, 2, and 3 relate?">Student L1 / L2 / L3</button>
                 <button type="button" class="pg-askdata-chip" data-ask="What does data_gap mean?">What is data_gap?</button>
-                <button type="button" class="pg-askdata-chip" data-ask="How is Ollama routing set up for Ask DATA?">Ollama routing</button>
               </div>
               <textarea id="askDataInput" class="pg-askdata-input" rows="3" maxlength="6000"
                 placeholder="Or type your own question (Ctrl/Cmd+Enter to send)…"
