@@ -119,7 +119,7 @@ _PATTERN_BANNER_WEBP_PATH = _RV4_ROOT / "assets" / "pattern.webp"
 _PATTERN_GAME_BANNER_BOOT_JS = _GAME_THEORY / "static" / "pattern_game_banner_boot.js"
 
 # Operator-visible web UI bundle version — bump when changing PAGE_HTML (HTML/CSS/JS) so deploys are provable.
-PATTERN_GAME_WEB_UI_VERSION = "2.19.72"
+PATTERN_GAME_WEB_UI_VERSION = "2.19.74"
 
 from renaissance_v4.game_theory.context_signature_memory import truncate_context_signature_memory_store
 from renaissance_v4.game_theory.groundhog_memory import (
@@ -3692,23 +3692,29 @@ PAGE_HTML = """<!DOCTYPE html>
       line-height: 1.4;
       color: var(--pg-muted);
     }
-    .pg-askdata-starters {
+    details.pg-askdata-starters-fold {
+      margin: 0 0 10px;
+      border: 1px dashed rgba(54, 64, 74, 0.32);
+      border-radius: 8px;
+      padding: 0 8px 4px;
+      background: rgba(0, 0, 0, 0.02);
+    }
+    details.pg-askdata-starters-fold > summary.pg-askdata-starters-fold-summary {
+      cursor: pointer;
+      font-size: 0.78rem;
+      font-weight: 700;
+      color: var(--pg-muted);
+      padding: 6px 0 4px;
+      user-select: none;
+      list-style-position: outside;
+    }
+    details.pg-askdata-starters-fold .pg-askdata-starters-inner {
       display: flex;
       flex-wrap: wrap;
       align-items: center;
       gap: 6px 8px;
-      margin: 0 0 10px;
-      padding: 0 0 8px;
-      border-bottom: 1px dashed rgba(54, 64, 74, 0.3);
-    }
-    .pg-askdata-starters-label {
-      width: 100%;
-      font-size: 0.68rem;
-      font-weight: 800;
-      letter-spacing: 0.05em;
-      text-transform: uppercase;
-      color: var(--pg-accent);
-      margin: 0 0 2px;
+      padding: 6px 0 4px;
+      border-top: 1px dashed rgba(54, 64, 74, 0.22);
     }
     button.pg-askdata-chip {
       font: inherit;
@@ -5493,26 +5499,21 @@ PAGE_HTML = """<!DOCTYPE html>
               <p class="pg-barney-title" style="margin:0 0 6px">Ask DATA</p>
               <p class="pg-askdata-invite">
                 <strong>Ask me anything in natural language</strong> — controls, runs, memory, the Student path, or how this UI fits together.
-                Starters are <strong>questions</strong> (tap to send). You can also <strong>paste JSON, manifest text, or errors</strong> in the box for read-only formatting and checks — Ask DATA will say what it still needs.
+                Optional <strong>example questions</strong> live in the fold below (closed by default). Tap a chip to send. You can also <strong>paste JSON, manifest text, or errors</strong> in the box — Ask DATA will say what it still needs.
                 Ask DATA only uses this app’s glossary, run/scorecard facts, and operator context — not the open web.
               </p>
-              <div class="pg-askdata-starters" role="group" aria-label="Suggested Ask DATA questions">
-                <span class="pg-askdata-starters-label">Try asking</span>
-                <button type="button" class="pg-askdata-chip" data-ask="What am I allowed to do in this Pattern Machine operator UI, and what is out of scope or forbidden?">What am I allowed to do?</button>
-                <button type="button" class="pg-askdata-chip" data-ask="What is required to submit a built-in pattern or recipe run (not Custom), and can you walk me through it with leading questions?">What is required to submit a pattern / recipe run?</button>
-                <button type="button" class="pg-askdata-chip" data-ask="What is required to submit a batch using an operator-uploaded strategy manifest, and can you walk me through it with leading questions?">What is required to submit an uploaded strategy?</button>
-                <button type="button" class="pg-askdata-chip" data-ask="What is required to submit a run using Custom JSON or policy framework metadata, and can you walk me through it with leading questions?">What is required for Custom JSON / framework?</button>
-                <button type="button" class="pg-askdata-chip" data-ask="How do I change the pattern or operator framework in this UI?">How do I change the pattern or framework?</button>
-                <button type="button" class="pg-askdata-chip" data-ask="How do I load an operator-uploaded strategy manifest?">How do I load an uploaded strategy manifest?</button>
-                <button type="button" class="pg-askdata-chip" data-ask="How do I load scenarios from a built-in template, preset file, or Custom JSON?">How do I load templates, presets, or Custom JSON?</button>
-                <button type="button" class="pg-askdata-chip" data-ask="How does the Student path learn from a run and what does the code persist to the learning store?">How does the Student path learn (what is saved)?</button>
-                <button type="button" class="pg-askdata-chip" data-ask="What is PML?">What is PML?</button>
-                <button type="button" class="pg-askdata-chip" data-ask="What is the difference between pattern, policy framework, and manifest?">What is the difference between pattern, policy, and manifest?</button>
-                <button type="button" class="pg-askdata-chip" data-ask="Where do scenarios come from?">Where do scenarios come from?</button>
-                <button type="button" class="pg-askdata-chip" data-ask="What can I control on this screen before I run a batch?">What can I control before I run?</button>
-                <button type="button" class="pg-askdata-chip" data-ask="How do student levels 1, 2, and 3 relate?">How do student levels L1, L2, and L3 relate?</button>
-                <button type="button" class="pg-askdata-chip" data-ask="What does data_gap mean?">What does data_gap mean?</button>
-              </div>
+              <details class="pg-askdata-starters-fold">
+                <summary class="pg-askdata-starters-fold-summary">Example questions (optional)</summary>
+                <div class="pg-askdata-starters-inner" role="group" aria-label="Suggested Ask DATA questions">
+                  <button type="button" class="pg-askdata-chip" data-ask="What am I allowed to do in this Pattern Machine operator UI, and what is out of scope or forbidden?">What am I allowed to do?</button>
+                  <button type="button" class="pg-askdata-chip" data-ask="What is required to submit a built-in pattern or recipe run (not Custom), and can you walk me through it with leading questions?">What is required to submit a pattern / recipe run?</button>
+                  <button type="button" class="pg-askdata-chip" data-ask="What is required to submit a batch using an operator-uploaded strategy manifest, and can you walk me through it with leading questions?">What is required to submit an uploaded strategy?</button>
+                  <button type="button" class="pg-askdata-chip" data-ask="What is required to submit a run using Custom JSON or policy framework metadata, and can you walk me through it with leading questions?">What is required for Custom JSON / framework?</button>
+                  <button type="button" class="pg-askdata-chip" data-ask="What is PML?">What is PML?</button>
+                  <button type="button" class="pg-askdata-chip" data-ask="Where do scenarios come from?">Where do scenarios come from?</button>
+                  <button type="button" class="pg-askdata-chip" data-ask="What is the difference between pattern, policy framework, and manifest?">What is the difference between pattern, policy, and manifest?</button>
+                </div>
+              </details>
               <textarea id="askDataInput" class="pg-askdata-input" rows="3" maxlength="6000"
                 placeholder="Ask anything in plain language… (Ctrl/Cmd+Enter to send)"
                 autocomplete="off" aria-label="Ask DATA — natural language question"></textarea>
