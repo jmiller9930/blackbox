@@ -50,9 +50,15 @@ see ``trade_strategy_post_cert_stub_v1.py`` and ``docs/STUDENT_PATH_EXAM_HIGH_LE
 **System Dialogue** (post-run formatter; ``/api/barney-summary``): ``POST /api/barney-summary`` with ``{"job_id": "…"}`` — structured
 run facts only. **Ask DATA** (bounded self-explainer): ``POST /api/ask-data`` with ``question`` and optional
 ``job_id`` / ``ui_context`` — answers only from bundled PML knowledge + run/scorecard facts
-(when LLM enabled: **role-routed** — Barney + Ask DATA use **PML lightweight** host/model; see
-``renaissance_v4/game_theory/ollama_role_routing_v1.py`` and ``GET /api/operator/ollama-role-routing``).
-Env: ``ASK_DATA_USE_LLM``, ``BARNEY_USE_LLM``, ``ANNA_USE_LLM``, ``PML_LIGHTWEIGHT_OLLAMA_*``, ``SYSTEM_AGENT_OLLAMA_*``, ``DEEPSEEK_ESCALATION_OLLAMA_*``, ``STUDENT_OLLAMA_BASE_URL``.
+(when LLM enabled: **intent router** may select **PML lightweight**, **System Agent**, or **DeepSeek** tier; see
+``ask_data_router_v1.py``, ``ollama_role_routing_v1.py``, ``GET /api/operator/ollama-role-routing``).
+Successful responses may include ``interaction_id`` and ``question_fingerprint`` when
+``ASK_DATA_OPERATOR_FEEDBACK`` is enabled; operators POST ratings to ``POST /api/ask-data/feedback``
+(body: ``interaction_id``, ``rating`` — one of ``up``, ``down``, ``neutral``; optional ``tags``, ``note``).
+Prior ratings for similar questions appear in the bundle as ``operator_feedback_signals`` (telemetry, not Referee).
+Env: ``ASK_DATA_USE_LLM``, ``ASK_DATA_ROUTER``, ``ASK_DATA_ROUTE``, ``ASK_DATA_OPERATOR_FEEDBACK``,
+``ASK_DATA_OPERATOR_FEEDBACK_PATH``, ``BARNEY_USE_LLM``, ``ANNA_USE_LLM``, ``PML_LIGHTWEIGHT_OLLAMA_*``,
+``SYSTEM_AGENT_OLLAMA_*``, ``DEEPSEEK_ESCALATION_OLLAMA_*``, ``STUDENT_OLLAMA_BASE_URL``.
 
 **Operator Ollama role routing (read-only snapshot):** ``GET /api/operator/ollama-role-routing`` — JSON snapshot of resolved bases/models per role (no secrets). **System Agent** tooling must use ``system_agent_ollama_v1`` + **tool layers** only; models never execute mutations directly.
 
@@ -112,7 +118,7 @@ _PATTERN_BANNER_WEBP_PATH = _RV4_ROOT / "assets" / "pattern.webp"
 _PATTERN_GAME_BANNER_BOOT_JS = _GAME_THEORY / "static" / "pattern_game_banner_boot.js"
 
 # Operator-visible web UI bundle version — bump when changing PAGE_HTML (HTML/CSS/JS) so deploys are provable.
-PATTERN_GAME_WEB_UI_VERSION = "2.19.57"
+PATTERN_GAME_WEB_UI_VERSION = "2.19.58"
 
 from renaissance_v4.game_theory.context_signature_memory import truncate_context_signature_memory_store
 from renaissance_v4.game_theory.groundhog_memory import (
@@ -1342,6 +1348,9 @@ def create_app() -> Flask:
               "job_id": "<hex optional>",
               "ui_context": { ... optional, server-sanitized keys only }
             }
+
+        When ``ASK_DATA_OPERATOR_FEEDBACK`` is enabled (default), JSON includes ``interaction_id``
+        (use with ``POST /api/ask-data/feedback``) and ``question_fingerprint`` for deduplication.
         """
         data = request.get_json(force=True, silent=True) or {}
         question = str(data.get("question") or "").strip()
@@ -1400,8 +1409,64 @@ def create_app() -> Flask:
             operator_strategy_state=op_state,
             job_resolution=job_res,
         )
-        out = ask_data_answer(question, bundle)
+        out = ask_data_answer(question, bundle, job_id=jid)
         return jsonify({"ok": out.get("ok", False), "bundle_meta": {"job_resolution": job_res, "job_id": jid}, **out})
+
+    @app.post("/api/ask-data/feedback")
+    def api_ask_data_feedback() -> Any:
+        """
+        Record operator signal for a prior Ask DATA turn. Body JSON::
+
+            {
+              "interaction_id": "<hex from ask-data response>",
+              "rating": "up" | "down" | "neutral",
+              "tags": ["optional", "short_slugs"],
+              "note": "optional short text"
+            }
+        """
+        from renaissance_v4.game_theory.ask_data_operator_feedback_v1 import (
+            append_ask_data_feedback_telemetry_v1,
+            ask_data_operator_feedback_enabled_v1,
+            interaction_exists_in_telemetry_v1,
+            interaction_feedback_already_recorded_v1,
+            lookup_interaction_meta_v1,
+        )
+
+        if not ask_data_operator_feedback_enabled_v1():
+            return jsonify({"ok": False, "error": "ASK_DATA_OPERATOR_FEEDBACK is disabled"}), 503
+        data = request.get_json(force=True, silent=True) or {}
+        iid = str(data.get("interaction_id") or "").strip()
+        if not iid or len(iid) > 64:
+            return jsonify({"ok": False, "error": "interaction_id is required"}), 400
+        rating = str(data.get("rating") or "").strip().lower()
+        if rating not in ("up", "down", "neutral"):
+            return jsonify({"ok": False, "error": "rating must be up, down, or neutral"}), 400
+        raw_tags = data.get("tags")
+        tags: list[str] = []
+        if isinstance(raw_tags, list):
+            for t in raw_tags[:8]:
+                if isinstance(t, str) and t.strip():
+                    tags.append(t.strip()[:40])
+        note = str(data.get("note") or "").strip()[:500]
+
+        if not interaction_exists_in_telemetry_v1(iid):
+            return jsonify({"ok": False, "error": "unknown interaction_id (too old or invalid)"}), 404
+        if interaction_feedback_already_recorded_v1(iid):
+            return jsonify({"ok": False, "error": "feedback already recorded for this interaction"}), 409
+        meta = lookup_interaction_meta_v1(iid)
+        fp = str((meta or {}).get("question_fingerprint") or "")
+        if not fp:
+            return jsonify({"ok": False, "error": "interaction record missing fingerprint"}), 500
+        ok, err = append_ask_data_feedback_telemetry_v1(
+            interaction_id=iid,
+            question_fingerprint=fp,
+            rating=rating,
+            tags=tags,
+            note=note,
+        )
+        if not ok:
+            return jsonify({"ok": False, "error": err or "append failed"}), 500
+        return jsonify({"ok": True, "error": None})
 
     @app.get("/api/operator/ollama-role-routing")
     def api_operator_ollama_role_routing() -> Any:
@@ -3670,6 +3735,41 @@ PAGE_HTML = """<!DOCTYPE html>
       text-transform: uppercase;
       color: var(--pg-muted);
       margin-bottom: 4px;
+    }
+    .pg-ask-feedback {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 6px 8px;
+      margin: -4px 12px 10px 0;
+      padding: 6px 8px;
+      border-radius: 8px;
+      border: 1px dashed rgba(30, 58, 95, 0.35);
+      background: rgba(30, 58, 95, 0.04);
+      font-size: 0.78rem;
+    }
+    .pg-ask-feedback-label {
+      color: var(--pg-muted);
+      font-weight: 700;
+      margin-right: 4px;
+    }
+    .pg-ask-feedback-btn {
+      font: inherit;
+      font-size: 0.76rem;
+      padding: 4px 10px;
+      border-radius: 6px;
+      border: 1px solid var(--pg-line);
+      background: var(--pg-surface);
+      cursor: pointer;
+      color: var(--pg-ink);
+    }
+    .pg-ask-feedback-btn:hover:not(:disabled) {
+      border-color: var(--pg-accent);
+      color: var(--pg-accent);
+    }
+    .pg-ask-feedback-btn:disabled {
+      opacity: 0.55;
+      cursor: default;
     }
     details.pg-panel-fold.pg-barney-dock > summary .pg-panel-sub,
     details.pg-panel-fold.pg-askdata-dock > summary .pg-panel-sub,
@@ -7251,6 +7351,50 @@ PAGE_HTML = """<!DOCTYPE html>
       thread.scrollTop = thread.scrollHeight;
     }
 
+    function appendAskDataFeedbackStrip(interactionId) {
+      const thread = document.getElementById('askDataThread');
+      if (!thread || !interactionId) return;
+      const row = document.createElement('div');
+      row.className = 'pg-ask-feedback';
+      const lab = document.createElement('span');
+      lab.className = 'pg-ask-feedback-label';
+      lab.textContent = 'Was this helpful?';
+      const send = async (rating) => {
+        if (row.dataset.sent) return;
+        try {
+          const r = await fetch('/api/ask-data/feedback', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ interaction_id: interactionId, rating: rating, tags: [] }),
+          });
+          const fj = await r.json();
+          if (!r.ok || !fj.ok) {
+            lab.textContent = fj.error || ('HTTP ' + r.status);
+            return;
+          }
+          row.dataset.sent = '1';
+          lab.textContent = 'Thanks — signal recorded.';
+          row.querySelectorAll('button').forEach(function (b) { b.disabled = true; });
+        } catch (e) {
+          lab.textContent = 'Feedback failed: ' + friendlyFetchError(e);
+        }
+      };
+      const mkBtn = function (label, rating) {
+        const b = document.createElement('button');
+        b.type = 'button';
+        b.className = 'pg-ask-feedback-btn';
+        b.textContent = label;
+        b.addEventListener('click', function () { send(rating); });
+        return b;
+      };
+      row.appendChild(lab);
+      row.appendChild(mkBtn('Helpful', 'up'));
+      row.appendChild(mkBtn('Not helpful', 'down'));
+      row.appendChild(mkBtn('Skip', 'neutral'));
+      thread.appendChild(row);
+      thread.scrollTop = thread.scrollHeight;
+    }
+
     async function sendAskData() {
       const inp = document.getElementById('askDataInput');
       const st = document.getElementById('askDataStatus');
@@ -7284,6 +7428,9 @@ PAGE_HTML = """<!DOCTYPE html>
         }
         const reply = (j.text || '').trim() || '—';
         appendAskDataBubble('assistant', reply);
+        if (j.interaction_id) {
+          appendAskDataFeedbackStrip(j.interaction_id);
+        }
         const src = j.answer_source ? (' · source: ' + j.answer_source) : '';
         if (st) st.textContent = (j.bundle_meta && j.bundle_meta.job_resolution ? ('Context: ' + j.bundle_meta.job_resolution) : '') + src;
       } catch (e) {

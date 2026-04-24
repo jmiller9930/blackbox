@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import pytest
+
 from renaissance_v4.game_theory.ask_data_explainer import (
     ask_data_answer,
     build_ask_data_bundle_v1,
@@ -10,6 +12,12 @@ from renaissance_v4.game_theory.ask_data_explainer import (
     sanitize_ui_context,
     scorecard_snapshot_for_ask,
 )
+
+
+@pytest.fixture(autouse=True)
+def _ask_data_feedback_disabled(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Avoid writing ``ask_data_operator_feedback.jsonl`` during unrelated explainer tests."""
+    monkeypatch.setenv("ASK_DATA_OPERATOR_FEEDBACK", "0")
 
 
 def test_sanitize_ui_context_strips_unknown_and_long() -> None:

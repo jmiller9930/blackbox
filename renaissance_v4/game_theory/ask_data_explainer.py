@@ -5,6 +5,9 @@ When LLM is enabled, an **intent router** (``ask_data_router_v1``) picks the bes
 tier: fast **PML lightweight**, stronger **system_agent** for schema/API-style questions, or
 **deepseek_escalation** for explicit ``[debug]`` / ``[escalation]`` prompts. Models never execute
 mutations. Disable: ``ASK_DATA_ROUTER=0``; force tier: ``ASK_DATA_ROUTE=lightweight|system_agent|deepseek``.
+Operator **signals** (``ask_data_operator_feedback_v1``): append-only JSONL + ``POST /api/ask-data/feedback``;
+rollups inject ``operator_feedback_signals`` into the bundle (telemetry, not Referee). Disable:
+``ASK_DATA_OPERATOR_FEEDBACK=0``.
 """
 
 from __future__ import annotations
@@ -324,7 +327,9 @@ def ask_data_format_with_llm(
         "Same honesty rules apply; you still do **not** execute mutations or call live tools.\n\n"
         "RULES (hard):\n"
         "- Answer ONLY using: (1) the JSON bundle sections `static_knowledge`, `system_dictionary`, `barney_facts`, "
-        "`scorecard_snapshot`, `ui_context`, `operator_strategy_upload_state`, and `job_resolution`. "
+        "`scorecard_snapshot`, `ui_context`, `operator_strategy_upload_state`, `job_resolution`, "
+        "and `operator_feedback_signals` (prior operator ratings for **similar** questions — aggregate telemetry, "
+        "not run truth). "
         "Do NOT use outside knowledge, the internet, or guesses.\n"
         "- If the bundle does not contain enough information, say clearly: "
         "**not available in current run data** or **not available in current app state** or "
@@ -334,8 +339,9 @@ def ask_data_format_with_llm(
         "- If the question is general trivia or unrelated to this application, refuse in one short paragraph "
         "(same idea as static_knowledge.refusal_policy).\n"
         "- At the end, add a single line starting with **Sources used:** listing only from: "
-        "`run_facts` | `scorecard` | `ui` | `static` | `dictionary` | `upload` | `refused` — comma-separated, "
-        "reflecting what you actually relied on (`dictionary` = `system_dictionary` topics).\n\n"
+        "`run_facts` | `scorecard` | `ui` | `static` | `dictionary` | `upload` | `refused` | `operator_signals` — comma-separated, "
+        "reflecting what you actually relied on (`dictionary` = `system_dictionary` topics; "
+        "`operator_signals` = `operator_feedback_signals` rollup).\n\n"
         f"OPERATOR QUESTION:\n{question.strip()}\n\n"
         "--- BUNDLE JSON ---\n"
         + payload
@@ -349,7 +355,19 @@ def ask_data_format_with_llm(
 def ask_data_answer(
     question: str,
     bundle: dict[str, Any],
+    *,
+    job_id: str | None = None,
 ) -> dict[str, Any]:
+    from renaissance_v4.game_theory.ask_data_operator_feedback_v1 import (
+        append_ask_data_interaction_telemetry_v1,
+        ask_data_operator_feedback_enabled_v1,
+        bundle_with_operator_feedback_signals_v1,
+        new_interaction_id_v1,
+        question_fingerprint_v1,
+        rollup_operator_feedback_for_fingerprint_v1,
+    )
+    from renaissance_v4.game_theory.ask_data_router_v1 import classify_ask_data_route_v1
+
     q = (question or "").strip()
     if not q:
         return {
@@ -358,42 +376,66 @@ def ask_data_answer(
             "answer_source": "refused",
             "error": "question is empty",
         }
-    if looks_off_topic(q):
-        return {
-            "ok": True,
-            "text": refusal_text_general(),
-            "answer_source": "refused",
-            "error": None,
-        }
-    from renaissance_v4.game_theory.ask_data_router_v1 import classify_ask_data_route_v1
+
+    fp = question_fingerprint_v1(q)
+    signals = rollup_operator_feedback_for_fingerprint_v1(fp)
+    eff_bundle = bundle_with_operator_feedback_signals_v1(bundle, signals)
+    job_res = str((bundle or {}).get("job_resolution") or "")
 
     route = classify_ask_data_route_v1(q)
+
+    def _finalize(
+        *,
+        ok: bool,
+        text: str,
+        answer_source: str,
+        error: Any,
+        router_label: str,
+    ) -> dict[str, Any]:
+        out: dict[str, Any] = {
+            "ok": ok,
+            "text": text,
+            "answer_source": answer_source,
+            "error": error,
+            "ask_data_route": route,
+            "ask_data_router": router_label,
+        }
+        if ask_data_operator_feedback_enabled_v1():
+            iid = new_interaction_id_v1()
+            append_ask_data_interaction_telemetry_v1(
+                interaction_id=iid,
+                question_fingerprint=fp,
+                job_id=job_id,
+                ask_data_route=route,
+                answer_source=answer_source,
+                job_resolution=job_res,
+                question_len=len(q),
+            )
+            out["interaction_id"] = iid
+            out["question_fingerprint"] = fp
+        return out
+
+    if looks_off_topic(q):
+        return _finalize(
+            ok=True,
+            text=refusal_text_general(),
+            answer_source="refused",
+            error=None,
+            router_label="off_topic",
+        )
+
     if not ask_data_use_llm():
-        txt, src = _fallback_answer_from_bundle(q, bundle)
-        return {
-            "ok": True,
-            "text": txt,
-            "answer_source": src,
-            "error": None,
-            "ask_data_route": route,
-            "ask_data_router": "off_llm",
-        }
-    txt, err = ask_data_format_with_llm(bundle, q, route=route)
+        txt, src = _fallback_answer_from_bundle(q, eff_bundle)
+        return _finalize(ok=True, text=txt, answer_source=src, error=None, router_label="off_llm")
+
+    txt, err = ask_data_format_with_llm(eff_bundle, q, route=route)
     if err or not txt:
-        fb, src = _fallback_answer_from_bundle(q, bundle)
-        return {
-            "ok": True,
-            "text": fb + ("\n\n(Formatter unavailable: " + str(err) + ")" if err else ""),
-            "answer_source": src + "+fallback",
-            "error": err,
-            "ask_data_route": route,
-            "ask_data_router": "fallback_after_llm_error",
-        }
-    return {
-        "ok": True,
-        "text": txt,
-        "answer_source": "llm",
-        "error": None,
-        "ask_data_route": route,
-        "ask_data_router": "llm",
-    }
+        fb, src = _fallback_answer_from_bundle(q, eff_bundle)
+        return _finalize(
+            ok=True,
+            text=fb + ("\n\n(Formatter unavailable: " + str(err) + ")" if err else ""),
+            answer_source=src + "+fallback",
+            error=err,
+            router_label="fallback_after_llm_error",
+        )
+    return _finalize(ok=True, text=txt, answer_source="llm", error=None, router_label="llm")

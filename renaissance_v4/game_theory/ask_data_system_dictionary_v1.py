@@ -54,7 +54,9 @@ def system_dictionary_context_v1() -> dict[str, Any]:
         "how_to_use": (
             "Ask in plain English about controls, columns, memory, runs, or how L1/L2/L3 relate. "
             "For **deep diagnostic reasoning**, prefix with `[debug]` or `[escalation]`. "
-            "For **structured / API / schema** style questions, ask explicitly (e.g. JSON validation, routes) — the router may select a stronger model."
+            "For **structured / API / schema** style questions, ask explicitly (e.g. JSON validation, routes) — the router may select a stronger model. "
+            "After each reply, use **Helpful / Not helpful** (``POST /api/ask-data/feedback``) so repeat questions can surface prior operator signals in "
+            "``operator_feedback_signals`` — telemetry for better explanations, not Referee truth."
         ),
     }
 

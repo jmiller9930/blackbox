@@ -18,6 +18,7 @@ Layout under the root (created on demand)::
     {MEMORY_ROOT}/run_memory.jsonl
     {MEMORY_ROOT}/experience_log.jsonl
     {MEMORY_ROOT}/batch_scorecard.jsonl   # batch run timing + totals (web UI + scripts)
+    {MEMORY_ROOT}/ask_data_operator_feedback.jsonl  # Ask DATA interaction + operator rating lines (not Referee)
     {MEMORY_ROOT}/retrospective_log.jsonl # operator/agent “what we learned / try next” (not Referee scores)
 """
 
@@ -70,6 +71,14 @@ def default_retrospective_log_jsonl() -> Path:
     if mr:
         return mr / "retrospective_log.jsonl"
     return _GAME_THEORY / "retrospective_log.jsonl"
+
+
+def default_ask_data_operator_feedback_jsonl() -> Path:
+    """Append-only Ask DATA telemetry: ``interaction`` lines plus operator ``feedback`` (ratings/tags)."""
+    mr = memory_root()
+    if mr:
+        return mr / "ask_data_operator_feedback.jsonl"
+    return _GAME_THEORY / "ask_data_operator_feedback.jsonl"
 
 
 def ensure_memory_root_tree() -> None:
