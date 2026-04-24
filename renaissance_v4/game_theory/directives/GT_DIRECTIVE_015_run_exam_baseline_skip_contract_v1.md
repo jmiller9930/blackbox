@@ -92,8 +92,8 @@ Implement at least these **distinct** modes (exact spelling for persistence and 
 #### 15.5.2 When each mode applies
 
 - **`cold_baseline`:** only the **system** replay arm (§15.2); **no** Student LLM.
-- **`memory_context_only`:** repeat Anna sit **with** memory/context plumbing **on**, **no** LLM in the Student emitter.
-- **`llm_qwen2_5_7b` / `llm_deepseek_r1_14b`:** repeat (or architect-approved) sits where the operator **explicitly** selects that **Student** LLM mode; **same** exam identity + tape comparison rules as §15.1 for cross-mode scoring.
+- **`repeat_anna_memory_context`** (alias **`memory_context_only`**): repeat Anna sit **with** memory/context plumbing **on**, **no** LLM in the Student emitter (v1 stub).
+- **`llm_assisted_anna_qwen` / `llm_assisted_anna_deepseek_r1_14b`** (legacy ids still accepted): repeat sits where the operator **explicitly** selects that **Student** LLM mode; **same** exam identity + tape comparison rules as §15.1 for cross-mode scoring.
 
 #### 15.5.3 Persistence on the exam unit / scorecard (every run)
 
@@ -114,13 +114,13 @@ Each completed run **must** persist (scorecard line, `operator_batch_audit`, or 
 
 - **Same exam identity** = §15.1 fingerprint unchanged.
 - **Different** `student_reasoning_mode` = **different** scorecard row / `job_id`, same anchor `Sys BL` reference for comparison.
-- **Ordering:** document whether operators must run **baseline first** once per identity; repeat sits may cycle `memory_context_only` → `llm_qwen2_5_7b` → `llm_deepseek_r1_14b` for **value tests**.
+- **Ordering:** document whether operators must run **baseline first** once per identity; repeat sits may cycle `repeat_anna_memory_context` → `llm_assisted_anna_qwen` → `llm_assisted_anna_deepseek_r1_14b` for **value tests**.
 
 #### 15.5.5 How scores are compared (E + P / pack grading)
 
 - **Referee / pack grading** remains the **only** authority for **E/P** (or PASS/E); the LLM **never** self-grades.
 - Comparisons are **only** valid when **`prompt_version`** and **exam identity** are documented as comparable, or comparison is explicitly labeled **“prompt drift allowed.”**
-- **Hypothesis:** `llm_deepseek_r1_14b` improves **E/P** vs `memory_context_only` and vs `llm_qwen2_5_7b` — **prove** with persisted fields + aggregate reports; **no** claim without data.
+- **Hypothesis:** `llm_assisted_anna_deepseek_r1_14b` improves **E/P** vs `repeat_anna_memory_context` and vs `llm_assisted_anna_qwen` — **prove** with persisted fields + aggregate reports; **no** claim without data.
 
 ### 15.6 Global defaults vs run override
 
@@ -153,7 +153,9 @@ Append to any project deficiencies log: **“GT_DIRECTIVE_015 — baseline skip 
 - Tests: `renaissance_v4/game_theory/tests/test_gt_directive_015_exam_run_contract_v1.py`.
 - Fixture + operator proof: `tests/fixtures/gt_directive_015_scorecard_fixture_lines.json`, `docs/proof/exam_v1/GT_DIRECTIVE_015_operator_proof_run_lanes_v1.md`.
 
-**Remaining gaps:** UI control to send `exam_run_contract_v1` per run; wire Student seam to Ollama with **run-scoped** `llm_model` (no env global); automated HTTP integration test against Flask app; E/P comparison report endpoint; `git push` + `gsync` per operator environment (not run from this agent).
+**Remaining gaps:** UI control to send `exam_run_contract_v1` per run; wire Student seam to Ollama with **run-scoped** `llm_model` (no env global); automated HTTP integration test against Flask app; E/P comparison report endpoint; full **two-phase** “do not rerun Referee cold parallel” engine behavior when anchor exists.
+
+**Shipped this slice:** `git push origin main` completed; `python3 scripts/gsync.py --no-commit --force-restart` completed (pattern-game Flask + UIUX per operator stack).
 
 **Request:** Architect acceptance when the above gaps are closed or explicitly deferred with directive amendment.
 
