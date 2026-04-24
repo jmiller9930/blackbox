@@ -119,7 +119,7 @@ _PATTERN_BANNER_WEBP_PATH = _RV4_ROOT / "assets" / "pattern.webp"
 _PATTERN_GAME_BANNER_BOOT_JS = _GAME_THEORY / "static" / "pattern_game_banner_boot.js"
 
 # Operator-visible web UI bundle version — bump when changing PAGE_HTML (HTML/CSS/JS) so deploys are provable.
-PATTERN_GAME_WEB_UI_VERSION = "2.19.71"
+PATTERN_GAME_WEB_UI_VERSION = "2.19.72"
 
 from renaissance_v4.game_theory.context_signature_memory import truncate_context_signature_memory_store
 from renaissance_v4.game_theory.groundhog_memory import (
@@ -5498,6 +5498,7 @@ PAGE_HTML = """<!DOCTYPE html>
               </p>
               <div class="pg-askdata-starters" role="group" aria-label="Suggested Ask DATA questions">
                 <span class="pg-askdata-starters-label">Try asking</span>
+                <button type="button" class="pg-askdata-chip" data-ask="What am I allowed to do in this Pattern Machine operator UI, and what is out of scope or forbidden?">What am I allowed to do?</button>
                 <button type="button" class="pg-askdata-chip" data-ask="What is required to submit a built-in pattern or recipe run (not Custom), and can you walk me through it with leading questions?">What is required to submit a pattern / recipe run?</button>
                 <button type="button" class="pg-askdata-chip" data-ask="What is required to submit a batch using an operator-uploaded strategy manifest, and can you walk me through it with leading questions?">What is required to submit an uploaded strategy?</button>
                 <button type="button" class="pg-askdata-chip" data-ask="What is required to submit a run using Custom JSON or policy framework metadata, and can you walk me through it with leading questions?">What is required for Custom JSON / framework?</button>
