@@ -29,6 +29,7 @@ counts, **run_ok_pct**, **referee_win_pct**, **avg_trade_win_pct**) and expose `
 ``GET /api/student-panel/run/<job_id>/decisions``, ``GET /api/student-panel/run/<job_id>/l3?trade_id=`` (**GT_DIRECTIVE_017** — L3 envelope + structured ``data_gaps[]``),
 ``GET /api/student-panel/run/<job_id>/learning`` (**GT_DIRECTIVE_018** — memory promotion / retrieval eligibility),
 ``GET /api/student-panel/decision?job_id=&trade_id=`` (``decision_id`` accepted as alias for migration).
+``GET /api/training/export`` (**GT_DIRECTIVE_022** — promoted-only training export preview / download); ``POST /api/training/export/materialize`` (typed confirm writes ``training_dataset_v1.jsonl``).
 
 **Post-certification ``trade_strategy`` (DEV STUB):** Same routes under **``/api/v1/trade-strategy``** (stable for external callers) and **``/api/trade-strategy``** (alias).
 ``GET …/contract`` returns integration metadata. Methods: list, ``<id>/export`` (download JSON), get one, POST, PATCH — placeholder payloads until persistence + execution;
@@ -118,7 +119,7 @@ _PATTERN_BANNER_WEBP_PATH = _RV4_ROOT / "assets" / "pattern.webp"
 _PATTERN_GAME_BANNER_BOOT_JS = _GAME_THEORY / "static" / "pattern_game_banner_boot.js"
 
 # Operator-visible web UI bundle version — bump when changing PAGE_HTML (HTML/CSS/JS) so deploys are provable.
-PATTERN_GAME_WEB_UI_VERSION = "2.19.67"
+PATTERN_GAME_WEB_UI_VERSION = "2.19.70"
 
 from renaissance_v4.game_theory.context_signature_memory import truncate_context_signature_memory_store
 from renaissance_v4.game_theory.groundhog_memory import (
@@ -164,6 +165,13 @@ from renaissance_v4.game_theory.student_panel_l1_road_v1 import build_l1_road_pa
 from renaissance_v4.game_theory.student_panel_l3_datagap_matrix_v1 import build_student_panel_l3_payload_v1
 from renaissance_v4.game_theory.student_proctor.learning_memory_promotion_v1 import (
     build_student_panel_run_learning_payload_v1,
+)
+from renaissance_v4.game_theory.student_proctor.training_export_v1 import (
+    MATERIALIZE_TRAINING_DATASET_CONFIRM_V1,
+    build_training_export_payload_v1,
+    default_training_dataset_jsonl_path_v1,
+    iter_training_record_lines_v1,
+    materialize_training_dataset_v1,
 )
 from renaissance_v4.game_theory.exam_decision_frame_schema_v1 import (
     ExamUnitTimelineDocumentV1,
@@ -1809,6 +1817,17 @@ def create_app() -> Flask:
             "<style>\n"
             "body { font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; margin: 0; "
             "background: #0f1419; color: #e6edf3; }\n"
+            "header.dict-nav { position: sticky; top: 0; z-index: 20; display: flex; flex-wrap: wrap; "
+            "align-items: center; gap: 10px 14px; padding: 10px 14px; background: #161b22; "
+            "border-bottom: 1px solid #30363d; }\n"
+            "header.dict-nav .dict-nav-title { font-size: 0.95rem; font-weight: 650; margin: 0; flex: 1 1 12rem; }\n"
+            "header.dict-nav .dict-nav-actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }\n"
+            "header.dict-nav a, header.dict-nav button.dict-nav-btn { display: inline-block; font-size: 0.84rem; "
+            "padding: 6px 12px; border-radius: 6px; text-decoration: none; cursor: pointer; border: 1px solid #30363d; "
+            "background: #21262d; color: #e6edf3; }\n"
+            "header.dict-nav a.dict-nav-primary, header.dict-nav button.dict-nav-primary { "
+            "background: #238636; border-color: #2ea043; color: #fff; font-weight: 600; }\n"
+            "header.dict-nav a:hover, header.dict-nav button.dict-nav-btn:hover { filter: brightness(1.08); }\n"
             "main { max-width: 52rem; margin: 0 auto; padding: 1.25rem 1rem 2.5rem; }\n"
             "h1 { font-size: 1.2rem; margin: 0 0 0.5rem; font-weight: 650; }\n"
             "p.hint { font-size: 0.84rem; color: #8b949e; margin: 0 0 1rem; line-height: 1.45; }\n"
@@ -1816,14 +1835,41 @@ def create_app() -> Flask:
             "line-height: 1.48; background: #161b22; padding: 1rem 1.1rem; border-radius: 8px; "
             "border: 1px solid #30363d; margin: 0; }\n"
             "a.back { color: #58a6ff; font-size: 0.9rem; }\n"
-            "</style></head><body><main>\n"
+            "</style></head><body>\n"
+            "<header class=\"dict-nav\" role=\"navigation\" aria-label=\"Dictionary navigation\">\n"
+            "<p class=\"dict-nav-title\">Student panel dictionary</p>\n"
+            "<div class=\"dict-nav-actions\">\n"
+            "<a class=\"dict-nav-primary\" href=\"/#pgStudentTriangleDock\">Return to Pattern Machine</a>\n"
+            "<a href=\"/\">Application home</a>\n"
+            "<button type=\"button\" class=\"dict-nav-btn dict-nav-primary\" id=\"dictFocusOpener\" "
+            "hidden>Focus main window</button>\n"
+            "</div></header>\n"
+            "<main>\n"
             "<h1>Student panel dictionary (v1)</h1>\n"
             "<p class=\"hint\">Canonical source in repo: "
             "<code>renaissance_v4/game_theory/docs/STUDENT_PANEL_DICTIONARY_v1.md</code>. "
-            "Use your browser <strong>Back</strong> to return to Pattern Machine learning.</p>\n"
+            "Open the main app with <strong>Return to Pattern Machine</strong> (opens the "
+            "<strong>Student → learning → outcome</strong> fold). If you used a pop-out from the UI, "
+            "<strong>Focus main window</strong> brings the Pattern Machine tab to the front when the browser allows it.</p>\n"
             f"<pre class=\"glossary\">{body}</pre>\n"
-            '<p style="margin-top:1.25rem"><a class="back" href="/">← Pattern Machine learning</a></p>\n'
-            "</main></body></html>"
+            '<p style="margin-top:1.25rem"><a class="back" href="/#pgStudentTriangleDock">← Student fold (Pattern Machine)</a> · '
+            '<a class="back" href="/">← Application home</a></p>\n'
+            "</main>\n"
+            "<script>\n"
+            "(function () {\n"
+            "  var b = document.getElementById('dictFocusOpener');\n"
+            "  if (!b) return;\n"
+            "  try {\n"
+            "    if (window.opener && !window.opener.closed) b.hidden = false;\n"
+            "  } catch (e) { /* cross-origin opener */ }\n"
+            "  b.addEventListener('click', function () {\n"
+            "    try {\n"
+            "      if (window.opener && !window.opener.closed) window.opener.focus();\n"
+            "    } catch (e2) {}\n"
+            "  });\n"
+            "})();\n"
+            "</script>\n"
+            "</body></html>"
         )
         return Response(page, mimetype="text/html; charset=utf-8")
 
@@ -2164,6 +2210,51 @@ def create_app() -> Flask:
                 }
             ), 400
         out = clear_student_learning_store_v1(confirm=c.strip())
+        return jsonify(out), (200 if out.get("ok") else 400)
+
+    @app.get("/api/training/export")
+    def api_training_export_v1() -> Any:
+        """
+        GT_DIRECTIVE_022 — Promoted learning rows only; deterministic preview / NDJSON download.
+
+        Query: ``preview`` (default 5, max 500). ``download=1`` returns ``training_dataset_v1.jsonl`` body.
+        """
+        st = student_learning_store_status_v1()
+        store_path = Path(str(st["path"]))
+        try:
+            preview_n = int(str(request.args.get("preview") or "5").strip() or "5")
+        except ValueError:
+            preview_n = 5
+        dl_raw = str(request.args.get("download") or "").strip().lower()
+        if dl_raw in ("1", "true", "yes", "download"):
+            lines = iter_training_record_lines_v1(store_path=store_path, scorecard_path=None)
+            body = "\n".join(lines) + ("\n" if lines else "")
+            return Response(
+                body,
+                mimetype="application/x-ndjson; charset=utf-8",
+                headers={
+                    "Content-Disposition": 'attachment; filename="training_dataset_v1.jsonl"',
+                    "X-Training-Export-Line-Count": str(len(lines)),
+                },
+            )
+        payload = build_training_export_payload_v1(
+            store_path=store_path, scorecard_path=None, preview_limit=preview_n
+        )
+        payload["learning_store_path"] = str(store_path.resolve())
+        return jsonify(payload), 200
+
+    @app.post("/api/training/export/materialize")
+    def api_training_export_materialize_v1() -> Any:
+        """Write default ``training_dataset_v1.jsonl`` (typed confirm; GT_DIRECTIVE_022)."""
+        data = request.get_json(force=True, silent=True) or {}
+        st = student_learning_store_status_v1()
+        store_path = Path(str(st["path"]))
+        out = materialize_training_dataset_v1(
+            store_path=store_path,
+            scorecard_path=None,
+            output_path=default_training_dataset_jsonl_path_v1(),
+            confirm=str(data.get("confirm") or ""),
+        )
         return jsonify(out), (200 if out.get("ok") else 400)
 
     @app.get("/api/batch-detail")
@@ -5350,7 +5441,7 @@ PAGE_HTML = """<!DOCTYPE html>
           <div class="pg-panel-header" style="margin:0;flex:1">
             <div>
               <h2 class="pg-panel-h">Student → learning → outcome</h2>
-              <p class="pg-panel-sub"><strong>Operator panel (D14):</strong> Level 1 = exam list only. Level 2 = one selected exam — run summary band + trade carousel only. Level 3 = one trade deep dive only. Resize the fold from the bottom edge; state is remembered. <a href="/docs/student-panel-dictionary" target="_blank" rel="noopener noreferrer">Student panel dictionary</a> — terms for columns, profiles, L1 road, and APIs.</p>
+              <p class="pg-panel-sub"><strong>Operator panel (D14):</strong> Level 1 = exam list only. Level 2 = one selected exam — run summary band + trade carousel only. Level 3 = one trade deep dive only. Resize the fold from the bottom edge; state is remembered. <a href="/docs/student-panel-dictionary" onclick="return pgOpenStudentPanelDictionaryPopout();" title="Opens glossary in a resizable pop-out window (same name reuses one window)">Student panel dictionary</a> — terms for columns, profiles, L1 road, and APIs.</p>
             </div>
             <span class="pg-chip pg-chip-teal">Primary</span>
           </div>
@@ -5402,21 +5493,21 @@ PAGE_HTML = """<!DOCTYPE html>
               <p class="pg-barney-title" style="margin:0 0 6px">Ask DATA</p>
               <p class="pg-askdata-invite">
                 <strong>Ask me anything in natural language</strong> — controls, runs, memory, the Student path, or how this UI fits together.
-                Tap a <strong>starter</strong> to send it immediately, or type your own question below.
+                Starters are <strong>questions</strong> (tap to send). You can also <strong>paste JSON, manifest text, or errors</strong> in the box for read-only formatting and checks — Ask DATA will say what it still needs.
                 Ask DATA only uses this app’s glossary, run/scorecard facts, and operator context — not the open web.
               </p>
               <div class="pg-askdata-starters" role="group" aria-label="Suggested Ask DATA questions">
                 <span class="pg-askdata-starters-label">Try asking</span>
-                <button type="button" class="pg-askdata-chip" data-ask="How do I change the pattern or operator framework in this UI?">Change framework / pattern</button>
-                <button type="button" class="pg-askdata-chip" data-ask="How do I load an operator-uploaded strategy manifest?">Load uploaded strategy</button>
-                <button type="button" class="pg-askdata-chip" data-ask="How do I load scenarios from a built-in template, preset file, or Custom JSON?">Load template / scenarios</button>
-                <button type="button" class="pg-askdata-chip" data-ask="How does the Student path learn from a run and what does the code persist to the learning store?">How Student learns (code)</button>
+                <button type="button" class="pg-askdata-chip" data-ask="How do I change the pattern or operator framework in this UI?">How do I change the pattern or framework?</button>
+                <button type="button" class="pg-askdata-chip" data-ask="How do I load an operator-uploaded strategy manifest?">How do I load an uploaded strategy manifest?</button>
+                <button type="button" class="pg-askdata-chip" data-ask="How do I load scenarios from a built-in template, preset file, or Custom JSON?">How do I load templates, presets, or Custom JSON?</button>
+                <button type="button" class="pg-askdata-chip" data-ask="How does the Student path learn from a run and what does the code persist to the learning store?">How does the Student path learn (what is saved)?</button>
                 <button type="button" class="pg-askdata-chip" data-ask="What is PML?">What is PML?</button>
-                <button type="button" class="pg-askdata-chip" data-ask="What is the difference between pattern, policy framework, and manifest?">Pattern vs policy vs manifest</button>
+                <button type="button" class="pg-askdata-chip" data-ask="What is the difference between pattern, policy framework, and manifest?">What is the difference between pattern, policy, and manifest?</button>
                 <button type="button" class="pg-askdata-chip" data-ask="Where do scenarios come from?">Where do scenarios come from?</button>
-                <button type="button" class="pg-askdata-chip" data-ask="What can I control on this screen before I run a batch?">What can I do here?</button>
-                <button type="button" class="pg-askdata-chip" data-ask="How do student levels 1, 2, and 3 relate?">Student L1 / L2 / L3</button>
-                <button type="button" class="pg-askdata-chip" data-ask="What does data_gap mean?">What is data_gap?</button>
+                <button type="button" class="pg-askdata-chip" data-ask="What can I control on this screen before I run a batch?">What can I control before I run?</button>
+                <button type="button" class="pg-askdata-chip" data-ask="How do student levels 1, 2, and 3 relate?">How do student levels L1, L2, and L3 relate?</button>
+                <button type="button" class="pg-askdata-chip" data-ask="What does data_gap mean?">What does data_gap mean?</button>
               </div>
               <textarea id="askDataInput" class="pg-askdata-input" rows="3" maxlength="6000"
                 placeholder="Ask anything in plain language… (Ctrl/Cmd+Enter to send)"
@@ -5556,6 +5647,19 @@ PAGE_HTML = """<!DOCTYPE html>
       const d = document.createElement('div');
       d.textContent = String(s);
       return d.innerHTML;
+    }
+
+    /** Student panel glossary — named pop-out so one dictionary window is reused. */
+    function pgOpenStudentPanelDictionaryPopout() {
+      try {
+        var path = '/docs/student-panel-dictionary';
+        var u =
+          window.location && window.location.origin ? window.location.origin + path : path;
+        var feat = 'width=940,height=880,scrollbars=yes,resizable=yes';
+        var w = window.open(u, 'pgStudentPanelDictionary', feat);
+        if (w) w.focus();
+      } catch (_e) {}
+      return false;
     }
 
     /** Async operator actions: disabled + spinner + label until cleared (instant feedback before network returns). */
@@ -6721,7 +6825,7 @@ PAGE_HTML = """<!DOCTYPE html>
         (leg.band_a ? String(leg.band_a).slice(0, 220) : '') +
         (leg.band_b ? ' | ' + String(leg.band_b).slice(0, 160) : '');
       let scroll =
-        '<p class="pg-student-d11-legend" style="margin-top:0"><strong title="Level 1 (L1): list of exam runs from the scorecard">Level 1 — exam list</strong> — Each row is one exam attempt (<code title="API schema name for one run row">student_panel_run_row_v2</code> + <code title="D14 aggregate block on the same response">d14_run_row_v1</code>). Referee rollups and harness signals. Click a row (not ×) for Level 2. <strong title="Remove this scorecard line only">×</strong> removes this scorecard line only. <strong title="Sys BL: system baseline trade win percent — oldest same-fingerprint anchor">Sys BL %</strong> = system baseline trade win % (oldest same-fingerprint anchor). <strong title="Run TW: this run trade win percent from the Referee batch">Run TW %</strong> = this exam&rsquo;s trade win %. <strong title="Greater than baseline: strict beat vs Sys BL; not on anchor row">&gt;BL</strong> = strict beat vs Sys BL (not on anchor). <strong title="L1 road: fingerprint-group band vs baseline">Road</strong> / <strong title="Anchor: baseline ruler vs compare row role">Anchor</strong> / <strong title="Road gaps: merge-time data gap codes">Road gaps</strong> come from <code title="Embedded L1 road payload on this API response">l1_road_v1</code> on this response (same aggregation as <code>GET /api/student-panel/l1-road</code>). Full <code>l1_road_v1.legend</code> copy is in native browser tooltips (<code>title</code>) on column headers and on Profile / LLM / Road cells and the fingerprint table — not a separate on-page legend block. <a href="/docs/student-panel-dictionary" target="_blank" rel="noopener noreferrer">Dictionary</a> · <a href="/api/student-panel/l1-road" target="_blank" rel="noopener noreferrer">L1 road JSON</a></p>' +
+        '<p class="pg-student-d11-legend" style="margin-top:0"><strong title="Level 1 (L1): list of exam runs from the scorecard">Level 1 — exam list</strong> — Each row is one exam attempt (<code title="API schema name for one run row">student_panel_run_row_v2</code> + <code title="D14 aggregate block on the same response">d14_run_row_v1</code>). Referee rollups and harness signals. Click a row (not ×) for Level 2. <strong title="Remove this scorecard line only">×</strong> removes this scorecard line only. <strong title="Sys BL: system baseline trade win percent — oldest same-fingerprint anchor">Sys BL %</strong> = system baseline trade win % (oldest same-fingerprint anchor). <strong title="Run TW: this run trade win percent from the Referee batch">Run TW %</strong> = this exam&rsquo;s trade win %. <strong title="Greater than baseline: strict beat vs Sys BL; not on anchor row">&gt;BL</strong> = strict beat vs Sys BL (not on anchor). <strong title="L1 road: fingerprint-group band vs baseline">Road</strong> / <strong title="Anchor: baseline ruler vs compare row role">Anchor</strong> / <strong title="Road gaps: merge-time data gap codes">Road gaps</strong> come from <code title="Embedded L1 road payload on this API response">l1_road_v1</code> on this response (same aggregation as <code>GET /api/student-panel/l1-road</code>). Full <code>l1_road_v1.legend</code> copy is in native browser tooltips (<code>title</code>) on column headers and on Profile / LLM / Road cells and the fingerprint table — not a separate on-page legend block. <a href="/docs/student-panel-dictionary" onclick="return pgOpenStudentPanelDictionaryPopout();" title="Glossary in a resizable pop-out">Dictionary</a> · <a href="/api/student-panel/l1-road" target="_blank" rel="noopener noreferrer">L1 road JSON</a></p>' +
         '<div class="pg-student-d11-table-wrap"><table class="pg-student-d11-table"><thead><tr>' +
         '<th title="Run id: unique parallel batch job identifier">run_id</th>' +
         '<th title="UTC timestamp for this scorecard row">time</th>' +
@@ -9435,6 +9539,19 @@ PAGE_HTML = """<!DOCTYPE html>
             baselineH = body.offsetHeight;
           }
         });
+        try {
+          if (window.location.hash === '#pgStudentTriangleDock') {
+            details.open = true;
+            try {
+              localStorage.setItem(LS_OPEN, '1');
+            } catch (_h) { /* ignore */ }
+            requestAnimationFrame(function () {
+              try {
+                details.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+              } catch (_s) { /* ignore */ }
+            });
+          }
+        } catch (_g) { /* ignore */ }
       } catch (_e) { /* persist must never break the rest of the page */
       }
     })();
