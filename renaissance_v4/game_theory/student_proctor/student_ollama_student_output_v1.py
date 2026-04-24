@@ -90,6 +90,38 @@ def _ollama_chat_once_v1(
     return content.strip(), None
 
 
+def _merge_optional_thesis_from_parsed_v1(parsed: dict[str, Any], out: dict[str, Any]) -> None:
+    """
+    Copy optional §1.0 thesis keys from LLM JSON into ``out`` (only whitelisted keys).
+
+    Shapes are finalized by ``validate_student_output_v1`` on the full document.
+    """
+    cb = parsed.get("confidence_band")
+    if isinstance(cb, str) and cb.strip():
+        out["confidence_band"] = cb.strip().lower()
+    for key in ("supporting_indicators", "conflicting_indicators"):
+        v = parsed.get(key)
+        if v is None:
+            continue
+        if isinstance(v, list):
+            out[key] = [str(x).strip() for x in v if isinstance(x, (str, int, float)) and str(x).strip()][
+                :32
+            ]
+        elif isinstance(v, str) and v.strip():
+            out[key] = [s.strip() for s in v.split(",") if s.strip()][:32]
+    cf = parsed.get("context_fit")
+    if isinstance(cf, str) and cf.strip():
+        out["context_fit"] = cf.strip()[:128]
+    inv = parsed.get("invalidation_text")
+    if isinstance(inv, str) and inv.strip():
+        out["invalidation_text"] = inv.strip()[:4000]
+    sa = parsed.get("student_action_v1")
+    if isinstance(sa, str) and sa.strip():
+        raw = sa.strip().lower().replace("-", "_")
+        if raw in ("enter_long", "enter_short", "no_trade"):
+            out["student_action_v1"] = raw
+
+
 def _extract_json_object_v1(text: str) -> dict[str, Any] | None:
     t = text.strip()
     m = re.search(r"\{[\s\S]*\}\s*$", t)
@@ -123,6 +155,14 @@ def emit_student_output_via_ollama_v1(
         "You are the Student (exam). You MUST output a single JSON object only — no markdown, no prose outside JSON.\n"
         "Keys required: act (boolean), direction (string: long | short | flat), confidence_01 (number 0..1), "
         "pattern_recipe_ids (array of strings, non-empty), reasoning_text (short string).\n"
+        "Optional thesis keys (omit any you cannot justify from the packet only; do not invent post-hoc outcomes):\n"
+        "- confidence_band: low | medium | high\n"
+        "- supporting_indicators: string[] (names of indicators or context cues that agree with your direction)\n"
+        "- conflicting_indicators: string[] (names that disagree or weaken the thesis)\n"
+        "- context_fit: short string, e.g. trend | chop | reversal | breakout | exhaustion | unknown\n"
+        "- invalidation_text: what would prove the thesis wrong (no future prices or outcomes)\n"
+        "- student_action_v1: enter_long | enter_short | no_trade — MUST agree with act and direction "
+        "(no_trade requires act false; enter_long requires act true and direction long; enter_short requires act true and direction short).\n"
         f"prompt_version_echo: {prompt_version}\n"
         f"graded_unit_id: {graded_unit_id}\n"
         f"decision_open_time_ms: {decision_at_ms}\n"
@@ -158,6 +198,7 @@ def emit_student_output_via_ollama_v1(
     pr = out["pattern_recipe_ids"]
     if not pr or not all(isinstance(x, str) for x in pr):
         out["pattern_recipe_ids"] = [f"ollama_{llm_model.replace(':', '_')}_v1"]
+    _merge_optional_thesis_from_parsed_v1(parsed, out)
     ve = validate_student_output_v1(out)
     if ve:
         return None, [f"student_output_invalid: {'; '.join(ve)}"]

@@ -108,6 +108,11 @@ def emit_shadow_stub_student_output_v1(
         "reasoning_text": reasoning,
         "student_decision_ref": decision_ref,
     }
+    # Optional §1.0 thesis: only when consistent (flat + act true has no enter_* action).
+    if not act:
+        out["student_action_v1"] = "no_trade"
+    elif direction in ("long", "short"):
+        out["student_action_v1"] = "enter_long" if direction == "long" else "enter_short"
     errs = validate_student_output_v1(out)
     if errs:
         return None, errs

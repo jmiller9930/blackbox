@@ -8,6 +8,11 @@ Versioned JSON-serializable artifacts:
 * ``student_learning_record_v1`` — persistent learning row for cross-run retrieval.
 
 Graded unit v1: **closed trade** (see ``GRADED_UNIT_TYPE_V1``).
+
+**§1.0 thesis (optional, additive):** when present on ``student_output_v1``, the following are
+validated: ``confidence_band`` (low / medium / high), ``supporting_indicators`` / ``conflicting_indicators``
+(list[str]), ``context_fit``, ``invalidation_text``, ``student_action_v1`` (enter_long / enter_short / no_trade;
+must agree with ``act`` / ``direction``). Core required keys are unchanged for backward compatibility.
 """
 
 from __future__ import annotations
@@ -39,6 +44,24 @@ _STUDENT_CONTEXT_ANNEX_TOP_LEVEL_KEYS_V1: frozenset[str] = frozenset(
 )
 
 _DIRECTIONS = frozenset({"long", "short", "flat"})
+# Optional §1.0 “directional thesis” extension on ``student_output_v1`` (parallel seam + learning store).
+# When absent, validators do not require them; when present, types/shape are enforced (additive v1).
+_THESIS_CONFIDENCE_BANDS_V1 = frozenset({"low", "medium", "high"})
+_STUDENT_ACTION_A_V1 = frozenset({"enter_long", "enter_short", "no_trade"})
+_THESIS_MAX_INDICATORS = 32
+_THESIS_MAX_INDICATOR_LEN = 128
+_THESIS_MAX_CONTEXT_FIT_LEN = 128
+_THESIS_MAX_INVALIDATION_LEN = 4000
+OPTIONAL_THESIS_FIELD_NAMES_V1: frozenset[str] = frozenset(
+    {
+        "confidence_band",
+        "supporting_indicators",
+        "conflicting_indicators",
+        "context_fit",
+        "invalidation_text",
+        "student_action_v1",
+    }
+)
 
 # Keys that must **not** appear anywhere in a **pre-reveal** decision packet (leakage prevention v1).
 # Conservative list — refine per architect if false positives appear in real packets.
@@ -142,6 +165,71 @@ def validate_pre_reveal_bundle_v1(bundle: Any) -> list[str]:
     return msgs
 
 
+def _validate_student_output_optional_thesis_v1(doc: dict[str, Any]) -> list[str]:
+    """Validate optional §1.0 thesis fields when present on ``student_output_v1``."""
+    errs: list[str] = []
+    cb = doc.get("confidence_band")
+    if cb is not None:
+        if not isinstance(cb, str) or not cb.strip():
+            errs.append("confidence_band must be a non-empty string when present")
+        elif cb.strip().lower() not in _THESIS_CONFIDENCE_BANDS_V1:
+            errs.append("confidence_band must be low|medium|high when present")
+
+    def _ind_list(name: str) -> None:
+        v = doc.get(name)
+        if v is None:
+            return
+        if not isinstance(v, list):
+            errs.append(f"{name} must be a list[str] when present")
+            return
+        if len(v) > _THESIS_MAX_INDICATORS:
+            errs.append(f"{name} must have at most {_THESIS_MAX_INDICATORS} entries")
+            return
+        for i, x in enumerate(v):
+            if not isinstance(x, str):
+                errs.append(f"{name}[{i}] must be string")
+            elif len(x.strip()) > _THESIS_MAX_INDICATOR_LEN:
+                errs.append(f"{name}[{i}] exceeds max length {_THESIS_MAX_INDICATOR_LEN}")
+
+    _ind_list("supporting_indicators")
+    _ind_list("conflicting_indicators")
+
+    cf = doc.get("context_fit")
+    if cf is not None:
+        if not isinstance(cf, str) or not cf.strip() or len(cf) > _THESIS_MAX_CONTEXT_FIT_LEN:
+            errs.append(
+                f"context_fit must be a non-empty string of length <= {_THESIS_MAX_CONTEXT_FIT_LEN} when present"
+            )
+
+    inv = doc.get("invalidation_text")
+    if inv is not None:
+        if not isinstance(inv, str) or not inv.strip() or len(inv) > _THESIS_MAX_INVALIDATION_LEN:
+            errs.append(
+                "invalidation_text must be a non-empty string of length "
+                f"<= {_THESIS_MAX_INVALIDATION_LEN} when present"
+            )
+
+    sa = doc.get("student_action_v1")
+    if sa is not None:
+        if not isinstance(sa, str) or not sa.strip():
+            errs.append("student_action_v1 must be a non-empty string when present")
+        else:
+            sa_l = sa.strip().lower()
+            if sa_l not in _STUDENT_ACTION_A_V1:
+                errs.append("student_action_v1 must be enter_long|enter_short|no_trade when present")
+            else:
+                act = doc.get("act")
+                d = doc.get("direction")
+                d_l = d.lower().strip() if isinstance(d, str) and d.strip() else None
+                if sa_l == "no_trade" and act is True:
+                    errs.append("student_action_v1 no_trade requires act false")
+                if sa_l == "enter_long" and (act is not True or d_l != "long"):
+                    errs.append("student_action_v1 enter_long requires act true and direction long")
+                if sa_l == "enter_short" and (act is not True or d_l != "short"):
+                    errs.append("student_action_v1 enter_short requires act true and direction short")
+    return errs
+
+
 def validate_student_output_v1(doc: Any) -> list[str]:
     """Validate ``student_output_v1`` — shadow Student decision."""
     errs: list[str] = []
@@ -181,6 +269,10 @@ def validate_student_output_v1(doc: Any) -> list[str]:
     # student_output_v1 must never smuggle flashcard fields (forbidden keys anywhere on doc)
     pre = validate_pre_reveal_bundle_v1(doc)
     errs.extend(pre)
+    if errs:
+        return errs
+    # Optional thesis extension (§1.0) — only when core document is otherwise valid
+    errs.extend(_validate_student_output_optional_thesis_v1(doc))
     return errs
 
 
@@ -257,6 +349,18 @@ def legal_example_student_output_v1() -> dict[str, Any]:
         "reasoning_text": "Hypothesis: continuation in line with cookbook.",
         "student_decision_ref": "550e8400-e29b-41d4-a716-446655440000",
     }
+
+
+def legal_example_student_output_with_thesis_v1() -> dict[str, Any]:
+    """Valid ``student_output_v1`` including optional §1.0 thesis extension."""
+    base = legal_example_student_output_v1()
+    base["confidence_band"] = "medium"
+    base["supporting_indicators"] = ["rsi_14", "ema_20_slope"]
+    base["conflicting_indicators"] = ["atr_elevated"]
+    base["context_fit"] = "trend"
+    base["invalidation_text"] = "Close back below prior swing low."
+    base["student_action_v1"] = "enter_long"
+    return base
 
 
 def legal_example_student_context_annex_v1() -> dict[str, Any]:

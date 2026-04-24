@@ -1,4 +1,4 @@
-# Student panel dictionary (operator) — v1.1
+# Student panel dictionary (operator) — v1.2
 
 **Canonical file:** `renaissance_v4/game_theory/docs/STUDENT_PANEL_DICTIONARY_v1.md`  
 **Browser:** Pattern Machine learning UI → **Student → learning → outcome** fold → link **“Student panel dictionary”**, or open **`/docs/student-panel-dictionary`** on the same host as Flask (e.g. `http://127.0.0.1:8765/docs/student-panel-dictionary`).  
@@ -54,6 +54,17 @@ What the Student must **solve for** at commitment time is a **directional thesis
 |------|--------|
 | **Directional thesis** | **Direction** (long / short / sideways or neutral edge) + **confidence** + **which indicators support vs conflict** + **context fit** + **action** (ENTER with side vs NO_TRADE) + **invalidation**. Full product definition: **`STUDENT_PATH_EXAM_HIGH_LEVEL_ARCHITECTURE_v1.md` §1.0**. |
 | **Learning loop (concept)** | Indicators → direction estimate → confidence → action → outcome → memory update; reliability is proven over runs via **Referee** **E**/**P**, not narrative length. |
+
+**`student_output_v1` (parallel seam) — optional thesis keys** (validated when present; see **`STUDENT_PATH` §1.0.1**):
+
+| Field | Meaning |
+|-------|--------|
+| **`confidence_band`** | `low` \| `medium` \| `high` — complements numeric **`confidence_01`**. |
+| **`supporting_indicators`** | `string[]` — names of signals/cues that agree with **`direction`**. |
+| **`conflicting_indicators`** | `string[]` — names that disagree or weaken the thesis. |
+| **`context_fit`** | Short regime/structure label (e.g. trend, chop, reversal). |
+| **`invalidation_text`** | What would prove the thesis wrong (pre-reveal legal only). |
+| **`student_action_v1`** | `enter_long` \| `enter_short` \| `no_trade` — must agree with **`act`** and **`direction`**. |
 
 ---
 
