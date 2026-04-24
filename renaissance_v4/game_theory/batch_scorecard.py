@@ -300,27 +300,118 @@ def record_parallel_batch_finished(
     operator_batch_audit: dict[str, Any] | None = None,
     student_seam_observability_v1: dict[str, Any] | None = None,
     exam_run_line_meta_v1: dict[str, Any] | None = None,
+    parallel_cancel_partial_results: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     """
     Append one scorecard line and return ``batch_timing`` for API payloads.
 
     On ``error``, ``results`` may be None; ``total_processed`` is 0.
+
+    When ``parallel_cancel_partial_results`` is set, the scorecard row is ``status: cancelled`` with
+    partial aggregates (operator mid-batch cancel); ``error`` should carry the human-readable reason.
     """
     end_unix = time.time()
     ended_at_utc = utc_timestamp_iso()
-    n_result_rows = len(results or [])
-    timing = build_batch_timing_payload(
-        started_at_utc=started_at_utc,
-        ended_at_utc=ended_at_utc,
-        start_unix=start_unix,
-        end_unix=end_unix,
-        total_scenarios=total_scenarios,
-        processed_count=n_result_rows,
-    )
 
     learning_batch: dict[str, Any] | None = None
 
-    if error:
+    if parallel_cancel_partial_results is not None:
+        res = list(parallel_cancel_partial_results)
+        timing = build_batch_timing_payload(
+            started_at_utc=started_at_utc,
+            ended_at_utc=ended_at_utc,
+            start_unix=start_unix,
+            end_unix=end_unix,
+            total_scenarios=total_scenarios,
+            processed_count=len(res),
+        )
+        ok_n = sum(1 for r in res if r.get("ok"))
+        pct_fields = compute_batch_score_percentages(res)
+        learning_batch = aggregate_batch_learning_run_audit_v1(res)
+        oba_m = dict(operator_batch_audit or {})
+        if not oba_m.get("replay_data_audit"):
+            for r in res:
+                if r.get("ok") and r.get("replay_data_audit") is not None:
+                    oba_m["replay_data_audit"] = r.get("replay_data_audit")
+                    break
+        scorecard_learning = compute_scorecard_learning_rollups_v1(res, operator_batch_audit=oba_m)
+        mem_impact = build_memory_context_impact_audit_v1(res, operator_batch_audit=oba_m)
+        batch_depth = {
+            "parallel_scenarios_completed": len(res),
+            "replay_bars_processed_sum": learning_batch.get("replay_bars_processed_sum"),
+            "replay_decision_windows_sum": learning_batch.get("replay_decision_windows_sum"),
+            "context_candidate_replays_sum": learning_batch.get("context_candidate_replays_sum"),
+            "total_processed_is_scenario_rows": len(res),
+            "note": (
+                "Cancelled mid-batch — totals below include only scenarios that returned a worker row "
+                "before cancel; pending scenarios were not completed."
+            ),
+        }
+        cancel_msg = (error or "Cancelled by operator").strip() or "Cancelled by operator"
+        record = {
+            "schema": SCHEMA_V1,
+            "job_id": job_id,
+            "source": source,
+            "started_at_utc": started_at_utc,
+            "ended_at_utc": ended_at_utc,
+            "duration_sec": timing["duration_sec"],
+            "total_scenarios": total_scenarios,
+            "total_processed": len(res),
+            "ok_count": ok_n,
+            "failed_count": max(0, total_scenarios - ok_n),
+            "workers_used": workers_used,
+            "status": "cancelled",
+            "session_log_batch_dir": session_log_batch_dir,
+            "error": cancel_msg[:4000],
+            "parallel_cancel_pending_scenarios_v1": max(0, total_scenarios - len(res)),
+            "learning_batch_audit_v1": learning_batch,
+            "batch_depth_v1": batch_depth,
+            "batch_run_classification_v1": learning_batch.get("batch_run_classification_v1"),
+            "operator_learning_status_line_v1": learning_batch.get("operator_learning_status_line_v1"),
+            "replay_decision_windows_sum": learning_batch.get("replay_decision_windows_sum"),
+            **pct_fields,
+        }
+        record.update(
+            {k: v for k, v in scorecard_learning.items() if k != "operator_learning_table_summary_v1"}
+        )
+        record["operator_learning_table_summary_v1"] = scorecard_learning.get(
+            "operator_learning_table_summary_v1"
+        )
+        if pct_fields.get("referee_wins") is not None or pct_fields.get("referee_losses") is not None:
+            record["batch_sessions_judged"] = int(pct_fields.get("referee_wins") or 0) + int(
+                pct_fields.get("referee_losses") or 0
+            )
+        if operator_batch_audit:
+            record["operator_batch_audit"] = operator_batch_audit
+        record["memory_context_impact_audit_v1"] = mem_impact
+        if exam_run_line_meta_v1:
+            for k, v in exam_run_line_meta_v1.items():
+                if v is not None:
+                    record[k] = v
+        from renaissance_v4.game_theory.exam_ep_scorecard_denorm_v1 import annotate_l1_ep_value_sources_v1
+
+        annotate_l1_ep_value_sources_v1(record)
+        seam_obs = student_seam_observability_v1 or {}
+        for fld in (
+            "student_learning_rows_appended",
+            "student_retrieval_matches",
+            "student_output_fingerprint",
+            "shadow_student_enabled",
+            "llm_student_output_rejections_v1",
+            "student_llm_execution_v1",
+        ):
+            if fld in seam_obs:
+                record[fld] = seam_obs[fld]
+    elif error:
+        n_result_rows = len(results or [])
+        timing = build_batch_timing_payload(
+            started_at_utc=started_at_utc,
+            ended_at_utc=ended_at_utc,
+            start_unix=start_unix,
+            end_unix=end_unix,
+            total_scenarios=total_scenarios,
+            processed_count=n_result_rows,
+        )
         pct_fields: dict[str, Any] = {
             "run_ok_pct": 0.0,
             "referee_win_pct": None,
@@ -354,6 +445,14 @@ def record_parallel_batch_finished(
                     record[k] = v
     else:
         res = results or []
+        timing = build_batch_timing_payload(
+            started_at_utc=started_at_utc,
+            ended_at_utc=ended_at_utc,
+            start_unix=start_unix,
+            end_unix=end_unix,
+            total_scenarios=total_scenarios,
+            processed_count=len(res),
+        )
         ok_n = sum(1 for r in res if r.get("ok"))
         pct_fields = compute_batch_score_percentages(res)
         learning_batch = aggregate_batch_learning_run_audit_v1(res)

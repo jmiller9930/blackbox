@@ -6,6 +6,7 @@ and drives **replay bar slicing** in ``run_manifest_replay`` (see ``replay_data_
 
 Batches use **``POST /api/run-parallel/start``** + polling **``GET /api/run-parallel/status/<job_id>``**
 (or **``GET /api/run-status/<job_id>``**, same payload) so the UI shows **per-scenario progress** plus
+**``POST /api/run-parallel/cancel/<job_id>``** to request cancel (best-effort: pending scenarios are not scheduled; workers already running may finish),
 **live telemetry** (decision windows, trades, candidate phase) from worker-written JSON snapshots.
 ``POST /api/run-parallel`` remains as a blocking API for scripts.
 
@@ -120,7 +121,7 @@ _PATTERN_BANNER_WEBP_PATH = _RV4_ROOT / "assets" / "pattern.webp"
 _PATTERN_GAME_BANNER_BOOT_JS = _GAME_THEORY / "static" / "pattern_game_banner_boot.js"
 
 # Operator-visible web UI bundle version — bump when changing PAGE_HTML (HTML/CSS/JS) so deploys are provable.
-PATTERN_GAME_WEB_UI_VERSION = "2.19.76"
+PATTERN_GAME_WEB_UI_VERSION = "2.19.77"
 
 from renaissance_v4.game_theory.context_signature_memory import truncate_context_signature_memory_store
 from renaissance_v4.game_theory.groundhog_memory import (
@@ -272,6 +273,7 @@ from renaissance_v4.game_theory.operator_recipes import (
 )
 from renaissance_v4.game_theory.parallel_runner import (
     OPERATOR_LEARNING_HARNESS_RECIPE_IDS,
+    ParallelBatchCancelledError,
     clamp_parallel_workers,
     get_parallel_limits,
     run_scenarios_parallel,
@@ -327,6 +329,12 @@ def _prune_jobs() -> None:
         stale = [k for k, v in _JOBS.items() if now - float(v.get("created", 0)) > _JOB_MAX_AGE_SEC]
         for k in stale:
             del _JOBS[k]
+
+
+def _parallel_job_cancel_requested(job_id: str) -> bool:
+    with _JOBS_LOCK:
+        j = _JOBS.get(job_id)
+        return bool(j and j.get("cancel_requested"))
 
 
 def _merge_scorecard_with_inflight(
@@ -1131,6 +1139,7 @@ def create_app() -> Flask:
                 "batch_timing": None,
                 "telemetry_dir": str(telem_dir),
                 "telemetry_context_echo": telemetry_ctx,
+                "cancel_requested": False,
             }
 
         def run_job() -> None:
@@ -1164,6 +1173,7 @@ def create_app() -> Flask:
                     telemetry_job_id=job_id,
                     telemetry_dir=telem_dir,
                     telemetry_context=telemetry_ctx,
+                    cancel_check=lambda: _parallel_job_cancel_requested(job_id),
                 )
                 validate_reference_comparison_batch_results(
                     results, operator_recipe_id=operator_batch_audit.get("operator_recipe_id")
@@ -1236,6 +1246,43 @@ def create_app() -> Flask:
                         j["completed"] = len(results)
                         j["result"] = payload
                         j["batch_timing"] = timing
+            except ParallelBatchCancelledError as e:
+                partial = e.partial_results
+                err_s = (
+                    f"Cancelled by operator — {len(partial)}/{len(scenarios)} scenario result(s) "
+                    "returned before remaining work was stopped."
+                )
+                exam_line_err = _exam_run_line_meta_for_parallel_job_v1(
+                    exam_req=exam_req if isinstance(exam_req, dict) else None,
+                    fingerprint_preview=fp_prev if isinstance(fp_prev, str) else None,
+                    operator_batch_audit=operator_batch_audit,
+                    results=partial if partial else None,
+                    job_id=job_id,
+                    seam_audit=None,
+                    error=err_s,
+                )
+                timing = record_parallel_batch_finished(
+                    job_id=job_id,
+                    started_at_utc=started_iso,
+                    start_unix=start_unix,
+                    total_scenarios=len(scenarios),
+                    workers_used=workers_used,
+                    results=None,
+                    session_log_batch_dir=session_batch_dir[0],
+                    error=err_s,
+                    operator_batch_audit=operator_batch_audit,
+                    student_seam_observability_v1=None,
+                    exam_run_line_meta_v1=exam_line_err,
+                    parallel_cancel_partial_results=partial,
+                )
+                with _JOBS_LOCK:
+                    j = _JOBS.get(job_id)
+                    if j:
+                        j["status"] = "cancelled"
+                        j["completed"] = len(partial)
+                        j["error"] = err_s
+                        j["batch_timing"] = timing
+                        j["last_message"] = err_s
             except Exception as e:
                 err_s = f"{type(e).__name__}: {e}"
                 exam_line_err = _exam_run_line_meta_for_parallel_job_v1(
@@ -1322,6 +1369,32 @@ def create_app() -> Flask:
         if j["status"] == "done" and j.get("result"):
             out["result"] = j["result"]
         return jsonify(out)
+
+    @app.post("/api/run-parallel/cancel/<job_id>")
+    @app.post("/api/run-status/cancel/<job_id>")
+    def api_parallel_cancel(job_id: str) -> Any:
+        """
+        Request cancellation of a **running** parallel job started from this Flask process.
+
+        Sets ``cancel_requested`` on the in-memory job; the pool stops scheduling new scenarios and
+        raises :class:`ParallelBatchCancelledError` when the runner observes the flag. Already-running
+        worker processes are not SIGKILL'd — they may complete while the parent tears down pending futures.
+        """
+        jid = str(job_id or "").strip()
+        if not jid:
+            return jsonify({"ok": False, "error": "job_id required"}), 400
+        _prune_jobs()
+        with _JOBS_LOCK:
+            j = _JOBS.get(jid)
+            if not j:
+                return jsonify({"ok": False, "error": "Unknown or expired job_id"}), 404
+            st = str(j.get("status") or "").strip().lower()
+            if st != "running":
+                return jsonify(
+                    {"ok": False, "error": f"Job is not running (status={j.get('status')!r})"}
+                ), 400
+            j["cancel_requested"] = True
+        return jsonify({"ok": True, "job_id": jid, "cancel_requested": True})
 
     @app.post("/api/barney-summary")
     def api_barney_summary() -> Any:
@@ -5196,6 +5269,7 @@ PAGE_HTML = """<!DOCTYPE html>
           <div class="run-actions">
             <div class="status-stack">
               <div id="statusLine" aria-live="polite"></div>
+              <button type="button" id="parallelCancelBtn" class="btn-secondary" style="display:none;margin-top:8px" title="Stop scheduling new scenarios; workers already running may still finish">Cancel batch</button>
               <div id="batchConcurrencyBanner" class="batch-concurrency-banner" aria-live="polite"></div>
               <div id="progressWrap" class="progress-wrap" role="progressbar" aria-label="Batch replay progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
                 <div class="progress-track" id="progressTrack"><div class="progress-fill" id="progressFill" style="width:0%"></div></div>
@@ -5616,6 +5690,13 @@ PAGE_HTML = """<!DOCTYPE html>
         if (jid) localStorage.setItem(PG_PARALLEL_INFLIGHT_JOB_LS, String(jid));
         else localStorage.removeItem(PG_PARALLEL_INFLIGHT_JOB_LS);
       } catch (e) { /* ignore quota / private mode */ }
+    }
+    function pgGetInflightJobId() {
+      try {
+        return String(localStorage.getItem(PG_PARALLEL_INFLIGHT_JOB_LS) || '').trim();
+      } catch (e) {
+        return '';
+      }
     }
     /** Product default: Decision Context Recall (context signature memory) is always READ+WRITE — not operator-toggleable in this UI. */
     const CONTEXT_SIGNATURE_MEMORY_MODE_PRODUCT = 'read_write';
@@ -7480,7 +7561,15 @@ PAGE_HTML = """<!DOCTYPE html>
       const dwEl = document.getElementById('tcsDw');
       const elp = document.getElementById('tcsElapsed');
       if (!st || !bat || !win || !dwEl || !elp) return;
-      const status = running ? 'Running' : pj && pj.status === 'done' ? 'Done' : 'Idle';
+      const status = running
+        ? 'Running'
+        : pj && pj.status === 'done'
+          ? 'Done'
+          : pj && pj.status === 'cancelled'
+            ? 'Cancelled'
+            : pj && pj.status === 'error'
+              ? 'Error'
+              : 'Idle';
       st.textContent = status;
       bat.textContent =
         total > 0 ? completed + ' / ' + total + ' scenarios' : (pj && pj.status ? String(pj.status) : '—');
@@ -8930,6 +9019,11 @@ PAGE_HTML = """<!DOCTYPE html>
       }
       runBtn.onclick = async () => {
       const btn = document.getElementById('runBtn');
+      const parallelCancelBtn = document.getElementById('parallelCancelBtn');
+      if (parallelCancelBtn) {
+        parallelCancelBtn.style.display = 'none';
+        parallelCancelBtn.disabled = false;
+      }
       setRunFeedbackToast('');
       setOpButtonBusy(btn, true, 'Running exam…', true);
       openRunControlsPanel();
@@ -9056,6 +9150,10 @@ PAGE_HTML = """<!DOCTYPE html>
         const scorePanel = document.querySelector('details.pg-panel-score');
         if (scorePanel) scorePanel.open = true;
         scrollRunStatusIntoView();
+        if (parallelCancelBtn) {
+          parallelCancelBtn.style.display = 'inline-block';
+          parallelCancelBtn.disabled = false;
+        }
 
         const pollOnce = async () => {
           const pr = await fetch('/api/run-parallel/status/' + jobId);
@@ -9114,6 +9212,20 @@ PAGE_HTML = """<!DOCTYPE html>
             updateRunStatusLine('Failed — see Result.');
             setRunFeedbackToast('Batch failed — open Results (focus dock) → Raw JSON tab for the error.');
             setProgressUI(pj.completed || 0, statusPollTotal(pj, total), pj.error || '');
+            return true;
+          }
+          if (pj.status === 'cancelled') {
+            pgSetInflightJobId(null);
+            showBatchConcurrencyBanner(total, wCap, 'error');
+            if (pj.batch_timing) updateLastBatchRunLine(pj.batch_timing);
+            refreshScorecardHistory();
+            askDataLastRunJobId = jobId;
+            void fetchBarneySummary(jobId);
+            await show(null, null, String(pj.error || 'Batch cancelled.'));
+            renderStudentTriangleBatchFailed(String(pj.error || 'Batch cancelled.'));
+            updateRunStatusLine('Cancelled — see scorecard (status cancelled).');
+            setRunFeedbackToast('Batch cancelled — partial aggregates may appear on the scorecard.');
+            setProgressUI(pj.completed || 0, statusPollTotal(pj, total), pj.error || 'cancelled');
             return true;
           }
           if (pj.status === 'done') {
@@ -9209,12 +9321,40 @@ PAGE_HTML = """<!DOCTYPE html>
         }
         updateRunStatusLine('Stopped or failed — see Result.');
       } finally {
+        if (parallelCancelBtn) {
+          parallelCancelBtn.style.display = 'none';
+          parallelCancelBtn.disabled = false;
+        }
         if (progressWrap) progressWrap.classList.remove('active');
         document.body.classList.remove('pg-run-active');
         setOpButtonBusy(btn, false);
         syncBannerRunFromStatusLine();
       }
     };
+      const parallelCancelBtnGlobal = document.getElementById('parallelCancelBtn');
+      if (parallelCancelBtnGlobal) {
+        parallelCancelBtnGlobal.onclick = async () => {
+          const jid = pgGetInflightJobId();
+          if (!jid) {
+            setRunFeedbackToast('No active batch job on this page.');
+            return;
+          }
+          parallelCancelBtnGlobal.disabled = true;
+          try {
+            const r = await fetch('/api/run-parallel/cancel/' + encodeURIComponent(jid), { method: 'POST' });
+            const j = await r.json().catch(function () { return {}; });
+            if (!r.ok || !j.ok) {
+              setRunFeedbackToast((j && j.error) ? String(j.error) : ('Cancel failed HTTP ' + r.status));
+              parallelCancelBtnGlobal.disabled = false;
+              return;
+            }
+            setRunFeedbackToast('Cancel requested — pending scenarios will not start; in-flight workers may still finish.');
+          } catch (e) {
+            setRunFeedbackToast(friendlyFetchError(e));
+            parallelCancelBtnGlobal.disabled = false;
+          }
+        };
+      }
     })();
 
     function applyEvaluationWindowCapFromPayload(h) {
@@ -10478,6 +10618,11 @@ PAGE_HTML = """<!DOCTYPE html>
         resetStudentTriangleStarting();
         void refreshStudentPanelD11();
         updateRunStatusLine('Resuming — batch still running (page was refreshed)…');
+        const resumeCancelBtn = document.getElementById('parallelCancelBtn');
+        if (resumeCancelBtn) {
+          resumeCancelBtn.style.display = 'inline-block';
+          resumeCancelBtn.disabled = false;
+        }
         const deadline = Date.now() + RUN_TIMEOUT_MS;
         while (Date.now() < deadline) {
           let pj = null;
@@ -10491,6 +10636,10 @@ PAGE_HTML = """<!DOCTYPE html>
           if (pj.status === 'error') {
             pgSetInflightJobId(null);
             document.body.classList.remove('pg-run-active');
+            if (resumeCancelBtn) {
+              resumeCancelBtn.style.display = 'none';
+              resumeCancelBtn.disabled = false;
+            }
             renderStudentTriangleBatchFailed(pj.error || 'Job failed');
             if (pj.batch_timing) updateLastBatchRunLine(pj.batch_timing);
             await show(null, null, friendlyParallelBackendError(pj.error || 'Job failed'));
@@ -10498,9 +10647,28 @@ PAGE_HTML = """<!DOCTYPE html>
             refreshScorecardHistory();
             return;
           }
+          if (pj.status === 'cancelled') {
+            pgSetInflightJobId(null);
+            document.body.classList.remove('pg-run-active');
+            if (resumeCancelBtn) {
+              resumeCancelBtn.style.display = 'none';
+              resumeCancelBtn.disabled = false;
+            }
+            if (pj.batch_timing) updateLastBatchRunLine(pj.batch_timing);
+            await show(null, null, String(pj.error || 'Batch cancelled.'));
+            renderStudentTriangleBatchFailed(String(pj.error || 'Batch cancelled.'));
+            void refreshStudentPanelD11();
+            refreshScorecardHistory();
+            updateRunStatusLine('Cancelled — see scorecard (status cancelled).');
+            return;
+          }
           if (pj.status === 'done') {
             pgSetInflightJobId(null);
             document.body.classList.remove('pg-run-active');
+            if (resumeCancelBtn) {
+              resumeCancelBtn.style.display = 'none';
+              resumeCancelBtn.disabled = false;
+            }
             if (pj.result) {
               updateMemoryStatusFromBatchResultPayload(pj.result);
               await show(null, pj.result, null);
@@ -10520,6 +10688,10 @@ PAGE_HTML = """<!DOCTYPE html>
         }
         pgSetInflightJobId(null);
         document.body.classList.remove('pg-run-active');
+        if (resumeCancelBtn) {
+          resumeCancelBtn.style.display = 'none';
+          resumeCancelBtn.disabled = false;
+        }
         await show(
           null,
           null,

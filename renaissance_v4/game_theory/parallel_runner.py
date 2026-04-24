@@ -14,7 +14,7 @@ import os
 import sys
 from datetime import datetime, timezone
 from collections.abc import Callable
-from concurrent.futures import ProcessPoolExecutor, as_completed
+from concurrent.futures import FIRST_COMPLETED, ProcessPoolExecutor, wait
 from pathlib import Path
 from typing import Any
 
@@ -299,6 +299,19 @@ def _worker_run_one(scenario: dict[str, Any]) -> dict[str, Any]:
         return row
 
 
+class ParallelBatchCancelledError(Exception):
+    """
+    Raised when ``cancel_check`` returns true mid-batch.
+
+    ``partial_results`` lists worker result dicts for scenarios that finished before cancel
+    (completion order); scenarios still queued or cancelled pending are not included.
+    """
+
+    def __init__(self, partial_results: list[dict[str, Any]]) -> None:
+        self.partial_results = partial_results
+        super().__init__("parallel_batch_cancelled")
+
+
 def _normalize_scenario(s: dict[str, Any]) -> dict[str, Any]:
     """Resolve manifest path so worker processes do not depend on cwd."""
     n = dict(s)
@@ -321,6 +334,7 @@ def run_scenarios_parallel(
     telemetry_job_id: str | None = None,
     telemetry_dir: Path | str | None = None,
     telemetry_context: dict[str, Any] | None = None,
+    cancel_check: Callable[[], bool] | None = None,
 ) -> list[dict[str, Any]]:
     """
     Run each scenario in a process pool. Order of results is **completion** order unless you sort by scenario_id.
@@ -352,6 +366,11 @@ def run_scenarios_parallel(
 
     If session logs are written and ``on_session_log_batch`` is set, it is called once with the
     ``batch_*`` directory path (for UIs and APIs).
+
+    If ``cancel_check`` is set, it is polled after each ``wait`` slice (~0.5s) and after each
+    completed scenario. When it returns true, pending futures are cancelled where possible
+    (``cancel_futures=True``), already-running worker processes may still finish on their own,
+    and :class:`ParallelBatchCancelledError` is raised with ``partial_results`` collected so far.
     """
     if not scenarios:
         raise ValueError(
@@ -382,15 +401,35 @@ def run_scenarios_parallel(
     total = len(normalized)
 
     results: list[dict[str, Any]] = []
-    with ProcessPoolExecutor(max_workers=workers) as ex:
+    cancelled_early = False
+    ex = ProcessPoolExecutor(max_workers=workers)
+    try:
         futures = {ex.submit(_worker_run_one, s): s for s in normalized}
+        pending = set(futures.keys())
         completed = 0
-        for fut in as_completed(futures):
-            row = fut.result()
-            results.append(row)
-            completed += 1
-            if progress_callback is not None:
-                progress_callback(completed, total, row)
+        while pending:
+            if cancel_check is not None and cancel_check():
+                cancelled_early = True
+                break
+            done_now, pending = wait(pending, timeout=0.5, return_when=FIRST_COMPLETED)
+            if done_now:
+                for fut in done_now:
+                    row = fut.result()
+                    results.append(row)
+                    completed += 1
+                    if progress_callback is not None:
+                        progress_callback(completed, total, row)
+    finally:
+        ex.shutdown(wait=not cancelled_early, cancel_futures=cancelled_early)
+
+    if cancelled_early:
+        if experience_log_path is not None and results:
+            p = Path(experience_log_path)
+            p.parent.mkdir(parents=True, exist_ok=True)
+            with p.open("a", encoding="utf-8") as fh:
+                for row in results:
+                    fh.write(json.dumps(row, ensure_ascii=False) + "\n")
+        raise ParallelBatchCancelledError(results)
 
     if experience_log_path is not None:
         p = Path(experience_log_path)
