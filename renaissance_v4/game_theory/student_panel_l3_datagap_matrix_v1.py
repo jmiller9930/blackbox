@@ -115,6 +115,12 @@ _GAP_REGISTRY: dict[str, tuple[str, str, str, str]] = {
         "exam_grading",
         SEVERITY_WARNING,
     ),
+    "exam_grading_missing_for_scored_run_v1": (
+        "exam_e_score_v1",
+        PRODUCER_GRADING_SERVICE,
+        "exam_scorecard_denorm",
+        SEVERITY_CRITICAL,
+    ),
     "missing_baseline_anchor_when_required_v1": (
         "cold_baseline_anchor_job_id_v1",
         PRODUCER_SCORECARD_WRITER,
@@ -297,6 +303,44 @@ def derive_l3_validation_data_gaps_v1(
                 severity=SEVERITY_WARNING,
             )
         )
+
+    # --- GT_DIRECTIVE_019: done scorecard line linked to exam unit, grading-ready inputs, but no denorm E
+    ex_uid = str(entry.get("exam_unit_id") or "").strip()
+    st_done = str(entry.get("status") or "").strip().lower() == "done"
+    if ex_uid and st_done and entry.get("exam_e_score_v1") is None:
+        from renaissance_v4.game_theory.exam_decision_frame_schema_v1 import get_committed_timeline_v1
+        from renaissance_v4.game_theory.exam_deliberation_capture_v1 import get_frame0_deliberation_v1
+        from renaissance_v4.game_theory.exam_grading_service_v1 import get_exam_pack_grading_config_v1
+        from renaissance_v4.game_theory.exam_state_machine_v1 import ExamPhase, get_exam_unit_v1
+
+        u = get_exam_unit_v1(ex_uid)
+        if u is not None and u.phase.value not in (
+            ExamPhase.CREATED.value,
+            ExamPhase.OPENING_SHOWN.value,
+            ExamPhase.HYPOTHESES_H1_H3.value,
+            ExamPhase.H4_COMPLETE.value,
+            ExamPhase.INVALID.value,
+        ):
+            raw_t = get_committed_timeline_v1(ex_uid)
+            delib = get_frame0_deliberation_v1(ex_uid)
+            frames_ok = bool(
+                isinstance(raw_t, dict)
+                and len(list(raw_t.get("decision_frames") or [])) >= 1
+                and delib is not None
+            )
+            pid = str(u.exam_pack_id or "").strip()
+            ver = str(u.exam_pack_version or "").strip()
+            cfg = get_exam_pack_grading_config_v1(pid, ver) if pid and ver else None
+            if frames_ok and cfg is not None:
+                out.append(
+                    _gap_entry_v1(
+                        field_name="exam_e_score_v1",
+                        producer=PRODUCER_GRADING_SERVICE,
+                        reason="exam_grading_missing_for_scored_run_v1",
+                        expected_stage="exam_scorecard_denorm",
+                        severity=SEVERITY_CRITICAL,
+                    )
+                )
 
     # --- Baseline anchor (fingerprint present, cold baseline required) ----------
     mci = entry.get("memory_context_impact_audit_v1")
@@ -549,6 +593,12 @@ def _scorecard_public_subset_v1(entry: dict[str, Any] | None) -> dict[str, Any] 
         "exam_deliberation_capture_digest_v1",
         "exam_pack_grade_digest_v1",
         "exam_pack_grade_v1",
+        "exam_unit_id",
+        "exam_e_score_v1",
+        "exam_p_score_v1",
+        "exam_pass_v1",
+        "l1_e_value_source_v1",
+        "l1_p_value_source_v1",
     )
     out: dict[str, Any] = {"schema": "scorecard_line_public_subset_v1"}
     for k in allow:

@@ -18,6 +18,7 @@ from renaissance_v4.game_theory.scorecard_drill import (
     find_scorecard_entry_by_job_id,
     load_run_record,
 )
+from renaissance_v4.game_theory.student_panel_l1_road_v1 import line_e_value_for_l1_v1
 from renaissance_v4.game_theory.student_proctor.student_learning_store_v1 import (
     default_student_learning_store_path_v1,
     list_student_learning_records_by_run_id,
@@ -333,6 +334,11 @@ def build_d11_run_rows_v1(
                 "status": "running",
                 "fingerprint": _fingerprint_from_scorecard_line(r),
                 "baseline_run_id": None,
+                "exam_e_score_v1": None,
+                "exam_p_score_v1": None,
+                "exam_pass_v1": None,
+                "l1_e_value_source_v1": None,
+                "l1_p_value_source_v1": None,
             }
             out.append(row_obj)
             continue
@@ -361,16 +367,16 @@ def build_d11_run_rows_v1(
         stud_hand = _student_handoff_signal(r)
         legacy_beh = _behavior_changed_legacy_union(r)
         outcome_imp: str
+        e_cur = line_e_value_for_l1_v1(r)
+        e_prev = line_e_value_for_l1_v1(prev_same) if prev_same else None
         if prev_same is None:
             outcome_imp = "N/A"
-        elif exp is None or _expectancy_per_trade_for_row(prev_same)[0] is None:
+        elif e_cur is None or e_prev is None:
             outcome_imp = "N/A"
         else:
-            prev_e = _expectancy_per_trade_for_row(prev_same)[0]
-            assert prev_e is not None
-            if exp > prev_e:
+            if e_cur > e_prev:
                 outcome_imp = "YES"
-            elif exp < prev_e:
+            elif e_cur < e_prev:
                 outcome_imp = "NO"
             else:
                 outcome_imp = "NO"
@@ -409,6 +415,11 @@ def build_d11_run_rows_v1(
             "status": st,
             "fingerprint": _fingerprint_from_scorecard_line(r),
             "baseline_run_id": str(prev_same.get("job_id")) if prev_same else None,
+            "exam_e_score_v1": r.get("exam_e_score_v1"),
+            "exam_p_score_v1": r.get("exam_p_score_v1"),
+            "exam_pass_v1": r.get("exam_pass_v1"),
+            "l1_e_value_source_v1": r.get("l1_e_value_source_v1"),
+            "l1_p_value_source_v1": r.get("l1_p_value_source_v1"),
         }
         out.append(row_obj)
 

@@ -415,6 +415,14 @@ def record_parallel_batch_finished(
             for k, v in exam_run_line_meta_v1.items():
                 if v is not None:
                     record[k] = v
+        if str(record.get("status") or "") == "done":
+            from renaissance_v4.game_theory.exam_ep_scorecard_denorm_v1 import (
+                annotate_l1_ep_value_sources_v1,
+                merge_exam_grading_into_scorecard_record_v1,
+            )
+
+            merge_exam_grading_into_scorecard_record_v1(record)
+            annotate_l1_ep_value_sources_v1(record)
         seam_obs = student_seam_observability_v1 or {}
         for fld in (
             "student_learning_rows_appended",

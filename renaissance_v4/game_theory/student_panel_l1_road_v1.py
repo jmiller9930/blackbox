@@ -28,6 +28,9 @@ SCHEMA_L1_ROAD = "student_panel_l1_road_v1"
 
 # Reserved optional scorecard field (0..1). Not written by batch_scorecard v1 — tests may set it.
 _PROCESS_SCORE_KEY = "student_l1_process_score_v1"
+# GT_DIRECTIVE_019 — exam-pack grading denorm on scorecard (from ``compute_exam_grade_v1`` only).
+_EXAM_E_SCORE_KEY = "exam_e_score_v1"
+_EXAM_P_SCORE_KEY = "exam_p_score_v1"
 
 
 def scorecard_line_fingerprint_sha256_40_v1(row: dict[str, Any]) -> str | None:
@@ -56,6 +59,22 @@ def _float(v: Any) -> float | None:
         return float(v)
     except (TypeError, ValueError):
         return None
+
+
+def line_e_value_for_l1_v1(row: dict[str, Any]) -> float | None:
+    """Prefer ``exam_e_score_v1``; else ``expectancy_per_trade`` (Referee batch proxy E)."""
+    e = _float(row.get(_EXAM_E_SCORE_KEY))
+    if e is not None:
+        return e
+    return _float(row.get("expectancy_per_trade"))
+
+
+def line_p_value_for_l1_v1(row: dict[str, Any]) -> float | None:
+    """Prefer ``exam_p_score_v1``; else optional ``student_l1_process_score_v1``."""
+    p = _float(row.get(_EXAM_P_SCORE_KEY))
+    if p is not None:
+        return p
+    return _float(row.get(_PROCESS_SCORE_KEY))
 
 
 def _started_ts(row: dict[str, Any]) -> str:
@@ -126,14 +145,15 @@ def l1_road_legend_v1() -> dict[str, Any]:
             ),
         },
         "band_a": (
-            "Band **A** — improved vs the **same-fingerprint** baseline anchor: group mean **E** "
-            "(``expectancy_per_trade``) strictly greater than anchor **E**, and when **P** is "
-            "available on both sides, group mean **P** (``student_l1_process_score_v1``) ≥ anchor **P** "
-            "(within float tolerance)."
+            "Band **A** — improved vs the **same-fingerprint** baseline anchor: group mean **E** uses "
+            "``exam_e_score_v1`` when present on scorecard lines (**GT_DIRECTIVE_019**), else "
+            "``expectancy_per_trade``; strictly greater than anchor **E**. When **P** is available on "
+            "both sides, group mean **P** uses ``exam_p_score_v1`` when present, else "
+            "``student_l1_process_score_v1``, compared ≥ anchor **P** (within float tolerance)."
         ),
         "band_b": (
-            "Band **B** — not improved or degraded vs that anchor under the same rules, or E-only tie "
-            "when P is unavailable."
+            "Band **B** — not improved or degraded vs that anchor under the same E/P rules as Band A "
+            "(exam E/P when present on lines, else batch proxies), or E-only tie when P is unavailable."
         ),
         "band_baseline_ruler": (
             "Rows whose brain profile is the baseline ruler for the fingerprint — not scored A vs B "
@@ -144,13 +164,13 @@ def l1_road_legend_v1() -> dict[str, Any]:
             "This is **session** Referee win rate as recorded on the scorecard line, not an invented pass bit."
         ),
         "avg_e_expectancy_per_trade": (
-            "Mean of ``expectancy_per_trade`` on scorecard lines in the group. This is the batch "
-            "economic rollup already persisted — **not** exam-pack timeline E unless a future denorm "
-            "adds that explicitly."
+            "Mean of **E** scalars per line: ``exam_e_score_v1`` when set (**019**), else "
+            "``expectancy_per_trade`` proxy."
         ),
         "avg_p_process_score": (
-            "Mean of optional ``student_l1_process_score_v1`` (0..1) when present on lines in the group; "
-            "else null with ``process_leg: data_gap`` for A/B when P cannot be compared."
+            "Mean of **P** scalars per line: ``exam_p_score_v1`` when set (**019**), else optional "
+            "``student_l1_process_score_v1``; else null with ``process_leg: data_gap`` for A/B when P "
+            "cannot be compared."
         ),
         "fingerprint": (
             "``run_config_fingerprint_sha256_40`` from ``memory_context_impact_audit_v1``, else a "
@@ -235,8 +255,8 @@ def build_l1_road_payload_v1(
             if resolved_brain_profile_v1(r) == STUDENT_BRAIN_PROFILE_BASELINE_NO_MEMORY_NO_LLM_V1:
                 anchor_row = r
                 break
-        anchor_e = _float(anchor_row.get("expectancy_per_trade")) if anchor_row else None
-        anchor_p = _float(anchor_row.get(_PROCESS_SCORE_KEY)) if anchor_row else None
+        anchor_e = line_e_value_for_l1_v1(anchor_row) if anchor_row else None
+        anchor_p = line_p_value_for_l1_v1(anchor_row) if anchor_row else None
         anchor_job = str(anchor_row.get("job_id") or "") if anchor_row else ""
 
         # Partition into (profile, llm_model) buckets — LLM profile splits by model tag (including None).
@@ -250,8 +270,12 @@ def build_l1_road_payload_v1(
             buckets.setdefault(key, []).append(r)
 
         for (prof, lm_tag), rs in sorted(buckets.items(), key=lambda kv: (kv[0][0], kv[0][1] or "")):
-            e_vals = [x for x in (_float(x.get("expectancy_per_trade")) for x in rs) if x is not None]
-            p_vals = [x for x in (_float(x.get(_PROCESS_SCORE_KEY)) for x in rs) if x is not None]
+            e_vals = [x for x in (line_e_value_for_l1_v1(x) for x in rs) if x is not None]
+            p_vals = [x for x in (line_p_value_for_l1_v1(x) for x in rs) if x is not None]
+            e_sources = sorted(
+                {str(x.get("l1_e_value_source_v1") or "expectancy_per_trade_proxy_v1") for x in rs}
+            )
+            p_sources = sorted({str(x.get("l1_p_value_source_v1") or "data_gap") for x in rs})
             rw_vals = [x for x in (_float(x.get("referee_win_pct")) for x in rs) if x is not None]
 
             avg_e = round(sum(e_vals) / len(e_vals), 6) if e_vals else None
@@ -320,6 +344,8 @@ def build_l1_road_payload_v1(
                     "anchor_job_id": anchor_job or None,
                     "anchor_expectancy_per_trade": anchor_e,
                     "anchor_process_score": anchor_p,
+                    "l1_e_value_sources_v1": e_sources,
+                    "l1_p_value_sources_v1": p_sources,
                     "data_gaps": g_gaps,
                 }
             )
@@ -373,6 +399,8 @@ __all__ = [
     "SCHEMA_L1_ROAD",
     "build_l1_road_payload_v1",
     "l1_road_legend_v1",
+    "line_e_value_for_l1_v1",
+    "line_p_value_for_l1_v1",
     "read_batch_scorecard_file_order_v1",
     "resolved_brain_profile_v1",
     "resolved_llm_model_tag_v1",

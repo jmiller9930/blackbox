@@ -324,6 +324,11 @@ def parse_exam_run_contract_request_v1(data: dict[str, Any]) -> tuple[dict[str, 
         "prompt_version": pv,
         "retrieved_context_ids": rcids_out,
     }
+    euid = block.get("exam_unit_id")
+    if euid is None and isinstance(data.get("exam_unit_id"), str):
+        euid = data.get("exam_unit_id")
+    if isinstance(euid, str) and euid.strip():
+        out["exam_unit_id"] = euid.strip()[:256]
     return out, None
 
 
@@ -421,6 +426,9 @@ def build_exam_run_line_meta_v1(
         if isinstance(lx.get("student_brain_profile_echo_v1"), str) and lx["student_brain_profile_echo_v1"].strip():
             line["student_brain_profile_v1"] = lx["student_brain_profile_echo_v1"].strip()
             line["student_reasoning_mode"] = line["student_brain_profile_v1"]
+    eid = req.get("exam_unit_id")
+    if isinstance(eid, str) and eid.strip():
+        line["exam_unit_id"] = eid.strip()[:256]
     return line
 
 
