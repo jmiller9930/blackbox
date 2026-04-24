@@ -27,7 +27,7 @@ Loader: `scorecard_drill.load_batch_parallel_results_v1(batch_dir)`.
 
 | Endpoint | Payload |
 |----------|---------|
-| `GET /api/student-panel/runs` | Run table (unchanged grain: one row per batch / job) |
+| `GET /api/student-panel/runs` | Run table (unchanged grain: one row per batch / job) + embedded **`l1_road_v1`** overlay for L1 road columns |
 | `GET /api/student-panel/l1-road` | `student_panel_l1_road_v1` — fingerprint × brain profile × `llm_model` aggregates (**GT_DIRECTIVE_016**) |
 | `GET /api/student-panel/run/<job_id>/decisions` | `student_panel_d13_selected_run_v1`: `run_summary`, `slices[]` keyed by `trade_id` |
 | `GET /api/student-panel/decision?job_id=&trade_id=` | `student_decision_record_v1` (alias: `decision_id=` for migration) |

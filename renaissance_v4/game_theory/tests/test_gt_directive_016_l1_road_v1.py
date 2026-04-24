@@ -24,6 +24,14 @@ def _load_fixture_lines() -> list[dict]:
     return json.loads(_FIXTURE.read_text(encoding="utf-8"))
 
 
+def test_road_by_job_id_v1_maps_fixture_jobs() -> None:
+    payload = build_l1_road_payload_v1(lines=_load_fixture_lines())
+    byj = payload.get("road_by_job_id_v1") or {}
+    assert "fixture_gt016_fpA_memory_002" in byj
+    assert byj["fixture_gt016_fpA_memory_002"]["band"] == "A"
+    assert byj["fixture_gt016_fpA_qwen_003"]["llm_model"] == "qwen2.5:7b"
+
+
 def test_grouping_by_brain_profile_and_llm_split() -> None:
     payload = build_l1_road_payload_v1(lines=_load_fixture_lines())
     assert payload["ok"] is True

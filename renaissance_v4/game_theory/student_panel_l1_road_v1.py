@@ -198,11 +198,13 @@ def build_l1_road_payload_v1(
     fp_missing_any = False
     usable = [r for r in lines if isinstance(r, dict) and _line_ok_for_agg(r)]
     if not usable:
+        leg = l1_road_legend_v1()
         return {
             "ok": True,
             "schema": SCHEMA_L1_ROAD,
             "groups": [],
-            "legend": l1_road_legend_v1(),
+            "legend": leg,
+            "road_by_job_id_v1": {},
             "data_gaps": ["no_completed_scorecard_lines_v1"],
             "note": "Single-pass scorecard aggregation; no Student learning JSONL scan.",
         }
@@ -298,6 +300,7 @@ def build_l1_road_payload_v1(
                         else:
                             band = "B"
 
+            member_ids = [str(x.get("job_id") or "").strip() for x in rs if str(x.get("job_id") or "").strip()]
             groups_out.append(
                 {
                     "schema": "student_panel_l1_road_group_v1",
@@ -307,7 +310,8 @@ def build_l1_road_payload_v1(
                         "llm_model": lm_tag,
                     },
                     "run_count": len(rs),
-                    "job_ids_sample": [str(x.get("job_id") or "") for x in rs][-5:],
+                    "member_job_ids": member_ids,
+                    "job_ids_sample": member_ids[-5:],
                     "pass_rate_percent": pass_rate,
                     "avg_e_expectancy_per_trade": avg_e,
                     "avg_p_process_score": avg_p,
@@ -321,15 +325,42 @@ def build_l1_road_payload_v1(
             )
 
     groups_out.sort(key=_group_sort_key)
+
+    road_by_job_id_v1: dict[str, dict[str, Any]] = {}
+    for g in groups_out:
+        gk = g.get("group_key") or {}
+        band = str(g.get("band") or "")
+        anchor_j = str(g.get("anchor_job_id") or "").strip() or None
+        g_gaps = list(g.get("data_gaps") or [])
+        for jid in g.get("member_job_ids") or []:
+            if not jid:
+                continue
+            role = "compare"
+            if band == "baseline_ruler":
+                role = "ruler"
+            elif anchor_j and jid == anchor_j:
+                role = "baseline_anchor"
+            road_by_job_id_v1[jid] = {
+                "band": band,
+                "process_leg": str(g.get("process_leg") or ""),
+                "anchor_job_id": anchor_j,
+                "row_anchor_role_v1": role,
+                "group_data_gaps": g_gaps,
+                "student_brain_profile_v1": gk.get("student_brain_profile_v1"),
+                "llm_model": gk.get("llm_model"),
+                "fingerprint_sha256_40": gk.get("fingerprint_sha256_40"),
+            }
     # De-dupe top_gaps order-stable
     seen: set[str] = set()
     dg = [x for x in top_gaps if not (x in seen or seen.add(x))]
 
+    legend = l1_road_legend_v1()
     return {
         "ok": True,
         "schema": SCHEMA_L1_ROAD,
         "groups": groups_out,
-        "legend": l1_road_legend_v1(),
+        "legend": legend,
+        "road_by_job_id_v1": road_by_job_id_v1,
         "data_gaps": dg,
         "note": (
             "Aggregated in one scorecard read; keyed by fingerprint + brain profile + llm_model. "

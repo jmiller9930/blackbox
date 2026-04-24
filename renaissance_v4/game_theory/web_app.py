@@ -23,8 +23,9 @@ counts, **run_ok_pct**, **referee_win_pct**, **avg_trade_win_pct**) and expose `
 ``POST /api/pattern-game/reset-learning`` with typed confirm phrase (see UI). Student Proctor store:
 ``GET /api/student-proctor/learning-store``, ``POST /api/student-proctor/learning-store/clear`` (separate confirm).
 
-**D13 Student panel (run → run summary + trade carousel → trade deep dive):** ``GET /api/student-panel/runs``,
-``GET /api/student-panel/l1-road`` (**GT_DIRECTIVE_016** — brain-profile road, single-pass scorecard aggregation),
+**D13 Student panel (run → run summary + trade carousel → trade deep dive):** ``GET /api/student-panel/runs``
+(includes embedded ``l1_road_v1`` overlay for L1 road columns + API legend),
+``GET /api/student-panel/l1-road`` (**GT_DIRECTIVE_016** — full road payload, same aggregation),
 ``GET /api/student-panel/run/<job_id>/decisions``, ``GET /api/student-panel/decision?job_id=&trade_id=`` (``decision_id`` accepted as alias for migration).
 
 **Post-certification ``trade_strategy`` (DEV STUB):** Same routes under **``/api/v1/trade-strategy``** (stable for external callers) and **``/api/trade-strategy``** (alias).
@@ -105,7 +106,7 @@ _PATTERN_BANNER_WEBP_PATH = _RV4_ROOT / "assets" / "pattern.webp"
 _PATTERN_GAME_BANNER_BOOT_JS = _GAME_THEORY / "static" / "pattern_game_banner_boot.js"
 
 # Operator-visible web UI bundle version — bump when changing PAGE_HTML (HTML/CSS/JS) so deploys are provable.
-PATTERN_GAME_WEB_UI_VERSION = "2.19.53"
+PATTERN_GAME_WEB_UI_VERSION = "2.19.54"
 
 from renaissance_v4.game_theory.context_signature_memory import truncate_context_signature_memory_store
 from renaissance_v4.game_theory.groundhog_memory import (
@@ -1658,12 +1659,21 @@ def create_app() -> Flask:
         file_rows = read_batch_scorecard_recent(limit, path=p)
         merged, inflight_n = _merge_scorecard_with_inflight(file_rows, limit=limit)
         rows = enrich_student_panel_run_rows_d14(build_d11_run_rows_v1(merged))
+        road = build_l1_road_payload_v1()
+        l1_road_overlay_v1 = {
+            "schema": "student_panel_l1_road_runs_overlay_v1",
+            "legend": road.get("legend"),
+            "road_by_job_id_v1": road.get("road_by_job_id_v1") or {},
+            "data_gaps": road.get("data_gaps") or [],
+            "note": road.get("note"),
+        }
         return jsonify(
             {
                 "ok": True,
                 "schema": "student_panel_d14_runs_v1",
                 "runs": rows,
                 "inflight_batches": inflight_n,
+                "l1_road_v1": l1_road_overlay_v1,
                 "l1_columns_v1": {
                     "harness_baseline_trade_win_percent": (
                         "Sys BL % — batch trade win % of the oldest completed run in the same "
@@ -3038,6 +3048,17 @@ PAGE_HTML = """<!DOCTYPE html>
       margin: 0 0 8px;
       line-height: 1.35;
     }
+    .pg-student-l1-road-legend-api {
+      font-size: 0.72rem;
+      color: var(--pg-muted);
+      line-height: 1.4;
+      margin: 10px 0 0;
+      padding: 8px 10px;
+      border: 1px solid rgba(48, 54, 61, 0.55);
+      border-radius: 8px;
+      background: rgba(22, 27, 34, 0.45);
+    }
+    .pg-student-l1-road-legend-api ul { margin: 4px 0 0; padding-left: 1.1rem; }
     .pg-student-d11-table-wrap { overflow: auto; max-width: 100%; }
     .pg-student-d11-table {
       width: 100%;
@@ -6136,6 +6157,43 @@ PAGE_HTML = """<!DOCTYPE html>
       studentPanelD11WireChrome();
     }
 
+    function l1RoadRowMeta(rid, ov) {
+      const m = (ov && ov.road_by_job_id_v1) || {};
+      return m[rid] || null;
+    }
+
+    function renderL1RoadLegendFromApi(legend) {
+      if (!legend || typeof legend !== 'object') return '';
+      let h =
+        '<div class="pg-student-l1-road-legend-api" aria-label="L1 road legend from API"><strong>L1 road legend</strong> (from <code>l1_road_v1.legend</code>)';
+      const bp = legend.brain_profiles;
+      if (bp && typeof bp === 'object') {
+        h += '<ul>';
+        for (const k of Object.keys(bp)) {
+          h += '<li><code>' + escapeHtml(k) + '</code> — ' + escapeHtml(String(bp[k])) + '</li>';
+        }
+        h += '</ul>';
+      }
+      const keys = [
+        'band_a',
+        'band_b',
+        'band_baseline_ruler',
+        'pass_rate_percent',
+        'avg_e_expectancy_per_trade',
+        'avg_p_process_score',
+        'fingerprint',
+        'llm_model',
+      ];
+      for (let ki = 0; ki < keys.length; ki++) {
+        const kk = keys[ki];
+        const v = legend[kk];
+        if (typeof v === 'string' && v)
+          h += '<p style="margin:6px 0 0"><strong>' + escapeHtml(kk) + '</strong> — ' + escapeHtml(v) + '</p>';
+      }
+      h += '</div>';
+      return h;
+    }
+
     async function refreshStudentPanelD11() {
       const root = studentPanelD11RootEl();
       if (!root) return;
@@ -6165,14 +6223,28 @@ PAGE_HTML = """<!DOCTYPE html>
         return;
       }
       const rows = j.runs;
+      const ov = j.l1_road_v1 || {};
+      const leg = ov.legend || {};
+      const roadBandTitle =
+        (leg.band_a ? String(leg.band_a).slice(0, 220) : '') +
+        (leg.band_b ? ' | ' + String(leg.band_b).slice(0, 160) : '');
       let scroll =
-        '<p class="pg-student-d11-legend" style="margin-top:0"><strong>Level 1 — exam list</strong> — Each row is one exam attempt (<code>student_panel_run_row_v2</code> + <code>d14_run_row_v1</code>). Referee rollups and harness signals. Click a row (not ×) for Level 2. <strong>×</strong> removes this scorecard line only. <strong>Sys BL %</strong> = system baseline trade win % (oldest same-fingerprint anchor). <strong>Run TW %</strong> = this exam&rsquo;s trade win %. <strong>&gt;BL</strong> = strict beat vs Sys BL (not on anchor). API: <code>GET /api/student-panel/runs</code> includes <code>l1_columns_v1</code> field semantics. <a href="/docs/student-panel-dictionary" target="_blank" rel="noopener noreferrer">Dictionary</a> · <a href="/api/student-panel/l1-road" target="_blank" rel="noopener noreferrer">L1 road JSON</a></p>' +
+        '<p class="pg-student-d11-legend" style="margin-top:0"><strong>Level 1 — exam list</strong> — Each row is one exam attempt (<code>student_panel_run_row_v2</code> + <code>d14_run_row_v1</code>). Referee rollups and harness signals. Click a row (not ×) for Level 2. <strong>×</strong> removes this scorecard line only. <strong>Sys BL %</strong> = system baseline trade win % (oldest same-fingerprint anchor). <strong>Run TW %</strong> = this exam&rsquo;s trade win %. <strong>&gt;BL</strong> = strict beat vs Sys BL (not on anchor). <strong>Road</strong> / <strong>Anchor</strong> / <strong>Road gaps</strong> come from <code>l1_road_v1</code> on this response (same aggregation as <code>GET /api/student-panel/l1-road</code>). <a href="/docs/student-panel-dictionary" target="_blank" rel="noopener noreferrer">Dictionary</a> · <a href="/api/student-panel/l1-road" target="_blank" rel="noopener noreferrer">L1 road JSON</a></p>' +
         '<div class="pg-student-d11-table-wrap"><table class="pg-student-d11-table"><thead><tr>' +
         '<th>run_id</th><th>time</th><th>pattern</th><th>window</th><th>#tr</th>' +
         '<th title="System baseline — batch trade win % of the oldest run in this fingerprint chain (same recipe/window anchor)">Sys BL %</th>' +
         '<th title="This run — Referee batch rollup trade win %">Run TW %</th>' +
         '<th title="Strictly beat system baseline? (not shown for anchor row)">&gt;BL</th>' +
         '<th title="Referee — expectancy per trade (batch rollup)">E/tr</th>' +
+        '<th title="student_brain_profile_v1 for this job_id from L1 road merge">Profile</th>' +
+        '<th title="llm_model when profile is memory_context_llm_student">LLM</th>' +
+        '<th title="' +
+        escapeHtml(roadBandTitle || 'Road band vs same-fingerprint baseline (A / B / baseline_ruler / data_gap)') +
+        '">Road</th>' +
+        '<th title="' +
+        escapeHtml(String(leg.band_baseline_ruler || 'Baseline anchor role vs compare')) +
+        '">Anchor</th>' +
+        '<th title="group_data_gaps from road merge; P-compare when process leg is data_gap">Road gaps</th>' +
         '<th title="Harness replay path">HB</th>' +
         '<th title="Student handoff">SH</th>' +
         '<th title="Expectancy vs prior same-config batch">outΔ</th>' +
@@ -6207,6 +6279,47 @@ PAGE_HTML = """<!DOCTYPE html>
           ) +
           '</td>';
         scroll += '<td>' + (row.expectancy_per_trade != null ? fmtD11MaybeNum(row.expectancy_per_trade, 4) : '—') + '</td>';
+        const rv = infl ? null : l1RoadRowMeta(rid, ov);
+        scroll +=
+          '<td title="L1 road merge">' +
+          (rv ? escapeHtml(String(rv.student_brain_profile_v1 || '—')) : '—') +
+          '</td>';
+        scroll +=
+          '<td title="L1 road merge">' +
+          (rv && rv.llm_model ? escapeHtml(String(rv.llm_model)) : '—') +
+          '</td>';
+        scroll +=
+          '<td title="L1 road band (group vs fingerprint baseline)">' +
+          (rv ? escapeHtml(String(rv.band || '—')) : '—') +
+          '</td>';
+        let anchorCell = '—';
+        let anchorTitle = '';
+        if (rv) {
+          const role = rv.row_anchor_role_v1;
+          if (role === 'ruler') {
+            anchorCell = 'Ruler';
+            anchorTitle = String(leg.band_baseline_ruler || '');
+          } else if (role === 'baseline_anchor') {
+            anchorCell = 'Anchor';
+            anchorTitle = rv.anchor_job_id ? 'job_id ' + String(rv.anchor_job_id) : '';
+          } else {
+            anchorCell = 'vs anchor';
+            anchorTitle = rv.anchor_job_id ? 'Baseline anchor job_id: ' + String(rv.anchor_job_id) : '';
+          }
+        }
+        scroll +=
+          '<td title="' +
+          escapeHtml(anchorTitle) +
+          '">' +
+          escapeHtml(anchorCell) +
+          '</td>';
+        const gapParts = [];
+        if (rv && rv.group_data_gaps && rv.group_data_gaps.length) gapParts.push(rv.group_data_gaps.join(', '));
+        if (rv && rv.process_leg === 'data_gap') gapParts.push('process_score_compare:data_gap');
+        scroll +=
+          '<td title="Road merge data gaps">' +
+          escapeHtml(gapParts.length ? gapParts.join(' · ') : '—') +
+          '</td>';
         const hbCol = row.harness_behavior_changed != null ? row.harness_behavior_changed : row.behavior_changed;
         const shCol = row.student_handoff_active != null ? row.student_handoff_active : '—';
         scroll += '<td>' + escapeHtml(String(hbCol != null ? hbCol : '—')) + '</td>';
@@ -6224,8 +6337,11 @@ PAGE_HTML = """<!DOCTYPE html>
         scroll += '</tr>';
       }
       scroll += '</tbody></table></div>';
+      scroll += renderL1RoadLegendFromApi(leg);
       if (!rows.length) {
-        scroll = '<p class="caps" style="margin:0">No exams in scorecard yet — click <strong>Run exam</strong> in Controls.</p>';
+        scroll =
+          '<p class="caps" style="margin:0">No exams in scorecard yet — click <strong>Run exam</strong> in Controls.</p>' +
+          renderL1RoadLegendFromApi(leg);
       }
       root.innerHTML = studentPanelD11Layout(chrome1, scroll);
       studentPanelD11WireChrome();

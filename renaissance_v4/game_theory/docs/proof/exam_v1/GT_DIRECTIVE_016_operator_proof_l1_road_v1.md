@@ -25,9 +25,10 @@ Full JSON body from `build_l1_road_payload_v1(lines=<fixture>)` (matches HTTP pa
 
 ```bash
 curl -s -o /dev/null -w "%{http_code}\n" "http://127.0.0.1:<PORT>/api/student-panel/l1-road"
+curl -s -o /dev/null -w "%{http_code}\n" "http://127.0.0.1:<PORT>/api/student-panel/runs?limit=50"
 ```
 
-Expect **200** and `schema` = `student_panel_l1_road_v1`.
+Expect **200**; `GET …/l1-road` → `schema` = `student_panel_l1_road_v1` (includes **`road_by_job_id_v1`**). `GET …/runs` → `l1_road_v1.schema` = `student_panel_l1_road_runs_overlay_v1` for the Level 1 UI merge.
 
 ## Truth notes (non-negotiable)
 

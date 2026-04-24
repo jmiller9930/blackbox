@@ -1,11 +1,11 @@
 # GT_DIRECTIVE_016 — L1 road data: system vs Anna band + denormalized rollups
 
-**Date:** 2026-04-24 (amended 2026-04-24 — **L1 road API slice** shipped)  
-**Status:** **ACTIVE — v1 road slice SHIPPED** — `GET /api/student-panel/l1-road` + `student_panel_l1_road_v1` + tests + fixture + operator proof. **OPEN** for optional scorecard denorm at `record_parallel_batch_finished` (Anna align, mem/ctx flags) and embedded L1 **table** bands until accepted or deferred.  
+**Date:** 2026-04-24 (amended 2026-04-24 — **L1 road API + L1 row UI merge** shipped)  
+**Status:** **ACTIVE — PARTIAL ACCEPTANCE** — backend + **Level 1 table** wired to **`l1_road_v1`** on `GET /api/student-panel/runs` (Profile, LLM, Road band, Anchor role, Road gaps + API-driven legend block). **OPEN** until scorecard-line denorm (§16.2 Anna align / mem-ctx flags) ships **or** is **deferred in writing**; **GT_DIRECTIVE_017** blocked until 016 closed or 016 UI remainder explicitly deferred.  
 **From:** Architect (via operator product lock)  
 **To:** Engineer  
 **CC:** Operator, Product, Referee, UI  
-**Scope:** `renaissance_v4/game_theory` — `student_panel_l1_road_v1.py`, `web_app.py` (`GET /api/student-panel/l1-road`), tests/fixtures/proof; future: `student_panel_d11.py`, `student_panel_d14.py`, `GET /api/student-panel/runs` column bands, `batch_scorecard.py` denorm fields per §16.2 original text.
+**Scope:** `renaissance_v4/game_theory` — `student_panel_l1_road_v1.py` (`road_by_job_id_v1`, `member_job_ids`), `web_app.py` (`GET /api/student-panel/l1-road`, **`l1_road_v1` overlay on** `GET /api/student-panel/runs`, L1 table columns + legend from API); tests/fixtures/proof; remaining: `batch_scorecard.py` denorm per §16.2; optional **A \| B** visual band chrome (§16.1 two-band layout) unless deferred.
 
 ## Canonical workflow record
 
@@ -76,10 +76,19 @@ Log **GT_DIRECTIVE_016** until **Accepted**.
 - **Tests** — `tests/test_gt_directive_016_l1_road_v1.py` (grouping, LLM split, aggregates, A/B, fingerprint isolation, empty structure, HTTP with `PATTERN_GAME_MEMORY_ROOT`).  
 - **Fixture** — `tests/fixtures/gt_directive_016_l1_road_scorecard_lines.json`.  
 - **Proof** — `docs/proof/exam_v1/GT_DIRECTIVE_016_operator_proof_l1_road_v1.md` + `GT_DIRECTIVE_016_operator_proof_l1_road_response_v1.json`.  
-- **Not in this slice:** L3 wiring; new Referee grading; scorecard append-time Anna-align denorm (original §16.2); embedded L1 row **A \| B** column UI (consume `l1-road` next).
+- **2026-04-24 (later)** — **`road_by_job_id_v1`** on L1 road payload; **`l1_road_v1`** overlay embedded on **`GET /api/student-panel/runs`**; Level 1 embedded table: **Profile**, **LLM**, **Road** (band), **Anchor** (Ruler / Anchor / vs anchor), **Road gaps** (group `data_gaps` + process P-compare flag); column **titles** use **`legend`** strings (not hardcoded semantics); legend block under table rendered from **`l1_road_v1.legend`**. `PATTERN_GAME_WEB_UI_VERSION` bump.  
+- **Still not complete:** scorecard append-time denorm (Anna %, mem/ctx flags); exam-pack **E** vs scorecard expectancy; persisted **P** beyond optional `student_l1_process_score_v1`; formal **A \| B** dual-band row layout (§16.1) vs added columns.
 
 ---
 
 ## Architect review
 
-**Status:** pending architect review (v1 road API slice — proof in repo)
+### Partial acceptance — backend + L1 row integration (2026-04-24)
+
+**Accepted:** `student_panel_l1_road_v1.py`; single-pass scorecard-only aggregation; grouping by fingerprint + brain profile + LLM model; Qwen vs DeepSeek split; baseline-anchored A/B per fingerprint; no cross-fingerprint mixing; no learning-store scans; honest `data_gaps` for missing baseline / process score; server-driven `legend`; `GET /api/student-panel/l1-road` **200**; fixture, operator proof, tests; commit / push / gsync; **`road_by_job_id_v1`**; **`l1_road_v1`** on **`GET /api/student-panel/runs`**; **Level 1 UI** shows profile, LLM (when applicable), band, anchor role, road gaps, and **legend text from API** (not copy-pasted definitions in JS).
+
+**Still OPEN (directive not closed):** scorecard-line denorm for intended road display (§16.2); **P** remains optional field; **E** remains scorecard expectancy (not exam-pack grade E); optional two-band **A \| B** chrome per §16.1 until shipped or **deferred in writing**. **Do not start GT_DIRECTIVE_017** until this closure or explicit deferral of the remainder.
+
+**One-line summary:** The L1 road data exists and is truthful **and** is wired into the visible L1 table via **`l1_road_v1`**; remaining 016 scope is denorm + formal band layout or written deferral.
+
+**Status:** **PARTIAL ACCEPTANCE — OPEN**

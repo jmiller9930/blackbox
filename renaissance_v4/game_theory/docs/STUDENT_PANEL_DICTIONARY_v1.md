@@ -63,6 +63,9 @@
 | **avg_p_process_score** | Mean **`student_l1_process_score_v1`** when that optional field is present on lines; else **null** (reserved for future batch denorm). |
 | **process_leg** | `compared` when P was used for A/B; **`data_gap`** when P was missing and A/B used **E-only**. |
 | **legend** (JSON) | API-delivered strings describing profiles, bands, and metrics — **source of truth** for UI copy (avoid duplicating conflicting definitions only in JS). |
+| **`road_by_job_id_v1`** | Map **`job_id` →** `{ band, process_leg, anchor_job_id, row_anchor_role_v1, group_data_gaps, student_brain_profile_v1, llm_model, fingerprint_sha256_40 }` for L1 row join. |
+| **`l1_road_v1` (on `/runs`)** | Overlay: **`legend`**, **`road_by_job_id_v1`**, **`data_gaps`** — same aggregation as full road endpoint; embedded in run list response. |
+| **row_anchor_role_v1** | **`ruler`** = baseline profile group; **`baseline_anchor`** = this `job_id` is the fingerprint’s baseline anchor row; **`compare`** = other profiles / models compared to that anchor. |
 
 ---
 
@@ -100,8 +103,8 @@
 
 | Route | Role |
 |--------|------|
-| `GET /api/student-panel/runs` | L1 rows + `l1_columns_v1` semantics for column tooltips. |
-| `GET /api/student-panel/l1-road` | L1 **road** aggregates by fingerprint × profile × `llm_model`. |
+| `GET /api/student-panel/runs` | L1 rows + `l1_columns_v1` + **`l1_road_v1`** overlay (`legend`, **`road_by_job_id_v1`** per `job_id`) so the embedded table can show Profile / LLM / Road / Anchor / gaps without a second fetch. |
+| `GET /api/student-panel/l1-road` | Full L1 **road** payload (`groups`, **`road_by_job_id_v1`**, `legend`, `data_gaps`). |
 | `GET /api/student-panel/run/<job_id>/decisions` | L2 payload (run summary + carousel). |
 | `GET /api/student-panel/decision?job_id=&trade_id=` | L3 `student_decision_record_v1`. |
 

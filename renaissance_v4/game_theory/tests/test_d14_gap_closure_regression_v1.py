@@ -341,6 +341,8 @@ def test_student_panel_runs_route_returns_d14_schema(flask_client) -> None:
     assert r.status_code == 200
     j = r.get_json()
     assert j.get("schema") == "student_panel_d14_runs_v1"
+    assert j.get("l1_road_v1", {}).get("schema") == "student_panel_l1_road_runs_overlay_v1"
+    assert "road_by_job_id_v1" in j.get("l1_road_v1", {})
 
 
 def test_fixture_export_script_outputs_exist() -> None:
