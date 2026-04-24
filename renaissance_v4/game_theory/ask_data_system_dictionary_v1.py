@@ -50,6 +50,13 @@ def system_dictionary_context_v1() -> dict[str, Any]:
                 "`data_gap` means the field is **not available** from wired sources — not a bug in the operator question. "
                 "Prefer naming the gap (`data_gaps[]` on L3) over guessing."
             ),
+            "exam_ep_student_panel_gt020": (
+                "**GT_DIRECTIVE_020 — Exam E/P visibility:** `exam_e_score_v1` and `exam_p_score_v1` come only from "
+                "`compute_exam_grade_v1` (denormalized on the scorecard). L1 road bands and the Student panel table use **the same** "
+                "scalars (not a shadow metric). `l1_e_value_source_v1` / `l1_p_value_source_v1` label **exam_pack_grading_v1** vs "
+                "batch proxies so operators are never confused. `exam_pass_v1` is the pack pass bit. When grading is missing but "
+                "expected, L3 emits a **critical** `exam_grading_missing_for_scored_run_v1` gap."
+            ),
         },
         "how_to_use": (
             "Ask in plain English about controls, columns, memory, runs, or how L1/L2/L3 relate. "

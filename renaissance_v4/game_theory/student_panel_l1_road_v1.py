@@ -7,6 +7,9 @@ present on a line — reserved for future batch denorm; when absent, ``avg_p`` i
 falls back to **E vs anchor** only with ``process_leg: "data_gap"``.
 
 **No cross-fingerprint mixing:** Groups are keyed by ``(fingerprint, brain_profile, llm_model)``.
+
+**GT_DIRECTIVE_020:** Per-job ``road_by_job_id_v1`` carries denormalized exam E/P and value sources;
+group objects expose optional ``group_avg_exam_*`` aggregates for operator comparison (same scalars as band logic).
 """
 
 from __future__ import annotations
@@ -181,6 +184,23 @@ def l1_road_legend_v1() -> dict[str, Any]:
             "Ollama model tag (e.g. ``qwen2.5:7b``, ``deepseek-r1:14b``) for ``memory_context_llm_student`` "
             "only; null for other profiles."
         ),
+        "group_avg_exam_e_score_v1": (
+            "GT_DIRECTIVE_020 — mean of ``exam_e_score_v1`` over group members that have exam economic grade; "
+            "null when no line in the group is graded."
+        ),
+        "group_avg_exam_p_score_v1": (
+            "GT_DIRECTIVE_020 — mean of ``exam_p_score_v1`` over members with exam process score; null when none."
+        ),
+        "group_exam_graded_run_count_v1": (
+            "Count of runs in the group with ``exam_e_score_v1`` present (exam-pack grading denormalized)."
+        ),
+        "group_exam_pass_count_v1": (
+            "Count of runs in the group with ``exam_pass_v1`` true (subset of graded lines only)."
+        ),
+        "road_exam_ep_per_job_v1": (
+            "Per ``job_id``, ``road_by_job_id_v1`` includes ``exam_*``, ``l1_*_value_source_v1``, and "
+            "``l1_e_scalar_v1`` / ``l1_p_scalar_v1`` (same scalars used for banding)."
+        ),
     }
 
 
@@ -228,6 +248,12 @@ def build_l1_road_payload_v1(
             "data_gaps": ["no_completed_scorecard_lines_v1"],
             "note": "Single-pass scorecard aggregation; no Student learning JSONL scan.",
         }
+
+    job_id_to_line: dict[str, dict[str, Any]] = {}
+    for row in usable:
+        jid = str(row.get("job_id") or "").strip()
+        if jid:
+            job_id_to_line[jid] = row
 
     by_fp: dict[str, list[dict[str, Any]]] = {}
     unknown_profile = 0
@@ -281,6 +307,19 @@ def build_l1_road_payload_v1(
             avg_e = round(sum(e_vals) / len(e_vals), 6) if e_vals else None
             avg_p = round(sum(p_vals) / len(p_vals), 6) if p_vals else None
             pass_rate = round(sum(rw_vals) / len(rw_vals), 4) if rw_vals else None
+
+            exam_e_only = [_float(x.get(_EXAM_E_SCORE_KEY)) for x in rs]
+            exam_e_only = [x for x in exam_e_only if x is not None]
+            exam_p_only = [_float(x.get(_EXAM_P_SCORE_KEY)) for x in rs]
+            exam_p_only = [x for x in exam_p_only if x is not None]
+            graded_n = sum(1 for x in rs if x.get(_EXAM_E_SCORE_KEY) is not None)
+            pass_n = sum(1 for x in rs if x.get("exam_pass_v1") is True)
+            group_avg_exam_e = (
+                round(sum(exam_e_only) / len(exam_e_only), 6) if exam_e_only else None
+            )
+            group_avg_exam_p = (
+                round(sum(exam_p_only) / len(exam_p_only), 6) if exam_p_only else None
+            )
 
             g_gaps: list[str] = []
             band: str
@@ -346,6 +385,10 @@ def build_l1_road_payload_v1(
                     "anchor_process_score": anchor_p,
                     "l1_e_value_sources_v1": e_sources,
                     "l1_p_value_sources_v1": p_sources,
+                    "group_avg_exam_e_score_v1": group_avg_exam_e,
+                    "group_avg_exam_p_score_v1": group_avg_exam_p,
+                    "group_exam_graded_run_count_v1": graded_n,
+                    "group_exam_pass_count_v1": pass_n,
                     "data_gaps": g_gaps,
                 }
             )
@@ -366,6 +409,7 @@ def build_l1_road_payload_v1(
                 role = "ruler"
             elif anchor_j and jid == anchor_j:
                 role = "baseline_anchor"
+            line = job_id_to_line.get(jid) or {}
             road_by_job_id_v1[jid] = {
                 "band": band,
                 "process_leg": str(g.get("process_leg") or ""),
@@ -375,6 +419,13 @@ def build_l1_road_payload_v1(
                 "student_brain_profile_v1": gk.get("student_brain_profile_v1"),
                 "llm_model": gk.get("llm_model"),
                 "fingerprint_sha256_40": gk.get("fingerprint_sha256_40"),
+                "exam_e_score_v1": line.get(_EXAM_E_SCORE_KEY),
+                "exam_p_score_v1": line.get(_EXAM_P_SCORE_KEY),
+                "exam_pass_v1": line.get("exam_pass_v1"),
+                "l1_e_value_source_v1": line.get("l1_e_value_source_v1"),
+                "l1_p_value_source_v1": line.get("l1_p_value_source_v1"),
+                "l1_e_scalar_v1": line_e_value_for_l1_v1(line) if line else None,
+                "l1_p_scalar_v1": line_p_value_for_l1_v1(line) if line else None,
             }
     # De-dupe top_gaps order-stable
     seen: set[str] = set()

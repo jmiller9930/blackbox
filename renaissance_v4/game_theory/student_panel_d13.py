@@ -394,6 +394,16 @@ def build_d13_selected_run_payload_v1(job_id: str) -> dict[str, Any]:
             round(100.0 * align_matches / align_evaluable, 4) if align_evaluable > 0 else None
         ),
     }
+    if isinstance(panel_row, dict):
+        for _k in (
+            "exam_e_score_v1",
+            "exam_p_score_v1",
+            "exam_pass_v1",
+            "l1_e_value_source_v1",
+            "l1_p_value_source_v1",
+        ):
+            if _k in panel_row:
+                run_summary[_k] = panel_row[_k]
 
     return {
         "ok": True,

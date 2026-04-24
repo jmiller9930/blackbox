@@ -118,7 +118,7 @@ _PATTERN_BANNER_WEBP_PATH = _RV4_ROOT / "assets" / "pattern.webp"
 _PATTERN_GAME_BANNER_BOOT_JS = _GAME_THEORY / "static" / "pattern_game_banner_boot.js"
 
 # Operator-visible web UI bundle version — bump when changing PAGE_HTML (HTML/CSS/JS) so deploys are provable.
-PATTERN_GAME_WEB_UI_VERSION = "2.19.60"
+PATTERN_GAME_WEB_UI_VERSION = "2.19.61"
 
 from renaissance_v4.game_theory.context_signature_memory import truncate_context_signature_memory_store
 from renaissance_v4.game_theory.groundhog_memory import (
@@ -1746,6 +1746,7 @@ def create_app() -> Flask:
             "schema": "student_panel_l1_road_runs_overlay_v1",
             "legend": road.get("legend"),
             "road_by_job_id_v1": road.get("road_by_job_id_v1") or {},
+            "groups": road.get("groups") or [],
             "data_gaps": road.get("data_gaps") or [],
             "note": road.get("note"),
         }
@@ -1767,6 +1768,22 @@ def create_app() -> Flask:
                     "beats_system_baseline_trade_win": (
                         ">BL — YES if this row is not the anchor and Run TW % > Sys BL %; "
                         "NO if Run TW < Sys BL; = if tie; — on anchor row or missing inputs."
+                    ),
+                    "exam_e_score_v1": (
+                        "GT_DIRECTIVE_020 — E: exam economic grade scalar from exam-pack grading "
+                        "(``compute_exam_grade_v1``); null if not graded on this line."
+                    ),
+                    "exam_p_score_v1": (
+                        "GT_DIRECTIVE_020 — P: exam process score 0..1 from the same grading call; null if absent."
+                    ),
+                    "exam_pass_v1": (
+                        "GT_DIRECTIVE_020 — PASS/FAIL from exam-pack grading ``pass``; null if not graded."
+                    ),
+                    "l1_e_value_source_v1": (
+                        "Source of the L1 economic scalar: exam_pack_grading_v1 vs expectancy_per_trade_proxy_v1."
+                    ),
+                    "l1_p_value_source_v1": (
+                        "Source of the L1 process scalar: exam_pack_grading_v1 vs proxy vs data_gap."
                     ),
                 },
             }
@@ -3181,6 +3198,11 @@ PAGE_HTML = """<!DOCTYPE html>
       background: rgba(30, 214, 170, 0.1);
     }
     .pg-student-d11-table tr[data-run-row] { cursor: pointer; }
+    tr[data-l1-band="A"] td { box-shadow: inset 0 0 0 2px rgba(46, 160, 67, 0.38); }
+    tr[data-l1-band="B"] td { box-shadow: inset 0 0 0 2px rgba(218, 85, 85, 0.32); }
+    tr[data-l1-band="baseline_ruler"] td { box-shadow: inset 0 0 0 2px rgba(139, 148, 158, 0.35); }
+    .pg-student-l1-groups-preview { margin-top: 8px; }
+    .pg-student-l1-groups-preview .pg-student-d11-table { font-size: 0.72rem; }
     .pg-student-d11-row-del {
       min-width: 28px;
       padding: 2px 6px;
@@ -5747,6 +5769,14 @@ PAGE_HTML = """<!DOCTYPE html>
         GH: 'GH: Groundhog memory tier / harness state for this run.',
         ctx: 'Ctx: context bundle used flag from run summary.',
         mem: 'Mem: memory bundle used flag from run summary.',
+        'E (exam)':
+          'E (exam): economic grade scalar from exam-pack grading only (compute_exam_grade_v1); not batch expectancy.',
+        'P (exam)': 'P (exam): process score 0–1 from the same exam grading call.',
+        PASS: 'PASS: exam-pack pass when graded true; FAIL when graded false; — when not graded.',
+        'E src':
+          'E src: label for which scalar feeds L1 for this run — exam_pack_grading_v1 vs expectancy_per_trade_proxy_v1.',
+        'P src':
+          'P src: label for process scalar source — exam_pack_grading_v1 vs student_l1_process_score_proxy_v1 vs data_gap.',
       };
       function cell(k, v) {
         var disp = v == null || v === '' ? '—' : String(v);
@@ -5787,6 +5817,14 @@ PAGE_HTML = """<!DOCTYPE html>
         cell('GH', rs.groundhog_state),
         cell('ctx', rs.context_used_flag),
         cell('mem', rs.memory_used_flag),
+        cell('E (exam)', rs.exam_e_score_v1 != null ? fmtD11MaybeNum(rs.exam_e_score_v1, 4) : '—'),
+        cell('P (exam)', rs.exam_p_score_v1 != null ? fmtD11MaybeNum(rs.exam_p_score_v1, 4) : '—'),
+        cell(
+          'PASS',
+          rs.exam_pass_v1 === true ? 'PASS' : rs.exam_pass_v1 === false ? 'FAIL' : '—'
+        ),
+        cell('E src', rs.l1_e_value_source_v1 != null ? String(rs.l1_e_value_source_v1) : '—'),
+        cell('P src', rs.l1_p_value_source_v1 != null ? String(rs.l1_p_value_source_v1) : '—'),
       ];
       return '<div class="pg-student-d13-run-summary" role="region" aria-label="Run summary">' + parts.join('') + '</div>';
     }
@@ -5959,6 +5997,26 @@ PAGE_HTML = """<!DOCTYPE html>
       const rs = j.run_summary && typeof j.run_summary === 'object' ? j.run_summary : null;
       let scroll = '';
       if (rs) scroll += renderD13RunSummaryBand(rs);
+      if (
+        rs &&
+        (rs.exam_e_score_v1 != null ||
+          rs.exam_p_score_v1 != null ||
+          rs.exam_pass_v1 != null)
+      ) {
+        const ee2 = rs.exam_e_score_v1 != null ? fmtD11MaybeNum(rs.exam_e_score_v1, 4) : '—';
+        const pe2 = rs.exam_p_score_v1 != null ? fmtD11MaybeNum(rs.exam_p_score_v1, 4) : '—';
+        const pass2 = rs.exam_pass_v1 === true ? 'PASS' : rs.exam_pass_v1 === false ? 'FAIL' : '—';
+        scroll +=
+          '<p class="caps" style="margin:6px 0 0;font-size:0.78rem" title="Run-level exam grades from scorecard (same values as L1)">' +
+          '<strong><span title="E/P: exam economic and process scores from one exam-pack grading call">E/P</span> (run)</strong> — ' +
+          '<span title="E: exam economic grade">E</span>=' +
+          ee2 +
+          ' · <span title="P: exam process score 0–1">P</span>=' +
+          pe2 +
+          ' · <span title="PASS: exam-pack pass bit">PASS</span>=' +
+          escapeHtml(pass2) +
+          '</p>';
+      }
       scroll +=
         '<p class="pg-student-d11-legend" style="margin-top:0"><strong>Trade carousel</strong> — one card per trade opportunity. ' +
         ordNote +
@@ -6345,6 +6403,35 @@ PAGE_HTML = """<!DOCTYPE html>
           escapeHtml(String(flat ? rec.is_loss : '')) +
           '</li>'
       );
+      const scl = l3.scorecard_line_v1;
+      if (scl && typeof scl === 'object') {
+        const hasEp =
+          scl.exam_e_score_v1 != null ||
+          scl.exam_p_score_v1 != null ||
+          scl.exam_pass_v1 != null ||
+          (scl.l1_e_value_source_v1 != null && String(scl.l1_e_value_source_v1).trim()) ||
+          (scl.l1_p_value_source_v1 != null && String(scl.l1_p_value_source_v1).trim());
+        if (hasEp) {
+          const ee = scl.exam_e_score_v1 != null ? fmtD11MaybeNum(scl.exam_e_score_v1, 4) : '—';
+          const pe = scl.exam_p_score_v1 != null ? fmtD11MaybeNum(scl.exam_p_score_v1, 4) : '—';
+          const pv =
+            scl.exam_pass_v1 === true ? 'PASS' : scl.exam_pass_v1 === false ? 'FAIL' : '—';
+          lines.push(
+            '<li><span class="pg-student-d11-k" title="Scorecard line subset for this job (L3 payload)">Exam E/P (scorecard)</span> ' +
+              '<span title="E: exam economic grade from exam-pack grading (not batch expectancy)">E</span>=' +
+              ee +
+              ' · <span title="P: exam process score 0–1 from grading">P</span>=' +
+              pe +
+              ' · <span title="PASS/FAIL from exam-pack grading pass bit">PASS</span>=' +
+              escapeHtml(pv) +
+              ' · <span title="Which value feeds L1 for E on this line">E src</span>=' +
+              escapeHtml(String(scl.l1_e_value_source_v1 != null ? scl.l1_e_value_source_v1 : '—')) +
+              ' · <span title="Which value feeds L1 for P on this line">P src</span>=' +
+              escapeHtml(String(scl.l1_p_value_source_v1 != null ? scl.l1_p_value_source_v1 : '—')) +
+              '</li>'
+          );
+        }
+      }
       lines.push(renderL3DataGapMatrixHtml(l3.data_gaps));
       if (rec.error) {
         lines.push('<li><span class="pg-student-d11-k">error</span> ' + escapeHtml(String(rec.error)) + '</li>');
@@ -6392,6 +6479,11 @@ PAGE_HTML = """<!DOCTYPE html>
         'avg_p_process_score',
         'fingerprint',
         'llm_model',
+        'group_avg_exam_e_score_v1',
+        'group_avg_exam_p_score_v1',
+        'group_exam_graded_run_count_v1',
+        'group_exam_pass_count_v1',
+        'road_exam_ep_per_job_v1',
       ];
       const LEGEND_KEY_TIP = {
         band_a:
@@ -6408,6 +6500,14 @@ PAGE_HTML = """<!DOCTYPE html>
         fingerprint:
           'Fingerprint: 40-char hash of run config — groups runs that share the same recipe and window.',
         llm_model: 'LLM model: Ollama model tag when the brain profile is the governed LLM student path.',
+        group_avg_exam_e_score_v1:
+          'Mean exam E only on lines that carry exam_e_score_v1 (explicit exam economic grades).',
+        group_avg_exam_p_score_v1:
+          'Mean exam P only on lines that carry exam_p_score_v1 (explicit exam process scores).',
+        group_exam_graded_run_count_v1: 'How many runs in the group have exam economic grade on the scorecard.',
+        group_exam_pass_count_v1: 'How many runs in the group have exam_pass_v1 true.',
+        road_exam_ep_per_job_v1:
+          'Per job_id, road merge exposes exam_e_score_v1, exam_p_score_v1, exam_pass_v1 and L1 value sources.',
       };
       for (let ki = 0; ki < keys.length; ki++) {
         const kk = keys[ki];
@@ -6425,6 +6525,60 @@ PAGE_HTML = """<!DOCTYPE html>
         }
       }
       h += '</div>';
+      return h;
+    }
+
+    function renderL1RoadGroupsPreviewFromApi(ov) {
+      const groups = (ov && ov.groups) || [];
+      if (!Array.isArray(groups) || !groups.length) return '';
+      let h =
+        '<div class="pg-student-l1-groups-preview"><p class="caps" style="margin:10px 0 4px;font-size:0.75rem">' +
+        '<strong title="E/P: same exam-pack scalars used for Road band A/B (GT_DIRECTIVE_020)">L1 road — by fingerprint</strong> ' +
+        '(compare baseline vs memory vs LLM within the same config hash)</p>';
+      h += '<table class="pg-student-d11-table"><thead><tr>';
+      h +=
+        '<th title="Fingerprint: 40-char same recipe/window hash">fp</th>' +
+        '<th title="Brain profile: cold baseline vs memory student vs LLM student">profile</th>' +
+        '<th title="LLM: model tag when profile is memory_context_llm_student">LLM</th>' +
+        '<th title="Number of runs in this bucket">n</th>' +
+        '<th title="E: group mean economic scalar per line (exam E when present, else batch proxy — same as band logic)">avg E</th>' +
+        '<th title="P: group mean process per line (exam P when present, else proxy)">avg P</th>' +
+        '<th title="Mean of exam_e_score_v1 on graded lines only">avg exam E</th>' +
+        '<th title="Mean of exam_p_score_v1 on graded lines only">avg exam P</th>' +
+        '<th title="Road band vs baseline anchor for this bucket">band</th>' +
+        '</tr></thead><tbody>';
+      for (let gi = 0; gi < groups.length; gi++) {
+        const g = groups[gi] || {};
+        const gk = g.group_key || {};
+        const fp = String(gk.fingerprint_sha256_40 || '');
+        const fpDisp = fp.length > 10 ? fp.slice(0, 8) + '…' : fp;
+        h += '<tr>';
+        h += '<td title="' + escapeHtml(fp) + '">' + escapeHtml(fpDisp) + '</td>';
+        h += '<td>' + escapeHtml(String(gk.student_brain_profile_v1 || '—')) + '</td>';
+        h += '<td>' + escapeHtml(String(gk.llm_model != null ? gk.llm_model : '—')) + '</td>';
+        h += '<td>' + escapeHtml(String(g.run_count != null ? g.run_count : '—')) + '</td>';
+        h +=
+          '<td>' +
+          (g.avg_e_expectancy_per_trade != null
+            ? fmtD11MaybeNum(g.avg_e_expectancy_per_trade, 4)
+            : '—') +
+          '</td>';
+        h +=
+          '<td>' +
+          (g.avg_p_process_score != null ? fmtD11MaybeNum(g.avg_p_process_score, 4) : '—') +
+          '</td>';
+        h +=
+          '<td>' +
+          (g.group_avg_exam_e_score_v1 != null ? fmtD11MaybeNum(g.group_avg_exam_e_score_v1, 4) : '—') +
+          '</td>';
+        h +=
+          '<td>' +
+          (g.group_avg_exam_p_score_v1 != null ? fmtD11MaybeNum(g.group_avg_exam_p_score_v1, 4) : '—') +
+          '</td>';
+        h += '<td>' + escapeHtml(String(g.band != null ? g.band : '—')) + '</td>';
+        h += '</tr>';
+      }
+      h += '</tbody></table></div>';
       return h;
     }
 
@@ -6473,7 +6627,12 @@ PAGE_HTML = """<!DOCTYPE html>
         '<th title="Sys BL %: system baseline — batch trade win percent of the oldest completed run in this fingerprint chain (same recipe and window anchor)">Sys BL %</th>' +
         '<th title="Run TW %: this run’s Referee batch rollup trade win percent (wins divided by trades with a result)">Run TW %</th>' +
         '<th title="&gt;BL: strictly beat system baseline trade win percent? Not shown on the anchor row. YES / NO / = / —">&gt;BL</th>' +
-        '<th title="E/tr: economic scalar shown on the row — exam-pack exam E when present on scorecard, else batch expectancy per trade">E/tr</th>' +
+        '<th title="Batch expectancy_per_trade (Referee rollup). When exam grading exists, L1 uses exam E — see E (exam) column.">E/tr</th>' +
+        '<th title="exam_e_score_v1 — exam-pack economic grade (same scalar as L1 band logic when present)"><span title="E: exam economic grade from exam-pack grading">E</span> (exam)</th>' +
+        '<th title="exam_p_score_v1 — exam-pack process score 0–1"><span title="P: exam process score from exam-pack grading">P</span> (exam)</th>' +
+        '<th title="exam_pass_v1 — PASS or FAIL from exam grading when present"><span title="PASS: exam-pack pass bit">PASS</span></th>' +
+        '<th title="l1_e_value_source_v1 — which scalar feeds L1 for E (exam vs proxy)"><span title="E value source for L1">E src</span></th>' +
+        '<th title="l1_p_value_source_v1 — which scalar feeds L1 for P"><span title="P value source for L1">P src</span></th>' +
         '<th title="Profile: student_brain_profile_v1 for this job from the L1 road merge">Profile</th>' +
         '<th title="LLM: large language model tag when profile is memory_context_llm_student">LLM</th>' +
         '<th title="' +
@@ -6494,7 +6653,13 @@ PAGE_HTML = """<!DOCTYPE html>
         const rid = row.run_id != null ? String(row.run_id) : '';
         const infl = row.is_inflight === true || row.status === 'running';
         const trCls = infl ? ' data-run-inflight="1" style="opacity:0.92"' : '';
-        scroll += '<tr' + trCls + (infl ? '' : ' data-run-row') + ' data-run-id="' + escapeHtml(rid) + '">';
+        const rv = infl ? null : l1RoadRowMeta(rid, ov);
+        const bandForAttr = rv && rv.band ? String(rv.band) : '';
+        const bandAttr =
+          !infl && bandForAttr && bandForAttr !== 'data_gap'
+            ? ' data-l1-band="' + escapeHtml(bandForAttr) + '"'
+            : '';
+        scroll += '<tr' + bandAttr + trCls + (infl ? '' : ' data-run-row') + ' data-run-id="' + escapeHtml(rid) + '">';
         scroll += '<td title="' + escapeHtml(rid) + '"><code style="font-size:0.7rem">' + escapeHtml(rid.length > 14 ? rid.slice(0, 12) + '…' : rid) + '</code></td>';
         scroll += '<td>' + escapeHtml(String(row.timestamp || '—')) + '</td>';
         scroll += '<td>' + escapeHtml(String(row.pattern || '—')) + '</td>';
@@ -6517,10 +6682,32 @@ PAGE_HTML = """<!DOCTYPE html>
           ) +
           '</td>';
         scroll +=
-          '<td title="Shown value is API expectancy_per_trade; exam E when present is merged into L1 road, not always duplicated in this cell">' +
+          '<td title="Shown value is batch expectancy_per_trade; L1 uses exam E when present (see E exam column)">' +
           (row.expectancy_per_trade != null ? fmtD11MaybeNum(row.expectancy_per_trade, 4) : '—') +
           '</td>';
-        const rv = infl ? null : l1RoadRowMeta(rid, ov);
+        scroll +=
+          '<td title="exam_e_score_v1 — exam economic grade (GT_DIRECTIVE_019/020)">' +
+          (infl ? '—' : row.exam_e_score_v1 != null ? fmtD11MaybeNum(row.exam_e_score_v1, 4) : '—') +
+          '</td>';
+        scroll +=
+          '<td title="exam_p_score_v1 — exam process score">' +
+          (infl ? '—' : row.exam_p_score_v1 != null ? fmtD11MaybeNum(row.exam_p_score_v1, 4) : '—') +
+          '</td>';
+        var passDisp =
+          infl ? '—' : row.exam_pass_v1 === true ? 'PASS' : row.exam_pass_v1 === false ? 'FAIL' : '—';
+        scroll += '<td title="exam_pass_v1">' + escapeHtml(passDisp) + '</td>';
+        scroll +=
+          '<td title="l1_e_value_source_v1">' +
+          escapeHtml(
+            infl || row.l1_e_value_source_v1 == null ? '—' : String(row.l1_e_value_source_v1)
+          ) +
+          '</td>';
+        scroll +=
+          '<td title="l1_p_value_source_v1">' +
+          escapeHtml(
+            infl || row.l1_p_value_source_v1 == null ? '—' : String(row.l1_p_value_source_v1)
+          ) +
+          '</td>';
         scroll +=
           '<td title="L1 road merge">' +
           (rv ? escapeHtml(String(rv.student_brain_profile_v1 || '—')) : '—') +
@@ -6591,10 +6778,12 @@ PAGE_HTML = """<!DOCTYPE html>
       }
       scroll += '</tbody></table></div>';
       scroll += renderL1RoadLegendFromApi(leg);
+      scroll += renderL1RoadGroupsPreviewFromApi(ov);
       if (!rows.length) {
         scroll =
           '<p class="caps" style="margin:0">No exams in scorecard yet — click <strong>Run exam</strong> in Controls.</p>' +
-          renderL1RoadLegendFromApi(leg);
+          renderL1RoadLegendFromApi(leg) +
+          renderL1RoadGroupsPreviewFromApi(ov);
       }
       root.innerHTML = studentPanelD11Layout(chrome1, scroll);
       studentPanelD11WireChrome();
