@@ -1,6 +1,6 @@
 # High-level architecture — learning, exam, certification, engineering, UI splice
 
-**Status:** v1.16 — **§1.1** / **§18.4** — **GT_DIRECTIVE_015** Student **brain profile** contract (`baseline_no_memory_no_llm` \| `memory_context_student` \| `memory_context_llm_student`) with nested **`student_llm_v1`**; legacy lane inputs normalize to profiles. **GT_DIRECTIVE_009a** remains shipped.
+**Status:** v1.17 — **§18.4** — **GT_DIRECTIVE_018** v1 (**retrieval cap** env, **newest-first** slices, **`learning_loop_governance_v1`** seam audit). **GT_DIRECTIVE_015** brain profiles unchanged. **GT_DIRECTIVE_009a** remains shipped.
 
 ---
 
@@ -768,6 +768,7 @@ Work **§18.2** as a sequence of small shippables; each row satisfies **§18.3**
 | **GT_DIRECTIVE_015** | **Run exam + Student brain profile contract:** three profiles (`baseline_no_memory_no_llm`, `memory_context_student`, `memory_context_llm_student`); nested **`student_llm_v1`** for model/provider/role; legacy lane **inputs** still normalize; memory → context → optional LLM → sealed output → Referee; **metadata** skip-cold only; refine-then-seal multi-artifact LLM path **future**; E/P surface **outstanding**. | **Active — partial (OPEN)** | Canonical: `directives/GT_DIRECTIVE_015_run_exam_baseline_skip_contract_v1.md`. |
 | **GT_DIRECTIVE_016** | **L1 road data:** visual **A \| B** bands (system vs Anna); denormalize Anna rollups + flags at batch finish; legend defines every symbol; no full-store scan per `/runs` row. | **Planned** | Canonical: `directives/GT_DIRECTIVE_016_l1_road_data_system_student_split_v1.md`. |
 | **GT_DIRECTIVE_017** | **L3 `data_gap` closure:** gap register matrix (code → producer → acceptance); shrink happy-path `data_gaps[]`; wire exports instead of guessing; couples to L1 strong claims per directive text. | **Planned** | Canonical: `directives/GT_DIRECTIVE_017_student_l3_datagap_closure_matrix_v1.md`. |
+| **GT_DIRECTIVE_018** | **Learning loop governance:** v1 **programmatic** — `PATTERN_GAME_STUDENT_MAX_RETRIEVAL_SLICES` (default 8, max 128), **newest-first** retrieval slice order, `learning_loop_governance_v1` on Student seam audit. **Future:** memory quality filters, H1–H4 / NO_TRADE contracts, strict P metrics, anti–bad-loop dashboards. | **Active — v1 shipped, OPEN** | `directives/GT_DIRECTIVE_018_student_learning_loop_governance_v1.md`; code `student_learning_loop_governance_v1.py`, `cross_run_retrieval_v1.py`. |
 | *TBD* | L2 tile: symbol / stake fields from outcome metadata when present | Planned | Depends on exporter / `outcome_json` shape. |
 | *TBD* | L3: mirror new slice keys where applicable | Planned | Extend `student_decision_record_v1` only when L3 contract should echo L2. |
 
@@ -794,3 +795,4 @@ Work **§18.2** as a sequence of small shippables; each row satisfies **§18.3**
 | v1.14 | **§1.1** — memory vs context vs LLM (distinct roles, feed chain, grading success criterion); pointers to `shadow_student_v1`, packet + retrieval contracts, **GT_DIRECTIVE_015** modes. |
 | v1.15 | **§1.1** / **§18.4** — **GT_DIRECTIVE_015**: Ollama-backed LLM modes + UI exam contract + HTTP proof; metadata-only skip-cold; directive remains **OPEN** for E/P comparison + physical cold skip. |
 | v1.16 | **GT_DIRECTIVE_015** rework — **Student brain profiles** + **`student_llm_v1`** metadata (model secondary to profile); **§1.1** LLM row aligned; legacy API strings normalize. |
+| v1.17 | **GT_DIRECTIVE_018** — programmatic retrieval governance (env cap, newest-first, seam audit blob); **§18.4** row. |

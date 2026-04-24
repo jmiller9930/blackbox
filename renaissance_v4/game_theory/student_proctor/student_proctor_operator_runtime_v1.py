@@ -35,6 +35,10 @@ from renaissance_v4.game_theory.student_proctor.student_ollama_student_output_v1
 from renaissance_v4.game_theory.student_proctor.cross_run_retrieval_v1 import (
     build_student_decision_packet_v1_with_cross_run_retrieval,
 )
+from renaissance_v4.game_theory.student_proctor.student_learning_loop_governance_v1 import (
+    learning_loop_governance_audit_v1,
+    resolved_max_retrieval_slices_v1,
+)
 from renaissance_v4.game_theory.student_proctor.contracts_v1 import (
     FIELD_RETRIEVED_STUDENT_EXPERIENCE_V1,
     FIELD_STUDENT_CONTEXT_ANNEX_V1,
@@ -467,6 +471,9 @@ def student_loop_seam_after_parallel_batch_v1(
             "ollama_trades_succeeded": ollama_ok,
             "llm_trade_cap": llm_cap,
         }
+    out_audit["learning_loop_governance_v1"] = learning_loop_governance_audit_v1(
+        max_retrieval_slices_resolved=resolved_max_retrieval_slices_v1(None),
+    )
     return out_audit
 
 

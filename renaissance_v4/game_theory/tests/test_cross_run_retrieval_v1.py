@@ -92,6 +92,8 @@ def test_retrieval_slices_injected_into_legal_packet(tmp_path: Path) -> None:
     exp = pkt.get(FIELD_RETRIEVED_STUDENT_EXPERIENCE_V1)
     assert isinstance(exp, list) and len(exp) == 2
     assert exp[0]["schema"] == SCHEMA_STUDENT_RETRIEVAL_SLICE_V1
+    assert exp[0]["source_record_id"] == "lr2"
+    assert exp[1]["source_record_id"] == "lr1"
     blob = json.dumps(pkt)
     assert '"pnl"' not in blob, "forbidden outcome keys must not appear in pre-reveal packet"
 

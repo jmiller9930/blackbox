@@ -7,6 +7,8 @@
 **CC:** Operator, Product, Referee, UI  
 **Scope:** `renaissance_v4/game_theory` — parallel batch (`web_app.py` `POST /api/run-parallel/start`, blocking `/api/run-parallel`), `batch_scorecard.py`, **Student seam** (memory → context packet → optional governed LLM → sealed `student_output_v1`), **persisted exam truth** for Referee attribution.
 
+**Cross-ref:** **GT_DIRECTIVE_018** owns **learning-loop governance** (retrieval caps, attachment order, future memory-quality / H1–H4 / P metrics) — not duplicated in 015.
+
 ---
 
 ## Product frame (non-negotiable semantics)

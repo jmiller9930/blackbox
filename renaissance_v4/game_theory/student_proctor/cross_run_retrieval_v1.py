@@ -5,6 +5,9 @@ Loads prior ``student_learning_record_v1`` rows from the Student Learning Store,
 ``context_signature_v1.signature_key``, and projects **pre-reveal-safe** slices (no forbidden outcome
 key names) into ``retrieved_student_experience_v1``.
 
+**GT_DIRECTIVE_018:** slice count is **capped** (env ``PATTERN_GAME_STUDENT_MAX_RETRIEVAL_SLICES`` or
+explicit arg); matches are attached **newest-first** before capping.
+
 Does **not** touch replay, fusion, or execution.
 """
 
@@ -27,6 +30,9 @@ from renaissance_v4.game_theory.student_proctor.student_context_builder_v1 impor
 )
 from renaissance_v4.game_theory.student_proctor.student_learning_store_v1 import (
     list_student_learning_records_by_signature_key,
+)
+from renaissance_v4.game_theory.student_proctor.student_learning_loop_governance_v1 import (
+    resolved_max_retrieval_slices_v1,
 )
 
 
@@ -84,7 +90,7 @@ def build_student_decision_packet_v1_with_cross_run_retrieval(
     decision_open_time_ms: int,
     store_path: Path | str,
     retrieval_signature_key: str,
-    max_retrieval_slices: int = 8,
+    max_retrieval_slices: int | None = None,
     table: str | None = None,
     max_bars_in_packet: int = 10_000,
     notes: str | None = None,
@@ -93,6 +99,10 @@ def build_student_decision_packet_v1_with_cross_run_retrieval(
     Build a causal decision packet and attach matching prior-experience slices (same signature key).
 
     If no rows match, ``retrieved_student_experience_v1`` is an empty list.
+
+    ``max_retrieval_slices`` — pass ``None`` to use **GT_DIRECTIVE_018** env
+    ``PATTERN_GAME_STUDENT_MAX_RETRIEVAL_SLICES`` (default 8, max 128). Matching rows are attached
+    **newest-first** (last appended in the store wins priority) up to the cap.
     """
     kwargs: dict[str, Any] = {
         "db_path": db_path,
@@ -112,7 +122,9 @@ def build_student_decision_packet_v1_with_cross_run_retrieval(
     matches = list_student_learning_records_by_signature_key(
         store_path, retrieval_signature_key
     )
-    cap = max(0, int(max_retrieval_slices))
+    # Newest-first: JSONL append order means later lines are more recent.
+    matches = list(reversed(matches))
+    cap = resolved_max_retrieval_slices_v1(max_retrieval_slices)
     slices: list[dict[str, Any]] = []
     for rec in matches[:cap]:
         sl, _perr = project_student_learning_record_to_retrieval_slice_v1(rec)
