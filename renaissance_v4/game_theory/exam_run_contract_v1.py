@@ -206,6 +206,7 @@ def preview_run_config_fingerprint_sha256_40_v1(
     fp_parts = [
         str(oba.get("operator_recipe_id") or ""),
         str(oba.get("evaluation_window_effective_calendar_months") or ""),
+        str(oba.get("candle_timeframe_minutes") or ""),
         str(oba.get("manifest_path_primary") or ""),
         str(oba.get("policy_framework_path") or ""),
     ]

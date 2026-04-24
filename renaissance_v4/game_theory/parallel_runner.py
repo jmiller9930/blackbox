@@ -42,6 +42,7 @@ from renaissance_v4.game_theory.run_session_log import (
     allocate_unique_run_directory,
     write_batch_index_and_scenario_logs,
 )
+from renaissance_v4.game_theory.candle_timeframe_runtime import extract_candle_timeframe_minutes_for_replay
 from renaissance_v4.game_theory.evaluation_window_runtime import extract_calendar_months_for_replay
 from renaissance_v4.game_theory.live_telemetry_v1 import (
     build_live_telemetry_callback,
@@ -161,6 +162,7 @@ def _worker_run_one(scenario: dict[str, Any]) -> dict[str, Any]:
         else:
             mbp = resolve_memory_bundle_for_scenario(scenario, explicit_path=None)
         bar_m = extract_calendar_months_for_replay(scenario)
+        candle_tf = extract_candle_timeframe_minutes_for_replay(scenario)
         recipe_id = str(scenario.get("operator_recipe_id") or "").strip()
         hres: dict[str, Any] | None = None
         tm = scenario.get("_live_telemetry_meta_v1")
@@ -191,6 +193,7 @@ def _worker_run_one(scenario: dict[str, Any]) -> dict[str, Any]:
                     repo_root_for_git=resolve_repo_root(),
                     goal_v2=scenario.get("goal_v2") if isinstance(scenario.get("goal_v2"), dict) else None,
                     bar_window_calendar_months=bar_m,
+                    candle_timeframe_minutes=candle_tf,
                     live_telemetry_callback=live_cb,
                     context_signature_memory_mode=cmem,
                     context_signature_memory_path=mem_jsonl,
@@ -240,6 +243,7 @@ def _worker_run_one(scenario: dict[str, Any]) -> dict[str, Any]:
                 emit_baseline_artifacts=bool(scenario.get("emit_baseline_artifacts", False)),
                 verbose=False,
                 bar_window_calendar_months=bar_m,
+                candle_timeframe_minutes=candle_tf,
                 live_telemetry_callback=live_cb,
                 context_signature_memory_mode=cmem,
                 context_signature_memory_path=mem_jsonl,

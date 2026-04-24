@@ -171,6 +171,8 @@ def test_get_docs_student_panel_dictionary_200() -> None:
         r = c.get("/docs/student-panel-dictionary")
     assert r.status_code == 200
     assert b"Student panel dictionary" in r.data
+    assert b"Return to Pattern Machine" in r.data
+    assert b"pgStudentTriangleDock" in r.data
     assert b"Sys BL %" in r.data or b"Sys BL" in r.data
 
 

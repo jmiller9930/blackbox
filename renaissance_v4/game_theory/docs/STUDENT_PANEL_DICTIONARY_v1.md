@@ -1,7 +1,7 @@
 # Student panel dictionary (operator) — v1.3
 
 **Canonical file:** `renaissance_v4/game_theory/docs/STUDENT_PANEL_DICTIONARY_v1.md`  
-**Browser:** Pattern Machine learning UI → **Student → learning → outcome** fold → link **“Student panel dictionary”**, or open **`/docs/student-panel-dictionary`** on the same host as Flask (e.g. `http://127.0.0.1:8765/docs/student-panel-dictionary`).  
+**Browser:** Pattern Machine learning UI → **Student → learning → outcome** fold → **“Student panel dictionary”** opens a **resizable pop-out** window; use **Return to Pattern Machine** (or **Application home**) in that window to jump back (`/#pgStudentTriangleDock` opens the Student fold). Same page: **`/docs/student-panel-dictionary`** on the Flask host (e.g. `http://127.0.0.1:8765/docs/student-panel-dictionary`).  
 **Deep architecture:** `docs/STUDENT_PATH_EXAM_HIGH_LEVEL_ARCHITECTURE_v1.md` (exam frames, grading, directives).
 
 ---

@@ -120,6 +120,7 @@ def run_manifest_replay(
     emit_baseline_artifacts: bool = True,
     verbose: bool = True,
     bar_window_calendar_months: int | None = None,
+    candle_timeframe_minutes: int | None = None,
     decision_context_recall_enabled: bool = False,
     decision_context_recall_apply_bias: bool = False,
     decision_context_recall_apply_signal_bias_v2: bool = False,
@@ -140,6 +141,9 @@ def run_manifest_replay(
     When ``bar_window_calendar_months`` is a positive integer, replay uses only the last ~N calendar
     months of bars (approximate day cutoff from the last bar). When ``None`` or non-positive, the
     full ``market_bars_5m`` series is used.
+
+    When ``candle_timeframe_minutes`` is greater than 5 and a multiple of 5, bars are rolled up from
+    the 5m base table into synthetic OHLCV rows at that cadence before the replay loop.
 
     When ``decision_context_recall_enabled`` is True, each decision may include structured recall from
     ``context_signature_memory`` JSONL (see :mod:`renaissance_v4.game_theory.decision_context_recall`).
@@ -185,6 +189,29 @@ def run_manifest_replay(
     dataset_bars = len(rows)
     if verbose:
         print(f"[replay] Loaded {dataset_bars} bars (full DB had {n_full})")
+
+    rollup_audit: dict[str, Any] | None = None
+    ctf: int | None = None
+    if candle_timeframe_minutes is not None:
+        try:
+            ctf = int(candle_timeframe_minutes)
+        except (TypeError, ValueError):
+            ctf = None
+    if ctf is not None and ctf > 5 and ctf % 5 == 0:
+        from renaissance_v4.game_theory.candle_timeframe_runtime import rollup_5m_rows_to_candle_timeframe
+
+        rows, rollup_audit = rollup_5m_rows_to_candle_timeframe(
+            list(rows),
+            target_minutes=ctf,
+        )
+        dataset_bars = len(rows)
+        if isinstance(replay_data_audit, dict) and rollup_audit:
+            replay_data_audit = {**replay_data_audit, "candle_timeframe_rollup_v1": rollup_audit}
+        if verbose:
+            print(
+                f"[replay] Candle rollup {ctf}m → {dataset_bars} bars "
+                f"(after calendar-window slice; rollup_applied={rollup_audit.get('rollup_applied')})"
+            )
 
     if dataset_bars < MIN_ROWS_REQUIRED:
         raise RuntimeError(

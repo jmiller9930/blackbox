@@ -1,0 +1,342 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Learning Loop Trace</title>
+  <style>
+    :root {
+      --bg: #0d1117;
+      --panel: #161b22;
+      --border: #30363d;
+      --text: #e6edf3;
+      --muted: #8b949e;
+      --pass: #238636;
+      --fail: #da3633;
+      --partial: #d29922;
+      --skipped: #6e7681;
+      --unknown: #8957e5;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0; font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+      background: var(--bg); color: var(--text); min-height: 100vh;
+    }
+    header.llt-head {
+      padding: 1.1rem 1.25rem; border-bottom: 1px solid var(--border);
+      background: var(--panel);
+    }
+    header.llt-head h1 { margin: 0 0 0.35rem; font-size: 1.25rem; font-weight: 700; letter-spacing: 0.02em; }
+    header.llt-head p.sub { margin: 0; font-size: 0.88rem; color: var(--muted); max-width: 52rem; line-height: 1.45; }
+    .llt-banner {
+      margin-top: 0.85rem; padding: 0.65rem 1rem; border-radius: 8px; font-weight: 800; font-size: 0.95rem;
+      letter-spacing: 0.06em; text-align: center;
+    }
+    .llt-banner--healthy { background: rgba(35, 134, 54, 0.22); color: #56d364; border: 1px solid var(--pass); }
+    .llt-banner--broken { background: rgba(218, 54, 51, 0.15); color: #ff7b72; border: 1px solid var(--fail); }
+    .llt-banner--inconclusive { background: rgba(210, 153, 34, 0.12); color: #e3b341; border: 1px solid var(--partial); }
+    .llt-banner--off { background: rgba(110, 118, 129, 0.2); color: var(--muted); border: 1px solid var(--skipped); }
+    .llt-detail { margin-top: 0.5rem; font-size: 0.82rem; font-weight: 500; color: var(--text); text-align: left; max-width: 52rem; margin-left: auto; margin-right: auto; }
+    .llt-fault-focus {
+      margin-top: 0.75rem; max-width: 52rem; margin-left: auto; margin-right: auto; padding: 0.75rem 1rem;
+      border-radius: 8px; border: 1px solid #a371f7; background: rgba(163, 113, 247, 0.12); font-size: 0.84rem; line-height: 1.45;
+    }
+    .llt-fault-focus strong { color: #d2a8ff; }
+    .llt-fault-focus code { font-size: 0.72rem; }
+    nav.llt-nav {
+      display: flex; flex-wrap: wrap; gap: 0.5rem 0.75rem; align-items: center;
+      padding: 0.65rem 1.25rem; background: #010409; border-bottom: 1px solid var(--border);
+    }
+    nav.llt-nav a, nav.llt-nav button {
+      font-size: 0.82rem; color: #58a6ff; text-decoration: none;
+      background: #21262d; border: 1px solid var(--border); border-radius: 6px; padding: 0.35rem 0.75rem; cursor: pointer;
+    }
+    nav.llt-nav a:hover, nav.llt-nav button:hover { filter: brightness(1.08); }
+    main { padding: 1rem 1.25rem 2.5rem; max-width: 120rem; margin: 0 auto; }
+    .llt-error { color: #ff7b72; padding: 1rem; }
+    .llt-graph {
+      display: flex; flex-direction: row; flex-wrap: wrap; align-items: stretch; justify-content: flex-start;
+      gap: 0.35rem 0.15rem; margin-top: 1rem;
+    }
+    .llt-node-wrap {
+      display: flex; flex-direction: row; align-items: center; gap: 0; flex: 0 1 auto;
+    }
+    .llt-node {
+      width: 11.5rem; min-height: 6.5rem; padding: 0.55rem 0.6rem; border-radius: 10px;
+      background: var(--panel); border: 1px solid var(--border);
+      border-left-width: 5px; display: flex; flex-direction: column; gap: 0.35rem;
+    }
+    .llt-node--pass { border-left-color: var(--pass); }
+    .llt-node--fail { border-left-color: var(--fail); }
+    .llt-node--partial { border-left-color: var(--partial); }
+    .llt-node--skipped { border-left-color: var(--skipped); opacity: 0.92; }
+    .llt-node--unknown { border-left-color: var(--unknown); }
+    .llt-node h3 { margin: 0; font-size: 0.72rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted); }
+    .llt-node .st { font-size: 0.68rem; font-weight: 800; text-transform: uppercase; }
+    .llt-node .st-pass { color: #56d364; }
+    .llt-node .st-fail { color: #ff7b72; }
+    .llt-node .st-partial { color: #e3b341; }
+    .llt-node .st-skipped { color: var(--muted); }
+    .llt-node .st-unknown { color: #d2a8ff; }
+    .llt-node p.sum { margin: 0; font-size: 0.76rem; line-height: 1.38; color: var(--text); flex: 1; }
+    .llt-node details { font-size: 0.68rem; color: var(--muted); }
+    .llt-node details summary { cursor: pointer; color: #58a6ff; }
+    .llt-node pre { margin: 0.25rem 0 0; white-space: pre-wrap; word-break: break-word; font-size: 0.62rem; max-height: 9rem; overflow: auto; }
+    .llt-edge {
+      display: flex; flex-direction: column; align-items: center; justify-content: center; min-width: 1.5rem; padding: 0 0.1rem;
+    }
+    .llt-edge svg { width: 22px; height: 36px; }
+    .llt-edge .cap { font-size: 0.58rem; max-width: 3.2rem; text-align: center; color: var(--muted); line-height: 1.2; margin-top: 2px; }
+    .llt-edge--ok path { stroke: #56d364; }
+    .llt-edge--blocked path { stroke: #ff7b72; }
+    .llt-edge--skipped path { stroke: #6e7681; }
+    .llt-edge--unknown path { stroke: #8957e5; }
+    .llt-legend {
+      margin-top: 1.25rem; font-size: 0.75rem; color: var(--muted); display: flex; flex-wrap: wrap; gap: 0.75rem 1.25rem;
+    }
+    .llt-legend span { display: inline-flex; align-items: center; gap: 0.35rem; }
+    .sw { width: 0.65rem; height: 0.65rem; border-radius: 2px; display: inline-block; }
+  </style>
+</head>
+<body>
+  <header class="llt-head">
+    <h1>Learning Loop Trace</h1>
+    <p class="sub">LangGraph-style visual proof of whether the Student learned or where the loop broke.</p>
+    <div id="lltBanner" class="llt-banner llt-banner--inconclusive" hidden></div>
+    <p id="lltDetail" class="llt-detail" hidden></p>
+    <div id="lltFaultFocus" class="llt-fault-focus" hidden></div>
+  </header>
+  <nav class="llt-nav" aria-label="Trace navigation">
+    <a id="lltBackRuns" href="/#pgStudentTriangleDock">Back to Runs</a>
+    <a id="lltRunSummary" href="#" style="display:none">View Run Summary</a>
+    <a id="lltL3" href="#" style="display:none">View L3 Detail</a>
+    <button type="button" id="lltDownload">Download Trace JSON</button>
+  </nav>
+  <main>
+    <p id="lltMsg" class="llt-error"></p>
+    <div id="lltGraph" class="llt-graph" aria-label="Learning loop execution graph"></div>
+    <div class="llt-legend">
+      <span><i class="sw" style="background:#238636"></i> pass</span>
+      <span><i class="sw" style="background:#da3633"></i> fail / broken</span>
+      <span><i class="sw" style="background:#d29922"></i> partial / uncertain</span>
+      <span><i class="sw" style="background:#6e7681"></i> skipped</span>
+      <span><i class="sw" style="background:#8957e5"></i> unknown</span>
+    </div>
+  </main>
+  <script>
+(function () {
+  function escapeHtml(s) {
+    return String(s)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;');
+  }
+  const params = new URLSearchParams(window.location.search);
+  const jobId = (params.get('job_id') || '').trim();
+  const tradeId = (params.get('trade_id') || '').trim();
+  const msg = document.getElementById('lltMsg');
+  const graph = document.getElementById('lltGraph');
+  const banner = document.getElementById('lltBanner');
+  const detail = document.getElementById('lltDetail');
+  const faultEl = document.getElementById('lltFaultFocus');
+  const dl = document.getElementById('lltDownload');
+  const aSum = document.getElementById('lltRunSummary');
+  const aL3 = document.getElementById('lltL3');
+  let lastPayload = null;
+
+  function bannerClass(b) {
+    const s = String(b || '');
+    if (s.indexOf('HEALTHY') !== -1) return 'llt-banner llt-banner--healthy';
+    if (s.indexOf('NOT CONFIGURED') !== -1) return 'llt-banner llt-banner--off';
+    if (s.indexOf('BROKEN') !== -1) return 'llt-banner llt-banner--broken';
+    return 'llt-banner llt-banner--inconclusive';
+  }
+
+  function nodeClass(st) {
+    const x = String(st || '').toLowerCase();
+    if (x === 'pass') return 'llt-node llt-node--pass';
+    if (x === 'fail') return 'llt-node llt-node--fail';
+    if (x === 'partial') return 'llt-node llt-node--partial';
+    if (x === 'skipped') return 'llt-node llt-node--skipped';
+    return 'llt-node llt-node--unknown';
+  }
+
+  function stClass(st) {
+    const x = String(st || '').toLowerCase();
+    if (x === 'pass') return 'st st-pass';
+    if (x === 'fail') return 'st st-fail';
+    if (x === 'partial') return 'st st-partial';
+    if (x === 'skipped') return 'st st-skipped';
+    return 'st st-unknown';
+  }
+
+  function edgeWrap(flow) {
+    const f = String(flow || '').toLowerCase();
+    let cls = 'llt-edge llt-edge--unknown';
+    if (f === 'ok') cls = 'llt-edge llt-edge--ok';
+    else if (f === 'blocked') cls = 'llt-edge llt-edge--blocked';
+    else if (f === 'skipped') cls = 'llt-edge llt-edge--skipped';
+    return cls;
+  }
+
+  function arrowSvg() {
+    return '<svg viewBox="0 0 24 40" aria-hidden="true"><path d="M4 20 L18 20 M14 14 L20 20 L14 26" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+  }
+
+  function render(data) {
+    graph.innerHTML = '';
+    if (!data || !data.nodes_v1 || !data.nodes_v1.length) return;
+    const edges = data.edges_v1 || [];
+    const edgeMap = {};
+    for (let i = 0; i < edges.length; i++) {
+      const e = edges[i] || {};
+      edgeMap[e.from_node + '>' + e.to_node] = e;
+    }
+    const nodes = data.nodes_v1;
+    for (let i = 0; i < nodes.length; i++) {
+      const n = nodes[i] || {};
+      const wrap = document.createElement('div');
+      wrap.className = 'llt-node-wrap';
+      const card = document.createElement('article');
+      card.className = nodeClass(n.node_status_v1);
+      card.setAttribute('data-node-id', String(n.id || ''));
+      const h = document.createElement('h3');
+      h.textContent = String(n.label || n.id || 'node');
+      const st = document.createElement('div');
+      st.className = stClass(n.node_status_v1);
+      st.textContent = String(n.node_status_v1 || 'unknown');
+      const p = document.createElement('p');
+      p.className = 'sum';
+      p.textContent = String(n.summary_v1 || '');
+      const det = document.createElement('details');
+      const sm = document.createElement('summary');
+      sm.textContent = 'Sources & raw evidence';
+      det.appendChild(sm);
+      const src = document.createElement('p');
+      src.style.margin = '0.2rem 0';
+      src.style.fontSize = '0.62rem';
+      const sf = Array.isArray(n.source_fields_v1) ? n.source_fields_v1.join(', ') : '';
+      src.textContent = 'Fields: ' + (sf || '—');
+      det.appendChild(src);
+      const pre = document.createElement('pre');
+      pre.textContent = JSON.stringify(n.evidence_v1 != null ? n.evidence_v1 : {}, null, 2);
+      det.appendChild(pre);
+      card.appendChild(h);
+      card.appendChild(st);
+      card.appendChild(p);
+      card.appendChild(det);
+      wrap.appendChild(card);
+      if (i < nodes.length - 1) {
+        const next = nodes[i + 1] || {};
+        const ek = String(n.id) + '>' + String(next.id);
+        const e = edgeMap[ek] || {};
+        const edge = document.createElement('div');
+        edge.className = edgeWrap(e.edge_flow_v1);
+        edge.innerHTML = arrowSvg() + '<span class="cap" title="' + String(e.detail_v1 || '').replace(/"/g, '&quot;') + '">' + String(e.edge_flow_v1 || '?') + '</span>';
+        wrap.appendChild(edge);
+      }
+      graph.appendChild(wrap);
+    }
+  }
+
+  async function load() {
+    if (!jobId) {
+      msg.textContent = 'Missing job_id — open this page from the Student panel via “View Learning Trace”, or append ?job_id=YOUR_RUN_ID to the URL.';
+      return;
+    }
+    msg.textContent = 'Loading trace…';
+    let data;
+    try {
+      const r = await fetch('/api/student-panel/run/' + encodeURIComponent(jobId) + '/learning-loop-trace');
+      data = await r.json();
+    } catch (e) {
+      msg.textContent = 'Network error loading trace.';
+      return;
+    }
+    lastPayload = data;
+    msg.textContent = '';
+    if (!data.ok && data.error) {
+      msg.textContent = String(data.error);
+      banner.hidden = false;
+      banner.className = bannerClass(data.learning_loop_health_banner_v1 || 'LEARNING LOOP INCONCLUSIVE');
+      banner.textContent = String(data.learning_loop_health_banner_v1 || 'LEARNING LOOP INCONCLUSIVE');
+      detail.hidden = false;
+      detail.textContent = String(data.learning_loop_health_detail_v1 || '');
+      const ff0 = data.fault_focus_v1;
+      if (ff0 && faultEl) {
+        faultEl.hidden = false;
+        faultEl.innerHTML =
+          '<strong>Fault focus (human + AI)</strong><p style="margin:0.35rem 0 0">' +
+          escapeHtml(String(ff0.headline_one_liner_v1 || '—')) +
+          '</p>';
+      }
+      return;
+    }
+    banner.hidden = false;
+    banner.className = bannerClass(data.learning_loop_health_banner_v1);
+    banner.textContent = String(data.learning_loop_health_banner_v1 || '');
+    detail.hidden = false;
+    detail.textContent = String(data.learning_loop_health_detail_v1 || '');
+    const ff = data.fault_focus_v1;
+    if (ff && faultEl) {
+      faultEl.hidden = false;
+      var floor = ff.intelligence_floor_trade_win_v1;
+      var floorHtml = '';
+      if (floor && typeof floor === 'object' && floor.code) {
+        floorHtml =
+          '<p style="margin:0.4rem 0 0;font-size:0.78rem"><strong>' +
+          escapeHtml(String(floor.code)) +
+          '</strong> — ' +
+          escapeHtml(String(floor.detail || '')) +
+          '</p>';
+      }
+      faultEl.innerHTML =
+        '<strong>Fault focus (human + AI)</strong><p style="margin:0.35rem 0 0">' +
+        escapeHtml(String(ff.headline_one_liner_v1 || '—')) +
+        '</p>' +
+        (ff.first_failed_node_id
+          ? '<p style="margin:0.35rem 0 0;font-size:0.78rem">First failed node: <code>' +
+            escapeHtml(String(ff.first_failed_node_id)) +
+            '</code></p>'
+          : '') +
+        floorHtml +
+        '<p style="margin:0.45rem 0 0;font-size:0.72rem;opacity:0.9">' +
+        escapeHtml(String(ff.for_collaboration_v1 || '')) +
+        '</p>';
+    }
+    render(data);
+    if (jobId) {
+      aSum.href = '/#pgStudentTriangleDock';
+      aSum.style.display = 'inline-block';
+      aSum.title =
+        'Opens Pattern Machine → Student fold. Re-open the same run (' +
+        jobId +
+        ') for Level 2 run summary + carousel.';
+      aL3.href = '/#pgStudentTriangleDock';
+      aL3.style.display = 'inline-block';
+      aL3.title = tradeId
+        ? 'Student fold: pick run ' +
+          jobId +
+          ', then trade ' +
+          tradeId +
+          ' for Level 3 (same host; hash opens fold).'
+        : 'Student fold: pick this run, then a trade card for Level 3 deep dive.';
+    }
+  }
+
+  document.getElementById('lltDownload').addEventListener('click', function () {
+    if (!lastPayload) return;
+    const blob = new Blob([JSON.stringify(lastPayload, null, 2)], { type: 'application/json' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'learning_loop_trace_' + (jobId || 'unknown') + '.json';
+    a.click();
+    URL.revokeObjectURL(a.href);
+  });
+
+  load();
+})();
+  </script>
+</body>
+</html>

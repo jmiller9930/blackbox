@@ -91,19 +91,39 @@ def _pattern_label(row: dict[str, Any]) -> str:
 
 
 def _evaluation_window_label(row: dict[str, Any]) -> str:
+    mo: str | None = None
     oba = row.get("operator_batch_audit")
     if isinstance(oba, dict):
         m = oba.get("evaluation_window_effective_calendar_months")
         if m is not None:
-            return f"{m} mo"
+            mo = f"{m} mo"
+        ctf = oba.get("candle_timeframe_minutes")
+        try:
+            cti = int(ctf) if ctf is not None else 5
+        except (TypeError, ValueError):
+            cti = 5
+        if mo and cti > 5:
+            lab = oba.get("candle_timeframe_label") or f"{cti}m"
+            return f"{mo} · {lab}"
+        if mo:
+            return mo
     la = row.get("learning_audit_v1")
     if isinstance(la, dict):
         ew = la.get("evaluation_window")
         if isinstance(ew, dict):
             cm = ew.get("calendar_months")
             if cm is not None:
-                return f"{cm} mo"
-    return "—"
+                mo2 = f"{cm} mo"
+                ctf2 = ew.get("candle_timeframe_minutes")
+                try:
+                    cti2 = int(ctf2) if ctf2 is not None else 5
+                except (TypeError, ValueError):
+                    cti2 = 5
+                if cti2 > 5:
+                    lab2 = ew.get("candle_timeframe_label") or f"{cti2}m"
+                    return f"{mo2} · {lab2}"
+                return mo2
+    return mo or "—"
 
 
 def _groundhog_active_for_d11(row: dict[str, Any]) -> bool:

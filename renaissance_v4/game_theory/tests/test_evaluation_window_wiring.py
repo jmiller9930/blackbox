@@ -48,9 +48,43 @@ def test_prepare_parallel_pattern_learning_default_window() -> None:
     assert prep["ok"] is True
     assert prep["operator_batch_audit"]["operator_recipe_id"] == "pattern_learning"
     assert prep["operator_batch_audit"]["evaluation_window_effective_calendar_months"] == 12
+    assert prep["operator_batch_audit"]["trade_window_mode"] == "5m"
+    assert prep["operator_batch_audit"]["candle_timeframe_minutes"] == 5
     assert prep["operator_batch_audit"]["window_overrode_recipe_default"] is False
     assert len(prep["scenarios"]) == 1
     assert prep["scenarios"][0].get("goal_v2") is not None
+    ew = prep["scenarios"][0]["evaluation_window"]
+    assert ew.get("candle_timeframe_minutes") == 5
+
+
+def test_prepare_parallel_trade_window_1h() -> None:
+    prep = _prepare_parallel_payload(
+        {
+            "operator_recipe_id": "pattern_learning",
+            "evaluation_window_mode": "12",
+            "evaluation_window_custom_months": None,
+            "trade_window_mode": "1h",
+            "scenarios_json": "[]",
+        }
+    )
+    assert prep["ok"] is True
+    assert prep["operator_batch_audit"]["trade_window_mode"] == "1h"
+    assert prep["operator_batch_audit"]["candle_timeframe_minutes"] == 60
+    assert prep["scenarios"][0]["evaluation_window"]["candle_timeframe_minutes"] == 60
+
+
+def test_prepare_parallel_invalid_trade_window() -> None:
+    prep = _prepare_parallel_payload(
+        {
+            "operator_recipe_id": "pattern_learning",
+            "evaluation_window_mode": "12",
+            "trade_window_mode": "30m",
+            "scenarios_json": "[]",
+        }
+    )
+    assert prep["ok"] is False
+    err = str(prep.get("error") or "").lower()
+    assert "trade_window" in err or "5m" in err
 
 
 def test_prepare_parallel_override_24_months() -> None:

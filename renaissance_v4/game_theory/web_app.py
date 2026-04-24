@@ -1,8 +1,9 @@
 """
-Local web UI for **Pattern Machine learning**: **curated operator recipes** + **evaluation window**, or **Custom JSON**,
-then Run (parallel workers). Recipes are defined in ``operator_recipes.py`` (not a glob of every file
-in ``examples/``). The evaluation window (12 / 18 / 24 / custom months) is merged into each scenario
-and drives **replay bar slicing** in ``run_manifest_replay`` (see ``replay_data_audit`` on results).
+Local web UI for **Pattern Machine learning**: **curated operator recipes** + **evaluation window**
+(months) + **trade window** (candle rollup 5m / 15m / 1h / 4h), or **Custom JSON**, then Run (parallel workers).
+Recipes are defined in ``operator_recipes.py`` (not a glob of every file in ``examples/``). The evaluation window
+is merged into each scenario and drives **calendar tape slicing**; trade window drives **OHLCV rollup from
+``market_bars_5m``** before ``run_manifest_replay`` (see ``replay_data_audit`` / ``candle_timeframe_rollup_v1``).
 
 Batches use **``POST /api/run-parallel/start``** + polling **``GET /api/run-parallel/status/<job_id>``**
 (or **``GET /api/run-status/<job_id>``**, same payload) so the UI shows **per-scenario progress** plus
@@ -29,6 +30,8 @@ counts, **run_ok_pct**, **referee_win_pct**, **avg_trade_win_pct**) and expose `
 ``GET /api/student-panel/l1-road`` (**GT_DIRECTIVE_016** — full road payload, same aggregation),
 ``GET /api/student-panel/run/<job_id>/decisions``, ``GET /api/student-panel/run/<job_id>/l3?trade_id=`` (**GT_DIRECTIVE_017** — L3 envelope + structured ``data_gaps[]``),
 ``GET /api/student-panel/run/<job_id>/learning`` (**GT_DIRECTIVE_018** — memory promotion / retrieval eligibility),
+``GET /api/student-panel/run/<job_id>/learning-loop-trace`` — LangGraph-style **learning loop trace** JSON (nodes, edges, blunt health banner); operator page ``GET /learning-loop-trace?job_id=…``,
+``GET /api/training-exam-audit/<job_id>`` — deterministic ``training_exam_audit_v1`` for one scorecard line (learning vs harness vs missing seam; rebuilds from fields if older lines lack the block),
 ``GET /api/student-panel/decision?job_id=&trade_id=`` (``decision_id`` accepted as alias for migration).
 ``GET /api/training/export`` (**GT_DIRECTIVE_022** — promoted-only training export preview / download); ``POST /api/training/export/materialize`` (typed confirm writes ``training_dataset_v1.jsonl``).
 ``GET /api/training/learning-effectiveness`` (**GT_DIRECTIVE_023** — read-only effectiveness audit JSON); ``POST /api/training/learning-effectiveness/materialize`` (typed confirm writes ``learning_effectiveness_report_v1.json``).
@@ -121,7 +124,7 @@ _PATTERN_BANNER_WEBP_PATH = _RV4_ROOT / "assets" / "pattern.webp"
 _PATTERN_GAME_BANNER_BOOT_JS = _GAME_THEORY / "static" / "pattern_game_banner_boot.js"
 
 # Operator-visible web UI bundle version — bump when changing PAGE_HTML (HTML/CSS/JS) so deploys are provable.
-PATTERN_GAME_WEB_UI_VERSION = "2.19.77"
+PATTERN_GAME_WEB_UI_VERSION = "2.19.81"
 
 from renaissance_v4.game_theory.context_signature_memory import truncate_context_signature_memory_store
 from renaissance_v4.game_theory.groundhog_memory import (
@@ -162,7 +165,13 @@ from renaissance_v4.game_theory.student_panel_d13 import (
     build_d13_selected_run_payload_v1,
     build_student_decision_record_v1,
 )
+from renaissance_v4.game_theory.scorecard_drill import find_scorecard_entry_by_job_id
 from renaissance_v4.game_theory.student_panel_d14 import enrich_student_panel_run_rows_d14
+from renaissance_v4.game_theory.training_exam_audit_v1 import build_training_exam_audit_v1
+from renaissance_v4.game_theory.learning_loop_trace_v1 import (
+    build_learning_loop_trace_v1,
+    read_learning_loop_trace_page_html_v1,
+)
 from renaissance_v4.game_theory.student_panel_l1_road_v1 import build_l1_road_payload_v1
 from renaissance_v4.game_theory.student_panel_l3_datagap_matrix_v1 import build_student_panel_l3_payload_v1
 from renaissance_v4.game_theory.student_proctor.learning_memory_promotion_v1 import (
@@ -259,6 +268,10 @@ from renaissance_v4.game_theory.live_telemetry_v1 import (
     clear_job_telemetry_files,
     default_telemetry_dir,
     read_job_telemetry_v1,
+)
+from renaissance_v4.game_theory.candle_timeframe_runtime import (
+    annotate_scenarios_with_candle_timeframe,
+    resolve_ui_trade_window,
 )
 from renaissance_v4.game_theory.evaluation_window_runtime import (
     annotate_scenarios_with_window_and_recipe,
@@ -417,6 +430,12 @@ def _prepare_parallel_payload(data: dict[str, Any]) -> dict[str, Any]:
     except ValueError as e:
         return {"ok": False, "error": str(e)}
 
+    tw_mode = (data.get("trade_window_mode") or "5m").strip().lower()
+    try:
+        tw_resolved = resolve_ui_trade_window(tw_mode)
+    except ValueError as e:
+        return {"ok": False, "error": str(e)}
+
     health = get_data_health()
     cap = health.get("max_evaluation_window_calendar_months")
     req_m = int(resolved["effective_calendar_months"])
@@ -478,6 +497,7 @@ def _prepare_parallel_payload(data: dict[str, Any]) -> dict[str, Any]:
         recipe_default_calendar_months=recipe_default_months,
         resolved=resolved,
     )
+    annotate_scenarios_with_candle_timeframe(scenarios, resolved=tw_resolved)
 
     _root_for_upload = operator_upload_repo_root()
     use_up = data.get("use_operator_uploaded_strategy")
@@ -561,6 +581,9 @@ def _prepare_parallel_payload(data: dict[str, Any]) -> dict[str, Any]:
         "policy_framework_audit": scenarios[0].get("policy_framework_audit") if scenarios else None,
         "context_signature_memory_mode": cmem_in or None,
         "operator_upload_manifest_repo_relative": operator_upload_manifest_repo_relative,
+        "trade_window_mode": tw_resolved["trade_window_mode"],
+        "candle_timeframe_minutes": int(tw_resolved["candle_timeframe_minutes"]),
+        "candle_timeframe_label": tw_resolved.get("candle_timeframe_label"),
     }
 
     if cmem_in in ("off", "read", "read_write"):
@@ -664,6 +687,7 @@ def _telemetry_context_for_parallel_job(operator_batch_audit: dict[str, Any]) ->
         "evaluation_window_calendar_months": operator_batch_audit.get(
             "evaluation_window_effective_calendar_months"
         ),
+        "candle_timeframe_minutes": operator_batch_audit.get("candle_timeframe_minutes"),
         "learning_path_mode": (
             "operator_harness_candidate_search" if harness else "baseline_replay_only"
         ),
@@ -1970,6 +1994,30 @@ def create_app() -> Flask:
     def api_student_panel_run_learning_gt018(job_id: str) -> Any:
         """GT_DIRECTIVE_018 — run-level learning governance, store presence, retrieval eligibility."""
         return jsonify(build_student_panel_run_learning_payload_v1(job_id.strip())), 200
+
+    @app.get("/api/student-panel/run/<job_id>/learning-loop-trace")
+    def api_student_panel_learning_loop_trace_v1(job_id: str) -> Any:
+        """Learning Loop Trace — graph-shaped JSON for operator engine-health (Student path)."""
+        return jsonify(build_learning_loop_trace_v1(job_id.strip())), 200
+
+    @app.get("/learning-loop-trace")
+    def page_learning_loop_trace_v1() -> Any:
+        """Standalone visual trace page (loads JSON from learning-loop-trace API)."""
+        return Response(read_learning_loop_trace_page_html_v1(), mimetype="text/html; charset=utf-8")
+
+    @app.get("/api/training-exam-audit/<job_id>")
+    def api_training_exam_audit_v1(job_id: str) -> Any:
+        """One scorecard line → ``training_exam_audit_v1`` (verdict + checks + troubleshooting)."""
+        jid = job_id.strip()
+        if not jid:
+            return jsonify({"ok": False, "error": "job_id required"}), 400
+        entry = find_scorecard_entry_by_job_id(jid)
+        if not entry:
+            return jsonify({"ok": False, "error": "Unknown job_id"}), 404
+        aud = entry.get("training_exam_audit_v1")
+        if not isinstance(aud, dict):
+            aud = build_training_exam_audit_v1(entry)
+        return jsonify({"ok": True, "schema": "training_exam_audit_api_v1", "job_id": jid, "training_exam_audit_v1": aud})
 
     @app.get("/api/student-panel/decision")
     def api_student_panel_decision_detail_d11() -> Any:
@@ -3346,6 +3394,27 @@ PAGE_HTML = """<!DOCTYPE html>
       cursor: pointer;
     }
     .pg-student-d11-nav button:hover { border-color: rgba(47, 127, 121, 0.45); }
+    a.pg-student-d11-trace {
+      font-size: 0.78rem;
+      padding: 4px 10px;
+      border-radius: 6px;
+      border: 1px solid rgba(47, 127, 121, 0.55);
+      background: rgba(47, 127, 121, 0.14);
+      color: var(--pg-ink);
+      text-decoration: none;
+      font-weight: 650;
+      white-space: nowrap;
+    }
+    a.pg-student-d11-trace:hover { border-color: rgba(47, 127, 121, 0.75); }
+    .pg-student-d11-trace--disabled {
+      font-size: 0.78rem;
+      padding: 4px 10px;
+      border-radius: 6px;
+      border: 1px dashed var(--pg-line);
+      color: var(--pg-muted);
+      opacity: 0.75;
+      white-space: nowrap;
+    }
     .pg-student-d11-scroll {
       flex: 1;
       min-height: 0;
@@ -3360,7 +3429,29 @@ PAGE_HTML = """<!DOCTYPE html>
       margin: 0 0 8px;
       line-height: 1.35;
     }
-    .pg-student-d11-table-wrap { overflow: auto; max-width: 100%; }
+    .pg-student-d11-table-wrap { overflow: auto; max-width: 100%; position: relative; }
+    /* Keep remove control visible — wide L1 tables scroll horizontally. */
+    .pg-student-d11-table thead th.pg-student-d11-sticky-actions,
+    .pg-student-d11-table tbody td.pg-student-d11-sticky-actions {
+      position: sticky;
+      right: 0;
+      z-index: 2;
+      background: var(--pg-surface-strong);
+      box-shadow: -8px 0 12px rgba(35, 44, 56, 0.07);
+    }
+    .pg-student-d11-table thead th.pg-student-d11-sticky-actions { z-index: 3; }
+    .pg-student-d11-table tbody tr:nth-child(even) td.pg-student-d11-sticky-actions {
+      background: rgba(120, 175, 235, 0.12);
+    }
+    .pg-student-d11-table tbody tr[data-run-inflight] td.pg-student-d11-sticky-actions {
+      background: rgba(70, 78, 95, 0.55);
+    }
+    .pg-student-d11-table tbody tr[data-run-row]:nth-child(odd):hover td.pg-student-d11-sticky-actions {
+      background: rgba(30, 214, 170, 0.12);
+    }
+    .pg-student-d11-table tbody tr[data-run-row]:nth-child(even):hover td.pg-student-d11-sticky-actions {
+      background: rgba(30, 214, 170, 0.16);
+    }
     .pg-student-d11-table {
       width: 100%;
       border-collapse: collapse;
@@ -3940,6 +4031,12 @@ PAGE_HTML = """<!DOCTYPE html>
       gap: 8px;
     }
     .pg-controls-run-row .pg-op-btn--run { width: 100%; }
+    .pg-controls-run-row #parallelCancelBtn {
+      width: 100%;
+      max-width: 340px;
+      align-self: stretch;
+      box-sizing: border-box;
+    }
     details.pg-controls-advanced {
       margin-top: 10px;
       border: 1px dashed rgba(30, 58, 95, 0.35);
@@ -5064,7 +5161,7 @@ PAGE_HTML = """<!DOCTYPE html>
             <span class="ui-version" title="Bump PATTERN_GAME_WEB_UI_VERSION in web_app.py">v__PATTERN_GAME_WEB_UI_VERSION__</span></h1>
           <button type="button" class="pg-howto-btn" id="pgHowToOpenBtn" aria-haspopup="dialog" aria-controls="pgHowToDialog">How to use</button>
         </div>
-        <p class="pg-lead-short">Choose pattern, evaluation window, then <strong>Run exam</strong>. Status cards above update live.</p>
+        <p class="pg-lead-short">Choose pattern, evaluation window, trade window (candle rollup), then <strong>Run exam</strong>. Status cards above update live.</p>
       </div>
       <div class="pg-banner-strip">
         <div class="pg-banner-stat">
@@ -5164,7 +5261,7 @@ PAGE_HTML = """<!DOCTYPE html>
           <div class="pg-panel-header" style="margin:0;flex:1">
             <div>
               <h2 class="pg-panel-h">Controls</h2>
-              <p class="pg-panel-sub">Pattern · evaluation window · Run</p>
+              <p class="pg-panel-sub">Pattern · windows · Run</p>
             </div>
           </div>
         </summary>
@@ -5183,6 +5280,13 @@ PAGE_HTML = """<!DOCTYPE html>
               <option value="18">18 months</option>
               <option value="24">24 months</option>
               <option value="custom">Custom…</option>
+            </select>
+            <label for="tradeWindowPick">Trade window</label>
+            <select id="tradeWindowPick" aria-describedby="presetHelp" title="Candle rollup: each replay bar is this wide (from 5m base data)">
+              <option value="5m" selected>5m</option>
+              <option value="15m">15m</option>
+              <option value="1h">1 hour</option>
+              <option value="4h">4 hours</option>
             </select>
             <div id="customMonthsWrap" class="pg-controls-span-2" style="display:none">
               <div class="pg-controls-min-grid" style="grid-template-columns:minmax(7.5rem,38%) 1fr">
@@ -5222,6 +5326,7 @@ PAGE_HTML = """<!DOCTYPE html>
           </div>
           <div class="pg-controls-run-row">
             <button type="button" id="runBtn" class="pg-op-btn pg-op-btn--run" data-label-idle="Run exam">Run exam</button>
+            <button type="button" id="parallelCancelBtn" class="btn-secondary" style="display:none" title="Stop scheduling new scenarios; workers already running may still finish">Cancel batch</button>
           </div>
         </div>
 
@@ -5269,7 +5374,6 @@ PAGE_HTML = """<!DOCTYPE html>
           <div class="run-actions">
             <div class="status-stack">
               <div id="statusLine" aria-live="polite"></div>
-              <button type="button" id="parallelCancelBtn" class="btn-secondary" style="display:none;margin-top:8px" title="Stop scheduling new scenarios; workers already running may still finish">Cancel batch</button>
               <div id="batchConcurrencyBanner" class="batch-concurrency-banner" aria-live="polite"></div>
               <div id="progressWrap" class="progress-wrap" role="progressbar" aria-label="Batch replay progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
                 <div class="progress-track" id="progressTrack"><div class="progress-fill" id="progressFill" style="width:0%"></div></div>
@@ -5294,7 +5398,7 @@ PAGE_HTML = """<!DOCTYPE html>
                 <p><strong>Modules row / banner</strong> — Groundhog uses green / amber / red: <strong>Ready</strong> when auto-merge is allowed and the container has promoted ATR values (after a successful batch, or manual POST); <strong>Wait</strong> when the file is missing or apply block incomplete; <strong>Opt-out</strong> when <code>PATTERN_GAME_GROUNDHOG_BUNDLE=0</code>; <strong>Fault</strong> when the file is unreadable or invalid JSON. Hover the Groundhog banner tile for the full line.</p>
               </div>
             </details>
-            <p class="caps" id="presetHelp">The server builds scenarios for curated patterns — no JSON required. Evaluation window controls how much tape is replayed (approximate months from the end of the series). Presets longer than your <code>market_bars_5m</code> span are disabled automatically (see Data health).</p>
+            <p class="caps" id="presetHelp">The server builds scenarios for curated patterns — no JSON required. <strong>Evaluation window</strong> is calendar months of tape from the end of the series. <strong>Trade window</strong> is candle rollup (5m / 15m / 1h / 4h): replay rolls up <code>market_bars_5m</code> into wider OHLCV bars before the Referee loop. Presets longer than your tape span are disabled automatically (see Data health).</p>
             <div id="patternModeExplanation" class="pg-pattern-mode-explanation" role="region" aria-label="What the selected pattern does">
               <div id="patternModeExplanationBody">Loading…</div>
             </div>
@@ -5304,6 +5408,7 @@ PAGE_HTML = """<!DOCTYPE html>
                 <dt>Pattern</dt><dd id="runConfigPattern">—</dd>
                 <dt>Policy</dt><dd id="runConfigPolicy">—</dd>
                 <dt>Evaluation window</dt><dd id="runConfigWindow">—</dd>
+                <dt>Trade window</dt><dd id="runConfigTradeWindow">—</dd>
                 <dt>Goal</dt><dd id="runConfigGoalSummary">—</dd>
               </dl>
             </div>
@@ -5831,6 +5936,12 @@ PAGE_HTML = """<!DOCTYPE html>
       }
       return String(w.value) + ' months';
     }
+    function tradeWindowLabel() {
+      const tw = document.getElementById('tradeWindowPick');
+      if (!tw || !tw.options) return '—';
+      const o = tw.options[tw.selectedIndex];
+      return (o && o.text) ? String(o.text).trim() : String(tw.value || '—');
+    }
     function fmtTelemetryHMS(sec) {
       const s = Math.max(0, Math.floor(Number(sec) || 0));
       const h = Math.floor(s / 3600);
@@ -6042,7 +6153,9 @@ PAGE_HTML = """<!DOCTYPE html>
       );
     }
 
-    function renderStudentPanelD11Chrome(level, bcParts, showNav) {
+    function renderStudentPanelD11Chrome(level, bcParts, showNav, traceRunId) {
+      var traceRid =
+        traceRunId != null && String(traceRunId).trim() ? String(traceRunId).trim() : '';
       let bc = '<nav class="pg-student-d11-bc" aria-label="D11 location">';
       if (Array.isArray(bcParts) && bcParts.length) {
         for (var i = 0; i < bcParts.length; i++) {
@@ -6063,6 +6176,20 @@ PAGE_HTML = """<!DOCTYPE html>
       if (showNav && level === 3) {
         nav +=
           '<button type="button" id="pgStudentD11BackStrip">← Trade carousel</button>';
+      }
+      if (traceRid) {
+        var traceUrl = '/learning-loop-trace?job_id=' + encodeURIComponent(traceRid);
+        if (level === 3 && studentPanelD11 && studentPanelD11.selectedDecisionId) {
+          traceUrl +=
+            '&trade_id=' + encodeURIComponent(String(studentPanelD11.selectedDecisionId));
+        }
+        nav +=
+          '<a class="pg-student-d11-trace" href="' +
+          traceUrl +
+          '" target="_blank" rel="noopener noreferrer">View Learning Trace</a>';
+      } else {
+        nav +=
+          '<span class="pg-student-d11-trace pg-student-d11-trace--disabled" title="Select an exam row on Level 1 (or open Level 2 / 3 for a run) to enable the trace link">View Learning Trace</span>';
       }
       nav += '</div>';
       return bc + nav;
@@ -6294,7 +6421,7 @@ PAGE_HTML = """<!DOCTYPE html>
       const root = studentPanelD11RootEl();
       if (!root) return;
       const loading = studentPanelD11Layout(
-        renderStudentPanelD11Chrome(2, ['<strong>Exam list</strong>', 'Loading…'], true),
+        renderStudentPanelD11Chrome(2, ['<strong>Exam list</strong>', 'Loading…'], true, runId),
         '<p class="caps" style="margin:0">Loading run summary and trades…</p>'
       );
       root.innerHTML = loading;
@@ -6306,7 +6433,7 @@ PAGE_HTML = """<!DOCTYPE html>
         );
       } catch (e) {
         root.innerHTML = studentPanelD11Layout(
-          renderStudentPanelD11Chrome(2, ['<strong>Exam list</strong>', '<strong>Run</strong> ' + escapeHtml(studentPanelD11ShortRunId(runId))], true),
+          renderStudentPanelD11Chrome(2, ['<strong>Exam list</strong>', '<strong>Run</strong> ' + escapeHtml(studentPanelD11ShortRunId(runId))], true, runId),
           '<p class="caps" style="margin:0;color:#a32b2b">Failed to load run: ' + escapeHtml(String(e)) + '</p>'
         );
         studentPanelD11WireChrome();
@@ -6314,7 +6441,7 @@ PAGE_HTML = """<!DOCTYPE html>
       }
       if (!j || !j.ok) {
         root.innerHTML = studentPanelD11Layout(
-          renderStudentPanelD11Chrome(2, ['<strong>Exam list</strong>', '<strong>Run</strong> ' + escapeHtml(studentPanelD11ShortRunId(runId))], true),
+          renderStudentPanelD11Chrome(2, ['<strong>Exam list</strong>', '<strong>Run</strong> ' + escapeHtml(studentPanelD11ShortRunId(runId))], true, runId),
           '<p class="caps" style="margin:0;color:#a32b2b">' +
             escapeHtml((j && j.error) || 'run payload unavailable') +
             '</p>'
@@ -6377,7 +6504,8 @@ PAGE_HTML = """<!DOCTYPE html>
           renderStudentPanelD11Chrome(
             2,
             ['<strong>Exam list</strong>', '<strong>Run</strong> ' + escapeHtml(studentPanelD11ShortRunId(runId))],
-            true
+            true,
+            runId
           ),
           scroll
         );
@@ -6456,7 +6584,8 @@ PAGE_HTML = """<!DOCTYPE html>
       const chrome = renderStudentPanelD11Chrome(
         2,
         ['<strong>Exam list</strong>', '<strong>Run</strong> ' + escapeHtml(studentPanelD11ShortRunId(runId))],
-        true
+        true,
+        runId
       );
       root.innerHTML = studentPanelD11Layout(chrome, scroll);
       studentPanelD11WireChrome();
@@ -6544,7 +6673,8 @@ PAGE_HTML = """<!DOCTYPE html>
             '<strong>Run</strong> ' + escapeHtml(studentPanelD11ShortRunId(runId)),
             '<strong>Trade</strong> ' + escapeHtml(tidDisp),
           ],
-          true
+          true,
+          runId
         ),
         '<p class="caps" style="margin:0">Loading L3 (<code>student_panel_l3_response_v1</code>)…</p>'
       );
@@ -6566,7 +6696,8 @@ PAGE_HTML = """<!DOCTYPE html>
               '<strong>Run</strong> ' + escapeHtml(studentPanelD11ShortRunId(runId)),
               '<strong>Trade</strong> ' + escapeHtml(tidDisp),
             ],
-            true
+            true,
+            runId
           ),
           '<p class="caps" style="margin:0;color:#a32b2b">Load failed: ' + escapeHtml(String(e)) + '</p>'
         );
@@ -6582,7 +6713,8 @@ PAGE_HTML = """<!DOCTYPE html>
               '<strong>Run</strong> ' + escapeHtml(studentPanelD11ShortRunId(runId)),
               '<strong>Trade</strong> ' + escapeHtml(tidDisp),
             ],
-            true
+            true,
+            runId
           ),
           '<p class="caps" style="margin:0;color:#a32b2b">' +
             escapeHtml((l3 && l3.error) || 'record unavailable') +
@@ -6782,7 +6914,8 @@ PAGE_HTML = """<!DOCTYPE html>
             '<strong>Run</strong> ' + escapeHtml(studentPanelD11ShortRunId(runId)),
             '<strong>Trade</strong> ' + escapeHtml(tidDisp),
           ],
-          true
+          true,
+          runId
         ),
         inner
       );
@@ -6914,15 +7047,33 @@ PAGE_HTML = """<!DOCTYPE html>
       return h;
     }
 
-    async function refreshStudentPanelD11() {
+    async function refreshStudentPanelD11(opts) {
+      const o = opts && typeof opts === 'object' ? opts : {};
+      const softRefresh = o.soft === true;
       const root = studentPanelD11RootEl();
       if (!root) return;
       if (studentPanelD11.level !== 1) return;
-      const chrome1 = renderStudentPanelD11Chrome(1, ['<strong>Exam list</strong>'], false);
-      root.innerHTML = studentPanelD11Layout(
-        chrome1,
-        '<p class="caps" style="margin:0">Loading runs…</p>'
+      const chrome1 = renderStudentPanelD11Chrome(
+        1,
+        ['<strong>Exam list</strong>'],
+        false,
+        studentPanelD11.lastVisitedRunId || ''
       );
+      let prevScrollTop = 0;
+      let prevScrollLeft = 0;
+      if (softRefresh) {
+        const wrapPrev = root.querySelector('.pg-student-d11-table-wrap');
+        if (wrapPrev) {
+          prevScrollTop = wrapPrev.scrollTop;
+          prevScrollLeft = wrapPrev.scrollLeft;
+        }
+      }
+      if (!softRefresh) {
+        root.innerHTML = studentPanelD11Layout(
+          chrome1,
+          '<p class="caps" style="margin:0">Loading runs…</p>'
+        );
+      }
       let j = null;
       try {
         j = await pgStudentPanelJsonGet('/api/student-panel/runs?limit=50');
@@ -6988,7 +7139,7 @@ PAGE_HTML = """<!DOCTYPE html>
         '<th title="SH: student handoff — YES if learning rows were appended or retrieval matched this run">SH</th>' +
         '<th title="outΔ: outcome improved — YES/NO if L1 economic scalar (exam E or batch expectancy) vs prior same-fingerprint run">outΔ</th>' +
         '<th title="GH: Groundhog state — memory / recall tier label for attribution">GH</th>' +
-        '<th title="Remove run from scorecard only (D14)"> </th>' +
+        '<th class="pg-student-d11-sticky-actions" title="Remove run from scorecard only (D14)">×</th>' +
         '</tr></thead><tbody>';
       for (let i = 0; i < rows.length; i++) {
         const row = rows[i] || {};
@@ -7130,7 +7281,7 @@ PAGE_HTML = """<!DOCTYPE html>
           escapeHtml(String(row.groundhog_state || '—')) +
           '</td>';
         scroll +=
-          '<td>' +
+          '<td class="pg-student-d11-sticky-actions">' +
           (infl
             ? '<button type="button" class="pg-student-d11-row-del" disabled title="Cannot delete until this exam completes">×</button>'
             : '<button type="button" class="pg-student-d11-row-del" data-run-id="' +
@@ -7148,6 +7299,15 @@ PAGE_HTML = """<!DOCTYPE html>
       }
       root.innerHTML = studentPanelD11Layout(chrome1, scroll);
       studentPanelD11WireChrome();
+      if (softRefresh && (prevScrollTop > 0 || prevScrollLeft > 0)) {
+        requestAnimationFrame(function () {
+          const wrapNext = root.querySelector('.pg-student-d11-table-wrap');
+          if (wrapNext) {
+            wrapNext.scrollTop = prevScrollTop;
+            wrapNext.scrollLeft = prevScrollLeft;
+          }
+        });
+      }
       const trs = root.querySelectorAll('tr[data-run-row]');
       trs.forEach(function (tr) {
         tr.addEventListener('click', function (ev) {
@@ -7188,7 +7348,7 @@ PAGE_HTML = """<!DOCTYPE html>
                 btn.disabled = false;
                 return;
               }
-              void refreshStudentPanelD11();
+              void refreshStudentPanelD11({ soft: true });
             })
             .catch(function () {
               alert('Delete failed (network)');
@@ -7220,7 +7380,7 @@ PAGE_HTML = """<!DOCTYPE html>
           (String(msg || '').length > 400 ? '…' : '') +
           '</span>';
       }
-      void refreshStudentPanelD11();
+      void refreshStudentPanelD11({ soft: true });
     }
     function renderStudentTriangleFromBatchResult(data) {
       const hoBox = document.getElementById('pgDevStudentSeamInner');
@@ -7232,13 +7392,13 @@ PAGE_HTML = """<!DOCTYPE html>
           '<p class="caps" style="margin:0">Student handoff <strong>skipped</strong>: ' +
           escapeHtml(String((handoff.reason != null && handoff.reason !== '') ? handoff.reason : '—')) +
           '</p>';
-        void refreshStudentPanelD11();
+        void refreshStudentPanelD11({ soft: true });
         return;
       }
       if (!handoff || typeof handoff !== 'object') {
         hoBox.innerHTML =
           '<p class="caps" style="margin:0">No <code>student_loop_directive_09_v1</code> in this result — refresh after upgrading the server.</p>';
-        void refreshStudentPanelD11();
+        void refreshStudentPanelD11({ soft: true });
         return;
       }
       const nApp = (rowsTop != null && rowsTop !== '') ? rowsTop : handoff.student_learning_rows_appended;
@@ -7286,7 +7446,7 @@ PAGE_HTML = """<!DOCTYPE html>
         '<p class="pg-student-tri-note">Referee outcomes: <strong>Results</strong> panel in the focus dock (expand tile above). Plumbing history: expand <strong>Score card</strong>. <strong>Clear Card</strong> does not clear the Student store — use Clear Student Proctor store there.</p>';
       studentPanelD11.level = 1;
       studentPanelD11.selectedDecisionId = null;
-      void refreshStudentPanelD11();
+      void refreshStudentPanelD11({ soft: true });
       updateLearningEventsStripFromBatch(data, handoff);
       const dock = document.querySelector('details.pg-student-triangle-dock');
       if (dock) {
@@ -7624,6 +7784,10 @@ PAGE_HTML = """<!DOCTYPE html>
       }
       if (t.indexOf('Finished') === 0) {
         setBannerRun('Done', t.length > 140 ? t.slice(0, 137) + '…' : t);
+        return;
+      }
+      if (t.indexOf('Cancelled') === 0) {
+        setBannerRun('Cancelled', t.length > 140 ? t.slice(0, 137) + '…' : t);
         return;
       }
       if (t.indexOf('Failed') === 0 || t.indexOf('Stopped') === 0 || t.indexOf('Client timeout') === 0) {
@@ -9091,6 +9255,7 @@ PAGE_HTML = """<!DOCTYPE html>
         updateMemoryStatusCardFromPanel(null, { context_signature_memory_mode: cmem }, null, true);
         const useUpEl = document.getElementById('useOperatorUploadedStrategy');
         const useUploaded = !!(useUpEl && useUpEl.checked);
+        const twm = document.getElementById('tradeWindowPick') ? document.getElementById('tradeWindowPick').value : '5m';
         const body = {
           scenarios_json: recipeId === 'custom' ? scenariosTa : '[]',
           max_workers: mw,
@@ -9098,6 +9263,7 @@ PAGE_HTML = """<!DOCTYPE html>
           operator_recipe_id: recipeId,
           evaluation_window_mode: wm,
           evaluation_window_custom_months: customM,
+          trade_window_mode: twm,
           context_signature_memory_mode: cmem,
           use_operator_uploaded_strategy: useUploaded,
           exam_run_contract_v1: buildExamRunContractV1ForStart(),
@@ -9189,7 +9355,7 @@ PAGE_HTML = """<!DOCTYPE html>
               windowLabel: evaluationWindowLabelFromDom(),
             });
             void refreshScorecardHistory();
-            void refreshStudentPanelD11();
+            void refreshStudentPanelD11({ soft: true });
             return false;
           }
           if (pj.status === 'error') {
@@ -9202,6 +9368,11 @@ PAGE_HTML = """<!DOCTYPE html>
               rollE.appendChild(t);
             }
             updateMemoryStatusCardFromPanel(null, pj.telemetry_context_echo || {}, null, false);
+            renderLiveTelemetryPanel(pj, {
+              elapsedSec: elapsed,
+              recipeLabel: recipeLabelFromDom(),
+              windowLabel: evaluationWindowLabelFromDom(),
+            });
             showBatchConcurrencyBanner(total, wCap, 'error');
             if (pj.batch_timing) updateLastBatchRunLine(pj.batch_timing);
             refreshScorecardHistory();
@@ -9216,6 +9387,12 @@ PAGE_HTML = """<!DOCTYPE html>
           }
           if (pj.status === 'cancelled') {
             pgSetInflightJobId(null);
+            updateMemoryStatusCardFromPanel(null, pj.telemetry_context_echo || {}, null, false);
+            renderLiveTelemetryPanel(pj, {
+              elapsedSec: elapsed,
+              recipeLabel: recipeLabelFromDom(),
+              windowLabel: evaluationWindowLabelFromDom(),
+            });
             showBatchConcurrencyBanner(total, wCap, 'error');
             if (pj.batch_timing) updateLastBatchRunLine(pj.batch_timing);
             refreshScorecardHistory();
@@ -9287,6 +9464,11 @@ PAGE_HTML = """<!DOCTYPE html>
               );
               setRunFeedbackToast('Batch finished — see scorecard.');
             }
+            renderLiveTelemetryPanel(pj, {
+              elapsedSec: elapsed,
+              recipeLabel: recipeLabelFromDom(),
+              windowLabel: evaluationWindowLabelFromDom(),
+            });
             return true;
           }
           /* Missing or unknown status: keep polling (treating as non-terminal avoids silent no-op). */
@@ -9301,6 +9483,14 @@ PAGE_HTML = """<!DOCTYPE html>
         }
         if (Date.now() >= deadline) {
           pgSetInflightJobId(null);
+          renderLiveTelemetryPanel(
+            { status: 'error', completed: 0, total: 0, telemetry_context_echo: {} },
+            {
+              elapsedSec: Math.floor(RUN_TIMEOUT_MS / 1000),
+              recipeLabel: recipeLabelFromDom(),
+              windowLabel: evaluationWindowLabelFromDom(),
+            }
+          );
           await show(null, null, 'Timed out after ' + (RUN_TIMEOUT_MS / 60000) + ' minutes — job may still be running on the server; open /api/run-parallel/status/<job_id> or check logs.');
           renderStudentTriangleBatchFailed('Client timeout — job may still be running on the server.');
           updateRunStatusLine('Client timeout — check server or logs.');
@@ -9780,6 +9970,7 @@ PAGE_HTML = """<!DOCTYPE html>
 
     const operatorRecipePick = document.getElementById('operatorRecipePick');
     const evaluationWindowPick = document.getElementById('evaluationWindowPick');
+    const tradeWindowPick = document.getElementById('tradeWindowPick');
     const evaluationWindowCustomMonths = document.getElementById('evaluationWindowCustomMonths');
     const customMonthsWrap = document.getElementById('customMonthsWrap');
     const examplesFilePick = document.getElementById('examplesFilePick');
@@ -9908,12 +10099,14 @@ PAGE_HTML = """<!DOCTYPE html>
       const rr = document.getElementById('runConfigPattern');
       const rp = document.getElementById('runConfigPolicy');
       const rw = document.getElementById('runConfigWindow');
+      const rtw = document.getElementById('runConfigTradeWindow');
       const rg = document.getElementById('runConfigGoalSummary');
       const rid = operatorRecipePick && operatorRecipePick.value;
       if (rr) rr.textContent = (operatorRecipePick && operatorRecipePick.selectedOptions[0])
         ? operatorRecipePick.selectedOptions[0].textContent : '—';
       if (rp) rp.textContent = policyLineForRunConfig();
       if (rw) rw.textContent = evaluationWindowLabel();
+      if (rtw) rtw.textContent = tradeWindowLabel();
       if (!rg) return;
       if (!rid || rid === 'custom') {
         rg.textContent = 'Defined in your JSON (Advanced).';
@@ -9928,7 +10121,7 @@ PAGE_HTML = """<!DOCTYPE html>
       const gNote = document.getElementById('goalReadonlyNote');
       if (rid === 'custom') {
         if (gTitle) gTitle.textContent = 'Custom scenario';
-        if (gMet) gMet.textContent = 'Goal, manifest, and window must appear in your JSON (or rely on server merge for evaluation window from the control above).';
+        if (gMet) gMet.textContent = 'Goal, manifest, and window must appear in your JSON (or rely on server merge for evaluation window + trade window from Controls above).';
         if (gCon) gCon.textContent = '';
         if (gNote) gNote.textContent = 'Open Advanced → Custom scenario (JSON) to edit.';
       } else {
@@ -10417,6 +10610,10 @@ PAGE_HTML = """<!DOCTYPE html>
       syncCustomMonthsVisibility();
       refreshStructuredMetadata();
     });
+    if (tradeWindowPick) tradeWindowPick.addEventListener('change', function () {
+      updateRunConfigurationPanel();
+      refreshStructuredMetadata();
+    });
     if (evaluationWindowCustomMonths) evaluationWindowCustomMonths.addEventListener('change', function () {
       refreshStructuredMetadata();
     });
@@ -10616,8 +10813,14 @@ PAGE_HTML = """<!DOCTYPE html>
       if (pj0.status === 'running') {
         document.body.classList.add('pg-run-active');
         resetStudentTriangleStarting();
-        void refreshStudentPanelD11();
+        void refreshStudentPanelD11({ soft: true });
         updateRunStatusLine('Resuming — batch still running (page was refreshed)…');
+        const resumeT0 = Date.now();
+        renderLiveTelemetryPanel(pj0, {
+          elapsedSec: 0,
+          recipeLabel: recipeLabelFromDom(),
+          windowLabel: evaluationWindowLabelFromDom(),
+        });
         const resumeCancelBtn = document.getElementById('parallelCancelBtn');
         if (resumeCancelBtn) {
           resumeCancelBtn.style.display = 'inline-block';
@@ -10640,10 +10843,16 @@ PAGE_HTML = """<!DOCTYPE html>
               resumeCancelBtn.style.display = 'none';
               resumeCancelBtn.disabled = false;
             }
+            const resumeElapsedErr = Math.floor((Date.now() - resumeT0) / 1000);
+            renderLiveTelemetryPanel(pj, {
+              elapsedSec: resumeElapsedErr,
+              recipeLabel: recipeLabelFromDom(),
+              windowLabel: evaluationWindowLabelFromDom(),
+            });
             renderStudentTriangleBatchFailed(pj.error || 'Job failed');
             if (pj.batch_timing) updateLastBatchRunLine(pj.batch_timing);
             await show(null, null, friendlyParallelBackendError(pj.error || 'Job failed'));
-            void refreshStudentPanelD11();
+            void refreshStudentPanelD11({ soft: true });
             refreshScorecardHistory();
             return;
           }
@@ -10654,10 +10863,16 @@ PAGE_HTML = """<!DOCTYPE html>
               resumeCancelBtn.style.display = 'none';
               resumeCancelBtn.disabled = false;
             }
+            const resumeElapsedCan = Math.floor((Date.now() - resumeT0) / 1000);
+            renderLiveTelemetryPanel(pj, {
+              elapsedSec: resumeElapsedCan,
+              recipeLabel: recipeLabelFromDom(),
+              windowLabel: evaluationWindowLabelFromDom(),
+            });
             if (pj.batch_timing) updateLastBatchRunLine(pj.batch_timing);
             await show(null, null, String(pj.error || 'Batch cancelled.'));
             renderStudentTriangleBatchFailed(String(pj.error || 'Batch cancelled.'));
-            void refreshStudentPanelD11();
+            void refreshStudentPanelD11({ soft: true });
             refreshScorecardHistory();
             updateRunStatusLine('Cancelled — see scorecard (status cancelled).');
             return;
@@ -10669,6 +10884,12 @@ PAGE_HTML = """<!DOCTYPE html>
               resumeCancelBtn.style.display = 'none';
               resumeCancelBtn.disabled = false;
             }
+            const resumeElapsedDone = Math.floor((Date.now() - resumeT0) / 1000);
+            renderLiveTelemetryPanel(pj, {
+              elapsedSec: resumeElapsedDone,
+              recipeLabel: recipeLabelFromDom(),
+              windowLabel: evaluationWindowLabelFromDom(),
+            });
             if (pj.result) {
               updateMemoryStatusFromBatchResultPayload(pj.result);
               await show(null, pj.result, null);
@@ -10676,11 +10897,17 @@ PAGE_HTML = """<!DOCTYPE html>
             refreshScorecardHistory();
             askDataLastRunJobId = jid;
             void fetchBarneySummary(jid);
-            void refreshStudentPanelD11();
+            void refreshStudentPanelD11({ soft: true });
             updateRunStatusLine('Finished — batch completed (restored after refresh).');
             return;
           }
-          void refreshStudentPanelD11();
+          const resumeElapsedPoll = Math.floor((Date.now() - resumeT0) / 1000);
+          renderLiveTelemetryPanel(pj, {
+            elapsedSec: resumeElapsedPoll,
+            recipeLabel: recipeLabelFromDom(),
+            windowLabel: evaluationWindowLabelFromDom(),
+          });
+          void refreshStudentPanelD11({ soft: true });
           refreshScorecardHistory();
           await new Promise(function (r) {
             setTimeout(r, 1500);
@@ -10692,30 +10919,61 @@ PAGE_HTML = """<!DOCTYPE html>
           resumeCancelBtn.style.display = 'none';
           resumeCancelBtn.disabled = false;
         }
+        renderLiveTelemetryPanel(
+          { status: 'error', completed: 0, total: 0, telemetry_context_echo: {} },
+          {
+            elapsedSec: Math.floor(RUN_TIMEOUT_MS / 1000),
+            recipeLabel: recipeLabelFromDom(),
+            windowLabel: evaluationWindowLabelFromDom(),
+          }
+        );
         await show(
           null,
           null,
           'Timed out while resuming — job may still run on server; open /api/run-parallel/status/' + jid
         );
         renderStudentTriangleBatchFailed('Resume timeout — job may still be running on the server.');
-        void refreshStudentPanelD11();
+        void refreshStudentPanelD11({ soft: true });
         return;
       }
       if (pj0.status === 'done') {
         pgSetInflightJobId(null);
+        renderLiveTelemetryPanel(pj0, {
+          elapsedSec: 0,
+          recipeLabel: recipeLabelFromDom(),
+          windowLabel: evaluationWindowLabelFromDom(),
+        });
         if (pj0.result) {
           updateMemoryStatusFromBatchResultPayload(pj0.result);
           await show(null, pj0.result, null);
         }
-        void refreshStudentPanelD11();
+        void refreshStudentPanelD11({ soft: true });
         refreshScorecardHistory();
         return;
       }
       if (pj0.status === 'error') {
         pgSetInflightJobId(null);
+        renderLiveTelemetryPanel(pj0, {
+          elapsedSec: 0,
+          recipeLabel: recipeLabelFromDom(),
+          windowLabel: evaluationWindowLabelFromDom(),
+        });
         renderStudentTriangleBatchFailed(pj0.error || 'Job failed');
         await show(null, null, friendlyParallelBackendError(pj0.error || 'Job failed'));
-        void refreshStudentPanelD11();
+        void refreshStudentPanelD11({ soft: true });
+        return;
+      }
+      if (pj0.status === 'cancelled') {
+        pgSetInflightJobId(null);
+        updateMemoryStatusCardFromPanel(null, pj0.telemetry_context_echo || {}, null, false);
+        renderLiveTelemetryPanel(pj0, {
+          elapsedSec: 0,
+          recipeLabel: recipeLabelFromDom(),
+          windowLabel: evaluationWindowLabelFromDom(),
+        });
+        void refreshStudentPanelD11({ soft: true });
+        refreshScorecardHistory();
+        updateRunStatusLine('Cancelled — see scorecard (status cancelled).');
         return;
       }
       pgSetInflightJobId(null);

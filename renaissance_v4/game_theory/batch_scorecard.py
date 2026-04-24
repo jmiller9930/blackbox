@@ -28,6 +28,7 @@ from renaissance_v4.game_theory.learning_run_audit import (
     compute_scorecard_learning_rollups_v1,
 )
 from renaissance_v4.game_theory.memory_paths import default_batch_scorecard_jsonl
+from renaissance_v4.game_theory.training_exam_audit_v1 import build_training_exam_audit_v1
 
 _APPEND_LOCK = threading.Lock()
 SCHEMA_V1 = "pattern_game_batch_scorecard_v1"
@@ -402,6 +403,7 @@ def record_parallel_batch_finished(
         ):
             if fld in seam_obs:
                 record[fld] = seam_obs[fld]
+        record["training_exam_audit_v1"] = build_training_exam_audit_v1(record)
     elif error:
         n_result_rows = len(results or [])
         timing = build_batch_timing_payload(
@@ -443,6 +445,7 @@ def record_parallel_batch_finished(
             for k, v in exam_run_line_meta_v1.items():
                 if v is not None:
                     record[k] = v
+        record["training_exam_audit_v1"] = build_training_exam_audit_v1(record)
     else:
         res = results or []
         timing = build_batch_timing_payload(
@@ -533,6 +536,7 @@ def record_parallel_batch_finished(
         ):
             if fld in seam_obs:
                 record[fld] = seam_obs[fld]
+        record["training_exam_audit_v1"] = build_training_exam_audit_v1(record)
 
     append_batch_scorecard_line(record, path=path)
     out = {**timing, **pct_fields}

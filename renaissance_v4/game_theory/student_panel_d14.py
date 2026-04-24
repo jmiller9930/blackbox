@@ -34,6 +34,7 @@ from renaissance_v4.game_theory.exam_run_contract_v1 import (
     STUDENT_BRAIN_PROFILE_MEMORY_CONTEXT_LLM_STUDENT_V1,
 )
 from renaissance_v4.game_theory.student_panel_d11 import SCHEMA_RUN_ROW, _groundhog_active_for_d11
+from renaissance_v4.game_theory.training_exam_audit_v1 import build_training_exam_audit_v1
 from renaissance_v4.game_theory.student_proctor.contracts_v1 import (
     validate_student_output_directional_thesis_required_for_llm_profile_v1,
 )
@@ -194,6 +195,12 @@ def enrich_student_panel_run_rows_d14(rows: list[dict[str, Any]]) -> list[dict[s
         if agg is None and clone.get("total_trades") is not None:
             d14_block["total_trade_opportunities"] = clone.get("total_trades")
         clone["d14_run_row_v1"] = d14_block
+        if entry:
+            ta = entry.get("training_exam_audit_v1")
+            if isinstance(ta, dict):
+                clone["training_exam_audit_v1"] = ta
+            else:
+                clone["training_exam_audit_v1"] = build_training_exam_audit_v1(entry)
         out.append(clone)
     return out
 

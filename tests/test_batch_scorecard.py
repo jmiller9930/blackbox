@@ -97,6 +97,9 @@ def test_record_error_line(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> N
     assert rows[0]["run_ok_pct"] == 0.0
     assert rows[0]["referee_win_pct"] is None
     assert rows[0].get("avg_trade_win_pct") is None
+    tea = rows[0].get("training_exam_audit_v1")
+    assert isinstance(tea, dict)
+    assert tea.get("training_learning_verdict_v1") == "INSUFFICIENT_BATCH_STATUS"
 
 
 def test_format_batch_scorecard_for_prompt(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
