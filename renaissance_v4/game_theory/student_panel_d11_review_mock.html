@@ -1,0 +1,542 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Student Panel D11 Review Mock</title>
+    <style>
+      :root {
+        --bg: #171b22;
+        --bg-soft: #202733;
+        --surface: rgba(0, 0, 0, 0.12);
+        --surface-strong: rgba(120, 175, 235, 0.08);
+        --line: rgba(255, 255, 255, 0.12);
+        --line-strong: rgba(30, 214, 170, 0.45);
+        --ink: #f4f7fb;
+        --muted: #9ba7b5;
+        --teal: #1ed6aa;
+        --green: #2ea043;
+        --red: #da5555;
+        --gray: #7a8794;
+        --shadow: 0 24px 60px rgba(0, 0, 0, 0.28);
+        --radius-xl: 24px;
+        --radius-lg: 16px;
+        --radius-md: 10px;
+        --font: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        --mono: ui-monospace, "SFMono-Regular", Menlo, monospace;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        font-family: var(--font);
+        color: var(--ink);
+        background:
+          radial-gradient(circle at top left, rgba(30, 214, 170, 0.12), transparent 28%),
+          linear-gradient(180deg, #10141b 0%, #1a202a 100%);
+      }
+
+      .page {
+        width: min(1500px, calc(100vw - 48px));
+        margin: 0 auto;
+        padding: 36px 0 48px;
+      }
+
+      .hero {
+        margin-bottom: 22px;
+      }
+
+      .eyebrow {
+        display: inline-flex;
+        padding: 0.4rem 0.7rem;
+        border-radius: 999px;
+        border: 1px solid rgba(30, 214, 170, 0.26);
+        background: rgba(30, 214, 170, 0.08);
+        color: #b7f3e6;
+        font-size: 0.72rem;
+        font-weight: 700;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+      }
+
+      h1 {
+        margin: 14px 0 10px;
+        font-size: 2.45rem;
+        line-height: 1;
+        letter-spacing: -0.04em;
+      }
+
+      .lede {
+        max-width: 76rem;
+        margin: 0;
+        color: var(--muted);
+        font-size: 1rem;
+        line-height: 1.5;
+      }
+
+      .flow {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 18px;
+      }
+
+      .stage {
+        min-height: 760px;
+        border: 1px solid var(--line);
+        border-radius: var(--radius-xl);
+        background: linear-gradient(180deg, rgba(22, 27, 34, 0.98), rgba(22, 27, 34, 0.94));
+        box-shadow: var(--shadow);
+        overflow: hidden;
+      }
+
+      .stage__top {
+        padding: 18px 20px 14px;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        background: linear-gradient(180deg, rgba(22, 27, 34, 1), rgba(22, 27, 34, 0.94));
+      }
+
+      .stage__kicker {
+        margin: 0 0 8px;
+        color: var(--muted);
+        font-size: 0.72rem;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+      }
+
+      .stage__title {
+        margin: 0 0 8px;
+        font-size: 1.18rem;
+        letter-spacing: -0.02em;
+      }
+
+      .stage__sub {
+        margin: 0;
+        color: var(--muted);
+        font-size: 0.8rem;
+        line-height: 1.4;
+      }
+
+      .stage__body {
+        padding: 16px 18px 18px;
+      }
+
+      .chrome {
+        margin-bottom: 12px;
+        padding-bottom: 10px;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+      }
+
+      .bc {
+        font-size: 0.72rem;
+        color: var(--muted);
+        line-height: 1.35;
+      }
+
+      .bc strong {
+        color: var(--ink);
+      }
+
+      .nav {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        margin-top: 10px;
+      }
+
+      .caret,
+      .ghost {
+        border: 1px solid rgba(255, 255, 255, 0.14);
+        background: rgba(0, 0, 0, 0.16);
+        color: var(--ink);
+      }
+
+      .caret {
+        width: 28px;
+        height: 28px;
+        border-radius: 999px;
+        display: inline-grid;
+        place-items: center;
+        font-size: 1rem;
+      }
+
+      .ghost {
+        padding: 0.35rem 0.7rem;
+        border-radius: 8px;
+        font-size: 0.76rem;
+      }
+
+      .legend {
+        margin: 0 0 12px;
+        color: var(--muted);
+        font-size: 0.76rem;
+        line-height: 1.4;
+      }
+
+      .table-wrap {
+        overflow: hidden;
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        border-radius: var(--radius-lg);
+      }
+
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 0.72rem;
+      }
+
+      th,
+      td {
+        padding: 8px 9px;
+        text-align: left;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+        white-space: nowrap;
+      }
+
+      th {
+        color: var(--muted);
+        font-size: 0.68rem;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+      }
+
+      tbody tr:nth-child(even) td {
+        background: var(--surface-strong);
+      }
+
+      tbody tr.is-selected td {
+        background: rgba(30, 214, 170, 0.09);
+      }
+
+      code {
+        font-family: var(--mono);
+        font-size: 0.69rem;
+      }
+
+      .meta-strip {
+        margin-top: 12px;
+        padding: 10px 12px;
+        border-radius: var(--radius-md);
+        background: rgba(255, 255, 255, 0.05);
+        color: var(--muted);
+        font-size: 0.74rem;
+      }
+
+      .carousel-meta {
+        margin: 0 0 8px;
+        text-align: center;
+        color: var(--muted);
+        font-size: 0.72rem;
+      }
+
+      .carousel-row {
+        display: grid;
+        grid-template-columns: 34px 1fr 34px;
+        gap: 8px;
+        align-items: center;
+      }
+
+      .carousel-btn {
+        min-height: 54px;
+        border: 1px solid rgba(255, 255, 255, 0.14);
+        border-radius: 8px;
+        display: grid;
+        place-items: center;
+        color: var(--ink);
+        background: rgba(0, 0, 0, 0.18);
+        font-size: 1rem;
+      }
+
+      .viewport {
+        overflow: hidden;
+      }
+
+      .strip {
+        display: flex;
+        gap: 12px;
+        padding: 6px 14%;
+      }
+
+      .slice {
+        flex: 0 0 72%;
+        min-width: 156px;
+        max-width: 220px;
+        border-radius: var(--radius-md);
+        border: 1px solid rgba(255, 255, 255, 0.12);
+        background: rgba(0, 0, 0, 0.1);
+        padding: 10px 12px;
+        font-size: 0.76rem;
+        line-height: 1.38;
+      }
+
+      .slice.is-focused {
+        border-color: var(--line-strong);
+        box-shadow: 0 0 0 1px rgba(30, 214, 170, 0.14);
+      }
+
+      .slice.win {
+        border-left: 3px solid var(--green);
+      }
+
+      .slice.loss {
+        border-left: 3px solid var(--red);
+      }
+
+      .slice.no-trade {
+        border-left: 3px solid var(--gray);
+      }
+
+      .k {
+        color: var(--muted);
+        font-weight: 700;
+        font-size: 0.7rem;
+        letter-spacing: 0.02em;
+      }
+
+      .deep {
+        margin: 0;
+        padding-left: 1.15rem;
+        font-size: 0.8rem;
+        line-height: 1.42;
+      }
+
+      .deep li {
+        margin: 0 0 8px;
+      }
+
+      .data-gap {
+        color: #c8ced7;
+        opacity: 0.82;
+      }
+
+      .callout {
+        margin-top: 14px;
+        padding: 12px 14px;
+        border-radius: var(--radius-md);
+        border: 1px solid rgba(30, 214, 170, 0.22);
+        background: rgba(30, 214, 170, 0.08);
+        color: #d8fff4;
+        font-size: 0.77rem;
+        line-height: 1.45;
+      }
+    </style>
+  </head>
+  <body>
+    <main class="page">
+      <section class="hero">
+        <div class="eyebrow">Game Theory Review Mock</div>
+        <h1>Student Panel D11</h1>
+        <p class="lede">
+          Local review visual based on the current implementation inside
+          <code>renaissance_v4/game_theory/web_app.py</code> and
+          <code>student_panel_d11.py</code>. This shows the intended three-step
+          flow side by side so we can critique hierarchy and drill-down behavior
+          even though the live run table is empty on this machine right now.
+        </p>
+      </section>
+
+      <section class="flow">
+        <article class="stage">
+          <div class="stage__top">
+            <p class="stage__kicker">Level 1</p>
+            <h2 class="stage__title">Run table</h2>
+            <p class="stage__sub">Batch-level rows. Click a run to open the scenario carousel.</p>
+          </div>
+          <div class="stage__body">
+            <div class="chrome">
+              <div class="bc"><strong>Run table</strong></div>
+              <div class="nav">
+                <div class="caret">‹</div>
+                <div class="caret">›</div>
+              </div>
+            </div>
+
+            <p class="legend">
+              Batch-level run view: Referee rollups + harness and handoff signals.
+              This is not yet a Student-only scoreboard.
+            </p>
+
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>run_id</th>
+                    <th>time</th>
+                    <th>pattern</th>
+                    <th>window</th>
+                    <th>#tr</th>
+                    <th>BL %</th>
+                    <th>E/tr</th>
+                    <th>HB</th>
+                    <th>SH</th>
+                    <th>outΔ</th>
+                    <th>GH</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td><code>run_240420…</code></td>
+                    <td>2026-04-20 20:18Z</td>
+                    <td>pattern_learning</td>
+                    <td>3 mo</td>
+                    <td>31</td>
+                    <td>58.1</td>
+                    <td>0.1842</td>
+                    <td>YES</td>
+                    <td>YES</td>
+                    <td>YES</td>
+                    <td>STRONG</td>
+                  </tr>
+                  <tr class="is-selected">
+                    <td><code>run_240421…</code></td>
+                    <td>2026-04-21 14:02Z</td>
+                    <td>pattern_learning</td>
+                    <td>3 mo</td>
+                    <td>29</td>
+                    <td>55.0</td>
+                    <td>0.1328</td>
+                    <td>YES</td>
+                    <td>YES</td>
+                    <td>NO</td>
+                    <td>ACTIVE</td>
+                  </tr>
+                  <tr>
+                    <td><code>run_240421…</code></td>
+                    <td>2026-04-21 15:46Z</td>
+                    <td>pattern_learning</td>
+                    <td>6 mo</td>
+                    <td>19</td>
+                    <td>52.6</td>
+                    <td>0.0971</td>
+                    <td>NO</td>
+                    <td>YES</td>
+                    <td>N/A</td>
+                    <td>WEAK</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+
+            <div class="meta-strip">
+              Current design signal: the row is dense and efficient, but it takes
+              work to understand what deserves a click and what changed enough to
+              matter.
+            </div>
+          </div>
+        </article>
+
+        <article class="stage">
+          <div class="stage__top">
+            <p class="stage__kicker">Level 2</p>
+            <h2 class="stage__title">Scenario carousel</h2>
+            <p class="stage__sub">One scenario per slice in batch order, not canonical exam sequence.</p>
+          </div>
+          <div class="stage__body">
+            <div class="chrome">
+              <div class="bc"><strong>Run table</strong> › <strong>Run</strong> run_240421…</div>
+              <div class="nav">
+                <div class="caret">‹</div>
+                <div class="caret">›</div>
+                <div class="ghost">← Run table</div>
+              </div>
+            </div>
+
+            <p class="legend">
+              Scenario carousel: one scenario per slice. Confidence and change are
+              present as gaps in the current contract when the backend cannot
+              export them yet.
+            </p>
+
+            <p class="carousel-meta">Slice 2 of 5 · scenario order = batch order</p>
+            <div class="carousel-row">
+              <div class="carousel-btn">◀</div>
+              <div class="viewport">
+                <div class="strip">
+                  <div class="slice win">
+                    <div class="k">scenario_01</div>
+                    <div>WIN · LONG</div>
+                    <div style="margin-top:4px">conf <span class="data-gap">data_gap:not_exported</span></div>
+                    <div style="margin-top:4px;color:var(--muted)">GH ctx+mem</div>
+                    <div style="margin-top:4px">Δ change <span class="data-gap">data_gap:not_wired</span></div>
+                  </div>
+                  <div class="slice loss is-focused">
+                    <div class="k">scenario_02</div>
+                    <div>LOSS · SHORT</div>
+                    <div style="margin-top:4px">conf <span class="data-gap">data_gap:not_exported</span></div>
+                    <div style="margin-top:4px;color:var(--muted)">GH ctx</div>
+                    <div style="margin-top:4px">Δ change <span class="data-gap">data_gap:not_wired</span></div>
+                  </div>
+                  <div class="slice no-trade">
+                    <div class="k">scenario_03</div>
+                    <div>NO_TRADE · NONE</div>
+                    <div style="margin-top:4px">conf <span class="data-gap">data_gap:not_exported</span></div>
+                    <div style="margin-top:4px;color:var(--muted)">GH none</div>
+                    <div style="margin-top:4px">Δ change <span class="data-gap">data_gap:not_wired</span></div>
+                  </div>
+                </div>
+              </div>
+              <div class="carousel-btn">▶</div>
+            </div>
+
+            <div class="callout">
+              Strong structural idea: the carousel keeps you in one run while
+              stepping scenario-by-scenario. Current risk: the slices read more
+              like compact debug cards than decision cards, so the click target
+              feels technically correct but not visually inevitable.
+            </div>
+          </div>
+        </article>
+
+        <article class="stage">
+          <div class="stage__top">
+            <p class="stage__kicker">Level 3</p>
+            <h2 class="stage__title">Scenario forensic detail</h2>
+            <p class="stage__sub">Structured record for one scenario with evidence scope and data gaps.</p>
+          </div>
+          <div class="stage__body">
+            <div class="chrome">
+              <div class="bc">
+                <strong>Run table</strong> › <strong>Run</strong> run_240421… ›
+                <strong>Slice</strong> scenario_02
+              </div>
+              <div class="nav">
+                <div class="caret">‹</div>
+                <div class="caret">›</div>
+                <div class="ghost">← Run table</div>
+                <div class="ghost">← Scenario carousel</div>
+              </div>
+            </div>
+
+            <p class="legend">
+              Scenario forensic view: useful honesty about scope and gaps, but the
+              presentation is still a long textual dump instead of a decision
+              narrative with grouped evidence.
+            </p>
+
+            <ul class="deep">
+              <li><span class="k">decision_time</span> 2026-04-21T14:02:00Z</li>
+              <li><span class="k">action / direction / confidence</span> ENTER · SHORT · <span class="data-gap">data_gap:not_in_run_record</span></li>
+              <li><span class="k">context</span> price 0.1328 · indicators see scenario manifest / run_record.summary · structure medium</li>
+              <li><span class="k">pattern_evaluation</span> <span class="data-gap">not_exported</span> · use HUMAN_READABLE.md / harness</li>
+              <li><span class="k">groundhog</span> used YES · retrieval — · narrative from learning_memory_evidence</li>
+              <li><span class="k">baseline vs current</span> — → ENTER SHORT · changed <span class="data-gap">data_gap:not_wired</span></li>
+              <li><span class="k">referee (scenario)</span> trades 1 · outcome LOSS · pnl -1.2481</li>
+              <li><span class="k">learning_run_audit_v1</span> operator_learning_status_line_v1 available when present</li>
+              <li><span class="k">student_learning_store</span> run-scoped count repeats on every slice until per-slice linkage exists</li>
+              <li><span class="k">data_gaps</span> confidence_not_in_run_record, baseline_decision_not_wired, pattern_evaluation_stub</li>
+            </ul>
+
+            <div class="callout">
+              Best part: the panel does not pretend certainty where the backend
+              lacks truth. Biggest design opportunity: group this into
+              “Decision”, “Evidence”, “Outcome”, and “Missing wiring” so the
+              operator can parse it in one scan instead of line-by-line.
+            </div>
+          </div>
+        </article>
+      </section>
+    </main>
+  </body>
+</html>
