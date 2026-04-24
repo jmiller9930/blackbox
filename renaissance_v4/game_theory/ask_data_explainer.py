@@ -1,8 +1,10 @@
 """
-Ask DATA — bounded PML self-explainer (run + system facts only).
+Ask DATA — bounded PML self-explainer (run + system facts + **system dictionary**).
 
-Uses the same local Ollama stack as Barney when enabled; otherwise deterministic fallback.
-Not a general chatbot: off-topic questions are refused before LLM when possible.
+When LLM is enabled, an **intent router** (``ask_data_router_v1``) picks the best **read-only**
+tier: fast **PML lightweight**, stronger **system_agent** for schema/API-style questions, or
+**deepseek_escalation** for explicit ``[debug]`` / ``[escalation]`` prompts. Models never execute
+mutations. Disable: ``ASK_DATA_ROUTER=0``; force tier: ``ASK_DATA_ROUTE=lightweight|system_agent|deepseek``.
 """
 
 from __future__ import annotations
@@ -253,6 +255,25 @@ def _fallback_answer_from_bundle(question: str, bundle: dict[str, Any]) -> tuple
             + " If you need one cell, click the row and read batch detail.",
             "app_knowledge",
         )
+    sdict = bundle.get("system_dictionary") or {}
+    topics = sdict.get("topics") if isinstance(sdict, dict) else {}
+    if isinstance(topics, dict):
+        if any(x in qlow for x in ("level 1", "level 2", "level 3", "l1 ", "l2 ", "l3 ", "exam list", "carousel")):
+            t = topics.get("student_fold_levels")
+            if t:
+                return (str(t), "system_dictionary")
+        if "ask data" in qlow and "student" in qlow:
+            t = topics.get("ask_data_vs_student")
+            if t:
+                return (str(t), "system_dictionary")
+        if "ollama" in qlow and "rout" in qlow:
+            t = topics.get("ollama_role_routing")
+            if t:
+                return (str(t), "system_dictionary")
+        if "data_gap" in qlow or "data gap" in qlow:
+            t = topics.get("data_gap_honesty")
+            if t:
+                return (str(t), "system_dictionary")
     return (
         "I do not have a keyword-matched canned answer. "
         "Turn on the local formatter (Ollama / same as Barney) for a fuller reply, "
@@ -270,10 +291,13 @@ def build_ask_data_bundle_v1(
     operator_strategy_state: dict[str, Any] | None,
     job_resolution: str,
 ) -> dict[str, Any]:
+    from renaissance_v4.game_theory.ask_data_system_dictionary_v1 import system_dictionary_context_v1
+
     return {
         "schema": "ask_data_bundle_v1",
         "job_resolution": job_resolution,
         "static_knowledge": pml_static_knowledge_v1(),
+        "system_dictionary": system_dictionary_context_v1(),
         "barney_facts": barney_facts,
         "scorecard_snapshot": scorecard_snapshot,
         "ui_context": ui_context,
@@ -281,20 +305,25 @@ def build_ask_data_bundle_v1(
     }
 
 
-def ask_data_format_with_llm(bundle: dict[str, Any], question: str, *, timeout: float = 120.0) -> tuple[str, str | None]:
-    from renaissance_v4.game_theory.ollama_role_routing_v1 import (
-        pml_lightweight_ollama_base_url,
-        pml_lightweight_ollama_model,
-    )
+def ask_data_format_with_llm(
+    bundle: dict[str, Any],
+    question: str,
+    *,
+    route: str,
+    timeout: float | None = None,
+) -> tuple[str, str | None]:
+    from renaissance_v4.game_theory.ask_data_router_v1 import ask_data_ollama_target_for_route_v1
 
     ollama_generate = _runtime_imports()
-    base = pml_lightweight_ollama_base_url()
-    model = pml_lightweight_ollama_model()
+    base, model, default_timeout = ask_data_ollama_target_for_route_v1(route)  # type: ignore[arg-type]
+    eff_timeout = default_timeout if timeout is None else timeout
     payload = json.dumps(bundle, indent=2, ensure_ascii=False)
     prompt = (
         "You are **Ask DATA** — a Pattern Machine Learning (PML) **self-explainer** for operators.\n\n"
+        f"ROUTING_TIER: **{route}** — you were selected for this tier to balance speed vs depth. "
+        "Same honesty rules apply; you still do **not** execute mutations or call live tools.\n\n"
         "RULES (hard):\n"
-        "- Answer ONLY using: (1) the JSON bundle sections `static_knowledge`, `barney_facts`, "
+        "- Answer ONLY using: (1) the JSON bundle sections `static_knowledge`, `system_dictionary`, `barney_facts`, "
         "`scorecard_snapshot`, `ui_context`, `operator_strategy_upload_state`, and `job_resolution`. "
         "Do NOT use outside knowledge, the internet, or guesses.\n"
         "- If the bundle does not contain enough information, say clearly: "
@@ -305,13 +334,13 @@ def ask_data_format_with_llm(bundle: dict[str, Any], question: str, *, timeout: 
         "- If the question is general trivia or unrelated to this application, refuse in one short paragraph "
         "(same idea as static_knowledge.refusal_policy).\n"
         "- At the end, add a single line starting with **Sources used:** listing only from: "
-        "`run_facts` | `scorecard` | `ui` | `static` | `upload` | `refused` — comma-separated, "
-        "reflecting what you actually relied on.\n\n"
+        "`run_facts` | `scorecard` | `ui` | `static` | `dictionary` | `upload` | `refused` — comma-separated, "
+        "reflecting what you actually relied on (`dictionary` = `system_dictionary` topics).\n\n"
         f"OPERATOR QUESTION:\n{question.strip()}\n\n"
         "--- BUNDLE JSON ---\n"
         + payload
     )
-    res = ollama_generate(prompt, base_url=base, model=model, timeout=timeout)
+    res = ollama_generate(prompt, base_url=base, model=model, timeout=eff_timeout)
     if res.error:
         return "", res.error
     return (res.text or "").strip(), None
@@ -336,10 +365,20 @@ def ask_data_answer(
             "answer_source": "refused",
             "error": None,
         }
+    from renaissance_v4.game_theory.ask_data_router_v1 import classify_ask_data_route_v1
+
+    route = classify_ask_data_route_v1(q)
     if not ask_data_use_llm():
         txt, src = _fallback_answer_from_bundle(q, bundle)
-        return {"ok": True, "text": txt, "answer_source": src, "error": None}
-    txt, err = ask_data_format_with_llm(bundle, q)
+        return {
+            "ok": True,
+            "text": txt,
+            "answer_source": src,
+            "error": None,
+            "ask_data_route": route,
+            "ask_data_router": "off_llm",
+        }
+    txt, err = ask_data_format_with_llm(bundle, q, route=route)
     if err or not txt:
         fb, src = _fallback_answer_from_bundle(q, bundle)
         return {
@@ -347,5 +386,14 @@ def ask_data_answer(
             "text": fb + ("\n\n(Formatter unavailable: " + str(err) + ")" if err else ""),
             "answer_source": src + "+fallback",
             "error": err,
+            "ask_data_route": route,
+            "ask_data_router": "fallback_after_llm_error",
         }
-    return {"ok": True, "text": txt, "answer_source": "llm", "error": None}
+    return {
+        "ok": True,
+        "text": txt,
+        "answer_source": "llm",
+        "error": None,
+        "ask_data_route": route,
+        "ask_data_router": "llm",
+    }

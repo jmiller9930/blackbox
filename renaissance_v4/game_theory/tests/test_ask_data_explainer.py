@@ -124,3 +124,34 @@ def test_fallback_memory_impact_from_scorecard(monkeypatch) -> None:
     assert "deterministic" in out["text"].lower()
     assert out["answer_source"] == "run_facts"
     monkeypatch.delenv("ASK_DATA_USE_LLM", raising=False)
+
+
+def test_build_bundle_includes_system_dictionary() -> None:
+    bundle = build_ask_data_bundle_v1(
+        barney_facts=None,
+        scorecard_snapshot=None,
+        ui_context={},
+        operator_strategy_state=None,
+        job_resolution="no_job",
+    )
+    sd = bundle.get("system_dictionary")
+    assert isinstance(sd, dict)
+    assert sd.get("schema") == "ask_data_system_dictionary_v1"
+    assert isinstance(sd.get("topics"), dict)
+
+
+def test_fallback_system_dictionary_levels(monkeypatch) -> None:
+    monkeypatch.setenv("ASK_DATA_USE_LLM", "0")
+    bundle = build_ask_data_bundle_v1(
+        barney_facts=None,
+        scorecard_snapshot=None,
+        ui_context={},
+        operator_strategy_state=None,
+        job_resolution="no_job",
+    )
+    out = ask_data_answer("What is level 2 in the student path?", bundle)
+    assert out["ok"] is True
+    assert out["answer_source"] == "system_dictionary"
+    assert "level" in out["text"].lower() or "fold" in out["text"].lower()
+    assert out.get("ask_data_route") == "pml_lightweight"
+    monkeypatch.delenv("ASK_DATA_USE_LLM", raising=False)
