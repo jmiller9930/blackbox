@@ -9,10 +9,10 @@ Versioned JSON-serializable artifacts:
 
 Graded unit v1: **closed trade** (see ``GRADED_UNIT_TYPE_V1``).
 
-**§1.0 thesis (optional, additive):** when present on ``student_output_v1``, the following are
-validated: ``confidence_band`` (low / medium / high), ``supporting_indicators`` / ``conflicting_indicators``
-(list[str]), ``context_fit``, ``invalidation_text``, ``student_action_v1`` (enter_long / enter_short / no_trade;
-must agree with ``act`` / ``direction``). Core required keys are unchanged for backward compatibility.
+**§1.0 thesis fields:** shape-validated when present on ``student_output_v1``. For
+``memory_context_llm_student`` (Ollama), **all** keys in ``THESIS_REQUIRED_FOR_LLM_PROFILE_V1`` are **mandatory**
+(see ``validate_student_output_directional_thesis_required_for_llm_profile_v1``). Other profiles: same keys are
+optional; core required keys unchanged for backward compatibility.
 """
 
 from __future__ import annotations
@@ -52,6 +52,38 @@ _THESIS_MAX_INDICATORS = 32
 _THESIS_MAX_INDICATOR_LEN = 128
 _THESIS_MAX_CONTEXT_FIT_LEN = 128
 _THESIS_MAX_INVALIDATION_LEN = 4000
+
+# Precondition for **GT_DIRECTIVE_017**: LLM profile runs must seal a complete directional thesis
+# or reject before persist (see ``emit_student_output_via_ollama_v1`` + seam audit).
+THESIS_REQUIRED_FOR_LLM_PROFILE_V1: tuple[str, ...] = (
+    "student_action_v1",
+    "confidence_band",
+    "supporting_indicators",
+    "conflicting_indicators",
+    "context_fit",
+    "invalidation_text",
+)
+
+
+def validate_student_output_directional_thesis_required_for_llm_profile_v1(doc: dict[str, Any]) -> list[str]:
+    """
+    ``memory_context_llm_student`` profile: all thesis fields must be present and shape-valid.
+
+    Call **after** ``validate_student_output_v1`` succeeds on the same document.
+    """
+    errs: list[str] = []
+    if not isinstance(doc, dict):
+        return _err("student_output_v1 must be a dict for thesis requirement check")
+    for k in THESIS_REQUIRED_FOR_LLM_PROFILE_V1:
+        if k not in doc or doc.get(k) is None:
+            errs.append(f"directional_thesis_required_for_llm_profile: missing {k}")
+            continue
+        if k in ("supporting_indicators", "conflicting_indicators") and not isinstance(doc.get(k), list):
+            errs.append(f"directional_thesis_required_for_llm_profile: {k} must be a list")
+    if errs:
+        return errs
+    return _validate_student_output_optional_thesis_v1(doc)
+
 
 # Keys that must **not** appear anywhere in a **pre-reveal** decision packet (leakage prevention v1).
 # Conservative list — refine per architect if false positives appear in real packets.

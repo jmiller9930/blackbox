@@ -1,0 +1,13 @@
+{
+  "schema": "student_output_v1",
+  "contract_version": 1,
+  "graded_unit_type": "closed_trade",
+  "graded_unit_id": "trade_thesis_fixture_incomplete",
+  "decision_at_ms": 1700000000000,
+  "act": true,
+  "direction": "long",
+  "pattern_recipe_ids": ["fixture_incomplete_v1"],
+  "confidence_01": 0.5,
+  "reasoning_text": "Missing thesis bundle — should be rejected for LLM profile.",
+  "student_decision_ref": "550e8400-e29b-41d4-a716-446655440000"
+}

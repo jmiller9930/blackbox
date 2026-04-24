@@ -1,6 +1,6 @@
 # High-level architecture — learning, exam, certification, engineering, UI splice
 
-**Status:** v1.25 — **§1.0.1** `student_output_v1` optional thesis fields wired (contracts + LLM prompt + stub). **§1.0** directional thesis doc. **GT_DIRECTIVE_016** CLOSED; **016R1** / **019** (reserved). **§18.1a** dictionary. **015** CLOSED; **018** v1. **017** unblocked.
+**Status:** v1.26 — **§1.0.2** LLM profile **mandatory** directional thesis (reject before seal; L3 payload + gaps). **§1.0.1** mapping. **GT_DIRECTIVE_016** CLOSED; **016R1** / **019** (reserved). **§18.1a** dictionary. **015** CLOSED; **018** v1. **GT_DIRECTIVE_017** — precondition shipped (see directive **PRECONDITION**).
 
 ---
 
@@ -82,14 +82,18 @@ Over time the Student (system + store + retrieval) learns **which indicator comb
 |----------------|----------------------|--------|
 | Direction | **`direction`**: `long` \| `short` \| `flat` \| null | `flat` ≈ weak / sideways edge; not the same token as exam-pack **NEUTRAL** unless mapped in UI copy. |
 | Confidence (numeric) | **`confidence_01`** in **[0, 1]** | Required. |
-| Confidence (band) | **Optional** **`confidence_band`**: `low` \| `medium` \| `high` | Validated when present; LLM prompt asks for it; stub omits. |
-| Why / conflict (structured) | **Optional** **`supporting_indicators`**, **`conflicting_indicators`**: `list[str]` | Validated when present (caps in contract); Ollama prompt asks; stub omits. |
-| Context fit | **Optional** **`context_fit`**: short string | Pack vocabulary; max length in validator. |
-| Invalidation | **Optional** **`invalidation_text`** | Distinct from free-form **`reasoning_text`**; Ollama prompt asks; stub omits. |
-| Action (ENTER / NO_TRADE) | **`act`** bool + **`direction`**; **optional** **`student_action_v1`**: `enter_long` \| `enter_short` \| `no_trade` | When `student_action_v1` is present it **must** agree with `act` / `direction`. Stub sets it only when **unambiguous** (omitted when `act` and `flat` would contradict `enter_*`). |
+| Confidence (band) | **`confidence_band`**: `low` \| `medium` \| `high` | **Required** when `student_brain_profile_v1` = **`memory_context_llm_student`** (Ollama path); optional for stub / non-LLM profiles. |
+| Why / conflict (structured) | **`supporting_indicators`**, **`conflicting_indicators`**: `list[str]` | **Required** (may be `[]`) for **LLM profile**; optional otherwise. |
+| Context fit | **`context_fit`**: short string | **Required** for **LLM profile**. |
+| Invalidation | **`invalidation_text`** | **Required** for **LLM profile**; distinct from **`reasoning_text`**. |
+| Action (ENTER / NO_TRADE) | **`act`** bool + **`direction`**; **`student_action_v1`**: `enter_long` \| `enter_short` \| `no_trade` | **Required** for **LLM profile**; must agree with `act` / `direction`. Stub sets it only when unambiguous (optional fields omitted on non-LLM paths). |
 | H1–H4 deliberation trace | **Exam-unit** path (deliberation capture / frames); **not** the same object as parallel single-shot | Parallel **Run exam** remains **one** governed completion → sealed `student_output_v1` (**015**); thesis fields **narrow the gap** on structured support/conflict/action, not full multi-hypothesis artifacts. |
 
-**Honesty:** Until packs and UI surface the optional fields end-to-end, many rows will show **core keys only** — that is **not** a spec violation; absence of optional keys is allowed.
+#### 1.0.2 LLM profile enforcement (precondition for **GT_DIRECTIVE_017**)
+
+When **`student_brain_profile_v1` = `memory_context_llm_student`**, `emit_student_output_via_ollama_v1` **rejects** (returns errors; **no** stub fallback) unless **all** thesis keys in **`THESIS_REQUIRED_FOR_LLM_PROFILE_V1`** (`contracts_v1.py`) are present and pass shape validation. Seam audit exposes **`llm_student_output_rejections_v1`**. Persisted **`student_learning_record_v1.student_output`** carries the full thesis object. **L3** (`student_panel_d14.build_student_decision_record_v1`) exposes flat **`student_*`** aliases and adds **`data_gaps`** when an LLM-profile run lacks a complete stored thesis.
+
+**Non-LLM profiles:** thesis keys remain **optional**; deterministic stub output is unchanged aside from optional `student_action_v1` when unambiguous.
 
 ### Learning consists of:
 
@@ -797,7 +801,7 @@ A **trade set** is one **evaluated opportunity**: **decision-time context** (wha
 
 ### 18.1a Student panel operator dictionary
 
-**Canonical doc:** `renaissance_v4/game_theory/docs/STUDENT_PANEL_DICTIONARY_v1.md` (v1.2+) — tables for **L1 / L2 / L3**, scorecard column shorthand (**Sys BL %**, **Run TW %**, **>BL**, harness vs Student handoff, **Groundhog state**), **brain profiles** and **`exam_run_contract_v1`**, **Decision A — directional thesis** + optional **`student_output_v1`** thesis keys (operator summary; deep spec **§1.0** / **§1.0.1**), **L1 road** (`GET /api/student-panel/l1-road`: bands, `pass_rate_percent`, E/P proxies, `legend`), L2 **direction align**, memory/context/LLM roles, and **`data_gap`**. **UI:** Pattern Machine page → **Student → learning → outcome** fold → link **Student panel dictionary** (also under Level 1 legend: **Dictionary**). **Same content in-browser:** `GET /docs/student-panel-dictionary` on the Flask host (e.g. `http://127.0.0.1:8765/docs/student-panel-dictionary`).
+**Canonical doc:** `renaissance_v4/game_theory/docs/STUDENT_PANEL_DICTIONARY_v1.md` (v1.3+) — tables for **L1 / L2 / L3**, scorecard column shorthand (**Sys BL %**, **Run TW %**, **>BL**, harness vs Student handoff, **Groundhog state**), **brain profiles** and **`exam_run_contract_v1`**, **Decision A — directional thesis** + **`student_output_v1`** thesis keys (**LLM profile mandatory** — §1.0.2), **L1 road** (`GET /api/student-panel/l1-road`: bands, `pass_rate_percent`, E/P proxies, `legend`), L2 **direction align**, memory/context/LLM roles, and **`data_gap`**. **UI:** Pattern Machine page → **Student → learning → outcome** fold → link **Student panel dictionary** (also under Level 1 legend: **Dictionary**). **Same content in-browser:** `GET /docs/student-panel-dictionary` on the Flask host (e.g. `http://127.0.0.1:8765/docs/student-panel-dictionary`).
 
 ### 18.1b L1 road aggregation (**GT_DIRECTIVE_016**)
 
@@ -857,7 +861,7 @@ Work **§18.2** as a sequence of small shippables; each row satisfies **§18.3**
 | **GT_DIRECTIVE_009a** | L2 **Student↔Referee direction coupling** (no baseline): per-slice `student_referee_direction_align`, `referee_direction`; `run_summary` rollups `student_referee_direction_align_*`; L2 tiles show align + honest “vs baseline: not wired”; summary band **`dir_align`** cell. | **Shipped** | Code: `student_panel_d13.py`, `web_app.py` (`PATTERN_GAME_WEB_UI_VERSION`), tests `test_d14_gap_closure_regression_v1.py`; proof sample JSON updated. |
 | **GT_DIRECTIVE_015** | **Run exam + Student brain profile contract:** three profiles; nested **`student_llm_v1`**; legacy **inputs** normalize; memory → context → optional LLM → sealed output → Referee; **metadata-only** skip-cold (honest label; not physical Referee skip). **Deferred (do not block 016):** E/P comparison surface (product / likely **016** or dedicated directive); physical cold Referee skip; refine-then-seal LLM pipeline; expanded **`llm_role`** beyond single-shot; learning-loop governance stays **018**. | **Accepted v1 / CLOSED** | `directives/GT_DIRECTIVE_015_run_exam_baseline_skip_contract_v1.md`. |
 | **GT_DIRECTIVE_016** | **L1 road data:** **`GET /api/student-panel/l1-road`** + **`l1_road_v1`** on **`GET /api/student-panel/runs`**; **`road_by_job_id_v1`**; L1 UI columns (Profile, LLM, Road, Anchor, Road gaps) + **legend from API**. **Deferred:** scorecard denorm (§16.2) + §16.1 dual-band → **`GT_DIRECTIVE_016R1`** (reserved); exam-pack E/P on scorecard + L1 → **`GT_DIRECTIVE_019`** (reserved). | **Accepted v1 / CLOSED** | `directives/GT_DIRECTIVE_016_l1_road_data_system_student_split_v1.md`; proof `docs/proof/exam_v1/GT_DIRECTIVE_016_operator_proof_l1_road_v1.md`. |
-| **GT_DIRECTIVE_017** | **L3 `data_gap` closure:** gap register matrix (code → producer → acceptance); shrink happy-path `data_gaps[]`; wire exports instead of guessing; couples to L1 strong claims per directive text. **016 v1 no longer gates 017.** | **Planned — unblocked** | Canonical: `directives/GT_DIRECTIVE_017_student_l3_datagap_closure_matrix_v1.md`. |
+| **GT_DIRECTIVE_017** | **L3 `data_gap` closure:** gap register matrix (code → producer → acceptance); shrink happy-path `data_gaps[]`; wire exports instead of guessing; couples to L1 strong claims per directive text. **PRECONDITION shipped:** §1.0.2 LLM directional thesis enforce + L3 surface (`student_panel_d14`). | **Planned — start after precondition verified in prod** | `directives/GT_DIRECTIVE_017_student_l3_datagap_closure_matrix_v1.md` (**PRECONDITION** section). |
 | **GT_DIRECTIVE_018** | **Learning loop governance:** v1 **programmatic** — `PATTERN_GAME_STUDENT_MAX_RETRIEVAL_SLICES` (default 8, max 128), **newest-first** retrieval slice order, `learning_loop_governance_v1` on Student seam audit. **Future:** memory quality filters, H1–H4 / NO_TRADE contracts, strict P metrics, anti–bad-loop dashboards. | **Active — v1 shipped, OPEN** | `directives/GT_DIRECTIVE_018_student_learning_loop_governance_v1.md`; code `student_learning_loop_governance_v1.py`, `cross_run_retrieval_v1.py`. |
 | *TBD* | L2 tile: symbol / stake fields from outcome metadata when present | Planned | Depends on exporter / `outcome_json` shape. |
 | *TBD* | L3: mirror new slice keys where applicable | Planned | Extend `student_decision_record_v1` only when L3 contract should echo L2. |
@@ -894,3 +898,4 @@ Work **§18.2** as a sequence of small shippables; each row satisfies **§18.3**
 | v1.23 | **GT_DIRECTIVE_016** — **Accepted v1 / CLOSED**; **Deferred work register** (**016R1**, **019** reserved); §18.1b + §18.4 + header; **017** unblocked. |
 | v1.24 | **§1.0** — Decision A **directional thesis** (direction, confidence, why, conflict, action; structured target fields; LLM as synthesizer); §1.1/§1.2 + Phase A + §18.1a cross-refs; **`STUDENT_PANEL_DICTIONARY_v1.md` v1.1** — Decision A operator summary. |
 | v1.25 | **§1.0.1** — `student_output_v1` optional thesis fields (contracts + Ollama prompt + shadow stub); implementation vs exam-unit H1–H4 honesty table. |
+| v1.26 | **§1.0.2** — LLM profile mandatory thesis (reject / `llm_student_output_rejections_v1`; no stub fallback); L3 flat fields + `data_gaps`; tests/fixtures/proof; **017** directive **PRECONDITION**; D14 field-sources; dictionary v1.3. |

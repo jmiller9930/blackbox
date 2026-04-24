@@ -265,6 +265,7 @@ def student_loop_seam_after_parallel_batch_v1(
             "deliverable_vocabulary_annotation_v1": _deliverable_vocabulary_annotation_v1(
                 seam_attempted=False
             ),
+            "llm_student_output_rejections_v1": 0,
         }
 
     db = Path(str(db_path)) if db_path else DB_PATH
@@ -293,6 +294,7 @@ def student_loop_seam_after_parallel_batch_v1(
     ollama_attempts = 0
     ollama_ok = 0
     llm_trade_i = 0
+    llm_student_output_rejections_v1 = 0
 
     for row in results:
         if not row.get("ok"):
@@ -354,22 +356,16 @@ def student_loop_seam_after_parallel_batch_v1(
                             llm_model=llm_model_resolved,
                             ollama_base_url=base_url_resolved,
                             prompt_version=pv,
+                            require_directional_thesis_v1=True,
                         )
                         if soe or so is None:
-                            errors.append(f"{sid} trade={o.trade_id}: ollama_student {'; '.join(soe)}")
-                            so, soe = emit_shadow_stub_student_output_v1(
-                                pkt,
-                                graded_unit_id=o.trade_id,
-                                decision_at_ms=int(o.entry_time),
+                            llm_student_output_rejections_v1 += 1
+                            errors.append(
+                                f"{sid} trade={o.trade_id}: llm_student_output_rejected: {'; '.join(soe)}"
                             )
-                            if soe or so is None:
-                                errors.append(
-                                    f"{sid} trade={o.trade_id}: student_output_fallback_stub "
-                                    f"{'; '.join(soe)}"
-                                )
-                                continue
-                        else:
-                            ollama_ok += 1
+                            # No stub fallback for LLM profile — thesis or explicit failure (precondition for 017).
+                            continue
+                        ollama_ok += 1
                 else:
                     so, soe = emit_shadow_stub_student_output_v1(
                         pkt,
@@ -456,6 +452,7 @@ def student_loop_seam_after_parallel_batch_v1(
         ),
         "memory_semantics_annotation_v1": _memory_semantics_annotation_v1(seam_attempted=True),
         "deliverable_vocabulary_annotation_v1": _deliverable_vocabulary_annotation_v1(seam_attempted=True),
+        "llm_student_output_rejections_v1": llm_student_output_rejections_v1,
     }
     if ex_req is not None:
         out_audit["student_llm_execution_v1"] = {
@@ -470,6 +467,7 @@ def student_loop_seam_after_parallel_batch_v1(
             "ollama_trades_attempted": ollama_attempts,
             "ollama_trades_succeeded": ollama_ok,
             "llm_trade_cap": llm_cap,
+            "llm_student_output_rejections_v1": llm_student_output_rejections_v1,
         }
     out_audit["learning_loop_governance_v1"] = learning_loop_governance_audit_v1(
         max_retrieval_slices_resolved=resolved_max_retrieval_slices_v1(None),

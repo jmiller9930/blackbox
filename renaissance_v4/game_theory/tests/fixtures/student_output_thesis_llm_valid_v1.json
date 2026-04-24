@@ -1,0 +1,19 @@
+{
+  "schema": "student_output_v1",
+  "contract_version": 1,
+  "graded_unit_type": "closed_trade",
+  "graded_unit_id": "trade_thesis_fixture_valid",
+  "decision_at_ms": 1700000000000,
+  "act": true,
+  "direction": "long",
+  "pattern_recipe_ids": ["fixture_thesis_v1"],
+  "confidence_01": 0.72,
+  "reasoning_text": "Fixture: directional thesis complete for LLM profile.",
+  "student_decision_ref": "550e8400-e29b-41d4-a716-446655440000",
+  "confidence_band": "high",
+  "supporting_indicators": ["rsi_14", "ema_20"],
+  "conflicting_indicators": ["atr_14"],
+  "context_fit": "trend",
+  "invalidation_text": "Close below prior swing low on this timeframe.",
+  "student_action_v1": "enter_long"
+}

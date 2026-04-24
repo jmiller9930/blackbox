@@ -14,6 +14,8 @@ Legend: **Student** = Proctor learning store / `student_output_v1`; **Referee** 
 | `timeframe` | Meta or `run_record` echo — else `data_gap` |
 | `student_action` | `student_output.act` → ENTER / NO_TRADE — else `data_gap` |
 | `student_direction`, `student_confidence_01` | Student store `student_output` — else `data_gap` |
+| `student_confidence_band`, `student_action_v1`, `student_supporting_indicators`, `student_conflicting_indicators`, `student_context_fit`, `student_invalidation_text`, `student_reasoning_text` | Student store `student_output` thesis keys — else `data_gap` (lists must be JSON arrays on the stored object) |
+| `data_gaps` (thesis) | For `student_brain_profile_v1` = `memory_context_llm_student`: `student_directional_thesis_store_missing_for_llm_profile_v1` / `student_directional_thesis_incomplete_for_llm_profile_v1` when the stored `student_output` lacks a complete thesis (precondition for **GT_DIRECTIVE_017**) |
 | `baseline_*`, `decision_changed_flag` | **gap** until per-trade baseline export exists |
 | `price_open/high/low/close` | Meta `ohlc` dict — else `data_gap` |
 | `ema_fast`, `ema_slow`, `rsi_14`, `atr_14`, `volume`, `trend_state`, `volatility_regime`, `structure_state` | Meta / aliased keys — else `data_gap` |

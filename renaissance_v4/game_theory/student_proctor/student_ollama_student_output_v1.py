@@ -24,6 +24,7 @@ from renaissance_v4.game_theory.student_proctor.contracts_v1 import (
     CONTRACT_VERSION_STUDENT_PROCTOR_V1,
     GRADED_UNIT_TYPE_V1,
     SCHEMA_STUDENT_OUTPUT_V1,
+    validate_student_output_directional_thesis_required_for_llm_profile_v1,
     validate_student_output_v1,
 )
 
@@ -144,30 +145,46 @@ def emit_student_output_via_ollama_v1(
     llm_model: str,
     ollama_base_url: str,
     prompt_version: str,
+    require_directional_thesis_v1: bool = True,
 ) -> tuple[dict[str, Any] | None, list[str]]:
     """
     One Ollama completion → ``student_output_v1`` or validation errors.
 
     Prompt is **strictly** pre-reveal packet JSON + JSON-only output contract (no future leakage).
+
+    When ``require_directional_thesis_v1`` is True (default), output must include the full §1.0 thesis
+    bundle for ``memory_context_llm_student`` — precondition for **GT_DIRECTIVE_017**.
     """
     pkt_json = json.dumps(packet, ensure_ascii=False, default=str)[:12000]
+    thesis_lines = (
+        "- confidence_band: low | medium | high\n"
+        "- supporting_indicators: string[]\n"
+        "- conflicting_indicators: string[]\n"
+        "- context_fit: short string, e.g. trend | chop | reversal | breakout | exhaustion | unknown\n"
+        "- invalidation_text: what would prove the thesis wrong (no future prices or outcomes)\n"
+        "- student_action_v1: enter_long | enter_short | no_trade — MUST agree with act and direction "
+        "(no_trade requires act false; enter_long requires act true and direction long; enter_short "
+        "requires act true and direction short).\n"
+    )
+    if require_directional_thesis_v1:
+        thesis_block = (
+            "REQUIRED thesis keys (all MUST be present; use [] for an empty indicator list if honest; "
+            "do not invent post-hoc outcomes):\n" + thesis_lines
+        )
+    else:
+        thesis_block = (
+            "Optional thesis keys (omit any you cannot justify from the packet only):\n" + thesis_lines
+        )
     user = (
         "You are the Student (exam). You MUST output a single JSON object only — no markdown, no prose outside JSON.\n"
         "Keys required: act (boolean), direction (string: long | short | flat), confidence_01 (number 0..1), "
         "pattern_recipe_ids (array of strings, non-empty), reasoning_text (short string).\n"
-        "Optional thesis keys (omit any you cannot justify from the packet only; do not invent post-hoc outcomes):\n"
-        "- confidence_band: low | medium | high\n"
-        "- supporting_indicators: string[] (names of indicators or context cues that agree with your direction)\n"
-        "- conflicting_indicators: string[] (names that disagree or weaken the thesis)\n"
-        "- context_fit: short string, e.g. trend | chop | reversal | breakout | exhaustion | unknown\n"
-        "- invalidation_text: what would prove the thesis wrong (no future prices or outcomes)\n"
-        "- student_action_v1: enter_long | enter_short | no_trade — MUST agree with act and direction "
-        "(no_trade requires act false; enter_long requires act true and direction long; enter_short requires act true and direction short).\n"
-        f"prompt_version_echo: {prompt_version}\n"
-        f"graded_unit_id: {graded_unit_id}\n"
-        f"decision_open_time_ms: {decision_at_ms}\n"
-        "Pre-reveal decision packet (JSON):\n"
-        f"{pkt_json}\n"
+        + thesis_block
+        + f"prompt_version_echo: {prompt_version}\n"
+        + f"graded_unit_id: {graded_unit_id}\n"
+        + f"decision_open_time_ms: {decision_at_ms}\n"
+        + "Pre-reveal decision packet (JSON):\n"
+        + f"{pkt_json}\n"
     )
     text, err = _ollama_chat_once_v1(base_url=ollama_base_url, model=llm_model, user_prompt=user)
     if err or text is None:
@@ -202,6 +219,10 @@ def emit_student_output_via_ollama_v1(
     ve = validate_student_output_v1(out)
     if ve:
         return None, [f"student_output_invalid: {'; '.join(ve)}"]
+    if require_directional_thesis_v1:
+        te = validate_student_output_directional_thesis_required_for_llm_profile_v1(out)
+        if te:
+            return None, [f"student_output_thesis_incomplete_for_llm_profile: {'; '.join(te)}"]
     return out, []
 
 

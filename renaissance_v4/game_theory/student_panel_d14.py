@@ -30,7 +30,13 @@ def _float(v: Any, default: float | None = None) -> float | None:
         return float(v)
     except (TypeError, ValueError):
         return default
+from renaissance_v4.game_theory.exam_run_contract_v1 import (
+    STUDENT_BRAIN_PROFILE_MEMORY_CONTEXT_LLM_STUDENT_V1,
+)
 from renaissance_v4.game_theory.student_panel_d11 import SCHEMA_RUN_ROW, _groundhog_active_for_d11
+from renaissance_v4.game_theory.student_proctor.contracts_v1 import (
+    validate_student_output_directional_thesis_required_for_llm_profile_v1,
+)
 from renaissance_v4.game_theory.student_proctor.student_learning_store_v1 import (
     default_student_learning_store_path_v1,
     list_student_learning_records_by_graded_unit_id,
@@ -317,6 +323,29 @@ def build_student_decision_record_v1(job_id: str, trade_id: str) -> dict[str, An
         student_conf = _dg()
         gaps.append("student_confidence_01_missing")
 
+    job_pf = str(
+        (entry.get("student_brain_profile_v1") or entry.get("student_reasoning_mode") or "")
+    ).strip()
+    if job_pf == STUDENT_BRAIN_PROFILE_MEMORY_CONTEXT_LLM_STUDENT_V1:
+        if not isinstance(so, dict) or not so:
+            gaps.append("student_directional_thesis_store_missing_for_llm_profile_v1")
+        else:
+            tv = validate_student_output_directional_thesis_required_for_llm_profile_v1(so)
+            if tv:
+                gaps.append("student_directional_thesis_incomplete_for_llm_profile_v1")
+
+    def _so_thesis_field(key: str) -> Any:
+        if not isinstance(so, dict):
+            return _dg()
+        v = so.get(key)
+        return v if v is not None else _dg()
+
+    def _so_thesis_list(key: str) -> Any:
+        if not isinstance(so, dict):
+            return _dg()
+        v = so.get(key)
+        return v if isinstance(v, list) else _dg()
+
     ctx_sig: Any = None
     if isinstance(sl, dict):
         ctx_sig = sl.get("context_signature_v1")
@@ -380,6 +409,13 @@ def build_student_decision_record_v1(job_id: str, trade_id: str) -> dict[str, An
         "student_action": _student_action_from_so(so),
         "student_direction": student_direction,
         "student_confidence_01": student_conf,
+        "student_confidence_band": _so_thesis_field("confidence_band"),
+        "student_action_v1": _so_thesis_field("student_action_v1"),
+        "student_supporting_indicators": _so_thesis_list("supporting_indicators"),
+        "student_conflicting_indicators": _so_thesis_list("conflicting_indicators"),
+        "student_context_fit": _so_thesis_field("context_fit"),
+        "student_invalidation_text": _so_thesis_field("invalidation_text"),
+        "student_reasoning_text": _so_thesis_field("reasoning_text"),
         # Baseline
         "baseline_action": _dg(),
         "baseline_direction": _dg(),
