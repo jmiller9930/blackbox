@@ -1,6 +1,6 @@
 # High-level architecture — learning, exam, certification, engineering, UI splice
 
-**Status:** v1.23 — **GT_DIRECTIVE_016** **Accepted v1 / CLOSED** (L1 road + embedded table + API legend); denorm / dual-band / exam-pack E/P → **016R1** / **019** (reserved) in directive register. **§18.1a** dictionary. **015** CLOSED; **018** v1. **§1.2** good learning loop. **009a** shipped. **017** unblocked.
+**Status:** v1.24 — **§1.0** Decision A **directional thesis** (pattern-recognition core). **GT_DIRECTIVE_016** **Accepted v1 / CLOSED**; **016R1** / **019** (reserved). **§18.1a** dictionary. **015** CLOSED; **018** v1. **§1.2** good learning loop. **009a** shipped. **017** unblocked.
 
 ---
 
@@ -37,6 +37,44 @@ Then **splice those artifacts into the existing UI** (carousel becomes a **timel
 ## 1. Learning model (product definition)
 
 Learning is defined as **operator-grade decision competence**, not rule memorization.
+
+### 1.0 Decision A — the directional thesis (pattern-recognition core)
+
+The **real Student question** at **Decision A** is not pattern **labeling** (“RSI is high,” “EMA is bullish,” “ATR is elevated” as a disconnected list). It is **pattern recognition in service of commitment**: given the **indicators and context** the pack exposes, what **directional thesis** is justified, how **confident** is it, and does that justify **ENTER** or **NO_TRADE**?
+
+**The Student should answer (conceptually — packs map these to H1–H4 + sealed fields):**
+
+1. **Direction** — Is price more likely to move **long/up**, **short/down**, or **sideways / no actionable edge** (often expressed as **NEUTRAL** + **NO_TRADE** when edge is absent)?  
+2. **Confidence** — How certain is that direction: **high / medium / low**, or **no actionable edge**?  
+3. **Why** — Which indicators (and context cues) **support** the chosen direction?  
+4. **Conflict** — Which indicators (or context) **disagree** or weaken the thesis?  
+5. **Action** — Does the confidence justify **ENTER** (with side), or **NO_TRADE**?
+
+**Direction thesis (target structured shape for exam-grade output — field names may vary by pack / schema version):**
+
+- `predicted_direction` — **LONG** / **SHORT** / **NEUTRAL** (or pack-equivalent)  
+- `confidence_score` — numeric **0.00–1.00** when the pack requires it  
+- `confidence_band` — **LOW** / **MEDIUM** / **HIGH** (or pack-equivalent)  
+- `supporting_indicators` — list of which signals **agree** with the thesis  
+- `conflicting_indicators` — list of which signals **oppose** or dilute it  
+- `context_fit` — e.g. **trend / chop / reversal / breakout / exhaustion** (pack vocabulary)  
+- `action` — **ENTER_LONG** / **ENTER_SHORT** / **NO_TRADE** (aligned to ENTER + side vs NO_TRADE)  
+- `invalidation` — what **proves the thesis wrong** (exam-legal; no future leakage)
+
+**Roles (feeds into §1.1):**
+
+- **Indicators** → raw **signals** (transforms of price/volume; vocabulary in policy spec).  
+- **Memory** → **prior comparable cases** (retrieved slices — what happened before in *similar* situations).  
+- **Context** → **regime / structure** the Student may condition on at decision time (pack-published).  
+- **LLM** (when in profile) → helps **synthesize**: *do these indicators actually point the same way, or are they in tension?* It does **not** replace indicators, memory, or context; it **interprets** the legal bundle into disciplined hypotheses and a defensible **H4** selection.
+
+**Learning loop (cleaner than “the Student learns indicators”):**
+
+**Indicators → direction estimate → confidence → action → outcome → memory update.**
+
+Over time the Student (system + store + retrieval) learns **which indicator combinations imply direction, under which context, with what reliability** — measured by **Referee** outcomes and **E + P**, not by eloquence.
+
+**One-line framing:** The Student’s job is to **turn indicators into a directional thesis with a confidence level**, then **prove over time** whether that confidence was **justified**.
 
 ### Learning consists of:
 
@@ -92,7 +130,7 @@ Three concerns must stay separate in design and in grading attribution:
 |--------|------|---------------------------|
 | **Memory** | What the system **learns across runs** (outcomes, retrievable experience slices, append-only learning rows). It does not act alone; it is **retrieved** and merged only through **legal** pre-reveal paths. | Cross-run retrieval → `retrieved_student_experience_v1` on the decision packet (`cross_run_retrieval_v1`); post-reveal **`student_learning_record_v1`** / reveal join (`contracts_v1`). |
 | **Context** | What the Student **may condition on at decision time**: causal market state (e.g. bars), pack-published indicators/labels when present, and **prior-revealed** memory **slices** surfaced for *this* run. Situational bundle — **not** the same thing as the long-term store. | **`student_decision_packet_v1`** + `validate_pre_reveal_bundle_v1` (forbidden outcome keys); optional **`student_context_annex_v1`** (shape validated; default builders may not fill all buckets yet — see `student_proctor/ARCHITECTURE_BACKWARD_LADDER_STUDENT_TABLE.md` **C.1**). |
-| **LLM** | **How** the Student refines and expresses reasoning **from** the context bundle (eventually: H1–H4 deliberation, critique of memory relevance — bounded prompts, **no** self-grading). | **`memory_context_student`:** stub / deterministic **`shadow_student_v1`**. **`memory_context_llm_student`:** governed Ollama component under **`student_llm_v1`** (`llm_provider`, **`llm_model`** as secondary metadata, `llm_role`; v1 default role = single-shot `student_output_v1`). Scorecard: `student_brain_profile_v1`, `student_llm_v1`, `student_llm_execution_v1`, `prompt_version`. |
+| **LLM** | **How** the Student refines and expresses reasoning **from** the context bundle (eventually: H1–H4 deliberation, critique of memory relevance — bounded prompts, **no** self-grading). At Decision A the product intent is **synthesis** of support vs conflict into a **directional thesis** (**§1.0**), not indicator parroting. | **`memory_context_student`:** stub / deterministic **`shadow_student_v1`**. **`memory_context_llm_student`:** governed Ollama component under **`student_llm_v1`** (`llm_provider`, **`llm_model`** as secondary metadata, `llm_role`; v1 default role = single-shot `student_output_v1`). Scorecard: `student_brain_profile_v1`, `student_llm_v1`, `student_llm_execution_v1`, `prompt_version`. |
 
 **Intended relationship (feed chain):** memory (store) → **retrieval** → context bundle → **reasoner** (stub or LLM) → **`student_output_v1`** → commitment → **graded** outcome → **written back** into memory-capable stores for **later** retrieval. The LLM does **not** replace memory or context; it replaces only the **mechanical** quality of the reasoning step.
 
@@ -106,7 +144,7 @@ Three concerns must stay separate in design and in grading attribution:
 
 **Loop (targets for product + engineering):**
 
-1. **Run exam** — Student sees **context** (OHLC, indicators, **retrieved memory** when enabled); **reasons** (stub or LLM per **GT_DIRECTIVE_015** brain profile); **commits** Decision A (`student_output_v1` / exam framing above).  
+1. **Run exam** — Student sees **context** (OHLC, indicators, **retrieved memory** when enabled); **reasons** toward a **directional thesis** (**§1.0**) (stub or LLM per **GT_DIRECTIVE_015** brain profile); **commits** Decision A (`student_output_v1` / exam framing above).  
 2. **Reality** — downstream frames / replay show **what happened** (outcomes, path).  
 3. **Referee** — grades **E** (economic) and **P** (process) per pack rules; Student does **not** self-grade.  
 4. **Store** — **what worked / failed** and alignment to Student claims (reveal → **`student_learning_record_v1`**; H1–H4 vs outcome is **exam narrative + store shape** over time — not every field is enforced in every v1 code path).  
@@ -176,6 +214,8 @@ Downstream frames **SHALL** use the same anchor convention per pack (typically e
 
 **Student sees:**  
 Only data up to the **end of the opening window** (v1 default: **one 5m bar** unless the exam pack states otherwise), assembled as the **opening window snapshot** (**§2** — OHLCV + pack-published indicators + pack-published Decision A context).
+
+**Product intent:** Phase A implements **§1.0** — hypotheses and sealed output express **direction**, **confidence**, **support vs conflict**, and **action** (ENTER vs NO_TRADE), not indicator trivia alone.
 
 **Student MUST:**
 
@@ -742,7 +782,7 @@ A **trade set** is one **evaluated opportunity**: **decision-time context** (wha
 
 ### 18.1a Student panel operator dictionary
 
-**Canonical doc:** `renaissance_v4/game_theory/docs/STUDENT_PANEL_DICTIONARY_v1.md` — tables for **L1 / L2 / L3**, scorecard column shorthand (**Sys BL %**, **Run TW %**, **>BL**, harness vs Student handoff, **Groundhog state**), **brain profiles** and **`exam_run_contract_v1`**, **L1 road** (`GET /api/student-panel/l1-road`: bands, `pass_rate_percent`, E/P proxies, `legend`), L2 **direction align**, memory/context/LLM roles, and **`data_gap`**. **UI:** Pattern Machine page → **Student → learning → outcome** fold → link **Student panel dictionary** (also under Level 1 legend: **Dictionary**). **Same content in-browser:** `GET /docs/student-panel-dictionary` on the Flask host (e.g. `http://127.0.0.1:8765/docs/student-panel-dictionary`).
+**Canonical doc:** `renaissance_v4/game_theory/docs/STUDENT_PANEL_DICTIONARY_v1.md` (v1.1+) — tables for **L1 / L2 / L3**, scorecard column shorthand (**Sys BL %**, **Run TW %**, **>BL**, harness vs Student handoff, **Groundhog state**), **brain profiles** and **`exam_run_contract_v1`**, **Decision A — directional thesis** (operator summary; deep spec **§1.0**), **L1 road** (`GET /api/student-panel/l1-road`: bands, `pass_rate_percent`, E/P proxies, `legend`), L2 **direction align**, memory/context/LLM roles, and **`data_gap`**. **UI:** Pattern Machine page → **Student → learning → outcome** fold → link **Student panel dictionary** (also under Level 1 legend: **Dictionary**). **Same content in-browser:** `GET /docs/student-panel-dictionary` on the Flask host (e.g. `http://127.0.0.1:8765/docs/student-panel-dictionary`).
 
 ### 18.1b L1 road aggregation (**GT_DIRECTIVE_016**)
 
@@ -837,3 +877,4 @@ Work **§18.2** as a sequence of small shippables; each row satisfies **§18.3**
 | v1.21 | **§18.1a** — `STUDENT_PANEL_DICTIONARY_v1.md` + Flask **`GET /docs/student-panel-dictionary`**; Student fold + L1 legend links in `web_app.py`. |
 | v1.22 | **GT_DIRECTIVE_016** — `road_by_job_id_v1`; **`l1_road_v1`** on **`/api/student-panel/runs`**; L1 table + API legend; §18.1b + §18.4; directive partial acceptance. |
 | v1.23 | **GT_DIRECTIVE_016** — **Accepted v1 / CLOSED**; **Deferred work register** (**016R1**, **019** reserved); §18.1b + §18.4 + header; **017** unblocked. |
+| v1.24 | **§1.0** — Decision A **directional thesis** (direction, confidence, why, conflict, action; structured target fields; LLM as synthesizer); §1.1/§1.2 + Phase A + §18.1a cross-refs; **`STUDENT_PANEL_DICTIONARY_v1.md` v1.1** — Decision A operator summary. |

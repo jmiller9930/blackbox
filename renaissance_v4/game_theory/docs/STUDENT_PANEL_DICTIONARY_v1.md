@@ -1,4 +1,4 @@
-# Student panel dictionary (operator) — v1
+# Student panel dictionary (operator) — v1.1
 
 **Canonical file:** `renaissance_v4/game_theory/docs/STUDENT_PANEL_DICTIONARY_v1.md`  
 **Browser:** Pattern Machine learning UI → **Student → learning → outcome** fold → link **“Student panel dictionary”**, or open **`/docs/student-panel-dictionary`** on the same host as Flask (e.g. `http://127.0.0.1:8765/docs/student-panel-dictionary`).  
@@ -43,6 +43,17 @@
 | **memory_context_llm_student** | Memory + context + **LLM** (Ollama when configured). **`llm_model`** (e.g. Qwen, DeepSeek) is **nested metadata**, not a separate top-level “lane”. |
 | **exam_run_contract_v1** | Request/UI block declaring profile, optional `student_llm_v1`, `prompt_version`, skip-cold **metadata**, etc. |
 | **skip_cold_baseline** | **Metadata only** — whether a prior anchor existed for comparison; **does not** skip physical Referee replay in v1. |
+
+---
+
+## Decision A — directional thesis (exam)
+
+What the Student must **solve for** at commitment time is a **directional thesis**, not indicator trivia. **Indicators** supply signals; **memory** supplies prior cases; **context** supplies regime; **LLM** (when enabled) helps judge **alignment vs conflict** among signals — still bounded by the legal packet and **no** self-grading.
+
+| Term | Meaning |
+|------|--------|
+| **Directional thesis** | **Direction** (long / short / sideways or neutral edge) + **confidence** + **which indicators support vs conflict** + **context fit** + **action** (ENTER with side vs NO_TRADE) + **invalidation**. Full product definition: **`STUDENT_PATH_EXAM_HIGH_LEVEL_ARCHITECTURE_v1.md` §1.0**. |
+| **Learning loop (concept)** | Indicators → direction estimate → confidence → action → outcome → memory update; reliability is proven over runs via **Referee** **E**/**P**, not narrative length. |
 
 ---
 
