@@ -74,6 +74,8 @@ def test_build_debug_inserts_delta_node(monkeypatch) -> None:
     assert out.get("schema") == SCHEMA_DEBUG
     ids = [n["id"] for n in out.get("nodes_v1") or []]
     assert "decision_delta_vs_baseline" in ids
+    assert "referee_student_output_coupling" in ids
+    assert isinstance(out.get("learning_trace_events_v1"), list)
     assert isinstance(out.get("breakpoints_v1"), list)
     cmp = out.get("fingerprint_profile_compare_v1")
     assert isinstance(cmp, dict)

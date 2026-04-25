@@ -1,6 +1,10 @@
 """
 Learning Loop Trace — LangGraph-style **structured** execution graph for the Student path.
 
+**Truth label:** this is a **reconstructed learning trace** (scorecard + batch + learning API), not a
+captured execution timeline. Runtime handoffs belong in ``learning_trace_events_v1`` (merged by
+the debug API when present).
+
 Operator payload: ``build_learning_loop_trace_v1(job_id)`` → nodes + edges + blunt health banner.
 Operator HTML: ``GET /debug/learning-loop`` (legacy ``GET /learning-loop-trace`` redirects there).
 """
@@ -53,8 +57,11 @@ def _node(
     summary: str,
     sources: list[str],
     evidence: dict[str, Any],
+    *,
+    evidence_provenance_v1: list[str] | None = None,
+    runtime_breakpoints_v1: list[str] | None = None,
 ) -> dict[str, Any]:
-    return {
+    out: dict[str, Any] = {
         "id": node_id,
         "label": label,
         "node_status_v1": status,
@@ -62,6 +69,35 @@ def _node(
         "source_fields_v1": sources,
         "evidence_v1": evidence,
     }
+    if evidence_provenance_v1:
+        out["evidence_provenance_v1"] = list(evidence_provenance_v1)
+    if runtime_breakpoints_v1:
+        out["runtime_breakpoints_v1"] = list(runtime_breakpoints_v1)
+    return out
+
+
+def ensure_node_evidence_provenance_defaults_v1(nodes: list[dict[str, Any]]) -> None:
+    """Fill ``evidence_provenance_v1`` when missing (does not overwrite explicit capture merge)."""
+    defaults: dict[str, list[str]] = {
+        "run_started": ["scorecard"],
+        "run_config": ["scorecard"],
+        "packet_build": ["batch_artifact", "scorecard"],
+        "memory_retrieval": ["scorecard"],
+        "llm_reasoning": ["scorecard"],
+        "student_decision": ["scorecard"],
+        "referee_student_output_coupling": ["unknown"],
+        "referee_execution": ["scorecard"],
+        "ep_grading": ["scorecard"],
+        "governance_018": ["learning_store"],
+        "learning_store": ["scorecard", "learning_store"],
+        "future_retrieval": ["learning_store"],
+        "decision_delta_vs_baseline": ["unknown", "l3"],
+    }
+    for n in nodes:
+        nid = str(n.get("id") or "")
+        if n.get("evidence_provenance_v1"):
+            continue
+        n["evidence_provenance_v1"] = list(defaults.get(nid, ["unknown"]))
 
 
 def _edge(frm: str, to: str, flow: EdgeFlow, detail: str) -> dict[str, Any]:
@@ -440,6 +476,26 @@ def build_learning_loop_trace_v1(job_id: str) -> dict[str, Any]:
         )
     )
 
+    nodes.append(
+        _node(
+            "referee_student_output_coupling",
+            "Referee use of Student output",
+            "unknown",
+            "NOT PROVEN — no runtime ``learning_trace_events_v1`` (or equivalent persisted coupling) "
+            "proves Referee consumed vs ignored Student thesis; scorecard aggregates are insufficient.",
+            [
+                "learning_trace_events_v1 (stage referee_used_student_output)",
+                "per-trade worker coupling audit (future)",
+            ],
+            {
+                "verdict_v1": "NOT_PROVEN",
+                "detail_v1": "Reconstructed trace cannot certify influence; workers must emit capture events.",
+            },
+            evidence_provenance_v1=["unknown"],
+            runtime_breakpoints_v1=["not_captured_at_runtime_v1"],
+        )
+    )
+
     if total_proc <= 0 and status == "done":
         rf: NodeStatus = "fail"
         rf_sm = "total_processed is zero despite done — Referee row aggregate missing."
@@ -549,6 +605,7 @@ def build_learning_loop_trace_v1(job_id: str) -> dict[str, Any]:
         )
     )
 
+    ensure_node_evidence_provenance_defaults_v1(nodes)
     edges = rebuild_linear_edges_v1(nodes)
 
     # --- top banner from training audit (single source of truth for "did store learn?") ---
@@ -588,6 +645,15 @@ def build_learning_loop_trace_v1(job_id: str) -> dict[str, Any]:
         "training_exam_audit_v1": tea,
         "nodes_v1": nodes,
         "edges_v1": edges,
+        "trace_classification_v1": {
+            "display_mode_v1": "reconstructed_learning_trace",
+            "capture_schema_v1": "learning_trace_event_v1",
+            "note_v1": (
+                "Graph is derived post-run from scorecard, batch artifacts, and learning API — "
+                "not a captured execution trace. Merge ``learning_trace_events_v1`` in the debug API "
+                "when runtime events exist."
+            ),
+        },
         # Echo for callers (e.g. debug trace) so they do not re-scan scorecard for the same row.
         "scorecard_line_v1": dict(entry),
     }
@@ -602,6 +668,7 @@ def read_learning_loop_trace_page_html_v1() -> str:
 __all__ = [
     "SCHEMA",
     "build_learning_loop_trace_v1",
+    "ensure_node_evidence_provenance_defaults_v1",
     "read_learning_loop_trace_page_html_v1",
     "rebuild_linear_edges_v1",
 ]

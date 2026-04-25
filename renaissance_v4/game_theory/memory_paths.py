@@ -81,6 +81,14 @@ def default_ask_data_operator_feedback_jsonl() -> Path:
     return _GAME_THEORY / "ask_data_operator_feedback.jsonl"
 
 
+def default_learning_trace_events_jsonl() -> Path:
+    """Append-only **learning_trace_events_v1** (runtime handoffs not reconstructable from scorecard alone)."""
+    mr = memory_root()
+    if mr:
+        return mr / "learning_trace_events_v1.jsonl"
+    return _GAME_THEORY / "learning_trace_events_v1.jsonl"
+
+
 def ensure_memory_root_tree() -> None:
     """Create ``logs`` under memory root when ``PATTERN_GAME_MEMORY_ROOT`` is set (idempotent)."""
     mr = memory_root()

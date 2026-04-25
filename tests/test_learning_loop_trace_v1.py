@@ -129,7 +129,9 @@ def test_trace_minimal_scorecard(monkeypatch) -> None:
     assert out.get("ok") is True
     assert isinstance(out.get("scorecard_line_v1"), dict)
     assert out["scorecard_line_v1"].get("job_id") == "trace-min"
-    assert len(out.get("nodes_v1") or []) >= 10
+    assert len(out.get("nodes_v1") or []) >= 12
+    ids = [n["id"] for n in out["nodes_v1"]]
+    assert "referee_student_output_coupling" in ids
     assert out.get("learning_loop_health_banner_v1")
     ff = out.get("fault_focus_v1")
     assert isinstance(ff, dict)

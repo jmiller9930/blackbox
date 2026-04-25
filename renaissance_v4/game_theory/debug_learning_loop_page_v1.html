@@ -114,7 +114,8 @@
 <body>
   <header class="llt-head">
     <h1>Learning Loop (Debug)</h1>
-    <p class="sub">LangGraph-style visual proof of whether the Student learned or where the loop broke.</p>
+    <p class="sub">Reconstructed learning trace (scorecard + batch + learning API) with optional merge of <code>learning_trace_events_v1</code> when workers append runtime events — not a captured execution trace by default.</p>
+    <p id="lltClassification" class="sub" style="margin-top:0.35rem;font-size:0.8rem;color:#8b949e" hidden></p>
     <div id="lltBanner" class="llt-banner llt-banner--inconclusive" hidden></div>
     <p id="lltDetail" class="llt-detail" hidden></p>
     <div id="lltFaultFocus" class="llt-fault-focus" hidden></div>
@@ -169,6 +170,7 @@
   const bpEl = document.getElementById('lltBreakpoints');
   const cmpEl = document.getElementById('lltCompare');
   const progEl = document.getElementById('lltProgress');
+  const tcEl = document.getElementById('lltClassification');
   let lastPayload = null;
   if (jobInp && jobId) jobInp.value = jobId;
 
@@ -264,6 +266,24 @@
       const p = document.createElement('p');
       p.className = 'sum';
       p.textContent = String(n.summary_v1 || '');
+      if (Array.isArray(n.evidence_provenance_v1) && n.evidence_provenance_v1.length) {
+        const pr = document.createElement('p');
+        pr.className = 'sum';
+        pr.style.fontSize = '0.68rem';
+        pr.style.color = 'var(--muted)';
+        pr.style.margin = '0.15rem 0 0';
+        pr.textContent = 'evidence_provenance_v1: ' + n.evidence_provenance_v1.join(', ');
+        card.appendChild(pr);
+      }
+      if (Array.isArray(n.runtime_breakpoints_v1) && n.runtime_breakpoints_v1.length) {
+        const rb = document.createElement('p');
+        rb.className = 'sum';
+        rb.style.fontSize = '0.65rem';
+        rb.style.color = '#e3b341';
+        rb.style.margin = '0.1rem 0 0';
+        rb.textContent = 'runtime_breakpoints_v1: ' + n.runtime_breakpoints_v1.join(', ');
+        card.appendChild(rb);
+      }
       const det = document.createElement('details');
       const sm = document.createElement('summary');
       sm.textContent = 'Sources & raw evidence';
@@ -448,6 +468,23 @@
     banner.textContent = String(view.learning_loop_health_banner_v1 || '');
     detail.hidden = false;
     detail.textContent = String(view.learning_loop_health_detail_v1 || '');
+    if (tcEl) {
+      var tc = data.trace_classification_v1 || view.trace_classification_v1;
+      if (tc && typeof tc === 'object' && tc.display_mode_v1) {
+        var t1 =
+          'display_mode_v1: ' +
+          String(tc.display_mode_v1) +
+          (tc.merge_mode_v1 ? ' · merge: ' + String(tc.merge_mode_v1) : '') +
+          (typeof data.learning_trace_events_count_v1 === 'number'
+            ? ' · runtime events: ' + data.learning_trace_events_count_v1
+            : '');
+        tcEl.textContent = t1;
+        tcEl.hidden = false;
+      } else {
+        tcEl.textContent = '';
+        tcEl.hidden = true;
+      }
+    }
     const ff = view.fault_focus_v1;
     if (faultEl) {
       if (!ff) {

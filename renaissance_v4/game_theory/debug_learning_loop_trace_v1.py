@@ -1,6 +1,10 @@
 """
 Debug Learning Loop Trace — LangGraph-style graph + fingerprint profile compare (GT operator).
 
+**Truth:** base nodes are **reconstructed**; this module **merges** ``learning_trace_events_v1`` lines
+(when present) so provenance can include ``trace_store`` and the Referee–Student coupling can be proven
+only when a ``referee_used_student_output`` event exists.
+
 ``GET /api/debug/learning-loop/trace/<job_id>`` — extends ``learning_loop_trace_v1`` with:
 - extra node **Decision delta vs baseline**
 - ``breakpoints_v1`` — machine-detectable fault codes
@@ -25,8 +29,14 @@ from renaissance_v4.game_theory.exam_run_contract_v1 import (
 )
 from renaissance_v4.game_theory.learning_loop_trace_v1 import (
     build_learning_loop_trace_v1,
+    ensure_node_evidence_provenance_defaults_v1,
     rebuild_linear_edges_v1,
 )
+from renaissance_v4.game_theory.learning_trace_events_v1 import (
+    merge_learning_trace_events_into_nodes_v1,
+    read_learning_trace_events_for_job_v1,
+)
+from renaissance_v4.game_theory.memory_paths import default_learning_trace_events_jsonl
 from renaissance_v4.game_theory.scorecard_drill import find_scorecard_entry_by_job_id
 from renaissance_v4.game_theory.student_panel_d11 import _batch_trade_win_pct_from_line
 from renaissance_v4.game_theory.student_panel_l1_road_v1 import (
@@ -192,6 +202,8 @@ def _finalize_debug_trace_from_base_v1(base: dict[str, Any], entry: dict[str, An
                     "training_learning_verdict_v1"
                 ),
             },
+            "evidence_provenance_v1": ["unknown", "l3"],
+            "runtime_breakpoints_v1": ["not_captured_at_runtime_v1"],
         }
         nodes.insert(ins_at + 1, delta_node)
     work["nodes_v1"] = nodes
@@ -217,6 +229,7 @@ def _finalize_debug_trace_from_base_v1(base: dict[str, Any], entry: dict[str, An
     t_fp0 = time.perf_counter()
     compare = _fingerprint_profile_compare_v1(entry)
     fp_ms = round((time.perf_counter() - t_fp0) * 1000.0, 2)
+    events = read_learning_trace_events_for_job_v1(jid)
     bps = _breakpoints_v1(
         entry=entry,
         tea=tea if isinstance(tea, dict) else {},
@@ -232,16 +245,34 @@ def _finalize_debug_trace_from_base_v1(base: dict[str, Any], entry: dict[str, An
         exam_e=exam_e,
         exam_p=exam_p,
     )
+    if not events:
+        bps = sorted({*bps, "runtime_learning_trace_events_empty_v1"})
 
     out = dict(work)
     out["schema"] = SCHEMA_DEBUG
     out["fingerprint_profile_compare_v1"] = compare
     out["breakpoints_v1"] = bps
     out["trace_build_timings_ms_v1"] = {"fingerprint_profile_compare_v1": fp_ms}
+    out["learning_trace_events_v1"] = events
+    out["learning_trace_events_count_v1"] = len(events)
+    out["learning_trace_events_path_v1"] = str(
+        default_learning_trace_events_jsonl().expanduser().resolve()
+    )
+    merge_learning_trace_events_into_nodes_v1(out["nodes_v1"], events)
+    ensure_node_evidence_provenance_defaults_v1(out["nodes_v1"])
+    out["edges_v1"] = rebuild_linear_edges_v1(out["nodes_v1"])
+    tc = dict(out.get("trace_classification_v1") or {})
+    tc["runtime_events_loaded_count_v1"] = len(events)
+    tc["merge_mode_v1"] = "reconstructed_plus_trace_store_v1"
+    out["trace_classification_v1"] = tc
     out["operator_notes_v1"] = {
         "referee_vs_student_metric_v1": (
             "L1 Run TW % and Sys BL % are Referee batch trade-win rollups — they can match across "
             "profiles when replay outcomes do not diverge. Student thesis deltas are L3 / store."
+        ),
+        "trace_truth_v1": (
+            "Primary graph is **reconstructed** from persisted artifacts. "
+            "``learning_trace_events_v1`` supplies runtime proof when workers append events."
         ),
     }
     return out
