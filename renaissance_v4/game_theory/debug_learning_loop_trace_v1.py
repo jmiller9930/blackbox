@@ -8,9 +8,13 @@ parent-thread instrumentation (batch / seam / scorecard), not from process-pool 
 
 ``GET /api/debug/learning-loop/trace/<job_id>`` — extends ``learning_loop_trace_v1`` with:
 - extra node **Decision delta vs baseline**
-- ``breakpoints_v1`` — machine-detectable fault codes
+- ``breakpoints_v1`` — machine-detectable fault codes (including triple-profile identical visible fields)
 - ``fingerprint_profile_compare_v1`` — newest-done row per canonical brain profile for same fingerprint
-  (single streaming scorecard pass; no full-file ``read_text``)
+- ``model_provenance_chain_v1`` — contract vs scorecard vs seam vs runtime ``llm_called`` model strings
+- ``student_decision_cross_profile_verdict_v1`` — plain-language **NOT PROVEN** answers (no decoration)
+- ``same_visible_outcome_candidates_v1`` — ranked hypotheses with **evidence_tier_v1**
+- ``referee_student_output_operator_line_v1`` — blunt **Referee used Student output** headline after merge
+- ``fault_focus_v1.decisive_operator_questions_v1`` — coupling + cross-profile summary for triage
 - ``GET /api/debug/learning-loop/trace-stream/<job_id>`` — NDJSON ``stage`` lines then ``complete`` (UI progress)
 """
 
@@ -27,6 +31,7 @@ from renaissance_v4.game_theory.exam_run_contract_v1 import (
     STUDENT_BRAIN_PROFILE_BASELINE_NO_MEMORY_NO_LLM_V1,
     STUDENT_BRAIN_PROFILE_MEMORY_CONTEXT_LLM_STUDENT_V1,
     STUDENT_BRAIN_PROFILE_MEMORY_CONTEXT_STUDENT_V1,
+    resolved_llm_for_exam_contract_v1,
 )
 from renaissance_v4.game_theory.learning_loop_trace_v1 import (
     build_learning_loop_trace_v1,
@@ -88,6 +93,8 @@ def _row_snapshot_v1(line: dict[str, Any]) -> dict[str, Any]:
         "l1_p_value_source_v1": line.get("l1_p_value_source_v1"),
         "student_learning_rows_appended": line.get("student_learning_rows_appended"),
         "student_retrieval_matches": line.get("student_retrieval_matches"),
+        "student_supporting_indicators": line.get("student_supporting_indicators"),
+        "student_conflicting_indicators": line.get("student_conflicting_indicators"),
         "note_v1": (
             "Scorecard-line snapshot. Per-trade student_action_v1 / thesis often live in L3 or "
             "Student store only — null here does not prove absence."
@@ -169,7 +176,367 @@ def _breakpoints_v1(
         out.append("no_scorecard_evidence_student_path")
     if tv == "STUDENT_LANE_NOT_CONFIGURED_OR_OFF":
         out.append("student_lane_not_configured")
+    snaps = compare.get("row_snapshots_v1") or {}
+    trip = [snaps[p] for p in _PROFILE_ORDER if isinstance(snaps.get(p), dict)]
+    if len(trip) >= 3:
+        keys_trip = (
+            "referee_trade_win_pct_proxy_v1",
+            "exam_e_score_v1",
+            "exam_p_score_v1",
+            "l1_e_scalar_v1",
+            "l1_p_scalar_v1",
+            "student_action_v1",
+            "direction",
+        )
+
+        def _eq3(a: Any, b: Any, c: Any) -> bool:
+            if a is None or b is None or c is None:
+                return False
+            if isinstance(a, (int, float)) and isinstance(b, (int, float)) and isinstance(c, (int, float)):
+                return abs(float(a) - float(b)) < 1e-9 and abs(float(b) - float(c)) < 1e-9
+            return str(a).strip() == str(b).strip() == str(c).strip()
+
+        same_all: list[str] = []
+        for k in keys_trip:
+            if _eq3(trip[0].get(k), trip[1].get(k), trip[2].get(k)):
+                same_all.append(k)
+        if len(same_all) >= 4:
+            out.append("triple_profile_same_fp_identical_on_core_visible_fields_v1")
     return sorted(set(out))
+
+
+def _norm_val(v: Any) -> str | None:
+    if v is None:
+        return None
+    if isinstance(v, (int, float)):
+        return str(round(float(v), 8))
+    if isinstance(v, list):
+        return json.dumps(v, sort_keys=True, default=str)
+    s = str(v).strip()
+    return s or None
+
+
+def _model_provenance_chain_v1(entry: dict[str, Any], events: list[dict[str, Any]]) -> dict[str, Any]:
+    """Where model strings can diverge — no guessing; only fields present on this row + runtime events."""
+    prof = resolved_brain_profile_v1(entry)
+    oba = entry.get("operator_batch_audit") if isinstance(entry.get("operator_batch_audit"), dict) else {}
+    ex_req = oba.get("exam_run_contract_request_v1")
+    ex_req = ex_req if isinstance(ex_req, dict) else None
+    contract_model: str | None = None
+    contract_url: str | None = None
+    if ex_req:
+        m, u, _slm = resolved_llm_for_exam_contract_v1(ex_req)
+        contract_model = m
+        contract_url = u or None
+    raw_llm_block = entry.get("student_llm_v1") if isinstance(entry.get("student_llm_v1"), dict) else {}
+    scorecard_top_llm = entry.get("llm_model")
+    scorecard_top_llm_s = str(scorecard_top_llm).strip() if scorecard_top_llm else None
+    resolved_tag = resolved_llm_model_tag_v1(entry, prof)
+    llm_ex = entry.get("student_llm_execution_v1") if isinstance(entry.get("student_llm_execution_v1"), dict) else {}
+    seam_model = str(llm_ex.get("model_resolved") or "").strip() or None
+    seam_url = str(llm_ex.get("base_url_resolved") or "").strip() or None
+    runtime_models: list[str] = []
+    for ev in events:
+        if str(ev.get("stage") or "").strip() != "llm_called":
+            continue
+        ep = ev.get("evidence_payload") if isinstance(ev.get("evidence_payload"), dict) else {}
+        mm = ep.get("llm_model")
+        if isinstance(mm, str) and mm.strip():
+            runtime_models.append(mm.strip())
+    uniq_runtime = list(dict.fromkeys(runtime_models))
+    switches: list[dict[str, Any]] = []
+    if contract_model and scorecard_top_llm_s and contract_model.strip() != scorecard_top_llm_s.strip():
+        switches.append(
+            {
+                "where_v1": "exam_run_contract_request_vs_scorecard_llm_model_column",
+                "left_v1": contract_model,
+                "right_v1": scorecard_top_llm_s,
+            }
+        )
+    if contract_model and resolved_tag and contract_model.strip() != resolved_tag.strip():
+        switches.append(
+            {
+                "where_v1": "exam_contract_vs_resolved_llm_model_tag_v1",
+                "left_v1": contract_model,
+                "right_v1": resolved_tag,
+            }
+        )
+    if seam_model and resolved_tag and seam_model.strip() != resolved_tag.strip():
+        switches.append(
+            {
+                "where_v1": "seam_student_llm_execution_vs_resolved_llm_model_tag_v1",
+                "left_v1": seam_model,
+                "right_v1": resolved_tag,
+            }
+        )
+    if uniq_runtime and contract_model:
+        if uniq_runtime[0].strip() != contract_model.strip():
+            switches.append(
+                {
+                    "where_v1": "runtime_llm_called_vs_exam_contract_model",
+                    "contract_v1": contract_model,
+                    "runtime_first_v1": uniq_runtime[0],
+                }
+            )
+    if len(uniq_runtime) > 1:
+        switches.append({"where_v1": "runtime_multiple_distinct_llm_called_models_same_job", "models_v1": uniq_runtime})
+    return {
+        "schema": "model_provenance_chain_v1",
+        "exam_run_contract_request_v1_present_v1": bool(ex_req),
+        "contract_resolved_llm_model_v1": contract_model,
+        "contract_default_ollama_base_url_v1": contract_url,
+        "scorecard_llm_model_column_v1": scorecard_top_llm_s,
+        "scorecard_student_llm_v1_block": raw_llm_block or None,
+        "scorecard_resolved_llm_model_tag_v1": resolved_tag,
+        "seam_student_llm_execution_model_resolved_v1": seam_model,
+        "seam_student_llm_execution_base_url_resolved_v1": seam_url,
+        "runtime_llm_called_models_ordered_v1": uniq_runtime,
+        "l1_display_v1": {
+            "l1_e_scalar_v1": line_e_value_for_l1_v1(entry),
+            "l1_p_scalar_v1": line_p_value_for_l1_v1(entry),
+            "l1_e_value_source_v1": entry.get("l1_e_value_source_v1"),
+            "l1_p_value_source_v1": entry.get("l1_p_value_source_v1"),
+        },
+        "model_switch_events_v1": switches,
+        "note_v1": (
+            "UI-selected model is only proven here if the client sent ``exam_run_contract_request_v1`` "
+            "inside ``operator_batch_audit`` on this scorecard row. ``llm_called`` runtime lines prove "
+            "what model tag was passed into the seam Ollama call for that trade."
+        ),
+    }
+
+
+def _cross_profile_student_verdict_v1(
+    compare: dict[str, Any],
+    entry: dict[str, Any],
+    model_chain: dict[str, Any],
+) -> dict[str, Any]:
+    snaps = compare.get("row_snapshots_v1") or {}
+    cov = {p: isinstance(snaps.get(p), dict) for p in _PROFILE_ORDER}
+    fields_compared = (
+        "student_action_v1",
+        "direction",
+        "confidence_01",
+        "confidence_band",
+        "student_supporting_indicators",
+        "student_conflicting_indicators",
+        "retrieved_context_ids",
+        "llm_model",
+        "referee_win_pct",
+        "referee_trade_win_pct_proxy_v1",
+        "expectancy_per_trade",
+        "exam_e_score_v1",
+        "exam_p_score_v1",
+        "l1_e_scalar_v1",
+        "l1_p_scalar_v1",
+    )
+    if not all(cov.values()):
+        return {
+            "schema": "student_decision_cross_profile_verdict_v1",
+            "row_coverage_v1": cov,
+            "fields_compared_v1": list(fields_compared),
+            "plain_language_answer_v1": (
+                "NOT PROVEN — newest **done** scorecard rows for all three canonical brain profiles "
+                "are not all present for this fingerprint; cannot decide whether three different brains ran."
+            ),
+            "answer_code_v1": "NOT_PROVEN_INCOMPLETE_ROWS",
+        }
+    rows = [snaps[p] for p in _PROFILE_ORDER]
+    diffs: list[str] = []
+    for k in fields_compared:
+        a, b, c = (_norm_val(rows[0].get(k)), _norm_val(rows[1].get(k)), _norm_val(rows[2].get(k)))
+        if a is None and b is None and c is None:
+            continue
+        if a != b or b != c or a != c:
+            diffs.append(k)
+    same_tw = compare.get("same_referee_trade_win_proxy_v1") is True
+    action_same = _norm_val(rows[0].get("student_action_v1")) == _norm_val(rows[2].get("student_action_v1")) == _norm_val(rows[1].get("student_action_v1"))
+    direction_same = _norm_val(rows[0].get("direction")) == _norm_val(rows[1].get("direction")) == _norm_val(rows[2].get("direction"))
+    exam_same = _norm_val(rows[0].get("exam_e_score_v1")) == _norm_val(rows[1].get("exam_e_score_v1")) == _norm_val(rows[2].get("exam_e_score_v1"))
+    l1e_same = _norm_val(rows[0].get("l1_e_scalar_v1")) == _norm_val(rows[1].get("l1_e_scalar_v1")) == _norm_val(rows[2].get("l1_e_scalar_v1"))
+    has_decision_on_snapshots = any(
+        rows[i].get("student_action_v1") not in (None, "")
+        or rows[i].get("direction") not in (None, "")
+        for i in range(3)
+    )
+
+    if not diffs:
+        if not has_decision_on_snapshots:
+            msg = (
+                "NOT PROVEN — all three profile rows exist for this fingerprint, but scorecard snapshots "
+                "omit ``student_action_v1`` / ``direction``; prove per-trade decisions in L3 or the Student store."
+            )
+            code = "NOT_PROVEN_MISSING_DECISION_FIELDS_ON_SCORECARD"
+        elif action_same and direction_same:
+            msg = (
+                "Student decision did not change on the compared scorecard snapshots (same action/direction "
+                "and no differences on compared fields that carry values). Same visible E / L1 road across "
+                "profiles is **consistent with one Referee replay** — **NOT PROVEN** that three "
+                "independent Student brains produced different decisions."
+            )
+            code = "STUDENT_DECISION_UNCHANGED_ON_SNAPSHOTS"
+        else:
+            msg = (
+                "Compared fields with any values are identical across profiles. **NOT PROVEN** that three "
+                "distinct decision paths produced this fingerprint."
+            )
+            code = "SNAPSHOTS_IDENTICAL_WHERE_VALUES_EXIST"
+    elif diffs and ("student_action_v1" in diffs or "direction" in diffs) and same_tw:
+        msg = (
+            "Student decision fields differ between profiles on these snapshots, but the Referee trade-win "
+            "proxy matches. Architecture note: Referee replay is scheduled before the Student seam — "
+            "**NOT PROVEN** that Referee execution consumed Student output for worker rows; see "
+            "``referee_used_student_output`` runtime line and coupling node."
+        )
+        code = "STUDENT_DECISION_CHANGED_REFEREE_PROXY_UNCHANGED"
+    elif diffs and (not exam_same or not l1e_same) and same_tw:
+        msg = (
+            "Exam or L1 E scalars differ across profiles while Referee proxy matches — check "
+            "``l1_e_value_source_v1`` / ``l1_p_value_source_v1`` on each row. **NOT PROVEN** (without "
+            "per-field wiring audit) that the UI is showing the wrong score column."
+        )
+        code = "NOT_PROVEN_EP_L1_DIVERGE_REFEREE_SAME"
+    else:
+        msg = (
+            "Profiles diverge on one or more compared fields — inspect ``fingerprint_profile_compare_v1`` "
+            "row_snapshots_v1. This is not a failure of the trace; it narrows where to look next (memory, "
+            "LLM, store, or display)."
+        )
+        code = "PROFILES_DIVERGE_ON_COMPARED_FIELDS"
+
+    out: dict[str, Any] = {
+        "schema": "student_decision_cross_profile_verdict_v1",
+        "row_coverage_v1": cov,
+        "fields_compared_v1": list(fields_compared),
+        "fields_differing_across_profiles_v1": diffs,
+        "plain_language_answer_v1": msg,
+        "answer_code_v1": code,
+        "same_referee_trade_win_proxy_across_profiles_v1": same_tw,
+        "this_run_brain_profile_v1": resolved_brain_profile_v1(entry),
+        "model_switch_events_echo_v1": model_chain.get("model_switch_events_v1") or [],
+    }
+    return out
+
+
+def _same_visible_outcome_candidates_v1(
+    entry: dict[str, Any],
+    compare: dict[str, Any],
+    events: list[dict[str, Any]],
+    bps: list[str],
+    model_chain: dict[str, Any],
+) -> dict[str, Any]:
+    """Ranked hypotheses when A/B/C look the same — each line states evidence tier; no decoration."""
+    cands: list[dict[str, Any]] = []
+    if "no_memory_retrieved_scorecard_zero" in bps:
+        cands.append(
+            {
+                "code_v1": "memory_not_retrieved",
+                "detail_v1": "Breakpoint: no_memory_retrieved_scorecard_zero.",
+                "evidence_tier_v1": "proven_from_breakpoint",
+            }
+        )
+    if "llm_not_called_no_ollama_attempts" in bps:
+        cands.append(
+            {
+                "code_v1": "llm_did_not_run",
+                "detail_v1": "Breakpoint: llm_not_called_no_ollama_attempts on this run row.",
+                "evidence_tier_v1": "proven_from_breakpoint",
+            }
+        )
+    if "runtime_learning_trace_events_empty_v1" in bps or "learning_trace_integrity_failed_v1" in bps:
+        cands.append(
+            {
+                "code_v1": "runtime_trace_missing_or_invalid",
+                "detail_v1": "Cannot prove stage boundaries without learning_trace_event_v1 lines for this job_id.",
+                "evidence_tier_v1": "proven_from_breakpoint",
+            }
+        )
+    sw = model_chain.get("model_switch_events_v1") if isinstance(model_chain.get("model_switch_events_v1"), list) else []
+    if sw:
+        cands.append(
+            {
+                "code_v1": "model_string_mismatch_in_chain",
+                "detail_v1": f"model_provenance_chain_v1 reports {len(sw)} switch(es) — inspect model_switch_events_v1.",
+                "evidence_tier_v1": "proven_from_scorecard_and_or_runtime",
+            }
+        )
+    if compare.get("same_referee_trade_win_proxy_v1") is True:
+        cands.append(
+            {
+                "code_v1": "shared_referee_replay_same_trade_win_proxy",
+                "detail_v1": (
+                    "Same-fingerprint newest rows share Referee trade-win proxy — expected if worker replay "
+                    "does not vary by Student brain profile for that fingerprint."
+                ),
+                "evidence_tier_v1": "proven_from_scorecard_compare",
+            }
+        )
+    ru_status: str | None = None
+    for ev in reversed(events):
+        if str(ev.get("stage") or "").strip() == "referee_used_student_output":
+            ru_status = str(ev.get("status") or "").strip().lower()
+            ep = ev.get("evidence_payload") if isinstance(ev.get("evidence_payload"), dict) else {}
+            inf = str(ep.get("student_influence_on_worker_replay_v1") or "").strip().lower()
+            if inf in ("true", "false", "unknown"):
+                ru_status = inf
+            break
+    if ru_status == "false":
+        cands.append(
+            {
+                "code_v1": "referee_worker_replay_did_not_use_student_output",
+                "detail_v1": "Runtime line referee_used_student_output status=false (documented ordering).",
+                "evidence_tier_v1": "proven_from_runtime_event",
+            }
+        )
+    elif ru_status == "unknown":
+        cands.append(
+            {
+                "code_v1": "referee_student_coupling_unknown",
+                "detail_v1": "Runtime line marked unknown — cannot prove influence on worker replay.",
+                "evidence_tier_v1": "proven_from_runtime_event",
+            }
+        )
+    if not cands:
+        cands.append(
+            {
+                "code_v1": "no_single_root_cause_identified",
+                "detail_v1": "No matching breakpoint chain — use plain_language_answer_v1 and per-node evidence.",
+                "evidence_tier_v1": "not_proven",
+            }
+        )
+    return {"schema": "same_visible_outcome_candidates_v1", "candidates_v1": cands}
+
+
+def _referee_coupling_operator_line_v1(nodes: list[dict[str, Any]]) -> dict[str, Any]:
+    for n in nodes:
+        if str(n.get("id") or "") != "referee_student_output_coupling":
+            continue
+        evd = n.get("evidence_v1") if isinstance(n.get("evidence_v1"), dict) else {}
+        verdict = str(evd.get("verdict_v1") or "NOT_PROVEN").strip()
+        rb = list(n.get("runtime_breakpoints_v1") or [])
+        if verdict == "PROVEN_BY_RUNTIME_EVENT_V1":
+            headline = "Referee used Student output: PROVEN (runtime event)"
+        elif verdict == "REFUSED_OR_IGNORED_V1":
+            headline = "Referee used Student output: NOT USED / IGNORED (runtime event)"
+        elif verdict == "COUPLING_UNKNOWN_V1":
+            headline = "Referee used Student output: UNKNOWN (runtime event)"
+        elif verdict in ("NOT_PROVEN", "") or "not_captured_at_runtime_v1" in rb:
+            headline = "Referee used Student output: NOT PROVEN"
+        else:
+            headline = f"Referee used Student output: {verdict}"
+        return {
+            "schema": "referee_student_output_operator_line_v1",
+            "headline_v1": headline,
+            "node_status_v1": n.get("node_status_v1"),
+            "summary_v1": n.get("summary_v1"),
+            "verdict_v1": verdict,
+            "runtime_breakpoints_v1": rb,
+        }
+    return {
+        "schema": "referee_student_output_operator_line_v1",
+        "headline_v1": "Referee used Student output: NOT PROVEN (coupling node missing)",
+        "verdict_v1": "NOT_PROVEN",
+    }
 
 
 def _finalize_debug_trace_from_base_v1(base: dict[str, Any], entry: dict[str, Any]) -> dict[str, Any]:
@@ -232,6 +599,8 @@ def _finalize_debug_trace_from_base_v1(base: dict[str, Any], entry: dict[str, An
     fp_ms = round((time.perf_counter() - t_fp0) * 1000.0, 2)
     events = read_learning_trace_events_for_job_v1(jid)
     status_lc = str(entry.get("status") or "").strip().lower()
+    model_chain = _model_provenance_chain_v1(entry, events)
+    cross_profile = _cross_profile_student_verdict_v1(compare, entry, model_chain)
     bps = _breakpoints_v1(
         entry=entry,
         tea=tea if isinstance(tea, dict) else {},
@@ -271,6 +640,17 @@ def _finalize_debug_trace_from_base_v1(base: dict[str, Any], entry: dict[str, An
     merge_learning_trace_events_into_nodes_v1(out["nodes_v1"], events)
     ensure_node_evidence_provenance_defaults_v1(out["nodes_v1"])
     out["edges_v1"] = rebuild_linear_edges_v1(out["nodes_v1"])
+    out["model_provenance_chain_v1"] = model_chain
+    out["student_decision_cross_profile_verdict_v1"] = cross_profile
+    out["referee_student_output_operator_line_v1"] = _referee_coupling_operator_line_v1(out["nodes_v1"])
+    out["same_visible_outcome_candidates_v1"] = _same_visible_outcome_candidates_v1(
+        entry, compare, events, bps, model_chain
+    )
+    ff = dict(out.get("fault_focus_v1") or {})
+    coup_h = (out.get("referee_student_output_operator_line_v1") or {}).get("headline_v1")
+    cp_a = (out.get("student_decision_cross_profile_verdict_v1") or {}).get("plain_language_answer_v1")
+    ff["decisive_operator_questions_v1"] = [x for x in (coup_h, cp_a) if x]
+    out["fault_focus_v1"] = ff
     tc = dict(out.get("trace_classification_v1") or {})
     tc["runtime_events_loaded_count_v1"] = len(events)
     tc["merge_mode_v1"] = "reconstructed_plus_trace_store_v1"

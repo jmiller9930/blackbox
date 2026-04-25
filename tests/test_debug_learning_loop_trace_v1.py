@@ -88,6 +88,15 @@ def test_build_debug_inserts_delta_node(monkeypatch) -> None:
     assert "learning_trace_integrity_failed_v1" in (out.get("breakpoints_v1") or [])
     assert "runtime_learning_trace_events_empty_v1" in (out.get("breakpoints_v1") or [])
     assert out.get("learning_loop_health_banner_v1") == "LEARNING LOOP BROKEN"
+    mpc = out.get("model_provenance_chain_v1")
+    assert isinstance(mpc, dict) and mpc.get("schema") == "model_provenance_chain_v1"
+    cpv = out.get("student_decision_cross_profile_verdict_v1")
+    assert isinstance(cpv, dict) and cpv.get("answer_code_v1") == "NOT_PROVEN_INCOMPLETE_ROWS"
+    assert isinstance(out.get("same_visible_outcome_candidates_v1"), dict)
+    rline = out.get("referee_student_output_operator_line_v1")
+    assert isinstance(rline, dict) and "NOT PROVEN" in str(rline.get("headline_v1") or "")
+    ff = out.get("fault_focus_v1") or {}
+    assert isinstance(ff.get("decisive_operator_questions_v1"), list)
 
 
 def test_build_debug_done_with_runtime_events_passes_integrity(monkeypatch) -> None:
@@ -160,3 +169,4 @@ def test_build_debug_done_with_runtime_events_passes_integrity(monkeypatch) -> N
     assert out.get("learning_trace_integrity_failed_v1") is not True
     assert "runtime_learning_trace_events_empty_v1" not in (out.get("breakpoints_v1") or [])
     assert "learning_trace_integrity_failed_v1" not in (out.get("breakpoints_v1") or [])
+    assert (out.get("model_provenance_chain_v1") or {}).get("schema") == "model_provenance_chain_v1"
