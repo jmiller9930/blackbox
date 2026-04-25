@@ -104,6 +104,15 @@
     .llt-edge--blocked path { stroke: #ff7b72; }
     .llt-edge--skipped path { stroke: #6e7681; }
     .llt-edge--unknown path { stroke: #8957e5; }
+    .llt-events {
+      margin: 1rem 0; padding: 0.75rem 1rem; border-radius: 8px; border: 1px solid var(--border);
+      background: #010409; max-height: 22rem; overflow: auto;
+    }
+    .llt-events h2 { margin: 0 0 0.5rem; font-size: 0.88rem; font-weight: 700; color: #58a6ff; }
+    .llt-events .llt-ev-meta { font-size: 0.72rem; color: var(--muted); margin: 0.25rem 0; }
+    .llt-events details { margin: 0.35rem 0; border: 1px solid #21262d; border-radius: 6px; padding: 0.35rem 0.5rem; background: var(--panel); }
+    .llt-events details summary { cursor: pointer; font-size: 0.78rem; font-weight: 600; color: #e6edf3; }
+    .llt-events pre { margin: 0.35rem 0 0; font-size: 0.65rem; white-space: pre-wrap; word-break: break-word; max-height: 10rem; overflow: auto; }
     .llt-legend {
       margin-top: 1.25rem; font-size: 0.75rem; color: var(--muted); display: flex; flex-wrap: wrap; gap: 0.75rem 1.25rem;
     }
@@ -114,7 +123,7 @@
 <body>
   <header class="llt-head">
     <h1>Learning Loop (Debug)</h1>
-    <p class="sub">Reconstructed learning trace (scorecard + batch + learning API) with optional merge of <code>learning_trace_events_v1</code> when workers append runtime events — not a captured execution trace by default.</p>
+    <p class="sub">Reconstructed graph (scorecard + batch + learning API) merged with <strong>captured</strong> <code>learning_trace_event_v1</code> lines from the batch / seam / scorecard threads (single-writer JSONL). Pool workers do not append trace lines.</p>
     <p id="lltClassification" class="sub" style="margin-top:0.35rem;font-size:0.8rem;color:#8b949e" hidden></p>
     <div id="lltBanner" class="llt-banner llt-banner--inconclusive" hidden></div>
     <p id="lltDetail" class="llt-detail" hidden></p>
@@ -136,6 +145,7 @@
     <div id="lltProgress" class="llt-progress" hidden aria-label="Server build progress"></div>
     <div id="lltGraph" class="llt-graph" aria-label="Learning loop execution graph"></div>
     <div id="lltBreakpoints" class="llt-breakpoints" style="margin:1rem 0"></div>
+    <div id="lltRuntimeEvents" class="llt-events" hidden aria-label="Captured runtime trace events"></div>
     <div id="lltCompare" class="llt-compare" style="margin:1rem 0"></div>
     <div class="llt-legend">
       <span><i class="sw" style="background:#238636"></i> pass</span>
@@ -169,6 +179,7 @@
   const loadBtn = document.getElementById('lltLoadBtn');
   const bpEl = document.getElementById('lltBreakpoints');
   const cmpEl = document.getElementById('lltCompare');
+  const evEl = document.getElementById('lltRuntimeEvents');
   const progEl = document.getElementById('lltProgress');
   const tcEl = document.getElementById('lltClassification');
   let lastPayload = null;
@@ -315,6 +326,49 @@
     }
   }
 
+  function renderRuntimeEvents(payload) {
+    if (!evEl) return;
+    const evs = payload && Array.isArray(payload.learning_trace_events_v1) ? payload.learning_trace_events_v1 : [];
+    const path = payload && payload.learning_trace_events_path_v1;
+    const cnt = typeof payload.learning_trace_events_count_v1 === 'number' ? payload.learning_trace_events_count_v1 : evs.length;
+    if (!evs.length && !path) {
+      evEl.hidden = true;
+      evEl.innerHTML = '';
+      return;
+    }
+    evEl.hidden = false;
+    var h =
+      '<h2>Captured runtime events (<code>learning_trace_event_v1</code>)</h2>' +
+      '<p class="llt-ev-meta">count: ' +
+      escapeHtml(String(cnt)) +
+      (path ? ' · path: <code>' + escapeHtml(String(path)) + '</code>' : '') +
+      '</p>';
+    if (!evs.length) {
+      h += '<p class="llt-ev-meta">No lines matched this job_id (see breakpoints if status is done).</p>';
+    } else {
+      for (var ei = 0; ei < evs.length; ei++) {
+        var row = evs[ei] || {};
+        var stage = String(row.stage || '?');
+        var st = String(row.status || '');
+        var ts = String(row.timestamp_utc || row.ts || '');
+        var prod = String(row.producer || '');
+        h +=
+          '<details><summary>' +
+          escapeHtml(stage) +
+          ' <span style="color:var(--muted);font-weight:500">(' +
+          escapeHtml(st) +
+          ')</span></summary>' +
+          '<p class="llt-ev-meta">' +
+          escapeHtml(ts) +
+          (prod ? ' · ' + escapeHtml(prod) : '') +
+          '</p><pre>' +
+          escapeHtml(JSON.stringify(row, null, 2)) +
+          '</pre></details>';
+      }
+    }
+    evEl.innerHTML = h;
+  }
+
   function renderBreakpoints(data) {
     if (!bpEl) return;
     const bps = (data && data.breakpoints_v1) || [];
@@ -397,6 +451,10 @@
     initProgress();
     if (bpEl) bpEl.innerHTML = '';
     if (cmpEl) cmpEl.innerHTML = '';
+    if (evEl) {
+      evEl.innerHTML = '';
+      evEl.hidden = true;
+    }
     if (loadBtn) {
       loadBtn.disabled = true;
       loadBtn.setAttribute('aria-busy', 'true');
@@ -520,6 +578,7 @@
     }
     render(view);
     renderBreakpoints(data);
+    renderRuntimeEvents(data);
     renderCompare(data);
     if (jobId) {
       aSum.href = '/#pgStudentTriangleDock';

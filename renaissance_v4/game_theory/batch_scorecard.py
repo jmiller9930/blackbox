@@ -522,9 +522,27 @@ def record_parallel_batch_finished(
                 annotate_l1_ep_value_sources_v1,
                 merge_exam_grading_into_scorecard_record_v1,
             )
+            from renaissance_v4.game_theory.learning_trace_instrumentation_v1 import (
+                emit_grading_completed_v1,
+                fingerprint_for_parallel_job_v1,
+            )
 
             merge_exam_grading_into_scorecard_record_v1(record)
             annotate_l1_ep_value_sources_v1(record)
+            fp_grading = fingerprint_for_parallel_job_v1(
+                operator_batch_audit=operator_batch_audit if isinstance(operator_batch_audit, dict) else None,
+                fingerprint_preview=(
+                    str(record.get("exam_run_fingerprint_preview_v1") or "").strip() or None
+                ),
+                scorecard_line=dict(record),
+            )
+            emit_grading_completed_v1(
+                job_id=job_id,
+                fingerprint=fp_grading,
+                exam_e=record.get("exam_e_score_v1"),
+                exam_p=record.get("exam_p_score_v1"),
+                exam_pass=record.get("exam_pass_v1"),
+            )
         seam_obs = student_seam_observability_v1 or {}
         for fld in (
             "student_learning_rows_appended",

@@ -1172,11 +1172,29 @@ def create_app() -> Flask:
             }
 
         def run_job() -> None:
+            from renaissance_v4.game_theory.learning_trace_instrumentation_v1 import (
+                emit_packet_built_v1,
+                emit_referee_execution_completed_v1,
+                emit_referee_execution_started_v1,
+                emit_seam_disabled_placeholder_events_v1,
+                fingerprint_for_parallel_job_v1,
+            )
+
             session_batch_dir: list[str | None] = [None]
             start_unix = time.time()
+            lt_fp = fingerprint_for_parallel_job_v1(
+                operator_batch_audit=operator_batch_audit if isinstance(operator_batch_audit, dict) else None,
+                fingerprint_preview=fp_prev if isinstance(fp_prev, str) else None,
+            )
 
             def on_session_batch(p: Path) -> None:
                 session_batch_dir[0] = str(p.resolve())
+                emit_packet_built_v1(
+                    job_id=job_id,
+                    fingerprint=lt_fp,
+                    batch_dir=session_batch_dir[0],
+                    scenario_count=len(scenarios),
+                )
 
             def cb(completed: int, total: int, row: dict[str, Any]) -> None:
                 sid = row.get("scenario_id", "?")
@@ -1192,7 +1210,12 @@ def create_app() -> Flask:
                         j["last_ok"] = ok
                         j["last_message"] = msg
 
+            results: list[dict[str, Any]] | None = None
+            referee_parallel_completed_emit_v1 = False
             try:
+                emit_referee_execution_started_v1(
+                    job_id=job_id, fingerprint=lt_fp, scenario_total=len(scenarios)
+                )
                 results = run_scenarios_parallel(
                     scenarios,
                     max_workers=max_workers,
@@ -1204,6 +1227,8 @@ def create_app() -> Flask:
                     telemetry_context=telemetry_ctx,
                     cancel_check=lambda: _parallel_job_cancel_requested(job_id),
                 )
+                emit_referee_execution_completed_v1(job_id=job_id, fingerprint=lt_fp, results=results)
+                referee_parallel_completed_emit_v1 = True
                 validate_reference_comparison_batch_results(
                     results, operator_recipe_id=operator_batch_audit.get("operator_recipe_id")
                 )
@@ -1219,6 +1244,12 @@ def create_app() -> Flask:
                     strategy_id=op_rid,
                     exam_run_contract_request_v1=exam_req if isinstance(exam_req, dict) else None,
                 )
+                if seam_audit.get("skipped"):
+                    emit_seam_disabled_placeholder_events_v1(
+                        job_id=job_id,
+                        fingerprint=lt_fp,
+                        reason=str(seam_audit.get("reason") or "skipped"),
+                    )
                 exam_line = _exam_run_line_meta_for_parallel_job_v1(
                     exam_req=exam_req if isinstance(exam_req, dict) else None,
                     fingerprint_preview=fp_prev if isinstance(fp_prev, str) else None,
@@ -1276,6 +1307,10 @@ def create_app() -> Flask:
                         j["result"] = payload
                         j["batch_timing"] = timing
             except ParallelBatchCancelledError as e:
+                emit_referee_execution_completed_v1(
+                    job_id=job_id, fingerprint=lt_fp, results=list(e.partial_results or [])
+                )
+                referee_parallel_completed_emit_v1 = True
                 partial = e.partial_results
                 err_s = (
                     f"Cancelled by operator — {len(partial)}/{len(scenarios)} scenario result(s) "
@@ -1313,6 +1348,10 @@ def create_app() -> Flask:
                         j["batch_timing"] = timing
                         j["last_message"] = err_s
             except Exception as e:
+                if not referee_parallel_completed_emit_v1:
+                    emit_referee_execution_completed_v1(
+                        job_id=job_id, fingerprint=lt_fp, results=list(results) if results is not None else []
+                    )
                 err_s = f"{type(e).__name__}: {e}"
                 exam_line_err = _exam_run_line_meta_for_parallel_job_v1(
                     exam_req=exam_req if isinstance(exam_req, dict) else None,
@@ -1619,20 +1658,62 @@ def create_app() -> Flask:
         clear_job_telemetry_files(job_id, base=telem_dir)
         telemetry_ctx = _telemetry_context_for_parallel_job(operator_batch_audit)
         try:
+            from renaissance_v4.game_theory.learning_trace_instrumentation_v1 import (
+                emit_packet_built_v1,
+                emit_referee_execution_completed_v1,
+                emit_referee_execution_started_v1,
+                emit_seam_disabled_placeholder_events_v1,
+                fingerprint_for_parallel_job_v1,
+            )
+
+            lt_fp_block = fingerprint_for_parallel_job_v1(
+                operator_batch_audit=operator_batch_audit if isinstance(operator_batch_audit, dict) else None,
+                fingerprint_preview=fp_prev_block if isinstance(fp_prev_block, str) else None,
+            )
             session_batch_dir: list[str | None] = [None]
 
             def on_session_batch(p: Path) -> None:
                 session_batch_dir[0] = str(p.resolve())
+                emit_packet_built_v1(
+                    job_id=job_id,
+                    fingerprint=lt_fp_block,
+                    batch_dir=session_batch_dir[0],
+                    scenario_count=len(scenarios),
+                )
 
-            results = run_scenarios_parallel(
-                scenarios,
-                max_workers=max_workers,
-                experience_log_path=log_path,
-                on_session_log_batch=on_session_batch,
-                telemetry_job_id=job_id,
-                telemetry_dir=telem_dir,
-                telemetry_context=telemetry_ctx,
+            emit_referee_execution_started_v1(
+                job_id=job_id, fingerprint=lt_fp_block, scenario_total=len(scenarios)
             )
+            results: list[dict[str, Any]] | None = None
+            referee_parallel_completed_emit_block_v1 = False
+            try:
+                results = run_scenarios_parallel(
+                    scenarios,
+                    max_workers=max_workers,
+                    experience_log_path=log_path,
+                    on_session_log_batch=on_session_batch,
+                    telemetry_job_id=job_id,
+                    telemetry_dir=telem_dir,
+                    telemetry_context=telemetry_ctx,
+                )
+                emit_referee_execution_completed_v1(
+                    job_id=job_id, fingerprint=lt_fp_block, results=results
+                )
+                referee_parallel_completed_emit_block_v1 = True
+            except ParallelBatchCancelledError as e:
+                emit_referee_execution_completed_v1(
+                    job_id=job_id, fingerprint=lt_fp_block, results=list(e.partial_results or [])
+                )
+                referee_parallel_completed_emit_block_v1 = True
+                raise
+            except Exception:
+                if not referee_parallel_completed_emit_block_v1:
+                    emit_referee_execution_completed_v1(
+                        job_id=job_id,
+                        fingerprint=lt_fp_block,
+                        results=list(results) if results is not None else [],
+                    )
+                raise
             validate_reference_comparison_batch_results(
                 results, operator_recipe_id=operator_batch_audit.get("operator_recipe_id")
             )
@@ -1648,6 +1729,12 @@ def create_app() -> Flask:
                 strategy_id=op_rid_block,
                 exam_run_contract_request_v1=exam_req_block if isinstance(exam_req_block, dict) else None,
             )
+            if seam_blocking.get("skipped"):
+                emit_seam_disabled_placeholder_events_v1(
+                    job_id=job_id,
+                    fingerprint=lt_fp_block,
+                    reason=str(seam_blocking.get("reason") or "skipped"),
+                )
             exam_line_block = _exam_run_line_meta_for_parallel_job_v1(
                 exam_req=exam_req_block if isinstance(exam_req_block, dict) else None,
                 fingerprint_preview=fp_prev_block if isinstance(fp_prev_block, str) else None,

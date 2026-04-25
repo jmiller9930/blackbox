@@ -42,6 +42,17 @@ from renaissance_v4.game_theory.student_proctor.learning_memory_promotion_v1 imp
     build_memory_promotion_context_v1,
     classify_trade_memory_promotion_v1,
 )
+from renaissance_v4.game_theory.learning_trace_instrumentation_v1 import (
+    emit_governance_decided_v1,
+    emit_learning_record_appended_v1,
+    emit_llm_called_v1,
+    emit_llm_output_received_v1,
+    emit_llm_output_rejected_v1,
+    emit_memory_retrieval_completed_v1,
+    emit_referee_used_student_output_batch_truth_v1,
+    emit_student_output_sealed_v1,
+    fingerprint_for_parallel_job_v1,
+)
 from renaissance_v4.game_theory.student_proctor.student_learning_loop_governance_v1 import (
     learning_loop_governance_audit_v1,
     resolved_max_retrieval_slices_v1,
@@ -306,6 +317,12 @@ def student_loop_seam_after_parallel_batch_v1(
     llm_trade_i = 0
     llm_student_output_rejections_v1 = 0
 
+    fp_emit = fingerprint_for_parallel_job_v1(
+        operator_batch_audit=None,
+        fingerprint_preview=None,
+        scorecard_line=scorecard_entry_effective if isinstance(scorecard_entry_effective, dict) else None,
+    )
+
     for row in results:
         if not row.get("ok"):
             continue
@@ -343,8 +360,16 @@ def student_loop_seam_after_parallel_batch_v1(
                 rx = pkt.get(FIELD_RETRIEVED_STUDENT_EXPERIENCE_V1)
                 n_rx = len(rx) if isinstance(rx, list) else 0
                 retrieval_matches_total += n_rx
+                emit_memory_retrieval_completed_v1(
+                    job_id=str(run_id).strip(),
+                    fingerprint=fp_emit,
+                    scenario_id=sid,
+                    trade_id=str(o.trade_id),
+                    retrieval_matches=n_rx,
+                )
                 so: dict[str, Any] | None = None
                 soe: list[str] = []
+                over_cap = False
                 if use_llm and llm_model_resolved and base_url_resolved:
                     over_cap = llm_cap is not None and llm_trade_i >= llm_cap
                     if over_cap:
@@ -356,7 +381,21 @@ def student_loop_seam_after_parallel_batch_v1(
                         errors.append(
                             f"{sid} trade={o.trade_id}: llm_trade_cap_exceeded (cap={llm_cap}) — stub Student used"
                         )
+                        emit_llm_output_rejected_v1(
+                            job_id=str(run_id).strip(),
+                            fingerprint=fp_emit,
+                            scenario_id=sid,
+                            trade_id=str(o.trade_id),
+                            errors=[f"llm_trade_cap_exceeded cap={llm_cap}"],
+                        )
                     else:
+                        emit_llm_called_v1(
+                            job_id=str(run_id).strip(),
+                            fingerprint=fp_emit,
+                            scenario_id=sid,
+                            trade_id=str(o.trade_id),
+                            model=llm_model_resolved,
+                        )
                         ollama_attempts += 1
                         llm_trade_i += 1
                         so, soe = emit_student_output_via_ollama_v1(
@@ -373,9 +412,22 @@ def student_loop_seam_after_parallel_batch_v1(
                             errors.append(
                                 f"{sid} trade={o.trade_id}: llm_student_output_rejected: {'; '.join(soe)}"
                             )
+                            emit_llm_output_rejected_v1(
+                                job_id=str(run_id).strip(),
+                                fingerprint=fp_emit,
+                                scenario_id=sid,
+                                trade_id=str(o.trade_id),
+                                errors=list(soe) if isinstance(soe, list) else [str(soe)],
+                            )
                             # No stub fallback for LLM profile — thesis or explicit failure (precondition for 017).
                             continue
                         ollama_ok += 1
+                        emit_llm_output_received_v1(
+                            job_id=str(run_id).strip(),
+                            fingerprint=fp_emit,
+                            scenario_id=sid,
+                            trade_id=str(o.trade_id),
+                        )
                 else:
                     so, soe = emit_shadow_stub_student_output_v1(
                         pkt,
@@ -385,6 +437,18 @@ def student_loop_seam_after_parallel_batch_v1(
                 if soe or so is None:
                     errors.append(f"{sid} trade={o.trade_id}: student_output {'; '.join(soe)}")
                     continue
+                via = (
+                    "shadow_stub_llm_cap"
+                    if over_cap
+                    else ("ollama" if use_llm and llm_model_resolved and base_url_resolved else "shadow_stub")
+                )
+                emit_student_output_sealed_v1(
+                    job_id=str(run_id).strip(),
+                    fingerprint=fp_emit,
+                    scenario_id=sid,
+                    trade_id=str(o.trade_id),
+                    via=via,
+                )
                 if primary_trade_shadow_student_v1 is None and isinstance(so, dict):
                     primary_student_output_v1 = so
                     pr_ids = so.get("pattern_recipe_ids")
@@ -419,6 +483,14 @@ def student_loop_seam_after_parallel_batch_v1(
                 _mem_dec, _mem_rc, gov = classify_trade_memory_promotion_v1(
                     l3_payload=l3, scorecard_entry=scorecard_entry_effective
                 )
+                emit_governance_decided_v1(
+                    job_id=str(run_id).strip(),
+                    fingerprint=fp_emit,
+                    scenario_id=sid,
+                    trade_id=str(o.trade_id),
+                    decision=str(gov.get("decision") or ""),
+                    reason_codes=list(gov.get("reason_codes") or []),
+                )
                 lr["learning_governance_v1"] = gov
                 lr["memory_promotion_context_v1"] = build_memory_promotion_context_v1(
                     scorecard_entry=scorecard_entry_effective,
@@ -443,6 +515,13 @@ def student_loop_seam_after_parallel_batch_v1(
                 try:
                     append_student_learning_record_v1(store, lr)
                     appended += 1
+                    emit_learning_record_appended_v1(
+                        job_id=str(run_id).strip(),
+                        fingerprint=fp_emit,
+                        scenario_id=sid,
+                        trade_id=str(o.trade_id),
+                        record_id=rid,
+                    )
                     memory_promotion_batch_trades_v1.append(
                         {"trade_id": str(o.trade_id), "learning_governance_v1": gov, "stored": True}
                     )
@@ -458,6 +537,24 @@ def student_loop_seam_after_parallel_batch_v1(
                 errors.append(f"{sid} trade={o.trade_id}: {ve!r}")
             except OSError as oe:
                 errors.append(f"{sid} trade={o.trade_id}: {type(oe).__name__}: {oe}")
+
+    if trades_seen <= 0:
+        emit_referee_used_student_output_batch_truth_v1(
+            job_id=str(run_id).strip(),
+            fingerprint=fp_emit,
+            student_influence_on_worker_replay_v1="unknown",
+            detail="No trades entered Student seam loop (no replay outcomes or all failed before packet).",
+        )
+    else:
+        emit_referee_used_student_output_batch_truth_v1(
+            job_id=str(run_id).strip(),
+            fingerprint=fp_emit,
+            student_influence_on_worker_replay_v1="false",
+            detail=(
+                "Referee replay completed in parallel workers before this seam; Student output and "
+                "learning rows do not change recorded worker replay outcomes for this job_id."
+            ),
+        )
 
     out_fp: str | None = None
     if primary_student_output_v1 is not None:

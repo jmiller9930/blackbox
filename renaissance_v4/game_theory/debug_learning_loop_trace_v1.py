@@ -2,8 +2,9 @@
 Debug Learning Loop Trace — LangGraph-style graph + fingerprint profile compare (GT operator).
 
 **Truth:** base nodes are **reconstructed**; this module **merges** ``learning_trace_events_v1`` lines
-(when present) so provenance can include ``trace_store`` and the Referee–Student coupling can be proven
-only when a ``referee_used_student_output`` event exists.
+(when present) so provenance can include ``trace_store`` and the Referee–Student coupling is updated
+from ``referee_used_student_output`` (``true`` / ``false`` / ``unknown``). Events are written from
+parent-thread instrumentation (batch / seam / scorecard), not from process-pool workers.
 
 ``GET /api/debug/learning-loop/trace/<job_id>`` — extends ``learning_loop_trace_v1`` with:
 - extra node **Decision delta vs baseline**
@@ -230,6 +231,7 @@ def _finalize_debug_trace_from_base_v1(base: dict[str, Any], entry: dict[str, An
     compare = _fingerprint_profile_compare_v1(entry)
     fp_ms = round((time.perf_counter() - t_fp0) * 1000.0, 2)
     events = read_learning_trace_events_for_job_v1(jid)
+    status_lc = str(entry.get("status") or "").strip().lower()
     bps = _breakpoints_v1(
         entry=entry,
         tea=tea if isinstance(tea, dict) else {},
@@ -245,8 +247,9 @@ def _finalize_debug_trace_from_base_v1(base: dict[str, Any], entry: dict[str, An
         exam_e=exam_e,
         exam_p=exam_p,
     )
-    if not events:
-        bps = sorted({*bps, "runtime_learning_trace_events_empty_v1"})
+    integrity_failed = bool(not events and status_lc == "done")
+    if integrity_failed:
+        bps = sorted({*bps, "runtime_learning_trace_events_empty_v1", "learning_trace_integrity_failed_v1"})
 
     out = dict(work)
     out["schema"] = SCHEMA_DEBUG
@@ -258,12 +261,21 @@ def _finalize_debug_trace_from_base_v1(base: dict[str, Any], entry: dict[str, An
     out["learning_trace_events_path_v1"] = str(
         default_learning_trace_events_jsonl().expanduser().resolve()
     )
+    if integrity_failed:
+        out["learning_trace_integrity_failed_v1"] = True
+        out["learning_loop_health_banner_v1"] = "LEARNING LOOP BROKEN"
+        out["learning_loop_health_detail_v1"] = (
+            "Completed scorecard row has **zero** ``learning_trace_event_v1`` lines for this job_id — "
+            "runtime trace capture is mandatory for a valid learning-loop proof."
+        )
     merge_learning_trace_events_into_nodes_v1(out["nodes_v1"], events)
     ensure_node_evidence_provenance_defaults_v1(out["nodes_v1"])
     out["edges_v1"] = rebuild_linear_edges_v1(out["nodes_v1"])
     tc = dict(out.get("trace_classification_v1") or {})
     tc["runtime_events_loaded_count_v1"] = len(events)
     tc["merge_mode_v1"] = "reconstructed_plus_trace_store_v1"
+    if integrity_failed:
+        tc["learning_trace_integrity_failed_v1"] = True
     out["trace_classification_v1"] = tc
     out["operator_notes_v1"] = {
         "referee_vs_student_metric_v1": (
@@ -272,7 +284,8 @@ def _finalize_debug_trace_from_base_v1(base: dict[str, Any], entry: dict[str, An
         ),
         "trace_truth_v1": (
             "Primary graph is **reconstructed** from persisted artifacts. "
-            "``learning_trace_events_v1`` supplies runtime proof when workers append events."
+            "``learning_trace_events_v1`` is appended from the **batch / seam / scorecard** threads "
+            "(single-writer); those lines merge as runtime proof — not from pool worker processes."
         ),
     }
     return out

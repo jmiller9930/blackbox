@@ -152,8 +152,9 @@ def merge_learning_trace_events_into_nodes_v1(
     Mutates ``nodes`` in place: adds ``trace_store`` to ``evidence_provenance_v1`` when a runtime
     event maps to that node; clears ``not_captured_at_runtime_v1`` when the stage supplies proof.
 
-    If ``referee_used_student_output`` is present with ``status`` in ``pass|ok|true``, the coupling
-    node may be upgraded from unknown — otherwise **NOT PROVEN** remains.
+    ``referee_used_student_output`` may carry ``status`` of ``true`` / ``false`` / ``unknown`` (or
+    legacy ``pass`` / ``fail`` synonyms). Coupling moves off **NOT PROVEN** when a runtime line exists
+    with a resolved verdict.
     """
     for ev in events:
         stage = str(ev.get("stage") or "").strip()
@@ -172,7 +173,11 @@ def merge_learning_trace_events_into_nodes_v1(
         if stage == "referee_used_student_output":
             cn = _node_by_id(nodes, "referee_student_output_coupling")
             if cn:
+                ep = ev.get("evidence_payload") if isinstance(ev.get("evidence_payload"), dict) else {}
                 st = str(ev.get("status") or "").strip().lower()
+                inf = str(ep.get("student_influence_on_worker_replay_v1") or "").strip().lower()
+                if inf in ("true", "false", "unknown"):
+                    st = inf
                 if st in ("pass", "ok", "true", "yes", "used"):
                     cn["node_status_v1"] = "pass"
                     cn["summary_v1"] = str(ev.get("summary") or "Runtime event: Referee used Student output (trace_store).")
@@ -191,6 +196,18 @@ def merge_learning_trace_events_into_nodes_v1(
                     evd = cn.setdefault("evidence_v1", {})
                     if isinstance(evd, dict):
                         evd["verdict_v1"] = "REFUSED_OR_IGNORED_V1"
+                    rb2 = cn.setdefault("runtime_breakpoints_v1", [])
+                    if "not_captured_at_runtime_v1" in rb2:
+                        rb2.remove("not_captured_at_runtime_v1")
+                elif st in ("unknown", "unclear", "maybe", "skipped"):
+                    cn["node_status_v1"] = "unknown"
+                    cn["summary_v1"] = str(
+                        ev.get("summary") or "Runtime event: Referee–Student coupling not determined (trace_store)."
+                    )
+                    evd = cn.setdefault("evidence_v1", {})
+                    if isinstance(evd, dict):
+                        evd["verdict_v1"] = "COUPLING_UNKNOWN_V1"
+                        evd["source_event_v1"] = {k: ev.get(k) for k in ("stage", "timestamp_utc", "producer") if k in ev}
                     rb2 = cn.setdefault("runtime_breakpoints_v1", [])
                     if "not_captured_at_runtime_v1" in rb2:
                         rb2.remove("not_captured_at_runtime_v1")
