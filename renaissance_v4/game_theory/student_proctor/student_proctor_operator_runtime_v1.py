@@ -23,8 +23,10 @@ from renaissance_v4.game_theory.student_proctor.reveal_layer_v1 import (
 )
 from renaissance_v4.game_theory.exam_run_contract_v1 import (
     STUDENT_BRAIN_PROFILE_MEMORY_CONTEXT_LLM_STUDENT_V1,
+    STUDENT_BRAIN_PROFILE_MEMORY_CONTEXT_STUDENT_V1,
     normalize_student_reasoning_mode_v1,
     resolved_llm_for_exam_contract_v1,
+    STUDENT_LLM_APPROVED_MODEL_V1,
 )
 from renaissance_v4.game_theory.student_proctor.shadow_student_v1 import (
     emit_shadow_stub_student_output_v1,
@@ -32,6 +34,7 @@ from renaissance_v4.game_theory.student_proctor.shadow_student_v1 import (
 from renaissance_v4.game_theory.student_proctor.student_ollama_student_output_v1 import (
     _student_llm_max_trades_v1,
     emit_student_output_via_ollama_v1,
+    verify_ollama_model_tag_available_v1,
 )
 from renaissance_v4.game_theory.candle_timeframe_runtime import (
     effective_replay_timeframe_from_worker_replay_row_v1,
@@ -57,6 +60,7 @@ from renaissance_v4.game_theory.learning_trace_instrumentation_v1 import (
     emit_memory_retrieval_completed_v1,
     emit_referee_used_student_output_batch_truth_v1,
     emit_student_output_sealed_v1,
+    emit_student_reasoning_fault_map_v1,
     emit_timeframe_mismatch_detected_v1,
     fingerprint_for_parallel_job_v1,
 )
@@ -68,6 +72,16 @@ from renaissance_v4.game_theory.student_proctor.contracts_v1 import (
     FIELD_RETRIEVED_STUDENT_EXPERIENCE_V1,
     FIELD_STUDENT_CONTEXT_ANNEX_V1,
     validate_student_learning_record_v1,
+)
+from renaissance_v4.game_theory.student_proctor.entry_reasoning_engine_v1 import (
+    apply_engine_authority_to_student_output_v1,
+    run_entry_reasoning_pipeline_v1,
+)
+from renaissance_v4.game_theory.student_proctor.student_execution_intent_v1 import (
+    build_student_execution_intent_from_sealed_output_v1,
+)
+from renaissance_v4.game_theory.student_proctor.student_reasoning_fault_map_v1 import (
+    merge_runtime_fault_nodes_v1,
 )
 from renaissance_v4.game_theory.student_proctor.student_learning_store_v1 import (
     append_student_learning_record_v1,
@@ -345,8 +359,32 @@ def student_loop_seam_after_parallel_batch_v1(
     llm_model_resolved: str | None = None
     base_url_resolved: str | None = None
     llm_meta_echo: dict[str, Any] = {}
+    llm_resolution_errs: list[str] = []
+    requested_model_echo: str | None = None
     if use_llm and ex_req:
-        llm_model_resolved, base_url_resolved, llm_meta_echo = resolved_llm_for_exam_contract_v1(ex_req)
+        llm_model_resolved, base_url_resolved, llm_meta_echo, llm_resolution_errs = (
+            resolved_llm_for_exam_contract_v1(ex_req)
+        )
+        rslv = (
+            (llm_meta_echo.get("student_llm_resolution_v1") or {})
+            if isinstance(llm_meta_echo, dict)
+            else {}
+        )
+        if isinstance(rslv, dict):
+            rm = rslv.get("requested_model")
+            requested_model_echo = str(rm).strip() if isinstance(rm, str) and rm.strip() else None
+        if not llm_resolution_errs and llm_model_resolved and base_url_resolved:
+            probe_err = verify_ollama_model_tag_available_v1(
+                base_url_resolved,
+                str(llm_model_resolved),
+            )
+            if probe_err:
+                llm_resolution_errs.append(probe_err)
+    batch_student_llm_gate_failed = bool(
+        use_llm and (llm_resolution_errs or not llm_model_resolved or not base_url_resolved)
+    )
+    if batch_student_llm_gate_failed and llm_resolution_errs:
+        errors.append("student_llm_gate: " + "; ".join(llm_resolution_errs))
     ollama_attempts = 0
     ollama_ok = 0
     llm_trade_i = 0
@@ -402,6 +440,8 @@ def student_loop_seam_after_parallel_batch_v1(
                 errors.append(f"{sid}: outcome_from_json {e!r}")
                 continue
             trades_seen += 1
+            if use_llm and batch_student_llm_gate_failed:
+                continue
             sk = _signature_key_for_trade_v1(o, candle_timeframe_minutes=c_tf)
             ctx_sig = {"schema": "context_signature_v1", "signature_key": sk}
             try:
@@ -450,9 +490,43 @@ def student_loop_seam_after_parallel_batch_v1(
                     candle_timeframe_minutes=c_tf,
                     retrieval_signature_key=sk,
                 )
+                rxx = rx if isinstance(rx, list) else []
+                ere, ere_err, _ere_trace, pfm = run_entry_reasoning_pipeline_v1(
+                    student_decision_packet=pkt,
+                    retrieved_student_experience=rxx,
+                    run_candle_timeframe_minutes=int(c_tf),
+                    job_id=str(run_id).strip(),
+                    fingerprint=fp_emit,
+                    emit_traces=True,
+                )
+                brain_prof = str(
+                    (ex_req or {}).get("student_brain_profile_v1")
+                    or (ex_req or {}).get("student_reasoning_mode")
+                    or ""
+                ).strip() or str(STUDENT_BRAIN_PROFILE_MEMORY_CONTEXT_STUDENT_V1)
+                if ere is None:
+                    errors.append(
+                        f"{sid} trade={o.trade_id}: entry_reasoning_engine_v1 required: {'; '.join(ere_err)}"
+                    )
+                    emit_student_reasoning_fault_map_v1(
+                        job_id=str(run_id).strip(),
+                        fingerprint=fp_emit,
+                        scenario_id=sid,
+                        trade_id=str(o.trade_id),
+                        student_reasoning_fault_map_v1=pfm,
+                    )
+                    continue
+                if isinstance(ere, dict) and isinstance(pfm, dict):
+                    ere["student_reasoning_fault_map_v1"] = pfm
+                allowed_mids = frozenset(
+                    str(z.get("record_id") or "").strip()
+                    for z in rxx
+                    if isinstance(z, dict) and str(z.get("record_id") or "").strip()
+                )
                 so: dict[str, Any] | None = None
                 soe: list[str] = []
                 over_cap = False
+                use_llm_attempt_v1 = bool(use_llm and llm_model_resolved and base_url_resolved)
                 if use_llm and llm_model_resolved and base_url_resolved:
                     over_cap = llm_cap is not None and llm_trade_i >= llm_cap
                     if over_cap:
@@ -502,6 +576,26 @@ def student_loop_seam_after_parallel_batch_v1(
                                 trade_id=str(o.trade_id),
                                 errors=list(soe) if isinstance(soe, list) else [str(soe)],
                             )
+                            _llm_rej_fm = merge_runtime_fault_nodes_v1(
+                                pfm,
+                                use_llm_path=True,
+                                llm_checked_pass=False,
+                                llm_error_codes=[str(x) for x in (soe or [])],
+                                llm_operator_message="The model did not return an answer that matched the required shape and field rules. Fix the prompt or the model output, then retry.",
+                                student_sealed_pass=False,
+                                student_seal_error_codes=[],
+                                student_seal_message="The student line was not sealed because the model step failed first.",
+                                execution_intent_pass=False,
+                                execution_intent_error_codes=[],
+                                execution_intent_message="No execution handoff was built because the model step did not return a valid student line.",
+                            )
+                            emit_student_reasoning_fault_map_v1(
+                                job_id=str(run_id).strip(),
+                                fingerprint=fp_emit,
+                                scenario_id=sid,
+                                trade_id=str(o.trade_id),
+                                student_reasoning_fault_map_v1=_llm_rej_fm,
+                            )
                             # No stub fallback for LLM profile — thesis or explicit failure (precondition for 017).
                             continue
                         ollama_ok += 1
@@ -520,6 +614,88 @@ def student_loop_seam_after_parallel_batch_v1(
                 if soe or so is None:
                     errors.append(f"{sid} trade={o.trade_id}: student_output {'; '.join(soe)}")
                     continue
+                so, auth_errs = apply_engine_authority_to_student_output_v1(
+                    so,
+                    ere,
+                    allowed_memory_ids=allowed_mids,
+                )
+                if so is None or auth_errs:
+                    _seal_u = use_llm_attempt_v1 and not over_cap
+                    _auth_fm = merge_runtime_fault_nodes_v1(
+                        pfm,
+                        use_llm_path=_seal_u,
+                        llm_checked_pass=_seal_u,
+                        llm_error_codes=[],
+                        llm_operator_message="",
+                        student_sealed_pass=False,
+                        student_seal_error_codes=list(auth_errs) if auth_errs else ["null_student_output"],
+                        student_seal_message="The model line could not be merged with the engine output. Cited memory, direction, and thesis must line up with the engine.",
+                        execution_intent_pass=False,
+                        execution_intent_error_codes=[],
+                        execution_intent_message="No execution handoff was built because the merge step did not complete.",
+                    )
+                    emit_student_reasoning_fault_map_v1(
+                        job_id=str(run_id).strip(),
+                        fingerprint=fp_emit,
+                        scenario_id=sid,
+                        trade_id=str(o.trade_id),
+                        student_reasoning_fault_map_v1=_auth_fm,
+                    )
+                    errors.append(
+                        f"{sid} trade={o.trade_id}: entry_reasoning_authority_merge_failed: "
+                        f"{'; '.join(auth_errs) if auth_errs else 'null_student_output'}"
+                    )
+                    continue
+                if isinstance(ere, dict) and not ere.get("student_reasoning_fault_map_v1") and isinstance(
+                    pfm, dict
+                ):
+                    ere["student_reasoning_fault_map_v1"] = pfm
+                ulm = bool(use_llm and llm_model_resolved and base_url_resolved and not over_cap)
+                _intent, _ie = build_student_execution_intent_from_sealed_output_v1(
+                    student_output_v1=so,
+                    job_id=str(run_id).strip(),
+                    fingerprint=str(fp_emit or ""),
+                    student_brain_profile_v1=brain_prof,
+                    scenario_id=sid,
+                    trade_id=str(o.trade_id),
+                    llm_model=llm_model_resolved,
+                )
+                from renaissance_v4.game_theory.student_proctor.student_reasoning_fault_map_v1 import (
+                    attach_fault_map_v1,
+                )
+
+                _eim = (
+                    "The execution handoff could not be built from the sealed line. Check thesis, direction, and confidence for this profile."
+                    if _ie
+                    else (
+                        "A formal execution handoff was built from the sealed student line."
+                        if _intent
+                        else "No execution handoff was produced for this line (this can be normal for a flat or no-trade outcome)."
+                    )
+                )
+                _full_fm = merge_runtime_fault_nodes_v1(
+                    pfm,
+                    use_llm_path=ulm,
+                    llm_checked_pass=bool(ulm),
+                    llm_error_codes=[],
+                    llm_operator_message="",
+                    student_sealed_pass=True,
+                    student_seal_error_codes=[],
+                    student_seal_message="The student line was merged with the engine and is ready to store.",
+                    execution_intent_pass=not bool(_ie),
+                    execution_intent_error_codes=[str(x) for x in (_ie or [])],
+                    execution_intent_message=_eim,
+                )
+                attach_fault_map_v1(so, _full_fm)
+                emit_student_reasoning_fault_map_v1(
+                    job_id=str(run_id).strip(),
+                    fingerprint=fp_emit,
+                    scenario_id=sid,
+                    trade_id=str(o.trade_id),
+                    student_reasoning_fault_map_v1=so.get("student_reasoning_fault_map_v1")
+                    if isinstance(so, dict)
+                    else None,
+                )
                 if isinstance(so, dict) and sid not in student_output_sealed_by_scenario_id_v1:
                     student_output_sealed_by_scenario_id_v1[sid] = copy.deepcopy(so)
                 via = (
@@ -692,8 +868,14 @@ def student_loop_seam_after_parallel_batch_v1(
             "student_reasoning_mode_echo": profile,
             "student_llm_v1_echo": llm_meta_echo if use_llm else None,
             "prompt_version_resolved": pv if use_llm else None,
+            "approved_student_llm_model_v1": STUDENT_LLM_APPROVED_MODEL_V1,
+            "requested_model": requested_model_echo,
+            "resolved_model": llm_model_resolved,
+            "ollama_base_url_used": base_url_resolved,
             "model_resolved": llm_model_resolved,
             "base_url_resolved": base_url_resolved,
+            "llm_resolution_errors_v1": llm_resolution_errs,
+            "batch_student_llm_gate_failed": batch_student_llm_gate_failed,
             "ollama_any_attempt": ollama_attempts > 0,
             "ollama_trades_attempted": ollama_attempts,
             "ollama_trades_succeeded": ollama_ok,

@@ -203,6 +203,7 @@
     <div id="lltBreakpoints" class="llt-breakpoints" style="margin:1rem 0"></div>
     <div id="lltRuntimeEvents" class="llt-events" hidden aria-label="Captured runtime trace events"></div>
     <div id="lltCompare" class="llt-compare" style="margin:1rem 0"></div>
+    <div id="lltFaultMap026R" class="llt-prove" style="margin:1rem 0" hidden aria-label="GT 026R student reasoning fault map"></div>
     <div class="llt-legend">
       <span><i class="sw" style="background:#238636"></i> pass</span>
       <span><i class="sw" style="background:#da3633"></i> fail / broken</span>
@@ -257,6 +258,7 @@
   const proofFirstBreak = document.getElementById('lltProofFirstBreak');
   const proofNodeCount = document.getElementById('lltProofNodeCount');
   const proofTableBody = document.getElementById('lltProofTableBody');
+  const faultMap026REl = document.getElementById('lltFaultMap026R');
   let lastPayload = null;
   let lastProofPayload = null;
   if (jobInp && jobId) jobInp.value = jobId;
@@ -802,6 +804,42 @@
       '</ul>';
   }
 
+  function renderFaultMap026R(data) {
+    if (!faultMap026REl) return;
+    var v = data && data.ok !== false ? data : data && data.trace_v1 ? data.trace_v1 : data;
+    var fm = v && v.student_reasoning_fault_map_v1;
+    if (!fm || !Array.isArray(fm.nodes_v1) || !fm.nodes_v1.length) {
+      faultMap026REl.hidden = true;
+      faultMap026REl.innerHTML = '';
+      return;
+    }
+    faultMap026REl.hidden = false;
+    var rows = fm.nodes_v1
+      .map(function (n, i) {
+        if (!n || typeof n !== 'object') return '';
+        return (
+          '<tr><td>' +
+          (i + 1) +
+          '</td><td><code>' +
+          escapeHtml(String(n.node_id || '')) +
+          '</code></td><td>' +
+          escapeHtml(String(n.status || '')) +
+          '</td><td>' +
+          escapeHtml(String(n.operator_message_v1 || '').replace(/\n/g, ' ')) +
+          '</td><td><details><summary>Details</summary><pre style="font-size:0.65rem;white-space:pre-wrap">' +
+          escapeHtml(JSON.stringify(n, null, 2)) +
+          '</pre></details></td></tr>'
+        );
+      })
+      .join('');
+    faultMap026REl.innerHTML =
+      '<h2 style="margin:0 0 0.5rem;font-size:0.95rem">Student reasoning fault map (026R)</h2>' +
+      '<p class="llt-plain" style="margin:0 0 0.5rem;font-size:0.8rem;max-width:52rem">Live node list for this run (from trace). Expand a row for evidence. This is visibility only; it does not change decisions.</p>' +
+      '<table class="llt-prove" style="width:100%;font-size:0.75rem;border-collapse:collapse"><thead><tr><th>#</th><th>Node</th><th>Status</th><th>What it means</th><th>Evidence</th></tr></thead><tbody>' +
+      rows +
+      '</tbody></table>';
+  }
+
   function renderCompare(data) {
     if (!cmpEl) return;
     const cmp = data && data.fingerprint_profile_compare_v1;
@@ -875,6 +913,10 @@
     initProgress();
     if (bpEl) bpEl.innerHTML = '';
     if (cmpEl) cmpEl.innerHTML = '';
+    if (faultMap026REl) {
+      faultMap026REl.innerHTML = '';
+      faultMap026REl.hidden = true;
+    }
     if (evEl) {
       evEl.innerHTML = '';
       evEl.hidden = true;
@@ -1037,6 +1079,7 @@
     renderBreakpoints(data);
     renderRuntimeEvents(data);
     renderCompare(data);
+    renderFaultMap026R(data);
     if (jobId) {
       aSum.href = '/#pgStudentTriangleDock';
       aSum.style.display = 'inline-block';

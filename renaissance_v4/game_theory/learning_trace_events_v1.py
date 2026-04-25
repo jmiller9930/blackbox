@@ -48,6 +48,7 @@ EVENT_STAGES_V1 = (
     "decision_synthesized",
     "entry_reasoning_validated",
     "entry_reasoning_sealed_v1",
+    "student_reasoning_fault_map_v1",
 )
 
 # Map persisted ``stage`` → graph node ``id`` (reconstructed trace) for merge / provenance.
@@ -79,6 +80,7 @@ STAGE_TO_NODE_IDS_V1: dict[str, tuple[str, ...]] = {
     "decision_synthesized": ("student_reasoning", "llm_reasoning"),
     "entry_reasoning_validated": ("student_reasoning", "llm_reasoning"),
     "entry_reasoning_sealed_v1": ("student_reasoning", "llm_reasoning"),
+    "student_reasoning_fault_map_v1": ("student_reasoning", "llm_reasoning"),
 }
 
 

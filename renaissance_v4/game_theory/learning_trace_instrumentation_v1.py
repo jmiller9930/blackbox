@@ -381,6 +381,29 @@ def emit_referee_used_student_output_batch_truth_v1(
     )
 
 
+def emit_student_reasoning_fault_map_v1(
+    *,
+    job_id: str,
+    fingerprint: str | None,
+    scenario_id: str | None = None,
+    trade_id: str | None = None,
+    student_reasoning_fault_map_v1: dict[str, Any] | None = None,
+) -> None:
+    """GT_DIRECTIVE_026R — one snapshot of the full node list for this trade (visibility)."""
+    pl = student_reasoning_fault_map_v1 if isinstance(student_reasoning_fault_map_v1, dict) else {}
+    _emit(
+        job_id=job_id,
+        fingerprint=fingerprint,
+        stage="student_reasoning_fault_map_v1",
+        status="pass" if pl else "partial",
+        summary="Student reasoning fault map (node-level visibility).",
+        producer="student_reasoning_fault_map_v1",
+        trade_id=trade_id,
+        scenario_id=scenario_id,
+        evidence_payload={"student_reasoning_fault_map_v1": pl},
+    )
+
+
 def emit_entry_reasoning_pipeline_stage_v1(
     *,
     job_id: str,
@@ -414,6 +437,7 @@ def emit_entry_reasoning_pipeline_stage_v1(
 __all__ = [
     "emit_candle_timeframe_nexus_v1",
     "emit_entry_reasoning_pipeline_stage_v1",
+    "emit_student_reasoning_fault_map_v1",
     "emit_governance_decided_v1",
     "emit_grading_completed_v1",
     "emit_learning_record_appended_v1",

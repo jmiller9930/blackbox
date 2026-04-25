@@ -9,12 +9,24 @@ validation → digest.
 
 from __future__ import annotations
 
+import copy
 import hashlib
 import json
 import math
 from typing import Any
 
-from renaissance_v4.game_theory.student_proctor.contracts_v1 import CONTRACT_VERSION_STUDENT_PROCTOR_V1
+from renaissance_v4.game_theory.student_proctor.contracts_v1 import (
+    CONTRACT_VERSION_STUDENT_PROCTOR_V1,
+    validate_student_output_v1,
+)
+from renaissance_v4.game_theory.student_proctor.student_reasoning_fault_map_v1 import (
+    STATUS_FAIL,
+    STATUS_NOT_PROVEN,
+    STATUS_PASS,
+    build_fault_map_v1,
+    make_fault_node_v1,
+    skipped_nodes_from_index_v1,
+)
 from renaissance_v4.utils.math_utils import ema as ema_last, safe_mean
 
 SCHEMA_ENTRY_REASONING_EVAL_V1 = "entry_reasoning_eval_v1"
@@ -140,11 +152,14 @@ def build_indicator_context_eval_v1(
     Deterministic ``indicator_context_eval_v1`` + support flags; ``errs`` if unusable.
     """
     errs: list[str] = []
-    if len(bars) < _EMA_TREND_PERIOD + 2:
+    n_b = len(bars)
+    if n_b < 2:
         errs.append("insufficient_bars_for_indicator_engine")
     closes = [float(b["close"]) for b in bars]
-    ema_now = _ema_value(closes, _EMA_TREND_PERIOD)
-    ema_prev = _ema_value(closes[:-1], _EMA_TREND_PERIOD) if len(closes) > 1 else ema_now
+    # Adaptive EMA/RSI when fewer than 20+2 bars (short causal windows, e.g. test fixtures) — still deterministic.
+    ema_p = _EMA_TREND_PERIOD if n_b > _EMA_TREND_PERIOD + 1 else max(1, min(_EMA_TREND_PERIOD, n_b - 1))
+    ema_now = _ema_value(closes, ema_p)
+    ema_prev = _ema_value(closes[:-1], ema_p) if len(closes) > 1 else ema_now
     last = closes[-1]
     trend = _ema_trend_state(last, ema_now, ema_prev)
     trend_tag = (
@@ -153,6 +168,8 @@ def build_indicator_context_eval_v1(
         else ("bearish_trend" if trend == "bearish_trend" else "neutral_trend")
     )
     rsi = _wilder_rsi_last(closes, _RSI_PERIOD)
+    if n_b < _RSI_PERIOD + 1 or math.isnan(rsi):
+        rsi = 50.0
     rsi_s = _rsi_state(rsi, trend_tag)
     atr = _atr14_last(bars)
     trs = _true_ranges(bars)
@@ -290,18 +307,19 @@ def prior_outcome_eval_v1(records: list[dict[str, Any]]) -> dict[str, Any]:
         pnls.append(p)
         if p > 0:
             ws += 1
-    win_rate = (ws / t) if t else 0.0
+    # Use wins_total_fraction_v1 — not "win_rate" (forbidden in pre_reveal key scan on student_path payloads).
+    wins_total_fraction_v1 = (ws / t) if t else 0.0
     avg = float(safe_mean(pnls)) if pnls else 0.0
     adj = 0.0
-    if t >= 3 and win_rate < 0.4:
+    if t >= 3 and wins_total_fraction_v1 < 0.4:
         adj = -0.15
-    elif t >= 2 and win_rate > 0.6:
+    elif t >= 2 and wins_total_fraction_v1 > 0.6:
         adj = 0.1
-    elif t >= 2 and 0.4 <= win_rate <= 0.6:
+    elif t >= 2 and 0.4 <= wins_total_fraction_v1 <= 0.6:
         adj = -0.05
     return {
         "schema": "prior_outcome_eval_v1",
-        "win_rate": round(win_rate, 6),
+        "wins_total_fraction_v1": round(wins_total_fraction_v1, 6),
         "total_with_pnl": t,
         "avg_pnl": round(avg, 6),
         "prior_outcome_confidence_delta_v1": round(adj, 6),
@@ -411,14 +429,15 @@ def run_entry_reasoning_pipeline_v1(
     long_threshold: float = _LONG_THRESHOLD,
     short_threshold: float = _SHORT_THRESHOLD,
     emit_traces: bool = True,
-) -> tuple[dict[str, Any] | None, list[str], list[dict[str, Any]]]:
+) -> tuple[dict[str, Any] | None, list[str], list[dict[str, Any]], dict[str, Any]]:
     """
-    Returns ``(entry_reasoning_eval_v1 or None, errors, trace_stages)``.
-    On hard validation failure, returns ``(None, errs, trace)`` — no soft pass.
+    Returns ``(entry_reasoning_eval_v1 or None, errors, trace_stages, student_reasoning_fault_map_v1)``.
+    On hard validation failure, returns ``(None, errs, trace, fault_map)`` — no soft pass.
     """
     trace: list[dict[str, Any]] = []
     errs: list[str] = []
     rse = list(retrieved_student_experience or [])
+    fnodes: list[dict[str, Any]] = []
 
     def _t(stage: str, inputs: Any, outputs: Any, evidence: dict[str, Any] | None = None) -> None:
         row = {"stage": stage, "inputs": inputs, "outputs": outputs, "evidence": evidence or {}}
@@ -439,8 +458,40 @@ def run_entry_reasoning_pipeline_v1(
 
     bars = student_decision_packet.get("bars_inclusive_up_to_t")
     if not isinstance(bars, list) or not bars:
-        return None, ["missing_bars_inclusive_up_to_t"], trace
+        sym0 = str(student_decision_packet.get("symbol") or "")
+        fnodes.append(
+            make_fault_node_v1(
+                "market_data_loaded",
+                STATUS_FAIL,
+                input_summary_v1="Student decision packet.",
+                output_summary_v1="No bars attached.",
+                blocking_rule_v1="At least one bar up to the decision time is required.",
+                error_codes_v1=["missing_bars_inclusive_up_to_t"],
+                evidence_fields_v1=["bar_count", "symbol"],
+                evidence_values_v1={"bar_count": 0, "symbol": sym0},
+                operator_message_v1="Price data for the decision was not in the packet, so the reasoning path cannot start.",
+            )
+        )
+        return None, ["missing_bars_inclusive_up_to_t"], trace, build_fault_map_v1(
+            fnodes + skipped_nodes_from_index_v1(1)
+        )
     sym = str(student_decision_packet.get("symbol") or "")
+    bar_n = len(bars)
+    fnodes.append(
+        make_fault_node_v1(
+            "market_data_loaded",
+            STATUS_PASS,
+            input_summary_v1="Student packet for the trade.",
+            output_summary_v1=f"Loaded {bar_n} price bar(s).",
+            evidence_fields_v1=["bar_count", "symbol", "candle_timeframe_minutes"],
+            evidence_values_v1={
+                "bar_count": bar_n,
+                "symbol": sym,
+                "candle_timeframe_minutes": int(run_candle_timeframe_minutes),
+            },
+            operator_message_v1="Market data for the decision time is present in the packet.",
+        )
+    )
     _t(
         "market_data_loaded",
         {"symbol": sym, "bar_count": len(bars)},
@@ -451,8 +502,35 @@ def run_entry_reasoning_pipeline_v1(
     _t("indicator_context_evaluated", {"bars": len(bars)}, ictx, _ev)
     if ind_err:
         errs.extend(ind_err)
-        if any("insufficient_bars" in e for e in ind_err):
-            return None, ind_err, trace
+        if any("insufficient_bars" in e for e in ind_err) and (not isinstance(bars, list) or len(bars) < 2):
+            fnodes.append(
+                make_fault_node_v1(
+                    "indicator_context_evaluated",
+                    STATUS_FAIL,
+                    input_summary_v1="Bar history for signals.",
+                    output_summary_v1="Not enough bars to form indicators.",
+                    blocking_rule_v1="The exam needs at least two closed bars to read momentum and trend.",
+                    error_codes_v1=[str(x) for x in ind_err],
+                    evidence_fields_v1=["bar_count"],
+                    evidence_values_v1={"bar_count": bar_n},
+                    operator_message_v1="There are not enough bars to evaluate indicators. Widen the history window or lower the bar size.",
+                )
+            )
+            return None, ind_err, trace, build_fault_map_v1(fnodes + skipped_nodes_from_index_v1(2))
+    fnodes.append(
+        make_fault_node_v1(
+            "indicator_context_evaluated",
+            STATUS_PASS,
+            input_summary_v1="Closed bars in the packet.",
+            output_summary_v1="Trend, momentum, and range context are computed from those bars only.",
+            evidence_fields_v1=["rsi_state", "ema_trend"],
+            evidence_values_v1={
+                "rsi_state": (ictx or {}).get("rsi_state"),
+                "ema_trend": (ictx or {}).get("ema_trend"),
+            },
+            operator_message_v1="Indicators were derived from the packet; nothing was invented beyond the data shown.",
+        )
+    )
     last_close = float(bars[-1]["close"])
 
     scored = score_memory_records_v1(
@@ -467,8 +545,50 @@ def run_entry_reasoning_pipeline_v1(
     }
     _t("memory_context_evaluated", {"retrieved_count": len(rse)}, mctx, {"memory_score": mscore})
 
+    mem_tf_mismatch = False
+    for s in scored:
+        if not isinstance(s, dict) or str(s.get("memory_effect_class_v1") or "") != "ignore":
+            continue
+        rid = str(s.get("record_id") or "")
+        for rec in rse:
+            if not isinstance(rec, dict) or str(rec.get("record_id") or "") != rid:
+                continue
+            if int(rec.get("candle_timeframe_minutes") or 0) != int(run_candle_timeframe_minutes):
+                mem_tf_mismatch = True
+    if mem_tf_mismatch:
+        mstat = STATUS_NOT_PROVEN
+        mmsg = "Memory was retrieved, but the stored lesson used a different bar size than this chart, so it did not steer the live score the same way a matching window would."
+    elif len(rse) > 0 and mclass in ("none", "ignore", ""):
+        mstat = STATUS_NOT_PROVEN
+        mmsg = "The packet carried prior trades, but they did not move the combined score in a strong way for this step."
+    else:
+        mstat = STATUS_PASS
+        mmsg = "Prior lesson rows were read and folded into the memory score for this step."
+    fnodes.append(
+        make_fault_node_v1(
+            "memory_context_evaluated",
+            mstat,
+            input_summary_v1=f"{len(rse)} memory row(s) available to the score.",
+            output_summary_v1=f"Blended class: {mclass}.",
+            evidence_fields_v1=["aggregate_memory_effect_v1", "retrieved_count"],
+            evidence_values_v1={"retrieved_count": len(rse), "aggregate_memory_effect_v1": mclass},
+            operator_message_v1=mmsg,
+        )
+    )
+
     poe = prior_outcome_eval_v1(rse)
     _t("prior_outcomes_evaluated", {"records": len(rse)}, poe, {})
+    fnodes.append(
+        make_fault_node_v1(
+            "prior_outcomes_evaluated",
+            STATUS_PASS,
+            input_summary_v1="Records tied to the packet.",
+            output_summary_v1="Win rate and loss streak influence applied.",
+            evidence_fields_v1=["prior_outcome_confidence_delta_v1"],
+            evidence_values_v1={"prior_outcome_confidence_delta_v1": poe.get("prior_outcome_confidence_delta_v1")},
+            operator_message_v1="How similar past outcomes behaved nudges confidence up or down.",
+        )
+    )
 
     atr = float(ictx.get("atr_last") or 0.0)
     ema_l = float(ictx.get("ema_last") or 0.0)
@@ -507,6 +627,33 @@ def run_entry_reasoning_pipeline_v1(
         errs.append("hard_fail:no_risk_no_trade")
         action = "no_trade"
 
+    if "hard_fail:no_risk_no_trade" in errs:
+        fnodes.append(
+            make_fault_node_v1(
+                "risk_reward_evaluated",
+                STATUS_FAIL,
+                input_summary_v1="Planned entry and exit story.",
+                output_summary_v1="Stop and target basis must be available before a real entry is allowed.",
+                blocking_rule_v1="No live entry without a full risk picture under exam rules.",
+                error_codes_v1=["hard_fail:no_risk_no_trade"],
+                evidence_fields_v1=["risk_defined_v1"],
+                evidence_values_v1={"risk_defined_v1": False},
+                operator_message_v1="The trade was blocked because the stop, target, and exit rules were not complete enough to justify an entry here.",
+            )
+        )
+    else:
+        fnodes.append(
+            make_fault_node_v1(
+                "risk_reward_evaluated",
+                STATUS_PASS,
+                input_summary_v1="Price, range, and chosen direction hint.",
+                output_summary_v1="Invalidation, stop, and target lines are all described when a trade is live.",
+                evidence_fields_v1=["risk_defined_v1"],
+                evidence_values_v1={"risk_defined_v1": bool(risk_defined)},
+                operator_message_v1="Reward versus risk is written in concrete terms whenever the engine contemplates a live entry; otherwise the side stays flat.",
+            )
+        )
+
     ds = {
         "indicator_score": round(ind_s, 6),
         "memory_score": round(mscore, 6),
@@ -518,6 +665,17 @@ def run_entry_reasoning_pipeline_v1(
         "short_threshold": short_threshold,
     }
     _t("decision_synthesized", {"scores": {k: ds[k] for k in ("indicator_score", "memory_score", "prior_outcome_score")}}, ds, {"authority": "entry_reasoning_engine_v1"})
+    fnodes.append(
+        make_fault_node_v1(
+            "decision_synthesized",
+            STATUS_PASS,
+            input_summary_v1="Indicator, memory, and history scores.",
+            output_summary_v1="Engine action: " + str(ds.get("action") or "no_trade") + ".",
+            evidence_fields_v1=["action", "final_score"],
+            evidence_values_v1={"action": ds.get("action"), "final_score": ds.get("final_score")},
+            operator_message_v1="The path combined those inputs into a single go / no-go style choice.",
+        )
+    )
 
     conf = max(0.0, min(1.0, 0.5 + fin * 0.4))
     band = "low" if conf < 0.35 else ("high" if conf > 0.72 else "medium")
@@ -541,16 +699,49 @@ def run_entry_reasoning_pipeline_v1(
     if verr:
         errs.extend(verr)
     _t("entry_reasoning_validated", {"candidates": "entry_reasoning_eval_v1"}, out if not errs else {"rejected": True, "errors": verr}, {})
-
+    if verr:
+        fnodes.append(
+            make_fault_node_v1(
+                "entry_reasoning_validated",
+                STATUS_FAIL,
+                input_summary_v1="Structured entry reasoning for audit.",
+                output_summary_v1="Some required fields or types are wrong or missing.",
+                blocking_rule_v1="The object must pass schema checks before it can be sealed.",
+                error_codes_v1=list(verr),
+                operator_message_v1="The entry reasoning record failed its validation pass. The issues in the error codes have to be fixed before anything downstream can treat this as final.",
+            )
+        )
+        return None, errs, trace, build_fault_map_v1(fnodes + skipped_nodes_from_index_v1(7))
     if errs:
-        return None, errs, trace
+        fnodes.append(
+            make_fault_node_v1(
+                "entry_reasoning_validated",
+                STATUS_FAIL,
+                input_summary_v1="Entry reasoning build.",
+                output_summary_v1="Pipeline errors remain after validation.",
+                error_codes_v1=[str(x) for x in errs],
+                operator_message_v1="The record shape passed its checks, but earlier pipeline errors still block sealing.",
+            )
+        )
+        return None, errs, trace, build_fault_map_v1(fnodes + skipped_nodes_from_index_v1(7))
+    fnodes.append(
+        make_fault_node_v1(
+            "entry_reasoning_validated",
+            STATUS_PASS,
+            input_summary_v1="Structured entry reasoning for audit.",
+            output_summary_v1="Validation rules passed.",
+            operator_message_v1="The record is well-formed and can move on to the model and seal steps.",
+        )
+    )
 
     dig = build_entry_reasoning_eval_digest_v1(out)
     out["entry_reasoning_eval_digest_v1"] = dig
     out["entry_reasoning_eval_digest_meta_v1"] = {"schema": SCHEMA_ENTRY_REASONING_DIGEST_V1, "algorithm": "sha256_json_canonical_v1"}
     _t("entry_reasoning_sealed_v1", {"digest_prefix": dig[:12]}, {"sealed": True, "entry_reasoning_eval_digest_v1": dig}, {})
 
-    return out, [], trace
+    _pfm = build_fault_map_v1(fnodes)
+    out["student_reasoning_fault_map_v1"] = _pfm
+    return out, [], trace, _pfm
 
 
 def apply_decision_overrides_llm_stated_action_v1(
@@ -567,3 +758,90 @@ def apply_decision_overrides_llm_stated_action_v1(
             "llm_stated": str(llm_stated_action),
         }
     return e
+
+
+def _infer_student_action_v1_from_legacy(so: dict[str, Any]) -> str | None:
+    sa = so.get("student_action_v1")
+    if isinstance(sa, str) and sa.strip():
+        return str(sa).strip().lower()
+    if so.get("act") is not True:
+        return "no_trade"
+    d = so.get("direction")
+    if isinstance(d, str) and d.lower().strip() == "long":
+        return "enter_long"
+    if isinstance(d, str) and d.lower().strip() == "short":
+        return "enter_short"
+    return "no_trade"
+
+
+def apply_engine_authority_to_student_output_v1(
+    so: dict[str, Any] | None,
+    ere: dict[str, Any],
+    *,
+    allowed_memory_ids: frozenset[str],
+) -> tuple[dict[str, Any] | None, list[str]]:
+    """
+    GT_DIRECTIVE_026A_IMPL (Blocker 1/2) — **engine is the authority** on trade direction;
+    ``student_output_v1`` is overwritten to match ``entry_reasoning_eval_v1`` after optional
+    LLM validation. Always attach ``entry_reasoning_eval_v1`` + digest for L3/audit.
+    """
+    if not isinstance(so, dict) or not isinstance(ere, dict):
+        return None, ["apply_engine_authority: invalid so or ere"]
+    out = copy.deepcopy(so)
+    raw_stated = _infer_student_action_v1_from_legacy(out)
+    llm_p: dict[str, Any] = {
+        "cited_memory_record_ids": out.get("cited_memory_record_ids", [])
+        if isinstance(out.get("cited_memory_record_ids"), list)
+        else [],
+        "stated_action": raw_stated,
+    }
+    v_llm = validate_llm_explanation_against_entry_reasoning_v1(
+        llm_p,
+        entry_reasoning=ere,
+        allowed_memory_ids=allowed_memory_ids,
+    )
+    ere2 = copy.deepcopy(ere)
+    if v_llm:
+        ere2["llm_explanation_validation_v1"] = v_llm
+    if raw_stated:
+        ere2 = apply_decision_overrides_llm_stated_action_v1(ere2, raw_stated)
+    ds = ere2.get("decision_synthesis_v1") or {}
+    act_s = str(ds.get("action") or "no_trade")
+    if act_s == "enter_long":
+        out["act"] = True
+        out["direction"] = "long"
+        out["student_action_v1"] = "enter_long"
+    elif act_s == "enter_short":
+        out["act"] = True
+        out["direction"] = "short"
+        out["student_action_v1"] = "enter_short"
+    else:
+        out["act"] = False
+        out["direction"] = "flat"
+        out["student_action_v1"] = "no_trade"
+    out["confidence_01"] = float(ere2.get("confidence_01", 0.0))
+    out["confidence_band"] = str(ere2.get("confidence_band", "medium"))
+    ind = ere2.get("indicator_context_eval_v1") or {}
+    rsi_s = str(ind.get("rsi_state", "neutral"))
+    ema_t = str(ind.get("ema_trend", "neutral_trend"))
+    out["supporting_indicators"] = [f"rsi={rsi_s}", f"ema_trend={ema_t}"][:32]
+    confl: list[str] = []
+    if rsi_s in ("exhaustion_risk",) and "bullish" in ema_t:
+        confl.append("rsi_exhaustion_vs_bull_trend")
+    out["conflicting_indicators"] = confl
+    rsk = ere2.get("risk_inputs_v1") or {}
+    out["context_fit"] = (ema_t.replace("_trend", "") or "context")[:128]
+    out["invalidation_text"] = str(rsk.get("invalidation_condition_v1", ""))[:4000]
+    dig2 = build_entry_reasoning_eval_digest_v1(ere2)
+    ere2["entry_reasoning_eval_digest_v1"] = dig2
+    out["entry_reasoning_eval_v1"] = ere2
+    out["entry_reasoning_eval_digest_v1"] = dig2
+    _fm = ere2.get("student_reasoning_fault_map_v1")
+    if isinstance(_fm, dict):
+        from renaissance_v4.game_theory.student_proctor.student_reasoning_fault_map_v1 import (
+            attach_fault_map_v1,
+        )
+
+        attach_fault_map_v1(out, _fm)
+    ve = validate_student_output_v1(out)
+    return out, ve

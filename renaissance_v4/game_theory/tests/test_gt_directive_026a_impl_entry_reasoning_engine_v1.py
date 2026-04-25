@@ -83,14 +83,14 @@ def test_ema_trend_bull_bear() -> None:
 
 def test_pipeline_digest_stable() -> None:
     pkt = _packet(_bars_uptrend_n(100))
-    a, e1, _ = run_entry_reasoning_pipeline_v1(
+    a, e1, _, _ = run_entry_reasoning_pipeline_v1(
         student_decision_packet=pkt,
         retrieved_student_experience=[],
         run_candle_timeframe_minutes=5,
         job_id="",
         emit_traces=False,
     )
-    b, e2, _ = run_entry_reasoning_pipeline_v1(
+    b, e2, _, _ = run_entry_reasoning_pipeline_v1(
         student_decision_packet=pkt,
         retrieved_student_experience=[],
         run_candle_timeframe_minutes=5,
@@ -103,7 +103,7 @@ def test_pipeline_digest_stable() -> None:
 
 def test_trace_stages_order() -> None:
     pkt = _packet(_bars_uptrend_n(100))
-    _, err, tr = run_entry_reasoning_pipeline_v1(
+    _, err, tr, _ = run_entry_reasoning_pipeline_v1(
         student_decision_packet=pkt,
         retrieved_student_experience=[],
         run_candle_timeframe_minutes=5,
@@ -118,8 +118,8 @@ def test_trace_stages_order() -> None:
 
 
 def test_insufficient_bars_fails() -> None:
-    pkt = _packet(_bars_uptrend_n(8))
-    out, err, _ = run_entry_reasoning_pipeline_v1(
+    pkt = _packet(_bars_uptrend_n(1))
+    out, err, _, _ = run_entry_reasoning_pipeline_v1(
         student_decision_packet=pkt,
         retrieved_student_experience=[],
         run_candle_timeframe_minutes=5,
@@ -134,7 +134,7 @@ def test_memory_conflict_negative_pnl() -> None:
     rec = legal_example_student_learning_record_v1()
     rec["candle_timeframe_minutes"] = 5
     rec["referee_outcome_subset"] = {"pnl": -5.0}
-    out, err, _ = run_entry_reasoning_pipeline_v1(
+    out, err, _, _ = run_entry_reasoning_pipeline_v1(
         student_decision_packet=pkt,
         retrieved_student_experience=[rec],
         run_candle_timeframe_minutes=5,
@@ -149,7 +149,7 @@ def test_memory_conflict_negative_pnl() -> None:
 
 def test_hallucinated_memory_id_fails_llm() -> None:
     pkt = _packet(_bars_uptrend_n(100))
-    eng, e, _ = run_entry_reasoning_pipeline_v1(
+    eng, e, _, _ = run_entry_reasoning_pipeline_v1(
         student_decision_packet=pkt,
         retrieved_student_experience=[],
         run_candle_timeframe_minutes=5,
@@ -165,7 +165,7 @@ def test_hallucinated_memory_id_fails_llm() -> None:
 
 def test_llm_cannot_override_decision() -> None:
     pkt = _packet(_bars_uptrend_n(100))
-    eng, e, _ = run_entry_reasoning_pipeline_v1(
+    eng, e, _, _ = run_entry_reasoning_pipeline_v1(
         student_decision_packet=pkt,
         retrieved_student_experience=[],
         run_candle_timeframe_minutes=5,

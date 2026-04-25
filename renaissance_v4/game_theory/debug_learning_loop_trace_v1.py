@@ -661,6 +661,15 @@ def _finalize_debug_trace_from_base_v1(base: dict[str, Any], entry: dict[str, An
     if integrity_failed:
         tc["learning_trace_integrity_failed_v1"] = True
     out["trace_classification_v1"] = tc
+    _fault_map = None
+    for _ev in reversed(events):
+        if str(_ev.get("stage") or "").strip() == "student_reasoning_fault_map_v1":
+            _ep = _ev.get("evidence_payload") if isinstance(_ev.get("evidence_payload"), dict) else {}
+            _fm = _ep.get("student_reasoning_fault_map_v1")
+            if isinstance(_fm, dict):
+                _fault_map = _fm
+            break
+    out["student_reasoning_fault_map_v1"] = _fault_map
     out["operator_notes_v1"] = {
         "referee_vs_student_metric_v1": (
             "L1 Run TW % and Sys BL % are Referee batch trade-win rollups — they can match across "
