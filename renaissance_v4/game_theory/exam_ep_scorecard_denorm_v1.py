@@ -102,7 +102,9 @@ def annotate_l1_ep_value_sources_v1(record: dict[str, Any]) -> None:
 
     sac = bool(record.get("student_controlled_execution_v1"))
     sem = str(record.get("student_execution_mode_v1") or "")
-    if sac and sem == "baseline_gated":
+    if sac and sem == "student_full_control":
+        record["l1_execution_authority_v1"] = "student_full_control"
+    elif sac and sem == "baseline_gated":
         record["l1_execution_authority_v1"] = "baseline_gated_student"
     else:
         record["l1_execution_authority_v1"] = "baseline_control"

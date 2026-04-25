@@ -222,3 +222,51 @@ def test_run_manifest_replay_default_has_no_student_intent() -> None:
     sig = inspect.signature(run_manifest_replay)
     assert "student_execution_intent_v1" in sig.parameters
     assert sig.parameters["student_execution_intent_v1"].default is None
+    assert "student_full_control_lane_v1" in sig.parameters
+    assert sig.parameters["student_full_control_lane_v1"].default is False
+
+
+@patch("renaissance_v4.research.replay_runner.run_manifest_replay")
+@patch("renaissance_v4.game_theory.pattern_game.prepare_effective_manifest_for_replay")
+def test_attach_passes_full_control_lane_to_replay(mock_prep, mock_run) -> None:
+    class _Prep:
+        replay_path = Path("/dev/null")
+
+        def cleanup(self) -> None:
+            return None
+
+    mock_prep.return_value = _Prep()
+    mock_run.return_value = {
+        "outcomes": [],
+        "validation_checksum": "c",
+        "student_full_control_replay_audit_v1": {
+            "schema": "student_full_control_replay_audit_v1",
+            "student_full_control_024d_fusion_veto_entry_events_v1": 0,
+        },
+        "summary": {
+            "expectancy": 0.0,
+            "cumulative_pnl": 0.0,
+            "average_pnl": 0.0,
+            "max_drawdown": 0.0,
+        },
+    }
+    intent = _valid_intent_from_fixture()
+    scen = {
+        "scenario_id": "fc1",
+        "manifest_path": "renaissance_v4/configs/manifests/baseline_v1_recipe.json",
+        "student_execution_intent_v1": intent,
+        "student_full_control_lane_v1": True,
+    }
+    row: dict = {
+        "ok": True,
+        "scenario_id": "fc1",
+        "replay_outcomes_json": [],
+        "summary": {"expectancy": 0.0},
+    }
+    with patch("renaissance_v4.game_theory.student_controlled_replay_v1._emit_student_lane_traces_v1"), patch(
+        "renaissance_v4.game_theory.student_controlled_replay_v1._emit_student_lane_complete_v1"
+    ), patch("renaissance_v4.game_theory.student_controlled_replay_v1._emit_referee_used_student_thesis_v1"):
+        out = attach_student_controlled_replay_v1(scen, row, job_id="j1", fingerprint="0" * 40)
+    assert out.get("execution_authority_v1") == "student_full_control"
+    kwo = mock_run.call_args.kwargs
+    assert kwo.get("student_full_control_lane_v1") is True

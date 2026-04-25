@@ -40,7 +40,10 @@ CANONICAL_STUDENT_BRAIN_PROFILES_V1: frozenset[str] = frozenset(
 
 STUDENT_EXECUTION_MODE_OFF_V1 = "off"
 STUDENT_EXECUTION_MODE_BASELINE_GATED_V1 = "baseline_gated"
+# GT-024D — Student may open via fusion-veto path (fusion no_trade + aligned signal + intent); still risk-gated.
+STUDENT_EXECUTION_MODE_STUDENT_FULL_CONTROL_V1 = "student_full_control"
 STUDENT_FULL_CONTROL_STATUS_NOT_IMPLEMENTED_V1 = "not_implemented"
+STUDENT_FULL_CONTROL_STATUS_ENABLED_V1 = "enabled"
 
 
 def student_lane_authority_truth_v1(
@@ -63,6 +66,12 @@ def student_lane_authority_truth_v1(
         return (
             "Student lane is baseline-gated. Student can modify a baseline-eligible entry, but cannot "
             "create a new entry when baseline/fusion says no_trade. student_full_control: not_implemented."
+        )
+    if student_execution_mode_v1 == STUDENT_EXECUTION_MODE_STUDENT_FULL_CONTROL_V1:
+        return (
+            "Student full-control lane (024D): in addition to baseline-gated behavior when fusion is "
+            "directional, replay may open when fusion is no_trade if a directional signal aligns with the "
+            "validated student_execution_intent_v1 and risk allows. No entry without a matching active signal."
         )
     return f"See student_execution_mode_v1={student_execution_mode_v1!r} and exam contract."
 
@@ -360,11 +369,39 @@ def parse_exam_run_contract_request_v1(data: dict[str, Any]) -> tuple[dict[str, 
         )
 
     student_execution_mode = STUDENT_EXECUTION_MODE_OFF_V1
+    explicit_mode: str | None = None
+    if student_controlled_execution:
+        raw_mode = block.get("student_execution_mode_v1")
+        if raw_mode is None and data.get("student_execution_mode_v1") is not None:
+            raw_mode = data.get("student_execution_mode_v1")
+        if isinstance(raw_mode, str) and raw_mode.strip():
+            sm = raw_mode.strip().lower()
+            if sm in (
+                STUDENT_EXECUTION_MODE_BASELINE_GATED_V1,
+                "024c",
+            ):
+                explicit_mode = STUDENT_EXECUTION_MODE_BASELINE_GATED_V1
+            elif sm in (
+                STUDENT_EXECUTION_MODE_STUDENT_FULL_CONTROL_V1,
+                "full_control",
+                "024d",
+            ):
+                explicit_mode = STUDENT_EXECUTION_MODE_STUDENT_FULL_CONTROL_V1
+            else:
+                return None, f"invalid student_execution_mode_v1: {raw_mode!r}"
     if student_controlled_execution and profile in (
         STUDENT_BRAIN_PROFILE_MEMORY_CONTEXT_STUDENT_V1,
         STUDENT_BRAIN_PROFILE_MEMORY_CONTEXT_LLM_STUDENT_V1,
     ):
-        student_execution_mode = STUDENT_EXECUTION_MODE_BASELINE_GATED_V1
+        student_execution_mode = (
+            explicit_mode
+            if explicit_mode is not None
+            else STUDENT_EXECUTION_MODE_BASELINE_GATED_V1
+        )
+
+    sfc_out = STUDENT_FULL_CONTROL_STATUS_NOT_IMPLEMENTED_V1
+    if student_execution_mode == STUDENT_EXECUTION_MODE_STUDENT_FULL_CONTROL_V1:
+        sfc_out = STUDENT_FULL_CONTROL_STATUS_ENABLED_V1
 
     out: dict[str, Any] = {
         "schema": "exam_run_contract_request_v1",
@@ -377,7 +414,7 @@ def parse_exam_run_contract_request_v1(data: dict[str, Any]) -> tuple[dict[str, 
         "retrieved_context_ids": rcids_out,
         "student_controlled_execution_v1": student_controlled_execution,
         "student_execution_mode_v1": student_execution_mode,
-        "student_full_control_v1": STUDENT_FULL_CONTROL_STATUS_NOT_IMPLEMENTED_V1,
+        "student_full_control_v1": sfc_out,
     }
     euid = block.get("exam_unit_id")
     if euid is None and isinstance(data.get("exam_unit_id"), str):
@@ -488,13 +525,23 @@ def build_exam_run_line_meta_v1(
     line["student_execution_mode_v1"] = str(
         req.get("student_execution_mode_v1") or STUDENT_EXECUTION_MODE_OFF_V1
     )
-    line["student_full_control_v1"] = STUDENT_FULL_CONTROL_STATUS_NOT_IMPLEMENTED_V1
+    sfc_req = str(req.get("student_full_control_v1") or "").strip()
+    line["student_full_control_v1"] = sfc_req or STUDENT_FULL_CONTROL_STATUS_NOT_IMPLEMENTED_V1
     line["student_lane_authority_truth_v1"] = student_lane_authority_truth_v1(
         student_execution_mode_v1=line["student_execution_mode_v1"],
         student_controlled_execution=line["student_controlled_execution_v1"],
         profile=profile,
     )
-    if line["student_controlled_execution_v1"] and line["student_execution_mode_v1"] == STUDENT_EXECUTION_MODE_BASELINE_GATED_V1:
+    sem = line["student_execution_mode_v1"]
+    if (
+        line["student_controlled_execution_v1"]
+        and sem == STUDENT_EXECUTION_MODE_STUDENT_FULL_CONTROL_V1
+    ):
+        line["execution_authority_v1"] = "student_full_control"
+    elif (
+        line["student_controlled_execution_v1"]
+        and sem == STUDENT_EXECUTION_MODE_BASELINE_GATED_V1
+    ):
         line["execution_authority_v1"] = "baseline_gated_student"
     else:
         line["execution_authority_v1"] = "baseline_control"
@@ -504,7 +551,9 @@ def build_exam_run_line_meta_v1(
 __all__ = [
     "STUDENT_EXECUTION_MODE_OFF_V1",
     "STUDENT_EXECUTION_MODE_BASELINE_GATED_V1",
+    "STUDENT_EXECUTION_MODE_STUDENT_FULL_CONTROL_V1",
     "STUDENT_FULL_CONTROL_STATUS_NOT_IMPLEMENTED_V1",
+    "STUDENT_FULL_CONTROL_STATUS_ENABLED_V1",
     "student_lane_authority_truth_v1",
     "STUDENT_REASONING_MODES_V1",
     "STUDENT_REASONING_MODE_COLD_BASELINE_V1",

@@ -16,6 +16,8 @@ from renaissance_v4.game_theory.exam_run_contract_v1 import (
     STUDENT_BRAIN_PROFILE_MEMORY_CONTEXT_STUDENT_V1,
     STUDENT_EXECUTION_MODE_BASELINE_GATED_V1,
     STUDENT_EXECUTION_MODE_OFF_V1,
+    STUDENT_EXECUTION_MODE_STUDENT_FULL_CONTROL_V1,
+    STUDENT_FULL_CONTROL_STATUS_ENABLED_V1,
     STUDENT_FULL_CONTROL_STATUS_NOT_IMPLEMENTED_V1,
     STUDENT_REASONING_MODE_REPEAT_ANNA_V1,
     build_exam_run_line_meta_v1,
@@ -93,6 +95,21 @@ def test_parse_memory_profile_default_student_controlled_off() -> None:
     assert out["student_execution_mode_v1"] == STUDENT_EXECUTION_MODE_OFF_V1
 
 
+def test_parse_student_full_control_sets_enabled() -> None:
+    out, err = parse_exam_run_contract_request_v1(
+        {
+            "exam_run_contract_v1": {
+                "student_brain_profile_v1": STUDENT_BRAIN_PROFILE_MEMORY_CONTEXT_STUDENT_V1,
+                "student_controlled_execution_v1": True,
+                "student_execution_mode_v1": "student_full_control",
+            }
+        }
+    )
+    assert err is None and out is not None
+    assert out["student_execution_mode_v1"] == STUDENT_EXECUTION_MODE_STUDENT_FULL_CONTROL_V1
+    assert out["student_full_control_v1"] == STUDENT_FULL_CONTROL_STATUS_ENABLED_V1
+
+
 def test_build_exam_run_line_includes_execution_authority_v1() -> None:
     out, _ = parse_exam_run_contract_request_v1(
         {
@@ -113,6 +130,29 @@ def test_build_exam_run_line_includes_execution_authority_v1() -> None:
     )
     assert line.get("execution_authority_v1") == "baseline_gated_student"
     assert "baseline-gated" in (line.get("student_lane_authority_truth_v1") or "").lower()
+
+
+def test_build_exam_run_line_full_control_authority() -> None:
+    out, _ = parse_exam_run_contract_request_v1(
+        {
+            "exam_run_contract_v1": {
+                "student_brain_profile_v1": STUDENT_BRAIN_PROFILE_MEMORY_CONTEXT_STUDENT_V1,
+                "student_controlled_execution_v1": True,
+                "student_execution_mode_v1": "student_full_control",
+            }
+        }
+    )
+    assert out
+    line = build_exam_run_line_meta_v1(
+        request=out,
+        operator_batch_audit={},
+        fingerprint_sha256_40="b" * 40,
+        job_id="job_fc",
+        student_seam_observability_v1={},
+        batch_status="done",
+    )
+    assert line.get("execution_authority_v1") == "student_full_control"
+    assert line.get("student_full_control_v1") == STUDENT_FULL_CONTROL_STATUS_ENABLED_V1
 
 
 def test_parse_llm_profile_requires_http_base(monkeypatch: pytest.MonkeyPatch) -> None:

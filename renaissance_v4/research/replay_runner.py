@@ -82,6 +82,71 @@ _REPO_ROOT = _RV4_ROOT.parent
 _DEFAULT_MANIFEST = _RV4_ROOT / "configs" / "manifests" / "baseline_v1_recipe.json"
 
 
+def _compute_student_lane_entry_v1(
+    *,
+    flat: bool,
+    risk_decision_allowed: bool,
+    fusion_result_direction: str,
+    has_directional_signal: bool,
+    signal_results: list[Any],
+    student_execution_intent_v1: dict[str, Any] | None,
+    student_full_control_lane_v1: bool,
+) -> tuple[bool, str | None, str | None]:
+    """
+    ``(should_open, entry_direction, path_tag)`` for GT-024C (baseline-gated) vs GT-024D (full control).
+
+    **024C:** When fusion is long/short and risk allows, optionally override direction / suppress
+    with ``student_execution_intent_v1`` (enter_* / no_trade).
+
+    **024D (fusion veto path):** When ``student_full_control_lane_v1`` and fusion is ``no_trade`` but
+    at least one active signal points **long** or **short** and matches the intent's enter direction,
+    allow opening **despite** fusion no_trade — still requires flat and risk. Does not open when
+    no signal aligns (no "naked" student entry without a directional signal).
+    """
+    should_open_baseline = (
+        flat
+        and risk_decision_allowed
+        and fusion_result_direction in {"long", "short"}
+    )
+    if should_open_baseline:
+        entry_dir: str | None = str(fusion_result_direction)
+        if student_execution_intent_v1 is not None:
+            act = str((student_execution_intent_v1 or {}).get("action") or "").strip()
+            if act == "no_trade":
+                entry_dir = None
+            elif act == "enter_long":
+                entry_dir = "long"
+            elif act == "enter_short":
+                entry_dir = "short"
+            else:
+                entry_dir = None
+        if entry_dir in {"long", "short"}:
+            return True, entry_dir, "baseline_024c"
+        return False, None, None
+
+    if not student_full_control_lane_v1 or not student_execution_intent_v1:
+        return False, None, None
+    if not (flat and risk_decision_allowed):
+        return False, None, None
+    if fusion_result_direction != "no_trade":
+        return False, None, None
+    act = str((student_execution_intent_v1 or {}).get("action") or "").strip()
+    if act == "enter_long":
+        int_dir = "long"
+    elif act == "enter_short":
+        int_dir = "short"
+    else:
+        return False, None, None
+    if not has_directional_signal:
+        return False, None, None
+    if not any(
+        getattr(r, "active", False) and getattr(r, "direction", None) == int_dir
+        for r in signal_results
+    ):
+        return False, None, None
+    return True, int_dir, "full_control_024d_fusion_veto"
+
+
 def load_replay_manifest(explicit: Path | str | None = None) -> tuple[dict[str, Any], Path]:
     """
     Load and validate the strategy manifest for replay.
@@ -132,6 +197,7 @@ def run_manifest_replay(
     decision_context_recall_drill_trade_entry_max: int = 0,
     live_telemetry_callback: Callable[[dict[str, Any]], None] | None = None,
     student_execution_intent_v1: dict[str, Any] | None = None,
+    student_full_control_lane_v1: bool = False,
 ) -> dict[str, Any]:
     """
     Execute one full deterministic replay using the manifest resolution rules in ``load_replay_manifest``.
@@ -160,6 +226,11 @@ def run_manifest_replay(
     ``None`` (default), behavior matches historical manifest-only control. Callers should keep DCR
     off when using Student intent; Student lane is invoked only from orchestration, not the default
     single-replay path.
+
+    When ``student_full_control_lane_v1`` is True (GT_DIRECTIVE_024D), the replay may also open when
+    fusion is ``no_trade`` if ``student_execution_intent_v1`` says ``enter_long``/``enter_short`` and
+    an active **signal** matches that direction (fusion veto path). Risk and flat gating still apply;
+    024C baseline-gated behavior takes precedence on bars where fusion is already directional.
 
     When drill-down maxima are > 0, the replay keeps the **last** N windows matching each category
     (matched memory, fusion/signal bias applied, trade opened) for operator harness inspection.
@@ -294,6 +365,7 @@ def run_manifest_replay(
     risk_blocked_bars = 0
     entries_attempted = 0
     closes_recorded = 0
+    student_full_control_024d_fusion_veto_entries = 0
 
     regime_bar_counts: Counter[str] = Counter()
     fusion_direction_counts: Counter[str] = Counter()
@@ -630,23 +702,20 @@ def run_manifest_replay(
 
         flat = exec_manager.current_trade is None or not exec_manager.current_trade.open
         opened_this_bar = False
-        should_open_baseline = (
-            flat
-            and risk_decision.allowed
-            and fusion_result.direction in {"long", "short"}
+        should_open, entry_direction, entry_path_v1 = _compute_student_lane_entry_v1(
+            flat=flat,
+            risk_decision_allowed=risk_decision.allowed,
+            fusion_result_direction=str(fusion_result.direction or ""),
+            has_directional_signal=has_directional_signal,
+            signal_results=signal_results,
+            student_execution_intent_v1=student_execution_intent_v1
+            if isinstance(student_execution_intent_v1, dict)
+            else None,
+            student_full_control_lane_v1=bool(student_full_control_lane_v1),
         )
-        entry_direction = fusion_result.direction
-        if should_open_baseline and student_execution_intent_v1 is not None:
-            act = str((student_execution_intent_v1 or {}).get("action") or "").strip()
-            if act == "no_trade":
-                entry_direction = None
-            elif act == "enter_long":
-                entry_direction = "long"
-            elif act == "enter_short":
-                entry_direction = "short"
-            else:
-                entry_direction = None
-        if should_open_baseline and entry_direction in {"long", "short"}:
+        if should_open and entry_path_v1 == "full_control_024d_fusion_veto":
+            student_full_control_024d_fusion_veto_entries += 1
+        if should_open and entry_direction in {"long", "short"}:
             exec_manager.open_trade(
                 symbol=state.symbol,
                 price=state.current_close,
@@ -668,6 +737,7 @@ def run_manifest_replay(
                     {
                         "bar_index_1based": index,
                         "timestamp": state.timestamp,
+                        "student_lane_entry_path_v1": entry_path_v1,
                         "entry_close": state.current_close,
                         "fusion_direction": fusion_result.direction,
                         "fusion_threshold_passed": fusion_result.threshold_passed,
@@ -1045,6 +1115,17 @@ def run_manifest_replay(
             "trade_entry_samples": list(dcr_drill_trade_entries),
         },
         "signal_behavior_proof_v1": signal_behavior_proof_v1,
+        "student_full_control_replay_audit_v1": {
+            "schema": "student_full_control_replay_audit_v1",
+            "student_full_control_lane_requested_v1": bool(student_full_control_lane_v1),
+            "student_full_control_024d_fusion_veto_entry_events_v1": int(
+                student_full_control_024d_fusion_veto_entries
+            ),
+            "note_v1": (
+                "Entries with path full_control_024d_fusion_veto open when fusion is no_trade but a "
+                "directional signal aligns with student_execution_intent_v1; flat and risk still required."
+            ),
+        },
     }
     if decision_context_recall_enabled:
         out["decision_context_recall_stats"] = dcr_stats

@@ -5450,6 +5450,15 @@ PAGE_HTML = """<!DOCTYPE html>
                   <option value="baseline_no_memory_no_llm">Baseline — no memory / no LLM (system cold path)</option>
                   <option value="memory_context_llm_student">Memory + context + LLM component (Ollama)</option>
                 </select>
+                <div id="examStudentExecutionModeWrap" class="pg-controls-span-2" style="margin-top:8px">
+                  <div class="pg-controls-min-grid" style="grid-template-columns:minmax(11.5rem,40%) 1fr;align-items:start">
+                    <label for="examStudentExecutionModePick">Student execution mode (GT-024)</label>
+                    <select id="examStudentExecutionModePick" aria-describedby="examContractHelp">
+                      <option value="baseline_gated" selected>Baseline-gated (024C)</option>
+                      <option value="student_full_control">Full control (024D)</option>
+                    </select>
+                  </div>
+                </div>
                 <div id="examLlmModelWrap" class="pg-controls-span-2" style="margin-top:8px;display:none">
                   <div class="pg-controls-min-grid" style="grid-template-columns:minmax(10rem,38%) 1fr;align-items:center">
                     <label for="examLlmModelPick">Ollama model</label>
@@ -5469,7 +5478,7 @@ PAGE_HTML = """<!DOCTYPE html>
                 <label for="examPromptVersion" style="margin-top:8px">Prompt version</label>
                 <input type="text" id="examPromptVersion" maxlength="256" autocomplete="off" placeholder="pattern_game_web_ui_v__PATTERN_GAME_WEB_UI_VERSION__" style="width:100%;max-width:100%"/>
               </div>
-              <p id="examContractHelp" class="caps" style="margin:8px 0 0;font-size:0.72rem;line-height:1.42;color:#5a6570">Every <strong>Run exam</strong> sends <code>exam_run_contract_v1</code> with <code>student_brain_profile_v1</code>, <code>student_controlled_execution_v1</code> (on for memory/LLM profiles; off for cold baseline), and optional <code>student_llm_v1</code> (plus <code>retrieved_context_ids: []</code> until wired). Legacy lane strings are still accepted. Ollama runs only for the LLM profile after replay. <strong>Student execution authority</strong> is <code>baseline_gated_student</code> (024C): Student can change direction on a baseline-eligible entry, not open a new entry when fusion says <code>no_trade</code>. <code>student_full_control</code> is not implemented (GT-024D).</p>
+              <p id="examContractHelp" class="caps" style="margin:8px 0 0;font-size:0.72rem;line-height:1.42;color:#5a6570">Every <strong>Run exam</strong> sends <code>exam_run_contract_v1</code> with <code>student_brain_profile_v1</code>, <code>student_controlled_execution_v1</code>, <code>student_execution_mode_v1</code> (<code>baseline_gated</code> = 024C, <code>student_full_control</code> = 024D; hidden for cold baseline), and optional <code>student_llm_v1</code>. 024C only overrides on bars where fusion is directional. 024D can open when fusion is <code>no_trade</code> if a directional signal matches intent (risk/flat gating still apply). <code>student_full_control_v1: enabled</code> on the scorecard when 024D is selected.</p>
             </div>
           </div>
           <div class="pg-controls-run-row">
@@ -9263,13 +9272,17 @@ PAGE_HTML = """<!DOCTYPE html>
       const llmModelEl = document.getElementById('examLlmModelPick');
       const PROFILE_LLM = 'memory_context_llm_student';
       const PROFILE_COLD = 'baseline_no_memory_no_llm';
+      const MODE_GATED = 'baseline_gated';
       const profile =
         profEl && profEl.value ? String(profEl.value).trim() : 'memory_context_student';
+      const modeEl = document.getElementById('examStudentExecutionModePick');
       const skipCold = !!(skipEl && skipEl.checked);
       const pv =
         pvEl && pvEl.value.trim()
           ? pvEl.value.trim()
           : 'pattern_game_web_ui_v' + PATTERN_GAME_UI_VERSION_STR;
+      const studentExecMode =
+        modeEl && modeEl.value ? String(modeEl.value).trim() : MODE_GATED;
       const out = {
         student_brain_profile_v1: profile,
         student_reasoning_mode: profile,
@@ -9278,6 +9291,9 @@ PAGE_HTML = """<!DOCTYPE html>
         retrieved_context_ids: [],
         student_controlled_execution_v1: profile !== PROFILE_COLD,
       };
+      if (profile !== PROFILE_COLD) {
+        out.student_execution_mode_v1 = studentExecMode;
+      }
       if (profile === PROFILE_LLM) {
         const model =
           llmModelEl && llmModelEl.value ? String(llmModelEl.value).trim() : 'qwen2.5:7b';
@@ -9295,13 +9311,22 @@ PAGE_HTML = """<!DOCTYPE html>
     (function wireExamBrainProfileUi() {
       const pick = document.getElementById('examStudentReasoningModePick');
       const wrap = document.getElementById('examLlmModelWrap');
+      const modeRow = document.getElementById('examStudentExecutionModeWrap');
       function syncExamLlmWrap() {
         if (!wrap || !pick) return;
         wrap.style.display = pick.value === 'memory_context_llm_student' ? 'block' : 'none';
       }
+      function syncStudentExecutionModeRow() {
+        if (!modeRow || !pick) return;
+        modeRow.style.display = pick.value === 'baseline_no_memory_no_llm' ? 'none' : 'block';
+      }
       if (pick) {
-        pick.addEventListener('change', syncExamLlmWrap);
+        pick.addEventListener('change', function () {
+          syncExamLlmWrap();
+          syncStudentExecutionModeRow();
+        });
         syncExamLlmWrap();
+        syncStudentExecutionModeRow();
       }
     })();
 
