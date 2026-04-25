@@ -9,6 +9,7 @@ Directive 09 — Operator **execution seam**: after a parallel batch, run Studen
 
 from __future__ import annotations
 
+import copy
 import hashlib
 import json
 import os
@@ -298,6 +299,7 @@ def student_loop_seam_after_parallel_batch_v1(
     retrieval_matches_total = 0
     primary_trade_shadow_student_v1: dict[str, Any] | None = None
     primary_student_output_v1: dict[str, Any] | None = None
+    student_output_sealed_by_scenario_id_v1: dict[str, Any] = {}
     first_packet_annex_present: bool | None = None
 
     ex_req = exam_run_contract_request_v1 if isinstance(exam_run_contract_request_v1, dict) else None
@@ -437,6 +439,8 @@ def student_loop_seam_after_parallel_batch_v1(
                 if soe or so is None:
                     errors.append(f"{sid} trade={o.trade_id}: student_output {'; '.join(soe)}")
                     continue
+                if isinstance(so, dict) and sid not in student_output_sealed_by_scenario_id_v1:
+                    student_output_sealed_by_scenario_id_v1[sid] = copy.deepcopy(so)
                 via = (
                     "shadow_stub_llm_cap"
                     if over_cap
@@ -611,6 +615,10 @@ def student_loop_seam_after_parallel_batch_v1(
         "schema": "memory_promotion_batch_v1",
         "per_trade": memory_promotion_batch_trades_v1,
     }
+    if student_output_sealed_by_scenario_id_v1:
+        out_audit["student_output_sealed_by_scenario_id_v1"] = student_output_sealed_by_scenario_id_v1
+    if primary_student_output_v1 is not None:
+        out_audit["primary_student_output_sealed_v1"] = copy.deepcopy(primary_student_output_v1)
     return out_audit
 
 

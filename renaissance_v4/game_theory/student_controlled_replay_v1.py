@@ -21,7 +21,11 @@ from typing import Any
 EXECUTION_LANE_BASELINE_CONTROL_V1 = "baseline_control"
 EXECUTION_AUTHORITY_MANIFEST_V1 = "manifest"
 EXECUTION_LANE_STUDENT_CONTROLLED_V1 = "student_controlled"
-EXECUTION_AUTHORITY_STUDENT_THESIS_V1 = "student_thesis"
+# 024C engine: Student lane only when baseline would admit an entry (baseline-gated), not full Student control.
+EXECUTION_AUTHORITY_BASELINE_GATED_STUDENT_V1 = "baseline_gated_student"
+EXECUTION_AUTHORITY_STUDENT_FULL_CONTROL_V1 = "student_full_control"
+# Legacy alias — same 024C semantics; do not read as "full Student authority".
+EXECUTION_AUTHORITY_STUDENT_THESIS_V1 = EXECUTION_AUTHORITY_BASELINE_GATED_STUDENT_V1
 
 
 def outcomes_list_canonical_hash_v1(outcomes_json: list[dict[str, Any]] | None) -> str:
@@ -45,15 +49,32 @@ def _emit_student_lane_traces_v1(
         return
     digest = str(intent.get("student_execution_intent_digest_v1") or "")
     srcd = str(intent.get("source_student_output_digest_v1") or "")
+    from renaissance_v4.game_theory.exam_run_contract_v1 import (
+        STUDENT_EXECUTION_MODE_BASELINE_GATED_V1,
+        normalize_student_reasoning_mode_v1,
+        student_lane_authority_truth_v1,
+    )
+
+    pnorm = normalize_student_reasoning_mode_v1(
+        str((intent.get("student_brain_profile_v1") or "") or "memory_context_student")
+    )
+    truth = student_lane_authority_truth_v1(
+        student_execution_mode_v1=STUDENT_EXECUTION_MODE_BASELINE_GATED_V1,
+        student_controlled_execution=True,
+        profile=pnorm,
+    )
     _emit(
         job_id=job_id,
         fingerprint=fingerprint,
         stage="student_execution_intent_consumed",
         status="pass",
-        summary="Student execution intent accepted for student-controlled replay (024C).",
+        summary="Student execution intent accepted (024C: baseline_gated_student — not full Student control).",
         producer="student_controlled_replay_v1",
         scenario_id=scenario_id,
         evidence_payload={
+            "execution_authority_v1": EXECUTION_AUTHORITY_BASELINE_GATED_STUDENT_V1,
+            "execution_authority_v1_engine_v1": "024C_baseline_gated",
+            "student_lane_authority_truth_v1": truth[:2000],
             "student_execution_intent_digest_v1": digest,
             "source_student_output_digest_v1": srcd,
             "action": intent.get("action"),
@@ -68,7 +89,10 @@ def _emit_student_lane_traces_v1(
         summary=status_line[:2000],
         producer="student_controlled_replay_v1",
         scenario_id=scenario_id,
-        evidence_payload={"execution_lane_v1": EXECUTION_LANE_STUDENT_CONTROLLED_V1},
+        evidence_payload={
+            "execution_lane_v1": EXECUTION_LANE_STUDENT_CONTROLLED_V1,
+            "execution_authority_v1": EXECUTION_AUTHORITY_BASELINE_GATED_STUDENT_V1,
+        },
     )
 
 
@@ -92,6 +116,7 @@ def _emit_student_lane_complete_v1(
         scenario_id=scenario_id,
         evidence_payload={
             "execution_lane_v1": EXECUTION_LANE_STUDENT_CONTROLLED_V1,
+            "execution_authority_v1": EXECUTION_AUTHORITY_BASELINE_GATED_STUDENT_V1,
             "student_outcomes_hash_v1": student_outcomes_hash,
         },
     )
@@ -110,12 +135,12 @@ def _emit_referee_used_student_thesis_v1(
         fingerprint=fingerprint,
         stage="referee_used_student_output",
         status="true",
-        summary="Student-controlled lane: execution entries followed validated student_execution_intent_v1 (024C).",
+        summary="Student lane completed (024C: baseline_gated_student — cannot override baseline no_trade to force new entries).",
         producer="student_controlled_replay_v1",
         scenario_id=scenario_id,
         evidence_payload={
             "execution_lane_v1": EXECUTION_LANE_STUDENT_CONTROLLED_V1,
-            "execution_authority_v1": EXECUTION_AUTHORITY_STUDENT_THESIS_V1,
+            "execution_authority_v1": EXECUTION_AUTHORITY_BASELINE_GATED_STUDENT_V1,
             "referee_used_student_output": True,
         },
     )
@@ -160,7 +185,7 @@ def attach_student_controlled_replay_v1(
 
     base_out: dict[str, Any] = {
         "execution_lane_v1": EXECUTION_LANE_STUDENT_CONTROLLED_V1,
-        "execution_authority_v1": EXECUTION_AUTHORITY_STUDENT_THESIS_V1,
+        "execution_authority_v1": EXECUTION_AUTHORITY_BASELINE_GATED_STUDENT_V1,
         "control_outcomes_hash_v1": control_h,
         "student_outcomes_hash_v1": control_h,
         "outcomes_hash_v1": control_h,
@@ -241,7 +266,7 @@ def attach_student_controlled_replay_v1(
     base_out.update(
         {
             "execution_lane_v1": EXECUTION_LANE_STUDENT_CONTROLLED_V1,
-            "execution_authority_v1": EXECUTION_AUTHORITY_STUDENT_THESIS_V1,
+            "execution_authority_v1": EXECUTION_AUTHORITY_BASELINE_GATED_STUDENT_V1,
             "student_execution_intent_digest_v1": intent.get("student_execution_intent_digest_v1"),
             "source_student_output_digest_v1": intent.get("source_student_output_digest_v1"),
             "outcomes_hash_v1": st_h,
@@ -260,7 +285,7 @@ def attach_student_controlled_replay_v1(
             "student_controlled_expectancy_per_trade_v1": round(ex, 6),
             "student_controlled_total_trades_v1": trades,
             "student_controlled_outcomes_hash_v1": st_h,
-            "student_controlled_execution_authority_v1": EXECUTION_AUTHORITY_STUDENT_THESIS_V1,
+            "student_controlled_execution_authority_v1": EXECUTION_AUTHORITY_BASELINE_GATED_STUDENT_V1,
             "student_controlled_execution_lane_v1": EXECUTION_LANE_STUDENT_CONTROLLED_V1,
             "student_baseline_e_expectancy_v1": base_ex,
             "student_thesis_e_expectancy_v1": ex,
@@ -279,6 +304,135 @@ def attach_student_controlled_replay_v1(
             job_id=j_id, fingerprint=fingerprint, scenario_id=sid
         )
     return base_out
+
+
+def apply_automated_student_lanes_from_exam_contract_v1(
+    *,
+    results: list[dict[str, Any]],
+    scenarios: list[dict[str, Any]],
+    job_id: str,
+    exam_run_contract_request_v1: dict[str, Any] | None,
+    seam_audit: dict[str, Any] | None,
+    fingerprint: str | None = None,
+) -> dict[str, Any]:
+    """
+    After ``student_loop_seam_after_parallel_batch_v1`` sealed ``student_output_v1`` per scenario, build
+    ``student_execution_intent_v1`` and run the Student lane **without** operator-authored scenario JSON.
+
+    024C engine remains **baseline_gated_student** (not full Student control).
+    """
+    from renaissance_v4.game_theory.exam_run_contract_v1 import (
+        STUDENT_BRAIN_PROFILE_MEMORY_CONTEXT_LLM_STUDENT_V1,
+        STUDENT_BRAIN_PROFILE_MEMORY_CONTEXT_STUDENT_V1,
+        STUDENT_EXECUTION_MODE_BASELINE_GATED_V1,
+        normalize_student_reasoning_mode_v1,
+        resolved_llm_for_exam_contract_v1,
+    )
+    from renaissance_v4.game_theory.student_proctor.student_execution_intent_v1 import (
+        build_student_execution_intent_from_sealed_output_v1,
+    )
+
+    ex = exam_run_contract_request_v1 if isinstance(exam_run_contract_request_v1, dict) else None
+    seam = seam_audit if isinstance(seam_audit, dict) else None
+    audit: dict[str, Any] = {
+        "schema": "automated_student_lane_batch_audit_v1",
+        "automation_ran_v1": False,
+        "scenarios_with_student_lane_attempted_v1": 0,
+        "scenarios_with_student_lane_completed_v1": 0,
+        "errors_v1": [],
+    }
+    if not ex or not ex.get("student_controlled_execution_v1"):
+        audit["skip_reason_v1"] = "student_controlled_execution_v1_false_or_absent"
+        return audit
+    if str(ex.get("student_execution_mode_v1") or "") != STUDENT_EXECUTION_MODE_BASELINE_GATED_V1:
+        audit["skip_reason_v1"] = "student_execution_mode_v1_not_baseline_gated"
+        return audit
+    prof = normalize_student_reasoning_mode_v1(
+        str(ex.get("student_brain_profile_v1") or ex.get("student_reasoning_mode") or "")
+    )
+    if prof not in (
+        STUDENT_BRAIN_PROFILE_MEMORY_CONTEXT_STUDENT_V1,
+        STUDENT_BRAIN_PROFILE_MEMORY_CONTEXT_LLM_STUDENT_V1,
+    ):
+        audit["skip_reason_v1"] = "profile_not_memory_context_student_or_llm"
+        return audit
+    sealed = (seam or {}).get("student_output_sealed_by_scenario_id_v1")
+    if not isinstance(sealed, dict) or not sealed:
+        audit["skip_reason_v1"] = "no_student_output_sealed_by_scenario"
+        return audit
+
+    fp = (fingerprint or "").strip()
+    if not fp:
+        audit["errors_v1"] = ["fingerprint_empty_automation_skipped"]
+        return audit
+    j = (job_id or "").strip()
+    if not j:
+        audit["errors_v1"] = ["job_id_empty_automation_skipped"]
+        return audit
+
+    llm_model: str | None = None
+    if prof == STUDENT_BRAIN_PROFILE_MEMORY_CONTEXT_LLM_STUDENT_V1:
+        llm_model, _, _ = resolved_llm_for_exam_contract_v1(ex)
+
+    rows_by_sid: dict[str, dict[str, Any]] = {}
+    for r in results or []:
+        if not isinstance(r, dict):
+            continue
+        sik = str(r.get("scenario_id") or "")
+        if sik:
+            rows_by_sid[sik] = r
+    sc_by_sid: dict[str, dict[str, Any]] = {}
+    for s in scenarios or []:
+        if not isinstance(s, dict):
+            continue
+        s_id = str(s.get("scenario_id") or "")
+        if s_id:
+            sc_by_sid[s_id] = s
+
+    audit["automation_ran_v1"] = True
+    attempted = 0
+    completed = 0
+    errs: list[str] = []
+    for sid, so in sealed.items():
+        if not isinstance(so, dict):
+            continue
+        s_id = str(sid)
+        row = rows_by_sid.get(s_id)
+        if not row or not row.get("ok"):
+            continue
+        scen = sc_by_sid.get(s_id, {})
+        if scen.get("enable_student_controlled_replay_v1"):
+            br = row.get("student_controlled_replay_v1")
+            if isinstance(br, dict) and str(br.get("student_lane_status_v1") or "") == "completed":
+                continue
+        intent, build_errs = build_student_execution_intent_from_sealed_output_v1(
+            student_output_v1=so,
+            job_id=j,
+            fingerprint=fp,
+            student_brain_profile_v1=prof,
+            scenario_id=s_id,
+            trade_id=None,
+            llm_model=llm_model,
+            created_at_utc=None,
+        )
+        if not intent or build_errs:
+            errs.append(
+                f"{s_id}: intent_build_failed: {'; '.join(build_errs or ['unknown'])}"
+            )
+            continue
+        attempted += 1
+        scen_aug = dict(scen)
+        scen_aug["student_execution_intent_v1"] = intent
+        out = attach_student_controlled_replay_v1(scen_aug, row, job_id=j, fingerprint=fp)
+        out["automation_source_v1"] = "exam_contract_v1"
+        out["execution_authority_v1"] = EXECUTION_AUTHORITY_BASELINE_GATED_STUDENT_V1
+        row["student_controlled_replay_v1"] = out
+        if str(out.get("student_lane_status_v1") or "") == "completed":
+            completed += 1
+    audit["scenarios_with_student_lane_attempted_v1"] = attempted
+    audit["scenarios_with_student_lane_completed_v1"] = completed
+    audit["errors_v1"] = errs
+    return audit
 
 
 def apply_student_controlled_scorecard_rollup_v1(

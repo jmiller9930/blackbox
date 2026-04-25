@@ -160,6 +160,9 @@ from renaissance_v4.game_theory.student_proctor.student_learning_operator_v1 imp
 from renaissance_v4.game_theory.student_proctor.student_proctor_operator_runtime_v1 import (
     student_loop_seam_after_parallel_batch_v1,
 )
+from renaissance_v4.game_theory.student_controlled_replay_v1 import (
+    apply_automated_student_lanes_from_exam_contract_v1,
+)
 from renaissance_v4.game_theory.student_panel_d11 import build_d11_run_rows_v1
 from renaissance_v4.game_theory.student_panel_d13 import (
     build_d13_selected_run_payload_v1,
@@ -1250,6 +1253,15 @@ def create_app() -> Flask:
                         fingerprint=lt_fp,
                         reason=str(seam_audit.get("reason") or "skipped"),
                     )
+                auto_stu = apply_automated_student_lanes_from_exam_contract_v1(
+                    results=results,
+                    scenarios=scenarios,
+                    job_id=job_id,
+                    exam_run_contract_request_v1=exam_req if isinstance(exam_req, dict) else None,
+                    seam_audit=seam_audit,
+                    fingerprint=lt_fp,
+                )
+                seam_audit["automated_student_lane_batch_audit_v1"] = auto_stu
                 exam_line = _exam_run_line_meta_for_parallel_job_v1(
                     exam_req=exam_req if isinstance(exam_req, dict) else None,
                     fingerprint_preview=fp_prev if isinstance(fp_prev, str) else None,
@@ -1735,6 +1747,15 @@ def create_app() -> Flask:
                     fingerprint=lt_fp_block,
                     reason=str(seam_blocking.get("reason") or "skipped"),
                 )
+            auto_stu_block = apply_automated_student_lanes_from_exam_contract_v1(
+                results=results,
+                scenarios=scenarios,
+                job_id=job_id,
+                exam_run_contract_request_v1=exam_req_block if isinstance(exam_req_block, dict) else None,
+                seam_audit=seam_blocking,
+                fingerprint=lt_fp_block,
+            )
+            seam_blocking["automated_student_lane_batch_audit_v1"] = auto_stu_block
             exam_line_block = _exam_run_line_meta_for_parallel_job_v1(
                 exam_req=exam_req_block if isinstance(exam_req_block, dict) else None,
                 fingerprint_preview=fp_prev_block if isinstance(fp_prev_block, str) else None,
@@ -5448,7 +5469,7 @@ PAGE_HTML = """<!DOCTYPE html>
                 <label for="examPromptVersion" style="margin-top:8px">Prompt version</label>
                 <input type="text" id="examPromptVersion" maxlength="256" autocomplete="off" placeholder="pattern_game_web_ui_v__PATTERN_GAME_WEB_UI_VERSION__" style="width:100%;max-width:100%"/>
               </div>
-              <p id="examContractHelp" class="caps" style="margin:8px 0 0;font-size:0.72rem;line-height:1.42;color:#5a6570">Every <strong>Run exam</strong> sends <code>exam_run_contract_v1</code> with <code>student_brain_profile_v1</code> and optional <code>student_llm_v1</code> (plus <code>retrieved_context_ids: []</code> until wired). Legacy lane strings are still accepted by the API. Ollama runs only for the LLM profile after replay.</p>
+              <p id="examContractHelp" class="caps" style="margin:8px 0 0;font-size:0.72rem;line-height:1.42;color:#5a6570">Every <strong>Run exam</strong> sends <code>exam_run_contract_v1</code> with <code>student_brain_profile_v1</code>, <code>student_controlled_execution_v1</code> (on for memory/LLM profiles; off for cold baseline), and optional <code>student_llm_v1</code> (plus <code>retrieved_context_ids: []</code> until wired). Legacy lane strings are still accepted. Ollama runs only for the LLM profile after replay. <strong>Student execution authority</strong> is <code>baseline_gated_student</code> (024C): Student can change direction on a baseline-eligible entry, not open a new entry when fusion says <code>no_trade</code>. <code>student_full_control</code> is not implemented (GT-024D).</p>
             </div>
           </div>
           <div class="pg-controls-run-row">
@@ -9241,6 +9262,7 @@ PAGE_HTML = """<!DOCTYPE html>
       const pvEl = document.getElementById('examPromptVersion');
       const llmModelEl = document.getElementById('examLlmModelPick');
       const PROFILE_LLM = 'memory_context_llm_student';
+      const PROFILE_COLD = 'baseline_no_memory_no_llm';
       const profile =
         profEl && profEl.value ? String(profEl.value).trim() : 'memory_context_student';
       const skipCold = !!(skipEl && skipEl.checked);
@@ -9254,6 +9276,7 @@ PAGE_HTML = """<!DOCTYPE html>
         skip_cold_baseline_if_anchor: skipCold,
         prompt_version: pv,
         retrieved_context_ids: [],
+        student_controlled_execution_v1: profile !== PROFILE_COLD,
       };
       if (profile === PROFILE_LLM) {
         const model =

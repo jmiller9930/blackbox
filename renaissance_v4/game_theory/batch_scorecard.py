@@ -400,6 +400,7 @@ def record_parallel_batch_finished(
             "shadow_student_enabled",
             "llm_student_output_rejections_v1",
             "student_llm_execution_v1",
+            "automated_student_lane_batch_audit_v1",
         ):
             if fld in seam_obs:
                 record[fld] = seam_obs[fld]
@@ -559,6 +560,7 @@ def record_parallel_batch_finished(
             "shadow_student_enabled",
             "llm_student_output_rejections_v1",
             "student_llm_execution_v1",
+            "automated_student_lane_batch_audit_v1",
         ):
             if fld in seam_obs:
                 record[fld] = seam_obs[fld]

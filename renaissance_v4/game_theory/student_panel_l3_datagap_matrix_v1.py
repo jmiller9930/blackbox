@@ -599,6 +599,14 @@ def _scorecard_public_subset_v1(entry: dict[str, Any] | None) -> dict[str, Any] 
         "exam_pass_v1",
         "l1_e_value_source_v1",
         "l1_p_value_source_v1",
+        "l1_execution_authority_v1",
+        "l1_student_full_control_v1",
+        "student_controlled_execution_v1",
+        "student_execution_mode_v1",
+        "student_full_control_v1",
+        "execution_authority_v1",
+        "student_lane_authority_truth_v1",
+        "automated_student_lane_batch_audit_v1",
     )
     out: dict[str, Any] = {"schema": "scorecard_line_public_subset_v1"}
     for k in allow:

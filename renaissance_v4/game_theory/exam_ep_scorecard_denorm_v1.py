@@ -100,6 +100,15 @@ def annotate_l1_ep_value_sources_v1(record: dict[str, Any]) -> None:
     else:
         record["l1_p_value_source_v1"] = "data_gap"
 
+    sac = bool(record.get("student_controlled_execution_v1"))
+    sem = str(record.get("student_execution_mode_v1") or "")
+    if sac and sem == "baseline_gated":
+        record["l1_execution_authority_v1"] = "baseline_gated_student"
+    else:
+        record["l1_execution_authority_v1"] = "baseline_control"
+    sfc = str(record.get("student_full_control_v1") or "").strip()
+    record["l1_student_full_control_v1"] = sfc or "not_implemented"
+
 
 __all__ = [
     "annotate_l1_ep_value_sources_v1",

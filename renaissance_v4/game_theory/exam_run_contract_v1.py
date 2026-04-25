@@ -36,6 +36,36 @@ CANONICAL_STUDENT_BRAIN_PROFILES_V1: frozenset[str] = frozenset(
     }
 )
 
+# --- GT_DIRECTIVE_024C closeout — explicit Student execution mode (vocabulary) ---
+
+STUDENT_EXECUTION_MODE_OFF_V1 = "off"
+STUDENT_EXECUTION_MODE_BASELINE_GATED_V1 = "baseline_gated"
+STUDENT_FULL_CONTROL_STATUS_NOT_IMPLEMENTED_V1 = "not_implemented"
+
+
+def student_lane_authority_truth_v1(
+    *,
+    student_execution_mode_v1: str,
+    student_controlled_execution: bool,
+    profile: str,
+) -> str:
+    """
+    Non-ambiguous copy for scorecard, trace evidence, and UI: baseline-gated vs full control.
+    """
+    if not student_controlled_execution or student_execution_mode_v1 == STUDENT_EXECUTION_MODE_OFF_V1:
+        return (
+            "Student lane automation was not enabled for this run "
+            "(student_controlled_execution_v1 false or student_execution_mode_v1 off)."
+        )
+    if profile == STUDENT_BRAIN_PROFILE_BASELINE_NO_MEMORY_NO_LLM_V1:
+        return "Student lane is not used for cold baseline profile runs."
+    if student_execution_mode_v1 == STUDENT_EXECUTION_MODE_BASELINE_GATED_V1:
+        return (
+            "Student lane is baseline-gated. Student can modify a baseline-eligible entry, but cannot "
+            "create a new entry when baseline/fusion says no_trade. student_full_control: not_implemented."
+        )
+    return f"See student_execution_mode_v1={student_execution_mode_v1!r} and exam contract."
+
 # Legacy **input** tokens (UI/API/scripts). Normalize maps these → brain profile.
 LEGACY_STUDENT_REASONING_INPUT_COLD_BASELINE_V1 = "cold_baseline"
 LEGACY_STUDENT_REASONING_INPUT_REPEAT_ANNA_V1 = "repeat_anna_memory_context"
@@ -315,6 +345,27 @@ def parse_exam_run_contract_request_v1(data: dict[str, Any]) -> tuple[dict[str, 
         if not base or not (base.startswith("http://") or base.startswith("https://")):
             return None, "ollama_base_url_invalid_or_unset_for_llm_assisted_mode"
 
+    raw_sce = block.get("student_controlled_execution_v1")
+    if raw_sce is None and data.get("student_controlled_execution_v1") is not None:
+        raw_sce = data.get("student_controlled_execution_v1")
+    if isinstance(raw_sce, str):
+        student_controlled_execution = raw_sce.strip().lower() in ("1", "true", "yes", "on")
+    else:
+        student_controlled_execution = bool(raw_sce)
+
+    if student_controlled_execution and profile == STUDENT_BRAIN_PROFILE_BASELINE_NO_MEMORY_NO_LLM_V1:
+        return (
+            None,
+            "student_controlled_execution_v1 requires memory_context_student or memory_context_llm_student, not cold baseline",
+        )
+
+    student_execution_mode = STUDENT_EXECUTION_MODE_OFF_V1
+    if student_controlled_execution and profile in (
+        STUDENT_BRAIN_PROFILE_MEMORY_CONTEXT_STUDENT_V1,
+        STUDENT_BRAIN_PROFILE_MEMORY_CONTEXT_LLM_STUDENT_V1,
+    ):
+        student_execution_mode = STUDENT_EXECUTION_MODE_BASELINE_GATED_V1
+
     out: dict[str, Any] = {
         "schema": "exam_run_contract_request_v1",
         "contract_version": 1,
@@ -324,6 +375,9 @@ def parse_exam_run_contract_request_v1(data: dict[str, Any]) -> tuple[dict[str, 
         "skip_cold_baseline_if_anchor": skip_req,
         "prompt_version": pv,
         "retrieved_context_ids": rcids_out,
+        "student_controlled_execution_v1": student_controlled_execution,
+        "student_execution_mode_v1": student_execution_mode,
+        "student_full_control_v1": STUDENT_FULL_CONTROL_STATUS_NOT_IMPLEMENTED_V1,
     }
     euid = block.get("exam_unit_id")
     if euid is None and isinstance(data.get("exam_unit_id"), str):
@@ -430,10 +484,28 @@ def build_exam_run_line_meta_v1(
     eid = req.get("exam_unit_id")
     if isinstance(eid, str) and eid.strip():
         line["exam_unit_id"] = eid.strip()[:256]
+    line["student_controlled_execution_v1"] = bool(req.get("student_controlled_execution_v1"))
+    line["student_execution_mode_v1"] = str(
+        req.get("student_execution_mode_v1") or STUDENT_EXECUTION_MODE_OFF_V1
+    )
+    line["student_full_control_v1"] = STUDENT_FULL_CONTROL_STATUS_NOT_IMPLEMENTED_V1
+    line["student_lane_authority_truth_v1"] = student_lane_authority_truth_v1(
+        student_execution_mode_v1=line["student_execution_mode_v1"],
+        student_controlled_execution=line["student_controlled_execution_v1"],
+        profile=profile,
+    )
+    if line["student_controlled_execution_v1"] and line["student_execution_mode_v1"] == STUDENT_EXECUTION_MODE_BASELINE_GATED_V1:
+        line["execution_authority_v1"] = "baseline_gated_student"
+    else:
+        line["execution_authority_v1"] = "baseline_control"
     return line
 
 
 __all__ = [
+    "STUDENT_EXECUTION_MODE_OFF_V1",
+    "STUDENT_EXECUTION_MODE_BASELINE_GATED_V1",
+    "STUDENT_FULL_CONTROL_STATUS_NOT_IMPLEMENTED_V1",
+    "student_lane_authority_truth_v1",
     "STUDENT_REASONING_MODES_V1",
     "STUDENT_REASONING_MODE_COLD_BASELINE_V1",
     "STUDENT_REASONING_MODE_REPEAT_ANNA_V1",

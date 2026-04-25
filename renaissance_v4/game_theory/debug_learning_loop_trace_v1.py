@@ -296,6 +296,10 @@ def _model_provenance_chain_v1(entry: dict[str, Any], events: list[dict[str, Any
             "l1_p_scalar_v1": line_p_value_for_l1_v1(entry),
             "l1_e_value_source_v1": entry.get("l1_e_value_source_v1"),
             "l1_p_value_source_v1": entry.get("l1_p_value_source_v1"),
+            "l1_execution_authority_v1": entry.get("l1_execution_authority_v1"),
+            "l1_student_full_control_v1": entry.get("l1_student_full_control_v1"),
+            "execution_authority_v1": entry.get("execution_authority_v1"),
+            "student_lane_authority_truth_v1": entry.get("student_lane_authority_truth_v1"),
         },
         "model_switch_events_v1": switches,
         "note_v1": (

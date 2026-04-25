@@ -475,6 +475,10 @@ def build_l1_road_payload_v1(
                 "exam_pass_v1": line.get("exam_pass_v1"),
                 "l1_e_value_source_v1": line.get("l1_e_value_source_v1"),
                 "l1_p_value_source_v1": line.get("l1_p_value_source_v1"),
+                "l1_execution_authority_v1": line.get("l1_execution_authority_v1"),
+                "l1_student_full_control_v1": line.get("l1_student_full_control_v1"),
+                "execution_authority_v1": line.get("execution_authority_v1"),
+                "student_lane_authority_truth_v1": line.get("student_lane_authority_truth_v1"),
                 "l1_e_scalar_v1": line_e_value_for_l1_v1(line) if line else None,
                 "l1_p_scalar_v1": line_p_value_for_l1_v1(line) if line else None,
             }

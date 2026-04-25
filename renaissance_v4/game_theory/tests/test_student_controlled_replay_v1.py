@@ -9,9 +9,16 @@ from unittest.mock import patch
 import pytest
 
 from renaissance_v4.game_theory.student_controlled_replay_v1 import (
+    apply_automated_student_lanes_from_exam_contract_v1,
     attach_student_controlled_replay_v1,
     apply_student_controlled_scorecard_rollup_v1,
     outcomes_list_canonical_hash_v1,
+)
+from renaissance_v4.game_theory.exam_run_contract_v1 import (
+    STUDENT_BRAIN_PROFILE_MEMORY_CONTEXT_STUDENT_V1,
+)
+from renaissance_v4.game_theory.student_proctor.contracts_v1 import (
+    legal_example_student_output_with_thesis_v1,
 )
 from renaissance_v4.game_theory.tests.test_student_execution_intent_v1 import (
     _FIXTURES_DIR,
@@ -143,6 +150,68 @@ def test_scorecard_rollup_two_completed() -> None:
     assert u["student_controlled_replay_ran_v1"] == 2
     assert u["student_controlled_referee_win_pct_v1"] == 50.0
     assert u["student_controlled_total_trades_sum_v1"] == 3
+
+
+@patch("renaissance_v4.research.replay_runner.run_manifest_replay")
+@patch("renaissance_v4.game_theory.pattern_game.prepare_effective_manifest_for_replay")
+def test_apply_automated_from_exam_contract_sealed_output(mock_prep, mock_run) -> None:
+    class _Prep:
+        replay_path = Path("/dev/null")
+
+        def cleanup(self) -> None:
+            return None
+
+    mock_prep.return_value = _Prep()
+    mock_run.return_value = {
+        "outcomes": [],
+        "validation_checksum": "c",
+        "summary": {
+            "expectancy": 0.0,
+            "cumulative_pnl": 0.0,
+            "average_pnl": 0.0,
+            "max_drawdown": 0.0,
+        },
+    }
+    so = legal_example_student_output_with_thesis_v1()
+    exam = {
+        "student_brain_profile_v1": STUDENT_BRAIN_PROFILE_MEMORY_CONTEXT_STUDENT_V1,
+        "student_controlled_execution_v1": True,
+        "student_execution_mode_v1": "baseline_gated",
+    }
+    seam = {"student_output_sealed_by_scenario_id_v1": {"scen_auto": so}}
+    results: list[dict] = [
+        {
+            "ok": True,
+            "scenario_id": "scen_auto",
+            "replay_outcomes_json": [{"trade_id": "t1", "entry_time": 1}],
+            "summary": {"expectancy": 0.1},
+        }
+    ]
+    scenarios = [
+        {
+            "scenario_id": "scen_auto",
+            "manifest_path": "renaissance_v4/configs/manifests/baseline_v1_recipe.json",
+        }
+    ]
+    with patch("renaissance_v4.game_theory.student_controlled_replay_v1._emit_student_lane_traces_v1"), patch(
+        "renaissance_v4.game_theory.student_controlled_replay_v1._emit_student_lane_complete_v1"
+    ), patch("renaissance_v4.game_theory.student_controlled_replay_v1._emit_referee_used_student_thesis_v1"):
+        ad = apply_automated_student_lanes_from_exam_contract_v1(
+            results=results,
+            scenarios=scenarios,
+            job_id="job_auto1",
+            exam_run_contract_request_v1=exam,
+            seam_audit=seam,
+            fingerprint="d" * 40,
+        )
+    assert ad.get("automation_ran_v1") is True
+    assert int(ad.get("scenarios_with_student_lane_attempted_v1") or 0) == 1
+    blk = results[0].get("student_controlled_replay_v1")
+    assert isinstance(blk, dict)
+    assert blk.get("automation_source_v1") == "exam_contract_v1"
+    assert blk.get("execution_authority_v1") == "baseline_gated_student"
+    assert blk.get("student_lane_status_v1") == "completed"
+    mock_run.assert_called_once()
 
 
 def test_run_manifest_replay_default_has_no_student_intent() -> None:
