@@ -131,6 +131,7 @@ def run_manifest_replay(
     decision_context_recall_drill_bias_max: int = 0,
     decision_context_recall_drill_trade_entry_max: int = 0,
     live_telemetry_callback: Callable[[dict[str, Any]], None] | None = None,
+    student_execution_intent_v1: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """
     Execute one full deterministic replay using the manifest resolution rules in ``load_replay_manifest``.
@@ -152,6 +153,13 @@ def run_manifest_replay(
 
     Optional ``decision_context_recall_apply_signal_bias_v2`` applies bounded per-signal contribution
     multipliers and optional intersection-based module suppression from memory (still manifest-scoped).
+
+    When ``student_execution_intent_v1`` is set (GT_DIRECTIVE_024C Student-controlled lane), entry
+    direction for **bars where fusion is directional and risk allows a baseline entry** is taken from
+    the intent: ``enter_long`` / ``enter_short`` / ``no_trade`` (suppresses that would-be entry). When
+    ``None`` (default), behavior matches historical manifest-only control. Callers should keep DCR
+    off when using Student intent; Student lane is invoked only from orchestration, not the default
+    single-replay path.
 
     When drill-down maxima are > 0, the replay keeps the **last** N windows matching each category
     (matched memory, fusion/signal bias applied, trade opened) for operator harness inspection.
@@ -622,15 +630,27 @@ def run_manifest_replay(
 
         flat = exec_manager.current_trade is None or not exec_manager.current_trade.open
         opened_this_bar = False
-        if (
+        should_open_baseline = (
             flat
             and risk_decision.allowed
             and fusion_result.direction in {"long", "short"}
-        ):
+        )
+        entry_direction = fusion_result.direction
+        if should_open_baseline and student_execution_intent_v1 is not None:
+            act = str((student_execution_intent_v1 or {}).get("action") or "").strip()
+            if act == "no_trade":
+                entry_direction = None
+            elif act == "enter_long":
+                entry_direction = "long"
+            elif act == "enter_short":
+                entry_direction = "short"
+            else:
+                entry_direction = None
+        if should_open_baseline and entry_direction in {"long", "short"}:
             exec_manager.open_trade(
                 symbol=state.symbol,
                 price=state.current_close,
-                direction=fusion_result.direction,
+                direction=entry_direction,
                 atr=features.atr_proxy_14,
                 size=risk_decision.notional_fraction,
                 entry_time=state.timestamp,

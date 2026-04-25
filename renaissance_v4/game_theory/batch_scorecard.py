@@ -517,6 +517,14 @@ def record_parallel_batch_finished(
             for k, v in exam_run_line_meta_v1.items():
                 if v is not None:
                     record[k] = v
+        from renaissance_v4.game_theory.student_controlled_replay_v1 import (
+            apply_student_controlled_scorecard_rollup_v1,
+        )
+
+        stu_roll = apply_student_controlled_scorecard_rollup_v1(res)
+        for k, v in stu_roll.items():
+            if v is not None:
+                record[k] = v
         if str(record.get("status") or "") == "done":
             from renaissance_v4.game_theory.exam_ep_scorecard_denorm_v1 import (
                 annotate_l1_ep_value_sources_v1,

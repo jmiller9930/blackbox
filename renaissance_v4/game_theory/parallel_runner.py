@@ -54,6 +54,7 @@ from renaissance_v4.game_theory.scenario_contract import (
     extract_scenario_echo_fields,
     referee_session_outcome,
 )
+from renaissance_v4.game_theory.student_controlled_replay_v1 import attach_student_controlled_replay_v1
 from renaissance_v4.manifest.validate import load_manifest_file
 
 DEFAULT_WORKERS = max(1, (os.cpu_count() or 4))
@@ -383,6 +384,10 @@ def run_scenarios_parallel(
         )
 
     normalized = [_normalize_scenario(s) for s in scenarios]
+    if telemetry_job_id:
+        tjid = str(telemetry_job_id).strip()
+        for s in normalized:
+            s["_batch_job_id_v1"] = tjid
 
     if telemetry_job_id and telemetry_dir:
         tdir = Path(str(telemetry_dir)).expanduser().resolve()
@@ -519,6 +524,30 @@ def run_scenarios_parallel(
         )
         if on_session_log_batch is not None:
             on_session_log_batch(batch_dir)
+
+    # --- GT_DIRECTIVE_024C: Student-controlled replay (parent process; learning trace safe) ---
+    rows_by_sid: dict[str, dict[str, Any]] = {}
+    for r in results:
+        sid_k = str((r or {}).get("scenario_id") or "")
+        if sid_k:
+            rows_by_sid[sid_k] = r
+    for s in normalized:
+        if not s.get("enable_student_controlled_replay_v1"):
+            continue
+        sid_k = str(s.get("scenario_id") or "")
+        if not sid_k:
+            continue
+        row = rows_by_sid.get(sid_k)
+        if not row or not row.get("ok"):
+            continue
+        fp = s.get("exam_run_fingerprint_preview_v1") or s.get("fingerprint_sha256_40") or s.get("fingerprint")
+        job_e = telemetry_job_id or s.get("_batch_job_id_v1")
+        row["student_controlled_replay_v1"] = attach_student_controlled_replay_v1(
+            s,
+            row,
+            job_id=str(job_e).strip() if job_e else None,
+            fingerprint=str(fp).strip() if fp else None,
+        )
 
     return results
 

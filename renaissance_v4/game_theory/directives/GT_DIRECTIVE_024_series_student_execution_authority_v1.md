@@ -110,6 +110,9 @@ Implementation will use one or a combination of:
 
 ## GT_DIRECTIVE_024C — Student execution lane / replay integration
 
+**Implementation:** `renaissance_v4/game_theory/student_controlled_replay_v1.py` + optional `student_execution_intent_v1` on `run_manifest_replay`; parent attach in `parallel_runner.run_scenarios_parallel`.  
+**Proof:** `docs/proof/exam_v1/GT_DIRECTIVE_024C_student_execution_lane_v1.md`
+
 **Objective:** Add a **Student-controlled** replay lane **without** changing baseline behavior. Baseline remains **default** and **byte-stable** when Student lane is not used.
 
 **Required behavior:**
