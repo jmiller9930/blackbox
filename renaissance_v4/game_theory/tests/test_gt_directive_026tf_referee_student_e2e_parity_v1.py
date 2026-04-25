@@ -24,6 +24,11 @@ from renaissance_v4.game_theory.student_proctor.student_context_builder_v1 impor
 
 SYMBOL = "GT026TF_PARITY"
 
+# Enough base 5m rows for 4h rollup: 240/5 = 48 bars per 4h candle; 320 bars → 6+ rolled 4h groups.
+_E2E_BARS_5M_COUNT = 320
+# Causal cut at bar index 300 → 301 five-minute bars through t; 301/48 > 6 complete 4h chunks (meaningful 4h tape).
+_E2E_DECISION_BAR_INDEX = 300
+
 
 def _mk_single_symbol_bars(path: Path, n: int) -> None:
     """n synthetic 5m rows for :data:`SYMBOL` only (Referee and Student are aligned)."""
@@ -48,7 +53,7 @@ def _mk_single_symbol_bars(path: Path, n: int) -> None:
     conn.close()
 
 
-@pytest.mark.parametrize("candle_timeframe_minutes", [5, 15, 60])
+@pytest.mark.parametrize("candle_timeframe_minutes", [5, 15, 60, 240])
 def test_referee_replay_rolled_bars_match_student_decision_packet_e2e(
     tmp_path: Path,
     candle_timeframe_minutes: int,
@@ -56,11 +61,15 @@ def test_referee_replay_rolled_bars_match_student_decision_packet_e2e(
     """
     MANDATORY closeout: bar count, timestamp list, OHLCV, and ``candle_timeframe_minutes`` in the
     Student packet match the Referee's ``load_replay_pre_loop_bars_v1`` output at the same cut.
+
+    Covers the full supported UI set: 5, 15, 60, 240 (4h). Fixture size is chosen so 4h rollup
+    has multiple post-rollup candles, not a degenerate one-bar series.
     """
     db = tmp_path / "e2e_single_symbol.sqlite3"
-    _mk_single_symbol_bars(db, 64)
-    # Causal at bar index 50 (51 bars 5m through cut); sufficient rolled bars for 15m/60m.
-    t_cut = 1_000_000 + 50 * 300_000
+    _mk_single_symbol_bars(db, _E2E_BARS_5M_COUNT)
+    t0 = 1_000_000
+    step = 300_000
+    t_cut = t0 + _E2E_DECISION_BAR_INDEX * step
     max_bars = 10_000
 
     with sqlite3.connect(str(db)) as conn:
@@ -86,6 +95,10 @@ def test_referee_replay_rolled_bars_match_student_decision_packet_e2e(
     stu = pkt["bars_inclusive_up_to_t"]
 
     assert pkt.get("candle_timeframe_minutes") == int(candle_timeframe_minutes)
+    if candle_timeframe_minutes == 240:
+        # 48 × 5m = one 4h bar; 301 causal 5m → several rolled 4h output rows
+        assert len(stu) >= 4, "4h tape should include several rolled bars for this fixture"
+
     # Parsed TF from the same kwargs as run_manifest_replay (5 = base bars, no rollup branch).
     assert ctf == int(candle_timeframe_minutes)
 
