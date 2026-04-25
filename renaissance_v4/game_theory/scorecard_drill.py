@@ -31,16 +31,17 @@ def find_scorecard_entry_by_job_id(
     if not p.is_file():
         return None
     last: dict[str, Any] | None = None
-    for line in p.read_text(encoding="utf-8", errors="replace").splitlines():
-        line = line.strip()
-        if not line:
-            continue
-        try:
-            obj = json.loads(line)
-        except json.JSONDecodeError:
-            continue
-        if str(obj.get("job_id", "")) == jid:
-            last = obj
+    with p.open(encoding="utf-8", errors="replace") as fh:
+        for raw_line in fh:
+            line = raw_line.strip()
+            if not line:
+                continue
+            try:
+                obj = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            if str(obj.get("job_id", "")) == jid:
+                last = obj
     return last
 
 

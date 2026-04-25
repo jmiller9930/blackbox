@@ -30,7 +30,7 @@ counts, **run_ok_pct**, **referee_win_pct**, **avg_trade_win_pct**) and expose `
 ``GET /api/student-panel/l1-road`` (**GT_DIRECTIVE_016** — full road payload, same aggregation),
 ``GET /api/student-panel/run/<job_id>/decisions``, ``GET /api/student-panel/run/<job_id>/l3?trade_id=`` (**GT_DIRECTIVE_017** — L3 envelope + structured ``data_gaps[]``),
 ``GET /api/student-panel/run/<job_id>/learning`` (**GT_DIRECTIVE_018** — memory promotion / retrieval eligibility),
-``GET /api/student-panel/run/<job_id>/learning-loop-trace`` — LangGraph-style **learning loop trace** JSON (nodes, edges, blunt health banner); **debug** fingerprint compare + breakpoints: ``GET /api/debug/learning-loop/trace/<job_id>`` and ``GET /debug/learning-loop?job_id=…`` (legacy ``GET /learning-loop-trace`` redirects there),
+``GET /api/student-panel/run/<job_id>/learning-loop-trace`` — LangGraph-style **learning loop trace** JSON (nodes, edges, blunt health banner); **debug** fingerprint compare + breakpoints: ``GET /api/debug/learning-loop/trace/<job_id>``, ``GET /api/debug/learning-loop/trace-stream/<job_id>`` (NDJSON progress + payload), and ``GET /debug/learning-loop?job_id=…`` (legacy ``GET /learning-loop-trace`` redirects there),
 ``GET /api/training-exam-audit/<job_id>`` — deterministic ``training_exam_audit_v1`` for one scorecard line (learning vs harness vs missing seam; rebuilds from fields if older lines lack the block),
 ``GET /api/student-panel/decision?job_id=&trade_id=`` (``decision_id`` accepted as alias for migration).
 ``GET /api/training/export`` (**GT_DIRECTIVE_022** — promoted-only training export preview / download); ``POST /api/training/export/materialize`` (typed confirm writes ``training_dataset_v1.jsonl``).
@@ -110,7 +110,7 @@ import uuid
 from pathlib import Path
 from typing import Any
 
-from flask import Flask, Response, abort, jsonify, request, send_file
+from flask import Flask, Response, abort, jsonify, request, send_file, stream_with_context
 from pydantic import ValidationError
 
 _GAME_THEORY = Path(__file__).resolve().parent
@@ -170,6 +170,7 @@ from renaissance_v4.game_theory.student_panel_d14 import enrich_student_panel_ru
 from renaissance_v4.game_theory.training_exam_audit_v1 import build_training_exam_audit_v1
 from renaissance_v4.game_theory.debug_learning_loop_trace_v1 import (
     build_debug_learning_loop_trace_v1,
+    iter_debug_learning_loop_trace_ndjson_v1,
     read_debug_learning_loop_page_html_v1,
 )
 from renaissance_v4.game_theory.learning_loop_trace_v1 import (
@@ -2008,6 +2009,20 @@ def create_app() -> Flask:
     def api_debug_learning_loop_trace_v1(job_id: str) -> Any:
         """Debug learning loop trace — graph + breakpoints + fingerprint profile compare."""
         return jsonify(build_debug_learning_loop_trace_v1(job_id.strip())), 200
+
+    @app.get("/api/debug/learning-loop/trace-stream/<job_id>")
+    def api_debug_learning_loop_trace_stream_v1(job_id: str) -> Any:
+        """NDJSON stream: stage timings then final ``complete`` payload (same as non-stream API)."""
+
+        def gen() -> Any:
+            for chunk in iter_debug_learning_loop_trace_ndjson_v1(job_id.strip()):
+                yield chunk
+
+        return Response(
+            stream_with_context(gen()),
+            mimetype="application/x-ndjson; charset=utf-8",
+            headers={"Cache-Control": "no-store", "X-Accel-Buffering": "no"},
+        )
 
     @app.get("/debug/learning-loop")
     def page_debug_learning_loop_trace_v1() -> Any:

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import json
+
 from renaissance_v4.game_theory.learning_loop_trace_v1 import (
     build_learning_loop_trace_v1,
     read_learning_loop_trace_page_html_v1,
@@ -67,6 +69,18 @@ def test_api_debug_learning_loop_trace_unknown_job() -> None:
     assert isinstance(body.get("trace_v1"), dict)
 
 
+def test_api_debug_learning_loop_trace_stream_unknown_job() -> None:
+    app = create_app()
+    with app.test_client() as c:
+        r = c.get("/api/debug/learning-loop/trace-stream/__no_such_job_xyz__")
+    assert r.status_code == 200
+    lines = [ln for ln in r.data.decode("utf-8").splitlines() if ln.strip()]
+    assert len(lines) >= 2
+    last = json.loads(lines[-1])
+    assert last.get("type") == "complete"
+    assert last.get("payload", {}).get("schema") == "debug_learning_loop_trace_v1"
+
+
 def test_trace_minimal_scorecard(monkeypatch) -> None:
     entry = {
         "job_id": "trace-min",
@@ -113,6 +127,8 @@ def test_trace_minimal_scorecard(monkeypatch) -> None:
 
     out = build_learning_loop_trace_v1("trace-min")
     assert out.get("ok") is True
+    assert isinstance(out.get("scorecard_line_v1"), dict)
+    assert out["scorecard_line_v1"].get("job_id") == "trace-min"
     assert len(out.get("nodes_v1") or []) >= 10
     assert out.get("learning_loop_health_banner_v1")
     ff = out.get("fault_focus_v1")

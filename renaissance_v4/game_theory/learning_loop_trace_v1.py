@@ -588,6 +588,8 @@ def build_learning_loop_trace_v1(job_id: str) -> dict[str, Any]:
         "training_exam_audit_v1": tea,
         "nodes_v1": nodes,
         "edges_v1": edges,
+        # Echo for callers (e.g. debug trace) so they do not re-scan scorecard for the same row.
+        "scorecard_line_v1": dict(entry),
     }
 
 

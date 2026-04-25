@@ -110,24 +110,75 @@ def resolved_llm_model_tag_v1(row: dict[str, Any], profile: str | None) -> str |
 
 def read_batch_scorecard_file_order_v1(*, path: Path | None = None, max_lines: int = 20_000) -> list[dict[str, Any]]:
     """
-    Parse ``batch_scorecard.jsonl`` in **file order** (oldest line first). Single read — no per-row
-    reopen. Caps ``max_lines`` for safety on huge files.
+    Parse ``batch_scorecard.jsonl`` in **file order** (oldest line first). Streams the file and stops
+    after ``max_lines`` physical lines (same cap as the historical ``read_text`` + slice behavior) so
+    huge logs do not allocate one giant string.
     """
     from renaissance_v4.game_theory.memory_paths import default_batch_scorecard_jsonl
 
     p = (path or default_batch_scorecard_jsonl()).expanduser().resolve()
     if not p.is_file():
         return []
-    raw = p.read_text(encoding="utf-8", errors="replace").splitlines()
     out: list[dict[str, Any]] = []
-    for line in raw[:max_lines]:
-        line = line.strip()
-        if not line:
-            continue
-        try:
-            out.append(json.loads(line))
-        except json.JSONDecodeError:
-            continue
+    n_read = 0
+    with p.open(encoding="utf-8", errors="replace") as fh:
+        for raw_line in fh:
+            if n_read >= max_lines:
+                break
+            n_read += 1
+            line = raw_line.strip()
+            if not line:
+                continue
+            try:
+                out.append(json.loads(line))
+            except json.JSONDecodeError:
+                continue
+    return out
+
+
+def newest_done_rows_by_brain_profile_for_fingerprint_v1(
+    fingerprint_sha256_40: str,
+    *,
+    accepted_profiles: frozenset[str],
+    path: Path | None = None,
+    max_scan_lines: int | None = 500_000,
+) -> dict[str, dict[str, Any]]:
+    """
+    One forward streaming pass of ``batch_scorecard.jsonl``: for each ``done`` line whose
+    fingerprint matches ``fingerprint_sha256_40``, record the row under ``resolved_brain_profile_v1``
+    when that profile is in ``accepted_profiles``. On append-only JSONL, the **last** seen row per
+    profile is the newest — no full-file ``read_text``.
+    """
+    from renaissance_v4.game_theory.memory_paths import default_batch_scorecard_jsonl
+
+    fp_need = str(fingerprint_sha256_40 or "").strip()
+    if not fp_need:
+        return {}
+    p = (path or default_batch_scorecard_jsonl()).expanduser().resolve()
+    if not p.is_file():
+        return {}
+    out: dict[str, dict[str, Any]] = {}
+    n = 0
+    with p.open(encoding="utf-8", errors="replace") as fh:
+        for raw_line in fh:
+            if max_scan_lines is not None and n >= max_scan_lines:
+                break
+            n += 1
+            line = raw_line.strip()
+            if not line:
+                continue
+            try:
+                row = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            if str(row.get("status") or "").strip().lower() != "done":
+                continue
+            if scorecard_line_fingerprint_sha256_40_v1(row) != fp_need:
+                continue
+            pr = resolved_brain_profile_v1(row)
+            if not pr or pr not in accepted_profiles:
+                continue
+            out[pr] = row
     return out
 
 
@@ -452,6 +503,7 @@ __all__ = [
     "l1_road_legend_v1",
     "line_e_value_for_l1_v1",
     "line_p_value_for_l1_v1",
+    "newest_done_rows_by_brain_profile_for_fingerprint_v1",
     "read_batch_scorecard_file_order_v1",
     "resolved_brain_profile_v1",
     "resolved_llm_model_tag_v1",

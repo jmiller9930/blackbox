@@ -65,8 +65,8 @@ def test_build_debug_inserts_delta_node(monkeypatch) -> None:
         },
     )
     monkeypatch.setattr(
-        "renaissance_v4.game_theory.debug_learning_loop_trace_v1.read_batch_scorecard_file_order_v1",
-        lambda max_lines=25000: [dict(entry)],
+        "renaissance_v4.game_theory.debug_learning_loop_trace_v1.newest_done_rows_by_brain_profile_for_fingerprint_v1",
+        lambda fp, **kw: {str(entry.get("student_brain_profile_v1") or ""): dict(entry)},
     )
 
     out = build_debug_learning_loop_trace_v1("dbg-trace-min")

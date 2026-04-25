@@ -5,11 +5,16 @@ Debug Learning Loop Trace — LangGraph-style graph + fingerprint profile compar
 - extra node **Decision delta vs baseline**
 - ``breakpoints_v1`` — machine-detectable fault codes
 - ``fingerprint_profile_compare_v1`` — newest-done row per canonical brain profile for same fingerprint
+  (single streaming scorecard pass; no full-file ``read_text``)
+- ``GET /api/debug/learning-loop/trace-stream/<job_id>`` — NDJSON ``stage`` lines then ``complete`` (UI progress)
 """
 
 from __future__ import annotations
 
 import copy
+import json
+import time
+from collections.abc import Iterator
 from pathlib import Path
 from typing import Any
 
@@ -27,7 +32,7 @@ from renaissance_v4.game_theory.student_panel_d11 import _batch_trade_win_pct_fr
 from renaissance_v4.game_theory.student_panel_l1_road_v1 import (
     line_e_value_for_l1_v1,
     line_p_value_for_l1_v1,
-    read_batch_scorecard_file_order_v1,
+    newest_done_rows_by_brain_profile_for_fingerprint_v1,
     resolved_brain_profile_v1,
     resolved_llm_model_tag_v1,
     scorecard_line_fingerprint_sha256_40_v1,
@@ -89,20 +94,10 @@ def _fingerprint_profile_compare_v1(entry: dict[str, Any]) -> dict[str, Any]:
             "same_referee_trade_win_proxy_v1": None,
             "detail_v1": "No fingerprint on this scorecard line — cannot align A/B/C profiles.",
         }
-    lines = read_batch_scorecard_file_order_v1(max_lines=25_000)
-    candidates = [
-        ln
-        for ln in lines
-        if str(ln.get("status") or "").strip().lower() == "done"
-        and scorecard_line_fingerprint_sha256_40_v1(ln) == fp
-    ]
-    newest_by_profile: dict[str, dict[str, Any]] = {}
-    for ln in reversed(candidates):
-        pr = resolved_brain_profile_v1(ln)
-        if not pr or pr not in _PROFILE_ORDER:
-            continue
-        if pr not in newest_by_profile:
-            newest_by_profile[pr] = ln
+    newest_by_profile = newest_done_rows_by_brain_profile_for_fingerprint_v1(
+        fp,
+        accepted_profiles=frozenset(_PROFILE_ORDER),
+    )
     snaps = {p: _row_snapshot_v1(newest_by_profile[p]) if p in newest_by_profile else None for p in _PROFILE_ORDER}
     tws = [
         _batch_trade_win_pct_from_line(newest_by_profile[p])
@@ -166,23 +161,12 @@ def _breakpoints_v1(
     return sorted(set(out))
 
 
-def build_debug_learning_loop_trace_v1(job_id: str) -> dict[str, Any]:
-    base = build_learning_loop_trace_v1(job_id)
-    if not base.get("ok"):
-        return {
-            "schema": SCHEMA_DEBUG,
-            "ok": False,
-            "error": base.get("error"),
-            "job_id": base.get("job_id") or str(job_id or "").strip(),
-            "trace_v1": base,
-        }
+def _finalize_debug_trace_from_base_v1(base: dict[str, Any], entry: dict[str, Any]) -> dict[str, Any]:
+    """Attach debug-only fields; does not mutate the ``base`` dict passed in."""
+    work = dict(base)
+    jid = str(work.get("job_id") or "").strip()
 
-    jid = str(base.get("job_id") or "").strip()
-    entry = find_scorecard_entry_by_job_id(jid)
-    if not isinstance(entry, dict):
-        return {**base, "schema": SCHEMA_DEBUG, "ok": False, "error": "entry_missing_after_trace"}
-
-    nodes = copy.deepcopy(base.get("nodes_v1") or [])
+    nodes = copy.deepcopy(work.get("nodes_v1") or [])
     for n in nodes:
         if n.get("id") == "ep_grading":
             n["label"] = "Scoring / E-P"
@@ -204,16 +188,16 @@ def build_debug_learning_loop_trace_v1(job_id: str) -> dict[str, Any]:
             ],
             "evidence_v1": {
                 "student_output_fingerprint": entry.get("student_output_fingerprint"),
-                "training_learning_verdict_v1": (base.get("training_exam_audit_v1") or {}).get(
+                "training_learning_verdict_v1": (work.get("training_exam_audit_v1") or {}).get(
                     "training_learning_verdict_v1"
                 ),
             },
         }
         nodes.insert(ins_at + 1, delta_node)
-        base["nodes_v1"] = nodes
-        base["edges_v1"] = rebuild_linear_edges_v1(nodes)
+    work["nodes_v1"] = nodes
+    work["edges_v1"] = rebuild_linear_edges_v1(nodes)
 
-    tea = base.get("training_exam_audit_v1") or build_training_exam_audit_v1(entry)
+    tea = work.get("training_exam_audit_v1") or build_training_exam_audit_v1(entry)
     oba = entry.get("operator_batch_audit")
     cmem = str(oba.get("context_signature_memory_mode") or "").strip().lower() if isinstance(oba, dict) else ""
     retr = int(entry.get("student_retrieval_matches") or 0)
@@ -230,7 +214,9 @@ def build_debug_learning_loop_trace_v1(job_id: str) -> dict[str, Any]:
     gov_dec = str(run_gov.get("decision") or "").strip().lower() if isinstance(run_gov, dict) else ""
     exam_e = entry.get("exam_e_score_v1")
     exam_p = entry.get("exam_p_score_v1")
+    t_fp0 = time.perf_counter()
     compare = _fingerprint_profile_compare_v1(entry)
+    fp_ms = round((time.perf_counter() - t_fp0) * 1000.0, 2)
     bps = _breakpoints_v1(
         entry=entry,
         tea=tea if isinstance(tea, dict) else {},
@@ -247,10 +233,11 @@ def build_debug_learning_loop_trace_v1(job_id: str) -> dict[str, Any]:
         exam_p=exam_p,
     )
 
-    out = dict(base)
+    out = dict(work)
     out["schema"] = SCHEMA_DEBUG
     out["fingerprint_profile_compare_v1"] = compare
     out["breakpoints_v1"] = bps
+    out["trace_build_timings_ms_v1"] = {"fingerprint_profile_compare_v1": fp_ms}
     out["operator_notes_v1"] = {
         "referee_vs_student_metric_v1": (
             "L1 Run TW % and Sys BL % are Referee batch trade-win rollups — they can match across "
@@ -258,6 +245,105 @@ def build_debug_learning_loop_trace_v1(job_id: str) -> dict[str, Any]:
         ),
     }
     return out
+
+
+def build_debug_learning_loop_trace_v1(job_id: str) -> dict[str, Any]:
+    base = build_learning_loop_trace_v1(job_id)
+    if not base.get("ok"):
+        return {
+            "schema": SCHEMA_DEBUG,
+            "ok": False,
+            "error": base.get("error"),
+            "job_id": base.get("job_id") or str(job_id or "").strip(),
+            "trace_v1": base,
+        }
+
+    jid = str(base.get("job_id") or "").strip()
+    entry = base.get("scorecard_line_v1")
+    if not isinstance(entry, dict):
+        entry = find_scorecard_entry_by_job_id(jid)
+    if not isinstance(entry, dict):
+        return {**base, "schema": SCHEMA_DEBUG, "ok": False, "error": "entry_missing_after_trace"}
+
+    return _finalize_debug_trace_from_base_v1(base, entry)
+
+
+def iter_debug_learning_loop_trace_ndjson_v1(job_id: str) -> Iterator[str]:
+    """
+    NDJSON stream: ``stage`` lines (server-side steps + ``ms``) then one ``complete`` line with the
+    same payload as ``build_debug_learning_loop_trace_v1`` (for live operator progress in the UI).
+    """
+
+    def _line(obj: dict[str, Any]) -> str:
+        return json.dumps(obj, ensure_ascii=False) + "\n"
+
+    jid = str(job_id or "").strip()
+    t0 = time.perf_counter()
+    yield _line(
+        {
+            "type": "stage",
+            "id": "learning_loop_trace_v1",
+            "label": "Learning loop trace (scorecard + nodes)",
+            "status": "running",
+        }
+    )
+    base = build_learning_loop_trace_v1(jid)
+    yield _line(
+        {
+            "type": "stage",
+            "id": "learning_loop_trace_v1",
+            "label": "Learning loop trace (scorecard + nodes)",
+            "status": "ok" if base.get("ok") else "error",
+            "ms": round((time.perf_counter() - t0) * 1000.0, 2),
+        }
+    )
+    if not base.get("ok"):
+        yield _line(
+            {
+                "type": "complete",
+                "payload": {
+                    "schema": SCHEMA_DEBUG,
+                    "ok": False,
+                    "error": base.get("error"),
+                    "job_id": base.get("job_id") or jid,
+                    "trace_v1": base,
+                },
+            }
+        )
+        return
+
+    entry = base.get("scorecard_line_v1")
+    if not isinstance(entry, dict):
+        entry = find_scorecard_entry_by_job_id(str(base.get("job_id") or jid).strip())
+    if not isinstance(entry, dict):
+        yield _line(
+            {
+                "type": "complete",
+                "payload": {**base, "schema": SCHEMA_DEBUG, "ok": False, "error": "entry_missing_after_trace"},
+            }
+        )
+        return
+
+    t1 = time.perf_counter()
+    yield _line(
+        {
+            "type": "stage",
+            "id": "debug_extensions_v1",
+            "label": "Fingerprint scan + breakpoints + graph patch",
+            "status": "running",
+        }
+    )
+    out = _finalize_debug_trace_from_base_v1(base, entry)
+    yield _line(
+        {
+            "type": "stage",
+            "id": "debug_extensions_v1",
+            "label": "Fingerprint scan + breakpoints + graph patch",
+            "status": "ok",
+            "ms": round((time.perf_counter() - t1) * 1000.0, 2),
+        }
+    )
+    yield _line({"type": "complete", "payload": out})
 
 
 def read_debug_learning_loop_page_html_v1() -> str:
@@ -268,5 +354,6 @@ def read_debug_learning_loop_page_html_v1() -> str:
 __all__ = [
     "SCHEMA_DEBUG",
     "build_debug_learning_loop_trace_v1",
+    "iter_debug_learning_loop_trace_ndjson_v1",
     "read_debug_learning_loop_page_html_v1",
 ]

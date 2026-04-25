@@ -53,7 +53,20 @@
     }
     nav.llt-nav a:hover, nav.llt-nav button:hover { filter: brightness(1.08); }
     main { padding: 1rem 1.25rem 2.5rem; max-width: 120rem; margin: 0 auto; }
-    .llt-error { color: #ff7b72; padding: 1rem; }
+    .llt-msg { padding: 0.65rem 0 0.25rem; font-size: 0.9rem; min-height: 1.35rem; }
+    .llt-msg--loading, .llt-msg--info { color: var(--muted); }
+    .llt-msg--error { color: #ff7b72; }
+    .llt-graph-loading {
+      width: 100%; margin-top: 0.75rem; padding: 1.25rem 1rem; text-align: center;
+      color: var(--muted); font-size: 0.95rem; letter-spacing: 0.06em; font-weight: 600;
+      border: 1px dashed var(--border); border-radius: 8px; background: var(--panel);
+    }
+    .llt-progress {
+      margin-top: 0.5rem; padding: 0.5rem 0.75rem; border-radius: 8px; border: 1px solid var(--border);
+      background: #010409; max-height: 8rem; overflow-y: auto;
+    }
+    .llt-progress .llt-prog-line { font-size: 0.76rem; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; color: var(--muted); line-height: 1.45; margin: 0.15rem 0; }
+    .llt-progress .llt-prog-hdr { font-size: 0.72rem; font-weight: 700; color: #58a6ff; margin-bottom: 0.35rem; letter-spacing: 0.04em; }
     .llt-graph {
       display: flex; flex-direction: row; flex-wrap: wrap; align-items: stretch; justify-content: flex-start;
       gap: 0.35rem 0.15rem; margin-top: 1rem;
@@ -118,7 +131,8 @@
     <button type="button" id="lltDownload">Download Trace JSON</button>
   </nav>
   <main>
-    <p id="lltMsg" class="llt-error"></p>
+    <p id="lltMsg" class="llt-msg" role="status" aria-live="polite"></p>
+    <div id="lltProgress" class="llt-progress" hidden aria-label="Server build progress"></div>
     <div id="lltGraph" class="llt-graph" aria-label="Learning loop execution graph"></div>
     <div id="lltBreakpoints" class="llt-breakpoints" style="margin:1rem 0"></div>
     <div id="lltCompare" class="llt-compare" style="margin:1rem 0"></div>
@@ -154,8 +168,37 @@
   const loadBtn = document.getElementById('lltLoadBtn');
   const bpEl = document.getElementById('lltBreakpoints');
   const cmpEl = document.getElementById('lltCompare');
+  const progEl = document.getElementById('lltProgress');
   let lastPayload = null;
   if (jobInp && jobId) jobInp.value = jobId;
+
+  function setMsg(text, kind) {
+    msg.textContent = text || '';
+    var k = String(kind || '');
+    msg.className =
+      'llt-msg' +
+      (k === 'error' ? ' llt-msg--error' : k === 'loading' ? ' llt-msg--loading' : k === 'info' ? ' llt-msg--info' : '');
+  }
+
+  function clearProgress() {
+    if (!progEl) return;
+    progEl.innerHTML = '';
+    progEl.hidden = true;
+  }
+
+  function initProgress() {
+    if (!progEl) return;
+    progEl.hidden = false;
+    progEl.innerHTML = '<div class="llt-prog-hdr">Server stages (NDJSON stream)</div>';
+  }
+
+  function appendProgress(text) {
+    if (!progEl) return;
+    var d = document.createElement('div');
+    d.className = 'llt-prog-line';
+    d.textContent = text;
+    progEl.appendChild(d);
+  }
 
   function bannerClass(b) {
     const s = String(b || '');
@@ -323,23 +366,82 @@
   async function load() {
     jobId = ((jobInp && jobInp.value.trim()) || jobId || '').trim();
     if (!jobId) {
-      msg.textContent = 'Enter job_id above or use ?job_id= in the URL.';
+      setMsg('Enter job_id above or use ?job_id= in the URL.', 'info');
+      graph.innerHTML = '';
       return;
     }
-    msg.textContent = 'Loading trace…';
-    let data;
+    setMsg('Loading…', 'loading');
+    graph.innerHTML =
+      '<p class="llt-graph-loading" role="status" aria-live="polite">Loading…</p>';
+    clearProgress();
+    initProgress();
+    if (bpEl) bpEl.innerHTML = '';
+    if (cmpEl) cmpEl.innerHTML = '';
+    if (loadBtn) {
+      loadBtn.disabled = true;
+      loadBtn.setAttribute('aria-busy', 'true');
+    }
+    let data = null;
     try {
-      const r = await fetch('/api/debug/learning-loop/trace/' + encodeURIComponent(jobId));
-      data = await r.json();
+      const streamUrl = '/api/debug/learning-loop/trace-stream/' + encodeURIComponent(jobId);
+      const r = await fetch(streamUrl);
+      if (r.ok && r.body && typeof r.body.getReader === 'function') {
+        const reader = r.body.getReader();
+        const dec = new TextDecoder();
+        let buf = '';
+        while (true) {
+          const chunk = await reader.read();
+          if (chunk.done) break;
+          buf += dec.decode(chunk.value, { stream: true });
+          const lines = buf.split('\n');
+          buf = lines.pop() || '';
+          for (var li = 0; li < lines.length; li++) {
+            var rawLn = lines[li].trim();
+            if (!rawLn) continue;
+            var ev = null;
+            try {
+              ev = JSON.parse(rawLn);
+            } catch (parseErr) {
+              continue;
+            }
+            if (ev.type === 'stage') {
+              var tail = ' …';
+              if (ev.ms != null) tail = ' → done in ' + ev.ms + ' ms';
+              appendProgress(String(ev.label || ev.id || 'stage') + tail);
+            } else if (ev.type === 'complete') {
+              data = ev.payload;
+            }
+          }
+        }
+        if (buf.trim()) {
+          try {
+            var evLast = JSON.parse(buf.trim());
+            if (evLast.type === 'complete') data = evLast.payload;
+          } catch (eLast) {}
+        }
+      }
+      if (!data) {
+        appendProgress('Falling back to single JSON request…');
+        const r2 = await fetch('/api/debug/learning-loop/trace/' + encodeURIComponent(jobId));
+        data = await r2.json();
+      }
     } catch (e) {
-      msg.textContent = 'Network error loading trace.';
+      graph.innerHTML = '';
+      clearProgress();
+      setMsg('Network error loading trace.', 'error');
       return;
+    } finally {
+      if (loadBtn) {
+        loadBtn.disabled = false;
+        loadBtn.removeAttribute('aria-busy');
+      }
     }
     lastPayload = data;
     var view = data.ok !== false ? data : data.trace_v1 || data;
-    msg.textContent = '';
     if (!data.ok && data.error) {
-      msg.textContent = String(data.error);
+      setMsg(String(data.error), 'error');
+    } else {
+      setMsg('', '');
     }
     banner.hidden = false;
     banner.className = bannerClass(view.learning_loop_health_banner_v1);
