@@ -1,0 +1,75 @@
+{
+    "breakpoints_v1": [
+        "run_a_reasoning_missing_v1"
+    ],
+    "final_verdict_v1": "LOOP_BROKEN_AT_NODE_node_02_run_a_student_reasoning_exists_v1",
+    "learning_loop_proof_graph_v1": {
+        "breakpoints_v1": [
+            "run_a_reasoning_missing_v1"
+        ],
+        "candle_timeframe_minutes": null,
+        "contract_version": 1,
+        "edges_v1": [
+            {
+                "edge_id": "edge_01_v1",
+                "from_node_id": "node_01_run_a_completed_v1",
+                "to_node_id": "node_02_run_a_student_reasoning_exists_v1"
+            }
+        ],
+        "final_verdict_v1": "LOOP_BROKEN_AT_NODE_node_02_run_a_student_reasoning_exists_v1",
+        "fingerprint_v1": "5cb749fd3a043222a73db4168cf87420cec753ab",
+        "generated_utc": "2026-04-25T23:45:34Z",
+        "nodes_v1": [
+            {
+                "evidence_fields_v1": [
+                    "status",
+                    "memory_context_impact_audit_v1.run_config_fingerprint_sha256_40",
+                    "candle_timeframe_minutes"
+                ],
+                "evidence_provenance_v1": [
+                    "batch_scorecard.jsonl"
+                ],
+                "evidence_values_v1": {
+                    "candle_timeframe_minutes": null,
+                    "fingerprint_sha256_40": "5cb749fd3a043222a73db4168cf87420cec753ab",
+                    "job_id": "1a37cc83d74c4ea1a974d56fc1caa360",
+                    "status": "done"
+                },
+                "explanation_v1": "Run A must be done with fingerprint and optional candle timeframe on line.",
+                "node_id": "node_01_run_a_completed_v1",
+                "node_type": "run_a_completed_v1",
+                "producer": "learning_loop_proof_graph_v1",
+                "required_for_learning_v1": true,
+                "status": "PASS"
+            },
+            {
+                "evidence_fields_v1": [
+                    "student_output.entry_reasoning_eval_v1",
+                    "student_output.entry_reasoning_eval_digest_v1",
+                    "entry_reasoning_eval_v1.decision_synthesis_v1"
+                ],
+                "evidence_provenance_v1": [
+                    "student_learning_store_v1",
+                    "student_output embedded in record"
+                ],
+                "evidence_values_v1": {
+                    "decision_synthesis_v1": null,
+                    "entry_reasoning_eval_digest_v1": null,
+                    "record_id": null
+                },
+                "explanation_v1": "Run A learning record must carry sealed reasoning + digest.",
+                "node_id": "node_02_run_a_student_reasoning_exists_v1",
+                "node_type": "run_a_student_reasoning_exists_v1",
+                "producer": "learning_loop_proof_graph_v1",
+                "required_for_learning_v1": true,
+                "status": "FAIL"
+            }
+        ],
+        "operator_summary_v1": "Final result: LOOP_BROKEN_AT_NODE_node_02_run_a_student_reasoning_exists_v1. Runs compared: first run '1a37cc83d74c4ea1a974d56fc1caa360', second run '8922b1a8bdb949d6ab864f73c8beeccb'. Did the system learn from the first run? See whether the learning record node passed. Did the second run retrieve that lesson? See the memory retrieval node. Did the Student use it in reasoning? See the memory-in-reasoning node. Did the decision change? See the decision comparison node. Did execution change? See the execution comparison node. Did profitability or decision quality change? See the score comparison node. Where the loop broke (codes): run_a_reasoning_missing_v1.",
+        "schema": "learning_loop_proof_graph_v1",
+        "source_run_id_v1": "1a37cc83d74c4ea1a974d56fc1caa360",
+        "target_run_id_v1": "8922b1a8bdb949d6ab864f73c8beeccb"
+    },
+    "ok": true,
+    "operator_summary_v1": "Final result: LOOP_BROKEN_AT_NODE_node_02_run_a_student_reasoning_exists_v1. Runs compared: first run '1a37cc83d74c4ea1a974d56fc1caa360', second run '8922b1a8bdb949d6ab864f73c8beeccb'. Did the system learn from the first run? See whether the learning record node passed. Did the second run retrieve that lesson? See the memory retrieval node. Did the Student use it in reasoning? See the memory-in-reasoning node. Did the decision change? See the decision comparison node. Did execution change? See the execution comparison node. Did profitability or decision quality change? See the score comparison node. Where the loop broke (codes): run_a_reasoning_missing_v1."
+}

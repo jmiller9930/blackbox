@@ -137,7 +137,7 @@
 <body>
   <header class="llt-head">
     <h1>Learning Loop (Debug)</h1>
-    <p class="sub">Reconstructed graph (scorecard + batch + learning API) merged with <strong>captured</strong> <code>learning_trace_event_v1</code> lines from the batch / seam / scorecard threads (single-writer JSONL). Pool workers do not append trace lines.</p>
+    <p class="sub">Reconstructed graph (scorecard + batch + learning API) merged with <strong>captured</strong> <code>learning_trace_event_v1</code> lines from the batch / seam / scorecard threads (single-writer JSONL). Pool workers do not append trace lines. For <strong>Run A → Run B</strong> learning proof (GT 026L), use the section below or open from the Student panel: <strong>“A→B learning proof (026L)”</strong> (no API URLs required).</p>
     <p id="lltClassification" class="sub" style="margin-top:0.35rem;font-size:0.8rem;color:#8b949e" hidden></p>
     <div id="lltBanner" class="llt-banner llt-banner--inconclusive" hidden></div>
     <p id="lltDetail" class="llt-detail" hidden></p>
@@ -154,21 +154,42 @@
     <a id="lltL3" href="#" style="display:none">View L3 Detail</a>
     <button type="button" id="lltDownload">Download Trace JSON</button>
     <span style="color:var(--muted);font-size:0.75rem">·</span>
+    <span style="color:var(--muted);font-size:0.78rem" title="GT_DIRECTIVE_026L">A→B proof</span>
     <label class="llt-job-inp" style="display:inline-flex;align-items:center;gap:6px;font-size:0.82rem"
-      >026L run_a
-      <input id="lltRunA" type="text" size="18" placeholder="job_id" autocomplete="off" />
+      >Run A <span style="color:var(--muted);font-weight:500" title="The run that produced the lesson / memory">(lesson)</span>
+      <input id="lltRunA" type="text" size="20" placeholder="earlier run id" title="The run that created the sealed student reasoning + lesson" autocomplete="off" />
     </label>
     <label class="llt-job-inp" style="display:inline-flex;align-items:center;gap:6px;font-size:0.82rem"
-      >run_b
-      <input id="lltRunB" type="text" size="18" placeholder="job_id" autocomplete="off" />
+      >Run B <span style="color:var(--muted);font-weight:500" title="The run you expect to retrieve that lesson">(later run)</span>
+      <input id="lltRunB" type="text" size="20" placeholder="later run id" title="A later run that should use the lesson from Run A" autocomplete="off" />
     </label>
-    <button type="button" id="lltLoadProof" style="font-size:0.82rem;padding:4px 10px;border-radius:6px;cursor:pointer">Load learning-loop proof</button>
+    <button type="button" id="lltLoadProof" style="font-size:0.82rem;padding:4px 10px;border-radius:6px;cursor:pointer" title="Load the proof (same data as the API, shown here)">Load A→B proof</button>
+    <button type="button" id="lltDownloadProof" style="font-size:0.82rem;padding:4px 10px;border-radius:6px;cursor:pointer;display:none" title="Save last proof as JSON (optional)">Download proof JSON</button>
   </nav>
   <div id="lltProofBlock" class="llt-prove" style="display:none;margin:0 1.25rem" aria-label="GT 026L learning loop proof graph">
-    <h2 style="margin:0 0 0.4rem">GT 026L — Causal learning-loop proof</h2>
-    <p id="lltProofVerdict" class="llt-plain" style="margin:0 0 0.35rem"></p>
-    <p id="lltProofSummary" class="llt-plain" style="margin:0 0 0.75rem;font-size:0.82rem;color:var(--muted)"></p>
-    <p id="lltProofBps" style="margin:0 0 0.5rem;font-size:0.75rem" hidden></p>
+    <h2 style="margin:0 0 0.4rem">A → B learning-loop proof (026L)</h2>
+    <p class="llt-plain" style="margin:0 0 0.5rem;font-size:0.82rem;line-height:1.5;max-width:56rem">
+      <strong>Run A</strong> is the run that <em>created</em> the lesson (memory + student reasoning the graph checks).
+      <strong>Run B</strong> is the <em>later</em> run that should <em>use</em> that lesson. The tool walks the store + scorecard
+      in order: if the chain breaks, only the nodes up to the failure are shown (not a bug — the system stops when evidence is missing).
+    </p>
+    <div id="lltProofVerdictStrip" class="llt-banner llt-banner--inconclusive" style="text-align:left;padding:0.65rem 0.9rem" hidden>
+      <div style="font-size:0.7rem;letter-spacing:0.06em;color:var(--muted)">Final verdict</div>
+      <div id="lltProofVerdictLine" style="font-size:0.95rem;font-weight:800;margin-top:0.2rem"></div>
+      <p id="lltProofVerdictPlain" class="llt-detail" style="margin:0.35rem 0 0;font-size:0.8rem"></p>
+    </div>
+    <p id="lltProofFirstBreak" class="llt-fault-focus" style="display:none" aria-live="polite"></p>
+    <p id="lltProofVerdict" class="llt-plain" style="margin:0.6rem 0 0.2rem;font-size:0.72rem;color:var(--muted)"></p>
+    <p id="lltProofSummary" class="llt-plain" style="margin:0 0 0.5rem;font-size:0.9rem"></p>
+    <p id="lltProofNodeCount" class="llt-plain" style="margin:0 0 0.4rem;font-size:0.78rem;color:var(--muted)"></p>
+    <p id="lltProofBps" style="margin:0 0 0.5rem;font-size:0.8rem" hidden></p>
+    <div class="llt-prove" style="margin:0.5rem 0 0.75rem;padding:0.5rem;border-radius:6px;overflow-x:auto" aria-label="Node trail table">
+      <h3 style="margin:0 0 0.4rem;font-size:0.85rem">Node-by-node trail</h3>
+      <table class="llt-prove" id="lltProofTable" style="font-size:0.75rem;min-width:32rem" aria-label="Proof nodes in order">
+        <thead><tr><th>#</th><th>Node</th><th>Status</th><th>What this step checks</th></tr></thead>
+        <tbody id="lltProofTableBody"></tbody>
+      </table>
+    </div>
     <div id="lltProofGraph" class="llt-graph" aria-label="Learning loop proof nodes" style="flex-wrap:wrap"></div>
   </div>
   <main>
@@ -229,12 +250,21 @@
   const runAInp = document.getElementById('lltRunA');
   const runBInp = document.getElementById('lltRunB');
   const loadProofBtn = document.getElementById('lltLoadProof');
+  const downloadProofBtn = document.getElementById('lltDownloadProof');
+  const proofVerdictStrip = document.getElementById('lltProofVerdictStrip');
+  const proofVerdictLine = document.getElementById('lltProofVerdictLine');
+  const proofVerdictPlain = document.getElementById('lltProofVerdictPlain');
+  const proofFirstBreak = document.getElementById('lltProofFirstBreak');
+  const proofNodeCount = document.getElementById('lltProofNodeCount');
+  const proofTableBody = document.getElementById('lltProofTableBody');
   let lastPayload = null;
+  let lastProofPayload = null;
   if (jobInp && jobId) jobInp.value = jobId;
   const runA0 = (params.get('run_a') || '').trim();
   const runB0 = (params.get('run_b') || '').trim();
   if (runAInp && runA0) runAInp.value = runA0;
   if (runBInp && runB0) runBInp.value = runB0;
+  else if (runBInp && jobId) runBInp.value = jobId;
 
   function setMsg(text, kind) {
     msg.textContent = text || '';
@@ -377,29 +407,136 @@
     }
   }
 
+  function verdictStripClass(verdict) {
+    var v = String(verdict || '');
+    if (v === 'LEARNING_CONFIRMED') return 'llt-banner llt-banner--healthy';
+    if (v.indexOf('LOOP_BROKEN') !== -1 || v === 'INSUFFICIENT_DATA') return 'llt-banner llt-banner--broken';
+    return 'llt-banner llt-banner--inconclusive';
+  }
+
+  function verdictPlainEnglish(verdict) {
+    var v = String(verdict || '—');
+    if (v === 'LEARNING_CONFIRMED') {
+      return 'The full chain passed: memory was written, Run B retrieved it, reasoning and decisions moved as required, and outcome evidence lines up. This is the bar for “learning confirmed.”';
+    }
+    if (v === 'LEARNING_NOT_CONFIRMED') {
+      return 'The chain did not meet the confirmation bar (missing links, no_effect memory, execution or score did not move, or cases are not comparable). Use the first failed node and breakpoints — not a single red flag in isolation.';
+    }
+    if (v === 'INSUFFICIENT_DATA') {
+      return 'Not enough stored artifacts to compare these two runs (for example missing scorecard rows or store lines).';
+    }
+    if (v.indexOf('LOOP_BROKEN_AT_NODE_') === 0) {
+      var id = v.replace('LOOP_BROKEN_AT_NODE_', '');
+      return 'The causal chain failed at step ' + id + '. Steps before that are evidence-backed; this is where the loop stops.';
+    }
+    return 'See operator summary and the node table for details.';
+  }
+
+  function firstFailedNodeId(nodes) {
+    if (!Array.isArray(nodes)) return null;
+    for (var i = 0; i < nodes.length; i++) {
+      if (String((nodes[i] || {}).status || '').toUpperCase() === 'FAIL') {
+        return String((nodes[i] || {}).node_id || '');
+      }
+    }
+    return null;
+  }
+
+  function breakpointPlainHint(code) {
+    var c = String(code || '');
+    if (c.indexOf('memory_had_no_effect') !== -1) return 'Memory was classified as no_effect — it cannot confirm learning.';
+    if (c.indexOf('reasoning_missing') !== -1) return 'Run A does not have sealed student reasoning in the learning store.';
+    if (c.indexOf('retrieval') !== -1) return 'Run B did not prove retrieval of Run A memory in trace or packet.';
+    return '';
+  }
+
   function renderProofFrom026L(p) {
     if (!proofBlock || !proofGraph || !proofVerdict || !proofSummary) return;
     const g = p && p.learning_loop_proof_graph_v1;
     if (!g || !Array.isArray(g.nodes_v1) || !g.nodes_v1.length) {
       proofBlock.style.display = 'none';
+      if (downloadProofBtn) downloadProofBtn.style.display = 'none';
       return;
     }
     proofBlock.style.display = 'block';
+    if (downloadProofBtn) downloadProofBtn.style.display = 'inline-block';
     proofGraph.innerHTML = '';
-    proofVerdict.textContent = 'final_verdict_v1: ' + String(p.final_verdict_v1 != null ? p.final_verdict_v1 : g.final_verdict_v1 || '—');
+    const finalV = p.final_verdict_v1 != null ? p.final_verdict_v1 : g.final_verdict_v1;
+    const verdictStr = String(finalV != null ? finalV : '—');
+    if (proofVerdictStrip && proofVerdictLine && proofVerdictPlain) {
+      proofVerdictStrip.hidden = false;
+      proofVerdictStrip.className = verdictStripClass(verdictStr);
+      proofVerdictStrip.style.textAlign = 'left';
+      proofVerdictStrip.style.padding = '0.65rem 0.9rem';
+      proofVerdictLine.textContent = verdictStr;
+      proofVerdictPlain.textContent = verdictPlainEnglish(verdictStr);
+    }
+    proofVerdict.textContent = 'Technical code (for automation): ' + verdictStr;
     proofSummary.textContent = String(p.operator_summary_v1 != null ? p.operator_summary_v1 : g.operator_summary_v1 || '');
+    const nodes = g.nodes_v1;
+    const failId = firstFailedNodeId(nodes);
+    if (proofFirstBreak) {
+      if (failId) {
+        proofFirstBreak.style.display = 'block';
+        proofFirstBreak.innerHTML =
+          '<strong>First failed node</strong> <code>' +
+          escapeHtml(failId) +
+          '</code> — this is the first step that does not pass; the graph may list fewer than 17 nodes when the chain stops here.';
+      } else {
+        proofFirstBreak.style.display = 'none';
+        proofFirstBreak.innerHTML = '';
+      }
+    }
+    if (proofNodeCount) {
+      proofNodeCount.textContent =
+        'Steps in this response: ' +
+        nodes.length +
+        ' (of 17 possible in a full pass; fewer is normal when the loop breaks early).';
+    }
+    if (proofTableBody) {
+      proofTableBody.innerHTML = '';
+      for (var ti = 0; ti < nodes.length; ti++) {
+        var rown = nodes[ti] || {};
+        var tr = document.createElement('tr');
+        tr.innerHTML =
+          '<td>' +
+          (ti + 1) +
+          '</td><td><code>' +
+          escapeHtml(String(rown.node_id || '')) +
+          '</code></td><td>' +
+          escapeHtml(String(rown.status || '')) +
+          '</td><td>' +
+          escapeHtml(String(rown.explanation_v1 || '').replace(/\n/g, ' ')) +
+          '</td>';
+        proofTableBody.appendChild(tr);
+      }
+    }
     const bps = p.breakpoints_v1 != null ? p.breakpoints_v1 : g.breakpoints_v1;
     if (proofBps) {
       if (bps && bps.length) {
         proofBps.hidden = false;
-        proofBps.innerHTML = '<strong>breakpoints_v1</strong><ul style="margin:0.2rem 0 0;padding-left:1.1rem">' +
-          bps.map(function (c) { return '<li><code>' + escapeHtml(String(c)) + '</code></li>'; }).join('') + '</ul>';
+        var bpHtml =
+          '<strong>Breakpoints</strong> (codes that explain why the verdict is not “learning confirmed” when applicable):<ul style="margin:0.2rem 0 0;padding-left:1.1rem;max-width:48rem">' +
+          bps
+            .map(function (c) {
+              var co = String(c);
+              var hint = breakpointPlainHint(co);
+              return (
+                '<li><code>' +
+                escapeHtml(co) +
+                '</code>' +
+                (hint ? ' — <span style="color:var(--text)">' + escapeHtml(hint) + '</span>' : '') +
+                '</li>'
+              );
+            })
+            .join('') +
+          '</ul>';
+        proofBps.innerHTML = bpHtml;
       } else {
         proofBps.hidden = true;
         proofBps.textContent = '';
       }
     }
-    const nodes = g.nodes_v1;
     const edges = g.edges_v1 || [];
     const edgeMap = {};
     for (var ei = 0; ei < edges.length; ei++) {
@@ -427,12 +564,12 @@
         pr.className = 'sum';
         pr.style.fontSize = '0.68rem';
         pr.style.color = 'var(--muted)';
-        pr.textContent = 'evidence: ' + prov.join(', ');
+        pr.textContent = 'Where we read it: ' + prov.join(', ');
         card.appendChild(pr);
       }
       const det = document.createElement('details');
       const sm = document.createElement('summary');
-      sm.textContent = 'evidence_values_v1';
+      sm.textContent = 'Raw evidence (optional)';
       det.appendChild(sm);
       const pre = document.createElement('pre');
       pre.textContent = JSON.stringify(n.evidence_values_v1 != null ? n.evidence_values_v1 : {}, null, 2);
@@ -444,10 +581,13 @@
       wrap.appendChild(card);
       if (i < nodes.length - 1) {
         const nxt = nodes[i + 1] || {};
-        const ek = String(n.node_id) + '>' + String(nxt.node_id);
-        const ed = edgeMap[ek] || {};
+        const nSt = String(n.status || '').toUpperCase();
         const ediv = document.createElement('div');
-        ediv.className = 'llt-edge llt-edge--ok';
+        if (nSt === 'FAIL') {
+          ediv.className = 'llt-edge llt-edge--blocked';
+        } else {
+          ediv.className = 'llt-edge llt-edge--ok';
+        }
         ediv.innerHTML = arrowSvg() + '<span class="cap">→</span>';
         wrap.appendChild(ediv);
       }
@@ -925,6 +1065,19 @@
     a.click();
     URL.revokeObjectURL(a.href);
   });
+  if (downloadProofBtn) {
+    downloadProofBtn.addEventListener('click', function () {
+      if (!lastProofPayload) return;
+      const blob = new Blob([JSON.stringify(lastProofPayload, null, 2)], { type: 'application/json' });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      const ra = (runAInp && runAInp.value.trim()) || 'run_a';
+      const rb = (runBInp && runBInp.value.trim()) || 'run_b';
+      a.download = 'learning_loop_proof_' + ra + '__' + rb + '.json';
+      a.click();
+      URL.revokeObjectURL(a.href);
+    });
+  }
 
   if (loadBtn) {
     loadBtn.addEventListener('click', function () {
@@ -938,6 +1091,9 @@
     var b = (runBInp && runBInp.value.trim()) || '';
     if (!a || !b) {
       if (proofBlock) proofBlock.style.display = 'none';
+      if (downloadProofBtn) downloadProofBtn.style.display = 'none';
+      if (proofVerdictStrip) proofVerdictStrip.hidden = true;
+      lastProofPayload = null;
       return;
     }
     if (a && b) {
@@ -949,12 +1105,37 @@
     try {
       const r = await fetch('/api/training/learning-loop-proof?run_a=' + encodeURIComponent(a) + '&run_b=' + encodeURIComponent(b));
       const p = await r.json();
+      lastProofPayload = p;
+      if (!r.ok || !p || p.ok === false) {
+        if (proofBlock) proofBlock.style.display = 'block';
+        if (proofVerdictStrip && proofVerdictLine && proofVerdictPlain) {
+          proofVerdictStrip.hidden = false;
+          proofVerdictStrip.className = 'llt-banner llt-banner--broken';
+          proofVerdictLine.textContent = 'Request failed';
+          proofVerdictPlain.textContent = String((p && p.error) || r.status + ' ' + r.statusText || 'Unknown error');
+        }
+        if (proofVerdict) proofVerdict.textContent = '';
+        if (proofSummary) proofSummary.textContent = '';
+        if (proofGraph) proofGraph.innerHTML = '';
+        if (proofTableBody) proofTableBody.innerHTML = '';
+        if (downloadProofBtn) downloadProofBtn.style.display = 'none';
+        return;
+      }
       renderProofFrom026L(p);
     } catch (e) {
+      lastProofPayload = null;
       if (proofBlock) {
         proofBlock.style.display = 'block';
-        if (proofVerdict) proofVerdict.textContent = 'Error loading learning-loop proof.';
+        if (proofVerdictStrip && proofVerdictLine && proofVerdictPlain) {
+          proofVerdictStrip.hidden = false;
+          proofVerdictStrip.className = 'llt-banner llt-banner--broken';
+          proofVerdictLine.textContent = 'Error loading learning-loop proof';
+          proofVerdictPlain.textContent = String(e && e.message ? e.message : e);
+        }
+        if (proofVerdict) proofVerdict.textContent = '';
         if (proofGraph) proofGraph.innerHTML = '';
+        if (proofTableBody) proofTableBody.innerHTML = '';
+        if (downloadProofBtn) downloadProofBtn.style.display = 'none';
       }
     }
   }

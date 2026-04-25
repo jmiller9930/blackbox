@@ -2168,6 +2168,16 @@ def create_app() -> Flask:
         """Operator debug page: LangGraph-style trace + A/B/C profile compare (loads debug trace API)."""
         return Response(read_debug_learning_loop_page_html_v1(), mimetype="text/html; charset=utf-8")
 
+    @app.get("/debug/learning-loop-proof")
+    def page_debug_learning_loop_proof_alias_v1() -> Any:
+        """Alias URL for operators — same page as ``/debug/learning-loop`` (026L proof + trace). Preserves query string."""
+        from flask import redirect
+
+        target = "/debug/learning-loop"
+        if request.query_string:
+            target += "?" + request.query_string.decode()
+        return redirect(target)
+
     @app.get("/learning-loop-trace")
     def page_learning_loop_trace_legacy_redirect_v1() -> Any:
         """Legacy URL — redirect to ``/debug/learning-loop`` preserving ``job_id`` / ``trade_id``."""
@@ -6451,13 +6461,22 @@ PAGE_HTML = """<!DOCTYPE html>
           traceUrl +=
             '&trade_id=' + encodeURIComponent(String(studentPanelD11.selectedDecisionId));
         }
+        var proof026LUrl =
+          '/debug/learning-loop?run_b=' +
+          encodeURIComponent(traceRid) +
+          '&job_id=' +
+          encodeURIComponent(traceRid);
         nav +=
           '<a class="pg-student-d11-trace" href="' +
           traceUrl +
-          '" target="_blank" rel="noopener noreferrer">View Learning Trace</a>';
+          '" target="_blank" rel="noopener noreferrer">View Learning Trace</a>' +
+          '<a class="pg-student-d11-trace" href="' +
+          proof026LUrl +
+          '" target="_blank" rel="noopener noreferrer" title="Compare Run A (lesson) vs this run as Run B">A→B learning proof (026L)</a>';
       } else {
         nav +=
-          '<span class="pg-student-d11-trace pg-student-d11-trace--disabled" title="Select an exam row on Level 1 (or open Level 2 / 3 for a run) to enable the trace link">View Learning Trace</span>';
+          '<span class="pg-student-d11-trace pg-student-d11-trace--disabled" title="Select an exam row on Level 1 (or open Level 2 / 3 for a run) to enable the trace link">View Learning Trace</span>' +
+          '<span class="pg-student-d11-trace pg-student-d11-trace--disabled" title="Select a run first">A→B learning proof (026L)</span>';
       }
       nav += '</div>';
       return bc + nav;

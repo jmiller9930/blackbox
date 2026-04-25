@@ -110,6 +110,7 @@
     <a id="lltBackRuns" href="/#pgStudentTriangleDock">Back to Runs</a>
     <a id="lltRunSummary" href="#" style="display:none">View Run Summary</a>
     <a id="lltL3" href="#" style="display:none">View L3 Detail</a>
+    <a id="lltProof026L" href="#" style="display:none" rel="noopener noreferrer" title="Run B is this run; set Run A to the earlier run that created the lesson">A→B learning proof (026L)</a>
     <button type="button" id="lltDownload">Download Trace JSON</button>
   </nav>
   <main>
@@ -143,6 +144,7 @@
   const dl = document.getElementById('lltDownload');
   const aSum = document.getElementById('lltRunSummary');
   const aL3 = document.getElementById('lltL3');
+  const aProof = document.getElementById('lltProof026L');
   let lastPayload = null;
 
   function bannerClass(b) {
@@ -322,6 +324,14 @@
           tradeId +
           ' for Level 3 (same host; hash opens fold).'
         : 'Student fold: pick this run, then a trade card for Level 3 deep dive.';
+      if (aProof) {
+        aProof.href =
+          '/debug/learning-loop?run_b=' +
+          encodeURIComponent(jobId) +
+          '&job_id=' +
+          encodeURIComponent(jobId);
+        aProof.style.display = 'inline-block';
+      }
     }
   }
 
