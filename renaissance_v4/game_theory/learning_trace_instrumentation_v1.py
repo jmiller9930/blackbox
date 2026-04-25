@@ -381,8 +381,39 @@ def emit_referee_used_student_output_batch_truth_v1(
     )
 
 
+def emit_entry_reasoning_pipeline_stage_v1(
+    *,
+    job_id: str,
+    fingerprint: str | None,
+    stage: str,
+    inputs: Any,
+    outputs: Any,
+    evidence: dict[str, Any] | None = None,
+) -> None:
+    """
+    GT_DIRECTIVE_026A_IMPL — one stage of the entry reasoning engine (in-process trace).
+
+    ``outputs`` / ``inputs`` may be large; keep evidence bounded in production if needed.
+    """
+    _emit(
+        job_id=job_id,
+        fingerprint=fingerprint,
+        stage=stage,
+        status="pass",
+        summary=f"entry_reasoning_engine_v1: {stage}",
+        producer="entry_reasoning_engine_v1",
+        evidence_payload={
+            "entry_reasoning_stage": stage,
+            "inputs": inputs,
+            "outputs": outputs,
+            "evidence": evidence or {},
+        },
+    )
+
+
 __all__ = [
     "emit_candle_timeframe_nexus_v1",
+    "emit_entry_reasoning_pipeline_stage_v1",
     "emit_governance_decided_v1",
     "emit_grading_completed_v1",
     "emit_learning_record_appended_v1",

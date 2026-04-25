@@ -27,6 +27,7 @@ Directive files should use stable ids such as:
 - `GT_DIRECTIVE_003_*` … `GT_DIRECTIVE_008_*` (see files in this folder)
 - **`GT_DIRECTIVE_015_*` … `GT_DIRECTIVE_018_*`** — Student / run exam stack (**015:** run + brain profile + scorecard; **016** L1 A\|B road data; **017** L3 `data_gap` closure; **018** learning-loop governance — retrieval bounds, order, seam audit; future memory/H1–H4/P metrics); tracked in `docs/STUDENT_PATH_EXAM_HIGH_LEVEL_ARCHITECTURE_v1.md` **§18.4**.
 - **`GT_DIRECTIVE_026A_*`** — Student entry **reasoning protocol** (hard contract: ordered pipeline, deterministic indicators, scored memory, decision engine authority, constrained LLM); **026TF** is separate (candle tape / timeframe parity).
+- **`GT_DIRECTIVE_026A_IMPL_*`** — **Execution**: `entry_reasoning_engine_v1` + tests + proof under `docs/proof/entry_v1/`.
 
 ## Required sections in each directive
 

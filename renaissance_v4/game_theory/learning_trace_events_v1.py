@@ -40,6 +40,14 @@ EVENT_STAGES_V1 = (
     "future_retrieval_observed",
     "candle_timeframe_nexus_v1",
     "timeframe_mismatch_detected_v1",
+    "market_data_loaded",
+    "indicator_context_evaluated",
+    "memory_context_evaluated",
+    "prior_outcomes_evaluated",
+    "risk_reward_evaluated",
+    "decision_synthesized",
+    "entry_reasoning_validated",
+    "entry_reasoning_sealed_v1",
 )
 
 # Map persisted ``stage`` → graph node ``id`` (reconstructed trace) for merge / provenance.
@@ -62,6 +70,15 @@ STAGE_TO_NODE_IDS_V1: dict[str, tuple[str, ...]] = {
     "future_retrieval_observed": ("future_retrieval",),
     "candle_timeframe_nexus_v1": ("memory_retrieval", "referee_execution"),
     "timeframe_mismatch_detected_v1": ("memory_retrieval", "referee_execution"),
+    # GT_DIRECTIVE_026A_IMPL — entry reasoning engine stages.
+    "market_data_loaded": ("student_reasoning", "llm_reasoning"),
+    "indicator_context_evaluated": ("student_reasoning", "llm_reasoning"),
+    "memory_context_evaluated": ("student_reasoning", "llm_reasoning"),
+    "prior_outcomes_evaluated": ("student_reasoning", "llm_reasoning"),
+    "risk_reward_evaluated": ("student_reasoning", "llm_reasoning"),
+    "decision_synthesized": ("student_reasoning", "llm_reasoning"),
+    "entry_reasoning_validated": ("student_reasoning", "llm_reasoning"),
+    "entry_reasoning_sealed_v1": ("student_reasoning", "llm_reasoning"),
 }
 
 
