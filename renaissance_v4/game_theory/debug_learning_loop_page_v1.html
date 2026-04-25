@@ -153,7 +153,24 @@
     <a id="lltRunSummary" href="#" style="display:none">View Run Summary</a>
     <a id="lltL3" href="#" style="display:none">View L3 Detail</a>
     <button type="button" id="lltDownload">Download Trace JSON</button>
+    <span style="color:var(--muted);font-size:0.75rem">·</span>
+    <label class="llt-job-inp" style="display:inline-flex;align-items:center;gap:6px;font-size:0.82rem"
+      >026L run_a
+      <input id="lltRunA" type="text" size="18" placeholder="job_id" autocomplete="off" />
+    </label>
+    <label class="llt-job-inp" style="display:inline-flex;align-items:center;gap:6px;font-size:0.82rem"
+      >run_b
+      <input id="lltRunB" type="text" size="18" placeholder="job_id" autocomplete="off" />
+    </label>
+    <button type="button" id="lltLoadProof" style="font-size:0.82rem;padding:4px 10px;border-radius:6px;cursor:pointer">Load learning-loop proof</button>
   </nav>
+  <div id="lltProofBlock" class="llt-prove" style="display:none;margin:0 1.25rem" aria-label="GT 026L learning loop proof graph">
+    <h2 style="margin:0 0 0.4rem">GT 026L — Causal learning-loop proof</h2>
+    <p id="lltProofVerdict" class="llt-plain" style="margin:0 0 0.35rem"></p>
+    <p id="lltProofSummary" class="llt-plain" style="margin:0 0 0.75rem;font-size:0.82rem;color:var(--muted)"></p>
+    <p id="lltProofBps" style="margin:0 0 0.5rem;font-size:0.75rem" hidden></p>
+    <div id="lltProofGraph" class="llt-graph" aria-label="Learning loop proof nodes" style="flex-wrap:wrap"></div>
+  </div>
   <main>
     <p id="lltMsg" class="llt-msg" role="status" aria-live="polite"></p>
     <div id="lltProgress" class="llt-progress" hidden aria-label="Server build progress"></div>
@@ -204,8 +221,20 @@
   const candEl = document.getElementById('lltCandidates');
   const progEl = document.getElementById('lltProgress');
   const tcEl = document.getElementById('lltClassification');
+  const proofBlock = document.getElementById('lltProofBlock');
+  const proofGraph = document.getElementById('lltProofGraph');
+  const proofVerdict = document.getElementById('lltProofVerdict');
+  const proofSummary = document.getElementById('lltProofSummary');
+  const proofBps = document.getElementById('lltProofBps');
+  const runAInp = document.getElementById('lltRunA');
+  const runBInp = document.getElementById('lltRunB');
+  const loadProofBtn = document.getElementById('lltLoadProof');
   let lastPayload = null;
   if (jobInp && jobId) jobInp.value = jobId;
+  const runA0 = (params.get('run_a') || '').trim();
+  const runB0 = (params.get('run_b') || '').trim();
+  if (runAInp && runA0) runAInp.value = runA0;
+  if (runBInp && runB0) runBInp.value = runB0;
 
   function setMsg(text, kind) {
     msg.textContent = text || '';
@@ -247,7 +276,7 @@
     const x = String(st || '').toLowerCase();
     if (x === 'pass') return 'llt-node llt-node--pass';
     if (x === 'fail') return 'llt-node llt-node--fail';
-    if (x === 'partial') return 'llt-node llt-node--partial';
+    if (x === 'partial' || x === 'not_proven') return 'llt-node llt-node--partial';
     if (x === 'skipped') return 'llt-node llt-node--skipped';
     return 'llt-node llt-node--unknown';
   }
@@ -256,7 +285,7 @@
     const x = String(st || '').toLowerCase();
     if (x === 'pass') return 'st st-pass';
     if (x === 'fail') return 'st st-fail';
-    if (x === 'partial') return 'st st-partial';
+    if (x === 'partial' || x === 'not_proven') return 'st st-partial';
     if (x === 'skipped') return 'st st-skipped';
     return 'st st-unknown';
   }
@@ -345,6 +374,84 @@
         wrap.appendChild(edge);
       }
       graph.appendChild(wrap);
+    }
+  }
+
+  function renderProofFrom026L(p) {
+    if (!proofBlock || !proofGraph || !proofVerdict || !proofSummary) return;
+    const g = p && p.learning_loop_proof_graph_v1;
+    if (!g || !Array.isArray(g.nodes_v1) || !g.nodes_v1.length) {
+      proofBlock.style.display = 'none';
+      return;
+    }
+    proofBlock.style.display = 'block';
+    proofGraph.innerHTML = '';
+    proofVerdict.textContent = 'final_verdict_v1: ' + String(p.final_verdict_v1 != null ? p.final_verdict_v1 : g.final_verdict_v1 || '—');
+    proofSummary.textContent = String(p.operator_summary_v1 != null ? p.operator_summary_v1 : g.operator_summary_v1 || '');
+    const bps = p.breakpoints_v1 != null ? p.breakpoints_v1 : g.breakpoints_v1;
+    if (proofBps) {
+      if (bps && bps.length) {
+        proofBps.hidden = false;
+        proofBps.innerHTML = '<strong>breakpoints_v1</strong><ul style="margin:0.2rem 0 0;padding-left:1.1rem">' +
+          bps.map(function (c) { return '<li><code>' + escapeHtml(String(c)) + '</code></li>'; }).join('') + '</ul>';
+      } else {
+        proofBps.hidden = true;
+        proofBps.textContent = '';
+      }
+    }
+    const nodes = g.nodes_v1;
+    const edges = g.edges_v1 || [];
+    const edgeMap = {};
+    for (var ei = 0; ei < edges.length; ei++) {
+      var e0 = edges[ei] || {};
+      edgeMap[(e0.from_node_id || '') + '>' + (e0.to_node_id || '')] = e0;
+    }
+    for (var i = 0; i < nodes.length; i++) {
+      const n = nodes[i] || {};
+      const stRaw = n.status;
+      const wrap = document.createElement('div');
+      wrap.className = 'llt-node-wrap';
+      const card = document.createElement('article');
+      card.className = nodeClass(String(stRaw || '').toLowerCase());
+      const h = document.createElement('h3');
+      h.textContent = String(n.node_id || n.node_type || 'node');
+      const stE = document.createElement('div');
+      stE.className = stClass(stRaw);
+      stE.textContent = String(stRaw || 'unknown');
+      const p0 = document.createElement('p');
+      p0.className = 'sum';
+      p0.textContent = String(n.explanation_v1 || '');
+      const prov = n.evidence_provenance_v1;
+      if (Array.isArray(prov) && prov.length) {
+        const pr = document.createElement('p');
+        pr.className = 'sum';
+        pr.style.fontSize = '0.68rem';
+        pr.style.color = 'var(--muted)';
+        pr.textContent = 'evidence: ' + prov.join(', ');
+        card.appendChild(pr);
+      }
+      const det = document.createElement('details');
+      const sm = document.createElement('summary');
+      sm.textContent = 'evidence_values_v1';
+      det.appendChild(sm);
+      const pre = document.createElement('pre');
+      pre.textContent = JSON.stringify(n.evidence_values_v1 != null ? n.evidence_values_v1 : {}, null, 2);
+      det.appendChild(pre);
+      card.appendChild(h);
+      card.appendChild(stE);
+      card.appendChild(p0);
+      card.appendChild(det);
+      wrap.appendChild(card);
+      if (i < nodes.length - 1) {
+        const nxt = nodes[i + 1] || {};
+        const ek = String(n.node_id) + '>' + String(nxt.node_id);
+        const ed = edgeMap[ek] || {};
+        const ediv = document.createElement('div');
+        ediv.className = 'llt-edge llt-edge--ok';
+        ediv.innerHTML = arrowSvg() + '<span class="cap">→</span>';
+        wrap.appendChild(ediv);
+      }
+      proofGraph.appendChild(wrap);
     }
   }
 
@@ -825,6 +932,37 @@
       if (jobId) window.history.replaceState({}, '', '/debug/learning-loop?job_id=' + encodeURIComponent(jobId));
       void load();
     });
+  }
+  async function loadProof() {
+    var a = (runAInp && runAInp.value.trim()) || '';
+    var b = (runBInp && runBInp.value.trim()) || '';
+    if (!a || !b) {
+      if (proofBlock) proofBlock.style.display = 'none';
+      return;
+    }
+    if (a && b) {
+      var q = '/debug/learning-loop?';
+      if (jobId) q += 'job_id=' + encodeURIComponent(jobId) + '&';
+      q += 'run_a=' + encodeURIComponent(a) + '&run_b=' + encodeURIComponent(b);
+      window.history.replaceState({}, '', q);
+    }
+    try {
+      const r = await fetch('/api/training/learning-loop-proof?run_a=' + encodeURIComponent(a) + '&run_b=' + encodeURIComponent(b));
+      const p = await r.json();
+      renderProofFrom026L(p);
+    } catch (e) {
+      if (proofBlock) {
+        proofBlock.style.display = 'block';
+        if (proofVerdict) proofVerdict.textContent = 'Error loading learning-loop proof.';
+        if (proofGraph) proofGraph.innerHTML = '';
+      }
+    }
+  }
+  if (loadProofBtn) {
+    loadProofBtn.addEventListener('click', function () { void loadProof(); });
+  }
+  if (runA0 && runB0) {
+    void loadProof();
   }
   load();
 })();

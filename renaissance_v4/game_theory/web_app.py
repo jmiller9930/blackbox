@@ -36,6 +36,7 @@ counts, **run_ok_pct**, **referee_win_pct**, **avg_trade_win_pct**) and expose `
 ``GET /api/training/export`` (**GT_DIRECTIVE_022** — promoted-only training export preview / download); ``POST /api/training/export/materialize`` (typed confirm writes ``training_dataset_v1.jsonl``).
 ``GET /api/training/learning-effectiveness`` (**GT_DIRECTIVE_023** — read-only effectiveness audit JSON); ``POST /api/training/learning-effectiveness/materialize`` (typed confirm writes ``learning_effectiveness_report_v1``).
 ``GET /api/training/learning-flow-validate`` (**GT_DIRECTIVE_025** — Run A→B step chain + verdict); ``POST /api/training/learning-flow-validate/materialize`` (typed confirm writes ``learning_flow_validation_v1.json``).
+``GET /api/training/learning-loop-proof`` (**GT_DIRECTIVE_026L** — node-by-node causal learning-loop graph); ``POST /api/training/learning-loop-proof/materialize`` (typed confirm ``MATERIALIZE_LEARNING_LOOP_PROOF_V1`` writes full ``learning_loop_proof_graph_v1`` JSON).
 
 **Post-certification ``trade_strategy`` (DEV STUB):** Same routes under **``/api/v1/trade-strategy``** (stable for external callers) and **``/api/trade-strategy``** (alias).
 ``GET …/contract`` returns integration metadata. Methods: list, ``<id>/export`` (download JSON), get one, POST, PATCH — placeholder payloads until persistence + execution;
@@ -205,6 +206,11 @@ from renaissance_v4.game_theory.learning_flow_validator_v1 import (
     build_learning_flow_validation_v1,
     default_learning_flow_validation_report_path_v1,
     materialize_learning_flow_validation_v1,
+)
+from renaissance_v4.game_theory.learning_loop_proof_graph_v1 import (
+    build_learning_loop_proof_graph_v1,
+    default_learning_loop_proof_output_path_v1,
+    materialize_learning_loop_proof_graph_v1,
 )
 from renaissance_v4.game_theory.exam_decision_frame_schema_v1 import (
     ExamUnitTimelineDocumentV1,
@@ -2619,6 +2625,52 @@ def create_app() -> Flask:
             store_path=store_path,
             output_path=default_learning_flow_validation_report_path_v1(),
             confirm=str(data.get("confirm") or ""),
+        )
+        return jsonify(out), (200 if out.get("ok") else 400)
+
+    @app.get("/api/training/learning-loop-proof")
+    def api_training_learning_loop_proof_v1() -> Any:
+        """GT_DIRECTIVE_026L — Causal learning-loop proof graph (read-only, artifact-backed)."""
+        run_a = (request.args.get("run_a") or "").strip()
+        run_b = (request.args.get("run_b") or "").strip()
+        if not run_a or not run_b:
+            return jsonify({"ok": False, "error": "run_a and run_b query parameters required"}), 400
+        st = student_learning_store_status_v1()
+        store_path = Path(str(st["path"]))
+        graph = build_learning_loop_proof_graph_v1(
+            run_a,
+            run_b,
+            scorecard_path=None,
+            store_path=store_path,
+        )
+        return jsonify(
+            {
+                "ok": True,
+                "learning_loop_proof_graph_v1": graph,
+                "final_verdict_v1": graph.get("final_verdict_v1"),
+                "breakpoints_v1": graph.get("breakpoints_v1"),
+                "operator_summary_v1": graph.get("operator_summary_v1"),
+            }
+        ), 200
+
+    @app.post("/api/training/learning-loop-proof/materialize")
+    def api_training_learning_loop_proof_materialize_v1() -> Any:
+        """Write ``learning_loop_proof_<run_a>__<run_b>.json`` (typed confirm; GT_DIRECTIVE_026L)."""
+        data = request.get_json(force=True, silent=True) or {}
+        run_a = str(data.get("run_a") or "").strip()
+        run_b = str(data.get("run_b") or "").strip()
+        if not run_a or not run_b:
+            return jsonify({"ok": False, "error": "run_a and run_b required in JSON body"}), 400
+        st = student_learning_store_status_v1()
+        store_path = Path(str(st["path"]))
+        out = materialize_learning_loop_proof_graph_v1(
+            run_a=run_a,
+            run_b=run_b,
+            scorecard_path=None,
+            store_path=store_path,
+            output_path=default_learning_loop_proof_output_path_v1(run_a, run_b),
+            confirm=str(data.get("confirm") or ""),
+            baseline_job_id=str(data.get("baseline_job_id") or "").strip() or None,
         )
         return jsonify(out), (200 if out.get("ok") else 400)
 
