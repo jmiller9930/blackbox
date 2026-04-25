@@ -143,7 +143,8 @@ def test_cross_run_packet_uses_retrieval_governance(tmp_path: Path) -> None:
     pkt, err = build_student_decision_packet_v1_with_cross_run_retrieval(
         db_path=db,
         symbol="TESTUSDT",
-        decision_open_time_ms=5_000_000,
+        decision_open_time_ms=5_000_000, 
+        candle_timeframe_minutes=5,
         store_path=store,
         retrieval_signature_key=sig,
         max_retrieval_slices=8,

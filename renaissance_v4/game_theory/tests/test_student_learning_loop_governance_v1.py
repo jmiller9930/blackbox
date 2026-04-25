@@ -52,7 +52,8 @@ def test_env_cap_limits_slices(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) 
     pkt, err = build_student_decision_packet_v1_with_cross_run_retrieval(
         db_path=db,
         symbol="TESTUSDT",
-        decision_open_time_ms=5_000_000,
+        decision_open_time_ms=5_000_000, 
+        candle_timeframe_minutes=5,
         store_path=store,
         retrieval_signature_key="sig_x",
         max_retrieval_slices=None,
@@ -83,7 +84,7 @@ def test_seam_audit_includes_learning_loop_governance(
         mfe=0.5,
         exit_reason="tp",
     )
-    sk = f"student_entry_v1:{o.symbol}:{o.entry_time}"
+    sk = f"student_entry_v1:{o.symbol}:{o.entry_time}:5"
     so = {
         "schema": "student_output_v1",
         "contract_version": 1,
@@ -104,6 +105,7 @@ def test_seam_audit_includes_learning_loop_governance(
         run_id="run_gov",
         record_id="rec_gov",
         context_signature_v1={"schema": "context_signature_v1", "signature_key": sk},
+        candle_timeframe_minutes=5,
     )
     assert not br and row
     append_student_learning_record_v1(store, row)

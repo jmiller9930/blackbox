@@ -38,6 +38,8 @@ EVENT_STAGES_V1 = (
     "governance_decided",
     "learning_record_appended",
     "future_retrieval_observed",
+    "candle_timeframe_nexus_v1",
+    "timeframe_mismatch_detected_v1",
 )
 
 # Map persisted ``stage`` → graph node ``id`` (reconstructed trace) for merge / provenance.
@@ -58,6 +60,8 @@ STAGE_TO_NODE_IDS_V1: dict[str, tuple[str, ...]] = {
     "governance_decided": ("governance_018",),
     "learning_record_appended": ("learning_store",),
     "future_retrieval_observed": ("future_retrieval",),
+    "candle_timeframe_nexus_v1": ("memory_retrieval", "referee_execution"),
+    "timeframe_mismatch_detected_v1": ("memory_retrieval", "referee_execution"),
 }
 
 

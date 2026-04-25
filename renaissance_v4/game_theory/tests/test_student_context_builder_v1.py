@@ -79,6 +79,7 @@ def test_no_future_bars_causal_boundary(synthetic_db: Path) -> None:
         db_path=synthetic_db,
         symbol="TESTUSDT",
         decision_open_time_ms=5_000_000,
+        candle_timeframe_minutes=5,
         max_bars_in_packet=500,
     )
     assert err is None and pkt is not None
@@ -91,7 +92,7 @@ def test_build_packet_passes_validate_and_pre_reveal(synthetic_db: Path) -> None
     pkt, err = build_student_decision_packet_v1(
         db_path=synthetic_db,
         symbol="TESTUSDT",
-        decision_open_time_ms=8_000_000,
+        decision_open_time_ms=8_000_000, candle_timeframe_minutes=5
     )
     assert err is None and pkt is not None
     assert validate_student_decision_packet_v1(pkt) == []
@@ -112,7 +113,7 @@ def test_packet_schema_enforced_reject_bad_schema() -> None:
 
 def test_manual_injected_flashcard_field_fails_pre_reveal(synthetic_db: Path) -> None:
     pkt, err = build_student_decision_packet_v1(
-        db_path=synthetic_db, symbol="TESTUSDT", decision_open_time_ms=4_000_000
+        db_path=synthetic_db, symbol="TESTUSDT", decision_open_time_ms=4_000_000, candle_timeframe_minutes=5
     )
     assert err is None and pkt is not None
     poisoned = dict(pkt)
@@ -123,7 +124,7 @@ def test_manual_injected_flashcard_field_fails_pre_reveal(synthetic_db: Path) ->
 
 def test_builder_never_emits_forbidden_keys(synthetic_db: Path) -> None:
     pkt, err = build_student_decision_packet_v1(
-        db_path=synthetic_db, symbol="TESTUSDT", decision_open_time_ms=10_000_000
+        db_path=synthetic_db, symbol="TESTUSDT", decision_open_time_ms=10_000_000, candle_timeframe_minutes=5
     )
     assert err is None and pkt is not None
     packet_keys = _all_keys_flat(pkt)
@@ -165,6 +166,7 @@ def test_real_db_example_json_validates_and_matches_builder() -> None:
         db_path=DB_PATH,
         symbol="SOLUSDT",
         decision_open_time_ms=decision_ms,
+        candle_timeframe_minutes=5,
         max_bars_in_packet=500,
     )
     assert err is None and pkt is not None
@@ -184,7 +186,7 @@ def test_empty_db_returns_error_not_crash(tmp_path: Path) -> None:
 
 def _valid_packet_from_fixture(synthetic_db: Path) -> dict:
     pkt, err = build_student_decision_packet_v1(
-        db_path=synthetic_db, symbol="TESTUSDT", decision_open_time_ms=5_000_000
+        db_path=synthetic_db, symbol="TESTUSDT", decision_open_time_ms=5_000_000, candle_timeframe_minutes=5
     )
     assert err is None and pkt is not None
     return pkt

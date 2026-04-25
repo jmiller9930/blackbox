@@ -5,6 +5,11 @@ Assembles ``student_decision_packet_v1``: causal market state at decision time `
 (``open_time <= decision_open_time_ms``), **no** Referee flashcards, **no** future bars.
 
 Causal state is obtained from SQLite ``market_bars_5m`` (same table as replay), read-only.
+For TF > 5, the same ``rollup_5m_rows_to_candle_timeframe`` as ``run_manifest_replay`` is applied to
+**all** 5m rows for the symbol (same global chunking as replay), then rolled bars with
+``open_time <= decision_open_time_ms`` are kept — no boundary skew vs replay (GT_DIRECTIVE_026TF).
+For TF = 5, the full 5m series is loaded (replay alignment), then filtered to ``open_time <= t`` and
+capped.
 """
 
 from __future__ import annotations
@@ -13,6 +18,10 @@ import sqlite3
 from pathlib import Path
 from typing import Any
 
+from renaissance_v4.game_theory.candle_timeframe_runtime import (
+    is_allowed_candle_timeframe_minutes_v1,
+    rollup_5m_rows_to_candle_timeframe,
+)
 from renaissance_v4.game_theory.student_proctor.contracts_v1 import (
     CONTRACT_VERSION_STUDENT_PROCTOR_V1,
     FIELD_RETRIEVED_STUDENT_EXPERIENCE_V1,
@@ -70,11 +79,44 @@ def fetch_bars_causal_up_to(
     return _rows_chronological(rows_desc), None
 
 
+def fetch_all_5m_for_symbol_asc(
+    *,
+    db_path: Path | str,
+    symbol: str,
+    table: str = _DEFAULT_TABLE,
+) -> tuple[list[dict[str, Any]], str | None]:
+    """
+    Load **all** ``market_bars_5m`` rows for ``symbol``, oldest→newest — same superset as
+    ``run_manifest_replay`` uses before rollup (so chunk boundaries match).
+    """
+    p = Path(db_path)
+    if not p.is_file():
+        return [], f"database file missing: {p}"
+    if table != _DEFAULT_TABLE:
+        table = _DEFAULT_TABLE
+    try:
+        with sqlite3.connect(str(p)) as conn:
+            conn.row_factory = sqlite3.Row
+            cur = conn.execute(
+                f"""
+                SELECT open_time, symbol, open, high, low, close, volume
+                FROM {table}
+                WHERE symbol = ?
+                ORDER BY open_time ASC
+                """,
+                (symbol,),
+            )
+            return [dict(r) for r in cur.fetchall()], None
+    except (OSError, sqlite3.Error) as e:
+        return [], f"{type(e).__name__}: {e}"
+
+
 def build_student_decision_packet_v1(
     *,
     db_path: Path | str,
     symbol: str,
     decision_open_time_ms: int,
+    candle_timeframe_minutes: int,
     table: str = _DEFAULT_TABLE,
     max_bars_in_packet: int = 10_000,
     notes: str | None = None,
@@ -85,27 +127,53 @@ def build_student_decision_packet_v1(
     Does **not** load replay outcomes, trades, PnL, or post-hoc batch summaries. Optional
     ``notes`` is for operator debugging strings only (must not contain outcome key names).
 
+    ``candle_timeframe_minutes`` must be one of 5, 15, 60, 240 — same as the run's replay bar width.
+    Coarser TFs are built from 5m base rows (rollup), never raw 5m in the student-visible series.
+
     Returns ``(packet, None)`` or ``(None, error)``.
     """
-    bars, err = fetch_bars_causal_up_to(
+    if not is_allowed_candle_timeframe_minutes_v1(candle_timeframe_minutes):
+        return None, f"invalid candle_timeframe_minutes: {candle_timeframe_minutes!r} (expected 5, 15, 60, or 240)"
+    tf = int(candle_timeframe_minutes)
+    cut = int(decision_open_time_ms)
+    all_5m, err = fetch_all_5m_for_symbol_asc(
         db_path=db_path,
         symbol=symbol,
-        decision_open_time_ms=decision_open_time_ms,
         table=table,
-        max_bars_in_packet=max_bars_in_packet,
     )
     if err:
         return None, err
+    rollup_audit: dict[str, Any] | None = None
+    if tf == 5:
+        causal_5m = [r for r in all_5m if int(r.get("open_time") or 0) <= cut]
+        if len(causal_5m) > int(max_bars_in_packet):
+            bars = causal_5m[-int(max_bars_in_packet) :]
+        else:
+            bars = causal_5m
+    else:
+        rolled, rollup_audit = rollup_5m_rows_to_candle_timeframe(
+            list(all_5m),
+            target_minutes=tf,
+        )
+        causal = [r for r in rolled if int(r.get("open_time") or 0) <= cut]
+        if len(causal) > int(max_bars_in_packet):
+            bars = causal[-int(max_bars_in_packet) :]
+        else:
+            bars = causal
     packet: dict[str, Any] = {
         "schema": SCHEMA_STUDENT_DECISION_PACKET_V1,
         "contract_version": CONTRACT_VERSION_STUDENT_PROCTOR_V1,
         "symbol": symbol,
         "table": table,
+        "candle_timeframe_minutes": tf,
+        "candle_timeframe_base_source_table": _DEFAULT_TABLE,
         "decision_open_time_ms": int(decision_open_time_ms),
         "graded_unit_type_hint": "closed_trade",
         "bars_inclusive_up_to_t": bars,
         "bar_count": len(bars),
     }
+    if rollup_audit is not None:
+        packet["candle_timeframe_rollup_audit_v1"] = rollup_audit
     if notes:
         packet["builder_notes"] = notes[:4000]
     vpre = validate_pre_reveal_bundle_v1(packet)
@@ -125,6 +193,9 @@ def validate_student_decision_packet_v1(packet: Any) -> list[str]:
         errs.append(f"contract_version must be {CONTRACT_VERSION_STUDENT_PROCTOR_V1}")
     if not isinstance(packet.get("symbol"), str) or not packet.get("symbol"):
         errs.append("symbol must be non-empty string")
+    ctf = packet.get("candle_timeframe_minutes")
+    if not isinstance(ctf, int) or not is_allowed_candle_timeframe_minutes_v1(ctf):
+        errs.append("candle_timeframe_minutes must be int in {5, 15, 60, 240}")
     t_cut = packet.get("decision_open_time_ms")
     if not isinstance(t_cut, int):
         errs.append("decision_open_time_ms must be int (ms)")

@@ -7,6 +7,8 @@
     "contract_version": 1,
     "symbol": "SOLUSDT",
     "table": "market_bars_5m",
+    "candle_timeframe_minutes": 5,
+    "candle_timeframe_base_source_table": "market_bars_5m",
     "decision_open_time_ms": 1700010000000,
     "graded_unit_type_hint": "closed_trade",
     "bars_inclusive_up_to_t": [

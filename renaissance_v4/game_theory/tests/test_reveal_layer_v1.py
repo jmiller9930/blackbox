@@ -146,7 +146,7 @@ def test_e2e_packet_shadow_reveal_chain(synthetic_db: Path) -> None:
     pkt, perr = build_student_decision_packet_v1(
         db_path=synthetic_db,
         symbol="TESTUSDT",
-        decision_open_time_ms=5_000_000,
+        decision_open_time_ms=5_000_000, candle_timeframe_minutes=5
     )
     assert not perr and pkt
     so, serr = emit_shadow_stub_student_output_v1(pkt, graded_unit_id=tid, decision_at_ms=5_000_000)

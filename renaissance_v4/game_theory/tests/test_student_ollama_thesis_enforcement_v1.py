@@ -29,7 +29,7 @@ def decision_packet(tmp_path: Path) -> dict:
     db = tmp_path / "ollama_thesis.sqlite3"
     _mk_synthetic_db(db)
     pkt, err = build_student_decision_packet_v1(
-        db_path=db, symbol="TESTUSDT", decision_open_time_ms=5_000_000
+        db_path=db, symbol="TESTUSDT", decision_open_time_ms=5_000_000, candle_timeframe_minutes=5
     )
     assert err is None and isinstance(pkt, dict)
     return pkt

@@ -269,6 +269,8 @@ def _worker_run_one(scenario: dict[str, Any]) -> dict[str, Any]:
             "memory_bundle_audit": out.get("memory_bundle_audit"),
             "memory_bundle_proof": out.get("memory_bundle_proof"),
             "replay_data_audit": out.get("replay_data_audit"),
+            "replay_timeframe_minutes": out.get("replay_timeframe_minutes"),
+            "dataset_bars_after_rollup": out.get("dataset_bars_after_rollup"),
             "atr_stop_mult": scenario.get("atr_stop_mult"),
             "atr_target_mult": scenario.get("atr_target_mult"),
             "learning_run_audit_v1": learn,

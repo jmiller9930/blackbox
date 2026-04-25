@@ -353,6 +353,19 @@ def validate_student_learning_record_v1(doc: Any) -> list[str]:
         errs.append("referee_outcome_subset must be a dict")
     if not isinstance(doc.get("alignment_flags_v1"), dict):
         errs.append("alignment_flags_v1 must be a dict")
+    ctf = doc.get("candle_timeframe_minutes")
+    if ctf is not None:
+        try:
+            ci = int(ctf)
+        except (TypeError, ValueError):
+            errs.append("candle_timeframe_minutes must be int when present")
+        else:
+            from renaissance_v4.game_theory.candle_timeframe_runtime import (
+                is_allowed_candle_timeframe_minutes_v1,
+            )
+
+            if not is_allowed_candle_timeframe_minutes_v1(ci):
+                errs.append("candle_timeframe_minutes must be one of 5, 15, 60, 240 when present")
     lg = doc.get("learning_governance_v1")
     if lg is not None:
         if not isinstance(lg, dict):
@@ -456,6 +469,7 @@ def legal_example_student_learning_record_v1() -> dict[str, Any]:
         "created_utc": "2026-04-20T16:00:00Z",
         "run_id": "run_example_abc",
         "graded_unit_id": so["graded_unit_id"],
+        "candle_timeframe_minutes": 5,
         "manifest_sha256": None,
         "strategy_id": "renaissance_baseline_v1_stack",
         "context_signature_v1": {"schema": "context_signature_v1", "signature_key": "demo"},

@@ -102,6 +102,7 @@ def test_thesis_persists_via_learning_record() -> None:
         run_id="run_fixture_thesis",
         record_id="660e8400-e29b-41d4-a716-446655440099",
         context_signature_v1={"schema": "context_signature_v1", "signature_key": "k"},
+        candle_timeframe_minutes=5,
         strategy_id="s",
     )
     assert not le and lr

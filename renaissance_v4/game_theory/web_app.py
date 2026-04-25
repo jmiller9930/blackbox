@@ -34,7 +34,8 @@ counts, **run_ok_pct**, **referee_win_pct**, **avg_trade_win_pct**) and expose `
 ``GET /api/training-exam-audit/<job_id>`` — deterministic ``training_exam_audit_v1`` for one scorecard line (learning vs harness vs missing seam; rebuilds from fields if older lines lack the block),
 ``GET /api/student-panel/decision?job_id=&trade_id=`` (``decision_id`` accepted as alias for migration).
 ``GET /api/training/export`` (**GT_DIRECTIVE_022** — promoted-only training export preview / download); ``POST /api/training/export/materialize`` (typed confirm writes ``training_dataset_v1.jsonl``).
-``GET /api/training/learning-effectiveness`` (**GT_DIRECTIVE_023** — read-only effectiveness audit JSON); ``POST /api/training/learning-effectiveness/materialize`` (typed confirm writes ``learning_effectiveness_report_v1.json``).
+``GET /api/training/learning-effectiveness`` (**GT_DIRECTIVE_023** — read-only effectiveness audit JSON); ``POST /api/training/learning-effectiveness/materialize`` (typed confirm writes ``learning_effectiveness_report_v1``).
+``GET /api/training/learning-flow-validate`` (**GT_DIRECTIVE_025** — Run A→B step chain + verdict); ``POST /api/training/learning-flow-validate/materialize`` (typed confirm writes ``learning_flow_validation_v1.json``).
 
 **Post-certification ``trade_strategy`` (DEV STUB):** Same routes under **``/api/v1/trade-strategy``** (stable for external callers) and **``/api/trade-strategy``** (alias).
 ``GET …/contract`` returns integration metadata. Methods: list, ``<id>/export`` (download JSON), get one, POST, PATCH — placeholder payloads until persistence + execution;
@@ -198,6 +199,12 @@ from renaissance_v4.game_theory.student_proctor.learning_effectiveness_report_v1
     default_learning_effectiveness_report_path_v1,
     materialize_learning_effectiveness_report_v1,
     summarize_learning_effectiveness_report_v1,
+)
+from renaissance_v4.game_theory.learning_flow_validator_v1 import (
+    MATERIALIZE_LEARNING_FLOW_VALIDATION_V1,
+    build_learning_flow_validation_v1,
+    default_learning_flow_validation_report_path_v1,
+    materialize_learning_flow_validation_v1,
 )
 from renaissance_v4.game_theory.exam_decision_frame_schema_v1 import (
     ExamUnitTimelineDocumentV1,
@@ -601,6 +608,18 @@ def _prepare_parallel_payload(data: dict[str, Any]) -> dict[str, Any]:
     ex_req, ex_err = parse_exam_run_contract_request_v1(data)
     if ex_err:
         return {"ok": False, "error": ex_err}
+    op_tf = int(operator_batch_audit["candle_timeframe_minutes"])
+    if ex_req and isinstance(ex_req, dict):
+        if ex_req.get("candle_timeframe_minutes") is None:
+            ex_req["candle_timeframe_minutes"] = op_tf
+        elif int(ex_req["candle_timeframe_minutes"]) != op_tf:
+            return {
+                "ok": False,
+                "error": (
+                    f"exam_run_contract_v1.candle_timeframe_minutes ({ex_req.get('candle_timeframe_minutes')}) "
+                    f"does not match operator trade window ({op_tf})"
+                ),
+            }
     fp_prev = preview_run_config_fingerprint_sha256_40_v1(scenarios, operator_batch_audit)
     operator_batch_audit["exam_run_contract_request_v1"] = ex_req
     operator_batch_audit["exam_run_fingerprint_preview_sha256_40_v1"] = fp_prev
@@ -1246,6 +1265,9 @@ def create_app() -> Flask:
                     run_id=job_id,
                     strategy_id=op_rid,
                     exam_run_contract_request_v1=exam_req if isinstance(exam_req, dict) else None,
+                    operator_batch_audit=operator_batch_audit
+                    if isinstance(operator_batch_audit, dict)
+                    else None,
                 )
                 if seam_audit.get("skipped"):
                     emit_seam_disabled_placeholder_events_v1(
@@ -1740,6 +1762,9 @@ def create_app() -> Flask:
                 run_id=job_id,
                 strategy_id=op_rid_block,
                 exam_run_contract_request_v1=exam_req_block if isinstance(exam_req_block, dict) else None,
+                operator_batch_audit=operator_batch_audit
+                if isinstance(operator_batch_audit, dict)
+                else None,
             )
             if seam_blocking.get("skipped"):
                 emit_seam_disabled_placeholder_events_v1(
@@ -2559,6 +2584,40 @@ def create_app() -> Flask:
             scorecard_path=None,
             store_path=store_path,
             output_path=default_learning_effectiveness_report_path_v1(),
+            confirm=str(data.get("confirm") or ""),
+        )
+        return jsonify(out), (200 if out.get("ok") else 400)
+
+    @app.get("/api/training/learning-flow-validate")
+    def api_training_learning_flow_validate_v1() -> Any:
+        """GT_DIRECTIVE_025 — Deterministic A→B learning chain proof (read-only JSON, no model-weight claims)."""
+        run_a = (request.args.get("run_a") or "").strip()
+        run_b = (request.args.get("run_b") or "").strip()
+        if not run_a or not run_b:
+            return jsonify({"ok": False, "error": "run_a and run_b query parameters required"}), 400
+        st = student_learning_store_status_v1()
+        store_path = Path(str(st["path"]))
+        out = build_learning_flow_validation_v1(
+            run_a, run_b, scorecard_path=None, store_path=store_path
+        )
+        return jsonify({"ok": True, **out}), 200
+
+    @app.post("/api/training/learning-flow-validate/materialize")
+    def api_training_learning_flow_validate_materialize_v1() -> Any:
+        """Write ``learning_flow_validation_v1.json`` for one A/B pair (typed confirm; GT_DIRECTIVE_025)."""
+        data = request.get_json(force=True, silent=True) or {}
+        run_a = str(data.get("run_a") or "").strip()
+        run_b = str(data.get("run_b") or "").strip()
+        if not run_a or not run_b:
+            return jsonify({"ok": False, "error": "run_a and run_b required in JSON body"}), 400
+        st = student_learning_store_status_v1()
+        store_path = Path(str(st["path"]))
+        out = materialize_learning_flow_validation_v1(
+            run_a=run_a,
+            run_b=run_b,
+            scorecard_path=None,
+            store_path=store_path,
+            output_path=default_learning_flow_validation_report_path_v1(),
             confirm=str(data.get("confirm") or ""),
         )
         return jsonify(out), (200 if out.get("ok") else 400)

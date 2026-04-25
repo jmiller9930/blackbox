@@ -11,6 +11,65 @@ from typing import Any
 
 _BASE_BAR_MINUTES = 5
 
+# GT_DIRECTIVE_026TF — one run = one replay bar width; must match operator UI and Student packet rollup.
+CANONICAL_CANDLE_TIMEFRAME_MINUTES_V1: frozenset[int] = frozenset((5, 15, 60, 240))
+
+
+def is_allowed_candle_timeframe_minutes_v1(n: int) -> bool:
+    try:
+        return int(n) in CANONICAL_CANDLE_TIMEFRAME_MINUTES_V1
+    except (TypeError, ValueError):
+        return False
+
+
+def effective_replay_timeframe_from_worker_replay_row_v1(row: Any) -> int:
+    """
+    Return replay bar width in **minutes** from a parallel worker result row
+    (``replay_timeframe_minutes`` from ``run_manifest_replay`` when present, else
+    ``replay_data_audit.candle_timeframe_rollup_v1``), or **5** when no rollup was applied.
+    """
+    if not isinstance(row, dict) or not row.get("ok"):
+        return _BASE_BAR_MINUTES
+    rtf = row.get("replay_timeframe_minutes")
+    if rtf is not None:
+        try:
+            n = int(rtf)
+            if is_allowed_candle_timeframe_minutes_v1(n):
+                return n
+        except (TypeError, ValueError):
+            pass
+    rda = row.get("replay_data_audit")
+    if not isinstance(rda, dict):
+        return _BASE_BAR_MINUTES
+    cur = rda.get("candle_timeframe_rollup_v1")
+    if not isinstance(cur, dict):
+        return _BASE_BAR_MINUTES
+    try:
+        t = int(cur.get("target_bar_minutes_requested") or 0)
+    except (TypeError, ValueError):
+        return _BASE_BAR_MINUTES
+    if t > _BASE_BAR_MINUTES and cur.get("rollup_applied") is True:
+        return t
+    return _BASE_BAR_MINUTES
+
+
+def normalize_candle_timeframe_minutes_v1(
+    raw: Any,
+    *,
+    default: int = _BASE_BAR_MINUTES,
+) -> int:
+    """
+    Coerce a candidate minutes value to 5/15/60/240 or return ``default`` when missing/invalid.
+    (Does not apply recipe-specific floors — see ``extract_candle_timeframe_minutes_for_replay``.)
+    """
+    try:
+        n = int(raw)
+    except (TypeError, ValueError):
+        return int(default)
+    if is_allowed_candle_timeframe_minutes_v1(n):
+        return n
+    return int(default)
+
 
 def resolve_ui_trade_window(mode: str) -> dict[str, Any]:
     """

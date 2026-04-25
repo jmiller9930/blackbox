@@ -162,8 +162,15 @@ def emit_memory_retrieval_completed_v1(
     scenario_id: str,
     trade_id: str,
     retrieval_matches: int,
+    candle_timeframe_minutes: int | None = None,
+    retrieval_signature_key: str | None = None,
 ) -> None:
     st = "pass" if retrieval_matches > 0 else "partial"
+    ev: dict[str, Any] = {"student_retrieval_matches": retrieval_matches}
+    if candle_timeframe_minutes is not None:
+        ev["candle_timeframe_minutes"] = int(candle_timeframe_minutes)
+    if retrieval_signature_key is not None and str(retrieval_signature_key).strip():
+        ev["retrieval_signature_key"] = str(retrieval_signature_key).strip()[:2000]
     _emit(
         job_id=job_id,
         fingerprint=fingerprint,
@@ -173,7 +180,7 @@ def emit_memory_retrieval_completed_v1(
         producer="student_loop_seam_v1",
         scenario_id=scenario_id,
         trade_id=trade_id,
-        evidence_payload={"student_retrieval_matches": retrieval_matches},
+        evidence_payload=ev,
     )
 
 
@@ -269,8 +276,17 @@ def emit_governance_decided_v1(
 
 
 def emit_learning_record_appended_v1(
-    *, job_id: str, fingerprint: str | None, scenario_id: str, trade_id: str, record_id: str
+    *,
+    job_id: str,
+    fingerprint: str | None,
+    scenario_id: str,
+    trade_id: str,
+    record_id: str,
+    candle_timeframe_minutes: int | None = None,
 ) -> None:
+    ev: dict[str, Any] = {"record_id": record_id}
+    if candle_timeframe_minutes is not None:
+        ev["candle_timeframe_minutes"] = int(candle_timeframe_minutes)
     _emit(
         job_id=job_id,
         fingerprint=fingerprint,
@@ -280,7 +296,60 @@ def emit_learning_record_appended_v1(
         producer="student_proctor_store_v1",
         scenario_id=scenario_id,
         trade_id=trade_id,
-        evidence_payload={"record_id": record_id},
+        evidence_payload=ev,
+    )
+
+
+def emit_candle_timeframe_nexus_v1(
+    *,
+    job_id: str,
+    fingerprint: str | None,
+    nexus: str,
+    candle_timeframe_minutes: int,
+    scenario_id: str | None = None,
+    trade_id: str | None = None,
+) -> None:
+    """GT_DIRECTIVE_026TF — one of run_contract / replay / student_packet scope strings."""
+    _emit(
+        job_id=job_id,
+        fingerprint=fingerprint,
+        stage="candle_timeframe_nexus_v1",
+        status="pass",
+        summary=f"Timeframe handoff: {nexus}={candle_timeframe_minutes}m.",
+        producer="candle_timeframe_trace_v1",
+        scenario_id=scenario_id,
+        trade_id=trade_id,
+        evidence_payload={
+            "candle_timeframe_nexus": str(nexus or "").strip()[:128],
+            "candle_timeframe_minutes": int(candle_timeframe_minutes),
+        },
+    )
+
+
+def emit_timeframe_mismatch_detected_v1(
+    *,
+    job_id: str,
+    fingerprint: str | None,
+    left_role: str,
+    left_minutes: int,
+    right_role: str,
+    right_minutes: int,
+    scenario_id: str | None = None,
+) -> None:
+    _emit(
+        job_id=job_id,
+        fingerprint=fingerprint,
+        stage="timeframe_mismatch_detected_v1",
+        status="fail",
+        summary=f"Timeframe mismatch: {left_role}={left_minutes}m vs {right_role}={right_minutes}m.",
+        producer="candle_timeframe_trace_v1",
+        scenario_id=scenario_id,
+        evidence_payload={
+            "left_role": str(left_role)[:120],
+            "left_minutes": int(left_minutes),
+            "right_role": str(right_role)[:120],
+            "right_minutes": int(right_minutes),
+        },
     )
 
 
@@ -313,6 +382,7 @@ def emit_referee_used_student_output_batch_truth_v1(
 
 
 __all__ = [
+    "emit_candle_timeframe_nexus_v1",
     "emit_governance_decided_v1",
     "emit_grading_completed_v1",
     "emit_learning_record_appended_v1",
@@ -326,6 +396,7 @@ __all__ = [
     "emit_referee_used_student_output_batch_truth_v1",
     "emit_seam_disabled_placeholder_events_v1",
     "emit_student_output_sealed_v1",
+    "emit_timeframe_mismatch_detected_v1",
     "fingerprint_for_parallel_job_v1",
     "learning_trace_instrumentation_enabled_v1",
 ]

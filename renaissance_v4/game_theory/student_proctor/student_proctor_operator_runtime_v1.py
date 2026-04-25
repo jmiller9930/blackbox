@@ -33,6 +33,10 @@ from renaissance_v4.game_theory.student_proctor.student_ollama_student_output_v1
     _student_llm_max_trades_v1,
     emit_student_output_via_ollama_v1,
 )
+from renaissance_v4.game_theory.candle_timeframe_runtime import (
+    effective_replay_timeframe_from_worker_replay_row_v1,
+    is_allowed_candle_timeframe_minutes_v1,
+)
 from renaissance_v4.game_theory.scorecard_drill import find_scorecard_entry_by_job_id
 from renaissance_v4.game_theory.student_panel_l3_datagap_matrix_v1 import build_student_panel_l3_payload_v1
 from renaissance_v4.game_theory.student_proctor.cross_run_retrieval_v1 import (
@@ -44,6 +48,7 @@ from renaissance_v4.game_theory.student_proctor.learning_memory_promotion_v1 imp
     classify_trade_memory_promotion_v1,
 )
 from renaissance_v4.game_theory.learning_trace_instrumentation_v1 import (
+    emit_candle_timeframe_nexus_v1,
     emit_governance_decided_v1,
     emit_learning_record_appended_v1,
     emit_llm_called_v1,
@@ -52,6 +57,7 @@ from renaissance_v4.game_theory.learning_trace_instrumentation_v1 import (
     emit_memory_retrieval_completed_v1,
     emit_referee_used_student_output_batch_truth_v1,
     emit_student_output_sealed_v1,
+    emit_timeframe_mismatch_detected_v1,
     fingerprint_for_parallel_job_v1,
 )
 from renaissance_v4.game_theory.student_proctor.student_learning_loop_governance_v1 import (
@@ -133,11 +139,11 @@ def _memory_semantics_annotation_v1(*, seam_attempted: bool) -> dict[str, Any]:
         "student_retrieval_match_mode_v1": "exact_signature_key",
         "same_chart_pattern_repeat_claim_supported_v1": False,
         "approximate_similarity_matching_student_store_v1": False,
-        "retrieval_signature_key_format_v1": "student_entry_v1:{symbol}:{entry_time}",
+        "retrieval_signature_key_format_v1": "student_entry_v1:{symbol}:{entry_time}:{timeframe_minutes}",
         "note": (
-            "Learning rows match by exact context_signature_v1.signature_key only — not feature-space "
-            "similarity. Do not claim ‘the same pattern again’ from Student v1 retrieval; see ARCHITECTURE "
-            "§C.2. Engine context_signature_memory is a separate approximate path."
+            "Learning rows match by exact context_signature_v1.signature_key (including candle timeframe "
+            "suffix) — not feature-space similarity. Do not claim ‘the same pattern again’ from Student v1 "
+            "retrieval; see ARCHITECTURE §C.2. Engine context_signature_memory is a separate approximate path."
         ),
     }
 
@@ -235,9 +241,9 @@ def _env_seam_enabled() -> bool:
     return v not in ("0", "false", "no", "off")
 
 
-def _signature_key_for_trade(o: OutcomeRecord) -> str:
-    """v1 **exact** lookup key for the learning store (`context_signature_v1.signature_key`)."""
-    return f"student_entry_v1:{o.symbol}:{o.entry_time}"
+def _signature_key_for_trade_v1(o: OutcomeRecord, *, candle_timeframe_minutes: int) -> str:
+    """v1 **exact** lookup key for the learning store (`context_signature_v1.signature_key`) — includes TF."""
+    return f"student_entry_v1:{o.symbol}:{o.entry_time}:{int(candle_timeframe_minutes)}"
 
 
 def _record_id_for_trade(*, run_id: str, scenario_id: str, trade_id: str) -> str:
@@ -257,6 +263,7 @@ def student_loop_seam_after_parallel_batch_v1(
     store_path: Path | str | None = None,
     strategy_id: str | None = None,
     exam_run_contract_request_v1: dict[str, Any] | None = None,
+    operator_batch_audit: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """
     For each successful scenario row with ``replay_outcomes_json``, process each trade.
@@ -303,6 +310,32 @@ def student_loop_seam_after_parallel_batch_v1(
     first_packet_annex_present: bool | None = None
 
     ex_req = exam_run_contract_request_v1 if isinstance(exam_run_contract_request_v1, dict) else None
+    oba = operator_batch_audit if isinstance(operator_batch_audit, dict) else {}
+
+    def _resolved_candle_timeframe_minutes_v1() -> int:
+        for cand in ((ex_req or {}).get("candle_timeframe_minutes"), oba.get("candle_timeframe_minutes")):
+            if cand is not None:
+                try:
+                    t = int(cand)
+                    if is_allowed_candle_timeframe_minutes_v1(t):
+                        return t
+                except (TypeError, ValueError):
+                    pass
+        return 5
+
+    c_tf = _resolved_candle_timeframe_minutes_v1()
+    exm = (ex_req or {}).get("candle_timeframe_minutes")
+    obm = oba.get("candle_timeframe_minutes")
+    if exm is not None and obm is not None and int(exm) != int(obm):
+        emit_timeframe_mismatch_detected_v1(
+            job_id=str(run_id).strip(),
+            fingerprint=None,
+            left_role="exam_run_contract",
+            left_minutes=int(exm),
+            right_role="operator_batch_audit",
+            right_minutes=int(obm),
+        )
+
     profile = normalize_student_reasoning_mode_v1(
         str((ex_req or {}).get("student_brain_profile_v1") or (ex_req or {}).get("student_reasoning_mode") or "")
     )
@@ -320,14 +353,41 @@ def student_loop_seam_after_parallel_batch_v1(
     llm_student_output_rejections_v1 = 0
 
     fp_emit = fingerprint_for_parallel_job_v1(
-        operator_batch_audit=None,
+        operator_batch_audit=oba if oba else None,
         fingerprint_preview=None,
         scorecard_line=scorecard_entry_effective if isinstance(scorecard_entry_effective, dict) else None,
     )
 
+    emit_candle_timeframe_nexus_v1(
+        job_id=str(run_id).strip(),
+        fingerprint=fp_emit,
+        nexus="run_contract",
+        candle_timeframe_minutes=c_tf,
+    )
+    _replay_timeframe_traced = False
     for row in results:
         if not row.get("ok"):
             continue
+        if not _replay_timeframe_traced:
+            w_tf = effective_replay_timeframe_from_worker_replay_row_v1(row)
+            emit_candle_timeframe_nexus_v1(
+                job_id=str(run_id).strip(),
+                fingerprint=fp_emit,
+                nexus="replay",
+                candle_timeframe_minutes=w_tf,
+                scenario_id=str(row.get("scenario_id") or ""),
+            )
+            if w_tf != c_tf:
+                emit_timeframe_mismatch_detected_v1(
+                    job_id=str(run_id).strip(),
+                    fingerprint=fp_emit,
+                    left_role="run_contract",
+                    left_minutes=c_tf,
+                    right_role="replay_worker_row",
+                    right_minutes=w_tf,
+                    scenario_id=str(row.get("scenario_id") or ""),
+                )
+            _replay_timeframe_traced = True
         sid = str(row.get("scenario_id") or "unknown")
         raw_list = row.get("replay_outcomes_json")
         if not isinstance(raw_list, list) or not raw_list:
@@ -342,19 +402,38 @@ def student_loop_seam_after_parallel_batch_v1(
                 errors.append(f"{sid}: outcome_from_json {e!r}")
                 continue
             trades_seen += 1
-            sk = _signature_key_for_trade(o)
+            sk = _signature_key_for_trade_v1(o, candle_timeframe_minutes=c_tf)
             ctx_sig = {"schema": "context_signature_v1", "signature_key": sk}
             try:
                 pkt, perr = build_student_decision_packet_v1_with_cross_run_retrieval(
                     db_path=db,
                     symbol=o.symbol,
                     decision_open_time_ms=int(o.entry_time),
+                    candle_timeframe_minutes=c_tf,
                     store_path=store,
                     retrieval_signature_key=sk,
                 )
                 if perr or pkt is None:
                     errors.append(f"{sid} trade={o.trade_id}: packet {perr!r}")
                     continue
+                emit_candle_timeframe_nexus_v1(
+                    job_id=str(run_id).strip(),
+                    fingerprint=fp_emit,
+                    nexus="student_packet",
+                    candle_timeframe_minutes=c_tf,
+                    scenario_id=sid,
+                    trade_id=str(o.trade_id),
+                )
+                if int(pkt.get("candle_timeframe_minutes") or 0) != int(c_tf):
+                    emit_timeframe_mismatch_detected_v1(
+                        job_id=str(run_id).strip(),
+                        fingerprint=fp_emit,
+                        left_role="run_contract",
+                        left_minutes=c_tf,
+                        right_role="student_packet",
+                        right_minutes=int(pkt.get("candle_timeframe_minutes") or 0),
+                        scenario_id=sid,
+                    )
                 if first_packet_annex_present is None:
                     first_packet_annex_present = isinstance(
                         pkt.get(FIELD_STUDENT_CONTEXT_ANNEX_V1), dict
@@ -368,6 +447,8 @@ def student_loop_seam_after_parallel_batch_v1(
                     scenario_id=sid,
                     trade_id=str(o.trade_id),
                     retrieval_matches=n_rx,
+                    candle_timeframe_minutes=c_tf,
+                    retrieval_signature_key=sk,
                 )
                 so: dict[str, Any] | None = None
                 soe: list[str] = []
@@ -478,6 +559,7 @@ def student_loop_seam_after_parallel_batch_v1(
                     run_id=run_id,
                     record_id=rid,
                     context_signature_v1=ctx_sig,
+                    candle_timeframe_minutes=c_tf,
                     strategy_id=strategy_id,
                 )
                 if lre or lr is None:
@@ -517,6 +599,14 @@ def student_loop_seam_after_parallel_batch_v1(
                     )
                     continue
                 try:
+                    emit_candle_timeframe_nexus_v1(
+                        job_id=str(run_id).strip(),
+                        fingerprint=fp_emit,
+                        nexus="memory_record",
+                        candle_timeframe_minutes=c_tf,
+                        scenario_id=sid,
+                        trade_id=str(o.trade_id),
+                    )
                     append_student_learning_record_v1(store, lr)
                     appended += 1
                     emit_learning_record_appended_v1(
@@ -525,6 +615,7 @@ def student_loop_seam_after_parallel_batch_v1(
                         scenario_id=sid,
                         trade_id=str(o.trade_id),
                         record_id=rid,
+                        candle_timeframe_minutes=c_tf,
                     )
                     memory_promotion_batch_trades_v1.append(
                         {"trade_id": str(o.trade_id), "learning_governance_v1": gov, "stored": True}
@@ -568,6 +659,7 @@ def student_loop_seam_after_parallel_batch_v1(
     out_audit: dict[str, Any] = {
         "schema": "student_loop_seam_audit_v1",
         "run_id": run_id,
+        "candle_timeframe_minutes_effective_v1": int(c_tf),
         "student_learning_store_path": str(store.resolve()),
         "database_path_used": str(db.resolve()),
         "trades_considered": trades_seen,

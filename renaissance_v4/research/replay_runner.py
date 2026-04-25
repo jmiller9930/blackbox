@@ -1079,10 +1079,16 @@ def run_manifest_replay(
     recall_rate = (
         (recall_attempts / float(processed)) if processed and decision_context_recall_enabled else 0.0
     )
+    # GT_DIRECTIVE_026TF — explicit replay bar width + post-rollup size for trace alignment.
+    _ctf_eff: int = 5
+    if ctf is not None and ctf > 5 and ctf % 5 == 0:
+        _ctf_eff = int(ctf)
     out: dict[str, Any] = {
         "manifest": manifest,
         "manifest_path": str(resolved_manifest_path),
         "dataset_bars": dataset_bars,
+        "replay_timeframe_minutes": int(_ctf_eff),
+        "dataset_bars_after_rollup": int(dataset_bars),
         "outcomes": outcomes,
         "validation_checksum": vchk,
         "summary": summary,

@@ -29,7 +29,7 @@ from renaissance_v4.game_theory.student_proctor.student_context_builder_v1 impor
     validate_student_decision_packet_v1,
 )
 from renaissance_v4.game_theory.student_proctor.student_learning_store_v1 import (
-    list_student_learning_records_by_signature_key,
+    list_student_learning_records_by_signature_key_v1,
 )
 from renaissance_v4.game_theory.student_proctor.student_learning_loop_governance_v1 import (
     resolved_max_retrieval_slices_v1,
@@ -76,6 +76,9 @@ def project_student_learning_record_to_retrieval_slice_v1(
     }
     if sym_hint:
         sl["prior_symbol_hint"] = sym_hint
+    ctf = record.get("candle_timeframe_minutes")
+    if isinstance(ctf, int):
+        sl["candle_timeframe_minutes"] = int(ctf)
 
     pre = validate_pre_reveal_bundle_v1(sl)
     if pre:
@@ -88,6 +91,7 @@ def build_student_decision_packet_v1_with_cross_run_retrieval(
     db_path: Path | str,
     symbol: str,
     decision_open_time_ms: int,
+    candle_timeframe_minutes: int,
     store_path: Path | str,
     retrieval_signature_key: str,
     max_retrieval_slices: int | None = None,
@@ -108,6 +112,7 @@ def build_student_decision_packet_v1_with_cross_run_retrieval(
         "db_path": db_path,
         "symbol": symbol,
         "decision_open_time_ms": decision_open_time_ms,
+        "candle_timeframe_minutes": int(candle_timeframe_minutes),
         "max_bars_in_packet": max_bars_in_packet,
     }
     if table is not None:
@@ -119,8 +124,10 @@ def build_student_decision_packet_v1_with_cross_run_retrieval(
     if err:
         return None, err
 
-    matches = list_student_learning_records_by_signature_key(
-        store_path, retrieval_signature_key
+    matches = list_student_learning_records_by_signature_key_v1(
+        store_path,
+        retrieval_signature_key,
+        run_candle_timeframe_minutes=int(candle_timeframe_minutes),
     )
     # Newest-first: JSONL append order means later lines are more recent.
     matches = list(reversed(matches))

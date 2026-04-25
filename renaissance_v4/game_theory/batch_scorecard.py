@@ -34,6 +34,22 @@ _APPEND_LOCK = threading.Lock()
 SCHEMA_V1 = "pattern_game_batch_scorecard_v1"
 
 
+def _attach_candle_timeframe_to_scorecard_line_v1(
+    record: dict[str, Any],
+    operator_batch_audit: dict[str, Any] | None,
+) -> None:
+    """GT_DIRECTIVE_026TF — top-level scorecard line mirrors operator trade window minutes."""
+    if not isinstance(operator_batch_audit, dict):
+        return
+    raw = operator_batch_audit.get("candle_timeframe_minutes")
+    if raw is None:
+        return
+    try:
+        record["candle_timeframe_minutes"] = int(raw)
+    except (TypeError, ValueError):
+        pass
+
+
 def compute_batch_score_percentages(results: list[dict[str, Any]] | None) -> dict[str, Any]:
     """
     Aggregates for one parallel batch.
@@ -384,6 +400,7 @@ def record_parallel_batch_finished(
             )
         if operator_batch_audit:
             record["operator_batch_audit"] = operator_batch_audit
+            _attach_candle_timeframe_to_scorecard_line_v1(record, operator_batch_audit)
         record["memory_context_impact_audit_v1"] = mem_impact
         if exam_run_line_meta_v1:
             for k, v in exam_run_line_meta_v1.items():
@@ -442,6 +459,7 @@ def record_parallel_batch_finished(
         }
         if operator_batch_audit:
             record["operator_batch_audit"] = operator_batch_audit
+            _attach_candle_timeframe_to_scorecard_line_v1(record, operator_batch_audit)
         if exam_run_line_meta_v1:
             for k, v in exam_run_line_meta_v1.items():
                 if v is not None:
@@ -513,6 +531,7 @@ def record_parallel_batch_finished(
             )
         if operator_batch_audit:
             record["operator_batch_audit"] = operator_batch_audit
+            _attach_candle_timeframe_to_scorecard_line_v1(record, operator_batch_audit)
         record["memory_context_impact_audit_v1"] = mem_impact
         if exam_run_line_meta_v1:
             for k, v in exam_run_line_meta_v1.items():

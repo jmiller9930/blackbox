@@ -34,7 +34,11 @@ def test_d7_default_builder_packet_has_no_context_annex(tmp_path: Path) -> None:
     db = tmp_path / "w.sqlite3"
     _mk_synthetic_db(db)
     pkt, err = build_student_decision_packet_v1(
-        db_path=db, symbol="TESTUSDT", decision_open_time_ms=5_000_000, max_bars_in_packet=500
+        db_path=db,
+        symbol="TESTUSDT",
+        decision_open_time_ms=5_000_000,
+        candle_timeframe_minutes=5,
+        max_bars_in_packet=500,
     )
     assert err is None and pkt
     assert FIELD_STUDENT_CONTEXT_ANNEX_V1 not in pkt

@@ -49,10 +49,27 @@ def test_seam_skipped_when_env_disabled(monkeypatch: pytest.MonkeyPatch) -> None
     assert audit.get("shadow_student_enabled") is False
 
 
-def test_seam_processes_trade_with_synthetic_db(tmp_path: Path) -> None:
+def test_seam_processes_trade_with_synthetic_db(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     db = tmp_path / "bars.sqlite3"
     _mk_synthetic_db(db)
     store = tmp_path / "learn.jsonl"
+
+    def _l3_ok(jid: str, tid: str) -> dict:
+        return {
+            "ok": True,
+            "data_gaps": [],
+            "decision_record_v1": {"ok": True},
+            "job_id": jid,
+            "trade_id": tid,
+        }
+
+    monkeypatch.setattr(
+        "renaissance_v4.game_theory.student_proctor.student_proctor_operator_runtime_v1"
+        ".build_student_panel_l3_payload_v1",
+        _l3_ok,
+    )
 
     o = OutcomeRecord(
         trade_id="sto_trade",

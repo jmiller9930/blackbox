@@ -34,7 +34,7 @@ def test_level1_render_fn_contains_run_table_only_no_handoff_dom() -> None:
     """GC.7 — Level-1 refresh must not inject seam / handoff HTML (developer surface is separate)."""
     text = _WEB_APP.read_text(encoding="utf-8")
     m = re.search(
-        r"async function refreshStudentPanelD11\(\) \{[\s\S]*?^    \}",
+        r"async function refreshStudentPanelD11\([^)]*\) \{[\s\S]*?^    \}",
         text,
         re.MULTILINE,
     )

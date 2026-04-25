@@ -44,7 +44,7 @@ def test_e2e_legal_decision_packet_to_valid_student_output(
     pkt, err = build_student_decision_packet_v1(
         db_path=synthetic_db,
         symbol="TESTUSDT",
-        decision_open_time_ms=8_000_000,
+        decision_open_time_ms=8_000_000, candle_timeframe_minutes=5
     )
     assert err is None and pkt is not None
     assert validate_student_decision_packet_v1(pkt) == []
@@ -60,7 +60,7 @@ def test_emit_shadow_stub_validates(synthetic_db: Path) -> None:
     pkt, err = build_student_decision_packet_v1(
         db_path=synthetic_db,
         symbol="TESTUSDT",
-        decision_open_time_ms=8_000_000,
+        decision_open_time_ms=8_000_000, candle_timeframe_minutes=5
     )
     assert err is None and pkt is not None
     out, errs = emit_shadow_stub_student_output_v1(pkt, graded_unit_id="graded_demo_001")
@@ -78,7 +78,7 @@ def test_multiple_graded_units_distinct_outputs(synthetic_db: Path) -> None:
         pkt, err = build_student_decision_packet_v1(
             db_path=synthetic_db,
             symbol="TESTUSDT",
-            decision_open_time_ms=tms,
+            decision_open_time_ms=tms, candle_timeframe_minutes=5
         )
         assert err is None and pkt is not None
         out, errs = emit_shadow_stub_student_output_v1(pkt, graded_unit_id=gid, decision_at_ms=tms)
@@ -173,7 +173,7 @@ def test_emit_is_deterministic_for_same_inputs(synthetic_db: Path) -> None:
     pkt, err = build_student_decision_packet_v1(
         db_path=synthetic_db,
         symbol="TESTUSDT",
-        decision_open_time_ms=5_000_000,
+        decision_open_time_ms=5_000_000, candle_timeframe_minutes=5
     )
     assert err is None and pkt is not None
     a, _ = emit_shadow_stub_student_output_v1(
@@ -203,7 +203,9 @@ def test_referee_codepath_does_not_depend_on_shadow_student() -> None:
     wa = (root / "game_theory" / "web_app.py").read_text(encoding="utf-8")
     assert "shadow_student" not in rr
     assert "shadow_student" not in pg
-    assert "student_output_v1" not in wa
+    # ``single_shot_student_output_v1`` contains the substring student_output_v1 — strip that id first.
+    wa_check = str(wa).replace("single_shot_student_output_v1", "")
+    assert "student_output_v1" not in wa_check
     assert "emit_shadow_stub" not in wa
 
 

@@ -21,6 +21,7 @@ from pathlib import Path
 from typing import Any
 
 from renaissance_v4.game_theory.batch_scorecard import read_batch_scorecard_recent
+from renaissance_v4.game_theory.candle_timeframe_runtime import is_allowed_candle_timeframe_minutes_v1
 
 # --- Canonical Student brain profiles (GT_DIRECTIVE_015 v2) ---
 
@@ -313,6 +314,8 @@ def parse_exam_run_contract_request_v1(data: dict[str, Any]) -> tuple[dict[str, 
         block["prompt_version"] = data.get("prompt_version")
     if data.get("retrieved_context_ids") is not None:
         block["retrieved_context_ids"] = data.get("retrieved_context_ids")
+    if data.get("candle_timeframe_minutes") is not None:
+        block["candle_timeframe_minutes"] = data.get("candle_timeframe_minutes")
 
     raw_profile = block.get("student_brain_profile_v1")
     raw_mode = block.get("student_reasoning_mode")
@@ -403,6 +406,17 @@ def parse_exam_run_contract_request_v1(data: dict[str, Any]) -> tuple[dict[str, 
     if student_execution_mode == STUDENT_EXECUTION_MODE_STUDENT_FULL_CONTROL_V1:
         sfc_out = STUDENT_FULL_CONTROL_STATUS_ENABLED_V1
 
+    raw_ctf = block.get("candle_timeframe_minutes")
+    ctf_out: int | None = None
+    if raw_ctf is not None:
+        try:
+            ctf_i = int(raw_ctf)
+        except (TypeError, ValueError):
+            return None, f"invalid candle_timeframe_minutes: {raw_ctf!r}"
+        if not is_allowed_candle_timeframe_minutes_v1(ctf_i):
+            return None, f"candle_timeframe_minutes not in supported set {{5,15,60,240}}: {raw_ctf!r}"
+        ctf_out = ctf_i
+
     out: dict[str, Any] = {
         "schema": "exam_run_contract_request_v1",
         "contract_version": 1,
@@ -421,6 +435,8 @@ def parse_exam_run_contract_request_v1(data: dict[str, Any]) -> tuple[dict[str, 
         euid = data.get("exam_unit_id")
     if isinstance(euid, str) and euid.strip():
         out["exam_unit_id"] = euid.strip()[:256]
+    if ctf_out is not None:
+        out["candle_timeframe_minutes"] = int(ctf_out)
     return out, None
 
 
@@ -521,6 +537,17 @@ def build_exam_run_line_meta_v1(
     eid = req.get("exam_unit_id")
     if isinstance(eid, str) and eid.strip():
         line["exam_unit_id"] = eid.strip()[:256]
+    ctf_req = req.get("candle_timeframe_minutes")
+    if ctf_req is not None:
+        try:
+            line["candle_timeframe_minutes"] = int(ctf_req)
+        except (TypeError, ValueError):
+            pass
+    elif oba.get("candle_timeframe_minutes") is not None:
+        try:
+            line["candle_timeframe_minutes"] = int(oba["candle_timeframe_minutes"])
+        except (TypeError, ValueError):
+            pass
     line["student_controlled_execution_v1"] = bool(req.get("student_controlled_execution_v1"))
     line["student_execution_mode_v1"] = str(
         req.get("student_execution_mode_v1") or STUDENT_EXECUTION_MODE_OFF_V1

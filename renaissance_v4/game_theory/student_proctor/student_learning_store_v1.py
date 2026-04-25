@@ -14,6 +14,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Iterator
 
+from renaissance_v4.game_theory.candle_timeframe_runtime import is_allowed_candle_timeframe_minutes_v1
 from renaissance_v4.game_theory.pml_runtime_layout import pml_runtime_root
 from renaissance_v4.game_theory.student_proctor.contracts_v1 import (
     CONTRACT_VERSION_STUDENT_PROCTOR_V1,
@@ -142,6 +143,80 @@ def list_student_learning_records_by_run_id(
     return [d for d in load_student_learning_records_v1(store_path) if str(d.get("run_id", "")).strip() == r]
 
 
+def _retrieval_timeframe_match_v1(
+    record: dict[str, Any],
+    *,
+    run_candle_timeframe_minutes: int,
+) -> bool:
+    want = int(run_candle_timeframe_minutes)
+    raw = record.get("candle_timeframe_minutes")
+    if raw is None:
+        return want == 5
+    try:
+        return int(raw) == want
+    except (TypeError, ValueError):
+        return False
+
+
+def _signature_key_retrieval_match_v1(
+    doc_sig: str,
+    requested_key: str,
+    *,
+    run_candle_timeframe_minutes: int,
+) -> bool:
+    """
+    Exact string match, or (GT-026TF) **legacy** 3-part key when run is 5m and the requested
+    key is ``student_entry_v1:{sym}:{t}:5``.
+    """
+    req = str(requested_key or "").strip()
+    got = str(doc_sig or "").strip()
+    if got == req:
+        return True
+    if run_candle_timeframe_minutes != 5:
+        return False
+    parts = req.split(":")
+    if len(parts) != 4 or parts[0] != "student_entry_v1" or parts[3] != "5":
+        return False
+    legacy = ":".join(parts[:3])
+    return got == legacy
+
+
+def list_student_learning_records_by_signature_key_v1(
+    store_path: Path | str,
+    signature_key: str,
+    *,
+    run_candle_timeframe_minutes: int,
+    retrieval_eligible_only: bool = True,
+) -> list[dict[str, Any]]:
+    """
+    Match ``context_signature_v1.signature_key`` and **candle_timeframe_minutes** on the record
+    (GT_DIRECTIVE_026TF — no cross-timeframe mixing). Legacy 3-part keys on store rows match only
+    5m runs (see :func:`_signature_key_retrieval_match_v1`).
+    """
+    from renaissance_v4.game_theory.student_proctor.learning_memory_promotion_v1 import (
+        memory_retrieval_eligible_v1,
+    )
+
+    want_tf = int(run_candle_timeframe_minutes)
+    sk = signature_key.strip()
+    out: list[dict[str, Any]] = []
+    for d in load_student_learning_records_v1(store_path):
+        ctx = d.get("context_signature_v1")
+        if not isinstance(ctx, dict):
+            continue
+        doc_sig = str(ctx.get("signature_key", "")).strip()
+        if not _signature_key_retrieval_match_v1(
+            doc_sig, sk, run_candle_timeframe_minutes=want_tf
+        ):
+            continue
+        if not _retrieval_timeframe_match_v1(d, run_candle_timeframe_minutes=want_tf):
+            continue
+        if retrieval_eligible_only and not memory_retrieval_eligible_v1(d):
+            continue
+        out.append(d)
+    return out
+
+
 def list_student_learning_records_by_signature_key(
     store_path: Path | str,
     signature_key: str,
@@ -151,26 +226,25 @@ def list_student_learning_records_by_signature_key(
     """
     Match ``context_signature_v1["signature_key"]`` when present.
 
+    When the key has a ``:minutes`` tail (``student_entry_v1:..:..:5``), timeframe is taken from
+    it; otherwise 5m is assumed. Prefer :func:`list_student_learning_records_by_signature_key_v1`
+    when the run's timeframe is known explicitly.
+
     When ``retrieval_eligible_only`` is True (default, **GT_DIRECTIVE_018**), rows with
     ``learning_governance_v1.decision`` in ``hold`` / ``reject`` are excluded from retrieval
     (legacy rows without governance remain eligible).
     """
-    from renaissance_v4.game_theory.student_proctor.learning_memory_promotion_v1 import (
-        memory_retrieval_eligible_v1,
+    sk = str(signature_key or "").strip()
+    parts = sk.split(":")
+    tf = 5
+    if len(parts) == 4 and parts[0] == "student_entry_v1":
+        try:
+            tf = int(parts[3])
+        except (TypeError, ValueError):
+            tf = 5
+    return list_student_learning_records_by_signature_key_v1(
+        store_path, sk, run_candle_timeframe_minutes=tf, retrieval_eligible_only=retrieval_eligible_only
     )
-
-    sk = signature_key.strip()
-    out: list[dict[str, Any]] = []
-    for d in load_student_learning_records_v1(store_path):
-        ctx = d.get("context_signature_v1")
-        if not isinstance(ctx, dict):
-            continue
-        if str(ctx.get("signature_key", "")).strip() != sk:
-            continue
-        if retrieval_eligible_only and not memory_retrieval_eligible_v1(d):
-            continue
-        out.append(d)
-    return out
 
 
 def build_student_learning_record_v1_from_reveal(
@@ -178,6 +252,7 @@ def build_student_learning_record_v1_from_reveal(
     *,
     run_id: str,
     context_signature_v1: dict[str, Any],
+    candle_timeframe_minutes: int,
     record_id: str | None = None,
     created_utc: str | None = None,
     manifest_sha256: str | None = None,
@@ -191,6 +266,9 @@ def build_student_learning_record_v1_from_reveal(
     errs_rv = validate_reveal_v1(reveal)
     if errs_rv:
         return None, ["reveal invalid: " + "; ".join(errs_rv)]
+
+    if not is_allowed_candle_timeframe_minutes_v1(candle_timeframe_minutes):
+        return None, [f"invalid candle_timeframe_minutes: {candle_timeframe_minutes!r}"]
 
     so = reveal.get("student_output")
     rt = reveal.get("referee_truth_v1")
@@ -232,6 +310,7 @@ def build_student_learning_record_v1_from_reveal(
         "created_utc": created_utc,
         "run_id": run_id.strip(),
         "graded_unit_id": gid,
+        "candle_timeframe_minutes": int(candle_timeframe_minutes),
         "context_signature_v1": dict(context_signature_v1),
         "student_output": so,
         "referee_outcome_subset": referee_subset,
@@ -256,5 +335,6 @@ __all__ = [
     "list_student_learning_records_by_graded_unit_id",
     "list_student_learning_records_by_run_id",
     "list_student_learning_records_by_signature_key",
+    "list_student_learning_records_by_signature_key_v1",
     "load_student_learning_records_v1",
 ]

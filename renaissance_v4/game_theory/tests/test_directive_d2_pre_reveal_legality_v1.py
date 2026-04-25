@@ -32,7 +32,7 @@ from renaissance_v4.game_theory.tests.test_student_context_builder_v1 import _mk
 
 def _valid_packet(synthetic_db: Path) -> dict:
     pkt, err = build_student_decision_packet_v1(
-        db_path=synthetic_db, symbol="TESTUSDT", decision_open_time_ms=5_000_000
+        db_path=synthetic_db, symbol="TESTUSDT", decision_open_time_ms=5_000_000, candle_timeframe_minutes=5
     )
     assert err is None and pkt is not None
     return pkt

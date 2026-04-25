@@ -130,6 +130,7 @@ def test_build_from_reveal_and_store(tmp_path: Path) -> None:
         run_id="run_d05",
         record_id="learn-row-99",
         context_signature_v1={"schema": "context_signature_v1", "signature_key": "k9"},
+        candle_timeframe_minutes=5,
         strategy_id="test_strategy",
     )
     assert not br and row

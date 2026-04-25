@@ -68,6 +68,22 @@ def downloadable_operator_artifacts_v1() -> list[dict[str, Any]]:
             "directive": "GT_DIRECTIVE_023",
         },
         {
+            "id": "learning_flow_validate",
+            "method": "GET",
+            "path": "/api/training/learning-flow-validate",
+            "query_params": "run_a, run_b = job_id",
+            "attachment": False,
+            "directive": "GT_DIRECTIVE_025",
+        },
+        {
+            "id": "learning_flow_validate_materialize",
+            "method": "POST",
+            "path": "/api/training/learning-flow-validate/materialize",
+            "body": "JSON: run_a, run_b, confirm=MATERIALIZE_LEARNING_FLOW_VALIDATION_V1",
+            "attachment": False,
+            "directive": "GT_DIRECTIVE_025",
+        },
+        {
             "id": "trade_strategy_json_export",
             "method": "GET",
             "path": "/api/v1/trade-strategy/<strategy_id>/export",

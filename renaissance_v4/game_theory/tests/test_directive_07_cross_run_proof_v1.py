@@ -58,6 +58,7 @@ def _make_and_store_prior_run(store: Path) -> None:
         run_id="run_1_d07",
         record_id="learning_row_d07_prior",
         context_signature_v1={"schema": "context_signature_v1", "signature_key": SIG},
+        candle_timeframe_minutes=5,
     )
     assert not br and row
     append_student_learning_record_v1(store, row)
@@ -84,7 +85,7 @@ def test_run2_student_output_differs_when_learning_loaded_vs_baseline(tmp_path: 
     gid = "later_trade_d07"
 
     pkt0, e0 = build_student_decision_packet_v1(
-        db_path=db, symbol="TESTUSDT", decision_open_time_ms=t_ms
+        db_path=db, symbol="TESTUSDT", decision_open_time_ms=t_ms, candle_timeframe_minutes=5
     )
     assert not e0 and pkt0
     o0, _ = emit_shadow_stub_student_output_v1(pkt0, graded_unit_id=gid, decision_at_ms=t_ms)
@@ -93,7 +94,8 @@ def test_run2_student_output_differs_when_learning_loaded_vs_baseline(tmp_path: 
     pkt1, e1 = build_student_decision_packet_v1_with_cross_run_retrieval(
         db_path=db,
         symbol="TESTUSDT",
-        decision_open_time_ms=t_ms,
+        decision_open_time_ms=t_ms, 
+        candle_timeframe_minutes=5,
         store_path=store,
         retrieval_signature_key=SIG,
     )
@@ -110,7 +112,8 @@ def test_run2_student_output_differs_when_learning_loaded_vs_baseline(tmp_path: 
     pkt_reset, er = build_student_decision_packet_v1_with_cross_run_retrieval(
         db_path=db,
         symbol="TESTUSDT",
-        decision_open_time_ms=t_ms,
+        decision_open_time_ms=t_ms, 
+        candle_timeframe_minutes=5,
         store_path=store,
         retrieval_signature_key="no_such_records",
     )

@@ -62,6 +62,7 @@ def _learning_row(*, rid: str, run_id: str, sig: str, trade: str) -> dict:
         run_id=run_id,
         record_id=rid,
         context_signature_v1={"schema": "context_signature_v1", "signature_key": sig},
+        candle_timeframe_minutes=5,
     )
     assert not br and row
     return row
@@ -82,7 +83,8 @@ def test_retrieval_slices_injected_into_legal_packet(tmp_path: Path) -> None:
     pkt, err = build_student_decision_packet_v1_with_cross_run_retrieval(
         db_path=db,
         symbol="TESTUSDT",
-        decision_open_time_ms=5_000_000,
+        decision_open_time_ms=5_000_000, 
+        candle_timeframe_minutes=5,
         store_path=store,
         retrieval_signature_key="key_alpha",
         max_retrieval_slices=8,
@@ -108,7 +110,8 @@ def test_wrong_signature_yields_empty_retrieval(tmp_path: Path) -> None:
     pkt, err = build_student_decision_packet_v1_with_cross_run_retrieval(
         db_path=db,
         symbol="TESTUSDT",
-        decision_open_time_ms=6_000_000,
+        decision_open_time_ms=6_000_000, 
+        candle_timeframe_minutes=5,
         store_path=store,
         retrieval_signature_key="other",
     )

@@ -62,7 +62,7 @@ def test_d3_must_have_causal_bars(tmp_path: Path) -> None:
     db = tmp_path / "d3.sqlite3"
     _mk_synthetic_db(db)
     pkt, err = build_student_decision_packet_v1(
-        db_path=db, symbol="TESTUSDT", decision_open_time_ms=5_000_000
+        db_path=db, symbol="TESTUSDT", decision_open_time_ms=5_000_000, candle_timeframe_minutes=5
     )
     assert err is None and pkt is not None
     bars = pkt["bars_inclusive_up_to_t"]
@@ -80,7 +80,8 @@ def test_d3_retrieval_nonempty_when_store_matches(tmp_path: Path) -> None:
     pkt, err = build_student_decision_packet_v1_with_cross_run_retrieval(
         db_path=db,
         symbol="TESTUSDT",
-        decision_open_time_ms=5_000_000,
+        decision_open_time_ms=5_000_000, 
+        candle_timeframe_minutes=5,
         store_path=store,
         retrieval_signature_key="sig_d3",
         max_retrieval_slices=8,
@@ -95,7 +96,7 @@ def test_d3_versioned_annex_passes_and_merge(tmp_path: Path) -> None:
     db = tmp_path / "annex.sqlite3"
     _mk_synthetic_db(db)
     base, err = build_student_decision_packet_v1(
-        db_path=db, symbol="TESTUSDT", decision_open_time_ms=5_000_000
+        db_path=db, symbol="TESTUSDT", decision_open_time_ms=5_000_000, candle_timeframe_minutes=5
     )
     assert err is None and base is not None
     annex = legal_example_student_context_annex_v1()
@@ -132,7 +133,7 @@ def test_d3_pattern_recipe_ids_on_shadow_output_strings(tmp_path: Path) -> None:
     db = tmp_path / "shadow.sqlite3"
     _mk_synthetic_db(db)
     pkt, err = build_student_decision_packet_v1(
-        db_path=db, symbol="TESTUSDT", decision_open_time_ms=5_000_000
+        db_path=db, symbol="TESTUSDT", decision_open_time_ms=5_000_000, candle_timeframe_minutes=5
     )
     assert err is None and pkt
     out, e2 = emit_shadow_stub_student_output_v1(pkt, graded_unit_id="gx")
@@ -148,7 +149,7 @@ def test_d3_shadow_stub_accepts_packet_with_context_annex(tmp_path: Path) -> Non
     db = tmp_path / "shadow2.sqlite3"
     _mk_synthetic_db(db)
     base, err = build_student_decision_packet_v1(
-        db_path=db, symbol="TESTUSDT", decision_open_time_ms=5_000_000
+        db_path=db, symbol="TESTUSDT", decision_open_time_ms=5_000_000, candle_timeframe_minutes=5
     )
     assert err is None and base
     merged, merr = attach_student_context_annex_v1(base, legal_example_student_context_annex_v1())

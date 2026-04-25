@@ -101,6 +101,7 @@ def test_d5_learning_row_referee_subset_matches_referee_truth_from_reveal() -> N
         run_id="run_d5",
         record_id="660e8400-e29b-41d4-a716-446655440099",
         context_signature_v1={"schema": "context_signature_v1", "signature_key": "k"},
+        candle_timeframe_minutes=5,
     )
     assert not lre and lr
     subset = lr["referee_outcome_subset"]

@@ -148,6 +148,7 @@ def shadow_stub_student_outputs_for_outcomes(
             db_path=db_path,
             symbol=o.symbol,
             decision_open_time_ms=_time(o),
+            candle_timeframe_minutes=5,
         )
         if err or pkt is None:
             errs_out.append(f"{o.trade_id}: packet {err!r}")

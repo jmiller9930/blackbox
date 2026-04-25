@@ -18,7 +18,7 @@ from renaissance_v4.game_theory.student_proctor.student_learning_store_v1 import
 )
 from renaissance_v4.game_theory.student_proctor.student_proctor_operator_runtime_v1 import (
     SCHEMA_MEMORY_SEMANTICS_ANNOTATION_V1,
-    _signature_key_for_trade,
+    _signature_key_for_trade_v1,
     student_loop_seam_after_parallel_batch_v1,
 )
 from renaissance_v4.game_theory.tests.test_cross_run_retrieval_v1 import _learning_row
@@ -102,4 +102,4 @@ def test_d8_signature_key_matches_trade_tuple() -> None:
         mfe=0.2,
         exit_reason="x",
     )
-    assert _signature_key_for_trade(o) == "student_entry_v1:SOLUSDT:1234000"
+    assert _signature_key_for_trade_v1(o, candle_timeframe_minutes=5) == "student_entry_v1:SOLUSDT:1234000:5"

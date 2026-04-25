@@ -51,7 +51,11 @@ def test_d4_shadow_confidence_and_tags_delta_vs_bars_only(tmp_path: Path) -> Non
     )
 
     base, err = build_student_decision_packet_v1(
-        db_path=db, symbol="TESTUSDT", decision_open_time_ms=_T_OPEN, max_bars_in_packet=500
+        db_path=db,
+        symbol="TESTUSDT",
+        decision_open_time_ms=_T_OPEN,
+        candle_timeframe_minutes=5,
+        max_bars_in_packet=500,
     )
     assert err is None and base is not None
     assert FIELD_RETRIEVED_STUDENT_EXPERIENCE_V1 not in base
@@ -59,7 +63,8 @@ def test_d4_shadow_confidence_and_tags_delta_vs_bars_only(tmp_path: Path) -> Non
     rx_pkt, rerr = build_student_decision_packet_v1_with_cross_run_retrieval(
         db_path=db,
         symbol="TESTUSDT",
-        decision_open_time_ms=_T_OPEN,
+        decision_open_time_ms=_T_OPEN, 
+        candle_timeframe_minutes=5,
         store_path=store,
         retrieval_signature_key=_SIG,
         max_bars_in_packet=500,
@@ -95,12 +100,17 @@ def test_d4_zero_matches_matches_bars_only_shadow_output(tmp_path: Path) -> None
     )
 
     base, err = build_student_decision_packet_v1(
-        db_path=db, symbol="TESTUSDT", decision_open_time_ms=_T_OPEN, max_bars_in_packet=500
+        db_path=db,
+        symbol="TESTUSDT",
+        decision_open_time_ms=_T_OPEN,
+        candle_timeframe_minutes=5,
+        max_bars_in_packet=500,
     )
     miss, rerr = build_student_decision_packet_v1_with_cross_run_retrieval(
         db_path=db,
         symbol="TESTUSDT",
-        decision_open_time_ms=_T_OPEN,
+        decision_open_time_ms=_T_OPEN, 
+        candle_timeframe_minutes=5,
         store_path=store,
         retrieval_signature_key=_SIG,
         max_bars_in_packet=500,
@@ -130,7 +140,8 @@ def test_d4_confidence_monotone_in_retrieval_count(tmp_path: Path) -> None:
     pkt, err = build_student_decision_packet_v1_with_cross_run_retrieval(
         db_path=db,
         symbol="TESTUSDT",
-        decision_open_time_ms=_T_OPEN,
+        decision_open_time_ms=_T_OPEN, 
+        candle_timeframe_minutes=5,
         store_path=store,
         retrieval_signature_key=_SIG,
         max_retrieval_slices=8,
@@ -144,7 +155,8 @@ def test_d4_confidence_monotone_in_retrieval_count(tmp_path: Path) -> None:
     pkt_one, err2 = build_student_decision_packet_v1_with_cross_run_retrieval(
         db_path=db,
         symbol="TESTUSDT",
-        decision_open_time_ms=_T_OPEN,
+        decision_open_time_ms=_T_OPEN, 
+        candle_timeframe_minutes=5,
         store_path=store,
         retrieval_signature_key=_SIG,
         max_retrieval_slices=1,
