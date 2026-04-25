@@ -36,6 +36,8 @@
 
 ## GT_DIRECTIVE_024A — Student execution authority design contract
 
+**Delivered design doc (code citations + A/B/C verdict):** `renaissance_v4/game_theory/directives/GT_DIRECTIVE_024A_student_execution_authority_design_contract_v1.md`
+
 **Objective:** Define the exact architecture for Student-controlled execution **before** touching replay implementation code.
 
 **Required output (design document must prove):**
@@ -64,6 +66,9 @@ Implementation will use one or a combination of:
 ---
 
 ## GT_DIRECTIVE_024B — Student execution intent schema
+
+**Implementation:** `renaissance_v4/game_theory/student_proctor/student_execution_intent_v1.py`  
+**Proof:** `docs/proof/exam_v1/GT_DIRECTIVE_024B_student_execution_intent_schema_v1.md`
 
 **Objective:** Create the **validated** contract that converts `student_output_v1` into something replay can safely consume. **Do not wire replay yet.**
 

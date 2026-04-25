@@ -1,0 +1,24 @@
+{
+  "schema": "student_execution_intent_v1",
+  "schema_version": 1,
+  "job_id": "job_invalid_adr",
+  "fingerprint": "1111111111111111111111111111111111111111",
+  "student_brain_profile_v1": "memory_context_llm_student",
+  "llm_model": null,
+  "source_student_output_digest_v1": "2222222222222222222222222222222222222222222222222222222222222222",
+  "action": "enter_long",
+  "direction": "short",
+  "confidence_01": 0.4,
+  "confidence_band": "low",
+  "supporting_indicators": [
+    "a"
+  ],
+  "conflicting_indicators": [
+    "b"
+  ],
+  "context_fit": "mismatch",
+  "invalidation_text": "x",
+  "created_at_utc": "2026-04-24T00:00:00.000000Z",
+  "scenario_id": "s_inv",
+  "student_execution_intent_digest_v1": "2e81fc9dd4b9aeb9965d436ea9c60a6c4e091872f760a02a6e4adcd5b377e13a"
+}

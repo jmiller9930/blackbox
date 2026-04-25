@@ -36,6 +36,15 @@ from renaissance_v4.game_theory.student_proctor.shadow_student_v1 import (
     emit_shadow_stub_student_output_v1,
     shadow_stub_student_outputs_for_outcomes,
 )
+from renaissance_v4.game_theory.student_proctor.student_execution_intent_v1 import (
+    SCHEMA_STUDENT_EXECUTION_INTENT_V1,
+    STUDENT_EXECUTION_INTENT_SCHEMA_VERSION_V1,
+    build_student_execution_intent_from_sealed_output_v1,
+    compute_student_execution_intent_digest_v1,
+    digest_sealed_student_output_v1,
+    student_execution_intent_trace_created_fields_v1,
+    validate_student_execution_intent_v1,
+)
 from renaissance_v4.game_theory.student_proctor.student_context_builder_v1 import (
     SCHEMA_STUDENT_DECISION_PACKET_V1,
     attach_student_context_annex_v1,
@@ -96,4 +105,11 @@ __all__ = [
     "list_student_learning_records_by_run_id",
     "list_student_learning_records_by_signature_key",
     "load_student_learning_records_v1",
+    "SCHEMA_STUDENT_EXECUTION_INTENT_V1",
+    "STUDENT_EXECUTION_INTENT_SCHEMA_VERSION_V1",
+    "build_student_execution_intent_from_sealed_output_v1",
+    "compute_student_execution_intent_digest_v1",
+    "digest_sealed_student_output_v1",
+    "student_execution_intent_trace_created_fields_v1",
+    "validate_student_execution_intent_v1",
 ]

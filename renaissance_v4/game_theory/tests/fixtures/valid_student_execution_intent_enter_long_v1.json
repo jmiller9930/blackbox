@@ -1,0 +1,26 @@
+{
+  "schema": "student_execution_intent_v1",
+  "schema_version": 1,
+  "job_id": "job_fixture_gt024b_valid",
+  "fingerprint": "0000000000000000000000000000000000000000",
+  "student_brain_profile_v1": "memory_context_llm_student",
+  "llm_model": "qwen2.5:7b",
+  "source_student_output_digest_v1": "76958411af6aa2d67f2a95316aff4025b3aa0bf966d1a1ae2f281bfd8c222b07",
+  "action": "enter_long",
+  "direction": "long",
+  "confidence_01": 0.72,
+  "confidence_band": "high",
+  "supporting_indicators": [
+    "rsi_14",
+    "ema_20"
+  ],
+  "conflicting_indicators": [
+    "atr_14"
+  ],
+  "context_fit": "trend",
+  "invalidation_text": "Close below prior swing low on this timeframe.",
+  "created_at_utc": "2026-04-24T00:00:00.000000Z",
+  "scenario_id": "fixture_scenario_gt024b",
+  "trade_id": "trade_thesis_fixture_valid",
+  "student_execution_intent_digest_v1": "d73579659bc5324d21094f6146e6b71d54d3a0b7a83d7cc71c652e36a455ea49"
+}
