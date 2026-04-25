@@ -179,6 +179,88 @@ def load_replay_manifest(explicit: Path | str | None = None) -> tuple[dict[str, 
     return manifest, path.resolve()
 
 
+def load_replay_pre_loop_bars_v1(
+    connection: Any,
+    *,
+    bar_window_calendar_months: int | None = None,
+    candle_timeframe_minutes: int | None = None,
+    verbose: bool = False,
+) -> tuple[list[dict[str, Any]], dict[str, Any], int | None]:
+    """
+    **Referee executable** pre-loop market tape: same SQL, optional calendar window, and optional
+    OHLCV rollup as :func:`run_manifest_replay` *before* the main decision loop.
+
+    Returns ``(rows, replay_data_audit, parsed_candle_timeframe_param)`` where each element of
+    ``rows`` is a dict with ``symbol``, ``open_time``, ``open``, ``high``, ``low``,
+    ``close``, ``volume`` (suitable for :func:`renaissance_v4.core.market_state_builder.build_market_state`).
+
+    **GT_DIRECTIVE_026TF (parity with Student):** On a **single-symbol** database, this sequence
+    matches ``build_student_decision_packet_v1`` (per-symbol all-5m then rollup) because sort order
+    and chunk boundaries are identical when only one symbol is present. Use this for the in-repo
+    e2e parity test; multi-symbol global ordering still differs from per-symbol Student fetch by design.
+    """
+    from renaissance_v4.game_theory.candle_timeframe_runtime import (
+        _row_dict,
+        rollup_5m_rows_to_candle_timeframe,
+    )
+
+    raw_rows = connection.execute(
+        """
+        SELECT symbol, open_time, open, high, low, close, volume
+        FROM market_bars_5m
+        ORDER BY open_time ASC
+        """
+    ).fetchall()
+    n_full = len(raw_rows)
+    rows: list[Any] = list(raw_rows)
+    replay_data_audit: dict[str, Any]
+    if bar_window_calendar_months is not None and int(bar_window_calendar_months) > 0:
+        rows, replay_data_audit = slice_rows_for_calendar_months(
+            rows,
+            int(bar_window_calendar_months),
+            min_rows_required=MIN_ROWS_REQUIRED,
+        )
+        replay_data_audit["dataset_bars_before_window"] = n_full
+    else:
+        replay_data_audit = {
+            "schema": "pattern_game_bar_window_v1",
+            "dataset_bars_before_window": n_full,
+            "dataset_bars_after_window": n_full,
+            "bar_window_calendar_months_requested": None,
+            "slicing_applied": False,
+            "bar_window_open_time_start": parse_bar_open_time_unix(rows[0]) if rows else None,
+            "bar_window_open_time_end": parse_bar_open_time_unix(rows[-1]) if rows else None,
+            "note": "Full dataset — no calendar-month window slice.",
+        }
+
+    dataset_bars = len(rows)
+    if verbose:
+        print(f"[replay] Loaded {dataset_bars} bars (full DB had {n_full})")
+
+    ctf: int | None = None
+    if candle_timeframe_minutes is not None:
+        try:
+            ctf = int(candle_timeframe_minutes)
+        except (TypeError, ValueError):
+            ctf = None
+    if ctf is not None and ctf > 5 and ctf % 5 == 0:
+        rows, rollup_audit = rollup_5m_rows_to_candle_timeframe(
+            list(rows),
+            target_minutes=ctf,
+        )
+        dataset_bars = len(rows)
+        if isinstance(replay_data_audit, dict) and rollup_audit:
+            replay_data_audit = {**replay_data_audit, "candle_timeframe_rollup_v1": rollup_audit}
+        if verbose:
+            print(
+                f"[replay] Candle rollup {ctf}m → {dataset_bars} bars "
+                f"(after calendar-window slice; rollup_applied={rollup_audit.get('rollup_applied')})"
+            )
+
+    out_rows: list[dict[str, Any]] = [_row_dict(r) for r in rows]
+    return out_rows, replay_data_audit, ctf
+
+
 def run_manifest_replay(
     manifest_path: Path | str | None = None,
     *,
@@ -236,61 +318,14 @@ def run_manifest_replay(
     (matched memory, fusion/signal bias applied, trade opened) for operator harness inspection.
     """
     connection = get_connection()
-    rows = connection.execute(
-        """
-        SELECT symbol, open_time, open, high, low, close, volume
-        FROM market_bars_5m
-        ORDER BY open_time ASC
-        """
-    ).fetchall()
-
-    n_full = len(rows)
-    replay_data_audit: dict[str, Any]
-    if bar_window_calendar_months is not None and int(bar_window_calendar_months) > 0:
-        rows, replay_data_audit = slice_rows_for_calendar_months(
-            list(rows),
-            int(bar_window_calendar_months),
-            min_rows_required=MIN_ROWS_REQUIRED,
-        )
-        replay_data_audit["dataset_bars_before_window"] = n_full
-    else:
-        replay_data_audit = {
-            "schema": "pattern_game_bar_window_v1",
-            "dataset_bars_before_window": n_full,
-            "dataset_bars_after_window": n_full,
-            "bar_window_calendar_months_requested": None,
-            "slicing_applied": False,
-            "bar_window_open_time_start": parse_bar_open_time_unix(rows[0]) if rows else None,
-            "bar_window_open_time_end": parse_bar_open_time_unix(rows[-1]) if rows else None,
-            "note": "Full dataset — no calendar-month window slice.",
-        }
+    rows, replay_data_audit, ctf = load_replay_pre_loop_bars_v1(
+        connection,
+        bar_window_calendar_months=bar_window_calendar_months,
+        candle_timeframe_minutes=candle_timeframe_minutes,
+        verbose=verbose,
+    )
 
     dataset_bars = len(rows)
-    if verbose:
-        print(f"[replay] Loaded {dataset_bars} bars (full DB had {n_full})")
-
-    rollup_audit: dict[str, Any] | None = None
-    ctf: int | None = None
-    if candle_timeframe_minutes is not None:
-        try:
-            ctf = int(candle_timeframe_minutes)
-        except (TypeError, ValueError):
-            ctf = None
-    if ctf is not None and ctf > 5 and ctf % 5 == 0:
-        from renaissance_v4.game_theory.candle_timeframe_runtime import rollup_5m_rows_to_candle_timeframe
-
-        rows, rollup_audit = rollup_5m_rows_to_candle_timeframe(
-            list(rows),
-            target_minutes=ctf,
-        )
-        dataset_bars = len(rows)
-        if isinstance(replay_data_audit, dict) and rollup_audit:
-            replay_data_audit = {**replay_data_audit, "candle_timeframe_rollup_v1": rollup_audit}
-        if verbose:
-            print(
-                f"[replay] Candle rollup {ctf}m → {dataset_bars} bars "
-                f"(after calendar-window slice; rollup_applied={rollup_audit.get('rollup_applied')})"
-            )
 
     if dataset_bars < MIN_ROWS_REQUIRED:
         raise RuntimeError(
