@@ -437,9 +437,14 @@ def get_reasoning_model_operator_snapshot_v1(job_id: str | None = None) -> dict[
         openai_key_situation_v1,
     )
 
+    # Local Ollama probe failure must not read as a total "Fault" when 026AI external is enabled and the
+    # OpenAI key is resolved — operators prove the key with smoke; the tile headline follows external path.
+    _ollama_only_issue_v1 = bool(
+        ollama_err and ext_effective and key_ok and (not operator_blocks)
+    )
     if not router_on:
         headline_badge_v1 = "Router off"
-    elif ollama_err:
+    elif ollama_err and not _ollama_only_issue_v1:
         headline_badge_v1 = "Fault"
     elif ext_effective and not key_ok and openai_key_situation_v1 == "unavailable_to_web_process":
         headline_badge_v1 = "Degraded"
@@ -453,9 +458,9 @@ def get_reasoning_model_operator_snapshot_v1(job_id: str | None = None) -> dict[
         headline_badge_v1 = "Blocked"
     elif not ext_effective:
         headline_badge_v1 = "Local route"
-    elif not jid and ext_effective and key_ok and not ollama_err and last_call != "failed":
-        headline_badge_v1 = "Idle"
-    elif ext_effective and key_ok and not ollama_err:
+    elif not jid and ext_effective and key_ok and last_call != "failed":
+        headline_badge_v1 = "External active" if ollama_err else "Idle"
+    elif ext_effective and key_ok:
         headline_badge_v1 = "External active"
     else:
         headline_badge_v1 = "Degraded"
@@ -465,16 +470,18 @@ def get_reasoning_model_operator_snapshot_v1(job_id: str | None = None) -> dict[
         color = "blue"
     elif ext_effective and not key_ok and openai_key_situation_v1 == "unavailable_to_web_process":
         color = "amber"
-    elif ollama_err or (ext_effective and not key_ok) or (jid and last_call == "failed" and ext_effective and key_ok) or (budget_label == "exhausted" and ext_effective):
+    elif (ollama_err and not _ollama_only_issue_v1) or (ext_effective and not key_ok) or (jid and last_call == "failed" and ext_effective and key_ok) or (budget_label == "exhausted" and ext_effective):
         color = "red"
     elif operator_blocks or not ext_effective:
         color = "amber"
-    elif not jid and ext_effective and key_ok and not ollama_err and last_call != "failed":
-        color = "blue"
-    elif last_call == "success" and ext_effective and key_ok and not ollama_err and budget_label != "exhausted":
-        color = "green"
-    elif ext_effective and key_ok and not ollama_err and last_call != "failed" and budget_label != "exhausted":
-        if external_api_balance_status_v1 == "Available":
+    elif not jid and ext_effective and key_ok and last_call != "failed":
+        color = "amber" if ollama_err else "blue"
+    elif last_call == "success" and ext_effective and key_ok and budget_label != "exhausted":
+        color = "amber" if ollama_err else "green"
+    elif ext_effective and key_ok and last_call != "failed" and budget_label != "exhausted":
+        if ollama_err:
+            color = "amber"
+        elif external_api_balance_status_v1 == "Available":
             color = "green"
         else:
             color = "amber"
