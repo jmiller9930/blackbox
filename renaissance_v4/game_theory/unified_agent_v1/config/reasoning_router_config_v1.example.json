@@ -1,0 +1,31 @@
+{
+  "schema": "reasoning_router_config_v1",
+  "contract_version": 1,
+  "router_enabled": true,
+  "external_api_enabled": false,
+  "external_provider": "openai",
+  "external_model": "gpt-5.5",
+  "api_key_env_var": "OPENAI_API_KEY",
+  "max_external_calls_per_run": 1,
+  "max_external_calls_per_trade": 1,
+  "max_input_tokens_per_call": 8000,
+  "max_output_tokens_per_call": 2000,
+  "max_total_tokens_per_run": 24000,
+  "max_estimated_cost_usd_per_run": 0.5,
+  "low_confidence_threshold": 0.35,
+  "max_memory_records_for_external": 3,
+  "random_audit_sample_rate": 0.0,
+  "enabled_escalation_reasons": [
+    "low_confidence_v1",
+    "indicator_conflict_v1",
+    "memory_conflict_v1",
+    "risk_conflict_v1",
+    "schema_failure_v1",
+    "operator_forced_audit_v1",
+    "high_value_opportunity_v1",
+    "student_vs_baseline_disagreement_v1",
+    "random_audit_sample_v1"
+  ],
+  "local_llm_model": "qwen3-coder:30b",
+  "local_ollama_base_url": "http://172.20.1.66:11434"
+}

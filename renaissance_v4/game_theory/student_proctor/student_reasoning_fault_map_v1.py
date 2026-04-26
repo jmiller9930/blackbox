@@ -11,7 +11,7 @@ from typing import Any
 SCHEMA_STUDENT_REASONING_FAULT_MAP_V1 = "student_reasoning_fault_map_v1"
 CONTRACT_VERSION_FAULT_MAP = 1
 
-# Fixed order (directive).
+# Fixed order (026R + 026AI router visibility).
 NODE_IDS_ORDER: tuple[str, ...] = (
     "market_data_loaded",
     "indicator_context_evaluated",
@@ -23,6 +23,9 @@ NODE_IDS_ORDER: tuple[str, ...] = (
     "llm_output_checked",
     "student_output_sealed",
     "execution_intent_created",
+    "reasoning_router_evaluated",
+    "external_escalation_governed",
+    "external_reasoning_review_recorded",
 )
 
 STATUS_PASS = "PASS"
@@ -100,6 +103,129 @@ def build_fault_map_v1(
                     else "Not reached yet for this run.",
                 )
             )
+    return {
+        "schema": SCHEMA_STUDENT_REASONING_FAULT_MAP_V1,
+        "contract_version": CONTRACT_VERSION_FAULT_MAP,
+        "nodes_v1": ordered,
+    }
+
+
+def merge_unified_agent_router_fault_nodes_v1(
+    base: dict[str, Any],
+    *,
+    decision_node: dict[str, Any] | None,
+    governor_snapshot: dict[str, Any] | None,
+    review_obj: dict[str, Any] | None,
+) -> dict[str, Any]:
+    """
+    GT_DIRECTIVE_026AI — last three nodes: router, budget/key visibility, external review outcome.
+    """
+    import copy
+
+    b = base if isinstance(base, dict) else {"schema": SCHEMA_STUDENT_REASONING_FAULT_MAP_V1, "nodes_v1": []}
+    nodes = [copy.deepcopy(x) for x in (b.get("nodes_v1") or []) if isinstance(x, dict)]
+    by_id: dict[str, dict[str, Any]] = {str(n.get("node_id") or ""): n for n in nodes}
+    d = decision_node if isinstance(decision_node, dict) else {}
+    route = str(d.get("final_route_v1") or "local_only")
+    reasons = list(d.get("escalation_reason_codes_v1") or [])
+    bl = list(d.get("escalation_blockers_v1") or [])
+
+    if route == "external_blocked_missing_key" or "missing_api_key" in " ".join(bl).lower():
+        rmsg = "External review was blocked because the OpenAI API key was not configured."
+    elif route == "external_blocked_budget" or any("budget" in str(x) for x in bl):
+        rmsg = "External review was blocked because the run budget was exceeded."
+    elif not reasons:
+        rmsg = "External review was not called because no escalation reason was present."
+    elif route == "external_review" and review_obj and reasons:
+        rmsg = (
+            "External review was called because escalation reasons were present: " + ", ".join(reasons[:6]) + "."
+        )
+    else:
+        rmsg = f"Reasoning router evaluated; final route: {route}."
+
+    by_id["reasoning_router_evaluated"] = make_fault_node_v1(
+        "reasoning_router_evaluated",
+        STATUS_PASS if d else STATUS_NOT_PROVEN,
+        input_summary_v1="Unified routing policy for this decision.",
+        output_summary_v1=route,
+        evidence_fields_v1=["final_route_v1", "escalation_reason_codes_v1", "escalation_blockers_v1"],
+        evidence_values_v1={
+            "final_route_v1": route,
+            "escalation_reason_codes_v1": reasons,
+            "escalation_blockers_v1": bl,
+        },
+        operator_message_v1=rmsg[:4000],
+    )
+
+    g = governor_snapshot if isinstance(governor_snapshot, dict) else {}
+    budget_ok = "exhausted" not in str(d.get("budget_status_v1") or "")
+    gmsg = (
+        "Cost governor allowed an external check under current caps."
+        if budget_ok and route == "external_review"
+        else "Cost governor held external usage within configured run and token caps (or no external call was made)."
+    )
+    by_id["external_escalation_governed"] = make_fault_node_v1(
+        "external_escalation_governed",
+        STATUS_PASS,
+        input_summary_v1="Budget, token caps, and key presence (no secret values in evidence).",
+        output_summary_v1="Governor state recorded in trace (no API keys).",
+        evidence_fields_v1=["budget_status_v1", "governor_snapshot"],
+        evidence_values_v1=(
+            {
+                "budget_status_v1": str(d.get("budget_status_v1") or ""),
+                "governor": {k: v for k, v in g.items() if "key" not in k.lower()},
+            }
+            if g
+            else {"budget_status_v1": str(d.get("budget_status_v1") or ""), "governor": {}}
+        ),
+        operator_message_v1=gmsg,
+    )
+
+    if review_obj and isinstance(review_obj, dict):
+        disagree = bool(review_obj.get("disagreement_with_local_v1"))
+        st_rev = "External review returned structured JSON and was recorded as advisory; engine authority unchanged."
+        if disagree:
+            st_rev = (
+                "External review disagreed with local reasoning, but the final action stayed with the "
+                "deterministic engine and validator; models do not take execution here."
+            )
+        by_id["external_reasoning_review_recorded"] = make_fault_node_v1(
+            "external_reasoning_review_recorded",
+            STATUS_PASS,
+            input_summary_v1="External model review (advisory).",
+            output_summary_v1="Recorded",
+            evidence_fields_v1=["disagreement_with_local_v1", "schema_valid_v1"],
+            evidence_values_v1={
+                "disagreement_with_local_v1": disagree,
+                "schema_valid_v1": bool(review_obj.get("schema_valid_v1")),
+            },
+            operator_message_v1=st_rev[:4000],
+        )
+    else:
+        st_skip = "No external review was recorded for this run."
+        nstat = STATUS_SKIPPED if route != "external_review" else STATUS_FAIL
+        nmsg = st_skip
+        if route == "external_review" and not review_obj:
+            nmsg = "An external call was attempted but no accepted review was stored (schema or API outcome)."
+        by_id["external_reasoning_review_recorded"] = make_fault_node_v1(
+            "external_reasoning_review_recorded",
+            nstat,
+            input_summary_v1="External model review (advisory).",
+            output_summary_v1="Not recorded" if route != "external_review" else "Not accepted",
+            operator_message_v1=nmsg,
+        )
+
+    ordered = [
+        by_id.get(nid)
+        or make_fault_node_v1(
+            nid,
+            STATUS_NOT_PROVEN,
+            input_summary_v1="—",
+            output_summary_v1="—",
+            operator_message_v1="Missing node.",
+        )
+        for nid in NODE_IDS_ORDER
+    ]
     return {
         "schema": SCHEMA_STUDENT_REASONING_FAULT_MAP_V1,
         "contract_version": CONTRACT_VERSION_FAULT_MAP,
@@ -239,6 +365,7 @@ __all__ = [
     "make_fault_node_v1",
     "skipped_nodes_from_index_v1",
     "build_fault_map_v1",
+    "merge_unified_agent_router_fault_nodes_v1",
     "validate_student_reasoning_fault_map_v1",
     "merge_runtime_fault_nodes_v1",
     "attach_fault_map_v1",

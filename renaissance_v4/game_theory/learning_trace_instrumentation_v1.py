@@ -381,6 +381,74 @@ def emit_referee_used_student_output_batch_truth_v1(
     )
 
 
+def emit_reasoning_router_decision_v1(
+    *,
+    job_id: str,
+    fingerprint: str | None,
+    decision: dict[str, Any] | None = None,
+    call_record: dict[str, Any] | None = None,
+) -> None:
+    """GT_DIRECTIVE_026AI — single router decision (no API keys, no raw provider blobs)."""
+    d = {k: v for k, v in (decision or {}).items() if "key" not in k.lower()}
+    cr = None
+    if isinstance(call_record, dict):
+        cr = {k: v for k, v in call_record.items() if "key" not in k.lower() and "api_key" not in k.lower()}
+    _emit(
+        job_id=job_id,
+        fingerprint=fingerprint,
+        stage="reasoning_router_decision_v1",
+        status="pass" if d else "partial",
+        summary="Unified reasoning router decision (local primary; external optional).",
+        producer="unified_agent_v1",
+        evidence_payload={"reasoning_router_decision_v1": d, "call_ledger_sanitized_v1": cr or {}},
+    )
+
+
+def emit_reasoning_cost_governor_v1(
+    *,
+    job_id: str,
+    fingerprint: str | None,
+    snapshot: dict[str, Any] | None = None,
+    call_record: dict[str, Any] | None = None,
+) -> None:
+    """GT_DIRECTIVE_026AI — token/call budget state (no secrets)."""
+    cr = None
+    if isinstance(call_record, dict):
+        cr = {k: v for k, v in call_record.items() if "key" not in k.lower()}
+    pl = {
+        "reasoning_cost_governor_v1": snapshot or {},
+        "call_ledger_sanitized_v1": cr or {},
+    }
+    _emit(
+        job_id=job_id,
+        fingerprint=fingerprint,
+        stage="reasoning_cost_governor_v1",
+        status="pass",
+        summary="Reasoning cost governor snapshot.",
+        producer="unified_agent_v1",
+        evidence_payload=pl,
+    )
+
+
+def emit_external_reasoning_review_v1(
+    *,
+    job_id: str,
+    fingerprint: str | None,
+    review: dict[str, Any] | None = None,
+) -> None:
+    """GT_DIRECTIVE_026AI — external advisory only (not execution authority)."""
+    rv = {k: v for k, v in (review or {}).items() if "key" not in k.lower()}
+    _emit(
+        job_id=job_id,
+        fingerprint=fingerprint,
+        stage="external_reasoning_review_v1",
+        status="pass" if rv else "partial",
+        summary="External OpenAI reasoning review (advisory).",
+        producer="unified_agent_v1",
+        evidence_payload={"external_reasoning_review_v1": rv},
+    )
+
+
 def emit_student_reasoning_fault_map_v1(
     *,
     job_id: str,
@@ -437,6 +505,9 @@ def emit_entry_reasoning_pipeline_stage_v1(
 __all__ = [
     "emit_candle_timeframe_nexus_v1",
     "emit_entry_reasoning_pipeline_stage_v1",
+    "emit_reasoning_cost_governor_v1",
+    "emit_reasoning_router_decision_v1",
+    "emit_external_reasoning_review_v1",
     "emit_student_reasoning_fault_map_v1",
     "emit_governance_decided_v1",
     "emit_grading_completed_v1",

@@ -429,6 +429,13 @@ def run_entry_reasoning_pipeline_v1(
     long_threshold: float = _LONG_THRESHOLD,
     short_threshold: float = _SHORT_THRESHOLD,
     emit_traces: bool = True,
+    unified_agent_router: bool = False,
+    router_config: dict[str, Any] | None = None,
+    router_config_path: str | None = None,
+    router_operator_forced_audit: bool = False,
+    router_baseline_action: str | None = None,
+    router_trade_notional_usd: float | None = None,
+    router_seed: int | None = None,
 ) -> tuple[dict[str, Any] | None, list[str], list[dict[str, Any]], dict[str, Any]]:
     """
     Returns ``(entry_reasoning_eval_v1 or None, errors, trace_stages, student_reasoning_fault_map_v1)``.
@@ -741,6 +748,33 @@ def run_entry_reasoning_pipeline_v1(
 
     _pfm = build_fault_map_v1(fnodes)
     out["student_reasoning_fault_map_v1"] = _pfm
+
+    if unified_agent_router:
+        from renaissance_v4.game_theory.unified_agent_v1.reasoning_router_v1 import apply_unified_reasoning_router_v1
+
+        u = apply_unified_reasoning_router_v1(
+            entry_reasoning_eval_v1=out,
+            base_fault_map=_pfm,
+            config=router_config,
+            config_path=router_config_path,
+            job_id=job_id,
+            fingerprint=fingerprint,
+            student_decision_packet=student_decision_packet,
+            retrieved_student_experience=rse,
+            run_candle_timeframe_minutes=int(run_candle_timeframe_minutes),
+            operator_forced_audit=bool(router_operator_forced_audit),
+            baseline_action=router_baseline_action,
+            trade_notional_usd=router_trade_notional_usd,
+            seed=router_seed,
+        )
+        out2 = u.get("entry_reasoning_eval_v1")
+        pfm2 = u.get("student_reasoning_fault_map_v1")
+        if isinstance(out2, dict):
+            out = out2
+        if isinstance(pfm2, dict):
+            out["student_reasoning_fault_map_v1"] = pfm2
+            _pfm = pfm2
+
     return out, [], trace, _pfm
 
 

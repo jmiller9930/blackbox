@@ -159,3 +159,107 @@ def test_status_enum_only_allowed() -> None:
         output_summary_v1="b",
     )
     assert bad["status"] == STATUS_NOT_PROVEN
+
+
+def test_debug_learning_loop_trace_includes_fault_map_from_runtime_event_v1(monkeypatch) -> None:
+    """
+    Same wiring as ``GET /api/debug/learning-loop/trace/<job_id>`` and ``/debug/learning-loop?job_id=…``:
+    last learning_trace event with stage ``student_reasoning_fault_map_v1`` is promoted to
+    top-level ``student_reasoning_fault_map_v1`` on the debug payload.
+    """
+    from renaissance_v4.game_theory.debug_learning_loop_trace_v1 import build_debug_learning_loop_trace_v1
+
+    bars = [
+        {"open": 1.0, "high": 1.1, "low": 0.9, "close": 1.0, "volume": 100.0},
+        {"open": 1.0, "high": 1.2, "low": 0.95, "close": 1.1, "volume": 110.0},
+    ]
+    pkt = _packet_minimal(bars=bars)
+    _ere, _err, _tr, pfm = run_entry_reasoning_pipeline_v1(
+        student_decision_packet=pkt,
+        retrieved_student_experience=[],
+        run_candle_timeframe_minutes=5,
+        job_id="",
+        emit_traces=False,
+    )
+    assert pfm and not _err
+    full_fm = merge_runtime_fault_nodes_v1(
+        pfm,
+        use_llm_path=False,
+        llm_checked_pass=True,
+        llm_error_codes=[],
+        llm_operator_message="",
+        student_sealed_pass=True,
+        student_seal_error_codes=[],
+        student_seal_message="Sealed.",
+        execution_intent_pass=True,
+        execution_intent_error_codes=[],
+        execution_intent_message="Intent ok.",
+    )
+    assert len(full_fm.get("nodes_v1") or []) == len(NODE_IDS_ORDER)
+
+    entry = {
+        "job_id": "gt026r-trace",
+        "status": "done",
+        "total_processed": 2,
+        "student_brain_profile_v1": "baseline_no_memory_no_llm",
+        "operator_batch_audit": {"context_signature_memory_mode": "off"},
+        "student_learning_rows_appended": 0,
+        "student_retrieval_matches": 0,
+        "memory_context_impact_audit_v1": {"memory_impact_yes_no": "NO"},
+        "student_llm_execution_v1": {"ollama_trades_succeeded": 0, "ollama_trades_attempted": 0},
+    }
+
+    def _fake_find(jid: str, path=None) -> dict | None:
+        return dict(entry) if jid == "gt026r-trace" else None
+
+    def _fake_read(jid: str) -> list[dict]:
+        if str(jid).strip() == "gt026r-trace":
+            return [
+                {
+                    "stage": "student_reasoning_fault_map_v1",
+                    "evidence_payload": {"student_reasoning_fault_map_v1": full_fm},
+                }
+            ]
+        return []
+
+    monkeypatch.setattr(
+        "renaissance_v4.game_theory.learning_loop_trace_v1.find_scorecard_entry_by_job_id",
+        _fake_find,
+    )
+    monkeypatch.setattr(
+        "renaissance_v4.game_theory.learning_loop_trace_v1.build_scenario_list_for_batch",
+        lambda jid, d: (None, [], "no dir"),
+    )
+    monkeypatch.setattr(
+        "renaissance_v4.game_theory.learning_loop_trace_v1.build_student_panel_run_learning_payload_v1",
+        lambda jid: {
+            "schema": "student_panel_run_learning_payload_v1",
+            "ok": True,
+            "job_id": jid,
+            "learning_governance_v1": {
+                "schema": "learning_governance_v1",
+                "decision": "hold",
+                "reason_codes": [],
+                "source_job_id": jid,
+                "fingerprint": None,
+            },
+            "run_was_stored": False,
+            "eligible_for_retrieval": False,
+            "per_trade": [],
+            "stored_record_count_v1": 0,
+        },
+    )
+    monkeypatch.setattr(
+        "renaissance_v4.game_theory.debug_learning_loop_trace_v1.read_learning_trace_events_for_job_v1",
+        _fake_read,
+    )
+
+    out = build_debug_learning_loop_trace_v1("gt026r-trace")
+    assert out.get("ok") is True
+    assert out.get("schema") == "debug_learning_loop_trace_v1"
+    assert out.get("student_reasoning_fault_map_v1") == full_fm
+    nodes = (out.get("student_reasoning_fault_map_v1") or {}).get("nodes_v1") or []
+    assert len(nodes) == len(NODE_IDS_ORDER)
+    for n in nodes:
+        assert n.get("status") in (STATUS_PASS, STATUS_FAIL, STATUS_SKIPPED, STATUS_NOT_PROVEN)
+        assert len(str(n.get("operator_message_v1") or "")) > 0
