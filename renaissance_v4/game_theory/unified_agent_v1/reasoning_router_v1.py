@@ -11,6 +11,7 @@ import time
 from typing import Any
 
 from renaissance_v4.game_theory.student_proctor.student_reasoning_fault_map_v1 import merge_unified_agent_router_fault_nodes_v1
+from renaissance_v4.game_theory.unified_agent_v1.external_api_l1_v1 import finalize_router_decision_addendum_v1
 from renaissance_v4.game_theory.unified_agent_v1.external_openai_adapter_v1 import call_openai_responses_v1
 from renaissance_v4.game_theory.unified_agent_v1.reasoning_cost_governor_v1 import ReasoningCostGovernorV1
 from renaissance_v4.game_theory.unified_agent_v1.reasoning_router_config_v1 import load_reasoning_router_config_v1
@@ -43,6 +44,10 @@ ESCALATION_CODES = (
 BLOCKER_CODES = (
     "external_disabled_v1",
     "missing_api_key_v1",
+    "insufficient_funds_v1",
+    "quota_exceeded_v1",
+    "rate_limited_v1",
+    "provider_unavailable_v1",
     "budget_exceeded_v1",
     "token_limit_exceeded_v1",
     "provider_error_v1",
@@ -304,6 +309,15 @@ def apply_unified_reasoning_router_v1(
             local_m=local_m,
         )
         dec["router_enabled_v1"] = False
+        finalize_router_decision_addendum_v1(
+            dec,
+            policy_permitted_http_call=False,
+            http_attempted=False,
+            review_accepted=False,
+            blockers=["external_disabled_v1"],
+            router_final_route="local_only",
+            api_failure_detail_sanitized=None,
+        )
         fm = merge_unified_agent_router_fault_nodes_v1(
             base_fault_map,
             decision_node=dec,
@@ -393,11 +407,13 @@ def apply_unified_reasoning_router_v1(
 
     review_obj: dict[str, Any] | None = None
     call_record: dict[str, Any] | None = None
-    api_call_attempted = False
-    api_call_allowed = final_route == "external_review"
+    api_call_allowed_flag = final_route == "external_review"
+    http_executed = False
+    api_failure_detail: str | None = None
+    router_wants_external = bool(api_call_allowed_flag)
 
-    if api_call_allowed:
-        api_call_attempted = True
+    if api_call_allowed_flag:
+        http_executed = True
         system_inst = (
             "You are an external reviewer. Output one JSON object matching the schema. "
             "You must not assert execution authority; the host engine is authoritative."
@@ -412,6 +428,14 @@ def apply_unified_reasoning_router_v1(
             response_json_schema=_external_reasoning_json_schema_v1(),
         )
         lat = (time.perf_counter() - t_call) * 1000.0
+        if not res.get("ok"):
+            api_failure_detail = str(res.get("error") or "provider_error")[:2000]
+            fb = res.get("failure_blocker_v1")
+            if isinstance(fb, str) and fb.strip():
+                if str(fb).strip() not in blockers:
+                    blockers.append(str(fb).strip())
+            else:
+                blockers.append("provider_error_v1")
         call_record = {
             "api_call_attempted_v1": True,
             "api_call_allowed_v1": True,
@@ -426,6 +450,9 @@ def apply_unified_reasoning_router_v1(
             "model_resolved_v1": res.get("model_resolved"),
             "response_status_v1": str(res.get("response_status") or "unknown"),
         }
+        if not res.get("ok"):
+            call_record["validator_status_v1"] = "rejected"
+            call_record["error"] = res.get("error")
         gov.record_external_result_v1(
             input_tokens=int(res.get("input_tokens") or 0),
             output_tokens=int(res.get("output_tokens") or 0),
@@ -437,9 +464,9 @@ def apply_unified_reasoning_router_v1(
         if not res.get("ok") or not isinstance(parsed, dict):
             final_route = "external_failed_fallback_local"
             call_record["validator_status_v1"] = "rejected"
-            if isinstance(call_record, dict):
-                call_record["error"] = res.get("error")
-            blockers = list({*blockers, "provider_error_v1"}) if not res.get("ok") else list({*blockers, "schema_validation_failed_v1"})
+            if res.get("ok") and not isinstance(parsed, dict):
+                blockers = list({*blockers, "schema_validation_failed_v1"})
+                api_failure_detail = api_failure_detail or "response_not_valid_json_object"
         else:
             pj = {
                 "schema": SCHEMA_REVIEW,
@@ -462,6 +489,7 @@ def apply_unified_reasoning_router_v1(
                 call_record["validator_status_v1"] = "rejected"
                 final_route = "external_failed_fallback_local"
                 blockers = list({*blockers, "schema_validation_failed_v1"})
+                api_failure_detail = "; ".join(val_errs)[:2000]
             else:
                 call_record["validator_status_v1"] = "accepted"
                 review_obj = pj
@@ -497,12 +525,23 @@ def apply_unified_reasoning_router_v1(
         "escalation_decision_v1": "escalation_requested" if reasons else "no_escalation",
         "escalation_reason_codes_v1": reasons,
         "escalation_blockers_v1": sorted(set(blockers)),
-        "budget_status_v1": "exhausted" if "budget_exceeded_v1" in blockers else "ok",
-        "api_call_allowed_v1": bool(
+        "budget_status_v1": "exhausted" if "budget_exceeded_v1" in blockers or "token_limit_exceeded_v1" in blockers else "ok",
+        "api_call_succeeded_v1": bool(
             review_obj is not None and str((call_record or {}).get("validator_status_v1") or "") == "accepted"
         ),
         "final_route_v1": final_route,
     }
+    finalize_router_decision_addendum_v1(
+        decision,
+        policy_permitted_http_call=router_wants_external,
+        http_attempted=http_executed,
+        review_accepted=review_obj is not None
+        and str((call_record or {}).get("validator_status_v1") or "") == "accepted",
+        blockers=list(blockers),
+        router_final_route=final_route,
+        api_failure_detail_sanitized=api_failure_detail,
+    )
+    decision["escalation_blockers_v1"] = sorted(set(blockers))
 
     if str(job_id or "").strip():
         emit_reasoning_router_decision_v1(

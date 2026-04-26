@@ -63,6 +63,7 @@ node_modules/
 .env.local
 .env.*.local
 .secrets/
+renaissance_v4/game_theory/unified_agent_v1/config/reasoning_router_secrets.local.json
 
 # Context engine local store (host-local; BLACKBOX_CONTEXT_ROOT or default data/context_engine)
 data/context_engine/

@@ -194,8 +194,8 @@ def l1_road_legend_v1() -> dict[str, Any]:
                 "Memory + context plumbing with stub / deterministic Student emitter (no Ollama)."
             ),
             STUDENT_BRAIN_PROFILE_MEMORY_CONTEXT_LLM_STUDENT_V1: (
-                "Memory + context + governed LLM component (Ollama when configured). "
-                "``llm_model`` tags the model under this profile."
+                "Memory + context + governed LLM on approved Ollama (``qwen3-coder:30b``; "
+                "``STUDENT_OLLAMA_BASE_URL`` / ``172.20.1.66:11434``)."
             ),
         },
         "band_a": (
@@ -232,7 +232,7 @@ def l1_road_legend_v1() -> dict[str, Any]:
             "same as Student panel L1 anchor logic."
         ),
         "llm_model": (
-            "Ollama model tag (e.g. ``qwen2.5:7b``, ``deepseek-r1:14b``) for ``memory_context_llm_student`` "
+            "Student Ollama model tag (fixed: ``qwen3-coder:30b``) for ``memory_context_llm_student`` "
             "only; null for other profiles."
         ),
         "group_avg_exam_e_score_v1": (
@@ -481,6 +481,9 @@ def build_l1_road_payload_v1(
                 "student_lane_authority_truth_v1": line.get("student_lane_authority_truth_v1"),
                 "l1_e_scalar_v1": line_e_value_for_l1_v1(line) if line else None,
                 "l1_p_scalar_v1": line_p_value_for_l1_v1(line) if line else None,
+                "external_api_status_v1": line.get("external_api_status_v1"),
+                "external_api_block_reason_v1": line.get("external_api_block_reason_v1"),
+                "external_api_action_url_v1": line.get("external_api_action_url_v1"),
             }
     # De-dupe top_gaps order-stable
     seen: set[str] = set()

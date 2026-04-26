@@ -15,7 +15,7 @@ This document satisfies the directive requirement for **worked examples** and **
 | Pipeline | `run_entry_reasoning_pipeline_v1` |
 | Indicators | `build_indicator_context_eval_v1` — RSI, EMA trend, ATR state, volume |
 | Memory | `score_memory_records_v1` — numeric score + `aligned\|partial\|conflict\|ignore` |
-| Prior outcomes | `prior_outcome_eval_v1` — win rate, avg pnl, confidence delta |
+| Prior outcomes | `prior_outcome_eval_v1` — `wins_total_fraction_v1`, `avg_pnl`, confidence delta |
 | Risk | `build_risk_inputs_v1` — `invalidation_condition_v1`, `stop_basis_v1`, `target_basis_v1` |
 | Decision | Synthesized in pipeline — `decision_synthesis_v1` (authoritative) |
 | Validation | `validate_entry_reasoning_eval_v1`, `validate_llm_explanation_against_entry_reasoning_v1` |
@@ -56,7 +56,7 @@ Each in-process row includes `inputs`, `outputs`, `evidence` (see test `test_tra
   "candle_timeframe_minutes": 5,
   "indicator_context_eval_v1": { "ema_trend": "bullish_trend", "rsi_state": "…" },
   "memory_context_eval_v1": { "aggregate_memory_effect_v1": "none" },
-  "prior_outcome_eval_v1": { "win_rate": 0.0, "total_with_pnl": 0 },
+  "prior_outcome_eval_v1": { "wins_total_fraction_v1": 0.0, "total_with_pnl": 0 },
   "risk_inputs_v1": {
     "invalidation_condition_v1": "4h close below … invalidates long",
     "stop_basis_v1": "1.2 × ATR (…) from entry",

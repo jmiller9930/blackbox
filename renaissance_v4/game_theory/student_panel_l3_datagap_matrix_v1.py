@@ -435,17 +435,40 @@ def build_l1_linkage_v1(job_id: str, entry: dict[str, Any] | None) -> dict[str, 
         fp = str(mci.get("run_config_fingerprint_sha256_40") or "").strip()
     prof = ""
     llm_model = None
+    requested_model = None
+    resolved_model = None
+    ollama_base_url_used = None
     if isinstance(entry, dict):
         prof = str(entry.get("student_brain_profile_v1") or entry.get("student_reasoning_mode") or "").strip()
         llm = entry.get("student_llm_v1")
         if isinstance(llm, dict):
             llm_model = str(llm.get("llm_model") or "").strip() or None
+        rm = entry.get("requested_model")
+        rmd = entry.get("resolved_model")
+        obu = entry.get("ollama_base_url_used")
+        if isinstance(rm, str) and rm.strip():
+            requested_model = rm.strip()
+        if isinstance(rmd, str) and rmd.strip():
+            resolved_model = rmd.strip()
+        if isinstance(obu, str) and obu.strip():
+            ollama_base_url_used = obu.strip()
+        slex = entry.get("student_llm_execution_v1")
+        if isinstance(slex, dict):
+            if requested_model is None and isinstance(slex.get("requested_model"), str):
+                requested_model = slex.get("requested_model") or None
+            if resolved_model is None and isinstance(slex.get("resolved_model"), str):
+                resolved_model = slex.get("resolved_model") or None
+            if ollama_base_url_used is None and isinstance(slex.get("ollama_base_url_used"), str):
+                ollama_base_url_used = slex.get("ollama_base_url_used") or None
     return {
         "schema": "student_panel_l1_linkage_v1",
         "job_id": job_id.strip(),
         "run_config_fingerprint_sha256_40": fp or None,
         "student_brain_profile_v1": prof or None,
         "llm_model": llm_model,
+        "requested_model": requested_model,
+        "resolved_model": resolved_model,
+        "ollama_base_url_used": ollama_base_url_used,
     }
 
 
@@ -571,6 +594,11 @@ def _scorecard_public_subset_v1(entry: dict[str, Any] | None) -> dict[str, Any] 
         "status",
         "student_brain_profile_v1",
         "student_reasoning_mode",
+        "llm_model",
+        "ollama_base_url",
+        "requested_model",
+        "resolved_model",
+        "ollama_base_url_used",
         "student_llm_v1",
         "student_llm_execution_v1",
         "llm_student_output_rejections_v1",

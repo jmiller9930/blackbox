@@ -34,21 +34,21 @@
       "run_config_fingerprint_sha256_40": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
     },
     "student_brain_profile_v1": "memory_context_llm_student",
-    "llm_model": "qwen2.5:7b",
+    "llm_model": "qwen3-coder:30b",
     "expectancy_per_trade": 0.05,
     "referee_win_pct": 45.0,
     "student_l1_process_score_v1": 0.4
   },
   {
     "schema": "pattern_game_batch_scorecard_v1",
-    "job_id": "fixture_gt016_fpA_deepseek_004",
+    "job_id": "fixture_gt016_fpA_llm_second_004",
     "status": "done",
     "started_at_utc": "2026-04-20T13:00:00Z",
     "memory_context_impact_audit_v1": {
       "run_config_fingerprint_sha256_40": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
     },
     "student_brain_profile_v1": "memory_context_llm_student",
-    "llm_model": "deepseek-r1:14b",
+    "llm_model": "qwen3-coder:30b",
     "expectancy_per_trade": 0.25,
     "referee_win_pct": 70.0,
     "student_l1_process_score_v1": 0.65

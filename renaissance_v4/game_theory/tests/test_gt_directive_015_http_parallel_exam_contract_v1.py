@@ -91,8 +91,10 @@ def test_post_run_parallel_blocking_writes_lane_metadata(
             "schema": "student_llm_execution_v1",
             "student_brain_profile_echo_v1": STUDENT_BRAIN_PROFILE_MEMORY_CONTEXT_LLM_STUDENT_V1,
             "student_reasoning_mode_echo": STUDENT_BRAIN_PROFILE_MEMORY_CONTEXT_LLM_STUDENT_V1,
-            "model_resolved": "qwen2.5:7b",
-            "base_url_resolved": "http://127.0.0.1:11434",
+            "model_resolved": "qwen3-coder:30b",
+            "base_url_resolved": "http://172.20.1.66:11434",
+            "resolved_model": "qwen3-coder:30b",
+            "ollama_base_url_used": "http://172.20.1.66:11434",
             "ollama_any_attempt": True,
             "ollama_trades_attempted": 1,
             "ollama_trades_succeeded": 1,
@@ -137,7 +139,9 @@ def test_post_run_parallel_blocking_writes_lane_metadata(
     assert body.get("ok") is True
     assert last_meta.get("student_brain_profile_v1") == STUDENT_BRAIN_PROFILE_MEMORY_CONTEXT_LLM_STUDENT_V1
     assert last_meta.get("student_reasoning_mode") == STUDENT_BRAIN_PROFILE_MEMORY_CONTEXT_LLM_STUDENT_V1
-    assert last_meta.get("llm_model") == "qwen2.5:7b"
+    assert last_meta.get("llm_model") == "qwen3-coder:30b"
+    assert last_meta.get("resolved_model") == "qwen3-coder:30b"
+    assert "172.20.1.66" in (last_meta.get("ollama_base_url_used") or "")
     assert last_meta.get("student_llm_execution_v1", {}).get("ollama_trades_succeeded") == 1
 
 
@@ -177,8 +181,10 @@ def test_post_run_parallel_start_returns_200_with_exam_contract(
             "schema": "student_llm_execution_v1",
             "student_brain_profile_echo_v1": STUDENT_BRAIN_PROFILE_MEMORY_CONTEXT_LLM_STUDENT_V1,
             "student_reasoning_mode_echo": STUDENT_BRAIN_PROFILE_MEMORY_CONTEXT_LLM_STUDENT_V1,
-            "model_resolved": "qwen2.5:7b",
-            "base_url_resolved": "http://127.0.0.1:11434",
+            "model_resolved": "qwen3-coder:30b",
+            "base_url_resolved": "http://172.20.1.66:11434",
+            "resolved_model": "qwen3-coder:30b",
+            "ollama_base_url_used": "http://172.20.1.66:11434",
             "ollama_any_attempt": True,
             "ollama_trades_attempted": 1,
             "ollama_trades_succeeded": 1,

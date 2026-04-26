@@ -77,6 +77,7 @@ from renaissance_v4.game_theory.student_proctor.entry_reasoning_engine_v1 import
     apply_engine_authority_to_student_output_v1,
     run_entry_reasoning_pipeline_v1,
 )
+from renaissance_v4.game_theory.unified_agent_v1.external_api_l1_v1 import l1_fields_from_router_decision_v1
 from renaissance_v4.game_theory.student_proctor.student_execution_intent_v1 import (
     build_student_execution_intent_from_sealed_output_v1,
 )
@@ -255,6 +256,12 @@ def _env_seam_enabled() -> bool:
     return v not in ("0", "false", "no", "off")
 
 
+def _env_unified_agent_reasoning_router_v1() -> bool:
+    """GT_DIRECTIVE_026AI — optional OpenAI review path (default off; local reasoning always runs)."""
+    v = (os.environ.get("PATTERN_GAME_UNIFIED_AGENT_REASONING_ROUTER") or "0").strip().lower()
+    return v in ("1", "true", "yes", "on")
+
+
 def _signature_key_for_trade_v1(o: OutcomeRecord, *, candle_timeframe_minutes: int) -> str:
     """v1 **exact** lookup key for the learning store (`context_signature_v1.signature_key`) — includes TF."""
     return f"student_entry_v1:{o.symbol}:{o.entry_time}:{int(candle_timeframe_minutes)}"
@@ -389,6 +396,8 @@ def student_loop_seam_after_parallel_batch_v1(
     ollama_ok = 0
     llm_trade_i = 0
     llm_student_output_rejections_v1 = 0
+    last_external_api_l1_v1: dict[str, object | None] | None = None
+    unified_router = _env_unified_agent_reasoning_router_v1()
 
     fp_emit = fingerprint_for_parallel_job_v1(
         operator_batch_audit=oba if oba else None,
@@ -498,7 +507,12 @@ def student_loop_seam_after_parallel_batch_v1(
                     job_id=str(run_id).strip(),
                     fingerprint=fp_emit,
                     emit_traces=True,
+                    unified_agent_router=unified_router,
                 )
+                if isinstance(ere, dict) and unified_router and ere.get("reasoning_router_decision_v1"):
+                    last_external_api_l1_v1 = l1_fields_from_router_decision_v1(
+                        ere.get("reasoning_router_decision_v1")
+                    )
                 brain_prof = str(
                     (ex_req or {}).get("student_brain_profile_v1")
                     or (ex_req or {}).get("student_reasoning_mode")
@@ -861,6 +875,10 @@ def student_loop_seam_after_parallel_batch_v1(
         "deliverable_vocabulary_annotation_v1": _deliverable_vocabulary_annotation_v1(seam_attempted=True),
         "llm_student_output_rejections_v1": llm_student_output_rejections_v1,
     }
+    if last_external_api_l1_v1 and isinstance(last_external_api_l1_v1, dict):
+        for k, v in last_external_api_l1_v1.items():
+            if v is not None:
+                out_audit[str(k)] = v
     if ex_req is not None:
         out_audit["student_llm_execution_v1"] = {
             "schema": "student_llm_execution_v1",

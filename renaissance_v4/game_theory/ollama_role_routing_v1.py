@@ -7,7 +7,7 @@ validated tool layers and optional operator confirmation.
 | Role | Default base | Default model | Env override (base / model) |
 |------|----------------|---------------|-----------------------------|
 | **PML lightweight** (Barney, Ask DATA) | ``http://172.20.2.230:11434`` | ``qwen2.5:7b`` | ``PML_LIGHTWEIGHT_OLLAMA_BASE_URL`` / ``PML_LIGHTWEIGHT_OLLAMA_MODEL``; model falls back to ``OLLAMA_MODEL`` |
-| **Student** (parallel LLM seam) | same chain as lightweight | (from exam contract ``llm_model``) | ``STUDENT_OLLAMA_BASE_URL`` first, then lightweight + ``OLLAMA_BASE_URL`` |
+| **Student** (parallel LLM seam) | **172.20.1.66:11434** (approved strong model host) | **qwen3-coder:30b** only (``exam_run_contract_v1``) | ``STUDENT_OLLAMA_BASE_URL`` overrides base **only** (CI/mocks) — not PML/lightweight |
 | **System Agent** (operator control brain; propose-only) | ``http://172.20.1.66:11434`` | ``qwen3-coder:30b`` | ``SYSTEM_AGENT_OLLAMA_BASE_URL`` / ``SYSTEM_AGENT_OLLAMA_MODEL`` |
 | **System Agent fallback** | (same as primary) | ``qwen2.5-coder:7b`` | ``SYSTEM_AGENT_OLLAMA_MODEL_FALLBACK`` |
 | **DeepSeek escalation** (diagnostic / debug only) | ``http://172.20.2.230:11434`` | ``deepseek-r1:14b`` | ``DEEPSEEK_ESCALATION_OLLAMA_BASE_URL`` / ``DEEPSEEK_ESCALATION_OLLAMA_MODEL`` |
@@ -30,6 +30,7 @@ def _strip_base(url: str) -> str:
 
 # Lab defaults (override with env in non-lab deployments).
 _DEFAULT_PML_LIGHTWEIGHT_BASE = "http://172.20.2.230:11434"
+_DEFAULT_STUDENT_OLLAMA_BASE = "http://172.20.1.66:11434"
 _DEFAULT_SYSTEM_AGENT_BASE = "http://172.20.1.66:11434"
 _DEFAULT_PML_LIGHTWEIGHT_MODEL = "qwen2.5:7b"
 _DEFAULT_SYSTEM_AGENT_MODEL = "qwen3-coder:30b"
@@ -55,12 +56,16 @@ def pml_lightweight_ollama_model() -> str:
 
 
 def student_ollama_base_url_v1() -> str:
-    """Parallel-replay Student LLM (``memory_context_llm_student``) — same host family as lightweight."""
-    for key in ("STUDENT_OLLAMA_BASE_URL", "PML_LIGHTWEIGHT_OLLAMA_BASE_URL", "OLLAMA_BASE_URL"):
-        v = os.environ.get(key)
-        if v and str(v).strip():
-            return _strip_base(str(v))
-    return _DEFAULT_PML_LIGHTWEIGHT_BASE
+    """
+    Student LLM (``memory_context_llm_student``) — **approved** Ollama host (strong model; lab default
+    **172.20.1.66**). ``STUDENT_OLLAMA_BASE_URL`` may override for integration tests or non-lab
+    operators; there is **no** fallback to PML lightweight or generic ``OLLAMA_BASE_URL`` (avoids
+    silent routing to the wrong host).
+    """
+    v = os.environ.get("STUDENT_OLLAMA_BASE_URL")
+    if v and str(v).strip():
+        return _strip_base(str(v))
+    return _DEFAULT_STUDENT_OLLAMA_BASE
 
 
 def system_agent_ollama_base_url() -> str:
@@ -110,7 +115,8 @@ def ollama_role_routing_snapshot_v1() -> dict[str, Any]:
         },
         "student_parallel_llm": {
             "ollama_base_url": student_ollama_base_url_v1(),
-            "note": "llm_model tag still comes from exam contract / scorecard student_llm_v1",
+            "ollama_model_approved_v1": "qwen3-coder:30b",
+            "note": "Student path is fixed to qwen3-coder:30b (exam_run_contract_v1); STUDENT_OLLAMA_BASE_URL overrides host only",
         },
         "system_agent": {
             "ollama_base_url": system_agent_ollama_base_url(),

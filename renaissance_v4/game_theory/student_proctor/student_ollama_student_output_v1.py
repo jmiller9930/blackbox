@@ -226,7 +226,48 @@ def emit_student_output_via_ollama_v1(
     return out, []
 
 
+def verify_ollama_model_tag_available_v1(
+    base_url: str,
+    model: str,
+    *,
+    timeout_s: float = 12.0,
+) -> str | None:
+    """
+    **Pre-flight** for Student LLM: return ``None`` if Ollama ``/api/tags`` includes ``model``;
+    else a single human-readable line suitable for run failure (no silent fallback).
+    """
+    base = (base_url or "").strip().rstrip("/")
+    if not base.startswith("http://") and not base.startswith("https://"):
+        return f"ollama_base_url_invalid_v1: {base_url!r}"
+    url = f"{base}/api/tags"
+    req = urllib.request.Request(url, method="GET")
+    try:
+        with urllib.request.urlopen(req, timeout=timeout_s) as resp:
+            body = json.loads(resp.read().decode("utf-8", errors="replace"))
+    except urllib.error.HTTPError as e:
+        return f"ollama_tags_http_{e.code}"
+    except (urllib.error.URLError, TimeoutError, OSError, json.JSONDecodeError) as e:
+        return f"ollama_model_availability_check_failed: {type(e).__name__}: {e}"
+    if not isinstance(body, dict):
+        return "ollama_tags_response_invalid"
+    names: set[str] = set()
+    for m in body.get("models") or []:
+        if not isinstance(m, dict):
+            continue
+        for k in ("name", "model"):
+            s = m.get(k)
+            if isinstance(s, str) and s.strip():
+                names.add(s.strip())
+    if model in names:
+        return None
+    return (
+        f"student_ollama_model_not_available: model {model!r} not in GET /api/tags on {base} "
+        f"({len(names)} models reported)"
+    )
+
+
 __all__ = [
     "emit_student_output_via_ollama_v1",
+    "verify_ollama_model_tag_available_v1",
     "_student_llm_max_trades_v1",
 ]

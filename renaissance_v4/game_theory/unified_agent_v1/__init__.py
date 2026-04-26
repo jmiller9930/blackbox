@@ -6,10 +6,12 @@ Existing modules stay in place; new router code lives here only.
 
 from __future__ import annotations
 
+from renaissance_v4.game_theory.unified_agent_v1.external_api_l1_v1 import l1_fields_from_router_decision_v1
 from renaissance_v4.game_theory.unified_agent_v1.reasoning_router_config_v1 import load_reasoning_router_config_v1
 from renaissance_v4.game_theory.unified_agent_v1.reasoning_router_v1 import apply_unified_reasoning_router_v1
 
 __all__ = [
     "apply_unified_reasoning_router_v1",
+    "l1_fields_from_router_decision_v1",
     "load_reasoning_router_config_v1",
 ]

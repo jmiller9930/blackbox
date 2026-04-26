@@ -1,0 +1,56 @@
+{
+  "schema": "gt_directive_026ai_proof_index_v1",
+  "proof_bundle_schema": "gt_directive_026ai_scenario_proof_bundle_v1",
+  "artifacts": [
+    {
+      "file": "docs/proof/reasoning_router_v1/scenario_artifacts_v1/S01_local_only.json",
+      "scenario_id": "01_local_only_external_disabled",
+      "final_route_v1": "external_blocked_config"
+    },
+    {
+      "file": "docs/proof/reasoning_router_v1/scenario_artifacts_v1/S02_missing_api_key.json",
+      "scenario_id": "02_missing_openai_api_key",
+      "final_route_v1": "external_blocked_missing_key"
+    },
+    {
+      "file": "docs/proof/reasoning_router_v1/scenario_artifacts_v1/S03_insufficient_funds.json",
+      "scenario_id": "03_insufficient_funds_v1",
+      "final_route_v1": "external_failed_fallback_local"
+    },
+    {
+      "file": "docs/proof/reasoning_router_v1/scenario_artifacts_v1/S03a_quota_exceeded.json",
+      "scenario_id": "03_quota_exceeded_v1",
+      "final_route_v1": "external_failed_fallback_local"
+    },
+    {
+      "file": "docs/proof/reasoning_router_v1/scenario_artifacts_v1/S04_budget_exceeded.json",
+      "scenario_id": "04_budget_exceeded_governor",
+      "final_route_v1": "external_blocked_budget"
+    },
+    {
+      "file": "docs/proof/reasoning_router_v1/scenario_artifacts_v1/S05_success_external_mocked.json",
+      "scenario_id": "05_successful_external_escalation_mocked",
+      "final_route_v1": "external_review"
+    },
+    {
+      "file": "docs/proof/reasoning_router_v1/scenario_artifacts_v1/S06_schema_failure.json",
+      "scenario_id": "06_external_schema_or_contract_failure",
+      "final_route_v1": "external_failed_fallback_local"
+    },
+    {
+      "file": "docs/proof/reasoning_router_v1/scenario_artifacts_v1/S07_disagreement_engine_unchanged.json",
+      "scenario_id": "07_external_disagrees_deterministic_unchanged",
+      "final_route_v1": "external_review"
+    },
+    {
+      "file": "docs/proof/reasoning_router_v1/scenario_artifacts_v1/S08_rate_limited.json",
+      "scenario_id": "08_rate_limited_or_provider_unavailable",
+      "final_route_v1": "external_failed_fallback_local"
+    },
+    {
+      "file": "docs/proof/reasoning_router_v1/scenario_artifacts_v1/S08b_provider_unavailable.json",
+      "scenario_id": "08b_provider_unavailable_network_style",
+      "final_route_v1": "external_failed_fallback_local"
+    }
+  ]
+}

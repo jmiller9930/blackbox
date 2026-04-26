@@ -156,7 +156,19 @@ def test_build_exam_run_line_full_control_authority() -> None:
 
 
 def test_parse_llm_profile_requires_http_base(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("OLLAMA_BASE_URL", "ftp://invalid.example/no-http")
+    monkeypatch.setenv("STUDENT_OLLAMA_BASE_URL", "ftp://invalid.example/no-http")
+    out, err = parse_exam_run_contract_request_v1(
+        {
+            "exam_run_contract_v1": {
+                "student_brain_profile_v1": STUDENT_BRAIN_PROFILE_MEMORY_CONTEXT_LLM_STUDENT_V1,
+                "student_llm_v1": {"llm_model": "qwen3-coder:30b"},
+            }
+        }
+    )
+    assert out is None and err == "ollama_base_url_invalid_or_unset_for_llm_assisted_mode"
+
+
+def test_parse_llm_profile_rejects_non_approved_model() -> None:
     out, err = parse_exam_run_contract_request_v1(
         {
             "exam_run_contract_v1": {
@@ -165,7 +177,8 @@ def test_parse_llm_profile_requires_http_base(monkeypatch: pytest.MonkeyPatch) -
             }
         }
     )
-    assert out is None and err == "ollama_base_url_invalid_or_unset_for_llm_assisted_mode"
+    assert out is None
+    assert err and "qwen3-coder:30b" in (err or "")
 
 
 def test_parse_legacy_llm_lane_infers_model(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -179,7 +192,7 @@ def test_parse_legacy_llm_lane_infers_model(monkeypatch: pytest.MonkeyPatch) -> 
     )
     assert err is None and out is not None
     assert out["student_brain_profile_v1"] == STUDENT_BRAIN_PROFILE_MEMORY_CONTEXT_LLM_STUDENT_V1
-    assert out["student_llm_v1"].get("llm_model") == "qwen2.5:7b"
+    assert out["student_llm_v1"].get("llm_model") == "qwen3-coder:30b"
 
 
 def test_fixture_rows_use_brain_profiles() -> None:

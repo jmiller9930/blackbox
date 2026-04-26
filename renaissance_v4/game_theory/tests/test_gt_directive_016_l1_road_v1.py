@@ -29,7 +29,7 @@ def test_road_by_job_id_v1_maps_fixture_jobs() -> None:
     byj = payload.get("road_by_job_id_v1") or {}
     assert "fixture_gt016_fpA_memory_002" in byj
     assert byj["fixture_gt016_fpA_memory_002"]["band"] == "A"
-    assert byj["fixture_gt016_fpA_qwen_003"]["llm_model"] == "qwen2.5:7b"
+    assert byj["fixture_gt016_fpA_qwen_003"]["llm_model"] == "qwen3-coder:30b"
 
 
 def test_grouping_by_brain_profile_and_llm_split() -> None:
@@ -39,8 +39,7 @@ def test_grouping_by_brain_profile_and_llm_split() -> None:
     keys = {(g["group_key"]["fingerprint_sha256_40"], g["group_key"]["student_brain_profile_v1"], g["group_key"]["llm_model"]) for g in groups}
     assert ("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "baseline_no_memory_no_llm", None) in keys
     assert ("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "memory_context_student", None) in keys
-    assert ("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "memory_context_llm_student", "qwen2.5:7b") in keys
-    assert ("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "memory_context_llm_student", "deepseek-r1:14b") in keys
+    assert ("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "memory_context_llm_student", "qwen3-coder:30b") in keys
     assert ("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", "memory_context_student", None) in keys
 
 
@@ -63,13 +62,11 @@ def test_aggregation_metrics_and_ab_bands() -> None:
     assert mem["band"] == "A"
     assert mem["process_leg"] == "compared"
 
-    qwen = by_triple[(fp_a, "memory_context_llm_student", "qwen2.5:7b")]
-    assert qwen["band"] == "B"
+    qwen = by_triple[(fp_a, "memory_context_llm_student", "qwen3-coder:30b")]
+    assert qwen["band"] == "A"
     assert qwen["process_leg"] == "compared"
-
-    ds = by_triple[(fp_a, "memory_context_llm_student", "deepseek-r1:14b")]
-    assert ds["band"] == "A"
-    assert ds["avg_e_expectancy_per_trade"] == 0.25
+    assert qwen["run_count"] == 2
+    assert qwen["avg_e_expectancy_per_trade"] == 0.15
 
     bl = by_triple[(fp_a, "baseline_no_memory_no_llm", None)]
     assert bl["band"] == "baseline_ruler"

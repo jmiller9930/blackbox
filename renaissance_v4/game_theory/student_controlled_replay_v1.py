@@ -418,7 +418,7 @@ def apply_automated_student_lanes_from_exam_contract_v1(
 
     llm_model: str | None = None
     if prof == STUDENT_BRAIN_PROFILE_MEMORY_CONTEXT_LLM_STUDENT_V1:
-        llm_model, _, _ = resolved_llm_for_exam_contract_v1(ex)
+        llm_model, _, _, _ = resolved_llm_for_exam_contract_v1(ex)
 
     rows_by_sid: dict[str, dict[str, Any]] = {}
     for r in results or []:

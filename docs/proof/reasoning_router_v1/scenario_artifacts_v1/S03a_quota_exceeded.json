@@ -1,0 +1,182 @@
+{
+  "schema": "gt_directive_026ai_scenario_proof_bundle_v1",
+  "proof_version": 1,
+  "scenario_id": "03_quota_exceeded_v1",
+  "generated_at_utc": "2026-04-26T00:27:12Z",
+  "narrative": "Simulated provider failure body → blocker + L1 billing link",
+  "python": "3.11.0",
+  "entry_reasoning_excerpt_v1": {
+    "decision_synthesis_v1": {
+      "indicator_score": 0.0,
+      "memory_score": 0.0,
+      "prior_outcome_score": 0.0,
+      "risk_adjustment": 0.0,
+      "final_score": 0.0,
+      "action": "no_trade",
+      "long_threshold": 0.2,
+      "short_threshold": -0.2
+    },
+    "confidence_01": 0.5
+  },
+  "trace_events_representative_v1": [
+    {
+      "stage": "reasoning_router_decision_v1",
+      "producer": "unified_agent_v1",
+      "summary": "Unified reasoning router decision (no secrets in evidence).",
+      "evidence_keys_sanitized_v1": [
+        "api_call_succeeded_v1",
+        "budget_status_v1",
+        "contract_version",
+        "escalation_blockers_v1",
+        "escalation_decision_v1",
+        "escalation_reason_codes_v1",
+        "external_api_action_url_v1",
+        "external_api_allowed_v1",
+        "external_api_attempted_v1",
+        "external_api_block_reason_v1",
+        "external_api_enabled_v1",
+        "external_api_failure_reason_v1",
+        "external_api_status_v1",
+        "external_model_requested_v1",
+        "external_model_resolved_v1",
+        "external_provider_v1",
+        "external_review_skipped_or_failed_v1",
+        "final_route_v1",
+        "local_base_url_used_v1",
+        "local_model_requested_v1",
+        "local_model_resolved_v1",
+        "operator_message_english_v1",
+        "router_enabled_v1",
+        "schema"
+      ]
+    },
+    {
+      "stage": "reasoning_cost_governor_v1",
+      "producer": "unified_agent_v1",
+      "summary": "Call ledger + token/cost caps (sanitized; no API key).",
+      "evidence_ledger_keys_v1": [
+        "api_call_allowed_v1",
+        "api_call_attempted_v1",
+        "api_call_reason_codes_v1",
+        "error",
+        "estimated_cost_usd_v1",
+        "input_tokens_v1",
+        "latency_ms_v1",
+        "model_requested_v1",
+        "model_resolved_v1",
+        "output_tokens_v1",
+        "provider_v1",
+        "response_status_v1",
+        "total_tokens_v1",
+        "validator_status_v1"
+      ]
+    }
+  ],
+  "router_decision_v1": {
+    "schema": "reasoning_router_decision_v1",
+    "contract_version": 1,
+    "router_enabled_v1": true,
+    "external_api_enabled_v1": true,
+    "local_model_requested_v1": "qwen3-coder:30b",
+    "local_model_resolved_v1": "qwen3-coder:30b",
+    "local_base_url_used_v1": "http://172.20.1.66:11434",
+    "external_provider_v1": "openai",
+    "external_model_requested_v1": "gpt-5.5",
+    "external_model_resolved_v1": null,
+    "escalation_decision_v1": "escalation_requested",
+    "escalation_reason_codes_v1": [
+      "low_confidence_v1"
+    ],
+    "escalation_blockers_v1": [
+      "quota_exceeded_v1"
+    ],
+    "budget_status_v1": "ok",
+    "api_call_succeeded_v1": false,
+    "final_route_v1": "external_failed_fallback_local",
+    "external_api_attempted_v1": true,
+    "external_api_allowed_v1": true,
+    "external_api_failure_reason_v1": "{\"error\":{\"code\":\"insufficient_quota\",\"message\":\"billing\"}}",
+    "external_review_skipped_or_failed_v1": true,
+    "external_api_block_reason_v1": "quota_exceeded_v1",
+    "operator_message_english_v1": "External review skipped: OpenAI quota exceeded.",
+    "external_api_status_v1": "External reasoning disabled — OpenAI quota exceeded",
+    "external_api_action_url_v1": "https://platform.openai.com/settings/organization/billing"
+  },
+  "external_api_call_ledger_v1": {
+    "api_call_attempted_v1": true,
+    "api_call_allowed_v1": true,
+    "api_call_reason_codes_v1": [
+      "low_confidence_v1"
+    ],
+    "input_tokens_v1": 0,
+    "output_tokens_v1": 0,
+    "total_tokens_v1": 0,
+    "estimated_cost_usd_v1": 0.0,
+    "latency_ms_v1": 1.0,
+    "provider_v1": "openai",
+    "model_requested_v1": "gpt-5.5",
+    "model_resolved_v1": null,
+    "response_status_v1": "http_403",
+    "validator_status_v1": "rejected",
+    "error": "{\"error\":{\"code\":\"insufficient_quota\",\"message\":\"billing\"}}"
+  },
+  "l1_fields_v1": {
+    "external_api_status_v1": "External reasoning disabled — OpenAI quota exceeded",
+    "external_api_block_reason_v1": "quota_exceeded_v1",
+    "external_api_action_url_v1": "https://platform.openai.com/settings/organization/billing"
+  },
+  "fault_map_excerpt_v1": {
+    "reasoning_router_evaluated": {
+      "node_id": "reasoning_router_evaluated",
+      "status": "PASS",
+      "input_summary_v1": "Unified routing policy for this decision.",
+      "output_summary_v1": "external_failed_fallback_local",
+      "blocking_rule_v1": "",
+      "error_codes_v1": [],
+      "evidence_fields_v1": [
+        "final_route_v1",
+        "escalation_reason_codes_v1",
+        "escalation_blockers_v1",
+        "external_api_attempted_v1",
+        "external_api_block_reason_v1",
+        "external_api_action_url_v1",
+        "funding_blocker_suspected_v1"
+      ],
+      "evidence_values_v1": {
+        "final_route_v1": "external_failed_fallback_local",
+        "escalation_reason_codes_v1": [
+          "low_confidence_v1"
+        ],
+        "escalation_blockers_v1": [
+          "quota_exceeded_v1"
+        ],
+        "external_api_attempted_v1": true,
+        "external_api_block_reason_v1": "quota_exceeded_v1",
+        "external_api_action_url_v1": "https://platform.openai.com/settings/organization/billing",
+        "funding_blocker_suspected_v1": true
+      },
+      "operator_message_v1": "External review skipped: OpenAI quota exceeded."
+    }
+  },
+  "operator_message_english_v1": "External review skipped: OpenAI quota exceeded.",
+  "final_route_v1": "external_failed_fallback_local",
+  "required_fields_verification_v1": {
+    "final_route_v1": true,
+    "external_api_attempted_v1": true,
+    "external_api_allowed_v1": true,
+    "external_api_block_reason_v1": true,
+    "api_call_reason_codes_v1": true,
+    "input_tokens_v1": true,
+    "output_tokens_v1": true,
+    "estimated_cost_usd_v1": true,
+    "latency_ms_v1": true
+  },
+  "all_required_fields_ok_v1": true,
+  "security_serialized_scan_v1": {
+    "ok": true,
+    "forbidden_hits": [],
+    "byte_length": 1944
+  },
+  "funding_l1_link_expected_v1": "https://platform.openai.com/settings/organization/billing",
+  "funding_l1_link_matches_v1": true
+}

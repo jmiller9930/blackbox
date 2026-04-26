@@ -1,4 +1,5 @@
 {
+  "_read_me": "No API keys in this file. For local file (gitignored): copy reasoning_router_secrets.local.json.example to reasoning_router_secrets.local.json in this folder, or export OPENAI_API_KEY.",
   "schema": "reasoning_router_config_v1",
   "contract_version": 1,
   "router_enabled": true,

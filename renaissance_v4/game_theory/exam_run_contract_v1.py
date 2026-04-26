@@ -6,8 +6,9 @@ GT_DIRECTIVE_015 — exam run contract: **Student brain profile**, nested LLM me
 repeat Anna, Qwen/DeepSeek lane labels) are still accepted and normalized to a profile.
 
 **LLM** is metadata under the ``memory_context_llm_student`` profile: ``student_llm_v1`` with
-``llm_provider``, ``llm_model``, ``llm_role``. Model choice is **secondary** to the profile
-(primary question: does memory + context + governed LLM reasoning improve under the Referee?).
+``llm_provider``, ``llm_model``, ``llm_role``. The Student Ollama model is **fixed** to
+``qwen3-coder:30b`` at ``student_ollama_base_url_v1()`` (see ``STUDENT_LLM_APPROVED_MODEL_V1``) —
+any other ``llm_model`` in the request is **rejected** (no silent fallback).
 
 Parallel replay **still executes** for every batch in v1; ``skip_cold_baseline`` records whether a
 **prior comparable baseline** existed (comparison validity), not a physical skip of Referee work.
@@ -119,18 +120,12 @@ _LEGACY_INPUT_TO_PROFILE_V1: dict[str, str] = {
 
 _DEFAULT_LLM_ROLE_V1 = "single_shot_student_output_v1"
 _DEFAULT_LLM_PROVIDER_V1 = "ollama"
-_DEFAULT_LLM_MODEL_WHEN_OMITTED_V1 = "qwen2.5:7b"
-
-_LLM_HINT_FROM_LEGACY_INPUT_V1: dict[str, str] = {
-    LEGACY_STUDENT_REASONING_INPUT_LLM_QWEN_V1: "qwen2.5:7b",
-    LEGACY_STUDENT_REASONING_INPUT_LLM_QWEN_ALIAS_V1: "qwen2.5:7b",
-    LEGACY_STUDENT_REASONING_INPUT_LLM_DEEPSEEK_V1: "deepseek-r1:14b",
-    LEGACY_STUDENT_REASONING_INPUT_LLM_DEEPSEEK_ALIAS_V1: "deepseek-r1:14b",
-}
+# Only model allowed on the Student (memory_context_llm_student) Ollama path — no other default.
+STUDENT_LLM_APPROVED_MODEL_V1 = "qwen3-coder:30b"
 
 
 def default_ollama_base_url_v1() -> str:
-    """Student parallel LLM — same routing chain as PML lightweight (``172.20.2.230`` lab default)."""
+    """Student Ollama base URL (``STUDENT_OLLAMA_BASE_URL`` or lab default **172.20.1.66:11434**)."""
     from renaissance_v4.game_theory.ollama_role_routing_v1 import student_ollama_base_url_v1
 
     return student_ollama_base_url_v1()
@@ -140,8 +135,8 @@ def normalize_student_reasoning_mode_v1(raw: str | None) -> str:
     """
     Return canonical **Student brain profile** id.
 
-    Legacy ``student_reasoning_mode`` **lane** strings (Qwen vs DeepSeek labels) still map here;
-    use ``student_llm_v1.llm_model`` (and scorecard ``llm_model``) for model-level attribution.
+    Legacy ``student_reasoning_mode`` **lane** strings still map to profiles; the resolved Student LLM
+    model is always ``STUDENT_LLM_APPROVED_MODEL_V1`` when the profile is ``memory_context_llm_student``.
     """
     s = (raw or "").strip()
     if not s:
@@ -163,11 +158,6 @@ def validate_student_reasoning_mode_v1(mode: str | None) -> str | None:
     return f"unknown student_reasoning_mode or student_brain_profile_v1: {mode!r}"
 
 
-def _infer_llm_model_from_legacy_reasoning_input_v1(raw: str | None) -> str | None:
-    s = (raw or "").strip()
-    return _LLM_HINT_FROM_LEGACY_INPUT_V1.get(s)
-
-
 def _normalize_student_llm_block_v1(
     block: dict[str, Any],
     *,
@@ -175,17 +165,19 @@ def _normalize_student_llm_block_v1(
     legacy_reasoning_input: str | None,
 ) -> tuple[dict[str, Any] | None, str | None]:
     """Returns ``(student_llm_v1_dict, error)``."""
+    _ = legacy_reasoning_input
     if profile != STUDENT_BRAIN_PROFILE_MEMORY_CONTEXT_LLM_STUDENT_V1:
         return {}, None
     raw = block.get("student_llm_v1")
     slm: dict[str, Any] = dict(raw) if isinstance(raw, dict) else {}
     model = str(slm.get("llm_model") or "").strip()
     if not model:
-        hint = _infer_llm_model_from_legacy_reasoning_input_v1(legacy_reasoning_input)
-        if hint:
-            model = hint
-        else:
-            model = _DEFAULT_LLM_MODEL_WHEN_OMITTED_V1
+        model = STUDENT_LLM_APPROVED_MODEL_V1
+    if model != STUDENT_LLM_APPROVED_MODEL_V1:
+        return None, (
+            f"student_llm_v1.llm_model must be {STUDENT_LLM_APPROVED_MODEL_V1!r} for "
+            f"memory_context_llm_student (got {model!r})"
+        )
     if len(model) > 128:
         return None, "llm_model too long"
     provider = str(slm.get("llm_provider") or _DEFAULT_LLM_PROVIDER_V1).strip().lower() or _DEFAULT_LLM_PROVIDER_V1
@@ -202,39 +194,59 @@ def _normalize_student_llm_block_v1(
     }, None
 
 
-def resolved_llm_for_exam_contract_v1(req: dict[str, Any] | None) -> tuple[str | None, str, dict[str, Any]]:
+def resolved_llm_for_exam_contract_v1(
+    req: dict[str, Any] | None,
+) -> tuple[str | None, str, dict[str, Any], list[str]]:
     """
-    For ``memory_context_llm_student``: Ollama model tag, base URL, and normalized ``student_llm_v1`` echo.
-    Otherwise: ``(None, default_url, {})``.
+    For ``memory_context_llm_student``: approved Ollama model, base URL, ``student_llm_v1`` echo
+    (includes ``student_llm_resolution_v1``), and error list. Otherwise:
+    ``(None, default_url, {}, [])``.
     """
     r = dict(req or {})
     prof = normalize_student_reasoning_mode_v1(
         str(r.get("student_brain_profile_v1") or r.get("student_reasoning_mode") or "")
     )
+    base = default_ollama_base_url_v1()
     if prof != STUDENT_BRAIN_PROFILE_MEMORY_CONTEXT_LLM_STUDENT_V1:
-        return None, default_ollama_base_url_v1(), {}
+        return None, base, {}, []
     slm = r.get("student_llm_v1")
     if not isinstance(slm, dict):
         slm = {}
-    model = str(slm.get("llm_model") or "").strip() or _DEFAULT_LLM_MODEL_WHEN_OMITTED_V1
+    requested = str(slm.get("llm_model") or "").strip()
+    if requested and requested != STUDENT_LLM_APPROVED_MODEL_V1:
+        return (
+            None,
+            base,
+            {},
+            [
+                f"student_llm_model_rejected_v1: memory_context_llm_student requires llm_model "
+                f"{STUDENT_LLM_APPROVED_MODEL_V1!r} (got {requested!r})"
+            ],
+        )
+    resolved = STUDENT_LLM_APPROVED_MODEL_V1
+    res_block = {
+        "schema": "student_llm_resolution_v1",
+        "requested_model": requested or None,
+        "resolved_model": resolved,
+        "ollama_base_url_used": base,
+    }
     out_slm = {
         "schema": "student_llm_v1",
         "llm_provider": str(slm.get("llm_provider") or _DEFAULT_LLM_PROVIDER_V1).strip().lower()
         or _DEFAULT_LLM_PROVIDER_V1,
-        "llm_model": model,
+        "llm_model": resolved,
         "llm_role": str(slm.get("llm_role") or _DEFAULT_LLM_ROLE_V1).strip() or _DEFAULT_LLM_ROLE_V1,
+        "student_llm_resolution_v1": res_block,
     }
-    return model, default_ollama_base_url_v1(), out_slm
+    return resolved, base, out_slm, []
 
 
 def resolved_llm_model_and_url_for_student_mode_v1(mode: str) -> tuple[str | None, str]:
-    """Backward-compat shim: treat legacy **lane** string as hint for model under LLM profile."""
+    """Backward-compat: legacy lane → profile; model is always ``STUDENT_LLM_APPROVED_MODEL_V1``."""
     m = normalize_student_reasoning_mode_v1(mode)
     if m != STUDENT_BRAIN_PROFILE_MEMORY_CONTEXT_LLM_STUDENT_V1:
         return None, default_ollama_base_url_v1()
-    hint = _infer_llm_model_from_legacy_reasoning_input_v1(mode)
-    model = hint or _DEFAULT_LLM_MODEL_WHEN_OMITTED_V1
-    return model, default_ollama_base_url_v1()
+    return STUDENT_LLM_APPROVED_MODEL_V1, default_ollama_base_url_v1()
 
 
 def preview_run_config_fingerprint_sha256_40_v1(
@@ -459,8 +471,12 @@ def build_exam_run_line_meta_v1(
 
     llm_used = profile == STUDENT_BRAIN_PROFILE_MEMORY_CONTEXT_LLM_STUDENT_V1
     slm_req = req.get("student_llm_v1") if isinstance(req.get("student_llm_v1"), dict) else {}
-    llm_model: str | None = str(slm_req.get("llm_model") or "").strip() or None if llm_used else None
+    req_model_raw: str | None = str(slm_req.get("llm_model") or "").strip() or None if llm_used else None
+    llm_model: str | None = STUDENT_LLM_APPROVED_MODEL_V1 if llm_used else None
     ollama_url = default_ollama_base_url_v1() if llm_used else None
+    requested_model: str | None = req_model_raw
+    resolved_model: str | None = STUDENT_LLM_APPROVED_MODEL_V1 if llm_used else None
+    ollama_base_url_used: str | None = ollama_url
 
     fp = (fingerprint_sha256_40 or "").strip()
     anchor = find_prior_baseline_job_id_for_fingerprint_v1(fp) if fp else None
@@ -501,6 +517,9 @@ def build_exam_run_line_meta_v1(
         "llm_used": llm_used,
         "llm_model": llm_model,
         "ollama_base_url": ollama_url,
+        "requested_model": requested_model,
+        "resolved_model": resolved_model,
+        "ollama_base_url_used": ollama_base_url_used,
         "prompt_version": str(req.get("prompt_version") or "shadow_student_stub_v1")[:256],
         "memory_context_used": mem_ctx,
         "retrieved_context_ids": list(req.get("retrieved_context_ids") or []),
@@ -529,6 +548,10 @@ def build_exam_run_line_meta_v1(
             line["llm_model"] = lx["model_resolved"].strip()
         if isinstance(lx.get("base_url_resolved"), str) and lx["base_url_resolved"].strip():
             line["ollama_base_url"] = lx["base_url_resolved"].strip()
+        for k in ("requested_model", "resolved_model", "ollama_base_url_used"):
+            v = lx.get(k)
+            if isinstance(v, str) and v.strip():
+                line[k] = v.strip()
         if isinstance(lx.get("prompt_version_resolved"), str) and lx["prompt_version_resolved"].strip():
             line["prompt_version"] = lx["prompt_version_resolved"].strip()[:256]
         if isinstance(lx.get("student_brain_profile_echo_v1"), str) and lx["student_brain_profile_echo_v1"].strip():
@@ -590,6 +613,7 @@ __all__ = [
     "STUDENT_BRAIN_PROFILE_BASELINE_NO_MEMORY_NO_LLM_V1",
     "STUDENT_BRAIN_PROFILE_MEMORY_CONTEXT_STUDENT_V1",
     "STUDENT_BRAIN_PROFILE_MEMORY_CONTEXT_LLM_STUDENT_V1",
+    "STUDENT_LLM_APPROVED_MODEL_V1",
     "CANONICAL_STUDENT_BRAIN_PROFILES_V1",
     "LEGACY_STUDENT_REASONING_INPUTS_V1",
     "build_exam_run_line_meta_v1",

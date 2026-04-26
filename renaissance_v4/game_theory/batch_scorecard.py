@@ -418,6 +418,9 @@ def record_parallel_batch_finished(
             "llm_student_output_rejections_v1",
             "student_llm_execution_v1",
             "automated_student_lane_batch_audit_v1",
+            "external_api_status_v1",
+            "external_api_block_reason_v1",
+            "external_api_action_url_v1",
         ):
             if fld in seam_obs:
                 record[fld] = seam_obs[fld]
@@ -580,6 +583,9 @@ def record_parallel_batch_finished(
             "llm_student_output_rejections_v1",
             "student_llm_execution_v1",
             "automated_student_lane_batch_audit_v1",
+            "external_api_status_v1",
+            "external_api_block_reason_v1",
+            "external_api_action_url_v1",
         ):
             if fld in seam_obs:
                 record[fld] = seam_obs[fld]

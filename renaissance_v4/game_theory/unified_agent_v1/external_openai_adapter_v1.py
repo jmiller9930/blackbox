@@ -9,13 +9,91 @@ import os
 import time
 import urllib.error
 import urllib.request
+from pathlib import Path
 from typing import Any
+
+# Optional local file (gitignored) seeds OPENAI_API_KEY once if env is empty.
+_LOCAL_SECRETS_INJECTED = False
+_DEFAULT_LOCAL_SECRETS_PATH = Path(__file__).resolve().parent / "config" / "reasoning_router_secrets.local.json"
 
 SCHEMA_RESULT = "external_openai_call_result_v1"
 CONTRACT_VERSION = 1
 
 
+def classify_openai_http_failure_v1(*, http_code: int, body: str) -> str:
+    """
+    Map HTTP / error body to addendum ``*_v1`` blocker codes (no secrets in ``body``).
+    """
+    b = (body or "").lower()
+    if http_code == 429:
+        return "rate_limited_v1"
+    if http_code in (500, 502, 503, 504):
+        return "provider_unavailable_v1"
+    if http_code == 402:
+        return "insufficient_funds_v1"
+    if http_code == 401:
+        return "provider_error_v1"
+    # Parse OpenAI error JSON if present
+    err_code: str | None = None
+    err_msg: str = b
+    try:
+        o = json.loads(body) if body.strip().startswith("{") else None
+        if isinstance(o, dict) and isinstance(o.get("error"), dict):
+            err_code = str((o.get("error") or {}).get("code") or "").lower()
+            err_msg = str((o.get("error") or {}).get("message") or body).lower()
+    except (json.JSONDecodeError, TypeError, ValueError):
+        err_code = None
+    combined = f"{err_code} {err_msg} {b}"
+    if "insufficient_quota" in combined or (http_code == 403 and "quota" in combined):
+        return "quota_exceeded_v1"
+    if "rate_limit" in combined or (http_code == 403 and "rate" in combined):
+        return "rate_limited_v1"
+    if "insufficient" in combined and "fund" in combined:
+        return "insufficient_funds_v1"
+    if "billing" in combined or "balance" in combined and "low" in combined:
+        return "insufficient_funds_v1"
+    if http_code in (400, 403, 404):
+        return "provider_error_v1"
+    if http_code >= 500:
+        return "provider_unavailable_v1"
+    return "provider_error_v1"
+
+
+def _maybe_inject_openai_key_from_local_ignored_file_v1() -> None:
+    """
+    If ``OPENAI_API_KEY`` (or the configured env name) is unset, read
+    ``config/reasoning_router_secrets.local.json`` (gitignored) and set the env var **once** per process.
+
+    The runtime contract remains: adapter reads the key from the environment. This file is a dev convenience
+    only; **do not** commit the ``.local`` file. GT_DIRECTIVE_026AI: no API key in tracked router JSON.
+    """
+    global _LOCAL_SECRETS_INJECTED
+    if _LOCAL_SECRETS_INJECTED:
+        return
+    _LOCAL_SECRETS_INJECTED = True
+    if (os.environ.get("OPENAI_API_KEY") or "").strip():
+        return
+    p = _DEFAULT_LOCAL_SECRETS_PATH
+    if not p.is_file():
+        return
+    try:
+        raw = json.loads(p.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError, TypeError, ValueError):
+        return
+    if not isinstance(raw, dict):
+        return
+    k = raw.get("openai_api_key") or raw.get("OPENAI_API_KEY")
+    if not isinstance(k, str):
+        return
+    s = k.strip()
+    if not s or s.upper().startswith("REPLACE_") or "<" in s:
+        return
+    os.environ["OPENAI_API_KEY"] = s
+
+
 def _get_api_key(api_key_env_var: str) -> str | None:
+    if str(api_key_env_var or "OPENAI_API_KEY").strip() in ("", "OPENAI_API_KEY"):
+        _maybe_inject_openai_key_from_local_ignored_file_v1()
     v = (os.environ.get(str(api_key_env_var or "OPENAI_API_KEY").strip() or "OPENAI_API_KEY") or "").strip()
     return v if v else None
 
@@ -44,6 +122,7 @@ def call_openai_responses_v1(
             0.0,
             (time.perf_counter() - t0) * 1000.0,
             "missing api key in environment",
+            failure_blocker_v1="missing_api_key_v1",
         )
     # Responses API — prefer ``instructions`` + string ``input`` (see OpenAI docs).
     body_obj: dict[str, Any] = {
@@ -80,6 +159,7 @@ def call_openai_responses_v1(
         except OSError:
             detail = str(e)
         ms = (time.perf_counter() - t0) * 1000.0
+        fb = classify_openai_http_failure_v1(http_code=int(e.code), body=detail)
         return _fail(
             model_requested,
             f"http_{e.code}",
@@ -89,11 +169,20 @@ def call_openai_responses_v1(
             0.0,
             ms,
             detail,
+            failure_blocker_v1=fb,
         )
     except (urllib.error.URLError, TimeoutError, OSError, json.JSONDecodeError) as e:
         ms = (time.perf_counter() - t0) * 1000.0
         return _fail(
-            model_requested, "request_failed", None, None, None, 0.0, ms, str(e)
+            model_requested,
+            "request_failed",
+            None,
+            None,
+            None,
+            0.0,
+            ms,
+            str(e),
+            failure_blocker_v1="provider_unavailable_v1",
         )
     ms = (time.perf_counter() - t0) * 1000.0
     return _parse_openai_responses_body(model_requested, raw, ms)
@@ -138,6 +227,7 @@ def _parse_openai_responses_body(
         "contract_version": CONTRACT_VERSION,
         "ok": out_text is not None,
         "error": None if out_text else "empty_output",
+        "failure_blocker_v1": None,
         "provider": "openai",
         "model_requested": model_requested,
         "model_resolved": resolved,
@@ -160,12 +250,15 @@ def _fail(
     tot: int | None,
     latency_ms: float,
     err: str,
+    *,
+    failure_blocker_v1: str | None = "provider_error_v1",
 ) -> dict[str, Any]:
     return {
         "schema": SCHEMA_RESULT,
         "contract_version": CONTRACT_VERSION,
         "ok": False,
         "error": err[:2000],
+        "failure_blocker_v1": failure_blocker_v1,
         "provider": "openai",
         "model_requested": model_requested,
         "model_resolved": model_resolved,
@@ -182,14 +275,17 @@ def _fail(
 def run_smoke_test_strict_json_v1(
     *,
     api_key_env_var: str = "OPENAI_API_KEY",
-    model: str = "gpt-5.5",
+    model: str | None = None,
 ) -> dict[str, Any]:
     """
     Minimal /v1/responses call; returns structured result (no key printed by caller).
+    ``OPENAI_REASONING_MODEL`` overrides default; default ``gpt-4o-mini`` for wide gateway availability.
+
     For CLI: ``python -m renaissance_v4.game_theory.unified_agent_v1.external_openai_adapter_v1 smoke``.
     """
+    m = model or str(os.environ.get("OPENAI_REASONING_MODEL", "") or "").strip() or "gpt-4o-mini"
     out = call_openai_responses_v1(
-        model_requested=model,
+        model_requested=m,
         system_instruction="Return only a JSON object with one key 'ok' true",
         user_text="Smoke test. Reply with JSON only.",
         api_key_env_var=api_key_env_var,
@@ -201,13 +297,17 @@ def run_smoke_test_strict_json_v1(
         },
     )
     return {
+        "schema": "external_openai_live_smoke_result_v1",
         "smoke_ok": bool(out.get("ok")),
+        "provider": "openai",
+        "model_requested": m,
         "model_resolved": out.get("model_resolved"),
         "input_tokens": out.get("input_tokens"),
         "output_tokens": out.get("output_tokens"),
         "total_tokens": out.get("total_tokens"),
         "latency_ms": out.get("latency_ms"),
         "error": out.get("error"),
+        "response_status": out.get("response_status"),
     }
 
 

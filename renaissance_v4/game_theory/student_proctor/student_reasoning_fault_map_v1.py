@@ -129,8 +129,11 @@ def merge_unified_agent_router_fault_nodes_v1(
     route = str(d.get("final_route_v1") or "local_only")
     reasons = list(d.get("escalation_reason_codes_v1") or [])
     bl = list(d.get("escalation_blockers_v1") or [])
+    omsg = str(d.get("operator_message_english_v1") or "").strip()
 
-    if route == "external_blocked_missing_key" or "missing_api_key" in " ".join(bl).lower():
+    if omsg:
+        rmsg = omsg
+    elif route == "external_blocked_missing_key" or "missing_api_key" in " ".join(bl).lower():
         rmsg = "External review was blocked because the OpenAI API key was not configured."
     elif route == "external_blocked_budget" or any("budget" in str(x) for x in bl):
         rmsg = "External review was blocked because the run budget was exceeded."
@@ -143,16 +146,36 @@ def merge_unified_agent_router_fault_nodes_v1(
     else:
         rmsg = f"Reasoning router evaluated; final route: {route}."
 
+    def _funding_cause() -> bool:
+        return any(
+            str(x) in ("insufficient_funds_v1", "quota_exceeded_v1", "budget_exceeded_v1", "token_limit_exceeded_v1")
+            for x in bl
+        )
+
     by_id["reasoning_router_evaluated"] = make_fault_node_v1(
         "reasoning_router_evaluated",
         STATUS_PASS if d else STATUS_NOT_PROVEN,
         input_summary_v1="Unified routing policy for this decision.",
         output_summary_v1=route,
-        evidence_fields_v1=["final_route_v1", "escalation_reason_codes_v1", "escalation_blockers_v1"],
+        evidence_fields_v1=[
+            "final_route_v1",
+            "escalation_reason_codes_v1",
+            "escalation_blockers_v1",
+            "external_api_attempted_v1",
+            "external_api_block_reason_v1",
+            "external_api_action_url_v1",
+            "funding_blocker_suspected_v1",
+        ],
         evidence_values_v1={
             "final_route_v1": route,
             "escalation_reason_codes_v1": reasons,
             "escalation_blockers_v1": bl,
+            "external_api_attempted_v1": bool(d.get("external_api_attempted_v1")),
+            "external_api_block_reason_v1": d.get("external_api_block_reason_v1"),
+            "external_api_action_url_v1": d.get("external_api_action_url_v1")
+            if d.get("external_api_action_url_v1")
+            else None,
+            "funding_blocker_suspected_v1": _funding_cause(),
         },
         operator_message_v1=rmsg[:4000],
     )

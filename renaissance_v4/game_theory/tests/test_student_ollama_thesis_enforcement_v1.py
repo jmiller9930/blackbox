@@ -149,7 +149,7 @@ def test_seam_llm_profile_no_stub_fallback_on_thesis_reject(tmp_path: Path) -> N
     ]
     ex_req = {
         "student_brain_profile_v1": "memory_context_llm_student",
-        "student_llm_v1": {"llm_model": "qwen2.5:7b", "llm_provider": "ollama"},
+        "student_llm_v1": {"llm_model": "qwen3-coder:30b", "llm_provider": "ollama"},
         "prompt_version": "pv_seam_test",
     }
 
@@ -157,17 +157,21 @@ def test_seam_llm_profile_no_stub_fallback_on_thesis_reject(tmp_path: Path) -> N
         return None, ["student_output_thesis_incomplete_for_llm_profile: missing confidence_band"]
 
     with mock.patch(
-        "renaissance_v4.game_theory.student_proctor.student_proctor_operator_runtime_v1.emit_student_output_via_ollama_v1",
-        fake_emit,
+        "renaissance_v4.game_theory.student_proctor.student_proctor_operator_runtime_v1.verify_ollama_model_tag_available_v1",
+        lambda *_a, **_k: None,
     ):
-        audit = student_loop_seam_after_parallel_batch_v1(
-            results=results,
-            run_id="run_llm_thesis_reject",
-            db_path=db,
-            store_path=store,
-            strategy_id="pattern_learning",
-            exam_run_contract_request_v1=ex_req,
-        )
+        with mock.patch(
+            "renaissance_v4.game_theory.student_proctor.student_proctor_operator_runtime_v1.emit_student_output_via_ollama_v1",
+            fake_emit,
+        ):
+            audit = student_loop_seam_after_parallel_batch_v1(
+                results=results,
+                run_id="run_llm_thesis_reject",
+                db_path=db,
+                store_path=store,
+                strategy_id="pattern_learning",
+                exam_run_contract_request_v1=ex_req,
+            )
     assert int(audit.get("llm_student_output_rejections_v1") or 0) >= 1
     assert int(audit.get("student_learning_rows_appended") or 0) == 0
     errs = audit.get("errors") or []

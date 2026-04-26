@@ -79,7 +79,7 @@ def _populate_023_fixtures(sc: Path, st: Path) -> None:
                 "started_at_utc": "2026-12-01T00:00:00Z",
                 "operator_batch_audit": oba1,
                 "student_brain_profile_v1": "memory_context_llm_student",
-                "student_llm_v1": {"llm_model": "m1"},
+                "student_llm_v1": {"llm_model": "qwen3-coder:30b"},
                 "exam_e_score_v1": 0.9,
                 "exam_p_score_v1": 0.95,
                 "exam_pass_v1": True,
