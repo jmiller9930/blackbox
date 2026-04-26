@@ -20,6 +20,10 @@ from renaissance_v4.game_theory.ollama_role_routing_v1 import student_ollama_bas
 from renaissance_v4.game_theory.student_proctor.student_ollama_student_output_v1 import (
     verify_ollama_model_tag_available_v1,
 )
+from renaissance_v4.game_theory.unified_agent_v1.external_openai_adapter_v1 import (
+    host_secrets_file_has_plausible_openai_key_line_v1,
+    host_secrets_path_openai_v1,
+)
 from renaissance_v4.game_theory.unified_agent_v1.reasoning_router_config_v1 import (
     load_reasoning_router_config_v1,
     operator_reasoning_model_preferences_path_v1,
@@ -65,6 +69,28 @@ def _openai_key_configured_v1(cfg: dict[str, Any]) -> bool:
     ev = str(cfg.get("api_key_env_var") or "OPENAI_API_KEY").strip() or "OPENAI_API_KEY"
     v = (_get_api_key(ev) or "").strip()
     return len(v) > 8 and not v.lower().startswith("sk-placeholder")
+
+
+def _classify_openai_key_situation_v1(cfg: dict[str, Any], key_ok: bool) -> str:
+    """
+    Machine-readable key situation for the web process (no key material in API).
+
+    * ``unavailable_to_web_process`` — host file has a plausible ``OPENAI_API_KEY=`` line but
+      this process has no resolvable key in ``api_key_env_var`` (wrong var, permissions, or inject error).
+    * ``missing_in_web_process`` — no key in the process and no such line in the host file (e.g. key only
+      in an interactive shell, not in systemd/Flask).
+    * ``invalid_or_placeholder`` — non-empty env value for ``api_key_env_var`` that fails the plausibility check.
+    * ``ok`` — key usable for the adapter.
+    """
+    if key_ok:
+        return "ok"
+    ev = str(cfg.get("api_key_env_var") or "OPENAI_API_KEY").strip() or "OPENAI_API_KEY"
+    env_raw = (os.environ.get(ev) or "").strip()
+    if env_raw and not key_ok:
+        return "invalid_or_placeholder"
+    if host_secrets_file_has_plausible_openai_key_line_v1() and not key_ok and not env_raw:
+        return "unavailable_to_web_process"
+    return "missing_in_web_process"
 
 
 def _last_router_and_governor_from_events(
@@ -131,6 +157,7 @@ def _operator_block_message_v1(
     last_call: str,
     primary_code: str,
     ollama_err: Any,
+    openai_key_situation: str = "ok",
 ) -> str | None:
     """One human sentence for tooltip only (not internal codes)."""
     if ollama_err:
@@ -142,7 +169,20 @@ def _operator_block_message_v1(
     if not ext_effective and not operator_blocks:
         return "External API is not enabled in effective configuration (atypical: expected only if config bypassed load merge)."
     if not key_ok and ext_effective:
-        return "OpenAI key is not configured. External API is blocked — configuration issue, or turn off Allow External AI."
+        if openai_key_situation == "unavailable_to_web_process":
+            return (
+                "A host OpenAI env file appears to have a key line, but this web process could not use it. "
+                "Check api_key_env_var, BLACKBOX_OPENAI_ENV_FILE, and that the process user can read the file; "
+                "a shell export does not apply to the Flask service without a service env file."
+            )
+        if openai_key_situation == "missing_in_web_process":
+            return (
+                "No OpenAI API key in this process (and no usable line in the default host file). "
+                "Set OPENAI for the service user or add ~/.blackbox_secrets/openai.env; interactive shell is not enough."
+            )
+        if openai_key_situation == "invalid_or_placeholder":
+            return "The API key in this process is missing, too short, or a placeholder. Replace it or use Allow External AI off."
+        return "OpenAI key is not available to this process; turn off Allow External AI or fix the service environment."
     if primary_code == "budget_blocked":
         return "External API Blocked (Budget) — per-run cap or token limits."
     if primary_code == "no_external_api_call_in_trace":
@@ -162,6 +202,7 @@ def get_reasoning_model_operator_snapshot_v1(job_id: str | None = None) -> dict[
     model = str(cfg.get("local_llm_model") or STUDENT_LLM_APPROVED_MODEL_V1)
     ollama_err = verify_ollama_model_tag_available_v1(base_url, model, timeout_s=8.0)
     key_ok = _openai_key_configured_v1(cfg)
+    openai_key_situation_v1 = _classify_openai_key_situation_v1(cfg, key_ok)
 
     # External path: operator “off” blocks; when not blocked, load merge forces external_api_enabled true.
     if operator_blocks:
@@ -169,7 +210,12 @@ def get_reasoning_model_operator_snapshot_v1(job_id: str | None = None) -> dict[
     elif not ext_effective:
         ext_health = "router_config_off"
     elif not key_ok:
-        ext_health = "missing_key"
+        if openai_key_situation_v1 == "unavailable_to_web_process":
+            ext_health = "openai_unavailable_to_web"
+        elif openai_key_situation_v1 == "invalid_or_placeholder":
+            ext_health = "openai_key_invalid"
+        else:
+            ext_health = "missing_key"
     else:
         ext_health = "available"
 
@@ -226,7 +272,14 @@ def get_reasoning_model_operator_snapshot_v1(job_id: str | None = None) -> dict[
     elif not ext_effective:
         primary_code = "router_external_disabled"
     elif not key_ok:
-        primary_code = "missing_openai_key"
+        if openai_key_situation_v1 == "unavailable_to_web_process":
+            primary_code = "openai_unavailable_in_web_process"
+        elif openai_key_situation_v1 == "invalid_or_placeholder":
+            primary_code = "openai_key_invalid_in_web_process"
+        elif openai_key_situation_v1 == "missing_in_web_process":
+            primary_code = "openai_key_missing_in_web_process"
+        else:
+            primary_code = "missing_openai_key"
     elif jid and last_call == "failed" and ext_effective and key_ok:
         primary_code = "external_api_call_failed"
     elif budget_label == "exhausted" and ext_effective:
@@ -242,7 +295,10 @@ def get_reasoning_model_operator_snapshot_v1(job_id: str | None = None) -> dict[
         "router_off": "026AI router is disabled in config.",
         "operator_gateway_off": "Operator has turned off the external API gateway (escalation not allowed).",
         "router_external_disabled": "External API is off in effective config (unusual if load merge runs; check for dict-only router config path).",
-        "missing_openai_key": "Allow External AI is on; API key (or api_key_env_var) is missing or placeholder — configuration issue until fixed.",
+        "missing_openai_key": "Legacy code path for OpenAI key; see openai_key_missing_in_web_process and related codes.",
+        "openai_unavailable_in_web_process": "Host file suggests OPENAI_API_KEY, but the web process has no resolvable key (service env, permissions, or wrong api_key_env_var).",
+        "openai_key_invalid_in_web_process": "A value exists for the API key in this process, but it is not usable (placeholder or too short).",
+        "openai_key_missing_in_web_process": "No OpenAI key in the web process and no plausible key line in the host file (shell-only key shows here).",
         "budget_blocked": "External budget or caps block escalation for this run.",
         "idle_no_job_scoped": "No job_id in query — last-call trace not shown; add ?job_id= for a specific run.",
         "no_external_api_call_in_trace": "External is enabled, but this run’s trace shows no OpenAI call (no escalation, or local-only route).",
@@ -273,7 +329,12 @@ def get_reasoning_model_operator_snapshot_v1(job_id: str | None = None) -> dict[
     elif operator_blocks or not ext_effective:
         operator_block_code_v1 = "api_disabled"
     elif not key_ok and ext_effective:
-        operator_block_code_v1 = "missing_key"
+        if openai_key_situation_v1 == "unavailable_to_web_process":
+            operator_block_code_v1 = "key_unavailable_to_web"
+        elif openai_key_situation_v1 == "invalid_or_placeholder":
+            operator_block_code_v1 = "key_invalid_in_env"
+        else:
+            operator_block_code_v1 = "missing_key"
     elif budget_label == "exhausted" and ext_effective:
         operator_block_code_v1 = "budget_exceeded"
     elif primary_code == "no_external_api_call_in_trace":
@@ -306,9 +367,18 @@ def get_reasoning_model_operator_snapshot_v1(job_id: str | None = None) -> dict[
     elif not ext_effective:
         external_api_proof_state_v1 = "not_connected"
         external_api_proof_line_v1 = "External API: Not Configured"
+    elif not key_ok and openai_key_situation_v1 == "unavailable_to_web_process":
+        external_api_proof_state_v1 = "blocked"
+        external_api_proof_line_v1 = "External API: Not available to web process"
+    elif not key_ok and openai_key_situation_v1 == "missing_in_web_process":
+        external_api_proof_state_v1 = "blocked"
+        external_api_proof_line_v1 = "External API: Missing key in web process"
+    elif not key_ok and openai_key_situation_v1 == "invalid_or_placeholder":
+        external_api_proof_state_v1 = "blocked"
+        external_api_proof_line_v1 = "External API: Blocked (invalid or placeholder key)"
     elif not key_ok:
         external_api_proof_state_v1 = "blocked"
-        external_api_proof_line_v1 = "External API: Blocked — Configuration Issue"
+        external_api_proof_line_v1 = "External API: Not available to web process"
     elif budget_label == "exhausted" and not operator_blocks:
         external_api_proof_state_v1 = "blocked"
         external_api_proof_line_v1 = "External API: Blocked (Budget)"
@@ -337,8 +407,12 @@ def get_reasoning_model_operator_snapshot_v1(job_id: str | None = None) -> dict[
     elif external_api_proof_state_v1 == "ready_no_call":
         external_line_core = "Ready"
     elif external_api_proof_state_v1 == "blocked":
-        if "Configuration Issue" in external_api_proof_line_v1:
-            external_line_core = "Configuration issue"
+        if "Not available to web" in external_api_proof_line_v1:
+            external_line_core = "Not available to web"
+        elif "Missing key" in external_api_proof_line_v1:
+            external_line_core = "No key in web process"
+        elif "invalid or placeholder" in external_api_proof_line_v1:
+            external_line_core = "Invalid key"
         else:
             external_line_core = "Blocked"
     elif external_api_proof_state_v1 == "not_connected":
@@ -354,13 +428,21 @@ def get_reasoning_model_operator_snapshot_v1(job_id: str | None = None) -> dict[
     tile_detail_v1 = " | ".join(ui_core_lines_v1)
 
     operator_block_message_v1 = _operator_block_message_v1(
-        operator_blocks, ext_effective, key_ok, last_call, primary_code, ollama_err
+        operator_blocks,
+        ext_effective,
+        key_ok,
+        last_call,
+        primary_code,
+        ollama_err,
+        openai_key_situation_v1,
     )
 
     if not router_on:
         headline_badge_v1 = "Router off"
     elif ollama_err:
         headline_badge_v1 = "Fault"
+    elif ext_effective and not key_ok and openai_key_situation_v1 == "unavailable_to_web_process":
+        headline_badge_v1 = "Degraded"
     elif ext_effective and not key_ok:
         headline_badge_v1 = "Fault"
     elif jid and last_call == "failed" and ext_effective and key_ok:
@@ -381,6 +463,8 @@ def get_reasoning_model_operator_snapshot_v1(job_id: str | None = None) -> dict[
     headline = headline_badge_v1
     if not router_on:
         color = "blue"
+    elif ext_effective and not key_ok and openai_key_situation_v1 == "unavailable_to_web_process":
+        color = "amber"
     elif ollama_err or (ext_effective and not key_ok) or (jid and last_call == "failed" and ext_effective and key_ok) or (budget_label == "exhausted" and ext_effective):
         color = "red"
     elif operator_blocks or not ext_effective:
@@ -439,6 +523,9 @@ def get_reasoning_model_operator_snapshot_v1(job_id: str | None = None) -> dict[
             ),
             "tile_detail_v1": tile_detail_v1,
             "tokens_current_run_v1": {"input": total_in, "output": total_out, "estimated_cost_usd_v1": round(est_usd, 6)},
+            "openai_key_situation_v1": openai_key_situation_v1,
+            "openai_secrets_path_v1": host_secrets_path_openai_v1(),
+            "openai_secrets_plausible_key_line_in_file": host_secrets_file_has_plausible_openai_key_line_v1(),
             "block_reasons_v1": br,
         },
         "runtime_signals_v1": {
@@ -448,6 +535,16 @@ def get_reasoning_model_operator_snapshot_v1(job_id: str | None = None) -> dict[
             },
             "local_ollama_probe": {"error": ollama_err, "base_url": base_url, "model": model},
             "openai_key_configured": key_ok,
+            "openai_key_diagnostics_v1": {
+                "key_resolved": key_ok,
+                "situation": openai_key_situation_v1,
+                "api_key_env_var": str(cfg.get("api_key_env_var") or "OPENAI_API_KEY"),
+                "key_nonempty_in_process_environ": bool(
+                    (os.environ.get(str(cfg.get("api_key_env_var") or "OPENAI_API_KEY").strip() or "OPENAI_API_KEY") or "").strip()
+                ),
+                "host_secrets_path": host_secrets_path_openai_v1(),
+                "host_secrets_plausible_key_line": host_secrets_file_has_plausible_openai_key_line_v1(),
+            },
             "last_reasoning_router_decision_v1": last_dec,
         },
     }

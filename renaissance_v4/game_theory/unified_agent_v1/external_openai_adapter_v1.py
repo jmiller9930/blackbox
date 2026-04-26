@@ -70,22 +70,60 @@ def _path_host_openai_envfile_v1() -> str:
     return os.path.expanduser("~/.blackbox_secrets/openai.env")
 
 
+def host_secrets_path_openai_v1() -> str:
+    """Absolute path to the host envfile the adapter may read (no I/O; for diagnostics only)."""
+    return _path_host_openai_envfile_v1()
+
+
+def host_secrets_file_has_plausible_openai_key_line_v1() -> bool:
+    """
+    True if a readable file at :func:`_path_host_openai_envfile_v1` contains a non-trivial
+    ``OPENAI_API_KEY=`` line. Does not mutate the process environment. Used to distinguish
+    “key missing in web process” from “file exists but this process could not use it” (without
+    logging key material).
+    """
+    path = _path_host_openai_envfile_v1()
+    if not path or not os.path.isfile(path):
+        return False
+    try:
+        raw = open(path, encoding="utf-8", errors="replace").read()
+    except OSError:
+        return False
+    for line in raw.splitlines():
+        s = line.strip()
+        if not s or s.startswith("#"):
+            continue
+        if s.startswith("export "):
+            s = s[7:].strip()
+        if not s.upper().startswith("OPENAI_API_KEY="):
+            continue
+        val = s.split("=", 1)[-1].strip().strip("'\"")
+        if not val or val.lower().startswith("sk-placeholder"):
+            continue
+        return len(val) > 8
+    return False
+
+
 def _maybe_inject_openai_key_from_host_secrets_file_v1(*, target_env: str) -> None:
     """
     If ``target_env`` is ``OPENAI_API_KEY`` and it is empty, read the first ``OPENAI_API_KEY=...`` line from
-    the host envfile (``export`` prefix allowed). Runs at most once per process.
+    the host envfile (``export`` prefix allowed). Idempotent: only marks done after a host-file read
+    attempt that found the file (so if the file was missing on first import and is created later,
+    a subsequent call can still inject).
     """
     global _INJECTED_HOST_OPENAI_FILE
     if _INJECTED_HOST_OPENAI_FILE:
         return
-    _INJECTED_HOST_OPENAI_FILE = True
     if (target_env or "OPENAI_API_KEY") != "OPENAI_API_KEY":
+        _INJECTED_HOST_OPENAI_FILE = True
         return
     if (os.environ.get("OPENAI_API_KEY") or "").strip():
+        _INJECTED_HOST_OPENAI_FILE = True
         return
     path = _path_host_openai_envfile_v1()
     if not path or not os.path.isfile(path):
         return
+    _INJECTED_HOST_OPENAI_FILE = True
     try:
         raw = open(path, encoding="utf-8", errors="replace").read()
     except OSError:
