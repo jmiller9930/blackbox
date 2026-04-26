@@ -2146,15 +2146,37 @@ def create_app() -> Flask:
 
     @app.get("/api/debug/learning-loop/trace/<job_id>")
     def api_debug_learning_loop_trace_v1(job_id: str) -> Any:
-        """Debug learning loop trace — graph + breakpoints + fingerprint profile compare."""
-        return jsonify(build_debug_learning_loop_trace_v1(job_id.strip())), 200
+        """Debug learning loop trace — graph + breakpoints + fingerprint profile compare.
+
+        Optional: ``run_a_job_id`` (026C learning producer job) and ``control_job_id`` (baseline run for
+        same scenario) populate ``learning_effect_closure_026c_v1`` (GT 026C addendum).
+        """
+        from flask import request
+
+        ra = (request.args.get("run_a_job_id") or "").strip() or None
+        ct = (request.args.get("control_job_id") or "").strip() or None
+        return jsonify(
+            build_debug_learning_loop_trace_v1(
+                job_id.strip(),
+                run_a_job_id=ra,
+                control_job_id=ct,
+            )
+        ), 200
 
     @app.get("/api/debug/learning-loop/trace-stream/<job_id>")
     def api_debug_learning_loop_trace_stream_v1(job_id: str) -> Any:
         """NDJSON stream: stage timings then final ``complete`` payload (same as non-stream API)."""
 
         def gen() -> Any:
-            for chunk in iter_debug_learning_loop_trace_ndjson_v1(job_id.strip()):
+            from flask import request
+
+            ra = (request.args.get("run_a_job_id") or "").strip() or None
+            ct = (request.args.get("control_job_id") or "").strip() or None
+            for chunk in iter_debug_learning_loop_trace_ndjson_v1(
+                job_id.strip(),
+                run_a_job_id=ra,
+                control_job_id=ct,
+            ):
                 yield chunk
 
         return Response(

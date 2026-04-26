@@ -6,7 +6,7 @@ Debug Learning Loop Trace — LangGraph-style graph + fingerprint profile compar
 from ``referee_used_student_output`` (``true`` / ``false`` / ``unknown``). Events are written from
 parent-thread instrumentation (batch / seam / scorecard), not from process-pool workers.
 
-``GET /api/debug/learning-loop/trace/<job_id>`` — extends ``learning_loop_trace_v1`` with:
+``GET /api/debug/learning-loop/trace/<job_id>`` (optional: ``?run_a_job_id=…&control_job_id=…`` for 026C closure) — extends ``learning_loop_trace_v1`` with:
 - extra node **Decision delta vs baseline**
 - ``breakpoints_v1`` — machine-detectable fault codes (including triple-profile identical visible fields)
 - ``fingerprint_profile_compare_v1`` — newest-done row per canonical brain profile for same fingerprint
@@ -588,7 +588,13 @@ def _referee_coupling_operator_line_v1(nodes: list[dict[str, Any]]) -> dict[str,
     }
 
 
-def _finalize_debug_trace_from_base_v1(base: dict[str, Any], entry: dict[str, Any]) -> dict[str, Any]:
+def _finalize_debug_trace_from_base_v1(
+    base: dict[str, Any],
+    entry: dict[str, Any],
+    *,
+    run_a_job_id: str | None = None,
+    control_job_id: str | None = None,
+) -> dict[str, Any]:
     """Attach debug-only fields; does not mutate the ``base`` dict passed in."""
     work = dict(base)
     jid = str(work.get("job_id") or "").strip()
@@ -739,10 +745,30 @@ def _finalize_debug_trace_from_base_v1(base: dict[str, Any], entry: dict[str, An
             "**lifecycle_tape_summary_v1** from the same job’s trace lines (see evidence_payload)."
         ),
     }
+    try:
+        from renaissance_v4.game_theory.learning_effect_closure_026c_v1 import build_learning_effect_closure_026c_v1
+
+        out["learning_effect_closure_026c_v1"] = build_learning_effect_closure_026c_v1(
+            str(jid or "").strip(),
+            run_a_job_id=run_a_job_id,
+            control_job_id=control_job_id,
+            scorecard_entry_run_b=entry,
+        )
+    except Exception as e:
+        out["learning_effect_closure_026c_v1"] = {
+            "schema": "learning_effect_closure_026c_v1",
+            "ok": False,
+            "error": str(e)[:2000],
+        }
     return out
 
 
-def build_debug_learning_loop_trace_v1(job_id: str) -> dict[str, Any]:
+def build_debug_learning_loop_trace_v1(
+    job_id: str,
+    *,
+    run_a_job_id: str | None = None,
+    control_job_id: str | None = None,
+) -> dict[str, Any]:
     base = build_learning_loop_trace_v1(job_id)
     if not base.get("ok"):
         return {
@@ -760,10 +786,17 @@ def build_debug_learning_loop_trace_v1(job_id: str) -> dict[str, Any]:
     if not isinstance(entry, dict):
         return {**base, "schema": SCHEMA_DEBUG, "ok": False, "error": "entry_missing_after_trace"}
 
-    return _finalize_debug_trace_from_base_v1(base, entry)
+    return _finalize_debug_trace_from_base_v1(
+        base, entry, run_a_job_id=run_a_job_id, control_job_id=control_job_id
+    )
 
 
-def iter_debug_learning_loop_trace_ndjson_v1(job_id: str) -> Iterator[str]:
+def iter_debug_learning_loop_trace_ndjson_v1(
+    job_id: str,
+    *,
+    run_a_job_id: str | None = None,
+    control_job_id: str | None = None,
+) -> Iterator[str]:
     """
     NDJSON stream: ``stage`` lines (server-side steps + ``ms``) then one ``complete`` line with the
     same payload as ``build_debug_learning_loop_trace_v1`` (for live operator progress in the UI).
@@ -828,7 +861,9 @@ def iter_debug_learning_loop_trace_ndjson_v1(job_id: str) -> Iterator[str]:
             "status": "running",
         }
     )
-    out = _finalize_debug_trace_from_base_v1(base, entry)
+    out = _finalize_debug_trace_from_base_v1(
+        base, entry, run_a_job_id=run_a_job_id, control_job_id=control_job_id
+    )
     yield _line(
         {
             "type": "stage",

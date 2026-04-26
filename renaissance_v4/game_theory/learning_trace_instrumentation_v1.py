@@ -521,6 +521,21 @@ def emit_lifecycle_tape_summary_v1(
                 "lifecycle_reasoning_stage_v1": stg if isinstance(stg, dict) else None,
             }
         )
+    ltr: dict[str, Any] = {
+        "schema": tr.get("schema"),
+        "closed_v1": tr.get("closed_v1"),
+        "exit_at_bar_index_v1": tr.get("exit_at_bar_index_v1"),
+        "exit_reason_code_v1": tr.get("exit_reason_code_v1"),
+        "per_bar_slim_v1": slim,
+    }
+    r026 = tr.get("retrieved_lifecycle_deterministic_learning_026c_v1")
+    if isinstance(r026, list) and r026:
+        ltr["retrieved_lifecycle_deterministic_learning_026c_v1"] = [x for x in r026 if isinstance(x, dict)][:8]
+    per0 = per[0] if per else None
+    le0 = (per0 or {}).get("lifecycle_reasoning_eval_v1") if isinstance(per0, dict) else None
+    dctx = (le0 or {}).get("deterministic_learning_context_026c_v1") if isinstance(le0, dict) else None
+    if isinstance(dctx, dict) and dctx:
+        ltr["deterministic_learning_context_026c_v1"] = dctx
     _emit(
         job_id=job_id,
         fingerprint=fingerprint,
@@ -530,15 +545,7 @@ def emit_lifecycle_tape_summary_v1(
         producer="lifecycle_reasoning_engine_v1",
         trade_id=trade_id,
         scenario_id=scenario_id,
-        evidence_payload={
-            "lifecycle_tape_result_v1": {
-                "schema": tr.get("schema"),
-                "closed_v1": tr.get("closed_v1"),
-                "exit_at_bar_index_v1": tr.get("exit_at_bar_index_v1"),
-                "exit_reason_code_v1": tr.get("exit_reason_code_v1"),
-                "per_bar_slim_v1": slim,
-            }
-        },
+        evidence_payload={"lifecycle_tape_result_v1": ltr},
     )
 
 
@@ -572,7 +579,73 @@ def emit_entry_reasoning_pipeline_stage_v1(
     )
 
 
+def emit_026c_learning_record_created_v1(
+    *,
+    job_id: str,
+    fingerprint: str | None,
+    scenario_id: str,
+    trade_id: str,
+    record_id_026c: str,
+) -> None:
+    _emit(
+        job_id=job_id,
+        fingerprint=fingerprint,
+        stage="learning_record_created_v1",
+        status="pass",
+        summary="GT_DIRECTIVE_026C: student_lifecycle_deterministic_learning record appended (closed tape).",
+        producer="lifecycle_deterministic_learning_026c_v1",
+        scenario_id=scenario_id,
+        trade_id=trade_id,
+        evidence_payload={"record_id_026c": record_id_026c, "event": "learning_record_created_v1"},
+    )
+
+
+def emit_026c_learning_scoring_completed_v1(
+    *,
+    job_id: str,
+    fingerprint: str | None,
+    scenario_id: str,
+    trade_id: str,
+    decision_quality_score_v1: Any,
+) -> None:
+    _emit(
+        job_id=job_id,
+        fingerprint=fingerprint,
+        stage="learning_scoring_completed_v1",
+        status="pass",
+        summary="GT_DIRECTIVE_026C: decision_quality_score_v1 (deterministic).",
+        producer="lifecycle_deterministic_learning_026c_v1",
+        scenario_id=scenario_id,
+        trade_id=trade_id,
+        evidence_payload={"decision_quality_score_v1": decision_quality_score_v1, "event": "learning_scoring_completed_v1"},
+    )
+
+
+def emit_026c_learning_decision_made_v1(
+    *,
+    job_id: str,
+    fingerprint: str | None,
+    scenario_id: str,
+    trade_id: str,
+    learning_decision_v1: Any,
+) -> None:
+    _emit(
+        job_id=job_id,
+        fingerprint=fingerprint,
+        stage="learning_decision_made_v1",
+        status="pass",
+        summary="GT_DIRECTIVE_026C: learning_decision_v1 (promote | reject | insufficient_data).",
+        producer="lifecycle_deterministic_learning_026c_v1",
+        scenario_id=scenario_id,
+        trade_id=trade_id,
+        evidence_payload={"learning_decision_v1": learning_decision_v1, "event": "learning_decision_made_v1"},
+    )
+
+
 __all__ = [
+    "emit_026c_learning_decision_made_v1",
+    "emit_026c_learning_record_created_v1",
+    "emit_026c_learning_scoring_completed_v1",
     "emit_candle_timeframe_nexus_v1",
     "emit_entry_reasoning_pipeline_stage_v1",
     "emit_lifecycle_reasoning_stage_v1",

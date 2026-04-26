@@ -183,6 +183,7 @@ def evaluate_lifecycle_bar_v1(
     target_r_multiple: float = 2.0,
     opposing_bar_streak: int = 0,
     degrading_streak: int = 0,
+    retrieved_lifecycle_deterministic_learning_026c_v1: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     """
     One bar of lifecycle reasoning. Deterministic; does not call HTTP (router is separate call).
@@ -292,6 +293,11 @@ def evaluate_lifecycle_bar_v1(
     )
     conf = max(0.0, min(1.0, base_c + 0.02 * (1.0 if not thesis_degrading else -0.12)))
     conf = max(0.0, min(1.0, conf + float(poe.get("prior_outcome_confidence_delta_v1") or 0.0) * 0.15))
+    l026 = [x for x in (retrieved_lifecycle_deterministic_learning_026c_v1 or []) if isinstance(x, dict)][:8]
+    if l026 and b_in_trade == 0:
+        wsum = sum(float((x or {}).get("decay_weight_01") or 0.0) for x in l026) / max(1, len(l026))
+        nudge = 0.02 * wsum * min(1.0, float(len(l026)) / 8.0)
+        conf = max(0.0, min(1.0, conf + nudge))
     conf_delta = conf - float(prior_confidence_01) if prior_confidence_01 is not None else (
         conf - float(entry_confidence_01) if entry_confidence_01 is not None else 0.0
     )
@@ -375,6 +381,13 @@ def evaluate_lifecycle_bar_v1(
         "opposing_bar_streak_v1": opposing_bar_streak,
         "thesis_degrading_streak_v1": degrading_streak,
     }
+    if l026 and b_in_trade == 0:
+        leval["deterministic_learning_context_026c_v1"] = {
+            "slice_count_v1": len(l026),
+            "max_decay_weight_01": max(
+                (float((x or {}).get("decay_weight_01") or 0.0) for x in l026), default=0.0
+            ),
+        }
     st = build_lifecycle_reasoning_stage_v1(
         bar_index=current_bar_index,
         bar_in_trade=b_in_trade,
@@ -446,6 +459,7 @@ def run_lifecycle_tape_v1(
     emit_lifecycle_traces: bool = False,
     trade_id: str | None = None,
     scenario_id: str | None = None,
+    retrieved_lifecycle_deterministic_learning_026c_v1: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     """
     Walks forward from entry bar, one evaluation per bar, until exit or data end.
@@ -453,6 +467,7 @@ def run_lifecycle_tape_v1(
     **lifecycle_tape_summary_v1** to the learning-trace JSONL (same path as 026A/026R).
     """
     w = _bars_up_to(all_bars, entry_bar_index)
+    l026 = [dict(x) for x in (retrieved_lifecycle_deterministic_learning_026c_v1 or []) if isinstance(x, dict)][:8]
     if not w:
         return {"schema": "lifecycle_tape_result_v1", "contract_version": 1, "error": "no_bars", "per_bar_v1": []}
     ict0, _, _ = build_indicator_context_eval_v1(w)
@@ -515,6 +530,7 @@ def run_lifecycle_tape_v1(
             prior_confidence_01=prev_c,
             degrading_streak=d_streak,
             opposing_bar_streak=o_streak,
+            retrieved_lifecycle_deterministic_learning_026c_v1=l026,
         )
         d_streak = int(r.get("carry_degrading_streak_v1") or 0)
         o_streak = int(r.get("carry_opposing_streak_v1") or 0)
@@ -548,7 +564,7 @@ def run_lifecycle_tape_v1(
         _emit_stage_row(row)
         d = (row.get("lifecycle_reasoning_eval_v1") or ev or {}).get("decision_v1")
         if d in (DEC_EXIT, DEC_FORCE):
-            res = {
+            res: dict[str, Any] = {
                 "schema": "lifecycle_tape_result_v1",
                 "contract_version": CONTRACT_LIFECYCLE,
                 "closed_v1": True,
@@ -557,6 +573,8 @@ def run_lifecycle_tape_v1(
                 "per_bar_v1": out_rows,
                 "final_fault_map_v1": last_fm,
             }
+            if l026:
+                res["retrieved_lifecycle_deterministic_learning_026c_v1"] = l026
             _emit_tape_done(res)
             return res
     res = {
@@ -566,6 +584,8 @@ def run_lifecycle_tape_v1(
         "per_bar_v1": out_rows,
         "final_fault_map_v1": last_fm,
     }
+    if l026:
+        res["retrieved_lifecycle_deterministic_learning_026c_v1"] = l026
     _emit_tape_done(res)
     return res
 

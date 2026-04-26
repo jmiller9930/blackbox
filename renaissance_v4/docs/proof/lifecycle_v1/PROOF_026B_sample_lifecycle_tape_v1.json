@@ -669,50 +669,6 @@
           "evidence_fields_v1": [],
           "evidence_values_v1": {},
           "operator_message_v1": "Stops, targets, time cap, and thesis lines are applied in fixed order (deterministic)."
-        },
-        {
-          "node_id": "learning_record_created",
-          "status": "NOT_PROVEN",
-          "input_summary_v1": "\u2014",
-          "output_summary_v1": "\u2014",
-          "blocking_rule_v1": "",
-          "error_codes_v1": [],
-          "evidence_fields_v1": [],
-          "evidence_values_v1": {},
-          "operator_message_v1": "Missing node."
-        },
-        {
-          "node_id": "learning_scoring_evaluated",
-          "status": "NOT_PROVEN",
-          "input_summary_v1": "\u2014",
-          "output_summary_v1": "\u2014",
-          "blocking_rule_v1": "",
-          "error_codes_v1": [],
-          "evidence_fields_v1": [],
-          "evidence_values_v1": {},
-          "operator_message_v1": "Missing node."
-        },
-        {
-          "node_id": "learning_promotion_decision",
-          "status": "NOT_PROVEN",
-          "input_summary_v1": "\u2014",
-          "output_summary_v1": "\u2014",
-          "blocking_rule_v1": "",
-          "error_codes_v1": [],
-          "evidence_fields_v1": [],
-          "evidence_values_v1": {},
-          "operator_message_v1": "Missing node."
-        },
-        {
-          "node_id": "learning_retrieval_applied",
-          "status": "NOT_PROVEN",
-          "input_summary_v1": "\u2014",
-          "output_summary_v1": "\u2014",
-          "blocking_rule_v1": "",
-          "error_codes_v1": [],
-          "evidence_fields_v1": [],
-          "evidence_values_v1": {},
-          "operator_message_v1": "Missing node."
         }
       ]
     }

@@ -1,0 +1,317 @@
+{
+  "comment": "GT_DIRECTIVE_026R closure: in-process sample using run_entry_reasoning_pipeline_v1 + merge_runtime_fault_nodes_v1 (non-LLM / stub-equivalent path). student_output attachment: field student_reasoning_fault_map_v1 is duplicated here as student_output_student_reasoning_fault_map_v1 for review. Debug API contract (same payload the /debug/learning-loop page loads): automated test test_debug_learning_loop_trace_includes_fault_map_from_runtime_event_v1 in test_gt_directive_026r_student_reasoning_fault_map_v1.py — last learning_trace event with stage student_reasoning_fault_map_v1 appears as top-level student_reasoning_fault_map_v1. Optional live lab: on a host that reaches the stack, GET /api/debug/learning-loop/trace/<job_id> for a post-deploy Student job and confirm the same key; save redacted JSON beside this file if you need a network-captured artifact.",
+  "schema_fault_map": "student_reasoning_fault_map_v1",
+  "node_count": 10,
+  "statuses_in_order": [
+    "PASS",
+    "PASS",
+    "PASS",
+    "PASS",
+    "PASS",
+    "PASS",
+    "PASS",
+    "SKIPPED",
+    "PASS",
+    "PASS"
+  ],
+  "student_reasoning_fault_map_v1": {
+    "schema": "student_reasoning_fault_map_v1",
+    "contract_version": 1,
+    "nodes_v1": [
+      {
+        "node_id": "market_data_loaded",
+        "status": "PASS",
+        "input_summary_v1": "Student packet for the trade.",
+        "output_summary_v1": "Loaded 2 price bar(s).",
+        "blocking_rule_v1": "",
+        "error_codes_v1": [],
+        "evidence_fields_v1": [
+          "bar_count",
+          "symbol",
+          "candle_timeframe_minutes"
+        ],
+        "evidence_values_v1": {
+          "bar_count": 2,
+          "symbol": "BTC",
+          "candle_timeframe_minutes": 5
+        },
+        "operator_message_v1": "Market data for the decision time is present in the packet."
+      },
+      {
+        "node_id": "indicator_context_evaluated",
+        "status": "PASS",
+        "input_summary_v1": "Closed bars in the packet.",
+        "output_summary_v1": "Trend, momentum, and range context are computed from those bars only.",
+        "blocking_rule_v1": "",
+        "error_codes_v1": [],
+        "evidence_fields_v1": [
+          "rsi_state",
+          "ema_trend"
+        ],
+        "evidence_values_v1": {
+          "rsi_state": "neutral",
+          "ema_trend": "neutral_trend"
+        },
+        "operator_message_v1": "Indicators were derived from the packet; nothing was invented beyond the data shown."
+      },
+      {
+        "node_id": "memory_context_evaluated",
+        "status": "PASS",
+        "input_summary_v1": "0 memory row(s) available to the score.",
+        "output_summary_v1": "Blended class: none.",
+        "blocking_rule_v1": "",
+        "error_codes_v1": [],
+        "evidence_fields_v1": [
+          "aggregate_memory_effect_v1",
+          "retrieved_count"
+        ],
+        "evidence_values_v1": {
+          "retrieved_count": 0,
+          "aggregate_memory_effect_v1": "none"
+        },
+        "operator_message_v1": "Prior lesson rows were read and folded into the memory score for this step."
+      },
+      {
+        "node_id": "prior_outcomes_evaluated",
+        "status": "PASS",
+        "input_summary_v1": "Records tied to the packet.",
+        "output_summary_v1": "Win rate and loss streak influence applied.",
+        "blocking_rule_v1": "",
+        "error_codes_v1": [],
+        "evidence_fields_v1": [
+          "prior_outcome_confidence_delta_v1"
+        ],
+        "evidence_values_v1": {
+          "prior_outcome_confidence_delta_v1": 0.0
+        },
+        "operator_message_v1": "How similar past outcomes behaved nudges confidence up or down."
+      },
+      {
+        "node_id": "risk_reward_evaluated",
+        "status": "PASS",
+        "input_summary_v1": "Price, range, and chosen direction hint.",
+        "output_summary_v1": "Invalidation, stop, and target lines are all described when a trade is live.",
+        "blocking_rule_v1": "",
+        "error_codes_v1": [],
+        "evidence_fields_v1": [
+          "risk_defined_v1"
+        ],
+        "evidence_values_v1": {
+          "risk_defined_v1": true
+        },
+        "operator_message_v1": "Reward versus risk is written in concrete terms whenever the engine contemplates a live entry; otherwise the side stays flat."
+      },
+      {
+        "node_id": "decision_synthesized",
+        "status": "PASS",
+        "input_summary_v1": "Indicator, memory, and history scores.",
+        "output_summary_v1": "Engine action: no_trade.",
+        "blocking_rule_v1": "",
+        "error_codes_v1": [],
+        "evidence_fields_v1": [
+          "action",
+          "final_score"
+        ],
+        "evidence_values_v1": {
+          "action": "no_trade",
+          "final_score": 0.0
+        },
+        "operator_message_v1": "The path combined those inputs into a single go / no-go style choice."
+      },
+      {
+        "node_id": "entry_reasoning_validated",
+        "status": "PASS",
+        "input_summary_v1": "Structured entry reasoning for audit.",
+        "output_summary_v1": "Validation rules passed.",
+        "blocking_rule_v1": "",
+        "error_codes_v1": [],
+        "evidence_fields_v1": [],
+        "evidence_values_v1": {},
+        "operator_message_v1": "The record is well-formed and can move on to the model and seal steps."
+      },
+      {
+        "node_id": "llm_output_checked",
+        "status": "SKIPPED",
+        "input_summary_v1": "Model path.",
+        "output_summary_v1": "Not used for this run.",
+        "blocking_rule_v1": "",
+        "error_codes_v1": [],
+        "evidence_fields_v1": [],
+        "evidence_values_v1": {},
+        "operator_message_v1": "This run used the rule-based student path, not a live model call."
+      },
+      {
+        "node_id": "student_output_sealed",
+        "status": "PASS",
+        "input_summary_v1": "Student answer and engine merge.",
+        "output_summary_v1": "Sealed student output is ready to store.",
+        "blocking_rule_v1": "",
+        "error_codes_v1": [],
+        "evidence_fields_v1": [],
+        "evidence_values_v1": {},
+        "operator_message_v1": "The student line was merged with the engine and is ready to store."
+      },
+      {
+        "node_id": "execution_intent_created",
+        "status": "PASS",
+        "input_summary_v1": "Sealed output plus run identity.",
+        "output_summary_v1": "Execution handoff was built.",
+        "blocking_rule_v1": "",
+        "error_codes_v1": [],
+        "evidence_fields_v1": [],
+        "evidence_values_v1": {},
+        "operator_message_v1": "A formal execution handoff was built from the sealed student line."
+      }
+    ]
+  },
+  "student_output_student_reasoning_fault_map_v1": {
+    "schema": "student_reasoning_fault_map_v1",
+    "contract_version": 1,
+    "nodes_v1": [
+      {
+        "node_id": "market_data_loaded",
+        "status": "PASS",
+        "input_summary_v1": "Student packet for the trade.",
+        "output_summary_v1": "Loaded 2 price bar(s).",
+        "blocking_rule_v1": "",
+        "error_codes_v1": [],
+        "evidence_fields_v1": [
+          "bar_count",
+          "symbol",
+          "candle_timeframe_minutes"
+        ],
+        "evidence_values_v1": {
+          "bar_count": 2,
+          "symbol": "BTC",
+          "candle_timeframe_minutes": 5
+        },
+        "operator_message_v1": "Market data for the decision time is present in the packet."
+      },
+      {
+        "node_id": "indicator_context_evaluated",
+        "status": "PASS",
+        "input_summary_v1": "Closed bars in the packet.",
+        "output_summary_v1": "Trend, momentum, and range context are computed from those bars only.",
+        "blocking_rule_v1": "",
+        "error_codes_v1": [],
+        "evidence_fields_v1": [
+          "rsi_state",
+          "ema_trend"
+        ],
+        "evidence_values_v1": {
+          "rsi_state": "neutral",
+          "ema_trend": "neutral_trend"
+        },
+        "operator_message_v1": "Indicators were derived from the packet; nothing was invented beyond the data shown."
+      },
+      {
+        "node_id": "memory_context_evaluated",
+        "status": "PASS",
+        "input_summary_v1": "0 memory row(s) available to the score.",
+        "output_summary_v1": "Blended class: none.",
+        "blocking_rule_v1": "",
+        "error_codes_v1": [],
+        "evidence_fields_v1": [
+          "aggregate_memory_effect_v1",
+          "retrieved_count"
+        ],
+        "evidence_values_v1": {
+          "retrieved_count": 0,
+          "aggregate_memory_effect_v1": "none"
+        },
+        "operator_message_v1": "Prior lesson rows were read and folded into the memory score for this step."
+      },
+      {
+        "node_id": "prior_outcomes_evaluated",
+        "status": "PASS",
+        "input_summary_v1": "Records tied to the packet.",
+        "output_summary_v1": "Win rate and loss streak influence applied.",
+        "blocking_rule_v1": "",
+        "error_codes_v1": [],
+        "evidence_fields_v1": [
+          "prior_outcome_confidence_delta_v1"
+        ],
+        "evidence_values_v1": {
+          "prior_outcome_confidence_delta_v1": 0.0
+        },
+        "operator_message_v1": "How similar past outcomes behaved nudges confidence up or down."
+      },
+      {
+        "node_id": "risk_reward_evaluated",
+        "status": "PASS",
+        "input_summary_v1": "Price, range, and chosen direction hint.",
+        "output_summary_v1": "Invalidation, stop, and target lines are all described when a trade is live.",
+        "blocking_rule_v1": "",
+        "error_codes_v1": [],
+        "evidence_fields_v1": [
+          "risk_defined_v1"
+        ],
+        "evidence_values_v1": {
+          "risk_defined_v1": true
+        },
+        "operator_message_v1": "Reward versus risk is written in concrete terms whenever the engine contemplates a live entry; otherwise the side stays flat."
+      },
+      {
+        "node_id": "decision_synthesized",
+        "status": "PASS",
+        "input_summary_v1": "Indicator, memory, and history scores.",
+        "output_summary_v1": "Engine action: no_trade.",
+        "blocking_rule_v1": "",
+        "error_codes_v1": [],
+        "evidence_fields_v1": [
+          "action",
+          "final_score"
+        ],
+        "evidence_values_v1": {
+          "action": "no_trade",
+          "final_score": 0.0
+        },
+        "operator_message_v1": "The path combined those inputs into a single go / no-go style choice."
+      },
+      {
+        "node_id": "entry_reasoning_validated",
+        "status": "PASS",
+        "input_summary_v1": "Structured entry reasoning for audit.",
+        "output_summary_v1": "Validation rules passed.",
+        "blocking_rule_v1": "",
+        "error_codes_v1": [],
+        "evidence_fields_v1": [],
+        "evidence_values_v1": {},
+        "operator_message_v1": "The record is well-formed and can move on to the model and seal steps."
+      },
+      {
+        "node_id": "llm_output_checked",
+        "status": "SKIPPED",
+        "input_summary_v1": "Model path.",
+        "output_summary_v1": "Not used for this run.",
+        "blocking_rule_v1": "",
+        "error_codes_v1": [],
+        "evidence_fields_v1": [],
+        "evidence_values_v1": {},
+        "operator_message_v1": "This run used the rule-based student path, not a live model call."
+      },
+      {
+        "node_id": "student_output_sealed",
+        "status": "PASS",
+        "input_summary_v1": "Student answer and engine merge.",
+        "output_summary_v1": "Sealed student output is ready to store.",
+        "blocking_rule_v1": "",
+        "error_codes_v1": [],
+        "evidence_fields_v1": [],
+        "evidence_values_v1": {},
+        "operator_message_v1": "The student line was merged with the engine and is ready to store."
+      },
+      {
+        "node_id": "execution_intent_created",
+        "status": "PASS",
+        "input_summary_v1": "Sealed output plus run identity.",
+        "output_summary_v1": "Execution handoff was built.",
+        "blocking_rule_v1": "",
+        "error_codes_v1": [],
+        "evidence_fields_v1": [],
+        "evidence_values_v1": {},
+        "operator_message_v1": "A formal execution handoff was built from the sealed student line."
+      }
+    ]
+  }
+}

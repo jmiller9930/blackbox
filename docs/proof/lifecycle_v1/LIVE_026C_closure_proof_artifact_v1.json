@@ -1,0 +1,896 @@
+{
+  "schema": "live_026c_closure_proof_wrap_v1",
+  "proof_generated_utc": "2026-04-26T16:41:39Z",
+  "closure_proof_tier_v1": "harness_sandbox_v1",
+  "production_closure_satisfied_v1": false,
+  "production_closure_note_v1": "This JSON was generated with PATTERN_GAME_MEMORY_ROOT pointing at closure_proof_026c_sandbox; it validates the closure query shape and code paths only. GT 026C production closure requires the same GET against live clawbot job_ids with real scorecard, learning_trace, lifecycle emits, router, LLM provenance, and 026C store under production paths — not this sandbox.",
+  "query_v1": {
+    "url_pattern_v1": "GET /api/debug/learning-loop/trace/<run_b_job_id>",
+    "run_b_job_id": "PROOF_026C_RUN_B",
+    "run_a_job_id": "PROOF_026C_RUN_A",
+    "control_job_id": "PROOF_026C_CONTROL",
+    "query_string_v1": "?run_a_job_id=PROOF_026C_RUN_A&control_job_id=PROOF_026C_CONTROL"
+  },
+  "sandbox_v1": {
+    "PATTERN_GAME_MEMORY_ROOT": "/Users/bigmac/Documents/code_projects/blackbox/docs/proof/lifecycle_v1/closure_proof_026c_sandbox/memory",
+    "PATTERN_GAME_LIFECYCLE_DETERMINISTIC_LEARNING_026C_STORE": "/Users/bigmac/Documents/code_projects/blackbox/docs/proof/lifecycle_v1/closure_proof_026c_sandbox/026c_lifecycle_store.jsonl",
+    "harness_sandbox_relpath_v1": "docs/proof/lifecycle_v1/closure_proof_026c_sandbox"
+  },
+  "debug_learning_loop_trace_v1": {
+    "schema": "debug_learning_loop_trace_v1",
+    "ok": true,
+    "job_id": "PROOF_026C_RUN_B",
+    "page_title_v1": "Learning Loop Trace",
+    "page_subtitle_v1": "LangGraph-style visual proof of whether the Student learned or where the loop broke.",
+    "learning_loop_health_banner_v1": "LEARNING NOT CONFIGURED",
+    "learning_loop_health_detail_v1": "context_signature_memory_mode='on' — Student seam may be inactive by configuration.",
+    "fault_focus_v1": {
+      "schema": "fault_focus_v1",
+      "job_id": "PROOF_026C_RUN_B",
+      "first_failed_node_id": null,
+      "first_failed_node_label": null,
+      "first_blocked_edge_v1": null,
+      "headline_one_liner_v1": "No explicit node_status_v1=fail — use learning_loop_health_banner_v1 and partial/unknown nodes for the story.",
+      "intelligence_floor_trade_win_v1": {
+        "code": "ANCHOR_OR_NO_BASELINE_COMPARE",
+        "detail": "This row is the fingerprint anchor or Sys BL % is unavailable — exact tie vs floor does not apply."
+      },
+      "training_learning_verdict_echo_v1": "STUDENT_LANE_NOT_CONFIGURED_OR_OFF",
+      "for_collaboration_v1": "Share job_id='PROOF_026C_RUN_B' plus JSON key fault_focus_v1 (or full GET …/learning-loop-trace) so operators and AI agree on the same fault object.",
+      "decisive_operator_questions_v1": [
+        "Referee used Student output: NOT PROVEN",
+        "NOT PROVEN — newest **done** scorecard rows for all three canonical brain profiles are not all present for this fingerprint; cannot decide whether three different brains ran."
+      ]
+    },
+    "training_exam_audit_v1": {
+      "schema": "training_exam_audit_v1",
+      "job_id": "PROOF_026C_RUN_B",
+      "batch_status_echo": "done",
+      "context_signature_memory_mode_echo": "on",
+      "training_learning_verdict_v1": "STUDENT_LANE_NOT_CONFIGURED_OR_OFF",
+      "training_learning_verdict_reason_v1": "context_signature_memory_mode='on' — Student seam may be inactive by configuration.",
+      "checks_v1": [
+        {
+          "id": "persisted_student_learning_rows",
+          "pass": false,
+          "detail": 0,
+          "source": "scorecard_line.student_learning_rows_appended"
+        },
+        {
+          "id": "student_retrieval_matches",
+          "pass": false,
+          "detail": 0,
+          "source": "scorecard_line.student_retrieval_matches"
+        },
+        {
+          "id": "memory_context_impact_yes",
+          "pass": false,
+          "detail": null,
+          "source": "scorecard_line.memory_context_impact_audit_v1.memory_impact_yes_no"
+        },
+        {
+          "id": "recall_or_bias_counters",
+          "pass": false,
+          "detail": {
+            "recall_match_windows_total_sum": 0,
+            "bias": 0,
+            "sig_bias": 0
+          },
+          "source": "scorecard_line.memory_context_impact_audit_v1"
+        },
+        {
+          "id": "llm_trades_succeeded",
+          "pass": false,
+          "detail": {
+            "succeeded": 0,
+            "attempted": 0,
+            "rejections": 0
+          },
+          "source": "scorecard_line.student_llm_execution_v1"
+        },
+        {
+          "id": "shadow_student_lane_enabled",
+          "pass": false,
+          "detail": false,
+          "source": "scorecard_line.shadow_student_enabled"
+        }
+      ],
+      "troubleshooting_steps_v1": [
+        "Open the parallel batch JSON for this job_id and read student_loop_directive_09_v1 (seam audit).",
+        "If verdict is ENGAGEMENT_WITHOUT_STORE_WRITES: read errors[], soft_fail, memory_promotion_batch_v1, learning_loop_governance_v1.",
+        "Compare learning_batch_audit_v1.replay_* sums vs expectation for recipe (harness vs baseline-only).",
+        "If Referee trade win % ties baseline but verdict is not PERSISTED_LEARNING_ROWS: do not infer 'no learning' from TW alone.",
+        "For exam-pack process (P): use exam fields + l1_p_value_source_v1; data_gap means process compare is blocked."
+      ],
+      "definitions_v1": {
+        "persisted_learning": "student_learning_rows_appended > 0 (append_student_learning_record_v1 succeeded).",
+        "engagement": "retrieval_matches > 0 and/or LLM succeeded trades and/or harness counters > 0.",
+        "not_referee_tie_breaker": "Run TW % vs Sys BL % is a separate Referee rollup; see L1 dictionary."
+      }
+    },
+    "nodes_v1": [
+      {
+        "id": "run_started",
+        "label": "Run started",
+        "node_status_v1": "pass",
+        "summary_v1": "Batch finished with status done — Referee + replay workers completed for submitted scenarios.",
+        "source_fields_v1": [
+          "scorecard_line.status",
+          "scorecard_line.job_id"
+        ],
+        "evidence_v1": {
+          "status": "done",
+          "job_id": "PROOF_026C_RUN_B",
+          "total_processed": 1
+        },
+        "evidence_provenance_v1": [
+          "scorecard"
+        ]
+      },
+      {
+        "id": "run_config",
+        "label": "Run config",
+        "node_status_v1": "partial",
+        "summary_v1": "Operator batch audit present — context_signature_memory_mode=on.",
+        "source_fields_v1": [
+          "scorecard_line.operator_batch_audit.context_signature_memory_mode"
+        ],
+        "evidence_v1": {
+          "context_signature_memory_mode": "on",
+          "student_brain_profile_v1": "memory_context_llm_student"
+        },
+        "evidence_provenance_v1": [
+          "scorecard"
+        ]
+      },
+      {
+        "id": "packet_build",
+        "label": "Packet build",
+        "node_status_v1": "unknown",
+        "summary_v1": "Batch folder not found on disk: /Users/bigmac/Documents/code_projects/blackbox/docs/proof/lifecycle_v1/closure_proof_026c_sandbox/batch_b",
+        "source_fields_v1": [
+          "session_log_batch_dir",
+          "batch_parallel_results_v1"
+        ],
+        "evidence_v1": {
+          "batch_dir": "/Users/bigmac/Documents/code_projects/blackbox/docs/proof/lifecycle_v1/closure_proof_026c_sandbox/batch_b",
+          "scenario_rows": 0
+        },
+        "evidence_provenance_v1": [
+          "batch_artifact",
+          "scorecard"
+        ]
+      },
+      {
+        "id": "memory_retrieval",
+        "label": "Memory retrieval",
+        "node_status_v1": "skipped",
+        "summary_v1": "Memory lane off — retrieval not expected on Student path for this configuration.",
+        "source_fields_v1": [
+          "scorecard_line.student_retrieval_matches",
+          "memory_context_impact_audit_v1"
+        ],
+        "evidence_v1": {
+          "student_retrieval_matches": 0
+        },
+        "evidence_provenance_v1": [
+          "scorecard"
+        ]
+      },
+      {
+        "id": "llm_reasoning",
+        "label": "LLM reasoning",
+        "node_status_v1": "partial",
+        "summary_v1": "LLM profile active but no ollama trade attempts on scorecard — model may not have run on closed trades.",
+        "source_fields_v1": [
+          "scorecard_line.student_llm_execution_v1",
+          "llm_student_output_rejections_v1"
+        ],
+        "evidence_v1": {
+          "ollama_trades_succeeded": 0,
+          "ollama_trades_attempted": 0
+        },
+        "evidence_provenance_v1": [
+          "scorecard",
+          "trace_store"
+        ],
+        "runtime_breakpoints_v1": []
+      },
+      {
+        "id": "student_decision",
+        "label": "Student decision",
+        "node_status_v1": "unknown",
+        "summary_v1": "No fingerprint and no store/retrieval proof at run grain — open L3 for decision deltas.",
+        "source_fields_v1": [
+          "scorecard_line.student_output_fingerprint"
+        ],
+        "evidence_v1": {
+          "fingerprint_present": false
+        },
+        "evidence_provenance_v1": [
+          "scorecard"
+        ]
+      },
+      {
+        "id": "decision_delta_vs_baseline",
+        "label": "Decision delta vs baseline",
+        "node_status_v1": "unknown",
+        "summary_v1": "Run-level scorecard does not carry baseline_action / decision_changed_flag (see student_data_capability_audit_v1). Use L3 per-trade ``decision_changed_flag`` + baseline slice vs Student store.",
+        "source_fields_v1": [
+          "student_decision_record_v1.baseline_comparison (L3)",
+          "student_data_capability_audit_v1"
+        ],
+        "evidence_v1": {
+          "student_output_fingerprint": null,
+          "training_learning_verdict_v1": "STUDENT_LANE_NOT_CONFIGURED_OR_OFF"
+        },
+        "evidence_provenance_v1": [
+          "unknown",
+          "l3"
+        ],
+        "runtime_breakpoints_v1": [
+          "not_captured_at_runtime_v1"
+        ]
+      },
+      {
+        "id": "referee_student_output_coupling",
+        "label": "Referee use of Student output",
+        "node_status_v1": "unknown",
+        "summary_v1": "NOT PROVEN — no runtime ``learning_trace_events_v1`` (or equivalent persisted coupling) proves Referee consumed vs ignored Student thesis; scorecard aggregates are insufficient.",
+        "source_fields_v1": [
+          "learning_trace_events_v1 (stage referee_used_student_output)",
+          "per-trade worker coupling audit (future)"
+        ],
+        "evidence_v1": {
+          "verdict_v1": "NOT_PROVEN",
+          "detail_v1": "Reconstructed trace cannot certify influence; workers must emit capture events."
+        },
+        "evidence_provenance_v1": [
+          "unknown"
+        ],
+        "runtime_breakpoints_v1": [
+          "not_captured_at_runtime_v1"
+        ]
+      },
+      {
+        "id": "referee_execution",
+        "label": "Referee execution",
+        "node_status_v1": "pass",
+        "summary_v1": "Referee path completed scenarios: total_processed=1.",
+        "source_fields_v1": [
+          "scorecard_line.total_processed",
+          "scorecard_line.avg_trade_win_pct"
+        ],
+        "evidence_v1": {
+          "total_processed": 1,
+          "avg_trade_win_pct": null
+        },
+        "evidence_provenance_v1": [
+          "scorecard"
+        ]
+      },
+      {
+        "id": "ep_grading",
+        "label": "Scoring / E-P",
+        "node_status_v1": "pass",
+        "summary_v1": "Exam-pack E/P (or pass) present on scorecard for this run.",
+        "source_fields_v1": [
+          "scorecard_line.exam_e_score_v1",
+          "exam_p_score_v1",
+          "exam_pass_v1"
+        ],
+        "evidence_v1": {
+          "exam_e_score_v1": 0.72,
+          "exam_p_score_v1": 0.68,
+          "exam_pass_v1": null
+        },
+        "evidence_provenance_v1": [
+          "scorecard"
+        ]
+      },
+      {
+        "id": "governance_018",
+        "label": "018 governance",
+        "node_status_v1": "partial",
+        "summary_v1": "GT018 aggregate: hold — promotion deferred (sample or policy thresholds).",
+        "source_fields_v1": [
+          "GET /api/student-panel/run/<job_id>/learning → learning_governance_v1"
+        ],
+        "evidence_v1": {
+          "schema": "learning_governance_v1",
+          "decision": "hold",
+          "reason_codes": [],
+          "source_job_id": "PROOF_026C_RUN_B",
+          "fingerprint": null,
+          "timestamp_utc": "2026-04-26T16:41:39Z"
+        },
+        "evidence_provenance_v1": [
+          "learning_store"
+        ]
+      },
+      {
+        "id": "learning_store",
+        "label": "Learning store append",
+        "node_status_v1": "partial",
+        "summary_v1": "No append counter and no stored rows for this run — Student store not proven.",
+        "source_fields_v1": [
+          "scorecard_line.student_learning_rows_appended",
+          "stored_record_count_v1"
+        ],
+        "evidence_v1": {
+          "student_learning_rows_appended": 0,
+          "stored_record_count_v1": 0
+        },
+        "evidence_provenance_v1": [
+          "scorecard",
+          "learning_store"
+        ]
+      },
+      {
+        "id": "future_retrieval",
+        "label": "Future retrieval impact",
+        "node_status_v1": "skipped",
+        "summary_v1": "No stored learning rows for this run — future retrieval cannot use this run yet.",
+        "source_fields_v1": [
+          "eligible_for_retrieval",
+          "run_was_stored"
+        ],
+        "evidence_v1": {
+          "eligible_for_retrieval": false,
+          "run_was_stored": false
+        },
+        "evidence_provenance_v1": [
+          "learning_store"
+        ]
+      }
+    ],
+    "edges_v1": [
+      {
+        "from_node": "run_started",
+        "to_node": "run_config",
+        "edge_flow_v1": "ok",
+        "detail_v1": "Data flowed with partial / weak signals (see node summaries)."
+      },
+      {
+        "from_node": "run_config",
+        "to_node": "packet_build",
+        "edge_flow_v1": "unknown",
+        "detail_v1": "Insufficient evidence on scorecard or batch artifacts for this hop."
+      },
+      {
+        "from_node": "packet_build",
+        "to_node": "memory_retrieval",
+        "edge_flow_v1": "unknown",
+        "detail_v1": "Insufficient evidence on scorecard or batch artifacts for this hop."
+      },
+      {
+        "from_node": "memory_retrieval",
+        "to_node": "llm_reasoning",
+        "edge_flow_v1": "skipped",
+        "detail_v1": "Upstream skipped — branch not applicable for this run."
+      },
+      {
+        "from_node": "llm_reasoning",
+        "to_node": "student_decision",
+        "edge_flow_v1": "unknown",
+        "detail_v1": "Insufficient evidence on scorecard or batch artifacts for this hop."
+      },
+      {
+        "from_node": "student_decision",
+        "to_node": "decision_delta_vs_baseline",
+        "edge_flow_v1": "unknown",
+        "detail_v1": "Insufficient evidence on scorecard or batch artifacts for this hop."
+      },
+      {
+        "from_node": "decision_delta_vs_baseline",
+        "to_node": "referee_student_output_coupling",
+        "edge_flow_v1": "unknown",
+        "detail_v1": "Insufficient evidence on scorecard or batch artifacts for this hop."
+      },
+      {
+        "from_node": "referee_student_output_coupling",
+        "to_node": "referee_execution",
+        "edge_flow_v1": "unknown",
+        "detail_v1": "Insufficient evidence on scorecard or batch artifacts for this hop."
+      },
+      {
+        "from_node": "referee_execution",
+        "to_node": "ep_grading",
+        "edge_flow_v1": "ok",
+        "detail_v1": "Scorecard and batch fields consistent with data reaching the next stage."
+      },
+      {
+        "from_node": "ep_grading",
+        "to_node": "governance_018",
+        "edge_flow_v1": "ok",
+        "detail_v1": "Data flowed with partial / weak signals (see node summaries)."
+      },
+      {
+        "from_node": "governance_018",
+        "to_node": "learning_store",
+        "edge_flow_v1": "ok",
+        "detail_v1": "Data flowed with partial / weak signals (see node summaries)."
+      },
+      {
+        "from_node": "learning_store",
+        "to_node": "future_retrieval",
+        "edge_flow_v1": "ok",
+        "detail_v1": "Data flowed with partial / weak signals (see node summaries)."
+      }
+    ],
+    "trace_classification_v1": {
+      "display_mode_v1": "reconstructed_learning_trace",
+      "capture_schema_v1": "learning_trace_event_v1",
+      "note_v1": "Graph is derived post-run from scorecard, batch artifacts, and learning API — not a captured execution trace. Merge ``learning_trace_events_v1`` in the debug API when runtime events exist.",
+      "runtime_events_loaded_count_v1": 2,
+      "merge_mode_v1": "reconstructed_plus_trace_store_v1"
+    },
+    "scorecard_line_v1": {
+      "schema": "pattern_game_batch_scorecard_v1",
+      "job_id": "PROOF_026C_RUN_B",
+      "status": "done",
+      "total_processed": 1,
+      "operator_batch_audit": {
+        "context_signature_memory_mode": "on"
+      },
+      "session_log_batch_dir": "/Users/bigmac/Documents/code_projects/blackbox/docs/proof/lifecycle_v1/closure_proof_026c_sandbox/batch_b",
+      "student_brain_profile_v1": "memory_context_llm_student",
+      "student_action_v1": "enter_long",
+      "student_confidence_01": 0.82,
+      "exam_e_score_v1": 0.72,
+      "exam_p_score_v1": 0.68,
+      "expectancy_per_trade": 0.14
+    },
+    "fingerprint_profile_compare_v1": {
+      "schema": "fingerprint_profile_compare_v1",
+      "fingerprint_sha256_40": null,
+      "row_snapshots_v1": {
+        "baseline_no_memory_no_llm": null,
+        "memory_context_student": null,
+        "memory_context_llm_student": null
+      },
+      "same_referee_trade_win_proxy_v1": null,
+      "detail_v1": "No fingerprint on this scorecard line — cannot align A/B/C profiles."
+    },
+    "breakpoints_v1": [
+      "llm_not_called_no_ollama_attempts",
+      "student_lane_not_configured"
+    ],
+    "trace_build_timings_ms_v1": {
+      "fingerprint_profile_compare_v1": 0.0
+    },
+    "learning_trace_events_v1": [
+      {
+        "schema": "learning_trace_event_v1",
+        "schema_version": 1,
+        "job_id": "PROOF_026C_RUN_B",
+        "fingerprint": "proof_fp_026c",
+        "stage": "reasoning_router_decision_v1",
+        "timestamp_utc": "2026-04-26T16:41:39Z",
+        "status": "pass",
+        "summary": "reasoning_router_decision_v1",
+        "evidence_payload": {
+          "reasoning_router_decision_v1": {
+            "schema": "reasoning_router_decision_v1",
+            "final_route_v1": "local_only",
+            "escalation_reason_codes_v1": [],
+            "escalation_blockers_v1": [
+              "no_escalation_reason_v1"
+            ],
+            "external_api_enabled_v1": true
+          },
+          "call_ledger_sanitized_v1": {
+            "api_call_attempted_v1": false,
+            "provider_v1": "openai",
+            "model_requested_v1": "gpt-4.1",
+            "model_resolved_v1": null,
+            "input_tokens_v1": 0,
+            "output_tokens_v1": 0,
+            "total_tokens_v1": 0,
+            "latency_ms_v1": 0.0,
+            "estimated_cost_usd_v1": 0.0,
+            "response_status_v1": "not_called",
+            "validator_status_v1": "not_applicable"
+          }
+        },
+        "producer": "unified_agent_v1"
+      },
+      {
+        "schema": "learning_trace_event_v1",
+        "schema_version": 1,
+        "job_id": "PROOF_026C_RUN_B",
+        "fingerprint": "proof_fp_026c",
+        "stage": "lifecycle_tape_summary_v1",
+        "timestamp_utc": "2026-04-26T16:41:39Z",
+        "status": "pass",
+        "summary": "lifecycle_tape_summary_v1",
+        "evidence_payload": {
+          "lifecycle_tape_result_v1": {
+            "closed_v1": true,
+            "exit_at_bar_index_v1": 15,
+            "exit_reason_code_v1": "target_r_multiple_hit_v1",
+            "per_bar_slim_v1": [
+              {
+                "decision_v1": "hold"
+              },
+              {
+                "decision_v1": "hold"
+              },
+              {
+                "decision_v1": "hold"
+              },
+              {
+                "decision_v1": "exit"
+              }
+            ],
+            "retrieved_lifecycle_deterministic_learning_026c_v1": [
+              {
+                "schema": "retrieved_lifecycle_deterministic_learning_slice_026c_v1",
+                "record_id_026c": "proof_rec_026c_001",
+                "pattern_key_026c_v1": "X",
+                "overall_score_01": 0.88,
+                "decay_weight_01": 0.95
+              }
+            ],
+            "deterministic_learning_context_026c_v1": {
+              "slice_count_v1": 1,
+              "max_decay_weight_01": 0.95
+            }
+          }
+        },
+        "producer": "lifecycle_reasoning_engine_v1"
+      }
+    ],
+    "learning_trace_events_count_v1": 2,
+    "lifecycle_trace_overlay_v1": {
+      "schema": "lifecycle_debug_overlay_v1",
+      "contract_version": 1,
+      "lifecycle_stage_events_count_v1": 0,
+      "lifecycle_stages_v1": [],
+      "lifecycle_tape_summary_v1": {
+        "closed_v1": true,
+        "exit_at_bar_index_v1": 15,
+        "exit_reason_code_v1": "target_r_multiple_hit_v1",
+        "per_bar_slim_v1": [
+          {
+            "decision_v1": "hold"
+          },
+          {
+            "decision_v1": "hold"
+          },
+          {
+            "decision_v1": "hold"
+          },
+          {
+            "decision_v1": "exit"
+          }
+        ],
+        "retrieved_lifecycle_deterministic_learning_026c_v1": [
+          {
+            "schema": "retrieved_lifecycle_deterministic_learning_slice_026c_v1",
+            "record_id_026c": "proof_rec_026c_001",
+            "pattern_key_026c_v1": "X",
+            "overall_score_01": 0.88,
+            "decay_weight_01": 0.95
+          }
+        ],
+        "deterministic_learning_context_026c_v1": {
+          "slice_count_v1": 1,
+          "max_decay_weight_01": 0.95
+        }
+      }
+    },
+    "learning_trace_events_path_v1": "/Users/bigmac/Documents/code_projects/blackbox/docs/proof/lifecycle_v1/closure_proof_026c_sandbox/memory/learning_trace_events_v1.jsonl",
+    "model_provenance_chain_v1": {
+      "schema": "model_provenance_chain_v1",
+      "exam_run_contract_request_v1_present_v1": false,
+      "contract_resolved_llm_model_v1": null,
+      "contract_default_ollama_base_url_v1": null,
+      "scorecard_llm_model_column_v1": null,
+      "scorecard_student_llm_v1_block": null,
+      "scorecard_resolved_llm_model_tag_v1": null,
+      "seam_student_llm_execution_model_resolved_v1": null,
+      "seam_student_llm_execution_base_url_resolved_v1": null,
+      "runtime_llm_called_models_ordered_v1": [],
+      "l1_display_v1": {
+        "l1_e_scalar_v1": 0.72,
+        "l1_p_scalar_v1": 0.68,
+        "l1_e_value_source_v1": null,
+        "l1_p_value_source_v1": null,
+        "l1_execution_authority_v1": null,
+        "l1_student_full_control_v1": null,
+        "execution_authority_v1": null,
+        "student_lane_authority_truth_v1": null
+      },
+      "model_switch_events_v1": [],
+      "note_v1": "UI-selected model is only proven here if the client sent ``exam_run_contract_request_v1`` inside ``operator_batch_audit`` on this scorecard row. ``llm_called`` runtime lines prove what model tag was passed into the seam Ollama call for that trade."
+    },
+    "student_decision_cross_profile_verdict_v1": {
+      "schema": "student_decision_cross_profile_verdict_v1",
+      "row_coverage_v1": {
+        "baseline_no_memory_no_llm": false,
+        "memory_context_student": false,
+        "memory_context_llm_student": false
+      },
+      "fields_compared_v1": [
+        "student_action_v1",
+        "direction",
+        "confidence_01",
+        "confidence_band",
+        "student_supporting_indicators",
+        "student_conflicting_indicators",
+        "retrieved_context_ids",
+        "llm_model",
+        "referee_win_pct",
+        "referee_trade_win_pct_proxy_v1",
+        "expectancy_per_trade",
+        "exam_e_score_v1",
+        "exam_p_score_v1",
+        "l1_e_scalar_v1",
+        "l1_p_scalar_v1"
+      ],
+      "plain_language_answer_v1": "NOT PROVEN — newest **done** scorecard rows for all three canonical brain profiles are not all present for this fingerprint; cannot decide whether three different brains ran.",
+      "answer_code_v1": "NOT_PROVEN_INCOMPLETE_ROWS"
+    },
+    "referee_student_output_operator_line_v1": {
+      "schema": "referee_student_output_operator_line_v1",
+      "headline_v1": "Referee used Student output: NOT PROVEN",
+      "node_status_v1": "unknown",
+      "summary_v1": "NOT PROVEN — no runtime ``learning_trace_events_v1`` (or equivalent persisted coupling) proves Referee consumed vs ignored Student thesis; scorecard aggregates are insufficient.",
+      "verdict_v1": "NOT_PROVEN",
+      "runtime_breakpoints_v1": [
+        "not_captured_at_runtime_v1"
+      ]
+    },
+    "same_visible_outcome_candidates_v1": {
+      "schema": "same_visible_outcome_candidates_v1",
+      "candidates_v1": [
+        {
+          "code_v1": "llm_did_not_run",
+          "detail_v1": "Breakpoint: llm_not_called_no_ollama_attempts on this run row.",
+          "evidence_tier_v1": "proven_from_breakpoint"
+        }
+      ]
+    },
+    "student_reasoning_fault_map_v1": null,
+    "gt_directive_026b_lifecycle_v1": {
+      "lifecycle_in_learning_trace_v1": true,
+      "unified_agent_router_lifecycle_v1": "On-demand when the operator runtime packet includes ``unified_agent_router_lifecycle_v1`` and ``bars_trade_lifecycle_inclusive_v1``; otherwise hybrid router in lifecycle remains optional."
+    },
+    "operator_notes_v1": {
+      "referee_vs_student_metric_v1": "L1 Run TW % and Sys BL % are Referee batch trade-win rollups — they can match across profiles when replay outcomes do not diverge. Student thesis deltas are L3 / store.",
+      "trace_truth_v1": "Primary graph is **reconstructed** from persisted artifacts. ``learning_trace_events_v1`` is appended from the **batch / seam / scorecard** threads (single-writer); those lines merge as runtime proof — not from pool worker processes.",
+      "lifecycle_026B_v1": "``lifecycle_trace_overlay_v1`` aggregates **lifecycle_reasoning_stage_v1** and **lifecycle_tape_summary_v1** from the same job’s trace lines (see evidence_payload)."
+    },
+    "learning_effect_closure_026c_v1": {
+      "schema": "learning_effect_closure_026c_v1",
+      "contract_version": 1,
+      "run_b_job_id_v1": "PROOF_026C_RUN_B",
+      "run_a_job_id_inferred_v1": "PROOF_026C_RUN_A",
+      "run_a_job_id_supplied_v1": "PROOF_026C_RUN_A",
+      "run_a_evidence_v1": {
+        "learning_record_created_v1": {
+          "record_id_026c": "proof_rec_026c_001",
+          "event": "learning_record_created_v1"
+        },
+        "learning_scoring_completed_v1": {
+          "event": "learning_scoring_completed_v1",
+          "decision_quality_score_v1": {
+            "schema": "decision_quality_score_v1",
+            "overall_score_v1": 0.88
+          }
+        },
+        "learning_decision_made_v1": {
+          "event": "learning_decision_made_v1",
+          "learning_decision_v1": {
+            "outcome_v1": "promote_pattern_v1"
+          }
+        },
+        "record_id_026c": "proof_rec_026c_001"
+      },
+      "run_b_reasoning_router_v1": {
+        "router_evaluated_v1": true,
+        "reasoning_router_decision_v1": {
+          "schema": "reasoning_router_decision_v1",
+          "final_route_v1": "local_only",
+          "escalation_reason_codes_v1": [],
+          "escalation_blockers_v1": [
+            "no_escalation_reason_v1"
+          ],
+          "external_api_enabled_v1": true
+        },
+        "call_ledger_sanitized_v1": {
+          "api_call_attempted_v1": false,
+          "provider_v1": "openai",
+          "model_requested_v1": "gpt-4.1",
+          "model_resolved_v1": null,
+          "input_tokens_v1": 0,
+          "output_tokens_v1": 0,
+          "total_tokens_v1": 0,
+          "latency_ms_v1": 0.0,
+          "estimated_cost_usd_v1": 0.0,
+          "response_status_v1": "not_called",
+          "validator_status_v1": "not_applicable"
+        },
+        "escalation_reason_codes_v1": [],
+        "escalation_blockers_v1": [
+          "no_escalation_reason_v1"
+        ],
+        "final_route_v1": "local_only"
+      },
+      "run_b_external_openai_v1": {
+        "external_openai_call_made_v1": false,
+        "final_route_v1": "local_only",
+        "escalation_blockers_v1": [
+          "no_escalation_reason_v1"
+        ],
+        "escalation_reason_codes_v1": [],
+        "no_call_reasons_plain_v1": [
+          "no_escalation_reason"
+        ]
+      },
+      "run_b_local_model_path_v1": {
+        "model_provenance_chain_v1": {
+          "schema": "model_provenance_chain_v1",
+          "exam_run_contract_request_v1_present_v1": false,
+          "contract_resolved_llm_model_v1": null,
+          "contract_default_ollama_base_url_v1": null,
+          "scorecard_llm_model_column_v1": null,
+          "scorecard_student_llm_v1_block": null,
+          "scorecard_resolved_llm_model_tag_v1": null,
+          "seam_student_llm_execution_model_resolved_v1": null,
+          "seam_student_llm_execution_base_url_resolved_v1": null,
+          "runtime_llm_called_models_ordered_v1": [],
+          "l1_display_v1": {
+            "l1_e_scalar_v1": 0.72,
+            "l1_p_scalar_v1": 0.68,
+            "l1_e_value_source_v1": null,
+            "l1_p_value_source_v1": null,
+            "l1_execution_authority_v1": null,
+            "l1_student_full_control_v1": null,
+            "execution_authority_v1": null,
+            "student_lane_authority_truth_v1": null
+          },
+          "model_switch_events_v1": [],
+          "note_v1": "UI-selected model is only proven here if the client sent ``exam_run_contract_request_v1`` inside ``operator_batch_audit`` on this scorecard row. ``llm_called`` runtime lines prove what model tag was passed into the seam Ollama call for that trade."
+        },
+        "llm_called_last_evidence_v1": null
+      },
+      "run_b_026c_injection_and_apply_v1": {
+        "packet_injection_evidence_in_trace_v1": true,
+        "retrieved_lifecycle_deterministic_learning_026c_v1": [
+          {
+            "schema": "retrieved_lifecycle_deterministic_learning_slice_026c_v1",
+            "record_id_026c": "proof_rec_026c_001",
+            "pattern_key_026c_v1": "X",
+            "overall_score_01": 0.88,
+            "decay_weight_01": 0.95
+          }
+        ],
+        "deterministic_learning_context_026c_v1": {
+          "slice_count_v1": 1,
+          "max_decay_weight_01": 0.95
+        },
+        "retrieved_record_ids_026c_v1": [
+          "proof_rec_026c_001"
+        ],
+        "deterministic_apply_markers_v1": true
+      },
+      "run_b_lifecycle_summary_from_trace_v1": {
+        "tape_headline_v1": {
+          "closed_v1": true,
+          "exit_at_bar_index_v1": 15,
+          "exit_reason_code_v1": "target_r_multiple_hit_v1",
+          "per_bar_slim_v1": [
+            {
+              "decision_v1": "hold"
+            },
+            {
+              "decision_v1": "hold"
+            },
+            {
+              "decision_v1": "hold"
+            },
+            {
+              "decision_v1": "exit"
+            }
+          ],
+          "retrieved_lifecycle_deterministic_learning_026c_v1": [
+            {
+              "schema": "retrieved_lifecycle_deterministic_learning_slice_026c_v1",
+              "record_id_026c": "proof_rec_026c_001",
+              "pattern_key_026c_v1": "X",
+              "overall_score_01": 0.88,
+              "decay_weight_01": 0.95
+            }
+          ],
+          "deterministic_learning_context_026c_v1": {
+            "slice_count_v1": 1,
+            "max_decay_weight_01": 0.95
+          }
+        },
+        "metrics_v1": {
+          "hold_bars_inferred_v1": 3,
+          "exit_reason_code_v1": "target_r_multiple_hit_v1",
+          "closed_v1": true,
+          "exit_at_bar_index_v1": 15
+        }
+      },
+      "run_b_to_run_a_link_v1": [
+        {
+          "record_id_026c": "proof_rec_026c_001",
+          "store_job_id_v1": "PROOF_026C_RUN_A",
+          "store_trade_id_v1": "t_proof_a",
+          "matches_inferred_run_a_v1": true
+        }
+      ],
+      "control_job_id_v1": "PROOF_026C_CONTROL",
+      "comparison_v1": {
+        "treatment_snapshot_v1": {
+          "job_id": "PROOF_026C_RUN_B",
+          "student_action_v1": "enter_long",
+          "student_confidence_01": 0.82,
+          "student_brain_profile_v1": "memory_context_llm_student",
+          "exam_e_score_v1": 0.72,
+          "exam_p_score_v1": 0.68,
+          "expectancy_per_trade": 0.14,
+          "referee_outcomes_digest_v1": null
+        },
+        "control_snapshot_v1": {
+          "job_id": "PROOF_026C_CONTROL",
+          "student_action_v1": "no_trade",
+          "student_confidence_01": 0.44,
+          "student_brain_profile_v1": "memory_context_llm_student",
+          "exam_e_score_v1": 0.5,
+          "exam_p_score_v1": 0.48,
+          "expectancy_per_trade": -0.01,
+          "referee_outcomes_digest_v1": null
+        },
+        "lifecycle_treatment_v1": {
+          "hold_bars_inferred_v1": 3,
+          "exit_reason_code_v1": "target_r_multiple_hit_v1",
+          "closed_v1": true,
+          "exit_at_bar_index_v1": 15
+        },
+        "lifecycle_control_v1": {
+          "hold_bars_inferred_v1": 1,
+          "exit_reason_code_v1": "stop_hit_v1",
+          "closed_v1": true,
+          "exit_at_bar_index_v1": 11
+        },
+        "deltas_v1": {
+          "student_action_v1": {
+            "treatment": "enter_long",
+            "control": "no_trade"
+          },
+          "student_confidence_01": {
+            "treatment": 0.82,
+            "control": 0.44
+          },
+          "exam_e_score_v1": {
+            "treatment": 0.72,
+            "control": 0.5
+          },
+          "exam_p_score_v1": {
+            "treatment": 0.68,
+            "control": 0.48
+          },
+          "expectancy_per_trade": {
+            "treatment": 0.14,
+            "control": -0.01
+          },
+          "lifecycle_exit_reason_code_v1": {
+            "treatment": "target_r_multiple_hit_v1",
+            "control": "stop_hit_v1"
+          },
+          "lifecycle_hold_bars_inferred_v1": {
+            "treatment": 3,
+            "control": 1
+          }
+        }
+      },
+      "closure_result_v1": "LEARNING_CHANGED_BEHAVIOR",
+      "closure_detail_v1": "Treatment vs control differ on at least one compared field (entry, confidence, lifecycle, scores)."
+    }
+  }
+}

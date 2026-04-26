@@ -31,6 +31,10 @@ from renaissance_v4.game_theory.student_proctor.student_context_builder_v1 impor
 from renaissance_v4.game_theory.student_proctor.student_learning_store_v1 import (
     list_student_learning_records_by_signature_key_v1,
 )
+from renaissance_v4.game_theory.student_proctor.lifecycle_deterministic_learning_026c_v1 import (
+    FIELD_RETRIEVED_LIFECYCLE_LEARNING_026C,
+    retrieve_applicable_learning_context_026c_v1,
+)
 from renaissance_v4.game_theory.student_proctor.student_learning_loop_governance_v1 import (
     resolved_max_retrieval_slices_v1,
 )
@@ -138,10 +142,18 @@ def build_student_decision_packet_v1_with_cross_run_retrieval(
         if sl is not None:
             slices.append(sl)
 
-    out = {
+    out: dict[str, Any] = {
         **base,
         FIELD_RETRIEVED_STUDENT_EXPERIENCE_V1: slices,
     }
+    ctx026 = retrieve_applicable_learning_context_026c_v1(
+        symbol=symbol,
+        candle_timeframe_minutes=int(candle_timeframe_minutes),
+        context_signature_key=str(retrieval_signature_key).strip(),
+        decision_open_time_ms=int(decision_open_time_ms),
+    )
+    if ctx026:
+        out[FIELD_RETRIEVED_LIFECYCLE_LEARNING_026C] = ctx026
     perrs = validate_student_decision_packet_v1(out)
     if perrs:
         return None, "decision packet with retrieval failed: " + "; ".join(perrs)

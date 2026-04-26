@@ -11,7 +11,7 @@ from typing import Any
 SCHEMA_STUDENT_REASONING_FAULT_MAP_V1 = "student_reasoning_fault_map_v1"
 CONTRACT_VERSION_FAULT_MAP = 1
 
-# Fixed order (026R + 026AI router + 026B lifecycle).
+# Fixed order (026R + 026AI router + 026B lifecycle + 026C deterministic learning).
 NODE_IDS_ORDER: tuple[str, ...] = (
     "market_data_loaded",
     "indicator_context_evaluated",
@@ -31,6 +31,11 @@ NODE_IDS_ORDER: tuple[str, ...] = (
     "lifecycle_reasoning_evaluated",
     "lifecycle_decision_made",
     "lifecycle_exit_evaluated",
+    # GT_DIRECTIVE_026C — deterministic learning (no LLM memory writes)
+    "learning_record_created",
+    "learning_scoring_evaluated",
+    "learning_promotion_decision",
+    "learning_retrieval_applied",
 )
 
 STATUS_PASS = "PASS"

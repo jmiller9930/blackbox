@@ -1,0 +1,30 @@
+{
+  "schema": "gt_directive_026ai_live_smoke_v1",
+  "closure_version_v1": 2,
+  "generated_at_utc": "2026-04-26T00:58:41Z",
+  "python": "3.11.0",
+  "note": "Adapter smoke failed; unified router path not run.",
+  "code_paths_proven_v1": [
+    "renaissance_v4.game_theory.unified_agent_v1.external_openai_adapter_v1.call_openai_responses_v1"
+  ],
+  "adapter_responses_api_smoke_v1": {
+    "schema": "external_openai_live_smoke_result_v1",
+    "smoke_ok": false,
+    "provider": "openai",
+    "model_requested": "gpt-5.5",
+    "model_resolved": null,
+    "input_tokens": 0,
+    "output_tokens": 0,
+    "total_tokens": 0,
+    "latency_ms": 331.449,
+    "error": "<urlopen error [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate (_ssl.c:992)>",
+    "response_status": "request_failed"
+  },
+  "reasoning_router_unified_path_v1": null,
+  "closure_complete_v1": false,
+  "security_full_artifact_scan_v1": {
+    "ok": true,
+    "forbidden_hits": [],
+    "byte_length": 833
+  }
+}

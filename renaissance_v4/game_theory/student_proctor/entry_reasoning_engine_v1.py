@@ -775,6 +775,19 @@ def run_entry_reasoning_pipeline_v1(
             out["student_reasoning_fault_map_v1"] = pfm2
             _pfm = pfm2
 
+    from renaissance_v4.game_theory.student_proctor.lifecycle_deterministic_learning_026c_v1 import (
+        FIELD_RETRIEVED_LIFECYCLE_LEARNING_026C,
+        merge_026c_learning_retrieval_node_only_v1,
+    )
+
+    r026 = student_decision_packet.get(FIELD_RETRIEVED_LIFECYCLE_LEARNING_026C)
+    if isinstance(r026, list) and r026 and isinstance(_pfm, dict):
+        _pfm = merge_026c_learning_retrieval_node_only_v1(
+            _pfm,
+            retrieval_slices_attached=True,
+        )
+        out["student_reasoning_fault_map_v1"] = _pfm
+
     return out, [], trace, _pfm
 
 

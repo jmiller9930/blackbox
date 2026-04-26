@@ -567,6 +567,9 @@ def student_loop_seam_after_parallel_batch_v1(
                             _ur = bool(
                                 pkt.get("unified_agent_router_lifecycle_v1", unified_router)
                             )
+                            from renaissance_v4.game_theory.student_proctor.lifecycle_deterministic_learning_026c_v1 import (
+                                FIELD_RETRIEVED_LIFECYCLE_LEARNING_026C,
+                            )
                             from renaissance_v4.game_theory.student_proctor.lifecycle_reasoning_engine_v1 import (
                                 run_lifecycle_tape_v1,
                             )
@@ -574,6 +577,10 @@ def student_loop_seam_after_parallel_batch_v1(
                                 load_reasoning_router_config_v1,
                             )
 
+                            _raw026 = (pkt or {}).get(FIELD_RETRIEVED_LIFECYCLE_LEARNING_026C)
+                            _l026p: list[dict] | None = None
+                            if isinstance(_raw026, list) and _raw026:
+                                _l026p = [dict(x) for x in _raw026 if isinstance(x, dict)][:8]
                             _tape = run_lifecycle_tape_v1(
                                 all_bars=[dict(b) for b in _lcy if isinstance(b, dict)],
                                 entry_bar_index=_eidx,
@@ -590,8 +597,42 @@ def student_loop_seam_after_parallel_batch_v1(
                                 emit_lifecycle_traces=True,
                                 trade_id=str(o.trade_id),
                                 scenario_id=sid,
+                                retrieved_lifecycle_deterministic_learning_026c_v1=_l026p,
                             )
                             ere["lifecycle_tape_result_v1"] = _tape
+                            if _tape.get("closed_v1"):
+                                from renaissance_v4.game_theory.student_proctor.lifecycle_deterministic_learning_026c_v1 import (
+                                    process_closed_lifecycle_for_deterministic_learning_026c_v1,
+                                )
+
+                                _lt_base = _tape.get("final_fault_map_v1")
+                                if not isinstance(_lt_base, dict):
+                                    _lt_base = pfm
+                                _r026 = bool(
+                                    isinstance(
+                                        (pkt or {}).get(FIELD_RETRIEVED_LIFECYCLE_LEARNING_026C),
+                                        list,
+                                    )
+                                    and len((pkt or {}).get(FIELD_RETRIEVED_LIFECYCLE_LEARNING_026C) or []) > 0
+                                )
+                                _pfm_learn = process_closed_lifecycle_for_deterministic_learning_026c_v1(
+                                    tape_result_v1=_tape,
+                                    entry_reasoning_eval_v1=ere,
+                                    outcome=o,
+                                    job_id=str(run_id).strip(),
+                                    scenario_id=sid,
+                                    trade_id=str(o.trade_id),
+                                    candle_timeframe_minutes=int(c_tf),
+                                    context_signature_key=sk,
+                                    symbol=str((pkt or {}).get("symbol") or o.symbol or ""),
+                                    pfm=_lt_base,
+                                    entry_bar_index_v1=_eidx,
+                                    retrieval_in_path=_r026,
+                                    fingerprint=fp_emit,
+                                )
+                                if _pfm_learn is not None:
+                                    pfm = _pfm_learn
+                                    ere["student_reasoning_fault_map_v1"] = pfm
                 allowed_mids = frozenset(
                     str(z.get("record_id") or "").strip()
                     for z in rxx
