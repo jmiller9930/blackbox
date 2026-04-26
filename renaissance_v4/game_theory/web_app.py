@@ -126,7 +126,7 @@ _PATTERN_BANNER_WEBP_PATH = _RV4_ROOT / "assets" / "pattern.webp"
 _PATTERN_GAME_BANNER_BOOT_JS = _GAME_THEORY / "static" / "pattern_game_banner_boot.js"
 
 # Operator-visible web UI bundle version — bump when changing PAGE_HTML (HTML/CSS/JS) so deploys are provable.
-PATTERN_GAME_WEB_UI_VERSION = "2.19.94"
+PATTERN_GAME_WEB_UI_VERSION = "2.19.95"
 
 from renaissance_v4.game_theory.reasoning_model_operator_surface_v1 import (
     get_reasoning_model_operator_snapshot_v1,
@@ -2209,6 +2209,34 @@ def create_app() -> Flask:
                 control_job_id=ct,
             )
         ), 200
+
+    @app.get("/api/operator-report/baseline-vs-student")
+    def api_operator_baseline_vs_student_report_v1() -> Any:
+        """Operator A/B Markdown — Baseline ``job_a`` vs Student ``job_b`` (scorecard + debug trace + 026C closure)."""
+        from flask import Response
+
+        from renaissance_v4.game_theory.operator_ab_report_v1 import (
+            build_operator_baseline_vs_student_report_markdown_v1,
+        )
+
+        ja = (request.args.get("job_a") or "").strip()
+        jb = (request.args.get("job_b") or "").strip()
+        if not ja or not jb:
+            return jsonify(
+                {"ok": False, "error": "Query params job_a and job_b (both job_id values) are required."}
+            ), 400
+        ra = (request.args.get("run_a_job_id") or "").strip() or None
+        md = build_operator_baseline_vs_student_report_markdown_v1(
+            job_id_baseline=ja,
+            job_id_student=jb,
+            run_a_job_id=ra,
+            ui_version=PATTERN_GAME_WEB_UI_VERSION,
+        )
+        return Response(
+            md,
+            mimetype="text/markdown; charset=utf-8",
+            headers={"Cache-Control": "no-store", "X-Pattern-Game-UI-Version": PATTERN_GAME_WEB_UI_VERSION},
+        )
 
     @app.get("/api/debug/learning-loop/trace-stream/<job_id>")
     def api_debug_learning_loop_trace_stream_v1(job_id: str) -> Any:
