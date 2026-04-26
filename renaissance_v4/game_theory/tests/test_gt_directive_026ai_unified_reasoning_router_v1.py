@@ -313,6 +313,63 @@ def test_fault_map_has_router_nodes():
     assert "external_reasoning_review_recorded" in ids
 
 
+def test_engine_action_unchanged_when_review_disagrees(monkeypatch):
+    """External review is advisory; deterministic engine action must not be overwritten by model."""
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-test-dummy-key-for-format-check-only")
+
+    def _disagree(**kwargs):
+        return {
+            "ok": True,
+            "input_tokens": 1,
+            "output_tokens": 1,
+            "total_tokens": 2,
+            "model_resolved": "gpt-5.5-2026-04-23",
+            "response_status": "ok",
+            "parsed_json": {
+                "schema": SCHEMA_REVIEW,
+                "contract_version": 1,
+                "review_model_v1": "m",
+                "review_summary_v1": "disagree",
+                "disagreement_with_local_v1": True,
+                "suggested_action_v1": "enter_long",
+                "suggested_confidence_v1": 0.99,
+                "identified_risks_v1": ["x"],
+                "memory_assessment_v1": "a",
+                "indicator_assessment_v1": "b",
+                "schema_valid_v1": True,
+                "validator_errors_v1": [],
+            },
+        }
+
+    baseline, berr, _, _ = run_entry_reasoning_pipeline_v1(
+        student_decision_packet=_packet(),
+        retrieved_student_experience=[],
+        run_candle_timeframe_minutes=5,
+        job_id="",
+        emit_traces=False,
+        unified_agent_router=False,
+    )
+    assert baseline and not berr
+    base_act = str((baseline.get("decision_synthesis_v1") or {}).get("action") or "")
+
+    monkeypatch.setattr(router_mod, "call_openai_responses_v1", _disagree)
+    ere, err, _tr, _ = run_entry_reasoning_pipeline_v1(
+        student_decision_packet=_packet(),
+        retrieved_student_experience=[],
+        run_candle_timeframe_minutes=5,
+        job_id="",
+        emit_traces=False,
+        unified_agent_router=True,
+        router_config=load_reasoning_router_config_v1(
+            None, extra_dict={"external_api_enabled": True, "low_confidence_threshold": 0.99}
+        ),
+    )
+    assert ere and not err
+    assert str((ere.get("decision_synthesis_v1") or {}).get("action") or "") == base_act
+    assert ere.get("external_reasoning_review_v1")
+    assert (ere.get("external_reasoning_review_v1") or {}).get("suggested_action_v1") == "enter_long"
+
+
 def test_smoke_output_has_no_bearer(capfd, monkeypatch):
     """Smoke must not print API key; module prints JSON summary only."""
     monkeypatch.setenv("OPENAI_API_KEY", "")
