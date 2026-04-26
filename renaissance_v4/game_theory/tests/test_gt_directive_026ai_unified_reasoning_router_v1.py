@@ -370,36 +370,19 @@ def test_engine_action_unchanged_when_review_disagrees(monkeypatch):
     assert (ere.get("external_reasoning_review_v1") or {}).get("suggested_action_v1") == "enter_long"
 
 
-def test_openai_key_from_gitignored_local_config_file(monkeypatch, tmp_path):
-    """Optional reasoning_router_secrets.local.json seeds OPENAI_API_KEY (never committed)."""
-    import json
-    from pathlib import Path
-
+def test_openai_key_read_from_environment_only(monkeypatch):
+    """Adapter reads OPENAI_API_KEY from the process environment only (GT_DIRECTIVE_026AI lab)."""
     import renaissance_v4.game_theory.unified_agent_v1.external_openai_adapter_v1 as adapter_mod
 
-    p = tmp_path / "reasoning_router_secrets.local.json"
-    p.write_text(json.dumps({"openai_api_key": "sk-test-file-inject"}), encoding="utf-8")
-    monkeypatch.setattr(adapter_mod, "_DEFAULT_LOCAL_SECRETS_PATH", Path(p))
-    monkeypatch.setattr(adapter_mod, "_LOCAL_SECRETS_INJECTED", False)
     monkeypatch.delenv("OPENAI_API_KEY", raising=False)
-    k = adapter_mod._get_api_key("OPENAI_API_KEY")
-    assert k == "sk-test-file-inject"
-    assert os.environ.get("OPENAI_API_KEY") == "sk-test-file-inject"
+    assert adapter_mod._get_api_key("OPENAI_API_KEY") is None
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-test-env-only-not-a-real-key")
+    assert adapter_mod._get_api_key("OPENAI_API_KEY") == "sk-test-env-only-not-a-real-key"
 
 
 def test_smoke_output_has_no_bearer(capfd, monkeypatch):
     """Smoke must not print API key; module prints JSON summary only."""
     monkeypatch.setenv("OPENAI_API_KEY", "")
-    # Ensure no gitignored local secrets file is read during this test.
-    from pathlib import Path
-
-    monkeypatch.setattr(
-        "renaissance_v4.game_theory.unified_agent_v1.external_openai_adapter_v1._DEFAULT_LOCAL_SECRETS_PATH",
-        Path("/__nonexistent__/reasoning_router_secrets.local.json"),
-    )
-    import renaissance_v4.game_theory.unified_agent_v1.external_openai_adapter_v1 as adapter_mod
-
-    monkeypatch.setattr(adapter_mod, "_LOCAL_SECRETS_INJECTED", False)
     from renaissance_v4.game_theory.unified_agent_v1.external_openai_adapter_v1 import run_smoke_test_strict_json_v1
 
     r = run_smoke_test_strict_json_v1()

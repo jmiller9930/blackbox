@@ -721,7 +721,7 @@ def build_live_026ai_closure_artifact_v1() -> dict[str, Any]:
         "closure_version_v1": 2,
         "generated_at_utc": _now_iso(),
         "python": sys.version.split()[0],
-        "note": "Real OpenAI: adapter /v1/responses strict smoke, then full unified router (same adapter). No secrets; key from OPENAI_API_KEY only.",
+        "note": "Real OpenAI: adapter /v1/responses strict smoke, then full unified router. Key from process environment (OPENAI_API_KEY) only; no secrets on disk in adapter.",
         "code_paths_proven_v1": [
             "renaissance_v4.game_theory.unified_agent_v1.external_openai_adapter_v1.call_openai_responses_v1",
             "renaissance_v4.game_theory.unified_agent_v1.external_openai_adapter_v1.run_smoke_test_strict_json_v1",

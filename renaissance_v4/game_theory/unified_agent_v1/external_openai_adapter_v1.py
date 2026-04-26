@@ -9,12 +9,10 @@ import os
 import time
 import urllib.error
 import urllib.request
-from pathlib import Path
 from typing import Any
 
-# Optional local file (gitignored) seeds OPENAI_API_KEY once if env is empty.
-_LOCAL_SECRETS_INJECTED = False
-_DEFAULT_LOCAL_SECRETS_PATH = Path(__file__).resolve().parent / "config" / "reasoning_router_secrets.local.json"
+# GT_DIRECTIVE_026AI lab: ``OPENAI_API_KEY`` is read **only** from the process environment (e.g. ``export`` on
+# clawbot). No repo files, no scp of secrets, no .env key injection in this module.
 
 SCHEMA_RESULT = "external_openai_call_result_v1"
 CONTRACT_VERSION = 1
@@ -59,81 +57,7 @@ def classify_openai_http_failure_v1(*, http_code: int, body: str) -> str:
     return "provider_error_v1"
 
 
-def _repo_root_dotenv_path_v1() -> Path:
-    # external_openai_adapter_v1.py -> unified_agent_v1 -> game_theory -> renaissance_v4 -> blackbox
-    return Path(__file__).resolve().parent.parent.parent.parent / ".env"
-
-
-def _maybe_inject_openai_key_from_repo_dotenv_v1() -> None:
-    """
-    If ``.env`` at repo root contains ``OPENAI_API_KEY=...``, set the env var (no dependency on python-dotenv).
-    """
-    if (os.environ.get("OPENAI_API_KEY") or "").strip():
-        return
-    p = _repo_root_dotenv_path_v1()
-    if not p.is_file():
-        return
-    try:
-        raw = p.read_text(encoding="utf-8", errors="replace")
-    except OSError:
-        return
-    for line in raw.splitlines():
-        s = line.strip()
-        if not s or s.startswith("#"):
-            continue
-        if s.startswith("OPENAI_API_KEY="):
-            val = s.split("=", 1)[-1].strip().strip("'").strip('"')
-            if val and not val.upper().startswith("REPLACE"):
-                os.environ["OPENAI_API_KEY"] = val
-            return
-
-
-def _maybe_inject_openai_key_from_local_ignored_file_v1() -> None:
-    """
-    If ``OPENAI_API_KEY`` (or the configured env name) is unset, read
-    ``config/reasoning_router_secrets.local.json`` (gitignored) and set the env var **once** per process.
-
-    The runtime contract remains: adapter reads the key from the environment. This file is a dev convenience
-    only; **do not** commit the ``.local`` file. GT_DIRECTIVE_026AI: no API key in tracked router JSON.
-    """
-    global _LOCAL_SECRETS_INJECTED
-    if _LOCAL_SECRETS_INJECTED:
-        return
-    if (os.environ.get("OPENAI_API_KEY") or "").strip():
-        _LOCAL_SECRETS_INJECTED = True
-        return
-    # Optional: repo root ``.env`` (e.g. ``~/blackbox/.env``) — not committed in templates.
-    _maybe_inject_openai_key_from_repo_dotenv_v1()
-    if (os.environ.get("OPENAI_API_KEY") or "").strip():
-        _LOCAL_SECRETS_INJECTED = True
-        return
-    p = _DEFAULT_LOCAL_SECRETS_PATH
-    if not p.is_file():
-        _LOCAL_SECRETS_INJECTED = True
-        return
-    try:
-        raw = json.loads(p.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError, TypeError, ValueError):
-        _LOCAL_SECRETS_INJECTED = True
-        return
-    if not isinstance(raw, dict):
-        _LOCAL_SECRETS_INJECTED = True
-        return
-    k = raw.get("openai_api_key") or raw.get("OPENAI_API_KEY")
-    if not isinstance(k, str):
-        _LOCAL_SECRETS_INJECTED = True
-        return
-    s = k.strip()
-    if not s or s.upper().startswith("REPLACE_") or "<" in s:
-        _LOCAL_SECRETS_INJECTED = True
-        return
-    os.environ["OPENAI_API_KEY"] = s
-    _LOCAL_SECRETS_INJECTED = True
-
-
 def _get_api_key(api_key_env_var: str) -> str | None:
-    if str(api_key_env_var or "OPENAI_API_KEY").strip() in ("", "OPENAI_API_KEY"):
-        _maybe_inject_openai_key_from_local_ignored_file_v1()
     v = (os.environ.get(str(api_key_env_var or "OPENAI_API_KEY").strip() or "OPENAI_API_KEY") or "").strip()
     return v if v else None
 
