@@ -8,6 +8,8 @@ import uuid
 from pathlib import Path
 import tempfile
 
+import pytest
+
 from renaissance_v4.game_theory.student_proctor.entry_reasoning_engine_v1 import (
     build_indicator_context_eval_v1,
     run_entry_reasoning_pipeline_v1,
@@ -381,4 +383,158 @@ def test_write_proof_artifact_lifecycle_tape_v1():
         encoding="utf-8",
     )
     assert out.is_file() and out.stat().st_size > 100
+
+
+def test_parse_exam_run_contract_passthrough_026b_lifecycle_bars_v1() -> None:
+    from renaissance_v4.game_theory.exam_run_contract_v1 import (
+        STUDENT_BRAIN_PROFILE_MEMORY_CONTEXT_STUDENT_V1,
+        parse_exam_run_contract_request_v1,
+    )
+
+    bars = [
+        {"open": 1.0, "high": 2.0, "low": 0.5, "close": 1.5, "volume": 1.0},
+        {"open": 1.5, "high": 2.0, "low": 1.0, "close": 2.0, "volume": 1.0},
+    ]
+    out, err = parse_exam_run_contract_request_v1(
+        {
+            "exam_run_contract_v1": {
+                "student_brain_profile_v1": STUDENT_BRAIN_PROFILE_MEMORY_CONTEXT_STUDENT_V1,
+                "bars_trade_lifecycle_inclusive_v1": bars,
+            }
+        }
+    )
+    assert err is None and out is not None
+    assert len(out["bars_trade_lifecycle_inclusive_v1"]) == 2
+    o2, err2 = parse_exam_run_contract_request_v1(
+        {
+            "exam_run_contract_v1": {
+                "student_brain_profile_v1": STUDENT_BRAIN_PROFILE_MEMORY_CONTEXT_STUDENT_V1,
+                "bars_trade_lifecycle_inclusive_v1": [bars[0]],
+            }
+        }
+    )
+    assert o2 is None and err2 is not None
+
+
+def test_026b_seam_exam_lifecycle_merges_debug_trace_overlay(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Packet-gated lifecycle tape: exam contract → packet merge → events → debug API overlay."""
+    import sqlite3
+
+    from renaissance_v4.core.outcome_record import OutcomeRecord, outcome_record_to_jsonable
+    from renaissance_v4.game_theory.batch_scorecard import append_batch_scorecard_line
+    from renaissance_v4.game_theory.debug_learning_loop_trace_v1 import build_debug_learning_loop_trace_v1
+    from renaissance_v4.game_theory.exam_run_contract_v1 import (
+        STUDENT_BRAIN_PROFILE_MEMORY_CONTEXT_STUDENT_V1,
+        parse_exam_run_contract_request_v1,
+    )
+    from renaissance_v4.game_theory.student_proctor.student_proctor_operator_runtime_v1 import (
+        student_loop_seam_after_parallel_batch_v1,
+    )
+
+    def _bars(n: int) -> list[dict]:
+        o: list[dict] = []
+        for i in range(n):
+            c = 100.0 + i * 0.35
+            o.append(
+                {
+                    "open": c - 0.02,
+                    "high": c + 0.12,
+                    "low": c - 0.1,
+                    "close": c,
+                    "volume": 100.0,
+                }
+            )
+        return o
+
+    def _db(path) -> str:
+        sym = "TESTUSDT"
+        conn = sqlite3.connect(str(path))
+        conn.execute(
+            """
+            CREATE TABLE market_bars_5m (
+                open_time INTEGER, symbol TEXT, open REAL, high REAL, low REAL, close REAL, volume REAL
+            )
+            """
+        )
+        for i in range(1, 15):
+            ts = i * 1_000_000
+            c = 100.0 + (i - 1) * 0.45
+            conn.execute(
+                "INSERT INTO market_bars_5m (open_time, symbol, open, high, low, close, volume) VALUES (?,?,?,?,?,?,?)",
+                (ts, sym, c - 0.1, c + 0.2, c - 0.2, c, 1000.0),
+            )
+        conn.commit()
+        conn.close()
+        return sym
+
+    monkeypatch.setenv("PATTERN_GAME_STUDENT_LOOP_SEAM", "1")
+    monkeypatch.setenv("PATTERN_GAME_MEMORY_ROOT", str(tmp_path))
+
+    job_id = f"gt026b_unit_{uuid.uuid4().hex[:12]}"
+    ex_req, ex_err = parse_exam_run_contract_request_v1(
+        {
+            "exam_run_contract_v1": {
+                "student_brain_profile_v1": STUDENT_BRAIN_PROFILE_MEMORY_CONTEXT_STUDENT_V1,
+                "candle_timeframe_minutes": 5,
+                "bars_trade_lifecycle_inclusive_v1": _bars(24),
+            }
+        }
+    )
+    assert ex_err is None and ex_req
+    o = OutcomeRecord(
+        trade_id="t_seam_026b",
+        symbol="TESTUSDT",
+        direction="long",
+        entry_time=6_000_000,
+        exit_time=6_100_000,
+        entry_price=100.0,
+        exit_price=101.0,
+        pnl=1.0,
+        mae=0.0,
+        mfe=0.5,
+        exit_reason="tp",
+    )
+    results = [
+        {
+            "ok": True,
+            "scenario_id": "sc1",
+            "replay_outcomes_json": [outcome_record_to_jsonable(o)],
+        }
+    ]
+    db = tmp_path / "b.sqlite3"
+    _db(db)
+    append_batch_scorecard_line(
+        {
+            "schema": "pattern_game_batch_scorecard_v1",
+            "job_id": job_id,
+            "status": "done",
+            "memory_context_impact_audit_v1": {"run_config_fingerprint_sha256_40": "b" * 40},
+        }
+    )
+    student_loop_seam_after_parallel_batch_v1(
+        results=results,
+        run_id=job_id,
+        db_path=db,
+        store_path=tmp_path / "learn.jsonl",
+        exam_run_contract_request_v1=ex_req,
+        operator_batch_audit={"candle_timeframe_minutes": 5},
+    )
+    dbg = build_debug_learning_loop_trace_v1(job_id)
+    assert dbg.get("ok")
+    ovl = dbg.get("lifecycle_trace_overlay_v1") or {}
+    assert ovl.get("schema") == "lifecycle_debug_overlay_v1"
+    assert int(ovl.get("lifecycle_stage_events_count_v1") or 0) >= 2
+    summ = ovl.get("lifecycle_tape_summary_v1")
+    assert isinstance(summ, dict) and summ.get("closed_v1")
+    ex = str(summ.get("exit_reason_code_v1") or "")
+    assert ex in (
+        "target_hit_v1",
+        "stop_hit_v1",
+        "time_expired_v1",
+        "thesis_invalidated_v1",
+        "confidence_collapse_v1",
+        "opposing_signal_v1",
+    )
 

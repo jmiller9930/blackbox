@@ -304,6 +304,55 @@ def _memory_context_used_flag_v1(operator_batch_audit: dict[str, Any] | None) ->
     return cmem in ("read", "read_write")
 
 
+def _apply_optional_026b_lifecycle_fields_v1(
+    out: dict[str, Any],
+    block: dict[str, Any],
+    data: dict[str, Any],
+) -> str | None:
+    """
+    GT_DIRECTIVE_026B — optional forward tape and lifecycle controls from ``exam_run_contract_v1``
+    (or top-level request keys) for merge into the student decision packet in the operator seam.
+    """
+    keys = (
+        "bars_trade_lifecycle_inclusive_v1",
+        "entry_bar_index_for_lifecycle_v1",
+        "unified_agent_router_lifecycle_v1",
+        "max_hold_bars_lifecycle_v1",
+    )
+    for key in keys:
+        v: Any = block.get(key)
+        if v is None:
+            v = data.get(key)
+        if v is None:
+            continue
+        if key == "bars_trade_lifecycle_inclusive_v1":
+            if not isinstance(v, list) or len(v) < 2:
+                return "bars_trade_lifecycle_inclusive_v1 must be a list with at least 2 bar dicts"
+            for i, b in enumerate(v):
+                if not isinstance(b, dict):
+                    return f"bars_trade_lifecycle_inclusive_v1[{i}] must be a dict"
+            out[key] = [dict(b) for b in v]
+        elif key == "entry_bar_index_for_lifecycle_v1":
+            try:
+                out[key] = int(v)
+            except (TypeError, ValueError):
+                return f"invalid entry_bar_index_for_lifecycle_v1: {v!r}"
+        elif key == "max_hold_bars_lifecycle_v1":
+            try:
+                m = int(v)
+            except (TypeError, ValueError):
+                return f"invalid max_hold_bars_lifecycle_v1: {v!r}"
+            if m < 1 or m > 10_000:
+                return "max_hold_bars_lifecycle_v1 out of range (1..10000)"
+            out[key] = m
+        elif key == "unified_agent_router_lifecycle_v1":
+            if isinstance(v, str):
+                out[key] = v.strip().lower() in ("1", "true", "yes", "on")
+            else:
+                out[key] = bool(v)
+    return None
+
+
 def parse_exam_run_contract_request_v1(data: dict[str, Any]) -> tuple[dict[str, Any] | None, str | None]:
     """
     Parse ``exam_run_contract_v1`` (or flat keys). Primary: ``student_brain_profile_v1``;
@@ -449,6 +498,9 @@ def parse_exam_run_contract_request_v1(data: dict[str, Any]) -> tuple[dict[str, 
         out["exam_unit_id"] = euid.strip()[:256]
     if ctf_out is not None:
         out["candle_timeframe_minutes"] = int(ctf_out)
+    lc_err = _apply_optional_026b_lifecycle_fields_v1(out, block, data)
+    if lc_err:
+        return None, lc_err
     return out, None
 
 

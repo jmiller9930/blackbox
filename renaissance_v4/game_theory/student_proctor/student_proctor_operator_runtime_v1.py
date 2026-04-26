@@ -276,6 +276,26 @@ def _student_output_fingerprint_v1(so: dict[str, Any]) -> str:
     return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
 
 
+def _merge_exam_lifecycle_026b_into_packet_v1(
+    pkt: dict[str, Any], ex_req: dict[str, Any] | None
+) -> dict[str, Any]:
+    """GT_DIRECTIVE_026B — copy optional lifecycle tape fields from exam contract onto the student packet."""
+    if not isinstance(pkt, dict) or not isinstance(ex_req, dict):
+        return pkt
+    keys = (
+        "bars_trade_lifecycle_inclusive_v1",
+        "entry_bar_index_for_lifecycle_v1",
+        "unified_agent_router_lifecycle_v1",
+        "max_hold_bars_lifecycle_v1",
+    )
+    for k in keys:
+        if ex_req.get(k) is None:
+            continue
+        v = ex_req[k]
+        pkt[k] = copy.deepcopy(v) if k == "bars_trade_lifecycle_inclusive_v1" else v
+    return pkt
+
+
 def student_loop_seam_after_parallel_batch_v1(
     *,
     results: list[dict[str, Any]],
@@ -465,6 +485,7 @@ def student_loop_seam_after_parallel_batch_v1(
                 if perr or pkt is None:
                     errors.append(f"{sid} trade={o.trade_id}: packet {perr!r}")
                     continue
+                pkt = _merge_exam_lifecycle_026b_into_packet_v1(pkt, ex_req)
                 emit_candle_timeframe_nexus_v1(
                     job_id=str(run_id).strip(),
                     fingerprint=fp_emit,
