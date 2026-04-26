@@ -11,8 +11,9 @@ import urllib.error
 import urllib.request
 from typing import Any
 
-# GT_DIRECTIVE_026AI lab: ``OPENAI_API_KEY`` is read **only** from the process environment (e.g. ``export`` on
-# clawbot). No repo files, no scp of secrets, no .env key injection in this module.
+# ``OPENAI_API_KEY`` comes from the process environment first. If unset, a **one-time** optional read of a
+# host-only file (default ``~/.blackbox_secrets/openai.env``) may set it — never in the repo; override path with
+# ``BLACKBOX_OPENAI_ENV_FILE``. No logging of the key.
 
 SCHEMA_RESULT = "external_openai_call_result_v1"
 CONTRACT_VERSION = 1
@@ -57,8 +58,54 @@ def classify_openai_http_failure_v1(*, http_code: int, body: str) -> str:
     return "provider_error_v1"
 
 
+_INJECTED_HOST_OPENAI_FILE = False
+
+
+def _path_host_openai_envfile_v1() -> str:
+    p = (os.environ.get("BLACKBOX_OPENAI_ENV_FILE") or "").strip()
+    if p:
+        return os.path.expanduser(p)
+    return os.path.expanduser("~/.blackbox_secrets/openai.env")
+
+
+def _maybe_inject_openai_key_from_host_secrets_file_v1(*, target_env: str) -> None:
+    """
+    If ``target_env`` is ``OPENAI_API_KEY`` and it is empty, read the first ``OPENAI_API_KEY=...`` line from
+    the host envfile (``export`` prefix allowed). Runs at most once per process.
+    """
+    global _INJECTED_HOST_OPENAI_FILE
+    if _INJECTED_HOST_OPENAI_FILE:
+        return
+    _INJECTED_HOST_OPENAI_FILE = True
+    if (target_env or "OPENAI_API_KEY") != "OPENAI_API_KEY":
+        return
+    if (os.environ.get("OPENAI_API_KEY") or "").strip():
+        return
+    path = _path_host_openai_envfile_v1()
+    if not path or not os.path.isfile(path):
+        return
+    try:
+        raw = open(path, encoding="utf-8", errors="replace").read()
+    except OSError:
+        return
+    for line in raw.splitlines():
+        s = line.strip()
+        if not s or s.startswith("#"):
+            continue
+        if s.startswith("export "):
+            s = s[7:].strip()
+        if not s.upper().startswith("OPENAI_API_KEY="):
+            continue
+        val = s.split("=", 1)[-1].strip().strip("'\"")
+        if val:
+            os.environ["OPENAI_API_KEY"] = val
+        return
+
+
 def _get_api_key(api_key_env_var: str) -> str | None:
-    v = (os.environ.get(str(api_key_env_var or "OPENAI_API_KEY").strip() or "OPENAI_API_KEY") or "").strip()
+    var = str(api_key_env_var or "OPENAI_API_KEY").strip() or "OPENAI_API_KEY"
+    _maybe_inject_openai_key_from_host_secrets_file_v1(target_env=var)
+    v = (os.environ.get(var) or "").strip()
     return v if v else None
 
 

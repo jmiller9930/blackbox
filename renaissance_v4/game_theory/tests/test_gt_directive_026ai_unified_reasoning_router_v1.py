@@ -371,18 +371,36 @@ def test_engine_action_unchanged_when_review_disagrees(monkeypatch):
 
 
 def test_openai_key_read_from_environment_only(monkeypatch):
-    """Adapter reads OPENAI_API_KEY from the process environment only (GT_DIRECTIVE_026AI lab)."""
+    """Env wins; if unset, optional host file (``BLACKBOX_OPENAI_ENV_FILE``) may provide the key."""
     import renaissance_v4.game_theory.unified_agent_v1.external_openai_adapter_v1 as adapter_mod
 
+    monkeypatch.setenv("BLACKBOX_OPENAI_ENV_FILE", "/__nonexistent__/no_openai.env")
+    monkeypatch.setattr(adapter_mod, "_INJECTED_HOST_OPENAI_FILE", False)
     monkeypatch.delenv("OPENAI_API_KEY", raising=False)
     assert adapter_mod._get_api_key("OPENAI_API_KEY") is None
     monkeypatch.setenv("OPENAI_API_KEY", "sk-test-env-only-not-a-real-key")
     assert adapter_mod._get_api_key("OPENAI_API_KEY") == "sk-test-env-only-not-a-real-key"
 
 
+def test_openai_key_from_host_secrets_file(monkeypatch, tmp_path):
+    """Host-only envfile (e.g. ``~/.blackbox_secrets/openai.env``) can seed ``OPENAI_API_KEY`` when env is empty."""
+    import renaissance_v4.game_theory.unified_agent_v1.external_openai_adapter_v1 as adapter_mod
+
+    f = tmp_path / "openai.env"
+    f.write_text("export OPENAI_API_KEY='sk-from-file-test-only'\n", encoding="utf-8")
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    monkeypatch.setenv("BLACKBOX_OPENAI_ENV_FILE", str(f))
+    monkeypatch.setattr(adapter_mod, "_INJECTED_HOST_OPENAI_FILE", False)
+    assert adapter_mod._get_api_key("OPENAI_API_KEY") == "sk-from-file-test-only"
+
+
 def test_smoke_output_has_no_bearer(capfd, monkeypatch):
     """Smoke must not print API key; module prints JSON summary only."""
+    import renaissance_v4.game_theory.unified_agent_v1.external_openai_adapter_v1 as adapter_mod
+
     monkeypatch.setenv("OPENAI_API_KEY", "")
+    monkeypatch.setenv("BLACKBOX_OPENAI_ENV_FILE", "/__nonexistent__/no_openai.env")
+    monkeypatch.setattr(adapter_mod, "_INJECTED_HOST_OPENAI_FILE", False)
     from renaissance_v4.game_theory.unified_agent_v1.external_openai_adapter_v1 import run_smoke_test_strict_json_v1
 
     r = run_smoke_test_strict_json_v1()
