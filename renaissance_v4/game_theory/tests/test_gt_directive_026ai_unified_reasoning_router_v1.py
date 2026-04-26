@@ -375,7 +375,7 @@ def test_openai_key_read_from_environment_only(monkeypatch):
     import renaissance_v4.game_theory.unified_agent_v1.external_openai_adapter_v1 as adapter_mod
 
     monkeypatch.setenv("BLACKBOX_OPENAI_ENV_FILE", "/__nonexistent__/no_openai.env")
-    monkeypatch.setattr(adapter_mod, "_INJECTED_HOST_OPENAI_FILE", False)
+    adapter_mod.reset_external_openai_bootstrap_state_for_tests_v1()
     monkeypatch.delenv("OPENAI_API_KEY", raising=False)
     assert adapter_mod._get_api_key("OPENAI_API_KEY") is None
     monkeypatch.setenv("OPENAI_API_KEY", "sk-test-env-only-not-a-real-key")
@@ -390,7 +390,7 @@ def test_openai_key_from_host_secrets_file(monkeypatch, tmp_path):
     f.write_text("export OPENAI_API_KEY='sk-from-file-test-only'\n", encoding="utf-8")
     monkeypatch.delenv("OPENAI_API_KEY", raising=False)
     monkeypatch.setenv("BLACKBOX_OPENAI_ENV_FILE", str(f))
-    monkeypatch.setattr(adapter_mod, "_INJECTED_HOST_OPENAI_FILE", False)
+    adapter_mod.reset_external_openai_bootstrap_state_for_tests_v1()
     assert adapter_mod._get_api_key("OPENAI_API_KEY") == "sk-from-file-test-only"
 
 
@@ -400,7 +400,7 @@ def test_smoke_output_has_no_bearer(capfd, monkeypatch):
 
     monkeypatch.setenv("OPENAI_API_KEY", "")
     monkeypatch.setenv("BLACKBOX_OPENAI_ENV_FILE", "/__nonexistent__/no_openai.env")
-    monkeypatch.setattr(adapter_mod, "_INJECTED_HOST_OPENAI_FILE", False)
+    adapter_mod.reset_external_openai_bootstrap_state_for_tests_v1()
     from renaissance_v4.game_theory.unified_agent_v1.external_openai_adapter_v1 import run_smoke_test_strict_json_v1
 
     r = run_smoke_test_strict_json_v1()

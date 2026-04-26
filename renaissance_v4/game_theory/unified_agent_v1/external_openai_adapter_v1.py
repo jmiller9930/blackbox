@@ -11,11 +11,15 @@ import urllib.error
 import urllib.request
 from typing import Any
 
+from renaissance_v4.game_theory.unified_agent_v1.external_openai_secrets_contract_v1 import (
+    EXTERNAL_API_OPENAI_KEY_ENV,
+    resolved_external_openai_env_file_v1,
+)
 from renaissance_v4.game_theory.unified_agent_v1.reasoning_router_config_v1 import DEFAULTS
 
-# ``OPENAI_API_KEY`` comes from the process environment first. If unset, a **one-time** optional read of a
-# host-only file (default ``~/.blackbox_secrets/openai.env``) may set it — never in the repo; override path with
-# ``BLACKBOX_OPENAI_ENV_FILE``. No logging of the key.
+# ``OPENAI_API_KEY`` comes from the process environment first. If unset, the **single** host file from
+# :func:`resolved_external_openai_env_file_v1` is read (re-read when that file’s mtime/size change).
+# See ``external_openai_secrets_contract_v1``. No logging of the key.
 
 SCHEMA_RESULT = "external_openai_call_result_v1"
 CONTRACT_VERSION = 1
@@ -60,19 +64,24 @@ def classify_openai_http_failure_v1(*, http_code: int, body: str) -> str:
     return "provider_error_v1"
 
 
-_INJECTED_HOST_OPENAI_FILE = False
+# When the host file is read but has no resolvable key line, we cache (path, mtime_ns, size) so
+# we do not re-parse every request; edits to the file change the signature and trigger a re-read.
+_EXTERNAL_API_OPENAI_FILE_LAST_NOKEY_SIG: tuple[str, int, int] | None = None
 
 
 def _path_host_openai_envfile_v1() -> str:
-    p = (os.environ.get("BLACKBOX_OPENAI_ENV_FILE") or "").strip()
-    if p:
-        return os.path.expanduser(p)
-    return os.path.expanduser("~/.blackbox_secrets/openai.env")
+    return resolved_external_openai_env_file_v1()
 
 
 def host_secrets_path_openai_v1() -> str:
-    """Absolute path to the host envfile the adapter may read (no I/O; for diagnostics only)."""
-    return _path_host_openai_envfile_v1()
+    """Absolute path to the **single** host OpenAI envfile (no I/O; for diagnostics only)."""
+    return resolved_external_openai_env_file_v1()
+
+
+def reset_external_openai_bootstrap_state_for_tests_v1() -> None:
+    """Clear host-file cache (pytest only; avoids cross-test pollution)."""
+    global _EXTERNAL_API_OPENAI_FILE_LAST_NOKEY_SIG
+    _EXTERNAL_API_OPENAI_FILE_LAST_NOKEY_SIG = None
 
 
 def host_secrets_file_has_plausible_openai_key_line_v1() -> bool:
@@ -106,24 +115,27 @@ def host_secrets_file_has_plausible_openai_key_line_v1() -> bool:
 
 def _maybe_inject_openai_key_from_host_secrets_file_v1(*, target_env: str) -> None:
     """
-    If ``target_env`` is ``OPENAI_API_KEY`` and it is empty, read the first ``OPENAI_API_KEY=...`` line from
-    the host envfile (``export`` prefix allowed). Idempotent: only marks done after a host-file read
-    attempt that found the file (so if the file was missing on first import and is created later,
-    a subsequent call can still inject).
+    If ``target_env`` is ``OPENAI_API_KEY`` and it is empty, read the first ``OPENAI_API_KEY=...`` line
+    from the single host file :func:`resolved_external_openai_env_file_v1` (``export`` prefix allowed).
+    Re-parses when the file is created, or when mtime/size change (e.g. key added later).
     """
-    global _INJECTED_HOST_OPENAI_FILE
-    if _INJECTED_HOST_OPENAI_FILE:
+    te = (target_env or EXTERNAL_API_OPENAI_KEY_ENV).strip() or EXTERNAL_API_OPENAI_KEY_ENV
+    if te != EXTERNAL_API_OPENAI_KEY_ENV:
         return
-    if (target_env or "OPENAI_API_KEY") != "OPENAI_API_KEY":
-        _INJECTED_HOST_OPENAI_FILE = True
-        return
-    if (os.environ.get("OPENAI_API_KEY") or "").strip():
-        _INJECTED_HOST_OPENAI_FILE = True
+    if (os.environ.get(EXTERNAL_API_OPENAI_KEY_ENV) or "").strip():
         return
     path = _path_host_openai_envfile_v1()
     if not path or not os.path.isfile(path):
         return
-    _INJECTED_HOST_OPENAI_FILE = True
+    try:
+        st = os.stat(path)
+    except OSError:
+        return
+    mtime_ns = int(getattr(st, "st_mtime_ns", st.st_mtime * 1_000_000_000))
+    sig: tuple[str, int, int] = (path, mtime_ns, int(st.st_size))
+    global _EXTERNAL_API_OPENAI_FILE_LAST_NOKEY_SIG
+    if _EXTERNAL_API_OPENAI_FILE_LAST_NOKEY_SIG == sig:
+        return
     try:
         raw = open(path, encoding="utf-8", errors="replace").read()
     except OSError:
@@ -134,12 +146,14 @@ def _maybe_inject_openai_key_from_host_secrets_file_v1(*, target_env: str) -> No
             continue
         if s.startswith("export "):
             s = s[7:].strip()
-        if not s.upper().startswith("OPENAI_API_KEY="):
+        if not s.upper().startswith(f"{EXTERNAL_API_OPENAI_KEY_ENV}="):
             continue
         val = s.split("=", 1)[-1].strip().strip("'\"")
-        if val:
-            os.environ["OPENAI_API_KEY"] = val
-        return
+        if val and not val.lower().startswith("sk-placeholder"):
+            os.environ[EXTERNAL_API_OPENAI_KEY_ENV] = val
+            _EXTERNAL_API_OPENAI_FILE_LAST_NOKEY_SIG = None
+            return
+    _EXTERNAL_API_OPENAI_FILE_LAST_NOKEY_SIG = sig
 
 
 def _get_api_key(api_key_env_var: str) -> str | None:

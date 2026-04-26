@@ -35,32 +35,21 @@ export PATTERN_GAME_SESSION_LOGS_ROOT="$RUNTIME_ROOT/batches"
 export PATTERN_GAME_GROUNDHOG_BUNDLE="${PATTERN_GAME_GROUNDHOG_BUNDLE:-1}"
 echo "gsync: PML runtime root (explicit): $RUNTIME_ROOT (Flask log rotates in-process: max 100MB x 5)"
 
-# ---- OpenAI / GT_DIRECTIVE_026AI: same key contract as external_openai_adapter_v1 and ./scripts/openai_adapter_smoke_v1.sh
-# The Flask process must inherit OPENAI so /api/reasoning-model/status matches a successful smoke. Interactive shells
-# often have a key; nohup does not read ~/.bashrc. Load, in order: repo .env, optional file override, host secrets, repo runtime secrets.
-# See renaissance_v4/game_theory/unified_agent_v1/config/reasoning_router_secrets.local.json.example
+# ---- OpenAI (external API only): one host file, same as external_openai_secrets_contract_v1 / adapter.
+# Optional: repo .env for other vars. Then exactly one of BLACKBOX_OPENAI_ENV_FILE or ~/.blackbox_secrets/openai.env
+# (override wins; no duplicate key stores under runtime/ or second copies).
+# See: renaissance_v4/game_theory/unified_agent_v1/external_openai_secrets_contract_v1.py
 if [ -f "$REPO/.env" ]; then
   set -a
   # shellcheck disable=SC1091
   . "$REPO/.env"
   set +a
 fi
-if [ -n "${BLACKBOX_OPENAI_ENV_FILE:-}" ] && [ -f "${BLACKBOX_OPENAI_ENV_FILE}" ]; then
+O_ENV="${BLACKBOX_OPENAI_ENV_FILE:-$HOME/.blackbox_secrets/openai.env}"
+if [ -f "$O_ENV" ]; then
   set -a
   # shellcheck disable=SC1090
-  . "${BLACKBOX_OPENAI_ENV_FILE}"
-  set +a
-fi
-if [ -f "${HOME}/.blackbox_secrets/openai.env" ]; then
-  set -a
-  # shellcheck disable=SC1090
-  . "${HOME}/.blackbox_secrets/openai.env"
-  set +a
-fi
-if [ -f "${RUNTIME_ROOT}/secrets/openai.env" ]; then
-  set -a
-  # shellcheck disable=SC1090
-  . "${RUNTIME_ROOT}/secrets/openai.env"
+  . "$O_ENV"
   set +a
 fi
 # Proof only (value never printed; length 0 = key not in service env — add a file above and restart)

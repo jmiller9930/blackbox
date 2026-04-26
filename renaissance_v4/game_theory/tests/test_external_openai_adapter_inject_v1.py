@@ -12,7 +12,7 @@ def test_inject_retried_when_secrets_file_created_after_first_key_lookup(monkeyp
     monkeypatch.delenv("OPENAI_API_KEY", raising=False)
     p = tmp_path / "openai.env"
     monkeypatch.setenv("BLACKBOX_OPENAI_ENV_FILE", str(p))
-    monkeypatch.setattr(adapter_mod, "_INJECTED_HOST_OPENAI_FILE", False)
+    adapter_mod.reset_external_openai_bootstrap_state_for_tests_v1()
     assert _get_api_key("OPENAI_API_KEY") is None
     p.write_text("export OPENAI_API_KEY='sk-late-file-appears-test-xyzabc'\n", encoding="utf-8")
     assert _get_api_key("OPENAI_API_KEY") is not None

@@ -8,6 +8,8 @@ set -e
 cd "$(dirname "$0")/.." || exit 1
 export PYTHONPATH=.
 U="${PATTERN_GAME_STATUS_URL:-http://127.0.0.1:8765/api/reasoning-model/status}"
+echo "== 0) Canonical external API env file (single source; same as adapter) =="
+python3 -c "from renaissance_v4.game_theory.unified_agent_v1.external_openai_secrets_contract_v1 import resolved_external_openai_env_file_v1 as p; print(p())"
 echo "== 1) This shell: OPENAI_API_KEY length (value not printed) =="
 python3 -c "import os; v=os.environ.get('OPENAI_API_KEY') or ''; print('OPENAI len:', len(v), '| long enough (>=9):', 1 if len(v) > 8 else 0)"
 echo "== 2) openai_adapter_smoke =="

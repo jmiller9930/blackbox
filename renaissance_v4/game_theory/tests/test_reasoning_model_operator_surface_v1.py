@@ -10,7 +10,7 @@ from renaissance_v4.game_theory.reasoning_model_operator_surface_v1 import _open
 
 def test_openai_key_configured_uses_host_secrets_file_like_adapter(monkeypatch, tmp_path):
     monkeypatch.delenv("OPENAI_API_KEY", raising=False)
-    monkeypatch.setattr(adapter_mod, "_INJECTED_HOST_OPENAI_FILE", False)
+    adapter_mod.reset_external_openai_bootstrap_state_for_tests_v1()
     f = tmp_path / "openai.env"
     f.write_text("export OPENAI_API_KEY='sk-surface-align-test-not-real-xyz'\n", encoding="utf-8")
     monkeypatch.setenv("BLACKBOX_OPENAI_ENV_FILE", str(f))
