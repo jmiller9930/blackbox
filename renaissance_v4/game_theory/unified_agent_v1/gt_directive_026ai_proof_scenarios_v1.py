@@ -11,6 +11,7 @@ import json
 import os
 import sys
 import uuid
+from unittest.mock import patch
 from datetime import datetime, timezone
 from typing import Any
 
@@ -135,20 +136,24 @@ def all_mandatory_verification_true_v1(ver: dict[str, bool]) -> bool:
 
 def run_scenario_01_local_only_external_disabled_v1() -> dict[str, Any]:
     job = f"proof_026ai_S01_{uuid.uuid4().hex[:8]}"
-    cfg = load_reasoning_router_config_v1(
-        None,
-        extra_dict={"router_enabled": True, "external_api_enabled": False, "low_confidence_threshold": 0.99},
-    )
-    ere, err, _tr, pfm = run_entry_reasoning_pipeline_v1(
-        student_decision_packet=packet_study_v1(),
-        retrieved_student_experience=[],
-        run_candle_timeframe_minutes=5,
-        job_id=job,
-        fingerprint="proof_fp_s01",
-        emit_traces=True,
-        unified_agent_router=True,
-        router_config=cfg,
-    )
+    with patch(
+        "renaissance_v4.game_theory.unified_agent_v1.reasoning_router_config_v1.read_operator_reasoning_model_preferences_v1",
+        return_value={"external_api_gateway_enabled": False},
+    ):
+        cfg = load_reasoning_router_config_v1(
+            None,
+            extra_dict={"router_enabled": True, "external_api_enabled": False, "low_confidence_threshold": 0.99},
+        )
+        ere, err, _tr, pfm = run_entry_reasoning_pipeline_v1(
+            student_decision_packet=packet_study_v1(),
+            retrieved_student_experience=[],
+            run_candle_timeframe_minutes=5,
+            job_id=job,
+            fingerprint="proof_fp_s01",
+            emit_traces=True,
+            unified_agent_router=True,
+            router_config=cfg,
+        )
     assert ere and not err
     dec = ere.get("reasoning_router_decision_v1") or {}
     leg = ere.get("external_api_call_ledger_v1") or {}

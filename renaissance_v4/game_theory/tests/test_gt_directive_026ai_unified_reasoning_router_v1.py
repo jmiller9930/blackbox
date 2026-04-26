@@ -407,3 +407,27 @@ def test_smoke_output_has_no_bearer(capfd, monkeypatch):
     t = json.dumps(r)
     assert "sk-" not in t
     assert "Authorization" not in t
+
+
+def test_operator_external_gateway_on_overrides_openai_escalation_env_off(monkeypatch):
+    import renaissance_v4.game_theory.unified_agent_v1.reasoning_router_config_v1 as rrc
+
+    monkeypatch.setattr(rrc, "read_operator_reasoning_model_preferences_v1", lambda: {})
+    monkeypatch.setenv("OPENAI_ESCALATION_ENABLED", "0")
+    c = load_reasoning_router_config_v1(None)
+    assert c.get("external_api_enabled") is True
+    assert c.get("operator_external_api_gateway_merge_v1") == "enabled_by_operator_ui_v1"
+
+
+def test_operator_external_gateway_off_forces_disable_even_if_escalation_env_on(monkeypatch):
+    import renaissance_v4.game_theory.unified_agent_v1.reasoning_router_config_v1 as rrc
+
+    monkeypatch.setattr(
+        rrc,
+        "read_operator_reasoning_model_preferences_v1",
+        lambda: {"external_api_gateway_enabled": False},
+    )
+    monkeypatch.setenv("OPENAI_ESCALATION_ENABLED", "1")
+    c = load_reasoning_router_config_v1(None)
+    assert c.get("external_api_enabled") is False
+    assert c.get("operator_external_api_gateway_merge_v1") == "blocked_by_operator_ui"

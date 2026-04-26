@@ -2,7 +2,9 @@
 Operator-facing **Reasoning Model** health surface (unified Student stack: local model, 026AI router, external gateway).
 
 * ``GET`` snapshot for ``/api/reasoning-model/status`` (runtime probes + optional ``job_id`` trace slice).
-* Persists the external API gateway toggle; :func:`load_reasoning_router_config_v1` merges it (blocks escalation when off).
+* Persists the **Allow External API** toggle; :func:`load_reasoning_router_config_v1` merges it as
+  authoritative: off blocks external entirely; on forces **external_api_enabled** at runtime and overrides
+  ``OPENAI_ESCALATION_ENABLED`` when the operator has not turned the gateway off.
 """
 
 from __future__ import annotations
@@ -33,8 +35,11 @@ ADD_FUNDS_BILLING_URL_V1 = "https://platform.openai.com/settings/organization/bi
 
 def write_operator_external_api_gateway_enabled_v1(allowed: bool) -> dict[str, Any]:
     """
-    ``allowed`` True = operator allows external escalation (subject to config + env).
-    ``allowed`` False = UI blocks external API regardless of config file.
+    ``allowed`` **True** = effective router config is merged with **external API enabled** (overrides
+    ``OPENAI_ESCALATION_ENABLED=0`` and the static config default when false).
+
+    ``allowed`` **False** = external API is **fully disabled**; the router will not use the external gateway
+    under any condition (no other hidden file/env switch for “optional” use).
     """
     p = operator_reasoning_model_preferences_path_v1()
     p.parent.mkdir(parents=True, exist_ok=True)
@@ -130,10 +135,10 @@ def _operator_block_message_v1(
         return "The last OpenAI call failed. Check key, quota, and provider; see trace for the run."
     if operator_blocks:
         return "Allow External AI is off — escalation to OpenAI is blocked in operator settings."
-    if not ext_effective:
-        return "External API is not enabled in server configuration (reasoning router config or OPENAI_ESCALATION_ENABLED)."
+    if not ext_effective and not operator_blocks:
+        return "External API is not enabled in effective configuration (atypical: expected only if config bypassed load merge)."
     if not key_ok and ext_effective:
-        return "OpenAI key is not configured; external API cannot be used."
+        return "OpenAI key is not configured. External API is blocked — configuration issue, or turn off Allow External AI."
     if primary_code == "budget_blocked":
         return "External API Blocked (Budget) — per-run cap or token limits."
     if primary_code == "no_external_api_call_in_trace":
@@ -154,15 +159,15 @@ def get_reasoning_model_operator_snapshot_v1(job_id: str | None = None) -> dict[
     ollama_err = verify_ollama_model_tag_available_v1(base_url, model, timeout_s=8.0)
     key_ok = _openai_key_configured_v1(cfg)
 
-    # External path status (distinct from operator checkbox: permission vs router config + key).
+    # External path: operator “off” blocks; when not blocked, load merge forces external_api_enabled true.
     if operator_blocks:
-        ext_health = "operator_blocked"  # UI toggle off — escalation not allowed
+        ext_health = "operator_blocked"
     elif not ext_effective:
-        ext_health = "router_config_off"  # merged config/env has external_api_enabled false
+        ext_health = "router_config_off"
     elif not key_ok:
         ext_health = "missing_key"
     else:
-        ext_health = "available"  # OpenAI can be called when the router escalates
+        ext_health = "available"
 
     last_call = "not_called"
     last_dec: dict[str, Any] | None = None
@@ -232,8 +237,8 @@ def get_reasoning_model_operator_snapshot_v1(job_id: str | None = None) -> dict[
         "local_model_error": "Local Ollama/model probe failed; local reasoning may be unavailable.",
         "router_off": "026AI router is disabled in config.",
         "operator_gateway_off": "Operator has turned off the external API gateway (escalation not allowed).",
-        "router_external_disabled": "External escalation is off in merged router config/env; enable in reasoning_router_config or OPENAI_ESCALATION_ENABLED. Operator 'gateway' can still show enabled.",
-        "missing_openai_key": "External path would be used but OPENAI (or api_key_env_var) is missing or placeholder.",
+        "router_external_disabled": "External API is off in effective config (unusual if load merge runs; check for dict-only router config path).",
+        "missing_openai_key": "Allow External AI is on; API key (or api_key_env_var) is missing or placeholder — configuration issue until fixed.",
         "budget_blocked": "External budget or caps block escalation for this run.",
         "idle_no_job_scoped": "No job_id in query — last-call trace not shown; add ?job_id= for a specific run.",
         "no_external_api_call_in_trace": "External is enabled, but this run’s trace shows no OpenAI call (no escalation, or local-only route).",
@@ -282,6 +287,7 @@ def get_reasoning_model_operator_snapshot_v1(job_id: str | None = None) -> dict[
         router_label = "error"
 
     # Proof of external path (no debug: no job_id, no "config" jargon in the primary string).
+    # With load merge, external_api_enabled is true whenever the operator has not turned the gateway off.
     external_api_proof_state_v1: str
     external_api_proof_line_v1: str
     if ollama_err:
@@ -296,21 +302,24 @@ def get_reasoning_model_operator_snapshot_v1(job_id: str | None = None) -> dict[
     elif not ext_effective:
         external_api_proof_state_v1 = "not_connected"
         external_api_proof_line_v1 = "External API: Not Configured"
-    elif not key_ok and ext_effective:
-        external_api_proof_state_v1 = "not_connected"
-        external_api_proof_line_v1 = "External API: Not Configured (key missing)"
-    elif budget_label == "exhausted" and ext_effective and not operator_blocks:
+    elif not key_ok:
+        external_api_proof_state_v1 = "blocked"
+        external_api_proof_line_v1 = "External API: Blocked — Configuration Issue"
+    elif budget_label == "exhausted" and not operator_blocks:
         external_api_proof_state_v1 = "blocked"
         external_api_proof_line_v1 = "External API: Blocked (Budget)"
-    elif last_call == "failed" and ext_effective and key_ok:
+    elif last_call == "failed" and key_ok:
         external_api_proof_state_v1 = "not_connected"
         external_api_proof_line_v1 = "External API: Not Connected (call failed)"
     elif not router_on:
         external_api_proof_state_v1 = "idle"
         external_api_proof_line_v1 = "External API: Idle"
+    elif not jid:
+        external_api_proof_state_v1 = "enabled"
+        external_api_proof_line_v1 = "External API: Enabled"
     else:
         external_api_proof_state_v1 = "ready_no_call"
-        external_api_proof_line_v1 = "External API: Ready (no call yet)"
+        external_api_proof_line_v1 = "External API: Ready"
 
     local_display = "Error" if ollama_err else "Loaded"
     router_display = "Disabled" if router_label == "disabled" else ("Error" if router_label == "error" else "Active")
@@ -319,19 +328,17 @@ def get_reasoning_model_operator_snapshot_v1(job_id: str | None = None) -> dict[
         external_line_core = "Unavailable"
     elif external_api_proof_state_v1 == "connected":
         external_line_core = "Connected"
+    elif external_api_proof_state_v1 == "enabled":
+        external_line_core = "Enabled"
     elif external_api_proof_state_v1 == "ready_no_call":
-        external_line_core = "Ready (no call yet)"
+        external_line_core = "Ready"
     elif external_api_proof_state_v1 == "blocked":
-        external_line_core = "Blocked"
-    elif external_api_proof_state_v1 == "not_connected":
-        if last_call == "failed":
-            external_line_core = "Not connected"
-        elif not key_ok and ext_effective:
-            external_line_core = "Not Configured (key missing)"
-        elif not ext_effective:
-            external_line_core = "Not Configured"
+        if "Configuration Issue" in external_api_proof_line_v1:
+            external_line_core = "Configuration issue"
         else:
-            external_line_core = "Not Configured"
+            external_line_core = "Blocked"
+    elif external_api_proof_state_v1 == "not_connected":
+        external_line_core = "Not connected" if last_call == "failed" else "Not Configured"
     else:
         external_line_core = "Idle"
 

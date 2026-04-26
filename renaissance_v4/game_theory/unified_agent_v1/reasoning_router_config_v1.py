@@ -73,7 +73,7 @@ def apply_environment_overrides_v1(base: dict[str, Any]) -> dict[str, Any]:
     - OPENAI_REASONING_MODEL → external_model
     - OPENAI_MAX_DOLLARS_PER_RUN → max_estimated_cost_usd_per_run
     - OPENAI_MAX_TOKENS_PER_RUN → max_total_tokens_per_run
-    - OPENAI_ESCALATION_ENABLED / OPENAI_ESCALATION_ENABLED=1|0 → external_api_enabled
+    - OPENAI_ESCALATION_ENABLED=1|0 → external_api_enabled (see merge below: operator UI wins when not off).
     """
     out = deepcopy(base)
     m = (os.environ.get("OPENAI_REASONING_MODEL") or "").strip()
@@ -98,7 +98,7 @@ def load_reasoning_router_config_v1(
     *,
     extra_dict: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    """Load JSON config (no secret values). Merge: defaults < file < extra_dict < environment."""
+    """Load JSON config (no secret values). Merge: defaults < file < extra_dict < environment < operator gateway authority."""
     c = deepcopy(DEFAULTS)
     c["schema"] = SCHEMA
     c["contract_version"] = CONTRACT_VERSION
@@ -133,8 +133,14 @@ def read_operator_reasoning_model_preferences_v1() -> dict[str, Any]:
 
 def apply_operator_external_api_gateway_merge_v1(c: dict[str, Any]) -> dict[str, Any]:
     """
-    When the operator has turned **off** the external API gateway in the UI, force
-    ``external_api_enabled`` to false for this process. Does not elevate permissions.
+    Authoritative **Allow External API** (saved preferences):
+
+    * ``external_api_gateway_enabled is False`` → ``external_api_enabled`` is forced **false** (no external
+      escalation, regardless of file/env).
+    * Otherwise (``True``, missing key, or unset) → ``external_api_enabled`` is forced **true** at
+      effective runtime, overriding ``reasoning_router_config`` defaults and
+      ``OPENAI_ESCALATION_ENABLED=0``. Missing preference matches the default-checked UI: external path
+      is **on** unless the operator has explicitly turned the gateway off.
     """
     pref = read_operator_reasoning_model_preferences_v1()
     if pref.get("external_api_gateway_enabled") is False:
@@ -142,7 +148,10 @@ def apply_operator_external_api_gateway_merge_v1(c: dict[str, Any]) -> dict[str,
         out["external_api_enabled"] = False
         out["operator_external_api_gateway_merge_v1"] = "blocked_by_operator_ui"
         return out
-    return c
+    out = deepcopy(c)
+    out["external_api_enabled"] = True
+    out["operator_external_api_gateway_merge_v1"] = "enabled_by_operator_ui_v1"
+    return out
 
 
 def validate_config_public_surface_v1(c: dict[str, Any]) -> list[str]:
